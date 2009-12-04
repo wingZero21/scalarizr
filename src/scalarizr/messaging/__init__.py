@@ -24,6 +24,11 @@ class Message:
 	meta = {}	
 	body = {}
 	
+	def __init__(self, name, meta={}, body={}):
+		self.name = name
+		self.meta = meta
+		self.body = body
+	
 	def is_delivered(self):
 		pass
 	
@@ -34,7 +39,31 @@ class Message:
 		pass
 	
 	def __str__(self):
-		return ""
+		from xml.dom.minidom import getDOMImplementation
+		impl = getDOMImplementation()
+		doc = impl.createDocument(None, "message", None)
+		
+		root = doc.documentElement;
+		root.setAttribute("id", self.id)
+		root.setAttribute("name", self.name)
+		
+		meta = doc.createElement("meta")
+		for k in self.meta.keys():
+			item = doc.createElement("item")
+			item.setAttribute("name", k)
+			item.appendChild(doc.createTextNode(self.meta[k]))
+			meta.appendChild(item)
+		root.appendChild(meta)
+		
+		body = doc.createElement("body")
+		for k in self.body.keys():
+			item = doc.createElement("item")
+			item.setAttribute("name", k)
+			item.appendChild(doc.createTextNode(self.body[k]))
+			body.appendChild(item)
+		root.appendChild(body)
+			
+		return doc.toxml()
 		
 	
 class MessageProducer:
