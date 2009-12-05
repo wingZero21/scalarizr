@@ -1,14 +1,13 @@
 
-
-
 class _Bus:
 	_registry = {}
 	
-	def set (self, name, value):
+	def __setattr__(self, name, value):
 		self._registry[name] = value
 	
-	def get (self, name):
+	def __getattr__(self, name):
 		return self._registry[name]
+	
 	
 # Bus singleton 	
 _bus_instance = None
@@ -22,3 +21,13 @@ class BusEntries:
 	MESSAGE_CONSUMER = "message_consumer"
 	MESSAGE_PRODUCER = "message_producer"
 	QUERYENV_SERVICE = "queryenv_service"
+
+
+
+def initialize ():
+	from sqlite3 import Connection, DatabaseError
+	Bus()[BusEntries.DB] = Connection("etc/.storage/db.sqlite3")
+	
+	
+	
+

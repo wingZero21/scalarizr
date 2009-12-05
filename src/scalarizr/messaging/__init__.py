@@ -1,4 +1,7 @@
 
+class MessagingError(Exception):
+	pass
+
 class MessageServiceFactory:
 	def __init__(self):
 		pass
@@ -24,7 +27,7 @@ class Message:
 	meta = {}	
 	body = {}
 	
-	def __init__(self, name, meta={}, body={}):
+	def __init__(self, name=None, meta={}, body={}):
 		self.name = name
 		self.meta = meta
 		self.body = body
@@ -37,6 +40,20 @@ class Message:
 		
 	def get_response(self):
 		pass
+	
+	def fromxml (self, xml):
+		from xml.dom.minidom import parseString
+		doc = parseString(xml)
+		
+		root = doc.documentElement
+		self.id = root.getAttribute("id")
+		self.name = root.getAttribute("name")
+		
+		for node in root.firstChild.childNodes:
+			self.meta[node.getAttribute("name")] = node.firstChild.nodeValue
+			
+		for node in root.childNodes[1].childNodes:
+			self.body[node.getAttribute("name")] = node.firstChild.nodeValue
 	
 	def __str__(self):
 		from xml.dom.minidom import getDOMImplementation
