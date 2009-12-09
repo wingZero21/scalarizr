@@ -2,7 +2,7 @@
 class MessagingError(Exception):
 	pass
 
-class MessageServiceFactory:
+class MessageServiceFactory(object):
 	def __init__(self):
 		pass
 	
@@ -10,8 +10,8 @@ class MessageServiceFactory:
 		pass
 
 	
-class MessageService:
-	def new_message(self, name):
+class MessageService(object):
+	def new_message(self, name=None):
 		pass
 	
 	def new_consumer(self):
@@ -20,8 +20,13 @@ class MessageService:
 	def new_producer(self):
 		pass
 	
+class MetaOptions(object):
+	SERVER_TYPE = "serverType"
+	OS_NAME 	= "osName"
+	OS_VERSION 	= "osVersion"
+	REQUEST_ID 	= "requestId"
 	
-class Message:
+class Message(object):
 	id = None	
 	name = None
 	meta = {}	
@@ -55,44 +60,51 @@ class Message:
 		for node in root.childNodes[1].childNodes:
 			self.body[node.getAttribute("name")] = node.firstChild.nodeValue
 	
+	def toxml (self):
+		return str(self)
+	
 	def __str__(self):
 		from xml.dom.minidom import getDOMImplementation
 		impl = getDOMImplementation()
 		doc = impl.createDocument(None, "message", None)
 		
 		root = doc.documentElement;
-		root.setAttribute("id", self.id)
-		root.setAttribute("name", self.name)
+		root.setAttribute("id", str(self.id))
+		root.setAttribute("name", str(self.name))
 		
 		meta = doc.createElement("meta")
 		for k in self.meta.keys():
 			item = doc.createElement("item")
-			item.setAttribute("name", k)
-			item.appendChild(doc.createTextNode(self.meta[k]))
+			item.setAttribute("name", str(k))
+			item.appendChild(doc.createTextNode(str(self.meta[k])))
 			meta.appendChild(item)
 		root.appendChild(meta)
 		
 		body = doc.createElement("body")
 		for k in self.body.keys():
 			item = doc.createElement("item")
-			item.setAttribute("name", k)
-			item.appendChild(doc.createTextNode(self.body[k]))
+			item.setAttribute("name", str(k))
+			item.appendChild(doc.createTextNode(str(self.body[k])))
 			body.appendChild(item)
 		root.appendChild(body)
 			
 		return doc.toxml()
 		
 	
-class MessageProducer:
-	def send(self, message):
+class MessageProducer(object):
+	def send(self, queue, message):
 		pass
 	
-class MessageConsumer:
+class MessageConsumer(object):
+	_listeners = []
+	
 	def add_message_listener(self, ln):
-		"""
-		Extend from observable?
-		"""
-		pass
+		if not ln in self._listeners:
+			self._listeners.append(ln)
+			
+	def remove_message_listener(self, ln):
+		if ln in self._listeners:
+			self._listeners.remove(ln)
 	
 	def start(self):
 		pass
