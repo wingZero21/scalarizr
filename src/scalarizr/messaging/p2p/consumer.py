@@ -17,9 +17,12 @@ class P2pMessageConsumer(MessageConsumer):
 	_handler_thread = None
 	_shutdown_handler = False
 	
-	def __init__(self, config={}):
-		from scalarizr.util import config_apply
-		config_apply(self, config)
+	def __init__(self, config):
+		for pair in config:
+			key = pair[0]
+			if key == "p2p.consumer.endpoint":
+				self.endpoint = pair[1]
+				
 		self._logger = logging.getLogger(__package__)
 		self._handler_thread = Thread(name="MessageHandler", target=self.message_handler)
 			
@@ -40,24 +43,28 @@ class P2pMessageConsumer(MessageConsumer):
 			self._logger.info("Stopping consumer...")
 			
 			# stop http server
-			self._server.shutdown()
+			self._server.server_close()
 			 
 			# stop message handler thread
 			self._shutdown_handler = True
 			self._handler_thread.join()
+			
+			self._logger.info("Stopped")
 
 	def message_handler (self):
 		store = P2pMessageStore()
 		while not self._shutdown_handler:
-			ids = store.get_unhandled_ids()
-			for message_id in ids:
-				message = store.load(message_id, True)
+			for unhandled in store.get_unhandled():
+				queue = unhandled[0]
+				message = unhandled[1]
 				try:
-					self._logger.info("Notify message listener (message_id: %s)", message_id);
+					self._logger.info("Notify message listeners (message_id: %s)", message.id);
+					for ln in self._listeners:
+						ln(message, queue)
 				except Exception, e:
 					self._logger.exception(e)
 				finally:
-					store.mark_as_handled(message_id)
+					store.mark_as_handled(message.id)
 					
 			time.sleep(0.2)
 		

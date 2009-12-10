@@ -3,11 +3,14 @@ class MessagingError(Exception):
 	pass
 
 class MessageServiceFactory(object):
-	def __init__(self):
-		pass
+	_adapters = {}
 	
 	def new_service (self, name, config):
-		pass
+		if not self._adapters.has_key(name):
+			adapter =  __import__("scalarizr.messaging." + name, 
+					globals(), locals(), ["new_service"])
+			self._adapters[name] = adapter
+		return self._adapters[name].new_service(config)
 
 	
 class MessageService(object):

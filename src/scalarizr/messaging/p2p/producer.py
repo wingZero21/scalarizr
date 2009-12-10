@@ -17,8 +17,11 @@ class P2pMessageProducer(MessageProducer):
 	
 	
 	def __init__(self, config):
-		from scalarizr.util import config_apply
-		config_apply(self, config)
+		for pair in config:
+			key = pair[0]
+			if key == "p2p.producer.endpoint":
+				self.endpoint = pair[1]
+				
 		self._logger = logging.getLogger(__package__)
 		self._store = P2pMessageStore()
 	
@@ -49,7 +52,4 @@ class P2pMessageProducer(MessageProducer):
 							% (e.code, e.read()))
 
 	def get_undelivered(self):
-		ret = []
-		for id in self._store.get_ingoing_unhandled_ids():
-			ret.append(self._store.load(id, False))
-		return ret;
+		return self._store.get_undelivered()

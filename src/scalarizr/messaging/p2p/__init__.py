@@ -28,6 +28,8 @@ class P2pMessageService(MessageService):
 		import producer
 		return producer.P2pMessageProducer(self._config)
 
+def new_service(config):
+	return P2pMessageService(config)
 	
 class _P2pMessageStore:
 	_logger = None
@@ -56,15 +58,19 @@ class _P2pMessageStore:
 		finally:
 			cur.close()
 			
-	def get_unhandled_ids(self):
+	def get_unhandled(self):
+		"""
+		Return list of unhandled messages in obtaining order
+		@return: [(queue, message), ...]   
+		"""
 		cur = self._conn().cursor()
 		try:
-			sql = "SELECT message_id FROM p2p_message " \
+			sql = "SELECT queue, message_id FROM p2p_message " \
 					"WHERE is_ingoing = 1 AND in_is_handled = 0 ORDER BY id"
 			cur.execute(sql)
 			ret = []
 			for r in cur.fetchall():
-				ret.append(r[0])
+				ret.append((r["queue"], self.load(r["message_id"], True)))
 			return ret
 		finally:
 			cur.close()
@@ -90,15 +96,18 @@ class _P2pMessageStore:
 		finally:
 			cur.close()
 			
-	def get_undelivered_ids (self):
+	def get_undelivered (self):
+		"""
+		Return list of undelivered messages in outgoing order
+		"""
 		cur = self._conn().cursor()
 		try:
-			sql = "SELECT message_id FROM p2p_message " \
-					"WHERE is_ingoing = 0 AND out_is_delivered = 0"
+			sql = "SELECT queue, message_id FROM p2p_message " \
+					"WHERE is_ingoing = 0 AND out_is_delivered = 0 ORDER BY id"
 			cur.execute(sql)
 			ret = []
 			for r in cur.fetchall():
-				ret.append(r[0])
+				ret.append((r[0], self.load(r[1], False)))
 			return ret
 		finally:
 			cur.close()

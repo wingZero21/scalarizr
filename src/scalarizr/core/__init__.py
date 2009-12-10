@@ -1,4 +1,9 @@
 class BusEntries:
+	CONFIG = "config"
+	"""
+	@cvar ConfigParser.RawConfigParser: Scalarizr configuration 
+	"""
+	
 	DB = "db"
 	"""
 	@cvar sqlalchemy.pool.SingletonThreadPool: Database connection pool
@@ -41,17 +46,24 @@ def Bus ():
 import os.path
 import sqlite3 as sqlite
 import sqlalchemy.pool as pool
+from ConfigParser import RawConfigParser
 import logging
 import logging.config
 
 	
 BASE_PATH =  os.path.realpath(os.path.dirname(__file__) + "/../../..")
 
-def initialize ():
+def initialize():
 	global BASE_PATH
-	
+
 	# Configure logging
 	logging.config.fileConfig(BASE_PATH + "/etc/logging.ini")
+	
+	# Load configuration
+	config = RawConfigParser()
+	config.read(BASE_PATH + "/etc/config.ini")
+	Bus()[BusEntries.CONFIG] = config
+	
 	# Configure database connection pool
 	Bus()[BusEntries.DB] = pool.SingletonThreadPool(_connect)
 
