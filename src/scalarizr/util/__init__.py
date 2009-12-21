@@ -1,6 +1,7 @@
 
-from threading import RLock
+import logging
 
+"""
 class Observable:
 	
 	_listeners = {}
@@ -30,14 +31,47 @@ class Observable:
 	
 	def resume_events(self):
 		pass
+"""
 
-def config_apply(obj, config):
-	for k in config.keys():
-		if hasattr(obj, k):
-			setattr(obj, k, config[k])
-			
-def config_applyif(obj, config):
-	for k in config.keys():
-		if hasattr(obj, k) and getattr(obj, k) in None:
-			setattr(obj, k, config[k])
+def inject_config(config, inj_config, sections_prefix=""):
+	logger = logging.getLogger(__package__)
 	
+	logger.debug("Injecting config with a section prefix: '%s'", sections_prefix)
+	for inj_section in inj_config.sections():
+		section = sections_prefix + inj_section
+		config.add_section(section)
+		logger.debug("Inject section %s as %s", inj_section, section)
+		for k, v in inj_config.items(inj_section):
+			config.set(section, k, v)
+	logger.debug("%d sections injected", len(inj_config.sections()))		
+
+import binascii
+class _CryptoUtil(object):
+	def keygen(self, length=40):
+		from Crypto.Util.randpool import RandomPool
+		from Crypto.Hash import SHA256
+						
+		pool = RandomPool(hash=SHA256)
+		pool.stir()
+		return binascii.b2a_base64(pool.get_bytes(length))	
+			
+	def _init_chiper(self, key):
+		from Crypto.Cipher import Blowfish
+				
+		k = binascii.a2b_base64(key)
+		return Blowfish.new(k[0:len(k)-9], Blowfish.MODE_CBC, k[len(k)-8:])		
+		
+	def encrypt (self, s, key):
+		c = self._init_chiper(key)
+		return binascii.b2a_base64(c.encrypt(s))
+	
+	def decrypt (self, s, key):
+		c = self._init_chiper(key)
+		return c.decrypt(binascii.a2b_base64(s))
+		
+_crypto_util = None
+def CryptoUtil():
+	global _crypto_util
+	if _crypto_util is None:
+		_crypto_util = _CryptoUtil()
+	return _crypto_util

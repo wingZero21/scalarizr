@@ -1,4 +1,9 @@
 class BusEntries:
+	BASE_PATH = "base_path"
+	"""
+	@cvar string: Application base path
+	"""
+	
 	CONFIG = "config"
 	"""
 	@cvar ConfigParser.RawConfigParser: Scalarizr configuration 
@@ -46,31 +51,29 @@ def Bus ():
 import os.path
 import sqlite3 as sqlite
 import sqlalchemy.pool as pool
-from ConfigParser import RawConfigParser
+from ConfigParser import ConfigParser
 import logging
 import logging.config
 
 	
-BASE_PATH =  os.path.realpath(os.path.dirname(__file__) + "/../../..")
-
 def initialize():
-	global BASE_PATH
-
+	bus = Bus()
+	bus[BusEntries.BASE_PATH] = os.path.realpath(os.path.dirname(__file__) + "/../../..")
+	
 	# Configure logging
-	logging.config.fileConfig(BASE_PATH + "/etc/logging.ini")
+	logging.config.fileConfig(bus[BusEntries.BASE_PATH] + "/etc/logging.ini")
 	
 	# Load configuration
-	config = RawConfigParser()
-	config.read(BASE_PATH + "/etc/config.ini")
-	Bus()[BusEntries.CONFIG] = config
+	config = ConfigParser()
+	config.read(bus[BusEntries.BASE_PATH] + "/etc/config.ini")
+	bus[BusEntries.CONFIG] = config
 	
 	# Configure database connection pool
-	Bus()[BusEntries.DB] = pool.SingletonThreadPool(_connect)
+	bus[BusEntries.DB] = pool.SingletonThreadPool(_connect)
 
 def _connect():
-	global BASE_PATH
-
-	file = BASE_PATH + "/etc/.storage/db.sqlite3"
+	bus = Bus()
+	file = bus[BusEntries.BASE_PATH] + "/" + bus[BusEntries.CONFIG].get("default", "storage_path")
 
 	logger = logging.getLogger(__package__)
 	logger.debug("Open SQLite database (file: %s)" % (file))

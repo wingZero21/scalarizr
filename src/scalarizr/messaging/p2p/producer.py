@@ -4,24 +4,27 @@ Created on Dec 5, 2009
 @author: marat
 '''
 
+from scalarizr.core import Bus, BusEntries
 from scalarizr.messaging import MessageProducer, Message, MessagingError
-from scalarizr.messaging.p2p import P2pMessageStore
+from scalarizr.messaging.p2p import P2pMessageStore, P2pOptions, _P2pBase
+from scalarizr.util import CryptoUtil
 from urllib2 import *
 import logging
 import uuid
 
-class P2pMessageProducer(MessageProducer):
+class P2pMessageProducer(MessageProducer, _P2pBase):
 	endpoint = ""
 	_store = None
 	_logger = None
 	
 	
 	def __init__(self, config):
+		_P2pBase.__init__(self, config)
 		for pair in config:
 			key = pair[0]
-			if key == "p2p.producer.endpoint":
+			if key == P2pOptions.PRODUCER_ENDPOINT:
 				self.endpoint = pair[1]
-				
+	
 		self._logger = logging.getLogger(__package__)
 		self._store = P2pMessageStore()
 	
@@ -31,9 +34,16 @@ class P2pMessageProducer(MessageProducer):
 			if message.id is None:
 				message.id = str(uuid.uuid4())
 				self._store.put_outgoing(message, queue)
-				
-			r = urlopen(self.endpoint + "/" + queue, message.toxml())
-			response = r.read()
+			
+			# Prepare POST body
+			xml = message.toxml()
+			xml = xml.ljust(len(xml) + 8 - len(xml) % 8, " ")
+			data = CryptoUtil().encrypt(xml, self._crypto_key)
+			
+			# Send request
+			req = Request(self.endpoint + "/" + queue, data, {"X-Server-Id": self._server_id})
+			resp = urlopen(req)
+			
 			self._store.mark_as_delivered(message.id)
 			
 		except HTTPError, e:

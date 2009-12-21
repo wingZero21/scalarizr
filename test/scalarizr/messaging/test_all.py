@@ -52,9 +52,13 @@ class TestInteration(unittest.TestCase):
 
 	def setUp(self):
 		service = P2pMessageService((
+				("p2p.server_id", "51310880-bb96-4a4e-8f1c-1b7ac094853b"),
+				("p2p.crypto_key_path", "etc/.keys/default"),
 				("p2p.consumer.endpoint", "http://localhost:8013"),
 				("p2p.producer.endpoint", "http://localhost:8013")))
 		self._consumer = service.new_consumer()
+		from scalarizr.core.handlers import message_listener
+		self._consumer.add_message_listener(message_listener)
 		self._producer = service.new_producer()
 		
 		t = Thread(target=self._start_consumer)
@@ -68,8 +72,8 @@ class TestInteration(unittest.TestCase):
 		self._consumer.stop()
 
 	def testAll(self):
-		message = P2pMessage("Melody", {"a" : "b"}, {"cx" : "dd"})
-		self._producer.send("test", message)	
+		message = P2pMessage("HostUp", {"a" : "b"}, {"cx" : "dd"})
+		self._producer.send("control", message)	
 
 
 if __name__ == "__main__":

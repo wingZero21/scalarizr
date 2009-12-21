@@ -1,5 +1,5 @@
 
-class MessagingError(Exception):
+class MessagingError(BaseException):
 	pass
 
 class MessageServiceFactory(object):
@@ -12,7 +12,6 @@ class MessageServiceFactory(object):
 			self._adapters[name] = adapter
 		return self._adapters[name].new_service(config)
 
-	
 class MessageService(object):
 	def new_message(self, name=None):
 		pass

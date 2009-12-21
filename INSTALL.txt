@@ -1,0 +1,2 @@
+$ easy_install SQLAlchemy
+$ easy_install pyCrypto 

@@ -4,13 +4,14 @@ Created on Dec 5, 2009
 @author: marat
 '''
 from scalarizr.messaging import MessageConsumer, Message, MessagingError
-from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage
+from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, P2pOptions, _P2pBase
+from scalarizr.util import CryptoUtil
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread, current_thread
 import logging
 import timemodule as time
 
-class P2pMessageConsumer(MessageConsumer):
+class P2pMessageConsumer(MessageConsumer, _P2pBase):
 	endpoint = ""
 	_server = None
 	_logger = None
@@ -18,9 +19,10 @@ class P2pMessageConsumer(MessageConsumer):
 	_shutdown_handler = False
 	
 	def __init__(self, config):
+		_P2pBase.__init__(self, config)
 		for pair in config:
 			key = pair[0]
-			if key == "p2p.consumer.endpoint":
+			if key == P2pOptions.CONSUMER_ENDPOINT:
 				self.endpoint = pair[1]
 				
 		self._logger = logging.getLogger(__package__)
@@ -30,7 +32,7 @@ class P2pMessageConsumer(MessageConsumer):
 		if self._server is None:
 			from urlparse import urlparse			
 			r = urlparse(self.endpoint)
-			
+			_HttpRequestHanler.consumer = self
 			self._server = HTTPServer((r.hostname, r.port), _HttpRequestHanler)
 			self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
 			
@@ -70,17 +72,20 @@ class P2pMessageConsumer(MessageConsumer):
 		
 	
 class _HttpRequestHanler(BaseHTTPRequestHandler):
+	consumer = None
 
 	def do_POST(self):
 		logger = logging.getLogger(__package__)
 		
 		import os.path
 		queue = os.path.basename(self.path)
-		xml = self.rfile.read(int(self.headers["Content-length"]))
-		logger.info("Received ingoing message. queue: '%s', message: %s" % (queue, xml))
+		rawmsg = self.rfile.read(int(self.headers["Content-length"]))
+		logger.info("Received ingoing message. queue: '%s', message: %s" % (queue, rawmsg))
 		
-		message = P2pMessage()
+		
 		try:
+			xml = CryptoUtil().decrypt(rawmsg, self.consumer._crypto_key)
+			message = P2pMessage()
 			message.fromxml(xml)
 		except Exception, e:
 			logger.exception(e)

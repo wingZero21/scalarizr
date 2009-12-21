@@ -22,6 +22,18 @@ if __name__ == "__main__":
 	
 	logger.info("Starting scalarizr...")
 	
+	# Read behaviour configurations and inject them into global config
+	from ConfigParser import ConfigParser
+	from scalarizr.util import inject_config
+	behaviour = config.get("default", "behaviour").split(",")
+	for bh in behaviour:
+		filename = "%s/etc/include/behaviour.%s.ini" % (bus[BusEntries.BASE_PATH], bh)
+		if os.path.exists(filename):
+			logger.debug("Read behaviour configuration file %s", filename)
+			bh_config = ConfigParser()
+			bh_config.read(filename)
+			inject_config(config, bh_config)
+	
 	# Start messaging
 	from scalarizr.messaging import MessageServiceFactory
 	factory = MessageServiceFactory()
@@ -36,6 +48,8 @@ if __name__ == "__main__":
 	
 	consumer = service.new_consumer()
 	bus[BusEntries.MESSAGE_CONSUMER] = consumer
+	from scalarizr.core.handlers import MessageListener
+	consumer.add_message_listener(MessageListener())
 	try:
 		consumer.start()
 	except KeyboardInterrupt:

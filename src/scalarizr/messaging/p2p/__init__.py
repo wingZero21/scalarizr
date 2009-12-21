@@ -10,7 +10,10 @@ import logging
 
 
 class P2pOptions:
-	pass
+	SERVER_ID = "p2p.server_id"
+	CRYPTO_KEY_PATH = "p2p.crypto_key_path"
+	PRODUCER_ENDPOINT = "p2p.producer.endpoint"
+	CONSUMER_ENDPOINT = "p2p.consumer.endpoint"
 
 class P2pMessageService(MessageService):
 	_config = {}
@@ -30,6 +33,27 @@ class P2pMessageService(MessageService):
 
 def new_service(config):
 	return P2pMessageService(config)
+	
+class _P2pBase(object):
+	_server_id = None
+	_crypto_key = None
+	
+	def __init__(self, config):
+		for pair in config:
+			key = pair[0]
+			if key == P2pOptions.SERVER_ID:
+				self._server_id = pair[1]
+			elif key == P2pOptions.CRYPTO_KEY_PATH:
+				self._crypto_key = pair[1]
+
+		if self._server_id is None:
+			self._server_id = Bus()[BusEntries.CONFIG].get("default", "server_id")
+		if self._crypto_key is None:
+			self._crypto_key = Bus()[BusEntries.CONFIG].get("default", "crypto_key_path")
+		
+		crypto_key_path = Bus()[BusEntries.BASE_PATH] + "/" + self._crypto_key
+		f = open(crypto_key_path)
+		self._crypto_key = f.read()
 	
 class _P2pMessageStore:
 	_logger = None
