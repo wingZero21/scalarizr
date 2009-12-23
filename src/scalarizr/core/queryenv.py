@@ -74,18 +74,19 @@ class QueryEnvService(object):
 		"""
 		@return: string
 		"""
+		self._request({}, self._read_list_role_params_response)
 		pass
 		
-	def _request (self, params={}, cls):
+	def _request (self, params={}, response_reader):
 		"""
 		@return object
 		"""
 		pass
 		
-	def _read_response(self, xml, cls):
-		"""
-		@return object
-		"""
+	def _read_list_roles_response(self, xml):
+		pass
+	
+	def _read_list_role_params_response(self, xml):
 		pass
 	
 	

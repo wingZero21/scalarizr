@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+        <roles>
+                <role behaviour="mysql" name="mysql-lvm">
+                        <hosts>
+                                <host index='1' replication-master="1" internal-ip="211.31.14.198" external-ip="211.31.14.198" />
+                                <host index='2' replication-master="0" internal-ip="211.31.14.198" external-ip="211.31.14.198" />
+                        </hosts>
+                </role>
+                <role behaviour="www" name="www64">
+                        <hosts>
+                                <host index='1' internal-ip="211.31.14.198" external-ip="211.31.14.198" />
+                                <host index='2' internal-ip="211.31.14.198" external-ip="211.31.14.198" />
+                        </hosts>
+                </role>
+                <role behaviour="www" name="www-custom">
+                        <hosts>
+                                <host index='1' internal-ip="211.31.14.198" external-ip="211.31.14.198" />
+                                <host index='2' internal-ip="211.31.14.198" external-ip="211.31.14.198" />
+                        </hosts>
+                </role>
+        </roles>
+</response>
