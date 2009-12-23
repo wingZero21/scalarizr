@@ -16,13 +16,14 @@ class PosixIpListBuilder(Handler):
 	def __init__(self):
 		self._logger = logging.getLogger(__package__ + "." + self.__class__.__name__)
 
-	def createDir(self, d):
-		try:
-			os.makedirs(d)
-		except OSError, x:
-			self._logger.error(x)
+	def _create_dir(self, d):
+		if not os.path.exists(d):
+			try:
+				os.makedirs(d)
+			except OSError, x:
+				self._logger.error(x)
 	
-	def createFile(self, file):
+	def _create_file(self, file):
 		try:
 			f = open(file, 'w')
 		except OSError, x:
@@ -33,19 +34,20 @@ class PosixIpListBuilder(Handler):
 		except OSError, x:
 			self._logger.error(x)
 	
-	def removeDir(self, d):
-		try:
-			os.removedirs(d)
-		except OSError, x:
-			self._logger.error(x)
+	def _remove_dir(self, d):
+		if not os.listdir(d):
+			try:
+				os.removedirs(d)
+			except OSError, x:
+				self._logger.error(x)
 	
-	def removeFile(self, f):
+	def _remove_file(self, f):
 		try:
 			os.remove(d)
 		except OSError, x:
 			self._logger.error(x)
 			
-	def HostIsReplicationMaster(self, IP):
+	def _host_is_replication_master(self, IP):
 		return True
 	
 	
@@ -58,24 +60,24 @@ class PosixIpListBuilder(Handler):
 		if dir[-1] != os.sep:
 			dir = dir + os.sep  
 		# mySQL checking and additional directory&file creation there
-		roleAlias = message.body["RoleAlias"]
-		internalIP = message.body["InternalIP"]
-		roleName = message.body["RoleName"]
+		role_alias = message.body["RoleAlias"]
+		internal_ip = message.body["InternalIP"]
+		role_name = message.body["RoleName"]
 		
-		if roleName != "mysql":	
-			fullPath = dir + roleName + os.sep
-			self.createDir(fullPath)		
-			self.createFile(fullPath + internalIP)
+		if role_name != "mysql":	
+			full_path = dir + role_name + os.sep
+			self._create_dir(full_path)		
+			self._create_file(full_path + internal_ip)
 		else :
-			suffix = "master" if self.HostIsReplicationMaster(internalIP) else "slave"
+			suffix = "master" if self._host_is_replication_master(internal_ip) else "slave"
 			
-			mysqlPath = dir + roleAlias + "-" + suffix + os.sep
-			self.createDir(mysqlPath)		
-			self.createFile(mysqlPath + internalIP)
+			mysql_path = dir + role_alias + "-" + suffix + os.sep
+			self._create_dir(mysql_path)		
+			self._create_file(mysql_path + internal_ip)
 			
-			mysqlPath2 = dir + "mysql-" + suffix + os.sep
-			self.createDir(mysqlPath2)		
-			self.createFile(mysqlPath2 + internalIP)
+			mysql_path2 = dir + "mysql-" + suffix + os.sep
+			self._create_dir(mysql_path2)		
+			self._createfile(mysql_path2 + internal_ip)
 								
 								
 	def on_HostDown(self, message):
@@ -87,24 +89,24 @@ class PosixIpListBuilder(Handler):
 		if dir[-1] != os.sep:
 			dir = dir + os.sep  
 		# mySQL checking and additional directory&file creation there
-		roleAlias = message.body["RoleAlias"]
-		internalIP = message.body["InternalIP"]
-		roleName = message.body["RoleName"]
+		role_alias = message.body["RoleAlias"]
+		internal_ip = message.body["InternalIP"]
+		role_name = message.body["RoleName"]
 		
-		if roleName != "mysql":	
-			fullPath = dir + roleName + os.sep		
-			self.removeFile(fullPath + internalIP)
-			self.removeDir(fullPath)
+		if role_name != "mysql":	
+			full_path = dir + role_name + os.sep		
+			self._remove_file(full_path + internal_ip)
+			self._remove_dir(full_path)
 		else :
-			suffix = "master" if self.HostIsReplicationMaster(internalIP) else "slave"
+			suffix = "master" if self._host_is_replication_master(internal_ip) else "slave"
 			
-			mysqlPath = dir + roleAlias + "-" + suffix + os.sep
-			self.removeFile(mysqlPath + internalIP)
-			self.removeDir(mysqlPath)		
+			mysql_path = dir + role_alias + "-" + suffix + os.sep
+			self._remove_file(mysql_path + internal_ip)
+			self._remove_dir(mysql_path)		
 			
-			mysqlPath2 = dir + "mysql-" + suffix + os.sep
-			self.removeFile(mysqlPath2 + internalIP)
-			self.removeDir(mysqlPath2)		
+			mysql_path2 = dir + "mysql-" + suffix + os.sep
+			self._remove_file(mysql_path2 + internal_ip)
+			self._remove_dir(mysql_path2)		
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == "HostUp" or message.name == "HostDown"
