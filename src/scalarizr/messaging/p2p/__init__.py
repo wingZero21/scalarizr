@@ -114,8 +114,8 @@ class _P2pMessageStore:
 		cur = conn.cursor()
 		try:
 			sql = "INSERT INTO p2p_message (id, message, message_id, message_name, queue, " \
-					"is_ingoing, out_is_delivered) VALUES (NULL, ?, ?, ?, ?, ?, ?)"
-			cur.execute(sql, [str(message), message.id, message.name, queue, 0, 0])
+					"is_ingoing, out_is_delivered, out_delivery_attempts) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)"
+			cur.execute(sql, [str(message), message.id, message.name, queue, 0, 0, 0])
 			conn.commit()
 		finally:
 			cur.close()

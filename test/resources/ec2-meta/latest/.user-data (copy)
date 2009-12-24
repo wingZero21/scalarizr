@@ -1,0 +1,10 @@
+farmid=115;role=base;eventhandlerurl=local.webta.net:90;hash=b8157d2d5d5b5f;s3bucket=farm-115-919814621061;realrolename=scalarizer-001;httpproto=http;region=us-east-1;callbackserviceurl=http://local.webta.net:90/cb_service.php;inittoken=MWE1ZWNhNGEvMTNk;scalrcert=-----BEGIN CERTIFICATE-----
+MIIBnTCCAQagAwIBAgIESZl7ATANBgkqhkiG9w0BAQUFADATMREwDwYDVQQLEwhJbnRyaWRlYTAe
+Fw0wOTAyMTYxNDQxMDVaFw0wOTA1MTcxNDQxMDVaMBMxETAPBgNVBAsTCEludHJpZGVhMIGfMA0G
+CSqGSIb3DQEBAQUAA4GNADCBiQKBgQCXeGoAyqf9ADmeo2VmQdIEYzyd1aMg50NHSaibLprgsyGm
+Rpu4bYooB6HkHPaQS0lm7okaFkpIdmZYmupdT0THpZX7rUiq7XhtOVkqSJ3/0z6m3uQHxWz/UwY2
+XPbnBnQrBvMv2X7SOuJQZnLn13t+x1U9FUT45YV5mphq6COQ8QIDAQABMA0GCSqGSIb3DQEBBQUA
+A4GBAEJldJBc/dTGddCbfPkCLg0NFiZMy3ZLT7+tkbwy6Y3bwBM7omZ7zNqfAEpU1tDKeC6ELyBW
+ilj+EEg+eg3r3YZ8k3/o/dimkLLIQ4kIi3Kc7p+vjqTWpKmwoL1PtBG+3p+/H8nKPMJQ9emfNnnV
+a2mQX0gSXt++I0DTUed9bs1a
+-----END CERTIFICATE-----

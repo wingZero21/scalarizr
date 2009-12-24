@@ -1,2 +1,8 @@
 $ easy_install SQLAlchemy
 $ easy_install pyCrypto 
+
+для rackspace
+$ easy_install python-cloudservers
+
+для aws
+$ easy_install boto

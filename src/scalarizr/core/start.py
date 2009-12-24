@@ -34,6 +34,13 @@ if __name__ == "__main__":
 			bh_config.read(filename)
 			inject_config(config, bh_config)
 	
+	
+	# Initialize platform
+	from scalarizr.platform import PlatformFactory
+	pl_factory = PlatformFactory()
+	bus[BusEntries.PLATFORM] = pl_factory.new_platform(config.get("default", "platform"))
+	
+	
 	# Start messaging
 	from scalarizr.messaging import MessageServiceFactory
 	factory = MessageServiceFactory()

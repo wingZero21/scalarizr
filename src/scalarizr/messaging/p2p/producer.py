@@ -46,20 +46,21 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			
 			self._store.mark_as_delivered(message.id)
 			
-		except HTTPError, e:
+		except URLError, e:
 			self._logger.exception(e)
+			self._logger.info("mark as undelivered")
 			self._store.mark_as_undelivered(message.id)
 			
 			if isinstance(e, HTTPError):
 				raise MessagingError("Cannot connect to message server. %s" % (str(e)))				
 			else:
+				print e.__dict__
 				if e.code == 401:
 					raise MessagingError("Cannot authenticate on message server. %s" % (e.read()))
 				elif e.code == 400:
 					raise MessagingError("Malformed request. %s" % (e.read()))
 				else:
-					raise MessagingError("Request to message server failed. code: %d, body: %s" \
-							% (e.code, e.read()))
+					raise MessagingError("Request to message server failed. %s" % (str(e)))
 
 	def get_undelivered(self):
 		return self._store.get_undelivered()

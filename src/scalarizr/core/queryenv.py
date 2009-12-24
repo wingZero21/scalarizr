@@ -95,30 +95,30 @@ class QueryEnvService(object):
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
 		
-		for rolesEl in response.childNodes:
-			for roleEl in rolesEl.childNodes:
-				role = Role()
-				role.behaviour = roleEl.getAttribute("behaviour")
-				role.name = roleEl.getAttribute("name")
-				for hostsEL in roleEl.childNodes:
-					for hostEL in hostsEL.childNodes:
-						host = RoleHost()
-						host.replication_master = hostEL.getAttribute("replication-master")
-						host.internal_ip = hostEL.getAttribute("internal-ip")
-						host.external_ip = hostEL.getAttribute("external-ip")
-						role.hosts.append(host)
-				ret.append(role)
+		for role_el in response.firstChild.childNodes:
+			role = Role()
+			role.behaviour = role_el.getAttribute("behaviour")
+			role.name = role_el.getAttribute("name")
+			for host_el in role_el.firstChild.childNodes:
+				host = RoleHost()
+				host.replication_master = bool(host_el.getAttribute("replication-master"))
+				host.internal_ip = host_el.getAttribute("internal-ip")
+				host.external_ip = host_el.getAttribute("external-ip")
+				role.hosts.append(host)
+				
+			ret.append(role)
 
 		return ret
 	
 	def _read_list_role_params_response(self, xml):
+		ret = {}
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		params = {}
-		for paramsEl in response.childNodes:
-			for paramEl in paramsEl.childNodes:
-				params[paramEl.getAttribute("name")] = paramEl.firstChild.firstChild.nodeValue
-		return params
+		
+		for param_el in response.firstChild.childNodes:
+			ret[param_el.getAttribute("name")] = param_el.firstChild.firstChild.nodeValue
+				
+		return ret
 
 	
 class Role(object):

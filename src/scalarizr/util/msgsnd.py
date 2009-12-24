@@ -8,18 +8,37 @@ if __name__ == "__main__":
 
 	from optparse import OptionParser
 	import sys
+	import os
 	
-	parser = OptionParser(usage="Usage: %prog [options]")
+	# Append src path to PYTHONPATH
+	src_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
+	sys.path.append(src_path)
+	
+	
+	parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
 	parser.add_option("-n", "--name", dest="name", help="Message name")
 	parser.add_option("-q", "--queue", dest="queue", help="Queue to send message into")
-	parser.add_option("-p", "--endpoint", dest="endpoint", help="Message server URL")
-	
 	
 	(options, args) = parser.parse_args()
-
-	if options.queue is None or options.name is None or options.endpoint is None:
-		print parser.format_help()
-		sys.exit() 
 	
-	print args
-	print options
+	if options.queue is None or options.name is None:
+		print parser.format_help()
+		sys.exit()
+	
+	from scalarizr.core import Bus, BusEntries
+	from scalarizr.messaging import MessageServiceFactory
+	
+	config = Bus()[BusEntries.CONFIG]
+	factory = MessageServiceFactory()
+	service = factory.new_service(config.get("messaging", "adapter"), config.items("messaging"))
+	producer = service.new_producer()
+	
+	msg = service.new_message()
+	msg.name = options.name
+	for pair in args:
+		k, v = pair.split("=")
+		msg.body[k] = v
+
+	producer.send(options.queue, msg)
+
+	print "Done"

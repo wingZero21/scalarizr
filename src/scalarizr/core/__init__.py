@@ -28,6 +28,11 @@ class BusEntries:
 	"""
 	@cvar: QueryEnv service client
 	"""
+	
+	PLATFORM = "platform"
+	"""
+	@cvar scalarizr.platform.Platform: Platform (ec2, rs, vps...)
+	"""
 
 class _Bus:
 	_registry = {}
