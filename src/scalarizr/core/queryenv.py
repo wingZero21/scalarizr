@@ -8,13 +8,13 @@ class QueryEnvError(BaseException):
 	pass
 
 class QueryEnvService(object):
-	_logger
-	_service_url
-	_api_version
-	_farm_id
-	_instance_id
-	_key
-	_key_id
+	_logger = None
+	_service_url = None
+	_api_version = None
+	_farm_id = None
+	_instance_id = None
+	_key = None
+	_key_id = None
 	
 	def __init__(self, service_url, farm_id, instance_id, key=None, key_id=None, api_version="2009-03-05"):
 		pass
@@ -77,14 +77,44 @@ class QueryEnvService(object):
 		self._request({}, self._read_list_role_params_response)
 		pass
 		
-	def _request (self, params={}, response_reader):
+	def _request (self, params={}, response_reader=None):
 		"""
 		@return object
 		"""
 		pass
+	
+	def _remove_whitespace_nodes(self, parent):
+		for child in list(parent.childNodes):
+			if child.nodeType==child.TEXT_NODE and child.data.strip()=='':
+				parent.removeChild(child)
+			else:
+				self._remove_whitespace_nodes(child)	
 		
 	def _read_list_roles_response(self, xml):
-		pass
+		ret = []
+		print("raw>> ")
+		print(xml.documentElement.toxml())
+		self._remove_whitespace_nodes(xml.documentElement)
+		print("cleared>> ")
+		print(xml.documentElement.toxml())
+		
+		response = xml.documentElement
+		
+		for rolesEl in response.childNodes:
+			for roleEl in rolesEl.childNodes:
+				role = Role()
+				role.behaviour = roleEl.getAttribute("behaviour")
+				role.name = roleEl.getAttribute("name")
+				for hostsEL in roleEl.childNodes:
+					for hostEL in hostsEL.childNodes:
+						host = RoleHost()
+						host.replication_master = hostEL.getAttribute("replication-master")
+						host.internal_ip = hostEL.getAttribute("internal-ip")
+						host.external_ip = hostEL.getAttribute("external-ip")
+						role.hosts.append(host)
+				ret.append(role)
+
+		return ret
 	
 	def _read_list_role_params_response(self, xml):
 		pass
