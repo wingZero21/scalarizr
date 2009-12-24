@@ -1,0 +1,9 @@
+There are some known issues to run scalarizr on freeBSD
+
+[+] ImportError: No module named _sqlite3
+You need to install port py-sqlite first:
+# cd /usr/ports/databases/py-sqlite3 && make install clean
+
+[+] ImportError: No module named sqlalchemy.pool
+You need to install port py-sqlalchemy too
+# cd /usr/ports/databases/py-sqlalchemy && make install clean
