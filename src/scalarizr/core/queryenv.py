@@ -1,7 +1,7 @@
 '''
 Created on Dec 23, 2009
 
-@author: marat
+@author: Dmytro Korsakov
 '''
 
 class QueryEnvError(BaseException):
@@ -92,12 +92,7 @@ class QueryEnvService(object):
 		
 	def _read_list_roles_response(self, xml):
 		ret = []
-		print("raw>> ")
-		print(xml.documentElement.toxml())
 		self._remove_whitespace_nodes(xml.documentElement)
-		print("cleared>> ")
-		print(xml.documentElement.toxml())
-		
 		response = xml.documentElement
 		
 		for rolesEl in response.childNodes:
@@ -117,8 +112,14 @@ class QueryEnvService(object):
 		return ret
 	
 	def _read_list_role_params_response(self, xml):
-		pass
-	
+		self._remove_whitespace_nodes(xml.documentElement)
+		response = xml.documentElement
+		params = {}
+		for paramsEl in response.childNodes:
+			for paramEl in paramsEl.childNodes:
+				params[paramEl.getAttribute("name")] = paramEl.firstChild.firstChild.nodeValue
+		return params
+
 	
 class Role(object):
 	behaviour = None
