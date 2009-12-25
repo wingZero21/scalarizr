@@ -62,7 +62,6 @@ class QueryEnvService(object):
 		"""
 		@return string
 		"""
-		pass
 		
 	def _get_canonical_string (self, params={}):
 		"""
@@ -101,13 +100,53 @@ class QueryEnvService(object):
 			role.name = role_el.getAttribute("name")
 			for host_el in role_el.firstChild.childNodes:
 				host = RoleHost()
-				host.replication_master = bool(host_el.getAttribute("replication-master"))
+				host.index = int(host_el.getAttribute("index"))
+				if host_el.hasAttribute("replication-master"):
+				    host.replication_master = bool(int(host_el.getAttribute("replication-master")))
 				host.internal_ip = host_el.getAttribute("internal-ip")
 				host.external_ip = host_el.getAttribute("external-ip")
 				role.hosts.append(host)
 				
 			ret.append(role)
 
+		return ret
+	
+	
+	def _read_list_ebs_mountpoints_response(self, xml):
+		import string
+		ret = []
+		self._remove_whitespace_nodes(xml.documentElement)
+		response = xml.documentElement
+		
+		for mountpoint_el in response.firstChild.childNodes:
+			mountpoint = Mountpoint()
+			mountpoint.name = mountpoint_el.getAttribute("name")
+			mountpoint.dir = mountpoint_el.getAttribute("dir")
+			mountpoint.create_fs = bool(int(mountpoint_el.getAttribute("createfs")))
+			mountpoint.is_array = bool(int(mountpoint_el.getAttribute("isarray")))
+			for volume_el in mountpoint_el.firstChild.childNodes:
+				volume = Volume()
+				volume.volume_id = volume_el.getAttribute("volume-id")
+				volume.device = volume_el.getAttribute("device")
+				mountpoint.volumes.append(volume)
+				
+			ret.append(mountpoint)
+
+		return ret
+	
+	
+	def _read_list_scripts_response(self, xml):
+		ret = []
+		self._remove_whitespace_nodes(xml.documentElement)
+		response = xml.documentElement
+		
+		for script_el in response.firstChild.childNodes:
+			script = Script()
+			script.asynchronous = bool(int(script_el.getAttribute("asynchronous")))
+			script.exec_timeout = int(script_el.getAttribute("exec-timeout"))
+			script.name = script_el.getAttribute("name")
+			script.body = script_el.firstChild.firstChild.nodeValue
+			ret.append(script)		
 		return ret
 	
 	def _read_list_role_params_response(self, xml):
@@ -119,16 +158,68 @@ class QueryEnvService(object):
 			ret[param_el.getAttribute("name")] = param_el.firstChild.firstChild.nodeValue
 				
 		return ret
-
 	
+	def _get_latest_version_response(self, xml):
+		version = ""
+		self._remove_whitespace_nodes(xml.documentElement)
+		response = xml.documentElement
+		version = response.firstChild.firstChild.nodeValue
+		return version
+	
+	def _get_https_certificate_response(self, xml):
+		
+		self._remove_whitespace_nodes(xml.documentElement)
+		response = xml.documentElement
+		cert = response.firstChild.firstChild.nodeValue
+		pkey = response.lastChild.firstChild.nodeValue
+		certificate = (cert, pkey)
+		return certificate
+
+	def _read_list_virtualhosts_response(self, xml):
+		ret = []
+		self._remove_whitespace_nodes(xml.documentElement)
+		response = xml.documentElement
+		
+		for vhost_el in response.firstChild.childNodes:
+			vhost = VirtualHost()
+			vhost.hostname = vhost_el.getAttribute("hostname")
+			vhost.type = vhost_el.getAttribute("type")
+			vhost.raw = vhost_el.firstChild.firstChild.nodeValue
+			if vhost_el.hasAttribute("https"):
+				vhost.https = bool(int(vhost_el.getAttribute("https")))
+			ret.append(vhost)		
+		return ret
+	
+class Mountpoint(object):
+	name = None
+	dir = None
+	create_fs = False
+	is_array = False
+	volumes  = []
+	
+class Volume(object):
+	volume_id  = None
+	device = None
+		
 class Role(object):
 	behaviour = None
 	name = None
 	hosts = []
 
 class RoleHost(object):
+	index = None
 	replication_master = False
 	internal_ip = None
 	external_ip	= None
 	
+class Script(object):
+	asynchronous = False
+	exec_timeout = None 
+	name = None
+	body = None
 	
+class VirtualHost(object):
+	hostname = None
+	type = None
+	raw = None
+	https = False
