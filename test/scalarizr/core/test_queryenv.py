@@ -133,6 +133,12 @@ class Test(unittest.TestCase):
                                 
                                 ''')
 		self.assertTrue(vhosts[1].https)
+		
+	
+	def test_get_canonical_string(self):
+	   dict = {2:"two",3:"three",1:"one",4:"four"}
+	   str = self._queryenv._get_canonical_string(dict)
+	   self.assertEqual(str,"1one2two3three4four")
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.test_list_roles']
