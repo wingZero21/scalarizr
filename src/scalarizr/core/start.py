@@ -46,16 +46,13 @@ if __name__ == "__main__":
 	factory = MessageServiceFactory()
 	try:
 		service = factory.new_service(config.get("messaging", "adapter"), config.items("messaging"))
+		bus[BusEntries.MESSAGE_SERVICE] = service
 	except Exception, e:
 		logger.exception(e)
 		sys.exit("Cannot create messaging service adapter '%s'" % (config.get("messaging", "adapter")))
-	
-	producer = service.new_producer()
-	bus[BusEntries.MESSAGE_PRODUCER] = producer
-	
-	consumer = service.new_consumer()
-	bus[BusEntries.MESSAGE_CONSUMER] = consumer
-	from scalarizr.core.handlers import MessageListener
+
+	from scalarizr.core.handlers import MessageListener	
+	consumer = service.get_consumer()
 	consumer.add_message_listener(MessageListener())
 	try:
 		consumer.start()

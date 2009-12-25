@@ -56,10 +56,10 @@ class TestInteration(unittest.TestCase):
 				("p2p.crypto_key_path", "etc/.keys/default"),
 				("p2p.consumer.endpoint", "http://localhost:8013"),
 				("p2p.producer.endpoint", "http://localhost:8013")))
-		self._consumer = service.new_consumer()
+		self._consumer = service.get_consumer()
 		from scalarizr.core.handlers import message_listener
 		self._consumer.add_message_listener(message_listener)
-		self._producer = service.new_producer()
+		self._producer = service.get_producer()
 		
 		t = Thread(target=self._start_consumer)
 		t.start()

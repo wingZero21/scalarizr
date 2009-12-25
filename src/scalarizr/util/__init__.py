@@ -45,6 +45,37 @@ def inject_config(config, inj_config, sections_prefix=""):
 			config.set(section, k, v)
 	logger.debug("%d sections injected", len(inj_config.sections()))		
 
+def parse_size(size):
+	"""
+	Read string like 10K, 12M, 1014B and return size in bytes
+	"""
+	ret = string(size)
+	dim = ret[-1]		
+	ret = float(ret[0:-1])
+	if dim.lower() == "b":
+		pass		
+	elif dim.lower() == "k":
+		ret *= 1024
+	elif dim.lower() == "m":
+		ret *= 1048576	
+	
+	return ret
+	
+def format_size(size, precision=2):
+	"""
+	Format size in Bytes, KBytes and MBytes
+	"""
+	ret = float(size)
+	dim = "B"
+	if ret > 1000:
+		ret = ret/1024
+		dim = "K"
+	if ret > 1000:
+		ret = ret/1024
+		dim = "M"
+	return "%."+precision+"f%s" % (ret, dim)	
+	
+
 import binascii
 class _CryptoUtil(object):
 	def keygen(self, length=40):

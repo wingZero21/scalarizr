@@ -17,19 +17,26 @@ class P2pOptions:
 
 class P2pMessageService(MessageService):
 	_config = {}
+	_consumer = None
+	_producer = None
+	
 	def __init__(self, config):
 		self._config = config
 
 	def new_message(self, name=None):
 		return P2pMessage(name)
 	
-	def new_consumer(self):
-		import consumer 
-		return consumer.P2pMessageConsumer(self._config)
+	def get_consumer(self):
+		if self._consumer is None:
+			import consumer
+			self._consumer = consumer.P2pMessageConsumer(self._config)
+		return self._consumer
 	
-	def new_producer(self):
-		import producer
-		return producer.P2pMessageProducer(self._config)
+	def get_producer(self):
+		if self._producer is None:
+			import producer
+			self._producer = producer.P2pMessageProducer(self._config)
+		return self._producer
 
 def new_service(config):
 	return P2pMessageService(config)

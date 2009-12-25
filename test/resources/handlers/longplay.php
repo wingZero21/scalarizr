@@ -1,4 +1,5 @@
 #!/usr/bin/php
 <?
-sleep(10);
+sleep(5);
+print "I'm done"
 ?>

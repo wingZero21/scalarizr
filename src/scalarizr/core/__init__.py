@@ -14,14 +14,9 @@ class BusEntries:
 	@cvar sqlalchemy.pool.SingletonThreadPool: Database connection pool
 	"""
 	
-	MESSAGE_CONSUMER = "message_consumer"
+	MESSAGE_SERVICE = "message_service"
 	"""
-	@cvar scalarizr.messaging.MessageConsumer: Default message consumer
-	"""
-	
-	MESSAGE_PRODUCER = "message_producer"
-	"""
-	@cvar scalarizr.messaging.MessageProducer: Default message producer
+	@cvar scalarizr.messaging.MessageService: Default message service 
 	"""
 	
 	QUERYENV_SERVICE = "queryenv_service"

@@ -16,10 +16,10 @@ class MessageService(object):
 	def new_message(self, name=None):
 		pass
 	
-	def new_consumer(self):
+	def get_consumer(self):
 		pass
 	
-	def new_producer(self):
+	def get_producer(self):
 		pass
 	
 class MetaOptions(object):
