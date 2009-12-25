@@ -67,15 +67,22 @@ class QueryEnvService(object):
 		"""
 		@return string
 		"""
-		pass
-	
+		s = ""
+		for key, value in sorted(params.items()):
+			s = s + str(key) + str(value)
+		return s
+		
 	def _sign (self, canonical_string, key):
 		"""
 		@return: string
 		"""
+		import hmac
+		digestmod=hashlib.sha1()
+		h = hmac.new(key, canonical_string, digestmod)
+		sign = h.hexdigest()
 		self._request({}, self._read_list_role_params_response)
-		pass
-		
+		return sign
+	
 	def _request (self, params={}, response_reader=None):
 		"""
 		@return object
