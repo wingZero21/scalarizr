@@ -33,7 +33,10 @@ class ScriptExecutor(Handler):
 	_logs_dir = None
 	_logs_truncate_over = None
 	
-	def __init__(self):
+	_wait_async = False
+	
+	def __init__(self, wait_async=False):
+		self._wait_async = wait_async
 		self._logger = logging.getLogger(__package__ + "." + self.__class__.__name__)
 		self._queryenv = Bus()[BusEntries.QUERYENV_SERVICE]
 		self._msg_service = Bus()[BusEntries.MESSAGE_SERVICE]
@@ -89,7 +92,8 @@ class ScriptExecutor(Handler):
 			self._logger.debug("Create temp logs dir %s", self._logs_dir)
 			os.makedirs(self._logs_dir) 
 
-			async_threads = []
+			if self._wait_async:
+				async_threads = []
 
 			for script in scripts:
 				self._logger.debug("Execute script '%s' in %s mode; exec timeout: %d", 
@@ -98,13 +102,15 @@ class ScriptExecutor(Handler):
 					# Start new thread
 					t = threading.Thread(target=self._execute_script, args=[script])
 					t.start()
-					async_threads.append(t)
+					if self._wait_async:
+						async_threads.append(t)
 				else:
 					self._execute_script(script)
 
 			# Wait
-			for t in async_threads:
-				t.join()
+			if self._wait_async:
+				for t in async_threads:
+					t.join()
 			os.removedirs(self._exec_dir)
 			
 	def _execute_script(self, script):

@@ -4,6 +4,8 @@ Created on Dec 11, 2009
 @author: Dmytro Korsakov
 @author: marat
 '''
+
+# TODO: add onRebootStart - delete onRebootFinish - restore
 import logging
 import os
 from scalarizr.core.handlers import Handler

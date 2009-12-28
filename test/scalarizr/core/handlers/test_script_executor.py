@@ -55,7 +55,7 @@ class Test(unittest.TestCase):
 		bus[BusEntries.PLATFORM] = VpsPlatform()
 		
 		from scalarizr.core.handlers.script_executor import ScriptExecutor
-		handler = ScriptExecutor()
+		handler = ScriptExecutor(wait_async=True)
 		
 		from scalarizr.messaging import Message
 		message = Message("EventNotice", {}, {
