@@ -133,6 +133,12 @@ class Test(unittest.TestCase):
                                 
                                 ''')
 		self.assertTrue(vhosts[1].https)
+	
+	def test_sign(self):
+		str = "I Can Has Cheezburger?"
+		key = "somesecurekeystring"
+		sign = self._queryenv._sign(str, key)
+		self.assertTrue(sign)
 		
 	
 	def test_get_canonical_string(self):
