@@ -77,10 +77,10 @@ class QueryEnvService(object):
 		@return: string
 		"""
 		import hmac
-		digestmod=hashlib.sha1()
-		h = hmac.new(key, canonical_string, digestmod)
-		sign = h.hexdigest()
-		self._request({}, self._read_list_role_params_response)
+		import hashlib
+		import base64
+		digest = hmac.new(key, canonical_string, hashlib.sha1).digest()
+		sign = base64.encodestring(digest)
 		return sign
 	
 	def _request (self, params={}, response_reader=None):
