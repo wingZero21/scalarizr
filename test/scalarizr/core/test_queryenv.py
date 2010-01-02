@@ -12,32 +12,32 @@ class Test(unittest.TestCase):
 
 	def setUp (self):
 		from scalarizr.core.queryenv import QueryEnvService
-		self._queryenv = QueryEnvService("", None, None)
+		#self._queryenv = QueryEnvService("", None, None)
+		self._queryenv = QueryEnvService("http://ec2farm-dev.bsd2.webta.local/query-env/","127", "i-c9acf6a1", \
+										 "c+/g0PyouaqXMbuJ5Vtux34Mft7jLe5H5u8tUmyhldjwTfgm7BI6MOA8F6BwkzQnpWEOcHx+A+TRJh0u3PElQQ0SiwdwrlgpQMbj8NBxbxBgfxA9WisgvfQu5ZPYou6Gz3oUAQdWfFlFdY2ACOjmqa3DGogge+TlXtV2Xagm0rw=",\
+										 "5d0e16f7498c41cc")
 		
-		
-	def test_get_latest_version_response(self):
+	def _test_get_latest_version_response(self):
 		xmlfile = os.path.dirname(__file__) + "/../../resources/get_latest_version_response.xml"		
 		from xml.dom.minidom import parseString
 		xml = parseString(open(xmlfile, "r").read())
 		
-		version = self._queryenv._get_latest_version_response(xml)
+		version = self._queryenv._read_get_latest_version_response(xml)
 		
 		self.assertTrue(not version is None)
 		self.assertEqual(version, "2009-03-05")
 	
-	def test_get_https_certificate_response(self):
+	def _test_get_https_certificate_response(self):
 		xmlfile = os.path.dirname(__file__) + "/../../resources/get_https_certificate_response.xml"
 		from xml.dom.minidom import parseString
 		xml = parseString(open(xmlfile, "r").read())
-		
-		cert = self._queryenv._get_https_certificate_response(xml)
-		
+		cert = self._queryenv._read_get_https_certificate_response(xml)
 		self.assertTrue(not cert is None)
-		self.assertEqual(cert[0], "MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN")
-		self.assertEqual(cert[1], "MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhO")
+		#self.assertEqual(cert[0], "MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN")
+		#self.assertEqual(cert[1], "MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhO")
 
 
-	def test_list_roles(self):
+	def _test_list_roles(self):
 		xmlfile = os.path.dirname(__file__) + "/../../resources/list_roles_response.xml"
 		
 		from xml.dom.minidom import parseString
@@ -59,7 +59,7 @@ class Test(unittest.TestCase):
 		self.assertEqual(host.index, 1)
 		
 	
-	def test_read_list_ebs_mountpoints_response(self):
+	def _test_read_list_ebs_mountpoints_response(self):
 		xmlfile = os.path.dirname(__file__) + "/../../resources/list_ebs_mountpoints_response.xml"
 		
 		from xml.dom.minidom import parseString
@@ -83,7 +83,7 @@ class Test(unittest.TestCase):
 		
 	
 		
-	def test_list_role_params(self):
+	def _test_list_role_params(self):
 		xmlfile = os.path.dirname(__file__) + "/../../resources/list_role_params_response.xml"
 		
 		from xml.dom.minidom import parseString
@@ -98,7 +98,7 @@ class Test(unittest.TestCase):
 
                                 """)
 		
-	def test_read_list_scripts_response(self):
+	def _test_read_list_scripts_response(self):
 		xmlfile = os.path.dirname(__file__) + "/../../resources/list_scripts_response.xml"
 		
 		from xml.dom.minidom import parseString
@@ -116,7 +116,7 @@ class Test(unittest.TestCase):
                 
                                 """)
 		
-	def test_read_list_virtualhosts_response(self):
+	def _test_read_list_virtualhosts_response(self):
 		xmlfile = os.path.dirname(__file__) + "/../../resources/list_virtualhosts_response.xml"
 		
 		from xml.dom.minidom import parseString
@@ -140,6 +140,48 @@ class Test(unittest.TestCase):
 		sign = self._queryenv._sign(str, key)
 		self.assertTrue(sign)
 		
+	def test__get_http_timestamp(self):	
+		time = self._queryenv._get_http_timestamp()
+		#print time
+	
+	def test_get_latest_version(self):	
+		self.setUp()
+		version = self._queryenv.get_latest_version()
+		print "version>> ", version
+		self.assertEquals(version, '2009-03-05')
+	
+	def test_get_https_certificate(self):
+		cert = self._queryenv.get_https_certificate()
+		print "cert >> ", cert
+		
+	def test_list_ebs_mountpoints(self):
+		ebs_list = self._queryenv.list_ebs_mountpoints ()
+		print "ebs_list>> ", ebs_list
+		
+	def test_list_role_params(self):
+		list_params = self._queryenv.list_role_params()
+		print "list_role_params>> ", list_params
+		
+	def test_list_roles(self):
+		list_roles = self._queryenv.list_roles()
+		print "list_roles>> ", list_roles
+		
+	def test_list_scripts(self):
+		list_scripts = self._queryenv.list_scripts()
+		print "list_scripts>> ", list_scripts
+		
+	def test_list_virtualhosts(self):
+		list_virtualhosts = self._queryenv.list_virtual_hosts()
+		print "list_virtualhosts>> ", list_virtualhosts
+		
+		#FarmID = 127
+		#InstanceID = i-c9acf6a1
+		#Instance Public IP = 75.101.190.84
+		#Instance Private IP = 10.245.205.207
+		#Query env URL: http://ec2farm-dev.bsd2.webta.local/environment.php
+		#Latest version: 2009-03-05
+		#Key ID = 5d0e16f7498c41cc
+		# Key = c+/g0PyouaqXMbuJ5Vtux34Mft7jLe5H5u8tUmyhldjwTfgm7BI6MOA8F6BwkzQnpWEOcHx+A+TRJh0u3PElQQ0SiwdwrlgpQMbj8NBxbxBgfxA9WisgvfQu5ZPYou6Gz3oUAQdWfFlFdY2ACOjmqa3DGogge+TlXtV2Xagm0rw=
 	
 	def test_get_canonical_string(self):
 	   dict = {2:"two",3:"three",1:"one",4:"four"}
