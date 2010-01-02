@@ -3,6 +3,8 @@ Created on Dec 23, 2009
 
 @author: Dmytro Korsakov
 '''
+import logging
+from scalarizr.messaging import MessageProducer, Message, MessagingError
 
 class QueryEnvError(BaseException):
 	pass
@@ -17,7 +19,13 @@ class QueryEnvService(object):
 	_key_id = None
 	
 	def __init__(self, service_url, farm_id, instance_id, key=None, key_id=None, api_version="2009-03-05"):
-		pass
+		self._logger = logging.getLogger(__package__)
+		self._service_url = service_url
+		self._farm_id = farm_id
+		self._instance_id = instance_id
+		self._key = key
+		self._key_id = key_id
+		self._api_version = api_version
 	
 	def set_keys(self, key_id, key):
 		pass
@@ -26,42 +34,45 @@ class QueryEnvService(object):
 		"""
 		@return Role[]
 		"""
-		pass
+		return self._request("list-roles",{"role":role_name, "behaviour":behaviour}, self._read_list_roles_response)
 	
-	def list_role_params(self, role_name):
+	def list_role_params(self, role_name=None):
 		"""
 		@return dict
 		"""
-		pass
+		return self._request("list-role-params",{"name":role_name}, self._read_list_role_params_response)
 	
-	def list_scripts (self, event, asynchronous=None, name=None):
+	def list_scripts (self, event=None, asynchronous=None, name=None):
 		"""
 		@return Script[]
 		"""
+		return self._request("list-scripts",{"event":event, "asynchronous":asynchronous,"name":name}, self._read_list_scripts_response)
 		pass
 	
 	def list_virtual_hosts (self, name=None, https=None):
 		"""
 		@return VirtualHost[]
 		"""
+		return self._request("list-virtualhosts",{"name":name, "https":https}, self._read_list_virtualhosts_response)
 		pass
 	
 	def get_https_certificate (self):
 		"""
 		@return (cert, pkey)
 		"""
-		pass
+		return self._request("get-https-certificate",{}, self._read_get_https_certificate_response)
 	
 	def list_ebs_mountpoints (self):
 		"""
 		@return Mountpoint[]
 		"""
-		pass
+		return self._request("list-ebs-mountpoints",{}, self._read_list_ebs_mountpoints_response)
 	
 	def get_latest_version (self):
 		"""
 		@return string
 		"""
+		return self._request("get-latest-version",{}, self._read_get_latest_version_response)
 		
 	def _get_canonical_string (self, params={}):
 		"""
@@ -70,6 +81,7 @@ class QueryEnvService(object):
 		s = ""
 		for key, value in sorted(params.items()):
 			s = s + str(key) + str(value)
+		#print s
 		return s
 		
 	def _sign (self, canonical_string, key):
@@ -78,17 +90,65 @@ class QueryEnvService(object):
 		"""
 		import hmac
 		import hashlib
-		import base64
+		import binascii
+		
 		digest = hmac.new(key, canonical_string, hashlib.sha1).digest()
-		sign = base64.encodestring(digest)
+		sign = binascii.b2a_base64(digest)
+		if sign.endswith('\n'):
+			sign = sign[:-1]
 		return sign
 	
-	def _request (self, params={}, response_reader=None):
+	def _request (self, command, params={}, response_reader=None):
 		"""
 		@return object
 		"""
-		pass
+		import time
+		import urllib
+		import urllib2
+		from xml.dom.minidom import parseString
+		
+		
+		request_body = {}
+		request_body["operation"] = command
+		request_body["version"] = self._api_version
+		request_body["KeyID"] = self._key_id 
+		request_body["farmid"] = self._farm_id 
+		request_body["instanceid"] = self._instance_id
+		if {} != params :
+			for key, value in params.items():
+				request_body[key] = value
+				
+		url = self._service_url + self._api_version + '/' + command
+		timestamp = self._get_http_timestamp()
+		data = self._get_canonical_string(request_body) 
+		data += timestamp
+		#try:
+		signature = self._sign(data, self._key)
+		post_data = urllib.urlencode(request_body)
+		headers = {"Date": timestamp, "X-Signature": signature}
+		#print "canonical string + timestamp = ", data
+		#print "post data = ", post_data
+		#print "post url  = ", url
+		#print "base64 signature = ", signature
+		#print "headers = ", headers
+		req = urllib2.Request(url, post_data, headers)
+		response = urllib2.urlopen(req)
+		#print "Info>>> ", response.info()
+		#print "URL>>> ", response.geturl()
+		# create xml, handle errors
+		#try:
+		xml = parseString(response.read())
+		return response_reader(xml)
+		#except URLError, e:
+			#print "Caught: " + e
+
+			
+	def _get_http_timestamp(self):
+		import time
+		import datetime
+		return time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
 	
+		
 	def _remove_whitespace_nodes(self, parent):
 		for child in list(parent.childNodes):
 			if child.nodeType==child.TEXT_NODE and child.data.strip()=='':
@@ -100,7 +160,7 @@ class QueryEnvService(object):
 		ret = []
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		
+		print "list_roles_response (xml)>> ", response.toxml()
 		for role_el in response.firstChild.childNodes:
 			role = Role()
 			role.behaviour = role_el.getAttribute("behaviour")
@@ -124,6 +184,7 @@ class QueryEnvService(object):
 		ret = []
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
+		print "list_ebs_mountpoints_response (xml)>> ", response.toxml()
 		
 		for mountpoint_el in response.firstChild.childNodes:
 			mountpoint = Mountpoint()
@@ -146,7 +207,7 @@ class QueryEnvService(object):
 		ret = []
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		
+		print "list_scripts_response (xml)>> ", response.toxml()
 		for script_el in response.firstChild.childNodes:
 			script = Script()
 			script.asynchronous = bool(int(script_el.getAttribute("asynchronous")))
@@ -160,33 +221,36 @@ class QueryEnvService(object):
 		ret = {}
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		
+		print "list_role_params_response (xml)>> ", response.toxml()
 		for param_el in response.firstChild.childNodes:
 			ret[param_el.getAttribute("name")] = param_el.firstChild.firstChild.nodeValue
 				
 		return ret
 	
-	def _get_latest_version_response(self, xml):
+	def _read_get_latest_version_response(self, xml):
 		version = ""
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
+		print "get_latest_version_response (xml)>> ", response.toxml()
 		version = response.firstChild.firstChild.nodeValue
 		return version
 	
-	def _get_https_certificate_response(self, xml):
-		
+	def _read_get_https_certificate_response(self, xml):
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		cert = response.firstChild.firstChild.nodeValue
-		pkey = response.lastChild.firstChild.nodeValue
-		certificate = (cert, pkey)
-		return certificate
+		print "get_https_certificate_response (xml)>> ", response.toxml()
+		if len(response.childNodes):
+			cert = response.firstChild.firstChild.nodeValue
+			pkey = response.lastChild.firstChild.nodeValue
+			return (cert, pkey)
+		
+		return (None, None)	
 
 	def _read_list_virtualhosts_response(self, xml):
 		ret = []
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		
+		print "list_virtualhosts_response (xml)>> ", response.toxml()
 		for vhost_el in response.firstChild.childNodes:
 			vhost = VirtualHost()
 			vhost.hostname = vhost_el.getAttribute("hostname")
