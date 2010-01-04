@@ -159,11 +159,11 @@ class Test(unittest.TestCase):
 		print "ebs_list>> ", ebs_list
 		
 	def test_list_role_params(self):
-		list_params = self._queryenv.list_role_params()
+		list_params = self._queryenv.list_role_params("www")
 		print "list_role_params>> ", list_params
 		
 	def test_list_roles(self):
-		list_roles = self._queryenv.list_roles()
+		list_roles = self._queryenv.list_roles("www")
 		print "list_roles>> ", list_roles
 		
 	def test_list_scripts(self):
@@ -171,7 +171,7 @@ class Test(unittest.TestCase):
 		print "list_scripts>> ", list_scripts
 		
 	def test_list_virtualhosts(self):
-		list_virtualhosts = self._queryenv.list_virtual_hosts()
+		list_virtualhosts = self._queryenv.list_virtual_hosts("www")
 		print "list_virtualhosts>> ", list_virtualhosts
 		
 		#FarmID = 127

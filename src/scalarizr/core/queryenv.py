@@ -28,33 +28,53 @@ class QueryEnvService(object):
 		self._api_version = api_version
 	
 	def set_keys(self, key_id, key):
-		pass
+		self._key_id = key_id
+		self._key = key
 	
 	def list_roles (self, role_name=None, behaviour=None):
 		"""
 		@return Role[]
 		"""
-		return self._request("list-roles",{"role":role_name, "behaviour":behaviour}, self._read_list_roles_response)
+		parametres = {}
+		if None != role_name :
+			parametres["role"] = role_name
+		if None != behaviour:
+			parametres["behaviour"] = behaviour
+			
+		return self._request("list-roles",parametres, self._read_list_roles_response)
 	
 	def list_role_params(self, role_name=None):
 		"""
 		@return dict
 		"""
-		return self._request("list-role-params",{"name":role_name}, self._read_list_role_params_response)
+		parametres = {}
+		if None != role_name :
+			parametres["role"] = role_name
+		return self._request("list-role-params",parametres, self._read_list_role_params_response)
 	
 	def list_scripts (self, event=None, asynchronous=None, name=None):
 		"""
 		@return Script[]
 		"""
-		return self._request("list-scripts",{"event":event, "asynchronous":asynchronous,"name":name}, self._read_list_scripts_response)
-		pass
+		parametres = {}
+		if None != event :
+			parametres["event"] = event
+		if None != asynchronous:
+			parametres["asynchronous"] = asynchronous
+		if None != name :
+			parametres["name"] = name
+		return self._request("list-scripts",parametres, self._read_list_scripts_response)
 	
 	def list_virtual_hosts (self, name=None, https=None):
 		"""
 		@return VirtualHost[]
 		"""
-		return self._request("list-virtualhosts",{"name":name, "https":https}, self._read_list_virtualhosts_response)
-		pass
+		parametres = {}
+		if None != name :
+			parametres["name"] = name
+		if None != https:
+			parametres["https"] = https
+		return self._request("list-virtualhosts",parametres, self._read_list_virtualhosts_response)
 	
 	def get_https_certificate (self):
 		"""
@@ -127,7 +147,7 @@ class QueryEnvService(object):
 		post_data = urllib.urlencode(request_body)
 		headers = {"Date": timestamp, "X-Signature": signature}
 		#print "canonical string + timestamp = ", data
-		#print "post data = ", post_data
+		print "post data = ", post_data
 		#print "post url  = ", url
 		#print "base64 signature = ", signature
 		#print "headers = ", headers
@@ -175,7 +195,6 @@ class QueryEnvService(object):
 				role.hosts.append(host)
 				
 			ret.append(role)
-
 		return ret
 	
 	
@@ -267,30 +286,58 @@ class Mountpoint(object):
 	create_fs = False
 	is_array = False
 	volumes  = []
+	def __repr__(self):
+		return "name = " + str(self.name) \
+	+ "; dir = " + str(self.dir) \
+	+ "; create_fs = " + str(self.create_fs) \
+	+ "; is_array = " + str(self.is_array) \
+	+ "; volumes = " + str(self.volumes)
 	
 class Volume(object):
 	volume_id  = None
 	device = None
+	def __repr__(self):
+		return 'volume_id = ' + str(self.volume_id) \
+	+ "; device = " + str(self.device)
 		
 class Role(object):
 	behaviour = None
 	name = None
 	hosts = []
+	def __repr__(self):
+		return 'behaviour = ' + str(self.behaviour) \
+	+ "; name = " + str(self.name) \
+	+ "; hosts = " + str(self.hosts) + ";"
 
 class RoleHost(object):
 	index = None
 	replication_master = False
 	internal_ip = None
 	external_ip	= None
+	def __repr__(self):
+		return "index = " + str(self.index) \
+	+ "; replication_master = " + str(self.replication_master) \
+	+ "; internal_ip = " + str(self.internal_ip) \
+	+ "; external_ip = " + str(self.external_ip)
 	
 class Script(object):
 	asynchronous = False
 	exec_timeout = None 
 	name = None
 	body = None
+	def __repr__(self):
+		return "asynchronous = " + str(self.asynchronous) \
+	+ "; exec_timeout = " + str(self.exec_timeout) \
+	+ "; name = " + str(self.name) \
+	+ "; body = " + str(self.body)
 	
 class VirtualHost(object):
 	hostname = None
 	type = None
 	raw = None
 	https = False
+	def __repr__(self):
+		return "hostname = " + str(self.hostname) \
+	+ "; type = " + str(self.type) \
+	+ "; raw = " + str(self.raw) \
+	+ "; https = " + str(self.https)
