@@ -101,7 +101,6 @@ class QueryEnvService(object):
 		s = ""
 		for key, value in sorted(params.items()):
 			s = s + str(key) + str(value)
-		#print s
 		return s
 		
 	def _sign (self, canonical_string, key):
@@ -142,25 +141,31 @@ class QueryEnvService(object):
 		timestamp = self._get_http_timestamp()
 		data = self._get_canonical_string(request_body) 
 		data += timestamp
-		#try:
 		signature = self._sign(data, self._key)
 		post_data = urllib.urlencode(request_body)
 		headers = {"Date": timestamp, "X-Signature": signature}
-		#print "canonical string + timestamp = ", data
-		print "post data = ", post_data
-		#print "post url  = ", url
-		#print "base64 signature = ", signature
-		#print "headers = ", headers
-		req = urllib2.Request(url, post_data, headers)
-		response = urllib2.urlopen(req)
-		#print "Info>>> ", response.info()
-		#print "URL>>> ", response.geturl()
-		# create xml, handle errors
-		#try:
-		xml = parseString(response.read())
+		response = None
+		try:
+			req = urllib2.Request(url, post_data, headers)
+			response = urllib2.urlopen(req)
+		except (urllib2.URLError, urllib2.HTTPError), e:
+			if e.code == 401:
+				raise QueryEnvError("Cannot authenticate on message server. %s" % (e.read()), e)
+			elif e.code == 400:
+				raise QueryEnvError("Malformed request. %s" % (e.read()), e)
+			elif e.code == 500:
+				raise QueryEnvError("QueryEnv failed. %s" % (e.read()), e)
+			elif e.code == 200:
+				raise QueryEnvError("HTTP Ok. %s" % (e.read()), e)
+			else:
+				raise QueryEnvError("Request to message server failed. %s" % (str(e)), e)
+		xml = None
+		try:
+			xml = parseString(response.read())
+		except (TypeError, AttributeError), e:
+			raise QueryEnvError("Cannot parse XML", e)
 		return response_reader(xml)
-		#except URLError, e:
-			#print "Caught: " + e
+		
 
 			
 	def _get_http_timestamp(self):
@@ -180,7 +185,6 @@ class QueryEnvService(object):
 		ret = []
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		print "list_roles_response (xml)>> ", response.toxml()
 		for role_el in response.firstChild.childNodes:
 			role = Role()
 			role.behaviour = role_el.getAttribute("behaviour")
@@ -203,8 +207,6 @@ class QueryEnvService(object):
 		ret = []
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		print "list_ebs_mountpoints_response (xml)>> ", response.toxml()
-		
 		for mountpoint_el in response.firstChild.childNodes:
 			mountpoint = Mountpoint()
 			mountpoint.name = mountpoint_el.getAttribute("name")
@@ -226,7 +228,6 @@ class QueryEnvService(object):
 		ret = []
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		print "list_scripts_response (xml)>> ", response.toxml()
 		for script_el in response.firstChild.childNodes:
 			script = Script()
 			script.asynchronous = bool(int(script_el.getAttribute("asynchronous")))
@@ -240,7 +241,6 @@ class QueryEnvService(object):
 		ret = {}
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		print "list_role_params_response (xml)>> ", response.toxml()
 		for param_el in response.firstChild.childNodes:
 			ret[param_el.getAttribute("name")] = param_el.firstChild.firstChild.nodeValue
 				
@@ -250,14 +250,12 @@ class QueryEnvService(object):
 		version = ""
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		print "get_latest_version_response (xml)>> ", response.toxml()
 		version = response.firstChild.firstChild.nodeValue
 		return version
 	
 	def _read_get_https_certificate_response(self, xml):
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		print "get_https_certificate_response (xml)>> ", response.toxml()
 		if len(response.childNodes):
 			cert = response.firstChild.firstChild.nodeValue
 			pkey = response.lastChild.firstChild.nodeValue
@@ -269,7 +267,6 @@ class QueryEnvService(object):
 		ret = []
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
-		print "list_virtualhosts_response (xml)>> ", response.toxml()
 		for vhost_el in response.firstChild.childNodes:
 			vhost = VirtualHost()
 			vhost.hostname = vhost_el.getAttribute("hostname")
