@@ -57,6 +57,8 @@ class ScriptExecutor(Handler):
 		self._logs_truncate_over = zrutil.parse_size(config.get(self._CONFIG_SECTION, "logs_truncate_over"))
 		
 	def on_EventNotice(self, message):
+		# TODO: remove event notice. 
+		
 		self._logger.debug("Entering on_EventNotice")
 		
 		internal_ip = message.body["InternalIP"]
