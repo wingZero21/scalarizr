@@ -2,6 +2,7 @@
 Created on Jan 6, 2010
 
 @author: marat
+@author: Dmytro Korsakov
 '''
 
 from scalarizr.core.handlers import Handler
@@ -26,12 +27,11 @@ class NginxHandler(Handler):
 		import logging
 		import subprocess
 		
-		bus = Bus()
 		self._logger = logging.getLogger(__package__ + "." + self.__class__.__name__)
-		self._queryenv = Bus()[BusEntries.QUERYENV_SERVICE]
-		#import ConfigParser
-		#config = ConfigParser.RawConfigParser()
-		#config.read("etc/include/handler.nginx.ini")
+		
+		bus = Bus()
+		self._queryenv = bus[BusEntries.QUERYENV_SERVICE]
+		
 		config = bus[BusEntries.CONFIG]
 		nginx_bin = config.get("handler_nginx","binary_path")
 		nginx_incl = config.get("handler_nginx","app_include_path")
@@ -45,11 +45,12 @@ class NginxHandler(Handler):
 		template_file = bus[BusEntries.BASE_PATH]+"/etc/include/handler.nginx/app-servers.tpl"
 		if os.path.isfile(template_file):
 			upstream_hosts = ""
-			ec2_listhosts_app = self._queryenv.list_roles("","app")
+			ec2_listhosts_app = self._queryenv.list_roles(behaviour = "app")
 			
 			for app_serv in ec2_listhosts_app :
-				upstream_hosts += "\tserver" + ec2_listhosts_app.hosts.internal_ip + ":" + app_port + ";\n"
-				num_of_appservers = num_of_appservers + 1
+				for app_hosts in app_serv.hosts :
+				    upstream_hosts += "\tserver" + app_hosts.internal_ip + ":" + app_port + ";\n"
+				    num_of_appservers = num_of_appservers + 1
 			
 			if 0 == num_of_appservers :
 				upstream_hosts = "\tserver 127.0.0.1:80;"
@@ -67,8 +68,8 @@ class NginxHandler(Handler):
 			tmp_incl = tmp_incl + "}"
 			
 		#HTTPS Configuration		
-		if os.path.isfile("/etc/nginx/https.include") & \
-		os.path.isfile("/etc/aws/keys/ssl/https.key") & \
+		if os.path.isfile("/etc/nginx/https.include") and \
+		os.path.isfile("/etc/aws/keys/ssl/https.key") and \
 		os.path.isfile("/etc/aws/keys/ssl/https.cert") :
 			#Needs one more file checking (cert)? See in original code line 80
 			tmp_incl += "include /etc/nginx/https.include;"
@@ -81,7 +82,7 @@ class NginxHandler(Handler):
 			shutil.move(nginx_incl, nginx_incl+".save")
 			shutil.move(tmp_incl, nginx_incl)
 			self._logger.info("Testing new configuration.")
-			if os.path.isfile(nginx_bin) & (not subprocess.call([nginx_bin, "-t"])):
+			if os.path.isfile(nginx_bin) and (not subprocess.call([nginx_bin, "-t"])):
 				self._logger.error("Configuration error detected: '$NG_LOG'. Reverting configuration.")
 				shutil.move(nginx_incl, nginx_incl+".junk")
 				shutil.move(nginx_incl+".save", nginx_incl)
