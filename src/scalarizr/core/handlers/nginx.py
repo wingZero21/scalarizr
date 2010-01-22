@@ -76,7 +76,7 @@ class NginxHandler(Handler):
 		os.path.isfile("/etc/aws/keys/ssl/cert.pem") :
 			tmp_incl += "include /etc/nginx/https.include;"
 			
-		#Determine, whether configuration was changed or no
+		#Determine, whether configuration was changed or not
 		if os.path.isfile(nginx_incl) and tmp_incl == open(nginx_incl,'r').read():
 			self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:
@@ -86,36 +86,40 @@ class NginxHandler(Handler):
 			file = open(nginx_incl, "w")
 			file.write(tmp_incl)
 			file.close()
-			self._logger.info("Testing new configuration.")
-			nginx_pid = "/var/run/nginx.pid"
 			
-			if os.path.isfile(nginx_bin) and subprocess.call([nginx_bin, "-t"]):
-				self._logger.error("Configuration error detected: '$NG_LOG'. Reverting configuration.")
+			self._logger.info("Testing new configuration.")
+			nginx_pid_file = "/var/run/nginx.pid"
+			nginx_test_command = [nginx_bin, "-t"]
+			
+			p = subprocess.Popen(nginx_test_command, \
+								 stdin=subprocess.PIPE, \
+								 stdout=subprocess.PIPE, \
+								 stderr=subprocess.PIPE)
+			stdout, stderr = p.communicate()
+			is_nginx_test_failed = p.poll()
+			
+			if os.path.isfile(nginx_bin) and is_nginx_test_failed:
+				self._logger.error("Configuration error detected:" +  stderr + " Reverting configuration.")
 				if os.path.isfile(nginx_incl):
 					shutil.move(nginx_incl, nginx_incl+".junk")
 				if os.path.isfile(nginx_incl+".save"):
 					shutil.move(nginx_incl+".save", nginx_incl)
-			elif os.path.isfile(nginx_bin) and os.path.isfile(nginx_pid):
+			
+			elif os.path.isfile(nginx_bin) and os.path.isfile(nginx_pid_file):
 				self._logger.info("Reloading nginx.")
-				#os.system("kill -HUP "+ open(nginx_pid,'r').read())
-				import subprocess
-				nginx_restart_command = "kill -HUP "+ open(nginx_pid,'r').read()
-				proc = subprocess.Popen(nginx_restart_command,
-                       shell=True,
-                       stdin=subprocess.PIPE,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE,
-                       )
-				stdout_value, stderr_value = proc.communicate('through stdin to stdout')
-				print '\tpass through:', repr(stdout_value)
-				print '\tstderr:', repr(stderr_value)
-				
+				nginx_pid = open(nginx_pid_file,'r').read()
+				if nginx_pid.endswith('\n'):
+					nginx_pid = nginx_pid[:-1]
+				if "" != nginx_pid :
+					nginx_restart_command = ["kill","-HUP", nginx_pid]
+					subprocess.call(nginx_restart_command)
+				else:
+					self._logger.info("/var/run/nginx.pid exists but empty (usually it so after configuration tests w/ running). Nginx hasn`t got HUP signal.")
 				
 			elif not os.path.isfile(nginx_bin):
-				self._logger.error("Nginx not found.")
-				print nginx_bin
-			elif not os.path.isfile(nginx_pid):
-				self._logger.debug("/var/run/nginx.pid does not exist. Probably nginx haven`t been started")
+				self._logger.info("Nginx not found.")
+			elif not os.path.isfile(nginx_pid_file):
+				self._logger.info("/var/run/nginx.pid does not exist. Probably nginx haven`t been started")
 		#call_user_code lib/nginx_reload
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
