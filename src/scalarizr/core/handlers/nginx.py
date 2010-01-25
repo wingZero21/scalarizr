@@ -42,7 +42,7 @@ class NginxHandler(Handler):
 			
 		tmp_incl = ""
 		num_of_appservers = 0
-		template_file = bus[BusEntries.BASE_PATH]+"/etc/include/handler.nginx/app-servers.tplm"
+		template_file = bus[BusEntries.BASE_PATH]+"/etc/include/handler.nginx/app-servers.tpl"
 		if os.path.isfile(template_file):
 			upstream_hosts = ""
 			ec2_listhosts_app = self._queryenv.list_roles(behaviour = "app")
