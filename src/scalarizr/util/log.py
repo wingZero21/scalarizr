@@ -10,10 +10,12 @@ import sys
 import atexit
 import logging
 import logging.handlers
+from scalarizr.core import Bus, BusEntries
 
 class MessagingHandler(logging.Handler):
     def __init__(self, num_stored_messages = 1, send_interval = "1"):
         logging.Handler.__init__(self)
+        self._msg_service = Bus()[BusEntries.MESSAGE_SERVICE]
         self.messages = []
         self.num_stored_messages = num_stored_messages
 
@@ -36,13 +38,21 @@ class MessagingHandler(logging.Handler):
         t.daemon = True
         t.start()
 
-    def send_messages(self):
+    def send_message(self):
         lock = threading.Lock()
         lock.acquire() # will block if lock is already held
+        
         if [] != self.messages:
-            #Insert useful function there:
-            for l in self.messages:
-                print "MessagingHandler:" , l
+            message = self._msg_service.new_message("LogMessage")
+            producer = self._msg_service.get_producer()
+            
+            entries = []
+            for m in self.messages:
+                entries.append([m.pathname, m.level, m.msg])
+            
+            message.body["entries"] = entries
+            producer.send(message)
+            
             self.messages = []
             self.time_point = time.time()
         lock.release()
@@ -50,26 +60,10 @@ class MessagingHandler(logging.Handler):
     def emit(self, record):
         self.messages.append(record)
         if len(self.messages) >= self.num_stored_messages:
-            self.send_messages()
+            self.send_message()
 
     def timer_thread(self):
         while 1:
-            time_delta = time.time() - self.time_point
-            while (time_delta < self.send_interval) or (time_delta <= 1):
+            while (time.time() - self.time_point < self.send_interval) or (time.time() - self.time_point <= 1):
                 time.sleep(1)
-            self.send_messages()
-
-if __name__ == "__main__":
-
-    logger = logging.getLogger()
-    testHandler = MessagingHandler(2,"2")
-    #testHandler.setLevel(logging.CRITICAL)
-    logger.addHandler(testHandler)
-    # And finally a test
-    logger.error('Test 1')
-    time.sleep(1)
-    logger.error('Test 2')
-    logger.warning('Test 3')
-    time.sleep(3)
-    logger.error('Test 4')
-    logger.critical('Test 5')
+            self.send_message()
