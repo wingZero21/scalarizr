@@ -30,7 +30,7 @@ class MessagingHandler(logging.Handler):
 
         self.time_point = time.time()
         
-        atexit.register(self.send_messages)
+        atexit.register(self.send_message)
         
         t = threading.Thread(target=self.timer_thread)
         #Code refactoring needed : 
@@ -48,7 +48,7 @@ class MessagingHandler(logging.Handler):
             
             entries = []
             for m in self.messages:
-                entries.append([m.pathname, m.level, m.msg])
+                entries.append([m.pathname, m.levelname, m.msg])
             
             message.body["entries"] = entries
             producer.send(message)
@@ -60,10 +60,12 @@ class MessagingHandler(logging.Handler):
     def emit(self, record):
         self.messages.append(record)
         if len(self.messages) >= self.num_stored_messages:
+            print "By num limit:"
             self.send_message()
 
     def timer_thread(self):
         while 1:
-            while (time.time() - self.time_point < self.send_interval) or (time.time() - self.time_point <= 1):
+            while (time.time() - self.time_point < self.send_interval) or (time.time() - self.time_point < 1):
                 time.sleep(1)
+            print "By time limit:"
             self.send_message()
