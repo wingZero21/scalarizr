@@ -14,7 +14,11 @@ from scalarizr.core import Bus, BusEntries
 
 class MessagingHandler(logging.Handler):
     def __init__(self, num_stored_messages = 1, send_interval = "1"):
+        
+        self.time_point = time.time()
+        
         logging.Handler.__init__(self)
+        
         self._msg_service = Bus()[BusEntries.MESSAGE_SERVICE]
         self.messages = []
         self.num_stored_messages = num_stored_messages
@@ -27,14 +31,11 @@ class MessagingHandler(logging.Handler):
             self.send_interval = int(send_interval)
         else:
             self.send_interval = 1
-
-        self.time_point = time.time()
         
-        atexit.register(self.send_message)
-        
-        t = threading.Thread(target=self.timer_thread)
         #Code refactoring needed : 
-        #after calling exit function from main program timer-thread throws exception  
+        #after calling exit function from main program timer-thread throws exception 
+        atexit.register(self.send_message)
+        t = threading.Thread(target=self.timer_thread) 
         t.daemon = True
         t.start()
 
@@ -54,18 +55,19 @@ class MessagingHandler(logging.Handler):
             producer.send(message)
             
             self.messages = []
-            self.time_point = time.time()
+        self.time_point = time.time()
         lock.release()
 
     def emit(self, record):
         self.messages.append(record)
         if len(self.messages) >= self.num_stored_messages:
-            print "By num limit:"
             self.send_message()
 
     def timer_thread(self):
         while 1:
-            while (time.time() - self.time_point < self.send_interval) or (time.time() - self.time_point < 1):
+            while 1:
+                time_delta = time.time() - self.time_point
+                if  (time_delta > 1) and (time_delta > self.send_interval):
+                    break
                 time.sleep(1)
-            print "By time limit:"
             self.send_message()
