@@ -10,10 +10,10 @@ import logging
 
 
 class P2pOptions:
-	SERVER_ID = "p2p.server_id"
-	CRYPTO_KEY_PATH = "p2p.crypto_key_path"
-	PRODUCER_ENDPOINT = "p2p.producer.endpoint"
-	CONSUMER_ENDPOINT = "p2p.consumer.endpoint"
+	SERVER_ID = "p2p_server_id"
+	CRYPTO_KEY_PATH = "p2p_crypto_key_path"
+	PRODUCER_ENDPOINT = "p2p_producer_endpoint"
+	CONSUMER_ENDPOINT = "p2p_consumer_endpoint"
 
 class P2pMessageService(MessageService):
 	_config = {}
@@ -23,8 +23,8 @@ class P2pMessageService(MessageService):
 	def __init__(self, config):
 		self._config = config
 
-	def new_message(self, name=None):
-		return P2pMessage(name)
+	def new_message(self, name=None, meta={}, body={}):
+		return P2pMessage(name, meta, body)
 	
 	def get_consumer(self):
 		if self._consumer is None:
@@ -66,7 +66,7 @@ class _P2pMessageStore:
 	_logger = None
 
 	def __init__(self):
-		self._logger = logging.getLogger(__package__)
+		self._logger = logging.getLogger(__name__)
 	
 	def _conn(self):
 		return Bus()[BusEntries.DB].get().get_connection()
@@ -227,11 +227,10 @@ def P2pMessageStore():
 	return _message_store
 
 class P2pMessage(Message):
-	_store = None
-	
+
 	def __init__(self, name=None, meta={}, body={}):
 		Message.__init__(self, name, meta, body)
-		self._store = P2pMessageStore()
+		self.__dict__["_store"] = P2pMessageStore()
 	
 	def is_delivered(self):
 		return self._store.is_delivered(self.id)

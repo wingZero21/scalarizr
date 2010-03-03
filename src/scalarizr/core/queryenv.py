@@ -4,7 +4,14 @@ Created on Dec 23, 2009
 @author: Dmytro Korsakov
 '''
 import logging
-from scalarizr.messaging import MessageProducer, Message, MessagingError
+import time
+import urllib
+import urllib2
+from xml.dom.minidom import parseString
+import hmac
+import hashlib
+import binascii
+
 
 class QueryEnvError(BaseException):
 	pass
@@ -13,22 +20,18 @@ class QueryEnvService(object):
 	_logger = None
 	_service_url = None
 	_api_version = None
-	_farm_id = None
-	_instance_id = None
 	_key = None
-	_key_id = None
+	_server_id = None
 	
-	def __init__(self, service_url, farm_id, instance_id, key=None, key_id=None, api_version="2009-03-05"):
-		self._logger = logging.getLogger(__package__)
+	def __init__(self, service_url, server_id=None, key=None, api_version="2009-03-05"):
+		self._logger = logging.getLogger(__name__)
 		self._service_url = service_url
-		self._farm_id = farm_id
-		self._instance_id = instance_id
-		self._key = key
-		self._key_id = key_id
+		self._key = binascii.a2b_base64(key)
+		self._server_id = server_id
 		self._api_version = api_version
 	
-	def set_keys(self, key_id, key):
-		self._key_id = key_id
+	def set_key(self, server_id, key):
+		self._server_id = server_id
 		self._key = key
 	
 	def list_roles (self, role_name=None, behaviour=None):
@@ -107,10 +110,6 @@ class QueryEnvService(object):
 		"""
 		@return: string
 		"""
-		import hmac
-		import hashlib
-		import binascii
-		
 		digest = hmac.new(key, canonical_string, hashlib.sha1).digest()
 		sign = binascii.b2a_base64(digest)
 		if sign.endswith('\n'):
@@ -121,44 +120,40 @@ class QueryEnvService(object):
 		"""
 		@return object
 		"""
-		import time
-		import urllib
-		import urllib2
-		from xml.dom.minidom import parseString
-		
+	
 		
 		request_body = {}
 		request_body["operation"] = command
 		request_body["version"] = self._api_version
-		request_body["KeyID"] = self._key_id 
-		request_body["farmid"] = self._farm_id 
-		request_body["instanceid"] = self._instance_id
 		if {} != params :
 			for key, value in params.items():
 				request_body[key] = value
 				
-		url = self._service_url + self._api_version + '/' + command
+		#url = self._service_url + self._api_version + '/' + command
+		url = self._service_url
 		timestamp = self._get_http_timestamp()
 		data = self._get_canonical_string(request_body) 
 		data += timestamp
 		signature = self._sign(data, self._key)
 		post_data = urllib.urlencode(request_body)
-		headers = {"Date": timestamp, "X-Signature": signature}
+		headers = {"Date": timestamp, "X-Signature": signature, "X-Server-Id": self._server_id}
 		response = None
 		try:
 			req = urllib2.Request(url, post_data, headers)
 			response = urllib2.urlopen(req)
 		except (urllib2.URLError, urllib2.HTTPError), e:
-			if e.code == 401:
-				raise QueryEnvError("Cannot authenticate on message server. %s" % (e.read()), e)
-			elif e.code == 400:
-				raise QueryEnvError("Malformed request. %s" % (e.read()), e)
-			elif e.code == 500:
-				raise QueryEnvError("QueryEnv failed. %s" % (e.read()), e)
-			elif e.code == 200:
-				raise QueryEnvError("HTTP Ok. %s" % (e.read()), e)
+			if hasattr(e, "code"):
+				if e.code == 401:
+					raise QueryEnvError("Cannot authenticate on QueryEnv server. %s" % (e.read()), e)
+				elif e.code == 400:
+					raise QueryEnvError("Malformed request. %s" % (e.read()), e)
+				elif e.code == 500:
+					raise QueryEnvError("QueryEnv failed. %s" % (e.read()), e)
+				else:
+					raise QueryEnvError("Request to QueryEnv server failed. %s" % (str(e)), e)
 			else:
-				raise QueryEnvError("Request to message server failed. %s" % (str(e)), e)
+				raise QueryEnvError("Cannot connect to QueryEnv server. %s" % str(e))
+			
 		xml = None
 		try:
 			xml = parseString(response.read())
@@ -169,8 +164,6 @@ class QueryEnvService(object):
 
 			
 	def _get_http_timestamp(self):
-		import time
-		import datetime
 		return time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
 	
 		
@@ -193,7 +186,7 @@ class QueryEnvService(object):
 				host = RoleHost()
 				host.index = int(host_el.getAttribute("index"))
 				if host_el.hasAttribute("replication-master"):
-				    host.replication_master = bool(int(host_el.getAttribute("replication-master")))
+					host.replication_master = bool(int(host_el.getAttribute("replication-master")))
 				host.internal_ip = host_el.getAttribute("internal-ip")
 				host.external_ip = host_el.getAttribute("external-ip")
 				role.hosts.append(host)
@@ -203,7 +196,6 @@ class QueryEnvService(object):
 	
 	
 	def _read_list_ebs_mountpoints_response(self, xml):
-		import string
 		ret = []
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
@@ -247,7 +239,6 @@ class QueryEnvService(object):
 		return ret
 	
 	def _read_get_latest_version_response(self, xml):
-		version = ""
 		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
 		version = response.firstChild.firstChild.nodeValue

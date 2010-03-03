@@ -19,13 +19,14 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 	
 	
 	def __init__(self, config):
+		MessageProducer.__init__(self)
 		_P2pBase.__init__(self, config)
 		for pair in config:
 			key = pair[0]
 			if key == P2pOptions.PRODUCER_ENDPOINT:
 				self.endpoint = pair[1]
 	
-		self._logger = logging.getLogger(__package__)
+		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
 	
 	def send(self, queue, message):
@@ -33,7 +34,9 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 		try:
 			if message.id is None:
 				message.id = str(uuid.uuid4())
-				self._store.put_outgoing(message, queue)
+				
+			self.fire("beforesend", queue, message)				
+			self._store.put_outgoing(message, queue)
 			
 			# Prepare POST body
 			xml = message.toxml()
@@ -45,8 +48,10 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			resp = urlopen(req)
 			
 			self._store.mark_as_delivered(message.id)
+			self.fire("send", queue, message)
 			
 		except URLError, e:
+			self.fire("senderror", e, queue, message)
 			self._logger.exception(e)
 			self._logger.info("mark as undelivered")
 			self._store.mark_as_undelivered(message.id)

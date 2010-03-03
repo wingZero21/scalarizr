@@ -1,40 +1,47 @@
 
 import logging
 
-"""
-class Observable:
+class Observable(object):
 	
 	_listeners = {}
-	_lock = None
-	
-	def __ini__(self):
-		self._lock = RLock()
+	_events_suspended = False
 	
 	def define_events(self, *args):
-		try: 
-			self._lock.acquire()
-			#for event in args:
-		finally:
-			self._lock.release()
+		for event in args:
+			self._listeners[event] = list()
+	
+	def list_events(self):
+		return self._listeners.keys()
 	
 	def fire(self, event, *args):
-		pass
+		logger = logging.getLogger(__name__)
+		logger.debug(self.__class__.__name__ + " fires " + event)
+		if not self._events_suspended:
+			if self._listeners.has_key(event):
+				for ln in self._listeners[event]:
+					ln(*args)
 	
-	def on(self, event, listener):
-		pass
+	def on(self, event, *args):
+		if not self._listeners.has_key(event):
+			raise Exception("Event '%s' is not defined" % event)
+		for listener in args:
+			if not listener in self._listeners[event]:
+				self._listeners[event].append(listener)
 	
-	def un(self):
-		pass
+	def un(self, event, listener):
+		if self._listeners.has_key(event):
+			if listener in self._listeners[event]:
+				self._listeners[event].remove(listener)
 	
 	def suspend_events(self):
-		pass
+		self._events_suspended = True
 	
 	def resume_events(self):
-		pass
-"""
+		self._events_suspended = False
+
 
 def inject_config(config, inj_config, sections_prefix=""):
-	logger = logging.getLogger(__package__)
+	logger = logging.getLogger(__name__)
 	
 	logger.debug("Injecting config with a section prefix: '%s'", sections_prefix)
 	for inj_section in inj_config.sections():
@@ -49,7 +56,7 @@ def parse_size(size):
 	"""
 	Read string like 10K, 12M, 1014B and return size in bytes
 	"""
-	ret = string(size)
+	ret = str(size)
 	dim = ret[-1]		
 	ret = float(ret[0:-1])
 	if dim.lower() == "b":
@@ -90,7 +97,7 @@ class _CryptoUtil(object):
 		from Crypto.Cipher import Blowfish
 				
 		k = binascii.a2b_base64(key)
-		return Blowfish.new(k[0:len(k)-9], Blowfish.MODE_CBC, k[len(k)-8:])		
+		return Blowfish.new(k[0:len(k)-9], Blowfish.MODE_CFB, k[len(k)-8:])		
 		
 	def encrypt (self, s, key):
 		c = self._init_chiper(key)

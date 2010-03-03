@@ -14,11 +14,22 @@ import os
 import stat
 import logging
 import binascii
+from scalarizr.messaging import Queues
 
 def get_handlers ():
 	return [ScriptExecutor()]
 
-class ScriptExecutor(Handler):
+def exec_scripts_on_event (event_name):
+	ScriptExecutor().exec_scripts_on_event(event_name)
+
+_script_executor = None
+def ScriptExecutor():
+	global _script_executor
+	if _script_executor is None:
+		_script_executor = _ScriptExecutor()
+	return _script_executor
+
+class _ScriptExecutor(Handler):
 	_CONFIG_SECTION = "handler_script_executor"
 	_logger = None
 	_queryenv = None
@@ -36,13 +47,22 @@ class ScriptExecutor(Handler):
 	_wait_async = False
 	
 	def __init__(self, wait_async=False):
+		self._logger = logging.getLogger(__name__)		
 		self._wait_async = wait_async
-		self._logger = logging.getLogger(__package__ + "." + self.__class__.__name__)
-		self._queryenv = Bus()[BusEntries.QUERYENV_SERVICE]
-		self._msg_service = Bus()[BusEntries.MESSAGE_SERVICE]
-		self._platform = Bus()[BusEntries.PLATFORM]
 		
-		config = Bus()[BusEntries.CONFIG]
+		bus = Bus()
+		self._queryenv = bus[BusEntries.QUERYENV_SERVICE]
+		self._msg_service = bus[BusEntries.MESSAGE_SERVICE]
+		self._platform = bus[BusEntries.PLATFORM]
+		
+		producer = self._msg_service.get_producer()
+		producer.on("beforesend", self.on_before_message_send)
+		
+		config = bus[BusEntries.CONFIG]
+		if not config.has_section(self._CONFIG_SECTION):
+			raise Exception("Script executor handler is not configured. "
+						    + "Config has no section '%s'" % self._CONFIG_SECTION)
+		
 		# read exec_dir_prefix
 		self._exec_dir_prefix = config.get(self._CONFIG_SECTION, "exec_dir_prefix")
 		if not os.path.isabs(self._exec_dir_prefix):
@@ -55,36 +75,23 @@ class ScriptExecutor(Handler):
 		
 		# logs_truncate_over
 		self._logs_truncate_over = zrutil.parse_size(config.get(self._CONFIG_SECTION, "logs_truncate_over"))
+	
+	
+	def on_before_message_send(self, queue, message):
+		self.exec_scripts_on_event(message.name)
 		
-	def on_EventNotice(self, message):
-		# TODO: remove event notice. 
-		
-		self._logger.debug("Entering on_EventNotice")
-		
-		internal_ip = message.body["InternalIP"]
-		role_name = message.body["RoleName"]
-		event_name = message.body["EventName"]
-		self._logger.info("Received event notice (event_name: %s, role_name: %s, ip: %s)", 
-						event_name, role_name, internal_ip)
-		self._event_name = event_name
-		
-		if self._platform.get_private_ip() == internal_ip:
-			self._logger.info("Ignore event with the same ip as mine")
-			return 
-		
-		if internal_ip == "0.0.0.0":
-			self._logger.info("Custom event %s fired", event_name)
-		else:
-			self._logger.info("Scalr notified me that %s (role: %s) fired event %s", 
-							internal_ip, role_name, event_name)
-		
+	
+	def exec_scripts_on_event (self, event_name, internal_ip=None):
 		self._logger.debug("Fetching scripts for event %s", event_name)	
 		scripts = self._queryenv.list_scripts(event_name)
 		self._logger.debug("Fetched %d scripts", len(scripts))
 		
 		if len(scripts) > 0:
-			self._logger.info("Executing %d script(s) on event %s fired on host %s", 
-							len(scripts), event_name, internal_ip)
+			if not internal_ip is None:
+				self._logger.info("Executing %d script(s) on event %s fired on host %s", 
+						len(scripts), event_name, internal_ip)
+			else:
+				self._logger.info("Executing %d script(s) on event %s", len(scripts), event_name)
 			
 			self._exec_dir = self._exec_dir_prefix + str(time.time())
 			self._logger.debug("Create temp exec dir %s", self._exec_dir)
@@ -114,6 +121,32 @@ class ScriptExecutor(Handler):
 				for t in async_threads:
 					t.join()
 			os.removedirs(self._exec_dir)
+
+		
+	def on_EventNotice(self, message):
+		# TODO: remove event notice. 
+		
+		self._logger.debug("Entering on_EventNotice")
+		
+		internal_ip = message.body["InternalIP"]
+		role_name = message.body["RoleName"]
+		event_name = message.body["EventName"]
+		self._logger.info("Received event notice (event_name: %s, role_name: %s, ip: %s)", 
+						event_name, role_name, internal_ip)
+		self._event_name = event_name
+		
+		if self._platform.get_private_ip() == internal_ip:
+			self._logger.info("Ignore event with the same ip as mine")
+			return 
+		
+		if internal_ip == "0.0.0.0":
+			self._logger.info("Custom event %s fired", event_name)
+		else:
+			self._logger.info("Scalr notified me that %s (role: %s) fired event %s", 
+							internal_ip, role_name, event_name)
+		
+		self.exec_scripts_on_event(event_name, internal_ip)
+		
 			
 	def _execute_script(self, script):
 		# Create script file in local fs
@@ -174,7 +207,7 @@ class ScriptExecutor(Handler):
 		
 		self._logger.debug("Sending 'execResult' message to Scalr")
 		producer = self._msg_service.get_producer()
-		producer.send(message)
+		producer.send(Queues.CONTROL, message)
 		self._logger.debug("Done sending message")
 	
 	def _get_truncated_log(self, logfile, maxsize):

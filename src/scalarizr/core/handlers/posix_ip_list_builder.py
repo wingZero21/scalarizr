@@ -19,7 +19,7 @@ class PosixIpListBuilder(Handler):
 	_base_path = None
 	
 	def __init__(self):
-		self._logger = logging.getLogger(__package__ + "." + self.__class__.__name__)
+		self._logger = logging.getLogger(__name__)
 		
 		config = Bus()[BusEntries.CONFIG]
 		self._base_path = config.get("handler_posix_ip_list_builder", "base_path")     	    

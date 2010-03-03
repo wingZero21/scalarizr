@@ -4,13 +4,15 @@ Created on Dec 24, 2009
 @author: marat
 '''
 
-from scalarizr.platform import Platform
+from scalarizr.platform import Platform, PlatformError 
 import socket
 
 def get_platform():
 	return VpsPlatform()
 
 class VpsPlatform(Platform):
+	name = "vps"
+	
 	def get_private_ip(self):
 		return self.get_public_ip()
 	

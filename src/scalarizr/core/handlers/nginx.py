@@ -27,7 +27,7 @@ class NginxHandler(Handler):
 		import logging
 		import subprocess
 		
-		self._logger = logging.getLogger(__package__ + "." + self.__class__.__name__)
+		self._logger = logging.getLogger(__name__)
 		
 		bus = Bus()
 		self._queryenv = bus[BusEntries.QUERYENV_SERVICE]
@@ -91,10 +91,8 @@ class NginxHandler(Handler):
 			nginx_pid_file = "/var/run/nginx.pid"
 			nginx_test_command = [nginx_bin, "-t"]
 			
-			p = subprocess.Popen(nginx_test_command, \
-								 stdin=subprocess.PIPE, \
-								 stdout=subprocess.PIPE, \
-								 stderr=subprocess.PIPE)
+			p = subprocess.Popen(nginx_test_command, 
+					stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			stdout, stderr = p.communicate()
 			is_nginx_test_failed = p.poll()
 			

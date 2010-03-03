@@ -31,14 +31,14 @@ if __name__ == "__main__":
 	config = Bus()[BusEntries.CONFIG]
 	factory = MessageServiceFactory()
 	service = factory.new_service(config.get("messaging", "adapter"), config.items("messaging"))
-	producer = service.new_producer()
+	producer = service.get_producer()
 	
 	msg = service.new_message()
 	msg.name = options.name
 	for pair in args:
 		k, v = pair.split("=")
 		msg.body[k] = v
-
+		
 	producer.send(options.queue, msg)
 
 	print "Done"

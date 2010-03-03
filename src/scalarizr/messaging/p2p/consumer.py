@@ -3,11 +3,11 @@ Created on Dec 5, 2009
 
 @author: marat
 '''
-from scalarizr.messaging import MessageConsumer, Message, MessagingError
+from scalarizr.messaging import MessageConsumer
 from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, P2pOptions, _P2pBase
 from scalarizr.util import CryptoUtil
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-from threading import Thread, current_thread
+from threading import Thread
 import logging
 import timemodule as time
 
@@ -25,7 +25,7 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 			if key == P2pOptions.CONSUMER_ENDPOINT:
 				self.endpoint = pair[1]
 				
-		self._logger = logging.getLogger(__package__)
+		self._logger = logging.getLogger(__name__)
 		self._handler_thread = Thread(name="MessageHandler", target=self.message_handler)
 			
 	def start(self):
@@ -46,7 +46,7 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 			
 			# stop http server
 			self._server.server_close()
-			 
+
 			# stop message handler thread
 			self._shutdown_handler = True
 			self._handler_thread.join()
@@ -75,15 +75,16 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 	consumer = None
 
 	def do_POST(self):
-		logger = logging.getLogger(__package__)
+		logger = logging.getLogger(__name__)
 		
 		import os.path
 		queue = os.path.basename(self.path)
 		rawmsg = self.rfile.read(int(self.headers["Content-length"]))
-		logger.info("Received ingoing message. queue: '%s', message: %s" % (queue, rawmsg))
+		logger.debug("Received ingoing message. queue: '%s', rawmessage: %s" % (queue, rawmsg))
 		
 		
 		try:
+			logger.debug("Decrypt message")
 			xml = CryptoUtil().decrypt(rawmsg, self.consumer._crypto_key)
 			message = P2pMessage()
 			message.fromxml(xml)
@@ -91,6 +92,8 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 			logger.exception(e)
 			self.send_response(400, str(e))
 			return
+		
+		logger.info("Received ingoing message. queue: '%s' message: %s" % (queue, message))
 		
 		try:
 			store = P2pMessageStore()
@@ -105,5 +108,5 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 		
 		
 	def log_message(self, format, *args):
-		logger = logging.getLogger(__package__)
+		logger = logging.getLogger(__name__)
 		logger.info("%s %s\n", self.address_string(), format%args)

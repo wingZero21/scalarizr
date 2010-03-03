@@ -4,18 +4,19 @@ Created on Dec 25, 2009
 @author: marat
 '''
 
+from scalarizr.core import Bus, BusEntries
 from scalarizr.core.handlers import Handler
 import logging
 
 def get_handlers ():
-	return [ScriptExecutor()]
+	return [ApacheAdapter()]
 
 class ApacheHandler(Handler):
 	_logger = None
 	_queryenv = None
 	
 	def __init__(self):
-		self._logger = logging.getLogger(__package__ + "." + self.__class__.__name__)
+		self._logger = logging.getLogger(__name__)
 		self._queryenv = Bus()[BusEntries.QUERYENV_SERVICE]
 	
 	def on_VhostReconfigure(self, message):

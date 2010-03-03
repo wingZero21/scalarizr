@@ -18,6 +18,8 @@ class PlatformFactory(object):
 		return self._platforms[name];
 
 class Platform():
+	name = None
+	
 	def get_private_ip(self):
 		"""
 		@return string 

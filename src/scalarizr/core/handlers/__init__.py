@@ -4,7 +4,6 @@ import os
 import platform
 import logging
 
-logger = logging.getLogger(__package__)
 
 class Handler(object):
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -26,7 +25,7 @@ class MessageListener ():
 	_accept_kwargs = {}
 	
 	def __init__(self):
-		self._logger = logging.getLogger(__package__)
+		self._logger = logging.getLogger(__name__)
 		config = Bus()[BusEntries.CONFIG]
 		self._logger.debug("Initialize message listener");
 		
@@ -36,8 +35,9 @@ class MessageListener ():
 		self._accept_kwargs["dist"] = platform.dist()
 		self._logger.debug("Gathered _accept_kwargs: %s", self._accept_kwargs)
 		
-		pass
+		self._get_handlers_chain()
 	
+
 	def _get_handlers_chain (self):
 		if self._handlers_chain is None:
 			self._handlers_chain = []
@@ -75,7 +75,7 @@ class MessageListener ():
 					# Import module
 					if not skip:
 						try:
-							module = __import__(module_name, globals(), locals(), ["get_handlers"])
+							module = __import__(module_name, globals(), locals(), ["get_handlers"], -1)
 							try:
 								self._handlers_chain.extend(module.get_handlers())
 							except Exception, e:
@@ -95,19 +95,23 @@ class MessageListener ():
 		return self._handlers_chain
 	
 	def __call__(self, message, queue):
-		logger.info("Handle '%s'" % (message.name))
+		self._logger.info("Handle '%s'" % (message.name))
+		accepted = False
 		for handler in self._get_handlers_chain():
 			try:
 				if handler.accept(message, queue):
+					accepted = True
 					self._logger.info("Call handler %s" % handler.__class__.__name__)
 					try:
 						handler(message)
 					except Exception, e:
-						logger.error("Exception in message handler")
-						logger.exception(e)
+						self._logger.error("Exception in message handler")
+						self._logger.exception(e)
 			except Exception, e:
 				self._logger.error("%s accept() method failed with exception", handler.__class__.__name__)
 				self._logger.exception(e)
-			
+		
+		if not accepted:
+			self._logger.warning("No one could handle '%s'", message.name)
 			
 			

@@ -1,3 +1,4 @@
+from scalarizr.util import Observable
 class BusEntries:
 	BASE_PATH = "base_path"
 	"""
@@ -29,7 +30,7 @@ class BusEntries:
 	@cvar scalarizr.platform.Platform: Platform (ec2, rs, vps...)
 	"""
 
-class _Bus:
+class _Bus(Observable):
 	_registry = {}
 	
 	def __setitem__(self, name, value):
@@ -70,12 +71,13 @@ def initialize():
 	
 	# Configure database connection pool
 	bus[BusEntries.DB] = pool.SingletonThreadPool(_connect)
+	
 
 def _connect():
 	bus = Bus()
 	file = bus[BusEntries.BASE_PATH] + "/" + bus[BusEntries.CONFIG].get("default", "storage_path")
 
-	logger = logging.getLogger(__package__)
+	logger = logging.getLogger(__name__)
 	logger.debug("Open SQLite database (file: %s)" % (file))
 	
 	conn = sqlite.Connection(file)

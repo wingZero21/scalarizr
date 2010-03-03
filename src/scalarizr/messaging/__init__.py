@@ -1,3 +1,4 @@
+from scalarizr.util import Observable
 
 class MessagingError(BaseException):
 	pass
@@ -13,7 +14,7 @@ class MessageServiceFactory(object):
 		return self._adapters[name].new_service(config)
 
 class MessageService(object):
-	def new_message(self, name=None):
+	def new_message(self, name=None, meta={}, body={}):
 		pass
 	
 	def get_consumer(self):
@@ -29,15 +30,21 @@ class MetaOptions(object):
 	REQUEST_ID 	= "requestId"
 	
 class Message(object):
-	id = None	
-	name = None
-	meta = {}	
-	body = {}
 	
 	def __init__(self, name=None, meta={}, body={}):
-		self.name = name
-		self.meta = meta
-		self.body = body
+		self.__dict__["id"] = None
+		self.__dict__["name"] = name
+		self.__dict__["meta"] = meta
+		self.__dict__["body"] = body
+	
+	def __setattr__(self, name, value):
+		if name in self.__dict__:
+			self.__dict__[name] = value
+		else:
+			self.body[name] = value
+		
+	def __getattr__(self, name):
+		return self.body[name] if name in self.body else None
 	
 	def is_delivered(self):
 		pass
@@ -93,7 +100,17 @@ class Message(object):
 		return doc.toxml()
 		
 	
-class MessageProducer(object):
+class MessageProducer(Observable):
+	def __init__(self):
+		self.define_events(
+			# Fires before message is send
+			"beforesend", 
+			# Fires after message is send
+			"send",
+			# Fires when error occures
+			"senderror"
+		)
+	
 	def send(self, queue, message):
 		pass
 	
@@ -114,3 +131,11 @@ class MessageConsumer(object):
 	def stop(self):
 		pass
 	
+class Queues:
+	CONTROL = "control"
+	LOG = "log"
+	
+class Messages:
+    HOST_INIT = "HostInit"
+    HOST_UP = "HostUp"
+    BLOCK_DEVICE_UPDATED = "BlockDeviceUpdated"
