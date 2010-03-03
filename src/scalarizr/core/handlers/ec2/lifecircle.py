@@ -17,18 +17,21 @@ class AwsLifeCircleHandler(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		
+		Bus().on("init", self.on_init)		
+	
+	def on_init(self, *args, **kwargs):
 		bus = Bus()
-		bus.on("beforehostinit", self.on_before_host_init)
-		
+		bus.on("beforehostinit", self.on_before_host_init)		
+
 		msg_service = bus[BusEntries.MESSAGE_SERVICE]
 		producer = msg_service.get_producer()
 		producer.on("beforesend", self.on_before_message_send)
+	
 		
-	def on_before_host_init(self):
+	def on_before_host_init(self, *args, **kwargs):
 		bus = Bus()
 		base_path = bus[BusEntries.BASE_PATH]
-		
+		"""
 		self._logger.info("Add udev rule for EBS devices")
 		try:
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")
@@ -37,7 +40,7 @@ class AwsLifeCircleHandler(Handler):
 		except IOError, e:
 			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' IOError: %s", str(e))
 			raise
-	
+		"""
 	
 	def on_before_message_send(self, queue, message):
 		

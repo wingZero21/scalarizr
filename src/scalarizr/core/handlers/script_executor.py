@@ -19,17 +19,7 @@ from scalarizr.messaging import Queues
 def get_handlers ():
 	return [ScriptExecutor()]
 
-def exec_scripts_on_event (event_name):
-	ScriptExecutor().exec_scripts_on_event(event_name)
-
-_script_executor = None
-def ScriptExecutor():
-	global _script_executor
-	if _script_executor is None:
-		_script_executor = _ScriptExecutor()
-	return _script_executor
-
-class _ScriptExecutor(Handler):
+class ScriptExecutor(Handler):
 	_CONFIG_SECTION = "handler_script_executor"
 	_logger = None
 	_queryenv = None

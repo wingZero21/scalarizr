@@ -28,15 +28,17 @@ class LifeCircleHandler(Handler):
 		msg_service = bus[BusEntries.MESSAGE_SERVICE]
 		producer = msg_service.get_producer()
 		producer.on("beforesend", self.on_before_message_send)
-		
+	
 	def on_before_message_send(self, queue, message):
 		"""
 		@todo: Add scalarizr version to meta
 		"""
 		pass
 		
+	
+		
 	def on_start(self):
-		self._bus.fire("beforehostinit")
+		self._bus.fire("beforehostinit", "a", "b")
 		
 		# Send host init
 		"""

@@ -13,13 +13,13 @@ class Observable(object):
 	def list_events(self):
 		return self._listeners.keys()
 	
-	def fire(self, event, *args):
+	def fire(self, event, *args, **kwargs):
 		logger = logging.getLogger(__name__)
 		logger.debug(self.__class__.__name__ + " fires " + event)
 		if not self._events_suspended:
 			if self._listeners.has_key(event):
 				for ln in self._listeners[event]:
-					ln(*args)
+					ln(*args, **kwargs)
 	
 	def on(self, event, *args):
 		if not self._listeners.has_key(event):

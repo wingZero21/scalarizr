@@ -55,16 +55,19 @@ if __name__ == "__main__":
 	logger.info("Starting scalarizr...")
 	
 	# Read behaviour configurations and inject them into global config
-	from ConfigParser import ConfigParser
-	from scalarizr.util import inject_config
+	#from ConfigParser import ConfigParser
+	#from scalarizr.util import inject_config
 	behaviour = config.get("default", "behaviour").split(",")
 	for bh in behaviour:
 		filename = "%s/etc/include/behaviour.%s.ini" % (base_path, bh)
 		if os.path.exists(filename):
 			logger.debug("Read behaviour configuration file %s", filename)
+			config.read(filename)
+			"""
 			bh_config = ConfigParser()
 			bh_config.read(filename)
 			inject_config(config, bh_config)
+			"""
 			
 	
 	# Run installation process
@@ -74,6 +77,8 @@ if __name__ == "__main__":
 	
 	# Define scalarizr events
 	bus.define_events(
+		# Fires before start (can be used by handers to subscribe events, published by other handlers)
+		"init",
 		# Fires when starting
 		"start",
 		# Fires when terminating
@@ -113,6 +118,8 @@ if __name__ == "__main__":
 	consumer = service.get_consumer()
 	consumer.add_message_listener(MessageListener())
 
+	# Fire init 
+	bus.fire("init")
 
 	# Fire start
 	bus.fire("start")

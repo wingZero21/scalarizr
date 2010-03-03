@@ -45,6 +45,7 @@ class MessageListener ():
 			
 			config = Bus()[BusEntries.CONFIG]
 			handlers = config.options("handlers")
+			print handlers
 			for handler_name in handlers:
 				try:
 					module_name = config.get("handlers", handler_name)
@@ -56,7 +57,9 @@ class MessageListener ():
 					if os.path.exists(filename):
 						try:
 							self._logger.debug("Read handler configuration file %s", filename)
+							config.read(filename)
 							
+							"""
 							from ConfigParser import ConfigParser
 							handler_config = ConfigParser()
 							handler_config.read(filename)
@@ -64,6 +67,7 @@ class MessageListener ():
 							self._logger.debug("Inject handler configuration into global config")
 							from scalarizr.util import inject_config
 							inject_config(config, handler_config)
+							"""
 							
 						except Exception, e:
 							skip = True
