@@ -7,15 +7,17 @@ Created on Mar 1, 2010
 from scalarizr.core.handlers import Handler
 from scalarizr.core import Bus, BusEntries
 from scalarizr.platform.ec2 import Aws
+from scalarizr.messaging import Queues, Messages
 import logging
 import time
-from scalarizr.messaging import Queues
+
 
 def get_handlers ():
 	return [EbsHandler()]
 
 class EbsHandler(Handler):
 	_logger = None
+	_bus = None
 	_platform = None
 	_aws = None
 	_msg_service = None
@@ -26,6 +28,18 @@ class EbsHandler(Handler):
 		self._platform = bus[BusEntries.PLATFORM]
 		self._aws = Aws()
 		self._msg_service = bus[BusEntries.MESSAGE_SERVICE]
+		self._bus = bus		
+		
+		bus.define_events(
+			# Fires when EBS is attached to instance
+			# @param volumeId: EBS volume id
+			# @param device: device name, ex: /dev/sdf
+			"block_device_attached", 
+			
+			# Fires when EBS is detached from instance
+			# @param device: device name, ex: /dev/sdf 
+			"block_device_detached"
+		)
 
 	def on_BlockDeviceUpdated(self, message):
 		ec2_conn = self._aws.get_ec2_conn()
@@ -45,12 +59,17 @@ class EbsHandler(Handler):
 						
 						self._logger.info("EBS was attached (volumeId: %s, device: %s)" % (volume.id, ad.device))
 						try:
-							msg = self._msg_service.new_message("BlockDeviceAttached", body={
+							# Send message to Scalr
+							msg = self._msg_service.new_message(Messages.BLOCK_DEVICE_ATTACHED, body={
     							"aws.volume_id" : volume.id,
     							"aws.device" : ad.device
     						})
 							producer = self._msg_service.get_producer()
 							producer.send(Queues.CONTROL, msg)
+							
+							# Notify listeners
+							self._bus.fire("block_device_attached", volume=volume.id, device=ad.device)
+							
 						except Exception, e:
 							self._logger.error("Cannot send message. %s" % str(e))
 							raise 
@@ -69,15 +88,19 @@ class EbsHandler(Handler):
 			# Volume was detached
 			self._logger.info("EBS was detached (device: %s)" % message.device)
 			try:
-				msg = self._msg_service.new_message("BlockDeviceDetached", body={
+				# Send message to Scalr
+				msg = self._msg_service.new_message(Messages.BLOCK_DEVICE_DETACHED, body={
     				"aws.device" : message.devname
     			})
 				producer = self._msg_service.get_producer()
 				producer.send(Queues.CONTROL, msg)
+				
+				# Notify listeners
+				self._bus.fire("block_device_detached", device=message.devname)
+				
 			except Exception, e:
 				self._logger.error("Cannot send message. %s" % str(e))
 				raise 
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		#return message.name == "BlockDeviceUpdated" and platform == "ec2"
-		return message.name == "BlockDeviceUpdated"
+		return message.name == Messages.BLOCK_DEVICE_UPDATED and platform == "ec2"

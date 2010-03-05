@@ -10,6 +10,7 @@ import logging
 import os
 from scalarizr.core.handlers import Handler
 from scalarizr.core import Bus, BusEntries
+from scalarizr.messaging import Messages
 
 def get_handlers ():
 	return [PosixIpListBuilder()]
@@ -120,5 +121,6 @@ class PosixIpListBuilder(Handler):
 			
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == "HostUp" or message.name == "HostDown"
+		return message.name == Messages.HOST_UP \
+			or message.name == Messages.HOST_DOWN
 	

@@ -102,13 +102,14 @@ class Message(object):
 	
 class MessageProducer(Observable):
 	def __init__(self):
+		Observable.__init__(self)
 		self.define_events(
 			# Fires before message is send
-			"beforesend", 
+			"before_send", 
 			# Fires after message is send
 			"send",
 			# Fires when error occures
-			"senderror"
+			"send_error"
 		)
 	
 	def send(self, queue, message):
@@ -136,6 +137,78 @@ class Queues:
 	LOG = "log"
 	
 class Messages:
-    HOST_INIT = "HostInit"
-    HOST_UP = "HostUp"
-    BLOCK_DEVICE_UPDATED = "BlockDeviceUpdated"
+	###
+	# Scalarizr events
+	###
+	
+	HOST_INIT = "HostInit"
+	"""
+	Fires when scalarizr is initialized and ready to be configured 
+	"""
+
+	GO2HALT = "Go2Halt"
+	"""
+	Fires when scalarizr is going to halt
+	"""
+	
+	REBOOT_START = "RebootStart"
+	"""
+	Fires when scalarizr is going to reboot
+	"""
+	
+	REBOOT_FINISH = "RebootFinish"
+	"""
+	Fires when scalarizr is resumed after reboot
+	"""
+
+	BLOCK_DEVICE_ATTACHED = "BlockDeviceAttached"
+	"""
+	Fires when block device was attached
+	"""
+	
+	BLOCK_DEVICE_DETACHED = "BlockDeviceDetached"
+	"""
+	Fires when block device was detached
+	"""
+	
+	###
+	# Scalr events
+	###
+	
+	HOST_UP = "HostUp"
+	"""
+	Fired by Scalr when farm is enriched with new server
+	"""
+	
+	HOST_DOWN = "HostDown"
+	"""
+	Fired by Scalr when one of the farm servers is terminated
+	"""
+	
+	EVENT_NOTICE = "EventNotice"
+	"""
+	Fired by Scalr when event occurred on one of the farm servers  
+	"""
+	
+	VHOST_RECONFIGURE = "VhostReconfigure"
+
+	HOST_INIT_RESPONSE = "HostInitResponse"
+	
+	###
+	# Scripts events
+	###
+	
+	BLOCK_DEVICE_UPDATED = "BlockDeviceUpdated"
+	"""
+	Fired by scripts/udev.py when block device was added/updated/removed 
+	"""
+	
+	SERVER_REBOOT = "ServerReboot"
+	"""
+	Fired by scripts/reboot.py when server is going to reboot
+	"""
+	
+	SERVER_HALT = "ServerHalt"
+	"""
+	Fired by scripts/halt.py when server is going to halt
+	"""

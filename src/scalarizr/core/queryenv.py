@@ -5,15 +5,15 @@ Created on Dec 23, 2009
 '''
 import logging
 import time
-import urllib
-import urllib2
+from urllib2 import urlopen, Request, URLError, HTTPError
+from urllib import urlencode, splitnport
 from xml.dom.minidom import parseString
 import hmac
 import hashlib
 import binascii
 
 
-class QueryEnvError(BaseException):
+class QueryEnvError(Exception):
 	pass
 
 class QueryEnvService(object):
@@ -26,12 +26,14 @@ class QueryEnvService(object):
 	def __init__(self, service_url, server_id=None, key=None, api_version="2009-03-05"):
 		self._logger = logging.getLogger(__name__)
 		self._service_url = service_url
-		self._key = binascii.a2b_base64(key)
+		self._key = key
 		self._server_id = server_id
 		self._api_version = api_version
 	
-	def set_key(self, server_id, key):
+	def set_server_id(self, server_id):
 		self._server_id = server_id
+	
+	def set_key(self, key):
 		self._key = key
 	
 	def list_roles (self, role_name=None, behaviour=None):
@@ -121,7 +123,7 @@ class QueryEnvService(object):
 		@return object
 		"""
 	
-		
+		# Perform HTTP request
 		request_body = {}
 		request_body["operation"] = command
 		request_body["version"] = self._api_version
@@ -129,38 +131,40 @@ class QueryEnvService(object):
 			for key, value in params.items():
 				request_body[key] = value
 				
-		#url = self._service_url + self._api_version + '/' + command
 		url = self._service_url
 		timestamp = self._get_http_timestamp()
 		data = self._get_canonical_string(request_body) 
 		data += timestamp
 		signature = self._sign(data, self._key)
-		post_data = urllib.urlencode(request_body)
+		post_data = urlencode(request_body)
 		headers = {"Date": timestamp, "X-Signature": signature, "X-Server-Id": self._server_id}
 		response = None
 		try:
-			req = urllib2.Request(url, post_data, headers)
-			response = urllib2.urlopen(req)
-		except (urllib2.URLError, urllib2.HTTPError), e:
-			if hasattr(e, "code"):
+			req = Request(url, post_data, headers)
+			response = urlopen(req)
+		except URLError, e:
+			if isinstance(e, HTTPError):
+				resp_body = e.read() if not e.fp is None else ""
 				if e.code == 401:
-					raise QueryEnvError("Cannot authenticate on QueryEnv server. %s" % (e.read()), e)
+					raise QueryEnvError("Cannot authenticate on QueryEnv server. %s" % (resp_body))
 				elif e.code == 400:
-					raise QueryEnvError("Malformed request. %s" % (e.read()), e)
+					raise QueryEnvError("Malformed request. %s" % (resp_body))
 				elif e.code == 500:
-					raise QueryEnvError("QueryEnv failed. %s" % (e.read()), e)
+					raise QueryEnvError("QueryEnv failed. %s" % (resp_body))
 				else:
-					raise QueryEnvError("Request to QueryEnv server failed. %s" % (str(e)), e)
+					raise QueryEnvError("Request to QueryEnv server failed (code: %d). %s" % (e.code, str(e)))
 			else:
-				raise QueryEnvError("Cannot connect to QueryEnv server. %s" % str(e))
-			
+				host, port = splitnport(req.host, 80)
+				raise QueryEnvError("Cannot connect to QueryEnv server on %s:%s. %s" 
+						% (host, port, str(e)))
+
+		# Parse XML response
 		xml = None
 		try:
 			xml = parseString(response.read())
 		except (TypeError, AttributeError), e:
-			raise QueryEnvError("Cannot parse XML", e)
+			raise QueryEnvError("Cannot parse XML. %s" % (str(e)))
 		return response_reader(xml)
-		
 
 			
 	def _get_http_timestamp(self):

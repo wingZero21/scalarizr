@@ -9,7 +9,6 @@ from scalarizr.core import Bus, BusEntries
 from scalarizr.core.handlers import Handler
 import logging
 import os
-import string
 import subprocess
 
 def get_handlers ():
@@ -35,11 +34,9 @@ class HooksHandler(Handler):
 				os.environ[key] = kwargs[key]
 			
 			bus = Bus()				
-			config = Bus()[BusEntries.CONFIG]
-			server_id = config.get("default", "server_id")
-			behaviour = config.get("default", "behaviour")
-			os.environ[server_id] = server_id
-			os.environ[behaviour] = behaviour
+			config = bus[BusEntries.CONFIG]
+			os.environ["server_id"] = config.get("default", "server_id")
+			os.environ["behaviour"] = config.get("default", "behaviour")
 			
 			path = bus[BusEntries.BASE_PATH] + "/hooks/"
 							
@@ -59,10 +56,10 @@ class HooksHandler(Handler):
 							start_command.append(argument) 
 						
 						p = subprocess.Popen(
-											 start_command, 
-											 stdin=subprocess.PIPE, 
-											 stdout=subprocess.PIPE, 
-											 stderr=subprocess.PIPE)
+							 start_command, 
+							 stdin=subprocess.PIPE, 
+							 stdout=subprocess.PIPE, 
+							 stderr=subprocess.PIPE)
 						
 						stdout, stderr = p.communicate()
 						is_start_failed = p.poll()

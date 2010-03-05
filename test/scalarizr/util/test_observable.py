@@ -4,13 +4,35 @@ Created on Mar 3, 2010
 @author: marat
 '''
 import unittest
-
+from scalarizr.util import Observable
 
 class Test(unittest.TestCase):
 
+	def test_extends(self):
+		class Bus(Observable):
+			def __init__(self):
+				Observable.__init__(self)
+				self.define_events("bus_event")
+				
+		class MessageService(Observable):
+			def __init__(self):
+				Observable.__init__(self)
+				self.define_events("msg_event")
+
+		bus = Bus()
+		msg = MessageService()
+		bus_events = bus.list_events()
+		self.assertEqual(len(bus_events), 1)
+		self.assertEqual(bus_events[0], "bus_event")
+		
+
+	def test_ways_to_add_listeners(self):
+		o = Observable()
+		o.define_events("add", "remove", "apply")
+		o.on(add=None, remove=None)
+
 
 	def test_all(self):
-		from scalarizr.util import Observable
 		o = Observable()
 		
 		args = ("undefevent", "param1", "param2")

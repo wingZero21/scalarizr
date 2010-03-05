@@ -3,8 +3,9 @@ import logging
 
 class Observable(object):
 	
-	_listeners = {}
-	_events_suspended = False
+	def __init__(self):
+		self._listeners = {}
+		self._events_suspended = False
 	
 	def define_events(self, *args):
 		for event in args:
@@ -19,16 +20,35 @@ class Observable(object):
 		if not self._events_suspended:
 			if self._listeners.has_key(event):
 				for ln in self._listeners[event]:
-					ln(*args, **kwargs)
+					try:
+						ln(*args, **kwargs)
+					except (Exception, BaseException), e:
+						logger.exception(e)
 	
-	def on(self, event, *args):
-		if not self._listeners.has_key(event):
-			raise Exception("Event '%s' is not defined" % event)
-		for listener in args:
-			if not listener in self._listeners[event]:
-				self._listeners[event].append(listener)
+	def on(self, *args, **kwargs):
+		"""
+		Add listener
+		
+		1) Add listeners to one event
+		obj.on("add", func1, func2, ...)
+		2) Add listeners to many events
+		obj.on(add=func1, remove=func2, apply=func3, ...)
+		"""
+		if len(args) >= 2:
+			event = args[0]
+			if not self._listeners.has_key(event):
+				raise Exception("Event '%s' is not defined" % event)
+			for listener in args[1:]:
+				if not listener in self._listeners[event]:
+					self._listeners[event].append(listener)
+		elif kwargs:
+			for event in kwargs.keys():
+				self.on(event, kwargs[event])
 	
 	def un(self, event, listener):
+		"""
+		Remove listener
+		"""
 		if self._listeners.has_key(event):
 			if listener in self._listeners[event]:
 				self._listeners[event].remove(listener)
@@ -39,18 +59,6 @@ class Observable(object):
 	def resume_events(self):
 		self._events_suspended = False
 
-
-def inject_config(config, inj_config, sections_prefix=""):
-	logger = logging.getLogger(__name__)
-	
-	logger.debug("Injecting config with a section prefix: '%s'", sections_prefix)
-	for inj_section in inj_config.sections():
-		section = sections_prefix + inj_section
-		config.add_section(section)
-		logger.debug("Inject section %s as %s", inj_section, section)
-		for k, v in inj_config.items(inj_section):
-			config.set(section, k, v)
-	logger.debug("%d sections injected", len(inj_config.sections()))		
 
 def parse_size(size):
 	"""
@@ -67,6 +75,7 @@ def parse_size(size):
 		ret *= 1048576	
 	
 	return ret
+
 	
 def format_size(size, precision=2):
 	"""
@@ -106,6 +115,8 @@ class _CryptoUtil(object):
 	def decrypt (self, s, key):
 		c = self._init_chiper(key)
 		return c.decrypt(binascii.a2b_base64(s))
+
+
 		
 _crypto_util = None
 def CryptoUtil():

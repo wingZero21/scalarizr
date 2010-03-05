@@ -6,6 +6,7 @@ Created on Dec 24, 2009
 
 from scalarizr.core import Bus, BusEntries
 from scalarizr.core.handlers import Handler
+from scalarizr.messaging import Queues, Messages
 import scalarizr.util as zrutil
 import threading
 import timemodule as time
@@ -14,7 +15,7 @@ import os
 import stat
 import logging
 import binascii
-from scalarizr.messaging import Queues
+
 
 def get_handlers ():
 	return [ScriptExecutor()]
@@ -46,7 +47,7 @@ class ScriptExecutor(Handler):
 		self._platform = bus[BusEntries.PLATFORM]
 		
 		producer = self._msg_service.get_producer()
-		producer.on("beforesend", self.on_before_message_send)
+		producer.on("before_send", self.on_before_message_send)
 		
 		config = bus[BusEntries.CONFIG]
 		if not config.has_section(self._CONFIG_SECTION):
@@ -212,4 +213,4 @@ class ScriptExecutor(Handler):
 				
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == "EventNotice"
+		return message.name == Messages.EVENT_NOTICE

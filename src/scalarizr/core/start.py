@@ -13,13 +13,11 @@ if __name__ == "__main__":
 	src_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
 	sys.path.append(src_path)
 
-	from scalarizr.core import Bus, BusEntries
+	from scalarizr.core import Bus, BusEntries, initialize_services
 	import logging	
-	
-	bus = Bus()
-	config = bus[BusEntries.CONFIG]
 	logger = logging.getLogger("scalarizr.core")
-	base_path = bus[BusEntries.BASE_PATH]
+	bus = Bus()
+
 
 	def install (argv=None):
 		if argv is None:
@@ -54,79 +52,21 @@ if __name__ == "__main__":
 	
 	logger.info("Starting scalarizr...")
 	
-	# Read behaviour configurations and inject them into global config
-	#from ConfigParser import ConfigParser
-	#from scalarizr.util import inject_config
-	behaviour = config.get("default", "behaviour").split(",")
-	for bh in behaviour:
-		filename = "%s/etc/include/behaviour.%s.ini" % (base_path, bh)
-		if os.path.exists(filename):
-			logger.debug("Read behaviour configuration file %s", filename)
-			config.read(filename)
-			"""
-			bh_config = ConfigParser()
-			bh_config.read(filename)
-			inject_config(config, bh_config)
-			"""
-			
 	
 	# Run installation process
 	if len(sys.argv) > 1 and sys.argv[1] == "--install":
 		install()
 	
-	
-	# Define scalarizr events
-	bus.define_events(
-		# Fires before start (can be used by handers to subscribe events, published by other handlers)
-		"init",
-		# Fires when starting
-		"start",
-		# Fires when terminating
-		"terminate"
-	)
-	
-	
-	# Initialize platform
-	logger.debug("Initialize platform")
-	from scalarizr.platform import PlatformFactory 
-	pl_factory = PlatformFactory()
-	bus[BusEntries.PLATFORM] = pl_factory.new_platform(config.get("default", "platform"))
-
-	
-	# Initialize QueryEnv
-	logger.debug("Initialize QueryEnv client")
-	from scalarizr.core.queryenv import QueryEnvService
-	crypto_key_path = base_path + "/" + config.get("default", "crypto_key_path")
-	crypto_key = open(crypto_key_path).read()
-	queryenv = QueryEnvService(config.get("default", "queryenv_url"),
-			config.get("default", "server_id"), crypto_key)
-	bus[BusEntries.QUERYENV_SERVICE] = queryenv
-
-	
-	# Initialize messaging
-	logger.debug("Initialize messaging")
-	from scalarizr.messaging import MessageServiceFactory
-	factory = MessageServiceFactory()
-	try:
-		service = factory.new_service(config.get("messaging", "adapter"), config.items("messaging"))
-		bus[BusEntries.MESSAGE_SERVICE] = service
-	except Exception, e:
-		logger.exception(e)
-		sys.exit("Cannot create messaging service adapter '%s'" % (config.get("messaging", "adapter")))
-
-	from scalarizr.core.handlers import MessageListener	
-	consumer = service.get_consumer()
-	consumer.add_message_listener(MessageListener())
-
-	# Fire init 
-	bus.fire("init")
+	# Initialize services
+	initialize_services()
 
 	# Fire start
 	bus.fire("start")
 
-
+	# @todo start messaging before fire 'start'
 	# Start messaging server
 	try:
+		consumer = bus[BusEntries.MESSAGE_SERVICE].get_consumer()
 		consumer.start()
 	except KeyboardInterrupt:
 		logger.info("Stopping scalarizr...")
@@ -135,5 +75,3 @@ if __name__ == "__main__":
 		# Fire terminate
 		bus.fire("terminate")
 		logger.info("Stopped")
-
-	

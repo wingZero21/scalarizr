@@ -1,0 +1,45 @@
+
+== start.py ==
+
+init
+
+start
+	1)
+	before_host_init	
+	-> HostInit			
+	host_init				
+
+	2)
+	before_reboot_finish
+	-> RebootFinish
+	reboot_finish
+			
+terminate
+
+
+== handlers/lifecircle.py ==
+
+<- ServerReboot (scripts/reboot.py)
+-> RebootStart		
+reboot_start		
+-> HostDown			
+host_down			
+
+<- ServerHalt (scripts/halt.py)
+-> Go2Halt			
+go2halt				
+-> HostDown			
+host_down			
+
+
+== handlers/ec2/ebs.py ==
+
+<- BlockDeviceUpdated (scripts/udev.py)	
+1)
+-> BlockDeviceAttached
+block_device_attached
+
+2)
+-> BlockDeviceDetached
+block_device_detached 
+

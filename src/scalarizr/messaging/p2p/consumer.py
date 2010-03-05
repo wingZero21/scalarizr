@@ -7,9 +7,12 @@ from scalarizr.messaging import MessageConsumer
 from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, P2pOptions, _P2pBase
 from scalarizr.util import CryptoUtil
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+from urlparse import urlparse
 from threading import Thread
 import logging
 import timemodule as time
+import os.path
+
 
 class P2pMessageConsumer(MessageConsumer, _P2pBase):
 	endpoint = ""
@@ -30,7 +33,6 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 			
 	def start(self):
 		if self._server is None:
-			from urlparse import urlparse			
 			r = urlparse(self.endpoint)
 			_HttpRequestHanler.consumer = self
 			self._server = HTTPServer((r.hostname, r.port), _HttpRequestHanler)
@@ -77,18 +79,21 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 	def do_POST(self):
 		logger = logging.getLogger(__name__)
 		
-		import os.path
 		queue = os.path.basename(self.path)
 		rawmsg = self.rfile.read(int(self.headers["Content-length"]))
 		logger.debug("Received ingoing message. queue: '%s', rawmessage: %s" % (queue, rawmsg))
 		
-		
 		try:
 			logger.debug("Decrypt message")
-			xml = CryptoUtil().decrypt(rawmsg, self.consumer._crypto_key)
+			crypto = CryptoUtil()	
+			logger.debug("Key: " + self.consumer._read_key())		
+			xml = crypto.decrypt(rawmsg, self.consumer._read_key())
+			
+			logger.debug("Decode message")
 			message = P2pMessage()
 			message.fromxml(xml)
-		except Exception, e:
+			
+		except (BaseException, Exception), e:
 			logger.exception(e)
 			self.send_response(400, str(e))
 			return
@@ -98,7 +103,8 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 		try:
 			store = P2pMessageStore()
 			store.put_ingoing(message, queue)
-		except Exception, e: 
+			
+		except (BaseException, Exception), e: 
 			logger.exception(e) 
 			self.send_response(500, str(e))
 			return

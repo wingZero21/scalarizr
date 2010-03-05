@@ -4,9 +4,11 @@ Created on Dec 25, 2009
 @author: marat
 '''
 
-from scalarizr.core import Bus, BusEntries
+from scalarizr.core import Bus, BusEntries, Behaviours
 from scalarizr.core.handlers import Handler
+from scalarizr.messaging import Messages
 import logging
+
 
 def get_handlers ():
 	return [ApacheAdapter()]
@@ -54,7 +56,7 @@ class ApacheHandler(Handler):
 		pass
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return behaviour == "app" and message.name == "VhostReconfigure"
+		return behaviour == Behaviours.APP and message.name == Messages.VHOST_RECONFIGURE
 	
 # It needed ??
 class ApacheAdapter(object):

@@ -26,11 +26,12 @@ class MessageListener ():
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		config = Bus()[BusEntries.CONFIG]
+		bus = Bus()
+		config = bus[BusEntries.CONFIG]
 		self._logger.debug("Initialize message listener");
 		
 		self._accept_kwargs["behaviour"] = config.get("default", "behaviour").split(",")
-		self._accept_kwargs["platform"] = config.get("default", "platform")
+		self._accept_kwargs["platform"] = bus[BusEntries.PLATFORM].name
 		self._accept_kwargs["os"] = platform.uname()
 		self._accept_kwargs["dist"] = platform.dist()
 		self._logger.debug("Gathered _accept_kwargs: %s", self._accept_kwargs)
@@ -58,16 +59,6 @@ class MessageListener ():
 						try:
 							self._logger.debug("Read handler configuration file %s", filename)
 							config.read(filename)
-							
-							"""
-							from ConfigParser import ConfigParser
-							handler_config = ConfigParser()
-							handler_config.read(filename)
-							
-							self._logger.debug("Inject handler configuration into global config")
-							from scalarizr.util import inject_config
-							inject_config(config, handler_config)
-							"""
 							
 						except Exception, e:
 							skip = True
@@ -103,7 +94,7 @@ class MessageListener ():
 		accepted = False
 		for handler in self._get_handlers_chain():
 			try:
-				if handler.accept(message, queue):
+				if handler.accept(message, queue, **self._accept_kwargs):
 					accepted = True
 					self._logger.info("Call handler %s" % handler.__class__.__name__)
 					try:

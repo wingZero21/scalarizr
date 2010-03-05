@@ -6,6 +6,8 @@ Created on Jan 6, 2010
 '''
 
 from scalarizr.core.handlers import Handler
+from scalarizr.core import Behaviours
+from scalarizr.messaging import Messages
 
 def get_handlers():
 	return [NginxHandler()]
@@ -48,8 +50,8 @@ class NginxHandler(Handler):
 			ec2_listhosts_app = self._queryenv.list_roles(behaviour = "app")
 			for app_serv in ec2_listhosts_app :
 				for app_hosts in app_serv.hosts :
-				    upstream_hosts += "\tserver " + app_hosts.internal_ip + ":" + app_port + ";\n"
-				    num_of_appservers = num_of_appservers + 1
+					upstream_hosts += "\tserver " + app_hosts.internal_ip + ":" + app_port + ";\n"
+					num_of_appservers = num_of_appservers + 1
 			
 			if 0 == num_of_appservers :
 				upstream_hosts = "\tserver 127.0.0.1:80;"
@@ -121,4 +123,5 @@ class NginxHandler(Handler):
 		#call_user_code lib/nginx_reload
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return behaviour == "app" and (message.name == "HostUp" or message.name == "HostDown")	
+		return behaviour == Behaviours.APP and \
+			(message.name == Messages.HOST_UP or message.name == Messages.HOST_DOWN)	

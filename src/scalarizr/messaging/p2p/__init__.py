@@ -43,7 +43,7 @@ def new_service(config):
 	
 class _P2pBase(object):
 	_server_id = None
-	_crypto_key = None
+	_crypto_key_path = None
 	
 	def __init__(self, config):
 		for pair in config:
@@ -55,12 +55,18 @@ class _P2pBase(object):
 
 		if self._server_id is None:
 			self._server_id = Bus()[BusEntries.CONFIG].get("default", "server_id")
-		if self._crypto_key is None:
-			self._crypto_key = Bus()[BusEntries.CONFIG].get("default", "crypto_key_path")
+		if self._crypto_key_path is None:
+			self._crypto_key_path = Bus()[BusEntries.CONFIG].get("default", "crypto_key_path")
+
 		
-		crypto_key_path = Bus()[BusEntries.BASE_PATH] + "/" + self._crypto_key
-		f = open(crypto_key_path)
-		self._crypto_key = f.read()
+	def _read_key(self):
+		f = None
+		try:
+			f = open(self._crypto_key_path)
+			return f.read().strip()
+		finally:
+			if not f is None:
+				f.close()
 	
 class _P2pMessageStore:
 	_logger = None
