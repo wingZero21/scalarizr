@@ -45,6 +45,7 @@ class HooksHandler(Handler):
 				matches_list = []
 				dir_list=os.listdir(path)
 				for fname in dir_list:
+					s = "\d+\-"+event+"$"
 					if (fname.startswith(event,3)) and ((fname.startswith(event+'.',3)) or (fname.endswith(event))):
 						matches_list.append(fname)
 				
