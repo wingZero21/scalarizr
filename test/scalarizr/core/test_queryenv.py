@@ -12,7 +12,6 @@ class Test(unittest.TestCase):
 
 	def setUp (self):
 		from scalarizr.core.queryenv import QueryEnvService
-		#self._queryenv = QueryEnvService("", None, None)
 		self._queryenv = QueryEnvService("http://ec2farm-dev.bsd2.webta.local/query-env/","127", "i-c9acf6a1", \
 										 "c+/g0PyouaqXMbuJ5Vtux34Mft7jLe5H5u8tUmyhldjwTfgm7BI6MOA8F6BwkzQnpWEOcHx+A+TRJh0u3PElQQ0SiwdwrlgpQMbj8NBxbxBgfxA9WisgvfQu5ZPYou6Gz3oUAQdWfFlFdY2ACOjmqa3DGogge+TlXtV2Xagm0rw=",\
 										 "5d0e16f7498c41cc")
@@ -147,32 +146,32 @@ class Test(unittest.TestCase):
 	def test_get_latest_version(self):	
 		self.setUp()
 		version = self._queryenv.get_latest_version()
-		print "version>> ", version
+		#print "version>> ", version
 		self.assertEquals(version, '2009-03-05')
 	
 	def test_get_https_certificate(self):
 		cert = self._queryenv.get_https_certificate()
-		print "cert >> ", cert
+		#print "cert >> ", cert
 		
 	def test_list_ebs_mountpoints(self):
 		ebs_list = self._queryenv.list_ebs_mountpoints ()
-		print "ebs_list>> ", ebs_list
+		#print "ebs_list>> ", ebs_list
 		
 	def test_list_role_params(self):
 		list_params = self._queryenv.list_role_params("www")
-		print "list_role_params>> ", list_params
+		#print "list_role_params>> ", list_params
 		
 	def test_list_roles(self):
 		list_roles = self._queryenv.list_roles("www")
-		print "list_roles>> ", list_roles
+		#print "list_roles>> ", list_roles
 		
 	def test_list_scripts(self):
 		list_scripts = self._queryenv.list_scripts()
-		print "list_scripts>> ", list_scripts
+		#print "list_scripts>> ", list_scripts
 		
 	def test_list_virtualhosts(self):
 		list_virtualhosts = self._queryenv.list_virtual_hosts("www")
-		print "list_virtualhosts>> ", list_virtualhosts
+		#print "list_virtualhosts>> ", list_virtualhosts
 		
 		#FarmID = 127
 		#InstanceID = i-c9acf6a1

@@ -1,0 +1,5 @@
+#!/bin/sh
+echo "__SCRIPT EXECUTED__"
+pwd
+touch /usr/home/shaitanich/workspace/scalarizr-trunk/test/resources/hooks/test_hook_executed
+/usr/bin/php

@@ -1,0 +1,6 @@
+#!/bin/sh
+echo "__SCRIPT 4__"
+echo $aenv
+echo $server_id
+touch /usr/home/shaitanich/workspace/scalarizr-trunk/test/resources/hooks/$aenv
+pwd

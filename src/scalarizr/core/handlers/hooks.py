@@ -10,6 +10,7 @@ from scalarizr.core.handlers import Handler
 import logging
 import os
 import subprocess
+import re
 
 def get_handlers ():
 	return [HooksHandler()]
@@ -29,42 +30,47 @@ class HooksHandler(Handler):
 	def create_hook(self, event):
 		def hook(*args, **kwargs):
 			self._logger.info("Hook on '"+event+"'" + str(args) + " " + str(kwargs))
-			
-			for key in kwargs:
-				os.environ[key] = kwargs[key]
-			
+
 			bus = Bus()				
 			config = bus[BusEntries.CONFIG]
-			os.environ["server_id"] = config.get("default", "server_id")
-			os.environ["behaviour"] = config.get("default", "behaviour")
+			
+			#for key in kwargs:
+			#	os.environ[key] = kwargs[key]
+			#os.environ["server_id"] = config.get("default", "server_id")
+			#os.environ["behaviour"] = config.get("default", "behaviour")
+			
+			environ = kwargs
+			environ["server_id"] = config.get("default", "server_id")
+			environ["behaviour"] = config.get("default", "behaviour")
 			
 			path = bus[BusEntries.BASE_PATH] + "/hooks/"
+			reg = re.compile(r"^\d+\-"+event+"$")
 							
 			if os.path.isdir(path):
-				
-				matches_list = []
-				dir_list=os.listdir(path)
-				for fname in dir_list:
-					s = "\d+\-"+event+"$"
-					if (fname.startswith(event,3)) and ((fname.startswith(event+'.',3)) or (fname.endswith(event))):
-						matches_list.append(fname)
-				
-				for fname in matches_list.sort():
-					if os.access(path + fname, os.X_OK):	
-						start_command = []
-						start_command.append(path + fname) 
-						for argument in args:
-							start_command.append(argument) 
-						
-						p = subprocess.Popen(
-							 start_command, 
-							 stdin=subprocess.PIPE, 
-							 stdout=subprocess.PIPE, 
-							 stderr=subprocess.PIPE)
-						
-						stdout, stderr = p.communicate()
-						is_start_failed = p.poll()
-						
-						if is_start_failed:
-							self._logger.error(stderr)				
+				matches_list = list(fname for fname in os.listdir(path) if reg.search(fname))
+				print matches_list
+				if matches_list:
+					matches_list.sort()
+					for fname in matches_list:
+						if os.access(path + fname, os.X_OK):	
+							start_command = [path + fname]
+							start_command += args
+							try:
+								p = subprocess.Popen(
+									 start_command, 
+									 stdin=subprocess.PIPE, 
+									 stdout=subprocess.PIPE, 
+									 stderr=subprocess.PIPE,
+									 env=environ)								
+								stdout, stderr = p.communicate()
+							
+								is_start_failed = p.poll()
+								
+								if is_start_failed:
+									self._logger.error(stderr)
+									
+								if None != stdout:
+									self._logger.info(stdout)	
+							except OSError, e:
+								self._logger.error(str(e.strerror) + ' in script ' + fname)			
 		return hook

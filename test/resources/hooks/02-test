@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "__SCRIPT 2__"
+touch /usr/home/shaitanich/workspace/scalarizr-trunk/test/resources/hooks/$1
