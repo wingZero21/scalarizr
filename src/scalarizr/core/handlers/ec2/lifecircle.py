@@ -6,7 +6,6 @@ Created on Mar 2, 2010
 
 from scalarizr.core.handlers import Handler
 from scalarizr.core import Bus, BusEntries
-from scalarizr.platform.ec2 import Aws
 import logging
 from scalarizr.messaging import Messages
 
@@ -15,10 +14,16 @@ def get_handlers ():
 
 class AwsLifeCircleHandler(Handler):
 	_logger = None
+	_platform = None
+	"""
+	@ivar scalarizr.platform.ec2.AwsPlatform:
+	"""
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		Bus().on("init", self.on_init)		
+		bus = Bus()
+		self._platform = bus[BusEntries.PLATFORM]
+		bus.on("init", self.on_init)		
 	
 	def on_init(self, *args, **kwargs):
 		bus = Bus()
@@ -37,8 +42,8 @@ class AwsLifeCircleHandler(Handler):
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")
 			f.write('KERNEL=="sd*[!0-9]", RUN+="'+base_path+'/src/scalarizr/scripts/udev.py"')
 			f.close()
-		except IOError, e:
-			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' IOError: %s", str(e))
+		except OSError, e:
+			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' OSError: %s", str(e))
 			raise
 
 	
@@ -51,8 +56,16 @@ class AwsLifeCircleHandler(Handler):
 	
 	
 	def on_HostInitResponse(self, message):
-		aws = Aws()
-		aws.set_keys(message.body["aws.key_id"], message.body["aws.key"])
+		"""
+		@todo: take all data from message
+		"""
+		self._platform.set_config(dict(
+			account_id="",
+			key_id="",
+			key="",
+			cert="",
+			pk=""
+		))
 		
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):

@@ -4,7 +4,10 @@ Created on Dec 4, 2009
 @author: marat
 '''
 import unittest
-import timemodule
+try:
+	import time
+except ImportError:
+	import timemodule as time
 from threading import Thread
 from scalarizr.messaging import Message
 from scalarizr.messaging.p2p import P2pMessageService
@@ -70,7 +73,7 @@ class TestInteration(unittest.TestCase):
 		
 		t = Thread(target=self._start_consumer)
 		t.start()
-		timemodule.sleep(1)
+		time.sleep(1)
 
 	def _start_consumer(self):
 		self._consumer.start()

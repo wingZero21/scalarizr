@@ -17,6 +17,10 @@ sys.path.append(src_path)
 from scalarizr.messaging import Messages, Queues
 from scalarizr.core import Bus, BusEntries, initialize_scripts
 import logging
+try:
+	import time
+except ImportError:
+	import timemodule as time
 
 logger = logging.getLogger("scalarizr.scripts.halt")
 bus = Bus()	
@@ -39,6 +43,15 @@ try:
 		
 		msg = msg_service.new_message(Messages.SERVER_HALT)
 		producer.send(Queues.CONTROL, msg)
+		
+		# 30 seconds for termination
+		start = time.time()
+		while not msg.is_handled():
+			if time.time() - start < 30:
+				time.sleep(1)
+			else:
+				break
+
 		
 except Exception, e:
 	logger.exception(e)

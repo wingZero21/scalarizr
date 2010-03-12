@@ -4,7 +4,10 @@ Created on Dec 23, 2009
 @author: Dmytro Korsakov
 '''
 import logging
-import time
+try:
+	import time
+except ImportError:
+	import timemodule as time
 from urllib2 import urlopen, Request, URLError, HTTPError
 from urllib import urlencode, splitnport
 from xml.dom.minidom import parseString

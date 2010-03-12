@@ -60,6 +60,19 @@ class Observable(object):
 		self._events_suspended = False
 
 
+def save_config():
+	from scalarizr.core import Bus, BusEntries
+	logger = logging.getLogger(__name__)
+	bus = Bus()
+	
+	# Save configuration
+	filename = bus[BusEntries.BASE_PATH] + "/etc/config.ini"
+	logger.debug("Save configuration into '%s'" % filename)
+	f = open(filename, "w")
+	bus[BusEntries.CONFIG].write(f)
+	f.close()	
+	
+
 def parse_size(size):
 	"""
 	Read string like 10K, 12M, 1014B and return size in bytes
@@ -89,7 +102,9 @@ def format_size(size, precision=2):
 	if ret > 1000:
 		ret = ret/1024
 		dim = "M"
-	return "%."+precision+"f%s" % (ret, dim)	
+		
+	s = "%."+str(precision)+"f%s"
+	return s % (ret, dim)	
 	
 
 import binascii

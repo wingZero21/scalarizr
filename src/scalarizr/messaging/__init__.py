@@ -46,6 +46,9 @@ class Message(object):
 	def __getattr__(self, name):
 		return self.body[name] if name in self.body else None
 	
+	def is_handled(self):
+		pass
+	
 	def is_delivered(self):
 		pass
 	
@@ -171,6 +174,11 @@ class Messages:
 	Fires when block device was detached
 	"""
 	
+	EXEC_RESULT = "ExecResult"
+	"""
+	Fires after script execution
+	"""
+	
 	###
 	# Scalr events
 	###
@@ -193,6 +201,8 @@ class Messages:
 	VHOST_RECONFIGURE = "VhostReconfigure"
 
 	HOST_INIT_RESPONSE = "HostInitResponse"
+	
+	REBUNDLE = "Rebundle"
 	
 	###
 	# Scripts events

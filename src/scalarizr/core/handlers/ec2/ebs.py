@@ -6,10 +6,12 @@ Created on Mar 1, 2010
 
 from scalarizr.core.handlers import Handler
 from scalarizr.core import Bus, BusEntries
-from scalarizr.platform.ec2 import Aws
 from scalarizr.messaging import Queues, Messages
 import logging
-import time
+try:
+	import time
+except ImportError:
+	import timemodule as time
 
 
 def get_handlers ():
@@ -19,14 +21,12 @@ class EbsHandler(Handler):
 	_logger = None
 	_bus = None
 	_platform = None
-	_aws = None
 	_msg_service = None
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		bus = Bus()
 		self._platform = bus[BusEntries.PLATFORM]
-		self._aws = Aws()
 		self._msg_service = bus[BusEntries.MESSAGE_SERVICE]
 		self._bus = bus		
 		
@@ -42,7 +42,7 @@ class EbsHandler(Handler):
 		)
 
 	def on_BlockDeviceUpdated(self, message):
-		ec2_conn = self._aws.get_ec2_conn()
+		ec2_conn = self._platform.get_ec2_conn()
 		self._logger.debug(message)
 
 		if message.action == "add":

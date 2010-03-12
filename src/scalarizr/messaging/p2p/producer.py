@@ -11,8 +11,7 @@ from urllib import splitnport
 from urllib2 import urlopen, Request, URLError, HTTPError
 import logging
 import uuid
-import binascii
-from unittest import isinstance
+
 
 class P2pMessageProducer(MessageProducer, _P2pBase):
 	endpoint = ""

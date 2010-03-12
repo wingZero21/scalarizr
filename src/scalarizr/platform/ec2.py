@@ -1,6 +1,7 @@
 
 from scalarizr.core import Bus, BusEntries
 from scalarizr.platform import Platform, PlatformError
+import os
 import logging
 import urllib2
 import re
@@ -19,6 +20,14 @@ class AwsPlatform(Platform):
 	_properties = {}
 	_metadata = None
 	_logger = None
+	
+	_key = None
+	_key_id = None
+	_pk = None
+	_cert = None
+	
+	_ec2_conn = None
+	_s3_conn = None	
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -57,84 +66,158 @@ class AwsPlatform(Platform):
 	def get_ami_id(self):
 		return self._get_property("latest/meta-data/ami-id")
 	
+	def get_kernel_id(self):
+		return self._get_property("latest/meta-data/kernel-id")
+	
+	def get_ramdisk_id(self):
+		return self._get_property("latest/meta-data/ramdisk-id")
+	
 	def get_avail_zone(self):
 		return self._get_property("latest/meta-data/placement/availability-zone")
-
-
-_aws_instance = None
-def Aws():
-	global _aws_instance
-	if _aws_instance is None:
-		_aws_instance = _Aws()
-	return _aws_instance
-
-class _Aws():
-	_key = None
-	_key_id = None
-	_ec2_conn = None
-	_s3_conn = None
-	_logger = None
 	
-	def __init__(self):
-		self._logger = logging.getLogger(__name__)
-	
-	def set_keys(self, key_id, key):
-		self._key = key
-		self._key_id = key_id
-
-		bus = Bus()
-		base_path = bus[BusEntries.BASE_PATH]
-		
-		s = base_path + "/etc/.keys/aws_key_id"
-		try:
-			f = open(s, "w+")
-			f.write(self._key_id)
-			f.close()
-		except IOError, e:
-			self._logger.error("Cannot save AWS key_id into file '%s'. IOError: %s" % (s, str(e)))
-			raise
-		
-		s = base_path + "/etc/.keys/aws_key"
-		try:
-			f = open(s, "w+")
-			f.write(self._key)
-			f.close()
-		except IOError, e:
-			self._logger.error("Cannot save AWS key into file '%s'. IOError: %s" % (s, str(e)))
-			raise
-		
-		
-	def _retrive_keys(self):
+	def _set_config_options(self, config, section, options):
+		base_path = Bus()[BusEntries.BASE_PATH]
+		for k in options:
+			filename = None
+			if k == "key_id":
+				filename = "etc/.keys/aws_key_id"
+			elif k == "key":
+				filename = "etc/.keys/aws_key"
+			elif k == "cert":
+				filename = "etc/.keys/cert.pem"
+			elif k == "pk":
+				filename = "etc/.keys/pk.pem"
+			if not filename is None:
+				k = k + "_path"
+				v = filename
+				f = open(base_path + "/" + filename, "w+")
+				f.write(options[k])
+				f.close()
+			else:
+				v = options[k]
+			config.set(section, k, v)
+			
+	def get_keys(self):
 		if not (self._key and self._key_id):
 			bus = Bus()
 			base_path = bus[BusEntries.BASE_PATH]
-			s = base_path + "/etc/.keys/aws_key_id"
+			
+			s = base_path + "/" + self.get_config_option(AwsPlatformOptions.KEY_ID_PATH)
 			try:
 				self._key_id = open(s, "r").read()
-			except IOError, e:
-				self._logger.error("Cannot read AWS key_id file '%s'. IOError: %s" % (s, str(e)))
+			except OSError, e:
+				self._logger.error("Cannot read AWS key_id file '%s'. OSError: %s" % (s, str(e)))
 				raise
 		
-			s = base_path + "/etc/.keys/aws_key"
+			s = base_path + "/" + self.get_config_option(AwsPlatformOptions.KEY_PATH)
 			try:
 				self._key = open(s, "r").read()
-			except IOError, e:
-				self._logger.error("Cannot read AWS key file '%s'. IOError: %s" % (s, str(e)))
+			except OSError, e:
+				self._logger.error("Cannot read AWS key file '%s'. OSError: %s" % (s, str(e)))
 				raise
 			
 		return (self._key_id, self._key)
+			
+	def get_cert_pk(self):
+		if (not self._cert and self._pk):
+			bus = Bus()
+			base_path = bus[BusEntries.BASE_PATH]
+			
+			s = base_path + "/" + self.get_config_option(AwsPlatformOptions.CERT_PATH)
+			try:
+				self._cert = open(s, "r").read()
+			except OSError, e:
+				self._logger.error("Cannot read AWS certificate file '%s'. OSError: %s" % (s, str(e)))
+				raise
+
+			s = base_path + "/" + self.get_config_option(AwsPlatformOptions.PK_PATH)
+			try:
+				self._pk = open(s, "r").read()
+			except OSError, e:
+				self._logger.error("Cannot read AWS private key file '%s'. OSError: %s" % (s, str(e)))
+				raise
 		
+		return (self._cert, self._pk)
+	
 	def get_ec2_conn(self):
 		if self._ec2_conn is None:
-			platform = AwsPlatform()
-			(key_id, key) = self._retrive_keys()
+			key_id, key = self.get_keys()
 			self._ec2_conn = boto.connect_ec2(key_id, key, 
-						region=RegionInfo(name=platform.get_avail_zone(), endpoint="ec2.amazonaws.com"))
+						region=RegionInfo(name=self.get_avail_zone(), endpoint="ec2.amazonaws.com"))
 		return self._ec2_conn
 
 	def get_s3_conn(self):
 		if self._s3_conn is None:
-			(key_id, key) = self._retrive_keys()
+			key_id, key = self.get_keys()
 			self._s3_conn = boto.connect_s3(key_id, key)
 		return self._s3_conn
+		
+class AwsPlatformOptions:
+	ACCOUNT_ID = "account_id"
+	KEY_ID_PATH = "key_id_path"
+	KEY_PATH = "key_path"
+	CERT_PATH = "cert_path"
+	PK_PATH = "pk_path"
 
+	
+class Fstab:
+	LOCATION = None
+	_entries = None
+	_filename = None
+	_re = None
+	
+	def __init__(self, filename=None):
+		self._filename = filename if not filename is None else Mtab.LOCATION
+		self._re = re.compile("^(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+).*$")
+		
+	def list_entries(self, rescan=False):
+		if not self._entries or rescan:
+			self._entries = []
+			f = open(self._filename, os.O_RDONLY)
+			for line in f:
+				if line[0:1] == "#":
+					continue
+				m = self._re.match(line)
+				if m:
+					self._entries.append(_TabEntry(
+						m.group(0), m.group(1), m.group(2), m.group(3), line.strip()
+					))
+			f.close()
+			
+		return list(self._entries)
+
+class Mtab(Fstab):
+	LOCAL_FS_TYPES = None	
+		
+class _TabEntry(object):
+	device = None
+	mpoint = None
+	fstype = None
+	options = None	
+	value = None
+	
+	def __init__(self, device, mpoint, fstype, options, value):
+		self.device = device
+		self.mpoint = mpoint
+		self.fstype = fstype
+		self.options = options		
+		self.value = value
+
+		
+_os = os.uname()[0].lower()
+
+if _os == "linux":
+	Fstab.LOCATION = "/etc/fstab"	
+	Mtab.LOCATION = "/etc/mtab"
+	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs')
+
+elif _os == "sun":
+	Fstab.LOCATION = "/etc/vfstab"	
+	Mtab.LOCATION = "/etc/mnttab"
+	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs', 
+		'ufs', 'sharefs', 'dev', 'devfs', 'ctfs', 'mntfs',
+		'proc', 'lofs',   'objfs', 'fd', 'autofs')
+
+del _os
+
+	

@@ -83,6 +83,18 @@ class LifeCircleHandler(Handler):
 					self._logger.error("Cannot create symlink %s -> %s", dst, path)
 					raise
 			
+			if os.path.exists("/var/lock/subsys"):
+				# Touch /var/lock/subsys/scalarizr
+				# This file represents that a service's subsystem is locked, which means the service should be running
+				# @see http://www.redhat.com/magazine/008jun05/departments/tips_tricks/
+				f = "/var/lock/subsys/scalarizr"
+				try:
+					open(f, "w+").close()
+				except OSError:
+					self._logger.error("Cannot touch file '%s'", f)
+					raise 
+			
+			
 			# Notify listeners
 			self._bus.fire("before_host_init")
 			
@@ -136,25 +148,30 @@ class LifeCircleHandler(Handler):
 		self._bus.fire("reboot_start")
 			
 		# Shutdown routine
-		self._shutdown()
+		#self._shutdown()
 		
 	
 	def on_ServerHalt(self, message):
-		msg = self._msg_service.new_message(Messages.GO2HALT)
-		self._producer.send(Queues.CONTROL, msg)
+		#msg = self._msg_service.new_message(Messages.GO2HALT)
+		#self._producer.send(Queues.CONTROL, msg)
 		
-		self._bus.fire("go2halt")
+		#self._bus.fire("go2halt")
 
 		# Shutdown routine
-		self._shutdown()
+		#self._shutdown()
+		
+		msg = self._msg_service.new_message(Messages.HOST_DOWN)
+		self._producer.send(Queues.CONTROL, msg)
 
+		self._bus.fire("host_down")
 
+	"""
 	def _shutdown(self):
 		msg = self._msg_service.new_message(Messages.HOST_DOWN)
 		self._producer.send(Queues.CONTROL, msg)
 
 		self._bus.fire("host_down")
-		
+	"""
 
 	def on_before_message_send(self, queue, message):
 		"""

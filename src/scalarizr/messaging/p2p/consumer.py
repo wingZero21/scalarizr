@@ -10,7 +10,10 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
 from threading import Thread
 import logging
-import timemodule as time
+try:
+	import time
+except ImportError:
+	import timemodule as time
 import os.path
 
 
@@ -62,12 +65,13 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 				queue = unhandled[0]
 				message = unhandled[1]
 				try:
-					self._logger.info("Notify message listeners (message_id: %s)", message.id);
+					self._logger.info("Notify message listeners (message_id: %s)", message.id)
 					for ln in self._listeners:
 						ln(message, queue)
 				except Exception, e:
 					self._logger.exception(e)
 				finally:
+					self._logger.debug("Mark message (message_id: %s) as handled", message.id)
 					store.mark_as_handled(message.id)
 					
 			time.sleep(0.2)

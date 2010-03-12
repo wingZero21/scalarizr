@@ -9,9 +9,13 @@ from scalarizr.core.handlers import Handler
 from scalarizr.messaging import Queues, Messages
 import scalarizr.util as zrutil
 import threading
-import timemodule as time
+try:
+	import time
+except ImportError:
+	import timemodule as time
 import subprocess
 import os
+import shutil
 import stat
 import logging
 import binascii
@@ -105,13 +109,17 @@ class ScriptExecutor(Handler):
 					if self._wait_async:
 						async_threads.append(t)
 				else:
-					self._execute_script(script)
+					try:
+						self._execute_script(script)
+					except (Exception, BaseException), e:
+						self._logger.error("Caught exception while execute script '%s'", script.name)
+						self._logger.exception(e)
 
 			# Wait
 			if self._wait_async:
 				for t in async_threads:
 					t.join()
-			os.removedirs(self._exec_dir)
+			shutil.rmtree(self._exec_dir)
 
 		
 	def on_EventNotice(self, message):
@@ -148,7 +156,7 @@ class ScriptExecutor(Handler):
 		f.close()
 		os.chmod(script_path, stat.S_IREAD | stat.S_IEXEC)
 
-		self._logger.debug("Starting '%s' ...", script.name)
+		self._logger.info("Starting '%s' ...", script.name)
 		
 		# Create stdout and stderr log files
 		stdout = open(self._logs_dir + os.sep + script.name + "-out", "w")
@@ -156,13 +164,16 @@ class ScriptExecutor(Handler):
 		self._logger.info("Redirect stdout > %s stderr > %s", stdout.name, stderr.name)		
 		
 		# Start process
-		proc = subprocess.Popen(script_path, stdout=stdout, stderr=stderr)
-		start_time = time.time()
+		try:
+			proc = subprocess.Popen(script_path, stdout=stdout, stderr=stderr)
+		except OSError:
+			self._logger.error("Cannot execute script '%s' (script path: %s)", script.name, script_path)
+			raise
 		
 		# Communicate with process
 		self._logger.debug("Communicate with '%s'", script.name)
-		exec_timeout = script.exec_timeout/1000
-		while time.time() - start_time < exec_timeout:
+		start_time = time.time()		
+		while time.time() - start_time < script.exec_timeout:
 			if proc.poll() is None:
 				time.sleep(0.5)
 			else:
@@ -171,9 +182,14 @@ class ScriptExecutor(Handler):
 				break
 		else:
 			# Process timeouted
-			self._logger.warn("Script '%s' execution timeout (%d millis). Kill process", 
+			self._logger.warn("Script '%s' execution timeout (%d seconds). Kill process", 
 							script.name, script.exec_timeout)
-			proc.kill()
+			if hasattr(proc, "kill"):
+				# python >= 2.6
+				proc.kill()
+			else:
+				import signal
+				os.kill(proc.pid, signal.SIGKILL)
 						
 		elapsed_time = time.time() - start_time
 		
@@ -188,15 +204,17 @@ class ScriptExecutor(Handler):
 						zrutil.format_size(os.path.getsize(stderr.name)))
 		
 		# Notify scalr
-		self._logger.debug("Prepare 'execResult' message")
-		message = self._msg_service.new_message("execResult")
-		message.body["stdout"] = binascii.b2a_base64(self._get_truncated_log(stdout.name, self._logs_truncate_over))
-		message.body["stderr"] = binascii.b2a_base64(self._get_truncated_log(stderr.name, self._logs_truncate_over))
-		message.body["time_elapsed"] = elapsed_time
-		message.body["script_path"] = script_path
-		message.body["eventName"] = self._event_name
+		self._logger.debug("Prepare 'ExecResult' message")
+		message = self._msg_service.new_message(Messages.EXEC_RESULT, body=dict(
+			stdout=binascii.b2a_base64(self._get_truncated_log(stdout.name, self._logs_truncate_over)),
+			stderr=binascii.b2a_base64(self._get_truncated_log(stderr.name, self._logs_truncate_over)),
+			time_elapsed=elapsed_time,
+			script_name=script.name,
+			script_path=script_path,
+			event_name=self._event_name
+		))
 		
-		self._logger.debug("Sending 'execResult' message to Scalr")
+		self._logger.debug("Sending 'ExecResult' message to Scalr")
 		producer = self._msg_service.get_producer()
 		producer.send(Queues.CONTROL, message)
 		self._logger.debug("Done sending message")

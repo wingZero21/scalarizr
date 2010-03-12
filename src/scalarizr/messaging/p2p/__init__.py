@@ -53,10 +53,12 @@ class _P2pBase(object):
 			elif key == P2pOptions.CRYPTO_KEY_PATH:
 				self._crypto_key = pair[1]
 
+		bus = Bus()
 		if self._server_id is None:
-			self._server_id = Bus()[BusEntries.CONFIG].get("default", "server_id")
+			self._server_id = bus[BusEntries.CONFIG].get("default", "server_id")
 		if self._crypto_key_path is None:
-			self._crypto_key_path = Bus()[BusEntries.CONFIG].get("default", "crypto_key_path")
+			self._crypto_key_path = bus[BusEntries.BASE_PATH] + "/" + \
+					bus[BusEntries.CONFIG].get("default", "crypto_key_path")
 
 		
 	def _read_key(self):
@@ -78,17 +80,18 @@ class _P2pMessageStore:
 		return Bus()[BusEntries.DB].get().get_connection()
 		
 	def put_ingoing(self, message, queue):
+		conn = self._conn()
+		cur = conn.cursor()
 		try:
-			sql = "INSERT INTO p2p_message " \
-					"(id, message, message_id, message_name, queue, is_ingoing, in_is_handled) " \
-					"VALUES (NULL, ?, ?, ?, ?, ?, ?)"
-			
-			conn = self._conn()
-			cur = conn.cursor()
+			sql = """INSERT INTO p2p_message (id, message, message_id, 
+						message_name, queue, is_ingoing, in_is_handled)
+					VALUES 
+						(NULL, ?, ?, ?, ?, ?, ?)"""
 			cur.execute(sql, [str(message), message.id, message.name, queue, 1, 0])
 			
 			if message.meta.has_key(MetaOptions.REQUEST_ID):
-				cur.execute("UPDATE p2p_message SET response_uuid = ? WHERE message_id = ?", 
+				cur.execute("""UPDATE p2p_message 
+						SET response_uuid = ? WHERE message_id = ?""", 
 						[message.id, message.meta[MetaOptions.REQUEST_ID]])
 				
 			conn.commit()
@@ -102,9 +105,8 @@ class _P2pMessageStore:
 		"""
 		cur = self._conn().cursor()
 		try:
-			sql = "SELECT queue, message_id FROM p2p_message " \
-					"WHERE is_ingoing = 1 AND in_is_handled = 0 ORDER BY id"
-			cur.execute(sql)
+			cur.execute("""SELECT queue, message_id FROM p2p_message
+					WHERE is_ingoing = 1 AND in_is_handled = 0 ORDER BY id""")
 			ret = []
 			for r in cur.fetchall():
 				ret.append((r["queue"], self.load(r["message_id"], True)))
@@ -116,8 +118,9 @@ class _P2pMessageStore:
 		conn = self._conn()
 		cur = conn.cursor()
 		try:
-			sql = "UPDATE p2p_message SET in_is_handled = ? WHERE message_id = ? AND is_ingoing = ?"
-			cur.execute(sql, (1, message_id, 1))
+			sql = """UPDATE p2p_message SET in_is_handled = ? 
+					WHERE message_id = ? AND is_ingoing = ?"""
+			cur.execute(sql, [1, message_id, 1])
 			conn.commit()
 		finally:
 			cur.close()
@@ -126,8 +129,10 @@ class _P2pMessageStore:
 		conn = self._conn()
 		cur = conn.cursor()
 		try:
-			sql = "INSERT INTO p2p_message (id, message, message_id, message_name, queue, " \
-					"is_ingoing, out_is_delivered, out_delivery_attempts) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)"
+			sql = """INSERT INTO p2p_message (id, message, message_id, message_name, queue, 
+						is_ingoing, out_is_delivered, out_delivery_attempts) 
+					VALUES 
+						(NULL, ?, ?, ?, ?, ?, ?, ?)"""
 			cur.execute(sql, [str(message), message.id, message.name, queue, 0, 0, 0])
 			conn.commit()
 		finally:
@@ -139,9 +144,8 @@ class _P2pMessageStore:
 		"""
 		cur = self._conn().cursor()
 		try:
-			sql = "SELECT queue, message_id FROM p2p_message " \
-					"WHERE is_ingoing = 0 AND out_is_delivered = 0 ORDER BY id"
-			cur.execute(sql)
+			cur.execute("""SELECT queue, message_id FROM p2p_message
+					WHERE is_ingoing = 0 AND out_is_delivered = 0 ORDER BY id""")
 			ret = []
 			for r in cur.fetchall():
 				ret.append((r[0], self.load(r[1], False)))
@@ -159,9 +163,10 @@ class _P2pMessageStore:
 		conn = self._conn()
 		cur = conn.cursor()
 		try:
-			sql = "UPDATE p2p_message SET out_delivery_attempts = out_delivery_attempts + 1, " \
-					"out_last_attempt_time = datetime('now'), out_is_delivered = ? " \
-					"WHERE message_id = ? AND is_ingoing = ?"
+			sql = """UPDATE p2p_message SET out_delivery_attempts = out_delivery_attempts + 1, 
+						out_last_attempt_time = datetime('now'), out_is_delivered = ? 
+					WHERE 
+						message_id = ? AND is_ingoing = ?"""
 			cur.execute(sql, [int(bool(delivered)), message_id, 0])
 			conn.commit()
 		finally:
@@ -170,7 +175,8 @@ class _P2pMessageStore:
 	def load(self, message_id, is_ingoing):
 		cur = self._conn().cursor()
 		try:
-			cur.execute("SELECT * FROM p2p_message WHERE message_id = ? AND is_ingoing = ?", 
+			cur.execute("""SELECT * FROM p2p_message 
+					WHERE message_id = ? AND is_ingoing = ?""", 
 					[message_id, int(bool(is_ingoing))])
 			row = cur.fetchone()
 			if not row is None:
@@ -182,36 +188,45 @@ class _P2pMessageStore:
 		finally:
 			cur.close()
 	
+	def is_handled(self, message_id):
+		cur = self._conn().cursor()
+		try:
+			cur.execute("""SELECT in_is_handled FROM p2p_message 
+					WHERE message_id = ? AND is_ingoing = 1""", 
+					[message_id])
+			return cur.fetchone()["in_is_handled"] == 1
+		finally:
+			cur.close()
+	
 	def is_delivered(self, message_id):
 		cur = self._conn().cursor()
 		try:
-			cur.execute("SELECT is_delivered FROM p2p_message " \
-					"WHERE message_id = ? AND is_ingoing = ?", 
+			cur.execute("""SELECT is_delivered FROM p2p_message
+					"WHERE message_id = ? AND is_ingoing = ?""", 
 					[message_id, 0])
-			return cur.rowcount > 0 and cur.fetchone()["out_is_delivered"] == 1
+			return cur.fetchone()["out_is_delivered"] == 1
 		finally:
 			cur.close()
 		
 	def is_response_received(self, message_id):
 		cur = self._conn().cursor()
 		try:
-			cur.execute("SELECT response_id FROM p2p_message " \
-					"WHERE message_id = ? AND is_ingoing = ?", 
-					[message_id, 0])
-			return cur.rowcount > 0 and cur.fetchone()["response_id"] != ""
+			sql = """SELECT response_id FROM p2p_message 
+					WHERE message_id = ? AND is_ingoing = ?"""
+			cur.execute(sql, [message_id, 0])
+			return cur.fetchone()["response_id"] != ""
 		finally:
 			cur.close()
 		
 	def get_response(self, message_id):
 		cur = self._conn().cursor()
 		try:
-			cur.execute("SELECT response_id FROM p2p_message " \
-					"WHERE message_id = ? AND is_ingoing = ?", 
+			cur.execute("""SELECT response_id FROM p2p_message 
+					WHERE message_id = ? AND is_ingoing = ?""", 
 					[message_id, 0])
-			if cur.rowcount:
-				response_id = cur.fetchone()["response_id"]
-				if not response_id is None:
-					return self.load(response_id, True)
+			response_id = cur.fetchone()["response_id"]
+			if not response_id is None:
+				return self.load(response_id, True)
 			return None
 		finally:
 			cur.close()
@@ -237,6 +252,9 @@ class P2pMessage(Message):
 	def __init__(self, name=None, meta={}, body={}):
 		Message.__init__(self, name, meta, body)
 		self.__dict__["_store"] = P2pMessageStore()
+	
+	def is_handled(self):
+		return self._store.is_handled(self.id)
 	
 	def is_delivered(self):
 		return self._store.is_delivered(self.id)

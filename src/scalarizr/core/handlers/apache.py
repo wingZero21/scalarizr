@@ -11,7 +11,7 @@ import logging
 
 
 def get_handlers ():
-	return [ApacheAdapter()]
+	return [ApacheHandler()]
 
 class ApacheHandler(Handler):
 	_logger = None
@@ -58,13 +58,3 @@ class ApacheHandler(Handler):
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return behaviour == Behaviours.APP and message.name == Messages.VHOST_RECONFIGURE
 	
-# It needed ??
-class ApacheAdapter(object):
-	def enable_vhost(self, vhost_name):
-		pass
-	
-	def disable_vhost(self, vhost_name):
-		pass
-	
-class ApacheDebianAdapter(ApacheAdapter):
-	pass

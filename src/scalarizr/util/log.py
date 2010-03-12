@@ -5,11 +5,12 @@ Created on 22.01.2010
 '''
 
 import threading
-import time
-import sys
+try:
+    import time
+except ImportError:
+    import timemodule as time
 import atexit
 import logging
-import logging.handlers
 from scalarizr.core import Bus, BusEntries
 
 class MessagingHandler(logging.Handler):
