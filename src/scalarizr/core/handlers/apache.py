@@ -24,34 +24,20 @@ class ApacheHandler(Handler):
 	def on_VhostReconfigure(self, message):
 		self._logger.debug("Entering on_VhostReconfigure")
 		
-		vhost_name = message.body["VhostName"]
-		is_ssl = bool(int(message.body["IsSSLVhost"]))
-		self._logger.debug("Received VhostReconfigure message (vhost_name: %s, is_ssl)", vhost_name, is_ssl)
-		
-		if vhost_name:
-			self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
-			self._create_vhosts()
-		else:
-			self._logger.info("Received update vhost notification (vhost_name: %s, is_ssl: %s)", 
-					vhost_name, is_ssl)
-			self._manage_vhost(vhost_name, is_ssl)
-			
+		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
+		self._update_vhosts()
 		self._reload_apache()
 	
-	def _manage_vhost(self, vhost_name, is_ssl):
-		if not is_ssl:
-			vhosts = self._queryenv.list_virtual_hosts(vhost_name)
-			if len(vhosts):
-				self._logger.info("Enabling virtual host %s", vhost_name)
-				
-				pass
-			else:
-				self._logger.info("Disabling virtual host %s", vhost_name)
-				pass
+	def _update_vhost(self):
+		vhosts = self._queryenv.list_virtual_hosts(vhost_name)
+		if len(vhosts):
+			self._logger.info("Enabling virtual host %s", vhost_name)
+			
+			pass
+		else:
+			self._logger.info("Disabling virtual host %s", vhost_name)
+			pass
 		
-	def _create_vhosts(self):
-		pass
-	
 	def _reload_apache(self):
 		pass
 	
