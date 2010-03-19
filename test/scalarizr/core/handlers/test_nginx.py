@@ -15,7 +15,7 @@ class Test(unittest.TestCase):
         config = bus[BusEntries.CONFIG]
         
         import ConfigParser
-        from scalarizr.util import inject_config
+        #from scalarizr.util import inject_config #deprecated
         c_parser = ConfigParser.ConfigParser()
         c_parser.read('/home/shaitanich/workspace/scalarizr-trunk/etc/include/handler.nginx.ini')
         
@@ -24,7 +24,7 @@ class Test(unittest.TestCase):
             c_parser.set("handler_nginx", "binary_path", "/usr/local/sbin/nginx")
             print c_parser.get("handler_nginx","binary_path")
             
-        inject_config(config, c_parser)
+        #inject_config(config, c_parser)
         
         class _Bunch(dict):
             __getattr__, __setattr__ = dict.get, dict.__setitem__

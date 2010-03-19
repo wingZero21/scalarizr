@@ -41,7 +41,7 @@ class Test(unittest.TestCase):
 		
 		from xml.dom.minidom import parseString
 		xml = parseString(open(xmlfile, "r").read())
-		 
+		
 		roles = self._queryenv._read_list_roles_response(xml)
 		
 		self.assertTrue(not roles is None)
@@ -63,7 +63,7 @@ class Test(unittest.TestCase):
 		
 		from xml.dom.minidom import parseString
 		xml = parseString(open(xmlfile, "r").read())
-		 
+		
 		mountpoints = self._queryenv._read_list_ebs_mountpoints_response(xml)
 		
 		self.assertTrue(not mountpoints is None)
@@ -87,7 +87,7 @@ class Test(unittest.TestCase):
 		
 		from xml.dom.minidom import parseString
 		xml = parseString(open(xmlfile, "r").read())
-		 
+		
 		parametres = self._queryenv._read_list_role_params_response(xml)
 		
 		self.assertTrue(not parametres is None)
@@ -183,9 +183,9 @@ class Test(unittest.TestCase):
 		# Key = c+/g0PyouaqXMbuJ5Vtux34Mft7jLe5H5u8tUmyhldjwTfgm7BI6MOA8F6BwkzQnpWEOcHx+A+TRJh0u3PElQQ0SiwdwrlgpQMbj8NBxbxBgfxA9WisgvfQu5ZPYou6Gz3oUAQdWfFlFdY2ACOjmqa3DGogge+TlXtV2Xagm0rw=
 	
 	def test_get_canonical_string(self):
-	   dict = {2:"two",3:"three",1:"one",4:"four"}
-	   str = self._queryenv._get_canonical_string(dict)
-	   self.assertEqual(str,"1one2two3three4four")
+		dict = {2:"two",3:"three",1:"one",4:"four"}
+		str = self._queryenv._get_canonical_string(dict)
+		self.assertEqual(str,"1one2two3three4four")
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.test_list_roles']
