@@ -70,19 +70,20 @@ class ApacheHandler(Handler):
 				for fname in list_vhosts:
 					if '000-default' == fname:
 						continue
-					if os.path.isfile(vhosts_path + fname):
+					vhost_file = vhosts_path + fname
+					if os.path.isfile(vhost_file):
 						try:
-							os.remove(vhosts_path + fname)
+							os.remove(vhost_file)
 						except OSError, e:
-									self._logger.error('Couldn`t remove vhost file ' + \
-													   vhosts_path + fname + " : " + str(e.strerror))
+							self._logger.error('Couldn`t remove vhost file %s. %s', 
+									vhost_file, e.strerror)
 					
-					if os.path.islink(vhosts_path + fname):
+					if os.path.islink(vhost_file):
 						try:
-							os.unlink(vhosts_path + fname)
+							os.unlink(vhost_file)
 						except OSError, e:
 									self._logger.error('Couldn`t remove vhost link ' + \
-													   vhosts_path + fname + " : " + str(e.strerror))
+													   vhost_file + " : " + str(e.strerror))
 				
 				for vhost in received_vhosts:
 					if (None == vhost.hostname) or (None == vhost.raw):
@@ -152,7 +153,7 @@ class ApacheHandler(Handler):
 				
 				#Check if vhost directory included in main apache config
 				index = 0
-				include_string = "Include \"" + vhosts_path + "*\""
+				include_string = 'Include "' + vhosts_path + '*"'
 				try:
 					text = open(httpd_conf_path, "r").read()
 					index = text.find(include_string)
