@@ -17,6 +17,7 @@ if __name__ == "__main__":
 	
 	parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
 	parser.add_option("-n", "--name", dest="name", help="Message name")
+	parser.add_option("-s", "--self", dest="self_send", default=True, help="Send message to myself")
 	parser.add_option("-q", "--queue", dest="queue", help="Queue to send message into")
 	
 	(options, args) = parser.parse_args()
@@ -29,8 +30,17 @@ if __name__ == "__main__":
 	from scalarizr.messaging import MessageServiceFactory
 	
 	config = Bus()[BusEntries.CONFIG]
+	adapter = config.get("messaging", "adapter")
 	factory = MessageServiceFactory()
-	service = factory.new_service(config.get("messaging", "adapter"), config.items("messaging"))
+	if options.self_send:
+		producer_config = []
+		for key, value in config.items("messaging"):
+			if key.startswith(adapter + "_consumer"):
+				producer_config.append((key.replace("consumer", "producer"), value))
+		service = factory.new_service(adapter, producer_config)
+	else:
+		service = factory.new_service(adapter, config.items("messaging"))
+		
 	producer = service.get_producer()
 	
 	msg = service.new_message()

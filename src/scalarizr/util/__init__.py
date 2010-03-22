@@ -72,6 +72,18 @@ def save_config():
 	bus[BusEntries.CONFIG].write(f)
 	f.close()	
 	
+def system(args, shell=True):
+	import subprocess
+	logger = logging.getLogger(__name__)
+	logger.debug("system: " + args if isinstance(args, str) else " ".join(args))
+	p = subprocess.Popen(args, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	out, err = p.communicate()
+	if out:
+		logger.debug("stdout: " + out)
+	if err:
+		logger.warning("stderr: " + err)
+	return out, err, p.returncode
+		
 
 def parse_size(size):
 	"""
@@ -110,27 +122,28 @@ def format_size(size, precision=2):
 import binascii
 class _CryptoUtil(object):
 	def keygen(self, length=40):
-		from Crypto.Util.randpool import RandomPool
-		from Crypto.Hash import SHA256
-						
-		pool = RandomPool(hash=SHA256)
-		pool.stir()
-		return binascii.b2a_base64(pool.get_bytes(length))	
+		from M2Crypto.Rand import rand_bytes
+		return binascii.b2a_base64(rand_bytes(length))	
 			
-	def _init_chiper(self, key):
-		from Crypto.Cipher import Blowfish
-				
+	def _init_chiper(self, key, op_enc=1):
+		from M2Crypto.EVP import Cipher
 		k = binascii.a2b_base64(key)
-		return Blowfish.new(k[0:len(k)-9], Blowfish.MODE_CFB, k[len(k)-8:])		
+		return Cipher("bf_cfb", k[0:len(k)-9], k[len(k)-8:], op=op_enc)
+
 		
 	def encrypt (self, s, key):
-		c = self._init_chiper(key)
-		return binascii.b2a_base64(c.encrypt(s))
+		c = self._init_chiper(key, 1)
+		ret = c.update(s)
+		ret += c.final()
+		del c
+		return binascii.b2a_base64(ret)
 	
 	def decrypt (self, s, key):
-		c = self._init_chiper(key)
-		return c.decrypt(binascii.a2b_base64(s))
-
+		c = self._init_chiper(key, 0)
+		ret = c.update(binascii.a2b_base64(s))
+		ret += c.final()
+		del c
+		return ret
 
 		
 _crypto_util = None
