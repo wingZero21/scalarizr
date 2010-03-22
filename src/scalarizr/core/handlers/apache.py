@@ -161,7 +161,7 @@ class ApacheHandler(Handler):
 			
 			#Check if vhost directory included in main apache config
 			index = 0
-			include_string = 'Include "' + vhosts_path + '/*"'
+			include_string = 'Include ' + vhosts_path + '/*'
 			try:
 				httpd_conf_file = open(httpd_conf_path, 'r')
 				text = httpd_conf_file.read()
