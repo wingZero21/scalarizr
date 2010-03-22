@@ -23,38 +23,39 @@ class HttpRequestHanler(BaseHTTPRequestHandler):
 			self.send_response(200)
 			self.end_headers()
 			
-			xml = """<?xml version="1.0" encoding="UTF-8"?>
-<response>
-        <vhosts>
-                <vhost hostname="test-example.scalr.net" type="apache">
-                        <raw>
-                                <![CDATA[
-<VirtualHost *:80> 
-DocumentRoot /var/www/test/ 
-ServerName test-example.scalr.net 
-CustomLog     /var/log/apache2/test-example.scalr.net-access.log combined
-ErrorLog      /var/log/apache2/test-example.scalr.net-error.log
-</VirtualHost>
-                                ]]>
-                        </raw>                  
-                </vhost>
-                        
-                <vhost hostname="test-ssl-example.scalr.net" https="1" type="apache">
-                        <raw>
-                                <![CDATA[
-<VirtualHost *:443> 
-DocumentRoot /var/www/test_ssl/ 
-ServerName test-ssl-example.scalr.net 
-CustomLog     /var/log/apache2/test-ssl-example.scalr.net-access.log combined
-ErrorLog      /var/log/apache2/test-ssl-example.scalr.net-error.log
-SSLLogFile      /var/log/apache2/test-ssl-example.scalr.net-ssl.log
-</VirtualHost>                                
-                                ]]>
-                        </raw>                          
-                </vhost>
-        </vhosts>
-</response>
-"""
+			xml = """
+				<?xml version="1.0" encoding="UTF-8"?>
+				<response>
+				        <vhosts>
+				                <vhost hostname="test-example.scalr.net" type="apache">
+				                        <raw>
+				                                <![CDATA[
+				<VirtualHost *:80> 
+				DocumentRoot /var/www/test/ 
+				ServerName test-example.scalr.net 
+				CustomLog     /var/log/apache2/test-example.scalr.net-access.log combined
+				ErrorLog      /var/log/apache2/test-example.scalr.net-error.log
+				</VirtualHost>
+				                                ]]>
+				                        </raw>                  
+				                </vhost>
+				                        
+				                <vhost hostname="test-ssl-example.scalr.net" https="1" type="apache">
+				                        <raw>
+				                                <![CDATA[
+				<VirtualHost *:443> 
+				DocumentRoot /var/www/test_ssl/ 
+				ServerName test-ssl-example.scalr.net 
+				CustomLog     /var/log/apache2/test-ssl-example.scalr.net-access.log combined
+				ErrorLog      /var/log/apache2/test-ssl-example.scalr.net-error.log
+				SSLLogFile      /var/log/apache2/test-ssl-example.scalr.net-ssl.log
+				</VirtualHost>                                
+				                                ]]>
+				                        </raw>                          
+				                </vhost>
+				        </vhosts>
+				</response>
+				"""
 			self.wfile.write(xml)
 			
 		if op == "list-scripts":
