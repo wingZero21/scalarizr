@@ -238,7 +238,7 @@ class ApacheHandler(Handler):
 			
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return behaviour == Behaviours.APP and message.name == Messages.VHOST_RECONFIGURE
+		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
 	
 	def _apache_deault_conf_patch_deb(self, vhosts_path):
 		#Replace NameVirtualhost and Virtualhost ports specifically for debian-based linux
