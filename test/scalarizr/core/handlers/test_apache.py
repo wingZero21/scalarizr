@@ -15,7 +15,7 @@ class Test(unittest.TestCase):
         from scalarizr.core import Bus, BusEntries
         bus = Bus()
         config = bus[BusEntries.CONFIG]
-        config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../../etc/include/handle.apache.ini" ))
+        config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../../etc/include/handler.apache.ini" ))
         
         class _Bunch(dict):
             __getattr__, __setattr__ = dict.get, dict.__setitem__
@@ -29,7 +29,7 @@ DocumentRoot /var/www/1/
 ServerName test-example.scalr.net 
 CustomLog     /var/log/apache3/test-example.scalr.net-access.log1 combined
 #  CustomLog     /var/log/apache2/test-example.scalr.net-access.log2 combined
-ErrorLog      /var/log/apache2/test-example.scalr.net-error.log3
+ErrorLog      /var/log/apache3/test-example.scalr.net-error.log3
 #ErrorLog      /var/log/apache2/test-example.scalr.net-error.log4#
 # ErrorLog      /var/log/apache2/test-example.scalr.net-error.log_5#
 #  ErrorLog      /var/log/apache2/test-example.scalr.net-error.log_6_#
