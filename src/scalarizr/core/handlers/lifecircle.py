@@ -73,6 +73,13 @@ class LifeCircleHandler(Handler):
 				except OSError:
 					self._logger.error("Cannot create symlink %s -> %s", dst, path)
 					raise
+			"""
+			OpenSolaris:
+			2010-03-15 19:10:15,448 - ERROR - scalarizr.core.handlers.lifecircle - Cannot create symlink /etc/rc6.d/K10scalarizr -> /opt/scalarizr/src/scalarizr/scripts/reboot.py
+			2010-03-15 19:10:15,449 - ERROR - scalarizr.util - [Errno 2] No such file or directory
+			"""
+			
+				
 			# Add halt script
 			dst = "/etc/rc0.d/K10scalarizr"
 			if not os.path.exists(dst):

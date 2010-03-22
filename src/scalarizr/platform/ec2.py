@@ -1,7 +1,6 @@
 
 from scalarizr.core import Bus, BusEntries
 from scalarizr.platform import Platform, PlatformError
-import os
 import logging
 import urllib2
 import re
@@ -30,6 +29,7 @@ class AwsPlatform(Platform):
 	_s3_conn = None	
 	
 	def __init__(self):
+		Platform.__init__(self)
 		self._logger = logging.getLogger(__name__)
 	
 	def get_private_ip(self):
@@ -47,8 +47,10 @@ class AwsPlatform(Platform):
 		try:
 			r = urllib2.urlopen(self._meta_url + key)
 			return string.strip(r.read())
-		except Exception, e:
-			self._logger.error(str(e))
+		except IOError, e:
+			if isinstance(e, urllib2.HTTPError):
+				if e.code == 404:
+					return ""
 			raise PlatformError("Cannot fetch ec2 metadata key '%s'. Error: %s" % (key, e))
 		
 	def get_metadata(self):
@@ -88,11 +90,11 @@ class AwsPlatform(Platform):
 			elif k == "pk":
 				filename = "etc/.keys/pk.pem"
 			if not filename is None:
-				k = k + "_path"
-				v = filename
 				f = open(base_path + "/" + filename, "w+")
 				f.write(options[k])
 				f.close()
+				k = k + "_path"
+				v = filename
 			else:
 				v = options[k]
 			config.set(section, k, v)
@@ -160,64 +162,6 @@ class AwsPlatformOptions:
 	PK_PATH = "pk_path"
 
 	
-class Fstab:
-	LOCATION = None
-	_entries = None
-	_filename = None
-	_re = None
-	
-	def __init__(self, filename=None):
-		self._filename = filename if not filename is None else Mtab.LOCATION
-		self._re = re.compile("^(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+).*$")
-		
-	def list_entries(self, rescan=False):
-		if not self._entries or rescan:
-			self._entries = []
-			f = open(self._filename, os.O_RDONLY)
-			for line in f:
-				if line[0:1] == "#":
-					continue
-				m = self._re.match(line)
-				if m:
-					self._entries.append(_TabEntry(
-						m.group(0), m.group(1), m.group(2), m.group(3), line.strip()
-					))
-			f.close()
-			
-		return list(self._entries)
 
-class Mtab(Fstab):
-	LOCAL_FS_TYPES = None	
-		
-class _TabEntry(object):
-	device = None
-	mpoint = None
-	fstype = None
-	options = None	
-	value = None
-	
-	def __init__(self, device, mpoint, fstype, options, value):
-		self.device = device
-		self.mpoint = mpoint
-		self.fstype = fstype
-		self.options = options		
-		self.value = value
-
-		
-_os = os.uname()[0].lower()
-
-if _os == "linux":
-	Fstab.LOCATION = "/etc/fstab"	
-	Mtab.LOCATION = "/etc/mtab"
-	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs')
-
-elif _os == "sun":
-	Fstab.LOCATION = "/etc/vfstab"	
-	Mtab.LOCATION = "/etc/mnttab"
-	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs', 
-		'ufs', 'sharefs', 'dev', 'devfs', 'ctfs', 'mntfs',
-		'proc', 'lofs',   'objfs', 'fd', 'autofs')
-
-del _os
 
 	

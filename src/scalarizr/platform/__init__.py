@@ -69,7 +69,7 @@ class Platform():
 		section = "platform_" + self.name
 		if not config.has_section(section):
 			config.add_section(section)
-		self._set_config(config, section, options)
+		self._set_config_options(config, section, options)
 		save_config()
 		
 	def get_config_option(self, option):

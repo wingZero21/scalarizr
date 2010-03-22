@@ -1,7 +1,182 @@
+===
+===
+
+
 python >= 2.5.1 required 
+tar >= 1.15 recomended (для ec2 бандла) 
+
+
 tested on fedora 8, debian 5, centos 5.4
 
-== CentOS 5.1-5.4/RedHat 5.1-5.4
+
+===
+Инсталяция
+===
+
+
+== 
+Fedora/CentOS/RedHat
+==
+
+$ yum install python-crypto python-sqlalchemy
+
+Поддержка AWS
+$ yum install python-boto
+
+Поддержка RackSpace 
+$ easy_install python-cloudservers ?
+
+
+==
+Fedora 8
+==
+
+$ python -V
+Python 2.5.1
+
+$ yum install python-crypto python-sqlalchemy python-boto
+Installing:
+ python-boto            noarch      1.5c-1.fc8       updates-newkey       226 k
+ python-crypto          i386        2.0.1-9.1        fedora               196 k
+ python-sqlalchemy      noarch      0.4.7-1.fc8      updates-newkey       1.4 M
+
+boto старый (Dec 2008). Нужно переставлять используя easy_install
+
+
+== 
+Fedora 9
+==
+
+
+==
+Fedora 10
+==
+
+
+==
+Fedora 11
+==
+
+
+== 
+CentOS 4
+==
+
+
+== 
+CentOS 5
+==
+$ cat /etc/*-release
+CentOS release 5.2 (Final)
+
+$ python -V
+Python 2.4.3
+
+Установить python 2.6
+
+sqlalchemy можно установить из репозитория:
+$ yum install python26-sqlalchemy
+
+остальное доставлять easy_install
+
+
+==
+OpenSolaris 8.11
+==
+
+$ uname -a
+SunOS domU-12-31-39-04-70-38 5.11 snv_101b i86pc i386 i86xpv Solaris
+
+$ python -V
+Python 2.4.4
+
+Установка python 2.6
+$ pkg install SUNWPython26
+Creating Plan /                        
+pkg: the following package(s) violated constraints:
+	Package pkg:/SUNWcsl@0.5.11,5.11-0.111 conflicts with constraint in installed pkg:/entire: 
+	        Pkg SUNWcsl: Optional min_version: 0.5.11,5.11-0.101 max version: 0.5.11,5.11-0.101 defined by: pkg:/entire
+	        
+Установка python 2.5
+$ pkg install SUNWPython25
+
+остальное доставлять easy_install
+
+
+=== 
+Установка паектов используя easy_install
+===
+
+== 
+Fedora/CentOS/RedHat
+==
+
+Установить setuptools
+
+В Fedora
+$ yum install python-setuptools-devel
+
+В RedHat/CentOS 4,5
+$ yum install python26-setuptools
+
+
+SQLAlchemy
+$ yum install sqlalchemy
+
+pyCrypto
+$ yum install gcc
+$ easy_install pycrypto
+
+boto (AWS)
+$ easy_install boto
+
+python-cloudservers (RackSpace)
+$ easy_install python-cloudservers
+
+
+== 
+Debian/Ubuntu
+==
+
+Установить setuptools
+$ apt-get install python-setuptools python-dev
+
+M2Crypto
+$ apt-get install python-m2crypto
+
+pyCrypto
+$ apt-get install gcc
+$ easy_install pycrypto
+
+Все остальное как в Fedora
+
+
+==
+OpenSolaris
+==
+
+Установить setuptools
+
+setuptools для python2.5 нет в репозитории
+
+Установка setuptools из egg 
+$ wget http://pypi.python.org/packages/2.5/s/setuptools/setuptools-0.6c11-py2.5.egg
+$ sh setuptools-0.6c11-py2.5.egg
+
+
+pyCrypto
+$ pkg install SUNWgcc
+$ easy_install-2.5 pycrypto
+
+
+===
+Known problems
+===
+
+
+== 
+На RedHat/CentOS 4,5 установлен python 2.4
+==
 
 $ vim /etc/yum.repos.d/IUS.repo
 [ius]
@@ -10,40 +185,13 @@ baseurl=http://dl.iuscommunity.org/pub/ius/stable/Redhat/5/i386/
 enabled=1
 gpgcheck=0
 
-$ yum install python26 python26-setuptools gcc
+$ yum install python26 python26-setuptools
 
-Known errors:
 
-E: 
-При старте скаларизера когда создается messaging сервер:
+== 
+При инициализации сервера сообщений [Errno -2] Name or service not known
 socket.gaierror: [Errno -2] Name or service not known
+==
 
-S: 
 echo "127.0.0.1 localhost" >> /etc/hosts
-
-
-== Fedora
-
-$ yum install python-setuptools-devel gcc
-
-== Debian/Ubuntu
-$ apt-get install python-setuptools python-dev gcc
-
-
-== OpenSolaris 9.06 не встало (((
-$ pkg install SUNWPython25 SUNWpython-setuptools SUNWgcc
-$ ln -s /usr/bin/python2.5 /usr/bin/python
-$ ln -s /usr/bin/easy_install-2.4 /usr/bin/easy_install
-
-
-== Для всех
-
-$ easy_install sqlalchemy pycrypto 
-
-для RackSpace
-$ easy_install python-cloudservers
-
-для AWS
-$ easy_install boto
-
 
