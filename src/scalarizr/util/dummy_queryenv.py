@@ -19,7 +19,20 @@ class HttpRequestHanler(BaseHTTPRequestHandler):
 		)
 		
 		op = form["operation"].value
-		if op == "list-virtualhosts":
+		
+		if op == "get-https-certificate":
+			self.send_response(200)
+			self.end_headers()
+			
+			xml = """<?xml version="1.0" encoding="UTF-8"?>
+				<response>
+					<cert>MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN</cert>
+					<pkey>MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN</pkey>
+				</response>
+				"""
+			self.wfile.write(xml)
+			
+		elif op == "list-virtualhosts":
 			self.send_response(200)
 			self.end_headers()
 			
@@ -44,7 +57,6 @@ class HttpRequestHanler(BaseHTTPRequestHandler):
 				ServerName test-ssl-example.scalr.net 
 				CustomLog     /var/log/apache2/test-ssl-example.scalr.net-access.log combined
 				ErrorLog      /var/log/apache2/test-ssl-example.scalr.net-error.log
-				SSLLogFile      /var/log/apache2/test-ssl-example.scalr.net-ssl.log
 				</VirtualHost>                                
 				                                ]]></raw>                          
 				                </vhost>

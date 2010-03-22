@@ -57,7 +57,7 @@ class ApacheHandler(Handler):
 		if [] != received_vhosts:	
 			#clean up old configuration			
 			if not os.path.exists(vhosts_path):
-				self._logger.error('Virtual hosts directory %s doesn`t exist', vhosts_path)
+				self._logger.warning('Virtual hosts directory %s doesn`t exist', vhosts_path)
 				list_vhosts = []
 				try:
 					os.makedirs(vhosts_path)
@@ -156,7 +156,7 @@ class ApacheHandler(Handler):
 				else:
 					self._logger.info('SSL is neither 0 or 1, skipping virtual host %s', vhost.hostname)
 			
-			if ['Ubuntu','Debian'].count(platform.dist()[0]):
+			if ['Ubuntu','debian'].count(platform.dist()[0]):
 				self._apache_deault_conf_patch_deb(vhosts_path)
 			
 			#Check if vhost directory included in main apache config
@@ -172,7 +172,7 @@ class ApacheHandler(Handler):
 						httpd_conf_path, e.strerror)
 			if index == -1:
 				try:
-					httpd_conf_file = open(httpd_conf_path, 'w')
+					httpd_conf_file = open(httpd_conf_path, 'a')
 					httpd_conf_file.write(include_string)
 					httpd_conf_file.close()
 				except IOError, e:
@@ -180,12 +180,12 @@ class ApacheHandler(Handler):
 							httpd_conf_path, e.strerror)
 	
 	def _check_mod_ssl(self, httpd_conf_path):
-		if ['Ubuntu','Debian'].count(platform.dist()[0]):
+		if ['Ubuntu','debian'].count(platform.dist()[0]):
 			self._check_mod_ssl_deb(httpd_conf_path)
 			
 	def _check_mod_ssl_deb(self, httpd_conf_path):
-		mods_available = os.path.dirname(httpd_conf_path) + '/mods_available'
-		mods_enabled = os.path.dirname(httpd_conf_path) + '/mods_enabled'
+		mods_available = os.path.dirname(httpd_conf_path) + '/mods-available'
+		mods_enabled = os.path.dirname(httpd_conf_path) + '/mods-enabled'
 		if not os.path.exists(mods_enabled + '/ssl.conf') and not os.path.exists(mods_enabled + '/ssl.load'):
 			if os.path.exists(mods_available) and os.path.exists(mods_available+'/ssl.conf') and os.path.exists(mods_available+'/ssl.load'):
 				if not os.path.exists(mods_enabled):
@@ -207,7 +207,7 @@ class ApacheHandler(Handler):
 		
 	
 	def _reload_apache(self):
-		if ['Ubuntu','Debian'].count(platform.dist()[0]):
+		if ['Ubuntu','debian'].count(platform.dist()[0]):
 			self._reload_apache_deb()
 			
 	def _reload_apache_deb(self):
@@ -215,6 +215,7 @@ class ApacheHandler(Handler):
 		apache_run_args = 'reload'
 		reload_command = [apache_run_script, apache_run_args]
 		if os.path.exists(apache_run_script) and os.access(apache_run_script, os.X_OK):
+			self._logger.info("Trying to reload apache..")
 			try:
 				p = subprocess.Popen(reload_command, 
 									 stdin=subprocess.PIPE, 
@@ -228,6 +229,7 @@ class ApacheHandler(Handler):
 					self._logger.error(stderr)
 				
 				else:
+					self._logger.info("Apache was successfully reloaded.")
 					self.bus.fire('apache_reload')	
 									
 				if None != stdout:
