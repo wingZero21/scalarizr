@@ -18,9 +18,9 @@ class DistTool(object):
     _debian_based_dists = ['debian', 'Ubuntu']
     _rpm_based_dists = ['CentOS', 'RHEL']
     
-    def __new__(cls,*dt,**mp):
+    def __new__(cls):
         if cls._instance is None:
-            cls._instance = object.__new__(cls,*dt,**mp)
+            cls._instance = object.__new__(cls)
             
             cls._instance._platform = cls._instance._get_platform()
             if 'Linux' == cls._instance._platform:
