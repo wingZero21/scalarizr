@@ -6,19 +6,54 @@ python >= 2.5.1 required
 tar >= 1.15 recomended (для ec2 бандла) 
 
 
-tested on fedora 8, debian 5, centos 5.4
+tested on fedora 8, debian 5, centos 5.2
 
 
-===
-Инсталяция
-===
+====================
+Installing scalarizr
+====================
+
+CentOS/RedHat 4,5
+-----------------
+
+Установить python2.6
+
+	$ vim /etc/yum.repos.d/IUS.repo
+	[ius]
+	name=IUS
+	baseurl=http://dl.iuscommunity.org/pub/ius/stable/Redhat/5/i386/
+	enabled=1
+	gpgcheck=0
+
+	$ yum install python26 python26-setuptools
+
+Установить зависимости
+	
+SQLAlchemy:
+
+	$ easy_install-2.6 sqlalchemy
+	
+Boto:
+
+	$ easy_install-2.6 boto
+	
+M2Crypto:
+
+	$ yum install swig openssl-devel
+	$ easy_install-2.6 m2crypto
+
+M2Crypto может упасть с ошибкой. Решение в known problems
 
 
-== 
-Fedora/CentOS/RedHat
-==
 
-$ yum install python-crypto python-sqlalchemy
+Fedora 8-12
+-----------
+
+Установить setuptools
+	$ yum install python-setuptools-devel
+
+
+$ yum install python-sqlalchemy
 
 Поддержка AWS
 $ yum install python-boto
@@ -27,45 +62,16 @@ $ yum install python-boto
 $ easy_install python-cloudservers ?
 
 
-==
-Fedora 8
-==
-
-$ python -V
-Python 2.5.1
-
-$ yum install python-crypto python-sqlalchemy python-boto
-Installing:
- python-boto            noarch      1.5c-1.fc8       updates-newkey       226 k
- python-crypto          i386        2.0.1-9.1        fedora               196 k
- python-sqlalchemy      noarch      0.4.7-1.fc8      updates-newkey       1.4 M
-
-boto старый (Dec 2008). Нужно переставлять используя easy_install
+~~~~~~~~~
 
 
-== 
-Fedora 9
-==
-
-
-==
-Fedora 10
-==
-
-
-==
-Fedora 11
-==
-
-
-== 
 CentOS 4
-==
+~~~~~~~~
 
 
-== 
 CentOS 5
-==
+~~~~~~~~
+
 $ cat /etc/*-release
 CentOS release 5.2 (Final)
 
@@ -80,9 +86,9 @@ $ yum install python26-sqlalchemy
 остальное доставлять easy_install
 
 
-==
 OpenSolaris 8.11
-==
+~~~~~~~~~~~~~~~~
+
 
 $ uname -a
 SunOS domU-12-31-39-04-70-38 5.11 snv_101b i86pc i386 i86xpv Solaris
@@ -123,9 +129,10 @@ $ yum install python26-setuptools
 SQLAlchemy
 $ yum install sqlalchemy
 
-pyCrypto
-$ yum install gcc
-$ easy_install pycrypto
+M2Crypto
+# yum install swig openssl-devel
+$ easy_install M2Crypto
+
 
 boto (AWS)
 $ easy_install boto
@@ -169,29 +176,53 @@ $ pkg install SUNWgcc
 $ easy_install-2.5 pycrypto
 
 
-===
+==============
 Known problems
-===
+==============
+
+На CentOS 5 падает установка M2Crypto через easy_install
+--------------------------------------------------------
+
+/usr/include/openssl/opensslconf.h:13: Error: Unable to find
+'opensslconf-i386.h' error: command 'swig' failed with exit status 1  
+
+Нужно скачать пакет
+$ http://pypi.python.org/packages/source/M/M2Cr#!/usr/bin/env python2.6ypto/M2Crypto-0.20.2.tar.gz
+$ tar -xzf M2Crypto-0.20.2.tar.gz
+$ cd M2Crypto-0.20.2
+
+Скомпилировать, протестировать и установить
+$ python2.6 setup.py build build_ext -I/usr/include/openssl
+$ python2.6 setup.py test
+$ python2.6 setup.py install
 
 
-== 
-На RedHat/CentOS 4,5 установлен python 2.4
-==
 
-$ vim /etc/yum.repos.d/IUS.repo
-[ius]
-name=IUS
-baseurl=http://dl.iuscommunity.org/pub/ius/stable/Redhat/5/i386/
-enabled=1
-gpgcheck=0
-
-$ yum install python26 python26-setuptools
-
-
-== 
 При инициализации сервера сообщений [Errno -2] Name or service not known
 socket.gaierror: [Errno -2] Name or service not known
-==
+------------------------------------------------------------------------
 
 echo "127.0.0.1 localhost" >> /etc/hosts
+
+
+====================================================
+Зависимости скаларизера в репозиториях дистрибутивов
+====================================================
+
+					python >= 2.5.1		m2crypto ?		sqlalchemy >= 0.4.7		boto ?
+----------------------------------------------------------------------------------
+Fedora 8			python				?				python-sqlalchemy		python-boto
+					2.5.1								0.4.7					1.5c
+					
+CentOS 4			
+
+CentOS 5			python				m2crypto		python-sqlalchemy		python-boto
+					2.4.3				0.16			0.3.11					1.0a
+					
+Debian 5
+
+Ubuntu 8.04
+
+OpenSolaris 8.11	SUNWPython25		-				-						-
+					2.5.5
 

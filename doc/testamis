@@ -5,3 +5,4 @@ OS					Provider		AMI					Arch
 Fedora 8							ami-d88e6db1		i386
 CentOS 5.2			RightScale		ami-cb52b6a2		i386
 OpenSolaris 8.11	Sun				ami-35ac4a5c		i386
+Debian 5							ami-dcf615b5		i386

@@ -5,15 +5,20 @@ Created on 23 марта 2010
 @author: Dmytro Korsakov
 '''
 import unittest
-from scalarizr.util import disttool
+from scalarizr.util.disttool import DistTool
 
 class Test(unittest.TestCase):
 
 
     def test_DistTool(self):
-        A = disttool.DistTool()
-        print A.is_debian_based()
-        print A.get_version()
+        dt = DistTool()
+        self.assertTrue(dt.is_linux())
+        self.assertTrue(dt.is_redhat_based())
+        self.assertTrue(dt.is_fedora())
+        
+        self.assertFalse(dt.is_win())
+        self.assertFalse(dt.is_sun())
+        self.assertFalse(dt.is_debian_based())
 
 
 if __name__ == "__main__":
