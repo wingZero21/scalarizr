@@ -21,7 +21,7 @@ class Test(unittest.TestCase):
             __getattr__, __setattr__ = dict.get, dict.__setitem__
             
         class _QueryEnv:
-            def list_virtual_hosts(self, name = None, https=None):
+            def list_virtual_hosts(self, name = None, https=False):
                 return [_Bunch(hostname = "test-example.scalr.net",
 							   type = "apache",
 							   raw = """<VirtualHost *:80> 

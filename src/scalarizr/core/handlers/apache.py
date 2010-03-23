@@ -8,6 +8,7 @@ Created on Dec 25, 2009
 from scalarizr.core import Bus, BusEntries, Behaviours
 from scalarizr.core.handlers import Handler
 from scalarizr.messaging import Messages
+from scalarizr.util import disttool
 import logging
 import os
 import platform
@@ -22,7 +23,8 @@ class ApacheHandler(Handler):
 	_logger = None
 	_queryenv = None
 	_bus = None
-	
+	_os = None 
+
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = Bus()[BusEntries.QUERYENV_SERVICE]
@@ -32,8 +34,9 @@ class ApacheHandler(Handler):
 		self.errorlog_regexp = re.compile( r"ErrorLog\s+(\S*)", re.IGNORECASE)
 		self.customlog_regexp = re.compile( r"CustomLog\s+(\S*)", re.IGNORECASE)
 		self.bus = Bus()
+		self._os = disttool.DistTool()
 		self.bus.define_events('apache_reload')
-	
+
 	def on_VhostReconfigure(self, message):
 		self._logger.debug("Entering on_VhostReconfigure")
 		
@@ -92,7 +95,6 @@ class ApacheHandler(Handler):
 						except OSError, e:
 								self._logger.error('Couldn`t remove vhost link %s. %s', 
 										vhost_file, e.strerror)
-				#why on this level?
 			for vhost in received_vhosts:
 				if (None == vhost.hostname) or (None == vhost.raw):
 					continue
@@ -104,6 +106,7 @@ class ApacheHandler(Handler):
 						self._logger.error('Can`t retrieve ssl cert and private key from Scalr.')
 						raise
 					else: 
+						self._logger.info("Saving SSL certificates for %s",vhost.hostname)
 						try:
 							cert_path = 'etc/.keys'
 							print os.path.realpath(cert_path)
@@ -156,7 +159,7 @@ class ApacheHandler(Handler):
 				else:
 					self._logger.info('SSL is neither 0 or 1, skipping virtual host %s', vhost.hostname)
 			
-			if ['Ubuntu','debian'].count(platform.dist()[0]):
+			if self._os.is_debian_based():
 				self._apache_deault_conf_patch_deb(vhosts_path)
 			
 			#Check if vhost directory included in main apache config
@@ -180,7 +183,7 @@ class ApacheHandler(Handler):
 							httpd_conf_path, e.strerror)
 	
 	def _check_mod_ssl(self, httpd_conf_path):
-		if ['Ubuntu','debian'].count(platform.dist()[0]):
+		if self._os.is_debian_based():
 			self._check_mod_ssl_deb(httpd_conf_path)
 			
 	def _check_mod_ssl_deb(self, httpd_conf_path):
@@ -207,11 +210,11 @@ class ApacheHandler(Handler):
 		
 	
 	def _reload_apache(self):
-		if ['Ubuntu','debian'].count(platform.dist()[0]):
-			self._reload_apache_deb()
-			
-	def _reload_apache_deb(self):
-		apache_run_script = '/etc/init.d/apache2'
+		apache_run_script = ''
+		if self._os.is_debian_based():
+			apache_run_script = '/etc/init.d/apache2'
+		elif self._os.is_redhat_based():
+			apache_run_script = '/etc/init.d/httpd'
 		apache_run_args = 'reload'
 		reload_command = [apache_run_script, apache_run_args]
 		if os.path.exists(apache_run_script) and os.access(apache_run_script, os.X_OK):
@@ -236,8 +239,7 @@ class ApacheHandler(Handler):
 					self._logger.info(stdout)	
 			except OSError, e:
 				self._logger.error('Apache realoading failed by running %s : %s', 
-						''.join(reload_command), e.strerror)		
-			
+						''.join(reload_command), e.strerror)	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
