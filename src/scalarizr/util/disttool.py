@@ -2,44 +2,51 @@
 '''
 Created on 23 марта 2010
 
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 import platform
-import os
 
 class DistTool(object):
     '''
     classdocs
     '''
-    obj = None
-    _version = None
-    _dist = None
-    _deb = ['debian', 'Ubuntu']
-    _rpm = ['CentOS', 'RHEL']
+    _instance = None
+    _platform = None
+    _linux_version = None
+    _is_debian_based = False
+    _is_redhat_based = False
+    _debian_based_dists = ['debian', 'Ubuntu']
+    _rpm_based_dists = ['CentOS', 'RHEL']
     
     def __new__(cls,*dt,**mp):
-        if cls.obj is None:
-            cls.obj = object.__new__(cls,*dt,**mp)
-            cls.obj._version = cls.obj.get_version()
-            if os.path.exists("/etc/debian_version") or cls.obj._version in cls.obj._deb:
-                cls.obj._dist = "deb"
-            elif os.path.exists("/etc/redhat-release") or cls.obj._version in cls.obj._rpm:
-                cls.obj._dist = "rpm"    
-            return cls.obj
+        if cls._instance is None:
+            cls._instance = object.__new__(cls,*dt,**mp)
+            
+            cls._instance._platform = cls._instance._get_platform()
+            if 'Linux' == cls._instance._platform:
+                cls._instance._linux_version = cls._instance._get_linux_version()
+                cls._instance._get_linux_base()
+                
+            return cls._instance
     
-    def is_debian_based(self):
-        if self._dist == "deb":
-            return True
-        else:
-            return False
-
-    def is_redhat_based(self):
-        if self._dist == "rpm":
-            return True
-        else:
-            return False
-   
-    def get_version(self):
+    def _get_platform(self):
+        return platform.uname()[0]
+    
+    def _get_linux_version(self):
         return platform.linux_distribution()[0]
-        
-
+    
+    def _get_linux_base(self):
+        if self._linux_version in self._debian_based_dists:
+            self._is_debian_based = True
+        if self._linux_version in self._rpm_based_dists:
+            self._is_redhat_based = True                
+            
+    def is_debian_based(self):
+        return self._is_debian_based
+    
+    def is_redhat_based(self):
+        return self._is_redhat_based
+    
+    def is_linux(self):
+        return 'Linux' == self._platform
+    

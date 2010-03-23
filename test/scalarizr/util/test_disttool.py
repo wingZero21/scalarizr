@@ -2,7 +2,7 @@
 '''
 Created on 23 марта 2010
 
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 import unittest
 from scalarizr.util import disttool

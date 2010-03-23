@@ -2,7 +2,7 @@
 '''
 Created on 16 марта 2010
 
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 import unittest
 import os
