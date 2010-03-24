@@ -13,9 +13,9 @@ from scalarizr.core import Bus, BusEntries
 from scalarizr.messaging import Messages
 
 def get_handlers ():
-	return [PosixIpListBuilder()]
+	return [IpListBuilder()]
 
-class PosixIpListBuilder(Handler):
+class IpListBuilder(Handler):
 	_logger = None
 	_base_path = None
 	
@@ -23,7 +23,7 @@ class PosixIpListBuilder(Handler):
 		self._logger = logging.getLogger(__name__)
 		
 		config = Bus()[BusEntries.CONFIG]
-		self._base_path = config.get("handler_posix_ip_list_builder", "base_path")     	    
+		self._base_path = config.get("handler_ip_list_builder", "base_path")     	    
 		if self._base_path[-1] != os.sep:
 			self._base_path = self._base_path + os.sep  		
 
