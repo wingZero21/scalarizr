@@ -9,8 +9,8 @@ class TestHandlers(unittest.TestCase):
 		handler_config.read(os.path.dirname(__file__) + "/../../resources/handler.ini")
 		
 		from scalarizr.core import Bus, BusEntries
-		from scalarizr.util import inject_config
-		inject_config(Bus()[BusEntries.CONFIG], handler_config, "handler_")
+		#from scalarizr.util import inject_config
+		#inject_config(Bus()[BusEntries.CONFIG], handler_config, "handler_")
 	
 	
 if __name__ == "__main__":

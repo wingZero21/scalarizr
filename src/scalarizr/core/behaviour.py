@@ -22,9 +22,16 @@ class BehaviourConfigurator:
 	
 	
 class AppConfigurator(BehaviourConfigurator):
-	pass
+	#self.messages = dict("httpd_conf_path_prompt" : "dsdsdsds")
+	
+	def configure(self, interactive, **kwargs):
+		
+		pass
 
 
 def get_behaviour_ini_name(name):
 	return "behaviour.%.ini" % name
 
+
+#c = AppConfigurator()
+#c.configure(False, vhosts_path="/etc/apache2/scalr-vhosts")

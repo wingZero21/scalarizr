@@ -13,11 +13,11 @@ class Test(unittest.TestCase):
 		bus = Bus()
 		
 		from ConfigParser import ConfigParser
-		from scalarizr.util import inject_config
+		#from scalarizr.util import inject_config
 		config = bus[BusEntries.CONFIG]
 		cparser = ConfigParser()
 		cparser.read(os.path.dirname(__file__) + "/../../../../etc/include/handler.script_executor.ini")
- 		inject_config(config, cparser)
+ 		#inject_config(config, cparser)
 		
 		class _Bunch(dict):
 			__getattr__, __setattr__ = dict.get, dict.__setitem__

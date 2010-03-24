@@ -1,7 +1,4 @@
-# -*- coding: latin-1 -*-
 '''
-Created on 23 марта 2010
-
 @author: Dmytro Korsakov
 '''
 import unittest
