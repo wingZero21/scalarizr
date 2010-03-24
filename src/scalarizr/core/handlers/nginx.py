@@ -6,7 +6,7 @@ Created on Jan 6, 2010
 '''
 
 from scalarizr.core.handlers import Handler
-from scalarizr.core import Behaviours
+from scalarizr.core.behaviour import Behaviours
 from scalarizr.messaging import Messages
 
 def get_handlers():

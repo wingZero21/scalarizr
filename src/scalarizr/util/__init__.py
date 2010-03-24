@@ -120,7 +120,14 @@ def format_size(size, precision=2):
 	
 
 import binascii
-class _CryptoUtil(object):
+class CryptoUtil(object):
+	_instance = None
+	
+	def __new__(cls):
+		if cls._instance is None:
+			cls._instance = object.__new__(cls)
+		return cls._instance
+	
 	def keygen(self, length=40):
 		from M2Crypto.Rand import rand_bytes
 		return binascii.b2a_base64(rand_bytes(length))	
@@ -145,10 +152,21 @@ class _CryptoUtil(object):
 		del c
 		return ret
 
-		
-_crypto_util = None
-def CryptoUtil():
-	global _crypto_util
-	if _crypto_util is None:
-		_crypto_util = _CryptoUtil()
-	return _crypto_util
+	_BUF_SIZE = 1024 * 1024	 # Buffer size in bytes
+	
+	def digest_file(self, digest, file):
+		while 1:
+			buf = file.read(self._BUF_SIZE)
+			if not buf:
+				break;
+			digest.update(buf)
+		return digest.final()
+
+	def crypt_file(self, cipher, in_file, out_file):
+		while 1:
+			buf = in_file.read(self._BUF_SIZE)
+			if not buf:
+				break
+			out_file.write(cipher.update(buf))
+		out_file.write(cipher.final())
+	

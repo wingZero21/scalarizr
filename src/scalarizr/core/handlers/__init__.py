@@ -29,7 +29,6 @@ class MessageListener ():
 		bus = Bus()
 		config = bus[BusEntries.CONFIG]
 		self._logger.debug("Initialize message listener");
-		
 		self._accept_kwargs["behaviour"] = config.get("default", "behaviour").split(",")
 		self._accept_kwargs["platform"] = bus[BusEntries.PLATFORM].name
 		self._accept_kwargs["os"] = platform.uname()

@@ -53,12 +53,6 @@ def Bus ():
 	return _bus
 
 
-class Behaviours:
-	APP = "app"
-	MYSQL = "mysql"
-	WWW = "www"
-
-
 import os.path
 import sys
 import sqlite3 as sqlite
@@ -66,6 +60,7 @@ import sqlalchemy.pool as pool
 from ConfigParser import ConfigParser
 import logging
 import logging.config
+from scalarizr.core.behaviour import get_behaviour_ini_name
 
 	
 def _initialize0():
@@ -85,7 +80,7 @@ def _initialize0():
 	# Inject behaviour configurations into global config
 	behaviour = config.get("default", "behaviour").split(",")
 	for bh in behaviour:
-		filename = "%s/etc/include/behaviour.%s.ini" % (bus[BusEntries.BASE_PATH], bh)
+		filename = "%s/etc/include/%s" % (bus[BusEntries.BASE_PATH], get_behaviour_ini_name(bh))
 		if os.path.exists(filename):
 			logger.debug("Read behaviour configuration file %s", filename)
 			config.read(filename)

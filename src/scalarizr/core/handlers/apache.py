@@ -5,7 +5,8 @@ Created on Dec 25, 2009
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.core import Bus, BusEntries, Behaviours
+from scalarizr.core import Bus, BusEntries
+from scalarizr.core.behaviour import Behaviours
 from scalarizr.core.handlers import Handler
 from scalarizr.messaging import Messages
 from scalarizr.util import disttool
