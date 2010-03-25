@@ -17,6 +17,8 @@ class Behaviours:
 def get_configurator(name):
 	if name == Behaviours.APP:
 		return AppConfigurator()
+	elif name == Behaviours.WWW:
+		return WwwConfigurator()
 	return None
 
 class BehaviourConfigurator:
@@ -136,8 +138,5 @@ class WwwConfigurator(BehaviourConfigurator):
 def get_behaviour_ini_name(name):
 	return "behaviour.%s.ini" % name
 
-class MissingDataError(Exception):
-	def __init__(self, value):
-		self.value = value
-	def __str__(self):
-		return repr(self.value)
+class MissingDataError(BaseException):
+	pass
