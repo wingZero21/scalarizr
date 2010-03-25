@@ -49,8 +49,11 @@ class ApacheHandler(Handler):
 				
 		bus = Bus()
 		config = bus[BusEntries.CONFIG]
-		vhosts_path = config.get('handler_apache','vhosts_path')
-		httpd_conf_path = config.get('handler_apache','httpd_conf_path')
+		vhosts_path = config.get('behaviour_app','vhosts_path')
+		#vhosts_path = config.get('handler_apache','vhosts_path')
+		print vhosts_path
+		httpd_conf_path = config.get('behaviour_app','httpd_conf_path')
+		#httpd_conf_path = config.get('handler_apache','httpd_conf_path')
 		
 		try:
 			received_vhosts = self._queryenv.list_virtual_hosts()

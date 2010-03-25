@@ -35,12 +35,18 @@ class NginxHandler(Handler):
 		self._queryenv = bus[BusEntries.QUERYENV_SERVICE]
 		
 		config = bus[BusEntries.CONFIG]
-		nginx_bin = config.get("handler_nginx","binary_path")
-		nginx_incl = config.get("handler_nginx","app_include_path")
-		if config.get("handler_nginx","app_port"):
-			app_port = config.get("handler_nginx","app_port")
+		nginx_bin = config.get("behaviour_www","binary_path")
+		nginx_incl = config.get("behaviour_www","app_include_path")
+		if config.get("behaviour_www","app_port"):
+			app_port = config.get("behaviour_www","app_port")
 		else:
 			app_port = "80"
+		#nginx_bin = config.get("handler_nginx","binary_path")
+		#nginx_incl = config.get("handler_nginx","app_include_path")
+		#if config.get("handler_nginx","app_port"):
+		#	app_port = config.get("handler_nginx","app_port")
+		#else:
+		#	app_port = "80"
 			
 		tmp_incl = ""
 		num_of_appservers = 0

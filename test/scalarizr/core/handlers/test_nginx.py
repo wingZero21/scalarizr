@@ -17,7 +17,7 @@ class Test(unittest.TestCase):
         import ConfigParser
         #from scalarizr.util import inject_config #deprecated
         c_parser = ConfigParser.ConfigParser()
-        c_parser.read('/home/shaitanich/workspace/scalarizr-trunk/etc/include/handler.nginx.ini')
+        c_parser.read('/home/shaitanich/workspace/scalarizr-trunk/etc/include/behaviour.www.ini')
         
         import sys
         if sys.platform.startswith("freebsd"):

@@ -15,8 +15,8 @@ class Test(unittest.TestCase):
         from scalarizr.core import Bus, BusEntries
         bus = Bus()
         config = bus[BusEntries.CONFIG]
-        config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../../etc/include/handler.apache.ini" ))
-        
+        #config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../../etc/include/handler.apache.ini" ))
+        config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../../etc/include/behaviour.app.ini"))
         class _Bunch(dict):
             __getattr__, __setattr__ = dict.get, dict.__setitem__
             
