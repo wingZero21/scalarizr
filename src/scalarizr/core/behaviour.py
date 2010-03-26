@@ -4,9 +4,9 @@ Created on Mar 24, 2010
 @author: marat
 @author: Dmytro Korsakov
 '''
-from scalarizr.util.disttool import DistTool
 import os
 import ConfigParser
+from scalarizr.core import Bus, BusEntries
 
 class Behaviours:
 	APP = "app"
@@ -22,13 +22,13 @@ def get_configurator(name):
 	return None
 
 class BehaviourConfigurator:
+	options = {}
+	"""
+	{name: ("prompt", default_value, finder)}
+	"""
 	
-	def __init__(self):
-		self.options = {} #using in child:
-		#options = dict(
-		#	optname=("prompt", "defvalue", self.optname_function)
-		self.platform_section = None
-		self.include_ini_filename = None
+	platform_section = None
+	include_ini_filename = None	
 	
 	def configure(self, _interactive, **kwargs):
 		#fill data from arguments
@@ -69,10 +69,9 @@ class AppConfigurator(BehaviourConfigurator):
 		self.options = dict(
 			httpd_conf_path=["Specify path to apache2 main config file", None, self.find_apache_conf],
 			vhosts_path=["Specify path to scalr vhosts dir", None, self.get_scalr_vhosts_dir]
-			)
+		)
 		self.platform_section = 'behaviour_app'
-		self.include_ini_filename = "etc/include/behaviour.app.ini"
-		#BehaviourConfigurator.__init__(self)
+		self.include_ini_filename = os.path.join(Bus()[BusEntries.BASE_PATH], "etc/include/behaviour.app.ini") 
 	
 	def find_apache_conf(self):
 		known_places = ("/etc/apache2/apache2.conf", "/etc/httpd/httpd.conf")
@@ -95,10 +94,9 @@ class WwwConfigurator(BehaviourConfigurator):
 			app_port=["Specify apache port", None, self.get_app_port],
 			app_include_path=["Specify app_include_path", None, self.get_app_include_path],
 			https_include_path=["Specify https_include_path", None, self.get_https_include_path]
-			)
+		)
 		self.platform_section = 'behaviour_www'
-		self.include_ini_filename = "etc/include/behaviour.www.ini"
-		#BehaviourConfigurator.__init__(self)
+		self.include_ini_filename = os.path.join(Bus()[BusEntries.BASE_PATH], "etc/include/behaviour.www.ini")
 	
 	def find_nginx_bin(self):
 		known_places = ('/usr/sbin/nginx', '/usr/local/nginx/sbin/nginx')
@@ -111,10 +109,11 @@ class WwwConfigurator(BehaviourConfigurator):
 		return "80"		
 	
 	def get_app_include_path(self):
-		return "chroot/etc/nginx/app-servers.include"
+		return "/etc/nginx/app-servers.include"
 	
 	def get_https_include_path(self):
-		return "chroot/etc/nginx/https.include"
+		return "/etc/nginx/https.include"
+
 				
 def get_behaviour_ini_name(name):
 	return "behaviour.%s.ini" % name
