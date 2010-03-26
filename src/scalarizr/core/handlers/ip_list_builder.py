@@ -58,7 +58,7 @@ class IpListBuilder(Handler):
 			self._logger.error(x)
 			
 	def _host_is_replication_master(self, ip):
-		# TODO: use queryenv !
+		# FIXME: use queryenv !
 		return True
 	
 	

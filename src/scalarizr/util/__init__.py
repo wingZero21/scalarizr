@@ -1,6 +1,9 @@
 
 import logging
 
+class UtilError(BaseException):
+	pass
+
 class Observable(object):
 	
 	def __init__(self):
@@ -59,6 +62,16 @@ class Observable(object):
 	def resume_events(self):
 		self._events_suspended = False
 
+#TODO: create object `Config` that will incapsulate all config stuff
+"""
+get_platform_option()
+get_handler_option()
+save()
+load_handlers()
+read_key()
+write_key()
+...
+"""
 
 def save_config():
 	from scalarizr.core import Bus, BusEntries
@@ -71,6 +84,43 @@ def save_config():
 	f = open(filename, "w")
 	bus[BusEntries.CONFIG].write(f)
 	f.close()	
+	
+def write_key_file(name, key, public=False):
+	"""
+	Writes key into %etc/.keys, %etc/keys-public
+	"""
+	import os
+	from scalarizr.core import Bus, BusEntries
+
+	filename = os.path.join(Bus()[BusEntries.BASE_PATH], "etc", "keys-public" if public else ".keys", name)
+	file = None
+	try:
+		file = open(filename, "w+")
+		file.write(key)
+		os.chmod(filename, 0400)
+	except OSError, e:
+		raise UtilError("Cannot write key in file '%s'. %s" % (filename, str(e)))
+	finally:
+		if file:
+			file.close()
+	
+def read_key_file(name, title=None, public=False):
+	"""
+	Reads key from %etc/.keys, %etc/keys-public
+	"""
+	import os
+	from scalarizr.core import Bus, BusEntries
+	
+	filename = os.path.join(Bus()[BusEntries.BASE_PATH], "etc", "keys-public" if public else ".keys", name)
+	file = None
+	try:
+		file = open(filename, "r")
+		return file.read().strip()
+	except OSError, e:
+		raise UtilError("Cannot read %s file '%s'. %s" % (title if title else "key", filename, str(e)))
+	finally:
+		if file:
+			file.close()
 	
 def system(args, shell=True):
 	import subprocess
