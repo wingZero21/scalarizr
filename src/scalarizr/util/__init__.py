@@ -170,7 +170,7 @@ def format_size(size, precision=2):
 	
 
 import binascii
-class CryptoUtil(object):
+class CryptoTool(object):
 	_instance = None
 	
 	def __new__(cls):

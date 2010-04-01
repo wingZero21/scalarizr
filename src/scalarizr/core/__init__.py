@@ -30,7 +30,7 @@ class BusEntries:
 	@cvar scalarizr.platform.Platform: Platform (ec2, rs, vps...)
 	"""
 
-from scalarizr.util import Observable, CryptoUtil
+from scalarizr.util import Observable, CryptoTool
 class _Bus(Observable):
 	_registry = {}
 	
@@ -63,7 +63,7 @@ import logging.config
 from scalarizr.core.behaviour import get_behaviour_ini_name
 
 	
-def _initialize0():
+def _init():
 	bus = Bus()
 	bus[BusEntries.BASE_PATH] = os.path.realpath(os.path.dirname(__file__) + "/../../..")
 	
@@ -113,7 +113,7 @@ def _db_connect():
 	conn.row_factory = sqlite.Row
 	return conn
 	
-def initialize_services():
+def init_services():
 	logger = logging.getLogger(__name__)
 	bus = Bus()
 	config = bus[BusEntries.CONFIG]
@@ -156,7 +156,7 @@ def initialize_services():
 
 	bus.fire("init")
 	
-def initialize_scripts():
+def init_scripts():
 	logger = logging.getLogger(__name__)
 	bus = Bus()
 	config = bus[BusEntries.CONFIG]
@@ -174,6 +174,67 @@ def initialize_scripts():
 	factory = MessageServiceFactory()
 	msg_service = factory.new_service(adapter, producer_config)
 	bus[BusEntries.MESSAGE_SERVICE] = msg_service
+
+def _install (argv=None):
+	if argv is None:
+		argv = sys.argv
+		
+	global config, logger, base_path
+	logger.info("Running installation process")
+		
+	for pair in argv[2:]:
+		pair = pair.split("=", 1)
+		if pair[0].startswith("--"):
+			key = pair[0][2:]
+			value = pair[1] if len(pair) > 1 else None
+
+			section_option = key.split(".")
+			section = section_option[0] if len(section_option) > 1 else "default"
+			option = section_option[1] if len(section_option) > 1 else section_option[0]
+			if config.has_option(section, option):
+				config.set(section, option, value)
+			elif section == "default" and option == "crypto_key":
+				# Update crypto key
+				f = open(base_path + "/" + config.get("default", "crypto_key_path"), "w+")
+				f.write(value)
+				f.close()
+				
+	# Save configuration
+	filename = Bus()[BusEntries.BASE_PATH] + "/etc/config.ini"
+	logger.debug("Save configuration into '%s'" % filename)
+	f = open(filename, "w")
+	config.write(f)
+	f.close()
+	
+
+def main():
+	logger = logging.getLogger(__name__)
+	logger.info("Starting scalarizr...")
 	
 	
-_initialize0()
+	# Run installation process
+	if len(sys.argv) > 1 and sys.argv[1] == "--install":
+		_install()
+	
+	# Initialize services
+	init_services()
+
+	# Fire start
+	bus = Bus()
+	bus.fire("start")
+
+	# @todo start messaging before fire 'start'
+	# Start messaging server
+	try:
+		consumer = bus[BusEntries.MESSAGE_SERVICE].get_consumer()
+		consumer.start()
+	except KeyboardInterrupt:
+		logger.info("Stopping scalarizr...")
+		consumer.stop()
+		
+		# Fire terminate
+		bus.fire("terminate")
+		logger.info("Stopped")
+	
+	
+_init()

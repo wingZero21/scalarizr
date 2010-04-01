@@ -1,67 +1,53 @@
-# -*- coding: latin-1 -*-
 '''
-Created on 23 марта 2010
-
 @author: Dmytro Korsakov
 '''
 import platform
 
-class DistTool(object):
-	'''
-	classdocs
-	'''
-	_instance = None
-	
-	_uname = None
-	_linux_dist = None
-	
-	_is_linux = _is_win = _is_sun = False
-	_is_debian_based = _is_redhat_based = False
-	_is_debian = _is_ubuntu = False
-	_is_rhel = _is_centos = _is_fedora = False
-	
-	_debian_based_dists = ['debian', 'ubuntu']
-	_redhat_based_dists = ['centos', 'rhel', 'redhat', 'fedora']
 
-	def __new__(cls):
-		if cls._instance is None:
-			i = object.__new__(cls)
-			cls._instance = i			
+_uname = None
+_linux_dist = None
 
-			i._uname = platform.uname()
-			os = i._uname[0].lower()
-			i._is_linux = os == "linux"
-			i._is_win = os == "windows"
-			i._is_sun = os == "sunos"
+_is_linux = _is_win = _is_sun = False
+_is_debian_based = _is_redhat_based = False
+_is_debian = _is_ubuntu = False
+_is_rhel = _is_centos = _is_fedora = False
+
+_debian_based_dists = ['debian', 'ubuntu']
+_redhat_based_dists = ['centos', 'rhel', 'redhat', 'fedora']
+
+
+_uname = platform.uname()
+os = _uname[0].lower()
+_is_linux = os == "linux"
+_is_win = os == "windows"
+_is_sun = os == "sunos"
 			
-			if i._is_linux:
-				i._linux_dist = platform.linux_distribution() \
-					if hasattr(platform, "linux_distribution") \
-					else platform.dist()
-				dist_name = i._linux_dist[0].lower()
-				i._is_redhat_based = dist_name in i._redhat_based_dists
-				i._is_debian_based = dist_name in i._debian_based_dists
-				i._is_debian = dist_name == "debian"
-				i._is_ubuntu = dist_name == "ubuntu"
-				i._is_fedora = dist_name == "fedora"
-				i._is_centos = dist_name == "centos"
-				i._is_rhel = dist_name in ["rhel", "redhat"]
+if _is_linux:
+	_linux_dist = platform.linux_distribution() \
+		if hasattr(platform, "linux_distribution") \
+		else platform.dist()
+	dist_name = _linux_dist[0].lower()
+	_is_redhat_based = dist_name in _redhat_based_dists
+	_is_debian_based = dist_name in _debian_based_dists
+	_is_debian = dist_name == "debian"
+	_is_ubuntu = dist_name == "ubuntu"
+	_is_fedora = dist_name == "fedora"
+	_is_centos = dist_name == "centos"
+	_is_rhel = dist_name in ["rhel", "redhat"]
 			
-		return cls._instance
 
-	def is_linux(self): return self._is_linux
-	def is_win(self): return self._is_win
-	def is_sun(self): return self._is_sun
-	
-	def is_debian_based(self): return self._is_debian_based
-	def is_redhat_based(self): return self._is_redhat_based
-	
-	def is_fedora(self): return self._is_fedora
-	def is_centos(self): return self._is_centos
-	def is_rhel(self): return self._is_rhel
-	def is_ubuntu(self): return self._is_ubuntu
-	def is_debian(self): return self._is_debian
+def is_linux(): return _is_linux
+def is_win(): return _is_win
+def is_sun(): return _is_sun
 
-	def uname(self): return self._uname
-	def linux_dist(self): return self._linux_dist
-		
+def is_debian_based(): return _is_debian_based
+def is_redhat_based(): return _is_redhat_based
+
+def is_fedora(): return _is_fedora
+def is_centos(): return _is_centos
+def is_rhel(): return _is_rhel
+def is_ubuntu(): return _is_ubuntu
+def is_debian(): return _is_debian
+
+def uname(): return _uname
+def linux_dist(): return _linux_dist

@@ -8,8 +8,7 @@ from scalarizr.core import Bus, BusEntries
 from scalarizr.core.handlers import Handler
 from scalarizr.platform import PlatformError
 from scalarizr.messaging import Messages
-from scalarizr.util.disttool import DistTool
-from scalarizr.util import system, CryptoUtil
+from scalarizr.util import system, disttool, CryptoTool
 import logging
 import time
 import os
@@ -25,6 +24,7 @@ from boto.s3 import Key
 from boto.s3.connection import Location
 from boto.resultset import ResultSet
 from boto.exception import BotoServerError
+import shutil
 
 
 def get_handlers ():
@@ -68,38 +68,7 @@ Bundled: %(bundle_date)s
 		return message.name == Messages.REBUNDLE and platform == "ec2"	
 	
 	def on_Rebundle(self, message):
-		
-		
-		# TODO: Truncate log files
-		
-		# Clear user activity history
-		for filename in ("/root/.bash_history", "/root/.lesshst", "/root/.viminfo", 
-						"/root/.mysql_history", "/root/.history"):
-			if os.path.exists(filename):
-				os.remove(filename)
-		
-		
-		# Create message of the day
-		dt = DistTool()
-		motd_filename = "/etc/motd.tail" if dt.is_debian_based() else "/etc/motd"
-		motd_file = None		
-		try:
-			dist = dt.linux_dist()
-			motd_file = open(motd_filename, "w")
-			motd_file.write(self._MOTD % dict(
-				dist_name = dist[0],
-				dist_version = dist[1],
-				bits = 64 if dt.uname()[4] == "x86_64" else 32,
-				role_name = message.role_name,
-				bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
-			))
-		except OSError, e:
-			self._logger.warning("Cannot patch motd file '%s'. %s", motd_filename, str(e))
-		finally:
-			if motd_file:
-				motd_file.close()
-		
-		
+	
 		aws_account_id = self._platform.get_account_id()
 		avail_zone = self._platform.get_avail_zone()
 		region = avail_zone[0:2]
@@ -111,11 +80,12 @@ Bundled: %(bundle_date)s
 		# Create exclude directories list
 		excludes = message["excludes"].split(":") \
 				if message.body.has_key("excludes") else []
-		base_path = Bus()[BusEntries.BASE_PATH]
-		excludes += ["/mnt", base_path + "/etc/.*"]		
+		excludes += ["/mnt"]		
 		
 		# Bundle volume
-		image_file = self._bundle_vol(prefix=prefix, destination="/mnt", excludes=excludes)
+		image_file, image_mpoint = self._bundle_vol(prefix=prefix, destination="/mnt", excludes=excludes)
+		# Execute pre-bundle routines. cleanup files, patch files, etc.
+		self._patch_image(image_mpoint, role_name=message.role_name)
 		# Bundle image
 		manifest_path, manifest = self._bundle_image(
 				prefix, image_file, aws_account_id, "/mnt", pk, cert, ec2_cert)
@@ -160,14 +130,62 @@ Bundled: %(bundle_date)s
 			# Create image from volume
 			self._logger.info("Creating loopback image device")
 			image = LoopbackImage(volume, image_file, LoopbackImage.MAX_IMAGE_SIZE, excludes)
-			image.make()
+			image_mpoint = image.make()
 			
 			self._logger.info("Volume bundle complete!")
-			return image_file
+			return image_file, image_mpoint
 		except (Exception, BaseException), e:
 			self._logger.error("Cannot bundle volume. %s", e)
 			raise
+	
+	def _patch_image(self, image_mpoint, role_name=None):
+		# Create message of the day
+		self._create_motd(image_mpoint, role_name)
 		
+		# Truncate logs
+		logs_path = os.path.join(image_mpoint, "var/log")
+		for basename in os.listdir(logs_path):
+			filename = os.path.join(logs_path, basename)
+			if os.path.isfile(filename):
+				try:
+					FileTool.truncate(filename)
+				except OSError, e:
+					self._logger.error("Cannot truncate file '%s'. %s", filename, e)
+			
+		
+		# Cleanup user activity
+		for filename in ("root/.bash_history", "root/.lesshst", "root/.viminfo", 
+						"root/.mysql_history", "root/.history"):
+			filename = os.path.join(image_mpoint, filename)
+			if os.path.exists(filename):
+				os.remove(filename)
+		
+		
+		# Cleanup scalarizr private data
+		shutil.rmtree(os.path.join(image_mpoint, "opt/scalarizr/etc/.keys"))
+		shutil.rmtree(os.path.join(image_mpoint, "opt/scalarizr/etc/.storage"))
+
+	
+	def _create_motd(self, image_mpoint, role_name=None):
+		# Create message of the day
+		motd_filename = os.path.join(image_mpoint, "etc/motd.tail" if disttool.is_debian_based() else "etc/motd") 
+		motd_file = None		
+		try:
+			dist = disttool.linux_dist()
+			motd_file = open(motd_filename, "w")
+			motd_file.write(self._MOTD % dict(
+				dist_name = dist[0],
+				dist_version = dist[1],
+				bits = 64 if disttool.uname()[4] == "x86_64" else 32,
+				role_name = role_name,
+				bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
+			))
+		except OSError, e:
+			self._logger.warning("Cannot patch motd file '%s'. %s", motd_filename, str(e))
+		finally:
+			if motd_file:
+				motd_file.close()
+						
 		
 	def _bundle_image(self, name, image_file, user, destination, user_private_key_string, 
 					user_cert_string, ec2_cert_string):
@@ -214,8 +232,7 @@ Bundled: %(bundle_date)s
 			# piped via several processes. The tee is used to allow a
 			# digest of the file to be calculated without having to re-read
 			# it from disk.
-			_dt = DistTool()
-			openssl = "/usr/sfw/bin/openssl" if _dt.is_sun() else "openssl"
+			openssl = "/usr/sfw/bin/openssl" if disttool.is_sun() else "openssl"
 			tar = Tar()
 			tar.create().dereference().sparse()
 			tar.add(os.path.basename(image_file), os.path.dirname(image_file))
@@ -253,7 +270,7 @@ Bundled: %(bundle_date)s
 			# stream, so that the filenames of the parts can be easily
 			# tracked. The alternative is to create a dedicated output
 			# directory, but this leaves the user less choice.
-			part_names = FileUtil.split(bundled_file_path, name, self._IMAGE_CHUNK_SIZE, destination)
+			part_names = FileTool.split(bundled_file_path, name, self._IMAGE_CHUNK_SIZE, destination)
 			
 			# Sum the parts file sizes to get the encrypted file size.
 			self._logger.info("Sum the parts file sizes to get the encrypted file size")
@@ -273,7 +290,7 @@ Bundled: %(bundle_date)s
 			# Digest parts.		
 			parts = self._digest_parts(part_names, destination)
 			
-			arch = DistTool().uname()[4]
+			arch = disttool.uname()[4]
 			if re.search("^i\d86$", arch):
 				arch = "i386"
 			
@@ -307,7 +324,7 @@ Bundled: %(bundle_date)s
 
 	def _digest_parts(self, part_names, destination):
 		self._logger.info("Generating digests for each part")
-		cu = CryptoUtil()
+		cu = CryptoTool()
 		part_digests = []
 		for part_name in part_names:
 			part_filename = os.path.join(destination, part_name)
@@ -339,9 +356,14 @@ Bundled: %(bundle_date)s
 			location = region.upper()
 			try:
 				self._logger.info("Creating bucket '%s'", bucket_name)
-				bucket = s3_conn.create_bucket(bucket_name, 
-						location=Location.DEFAULT if location == "US" else location,
-						policy=acl)
+				if s3_conn.lookup(bucket_name) is None:
+					# It's important to lockup bucket before creating it because if bucket exists
+					# and account has reached buckets limit S3 returns error.
+					bucket = s3_conn.create_bucket(bucket_name, 
+							location=Location.DEFAULT if location == "US" else location,
+							policy=acl)
+				else:
+					self._logger.debug("Bucket '%s' already exists", bucket_name)
 			except BotoServerError, e:
 				self._logger.error("Cannot create bucket '%s'. %s", bucket_name, e.reason)
 				raise e
@@ -465,13 +487,12 @@ class _TabEntry(object):
 		self.value = value
 
 		
-_dt = DistTool()
-if _dt.is_linux():
+if disttool.is_linux():
 	Fstab.LOCATION = "/etc/fstab"	
 	Mtab.LOCATION = "/etc/mtab"
 	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs')
 	
-elif _dt.is_sun():
+elif disttool.is_sun():
 	Fstab.LOCATION = "/etc/vfstab"	
 	Mtab.LOCATION = "/etc/mnttab"
 	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs', 
@@ -479,7 +500,7 @@ elif _dt.is_sun():
 		'proc', 'lofs',   'objfs', 'fd', 'autofs')
 
 
-if _dt.is_linux():
+if disttool.is_linux():
 	class LinuxLoopbackImage:
 		"""
 		This class encapsulate functionality to create an file loopback image
@@ -520,9 +541,9 @@ if _dt.is_linux():
 				self._mount_image()
 				self._make_special_dirs()
 				self._copy_rec(self._volume, self._image_mpoint)
-			except:
+				return self._image_mpoint
+			finally:
 				self._cleanup()
-				raise
 			
 		def _create_image_file(self):
 			self._logger.debug("Create image file")
@@ -609,7 +630,7 @@ if _dt.is_linux():
 				
 	LoopbackImage = LinuxLoopbackImage
 	
-elif _dt.is_sun():
+elif disttool.is_sun():
 	class SolarisLoopbakImage:
 		
 		MAX_IMAGE_SIZE = 10*1024
@@ -709,7 +730,7 @@ class Rsync(object):
 
 
 class Tar:
-	EXECUTABLE = "/usr/sfw/bin/gtar" if DistTool().is_sun() else "tar"
+	EXECUTABLE = "/usr/sfw/bin/gtar" if disttool.is_sun() else "tar"
 	
 	_executable = None
 	_options = None
@@ -782,7 +803,7 @@ class Tar:
 		return ret.strip()
 	
 
-class FileUtil:
+class FileTool:
 	BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
 	PART_SUFFIX = '.part.'	
 	
@@ -803,13 +824,13 @@ class FileUtil:
 			part_names = []
 			logger.info("Splitting file '%s' into %d chunks", filename, num_parts)
 			for i in range(num_parts):
-				part_name_suffix = FileUtil.PART_SUFFIX + str(i).rjust(2, "0")
+				part_name_suffix = FileTool.PART_SUFFIX + str(i).rjust(2, "0")
 				part_name = part_name_prefix + part_name_suffix
 				part_names.append(part_name)
 				
 				part_filename = os.path.join(dest_dir, part_name)
 				try:
-					FileUtil.touch(part_filename)
+					FileTool.touch(part_filename)
 				except OSError:
 					logger.error("Cannot create part file '%s'", part_filename)
 					raise
@@ -820,7 +841,7 @@ class FileUtil:
 				cf = open(part_filename, "w")
 				try:
 					logger.info("Writing chunk '%s'", part_filename)
-					FileUtil._write_chunk(f, cf, chunk_size)
+					FileTool._write_chunk(f, cf, chunk_size)
 				except OSError:
 					logger.error("Cannot write chunk file '%s'", part_filename)
 					raise
@@ -836,7 +857,7 @@ class FileUtil:
 		bytes_left = chunk_size	# Bytes left to write in this chunk.
 		
 		while bytes_left > 0:
-			size = FileUtil.BUFFER_SIZE if FileUtil.BUFFER_SIZE < bytes_left else bytes_left
+			size = FileTool.BUFFER_SIZE if FileTool.BUFFER_SIZE < bytes_left else bytes_left
 			buf = source_file.read(size)
 			chunk_file.write(buf)
 			bytes_written += len(buf)
@@ -848,6 +869,11 @@ class FileUtil:
 	def touch(filename):
 		open(filename, "w+").close()
 
+	@staticmethod
+	def truncate(filename):
+		f = open(filename, "w+")
+		f.truncate(0)
+		f.close()
 
 class Manifest:
 	
@@ -1136,3 +1162,4 @@ class Manifest:
 	
 	def endElement(self, name):
 		pass
+

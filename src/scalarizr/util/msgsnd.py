@@ -4,16 +4,11 @@ Created on Dec 16, 2009
 @author: marat
 '''
 
-if __name__ == "__main__":
+
+def main():
 
 	from optparse import OptionParser
 	import sys
-	import os
-	
-	# Append src path to PYTHONPATH
-	src_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
-	sys.path.append(src_path)
-	
 	
 	parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
 	parser.add_option("-n", "--name", dest="name", help="Message name")

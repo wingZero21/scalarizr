@@ -7,7 +7,7 @@ Created on Mar 3, 2010
 from scalarizr.core import Bus, BusEntries
 from scalarizr.core.handlers import Handler
 from scalarizr.messaging import Queues, Messages
-from scalarizr.util import CryptoUtil
+from scalarizr.util import CryptoTool
 import logging
 import os
 
@@ -108,7 +108,7 @@ class LifeCircleHandler(Handler):
 			# Regenerage key
 			config = self._bus[BusEntries.CONFIG]
 			key_path = self._bus[BusEntries.BASE_PATH] + "/" + config.get("default", "crypto_key_path")
-			key = CryptoUtil().keygen()
+			key = CryptoTool().keygen()
 			f = open(key_path, "w+")
 			f.write(key)
 			f.close()

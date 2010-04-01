@@ -6,7 +6,7 @@ Created on Mar 15, 2010
 
 import unittest
 import os
-from scalarizr.core.handlers.ec2.rebundle import FileUtil
+from scalarizr.core.handlers.ec2.rebundle import FileTool
 
 class Test(unittest.TestCase):
 	
@@ -54,10 +54,16 @@ class Test(unittest.TestCase):
 		f.write("1234567")
 		f.close()
 		
-		part_names = FileUtil.split(filename, "fileutil.chunk", 3, self._resources_path)
+		part_names = FileTool.split(filename, "fileutil.chunk", 3, self._resources_path)
 		self.assertEqual(len(part_names), 3)
 		self.assertEqual(os.path.getsize(self._resources_path + "/" + part_names[0]), 3)
 		self.assertEqual(os.path.getsize(self._resources_path + "/" + part_names[2]), 1)
+
+	def test_manifest(self):
+		from scalarizr.core.handlers.ec2.rebundle import Manifest
+		m = Manifest(user="2121212245")
+		self.assertTrue(m.user is not None)
+		self.assertTrue(m.ec2_encrypted_iv is None)
 
 if __name__ == "__main__":
 	unittest.main()
