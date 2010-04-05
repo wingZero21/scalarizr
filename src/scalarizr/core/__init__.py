@@ -5,6 +5,11 @@ class BusEntries:
 	@cvar string: Application base path
 	"""
 	
+	ETC_PATH = "etc_path"
+	"""
+	@cvar string: Application etc path 
+	"""
+	
 	CONFIG = "config"
 	"""
 	@cvar ConfigParser.RawConfigParser: Scalarizr configuration 
@@ -53,37 +58,49 @@ def Bus ():
 	return _bus
 
 
+class ScalarizrError(BaseException):
+	pass
+
 import os.path
 import sys
 import sqlite3 as sqlite
 import sqlalchemy.pool as pool
 from ConfigParser import ConfigParser
+from scalarizr.util import configtool
 import logging
-import logging.config
-from scalarizr.core.behaviour import get_behaviour_ini_name
 
 	
 def _init():
 	bus = Bus()
 	bus[BusEntries.BASE_PATH] = os.path.realpath(os.path.dirname(__file__) + "/../../..")
 	
+	# Find scalarizr config file
+	bus[BusEntries.ETC_PATH] = None
+	etc_places = ("/etc/scalr", "/usr/local/etc/scalr", os.path.join(bus[BusEntries.BASE_PATH], "etc"))
+	for etc_path in etc_places:
+		config_filename = os.path.join(etc_path, "config.ini")
+		if os.path.exists(config_filename) and os.path.isfile(config_filename):
+			bus[BusEntries.ETC_PATH] = etc_path
+	if bus[BusEntries.ETC_PATH] is None:
+		raise ScalarizrError("Cannot find scalarizr `etc` path. " + 
+				"Search amoung the list %s returned no results" % (":".join(etc_places)))
+	
 	# Configure logging
-	logging.config.fileConfig(bus[BusEntries.BASE_PATH] + "/etc/logging.ini")
+	logging.config.fileConfig(bus[BusEntries.ETC_PATH] + "logging.ini")
 	logger = logging.getLogger(__name__)
 	logger.debug("Initialize scalarizr...")
 	
 	# Load configuration
 	config = ConfigParser()
-	config.read(bus[BusEntries.BASE_PATH] + "/etc/config.ini")
+	config.read(os.path.join(bus[BusEntries.ETC_PATH], "config.ini"))
 	bus[BusEntries.CONFIG] = config
 
 	# Inject behaviour configurations into global config
-	behaviour = config.get("default", "behaviour").split(",")
-	for bh in behaviour:
-		filename = "%s/etc/include/%s" % (bus[BusEntries.BASE_PATH], get_behaviour_ini_name(bh))
-		if os.path.exists(filename):
-			logger.debug("Read behaviour configuration file %s", filename)
-			config.read(filename)
+	for behaviour in config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR).split(","):
+		for filename in configtool.get_behaviour_filename(behaviour, ret=configtool.RET_BOTH):
+			if os.path.exists(filename):
+				logger.debug("Read behaviour configuration file %s", filename)
+				config.read(filename)
 	
 	# Configure database connection pool
 	bus[BusEntries.DB] = pool.SingletonThreadPool(_db_connect)
@@ -103,9 +120,10 @@ def _init():
 
 
 def _db_connect():
-	bus = Bus()
-	file = bus[BusEntries.BASE_PATH] + "/" + bus[BusEntries.CONFIG].get("default", "storage_path")
-
+	etc_path = Bus()[BusEntries.ETC_PATH]
+	config = Bus()[BusEntries.CONFIG]
+	file = os.path.join(etc_path, config.get(configtool.SECT_GENERAL, configtool.OPT_STORAGE_PATH))
+	
 	logger = logging.getLogger(__name__)
 	logger.debug("Open SQLite database (file: %s)" % (file))
 	
@@ -113,7 +131,7 @@ def _db_connect():
 	conn.row_factory = sqlite.Row
 	return conn
 	
-def init_services():
+def init_service():
 	logger = logging.getLogger(__name__)
 	bus = Bus()
 	config = bus[BusEntries.CONFIG]
@@ -124,17 +142,19 @@ def init_services():
 	logger.debug("Initialize platform")
 	from scalarizr.platform import PlatformFactory 
 	pl_factory = PlatformFactory()
-	bus[BusEntries.PLATFORM] = pl_factory.new_platform(config.get("default", "platform"))
+	bus[BusEntries.PLATFORM] = pl_factory.new_platform(
+			config.get(configtool.SECT_GENERAL, configtool.OPT_PLATFORM))
 
 	
 	# Initialize QueryEnv
 	logger.debug("Initialize QueryEnv client")
 	from scalarizr.core.queryenv import QueryEnvService
-	f = open(bus[BusEntries.BASE_PATH] + "/" + config.get("default", "crypto_key_path"))
-	key = f.read().strip()
-	f.close()
-	queryenv = QueryEnvService(config.get("default", "queryenv_url"),
-			config.get("default", "server_id"), key)
+	crypto_key = configtool.read_key(config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH), 
+			"Scalarizr crypto key")
+	queryenv = QueryEnvService(
+			config.get(configtool.SECT_GENERAL, configtool.OPT_QUERYENV_URL),
+			config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID),
+			crypto_key)
 	bus[BusEntries.QUERYENV_SERVICE] = queryenv
 
 	
@@ -142,12 +162,13 @@ def init_services():
 	logger.debug("Initialize messaging")
 	from scalarizr.messaging import MessageServiceFactory
 	factory = MessageServiceFactory()
+	adapter_name = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)
 	try:
-		service = factory.new_service(config.get("messaging", "adapter"), config.items("messaging"))
+		service = factory.new_service(adapter_name, config.items(configtool.SECT_MESSAGING))
 		bus[BusEntries.MESSAGE_SERVICE] = service
-	except Exception, e:
-		logger.exception(e)
-		sys.exit("Cannot create messaging service adapter '%s'" % (config.get("messaging", "adapter")))
+	except (BaseException, Exception):
+		logger.error("Cannot create messaging service adapter '%s'" % (adapter_name))
+		raise
 		
 	# Initialize handlers
 	from scalarizr.core.handlers import MessageListener	
@@ -156,7 +177,7 @@ def init_services():
 
 	bus.fire("init")
 	
-def init_scripts():
+def init_script():
 	logger = logging.getLogger(__name__)
 	bus = Bus()
 	config = bus[BusEntries.CONFIG]
@@ -176,6 +197,8 @@ def init_scripts():
 	bus[BusEntries.MESSAGE_SERVICE] = msg_service
 
 def _install (argv=None):
+	# FIXME: rewrite _install
+	"""
 	if argv is None:
 		argv = sys.argv
 		
@@ -205,6 +228,8 @@ def _install (argv=None):
 	f = open(filename, "w")
 	config.write(f)
 	f.close()
+	"""
+	pass
 	
 
 def main():
@@ -216,8 +241,8 @@ def main():
 	if len(sys.argv) > 1 and sys.argv[1] == "--install":
 		_install()
 	
-	# Initialize services
-	init_services()
+	# Initialize scalarizr service
+	init_service()
 
 	# Fire start
 	bus = Bus()
@@ -237,4 +262,8 @@ def main():
 		logger.info("Stopped")
 	
 	
-_init()
+try:
+	_init()
+except (Exception, BaseException), e:
+	print >> sys.stderr, "error: %s" % (e)
+	sys.exit(1)

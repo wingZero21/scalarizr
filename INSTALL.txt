@@ -104,6 +104,29 @@ Debian 5 / Ubuntu
 -----------------
 
 
+OpenSolaris 9.06
+----------------
+
+Установить python2.6
+	
+	$ pkg install SUNWPython26 SUNWpython26-setuptools
+
+Установить зависимости
+
+SQLAlchemy:
+
+	$ easy_install-2.6 sqlalchemy
+	
+Boto:
+
+	$ easy_install-2.6 boto
+	
+M2Crypto:
+
+	$ pkg install SUNWswig SUNWgcc
+	$ easy_install-2.6 m2crypto
+
+
 
 OpenSolaris 8.11
 ----------------
@@ -193,8 +216,6 @@ $ easy_install pycrypto
 ==
 OpenSolaris
 ==
-
-Установить setuptools
 
 setuptools для python2.5 нет в репозитории
 

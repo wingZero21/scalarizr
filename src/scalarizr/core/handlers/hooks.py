@@ -7,6 +7,7 @@ Created on Mar 3, 2010
 
 from scalarizr.core import Bus, BusEntries
 from scalarizr.core.handlers import Handler
+from scalarizr.util import configtool
 import logging
 import os
 import subprocess
@@ -40,8 +41,8 @@ class HooksHandler(Handler):
 			#os.environ["behaviour"] = config.get("default", "behaviour")
 			
 			environ = kwargs
-			environ["server_id"] = config.get("default", "server_id")
-			environ["behaviour"] = config.get("default", "behaviour")
+			environ["server_id"] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
+			environ["behaviour"] = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
 			
 			path = bus[BusEntries.BASE_PATH] + "/hooks/"
 			reg = re.compile(r"^\d+\-"+event+"$")
@@ -67,10 +68,9 @@ class HooksHandler(Handler):
 								is_start_failed = p.poll()
 								
 								if is_start_failed:
-									self._logger.error(stderr)
+									self._logger.error("stderr: %s", stderr)
 									
-								if None != stdout:
-									self._logger.info(stdout)	
+								self._logger.info("stdout: %s", stdout)	
 							except OSError, e:
-								self._logger.error(str(e.strerror) + ' in script ' + fname)			
+								self._logger.error("Error in script '%s'. %s", fname, str(e.strerror))			
 		return hook

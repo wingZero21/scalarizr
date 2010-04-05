@@ -1,5 +1,6 @@
 
 from scalarizr.core import Bus, BusEntries
+from scalarizr.util import configtool
 import os
 import platform
 import logging
@@ -29,7 +30,7 @@ class MessageListener ():
 		bus = Bus()
 		config = bus[BusEntries.CONFIG]
 		self._logger.debug("Initialize message listener");
-		self._accept_kwargs["behaviour"] = config.get("default", "behaviour").split(",")
+		self._accept_kwargs["behaviour"] = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR).split(",")
 		self._accept_kwargs["platform"] = bus[BusEntries.PLATFORM].name
 		self._accept_kwargs["os"] = platform.uname()
 		self._accept_kwargs["dist"] = platform.dist()
@@ -44,26 +45,24 @@ class MessageListener ():
 			self._logger.debug("Collecting handlers chain");
 			
 			config = Bus()[BusEntries.CONFIG]
-			handlers = config.options("handlers")
-			print handlers
-			for handler_name in handlers:
+			for handler_name, module_name in config.items(configtool.SECT_HANDLERS):
 				try:
 					module_name = config.get("handlers", handler_name)
 					skip = False
 					
 					# Read handler configuration.
 					# If will be available in global configuration
-					filename = "%s/etc/include/handler.%s.ini" % (Bus()[BusEntries.BASE_PATH], handler_name)
-					if os.path.exists(filename):
-						try:
-							self._logger.debug("Read handler configuration file %s", filename)
-							config.read(filename)
-							
-						except Exception, e:
-							skip = True
-							self._logger.error("Cannot read handler configuraion (handler: %s, filename: %s)", 
-										handler_name, filename)
-							self._logger.exception(e)
+					for filename in configtool.get_handler_filename(handler_name, ret=configtool.RET_BOTH):
+						if os.path.exists(filename):
+							try:
+								self._logger.debug("Read handler configuration file %s", filename)
+								config.read(filename)
+								
+							except Exception, e:
+								skip = True
+								self._logger.error("Cannot read handler configuraion (handler: %s, filename: %s)", 
+											handler_name, filename)
+								self._logger.exception(e)
 							
 					
 					# Import module

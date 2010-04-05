@@ -5,6 +5,8 @@ Created on Dec 25, 2009
 @author: Dmytro Korsakov
 '''
 
+#FIXME: keys are located in $etc/private.d/keys $etc/public.d/keys
+
 from scalarizr.core import Bus, BusEntries
 from scalarizr.core.behaviour import Behaviours
 from scalarizr.core.handlers import Handler

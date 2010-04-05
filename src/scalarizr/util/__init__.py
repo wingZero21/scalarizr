@@ -1,6 +1,7 @@
 
 import logging
 
+
 class UtilError(BaseException):
 	pass
 
@@ -220,3 +221,25 @@ class CryptoTool(object):
 			out_file.write(cipher.update(buf))
 		out_file.write(cipher.final())
 	
+
+def timethis(what):
+	try:
+		import time
+	except ImportError:
+		import timemodule as time
+	from contextlib import contextmanager	
+	
+	@contextmanager
+	def benchmark():
+		start = time.time()
+		yield
+		end = time.time()
+		print("%s : %0.3f seconds" % (what, end-start))
+	if hasattr(what,"__call__"):
+		def timed(*args,**kwargs):
+			with benchmark():
+				return what(*args,**kwargs)
+		return timed
+	else:
+		return benchmark()
+

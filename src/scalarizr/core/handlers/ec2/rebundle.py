@@ -402,19 +402,19 @@ Bundled: %(bundle_date)s
 	def _uploader(self, queue, s3_conn, bucket, acl):
 		try:
 			while 1:
-				msg = queue.get(False)
+				filename, upload_attempts = queue.get(False)
 				try:
-					self._logger.info("Uploading '%s' to S3 bucket '%s'", msg[0], bucket.name)
+					self._logger.info("Uploading '%s' to S3 bucket '%s'", filename, bucket.name)
 					key = Key(bucket)
-					key.name = os.path.basename(msg[0])
-					file = open(msg[0], "rb")
+					key.name = os.path.basename(filename)
+					file = open(filename, "rb")
 					key.set_contents_from_file(file, policy=acl)
 				except (BotoServerError, OSError), e:
-					self._logger.error("Cannot upload '%s'. %s", msg[0], e)
-					if isinstance(e, BotoServerError) and msg[1] < self._MAX_UPLOAD_ATTEMPTS:
-						self._logger.info("File '%s' will be uploaded within the next attempt", msg[0])
-						msg[1] += 1
-						queue.put(msg)
+					self._logger.error("Cannot upload '%s'. %s", filename, e)
+					if isinstance(e, BotoServerError) and upload_attempts < self._MAX_UPLOAD_ATTEMPTS:
+						self._logger.info("File '%s' will be uploaded within the next attempt", filename)
+						upload_attempts += 1
+						queue.put((filename, upload_attempts))
 					# TODO: collect failed files and report them at the end						
 		except Empty:
 			return

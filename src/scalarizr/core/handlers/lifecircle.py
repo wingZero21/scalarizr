@@ -7,7 +7,7 @@ Created on Mar 3, 2010
 from scalarizr.core import Bus, BusEntries
 from scalarizr.core.handlers import Handler
 from scalarizr.messaging import Queues, Messages
-from scalarizr.util import CryptoTool
+from scalarizr.util import CryptoTool, configtool
 import logging
 import os
 
@@ -60,7 +60,7 @@ class LifeCircleHandler(Handler):
 		
 	
 	def on_start(self):
-		reboot_file = self._bus[BusEntries.BASE_PATH] + "/etc/.reboot"
+		reboot_file = os.path.join(self._bus[BusEntries.ETC_PATH], ".reboot")
 		if not os.path.exists(reboot_file):
 			# Add init scripts
 			
@@ -77,6 +77,10 @@ class LifeCircleHandler(Handler):
 			OpenSolaris:
 			2010-03-15 19:10:15,448 - ERROR - scalarizr.core.handlers.lifecircle - Cannot create symlink /etc/rc6.d/K10scalarizr -> /opt/scalarizr/src/scalarizr/scripts/reboot.py
 			2010-03-15 19:10:15,449 - ERROR - scalarizr.util - [Errno 2] No such file or directory
+			
+			SOLUTION:
+			/sbin/rc6 - shell script file, executed on reboot
+			add scripts/reboot.py into the begining of this file
 			"""
 			
 				
@@ -107,11 +111,9 @@ class LifeCircleHandler(Handler):
 			
 			# Regenerage key
 			config = self._bus[BusEntries.CONFIG]
-			key_path = self._bus[BusEntries.BASE_PATH] + "/" + config.get("default", "crypto_key_path")
+			key_path = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
 			key = CryptoTool().keygen()
-			f = open(key_path, "w+")
-			f.write(key)
-			f.close()
+			configtool.write_key(key_path, key, key_title="Scalarizr crypto key")
 			# Update key in QueryEnv
 			queryenv = self._bus[BusEntries.QUERYENV_SERVICE]
 			queryenv.set_key(key)
@@ -141,12 +143,12 @@ class LifeCircleHandler(Handler):
 
 	def on_ServerReboot(self, message):
 		# Scalarizr must detect that it was resumed after reboot
-		file = self._bus[BusEntries.BASE_PATH] + "/etc/.reboot"
+		reboot_file = os.path.join(self._bus[BusEntries.ETC_PATH], ".reboot")
 		try:
-			self._logger.debug("Touch file '%s'", file)
-			open(file, "w+").close()
+			self._logger.debug("Touch file '%s'", reboot_file)
+			open(reboot_file, "w+").close()
 		except IOError, e:
-			self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))
+			self._logger.error("Cannot touch file '%s'. IOError: %s", reboot_file, str(e))
 			
 		# Send message 
 		msg = self._msg_service.new_message(Messages.REBOOT_START)

@@ -5,9 +5,16 @@ Created on Jan 6, 2010
 @author: Dmytro Korsakov
 '''
 
+from scalarizr.core import Bus, BusEntries
 from scalarizr.core.handlers import Handler
 from scalarizr.core.behaviour import Behaviours
 from scalarizr.messaging import Messages
+from scalarizr.util import configtool
+import os
+import shutil
+import subprocess
+import logging
+
 
 def get_handlers():
 	return [NginxHandler()]
@@ -16,6 +23,10 @@ class NginxHandler(Handler):
 	_logger = None
 	_queryenv = None
 	
+	def __init__(self):
+		self._logger = logging.getLogger(__name__)
+		self._queryenv = Bus()[BusEntries.QUERYENV_SERVICE]		
+	
 	def on_HostUp(self, message):
 		self.nginx_upstream_reload()
 	
@@ -23,76 +34,57 @@ class NginxHandler(Handler):
 		self.nginx_upstream_reload()
 	
 	def nginx_upstream_reload(self):
-		import os
-		import shutil
-		from scalarizr.core import Bus, BusEntries
-		import logging
-		import subprocess
-		
-		self._logger = logging.getLogger(__name__)
-		
 		bus = Bus()
-		self._queryenv = bus[BusEntries.QUERYENV_SERVICE]
-		
 		config = bus[BusEntries.CONFIG]
-		nginx_bin = config.get("behaviour_www","binary_path")
-		nginx_incl = config.get("behaviour_www","app_include_path")
-		if config.get("behaviour_www","app_port"):
-			app_port = config.get("behaviour_www","app_port")
-		else:
-			app_port = "80"
-		#nginx_bin = config.get("handler_nginx","binary_path")
-		#nginx_incl = config.get("handler_nginx","app_include_path")
-		#if config.get("handler_nginx","app_port"):
-		#	app_port = config.get("handler_nginx","app_port")
-		#else:
-		#	app_port = "80"
-			
-		tmp_incl = ""
-		num_of_appservers = 0
-		template_file = bus[BusEntries.BASE_PATH]+"/etc/include/handler.nginx/app-servers.tpl"
-		if os.path.isfile(template_file):
-			upstream_hosts = ""
-			ec2_listhosts_app = self._queryenv.list_roles(behaviour = "app")
-			for app_serv in ec2_listhosts_app :
-				for app_hosts in app_serv.hosts :
-					upstream_hosts += "\tserver " + app_hosts.internal_ip + ":" + app_port + ";\n"
-					num_of_appservers = num_of_appservers + 1
-			
-			if 0 == num_of_appservers :
-				upstream_hosts = "\tserver 127.0.0.1:80;"
-			
-			if "" != upstream_hosts:
-				tmp_incl = open(template_file,'r').read()
-				tmp_incl = tmp_incl.replace("${upstream_hosts}",upstream_hosts)
+		sect_name = configtool.get_behaviour_section_name(Behaviours.WWW)
+		nginx_bin = config.get(sect_name, "binary_path")
+		nginx_incl = config.get(sect_name, "app_include_path")
+		app_port = config.get(sect_name, "app_port") or "80"
 
-		else:
-			tmp_incl += "upstream backend {" + "\tip_hash;\n"
-			ec2_listhosts_app = self._queryenv.list_roles(behaviour = "app")
-			for app_serv in ec2_listhosts_app : 
-				for app_hosts in app_serv.hosts :
-					tmp_incl += "\tserver " + app_hosts.internal_ip + ":" + app_port + ";\n"
-					num_of_appservers = num_of_appservers + 1
-			if 0 == num_of_appservers : 
-				tmp_incl += "\tserver 127.0.0.1:80;"
-			tmp_incl = tmp_incl + "}"
+			
+		tpl_filename = os.path.join(bus[BusEntries.ETC_PATH], "public.d/handler.nginx/app-servers.tpl")
+		if not os.path.exists(tpl_filename):
+			self._logger.warning("nginx template '%s' doesn't exists. Create default template", tpl_filename)
+			f = open(tpl_filename, "w+")
+			f.write("""
+upstream backend {
+    ip_hash;
+
+${upstream_hosts}
+}
+			""")
+			f.close()
+		include_tpl = open(tpl_filename, 'r').read()
+
+		# Create upstream hosts configuration	
+		upstream_hosts = ""
+		for app_serv in self._queryenv.list_roles(behaviour = Behaviours.APP):
+			for app_host in app_serv.hosts :
+				upstream_hosts += "\tserver %s:%d;\n" % (app_host.internal_ip, app_port)
+
+		if not upstream_hosts:
+			upstream_hosts = "\tserver 127.0.0.1:80;\n"
 		
+		include_tpl = include_tpl.replace("${upstream_hosts}", upstream_hosts)
+
 		#HTTPS Configuration		
 		# openssl req -new -x509 -days 9999 -nodes -out cert.pem -keyout cert.key
+		cert_path = configtool.get_key_filename("https_cert.pem", private=True)
+		pk_path = configtool.get_key_filename("https_pk.pem", private=True) 
 		if os.path.isfile("/etc/nginx/https.include") and \
-		os.path.isfile("/etc/aws/keys/ssl/cert.key") and \
-		os.path.isfile("/etc/aws/keys/ssl/cert.pem") :
-			tmp_incl += "include /etc/nginx/https.include;"
+				os.path.isfile(cert_path) and os.path.isfile(pk_path):
+			include_tpl += "include /etc/nginx/https.include;"
 			
 		#Determine, whether configuration was changed or not
-		if os.path.isfile(nginx_incl) and tmp_incl == open(nginx_incl,'r').read():
+		# FIXME:  include_tpl == open(... overrides privious value in  include_tpl
+		if os.path.isfile(nginx_incl) and include_tpl == open(nginx_incl,'r').read():
 			self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:
 			self._logger.info("nginx upstream configuration changed.")
 			if os.path.isfile(nginx_incl):
 				shutil.move(nginx_incl, nginx_incl+".save")
 			file = open(nginx_incl, "w")
-			file.write(tmp_incl)
+			file.write(include_tpl)
 			file.close()
 			
 			self._logger.info("Testing new configuration.")
