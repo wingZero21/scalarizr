@@ -9,6 +9,7 @@ from scalarizr.core.handlers import Handler
 from scalarizr.messaging import Queues, Messages
 import scalarizr.util as zrutil
 import threading
+from scalarizr.util import configtool
 try:
 	import time
 except ImportError:
@@ -21,11 +22,17 @@ import logging
 import binascii
 
 
+
 def get_handlers ():
 	return [ScriptExecutor()]
 
 class ScriptExecutor(Handler):
-	_CONFIG_SECTION = "handler_script_executor"
+	name = "script_executor"
+	
+	OPT_EXEC_DIR_PREFIX = "exec_dir_prefix"
+	OPT_LOGS_DIR_PREFIX = "logs_dir_prefix"
+	OPT_LOGS_TRUNCATE_OVER = "logs_truncate_over"	
+	
 	_logger = None
 	_queryenv = None
 	_msg_service = None
@@ -54,22 +61,23 @@ class ScriptExecutor(Handler):
 		producer.on("before_send", self.on_before_message_send)
 		
 		config = bus[BusEntries.CONFIG]
-		if not config.has_section(self._CONFIG_SECTION):
+		sect_name = configtool.get_handler_section_name(self.name)
+		if not config.has_section(sect_name):
 			raise Exception("Script executor handler is not configured. "
-						    + "Config has no section '%s'" % self._CONFIG_SECTION)
+						    + "Config has no section '%s'" % sect_name)
 		
 		# read exec_dir_prefix
-		self._exec_dir_prefix = config.get(self._CONFIG_SECTION, "exec_dir_prefix")
+		self._exec_dir_prefix = config.get(sect_name, self.OPT_EXEC_DIR_PREFIX)
 		if not os.path.isabs(self._exec_dir_prefix):
 			self._exec_dir_prefix = Bus()[BusEntries.BASE_PATH] + os.sep + self._exec_dir_prefix
 			
 		# read logs_dir_prefix
-		self._logs_dir_prefix = config.get(self._CONFIG_SECTION, "logs_dir_prefix")
+		self._logs_dir_prefix = config.get(sect_name, self.OPT_LOGS_DIR_PREFIX)
 		if not os.path.isabs(self._logs_dir_prefix):
 			self._logs_dir_prefix = Bus()[BusEntries.BASE_PATH] + os.sep + self._logs_dir_prefix
 		
 		# logs_truncate_over
-		self._logs_truncate_over = zrutil.parse_size(config.get(self._CONFIG_SECTION, "logs_truncate_over"))
+		self._logs_truncate_over = zrutil.parse_size(config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
 	
 	
 	def on_before_message_send(self, queue, message):

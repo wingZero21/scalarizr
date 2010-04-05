@@ -7,6 +7,8 @@ import os
 from scalarizr.core import Bus, BusEntries
 import binascii
 
+# TODO: add save() method with comments preserved
+
 class ConfigError(BaseException):
 	pass
 

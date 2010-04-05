@@ -87,6 +87,7 @@ class AwsPlatform(Platform):
 	
 	
 	def _set_config_options(self, config, section, options):
+		# FIXME: maybe better remove _set_config_options ?
 		for k, v in options.items():
 			if k == "account_id":
 				write_key_file("aws_account_id", v)
