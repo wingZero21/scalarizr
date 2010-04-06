@@ -7,7 +7,8 @@ Created on Mar 3, 2010
 
 
 from scalarizr.messaging import Messages, Queues
-from scalarizr.core import Bus, BusEntries, init_scripts
+from scalarizr.bus import Bus
+from scalarizr import init_script
 import logging
 import sys
 try:
@@ -29,9 +30,9 @@ try:
 		sys.exit()
 		
 	if action == "start" or action == "stop":
-		init_scripts()	
+		init_script()	
 			
-		msg_service = bus[BusEntries.MESSAGE_SERVICE]
+		msg_service = bus.messaging_service
 		producer = msg_service.get_producer()
 		
 		msg = msg_service.new_message(Messages.SERVER_HALT)

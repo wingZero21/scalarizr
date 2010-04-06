@@ -4,8 +4,8 @@ Created on Mar 2, 2010
 @author: marat
 '''
 
-from scalarizr.core.handlers import Handler
-from scalarizr.core import Bus, BusEntries
+from scalarizr.handlers import Handler
+from scalarizr.bus import bus
 import logging
 from scalarizr.messaging import Messages
 
@@ -21,26 +21,22 @@ class AwsLifeCircleHandler(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		bus = Bus()
-		self._platform = bus[BusEntries.PLATFORM]
+		self._platform = bus.platfrom
 		bus.on("init", self.on_init)		
 	
 	def on_init(self, *args, **kwargs):
-		bus = Bus()
 		bus.on("before_host_init", self.on_before_host_init)		
 
-		msg_service = bus[BusEntries.MESSAGE_SERVICE]
+		msg_service = bus.messaging_service
 		producer = msg_service.get_producer()
 		producer.on("before_send", self.on_before_message_send)
 	
 		
 	def on_before_host_init(self, *args, **kwargs):
-		bus = Bus()
-		base_path = bus[BusEntries.BASE_PATH]
 		self._logger.info("Add udev rule for EBS devices")
 		try:
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")
-			f.write('KERNEL=="sd*[!0-9]", RUN+="'+base_path+'/src/scalarizr/scripts/udev.py"')
+			f.write('KERNEL=="sd*[!0-9]", RUN+="'+ bus.base_path+'/src/scalarizr/scripts/udev.py"')
 			f.close()
 		except OSError, e:
 			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' OSError: %s", str(e))

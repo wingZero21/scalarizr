@@ -3,11 +3,9 @@ Created on Apr 1, 2010
 
 @author: marat
 '''
-import os
-from scalarizr.core import Bus, BusEntries
+from scalarizr.bus import bus
 import binascii
-
-# TODO: add save() method with comments preserved
+import os
 
 class ConfigError(BaseException):
 	pass
@@ -30,7 +28,7 @@ OPT_ADAPTER = "adapter"
 SECT_HANDLERS = "handlers"
 
 def _get_filename(basename, ret):
-	etc_path = Bus()[BusEntries.ETC_PATH]
+	etc_path = bus.etc_path
 	if ret == RET_PUBLIC:
 		return os.path.join(etc_path, "public.d", basename)
 	elif ret == RET_PRIVATE:
@@ -60,15 +58,14 @@ def get_handler_section_name(handler_name):
 	return "handler_%s" % (handler_name)
 	
 def get_key_filename(key_name, private=True):
-	etc_path = Bus()[BusEntries.ETC_PATH]
+	etc_path = bus.etc_path
 	return os.path.join(etc_path, "private.d" if private else "public.d", "keys", key_name)
 	
 def write_key(path, key, key_title=None, base64encode=False):
 	"""
 	Writes key into $etc/.private.d/keys, $etc/public.d/keys
 	"""
-	etc_path = Bus()[BusEntries.ETC_PATH]
-	filename = os.path.join(etc_path, path)
+	filename = os.path.join(bus.etc_path, path)
 	file = None
 	try:
 		file = open(filename, "w+")
@@ -84,8 +81,7 @@ def read_key(path, key_title=None):
 	"""
 	Reads key from $etc/.private.d/keys, $etc/public.d/keys
 	"""
-	etc_path = Bus()[BusEntries.ETC_PATH]
-	filename = os.path.join(etc_path, path)
+	filename = os.path.join(bus.etc_path, path)
 	file = None
 	try:
 		file = open(filename, "r")
@@ -96,3 +92,7 @@ def read_key(path, key_title=None):
 		if file:
 			file.close()
 
+
+def save(config, filename):
+	# TODO: implement with comments preserved
+	raise ConfigError("Not implemented")

@@ -4,8 +4,8 @@ Created on Mar 1, 2010
 @author: marat
 '''
 
-from scalarizr.core.handlers import Handler
-from scalarizr.core import Bus, BusEntries
+from scalarizr.handlers import Handler
+from scalarizr.bus import bus
 from scalarizr.messaging import Queues, Messages
 import logging
 try:
@@ -19,16 +19,13 @@ def get_handlers ():
 
 class EbsHandler(Handler):
 	_logger = None
-	_bus = None
 	_platform = None
 	_msg_service = None
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		bus = Bus()
-		self._platform = bus[BusEntries.PLATFORM]
-		self._msg_service = bus[BusEntries.MESSAGE_SERVICE]
-		self._bus = bus		
+		self._platform = bus.platfrom
+		self._msg_service = bus.messaging_service
 		
 		bus.define_events(
 			# Fires when EBS is attached to instance
@@ -68,7 +65,7 @@ class EbsHandler(Handler):
 							producer.send(Queues.CONTROL, msg)
 							
 							# Notify listeners
-							self._bus.fire("block_device_attached", volume=volume.id, device=ad.device)
+							bus.fire("block_device_attached", volume=volume.id, device=ad.device)
 							
 						except Exception, e:
 							self._logger.error("Cannot send message. %s" % str(e))
@@ -96,7 +93,7 @@ class EbsHandler(Handler):
 				producer.send(Queues.CONTROL, msg)
 				
 				# Notify listeners
-				self._bus.fire("block_device_detached", device=message.devname)
+				bus.fire("block_device_detached", device=message.devname)
 				
 			except Exception, e:
 				self._logger.error("Cannot send message. %s" % str(e))

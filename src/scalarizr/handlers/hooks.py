@@ -5,8 +5,9 @@ Created on Mar 3, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.core import Bus, BusEntries
-from scalarizr.core.handlers import Handler
+from scalarizr.bus import bus
+from scalarizr.handlers import Handler
+from scalarizr.util import configtool
 from scalarizr.util import configtool
 import logging
 import os
@@ -21,19 +22,16 @@ class HooksHandler(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		Bus().on("init", self.on_init)
+		bus.on("init", self.on_init)
 		
 	def on_init(self):
-		bus = Bus()
 		for event in bus.list_events():
 			bus.on(event, self.create_hook(event))
 			
 	def create_hook(self, event):
 		def hook(*args, **kwargs):
 			self._logger.info("Hook on '"+event+"'" + str(args) + " " + str(kwargs))
-
-			bus = Bus()				
-			config = bus[BusEntries.CONFIG]
+			config = bus.config
 			
 			#for key in kwargs:
 			#	os.environ[key] = kwargs[key]
@@ -44,12 +42,11 @@ class HooksHandler(Handler):
 			environ["server_id"] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 			environ["behaviour"] = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
 			
-			path = bus[BusEntries.BASE_PATH] + "/hooks/"
+			path = bus.base_path + "/hooks/"
 			reg = re.compile(r"^\d+\-"+event+"$")
 							
 			if os.path.isdir(path):
 				matches_list = list(fname for fname in os.listdir(path) if reg.search(fname))
-				print matches_list
 				if matches_list:
 					matches_list.sort()
 					for fname in matches_list:

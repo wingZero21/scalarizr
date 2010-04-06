@@ -11,7 +11,7 @@ except ImportError:
     import timemodule as time
 import atexit
 import logging
-from scalarizr.core import Bus, BusEntries
+from scalarizr.bus import Bus
 
 class MessagingHandler(logging.Handler):
     def __init__(self, num_stored_messages = 1, send_interval = "1"):
@@ -20,7 +20,7 @@ class MessagingHandler(logging.Handler):
         
         logging.Handler.__init__(self)
         
-        self._msg_service = Bus()[BusEntries.MESSAGE_SERVICE]
+        self._msg_service = Bus().messaging_service
         self.messages = []
         self.num_stored_messages = num_stored_messages
 

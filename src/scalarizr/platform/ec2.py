@@ -1,5 +1,4 @@
 from scalarizr.platform import Platform, PlatformError
-from scalarizr.util import write_key_file, read_key_file
 from boto import connect_ec2, connect_s3
 from boto.ec2.regioninfo import RegionInfo
 import logging
@@ -27,7 +26,6 @@ class AwsPlatform(Platform):
 	_s3_conn = None	
 	
 	def __init__(self):
-		Platform.__init__(self)
 		self._logger = logging.getLogger(__name__)
 	
 	def get_private_ip(self):

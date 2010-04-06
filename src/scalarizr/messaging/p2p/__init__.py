@@ -4,9 +4,10 @@ Created on Dec 5, 2009
 @author: marat
 '''
 
-from scalarizr.core import Bus, BusEntries
+from scalarizr.bus import bus
 from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingError
 import logging
+from scalarizr.util import configtool
 
 
 class P2pOptions:
@@ -53,22 +54,15 @@ class _P2pBase(object):
 			elif key == P2pOptions.CRYPTO_KEY_PATH:
 				self._crypto_key = pair[1]
 
-		bus = Bus()
+		config = bus.config
 		if self._server_id is None:
-			self._server_id = bus[BusEntries.CONFIG].get("default", "server_id")
+			self._server_id = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 		if self._crypto_key_path is None:
-			self._crypto_key_path = bus[BusEntries.BASE_PATH] + "/" + \
-					bus[BusEntries.CONFIG].get("default", "crypto_key_path")
+			self._crypto_key_path = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
 
 		
 	def _read_key(self):
-		f = None
-		try:
-			f = open(self._crypto_key_path)
-			return f.read().strip()
-		finally:
-			if not f is None:
-				f.close()
+		return configtool.read_key(self._crypto_key_path, "Messaging crypto key")
 	
 class _P2pMessageStore:
 	_logger = None
@@ -77,7 +71,8 @@ class _P2pMessageStore:
 		self._logger = logging.getLogger(__name__)
 	
 	def _conn(self):
-		return Bus()[BusEntries.DB].get().get_connection()
+		db = bus.db
+		return db.get().get_connection()
 		
 	def put_ingoing(self, message, queue):
 		conn = self._conn()

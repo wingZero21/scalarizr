@@ -3,8 +3,7 @@ Created on Dec 24, 2009
 
 @author: marat
 '''
-from scalarizr.core import Bus, BusEntries
-from scalarizr.util import save_config
+from scalarizr.bus import bus
 import os
 import re
 
@@ -23,11 +22,7 @@ class PlatformFactory(object):
 
 class Platform():
 	name = None
-	_bus = None
 	_arch = None
-	
-	def __init__(self):
-		self._bus = Bus()
 	
 	def get_private_ip(self):
 		"""
@@ -65,7 +60,7 @@ class Platform():
 		"""
 		Inject into scalarizr configuration platform config
 		"""
-		config = self._bus[BusEntries.CONFIG]
+		config = self._bus.config
 		section = "platform_" + self.name
 		if not config.has_section(section):
 			config.add_section(section)
@@ -73,7 +68,7 @@ class Platform():
 		save_config()
 		
 	def get_config_option(self, option):
-		return self._bus[BusEntries.CONFIG].get("platform_" + self.name, option)
+		return self._bus.config.get("platform_" + self.name, option)
 		
 	def _set_config_options(self, config, section, options):
 		pass

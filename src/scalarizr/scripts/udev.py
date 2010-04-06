@@ -8,7 +8,8 @@ Created on Mar 1, 2010
 import os
 
 from scalarizr.messaging import Messages, Queues
-from scalarizr.core import Bus, BusEntries, init_scripts
+from scalarizr.bus import Bus 
+from scalarizr import init_script
 import logging
 
 logger = logging.getLogger("scalarizr.scripts.udev")
@@ -17,9 +18,9 @@ bus = Bus()
 logger.info("Starting udev script...")
 
 try:
-	init_scripts()
+	init_script()
 
-	msg_service = bus[BusEntries.MESSAGE_SERVICE]
+	msg_service = bus.messaging_service
 	producer = msg_service.get_producer()
 
 	msg = msg_service.new_message(Messages.BLOCK_DEVICE_UPDATED)

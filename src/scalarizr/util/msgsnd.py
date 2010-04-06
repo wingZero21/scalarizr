@@ -3,6 +3,7 @@ Created on Dec 16, 2009
 
 @author: marat
 '''
+from scalarizr.util import configtool
 
 
 def main():
@@ -21,20 +22,20 @@ def main():
 		print parser.format_help()
 		sys.exit()
 	
-	from scalarizr.core import Bus, BusEntries
+	from scalarizr.bus import Bus
 	from scalarizr.messaging import MessageServiceFactory
 	
-	config = Bus()[BusEntries.CONFIG]
-	adapter = config.get("messaging", "adapter")
+	config = Bus().config
+	adapter = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)
 	factory = MessageServiceFactory()
 	if options.self_send:
 		producer_config = []
-		for key, value in config.items("messaging"):
+		for key, value in config.items(configtool.SECT_MESSAGING):
 			if key.startswith(adapter + "_consumer"):
 				producer_config.append((key.replace("consumer", "producer"), value))
 		service = factory.new_service(adapter, producer_config)
 	else:
-		service = factory.new_service(adapter, config.items("messaging"))
+		service = factory.new_service(adapter, config.items(configtool.SECT_MESSAGING))
 		
 	producer = service.get_producer()
 	

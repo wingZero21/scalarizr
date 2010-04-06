@@ -4,8 +4,8 @@ Created on Mar 3, 2010
 @author: marat
 '''
 
-from scalarizr.core import Bus, BusEntries
-from scalarizr.core.handlers import Handler
+from scalarizr.bus import bus
+from scalarizr.handlers import Handler
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import CryptoTool, configtool
 import logging
@@ -24,7 +24,6 @@ class LifeCircleHandler(Handler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		
-		bus = Bus()
 		bus.define_events(
 			# Fires before HostInit message is sent
 			"before_host_init",
@@ -49,25 +48,24 @@ class LifeCircleHandler(Handler):
 		)
 		bus.on("init", self.on_init)
 		
-		self._bus = bus
-		self._msg_service = self._bus[BusEntries.MESSAGE_SERVICE]
+		self._msg_service = bus.messaging_service
 		self._producer = self._msg_service.get_producer()
 	
 	
 	def on_init(self):
-		self._bus.on("start", self.on_start)
+		bus.on("start", self.on_start)
 		self._producer.on("before_send", self.on_before_message_send)
 		
 	
 	def on_start(self):
-		reboot_file = os.path.join(self._bus[BusEntries.ETC_PATH], ".reboot")
+		reboot_file = os.path.join(bus.etc_path, ".reboot")
 		if not os.path.exists(reboot_file):
 			# Add init scripts
 			
 			# Add reboot script
 			dst = "/etc/rc6.d/K10scalarizr"
 			if not os.path.exists(dst):
-				path = self._bus[BusEntries.BASE_PATH] + "/src/scalarizr/scripts/reboot.py"
+				path = bus.base_path + "/src/scalarizr/scripts/reboot.py"
 				try:
 					os.symlink(path, dst)
 				except OSError:
@@ -75,7 +73,7 @@ class LifeCircleHandler(Handler):
 					raise
 			"""
 			OpenSolaris:
-			2010-03-15 19:10:15,448 - ERROR - scalarizr.core.handlers.lifecircle - Cannot create symlink /etc/rc6.d/K10scalarizr -> /opt/scalarizr/src/scalarizr/scripts/reboot.py
+			2010-03-15 19:10:15,448 - ERROR - scalarizr.handlers.lifecircle - Cannot create symlink /etc/rc6.d/K10scalarizr -> /opt/scalarizr/src/scalarizr/scripts/reboot.py
 			2010-03-15 19:10:15,449 - ERROR - scalarizr.util - [Errno 2] No such file or directory
 			
 			SOLUTION:
@@ -87,7 +85,7 @@ class LifeCircleHandler(Handler):
 			# Add halt script
 			dst = "/etc/rc0.d/K10scalarizr"
 			if not os.path.exists(dst):
-				path = self._bus[BusEntries.BASE_PATH] + "/src/scalarizr/scripts/halt.py"
+				path = bus.base_path + "/src/scalarizr/scripts/halt.py"
 				try:
 					os.symlink(path, dst)
 				except OSError:
@@ -107,15 +105,15 @@ class LifeCircleHandler(Handler):
 			
 			
 			# Notify listeners
-			self._bus.fire("before_host_init")
+			bus.fire("before_host_init")
 			
 			# Regenerage key
-			config = self._bus[BusEntries.CONFIG]
+			config = bus.config
 			key_path = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
 			key = CryptoTool().keygen()
 			configtool.write_key(key_path, key, key_title="Scalarizr crypto key")
 			# Update key in QueryEnv
-			queryenv = self._bus[BusEntries.QUERYENV_SERVICE]
+			queryenv = bus.queryenv_service
 			queryenv.set_key(key)
 
 			# Send HostInit			
@@ -124,26 +122,26 @@ class LifeCircleHandler(Handler):
 			self._producer.send(Queues.CONTROL, msg) 
 
 			# Notify listeners
-			self._bus.fire("host_init")
+			bus.fire("host_init")
 			
 		else:
 			self._logger.info("Scalarizr is resumed after reboot")
 			os.remove(reboot_file)
 			
 			# Notify listeners
-			self._bus.fire("before_reboot_finish")
+			bus.fire("before_reboot_finish")
 			
 			# Send RebootFinish
 			msg = self._msg_service.new_message(Messages.REBOOT_FINISH)
 			self._producer.send(Queues.CONTROL, msg)
 			
 			# Notify listeners
-			self._bus.fire("reboot_finish")
+			bus.fire("reboot_finish")
 
 
 	def on_ServerReboot(self, message):
 		# Scalarizr must detect that it was resumed after reboot
-		reboot_file = os.path.join(self._bus[BusEntries.ETC_PATH], ".reboot")
+		reboot_file = os.path.join(bus.etc_path, ".reboot")
 		try:
 			self._logger.debug("Touch file '%s'", reboot_file)
 			open(reboot_file, "w+").close()
@@ -154,7 +152,7 @@ class LifeCircleHandler(Handler):
 		msg = self._msg_service.new_message(Messages.REBOOT_START)
 		self._producer.send(Queues.CONTROL, msg)
 			
-		self._bus.fire("reboot_start")
+		bus.fire("reboot_start")
 			
 		# Shutdown routine
 		#self._shutdown()
@@ -164,7 +162,7 @@ class LifeCircleHandler(Handler):
 		#msg = self._msg_service.new_message(Messages.GO2HALT)
 		#self._producer.send(Queues.CONTROL, msg)
 		
-		#self._bus.fire("go2halt")
+		#bus.fire("go2halt")
 
 		# Shutdown routine
 		#self._shutdown()
@@ -172,14 +170,14 @@ class LifeCircleHandler(Handler):
 		msg = self._msg_service.new_message(Messages.HOST_DOWN)
 		self._producer.send(Queues.CONTROL, msg)
 
-		self._bus.fire("host_down")
+		bus.fire("host_down")
 
 	"""
 	def _shutdown(self):
 		msg = self._msg_service.new_message(Messages.HOST_DOWN)
 		self._producer.send(Queues.CONTROL, msg)
 
-		self._bus.fire("host_down")
+		bus.fire("host_down")
 	"""
 
 	def on_before_message_send(self, queue, message):

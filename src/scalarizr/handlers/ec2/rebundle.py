@@ -4,8 +4,8 @@ Created on Mar 11, 2010
 @author: marat
 '''
 
-from scalarizr.core import Bus, BusEntries
-from scalarizr.core.handlers import Handler
+from scalarizr.bus import bus
+from scalarizr.handlers import Handler
 from scalarizr.platform import PlatformError
 from scalarizr.messaging import Messages
 from scalarizr.util import system, disttool, CryptoTool
@@ -61,8 +61,8 @@ Bundled: %(bundle_date)s
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._platform = Bus()[BusEntries.PLATFORM]
-		self._msg_service = Bus()[BusEntries.MESSAGE_SERVICE]
+		self._platform = bus.platfrom
+		self._msg_service = bus.messaging_service
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.REBUNDLE and platform == "ec2"	

@@ -1,5 +1,6 @@
 
-from scalarizr.core import Bus, BusEntries
+from scalarizr.bus import bus
+from scalarizr.util import configtool
 from scalarizr.util import configtool
 import os
 import platform
@@ -20,18 +21,18 @@ class Handler(object):
 class HandlerError(BaseException):
 	pass
 
-class MessageListener ():
+class MessageListener:
 	_logger = None 
 	_handlers_chain = None
 	_accept_kwargs = {}
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		bus = Bus()
-		config = bus[BusEntries.CONFIG]
+		config = bus.config
+		platfrom = bus.platfrom
 		self._logger.debug("Initialize message listener");
 		self._accept_kwargs["behaviour"] = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR).split(",")
-		self._accept_kwargs["platform"] = bus[BusEntries.PLATFORM].name
+		self._accept_kwargs["platform"] = platfrom.name
 		self._accept_kwargs["os"] = platform.uname()
 		self._accept_kwargs["dist"] = platform.dist()
 		self._logger.debug("Gathered _accept_kwargs: %s", self._accept_kwargs)
@@ -44,7 +45,7 @@ class MessageListener ():
 			self._handlers_chain = []
 			self._logger.debug("Collecting handlers chain");
 			
-			config = Bus()[BusEntries.CONFIG]
+			config = bus.config
 			for handler_name, module_name in config.items(configtool.SECT_HANDLERS):
 				try:
 					module_name = config.get("handlers", handler_name)

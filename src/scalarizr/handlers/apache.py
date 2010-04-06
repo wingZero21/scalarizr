@@ -7,16 +7,16 @@ Created on Dec 25, 2009
 
 #FIXME: keys are located in $etc/private.d/keys $etc/public.d/keys
 
-from scalarizr.core import Bus, BusEntries
-from scalarizr.core.behaviour import Behaviours
-from scalarizr.core.handlers import Handler
+from scalarizr.bus import bus
+from scalarizr.behaviour import Behaviours
+from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
 from scalarizr.util import disttool
 import logging
 import os
 import re
 import subprocess
-#from scalarizr.core.handlers import hooks
+#from scalarizr.handlers import hooks
 
 def get_handlers ():
 	return [ApacheHandler()]
@@ -24,18 +24,16 @@ def get_handlers ():
 class ApacheHandler(Handler):
 	_logger = None
 	_queryenv = None
-	_bus = None
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._queryenv = Bus()[BusEntries.QUERYENV_SERVICE]
+		self._queryenv = bus.queryenv_service
 		self.name_vhost_regexp = re.compile(r'NameVirtualHost\s+\*[^:]')
 		self.vhost_regexp = re.compile('<VirtualHost\s+\*>')
 		self.strip_comments_regexp = re.compile( r"#.*\n")
 		self.errorlog_regexp = re.compile( r"ErrorLog\s+(\S*)", re.IGNORECASE)
 		self.customlog_regexp = re.compile( r"CustomLog\s+(\S*)", re.IGNORECASE)
-		self.bus = Bus()
-		self.bus.define_events('apache_reload')
+		bus.define_events('apache_reload')
 
 	def on_VhostReconfigure(self, message):
 		self._logger.debug("Entering on_VhostReconfigure")
@@ -46,11 +44,9 @@ class ApacheHandler(Handler):
 
 	def _update_vhosts(self):
 				
-		bus = Bus()
-		config = bus[BusEntries.CONFIG]
+		config = bus.config
 		vhosts_path = config.get('behaviour_app','vhosts_path')
 		#vhosts_path = config.get('handler_apache','vhosts_path')
-		print vhosts_path
 		httpd_conf_path = config.get('behaviour_app','httpd_conf_path')
 		#httpd_conf_path = config.get('handler_apache','httpd_conf_path')
 		
@@ -112,7 +108,6 @@ class ApacheHandler(Handler):
 						self._logger.info("Saving SSL certificates for %s",vhost.hostname)
 						try:
 							cert_path = 'etc/.keys'
-							print os.path.realpath(cert_path)
 							
 							file = open(cert_path + '/' + 'https.key', 'w')
 							file.write(https_certificate[1])
@@ -236,7 +231,7 @@ class ApacheHandler(Handler):
 				
 				else:
 					self._logger.info("Apache was successfully reloaded.")
-					self.bus.fire('apache_reload')	
+					bus.fire('apache_reload')	
 									
 				if None != stdout:
 					self._logger.info(stdout)	

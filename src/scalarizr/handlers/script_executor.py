@@ -4,8 +4,8 @@ Created on Dec 24, 2009
 @author: marat
 '''
 
-from scalarizr.core import Bus, BusEntries
-from scalarizr.core.handlers import Handler
+from scalarizr.bus import bus
+from scalarizr.handlers import Handler
 from scalarizr.messaging import Queues, Messages
 import scalarizr.util as zrutil
 import threading
@@ -52,15 +52,14 @@ class ScriptExecutor(Handler):
 		self._logger = logging.getLogger(__name__)		
 		self._wait_async = wait_async
 		
-		bus = Bus()
-		self._queryenv = bus[BusEntries.QUERYENV_SERVICE]
-		self._msg_service = bus[BusEntries.MESSAGE_SERVICE]
-		self._platform = bus[BusEntries.PLATFORM]
+		self._queryenv = bus.queryenv_service
+		self._msg_service = bus.messaging_service
+		self._platform = bus.platfrom
 		
 		producer = self._msg_service.get_producer()
 		producer.on("before_send", self.on_before_message_send)
 		
-		config = bus[BusEntries.CONFIG]
+		config = bus.config
 		sect_name = configtool.get_handler_section_name(self.name)
 		if not config.has_section(sect_name):
 			raise Exception("Script executor handler is not configured. "
@@ -69,12 +68,12 @@ class ScriptExecutor(Handler):
 		# read exec_dir_prefix
 		self._exec_dir_prefix = config.get(sect_name, self.OPT_EXEC_DIR_PREFIX)
 		if not os.path.isabs(self._exec_dir_prefix):
-			self._exec_dir_prefix = Bus()[BusEntries.BASE_PATH] + os.sep + self._exec_dir_prefix
+			self._exec_dir_prefix = bus.base_path + os.sep + self._exec_dir_prefix
 			
 		# read logs_dir_prefix
 		self._logs_dir_prefix = config.get(sect_name, self.OPT_LOGS_DIR_PREFIX)
 		if not os.path.isabs(self._logs_dir_prefix):
-			self._logs_dir_prefix = Bus()[BusEntries.BASE_PATH] + os.sep + self._logs_dir_prefix
+			self._logs_dir_prefix = bus.base_path + os.sep + self._logs_dir_prefix
 		
 		# logs_truncate_over
 		self._logs_truncate_over = zrutil.parse_size(config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))

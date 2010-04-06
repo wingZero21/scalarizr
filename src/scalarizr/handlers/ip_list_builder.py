@@ -8,22 +8,24 @@ Created on Dec 11, 2009
 # TODO: add onRebootStart - delete onRebootFinish - restore
 import logging
 import os
-from scalarizr.core.handlers import Handler
-from scalarizr.core import Bus, BusEntries
+from scalarizr.handlers import Handler
+from scalarizr.bus import bus
 from scalarizr.messaging import Messages
+from scalarizr.util import configtool
 
 def get_handlers ():
 	return [IpListBuilder()]
 
 class IpListBuilder(Handler):
+	name = "ip_list_builder"
 	_logger = None
 	_base_path = None
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		
-		config = Bus()[BusEntries.CONFIG]
-		self._base_path = config.get("handler_ip_list_builder", "base_path")     	    
+		config = bus.config
+		self._base_path = config.get(configtool.get_handler_section_name(self.name), "base_path")     	    
 		if self._base_path[-1] != os.sep:
 			self._base_path = self._base_path + os.sep  		
 

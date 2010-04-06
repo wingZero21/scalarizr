@@ -12,7 +12,8 @@ log.write("argv: " + str(sys.argv))
 
 
 from scalarizr.messaging import Messages, Queues
-from scalarizr.core import Bus, BusEntries, init_scripts
+from scalarizr.bus import Bus
+from scalarizr import init_script
 import logging
 try:
 	import time
@@ -33,9 +34,9 @@ try:
 		sys.exit()
 		
 	if action == "start" or action == "stop":
-		init_scripts()
+		init_script()
 			
-		msg_service = bus[BusEntries.MESSAGE_SERVICE]
+		msg_service = bus.messaging_service
 		producer = msg_service.get_producer()
 		
 		msg = msg_service.new_message(Messages.SERVER_REBOOT)

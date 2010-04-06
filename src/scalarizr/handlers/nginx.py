@@ -5,9 +5,9 @@ Created on Jan 6, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.core import Bus, BusEntries
-from scalarizr.core.handlers import Handler
-from scalarizr.core.behaviour import Behaviours
+from scalarizr.bus import bus
+from scalarizr.handlers import Handler
+from scalarizr.behaviour import Behaviours
 from scalarizr.messaging import Messages
 from scalarizr.util import configtool
 import os
@@ -25,7 +25,7 @@ class NginxHandler(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._queryenv = Bus()[BusEntries.QUERYENV_SERVICE]		
+		self._queryenv = bus.queryenv_service		
 	
 	def on_HostUp(self, message):
 		self.nginx_upstream_reload()
@@ -34,15 +34,13 @@ class NginxHandler(Handler):
 		self.nginx_upstream_reload()
 	
 	def nginx_upstream_reload(self):
-		bus = Bus()
-		config = bus[BusEntries.CONFIG]
+		config = bus.config
 		sect_name = configtool.get_behaviour_section_name(Behaviours.WWW)
 		nginx_bin = config.get(sect_name, "binary_path")
 		nginx_incl = config.get(sect_name, "app_include_path")
 		app_port = config.get(sect_name, "app_port") or "80"
-
 			
-		tpl_filename = os.path.join(bus[BusEntries.ETC_PATH], "public.d/handler.nginx/app-servers.tpl")
+		tpl_filename = os.path.join(bus.etc_path, "public.d/handler.nginx/app-servers.tpl")
 		if not os.path.exists(tpl_filename):
 			self._logger.warning("nginx template '%s' doesn't exists. Create default template", tpl_filename)
 			f = open(tpl_filename, "w+")

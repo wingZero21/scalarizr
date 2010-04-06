@@ -4,7 +4,7 @@ Created on Dec 24, 2009
 @author: marat
 '''
 
-from scalarizr.platform import Platform 
+from scalarizr.platform import Platform
 import socket
 
 def get_platform():
