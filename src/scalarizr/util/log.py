@@ -4,6 +4,9 @@ Created on 22.01.2010
 @author: shaitanich
 '''
 
+# TODO: store logs in database table 'log'. 
+# `emit` should insert entries, `send_message` should select and delete entries
+
 import threading
 try:
     import time

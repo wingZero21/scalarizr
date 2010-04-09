@@ -5,7 +5,7 @@ Created on Dec 5, 2009
 '''
 from scalarizr.messaging import MessageConsumer
 from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, P2pOptions, _P2pBase
-from scalarizr.util import CryptoTool
+from scalarizr.util import cryptotool
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
 from threading import Thread
@@ -89,9 +89,7 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 		
 		try:
 			logger.debug("Decrypt message")
-			crypto = CryptoTool()	
-			logger.debug("Key: " + self.consumer._read_key())		
-			xml = crypto.decrypt(rawmsg, self.consumer._read_key())
+			xml = cryptotool.decrypt(rawmsg, self.consumer.crypto_key)
 			
 			logger.debug("Decode message")
 			message = P2pMessage()

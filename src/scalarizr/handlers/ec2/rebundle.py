@@ -8,7 +8,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.platform import PlatformError
 from scalarizr.messaging import Messages
-from scalarizr.util import system, disttool, CryptoTool
+from scalarizr.util import system, disttool, cryptotool
 import logging
 import time
 import os
@@ -324,7 +324,6 @@ Bundled: %(bundle_date)s
 
 	def _digest_parts(self, part_names, destination):
 		self._logger.info("Generating digests for each part")
-		cu = CryptoTool()
 		part_digests = []
 		for part_name in part_names:
 			part_filename = os.path.join(destination, part_name)
@@ -332,7 +331,7 @@ Bundled: %(bundle_date)s
 			try:
 				f = open(part_filename)
 				digest = EVP.MessageDigest("sha1")
-				part_digests.append((part_name, hexlify(cu.digest_file(digest, f)))) 
+				part_digests.append((part_name, hexlify(cryptotool.digest_file(digest, f)))) 
 			except Exception, BaseException:
 				self._logger.error("Cannot generate digest for part '%s'", part_name)
 				raise

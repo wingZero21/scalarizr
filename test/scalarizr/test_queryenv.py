@@ -11,7 +11,7 @@ class Test(unittest.TestCase):
 	_queryenv = None		
 
 	def setUp (self):
-		from scalarizr.core.queryenv import QueryEnvService
+		from scalarizr.queryenv import QueryEnvService
 		self._queryenv = QueryEnvService("http://ec2farm-dev.bsd2.webta.local/query-env/","127", "i-c9acf6a1", \
 										 "c+/g0PyouaqXMbuJ5Vtux34Mft7jLe5H5u8tUmyhldjwTfgm7BI6MOA8F6BwkzQnpWEOcHx+A+TRJh0u3PElQQ0SiwdwrlgpQMbj8NBxbxBgfxA9WisgvfQu5ZPYou6Gz3oUAQdWfFlFdY2ACOjmqa3DGogge+TlXtV2Xagm0rw=",\
 										 "5d0e16f7498c41cc")

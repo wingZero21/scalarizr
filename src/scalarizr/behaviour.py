@@ -4,14 +4,15 @@ Created on Mar 24, 2010
 @author: marat
 @author: Dmytro Korsakov
 '''
-import os
-from ConfigParser import ConfigParser
 from scalarizr.util import configtool
+from ConfigParser import ConfigParser
+from optparse import Option
+import os
 
 class Behaviours:
+	WWW = "www"	
 	APP = "app"
 	MYSQL = "mysql"
-	WWW = "www"
 	
 	
 def get_configurator(name):
@@ -19,9 +20,11 @@ def get_configurator(name):
 		return AppConfigurator()
 	elif name == Behaviours.WWW:
 		return WwwConfigurator()
-	return None
+	else:
+		return BehaviourConfigurator()
 
 class BehaviourConfigurator:
+	cli_options = []
 	options = {}
 	"""
 	{name: ("prompt", default_value, finder)}
@@ -70,6 +73,12 @@ class AppConfigurator(BehaviourConfigurator):
 			httpd_conf_path=["Specify path to apache2 main config file", None, self.find_apache_conf],
 			vhosts_path=["Specify path to scalr vhosts dir", None, self.get_scalr_vhosts_dir]
 		)
+		self.cli_options = [
+			Option("--app-httpd-conf-path", dest="httpd_conf_path", 
+					help="Path to your httpd configuration file"),
+			Option("--app-vhosts-path", dest="vhosts_path", 
+					help="Path to directory where scalarizr will place virtual hosts configurations")
+		]
 		self.platform_section = configtool.get_behaviour_section_name(Behaviours.APP)
 		self.include_ini_filename = configtool.get_behaviour_filename(Behaviours.APP, ret=configtool.RET_PUBLIC) 
 	
@@ -94,6 +103,12 @@ class WwwConfigurator(BehaviourConfigurator):
 			app_port=["Specify apache port", None, self.get_app_port],
 			app_include_path=["Specify app_include_path", None, self.get_app_include_path],
 			https_include_path=["Specify https_include_path", None, self.get_https_include_path]
+		)
+		self.cli_options = (
+			Option("--www-binary-path", dest="binary_path", help="Path to nginx binary"),
+			Option("--www-app-port", dest="app_port", help="Apache port number"),
+			Option("--www-app-include-path", dest="app_include_path", help="TODO: write description"),
+			Option("--www-https-include-path", dest="https_include_path", help="TODO: write description")
 		)
 		self.platform_section = configtool.get_behaviour_section_name(Behaviours.WWW)
 		self.include_ini_filename = configtool.get_behaviour_filename(Behaviours.WWW, ret=configtool.RET_PUBLIC)

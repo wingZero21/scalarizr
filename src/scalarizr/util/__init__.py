@@ -2,7 +2,7 @@
 #from scalarizr.bus import Bus
 import os
 import logging
-
+import sys
 
 class UtilError(BaseException):
 	pass
@@ -65,18 +65,6 @@ class Observable(object):
 	def resume_events(self):
 		self._events_suspended = False
 
-"""
-def save_config():
-	logger = logging.getLogger(__name__)
-	bus = Bus()
-	
-	# Save configuration
-	filename = os.path.join(bus.etc_path, "config.ini")
-	logger.debug("Save configuration into '%s'" % filename)
-	f = open(filename, "w")
-	bus.config.write(f)
-	f.close()	
-"""	
 	
 def system(args, shell=True):
 	import subprocess
@@ -89,7 +77,7 @@ def system(args, shell=True):
 	if err:
 		logger.warning("stderr: " + err)
 	return out, err, p.returncode
-		
+
 
 def parse_size(size):
 	"""
@@ -106,7 +94,6 @@ def parse_size(size):
 		ret *= 1048576	
 	
 	return ret
-
 	
 def format_size(size, precision=2):
 	"""
@@ -123,59 +110,6 @@ def format_size(size, precision=2):
 		
 	s = "%."+str(precision)+"f%s"
 	return s % (ret, dim)	
-	
-
-import binascii
-class CryptoTool(object):
-	_instance = None
-	
-	def __new__(cls):
-		if cls._instance is None:
-			cls._instance = object.__new__(cls)
-		return cls._instance
-	
-	def keygen(self, length=40):
-		from M2Crypto.Rand import rand_bytes
-		return binascii.b2a_base64(rand_bytes(length))	
-			
-	def _init_chiper(self, key, op_enc=1):
-		from M2Crypto.EVP import Cipher
-		k = binascii.a2b_base64(key)
-		return Cipher("bf_cfb", k[0:len(k)-9], k[len(k)-8:], op=op_enc)
-
-		
-	def encrypt (self, s, key):
-		c = self._init_chiper(key, 1)
-		ret = c.update(s)
-		ret += c.final()
-		del c
-		return binascii.b2a_base64(ret)
-	
-	def decrypt (self, s, key):
-		c = self._init_chiper(key, 0)
-		ret = c.update(binascii.a2b_base64(s))
-		ret += c.final()
-		del c
-		return ret
-
-	_BUF_SIZE = 1024 * 1024	 # Buffer size in bytes
-	
-	def digest_file(self, digest, file):
-		while 1:
-			buf = file.read(self._BUF_SIZE)
-			if not buf:
-				break;
-			digest.update(buf)
-		return digest.final()
-
-	def crypt_file(self, cipher, in_file, out_file):
-		while 1:
-			buf = in_file.read(self._BUF_SIZE)
-			if not buf:
-				break
-			out_file.write(cipher.update(buf))
-		out_file.write(cipher.final())
-	
 
 def timethis(what):
 	try:
@@ -198,3 +132,9 @@ def timethis(what):
 	else:
 		return benchmark()
 
+
+def init_tests():
+	logging.basicConfig(
+			format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", 
+			stream=sys.stdout, 
+			level=logging.DEBUG)

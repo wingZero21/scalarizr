@@ -7,7 +7,7 @@ Created on Mar 3, 2010
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Queues, Messages
-from scalarizr.util import CryptoTool, configtool
+from scalarizr.util import cryptotool, configtool
 import logging
 import os
 
@@ -110,11 +110,18 @@ class LifeCircleHandler(Handler):
 			# Regenerage key
 			config = bus.config
 			key_path = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
-			key = CryptoTool().keygen()
+			key = cryptotool.keygen()
 			configtool.write_key(key_path, key, key_title="Scalarizr crypto key")
+			
 			# Update key in QueryEnv
 			queryenv = bus.queryenv_service
-			queryenv.set_key(key)
+			queryenv.key = key
+			
+			# Update key in Messaging
+			# FIXME: disclosure of the interface implementation
+			msg_service = bus.messaging_service
+			msg_service.get_consumer().crypto_key = key
+			msg_service.get_producer().crypto_key = key
 
 			# Send HostInit			
 			msg = self._msg_service.new_message(Messages.HOST_INIT)

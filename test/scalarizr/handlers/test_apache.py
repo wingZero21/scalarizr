@@ -12,9 +12,8 @@ class Test(unittest.TestCase):
 
 
     def test_update_vhost(self):
-        from scalarizr.core import Bus, BusEntries
-        bus = Bus()
-        config = bus[BusEntries.CONFIG]
+        from scalarizr.bus import bus
+        config = bus.config
         #config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../../etc/include/handler.apache.ini" ))
         config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../../etc/include/behaviour.app.ini"))
         class _Bunch(dict):
@@ -41,8 +40,8 @@ ErrorLog      /var/log/apache3/test-example.scalr.net-error.log3
             def get_https_certificate(self):
             	return ("MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN","MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN")
             
-        bus[BusEntries.QUERYENV_SERVICE] = _QueryEnv()
-        from scalarizr.core.handlers import apache  
+        bus.queryenv_service = _QueryEnv()
+        from scalarizr.handlers import apache  
         a = apache.ApacheHandler()
         a.on_VhostReconfigure("")      
 

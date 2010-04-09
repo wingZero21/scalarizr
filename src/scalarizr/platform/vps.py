@@ -19,5 +19,3 @@ class VpsPlatform(Platform):
 	def get_public_ip(self):
 		return socket.gethostbyname(socket.gethostname())
 	
-	def get_metadata(self):
-		return {}

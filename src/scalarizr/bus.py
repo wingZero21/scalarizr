@@ -5,6 +5,8 @@ Created on Apr 6, 2010
 '''
 
 from scalarizr.util import Observable
+from optparse import OptionParser
+
 class Bus(Observable):
 	base_path = None
 	"""
@@ -18,7 +20,12 @@ class Bus(Observable):
 	
 	config = None
 	"""
-	@ivar ConfigParser.ConfigParser: Scalarizr configuration 
+	@ivar ConfigParser.ConfigParser: Configuration (config.ini and includes) 
+	"""
+	
+	optparser = OptionParser()
+	"""
+	@ivar optparse.OptionParser: Command line options
 	"""
 	
 	db = None

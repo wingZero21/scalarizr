@@ -9,7 +9,7 @@ fi
 testdir=`dirname "$runner"`
 basedir=`dirname "$testdir"`
 
-pypath=$basedir/src
+pypath=$basedir/src:$testdir
 
 export PYTHONPATH=$pypath
 

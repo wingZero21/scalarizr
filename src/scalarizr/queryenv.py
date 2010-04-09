@@ -21,23 +21,18 @@ class QueryEnvError(Exception):
 
 class QueryEnvService(object):
 	_logger = None
-	_service_url = None
-	_api_version = None
-	_key = None
-	_server_id = None
 	
-	def __init__(self, service_url, server_id=None, key=None, api_version="2009-03-05"):
+	url = None
+	api_version = None
+	key = None
+	server_id = None
+	
+	def __init__(self, url, server_id=None, key=None, api_version="2009-03-05"):
 		self._logger = logging.getLogger(__name__)
-		self._service_url = service_url
-		self._key = key
-		self._server_id = server_id
-		self._api_version = api_version
-	
-	def set_server_id(self, server_id):
-		self._server_id = server_id
-	
-	def set_key(self, key):
-		self._key = key
+		self.url = url
+		self.server_id = server_id		
+		self.key = key
+		self.api_version = api_version
 	
 	def list_roles (self, role_name=None, behaviour=None):
 		"""
@@ -129,25 +124,29 @@ class QueryEnvService(object):
 		# Perform HTTP request
 		request_body = {}
 		request_body["operation"] = command
-		request_body["version"] = self._api_version
+		request_body["version"] = self.api_version
 		if {} != params :
 			for key, value in params.items():
 				request_body[key] = value
 				
-		url = self._service_url
 		timestamp = self._get_http_timestamp()
 		data = self._get_canonical_string(request_body) 
 		data += timestamp
-		signature = self._sign(data, self._key)
+		
+		signature = self._sign(data, self.key)
 		post_data = urlencode(request_body)
-		headers = {"Date": timestamp, "X-Signature": signature, "X-Server-Id": self._server_id}
+		headers = {
+			"Date": timestamp, 
+			"X-Signature": signature, 
+			"X-Server-Id": self.server_id
+		}
 		response = None
 		try:
-			req = Request(url, post_data, headers)
+			req = Request(self.url, post_data, headers)
 			response = urlopen(req)
 		except URLError, e:
 			if isinstance(e, HTTPError):
-				resp_body = e.read() if not e.fp is None else ""
+				resp_body = e.read() if e.fp is not None else ""
 				if e.code == 401:
 					raise QueryEnvError("Cannot authenticate on QueryEnv server. %s" % (resp_body))
 				elif e.code == 400:

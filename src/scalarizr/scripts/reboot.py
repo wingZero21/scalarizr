@@ -12,7 +12,7 @@ log.write("argv: " + str(sys.argv))
 
 
 from scalarizr.messaging import Messages, Queues
-from scalarizr.bus import Bus
+from scalarizr.bus import bus
 from scalarizr import init_script
 import logging
 try:
@@ -21,7 +21,6 @@ except ImportError:
 	import timemodule as time
 
 logger = logging.getLogger("scalarizr.scripts.reboot")
-bus = Bus()	
 
 
 logger.info("Starting reboot script...")

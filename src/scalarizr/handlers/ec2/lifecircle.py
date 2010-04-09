@@ -3,11 +3,12 @@ Created on Mar 2, 2010
 
 @author: marat
 '''
-
-from scalarizr.handlers import Handler
 from scalarizr.bus import bus
-import logging
+from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
+from scalarizr.util import configtool
+import scalarizr.platform.ec2 as ec2_platform
+import logging
 
 def get_handlers ():
 	return [AwsLifeCircleHandler()]
@@ -53,15 +54,31 @@ class AwsLifeCircleHandler(Handler):
 	
 	def on_HostInitResponse(self, message):
 		"""
-		@todo: take all data from message
+		TODO: Send this to Igor
+		message properties:
+			ec2_account_id, ec2_key_id, ec2_key, ec2_cert, ec2_pk 
 		"""
-		self._platform.set_config(dict(
-			account_id="",
-			key_id="",
-			key="",
-			cert="",
-			pk=""
-		))
+		
+		# Update ec2 platform configurations
+		sect_name = configtool.get_platform_section_name(self._platform.name)
+		private_filename = configtool.get_platform_filename(
+					self._platform.name, ret=configtool.RET_PRIVATE)
+			
+		# Private	
+		configtool.update(private_filename, {
+			sect_name : {
+				ec2_platform.OPT_ACCOUNT_ID : message.ec2_account_id,
+				ec2_platform.OPT_KEY_ID : message.ec2_key_id,
+				ec2_platform.OPT_KEY : message.ec2_key
+			}
+		})
+		
+		#Public
+		config = bus.config
+		configtool.write_key(config.get(sect_name, ec2_platform.OPT_CERT_PATH), 
+				message.ec2_cert, key_title="EC2 user certificate")
+		configtool.write_key(config.get(sect_name, ec2_platform.OPT_PK_PATH), 
+				message.ec2_pk, key_title="EC2 user private key")
 		
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):

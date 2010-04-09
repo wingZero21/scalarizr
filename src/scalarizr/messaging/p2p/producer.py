@@ -6,7 +6,7 @@ Created on Dec 5, 2009
 
 from scalarizr.messaging import MessageProducer, MessagingError
 from scalarizr.messaging.p2p import P2pMessageStore, P2pOptions, _P2pBase
-from scalarizr.util import CryptoTool
+from scalarizr.util import cryptotool
 from urllib import splitnport
 from urllib2 import urlopen, Request, URLError, HTTPError
 import logging
@@ -42,11 +42,10 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			# Prepare POST body
 			xml = message.toxml()
 			#xml = xml.ljust(len(xml) + 8 - len(xml) % 8, " ")
-			crypto = CryptoTool()
-			data = crypto.encrypt(xml, self._read_key())
+			data = cryptotool.encrypt(xml, self.crypto_key)
 			
 			# Send request
-			req = Request(self.endpoint + "/" + queue, data, {"X-Server-Id": self._server_id})
+			req = Request(self.endpoint + "/" + queue, data, {"X-Server-Id": self.server_id})
 			urlopen(req)
 			
 			self._store.mark_as_delivered(message.id)

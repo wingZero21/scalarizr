@@ -1,10 +1,27 @@
 from scalarizr.platform import Platform, PlatformError
+from scalarizr.bus import bus
 from boto import connect_ec2, connect_s3
 from boto.ec2.regioninfo import RegionInfo
 import logging
 import urllib2
 import re
+from scalarizr.util import configtool
 
+"""
+Platform configuration options
+"""
+OPT_ACCOUNT_ID = "account_id"
+OPT_KEY = "key"
+OPT_KEY_ID = "key_id"
+OPT_EC2_CERT_PATH = "ec2_cert_path"
+OPT_CERT_PATH = "cert_path"
+OPT_PK_PATH = "pk_path"
+
+
+"""
+User data options 
+"""
+UD_OPT_S3_BUCKET_NAME = "s3bucket"
 
 
 def get_platform():
@@ -18,8 +35,6 @@ class AwsPlatform(Platform):
 	_metadata = None
 	_logger = None
 	
-	_account_id = None
-	_key = _key_id = None
 	_pk = _cert = _ec2_cert = None
 	
 	_ec2_conn = None
@@ -40,23 +55,27 @@ class AwsPlatform(Platform):
 		return self._properties[name]
 	
 	def _fetch_ec2_meta(self, key):
+		url = self._meta_url + key
 		try:
-			r = urllib2.urlopen(self._meta_url + key)
+			r = urllib2.urlopen(url)
 			return r.read().strip()
 		except IOError, e:
 			if isinstance(e, urllib2.HTTPError):
 				if e.code == 404:
 					return ""
-			raise PlatformError("Cannot fetch ec2 metadata key '%s'. Error: %s" % (key, e))
+			raise PlatformError("Cannot fetch ec2 metadata url '%s'. Error: %s" % (url, e))
 		
-	def get_metadata(self):
+	def get_user_data(self, key=None):
 		if self._metadata is None:
 			rawmeta = self._fetch_ec2_meta("latest/user-data")
 			self._metadata = {}
 			for k, v in re.findall("([^=]+)=([^;]*);?", rawmeta):
 				self._metadata[k] = v
 			
-		return self._metadata 
+		if key:
+			return self._metadata[key] if key in self._metadata else None
+		else:
+			return self._metadata 
 
 	def get_instance_id(self):
 		return self._get_property("latest/meta-data/instance-id")
@@ -82,44 +101,32 @@ class AwsPlatform(Platform):
 		for key in keys:
 			ret[key] = self._get_property("latest/meta-data/block-device-mapping/" + key)
 		return ret
-	
-	
-	def _set_config_options(self, config, section, options):
-		# FIXME: maybe better remove _set_config_options ?
-		for k, v in options.items():
-			if k == "account_id":
-				write_key_file("aws_account_id", v)
-			if k == "key_id":
-				write_key_file("aws_key_id", v)
-			elif k == "key":
-				write_key_file("aws_key", v)
-			elif k == "cert":
-				write_key_file("ec2_cert.pem", v)
-			elif k == "pk":
-				write_key_file("ec2_pk.pem", v)
-			else:
-				config.set(section, k, v)
 			
 	def get_account_id(self):
-		if not self._account_id:
-			self._account_id = read_key_file("aws_account_id", title="AWS account id")
-		return self._account_id
+		config = bus.config
+		return config.get(configtool.get_platform_section_name(self.name), OPT_ACCOUNT_ID)
 			
 	def get_access_keys(self):
-		if not self._key:
-			self._key = read_key_file("aws_key", title="AWS access secret key")
-			self._key_id = read_key_file("aws_key_id", title="AWS access key_id")
-		return (self._key_id, self._key)
+		config = bus.config
+		sect_name = configtool.get_platform_section_name(self.name)
+		return config.get(config.get(sect_name, OPT_KEY_ID), config.get(sect_name, OPT_KEY))
 			
 	def get_cert_pk(self):
 		if not self._cert:
-			self._cert = read_key_file("ec2_cert.pem", title="EC2 user certificate")
-			self._pk = read_key_file("ec2_pk.pem", title="EC2 user private key")
+			config = bus.config
+			sect_name = configtool.get_platform_section_name(self.name)
+			self._cert = configtool.read_key(config.get(sect_name, OPT_CERT_PATH), 
+					key_title="EC2 user certificate")
+			self._pk = configtool.read_key(config.get(sect_name, OPT_PK_PATH), 
+					key_title="EC2 user private key")
 		return (self._cert, self._pk)
 	
 	def get_ec2_cert(self):
 		if not self._ec2_cert:
-			self._ec2_cert = read_key_file("ec2_cert.pem", title="EC2 certificate", public=True)
+			config = bus.config
+			sect_name = configtool.get_platform_section_name(self.name)
+			self._ec2_cert = configtool.read_key(config.get(sect_name, OPT_EC2_CERT_PATH), 
+					key_title="EC2 certificate")
 		return self._ec2_cert
 	
 	def get_ec2_conn(self):
@@ -134,12 +141,3 @@ class AwsPlatform(Platform):
 			key_id, key = self.get_access_keys()
 			self._s3_conn = connect_s3(key_id, key)
 		return self._s3_conn
-		
-
-	
-	
-
-	
-
-
-	

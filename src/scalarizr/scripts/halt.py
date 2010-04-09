@@ -7,7 +7,7 @@ Created on Mar 3, 2010
 
 
 from scalarizr.messaging import Messages, Queues
-from scalarizr.bus import Bus
+from scalarizr.bus import bus
 from scalarizr import init_script
 import logging
 import sys
@@ -17,8 +17,6 @@ except ImportError:
 	import timemodule as time
 
 logger = logging.getLogger("scalarizr.scripts.halt")
-bus = Bus()	
-
 
 logger.info("Starting halt script...")
 

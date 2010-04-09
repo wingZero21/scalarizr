@@ -43,26 +43,23 @@ def new_service(config):
 	return P2pMessageService(config)
 	
 class _P2pBase(object):
-	_server_id = None
-	_crypto_key_path = None
+	server_id = None
+	crypto_key = None
 	
 	def __init__(self, config):
 		for pair in config:
 			key = pair[0]
 			if key == P2pOptions.SERVER_ID:
-				self._server_id = pair[1]
+				self.server_id = pair[1]
 			elif key == P2pOptions.CRYPTO_KEY_PATH:
-				self._crypto_key = pair[1]
+				self.crypto_key = pair[1]
 
 		config = bus.config
-		if self._server_id is None:
-			self._server_id = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
-		if self._crypto_key_path is None:
-			self._crypto_key_path = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
-
-		
-	def _read_key(self):
-		return configtool.read_key(self._crypto_key_path, "Messaging crypto key")
+		if self.server_id is None:
+			self.server_id = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
+		if self.crypto_key is None:
+			self.crypto_key = configtool.read_key(
+					config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH))
 	
 class _P2pMessageStore:
 	_logger = None

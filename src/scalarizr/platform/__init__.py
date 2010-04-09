@@ -10,6 +10,12 @@ import re
 class PlatformError(BaseException):
 	pass
 
+class UserDataOptions:
+	SERVER_ID = "serverid"	
+	CRYPTO_KEY = "szr_key"
+	QUERYENV_URL = "queryenv_url"
+	MESSAGE_SERVER_URL = "p2p_producer_endpoint"	
+
 class PlatformFactory(object):
 	_platforms = {}
 	
@@ -36,11 +42,12 @@ class Platform():
 		"""
 		pass
 	
-	def get_metadata(self):
+	def get_user_data(self, key=None):
 		"""
-		@return dict
+		@return dict|any
 		"""
-		pass
+		return {} if key else None
+
 	
 	def get_architecture(self):
 		"""
@@ -55,23 +62,6 @@ class Platform():
 			else:
 				self._arch = Architectures.UNKNOWN
 		return self._arch
-
-	def set_config_options(self, options):
-		"""
-		Inject into scalarizr configuration platform config
-		"""
-		config = self._bus.config
-		section = "platform_" + self.name
-		if not config.has_section(section):
-			config.add_section(section)
-		self._set_config_options(config, section, options)
-		save_config()
-		
-	def get_config_option(self, option):
-		return self._bus.config.get("platform_" + self.name, option)
-		
-	def _set_config_options(self, config, section, options):
-		pass
 
 
 class Architectures:

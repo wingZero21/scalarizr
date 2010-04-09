@@ -2,7 +2,7 @@
 @author: Dmytro Korsakov
 '''
 import unittest
-from scalarizr.core import behaviour
+from scalarizr import behaviour
 
 class TestBehaviour(unittest.TestCase):
 

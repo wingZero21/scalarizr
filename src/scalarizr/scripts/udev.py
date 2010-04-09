@@ -8,12 +8,11 @@ Created on Mar 1, 2010
 import os
 
 from scalarizr.messaging import Messages, Queues
-from scalarizr.bus import Bus 
+from scalarizr.bus import bus 
 from scalarizr import init_script
 import logging
 
 logger = logging.getLogger("scalarizr.scripts.udev")
-bus = Bus()
 
 logger.info("Starting udev script...")
 
