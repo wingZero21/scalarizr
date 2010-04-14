@@ -2,7 +2,11 @@
 #from scalarizr.bus import Bus
 import os
 import logging
+import threading
+import weakref
+import time
 import sys
+
 
 class UtilError(BaseException):
 	pass
@@ -65,6 +69,25 @@ class Observable(object):
 	def resume_events(self):
 		self._events_suspended = False
 
+	
+class LocalObject:
+	
+	def __init__(self, creator):
+		self._creator = creator		
+		self._object = threading.local()
+	
+	def get(self):
+		try:
+			o = self._object.current()
+			if o:
+				return o
+		except AttributeError:
+			pass
+		
+		o = self._creator()
+		self._object.current = weakref.ref(o)
+		return o
+			
 	
 def system(args, shell=True):
 	import subprocess
@@ -138,3 +161,6 @@ def init_tests():
 			format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", 
 			stream=sys.stdout, 
 			level=logging.DEBUG)
+	
+	from scalarizr import _init
+	_init()

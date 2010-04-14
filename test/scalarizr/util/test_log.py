@@ -4,8 +4,9 @@ Created on 01.02.2010
 @author: shaitanich
 '''
 import unittest
-from scalarizr.core import Bus, BusEntries
-from scalarizr.util import log
+from scalarizr.bus import bus
+#from scalarizr.core import Bus, BusEntries
+from scalarizr.util import log, init_tests
 import logging
 import logging.handlers
 import time
@@ -42,9 +43,9 @@ class Test(unittest.TestCase):
     _msg_service = None
 
     def setUp(self):
-        bus = Bus()
-        bus[BusEntries.MESSAGE_SERVICE] = MessageService()
-        self._msg_service = Bus()[BusEntries.MESSAGE_SERVICE]
+        bus.messaging_service = MessageService()
+        self._msg_service = bus.messaging_service
+        
         testHandler = log.MessagingHandler(2, '2')
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.DEBUG)
@@ -69,5 +70,5 @@ class Test(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.testName']
-    unittest.main()
+	init_tests()
+	unittest.main()
