@@ -55,9 +55,14 @@ class Test(unittest.TestCase):
         self.logger.info("ALLERT-1")
         self.logger.debug("ALLERT-2")
         self.logger.error("ALLERT-3")
+        try:
+        	open("/non/existed/path", "r")
+        except IOError, e:
+            self.logger.exception(e)
+        
         self.assertEqual(self._msg_service.message.id,2)
         time.sleep(3)
-        self.assertEqual(self._msg_service.message.id,1)
+        self.assertEqual(self._msg_service.message.id,2)
         self.logger.critical("ALLERT-4")
 
 

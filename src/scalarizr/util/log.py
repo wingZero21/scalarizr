@@ -9,6 +9,7 @@ import atexit
 import logging
 import sqlite3
 import threading
+import traceback
 from scalarizr.bus import bus
 
 try:
@@ -56,8 +57,12 @@ class MessagingHandler(logging.Handler):
 		
 		for row in cur.fetchall():
 			args = pickle.loads(str(row['args']))
-			exc_info = pickle.loads(str(row['exc_info']))
-			entries.append((row['name'],row['level'],row['pathname'],row['lineno'],row['msg'],args,exc_info))
+			if row['exc_info']:
+				exc_info = pickle.loads(str(row['exc_info']))
+			else:
+				exc_info = None 
+			entries.append((row['name'], row['level'], row['pathname'], row['lineno'],
+					row['msg'] % args if args else row['msg'], exc_info))
 			ids.append(str(row['id']))
 		cur.close()
 			
@@ -72,8 +77,15 @@ class MessagingHandler(logging.Handler):
 
 	def emit(self, record):
 		args = pickle.dumps(record.args) 
-		exc_info = pickle.dumps(record.exc_info)
-		data = (None, record.name, record.levelname, record.pathname, record.lineno, record.msg, args, exc_info)
+		
+		if not record.exc_info:
+			exc_info = None
+		else:
+			exc_info =  pickle.dumps(traceback.print_tb(record.exc_info[2]))
+		
+		msg = record.msg.__str__()
+
+		data = (None, record.name, record.levelname, record.pathname, record.lineno, msg, args, exc_info)
 		self.conn.execute('INSERT INTO log VALUES (?,?,?,?,?,?,?,?)', data)
 		self.conn.commit()
 		cur = self.conn.cursor()
