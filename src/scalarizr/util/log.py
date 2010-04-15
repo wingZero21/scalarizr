@@ -10,6 +10,7 @@ import logging
 import sqlite3
 import threading
 import traceback
+import cStringIO
 from scalarizr.bus import bus
 
 try:
@@ -55,21 +56,13 @@ class MessagingHandler(logging.Handler):
 		entries = []
 		entry = {}
 		
-		for row in cur.fetchall():
-			args = pickle.loads(str(row['args']))
-			
-			if row['exc_info']:
-				exc_info = pickle.loads(str(row['exc_info']))
-			else:
-				exc_info = None 
-			
+		for row in cur.fetchall():					
 			entry['name'] = row['name']
 			entry['level'] = row['level']
 			entry['pathname'] = row['pathname']
 			entry['lineno'] = row['lineno']
-			entry['msg'] = row['msg'] % args if args else row['msg']
-			entry['exc_info'] = exc_info
-			
+			entry['msg'] = row['msg']
+			entry['stack_trace'] = row['stack_trace']	
 			entries.append(entry)
 			ids.append(str(row['id']))
 		cur.close()
@@ -84,17 +77,17 @@ class MessagingHandler(logging.Handler):
 		self.time_point = time.time()
 
 	def emit(self, record):
-		args = pickle.dumps(record.args) 
+		msg = record.msg.__str__() % record.args if record.args else record.msg.__str__()
+		stack_trace = None
 		
 		if record.exc_info:
-			exc_info =  pickle.dumps(traceback.print_tb(record.exc_info[2]))
-		else:
-			exc_info = None
-		
-		msg = record.msg.__str__()
+			output = cStringIO.StringIO()
+			traceback.print_tb(record.exc_info[2], file=output)
+			stack_trace =  output.getvalue()
+			output.close()			
 
-		data = (None, record.name, record.levelname, record.pathname, record.lineno, msg, args, exc_info)
-		self.conn.execute('INSERT INTO log VALUES (?,?,?,?,?,?,?,?)', data)
+		data = (None, record.name, record.levelname, record.pathname, record.lineno, msg, stack_trace)
+		self.conn.execute('INSERT INTO log VALUES (?,?,?,?,?,?,?)', data)
 		self.conn.commit()
 		cur = self.conn.cursor()
 		cur.execute("SELECT COUNT(*) FROM log")
