@@ -27,7 +27,6 @@ class MessagingHandler(logging.Handler):
 		pool = bus.db
 		self.conn = pool.get().get_connection()
 		
-		#self.conn.row_factory = sqlite3.Row	
 		self.time_point = time.time()
 		logging.Handler.__init__(self)
 		self._msg_service = bus.messaging_service
@@ -54,15 +53,24 @@ class MessagingHandler(logging.Handler):
 		cur.execute("SELECT * FROM log")
 		ids = []
 		entries = []
+		entry = {}
 		
 		for row in cur.fetchall():
 			args = pickle.loads(str(row['args']))
+			
 			if row['exc_info']:
 				exc_info = pickle.loads(str(row['exc_info']))
 			else:
 				exc_info = None 
-			entries.append((row['name'], row['level'], row['pathname'], row['lineno'],
-					row['msg'] % args if args else row['msg'], exc_info))
+			
+			entry['name'] = row['name']
+			entry['level'] = row['level']
+			entry['pathname'] = row['pathname']
+			entry['lineno'] = row['lineno']
+			entry['msg'] = row['msg'] % args if args else row['msg']
+			entry['exc_info'] = exc_info
+			
+			entries.append(entry)
 			ids.append(str(row['id']))
 		cur.close()
 			
@@ -78,10 +86,10 @@ class MessagingHandler(logging.Handler):
 	def emit(self, record):
 		args = pickle.dumps(record.args) 
 		
-		if not record.exc_info:
-			exc_info = None
-		else:
+		if record.exc_info:
 			exc_info =  pickle.dumps(traceback.print_tb(record.exc_info[2]))
+		else:
+			exc_info = None
 		
 		msg = record.msg.__str__()
 
