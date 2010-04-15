@@ -59,11 +59,18 @@ class IpListBuilder(Handler):
 		except OSError, x:
 			self._logger.error(x)
 			
-	def _host_is_replication_master(self, ip):
-		# FIXME: use queryenv !
-		return True
-	
-	
+	def _host_is_replication_master(self, ip, role_name):
+		try:
+			received_roles = self._queryenv.list_roles(role_name=role_name)
+		except:
+			self._logger.error('Can`t retrieve list of roles from Scalr.')
+			raise
+				
+		for role in received_roles:
+			for host in role.hosts:
+				if ip == host.internal_ip:
+					return host.replication_master
+		
 	def on_HostUp(self, message):
 		self._logger.debug("Entering host up...") 
 		
@@ -80,7 +87,7 @@ class IpListBuilder(Handler):
 		self._create_file(full_path + internal_ip)
 		
 		if role_alias == "mysql": 
-			suffix = "master" if self._host_is_replication_master(internal_ip) else "slave"
+			suffix = "master" if self._host_is_replication_master(internal_ip, role_name) else "slave"
 			
 			# Create mysql-(master|slave)/xx.xx.xx.xx
 			mysql_path = self._base_path + "mysql-" + suffix + os.sep
@@ -109,7 +116,7 @@ class IpListBuilder(Handler):
 		self._remove_dir(full_path)
 		
 		if role_alias == "mysql":	
-			suffix = "master" if self._host_is_replication_master(internal_ip) else "slave"
+			suffix = "master" if self._host_is_replication_master(internal_ip, role_name) else "slave"
 
 			# Delete mysql-(master|slave)/xx.xx.xx.xx
 			mysql_path = self._base_path + "mysql-" + suffix + os.sep
