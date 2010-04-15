@@ -59,15 +59,16 @@ class Test(unittest.TestCase):
 	def test_send_message(self):
 		self.logger.info("ALLERT-1")
 		self.logger.debug("ALLERT-2")
-		self.logger.error("ALLERT-3")
+		#self.logger.error("ALLERT-3")
 		try:
 			self.open_file("/non/existed/path")
+			pass
 		except IOError, e:
 			self.logger.exception(e)
 
 		self.assertEqual(self._msg_service.message.id,2)
 		time.sleep(3)
-		self.assertEqual(self._msg_service.message.id,2)
+		self.assertEqual(self._msg_service.message.id,1)
 		self.logger.critical("ALLERT-4")
 
 	def tearDown(self):
