@@ -4,9 +4,6 @@ Created on Dec 25, 2009
 @author: marat
 @author: Dmytro Korsakov
 '''
-
-#FIXME: keys are located in $etc/private.d/keys $etc/public.d/keys
-
 from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler
@@ -106,8 +103,9 @@ class ApacheHandler(Handler):
 						raise
 					else: 
 						self._logger.info("Saving SSL certificates for %s",vhost.hostname)
+						#TODO: find why https.key & https.crt files are refilled with new data each time
 						try:
-							cert_path = 'etc/.keys'
+							cert_path = 'etc/private.d/keys'
 							
 							file = open(cert_path + '/' + 'https.key', 'w')
 							file.write(https_certificate[1])

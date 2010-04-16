@@ -31,13 +31,8 @@ class HooksHandler(Handler):
 	def create_hook(self, event):
 		def hook(*args, **kwargs):
 			self._logger.info("Hook on '"+event+"'" + str(args) + " " + str(kwargs))
+
 			config = bus.config
-			
-			#for key in kwargs:
-			#	os.environ[key] = kwargs[key]
-			#os.environ["server_id"] = config.get("default", "server_id")
-			#os.environ["behaviour"] = config.get("default", "behaviour")
-			
 			environ = kwargs
 			environ["server_id"] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 			environ["behaviour"] = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)

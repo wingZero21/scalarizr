@@ -74,7 +74,6 @@ ${upstream_hosts}
 			include_tpl += "include /etc/nginx/https.include;"
 			
 		#Determine, whether configuration was changed or not
-		# FIXME:  include_tpl == open(... overrides privious value in  include_tpl
 		if os.path.isfile(nginx_incl) and include_tpl == open(nginx_incl,'r').read():
 			self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:

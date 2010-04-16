@@ -14,7 +14,6 @@ class Test(unittest.TestCase):
     def test_update_vhost(self):
         from scalarizr.bus import bus
         config = bus.config
-        #config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../../etc/include/handler.apache.ini" ))
         config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../../etc/include/behaviour.app.ini"))
         class _Bunch(dict):
             __getattr__, __setattr__ = dict.get, dict.__setitem__
