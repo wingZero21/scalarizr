@@ -7,72 +7,120 @@ import unittest
 from scalarizr.bus import bus
 from scalarizr.util import log, init_tests
 import logging
-import logging.handlers
-import time
+from scalarizr.messaging import MessageService, Message
+try:
+	import time
+except ImportError:
+	import timemodule as time
 
-class Message(object):
-	id = None    
-	name = None
-	meta = {}    
-	body = {}
 	
-class MessageProducer(object):
+class _MessageProducer(object):
 	
-	message = None
+	last_message = None
 	
 	def send(self, message):
-		self.message = message
-		self.message.id = len(self.message.body["entries"])
-		print self.message.id, "sent: ", self.message.body["entries"] 
+		self.last_message = message
 		
-class MessageService(object):
+class _MessageService(MessageService):
 	
-	message = None
+	producer = None
+
+	def __init__(self):
+		self.producer = _MessageProducer()
 	
-	def new_message(self, name=None):
-		self.message = Message()
-		self.message.name = name
-		return self.message
+	def new_message(self, name=None, meta={}, body={}):
+		return Message(name, meta, body)
 	
 	def get_producer(self):
-		return MessageProducer()
+		return self.producer
+	
 	
 class Test(unittest.TestCase):
 	
-	_msg_service = None
+	_msg_producer = None
+	_handler = None
+	_logger = None
 	
 	def setUp(self):
-		bus.messaging_service = MessageService()
-		self._msg_service = bus.messaging_service
+		msg_service = _MessageService()
+		bus.messaging_service = msg_service
+		self._msg_producer = msg_service.get_producer()
+		self._logger = logging.getLogger()		
 		
-		testHandler = log.MessagingHandler(2, '2')
-		self.logger = logging.getLogger()
-		self.logger.setLevel(logging.DEBUG)
-		self.logger.addHandler(testHandler)
-		
-	def open_file0(self, path):
-		return open(path, "r")
-	
-	def open_file(self, path):
-		return self.open_file0(path)
-	
-	def test_send_message(self):
-		self.logger.info("ALLERT-1")
-		self.logger.debug("ALLERT-2")
-		#self.logger.error("ALLERT-3")
-		try:
-			self.open_file("/non/existed/path")
-			pass
-		except IOError, e:
-			self.logger.exception(e)
-
-		self.assertEqual(self._msg_service.message.id,2)
-		time.sleep(3)
-		self.assertEqual(self._msg_service.message.id,1)
-		self.logger.critical("ALLERT-4")
-
 	def tearDown(self):
-		pass
+		if self._handler:
+			self._logger.removeHandler(self._handler)
+			self._handler.__del__()
+			self._handler = None
+	
+	def test_log_exception(self):
+		self._handler = log.MessagingHandler()
+		self._logger.addHandler(self._handler)
+		
+		# Log exception
+		try:
+			open("/non/existed/path", "r")
+		except IOError, e:
+			self._logger.exception(e)
+			
+		message = self._wait_sender()
+			
+		# Assertions
+		self.assertTrue(message, "Message was sent")
+		entry = message.entries[0]
+		self.assertTrue(entry['stack_trace'] is not None
+				and entry['stack_trace'].find('open("/non/existed/path", "r")') != -1,
+				"Entry contains stack trace")
+		self.assertEqual(entry['level'], 'ERROR')
+
+		
+	def test_send_interval(self):
+		# To many entries to store but send each second
+		self._handler = log.MessagingHandler(num_entries=1000, send_interval='1s')
+		self._logger.addHandler(self._handler)
+		
+		num_it = 3
+		num_msg = 5
+		
+		# Do `num_it` iterations
+		for i in range(num_it):
+			start = time.time()
+			# Do logging
+			for msg in range(num_msg):
+				self._logger.info("test_send_interval, iteration %d, entry %d", i, msg)
+				
+			self._wait_sender()
+		
+			# Assertions
+			self.assertAlmostEqual(self._handler.send_interval, time.time() - start, 1)
+	
+	
+	def test_num_entries(self):
+		self._handler = log.MessagingHandler(num_entries=5, send_interval='1min')
+		self._logger.addHandler(self._handler)
+		
+		num_it = 3
+		num_msg = 5
+		
+		# Do `num_it` iterations
+		for i in range(num_it):
+			# Do logging
+			for msg in range(num_msg):
+				self._logger.info("test_num_entries, iteration %d, entry %d", i, msg)
+			
+			message = self._wait_sender()
+			
+			# Assertions
+			self.assertEqual(len(message.entries), num_msg)
+
+		
+	def _wait_sender(self):
+		while self._msg_producer.last_message is None:
+			time.sleep(0.05)
+		message = self._msg_producer.last_message
+		self._msg_producer.last_message = None
+		return message
+		
 
 if __name__ == "__main__":
 	init_tests()

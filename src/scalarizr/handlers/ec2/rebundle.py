@@ -162,8 +162,9 @@ Bundled: %(bundle_date)s
 		
 		
 		# Cleanup scalarizr private data
-		shutil.rmtree(os.path.join(image_mpoint, "opt/scalarizr/etc/.keys"))
-		shutil.rmtree(os.path.join(image_mpoint, "opt/scalarizr/etc/.storage"))
+		etc_path = bus.etc_path[1:]
+		shutil.rmtree(os.path.join(image_mpoint, etc_path + "/.keys"))
+		shutil.rmtree(os.path.join(image_mpoint, etc_path + "/.storage"))
 
 	
 	def _create_motd(self, image_mpoint, role_name=None):

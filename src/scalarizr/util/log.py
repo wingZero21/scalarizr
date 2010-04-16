@@ -3,58 +3,80 @@ Created on 22.01.2010
 
 @author: shaitanich
 '''
+import re
 import atexit
 import logging
-import sqlite3
 import threading
 import traceback
 import cStringIO
 from scalarizr.bus import bus
 
-try:
-	import time
-except ImportError:
-	import timemodule as time
-
-try:
-	import cPickle as pickle
-except:
-	import pickle
+INTERVAL_RE = re.compile('((?P<minutes>\d+)min\s?)?((?P<seconds>\d+)s)?')
 
 class MessagingHandler(logging.Handler):
-	def __init__(self, num_stored_messages = 1, send_interval = "1"):
-		pool = bus.db
-		self.conn = pool.get().get_connection()
+	
+	num_entries = None
+	send_interval = None
+	
+	_sender_thread = None
+	_send_event = None
+	_stop_event = None
+	
+	def __init__(self, num_entries = 1, send_interval = "1s"):
+		logging.Handler.__init__(self)		
 		
-		self.time_point = time.time()
-		logging.Handler.__init__(self)
+		pool = bus.db
+		self._conn = pool.get().get_connection()
 		self._msg_service = bus.messaging_service
-		self.num_stored_messages = num_stored_messages
-		
-		if send_interval.endswith('s'):
-			self.send_interval = int(send_interval[:-1])
-		elif  send_interval.endswith('min'):
-			self.send_interval = int(send_interval[:-3])*60
-		elif send_interval.isdigit():
-			self.send_interval = int(send_interval)
-		else:
-			self.send_interval = 1
-		
-		atexit.register(self.send_message)
-		t = threading.Thread(target=self.timer_thread) 
-		t.daemon = True
-		t.start()
 
-	def send_message(self):
+		self.num_entries = num_entries
+		
+		m = INTERVAL_RE.match(send_interval)
+		self.send_interval = (int(m.group('seconds') or 0) + 60*int(m.group('minutes') or 0)) or 1
+		
+		self._send_event = threading.Event()
+		self._stop_event = threading.Event()
+		atexit.register(self._send_message)
+		self._sender_thread = threading.Thread(target=self._sender)
+		self._sender_thread.daemon = True
+		
+	def __del__(self):
+		self._stop_event.set()
+
+	def emit(self, record):
+		if not self._sender_thread.isAlive():
+			self._sender_thread.start()
+		
+		msg = str(record.msg) % record.args if record.args else str(record.msg)
+		
+		stack_trace = None
+		if record.exc_info:
+			output = cStringIO.StringIO()
+			traceback.print_tb(record.exc_info[2], file=output)
+			stack_trace =  output.getvalue()
+			output.close()			
+
+		data = (None, record.name, record.levelname, record.pathname, record.lineno, msg, stack_trace)
+		self._conn.execute('INSERT INTO log VALUES (?,?,?,?,?,?,?)', data)
+		self._conn.commit()
+		
+		cur = self._conn.cursor()
+		cur.execute("SELECT COUNT(*) FROM log")
+		count = cur.fetchone()[0]
+		cur.close()
+		if count >= self.num_entries:
+			self._send_event.set()
+			
+	def _send_message(self):
 		pool = bus.db
-		connection = pool.get().get_connection()
-		cur = connection.cursor()
+		conn = pool.get().get_connection()
+		cur = conn.cursor()
 		cur.execute("SELECT * FROM log")
 		ids = []
 		entries = []
-		entry = {}
 		
-		for row in cur.fetchall():					
+		for row in cur.fetchall():
+			entry = {}
 			entry['name'] = row['name']
 			entry['level'] = row['level']
 			entry['pathname'] = row['pathname']
@@ -70,37 +92,16 @@ class MessagingHandler(logging.Handler):
 			producer = self._msg_service.get_producer()
 			message.body["entries"] = entries
 			producer.send(message)
-			connection.execute("DELETE FROM log WHERE id IN (%s)" % (",".join(ids)))
-			connection.commit()
-		self.time_point = time.time()
+			conn.execute("DELETE FROM log WHERE id IN (%s)" % (",".join(ids)))
+			conn.commit()
 
-	def emit(self, record):
-		msg = record.msg.__str__() % record.args if record.args else record.msg.__str__()
-		stack_trace = None
-		
-		if record.exc_info:
-			output = cStringIO.StringIO()
-			traceback.print_tb(record.exc_info[2], file=output)
-			stack_trace =  output.getvalue()
-			output.close()			
+	def _sender(self):
+		while not self._stop_event.isSet():
+			try:
+				self._send_event.wait(self.send_interval)
+				if not self._stop_event.isSet():
+					self._send_message()
+			finally:
+				self._send_event.clear()
 
-		data = (None, record.name, record.levelname, record.pathname, record.lineno, msg, stack_trace)
-		self.conn.execute('INSERT INTO log VALUES (?,?,?,?,?,?,?)', data)
-		self.conn.commit()
-		cur = self.conn.cursor()
-		cur.execute("SELECT COUNT(*) FROM log")
-		count = cur.fetchone()[0]
-		cur.close()
-		if count >= self.num_stored_messages:
-			self.send_message()
-		
-
-	def timer_thread(self):
-		while 1:
-			while 1:
-				time_delta = time.time() - self.time_point
-				if  (time_delta > 1) and (time_delta > self.send_interval):
-					break
-				time.sleep(1)
-			self.send_message()
 			
