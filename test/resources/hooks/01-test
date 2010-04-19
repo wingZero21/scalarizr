@@ -1,5 +1,4 @@
 #!/bin/sh
-echo "__SCRIPT EXECUTED__"
+echo "__SCRIPT 1 EXECUTED__supposed to be absolutely valid"
 pwd
-touch /usr/home/shaitanich/workspace/scalarizr-trunk/test/resources/hooks/test_hook_executed
-/usr/bin/php
+touch test/resources/hooks/test_1_done

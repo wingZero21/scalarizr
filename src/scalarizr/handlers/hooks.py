@@ -39,7 +39,6 @@ class HooksHandler(Handler):
 			
 			path = bus.base_path + "/hooks/"
 			reg = re.compile(r"^\d+\-"+event+"$")
-							
 			if os.path.isdir(path):
 				matches_list = list(fname for fname in os.listdir(path) if reg.search(fname))
 				if matches_list:

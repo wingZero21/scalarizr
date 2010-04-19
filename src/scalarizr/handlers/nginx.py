@@ -67,8 +67,8 @@ ${upstream_hosts}
 
 		#HTTPS Configuration		
 		# openssl req -new -x509 -days 9999 -nodes -out cert.pem -keyout cert.key
-		cert_path = configtool.get_key_filename("https_cert.pem", private=True)
-		pk_path = configtool.get_key_filename("https_pk.pem", private=True) 
+		cert_path = configtool.get_key_filename("https.crt", private=True)
+		pk_path = configtool.get_key_filename("https.key", private=True) 
 		if os.path.isfile("/etc/nginx/https.include") and \
 				os.path.isfile(cert_path) and os.path.isfile(pk_path):
 			include_tpl += "include /etc/nginx/https.include;"

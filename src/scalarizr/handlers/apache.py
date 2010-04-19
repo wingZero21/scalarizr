@@ -105,7 +105,7 @@ class ApacheHandler(Handler):
 						self._logger.info("Saving SSL certificates for %s",vhost.hostname)
 						#TODO: find why https.key & https.crt files are refilled with new data each time
 						try:
-							cert_path = 'etc/private.d/keys'
+							cert_path = bus.etc_path + '/private.d/keys'
 							
 							file = open(cert_path + '/' + 'https.key', 'w')
 							file.write(https_certificate[1])
