@@ -23,7 +23,7 @@ class IpListBuilder(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		
+		self._queryenv = bus.queryenv_service
 		config = bus.config
 		self._base_path = config.get(configtool.get_handler_section_name(self.name), "base_path")     	    
 		if self._base_path[-1] != os.sep:
@@ -59,9 +59,9 @@ class IpListBuilder(Handler):
 		except OSError, x:
 			self._logger.error(x)
 			
-	def _host_is_replication_master(self, ip, role_name):
+	def _host_is_replication_master(self, ip,role_name):
 		try:
-			received_roles = self._queryenv.list_roles(role_name=role_name)
+			received_roles = self._queryenv.list_roles(role_name)
 		except:
 			self._logger.error('Can`t retrieve list of roles from Scalr.')
 			raise
@@ -70,6 +70,9 @@ class IpListBuilder(Handler):
 			for host in role.hosts:
 				if ip == host.internal_ip:
 					return host.replication_master
+				
+		self._logger.warning("Cannot find ip '%s' in roles list", ip)
+		return False
 		
 	def on_HostUp(self, message):
 		self._logger.debug("Entering host up...") 
@@ -83,6 +86,7 @@ class IpListBuilder(Handler):
 		
 		# Create %role_name%/xx.xx.xx.xx
 		full_path = self._base_path + role_name + os.sep
+		print full_path
 		self._create_dir(full_path)		
 		self._create_file(full_path + internal_ip)
 		
@@ -98,8 +102,7 @@ class IpListBuilder(Handler):
 			full_path = self._base_path + role_alias + os.sep
 			self._create_dir(full_path)
 			self._create_file(full_path + internal_ip)
-								
-								
+			
 	def on_HostDown(self, message):
 		self._logger.debug("Entering host down...")
 		
