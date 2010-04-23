@@ -58,8 +58,8 @@ class BehaviourConfigurator:
 		if os.path.exists(self.include_ini_filename):
 			#needs try block
 			config.read(self.include_ini_filename)
-			if not config.has_section(self.platform_section):
-				config.add_section(self.platform_section)
+		if not config.has_section(self.platform_section):
+			config.add_section(self.platform_section)
 				
 		for key, value in self.options.items():
 			config.set(self.platform_section, key , value[1])
