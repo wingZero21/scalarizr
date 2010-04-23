@@ -1,5 +1,3 @@
-/etc/httpd/scalr-vhosts
-/etc/apache2/apache2.conf
 /etc/nginx/https.include
 /usr/sbin/nginx
 /etc/nginx/app-servers.include

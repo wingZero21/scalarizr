@@ -14,10 +14,10 @@ class TestBehaviour(unittest.TestCase):
 	
 	def setUp(self):
 		bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../resources/etc")
-		self.answers = os.path.dirname(__file__) + "/../resources/answers_behaviour.txt"
-		sys.stdin = file(self.answers)
 
 	def test_AppConfigurator(self):
+		self.answers = os.path.dirname(__file__) + "/../resources/answers_behaviour_app.txt"
+		sys.stdin = file(self.answers)
 		A = behaviour.AppConfigurator()
 		A.configure(_interactive=True, vhosts_path = "/etc/httpd/scalr-vhosts")
 		config = ConfigParser.ConfigParser()
@@ -28,6 +28,8 @@ class TestBehaviour(unittest.TestCase):
 		self.assertEquals(httpd_conf_path,'/etc/apache2/apache2.conf')
 		
 	def test_WwwConfigurator(self):
+		self.answers = os.path.dirname(__file__) + "/../resources/answers_behaviour_www.txt"
+		sys.stdin = file(self.answers)
 		W = behaviour.WwwConfigurator()
 		W.configure(_interactive=True)
 		config = ConfigParser.ConfigParser()
