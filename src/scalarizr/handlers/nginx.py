@@ -4,7 +4,6 @@ Created on Jan 6, 2010
 @author: marat
 @author: Dmytro Korsakov
 '''
-
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.behaviour import Behaviours
@@ -20,8 +19,6 @@ def get_handlers():
 	return [NginxHandler()]
 
 class NginxHandler(Handler):
-	_logger = None
-	_queryenv = None
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -42,15 +39,9 @@ class NginxHandler(Handler):
 			
 		tpl_filename = os.path.join(bus.etc_path, "public.d/handler.nginx/app-servers.tpl")
 		if not os.path.exists(tpl_filename):
-			self._logger.warning("nginx template '%s' doesn't exists. Create default template", tpl_filename)
+			self._logger.warning("nginx template '%s' doesn't exists. Creating default template", tpl_filename)
 			f = open(tpl_filename, "w+")
-			f.write("""
-upstream backend {
-    ip_hash;
-
-${upstream_hosts}
-}
-			""")
+			f.write("""\nupstream backend {\n\tip_hash;\n\n\t${upstream_hosts}\n}\n""")
 			f.close()
 		include_tpl = open(tpl_filename, 'r').read()
 
@@ -58,7 +49,7 @@ ${upstream_hosts}
 		upstream_hosts = ""
 		for app_serv in self._queryenv.list_roles(behaviour = Behaviours.APP):
 			for app_host in app_serv.hosts :
-				upstream_hosts += "\tserver %s:%d;\n" % (app_host.internal_ip, app_port)
+				upstream_hosts += "\tserver %s:%s;\n" % (app_host.internal_ip, app_port)
 
 		if not upstream_hosts:
 			upstream_hosts = "\tserver 127.0.0.1:80;\n"
@@ -77,7 +68,7 @@ ${upstream_hosts}
 		if os.path.isfile(nginx_incl) and include_tpl == open(nginx_incl,'r').read():
 			self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:
-			self._logger.info("nginx upstream configuration changed.")
+			self._logger.info("nginx upstream configuration was changed.")
 			if os.path.isfile(nginx_incl):
 				shutil.move(nginx_incl, nginx_incl+".save")
 			file = open(nginx_incl, "w")

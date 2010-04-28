@@ -1,5 +1,5 @@
 '''
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 import unittest
 

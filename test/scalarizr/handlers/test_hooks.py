@@ -1,7 +1,7 @@
 '''
 Created on 04.03.2010
 
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 import unittest
 from scalarizr.handlers import hooks

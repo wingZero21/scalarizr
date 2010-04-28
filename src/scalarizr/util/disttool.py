@@ -3,7 +3,6 @@
 '''
 import platform
 
-
 _uname = None
 _linux_dist = None
 

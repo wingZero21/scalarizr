@@ -1,7 +1,7 @@
 '''
 Created on 01.02.2010
 
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 import unittest
 from scalarizr.bus import bus

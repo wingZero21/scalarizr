@@ -1,7 +1,7 @@
 '''
 Created on 22.01.2010
 
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 import re
 import atexit
