@@ -14,7 +14,8 @@ cfg = dict(
 		"scalarizr.platform",
 		"scalarizr.scripts",
 		"scalarizr.util" 
-	]
+	],
+	scripts=['bin/scalarizr']
 )
 
 
