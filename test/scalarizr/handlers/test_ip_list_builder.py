@@ -70,10 +70,10 @@ class TestIpListBuilder(unittest.TestCase):
 		
 	def test_on_HostUpDown2(self):
 		self._on_HostUpDown(internal_ip = '127.0.0.2', prefix = "-slave")
-				
+
+init_tests()
+config = bus.config
+config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../etc/public.d/handler.ip_list_builder.ini"))
+bus.queryenv_service = _QueryEnv()				
 if __name__ == "__main__":
-	init_tests()
-	config = bus.config
-	config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../etc/public.d/handler.ip_list_builder.ini"))
-	bus.queryenv_service = _QueryEnv()
 	unittest.main()

@@ -112,6 +112,8 @@ def read_key(path, key_title=None, private=None):
 		if file:
 			file.close()
 
+def split_array(value, separator=",", allow_empty=False, ct=list):
+	return ct(v.strip() for v in value.split(separator) if allow_empty or (not allow_empty and v))
 
 def update(filename, sections):
 	class Comment:
@@ -153,30 +155,31 @@ def update(filename, sections):
 		
 	# Read configuration from file
 	config = Config()
-	cursect = None
-	sect_re = RawConfigParser.SECTCRE
-	opt_re = RawConfigParser.OPTCRE
-	fp = open(filename, "r")
-	while True:
-		line = fp.readline()
-		if not line:
-			break
-		mo = sect_re.match(line)
-		if mo:
-			cursect = Section(mo.group('header'))
-			config.items.append(cursect)
-		else:
-			mo = opt_re.match(line)
+	if os.path.exists(filename):
+		cursect = None
+		sect_re = RawConfigParser.SECTCRE
+		opt_re = RawConfigParser.OPTCRE
+		fp = open(filename, "r")
+		while True:
+			line = fp.readline()
+			if not line:
+				break
+			mo = sect_re.match(line)
 			if mo:
-				cursect.items.append(Option(mo.group("option"), mo.group("value")))
+				cursect = Section(mo.group('header').strip())
+				config.items.append(cursect)
 			else:
-				comment = Comment(line)
-				if cursect:
-					cursect.items.append(comment)
+				mo = opt_re.match(line)
+				if mo:
+					cursect.items.append(Option(mo.group("option").strip(), mo.group("value").strip()))
 				else:
-					config.items.append(comment)
-	fp.close()
-	fp = None
+					comment = Comment(line)
+					if cursect:
+						cursect.items.append(comment)
+					else:
+						config.items.append(comment)
+		fp.close()
+		fp = None
 	
 	
 	logger.debug("Update configuration...")

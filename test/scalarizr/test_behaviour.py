@@ -19,7 +19,7 @@ class TestBehaviour(unittest.TestCase):
 		self.answers = os.path.dirname(__file__) + "/../resources/answers_behaviour_app.txt"
 		sys.stdin = file(self.answers)
 		A = behaviour.AppConfigurator()
-		A.configure(_interactive=True, vhosts_path = "/etc/httpd/scalr-vhosts")
+		A.configure(True, vhosts_path = "/etc/httpd/scalr-vhosts")
 		config = ConfigParser.ConfigParser()
 		config.read(bus.etc_path+'/public.d/behaviour.app.ini')
 		vhosts_path = config.get('behaviour_app','vhosts_path')
@@ -31,7 +31,7 @@ class TestBehaviour(unittest.TestCase):
 		self.answers = os.path.dirname(__file__) + "/../resources/answers_behaviour_www.txt"
 		sys.stdin = file(self.answers)
 		W = behaviour.WwwConfigurator()
-		W.configure(_interactive=True)
+		W.configure(True)
 		config = ConfigParser.ConfigParser()
 		config.read(bus.etc_path+'/public.d/behaviour.www.ini')
 		app_include_path = config.get('behaviour_www','app_include_path')

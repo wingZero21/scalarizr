@@ -1,0 +1,14 @@
+# Scalrizr distutils distribution files
+#
+
+# additional files not known by setup.py
+include INSTALL.txt
+
+# configuration
+recursive-include etc *
+
+# omit revision control, python bytecode
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude */.svn/*
+

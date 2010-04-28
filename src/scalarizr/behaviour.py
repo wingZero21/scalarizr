@@ -20,8 +20,9 @@ def get_configurator(name):
 		return AppConfigurator()
 	elif name == Behaviours.WWW:
 		return WwwConfigurator()
-	else:
-		return BehaviourConfigurator()
+	elif name == Behaviours.MYSQL:
+		return MySqlConfigurator()
+	return None
 
 class BehaviourConfigurator:
 	cli_options = []
@@ -30,21 +31,27 @@ class BehaviourConfigurator:
 	{name: ("prompt", default_value, finder)}
 	"""
 	
-	platform_section = None
+	section_name = None
 	include_ini_filename = None	
 	
-	def configure(self, _interactive, **kwargs):
-		#fill data from arguments
-		for key, value in kwargs.items():
-			self.options[key][1] = value
+	def configure(self, interactive, **kwargs):
+		config = ConfigParser()
+		config.read(self.include_ini_filename)
+		sect = configtool.section_wrapper(config, self.section_name)
+		
+		#fill data from config and kwargs
+		for key in self.options:
+			self.options[key][1] = (kwargs[key] if key in kwargs else None) or sect.get(key) 
+			
 		#fill missing parts from specific functions
 		for key, value in self.options.items():
 			if not value[1]:
 				value[1] = value[2]()
+				
 		#interactive section allows change data in manual mode
-		if _interactive:	
+		if interactive:	
 			for key, value in self.options.items():
-				message = value[0] + ' [or press enter to keep %s]:' % (value[1])
+				message = '%s [%s]:' % (value[0], value[1]) if value[1] else '%s:' % (value[0])
 				manual_input = raw_input(message)
 				if manual_input:
 					self.options[key][1] = manual_input
@@ -52,26 +59,20 @@ class BehaviourConfigurator:
 			#needs to check if all data entries exist
 			for key, value in self.options.items():
 				if not value[1]:
-					raise MissingDataError("Not enough information." + value[0])
-		#write to specific ini-file		
-		config = ConfigParser()
-		if os.path.exists(self.include_ini_filename):
-			#needs try block
-			config.read(self.include_ini_filename)
-		if not config.has_section(self.platform_section):
-			config.add_section(self.platform_section)
+					raise MissingDataError("Option missed. " + value[0])
 				
+		#write to specific ini-file		
+		sections = {self.section_name: {}}
 		for key, value in self.options.items():
-			config.set(self.platform_section, key , value[1])
-		configfile = open(self.include_ini_filename, 'w')
-		config.write(configfile)
+			sections[self.section_name][key] = value[1]
+		configtool.update(self.include_ini_filename, sections)
 			
 class AppConfigurator(BehaviourConfigurator):
 	
 	def __init__(self):
 		self.options = dict(
-			httpd_conf_path=["Specify path to apache2 main config file", None, self.find_apache_conf],
-			vhosts_path=["Specify path to scalr vhosts dir", None, self.get_scalr_vhosts_dir]
+			httpd_conf_path=["Enter path to apache2 main config file", None, self.find_apache_conf],
+			vhosts_path=["Enter path to scalr vhosts dir", None, self.get_scalr_vhosts_dir]
 		)
 		self.cli_options = [
 			Option("--app-httpd-conf-path", dest="httpd_conf_path", 
@@ -79,7 +80,7 @@ class AppConfigurator(BehaviourConfigurator):
 			Option("--app-vhosts-path", dest="vhosts_path", 
 					help="Path to directory where scalarizr will place virtual hosts configurations")
 		]
-		self.platform_section = configtool.get_behaviour_section_name(Behaviours.APP)
+		self.section_name = configtool.get_behaviour_section_name(Behaviours.APP)
 		self.include_ini_filename = configtool.get_behaviour_filename(Behaviours.APP, ret=configtool.RET_PUBLIC) 
 	
 	def find_apache_conf(self):
@@ -99,10 +100,10 @@ class WwwConfigurator(BehaviourConfigurator):
 	
 	def __init__(self):
 		self.options = dict(
-			binary_path=["Specify path to nginx", None, self.find_nginx_bin],
-			app_port=["Specify apache port", None, self.get_app_port],
-			app_include_path=["Specify app_include_path", None, self.get_app_include_path],
-			https_include_path=["Specify https_include_path", None, self.get_https_include_path]
+			binary_path=["Enter path to nginx binary", None, self.find_nginx_bin],
+			app_port=["Enter apache port", None, self.get_app_port],
+			app_include_path=["Enter app_include_path", None, self.get_app_include_path],
+			https_include_path=["Enter https_include_path", None, self.get_https_include_path]
 		)
 		self.cli_options = (
 			Option("--www-binary-path", dest="binary_path", help="Path to nginx binary"),
@@ -110,7 +111,7 @@ class WwwConfigurator(BehaviourConfigurator):
 			Option("--www-app-include-path", dest="app_include_path", help="TODO: write description"),
 			Option("--www-https-include-path", dest="https_include_path", help="TODO: write description")
 		)
-		self.platform_section = configtool.get_behaviour_section_name(Behaviours.WWW)
+		self.section_name = configtool.get_behaviour_section_name(Behaviours.WWW)
 		self.include_ini_filename = configtool.get_behaviour_filename(Behaviours.WWW, ret=configtool.RET_PUBLIC)
 	
 	def find_nginx_bin(self):
@@ -129,6 +130,10 @@ class WwwConfigurator(BehaviourConfigurator):
 	def get_https_include_path(self):
 		return "/etc/nginx/https.include"
 
+class MySqlConfigurator(BehaviourConfigurator):
+	def __init__(self):
+		self.section_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		self.include_ini_filename = configtool.get_behaviour_filename(Behaviours.MYSQL, ret=configtool.RET_PUBLIC)
 				
 def get_behaviour_ini_name(name):
 	return "behaviour.%s.ini" % name
