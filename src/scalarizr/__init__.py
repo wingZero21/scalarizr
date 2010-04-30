@@ -28,7 +28,7 @@ def _init():
 
 	# Selected etc path and get configuration filename
 	config_filename = None
-	if optparser.values.conf_path:
+	if optparser and optparser.values.conf_path:
 		# Take config file from command-line options
 		config_filename = os.path.abspath(optparser.values.conf_path)
 	else:
