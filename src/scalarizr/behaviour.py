@@ -25,6 +25,7 @@ def get_configurator(name):
 	return None
 
 class BehaviourConfigurator:
+	name = None
 	cli_options = []
 	options = {}
 	"""
@@ -62,14 +63,17 @@ class BehaviourConfigurator:
 					raise MissingDataError("Option missed. " + value[0])
 				
 		#write to specific ini-file		
-		sections = {self.section_name: {}}
+		section_name = configtool.get_behaviour_section_name(self.name)
+		ini_filename = configtool.get_behaviour_filename(self.name, ret=configtool.RET_PUBLIC)
+		sections = {section_name: {}}
 		for key, value in self.options.items():
-			sections[self.section_name][key] = value[1]
-		configtool.update(self.include_ini_filename, sections)
+			sections[section_name][key] = value[1]
+		configtool.update(ini_filename, sections)
 			
 class AppConfigurator(BehaviourConfigurator):
-	
+
 	def __init__(self):
+		self.name = Behaviours.APP
 		self.options = dict(
 			httpd_conf_path=["Enter path to apache2 main config file", None, self.find_apache_conf],
 			vhosts_path=["Enter path to scalr vhosts dir", None, self.get_scalr_vhosts_dir]
@@ -80,8 +84,6 @@ class AppConfigurator(BehaviourConfigurator):
 			Option("--app-vhosts-path", dest="vhosts_path", 
 					help="Path to directory where scalarizr will place virtual hosts configurations")
 		]
-		self.section_name = configtool.get_behaviour_section_name(Behaviours.APP)
-		self.include_ini_filename = configtool.get_behaviour_filename(Behaviours.APP, ret=configtool.RET_PUBLIC) 
 	
 	def find_apache_conf(self):
 		known_places = ("/etc/apache2/apache2.conf", "/etc/httpd/httpd.conf")
@@ -97,6 +99,7 @@ class AppConfigurator(BehaviourConfigurator):
 		return "/"		
 
 class WwwConfigurator(BehaviourConfigurator):
+	name = Behaviours.WWW
 	
 	def __init__(self):
 		self.options = dict(
@@ -111,8 +114,6 @@ class WwwConfigurator(BehaviourConfigurator):
 			Option("--www-app-include-path", dest="app_include_path", help="TODO: write description"),
 			Option("--www-https-include-path", dest="https_include_path", help="TODO: write description")
 		)
-		self.section_name = configtool.get_behaviour_section_name(Behaviours.WWW)
-		self.include_ini_filename = configtool.get_behaviour_filename(Behaviours.WWW, ret=configtool.RET_PUBLIC)
 	
 	def find_nginx_bin(self):
 		known_places = ('/usr/sbin/nginx', '/usr/local/nginx/sbin/nginx')
@@ -132,8 +133,7 @@ class WwwConfigurator(BehaviourConfigurator):
 
 class MySqlConfigurator(BehaviourConfigurator):
 	def __init__(self):
-		self.section_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
-		self.include_ini_filename = configtool.get_behaviour_filename(Behaviours.MYSQL, ret=configtool.RET_PUBLIC)
+		self.name = Behaviours.WWW
 				
 def get_behaviour_ini_name(name):
 	return "behaviour.%s.ini" % name

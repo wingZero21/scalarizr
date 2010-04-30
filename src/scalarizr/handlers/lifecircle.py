@@ -60,7 +60,9 @@ class LifeCircleHandler(Handler):
 	def on_start(self):
 		reboot_file = os.path.join(bus.etc_path, ".reboot")
 		if not os.path.exists(reboot_file):
+			"""
 			# Add init scripts
+			
 			
 			# Add reboot script
 			dst = "/etc/rc6.d/K10scalarizr"
@@ -72,6 +74,7 @@ class LifeCircleHandler(Handler):
 					self._logger.error("Cannot create symlink %s -> %s", dst, path)
 					raise
 			"""
+			"""
 			OpenSolaris:
 			2010-03-15 19:10:15,448 - ERROR - scalarizr.handlers.lifecircle - Cannot create symlink /etc/rc6.d/K10scalarizr -> /opt/scalarizr/src/scalarizr/scripts/reboot.py
 			2010-03-15 19:10:15,449 - ERROR - scalarizr.util - [Errno 2] No such file or directory
@@ -81,7 +84,7 @@ class LifeCircleHandler(Handler):
 			add scripts/reboot.py into the begining of this file
 			"""
 			
-				
+			"""
 			# Add halt script
 			dst = "/etc/rc0.d/K10scalarizr"
 			if not os.path.exists(dst):
@@ -102,7 +105,7 @@ class LifeCircleHandler(Handler):
 				except OSError:
 					self._logger.error("Cannot touch file '%s'", f)
 					raise 
-			
+			"""
 			
 			# Notify listeners
 			bus.fire("before_host_init")

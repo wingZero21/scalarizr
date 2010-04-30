@@ -8,7 +8,6 @@ Created on Mar 3, 2010
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.util import configtool
-from scalarizr.util import configtool
 import logging
 import os
 import subprocess
@@ -18,10 +17,14 @@ def get_handlers ():
 	return [HooksHandler()]
 
 class HooksHandler(Handler):
+	name = "hooks"
 	_logger = None
+	_hooks_path = None
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		config = bus.config
+		self._hooks_path = config.get(configtool.get_handler_section_name(self.name), "hooks_path")
 		bus.on("init", self.on_init)
 		
 	def on_init(self):
@@ -37,15 +40,15 @@ class HooksHandler(Handler):
 			environ["server_id"] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 			environ["behaviour"] = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
 			
-			path = bus.base_path + "/hooks/"
-			reg = re.compile(r"^\d+\-"+event+"$")
-			if os.path.isdir(path):
-				matches_list = list(fname for fname in os.listdir(path) if reg.search(fname))
+			if os.path.isdir(self._hooks_path):
+				reg = re.compile(r"^\d+\-"+event+"$")				
+				matches_list = list(fname for fname in os.listdir(self._hooks_path) if reg.search(fname))
 				if matches_list:
 					matches_list.sort()
 					for fname in matches_list:
-						if os.access(path + fname, os.X_OK):	
-							start_command = [path + fname]
+						hook_file = os.path.join(self._hooks_path, fname)
+						if os.access(hook_file, os.X_OK):	
+							start_command = [hook_file]
 							start_command += args
 							try:
 								p = subprocess.Popen(

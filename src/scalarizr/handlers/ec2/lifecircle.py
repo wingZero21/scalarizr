@@ -36,8 +36,10 @@ class AwsLifeCircleHandler(Handler):
 	def on_before_host_init(self, *args, **kwargs):
 		self._logger.info("Add udev rule for EBS devices")
 		try:
+			config = bus.config
+			scripts_path = config.get(configtool.SECT_GENERAL, configtool.OPT_SCRIPTS_PATH)
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")
-			f.write('KERNEL=="sd*[!0-9]", RUN+="'+ bus.base_path+'/src/scalarizr/scripts/udev.py"')
+			f.write('KERNEL=="sd*[!0-9]", RUN+="'+ scripts_path + '/udev"')
 			f.close()
 		except OSError, e:
 			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' OSError: %s", str(e))

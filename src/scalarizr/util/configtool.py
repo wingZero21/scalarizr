@@ -25,6 +25,7 @@ OPT_STORAGE_PATH = "storage_path"
 OPT_CRYPTO_KEY_PATH = "crypto_key_path"
 OPT_PLATFORM = "platform"
 OPT_QUERYENV_URL = "queryenv_url"
+OPT_SCRIPTS_PATH = "scripts_path"
 
 SECT_MESSAGING = "messaging"
 OPT_ADAPTER = "adapter"

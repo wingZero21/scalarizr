@@ -58,8 +58,8 @@ class EbsHandler(Handler):
 						try:
 							# Send message to Scalr
 							msg = self._msg_service.new_message(Messages.BLOCK_DEVICE_ATTACHED, body={
-    							"aws.volume_id" : volume.id,
-    							"aws.device" : ad.device
+    							"ec2_volume_id" : volume.id,
+    							"device" : ad.device
     						})
 							producer = self._msg_service.get_producer()
 							producer.send(Queues.CONTROL, msg)

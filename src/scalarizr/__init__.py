@@ -24,23 +24,42 @@ class NotInstalledError(BaseException):
 	pass
 	
 def _init():
-	bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
+	optparser = bus.optparser
 
-	# Find scalarizr config file
-	etc_places = (
-		"/etc/scalr", 
-		"/usr/etc/scalr", 
-		"/usr/local/etc/scalr",
-		os.path.join(bus.base_path, "etc-devel"), 
-		os.path.join(bus.base_path, "etc")
-	)
-	for etc_path in etc_places:
-		config_filename = os.path.join(etc_path, "config.ini")
-		if os.path.exists(config_filename) and os.path.isfile(config_filename):
-			bus.etc_path = etc_path
-	if bus.etc_path is None:
-		raise ScalarizrError("Cannot find scalarizr `etc` path. " + 
-				"Search amoung the list %s returned no results" % (":".join(etc_places)))
+	# Selected etc path and get configuration filename
+	config_filename = None
+	if optparser.values.conf_path:
+		# Take config file from command-line options
+		config_filename = os.path.abspath(optparser.values.conf_path)
+	else:
+		# Find configuration file among several places
+		if not bus.etc_path:
+			base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")		
+			etc_places = (
+				"/etc/scalarizr", 
+				"/usr/etc/scalarizr", 
+				"/usr/local/etc/scalarizr",
+				os.path.join(base_path, "etc-devel"),
+				os.path.join(base_path, "etc")
+			)
+		else:
+			etc_places = (bus.etc_path)	
+			
+		# Find configuration file 
+		for etc_path in etc_places:
+			config_filename = os.path.join(etc_path, "config.ini")
+			if os.path.exists(config_filename) and os.path.isfile(config_filename):
+				break
+		
+		if config_filename is None:
+			# File not found
+			raise ScalarizrError("Cannot find scalarizr configuration file. " + 
+					"Search amoung the list %s returned no results" % (":".join(etc_places)))
+
+	if not os.path.exists(config_filename):
+		raise ScalarizrError("Configuration file '%s' doesn't exists" % (config_filename))
+	bus.etc_path = os.path.dirname(config_filename)
+	
 	
 	# Configure logging
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
@@ -50,7 +69,7 @@ def _init():
 
 	# Load configuration
 	config = ConfigParser()
-	config.read(os.path.join(bus.etc_path, "config.ini"))
+	config.read(config_filename)
 	bus.config = config
 
 	# Inject behaviour configurations into global config
@@ -301,9 +320,9 @@ def main():
 		sys.exit(1)
 			
 	try:
-		_init()		
-		
 		optparser = bus.optparser
+		optparser.add_option("-c", "--conf-path", dest="conf_path",
+				help="Configuration path")
 		optparser.add_option("-n", "--install", dest="install", action="store_true", default=False, 
 				help="Run installation process")
 		optparser.add_option("--no-prompt", dest="no_prompt", action="store_true", default=False,
@@ -340,6 +359,8 @@ def main():
 				optparser.add_option_group(group)
 			
 		optparser.parse_args()
+	
+		_init()		
 	
 		if optparser.values.gen_key:
 			print cryptotool.keygen()

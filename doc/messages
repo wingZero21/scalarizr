@@ -1,0 +1,65 @@
+-> HostUp
+behaviour
+internal_ip
+role_name
+
+
+-> HostDown
+behaviour
+internal_ip
+role_name
+
+
+-> EventNotice
+internal_ip
+role_name
+event_name
+
+-> VhostReconfigure
+
+
+-> ServerInitResponse
+ec2_account_id
+ec2_key_id
+ec2_key
+ec2_cert
+ec2_pk
+
+
+-> Rebundle
+role_name
+excludes
+
+<- ServerInit (HostInit)
+# Scalarizr new crypto key
+crypto_key
+
+<- ServerDown (HostDown)
+
+<- RebootStart
+
+<- RebootFinish
+
+<- BlockDeviceAttached
+ec2_volume_id
+device
+
+<- BlockDeviceDetached
+device
+
+<- ScriptExecResult (execResult)
+stdout
+stderr
+time_elapsed
+script_name
+script_path
+event_name
+
+<- Log
+entries
+	category
+	level
+	filename
+	lineno
+	message
+	stack_trace		

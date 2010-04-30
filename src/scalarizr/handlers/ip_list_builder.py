@@ -25,7 +25,8 @@ class IpListBuilder(Handler):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
 		config = bus.config
-		self._base_path = config.get(configtool.get_handler_section_name(self.name), "base_path")     	    
+		self._base_path = config.get(configtool.get_handler_section_name(self.name), "base_path")
+		self._base_path = self._base_path.replace('$etc_path', bus.etc_path)     	    
 		if self._base_path[-1] != os.sep:
 			self._base_path = self._base_path + os.sep  		
 
