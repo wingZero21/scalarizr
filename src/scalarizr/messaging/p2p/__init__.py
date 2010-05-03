@@ -10,19 +10,19 @@ import logging
 from scalarizr.util import configtool
 
 
-class P2pOptions:
-	SERVER_ID = "p2p_server_id"
-	CRYPTO_KEY_PATH = "p2p_crypto_key_path"
-	PRODUCER_ENDPOINT = "p2p_producer_endpoint"
-	CONSUMER_ENDPOINT = "p2p_consumer_endpoint"
+class P2pConfigOptions:
+	SERVER_ID 			= "server_id"
+	CRYPTO_KEY_PATH 	= "crypto_key_path"
+	PRODUCER_URL 		= "producer_url"
+	CONSUMER_URL 		= "consumer_url"
 
 class P2pMessageService(MessageService):
-	_config = {}
+	_kwargs = {}
 	_consumer = None
 	_producer = None
 	
-	def __init__(self, config):
-		self._config = config
+	def __init__(self, **kwargs):
+		self._kwargs = kwargs
 
 	def new_message(self, name=None, meta={}, body={}):
 		return P2pMessage(name, meta, body)
@@ -30,13 +30,13 @@ class P2pMessageService(MessageService):
 	def get_consumer(self):
 		if self._consumer is None:
 			import consumer
-			self._consumer = consumer.P2pMessageConsumer(self._config)
+			self._consumer = consumer.P2pMessageConsumer(**self._kwargs)
 		return self._consumer
 	
 	def get_producer(self):
 		if self._producer is None:
 			import producer
-			self._producer = producer.P2pMessageProducer(self._config)
+			self._producer = producer.P2pMessageProducer(**self._kwargs)
 		return self._producer
 
 def new_service(config):
@@ -44,22 +44,11 @@ def new_service(config):
 	
 class _P2pBase(object):
 	server_id = None
-	crypto_key = None
+	crypto_key_path = None
 	
-	def __init__(self, config):
-		for pair in config:
-			key = pair[0]
-			if key == P2pOptions.SERVER_ID:
-				self.server_id = pair[1]
-			elif key == P2pOptions.CRYPTO_KEY_PATH:
-				self.crypto_key = pair[1]
-
-		config = bus.config
-		if self.server_id is None:
-			self.server_id = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
-		if self.crypto_key is None:
-			self.crypto_key = configtool.read_key(
-					config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH))
+	def __init__(self, **kwargs):
+		self.server_id = kwargs[P2pConfigOptions.SERVER_ID]
+		self.crypto_key_path = kwargs[P2pConfigOptions.CRYPTO_KEY_PATH]
 	
 class _P2pMessageStore:
 	_logger = None

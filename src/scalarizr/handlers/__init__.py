@@ -80,7 +80,7 @@ class MessageListener:
 							self._logger.error("Cannot import module %s", module_name)
 							self._logger.exception(e)
 							
-				except Exception, e:
+				except (BaseException, Exception), e:
 					self._logger.error("Unhandled exception in handler notification loop")
 					self._logger.exception(e)
 						
@@ -98,10 +98,10 @@ class MessageListener:
 					self._logger.info("Call handler %s" % handler.__class__.__name__)
 					try:
 						handler(message)
-					except Exception, e:
+					except (BaseException, Exception), e:
 						self._logger.error("Exception in message handler")
 						self._logger.exception(e)
-			except Exception, e:
+			except (BaseException, Exception), e:
 				self._logger.error("%s accept() method failed with exception", handler.__class__.__name__)
 				self._logger.exception(e)
 		

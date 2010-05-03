@@ -12,11 +12,6 @@ Python modules
 Mandatory
 ~~~~~~~~~
 
-SQLAlchemy
-
-	sqlalchemy 
-	http://www.sqlalchemy.org
-
 M2Crypto
 
 	m2crypto 
@@ -276,20 +271,20 @@ echo "127.0.0.1 localhost" >> /etc/hosts
 Зависимости скаларизера в репозиториях дистрибутивов
 ====================================================
 
-					python >= 2.5.1		m2crypto >= 0.20	sqlalchemy >= 0.4.0		boto ?
---------------------------------------------------------------------------------------------------
-Fedora 8			python				m2crypto			python-sqlalchemy		python-boto
-					2.5.1				0.18				0.4.7					1.5c
+					python >= 2.5.1		m2crypto >= 0.20	boto ?
+----------------------------------------------------------------------------
+Fedora 8			python				m2crypto			python-boto
+					2.5.1				0.18				1.5c
 					
 CentOS 4			
 
-CentOS 5			python				m2crypto			python-sqlalchemy		python-boto
-					2.4.3				0.16				0.3.11					1.0a
+CentOS 5			python				m2crypto			python-boto
+					2.4.3				0.16				1.0a
 					
 Debian 5
 
 Ubuntu 8.04
 
-OpenSolaris 8.11	SUNWPython25		--				--						--
+OpenSolaris 8.11	SUNWPython25		--					--					
 					2.5.5
 

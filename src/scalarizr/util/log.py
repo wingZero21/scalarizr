@@ -25,8 +25,8 @@ class MessagingHandler(logging.Handler):
 	def __init__(self, num_entries = 1, send_interval = "1s"):
 		logging.Handler.__init__(self)		
 		
-		pool = bus.db
-		self._conn = pool.get().get_connection()
+		db = bus.db
+		self._conn = db.get().get_connection()
 		self._msg_service = bus.messaging_service
 
 		self.num_entries = num_entries
@@ -68,8 +68,8 @@ class MessagingHandler(logging.Handler):
 			self._send_event.set()
 			
 	def _send_message(self):
-		pool = bus.db
-		conn = pool.get().get_connection()
+		db = bus.db
+		conn = db.get().get_connection()
 		cur = conn.cursor()
 		cur.execute("SELECT * FROM log")
 		ids = []

@@ -120,12 +120,6 @@ class LifeCircleHandler(Handler):
 			queryenv = bus.queryenv_service
 			queryenv.key = key
 			
-			# Update key in Messaging
-			# FIXME: disclosure of the interface implementation
-			msg_service = bus.messaging_service
-			msg_service.get_consumer().crypto_key = key
-			msg_service.get_producer().crypto_key = key
-
 			# Send HostInit			
 			msg = self._msg_service.new_message(Messages.HOST_INIT)
 			msg.key = key

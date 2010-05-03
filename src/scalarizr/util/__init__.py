@@ -1,5 +1,3 @@
-
-#from scalarizr.bus import Bus
 import os
 import logging
 import threading
@@ -73,6 +71,7 @@ class Observable(object):
 class LocalObject:
 	
 	def __init__(self, creator):
+		self._logger = logging.getLogger(__name__)
 		self._creator = creator		
 		self._object = threading.local()
 	
@@ -81,13 +80,29 @@ class LocalObject:
 			o = self._object.current()
 			if o:
 				return o
-		except AttributeError:
+			else:
+				self._logger.warn("Current weakref is empty")
+		except AttributeError, e:
+			self._logger.warn(str(e))
 			pass
 		
+		self._logger.info("Creating new object...")
 		o = self._creator()
+		self._logger.info("Created %s", o)
 		self._object.current = weakref.ref(o)
+		self._logger.info("Added weakref %s", self._object.current)
 		return o
-			
+	
+# TODO: LocalObject need to be extended to support SQLite connections managing
+# Current problems:
+# 1. Cannot create weak reference to 'sqlite3.Connection' object
+# 2. If we use any wrapper object for sqlite that returns connection with get_connection() method
+#    LocalObject lose weakref with this code:
+#    conn = localobj.get().get_connection()
+#    but weakref alives with this code:
+#    wrap = localobj.get()
+#    conn = wrap.get_connection()
+	
 	
 def system(args, shell=True):
 	import subprocess
@@ -101,6 +116,12 @@ def system(args, shell=True):
 		logger.warning("stderr: " + err)
 	return out, err, p.returncode
 
+def xml_strip(el):
+	for child in list(el.childNodes):
+		if child.nodeType==child.TEXT_NODE and child.nodeValue.strip() == '':
+			el.removeChild(child)
+		else:
+			xml_strip(child)	
 
 def parse_size(size):
 	"""

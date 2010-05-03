@@ -23,7 +23,7 @@ class Bus(Observable):
 	@ivar ConfigParser.ConfigParser: Configuration (config.ini and includes) 
 	"""
 	
-	optparser = OptionParser()
+	optparser = None
 	"""
 	@ivar optparse.OptionParser: Command line options
 	"""

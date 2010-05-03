@@ -67,7 +67,7 @@ class EbsHandler(Handler):
 							# Notify listeners
 							bus.fire("block_device_attached", volume=volume.id, device=ad.device)
 							
-						except Exception, e:
+						except (BaseException, Exception), e:
 							self._logger.error("Cannot send message. %s" % str(e))
 							raise 
 				
@@ -95,7 +95,7 @@ class EbsHandler(Handler):
 				# Notify listeners
 				bus.fire("block_device_detached", device=message.devname)
 				
-			except Exception, e:
+			except (BaseException, Exception), e:
 				self._logger.error("Cannot send message. %s" % str(e))
 				raise 
 

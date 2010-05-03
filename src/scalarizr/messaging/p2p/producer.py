@@ -5,8 +5,8 @@ Created on Dec 5, 2009
 '''
 
 from scalarizr.messaging import MessageProducer, MessagingError
-from scalarizr.messaging.p2p import P2pMessageStore, P2pOptions, _P2pBase
-from scalarizr.util import cryptotool
+from scalarizr.messaging.p2p import P2pMessageStore, _P2pBase, P2pConfigOptions
+from scalarizr.util import cryptotool, configtool
 from urllib import splitnport
 from urllib2 import urlopen, Request, URLError, HTTPError
 import logging
@@ -14,19 +14,15 @@ import uuid
 
 
 class P2pMessageProducer(MessageProducer, _P2pBase):
-	endpoint = ""
+	endpoint = None
 	_store = None
 	_logger = None
 	
 	
-	def __init__(self, config):
+	def __init__(self, **kwargs):
 		MessageProducer.__init__(self)
-		_P2pBase.__init__(self, config)
-		for pair in config:
-			key = pair[0]
-			if key == P2pOptions.PRODUCER_ENDPOINT:
-				self.endpoint = pair[1]
-	
+		_P2pBase.__init__(self, **kwargs)
+		self.endpoint = kwargs[P2pConfigOptions.PRODUCER_URL]
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
 	
@@ -42,7 +38,8 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			# Prepare POST body
 			xml = message.toxml()
 			#xml = xml.ljust(len(xml) + 8 - len(xml) % 8, " ")
-			data = cryptotool.encrypt(xml, self.crypto_key)
+			crypto_key = configtool.read_key(self.crypto_key_path)
+			data = cryptotool.encrypt(xml, crypto_key)
 			
 			# Send request
 			req = Request(self.endpoint + "/" + queue, data, {"X-Server-Id": self.server_id})

@@ -4,8 +4,8 @@ Created on Dec 5, 2009
 @author: marat
 '''
 from scalarizr.messaging import MessageConsumer
-from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, P2pOptions, _P2pBase
-from scalarizr.util import cryptotool
+from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, _P2pBase, P2pConfigOptions
+from scalarizr.util import cryptotool, configtool
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
 from threading import Thread
@@ -18,19 +18,15 @@ import os.path
 
 
 class P2pMessageConsumer(MessageConsumer, _P2pBase):
-	endpoint = ""
+	endpoint = None
 	_server = None
 	_logger = None
 	_handler_thread = None
 	_shutdown_handler = False
 	
-	def __init__(self, config):
-		_P2pBase.__init__(self, config)
-		for pair in config:
-			key = pair[0]
-			if key == P2pOptions.CONSUMER_ENDPOINT:
-				self.endpoint = pair[1]
-				
+	def __init__(self, **kwargs):
+		_P2pBase.__init__(self, **kwargs)
+		self.endpoint = kwargs[P2pConfigOptions.CONSUMER_URL]
 		self._logger = logging.getLogger(__name__)
 		self._handler_thread = Thread(name="MessageHandler", target=self.message_handler)
 			
@@ -50,7 +46,7 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 			self._logger.info("Stopping consumer...")
 			
 			# stop http server
-			self._server.server_close()
+			self._server.shutdown()
 
 			# stop message handler thread
 			self._shutdown_handler = True
@@ -68,7 +64,7 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 					self._logger.info("Notify message listeners (message_id: %s)", message.id)
 					for ln in self._listeners:
 						ln(message, queue)
-				except Exception, e:
+				except (BaseException, Exception), e:
 					self._logger.exception(e)
 				finally:
 					self._logger.debug("Mark message (message_id: %s) as handled", message.id)
@@ -89,7 +85,8 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 		
 		try:
 			logger.debug("Decrypt message")
-			xml = cryptotool.decrypt(rawmsg, self.consumer.crypto_key)
+			crypto_key = configtool.read_key(self.consumer.crypto_key_path)
+			xml = cryptotool.decrypt(rawmsg, crypto_key)
 			
 			logger.debug("Decode message")
 			message = P2pMessage()

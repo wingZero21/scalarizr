@@ -4,17 +4,18 @@ from scalarizr.bus import bus
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
-from scalarizr.util import configtool, cryptotool
+from scalarizr.util import configtool, cryptotool, LocalObject
 
 import os
 import sys
 import sqlite3 as sqlite
-import sqlalchemy.pool as pool
+from sqlalchemy.pool import SingletonThreadPool
 from ConfigParser import ConfigParser
 import logging
 import logging.config
 from optparse import OptionParser, OptionGroup
 import binascii
+from scalarizr.messaging.p2p import P2pConfigOptions
 
 
 class ScalarizrError(BaseException):
@@ -23,6 +24,7 @@ class ScalarizrError(BaseException):
 class NotInstalledError(BaseException):
 	pass
 	
+
 def _init():
 	optparser = bus.optparser
 
@@ -43,7 +45,7 @@ def _init():
 				os.path.join(base_path, "etc")
 			)
 		else:
-			etc_places = (bus.etc_path)	
+			etc_places = (bus.etc_path,)	
 			
 		# Find configuration file 
 		for etc_path in etc_places:
@@ -82,7 +84,7 @@ def _init():
 				config.read(filename)
 	
 	# Configure database connection pool
-	bus.db = pool.SingletonThreadPool(_db_connect)
+	bus.db = SingletonThreadPool(_db_connect)
 	
 	# Define scalarizr events
 	bus.define_events(
@@ -96,7 +98,6 @@ def _init():
 		# Fires when scalarizr is terminating
 		"terminate"
 	)	
-
 
 def _db_connect():
 	config = bus.config
@@ -143,11 +144,11 @@ def _init_services():
 			or platform.get_user_data(UserDataOptions.QUERYENV_URL), 
 			NotInstalledError)
 
-	# Set mesaging url
-	# FIXME: disclosure of implementation	
-	message_server_opt = messaging_sect.option_wrapper("p2p_producer_endpoint")
-	message_server_opt.set_required(optparser.values.message_server_url \
-			or platform.get_user_data(UserDataOptions.MESSAGE_SERVER_URL),
+	# Set messaging producer url
+	msg_p2p_producer_url_opt = configtool.option_wrapper(config, "messaging_p2p", 
+			P2pConfigOptions.PRODUCER_URL)
+	msg_p2p_producer_url_opt.set_required(optparser.values.msg_p2p_producer_url \
+			or platform.get_user_data(UserDataOptions.MESSAGE_SERVER_URL), 
 			NotInstalledError)
 	
 	# Set crypto key
@@ -172,7 +173,11 @@ def _init_services():
 	factory = MessageServiceFactory()
 	adapter_name = messaging_sect.get(configtool.OPT_ADAPTER)
 	try:
-		service = factory.new_service(adapter_name, config.items(configtool.SECT_MESSAGING))
+		kwargs = dict(config.items("messaging_" + adapter_name))
+		kwargs[P2pConfigOptions.SERVER_ID] = gen_sect.get(configtool.OPT_SERVER_ID)
+		kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = gen_sect.get(configtool.OPT_CRYPTO_KEY_PATH)
+		
+		service = factory.new_service(adapter_name, **kwargs)
 		bus.messaging_service = service
 	except (BaseException, Exception):
 		logger.error("Cannot create messaging service adapter '%s'" % (adapter_name))
@@ -188,21 +193,19 @@ def _init_services():
 def init_script():
 	_init()
 	
-	logger = logging.getLogger(__name__)
 	config = bus.config
-	
-	adapter = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)
-	
-	# Make producer config from consumer
-	logger.debug("Initialize messaging")
-	producer_config = []
-	for key, value in config.items(configtool.SECT_MESSAGING):
-		# FIXME: disclosure of implementation		
-		if key.startswith(adapter + "_consumer"):
-			producer_config.append((key.replace("consumer", "producer"), value))
+	logger = logging.getLogger(__name__)
 
-	factory = MessageServiceFactory()
-	msg_service = factory.new_service(adapter, producer_config)
+	adapter = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)
+	sect = configtool.section_wrapper(bus.config, "messaging_" + adapter)
+	
+	logger.debug("Initialize messaging")
+
+	# Script producer url is scalarizr consumer url. 
+	# Script can't handle any messages by himself. Leave consumer url blank
+	kwargs = {P2pConfigOptions.PRODUCER_URL : sect.get(P2pConfigOptions.CONSUMER_URL)}
+	factory = MessageServiceFactory()		
+	msg_service = factory.new_service(adapter, **kwargs)
 	bus.messaging_service = msg_service
 
 def _install_option(optparser, cli_opt_name, opt_title, opt_wrapper, ini_updates, validator=None):
@@ -258,13 +261,13 @@ def _install ():
 			ini_updates)
 	
 	# QueryEnv 
-	_install_option(optparser, "queryenv_url", "QueryEnv url",
+	_install_option(optparser, "queryenv_url", "QueryEnv server URL",
 			configtool.option_wrapper(gen_sect, configtool.OPT_QUERYENV_URL), 
 			ini_updates)
 	
 	# Message server url
-	_install_option(optparser, "message_server_url", "message server url", 
-			configtool.option_wrapper(messaging_sect, "p2p_producer_endpoint"), 
+	_install_option(optparser, "msg_p2p_producer_url", "Messaging server URL", 
+			configtool.option_wrapper(config, "messaging_p2p", P2pConfigOptions.PRODUCER_URL), 
 			ini_updates)
 	
 	# Platform
@@ -320,7 +323,7 @@ def main():
 		sys.exit(1)
 			
 	try:
-		optparser = bus.optparser
+		optparser = bus.optparser = OptionParser()
 		optparser.add_option("-c", "--conf-path", dest="conf_path",
 				help="Configuration path")
 		optparser.add_option("-n", "--install", dest="install", action="store_true", default=False, 
@@ -343,7 +346,7 @@ def main():
 				(", ".join(_KNOWN_BEHAVIOURS)))
 		group.add_option("--queryenv-url", dest="queryenv_url",
 				help="URL to Scalr QueryEnv service (default: https://scalr.net/queryenv)")
-		group.add_option("--message-server-url", dest="message_server_url",
+		group.add_option("--msg-producer-url", dest="msg_p2p_producer_url",
 				help="URL to Scalr messaging server (default: https://scalr.net/messaging)")
 		optparser.add_option_group(group)
 		

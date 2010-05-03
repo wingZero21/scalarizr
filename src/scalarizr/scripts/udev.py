@@ -26,5 +26,5 @@ def main():
 			msg.body[k.lower()] = v
 		producer.send(Queues.CONTROL, msg)
 	
-	except Exception, e:
+	except (BaseException, Exception), e:
 		logger.exception(e)

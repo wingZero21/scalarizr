@@ -1,4 +1,5 @@
-from scalarizr.util import Observable
+from scalarizr.util import Observable, xml_strip
+import xml.dom.minidom as dom
 
 class MessagingError(BaseException):
 	pass
@@ -6,12 +7,12 @@ class MessagingError(BaseException):
 class MessageServiceFactory(object):
 	_adapters = {}
 	
-	def new_service (self, name, config):
+	def new_service (self, name, **kwargs):
 		if not self._adapters.has_key(name):
 			adapter =  __import__("scalarizr.messaging." + name, 
 					globals(), locals(), ["new_service"])
 			self._adapters[name] = adapter
-		return self._adapters[name].new_service(config)
+		return self._adapters[name].new_service(**kwargs)
 
 class MessageService(object):
 	def new_message(self, name=None, meta={}, body={}):
@@ -24,10 +25,10 @@ class MessageService(object):
 		pass
 	
 class MetaOptions(object):
-	SERVER_TYPE = "serverType"
-	OS_NAME 	= "osName"
-	OS_VERSION 	= "osVersion"
-	REQUEST_ID 	= "requestId"
+	SERVER_ID 	= "server_id"
+	PLATFORM 	= "platform" # ec2, vps, rs
+	OS 			= "os" # linux, win, sunos
+	REQUEST_ID 	= "request_id"
 	
 class Message(object):
 	
@@ -59,21 +60,21 @@ class Message(object):
 		pass
 	
 	def fromxml (self, xml):
-		from xml.dom.minidom import parseString
-		doc = parseString(xml)
+		doc = dom.parseString(xml)
+		xml_strip(doc)
 		
 		root = doc.documentElement
 		self.id = root.getAttribute("id")
 		self.name = root.getAttribute("name")
 		
-		for node in root.firstChild.childNodes:
-			self.meta[node.getAttribute("name")] = node.firstChild.nodeValue
-			
-		for node in root.childNodes[1].childNodes:
-			self.body[node.getAttribute("name")] = node.firstChild.nodeValue
-	
-	def toxml (self):
-		return str(self)
+		self._walk_decode(self.meta, root.firstChild)
+		self._walk_decode(self.body, root.childNodes[1])
+
+
+	def _walk_decode(self, var, el):
+		# FIXME: nested elements doesn't supported
+		for childEl in el.childNodes:
+			var[childEl.nodeName] = childEl.firstChild.nodeValue
 	
 	def __str__(self):
 		from xml.dom.minidom import getDOMImplementation
@@ -85,24 +86,34 @@ class Message(object):
 		root.setAttribute("name", str(self.name))
 		
 		meta = doc.createElement("meta")
-		for k in self.meta.keys():
-			item = doc.createElement("item")
-			item.setAttribute("name", str(k))
-			item.appendChild(doc.createTextNode(str(self.meta[k])))
-			meta.appendChild(item)
 		root.appendChild(meta)
+		self._walk_encode(self.meta, meta, doc)
 		
 		body = doc.createElement("body")
-		for k in self.body.keys():
-			item = doc.createElement("item")
-			item.setAttribute("name", str(k))
-			item.appendChild(doc.createTextNode(str(self.body[k])))
-			body.appendChild(item)
 		root.appendChild(body)
+		self._walk_encode(self.body, body, doc)
 			
 		return doc.toxml()
-		
 	
+	toxml = __str__
+		
+	def _walk_encode(self, value, el, doc):
+		if getattr(value, '__iter__', False):
+			if getattr(value, "keys", False):
+				for k, v in value.items():
+					itemEl = doc.createElement(str(k))
+					el.appendChild(itemEl)
+					self._walk_encode(v, itemEl, doc)
+			else:
+				for v in value:
+					itemEl = doc.createElement(el.nodeName)
+					el.parentNode.appendChild(itemEl)
+					self._walk_encode(v, itemEl, doc)
+				el.parentNode.removeChild(el)
+		else:	
+			el.appendChild(doc.createTextNode(str(value)))
+
+
 class MessageProducer(Observable):
 	def __init__(self):
 		Observable.__init__(self)
@@ -149,7 +160,7 @@ class Messages:
 	Fires when scalarizr is initialized and ready to be configured 
 	"""
 
-	GO2HALT = "Go2Halt"
+	HOST_HALT = "Go2Halt"
 	"""
 	Fires when scalarizr is going to halt
 	"""
