@@ -60,8 +60,10 @@ class TestSQLite(unittest.TestCase):
 		#return _SQLiteConnection(conn)
 		
 	def test_get_from_the_same_thread(self):
-		conn1 = self.localobj.get().get_connection()
-		conn2 = self.localobj.get().get_connection()
+		conn = self.localobj.get()
+		conn_ = self.localobj.get()
+		conn1 = conn.get_connection()
+		conn2 = conn_.get_connection()
 		
 #		conn1 = self.localobj.get()
 #		conn2 = self.localobj.get()
@@ -73,9 +75,10 @@ class _SQLiteConnection(object):
 
 	def get_connection(self):
 		if not self._conn:
+			print "new conn"
 			logger = logging.getLogger(__name__)
 			logger.info("Open SQLite database in memory")
-			conn = sqlite.Connection(":memory:")
+			conn = sqlite.Connection('sample.db')
 			conn.row_factory = sqlite.Row		
 			self._conn = conn
 			
