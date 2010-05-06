@@ -19,7 +19,7 @@ class _QueryEnv:
 		return [_Bunch(
 			behaviour = "app",
 			name = "nginx",
-			hosts = [_Bunch(index='1',replication_master="1",internal_ip="127.0.0.1",external_ip="192.168.1.93")]
+			hosts = [_Bunch(index='1',replication_master="1",internal_ip="8.8.8.8",external_ip="192.168.1.93")]
 			)]
 
 class _EmptyQueryEnv:
@@ -35,11 +35,11 @@ class Test(unittest.TestCase):
 	def _test_nginx_upstream_reload(self):
 		pass
 	
-	def test_creating_vhosts(self):
+	def _test_creating_vhosts(self):
 		bus.etc_path =  os.path.realpath(os.path.dirname(__file__) + "/../../resources/etc")
 		config = bus.config
 		sect_name = configtool.get_behaviour_section_name(Behaviours.WWW)
-		nginx_incl = bus.etc_path + "/httpd/scalr-vhosts"
+		nginx_incl = bus.etc_path + "/nginx/scalr-vhosts"
 		config.set(sect_name, "app_include_path",nginx_incl)
 		if os.path.exists(nginx_incl):
 			os.remove(nginx_incl)
@@ -61,5 +61,7 @@ class Test(unittest.TestCase):
 		self.assertTrue(os.path.exists(include_tpl))
 		
 if __name__ == "__main__":
+	#bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../../resources")
 	init_tests()
+	#bus_base_path = os.path.realpath(os.path.dirname(__file__) + "/../../../")
 	unittest.main()

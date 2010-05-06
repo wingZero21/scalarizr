@@ -51,25 +51,30 @@ class TestSQLite(unittest.TestCase):
 	def tearDown(self):
 		del self.localobj		
 
+	def test_get_from_the_same_thread(self):
+		obj1 = self.localobj.get()
+		obj2 = self.localobj.get()
+		conn1 = obj1.get_connection()
+		conn2 = obj2.get_connection()
+		self.assertEqual(conn1, conn2)
+
 	def _db_connect(self):
 		logger = logging.getLogger(__name__)
 		logger.info("Open SQLite database in memory")
 		conn = sqlite.Connection(":memory:")
 		conn.row_factory = sqlite.Row
-		return conn
-		#return _SQLiteConnection(conn)
-		
-	def test_get_from_the_same_thread(self):
-		conn = self.localobj.get()
-		conn_ = self.localobj.get()
-		conn1 = conn.get_connection()
-		conn2 = conn_.get_connection()
-		
-#		conn1 = self.localobj.get()
-#		conn2 = self.localobj.get()
-		self.assertEqual(conn1, conn2)
-		
+		self.o_thread = conn
 
+	def test_get_from_different_threads(self):
+		o_main = self.localobj.get()
+		self.o_thread = None
+	
+		t = threading.Thread(target=self._db_connect)
+		t.start()
+		t.join()
+		
+		self.assertNotEqual(o_main, self.o_thread) 
+		
 class _SQLiteConnection(object):
 	_conn = None
 
@@ -78,7 +83,7 @@ class _SQLiteConnection(object):
 			print "new conn"
 			logger = logging.getLogger(__name__)
 			logger.info("Open SQLite database in memory")
-			conn = sqlite.Connection('sample.db')
+			conn = sqlite.Connection(":memory:")
 			conn.row_factory = sqlite.Row		
 			self._conn = conn
 			

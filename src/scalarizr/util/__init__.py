@@ -76,18 +76,14 @@ class LocalObject:
 		self._object = threading.local()
 	
 	def get(self):
-		print "entering to get"
 		try:
 			o = self._object.current
-			print "this is obj.current:", self._object.current
 			if o:
-				print "this will be newer shown up", o()
 				return o()
 			else:
 				self._logger.warn("Current weakref is empty")
 		except AttributeError, e:
 			self._logger.warn(str(e))
-			print "this is exception, current not exists"
 			pass
 		
 		self._logger.info("Creating new object...")

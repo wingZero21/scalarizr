@@ -43,10 +43,9 @@ class ApacheHandler(Handler):
 				
 		config = bus.config
 		vhosts_path = config.get('behaviour_app','vhosts_path')
-		#vhosts_path = config.get('handler_apache','vhosts_path')
 		httpd_conf_path = config.get('behaviour_app','httpd_conf_path')
-		#httpd_conf_path = config.get('handler_apache','httpd_conf_path')
-		
+		cert_path = bus.etc_path + '/private.d/keys'	
+			
 		try:
 			received_vhosts = self._queryenv.list_virtual_hosts()
 		except:
@@ -103,10 +102,7 @@ class ApacheHandler(Handler):
 						raise
 					else: 
 						self._logger.info("Saving SSL certificates for %s",vhost.hostname)
-						#TODO: find why https.key & https.crt files are refilled with new data each time
 						try:
-							cert_path = bus.etc_path + '/private.d/keys'
-							
 							file = open(cert_path + '/' + 'https.key', 'w')
 							file.write(https_certificate[1])
 							file.close()
@@ -128,10 +124,11 @@ class ApacheHandler(Handler):
 									cert_path, e.strerror)
 					
 					self._logger.info('Enabling SSL virtual host %s', vhost.hostname)
+					
 					try:
 						vhost_fullpath = vhosts_path + '/' + vhost.hostname + '-ssl.vhost.conf'
 						file = open(vhost_fullpath, 'w')
-						file.write(vhost.raw)
+						file.write(vhost.raw.replace('/etc/aws/keys/ssl',cert_path))
 						file.close()
 					except IOError, e:
 						self._logger.error('Couldn`t write to vhost file %s. %s', 
