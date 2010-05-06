@@ -1,7 +1,7 @@
 '''
 @author: Dmytro Korsakov
 '''
-from scalarizr.util import LocalObject, init_tests
+from scalarizr.util import LocalObject, SQLiteLO, init_tests
 
 import unittest
 import threading
@@ -46,16 +46,22 @@ class TestSQLite(unittest.TestCase):
 	localobj = None
 	
 	def setUp(self):
-		self.localobj = LocalObject(_SQLiteConnection)
+		self.localobj = SQLiteLO(self._db_connect)
 		
 	def tearDown(self):
 		del self.localobj		
 
 	def test_get_from_the_same_thread(self):
+		"""
 		obj1 = self.localobj.get()
 		obj2 = self.localobj.get()
 		conn1 = obj1.get_connection()
 		conn2 = obj2.get_connection()
+		"""
+		conn1 = self.localobj.get().get_connection()
+		conn2 = self.localobj.get().get_connection()
+		
+		#conn = self.localobj.get().get_connection()
 		self.assertEqual(conn1, conn2)
 
 	def _db_connect(self):
@@ -80,7 +86,6 @@ class _SQLiteConnection(object):
 
 	def get_connection(self):
 		if not self._conn:
-			print "new conn"
 			logger = logging.getLogger(__name__)
 			logger.info("Open SQLite database in memory")
 			conn = sqlite.Connection(":memory:")

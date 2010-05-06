@@ -75,11 +75,14 @@ class LocalObject:
 		self._creator = creator		
 		self._object = threading.local()
 	
+	def do_create(self):
+		return self._creator()
+	
 	def get(self):
 		try:
-			o = self._object.current
+			o = self._object.current()
 			if o:
-				return o()
+				return o
 			else:
 				self._logger.warn("Current weakref is empty")
 		except AttributeError, e:
@@ -87,11 +90,29 @@ class LocalObject:
 			pass
 		
 		self._logger.info("Creating new object...")
-		o = self._creator()
+		o = self.do_create()
 		self._logger.info("Created %s", o)
 		self._object.current = weakref.ref(o)
 		self._logger.info("Added weakref %s", self._object.current)
 		return o
+	
+class SQLiteLO(LocalObject):
+	def do_create(self):
+		return _SQLiteConnection(self, self._creator)
+	
+class _SQLiteConnection(object):
+	_conn = None
+	_lo = None
+	_creator = None
+	
+	def __init__(self, lo, creator):
+		self._lo = lo
+		self._creator = creator
+	
+	def get_connection(self):
+		if not self._conn:
+			self._conn = self._creator()
+		return self._conn
 	
 # TODO: LocalObject need to be extended to support SQLite connections managing
 # Current problems:
