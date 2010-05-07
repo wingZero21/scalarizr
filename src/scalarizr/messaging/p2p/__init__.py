@@ -138,7 +138,7 @@ class _P2pMessageStore:
 	def mark_as_delivered(self, message_id):
 		return self._mark_as_delivered(message_id, 1)
 	
-	def mark_as_undelivered(self, message_id):
+	def mark_as_undelivered(self, message_id, next_time):
 		return self._mark_as_delivered(message_id, 0)
 
 	def _mark_as_delivered (self, message_id, delivered):

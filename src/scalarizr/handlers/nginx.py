@@ -40,6 +40,9 @@ class NginxHandler(Handler):
 		template_path = os.path.join(bus.etc_path, "public.d/handler.nginx/app-servers.tpl")
 		if not os.path.exists(template_path):
 			self._logger.warning("nginx template '%s' doesn't exists. Creating default template", template_path)
+			template_dir = os.path.dirname(template_path)
+			if not os.path.exists(template_dir):
+				os.makedirs(template_dir)
 			f = open(template_path, "w+")
 			f.write("""\nupstream backend {\n\tip_hash;\n\n\t${upstream_hosts}\n}\n""")
 			f.close()
@@ -50,7 +53,6 @@ class NginxHandler(Handler):
 		for app_serv in self._queryenv.list_roles(behaviour = Behaviours.APP):
 			for app_host in app_serv.hosts :
 				upstream_hosts += "\tserver %s:%s;\n" % (app_host.internal_ip, app_port)
-		print upstream_hosts
 		if not upstream_hosts:
 			upstream_hosts = "\tserver 127.0.0.1:80;\n"
 		
@@ -63,14 +65,13 @@ class NginxHandler(Handler):
 		if os.path.isfile(bus.etc_path+"/nginx/https.include") and \
 				os.path.isfile(cert_path) and os.path.isfile(pk_path):
 			template += "include " + bus.etc_path + "/nginx/https.include;"
-			print template
 			
 		#Determine, whether configuration was changed or not
-		print include
-		old_include = open(include,'r').read()
-		print template, old_include
-		if os.path.isfile(include) and template == old_include:
-			self._logger.info("nginx upstream configuration wasn`t changed.")
+		
+		if os.path.isfile(include):
+			old_include = open(include,'r').read()
+			if template == old_include:
+				self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:
 			self._logger.info("nginx upstream configuration was changed.")
 			if os.path.isfile(include):

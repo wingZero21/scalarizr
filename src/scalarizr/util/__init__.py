@@ -203,6 +203,7 @@ def init_tests():
 			format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", 
 			stream=sys.stdout, 
 			level=logging.DEBUG)
-	
+	from scalarizr.bus import bus
+	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../test/resources/etc")
 	from scalarizr import _init
 	_init()

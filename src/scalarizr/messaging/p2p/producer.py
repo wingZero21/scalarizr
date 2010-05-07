@@ -28,6 +28,10 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
 	
+	def _send_undelivered(self):
+		#lock
+		pass
+	
 	def send(self, queue, message):
 		self._logger.info("Sending message '%s' into queue '%s'" % (message.name, queue))
 		try:
