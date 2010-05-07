@@ -14,6 +14,7 @@ class P2pConfigOptions:
 	SERVER_ID 			= "server_id"
 	CRYPTO_KEY_PATH 	= "crypto_key_path"
 	PRODUCER_URL 		= "producer_url"
+	PRODUCER_RETRIES_PROGRESSION = "producer_retries_progression"	
 	CONSUMER_URL 		= "consumer_url"
 
 class P2pMessageService(MessageService):
@@ -39,8 +40,8 @@ class P2pMessageService(MessageService):
 			self._producer = producer.P2pMessageProducer(**self._kwargs)
 		return self._producer
 
-def new_service(config):
-	return P2pMessageService(config)
+def new_service(**kwargs):
+	return P2pMessageService(**kwargs)
 	
 class _P2pBase(object):
 	server_id = None

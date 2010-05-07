@@ -15,6 +15,7 @@ import uuid
 
 class P2pMessageProducer(MessageProducer, _P2pBase):
 	endpoint = None
+	retries_progression = None
 	_store = None
 	_logger = None
 	
@@ -23,6 +24,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 		MessageProducer.__init__(self)
 		_P2pBase.__init__(self, **kwargs)
 		self.endpoint = kwargs[P2pConfigOptions.PRODUCER_URL]
+		self.retries_progression = configtool.split_array(kwargs[P2pConfigOptions.PRODUCER_RETRIES_PROGRESSION], ",")		
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
 	

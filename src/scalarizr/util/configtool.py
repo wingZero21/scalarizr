@@ -87,11 +87,12 @@ def write_key(path, key, key_title=None, private=None, base64encode=False):
 			else get_key_filename(os.path.basename(path), private)
 	file = None
 	try:
-		os.chmod(filename, 0600)
+		if os.path.exists(filename):
+			os.chmod(filename, 0600)
 		file = open(filename, "w+")
 		file.write(binascii.b2a_base64(key) if base64encode else key)
 		os.chmod(filename, 0400)
-	except OSError, e:
+	except (IOError, OSError), e:
 		raise ConfigError("Cannot write %s in file '%s'. %s" % (key_title or "key", filename, str(e)))
 	finally:
 		if file:
@@ -107,7 +108,7 @@ def read_key(path, key_title=None, private=None):
 	try:
 		file = open(filename, "r")
 		return file.read().strip()
-	except OSError, e:
+	except IOError, e:
 		raise ConfigError("Cannot read %s file '%s'. %s" % (key_title or "key", filename, str(e)))
 	finally:
 		if file:

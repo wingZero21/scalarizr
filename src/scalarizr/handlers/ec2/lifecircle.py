@@ -41,8 +41,8 @@ class AwsLifeCircleHandler(Handler):
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")
 			f.write('KERNEL=="sd*[!0-9]", RUN+="'+ scripts_path + '/udev"')
 			f.close()
-		except OSError, e:
-			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' OSError: %s", str(e))
+		except (OSError, IOError), e:
+			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' Error: %s", str(e))
 			raise
 
 	

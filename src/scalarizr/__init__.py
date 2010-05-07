@@ -16,6 +16,7 @@ import logging.config
 from optparse import OptionParser, OptionGroup
 import binascii
 from scalarizr.messaging.p2p import P2pConfigOptions
+from scalarizr.util.configtool import ConfigError
 
 
 class ScalarizrError(BaseException):
@@ -157,7 +158,10 @@ def _init_services():
 	crypto_key = optparser.values.crypto_key or platform.get_user_data(UserDataOptions.CRYPTO_KEY)
 	if crypto_key:
 		configtool.write_key(crypto_key_opt.get(), crypto_key, key_title=crypto_key_title)
-	crypto_key = configtool.read_key(crypto_key_opt.get(), key_title=crypto_key_title)
+	try:
+		crypto_key = configtool.read_key(crypto_key_opt.get(), key_title=crypto_key_title)
+	except ConfigError, e:
+		logger.warn(str(e))
 	if not crypto_key:
 		raise NotInstalledError("%s is empty" % (crypto_key_title))
 
@@ -235,7 +239,10 @@ def _install ():
 
 	# Crypto key
 	crypto_key_path_opt = configtool.option_wrapper(gen_sect, configtool.OPT_CRYPTO_KEY_PATH)
-	orig_crypto_key = configtool.read_key(crypto_key_path_opt.get())
+	try:
+		orig_crypto_key = configtool.read_key(crypto_key_path_opt.get())
+	except ConfigError, e:
+		orig_crypto_key = None
 	while True:
 		input = optparser.values.crypto_key \
 				or (raw_input("Enter crypto key" + (" ["+orig_crypto_key+"]" if orig_crypto_key else "") + ":")

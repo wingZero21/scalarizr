@@ -36,9 +36,12 @@ class BehaviourConfigurator:
 	include_ini_filename = None	
 	
 	def configure(self, interactive, **kwargs):
+		section_name = configtool.get_behaviour_section_name(self.name)
+		ini_filename = configtool.get_behaviour_filename(self.name, ret=configtool.RET_PUBLIC)
+		
 		config = ConfigParser()
-		config.read(self.include_ini_filename)
-		sect = configtool.section_wrapper(config, self.section_name)
+		config.read(ini_filename)
+		sect = configtool.section_wrapper(config, section_name)
 		
 		#fill data from config and kwargs
 		for key in self.options:
@@ -63,8 +66,6 @@ class BehaviourConfigurator:
 					raise MissingDataError("Option missed. " + value[0])
 				
 		#write to specific ini-file		
-		section_name = configtool.get_behaviour_section_name(self.name)
-		ini_filename = configtool.get_behaviour_filename(self.name, ret=configtool.RET_PUBLIC)
 		sections = {section_name: {}}
 		for key, value in self.options.items():
 			sections[section_name][key] = value[1]
