@@ -6,10 +6,9 @@ Created on Dec 24, 2009
 
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.messaging import Queues, Messages
-import scalarizr.util as zrutil
+from scalarizr.messaging import Queues, Messages, MetaOptions
+from scalarizr.util import parse_size, format_size, configtool
 import threading
-from scalarizr.util import configtool
 try:
 	import time
 except ImportError:
@@ -55,45 +54,41 @@ class ScriptExecutor(Handler):
 		self._queryenv = bus.queryenv_service
 		self._msg_service = bus.messaging_service
 		self._platform = bus.platfrom
+		self._config = bus.config
 		
 		producer = self._msg_service.get_producer()
 		producer.on("before_send", self.on_before_message_send)
 		
-		config = bus.config
 		sect_name = configtool.get_handler_section_name(self.name)
-		if not config.has_section(sect_name):
+		if not self._config.has_section(sect_name):
 			raise Exception("Script executor handler is not configured. "
 						    + "Config has no section '%s'" % sect_name)
 		
 		# read exec_dir_prefix
-		self._exec_dir_prefix = config.get(sect_name, self.OPT_EXEC_DIR_PREFIX)
+		self._exec_dir_prefix = self._config.get(sect_name, self.OPT_EXEC_DIR_PREFIX)
 		if not os.path.isabs(self._exec_dir_prefix):
 			self._exec_dir_prefix = bus.base_path + os.sep + self._exec_dir_prefix
 			
 		# read logs_dir_prefix
-		self._logs_dir_prefix = config.get(sect_name, self.OPT_LOGS_DIR_PREFIX)
+		self._logs_dir_prefix = self._config.get(sect_name, self.OPT_LOGS_DIR_PREFIX)
 		if not os.path.isabs(self._logs_dir_prefix):
 			self._logs_dir_prefix = bus.base_path + os.sep + self._logs_dir_prefix
 		
 		# logs_truncate_over
-		self._logs_truncate_over = zrutil.parse_size(config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
+		self._logs_truncate_over = parse_size(self._config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
 	
 	
 	def on_before_message_send(self, queue, message):
 		self.exec_scripts_on_event(message.name)
 		
 	
-	def exec_scripts_on_event (self, event_name, internal_ip=None):
+	def exec_scripts_on_event (self, event_name):
 		self._logger.debug("Fetching scripts for event %s", event_name)	
 		scripts = self._queryenv.list_scripts(event_name)
 		self._logger.debug("Fetched %d scripts", len(scripts))
 		
 		if len(scripts) > 0:
-			if not internal_ip is None:
-				self._logger.info("Executing %d script(s) on event %s fired on host %s", 
-						len(scripts), event_name, internal_ip)
-			else:
-				self._logger.info("Executing %d script(s) on event %s", len(scripts), event_name)
+			self._logger.info("Executing %d script(s) on event %s", len(scripts), event_name)
 			
 			self._exec_dir = self._exec_dir_prefix + str(time.time())
 			self._logger.debug("Create temp exec dir %s", self._exec_dir)
@@ -127,32 +122,6 @@ class ScriptExecutor(Handler):
 				for t in async_threads:
 					t.join()
 			shutil.rmtree(self._exec_dir)
-
-		
-	def on_EventNotice(self, message):
-		# TODO: remove event notice. 
-		
-		self._logger.debug("Entering on_EventNotice")
-		
-		internal_ip = message.body["InternalIP"]
-		role_name = message.body["RoleName"]
-		event_name = message.body["EventName"]
-		self._logger.info("Received event notice (event_name: %s, role_name: %s, ip: %s)", 
-						event_name, role_name, internal_ip)
-		self._event_name = event_name
-		
-		if self._platform.get_private_ip() == internal_ip:
-			self._logger.info("Ignore event with the same ip as mine")
-			return 
-		
-		if internal_ip == "0.0.0.0":
-			self._logger.info("Custom event %s fired", event_name)
-		else:
-			self._logger.info("Scalr notified me that %s (role: %s) fired event %s", 
-							internal_ip, role_name, event_name)
-		
-		self.exec_scripts_on_event(event_name, internal_ip)
-		
 			
 	def _execute_script(self, script):
 		# Create script file in local fs
@@ -207,12 +176,12 @@ class ScriptExecutor(Handler):
 		
 		self._logger.info("Script '%s' execution finished. Elapsed time: %.2f seconds, stdout: %s, stderr: %s", 
 						script.name, elapsed_time, 
-						zrutil.format_size(os.path.getsize(stdout.name)), 
-						zrutil.format_size(os.path.getsize(stderr.name)))
+						format_size(os.path.getsize(stdout.name)), 
+						format_size(os.path.getsize(stderr.name)))
 		
 		# Notify scalr
 		self._logger.debug("Prepare 'ExecResult' message")
-		message = self._msg_service.new_message(Messages.EXEC_RESULT, body=dict(
+		message = self._msg_service.new_message(Messages.SCRIPT_EXEC_RESULT, body=dict(
 			stdout=binascii.b2a_base64(self._get_truncated_log(stdout.name, self._logs_truncate_over)),
 			stderr=binascii.b2a_base64(self._get_truncated_log(stderr.name, self._logs_truncate_over)),
 			time_elapsed=elapsed_time,
@@ -238,4 +207,16 @@ class ScriptExecutor(Handler):
 				
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.EVENT_NOTICE
+		return True
+	
+	def __call__(self, message):
+		self._event_name = message.name
+		self._logger.info("Scalr notified me that '%s' fired", self._event_name)		
+		
+		mine_server_id = self._config.get()
+		if mine_server_id == message.meta[MetaOptions.SERVER_ID]:
+			self._logger.info("Ignore event with the same server_id as mine")
+			return 
+		
+		self.exec_scripts_on_event(self._event_name)		
+

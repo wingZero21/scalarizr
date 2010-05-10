@@ -10,6 +10,7 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
 from threading import Thread
 import logging
+import threading
 try:
 	import time
 except ImportError:
@@ -44,9 +45,10 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 	def stop(self):
 		if (not self._server is None):
 			self._logger.info("Stopping consumer...")
-			
+		
 			# stop http server
 			self._server.shutdown()
+			self._logger.debug("HTTP server shutdowned")
 
 			# stop message handler thread
 			self._shutdown_handler = True

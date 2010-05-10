@@ -1,7 +1,6 @@
 
 from scalarizr.bus import bus
 from scalarizr.util import configtool
-from scalarizr.util import configtool
 import os
 import platform
 import logging
@@ -17,6 +16,15 @@ class Handler(object):
 			getattr(self, fn)(message)
 		else:
 			raise HandlerError("Handler has no method %s" % (fn))
+
+	def _msg_put_broadcast_data(self, message):
+		config = bus.config
+		platform = bus.platfrom
+		gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
+		message.behaviour = configtool.split_array(gen_sect.get(configtool.OPT_BEHAVIOUR))
+		message.local_ip = platform.get_private_ip()
+		message.remote_ip = platform.get_public_ip()
+		message.role_name = gen_sect.get(configtool.OPT_ROLE_NAME)	
 
 class HandlerError(BaseException):
 	pass
@@ -107,5 +115,3 @@ class MessageListener:
 		
 		if not accepted:
 			self._logger.warning("No one could handle '%s'", message.name)
-			
-			

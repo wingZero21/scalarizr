@@ -21,6 +21,7 @@ RET_PRIVATE = 3
 SECT_GENERAL = "general"
 OPT_SERVER_ID = "server_id"
 OPT_BEHAVIOUR = "behaviour"
+OPT_ROLE_NAME = "role_name"
 OPT_STORAGE_PATH = "storage_path"
 OPT_CRYPTO_KEY_PATH = "crypto_key_path"
 OPT_PLATFORM = "platform"

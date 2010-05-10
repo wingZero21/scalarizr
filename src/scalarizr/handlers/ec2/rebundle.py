@@ -8,7 +8,8 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.platform import PlatformError
 from scalarizr.messaging import Messages
-from scalarizr.util import system, disttool, cryptotool
+from scalarizr.util import system, disttool, cryptotool, fstool
+from scalarizr.util.fstool import Mtab, Fstab
 import logging
 import time
 import os
@@ -435,70 +436,7 @@ Bundled: %(bundle_date)s
 		except (BaseException, Exception), e:
 			self._logger.error("Cannot register image on EC2. %s", e)
 			raise
-	
-class Fstab:
-	"""
-	Wrapper over /etc/fstab
-	"""
-	LOCATION = None
-	_entries = None
-	_filename = None
-	_re = None
-	
-	def __init__(self, filename=None):
-		self._filename = filename if not filename is None else Mtab.LOCATION
-		self._entries = None
-		self._re = re.compile("^(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+).*$")
 		
-	def list_entries(self, rescan=False):
-		if not self._entries or rescan:
-			self._entries = []
-			f = open(self._filename, "r")
-			for line in f:
-				if line[0:1] == "#":
-					continue
-				m = self._re.match(line)
-				if m:
-					self._entries.append(_TabEntry(
-						m.group(1), m.group(2), m.group(3), m.group(4), line.strip()
-					))
-			f.close()
-			
-		return list(self._entries)
-
-class Mtab(Fstab):
-	"""
-	Wrapper over /etc/mtab
-	"""
-	LOCAL_FS_TYPES = None	
-		
-class _TabEntry(object):
-	device = None
-	mpoint = None
-	fstype = None
-	options = None	
-	value = None
-	
-	def __init__(self, device, mpoint, fstype, options, value):
-		self.device = device
-		self.mpoint = mpoint
-		self.fstype = fstype
-		self.options = options		
-		self.value = value
-
-		
-if disttool.is_linux():
-	Fstab.LOCATION = "/etc/fstab"	
-	Mtab.LOCATION = "/etc/mtab"
-	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs')
-	
-elif disttool.is_sun():
-	Fstab.LOCATION = "/etc/vfstab"	
-	Mtab.LOCATION = "/etc/mnttab"
-	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs', 
-		'ufs', 'sharefs', 'dev', 'devfs', 'ctfs', 'mntfs',
-		'proc', 'lofs',   'objfs', 'fd', 'autofs')
-
 
 if disttool.is_linux():
 	class LinuxLoopbackImage:
@@ -518,17 +456,20 @@ if disttool.is_linux():
 		_excludes = None	
 		_logger = None
 		
+		_mtab = None
+		
 		def __init__(self, volume, image_file, image_size, excludes):
 			self._logger = logging.getLogger(__name__)
 			
 			self._volume = volume
 			self._image_file = image_file
 			self._image_size = image_size
+			
 			self._excludes = excludes
-	
 			if self._image_mpoint.startswith(volume):
 				self._excludes.append(self._image_mpoint)
 		
+			self._mtab = Mtab()
 		
 		def make(self):
 			self._logger.info("Copying %s into the image file %s...", self._volume, self._image_file)
@@ -560,11 +501,9 @@ if disttool.is_linux():
 			if necessary.		
 			"""
 			self._logger.debug("Mount image file")
-			if not os.path.exists(self._image_mpoint):
-				os.makedirs(self._image_mpoint)
-			if self._is_mounted(self._image_mpoint):
+			if self._mtab.is_mounted(self._image_mpoint):
 				raise PlatformError("Image already mounted")
-			system("mount -o loop " + self._image_file + " " + self._image_mpoint)
+			fstool.mount(self._image_file, self._image_mpoint, ["-o loop"])
 		
 		def _make_special_dirs(self):
 			self._logger.debug("Make special directories")
@@ -614,16 +553,8 @@ if disttool.is_linux():
 		def _cleanup (self):
 			self._unmount(self._image_mpoint)
 			
-		def _is_mounted(self, mpoint):
-			self._logger.debug("Checking that '%s' is mounted", mpoint)
-			mtab = Mtab()
-			for entry in mtab.list_entries():
-				if entry.mpoint == mpoint:
-					return True
-			return False
-			
 		def _unmount(self, mpoint):
-			if self._is_mounted(mpoint):
+			if self._mtab.is_mounted(mpoint):
 				self._logger.debug("Unmounting '%s'", mpoint)				
 				system("umount -d " + mpoint)
 				os.rmdir(mpoint)

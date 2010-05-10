@@ -17,6 +17,7 @@ from optparse import OptionParser, OptionGroup
 import binascii
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util.configtool import ConfigError
+import threading
 
 
 class ScalarizrError(BaseException):
@@ -120,6 +121,11 @@ def _init_services():
 	
 	gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
 	messaging_sect = configtool.section_wrapper(config, configtool.SECT_MESSAGING)
+	
+	# Check that database is installed
+	db_file = os.path.join(bus.etc_path, gen_sect.get(configtool.OPT_STORAGE_PATH))
+	if not os.path.exists(db_file):
+		raise NotInstalledError("Database is not installed")	
 	
 	# Initialize platform
 	logger.debug("Initialize platform")
@@ -302,6 +308,12 @@ def _install ():
 		
 	configtool.update(os.path.join(bus.etc_path, "config.ini"), ini_updates)
 	
+	# Install database
+	print "Create database"
+	conn = _db_connect()
+	conn.executescript(open(os.path.join(bus.etc_path, "public.d/db.sql")).read())
+	conn.commit()
+	
 	print "Done"
 
 _KNOWN_PLATFORMS = ("ec2", "rs", "vps")
@@ -389,6 +401,12 @@ def main():
 			print >> sys.stderr, "error: %s" % (e)
 			print >> sys.stdout, "Execute instalation process first: 'scalarizr --install'"
 			sys.exit()
+
+
+		msg_service = bus.messaging_service
+		consumer = msg_service.get_consumer()
+		msg_thread = threading.Thread(target=consumer.start)
+		msg_thread.start()
 	
 		# Fire start
 		bus.fire("start")
@@ -398,9 +416,8 @@ def main():
 		
 		# Start messaging server
 		try:
-			msg_service = bus.messaging_service
-			consumer = msg_service.get_consumer()
-			consumer.start()
+			while True:
+				msg_thread.join(0.5)
 		except KeyboardInterrupt:
 			logger.info("Stopping scalarizr...")
 			consumer.stop()

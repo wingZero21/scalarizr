@@ -1,5 +1,4 @@
 BEGIN TRANSACTION;
-DELETE FROM sqlite_sequence;
 CREATE TABLE p2p_message (
     "id" INTEGER PRIMARY KEY,
     "message_id" TEXT,
@@ -21,5 +20,5 @@ CREATE TABLE log (
     "lineno" INTEGER,
     "msg" TEXT,
     "stack_trace" TEXT
-)
+);
 COMMIT;

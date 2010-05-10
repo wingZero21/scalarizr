@@ -32,7 +32,7 @@ def main ():
 			msg_service = bus.messaging_service
 			producer = msg_service.get_producer()
 			
-			msg = msg_service.new_message(Messages.SERVER_REBOOT)
+			msg = msg_service.new_message(Messages.INT_SERVER_REBOOT)
 			producer.send(Queues.CONTROL, msg)
 			
 			# 30 seconds for termination

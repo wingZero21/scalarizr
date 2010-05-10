@@ -34,7 +34,7 @@ def main():
 			msg_service = bus.messaging_service
 			producer = msg_service.get_producer()
 			
-			msg = msg_service.new_message(Messages.SERVER_HALT)
+			msg = msg_service.new_message(Messages.INT_SERVER_HALT)
 			producer.send(Queues.CONTROL, msg)
 			
 			# 30 seconds for termination

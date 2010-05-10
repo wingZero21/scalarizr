@@ -157,79 +157,101 @@ class Messages:
 	
 	HOST_INIT = "HostInit"
 	"""
+	@broadcast
 	Fires when scalarizr is initialized and ready to be configured 
 	"""
 
-	HOST_HALT = "Go2Halt"
+	HOST_UP = "HostUp"
 	"""
-	Fires when scalarizr is going to halt
+	@broadcast
+	Fires when server is ready to play it's role
 	"""
 	
+	HOST_DOWN = "HostDown"
+	"""
+	@broadcast
+	Fires when server is terminating
+	"""
+
 	REBOOT_START = "RebootStart"
 	"""
+	@broadcast
 	Fires when scalarizr is going to reboot
 	"""
 	
 	REBOOT_FINISH = "RebootFinish"
 	"""
+	@broadcast
 	Fires when scalarizr is resumed after reboot
 	"""
 
 	BLOCK_DEVICE_ATTACHED = "BlockDeviceAttached"
 	"""
+	@broadcast
 	Fires when block device was attached
 	"""
 	
 	BLOCK_DEVICE_DETACHED = "BlockDeviceDetached"
 	"""
+	@broadcast
 	Fires when block device was detached
 	"""
+
+	BLOCK_DEVICE_MOUNTED = "BlockDeviceMounted"
+	"""
+	@broadcast
+	Fires when block device was mounted
+	"""
 	
-	EXEC_RESULT = "ExecResult"
+	SCRIPT_EXEC_RESULT = "ExecResult"
 	"""
 	Fires after script execution
+	"""
+	
+	REBUNDLE_RESULT = "RebundleResult"
+	"""
+	Fires after rebundle task finished
 	"""
 	
 	###
 	# Scalr events
 	###
 	
-	HOST_UP = "HostUp"
-	"""
-	Fired by Scalr when farm is enriched with new server
-	"""
-	
-	HOST_DOWN = "HostDown"
-	"""
-	Fired by Scalr when one of the farm servers is terminated
-	"""
-	
-	EVENT_NOTICE = "EventNotice"
-	"""
-	Fired by Scalr when event occurred on one of the farm servers  
-	"""
-	
 	VHOST_RECONFIGURE = "VhostReconfigure"
+
+	MOUNTPOINTS_RECONFIGURE = "MountPointsReconfigure"
 
 	HOST_INIT_RESPONSE = "HostInitResponse"
 	
 	REBUNDLE = "Rebundle"
 	
+	SCALARIZR_UPDATE_AVAILABLE = "ScalarizrUpdateAvailable"
+	
+	BEFORE_HOST_TERMINATE = "BeforeHostTerminate"
+	
+	BEFORE_INSTANCE_LAUNCH = "BeforeInstanceLaunch"
+	
+	DNS_ZONE_UPDATED = "DNSZoneUpdated"
+	
+	IP_ADDRESS_CHANGED = "IPAddressChanged"
+	
+	SCRIPTS_LIST_UPDATED = "ScriptsListUpdated"
+	
 	###
-	# Scripts events
+	# Internal events
 	###
 	
-	BLOCK_DEVICE_UPDATED = "BlockDeviceUpdated"
+	INT_BLOCK_DEVICE_UPDATED = "IntBlockDeviceUpdated"
 	"""
 	Fired by scripts/udev.py when block device was added/updated/removed 
 	"""
 	
-	SERVER_REBOOT = "ServerReboot"
+	INT_SERVER_REBOOT = "IntServerReboot"
 	"""
 	Fired by scripts/reboot.py when server is going to reboot
 	"""
 	
-	SERVER_HALT = "ServerHalt"
+	INT_SERVER_HALT = "IntServerHalt"
 	"""
 	Fired by scripts/halt.py when server is going to halt
 	"""

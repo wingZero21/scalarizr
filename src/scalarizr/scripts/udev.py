@@ -21,7 +21,7 @@ def main():
 		msg_service = bus.messaging_service
 		producer = msg_service.get_producer()
 	
-		msg = msg_service.new_message(Messages.BLOCK_DEVICE_UPDATED)
+		msg = msg_service.new_message(Messages.INT_BLOCK_DEVICE_UPDATED)
 		for k, v in os.environ.items():
 			msg.body[k.lower()] = v
 		producer.send(Queues.CONTROL, msg)

@@ -50,6 +50,7 @@ class LifeCircleHandler(Handler):
 		
 		self._msg_service = bus.messaging_service
 		self._producer = self._msg_service.get_producer()
+		self._config = bus.config
 	
 	
 	def on_init(self):
@@ -111,8 +112,7 @@ class LifeCircleHandler(Handler):
 			bus.fire("before_host_init")
 			
 			# Regenerage key
-			config = bus.config
-			key_path = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
+			key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
 			key = cryptotool.keygen()
 			configtool.write_key(key_path, key, key_title="Scalarizr crypto key")
 			
@@ -120,9 +120,10 @@ class LifeCircleHandler(Handler):
 			queryenv = bus.queryenv_service
 			queryenv.key = key
 			
-			# Send HostInit			
+			# Send HostInit
 			msg = self._msg_service.new_message(Messages.HOST_INIT)
-			msg.key = key
+			self._msg_put_broadcast_data(msg)
+			msg.crypto_key = key			
 			self._producer.send(Queues.CONTROL, msg) 
 
 			# Notify listeners
@@ -137,6 +138,7 @@ class LifeCircleHandler(Handler):
 			
 			# Send RebootFinish
 			msg = self._msg_service.new_message(Messages.REBOOT_FINISH)
+			self._msg_put_broadcast_data(msg)
 			self._producer.send(Queues.CONTROL, msg)
 			
 			# Notify listeners
@@ -154,35 +156,19 @@ class LifeCircleHandler(Handler):
 			
 		# Send message 
 		msg = self._msg_service.new_message(Messages.REBOOT_START)
+		self._msg_put_broadcast_data(msg)
 		self._producer.send(Queues.CONTROL, msg)
 			
 		bus.fire("reboot_start")
-			
-		# Shutdown routine
-		#self._shutdown()
 		
 	
 	def on_ServerHalt(self, message):
-		#msg = self._msg_service.new_message(Messages.GO2HALT)
-		#self._producer.send(Queues.CONTROL, msg)
-		
-		#bus.fire("go2halt")
-
-		# Shutdown routine
-		#self._shutdown()
-		
 		msg = self._msg_service.new_message(Messages.HOST_DOWN)
+		self._msg_put_broadcast_data(msg)
 		self._producer.send(Queues.CONTROL, msg)
 
 		bus.fire("host_down")
 
-	"""
-	def _shutdown(self):
-		msg = self._msg_service.new_message(Messages.HOST_DOWN)
-		self._producer.send(Queues.CONTROL, msg)
-
-		bus.fire("host_down")
-	"""
 
 	def on_before_message_send(self, queue, message):
 		"""
@@ -191,6 +177,6 @@ class LifeCircleHandler(Handler):
 		pass
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.SERVER_REBOOT \
-			or message.name == Messages.SERVER_HALT	
+		return message.name == Messages.INT_SERVER_REBOOT \
+			or message.name == Messages.INT_SERVER_HALT	
 	

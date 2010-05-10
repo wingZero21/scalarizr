@@ -25,6 +25,9 @@ class AwsLifeCircleHandler(Handler):
 		self._platform = bus.platfrom
 		bus.on("init", self.on_init)		
 	
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return message.name == Messages.HOST_INIT_RESPONSE and platform == "ec2"	
+	
 	def on_init(self, *args, **kwargs):
 		bus.on("before_host_init", self.on_before_host_init)		
 
@@ -82,6 +85,3 @@ class AwsLifeCircleHandler(Handler):
 		configtool.write_key(config.get(sect_name, ec2_platform.OPT_PK_PATH), 
 				message.ec2_pk, key_title="EC2 user private key")
 		
-	
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.HOST_INIT_RESPONSE and platform == "ec2"
