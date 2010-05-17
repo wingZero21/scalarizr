@@ -11,6 +11,7 @@ from urllib import splitnport
 from urllib2 import urlopen, Request, URLError, HTTPError
 import logging
 import uuid
+import threading
 
 
 class P2pMessageProducer(MessageProducer, _P2pBase):
@@ -25,12 +26,45 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 		_P2pBase.__init__(self, **kwargs)
 		self.endpoint = kwargs[P2pConfigOptions.PRODUCER_URL]
 		self.retries_progression = configtool.split_array(kwargs[P2pConfigOptions.PRODUCER_RETRIES_PROGRESSION], ",")		
+		self.next_try = 0
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
+		self._send_event = threading.Event()
+		self._sender_thread = threading.Thread(target=self._send_undelivered)
+		self._sender_thread.daemon = True
+		self._sender_thread.run()
 	
 	def _send_undelivered(self):
-		#lock
-		pass
+		while 1:
+			
+			interval = self.next_interval()
+			self._send_event.wait(interval)
+			
+			if self._send_event.isSet():
+				
+				self._send_event.clear()
+				
+				undelivered = self.get_undelivered()
+				
+				for queue, message in undelivered:		
+					try:
+						xml = message.toxml()
+						crypto_key = configtool.read_key(self.crypto_key_path)
+						data = cryptotool.encrypt(xml, crypto_key)
+						req = Request(self.endpoint + "/" + queue, data, {"X-Server-Id": self.server_id})
+						urlopen(req)
+						self._store.mark_as_delivered(message.id)
+						self.fire("send", queue, message)
+						self.next_try = 0			
+					except IOError, e:
+						if isinstance(e, HTTPError) and e.code == 201:
+							self._store.mark_as_delivered(message.id)
+							self.fire("send", queue, message)
+							self.next_try = 0	
+						else:
+							if self.next_try < len(self.retries_progression):
+								self.next_try += 1
+							break
 	
 	def send(self, queue, message):
 		self._logger.info("Sending message '%s' into queue '%s'" % (message.name, queue))
@@ -40,6 +74,9 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 				
 			self.fire("before_send", queue, message)				
 			self._store.put_outgoing(message, queue)
+			
+			interval = self.next_interval()
+			self._send_event.wait(interval)
 			
 			# Prepare POST body
 			xml = message.toxml()
@@ -55,6 +92,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			self.fire("send", queue, message)
 			
 		except IOError, e:
+
 			if isinstance(e, HTTPError) and e.code == 201:
 				self._store.mark_as_delivered(message.id)
 				self.fire("send", queue, message)
@@ -62,6 +100,8 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 				self.fire("send_error", e, queue, message)
 				self._logger.info("Mark message as undelivered")
 				self._store.mark_as_undelivered(message.id)
+				
+				self._send_event.set()
 				
 				if isinstance(e, HTTPError):
 					resp_body = e.read() if not e.fp is None else ""
@@ -82,3 +122,6 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 
 	def get_undelivered(self):
 		return self._store.get_undelivered()
+	
+	def next_interval(self):
+		return int(self.retries_progression[self.next_try]) * 60.0
