@@ -12,6 +12,7 @@ from urllib2 import urlopen, Request, URLError, HTTPError
 import logging
 import uuid
 import threading
+import time
 
 
 class P2pMessageProducer(MessageProducer, _P2pBase):
@@ -59,7 +60,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 						self._send_event.wait(interval)
 						self._send_event.clear()
 						break
-				#sleep
+			time.sleep(1)
 			
 	
 	def send(self, queue, message):
