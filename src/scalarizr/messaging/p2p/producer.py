@@ -29,6 +29,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 		self.next_try = 0
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
+		
 		self._send_event = threading.Event()
 		self._sender_thread = threading.Thread(target=self._send_undelivered)
 		self._sender_thread.daemon = True
@@ -36,10 +37,6 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 	
 	def _send_undelivered(self):
 		while 1:
-			
-			interval = self.next_interval()
-			self._send_event.wait(interval)
-			
 			if self._send_event.isSet():
 				
 				self._send_event.clear()
@@ -64,6 +61,8 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 						else:
 							if self.next_try < len(self.retries_progression):
 								self.next_try += 1
+							interval = self.next_interval()
+							self._send_event.wait(interval)
 							break
 	
 	def send(self, queue, message):
