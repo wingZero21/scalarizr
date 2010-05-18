@@ -21,6 +21,19 @@ import logging
 import binascii
 
 
+#FIXME: Script 'phpinfo' terminated
+"""
+Exception in thread Thread-2:
+Traceback (most recent call last):
+  File "/usr/lib/python2.6/threading.py", line 525, in __bootstrap_inner
+    self.run()
+  File "/usr/lib/python2.6/threading.py", line 477, in run
+    self.__target(*self.__args, **self.__kwargs)
+  File "/opt/scalarizr/src/scalarizr/handlers/script_executor.py", line 174, in _execute_script
+    os.remove(script_path)
+OSError: [Errno 2] No such file or directory: '/usr/local/bin/scalr-scripting.1273578026.9/phpinfo'
+"""
+
 
 def get_handlers ():
 	return [ScriptExecutor()]
@@ -56,9 +69,6 @@ class ScriptExecutor(Handler):
 		self._platform = bus.platfrom
 		self._config = bus.config
 		
-		producer = self._msg_service.get_producer()
-		producer.on("before_send", self.on_before_message_send)
-		
 		sect_name = configtool.get_handler_section_name(self.name)
 		if not self._config.has_section(sect_name):
 			raise Exception("Script executor handler is not configured. "
@@ -76,10 +86,6 @@ class ScriptExecutor(Handler):
 		
 		# logs_truncate_over
 		self._logs_truncate_over = parse_size(self._config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
-	
-	
-	def on_before_message_send(self, queue, message):
-		self.exec_scripts_on_event(message.name)
 		
 	
 	def exec_scripts_on_event (self, event_name):
@@ -159,7 +165,7 @@ class ScriptExecutor(Handler):
 		else:
 			# Process timeouted
 			self._logger.warn("Script '%s' execution timeout (%d seconds). Kill process", 
-							script.name, script.exec_timeout)
+					script.name, script.exec_timeout)
 			if hasattr(proc, "kill"):
 				# python >= 2.6
 				proc.kill()
@@ -175,9 +181,9 @@ class ScriptExecutor(Handler):
 		
 		
 		self._logger.info("Script '%s' execution finished. Elapsed time: %.2f seconds, stdout: %s, stderr: %s", 
-						script.name, elapsed_time, 
-						format_size(os.path.getsize(stdout.name)), 
-						format_size(os.path.getsize(stderr.name)))
+				script.name, elapsed_time, 
+				format_size(os.path.getsize(stdout.name)), 
+				format_size(os.path.getsize(stderr.name)))
 		
 		# Notify scalr
 		self._logger.debug("Prepare 'ExecResult' message")
@@ -192,7 +198,7 @@ class ScriptExecutor(Handler):
 		
 		self._logger.debug("Sending 'ExecResult' message to Scalr")
 		producer = self._msg_service.get_producer()
-		producer.send(Queues.CONTROL, message)
+		producer.send(Queues.LOG, message)
 		self._logger.debug("Done sending message")
 	
 	def _get_truncated_log(self, logfile, maxsize):
@@ -213,7 +219,7 @@ class ScriptExecutor(Handler):
 		self._event_name = message.name
 		self._logger.info("Scalr notified me that '%s' fired", self._event_name)		
 		
-		mine_server_id = self._config.get()
+		mine_server_id = self._config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 		if mine_server_id == message.meta[MetaOptions.SERVER_ID]:
 			self._logger.info("Ignore event with the same server_id as mine")
 			return 

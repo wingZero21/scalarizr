@@ -157,6 +157,7 @@ def update(filename, sections):
 	logger = logging.getLogger(__name__)
 		
 	# Read configuration from file
+	bus_config = bus.config
 	config = Config()
 	if os.path.exists(filename):
 		cursect = None
@@ -204,6 +205,8 @@ def update(filename, sections):
 			logger.debug("Create section '%s' and append it in the end", sect_name)
 			cur_sect = Section(sect_name)
 			config.items.append(cur_sect)
+		if not bus_config.has_section(cur_sect.name):
+			bus_config.add_section(cur_sect.name)
 			
 		for opt_name, value in sections[sect_name].items():
 			logger.debug("Find option '%s' in section '%s'", opt_name, sect_name)
@@ -226,12 +229,17 @@ def update(filename, sections):
 				cur_sect.items.append(cur_opt)
 			else:
 				cur_opt.value = value
+			bus_config.set(cur_sect.name, cur_opt.key, value)
 	
 
 	logger.debug("Write result configuration into file '%s'", filename)
+	fp = None
 	try:
-		fp = open(filename, "w")
+		if os.path.exists(filename):
+			os.chmod(filename, 0600)		
+		fp = open(filename, "w+")
 		fp.write(str(config))
+		os.chmod(filename, 0400)
 	finally:
 		if fp:
 			fp.close()

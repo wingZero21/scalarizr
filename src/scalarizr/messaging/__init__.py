@@ -74,7 +74,7 @@ class Message(object):
 	def _walk_decode(self, var, el):
 		# FIXME: nested elements doesn't supported
 		for childEl in el.childNodes:
-			var[childEl.nodeName] = childEl.firstChild.nodeValue
+			var[childEl.nodeName] = childEl.firstChild.nodeValue if childEl.firstChild else None
 	
 	def __str__(self):
 		from xml.dom.minidom import getDOMImplementation
@@ -203,7 +203,7 @@ class Messages:
 	Fires when block device was mounted
 	"""
 	
-	SCRIPT_EXEC_RESULT = "ExecResult"
+	SCRIPT_EXEC_RESULT = "ScriptExecResult"
 	"""
 	Fires after script execution
 	"""

@@ -25,7 +25,8 @@ class ScalarizrError(BaseException):
 
 class NotInstalledError(BaseException):
 	pass
-	
+
+__version__ = "0.5"	
 
 def _init():
 	optparser = bus.optparser
@@ -122,15 +123,24 @@ def _init_services():
 	gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
 	messaging_sect = configtool.section_wrapper(config, configtool.SECT_MESSAGING)
 	
-	# Check that database is installed
+	# Check that database exists (after rebundle for example)
 	db_file = os.path.join(bus.etc_path, gen_sect.get(configtool.OPT_STORAGE_PATH))
 	if not os.path.exists(db_file):
-		raise NotInstalledError("Database is not installed")	
+		db_script_file = os.path.join(bus.etc_path, "public.d/db.sql")
+		logger.warning("Database doesn't exists, create new one from script '%s'", db_script_file)
+		db = bus.db
+		conn = db.get().get_connection()
+		conn.executescript(open(db_script_file).read())
+		conn.commit()		
 	
 	# Initialize platform
 	logger.debug("Initialize platform")
 	pl_name = gen_sect.get(configtool.OPT_PLATFORM)
 	if pl_name:
+		for filename in configtool.get_platform_filename(pl_name, ret=configtool.RET_BOTH):
+			if os.path.exists(filename):
+				logger.debug("Read platform configuration file %s", filename)
+				config.read(filename)		
 		pl_factory = PlatformFactory()
 		bus.platfrom = pl_factory.new_platform(pl_name)
 	else:
@@ -165,7 +175,7 @@ def _init_services():
 	if crypto_key:
 		configtool.write_key(crypto_key_opt.get(), crypto_key, key_title=crypto_key_title)
 	try:
-		crypto_key = configtool.read_key(crypto_key_opt.get(), key_title=crypto_key_title)
+		crypto_key = binascii.a2b_base64(configtool.read_key(crypto_key_opt.get(), key_title=crypto_key_title))
 	except ConfigError, e:
 		logger.warn(str(e))
 	if not crypto_key:
@@ -205,15 +215,16 @@ def init_script():
 	
 	config = bus.config
 	logger = logging.getLogger(__name__)
-
-	adapter = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)
-	sect = configtool.section_wrapper(bus.config, "messaging_" + adapter)
-	
 	logger.debug("Initialize messaging")
 
 	# Script producer url is scalarizr consumer url. 
 	# Script can't handle any messages by himself. Leave consumer url blank
-	kwargs = {P2pConfigOptions.PRODUCER_URL : sect.get(P2pConfigOptions.CONSUMER_URL)}
+	adapter = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)	
+	kwargs = dict(config.items("messaging_" + adapter))
+	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
+	kwargs[P2pConfigOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
+	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
+	
 	factory = MessageServiceFactory()		
 	msg_service = factory.new_service(adapter, **kwargs)
 	bus.messaging_service = msg_service
@@ -318,6 +329,7 @@ def _install ():
 
 _KNOWN_PLATFORMS = ("ec2", "rs", "vps")
 	
+
 def _platform_validator(value):
 	if not value in _KNOWN_PLATFORMS:
 		print "invalid choice: '%s' (choose from %s)" % (value, ", ".join(_KNOWN_PLATFORMS))

@@ -1,51 +1,102 @@
--> HostUp
-behaviour
-internal_ip
-role_name
 
-
--> HostDown
-behaviour
-internal_ip
-role_name
-
-
--> EventNotice
-internal_ip
-role_name
-event_name
+-> ScalarizrUpdateAvailable
+version
 
 -> VhostReconfigure
 
+-> HostInitResponse
+aws_account_id
+aws_key_id
+aws_key
+aws_cert
+aws_pk
 
--> ServerInitResponse
-ec2_account_id
-ec2_key_id
-ec2_key
-ec2_cert
-ec2_pk
+Скалр дожен посылать его до аттача EBS-ов
 
+[BC] -> BeforeHostTerminate
+behaviour
+local_ip
+remote_ip
+role_name
+
+[BC] -> BeforeInstanceLaunch
+behaviour
+role_name
+
+[BC] -> DNSZoneUpdated
+zone_name
+
+[BC] -> IPAddressChanged
+behaviour
+local_ip
+remote_ip
+role_name
+new_remote_ip
+
+[BC] -> ScriptsListUpdated
 
 -> Rebundle
 role_name
 excludes
+bundle_task_id
 
-<- ServerInit (HostInit)
+<- RebundleResult
+status = ok|error
+last_error = error
+snapshot_id = AMI_ID
+bundle_task_id
+
+[BC] <- HostUp
+behaviour
+local_ip
+remote_ip
+role_name
+
+
+[BC] <- HostInit
 # Scalarizr new crypto key
 crypto_key
 
-<- ServerDown (HostDown)
+[BC] <- HostDown
+behaviour
+local_ip
+remote_ip
+role_name
 
-<- RebootStart
+[BC]<- RebootStart
+behaviour
+local_ip
+remote_ip
+role_name
 
-<- RebootFinish
+[BC] <- RebootFinish
+behaviour
+local_ip
+remote_ip
+role_name
 
-<- BlockDeviceAttached
-ec2_volume_id
+[BC] <- BlockDeviceMounted
+volume_id
 device
+behaviour
+local_ip
+remote_ip
+role_name
 
-<- BlockDeviceDetached
+[BC] <- BlockDeviceAttached
+volume_id
 device
+behaviour
+local_ip
+remote_ip
+role_name
+
+[BC] <- BlockDeviceDetached
+device
+behaviour
+local_ip
+remote_ip
+role_name
 
 <- ScriptExecResult (execResult)
 stdout
@@ -62,4 +113,4 @@ entries
 	filename
 	lineno
 	message
-	stack_trace		
+	stacktrace

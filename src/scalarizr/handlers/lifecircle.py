@@ -10,6 +10,7 @@ from scalarizr.messaging import Queues, Messages
 from scalarizr.util import cryptotool, configtool
 import logging
 import os
+import binascii
 
 
 def get_handlers():
@@ -31,6 +32,13 @@ class LifeCircleHandler(Handler):
 			# Fires after HostInit message is sent
 			"host_init",
 			
+			# Fires before HostUp message is sent
+			# @param message: HostInitResponse message 
+			"before_host_up",
+			
+			# Fires after HostUp message is sent
+			"host_up",
+			
 			# Fires after RebootStart message is sent
 			"reboot_start",
 			
@@ -40,8 +48,8 @@ class LifeCircleHandler(Handler):
 			# Fires after RebootFinish message is sent
 			"reboot_finish",
 			
-			# Fires after Go2Halt message is sent
-			"go2halt",
+			# Fires after HostDown message is sent
+			"before_host_down",
 			
 			# Fires after HostDown message is sent
 			"host_down"
@@ -52,6 +60,12 @@ class LifeCircleHandler(Handler):
 		self._producer = self._msg_service.get_producer()
 		self._config = bus.config
 	
+	
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return message.name == Messages.INT_SERVER_REBOOT \
+			or message.name == Messages.INT_SERVER_HALT	\
+			or message.name == Messages.HOST_INIT_RESPONSE	
+
 	
 	def on_init(self):
 		bus.on("start", self.on_start)
@@ -114,17 +128,19 @@ class LifeCircleHandler(Handler):
 			# Regenerage key
 			key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
 			key = cryptotool.keygen()
-			configtool.write_key(key_path, key, key_title="Scalarizr crypto key")
-			
-			# Update key in QueryEnv
-			queryenv = bus.queryenv_service
-			queryenv.key = key
 			
 			# Send HostInit
 			msg = self._msg_service.new_message(Messages.HOST_INIT)
-			self._msg_put_broadcast_data(msg)
+			self._put_broadcast_data(msg)
 			msg.crypto_key = key			
 			self._producer.send(Queues.CONTROL, msg) 
+
+			# Update key file
+			configtool.write_key(key_path, key, key_title="Scalarizr crypto key")
+
+			# Update key in QueryEnv
+			queryenv = bus.queryenv_service
+			queryenv.key = binascii.a2b_base64(key)
 
 			# Notify listeners
 			bus.fire("host_init")
@@ -138,14 +154,14 @@ class LifeCircleHandler(Handler):
 			
 			# Send RebootFinish
 			msg = self._msg_service.new_message(Messages.REBOOT_FINISH)
-			self._msg_put_broadcast_data(msg)
+			self._put_broadcast_data(msg)
 			self._producer.send(Queues.CONTROL, msg)
 			
 			# Notify listeners
 			bus.fire("reboot_finish")
 
 
-	def on_ServerReboot(self, message):
+	def on_IntServerReboot(self, message):
 		# Scalarizr must detect that it was resumed after reboot
 		reboot_file = os.path.join(bus.etc_path, ".reboot")
 		try:
@@ -156,27 +172,34 @@ class LifeCircleHandler(Handler):
 			
 		# Send message 
 		msg = self._msg_service.new_message(Messages.REBOOT_START)
-		self._msg_put_broadcast_data(msg)
+		self._put_broadcast_data(msg)
 		self._producer.send(Queues.CONTROL, msg)
 			
 		bus.fire("reboot_start")
 		
 	
-	def on_ServerHalt(self, message):
+	def on_IntServerHalt(self, message):
+		bus.fire("before_host_down")
+		
 		msg = self._msg_service.new_message(Messages.HOST_DOWN)
-		self._msg_put_broadcast_data(msg)
+		self._put_broadcast_data(msg)
 		self._producer.send(Queues.CONTROL, msg)
 
 		bus.fire("host_down")
 
+	def on_HostInitResponse(self, message):
+		bus.fire("before_host_up", message)
+		
+		msg = self._msg_service.new_message(Messages.HOST_UP)
+		self._put_broadcast_data(msg)
+		self._producer.send(Queues.CONTROL, msg)
+		
+		bus.fire("host_up")
 
 	def on_before_message_send(self, queue, message):
 		"""
 		@todo: Add scalarizr version to meta
 		"""
 		pass
-	
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.INT_SERVER_REBOOT \
-			or message.name == Messages.INT_SERVER_HALT	
+
 	

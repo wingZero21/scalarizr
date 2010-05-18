@@ -8,9 +8,10 @@ from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, _P2pBase, P2pCo
 from scalarizr.util import cryptotool, configtool
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
-from threading import Thread
-import logging
 import threading
+import logging
+import binascii
+import sys
 try:
 	import time
 except ImportError:
@@ -29,13 +30,14 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 		_P2pBase.__init__(self, **kwargs)
 		self.endpoint = kwargs[P2pConfigOptions.CONSUMER_URL]
 		self._logger = logging.getLogger(__name__)
-		self._handler_thread = Thread(name="MessageHandler", target=self.message_handler)
+		self._handler_thread = threading.Thread(name="MessageHandler", target=self.message_handler)
 			
 	def start(self):
 		if self._server is None:
 			r = urlparse(self.endpoint)
 			_HttpRequestHanler.consumer = self
-			self._server = HTTPServer((r.hostname, r.port), _HttpRequestHanler)
+			server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
+			self._server = server_cls((r.hostname, r.port), _HttpRequestHanler)
 			self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
 			
 		self._logger.info("Staring consumer...")
@@ -83,20 +85,28 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 		
 		queue = os.path.basename(self.path)
 		rawmsg = self.rfile.read(int(self.headers["Content-length"]))
-		logger.debug("Received ingoing message. queue: '%s', rawmessage: %s" % (queue, rawmsg))
+		logger.debug("Received ingoing message. queue: '%s', rawmessage: %s", queue, rawmsg)
 		
 		try:
-			logger.debug("Decrypt message")
-			crypto_key = configtool.read_key(self.consumer.crypto_key_path)
+			logger.debug("Decrypting message...")
+			crypto_key = binascii.a2b_base64(configtool.read_key(self.consumer.crypto_key_path))
 			xml = cryptotool.decrypt(rawmsg, crypto_key)
-			
-			logger.debug("Decode message")
+		except (BaseException, Exception), e:
+			err = "Cannot decrypt message"
+			logger.error(err)
+			logger.exception(e)
+			self.send_response(400, err)
+			return
+		
+		try:
+			logger.debug("Decoding message %s", xml)
 			message = P2pMessage()
 			message.fromxml(xml)
-			
 		except (BaseException, Exception), e:
+			err = "Cannot decrypt message"
+			logger.error(err)
 			logger.exception(e)
-			self.send_response(400, str(e))
+			self.send_response(400, err)
 			return
 		
 		logger.info("Received ingoing message. queue: '%s' message: %s" % (queue, message))
@@ -113,7 +123,26 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 		self.send_response(201)
 		
 		
-		
 	def log_message(self, format, *args):
 		logger = logging.getLogger(__name__)
 		logger.info("%s %s\n", self.address_string(), format%args)
+
+
+if sys.version_info < (2,6):
+	class _HTTPServer25(HTTPServer):
+		
+		def __init__(self, server_address, RequestHandlerClass):
+			HTTPServer.__init__(self, server_address, RequestHandlerClass)
+			self.__is_shut_down = threading.Event()
+			self.__serving = False
+		
+		def serve_forever(self):
+			self.__serving = True
+			self.__is_shut_down.clear()
+			while self.__serving:
+				self.handle_request()
+			self.__is_shut_down.set()
+		
+		def shutdown(self):
+			self.__serving = False
+			self.__is_shut_down.wait()

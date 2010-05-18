@@ -68,6 +68,13 @@ class TestMessage(unittest.TestCase):
 		self.assertEqual(msg.meta["platform"], "ec2")
 		self.assertEqual(msg.body["ec2_account_id"], "5435544")
 
+	def test_fromxml_with_empty_values (self):
+		xml_string = """<?xml version="1.0" ?><message id="710e8b54-331c-4c23-afcd-adc98163c063" name="IntBlockDeviceUpdated"><meta><server_id>32d18890-bf13-468e-9f91-981ae7851baa</server_id></meta><body><subsystem>block</subsystem><devlinks>/dev/disk/by-uuid/f31203e0-b554-465a-856e-2d8d144714d7</devlinks><major>8</major><physdevpath>/devices/xen/vbd-2160</physdevpath><id_fs_version>1.0</id_fs_version><devpath>/block/sdh</devpath><udev_log>3</udev_log><devname>/dev/sdh</devname><physdevdriver>vbd</physdevdriver><udevd_event>1</udevd_event><action>remove</action><id_fs_label></id_fs_label><id_fs_usage>filesystem</id_fs_usage><id_fs_uuid>f31203e0-b554-465a-856e-2d8d144714d7</id_fs_uuid><physdevbus>xen</physdevbus><id_fs_label_safe></id_fs_label_safe><id_fs_type>ext3</id_fs_type><seqnum>1296</seqnum><minor>112</minor></body></message>"""
+		
+		msg = Message()
+		msg.fromxml(xml_string)
+
+
 
 if __name__ == "__main__":
 	unittest.main()

@@ -3,17 +3,12 @@ Created on Dec 23, 2009
 
 @author: Dmytro Korsakov
 '''
+from scalarizr.util import xml_strip
+from scalarizr.util.cryptotool import sign_http_request
 import logging
-try:
-	import time
-except ImportError:
-	import timemodule as time
 from urllib2 import urlopen, Request, URLError, HTTPError
 from urllib import urlencode, splitnport
 from xml.dom.minidom import parseString
-import hmac
-import hashlib
-import binascii
 
 
 class QueryEnvError(Exception):
@@ -96,26 +91,7 @@ class QueryEnvService(object):
 		@return string
 		"""
 		return self._request("get-latest-version",{}, self._read_get_latest_version_response)
-		
-	def _get_canonical_string (self, params={}):
-		"""
-		@return string
-		"""
-		s = ""
-		for key, value in sorted(params.items()):
-			s = s + str(key) + str(value)
-		return s
-		
-	def _sign (self, canonical_string, key):
-		"""
-		@return: string
-		"""
-		digest = hmac.new(key, canonical_string, hashlib.sha1).digest()
-		sign = binascii.b2a_base64(digest)
-		if sign.endswith('\n'):
-			sign = sign[:-1]
-		return sign
-	
+
 	def _request (self, command, params={}, response_reader=None):
 		"""
 		@return object
@@ -129,11 +105,8 @@ class QueryEnvService(object):
 			for key, value in params.items():
 				request_body[key] = value
 				
-		timestamp = self._get_http_timestamp()
-		data = self._get_canonical_string(request_body) 
-		data += timestamp
+		signature, timestamp = sign_http_request(request_body, self.key)		
 		
-		signature = self._sign(data, self.key)
 		post_data = urlencode(request_body)
 		headers = {
 			"Date": timestamp, 
@@ -163,26 +136,15 @@ class QueryEnvService(object):
 		# Parse XML response
 		xml = None
 		try:
-			xml = parseString(response.read())
+			xml = xml_strip(parseString(response.read()))
 		except (TypeError, AttributeError), e:
 			raise QueryEnvError("Cannot parse XML. %s" % (str(e)))
 		return response_reader(xml)
 
-			
-	def _get_http_timestamp(self):
-		return time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
-	
-		
-	def _remove_whitespace_nodes(self, parent):
-		for child in list(parent.childNodes):
-			if child.nodeType==child.TEXT_NODE and child.data.strip()=='':
-				parent.removeChild(child)
-			else:
-				self._remove_whitespace_nodes(child)	
 		
 	def _read_list_roles_response(self, xml):
 		ret = []
-		self._remove_whitespace_nodes(xml.documentElement)
+		
 		response = xml.documentElement
 		for role_el in response.firstChild.childNodes:
 			role = Role()
@@ -203,7 +165,7 @@ class QueryEnvService(object):
 	
 	def _read_list_ebs_mountpoints_response(self, xml):
 		ret = []
-		self._remove_whitespace_nodes(xml.documentElement)
+		
 		response = xml.documentElement
 		for mountpoint_el in response.firstChild.childNodes:
 			mountpoint = Mountpoint()
@@ -224,7 +186,7 @@ class QueryEnvService(object):
 	
 	def _read_list_scripts_response(self, xml):
 		ret = []
-		self._remove_whitespace_nodes(xml.documentElement)
+		
 		response = xml.documentElement
 		for script_el in response.firstChild.childNodes:
 			script = Script()
@@ -237,7 +199,7 @@ class QueryEnvService(object):
 	
 	def _read_list_role_params_response(self, xml):
 		ret = {}
-		self._remove_whitespace_nodes(xml.documentElement)
+	
 		response = xml.documentElement
 		for param_el in response.firstChild.childNodes:
 			ret[param_el.getAttribute("name")] = param_el.firstChild.firstChild.nodeValue
@@ -245,13 +207,11 @@ class QueryEnvService(object):
 		return ret
 	
 	def _read_get_latest_version_response(self, xml):
-		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
 		version = response.firstChild.firstChild.nodeValue
 		return version
 	
 	def _read_get_https_certificate_response(self, xml):
-		self._remove_whitespace_nodes(xml.documentElement)
 		response = xml.documentElement
 		if len(response.childNodes):
 			cert = response.firstChild.firstChild.nodeValue
@@ -262,7 +222,7 @@ class QueryEnvService(object):
 
 	def _read_list_virtualhosts_response(self, xml):
 		ret = []
-		self._remove_whitespace_nodes(xml.documentElement)
+		
 		response = xml.documentElement
 		for vhost_el in response.firstChild.childNodes:
 			vhost = VirtualHost()
@@ -271,7 +231,8 @@ class QueryEnvService(object):
 			vhost.raw = vhost_el.firstChild.firstChild.nodeValue
 			if vhost_el.hasAttribute("https"):
 				vhost.https = bool(int(vhost_el.getAttribute("https")))
-			ret.append(vhost)		
+			ret.append(vhost)	
+				
 		return ret
 	
 class Mountpoint(object):

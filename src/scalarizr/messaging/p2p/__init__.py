@@ -234,6 +234,8 @@ class P2pMessage(Message):
 	def __init__(self, name=None, meta={}, body={}):
 		Message.__init__(self, name, meta, body)
 		self.__dict__["_store"] = P2pMessageStore()
+		config = bus.config
+		self.__dict__["meta"][MetaOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 	
 	def is_handled(self):
 		return self._store.is_handled(self.id)

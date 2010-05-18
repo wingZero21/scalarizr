@@ -82,7 +82,7 @@ class MessagingHandler(logging.Handler):
 			entry['pathname'] = row['pathname']
 			entry['lineno'] = row['lineno']
 			entry['msg'] = row['msg']
-			entry['stack_trace'] = row['stack_trace']	
+			entry['stacktrace'] = row['stack_trace']	
 			entries.append(entry)
 			ids.append(str(row['id']))
 		cur.close()

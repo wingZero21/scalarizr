@@ -7,23 +7,28 @@ Created on Apr 7, 2010
 from M2Crypto.EVP import Cipher
 from M2Crypto.Rand import rand_bytes
 import binascii
+import hmac
+import hashlib
+try:
+	import timemodule as time
+except ImportError:
+	import time
 
 def keygen(length=40):
 	return binascii.b2a_base64(rand_bytes(length))	
 			
-def _init_chiper(key, op_enc=1):
-	k = binascii.a2b_base64(key)
-	return Cipher("bf_cfb", k[0:len(k)-9], k[len(k)-8:], op=op_enc)
+def _init_cipher(key, op_enc=1):
+	return Cipher("des_ede3_cbc", key[0:-8], key[-8:], op=op_enc, padding=0)
 		
 def encrypt (s, key):
-	c = _init_chiper(key, 1)
+	c = _init_cipher(key, 1)
 	ret = c.update(s)
 	ret += c.final()
 	del c
 	return binascii.b2a_base64(ret)
 	
 def decrypt (s, key):
-	c = _init_chiper(key, 0)
+	c = _init_cipher(key, 0)
 	ret = c.update(binascii.a2b_base64(s))
 	ret += c.final()
 	del c
@@ -46,3 +51,21 @@ def crypt_file(cipher, in_file, out_file):
 			break
 		out_file.write(cipher.update(buf))
 	out_file.write(cipher.final())
+	
+
+def _get_canonical_string (params={}):
+	s = ""
+	for key, value in sorted(params.items()):
+		s = s + str(key) + str(value)
+	return s
+		
+def sign_http_request(data, key, timestamp=None):
+	date = time.strftime("%a %d %b %Y %H:%M:%S %Z", timestamp or time.gmtime())
+	canonical_string = _get_canonical_string(data) if hasattr(data, "__iter__") else data
+	canonical_string += date
+	
+	digest = hmac.new(key, canonical_string, hashlib.sha1).digest()
+	sign = binascii.b2a_base64(digest)
+	if sign.endswith('\n'):
+		sign = sign[:-1]
+	return sign, date

@@ -11,8 +11,14 @@ from urllib import splitnport
 from urllib2 import urlopen, Request, URLError, HTTPError
 import logging
 import uuid
+import binascii
 import threading
-import time
+try:
+	import timemodule as time
+except ImportError:
+	import time
+
+
 
 
 class P2pMessageProducer(MessageProducer, _P2pBase):
@@ -76,13 +82,26 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			
 			# Prepare POST body
 			xml = message.toxml()
-			#xml = xml.ljust(len(xml) + 8 - len(xml) % 8, " ")
-			crypto_key = configtool.read_key(self.crypto_key_path)
+			xml = xml.ljust(len(xml) + 8 - len(xml) % 8, " ")
+			crypto_key = binascii.a2b_base64(configtool.read_key(self.crypto_key_path))
 			data = cryptotool.encrypt(xml, crypto_key)
 			
+			signature, timestamp = cryptotool.sign_http_request(data, crypto_key)
+			
 			# Send request
-			req = Request(self.endpoint + "/" + queue, data, {"X-Server-Id": self.server_id})
-			urlopen(req)
+			headers = {
+				"Date": timestamp, 
+				"X-Signature": signature, 
+				"X-Server-Id": self.server_id
+			}
+			self._logger.debug("Date: " + timestamp)			
+			self._logger.debug("X-Signature: " + signature)
+			self._logger.debug("X-Server-Id: " + self.server_id)
+			self._logger.debug("Payload: " + data)
+			
+			req = Request(self.endpoint + "/" + queue, data, headers)
+			resp = urlopen(req)
+			print resp.read()
 			
 			self._store.mark_as_delivered(message.id)
 			self.fire("send", queue, message)
@@ -98,20 +117,20 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 				self._store.mark_as_undelivered(message.id)
 			
 				if isinstance(e, HTTPError):
-					resp_body = e.read() if not e.fp is None else ""
+					#print e
 					if e.code == 401:
-						raise MessagingError("Cannot authenticate on message server. %s" % (resp_body))
+						raise MessagingError("Cannot authenticate on message server. %s" % e)
 					
 					elif e.code == 400:
-						raise MessagingError("Malformed request. %s" % (resp_body))
+						raise MessagingError("Malformed request. %s" % e)
 					
 					else:
-						raise MessagingError("Request to message server failed (code: %d). %s" % (e.code, str(e)))
+						raise MessagingError("Request to message server failed. %s" % e)
 				elif isinstance(e, URLError):
 					host, port = splitnport(req.host, req.port)
-					raise MessagingError("Cannot connect to message server on %s:%s. %s" % (host, port, str(e)))
+					raise MessagingError("Cannot connect to message server on %s:%s. %s" % (host, port, e))
 				else:
-					raise MessagingError("Cannot read crypto key. %s" % str(e))		
+					raise MessagingError("Cannot read crypto key. %s" % e)		
 					
 
 	def get_undelivered(self):

@@ -21,7 +21,7 @@
 scalarizr="/usr/bin/scalarizr"
 prog=$(basename $scalarizr)
 
-SCALARIZR_CONF_FILE="/etc/scalarizr/config.ini"
+SCALARIZR_CONF_FILE="/etc/scalr/config.ini"
 
 [ -f /etc/sysconfig/scalarizr ] && . /etc/sysconfig/scalarizr
 

@@ -4,12 +4,13 @@ Created on Mar 11, 2010
 @author: marat
 '''
 
+import scalarizr
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.platform import PlatformError
-from scalarizr.messaging import Messages
+from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system, disttool, cryptotool, fstool
-from scalarizr.util.fstool import Mtab, Fstab
+from scalarizr.util.fstool import Mtab
 import logging
 import time
 import os
@@ -28,12 +29,13 @@ from boto.exception import BotoServerError
 import shutil
 
 
+
 def get_handlers ():
 	return [Ec2RebundleHandler()]
 
 
 BUNDLER_NAME = "scalarizr"
-BUNDLER_VERSION = "0.9"
+BUNDLER_VERSION = scalarizr.__version__
 BUNDLER_RELEASE = "76"
 DIGEST_ALGO = "sha1"
 CRYPTO_ALGO = "aes-128-cbc"
@@ -64,36 +66,81 @@ Bundled: %(bundle_date)s
 		self._logger = logging.getLogger(__name__)
 		self._platform = bus.platfrom
 		self._msg_service = bus.messaging_service
+		bus.define_events(
+			# Fires before rebundle starts
+			"before_rebundle", 
+			
+			# Fires after rebundle complete
+			# @param param: 
+			"rebundle", 
+			
+			# Fires on rebundle error
+			# @param role_name
+			"rebundle_error",
+			
+			# Fires on bundled volume cleanup. Usefull to remove password files, user activity, logs
+			# @param image_mpoint 
+			"rebundle_cleanup_image"
+		)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.REBUNDLE and platform == "ec2"	
 	
 	def on_Rebundle(self, message):
-	
-		aws_account_id = self._platform.get_account_id()
-		avail_zone = self._platform.get_avail_zone()
-		region = avail_zone[0:2]
-		prefix = message.role_name + "-" + str(int(time.time()))
-		cert, pk = self._platform.get_cert_pk()
-		ec2_cert = self._platform.get_ec2_cert()
-		bucket = "scalr2-images-%s-%s" % (region, aws_account_id)		
+		try:
+			bus.fire("before_rebundle", role_name=message.role_name)
+			
+			aws_account_id = self._platform.get_account_id()
+			avail_zone = self._platform.get_avail_zone()
+			region = avail_zone[0:2]
+			prefix = message.role_name + "-" + str(int(time.time()))
+			cert, pk = self._platform.get_cert_pk()
+			ec2_cert = self._platform.get_ec2_cert()
+			bucket = "scalr2-images-%s-%s" % (region, aws_account_id)		
+			
+			# Create exclude directories list
+			excludes = message["excludes"].split(":") \
+					if message.body.has_key("excludes") else []
+			
+			# Bundle volume
+			image_file, image_mpoint = self._bundle_vol(prefix=prefix, destination="/mnt", excludes=excludes)
+			# Execute pre-bundle routines. cleanup files, patch files, etc.
+			self._cleanup_image(image_mpoint, role_name=message.role_name)
+
+			#image_file = "/mnt/scalarizr-debian-1274093259"
+			# Bundle image
+			manifest_path, manifest = self._bundle_image(
+					prefix, image_file, aws_account_id, "/mnt", pk, cert, ec2_cert)
+			# Upload image to S3
+			s3_manifest_path = self._upload_image(bucket, manifest_path, manifest, region=region)
+			# Register image on EC2
+			ami_id = self._register_image(s3_manifest_path)
+			
+			# Send message to Scalr
+			producer = self._msg_service.get_producer()
+			msg = self._msg_service.new_message(Messages.REBUNDLE_RESULT, dict(
+				status = "ok",
+				snapshot_id = ami_id,
+				bundle_task_id = message.bundle_task_id															
+			))
+			producer.send(Queues.CONTROL, msg)
+			
+			# Fire 'rebundle'
+			bus.fire("rebundle", role_name=message.role_name, snapshot_id=ami_id)
+			
+		except (Exception, BaseException), e:
+			# Send message to Scalr			
+			producer = self._msg_service.get_producer()
+			msg = self._msg_service.new_message(Messages.REBUNDLE_RESULT, dict(
+				status = "error",
+				last_error = str(e),
+				bundle_task_id = message.bundle_task_id
+			))
+			producer.send(Queues.CONTROL, msg)
+			
+			# Fire 'rebundle_error'
+			bus.fire("rebundle_error", role_name=message.role_name, last_error=str(e))
 		
-		# Create exclude directories list
-		excludes = message["excludes"].split(":") \
-				if message.body.has_key("excludes") else []
-		excludes += ["/mnt"]		
-		
-		# Bundle volume
-		image_file, image_mpoint = self._bundle_vol(prefix=prefix, destination="/mnt", excludes=excludes)
-		# Execute pre-bundle routines. cleanup files, patch files, etc.
-		self._patch_image(image_mpoint, role_name=message.role_name)
-		# Bundle image
-		manifest_path, manifest = self._bundle_image(
-				prefix, image_file, aws_account_id, "/mnt", pk, cert, ec2_cert)
-		# Upload image to S3 
-		s3_manifest_path = self._upload_image(bucket, manifest_path, manifest, region=region)
-		# Register image on EC2
-		self._register_image(s3_manifest_path)
 
 
 	def _bundle_vol(self, prefix="", volume="/", destination=None, 
@@ -139,7 +186,7 @@ Bundled: %(bundle_date)s
 			self._logger.error("Cannot bundle volume. %s", e)
 			raise
 	
-	def _patch_image(self, image_mpoint, role_name=None):
+	def _cleanup_image(self, image_mpoint, role_name=None):
 		# Create message of the day
 		self._create_motd(image_mpoint, role_name)
 		
@@ -163,9 +210,11 @@ Bundled: %(bundle_date)s
 		
 		
 		# Cleanup scalarizr private data
-		etc_path = bus.etc_path[1:]
-		shutil.rmtree(os.path.join(image_mpoint, etc_path + "/.keys"))
-		shutil.rmtree(os.path.join(image_mpoint, etc_path + "/.storage"))
+		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
+		shutil.rmtree(os.path.join(etc_path, "private.d"))
+		os.mkdir(os.path.join(etc_path, "private.d/keys"))
+		
+		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
 
 	
 	def _create_motd(self, image_mpoint, role_name=None):
@@ -192,7 +241,7 @@ Bundled: %(bundle_date)s
 	def _bundle_image(self, name, image_file, user, destination, user_private_key_string, 
 					user_cert_string, ec2_cert_string):
 		try:
-			self._logger.info("Bundling image")
+			self._logger.info("Bundling image...")
 			# Create named pipes.
 			digest_pipe = os.path.join('/tmp', 'ec2-bundle-image-digest-pipe')
 			if os.path.exists(digest_pipe):
@@ -204,6 +253,7 @@ Bundled: %(bundle_date)s
 				raise
 		
 			# Load and generate necessary keys.
+			#self._logger.info("Load ")
 			name = os.path.basename(image_file)
 			manifest_file = os.path.join(destination, name + '.manifest.xml')
 			bundled_file_path = os.path.join(destination, name + '.tar.gz.enc')
@@ -262,10 +312,9 @@ Bundled: %(bundle_date)s
 				self._logger.error("Cannot read file with image digest '%s'. %s", digest_file, e)
 				raise
 			finally:
-				#os.remove(digest_file)
-				pass
-
-			#digest = "1f75937c890092bb8046af3cde0b575b7e5728f9"
+				os.remove(digest_file)
+			
+			# digest = "88935fe66e78ce819789dc4a4ef6461f72db6342"
 	
 			# Split the bundled AMI. 
 			# Splitting is not done as part of the compress, encrypt digest
@@ -356,18 +405,21 @@ Bundled: %(bundle_date)s
 			bucket = None
 			location = region.upper()
 			try:
-				self._logger.info("Creating bucket '%s'", bucket_name)
-				if s3_conn.lookup(bucket_name) is None:
+				self._logger.info("Lookup bucket '%s'", bucket_name)
+				try:
+					# Lockup bucket
+					bucket = s3_conn.get_bucket(bucket_name)
+					self._logger.debug("Bucket '%s' already exists", bucket_name)
+				except:
 					# It's important to lockup bucket before creating it because if bucket exists
 					# and account has reached buckets limit S3 returns error.
+					self._logger.info("Creating bucket '%s'", bucket_name)					
 					bucket = s3_conn.create_bucket(bucket_name, 
 							location=Location.DEFAULT if location == "US" else location,
 							policy=acl)
-				else:
-					self._logger.debug("Bucket '%s' already exists", bucket_name)
+					
 			except BotoServerError, e:
-				self._logger.error("Cannot create bucket '%s'. %s", bucket_name, e.reason)
-				raise e
+				raise BaseException("Cannot get bucket '%s'. %s" % (bucket_name, e.reason))
 			
 			# Create files queue
 			self._logger.info("Enqueue files to upload")
@@ -401,6 +453,7 @@ Bundled: %(bundle_date)s
 
 
 	def _uploader(self, queue, s3_conn, bucket, acl):
+		self._logger.debug("queue: %s, bucket: %s", queue, bucket)
 		try:
 			while 1:
 				filename, upload_attempts = queue.get(False)
@@ -468,6 +521,9 @@ if disttool.is_linux():
 			self._excludes = excludes
 			if self._image_mpoint.startswith(volume):
 				self._excludes.append(self._image_mpoint)
+			self._excludes.append("/mnt")
+			self._excludes.append("/sys")
+			self._excludes.append("/proc")
 		
 			self._mtab = Mtab()
 		
@@ -487,11 +543,11 @@ if disttool.is_linux():
 				self._cleanup()
 			
 		def _create_image_file(self):
-			self._logger.debug("Create image file")
+			self._logger.info("Create image file")
 			system("dd if=/dev/zero of=" + self._image_file + " bs=1M count=1 seek=" + str(self._image_size))
 		
 		def _format_image(self):
-			self._logger.debug("Format image file")
+			self._logger.info("Format image file")
 			system("/sbin/mkfs.ext3 -F " + self._image_file)
 			system("/sbin/tune2fs -i 0 " + self._image_file)
 		
@@ -500,13 +556,13 @@ if disttool.is_linux():
 			Mount the image file as a loopback device. The mount point is created
 			if necessary.		
 			"""
-			self._logger.debug("Mount image file")
+			self._logger.info("Mount image file")
 			if self._mtab.is_mounted(self._image_mpoint):
 				raise PlatformError("Image already mounted")
 			fstool.mount(self._image_file, self._image_mpoint, ["-o loop"])
 		
 		def _make_special_dirs(self):
-			self._logger.debug("Make special directories")
+			self._logger.info("Make special directories")
 			# Make /proc /sys /mnt
 			os.makedirs(self._image_mpoint + "/mnt")
 			os.makedirs(self._image_mpoint + "/proc")
@@ -523,7 +579,7 @@ if disttool.is_linux():
 			system("ln -s null " + dev_dir +"/X0R")		
 		
 		def _copy_rec(self, source, dest, xattr=True):
-			self._logger.debug("Copy volume to image file")
+			self._logger.info("Copy volume to image file")
 			rsync = Rsync()
 			rsync.archive().times().sparse().links().quietly()
 			if xattr:
@@ -555,7 +611,7 @@ if disttool.is_linux():
 			
 		def _unmount(self, mpoint):
 			if self._mtab.is_mounted(mpoint):
-				self._logger.debug("Unmounting '%s'", mpoint)				
+				self._logger.info("Unmounting '%s'", mpoint)				
 				system("umount -d " + mpoint)
 				os.rmdir(mpoint)
 				

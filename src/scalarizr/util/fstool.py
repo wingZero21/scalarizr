@@ -64,7 +64,7 @@ class TabEntry(object):
 	options = None	
 	value = None
 	
-	def __init__(self, device, mpoint, fstype, options, value):
+	def __init__(self, device, mpoint, fstype, options, value=None):
 		self.device = device
 		self.mpoint = mpoint
 		self.fstype = fstype
@@ -98,3 +98,8 @@ def mount (device, mpoint, options=()):
 	if not mtab.is_mounted(mpoint):
 		raise FstoolError("Cannot mount device '%s'. %s" % (device, out))
 
+def umount():
+	pass
+
+def mkfs():
+	pass

@@ -22,7 +22,8 @@ class NginxHandler(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._queryenv = bus.queryenv_service		
+		self._queryenv = bus.queryenv_service	
+		bus.define_events("nginx_upstream_reload")	
 	
 	def on_HostUp(self, message):
 		self.nginx_upstream_reload()
@@ -111,7 +112,7 @@ class NginxHandler(Handler):
 				self._logger.info("Nginx not found.")
 			elif not os.path.isfile(nginx_pid_file):
 				self._logger.info("/var/run/nginx.pid does not exist. Probably nginx haven`t been started")
-		#call_user_code lib/nginx_reload
+		bus.fire("nginx_upstream_reload")
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return behaviour == Behaviours.APP and \

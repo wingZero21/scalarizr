@@ -109,7 +109,7 @@ class AwsPlatform(Platform):
 	def get_access_keys(self):
 		config = bus.config
 		sect_name = configtool.get_platform_section_name(self.name)
-		return config.get(config.get(sect_name, OPT_KEY_ID), config.get(sect_name, OPT_KEY))
+		return config.get(sect_name, OPT_KEY_ID), config.get(sect_name, OPT_KEY)
 			
 	def get_cert_pk(self):
 		if not self._cert:
@@ -119,7 +119,7 @@ class AwsPlatform(Platform):
 					key_title="EC2 user certificate")
 			self._pk = configtool.read_key(config.get(sect_name, OPT_PK_PATH), 
 					key_title="EC2 user private key")
-		return (self._cert, self._pk)
+		return self._cert, self._pk
 	
 	def get_ec2_cert(self):
 		if not self._ec2_cert:

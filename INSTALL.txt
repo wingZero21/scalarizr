@@ -98,6 +98,25 @@ M2Crypto может упасть с ошибкой. Решение в known prob
 Debian 5 / Ubuntu
 -----------------
 
+Установить setuptools
+
+	$ apt-get install python-setuptools python-dev
+
+Установить зависимости
+
+SQLAlchemy 
+
+	$ easy_install sqlalchemy
+
+Boto
+
+	$ easy_install boto
+
+M2Crypto
+	
+	$ apt-get install python-m2crypto
+
+
 
 OpenSolaris 9.06
 ----------------
@@ -159,53 +178,54 @@ You need to install port py-sqlalchemy too
 # cd /usr/ports/databases/py-sqlalchemy && make install clean
 
 
-=== 
-Установка паектов используя easy_install
-===
+========================================
+Установка пактов используя easy_install
+========================================
 
-== 
 Fedora/CentOS/RedHat
-==
+--------------------
 
 Установить setuptools
 
 В Fedora
-$ yum install python-setuptools-devel
+	$ yum install python-setuptools-devel
 
 В RedHat/CentOS 4,5
-$ yum install python26-setuptools
+	$ yum install python26-setuptools
 
+
+Установить пакеты
 
 SQLAlchemy
-$ yum install sqlalchemy
+	$ easy_install sqlalchemy
 
 M2Crypto
-# yum install swig openssl-devel
-$ easy_install M2Crypto
+	$ yum install swig openssl-devel
+	$ easy_install m2crypto
 
 
 boto (AWS)
-$ easy_install boto
+	$ easy_install boto
 
 python-cloudservers (RackSpace)
-$ easy_install python-cloudservers
+	$ easy_install python-cloudservers
 
 
-== 
+
 Debian/Ubuntu
-==
+-------------
 
 Установить setuptools
-$ apt-get install python-setuptools python-dev
+
+	$ apt-get install python-setuptools python-dev
+
+
+Установить пакеты
 
 M2Crypto
-$ apt-get install python-m2crypto
+	$ apt-get install swig libssl-dev gcc
+	$ easy_install m2crypto
 
-pyCrypto
-$ apt-get install gcc
-$ easy_install pycrypto
-
-Все остальное как в Fedora
 
 
 ==
@@ -271,7 +291,7 @@ echo "127.0.0.1 localhost" >> /etc/hosts
 Зависимости скаларизера в репозиториях дистрибутивов
 ====================================================
 
-					python >= 2.5.1		m2crypto >= 0.20	boto ?
+					python >= 2.5.1		m2crypto >= 0.20	boto >= 1.4a
 ----------------------------------------------------------------------------
 Fedora 8			python				m2crypto			python-boto
 					2.5.1				0.18				1.5c
@@ -281,10 +301,21 @@ CentOS 4
 CentOS 5			python				m2crypto			python-boto
 					2.4.3				0.16				1.0a
 					
-Debian 5
-
+Debian 5			python				python-m2crypto		python-boto
+					2.5.2				0.18.2				1.2a
 Ubuntu 8.04
 
 OpenSolaris 8.11	SUNWPython25		--					--					
 					2.5.5
+
+
+Why so high dependencies?
+------------------------- 
+
+Debian 5 python-m2crypto 0.18.2
+Segmentation fault
+<code>
+user_encrypted_key = hexlify(user_public_key.get_rsa().public_encrypt(key, padding))
+</code>
+File scalarizr/handlers/ec2/rebundle.py
 

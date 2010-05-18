@@ -124,7 +124,6 @@ class _SQLiteConnection(object):
 #    wrap = localobj.get()
 #    conn = wrap.get_connection()
 	
-	
 def system(args, shell=True):
 	import subprocess
 	logger = logging.getLogger(__name__)
@@ -176,6 +175,7 @@ def format_size(size, precision=2):
 	s = "%."+str(precision)+"f%s"
 	return s % (ret, dim)	
 
+"""
 def timethis(what):
 	try:
 		import time
@@ -196,7 +196,7 @@ def timethis(what):
 		return timed
 	else:
 		return benchmark()
-
+"""
 
 def init_tests():
 	logging.basicConfig(

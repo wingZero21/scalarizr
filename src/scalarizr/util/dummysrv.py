@@ -5,6 +5,7 @@ Created on Mar 31, 2010
 '''
 
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+from scalarizr.messaging import Messages
 
 def msg_main():
 	class HttpRequestHanler(BaseHTTPRequestHandler):
@@ -39,6 +40,22 @@ def queryenv_main():
 					<response>
 						<cert>MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN</cert>
 						<pkey>MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN</pkey>
+					</response>
+					"""
+				self.wfile.write(xml)
+				
+			elif op == "list-ebs-mountpoints":
+				self.send_response(200)
+				self.end_headers()
+				xml = """<?xml version="1.0" encoding="UTF-8"?>
+					<response>
+        				<mountpoints>
+                			<mountpoint name='some_name_for_LVM' dir='/mnt/storage1' createfs='1' isarray='0'>
+                        		<volumes>
+                                	<volume volume-id='vol-fb8e3492' device='/dev/sdh'></volume>
+                        		</volumes>
+                			</mountpoint>
+        				</mountpoints>
 					</response>
 					"""
 				self.wfile.write(xml)
@@ -80,7 +97,7 @@ def queryenv_main():
 				self.send_response(200)
 				self.end_headers()
 				
-				if form["event"].value != "ExecResult":
+				if 0 and form["event"].value != Messages.SCRIPT_EXEC_RESULT:
 					xml = """<?xml version="1.0" encoding="UTF-8"?>
 						<response>
 						<scripts>
