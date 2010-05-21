@@ -4,7 +4,7 @@ from scalarizr.bus import bus
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
-from scalarizr.util import configtool, cryptotool, LocalObject
+from scalarizr.util import configtool, cryptotool
 
 import os
 import sys
@@ -23,7 +23,7 @@ import threading
 class ScalarizrError(BaseException):
 	pass
 
-class NotInstalledError(BaseException):
+class NotConfiguredError(BaseException):
 	pass
 
 __version__ = "0.5"	
@@ -41,6 +41,7 @@ def _init():
 		if not bus.etc_path:
 			base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")		
 			etc_places = (
+				"/etc/scalr",
 				"/etc/scalarizr", 
 				"/usr/etc/scalarizr", 
 				"/usr/local/etc/scalarizr",
@@ -144,7 +145,7 @@ def _init_services():
 		pl_factory = PlatformFactory()
 		bus.platfrom = pl_factory.new_platform(pl_name)
 	else:
-		raise NotInstalledError("Platform not defined")
+		raise NotConfiguredError("Platform not defined")
 
 	platform = bus.platfrom
 	optparser = bus.optparser
@@ -153,20 +154,26 @@ def _init_services():
 	server_id_opt = gen_sect.option_wrapper(configtool.OPT_SERVER_ID)
 	server_id_opt.set_required(optparser.values.server_id \
 			or platform.get_user_data(UserDataOptions.SERVER_ID), 
-			NotInstalledError)
+			NotConfiguredError)
+	
+	# Set role name
+	role_name_opt = gen_sect.option_wrapper(configtool.OPT_ROLE_NAME)
+	role_name_opt.set_required(optparser.values.role_name \
+			or platform.get_user_data(UserDataOptions.ROLE_NAME), 
+			NotConfiguredError)
 
 	# Set queryenv url
 	query_env_opt = gen_sect.option_wrapper(configtool.OPT_QUERYENV_URL)
 	query_env_opt.set_required(optparser.values.queryenv_url \
 			or platform.get_user_data(UserDataOptions.QUERYENV_URL), 
-			NotInstalledError)
+			NotConfiguredError)
 
 	# Set messaging producer url
 	msg_p2p_producer_url_opt = configtool.option_wrapper(config, "messaging_p2p", 
 			P2pConfigOptions.PRODUCER_URL)
 	msg_p2p_producer_url_opt.set_required(optparser.values.msg_p2p_producer_url \
 			or platform.get_user_data(UserDataOptions.MESSAGE_SERVER_URL), 
-			NotInstalledError)
+			NotConfiguredError)
 	
 	# Set crypto key
 	crypto_key_title = "Scalarizr crypto key"
@@ -179,7 +186,7 @@ def _init_services():
 	except ConfigError, e:
 		logger.warn(str(e))
 	if not crypto_key:
-		raise NotInstalledError("%s is empty" % (crypto_key_title))
+		raise NotConfiguredError("%s is empty" % (crypto_key_title))
 
 	
 	# Initialize QueryEnv
@@ -229,25 +236,26 @@ def init_script():
 	msg_service = factory.new_service(adapter, **kwargs)
 	bus.messaging_service = msg_service
 
-def _install_option(optparser, cli_opt_name, opt_title, opt_wrapper, ini_updates, validator=None):
+def _configure_option(optparser, cli_opt_name, opt_title, opt_wrapper, ini_updates, 
+		validator=None, allow_empty=False):
 	orig_value = opt_wrapper.get()
 	while True:
 		input = optparser.values.__dict__[cli_opt_name] \
 				or (raw_input("Enter " + opt_title + (" ["+orig_value+"]" if orig_value else "") + ":") 
-						if not optparser.values.no_prompt else None)
-		if input:
+						if not optparser.values.no_prompt else "")
+		if input or allow_empty:
 			if validator and not validator(input):
 				continue
 			if not opt_wrapper.section in ini_updates:
 				ini_updates[opt_wrapper.section] = dict()
 			ini_updates[opt_wrapper.section][opt_wrapper.option] = input
-		if input or orig_value:
+		if input or orig_value or allow_empty:
 			break
 		elif optparser.values.no_prompt:
 			# In automated mode raise error
 			raise ScalarizrError("Option '%s' is missed" % (cli_opt_name))
 
-def _install ():
+def _configure ():
 	optparser = bus.optparser
 	config = bus.config
 	gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
@@ -280,29 +288,34 @@ def _install ():
 			break
 	
 	# Server id
-	_install_option(optparser, "server_id", "server id", 
+	_configure_option(optparser, "server_id", "server id", 
 			configtool.option_wrapper(gen_sect, configtool.OPT_SERVER_ID), 
 			ini_updates)
 	
+	# Role name
+	_configure_option(optparser, "role_name", "role name",
+			configtool.option_wrapper(gen_sect, configtool.OPT_ROLE_NAME),
+			ini_updates)
+	
 	# QueryEnv 
-	_install_option(optparser, "queryenv_url", "QueryEnv server URL",
+	_configure_option(optparser, "queryenv_url", "QueryEnv server URL",
 			configtool.option_wrapper(gen_sect, configtool.OPT_QUERYENV_URL), 
 			ini_updates)
 	
 	# Message server url
-	_install_option(optparser, "msg_p2p_producer_url", "Messaging server URL", 
+	_configure_option(optparser, "msg_p2p_producer_url", "Messaging server URL", 
 			configtool.option_wrapper(config, "messaging_p2p", P2pConfigOptions.PRODUCER_URL), 
 			ini_updates)
 	
 	# Platform
-	_install_option(optparser, "platform", "platform", 
+	_configure_option(optparser, "platform", "platform", 
 			configtool.option_wrapper(gen_sect, configtool.OPT_PLATFORM), 
 			ini_updates, validator=_platform_validator)
 	
 	# Behaviour
-	_install_option(optparser, "behaviour", "behaviour", 
+	_configure_option(optparser, "behaviour", "behaviour", 
 			configtool.option_wrapper(gen_sect, configtool.OPT_BEHAVIOUR), 
-			ini_updates, validator=_behaviour_validator)
+			ini_updates, validator=_behaviour_validator, allow_empty=True)
 	
 	try:
 		bhs = ini_updates[configtool.SECT_GENERAL][configtool.OPT_BEHAVIOUR]
@@ -319,13 +332,14 @@ def _install ():
 		
 	configtool.update(os.path.join(bus.etc_path, "config.ini"), ini_updates)
 	
-	# Install database
+	# Configure database
 	print "Create database"
 	conn = _db_connect()
 	conn.executescript(open(os.path.join(bus.etc_path, "public.d/db.sql")).read())
 	conn.commit()
 	
 	print "Done"
+
 
 _KNOWN_PLATFORMS = ("ec2", "rs", "vps")
 	
@@ -339,10 +353,11 @@ def _platform_validator(value):
 _KNOWN_BEHAVIOURS = ("www", "app", "mysql")
 
 def _behaviour_validator(value):
-	for bh in configtool.split_array(value):
-		if bh not in _KNOWN_BEHAVIOURS:
-			print "invalid choice: '%s' (choose from %s)" % (bh, ", ".join(_KNOWN_BEHAVIOURS))
-			return False
+	if value:
+		for bh in configtool.split_array(value):
+			if bh not in _KNOWN_BEHAVIOURS:
+				print "invalid choice: '%s' (choose from %s)" % (bh, ", ".join(_KNOWN_BEHAVIOURS))
+				return False
 	return True
 		
 
@@ -357,16 +372,21 @@ def main():
 		optparser = bus.optparser = OptionParser()
 		optparser.add_option("-c", "--conf-path", dest="conf_path",
 				help="Configuration path")
-		optparser.add_option("-n", "--install", dest="install", action="store_true", default=False, 
+		optparser.add_option("-n", "--configure", dest="configure", action="store_true", default=False, 
 				help="Run installation process")
-		optparser.add_option("--no-prompt", dest="no_prompt", action="store_true", default=False,
-				help="Do not prompt user during installation. Use only command line options")
 		optparser.add_option("-k", "--gen-key", dest="gen_key", action="store_true", default=False,
 				help="Generate crypto key")
 		
 		group = OptionGroup(optparser, "Installation and runtime override options")
+		
+		group.add_option("--no-prompt", dest="no_prompt", action="store_true", default=False,
+				help="Do not prompt user during installation. Use only command line options")
+		group.add_option("--import", dest="run_import", action="store_true", default=False, 
+				help="Start import process after configure Scalarizr")
 		group.add_option("--server-id", dest="server_id", 
-				help="unique server identificator in Scalr envirounment")
+				help="Unique server identificator in Scalr envirounment")
+		group.add_option("--role-name", dest="role_name",
+				help="Server role name")
 		group.add_option("--crypto-key", dest="crypto_key",
 				help="Scalarizr base64 encoded crypto key")
 		group.add_option("--platform", dest="platform", choices=_KNOWN_PLATFORMS,
@@ -379,6 +399,7 @@ def main():
 				help="URL to Scalr QueryEnv service (default: https://scalr.net/queryenv)")
 		group.add_option("--msg-producer-url", dest="msg_p2p_producer_url",
 				help="URL to Scalr messaging server (default: https://scalr.net/messaging)")
+		
 		optparser.add_option_group(group)
 		
 		# Add options from behaviour configurators
@@ -401,20 +422,21 @@ def main():
 			sys.exit()
 
 		# Run installation process
-		if optparser.values.install:
-			_install()
-			sys.exit()
+		if optparser.values.configure:
+			_configure()
+			if not optparser.values.run_import:
+				sys.exit()
 		
 		# Initialize scalarizr service
 		try:
 			_init_services()
-		except NotInstalledError, e:
-			logger.error("Scalarizr is not properly installed. %s", e)
+		except NotConfiguredError, e:
+			logger.error("Scalarizr is not properly configured. %s", e)
 			print >> sys.stderr, "error: %s" % (e)
-			print >> sys.stdout, "Execute instalation process first: 'scalarizr --install'"
+			print >> sys.stdout, "Execute instalation process first: 'scalarizr --configure'"
 			sys.exit()
 
-
+		# Start messaging server
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
 		msg_thread = threading.Thread(target=consumer.start)
@@ -423,10 +445,6 @@ def main():
 		# Fire start
 		bus.fire("start")
 	
-		# TODO: find a way to start messaging before fire 'start'. maybe in a separate thread, 
-		# but program termination on Ctrl-C must be preserved
-		
-		# Start messaging server
 		try:
 			while True:
 				msg_thread.join(0.5)

@@ -40,7 +40,8 @@ class MessageListener:
 		config = bus.config
 		platfrom = bus.platfrom
 		self._logger.debug("Initialize message listener");
-		self._accept_kwargs["behaviour"] = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR).split(",")
+		self._accept_kwargs["behaviour"] = configtool.split_array(
+				config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR))
 		self._accept_kwargs["platform"] = platfrom.name
 		self._accept_kwargs["os"] = platform.uname()
 		self._accept_kwargs["dist"] = platform.dist()

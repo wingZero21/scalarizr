@@ -1,4 +1,5 @@
 BEGIN TRANSACTION;
+DROP TABLE IF EXISTS p2p_message;
 CREATE TABLE p2p_message (
     "id" INTEGER PRIMARY KEY,
     "message_id" TEXT,
@@ -12,6 +13,7 @@ CREATE TABLE p2p_message (
     "out_last_attempt_time" TEXT,
     "in_is_handled" INTEGER
 );
+DROP TABLE IF EXISTS log;
 CREATE TABLE log (
     "id" INTEGER PRIMARY KEY,
     "name" TEXT,

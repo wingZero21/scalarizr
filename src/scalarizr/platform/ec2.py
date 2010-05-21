@@ -80,6 +80,9 @@ class AwsPlatform(Platform):
 	def get_instance_id(self):
 		return self._get_property("latest/meta-data/instance-id")
 	
+	def get_instance_type(self):
+		return self._get_property("latest/meta-data/instance-type")
+	
 	def get_ami_id(self):
 		return self._get_property("latest/meta-data/ami-id")
 

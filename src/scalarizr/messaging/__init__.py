@@ -155,6 +155,11 @@ class Messages:
 	# Scalarizr events
 	###
 	
+	HELLO = "Hello"
+	"""
+	Fires when Scalarizr wants to remind Scalr of himself
+	"""
+	
 	HOST_INIT = "HostInit"
 	"""
 	@broadcast

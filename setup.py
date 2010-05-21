@@ -17,10 +17,10 @@ cfg = dict(
 	requires = ["m2crypto (>=0.20)", "boto"],
 	data_files= [
 		("/etc/scalr", findall("etc")),
+		("/usr/local/bin", ["bin/scalarizr"]),
 		("/usr/local/scalarizr/scripts", findall("scripts"))
 	]
 )
-
 
 
 setup(**cfg)

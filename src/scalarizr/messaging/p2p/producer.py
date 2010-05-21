@@ -38,9 +38,12 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 		self._store = P2pMessageStore()
 		
 		self._send_event = threading.Event()
+		# FIXME: Python doesn't exit. WTF? 
+		"""
 		self._sender_thread = threading.Thread(target=self._send_undelivered)
 		self._sender_thread.daemon = True
 		self._sender_thread.start()
+		"""
 	
 	def _send_undelivered(self):
 		while 1:

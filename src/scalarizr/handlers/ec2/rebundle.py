@@ -11,6 +11,7 @@ from scalarizr.platform import PlatformError
 from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system, disttool, cryptotool, fstool
 from scalarizr.util.fstool import Mtab
+from scalarizr.handlers.ec2.lifecircle import set_aws_credentials
 import logging
 import time
 import os
@@ -19,7 +20,7 @@ from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
-from threading import Thread
+from threading import Thread, Lock
 from Queue import Queue, Empty
 import math
 from boto.s3 import Key
@@ -27,6 +28,35 @@ from boto.s3.connection import Location
 from boto.resultset import ResultSet
 from boto.exception import BotoServerError
 import shutil
+
+
+"""
+2010-05-21 15:21:29,977 - DEBUG - scalarizr.util - / s b i n / t u n e 2 f s   - i   0   / m n t / s c a l a r i z r - f i r s t - 1 2 7 4 4 5 5 2 8 1
+2010-05-21 15:21:30,054 - DEBUG - scalarizr.util - stdout: tune2fs 1.41.3 (12-Oct-2008)
+Setting interval between checks to 0 seconds
+
+2010-05-21 15:21:30,055 - DEBUG - scalarizr.util - system: sync
+2010-05-21 15:21:30,305 - INFO - scalarizr.handlers.ec2.rebundle - Mount image file
+2010-05-21 15:21:30,331 - DEBUG - scalarizr.util - m o u n t   - o   l o o p   / m n t / s c a l a r i z r - f i r s t - 1 2 7 4 4 5 5 2 8 1   / m n t / i m g - m n t   2 > & 1
+2010-05-21 15:21:30,385 - INFO - scalarizr.handlers.ec2.rebundle - Make special directories
+2010-05-21 15:21:30,386 - DEBUG - scalarizr.util - system: mknod /mnt/img-mnt/dev/null c 1 3
+2010-05-21 15:21:30,391 - DEBUG - scalarizr.util - system: mknod /mnt/img-mnt/dev/zero c 1 5
+2010-05-21 15:21:30,395 - DEBUG - scalarizr.util - system: mknod /mnt/img-mnt/dev/tty c 5 0
+2010-05-21 15:21:30,408 - DEBUG - scalarizr.util - system: mknod /mnt/img-mnt/dev/console c 5 1
+2010-05-21 15:21:30,413 - DEBUG - scalarizr.util - system: ln -s null /mnt/img-mnt/dev/X0R
+2010-05-21 15:21:30,417 - INFO - scalarizr.handlers.ec2.rebundle - Copy volume to image file
+2010-05-21 15:21:30,442 - DEBUG - scalarizr.util - system: rsync -rlpgoD -t -S -l -X --exclude None --exclude /dev --exclude / --exclude /mnt/scalarizr-first-1274455281 --exclude /mnt --exclude /dev/shm --exclude /mnt/img-mnt --exclude /mnt --exclude /sys --exclude /proc /* /mnt/img-mnt 2>&1 > /dev/null
+2010-05-21 15:21:55,863 - INFO - scalarizr.handlers.ec2.rebundle - Volume bundle complete!
+2010-05-21 15:21:55,875 - ERROR - scalarizr.handlers.ec2.rebundle - Rebundle failed. [Errno 2] No such file or directory: '/mnt/img-mnt/opt/scalarizr/etc/private.d/keys'
+2010-05-21 15:21:55,875 - ERROR - scalarizr.handlers.ec2.rebundle - [Errno 2] No such file or directory: '/mnt/img-mnt/opt/scalarizr/etc/private.d/keys'
+Traceback (most recent call last):
+  File "/opt/scalarizr/src/scalarizr/handlers/ec2/rebundle.py", line 113, in on_Rebundle
+    self._cleanup_image(image_mpoint, role_name=message.role_name)
+  File "/opt/scalarizr/src/scalarizr/handlers/ec2/rebundle.py", line 223, in _cleanup_image
+    os.mkdir(os.path.join(etc_path, "private.d/keys"))
+OSError: [Errno 2] No such file or directory: '/mnt/img-mnt/opt/scalarizr/etc/private.d/keys'
+
+"""
 
 
 
@@ -90,6 +120,9 @@ Bundled: %(bundle_date)s
 		try:
 			bus.fire("before_rebundle", role_name=message.role_name)
 			
+			if message.body.has_key("aws_account_id"):
+				set_aws_credentials(message)
+			
 			aws_account_id = self._platform.get_account_id()
 			avail_zone = self._platform.get_avail_zone()
 			region = avail_zone[0:2]
@@ -99,8 +132,8 @@ Bundled: %(bundle_date)s
 			bucket = "scalr2-images-%s-%s" % (region, aws_account_id)		
 			
 			# Create exclude directories list
-			excludes = message["excludes"].split(":") \
-					if message.body.has_key("excludes") else []
+			excludes = message.excludes.split(":") \
+					if message.body.has_key("excludes") and message.excludes else []
 			
 			# Bundle volume
 			image_file, image_mpoint = self._bundle_vol(prefix=prefix, destination="/mnt", excludes=excludes)
@@ -118,7 +151,7 @@ Bundled: %(bundle_date)s
 			
 			# Send message to Scalr
 			producer = self._msg_service.get_producer()
-			msg = self._msg_service.new_message(Messages.REBUNDLE_RESULT, dict(
+			msg = self._msg_service.new_message(Messages.REBUNDLE_RESULT, body=dict(
 				status = "ok",
 				snapshot_id = ami_id,
 				bundle_task_id = message.bundle_task_id															
@@ -129,9 +162,12 @@ Bundled: %(bundle_date)s
 			bus.fire("rebundle", role_name=message.role_name, snapshot_id=ami_id)
 			
 		except (Exception, BaseException), e:
+			self._logger.error("Rebundle failed. %s", e)
+			self._logger.exception(e)
+			
 			# Send message to Scalr			
 			producer = self._msg_service.get_producer()
-			msg = self._msg_service.new_message(Messages.REBUNDLE_RESULT, dict(
+			msg = self._msg_service.new_message(Messages.REBUNDLE_RESULT, body=dict(
 				status = "error",
 				last_error = str(e),
 				bundle_task_id = message.bundle_task_id
@@ -212,7 +248,7 @@ Bundled: %(bundle_date)s
 		# Cleanup scalarizr private data
 		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
 		shutil.rmtree(os.path.join(etc_path, "private.d"))
-		os.mkdir(os.path.join(etc_path, "private.d/keys"))
+		os.makedirs(os.path.join(etc_path, "private.d/keys"))
 		
 		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
 
@@ -431,9 +467,12 @@ Bundled: %(bundle_date)s
 			
 			# Start uploaders
 			self._logger.info("Start uploading with %d threads", self._NUM_UPLOAD_THREADS)
+			failed_files = []
+			failed_files_lock = Lock()
 			uploaders = []
 			for n in range(self._NUM_UPLOAD_THREADS):
-				uploader = Thread(name="Uploader-%s" % n, target=self._uploader, args=(queue, s3_conn, bucket, acl))
+				uploader = Thread(name="Uploader-%s" % n, target=self._uploader, 
+						args=(queue, s3_conn, bucket, acl, failed_files, failed_files_lock))
 				self._logger.debug("Starting uploader '%s'", uploader.getName())
 				uploader.start()
 				uploaders.append(uploader)
@@ -443,7 +482,10 @@ Bundled: %(bundle_date)s
 			for uploader in uploaders:
 				uploader.join()
 				self._logger.debug("Uploader '%s' finished", uploader.getName())
-	
+				
+			if failed_files:
+				raise BaseException("Cannot upload several files. %s" % [", ".join(failed_files)])
+			
 			self._logger.info("Upload complete!")
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
 			
@@ -452,7 +494,15 @@ Bundled: %(bundle_date)s
 			raise
 
 
-	def _uploader(self, queue, s3_conn, bucket, acl):
+	def _uploader(self, queue, s3_conn, bucket, acl, failed_files, failed_files_lock):
+		"""
+		@param queue: files queue
+		@param s3_conn: S3 connection
+		@param bucket: S3 bucket object
+		@param acl: file S3 acl
+		@param failed_files: list of files that failed to upload
+		@param failed_files_lock: Lock object to synchronize access to `failed_files`
+		"""
 		self._logger.debug("queue: %s, bucket: %s", queue, bucket)
 		try:
 			while 1:
@@ -465,11 +515,16 @@ Bundled: %(bundle_date)s
 					key.set_contents_from_file(file, policy=acl)
 				except (BotoServerError, OSError), e:
 					self._logger.error("Cannot upload '%s'. %s", filename, e)
-					if isinstance(e, BotoServerError) and upload_attempts < self._MAX_UPLOAD_ATTEMPTS:
+					if upload_attempts < self._MAX_UPLOAD_ATTEMPTS:
 						self._logger.info("File '%s' will be uploaded within the next attempt", filename)
 						upload_attempts += 1
 						queue.put((filename, upload_attempts))
-					# TODO: collect failed files and report them at the end						
+					else:
+						try:
+							failed_files_lock.acquire()
+							failed_files.append(filename)
+						finally:
+							failed_files_lock.release()
 		except Empty:
 			return
 	

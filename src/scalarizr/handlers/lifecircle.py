@@ -27,13 +27,18 @@ class LifeCircleHandler(Handler):
 		
 		bus.define_events(
 			# Fires before HostInit message is sent
+			# @param msg 
 			"before_host_init",
 			
 			# Fires after HostInit message is sent
 			"host_init",
 			
+			# Fires when HostInitResponse received
+			# @param msg
+			"host_init_response",
+			
 			# Fires before HostUp message is sent
-			# @param message: HostInitResponse message 
+			# @param msg
 			"before_host_up",
 			
 			# Fires after HostUp message is sent
@@ -43,12 +48,21 @@ class LifeCircleHandler(Handler):
 			"reboot_start",
 			
 			# Fires before RebootFinish message is sent
+			# @param msg
 			"before_reboot_finish",
 			
 			# Fires after RebootFinish message is sent
 			"reboot_finish",
 			
+			# Fires before Hello message is sent
+			# @param msg
+			"before_hello",
+			
+			# Fires after Hello message is sent
+			"hello",
+			
 			# Fires after HostDown message is sent
+			# @param msg
 			"before_host_down",
 			
 			# Fires after HostDown message is sent
@@ -74,91 +88,113 @@ class LifeCircleHandler(Handler):
 	
 	def on_start(self):
 		reboot_file = os.path.join(bus.etc_path, ".reboot")
-		if not os.path.exists(reboot_file):
-			"""
-			# Add init scripts
-			
-			
-			# Add reboot script
-			dst = "/etc/rc6.d/K10scalarizr"
-			if not os.path.exists(dst):
-				path = bus.base_path + "/src/scalarizr/scripts/reboot.py"
-				try:
-					os.symlink(path, dst)
-				except OSError:
-					self._logger.error("Cannot create symlink %s -> %s", dst, path)
-					raise
-			"""
-			"""
-			OpenSolaris:
-			2010-03-15 19:10:15,448 - ERROR - scalarizr.handlers.lifecircle - Cannot create symlink /etc/rc6.d/K10scalarizr -> /opt/scalarizr/src/scalarizr/scripts/reboot.py
-			2010-03-15 19:10:15,449 - ERROR - scalarizr.util - [Errno 2] No such file or directory
-			
-			SOLUTION:
-			/sbin/rc6 - shell script file, executed on reboot
-			add scripts/reboot.py into the begining of this file
-			"""
-			
-			"""
-			# Add halt script
-			dst = "/etc/rc0.d/K10scalarizr"
-			if not os.path.exists(dst):
-				path = bus.base_path + "/src/scalarizr/scripts/halt.py"
-				try:
-					os.symlink(path, dst)
-				except OSError:
-					self._logger.error("Cannot create symlink %s -> %s", dst, path)
-					raise
-			
-			if os.path.exists("/var/lock/subsys"):
-				# Touch /var/lock/subsys/scalarizr
-				# This file represents that a service's subsystem is locked, which means the service should be running
-				# @see http://www.redhat.com/magazine/008jun05/departments/tips_tricks/
-				f = "/var/lock/subsys/scalarizr"
-				try:
-					open(f, "w+").close()
-				except OSError:
-					self._logger.error("Cannot touch file '%s'", f)
-					raise 
-			"""
-			
-			# Notify listeners
-			bus.fire("before_host_init")
-			
-			# Regenerage key
-			key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
-			key = cryptotool.keygen()
-			
-			# Send HostInit
-			msg = self._msg_service.new_message(Messages.HOST_INIT)
-			self._put_broadcast_data(msg)
-			msg.crypto_key = key			
-			self._producer.send(Queues.CONTROL, msg) 
+		optparser = bus.optparser
+		
+		if os.path.exists(reboot_file):
+			self._logger.info("Scalarizr resumed after reboot")
+			os.remove(reboot_file)			
+			self._start_after_beboot()
 
-			# Update key file
-			configtool.write_key(key_path, key, key_title="Scalarizr crypto key")
-
-			# Update key in QueryEnv
-			queryenv = bus.queryenv_service
-			queryenv.key = binascii.a2b_base64(key)
-
-			# Notify listeners
-			bus.fire("host_init")
+			
+		elif optparser.values.run_import:
+			self._logger.info("Server will be imported into Scalr")
+			self._start_import()
 			
 		else:
-			self._logger.info("Scalarizr is resumed after reboot")
-			os.remove(reboot_file)
-			
-			# Notify listeners
-			bus.fire("before_reboot_finish")
-			
-			# Send RebootFinish
-			msg = self._msg_service.new_message(Messages.REBOOT_FINISH)
-			self._put_broadcast_data(msg)
-			self._producer.send(Queues.CONTROL, msg)
-			
-			# Notify listeners
-			bus.fire("reboot_finish")
+			self._logger.info("Normal start")
+			self._start_normal()
+
+
+	def _start_after_beboot(self):
+		# Send RebootFinish
+		msg = self._msg_service.new_message(Messages.REBOOT_FINISH)
+		self._put_broadcast_data(msg)
+		
+		bus.fire("before_reboot_finish", msg)
+		self._producer.send(Queues.CONTROL, msg)
+		
+		bus.fire("reboot_finish")		
+
+	
+	def _start_normal(self):
+		"""
+		# Add init scripts
+		
+		
+		# Add reboot script
+		dst = "/etc/rc6.d/K10scalarizr"
+		if not os.path.exists(dst):
+			path = bus.base_path + "/src/scalarizr/scripts/reboot.py"
+			try:
+				os.symlink(path, dst)
+			except OSError:
+				self._logger.error("Cannot create symlink %s -> %s", dst, path)
+				raise
+		"""
+		"""
+		OpenSolaris:
+		2010-03-15 19:10:15,448 - ERROR - scalarizr.handlers.lifecircle - Cannot create symlink /etc/rc6.d/K10scalarizr -> /opt/scalarizr/src/scalarizr/scripts/reboot.py
+		2010-03-15 19:10:15,449 - ERROR - scalarizr.util - [Errno 2] No such file or directory
+		
+		SOLUTION:
+		/sbin/rc6 - shell script file, executed on reboot
+		add scripts/reboot.py into the begining of this file
+		"""
+		
+		"""
+		# Add halt script
+		dst = "/etc/rc0.d/K10scalarizr"
+		if not os.path.exists(dst):
+			path = bus.base_path + "/src/scalarizr/scripts/halt.py"
+			try:
+				os.symlink(path, dst)
+			except OSError:
+				self._logger.error("Cannot create symlink %s -> %s", dst, path)
+				raise
+		
+		if os.path.exists("/var/lock/subsys"):
+			# Touch /var/lock/subsys/scalarizr
+			# This file represents that a service's subsystem is locked, which means the service should be running
+			# @see http://www.redhat.com/magazine/008jun05/departments/tips_tricks/
+			f = "/var/lock/subsys/scalarizr"
+			try:
+				open(f, "w+").close()
+			except OSError:
+				self._logger.error("Cannot touch file '%s'", f)
+				raise 
+		"""
+		
+		# Regenerage key
+		key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
+		key = cryptotool.keygen()
+		
+		# Send HostInit
+		msg = self._msg_service.new_message(Messages.HOST_INIT)
+		self._put_broadcast_data(msg)
+		msg.crypto_key = key
+		
+		bus.fire("before_host_init", msg)					
+		self._producer.send(Queues.CONTROL, msg) 
+
+		# Update key file
+		configtool.write_key(key_path, key, key_title="Scalarizr crypto key")
+
+		# Update key in QueryEnv
+		queryenv = bus.queryenv_service
+		queryenv.key = binascii.a2b_base64(key)
+
+		# Notify listeners
+		bus.fire("host_init")
+		
+	
+	def _start_import(self):
+		# Send Hello		
+		msg = self._msg_service.new_message(Messages.HELLO)
+		
+		bus.fire("before_hello", msg)
+		self._producer.send(Queues.CONTROL, msg)
+		
+		bus.fire("hello")
 
 
 	def on_IntServerReboot(self, message):
@@ -179,19 +215,21 @@ class LifeCircleHandler(Handler):
 		
 	
 	def on_IntServerHalt(self, message):
-		bus.fire("before_host_down")
-		
 		msg = self._msg_service.new_message(Messages.HOST_DOWN)
 		self._put_broadcast_data(msg)
+		
+		bus.fire("before_host_down", msg)		
 		self._producer.send(Queues.CONTROL, msg)
 
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
-		bus.fire("before_host_up", message)
+		bus.fire("host_init_response", message)
 		
 		msg = self._msg_service.new_message(Messages.HOST_UP)
 		self._put_broadcast_data(msg)
+		
+		bus.fire("before_host_up", msg)
 		self._producer.send(Queues.CONTROL, msg)
 		
 		bus.fire("host_up")

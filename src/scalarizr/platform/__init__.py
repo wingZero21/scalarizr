@@ -12,6 +12,7 @@ class PlatformError(BaseException):
 
 class UserDataOptions:
 	SERVER_ID = "serverid"	
+	ROLE_NAME = "realrolename"
 	CRYPTO_KEY = "szr_key"
 	QUERYENV_URL = "queryenv_url"
 	MESSAGE_SERVER_URL = "p2p_producer_endpoint"	

@@ -8,10 +8,12 @@ from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, _P2pBase, P2pCo
 from scalarizr.util import cryptotool, configtool
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
+import socket
 import threading
 import logging
 import binascii
 import sys
+
 try:
 	import time
 except ImportError:
@@ -37,7 +39,11 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 			r = urlparse(self.endpoint)
 			_HttpRequestHanler.consumer = self
 			server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-			self._server = server_cls((r.hostname, r.port), _HttpRequestHanler)
+			self._server = server_cls(
+				# Forse listening eth interface
+				(r.hostname if r.hostname != "localhost" else socket.gethostname(), r.port), 
+				_HttpRequestHanler
+			)
 			self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
 			
 		self._logger.info("Staring consumer...")
@@ -91,8 +97,10 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 			logger.debug("Decrypting message...")
 			crypto_key = binascii.a2b_base64(configtool.read_key(self.consumer.crypto_key_path))
 			xml = cryptotool.decrypt(rawmsg, crypto_key)
+			# Remove special chars
+			xml = xml.strip(''.join(chr(i) for i in range(0, 31)))		
 		except (BaseException, Exception), e:
-			err = "Cannot decrypt message"
+			err = "Cannot decrypt message. %s" % str(e)
 			logger.error(err)
 			logger.exception(e)
 			self.send_response(400, err)
@@ -103,7 +111,7 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 			message = P2pMessage()
 			message.fromxml(xml)
 		except (BaseException, Exception), e:
-			err = "Cannot decrypt message"
+			err = "Cannot decode message. %s" % str(e)
 			logger.error(err)
 			logger.exception(e)
 			self.send_response(400, err)
@@ -129,6 +137,10 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 
 
 if sys.version_info < (2,6):
+	try:
+		import selectmodule as select
+	except ImportError:
+		import select
 	class _HTTPServer25(HTTPServer):
 		
 		def __init__(self, server_address, RequestHandlerClass):
@@ -136,13 +148,26 @@ if sys.version_info < (2,6):
 			self.__is_shut_down = threading.Event()
 			self.__serving = False
 		
-		def serve_forever(self):
+		def serve_forever(self, poll_interval=0.5):
+			logger = logging.getLogger(__name__)
+			logger.debug("_HTTPServer25 serving...")
 			self.__serving = True
 			self.__is_shut_down.clear()
 			while self.__serving:
-				self.handle_request()
+				# XXX: Consider using another file descriptor or
+				# connecting to the socket to wake this up instead of
+				# polling. Polling reduces our responsiveness to a
+				# shutdown request and wastes cpu at all other times.
+				r, w, e = select.select([self], [], [], poll_interval)
+				if r:
+					self.handle_request()
+			
 			self.__is_shut_down.set()
 		
 		def shutdown(self):
 			self.__serving = False
+			logger = logging.getLogger(__name__)
+			logger.debug("Set serving to False")
 			self.__is_shut_down.wait()
+
+			
