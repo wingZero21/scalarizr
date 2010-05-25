@@ -96,11 +96,11 @@ class LocalObject:
 		self._logger.info("Added weakref %s", self._object.current)
 		return o
 	
-class SQLiteLO(LocalObject):
+class SqliteLocalObject(LocalObject):
 	def do_create(self):
-		return _SQLiteConnection(self, self._creator)
+		return _SqliteConnection(self, self._creator)
 	
-class _SQLiteConnection(object):
+class _SqliteConnection(object):
 	_conn = None
 	_lo = None
 	_creator = None
@@ -114,15 +114,6 @@ class _SQLiteConnection(object):
 			self._conn = self._creator()
 		return self._conn
 	
-# TODO: LocalObject need to be extended to support SQLite connections managing
-# Current problems:
-# 1. Cannot create weak reference to 'sqlite3.Connection' object
-# 2. If we use any wrapper object for sqlite that returns connection with get_connection() method
-#    LocalObject lose weakref with this code:
-#    conn = localobj.get().get_connection()
-#    but weakref alives with this code:
-#    wrap = localobj.get()
-#    conn = wrap.get_connection()
 	
 def system(args, shell=True):
 	import subprocess

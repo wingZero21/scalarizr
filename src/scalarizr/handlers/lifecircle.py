@@ -21,6 +21,8 @@ class LifeCircleHandler(Handler):
 	_bus = None
 	_msg_service = None
 	_producer = None
+	_platform = None
+	_config = None
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -73,6 +75,7 @@ class LifeCircleHandler(Handler):
 		self._msg_service = bus.messaging_service
 		self._producer = self._msg_service.get_producer()
 		self._config = bus.config
+		self._platform = bus.platfrom
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -190,6 +193,7 @@ class LifeCircleHandler(Handler):
 	def _start_import(self):
 		# Send Hello		
 		msg = self._msg_service.new_message(Messages.HELLO)
+		msg.architecture = self._platform.get_architecture()
 		
 		bus.fire("before_hello", msg)
 		self._producer.send(Queues.CONTROL, msg)

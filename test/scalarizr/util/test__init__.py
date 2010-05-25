@@ -1,7 +1,7 @@
 '''
 @author: Dmytro Korsakov
 '''
-from scalarizr.util import LocalObject, SQLiteLO, init_tests
+from scalarizr.util import LocalObject, SqliteLocalObject, init_tests
 
 import unittest
 import threading
@@ -12,15 +12,10 @@ class TestSQLite(unittest.TestCase):
 	localobj = None
 	
 	def setUp(self):
-		self.localobj = SQLiteLO(self._db_connect)
+		self.localobj = SqliteLocalObject(self._db_connect)
 		
 	def tearDown(self):
 		del self.localobj		
-
-	def test_get_from_the_same_thread(self):
-		conn1 = self.localobj.get().get_connection()
-		conn2 = self.localobj.get().get_connection()
-		self.assertEqual(conn1, conn2)
 
 	def _db_connect(self):
 		logger = logging.getLogger(__name__)
@@ -28,6 +23,11 @@ class TestSQLite(unittest.TestCase):
 		conn = sqlite.Connection(":memory:")
 		conn.row_factory = sqlite.Row
 		self.o_thread = conn
+
+	def test_get_from_the_same_thread(self):
+		conn1 = self.localobj.get().get_connection()
+		conn2 = self.localobj.get().get_connection()
+		self.assertEqual(conn1, conn2)
 
 	def test_get_from_different_threads(self):
 		o_main = self.localobj.get()

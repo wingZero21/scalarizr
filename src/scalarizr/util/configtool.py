@@ -116,7 +116,7 @@ def read_key(path, key_title=None, private=None):
 			file.close()
 
 def split_array(value, separator=",", allow_empty=False, ct=list):
-	return ct(v.strip() for v in value.split(separator) if allow_empty or (not allow_empty and v))
+	return ct(v.strip() for v in value.split(separator) if allow_empty or (not allow_empty and v)) if value else ct()
 
 def update(filename, sections):
 	class Comment:
