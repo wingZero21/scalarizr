@@ -25,8 +25,9 @@ class AwsLifeCircleHandler(Handler):
 		bus.on("init", self.on_init)		
 	
 	def on_init(self, *args, **kwargs):
-		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_hello", self.on_before_hello)		
+		bus.on("before_host_init", self.on_before_host_init)
+		bus.on("host_init_response", self.on_host_init_response)
 
 		msg_service = bus.messaging_service
 		producer = msg_service.get_producer()
@@ -49,6 +50,14 @@ class AwsLifeCircleHandler(Handler):
 		message.aws_instance_type = self._platform.get_instance_type()		
 		message.aws_ami_id = self._platform.get_ami_id()
 		message.aws_avail_zone = self._platform.get_avail_zone()
+
+
+	def on_before_host_init(self, message):
+		"""
+		@param message: HostInit message
+		"""
+		
+		message.ssh_pub_key = self._platform.get_ssh_pub_key()
 
 
 	def on_before_message_send(self, queue, message):

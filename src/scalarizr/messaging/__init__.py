@@ -32,15 +32,20 @@ class MetaOptions(object):
 	
 class Message(object):
 	
-	def __init__(self, name=None, meta={}, body={}):
-		self.__dict__["id"] = None
-		self.__dict__["name"] = name
-		self.__dict__["meta"] = meta
-		self.__dict__["body"] = body
+	id = None
+	name = None
+	meta = None
+	body = None
+	
+	def __init__(self, name=None, meta=None, body=None):
+		self.id = None
+		self.name = name
+		self.meta = meta or {}
+		self.body = body or {}
 	
 	def __setattr__(self, name, value):
-		if name in self.__dict__:
-			self.__dict__[name] = value
+		if name in self.__class__.__dict__:
+			object.__setattr__(self, name, value)
 		else:
 			self.body[name] = value
 		

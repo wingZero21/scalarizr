@@ -102,9 +102,9 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			self._logger.debug("X-Server-Id: " + self.server_id)
 			self._logger.debug("Payload: " + data)
 			
-			req = Request(self.endpoint + "/" + queue, data, headers)
+			url = self.endpoint + "/" + queue
+			req = Request(url, data, headers)
 			resp = urlopen(req)
-			print resp.read()
 			
 			self._store.mark_as_delivered(message.id)
 			self.fire("send", queue, message)
@@ -128,7 +128,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 						raise MessagingError("Malformed request. %s" % e)
 					
 					else:
-						raise MessagingError("Request to message server failed. %s" % e)
+						raise MessagingError("Cannot post message to %s. %s" % (url, e))
 				elif isinstance(e, URLError):
 					host, port = splitnport(req.host, req.port)
 					raise MessagingError("Cannot connect to message server on %s:%s. %s" % (host, port, e))

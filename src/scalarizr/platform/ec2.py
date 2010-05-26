@@ -104,6 +104,9 @@ class AwsPlatform(Platform):
 		for key in keys:
 			ret[key] = self._get_property("latest/meta-data/block-device-mapping/" + key)
 		return ret
+		
+	def get_ssh_pub_key(self):
+		return self._get_property("latest/meta-data/public-keys/0/openssh-key")
 			
 	def get_account_id(self):
 		config = bus.config

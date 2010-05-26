@@ -73,7 +73,9 @@ class TestMessage(unittest.TestCase):
 		
 		msg = Message()
 		msg.fromxml(xml_string)
-
+		self.assertEqual(msg.name, "IntBlockDeviceUpdated")
+		self.assertFalse(msg.meta.has_key("platform"))
+		self.assertEqual(msg.subsystem, "block")
 
 
 if __name__ == "__main__":

@@ -88,8 +88,8 @@ def _init():
 				config.read(filename)
 	
 	# Configure database connection pool
-	#bus.db = SingletonThreadPool(_db_connect)
-	bus.db = SqliteLocalObject(_db_connect)
+	bus.db = SingletonThreadPool(_db_connect)
+	#bus.db = SqliteLocalObject(_db_connect)
 	
 	# Define scalarizr events
 	bus.define_events(

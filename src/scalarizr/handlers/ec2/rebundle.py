@@ -30,35 +30,6 @@ from boto.exception import BotoServerError
 import shutil
 
 
-"""
-2010-05-21 15:21:29,977 - DEBUG - scalarizr.util - / s b i n / t u n e 2 f s   - i   0   / m n t / s c a l a r i z r - f i r s t - 1 2 7 4 4 5 5 2 8 1
-2010-05-21 15:21:30,054 - DEBUG - scalarizr.util - stdout: tune2fs 1.41.3 (12-Oct-2008)
-Setting interval between checks to 0 seconds
-
-2010-05-21 15:21:30,055 - DEBUG - scalarizr.util - system: sync
-2010-05-21 15:21:30,305 - INFO - scalarizr.handlers.ec2.rebundle - Mount image file
-2010-05-21 15:21:30,331 - DEBUG - scalarizr.util - m o u n t   - o   l o o p   / m n t / s c a l a r i z r - f i r s t - 1 2 7 4 4 5 5 2 8 1   / m n t / i m g - m n t   2 > & 1
-2010-05-21 15:21:30,385 - INFO - scalarizr.handlers.ec2.rebundle - Make special directories
-2010-05-21 15:21:30,386 - DEBUG - scalarizr.util - system: mknod /mnt/img-mnt/dev/null c 1 3
-2010-05-21 15:21:30,391 - DEBUG - scalarizr.util - system: mknod /mnt/img-mnt/dev/zero c 1 5
-2010-05-21 15:21:30,395 - DEBUG - scalarizr.util - system: mknod /mnt/img-mnt/dev/tty c 5 0
-2010-05-21 15:21:30,408 - DEBUG - scalarizr.util - system: mknod /mnt/img-mnt/dev/console c 5 1
-2010-05-21 15:21:30,413 - DEBUG - scalarizr.util - system: ln -s null /mnt/img-mnt/dev/X0R
-2010-05-21 15:21:30,417 - INFO - scalarizr.handlers.ec2.rebundle - Copy volume to image file
-2010-05-21 15:21:30,442 - DEBUG - scalarizr.util - system: rsync -rlpgoD -t -S -l -X --exclude None --exclude /dev --exclude / --exclude /mnt/scalarizr-first-1274455281 --exclude /mnt --exclude /dev/shm --exclude /mnt/img-mnt --exclude /mnt --exclude /sys --exclude /proc /* /mnt/img-mnt 2>&1 > /dev/null
-2010-05-21 15:21:55,863 - INFO - scalarizr.handlers.ec2.rebundle - Volume bundle complete!
-2010-05-21 15:21:55,875 - ERROR - scalarizr.handlers.ec2.rebundle - Rebundle failed. [Errno 2] No such file or directory: '/mnt/img-mnt/opt/scalarizr/etc/private.d/keys'
-2010-05-21 15:21:55,875 - ERROR - scalarizr.handlers.ec2.rebundle - [Errno 2] No such file or directory: '/mnt/img-mnt/opt/scalarizr/etc/private.d/keys'
-Traceback (most recent call last):
-  File "/opt/scalarizr/src/scalarizr/handlers/ec2/rebundle.py", line 113, in on_Rebundle
-    self._cleanup_image(image_mpoint, role_name=message.role_name)
-  File "/opt/scalarizr/src/scalarizr/handlers/ec2/rebundle.py", line 223, in _cleanup_image
-    os.mkdir(os.path.join(etc_path, "private.d/keys"))
-OSError: [Errno 2] No such file or directory: '/mnt/img-mnt/opt/scalarizr/etc/private.d/keys'
-
-"""
-
-
 
 def get_handlers ():
 	return [Ec2RebundleHandler()]
@@ -88,6 +59,7 @@ class Ec2RebundleHandler(Handler):
 Role: %(role_name)s
 Bundled: %(bundle_date)s
 """
+	_WALL_MESSAGE = "Server is going to rebundle. Please logout from terminal"
 	
 	_NUM_UPLOAD_THREADS = 4
 	_MAX_UPLOAD_ATTEMPTS = 5
@@ -112,12 +84,14 @@ Bundled: %(bundle_date)s
 			# @param image_mpoint 
 			"rebundle_cleanup_image"
 		)
+
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.REBUNDLE and platform == "ec2"	
 	
 	def on_Rebundle(self, message):
 		try:
+			self._before_rebundle(message.role_name)			
 			bus.fire("before_rebundle", role_name=message.role_name)
 			
 			if message.body.has_key("aws_account_id"):
@@ -177,6 +151,9 @@ Bundled: %(bundle_date)s
 			# Fire 'rebundle_error'
 			bus.fire("rebundle_error", role_name=message.role_name, last_error=str(e))
 		
+	def _before_rebundle(self, role_name):
+		# Send wall message before rebundling. So console users can run away
+		system("wall \"%s\"" % [self._WALL_MESSAGE])
 
 
 	def _bundle_vol(self, prefix="", volume="/", destination=None, 
