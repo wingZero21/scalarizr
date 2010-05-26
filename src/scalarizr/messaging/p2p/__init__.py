@@ -25,7 +25,7 @@ class P2pMessageService(MessageService):
 	def __init__(self, **kwargs):
 		self._kwargs = kwargs
 
-	def new_message(self, name=None, meta={}, body={}):
+	def new_message(self, name=None, meta=None, body=None):
 		return P2pMessage(name, meta, body)
 	
 	def get_consumer(self):
@@ -138,6 +138,7 @@ class _P2pMessageStore:
 	def mark_as_delivered(self, message_id):
 		return self._mark_as_delivered(message_id, 1)
 	
+
 	def mark_as_undelivered(self, message_id):
 		return self._mark_as_delivered(message_id, 0)
 

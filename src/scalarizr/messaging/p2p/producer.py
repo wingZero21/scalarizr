@@ -19,14 +19,11 @@ except ImportError:
 	import time
 
 
-
-
 class P2pMessageProducer(MessageProducer, _P2pBase):
 	endpoint = None
 	retries_progression = None
 	_store = None
 	_logger = None
-	
 	
 	def __init__(self, **kwargs):
 		MessageProducer.__init__(self)
@@ -34,110 +31,102 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 		self.endpoint = kwargs[P2pConfigOptions.PRODUCER_URL]
 		self.retries_progression = configtool.split_array(kwargs[P2pConfigOptions.PRODUCER_RETRIES_PROGRESSION], ",")		
 		self.next_try = 0
+		self.interval = None
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
 		
 		self._send_event = threading.Event()
-		# FIXME: Python doesn't exit. WTF? 
-		"""
 		self._sender_thread = threading.Thread(target=self._send_undelivered)
 		self._sender_thread.daemon = True
-		self._sender_thread.start()
-		"""
+		self._sender_thread.start()		
 	
 	def _send_undelivered(self):
-		while 1:
-			for queue, message in self.get_undelivered():		
-				try:
-					xml = message.toxml()
-					crypto_key = configtool.read_key(self.crypto_key_path)
-					data = cryptotool.encrypt(xml, crypto_key)
-					req = Request(self.endpoint + "/" + queue, data, {"X-Server-Id": self.server_id})
-					urlopen(req)
-					self._store.mark_as_delivered(message.id)
-					self.fire("send", queue, message)
-					self.next_try = 0			
-				except IOError, e:
-					if isinstance(e, HTTPError) and e.code == 201:
-						self._store.mark_as_delivered(message.id)
-						self.fire("send", queue, message)
-						self.next_try = 0	
-					else:
-						if self.next_try < len(self.retries_progression):
-							self.next_try += 1
-						interval = self.next_interval()
-						self._send_event.wait(interval)
-						self._send_event.clear()
-						break
-			time.sleep(1)
-			
-	
-	def send(self, queue, message):
-		self._logger.info("Sending message '%s' into queue '%s'" % (message.name, queue))
-		try:
-			if message.id is None:
-				message.id = str(uuid.uuid4())
-						
-			self._send_event.set()
-				
-			self.fire("before_send", queue, message)				
-			self._store.put_outgoing(message, queue)
-			
-			# Prepare POST body
-			xml = message.toxml()
-			xml = xml.ljust(len(xml) + 8 - len(xml) % 8, " ")
-			crypto_key = binascii.a2b_base64(configtool.read_key(self.crypto_key_path))
-			data = cryptotool.encrypt(xml, crypto_key)
-			
-			signature, timestamp = cryptotool.sign_http_request(data, crypto_key)
-			
-			# Send request
-			headers = {
-				"Date": timestamp, 
-				"X-Signature": signature, 
-				"X-Server-Id": self.server_id
-			}
-			self._logger.debug("Date: " + timestamp)			
-			self._logger.debug("X-Signature: " + signature)
-			self._logger.debug("X-Server-Id: " + self.server_id)
-			self._logger.debug("Payload: " + data)
-			
-			url = self.endpoint + "/" + queue
-			req = Request(url, data, headers)
-			resp = urlopen(req)
-			
+
+		def message_delivered(message, queue):
 			self._store.mark_as_delivered(message.id)
 			self.fire("send", queue, message)
-			
-		except IOError, e:
+			self.next_try = 0
+			self.interval = None
+		
+		def set_next_interval():
+			self.interval = self.get_next_interval()
+			if self.next_try < len(self.retries_progression):
+				self.next_try += 1
+				
+		while 1:
+			try:
+				self._send_event.wait(self.interval)
+				self._send_event.clear()
+				for queue, message in self.get_undelivered():
+					self._logger.debug("Fetch undelivered message '%s' (id: %s)", message.name, message.id)		
+					try:
+						# Prepare POST body
+						xml = message.toxml()
+						xml = xml.ljust(len(xml) + 8 - len(xml) % 8, " ")
+						crypto_key = binascii.a2b_base64(configtool.read_key(self.crypto_key_path))
+						data = cryptotool.encrypt(xml, crypto_key)
+						
+						signature, timestamp = cryptotool.sign_http_request(data, crypto_key)
+						
+						# Send request
+						headers = {
+							"Date": timestamp, 
+							"X-Signature": signature, 
+							"X-Server-Id": self.server_id
+						}
+						self._logger.debug("Date: " + timestamp)			
+						self._logger.debug("X-Signature: " + signature)
+						self._logger.debug("X-Server-Id: " + self.server_id)
+						self._logger.debug("Payload: " + data)
+						
+						url = self.endpoint + "/" + queue
+						req = Request(url, data, headers)
+						resp = urlopen(req)
+						
+						message_delivered(message, queue)
+						self._logger.debug("Mark delivered '%s' (id: %s)", message.name, message.id)
+					
+					
+					except HTTPError, e:
+						if e.code == 201:
+							message_delivered(message, queue)
+						else:
+							self._logger.info("Mark message as undelivered")
+							self.fire("send_error", e, queue, message)
+							resp_body = e.read() if not e.fp is None else ""
+							
+							if e.code == 401:
+								self._logger.error("Cannot authenticate on message server. %s", resp_body)
+							elif e.code == 400:
+								self._logger.error("Malformed request. %s", resp_body)	
+							else:
+								self._logger.error("Cannot post message to %s. %s", url, e)
+							set_next_interval()
+							break
+					except URLError,e:
+						host, port = splitnport(req.host, req.port)
+						self._logger.error("Cannot connect to message server on %s:%s. %s", host, port, e)
+						set_next_interval()
+						break
+					except (Exception, BaseException), e:	
+						self._logger.error("Cannot read crypto key. %s",  e)
+						set_next_interval()
+						break
+			except (Exception, BaseException), e:
+				self._logger.error("Unable to read from database. %s", e)
+	
+	def send(self, queue, message):
+		self._logger.info("Sending message '%s' into queue '%s'", message.name, queue)
 
-			if isinstance(e, HTTPError) and e.code == 201:
-				self._store.mark_as_delivered(message.id)
-				self.fire("send", queue, message)
-			else:
-				self.fire("send_error", e, queue, message)
-				self._logger.info("Mark message as undelivered")
-				self._store.mark_as_undelivered(message.id)
-			
-				if isinstance(e, HTTPError):
-					#print e
-					if e.code == 401:
-						raise MessagingError("Cannot authenticate on message server. %s" % e)
-					
-					elif e.code == 400:
-						raise MessagingError("Malformed request. %s" % e)
-					
-					else:
-						raise MessagingError("Cannot post message to %s. %s" % (url, e))
-				elif isinstance(e, URLError):
-					host, port = splitnport(req.host, req.port)
-					raise MessagingError("Cannot connect to message server on %s:%s. %s" % (host, port, e))
-				else:
-					raise MessagingError("Cannot read crypto key. %s" % e)		
-					
+		if message.id is None:
+			message.id = str(uuid.uuid4())
+		self.fire("before_send", queue, message)				
+		self._store.put_outgoing(message, queue)
+		self._send_event.set()
+
 
 	def get_undelivered(self):
 		return self._store.get_undelivered()
 	
-	def next_interval(self):
+	def get_next_interval(self):
 		return int(self.retries_progression[self.next_try]) * 60.0

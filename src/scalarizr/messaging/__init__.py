@@ -15,7 +15,7 @@ class MessageServiceFactory(object):
 		return self._adapters[name].new_service(**kwargs)
 
 class MessageService(object):
-	def new_message(self, name=None, meta={}, body={}):
+	def new_message(self, name=None, meta=None, body=None):
 		pass
 	
 	def get_consumer(self):
@@ -44,7 +44,7 @@ class Message(object):
 		self.body = body or {}
 	
 	def __setattr__(self, name, value):
-		if name in self.__class__.__dict__:
+		if name in ("id", "name", "meta", "body"):
 			object.__setattr__(self, name, value)
 		else:
 			self.body[name] = value
