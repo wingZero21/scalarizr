@@ -69,20 +69,22 @@ class Observable(object):
 
 	
 class LocalObject:
-	
-	def __init__(self, creator):
+	def __init__(self, creator, pool_size=10):
 		self._logger = logging.getLogger(__name__)
 		self._creator = creator		
 		self._object = threading.local()
+		
+		self._all_conns = set()
+		self.size = pool_size
 	
 	def do_create(self):
 		return self._creator()
 	
 	def get(self):
 		try:
-			o = self._object.current()
-			if o:
-				return o
+			o = self._object.current
+			if o():
+				return o()
 			else:
 				self._logger.warn("Current weakref is empty")
 		except AttributeError, e:
@@ -94,7 +96,16 @@ class LocalObject:
 		self._logger.info("Created %s", o)
 		self._object.current = weakref.ref(o)
 		self._logger.info("Added weakref %s", self._object.current)
+		self._all_conns.add(o)
+		if len(self._all_conns) > self.size:
+			self.cleanup()
 		return o
+	
+	def cleanup(self):
+		for conn in list(self._all_conns):
+			self._all_conns.discard(conn)
+			if len(self._all_conns) <= self.size:
+				return
 	
 class SqliteLocalObject(LocalObject):
 	def do_create(self):
@@ -102,11 +113,11 @@ class SqliteLocalObject(LocalObject):
 	
 class _SqliteConnection(object):
 	_conn = None
-	_lo = None
+	#_lo = None
 	_creator = None
 	
 	def __init__(self, lo, creator):
-		self._lo = lo
+		#self._lo = lo
 		self._creator = creator
 	
 	def get_connection(self):
