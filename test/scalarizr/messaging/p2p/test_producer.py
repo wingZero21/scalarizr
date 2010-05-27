@@ -5,7 +5,7 @@ Created on May 18, 2010
 '''
 import unittest
 from scalarizr.bus import bus
-from scalarizr.messaging.p2p import P2pMessageService, P2pMessage
+from scalarizr.messaging.p2p import P2pMessageService, P2pMessage, P2pSender
 from scalarizr.messaging.p2p.producer import P2pMessageProducer
 from scalarizr.util import init_tests, configtool, cryptotool
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
@@ -14,8 +14,8 @@ import time
 import binascii
 
 class _P2pMessageProducer(P2pMessageProducer):	
-	def get_next_interval(self):
-		return int(self.retries_progression[self.next_try]) * 1.0
+	def _get_next_interval(self):
+		return int(self.retries_progression[self._next_retry_index]) * 1.0
 
 class _P2pMessageService(P2pMessageService):
 	def get_producer(self):
@@ -40,7 +40,8 @@ class TestProducer(unittest.TestCase):
 			crypto_key_path=gen_sect.get(configtool.OPT_CRYPTO_KEY_PATH),
 			consumer_url=self._msg_url, 
 			producer_url=self._msg_url,
-			producer_retries_progression=self.retries_progression
+			producer_retries_progression=self.retries_progression,
+			producer_sender=P2pSender.DAEMON
 		) 
 		self._producer = self._srv.get_producer()
 		self._crypto_key = binascii.a2b_base64(configtool.read_key("default", private=True))

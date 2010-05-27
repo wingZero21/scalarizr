@@ -8,6 +8,7 @@ CREATE TABLE p2p_message (
     "message" TEXT,
     "queue" TEXT,
     "is_ingoing" INTEGER,
+    "out_sender" TEXT,
     "out_is_delivered" INTEGER,
     "out_delivery_attempts" INTEGER,
     "out_last_attempt_time" TEXT,

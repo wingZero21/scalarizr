@@ -24,6 +24,8 @@ class LifeCircleHandler(Handler):
 	_platform = None
 	_config = None
 	
+	_new_crypto_key = None
+	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		
@@ -168,27 +170,22 @@ class LifeCircleHandler(Handler):
 		"""
 		
 		# Regenerage key
-		key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
-		key = cryptotool.keygen()
+		self._new_crypto_key = cryptotool.keygen()
 		
-		# Send HostInit
+		# Prepare HostInit
 		msg = self._msg_service.new_message(Messages.HOST_INIT)
 		self._put_broadcast_data(msg)
-		msg.crypto_key = key
+		msg.crypto_key = self._new_crypto_key
 		
-		bus.fire("before_host_init", msg)					
+		bus.fire("before_host_init", msg)
+		
+		# Update crypto key when HostInit will be delivered 
+		self._producer.on("send", self._update_crypto_key)
+		# Send HostInit
 		self._producer.send(Queues.CONTROL, msg) 
 
-		# Update key file
-		configtool.write_key(key_path, key, key_title="Scalarizr crypto key")
-
-		# Update key in QueryEnv
-		queryenv = bus.queryenv_service
-		queryenv.key = binascii.a2b_base64(key)
-
-		# Notify listeners
 		bus.fire("host_init")
-		
+
 	
 	def _start_import(self):
 		# Send Hello		
@@ -199,6 +196,21 @@ class LifeCircleHandler(Handler):
 		self._producer.send(Queues.CONTROL, msg)
 		
 		bus.fire("hello")
+
+
+	def _update_crypto_key(self, *args, **kwargs):
+		# Remove listener
+		self._producer.un("send", self._update_crypto_key)
+				
+		# Update key file
+		key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)		
+		configtool.write_key(key_path, self._new_crypto_key, key_title="Scalarizr crypto key")
+
+		# Update key in QueryEnv
+		queryenv = bus.queryenv_service
+		queryenv.key = binascii.a2b_base64(self._new_crypto_key)
+		
+		del self._new_crypto_key
 
 
 	def on_IntServerReboot(self, message):

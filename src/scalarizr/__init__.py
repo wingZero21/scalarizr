@@ -9,13 +9,12 @@ from scalarizr.util import configtool, cryptotool, SqliteLocalObject
 import os
 import sys
 import sqlite3 as sqlite
-from sqlalchemy.pool import SingletonThreadPool
 from ConfigParser import ConfigParser
 import logging
 import logging.config
 from optparse import OptionParser, OptionGroup
 import binascii
-from scalarizr.messaging.p2p import P2pConfigOptions
+from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
 from scalarizr.util.configtool import ConfigError
 import threading
 
@@ -204,6 +203,7 @@ def _init_services():
 		kwargs = dict(config.items("messaging_" + adapter_name))
 		kwargs[P2pConfigOptions.SERVER_ID] = gen_sect.get(configtool.OPT_SERVER_ID)
 		kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = gen_sect.get(configtool.OPT_CRYPTO_KEY_PATH)
+		kwargs[P2pConfigOptions.PRODUCER_SENDER] = P2pSender.DAEMON
 		
 		service = factory.new_service(adapter_name, **kwargs)
 		bus.messaging_service = service
@@ -214,7 +214,7 @@ def _init_services():
 	# Initialize handlers
 	from scalarizr.handlers import MessageListener
 	consumer = service.get_consumer()
-	consumer.add_message_listener(MessageListener())	
+	consumer.add_message_listener(MessageListener())
 
 	bus.fire("init")
 	
@@ -230,6 +230,7 @@ def init_script():
 	adapter = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)	
 	kwargs = dict(config.items("messaging_" + adapter))
 	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
+	kwargs[P2pConfigOptions.PRODUCER_SENDER] = P2pSender.SCRIPT
 	kwargs[P2pConfigOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
 	

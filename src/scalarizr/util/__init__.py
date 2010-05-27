@@ -91,11 +91,11 @@ class LocalObject:
 			self._logger.warn(str(e))
 			pass
 		
-		self._logger.info("Creating new object...")
+		self._logger.debug("Creating new object...")
 		o = self.do_create()
-		self._logger.info("Created %s", o)
+		self._logger.debug("Created %s", o)
 		self._object.current = weakref.ref(o)
-		self._logger.info("Added weakref %s", self._object.current)
+		self._logger.debug("Added weakref %s", self._object.current)
 		self._all_conns.add(o)
 		if len(self._all_conns) > self.size:
 			self.cleanup()

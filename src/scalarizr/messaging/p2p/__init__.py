@@ -11,11 +11,16 @@ from scalarizr.util import configtool
 
 
 class P2pConfigOptions:
-	SERVER_ID 			= "server_id"
-	CRYPTO_KEY_PATH 	= "crypto_key_path"
-	PRODUCER_URL 		= "producer_url"
-	PRODUCER_RETRIES_PROGRESSION = "producer_retries_progression"	
-	CONSUMER_URL 		= "consumer_url"
+	SERVER_ID 						= "server_id"
+	CRYPTO_KEY_PATH 				= "crypto_key_path"
+	PRODUCER_URL 					= "producer_url"
+	PRODUCER_RETRIES_PROGRESSION 	= "producer_retries_progression"
+	PRODUCER_SENDER					= "producer_sender"	
+	CONSUMER_URL 					= "consumer_url"
+
+class P2pSender:
+	DAEMON = "daemon"
+	SCRIPT = "script"
 
 class P2pMessageService(MessageService):
 	_kwargs = {}
@@ -107,27 +112,28 @@ class _P2pMessageStore:
 		finally:
 			cur.close()
 
-	def put_outgoing(self, message, queue):
+	def put_outgoing(self, message, queue, sender):
 		conn = self._conn()
 		cur = conn.cursor()
 		try:
 			sql = """INSERT INTO p2p_message (id, message, message_id, message_name, queue, 
-						is_ingoing, out_is_delivered, out_delivery_attempts) 
+						is_ingoing, out_is_delivered, out_delivery_attempts, out_sender) 
 					VALUES 
-						(NULL, ?, ?, ?, ?, ?, ?, ?)"""
-			cur.execute(sql, [str(message), message.id, message.name, queue, 0, 0, 0])
+						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
+			cur.execute(sql, [str(message), message.id, message.name, queue, 0, 0, 0, sender])
 			conn.commit()
 		finally:
 			cur.close()
 			
-	def get_undelivered (self):
+	def get_undelivered (self, sender):
 		"""
 		Return list of undelivered messages in outgoing order
 		"""
 		cur = self._conn().cursor()
 		try:
-			cur.execute("""SELECT queue, message_id FROM p2p_message
-					WHERE is_ingoing = 0 AND out_is_delivered = 0 ORDER BY id""")
+			sql = """SELECT queue, message_id FROM p2p_message
+					WHERE is_ingoing = ? AND out_is_delivered = ? AND out_sender = ? ORDER BY id"""
+			cur.execute(sql, [0, 0, sender])
 			ret = []
 			for r in cur.fetchall():
 				ret.append((r[0], self.load(r[1], False)))
@@ -232,11 +238,11 @@ def P2pMessageStore():
 
 class P2pMessage(Message):
 
-	def __init__(self, name=None, meta={}, body={}):
+	def __init__(self, name=None, meta=None, body=None):
 		Message.__init__(self, name, meta, body)
 		self.__dict__["_store"] = P2pMessageStore()
 		config = bus.config
-		self.__dict__["meta"][MetaOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
+		self.meta[MetaOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 	
 	def is_handled(self):
 		return self._store.is_handled(self.id)

@@ -31,6 +31,10 @@ import shutil
 
 
 
+# FIXME: When excludes is empty in XML message --exclude None appears 
+# --exclude /mnt/scalarizr-centos5.2-201005271212 --exclude None --exclude /mnt --exclude / --exclude /dev/shm
+
+
 def get_handlers ():
 	return [Ec2RebundleHandler()]
 
@@ -100,7 +104,7 @@ Bundled: %(bundle_date)s
 			aws_account_id = self._platform.get_account_id()
 			avail_zone = self._platform.get_avail_zone()
 			region = avail_zone[0:2]
-			prefix = message.role_name + "-" + str(int(time.time()))
+			prefix = message.role_name + "-" + time.strftime("%Y%m%d%H%I")
 			cert, pk = self._platform.get_cert_pk()
 			ec2_cert = self._platform.get_ec2_cert()
 			bucket = "scalr2-images-%s-%s" % (region, aws_account_id)		

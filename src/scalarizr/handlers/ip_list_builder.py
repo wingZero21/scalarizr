@@ -96,7 +96,6 @@ class IpListBuilder(Handler):
 		
 		# Create %role_name%/xx.xx.xx.xx
 		full_path = self._base_path + role_name + os.sep
-		print full_path
 		self._create_dir(full_path)		
 		self._create_file(full_path + internal_ip)
 		
