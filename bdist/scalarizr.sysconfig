@@ -1,4 +1,0 @@
-# Configuration file for the scalarizr service
-
-# set this to the location of the scalarizr configuration file
-SCALARIZR_CONF_FILE=/etc/scalr/config.ini
