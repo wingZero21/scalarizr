@@ -115,7 +115,7 @@ Bundled: %(bundle_date)s
 			excludes = message.excludes.split(":") \
 					if message.body.has_key("excludes") and message.excludes else []
 			self._logger.debug("Excludes %s", ":".join(excludes))
-			return
+
 			# Bundle volume
 			image_file, image_mpoint = self._bundle_vol(prefix=prefix, destination="/mnt", excludes=excludes)
 			# Execute pre-bundle routines. cleanup files, patch files, etc.
