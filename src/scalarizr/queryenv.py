@@ -33,46 +33,48 @@ class QueryEnvService(object):
 		"""
 		@return Role[]
 		"""
-		parametres = {}
+		parameters = {}
 		if None != role_name :
-			parametres["role"] = role_name
+			parameters["role"] = role_name
 		if None != behaviour:
-			parametres["behaviour"] = behaviour
+			parameters["behaviour"] = behaviour
 			
-		return self._request("list-roles",parametres, self._read_list_roles_response)
+		return self._request("list-roles",parameters, self._read_list_roles_response)
 	
 	def list_role_params(self, role_name=None):
 		"""
 		@return dict
 		"""
-		parametres = {}
+		parameters = {}
 		if None != role_name :
-			parametres["role"] = role_name
-		return self._request("list-role-params",parametres, self._read_list_role_params_response)
+			parameters["role"] = role_name
+		return self._request("list-role-params",parameters, self._read_list_role_params_response)
 	
-	def list_scripts (self, event=None, asynchronous=None, name=None):
+	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None):
 		"""
 		@return Script[]
 		"""
-		parametres = {}
+		parameters = {}
 		if None != event :
-			parametres["event"] = event
+			parameters["event"] = event
+		if None != event_id:
+			parameters["event_id"] = event_id
 		if None != asynchronous:
-			parametres["asynchronous"] = asynchronous
+			parameters["asynchronous"] = asynchronous
 		if None != name :
-			parametres["name"] = name
-		return self._request("list-scripts",parametres, self._read_list_scripts_response)
+			parameters["name"] = name
+		return self._request("list-scripts",parameters, self._read_list_scripts_response)
 	
 	def list_virtual_hosts (self, name=None, https=None):
 		"""
 		@return VirtualHost[]
 		"""
-		parametres = {}
+		parameters = {}
 		if None != name :
-			parametres["name"] = name
+			parameters["name"] = name
 		if None != https:
-			parametres["https"] = https
-		return self._request("list-virtualhosts",parametres, self._read_list_virtualhosts_response)
+			parameters["https"] = https
+		return self._request("list-virtualhosts",parameters, self._read_list_virtualhosts_response)
 	
 	def get_https_certificate (self):
 		"""
@@ -115,30 +117,35 @@ class QueryEnvService(object):
 		}
 		response = None
 		try:
+			self._logger.debug("QueryEnv request: %s", post_data)
 			req = Request(self.url, post_data, headers)
 			response = urlopen(req)
 		except URLError, e:
 			if isinstance(e, HTTPError):
 				resp_body = e.read() if e.fp is not None else ""
 				if e.code == 401:
-					raise QueryEnvError("Cannot authenticate on QueryEnv server. %s" % (resp_body))
+					raise QueryEnvError("Cannot authenticate on QueryEnv server. %s" % [resp_body])
 				elif e.code == 400:
-					raise QueryEnvError("Malformed request. %s" % (resp_body))
+					raise QueryEnvError("Malformed request. %s" % [resp_body])
 				elif e.code == 500:
-					raise QueryEnvError("QueryEnv failed. %s" % (resp_body))
+					raise QueryEnvError("QueryEnv failed. %s" % [resp_body])
 				else:
-					raise QueryEnvError("Request to QueryEnv server failed (code: %d). %s" % (e.code, str(e)))
+					raise QueryEnvError("Request to QueryEnv server failed (code: %d). %s" % [e.code, str(e)])
 			else:
 				host, port = splitnport(req.host, 80)
 				raise QueryEnvError("Cannot connect to QueryEnv server on %s:%s. %s" 
 						% (host, port, str(e)))
 
+		resp_body = response.read()
+		self._logger.debug("QueryEnv response: %s", resp_body)
+
+
 		# Parse XML response
 		xml = None
 		try:
-			xml = xml_strip(parseString(response.read()))
-		except (TypeError, AttributeError), e:
-			raise QueryEnvError("Cannot parse XML. %s" % (str(e)))
+			xml = xml_strip(parseString(resp_body))
+		except (Exception, BaseException), e:
+			raise QueryEnvError("Cannot parse XML. %s" % [str(e)])
 		return response_reader(xml)
 
 		

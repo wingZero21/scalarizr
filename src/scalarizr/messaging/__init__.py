@@ -29,6 +29,7 @@ class MetaOptions(object):
 	PLATFORM 	= "platform" # ec2, vps, rs
 	OS 			= "os" # linux, win, sunos
 	REQUEST_ID 	= "request_id"
+
 	
 class Message(object):
 	
@@ -213,7 +214,7 @@ class Messages:
 	Fires when block device was mounted
 	"""
 	
-	SCRIPT_EXEC_RESULT = "ScriptExecResult"
+	EXEC_SCRIPT_RESULT = "ExecScriptResult"
 	"""
 	Fires after script execution
 	"""
@@ -246,6 +247,8 @@ class Messages:
 	IP_ADDRESS_CHANGED = "IPAddressChanged"
 	
 	SCRIPTS_LIST_UPDATED = "ScriptsListUpdated"
+	
+	EXEC_SCRIPT = "ExecScript"
 	
 	###
 	# Internal events

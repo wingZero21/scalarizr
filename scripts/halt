@@ -2,7 +2,7 @@
 
 import sys
 try:
-	from scalarizr.script.halt import main
+	from scalarizr.scripts.halt import main
 except ImportError, e:
 	print >> sys.stderr, "error: %s\n\nPlease make sure that scalarizr is properly installed" % (e)
 	sys.exit(1)

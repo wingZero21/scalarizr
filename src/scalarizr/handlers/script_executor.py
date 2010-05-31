@@ -88,9 +88,9 @@ class ScriptExecutor(Handler):
 		self._logs_truncate_over = parse_size(self._config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
 		
 	
-	def exec_scripts_on_event (self, event_name):
+	def exec_scripts_on_event (self, event_name, event_id=None):
 		self._logger.debug("Fetching scripts for event %s", event_name)	
-		scripts = self._queryenv.list_scripts(event_name)
+		scripts = self._queryenv.list_scripts(event_name, event_id)
 		self._logger.debug("Fetched %d scripts", len(scripts))
 		
 		if len(scripts) > 0:
@@ -187,7 +187,7 @@ class ScriptExecutor(Handler):
 		
 		# Notify scalr
 		self._logger.debug("Prepare 'ExecResult' message")
-		message = self._msg_service.new_message(Messages.SCRIPT_EXEC_RESULT, body=dict(
+		message = self._msg_service.new_message(Messages.EXEC_SCRIPT_RESULT, body=dict(
 			stdout=binascii.b2a_base64(self._get_truncated_log(stdout.name, self._logs_truncate_over)),
 			stderr=binascii.b2a_base64(self._get_truncated_log(stderr.name, self._logs_truncate_over)),
 			time_elapsed=elapsed_time,
@@ -216,13 +216,17 @@ class ScriptExecutor(Handler):
 		return True
 	
 	def __call__(self, message):
-		self._event_name = message.name
+		self._event_name = message.event_name if message.name == Messages.EXEC_SCRIPT else message.name
 		self._logger.info("Scalr notified me that '%s' fired", self._event_name)		
 		
+		"""
 		mine_server_id = self._config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 		if mine_server_id == message.meta[MetaOptions.SERVER_ID]:
 			self._logger.info("Ignore event with the same server_id as mine")
-			return 
+			return
+		""" 
 		
-		self.exec_scripts_on_event(self._event_name)		
-
+		if message.name == Messages.EXEC_SCRIPT:
+			self.exec_scripts_on_event(self._event_name, message.meta["event_id"])
+		else:
+			self.exec_scripts_on_event(self._event_name)

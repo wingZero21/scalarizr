@@ -6,6 +6,7 @@ import time
 import sys
 
 
+
 class UtilError(BaseException):
 	pass
 
@@ -86,10 +87,9 @@ class LocalObject:
 			if o():
 				return o()
 			else:
-				self._logger.warn("Current weakref is empty")
+				self._logger.debug("Current weakref is empty")
 		except AttributeError, e:
-			self._logger.warn(str(e))
-			pass
+			self._logger.debug("Caught: %s", e)
 		
 		self._logger.debug("Creating new object...")
 		o = self.do_create()
@@ -143,7 +143,18 @@ def xml_strip(el):
 		if child.nodeType==child.TEXT_NODE and child.nodeValue.strip() == '':
 			el.removeChild(child)
 		else:
-			xml_strip(child)	
+			xml_strip(child)
+	return el	
+
+def url_replace_hostname(url, newhostname):
+	import urlparse	
+	r = url if isinstance(url, tuple) else urlparse.urlparse(url)
+	r2 = list(r)
+	r2[1] = newhostname
+	if r.port:
+		r2[1] += ":" + str(r.port)
+	return urlparse.urlunparse(r2)
+	
 
 def parse_size(size):
 	"""

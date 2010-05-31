@@ -4,7 +4,7 @@ from scalarizr.bus import bus
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
-from scalarizr.util import configtool, cryptotool, SqliteLocalObject
+from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname
 
 import os
 import sys
@@ -17,6 +17,8 @@ import binascii
 from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
 from scalarizr.util.configtool import ConfigError
 import threading
+import urlparse
+import socket
 
 
 class ScalarizrError(BaseException):
@@ -29,7 +31,8 @@ __version__ = "0.5"
 
 def _init():
 	optparser = bus.optparser
-
+	bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
+	
 	# Selected etc path and get configuration filename
 	config_filename = None
 	if optparser and optparser.values.conf_path:
@@ -38,14 +41,13 @@ def _init():
 	else:
 		# Find configuration file among several places
 		if not bus.etc_path:
-			base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")		
 			etc_places = (
 				"/etc/scalr",
 				"/etc/scalarizr", 
 				"/usr/etc/scalarizr", 
 				"/usr/local/etc/scalarizr",
-				os.path.join(base_path, "etc-devel"),
-				os.path.join(base_path, "etc")
+				os.path.join(bus.base_path, "etc-devel"),
+				os.path.join(bus.base_path, "etc")
 			)
 		else:
 			etc_places = (bus.etc_path,)	
@@ -69,7 +71,7 @@ def _init():
 	# Configure logging
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
 	logger = logging.getLogger(__name__)
-	logger.debug("Initialize scalarizr...")
+	logger.info("Initialize scalarizr...")
 	
 
 	# Load configuration
@@ -119,7 +121,7 @@ def _init_services():
 	logger = logging.getLogger(__name__)
 	config = bus.config
 	
-	logger.info("Initialize services...")
+	logger.debug("Initialize services...")
 	
 	gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
 	messaging_sect = configtool.section_wrapper(config, configtool.SECT_MESSAGING)
@@ -178,9 +180,12 @@ def _init_services():
 	# Set crypto key
 	crypto_key_title = "Scalarizr crypto key"
 	crypto_key_opt = gen_sect.option_wrapper(configtool.OPT_CRYPTO_KEY_PATH)
-	crypto_key = optparser.values.crypto_key or platform.get_user_data(UserDataOptions.CRYPTO_KEY)
-	if crypto_key:
-		configtool.write_key(crypto_key_opt.get(), crypto_key, key_title=crypto_key_title)
+
+	if not os.path.exists(os.path.join(bus.etc_path, ".hostinit")):
+		# Override crypto key if server was'nt already initialized
+		crypto_key = optparser.values.crypto_key or platform.get_user_data(UserDataOptions.CRYPTO_KEY)
+		if crypto_key:
+			configtool.write_key(crypto_key_opt.get(), crypto_key, key_title=crypto_key_title)
 	try:
 		crypto_key = binascii.a2b_base64(configtool.read_key(crypto_key_opt.get(), key_title=crypto_key_title))
 	except ConfigError, e:
@@ -204,6 +209,10 @@ def _init_services():
 		kwargs[P2pConfigOptions.SERVER_ID] = gen_sect.get(configtool.OPT_SERVER_ID)
 		kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = gen_sect.get(configtool.OPT_CRYPTO_KEY_PATH)
 		kwargs[P2pConfigOptions.PRODUCER_SENDER] = P2pSender.DAEMON
+		r = urlparse.urlparse(kwargs[P2pConfigOptions.CONSUMER_URL])
+		if r.hostname == "localhost":
+			# Replace localhost with public dns name in endpoint url
+			kwargs[P2pConfigOptions.CONSUMER_URL] = url_replace_hostname(r, socket.gethostname())
 		
 		service = factory.new_service(adapter_name, **kwargs)
 		bus.messaging_service = service
@@ -229,10 +238,14 @@ def init_script():
 	# Script can't handle any messages by himself. Leave consumer url blank
 	adapter = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)	
 	kwargs = dict(config.items("messaging_" + adapter))
-	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
-	kwargs[P2pConfigOptions.PRODUCER_SENDER] = P2pSender.SCRIPT
 	kwargs[P2pConfigOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
+	kwargs[P2pConfigOptions.PRODUCER_SENDER] = P2pSender.SCRIPT
+	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
+	r = urlparse.urlparse(kwargs[P2pConfigOptions.PRODUCER_URL])
+	if r.hostname == "localhost":
+		# Replace localhost with public dns name in endpoint url
+		kwargs[P2pConfigOptions.PRODUCER_URL] = url_replace_hostname(r, socket.gethostname())
 	
 	factory = MessageServiceFactory()		
 	msg_service = factory.new_service(adapter, **kwargs)
@@ -384,7 +397,7 @@ def main():
 		group.add_option("--no-prompt", dest="no_prompt", action="store_true", default=False,
 				help="Do not prompt user during installation. Use only command line options")
 		group.add_option("--import", dest="run_import", action="store_true", default=False, 
-				help="Start import process after configure Scalarizr")
+				help="Start import process after configuring Scalarizr")
 		group.add_option("--server-id", dest="server_id", 
 				help="Unique server identificator in Scalr envirounment")
 		group.add_option("--role-name", dest="role_name",

@@ -92,22 +92,24 @@ class LifeCircleHandler(Handler):
 		
 	
 	def on_start(self):
-		reboot_file = os.path.join(bus.etc_path, ".reboot")
+		reboot_flag = os.path.join(bus.etc_path, ".reboot")
+		hostinit_flag = os.path.join(bus.etc_path, ".hostinit")
 		optparser = bus.optparser
 		
-		if os.path.exists(reboot_file):
+		if os.path.exists(reboot_flag):
 			self._logger.info("Scalarizr resumed after reboot")
-			os.remove(reboot_file)			
+			os.remove(reboot_flag)			
 			self._start_after_beboot()
-
 			
 		elif optparser.values.run_import:
 			self._logger.info("Server will be imported into Scalr")
 			self._start_import()
 			
+		elif not os.path.exists(hostinit_flag):
+			self._logger.info("Starting initialization")
+			self._start_init()
 		else:
 			self._logger.info("Normal start")
-			self._start_normal()
 
 
 	def _start_after_beboot(self):
@@ -121,7 +123,7 @@ class LifeCircleHandler(Handler):
 		bus.fire("reboot_finish")		
 
 	
-	def _start_normal(self):
+	def _start_init(self):
 		"""
 		# Add init scripts
 		
@@ -185,6 +187,13 @@ class LifeCircleHandler(Handler):
 		self._producer.send(Queues.CONTROL, msg) 
 
 		bus.fire("host_init")
+		
+		hostinit_file = os.path.join(bus.etc_path, ".hostinit")
+		try:
+			self._logger.debug("Touch file '%s'", hostinit_file)
+			open(hostinit_file, "w+").close()
+		except IOError, e:
+			self._logger.error("Cannot touch file '%s'. IOError: %s", hostinit_file, str(e))		
 
 	
 	def _start_import(self):

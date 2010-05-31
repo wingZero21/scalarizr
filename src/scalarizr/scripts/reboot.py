@@ -16,6 +16,7 @@ except ImportError:
 
 
 def main ():
+	init_script()	
 	logger = logging.getLogger("scalarizr.scripts.reboot")
 	logger.info("Starting reboot script...")
 	
@@ -27,8 +28,6 @@ def main ():
 			sys.exit()
 			
 		if action == "start" or action == "stop":
-			init_script()
-				
 			msg_service = bus.messaging_service
 			producer = msg_service.get_producer()
 			

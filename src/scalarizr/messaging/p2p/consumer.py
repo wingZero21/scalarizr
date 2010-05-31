@@ -39,11 +39,7 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 			r = urlparse(self.endpoint)
 			_HttpRequestHanler.consumer = self
 			server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-			self._server = server_cls(
-				# Forse listening eth interface
-				(r.hostname if r.hostname != "localhost" else socket.gethostname(), r.port), 
-				_HttpRequestHanler
-			)
+			self._server = server_cls((r.hostname, r.port),	_HttpRequestHanler)
 			self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
 			
 		self._logger.info("Staring consumer...")

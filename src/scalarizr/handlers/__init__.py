@@ -4,6 +4,7 @@ from scalarizr.util import configtool
 import os
 import platform
 import logging
+import threading
 
 
 class Handler(object):
@@ -53,7 +54,7 @@ class MessageListener:
 	def _get_handlers_chain (self):
 		if self._handlers_chain is None:
 			self._handlers_chain = []
-			self._logger.debug("Collecting handlers chain");
+			self._logger.info("Collecting handlers chain");
 			
 			config = bus.config
 			for handler_name, module_name in config.items(configtool.SECT_HANDLERS):
@@ -94,7 +95,7 @@ class MessageListener:
 					self._logger.error("Unhandled exception in handler notification loop")
 					self._logger.exception(e)
 						
-			self._logger.debug("Collected handlers chain: %s" % self._handlers_chain)
+			self._logger.info("Collected handlers chain: %s" % self._handlers_chain)
 						
 		return self._handlers_chain
 	
@@ -117,3 +118,11 @@ class MessageListener:
 		
 		if not accepted:
 			self._logger.warning("No one could handle '%s'", message.name)
+
+def async(fn):
+	def decorated(*args, **kwargs):
+		t = threading.Thread(target=fn, args=args, kwargs=kwargs)
+		t.start()
+	
+	return decorated
+	

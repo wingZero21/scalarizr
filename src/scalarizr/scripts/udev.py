@@ -12,12 +12,11 @@ from scalarizr import init_script
 import logging
 
 def main():
+	init_script()	
 	logger = logging.getLogger("scalarizr.scripts.udev")
 	logger.info("Starting udev script...")
 	
 	try:
-		init_script()
-	
 		msg_service = bus.messaging_service
 		producer = msg_service.get_producer()
 	

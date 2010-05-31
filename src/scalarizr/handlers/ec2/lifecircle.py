@@ -8,6 +8,7 @@ from scalarizr.handlers import Handler
 from scalarizr.util import configtool
 import scalarizr.platform.ec2 as ec2_platform
 import logging
+import string
 
 def get_handlers ():
 	return [AwsLifeCircleHandler()]
@@ -79,9 +80,10 @@ def set_aws_credentials(message):
 	# Private	
 	configtool.update(private_filename, {
 		sect_name : {
-			ec2_platform.OPT_ACCOUNT_ID : message.aws_account_id,
-			ec2_platform.OPT_KEY_ID : message.aws_key_id,
-			ec2_platform.OPT_KEY : message.aws_key
+			# Keys must be in ASCII because hmac functions doesn't works with unicode
+			ec2_platform.OPT_ACCOUNT_ID : message.aws_account_id.encode("ascii"),
+			ec2_platform.OPT_KEY_ID : message.aws_key_id.encode("ascii"),
+			ec2_platform.OPT_KEY : message.aws_key.encode("ascii")
 		}
 	})
 	

@@ -8,6 +8,7 @@ from scalarizr.handlers import Handler
 from scalarizr.bus import bus
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import system, fstool, configtool
+import os
 import logging
 try:
 	import time
@@ -60,6 +61,8 @@ class EbsHandler(Handler):
 		try:
 			config = bus.config
 			scripts_path = config.get(configtool.SECT_GENERAL, configtool.OPT_SCRIPTS_PATH)
+			if scripts_path[0] != "/":
+				scripts_path = os.path.join(bus.base_path, scripts_path)
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")
 			f.write('KERNEL=="sd*[!0-9]", RUN+="'+ scripts_path + '/udev"')
 			f.close()

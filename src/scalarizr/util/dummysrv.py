@@ -96,7 +96,7 @@ def queryenv_main():
 				self.send_response(200)
 				self.end_headers()
 				
-				if 0 and form["event"].value != Messages.SCRIPT_EXEC_RESULT:
+				if 0 and form["event"].value != Messages.EXEC_SCRIPT_RESULT:
 					xml = """<?xml version="1.0" encoding="UTF-8"?>
 						<response>
 						<scripts>

@@ -6,7 +6,7 @@ Created on Mar 11, 2010
 
 import scalarizr
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler
+from scalarizr.handlers import Handler, async
 from scalarizr.platform import PlatformError
 from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system, disttool, cryptotool, fstool
@@ -28,6 +28,7 @@ from boto.s3.connection import Location
 from boto.resultset import ResultSet
 from boto.exception import BotoServerError
 import shutil
+import glob
 
 
 
@@ -93,6 +94,7 @@ Bundled: %(bundle_date)s
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.REBUNDLE and platform == "ec2"	
 	
+	@async
 	def on_Rebundle(self, message):
 		try:
 			self._before_rebundle(message.role_name)			
@@ -112,7 +114,8 @@ Bundled: %(bundle_date)s
 			# Create exclude directories list
 			excludes = message.excludes.split(":") \
 					if message.body.has_key("excludes") and message.excludes else []
-			
+			self._logger.debug("Excludes %s", ":".join(excludes))
+			return
 			# Bundle volume
 			image_file, image_mpoint = self._bundle_vol(prefix=prefix, destination="/mnt", excludes=excludes)
 			# Execute pre-bundle routines. cleanup files, patch files, etc.
@@ -154,6 +157,10 @@ Bundled: %(bundle_date)s
 			
 			# Fire 'rebundle_error'
 			bus.fire("rebundle_error", role_name=message.role_name, last_error=str(e))
+			
+		finally:
+			self._cleanup(image_file, image_mpoint)
+		
 		
 	def _before_rebundle(self, role_name):
 		# Send wall message before rebundling. So console users can run away
@@ -161,7 +168,7 @@ Bundled: %(bundle_date)s
 
 
 	def _bundle_vol(self, prefix="", volume="/", destination=None, 
-				size=None, excludes=[]):
+				size=None, excludes=None):
 		try:
 			self._logger.info("Bundling volume '%s'", volume)
 			
@@ -408,6 +415,24 @@ Bundled: %(bundle_date)s
 					f.close()
 		return part_digests
 		
+	def _cleanup(self, image_file, image_mpoint):
+		self._logger.debug("Cleanup after bundle")
+
+		system("umount -f " + image_mpoint)
+		try:
+			shutil.rmtree(image_mpoint)
+		except OSError, e:
+			self._logger.error("Error during cleanup. %s", e) 
+		
+		for path in glob.glob(image_file + "*"):
+			try:
+				if os.path.isdir(path):
+					shutil.rmtree(path, ignore_errors=True)
+				else:
+					os.remove(path)
+			except (OSError, IOError), e:
+				self._logger.error("Error during cleanup. %s", e)
+
 		
 	def _is_super_user(self):
 		out = system("id -u")[0]
@@ -440,11 +465,11 @@ Bundled: %(bundle_date)s
 			
 			# Create files queue
 			self._logger.info("Enqueue files to upload")
-			dir = os.path.dirname(manifest_path)
+			manifest_dir = os.path.dirname(manifest_path)
 			queue = Queue()
 			queue.put((manifest_path, 0))
 			for part in manifest.parts:
-				queue.put((os.path.join(dir, part[0]), 0))
+				queue.put((os.path.join(manifest_dir, part[0]), 0))
 			
 			# Start uploaders
 			self._logger.info("Start uploading with %d threads", self._NUM_UPLOAD_THREADS)
@@ -473,6 +498,7 @@ Bundled: %(bundle_date)s
 		except (Exception, BaseException), e:
 			self._logger.error("Cannot upload image. %s", e)
 			raise
+
 
 
 	def _uploader(self, queue, s3_conn, bucket, acl, failed_files, failed_files_lock):
