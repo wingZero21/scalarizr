@@ -1,6 +1,7 @@
 import os
+from stat import ST_MODE
 from setuptools import setup, findall, find_packages
-from distutils import sysconfig
+from distutils import sysconfig, log
 from distutils.util import change_root
 from distutils.command.install_data import install_data
 
@@ -34,6 +35,12 @@ class my_install_data(install_data):
 					f.write(script)
 				finally:
 					f.close()
+					
+				if os.name == "posix":
+					oldmode = os.stat(path)[ST_MODE] & 07777
+					newmode = (oldmode | 0555) & 07777
+					log.info("changing mode of %s from %o to %o", path, oldmode, newmode)
+					os.chmod(path, newmode)
 
 
 def make_data_files(dst, src):

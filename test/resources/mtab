@@ -7,3 +7,7 @@ tmpfs /dev/shm tmpfs rw 0 0
 none /proc/sys/fs/binfmt_misc binfmt_misc rw 0 0
 sunrpc /var/lib/nfs/rpc_pipefs rpc_pipefs rw 0 0
 gvfs-fuse-daemon /home/marat/.gvfs fuse.gvfs-fuse-daemon rw,nosuid,nodev,user=marat 0 0
+
+
+
+

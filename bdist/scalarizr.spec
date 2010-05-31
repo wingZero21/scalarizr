@@ -12,7 +12,7 @@ Name: %{name}
 Version: %{version}
 Release: %{release}
 Source0: %{name}-%{version}.tar.gz
-Summary:        MoinMoin Wiki engine
+Summary:        Scalarizr converts any server to Scalr-manageable node
 
 Group:          Applications/Internet
 License:        GPLv3
@@ -26,10 +26,7 @@ Requires:       python >= 2.5
 
 %description
 
-A WikiWikiWeb is a collaborative hypertext environment, with an
-emphasis on easy access to and modification of information. MoinMoin
-is a Python WikiClone that allows you to easily set up your own wiki,
-only requiring a Python installation. 
+Scalarizr converts any server to Scalr-manageable node.
 
 %prep
 %setup
@@ -47,17 +44,8 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root)
 /usr
+/etc
 
 
 %changelog
-* Sun Feb 15 2009 Thomas Waldmann
-- Raised requirement to Python 2.4
-- Removed references to Python 1.5
-- Fixed doc files.
 
-* Thu Jun  8 2006 Johannes Poehlmann
-- Fix RPM build errror "Files listet twice" 
-  Replaced files list and just package all of /usr.
-
-* Fri Mar 05 2004 Florian Festi
-- Initial RPM release.
