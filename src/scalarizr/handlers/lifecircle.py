@@ -4,13 +4,15 @@ Created on Mar 3, 2010
 @author: marat
 '''
 
+import scalarizr
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.messaging import Queues, Messages
+from scalarizr.messaging import Queues, Messages, MetaOptions
 from scalarizr.util import cryptotool, configtool
 import logging
 import os
 import binascii
+
 
 
 def get_handlers():
@@ -261,8 +263,8 @@ class LifeCircleHandler(Handler):
 
 	def on_before_message_send(self, queue, message):
 		"""
-		@todo: Add scalarizr version to meta
+		Add scalarizr version to meta
 		"""
-		pass
+		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
 
 	

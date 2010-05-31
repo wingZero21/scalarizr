@@ -29,6 +29,7 @@ class MetaOptions(object):
 	PLATFORM 	= "platform" # ec2, vps, rs
 	OS 			= "os" # linux, win, sunos
 	REQUEST_ID 	= "request_id"
+	SZR_VERSION = "szr_version"
 
 	
 class Message(object):

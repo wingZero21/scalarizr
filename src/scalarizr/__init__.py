@@ -27,7 +27,7 @@ class ScalarizrError(BaseException):
 class NotConfiguredError(BaseException):
 	pass
 
-__version__ = "0.5"	
+__version__ = "0.5-1"	
 
 def _init():
 	optparser = bus.optparser
