@@ -125,6 +125,31 @@ class _SqliteConnection(object):
 			self._conn = self._creator()
 		return self._conn
 	
+def daemonize():
+	# First fork
+	pid = os.fork()
+	if pid > 0:
+		sys.exit(0) 	
+	
+	os.chdir("/")
+	os.setsid()
+	os.umask(0)
+	
+	# Second fork
+	pid = os.fork()
+	if pid > 0:
+		sys.exit(0)
+		
+	# Redirect standard file descriptors
+	sys.stdout.flush()
+	sys.stderr.flush()
+	si = file(os.devnull, 'r')
+	so = file(os.devnull, 'a+')
+	se = file(os.devnull, 'a+', 0)
+	os.dup2(si.fileno(), sys.stdin.fileno())
+	os.dup2(so.fileno(), sys.stdout.fileno())
+	os.dup2(se.fileno(), sys.stderr.fileno())
+	
 	
 def system(args, shell=True):
 	import subprocess

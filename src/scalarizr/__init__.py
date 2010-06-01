@@ -4,7 +4,8 @@ from scalarizr.bus import bus
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
-from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname
+from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
+	daemonize
 
 import os
 import sys
@@ -387,6 +388,8 @@ def main():
 		optparser = bus.optparser = OptionParser()
 		optparser.add_option("-c", "--conf-path", dest="conf_path",
 				help="Configuration path")
+		optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
+				help="Daemonize process")
 		optparser.add_option("-n", "--configure", dest="configure", action="store_true", default=False, 
 				help="Run installation process")
 		optparser.add_option("-k", "--gen-key", dest="gen_key", action="store_true", default=False,
@@ -449,7 +452,11 @@ def main():
 			logger.error("Scalarizr is not properly configured. %s", e)
 			print >> sys.stderr, "error: %s" % (e)
 			print >> sys.stdout, "Execute instalation process first: 'scalarizr --configure'"
-			sys.exit()
+			sys.exit(1)
+		
+		# Daemonize process
+		if optparser.values.daemonize:
+			daemonize()
 
 		# Start messaging server
 		msg_service = bus.messaging_service
