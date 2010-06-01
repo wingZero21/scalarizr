@@ -44,6 +44,8 @@ ErrorLog      /var/log/apache2/test-example.scalr.net-error.log3
 				return ("MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN","MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN")
 		
 		old_vhost = self.vhosts_path + "/test.vhost"
+		if not os.path.exists(self.vhosts_path):
+			os.makedirs(self.vhosts_path)
 		open(old_vhost,'w').close	
 		self.assertTrue(os.path.exists(old_vhost))
 		
