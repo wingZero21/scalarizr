@@ -481,3 +481,4 @@ def main():
 		if not (isinstance(e, SystemExit) or isinstance(e, KeyboardInterrupt)):
 			logger.exception(e)
 			print >> sys.stderr, "error: %s" % (e)
+			sys.exit(1)
