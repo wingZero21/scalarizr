@@ -153,7 +153,7 @@ class ApacheHandler(Handler):
 					self._logger.info('SSL is neither 0 or 1, skipping virtual host %s', vhost.hostname)
 			
 			if disttool.is_debian_based():
-				self._apache_deault_conf_patch_deb(vhosts_path)
+				self._apache_default_conf_patch_deb(vhosts_path)
 			
 			#Check if vhost directory included in main apache config
 			index = 0
@@ -237,7 +237,7 @@ class ApacheHandler(Handler):
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
 	
-	def _apache_deault_conf_patch_deb(self, vhosts_path):
+	def _apache_default_conf_patch_deb(self, vhosts_path):
 		#Replace NameVirtualhost and Virtualhost ports specifically for debian-based linux
 		default_vhost_path = vhosts_path + '/' + '000-default'
 		if os.path.exists(default_vhost_path):
