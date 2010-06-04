@@ -47,13 +47,14 @@ class ApacheHandler(Handler):
 		cert_path = bus.etc_path + '/private.d/keys'	
 			
 		try:
+			self._logger.debug("Retrieving virtual hosts list from Scalr.")
 			received_vhosts = self._queryenv.list_virtual_hosts()
 		except:
 			self._logger.error('Can`t retrieve virtual hosts list from Scalr.')
 			raise
 		
 		if [] != received_vhosts:	
-			#clean up old configuration			
+			self._logger.debug("Clean up old configuration.")			
 			if not os.path.exists(vhosts_path):
 				self._logger.warning('Virtual hosts directory %s doesn`t exist', vhosts_path)
 				list_vhosts = []
@@ -96,7 +97,9 @@ class ApacheHandler(Handler):
 				
 				if vhost.https:
 					try:
+						self._logger.debug("Retrieving ssl cert and private key from Scalr.")
 						https_certificate = self._queryenv.get_https_certificate()
+						self._logger.debug('Received certificate as %s type', type(https_certificate))
 					except:
 						self._logger.error('Can`t retrieve ssl cert and private key from Scalr.')
 						raise
@@ -135,7 +138,7 @@ class ApacheHandler(Handler):
 								vhost_fullpath, e.strerror)
 					self._apache_vhost_create_paths(vhost_fullpath) 	
 				
-					#it also needs to take care of apache SSL mod
+					self._logger.debug("Checking apache SSL mod")
 					self._check_mod_ssl(httpd_conf_path)	
 				
 				elif not vhost.https:
@@ -155,7 +158,7 @@ class ApacheHandler(Handler):
 			if disttool.is_debian_based():
 				self._apache_default_conf_patch_deb(vhosts_path)
 			
-			#Check if vhost directory included in main apache config
+			self._logger.debug("Checking if vhost directory included in main apache config")
 			index = 0
 			include_string = 'Include ' + vhosts_path + '/*'
 			try:
@@ -168,6 +171,8 @@ class ApacheHandler(Handler):
 						httpd_conf_path, e.strerror)
 			if index == -1:
 				try:
+					self._logger.debug("Writing changes to main config file %s.", 
+							httpd_conf_path)
 					httpd_conf_file = open(httpd_conf_path, 'a')
 					httpd_conf_file.write(include_string)
 					httpd_conf_file.close()
@@ -186,11 +191,15 @@ class ApacheHandler(Handler):
 			if os.path.exists(mods_available) and os.path.exists(mods_available+'/ssl.conf') and os.path.exists(mods_available+'/ssl.load'):
 				if not os.path.exists(mods_enabled):
 					try:
+						self._logger.debug("Creating directory %s.",  
+								mods_enabled)
 						os.makedirs(mods_enabled)
 					except OSError, e:
 						self._logger.error('Couldn`t create directory %s. %s',  
 								mods_enabled, e.strerror)
 				try:
+					self._logger.debug("Creating symlinks for mod_ssl files.",  
+								mods_enabled)
 					os.symlink(mods_available+'/ssl.conf', mods_enabled+'/ssl.conf')
 					os.symlink(mods_available+'/ssl.load', mods_enabled+'/ssl.load')
 					self._logger.info('SSL module has been enabled')
@@ -238,7 +247,7 @@ class ApacheHandler(Handler):
 		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
 	
 	def _apache_default_conf_patch_deb(self, vhosts_path):
-		#Replace NameVirtualhost and Virtualhost ports specifically for debian-based linux
+		self._logger.debug("Replacing NameVirtualhost and Virtualhost ports especially for debian-based linux")
 		default_vhost_path = vhosts_path + '/' + '000-default'
 		if os.path.exists(default_vhost_path):
 			try:
