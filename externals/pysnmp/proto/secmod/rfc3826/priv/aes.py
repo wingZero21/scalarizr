@@ -4,9 +4,14 @@ from pyasn1.type import univ
 from pysnmp.proto import error
 
 try:
-    from Crypto.Cipher import AES
+    from M2Crypto import EVP
 except ImportError:
-    AES = None
+    EVP = None
+
+#try:
+#    from Crypto.Cipher import AES
+#except ImportError:
+#    AES = None
 
 random.seed()
 
@@ -70,7 +75,7 @@ class Aes(base.AbstractEncryptionService):
         
     # 3.2.4.1
     def encryptData(self, encryptKey, privParameters, dataToEncrypt):
-        if AES is None:
+        if EVP is None:
             raise error.StatusInformation(
                 errorIndication='encryptionError'
                 )
@@ -83,15 +88,18 @@ class Aes(base.AbstractEncryptionService):
             )
 
         # 3.3.1.3
-        aesObj = AES.new(aesKey, AES.MODE_CFB, iv)
-        ciphertext = aesObj.encrypt(dataToEncrypt)
-
+#        aesObj = AES.new(aesKey, AES.MODE_CFB, iv)
+#        ciphertext = aesObj.encrypt(dataToEncrypt)
+        c = EVP.Cipher('aes_128_cfb', aesKey, iv, op=1, padding=0)
+        ciphertext = c.update(dataToEncrypt)
+        ciphertext += c.final()
+        del c 
         # 3.3.1.4
         return univ.OctetString(ciphertext), salt
         
     # 3.2.4.2
     def decryptData(self, decryptKey, privParameters, encryptedData):
-        if AES is None:
+        if EVP is None:
             raise error.StatusInformation(
                 errorIndication='decryptionError'
                 )
@@ -109,7 +117,15 @@ class Aes(base.AbstractEncryptionService):
             str(decryptKey), snmpEngineBoots, snmpEngineTime, salt
             )
 
-        aesObj = AES.new(aesKey, AES.MODE_CFB, iv)
+        c = EVP.Cipher('aes_128_cfb', aesKey, iv, op=0, padding=0)
+        decryptedData = c.update(str(encryptedData))
+        decryptedData += c.final()
+        
+        del c 
+                
+        return decryptedData
+
+#        aesObj = AES.new(aesKey, AES.MODE_CFB, iv)
 
         # 3.3.2.4-6
-        return aesObj.decrypt(str(encryptedData))
+#        return aesObj.decrypt(str(encryptedData))
