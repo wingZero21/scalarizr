@@ -4,9 +4,9 @@ from pyasn1.type import univ
 from pysnmp.proto import error
 
 try:
-    from Crypto.Cipher import DES
+    from M2Crypto import EVP
 except ImportError:
-    DES = None
+    EVP = None
     
 random.seed()
 
@@ -48,7 +48,8 @@ class Des(base.AbstractEncryptionService):
         
     # 8.2.4.1
     def encryptData(self, encryptKey, privParameters, dataToEncrypt):
-        if DES is None:
+
+        if EVP is None:
             raise error.StatusInformation(
                 errorIndication='encryptionError'
                 )
@@ -64,16 +65,20 @@ class Des(base.AbstractEncryptionService):
         privParameters = univ.OctetString(salt)
 
         # 8.1.1.2
-        desObj = DES.new(desKey, DES.MODE_CBC, iv)
+#        desObj = DES.new(desKey, DES.MODE_CBC, iv)
         plaintext =  dataToEncrypt + '\x00' * (8 - len(dataToEncrypt) % 8)
-        ciphertext = desObj.encrypt(plaintext)
+        c = EVP.Cipher('des_cbc', desKey, iv, op=1, padding=0)
+        ciphertext = c.update(plaintext)
+        ciphertext += c.final()
+        del c 
+#        ciphertext = desObj.encrypt(plaintext)
 
         # 8.3.1.3 & 4
         return univ.OctetString(ciphertext), privParameters
         
     # 8.2.4.2
     def decryptData(self, decryptKey, privParameters, encryptedData):
-        if DES is None:
+        if EVP is None:
             raise error.StatusInformation(
                 errorIndication='decryptionError'
                 )
@@ -93,12 +98,20 @@ class Des(base.AbstractEncryptionService):
         desKey, iv = self.__getDecryptionKey(str(decryptKey), salt)
 
         # 8.3.2.4 -> 8.1.1.3
+        
         if len(encryptedData) % 8 != 0:
             raise error.StatusInformation(
                 errorIndication='decryptionError'
                 )
-
-        desObj = DES.new(desKey, DES.MODE_CBC, iv)
+            
+        c = EVP.Cipher('des_cbc', desKey, iv, op=0, padding=0)
+        decryptedData = c.update(str(encryptedData))
+        decryptedData += c.final()
+        
+        del c 
+                
+        return decryptedData
+#        desObj = DES.new(desKey, DES.MODE_CBC, iv)
         
         # 8.3.2.6
-        return desObj.decrypt(str(encryptedData))
+#        return desObj.decrypt(str(encryptedData))
