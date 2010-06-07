@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import subprocess
+import shutil
 #from scalarizr.handlers import hooks
 
 def get_handlers ():
@@ -170,7 +171,9 @@ class ApacheHandler(Handler):
 				self._logger.error('Couldn`t read main config file %s. %s', 
 						httpd_conf_path, e.strerror)
 			if index == -1:
+				self.make_backup_copy(httpd_conf_path)
 				try:
+					
 					self._logger.debug("Writing changes to main config file %s.", 
 							httpd_conf_path)
 					httpd_conf_file = open(httpd_conf_path, 'a')
@@ -183,6 +186,8 @@ class ApacheHandler(Handler):
 	def _check_mod_ssl(self, httpd_conf_path):
 		if disttool.is_debian_based():
 			self._check_mod_ssl_deb(httpd_conf_path)
+		elif disttool.is_redhat_based():
+			self._check_mod_ssl_redhat(httpd_conf_path)
 			
 	def _check_mod_ssl_deb(self, httpd_conf_path):
 		mods_available = os.path.dirname(httpd_conf_path) + '/mods-available'
@@ -209,7 +214,58 @@ class ApacheHandler(Handler):
 			else:
 				self._logger.error('%s directory doesn`t exist or doesn`t contain valid ssl.conf and ssl.load files', 
 						mods_available)
-		
+				
+	def _check_mod_ssl_redhat(self, httpd_conf_path):
+		modules_dir = os.path.dirname(httpd_conf_path) + '/modules'
+		mod_ssl_file = modules_dir + '/mod_ssl.so'
+		include_mod_ssl = 'LoadModule mod_ssl modules/mod_ssl.so'
+		if not os.path.isfile(mod_ssl_file) and not os.path.islink(mod_ssl_file):
+			self._logger.error('mod_ssl file %s does not exist. Try "sudo yum install mod_ssl" ',
+						mod_ssl_file)
+		else:
+			text = ''
+			
+			try:
+				httpd_conf_file = open(httpd_conf_path, 'r')
+				text = httpd_conf_file.read()
+				httpd_conf_file.close()
+			except IOError, e: 
+				self._logger.error('Couldn`t read main config file %s. %s', 
+						httpd_conf_path, e.strerror)
+			index = text.find('mod_ssl.so')
+			
+			if text and index == -1:
+				
+				self.make_backup_copy(httpd_conf_path)
+					
+				self._logger.info('%s does not contain loading mod_ssl string. Trying to patch.',
+							httpd_conf_path)
+				
+				position = text.find("LoadModule")
+				if position == -1:
+					updated_text = text + '\n' + include_mod_ssl + '\n'
+				else:
+					updated_text = text[:position] + '\n' + include_mod_ssl  + '\n' + text[position:]
+				try:
+					self._logger.debug("Writing changes to main config file %s.", 
+							httpd_conf_path)
+					httpd_conf_file = open(httpd_conf_path, 'w')
+					httpd_conf_file.write(updated_text)
+					httpd_conf_file.close()
+				except IOError, e:
+					self._logger.error('Couldn`t write to main config file %s. %s', 
+							httpd_conf_path, e.strerror)
+	
+	def make_backup_copy(self, path):
+		backup_file = path + '.bak'
+		self._logger.debug('Copying %s to %s',
+				path, backup_file)
+		if not os.path.exists(backup_file):
+			try:
+				shutil.copy(path, backup_file)
+			except IOError, e:
+				self._logger.error('Couldn`t backup %s to %s', 
+						path, backup_file, e.strerror)
 	
 	def _reload_apache(self):
 		if disttool.is_debian_based():
@@ -251,7 +307,6 @@ class ApacheHandler(Handler):
 				default_vhost = self.name_vhost_regexp.sub('NameVirtualHost *:80\n', default_vhost)
 				default_vhost = self.vhost_regexp.sub( '<VirtualHost *:80>', default_vhost)
 				try:
-					#print default_vhost
 					default_vhost_file = open(default_vhost_path, 'w')
 					default_vhost_file.write(default_vhost)
 					default_vhost_file.close()
