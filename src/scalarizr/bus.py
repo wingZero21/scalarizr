@@ -43,6 +43,11 @@ class Bus(Observable):
 	@ivar scalarizr.queryenv.QueryEnv:  QueryEnv service client
 	"""
 	
+	snmp_server = None
+	"""
+	@ivar scalarizr.snmpagent.SnmpServer: SNMP embed server
+	"""
+	
 	platfrom = None
 	"""
 	@ivar scalarizr.platform.Platform: Platform (ec2, rs, vps...)

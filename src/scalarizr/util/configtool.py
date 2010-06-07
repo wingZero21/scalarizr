@@ -31,7 +31,14 @@ OPT_SCRIPTS_PATH = "scripts_path"
 SECT_MESSAGING = "messaging"
 OPT_ADAPTER = "adapter"
 
+SECT_SNMP = "snmp"
+OPT_PORT = "port"
+OPT_SECURITY_NAME = "security_name"
+OPT_COMMUNITY_NAME = "community_name"
+
 SECT_HANDLERS = "handlers"
+
+
 
 def _get_filename(basename, ret):
 	if ret == RET_PUBLIC:

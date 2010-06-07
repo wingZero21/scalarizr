@@ -8,7 +8,7 @@ from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
-from scalarizr.util import disttool
+from scalarizr.util import disttool, system
 import logging
 import os
 import re
@@ -212,35 +212,25 @@ class ApacheHandler(Handler):
 		
 	
 	def _reload_apache(self):
-		apache_run_script = ''
 		if disttool.is_debian_based():
-			apache_run_script = '/etc/init.d/apache2'
+			init_script = '/etc/init.d/apache2'
 		elif disttool.is_redhat_based():
-			apache_run_script = '/etc/init.d/httpd'
-		apache_run_args = 'reload'
-		reload_command = [apache_run_script, apache_run_args]
-		if os.path.exists(apache_run_script) and os.access(apache_run_script, os.X_OK):
+			init_script = '/etc/init.d/httpd'
+		else:
+			init_script = '/etc/init.d/httpd'
+		reload_command = [init_script, "reload"]
+		if os.path.exists(init_script) and os.access(init_script, os.X_OK):
 			self._logger.info("Trying to reload apache..")
 			try:
-				p = subprocess.Popen(reload_command, 
-									 stdin=subprocess.PIPE, 
-									 stdout=subprocess.PIPE, 
-									 stderr=subprocess.PIPE)								
-				stdout, stderr = p.communicate()
-					
-				is_start_failed = p.poll()
-								
-				if is_start_failed:
-					self._logger.error(stderr)
-				
+				out, err, retcode = system(reload_command, shell=False)
+				if retcode or (out and out.find("FAILED") != -1):
+					self._logger.error("Apache reloading failed. %s", out)
 				else:
-					self._logger.info("Apache was successfully reloaded.")
-					bus.fire('apache_reload')	
-									
-				if None != stdout:
-					self._logger.info(stdout)	
+					self._logger.info("Apache was successfully reloaded")
+					bus.fire('apache_reload')
+						
 			except OSError, e:
-				self._logger.error('Apache realoading failed by running %s : %s', 
+				self._logger.error('Apache realoading failed by running %s. %s', 
 						''.join(reload_command), e.strerror)	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
