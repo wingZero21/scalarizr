@@ -31,6 +31,7 @@ class ApacheHandler(Handler):
 		self.strip_comments_regexp = re.compile( r"#.*\n")
 		self.errorlog_regexp = re.compile( r"ErrorLog\s+(\S*)", re.IGNORECASE)
 		self.customlog_regexp = re.compile( r"CustomLog\s+(\S*)", re.IGNORECASE)
+		self.load_module_regexp = re.compile(r"LoadModule\s+mod_ssl",re.IGNORECASE)
 		bus.define_events('apache_reload')
 
 	def on_VhostReconfigure(self, message):
@@ -232,8 +233,11 @@ class ApacheHandler(Handler):
 			except IOError, e: 
 				self._logger.error('Couldn`t read main config file %s. %s', 
 						httpd_conf_path, e.strerror)
+			else:
+				if not text:
+					self._logger.error('%s is empty', httpd_conf_path)
 			index = text.find('mod_ssl.so')
-			
+
 			if text and index == -1:
 				
 				self.make_backup_copy(httpd_conf_path)
