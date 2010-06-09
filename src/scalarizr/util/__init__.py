@@ -213,6 +213,20 @@ def format_size(size, precision=2):
 	s = "%."+str(precision)+"f%s"
 	return s % (ret, dim)	
 
+def backup_file(filename):
+	import shutil
+	logger = logging.getLogger(__name__)
+	max_backups = 50
+	
+	for i in range(0, max_backups):
+		bkname = '%s.bak.%s' % (filename, i)		
+		if not os.path.exists(bkname):
+			logger.debug('Backuping %s to %s', filename, bkname)
+			shutil.copy(filename, backup_file)
+			return bkname
+	raise UtilError("Max backups limit %d exceed for file %s" % (max_backups, filename))
+
+
 """
 def timethis(what):
 	try:
