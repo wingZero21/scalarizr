@@ -45,6 +45,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 	
 	
 	def send(self, queue, message):
+		# TODO: Implement blocking. Thread will block until it deliver message
 		self._logger.info("Sending message '%s' into queue '%s'", message.name, queue)
 
 		if message.id is None:

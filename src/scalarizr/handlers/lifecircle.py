@@ -90,9 +90,9 @@ class LifeCircleHandler(Handler):
 	
 	def on_init(self):
 		bus.on("start", self.on_start)
-		self._producer.on("before_send", self.on_before_message_send)
-		
-	
+		self._producer.on("before_send", self.on_before_message_send)		
+
+
 	def on_start(self):
 		reboot_flag = os.path.join(bus.etc_path, ".reboot")
 		hostinit_flag = os.path.join(bus.etc_path, ".hostinit")
@@ -184,18 +184,10 @@ class LifeCircleHandler(Handler):
 		bus.fire("before_host_init", msg)
 		
 		# Update crypto key when HostInit will be delivered 
-		self._producer.on("send", self._update_crypto_key)
+		# TODO: Remove this confusing listener when blocking will be implemented in message producer 
+		self._producer.on("send", self.on_hostinit_send)
 		# Send HostInit
 		self._producer.send(Queues.CONTROL, msg) 
-
-		bus.fire("host_init")
-		
-		hostinit_file = os.path.join(bus.etc_path, ".hostinit")
-		try:
-			self._logger.debug("Touch file '%s'", hostinit_file)
-			open(hostinit_file, "w+").close()
-		except IOError, e:
-			self._logger.error("Cannot touch file '%s'. IOError: %s", hostinit_file, str(e))		
 
 	
 	def _start_import(self):
@@ -209,9 +201,9 @@ class LifeCircleHandler(Handler):
 		bus.fire("hello")
 
 
-	def _update_crypto_key(self, *args, **kwargs):
+	def on_hostinit_send(self, *args, **kwargs):
 		# Remove listener
-		self._producer.un("send", self._update_crypto_key)
+		self._producer.un("send", self.on_hostinit_send)
 				
 		# Update key file
 		key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)		
@@ -222,6 +214,16 @@ class LifeCircleHandler(Handler):
 		queryenv.key = binascii.a2b_base64(self._new_crypto_key)
 		
 		del self._new_crypto_key
+		
+		
+		hostinit_file = os.path.join(bus.etc_path, ".hostinit")
+		try:
+			self._logger.debug("Touch file '%s'", hostinit_file)
+			open(hostinit_file, "w+").close()
+		except IOError, e:
+			self._logger.error("Cannot touch file '%s'. IOError: %s", hostinit_file, str(e))
+			
+		bus.fire("host_init")		
 
 
 	def on_IntServerReboot(self, message):
@@ -266,5 +268,5 @@ class LifeCircleHandler(Handler):
 		Add scalarizr version to meta
 		"""
 		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
-
+	
 	

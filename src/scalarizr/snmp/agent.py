@@ -9,12 +9,12 @@ from pysnmp.entity import engine, config
 from pysnmp.carrier.asynsock.dgram import udp
 #from pysnmp.carrier.asynsock.dgram import udp6
 from pysnmp.entity.rfc3413 import cmdrsp, context
-from socket import socket
-from pysnmp.smi import builder
+import socket
+#from pysnmp.smi import builder
 import os, re
 
-mibBuilder = builder.MibBuilder()
-Integer32, = mibBuilder.importSymbols('SNMPv2-SMI', 'Integer32')
+#mibBuilder = builder.MibBuilder()
+#Integer32, = mibBuilder.importSymbols('SNMPv2-SMI', 'Integer32')
 
 class SnmpServer():
 	port = None
@@ -37,7 +37,7 @@ class SnmpServer():
 			config.addSocketTransport(
 			    self._engine,
 			    udp.domainName,
-			    udp.UdpSocketTransport().openServerMode(('127.0.0.1', self.port))
+			    udp.UdpSocketTransport().openServerMode((socket.gethostname(), self.port))
 			    )
 			
 			mibBuilder = self._engine.msgAndPduDsp.mibInstrumController.mibBuilder

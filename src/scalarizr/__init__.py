@@ -5,11 +5,12 @@ from scalarizr.messaging import MessageServiceFactory, MessageService, MessageCo
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
-	daemonize
-#from scalarizr.snmpagent import SnmpServer
+	daemonize, system, disttool
+from scalarizr.snmp.agent import SnmpServer
 
 import os
 import sys
+import re
 import sqlite3 as sqlite
 from ConfigParser import ConfigParser
 import logging
@@ -21,6 +22,12 @@ from scalarizr.util.configtool import ConfigError
 import threading
 import urlparse
 import socket
+import signal
+import shutil
+try:
+	import timemodule as time
+except ImportError:
+	import time
 
 
 class ScalarizrError(BaseException):
@@ -29,7 +36,10 @@ class ScalarizrError(BaseException):
 class NotConfiguredError(BaseException):
 	pass
 
+
 __version__ = "0.5-1"	
+EMBED_SNMPD = False
+_running = False
 
 def _init():
 	optparser = bus.optparser
@@ -222,15 +232,36 @@ def _init_services():
 		logger.error("Cannot create messaging service adapter '%s'" % (adapter_name))
 		raise
 		
+		
 	# Initialize SNMP server
-	#logger.debug("Initialize embed SNMP server")
-	#snmp_sect = configtool.section_wrapper(config, configtool.SECT_SNMP)
-	#bus.snmp_server = SnmpServer(
-	#	port=int(snmp_sect.get(configtool.OPT_PORT)),
-	#	security_name=snmp_sect.get(configtool.OPT_SECURITY_NAME),
-	#	community_name=platform.get_user_data(UserDataOptions.FARM_HASH) \
-	#			or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)  
-	#)
+	snmp_sect = configtool.section_wrapper(config, configtool.SECT_SNMP)	
+	if EMBED_SNMPD:
+		logger.debug("Initialize embed SNMP server")
+		bus.snmp_server = SnmpServer(
+			port=int(snmp_sect.get(configtool.OPT_PORT)),
+			security_name=snmp_sect.get(configtool.OPT_SECURITY_NAME),
+			community_name=platform.get_user_data(UserDataOptions.FARM_HASH) \
+					or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)  
+		)
+	else:
+		logger.debug("Initialize snmpd")
+		if not os.path.exists("/etc/snmp/snmpd.conf.bak"):
+			shutil.copy("/etc/snmp/snmpd.conf", "/etc/snmp/snmpd.conf.bak")
+		inp = open("/etc/snmp/snmpd.conf", "r")
+		lines = inp.readlines()
+		inp.close()
+		
+		out = open("/etc/snmp/snmpd.conf", "w")
+		for line in lines:
+			if re.match("^(com2sec.+)", line):
+				# Modify community name
+				parts = line.split()
+				parts[3] = platform.get_user_data(UserDataOptions.FARM_HASH) \
+						or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)
+				line = " ".join(parts)
+			out.write(line)
+		out.close()
+			
 		
 	# Initialize handlers
 	from scalarizr.handlers import MessageListener
@@ -386,7 +417,28 @@ def _behaviour_validator(value):
 				print "invalid choice: '%s' (choose from %s)" % (bh, ", ".join(_KNOWN_BEHAVIOURS))
 				return False
 	return True
-		
+
+def _start_snmp_server():
+	# Start SNMP server in a separate process
+	pid = os.fork()
+	if pid == 0:
+		snmp_server = bus.snmp_server
+		snmp_server.start()
+		sys.exit()	
+
+def _snmp_crash_handler(signum, frame):
+	if _running:
+		_start_snmp_server()
+
+def _snmpd_health_check():
+	logger = logging.getLogger(__name__)
+	while True:
+		if not os.path.exists("/var/run/snmpd.pid"):
+			logger.warning("snmpd is not running. trying to start it")
+			out, err, retcode = system("/etc/init.d/snmpd start")
+			if retcode > 0 or out.lower().find("failed") != -1:
+				logger.error("Canot start snmpd. %s", out)
+		time.sleep(60)
 
 def main():
 	try:
@@ -469,28 +521,34 @@ def main():
 		if optparser.values.daemonize:
 			daemonize()
 
+		if EMBED_SNMPD:
+			# Start SNMP server in a separate process			
+			signal.signal(signal.SIGCHLD, _snmp_crash_handler)
+			_start_snmp_server()
+		else:
+			# Start snmpd health check thread
+			t = threading.Thread(target=_snmpd_health_check)
+			t.daemon = True
+			t.start()
+
 		# Start messaging server
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
 		msg_thread = threading.Thread(target=consumer.start)
 		msg_thread.start()
 	
-		# Start SNMP server
-		#snmp_server = bus.snmp_server
-		#snmp_thread = threading.Thread(target=snmp_server.start)
-		#snmp_thread.start()
-	
+
 		# Fire start
+		_running = True
 		bus.fire("start")
 	
 		try:
 			while True:
 				msg_thread.join(0.5)
-				#snmp_thread.join(0.5)
 		except KeyboardInterrupt:
+			_running = False
 			logger.info("Stopping scalarizr...")
 			consumer.stop()
-			#snmp_server.stop()
 			
 			# Fire terminate
 			bus.fire("terminate")
