@@ -6,7 +6,7 @@ from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
 	daemonize
-from scalarizr.snmpagent import SnmpServer
+#from scalarizr.snmpagent import SnmpServer
 
 import os
 import sys
@@ -223,14 +223,14 @@ def _init_services():
 		raise
 		
 	# Initialize SNMP server
-	logger.debug("Initialize embed SNMP server")
-	snmp_sect = configtool.section_wrapper(config, configtool.SECT_SNMP)
-	bus.snmp_server = SnmpServer(
-		port=int(snmp_sect.get(configtool.OPT_PORT)),
-		security_name=snmp_sect.get(configtool.OPT_SECURITY_NAME),
-		community_name=platform.get_user_data(UserDataOptions.FARM_HASH) \
-				or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)  
-	)
+	#logger.debug("Initialize embed SNMP server")
+	#snmp_sect = configtool.section_wrapper(config, configtool.SECT_SNMP)
+	#bus.snmp_server = SnmpServer(
+	#	port=int(snmp_sect.get(configtool.OPT_PORT)),
+	#	security_name=snmp_sect.get(configtool.OPT_SECURITY_NAME),
+	#	community_name=platform.get_user_data(UserDataOptions.FARM_HASH) \
+	#			or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)  
+	#)
 		
 	# Initialize handlers
 	from scalarizr.handlers import MessageListener
@@ -476,9 +476,9 @@ def main():
 		msg_thread.start()
 	
 		# Start SNMP server
-		snmp_server = bus.snmp_server
-		snmp_thread = threading.Thread(target=snmp_server.start)
-		snmp_thread.start()
+		#snmp_server = bus.snmp_server
+		#snmp_thread = threading.Thread(target=snmp_server.start)
+		#snmp_thread.start()
 	
 		# Fire start
 		bus.fire("start")
@@ -486,11 +486,11 @@ def main():
 		try:
 			while True:
 				msg_thread.join(0.5)
-				snmp_thread.join(0.5)
+				#snmp_thread.join(0.5)
 		except KeyboardInterrupt:
 			logger.info("Stopping scalarizr...")
 			consumer.stop()
-			snmp_server.stop()
+			#snmp_server.stop()
 			
 			# Fire terminate
 			bus.fire("terminate")
