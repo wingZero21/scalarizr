@@ -128,10 +128,6 @@ def _get_cpu_value(key=None):
 		return int(cpuinfo.split()[cpuvalues[key]])
 
 
-	'ssCpuRawUser',
-	'ssCpuRawNice',
-	'ssCpuRawIdle',
-	'ssCpuRawSystem'
 __ssCpuRawUser = MibScalarInstance(ssCpuRawUser.name, (0,), SsCpuRawUser(0))
 __ssCpuRawNice = MibScalarInstance(ssCpuRawNice.name, (0,), SsCpuRawNice(0))
 __ssCpuRawIdle = MibScalarInstance(ssCpuRawIdle.name, (0,), SsCpuRawIdle(0))
