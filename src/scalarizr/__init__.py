@@ -6,7 +6,7 @@ from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
 	daemonize, system, disttool
-from scalarizr.snmp.agent import SnmpServer
+
 
 import os
 import sys
@@ -237,6 +237,7 @@ def _init_services():
 	snmp_sect = configtool.section_wrapper(config, configtool.SECT_SNMP)	
 	if EMBED_SNMPD:
 		logger.debug("Initialize embed SNMP server")
+		from scalarizr.snmp.agent import SnmpServer
 		bus.snmp_server = SnmpServer(
 			port=int(snmp_sect.get(configtool.OPT_PORT)),
 			security_name=snmp_sect.get(configtool.OPT_SECURITY_NAME),
