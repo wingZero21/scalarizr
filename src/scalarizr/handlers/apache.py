@@ -224,7 +224,7 @@ class ApacheHandler(Handler):
 				
 				
 	def _check_mod_ssl_redhat(self, httpd_conf_path):
-		include_mod_ssl = 'LoadModule mod_ssl modules/mod_ssl.so'
+		include_mod_ssl = 'LoadModule ssl_module modules/mod_ssl.so'
 		
 		f = None
 		conf_str = None		
