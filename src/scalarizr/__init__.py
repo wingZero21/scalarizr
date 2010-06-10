@@ -24,6 +24,8 @@ import urlparse
 import socket
 import signal
 import shutil
+import string
+import traceback
 try:
 	import timemodule as time
 except ImportError:
@@ -40,6 +42,8 @@ class NotConfiguredError(BaseException):
 __version__ = "0.5-1"	
 EMBED_SNMPD = False
 _running = False
+
+
 
 def _init():
 	optparser = bus.optparser
@@ -81,6 +85,11 @@ def _init():
 	
 	
 	# Configure logging
+	if sys.version_info < (2,6):
+		# Fix logging handler resolve
+		from scalarizr.util.log import fix_python25_handler_resolve		
+		fix_python25_handler_resolve()
+	
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
 	logger = logging.getLogger(__name__)
 	logger.info("Initialize scalarizr...")
@@ -246,13 +255,18 @@ def _init_services():
 		)
 	else:
 		logger.debug("Initialize snmpd")
-		if not os.path.exists("/etc/snmp/snmpd.conf.bak"):
-			shutil.copy("/etc/snmp/snmpd.conf", "/etc/snmp/snmpd.conf.bak")
-		inp = open("/etc/snmp/snmpd.conf", "r")
+		snmpd_conf = "/etc/snmp/snmpd.conf"
+		if not os.path.exists(snmpd_conf):
+			raise ScalarizrError("File %s doesn't exists. snmpd is not installed" % (snmpd_conf,))
+		
+		if not os.path.exists(snmpd_conf + ".bak"):
+			shutil.copy(snmpd_conf, snmpd_conf + ".bak")
+			
+		inp = open(snmpd_conf, "r")
 		lines = inp.readlines()
 		inp.close()
 		
-		out = open("/etc/snmp/snmpd.conf", "w")
+		out = open(snmpd_conf, "w")
 		for line in lines:
 			if re.match("^(com2sec.+)", line):
 				# Modify community name
@@ -556,6 +570,6 @@ def main():
 			logger.info("Stopped")
 	except (BaseException, Exception), e:
 		if not (isinstance(e, SystemExit) or isinstance(e, KeyboardInterrupt)):
+			traceback.print_exc(file=sys.stderr)
 			logger.exception(e)
-			print >> sys.stderr, "error: %s" % (e)
 			sys.exit(1)
