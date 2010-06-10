@@ -66,6 +66,7 @@ ErrorLog      /var/log/apache2/test-example.scalr.net-error.log3
 		text = httpd_conf_file.read()
 		index = text.find('Include ' + self.vhosts_path + '/*')
 		self.assertNotEqual(index, -1)
+
 		
 if __name__ == "__main__":
 	init_tests()

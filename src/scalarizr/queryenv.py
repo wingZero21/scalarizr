@@ -98,7 +98,6 @@ class QueryEnvService(object):
 		"""
 		@return object
 		"""
-	
 		# Perform HTTP request
 		request_body = {}
 		request_body["operation"] = command
@@ -220,6 +219,7 @@ class QueryEnvService(object):
 	
 	def _read_get_https_certificate_response(self, xml):
 		response = xml.documentElement
+		print xml.documentElement.toxml()
 		if len(response.childNodes):
 			virtualhost = response.firstChild
 			for ssl_data in virtualhost.childNodes:
@@ -227,8 +227,12 @@ class QueryEnvService(object):
 					cert = ssl_data.firstChild.nodeValue
 				elif ssl_data.nodeName=="pkey":
 					pkey = ssl_data.firstChild.nodeValue
+			if not cert:
+				self._logger.error("Queryenv didn`t return SSL cert")
+			if not pkey:
+				self._logger.error("Queryenv didn`t return SSL keys")
 			return (cert, pkey)
-		
+		self._logger.error("Queryenv return empty SSL cert & keys")
 		return (None, None)	
 
 	def _read_list_virtualhosts_response(self, xml):

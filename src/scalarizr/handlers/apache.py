@@ -31,7 +31,8 @@ class ApacheHandler(Handler):
 		self.strip_comments_regexp = re.compile( r"#.*\n")
 		self.errorlog_regexp = re.compile( r"ErrorLog\s+(\S*)", re.IGNORECASE)
 		self.customlog_regexp = re.compile( r"CustomLog\s+(\S*)", re.IGNORECASE)
-		self.load_module_regexp = re.compile(r"LoadModule\s+mod_ssl",re.IGNORECASE)
+		self.load_module_regexp = re.compile(r"\nLoadModule\s+",re.IGNORECASE)
+		self.server_root_regexp = re.compile(r"ServerRoot\s+\"(\S*)\"",re.IGNORECASE)
 		bus.define_events('apache_reload')
 
 	def on_VhostReconfigure(self, message):
@@ -106,27 +107,32 @@ class ApacheHandler(Handler):
 						self._logger.error('Can`t retrieve ssl cert and private key from Scalr.')
 						raise
 					else: 
-						self._logger.info("Saving SSL certificates for %s",vhost.hostname)
-						try:
-							file = open(cert_path + '/' + 'https.key', 'w')
-							file.write(https_certificate[1])
-							file.close()
+						if not https_certificate[0]:
+							self._logger.error("Scalar returned empty SSL cert")
+						elif not https_certificate[1]:
+							self._logger.error("Scalar returned empty SSL key")
+						else:
+							self._logger.info("Saving SSL certificates for %s",vhost.hostname)
+							try:
+								file = open(cert_path + '/' + 'https.key', 'w')
+								file.write(https_certificate[1])
+								file.close()
+								
+								file = open(cert_path + '/' + vhost.hostname + '.key', 'w')
+								file.write(https_certificate[1])
+								file.close()
 							
-							file = open(cert_path + '/' + vhost.hostname + '.key', 'w')
-							file.write(https_certificate[1])
-							file.close()
-						
-							file = open(cert_path + '/' + 'https.crt', 'w')
-							file.write(https_certificate[0])
-							file.close()
-						
-							file = open(cert_path  + '/' + vhost.hostname + '.crt', 'w')
-							file.write(https_certificate[0])
-							file.close()
-						
-						except IOError, e:
-							self._logger.error('Couldn`t write SSL certificate files to %s. %s', 
-									cert_path, e.strerror)
+								file = open(cert_path + '/' + 'https.crt', 'w')
+								file.write(https_certificate[0])
+								file.close()
+							
+								file = open(cert_path  + '/' + vhost.hostname + '.crt', 'w')
+								file.write(https_certificate[0])
+								file.close()
+							
+							except IOError, e:
+								self._logger.error('Couldn`t write SSL certificate files to %s. %s', 
+										cert_path, e.strerror)
 					
 					self._logger.info('Enabling SSL virtual host %s', vhost.hostname)
 					
@@ -218,35 +224,42 @@ class ApacheHandler(Handler):
 				
 				
 	def _check_mod_ssl_redhat(self, httpd_conf_path):
-		modules_dir = os.path.dirname(httpd_conf_path) + '/modules'
-		mod_ssl_file = modules_dir + '/mod_ssl.so'
 		include_mod_ssl = 'LoadModule mod_ssl modules/mod_ssl.so'
+		
+		f = None
+		conf_str = None		
+		try:
+			f = open(httpd_conf_path, 'r')
+			conf_str = f.read()
+		except IOError, e: 
+			self._logger.error('Cannot read httpd config file %s. %s', 
+					httpd_conf_path, e.strerror)
+			return
+		finally:
+			if f:
+				f.close()
+		
+		server_root_entries = self.server_root_regexp.findall(conf_str)
+		
+		if server_root_entries:
+			server_root = server_root_entries[0]
+		else:
+			server_root = os.path.dirname(httpd_conf_path)
+		mod_ssl_file = server_root + '/modules/mod_ssl.so'
+		
 		if not os.path.isfile(mod_ssl_file) and not os.path.islink(mod_ssl_file):
 			self._logger.error('mod_ssl file %s does not exist. Try "sudo yum install mod_ssl" ',
 						mod_ssl_file)
 		else:
-			f = None
-			conf_str = None
-			try:
-				f = open(httpd_conf_path, 'r')
-				conf_str = f.read()
-			except IOError, e: 
-				self._logger.error('Cannot read httpd config file %s. %s', 
-						httpd_conf_path, e.strerror)
-				return
-			finally:
-				if f:
-					f.close()
-
 			index = conf_str.find('mod_ssl.so')
 			if conf_str and index == -1:
 				backup_file(httpd_conf_path)
 				self._logger.info('%s does not contain mod_ssl include. Patching httpd conf.',
 							httpd_conf_path)
 				
-				pos = conf_str.find("LoadModule")
-				conf_str_updated = conf_str + '\n' + include_mod_ssl + '\n' if pos == -1 else \
-						conf_str[:pos] + '\n' + include_mod_ssl  + '\n' + conf_str[pos:]
+				pos = self.load_module_regexp.search(conf_str)
+				conf_str_updated = conf_str[:pos.start()] + '\n' + include_mod_ssl  + '\n' + conf_str[pos.start():] if pos else \
+						conf_str + '\n' + include_mod_ssl + '\n'
 					
 				f = None			
 				try:

@@ -222,7 +222,7 @@ def backup_file(filename):
 		bkname = '%s.bak.%s' % (filename, i)		
 		if not os.path.exists(bkname):
 			logger.debug('Backuping %s to %s', filename, bkname)
-			shutil.copy(filename, backup_file)
+			shutil.copy(filename, bkname)
 			return bkname
 	raise UtilError("Max backups limit %d exceed for file %s" % (max_backups, filename))
 
