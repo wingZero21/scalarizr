@@ -4,7 +4,6 @@ Created on 22.01.2010
 @author: Dmytro Korsakov
 '''
 import re
-import atexit
 import logging
 import logging.config
 import threading
@@ -13,6 +12,28 @@ import cStringIO
 import string
 
 from scalarizr.bus import bus
+from scalarizr.messaging import Queues, Messages
+
+# FIXME: database is locked
+"""
+2010-06-10 08:58:31,451 - ERROR - scalarizr - database is locked
+Traceback (most recent call last):
+  File "/usr/lib/python2.5/site-packages/scalarizr/__init__.py", line 566, in main
+    logger.info("Stopping scalarizr...")
+  File "/usr/lib/python2.5/logging/__init__.py", line 985, in info
+    apply(self._log, (INFO, msg, args), kwargs)
+  File "/usr/lib/python2.5/logging/__init__.py", line 1101, in _log
+    self.handle(record)
+  File "/usr/lib/python2.5/logging/__init__.py", line 1111, in handle
+    self.callHandlers(record)
+  File "/usr/lib/python2.5/logging/__init__.py", line 1148, in callHandlers
+    hdlr.handle(record)
+  File "/usr/lib/python2.5/logging/__init__.py", line 655, in handle
+    self.emit(record)
+  File "/usr/lib/python2.5/site-packages/scalarizr/util/log.py", line 75, in emit
+    conn.execute('INSERT INTO log VALUES (?,?,?,?,?,?,?)', data)
+"""
+
 
 INTERVAL_RE = re.compile('((?P<minutes>\d+)min\s?)?((?P<seconds>\d+)s)?')
 
@@ -38,6 +59,7 @@ class MessagingHandler(logging.Handler):
 	def __del__(self):
 		if self._send_event:
 			self._stop_event.set()
+			self._send_event.set()
 			
 	def _init(self):
 		self._db = bus.db
@@ -45,7 +67,6 @@ class MessagingHandler(logging.Handler):
 		
 		self._send_event = threading.Event()
 		self._stop_event = threading.Event()
-		atexit.register(self._send_message)
 		
 		self._sender_thread = threading.Thread(target=self._sender)
 		self._sender_thread.daemon = True
@@ -96,10 +117,10 @@ class MessagingHandler(logging.Handler):
 		cur.close()
 			
 		if entries:
-			message = self._msg_service.new_message("LogMessage")
+			message = self._msg_service.new_message(Messages.LOG)
 			producer = self._msg_service.get_producer()
 			message.body["entries"] = entries
-			producer.send(message)
+			producer.send(Queues.LOG, message)
 			conn.execute("DELETE FROM log WHERE id IN (%s)" % (",".join(ids)))
 			conn.commit()
 
@@ -107,8 +128,7 @@ class MessagingHandler(logging.Handler):
 		while not self._stop_event.isSet():
 			try:
 				self._send_event.wait(self.send_interval)
-				if not self._stop_event.isSet():
-					self._send_message()
+				self._send_message()
 			finally:
 				self._send_event.clear()
 

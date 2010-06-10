@@ -186,7 +186,6 @@ class ScriptExecutor(Handler):
 				format_size(os.path.getsize(stderr.name)))
 		
 		# Notify scalr
-		self._logger.debug("Prepare 'ExecResult' message")
 		message = self._msg_service.new_message(Messages.EXEC_SCRIPT_RESULT, body=dict(
 			stdout=binascii.b2a_base64(self._get_truncated_log(stdout.name, self._logs_truncate_over)),
 			stderr=binascii.b2a_base64(self._get_truncated_log(stderr.name, self._logs_truncate_over)),
@@ -196,10 +195,8 @@ class ScriptExecutor(Handler):
 			event_name=self._event_name
 		))
 		
-		self._logger.debug("Sending 'ExecResult' message to Scalr")
 		producer = self._msg_service.get_producer()
 		producer.send(Queues.LOG, message)
-		self._logger.debug("Done sending message")
 	
 	def _get_truncated_log(self, logfile, maxsize):
 		f = open(logfile, "r")

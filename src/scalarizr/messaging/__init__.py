@@ -225,6 +225,8 @@ class Messages:
 	Fires after rebundle task finished
 	"""
 	
+	LOG = "Log"
+	
 	###
 	# Scalr events
 	###

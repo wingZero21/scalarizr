@@ -82,7 +82,15 @@ def _init():
 	if not os.path.exists(config_filename):
 		raise ScalarizrError("Configuration file '%s' doesn't exists" % (config_filename))
 	bus.etc_path = os.path.dirname(config_filename)
-	
+
+	# Load configuration
+	config = ConfigParser()
+	config.read(config_filename)
+	bus.config = config
+
+	# Configure database connection pool
+	bus.db = SqliteLocalObject(_db_connect)
+
 	
 	# Configure logging
 	if sys.version_info < (2,6):
@@ -93,12 +101,7 @@ def _init():
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
 	logger = logging.getLogger(__name__)
 	logger.info("Initialize scalarizr...")
-	
 
-	# Load configuration
-	config = ConfigParser()
-	config.read(config_filename)
-	bus.config = config
 
 	# Inject behaviour configurations into global config
 	bhs = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
@@ -109,9 +112,7 @@ def _init():
 				logger.debug("Read behaviour configuration file %s", filename)
 				config.read(filename)
 	
-	# Configure database connection pool
-	#bus.db = SingletonThreadPool(_db_connect)
-	bus.db = SqliteLocalObject(_db_connect)
+
 	
 	# Define scalarizr events
 	bus.define_events(
