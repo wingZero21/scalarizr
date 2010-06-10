@@ -2,16 +2,27 @@ from sys import version
 from time import time
 from pysnmp import majorVersionId
 import os, re
+from pyasn1.type import constraint, namedval
+( Integer, OctetString, ) = mibBuilder.importSymbols("ASN1", "Integer", "OctetString")
+( DisplayString,) = mibBuilder.importSymbols("SNMPv2-TC", "DisplayString")
+
+
 
 ( MibScalarInstance,
   TimeTicks,
   Integer32,
-  Counter32) = mibBuilder.importSymbols(
+  Counter32,
+  MibTableRow,
+  MibTableColumn,
+  Opaque) = mibBuilder.importSymbols(
     'SNMPv2-SMI',
     'MibScalarInstance',
     'TimeTicks',
     'Integer32',
-    'Counter32'
+    'Counter32',
+    'MibTableRow',
+    'MibTableColumn',
+    'Opaque'
 	)
 
 ( 
@@ -26,8 +37,19 @@ import os, re
   ssCpuRawUser,
   ssCpuRawNice,
   ssCpuRawIdle,
-  ssCpuRawSystem
-   ) = mibBuilder.importSymbols(
+  ssCpuRawSystem,
+  systemStats,
+  laTable,
+  laEntry,
+  laIndex,
+  laNames,
+  laLoad, 
+  laConfig, 
+  laLoadInt, 
+  laLoadFloat, 
+  laErrorFlag,
+  laErrMessage
+     ) = mibBuilder.importSymbols(
     'UCD-SNMP-MIB',
     'memory',
     'memTotalSwap',
@@ -40,9 +62,30 @@ import os, re
     'ssCpuRawUser',
     'ssCpuRawNice',
     'ssCpuRawIdle',
-    'ssCpuRawSystem'
+    'ssCpuRawSystem',
+    'systemStats',
+      'laTable',
+	  'laEntry',
+	  'laIndex',
+	  'laNames',
+	  'laLoad', 
+	  'laConfig', 
+	  'laLoadInt', 
+	  'laLoadFloat', 
+	  'laErrorFlag',
+	  'laErrMessage'
     )
 
+#class Float(Opaque):
+#    subtypeSpec = Opaque.subtypeSpec+constraint.ValueSizeConstraint(7,7)
+#    fixedLength = 7
+#    pass
+
+class UCDErrorFlag(Integer):
+    subtypeSpec = Integer.subtypeSpec+constraint.SingleValueConstraint(0,1,)
+    namedValues = namedval.NamedValues(("noError", 0), ("error", 1), )
+    pass
+   
 class MemTotalReal(Integer32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
@@ -127,6 +170,51 @@ def _get_cpu_value(key=None):
 		file.close()
 		return int(cpuinfo.split()[cpuvalues[key]])
 
+class GetLaLoad():
+	def __init__(self, i=None):
+		self.i = i
+	def clone(self):
+		return laLoad.getSyntax().clone(str(round(os.getloadavg()[self.i], 2)))
+
+class GetLaLoadInt():
+	def __init__(self, i=None):
+		self.i = i
+	def clone(self):
+		return laLoadInt.getSyntax().clone(int(os.getloadavg()[self.i]//0.01))
+		
+#class GetLaLoadFloat():
+#	def __init__(self, i=None):
+#		self.i = i
+#	def clone(self):
+#		return laLoadFloat.getSyntax().clone(('%.5f' % os.getloadavg()[1]))
+laMax = 12
+
+for i in [0, 1, 2]:
+	laIndexInst		= MibScalarInstance(laIndex.getName(), (i,), laIndex.getSyntax().clone(i))
+	laNamesInst		= MibScalarInstance(laNames.getName(), (i,), laNames.getSyntax().clone('laLoad-' + str((i+1)*5)))
+	laLoadInst		= MibScalarInstance(laLoad.getName(), (i,), GetLaLoad(i))
+	laConfigInst	= MibScalarInstance(laConfig.getName(), (i,), laConfig.getSyntax().clone(laMax))
+	laLoadIntInst	= MibScalarInstance(laLoadInt.getName(), (i,), GetLaLoadInt(i))
+#	laLoadFloatInst = MibScalarInstance(laLoadFloat.getName(), (i,), GetLaLoadFloat(i))
+	if laMax > os.getloadavg()[i]:
+		laErrorFlagInst = MibScalarInstance(laErrorFlag.getName(), (i,), laErrorFlag.getSyntax().clone(UCDErrorFlag(0)))
+		laErrMessageInst= MibScalarInstance(laErrMessage.getName(), (i,), laErrMessage.getSyntax().clone(''))
+	else:
+		laErrorFlagInst = MibScalarInstance(laErrorFlag.getName(), (i,), laErrorFlag.getSyntax().clone(UCDErrorFlag(1)))
+		laErrMessageInst= MibScalarInstance(laErrMessage.getName(), (i,), laErrMessage.getSyntax().clone(str((i+1)*5) + ' min Load Average too high'))
+		
+	namedSyms = {
+		'laIndex' + str(i) : laIndexInst,
+		'laNames' + str(i) : laNamesInst,
+		'laLoad' + str(i)  : laLoadInst,
+		'laConfig' + str(i) : laConfigInst,
+		'laLoadInt' + str(i) : laLoadIntInst,
+#		'laLoadFloat' + str(i) : laLoadFloatInst,
+		'laErrorFlag' + str(i) : laErrorFlagInst,
+		'laErrMessage' + str(i) : laErrMessageInst,
+	}
+	mibBuilder.exportSymbols("__UCD-SNMP-MIB", **namedSyms)
+	
 
 __ssCpuRawUser = MibScalarInstance(ssCpuRawUser.name, (0,), SsCpuRawUser(0))
 __ssCpuRawNice = MibScalarInstance(ssCpuRawNice.name, (0,), SsCpuRawNice(0))
@@ -143,6 +231,7 @@ __memCached    = MibScalarInstance(memCached.name, (0,), MemCached(0))
 mibBuilder.exportSymbols(
     "__UCD-SNMP-MIB",
     memory		 = memory,
+    systemStats  = systemStats,
     memTotalReal = __memTotalReal,
     memTotalSwap = __memTotalSwap,
     memAvailSwap = __memAvailSwap,
