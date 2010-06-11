@@ -3,7 +3,7 @@ Created on Apr 7, 2010
 
 @author: marat
 '''
-
+import M2Crypto
 from M2Crypto.EVP import Cipher
 from M2Crypto.Rand import rand_bytes
 import binascii
@@ -16,9 +16,12 @@ except ImportError:
 
 def keygen(length=40):
 	return binascii.b2a_base64(rand_bytes(length))	
-			
+
 def _init_cipher(key, op_enc=1):
-	return Cipher("des_ede3_cbc", key[0:-8], key[-8:], op=op_enc, padding=0)
+	if int(M2Crypto.version.split('.')[1]) < 20:
+		return Cipher("des_ede3_cbc", key[0:-8], key[-8:], op=op_enc)
+	else:
+		return Cipher("des_ede3_cbc", key[0:-8], key[-8:], op=op_enc, padding=0)
 		
 def encrypt (s, key):
 	c = _init_cipher(key, 1)
