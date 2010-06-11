@@ -50,7 +50,7 @@ class SnmpServer():
 				MibSources += ( (os.path.realpath(os.path.dirname(__file__) + source), ))
 			apply(mibBuilder.setMibPath, MibSources)
 			
-			mibBuilder.loadModules('__UCD-SNMP-MIB', '__UCD-DISKIO-MIB')
+			mibBuilder.loadModules('__UCD-SNMP-MIB', '__UCD-DISKIO-MIB', '__IF-MIB')
 
 			config.addV1System(self._engine, self._security_name, self._community_name)
 			

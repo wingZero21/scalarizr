@@ -26,12 +26,17 @@ class Test(unittest.TestCase):
 	def test_snmp_memory(self):
 		
 		pyvars, vars = getValues((1, 3, 6, 1, 4, 1, 2021, 4))		
-		test = Assertion(pyvars, vars, -3)
+		test = Assertion(pyvars, vars, -4)
 		test.assertValues()
 
 	def test_snmp_la(self):		
 		pyvars, vars = getValues((1, 3, 6, 1, 4, 1, 2021, 10))
 		test = Assertion(pyvars, vars, -3)
+		test.assertValues()
+		
+	def test_snmp_ifstat(self):		
+		pyvars, vars = getValues((1, 3, 6, 1, 2, 1, 2))
+		test = Assertion(pyvars, vars, -8)
 		test.assertValues()
 								
 def getValues(oid):
@@ -63,7 +68,6 @@ class Assertion():
 				for pyvarrow in self.pyvars:
 					for pyname, pyval in pyvarrow:
 						if name.prettyPrint() == pyname.prettyPrint():
-							print val.prettyPrint(), '\t', pyval.prettyPrint()
 							if self.places == None:
 								self.testcase.assertEqual(val.prettyPrint(), pyval.prettyPrint())
 							else:
@@ -73,6 +77,7 @@ class Assertion():
 								except ValueError:
 									self.testcase.assertEqual(val.prettyPrint(), pyval.prettyPrint())
 							
+
 if __name__ == "__main__" :
 	unittest.main()	
 	

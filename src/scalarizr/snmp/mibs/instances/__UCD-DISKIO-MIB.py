@@ -20,12 +20,6 @@ diskIODevice) = mibBuilder.importSymbols(
     'diskIODevice'
     )
 
-file = open('/proc/partitions', "r")
-partitionsList = file.readlines()
-file.close()
-partitions = {}
-
-
 subBlockDevices = []
 blockDevices = os.listdir('/sys/block')
 for device in blockDevices:
