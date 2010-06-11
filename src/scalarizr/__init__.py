@@ -260,7 +260,9 @@ def _init_services():
 		if not os.path.exists(snmpd_conf):
 			raise ScalarizrError("File %s doesn't exists. snmpd is not installed" % (snmpd_conf,))
 		
-		if not os.path.exists(snmpd_conf + ".bak"):
+		if not os.path.exists(snmpd_conf + ".orig"):
+			shutil.copy(snmpd_conf, snmpd_conf + ".orig")
+		else:
 			shutil.copy(snmpd_conf, snmpd_conf + ".bak")
 			
 		inp = open(snmpd_conf, "r")
@@ -268,15 +270,27 @@ def _init_services():
 		inp.close()
 		
 		out = open(snmpd_conf, "w")
+		ucdDiskIOMIB = ".1.3.6.1.4.1.2021.13.15"
+		ucdDiskIOMIB_included = False		
 		for line in lines:
 			if re.match("^(com2sec.+)", line):
 				# Modify community name
-				parts = line.split()
-				parts[3] = platform.get_user_data(UserDataOptions.FARM_HASH) \
+				community_name = platform.get_user_data(UserDataOptions.FARM_HASH) \
 						or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)
-				line = " ".join(parts)
+				line = line.replace(line.split()[3], community_name)
+				
+			elif re.match("^view\\s+systemview\\s+included", line):
+				if line.split()[3] == ucdDiskIOMIB:
+					ucdDiskIOMIB_included = True
+				
 			out.write(line)
+			
+		if not ucdDiskIOMIB_included:
+			out.write("view systemview included " + ucdDiskIOMIB)
+			
 		out.close()
+		
+		# Add UCD-DISKIO-MIB
 			
 		
 	# Initialize handlers

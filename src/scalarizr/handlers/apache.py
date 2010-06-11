@@ -12,9 +12,7 @@ from scalarizr.util import disttool, system, backup_file
 import logging
 import os
 import re
-import subprocess
-import shutil
-#from scalarizr.handlers import hooks
+
 
 def get_handlers ():
 	return [ApacheHandler()]
@@ -37,9 +35,10 @@ class ApacheHandler(Handler):
 		self.ssl_conf_listen_regexp = re.compile(r"Listen\s+\d+\n",re.IGNORECASE)
 		bus.define_events('apache_reload')
 
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
+
 	def on_VhostReconfigure(self, message):
-		self._logger.debug("Entering on_VhostReconfigure")
-		
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
 		self._reload_apache()
@@ -146,7 +145,7 @@ class ApacheHandler(Handler):
 					except IOError, e:
 						self._logger.error('Couldn`t write to vhost file %s. %s', 
 								vhost_fullpath, e.strerror)
-					self._apache_vhost_create_paths(vhost_fullpath) 	
+					self._create_vhost_paths(vhost_fullpath) 	
 				
 					self._logger.debug("Checking apache SSL mod")
 					self._check_mod_ssl(httpd_conf_path)	
@@ -161,12 +160,12 @@ class ApacheHandler(Handler):
 					except IOError, e:
 						self._logger.error('Couldn`t write to vhost file %s. %s', 
 										   vhost_fullpath, e.strerror)
-					self._apache_vhost_create_paths(vhost_fullpath)
+					self._create_vhost_paths(vhost_fullpath)
 				else:
 					self._logger.info('SSL is neither 0 or 1, skipping virtual host %s', vhost.hostname)
 			
 			if disttool.is_debian_based():
-				self._apache_default_conf_patch_deb(vhosts_path)
+				self._patch_default_conf_deb(vhosts_path)
 			
 			self._logger.debug("Checking if vhost directory included in main apache config")
 			index = 0
@@ -355,10 +354,8 @@ class ApacheHandler(Handler):
 				self._logger.error('Apache realoading failed by running %s. %s', 
 						''.join(reload_command), e.strerror)	
 	
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
 	
-	def _apache_default_conf_patch_deb(self, vhosts_path):
+	def _patch_default_conf_deb(self, vhosts_path):
 		self._logger.debug("Replacing NameVirtualhost and Virtualhost ports especially for debian-based linux")
 		default_vhost_path = vhosts_path + '/' + '000-default'
 		if os.path.exists(default_vhost_path):
@@ -380,7 +377,7 @@ class ApacheHandler(Handler):
 					self._logger.error('Couldn`t write to default vhost config file %s. %s', 
 							default_vhost_path, e.strerror)
 
-	def _apache_vhost_create_paths(self, vhost_path):
+	def _create_vhost_paths(self, vhost_path):
 		if os.path.exists(vhost_path):
 			try:
 				vhost_file = open(vhost_path, 'r')
