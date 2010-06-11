@@ -33,6 +33,8 @@ class ApacheHandler(Handler):
 		self.customlog_regexp = re.compile( r"CustomLog\s+(\S*)", re.IGNORECASE)
 		self.load_module_regexp = re.compile(r"\nLoadModule\s+",re.IGNORECASE)
 		self.server_root_regexp = re.compile(r"ServerRoot\s+\"(\S*)\"",re.IGNORECASE)
+		self.ssl_conf_name_vhost_regexp = re.compile(r"NameVirtualHost\s+\*:\d+\n",re.IGNORECASE)
+		self.ssl_conf_listen_regexp = re.compile(r"Listen\s+\d+\n",re.IGNORECASE)
 		bus.define_events('apache_reload')
 
 	def on_VhostReconfigure(self, message):
@@ -195,6 +197,7 @@ class ApacheHandler(Handler):
 			self._check_mod_ssl_deb(httpd_conf_path)
 		elif disttool.is_redhat_based():
 			self._check_mod_ssl_redhat(httpd_conf_path)
+
 			
 	def _check_mod_ssl_deb(self, httpd_conf_path):
 		mods_available = os.path.dirname(httpd_conf_path) + '/mods-available'
@@ -225,6 +228,8 @@ class ApacheHandler(Handler):
 				
 	def _check_mod_ssl_redhat(self, httpd_conf_path):
 		include_mod_ssl = 'LoadModule ssl_module modules/mod_ssl.so'
+		self._logger.debug("Searching in apache config file %s to find server root",
+				httpd_conf_path)
 		
 		f = None
 		conf_str = None		
@@ -243,14 +248,68 @@ class ApacheHandler(Handler):
 		
 		if server_root_entries:
 			server_root = server_root_entries[0]
+			self._logger.debug("Server root found: %s", server_root)
 		else:
+			self._logger.error("server root not found in apache config file %s", httpd_conf_path)
 			server_root = os.path.dirname(httpd_conf_path)
+			self._logger.debug("trying to use httpd.conf dir %s as server root", server_root)
 		mod_ssl_file = server_root + '/modules/mod_ssl.so'
 		
 		if not os.path.isfile(mod_ssl_file) and not os.path.islink(mod_ssl_file):
-			self._logger.error('mod_ssl file %s does not exist. Try "sudo yum install mod_ssl" ',
+			self._logger.error('%s does not exist. Try "sudo yum install mod_ssl" ',
 						mod_ssl_file)
-		else:
+		else:			
+			#ssl.conf part
+			ssl_conf_path = server_root + '/conf.d/ssl.conf'
+			ssl_conf_minimal = "Listen 443\nNameVirtualHost *:443\n"
+			ssl_conf_file = None
+			ssl_conf_str = None	
+			ssl_conf_str_updated = None
+			
+			if not os.path.exists(ssl_conf_path):
+				self._logger.error("SSL config %s doesn`t exist", ssl_conf_path)
+			else:
+				try:
+					ssl_conf_file = open(ssl_conf_path, 'r')
+					ssl_conf_str = ssl_conf_file.read()
+				except IOError, e: 
+					self._logger.error('Cannot read SSL config file %s. %s', 
+							ssl_conf_path, e.strerror)
+					return
+				finally:
+					if ssl_conf_file:
+						ssl_conf_file.close()
+			
+				if not ssl_conf_str:
+					self._logger.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
+					ssl_conf_str_updated = ssl_conf_minimal
+						
+				else:
+					if not self.ssl_conf_name_vhost_regexp.search(ssl_conf_str):
+						self._logger.debug("NameVirtualHost directive not found in %s", ssl_conf_path)
+						listen_pos = self.ssl_conf_listen_regexp.search(ssl_conf_str)
+						if not listen_pos:
+							self._logger.debug("Listen directive not found in %s. ", ssl_conf_path)
+							self._logger.debug("Patching %s with Listen & NameVirtualHost directives.",
+										ssl_conf_path)
+							ssl_conf_str_updated = ssl_conf_minimal + ssl_conf_str
+						else:
+							self._logger.debug("NameVirtualHost directive inserted after Listen directive.")
+							listen_index = listen_pos.end()
+							ssl_conf_str_updated = ssl_conf_str[:listen_index] + '\nNameVirtualHost *:443\n' + ssl_conf_str[listen_index:]
+				if ssl_conf_str_updated:
+					try:
+						self._logger.debug("Writing changes to SSL config file %s.", ssl_conf_path)
+						ssl_conf_file = open(ssl_conf_path, 'w')					
+						ssl_conf_file.write(ssl_conf_str_updated)
+					except IOError, e:
+						self._logger.error('Cannot save SSL config file %s. %s', 
+								ssl_conf_path, e.strerror)
+					finally:
+						if ssl_conf_file:
+							ssl_conf_file.close()
+			
+			#apache.conf part
 			index = conf_str.find('mod_ssl.so')
 			if conf_str and index == -1:
 				backup_file(httpd_conf_path)
