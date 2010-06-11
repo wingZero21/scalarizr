@@ -37,7 +37,7 @@ class SnmpServer():
 			config.addSocketTransport(
 			    self._engine,
 			    udp.domainName,
-			    udp.UdpSocketTransport().openServerMode((socket.gethostname(), self.port))
+			    udp.UdpSocketTransport().openServerMode(('', self.port))
 			    )
 			
 			mibBuilder = self._engine.msgAndPduDsp.mibInstrumController.mibBuilder
@@ -50,7 +50,7 @@ class SnmpServer():
 				MibSources += ( (os.path.realpath(os.path.dirname(__file__) + source), ))
 			apply(mibBuilder.setMibPath, MibSources)
 			
-			mibBuilder.loadModules('__UCD-SNMP-MIB')
+			mibBuilder.loadModules('__UCD-SNMP-MIB', '__UCD-DISKIO-MIB')
 
 			config.addV1System(self._engine, self._security_name, self._community_name)
 			

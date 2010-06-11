@@ -3,6 +3,8 @@ from time import time
 from pysnmp import majorVersionId
 import os, re
 from pyasn1.type import constraint, namedval
+
+
 ( Integer, OctetString, ) = mibBuilder.importSymbols("ASN1", "Integer", "OctetString")
 ( DisplayString,) = mibBuilder.importSymbols("SNMPv2-TC", "DisplayString")
 
@@ -24,7 +26,7 @@ from pyasn1.type import constraint, namedval
     'MibTableColumn',
     'Opaque'
 	)
-
+  
 ( 
  memory,
   memTotalSwap,
@@ -181,28 +183,44 @@ class GetLaLoadInt():
 		self.i = i
 	def clone(self):
 		return laLoadInt.getSyntax().clone(int(os.getloadavg()[self.i]//0.01))
+
+class GetLaErrorFlag():
+	def __init__(self, i=None):
+		self.i = i
+	def clone(self):
+		if laMax > os.getloadavg()[self.i]:
+			return laErrorFlag.getSyntax().clone(UCDErrorFlag(0))
+		else:
+			return laErrorFlag.getSyntax().clone(UCDErrorFlag(1))
+	
+class GetLaErrorMsg():
+	def __init__(self, i=None):
+		self.i = i
+	def clone(self):
+		if laMax > os.getloadavg()[self.i]:
+			return laErrMessage.getSyntax().clone('')
+		else:
+			return laErrMessage.getSyntax().clone(laMinutes[self.i] + ' min Load Average too high')
 		
 #class GetLaLoadFloat():
 #	def __init__(self, i=None):
 #		self.i = i
 #	def clone(self):
 #		return laLoadFloat.getSyntax().clone(('%.5f' % os.getloadavg()[1]))
+
+laMinutes = {0 : '1', 1: '5', 2: '15'}
 laMax = 12
 
 for i in [0, 1, 2]:
-	laIndexInst		= MibScalarInstance(laIndex.getName(), (i,), laIndex.getSyntax().clone(i))
-	laNamesInst		= MibScalarInstance(laNames.getName(), (i,), laNames.getSyntax().clone('laLoad-' + str((i+1)*5)))
-	laLoadInst		= MibScalarInstance(laLoad.getName(), (i,), GetLaLoad(i))
-	laConfigInst	= MibScalarInstance(laConfig.getName(), (i,), laConfig.getSyntax().clone(laMax))
-	laLoadIntInst	= MibScalarInstance(laLoadInt.getName(), (i,), GetLaLoadInt(i))
+	laIndexInst		= MibScalarInstance(laIndex.getName(), (i+1,), laIndex.getSyntax().clone(i+1))
+	laNamesInst		= MibScalarInstance(laNames.getName(), (i+1,), laNames.getSyntax().clone('Load-' + laMinutes[i]))
+	laLoadInst		= MibScalarInstance(laLoad.getName(), (i+1,), GetLaLoad(i))
+	laConfigInst	= MibScalarInstance(laConfig.getName(), (i+1,), laConfig.getSyntax().clone(laMax))
+	laLoadIntInst	= MibScalarInstance(laLoadInt.getName(), (i+1,), GetLaLoadInt(i))
 #	laLoadFloatInst = MibScalarInstance(laLoadFloat.getName(), (i,), GetLaLoadFloat(i))
-	if laMax > os.getloadavg()[i]:
-		laErrorFlagInst = MibScalarInstance(laErrorFlag.getName(), (i,), laErrorFlag.getSyntax().clone(UCDErrorFlag(0)))
-		laErrMessageInst= MibScalarInstance(laErrMessage.getName(), (i,), laErrMessage.getSyntax().clone(''))
-	else:
-		laErrorFlagInst = MibScalarInstance(laErrorFlag.getName(), (i,), laErrorFlag.getSyntax().clone(UCDErrorFlag(1)))
-		laErrMessageInst= MibScalarInstance(laErrMessage.getName(), (i,), laErrMessage.getSyntax().clone(str((i+1)*5) + ' min Load Average too high'))
-		
+	laErrorFlagInst = MibScalarInstance(laErrorFlag.getName(), (i+1,), GetLaErrorFlag(i))
+	laErrMessageInst= MibScalarInstance(laErrMessage.getName(), (i+1,), GetLaErrorMsg(i))
+
 	namedSyms = {
 		'laIndex' + str(i) : laIndexInst,
 		'laNames' + str(i) : laNamesInst,
