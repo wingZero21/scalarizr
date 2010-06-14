@@ -3,6 +3,8 @@ import os
 import signal
 from scalarizr.snmp import agent
 from pysnmp.entity.rfc3413.oneliner import cmdgen
+from scalarizr.util import init_tests
+
 	
 class Test(unittest.TestCase):
 	
@@ -18,7 +20,6 @@ class Test(unittest.TestCase):
 			os.kill(self._pid, signal.SIGKILL)
 			
 	def test_snmp_diskio(self):
-	
 		pyvars, vars = getValues((1, 3, 6, 1, 4, 1, 2021, 13, 15, 1))		
 		test = Assertion(pyvars, vars)
 		test.assertValues()
@@ -45,7 +46,7 @@ def getValues(oid):
 			cmdgen.CommunityData('test-agent', 'public'),
 			cmdgen.UdpTransportTarget(('localhost', 8161)),
 			oid
-			)	
+			)
 		
 		errorIndication, errorStatus, errorIndex, \
 		vars = cmdgen.CommandGenerator().nextCmd(
@@ -79,7 +80,8 @@ class Assertion():
 							
 
 if __name__ == "__main__" :
-	unittest.main()	
+	init_tests()
+	unittest.main()
 	
 	
 

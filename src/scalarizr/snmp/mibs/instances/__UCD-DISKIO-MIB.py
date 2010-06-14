@@ -20,19 +20,13 @@ diskIODevice) = mibBuilder.importSymbols(
     'diskIODevice'
     )
 
-subBlockDevices = []
-blockDevices = os.listdir('/sys/block')
-for device in blockDevices:
+blockDevices = []
+for device in os.listdir('/sys/block'):
+	blockDevices.append(device)
 	subDevices = os.listdir('/sys/block/' + device)
 	for subDevice in subDevices:
 		if re.match("^[hs]d[a-z]\d+", subDevice):
-			subBlockDevices.append(subDevice)
-
-blockDevices += subBlockDevices
-
-#for index in range(len(blockDevices)):
-#	if re.match ('[\s*\d*]{3}', row):
-#		partitions[row.split()[1]] = row.split()[3] 
+			blockDevices.append(subDevice)
 		
 for index in range(len(blockDevices)):
 	diskIOIndexInst		= MibScalarInstance(diskIOIndex.getName(), (int(index)+1 ,), diskIOIndex.getSyntax().clone(int(index)+1))

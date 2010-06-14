@@ -7,14 +7,10 @@ Created on Jun 4, 2010
 # Command Responder
 from pysnmp.entity import engine, config
 from pysnmp.carrier.asynsock.dgram import udp
-#from pysnmp.carrier.asynsock.dgram import udp6
 from pysnmp.entity.rfc3413 import cmdrsp, context
-import socket
-#from pysnmp.smi import builder
-import os, re
-
-#mibBuilder = builder.MibBuilder()
-#Integer32, = mibBuilder.importSymbols('SNMPv2-SMI', 'Integer32')
+import os, re, sys, logging, socket
+from pysnmp.carrier.error import CarrierError
+from pysnmp.smi.error import SmiError
 
 class SnmpServer():
 	port = None
@@ -23,6 +19,7 @@ class SnmpServer():
 	_engine = None 
 	
 	def __init__(self, port=None, security_name=None, community_name=None):
+		self._logger = logging.getLogger(__name__)
 		self.port = port
 		self._security_name = security_name
 		self._community_name = community_name
@@ -34,47 +31,52 @@ class SnmpServer():
 			self._engine = engine.SnmpEngine()
 			
 			# Setup UDP over IPv4 transport endpoint
+		try:
 			config.addSocketTransport(
-			    self._engine,
-			    udp.domainName,
-			    udp.UdpSocketTransport().openServerMode(('', self.port))
-			    )
+			self._engine,
+			udp.domainName,
+			udp.UdpSocketTransport().openServerMode(('', self.port))
+			)
+		except CarrierError:
+			self._logger.error('Can\'t run SNMP agent on port %d: Address already in use', self.port)
+			raise
+		
+		mibBuilder = self._engine.msgAndPduDsp.mibInstrumController.mibBuilder
 			
-			mibBuilder = self._engine.msgAndPduDsp.mibInstrumController.mibBuilder
+		#mibBuilder
+		MibSources = mibBuilder.getMibPath()
 			
-			#mibBuilder.
-			MibSources = mibBuilder.getMibPath()
+		sources =  ['/mibs','/mibs/instances']
+		for source in sources:
+			MibSources += ((os.path.realpath(os.path.dirname(__file__) + source), ))
+		apply(mibBuilder.setMibPath, MibSources)
 			
-			sources =  ['/mibs','/mibs/instances']
-			for source in sources:
-				MibSources += ( (os.path.realpath(os.path.dirname(__file__) + source), ))
-			apply(mibBuilder.setMibPath, MibSources)
-			
+		try:
 			mibBuilder.loadModules('__UCD-SNMP-MIB', '__UCD-DISKIO-MIB', '__IF-MIB')
+		except SmiError:
+			self._logger.error('Can\'t load modules')
+			raise
 
-			config.addV1System(self._engine, self._security_name, self._community_name)
+		config.addV1System(self._engine, self._security_name, self._community_name)
 			
-			# VACM setup
-			config.addContext(self._engine, '')
-			config.addRwUser(self._engine, 1, self._security_name, 'noAuthNoPriv', (1,3,6)) # v1
-			config.addRwUser(self._engine, 2, self._security_name, 'noAuthNoPriv', (1,3,6)) # v2c
+		# VACM setup
+		config.addContext(self._engine, '')
+		config.addRwUser(self._engine, 1, self._security_name, 'noAuthNoPriv', (1,3,6)) # v1
+		config.addRwUser(self._engine, 2, self._security_name, 'noAuthNoPriv', (1,3,6)) # v2c
 			
-			# SNMP context
-
-			snmpContext = context.SnmpContext(self._engine)
-			# Apps registration
-			cmdrsp.GetCommandResponder(self._engine, snmpContext)
-			cmdrsp.SetCommandResponder(self._engine, snmpContext)
-			cmdrsp.NextCommandResponder(self._engine, snmpContext)
-			cmdrsp.BulkCommandResponder(self._engine, snmpContext)
-
+		# SNMP context
+		snmpContext = context.SnmpContext(self._engine)
+		# Apps registration
+		cmdrsp.GetCommandResponder(self._engine, snmpContext)
+		cmdrsp.SetCommandResponder(self._engine, snmpContext)
+		cmdrsp.NextCommandResponder(self._engine, snmpContext)
+		cmdrsp.BulkCommandResponder(self._engine, snmpContext)
 			
 		# Start server
 		self._engine.transportDispatcher.jobStarted(1)
 		self._engine.transportDispatcher.runDispatcher()
 	
 	def stop(self):
-#		udp.UdpSocketTransport().handle_close()
-		self._engine.transportDispatcher.closeDispatcher()
+		udp.UdpSocketTransport().handle_close()
 
 
