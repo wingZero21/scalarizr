@@ -344,6 +344,8 @@ def _configure_option(optparser, cli_opt_name, opt_title, opt_wrapper, ini_updat
 			raise ScalarizrError("Option '%s' is missed" % (cli_opt_name))
 
 def _configure ():
+	print "Configuring scalarizr..."
+	
 	optparser = bus.optparser
 	config = bus.config
 	gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
@@ -426,7 +428,11 @@ def _configure ():
 	conn.executescript(open(os.path.join(bus.etc_path, "public.d/db.sql")).read())
 	conn.commit()
 	
-	print "Done"
+	if optparser.values.run_import:
+		print "Starting import process..."
+		print "Don't terminate Scalarizr until Scalr will create the new role"
+	else:
+		print "Done"
 
 
 _KNOWN_PLATFORMS = ("ec2", "rs", "vps")

@@ -104,7 +104,6 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 		try:
 			# Serialize
 			xml = message.toxml()
-			xml = xml.ljust(len(xml) + 8 - len(xml) % 8, " ")
 			self._logger.debug("Delivering message '%s' %s", message.name, xml)
 			
 			# Crypt
