@@ -40,7 +40,7 @@ class NotConfiguredError(BaseException):
 
 
 __version__ = "0.5-1"	
-EMBED_SNMPD = False
+EMBED_SNMPD = True
 _running = False
 
 
