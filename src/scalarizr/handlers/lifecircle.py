@@ -4,10 +4,9 @@ Created on Mar 3, 2010
 @author: marat
 '''
 
-import scalarizr
+import scalarizr.handlers
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler
-from scalarizr.messaging import Queues, Messages, MetaOptions
+from scalarizr.messaging import Messages, MetaOptions
 from scalarizr.util import cryptotool, configtool
 import logging
 import os
@@ -18,7 +17,7 @@ import binascii
 def get_handlers():
 	return [LifeCircleHandler()]
 
-class LifeCircleHandler(Handler):
+class LifeCircleHandler(scalarizr.handlers.Handler):
 	_logger = None
 	_bus = None
 	_msg_service = None
@@ -27,6 +26,9 @@ class LifeCircleHandler(Handler):
 	_config = None
 	
 	_new_crypto_key = None
+	
+	FLAG_REBOOT = "reboot"
+	FLAG_HOST_INIT = "hostinit"
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -79,7 +81,7 @@ class LifeCircleHandler(Handler):
 		self._msg_service = bus.messaging_service
 		self._producer = self._msg_service.get_producer()
 		self._config = bus.config
-		self._platform = bus.platfrom
+		self._platform = bus.platform
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -90,24 +92,32 @@ class LifeCircleHandler(Handler):
 	
 	def on_init(self):
 		bus.on("start", self.on_start)
-		self._producer.on("before_send", self.on_before_message_send)		
+		self._producer.on("before_send", self.on_before_message_send)
+		
+		try:
+			scalarizr.handlers.script_executor.skip_events.add(
+				Messages.INT_SERVER_REBOOT, 
+				Messages.INT_SERVER_HALT, 
+				Messages.HOST_INIT_RESPONSE
+			)
+		except AttributeError:
+			pass
+
 
 
 	def on_start(self):
-		reboot_flag = os.path.join(bus.etc_path, ".reboot")
-		hostinit_flag = os.path.join(bus.etc_path, ".hostinit")
 		optparser = bus.optparser
 		
-		if os.path.exists(reboot_flag):
+		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")
-			os.remove(reboot_flag)			
+			self._clear_flag(self.FLAG_REBOOT)			
 			self._start_after_beboot()
 			
 		elif optparser.values.run_import:
 			self._logger.info("Server will be imported into Scalr")
 			self._start_import()
 			
-		elif not os.path.exists(hostinit_flag):
+		elif not self._flag_exists(self.FLAG_HOST_INIT):
 			self._logger.info("Starting initialization")
 			self._start_init()
 		else:
@@ -115,13 +125,9 @@ class LifeCircleHandler(Handler):
 
 
 	def _start_after_beboot(self):
-		# Send RebootFinish
-		msg = self._msg_service.new_message(Messages.REBOOT_FINISH)
-		self._put_broadcast_data(msg)
-		
+		msg = self._new_message(Messages.REBOOT_FINISH, broadcast=True)
 		bus.fire("before_reboot_finish", msg)
-		self._producer.send(Queues.CONTROL, msg)
-		
+		self._send_message(msg)
 		bus.fire("reboot_finish")		
 
 	
@@ -177,27 +183,21 @@ class LifeCircleHandler(Handler):
 		self._new_crypto_key = cryptotool.keygen()
 		
 		# Prepare HostInit
-		msg = self._msg_service.new_message(Messages.HOST_INIT)
-		self._put_broadcast_data(msg)
-		msg.crypto_key = self._new_crypto_key
-		
+		msg = self._new_message(Messages.HOST_INIT, {"crypto_key" : self._new_crypto_key}, broadcast=True)
 		bus.fire("before_host_init", msg)
 		
 		# Update crypto key when HostInit will be delivered 
 		# TODO: Remove this confusing listener when blocking will be implemented in message producer 
 		self._producer.on("send", self.on_hostinit_send)
-		# Send HostInit
-		self._producer.send(Queues.CONTROL, msg) 
+		
+		self._send_message(msg)
 
 	
 	def _start_import(self):
-		# Send Hello		
-		msg = self._msg_service.new_message(Messages.HELLO)
-		msg.architecture = self._platform.get_architecture()
-		
+		# Send Hello
+		msg = self._new_message(Messages.HELLO, {"architecture" : self._platform.get_architecture()})		
 		bus.fire("before_hello", msg)
-		self._producer.send(Queues.CONTROL, msg)
-		
+		self._send_message(msg)
 		bus.fire("hello")
 
 
@@ -215,52 +215,29 @@ class LifeCircleHandler(Handler):
 		
 		del self._new_crypto_key
 		
-		
-		hostinit_file = os.path.join(bus.etc_path, ".hostinit")
-		try:
-			self._logger.debug("Touch file '%s'", hostinit_file)
-			open(hostinit_file, "w+").close()
-		except IOError, e:
-			self._logger.error("Cannot touch file '%s'. IOError: %s", hostinit_file, str(e))
-			
+		self._set_flag(self.FLAG_HOST_INIT)
 		bus.fire("host_init")		
 
 
 	def on_IntServerReboot(self, message):
 		# Scalarizr must detect that it was resumed after reboot
-		reboot_file = os.path.join(bus.etc_path, ".reboot")
-		try:
-			self._logger.debug("Touch file '%s'", reboot_file)
-			open(reboot_file, "w+").close()
-		except IOError, e:
-			self._logger.error("Cannot touch file '%s'. IOError: %s", reboot_file, str(e))
-			
+		self._set_flag(self.FLAG_REBOOT)
 		# Send message 
-		msg = self._msg_service.new_message(Messages.REBOOT_START)
-		self._put_broadcast_data(msg)
-		self._producer.send(Queues.CONTROL, msg)
-			
+		self._send_message(Messages.REBOOT_START, broadcast=True)
 		bus.fire("reboot_start")
 		
 	
 	def on_IntServerHalt(self, message):
-		msg = self._msg_service.new_message(Messages.HOST_DOWN)
-		self._put_broadcast_data(msg)
-		
-		bus.fire("before_host_down", msg)		
-		self._producer.send(Queues.CONTROL, msg)
-
+		msg = self._new_message(Messages.HOST_DOWN, broadcast=True)
+		bus.fire("before_host_down", msg)
+		self._send_message(msg)		
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
 		bus.fire("host_init_response", message)
-		
-		msg = self._msg_service.new_message(Messages.HOST_UP)
-		self._put_broadcast_data(msg)
-		
+		msg = self._new_message(Messages.HOST_UP, broadcast=True)
 		bus.fire("before_host_up", msg)
-		self._producer.send(Queues.CONTROL, msg)
-		
+		self._send_message(msg)
 		bus.fire("host_up")
 
 	def on_before_message_send(self, queue, message):
@@ -268,5 +245,23 @@ class LifeCircleHandler(Handler):
 		Add scalarizr version to meta
 		"""
 		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
+		
+		
+	def _get_flag_filename(self, name):
+		return os.path.join(bus.etc_path, "." + name)
+	
+	def _set_flag(self, name):
+		file = self._get_flag_filename(name)
+		try:
+			self._logger.debug("Touch file '%s'", file)
+			open(file, "w+").close()
+		except IOError, e:
+			self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))		
+	
+	def _flag_exists(self, name):
+		os.path.exists(self._get_flag_filename(name))
+	
+	def _clear_flag(self, name):
+		os.remove(self._get_flag_filename(name))	
 	
 	

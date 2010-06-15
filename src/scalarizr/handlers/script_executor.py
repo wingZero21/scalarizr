@@ -38,6 +38,11 @@ OSError: [Errno 2] No such file or directory: '/usr/local/bin/scalr-scripting.12
 def get_handlers ():
 	return [ScriptExecutor()]
 
+skip_events = set()
+"""
+@var ScriptExecutor will doesn't request scripts on passed events 
+"""
+
 class ScriptExecutor(Handler):
 	name = "script_executor"
 	
@@ -59,14 +64,14 @@ class ScriptExecutor(Handler):
 	_logs_truncate_over = None
 	
 	_wait_async = False
-	
+
 	def __init__(self, wait_async=False):
 		self._logger = logging.getLogger(__name__)		
 		self._wait_async = wait_async
 		
 		self._queryenv = bus.queryenv_service
 		self._msg_service = bus.messaging_service
-		self._platform = bus.platfrom
+		self._platform = bus.platform
 		self._config = bus.config
 		
 		sect_name = configtool.get_handler_section_name(self.name)
@@ -86,8 +91,8 @@ class ScriptExecutor(Handler):
 		
 		# logs_truncate_over
 		self._logs_truncate_over = parse_size(self._config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
-		
-	
+
+
 	def exec_scripts_on_event (self, event_name, event_id=None):
 		self._logger.debug("Fetching scripts for event %s", event_name)	
 		scripts = self._queryenv.list_scripts(event_name, event_id)
@@ -210,7 +215,7 @@ class ScriptExecutor(Handler):
 				
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return True
+		return not message.name in skip_events
 	
 	def __call__(self, message):
 		self._event_name = message.event_name if message.name == Messages.EXEC_SCRIPT else message.name

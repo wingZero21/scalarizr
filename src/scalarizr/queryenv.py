@@ -256,6 +256,12 @@ class Mountpoint(object):
 	create_fs = False
 	is_array = False
 	volumes  = []
+	
+	def __str__(self):
+		return "Mountpoint(name: %s, dir: %s, create_fs: %s, num_volumes: %d)" % (
+			self.name, self.dir, self.create_fs, len(self.volumes)
+		)
+	
 	def __repr__(self):
 		return "name = " + str(self.name) \
 	+ "; dir = " + str(self.dir) \
@@ -266,6 +272,10 @@ class Mountpoint(object):
 class Volume(object):
 	volume_id  = None
 	device = None
+	
+	def __str__(self):
+		return "Volume(volume_id: %s, device: %s)" % (self.volume_id, self.device)
+	
 	def __repr__(self):
 		return 'volume_id = ' + str(self.volume_id) \
 	+ "; device = " + str(self.device)

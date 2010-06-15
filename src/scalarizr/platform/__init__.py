@@ -31,6 +31,7 @@ class PlatformFactory(object):
 class Platform():
 	name = None
 	_arch = None
+	_access_data = None
 	
 	def get_private_ip(self):
 		"""
@@ -50,6 +51,20 @@ class Platform():
 		"""
 		return {} if key else None
 
+	def set_access_data(self, access_data):
+		self._access_data = access_data
+	
+	def get_access_data(self, prop=None):
+		if prop:
+			try:
+				return self._access_data[prop]
+			except TypeError, KeyError:
+				raise PlatformError("Platform access data property '%s' doesn't exists" % (prop,))
+		else:
+			return self._access_data
+		
+	def clear_access_data(self):
+		del self._access_data
 	
 	def get_architecture(self):
 		"""

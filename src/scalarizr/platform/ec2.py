@@ -25,9 +25,9 @@ UD_OPT_S3_BUCKET_NAME = "s3bucket"
 
 
 def get_platform():
-	return AwsPlatform()
+	return Ec2Platform()
 
-class AwsPlatform(Platform):
+class Ec2Platform(Platform):
 	name = "ec2"
 	
 	_meta_url = "http://169.254.169.254/"
@@ -35,10 +35,7 @@ class AwsPlatform(Platform):
 	_metadata = None
 	_logger = None
 	
-	_pk = _cert = _ec2_cert = None
-	
-	_ec2_conn = None
-	_s3_conn = None	
+	_ec2_cert = None
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -48,6 +45,9 @@ class AwsPlatform(Platform):
 	
 	def get_public_ip(self):
 		return self._get_property("latest/meta-data/public-ipv4")
+	
+	def get_public_hostname(self):
+		return self._get_property("latest/meta-data/public-hostname")
 	
 	def _get_property(self, name):
 		if not self._properties.has_key(name):
@@ -109,23 +109,14 @@ class AwsPlatform(Platform):
 		return self._get_property("latest/meta-data/public-keys/0/openssh-key")
 			
 	def get_account_id(self):
-		config = bus.config
-		return config.get(configtool.get_platform_section_name(self.name), OPT_ACCOUNT_ID)
+		return self.get_access_data("account_id").encode("ascii")
 			
 	def get_access_keys(self):
-		config = bus.config
-		sect_name = configtool.get_platform_section_name(self.name)
-		return config.get(sect_name, OPT_KEY_ID), config.get(sect_name, OPT_KEY)
+		# Keys must be in ASCII because hmac functions doesn't works with unicode		
+		return (self.get_access_data("key").encode("ascii"), self.get_access_data("key_id").encode("ascii"))
 			
 	def get_cert_pk(self):
-		if not self._cert:
-			config = bus.config
-			sect_name = configtool.get_platform_section_name(self.name)
-			self._cert = configtool.read_key(config.get(sect_name, OPT_CERT_PATH), 
-					key_title="EC2 user certificate")
-			self._pk = configtool.read_key(config.get(sect_name, OPT_PK_PATH), 
-					key_title="EC2 user private key")
-		return self._cert, self._pk
+		return (self.get_access_data("cert").encode("ascii"), self.get_access_data("pk").encode("ascii"))
 	
 	def get_ec2_cert(self):
 		if not self._ec2_cert:
@@ -135,15 +126,12 @@ class AwsPlatform(Platform):
 					key_title="EC2 certificate")
 		return self._ec2_cert
 	
-	def get_ec2_conn(self):
-		if self._ec2_conn is None:
-			key_id, key = self.get_access_keys()
-			self._ec2_conn = connect_ec2(key_id, key, 
-						region=RegionInfo(name=self.get_avail_zone(), endpoint="ec2.amazonaws.com"))
-		return self._ec2_conn
+	def new_ec2_conn(self):
+		key_id, key = self.get_access_keys()
+		return connect_ec2(key_id, key, 
+				region=RegionInfo(name=self.get_avail_zone(), endpoint="ec2.amazonaws.com"))
 
-	def get_s3_conn(self):
-		if self._s3_conn is None:
-			key_id, key = self.get_access_keys()
-			self._s3_conn = connect_s3(key_id, key)
-		return self._s3_conn
+	def new_s3_conn(self):
+		key_id, key = self.get_access_keys()
+		return connect_s3(key_id, key)
+

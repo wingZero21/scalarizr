@@ -5,41 +5,36 @@ Created on Mar 2, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.util import configtool
-import scalarizr.platform.ec2 as ec2_platform
+from scalarizr.util import system
 import logging
-import string
+
+
 
 def get_handlers ():
-	return [AwsLifeCircleHandler()]
+	return [Ec2LifeCircleHandler()]
 
-class AwsLifeCircleHandler(Handler):
+class Ec2LifeCircleHandler(Handler):
 	_logger = None
 	_platform = None
 	"""
-	@ivar scalarizr.platform.ec2.AwsPlatform:
+	@ivar scalarizr.platform.ec2.Ec2Platform:
 	"""
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._platform = bus.platfrom
+		self._platform = bus.platform
 		bus.on("init", self.on_init)		
 	
 	def on_init(self, *args, **kwargs):
 		bus.on("before_hello", self.on_before_hello)		
 		bus.on("before_host_init", self.on_before_host_init)
-		bus.on("host_init_response", self.on_host_init_response)
 
 		msg_service = bus.messaging_service
 		producer = msg_service.get_producer()
 		producer.on("before_send", self.on_before_message_send)
-
-	
-	def on_host_init_response(self, message):
-		"""
-		@param message: HostInitResponse message 
-		"""
-		set_aws_credentials(message)
+		
+		# Set the hostname to this instance's public hostname
+		system("hostname " + self._platform.get_public_hostname())
 	
 	
 	def on_before_hello(self, message):
@@ -57,7 +52,7 @@ class AwsLifeCircleHandler(Handler):
 		"""
 		@param message: HostInit message
 		"""
-		
+
 		message.ssh_pub_key = self._platform.get_ssh_pub_key()
 
 
@@ -65,39 +60,6 @@ class AwsLifeCircleHandler(Handler):
 		"""
 		@todo: add aws specific here
 		"""
+		
 		pass
-	
-
-def set_aws_credentials(message):
-	platform = bus.platfrom
-	logger = logging.getLogger(__name__)
-	
-	# Update ec2 platform configurations
-	sect_name = configtool.get_platform_section_name(platform.name)
-	private_filename = configtool.get_platform_filename(
-				platform.name, ret=configtool.RET_PRIVATE)
-		
-	# Private	
-	configtool.update(private_filename, {
-		sect_name : {
-			# Keys must be in ASCII because hmac functions doesn't works with unicode
-			ec2_platform.OPT_ACCOUNT_ID : message.aws_account_id.encode("ascii"),
-			ec2_platform.OPT_KEY_ID : message.aws_key_id.encode("ascii"),
-			ec2_platform.OPT_KEY : message.aws_key.encode("ascii")
-		}
-	})
-	
-	#Public
-	config = bus.config
-	if message.aws_cert:
-		configtool.write_key(config.get(sect_name, ec2_platform.OPT_CERT_PATH), 
-				message.aws_cert, key_title="EC2 user certificate")
-	else:
-		logger.warn("EC2 user certificate is empty in 'HostInitResponse' message")
-		
-	if message.aws_pk:
-		configtool.write_key(config.get(sect_name, ec2_platform.OPT_PK_PATH), 
-				message.aws_pk, key_title="EC2 user private key")
-	else:
-		logger.warn("EC2 user private key is empty in 'HostInitResponse' message")	
 	

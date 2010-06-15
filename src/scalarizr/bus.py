@@ -48,7 +48,7 @@ class Bus(Observable):
 	@ivar scalarizr.snmpagent.SnmpServer: SNMP embed server
 	"""
 	
-	platfrom = None
+	platform = None
 	"""
 	@ivar scalarizr.platform.Platform: Platform (ec2, rs, vps...)
 	"""

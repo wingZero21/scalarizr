@@ -118,7 +118,7 @@ class Message(object):
 					self._walk_encode(v, itemEl, doc)
 				el.parentNode.removeChild(el)
 		else:	
-			el.appendChild(doc.createTextNode(str(value)))
+			el.appendChild(doc.createTextNode(str(value) if value is not None else ""))
 
 
 class MessageProducer(Observable):

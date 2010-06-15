@@ -4,22 +4,19 @@ Created on Mar 1, 2010
 @author: marat
 '''
 
-from scalarizr.handlers import Handler
+import scalarizr.handlers
 from scalarizr.bus import bus
-from scalarizr.messaging import Queues, Messages
+from scalarizr.messaging import Messages
 from scalarizr.util import system, fstool, configtool
 import os
 import logging
-try:
-	import time
-except ImportError:
-	import timemodule as time
+
 
 
 def get_handlers ():
 	return [EbsHandler()]
 
-class EbsHandler(Handler):
+class EbsHandler(scalarizr.handlers.Handler):
 	_logger = None
 	_platform = None
 	_queryenv = None
@@ -28,15 +25,13 @@ class EbsHandler(Handler):
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._platform = bus.platfrom
-		self._msg_service = bus.messaging_service
+		self._platform = bus.platform
 		self._queryenv = bus.queryenv_service
 		self._config = bus.config
 		
 		bus.on("init", self.on_init)
 		bus.define_events(
 			# Fires when EBS is attached to instance
-			# @param volume_id: EBS volume id
 			# @param device: device name, ex: /dev/sdf
 			"block_device_attached", 
 			
@@ -45,16 +40,20 @@ class EbsHandler(Handler):
 			"block_device_detached",
 			
 			# Fires when EBS is mounted
-			# @param volume_id: EBS volume id
 			# @param device: device name, ex: /dev/sdf
 			"block_device_mounted"
 		)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.INT_BLOCK_DEVICE_UPDATED and platform == "ec2"
+		return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, Messages.MOUNTPOINTS_RECONFIGURE) \
+				and platform == "ec2"
 
 	def on_init(self):
 		bus.on("before_host_init", self.on_before_host_init)
+		try:
+			scalarizr.handlers.script_executor.skip_events.add(Messages.INT_BLOCK_DEVICE_UPDATED)
+		except AttributeError:
+			pass
 	
 	def on_before_host_init(self, *args, **kwargs):
 		self._logger.info("Add udev rule for EBS devices")
@@ -70,11 +69,118 @@ class EbsHandler(Handler):
 			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' Error: %s", str(e))
 			raise
 
+	def on_MountPointsReconfigure(self, message):
+		mtab = fstool.Mtab()
+		fstab = fstool.Fstab()		
+		
+		self._logger.debug("Iterate over EBS mounpoints")
+		for ebs_mpoint in self._queryenv.list_ebs_mountpoints():
+			self._logger.debug("Take %s", ebs_mpoint)
+			if ebs_mpoint.is_array:
+				# TODO: implement EBS arrays
+				self._logger.warning("EBS array %s skipped. EBS arrays not implemented yet", ebs_mpoint.name)
+				continue
+			
+			try:
+				ebs_volume = ebs_mpoint.volumes[0]
+				devname = ebs_volume.device
+			except IndexError, e:
+				self._logger.error("Volume:0 doesn't exists. %s", e)
+				continue
+
+			
+			if not mtab.contains(devname, rescan=True):
+				# Create filesystem
+				if ebs_mpoint.create_fs:
+					self._logger.info("Creating new filesystem on device %s", devname)
+					system("/sbin/mkfs.ext3 -F " + devname + " 2>&1")
+					
+				# Mount device
+				fstool.mount(devname, ebs_mpoint.dir, ["-t auto"])
+				if not fstab.contains(devname, rescan=True):
+					self._logger.info("Adding a record to fstab")
+					fstab.append(fstool.TabEntry(devname, ebs_mpoint.dir, "auto", "defaults\t0\t0"))
+		
+				self._logger.info("Device %s succesfully mounted to %s (volume_id: %s)", 
+						devname, ebs_mpoint.dir, ebs_volume.volume_id)
+				
+				self._send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
+					volume_id = ebs_volume.volume_id,
+					device_name = devname
+				), broadcast=True)
+				bus.fire("block_device_mounted", volume_id=ebs_volume.volume_id, device=devname)				
+				
+			else:
+				entry = mtab.find(devname)[0]
+				self._logger.debug("Skip device %s already mounted to %s", devname, entry.mpoint)
+
+				
+		"""
+		for mpoint in self._queryenv.list_ebs_mountpoints()
+			for volume in mpoint.volumes:
+				if volume.volume_id == ec2_volume.id:
+					gotcha = True		
+		
+		if gotcha:
+			self._logger.info("Mounting EBS volume '%s' as device '%s' on '%s' ...", 
+					ec2_volume.id, volume.device, mpoint.dir)
+		else:
+			self._logger.warn("Cannot find volume '%s' in EBS mountpoints list", ec2_volume.id)
+			return False 
+					
+		if mpoint.create_fs:
+			self._logger.info("Creating new filesystem on device '%s'", volume.device)
+			system("/sbin/mkfs.ext3 -F " + volume.device + " 2>&1")
+			
+		fstool.mount(volume.device, mpoint.dir, ["-t auto"])
+		fstab = fstool.Fstab()
+		if not any([entry.device == volume.device for entry in fstab.list_entries()]):
+			self._logger.info("Adding a record to fstab")
+			fstab.append(fstool.TabEntry(volume.device, mpoint.dir, "auto", "defaults\t0\t0"))
+
+		self._logger.info("Device %s succesfully mounted to %s (volume_id: %s)", 
+				volume.device, mpoint.dir, ec2_volume.id)
+		return True		
+		"""
+
 	def on_IntBlockDeviceUpdated(self, message):
-		ec2_conn = self._platform.get_ec2_conn()
-		self._logger.debug(message)
+		if message.action == "add":
+			self._logger.info("udev notified that block device %s was attached", message.devname)
+			
+			self._send_message(
+				Messages.BLOCK_DEVICE_ATTACHED, 
+				{"device_name" : message.devname}, 
+				broadcast=True
+			)
+			
+			bus.fire("block_device_attached", device=message.devname)
+			
+		elif message.action == "remove":
+			self._logger.info("udev notified me that block device %s was detached", message.device)
+			
+			self._send_message(
+				Messages.BLOCK_DEVICE_DETACHED, 
+				{"device_name" : message.devname}, 
+				broadcast=True
+			)
+			
+			bus.fire("block_device_detached", device=message.devname)						
+
+
+		"""
 
 		if message.action == "add":
+			self._logger.info("udev notified that block device %s was attached", message.devname)
+			
+			self._send_message(
+				Messages.BLOCK_DEVICE_ATTACHED, 
+				{"device_name" : message.devname}, 
+				broadcast=True
+			)
+			bus.fire("block_device_attached", device=message.devname)
+			
+			
+			
 			# Volume was attached
 			max_attempts = 5
 			attempt = 1
@@ -139,31 +245,4 @@ class EbsHandler(Handler):
 			# Notify listeners
 			bus.fire("block_device_detached", device=message.devname)
 
-
-	def _mount_volume(self, ec2_volume):
-		gotcha = False
-		for mpoint in self._queryenv.list_ebs_mountpoints():
-			for volume in mpoint.volumes:
-				if volume.volume_id == ec2_volume.id:
-					gotcha = True
-		
-		if gotcha:
-			self._logger.info("Mounting EBS volume '%s' as device '%s' on '%s' ...", 
-					ec2_volume.id, volume.device, mpoint.dir)
-		else:
-			self._logger.warn("Cannot find volume '%s' in EBS mountpoints list", ec2_volume.id)
-			return False 
-					
-		if mpoint.create_fs:
-			self._logger.info("Creating new filesystem on device '%s'", volume.device)
-			system("/sbin/mkfs.ext3 -F " + volume.device + " 2>&1")
-			
-		fstool.mount(volume.device, mpoint.dir, ["-t auto"])
-		fstab = fstool.Fstab()
-		if not any([entry.device == volume.device for entry in fstab.list_entries()]):
-			self._logger.info("Adding a record to fstab")
-			fstab.append(fstool.TabEntry(volume.device, mpoint.dir, "auto", "defaults\t0\t0"))
-
-		self._logger.info("Device %s succesfully mounted to %s (volume_id: %s)", 
-				volume.device, mpoint.dir, ec2_volume.id)
-		return True
+		"""

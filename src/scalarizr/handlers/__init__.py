@@ -1,5 +1,6 @@
 
 from scalarizr.bus import bus
+from scalarizr.messaging import Queues, Message
 from scalarizr.util import configtool
 import os
 import platform
@@ -8,6 +9,31 @@ import threading
 
 
 class Handler(object):
+	
+	def _new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False):
+		srv = bus.messaging_service		
+		msg = srv.new_message(msg_name, msg_meta, msg_body)
+		if broadcast:
+			self._broadcast_message(msg)
+		return msg
+	
+	def _send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, queue=Queues.CONTROL):
+		srv = bus.messaging_service
+		msg = msg_name if isinstance(msg_name, Message) else \
+				self.new_message(msg_name, msg_body, msg_meta, broadcast)
+		srv.get_producer().send(queue, msg)
+
+	def _broadcast_message(self, msg):
+		config = bus.config
+		platform = bus.platform
+		gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
+		
+		msg.behaviour = configtool.split_array(gen_sect.get(configtool.OPT_BEHAVIOUR))
+		msg.local_ip = platform.get_private_ip()
+		msg.remote_ip = platform.get_public_ip()
+		msg.role_name = gen_sect.get(configtool.OPT_ROLE_NAME)	
+
+	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return False
 	
@@ -18,15 +44,6 @@ class Handler(object):
 		else:
 			raise HandlerError("Handler has no method %s" % (fn))
 
-	def _put_broadcast_data(self, message):
-		config = bus.config
-		platform = bus.platfrom
-		gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
-		
-		message.behaviour = configtool.split_array(gen_sect.get(configtool.OPT_BEHAVIOUR))
-		message.local_ip = platform.get_private_ip()
-		message.remote_ip = platform.get_public_ip()
-		message.role_name = gen_sect.get(configtool.OPT_ROLE_NAME)	
 
 class HandlerError(BaseException):
 	pass
@@ -39,13 +56,14 @@ class MessageListener:
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		config = bus.config
-		platfrom = bus.platfrom
+
 		self._logger.debug("Initialize message listener");
-		self._accept_kwargs["behaviour"] = configtool.split_array(
-				config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR))
-		self._accept_kwargs["platform"] = platfrom.name
-		self._accept_kwargs["os"] = platform.uname()
-		self._accept_kwargs["dist"] = platform.dist()
+		self._accept_kwargs = dict(
+			behaviour = configtool.split_array(config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)),
+			platform = getattr(bus.platform, "name"),
+			os = platform.uname(),
+			dist = platform.dist()
+		)
 		self._logger.debug("Gathered _accept_kwargs: %s", self._accept_kwargs)
 		
 		self._get_handlers_chain()
@@ -101,23 +119,33 @@ class MessageListener:
 	
 	def __call__(self, message, queue):
 		self._logger.info("Handle '%s'" % (message.name))
-		accepted = False
-		for handler in self._get_handlers_chain():
-			try:
-				if handler.accept(message, queue, **self._accept_kwargs):
-					accepted = True
-					self._logger.info("Call handler %s" % handler.__class__.__name__)
-					try:
-						handler(message)
-					except (BaseException, Exception), e:
-						self._logger.error("Exception in message handler")
-						self._logger.exception(e)
-			except (BaseException, Exception), e:
-				self._logger.error("%s accept() method failed with exception", handler.__class__.__name__)
-				self._logger.exception(e)
 		
-		if not accepted:
-			self._logger.warning("No one could handle '%s'", message.name)
+		try:
+			# Each message can contains secret data to access platform services.
+			# Scalarizr assign access data to platform object and clears it when handlers processing finished 
+			pl = bus.platform
+			if message.body.has_key("platform_access_data"):
+				pl.set_access_data(message.platform_access_data)
+			
+			accepted = False
+			for handler in self._get_handlers_chain():
+				try:
+					if handler.accept(message, queue, **self._accept_kwargs):
+						accepted = True
+						self._logger.info("Call handler %s" % handler.__class__.__name__)
+						try:
+							handler(message)
+						except (BaseException, Exception), e:
+							self._logger.error("Exception in message handler")
+							self._logger.exception(e)
+				except (BaseException, Exception), e:
+					self._logger.error("%s accept() method failed with exception", handler.__class__.__name__)
+					self._logger.exception(e)
+			
+			if not accepted:
+				self._logger.warning("No one could handle '%s'", message.name)
+		finally:
+			pl.clear_access_data()
 
 def async(fn):
 	def decorated(*args, **kwargs):

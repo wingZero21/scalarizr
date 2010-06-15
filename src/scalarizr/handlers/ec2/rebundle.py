@@ -6,12 +6,10 @@ Created on Mar 11, 2010
 
 import scalarizr
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler, async
-from scalarizr.platform import PlatformError
-from scalarizr.messaging import Messages, Queues
+from scalarizr.handlers import Handler, async, HandlerError
+from scalarizr.messaging import Messages
 from scalarizr.util import system, disttool, cryptotool, fstool
-from scalarizr.util.fstool import Mtab
-from scalarizr.handlers.ec2.lifecircle import set_aws_credentials
+
 import logging
 import time
 import os
@@ -23,17 +21,13 @@ from datetime import datetime
 from threading import Thread, Lock
 from Queue import Queue, Empty
 import math
+import shutil
+import glob
+
 from boto.s3 import Key
 from boto.s3.connection import Location
 from boto.resultset import ResultSet
 from boto.exception import BotoServerError
-import shutil
-import glob
-
-
-
-# FIXME: When excludes is empty in XML message --exclude None appears 
-# --exclude /mnt/scalarizr-centos5.2-201005271212 --exclude None --exclude /mnt --exclude / --exclude /dev/shm
 
 
 def get_handlers ():
@@ -71,8 +65,8 @@ Bundled: %(bundle_date)s
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._platform = bus.platfrom
-		self._msg_service = bus.messaging_service
+		self._platform = bus.platform
+		
 		bus.define_events(
 			# Fires before rebundle starts
 			"before_rebundle", 
@@ -99,9 +93,6 @@ Bundled: %(bundle_date)s
 		try:
 			self._before_rebundle(message.role_name)			
 			bus.fire("before_rebundle", role_name=message.role_name)
-			
-			if message.body.has_key("aws_account_id"):
-				set_aws_credentials(message)
 			
 			aws_account_id = self._platform.get_account_id()
 			avail_zone = self._platform.get_avail_zone()
@@ -131,13 +122,11 @@ Bundled: %(bundle_date)s
 			ami_id = self._register_image(s3_manifest_path)
 			
 			# Send message to Scalr
-			producer = self._msg_service.get_producer()
-			msg = self._msg_service.new_message(Messages.REBUNDLE_RESULT, body=dict(
+			self._send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "ok",
 				snapshot_id = ami_id,
 				bundle_task_id = message.bundle_task_id															
 			))
-			producer.send(Queues.CONTROL, msg)
 			
 			# Fire 'rebundle'
 			bus.fire("rebundle", role_name=message.role_name, snapshot_id=ami_id)
@@ -146,14 +135,12 @@ Bundled: %(bundle_date)s
 			self._logger.error("Rebundle failed. %s", e)
 			self._logger.exception(e)
 			
-			# Send message to Scalr			
-			producer = self._msg_service.get_producer()
-			msg = self._msg_service.new_message(Messages.REBUNDLE_RESULT, body=dict(
+			# Send message to Scalr
+			self._send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "error",
 				last_error = str(e),
 				bundle_task_id = message.bundle_task_id
-			))
-			producer.send(Queues.CONTROL, msg)
+			))		
 			
 			# Fire 'rebundle_error'
 			bus.fire("rebundle_error", role_name=message.role_name, last_error=str(e))
@@ -174,7 +161,7 @@ Bundled: %(bundle_date)s
 			
 			self._logger.debug("Checking that user is root")
 			if not self._is_super_user():
-				raise PlatformError("You need to be root to run rebundle")
+				raise HandlerError("You need to be root to run rebundle")
 			self._logger.debug("User check success")
 			
 			image_file = destination + "/" + prefix
@@ -187,9 +174,9 @@ Bundled: %(bundle_date)s
 				excludes = []
 			
 			# Exclude mounted non-local filesystems if they are under the volume root
-			mtab = Mtab()
+			mtab = fstool.Mtab()
 			excludes += list(entry.mpoint for entry in mtab.list_entries()  
-					if entry.fstype in Mtab.LOCAL_FS_TYPES)
+					if entry.fstype in fstool.Mtab.LOCAL_FS_TYPES)
 			
 			# Exclude the image file if it is under the volume root.
 			if image_file.startswith(volume):
@@ -441,7 +428,7 @@ Bundled: %(bundle_date)s
 	def _upload_image(self, bucket_name, manifest_path, manifest, acl="aws-exec-read", region="US"):
 		try:
 			self._logger.info("Uploading bundle")
-			s3_conn = self._platform.get_s3_conn()
+			s3_conn = self._platform.new_s3_conn()
 			
 			# Create bucket
 			bucket = None
@@ -539,7 +526,7 @@ Bundled: %(bundle_date)s
 	def _register_image(self, s3_manifest_path):
 		try:
 			self._logger.info("Registering image '%s'", s3_manifest_path)
-			ec2_conn = self._platform.get_ec2_conn()
+			ec2_conn = self._platform.new_ec2_conn()
 			
 			# TODO: describe this strange bug in boto when istead of `ImageLocation` param `Location` is sent
 			#ami_id = ec2_conn.register_image(None, None, image_location=s3_manifest_path)
@@ -587,10 +574,10 @@ if disttool.is_linux():
 			self._excludes.append("/sys")
 			self._excludes.append("/proc")
 		
-			self._mtab = Mtab()
+			self._mtab = fstool.Mtab()
 		
 		def make(self):
-			self._logger.info("Copying %s into the image file %s...", self._volume, self._image_file)
+			self._logger.info("Copying %s into the image file %s", self._volume, self._image_file)
 			self._logger.info("Exclude list: %s", ":".join(self._excludes))
 	
 			try:
@@ -619,8 +606,8 @@ if disttool.is_linux():
 			if necessary.		
 			"""
 			self._logger.info("Mount image file")
-			if self._mtab.is_mounted(self._image_mpoint):
-				raise PlatformError("Image already mounted")
+			if self._mtab.contains(mpoint=self._image_mpoint):
+				raise HandlerError("Image already mounted")
 			fstool.mount(self._image_file, self._image_mpoint, ["-o loop"])
 		
 		def _make_special_dirs(self):
@@ -669,13 +656,10 @@ if disttool.is_linux():
 		"""
 		
 		def _cleanup (self):
-			self._unmount(self._image_mpoint)
-			
-		def _unmount(self, mpoint):
-			if self._mtab.is_mounted(mpoint):
-				self._logger.info("Unmounting '%s'", mpoint)				
-				system("umount -d " + mpoint)
-				os.rmdir(mpoint)
+			if self._mtab.contains(mpoint=self._image_mpoint, rescan=True):
+				self._logger.info("Unmounting '%s'", self._image_mpoint)				
+				system("umount -d " + self._image_mpoint)
+				os.rmdir(self._image_mpoint)
 				
 	LoopbackImage = LinuxLoopbackImage
 	

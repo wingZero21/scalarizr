@@ -47,15 +47,25 @@ class Fstab:
 			f.write(line)
 		finally:
 			f.close()
+			
+	def contains(self, devname=None, mpoint=None, rescan=False):
+		return any((mpoint and entry.mpoint == mpoint) or (devname and entry.device) \
+				for entry in self.list_entries(rescan))
+		
+	def find(self, devname=None, mpoint=None, fstype=None, rescan=False):
+		ret = list(entry for entry in self.list_entries(rescan) if \
+				(devname and entry.device == devname) or \
+				(mpoint and entry.mpoint == mpoint) or \
+				(fstype and entry.fstype == fstype))
+		return ret
+	
 
 class Mtab(Fstab):
 	"""
 	Wrapper over /etc/mtab
 	"""
 	LOCAL_FS_TYPES = None	
-	
-	def is_mounted(self, mpoint):
-		return any(entry.mpoint == mpoint for entry in self.list_entries())
+
 		
 class TabEntry(object):
 	device = None
