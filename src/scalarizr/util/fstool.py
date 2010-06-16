@@ -8,7 +8,21 @@ from scalarizr.util import disttool, system
 import re
 import os
 
-class FstoolError(BaseException): pass
+class FstoolError(BaseException):
+	NO_FS = -666
+	CANNOT_MOUNT = -667
+	
+	message = None
+	code = None
+	
+	def __init__(self, *args):
+		BaseException.__init__(self, *args)
+		self.message = args[0]
+		try:
+			self.code = args[1]
+		except IndexError:
+			pass
+
 
 class Fstab:
 	"""
@@ -101,12 +115,12 @@ def mount (device, mpoint, options=()):
 	
 	options = " ".join(options) 
 	out = system("mount %(options)s %(device)s %(mpoint)s 2>&1" % vars())[0]
-	if out.find("you must specify the filesystem type") != -1:
-		raise FstoolError("No filesystem found on device '%s'" % (device))
+	if out.find("you must specify the filesystem mkfstype") != -1:
+		raise FstoolError("No filesystem found on device '%s'" % (device), FstoolError.NO_FS)
 	
 	mtab = Mtab()
 	if not mtab.is_mounted(mpoint):
-		raise FstoolError("Cannot mount device '%s'. %s" % (device, out))
+		raise FstoolError("Cannot mount device '%s'. %s" % (device, out), FstoolError.CANNOT_MOUNT)
 
 def umount():
 	pass
