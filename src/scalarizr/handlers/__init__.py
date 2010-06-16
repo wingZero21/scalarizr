@@ -20,7 +20,7 @@ class Handler(object):
 	def _send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, queue=Queues.CONTROL):
 		srv = bus.messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
-				self.new_message(msg_name, msg_body, msg_meta, broadcast)
+				self._new_message(msg_name, msg_body, msg_meta, broadcast)
 		srv.get_producer().send(queue, msg)
 
 	def _broadcast_message(self, msg):
@@ -129,17 +129,18 @@ class MessageListener:
 			
 			accepted = False
 			for handler in self._get_handlers_chain():
+				hnd_name = handler.__class__.__name__
 				try:
 					if handler.accept(message, queue, **self._accept_kwargs):
 						accepted = True
-						self._logger.info("Call handler %s" % handler.__class__.__name__)
+						self._logger.info("Call handler %s" % hnd_name)
 						try:
 							handler(message)
 						except (BaseException, Exception), e:
-							self._logger.error("Exception in message handler")
+							self._logger.error("Exception in message handler %s", hnd_name)
 							self._logger.exception(e)
 				except (BaseException, Exception), e:
-					self._logger.error("%s accept() method failed with exception", handler.__class__.__name__)
+					self._logger.error("%s accept() method failed with exception", hnd_name)
 					self._logger.exception(e)
 			
 			if not accepted:

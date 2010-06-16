@@ -24,7 +24,7 @@ class QueryEnvService(object):
 	
 	def __init__(self, url, server_id=None, key=None, api_version="2009-03-05"):
 		self._logger = logging.getLogger(__name__)
-		self.url = url
+		self.url = url if url[-1] != "/" else url[0:-1]
 		self.server_id = server_id		
 		self.key = key
 		self.api_version = api_version
@@ -99,6 +99,7 @@ class QueryEnvService(object):
 		@return object
 		"""
 		# Perform HTTP request
+		url = "%s/%s/%s" % (self.url, self.api_version, command)
 		request_body = {}
 		request_body["operation"] = command
 		request_body["version"] = self.api_version
@@ -117,11 +118,13 @@ class QueryEnvService(object):
 		response = None
 		try:
 			self._logger.debug("QueryEnv request: %s", post_data)
-			req = Request(self.url, post_data, headers)
+			req = Request(url, post_data, headers)
 			response = urlopen(req)
 		except URLError, e:
 			if isinstance(e, HTTPError):
 				resp_body = e.read() if e.fp is not None else ""
+				raise QueryEnvError("Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body))				
+				"""
 				if e.code == 401:
 					raise QueryEnvError("Cannot authenticate on QueryEnv server. %s" % [resp_body])
 				elif e.code == 400:
@@ -130,6 +133,7 @@ class QueryEnvService(object):
 					raise QueryEnvError("QueryEnv failed. %s" % [resp_body])
 				else:
 					raise QueryEnvError("Request to QueryEnv server failed (code: %d). %s" % [e.code, str(e)])
+				"""
 			else:
 				host, port = splitnport(req.host, 80)
 				raise QueryEnvError("Cannot connect to QueryEnv server on %s:%s. %s" 

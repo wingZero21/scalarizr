@@ -124,6 +124,7 @@ class _P2pMessageStore:
 			conn.commit()
 		finally:
 			cur.close()
+
 			
 	def get_undelivered (self, sender):
 		"""

@@ -88,29 +88,33 @@ Bundled: %(bundle_date)s
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.REBUNDLE and platform == "ec2"	
 	
-	@async
+
 	def on_Rebundle(self, message):
 		try:
-			self._before_rebundle(message.role_name)			
-			bus.fire("before_rebundle", role_name=message.role_name)
+			image_file = image_mpoint = None
+			
+			role_name = message.role_name.encode("ascii")
+			
+			self._before_rebundle(role_name)			
+			bus.fire("before_rebundle", role_name=role_name)
 			
 			aws_account_id = self._platform.get_account_id()
 			avail_zone = self._platform.get_avail_zone()
 			region = avail_zone[0:2]
-			prefix = message.role_name + "-" + time.strftime("%Y%m%d%H%I")
+			prefix = role_name + "-" + time.strftime("%Y%m%d%H%I")
 			cert, pk = self._platform.get_cert_pk()
 			ec2_cert = self._platform.get_ec2_cert()
 			bucket = "scalr2-images-%s-%s" % (region, aws_account_id)		
 			
 			# Create exclude directories list
-			excludes = message.excludes.split(":") \
+			excludes = message.excludes.encode("ascii").split(":") \
 					if message.body.has_key("excludes") and message.excludes else []
 			self._logger.debug("Excludes %s", ":".join(excludes))
 
 			# Bundle volume
 			image_file, image_mpoint = self._bundle_vol(prefix=prefix, destination="/mnt", excludes=excludes)
 			# Execute pre-bundle routines. cleanup files, patch files, etc.
-			self._cleanup_image(image_mpoint, role_name=message.role_name)
+			self._cleanup_image(image_mpoint, role_name=role_name)
 
 			#image_file = "/mnt/scalarizr-debian-1274093259"
 			# Bundle image
@@ -129,7 +133,7 @@ Bundled: %(bundle_date)s
 			))
 			
 			# Fire 'rebundle'
-			bus.fire("rebundle", role_name=message.role_name, snapshot_id=ami_id)
+			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)
 			
 		except (Exception, BaseException), e:
 			self._logger.error("Rebundle failed. %s", e)
@@ -143,10 +147,15 @@ Bundled: %(bundle_date)s
 			))		
 			
 			# Fire 'rebundle_error'
-			bus.fire("rebundle_error", role_name=message.role_name, last_error=str(e))
+			bus.fire("rebundle_error", role_name=role_name, last_error=str(e))
 			
 		finally:
-			self._cleanup(image_file, image_mpoint)
+			try:
+				if image_file or image_mpoint:
+					self._cleanup(image_file, image_mpoint)
+			except (Exception, BaseException), e2:
+				self._logger.exception(e2)
+				pass
 		
 		
 	def _before_rebundle(self, role_name):
@@ -230,23 +239,26 @@ Bundled: %(bundle_date)s
 	
 	def _create_motd(self, image_mpoint, role_name=None):
 		# Create message of the day
-		motd_filename = os.path.join(image_mpoint, "etc/motd.tail" if disttool.is_debian_based() else "etc/motd") 
-		motd_file = None		
-		try:
-			dist = disttool.linux_dist()
-			motd_file = open(motd_filename, "w")
-			motd_file.write(self._MOTD % dict(
-				dist_name = dist[0],
-				dist_version = dist[1],
-				bits = 64 if disttool.uname()[4] == "x86_64" else 32,
-				role_name = role_name,
-				bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
-			))
-		except OSError, e:
-			self._logger.warning("Cannot patch motd file '%s'. %s", motd_filename, str(e))
-		finally:
-			if motd_file:
-				motd_file.close()
+		motd_filename = os.path.join(image_mpoint, "etc/motd.tail" if disttool.is_debian_based() else "etc/motd")
+		if os.path.exists(motd_filename): 
+			motd_file = None		
+			try:
+				dist = disttool.linux_dist()
+				motd_file = open(motd_filename, "w")
+				motd_file.write(self._MOTD % dict(
+					dist_name = dist[0],
+					dist_version = dist[1],
+					bits = 64 if disttool.uname()[4] == "x86_64" else 32,
+					role_name = role_name,
+					bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
+				))
+			except OSError, e:
+				self._logger.warning("Cannot patch motd file '%s'. %s", motd_filename, str(e))
+			finally:
+				if motd_file:
+					motd_file.close()
+		else:
+			self._logger.warning("motd file doesn't exists on expected location '%s'", motd_filename)
 						
 		
 	def _bundle_image(self, name, image_file, user, destination, user_private_key_string, 
@@ -404,13 +416,13 @@ Bundled: %(bundle_date)s
 		
 	def _cleanup(self, image_file, image_mpoint):
 		self._logger.debug("Cleanup after bundle")
-
-		system("umount -f " + image_mpoint)
-		try:
-			shutil.rmtree(image_mpoint)
-		except OSError, e:
-			self._logger.error("Error during cleanup. %s", e) 
 		
+		mtab = fstool.Mtab()
+		if mtab.contains(mpoint=image_mpoint):
+			self._logger.info("Unmounting '%s'", image_mpoint)				
+			system("umount -d " + image_mpoint)
+			os.rmdir(image_mpoint)
+			
 		for path in glob.glob(image_file + "*"):
 			try:
 				if os.path.isdir(path):
@@ -580,16 +592,13 @@ if disttool.is_linux():
 			self._logger.info("Copying %s into the image file %s", self._volume, self._image_file)
 			self._logger.info("Exclude list: %s", ":".join(self._excludes))
 	
-			try:
-				self._create_image_file()
-				self._format_image()
-				system("sync")  # Flush so newly formatted filesystem is ready to mount.
-				self._mount_image()
-				self._make_special_dirs()
-				self._copy_rec(self._volume, self._image_mpoint)
-				return self._image_mpoint
-			finally:
-				self._cleanup()
+			self._create_image_file()
+			self._format_image()
+			system("sync")  # Flush so newly formatted filesystem is ready to mount.
+			self._mount_image()
+			self._make_special_dirs()
+			self._copy_rec(self._volume, self._image_mpoint)
+			return self._image_mpoint
 			
 		def _create_image_file(self):
 			self._logger.info("Create image file")
@@ -630,7 +639,8 @@ if disttool.is_linux():
 		def _copy_rec(self, source, dest, xattr=True):
 			self._logger.info("Copy volume to image file")
 			rsync = Rsync()
-			rsync.archive().times().sparse().links().quietly()
+			#rsync.archive().times().sparse().links().quietly()
+			rsync.archive().times().sparse().links()
 			if xattr:
 				rsync.xattributes()
 			rsync.exclude(self._excludes)
@@ -654,12 +664,6 @@ if disttool.is_linux():
 		def _update_fstab(self):
 			pass
 		"""
-		
-		def _cleanup (self):
-			if self._mtab.contains(mpoint=self._image_mpoint, rescan=True):
-				self._logger.info("Unmounting '%s'", self._image_mpoint)				
-				system("umount -d " + self._image_mpoint)
-				os.rmdir(self._image_mpoint)
 				
 	LoopbackImage = LinuxLoopbackImage
 	

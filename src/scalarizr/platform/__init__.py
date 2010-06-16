@@ -64,7 +64,7 @@ class Platform():
 			return self._access_data
 		
 	def clear_access_data(self):
-		del self._access_data
+		self._access_data = None
 	
 	def get_architecture(self):
 		"""

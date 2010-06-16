@@ -119,7 +119,7 @@ def mount (device, mpoint, options=()):
 		raise FstoolError("No filesystem found on device '%s'" % (device), FstoolError.NO_FS)
 	
 	mtab = Mtab()
-	if not mtab.is_mounted(mpoint):
+	if not mtab.contains(device):
 		raise FstoolError("Cannot mount device '%s'. %s" % (device, out), FstoolError.CANNOT_MOUNT)
 
 def umount():

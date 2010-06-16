@@ -79,9 +79,18 @@ class Message(object):
 
 
 	def _walk_decode(self, var, el):
-		# FIXME: nested elements doesn't supported
-		for childEl in el.childNodes:
-			var[childEl.nodeName] = childEl.firstChild.nodeValue if childEl.firstChild else None
+		for ch in el.childNodes:
+			f = ch.firstChild
+			if f and f.hasChildNodes():
+				is_list = all((ch.nodeName == "item" for ch in f.childNodes))
+				var2 = var[ch.nodeName] = list() if is_list else dict()
+				self._walk_decode(var2, ch)
+			else:
+				val = f.nodeValue if f else None
+				if isinstance(var, list):
+					var.append(val)
+				else:
+					var[ch.nodeName] = val 
 	
 	def __str__(self):
 		from xml.dom.minidom import getDOMImplementation

@@ -259,7 +259,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 			self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))		
 	
 	def _flag_exists(self, name):
-		os.path.exists(self._get_flag_filename(name))
+		return os.path.exists(self._get_flag_filename(name))
 	
 	def _clear_flag(self, name):
 		os.remove(self._get_flag_filename(name))	

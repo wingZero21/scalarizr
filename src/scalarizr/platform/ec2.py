@@ -113,7 +113,7 @@ class Ec2Platform(Platform):
 			
 	def get_access_keys(self):
 		# Keys must be in ASCII because hmac functions doesn't works with unicode		
-		return (self.get_access_data("key").encode("ascii"), self.get_access_data("key_id").encode("ascii"))
+		return (self.get_access_data("key_id").encode("ascii"), self.get_access_data("key").encode("ascii"))
 			
 	def get_cert_pk(self):
 		return (self.get_access_data("cert").encode("ascii"), self.get_access_data("pk").encode("ascii"))
