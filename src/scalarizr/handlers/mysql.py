@@ -7,7 +7,7 @@ from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler
 from scalarizr.util import fstool, system, cryptotool
-import logging, os, re, shutil
+import logging, os, re, shutil, time
 
 def get_handlers ():
 	return [MysqlHandler()]
@@ -53,12 +53,12 @@ class MysqlHandler(Handler):
 					ebsVolume = ebsVolumes[0]
 					if ebsVolume.volume_state() == 'available':
 						ec2connection.attach_volume(volId, self._iid, devname)
-#						while ebsVolume.attachment_state() != 'attached':
+						while ebsVolume.attachment_state() != 'attached':
+							time.sleep(5)
 				else:
 					self._logger.error('Can\'t find volume with ID =  %s ', volId)
 					raise
-							
-				#TODO: check if the volume has been successfully attached 
+
 				# Mount ebs # fstool.mount()
 				self._mount_device(devname)
 			
@@ -123,9 +123,10 @@ class MysqlHandler(Handler):
 				
 				# Save root user to /etc/scalr/private.d/behaviour.mysql.ini
 				config.set('behaviour_mysql', "mysql_password", password)
+
 			if "master":
-				message.mysql_repl_user = ""
-				message.mysql_repl_password = ""
+				message.mysql_repl_user = "scalarizr"
+				message.mysql_repl_password = password
 
 	
 	def _change_mysql_dir(self, directive=None, dirname = None):
@@ -165,18 +166,18 @@ class MysqlHandler(Handler):
 	def _mount_device(self, devname):
 		fstab = fstool.Fstab()			
 		if None != devname:
-			# FIXME: ugly infinity loop.
-			while True:
-				try:
-					fstool.mount(devname, '/mnt', ["-t auto"])
-					break
-				except fstool.FstoolError, e:
-					if -666 == e.code:
-						system("/sbin/mkfs.ext3 -F " + devname + " 2>&1")
-					else:
-						self._logger.error('Can\'t mount device %s : %s', devname, e)
+			try:
+				fstool.mount(devname, '/mnt', ["-t auto"])
+			except fstool.FstoolError, e:
+				if -666 == e.code:
+					system("/sbin/mkfs.ext3 -F " + devname + " 2>&1")
+					try:
+						fstool.mount(devname, '/mnt', ["-t auto"])
+					except fstool.FstoolError, e:
 						raise
-					
+				else:
+					raise
+
 		if not fstab.contains(devname, rescan=True):
 			self._logger.info("Adding a record to fstab")
 			fstab.append(fstool.TabEntry(devname, '/mnt', "auto", "defaults\t0\t0"))
