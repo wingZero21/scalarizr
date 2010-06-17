@@ -5,9 +5,44 @@ Created on 14.06.2010
 '''
 from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
-from scalarizr.handlers import Handler
-from scalarizr.util import fstool, system, cryptotool
+from scalarizr.handlers import Handler, HandlerError
+from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
+	configtool
+
+from subprocess import Popen, PIPE, STDOUT
 import logging, os, re, shutil, time
+import signal
+
+
+
+if disttool.is_redhat_based():
+	initd_script = "/etc/init.d/mysqld"
+elif disttool.is_debian_based():
+	initd_script = "/etc/init.d/mysql"
+else:
+	raise HandlerError("Cannot find MySQL init script. Make sure that mysql server is installed")
+
+pid_file = None
+try:
+	out = system("my_print_defaults mysqld_safe")
+	m = re.search("--pid-file=(.*)", out, re.MULTILINE)
+	if m:
+		pid_file = m.group(1)
+except:
+	pass
+
+# Register mysql service
+logger = logging.getLogger(__name__)
+logger.debug("Explore MySQL service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
+initd.explore("mysql", initd_script, pid_file)
+
+
+
+OPT_ROOT_USER = "root_user"
+OPT_ROOT_PASSWORD = "root_password"
+OPT_REPL_USER = "repl_user"
+OPT_REPL_PASSWORD = "repl_password"
+
 
 def get_handlers ():
 	return [MysqlHandler()]
@@ -73,44 +108,42 @@ class MysqlHandler(Handler):
 			
 			if not os.path.exists('/mnt/mysql-data') and not os.path.exists('/mnt/mysql-misc'):
 				# Stop mysql server
-				init_script		= '/etc/init.d/mysql'
-				reload_command	= [init_script, 'stop']
-				if os.path.exists(init_script) and os.access(init_script, os.X_OK):
-					self._logger.info("Trying to stop mysql server..")
+				if initd.is_running("mysql"):
 					try:
-						out, err, retcode = system(reload_command, shell=False)
-						if retcode or (out and out.find("FAILED") != -1):
-							self._logger.error("Mysql stopping failed. %s", out)
-						else:
-							self._logger.info("Mysql was successfully stopped.")
-					except OSError, e:
-						self._logger.error('Mysql stopping failed by running %s. %s',
-						''.join(reload_command), e.strerror)
+						initd.stop("mysql")
+					except initd.InitdError, e:
+						self._logger.error(e)
 				
 				# Move datadir to EBS 
 				self._change_mysql_dir('log_bin', '/mnt/mysql-misc')
 				self._change_mysql_dir('datadir', '/mnt/mysql-data')
 				
-				# Start --skip-grant-tables
-				daemon = '/usr/sbin/mysqld'
-				start_command	= [daemon , '--skip-grant-tables']
+				# Start mysqld --skip-grant-tables
+				if disttool.is_redhat_based():
+					daemon = "/usr/libexec/mysqld"
+				else:
+					daemon = "/usr/sbin/mysqld"
+				
 				if os.path.exists(daemon) and os.access(daemon, os.X_OK):
-					self._logger.info("Starting mysql server without grant tables.")
-					try:
-						out, err, retcode = system(start_command, shell=False)
-						if retcode or (out and out.find("ERROR") != -1):
-							self._logger.error("Mysql start failed. %s", out)
-						else:
-							self._logger.info("Mysql was successfully started")
-					except OSError, e:
-						self._logger.error('Mysql stopping failed by running %s. %s',
-						''.join(reload_command), e.strerror)
+					self._logger.info("Starting mysql server with --skip-grant-tables")
+					myd = Popen([daemon, '--skip-grant-tables'], stdin=PIPE, stdout=PIPE, stderr=STDOUT)
+				else:
+					self._logger.error("MySQL daemon '%s' doesn't exists", daemon)
+					return False
 				
 				# Add root user
-				mysqlClient = '/usr/bin/mysql'
+				myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+				
+				user = "scalr"
 				password = re.sub('[\n=]','', cryptotool.keygen(32))
-				command = "INSERT INTO mysql.user VALUES('%','scalarizr',PASSWORD('"+password+"')" + ",'Y'"*28 + ",''"*4 +',0'*4+"); FLUSH PRIVILEGES;"
-				start_command	= [mysqlClient , '-e ' + command ]
+				sql = "INSERT INTO mysql.user VALUES('%','"+user+"',PASSWORD('"+password+"')" + ",'Y'"*26 + ",''"*4 +',0'*4+");"
+				sql += "FLUSH PRIVILEGES;"
+				myclient.communicate(sql)
+				
+				# Terminate mysqld --skip-grant-tables
+				myd.send_signal(signal.SIGTERM)	
+				
+				"""
 				try:
 					out, err, retcode = system(start_command, shell=False)
 					if retcode or (out and out.find("ERROR") != -1):
@@ -119,10 +152,19 @@ class MysqlHandler(Handler):
 						self._logger.info("Mysql user 'scalarizr' successfully added.")
 				except OSError, e:
 					self._logger.error("Mysql user 'scalarizr' adding failed by running %s. %s",
-					''.join(reload_command), e.strerror)
+						''.join(reload_command), e.strerror)
+				"""
+				
 				
 				# Save root user to /etc/scalr/private.d/behaviour.mysql.ini
-				config.set('behaviour_mysql', "mysql_password", password)
+				conf_updates = {configtool.get_behaviour_section_name(Behaviours.MYSQL) : {
+					OPT_ROOT_USER : user,
+					OPT_ROOT_PASSWORD : password
+				}}
+				configtool.update(configtool.get_behaviour_filename(Behaviours.MYSQL, ret=configtool.RET_PRIVATE), 
+						conf_updates)
+
+				
 
 			if "master":
 				message.mysql_repl_user = "scalarizr"

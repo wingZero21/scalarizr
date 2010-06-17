@@ -5,6 +5,7 @@ import platform
 
 _uname = None
 _linux_dist = None
+_dist_base = None
 
 _is_linux = _is_win = _is_sun = False
 _is_debian_based = _is_redhat_based = False
@@ -30,10 +31,9 @@ if _is_linux:
 	_is_debian_based = dist_name in _debian_based_dists
 	_is_debian = dist_name == "debian"
 	_is_ubuntu = dist_name == "ubuntu"
-	_is_fedora = dist_name == "fedora"
+	_is_fedora = dist_name == "fedora" or (dist_name == 'redhat' and _linux_dist[2].lower() == 'werewolf')
 	_is_centos = dist_name == "centos"
 	_is_rhel = dist_name in ["rhel", "redhat"]
-			
 
 def is_linux(): return _is_linux
 def is_win(): return _is_win

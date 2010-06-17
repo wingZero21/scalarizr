@@ -167,6 +167,7 @@ def system(args, shell=True):
 		#print "stderr: " + err
 	return out, err, p.returncode
 
+
 def xml_strip(el):
 	for child in list(el.childNodes):
 		if child.nodeType==child.TEXT_NODE and child.nodeValue.strip() == '':

@@ -6,12 +6,41 @@ Created on Dec 25, 2009
 '''
 from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
-from scalarizr.handlers import Handler
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
-from scalarizr.util import disttool, system, backup_file
+from scalarizr.util import disttool, backup_file, initd
 import logging
 import os
 import re
+from scalarizr.util.initd import InitdError
+
+
+if disttool.is_redhat_based():
+	initd_script = "/etc/init.d/httpd"
+	pid_file = "/var/run/httpd/httpd.pid"
+elif disttool.is_debian_based():
+	initd_script = "/etc/init.d/apache2"
+	
+	pid_file = None
+	# Find option value
+	if os.path.exists("/etc/apache2/envvars"):
+		try:
+			env = open("/etc/apache2/envvars", "r")
+		except:
+			pass
+		else:
+			m = re.search("export\sAPACHE_PID_FILE=(.*)", env.read())
+			if m:
+				pid_file = m.group(1)
+			env.close()
+	
+else:
+	raise HandlerError("Cannot find Apache init script. Make sure that apache web server is installed")
+
+# Register apache service
+logger = logging.getLogger(__name__)
+logger.debug("Explore apache service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
+initd.explore("apache", initd_script, pid_file)
 
 
 def get_handlers ():
@@ -333,26 +362,10 @@ class ApacheHandler(Handler):
 	
 
 	def _reload_apache(self):
-		if disttool.is_debian_based():
-			init_script = '/etc/init.d/apache2'
-		elif disttool.is_redhat_based():
-			init_script = '/etc/init.d/httpd'
-		else:
-			init_script = '/etc/init.d/httpd'
-		reload_command = [init_script, "reload"]
-		if os.path.exists(init_script) and os.access(init_script, os.X_OK):
-			self._logger.info("Trying to reload apache..")
-			try:
-				out, err, retcode = system(reload_command, shell=False)
-				if retcode or (out and out.find("FAILED") != -1):
-					self._logger.error("Apache reloading failed. %s", out)
-				else:
-					self._logger.info("Apache was successfully reloaded")
-					bus.fire('apache_reload')
-						
-			except OSError, e:
-				self._logger.error('Apache realoading failed by running %s. %s', 
-						''.join(reload_command), e.strerror)	
+		try:
+			initd.reload("apache")
+		except InitdError, e:
+			self._logger.error(e)
 	
 	
 	def _patch_default_conf_deb(self, vhosts_path):
