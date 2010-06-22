@@ -12,7 +12,7 @@ class TestSQLite(unittest.TestCase):
 	localobj = None
 
 	def setUp(self):
-		self.localobj = SqliteLocalObject(self._db_connect)
+		self.localobj = SingletonThreadPool(self._db_connect)
 		##self.localobj = SqliteLocalObject(self._db_connect)
 		#for loop test:
 		conn = self.localobj.get().get_connection()
@@ -21,6 +21,7 @@ class TestSQLite(unittest.TestCase):
 		cur.execute(sql)
 		conn.commit()
 		#conn.close()
+		
 		
 	def tearDown(self):
 		#for loop test:
