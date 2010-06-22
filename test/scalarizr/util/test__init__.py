@@ -2,7 +2,7 @@
 @author: Dmytro Korsakov
 '''
 from scalarizr.util import LocalObject, SqliteLocalObject, init_tests
-
+from sqlalchemy.pool import SingletonThreadPool
 import unittest
 import threading
 import sqlite3 as sqlite
@@ -13,6 +13,7 @@ class TestSQLite(unittest.TestCase):
 
 	def setUp(self):
 		self.localobj = SqliteLocalObject(self._db_connect)
+		##self.localobj = SqliteLocalObject(self._db_connect)
 		#for loop test:
 		conn = self.localobj.get().get_connection()
 		cur = conn.cursor()
@@ -20,7 +21,6 @@ class TestSQLite(unittest.TestCase):
 		cur.execute(sql)
 		conn.commit()
 		#conn.close()
-		
 		
 	def tearDown(self):
 		#for loop test:
@@ -97,7 +97,6 @@ class TestSQLite(unittest.TestCase):
 		t.join()
 		#conn.close()
 		
-	
 
 class _SQLiteConnection(object):
 	_conn = None
