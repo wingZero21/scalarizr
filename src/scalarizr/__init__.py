@@ -561,6 +561,8 @@ def main():
 			# Start SNMP server in a separate process			
 			signal.signal(signal.SIGCHLD, _snmp_crash_handler)
 			_start_snmp_server()
+			pass
+
 		else:
 			# Start snmpd health check thread
 			t = threading.Thread(target=_snmpd_health_check)

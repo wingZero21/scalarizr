@@ -94,12 +94,13 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		bus.on("start", self.on_start)
 		self._producer.on("before_send", self.on_before_message_send)
 		
+		# Add internal messages to scripting skip list
 		try:
-			scalarizr.handlers.script_executor.skip_events.add(
+			map(scalarizr.handlers.script_executor.skip_events.add, (
 				Messages.INT_SERVER_REBOOT, 
 				Messages.INT_SERVER_HALT, 
 				Messages.HOST_INIT_RESPONSE
-			)
+			))
 		except AttributeError:
 			pass
 
@@ -132,79 +133,14 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 
 	
 	def _start_init(self):
-		"""
-		# Add init scripts
-		
-		
-		# Add reboot script
-		dst = "/etc/rc6.d/K10scalarizr"
-		if not os.path.exists(dst):
-			path = bus.base_path + "/src/scalarizr/scripts/reboot.py"
-			try:
-				os.symlink(path, dst)
-			except OSError:
-				self._logger.error("Cannot create symlink %s -> %s", dst, path)
-				raise
-		"""
-		"""
-		OpenSolaris:
-		2010-03-15 19:10:15,448 - ERROR - scalarizr.handlers.lifecircle - Cannot create symlink /etc/rc6.d/K10scalarizr -> /opt/scalarizr/src/scalarizr/scripts/reboot.py
-		2010-03-15 19:10:15,449 - ERROR - scalarizr.util - [Errno 2] No such file or directory
-		
-		SOLUTION:
-		/sbin/rc6 - shell script file, executed on reboot
-		add scripts/reboot.py into the begining of this file
-		"""
-		
-		"""
-		# Add halt script
-		dst = "/etc/rc0.d/K10scalarizr"
-		if not os.path.exists(dst):
-			path = bus.base_path + "/src/scalarizr/scripts/halt.py"
-			try:
-				os.symlink(path, dst)
-			except OSError:
-				self._logger.error("Cannot create symlink %s -> %s", dst, path)
-				raise
-		
-		if os.path.exists("/var/lock/subsys"):
-			# Touch /var/lock/subsys/scalarizr
-			# This file represents that a service's subsystem is locked, which means the service should be running
-			# @see http://www.redhat.com/magazine/008jun05/departments/tips_tricks/
-			f = "/var/lock/subsys/scalarizr"
-			try:
-				open(f, "w+").close()
-			except OSError:
-				self._logger.error("Cannot touch file '%s'", f)
-				raise 
-		"""
-		
 		# Regenerage key
 		self._new_crypto_key = cryptotool.keygen()
 		
 		# Prepare HostInit
 		msg = self._new_message(Messages.HOST_INIT, {"crypto_key" : self._new_crypto_key}, broadcast=True)
 		bus.fire("before_host_init", msg)
-		
-		# Update crypto key when HostInit will be delivered 
-		# TODO: Remove this confusing listener when blocking will be implemented in message producer 
-		self._producer.on("send", self.on_hostinit_send)
-		
 		self._send_message(msg)
-
-	
-	def _start_import(self):
-		# Send Hello
-		msg = self._new_message(Messages.HELLO, {"architecture" : self._platform.get_architecture()})		
-		bus.fire("before_hello", msg)
-		self._send_message(msg)
-		bus.fire("hello")
-
-
-	def on_hostinit_send(self, *args, **kwargs):
-		# Remove listener
-		self._producer.un("send", self.on_hostinit_send)
-				
+		
 		# Update key file
 		key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)		
 		configtool.write_key(key_path, self._new_crypto_key, key_title="Scalarizr crypto key")
@@ -217,6 +153,15 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		
 		self._set_flag(self.FLAG_HOST_INIT)
 		bus.fire("host_init")		
+		
+
+	
+	def _start_import(self):
+		# Send Hello
+		msg = self._new_message(Messages.HELLO, {"architecture" : self._platform.get_architecture()})		
+		bus.fire("before_hello", msg)
+		self._send_message(msg)
+		bus.fire("hello")
 
 
 	def on_IntServerReboot(self, message):

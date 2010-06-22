@@ -1,0 +1,316 @@
+'''
+Created on Jun 22, 2010
+
+@author: marat
+'''
+
+from scalarizr.util import disttool
+import os
+import math
+import logging
+
+
+BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
+PART_SUFFIX = '.part.'	
+
+def split(filename, part_name_prefix, chunk_size, dest_dir):
+	logger = logging.getLogger(__name__)
+	f = None
+	try:
+		try:
+			f = open(filename, "r")
+		except OSError:
+			logger.error("Cannot open file to split '%s'", filename)
+			raise
+		
+		# Create the part file upfront to catch any creation/access errors
+		# before writing out data.
+		num_parts = int(math.ceil(float(os.path.getsize(filename))/chunk_size))
+		part_names = []
+		logger.info("Splitting file '%s' into %d chunks", filename, num_parts)
+		for i in range(num_parts):
+			part_name_suffix = PART_SUFFIX + str(i).rjust(2, "0")
+			part_name = part_name_prefix + part_name_suffix
+			part_names.append(part_name)
+			
+			part_filename = os.path.join(dest_dir, part_name)
+			try:
+				touch(part_filename)
+			except OSError:
+				logger.error("Cannot create part file '%s'", part_filename)
+				raise
+					
+		# Write parts to files.
+		for part_name in part_names:
+			part_filename = os.path.join(dest_dir, part_name)
+			cf = open(part_filename, "w")
+			try:
+				logger.info("Writing chunk '%s'", part_filename)
+				_write_chunk(f, cf, chunk_size)
+			except OSError:
+				logger.error("Cannot write chunk file '%s'", part_filename)
+				raise
+			
+		return part_names
+	finally:
+		if f is not None:
+			f.close()
+
+	
+def _write_chunk(source_file, chunk_file, chunk_size):
+	bytes_written = 0  # Bytes written.
+	bytes_left = chunk_size	# Bytes left to write in this chunk.
+	
+	while bytes_left > 0:
+		size = BUFFER_SIZE if BUFFER_SIZE < bytes_left else bytes_left
+		buf = source_file.read(size)
+		chunk_file.write(buf)
+		bytes_written += len(buf)
+		bytes_left = chunk_size - bytes_written
+		if len(buf) < size:
+			bytes_left = 0 # EOF
+
+
+def touch(filename):
+	open(filename, "w+").close()
+
+def truncate(filename):
+	f = open(filename, "w+")
+	f.truncate(0)
+	f.close()
+
+
+
+class Rsync(object):
+	"""
+	Wrapper for rsync
+	"""
+	
+	EXECUTABLE = "rsync"
+	_options = None
+	_src = None
+	_dst = None
+	_executable = None
+	_quiet = None
+	
+	def __init__(self, executable=None):
+		self._executable = executable if executable is not None else Rsync.EXECUTABLE
+		self._options = []
+		self._src = self._dst = None
+		self._quiet = False
+		
+	def archive(self):
+		self._options.append('-rlpgoD')
+		return self
+	
+	def times(self):
+		self._options.append('-t')
+		return self
+	
+	def recursive(self):
+		self._options.append('-r')
+		return self
+		
+	def sparse(self):
+		self._options.append('-S')
+		return self
+
+	def links(self):
+		self._options.append('-l')
+		return self
+		
+	def dereference(self):
+		self._options.append('-L')
+		return self
+	
+	def xattributes(self):
+		self._options.append('-X')
+		return self
+
+	def exclude(self, files):
+		for file in files:
+			self._options.append("--exclude " + file)
+		return self
+
+	def version(self):
+		self._options.append("--version")
+		return self
+		
+	def source(self, path):
+		self._src = path
+		return self
+		
+	def dest(self, path):
+		self._dst = path
+		return self
+		
+	def quietly(self):
+		self._quiet = True
+		return self
+	
+	def __str__(self):
+		ret = "%(executable)s %(options)s %(src)s %(dst)s %(quiet)s" % dict(
+			executable=self._executable,
+			options=" ".join(self._options),
+			src=self._src,
+			dst=self._dst,
+			quiet="2>&1 > /dev/null" if self._quiet else ""
+		)
+		return ret.strip()
+
+	@staticmethod
+	def usable():
+		"""
+		@todo: implement
+		"""
+		return True
+
+
+class Tar:
+	EXECUTABLE = "/usr/sfw/bin/gtar" if disttool.is_sun() else "tar"
+	
+	_executable = None
+	_options = None
+	_files = None
+	
+	def __init__(self, executable=None):
+		self._executable = executable if executable is not None else self.EXECUTABLE
+		self._options = []
+		self._files = []
+		
+	def version(self):
+		self._options.append("--version")
+		return self
+	
+	def verbose(self):
+		self._options.append("-v")
+		return self
+	
+	def create(self):
+		self._options.append("-c")
+		return self
+		
+	def bzip2(self):
+		self._options.append("-j")
+		return self
+
+	def diff(self):
+		self._options.append("-d")
+		return self
+		
+	def gzip(self):
+		self._options.append("-z")
+		return self
+
+	def extract(self):
+		self._options.append("-x")
+		return self
+
+	def update(self):
+		self._options.append("-u")
+		return self
+
+	def sparse(self):
+		self._options.append("-S")
+		return self
+
+	def dereference(self):
+		self._options.append("-h")
+		return self
+
+	def archive(self, filename):
+		self._options.append("-f " + filename if filename is not None else "-")
+		return self
+	
+	def chdir(self, dir):
+		self._options.append("-C " + dir)
+		return self
+	
+	def add(self, filename, dir=None):
+		item = filename if dir is None else "-C "+dir+" "+filename
+		self._files.append(item)
+		return self
+	
+	def __str__(self):
+		ret = "%(executable)s %(options)s %(files)s" % dict(
+			executable=self._executable,
+			options=" ".join(self._options),
+			files=" ".join(self._files)
+		)
+		return ret.strip()
+
+
+
+"""
+class FileTool:
+	BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
+	PART_SUFFIX = '.part.'	
+	
+	@staticmethod
+	def split(filename, part_name_prefix, chunk_size, dest_dir):
+		logger = logging.getLogger(__name__)
+		f = None
+		try:
+			try:
+				f = open(filename, "r")
+			except OSError:
+				logger.error("Cannot open file to split '%s'", filename)
+				raise
+			
+			# Create the part file upfront to catch any creation/access errors
+			# before writing out data.
+			num_parts = int(math.ceil(float(os.path.getsize(filename))/chunk_size))
+			part_names = []
+			logger.info("Splitting file '%s' into %d chunks", filename, num_parts)
+			for i in range(num_parts):
+				part_name_suffix = FileTool.PART_SUFFIX + str(i).rjust(2, "0")
+				part_name = part_name_prefix + part_name_suffix
+				part_names.append(part_name)
+				
+				part_filename = os.path.join(dest_dir, part_name)
+				try:
+					FileTool.touch(part_filename)
+				except OSError:
+					logger.error("Cannot create part file '%s'", part_filename)
+					raise
+						
+			# Write parts to files.
+			for part_name in part_names:
+				part_filename = os.path.join(dest_dir, part_name)
+				cf = open(part_filename, "w")
+				try:
+					logger.info("Writing chunk '%s'", part_filename)
+					FileTool._write_chunk(f, cf, chunk_size)
+				except OSError:
+					logger.error("Cannot write chunk file '%s'", part_filename)
+					raise
+				
+			return part_names
+		finally:
+			if f is not None:
+				f.close()
+	
+	@staticmethod	
+	def _write_chunk(source_file, chunk_file, chunk_size):
+		bytes_written = 0  # Bytes written.
+		bytes_left = chunk_size	# Bytes left to write in this chunk.
+		
+		while bytes_left > 0:
+			size = FileTool.BUFFER_SIZE if FileTool.BUFFER_SIZE < bytes_left else bytes_left
+			buf = source_file.read(size)
+			chunk_file.write(buf)
+			bytes_written += len(buf)
+			bytes_left = chunk_size - bytes_written
+			if len(buf) < size:
+				bytes_left = 0 # EOF
+	
+	@staticmethod
+	def touch(filename):
+		open(filename, "w+").close()
+
+	@staticmethod
+	def truncate(filename):
+		f = open(filename, "w+")
+		f.truncate(0)
+		f.close()
+"""

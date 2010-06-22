@@ -5,8 +5,7 @@ Created on Dec 5, 2009
 '''
 
 from scalarizr.messaging import MessageProducer
-from scalarizr.messaging.p2p import P2pMessageStore, _P2pBase, P2pConfigOptions,\
-	P2pSender
+from scalarizr.messaging.p2p import P2pMessageStore, _P2pBase, P2pConfigOptions
 from scalarizr.util import cryptotool, configtool
 from urllib import splitnport
 from urllib2 import urlopen, Request, URLError, HTTPError
@@ -14,6 +13,10 @@ import logging
 import uuid
 import binascii
 import threading
+try:
+	import timemodule as time
+except ImportError:
+	import time	
 
 
 class P2pMessageProducer(MessageProducer, _P2pBase):
@@ -32,73 +35,52 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 				kwargs[P2pConfigOptions.PRODUCER_RETRIES_PROGRESSION], ",")
 		self.sender = kwargs[P2pConfigOptions.PRODUCER_SENDER]
 				
-		self._next_retry_index = 0
-		self._interval = None
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
 		
-		self._send_event = threading.Event()
-		self._delivery_thread = threading.Thread(target=self._send_undelivered)
-		self._delivery_thread.daemon = True
-		self._delivery_started = False
-		self._delivery_lock = threading.Lock()
-	
+		self._local = threading.local()
+		self._local_defaults = dict(interval=None, next_retry_index=0, delivered=False)
+
 	
 	def send(self, queue, message):
-		# TODO: Implement blocking. Thread will block until it deliver message
 		self._logger.info("Sending message '%s' into queue '%s'", message.name, queue)
 
 		if message.id is None:
 			message.id = str(uuid.uuid4())
-		self.fire("before_send", queue, message)				
+		self.fire("before_send", queue, message)
 		self._store.put_outgoing(message, queue, self.sender)
 		
-		"""
-		if self.sender == P2pSender.DAEMON:
-			self._delivery_lock.acquire()
-			if not self._delivery_started:
-				self._delivery_started = True
-				self._delivery_lock.release()				
-				self._delivery_thread.start()
-			self._send_event.set()
-		else:
-			self._send0(queue, message)
-		"""	
-		self._send0(queue, message)
-	
-	
-	def _send_undelivered(self):
-		"""
-		Delivery thread target
-		"""
-		
-		def _delivered(queue, message):
-			self._next_retry_index = 0
-			self._interval = None
-		
-		def _undelivered(queue, message):
-			self._interval = self._get_next_interval()
-			if self._next_retry_index < len(self.retries_progression):
-				self._next_retry_index += 1
-		
-		self._logger.info("Starting message delivery thread")		
-		while 1:
-			try:
-				self._logger.debug("Wait %s seconds to continue delivering messages", self._interval)
-				self._send_event.wait(self._interval)
-				self._send_event.clear()
-				for queue, message in self._store.get_undelivered(P2pSender.DAEMON):
-					self._logger.debug("Fetch undelivered message '%s' (id: %s)", message.name, message.id)
-					self._send0(queue, message, _delivered, _undelivered)
+		if not hasattr(self._local, "interval"):
+			for k, v in self._local_defaults.items():
+				setattr(self._local, k, v)
+				
+		self._local.delivered = False
+		while not self._local.delivered:
+			if self._local.interval:
+				self._logger.info("Sleep %d seconds before next attempt", self._local.interval)
+				time.sleep(self._local.interval)
+				# FIXME: SIGINT hanged
+				# strace:
+				# --- SIGINT (Interrupt) @ 0 (0) ---
+				# rt_sigaction(SIGINT, {0x36b9210, [], 0}, {0x36b9210, [], 0}, 8) = 0
+				# sigreturn()                             = ? (mask now [])
+				# futex(0xa3f5d78, FUTEX_WAIT_PRIVATE, 0, NUL
+					
+			self._send0(queue, message, self._delivered_cb, self._undelivered_cb)
 
-			except (Exception, BaseException), e:
-				self._logger.error("Unable to read from database. %s", e)
-				self._logger.exception(e)
 
+	def _delivered_cb(self, queue, message):
+		self._local.next_retry_index = 0
+		self._local.interval = None
+		self._local.delivered = True
+	
+	def _undelivered_cb(self, queue, message):
+		self._local.interval = self._get_next_interval()
+		if self._local.next_retry_index < len(self.retries_progression):
+			self._local.next_retry_index += 1	
 
 	def _get_next_interval(self):
-		return int(self.retries_progression[self._next_retry_index]) * 60.0
-
+		return int(self.retries_progression[self._local.next_retry_index]) * 60.0
 
 	def _send0(self, queue, message, success_callback=None, fail_callback=None):
 		try:
@@ -126,12 +108,12 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			
 			url = self.endpoint + "/" + queue
 			req = Request(url, data, headers)
-			resp = urlopen(req)
+			urlopen(req)
 			
 			self._message_delivered(queue, message, success_callback)
 		
 		except (Exception, BaseException), e:
-			# Python < 2.6 raise exception on 2xx http codes 
+			# Python < 2.6 raise exception on 2xx > 200 http codes except
 			if isinstance(e, HTTPError):
 				if e.code == 201:
 					self._message_delivered(queue, message, success_callback)

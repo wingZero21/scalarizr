@@ -29,10 +29,8 @@ class Observable(object):
 		if not self._events_suspended:
 			if self._listeners.has_key(event):
 				for ln in self._listeners[event]:
-					try:
-						ln(*args, **kwargs)
-					except (Exception, BaseException), e:
-						logger.exception(e)
+					ln(*args, **kwargs)
+
 	
 	def on(self, *args, **kwargs):
 		"""
