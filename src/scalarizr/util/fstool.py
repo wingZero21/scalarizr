@@ -99,7 +99,7 @@ class TabEntry(object):
 if disttool.is_linux():
 	Fstab.LOCATION = "/etc/fstab"	
 	Mtab.LOCATION = "/etc/mtab"
-	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs')
+	Mtab.LOCAL_FS_TYPES = ('ext2', 'ext3', 'xfs', 'jfs', 'reiserfs', 'tmpfs', 'sysfs', 'proc')
 	
 elif disttool.is_sun():
 	Fstab.LOCATION = "/etc/vfstab"	
