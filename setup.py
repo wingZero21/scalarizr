@@ -4,6 +4,7 @@ from setuptools import setup, findall, find_packages
 from distutils import sysconfig, log
 from distutils.util import change_root
 from distutils.command.install_data import install_data
+import platform
 
 
 class my_install_data(install_data):
@@ -16,25 +17,31 @@ class my_install_data(install_data):
 			"python%s%s" % (sysconfig.get_config_var("VERSION"), sysconfig.get_config_var("EXE"))
 		)
 		
+		d = platform.dist();
+		rhel =  int(d[0].lower() in ['centos', 'rhel', 'redhat']) and int(d[1].split('.')[0])
+		
 		entries = list(t for t in self.data_files if t[0].startswith("/usr"))
 		for ent in entries:
 			dir = change_root(self.root, ent[0])			
 			for file in ent[1]:
 				path = os.path.join(dir, os.path.basename(file))
-				f = None
-				try:
-					f = open(path, "r")
-					script = f.readline()
-					script = script.replace("#!/usr/bin/python", shbang)
-					script += f.read()
-				finally:
-					f.close()
-					
-				try:
-					f = open(path, "w")
-					f.write(script)
-				finally:
-					f.close()
+				
+				# Change #! to current python binary for RHEL4,5
+				if rhel >= 4 and rhel <= 5:
+					f = None
+					try:
+						f = open(path, "r")
+						script = f.readline()
+						script = script.replace("#!/usr/bin/python", shbang)
+						script += f.read()
+					finally:
+						f.close()
+						
+					try:
+						f = open(path, "w")
+						f.write(script)
+					finally:
+						f.close()
 					
 				if os.name == "posix":
 					oldmode = os.stat(path)[ST_MODE] & 07777
