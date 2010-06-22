@@ -18,7 +18,7 @@ class _MessageProducer(object):
 	
 	last_message = None
 	
-	def send(self, message):
+	def send(self, log,message):
 		self.last_message = message
 		
 class _MessageService(MessageService):
@@ -56,15 +56,13 @@ class Test(unittest.TestCase):
 	def test_log_exception(self):
 		self._handler = log.MessagingHandler()
 		self._logger.addHandler(self._handler)
-		
 		# Log exception
 		try:
 			open("/non/existed/path", "r")
 		except IOError, e:
 			self._logger.exception(e)
 			
-		message = self._wait_sender()
-			
+		message = self._wait_sender()	
 		# Assertions
 		self.assertTrue(message, "Message was sent")
 		entry = message.entries[0]
@@ -80,8 +78,7 @@ class Test(unittest.TestCase):
 		self._logger.addHandler(self._handler)
 		
 		num_it = 3
-		num_msg = 5
-		
+		num_msg = 5	
 		# Do `num_it` iterations
 		for i in range(num_it):
 			start = time.time()
@@ -90,7 +87,6 @@ class Test(unittest.TestCase):
 				self._logger.info("test_send_interval, iteration %d, entry %d", i, msg)
 				
 			self._wait_sender()
-		
 			# Assertions
 			self.assertAlmostEqual(self._handler.send_interval, time.time() - start, 1)
 	
@@ -101,7 +97,6 @@ class Test(unittest.TestCase):
 		
 		num_it = 3
 		num_msg = 5
-		
 		# Do `num_it` iterations
 		for i in range(num_it):
 			# Do logging
@@ -109,16 +104,16 @@ class Test(unittest.TestCase):
 				self._logger.info("test_num_entries, iteration %d, entry %d", i, msg)
 			
 			message = self._wait_sender()
-			
 			# Assertions
 			self.assertEqual(len(message.entries), num_msg)
-
+	
 		
 	def _wait_sender(self):
 		while self._msg_producer.last_message is None:
 			time.sleep(0.05)
 		message = self._msg_producer.last_message
 		self._msg_producer.last_message = None
+		print message
 		return message
 		
 

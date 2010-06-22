@@ -72,6 +72,10 @@ class MessagingHandler(logging.Handler):
 		self._sender_thread.daemon = True
 		self._sender_thread.start()		
 
+		self.messages = []
+
+	"""	
+
 	def emit(self, record):
 		if not self._initialized:
 			self._init()
@@ -96,6 +100,7 @@ class MessagingHandler(logging.Handler):
 		cur.close()
 		if count >= self.num_entries:
 			self._send_event.set()
+			
 			
 	def _send_message(self):
 		conn = self._db.get().get_connection()
@@ -123,7 +128,44 @@ class MessagingHandler(logging.Handler):
 			producer.send(Queues.LOG, message)
 			conn.execute("DELETE FROM log WHERE id IN (%s)" % (",".join(ids)))
 			conn.commit()
+	"""
 
+	def emit(self, record):
+		if not self._initialized:
+			self._init()
+		
+		msg = str(record.msg) % record.args if record.args else str(record.msg)
+		
+		stack_trace = None
+		if record.exc_info:
+			output = cStringIO.StringIO()
+			traceback.print_tb(record.exc_info[2], file=output)
+			stack_trace =  output.getvalue()
+			output.close()			
+
+		data = dict(
+				name = record.name,
+				level = record.levelname,
+				pathname = record.pathname,
+				lineno = record.lineno,
+				msg = msg,
+				stack_trace = stack_trace
+				)
+		self.messages.append(data)
+		
+		if len(self.messages) >= self.num_entries:
+			self._send_event.set()
+		
+			
+	def _send_message(self):
+		if self.messages:
+			message = self._msg_service.new_message(Messages.LOG)
+			producer = self._msg_service.get_producer()
+			message.body["entries"] = self.messages
+			producer.send(Queues.LOG, message)	
+			self.messages = []
+
+	
 	def _sender(self):
 		while not self._stop_event.isSet():
 			try:
