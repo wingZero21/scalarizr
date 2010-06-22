@@ -14,14 +14,4 @@ CREATE TABLE p2p_message (
     "out_last_attempt_time" TEXT,
     "in_is_handled" INTEGER
 );
-DROP TABLE IF EXISTS log;
-CREATE TABLE log (
-    "id" INTEGER PRIMARY KEY,
-    "name" TEXT,
-    "level" INTEGER,
-    "pathname" TEXT,
-    "lineno" INTEGER,
-    "msg" TEXT,
-    "stack_trace" TEXT
-);
 COMMIT;

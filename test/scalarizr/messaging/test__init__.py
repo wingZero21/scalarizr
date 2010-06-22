@@ -16,7 +16,7 @@ class TestMessage(unittest.TestCase):
 				server_id = "32d18890-bf13-468e-9f91-981ae7851baa",
 				platform = "ec2"
 			), dict(
-				entry = (
+				entries = (
 					dict(category="scalarizr", level="INFO", message="Starting scalairzr..."),
 					dict(category="scalarizr", level="INFO", message="Initialize services"),
 					dict(category="scalarizr.messaging", level="ERROR", 
@@ -27,6 +27,7 @@ class TestMessage(unittest.TestCase):
 		msg.id = "12346xxxx-xxxx-xxx2221"
 		
 		xml_string = msg.toxml()
+		
 		xml = dom.parseString(xml_string)
 
 		root = xml.documentElement
@@ -40,11 +41,9 @@ class TestMessage(unittest.TestCase):
 		self.assertEqual(server_id[0].firstChild.nodeValue, msg.meta["server_id"])
 		
 		body = xml.documentElement.childNodes[1]
-		self.assertEqual(len(body.childNodes), 3)
-		entry0 = body.childNodes[0]
-		self.assertEqual(entry0.nodeName, "entry")
-		entry1 = body.childNodes[0]
-		self.assertEqual(entry1.nodeName, "entry")
+		entries = body.firstChild
+		self.assertTrue(any(el.nodeName == "item" for el in entries.childNodes))
+
 
 	def test_fromxml(self):
 		xml_string =  """<?xml version="1.0" ?>

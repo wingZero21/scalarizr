@@ -14,25 +14,6 @@ import string
 from scalarizr.bus import bus
 from scalarizr.messaging import Queues, Messages
 
-# FIXME: database is locked
-"""
-2010-06-10 08:58:31,451 - ERROR - scalarizr - database is locked
-Traceback (most recent call last):
-  File "/usr/lib/python2.5/site-packages/scalarizr/__init__.py", line 566, in main
-    logger.info("Stopping scalarizr...")
-  File "/usr/lib/python2.5/logging/__init__.py", line 985, in info
-    apply(self._log, (INFO, msg, args), kwargs)
-  File "/usr/lib/python2.5/logging/__init__.py", line 1101, in _log
-    self.handle(record)
-  File "/usr/lib/python2.5/logging/__init__.py", line 1111, in handle
-    self.callHandlers(record)
-  File "/usr/lib/python2.5/logging/__init__.py", line 1148, in callHandlers
-    hdlr.handle(record)
-  File "/usr/lib/python2.5/logging/__init__.py", line 655, in handle
-    self.emit(record)
-  File "/usr/lib/python2.5/site-packages/scalarizr/util/log.py", line 75, in emit
-    conn.execute('INSERT INTO log VALUES (?,?,?,?,?,?,?)', data)
-"""
 
 
 INTERVAL_RE = re.compile('((?P<minutes>\d+)min\s?)?((?P<seconds>\d+)s)?')
@@ -64,17 +45,18 @@ class MessagingHandler(logging.Handler):
 	def _init(self):
 		self._db = bus.db
 		self._msg_service = bus.messaging_service
+		self.entries = []		
 		
 		self._send_event = threading.Event()
 		self._stop_event = threading.Event()
+		self._lock = threading.Lock()
 		
 		self._sender_thread = threading.Thread(target=self._sender)
 		self._sender_thread.daemon = True
 		self._sender_thread.start()		
 
-		self.messages = []
+		self._initialized = True		
 
-	"""	
 
 	def emit(self, record):
 		if not self._initialized:
@@ -89,81 +71,36 @@ class MessagingHandler(logging.Handler):
 			stack_trace =  output.getvalue()
 			output.close()			
 
-		conn = self._db.get().get_connection()
-		data = (None, record.name, record.levelname, record.pathname, record.lineno, msg, stack_trace)
-		conn.execute('INSERT INTO log VALUES (?,?,?,?,?,?,?)', data)
-		conn.commit()
+		ent = dict(
+			name = record.name,
+			level = record.levelname,
+			pathname = record.pathname,
+			lineno = record.lineno,
+			msg = msg,
+			stack_trace = stack_trace
+		)
 		
-		cur = conn.cursor()
-		cur.execute("SELECT COUNT(*) FROM log")
-		count = cur.fetchone()[0]
-		cur.close()
-		if count >= self.num_entries:
-			self._send_event.set()
-			
+		self._lock.acquire()		
+		try:
+			self.entries.append(ent)
+			if len(self.entries) >= self.num_entries:
+				self._send_event.set()
+		finally:
+			self._lock.release()
 			
 	def _send_message(self):
-		conn = self._db.get().get_connection()
-		cur = conn.cursor()
-		cur.execute("SELECT * FROM log")
-		ids = []
-		entries = []
+		entries = ()
+		self._lock.acquire()
+		try:
+			entries = self.entries[:]
+			self.entries = []
+		finally:
+			self._lock.release()
 		
-		for row in cur.fetchall():
-			entry = {}
-			entry['name'] = row['name']
-			entry['level'] = row['level']
-			entry['pathname'] = row['pathname']
-			entry['lineno'] = row['lineno']
-			entry['msg'] = row['msg']
-			entry['stacktrace'] = row['stack_trace']	
-			entries.append(entry)
-			ids.append(str(row['id']))
-		cur.close()
-			
 		if entries:
 			message = self._msg_service.new_message(Messages.LOG)
-			producer = self._msg_service.get_producer()
-			message.body["entries"] = entries
-			producer.send(Queues.LOG, message)
-			conn.execute("DELETE FROM log WHERE id IN (%s)" % (",".join(ids)))
-			conn.commit()
-	"""
-
-	def emit(self, record):
-		if not self._initialized:
-			self._init()
-		
-		msg = str(record.msg) % record.args if record.args else str(record.msg)
-		
-		stack_trace = None
-		if record.exc_info:
-			output = cStringIO.StringIO()
-			traceback.print_tb(record.exc_info[2], file=output)
-			stack_trace =  output.getvalue()
-			output.close()			
-
-		data = dict(
-				name = record.name,
-				level = record.levelname,
-				pathname = record.pathname,
-				lineno = record.lineno,
-				msg = msg,
-				stack_trace = stack_trace
-				)
-		self.messages.append(data)
-		
-		if len(self.messages) >= self.num_entries:
-			self._send_event.set()
-		
-			
-	def _send_message(self):
-		if self.messages:
-			message = self._msg_service.new_message(Messages.LOG)
-			producer = self._msg_service.get_producer()
-			message.body["entries"] = self.messages
-			producer.send(Queues.LOG, message)	
-			self.messages = []
+			message.body["entries"] = entries			
+			self._msg_service.get_producer().send(Queues.LOG, message)	
 
 	
 	def _sender(self):

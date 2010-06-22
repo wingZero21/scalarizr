@@ -122,10 +122,9 @@ class Message(object):
 					self._walk_encode(v, itemEl, doc)
 			else:
 				for v in value:
-					itemEl = doc.createElement(el.nodeName)
-					el.parentNode.appendChild(itemEl)
+					itemEl = doc.createElement("item")
+					el.appendChild(itemEl)
 					self._walk_encode(v, itemEl, doc)
-				el.parentNode.removeChild(el)
 		else:	
 			el.appendChild(doc.createTextNode(str(value) if value is not None else ""))
 

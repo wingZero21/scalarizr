@@ -4,6 +4,7 @@ Created on 01.02.2010
 @author: Dmytro Korsakov
 '''
 import unittest
+import threading
 from scalarizr.bus import bus
 from scalarizr.util import log, init_tests
 import logging
@@ -109,7 +110,9 @@ class Test(unittest.TestCase):
 	
 		
 	def _wait_sender(self):
-		while self._msg_producer.last_message is None:
+		timeout = 1
+		start = time.time()
+		while self._msg_producer.last_message is None and time.time() - start < timeout:
 			time.sleep(0.05)
 		message = self._msg_producer.last_message
 		self._msg_producer.last_message = None
