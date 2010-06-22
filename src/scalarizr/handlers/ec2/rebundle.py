@@ -28,6 +28,11 @@ from boto.s3.connection import Location
 from boto.resultset import ResultSet
 from boto.exception import BotoServerError
 
+# Workaround for python bug #5853
+# @see http://bugs.python.org/issue5853
+# @see http://groups.google.com/group/smug-dev/browse_thread/thread/47e7833edb9efbf9?pli=1
+import mimetypes
+mimetypes.init()
 
 def get_handlers ():
 	return [Ec2RebundleHandler()]
