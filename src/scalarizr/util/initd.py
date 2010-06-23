@@ -32,8 +32,11 @@ def reload(name, force=False):
 def _start_stop_reload(name, action):
 	if not _services.has_key(name):
 		raise InitdError("Unknown service '%s'" % (name,))
-	cmd = [_services[name]["initd_script"], action]
-	out, err, retcode = system(cmd, shell=False)
+	try:
+		cmd = [_services[name]["initd_script"], action]
+		out, err, retcode = system(cmd, shell=False)
+	except OSError, e:
+		raise InitdError("Popen failed with error %s" % (e.strerror,))
 	if retcode or (out and out.find("FAILED") != -1):
 		raise InitdError("Cannot %s %s" % (action, name), output=out + " " + err)
 	
