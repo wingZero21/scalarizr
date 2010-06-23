@@ -7,13 +7,14 @@ import unittest
 import threading
 import sqlite3 as sqlite
 import logging
+import time
 
 class TestSQLite(unittest.TestCase):
 	localobj = None
 
 	def setUp(self):
-		self.localobj = SingletonThreadPool(self._db_connect)
-		##self.localobj = SqliteLocalObject(self._db_connect)
+		##self.localobj = SingletonThreadPool(self._db_connect)
+		self.localobj = SqliteLocalObject(self._db_connect)
 		#for loop test:
 		conn = self.localobj.get().get_connection()
 		cur = conn.cursor()
@@ -78,6 +79,7 @@ class TestSQLite(unittest.TestCase):
 				cur2.execute(sqlsel2)
 				print "Trololo count: ", cur2.fetchone()[0]
 				conn2.commit()
+				time.sleep(0.010)
 			except BaseException, e:
 				print "Trololo: ", str(e)
 		#conn2.close()
@@ -95,6 +97,7 @@ class TestSQLite(unittest.TestCase):
 			cur.execute(sqlsel)
 			print "Ololo count: ", cur.fetchone()[0]
 			conn.commit()
+			time.sleep(0.010)
 		t.join()
 		#conn.close()
 		
