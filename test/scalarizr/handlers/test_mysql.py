@@ -53,14 +53,13 @@ class Test(unittest.TestCase):
             
             myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
             out,err = myclient.communicate("SELECT Password from mysql.user where User='"+user+"'")
-            print "Trololo: ", out, err
             hashed_pass = re.search ('Password\n(.*)', out).group(1)
-            self.assertEqual(hashed_pass, password)
+            self.assertEqual(hashed_pass, mysql_password(password))
         os.kill(myd.pid, signal.SIGKILL)
         
             
         
-    def test_create_snapshot(self):
+    def _test_create_snapshot(self):
         bus.queryenv_service = _QueryEnv()
 #        bus.platform = Ec2Platform()
         bus.platform = _Platform()
@@ -70,7 +69,6 @@ class Test(unittest.TestCase):
         stat_user = "scalarizr_stat"
 
         root_password, repl_password, stat_password = handler._add_mysql_users(root_user, repl_user, stat_user)
-        print "####### PASSWORD ", root_password
         handler._change_mysql_dir('log_bin', '/var/log/mysql/binarylog/binary.log', 'mysqld')
         handler._master_replication_init()
         snap_id, log_file, log_pos = handler._create_snapshot(root_user, root_password)
@@ -88,6 +86,25 @@ class Test(unittest.TestCase):
         sql.close()
         self.assertEqual(log_file, true_log_file)
         self.assertEqual(log_pos, true_log_pos)
+        file = open('/etc/mysql/farm-replication.cnf')
+        self.assertEqual('[mysqld]\nserver-id\t\t=\t1\nmaster-connect-retry\t\t=\t15\n', file.read())
+        file.close()
+        
+        
+    
+    def test_on_before_host_init(self):
+        bus.queryenv_service = _QueryEnv()
+#        bus.platform = Ec2Platform()
+        bus.platform = _Platform()
+        handler = _MysqlHandler()
+        message = _Message()
+        handler.on_before_host_up(message)
+        
+
+def mysql_password(str):
+    pass1 = hashlib.sha1(str).digest()
+    pass2 = hashlib.sha1(pass1).hexdigest()
+    return "*" + pass2.upper()
 
 
 class _Bunch(dict):
@@ -95,12 +112,22 @@ class _Bunch(dict):
 
 class _QueryEnv:
     def list_role_params(self, role_name):
-        return [_Bunch(
-            mysql_data_storage_engine = 'ebs'
-            )]
+        return _Bunch(
+            mysql_data_storage_engine = 'ebs',           
+            )
+        
 class _Platform:
     def get_instance_id(self):
         pass
+
+class _Message:
+    def __init__(self):
+        self.log_file = None
+        self.log_pos  = None
+        self.mysql_repl_user = None
+        self.mysql_repl_password = None
+        self.mysql_stat_password = None
+        self.mysql_stat_user = None
 
 if __name__ == "__main__":
     init_tests()
