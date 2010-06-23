@@ -376,7 +376,7 @@ class MysqlHandler(Handler):
 					try:
 						fstool.mount(devname, '/mnt', ["-t auto"])
 					except fstool.FstoolError, e:
-						if -666 == e.code:
+						if fstool.FstoolError.NO_FS == e.code:
 							system("/sbin/mkfs.ext3 -F " + devname + " 2>&1")
 							try:
 								fstool.mount(devname, '/mnt', ["-t auto"])

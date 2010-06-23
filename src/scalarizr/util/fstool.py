@@ -9,8 +9,8 @@ import re
 import os
 
 class FstoolError(BaseException):
-	NO_FS = -666
-	CANNOT_MOUNT = -667
+	NO_FS = -100
+	CANNOT_MOUNT = -101
 	
 	message = None
 	code = None
