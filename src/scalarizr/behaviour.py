@@ -13,6 +13,7 @@ class Behaviours:
 	WWW = "www"	
 	APP = "app"
 	MYSQL = "mysql"
+	CASSANDRA = "cassandra"
 	
 	
 def get_configurator(name):
