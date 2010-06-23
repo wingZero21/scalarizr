@@ -13,8 +13,8 @@ class TestSQLite(unittest.TestCase):
 	localobj = None
 
 	def setUp(self):
-		##self.localobj = SingletonThreadPool(self._db_connect)
-		self.localobj = SqliteLocalObject(self._db_connect)
+		self.localobj = SingletonThreadPool(self._db_connect)
+		##self.localobj = SqliteLocalObject(self._db_connect)
 		#for loop test:
 		conn = self.localobj.get().get_connection()
 		cur = conn.cursor()
