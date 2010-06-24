@@ -3,7 +3,7 @@ Created on Jun 17, 2010
 
 @author: marat
 '''
-from scalarizr.util import UtilError, system
+from scalarizr.util import UtilError, system, ping_service
 import time
 import os
 
@@ -17,8 +17,9 @@ class InitdError(UtilError):
 
 _services = dict()
 
-def explore(name, initd_script, pid_file=None, lock_file=None):
-	_services[name] = dict(initd_script=initd_script, pid_file=pid_file, lock_file=lock_file)
+def explore(name, initd_script, pid_file=None, lock_file=None, tcp_port=None, udp_port=None, so_timeout=5):
+	_services[name] = dict(initd_script=initd_script, pid_file=pid_file, lock_file=lock_file,\
+							tcp_port=tcp_port, udp_port=udp_port, so_timeout=so_timeout)
 
 def start(name):
 	return _start_stop_reload(name, "start")
@@ -45,8 +46,17 @@ def _start_stop_reload(name, action):
 	# 1. on start init.d scripts often returns control right after daemon is forked 
 	# but pid-file is not touched
 	# 2. when doing apache reload
+	
+	
 	if action != "stop":
-		time.sleep(0.5)
+		so_timeout 	= _services[name]["so_timeout"]
+		if _services[name]["tcp_port"]:
+			port 		= _services[name]["tcp_port"]
+			ping_service('127.0.0.1', port, so_timeout)
+		elif _services[name]["udp_port"]:
+			port 		= _services[name]["udp_port"]
+			ping_service('127.0.0.1', port, so_timeout, 'udp')
+
 	
 	if pid_file:
 		if action == "start" and not os.path.exists(pid_file):
@@ -63,3 +73,8 @@ def is_running(name):
 	out, err = system(cmd, shell=False)[0:2]
 	out += err
 	return out.lower().find("running") != -1
+
+
+
+
+	
