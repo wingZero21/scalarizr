@@ -4,7 +4,7 @@ import threading
 import weakref
 import time
 import sys
-
+import socket
 
 
 class UtilError(BaseException):
@@ -262,3 +262,22 @@ def init_tests():
 	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../test/resources/etc")
 	from scalarizr import _init
 	_init()
+	
+def ping_service(host=None, port=None, timeout=None, proto='tcp'):
+	if None == timeout:
+		timeout = 5
+	if 'udp' == proto:
+		socket_proto = socket.SOCK_DGRAM
+	else:
+		socket_proto = socket.SOCK_STREAM
+	s = socket.socket(socket.AF_INET, socket_proto)
+	time_start = time.time()
+	while time.time() - time_start < timeout:
+		try:
+			s.connect((host, port))
+			s.shutdown(2)
+			return
+		except:
+			time.sleep(0.1)
+			pass
+	raise UtilError ("Service unavailable after %d seconds of waiting" % timeout)
