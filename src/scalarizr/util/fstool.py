@@ -115,7 +115,7 @@ def mount (device, mpoint, options=()):
 	
 	options = " ".join(options) 
 	out = system("mount %(options)s %(device)s %(mpoint)s 2>&1" % vars())[0]
-	if out.find("you must specify the filesystem mkfstype") != -1:
+	if out.find("you must specify the filesystem type") != -1:
 		raise FstoolError("No filesystem found on device '%s'" % (device), FstoolError.NO_FS)
 	
 	mtab = Mtab()
