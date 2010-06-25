@@ -63,8 +63,9 @@ class Fstab:
 			f.close()
 			
 	def contains(self, devname=None, mpoint=None, rescan=False):
-		return any((mpoint and entry.mpoint == mpoint) or (devname and entry.device) \
-				for entry in self.list_entries(rescan))
+		for entry in self.list_entries(rescan):
+			return any(bool(mpoint and entry.mpoint == mpoint) or bool(devname and entry.device == devname) \
+					for entry in self.list_entries(rescan))
 		
 	def find(self, devname=None, mpoint=None, fstype=None, rescan=False):
 		ret = list(entry for entry in self.list_entries(rescan) if \
@@ -94,6 +95,9 @@ class TabEntry(object):
 		self.fstype = fstype
 		self.options = options		
 		self.value = value
+		
+	def __str__(self):
+		return "%s %s %s %s" % (self.device, self.mpoint, self.fstype, self.options)
 
 		
 if disttool.is_linux():

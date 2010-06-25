@@ -9,6 +9,7 @@ import logging
 import binascii
 import os
 
+#TODO method to remove individual options
 
 class ConfigError(BaseException):
 	pass

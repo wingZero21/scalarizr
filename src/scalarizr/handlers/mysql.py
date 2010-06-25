@@ -119,7 +119,7 @@ class MysqlHandler(Handler):
 					snap_id, log_file, log_pos = self._create_snapshot(root_user, root_password)
 					# Sending updated metadata to scalr
 					message.log_file = log_file
-					message.log_pos = log_pos					
+					message.log_pos = log_pos
 					self._start_mysql()
 			elif "slave" == role_name or "eph" == role_params["mysql_data_storage_engine"]:
 				try:

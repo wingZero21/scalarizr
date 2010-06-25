@@ -39,25 +39,19 @@ class Test(unittest.TestCase):
         bus.queryenv_service = _QueryEnv()
         bus.platform = _Platform()
         handler = _MysqlHandler()
-
         root_user = "scalarizr"
         repl_user = "scalarizr_repl"
-        stat_user = "scalarizr_stat"
-        
+        stat_user = "scalarizr_stat"        
         root_password, repl_password, stat_password = handler._add_mysql_users(root_user, repl_user, stat_user)
-
         myd = handler._start_mysql_skip_grant_tables()
         for user, password in {root_user: root_password,
                                repl_user: repl_password,
-                               stat_user: stat_password}.items():
-            
+                               stat_user: stat_password}.items():            
             myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
             out,err = myclient.communicate("SELECT Password from mysql.user where User='"+user+"'")
             hashed_pass = re.search ('Password\n(.*)', out).group(1)
             self.assertEqual(hashed_pass, mysql_password(password))
-        os.kill(myd.pid, signal.SIGTERM)
-        
-            
+        os.kill(myd.pid, signal.SIGTERM)           
         
     def test_create_snapshot(self):
         bus.queryenv_service = _QueryEnv()
@@ -86,8 +80,8 @@ class Test(unittest.TestCase):
         self.assertEqual(log_file, true_log_file)
         self.assertEqual(log_pos, true_log_pos)
         file = open('/etc/mysql/farm-replication.cnf')
-        file.close()
         self.assertEqual('[mysqld]\nserver-id\t\t=\t1\nmaster-connect-retry\t\t=\t15\n', file.read())
+        file.close()
         
     
     def test_on_before_host_init(self):
@@ -102,9 +96,22 @@ class Test(unittest.TestCase):
         mysql_user    = pwd.getpwnam("mysql")
         self.assertEqual(mysql_user.pw_uid, os.stat('/mnt/mysql-data')[4])
         self.assertEqual(mysql_user.pw_gid, os.stat('/mnt/mysql-data')[5])
+        self.assertEqual(mysql_user.pw_uid, os.stat('/mnt/mysql-misc')[4])
+        self.assertEqual(mysql_user.pw_gid, os.stat('/mnt/mysql-misc')[5])
+        self.tearDown()
+        self.setUp()
         handler.on_before_host_up(message)
-        
-        
+        if disttool.is_redhat_based():
+            my_cnf_file = "/etc/my.cnf"
+        else:
+            my_cnf_file = "/etc/mysql/my.cnf"
+        file = open(my_cnf_file)
+        mycnf = file.read()
+        file.close()
+        datadir = re.search(re.compile('^\s*datadir\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
+        self.assertEqual(datadir, '/mnt/mysql-data/')
+        log_bin = re.search(re.compile('^\s*log_bin\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
+        self.assertEqual(log_bin, '/mnt/mysql-misc/binlog.log')
 
 def mysql_password(str):
     pass1 = hashlib.sha1(str).digest()
