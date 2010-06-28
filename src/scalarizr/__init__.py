@@ -26,6 +26,7 @@ import signal
 import shutil
 import string
 import traceback
+
 try:
 	import timemodule as time
 except ImportError:
@@ -39,7 +40,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.5-1"	
+__version__ = "0.5"	
 EMBED_SNMPD = True
 _running = False
 
@@ -454,13 +455,16 @@ def _behaviour_validator(value):
 				return False
 	return True
 
+_snmp_pid = None
 def _start_snmp_server():
 	# Start SNMP server in a separate process
 	pid = os.fork()
 	if pid == 0:
 		snmp_server = bus.snmp_server
 		snmp_server.start()
-		sys.exit()	
+		sys.exit()
+	else:
+		_snmp_pid = pid	
 
 def _snmp_crash_handler(signum, frame):
 	if _running:
@@ -475,6 +479,25 @@ def _snmpd_health_check():
 			if retcode > 0 or out.lower().find("failed") != -1:
 				logger.error("Canot start snmpd. %s", out)
 		time.sleep(60)
+
+def _shutdown():
+	_running = False
+	logger = logging.getLogger(__name__)
+	logger.info("Stopping scalarizr...")
+	
+	if _snmp_pid:
+		try:
+			logging.debug("Stopping SNMP subprocess")
+			os.kill(_snmp_pid, signal.SIGTERM)
+		except OSError, e:
+			logger.error("Cannot send SIGTERM to SNMP subprocess (pid: %d). %s", _snmp_pid, e)
+	
+	msg_service = bus.messaging_service
+	consumer = msg_service.get_consumer()
+	consumer.stop()
+	# Fire terminate
+	bus.fire("terminate")
+	logger.info("Stopped")	
 
 def main():
 	try:
@@ -561,13 +584,14 @@ def main():
 			# Start SNMP server in a separate process			
 			signal.signal(signal.SIGCHLD, _snmp_crash_handler)
 			_start_snmp_server()
-			pass
-
 		else:
 			# Start snmpd health check thread
 			t = threading.Thread(target=_snmpd_health_check)
 			t.daemon = True
 			t.start()
+			
+		# Install  signal handlers	
+		signal.signal(signal.SIGTERM, _shutdown)
 
 		# Start messaging server
 		msg_service = bus.messaging_service
@@ -584,13 +608,8 @@ def main():
 			while True:
 				msg_thread.join(0.5)
 		except KeyboardInterrupt:
-			_running = False
-			logger.info("Stopping scalarizr...")
-			consumer.stop()
+			_shutdown()
 			
-			# Fire terminate
-			bus.fire("terminate")
-			logger.info("Stopped")
 	except (BaseException, Exception), e:
 		if not (isinstance(e, SystemExit) or isinstance(e, KeyboardInterrupt)):
 			traceback.print_exc(file=sys.stderr)
