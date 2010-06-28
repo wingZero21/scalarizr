@@ -11,9 +11,7 @@ from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re, time, pexpect
-import signal, pwd
-
-
+import signal, pwd, random, tempfile, shutil
 
 if disttool.is_redhat_based():
 	initd_script = "/etc/init.d/mysqld"
@@ -34,7 +32,7 @@ except:
 # Register mysql service
 logger = logging.getLogger(__name__)
 logger.debug("Explore MySQL service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
-initd.explore("mysql", initd_script, pid_file)
+initd.explore("mysql", initd_script, pid_file, tcp_port=3306)
 
 
 OPT_ROOT_USER   		= "root_user"
@@ -45,6 +43,10 @@ OPT_STAT_USER   		= "stat_user"
 OPT_STAT_PASSWORD   	= "stat_password"
 OPT_ROLE_NAME			= "role_name"
 
+ROOT_USER = "scalr"
+REPL_USER = "scalr_repl"
+STAT_USER = "scalr_stat"
+
 def get_handlers ():
 	return [MysqlHandler()]
 
@@ -54,7 +56,19 @@ class MysqlMessages:
 	CREATE_BACKUP = "Mysql_CreateBackup"
 	CREATE_PMA_USER = "Mysql_CreatePmaUser"
 	CREATE_PMA_USER_RESULT = "Mysql_CreatePmaUserResult"
+	PROMOTE_TO_MASTER	= "Mysql_PromoteToMaster"
+	PROMOTE_TO_MASTER_RESULT = "Mysql_PromoteToMasterResult"
 	MASTER_UP = "Mysql_MasterUp"
+	"""
+	@ivar behaviour
+	@ivar local_ip
+	@ivar remote_ip
+	@ivar role_name		
+	@ivar log_file
+	@ivar log_pos
+	@ivar repl_user
+	@ivar repl_password
+	"""
 
 
 class MysqlHandler(Handler):
@@ -66,37 +80,134 @@ class MysqlHandler(Handler):
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
 		self._iid = self._platform.get_instance_id()
+		self._config 		= bus.config
+		self._role_name 	= self._config.get(configtool.SECT_GENERAL, OPT_ROLE_NAME)
+		self._section	= configtool.get_behaviour_section_name(Behaviours.MYSQL)
 		bus.on("init", self.on_init)
 
 	def on_init(self):
 		bus.on("before_host_up", self.on_before_host_up)
 
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return behaviour == Behaviours.MYSQL and \
+				(message.name == MysqlMessages.MASTER_UP\
+			or   message.name == MysqlMessages.PROMOTE_TO_MASTER\
+			or   message.name == MysqlMessages.CREATE_DATA_BUNDLE\
+			or   message.name == MysqlMessages.CREATE_BACKUP\
+			or   message.name == MysqlMessages.CREATE_PMA_USER)
+
+	def on_Mysql_CreateDataBundle(self, message):
+		try:
+			root_password	= self._config.get(self._section, OPT_ROOT_PASSWORD)
+		except Exception, e:
+			self._logger.error('Cannot retrieve mysql login and password from config: ', e)
+			raise HandlerError('Cannot retrieve mysql login and password from config: %s' % e)
+		(snap_id, log_file, log_pos) = self._create_snapshot(ROOT_USER, root_password)
+		self._send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+			snapshot_id=snap_id,
+			log_file=log_file,
+			log_pos=log_pos
+		))
+
+				
+	def on_Mysql_PromoteToMaster(self, message):
+		if 'mysql_slave' == self._role_name:
+			role_params = self._queryenv.list_role_params(self._role_name)
+			self._stop_mysql()
+			#TODO: Umount ephemeral or ebs
+			vol_id = role_params["mysql_master_ebs_volume_id"]
+			self._init_storage(vol_id, '/mnt/dbstorage')
+			if os.path.exists('/mnt/dbstorage/mysql-data') and os.path.exists('/mnt/dbstorage/mysql-misc'):
+				self._change_mysql_dir('log_bin', '/mnt/dbstorage/mysql-misc/binlog.log', 'mysqld')
+				self._change_mysql_dir('datadir', '/mnt/dbstorage/mysql-data/', 'mysqld')				
+				self._replication_init()
+				self._update_config_users(message.root_user, message.root_password, 
+										  message.repl_user, message.repl_password,
+								          message.stat_user, message.stat_password)
+				self._config.set(configtool.SECT_GENERAL, OPT_ROLE_NAME, 'mysql_master')
+				self._role_name = 'mysql_master'
+				self._send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT)
+		else:
+			self._logger.error('Cannot promote to master: Already master.')
+			raise HandlerError('Cannot promote to master: Already master.')
+
+	def on_Mysql_MasterUp(self, message):
+		if 'mysql_slave' == self._role_name:		
+			ip = message.local_ip or message.remote_ip
+			log_file	= message.log_file
+			log_pos		= message.log_pos
+			master_repl_user 	= message.repl_user
+			master_repl_password = message.repl_password
+			self._replication_init(master=False)
+			try:
+				root_password	= self._config.get(self._section, OPT_ROOT_PASSWORD)
+			except (Exception, BaseException):
+				self._logger.error('Cannot retrieve mysql login and password from config.')
+				raise HandlerError('Cannot retrieve mysql login and password from config.')
+			sql = pexpect.spawn('/usr/bin/mysql -u' + ROOT_USER + ' -p' + root_password)
+			sql.expect('mysql>')
+			sql.sendline('STOP SLAVE;')
+			sql.expect('mysql>')
+			print "LOG FILE  = ", log_file
+			print "LOG POS = ", log_pos
+			print "PASS = ", master_repl_password
+			sql.sendline('CHANGE MASTER TO MASTER_HOST="'+ip+'", \
+							MASTER_USER="'+master_repl_user+'",\
+		  					MASTER_PASSWORD="'+master_repl_password+'",\
+							MASTER_LOG_FILE="'+log_file+'", \
+							MASTER_LOG_POS='+str(log_pos)+';')
+			sql.expect('mysql>')
+			sql.sendline('START SLAVE;')
+			sql.expect('mysql>')
+			status = sql.before
+			if re.search(re.compile('ERROR', re.MULTILINE), status):
+				self._logger.debug('Cannot start mysql slave: %s', status)
+				raise HandlerError('Cannot start mysql slave: %s' % status)
+			# Sleeping for a while
+			time.sleep(3)
+			sql.sendline('SHOW SLAVE STATUS;')
+			sql.expect('mysql>')
+			# Retrieveing slave status row vith values
+			print sql.before
+			status = sql.before.split('\r\n')[4].split('|')
+			sql.close()
+			io_status = status[11].strip()
+			sql_status = status[12].strip()
+			if not 'Yes' == io_status:
+				self._logger.debug('IO Error while starting mysql slave: %s %s',  status[17], status[18])
+				raise HandlerError ('IO Error while starting mysql slave: %s %s' %  status[17], status[18])
+			if not 'Yes' == sql_status:
+				self._logger.debug('SQL Error while starting mysql slave: %s %s',  status[17], status[18])
+				raise HandlerError('SQL Error while starting mysql slave: %s %s' %  status[17], status[18])
+			self._logger.debug('Successfully switched replication to a new MySQL master server.')
+		else:
+			self._logger.error('Cannot change master host: our role_name is master')
+		
+
 	def on_before_host_up(self, message):
-		config 		= bus.config
-		role_name 	= config.get(configtool.SECT_GENERAL, OPT_ROLE_NAME)
-		role_params = self._queryenv.list_role_params(role_name)
+		role_params = self._queryenv.list_role_params(self._role_name)
 		if role_params["mysql_data_storage_engine"]:
 			# Poneslas' pizda po ko4kam
-			if "mysql_master" == role_name:
+			if "mysql_master" == self._role_name:
 				# Mount EBS
-				self._init_storage()
+				vol_id = role_params["mysql_master_ebs_volume_id"]
+				self._init_storage(vol_id, '/mnt/dbstorage')
 				# If It's 1st init of mysql master
-				if not os.path.exists('/mnt/mysql-data') and not os.path.exists('/mnt/mysql-misc'):					
+				if not os.path.exists('/mnt/dbstorage/mysql-data') and not os.path.exists('/mnt/dbstorage/mysql-misc'):					
 					self._stop_mysql()					
 					# Move datadir to EBS
-					self._change_mysql_dir('datadir', '/mnt/mysql-data/', 'mysqld')
-					self._change_mysql_dir('log_bin', '/mnt/mysql-misc/binlog.log', 'mysqld')
-					self._master_replication_init()										
-					root_user = "scalarizr"
-					repl_user = "scalarizr_repl"
-					stat_user = "scalarizr_stat"
-					root_password, repl_password, stat_password =  self._add_mysql_users(root_user, repl_user, stat_user)				
-					message.mysql_repl_user = repl_user
+					self._change_mysql_dir('datadir', '/mnt/dbstorage/mysql-data/', 'mysqld')
+					self._change_mysql_dir('log_bin', '/mnt/dbstorage/mysql-misc/binlog.log', 'mysqld')
+					self._replication_init()										
+					root_password, repl_password, stat_password =  self._add_mysql_users(ROOT_USER,
+																						 REPL_USER,
+																						 STAT_USER)				
+					message.mysql_repl_user = REPL_USER
 					message.mysql_repl_password = repl_password
-					message.mysql_stat_user = stat_user
+					message.mysql_stat_user = STAT_USER
 					message.mysql_stat_password = stat_password
 					dry_run = role_params.get("create_ec2_snapshot", True)
-					snap_id, log_file, log_pos = self._create_snapshot(root_user, root_password, dry_run)
+					snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, dry_run)
 					if None != snap_id:
 						message.snapshot_id = snap_id
 					message.log_file	= log_file
@@ -104,50 +215,105 @@ class MysqlHandler(Handler):
 				# If EBS volume had mysql dirs (N-th init)
 				else:
 					self._stop_mysql()
-					self._change_mysql_dir('log_bin', '/mnt/mysql-misc/binlog.log', 'mysqld')
-					self._change_mysql_dir('datadir', '/mnt/mysql-data/', 'mysqld')
-					self._master_replication_init()
-					# Retrieve scalarizr's mysql username and password
-					section			= configtool.get_behaviour_section_name(Behaviours.MYSQL)
+					self._change_mysql_dir('log_bin', '/mnt/dbstorage/mysql-misc/binlog.log', 'mysqld')
+					self._change_mysql_dir('datadir', '/mnt/dbstorage/mysql-data/', 'mysqld')
+					self._replication_init()
+					# Retrieve scalr's mysql username and password
 					try:
-						root_user		= config.get(section, OPT_ROOT_USER)
-						root_password	= config.get(section, OPT_ROOT_PASSWORD)
+						root_password	= self._config.get(self._section, OPT_ROOT_PASSWORD)
 					except Exception, e:
-						self._logger.error('Cannot retrieve mysql login and password from config: %s', e)
-						raise
+						self._logger.error('Cannot retrieve mysql login and password from config: ', e)
+						raise HandlerError('Cannot retrieve mysql login and password from config: %s' % e)
 					# Updating snapshot metadata
-					snap_id, log_file, log_pos = self._create_snapshot(root_user, root_password)
+					snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
 					# Sending updated metadata to scalr
 					message.log_file = log_file
 					message.log_pos = log_pos
 					self._start_mysql()
-			elif "slave" == role_name or "eph" == role_params["mysql_data_storage_engine"]:
-				try:
-					devname = '/dev/' + self._platform.get_block_device_mapping()["ephemeral0"]
-				except Exception, e:
-					self._logger.error('Cannot retrieve device %s info: %s', devname, e)
-					raise
-				self._mount_device(devname)					
+			elif "mysql_slave" == self._role_name:
+				if not os.path.exists('mnt/dbstorage/mysql-data') and not os.path.exists('mnt/dbstorage/mysql-misc'):
+					snap_id = role_params['EBS_SNAP_ID']
+					ebs_volume = self._create_volume_from_snap(snap_id)
+					# Waiting until ebs volume will be created							
+					if "ebs" == role_params["mysql_data_storage_engine"]:
+						self._init_storage(ebs_volume.id, '/mnt/dbstorage')
+					elif "eph" == role_params["mysql_data_storage_engine"]:
+						# Mount ephemeral device
+						try:
+							devname = '/dev/' + self._platform.get_block_device_mapping()["ephemeral0"]
+						except Exception, e:
+							self._logger.error('Cannot retrieve device %s info: %s', devname, e)
+							raise HandlerError('Cannot retrieve device %s info: %s' % (devname, e))
+						self._mount_device(devname, '/mnt/dbstorage/')
+						# Mount ebs with mysql data
+						# tmpdir = tempfile.mkdtemp()
+						tmpdir = '/mnt/tmpdir'
+						self._init_storage(ebs_volume.id, tmpdir)
+						if os.path.exists(tmpdir+'/mysql-data') and os.path.exists(tmpdir+'/mysql-misc'):
+							# Rsync data from ebs to ephemeral device
+							rsync = filetool.Rsync()
+							rsync.source(tmpdir+'/')
+							rsync.dest('/mnt/dbstorage/')
+							rsync.archive()
+							out, err, retcode = system(str(rsync))
+							if err:
+								self._logger.error("Cannot copy data from ebs to ephemeral: %s", err)
+								raise HandlerError("Cannot copy data from ebs to ephemeral: %s" % err)
+							#TODO: Umount ebs device
+							# Detach and delete EBS Volume 
+							self._detach_delete_volume(ebs_volume)
+							shutil.rmtree(tmpdir)
+						else:
+							self._logger.error("EBS Volume does not contain mysql data.")
+							raise HandlerError("EBS Volume does not contain mysql data.")
+					# Change datadir and binary logs dir to ephemeral or ebs
+				self._change_mysql_dir('datadir', '/mnt/dbstorage/mysql-data/', 'mysqld')
+				self._change_mysql_dir('log_bin', '/mnt/dbstorage/mysql-misc/binlog.log', 'mysqld')
+				# Initialize replication
+				self._replication_init(master=False)
+				# Adding mysql users
+			
 					
-	def _init_storage(self):
-			vol_id = self._role_params["mysql_ebs_vol_id"]
+	def _init_storage(self, vol_id, mnt_point):
 			devname = '/dev/sdo'
 			ec2connection = self._platform.new_ec2_conn()
 			# Attach ebs
 			ebs_volumes = ec2connection.get_all_volumes([vol_id])
-
 			if 1 == len(ebs_volumes):
-				self._ebs_volume = ebs_volumes[0]
-				if self._ebs_volume.volume_state() == 'available':
-					ec2connection.attach_volume(vol_id, self._iid, devname)
-					while self._ebs_volume.attachment_state() != 'attached':
+				ebs_volume = ebs_volumes[0]
+				if 'available' != ebs_volume.volume_state():
+					ebs_volume.detach(force=True)
+					while ebs_volume.attachment_state() != 'available':
 						time.sleep(5)
+				ebs_volume.attach(self._iid, devname)
+				self._logger.info('Waiting while volume ID=%s attaching', vol_id)
+				while ebs_volume.attachment_state() != 'attached':
+					time.sleep(5)
 			else:
 				self._logger.error('Can\'t find volume with ID =  %s ', vol_id)
-				raise
+				raise HandlerError('Cannot find volume with ID =  %s ' % vol_id)
 			# Mount ebs # fstool.mount()
-			self._mount_device(devname)
-
+			self._mount_device(devname, mnt_point)
+	
+	def _create_volume_from_snap(self, snap_id):
+		ec2connection = self._platform.new_ec2_conn()
+		avail_zone = self._platform.get_avail_zone()
+		ebs_volume = ec2connection.create_volume(zone=avail_zone, snapshot=snap_id)
+		self._logger.info('Waiting until ebs volume will be created from snapshot "%s"', snap_id)
+		while 'available' != ebs_volume.volume_state():
+			time.sleep(5)
+		del ec2connection
+		return ebs_volume
+	
+	def _detach_delete_volume(self, volume):
+		if volume.detach():
+			if not volume.delete():
+				self._logger.error("Cannot delete volume ID=%s", volume.id)
+				raise HandlerError("Cannot delete volume ID=%s" % volume.id)
+		else:
+			self._logger.error("Cannot detach volume ID=%s", volume.id)
+			raise HandlerError("Cannot detach volume ID=%s" % volume.id)
+		
 	def _start_mysql_skip_grant_tables(self):
 		self._stop_mysql()
 		if disttool.is_redhat_based():
@@ -182,7 +348,7 @@ class MysqlHandler(Handler):
 			log_pos = log_row.group(2)
 		else:
 			log_file = log_pos = None
-		# Creating e2 snapshot
+		# Creating ebs snapshot
 		if not dry_run:
 			snapshot = self._ebs_volume.create_snapshot()
 			snap_id = snapshot.id
@@ -219,7 +385,17 @@ class MysqlHandler(Handler):
 		sql += " FLUSH PRIVILEGES;"
 		out,err = myclient.communicate(sql)
 		# Save root user to /etc/scalr/private.d/behaviour.mysql.ini
-		conf_updates = {configtool.get_behaviour_section_name(Behaviours.MYSQL) : {
+		self._update_config_users(root_user, root_password, repl_user, repl_password,
+								  stat_user, stat_password)
+		os.kill(myd.pid, signal.SIGTERM)
+		time.sleep(3)
+		self._start_mysql()
+		ping_service('127.0.0.1', 3306, 5)
+		return (root_password, repl_password, stat_password)
+	
+	def _update_config_users(self, root_user, root_password, repl_user, repl_password,
+							       stat_user, stat_password):
+		conf_updates = {self._section : {
 			OPT_ROOT_USER		: root_user,
 			OPT_ROOT_PASSWORD	: root_password,
 			OPT_REPL_USER		: repl_user,
@@ -229,12 +405,8 @@ class MysqlHandler(Handler):
 		}}
 		configtool.update(configtool.get_behaviour_filename(Behaviours.MYSQL, ret=configtool.RET_PRIVATE),
 			conf_updates)
-		os.kill(myd.pid, signal.SIGTERM)
-		time.sleep(3)
-		self._start_mysql()
-		return (root_password, repl_password, stat_password)
-
-	def _master_replication_init(self):
+		
+	def _replication_init(self, master=True):
 		# Create /etc/mysql if Hats
 		if disttool.is_redhat_based():
 			try:
@@ -248,7 +420,8 @@ class MysqlHandler(Handler):
 			self._logger.error('Cannot open /etc/mysql/farm-replication.cnf: %s', e.strerror )
 			raise
 		else:
-			file.write('[mysqld]\nserver-id\t\t=\t1\nmaster-connect-retry\t\t=\t15\n')
+			server_id = 1 if master else int(random.random() * 100000)+1
+			file.write('[mysqld]\nserver-id\t\t=\t'+ str(server_id)+'\nmaster-connect-retry\t\t=\t15\n')
 			file.close()
 		# Get my.cnf location
 		if disttool.is_redhat_based():
@@ -314,16 +487,17 @@ class MysqlHandler(Handler):
 			if not os.path.isdir(directory):
 				src_dir = os.path.dirname(src_dir_row.group(2) + "/") + "/"
 				if os.path.isdir(src_dir):
+					os.makedirs(directory)
 					self._logger.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync()
 					rsync.source(src_dir)
 					rsync.dest(dirname)
 					rsync.archive()
-					rsync.exclude(['*ib*'])
+					rsync.exclude(['ib_logfile*'])
 					system(str(rsync))
 					myCnf = re.sub(search_row, '\\1'+ dirname + '\n' , myCnf)
 				else:
-					self._logger.error('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
+					self._logger.debug('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
 					myCnf = re.sub(search_row, '' , myCnf)
 					os.makedirs(directory)
 					regexp = re.search(sectionrow, myCnf)
@@ -370,23 +544,24 @@ class MysqlHandler(Handler):
 					try:
 						initd.reload('apparmor', True)
 					except initd.InitdError, e:
-						self._logger.error('Cant restart apparmor')
-									
+						self._logger.error('Cant restart apparmor')									
 
-	def _mount_device(self, devname):
+	# TODO: Replace with fstool
+	def _mount_device(self, devname, mnt_point):
 			fstab = fstool.Fstab()
 			if None != devname:
 					try:
-						fstool.mount(devname, '/mnt', ["-t auto"])
+						fstool.mount(devname, '/mnt/dbstorage/', ["-t auto"])
 					except fstool.FstoolError, e:
 						if fstool.FstoolError.NO_FS == e.code:
 							system("/sbin/mkfs.ext3 -F " + devname + " 2>&1")
 							try:
-								fstool.mount(devname, '/mnt', ["-t auto"])
+								fstool.mount(devname, mnt_point, ["-t auto"])
 							except fstool.FstoolError, e:
 								raise
 						else:
 							raise
 			if not fstab.contains(devname, rescan=True):
 				self._logger.info("Adding a record to fstab")
-				fstab.append(fstool.TabEntry(devname, '/mnt', "auto", "defaults\t0\t0"))
+				fstab.append(fstool.TabEntry(devname, mnt_point, "auto", "defaults\t0\t0"))
+	

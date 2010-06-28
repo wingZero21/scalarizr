@@ -7,141 +7,244 @@ Created on 17.06.2010
 import unittest
 import os
 import signal, pexpect, re
-from scalarizr.util import init_tests
+from scalarizr.util import init_tests, ping_service
 from scalarizr.bus import bus
 from scalarizr.handlers import mysql
-from scalarizr.util import system, initd, disttool
+from scalarizr.util import system, initd, disttool, cryptotool, configtool
 from scalarizr.platform.ec2 import Ec2Platform
 from subprocess import Popen, PIPE, STDOUT
 import time, shutil, hashlib, pwd
 
+class _Volume:
+	def __init__(self):
+		self.id = 'test_id'
+
 class _MysqlHandler(mysql.MysqlHandler):
-    def _init_storage(self):
-        pass
+	def _init_storage(self, vol_id, mnt_point):
+		pass
+	def _detach_delete_volume(self, volume):
+		pass
+	def _create_volume_from_snap(self, snap_id):
+		return _Volume()
+	def _mount_device(self, devname, mnt_point):
+		pass
+	
+LOCAL_IP = '12.34.56.78'
 
 class Test(unittest.TestCase):
 
-    def setUp(self):
-        system('cp -pr /etc/mysql/ /tmp/mysqletc/')
-        system('cp -pr /var/lib/mysql /tmp/mysqldata/')
+	def setUp(self):
+		system('mkdir /mnt/tmpdir')
+		system('rsync -a /var/lib/mysql/ /mnt/tmpdir/mysql-data')
+		system('rsync -a /var/log/mysql/binarylog/ /mnt/tmpdir/mysql-misc')
+		system('cp -pr /etc/mysql/ /tmp/mysqletc/')
+		system('cp -pr /var/lib/mysql /tmp/mysqldata/')
 
-    def tearDown(self):
-        initd.stop("mysql")
-        system('cp /etc/mysql/my.cnf /tmp/etc')
-        system('rm -rf /etc/mysql/')
-        system('rm -rf /var/lib/mysql')
-        system('cp -pr /tmp/mysqletc/ /etc/mysql/ ')
-        system('cp -pr /tmp/mysqldata/ /var/lib/mysql ') 
-        system('rm -rf /tmp/mysql*')
-        initd.start("mysql")            
+	def tearDown(self):
+		initd.stop("mysql")
+		system('cp /etc/mysql/my.cnf /tmp/etc')
+		system('rm -rf /etc/mysql/')
+		system('rm -rf /var/lib/mysql')
+		system('cp -pr /tmp/mysqletc/ /etc/mysql/ ')
+		system('cp -pr /tmp/mysqldata/ /var/lib/mysql ') 
+		system('rm -rf /tmp/mysql*')
+		system('rm -rf /mnt/dbstorage/*')
+		system('rm -rf /mnt/tmpdir/*')
+		initd.start("mysql")
+		config = bus.config
+		section	= configtool.get_behaviour_section_name(mysql.Behaviours.MYSQL)
+		try:
+			config.remove_option(section, mysql.OPT_ROOT_USER)
+			config.remove_option(section, mysql.OPT_ROOT_PASSWORD)
+			config.remove_option(section, mysql.OPT_REPL_USER)
+			config.remove_option(section, mysql.OPT_REPL_PASSWORD)
+			config.remove_option(section, mysql.OPT_STAT_USER)
+			config.remove_option(section, mysql.OPT_STAT_PASSWORD)
+			print "########## Successfully deleted passwords from config"
+		except:
+			print "##########ERROR while deleting passwords from config"
+			pass
 
-    def test_users(self):
-        bus.queryenv_service = _QueryEnv()
-        bus.platform = _Platform()
-        handler = _MysqlHandler()
-        root_user = "scalarizr"
-        repl_user = "scalarizr_repl"
-        stat_user = "scalarizr_stat"        
-        root_password, repl_password, stat_password = handler._add_mysql_users(root_user, repl_user, stat_user)
-        myd = handler._start_mysql_skip_grant_tables()
-        for user, password in {root_user: root_password,
-                               repl_user: repl_password,
-                               stat_user: stat_password}.items():            
-            myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
-            out,err = myclient.communicate("SELECT Password from mysql.user where User='"+user+"'")
-            hashed_pass = re.search ('Password\n(.*)', out).group(1)
-            self.assertEqual(hashed_pass, mysql_password(password))
-        os.kill(myd.pid, signal.SIGTERM)           
-        
-    def test_create_snapshot(self):
-        bus.queryenv_service = _QueryEnv()
-#        bus.platform = Ec2Platform()
-        bus.platform = _Platform()
-        handler = _MysqlHandler()
-        root_user = "scalarizr"
-        repl_user = "scalarizr_repl"
-        stat_user = "scalarizr_stat"
-        
-        root_password, repl_password, stat_password = handler._add_mysql_users(root_user, repl_user, stat_user)
-        handler._change_mysql_dir('log_bin', '/var/log/mysql/binarylog/binary.log', 'mysqld')
-        handler._master_replication_init()
-        snap_id, log_file, log_pos = handler._create_snapshot(root_user, root_password)
-        sql = pexpect.spawn('/usr/bin/mysql -u' + root_user + ' -p' + root_password)
-        sql.expect('mysql>')
-        sql.sendline('SHOW MASTER STATUS;\n')
-        sql.expect('mysql>')
-        lines = sql.before
-        # Retrieve log file and log position
-        log_row = re.search(re.compile('^\|\s*([\w-]*\.\d*)\s*\|\s*(\d*)', re.MULTILINE), lines)
-        if log_row:
-            true_log_file = log_row.group(1)
-            true_log_pos = log_row.group(2)
-        sql.close()
-        self.assertEqual(log_file, true_log_file)
-        self.assertEqual(log_pos, true_log_pos)
-        file = open('/etc/mysql/farm-replication.cnf')
-        self.assertEqual('[mysqld]\nserver-id\t\t=\t1\nmaster-connect-retry\t\t=\t15\n', file.read())
-        file.close()
-        
-    
-    def test_on_before_host_init(self):
-        bus.queryenv_service = _QueryEnv()
-#        bus.platform = Ec2Platform()
-        bus.platform = _Platform()
-        handler = _MysqlHandler()
-        message = _Message()
-        handler.on_before_host_up(message)
-        self.assertTrue(os.path.exists('/mnt/mysql-data'))
-        self.assertTrue(os.path.exists('/mnt/mysql-misc'))
-        mysql_user    = pwd.getpwnam("mysql")
-        self.assertEqual(mysql_user.pw_uid, os.stat('/mnt/mysql-data')[4])
-        self.assertEqual(mysql_user.pw_gid, os.stat('/mnt/mysql-data')[5])
-        self.assertEqual(mysql_user.pw_uid, os.stat('/mnt/mysql-misc')[4])
-        self.assertEqual(mysql_user.pw_gid, os.stat('/mnt/mysql-misc')[5])
-        self.tearDown()
-        self.setUp()
-        handler.on_before_host_up(message)
-        if disttool.is_redhat_based():
-            my_cnf_file = "/etc/my.cnf"
-        else:
-            my_cnf_file = "/etc/mysql/my.cnf"
-        file = open(my_cnf_file)
-        mycnf = file.read()
-        file.close()
-        datadir = re.search(re.compile('^\s*datadir\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
-        self.assertEqual(datadir, '/mnt/mysql-data/')
-        log_bin = re.search(re.compile('^\s*log_bin\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
-        self.assertEqual(log_bin, '/mnt/mysql-misc/binlog.log')
-
+	def _test_users(self):
+		bus.queryenv_service = _QueryEnv()
+		bus.platform = _Platform()
+		handler = _MysqlHandler()
+		root_password, repl_password, stat_password = handler._add_mysql_users(mysql.ROOT_USER,
+																			   mysql.REPL_USER,
+																			   mysql.STAT_USER)
+		myd = handler._start_mysql_skip_grant_tables()
+		for user, password in {mysql.ROOT_USER: root_password,
+							   mysql.REPL_USER: repl_password,
+							   mysql.STAT_USER: stat_password}.items():			
+			myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+			out,err = myclient.communicate("SELECT Password from mysql.user where User='"+user+"'")
+			print out
+			hashed_pass = re.search ('Password\n(.*)', out).group(1)
+			self.assertEqual(hashed_pass, mysql_password(password))
+		os.kill(myd.pid, signal.SIGTERM)		   
+		
+	def _test_create_snapshot(self):
+		bus.queryenv_service = _QueryEnv()
+#		bus.platform = Ec2Platform()
+		bus.platform = _Platform()
+		handler = _MysqlHandler()
+		
+		root_password, repl_password, stat_password = handler._add_mysql_users(mysql.ROOT_USER,
+																			   mysql.REPL_USER,
+																			   mysql.STAT_USER)
+		handler._change_mysql_dir('log_bin', '/var/log/mysql/binarylog/binary.log', 'mysqld')
+		handler._replication_init()
+		snap_id, log_file, log_pos = handler._create_snapshot(mysql.ROOT_USER, root_password)
+		sql = pexpect.spawn('/usr/bin/mysql -u' + mysql.ROOT_USER + ' -p' + root_password)
+		sql.expect('mysql>')
+		sql.sendline('SHOW MASTER STATUS;\n')
+		sql.expect('mysql>')
+		lines = sql.before
+		# Retrieve log file and log position
+		log_row = re.search(re.compile('^\|\s*([\w-]*\.\d*)\s*\|\s*(\d*)', re.MULTILINE), lines)
+		if log_row:
+			true_log_file = log_row.group(1)
+			true_log_pos = log_row.group(2)
+		sql.close()
+		self.assertEqual(log_file, true_log_file)
+		self.assertEqual(log_pos, true_log_pos)
+		file = open('/etc/mysql/farm-replication.cnf')
+		self.assertEqual('[mysqld]\nserver-id\t\t=\t1\nmaster-connect-retry\t\t=\t15\n', file.read())
+		file.close()
+		
+	
+	def _test_on_before_host_up(self):
+		bus.queryenv_service = _QueryEnv()
+#		bus.platform = Ec2Platform()
+		bus.platform = _Platform()
+		handler = _MysqlHandler()
+		message = _Message()
+		config = bus.config
+		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_master')
+		handler.on_before_host_up(message)
+		self.assertTrue(os.path.exists('/mnt/dbstorage/mysql-data'))
+		self.assertTrue(os.path.exists('/mnt/dbstorage/mysql-misc'))
+		mysql_user	= pwd.getpwnam("mysql")
+		self.assertEqual(mysql_user.pw_uid, os.stat('/mnt/dbstorage/mysql-data')[4])
+		self.assertEqual(mysql_user.pw_gid, os.stat('/mnt/dbstorage/mysql-data')[5])
+		self.assertEqual(mysql_user.pw_uid, os.stat('/mnt/dbstorage/mysql-misc')[4])
+		self.assertEqual(mysql_user.pw_gid, os.stat('/mnt/dbstorage/mysql-misc')[5])
+#		self.tearDown()
+#		self.setUp()
+		handler.on_before_host_up(message)
+		if disttool.is_redhat_based():
+			my_cnf_file = "/etc/my.cnf"
+		else:
+			my_cnf_file = "/etc/mysql/my.cnf"
+		file = open(my_cnf_file)
+		mycnf = file.read()
+		file.close()
+		datadir = re.search(re.compile('^\s*datadir\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
+		self.assertEqual(datadir, '/mnt/dbstorage/mysql-data/')
+		log_bin = re.search(re.compile('^\s*log_bin\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
+		self.assertEqual(log_bin, '/mnt/dbstorage/mysql-misc/binlog.log')
+		
+	def _test_on_mysql_master_up(self):
+		bus.queryenv_service = _QueryEnv()
+		bus.platform = _Platform()
+		handler = _MysqlHandler()
+		message = _Message()
+		if disttool.is_redhat_based():
+			daemon = "/usr/libexec/mysqld"
+		else:
+			daemon = "/usr/sbin/mysqld"
+		initd.stop("mysql")
+		myd = Popen([daemon, '--defaults-file=/etc/mysql2/my.cnf', '--skip-grant-tables'], stdin=PIPE, stdout=PIPE, stderr=STDOUT)
+		ping_service(LOCAL_IP, 3306, 5)
+		myclient = pexpect.spawn('/usr/bin/mysql -h'+LOCAL_IP)
+		myclient.expect('mysql>')
+		repl_password = re.sub('[^\w]','', cryptotool.keygen(20))
+		sql = "update mysql.user set password = PASSWORD('"+repl_password+"') where user = '"+mysql.REPL_USER+"'; FLUSH PRIVILEGES;"
+		print sql
+		myclient.sendline(sql)
+		myclient.expect('mysql>')
+		result = myclient.before
+		if re.search('ERROR', result):
+			os.kill(myd.pid, signal.SIGTERM)
+			raise BaseException("Cannot update user", result)
+		myclient.sendline('FLUSH TABLES WITH READ LOCK;')
+		myclient.expect('mysql>')
+		system('cp -pr /var/lib/mysql /var/lib/backmysql')
+		system('rm -rf /var/lib/mysql && cp -pr /var/lib/mysql2 /var/lib/mysql')
+		myclient.sendline('SHOW MASTER STATUS;')
+		myclient.expect('mysql>')
+		# retrieve log file and position
+		try:
+			master_status = myclient.before.split('\r\n')[4].split('|')
+		except:
+			raise BaseException("Cannot get master status")
+		finally:
+			os.kill(myd.pid, signal.SIGTERM)
+		myclient.sendline('UNLOCK TABLES;')
+		myd = Popen([daemon, '--defaults-file=/etc/mysql2/my.cnf'], stdin=PIPE, stdout=PIPE, stderr=STDOUT)
+		ping_service(LOCAL_IP, 3306, 5)
+		message.log_file = master_status[1].strip()
+		message.log_pos = master_status[2].strip()
+		message.repl_user = mysql.REPL_USER
+		message.repl_password = repl_password
+		handler.on_Mysql_MasterUp(message)
+		os.kill(myd.pid, signal.SIGTERM)
+		initd.stop("mysql")
+		system ('rm -rf /var/lib/mysql && cp -pr /var/lib/backmysql /var/lib/mysql && rm -rf /var/lib/backmysql')
+		
+	def test_on_before_host_up_slave(self):
+		bus.queryenv_service = _QueryEnv()
+		bus.platform = _Platform()
+		handler = _MysqlHandler()
+		message = _Message()
+		config = bus.config
+		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_slave')
+		handler.on_before_host_up(message)
+		bus.queryenv_service.storage = 'eph'
+		system('rm -rf /mnt/dbstorage/*')
+		handler.on_before_host_up(message)
+		
 def mysql_password(str):
-    pass1 = hashlib.sha1(str).digest()
-    pass2 = hashlib.sha1(pass1).hexdigest()
-    return "*" + pass2.upper()
+	pass1 = hashlib.sha1(str).digest()
+	pass2 = hashlib.sha1(pass1).hexdigest()
+	return "*" + pass2.upper()
 
 
 class _Bunch(dict):
-            __getattr__, __setattr__ = dict.get, dict.__setitem__
+			__getattr__, __setattr__ = dict.get, dict.__setitem__
 
 class _QueryEnv:
-    def list_role_params(self, role_name):
-        return _Bunch(
-            mysql_data_storage_engine = 'ebs',           
-            )
-        
+	
+	def __init__(self):
+		self.storage = 'ebs'
+	
+	def list_role_params(self, role_name):
+		return _Bunch(
+			mysql_data_storage_engine = self.storage,
+			mysql_master_ebs_volume_id = 'test-id',
+			EBS_SNAP_ID = 'test_snap_id'
+			)
+		
 class _Platform:
-    def get_instance_id(self):
-        pass
+	def get_instance_id(self):
+		pass
+	
+	def get_block_device_mapping(self):
+		return {'ephemeral0' : 'eph0'}
 
 class _Message:
-    def __init__(self):
-        self.log_file = None
-        self.log_pos  = None
-        self.mysql_repl_user = None
-        self.mysql_repl_password = None
-        self.mysql_stat_password = None
-        self.mysql_stat_user = None
+	def __init__(self):
+		self.repl_user = None
+		self.repl_password = None
+		self.log_file = None
+		self.log_pos  = None
+		self.mysql_repl_user = None
+		self.mysql_repl_password = None
+		self.mysql_stat_password = None
+		self.mysql_stat_user = None
+		self.local_ip = LOCAL_IP
 
 if __name__ == "__main__":
-    init_tests()
-    unittest.main()
+	init_tests()
+	unittest.main()
 
