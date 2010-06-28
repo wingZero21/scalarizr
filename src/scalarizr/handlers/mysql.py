@@ -58,7 +58,7 @@ class MysqlMessages:
 	CREATE_PMA_USER_RESULT = "Mysql_CreatePmaUserResult"
 	PROMOTE_TO_MASTER	= "Mysql_PromoteToMaster"
 	PROMOTE_TO_MASTER_RESULT = "Mysql_PromoteToMasterResult"
-	MASTER_UP = "Mysql_MasterUp"
+	NEW_MASTER_UP = "Mysql_NewMasterUp"
 	"""
 	@ivar behaviour
 	@ivar local_ip
@@ -100,8 +100,7 @@ class MysqlHandler(Handler):
 		try:
 			root_password	= self._config.get(self._section, OPT_ROOT_PASSWORD)
 		except Exception, e:
-			self._logger.error('Cannot retrieve mysql login and password from config: ', e)
-			raise HandlerError('Cannot retrieve mysql login and password from config: %s' % e)
+			raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 		(snap_id, log_file, log_pos) = self._create_snapshot(ROOT_USER, root_password)
 		self._send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
 			snapshot_id=snap_id,
@@ -128,8 +127,7 @@ class MysqlHandler(Handler):
 				self._role_name = 'mysql_master'
 				self._send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT)
 		else:
-			self._logger.error('Cannot promote to master: Already master.')
-			raise HandlerError('Cannot promote to master: Already master.')
+			self._logger.warning('Cannot promote to master. Already master')
 
 	def on_Mysql_MasterUp(self, message):
 		if 'mysql_slave' == self._role_name:		
@@ -142,8 +140,8 @@ class MysqlHandler(Handler):
 			try:
 				root_password	= self._config.get(self._section, OPT_ROOT_PASSWORD)
 			except (Exception, BaseException):
-				self._logger.error('Cannot retrieve mysql login and password from config.')
-				raise HandlerError('Cannot retrieve mysql login and password from config.')
+				raise HandlerError('Cannot retrieve mysql login and password from config')
+			
 			sql = pexpect.spawn('/usr/bin/mysql -u' + ROOT_USER + ' -p' + root_password)
 			sql.expect('mysql>')
 			sql.sendline('STOP SLAVE;')
@@ -161,8 +159,8 @@ class MysqlHandler(Handler):
 			sql.expect('mysql>')
 			status = sql.before
 			if re.search(re.compile('ERROR', re.MULTILINE), status):
-				self._logger.debug('Cannot start mysql slave: %s', status)
 				raise HandlerError('Cannot start mysql slave: %s' % status)
+			
 			# Sleeping for a while
 			time.sleep(3)
 			sql.sendline('SHOW SLAVE STATUS;')
@@ -173,13 +171,12 @@ class MysqlHandler(Handler):
 			sql.close()
 			io_status = status[11].strip()
 			sql_status = status[12].strip()
-			if not 'Yes' == io_status:
-				self._logger.debug('IO Error while starting mysql slave: %s %s',  status[17], status[18])
-				raise HandlerError ('IO Error while starting mysql slave: %s %s' %  status[17], status[18])
-			if not 'Yes' == sql_status:
-				self._logger.debug('SQL Error while starting mysql slave: %s %s',  status[17], status[18])
-				raise HandlerError('SQL Error while starting mysql slave: %s %s' %  status[17], status[18])
-			self._logger.debug('Successfully switched replication to a new MySQL master server.')
+			if 'Yes' != io_status:
+				raise HandlerError ('IO Error while starting mysql slave: %s %s' %  (status[17], status[18]))
+			if 'Yes' != sql_status:
+				raise HandlerError('SQL Error while starting mysql slave: %s %s' %  (status[17], status[18]))
+			
+			self._logger.info('Successfully switched replication to a new MySQL master server')
 		else:
 			self._logger.error('Cannot change master host: our role_name is master')
 		
@@ -187,7 +184,6 @@ class MysqlHandler(Handler):
 	def on_before_host_up(self, message):
 		role_params = self._queryenv.list_role_params(self._role_name)
 		if role_params["mysql_data_storage_engine"]:
-			# Poneslas' pizda po ko4kam
 			if "mysql_master" == self._role_name:
 				# Mount EBS
 				vol_id = role_params["mysql_master_ebs_volume_id"]
@@ -222,14 +218,14 @@ class MysqlHandler(Handler):
 					try:
 						root_password	= self._config.get(self._section, OPT_ROOT_PASSWORD)
 					except Exception, e:
-						self._logger.error('Cannot retrieve mysql login and password from config: ', e)
-						raise HandlerError('Cannot retrieve mysql login and password from config: %s' % e)
+						raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 					# Updating snapshot metadata
 					snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
 					# Sending updated metadata to scalr
 					message.log_file = log_file
 					message.log_pos = log_pos
 					self._start_mysql()
+					
 			elif "mysql_slave" == self._role_name:
 				if not os.path.exists('mnt/dbstorage/mysql-data') and not os.path.exists('mnt/dbstorage/mysql-misc'):
 					snap_id = role_params['EBS_SNAP_ID']
@@ -251,21 +247,18 @@ class MysqlHandler(Handler):
 						self._init_storage(ebs_volume.id, tmpdir)
 						if os.path.exists(tmpdir+'/mysql-data') and os.path.exists(tmpdir+'/mysql-misc'):
 							# Rsync data from ebs to ephemeral device
-							rsync = filetool.Rsync()
-							rsync.source(tmpdir+'/')
-							rsync.dest('/mnt/dbstorage/')
-							rsync.archive()
+							rsync = filetool.Rsync().archive()
+							rsync.source(tmpdir+'/').dest('/mnt/dbstorage/')
 							out, err, retcode = system(str(rsync))
 							if err:
-								self._logger.error("Cannot copy data from ebs to ephemeral: %s", err)
-								raise HandlerError("Cannot copy data from ebs to ephemeral: %s" % err)
+								raise HandlerError("Cannot copy data from ebs to ephemeral: %s" % (err,))
 							#TODO: Umount ebs device
 							# Detach and delete EBS Volume 
 							self._detach_delete_volume(ebs_volume)
 							shutil.rmtree(tmpdir)
 						else:
-							self._logger.error("EBS Volume does not contain mysql data.")
-							raise HandlerError("EBS Volume does not contain mysql data.")
+							raise HandlerError("EBS Volume does not contain mysql data")
+						
 					# Change datadir and binary logs dir to ephemeral or ebs
 				self._change_mysql_dir('datadir', '/mnt/dbstorage/mysql-data/', 'mysqld')
 				self._change_mysql_dir('log_bin', '/mnt/dbstorage/mysql-misc/binlog.log', 'mysqld')
@@ -290,8 +283,7 @@ class MysqlHandler(Handler):
 				while ebs_volume.attachment_state() != 'attached':
 					time.sleep(5)
 			else:
-				self._logger.error('Can\'t find volume with ID =  %s ', vol_id)
-				raise HandlerError('Cannot find volume with ID =  %s ' % vol_id)
+				raise HandlerError('Cannot find volume with ID =  %s ' % (vol_id,))
 			# Mount ebs # fstool.mount()
 			self._mount_device(devname, mnt_point)
 	
@@ -308,11 +300,9 @@ class MysqlHandler(Handler):
 	def _detach_delete_volume(self, volume):
 		if volume.detach():
 			if not volume.delete():
-				self._logger.error("Cannot delete volume ID=%s", volume.id)
-				raise HandlerError("Cannot delete volume ID=%s" % volume.id)
+				raise HandlerError("Cannot delete volume ID=%s", (volume.id,))
 		else:
-			self._logger.error("Cannot detach volume ID=%s", volume.id)
-			raise HandlerError("Cannot detach volume ID=%s" % volume.id)
+			raise HandlerError("Cannot detach volume ID=%s" % (volume.id,))
 		
 	def _start_mysql_skip_grant_tables(self):
 		self._stop_mysql()
@@ -544,7 +534,7 @@ class MysqlHandler(Handler):
 					try:
 						initd.reload('apparmor', True)
 					except initd.InitdError, e:
-						self._logger.error('Cant restart apparmor')									
+						self._logger.error('Cannot restart apparmor. %s', e)									
 
 	# TODO: Replace with fstool
 	def _mount_device(self, devname, mnt_point):
