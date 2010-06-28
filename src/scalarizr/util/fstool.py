@@ -2,6 +2,7 @@
 Created on May 10, 2010
 
 @author: marat
+@author: Dmytro Korsakov
 '''
 
 from scalarizr.util import disttool, system
@@ -11,6 +12,8 @@ import os
 class FstoolError(BaseException):
 	NO_FS = -100
 	CANNOT_MOUNT = -101
+	CANNOT_UMOUNT = -102
+	CANNOT_CREATE_FS = -103
 	
 	message = None
 	code = None
@@ -55,7 +58,7 @@ class Fstab:
 		return list(self._entries)
 	
 	def append(self, entry):
-		line = "\n" + "\t".join([entry.device, entry.mpoint, entry.fstype, entry.options])
+		line = "\n" + "\t".join([entry.device, entry.mpoint, entry.fstype, entry.options]) + "\n"
 		try:
 			f = open(self.filename, "a")
 			f.write(line)
@@ -113,21 +116,64 @@ elif disttool.is_sun():
 		'proc', 'lofs',   'objfs', 'fd', 'autofs')
 	
 
-def mount (device, mpoint, options=()):
+def mount (device, mpoint = '/mnt', options=(), make_fs = False, auto_mount = False, fstype='ext3'):
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
 	
 	options = " ".join(options) 
+	
+	if make_fs:
+		mkfs(device,fstype)
+			
 	out = system("mount %(options)s %(device)s %(mpoint)s 2>&1" % vars())[0]
 	if out.find("you must specify the filesystem type") != -1:
 		raise FstoolError("No filesystem found on device '%s'" % (device), FstoolError.NO_FS)
-	
+		
 	mtab = Mtab()
 	if not mtab.contains(device):
 		raise FstoolError("Cannot mount device '%s'. %s" % (device, out), FstoolError.CANNOT_MOUNT)
+	
+	if auto_mount:
+		fstab = Fstab()
+		if not fstab.contains(device, mpoint = mpoint, rescan=True):
+			fstab.append(TabEntry(device, mpoint, "auto", "defaults\t0\t0"))
 
-def umount():
-	pass
-
-def mkfs():
-	pass
+def umount(device, options=(), clean_fstab = False):
+	if not os.path.exists(device):
+		raise FstoolError("Device %s not found" % (device), FstoolError.CANNOT_UMOUNT)
+	
+	options = " ".join(options)
+	
+	returncode = system("umount %(options)s %(device)s 2>&1" % vars())[2]
+	if returncode :
+		raise FstoolError("Cannot unmount device '%s'" % (device), FstoolError.CANNOT_UMOUNT)
+	
+	if clean_fstab:
+		fstab = None
+		
+		try:
+			fstab_file = open(Fstab.LOCATION, 'r')
+		except OSError:
+			pass
+		else:
+			fstab = fstab_file.read()
+		finally:
+			fstab_file.close()
+		
+		if fstab:
+			fstab = re.sub(r"\n" + device + ".*\n", '\n', fstab)
+			
+			try:
+				fstab_file = open(Fstab.LOCATION, 'w')
+			except OSError:
+				pass
+			else:
+				fstab = fstab_file.write(fstab)
+			finally:
+				fstab_file.close()
+	
+	
+def mkfs(device, fstype = 'ext3'):
+	_out, _err, _retcode = system("/sbin/mkfs -t " + fstype + " -F " + device)
+	if _retcode:
+		raise FstoolError("Cannot create file system on device '%s'. %s" % (device, _err), FstoolError.CANNOT_CREATE_FS)

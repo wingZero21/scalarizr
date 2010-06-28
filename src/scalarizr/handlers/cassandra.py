@@ -2,13 +2,17 @@
 Created on Jun 23, 2010
 
 @author: marat
+@author: Dmytro Korsakov
 '''
 from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
 import logging
-from scalarizr.util import configtool
+import os
+from scalarizr.util import configtool, fstool
+from xml.dom.minidom import parse
+
 
 class StorageError(BaseException): pass
 
@@ -19,6 +23,8 @@ class CassandraHandler(Handler):
 	_logger = None
 	_queryenv = None
 	_storage = None
+	_storage_path = None
+	_storage_conf = None
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -35,7 +41,10 @@ class CassandraHandler(Handler):
 	def on_before_host_up(self, message):
 		config = bus.config
 		role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
-		
+		self._storage_path = config.get('behaviour_cassandra','storage_path')
+		self._storage_conf = config.get('behaviour_cassandra','storage_conf')
+		self.data_file_directory = self._storage_path + "/datafile" 
+		self.commit_log_directory = self._storage_path + "/commitlog" 
 		# Init storage
 		role_params = self._queryenv.list_role_params(role_name)
 		try:
@@ -44,8 +53,35 @@ class CassandraHandler(Handler):
 			storage_name = "eph"
 				
 		self._storage = StorageProvider().new_storage(storage_name)
-		self._storage.init("/mnt")
-		# Update CommitLogDirectory and DataFileDirectory in storage-conf.xml 
+		self._storage.init(self._storage_path)
+		# Update CommitLogDirectory and DataFileDirectory in storage-conf.xml
+		if not os.path.exists(self.data_file_directory):
+			os.makedirs(self.data_file_directory) 
+		if not os.path.exists(self.commit_log_directory):
+			os.makedirs(self.commit_log_directory)
+		
+		xml = parse(self._storage_conf)
+		data = xml.documentElement
+		
+		if len(data.childNodes):
+			
+			log_entry = data.getElementsByTagName("CommitLogDirectory")
+			if log_entry:
+				self._logger.debug("Rewriting CommitLogDirectory in cassandra config")
+				log_entry[0].firstChild.nodeValue = self.commit_log_directory
+			else:
+				self._logger.debug("CommitLogDirectory not found in cassandra config")
+			
+			data_entry = data.getElementsByTagName("DataFileDirectory")
+			if data_entry:
+				self._logger.debug("Rewriting DataFileDirectory in cassandra config")
+				data_entry[0].firstChild.nodeValue = self.data_file_directory
+			else:
+				self._logger.debug("DataFileDirectory not found in cassandra config")
+				
+			fw = open(self._storage_conf, 'w')
+			fw.write(data.toxml())
+			fw.close()
 		
 		# Update Seed configuration
 		pass
@@ -104,15 +140,23 @@ class EphemeralStorage(Storage):
 	_platform = None
 	def __init__(self):
 		self._platform = bus.platform
+		self._logger = logging.getLogger(__name__)
 		
 	def init(self, mpoint, *args, **kwargs):
 		devname = '/dev/' + self._platform.get_block_device_mapping()["ephemeral0"]
-		# Create FS if nedded
-		# Mount to mpoint
-		# @see mysql handler
-		pass
+		
+		try:
+			self._logger.debug("Trying to mount device %s and add it to fstab", devname)
+			fstool.mount(device = devname, mpoint = mpoint, options = ["-t auto"], auto_mount = True)
+		except fstool.FstoolError, e:
+			if fstool.FstoolError.NO_FS == e.code:
+				self._logger.debug("Trying to create file system on device %s, mount it and add to fstab", devname)
+				fstool.mount(device = devname, mpoint = mpoint, options = ["-t auto"], make_fs = True, auto_mount = True)
+			else:
+				raise
 	
 	def copy_data(self, src, *args, **kwargs):
 		pass
 	
+StorageProvider().register_storage("eph", EphemeralStorage)	
 
