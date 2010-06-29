@@ -18,7 +18,8 @@ import time, shutil, hashlib, pwd
 class _Volume:
 	def __init__(self):
 		self.id = 'test_id'
-
+		self._messages = []
+		
 class _MysqlHandler(mysql.MysqlHandler):
 	def _init_storage(self, vol_id, mnt_point):
 		pass
@@ -28,6 +29,8 @@ class _MysqlHandler(mysql.MysqlHandler):
 		return _Volume()
 	def _mount_device(self, devname, mnt_point):
 		pass
+	def _send_message(self, message):
+		self._messages.append(message)
 	
 LOCAL_IP = '12.34.56.78'
 
@@ -42,7 +45,7 @@ class Test(unittest.TestCase):
 
 	def tearDown(self):
 		initd.stop("mysql")
-		system('cp /etc/mysql/my.cnf /tmp/etc')
+		system('cp /etc/mysql/my.cnf /tmp/etc'+time.strftime("%d%b%H%M%S", time.gmtime()))
 		system('rm -rf /etc/mysql/')
 		system('rm -rf /var/lib/mysql')
 		system('cp -pr /tmp/mysqletc/ /etc/mysql/ ')
@@ -60,12 +63,10 @@ class Test(unittest.TestCase):
 			config.remove_option(section, mysql.OPT_REPL_PASSWORD)
 			config.remove_option(section, mysql.OPT_STAT_USER)
 			config.remove_option(section, mysql.OPT_STAT_PASSWORD)
-			print "########## Successfully deleted passwords from config"
 		except:
-			print "##########ERROR while deleting passwords from config"
 			pass
 
-	def _test_users(self):
+	def test_users(self):
 		bus.queryenv_service = _QueryEnv()
 		bus.platform = _Platform()
 		handler = _MysqlHandler()
@@ -78,12 +79,11 @@ class Test(unittest.TestCase):
 							   mysql.STAT_USER: stat_password}.items():			
 			myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
 			out,err = myclient.communicate("SELECT Password from mysql.user where User='"+user+"'")
-			print out
 			hashed_pass = re.search ('Password\n(.*)', out).group(1)
 			self.assertEqual(hashed_pass, mysql_password(password))
 		os.kill(myd.pid, signal.SIGTERM)		   
 		
-	def _test_create_snapshot(self):
+	def test_create_snapshot(self):
 		bus.queryenv_service = _QueryEnv()
 #		bus.platform = Ec2Platform()
 		bus.platform = _Platform()
@@ -113,7 +113,7 @@ class Test(unittest.TestCase):
 		file.close()
 		
 	
-	def _test_on_before_host_up(self):
+	def test_on_before_host_up(self):
 		bus.queryenv_service = _QueryEnv()
 #		bus.platform = Ec2Platform()
 		bus.platform = _Platform()
@@ -132,19 +132,11 @@ class Test(unittest.TestCase):
 #		self.tearDown()
 #		self.setUp()
 		handler.on_before_host_up(message)
-		if disttool.is_redhat_based():
-			my_cnf_file = "/etc/my.cnf"
-		else:
-			my_cnf_file = "/etc/mysql/my.cnf"
-		file = open(my_cnf_file)
-		mycnf = file.read()
-		file.close()
-		datadir = re.search(re.compile('^\s*datadir\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
+		datadir, log_bin = extract_datadir_and_log()
 		self.assertEqual(datadir, '/mnt/dbstorage/mysql-data/')
-		log_bin = re.search(re.compile('^\s*log_bin\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
 		self.assertEqual(log_bin, '/mnt/dbstorage/mysql-misc/binlog.log')
 		
-	def _test_on_mysql_master_up(self):
+	def test_on_mysql_master_up(self):
 		bus.queryenv_service = _QueryEnv()
 		bus.platform = _Platform()
 		handler = _MysqlHandler()
@@ -160,7 +152,6 @@ class Test(unittest.TestCase):
 		myclient.expect('mysql>')
 		repl_password = re.sub('[^\w]','', cryptotool.keygen(20))
 		sql = "update mysql.user set password = PASSWORD('"+repl_password+"') where user = '"+mysql.REPL_USER+"'; FLUSH PRIVILEGES;"
-		print sql
 		myclient.sendline(sql)
 		myclient.expect('mysql>')
 		result = myclient.before
@@ -192,23 +183,54 @@ class Test(unittest.TestCase):
 		initd.stop("mysql")
 		system ('rm -rf /var/lib/mysql && cp -pr /var/lib/backmysql /var/lib/mysql && rm -rf /var/lib/backmysql')
 		
-	def test_on_before_host_up_slave(self):
+	def test_on_before_host_up_slave_ebs(self):
 		bus.queryenv_service = _QueryEnv()
 		bus.platform = _Platform()
-		handler = _MysqlHandler()
 		message = _Message()
 		config = bus.config
 		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_slave')
+		bus.queryenv_service.storage = 'ebs'
+		handler = _MysqlHandler()
 		handler.on_before_host_up(message)
+		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_master')
+		datadir, log_bin = extract_datadir_and_log()
+		self.assertEqual(datadir, '/mnt/dbstorage/mysql-data/')
+		self.assertEqual(log_bin, '/mnt/dbstorage/mysql-misc/binlog.log')
+		
+	def test_on_before_host_up_slave_eph(self):
+		bus.queryenv_service = _QueryEnv()
+		bus.platform = _Platform()
+		message = _Message()
+		config = bus.config
+		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_slave')
 		bus.queryenv_service.storage = 'eph'
-		system('rm -rf /mnt/dbstorage/*')
+		handler = _MysqlHandler()
 		handler.on_before_host_up(message)
+		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_master')
+		datadir, log_bin = extract_datadir_and_log()
+		self.assertEqual(datadir, '/mnt/dbstorage/mysql-data/')
+		self.assertEqual(log_bin, '/mnt/dbstorage/mysql-misc/binlog.log')
+		
+	def test_on_Mysql_PromoteToMaster(self):
+		message = _Message()
+		pass
 		
 def mysql_password(str):
 	pass1 = hashlib.sha1(str).digest()
 	pass2 = hashlib.sha1(pass1).hexdigest()
 	return "*" + pass2.upper()
 
+def extract_datadir_and_log():
+		if disttool.is_redhat_based():
+			my_cnf_file = "/etc/my.cnf"
+		else:
+			my_cnf_file = "/etc/mysql/my.cnf"
+		file = open(my_cnf_file)
+		mycnf = file.read()
+		file.close()
+		datadir = re.search(re.compile('^\s*datadir\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
+		log_bin = re.search(re.compile('^\s*log_bin\s*=\s*(.*)$', re.MULTILINE), mycnf).group(1)
+		return datadir, log_bin
 
 class _Bunch(dict):
 			__getattr__, __setattr__ = dict.get, dict.__setitem__
