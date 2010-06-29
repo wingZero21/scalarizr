@@ -127,11 +127,11 @@ def mount (device, mpoint, options=()):
 		raise FstoolError("Cannot mount device '%s'. %s" % (device, out), FstoolError.CANNOT_MOUNT)
 """
 
-def mount (device, mpoint = '/mnt', options=(), make_fs = False, auto_mount = False, fstype='ext3'):
+def mount (device, mpoint = '/mnt', options=None, make_fs = False, auto_mount = False, fstype='ext3'):
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
 	
-	options = " ".join(options) 
+	options = " ".join(options or ()) 
 	
 	if make_fs:
 		mkfs(device,fstype)
