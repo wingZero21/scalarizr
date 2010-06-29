@@ -543,8 +543,7 @@ class MysqlHandler(Handler):
 						initd.reload('apparmor', True)
 					except initd.InitdError, e:
 						self._logger.error('Cannot restart apparmor. %s', e)									
-
-	# TODO: Replace with fstool
+	"""
 	def _mount_device(self, devname, mnt_point):
 			fstab = fstool.Fstab()
 			if None != devname:
@@ -562,4 +561,15 @@ class MysqlHandler(Handler):
 			if not fstab.contains(devname, rescan=True):
 				self._logger.info("Adding a record to fstab")
 				fstab.append(fstool.TabEntry(devname, mnt_point, "auto", "defaults\t0\t0"))
+	"""
 	
+	def _mount_device(self, devname):
+		try:
+			self._logger.debug("Trying to mount device %s and add it to fstab", devname)
+			fstool.mount(device = devname, options=["-t auto"], auto_mount = True)
+		except fstool.FstoolError, e:
+			if fstool.FstoolError.NO_FS == e.code:
+				self._logger.debug("Trying to create file system on device %s, mount it and add to fstab", devname)
+				fstool.mount(device = devname, options=["-t auto"], make_fs = True, auto_mount = True)
+			else:
+				raise
