@@ -10,7 +10,7 @@ from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
 import logging
 import os
-from scalarizr.util import configtool, fstool
+from scalarizr.util import configtool, fstool, system
 from xml.dom.minidom import parse
 
 
@@ -25,6 +25,7 @@ class CassandraHandler(Handler):
 	_storage = None
 	_storage_path = None
 	_storage_conf = None
+	_port = None
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -36,7 +37,18 @@ class CassandraHandler(Handler):
 		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.CASSANDRA in behaviour and \
-				(message.name == Messages.HOST_UP or message.name == Messages.HOST_DOWN)
+				(message.name == Messages.HOST_INIT or
+				message.name == Messages.HOST_UP or 
+				message.name == Messages.HOST_DOWN)
+	
+	def on_HostInit(self, message):
+		if message.behaviour == Behaviours.CASSANDRA:
+			if not message.local_ip:
+				ip = message.remote_ip
+			else:
+				ip = message.local_ip
+			self._add_iptables_rule(ip, Drop = True)
+
 		
 	def on_before_host_up(self, message):
 		config = bus.config
@@ -79,6 +91,55 @@ class CassandraHandler(Handler):
 			else:
 				self._logger.debug("DataFileDirectory not found in cassandra config")
 				
+			cluster_name_entry = data.getElementsByTagName("ClusterName")
+			if cluster_name_entry:
+				self._logger.debug("Rewriting ClusterName in cassandra config")
+				cluster_name_entry[0].firstChild.nodeValue = "ololo" # set cassandra-cluster- + farmID
+			else:
+				self._logger.debug("ClusterName not found in cassandra config")
+			
+			#set list of seed`s IPs
+			roles = self._queryenv.list_roles(behaviour = "cassandra")
+			seed_list = []
+			
+			for role in roles:
+				for host in role.hosts:
+					if host.internal_ip:
+						seed_list.append(host.internal_ip)
+					else:
+						seed_list.append(host.external_ip)
+				
+			seeds_section = data.getElementsByTagName("Seeds")
+			
+			if seeds_section:
+				for seed in seeds_section[0].childNodes:
+					if seed.nodeName == "Seed" and seed.firstChild.nodeValue == "127.0.0.1":
+							seed_list.append("127.0.0.1")
+							
+				if seed_list:
+					new_section = xml.createElement('Seeds')
+					
+					for seed_ip in seed_list:
+						seed_section = xml.createElement('Seed')
+						text = xml.createTextNode(seed_ip)
+						seed_section.appendChild(text)
+						new_section.appendChild(seed_section)
+					
+					data.replaceChild(new_section, seeds_section[0])
+				
+			else:
+				self._logger.debug("Seeds section not found in cassandra config")
+					
+			listen_entry = data.getElementsByTagName("ListenAddress")
+			if listen_entry:
+				self._logger.debug("Rewriting ListenAddress in cassandra config")
+				listen_entry[0].firstChild.nodeValue = "0.0.0.0"
+				
+			thrift_entry = data.getElementsByTagName("ThriftAddress")
+			if thrift_entry:
+				self._logger.debug("Rewriting ThriftAddress in cassandra config")
+				thrift_entry[0].firstChild.nodeValue = "0.0.0.0"
+				
 			fw = open(self._storage_conf, 'w')
 			fw.write(data.toxml())
 			fw.close()
@@ -92,10 +153,37 @@ class CassandraHandler(Handler):
 	
 	def on_HostDown(self, message):
 		# Update Seed configuration
+		# Update iptables rule
+		if not message.local_ip:
+			ip = message.remote_ip
+		else:
+			ip = message.local_ip
+		self._add_iptables_rule(ip)
 		pass
 	
-
-
+	def _add_iptables_rule(self, ip, drop = False):
+		if not self._port:
+			xml = parse(self._storage_conf)
+			data = xml.documentElement
+			
+			if len(data.childNodes):
+				port_entry = data.getElementsByTagName("StoragePort")
+				
+				if port_entry:
+					self._port = port_entry[0].firstChild.nodeValue
+				else:
+					self._logger.error("Port value not found in cassandra config. Using 7000 for default.")
+					self._port = '7000'
+					
+		if drop:
+			returncode = system("/sbin/iptables -A INPUT -p tcp --destination-port %s -j DROP" % (self._port,))[2]
+			if returncode :
+				self._logger.error("Cannot drop rules")
+				
+		returncode = system("/sbin/iptables -A INPUT -s %s -p tcp --destination-port %s -j ACCEPT" % (ip, self._port))[2]
+		if returncode :
+			self._logger.error("Cannot add rule")
+		
 class StorageProvider(object):
 	
 	_providers = None

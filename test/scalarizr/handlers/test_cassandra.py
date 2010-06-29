@@ -4,7 +4,7 @@ Created on June, 25 2010
 @author: Dmytro Korsakov
 '''
 import unittest
-from scalarizr.util import init_tests, system
+from scalarizr.util import init_tests
 from scalarizr.bus import bus
 from scalarizr.handlers import cassandra
 from scalarizr.util import fstool
@@ -18,7 +18,6 @@ class Test(unittest.TestCase):
 		self._storage_conf = config.get('behaviour_cassandra','storage_conf')
 		
 	def tearDown(self):
-		#system("umount /dev/sdb1")
 		fstool.umount("/dev/sdb1", clean_fstab = True)
 		
 	def testName(self):
@@ -29,6 +28,17 @@ class Test(unittest.TestCase):
 			def list_role_params(self, role_name=None):
 				return _Bunch(cassandra_data_storage_engine = "eph"
 			)
+			def list_roles(self, behaviour):
+				return [_Bunch(
+					behaviour = "cassandra",
+					name = "cassandra-node-1",
+					hosts = [_Bunch(index='1',replication_master="1",internal_ip="192.168.1.93",external_ip="8.8.8.8")]
+					),
+					_Bunch(
+					behaviour = "cassandra",
+					name = "cassandra-node-2",
+					hosts = [_Bunch(index='2',replication_master="0",internal_ip=None,external_ip="8.8.8.9")]
+					)]		
 		bus.platform = _Platform()
 		bus.queryenv_service = _QueryEnv()
 		C = cassandra.CassandraHandler()
@@ -52,7 +62,6 @@ class Test(unittest.TestCase):
 			self.assertEqual(entries[1].fstype, "ext4")
 			self.assertEqual(entries[1].options, "errors=remount-ro")
 			self.assertEqual(entries[1].value, "/dev/sda1       /               ext4    errors=remount-ro 0       1")
-		
 		
 
 class _Platform:

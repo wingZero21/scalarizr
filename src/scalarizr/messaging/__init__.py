@@ -178,7 +178,11 @@ class Messages:
 	HOST_INIT = "HostInit"
 	"""
 	@broadcast
-	Fires when scalarizr is initialized and ready to be configured 
+	Fires when scalarizr is initialized and ready to be configured
+	@ivar behaviour
+	@ivar local_ip
+	@ivar remote_ip
+	@ivar role_name 
 	"""
 
 	HOST_UP = "HostUp"
