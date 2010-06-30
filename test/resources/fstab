@@ -1,15 +1,13 @@
-
+# /etc/fstab: static file system information.
 #
-# /etc/fstab
-# Created by anaconda on Thu May 14 23:58:49 2009
+# Use 'blkid -o value -s UUID' to print the universally unique identifier
+# for a device; this may be used with UUID= as a more robust way to name
+# devices that works even if disks are added and removed. See fstab(5).
 #
-# Accessible filesystems, by reference, are maintained under '/dev/disk'
-# See man pages fstab(5), findfs(8), mount(8) and/or vol_id(8) for more info
-#
-UUID=c5662397-b99a-468c-9a75-bf6cefc260d7 /     ext3    defaults     1 1
-UUID=9cc535dd-9a2c-4504-8f5f-1bd0b91a0086 /home ext3    defaults 1 2
-tmpfs                   /dev/shm                tmpfs   defaults        0 0
-devpts                  /dev/pts                devpts  gid=5,mode=620  0 0
-sysfs                   /sys                    sysfs   defaults        0 0
-proc                    /proc                   proc    defaults        0 0
-UUID=a2f4a566-594b-4b0d-a1e7-827070cf0a05 swap                    swap    defaults        0 0
+# <file system> <mount point>   <type>  <options>       <dump>  <pass>
+proc            /proc           proc    nodev,noexec,nosuid 0       0
+/dev/sda1       /               ext4    errors=remount-ro 0       1
+# /home was on /dev/sda6 during installation
+UUID=d8a1e0cc-f3c7-4f99-946e-d012e2730b24 /home           ext4    defaults        0       2
+# swap was on /dev/sda5 during installation
+UUID=25744d1f-e155-4cf1-9994-e62f5b2271b9 none            swap    sw              0       0
