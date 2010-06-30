@@ -37,10 +37,7 @@ class Test(unittest.TestCase):
 		self.assertEqual(config.get("platform_ec2", "key_id"), "^ffdfdfte33ghgbfv")
 		self.assertEqual(config.get("platform_ec2", "new_option"), "vvaalluuee")
 		
-	def test_mount_private_d(self):
-		pass
 
 if __name__ == "__main__":
-	bus.etc_path = '/root/etc/'
 	init_tests()
 	unittest.main()
