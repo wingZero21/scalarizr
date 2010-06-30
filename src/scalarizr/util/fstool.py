@@ -2,6 +2,7 @@
 Created on May 10, 2010
 
 @author: marat
+@author: Dmytro Korsakov
 '''
 
 from scalarizr.util import disttool, system
@@ -12,6 +13,7 @@ class FstoolError(BaseException):
 	NO_FS = -100
 	CANNOT_MOUNT = -101
 	CANNOT_UMOUNT = -102
+	CANNOT_CREATE_FS = -103
 	
 	message = None
 	code = None
@@ -54,15 +56,7 @@ class Fstab:
 			f.close()
 			
 		return list(self._entries)
-	
-	def append(self, entry):
-		line = "\n" + "\t".join([entry.device, entry.mpoint, entry.fstype, entry.options])
-		try:
-			f = open(self.filename, "a")
-			f.write(line)
-		finally:
-			f.close()
-			
+
 	def contains(self, devname=None, mpoint=None, rescan=False):
 		for entry in self.list_entries(rescan):
 			return any(bool(mpoint and entry.mpoint == mpoint) or bool(devname and entry.device == devname) \
@@ -74,6 +68,32 @@ class Fstab:
 				(mpoint and entry.mpoint == mpoint) or \
 				(fstype and entry.fstype == fstype))
 		return ret
+
+	def append(self, devname, mpoint, fstype="auto", options="defaults\t0\t0", autosave=True):
+		self._entries.append(TabEntry(devname, mpoint, fstype, options))
+		if autosave:
+			self.save()
+	
+	def remove(self, devname=None, mpoint=None, fstype=None, rescan=False, autosave=True):
+		ent = self.find(devname, mpoint, fstype, rescan)
+		if len(ent):
+			self._entries.remove(ent[0])
+			if autosave:
+				self.write()
+			return True
+		return False
+	
+	def save(self):
+		fp = None
+		try:
+			fp = open(self.filename, "w")
+			fp.write(str(self))
+		finally:
+			if fp:
+				fp.close()			
+	
+	def __str__(self):
+		return "\n".join(self._entries) + "\n"
 	
 
 class Mtab(Fstab):
@@ -91,14 +111,22 @@ class TabEntry(object):
 	value = None
 	
 	def __init__(self, device, mpoint, fstype, options, value=None):
+		"""
+		@param  str device:
+		@param str mpoint:
+		@param str fstype:
+		@param str options:
+		@param str value: Original fstab line
+		"""
+		
 		self.device = device
 		self.mpoint = mpoint
 		self.fstype = fstype
-		self.options = options		
+		self.options = options
 		self.value = value
 		
 	def __str__(self):
-		return "%s %s %s %s" % (self.device, self.mpoint, self.fstype, self.options)
+		return "%s\t%s\t%s\t%s" % (self.device, self.mpoint, self.fstype, self.options)
 
 		
 if disttool.is_linux():
@@ -113,26 +141,12 @@ elif disttool.is_sun():
 		'ufs', 'sharefs', 'dev', 'devfs', 'ctfs', 'mntfs',
 		'proc', 'lofs',   'objfs', 'fd', 'autofs')
 	
-"""
-def mount (device, mpoint, options=()):
-	if not os.path.exists(mpoint):
-		os.makedirs(mpoint)
-	
-	options = " ".join(options) 
-	out = system("mount %(options)s %(device)s %(mpoint)s 2>&1" % vars())[0]
-	if out.find("you must specify the filesystem type") != -1:
-		raise FstoolError("No filesystem found on device '%s'" % (device), FstoolError.NO_FS)
-	
-	mtab = Mtab()
-	if not mtab.contains(device):
-		raise FstoolError("Cannot mount device '%s'. %s" % (device, out), FstoolError.CANNOT_MOUNT)
-"""
 
-def mount (device, mpoint = '/mnt', options=None, make_fs = False, auto_mount = False, fstype='ext3'):
+def mount (device, mpoint = '/mnt', options=None, make_fs=False, fstype='ext3', auto_mount=False):
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
 	
-	options = " ".join(options or ()) 
+	options = " ".join(options or ("-t auto")) 
 	
 	if make_fs:
 		mkfs(device,fstype)
@@ -140,52 +154,34 @@ def mount (device, mpoint = '/mnt', options=None, make_fs = False, auto_mount = 
 	out = system("mount %(options)s %(device)s %(mpoint)s 2>&1" % vars())[0]
 	if out.find("you must specify the filesystem type") != -1:
 		raise FstoolError("No filesystem found on device '%s'" % (device), FstoolError.NO_FS)
-		
-	mtab = Mtab()
-	if not mtab.contains(device):
-		raise FstoolError("Cannot mount device '%s'. %s" % (device, out), FstoolError.CANNOT_MOUNT)
+	
+	if options.find("loop") == -1:
+		mtab = Mtab()		
+		if not mtab.contains(device):
+			raise FstoolError("Cannot mount device '%s'. %s" % (device, out), FstoolError.CANNOT_MOUNT)
 	
 	if auto_mount:
 		fstab = Fstab()
-		if not fstab.contains(device, mpoint = mpoint, rescan=True):
-			fstab.append(TabEntry(device, mpoint, "auto", "defaults\t0\t0"))
+		if not fstab.contains(device, mpoint=mpoint, rescan=True):
+			fstab.append(device, mpoint)
 
-def umount(device, options=(), clean_fstab = False):
+def umount(device=None, mpoint=None, options=None, clean_fstab = False):
 	if not os.path.exists(device):
 		raise FstoolError("Device %s not found" % (device), FstoolError.CANNOT_UMOUNT)
 	
-	options = " ".join(options)
+	options = " ".join(options or ())
 	
-	returncode = system("umount %(options)s %(device)s 2>&1" % vars())[2]
-	if returncode :
-		raise FstoolError("Cannot unmount device '%s'" % (device), FstoolError.CANNOT_UMOUNT)
+	out, returncode = system("umount %(options)s %(device)s 2>&1" % vars())[0::2]
+	if returncode:
+		raise FstoolError("Cannot unmount device '%s'. %s" % (device, out),	FstoolError.CANNOT_UMOUNT)
 	
 	if clean_fstab:
-		fstab = None
-		
-		try:
-			fstab_file = open(Fstab.LOCATION, 'r')
-		except OSError:
-			pass
-		else:
-			fstab = fstab_file.read()
-		finally:
-			fstab_file.close()
-		
-		if fstab:
-			fstab = re.sub(r"\n" + device + ".*\n", '\n', fstab)
-			
-			try:
-				fstab_file = open(Fstab.LOCATION, 'w')
-			except OSError:
-				pass
-			else:
-				fstab = fstab_file.write(fstab)
-			finally:
-				fstab_file.close()
+		fstab = Fstab()
+		fstab.remove(device, mpoint)
 	
-
+	
 def mkfs(device, fstype = 'ext3'):
-	_out, _err, _retcode = system("/sbin/mkfs -t " + fstype + " -F " + device)
-	if _retcode:
-		raise FstoolError("Cannot create file system on device '%s'. %s" % (device, _err), FstoolError.CANNOT_CREATE_FS)
+	out, retcode = system("/sbin/mkfs -t %(fstype)s -F %(device)s 2>&1" % vars())[0::2]
+	if retcode:
+		raise FstoolError("Cannot create file system on device '%s'. %s" % (device, out), 
+				FstoolError.CANNOT_CREATE_FS)
