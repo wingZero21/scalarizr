@@ -188,7 +188,7 @@ Bundled: %(bundle_date)s
 			
 			# Exclude mounted non-local filesystems if they are under the volume root
 			mtab = fstool.Mtab()
-			excludes += list(entry.mpoint + "/*" if entry.mpoint[-1] != "/" else entry.mpoint
+			excludes += list(entry.mpoint
 					for entry in mtab.list_entries()  
 					if entry.fstype in fstool.Mtab.LOCAL_FS_TYPES)
 			
@@ -628,10 +628,17 @@ if disttool.is_linux():
 		
 		def _make_special_dirs(self):
 			self._logger.info("Make special directories")
-			# Make /proc /sys /mnt
-			for dir in ("/mnt", "/proc", "/sys", "/dev"):
+			
+			mtab = fstool.Mtab()
+			special_dirs = list(entry.mpoint
+					for entry in mtab.list_entries()  
+					if entry.fstype in fstool.Mtab.LOCAL_FS_TYPES)
+			special_dirs.extend(["/mnt", "/proc", "/sys", "/dev"])
+			
+			for dir in special_dirs:
 				if not os.path.exists(self._image_mpoint + dir):
 					os.makedirs(self._image_mpoint + dir)
+			
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
 			dev_dir = self._image_mpoint + "/dev"			

@@ -70,9 +70,6 @@ class EbsHandler(scalarizr.handlers.Handler):
 			raise
 
 	def on_MountPointsReconfigure(self, message):
-		mtab = fstool.Mtab()
-		fstab = fstool.Fstab()		
-		
 		self._logger.debug("Iterate over EBS mounpoints")
 		for ebs_mpoint in self._queryenv.list_ebs_mountpoints():
 			self._logger.debug("Take %s", ebs_mpoint)
@@ -87,20 +84,10 @@ class EbsHandler(scalarizr.handlers.Handler):
 			except IndexError, e:
 				self._logger.error("Volume:0 doesn't exists. %s", e)
 				continue
-
 			
+			mtab = fstool.Mtab()			
 			if not mtab.contains(devname, rescan=True):
-				# Create filesystem
-				if ebs_mpoint.create_fs:
-					self._logger.info("Creating new filesystem on device %s", devname)
-					system("/sbin/mkfs.ext3 -F " + devname + " 2>&1")
-					
-				# Mount device
-				fstool.mount(devname, ebs_mpoint.dir, ["-t auto"])
-				if not fstab.contains(devname, rescan=True):
-					self._logger.info("Adding a record to fstab")
-					fstab.append(fstool.TabEntry(devname, ebs_mpoint.dir, "auto", "defaults\t0\t0"))
-		
+				fstool.mount(devname, ebs_mpoint.dir, make_fs=ebs_mpoint.create_fs, auto_mount=True)
 				self._logger.info("Device %s succesfully mounted to %s (volume_id: %s)", 
 						devname, ebs_mpoint.dir, ebs_volume.volume_id)
 				
@@ -115,34 +102,6 @@ class EbsHandler(scalarizr.handlers.Handler):
 				self._logger.debug("Skip device %s already mounted to %s", devname, entry.mpoint)
 
 				
-		"""
-		for mpoint in self._queryenv.list_ebs_mountpoints()
-			for volume in mpoint.volumes:
-				if volume.volume_id == ec2_volume.id:
-					gotcha = True		
-		
-		if gotcha:
-			self._logger.info("Mounting EBS volume '%s' as device '%s' on '%s' ...", 
-					ec2_volume.id, volume.device, mpoint.dir)
-		else:
-			self._logger.warn("Cannot find volume '%s' in EBS mountpoints list", ec2_volume.id)
-			return False 
-					
-		if mpoint.create_fs:
-			self._logger.info("Creating new filesystem on device '%s'", volume.device)
-			system("/sbin/mkfs.ext3 -F " + volume.device + " 2>&1")
-			
-		fstool.mount(volume.device, mpoint.dir, ["-t auto"])
-		fstab = fstool.Fstab()
-		if not any([entry.device == volume.device for entry in fstab.list_entries()]):
-			self._logger.info("Adding a record to fstab")
-			fstab.append(fstool.TabEntry(volume.device, mpoint.dir, "auto", "defaults\t0\t0"))
-
-		self._logger.info("Device %s succesfully mounted to %s (volume_id: %s)", 
-				volume.device, mpoint.dir, ec2_volume.id)
-		return True		
-		"""
-
 	def on_IntBlockDeviceUpdated(self, message):
 		if message.action == "add":
 			self._logger.info("udev notified that block device %s was attached", message.devname)
@@ -166,83 +125,3 @@ class EbsHandler(scalarizr.handlers.Handler):
 			
 			bus.fire("block_device_detached", device=message.devname)						
 
-
-		"""
-
-		if message.action == "add":
-			self._logger.info("udev notified that block device %s was attached", message.devname)
-			
-			self._send_message(
-				Messages.BLOCK_DEVICE_ATTACHED, 
-				{"device_name" : message.devname}, 
-				broadcast=True
-			)
-			bus.fire("block_device_attached", device=message.devname)
-			
-			
-			
-			# Volume was attached
-			max_attempts = 5
-			attempt = 1
-			while attempt <= max_attempts:
-				for volume in ec2_conn.get_all_volumes():
-					ad = volume.attach_data
-					if not ad is None and \
-							ad.instance_id == self._platform.get_instance_id() and \
-							ad.device == message.devname and \
-							ad.status == "attached":
-						
-						self._logger.info("EBS was attached (volumeId: %s, device: %s)" % (volume.id, ad.device))
-						# Send message to Scalr
-						msg = self._msg_service.new_message(Messages.BLOCK_DEVICE_ATTACHED, body=dict(
-							volume_id = volume.id,
-							device_name = ad.device
-						))
-						self._put_broadcast_data(msg)
-						producer = self._msg_service.get_producer()
-						producer.send(Queues.CONTROL, msg)
-						
-						# Notify listeners
-						bus.fire("block_device_attached", volume=volume.id, device=ad.device)
-						
-						try:
-							# Check EBS mountpoints and mount device if necessary
-							if self._mount_volume(volume):
-								msg = self._msg_service.new_message(Messages.BLOCK_DEVICE_MOUNTED, body=dict(
-									volume_id = volume.id,
-									device_name = ad.device
-								))
-								self._put_broadcast_data(msg)
-								producer.send(Queues.CONTROL, msg)
-								
-								bus.fire("block_device_mounted", volume_id=volume.id, device=ad.device)
-						except BaseException, Exception:
-							self._logger.error("Mount EBS volume failed")
-							raise
-						
-						return
-				
-				if attempt < max_attempts:
-					self._logger.debug("Attempt %d not succeed. " +
-								"Sleep %d seconds before the next one", attempt, attempt)		
-					time.sleep(attempt)
-				else:
-					self._logger.debug("Attempt %d not succeed", attempt)
-				attempt = attempt + 1
-			else:
-				self._logger.warning("Unable to verify that EBS was attached to the server")
-				
-		elif message.action == "remove":
-			# Volume was detached
-			self._logger.info("EBS was detached (device: %s)", message.device)
-			
-			# Send message to Scalr
-			msg = self._msg_service.new_message(Messages.BLOCK_DEVICE_DETACHED)
-			msg.device_name = message.devname
-			producer = self._msg_service.get_producer()
-			producer.send(Queues.CONTROL, msg)
-			
-			# Notify listeners
-			bus.fire("block_device_detached", device=message.devname)
-
-		"""

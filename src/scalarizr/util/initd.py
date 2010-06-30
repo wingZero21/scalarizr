@@ -26,6 +26,9 @@ def start(name):
 
 def stop(name): 
 	return _start_stop_reload(name, "stop")
+
+def restart(name):
+	return _start_stop_reload(name, "restart")
 	
 def reload(name, force=False): 
 	return _start_stop_reload(name, "force-reload" if force else "reload")
@@ -49,17 +52,17 @@ def _start_stop_reload(name, action):
 	
 	
 	if action != "stop":
-		so_timeout 	= _services[name]["so_timeout"]
+		so_timeout = _services[name]["so_timeout"]
 		if _services[name]["tcp_port"]:
-			port 		= _services[name]["tcp_port"]
+			port = _services[name]["tcp_port"]
 			ping_service('127.0.0.1', port, so_timeout)
 		elif _services[name]["udp_port"]:
-			port 		= _services[name]["udp_port"]
+			port = _services[name]["udp_port"]
 			ping_service('127.0.0.1', port, so_timeout, 'udp')
 
 	
 	if pid_file:
-		if action == "start" and not os.path.exists(pid_file):
+		if (action == "start" or action == "restart") and not os.path.exists(pid_file):
 			raise InitdError("Cannot start %s. pid file %s doesn't exists" % (name, pid_file))
 		if action == "stop" and os.path.exists(pid_file):
 			raise InitdError("Cannot stop %s. pid file %s still exists" % (name, pid_file))
