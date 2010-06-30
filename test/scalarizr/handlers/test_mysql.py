@@ -14,6 +14,7 @@ from scalarizr.util import system, initd, disttool, cryptotool, configtool
 from scalarizr.platform.ec2 import Ec2Platform
 from subprocess import Popen, PIPE, STDOUT
 import time, shutil, hashlib, pwd
+from scalarizr.behaviour import Behaviours
 
 class _Volume:
 	def __init__(self):
@@ -21,16 +22,18 @@ class _Volume:
 		self._messages = []
 		
 class _MysqlHandler(mysql.MysqlHandler):
-	def _init_storage(self, vol_id, mnt_point):
+	def _create_storage(self, vol_id, mnt_point):
 		pass
 	def _detach_delete_volume(self, volume):
 		pass
-	def _create_volume_from_snap(self, snap_id):
+	def _create_volume_from_snapshot(self, snap_id):
 		return _Volume()
 	def _mount_device(self, devname, mnt_point):
 		pass
 	def _send_message(self, message):
 		self._messages.append(message)
+	def _create_ebs_snapshot(self):
+		pass
 	
 LOCAL_IP = '12.34.56.78'
 
@@ -70,9 +73,11 @@ class Test(unittest.TestCase):
 		bus.queryenv_service = _QueryEnv()
 		bus.platform = _Platform()
 		handler = _MysqlHandler()
+		handler._stop_mysql()
 		root_password, repl_password, stat_password = handler._add_mysql_users(mysql.ROOT_USER,
 																			   mysql.REPL_USER,
 																			   mysql.STAT_USER)
+		handler._stop_mysql()
 		myd = handler._start_mysql_skip_grant_tables()
 		for user, password in {mysql.ROOT_USER: root_password,
 							   mysql.REPL_USER: repl_password,
@@ -92,7 +97,7 @@ class Test(unittest.TestCase):
 		root_password, repl_password, stat_password = handler._add_mysql_users(mysql.ROOT_USER,
 																			   mysql.REPL_USER,
 																			   mysql.STAT_USER)
-		handler._change_mysql_dir('log_bin', '/var/log/mysql/binarylog/binary.log', 'mysqld')
+		handler._move_mysql_dir('log_bin', '/var/log/mysql/binarylog/binary.log', 'mysqld')
 		handler._replication_init()
 		snap_id, log_file, log_pos = handler._create_snapshot(mysql.ROOT_USER, root_password)
 		sql = pexpect.spawn('/usr/bin/mysql -u' + mysql.ROOT_USER + ' -p' + root_password)
@@ -120,7 +125,7 @@ class Test(unittest.TestCase):
 		handler = _MysqlHandler()
 		message = _Message()
 		config = bus.config
-		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_master')
+		config.set(configtool.SECT_GENERAL, mysql.OPT_REPLICATION_MASTER, '1')
 		handler.on_before_host_up(message)
 		self.assertTrue(os.path.exists('/mnt/dbstorage/mysql-data'))
 		self.assertTrue(os.path.exists('/mnt/dbstorage/mysql-misc'))
@@ -129,17 +134,22 @@ class Test(unittest.TestCase):
 		self.assertEqual(mysql_user.pw_gid, os.stat('/mnt/dbstorage/mysql-data')[5])
 		self.assertEqual(mysql_user.pw_uid, os.stat('/mnt/dbstorage/mysql-misc')[4])
 		self.assertEqual(mysql_user.pw_gid, os.stat('/mnt/dbstorage/mysql-misc')[5])
-#		self.tearDown()
-#		self.setUp()
 		handler.on_before_host_up(message)
 		datadir, log_bin = extract_datadir_and_log()
 		self.assertEqual(datadir, '/mnt/dbstorage/mysql-data/')
 		self.assertEqual(log_bin, '/mnt/dbstorage/mysql-misc/binlog.log')
 		
-	def test_on_mysql_master_up(self):
+	def test_on_mysql_newmaster_up(self):
 		bus.queryenv_service = _QueryEnv()
 		bus.platform = _Platform()
+		config = bus.config
+		sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '0')
 		handler = _MysqlHandler()
+		root_pass, repl_pass, stat_pass = handler._add_mysql_users(mysql.ROOT_USER, mysql.REPL_USER, mysql.STAT_USER)
+		handler._update_config( **{mysql.OPT_ROOT_PASSWORD : root_pass,
+								 mysql.OPT_REPL_PASSWORD : repl_pass,
+								 mysql.OPT_STAT_PASSWORD : stat_pass})
 		message = _Message()
 		if disttool.is_redhat_based():
 			daemon = "/usr/libexec/mysqld"
@@ -151,7 +161,7 @@ class Test(unittest.TestCase):
 		myclient = pexpect.spawn('/usr/bin/mysql -h'+LOCAL_IP)
 		myclient.expect('mysql>')
 		repl_password = re.sub('[^\w]','', cryptotool.keygen(20))
-		sql = "update mysql.user set password = PASSWORD('"+repl_password+"') where user = '"+mysql.REPL_USER+"'; FLUSH PRIVILEGES;"
+		sql = "update mysql.user set password = PASSWORD('"+repl_password+"') where user = '"+mysql.REPL_USER+"';"
 		myclient.sendline(sql)
 		myclient.expect('mysql>')
 		result = myclient.before
@@ -160,8 +170,8 @@ class Test(unittest.TestCase):
 			raise BaseException("Cannot update user", result)
 		myclient.sendline('FLUSH TABLES WITH READ LOCK;')
 		myclient.expect('mysql>')
-		system('cp -pr /var/lib/mysql /var/lib/backmysql')
-		system('rm -rf /var/lib/mysql && cp -pr /var/lib/mysql2 /var/lib/mysql')
+#		system('cp -pr /var/lib/mysql /var/lib/backmysql')
+#		system('rm -rf /var/lib/mysql && cp -pr /var/lib/mysql2 /var/lib/mysql')
 		myclient.sendline('SHOW MASTER STATUS;')
 		myclient.expect('mysql>')
 		# retrieve log file and position
@@ -170,29 +180,31 @@ class Test(unittest.TestCase):
 		except:
 			raise BaseException("Cannot get master status")
 		finally:
+			myclient.sendline('UNLOCK TABLES;')
 			os.kill(myd.pid, signal.SIGTERM)
-		myclient.sendline('UNLOCK TABLES;')
 		myd = Popen([daemon, '--defaults-file=/etc/mysql2/my.cnf'], stdin=PIPE, stdout=PIPE, stderr=STDOUT)
 		ping_service(LOCAL_IP, 3306, 5)
 		message.log_file = master_status[1].strip()
 		message.log_pos = master_status[2].strip()
 		message.repl_user = mysql.REPL_USER
 		message.repl_password = repl_password
-		handler.on_Mysql_MasterUp(message)
+		handler.on_Mysql_NewMasterUp(message)
 		os.kill(myd.pid, signal.SIGTERM)
 		initd.stop("mysql")
 		system ('rm -rf /var/lib/mysql && cp -pr /var/lib/backmysql /var/lib/mysql && rm -rf /var/lib/backmysql')
+		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '1')
 		
 	def test_on_before_host_up_slave_ebs(self):
 		bus.queryenv_service = _QueryEnv()
 		bus.platform = _Platform()
 		message = _Message()
 		config = bus.config
-		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_slave')
+		sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '0')
 		bus.queryenv_service.storage = 'ebs'
 		handler = _MysqlHandler()
 		handler.on_before_host_up(message)
-		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_master')
+		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '1')
 		datadir, log_bin = extract_datadir_and_log()
 		self.assertEqual(datadir, '/mnt/dbstorage/mysql-data/')
 		self.assertEqual(log_bin, '/mnt/dbstorage/mysql-misc/binlog.log')
@@ -202,18 +214,28 @@ class Test(unittest.TestCase):
 		bus.platform = _Platform()
 		message = _Message()
 		config = bus.config
-		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_slave')
+		sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '0')
 		bus.queryenv_service.storage = 'eph'
 		handler = _MysqlHandler()
 		handler.on_before_host_up(message)
-		config.set(configtool.SECT_GENERAL, mysql.OPT_ROLE_NAME, 'mysql_master')
+		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '1')
 		datadir, log_bin = extract_datadir_and_log()
 		self.assertEqual(datadir, '/mnt/dbstorage/mysql-data/')
 		self.assertEqual(log_bin, '/mnt/dbstorage/mysql-misc/binlog.log')
 		
 	def test_on_Mysql_PromoteToMaster(self):
+		bus.queryenv_service = _QueryEnv()
+		bus.platform = _Platform()
+		config = bus.config
+		sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '0')
 		message = _Message()
-		pass
+		message.root_password = '123'
+		message.repl_password = '456'
+		message.stat_password = '789'
+		handler = _MysqlHandler()
+		handler.on_Mysql_PromoteToMaster(message)
 		
 def mysql_password(str):
 	pass1 = hashlib.sha1(str).digest()
@@ -244,7 +266,7 @@ class _QueryEnv:
 		return _Bunch(
 			mysql_data_storage_engine = self.storage,
 			mysql_master_ebs_volume_id = 'test-id',
-			EBS_SNAP_ID = 'test_snap_id'
+			ebs_snap_id = 'test_snap_id'
 			)
 		
 class _Platform:
@@ -265,6 +287,7 @@ class _Message:
 		self.mysql_stat_password = None
 		self.mysql_stat_user = None
 		self.local_ip = LOCAL_IP
+		self.replication_master = 1
 
 if __name__ == "__main__":
 	init_tests()

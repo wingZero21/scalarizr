@@ -11,6 +11,7 @@ import os
 class FstoolError(BaseException):
 	NO_FS = -100
 	CANNOT_MOUNT = -101
+	CANNOT_UMOUNT = -102
 	
 	message = None
 	code = None
@@ -183,7 +184,7 @@ def umount(device, options=(), clean_fstab = False):
 			finally:
 				fstab_file.close()
 	
-	
+
 def mkfs(device, fstype = 'ext3'):
 	_out, _err, _retcode = system("/sbin/mkfs -t " + fstype + " -F " + device)
 	if _retcode:
