@@ -8,9 +8,13 @@ Primary goal: support Ini, Xml, Yaml, ProtocolBuffers, Nginx, Apache2
 @author: marat
 @author: spike
 '''
-
+from xml.etree import ElementTree as ET
+import re
 format_providers = dict()
 default_format = "ini"
+	
+class MetaconfError(Exception):
+	pass
 
 class Configuration:
 	def __init__(self, format=default_format):
@@ -101,17 +105,107 @@ class PyConfigParserAdapter:
 
 
 class IniFormatProvider:
+	
+	_parsers = None
+	
+	def __init__(self):
+		self._parsers = (
+			self.parse_comment,
+			self.parse_section,
+			self.parse_option
+		)
+	
 	def read(self, fp):
 		"""
 		@return: xml.etree.ElementTree
 		"""
-		pass
+		errors = []
+		lineno = 0
+		root = ET.Element("configuration")
+		cursect = root
+		while True:
+			line = fp.readline()
+			if not line:
+				break
+			lineno += 1
+			if line.strip() == '':
+				continue
+			for parser in self._parsers:
+				if parser(line, cursect, root):
+					match = True
+					break
+			if not match:
+				errors.append((lineno, line))
+
+		indent(root)
+		if errors:
+			raise MetaconfError(errors)
+		else:
+			return ET.ElementTree(root)
+		
+	def parse_comment(self, line, cursect, root):
+		if not hasattr(self, "_comment_re"):
+			self._comment_re = re.compile('\s*[#;]([^\n]*)')
+		if self._comment_re.match(line):
+			comment = ET.Comment(self._comment_re.match(line).group(1))
+			cursect.append(comment)
+			return True
+		else:
+			return False
 	
+	def parse_section(self, line, cursect, root):
+		if not hasattr(self, "_sect_re"):
+			self._sect_re = re.compile(r'\[(?P<header>[^]]+)\]')
+		if self._sect_re.match(line):
+			cursect = ET.SubElement(root, self._sect_re.match(line).group('header'))
+			return True
+		else:
+			return False
+			
+	
+	def parse_option(self, line, cursect, root):
+		if not hasattr(self, "_opt_re"):
+			self._opt_re = re.compile(r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*)$')
+		if self._opt_re.match(line):
+			new_opt = ET.SubElement(cursect, self._opt_re.match(line).group('option'))
+			new_opt.text = self._opt_re.match(line).group('value')
+			return True
+		else:
+			return False
+					
 	def write(self, fp, etree):
-		pass
+		if isinstance(etree, ET._ElementInterface) or isinstance(etree, ET.ElementTree):
+			toplevel = etree.find('').getchildren()
+			if len(toplevel):
+				for section in toplevel:
+					if callable(section.tag):
+						fp.write('#'+section.text+'\n')
+					elif len(section.find('').getchildren()):
+						fp.write('['+section.tag+']\n')
+						self.write(fp, section)
+					else:
+						try:
+							fp.write(section.tag+" = "+section.text+'\n')
+						except:
+							print section
+					
 	
 format_providers["ini"] = IniFormatProvider
 
+class XmlFormatProvider:
+	def read(self, fp):
+		try:
+			etree = ET.parse(fp, parser=CommentedTreeBuilder())
+		except Exception, e:
+			raise MetaconfError(e)
+			
+		indent(etree.getroot())
+		return etree
+	
+	def write(self, fp, etree):
+		etree.write(fp)
+		
+format_providers["xml"] = XmlFormatProvider
 """
 [general]
 ; Server behaviour (app|www|mysql) 
@@ -128,9 +222,33 @@ role_name
 ;   vps     - Standalone VPS server 
 platform = vps
 """
+def indent(elem, level=0):
+	i = "\n" + level*"	"
+	if len(elem):
+		if not elem.text or not elem.text.strip():
+			elem.text = i + "	"
+		if not elem.tail or not elem.tail.strip():
+			elem.tail = i
+		for elem in elem:
+			indent(elem, level+1)
+		if not elem.tail or not elem.tail.strip():
+			elem.tail = i
+	else:
+		if level and (not elem.tail or not elem.tail.strip()):
+			elem.tail = i
+			
+class CommentedTreeBuilder ( ET.XMLTreeBuilder ):
+	def __init__ ( self, html = 0, target = None ):
+		ET.XMLTreeBuilder.__init__( self, html, target )
+		self._parser.CommentHandler = self.handle_comment
 
+	def handle_comment ( self, data ):
+		self._target.start( ET.Comment, {} )
+		self._target.data( data.strip() )
+		self._target.end( ET.Comment )
+'''
 # use for xml.etree.ElementTree for hierarchy
-from xml.etree import ElementTree as ET
+
 root = ET.Element("configuration")
 gen = ET.SubElement(root, "general")
 gen.append(ET.Comment("Server behaviour (app|www|mysql)"))
@@ -192,7 +310,7 @@ format_providers["xml"] = XmlFormatProvider
                     KeysCached="100%"/>
         <ColumnFamily Name="StandardByUUID1" CompareWith="TimeUUIDType" />
     </Keyspace>
-  <Keyspaces>
+  </Keyspaces>
   
   
   <Seeds>
@@ -200,54 +318,5 @@ format_providers["xml"] = XmlFormatProvider
       <Seed>10.196.18.36</Seed>
   </Seeds>  
   
-</Storage>
-"""
-conf = Configuration("xml")
-
-"""
-1. Access subsets
-"""
-k1 = conf["Storage/Keyspaces/Keyspace[@Name=KeySpace1]"]
-
-"""
-2. Iterate keys
-"""
-for k in k1:
-	print k1.get(k + "/@Name")
-"""
-Expected:
-	Standard2
-	StandardByUUID1
-"""
-
-"""
-3. Add keys
-"""
-k1.add("ColumnFamily", dict(Name="Super2", ColumnType="Super", CompareWith="UTF8Type"))
-"""
-Expected: ColumnFamily[@Name=Super2] added at the end of KeySpace1
-"""
-k1.add("ColumnFamily", dict(Name="Super22", ColumnType="Super", CompareWith="UTF8Type"), 
-		before_path="ColumnFamily[1]")
-"""
-Expected: ColumnFamily[@Name=Super2] added at the begining of KeySpace1
-"""
-
-"""
-4. Remove keys
-"""
-conf.remove("Storage/Keyspaces/Keyspace[1]")
-"""
-Expected: Removed KeySpace1 and all it's children 
-"""
-
-conf.remove("Storage/Seeds/Seed", "10.196.18.36")
-"""
-Expected: Removed 10.196.18.36 from seeds list
-"""
-
-
-
-class YamlFormatProvider:
-	pass
-
+</Storage> """ 
+'''
