@@ -12,6 +12,7 @@ from xml.etree import ElementTree as ET
 import re
 format_providers = dict()
 default_format = "ini"
+import yaml
 	
 class MetaconfError(Exception):
 	pass
@@ -328,6 +329,31 @@ class XmlFormatProvider:
 	def write(self, etree, fp):
 		etree.write(fp)
 		
+		
+class YamlFormatProvider:
+	
+	def read(self, fp):
+		self._root = ET.Element('root')
+		self._cursect = self._root
+		dict = yaml.load(fp.read(), Loader = yaml.BaseLoader)
+		self._parse(dict)
+		indent(self._root)
+		return ET.ElementTree(self._root)
+			
+	def _parse(self, iterable):
+		if isinstance(iterable, dict):
+			for key in iterable:
+				new_opt = ET.SubElement(self._cursect, str(key))
+				cursect = self._cursect
+				self._cursect = new_opt
+				self._parse(iterable[key])
+				self._cursect = cursect
+		elif isinstance(iterable, list):
+			for value in iterable:
+				self._parse(value)
+		else:
+			self._cursect.text = str(iterable)
+
 format_providers["xml"] = XmlFormatProvider
 """
 [general]
