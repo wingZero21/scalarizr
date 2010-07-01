@@ -84,7 +84,7 @@ def _init():
 		raise ScalarizrError("Configuration file '%s' doesn't exists" % (config_filename))
 	bus.etc_path = os.path.dirname(config_filename)
 	
-	mount_private_d(mount_point = bus.etc_path + '/private.d/')
+	#mount_private_d(mount_point = bus.etc_path + '/private.d/')
 
 	# Load configuration
 	config = ConfigParser()

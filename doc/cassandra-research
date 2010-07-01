@@ -9,3 +9,14 @@ http://wiki.apache.org/cassandra/HintedHandoff
 Backup/Restore
 ---------------------------
 http://www.mail-archive.com/cassandra-user@incubator.apache.org/msg01342.html
+
+
+
+Настройки, которые должна поддерживать роль
+-------------------------------------------
+
+Consistency Level.
+read/write
+
+Replication Factor
+

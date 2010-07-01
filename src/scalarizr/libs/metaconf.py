@@ -9,31 +9,58 @@ Primary goal: support Ini, Xml, Yaml, ProtocolBuffers, Nginx, Apache2
 @author: spike
 '''
 from xml.etree import ElementTree as ET
+import ElementPath13
 import re
+
+
 format_providers = dict()
 default_format = "ini"
-import yaml
 	
 class MetaconfError(Exception):
 	pass
 
+class ParseError(BaseException):
+	"""
+	Throw it in providers read method
+	"""
+	pass
+
+class PathNotExistsError(BaseException):
+	pass
+
+
 class Configuration:
 	_etree = None
-	_root = None
-	_format = None
 	"""
-	@ivar xml.etree.ElementTree _etree: 
+	@ivar xml.etree.ElementTree.ElementTree _etree:  
 	"""
 
-	def __init__(self, format=default_format, root_path="//", etree=None):
-		if not (isinstance(etree, ET._ElementInterface) or isinstance(etree, ET.ElementTree)):
+	_root_path = None
+	"""
+	@ivar str _root_path: 
+	"""
+	
+	_format = None
+	"""
+	@ivar str _format: 
+	"""
+	
+	_provider = None
+
+	def __init__(self, format=default_format, root_path="", etree=None):
+		if etree and not (isinstance(etree, ET._ElementInterface) or isinstance(etree, ET.ElementTree)):
 			raise MetaconfError("etree param must be instance of _ElementInterface or ElementTree. %s passed" % (etree,))
-		self._root = root_path
+		self._root_path = root_path
 		self._format = format
 		self._etree = etree
 	
 	def read(self, filenames):
 		pass
+	
+	def readfp(self, fp):
+		if not self._provider:
+			self._provider = format_providers[self._format]()
+		self._etree = self._provider.read(fp)
 		
 	def write(self, fp):
 		"""
@@ -47,13 +74,28 @@ class Configuration:
 		pass
 	
 	def __iter__(self):
+		return ElementPath13.findall(self._etree, self._root_path + "*")
+		
 		"""
 		Returns keys iterator 
 		"""
 		pass
 	
-	def _get0(self, path):
-		return self._etree.find(self._root + path)
+	def _find_all(self, path):
+		ret = []
+		try:
+			it = ElementPath13.findall(self._etree, self._root_path + path)			
+			while 1:
+				ret.append(it.next())
+		except StopIteration:
+			return ret
+		
+	def _find(self, path):
+		try:
+			return self._find_all(path)[0]
+		except IndexError: 
+			raise PathNotExistsError(path)
+
 	
 	def get(self, path):
 		"""
@@ -61,7 +103,22 @@ class Configuration:
 		v = conf.get("general/server_id")
 		v = "3233-322"
 		"""
-		return str(self._get0(path)[0].text)
+		return str(self._find(path).text)
+	
+	def get_float(self, path):
+		return float(self.get(path))
+	
+	def get_int(self, path):
+		return int(self.get(path))
+	
+	def get_boolean(self, path):
+		return self.get(path).lower() in ["1", "0", "yes", "true"]
+	
+	def get_list(self, path):
+		return list(el.text for el in self._find_all(path))
+	
+	def get_dict(self, path):
+		return self._find(path).attrib
 	
 	def set(self, path, value, typecast=None):
 		"""
@@ -80,7 +137,7 @@ class Configuration:
 		"""
 		Find element, and call _set0
 		"""
-		el = self._etree.find(self._root+path)
+		el = ElementPath13.find(self._etree, self._root_path + path)
 		if el:
 			self._set0(el, value, typecast)
 	
@@ -90,7 +147,7 @@ class Configuration:
 	
 	def add(self, path, value, typecast=None, before_path=None):
 		if before_path:
-			path_list = self._etree.findall(self._root+before_path)
+			path_list = self._etree.findall(self._root_path+before_path)
 			if len(path_list):
 				before_element = path_list[-1]
 		path_list = self._etree.findall(self._root+path)
@@ -150,31 +207,10 @@ class Configuration:
 		subconf = conf["Seeds/Seed[1]"]
 		
 		"""
-		el = self._get(path)
-		if len(el) == 1:
-			return Configuration(format=self._format, etree=self._etree, root_path=path)
-		else:
-			raise
+		self._find(path)
+		return Configuration(format=self._format, etree=self._etree, root_path=path+"/")
 	
-	def get_float(self, path):
-		return 
-		pass
-	
-	def get_int(self, path):
-		pass
-	
-	def get_boolean(self, path):
-		pass
-	
-	def get_list(self, path):
-		return list(el.text for el in self._get(path))
-	
-	def get_dict(self, path):
-		"""
-		For XML return node attributes
-		For INI return {}
-		"""
-		pass
+
 
 """
 class PyConfigParserAdapter:
@@ -321,7 +357,7 @@ class XmlFormatProvider:
 		try:
 			etree = ET.parse(fp, parser=CommentedTreeBuilder())
 		except Exception, e:
-			raise MetaconfError(e)
+			raise ParseError(e)
 			
 		indent(etree.getroot())
 		return etree
@@ -332,13 +368,19 @@ class XmlFormatProvider:
 		
 class YamlFormatProvider:
 	
+	def __init__(self):
+		import yaml
+	
 	def read(self, fp):
-		self._root = ET.Element('root')
-		self._cursect = self._root
-		dict = yaml.load(fp.read(), Loader = yaml.BaseLoader)
-		self._parse(dict)
-		indent(self._root)
-		return ET.ElementTree(self._root)
+		try:
+			self._root = ET.Element('root')
+			self._cursect = self._root
+			dict = yaml.load(fp.read(), Loader = yaml.BaseLoader)
+			self._parse(dict)
+			indent(self._root)
+			return ET.ElementTree(self._root)
+		except (BaseException, Exception), e:
+			raise ParseError(e)
 			
 	def _parse(self, iterable):
 		if isinstance(iterable, dict):
