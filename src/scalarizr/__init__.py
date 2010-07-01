@@ -5,7 +5,7 @@ from scalarizr.messaging import MessageServiceFactory, MessageService, MessageCo
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
-	daemonize, system, disttool
+	daemonize, system, disttool, fstool
 
 
 import os
@@ -18,7 +18,7 @@ import logging.config
 from optparse import OptionParser, OptionGroup
 import binascii
 from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
-from scalarizr.util.configtool import ConfigError
+from scalarizr.util.configtool import ConfigError , mount_private_d
 import threading
 import urlparse
 import socket
@@ -83,6 +83,8 @@ def _init():
 	if not os.path.exists(config_filename):
 		raise ScalarizrError("Configuration file '%s' doesn't exists" % (config_filename))
 	bus.etc_path = os.path.dirname(config_filename)
+	
+	mount_private_d(mount_point = bus.etc_path + '/private.d/')
 
 	# Load configuration
 	config = ConfigParser()

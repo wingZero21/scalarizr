@@ -38,38 +38,44 @@ class Fstab:
 	
 	def __init__(self, filename=None):
 		self.filename = filename if not filename is None else self.LOCATION
-		self._entries = None
+		self._entries = []
 		self._re = re.compile("^(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+).*$")
+		
+	def _rescan(self):
+		self._entries = []
+		f = open(self.filename, "r")
+		for line in f:
+			if line[0:1] == "#":
+				continue
+			m = self._re.match(line)
+			if m:
+				self._entries.append(TabEntry(m.group(1), m.group(2), 
+						m.group(3), m.group(4), line.strip()))
+		f.close()
+		
 		
 	def list_entries(self, rescan=False):
 		if not self._entries or rescan:
-			self._entries = []
-			f = open(self.filename, "r")
-			for line in f:
-				if line[0:1] == "#":
-					continue
-				m = self._re.match(line)
-				if m:
-					self._entries.append(TabEntry(
-						m.group(1), m.group(2), m.group(3), m.group(4), line.strip()
-					))
-			f.close()
-			
+			self._rescan()
 		return list(self._entries)
 
 	def contains(self, devname=None, mpoint=None, rescan=False):
+		eq = dict(devname=devname, mpoint=mpoint)
 		for entry in self.list_entries(rescan):
-			return any(bool(mpoint and entry.mpoint == mpoint) or bool(devname and entry.device == devname) \
-					for entry in self.list_entries(rescan))
+			if self._cmp(entry, eq):
+				return True
+		return False
+			
+	def _cmp(self, entry, eq):
+		return all(list(getattr(entry, k) == v for k, v in eq.items() if v))	
 		
 	def find(self, devname=None, mpoint=None, fstype=None, rescan=False):
-		ret = list(entry for entry in self.list_entries(rescan) if \
-				(devname and entry.device == devname) or \
-				(mpoint and entry.mpoint == mpoint) or \
-				(fstype and entry.fstype == fstype))
-		return ret
+		eq = dict(devname=devname, mpoint=mpoint, fstype=fstype)
+		return list(entry for entry in self.list_entries(rescan) if self._cmp(entry, eq))
 
 	def append(self, devname, mpoint, fstype="auto", options="defaults\t0\t0", autosave=True):
+		if not self._entries:
+			self._rescan()
 		self._entries.append(TabEntry(devname, mpoint, fstype, options))
 		if autosave:
 			self.save()
@@ -79,7 +85,7 @@ class Fstab:
 		if len(ent):
 			self._entries.remove(ent[0])
 			if autosave:
-				self.write()
+				self.save()
 			return True
 		return False
 	
@@ -90,10 +96,11 @@ class Fstab:
 			fp.write(str(self))
 		finally:
 			if fp:
-				fp.close()			
+				fp.close()
+		
 	
 	def __str__(self):
-		return "\n".join(self._entries) + "\n"
+		return "\n".join(map(str, self._entries)) + "\n"
 	
 
 class Mtab(Fstab):
@@ -104,29 +111,29 @@ class Mtab(Fstab):
 
 		
 class TabEntry(object):
-	device = None
+	devname = None
 	mpoint = None
 	fstype = None
 	options = None	
 	value = None
 	
-	def __init__(self, device, mpoint, fstype, options, value=None):
+	def __init__(self, devname, mpoint, fstype, options, value=None):
 		"""
-		@param  str device:
+		@param  str devname:
 		@param str mpoint:
 		@param str fstype:
 		@param str options:
 		@param str value: Original fstab line
 		"""
 		
-		self.device = device
+		self.devname = devname
 		self.mpoint = mpoint
 		self.fstype = fstype
 		self.options = options
 		self.value = value
 		
 	def __str__(self):
-		return "%s\t%s\t%s\t%s" % (self.device, self.mpoint, self.fstype, self.options)
+		return "%s\t%s\t%s\t%s" % (self.devname, self.mpoint, self.fstype, self.options)
 
 		
 if disttool.is_linux():

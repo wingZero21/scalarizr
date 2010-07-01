@@ -304,3 +304,23 @@ class _SectionWrapper(object):
 	
 def section_wrapper(config, section):
 	return _SectionWrapper(config, section)
+
+def mount_private_d(mount_point, privated_image = '/mnt/privated.img', blocks_count = '10000'):
+	from scalarizr.util import system, fstool
+	logger = logging.getLogger(__name__)
+	if not os.path.exists(mount_point):
+		os.makedirs(mount_point)
+		
+	if not os.path.exists(privated_image):
+		logger.info("private.d image file %s not found. Creating new loop device.")
+		
+		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
+		retcode = system(build_image_cmd)[2]
+		if retcode:
+			logger.error('Cannot create device image')
+			
+		logger.debug("Creating file system on new device.")
+		fstool.mkfs(privated_image)
+		
+	logger.debug("Trying to mount file %s as loop device in %s directory.", privated_image, mount_point)	
+	fstool.mount(privated_image, mpoint = mount_point, options =('-t auto','-o loop,rw'), auto_mount=False)
