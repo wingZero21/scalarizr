@@ -139,6 +139,10 @@ Bundled: %(bundle_date)s
 			# Fire 'rebundle'
 			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)
 			
+			optparser = bus.optparser
+			if optparser.values.run_import:
+				print "Rebundle complete"
+			
 		except (Exception, BaseException), e:
 			self._logger.error("Rebundle failed. %s", e)
 			self._logger.exception(e)
@@ -146,12 +150,16 @@ Bundled: %(bundle_date)s
 			# Send message to Scalr
 			self._send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "error",
-				last_error = str(e),
+				last_error = e.message,
 				bundle_task_id = message.bundle_task_id
 			))		
 			
 			# Fire 'rebundle_error'
-			bus.fire("rebundle_error", role_name=role_name, last_error=str(e))
+			bus.fire("rebundle_error", role_name=role_name, last_error=e.message)
+			
+			optparser = bus.optparser
+			if optparser.values.run_import:
+				print "Rebundle failed. %s" % (e.message,)
 			
 		finally:
 			try:

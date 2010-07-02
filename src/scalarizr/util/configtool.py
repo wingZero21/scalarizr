@@ -8,6 +8,8 @@ from ConfigParser import RawConfigParser
 import logging
 import binascii
 import os
+import shutil
+
 
 #TODO method to remove individual options
 
@@ -305,22 +307,49 @@ class _SectionWrapper(object):
 def section_wrapper(config, section):
 	return _SectionWrapper(config, section)
 
-def mount_private_d(mount_point, privated_image = '/mnt/privated.img', blocks_count = '10000'):
-	from scalarizr.util import system, fstool
+def mount_private_d(mpoint, privated_image, blocks_count):
+	from scalarizr.util import system, fstool, format_size
+	from scalarizr.util.filetool import Rsync
 	logger = logging.getLogger(__name__)
-	if not os.path.exists(mount_point):
-		os.makedirs(mount_point)
+	
+	logger.info("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
+			mpoint, privated_image, format_size(1024*blocks_count))
+	mtab = fstool.Mtab()
+	if mtab.contains(mpoint=mpoint):
+		logger.warning("private.d already mounted to %s", mpoint)
+		return
+	
+	if not os.path.exists(mpoint):
+		os.makedirs(mpoint)
 		
-	if not os.path.exists(privated_image):
-		logger.info("private.d image file %s not found. Creating new loop device.")
+	build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
+	retcode = system(build_image_cmd)[2]
+	if retcode:
+		logger.error('Cannot create image device')
 		
-		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
-		retcode = system(build_image_cmd)[2]
-		if retcode:
-			logger.error('Cannot create device image')
-			
-		logger.debug("Creating file system on new device.")
-		fstool.mkfs(privated_image)
+	logger.debug("Creating file system on image device")
+	fstool.mkfs(privated_image)
 		
-	logger.debug("Trying to mount file %s as loop device in %s directory.", privated_image, mount_point)	
-	fstool.mount(privated_image, mpoint = mount_point, options =('-t auto','-o loop,rw'), auto_mount=False)
+	mnt_opts = ('-t auto', '-o loop,rw')
+	if os.listdir(mpoint):
+		logger.debug("%s contains data. Need to copy it ot image before mounting", mpoint)
+		# If mpoint not empty copy all data to the image
+		try:
+			tmp_mpoint = "/mnt/tmp-privated"
+			os.makedirs(tmp_mpoint)
+			logger.debug("Mounting %s to %s", privated_image, tmp_mpoint)
+			fstool.mount(privated_image, tmp_mpoint, mnt_opts)
+			logger.debug("Copy data from %s to %s", mpoint, tmp_mpoint)
+			system(str(Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)))
+		finally:
+			try:
+				fstool.umount(mpoint=tmp_mpoint)
+			except fstool.FstoolError:
+				pass
+			try:
+				os.removedirs(tmp_mpoint)
+			except OSError:
+				pass
+		
+	logger.debug("Mounting %s to %s", privated_image, mpoint)	
+	fstool.mount(privated_image, mpoint, mnt_opts, auto_mount=True)

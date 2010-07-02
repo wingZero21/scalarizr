@@ -173,14 +173,15 @@ def mount (device, mpoint = '/mnt', options=None, make_fs=False, fstype='ext3', 
 			fstab.append(device, mpoint)
 
 def umount(device=None, mpoint=None, options=None, clean_fstab = False):
-	if not os.path.exists(device):
-		raise FstoolError("Device %s not found" % (device), FstoolError.CANNOT_UMOUNT)
+	dev = device or mpoint
+	if not os.path.exists(dev):
+		raise FstoolError("Path doesn't exists %s" % (dev), FstoolError.CANNOT_UMOUNT)
 	
 	options = " ".join(options or ())
 	
-	out, returncode = system("umount %(options)s %(device)s 2>&1" % vars())[0::2]
+	out, returncode = system("umount %(options)s %(dev)s 2>&1" % vars())[0::2]
 	if returncode:
-		raise FstoolError("Cannot unmount device '%s'. %s" % (device, out),	FstoolError.CANNOT_UMOUNT)
+		raise FstoolError("Cannot unmount %s. %s" % (dev, out), FstoolError.CANNOT_UMOUNT)
 	
 	if clean_fstab:
 		fstab = Fstab()

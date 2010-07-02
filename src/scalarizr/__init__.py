@@ -2,10 +2,12 @@
 from scalarizr import behaviour
 from scalarizr.bus import bus
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
+from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
 	daemonize, system, disttool, fstool
+from scalarizr.util.configtool import ConfigError
 
 
 import os
@@ -17,8 +19,6 @@ import logging
 import logging.config
 from optparse import OptionParser, OptionGroup
 import binascii
-from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
-from scalarizr.util.configtool import ConfigError , mount_private_d
 import threading
 import urlparse
 import socket
@@ -83,18 +83,8 @@ def _init():
 	if not os.path.exists(config_filename):
 		raise ScalarizrError("Configuration file '%s' doesn't exists" % (config_filename))
 	bus.etc_path = os.path.dirname(config_filename)
-	
-	mount_private_d(mount_point = bus.etc_path + '/private.d/')
 
-	# Load configuration
-	config = ConfigParser()
-	config.read(config_filename)
-	bus.config = config
 
-	# Configure database connection pool
-	bus.db = SqliteLocalObject(_db_connect)
-
-	
 	# Configure logging
 	if sys.version_info < (2,6):
 		# Fix logging handler resolve
@@ -105,16 +95,13 @@ def _init():
 	logger = logging.getLogger(__name__)
 	logger.info("Initialize scalarizr...")
 
+	# Load main configuration
+	config = ConfigParser()
+	config.read(config_filename)
+	bus.config = config
 
-	# Inject behaviour configurations into global config
-	bhs = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
-	for behaviour in configtool.split_array(bhs):
-		behaviour = behaviour.strip()
-		for filename in configtool.get_behaviour_filename(behaviour, ret=configtool.RET_BOTH):
-			if os.path.exists(filename):
-				logger.debug("Read behaviour configuration file %s", filename)
-				config.read(filename)
-	
+	# Configure database connection pool
+	bus.db = SqliteLocalObject(_db_connect)
 
 	
 	# Define scalarizr events
@@ -140,6 +127,24 @@ def _db_connect():
 	conn = sqlite.Connection(file)
 	conn.row_factory = sqlite.Row
 	return conn
+	
+def _mount_private_d():
+	configtool.mount_private_d(bus.etc_path + "/private.d", "/mnt/privated.img", 10000)
+
+	
+def _read_bhs_config():
+	# Inject behaviour configurations into global config
+	config = bus.config
+	logger = logging.getLogger(__name__)
+	logger.debug("Read behaviours configuration...")
+	
+	bhs = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
+	for behaviour in configtool.split_array(bhs):
+		behaviour = behaviour.strip()
+		for filename in configtool.get_behaviour_filename(behaviour, ret=configtool.RET_BOTH):
+			if os.path.exists(filename):
+				logger.debug("Read behaviour configuration file %s", filename)
+				config.read(filename)
 	
 def _init_services():
 	
@@ -305,6 +310,7 @@ def _init_services():
 	
 def init_script():
 	_init()
+	_read_bhs_config()
 	
 	config = bus.config
 	logger = logging.getLogger(__name__)
@@ -557,7 +563,7 @@ def main():
 			
 		optparser.parse_args()
 	
-		_init()		
+		_init()
 	
 		if optparser.values.gen_key:
 			print cryptotool.keygen()
@@ -568,6 +574,9 @@ def main():
 			_configure()
 			if not optparser.values.run_import:
 				sys.exit()
+
+		_mount_private_d()
+		_read_bhs_config()		
 		
 		# Initialize scalarizr service
 		try:
