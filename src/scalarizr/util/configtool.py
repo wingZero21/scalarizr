@@ -355,5 +355,19 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 			except OSError:
 				pass
 		
-	logger.debug("Mounting %s to %s", privated_image, mpoint)	
-	fstool.mount(privated_image, mpoint, mnt_opts, auto_mount=True)
+	logger.debug("Mounting %s to %s", privated_image, mpoint)
+	fstool.mount(privated_image, mpoint, mnt_opts)
+	
+	logger.debug("Adding %s to fstab as loop device", privated_image)
+	loop_list = mtab.find(mpoint = mpoint)
+	if loop_list:
+		loop_entry = loop_list[0].__str__()
+		try:
+			fstab_file = open(fstool.Fstab.filename,'a')
+			fstab_file.write(loop_entry)
+		except:
+			logger.error("Cannot write to fstab file")
+		finally:
+			fstab_file.close()
+	else:
+		logger.error("Mtab file does not contain entry with %s mount point", mpoint)
