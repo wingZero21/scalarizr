@@ -137,7 +137,11 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		self._new_crypto_key = cryptotool.keygen()
 		
 		# Prepare HostInit
-		msg = self._new_message(Messages.HOST_INIT, {"crypto_key" : self._new_crypto_key}, broadcast=True)
+		msg = self._new_message(Messages.HOST_INIT, dict(
+			crypto_key=self._new_crypto_key,
+			snmp_port=self._config.get(configtool.SECT_SNMP, configtool.OPT_PORT),
+			snmp_community_name=self._config.get(configtool.SECT_SNMP, configtool.OPT_COMMUNITY_NAME)
+		), broadcast=True)
 		bus.fire("before_host_init", msg)
 		self._send_message(msg)
 		

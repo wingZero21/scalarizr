@@ -98,6 +98,9 @@ def write_key(path, key, key_title=None, private=None, base64encode=False):
 			else get_key_filename(os.path.basename(path), private)
 	file = None
 	try:
+		keys_dir = os.path.dirname(filename)
+		if not os.path.exists(keys_dir):
+			os.makedirs(keys_dir)
 		if os.path.exists(filename):
 			os.chmod(filename, 0600)
 		file = open(filename, "w+")
@@ -326,6 +329,7 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 	retcode = system(build_image_cmd)[2]
 	if retcode:
 		logger.error('Cannot create image device')
+	os.chmod(privated_image, 0600)
 		
 	logger.debug("Creating file system on image device")
 	fstool.mkfs(privated_image)

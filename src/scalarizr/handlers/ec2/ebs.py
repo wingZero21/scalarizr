@@ -8,6 +8,7 @@ import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system, fstool, configtool
+from binascii import hexlify
 import os
 import logging
 

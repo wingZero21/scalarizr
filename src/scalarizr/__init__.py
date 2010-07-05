@@ -488,7 +488,7 @@ def _snmpd_health_check():
 				logger.error("Canot start snmpd. %s", out)
 		time.sleep(60)
 
-def _shutdown():
+def _shutdown(*args):
 	_running = False
 	logger = logging.getLogger(__name__)
 	logger.info("Stopping scalarizr...")

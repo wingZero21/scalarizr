@@ -32,10 +32,12 @@ class SnmpServer():
 			
 			# Setup UDP over IPv4 transport endpoint
 		try:
+			iface = ('0.0.0.0', self.port)
+			self._logger.info("Starting SNMP server on %s:%d", *iface)
 			config.addSocketTransport(
 			self._engine,
 			udp.domainName,
-			udp.UdpSocketTransport().openServerMode(('', self.port))
+			udp.UdpSocketTransport().openServerMode(iface)
 			)
 		except CarrierError:
 			self._logger.error('Can\'t run SNMP agent on port %d: Address already in use', self.port)
