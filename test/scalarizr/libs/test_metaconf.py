@@ -47,25 +47,7 @@ role_name = scalarizr-first
   </Keyspaces>	
 </Storage>
 	"""
-	
-	_xml2 = """
-<Storage>
-  <Keyspaces>
-    <Keyspace Name="Keyspace1">
-    	<ColumnFamily Name="Standard2" 
-                    CompareWith="UTF8Type"
-                    KeysCached="100%"/>
-        <ColumnFamily Name="StandardByUUID1" CompareWith="TimeUUIDType" />
-    </Keyspace>
-    <Keyspace Name="Keyspace2">
-    	<ColumnFamily Name="Standard2" 
-                    CompareWith="UTF8Type"
-                    KeysCached="100%"/>
-        <ColumnFamily Name="StandardByUUID1" CompareWith="TimeUUIDType" />
-    </Keyspace>    
-  </Keyspaces>	
-</Storage>
-	"""
+
 	
 	def test_ini(self):
 		conf = Configuration("ini")
@@ -128,16 +110,16 @@ role_name = scalarizr-first
 	def test_extend(self):
 		conf = Configuration("xml")
 		conf.readfp(StringIO(self._xml))
-		conf.extend(StringIO(self._xml2))
+		conf.extend(StringIO(self._xml))
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces/Keyspace")), 2)
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces")), 1)
-		conf.extend(StringIO(re.sub('UTF8Type', 'UTF16Type', self._xml2, 1)))
+		conf.extend(StringIO(re.sub('UTF8Type', 'UTF16Type', self._xml, 1)))
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces/Keyspace")), 3)
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces")), 1)
-		conf.extend(StringIO(re.sub('"Keyspace2">', '"Keyspace2">some_text', self._xml2, 1)))
+		conf.extend(StringIO(re.sub('"Keyspace2">', '"Keyspace2">some_text', self._xml, 1)))
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces/Keyspace")), 4)
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces")), 1)
-		conf.extend(StringIO(re.sub('<Keyspaces>', '<Keyspaces Name="SomeName">', self._xml2, 1)))
+		conf.extend(StringIO(re.sub('<Keyspaces>', '<Keyspaces Name="SomeName">', self._xml, 1)))
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces")), 2)
 		
 		
