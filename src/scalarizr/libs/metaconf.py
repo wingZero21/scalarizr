@@ -11,7 +11,6 @@ Primary goal: support Ini, Xml, Yaml, ProtocolBuffers, Nginx, Apache2
 from xml.etree import ElementTree as ET
 import ElementPath13
 import re
-import yaml
 import os
 
 format_providers = dict()
@@ -57,6 +56,13 @@ class Configuration:
 		self._format = format
 		self._etree = etree
 	
+	def _init(self):
+		if not self._provider:
+			self._provider = format_providers[self._format]()
+		if not self._etree:
+			root = ET.Element("mc_conf/")
+			self._etree = ET.ElementTree(root)
+	
 	def read(self, filenames):
 		for file in filenames:
 			try:
@@ -68,11 +74,7 @@ class Configuration:
 		indent(self._etree.getroot())
 	
 	def readfp(self, fp):
-		if not self._provider:
-			self._provider = format_providers[self._format]()
-		if not self._etree:
-			root = ET.Element("mc_conf/")
-			self._etree = ET.ElementTree(root)
+		self._init()
 		for child in self._provider.read(fp):
 			self._etree.getroot().append(child)
 		
@@ -88,13 +90,7 @@ class Configuration:
 		Extend self with options from another config
 		Comments and blank lines from importing config will not be added
 		"""
-		if not self._etree:
-			self._root = ET.Element("mc_conf/")
-			self._etree = ET.ElementTree(self._root)
-
-		if not self._provider:
-			self._provider = format_providers[self._format]()
-
+		self._init()
 		node_list = self._provider.read(conf)
 
 		self._sections = []
@@ -119,23 +115,20 @@ class Configuration:
 					else:
 						if node.text != exist_list[0].text and \
 											(len(node.attrib) ^ (exist_list[0].attrib != node.attrib)):
-							self._add_after(cursect, self._cursect, node)
+							self._add_element(cursect, self._cursect, node)
 				else:
 					equal = 0
 					for exist_node in exist_list:
-						equal += 0 if not self._compare(exist_node, node) else 1
+						equal += 0 if not self._compare_tree(exist_node, node) else 1
 					if not equal:
-						self._add_after(cursect, self._cursect, node)
+						self._add_element(cursect, self._cursect, node)
 			else:
 				self._etree.find(self._cursect).append(node)
 				
-	def _compare(self, first, second):
+	def _compare_tree(self, first, second):
 		
-		if first.text and second.text:
-			first_text = first.text.strip()
-			second_text = second.text.strip()
-			if first_text != second_text:
-				return False
+		if first.text and second.text and first.text.strip() != second.text.strip():
+			return False
 			
 		if first.attrib != second.attrib:
 			return False
@@ -150,15 +143,13 @@ class Configuration:
 			comparison = 0
 			for f_child in first_childs:
 				for s_child in second_childs:
-					comparison += 0 if not self._compare(f_child, s_child) else 1
+					comparison += 0 if not self._compare_tree(f_child, s_child) else 1
 			if comparison != len(first_childs):
 				return False
-			else:
-				return True
-		else:
-			return True
+
+		return True
 		
-	def _add_after(self, after, parent, node):
+	def _add_element(self, after, parent, node):
 		after_element  = self._etree.findall(after)[-1]
 		parent_element = self._etree.find(parent)
 		it = parent_element.getiterator()
@@ -180,7 +171,7 @@ class Configuration:
 		
 	def _find(self, path):
 		el = ElementPath13.find(self._etree, self._root_path+path)
-		if None != el:
+		if el:
 			return el
 		else:
 			raise PathNotExistsError(path)
@@ -223,13 +214,13 @@ class Configuration:
 		"""
 		
 		"""
-		Find element, and call _set0
+		Find element, and call _set
 		"""
 		el = ElementPath13.find(self._etree, self._root_path + path)
 		if el != None:
-			self._set0(el, value, typecast)
+			self._set(el, value, typecast)
 	
-	def _set0(self, el, value, typecast=None):
+	def _set(self, el, value, typecast=None):
 		if isinstance(value, dict):
 			for key in value:
 				el.attrib.update({key: value[key]})
@@ -265,8 +256,8 @@ class Configuration:
 			parent.insert(it.index(before_element), el)
 		else:
 			parent.append(el)
-			self._set0(el, value, typecast)
-		self._set0(el, value, typecast)
+			self._set(el, value, typecast)
+		self._set(el, value, typecast)
 
 				
 		"""
@@ -292,7 +283,7 @@ class Configuration:
 		"""
 		
 		"""
-		Create elements, call _set0
+		Create elements, call _set
 		"""
 	
 	
@@ -489,17 +480,21 @@ class XmlFormatProvider:
 
 format_providers["xml"] = XmlFormatProvider
 	
-		
-class YamlFormatProvider:
 	
+class YamlFormatProvider:
+
 	def __init__(self):
-		pass
+		if not YamlFormatProvider._yaml:
+			try:
+				YamlFormatProvider._yaml = __import__("yaml")
+			except ImportError:
+				raise MetaconfError("`'yaml' module is not defined. Install PyYAML package")
 	
 	def read(self, fp):
 		try:
 			self._root = ET.Element('configuration')
 			self._cursect = self._root
-			dict = yaml.load(fp.read(), Loader = yaml.BaseLoader)
+			dict = YamlFormatProvider._yaml.load(fp.read(), Loader = YamlFormatProvider._yaml.BaseLoader)
 			self._parse(dict)
 			indent(self._root)
 			return self._root.getchildren()
