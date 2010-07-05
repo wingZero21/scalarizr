@@ -106,7 +106,7 @@ def prepare_iter(next, token):
         raise SyntaxError
     def select(context, result):
         for elem in result:
-            for e in elem.iter(tag):
+            for e in elem.getiterator(tag):
                 if e is not elem:
                     yield e
     return select
@@ -116,7 +116,7 @@ def prepare_dot_dot(next, token):
         parent_map = context.parent_map
         if parent_map is None:
             context.parent_map = parent_map = {}
-            for p in context.root.iter():
+            for p in context.root.getiterator():
                 for e in p:
                     parent_map[e] = p
         for elem in result:
