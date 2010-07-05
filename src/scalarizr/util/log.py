@@ -43,8 +43,6 @@ class MessagingHandler(logging.Handler):
 			self._send_event.set()
 			
 	def _init(self):
-		self._db = bus.db
-		self._msg_service = bus.messaging_service
 		self.entries = []		
 		
 		self._send_event = threading.Event()
@@ -98,9 +96,10 @@ class MessagingHandler(logging.Handler):
 			self._lock.release()
 		
 		if entries:
-			message = self._msg_service.new_message(Messages.LOG)
+			msg_service = bus.messaging_service
+			message = msg_service.new_message(Messages.LOG)
 			message.body["entries"] = entries			
-			self._msg_service.get_producer().send(Queues.LOG, message)	
+			msg_service.get_producer().send(Queues.LOG, message)	
 
 	
 	def _sender(self):
