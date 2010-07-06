@@ -13,7 +13,7 @@ import ElementPath13
 import re
 import os
 from cStringIO import StringIO
-#from urllib import quote, unquote
+
 
 format_providers = dict()
 default_format = "ini"
@@ -25,7 +25,9 @@ class ParseError(BaseException):
 	"""
 	Throw it in providers read method
 	"""
-	pass
+	def __str__(self):
+		# todo: format errors
+		pass
 
 class PathNotExistsError(BaseException):
 	pass
@@ -508,6 +510,7 @@ class NginxFormatProvider(IniFormatProvider):
 		self._writers += (self.write_multiline,)
 		self._nesting  = 0
 		self._sections = []
+		self._pad = ' '*4
 
 	def read_comment(self, line, root):
 		if not hasattr(self, "_comment_re"):
