@@ -126,7 +126,7 @@ role_name = scalarizr-first
 		conf.read('/etc/nginx/nginx.conf')
 		self.assertEqual(conf.get_int('worker_processes'), 1)
 		conf.set('user', 'www www')	
-		self.assertEqual(conf.get('user'), 'www www')
+		self.assertEqual(conf.get('user'),'www www')
 
 if __name__ == "__main__":
 	init_tests()
