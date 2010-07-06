@@ -644,8 +644,10 @@ if disttool.is_linux():
 			special_dirs.extend(["/mnt", "/proc", "/sys", "/dev"])
 			
 			for dir in special_dirs:
-				if not os.path.exists(self._image_mpoint + dir):
-					os.makedirs(self._image_mpoint + dir)
+				spec_dir = self._image_mpoint + dir
+				if not os.path.exists(spec_dir):
+					self._logger.debug("Create spec dir %s", spec_dir)
+					os.makedirs(spec_dir)
 			
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
@@ -660,7 +662,7 @@ if disttool.is_linux():
 			self._logger.info("Copy volume to image file")
 			rsync = filetool.Rsync()
 			#rsync.archive().times().sparse().links().quietly()
-			rsync.archive().times().sparse().links()
+			rsync.archive().times().sparse().links().verbose()
 			if xattr:
 				rsync.xattributes()
 			rsync.exclude(self._excludes)
