@@ -245,7 +245,7 @@ Bundled: %(bundle_date)s
 		# Cleanup scalarizr private data
 		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
 		shutil.rmtree(os.path.join(etc_path, "private.d"))
-		os.makedirs(os.path.join(etc_path, "private.d/keys"))
+		#os.makedirs(os.path.join(etc_path, "private.d/keys"))
 		
 		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
 
