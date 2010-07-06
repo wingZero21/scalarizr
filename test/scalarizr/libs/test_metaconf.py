@@ -110,20 +110,23 @@ role_name = scalarizr-first
 	def test_extend(self):
 		conf = Configuration("xml")
 		conf.readfp(StringIO(self._xml))
-		conf.extend(StringIO(self._xml))
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces/Keyspace")), 2)
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces")), 1)
-		conf.extend(StringIO(re.sub('UTF8Type', 'UTF16Type', self._xml, 1)))
+		conf.readfp(StringIO(re.sub('UTF8Type', 'UTF16Type', self._xml, 1)))
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces/Keyspace")), 3)
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces")), 1)
-		conf.extend(StringIO(re.sub('"Keyspace2">', '"Keyspace2">some_text', self._xml, 1)))
+		conf.readfp(StringIO(re.sub('"Keyspace2">', '"Keyspace2">some_text', self._xml, 1)))
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces/Keyspace")), 4)
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces")), 1)
-		conf.extend(StringIO(re.sub('<Keyspaces>', '<Keyspaces Name="SomeName">', self._xml, 1)))
+		conf.readfp(StringIO(re.sub('<Keyspaces>', '<Keyspaces Name="SomeName">', self._xml, 1)))
 		self.assertEqual(len(conf.get_list("Storage/Keyspaces")), 2)
 		
-		
-		
+	def test_nginx(self):
+		conf = Configuration("nginx")
+		conf.read('/etc/nginx/nginx.conf')
+		self.assertEqual(conf.get_int('worker_processes'), 1)
+		conf.set('user', 'www www')	
+		self.assertEqual(conf.get('user'), 'www www')
 
 if __name__ == "__main__":
 	init_tests()
