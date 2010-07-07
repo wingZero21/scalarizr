@@ -7,6 +7,8 @@ Created on Apr 30, 2010
 from scalarizr.messaging import Message
 import xml.dom.minidom as dom
 import unittest
+from scalarizr.util import cryptotool, init_tests
+import logging
 
 class TestMessage(unittest.TestCase):
 
@@ -76,6 +78,20 @@ class TestMessage(unittest.TestCase):
 		self.assertFalse(msg.meta.has_key("platform"))
 		self.assertEqual(msg.subsystem, "block")
 
+	def test_decode_wrong_spaces(self):
+		key = "q9mBWijQrEphNSN77OiEHvA0r0U3PJb3ydvH2kkQz5wxqxpKfSFLGQ=="
+		
+		msg = Message("Rebundle", dict(), dict(role_name="scalarizr"))
+		serialized = msg.toxml()
+		crypted = cryptotool.encrypt(serialized, key)
+		
+		decrypted = cryptotool.decrypt(crypted, key)
+		msg = Message()
+		msg.fromxml(decrypted)
+		logger = logging.getLogger(__name__)
+		cmd = "mount %s" % (msg.role_name)
+		logger.debug(cmd)
 
 if __name__ == "__main__":
+	init_tests()
 	unittest.main()

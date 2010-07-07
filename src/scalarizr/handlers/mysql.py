@@ -7,11 +7,11 @@ from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
-		configtool, filetool, ping_service, UtilError
+		configtool, filetool, ping_service
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re, time, pexpect
-import signal, pwd, random, tempfile, shutil
+import signal, pwd, random, shutil
 from boto.exception import BotoServerError
 
 if disttool.is_redhat_based():
@@ -43,11 +43,10 @@ OPT_REPL_PASSWORD   	= "repl_password"
 OPT_STAT_USER   		= "stat_user"
 OPT_STAT_PASSWORD   	= "stat_password"
 OPT_REPLICATION_MASTER  = "replication_master"
+OPT_STORAGE_VOLUME_ID	= "storage_volume_id" 
 
 PARAM_MASTER_EBS_VOLUME_ID 	= "mysql_master_ebs_volume_id"
 PARAM_DATA_STORAGE_ENGINE 	= "mysql_data_storage_engine"
-
-
 
 
 ROOT_USER = "scalr"
@@ -67,8 +66,22 @@ class MysqlMessages:
 	CREATE_BACKUP = "Mysql_CreateBackup"
 	CREATE_PMA_USER = "Mysql_CreatePmaUser"
 	CREATE_PMA_USER_RESULT = "Mysql_CreatePmaUserResult"
+	
 	PROMOTE_TO_MASTER	= "Mysql_PromoteToMaster"
+	"""
+	@ivar root_password: 'scalr' user password 
+	@ivar repl_password: 'scalr_repl' user password
+	@ivar stat_password: 'scalr_stat' user password
+	@ivar volume_id: Master EBS volume id
+	"""
+	
 	PROMOTE_TO_MASTER_RESULT = "Mysql_PromoteToMasterResult"
+	"""
+	@ivar status: ok|error
+	@ivar last_error: Last error message in case of status = 'error'
+	@ivar volume_id: Master EBS volume id
+	"""
+	
 	NEW_MASTER_UP = "Mysql_NewMasterUp"
 	"""
 	@ivar behaviour
@@ -77,10 +90,24 @@ class MysqlMessages:
 	@ivar role_name		
 	@ivar log_file
 	@ivar log_pos
-	@ivar repl_user
 	@ivar repl_password
 	"""
-
+	
+	"""
+	Also MySQL behaviour adds params to common messages:
+	
+	= HOST_INIT_RESPONSE =
+	@ivar mysql_replication_master: 	1|0  
+	@ivar mysql_snapshot_id: 			Master EBS snapshot id			(on slave)
+	
+	= HOST_UP =
+	@ivar mysql_volume_id: 		Data storage EBS volume
+	@ivar mysql_root_password: 	'scalr' user password  					(on master)
+	@ivar mysql_repl_password: 	'scalr_repl' user password				(on master)
+	@ivar mysql_stat_password: 	'scalr_stat' user password				(on master) 
+	@ivar mysql_log_file: 		Binary log file							(on master) 
+	@ivar mysql_log_pos: 		Binary log file position				(on master) 
+	"""
 
 class MysqlHandler(Handler):
 	_logger = None
@@ -95,7 +122,8 @@ class MysqlHandler(Handler):
 		self._iid = self._platform.get_instance_id()
 		self._sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
 		self._sect = configtool.section_wrapper(bus.config, self._sect_name)
-		self._role_name = bus.config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
+		config = bus.config
+		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
 		
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
@@ -130,35 +158,67 @@ class MysqlHandler(Handler):
 
 				
 	def on_Mysql_PromoteToMaster(self, message):
-		#if not int(self._config.get()):
 		if not int(self._sect.get(OPT_REPLICATION_MASTER)):
-			role_params = self._queryenv.list_role_params(self._role_name)
 			self._stop_mysql()
+			
+			succeed = False
+			slave_vol_id = 	self._sect.get(OPT_STORAGE_VOLUME_ID)		
 			try:
-				fstool.umount(self._storage_path, clean_fstab=True)
-			except fstool.FstoolError, e:
-				self._logger.warning(e)
-			vol_id = role_params[PARAM_MASTER_EBS_VOLUME_ID]
-			# Mount previous master's ebs
-			self._create_storage(vol_id, self._storage_path)
-			if self._storage_valid():
-				# Point datadir and log_bin to ebs 
-				self._move_mysql_dir('log_bin', '/mnt/dbstorage/mysql-misc/binlog.log', 'mysqld')
-				self._move_mysql_dir('datadir', '/mnt/dbstorage/mysql-data/', 'mysqld')
-				# Starting master replication			
-				self._replication_init()
-				# Save previous master's logins and passwords to config
-				updates = {
-					OPT_ROOT_PASSWORD : message.root_password,
-					OPT_REPL_PASSWORD : message.repl_password,
-					OPT_STAT_PASSWORD : message.stat_password,
-					OPT_REPLICATION_MASTER 	: 1
-				}
-				self._update_config(**updates)
-				# Send message to Scalr
-				self._send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT)
+				role_params = self._queryenv.list_role_params(self._role_name)
+				ec2_conn = self._platform.new_ec2_conn()
 				
-			self._start_mysql()
+				# Unmount slave EBS volume
+				try:
+					fstool.umount(self._storage_path, clean_fstab=True)
+				except fstool.FstoolError, e:
+					self._logger.warning(e)
+				
+				master_vol = self._take_master_volume(role_params[PARAM_MASTER_EBS_VOLUME_ID], ec2_conn)
+				
+				# Mount previous master's EBS volume						
+				self._create_storage(master_vol.id, self._storage_path)
+				if self._storage_valid():
+					# Point datadir and log_bin to ebs 
+					self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
+					self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
+					# Starting master replication			
+					self._replication_init()
+					# Save previous master's logins and passwords to config
+					updates = {
+						OPT_ROOT_PASSWORD : message.root_password,
+						OPT_REPL_PASSWORD : message.repl_password,
+						OPT_STAT_PASSWORD : message.stat_password,
+						OPT_STORAGE_VOLUME_ID : master_vol.id,
+						OPT_REPLICATION_MASTER 	: 1
+					}
+					self._update_config(**updates)
+					# Send message to Scalr
+					self._send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
+						status="ok",
+						volume_id=master_vol.id																				
+					))
+				else:
+					raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
+				succeed = True
+			except (Exception, BaseException), e:
+				self._logger.error("Promote to master failed. %s", e)
+				self._send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
+					status="error",
+					last_error=str(e)
+				))
+				
+				# Rollback. Mount slave EBS back
+				self._mount_device('/dev/sdo', self._storage_path)
+				
+			
+			# Start MySQL
+			self._start_mysql()				
+			
+			if succeed:
+				# Delete slave EBS
+				ec2_conn.detach_volume(slave_vol_id, force=True)
+				ec2_conn.delete_volume(slave_vol_id)
+			
 		else:
 			self._logger.warning('Cannot promote to master. Already master')
 
@@ -170,7 +230,8 @@ class MysqlHandler(Handler):
 			log_file	= message.log_file
 			log_pos		= message.log_pos
 			repl_password = message.repl_password
-#			repl_password = message.repl_password
+			root_password = message.root_password
+
 			
 			# Init slave replication
 			self._replication_init(master=False)
@@ -210,22 +271,29 @@ class MysqlHandler(Handler):
 			
 			self._logger.info('Successfully switched replication to a new MySQL master server')
 		else:
-			self._logger.error('Cannot change master host: our role is master')		
+			self._logger.info('Skip Mysql_NewMasterUp. My replication role is master')		
 
 	def on_before_host_up(self, message):
 		"""
-		@ivar message.replication_master
-		@ivar message.snapshot_id
+		@ivar message.mysql_replication_master
+		@ivar message.mysql_snapshot_id
 		"""
 		
 		role_params = self._queryenv.list_role_params(self._role_name)
-		if role_params[PARAM_DATA_STORAGE_ENGINE]:
-			if int(message.replication_master):
-				self._init_master(message, role_params)					
-			else:
-				self._init_slave(message, role_params)
+		#if role_params[PARAM_DATA_STORAGE_ENGINE]:
+		if int(message.mysql_replication_master):
+			self._init_master(message, role_params)					
+		else:
+			self._init_slave(message, role_params)
 	
 	def _init_master(self, message, role_params):
+		"""
+		Initialize MySQL master. Add to HostUp message these variables:
+		<code>
+		mysql_root_password, mysql_repl_password, mysql_stat_password, mysql_log_file, mysql_log_pos
+		</code>
+		"""
+		
 		# Mount EBS
 		self._create_storage(role_params[PARAM_MASTER_EBS_VOLUME_ID], self._storage_path)
 		
@@ -244,13 +312,13 @@ class MysqlHandler(Handler):
 			# Get binary logfile, logpos and create data snapshot if needed
 			snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
 			if snap_id:
-				message.snapshot_id = snap_id
+				message.mysql_snapshot_id = snap_id
 
 			message.mysql_root_password = root_password
 			message.mysql_repl_password = repl_password
 			message.mysql_stat_password = stat_password
-			message.log_file = log_file
-			message.log_pos	= log_pos
+			message.mysql_log_file = log_file
+			message.mysql_log_pos	= log_pos
 			
 			# Save root user to /etc/scalr/private.d/behaviour.mysql.ini
 			updates = {
@@ -277,8 +345,8 @@ class MysqlHandler(Handler):
 			snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, dry_run=True)
 			
 			# Sending updated metadata to scalr
-			message.log_file = log_file
-			message.log_pos = log_pos
+			message.mysql_log_file = log_file
+			message.mysql_log_pos = log_pos
 			
 			self._update_config(**{OPT_REPLICATION_MASTER : 1})
 			
@@ -287,16 +355,27 @@ class MysqlHandler(Handler):
 			
 	
 	def _init_slave(self, message, role_params):
+		"""
+		@param message: HostInitResponse message
+		@param role_params: dict from queryenv.list_role_params() 
+		"""
+		
 		if not self._storage_valid():
 			self._logger.info("Initialize slave storage")
 			
-			if not message.body.has_key("snapshot_id"):
+			if not message.body.has_key("mysql_snapshot_id"):
 				raise HandlerError("Message '%s' must have '%s' property")
-			ebs_volume = self._create_volume_from_snapshot(message.snapshot_id)
+			
+			
+			ebs_volume = self._create_volume_from_snapshot(message.mysql_snapshot_id)
+			message.mysql_volume_id = ebs_volume.id
+			self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 			
 			# Waiting until ebs volume will be created							
-			if "ebs" == role_params[PARAM_DATA_STORAGE_ENGINE]:
-				self._create_storage(ebs_volume.id, self._storage_path)
+			#if "ebs" == role_params[PARAM_DATA_STORAGE_ENGINE]:
+			self._create_storage(message.mysql_volume_id, self._storage_path)
+
+			"""	
 			elif "eph" == role_params[PARAM_DATA_STORAGE_ENGINE]:
 				# Mount ephemeral device
 				try:
@@ -321,6 +400,7 @@ class MysqlHandler(Handler):
 					shutil.rmtree(tmpdir)
 				else:
 					raise HandlerError("EBS Volume does not contain mysql data")
+			"""
 				
 		# Change datadir and binary logs dir to ephemeral or ebs
 		# it will override data fetched from snapshot
@@ -332,6 +412,9 @@ class MysqlHandler(Handler):
 		
 	def _create_storage(self, vol_id, mnt_point):
 		devname = '/dev/sdo'
+		self._logger.info("Creating EBS storage (volume: %s, devname: %s) and mount to %s", 
+				vol_id, devname, mnt_point)
+		
 		ec2connection = self._platform.new_ec2_conn()
 		# Attach ebs
 		ebs_volumes = ec2connection.get_all_volumes([vol_id])
@@ -356,15 +439,25 @@ class MysqlHandler(Handler):
 		binlog_path = os.path.join(path, STORAGE_BINLOG_PATH) if path else os.path.dirname(self._binlog_path)
 		return os.path.exists(data_dir) and os.path.exists(binlog_path)
 	
-	def _create_volume_from_snapshot(self, snap_id):
-		ec2_conn = self._platform.new_ec2_conn()
-		avail_zone = self._platform.get_avail_zone()
-		ebs_volume = ec2_conn.create_volume(zone=avail_zone, snapshot=snap_id)
-		self._logger.info('Waiting until EBS volume will be created from snapshot "%s"', snap_id)
-		while 'available' != ebs_volume.volume_state():
-			time.sleep(5)
-		del ec2_conn
+	def _create_volume_from_snapshot(self, snap_id, avail_zone=None, ec2_conn=None):
+		ec2_conn = ec2_conn or self._platform.new_ec2_conn()
+		avail_zone = avail_zone or self._platform.get_avail_zone()
+		
+		self._logger.info("Creating EBS volume from snapshot %s in avail zone %s", snap_id, avail_zone)
+		ebs_volume = ec2_conn.create_volume(None, avail_zone, snap_id)
+		self._logger.debug("Volume created")
+		
+		self._logger.info('Checking that EBS volume %s is available', ebs_volume.id)
+		self._wait_until(lambda ebs_volume: 'available' != ebs_volume.volume_state())
+		self._logger.info("Volume %s available", ebs_volume.id)
+		
 		return ebs_volume
+	
+	def _wait_until(self, target, args=None, sleep=5):
+		args = args or ()
+		while not target(*args):
+			self._logger.debug("Wait %d seconds before next attempt", sleep)
+			time.sleep(sleep)
 	
 	def _detach_delete_volume(self, volume):
 		if volume.detach():
@@ -372,7 +465,26 @@ class MysqlHandler(Handler):
 				raise HandlerError("Cannot delete volume ID=%s", (volume.id,))
 		else:
 			raise HandlerError("Cannot detach volume ID=%s" % (volume.id,))
+
+	def _take_master_volume(self, volume_id, ec2_conn=None):
+		# Lookup master volume
+		ec2_conn = ec2_conn or self._platform.new_ec2_conn()
+		zone = self._platform.get_avail_zone()						
+		try:
+			master_vol = ec2_conn.get_all_volumes([volume_id])[0]
+		except IndexError:
+			raise HandlerError("Cannot find volume %s in EBS volumes list" % volume_id)
+
+		# For EBS in another avail zone we need to snapshot it
+		# and create EBS in our avail zone
+		self._logger.info("Master volume %s (zone: %s). Me is in %s zone", 
+				master_vol.id, master_vol.zone, zone)
+		if master_vol.zone != zone:
+			self._logger.info("Master volume is in another zone. Create volume in %s", zone)
+			master_snap = ec2_conn.create_snapshot(master_vol.id)
+			master_vol = self._create_volume_from_snapshot(master_snap.id, zone, ec2_conn)
 		
+		return master_vol
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
 		was_running = initd.is_running("mysql")
