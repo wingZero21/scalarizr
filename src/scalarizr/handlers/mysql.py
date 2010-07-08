@@ -11,7 +11,7 @@ from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re, time, pexpect
-import signal, pwd, random, shutil
+import signal, pwd, random 
 from boto.exception import BotoServerError
 
 if disttool.is_redhat_based():
@@ -36,6 +36,7 @@ logger.debug("Explore MySQL service to initd module (initd_script: %s, pid_file:
 initd.explore("mysql", initd_script, pid_file, tcp_port=3306)
 
 
+# Configuration options
 OPT_ROOT_USER   		= "root_user"
 OPT_ROOT_PASSWORD   	= "root_password"
 OPT_REPL_USER   		= "repl_user"
@@ -43,8 +44,10 @@ OPT_REPL_PASSWORD   	= "repl_password"
 OPT_STAT_USER   		= "stat_user"
 OPT_STAT_PASSWORD   	= "stat_password"
 OPT_REPLICATION_MASTER  = "replication_master"
-OPT_STORAGE_VOLUME_ID	= "storage_volume_id" 
+OPT_SNAPSHOT_ID			= "snapshot_id"
+OPT_STORAGE_VOLUME_ID	= "volume_id" 
 
+# Role params
 PARAM_MASTER_EBS_VOLUME_ID 	= "mysql_master_ebs_volume_id"
 PARAM_DATA_STORAGE_ENGINE 	= "mysql_data_storage_engine"
 
@@ -56,6 +59,12 @@ STAT_USER = "scalr_stat"
 STORAGE_PATH = "/mnt/dbstorage"
 STORAGE_DATA_DIR = "mysql-data"
 STORAGE_BINLOG_PATH = "mysql-misc/binlog.log"
+
+if disttool.is_redhat_based():
+	MY_CNF_PATH = "/etc/my.cnf"
+else:
+	MY_CNF_PATH = "/etc/mysql/my.cnf"
+
 
 def get_handlers ():
 	return [MysqlHandler()]
@@ -97,17 +106,25 @@ class MysqlMessages:
 	Also MySQL behaviour adds params to common messages:
 	
 	= HOST_INIT_RESPONSE =
-	@ivar mysql_replication_master: 	1|0  
-	@ivar mysql_snapshot_id: 			Master EBS snapshot id			(on slave)
+	@ivar mysql=dict(
+		replication_master: 	1|0
+		volume_id				EBS volume id		
+		snapshot_id: 			Master EBS snapshot id			(on slave)
+	)
 	
 	= HOST_UP =
-	@ivar mysql_volume_id: 		Data storage EBS volume
-	@ivar mysql_root_password: 	'scalr' user password  					(on master)
-	@ivar mysql_repl_password: 	'scalr_repl' user password				(on master)
-	@ivar mysql_stat_password: 	'scalr_stat' user password				(on master) 
-	@ivar mysql_log_file: 		Binary log file							(on master) 
-	@ivar mysql_log_pos: 		Binary log file position				(on master) 
+	@ivar mysql=dict(
+		root_password: 	'scalr' user password  					(on master)
+		repl_password: 	'scalr_repl' user password				(on master)
+		stat_password: 	'scalr_stat' user password				(on master)
+		snapshot_id: 	Data volume EBS snapshot				(on master)		 
+		log_file: 		Binary log file							(on master) 
+		log_pos: 		Binary log file position				(on master)
+		volume_id:		EBS volume created from master snapshot (on slave)
+		) 
 	"""
+
+
 
 class MysqlHandler(Handler):
 	_logger = None
@@ -119,7 +136,6 @@ class MysqlHandler(Handler):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
-		self._iid = self._platform.get_instance_id()
 		self._sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
 		self._sect = configtool.section_wrapper(bus.config, self._sect_name)
 		config = bus.config
@@ -132,6 +148,7 @@ class MysqlHandler(Handler):
 		bus.on("init", self.on_init)
 
 	def on_init(self):
+		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -191,7 +208,7 @@ class MysqlHandler(Handler):
 						OPT_STORAGE_VOLUME_ID : master_vol.id,
 						OPT_REPLICATION_MASTER 	: 1
 					}
-					self._update_config(**updates)
+					self._update_config(updates)
 					# Send message to Scalr
 					self._send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 						status="ok",
@@ -273,33 +290,41 @@ class MysqlHandler(Handler):
 		else:
 			self._logger.info('Skip Mysql_NewMasterUp. My replication role is master')		
 
-	def on_before_host_up(self, message):
+	def on_host_init_response(self, message):
+		"""Check mysql data in host init response
+		@param message: HostInitResponse
 		"""
-		@ivar message.mysql_replication_master
-		@ivar message.mysql_snapshot_id
+		if not message.body.has_key("mysql"):
+			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
+		self._update_config(message.mysql)
+		
+
+	def on_before_host_up(self, message):
+		"""Configure MySQL behaviour
+		@param message: HostUp message
 		"""
 		
-		role_params = self._queryenv.list_role_params(self._role_name)
+		#role_params = self._queryenv.list_role_params(self._role_name)
 		#if role_params[PARAM_DATA_STORAGE_ENGINE]:
-		if int(message.mysql_replication_master):
-			self._init_master(message, role_params)					
+
+		if int(self._sect.get(OPT_REPLICATION_MASTER)):
+			self._init_master(message)									  
 		else:
-			self._init_slave(message, role_params)
+			self._init_slave(message)		
+		
 	
-	def _init_master(self, message, role_params):
-		"""
-		Initialize MySQL master. Add to HostUp message these variables:
-		<code>
-		mysql_root_password, mysql_repl_password, mysql_stat_password, mysql_log_file, mysql_log_pos
-		</code>
+	def _init_master(self, message):
+		"""Initialize MySQL master
+		@param message: HostUp message
 		"""
 		
 		# Mount EBS
-		self._create_storage(role_params[PARAM_MASTER_EBS_VOLUME_ID], self._storage_path)
+		self._create_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
 		
 		# Stop MySQL server
 		self._stop_mysql()
 							
+		msg_data = None
 		# If It's 1st init of mysql master
 		if not self._storage_valid():
 			# Move datadir to EBS
@@ -311,23 +336,15 @@ class MysqlHandler(Handler):
 			
 			# Get binary logfile, logpos and create data snapshot if needed
 			snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-			if snap_id:
-				message.mysql_snapshot_id = snap_id
 
-			message.mysql_root_password = root_password
-			message.mysql_repl_password = repl_password
-			message.mysql_stat_password = stat_password
-			message.mysql_log_file = log_file
-			message.mysql_log_pos	= log_pos
-			
-			# Save root user to /etc/scalr/private.d/behaviour.mysql.ini
-			updates = {
-				OPT_ROOT_PASSWORD : root_password,
-				OPT_REPL_PASSWORD : repl_password,
-				OPT_STAT_PASSWORD : stat_password,
-				OPT_REPLICATION_MASTER : 1
-			}
-			self._update_config(**updates)			
+			msg_data = dict(
+				root_password=root_password,
+				repl_password=repl_password,
+				stat_password=stat_password,
+				snapshot_id=snap_id,
+				log_file=log_file,
+				log_pos=log_pos			
+			)
 			
 		# If EBS volume had mysql dirs (N-th init)
 		else:
@@ -344,31 +361,27 @@ class MysqlHandler(Handler):
 			# Updating snapshot metadata
 			snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, dry_run=True)
 			
-			# Sending updated metadata to scalr
-			message.mysql_log_file = log_file
-			message.mysql_log_pos = log_pos
+			# Send updated metadata to Scalr
+			msg_data = dict(log_file=log_file, log_pos=log_pos)
 			
-			self._update_config(**{OPT_REPLICATION_MASTER : 1})
+		if msg_data:
+			message.mysql = msg_data
+			self._update_config(msg_data)
 			
 		self._start_mysql()			
 			
 			
 	
-	def _init_slave(self, message, role_params):
-		"""
-		@param message: HostInitResponse message
-		@param role_params: dict from queryenv.list_role_params() 
+	def _init_slave(self, message):
+		"""Initialize MySQL slave
+		@param message: HostUp message
 		"""
 		
 		if not self._storage_valid():
 			self._logger.info("Initialize slave storage")
 			
-			if not message.body.has_key("mysql_snapshot_id"):
-				raise HandlerError("Message '%s' must have '%s' property")
-			
-			
-			ebs_volume = self._create_volume_from_snapshot(message.mysql_snapshot_id)
-			message.mysql_volume_id = ebs_volume.id
+			ebs_volume = self._create_volume_from_snapshot(self._sect.get(OPT_SNAPSHOT_ID))
+			message.mysql = dict(volume_id = ebs_volume.id)
 			self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 			
 			# Waiting until ebs volume will be created							
@@ -415,23 +428,33 @@ class MysqlHandler(Handler):
 		self._logger.info("Creating EBS storage (volume: %s, devname: %s) and mount to %s", 
 				vol_id, devname, mnt_point)
 		
-		ec2connection = self._platform.new_ec2_conn()
+		ec2_conn = self._platform.new_ec2_conn()
 		# Attach ebs
-		ebs_volumes = ec2connection.get_all_volumes([vol_id])
-		if 1 == len(ebs_volumes):
-			ebs_volume = ebs_volumes[0]
-			if 'available' != ebs_volume.volume_state():
-				ebs_volume.detach(force=True)
-				while ebs_volume.attachment_state() != 'available':
-					time.sleep(5)
-			ebs_volume.attach(self._iid, devname)
-			self._logger.info('Waiting while volume ID=%s attaching', vol_id)
-			while ebs_volume.attachment_state() != 'attached':
-				time.sleep(5)
-			self.ebs_volume = ebs_volume
+		try:
+			vol = ec2_conn.get_all_volumes([vol_id])[0]
+		except IndexError:
+			raise HandlerError("Volume %s not found" % vol_id)
 		else:
-			raise HandlerError('Cannot find volume with ID = %s' % (vol_id,))
+			if 'available' != vol.volume_state():
+				self._logger.warning("Volume %s is not available. Force detach it from instance", vol_id)
+				vol.detach(force=True)
+				self._logger.debug('Checking that volume %s is available', vol_id)
+				self._wait_until(lambda: vol.update() == "available")
+				self._logger.debug("Volume %s available", vol_id)
+			
+			self._logger.info("Attaching volume %s as device %s", vol_id, devname)
+			vol.attach(self._platform.get_instance_id(), devname)
+			self._logger.debug("Checking that volume %s attached", vol_id)
+			self._wait_until(lambda: vol.update() and vol.attachment_state() == "attached")
+			self._logger.debug("Volume %s attached", vol_id)
+			
 		# Mount ebs # fstool.mount()
+		"""
+		2010-07-07 13:16:38,255 - ERROR - scalarizr.handlers - Exception in message handler LifeCircleHandler
+		2010-07-07 13:16:38,255 - ERROR - scalarizr.handlers - ("Cannot mount device '/dev/sdo'. mount: special device /dev/sdo does not exist\n", -101)
+		Need to wait for IntBlockDeviceUpdated
+		"""		
+		
 		self._mount_device(devname, mnt_point)
 	
 	def _storage_valid(self, path=None):
@@ -557,8 +580,8 @@ class MysqlHandler(Handler):
 		self._ping_mysql()		
 		return (root_password, repl_password, stat_password)
 	
-	def _update_config(self, **kwargs): 
-		updates = {self._sect_name: kwargs}
+	def _update_config(self, data): 
+		updates = {self._sect_name: data}
 		configtool.update(configtool.get_behaviour_filename(Behaviours.MYSQL, ret=configtool.RET_PRIVATE), updates)
 		
 	"""
@@ -579,30 +602,30 @@ class MysqlHandler(Handler):
 	def _replication_init(self, master=True):
 		# Create /etc/mysql if Hats
 		if disttool.is_redhat_based():
-			if not os.path.exists('/etc/mysql/'):
+			if not os.path.exists('/etc/mysql'):
 				try:
-					os.makedirs('/etc/mysql/')
+					os.makedirs('/etc/mysql')
 				except OSError, e:
 					raise HandlerError('Couldn`t create directory /etc/mysql/: %s' % (e,))
 		# Writting replication config
 		try:
 			file = open('/etc/mysql/farm-replication.cnf', 'w')
 		except IOError, e:
+			
+			
+			
 			raise HandlerError('Cannot open /etc/mysql/farm-replication.cnf: %s' % (e.strerror,))
 		else:
 			server_id = 1 if master else int(random.random() * 100000)+1
 			file.write('[mysqld]\nserver-id\t\t=\t'+ str(server_id)+'\nmaster-connect-retry\t\t=\t15\n')
 			file.close()
 		# Get my.cnf location
-		if disttool.is_redhat_based():
-			my_cnf_file = "/etc/my.cnf"
-		else:
-			my_cnf_file = "/etc/mysql/my.cnf"
+
 		# Include farm-replication.cnf to my.cnf
 		try:
-			file = open(my_cnf_file, 'a+')
+			file = open(MY_CNF_PATH, 'a+')
 		except IOError, e:
-			self._logger.error('Can\'t open %s: %s', my_cnf_file, e.strerror )
+			self._logger.error('Can\'t open %s: %s', MY_CNF_PATH, e.strerror )
 			raise
 		else:
 			my_cnf = file.read()
@@ -649,16 +672,11 @@ class MysqlHandler(Handler):
 		return myd
 			
 	def _move_mysql_dir(self, directive=None, dirname = None, section=None):
-		# Locating mysql config file			
-		if disttool.is_redhat_based():
-			my_cnf_file = "/etc/my.cnf"
-		else:
-			my_cnf_file = "/etc/mysql/my.cnf"		
 		#Reading Mysql config file		
 		try:
-			file = open(my_cnf_file, 'r')
+			file = open(MY_CNF_PATH, 'r')
 		except IOError, e:
-			raise HandlerError('Cannot open %s: %s' % my_cnf_file, e.strerror)
+			raise HandlerError('Cannot open %s: %s' % MY_CNF_PATH, e.strerror)
 		else:
 			myCnf = file.read()
 			file.close					
@@ -701,11 +719,13 @@ class MysqlHandler(Handler):
 		try:
 			os.chown(directory, mysql_user.pw_uid, mysql_user.pw_gid)
 		except OSError, e:
-			self._logger.error('Cannot chown Mysql directory %s', directory)		
+			self._logger.error('Cannot chown Mysql directory %s', directory)
+					
 		# Writing new MySQL config
-		file = open('/etc/mysql/my.cnf', 'w')
+		file = open(MY_CNF_PATH, 'w')
 		file.write(myCnf)
-		file.close()		
+		file.close()	
+			
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
 			try:
@@ -730,11 +750,12 @@ class MysqlHandler(Handler):
 	
 	def _mount_device(self, devname, mpoint):
 		try:
-			self._logger.debug("Trying to mount device %s and add it to fstab", devname)
+			self._logger.info("Mounting device %s to %s", devname, mpoint)
 			fstool.mount(devname, mpoint, auto_mount=True)
 		except fstool.FstoolError, e:
 			if fstool.FstoolError.NO_FS == e.code:
-				self._logger.debug("Trying to create file system on device %s, mount it and add to fstab", devname)
+				self._logger.warning("Mount failed with NO_FS error")
+				self._logger.info("Creating file system on device %s and mount it again", devname)
 				fstool.mount(devname, mpoint, make_fs=True, auto_mount=True)
 			else:
 				raise

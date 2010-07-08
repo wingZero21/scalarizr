@@ -153,7 +153,7 @@ def mount (device, mpoint = '/mnt', options=None, make_fs=False, fstype='ext3', 
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
 	
-	options = " ".join(options or ("-t auto")) 
+	options = " ".join(options or ("-t auto",)) 
 	
 	if make_fs:
 		mkfs(device,fstype)

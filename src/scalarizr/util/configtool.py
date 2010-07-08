@@ -238,7 +238,7 @@ def update(filename, sections):
 				logger.debug("Create option '%s' and append it in the end of section '%s'", 
 						opt_name, sect_name)
 				# Create option and append it in the end
-				cur_opt = Option(opt_name, value)
+				cur_opt = Option(opt_name, value if value != None else "")
 				cur_sect.items.append(cur_opt)
 			else:
 				cur_opt.value = value

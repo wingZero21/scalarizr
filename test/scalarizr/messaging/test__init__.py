@@ -7,6 +7,7 @@ Created on Apr 30, 2010
 from scalarizr.messaging import Message
 import xml.dom.minidom as dom
 import unittest
+import os
 from scalarizr.util import cryptotool, init_tests
 import logging
 
@@ -78,6 +79,14 @@ class TestMessage(unittest.TestCase):
 		self.assertFalse(msg.meta.has_key("platform"))
 		self.assertEqual(msg.subsystem, "block")
 
+	def test_decode_host_init(self):
+		filename = os.path.abspath(os.path.dirname(__file__) + "/../../resources/messaging/HostInitResponse-mysql.xml")
+		xml_string = open(filename).read()
+		
+		msg = Message()
+		msg.fromxml(xml_string)
+		print msg.body["mysql"]
+
 	def test_decode_wrong_spaces(self):
 		key = "q9mBWijQrEphNSN77OiEHvA0r0U3PJb3ydvH2kkQz5wxqxpKfSFLGQ=="
 		
@@ -91,6 +100,8 @@ class TestMessage(unittest.TestCase):
 		logger = logging.getLogger(__name__)
 		cmd = "mount %s" % (msg.role_name)
 		logger.debug(cmd)
+		
+	
 
 if __name__ == "__main__":
 	init_tests()

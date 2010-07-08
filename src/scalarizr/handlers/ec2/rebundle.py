@@ -150,7 +150,7 @@ Bundled: %(bundle_date)s
 			# Send message to Scalr
 			self._send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "error",
-				last_error = e.message,
+				last_error = e.message if isinstance(e, BotoServerError) else str(e),
 				bundle_task_id = message.bundle_task_id
 			))		
 			
