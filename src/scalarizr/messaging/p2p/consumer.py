@@ -87,33 +87,33 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 		
 		queue = os.path.basename(self.path)
 		rawmsg = self.rfile.read(int(self.headers["Content-length"]))
-		logger.debug("Received ingoing message. queue: '%s', rawmessage: %s", queue, rawmsg)
+		logger.debug("Received ingoing message in queue: '%s'", queue)
 		
 		try:
-			logger.debug("Decrypting message...")
+			logger.debug("Decrypting message")
 			crypto_key = binascii.a2b_base64(configtool.read_key(self.consumer.crypto_key_path))
 			xml = cryptotool.decrypt(rawmsg, crypto_key)
 			# Remove special chars
 			xml = xml.strip(''.join(chr(i) for i in range(0, 31)))		
 		except (BaseException, Exception), e:
-			err = "Cannot decrypt message. %s" % str(e)
+			err = "Cannot decrypt message. error: %s; raw message: %s" % (str(e), rawmsg)
 			logger.error(err)
 			logger.exception(e)
 			self.send_response(400, err)
 			return
 		
 		try:
-			logger.debug("Decoding message %s", xml)
+			logger.debug("Decoding message")
 			message = P2pMessage()
 			message.fromxml(xml)
 		except (BaseException, Exception), e:
-			err = "Cannot decode message. %s" % str(e)
+			err = "Cannot decode message. error: %s; xml message: %s" % (str(e), xml)
 			logger.error(err)
 			logger.exception(e)
 			self.send_response(400, err)
 			return
 		
-		logger.info("Received ingoing message. queue: '%s' message: %s" % (queue, message))
+		logger.info("Received ingoing message %s in queue %s", message.name, queue)
 		
 		try:
 			store = P2pMessageStore()

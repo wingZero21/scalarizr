@@ -10,6 +10,7 @@ import threading
 import traceback
 import cStringIO
 import string
+import os
 
 from scalarizr.bus import bus
 from scalarizr.messaging import Queues, Messages
@@ -18,6 +19,15 @@ from scalarizr.messaging import Queues, Messages
 
 INTERVAL_RE = re.compile('((?P<minutes>\d+)min\s?)?((?P<seconds>\d+)s)?')
 
+class RotatingFileHandler(logging.handlers.RotatingFileHandler):
+	def __init__(self, filename, mode, maxBytes, backupCount, chmod = '0600'):
+		logging.handlers.RotatingFileHandler.__init__(self, filename, mode, maxBytes, backupCount)
+		try:
+			os.chown(self.baseFilename, os.getuid(), os.getgid())
+			os.chmod(self.baseFilename, chmod)
+		except OSError:
+			pass
+		
 class MessagingHandler(logging.Handler):
 	
 	num_entries = None
@@ -29,8 +39,8 @@ class MessagingHandler(logging.Handler):
 	_initialized = False
 	
 	def __init__(self, num_entries = 1, send_interval = "1s"):
-		logging.Handler.__init__(self)		
-
+		logging.Handler.__init__(self)	
+		
 		m = INTERVAL_RE.match(send_interval)
 		self.send_interval = (int(m.group('seconds') or 0) + 60*int(m.group('minutes') or 0)) or 1
 		
@@ -57,6 +67,7 @@ class MessagingHandler(logging.Handler):
 
 
 	def emit(self, record):
+		
 		if not self._initialized:
 			self._init()
 		
