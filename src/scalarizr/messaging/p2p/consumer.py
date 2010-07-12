@@ -55,25 +55,26 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 			
 	def stop(self):
 		if (not self._server is None):
-			try:
-				self._logger.info("Stopping message consumer...")
-			
-				# stop http server
-				self._logger.debug("Stopping HTTP server")
-				self._server.shutdown()
-				self._logger.debug("HTTP server stopped")
-	
-				# stop message handler thread
-				self._logger.debug("Stopping message handler")
-				self._shutdown_handler = True
-				self._handler_thread.join()
-				self._logger.debug("Message handler stopped")
-			finally:
-				self._logger.debug("Closing HTTP server")
-				self._server.server_close()
-				self._logger.debug("HTTP server closed")
+			self._logger.info("Stopping message consumer...")
+		
+			# stop http server
+			self._logger.debug("Stopping HTTP server")
+			self._server.shutdown()
+			self._logger.debug("HTTP server stopped")
+
+			# stop message handler thread
+			self._logger.debug("Stopping message handler")
+			self._shutdown_handler = True
+			self._handler_thread.join()
+			self._logger.debug("Message handler stopped")
 			
 			self._logger.info("Message consumer stopped")
+
+	def shutdown(self):
+		self._logger.debug("Closing HTTP server")
+		self._server.server_close()
+		self._server = None		
+		self._logger.debug("HTTP server closed")
 
 	def message_handler (self):
 		store = P2pMessageStore()

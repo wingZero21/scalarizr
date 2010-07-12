@@ -495,7 +495,7 @@ def _snmpd_health_check():
 def onSIGTERM(*args):
 	logger = logging.getLogger(__name__)
 	logger.info("Received SIGTERM")
-	globals()["_running"] = False
+	_shutdown()
 
 def onSIGCHILD(*args):
 	logger = logging.getLogger(__name__)
@@ -506,21 +506,31 @@ def onSIGCHILD(*args):
 
 def _shutdown(*args):
 	logger = logging.getLogger(__name__)
-	logger.info("Stopping scalarizr...")
-	
-	if EMBED_SNMPD and _snmp_pid:
-		try:
-			logging.debug("Stopping SNMP subprocess")
-			os.kill(_snmp_pid, signal.SIGTERM)
-		except OSError, e:
-			logger.error("Cannot kill SIGTERM to SNMP subprocess (pid: %d). %s", _snmp_pid, e)
-	
-	msg_service = bus.messaging_service
-	consumer = msg_service.get_consumer()
-	consumer.stop()
-	# Fire terminate
-	bus.fire("terminate")
-	logger.info("Stopped")	
+	if globals()["_running"]:
+		logger.info("Stopping scalarizr...")
+		try:		
+			if EMBED_SNMPD and _snmp_pid:
+				try:
+					logging.debug("Stopping SNMP subprocess")
+					os.kill(_snmp_pid, signal.SIGTERM)
+				except OSError, e:
+					logger.error("Cannot kill SIGTERM to SNMP subprocess (pid: %d). %s", _snmp_pid, e)
+			
+			msg_service = bus.messaging_service
+			consumer = msg_service.get_consumer()
+			consumer.stop()
+			consumer.shutdown()
+			
+			producer = msg_service.get_producer()
+			producer.shutdown()
+			
+			# Fire terminate
+			bus.fire("terminate")
+			logger.info("Stopped")
+		finally:
+			globals()["_running"] = False
+	else:
+		logger.warning("Scalarizr is not running. Nothing to stop")	
 
 def main():
 	try:
@@ -638,7 +648,8 @@ def main():
 		except KeyboardInterrupt:
 			pass
 		finally:
-			_shutdown()
+			if _running:
+				_shutdown()
 			
 	except (BaseException, Exception), e:
 		if not (isinstance(e, SystemExit) or isinstance(e, KeyboardInterrupt)):

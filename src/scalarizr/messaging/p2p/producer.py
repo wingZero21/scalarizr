@@ -25,6 +25,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 	sender = None
 	_store = None
 	_logger = None
+	_stop_delivery = None
 	
 	def __init__(self, **kwargs):
 		MessageProducer.__init__(self)
@@ -37,10 +38,13 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 				
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
+		self._stop_delivery = threading.Event()
 		
 		self._local = threading.local()
 		self._local_defaults = dict(interval=None, next_retry_index=0, delivered=False)
 
+	def shutdown(self):
+		self._stop_delivery.set()
 	
 	def send(self, queue, message):
 		self._logger.info("Sending message '%s' into queue '%s'", message.name, queue)
@@ -55,7 +59,8 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 				setattr(self._local, k, v)
 				
 		self._local.delivered = False
-		while not self._local.delivered:
+		#while not self._local.delivered and not self._stop_delivery.isSet():
+		while not self._local.delivered:			
 			if self._local.interval:
 				self._logger.info("Sleep %d seconds before next attempt", self._local.interval)
 				time.sleep(self._local.interval)
@@ -64,9 +69,12 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 				# --- SIGINT (Interrupt) @ 0 (0) ---
 				# rt_sigaction(SIGINT, {0x36b9210, [], 0}, {0x36b9210, [], 0}, 8) = 0
 				# sigreturn()                             = ? (mask now [])
+				
 				# futex(0xa3f5d78, FUTEX_WAIT_PRIVATE, 0, NUL
-					
+			#if not self._stop_delivery.isSet():
+			#	self._send0(queue, message, self._delivered_cb, self._undelivered_cb)
 			self._send0(queue, message, self._delivered_cb, self._undelivered_cb)
+				
 
 
 	def _delivered_cb(self, queue, message):

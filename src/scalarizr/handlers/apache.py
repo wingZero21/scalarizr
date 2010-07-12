@@ -35,7 +35,10 @@ elif disttool.is_debian_based():
 			env.close()
 	
 else:
-	raise HandlerError("Cannot find Apache init script. Make sure that apache web server is installed")
+	initd_script = "/etc/init.d/apache2"
+	
+if not os.path.exists(initd_script):
+	raise HandlerError("Cannot find Apache init script at %s. Make sure that apache web server is installed" % initd_script)
 
 # Register apache service
 logger = logging.getLogger(__name__)

@@ -20,7 +20,10 @@ if disttool.is_redhat_based():
 elif disttool.is_debian_based():
 	initd_script = "/etc/init.d/mysql"
 else:
-	raise HandlerError("Cannot find MySQL init script. Make sure that mysql server is installed")
+	initd_script = "/etc/init.d/mysql"
+	
+if not os.path.exists(initd_script):
+	raise HandlerError("Cannot find MySQL init script at %s. Make sure that mysql server is installed" % initd_script)
 
 pid_file = None
 try:
@@ -706,7 +709,7 @@ class MysqlHandler(Handler):
 		try:
 			file = open(MY_CNF_PATH, 'r')
 		except IOError, e:
-			raise HandlerError('Cannot open %s: %s' % MY_CNF_PATH, e.strerror)
+			raise HandlerError('Cannot open %s: %s' % (MY_CNF_PATH, e.strerror))
 		else:
 			myCnf = file.read()
 			file.close					

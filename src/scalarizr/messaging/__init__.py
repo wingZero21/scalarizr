@@ -144,6 +144,9 @@ class MessageProducer(Observable):
 	def send(self, queue, message):
 		pass
 	
+	def shutdown(self):
+		pass
+	
 class MessageConsumer(object):
 	_listeners = []
 	
@@ -159,6 +162,9 @@ class MessageConsumer(object):
 		pass
 	
 	def stop(self):
+		pass
+	
+	def shutdown(self):
 		pass
 	
 class Queues:
