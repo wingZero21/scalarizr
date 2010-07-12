@@ -6,6 +6,7 @@ Created on Jun 17, 2010
 from scalarizr.util import UtilError, system, ping_service
 import time
 import os
+from subprocess import Popen, PIPE
 
 class InitdError(UtilError):
 	output = None
@@ -38,11 +39,16 @@ def _start_stop_reload(name, action):
 		raise InitdError("Unknown service '%s'" % (name,))
 	try:
 		cmd = [_services[name]["initd_script"], action]
-		out, err, retcode = system(cmd, shell=False)
+		proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
+		out, err = proc.communicate()
 	except OSError, e:
 		raise InitdError("Popen failed with error %s" % (e.strerror,))
-	if retcode or (out and out.find("FAILED") != -1):
+	
+	if proc.returncode:
 		raise InitdError("Cannot %s %s" % (action, name), output=out + " " + err)
+	
+	#if action != "restart" and retcode or (out and out.find("FAILED") != -1):
+	#	raise InitdError("Cannot %s %s" % (action, name), output=out + " " + err)
 	
 	pid_file = _services[name]["pid_file"]
 	

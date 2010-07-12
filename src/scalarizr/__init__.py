@@ -42,7 +42,7 @@ class NotConfiguredError(BaseException):
 
 __version__ = "0.5"	
 
-EMBED_SNMPD = False
+EMBED_SNMPD = True
 NET_SNMPD = False
 
 _running = False
@@ -493,6 +493,8 @@ def _snmpd_health_check():
 		time.sleep(60)
 
 def onSIGTERM(*args):
+	logger = logging.getLogger(__name__)
+	logger.info("Received SIGTERM")
 	globals()["_running"] = False
 
 def onSIGCHILD(*args):
@@ -606,7 +608,7 @@ def main():
 
 		if EMBED_SNMPD:
 			# Start SNMP server in a separate process			
-			signal.signal(signal.SIGCHLD, onSIGCHILD)
+			#signal.signal(signal.SIGCHLD, onSIGCHILD)
 			_start_snmp_server()
 		elif NET_SNMPD:
 			# Start snmpd health check thread
