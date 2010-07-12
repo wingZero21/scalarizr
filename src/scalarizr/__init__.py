@@ -41,10 +41,15 @@ class NotConfiguredError(BaseException):
 
 
 __version__ = "0.5"	
-EMBED_SNMPD = True
+
+EMBED_SNMPD = False
+NET_SNMPD = False
+
 _running = False
+""" @var _running: True when scalarizr is running """
 
-
+_snmp_pid = None
+""" @var _snmp_pid: Embed snmpd process pid"""
 
 def _init():
 	optparser = bus.optparser
@@ -262,7 +267,7 @@ def _init_services():
 			community_name=platform.get_user_data(UserDataOptions.FARM_HASH) \
 					or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)  
 		)
-	else:
+	if NET_SNMPD:
 		logger.debug("Initialize snmpd")
 		snmpd_conf = "/etc/snmp/snmpd.conf"
 		if not os.path.exists(snmpd_conf):
@@ -463,7 +468,6 @@ def _behaviour_validator(value):
 				return False
 	return True
 
-_snmp_pid = None
 def _start_snmp_server():
 	# Start SNMP server in a separate process
 	pid = os.fork()
@@ -472,7 +476,7 @@ def _start_snmp_server():
 		snmp_server.start()
 		sys.exit()
 	else:
-		_snmp_pid = pid	
+		globals()["_snmp_pid"] = pid
 
 def _snmp_crash_handler(signum, frame):
 	if _running:
@@ -488,17 +492,26 @@ def _snmpd_health_check():
 				logger.error("Canot start snmpd. %s", out)
 		time.sleep(60)
 
+def onSIGTERM(*args):
+	globals()["_running"] = False
+
+def onSIGCHILD(*args):
+	logger = logging.getLogger(__name__)
+	logger.info("Received SIGCHILD from SNMP process")
+	if globals()["_running"]:
+		_start_snmp_server()
+
+
 def _shutdown(*args):
-	_running = False
 	logger = logging.getLogger(__name__)
 	logger.info("Stopping scalarizr...")
 	
-	if _snmp_pid:
+	if EMBED_SNMPD and _snmp_pid:
 		try:
 			logging.debug("Stopping SNMP subprocess")
 			os.kill(_snmp_pid, signal.SIGTERM)
 		except OSError, e:
-			logger.error("Cannot send SIGTERM to SNMP subprocess (pid: %d). %s", _snmp_pid, e)
+			logger.error("Cannot kill SIGTERM to SNMP subprocess (pid: %d). %s", _snmp_pid, e)
 	
 	msg_service = bus.messaging_service
 	consumer = msg_service.get_consumer()
@@ -593,16 +606,16 @@ def main():
 
 		if EMBED_SNMPD:
 			# Start SNMP server in a separate process			
-			signal.signal(signal.SIGCHLD, _snmp_crash_handler)
+			signal.signal(signal.SIGCHLD, onSIGCHILD)
 			_start_snmp_server()
-		else:
+		elif NET_SNMPD:
 			# Start snmpd health check thread
 			t = threading.Thread(target=_snmpd_health_check)
 			t.daemon = True
 			t.start()
 			
 		# Install  signal handlers	
-		signal.signal(signal.SIGTERM, _shutdown)
+		signal.signal(signal.SIGTERM, onSIGTERM)
 
 		# Start messaging server
 		msg_service = bus.messaging_service
@@ -612,13 +625,15 @@ def main():
 	
 
 		# Fire start
-		_running = True
+		globals()["_running"] = True
 		bus.fire("start")
 	
 		try:
-			while True:
-				msg_thread.join(0.5)
+			while _running:
+				msg_thread.join(0.2)
 		except KeyboardInterrupt:
+			pass
+		finally:
 			_shutdown()
 			
 	except (BaseException, Exception), e:
