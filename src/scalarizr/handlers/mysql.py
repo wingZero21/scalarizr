@@ -2,6 +2,7 @@
 Created on 14.06.2010
 
 @author: spike
+@author: marat
 '''
 from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
@@ -128,9 +129,15 @@ class MysqlMessages:
 
 class MysqlHandler(Handler):
 	_logger = None
+	
 	_queryenv = None
-
-	_data_dir = _binlog_path = None
+	""" @type _queryenv: scalarizr.queryenv.QueryEnvService	"""
+	
+	_platform = None
+	""" @type _platform: scalarizr.platform.Ec2Platform """
+	
+	_storage_path = _data_dir = _binlog_path = None
+	""" Storage parameters """
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -182,7 +189,6 @@ class MysqlHandler(Handler):
 			slave_vol_id = 	self._sect.get(OPT_STORAGE_VOLUME_ID)		
 			try:
 				role_params = self._queryenv.list_role_params(self._role_name)
-				ec2_conn = self._platform.new_ec2_conn()
 				
 				# Unmount slave EBS volume
 				try:
@@ -190,7 +196,7 @@ class MysqlHandler(Handler):
 				except fstool.FstoolError, e:
 					self._logger.warning(e)
 				
-				master_vol = self._take_master_volume(role_params[PARAM_MASTER_EBS_VOLUME_ID], ec2_conn)
+				master_vol = self._take_master_volume(role_params[PARAM_MASTER_EBS_VOLUME_ID])
 				
 				# Mount previous master's EBS volume						
 				self._create_storage(master_vol.id, self._storage_path)
@@ -233,6 +239,7 @@ class MysqlHandler(Handler):
 			
 			if succeed:
 				# Delete slave EBS
+				ec2_conn = self._get_ec2_conn()				
 				ec2_conn.detach_volume(slave_vol_id, force=True)
 				ec2_conn.delete_volume(slave_vol_id)
 			
@@ -291,7 +298,9 @@ class MysqlHandler(Handler):
 			self._logger.info('Skip Mysql_NewMasterUp. My replication role is master')		
 
 	def on_host_init_response(self, message):
-		"""Check mysql data in host init response
+		"""
+		Check mysql data in host init response
+		@type message: scalarizr.messaging.Message
 		@param message: HostInitResponse
 		"""
 		if not message.body.has_key("mysql"):
@@ -300,7 +309,9 @@ class MysqlHandler(Handler):
 		
 
 	def on_before_host_up(self, message):
-		"""Configure MySQL behaviour
+		"""
+		Configure MySQL behaviour
+		@type message: scalarizr.messaging.Message		
 		@param message: HostUp message
 		"""
 		
@@ -314,7 +325,9 @@ class MysqlHandler(Handler):
 		
 	
 	def _init_master(self, message):
-		"""Initialize MySQL master
+		"""
+		Initialize MySQL master
+		@type message: scalarizr.messaging.Message 
 		@param message: HostUp message
 		"""
 		
@@ -352,6 +365,7 @@ class MysqlHandler(Handler):
 			self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
 			self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
 			self._replication_init(master=True)
+			
 			# Retrieve scalr's mysql username and password
 			try:
 				root_password = self._sect.get(OPT_ROOT_PASSWORD)
@@ -428,7 +442,7 @@ class MysqlHandler(Handler):
 		self._logger.info("Creating EBS storage (volume: %s, devname: %s) and mount to %s", 
 				vol_id, devname, mnt_point)
 		
-		ec2_conn = self._platform.new_ec2_conn()
+		ec2_conn = self._get_ec2_conn()
 		# Attach ebs
 		try:
 			vol = ec2_conn.get_all_volumes([vol_id])[0]
@@ -448,13 +462,17 @@ class MysqlHandler(Handler):
 			self._wait_until(lambda: vol.update() and vol.attachment_state() == "attached")
 			self._logger.debug("Volume %s attached", vol_id)
 			
-		# Mount ebs # fstool.mount()
+		# Wait when device will be added
+		self._logger.info("Wait when %s will be available", devname)
+		self._wait_until(lambda: os.access(devname, os.F_OK | os.R_OK))
+		self._logger.debug("Device %s is available", devname)
+		
 		"""
 		2010-07-07 13:16:38,255 - ERROR - scalarizr.handlers - Exception in message handler LifeCircleHandler
 		2010-07-07 13:16:38,255 - ERROR - scalarizr.handlers - ("Cannot mount device '/dev/sdo'. mount: special device /dev/sdo does not exist\n", -101)
 		Need to wait for IntBlockDeviceUpdated
-		"""		
-		
+		"""
+		# Mount EBS
 		self._mount_device(devname, mnt_point)
 	
 	def _storage_valid(self, path=None):
@@ -462,11 +480,11 @@ class MysqlHandler(Handler):
 		binlog_path = os.path.join(path, STORAGE_BINLOG_PATH) if path else os.path.dirname(self._binlog_path)
 		return os.path.exists(data_dir) and os.path.exists(binlog_path)
 	
-	def _create_volume_from_snapshot(self, snap_id, avail_zone=None, ec2_conn=None):
-		ec2_conn = ec2_conn or self._platform.new_ec2_conn()
+	def _create_volume_from_snapshot(self, snap_id, avail_zone=None):
+		ec2_conn = self._get_ec2_conn()
 		avail_zone = avail_zone or self._platform.get_avail_zone()
 		
-		self._logger.info("Creating EBS volume from snapshot %s in avail zone %s", snap_id, avail_zone)
+		self._logger.info("Creating EBS volume from snapshot %s pythonin avail zone %s", snap_id, avail_zone)
 		ebs_volume = ec2_conn.create_volume(None, avail_zone, snap_id)
 		self._logger.debug("Volume created")
 		
@@ -489,9 +507,9 @@ class MysqlHandler(Handler):
 		else:
 			raise HandlerError("Cannot detach volume ID=%s" % (volume.id,))
 
-	def _take_master_volume(self, volume_id, ec2_conn=None):
+	def _take_master_volume(self, volume_id):
 		# Lookup master volume
-		ec2_conn = ec2_conn or self._platform.new_ec2_conn()
+		ec2_conn = self._get_ec2_conn()
 		zone = self._platform.get_avail_zone()						
 		try:
 			master_vol = ec2_conn.get_all_volumes([volume_id])[0]
@@ -505,7 +523,7 @@ class MysqlHandler(Handler):
 		if master_vol.zone != zone:
 			self._logger.info("Master volume is in another zone. Create volume in %s", zone)
 			master_snap = ec2_conn.create_snapshot(master_vol.id)
-			master_vol = self._create_volume_from_snapshot(master_snap.id, zone, ec2_conn)
+			master_vol = self._create_volume_from_snapshot(master_snap.id, zone)
 		
 		return master_vol
 
@@ -546,8 +564,12 @@ class MysqlHandler(Handler):
 
 			
 	def _create_ebs_snapshot(self):
+		self._logger.info("Creating MySQL storage EBS snapshot")
 		try:
-			snapshot = self._ebs_volume.create_snapshot()
+			ec2_conn = self._get_ec2_conn()
+			""" @type ec2_conn: boto.ec2.connection.EC2Connection """
+			
+			snapshot = ec2_conn.create_snapshot(self._sect.get(OPT_STORAGE_VOLUME_ID))
 			return snapshot.id			
 		except BotoServerError, e:
 			self._logger.error("Cannot create MySQL data EBS snapshot. %s", e.message)
@@ -600,32 +622,28 @@ class MysqlHandler(Handler):
 	"""
 		
 	def _replication_init(self, master=True):
-		# Create /etc/mysql if Hats
-		if disttool.is_redhat_based():
-			if not os.path.exists('/etc/mysql'):
-				try:
-					os.makedirs('/etc/mysql')
-				except OSError, e:
-					raise HandlerError('Couldn`t create directory /etc/mysql/: %s' % (e,))
-		# Writting replication config
+		if not os.path.exists('/etc/mysql'):
+			os.makedirs('/etc/mysql')
+			
+		# Create replication config
+		self._logger.info("Creating farm-replication config")
 		try:
 			file = open('/etc/mysql/farm-replication.cnf', 'w')
 		except IOError, e:
-			
-			
-			
-			raise HandlerError('Cannot open /etc/mysql/farm-replication.cnf: %s' % (e.strerror,))
+			self._logger.error('Cannot open /etc/mysql/farm-replication.cnf: %s', e.strerror)
+			raise
 		else:
 			server_id = 1 if master else int(random.random() * 100000)+1
 			file.write('[mysqld]\nserver-id\t\t=\t'+ str(server_id)+'\nmaster-connect-retry\t\t=\t15\n')
 			file.close()
-		# Get my.cnf location
+		self._logger.debug("farm-replication config created")
 
-		# Include farm-replication.cnf to my.cnf
+		# Include farm-replication.cnf in my.cnf
+		self._logger.debug("Add farm-replication.cnf include in my.cnf")
 		try:
 			file = open(MY_CNF_PATH, 'a+')
 		except IOError, e:
-			self._logger.error('Can\'t open %s: %s', MY_CNF_PATH, e.strerror )
+			self._logger.error('Cannot open %s: %s', MY_CNF_PATH, e.strerror)
 			raise
 		else:
 			my_cnf = file.read()
@@ -633,25 +651,37 @@ class MysqlHandler(Handler):
 				file.write('\n!include /etc/mysql/farm-replication.cnf\n')
 		finally:
 			file.close()
+		self._logger.debug("Include added")
+			
 		self._restart_mysql()
 
 	def _start_mysql(self):
 		try:
+			self._logger.info("Starting MySQL")
 			initd.start("mysql")
-		except initd.InitdError, e:
-			self._logger.error(e)
+		except:
+			self._logger.error("Cannot start MySQL")
+			if not initd.is_running("mysql"):				
+				raise
 
 	def _stop_mysql(self):
 		try:
+			self._logger.info("Stopping MySQL")
 			initd.stop("mysql")
-		except initd.InitdError, e:
-			logger.error(e)
+		except:
+			self._logger.error("Cannot stop MySQL")
+			if initd.is_running("mysql"):
+				raise
+
 			
 	def _restart_mysql(self):
 		try:
+			self._logger.info("Restarting MySQL")
 			initd.restart("mysql")
-		except initd.InitdError, e:
-			logger.error(e)
+		except:
+			self._logger.error("Cannot restart MySQL")
+			raise
+	
 		
 	def _ping_mysql(self):
 		ping_service("0.0.0.0", 3306, 5)	
@@ -759,3 +789,12 @@ class MysqlHandler(Handler):
 				fstool.mount(devname, mpoint, make_fs=True, auto_mount=True)
 			else:
 				raise
+			
+	def _get_ec2_conn(self):
+		"""
+		Maintains single EC2 connection
+		@rtype: boto.ec2.connection.EC2Connection
+		"""
+		if not hasattr(self, "_ec2_conn"):
+			self._ec2_conn = self._platform.new_ec2_conn()
+		return self._ec2_conn
