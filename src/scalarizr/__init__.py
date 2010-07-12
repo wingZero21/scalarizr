@@ -622,7 +622,7 @@ def main():
 		# Start messaging server
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
-		msg_thread = threading.Thread(target=consumer.start)
+		msg_thread = threading.Thread(target=consumer.start, name="Message consumer")
 		msg_thread.start()
 	
 
@@ -633,6 +633,8 @@ def main():
 		try:
 			while _running:
 				msg_thread.join(0.2)
+				if not msg_thread.isAlive():
+					raise ScalarizrError("%s thread unexpectedly terminated" % msg_thread.name)
 		except KeyboardInterrupt:
 			pass
 		finally:

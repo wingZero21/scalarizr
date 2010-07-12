@@ -35,17 +35,24 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 		self._handler_thread = threading.Thread(name="MessageHandler", target=self.message_handler)
 			
 	def start(self):
-		if self._server is None:
-			r = urlparse(self.endpoint)
-			_HttpRequestHanler.consumer = self
-			server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-			self._server = server_cls((r.hostname, r.port),	_HttpRequestHanler)
-			self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
+		try:
+			if self._server is None:
+				r = urlparse(self.endpoint)
+				_HttpRequestHanler.consumer = self
+				server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
+				self._server = server_cls((r.hostname, r.port),	_HttpRequestHanler)
+				self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
+		except (BaseException, Exception), e:
+			self._logger.error("Cannot build server. %s", e)
 			
 		self._logger.info("Starting message consumer")
-		self._handler_thread.start() 	# start message handler
-		self._server.serve_forever() 	# start http server
-	
+		
+		try:
+			self._handler_thread.start() 	# start message handler
+			self._server.serve_forever() 	# start http server
+		except (BaseException, Exception), e:
+			self._logger.error("Cannot start message consumer. %s", e)
+			
 	def stop(self):
 		if (not self._server is None):
 			try:
