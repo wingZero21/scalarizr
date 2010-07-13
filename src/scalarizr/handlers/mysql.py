@@ -630,15 +630,17 @@ class MysqlHandler(Handler):
 			
 		# Create replication config
 		self._logger.info("Creating farm-replication config")
+		repl_conf_path = '/etc/mysql/farm-replication.cnf'
 		try:
-			file = open('/etc/mysql/farm-replication.cnf', 'w')
+			file = open(repl_conf_path, 'w')
 		except IOError, e:
-			self._logger.error('Cannot open /etc/mysql/farm-replication.cnf: %s', e.strerror)
+			self._logger.error('Cannot open %s: %s', repl_conf_path, e.strerror)
 			raise
 		else:
 			server_id = 1 if master else int(random.random() * 100000)+1
 			file.write('[mysqld]\nserver-id\t\t=\t'+ str(server_id)+'\nmaster-connect-retry\t\t=\t15\n')
 			file.close()
+			os.chmod(repl_conf_path, 0644)
 		self._logger.debug("farm-replication config created")
 
 		# Include farm-replication.cnf in my.cnf
