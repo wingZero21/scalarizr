@@ -751,10 +751,13 @@ class MysqlHandler(Handler):
 			else:
 				myCnf += '\n' + directive + ' = ' + dirname		
 		# Setting new directory permissions
+		"""
+		@todo: Brokes Ubuntu 10.04 ?
 		try:
 			os.chown(directory, mysql_user.pw_uid, mysql_user.pw_gid)
 		except OSError, e:
 			self._logger.error('Cannot chown Mysql directory %s', directory)
+		"""
 					
 		# Writing new MySQL config
 		file = open(MY_CNF_PATH, 'w')
@@ -772,8 +775,8 @@ class MysqlHandler(Handler):
 				file.close()
 				if not re.search (directory, app_rules):
 					file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
-					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+' r,\n'+'\\2', app_rules)
-					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1'+directory+'* rwk,\n'+'\\2', app_rules)
+					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+'/ r,\n'+'\\2', app_rules)
+					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1'+directory+'/** rwk,\n'+'\\2', app_rules)
 					file.write(app_rules)
 					file.close()
 					initd.explore('apparmor', '/etc/init.d/apparmor')
