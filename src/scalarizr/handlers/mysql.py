@@ -50,6 +50,8 @@ OPT_STAT_PASSWORD   	= "stat_password"
 OPT_REPLICATION_MASTER  = "replication_master"
 OPT_SNAPSHOT_ID			= "snapshot_id"
 OPT_STORAGE_VOLUME_ID	= "volume_id" 
+OPT_LOG_FILE 			= "log_file"
+OPT_LOG_POS				= "log_pos"
 
 # Role params
 PARAM_MASTER_EBS_VOLUME_ID 	= "mysql_master_ebs_volume_id"
@@ -112,8 +114,13 @@ class MysqlMessages:
 	= HOST_INIT_RESPONSE =
 	@ivar mysql=dict(
 		replication_master: 	1|0
-		volume_id				EBS volume id		
+		volume_id				EBS volume id					(on master)
 		snapshot_id: 			Master EBS snapshot id			(on slave)
+		root_password:			'scalr' user password  			(on slave)
+		repl_password:			'scalr_repl' user password		(on slave)
+		stat_password: 			'scalr_stat' user password		(on slave)
+		log_file:				Binary log file					(on slave)
+		log_pos:				Binary log file position		(on slave)
 	)
 	
 	= HOST_UP =
@@ -185,6 +192,11 @@ class MysqlHandler(Handler):
 
 				
 	def on_Mysql_PromoteToMaster(self, message):
+		"""
+		Promote slave to master
+		@type message: scalarizr.messaging.Message
+		@param message: Mysql_PromoteToMaster
+		"""
 		if not int(self._sect.get(OPT_REPLICATION_MASTER)):
 			self._stop_mysql()
 			
@@ -251,54 +263,26 @@ class MysqlHandler(Handler):
 
 
 	def on_Mysql_NewMasterUp(self, message):
+		"""
+		Switch replication to a new master server
+		@type message: scalarizr.messaging.Message
+		@param message:  Mysql_NewMasterUp
+		"""
 		if not int(self._sect.get(OPT_REPLICATION_MASTER)):
-			# Get replication info from message
-			master_ip = message.local_ip or message.remote_ip
-			log_file	= message.log_file
-			log_pos		= message.log_pos
-			repl_password = message.repl_password
-			root_password = message.root_password
-
-			
-			# Init slave replication
-			self._replication_init(master=False)
-			root_password = self._sect.get(OPT_ROOT_PASSWORD)
-			# Changing replication master
-			sql = pexpect.spawn('/usr/bin/mysql -u' + ROOT_USER + ' -p' + root_password)
-			sql.expect('mysql>')
-			sql.sendline('STOP SLAVE;')
-			sql.expect('mysql>')
-			sql.sendline('CHANGE MASTER TO MASTER_HOST="'+master_ip+'", \
-							MASTER_USER="'+REPL_USER+'",\
-		  					MASTER_PASSWORD="'+repl_password+'",\
-							MASTER_LOG_FILE="'+log_file+'", \
-							MASTER_LOG_POS='+str(log_pos)+';')
-			sql.expect('mysql>')
-			# Starting slave
-			sql.sendline('START SLAVE;')
-			sql.expect('mysql>')
-			status = sql.before
-			if re.search(re.compile('ERROR', re.MULTILINE), status):
-				raise HandlerError('Cannot start mysql slave: %s' % status)
-			
-			# Sleeping for a while
-			time.sleep(3)
-			sql.sendline('SHOW SLAVE STATUS;')
-			sql.expect('mysql>')
-			# Retrieveing slave status row vith values
-			status = sql.before.split('\r\n')[4].split('|')
-			sql.close()
-			io_status = status[11].strip()
-			sql_status = status[12].strip()
-			# Check for errors
-			if 'Yes' != io_status:
-				raise HandlerError ('IO Error while starting mysql slave: %s %s' %  (status[17], status[18]))
-			if 'Yes' != sql_status:
-				raise HandlerError('SQL Error while starting mysql slave: %s %s' %  (status[17], status[18]))
-			
-			self._logger.info('Successfully switched replication to a new MySQL master server')
+			host = message.local_ip or message.remote_ip
+			self._logger.info("Switching replication to a new MySQL master %s", host)
+			self._change_master(
+				host=host, 
+				user=REPL_USER, 
+				password=message.repl_password,
+				log_file=message.log_file, 
+				log_pos=message.log_pos, 
+				mysql_user=ROOT_USER,
+				mysql_password=message.root_password
+			)			
+			self._logger.debug("Replication switched")
 		else:
-			self._logger.info('Skip Mysql_NewMasterUp. My replication role is master')		
+			self._logger.debug('Skip NewMasterUp. My replication role is master')		
 
 	def on_host_init_response(self, message):
 		"""
@@ -308,6 +292,7 @@ class MysqlHandler(Handler):
 		"""
 		if not message.body.has_key("mysql"):
 			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
+		self._logger.debug("Update mysql config with %s", message.mysql)
 		self._update_config(message.mysql)
 		
 
@@ -333,6 +318,7 @@ class MysqlHandler(Handler):
 		@type message: scalarizr.messaging.Message 
 		@param message: HostUp message
 		"""
+		self._logger.info("Initializing MySQL master")
 		
 		# Mount EBS
 		self._create_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
@@ -341,12 +327,15 @@ class MysqlHandler(Handler):
 		self._stop_mysql()
 							
 		msg_data = None
+		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
+
+		# Patch configuration
+		self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
+		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
+		self._replication_init(master=True)
+		
 		# If It's 1st init of mysql master
-		if not self._storage_valid():
-			# Move datadir to EBS
-			self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
-			self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
-			self._replication_init(master=True)
+		if not storage_valid:
 			root_password, repl_password, stat_password = \
 					self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER)
 			
@@ -364,11 +353,6 @@ class MysqlHandler(Handler):
 			
 		# If EBS volume had mysql dirs (N-th init)
 		else:
-			# Move datadir to EBS
-			self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
-			self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
-			self._replication_init(master=True)
-			
 			# Retrieve scalr's mysql username and password
 			try:
 				root_password = self._sect.get(OPT_ROOT_PASSWORD)
@@ -390,10 +374,12 @@ class MysqlHandler(Handler):
 			
 	
 	def _init_slave(self, message):
-		"""Initialize MySQL slave
+		"""
+		Initialize MySQL slave
+		@type message: scalarizr.messaging.Message 
 		@param message: HostUp message
 		"""
-		
+		self._logger.info("Initializing MySQL slave")
 		if not self._storage_valid():
 			self._logger.info("Initialize slave storage")
 			
@@ -403,7 +389,7 @@ class MysqlHandler(Handler):
 			
 			# Waiting until ebs volume will be created							
 			#if "ebs" == role_params[PARAM_DATA_STORAGE_ENGINE]:
-			self._create_storage(message.mysql_volume_id, self._storage_path)
+			self._create_storage(None, self._storage_path, vol=ebs_volume)
 
 			"""	
 			elif "eph" == role_params[PARAM_DATA_STORAGE_ENGINE]:
@@ -431,42 +417,65 @@ class MysqlHandler(Handler):
 				else:
 					raise HandlerError("EBS Volume does not contain mysql data")
 			"""
+			
+		self._stop_mysql()			
 				
-		# Change datadir and binary logs dir to ephemeral or ebs
-		# it will override data fetched from snapshot
+		# Change configuration files
+		self._logger.info("Changing configuration files")
 		self._move_mysql_dir('datadir', self._data_dir, 'mysqld')
 		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
-
-		# Initialize replication
 		self._replication_init(master=False)
 		
-	def _create_storage(self, vol_id, mnt_point):
+		self._start_mysql()
+		
+		# Change replication master 
+		try:
+			master_host = list(host 
+					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+					if host.replication_master)[0] 
+		except IndexError:
+			raise HandlerError("Cannot get master host. QueryEnv returns no host with replication_master=1")
+		else:
+			host = master_host.internal_ip or master_host.external_ip
+			self._logger.info("Changing replication master to %s", host)			
+			self._change_master(
+				host=host, 
+				user=REPL_USER, 
+				password=self._sect.get(OPT_REPL_PASSWORD),
+				log_file=self._sect.get(OPT_LOG_FILE), 
+				log_pos=self._sect.get(OPT_LOG_POS), 
+				mysql_user=ROOT_USER,
+				mysql_password=self._sect.get(OPT_ROOT_PASSWORD)
+			)
+		
+	def _create_storage(self, vol_id, mnt_point, vol=None):
 		devname = '/dev/sdo'
 		self._logger.info("Creating EBS storage (volume: %s, devname: %s) and mount to %s", 
 				vol_id, devname, mnt_point)
 		
 		ec2_conn = self._get_ec2_conn()
-		# Attach ebs
-		try:
-			vol = ec2_conn.get_all_volumes([vol_id])[0]
-		except IndexError:
-			raise HandlerError("Volume %s not found" % vol_id)
-		else:
-			if 'available' != vol.volume_state():
-				self._logger.warning("Volume %s is not available. Force detach it from instance", vol_id)
-				vol.detach(force=True)
-				self._logger.debug('Checking that volume %s is available', vol_id)
-				self._wait_until(lambda: vol.update() == "available")
-				self._logger.debug("Volume %s available", vol_id)
+		if not vol:
+			try:
+				vol = ec2_conn.get_all_volumes([vol_id])[0]
+			except IndexError:
+				raise HandlerError("Volume %s not found" % vol_id)
 			
-			self._logger.info("Attaching volume %s as device %s", vol_id, devname)
-			vol.attach(self._platform.get_instance_id(), devname)
-			self._logger.debug("Checking that volume %s attached", vol_id)
-			self._wait_until(lambda: vol.update() and vol.attachment_state() == "attached")
-			self._logger.debug("Volume %s attached", vol_id)
+		if 'available' != vol.volume_state():
+			self._logger.warning("Volume %s is not available. Force detach it from instance", vol.id)
+			vol.detach(force=True)
+			self._logger.debug('Checking that volume %s is available', vol.id)
+			self._wait_until(lambda: vol.update() == "available")
+			self._logger.debug("Volume %s available", vol.id)
+			
+		# Attach ebs
+		self._logger.info("Attaching volume %s as device %s", vol.id, devname)
+		vol.attach(self._platform.get_instance_id(), devname)
+		self._logger.debug("Checking that volume %s is attached", vol.id)
+		self._wait_until(lambda: vol.update() and vol.attachment_state() == "attached")
+		self._logger.debug("Volume %s attached", vol_id)
 			
 		# Wait when device will be added
-		self._logger.info("Wait when %s will be available", devname)
+		self._logger.info("Checking that device %s is available", devname)
 		self._wait_until(lambda: os.access(devname, os.F_OK | os.R_OK))
 		self._logger.debug("Device %s is available", devname)
 		
@@ -487,12 +496,12 @@ class MysqlHandler(Handler):
 		ec2_conn = self._get_ec2_conn()
 		avail_zone = avail_zone or self._platform.get_avail_zone()
 		
-		self._logger.info("Creating EBS volume from snapshot %s pythonin avail zone %s", snap_id, avail_zone)
+		self._logger.info("Creating EBS volume from snapshot %s in avail zone %s", snap_id, avail_zone)
 		ebs_volume = ec2_conn.create_volume(None, avail_zone, snap_id)
 		self._logger.debug("Volume created")
 		
 		self._logger.info('Checking that EBS volume %s is available', ebs_volume.id)
-		self._wait_until(lambda ebs_volume: 'available' != ebs_volume.volume_state())
+		self._wait_until(lambda: 'available' != ebs_volume.volume_state())
 		self._logger.info("Volume %s available", ebs_volume.id)
 		
 		return ebs_volume
@@ -500,7 +509,7 @@ class MysqlHandler(Handler):
 	def _wait_until(self, target, args=None, sleep=5):
 		args = args or ()
 		while not target(*args):
-			self._logger.debug("Wait %d seconds before next attempt", sleep)
+			self._logger.debug("Wait %d seconds before the next attempt", sleep)
 			time.sleep(sleep)
 	
 	def _detach_delete_volume(self, volume):
@@ -535,11 +544,10 @@ class MysqlHandler(Handler):
 		try:
 			if not was_running:
 				self._start_mysql()
+				self._ping_mysql()
 			
 			# Lock tables
-			sql = pexpect.spawn('/usr/bin/mysql -u' + root_user + ' -p' + root_password)
-			#sql = pexpect.spawn('/usr/bin/mysql -uroot -p123')
-			sql.expect('mysql>')
+			sql = self._spawn_mysql(root_user, root_password)
 			sql.sendline('FLUSH TABLES WITH READ LOCK;')
 			sql.expect('mysql>')
 			sql.sendline('SHOW MASTER STATUS;')
@@ -567,12 +575,13 @@ class MysqlHandler(Handler):
 
 			
 	def _create_ebs_snapshot(self):
-		self._logger.info("Creating MySQL storage EBS snapshot")
+		self._logger.info("Creating storage EBS snapshot")
 		try:
 			ec2_conn = self._get_ec2_conn()
 			""" @type ec2_conn: boto.ec2.connection.EC2Connection """
 			
 			snapshot = ec2_conn.create_snapshot(self._sect.get(OPT_STORAGE_VOLUME_ID))
+			self._logger.debug("Storage EBS snapshot %s created", snapshot.id)
 			return snapshot.id			
 		except BotoServerError, e:
 			self._logger.error("Cannot create MySQL data EBS snapshot. %s", e.message)
@@ -580,6 +589,8 @@ class MysqlHandler(Handler):
 
 	def _add_mysql_users(self, root_user, repl_user, stat_user):
 		self._stop_mysql()
+		self._logger.info("Adding mysql system users")
+
 		myd = self._start_mysql_skip_grant_tables()
 		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
 		out = myclient.communicate('SELECT VERSION();')[0]
@@ -588,7 +599,7 @@ class MysqlHandler(Handler):
 			mysql_ver = version.StrictVersion(mysql_ver_str.group(0))
 			priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 		else:
-			raise HandlerError("Cannot determine mysql version.")
+			raise HandlerError("Cannot extract mysql version from string '%s'" % out)
 	
 		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
 		# Define users and passwords
@@ -603,6 +614,13 @@ class MysqlHandler(Handler):
 		os.kill(myd.pid, signal.SIGTERM)
 		self._start_mysql()
 		self._ping_mysql()		
+		"""
+		self._logger.debug("Checking that mysqld is terminated")
+		self._wait_until(lambda: not initd.is_running("mysql"))
+		self._logger.debug("Mysqld terminated")
+		"""
+
+		self._logger.debug("MySQL system users added")
 		return (root_password, repl_password, stat_password)
 	
 	def _update_config(self, data): 
@@ -659,6 +677,58 @@ class MysqlHandler(Handler):
 		self._logger.debug("Include added")
 			
 		self._restart_mysql()
+		self._stop_mysql()
+	
+
+	def _spawn_mysql(self, user, password):
+		#mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p' + password)
+		
+		mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
+		mysql.expect('Enter password:')
+		mysql.sendline(password)
+		
+		mysql.expect('mysql>')
+		return mysql
+
+	def _change_master(self, host, user, password, log_file, log_pos, 
+					spawn=None, mysql_user=None, mysql_password=None):
+		spawn = spawn or self._spawn_mysql(mysql_user, mysql_password)
+		self._logger.info("Changing replication master to host %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
+		# Changing replication master
+		spawn.sendline('STOP SLAVE;')
+		spawn.expect('mysql>')
+		spawn.sendline('CHANGE MASTER TO MASTER_HOST="%(host)s", \
+						MASTER_USER="%(user)s", \
+						MASTER_PASSWORD="%(password)s", \
+						MASTER_LOG_FILE="%(log_file)s", \
+						MASTER_LOG_POS=%(log_pos)s;' % vars())
+		spawn.expect('mysql>')
+		
+		# Starting slave
+		spawn.sendline('START SLAVE;')
+		spawn.expect('mysql>')
+		status = spawn.before
+		if re.search(re.compile('ERROR', re.MULTILINE), status):
+			raise HandlerError('Cannot start mysql slave: %s' % status)
+		
+		# Sleeping for a while
+		time.sleep(3)
+		spawn.sendline('SHOW SLAVE STATUS;')
+		spawn.expect('mysql>')
+		
+		# Retrieveing slave status row vith values
+		status = spawn.before.split('\r\n')[4].split('|')
+		spawn.close()
+		io_status = status[11].strip()
+		sql_status = status[12].strip()
+		
+		# Check for errors
+		if 'Yes' != io_status:
+			raise HandlerError ('IO Error while starting mysql slave: %s %s' %  (status[17], status[18]))
+		if 'Yes' != sql_status:
+			raise HandlerError('SQL Error while starting mysql slave: %s %s' %  (status[17], status[18]))
+		
+		self._logger.debug('Replication master is changed to host %s', host)		
 
 	def _start_mysql(self):
 		try:
@@ -683,6 +753,7 @@ class MysqlHandler(Handler):
 		try:
 			self._logger.info("Restarting MySQL")
 			initd.restart("mysql")
+			self._logger.debug("MySQL restarted")
 		except:
 			self._logger.error("Cannot restart MySQL")
 			raise
@@ -790,6 +861,7 @@ class MysqlHandler(Handler):
 		try:
 			self._logger.info("Mounting device %s to %s", devname, mpoint)
 			fstool.mount(devname, mpoint, auto_mount=True)
+			self._logger.debug("Device %s is mounted to %s", devname, mpoint)
 		except fstool.FstoolError, e:
 			if fstool.FstoolError.NO_FS == e.code:
 				self._logger.warning("Mount failed with NO_FS error")
