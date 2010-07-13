@@ -362,6 +362,10 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 	if loop_list:
 		logger.debug("Adding %s to fstab as loop device", privated_image)		
 		loop_entry = loop_list[0].__str__()
+		
+		if not loop_entry.endswith('\n'):
+			loop_entry += '\n'
+			
 		try:
 			fstab_file = open(fstool.Fstab.LOCATION, 'a')
 			fstab_file.write(loop_entry)
