@@ -54,7 +54,7 @@ class SnmpServer():
 		apply(mibBuilder.setMibPath, MibSources)
 			
 		try:
-			mibBuilder.loadModules('__UCD-SNMP-MIB', '__UCD-DISKIO-MIB', '__IF-MIB', '__HOST-RESOURCES-MIB')
+			mibBuilder.loadModules('__UCD-SNMP-MIB', '__UCD-DISKIO-MIB', '__IF-MIB')
 		except SmiError:
 			self._logger.error('Can\'t load modules')
 			raise
