@@ -33,9 +33,9 @@ def values():
 					  diskIODevice = diskIODevice)
 	
 	blockDevices = []
-	for device in os.listdir('/sys/block'):
+	for device in os.listdir('/sys/block/'):
 		blockDevices.append(device)
-		subDevices = os.listdir('/sys/block' + device)
+		subDevices = os.listdir('/sys/block/' + device)
 		for subDevice in subDevices:
 			if re.match("^[hs]d[a-z]\d+", subDevice):
 				blockDevices.append(subDevice)			
