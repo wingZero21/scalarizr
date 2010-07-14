@@ -84,7 +84,7 @@ def is_running(name):
 	cmd = [_services[name]["initd_script"], "status"]
 	out, err = system(cmd, shell=False)[0:2]
 	out += err
-	if disttool.is_ubuntu() and disttool._linux_dist[1] == '8.04':
+	if name == "mysql" and disttool.is_ubuntu() and disttool.linux_dist()[1] == '8.04':
 		return out.lower().find("Uptime:") != -1
 	else:
 		return out.lower().find("running") != -1
