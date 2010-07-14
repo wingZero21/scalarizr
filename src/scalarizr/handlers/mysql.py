@@ -451,7 +451,7 @@ class MysqlHandler(Handler):
 	def _create_storage(self, vol_id, mnt_point, vol=None):
 		devname = '/dev/sdo'
 		self._logger.info("Creating EBS storage (volume: %s, devname: %s) and mount to %s", 
-				vol_id, devname, mnt_point)
+				vol.id if vol else vol_id, devname, mnt_point)
 		
 		ec2_conn = self._get_ec2_conn()
 		if not vol:
@@ -501,7 +501,7 @@ class MysqlHandler(Handler):
 		self._logger.debug("Volume created")
 		
 		self._logger.info('Checking that EBS volume %s is available', ebs_volume.id)
-		self._wait_until(lambda: 'available' != ebs_volume.volume_state())
+		self._wait_until(lambda: 'available' == ebs_volume.volume_state())
 		self._logger.info("Volume %s available", ebs_volume.id)
 		
 		return ebs_volume
@@ -821,14 +821,12 @@ class MysqlHandler(Handler):
 				myCnf = re.sub(sectionrow, '\\1\\2\n'+ directive + ' = ' +dirname + '\n\\3' , myCnf)
 			else:
 				myCnf += '\n' + directive + ' = ' + dirname		
+				
 		# Setting new directory permissions
-		"""
-		@todo: Brokes Ubuntu 10.04 ?
 		try:
 			os.chown(directory, mysql_user.pw_uid, mysql_user.pw_gid)
 		except OSError, e:
 			self._logger.error('Cannot chown Mysql directory %s', directory)
-		"""
 					
 		# Writing new MySQL config
 		file = open(MY_CNF_PATH, 'w')
