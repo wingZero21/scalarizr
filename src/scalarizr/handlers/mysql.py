@@ -472,7 +472,7 @@ class MysqlHandler(Handler):
 		vol.attach(self._platform.get_instance_id(), devname)
 		self._logger.debug("Checking that volume %s is attached", vol.id)
 		self._wait_until(lambda: vol.update() and vol.attachment_state() == "attached")
-		self._logger.debug("Volume %s attached", vol_id)
+		self._logger.debug("Volume %s attached",  vol.id)
 			
 		# Wait when device will be added
 		self._logger.info("Checking that device %s is available", devname)
@@ -498,10 +498,10 @@ class MysqlHandler(Handler):
 		
 		self._logger.info("Creating EBS volume from snapshot %s in avail zone %s", snap_id, avail_zone)
 		ebs_volume = ec2_conn.create_volume(None, avail_zone, snap_id)
-		self._logger.debug("Volume created")
+		self._logger.debug("Volume %s created from snapshot %s", ebs_volume.id, snap_id)
 		
 		self._logger.info('Checking that EBS volume %s is available', ebs_volume.id)
-		self._wait_until(lambda: 'available' == ebs_volume.volume_state())
+		self._wait_until(lambda: ebs_volume.update() == "available")
 		self._logger.info("Volume %s available", ebs_volume.id)
 		
 		return ebs_volume

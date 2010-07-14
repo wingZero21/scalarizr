@@ -643,8 +643,8 @@ def main():
 		try:
 			while _running:
 				msg_thread.join(0.2)
-				if not msg_thread.isAlive():
-					raise ScalarizrError("%s thread unexpectedly terminated" % msg_thread.name)
+				#if not msg_thread.isAlive():
+				#	raise ScalarizrError("%s thread unexpectedly terminated" % msg_thread.name)
 		except KeyboardInterrupt:
 			pass
 		finally:
