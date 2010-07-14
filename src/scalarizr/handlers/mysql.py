@@ -606,12 +606,14 @@ class MysqlHandler(Handler):
 		root_password, repl_password, stat_password = map(lambda x: re.sub('[^\w]','', cryptotool.keygen(20)), range(3))
 		# Add users
 		sql = "INSERT INTO mysql.user VALUES('%','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
+		sql += " INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
 		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_slave_priv) VALUES ('%','"+repl_user+"',PASSWORD('"+repl_password+"'),'Y');"
 		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');"
 		sql += " FLUSH PRIVILEGES;"
 		out,err = myclient.communicate(sql)
 		
 		os.kill(myd.pid, signal.SIGTERM)
+		time.sleep(3)
 		self._start_mysql()
 		self._ping_mysql()		
 		"""
@@ -619,6 +621,11 @@ class MysqlHandler(Handler):
 		self._wait_until(lambda: not initd.is_running("mysql"))
 		self._logger.debug("Mysqld terminated")
 		"""
+		self._update_config(dict(
+			root_password=root_password,
+			repl_password=repl_password,
+			stat_password=stat_password
+		))
 
 		self._logger.debug("MySQL system users added")
 		return (root_password, repl_password, stat_password)
@@ -675,14 +682,13 @@ class MysqlHandler(Handler):
 		finally:
 			file.close()
 		self._logger.debug("Include added")
-			
+		self._add_apparmor_rules(repl_conf_path)			
 		self._restart_mysql()
 		self._stop_mysql()
 	
 
 	def _spawn_mysql(self, user, password):
 		#mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p' + password)
-		
 		mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
 		mysql.expect('Enter password:')
 		mysql.sendline(password)
@@ -835,24 +841,30 @@ class MysqlHandler(Handler):
 			
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
-			try:
-				file = open('/etc/apparmor.d/usr.sbin.mysqld', 'r')
-			except IOError, e:
-				pass
-			else:
-				app_rules = file.read()
-				file.close()
-				if not re.search (directory, app_rules):
-					file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
+			self._add_apparmor_rules(directory)
+			
+	def _add_apparmor_rules(self, directory):
+		try:
+			file = open('/etc/apparmor.d/usr.sbin.mysqld', 'r')
+		except IOError, e:
+			pass
+		else:
+			app_rules = file.read()
+			file.close()
+			if not re.search (directory, app_rules):
+				file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
+				if os.path.isdir(directory):
 					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+'/ r,\n'+'\\2', app_rules)
 					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1'+directory+'/** rwk,\n'+'\\2', app_rules)
-					file.write(app_rules)
-					file.close()
-					initd.explore('apparmor', '/etc/init.d/apparmor')
-					try:
-						initd.reload('apparmor', True)
-					except initd.InitdError, e:
-						self._logger.error('Cannot restart apparmor. %s', e)									
+				else:
+					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+' r,\n'+'\\2', app_rules)
+				file.write(app_rules)
+				file.close()
+				initd.explore('apparmor', '/etc/init.d/apparmor')
+				try:
+					initd.reload('apparmor', True)
+				except initd.InitdError, e:
+					self._logger.error('Cannot restart apparmor. %s', e)	
 
 	
 	def _mount_device(self, devname, mpoint):
