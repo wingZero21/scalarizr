@@ -15,6 +15,7 @@ import logging, os, re, time, pexpect
 import signal, pwd, random 
 from boto.exception import BotoServerError
 
+
 if disttool.is_redhat_based():
 	initd_script = "/etc/init.d/mysqld"
 elif disttool.is_debian_based():
@@ -62,6 +63,7 @@ ROOT_USER = "scalr"
 REPL_USER = "scalr_repl"
 STAT_USER = "scalr_stat"
 
+STORAGE_DEVNAME = "/dev/sdo"
 STORAGE_PATH = "/mnt/dbstorage"
 STORAGE_DATA_DIR = "mysql-data"
 STORAGE_BINLOG_PATH = "mysql-misc/binlog.log"
@@ -169,11 +171,12 @@ class MysqlHandler(Handler):
 		bus.on("before_host_up", self.on_before_host_up)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return behaviour == Behaviours.MYSQL and (message.name == MysqlMessages.MASTER_UP
-			or   message.name == MysqlMessages.PROMOTE_TO_MASTER
-			or   message.name == MysqlMessages.CREATE_DATA_BUNDLE
-			or   message.name == MysqlMessages.CREATE_BACKUP
-			or   message.name == MysqlMessages.CREATE_PMA_USER)
+		return Behaviours.MYSQL in behaviour and (
+					message.name == MysqlMessages.NEW_MASTER_UP
+				or 	message.name == MysqlMessages.PROMOTE_TO_MASTER
+				or 	message.name == MysqlMessages.CREATE_DATA_BUNDLE
+				or 	message.name == MysqlMessages.CREATE_BACKUP
+				or 	message.name == MysqlMessages.CREATE_PMA_USER)
 
 	def on_Mysql_CreateDataBundle(self, message):
 		# Retrieve password for salr mysql user
@@ -200,21 +203,18 @@ class MysqlHandler(Handler):
 		if not int(self._sect.get(OPT_REPLICATION_MASTER)):
 			self._stop_mysql()
 			
-			succeed = False
-			slave_vol_id = 	self._sect.get(OPT_STORAGE_VOLUME_ID)		
+			ec2_conn = self._platform.new_ec2_conn()
+			slave_vol_id = 	self._sect.get(OPT_STORAGE_VOLUME_ID)
+			master_vol_id = self._queryenv.list_role_params(self._role_name)[PARAM_MASTER_EBS_VOLUME_ID]
+			master_vol = None
+			tx_complete = False
 			try:
-				role_params = self._queryenv.list_role_params(self._role_name)
+				self._unplug_storage(slave_vol_id, self._storage_path)
 				
-				# Unmount slave EBS volume
-				try:
-					fstool.umount(self._storage_path, clean_fstab=True)
-				except fstool.FstoolError, e:
-					self._logger.warning(e)
-				
-				master_vol = self._take_master_volume(role_params[PARAM_MASTER_EBS_VOLUME_ID])
+				master_vol = self._take_master_volume(master_vol_id)
 				
 				# Mount previous master's EBS volume						
-				self._create_storage(master_vol.id, self._storage_path)
+				self._plug_storage(master_vol.id, self._storage_path)
 				if self._storage_valid():
 					# Point datadir and log_bin to ebs 
 					self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
@@ -237,24 +237,27 @@ class MysqlHandler(Handler):
 					))
 				else:
 					raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
-				succeed = True
+				tx_complete = True
 			except (Exception, BaseException), e:
 				self._logger.error("Promote to master failed. %s", e)
+
+				# Get back slave storage
+				self._plug_storage(slave_vol_id, self._storage_path)
+				
+				if master_vol and master_vol.id != master_vol_id:
+					ec2_conn.delete_volume(master_vol.id)
+				
 				self._send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 					status="error",
 					last_error=str(e)
 				))
-				
-				# Rollback. Mount slave EBS back
-				self._mount_device('/dev/sdo', self._storage_path)
-				
+
 			
 			# Start MySQL
 			self._start_mysql()				
 			
-			if succeed:
+			if tx_complete:
 				# Delete slave EBS
-				ec2_conn = self._get_ec2_conn()				
 				ec2_conn.detach_volume(slave_vol_id, force=True)
 				ec2_conn.delete_volume(slave_vol_id)
 			
@@ -321,7 +324,7 @@ class MysqlHandler(Handler):
 		self._logger.info("Initializing MySQL master")
 		
 		# Mount EBS
-		self._create_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
+		self._plug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
 		
 		# Stop MySQL server
 		self._stop_mysql()
@@ -389,7 +392,7 @@ class MysqlHandler(Handler):
 			
 			# Waiting until ebs volume will be created							
 			#if "ebs" == role_params[PARAM_DATA_STORAGE_ENGINE]:
-			self._create_storage(None, self._storage_path, vol=ebs_volume)
+			self._plug_storage(None, self._storage_path, vol=ebs_volume)
 
 			"""	
 			elif "eph" == role_params[PARAM_DATA_STORAGE_ENGINE]:
@@ -402,7 +405,7 @@ class MysqlHandler(Handler):
 				
 				# Mount EBS with mysql data
 				tmpdir = '/mnt/tmpdir'
-				self._create_storage(ebs_volume.id, tmpdir)
+				self._plug_storage(ebs_volume.id, tmpdir)
 				if self._storage_valid(tmpdir):
 					# Rsync data from ebs to ephemeral device
 					rsync = filetool.Rsync().archive()
@@ -429,28 +432,34 @@ class MysqlHandler(Handler):
 		self._start_mysql()
 		
 		# Change replication master 
-		try:
-			master_host = list(host 
+		master_host = None
+		self._logger.info("Requesting master server")
+		while not master_host:
+			try:
+				master_host = list(host 
 					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
-					if host.replication_master)[0] 
-		except IndexError:
-			raise HandlerError("Cannot get master host. QueryEnv returns no host with replication_master=1")
-		else:
-			host = master_host.internal_ip or master_host.external_ip
-			self._logger.info("Changing replication master to %s", host)			
-			self._change_master(
-				host=host, 
-				user=REPL_USER, 
-				password=self._sect.get(OPT_REPL_PASSWORD),
-				log_file=self._sect.get(OPT_LOG_FILE), 
-				log_pos=self._sect.get(OPT_LOG_POS), 
-				mysql_user=ROOT_USER,
-				mysql_password=self._sect.get(OPT_ROOT_PASSWORD)
-			)
+					if host.replication_master)[0]
+			except IndexError:
+				self._logger.debug("QueryEnv respond with no mysql master. " + 
+						"Waiting %d seconds before the next attempt", 5)
+				time.sleep(5)
+		self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
+				master_host.internal_ip, master_host.external_ip)
 		
-	def _create_storage(self, vol_id, mnt_point, vol=None):
-		devname = '/dev/sdo'
-		self._logger.info("Creating EBS storage (volume: %s, devname: %s) and mount to %s", 
+		host = master_host.internal_ip or master_host.external_ip
+		self._change_master(
+			host=host, 
+			user=REPL_USER, 
+			password=self._sect.get(OPT_REPL_PASSWORD),
+			log_file=self._sect.get(OPT_LOG_FILE), 
+			log_pos=self._sect.get(OPT_LOG_POS), 
+			mysql_user=ROOT_USER,
+			mysql_password=self._sect.get(OPT_ROOT_PASSWORD)
+		)
+		
+	def _plug_storage(self, vol_id, mnt_point, vol=None):
+		devname = STORAGE_DEVNAME
+		self._logger.info("Create EBS storage (volume: %s, devname: %s) and mount to %s", 
 				vol.id if vol else vol_id, devname, mnt_point)
 		
 		ec2_conn = self._get_ec2_conn()
@@ -479,13 +488,32 @@ class MysqlHandler(Handler):
 		self._wait_until(lambda: os.access(devname, os.F_OK | os.R_OK))
 		self._logger.debug("Device %s is available", devname)
 		
-		"""
-		2010-07-07 13:16:38,255 - ERROR - scalarizr.handlers - Exception in message handler LifeCircleHandler
-		2010-07-07 13:16:38,255 - ERROR - scalarizr.handlers - ("Cannot mount device '/dev/sdo'. mount: special device /dev/sdo does not exist\n", -101)
-		Need to wait for IntBlockDeviceUpdated
-		"""
 		# Mount EBS
 		self._mount_device(devname, mnt_point)
+
+	def _unplug_storage(self, vol_id, mnt_point, vol=None):
+		self._logger.info("Unplug EBS storage (volume: %s) from mpoint %s", 
+				vol.id if vol else vol_id, mnt_point)
+		
+		ec2_conn = self._get_ec2_conn()
+		if not vol:
+			try:
+				vol = ec2_conn.get_all_volumes([vol_id])[0]
+			except IndexError:
+				raise HandlerError("Volume %s not found" % vol_id)		
+		
+		# Unmount volume
+		if os.path.ismount(self._storage_path):
+			self._logger.info("Unmounting storage %s", self._storage_path)
+			fstool.umount(self._storage_path, clean_fstab=True)
+			self._logger.debug("Storage %s unmounted", self._storage_path)
+		
+		# Detach volume
+		self._logger.info("Detaching storage volume %s", vol.id)
+		vol.detach()
+		self._wait_until(lambda: vol.update() == "available")
+		self._logger.debug("Volume %s detached", vol.id)
+
 	
 	def _storage_valid(self, path=None):
 		data_dir = os.path.join(path, STORAGE_DATA_DIR) if path else self._data_dir
@@ -521,6 +549,7 @@ class MysqlHandler(Handler):
 
 	def _take_master_volume(self, volume_id):
 		# Lookup master volume
+		self._logger.info("Taking master EBS volume %s", volume_id)
 		ec2_conn = self._get_ec2_conn()
 		zone = self._platform.get_avail_zone()						
 		try:
@@ -530,12 +559,22 @@ class MysqlHandler(Handler):
 
 		# For EBS in another avail zone we need to snapshot it
 		# and create EBS in our avail zone
-		self._logger.info("Master volume %s (zone: %s). Me is in %s zone", 
-				master_vol.id, master_vol.zone, zone)
+		self._logger.debug("Taked master volume %s (zone: %s)", master_vol.id, master_vol.zone)
 		if master_vol.zone != zone:
-			self._logger.info("Master volume is in another zone. Create volume in %s", zone)
+			self._logger.info("Master volume is in another zone (volume zone: %s, server zone: %s) " + 
+					"Creating volume in %s zone", 
+					master_vol.id, zone, zone)
+			self._logger.debug("Creating snapshot from volume %s", master_vol.id)
 			master_snap = ec2_conn.create_snapshot(master_vol.id)
-			master_vol = self._create_volume_from_snapshot(master_snap.id, zone)
+			self._logger.debug("Snapshot %s created from volume %s", master_snap.id, master_vol.id)
+			try:
+				master_vol = self._create_volume_from_snapshot(master_snap.id, zone)
+			finally:
+				self._logger.debug("Deleting snapshot %s", master_snap.id)
+				master_snap.delete()
+				self._logger.debug("Snapshot %s deleted", master_snap.id)
+				
+			self._logger.info("Use %s as master data volume", master_vol.id)
 		
 		return master_vol
 
