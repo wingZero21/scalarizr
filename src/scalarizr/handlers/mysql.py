@@ -12,7 +12,8 @@ from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re, time, pexpect
-import signal, pwd, random 
+import signal, pwd, random
+import shutil
 from boto.exception import BotoServerError
 
 
@@ -29,7 +30,7 @@ if not os.path.exists(initd_script):
 pid_file = None
 try:
 	out = system("my_print_defaults mysqld")
-	m = re.search("--pid_file=(.*)", out, re.MULTILINE)
+	m = re.search("--pid[-_]file=(.*)", out, re.MULTILINE)
 	if m:
 		pid_file = m.group(1)
 except:
@@ -428,7 +429,14 @@ class MysqlHandler(Handler):
 		self._move_mysql_dir('datadir', self._data_dir, 'mysqld')
 		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
 		self._replication_init(master=False)
-		
+		if disttool._is_debian_based and os.path.exists(STORAGE_PATH + os.sep +'debian.cnf') :
+			try:
+				self._logger.info("Copying debian.cnf from storage to mysql configuration directory")
+				shutil.copy(STORAGE_PATH + os.sep +'debian.cnf', '/etc/mysql/')
+			except BaseException, e:
+				self._logger.error("Cannot copy debian.cnf file from storage: ", e)
+				
+					
 		self._start_mysql()
 		
 		# Change replication master 
@@ -600,7 +608,13 @@ class MysqlHandler(Handler):
 				log_pos = log_row.group(2)
 			else:
 				log_file = log_pos = None
-				
+			
+			if os.path.exists('/etc/mysql/debian.cnf'):
+				try:
+					self._logger.info("Copying debian.cnf file to storage")
+					shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
+				except BaseException, e:
+					self._logger.error("Cannot copy debian.cnf file to storage: ", e)
 			# Creating EBS snapshot
 			snap_id = None if dry_run else self._create_ebs_snapshot()
 	
