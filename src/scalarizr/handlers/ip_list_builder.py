@@ -56,7 +56,7 @@ class IpListBuilder(Handler):
 			self._logger.error(x)
 	
 	def _remove_dir(self, d):
-		if not os.listdir(d):
+		if os.path.exists(d) and not os.listdir(d):
 			try:
 				self._logger.debug("Remove dir %s", d)
 				os.removedirs(d)
@@ -64,11 +64,12 @@ class IpListBuilder(Handler):
 				self._logger.error(x)
 	
 	def _remove_file(self, f):
-		try:
-			self._logger.debug("Remove file %s", f)
-			os.remove(f)
-		except OSError, x:
-			self._logger.error(x)
+		if os.path.exists(f):
+			try:
+				self._logger.debug("Remove file %s", f)
+				os.remove(f)
+			except OSError, x:
+				self._logger.error(x)
 			
 	def _host_is_replication_master(self, ip,role_name):
 		try:
