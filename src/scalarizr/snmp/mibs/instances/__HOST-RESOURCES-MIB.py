@@ -79,15 +79,20 @@ def hrSWRunvalues():
 		if pid.isdigit():
 			index = int(pid)
 			devicelist['hrSWRunIndex'+pid] = MibScalarInstance(hrSWRunIndex.getName(), (index ,), hrSWRunIndex.getSyntax().clone(index))
-
-			fp = open('/proc/'+pid+'/stat')
+			
+			try:
+				fp = open('/proc/'+pid+'/stat')
+			except:
+				continue
 			status = fp.read().split()
 			fp.close()			
 			proc_name = status[1][1:-1]
 			proc_state = status[2]
 			proc_perfcpu = int(status[13]) + int(status[14])
-			
-			fp = open('/proc/'+pid+'/status')
+			try:
+				fp = open('/proc/'+pid+'/status')
+			except:
+				continue
 			status = fp.readlines()
 			fp.close()			
 			proc_perfmem = status[14].split()[1].strip()
