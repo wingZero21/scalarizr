@@ -115,5 +115,5 @@ class NginxHandler(Handler):
 		bus.fire("nginx_upstream_reload")
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return behaviour == Behaviours.WWW and \
+		return Behaviours.WWW in behaviour and \
 			(message.name == Messages.HOST_UP or message.name == Messages.HOST_DOWN)	
