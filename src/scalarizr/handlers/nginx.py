@@ -49,12 +49,13 @@ class NginxHandler(Handler):
 			f.close()
 		template = open(template_path, 'r').read()
 
-		# Create upstream hosts configuration	
+		# Create upstream hosts configuration
 		upstream_hosts = ""
 		for app_serv in self._queryenv.list_roles(behaviour = Behaviours.APP):
 			for app_host in app_serv.hosts :
 				upstream_hosts += "\tserver %s:%s;\n" % (app_host.internal_ip, app_port)
 		if not upstream_hosts:
+			self._logger.debug("Scalr returned empty app hosts list. Filling template with localhost only.")
 			upstream_hosts = "\tserver 127.0.0.1:80;\n"
 		
 		template = template.replace("${upstream_hosts}", upstream_hosts)
@@ -65,14 +66,27 @@ class NginxHandler(Handler):
 		pk_path = configtool.get_key_filename("https.key", private=True) 
 		if os.path.isfile(bus.etc_path+"/nginx/https.include") and \
 				os.path.isfile(cert_path) and os.path.isfile(pk_path):
-			template += "include " + bus.etc_path + "/nginx/https.include;"
+			https_include = bus.etc_path + "/nginx/https.include;"
+			self._logger.debug("Adding %s to template", https_include)
+			template += "include "  + https_include
 			
 		#Determine, whether configuration was changed or not
 		
+		old_include = None
+		
+		file = None
 		if os.path.isfile(include):
-			old_include = open(include,'r').read()
-			if template == old_include:
-				self._logger.info("nginx upstream configuration wasn`t changed.")
+			try:
+				file = open(include,'r')
+				old_include = file.read()
+			except IOError, e:
+				self._logger.error("Cannot read %s file: %s" % (include, str(e)))
+			finally:
+				if file:
+					file.close()
+			
+		if template == old_include:
+			self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:
 			self._logger.info("nginx upstream configuration was changed.")
 			if os.path.isfile(include):
@@ -112,6 +126,7 @@ class NginxHandler(Handler):
 				self._logger.info("Nginx not found.")
 			elif not os.path.isfile(nginx_pid_file):
 				self._logger.info("/var/run/nginx.pid does not exist. Probably nginx haven`t been started")
+		
 		bus.fire("nginx_upstream_reload")
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
