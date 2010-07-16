@@ -6,6 +6,7 @@ from scalarizr.util import init_tests
 import os
 from scalarizr.bus import bus
 from scalarizr.handlers import ip_list_builder
+from scalarizr.messaging import Message
 
 class _Bunch(dict):
 			__getattr__, __setattr__ = dict.get, dict.__setitem__
@@ -30,9 +31,6 @@ class _QueryEnv:
 				]
 			)]
 		
-class Message:
-	def __init__(self,body={}):
-		self.body = body
 	
 class TestIpListBuilder(unittest.TestCase):
 	
@@ -48,12 +46,13 @@ class TestIpListBuilder(unittest.TestCase):
 	def _on_HostUpDown(self,internal_ip, prefix):
 		role_alias = 'mysql'
 		role_name = 'mysql-lvm'
-		role_dir = self.base_name + os.sep + role_name
+		role_dir = self.ip_lb._base_path + os.sep + role_name
 		role_file = role_dir + os.sep + internal_ip
-		mysql_dir = self.base_name + os.sep + role_alias + prefix #
+		mysql_dir = self.ip_lb._base_path + os.sep + role_alias + prefix #
 		mysql_file = mysql_dir + os.sep + internal_ip
-		msg = Message(dict(RoleAlias=role_alias,InternalIP=internal_ip,RoleName=role_name))
+		msg = Message(body=dict(role_name=role_name, behaviour=role_alias, local_ip=internal_ip))
 		self.ip_lb.on_HostUp(msg)
+
 		self.assertTrue(os.path.exists(role_dir) and os.path.isdir(role_dir))
 		self.assertTrue(os.path.exists(role_file) and os.path.isfile(role_file))
 		self.assertTrue(os.path.exists(mysql_dir) and os.path.isdir(mysql_dir))
@@ -71,9 +70,11 @@ class TestIpListBuilder(unittest.TestCase):
 	def test_on_HostUpDown2(self):
 		self._on_HostUpDown(internal_ip = '127.0.0.2', prefix = "-slave")
 
-init_tests()
-config = bus.config
-config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../etc/public.d/handler.ip_list_builder.ini"))
-bus.queryenv_service = _QueryEnv()				
 if __name__ == "__main__":
+	init_tests()
+	config = bus.config
+	config.read( os.path.realpath(os.path.dirname(__file__) + "/../../../etc/public.d/handler.ip_list_builder.ini"))
+	bus.queryenv_service = _QueryEnv()	
+	bus.define_events("before_host_up")			
+	
 	unittest.main()
