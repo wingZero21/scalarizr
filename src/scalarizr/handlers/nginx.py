@@ -76,6 +76,7 @@ class NginxHandler(Handler):
 		
 		file = None
 		if os.path.isfile(include):
+			self._logger.debug("Reading old configuration from %s", include)
 			try:
 				file = open(include,'r')
 				old_include = file.read()
@@ -89,8 +90,10 @@ class NginxHandler(Handler):
 			self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:
 			self._logger.info("nginx upstream configuration was changed.")
+			self._logger.debug("Creating backup config files.")
 			if os.path.isfile(include):
 				shutil.move(include, include+".save")
+			self._logger.debug("Writing template to %s", include)
 			file = open(include, "w")
 			file.write(template)
 			file.close()
