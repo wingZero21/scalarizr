@@ -8,6 +8,8 @@ from ConfigParser import RawConfigParser
 import logging
 import binascii
 import os
+import shutil
+
 
 #TODO method to remove individual options
 
@@ -96,6 +98,9 @@ def write_key(path, key, key_title=None, private=None, base64encode=False):
 			else get_key_filename(os.path.basename(path), private)
 	file = None
 	try:
+		keys_dir = os.path.dirname(filename)
+		if not os.path.exists(keys_dir):
+			os.makedirs(keys_dir)
 		if os.path.exists(filename):
 			os.chmod(filename, 0600)
 		file = open(filename, "w+")
@@ -233,7 +238,7 @@ def update(filename, sections):
 				logger.debug("Create option '%s' and append it in the end of section '%s'", 
 						opt_name, sect_name)
 				# Create option and append it in the end
-				cur_opt = Option(opt_name, value)
+				cur_opt = Option(opt_name, value if value != None else "")
 				cur_sect.items.append(cur_opt)
 			else:
 				cur_opt.value = value
@@ -305,22 +310,69 @@ class _SectionWrapper(object):
 def section_wrapper(config, section):
 	return _SectionWrapper(config, section)
 
-def mount_private_d(mount_point, privated_image = '/mnt/privated.img', blocks_count = '10000'):
-	from scalarizr.util import system, fstool
+def mount_private_d(mpoint, privated_image, blocks_count):
+	from scalarizr.util import system, fstool, format_size
+	from scalarizr.util.filetool import Rsync
 	logger = logging.getLogger(__name__)
-	if not os.path.exists(mount_point):
-		os.makedirs(mount_point)
+	
+	logger.info("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
+			mpoint, privated_image, format_size(1024*blocks_count))
+	mtab = fstool.Mtab()
+	if mtab.contains(mpoint=mpoint):
+		logger.warning("private.d already mounted to %s", mpoint)
+		return
+	
+	if not os.path.exists(mpoint):
+		os.makedirs(mpoint)
 		
-	if not os.path.exists(privated_image):
-		logger.info("private.d image file %s not found. Creating new loop device.")
+	build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
+	retcode = system(build_image_cmd)[2]
+	if retcode:
+		logger.error('Cannot create image device')
+	os.chmod(privated_image, 0600)
 		
-		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
-		retcode = system(build_image_cmd)[2]
-		if retcode:
-			logger.error('Cannot create device image')
+	logger.debug("Creating file system on image device")
+	fstool.mkfs(privated_image)
+		
+	mnt_opts = ('-t auto', '-o loop,rw')
+	if os.listdir(mpoint):
+		logger.debug("%s contains data. Need to copy it ot image before mounting", mpoint)
+		# If mpoint not empty copy all data to the image
+		try:
+			tmp_mpoint = "/mnt/tmp-privated"
+			os.makedirs(tmp_mpoint)
+			logger.debug("Mounting %s to %s", privated_image, tmp_mpoint)
+			fstool.mount(privated_image, tmp_mpoint, mnt_opts)
+			logger.debug("Copy data from %s to %s", mpoint, tmp_mpoint)
+			system(str(Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)))
+		finally:
+			try:
+				fstool.umount(mpoint=tmp_mpoint)
+			except fstool.FstoolError:
+				pass
+			try:
+				os.removedirs(tmp_mpoint)
+			except OSError:
+				pass
+		
+	logger.debug("Mounting %s to %s", privated_image, mpoint)
+	fstool.mount(privated_image, mpoint, mnt_opts)
+	
+	loop_list = mtab.find(mpoint=mpoint, rescan=True)
+	if loop_list:
+		logger.debug("Adding %s to fstab as loop device", privated_image)		
+		loop_entry = loop_list[0].__str__()
+		
+		if not loop_entry.endswith('\n'):
+			loop_entry += '\n'
 			
-		logger.debug("Creating file system on new device.")
-		fstool.mkfs(privated_image)
-		
-	logger.debug("Trying to mount file %s as loop device in %s directory.", privated_image, mount_point)	
-	fstool.mount(privated_image, mpoint = mount_point, options =('-t auto','-o loop,rw'), auto_mount=False)
+		try:
+			fstab_file = open(fstool.Fstab.LOCATION, 'a')
+			fstab_file.write(loop_entry)
+		except OSError, e:
+			logger.error("Cannot write to fstab file. %s", e)
+		else:
+			fstab_file.close()
+				
+	else:
+		logger.error("Mtab file does not contain entry with %s mount point", mpoint)

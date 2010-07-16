@@ -1,5 +1,6 @@
 from scalarizr.util import Observable, xml_strip
 import xml.dom.minidom as dom
+import logging
 
 class MessagingError(BaseException):
 	pass
@@ -80,16 +81,20 @@ class Message(object):
 
 	def _walk_decode(self, var, el):
 		for ch in el.childNodes:
-			f = ch.firstChild
-			if f and f.hasChildNodes():
-				is_list = all((ch.nodeName == "item" for ch in f.childNodes))
+			#print "el: %s" % ch.nodeName 
+			if len(ch.childNodes) > 1:
+				is_list = all((ch2.nodeName == "item" for ch2 in ch.childNodes))
 				var2 = var[ch.nodeName] = list() if is_list else dict()
+				#print "var2 -> " + str(type(var2)) + ". next level"
 				self._walk_decode(var2, ch)
 			else:
+				f = ch.firstChild				
 				val = f.nodeValue if f else None
 				if isinstance(var, list):
+					#print "Push %s into %s" % (val, var)
 					var.append(val)
 				else:
+					#print "Put %s into %s at %s" % (val, var, ch.nodeName)
 					var[ch.nodeName] = val 
 	
 	def __str__(self):
@@ -144,6 +149,9 @@ class MessageProducer(Observable):
 	def send(self, queue, message):
 		pass
 	
+	def shutdown(self):
+		pass
+	
 class MessageConsumer(object):
 	_listeners = []
 	
@@ -159,6 +167,9 @@ class MessageConsumer(object):
 		pass
 	
 	def stop(self):
+		pass
+	
+	def shutdown(self):
 		pass
 	
 class Queues:
@@ -208,7 +219,13 @@ class Messages:
 	@broadcast
 	Fires when scalarizr is resumed after reboot
 	"""
-
+	
+	RESTART = "Restart"
+	"""
+	@broadcast
+	Fires when server is resumed after stop
+	"""
+	
 	BLOCK_DEVICE_ATTACHED = "BlockDeviceAttached"
 	"""
 	@broadcast

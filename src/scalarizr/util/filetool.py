@@ -118,6 +118,10 @@ class Rsync(object):
 	def links(self):
 		self._options.append('-l')
 		return self
+	
+	def verbose(self):
+		self._options.append('-v')
+		return self
 		
 	def dereference(self):
 		self._options.append('-L')

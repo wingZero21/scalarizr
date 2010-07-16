@@ -3,16 +3,20 @@ Created on Jun 17, 2010
 
 @author: marat
 '''
-from scalarizr.util import UtilError, system, ping_service
+from scalarizr.util import UtilError, system, ping_service, disttool
 import time
 import os
+from subprocess import Popen, PIPE
 
 class InitdError(UtilError):
 	output = None
 	def __init__(self, *args, **kwargs):
 		UtilError.__init__(self, *args)
-		if kwargs.has_key("output"):
-			self.output = kwargs["output"]
+		self.output = kwargs.get("output", "")
+			
+	def __str__(self):
+		s = "(output: %s)" % self.output
+		return UtilError.__str__(self) +  s
 
 
 _services = dict()
@@ -38,11 +42,16 @@ def _start_stop_reload(name, action):
 		raise InitdError("Unknown service '%s'" % (name,))
 	try:
 		cmd = [_services[name]["initd_script"], action]
-		out, err, retcode = system(cmd, shell=False)
+		proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
+		out, err = proc.communicate()
 	except OSError, e:
 		raise InitdError("Popen failed with error %s" % (e.strerror,))
-	if retcode or (out and out.find("FAILED") != -1):
+	
+	if proc.returncode:
 		raise InitdError("Cannot %s %s" % (action, name), output=out + " " + err)
+	
+	#if action != "restart" and retcode or (out and out.find("FAILED") != -1):
+	#	raise InitdError("Cannot %s %s" % (action, name), output=out + " " + err)
 	
 	pid_file = _services[name]["pid_file"]
 	
@@ -75,7 +84,10 @@ def is_running(name):
 	cmd = [_services[name]["initd_script"], "status"]
 	out, err = system(cmd, shell=False)[0:2]
 	out += err
-	return out.lower().find("running") != -1
+	if name == "mysql" and disttool.is_ubuntu() and disttool.linux_dist()[1] == '8.04':
+		return out.lower().find("Uptime:") != -1
+	else:
+		return out.lower().find("running") != -1
 
 
 

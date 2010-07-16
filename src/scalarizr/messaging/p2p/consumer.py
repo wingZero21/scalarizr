@@ -35,30 +35,46 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 		self._handler_thread = threading.Thread(name="MessageHandler", target=self.message_handler)
 			
 	def start(self):
-		if self._server is None:
-			r = urlparse(self.endpoint)
-			_HttpRequestHanler.consumer = self
-			server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-			self._server = server_cls((r.hostname, r.port),	_HttpRequestHanler)
-			self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
+		try:
+			if self._server is None:
+				r = urlparse(self.endpoint)
+				_HttpRequestHanler.consumer = self
+				server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
+				self._server = server_cls((r.hostname, r.port),	_HttpRequestHanler)
+				self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
+		except (BaseException, Exception), e:
+			self._logger.error("Cannot build server. %s", e)
 			
-		self._logger.info("Staring consumer...")
-		self._handler_thread.start() 	# start message handler
-		self._server.serve_forever() 	# start http server
-	
+		self._logger.info("Starting message consumer")
+		
+		try:
+			self._handler_thread.start() 	# start message handler
+			self._server.serve_forever() 	# start http server
+		except (BaseException, Exception), e:
+			self._logger.error("Cannot start message consumer. %s", e)
+			
 	def stop(self):
 		if (not self._server is None):
-			self._logger.info("Stopping consumer...")
+			self._logger.info("Stopping message consumer...")
 		
 			# stop http server
+			self._logger.debug("Stopping HTTP server")
 			self._server.shutdown()
-			self._logger.debug("HTTP server shutdowned")
+			self._logger.debug("HTTP server stopped")
 
 			# stop message handler thread
+			self._logger.debug("Stopping message handler")
 			self._shutdown_handler = True
 			self._handler_thread.join()
+			self._logger.debug("Message handler stopped")
 			
-			self._logger.info("Stopped")
+			self._logger.info("Message consumer stopped")
+
+	def shutdown(self):
+		self._logger.debug("Closing HTTP server")
+		self._server.server_close()
+		self._server = None		
+		self._logger.debug("HTTP server closed")
 
 	def message_handler (self):
 		store = P2pMessageStore()
@@ -87,33 +103,33 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 		
 		queue = os.path.basename(self.path)
 		rawmsg = self.rfile.read(int(self.headers["Content-length"]))
-		logger.debug("Received ingoing message. queue: '%s', rawmessage: %s", queue, rawmsg)
+		logger.debug("Received ingoing message in queue: '%s'", queue)
 		
 		try:
-			logger.debug("Decrypting message...")
+			logger.debug("Decrypting message")
 			crypto_key = binascii.a2b_base64(configtool.read_key(self.consumer.crypto_key_path))
 			xml = cryptotool.decrypt(rawmsg, crypto_key)
 			# Remove special chars
 			xml = xml.strip(''.join(chr(i) for i in range(0, 31)))		
 		except (BaseException, Exception), e:
-			err = "Cannot decrypt message. %s" % str(e)
+			err = "Cannot decrypt message. error: %s; raw message: %s" % (str(e), rawmsg)
 			logger.error(err)
 			logger.exception(e)
 			self.send_response(400, err)
 			return
 		
 		try:
-			logger.debug("Decoding message %s", xml)
+			logger.debug("Decoding message")
 			message = P2pMessage()
 			message.fromxml(xml)
 		except (BaseException, Exception), e:
-			err = "Cannot decode message. %s" % str(e)
+			err = "Cannot decode message. error: %s; xml message: %s" % (str(e), xml)
 			logger.error(err)
 			logger.exception(e)
 			self.send_response(400, err)
 			return
 		
-		logger.info("Received ingoing message. queue: '%s' message: %s" % (queue, message))
+		logger.info("Received ingoing message %s in queue %s", message.name, queue)
 		
 		try:
 			store = P2pMessageStore()

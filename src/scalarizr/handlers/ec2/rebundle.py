@@ -139,6 +139,10 @@ Bundled: %(bundle_date)s
 			# Fire 'rebundle'
 			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)
 			
+			optparser = bus.optparser
+			if optparser.values.run_import:
+				print "Rebundle complete"
+			
 		except (Exception, BaseException), e:
 			self._logger.error("Rebundle failed. %s", e)
 			self._logger.exception(e)
@@ -146,12 +150,16 @@ Bundled: %(bundle_date)s
 			# Send message to Scalr
 			self._send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "error",
-				last_error = str(e),
+				last_error = e.message if isinstance(e, BotoServerError) else str(e),
 				bundle_task_id = message.bundle_task_id
 			))		
 			
 			# Fire 'rebundle_error'
-			bus.fire("rebundle_error", role_name=role_name, last_error=str(e))
+			bus.fire("rebundle_error", role_name=role_name, last_error=e.message)
+			
+			optparser = bus.optparser
+			if optparser.values.run_import:
+				print "Rebundle failed. %s" % (e.message,)
 			
 		finally:
 			try:
@@ -237,7 +245,7 @@ Bundled: %(bundle_date)s
 		# Cleanup scalarizr private data
 		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
 		shutil.rmtree(os.path.join(etc_path, "private.d"))
-		os.makedirs(os.path.join(etc_path, "private.d/keys"))
+		#os.makedirs(os.path.join(etc_path, "private.d/keys"))
 		
 		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
 
@@ -636,8 +644,10 @@ if disttool.is_linux():
 			special_dirs.extend(["/mnt", "/proc", "/sys", "/dev"])
 			
 			for dir in special_dirs:
-				if not os.path.exists(self._image_mpoint + dir):
-					os.makedirs(self._image_mpoint + dir)
+				spec_dir = self._image_mpoint + dir
+				if not os.path.exists(spec_dir):
+					self._logger.debug("Create spec dir %s", spec_dir)
+					os.makedirs(spec_dir)
 			
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
@@ -652,7 +662,7 @@ if disttool.is_linux():
 			self._logger.info("Copy volume to image file")
 			rsync = filetool.Rsync()
 			#rsync.archive().times().sparse().links().quietly()
-			rsync.archive().times().sparse().links()
+			rsync.archive().times().sparse().links().verbose()
 			if xattr:
 				rsync.xattributes()
 			rsync.exclude(self._excludes)

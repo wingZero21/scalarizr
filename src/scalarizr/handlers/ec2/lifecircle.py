@@ -28,6 +28,7 @@ class Ec2LifeCircleHandler(Handler):
 	def on_init(self, *args, **kwargs):
 		bus.on("before_hello", self.on_before_hello)		
 		bus.on("before_host_init", self.on_before_host_init)
+		bus.on("before_restart", self.on_before_restart)
 
 		msg_service = bus.messaging_service
 		producer = msg_service.get_producer()
@@ -55,6 +56,17 @@ class Ec2LifeCircleHandler(Handler):
 
 		message.ssh_pub_key = self._platform.get_ssh_pub_key()
 
+	def on_before_restart(self, message):
+		"""
+		@param message: Restart message
+		@type message: scalarizr.messaging.Message 
+		"""
+		
+		"""
+		@todo Update ips, reset platform meta-data
+ 		@see http://docs.amazonwebservices.com/AWSEC2/latest/DeveloperGuide/index.html?Concepts_BootFromEBS.html#Stop_Start
+		"""
+		pass
 
 	def on_before_message_send(self, queue, message):
 		"""

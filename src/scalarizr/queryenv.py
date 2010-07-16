@@ -287,7 +287,11 @@ class Volume(object):
 class Role(object):
 	behaviour = None
 	name = None
-	hosts = []
+	hosts = None
+	
+	def __init__(self):
+		self.hosts = []
+	
 	def __repr__(self):
 		return 'behaviour = ' + str(self.behaviour) \
 	+ "; name = " + str(self.name) \

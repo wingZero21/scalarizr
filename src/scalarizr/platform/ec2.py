@@ -127,6 +127,7 @@ class Ec2Platform(Platform):
 		return self._ec2_cert
 	
 	def new_ec2_conn(self):
+		""" @rtype: boto.ec2.connection.EC2Connection """
 		key_id, key = self.get_access_keys()
 		return connect_ec2(key_id, key, 
 				region=RegionInfo(name=self.get_avail_zone(), endpoint="ec2.amazonaws.com"))

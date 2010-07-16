@@ -34,6 +34,8 @@ class _MysqlHandler(mysql.MysqlHandler):
 		self._messages.append(message)
 	def _create_ebs_snapshot(self):
 		pass
+	def _take_master_volume(self, volume_id, ec2_conn=None):
+		return _Volume()
 	
 LOCAL_IP = '12.34.56.78'
 

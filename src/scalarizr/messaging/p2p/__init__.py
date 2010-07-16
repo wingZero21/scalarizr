@@ -61,7 +61,7 @@ class _P2pMessageStore:
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-	
+
 	def _conn(self):
 		db = bus.db
 		return db.get().get_connection()

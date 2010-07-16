@@ -207,10 +207,10 @@ def format_size(size, precision=2):
 	ret = float(size)
 	dim = "B"
 	if ret > 1000:
-		ret = ret/1024
+		ret = ret/1000
 		dim = "K"
 	if ret > 1000:
-		ret = ret/1024
+		ret = ret/1000
 		dim = "M"
 		
 	s = "%."+str(precision)+"f%s"
@@ -258,10 +258,11 @@ def init_tests():
 			format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", 
 			stream=sys.stdout, 
 			level=logging.DEBUG)
+	import scalarizr as szr
 	from scalarizr.bus import bus
 	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../test/resources/etc")
-	from scalarizr import _init
-	_init()
+	szr._init()
+	szr._read_bhs_config()
 	
 def ping_service(host=None, port=None, timeout=None, proto='tcp'):
 	if None == timeout:

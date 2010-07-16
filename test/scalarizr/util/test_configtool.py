@@ -3,7 +3,7 @@ Created on Apr 6, 2010
 
 @author: marat
 '''
-from scalarizr.util import configtool, init_tests
+from scalarizr.util import configtool, fstool, init_tests
 from scalarizr.bus import bus
 from ConfigParser import ConfigParser
 import unittest
@@ -36,7 +36,19 @@ class Test(unittest.TestCase):
 		self.assertEqual(config.get("platform_ec2", "key"), "")
 		self.assertEqual(config.get("platform_ec2", "key_id"), "^ffdfdfte33ghgbfv")
 		self.assertEqual(config.get("platform_ec2", "new_option"), "vvaalluuee")
-		
+
+	def test_mount_private_d(self):
+		try:
+			privated_path = bus.etc_path+"/private.d"
+			img_path = "/mnt/test-privated.img"
+			configtool.mount_private_d(privated_path, img_path, 10000)
+			self.assertTrue(os.path.exists(privated_path + "/keys/default"))
+			mtab = fstool.Mtab()
+			self.assertTrue(mtab.contains(mpoint=privated_path))
+		finally:
+			fstool.umount(mpoint=privated_path)
+			os.remove(img_path)
+
 
 if __name__ == "__main__":
 	init_tests()

@@ -56,6 +56,10 @@ class Test(unittest.TestCase):
 		self.assertTrue("/home" in excludes)
 		self.assertTrue(len(excludes), 3)
 
+	def test_mtab_with_loop(self):
+		filename = os.path.realpath(os.path.dirname(__file__) + "/../../resources") + "/mtab.with.loop"
+		mtab = fstool.Mtab(filename)
+		self.assertTrue(mtab.contains(mpoint="/etc/scalr/private.d"))
 		
 	def test_fstab_read(self):
 		fstab = self._new_fstab()

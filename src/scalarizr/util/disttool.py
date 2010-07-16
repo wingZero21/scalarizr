@@ -2,6 +2,8 @@
 @author: Dmytro Korsakov
 '''
 import platform
+import re
+import os
 
 _uname = None
 _linux_dist = None
@@ -17,15 +19,22 @@ _redhat_based_dists = ['centos', 'rhel', 'redhat', 'fedora']
 
 
 _uname = platform.uname()
-os = _uname[0].lower()
-_is_linux = os == "linux"
-_is_win = os == "windows"
-_is_sun = os == "sunos"
+os_name = _uname[0].lower()
+_is_linux = os_name == "linux"
+_is_win = os_name == "windows"
+_is_sun = os_name == "sunos"
 			
 if _is_linux:
-	_linux_dist = platform.linux_distribution() \
-		if hasattr(platform, "linux_distribution") \
-		else platform.dist()
+	if os.path.exists("/etc/lsb-release"):
+		fp = open("/etc/lsb-release")
+		lsb = fp.readlines()
+		fp.close()
+		_linux_dist = tuple(map(lambda i: lsb[i].split('=')[1].strip(), range(3)))
+	elif hasattr(platform, "linux_distribution"):
+		_linux_dist = platform.linux_distribution()
+	else:
+		_linux_dist = platform.dist()
+		
 	dist_name = _linux_dist[0].lower()
 	_is_redhat_based = dist_name in _redhat_based_dists
 	_is_debian_based = dist_name in _debian_based_dists

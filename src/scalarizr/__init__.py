@@ -2,10 +2,12 @@
 from scalarizr import behaviour
 from scalarizr.bus import bus
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
+from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
 	daemonize, system, disttool, fstool
+from scalarizr.util.configtool import ConfigError
 
 
 import os
@@ -17,8 +19,6 @@ import logging
 import logging.config
 from optparse import OptionParser, OptionGroup
 import binascii
-from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
-from scalarizr.util.configtool import ConfigError , mount_private_d
 import threading
 import urlparse
 import socket
@@ -41,10 +41,15 @@ class NotConfiguredError(BaseException):
 
 
 __version__ = "0.5"	
+
 EMBED_SNMPD = True
+NET_SNMPD = False
+
 _running = False
+""" @var _running: True when scalarizr is running """
 
-
+_snmp_pid = None
+""" @var _snmp_pid: Embed snmpd process pid"""
 
 def _init():
 	optparser = bus.optparser
@@ -83,18 +88,8 @@ def _init():
 	if not os.path.exists(config_filename):
 		raise ScalarizrError("Configuration file '%s' doesn't exists" % (config_filename))
 	bus.etc_path = os.path.dirname(config_filename)
-	
-	#mount_private_d(mount_point = bus.etc_path + '/private.d/')
 
-	# Load configuration
-	config = ConfigParser()
-	config.read(config_filename)
-	bus.config = config
 
-	# Configure database connection pool
-	bus.db = SqliteLocalObject(_db_connect)
-
-	
 	# Configure logging
 	if sys.version_info < (2,6):
 		# Fix logging handler resolve
@@ -105,16 +100,13 @@ def _init():
 	logger = logging.getLogger(__name__)
 	logger.info("Initialize scalarizr...")
 
+	# Load main configuration
+	config = ConfigParser()
+	config.read(config_filename)
+	bus.config = config
 
-	# Inject behaviour configurations into global config
-	bhs = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
-	for behaviour in configtool.split_array(bhs):
-		behaviour = behaviour.strip()
-		for filename in configtool.get_behaviour_filename(behaviour, ret=configtool.RET_BOTH):
-			if os.path.exists(filename):
-				logger.debug("Read behaviour configuration file %s", filename)
-				config.read(filename)
-	
+	# Configure database connection pool
+	bus.db = SqliteLocalObject(_db_connect)
 
 	
 	# Define scalarizr events
@@ -141,6 +133,24 @@ def _db_connect():
 	conn.row_factory = sqlite.Row
 	return conn
 	
+def _mount_private_d():
+	configtool.mount_private_d(bus.etc_path + "/private.d", "/mnt/privated.img", 10000)
+
+	
+def _read_bhs_config():
+	# Inject behaviour configurations into global config
+	config = bus.config
+	logger = logging.getLogger(__name__)
+	logger.debug("Read behaviours configuration...")
+	
+	bhs = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
+	for behaviour in configtool.split_array(bhs):
+		behaviour = behaviour.strip()
+		for filename in configtool.get_behaviour_filename(behaviour, ret=configtool.RET_BOTH):
+			if os.path.exists(filename):
+				logger.debug("Read behaviour configuration file %s", filename)
+				config.read(filename)
+	
 def _init_services():
 	
 	logger = logging.getLogger(__name__)
@@ -153,7 +163,7 @@ def _init_services():
 	
 	# Check that database exists (after rebundle for example)
 	db_file = os.path.join(bus.etc_path, gen_sect.get(configtool.OPT_STORAGE_PATH))
-	if not os.path.exists(db_file):
+	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
 		db_script_file = os.path.join(bus.etc_path, "public.d/db.sql")
 		logger.warning("Database doesn't exists, create new one from script '%s'", db_script_file)
 		db = bus.db
@@ -206,6 +216,7 @@ def _init_services():
 	crypto_key_title = "Scalarizr crypto key"
 	crypto_key_opt = gen_sect.option_wrapper(configtool.OPT_CRYPTO_KEY_PATH)
 
+	crypto_key = None
 	if not os.path.exists(os.path.join(bus.etc_path, ".hostinit")):
 		# Override crypto key if server was'nt already initialized
 		crypto_key = optparser.values.crypto_key or platform.get_user_data(UserDataOptions.CRYPTO_KEY)
@@ -257,7 +268,7 @@ def _init_services():
 			community_name=platform.get_user_data(UserDataOptions.FARM_HASH) \
 					or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)  
 		)
-	else:
+	if NET_SNMPD:
 		logger.debug("Initialize snmpd")
 		snmpd_conf = "/etc/snmp/snmpd.conf"
 		if not os.path.exists(snmpd_conf):
@@ -305,6 +316,7 @@ def _init_services():
 	
 def init_script():
 	_init()
+	_read_bhs_config()
 	
 	config = bus.config
 	logger = logging.getLogger(__name__)
@@ -457,7 +469,6 @@ def _behaviour_validator(value):
 				return False
 	return True
 
-_snmp_pid = None
 def _start_snmp_server():
 	# Start SNMP server in a separate process
 	pid = os.fork()
@@ -466,7 +477,7 @@ def _start_snmp_server():
 		snmp_server.start()
 		sys.exit()
 	else:
-		_snmp_pid = pid	
+		globals()["_snmp_pid"] = pid
 
 def _snmp_crash_handler(signum, frame):
 	if _running:
@@ -482,24 +493,45 @@ def _snmpd_health_check():
 				logger.error("Canot start snmpd. %s", out)
 		time.sleep(60)
 
-def _shutdown():
-	_running = False
+def onSIGTERM(*args):
 	logger = logging.getLogger(__name__)
-	logger.info("Stopping scalarizr...")
-	
-	if _snmp_pid:
-		try:
-			logging.debug("Stopping SNMP subprocess")
-			os.kill(_snmp_pid, signal.SIGTERM)
-		except OSError, e:
-			logger.error("Cannot send SIGTERM to SNMP subprocess (pid: %d). %s", _snmp_pid, e)
-	
-	msg_service = bus.messaging_service
-	consumer = msg_service.get_consumer()
-	consumer.stop()
-	# Fire terminate
-	bus.fire("terminate")
-	logger.info("Stopped")	
+	logger.info("Received SIGTERM")
+	_shutdown()
+
+def onSIGCHILD(*args):
+	logger = logging.getLogger(__name__)
+	logger.info("Received SIGCHILD from SNMP process")
+	if globals()["_running"]:
+		_start_snmp_server()
+
+
+def _shutdown(*args):
+	logger = logging.getLogger(__name__)
+	if globals()["_running"]:
+		logger.info("Stopping scalarizr...")
+		try:		
+			if EMBED_SNMPD and _snmp_pid:
+				try:
+					logging.debug("Stopping SNMP subprocess")
+					os.kill(_snmp_pid, signal.SIGTERM)
+				except OSError, e:
+					logger.error("Cannot kill SIGTERM to SNMP subprocess (pid: %d). %s", _snmp_pid, e)
+			
+			msg_service = bus.messaging_service
+			consumer = msg_service.get_consumer()
+			consumer.stop()
+			consumer.shutdown()
+			
+			producer = msg_service.get_producer()
+			producer.shutdown()
+			
+			# Fire terminate
+			bus.fire("terminate")
+			logger.info("Stopped")
+		finally:
+			globals()["_running"] = False
+	else:
+		logger.warning("Scalarizr is not running. Nothing to stop")	
 
 def main():
 	try:
@@ -557,7 +589,7 @@ def main():
 			
 		optparser.parse_args()
 	
-		_init()		
+		_init()
 	
 		if optparser.values.gen_key:
 			print cryptotool.keygen()
@@ -568,6 +600,9 @@ def main():
 			_configure()
 			if not optparser.values.run_import:
 				sys.exit()
+
+		_mount_private_d()
+		_read_bhs_config()		
 		
 		# Initialize scalarizr service
 		try:
@@ -584,33 +619,38 @@ def main():
 
 		if EMBED_SNMPD:
 			# Start SNMP server in a separate process			
-			signal.signal(signal.SIGCHLD, _snmp_crash_handler)
+			#signal.signal(signal.SIGCHLD, onSIGCHILD)
 			_start_snmp_server()
-		else:
+		elif NET_SNMPD:
 			# Start snmpd health check thread
 			t = threading.Thread(target=_snmpd_health_check)
 			t.daemon = True
 			t.start()
 			
 		# Install  signal handlers	
-		signal.signal(signal.SIGTERM, _shutdown)
+		signal.signal(signal.SIGTERM, onSIGTERM)
 
 		# Start messaging server
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
-		msg_thread = threading.Thread(target=consumer.start)
+		msg_thread = threading.Thread(target=consumer.start, name="Message consumer")
 		msg_thread.start()
 	
 
 		# Fire start
-		_running = True
+		globals()["_running"] = True
 		bus.fire("start")
 	
 		try:
-			while True:
-				msg_thread.join(0.5)
+			while _running:
+				msg_thread.join(0.2)
+				#if not msg_thread.isAlive():
+				#	raise ScalarizrError("%s thread unexpectedly terminated" % msg_thread.name)
 		except KeyboardInterrupt:
-			_shutdown()
+			pass
+		finally:
+			if _running:
+				_shutdown()
 			
 	except (BaseException, Exception), e:
 		if not (isinstance(e, SystemExit) or isinstance(e, KeyboardInterrupt)):
