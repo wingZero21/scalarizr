@@ -13,7 +13,7 @@ from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re, time, pexpect
 import signal, pwd, random
-import shutil
+import shutil, ConfigParser
 from boto.exception import BotoServerError
 
 
@@ -170,6 +170,8 @@ class MysqlHandler(Handler):
 	def on_init(self):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
+		bus.on("before_reboot_start", self.on_before_reboot_start)
+		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.MYSQL in behaviour and (
@@ -202,27 +204,40 @@ class MysqlHandler(Handler):
 		@param message: Mysql_PromoteToMaster
 		"""
 		if not int(self._sect.get(OPT_REPLICATION_MASTER)):
-			self._stop_mysql()
 			
 			ec2_conn = self._platform.new_ec2_conn()
 			slave_vol_id = 	self._sect.get(OPT_STORAGE_VOLUME_ID)
 			master_vol_id = self._queryenv.list_role_params(self._role_name)[PARAM_MASTER_EBS_VOLUME_ID]
 			master_vol = None
 			tx_complete = False
+			
 			try:
+				# Stop mysql
+				if initd.is_running("mysql"):
+					mysql = self._spawn_mysql(ROOT_USER, message.root_password)
+					timeout = 180
+					try:
+						mysql.sendline("STOP SLAVE;")
+						mysql.expect("mysql>", timeout=timeout)
+					except pexpect.TIMEOUT:
+						raise HandlerError("Timeout (%d seconds) reached " + 
+								"while waiting for slave stop" % (timeout,))
+					finally:
+						mysql.close()
+					self._stop_mysql()
+					
+				# Unplug slave storage and plug master one
 				self._unplug_storage(slave_vol_id, self._storage_path)
-				
 				master_vol = self._take_master_volume(master_vol_id)
-				
-				# Mount previous master's EBS volume						
 				self._plug_storage(master_vol.id, self._storage_path)
+				
+				# Continue if master storage is a valid MySQL storage 
 				if self._storage_valid():
-					# Point datadir and log_bin to ebs 
+					# Patch configuration files 
 					self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
 					self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
-					# Starting master replication			
 					self._replication_init()
-					# Save previous master's logins and passwords to config
+					# Update behaviour configuration
 					updates = {
 						OPT_ROOT_PASSWORD : message.root_password,
 						OPT_REPL_PASSWORD : message.repl_password,
@@ -259,7 +274,6 @@ class MysqlHandler(Handler):
 			
 			if tx_complete:
 				# Delete slave EBS
-				ec2_conn.detach_volume(slave_vol_id, force=True)
 				ec2_conn.delete_volume(slave_vol_id)
 			
 		else:
@@ -287,6 +301,26 @@ class MysqlHandler(Handler):
 			self._logger.debug("Replication switched")
 		else:
 			self._logger.debug('Skip NewMasterUp. My replication role is master')		
+
+	def on_before_reboot_start(self):
+		"""
+		Stop MySQL and unplug storage
+		"""
+		self._stop_mysql()
+		try:
+			self._unplug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
+		except ConfigParser.NoOptionError:
+			self._logger.info("Skip storage unplug. There is no configured storage.")
+
+	def on_before_reboot_finish(self):
+		"""
+		Start MySQL and plug storage
+		"""
+		try:
+			self._plug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
+		except ConfigParser.NoOptionError:
+			self._logger.info("Skip storage plug. There is no configured storage.")
+		self._start_mysql()
 
 	def on_host_init_response(self, message):
 		"""
@@ -496,7 +530,25 @@ class MysqlHandler(Handler):
 			
 		# Attach ebs
 		self._logger.info("Attaching volume %s as device %s", vol.id, devname)
-		vol.attach(self._platform.get_instance_id(), devname)
+		try:
+			vol.attach(self._platform.get_instance_id(), devname)
+		except BotoServerError, e:
+			if e.code == "VolumeInUse":
+				# Sometimes this happens when plugging storage from crashed master server.
+				self._logger.warning("Volume status is 'available' " + 
+						"but attach operation failed with 'VolumeInUse' error. " +
+						"Sometimes this happens when plugging storage from crashed MySQL master server.")
+				try:
+					self._logger.info("Force detaching volume %s", vol.id)
+					vol.detach(True)
+					self._logger.debug("Volume %s detached", vol.id)
+				except BotoServerError, e:
+					pass
+				time.sleep(5)
+				self._logger("Attaching volume %s as device %s", vol.id, devname)
+				vol.attach(self._platform.get_instance_id(), devname)
+			else:
+				raise
 		self._logger.debug("Checking that volume %s is attached", vol.id)
 		self._wait_until(lambda: vol.update() and vol.attachment_state() == "attached")
 		self._logger.debug("Volume %s attached",  vol.id)
@@ -508,6 +560,7 @@ class MysqlHandler(Handler):
 		
 		# Mount EBS
 		self._mount_device(devname, mnt_point)
+
 
 	def _unplug_storage(self, vol_id, mnt_point, vol=None):
 		self._logger.info("Unplug EBS storage (volume: %s) from mpoint %s", 

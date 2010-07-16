@@ -64,7 +64,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 			if scripts_path[0] != "/":
 				scripts_path = os.path.join(bus.base_path, scripts_path)
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")
-			f.write('KERNEL=="sd*[!0-9]", RUN+="'+ scripts_path + '/udev"')
+			f.write('KERNEL=="sd*[!0-9]", ACTION=="add|change", RUN+="'+ scripts_path + '/udev"')
 			f.close()
 		except (OSError, IOError), e:
 			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' Error: %s", str(e))

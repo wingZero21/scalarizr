@@ -215,7 +215,13 @@ class Messages:
 	@broadcast
 	Fires when scalarizr is resumed after reboot
 	"""
-
+	
+	RESTART = "Restart"
+	"""
+	@broadcast
+	Fires when server is resumed after stop
+	"""
+	
 	BLOCK_DEVICE_ATTACHED = "BlockDeviceAttached"
 	"""
 	@broadcast

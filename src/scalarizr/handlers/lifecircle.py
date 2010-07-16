@@ -28,6 +28,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 	_new_crypto_key = None
 	
 	FLAG_REBOOT = "reboot"
+	FLAG_HALT = "halt"
 	FLAG_HOST_INIT = "hostinit"
 	
 	def __init__(self):
@@ -61,6 +62,13 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 			
 			# Fires after RebootFinish message is sent
 			"reboot_finish",
+			
+			# Fires before Restart message is sent
+			# @param msg: Restart message
+			"before_restart",
+			
+			# Fires after Restart message is sent
+			"restart",
 			
 			# Fires before Hello message is sent
 			# @param msg
@@ -112,7 +120,11 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")
 			self._clear_flag(self.FLAG_REBOOT)			
-			self._start_after_beboot()
+			self._start_after_reboot()
+		elif self._flag_exists(self.FLAG_HALT):
+			self._logger.info("Scalarizr resumed after stop")
+			self._clear_flag(self.FLAG_HALT)
+			self._start_after_stop()
 			
 		elif optparser.values.run_import:
 			self._logger.info("Server will be imported into Scalr")
@@ -125,12 +137,17 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 			self._logger.info("Normal start")
 
 
-	def _start_after_beboot(self):
+	def _start_after_reboot(self):
 		msg = self._new_message(Messages.REBOOT_FINISH, broadcast=True)
 		bus.fire("before_reboot_finish", msg)
 		self._send_message(msg)
 		bus.fire("reboot_finish")		
 
+	def _start_after_stop(self):
+		msg = self._new_message(Messages.RESTART)
+		bus.fire("before_restart". msg)
+		self._send_message(msg)
+		bus.fire("restart")
 	
 	def _start_init(self):
 		# Regenerage key
@@ -177,6 +194,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		
 	
 	def on_IntServerHalt(self, message):
+		self._set_flag(self.FLAG_HALT)
 		msg = self._new_message(Messages.HOST_DOWN, broadcast=True)
 		bus.fire("before_host_down", msg)
 		self._send_message(msg)		

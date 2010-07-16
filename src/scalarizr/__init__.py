@@ -163,7 +163,7 @@ def _init_services():
 	
 	# Check that database exists (after rebundle for example)
 	db_file = os.path.join(bus.etc_path, gen_sect.get(configtool.OPT_STORAGE_PATH))
-	if not os.path.exists(db_file):
+	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
 		db_script_file = os.path.join(bus.etc_path, "public.d/db.sql")
 		logger.warning("Database doesn't exists, create new one from script '%s'", db_script_file)
 		db = bus.db
@@ -216,6 +216,7 @@ def _init_services():
 	crypto_key_title = "Scalarizr crypto key"
 	crypto_key_opt = gen_sect.option_wrapper(configtool.OPT_CRYPTO_KEY_PATH)
 
+	crypto_key = None
 	if not os.path.exists(os.path.join(bus.etc_path, ".hostinit")):
 		# Override crypto key if server was'nt already initialized
 		crypto_key = optparser.values.crypto_key or platform.get_user_data(UserDataOptions.CRYPTO_KEY)
