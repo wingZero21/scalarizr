@@ -30,7 +30,7 @@ if not os.path.exists(initd_script):
 pid_file = None
 try:
 	out = system("my_print_defaults mysqld")
-	m = re.search("--pid[-_]file=(.*)", out, re.MULTILINE)
+	m = re.search("--pid[-_]file=(.*)", out[0], re.MULTILINE)
 	if m:
 		pid_file = m.group(1)
 except:
@@ -228,7 +228,7 @@ class MysqlHandler(Handler):
 						OPT_REPL_PASSWORD : message.repl_password,
 						OPT_STAT_PASSWORD : message.stat_password,
 						OPT_STORAGE_VOLUME_ID : master_vol.id,
-						OPT_REPLICATION_MASTER 	: 1
+						OPT_REPLICATION_MASTER 	: "1"
 					}
 					self._update_config(updates)
 					# Send message to Scalr
@@ -336,6 +336,14 @@ class MysqlHandler(Handler):
 		# Patch configuration
 		self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
 		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
+		
+		if os.path.exists('/etc/mysql/debian.cnf'):
+			try:
+				self._logger.info("Copying debian.cnf file to storage")
+				shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
+			except BaseException, e:
+				self._logger.error("Cannot copy debian.cnf file to storage: ", e)
+				
 		self._replication_init(master=True)
 		
 		# If It's 1st init of mysql master
@@ -609,12 +617,6 @@ class MysqlHandler(Handler):
 			else:
 				log_file = log_pos = None
 			
-			if os.path.exists('/etc/mysql/debian.cnf'):
-				try:
-					self._logger.info("Copying debian.cnf file to storage")
-					shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
-				except BaseException, e:
-					self._logger.error("Cannot copy debian.cnf file to storage: ", e)
 			# Creating EBS snapshot
 			snap_id = None if dry_run else self._create_ebs_snapshot()
 	
