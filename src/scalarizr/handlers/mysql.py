@@ -333,9 +333,6 @@ class MysqlHandler(Handler):
 		msg_data = None
 		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
 
-		# Patch configuration
-		self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
-		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
 		
 		if os.path.exists('/etc/mysql/debian.cnf'):
 			try:
@@ -343,6 +340,11 @@ class MysqlHandler(Handler):
 				shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
 			except BaseException, e:
 				self._logger.error("Cannot copy debian.cnf file to storage: ", e)
+				
+		# Patch configuration
+		self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
+		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
+
 				
 		self._replication_init(master=True)
 		
