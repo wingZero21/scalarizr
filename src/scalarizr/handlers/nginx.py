@@ -142,14 +142,52 @@ class NginxHandler(Handler):
 				finally:
 					if file:
 						file.close()
-												
+			
 				if nginx_conf:
-					include_regexp = re.compile('^[^#\n]*?include\s*'+include+'\s*;\s*$', re.MULTILINE)
-					if not re.search(include_regexp, nginx_conf):
-						new_nginx_conf = re.sub(re.compile('(http\s*\{.*?)(\})', re.S),
-								'\\1\n' + '    include '+ include + ';\n' + '\\2', nginx_conf)
-						self._logger.debug("Including generated config to main nginx config %s", nginx_conf_path)
-						
+					backend_re = re.compile('^[^#\n]*?proxy_pass\s*http://backend\s*;\s*$', re.MULTILINE)
+					# If configuration hasn't been patched before
+					if not re.search(backend_re, nginx_conf):
+						new_nginx_conf = ''
+						server_re = re.compile('^\s*server\s*\{\s*(#.*?)?$')
+						fp = open(nginx_conf_path,'r')
+						opened = 0
+						open_close_re = re.compile('^[^#\n]*([\{\}]).*?$')
+						include_re = re.compile('^[^#\n]*include\s*/etc/nginx/(conf\.d/\*|sites-enabled/\*).*?$')
+						# Comment all server sections and includes of default configuration files
+						while 1:
+							line = fp.readline()
+							if not line:
+								break
+							
+							if re.match(include_re, line):
+								new_nginx_conf += '###' + line
+
+							if re.match(server_re, line):
+								new_nginx_conf += '###' + line
+								opened = 1
+								while 1:
+									new_line = fp.readline()
+									new_nginx_conf += '###' + new_line
+									res = re.match(open_close_re, new_line)
+									if res:
+										opened += 1 if res.group(1) == '{' else -1
+									if not opened:
+										break
+							else:
+								new_nginx_conf += line
+								
+						# Adding upstream include to main nginx config		
+						http_sect_re = re.compile('(^\s*http\s*\{.*?$)(.*)', re.S | re.MULTILINE)
+						if re.search(http_sect_re, new_nginx_conf):
+							self._logger.debug("Including generated config to main nginx config %s", nginx_conf_path)
+							
+							fp = open(os.path.join(bus.etc_path, "public.d/handler.nginx/server.tpl"))
+							server_sect = fp.read()
+							fp.close()
+							
+							new_nginx_conf = re.sub(http_sect_re, '\\1' + '    include '+ include + ';\n'
+												                          + server_sect + '\\2', new_nginx_conf)				
+
 						try:
 							file = open(nginx_conf_path,'w')
 							file.write(new_nginx_conf)
@@ -162,7 +200,7 @@ class NginxHandler(Handler):
 					else:
 						self._logger.debug("File %s already included into nginx main config %s", 
 									include, nginx_conf_path)
-						
+'''				
 			if disttool._is_debian_based and os.path.isfile(default_conf_path):		
 				self._logger.debug("Patching nginx default vhost file (for debian-based dists only)")
 				
@@ -178,7 +216,7 @@ class NginxHandler(Handler):
 						file.close()
 						
 				root_locat = re.compile('(?P<loc>^\s*location\s*/\s*\{[^\}]*?)(?P<root>^\s*root.*?;.*?$)(?P<endloc>[^\}]*?\})', re.DOTALL | re.MULTILINE)
-				
+				"""	
 				if default_content:
 					if re.search(root_locat, default_content):
 						new_content = re.sub(root_locat, '\\loc'+' '*16 +'proxy_pass http://backend;\\endloc', default_content)
@@ -195,9 +233,9 @@ class NginxHandler(Handler):
 					
 					else:
 						location_re = re.compile('(?P<loc>^\s*location\s*/\s*\{\s*$)(?P<endloc>[^\}]*\})')
-					
-											
-			#FIXME: use initd for starting, stopping & reloading nginx
+						
+'''
+			#FIXME: use initd for starting, stopping & reloading nginx			
 			self._logger.info("Testing new configuration.")
 			nginx_pid_file = "/var/run/nginx.pid"
 			nginx_test_command = [nginx_binary, "-t"]
