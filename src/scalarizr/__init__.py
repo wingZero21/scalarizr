@@ -595,13 +595,14 @@ def main():
 			print cryptotool.keygen()
 			sys.exit()
 
+		_mount_private_d()
+
 		# Run installation process
 		if optparser.values.configure:
 			_configure()
 			if not optparser.values.run_import:
 				sys.exit()
 
-		_mount_private_d()
 		_read_bhs_config()		
 		
 		# Initialize scalarizr service
