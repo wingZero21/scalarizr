@@ -202,7 +202,7 @@ class NginxHandler(Handler):
 			(message.name == Messages.HOST_UP or message.name == Messages.HOST_DOWN)	
 	
 	def _reload_nginx(self):
-		if pid_file and os.path.isfile(pid_file):
+		if read_file(pid_file, logger = self._logger).strip():
 			try:
 				self._logger.info("Reloading nginx")
 				initd.reload("nginx")
