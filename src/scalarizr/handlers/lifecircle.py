@@ -13,9 +13,11 @@ import os
 import binascii
 
 
-
+_lifecircle = None
 def get_handlers():
-	return [LifeCircleHandler()]
+	if not _lifecircle:
+		globals()["_lifecircle"] = LifeCircleHandler()
+	return [_lifecircle]
 
 class LifeCircleHandler(scalarizr.handlers.Handler):
 	_logger = None
@@ -30,6 +32,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 	FLAG_REBOOT = "reboot"
 	FLAG_HALT = "halt"
 	FLAG_HOST_INIT = "hostinit"
+	FLAG_HOST_UP = "hostup"
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -52,6 +55,10 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 			
 			# Fires after HostUp message is sent
 			"host_up",
+			
+			# Fires before RebootStart message is sent
+			# @param msg
+			"before_reboot_start",
 			
 			# Fires after RebootStart message is sent
 			"reboot_start",
@@ -189,7 +196,9 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		# Scalarizr must detect that it was resumed after reboot
 		self._set_flag(self.FLAG_REBOOT)
 		# Send message 
-		self._send_message(Messages.REBOOT_START, broadcast=True)
+		msg = self._new_message(Messages.REBOOT_START, broadcast=True)
+		bus.fire("before_reboot_start", msg)
+		self._send_message(msg)
 		bus.fire("reboot_start")
 		
 	
@@ -205,6 +214,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		msg = self._new_message(Messages.HOST_UP, broadcast=True)
 		bus.fire("before_host_up", msg)
 		self._send_message(msg)
+		self._set_flag(self.FLAG_HOST_UP)
 		bus.fire("host_up")
 
 	def on_before_message_send(self, queue, message):
@@ -215,7 +225,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		
 		
 	def _get_flag_filename(self, name):
-		return os.path.join(bus.etc_path, "." + name)
+		return os.path.join(bus.etc_path, "private.d", "." + name)
 	
 	def _set_flag(self, name):
 		file = self._get_flag_filename(name)
@@ -231,4 +241,18 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 	def _clear_flag(self, name):
 		os.remove(self._get_flag_filename(name))	
 	
-	
+
+STATE_PENDING = "pending" 
+STATE_INITIALIZED = "initialized"
+STATE_RUNNING = "running"
+
+def get_state():
+	"""
+	@xxx: Not good to call private methods 
+	"""
+	if  _lifecircle:
+		if _lifecircle._flag_exists(_lifecircle.FLAG_HOST_UP):
+			return STATE_RUNNING
+		elif _lifecircle._flag_exists(_lifecircle.FLAG_HOST_INIT):
+			return STATE_INITIALIZED
+	return STATE_PENDING

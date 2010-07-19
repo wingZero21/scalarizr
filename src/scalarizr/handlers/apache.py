@@ -82,34 +82,23 @@ class ApacheHandler(Handler):
 		httpd_conf_path = config.get('behaviour_app','httpd_conf_path')
 		cert_path = bus.etc_path + '/private.d/keys'	
 			
-		try:
-			self._logger.debug("Retrieving virtual hosts list from Scalr.")
-			received_vhosts = self._queryenv.list_virtual_hosts()
-		except:
-			self._logger.error('Can`t retrieve virtual hosts list from Scalr.')
-			raise
+		self._logger.info("Requesting virtual hosts list")
+		received_vhosts = self._queryenv.list_virtual_hosts()
+		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
 		
-		if [] != received_vhosts:	
-			self._logger.debug("Clean up old configuration.")			
+		if [] != received_vhosts:
 			if not os.path.exists(vhosts_path):
-				self._logger.warning('Virtual hosts directory %s doesn`t exist', vhosts_path)
-				list_vhosts = []
+				self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
 				try:
 					os.makedirs(vhosts_path)
+					self._logger.debug("Virtual hosts dir %s created", vhosts_path)
 				except OSError, e:
-					self._logger.error('Couldn`t create directory %s. %s', 
-							vhosts_path, e.strerror)
-				else:
-					self._logger.info('Virtual hosts directory has been created: %s', 
-							vhosts_path)  
-				
-			else:
-				list_vhosts = os.listdir(vhosts_path)
+					self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
+					raise
 			
-			if [] == list_vhosts:
-				self._logger.info('Virtual hosts list is empty.')
-			
-			else:
+			list_vhosts = os.listdir(vhosts_path)
+			if [] != list_vhosts:
+				self._logger.info("Deleting old vhosts configuration files")
 				for fname in list_vhosts:
 					if '000-default' == fname:
 						continue
@@ -118,26 +107,28 @@ class ApacheHandler(Handler):
 						try:
 							os.remove(vhost_file)
 						except OSError, e:
-							self._logger.error('Couldn`t remove vhost file %s. %s', 
-									vhost_file, e.strerror)
+							self._logger.error('Cannot delete vhost file %s. %s', vhost_file, e.strerror)
 					
 					if os.path.islink(vhost_file):
 						try:
 							os.unlink(vhost_file)
 						except OSError, e:
-								self._logger.error('Couldn`t remove vhost link %s. %s', 
-										vhost_file, e.strerror)
+							self._logger.error('Cannot delete vhost link %s. %s', vhost_file, e.strerror)
+				self._logger.debug("Old vhosts configuration files deleted")
+
+			self._logger.info("Creating new vhosts configuration files")
 			for vhost in received_vhosts:
 				if (None == vhost.hostname) or (None == vhost.raw):
 					continue
 				
+				self._logger.info("Processing %s", vhost.hostname)
 				if vhost.https:
 					try:
 						self._logger.debug("Retrieving ssl cert and private key from Scalr.")
 						https_certificate = self._queryenv.get_https_certificate()
 						self._logger.debug('Received certificate as %s type', type(https_certificate))
 					except:
-						self._logger.error('Can`t retrieve ssl cert and private key from Scalr.')
+						self._logger.error('Cannot retrieve ssl cert and private key from Scalr.')
 						raise
 					else: 
 						if not https_certificate[0]:
@@ -164,7 +155,7 @@ class ApacheHandler(Handler):
 								file.close()
 							
 							except IOError, e:
-								self._logger.error('Couldn`t write SSL certificate files to %s. %s', 
+								self._logger.error('Cannot write SSL certificate files to %s. %s', 
 										cert_path, e.strerror)
 					
 					self._logger.info('Enabling SSL virtual host %s', vhost.hostname)
@@ -175,14 +166,13 @@ class ApacheHandler(Handler):
 						file.write(vhost.raw.replace('/etc/aws/keys/ssl',cert_path))
 						file.close()
 					except IOError, e:
-						self._logger.error('Couldn`t write to vhost file %s. %s', 
-								vhost_fullpath, e.strerror)
+						self._logger.error('Cannot write vhost file %s. %s', vhost_fullpath, e.strerror)
 					self._create_vhost_paths(vhost_fullpath) 	
 				
 					self._logger.debug("Checking apache SSL mod")
 					self._check_mod_ssl(httpd_conf_path)	
 				
-				elif not vhost.https:
+				else:
 					self._logger.info('Enabling virtual host %s', vhost.hostname)
 					try:
 						vhost_fullpath = vhosts_path + '/' + vhost.hostname + '.vhost.conf'
@@ -190,16 +180,17 @@ class ApacheHandler(Handler):
 						file.write(vhost.raw)
 						file.close()
 					except IOError, e:
-						self._logger.error('Couldn`t write to vhost file %s. %s', 
-										   vhost_fullpath, e.strerror)
+						self._logger.error('Cannot write vhost file %s. %s', vhost_fullpath, e.strerror)
 					self._create_vhost_paths(vhost_fullpath)
-				else:
-					self._logger.info('SSL is neither 0 or 1, skipping virtual host %s', vhost.hostname)
+
+					
+				self._logger.debug("Done %s processing", vhost.hostname)
+			self._logger.debug("New vhosts configuration files created")
 			
 			if disttool.is_debian_based():
 				self._patch_default_conf_deb(vhosts_path)
 			
-			self._logger.debug("Checking if vhost directory included in main apache config")
+			self._logger.debug("Checking that vhosts directory included in main apache config")
 			index = 0
 			include_string = 'Include ' + vhosts_path + '/*'
 			try:
@@ -241,17 +232,16 @@ class ApacheHandler(Handler):
 								mods_enabled)
 						os.makedirs(mods_enabled)
 					except OSError, e:
-						self._logger.error('Couldn`t create directory %s. %s',  
+						self._logger.error('Cannot create directory %s. %s',  
 								mods_enabled, e.strerror)
 				try:
-					self._logger.debug("Creating symlinks for mod_ssl files.",  
-								mods_enabled)
+					self._logger.debug("Creating symlinks for mod_ssl files.", mods_enabled)
 					os.symlink(mods_available+'/ssl.conf', mods_enabled+'/ssl.conf')
 					os.symlink(mods_available+'/ssl.load', mods_enabled+'/ssl.load')
 					self._logger.info('SSL module has been enabled')
 				except OSError, e:
-						self._logger.error('Couldn`t create symlinks for ssl.conf and ssl.load in %s. %s', 
-								mods_enabled, e.strerror)
+					self._logger.error('Cannot create symlinks for ssl.conf and ssl.load in %s. %s', 
+							mods_enabled, e.strerror)
 			else:
 				self._logger.error('%s directory doesn`t exist or doesn`t contain valid ssl.conf and ssl.load files', 
 						mods_available)
@@ -279,11 +269,12 @@ class ApacheHandler(Handler):
 		
 		if server_root_entries:
 			server_root = server_root_entries[0]
-			self._logger.debug("Server root found: %s", server_root)
+			self._logger.debug("ServerRoot found: %s", server_root)
 		else:
-			self._logger.error("server root not found in apache config file %s", httpd_conf_path)
+			self._logger.warning("ServerRoot not found in apache config file %s", httpd_conf_path)
 			server_root = os.path.dirname(httpd_conf_path)
-			self._logger.debug("trying to use httpd.conf dir %s as server root", server_root)
+			self._logger.info("Use %s as ServerRoot", server_root)
+			
 		mod_ssl_file = server_root + '/modules/mod_ssl.so'
 		
 		if not os.path.isfile(mod_ssl_file) and not os.path.islink(mod_ssl_file):
@@ -380,7 +371,7 @@ class ApacheHandler(Handler):
 				default_vhost = default_vhost_file.read()
 				default_vhost_file.close()
 			except IOError, e: 
-				self._logger.error('Couldn`t read default vhost config file %s. %s', 
+				self._logger.error('Cannot read default vhost config file %s. %s', 
 						default_vhost_path, e.strerror)
 			else:
 				default_vhost = self.name_vhost_regexp.sub('NameVirtualHost *:80\n', default_vhost)
@@ -390,7 +381,7 @@ class ApacheHandler(Handler):
 					default_vhost_file.write(default_vhost)
 					default_vhost_file.close()
 				except IOError, e:
-					self._logger.error('Couldn`t write to default vhost config file %s. %s', 
+					self._logger.error('Cannot write to default vhost config file %s. %s', 
 							default_vhost_path, e.strerror)
 
 	def _create_vhost_paths(self, vhost_path):

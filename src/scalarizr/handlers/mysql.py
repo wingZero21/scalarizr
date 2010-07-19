@@ -6,7 +6,7 @@ Created on 14.06.2010
 '''
 from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
-from scalarizr.handlers import Handler, HandlerError
+from scalarizr.handlers import Handler, HandlerError, lifecircle
 from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
 		configtool, filetool, ping_service
 from distutils import version
@@ -106,8 +106,6 @@ class MysqlMessages:
 	@ivar local_ip
 	@ivar remote_ip
 	@ivar role_name		
-	@ivar log_file
-	@ivar log_pos
 	@ivar repl_password
 	"""
 	
@@ -168,10 +166,15 @@ class MysqlHandler(Handler):
 		bus.on("init", self.on_init)
 
 	def on_init(self):
+		bus.on("start", self.on_start)		
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
+		
+		"""
+		@xxx: Storage unplug failed because scalarizr has no EC2 access keys
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
+		"""
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.MYSQL in behaviour and (
@@ -289,20 +292,46 @@ class MysqlHandler(Handler):
 		if not int(self._sect.get(OPT_REPLICATION_MASTER)):
 			host = message.local_ip or message.remote_ip
 			self._logger.info("Switching replication to a new MySQL master %s", host)
+			mysql = self._spawn_mysql(ROOT_USER, message.root_password)
+						
+			self._logger.info("Stopping slave i/o thread")
+			mysql.sendline("STOP SLAVE IO_THREAD;")
+			mysql.expect("mysql>")
+			self._logger.debug("Slave i/o thread stopped")
+			
+			self._logger.info("Retrieving current log_file and log_pos")
+			mysql.sendline("SHOW SLAVE STATUS\\G");
+			mysql.expect("mysql>")
+			log_file = log_pos = None
+			for line in mysql.before.split("\n"):
+				pair = map(str.strip, line.split(": ", 1))
+				if pair[0] == "Master_Log_File":
+					log_file = pair[1]
+				elif pair[0] == "Read_Master_Log_Pos":
+					log_pos = pair[1]
+			self._logger.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+
 			self._change_master(
 				host=host, 
 				user=REPL_USER, 
 				password=message.repl_password,
-				log_file=message.log_file, 
-				log_pos=message.log_pos, 
+				log_file=log_file, 
+				log_pos=log_pos, 
 				mysql_user=ROOT_USER,
 				mysql_password=message.root_password
 			)			
-			self._logger.debug("Replication switched")
+			self._logger.info("Replication switched")
 		else:
 			self._logger.debug('Skip NewMasterUp. My replication role is master')		
 
-	def on_before_reboot_start(self):
+	def on_start(self):
+		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+			try:
+				self._start_mysql()
+			except initd.InitdError, e:
+				self._logger.error(e)
+
+	def on_before_reboot_start(self, *args, **kwargs):
 		"""
 		Stop MySQL and unplug storage
 		"""
@@ -312,7 +341,7 @@ class MysqlHandler(Handler):
 		except ConfigParser.NoOptionError:
 			self._logger.info("Skip storage unplug. There is no configured storage.")
 
-	def on_before_reboot_finish(self):
+	def on_before_reboot_finish(self, *args, **kwargs):
 		"""
 		Start MySQL and plug storage
 		"""
@@ -407,11 +436,11 @@ class MysqlHandler(Handler):
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 			
-			# Updating snapshot metadata
-			snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, dry_run=True)
+			# Updating snapshot
+			snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
 			
 			# Send updated metadata to Scalr
-			msg_data = dict(log_file=log_file, log_pos=log_pos)
+			msg_data = dict(snapshot_id=snap_id, log_file=log_file, log_pos=log_pos)
 			
 		if msg_data:
 			message.mysql = msg_data
