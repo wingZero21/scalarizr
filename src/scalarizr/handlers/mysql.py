@@ -816,14 +816,16 @@ class MysqlHandler(Handler):
 			raise
 		else:
 			my_cnf = file.read()
+			file.close()
+			file = open(MY_CNF_PATH, 'w')
+			# Patch networking
+			network_re = re.compile('^([\t ]*((bind-address[\t ]*=)|(skip-networking)).*?)$', re.M)
+			my_cnf = re.sub(network_re, '#\\1', my_cnf)
 			if not re.search(re.compile('^!include \/etc\/mysql\/farm-replication\.cnf', re.MULTILINE), my_cnf):
-				file.write('\n!include /etc/mysql/farm-replication.cnf\n')
+				my_cnf += '\n!include /etc/mysql/farm-replication.cnf\n'
+			file.write(my_cnf)
 		finally:
 			file.close()
-		self._logger.debug("Include added")
-		self._add_apparmor_rules(repl_conf_path)			
-		self._restart_mysql()
-		self._stop_mysql()
 	
 
 	def _spawn_mysql(self, user, password):
