@@ -5,7 +5,7 @@ Created on Jan 6, 2010
 @author: Dmytro Korsakov
 '''
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler, HandlerError
+from scalarizr.handlers import Handler, HandlerError, lifecircle
 from scalarizr.behaviour import Behaviours
 from scalarizr.messaging import Messages
 from scalarizr.util import configtool, disttool, system, initd
@@ -41,7 +41,16 @@ class NginxHandler(Handler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service	
-		bus.define_events("nginx_upstream_reload")	
+		bus.define_events("nginx_upstream_reload")
+		bus.on("start", self.on_start)
+		
+	def on_start(self):
+		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+			try:
+				self._logger.info("Starting Nginx")
+				initd.start("nginx")
+			except initd.InitdError, e:
+				self._logger.error(e)	
 	
 	def on_HostUp(self, message):
 		self.nginx_upstream_reload()

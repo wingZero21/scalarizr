@@ -6,7 +6,7 @@ Created on Dec 25, 2009
 '''
 from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
-from scalarizr.handlers import Handler, HandlerError
+from scalarizr.handlers import Handler, HandlerError, lifecircle
 from scalarizr.messaging import Messages
 from scalarizr.util import disttool, backup_file, initd
 import logging
@@ -66,6 +66,7 @@ class ApacheHandler(Handler):
 		self.ssl_conf_name_vhost_regexp = re.compile(r"NameVirtualHost\s+\*:\d+\n",re.IGNORECASE)
 		self.ssl_conf_listen_regexp = re.compile(r"Listen\s+\d+\n",re.IGNORECASE)
 		bus.define_events('apache_reload')
+		bus.on("start", self.on_start)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
@@ -74,6 +75,14 @@ class ApacheHandler(Handler):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
 		self._reload_apache()
+
+	def on_start(self):
+		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+			try:
+				self._logger.info("Starting Apache")
+				initd.start("apache")
+			except initd.InitdError, e:
+				self._logger.error(e)
 
 	def _update_vhosts(self):
 				
