@@ -6,7 +6,7 @@ from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
-	daemonize, system, disttool, fstool
+	daemonize, system, disttool, fstool, initd
 from scalarizr.util.configtool import ConfigError
 
 
@@ -59,7 +59,8 @@ def _init():
 	config_filename = None
 	if optparser and optparser.values.conf_path:
 		# Take config file from command-line options
-		config_filename = os.path.abspath(optparser.values.conf_path)
+		config_filename = os.path.abspath(optparser.values.conf_path)			
+
 	else:
 		# Find configuration file among several places
 		if not bus.etc_path:
@@ -89,6 +90,7 @@ def _init():
 		raise ScalarizrError("Configuration file '%s' doesn't exists" % (config_filename))
 	bus.etc_path = os.path.dirname(config_filename)
 
+			
 
 	# Configure logging
 	if sys.version_info < (2,6):
@@ -104,6 +106,9 @@ def _init():
 	config = ConfigParser()
 	config.read(config_filename)
 	bus.config = config
+
+	# Registering in init.d
+	initd.explore("scalarizr", "/etc/init.d/scalarizr", tcp_port=8013)
 
 	# Configure database connection pool
 	bus.db = SqliteLocalObject(_db_connect)

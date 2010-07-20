@@ -324,7 +324,8 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 	
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
-	
+
+	mnt_opts = ('-t auto', '-o loop,rw')
 	if not os.path.exists(privated_image):	
 		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
 		retcode = system(build_image_cmd)[2]
@@ -335,7 +336,6 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 		logger.debug("Creating file system on image device")
 		fstool.mkfs(privated_image)
 			
-		mnt_opts = ('-t auto', '-o loop,rw')
 		if os.listdir(mpoint):
 			logger.debug("%s contains data. Need to copy it ot image before mounting", mpoint)
 			# If mpoint not empty copy all data to the image
