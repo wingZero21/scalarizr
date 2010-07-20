@@ -14,7 +14,6 @@ import logging
 import os
 import re
 from scalarizr.util.initd import InitdError
-from asyncore import file_wrapper
 
 
 if disttool.is_redhat_based():

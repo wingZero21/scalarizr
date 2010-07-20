@@ -7,10 +7,11 @@ Created on Mar 3, 2010
 import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages, MetaOptions
-from scalarizr.util import cryptotool, configtool
+from scalarizr.util import cryptotool, configtool, disttool, system
 import logging
-import os
+import os, sys
 import binascii
+from subprocess import Popen, PIPE
 
 
 _lifecircle = None
@@ -102,7 +103,8 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.INT_SERVER_REBOOT \
 			or message.name == Messages.INT_SERVER_HALT	\
-			or message.name == Messages.HOST_INIT_RESPONSE	
+			or message.name == Messages.HOST_INIT_RESPONSE \
+			or message.name == Messages.SCALARIZR_UPDATE_AVAILABLE
 
 	
 	def on_init(self):
@@ -216,6 +218,13 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		self._send_message(msg)
 		self._set_flag(self.FLAG_HOST_UP)
 		bus.fire("host_up")
+
+	def on_ScalarizrUpdateAvailable(self, message):
+		up_script = self._config.get(configtool.SECT_GENERAL, configtool.OPT_SCRIPTS_PATH) + "/update"
+		cmd = [sys.executable, up_script]
+		p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
+		p.communicate()
+
 
 	def on_before_message_send(self, queue, message):
 		"""
