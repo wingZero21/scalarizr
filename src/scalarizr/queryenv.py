@@ -259,12 +259,14 @@ class Mountpoint(object):
 	dir = None
 	create_fs = False
 	is_array = False
-	volumes  = []
+	volumes  = None
+	
+	def __init__(self):
+		self.volumes = []
 	
 	def __str__(self):
-		return "Mountpoint(name: %s, dir: %s, create_fs: %s, num_volumes: %d)" % (
-			self.name, self.dir, self.create_fs, len(self.volumes)
-		)
+		opts = (self.name, self.dir, self.create_fs, len(self.volumes))
+		return "qe:Mountpoint(name: %s, dir: %s, create_fs: %s, num_volumes: %d)" % opts
 	
 	def __repr__(self):
 		return "name = " + str(self.name) \
@@ -278,7 +280,7 @@ class Volume(object):
 	device = None
 	
 	def __str__(self):
-		return "Volume(volume_id: %s, device: %s)" % (self.volume_id, self.device)
+		return "qe:Volume(volume_id: %s, device: %s)" % (self.volume_id, self.device)
 	
 	def __repr__(self):
 		return 'volume_id = ' + str(self.volume_id) \
@@ -292,6 +294,10 @@ class Role(object):
 	def __init__(self):
 		self.hosts = []
 	
+	def __str__(self):
+		opts = (self.name, self.behaviour, len(self.hosts))
+		return "qe:Role(name: %s, behaviour: %s, num_hosts: %s)" % opts
+	
 	def __repr__(self):
 		return 'behaviour = ' + str(self.behaviour) \
 	+ "; name = " + str(self.name) \
@@ -302,6 +308,7 @@ class RoleHost(object):
 	replication_master = False
 	internal_ip = None
 	external_ip	= None
+	
 	def __repr__(self):
 		return "index = " + str(self.index) \
 	+ "; replication_master = " + str(self.replication_master) \
@@ -313,6 +320,7 @@ class Script(object):
 	exec_timeout = None 
 	name = None
 	body = None
+	
 	def __repr__(self):
 		return "asynchronous = " + str(self.asynchronous) \
 	+ "; exec_timeout = " + str(self.exec_timeout) \
@@ -324,6 +332,7 @@ class VirtualHost(object):
 	type = None
 	raw = None
 	https = False
+	
 	def __repr__(self):
 		return "hostname = " + str(self.hostname) \
 	+ "; type = " + str(self.type) \

@@ -324,8 +324,8 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 	
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
-
-	mnt_opts = ('-t auto', '-o loop,rw')
+		
+	mnt_opts = ('-t auto', '-o loop,rw')	
 	if not os.path.exists(privated_image):	
 		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
 		retcode = system(build_image_cmd)[2]

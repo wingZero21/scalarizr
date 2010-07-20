@@ -57,14 +57,14 @@ class EbsHandler(scalarizr.handlers.Handler):
 			pass
 	
 	def on_before_host_init(self, *args, **kwargs):
-		self._logger.info("Add udev rule for EBS devices")
+		self._logger.info("Adding udev rule for EBS devices")
 		try:
 			config = bus.config
 			scripts_path = config.get(configtool.SECT_GENERAL, configtool.OPT_SCRIPTS_PATH)
 			if scripts_path[0] != "/":
 				scripts_path = os.path.join(bus.base_path, scripts_path)
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")
-			f.write('KERNEL=="sd*[!0-9]", ACTION=="add|change", RUN+="'+ scripts_path + '/udev"')
+			f.write('KERNEL=="sd*[!0-9]", ACTION=="add|remove", RUN+="'+ scripts_path + '/udev"')
 			f.close()
 		except (OSError, IOError), e:
 			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' Error: %s", str(e))
@@ -72,25 +72,28 @@ class EbsHandler(scalarizr.handlers.Handler):
 
 	def on_MountPointsReconfigure(self, message):
 		self._logger.debug("Iterate over EBS mounpoints")
+		self._logger.info("Reconfiguring mpoints")
 		for ebs_mpoint in self._queryenv.list_ebs_mountpoints():
-			self._logger.debug("Take %s", ebs_mpoint)
+			self._logger.info("Processing %s", ebs_mpoint)
 			if ebs_mpoint.is_array:
 				# TODO: implement EBS arrays
 				self._logger.warning("EBS array %s skipped. EBS arrays not implemented yet", ebs_mpoint.name)
 				continue
-			
 			try:
 				ebs_volume = ebs_mpoint.volumes[0]
-				devname = ebs_volume.device
-			except IndexError, e:
-				self._logger.error("Volume:0 doesn't exists. %s", e)
+			except IndexError:
+				self._logger.error("Invalid mpoint info %s. Volumes list is empty", ebs_mpoint)
 				continue
+			if not ebs_volume.volume_id or not ebs_volume.device:
+				self._logger.error("Invalid volume info %s. volume_id and device should be non-empty", ebs_volume)
+				continue
+			devname = ebs_volume.device
 			
 			mtab = fstool.Mtab()			
 			if not mtab.contains(devname, rescan=True):
+				self._logger.info("Mounting device %s to %s", devname, ebs_mpoint.dir)
 				fstool.mount(devname, ebs_mpoint.dir, make_fs=ebs_mpoint.create_fs, auto_mount=True)
-				self._logger.info("Device %s succesfully mounted to %s (volume_id: %s)", 
-						devname, ebs_mpoint.dir, ebs_volume.volume_id)
+				self._logger.debug("Device %s is mounted to %s", devname, ebs_mpoint.dir)
 				
 				self._send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
 					volume_id = ebs_volume.volume_id,
@@ -101,6 +104,9 @@ class EbsHandler(scalarizr.handlers.Handler):
 			else:
 				entry = mtab.find(devname)[0]
 				self._logger.debug("Skip device %s already mounted to %s", devname, entry.mpoint)
+				
+		self._logger.debug("Mpoints reconfigured")
+		
 
 				
 	def on_IntBlockDeviceUpdated(self, message):
