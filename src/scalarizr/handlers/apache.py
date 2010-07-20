@@ -160,7 +160,7 @@ class ApacheHandler(Handler):
 					
 					vhost_fullpath = vhosts_path + '/' + vhost.hostname + '-ssl.vhost.conf'
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
-					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl',cert_path), vhost_error_message, logger = self._logger)
+					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl',cert_path), error_msg=vhost_error_message, logger = self._logger)
 					
 					self._create_vhost_paths(vhost_fullpath) 	
 				
