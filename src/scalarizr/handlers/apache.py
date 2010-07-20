@@ -279,8 +279,6 @@ class ApacheHandler(Handler):
 						
 				else:
 					
-					#put replacing key & cert paths here 
-					
 					if not self.ssl_conf_name_vhost_regexp.search(ssl_conf_str):
 						self._logger.debug("NameVirtualHost directive not found in %s", ssl_conf_path)
 						listen_pos = self.ssl_conf_listen_regexp.search(ssl_conf_str)
@@ -300,21 +298,26 @@ class ApacheHandler(Handler):
 			#apache.conf part
 			error_message = 'Cannot read httpd config file %s' % httpd_conf_path
 			conf_str = read_file(httpd_conf_path, error_msg=error_message, logger=self._logger)
-			
 			index = conf_str.find('mod_ssl.so')
+			
 			if conf_str and index == -1:
-				backup_file(httpd_conf_path)
-				self._logger.info('%s does not contain mod_ssl include. Patching httpd conf.',
-							httpd_conf_path)
+				error_message = 'Cannot read mod_ssl config %s' % httpd_conf_path
+				ssl_conf_str = read_file(mod_ssl_file, error_msg=error_message, logger=self._logger)
+				index = ssl_conf_str.find('mod_ssl.so')
 				
-				pos = self.load_module_regexp.search(conf_str)
-				conf_str_updated = conf_str[:pos.start()] + '\n' + include_mod_ssl  + '\n' + conf_str[pos.start():] if pos else \
-						conf_str + '\n' + include_mod_ssl + '\n'
+				if ssl_conf_str and index == -1:
+					backup_file(httpd_conf_path)
+					self._logger.info('%s does not contain mod_ssl include. Patching httpd conf.',
+								httpd_conf_path)
 					
-				self._logger.debug("Writing changes to httpd config file %s.", httpd_conf_path)
-				error_message = 'Cannot save httpd config file %s' % httpd_conf_path
-				write_file(httpd_conf_path, conf_str_updated, error_msg=error_message, logger=self._logger)
-	
+					pos = self.load_module_regexp.search(conf_str)
+					conf_str_updated = conf_str[:pos.start()] + '\n' + include_mod_ssl  + '\n' + conf_str[pos.start():] if pos else \
+							conf_str + '\n' + include_mod_ssl + '\n'
+						
+					self._logger.debug("Writing changes to httpd config file %s.", httpd_conf_path)
+					error_message = 'Cannot save httpd config file %s' % httpd_conf_path
+					write_file(httpd_conf_path, conf_str_updated, error_msg=error_message, logger=self._logger)
+		
 	
 	def _get_server_root(self, httpd_conf_path):
 		if disttool.is_debian_based():
