@@ -209,8 +209,8 @@ class ApacheHandler(Handler):
 			
 		ssl_conf = read_file(ssl_conf_path,logger = self._logger)
 		if ssl_conf:
-			cert_file_re = re.compile('^([^#\n]SSLCertificateFile).*?$', re.M)
-			cert_key_file_re = re.compile('^([^#\n]SSLCertificateKeyFile).*?$', re.M)
+			cert_file_re = re.compile('^([^#\n]*SSLCertificateFile).*?$', re.M)
+			cert_key_file_re = re.compile('^([^#\n]*SSLCertificateKeyFile).*?$', re.M)
 			
 			new_ssl_conf = re.sub(cert_file_re, '\\1\t'+crt_path, ssl_conf)
 			new_ssl_conf = re.sub(cert_key_file_re, '\\1\t'+key_path, new_ssl_conf)
