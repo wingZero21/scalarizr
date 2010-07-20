@@ -9,10 +9,12 @@ from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler, HandlerError, lifecircle
 from scalarizr.messaging import Messages
 from scalarizr.util import disttool, backup_file, initd
+from scalarizr.util.filetool import read_file, write_file
 import logging
 import os
 import re
 from scalarizr.util.initd import InitdError
+from asyncore import file_wrapper
 
 
 if disttool.is_redhat_based():
@@ -23,16 +25,12 @@ elif disttool.is_debian_based():
 	
 	pid_file = None
 	# Find option value
-	if os.path.exists("/etc/apache2/envvars"):
-		try:
-			env = open("/etc/apache2/envvars", "r")
-		except:
-			pass
-		else:
-			m = re.search("export\sAPACHE_PID_FILE=(.*)", env.read())
-			if m:
-				pid_file = m.group(1)
-			env.close()
+	
+	env_vars = read_file("/etc/apache2/envvars")
+	if env_vars:
+		m = re.search("export\sAPACHE_PID_FILE=(.*)", env_vars)
+		if m:
+			pid_file = m.group(1)
 	
 else:
 	initd_script = "/etc/init.d/apache2"
@@ -90,6 +88,8 @@ class ApacheHandler(Handler):
 		vhosts_path = config.get('behaviour_app','vhosts_path')
 		httpd_conf_path = config.get('behaviour_app','httpd_conf_path')
 		cert_path = bus.etc_path + '/private.d/keys'	
+		
+		self.server_root = self._get_server_root(httpd_conf_path)
 			
 		self._logger.info("Requesting virtual hosts list")
 		received_vhosts = self._queryenv.list_virtual_hosts()
@@ -146,52 +146,35 @@ class ApacheHandler(Handler):
 							self._logger.error("Scalar returned empty SSL key")
 						else:
 							self._logger.info("Saving SSL certificates for %s",vhost.hostname)
-							try:
-								file = open(cert_path + '/' + 'https.key', 'w')
-								file.write(https_certificate[1])
-								file.close()
-								
-								file = open(cert_path + '/' + vhost.hostname + '.key', 'w')
-								file.write(https_certificate[1])
-								file.close()
 							
-								file = open(cert_path + '/' + 'https.crt', 'w')
-								file.write(https_certificate[0])
-								file.close()
+							key_error_message = 'Cannot write SSL key files to %s.' % cert_path
+							cert_error_message = 'Cannot write SSL certificate files to %s.' % cert_path
 							
-								file = open(cert_path  + '/' + vhost.hostname + '.crt', 'w')
-								file.write(https_certificate[0])
-								file.close()
-							
-							except IOError, e:
-								self._logger.error('Cannot write SSL certificate files to %s. %s', 
-										cert_path, e.strerror)
+							for key_file in ['https.key', vhost.hostname + '.key']:
+								write_file(cert_path + '/' + key_file, https_certificate[1], error_msg=key_error_message, logger=self._logger)
+														
+							for cert_file in ['https.crt', vhost.hostname + '.crt']:
+								write_file(cert_path + '/' + cert_file, https_certificate[0], error_msg=cert_error_message, logger=self._logger)
 					
 					self._logger.info('Enabling SSL virtual host %s', vhost.hostname)
 					
-					try:
-						vhost_fullpath = vhosts_path + '/' + vhost.hostname + '-ssl.vhost.conf'
-						file = open(vhost_fullpath, 'w')
-						file.write(vhost.raw.replace('/etc/aws/keys/ssl',cert_path))
-						file.close()
-					except IOError, e:
-						self._logger.error('Cannot write vhost file %s. %s', vhost_fullpath, e.strerror)
+					vhost_fullpath = vhosts_path + '/' + vhost.hostname + '-ssl.vhost.conf'
+					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
+					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl',cert_path), vhost_error_message, logger = self._logger)
+					
 					self._create_vhost_paths(vhost_fullpath) 	
 				
 					self._logger.debug("Checking apache SSL mod")
-					self._check_mod_ssl(httpd_conf_path)	
-				
+					self._check_mod_ssl(httpd_conf_path)
+					
+					self._logger.debug("Changing paths in ssl.conf")
+					self._patch_ssl_conf(cert_path)
+			
 				else:
 					self._logger.info('Enabling virtual host %s', vhost.hostname)
-					try:
-						vhost_fullpath = vhosts_path + '/' + vhost.hostname + '.vhost.conf'
-						file = open(vhost_fullpath, 'w')
-						file.write(vhost.raw)
-						file.close()
-					except IOError, e:
-						self._logger.error('Cannot write vhost file %s. %s', vhost_fullpath, e.strerror)
-					self._create_vhost_paths(vhost_fullpath)
-
+					vhost_fullpath = vhosts_path + '/' + vhost.hostname + '.vhost.conf'
+					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
+					write_file(vhost_fullpath, vhost.raw, error_msg=vhost_error_message, logger=self._logger)
 					
 				self._logger.debug("Done %s processing", vhost.hostname)
 			self._logger.debug("New vhosts configuration files created")
@@ -202,26 +185,38 @@ class ApacheHandler(Handler):
 			self._logger.debug("Checking that vhosts directory included in main apache config")
 			index = 0
 			include_string = 'Include ' + vhosts_path + '/*'
-			try:
-				httpd_conf_file = open(httpd_conf_path, 'r')
-				text = httpd_conf_file.read()
-				httpd_conf_file.close()
+			
+			error_message = 'Cannot read main config file %s' % httpd_conf_path
+			text = read_file(httpd_conf_path, error_msg=error_message, logger=self._logger)
+			if text:
 				index = text.find(include_string)
-			except IOError, e: 
-				self._logger.error('Cannot read main config file %s. %s', 
-						httpd_conf_path, e.strerror)
+
 			if index == -1:
 				backup_file(httpd_conf_path)
-				try:
-					
-					self._logger.debug("Writing changes to main config file %s.", 
-							httpd_conf_path)
-					httpd_conf_file = open(httpd_conf_path, 'a')
-					httpd_conf_file.write(include_string)
-					httpd_conf_file.close()
-				except IOError, e:
-					self._logger.error('Cannot write to main config file %s. %s', 
-							httpd_conf_path, e.strerror)
+				msg = "Writing changes to main config file %s." % httpd_conf_path
+				error_message = 'Cannot write to main config file %s' % httpd_conf_path
+				write_file(httpd_conf_path, include_string, msg=msg, error_msg=error_message, logger=self._logger)
+
+
+	def _patch_ssl_conf(self, cert_path):
+		key_path = cert_path + '/https.key'
+		crt_path = cert_path + '/https.crt'
+		
+		if disttool.is_debian_based():
+			ssl_conf_path = self.server_root + '/sites-available/default-ssl'
+		elif disttool.is_redhat_based():
+			ssl_conf_path = self.server_root + '/conf.d/ssl.conf'
+			
+		ssl_conf = read_file(ssl_conf_path,logger = self._logger)
+		if ssl_conf:
+			cert_file_re = re.compile('^([^#\n]SSLCertificateFile).*?$', re.M)
+			cert_key_file_re = re.compile('^([^#\n]SSLCertificateKeyFile).*?$', re.M)
+			
+			new_ssl_conf = re.sub(cert_file_re, '\\1\t'+crt_path, ssl_conf)
+			new_ssl_conf = re.sub(cert_key_file_re, '\\1\t'+key_path, new_ssl_conf)
+			
+			write_file(ssl_conf_path, new_ssl_conf, logger = self._logger)
+	
 	
 	def _check_mod_ssl(self, httpd_conf_path):
 		if disttool.is_debian_based():
@@ -229,7 +224,7 @@ class ApacheHandler(Handler):
 		elif disttool.is_redhat_based():
 			self._check_mod_ssl_redhat(httpd_conf_path)
 
-			
+
 	def _check_mod_ssl_deb(self, httpd_conf_path):
 		mods_available = os.path.dirname(httpd_conf_path) + '/mods-available'
 		mods_enabled = os.path.dirname(httpd_conf_path) + '/mods-enabled'
@@ -254,44 +249,18 @@ class ApacheHandler(Handler):
 			else:
 				self._logger.error('%s directory doesn`t exist or doesn`t contain valid ssl.conf and ssl.load files', 
 						mods_available)
-				
+			
 				
 	def _check_mod_ssl_redhat(self, httpd_conf_path):
-		include_mod_ssl = 'LoadModule ssl_module modules/mod_ssl.so'
-		self._logger.debug("Searching in apache config file %s to find server root",
-				httpd_conf_path)
-		
-		f = None
-		conf_str = None		
-		try:
-			f = open(httpd_conf_path, 'r')
-			conf_str = f.read()
-		except IOError, e: 
-			self._logger.error('Cannot read httpd config file %s. %s', 
-					httpd_conf_path, e.strerror)
-			return
-		finally:
-			if f:
-				f.close()
-		
-		server_root_entries = self.server_root_regexp.findall(conf_str)
-		
-		if server_root_entries:
-			server_root = server_root_entries[0]
-			self._logger.debug("ServerRoot found: %s", server_root)
-		else:
-			self._logger.warning("ServerRoot not found in apache config file %s", httpd_conf_path)
-			server_root = os.path.dirname(httpd_conf_path)
-			self._logger.info("Use %s as ServerRoot", server_root)
-			
-		mod_ssl_file = server_root + '/modules/mod_ssl.so'
+		include_mod_ssl = 'LoadModule ssl_module modules/mod_ssl.so'			
+		mod_ssl_file = self.server_root + '/modules/mod_ssl.so'
 		
 		if not os.path.isfile(mod_ssl_file) and not os.path.islink(mod_ssl_file):
 			self._logger.error('%s does not exist. Try "sudo yum install mod_ssl" ',
 						mod_ssl_file)
 		else:			
 			#ssl.conf part
-			ssl_conf_path = server_root + '/conf.d/ssl.conf'
+			ssl_conf_path = self.server_root + '/conf.d/ssl.conf'
 			ssl_conf_minimal = "Listen 443\nNameVirtualHost *:443\n"
 			ssl_conf_file = None
 			ssl_conf_str = None	
@@ -300,22 +269,18 @@ class ApacheHandler(Handler):
 			if not os.path.exists(ssl_conf_path):
 				self._logger.error("SSL config %s doesn`t exist", ssl_conf_path)
 			else:
-				try:
-					ssl_conf_file = open(ssl_conf_path, 'r')
-					ssl_conf_str = ssl_conf_file.read()
-				except IOError, e: 
-					self._logger.error('Cannot read SSL config file %s. %s', 
-							ssl_conf_path, e.strerror)
-					return
-				finally:
-					if ssl_conf_file:
-						ssl_conf_file.close()
-			
+				
+				error_message = 'Cannot read SSL config file %s' % ssl_conf_path
+				ssl_conf_str = read_file(ssl_conf_path, error_msg=error_message, logger=self._logger)
+				
 				if not ssl_conf_str:
 					self._logger.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
 					ssl_conf_str_updated = ssl_conf_minimal
 						
 				else:
+					
+					#put replacing key & cert paths here 
+					
 					if not self.ssl_conf_name_vhost_regexp.search(ssl_conf_str):
 						self._logger.debug("NameVirtualHost directive not found in %s", ssl_conf_path)
 						listen_pos = self.ssl_conf_listen_regexp.search(ssl_conf_str)
@@ -329,18 +294,13 @@ class ApacheHandler(Handler):
 							listen_index = listen_pos.end()
 							ssl_conf_str_updated = ssl_conf_str[:listen_index] + '\nNameVirtualHost *:443\n' + ssl_conf_str[listen_index:]
 				if ssl_conf_str_updated:
-					try:
-						self._logger.debug("Writing changes to SSL config file %s.", ssl_conf_path)
-						ssl_conf_file = open(ssl_conf_path, 'w')					
-						ssl_conf_file.write(ssl_conf_str_updated)
-					except IOError, e:
-						self._logger.error('Cannot save SSL config file %s. %s', 
-								ssl_conf_path, e.strerror)
-					finally:
-						if ssl_conf_file:
-							ssl_conf_file.close()
+					error_message = 'Cannot save SSL config file %s' % ssl_conf_path
+					write_file(ssl_conf_path, ssl_conf_str_updated, error_msg=error_message, logger=self._logger)
 			
 			#apache.conf part
+			error_message = 'Cannot read httpd config file %s' % httpd_conf_path
+			conf_str = read_file(httpd_conf_path, error_msg=error_message, logger=self._logger)
+			
 			index = conf_str.find('mod_ssl.so')
 			if conf_str and index == -1:
 				backup_file(httpd_conf_path)
@@ -351,19 +311,35 @@ class ApacheHandler(Handler):
 				conf_str_updated = conf_str[:pos.start()] + '\n' + include_mod_ssl  + '\n' + conf_str[pos.start():] if pos else \
 						conf_str + '\n' + include_mod_ssl + '\n'
 					
-				f = None			
-				try:
-					self._logger.debug("Writing changes to httpd config file %s.", httpd_conf_path)
-					f = open(httpd_conf_path, 'w')
-					f.write(conf_str_updated)
-				except IOError, e:
-					self._logger.error('Cannot save httpd config file %s. %s', 
-							httpd_conf_path, e.strerror)
-				finally:
-					if f:
-						f.close()
+				self._logger.debug("Writing changes to httpd config file %s.", httpd_conf_path)
+				error_message = 'Cannot save httpd config file %s' % httpd_conf_path
+				write_file(httpd_conf_path, conf_str_updated, error_msg=error_message, logger=self._logger)
 	
-
+	
+	def _get_server_root(self, httpd_conf_path):
+		if disttool.is_debian_based():
+			server_root = '/etc/apache2'
+		
+		elif disttool.is_redhat_based():
+			self._logger.debug("Searching in apache config file %s to find server root",
+					httpd_conf_path)
+			error_message = 'Cannot read httpd config file %s' % httpd_conf_path
+			conf_str = read_file(httpd_conf_path, error_msg=error_message, logger=self._logger)
+	
+			if conf_str:		
+				server_root_entries = self.server_root_regexp.findall(conf_str)
+			
+			if server_root_entries:
+				server_root = server_root_entries[0]
+				self._logger.debug("ServerRoot found: %s", server_root)
+			else:
+				self._logger.warning("ServerRoot not found in apache config file %s", httpd_conf_path)
+				server_root = os.path.dirname(httpd_conf_path)
+				self._logger.info("Use %s as ServerRoot", server_root)
+				
+		return server_root
+	
+	
 	def _reload_apache(self):
 		try:
 			initd.reload("apache")
@@ -374,49 +350,36 @@ class ApacheHandler(Handler):
 	def _patch_default_conf_deb(self, vhosts_path):
 		self._logger.debug("Replacing NameVirtualhost and Virtualhost ports especially for debian-based linux")
 		default_vhost_path = vhosts_path + '/' + '000-default'
-		if os.path.exists(default_vhost_path):
-			try:
-				default_vhost_file = open(default_vhost_path, 'r')
-				default_vhost = default_vhost_file.read()
-				default_vhost_file.close()
-			except IOError, e: 
-				self._logger.error('Cannot read default vhost config file %s. %s', 
-						default_vhost_path, e.strerror)
-			else:
-				default_vhost = self.name_vhost_regexp.sub('NameVirtualHost *:80\n', default_vhost)
-				default_vhost = self.vhost_regexp.sub( '<VirtualHost *:80>', default_vhost)
-				try:
-					default_vhost_file = open(default_vhost_path, 'w')
-					default_vhost_file.write(default_vhost)
-					default_vhost_file.close()
-				except IOError, e:
-					self._logger.error('Cannot write to default vhost config file %s. %s', 
-							default_vhost_path, e.strerror)
+		
+		error_message = 'Cannot read default vhost config file %s' % default_vhost_path
+		default_vhost = read_file(default_vhost_path, error_msg=error_message, logger=self._logger)
+		
+		if default_vhost:
+			default_vhost = self.name_vhost_regexp.sub('NameVirtualHost *:80\n', default_vhost)
+			default_vhost = self.vhost_regexp.sub( '<VirtualHost *:80>', default_vhost)
+			error_message = 'Cannot write to default vhost config file %s' % default_vhost_path
+			write_file(default_vhost_path, default_vhost, error_msg=error_message, logger=self._logger)
+
 
 	def _create_vhost_paths(self, vhost_path):
-		if os.path.exists(vhost_path):
-			try:
-				vhost_file = open(vhost_path, 'r')
-				vhost = vhost_file.read()
-				vhost_file.close()
-			except IOError, e: 
-						self._logger.error('Couldn`t read vhost config file %s. %s', 
-								vhost_path, e.strerror)
-			else:
-				vhost = re.sub(self.strip_comments_regexp, '', vhost, re.S)
-				list_logs = self.errorlog_regexp.findall(vhost) + self.customlog_regexp.findall(vhost)
-				
-				dir_list = []
-				for log_file in list_logs: 
-					log_dir = os.path.dirname(log_file)
-					if (log_dir not in dir_list) and (not os.path.exists(log_dir)): 
-						dir_list.append(log_dir)
-						
-				for log_dir in dir_list:
-					try:
-						os.makedirs(log_dir)
-						self._logger.info('Created log directory %s', log_dir)
-					except OSError, e:
-						self._logger.error('Couldn`t create directory %s. %s', 
-								log_dir, e.strerror)
+		error_message = 'Couldn`t read vhost config file %s' % vhost_path
+		vhost = read_file(vhost_path, error_msg=error_message, logger=self._logger)
+		
+		if vhost:
+			vhost = re.sub(self.strip_comments_regexp, '', vhost, re.S)
+			list_logs = self.errorlog_regexp.findall(vhost) + self.customlog_regexp.findall(vhost)
+			
+			dir_list = []
+			for log_file in list_logs: 
+				log_dir = os.path.dirname(log_file)
+				if (log_dir not in dir_list) and (not os.path.exists(log_dir)): 
+					dir_list.append(log_dir)
+					
+			for log_dir in dir_list:
+				try:
+					os.makedirs(log_dir)
+					self._logger.info('Created log directory %s', log_dir)
+				except OSError, e:
+					self._logger.error('Couldn`t create directory %s. %s', 
+							log_dir, e.strerror)
 		
