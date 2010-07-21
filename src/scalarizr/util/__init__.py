@@ -152,9 +152,7 @@ def daemonize():
 def system(args, shell=True):
 	import subprocess
 	logger = logging.getLogger(__name__)
-	#logger = logging.getLogger("scalarizr.util")
-	logger.debug("system: " + args if isinstance(args, str) else " ".join(args))
-	#print "system: " + args if isinstance(args, str) else " ".join(args)
+	logger.debug("system: %s", args)
 	p = subprocess.Popen(args, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	out, err = p.communicate()
 	if out:

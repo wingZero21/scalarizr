@@ -80,6 +80,55 @@ def truncate(filename):
 	f.close()
 
 
+def read_file(filename, msg = None, error_msg="Cannot read from ", logger = None):
+	if not logger:
+		logger = logging.getLogger(__name__)
+	
+	logger.debug(msg) if msg else logger.debug("Reading from file %s", filename)
+
+	file = None
+	data = None	
+	if os.path.isfile(filename):
+		try:
+			file = open(filename,'r')
+			data = file.read()
+			return data
+		except IOError, e:
+			logger.error(error_msg, filename, " : ", str(e))
+			return None
+		finally:
+			if not file.closed:
+				file.close()
+				
+	else:
+		logger.error("File %s does not exist", filename)
+		return None
+
+
+def write_file(filename, data, mode = 'w', msg = None, error_msg="Cannot write to ", logger = None):
+	if not logger:
+		logger = logging.getLogger(__name__)
+	logger.debug(msg) if msg else logger.debug("Writing to file %s", filename)
+	if not os.path.isfile(filename):
+		logger.debug("File %s does not exist. Trying to create.", filename)
+		dir = os.path.dirname(filename)
+		if not os.path.isdir(dir):
+			logger.debug("Directory %s does not exist. Trying to create.", dir)
+			os.makedirs(dir)
+
+	file = None
+	try:
+		file = open(filename, mode)
+		file.write(data)
+		return True
+	except IOError, e:
+		logger.error(error_msg, filename, " : ", str(e))
+	finally:
+		if not file.closed:
+			file.close()
+		
+	return False
+
 
 class Rsync(object):
 	"""

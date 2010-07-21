@@ -318,61 +318,43 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 	logger.info("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
 			mpoint, privated_image, format_size(1024*blocks_count))
 	mtab = fstool.Mtab()
-	if mtab.contains(mpoint=mpoint):
+	if mtab.contains(mpoint=mpoint): # if privated_image exists
 		logger.warning("private.d already mounted to %s", mpoint)
 		return
 	
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
 		
-	build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
-	retcode = system(build_image_cmd)[2]
-	if retcode:
-		logger.error('Cannot create image device')
-	os.chmod(privated_image, 0600)
-		
-	logger.debug("Creating file system on image device")
-	fstool.mkfs(privated_image)
-		
-	mnt_opts = ('-t auto', '-o loop,rw')
-	if os.listdir(mpoint):
-		logger.debug("%s contains data. Need to copy it ot image before mounting", mpoint)
-		# If mpoint not empty copy all data to the image
-		try:
-			tmp_mpoint = "/mnt/tmp-privated"
-			os.makedirs(tmp_mpoint)
-			logger.debug("Mounting %s to %s", privated_image, tmp_mpoint)
-			fstool.mount(privated_image, tmp_mpoint, mnt_opts)
-			logger.debug("Copy data from %s to %s", mpoint, tmp_mpoint)
-			system(str(Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)))
-		finally:
+	mnt_opts = ('-t auto', '-o loop,rw')	
+	if not os.path.exists(privated_image):	
+		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
+		retcode = system(build_image_cmd)[2]
+		if retcode:
+			logger.error('Cannot create image device')
+		os.chmod(privated_image, 0600)
+			
+		logger.debug("Creating file system on image device")
+		fstool.mkfs(privated_image)
+			
+		if os.listdir(mpoint):
+			logger.debug("%s contains data. Need to copy it ot image before mounting", mpoint)
+			# If mpoint not empty copy all data to the image
 			try:
-				fstool.umount(mpoint=tmp_mpoint)
-			except fstool.FstoolError:
-				pass
-			try:
-				os.removedirs(tmp_mpoint)
-			except OSError:
-				pass
+				tmp_mpoint = "/mnt/tmp-privated"
+				os.makedirs(tmp_mpoint)
+				logger.debug("Mounting %s to %s", privated_image, tmp_mpoint)
+				fstool.mount(privated_image, tmp_mpoint, mnt_opts)
+				logger.debug("Copy data from %s to %s", mpoint, tmp_mpoint)
+				system(str(Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)))
+			finally:
+				try:
+					fstool.umount(mpoint=tmp_mpoint)
+				except fstool.FstoolError:
+					pass
+				try:
+					os.removedirs(tmp_mpoint)
+				except OSError:
+					pass
 		
 	logger.debug("Mounting %s to %s", privated_image, mpoint)
 	fstool.mount(privated_image, mpoint, mnt_opts)
-	
-	loop_list = mtab.find(mpoint=mpoint, rescan=True)
-	if loop_list:
-		logger.debug("Adding %s to fstab as loop device", privated_image)		
-		loop_entry = loop_list[0].__str__()
-		
-		if not loop_entry.endswith('\n'):
-			loop_entry += '\n'
-			
-		try:
-			fstab_file = open(fstool.Fstab.LOCATION, 'a')
-			fstab_file.write(loop_entry)
-		except OSError, e:
-			logger.error("Cannot write to fstab file. %s", e)
-		else:
-			fstab_file.close()
-				
-	else:
-		logger.error("Mtab file does not contain entry with %s mount point", mpoint)

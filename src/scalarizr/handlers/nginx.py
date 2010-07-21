@@ -5,16 +5,33 @@ Created on Jan 6, 2010
 @author: Dmytro Korsakov
 '''
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler
+from scalarizr.handlers import Handler, HandlerError, lifecircle
 from scalarizr.behaviour import Behaviours
 from scalarizr.messaging import Messages
-from scalarizr.util import configtool, disttool
+from scalarizr.util import configtool, disttool, system, initd
+from scalarizr.util.filetool import read_file, write_file
 import os
 import re
 import shutil
 import subprocess
 import logging
 
+initd_script = "/etc/init.d/nginx"
+if not os.path.exists(initd_script):
+	raise HandlerError("Cannot find Nginx init script at %s. Make sure that nginx is installed" % initd_script)
+
+pid_file = None
+try:
+	out = system("nginx -V")[1]
+	m = re.search("--pid-path=(.*?)\s", out)
+	if m:
+			pid_file = m.group(1)
+except:
+	pass
+
+logger = logging.getLogger(__name__)
+logger.debug("Explore Nginx service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
+initd.explore("nginx", initd_script, pid_file, tcp_port=80)
 
 def get_handlers():
 	return [NginxHandler()]
@@ -24,7 +41,16 @@ class NginxHandler(Handler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service	
-		bus.define_events("nginx_upstream_reload")	
+		bus.define_events("nginx_upstream_reload")
+		bus.on("start", self.on_start)
+		
+	def on_start(self):
+		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+			try:
+				self._logger.info("Starting Nginx")
+				initd.start("nginx")
+			except initd.InitdError, e:
+				self._logger.error(e)	
 	
 	def on_HostUp(self, message):
 		self.nginx_upstream_reload()
@@ -41,35 +67,15 @@ class NginxHandler(Handler):
 		config_dir = os.path.dirname(include)
 		nginx_conf_path = config_dir + '/nginx.conf'
 		default_conf_path = config_dir + '/sites-enabled/' + 'default'
+		initd_script = "/etc/init.d/nginx"
 		
 		template_path = os.path.join(bus.etc_path, "public.d/handler.nginx/app-servers.tpl")
 		
 		if not os.path.exists(template_path):
-			self._logger.warning("nginx template '%s' doesn't exists. Creating default template", template_path)
-			template_dir = os.path.dirname(template_path)
-			if not os.path.exists(template_dir):
-				os.makedirs(template_dir)
-			
-			file = None
-			try:
-				file = open(template_path, "w+")
-				file.write("""\nupstream backend {\n\tip_hash;\n\n\t${upstream_hosts}\n}\n""")
-			except IOError, e:
-				self._logger.error("Cannot write to %s file: %s" % (template_path, str(e)))
-			finally:
-				if file:
-					file.close()
-		
-		template = ""
-		file = None
-		try:			
-			file = open(template_path, 'r')
-			template = file.read()
-		except IOError, e:
-			self._logger.error("Cannot read %s file: %s" % (template_path, str(e)))
-		finally:
-			if file:
-				file.close()	
+			template_content = """\nupstream backend {\n\tip_hash;\n\n\t${upstream_hosts}\n}\n"""
+			log_message = "nginx template '%s' doesn't exists. Creating default template" % (template_path,)
+			write_file(template_path, template_content, msg = log_message, logger = self._logger)
+		template = read_file(template_path, logger = self._logger)			
 
 		# Create upstream hosts configuration
 		upstream_hosts = ""
@@ -77,10 +83,15 @@ class NginxHandler(Handler):
 			for app_host in app_serv.hosts :
 				upstream_hosts += "\tserver %s:%s;\n" % (app_host.internal_ip, app_port)
 		if not upstream_hosts:
-			self._logger.debug("Scalr returned empty app hosts list. Filling template with localhost only.")
+			self._logger.debug("Scalr returned empty app hosts list. Adding localhost only.")
 			upstream_hosts = "\tserver 127.0.0.1:80;\n"
 		
-		template = template.replace("${upstream_hosts}", upstream_hosts)
+		if template:
+			self._logger.debug("Replacing data in template")
+			template = template.replace("${upstream_hosts}", upstream_hosts)
+		else:
+			self.logger.error("Template is empty. Using internal data instead.")
+			template = template_content.replace("${upstream_hosts}", upstream_hosts)
 
 		#HTTPS Configuration		
 		# openssl req -new -x509 -days 9999 -nodes -out cert.pem -keyout cert.key
@@ -95,19 +106,10 @@ class NginxHandler(Handler):
 		#Determine, whether configuration was changed or not
 		
 		old_include = None
-		
-		file = None
 		if os.path.isfile(include):
-			self._logger.debug("Reading old configuration from %s", include)
-			try:
-				file = open(include,'r')
-				old_include = file.read()
-			except IOError, e:
-				self._logger.error("Cannot read %s file: %s" % (include, str(e)))
-			finally:
-				if file:
-					file.close()
-			
+			log_message = "Reading old configuration from %s" % include
+			old_include = read_file(include, msg = log_message, logger = self._logger)
+
 		if template == old_include:
 			self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:
@@ -115,135 +117,108 @@ class NginxHandler(Handler):
 			self._logger.debug("Creating backup config files.")
 			if os.path.isfile(include):
 				shutil.move(include, include+".save")
-			self._logger.debug("Writing template to %s", include)
-			
-			file = None
-			try:
-				file = open(include, "w")
-				file.write(template)
-			except IOError, e:
-				self._logger.error("Cannot write to %s file: %s" % (include, str(e)))
-			finally:
-				if file:
-					file.close()
-			
-			nginx_conf = None
-			file = None
-			if not os.path.isfile(nginx_conf_path):
-				self._logger.error("nginx main config file % does not exist", nginx_conf_path)
-			else:
-				self._logger.debug("Trying to read nginx main config %s", nginx_conf_path)
 				
-				try:
-					file = open(nginx_conf_path,'r')
-					nginx_conf = file.read()
-				except IOError, e:
-					self._logger.error("Cannot read %s file: %s" % (nginx_conf_path, str(e)))
-				finally:
-					if file:
-						file.close()
-												
+			log_message = "Writing template to %s" % include			
+			write_file(include, template, msg = log_message, logger = self._logger)
+			
+			
+			#Patching main config file
+			if not os.path.isfile(nginx_conf_path):
+				self._logger.error("nginx main config file %s does not exist", nginx_conf_path)
+			else:
+				log_message = "Reading nginx config "
+				nginx_conf = read_file(nginx_conf_path, msg=log_message, logger=self._logger)
+							
 				if nginx_conf:
-					include_regexp = re.compile('^[^#\n]*?include\s*'+include+'\s*;\s*$', re.MULTILINE)
-					if not re.search(include_regexp, nginx_conf):
-						new_nginx_conf = re.sub(re.compile('(http\s*\{.*?)(\})', re.S),
-								'\\1\n' + '    include '+ include + ';\n' + '\\2', nginx_conf)
-						self._logger.debug("Including generated config to main nginx config %s", nginx_conf_path)
+					backend_re = re.compile('^[^#\n]*?proxy_pass\s*http://backend\s*;\s*$', re.MULTILINE)
+					# If configuration hasn't been patched before
+					if not re.search(backend_re, nginx_conf):
+						new_nginx_conf = ''
+						server_re = re.compile('^\s*server\s*\{\s*(#.*?)?$')
+						fp = open(nginx_conf_path,'r')
+						opened = 0
+						open_close_re = re.compile('^[^#\n]*([\{\}]).*?$')
+						include_re = re.compile('^[^#\n]*include\s*/etc/nginx/(conf\.d/\*|sites-enabled/\*).*?$')
+						# Comment all server sections and includes of default configuration files
+						while 1:
+							line = fp.readline()
+							if not line:
+								break
+							
+							if re.match(include_re, line):
+								new_nginx_conf += '###' + line
+								continue
+
+							if re.match(server_re, line):
+								new_nginx_conf += '###' + line
+								opened = 1
+								while 1:
+									new_line = fp.readline()
+									new_nginx_conf += '###' + new_line
+									res = re.match(open_close_re, new_line)
+									if res:
+										opened += 1 if res.group(1) == '{' else -1
+									if not opened:
+										break
+							else:
+								new_nginx_conf += line
+								
+						# Adding upstream include to main nginx config		
+						http_sect_re = re.compile('(^\s*http\s*\{.*?$)(.*)', re.S | re.MULTILINE)
+						# Find http section in main nginx config
+						if re.search(http_sect_re, new_nginx_conf):
+							self._logger.debug("Including generated config to main nginx config %s", nginx_conf_path)
+							
+							server_sect = read_file(os.path.join(bus.etc_path, "public.d/handler.nginx/server.tpl"),logger=self._logger)
+							
+							new_nginx_conf = re.sub(http_sect_re, '\\1\n' + '    include '+ include + ';\n'
+												                          + server_sect + '\\2', new_nginx_conf)				
 						
-						try:
-							file = open(nginx_conf_path,'w')
-							file.write(new_nginx_conf)
-						except IOError, e:
-							self._logger.error("Cannot write to %s file: %s" % (nginx_conf_path, str(e)))
-						finally:
-							if file:
-								file.close()
-					
+						write_file(nginx_conf_path, new_nginx_conf, logger = self._logger)
+						
 					else:
 						self._logger.debug("File %s already included into nginx main config %s", 
 									include, nginx_conf_path)
-						
-			if disttool._is_debian_based and os.path.isfile(default_conf_path):		
-				self._logger.debug("Patching nginx default vhost file (for debian-based dists only)")
-				
-				default_content = None
-				file = None
-				try:
-					file = open(default_conf_path)
-					default_content = file.read()
-				except IOError, e:
-					self._logger.error("Cannot read %s file: %s" % (default_conf_path, str(e)))
-				finally:
-					if file:
-						file.close()
-						
-				root_locat = re.compile('(?P<loc>^\s*location\s*/\s*\{[^\}]*?)(?P<root>^\s*root.*?;.*?$)(?P<endloc>[^\}]*?\})', re.DOTALL | re.MULTILINE)
-				
-				if default_content:
-					if re.search(root_locat, default_content):
-						new_content = re.sub(root_locat, '\\loc'+' '*16 +'proxy_pass http://backend;\\endloc', default_content)
-						
-						file = None 
-						try:
-							file = open(default_conf_path, 'w')
-							file.write(new_content)
-						except IOError, e:
-							self._logger.error("Cannot write to %s file: %s" % (default_conf_path, str(e)))
-						finally:
-							if file:
-								file.close()						
-					
-					else:
-						location_re = re.compile('(?P<loc>^\s*location\s*/\s*\{\s*$)(?P<endloc>[^\}]*\})')
-					
-											
-			#FIXME: use initd for starting, stopping & reloading nginx
+
+			
+			
 			self._logger.info("Testing new configuration.")
-			nginx_pid_file = "/var/run/nginx.pid"
-			nginx_test_command = [nginx_binary, "-t"]
 			
-			p = subprocess.Popen(nginx_test_command, 
-					stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			stdout, stderr = p.communicate()
-			is_nginx_test_failed = p.poll()
+			if os.path.isfile(nginx_binary):
 			
-			if os.path.isfile(nginx_binary) and is_nginx_test_failed:
-				self._logger.error("Configuration error detected:" +  stderr + " Reverting configuration.")
-				if os.path.isfile(include):
-					shutil.move(include, include+".junk")
-				if os.path.isfile(include+".save"):
-					shutil.move(include+".save", include)
+				nginx_test_command = [nginx_binary, "-t"]
 			
-			elif os.path.isfile(nginx_binary) and os.path.isfile(nginx_pid_file):
-				self._logger.info("Reloading nginx.")
+				p = subprocess.Popen(nginx_test_command, 
+						stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+				stdout, stderr = p.communicate()
+				is_nginx_test_failed = p.poll()
 				
-				nginx_pid = None
-				file = None
-				try:
-					file =  open(nginx_pid_file,'r')
-					nginx_pid = file.read()
-				except IOError, e:
-					self._logger.error("Cannot read nginx pid file %s: %s" % (nginx_pid_file, str(e)))
-				finally:
-					if file:
-						file.close()
-						
-				if nginx_pid.endswith('\n'):
-					nginx_pid = nginx_pid[:-1]
-					
-				if nginx_pid :
-					nginx_restart_command = ["kill","-HUP", nginx_pid]
-					subprocess.call(nginx_restart_command)
+				if is_nginx_test_failed:
+					self._logger.error("Configuration error detected:" +  stderr + " Reverting configuration.")
+					if os.path.isfile(include):
+						shutil.move(include, include+".junk")
+					if os.path.isfile(include+".save"):
+						shutil.move(include+".save", include)
+				
 				else:
-					self._logger.info("/var/run/nginx.pid exists but empty (usually it so after configuration tests w/ running). Nginx hasn`t got HUP signal.")
-				
-			elif not os.path.isfile(nginx_binary):
-				self._logger.info("Nginx not found.")
-			elif not os.path.isfile(nginx_pid_file):
-				self._logger.info("/var/run/nginx.pid does not exist. Probably nginx haven`t been started")
-		
+					# Reload nginx
+					self._reload_nginx()
+
 		bus.fire("nginx_upstream_reload")
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.WWW in behaviour and \
 			(message.name == Messages.HOST_UP or message.name == Messages.HOST_DOWN)	
+	
+	def _reload_nginx(self):
+		nginx_pid = read_file(pid_file, logger = self._logger)
+		if nginx_pid and nginx_pid.strip():
+			try:
+				self._logger.info("Reloading nginx")
+				initd.reload("nginx")
+				self._logger.debug("nginx reloaded")
+			except:
+				self._logger.error("Cannot reloaded nginx")
+				raise
+
+logger = logging.getLogger(__name__)
