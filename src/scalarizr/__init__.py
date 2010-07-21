@@ -593,6 +593,9 @@ def main():
 				optparser.add_option_group(group)
 			
 		optparser.parse_args()
+		# Daemonize process
+		if optparser.values.daemonize:
+			daemonize()
 	
 		_init()
 	
@@ -619,9 +622,6 @@ def main():
 			print >> sys.stdout, "Execute instalation process first: 'scalarizr --configure'"
 			sys.exit(1)
 		
-		# Daemonize process
-		if optparser.values.daemonize:
-			daemonize()
 
 		if EMBED_SNMPD:
 			# Start SNMP server in a separate process			

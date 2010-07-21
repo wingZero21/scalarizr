@@ -106,11 +106,18 @@ class MessagingHandler(logging.Handler):
 		finally:
 			self._lock.release()
 		
-		if entries:
-			msg_service = bus.messaging_service
-			message = msg_service.new_message(Messages.LOG)
-			message.body["entries"] = entries			
-			msg_service.get_producer().send(Queues.LOG, message)	
+		try:
+			if entries:
+				msg_service = bus.messaging_service
+				message = msg_service.new_message(Messages.LOG)
+				message.body["entries"] = entries
+				logger = logging.getLogger("scalarizr")
+				logger.removeHandler(self)	
+				msg_service.get_producer().send(Queues.LOG, message)
+				logger.addHandler(self)
+		except (BaseException, Exception):
+			# silently
+			pass	
 
 	
 	def _sender(self):
