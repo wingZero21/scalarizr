@@ -613,6 +613,7 @@ if disttool.is_linux():
 			self._mount_image()
 			self._make_special_dirs()
 			self._copy_rec(self._volume, self._image_mpoint)
+			system("sync")  # Flush buffers
 			return self._image_mpoint
 			
 		def _create_image_file(self):

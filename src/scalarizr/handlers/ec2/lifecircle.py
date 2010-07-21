@@ -5,9 +5,9 @@ Created on Mar 2, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.util import system
+from scalarizr.util import system, filetool
 import logging
-
+import os, re
 
 
 def get_handlers ():
@@ -36,7 +36,24 @@ class Ec2LifeCircleHandler(Handler):
 		
 		# Set the hostname to this instance's public hostname
 		system("hostname " + self._platform.get_public_hostname())
-	
+		
+		# ec2 init script may disable root login
+		ec2_cfg_path = "/etc/ec2-init/ec2-config.cfg"
+		if os.path.exists(ec2_cfg_path):
+			c = filetool.read_file(ec2_cfg_path)
+			c = re.sub(re.compile("^disable_root.*", re.M), "disable_root=0", c)
+			filetool.write_file(ec2_cfg_path, c)
+			
+		# Add server ssh public key to authorized_keys
+		authorized_keys_path = "/root/.ssh/authorized_keys"
+		if os.path.exists(authorized_keys_path):
+			c = filetool.read_file(authorized_keys_path)
+			ssh_key = self._platform.get_ssh_pub_key()
+			if c.find(ssh_key) == -1:
+				c += ssh_key + "\n"
+				self._logger.info("Add server ssh public key to authorized_keys")
+				filetool.write_file(authorized_keys_path)
+
 	
 	def on_before_hello(self, message):
 		"""
