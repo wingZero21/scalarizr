@@ -8,7 +8,12 @@ Primary goal: support Ini, Xml, Yaml, ProtocolBuffers, Nginx, Apache2
 @author: marat
 @author: spike
 '''
-from xml.etree import ElementTree as ET
+from scalarizr.libs import ElementPath13
+"""
+Comment , uncomment
+
+"""
+from xml.etree import ElementTree as ET, ElementTree
 import ElementPath13
 import re
 import os
@@ -114,7 +119,7 @@ class Configuration:
 	def write(self, fp):
 		"""
 		"""
-		if not self._provider:
+		if self.etree.getroot() == None:
 			raise MetaconfError("Nothing to write! Create the tree first (readfp or read)")
 		self._provider.write(fp, self.etree)
 	
@@ -128,6 +133,29 @@ class Configuration:
 		for node in nodes:
 			self._extend(node)
 			
+	def comment(self, path):
+		temp_nodes = self._find_all(path)
+
+		if not temp_nodes:
+			raise MetaconfError("Path %s doesn't exist" % path)
+
+		parent_els	= self._find_all(os.path.join(path,'..'))
+
+		for temp_node in temp_nodes:
+			comment_value = StringIO()
+			temp_root	= ET.Element('mc_conf')
+			temp_tree	= ElementTree.ElementTree(temp_root)
+			temp_root.append(temp_node)
+			new_conf	= Configuration(format=self._format, etree=temp_tree)
+			new_conf._init()
+			new_conf.write(comment_value)
+			parent_el = parent_els.pop(0)
+			it			= parent_el.getiterator()
+			comment		= ET.Comment(comment_value.getvalue())
+			parent_el.insert(it.index(temp_node), comment)
+			parent_el.remove(temp_node)
+
+	
 	def _extend(self, node):
 		if not callable(node.tag) and node.tag != '':
 			cursect = self._cursect + '/' + node.tag
@@ -165,7 +193,7 @@ class Configuration:
 		first_childs = first.getchildren()
 		second_childs = second.getchildren()
 		
-		if first_childs and second_childs:			
+		if first_childs and second_childs:
 			if len(first_childs) != len(second_childs):
 				return False
 			
@@ -183,12 +211,13 @@ class Configuration:
 		parent_element = self.etree.find(parent)
 		it = parent_element.getiterator()
 		parent_element.insert(it.index(after_element), node)
-				
+
 	def __iter__(self):
 		return ElementPath13.findall(self.etree, self._root_path + "*")
 		"""
 		Returns keys iterator 
 		"""	
+		
 	def _find_all(self, path):
 		ret = []
 		try:
@@ -264,7 +293,10 @@ class Configuration:
 	def add(self, path, value, typecast=None, before_path=None):
 		
 		after_element = None
-		parent_path = os.path.dirname(path)
+		before_element = None
+		
+		parent_path = os.path.dirname(path)			
+		
 		parent		= self._find(parent_path)
 		el = ET.Element(os.path.basename(path))
 		
@@ -280,13 +312,14 @@ class Configuration:
 		if after_element != None:
 			it = parent.getiterator()
 			parent.insert(it.index(after_element), el)
-		elif before_element != None:
+		elif before_element:
 			it = parent.getiterator()
 			parent.insert(it.index(before_element), el)
 		else:
 			parent.append(el)
 			self._set(el, value, typecast)
 		self._set(el, value, typecast)
+	
 
 				
 		"""
@@ -420,7 +453,7 @@ class FormatProvider:
 		if not len(toplevel):
 			exit
 		for section in toplevel:
-			for writer in self._writers:	
+			for writer in self._writers:
 				if writer(fp, section):
 					break
 			else:
@@ -441,7 +474,7 @@ class IniFormatProvider(FormatProvider):
 			self.read_section,
 			self.read_option
 		)
-		self._writers = (
+		self._writers = (								
 			self.write_blank,
 			self.write_comment,
 			self.write_section,
@@ -461,46 +494,49 @@ class IniFormatProvider(FormatProvider):
 		if not hasattr(self, "_sect_re"):
 			self._sect_re = re.compile(r'\[(?P<header>[^]]+)\]')
 		if self._sect_re.match(line):
-			self._cursect = ET.SubElement(root, quote(self._sect_re.match(line).group('header')), {'mc_type' : 'section'})
+			self._cursect = ET.SubElement(root, quote(self._sect_re.match(line).group('header')))
 			return True
 		return False
 	
 	def read_blank(self, line, root):
 		if '' == line.strip():
-			ET.SubElement(self._cursect, '', {'mc_type' : 'blank'})
+			ET.SubElement(self._cursect, '')
 			return True
 		return False
+	
 	
 	def read_option(self, line, root):
 		if not hasattr(self, "_opt_re"):
 			self._opt_re = re.compile(r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*)$')
 		if self._opt_re.match(line):
-			new_opt = ET.SubElement(self._cursect, quote(self._opt_re.match(line).group('option').strip()), {'mc_type' : 'option'})
+			new_opt = ET.SubElement(self._cursect, quote(self._opt_re.match(line).group('option').strip()))
 			new_opt.text = self._opt_re.match(line).group('value')
 			return True
 		return False
 	
 	def write_comment(self, fp, node):
 		if callable(node.tag):
-			fp.write('#'+node.text+'\n')
+			comment_lines  = node.text.split('\n')
+			for line in comment_lines:
+					fp.write('#'+line+'\n')
 			return True
 		return False
 	
 	def write_section(self, fp, node):
-		if 'mc_type' in node.attrib and 'section' == node.attrib['mc_type']:
+		if node.getchildren():
 			fp.write('['+unquote(node.tag)+']\n')	
 			self.write(fp, node)
 			return True
 		return False
 	
 	def write_option(self, fp, node):
-		if 'mc_type' in node.attrib and 'option' == node.attrib['mc_type']:
-			fp.write(unquote(node.tag)+" = "+node.text+'\n')
+		if not node.getchildren() and not callable(node.tag) and node.text:
+			fp.write(unquote(node.tag)+"\t= "+node.text+'\n')
 			return True
 		return False
 	
 	def write_blank(self, fp, node):
-		if 'mc_type' in node.attrib and 'blank' == node.attrib['mc_type']:
+		if not node.tag and not callable(node.tag):
 			fp.write('\n')
 			return True
 		return False
@@ -513,11 +549,11 @@ class NginxFormatProvider(IniFormatProvider):
 	
 	def __init__(self):
 		IniFormatProvider.__init__(self)
-		self._readers += (self.read_multiline,)
-		self._writers += (self.write_multiline,)
+#		self._readers += (self.read_multiline,)
+#		self._writers += (self.write_multiline,)
 		self._nesting  = 0
-		self._pad = ' '*4
-
+		self._pad = '	'
+			
 	def read_comment(self, line, root):
 		if not hasattr(self, "_comment_re"):
 			self._comment_re = re.compile('\s*#(.*)$')
@@ -527,24 +563,25 @@ class NginxFormatProvider(IniFormatProvider):
 			return True
 		return False
 	
-	def read_multiline(self, line, root):
+	def read_option(self, line, root):
 		if not hasattr(self, "_multi_re"):
-			self._multi_re = re.compile("\s*(?P<statement>[^\s]+)\s+(?P<option>[^\s]+)?\s*(?P<value>'.*')(?P<multi_end>;)?\s*(#(?P<comment>.*))?$")
-		if self._multi_re.match(line):
-			result = self._multi_re.match(line)
-			new_multi = ET.SubElement(self._cursect, quote(result.group('statement').strip()), {'mc_type' : 'multiline'})
-			ET.SubElement(new_multi, quote(result.group('value').strip()), {'mc_type' : 'multiline_part'})
+			self._multi_re = re.compile("\s*(?P<statement>[^\s]+)\s+(?P<value>.+?)(?P<multi_end>;)?\s*(#(?P<comment>.*))?$")
+
+		result = self._multi_re.match(line)
+
+		if result:
+			new_multi = ET.SubElement(self._cursect, quote(result.group('statement').strip()))
+			multi_value = quote(result.group('value').strip())
 			if result.group('comment'):
 				comment = ET.Comment(result.group('comment').strip())
 				self._cursect.append(comment)
-			if result.group('option'):
-				new_multi.text =  result.group('option').strip()			
 			if result.group('multi_end'):
+				new_multi.text = multi_value
 				return True
 			else:
 				opened = 1
 				if not hasattr(self, "_multi_block"):
-					self._multi_block = re.compile("\s*(?P<value>'[^#]*')(?P<multi_end>;)?\s*(#(?P<comment>.*))?$")
+					self._multi_block = re.compile("\s*(?P<value>[^#]+?)(?P<multi_end>;)?\s*(#(?P<comment>.*))?$")
 				while opened != 0:
 					new_line = self._fp.readline()
 					result = self._multi_block.match(new_line)
@@ -552,24 +589,13 @@ class NginxFormatProvider(IniFormatProvider):
 						return False
 					self._lineno += 1
 					if result.group('comment'):
-						comment = ET.Comment(result.group('comment').strip())
+						comment = ET.Comment(result.group('comment'))
 						self._cursect.append(comment)
-					ET.SubElement(new_multi, quote(result.group('value').strip()), {'mc_type' : 'multiline_part'})
+					multi_value += quote('\n'+self._pad+result.group('value').strip())
 					if result.group('multi_end'):
 						opened -= 1
+				new_multi.text = multi_value
 				return True
-		return False
-	
-	def read_option(self, line, root):
-		if not hasattr(self, "_opt_re"):
-			self._opt_re = re.compile('\s*(?P<option>[^\s]+)\s*(?P<value>.*);\s*(#(?P<comment>.*))?$')
-		if self._opt_re.match(line):
-			if self._opt_re.match(line.strip()).group('comment'):
-				comment = ET.Comment(self._opt_re.match(line).group('comment').strip())
-				self._cursect.append(comment)
-			new_opt = ET.SubElement(self._cursect, quote(self._opt_re.match(line).group('option').strip()), {'mc_type' : 'option'})
-			new_opt.text = self._opt_re.match(line).group('value').strip()
-			return True
 		return False
 	
 	def read_section(self, line, root):
@@ -578,10 +604,11 @@ class NginxFormatProvider(IniFormatProvider):
 			
 		result = self._sect_re.match(line)
 		if result:
-			new_section = ET.SubElement(self._cursect, quote(result.group('option').strip()), {'mc_type' : 'section'})
+			new_section = ET.SubElement(self._cursect, quote(result.group('option').strip()))
 			if result.group('value'):
 				new_section.text = result.group('value').strip()
-
+			if result.group('comment'):
+				new_section.append(ET.Comment(result.group(4)))
 			opened = 1 if '}' not in line.split('#')[0] else 0
 			
 			while opened != 0:
@@ -606,34 +633,32 @@ class NginxFormatProvider(IniFormatProvider):
 	
 	def write_comment(self, fp, node):
 		if callable(node.tag):
-			fp.write('    '*self._nesting + '#'+node.text+'\n')
-			return True
-		return False
-	
-	def write_option(self, fp, node):
-		if 'mc_type' in node.attrib and 'option' == node.attrib['mc_type']:
-			fp.write(self._pad*self._nesting + unquote(node.tag)+self._pad+node.text+';\n')
+			comment_lines  = node.text.split('\n')
+			for line in comment_lines:
+				fp.write(self._pad*self._nesting + '#'+line+'\n')
 			return True
 		return False
 	
 	def write_section(self, fp, node):
-		if 'mc_type' in node.attrib and 'section' == node.attrib['mc_type']:
-			fp.write('    '*self._nesting + unquote(node.tag) + self._pad + unquote(node.text.strip()) + ' {\n')
+		if node.getchildren():
+			fp.write(self._pad*self._nesting + unquote(node.tag) + ' ' + unquote(node.text.strip()) + ' {\n')
 			self._nesting +=1
-			self.write(fp, node)
-			self._nesting -=1
+			try:
+				self.write(fp, node)
+			finally:
+				self._nesting -=1
 			fp.write(self._pad*self._nesting + '}\n')
 			return True
 		return False
 	
-	def write_multiline(self, fp, node):
-		if 'mc_type' in node.attrib and 'multiline' == node.attrib['mc_type']:
-			childs = node.getchildren()
-			fp.write (self._pad*self._nesting + unquote(node.tag)+ self._pad + unquote(node.text.strip()) + ' ' + unquote(childs[0].tag))
-			if len(childs) > 1:
-				tag_len = len(unquote(node.tag) + self._pad + unquote(node.text.strip()) + ' ')
-				for child in range(len(childs))[1:]:
-					fp.write('\n'+self._pad*self._nesting + ' '*tag_len + unquote(childs[child].tag))
+	def write_option(self, fp, node):
+		if not node.getchildren() and not callable(node.tag) and node.text:
+			values = node.text.split('\n')
+			fp.write (self._pad*self._nesting + unquote(node.tag)+ self._pad + unquote(values.pop(0)))
+			if len(values):
+				tag_len = len(node.tag)
+				for value in values:
+					fp.write('\n'+self._pad*self._nesting + ' '*tag_len + unquote(value))
 			fp.write(';\n')
 			return True
 		return False
@@ -648,10 +673,10 @@ class XmlFormatProvider:
 			etree = ET.parse(fp, parser=CommentedTreeBuilder())
 		except Exception, e:
 			raise ParseError((e,))
-			
+
 		indent(etree.getroot())
 		return [etree.getroot()]
-	
+
 	def write(self, etree, fp):
 		etree.write(fp)
 
@@ -726,7 +751,7 @@ class MysqlFormatProvider(IniFormatProvider):
 		if not hasattr(self, "_stat_re"):
 			self._stat_re = re.compile(r'\s*([^\s*]*)\s*$')
 		if self._stat_re.match(line):
-			ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)), {'mc_type' : 'statement'} )
+			ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)))
 			return True
 		return False
 		
@@ -734,20 +759,20 @@ class MysqlFormatProvider(IniFormatProvider):
 		if not hasattr(self, "_inc_re"):
 			self._inc_re = re.compile(r'\s*(!include(dir)?)\s*([^\s]*)[^\w-]*$')
 		if self._inc_re.match(line):
-			new_include = ET.SubElement(self._cursect, quote(self._inc_re.match(line).group(1)), {'mc_type' : 'include'})
+			new_include = ET.SubElement(self._cursect, quote(self._inc_re.match(line).group(1)))
 			new_include.text = self._inc_re.match(line).group(3)
 			return True
 		return False
 
 
 	def write_statement(self, fp, node):
-		if 'mc_type' in node.attrib and 'statement' == node.attrib['mc_type']:
+		if not callable(node.tag) and not node.text and not node.getchildren():
 			fp.write(unquote(node.tag)+'\n')
 			return True
 		return False
 	
 	def write_include(self, fp, node):
-		if 'mc_type' in node.attrib and 'include' == node.attrib['mc_type']:
+		if re.match(self._stat_re, node.tag):
 			fp.write(unquote(node.tag)+" "+node.text.strip()+'\n')
 			return True
 		return False
