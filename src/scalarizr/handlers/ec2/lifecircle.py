@@ -52,7 +52,7 @@ class Ec2LifeCircleHandler(Handler):
 			if c.find(ssh_key) == -1:
 				c += ssh_key + "\n"
 				self._logger.info("Add server ssh public key to authorized_keys")
-				filetool.write_file(authorized_keys_path)
+				filetool.write_file(authorized_keys_path, c)
 
 	
 	def on_before_hello(self, message):
