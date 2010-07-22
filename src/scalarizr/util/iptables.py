@@ -4,6 +4,9 @@ Created on Jul 21, 2010
 @author: marat
 '''
 
+from scalarizr.util import system
+import sys
+
 P_TCP = "tcp"
 P_UDP = "udp"
 P_UDPLITE = "udplite"
@@ -15,27 +18,47 @@ P_ALL = "all"
 
 
 class RuleSpec(object):
-	options = None
-	rule_num = None
+	specs = None
 	
-	def __init__(self, protocol=None, source=None, destination=None, jump=None, 
-			goto=None, inint=None, outint=None, set_counters=None):
-		self.options = dict()
-		
-	def get_protocol (self):
-		return self.options["-p"]
-	
-	def set_protocol (self, p):
-		if not hasattr(p, "__iter__"):
-			p = (p, True)
-		if len(p) != 2:
-			raise
-		self.options["-p"] = p
+	def __init__(self, protocol=None, source=None, destination=None, 
+				inint=None, outint=None, dport = None, jump=None):	
+		self.specs = {}
+		self.specs['-p'] = protocol
+		self.specs['-s'] = source
+		self.specs['-d'] = destination	
+		self.specs['-i'] = inint
+		self.specs['-o'] = outint
+		self.specs['-j'] = jump
+		self.specs['-dport'] = dport
 
-	protocol = property(get_protocol, set_protocol)
-	
+		
 	def __str__(self):
-		pass
+		rule_spec = ''			
+		for key in self.specs:
+			if self.specs[key]:
+				rule_spec +=' ! %s %s' % (key,self.specs[key][0]) if is_inverted(self.specs[key]) \
+						else ' %s %s' % (key,self.specs[key])
+				
+		return str(rule_spec)
+	
+	def __eq__(self, other):
+		p = self.specs['-p'] == other.specs['-p'] or \
+			(not self.specs['-p'] and other.specs['-p']=='ALL')
+		s = self.specs['-s'] == other.specs['-s'] or \
+			(not self.specs['-s'] and other.specs['-s']=='0.0.0.0/0')
+		d = (self.specs['-d'] == other.specs['-d']) or \
+			(not self.specs['-d'] and other.specs['-d']=='0.0.0.0/0')
+		i = self.specs['-i'] == other.specs['-i']
+		o = self.specs['-o'] == other.specs['-o']
+		j = self.specs['-j'] == other.specs['-j']
+		dport = self.specs['-dport'] == other.specs['-dport']
+		if p and s and d and i and o and j and dport:
+			return True
+		else:
+			return False
+
+def is_inverted(param):
+	return type(param) == tuple and len(param) > 1 and not param[1]
 
 class IpTables(object):
 	executable = None
@@ -43,14 +66,50 @@ class IpTables(object):
 	def __init__(self, executable=None):
 		self.executable = executable or "/sbin/iptables"
 		
-	def append_rule(self, chain, rule_spec):
-		pass
+	def append_rule(self, rule_spec, chain='INPUT'):
+		rule = "%s -A %s%s" % (self.executable, chain, str(rule_spec))
+		system(rule)
 
-	def insert_rule(self, chain, rule_num, rule_spec):
-		pass
+	def insert_rule(self, rule_num, rule_spec, chain='INPUT'):
+		if not rule_num:
+			rule_num = ''
+		rule = "%s -I %s %s%s" % (self.executable, chain, str(rule_num), str(rule_spec))
+		system(rule)
 	
-	def delete_rule(self, chain, rule_spec):
-		pass
+	def delete_rule(self, rule_spec, chain='INPUT'):
+		rule = "%s -D %s%s" % (self.executable, chain, str(rule_spec))
+		system(rule)
+
+	def list_rules(self, chain='INPUT'):
+		table = system('%s --line-numbers -nvL %s' % (self.executable, chain))[0]
+
+		list = table.splitlines()
+		rules = []
+		for line in list:
+			if line.find("destination")==-1 and not line.startswith('Chain') and line.strip():
+				row = line.split()
+				row.reverse()
+				num = row.pop()
+				pkts = row.pop()
+				bytes = row.pop()
+				
+				for option in range(1,len(row)):
+					if row[option].startswith('!'):
+						row[option] = (row[option][1:],False)
+					elif row[option] in ('--','*'):
+						row[option] = None
+
+				rule = RuleSpec()
+				rule.specs['-d'] = row[0]
+				rule.specs['-s'] = row[1]
+				rule.specs['-o'] = row[2]
+				rule.specs['-i'] = row[3]
+				rule.specs['-p'] = row[5]
+				if len(row)>6:
+					rule.specs['-j'] = row[6]
+				rules.append((rule, num))			
+		return rules
 	
-	def list_rules(self, chain):
-		pass
+	def flush(self, chain='INPUT'):
+		rule = '%s -F %s' % (self.executable, chain)
+		system(rule)
