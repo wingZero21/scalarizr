@@ -21,7 +21,7 @@ class RuleSpec(object):
 	specs = None
 	
 	def __init__(self, protocol=None, source=None, destination=None, 
-				inint=None, outint=None, dport = None, jump=None):	
+				inint=None, outint=None, dport = None, jump=None, custom=None):	
 		self.specs = {}
 		self.specs['-p'] = protocol
 		self.specs['-s'] = source
@@ -30,15 +30,16 @@ class RuleSpec(object):
 		self.specs['-o'] = outint
 		self.specs['-j'] = jump
 		self.specs['-dport'] = dport
-
+		self.specs['custom'] = custom
 		
 	def __str__(self):
 		rule_spec = ''			
 		for key in self.specs:
-			if self.specs[key]:
+			if self.specs[key] and key != 'custom':
 				rule_spec +=' ! %s %s' % (key,self.specs[key][0]) if is_inverted(self.specs[key]) \
 						else ' %s %s' % (key,self.specs[key])
-				
+		if self.specs['custom']:
+			rule_spec += self.specs['custom']				
 		return str(rule_spec)
 	
 	def __eq__(self, other):
