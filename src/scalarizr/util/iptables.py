@@ -1,11 +1,11 @@
 '''
 Created on Jul 21, 2010
 
-@author: marat
+@author: shaitanich
 '''
 
 from scalarizr.util import system
-import sys
+
 
 P_TCP = "tcp"
 P_UDP = "udp"
@@ -21,7 +21,7 @@ class RuleSpec(object):
 	specs = None
 	
 	def __init__(self, protocol=None, source=None, destination=None, 
-				inint=None, outint=None, dport = None, jump=None, custom=None):	
+				inint=None, outint=None, sport = None, dport = None, jump=None, custom=None):	
 		self.specs = {}
 		self.specs['-p'] = protocol
 		self.specs['-s'] = source
@@ -29,7 +29,8 @@ class RuleSpec(object):
 		self.specs['-i'] = inint
 		self.specs['-o'] = outint
 		self.specs['-j'] = jump
-		self.specs['-dport'] = dport
+		self.specs['--sport'] = sport
+		self.specs['--dport'] = dport
 		self.specs['custom'] = custom
 		
 	def __str__(self):
@@ -58,9 +59,10 @@ class RuleSpec(object):
 		i = self.specs['-i'] == other.specs['-i']
 		o = self.specs['-o'] == other.specs['-o']
 		j = self.specs['-j'] == other.specs['-j']
-		dport = self.specs['-dport'] == other.specs['-dport']
+		dport = self.specs['--dport'] == other.specs['--dport']
+		sport = self.specs['--sport'] == other.specs['--sport']
 		
-		if p and s and d and i and o and j and dport:
+		if p and s and d and i and o and j and dport and sport:
 			return True
 		else:
 			return False

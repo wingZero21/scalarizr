@@ -8,15 +8,21 @@ Primary goal: support Ini, Xml, Yaml, ProtocolBuffers, Nginx, Apache2
 @author: marat
 @author: spike
 '''
-from scalarizr.libs import ElementPath13
-"""
-Comment , uncomment
-"""
-from xml.etree import ElementTree as ET, ElementTree
-import ElementPath13
+
+import sys
+if sys.version_info[0:2] >= (2, 7):
+	from xml.etree import ElementTree as ET 
+else:
+	from scalarizr.externals.etree import ElementTree as ET
 import re
 import os
 from cStringIO import StringIO
+
+"""
+Comment , uncomment
+"""
+
+
 
 
 format_providers = dict()
@@ -76,7 +82,7 @@ class Configuration:
 			root = ET.Element("mc_conf/")
 			self.etree = ET.ElementTree(root)
 		self._sections = []
-		self._cursect = '/'
+		self._cursect = './'
 	
 	def read(self, filenames):
 		if isinstance(filenames, str):
@@ -128,8 +134,7 @@ class Configuration:
 		Comments and blank lines from importing config will not be added
 		"""
 		self._init()	
-		nodes = conf.etree.getroot().getchildren()
-		for node in nodes:
+		for node in conf.etree.getroot():
 			self._extend(node)
 			
 	def comment(self, path):
@@ -144,7 +149,7 @@ class Configuration:
 		for temp_node in temp_nodes:
 			comment_value = StringIO()
 			temp_root	= ET.Element('mc_conf')
-			temp_tree	= ElementTree.ElementTree(temp_root)
+			temp_tree	= ET.ElementTree(temp_root)
 			temp_root.append(temp_node)
 			new_conf	= Configuration(format=self._format, etree=temp_tree)
 			new_conf._init()
@@ -165,9 +170,8 @@ class Configuration:
 			raise MetaconfError("Path %s doesn't exist" % unquote(path))
 		
 		for temp_node in temp_nodes:
-			children = temp_node.getchildren()
 			it	= temp_node.getiterator()
-			for child in children:
+			for child in temp_node:
 				if not callable(child.tag):
 					continue
 				
@@ -191,11 +195,10 @@ class Configuration:
 			exist_list = self.etree.findall(cursect)
 			if exist_list:
 				if len(exist_list) == 1 and exist_list[0].attrib == node.attrib:
-					childs = exist_list[0].getchildren()
-					if len(childs):
+					if len(exist_list[0]):
 						self._sections.append(self._cursect)
 						self._cursect  = cursect
-						for child in node.getchildren():
+						for child in node:
 							self._extend(child)
 						self._cursect  = self._sections.pop()
 					else:
@@ -219,8 +222,8 @@ class Configuration:
 		if first.attrib != second.attrib:
 			return False
 		
-		first_childs = first.getchildren()
-		second_childs = second.getchildren()
+		first_childs = list(first)
+		second_childs = list(second)
 		
 		if first_childs and second_childs:
 			if len(first_childs) != len(second_childs):
@@ -242,12 +245,15 @@ class Configuration:
 		parent_element.insert(it.index(after_element), node)
 
 	def __iter__(self):
-		return ElementPath13.findall(self.etree, self._root_path + "*")
 		"""
 		Returns keys iterator 
 		"""	
+		return self.etree.findall(self._root_path + "*")
+		#return ElementPath13.findall(self.etree, self._root_path + "*")
 		
 	def _find_all(self, path):
+		return self.etree.findall(self._root_path + quote(path))
+		"""
 		ret = []
 		try:
 			it = ElementPath13.findall(self.etree, self._root_path + quote(path))			
@@ -255,9 +261,11 @@ class Configuration:
 				ret.append(it.next())
 		except StopIteration:
 			return ret
+		"""
 		
 	def _find(self, path):
-		el = ElementPath13.find(self.etree, self._root_path + quote(path))
+		el = self.etree.find(self._root_path + quote(path))
+		# el = ElementPath13.find(self.etree, self._root_path + quote(path))
 		if el != None:
 			return el
 		else:
@@ -303,7 +311,8 @@ class Configuration:
 		"""
 		Find element, and call _set
 		"""
-		el = ElementPath13.find(self.etree, self._root_path + quote(path))
+		el = self.etree.find(self._root_path + quote(path))
+		#el = ElementPath13.find(self.etree, )
 		if el != None:
 			self._set(el, value, typecast)
 	
@@ -341,7 +350,7 @@ class Configuration:
 		if after_element != None:
 			it = parent.getiterator()
 			parent.insert(it.index(after_element), el)
-		elif before_element:
+		elif before_element != None:
 			it = parent.getiterator()
 			parent.insert(it.index(before_element), el)
 		else:
@@ -471,14 +480,13 @@ class FormatProvider:
 			#print self._errors
 			raise ParseError(self._errors)
 		else:
-			childs = root.getchildren()
-			return childs
+			return list(root)
 		
 	def write(self, fp, etree):
 		if not (isinstance(etree, ET._ElementInterface) or isinstance(etree, ET.ElementTree)):
 			raise MetaconfError("etree param must be instance of _ElementInterface or ElementTree. %s passed" % (etree,))
 		errors = []
-		toplevel = etree.find('').getchildren()
+		toplevel = list(etree.find(''))
 		if not len(toplevel):
 			exit
 		for section in toplevel:
@@ -552,14 +560,14 @@ class IniFormatProvider(FormatProvider):
 		return False
 	
 	def write_section(self, fp, node):
-		if node.getchildren():
+		if len(node):
 			fp.write('['+unquote(node.tag)+']\n')	
 			self.write(fp, node)
 			return True
 		return False
 	
 	def write_option(self, fp, node):
-		if not node.getchildren() and not callable(node.tag) and node.text:
+		if not len(node) and not callable(node.tag) and node.text:
 			fp.write(unquote(node.tag)+"\t= "+node.text+'\n')
 			return True
 		return False
@@ -669,7 +677,7 @@ class NginxFormatProvider(IniFormatProvider):
 		return False
 	
 	def write_section(self, fp, node):
-		if node.getchildren():
+		if len(node):
 			fp.write(self._pad*self._nesting + unquote(node.tag) + ' ' + unquote(node.text.strip()) + ' {\n')
 			self._nesting +=1
 			try:
@@ -681,7 +689,7 @@ class NginxFormatProvider(IniFormatProvider):
 		return False
 	
 	def write_option(self, fp, node):
-		if not node.getchildren() and not callable(node.tag) and node.text:
+		if not len(node) and not callable(node.tag) and node.text:
 			values = node.text.split('\n')
 			fp.write (self._pad*self._nesting + unquote(node.tag)+ self._pad + unquote(values.pop(0)))
 			if len(values):
@@ -728,7 +736,7 @@ class YamlFormatProvider:
 			dict = YamlFormatProvider._yaml.load(fp.read(), Loader = YamlFormatProvider._yaml.BaseLoader)
 			self._parse(dict)
 			indent(self._root)
-			return self._root.getchildren()
+			return list(self._root)
 		except (BaseException, Exception), e:
 			raise ParseError((e,))
 			
@@ -795,7 +803,7 @@ class MysqlFormatProvider(IniFormatProvider):
 
 
 	def write_statement(self, fp, node):
-		if not callable(node.tag) and not node.text and not node.getchildren():
+		if not callable(node.tag) and not node.text and not len(node):
 			fp.write(unquote(node.tag)+'\n')
 			return True
 		return False
