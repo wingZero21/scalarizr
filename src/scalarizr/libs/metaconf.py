@@ -11,7 +11,6 @@ Primary goal: support Ini, Xml, Yaml, ProtocolBuffers, Nginx, Apache2
 from scalarizr.libs import ElementPath13
 """
 Comment , uncomment
-
 """
 from xml.etree import ElementTree as ET, ElementTree
 import ElementPath13
@@ -135,9 +134,10 @@ class Configuration:
 			
 	def comment(self, path):
 		temp_nodes = self._find_all(path)
-
+		
+		path = quote(path)
 		if not temp_nodes:
-			raise MetaconfError("Path %s doesn't exist" % path)
+			raise MetaconfError("Path %s doesn't exist" % unquote(path))
 
 		parent_els	= self._find_all(os.path.join(path,'..'))
 
@@ -149,13 +149,42 @@ class Configuration:
 			new_conf	= Configuration(format=self._format, etree=temp_tree)
 			new_conf._init()
 			new_conf.write(comment_value)
-			parent_el = parent_els.pop(0)
+			parent_el   = parent_els.pop(0)
 			it			= parent_el.getiterator()
-			comment		= ET.Comment(comment_value.getvalue())
+			comment		= ET.Comment(comment_value.getvalue().strip())
 			parent_el.insert(it.index(temp_node), comment)
 			parent_el.remove(temp_node)
 
-	
+	def uncomment(self, path):
+		path = quote(path)
+		parent_path = os.path.dirname(path)
+		el_name = os.path.basename(path)
+		temp_nodes = self._find_all(parent_path)
+		
+		if not temp_nodes:
+			raise MetaconfError("Path %s doesn't exist" % unquote(path))
+		
+		for temp_node in temp_nodes:
+			children = temp_node.getchildren()
+			it	= temp_node.getiterator()
+			for child in children:
+				if not callable(child.tag):
+					continue
+				
+				temp_conf = Configuration(self._format)
+				try:
+					temp_conf.readfp(StringIO(child.text.strip()))
+				except:
+					continue
+				
+				comment_node = temp_conf.etree.find(el_name)
+				
+				if comment_node == None:
+					continue
+
+				temp_node.insert(it.index(child), comment_node)
+				temp_node.remove(child)
+
 	def _extend(self, node):
 		if not callable(node.tag) and node.tag != '':
 			cursect = self._cursect + '/' + node.tag
