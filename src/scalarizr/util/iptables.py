@@ -44,15 +44,22 @@ class RuleSpec(object):
 	
 	def __eq__(self, other):
 		p = self.specs['-p'] == other.specs['-p'] or \
-			(not self.specs['-p'] and other.specs['-p']=='ALL')
+			(not self.specs['-p'] and other.specs['-p']=='ALL') or \
+			(not other.specs['-p'] and self.specs['-p']=='ALL')
+		
 		s = self.specs['-s'] == other.specs['-s'] or \
-			(not self.specs['-s'] and other.specs['-s']=='0.0.0.0/0')
+			(not self.specs['-s'] and other.specs['-s']=='0.0.0.0/0') or \
+			(not other.specs['-s'] and self.specs['-s']=='0.0.0.0/0')
+		
 		d = (self.specs['-d'] == other.specs['-d']) or \
-			(not self.specs['-d'] and other.specs['-d']=='0.0.0.0/0')
+			(not self.specs['-d'] and other.specs['-d']=='0.0.0.0/0') or \
+			(not other.specs['-d'] and self.specs['-d']=='0.0.0.0/0')
+			
 		i = self.specs['-i'] == other.specs['-i']
 		o = self.specs['-o'] == other.specs['-o']
 		j = self.specs['-j'] == other.specs['-j']
 		dport = self.specs['-dport'] == other.specs['-dport']
+		
 		if p and s and d and i and o and j and dport:
 			return True
 		else:
