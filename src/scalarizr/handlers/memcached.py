@@ -5,104 +5,104 @@ Created on Jul 23, 2010
 @author: shaitanich
 '''
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler
+from scalarizr.behaviour import Behaviours
+from scalarizr.handlers import Handler, HandlerError, lifecircle
+from scalarizr.util import disttool, initd
+from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util import iptables
+from scalarizr.util.iptables import IpTables, RuleSpec
+import logging
+import re
+import os
 
-# Explore memcached for initd
+file = '/var/run/memcached.pid'
+pid_file = file if os.path.exists(file) else None
+
+initd_script = '/etc/init.d/memcached'
+if not os.path.exists(initd_script):
+	raise HandlerError("Cannot find Apache init script at %s. Make sure that apache web server is installed" % initd_script)
+
+# Register memcached service
+logger = logging.getLogger(__name__)
+logger.debug("Explore memcached service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
+initd.explore("memcached", initd_script, pid_file)
 
 def get_handlers():
 	return [MemcachedHandler()]
 
 class MemcachedHandler(Handler):
+	
+	_logger = None
+	
 	def __init__(self):
-		pass
+		self._queryenv = bus.queryenv_service
+		self._logger = logging.getLogger(__name__)
+		self.debian_re = re.compile('^\s*-m\s*\d*$', re.M) 
+		self.redhat_re = re.compile('^\s*CACHESIZE\s*=\s*"\d*"$', re.M)
+		self.mcd_conf_path_deb = '/etc/memcached.conf' 
+		self.mcd_conf_path_redhat = '/etc/sysconfig/memcached'
+		self.ip_tables = IpTables()
+		self.rules = []
 	
 	def on_init(self):
 		bus.on("start", self.on_start)
 		bus.on("before_host_up", self.on_before_host_up)
 
 	def on_start(self):
-		pass
+		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+			try:
+				self._logger.info("Starting memcached")
+				initd.start("memcached")
+			except initd.InitdError, e:
+				self._logger.error(e)
 	
 	def on_before_host_up(self):
-		# Configure and start memcached
-		pass
+		config = bus.config
+		cache_size = config.get('behaviour_memcached','cache_size')
+			
+		if disttool._is_debian_based:
+			mcd_conf_path = self.mcd_conf_path_deb
+			expression = self.debian_re
+			substitute = '-m %s' % cache_size
+		else:
+			mcd_conf_path = self.mcd_conf_path_redhat
+			expression = self.redhat_re
+			substitute = 'CACHESIZE="%s"' % cache_size
+			
+		mcd_conf = read_file(mcd_conf_path, logger=self._logger)
+		
+		if mcd_conf:
+			if expression.findall(mcd_conf):
+				write_file(mcd_conf_path, re.sub(expression, substitute, mcd_conf), logger=self._logger)
+			else:
+				write_file(mcd_conf_path, substitute, mode='a', logger = self._logger)
+				
+		try:
+			self._logger.info("Reloading memcached")
+			initd.reload("memcached", force=True)
+		except initd.InitdError, e:
+			self._logger.error(e)
+
 	
 	def on_HostUp(self):
-		# Add iptables rule
-		pass
-	
+		# Adding iptables rules
+		ips = []
+		
+		for role in self._queryenv.list_roles():
+			for host in role.hosts:
+				ips.append(host.internal_ip or host.external_ip)
+		
+		for ip in ips:
+			allow_rule = RuleSpec(source=ip, protocol=iptables.P_TCP, dport='11211', jump='ACCEPT')
+			self.rules.append(allow_rule)
+		
+		drop_rule = RuleSpec(protocol=iptables.P_TCP, dport='11211', jump='DROP')
+		self.rules.append(drop_rule)
+			
+		for rule in self.rules:
+			self.ip_tables.append_rule(rule)
+		
+		
 	def on_HostDown(self):
-		# Remove iptables rule
-		pass
-
-
-
-
-"""
-Config samples:
-
-== Fedora 8 - 12
-/etc/sysconfig/memcached
-
-PORT="11211"
-USER="memcached"
-MAXCONN="1024"
-CACHESIZE="64"
-OPTIONS=""
-
-
-
-== Debian 5
-/etc/memcached.conf
-
-# memcached default config file
-# 2003 - Jay Bonci <jaybonci@debian.org>
-# This configuration file is read by the start-memcached script provided as
-# part of the Debian GNU/Linux distribution. 
-
-# Run memcached as a daemon. This command is implied, and is not needed for the
-# daemon to run. See the README.Debian that comes with this package for more
-# information.
--d
-
-# Log memcached's output to /var/log/memcached
-logfile /var/log/memcached.log
-
-# Be verbose
-# -v
-
-# Be even more verbose (print client commands as well)
-# -vv
-
-# Start with a cap of 64 megs of memory. It's reasonable, and the daemon default
-# Note that the daemon will grow to this size, but does not start out holding this much
-# memory
--m 64
-
-# Default connection port is 11211
--p 11211 
-
-# Run the daemon as root. The start-memcached will default to running as root if no
-# -u command is present in this config file
--u nobody
-
-# Specify which IP address to listen on. The default is to listen on all IP addresses
-# This parameter is one of the only security measures that memcached has, so make sure
-# it's listening on a firewalled interface.
--l 127.0.0.1
-
-# Limit the number of simultaneous incoming connections. The daemon default is 1024
-# -c 1024
-
-# Lock down all paged memory. Consult with the README and homepage before you do this
-# -k
-
-# Return error when memory is exhausted (rather than removing items)
-# -M
-
-# Maximize core file limit
-# -r
-
-
-"""
-
+		for rule in self.rules:
+			self.ip_tables.delete_rule(rule)
