@@ -586,7 +586,7 @@ def main():
 		for bh_attr in [bh for bh in dir(behaviour.Behaviours) if not bh.startswith("__")]:
 			bh = getattr(behaviour.Behaviours, bh_attr)
 			configurator = behaviour.get_configurator(bh)
-			if configurator.cli_options:			
+			if configurator and configurator.cli_options:
 				group = OptionGroup(optparser, "Installation options for '%s' behaviour" % (bh))
 				for opt in configurator.cli_options:
 					opt.dest = bh + "_" + opt.dest
