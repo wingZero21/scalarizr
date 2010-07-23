@@ -274,7 +274,7 @@ class NginxFpTest(unittest.TestCase):
 		c = StringIO('listen 80; # comment')
 		self.provider._fp = c
 		self.assertTrue(self.provider.read_option(c.readline(), self.root))
-#		self.assertEqual(self.provider._cursect.getiterator()[].text.strip(), 'comment')
+		self.assertEqual(self.provider._cursect.getiterator()[2].text.strip(), 'comment')
 		
 		c = StringIO("log_format  main  '$remote_addr - $remote_user [$time_local] \"$request\" '\n"+
 					 "'$status $body_bytes_sent \"$http_referer\" '\n"+
