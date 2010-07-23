@@ -464,7 +464,7 @@ def _platform_validator(value):
 		return False
 	return True
 
-_KNOWN_BEHAVIOURS = ("www", "app", "mysql")
+_KNOWN_BEHAVIOURS = tuple(getattr(behaviour.Behaviours, a) for a in dir(behaviour.Behaviours) if a[0:2] != "__")
 
 def _behaviour_validator(value):
 	if value:

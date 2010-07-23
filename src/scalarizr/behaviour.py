@@ -14,6 +14,7 @@ class Behaviours:
 	APP = "app"
 	MYSQL = "mysql"
 	CASSANDRA = "cassandra"
+	MEMCACHED = "memcached"
 	
 	
 def get_configurator(name):
