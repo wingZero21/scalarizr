@@ -434,11 +434,12 @@ def _configure ():
 
 	for bh in configtool.split_array(bhs):
 		configurator = behaviour.get_configurator(bh)
-		print "Configure %s behaviour" % (bh)
-		kwargs = {}
-		for opt in configurator.cli_options:
-			kwargs[opt.dest] = optparser.values.__dict__[bh + "_" + opt.dest]
-		configurator.configure(not optparser.values.no_prompt, **kwargs)
+		if configurator:
+			print "Configure %s behaviour" % (bh)
+			kwargs = {}
+			for opt in configurator.cli_options:
+				kwargs[opt.dest] = optparser.values.__dict__[bh + "_" + opt.dest]
+			configurator.configure(not optparser.values.no_prompt, **kwargs)
 		
 	configtool.update(os.path.join(bus.etc_path, "config.ini"), ini_updates)
 	
