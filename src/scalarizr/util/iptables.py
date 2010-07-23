@@ -15,13 +15,14 @@ P_ESP = "esp"
 P_AH = "ah"
 P_SCTP = "sctp"
 P_ALL = "all"
-
+PROTOCOLS = (P_TCP, P_UDP, P_UDPLITE, P_ICMP, P_ESP, P_AH, P_SCTP, P_ALL)
 
 class RuleSpec(object):
 	specs = None
 	
 	def __init__(self, protocol=None, source=None, destination=None, 
 				inint=None, outint=None, sport = None, dport = None, jump=None, custom=None):	
+		
 		self.specs = {}
 		self.specs['-p'] = protocol
 		self.specs['-s'] = source
@@ -32,17 +33,23 @@ class RuleSpec(object):
 		self.specs['--sport'] = sport
 		self.specs['--dport'] = dport
 		self.specs['custom'] = custom
+
 		
 	def __str__(self):
-		rule_spec = ''			
-		for key in self.specs:
-			if self.specs[key] and key != 'custom':
-				rule_spec +=' ! %s %s' % (key,self.specs[key][0]) if is_inverted(self.specs[key]) \
-						else ' %s %s' % (key,self.specs[key])
+		rule_spec = ''
+		specs = [self.specs['-p'], self.specs['-s'], self.specs['-d'], self.specs['-i'], \
+					self.specs['-o'], self.specs['--sport'], self.specs['--dport'], self.specs['-j']]
+		keys = ('-p', '-s', '-d', '-i', '-o', '--sport', '--dport', '-j')
+					
+		for item in range(0, len(specs)):
+			if specs[item] not in (None, 'custom'):
+				rule_spec +=' ! %s %s' % (keys[item], specs[item]) if is_inverted(specs[item]) \
+						else ' %s %s' % (keys[item],specs[item])
 		if self.specs['custom']:
-			rule_spec += self.specs['custom']				
-		return str(rule_spec)
-	
+			rule_spec += self.specs['custom']		
+		return str(rule_spec)			
+		
+				
 	def __eq__(self, other):
 		p = self.specs['-p'] == other.specs['-p'] or \
 			(not self.specs['-p'] and other.specs['-p']=='ALL') or \
@@ -108,15 +115,26 @@ class IpTables(object):
 						row[option] = (row[option][1:],False)
 					elif row[option] in ('--','*'):
 						row[option] = None
-
 				rule = RuleSpec()
-				rule.specs['-d'] = row[0]
-				rule.specs['-s'] = row[1]
-				rule.specs['-o'] = row[2]
-				rule.specs['-i'] = row[3]
-				rule.specs['-p'] = row[5]
-				if len(row)>6:
-					rule.specs['-j'] = row[6]
+				
+				last = row.pop()
+				if last not in PROTOCOLS:
+					rule.specs['-j'] = last
+					rule.specs['-p'] = row.pop()
+					
+				else:
+					rule.specs['-p'] = last
+				opt = row.pop()	
+				rule.specs['-i'] = row.pop()
+				rule.specs['-o'] = row.pop()
+				rule.specs['-s'] = row.pop()
+				rule.specs['-d'] = row.pop()
+				if len(row):
+					for spec in row:
+						if spec.startswith('dpt'):
+							rule.specs['--dport'] = spec.split(':')[1]
+						if spec.startswith('spt'):
+							rule.specs['--sport'] = spec.split(':')[1]
 				rules.append((rule, num))			
 		return rules
 	

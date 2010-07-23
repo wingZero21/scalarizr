@@ -6,6 +6,8 @@ Created on july 21, 2010
 import unittest
 from scalarizr.util import iptables
 from scalarizr.util.iptables import RuleSpec, IpTables
+from scalarizr.util import system
+import time
 
 class Test(unittest.TestCase):
 
@@ -19,14 +21,13 @@ class Test(unittest.TestCase):
 		self.ip_tables.flush()
 
 
-	def _test_valid_rule(self):
-		rule = RuleSpec(protocol=iptables.P_TCP, source='127.0.0.0/8', jump='ACCEPT')
-		
+	def test_valid_rule(self):
+		rule = RuleSpec(protocol=iptables.P_TCP, source='127.0.0.0/8', dport = '90', jump='ACCEPT')
 		print"\ntest_valid_rule\n"
 		print str(rule)
 		
 		self.ip_tables.append_rule(rule)
-		
+
 		list_system_rules = self.ip_tables.list_rules()
 		
 		for system_rule in list_system_rules:
@@ -36,7 +37,7 @@ class Test(unittest.TestCase):
 		print "Objects are equal."
 		
 		
-	def _test_delete_rule(self):
+	def test_delete_rule(self):
 		rule = RuleSpec(protocol=iptables.P_TCP, destination='127.0.0.0/8', jump='ACCEPT')
 		
 		print "\ntest_delete_rule\n"
