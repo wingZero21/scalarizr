@@ -124,7 +124,7 @@ class Configuration:
 	def write(self, fp):
 		"""
 		"""
-		if self.etree.getroot() == None:
+		if not self.etree or self.etree.getroot() == None:
 			raise MetaconfError("Nothing to write! Create the tree first (readfp or read)")
 		self._provider.write(fp, self.etree)
 	
@@ -168,26 +168,27 @@ class Configuration:
 		
 		if not temp_nodes:
 			raise MetaconfError("Path %s doesn't exist" % unquote(path))
-		
 		for temp_node in temp_nodes:
 			it	= temp_node.getiterator()
 			for child in temp_node:
+
 				if not callable(child.tag):
 					continue
-				
 				temp_conf = Configuration(self._format)
+
 				try:
 					temp_conf.readfp(StringIO(child.text.strip()))
 				except:
 					continue
-				
+
 				comment_node = temp_conf.etree.find(el_name)
-				
+
 				if comment_node == None:
 					continue
 
 				temp_node.insert(it.index(child), comment_node)
 				temp_node.remove(child)
+				del(temp_conf)
 
 	def _extend(self, node):
 		if not callable(node.tag) and node.tag != '':
@@ -277,6 +278,7 @@ class Configuration:
 		v = conf.get("general/server_id")
 		v = "3233-322"
 		"""
+		
 		return str(self._find(path).text)
 	
 	def get_float(self, path):
@@ -286,7 +288,7 @@ class Configuration:
 		return int(self.get(path))
 	
 	def get_boolean(self, path):
-		return self.get(path).lower() in ["1", "0", "yes", "true"]
+		return self.get(path).lower() in ["1", "yes", "true", "on"]
 	
 	def get_list(self, path):
 		return list(el.text for el in self._find_all(path))
@@ -486,7 +488,7 @@ class FormatProvider:
 		if not (isinstance(etree, ET._ElementInterface) or isinstance(etree, ET.ElementTree)):
 			raise MetaconfError("etree param must be instance of _ElementInterface or ElementTree. %s passed" % (etree,))
 		errors = []
-		toplevel = list(etree.find(''))
+		toplevel = list(etree.find('.'))
 		if not len(toplevel):
 			exit
 		for section in toplevel:
@@ -544,8 +546,11 @@ class IniFormatProvider(FormatProvider):
 	
 	def read_option(self, line, root):
 		if not hasattr(self, "_opt_re"):
-			self._opt_re = re.compile(r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*)$')
+			self._opt_re = re.compile(r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*?)\s*(?P<comment>[#;](.*))?$')
 		if self._opt_re.match(line):
+			if self._opt_re.match(line).group('comment'):
+				comment = ET.Comment(self._opt_re.match(line).group('comment')[1:])
+				self._cursect.append(comment)
 			new_opt = ET.SubElement(self._cursect, quote(self._opt_re.match(line).group('option').strip()))
 			new_opt.text = self._opt_re.match(line).group('value')
 			return True
@@ -607,13 +612,14 @@ class NginxFormatProvider(IniFormatProvider):
 		result = self._multi_re.match(line)
 
 		if result:
-			new_multi = ET.SubElement(self._cursect, quote(result.group('statement').strip()))
+			new_multi = ET.Element(quote(result.group('statement').strip()))
 			multi_value = quote(result.group('value').strip())
 			if result.group('comment'):
 				comment = ET.Comment(result.group('comment').strip())
 				self._cursect.append(comment)
 			if result.group('multi_end'):
 				new_multi.text = multi_value
+				self._cursect.append(new_multi)
 				return True
 			else:
 				opened = 1
@@ -621,6 +627,8 @@ class NginxFormatProvider(IniFormatProvider):
 					self._multi_block = re.compile("\s*(?P<value>[^#]+?)(?P<multi_end>;)?\s*(#(?P<comment>.*))?$")
 				while opened != 0:
 					new_line = self._fp.readline()
+					if not new_line:
+						return False
 					result = self._multi_block.match(new_line)
 					if not result:
 						return False
@@ -632,6 +640,7 @@ class NginxFormatProvider(IniFormatProvider):
 					if result.group('multi_end'):
 						opened -= 1
 				new_multi.text = multi_value
+				self._cursect.append(new_multi)
 				return True
 		return False
 	
@@ -650,6 +659,8 @@ class NginxFormatProvider(IniFormatProvider):
 			
 			while opened != 0:
 				new_line = self._fp.readline()
+				if not new_line:
+					return False
 				line += new_line
 				if not hasattr(self, "_block_re"):
 					self._block_re = re.compile('[^#]*([{}]).*$')
@@ -678,7 +689,8 @@ class NginxFormatProvider(IniFormatProvider):
 	
 	def write_section(self, fp, node):
 		if len(node):
-			fp.write(self._pad*self._nesting + unquote(node.tag) + ' ' + unquote(node.text.strip()) + ' {\n')
+			value = unquote(node.text.strip()) if node.text else ''
+			fp.write(self._pad*self._nesting + unquote(node.tag) + ' ' + value + ' {\n')
 			self._nesting +=1
 			try:
 				self.write(fp, node)
@@ -719,7 +731,7 @@ class XmlFormatProvider:
 
 format_providers["xml"] = XmlFormatProvider
 	
-	
+"""
 class YamlFormatProvider:
 
 	def __init__(self):
@@ -756,7 +768,7 @@ class YamlFormatProvider:
 			self._cursect.text = str(iterable)
 
 format_providers["yaml"] = YamlFormatProvider
-
+"""
 
 """
 [general]
@@ -794,7 +806,7 @@ class MysqlFormatProvider(IniFormatProvider):
 		
 	def read_include(self, line, root):
 		if not hasattr(self, "_inc_re"):
-			self._inc_re = re.compile(r'\s*(!include(dir)?)\s*([^\s]*)[^\w-]*$')
+			self._inc_re = re.compile(r'\s*(!include(dir)?)\s+([^\s]+)[^\w-]*$')
 		if self._inc_re.match(line):
 			new_include = ET.SubElement(self._cursect, quote(self._inc_re.match(line).group(1)))
 			new_include.text = self._inc_re.match(line).group(3)
@@ -809,7 +821,7 @@ class MysqlFormatProvider(IniFormatProvider):
 		return False
 	
 	def write_include(self, fp, node):
-		if re.match(self._stat_re, node.tag):
+		if '!include' in node.tag:
 			fp.write(unquote(node.tag)+" "+node.text.strip()+'\n')
 			return True
 		return False
