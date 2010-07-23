@@ -39,10 +39,19 @@ class MemcachedHandler(Handler):
 	def __init__(self):
 		self._queryenv = bus.queryenv_service
 		self._logger = logging.getLogger(__name__)
-		self.debian_re = re.compile('^\s*-m\s*\d*$', re.M) 
-		self.redhat_re = re.compile('^\s*CACHESIZE\s*=\s*"\d*"$', re.M)
-		self.mcd_conf_path_deb = '/etc/memcached.conf' 
-		self.mcd_conf_path_redhat = '/etc/sysconfig/memcached'
+		
+		config = bus.config
+		cache_size = config.get('behaviour_memcached','cache_size')
+		
+		if disttool._is_debian_based:
+			self.mcd_conf_path = '/etc/memcached.conf' 
+			self.expression = re.compile('^\s*-m\s*\d*$', re.M) 
+			self.substitute = '-m %s' % cache_size
+		else:
+			self.mcd_conf_path = '/etc/sysconfig/memcached'
+			self.expression = re.compile('^\s*CACHESIZE\s*=\s*"\d*"$', re.M)
+			self.substitute = 'CACHESIZE="%s"' % cache_size		
+
 		self.ip_tables = IpTables()
 		self.rules = []
 	
@@ -59,25 +68,14 @@ class MemcachedHandler(Handler):
 				self._logger.error(e)
 	
 	def on_before_host_up(self):
-		config = bus.config
-		cache_size = config.get('behaviour_memcached','cache_size')
-			
-		if disttool._is_debian_based:
-			mcd_conf_path = self.mcd_conf_path_deb
-			expression = self.debian_re
-			substitute = '-m %s' % cache_size
-		else:
-			mcd_conf_path = self.mcd_conf_path_redhat
-			expression = self.redhat_re
-			substitute = 'CACHESIZE="%s"' % cache_size
-			
-		mcd_conf = read_file(mcd_conf_path, logger=self._logger)
-		
+					
+		mcd_conf = read_file(self.mcd_conf_path, logger=self._logger)
+	
 		if mcd_conf:
-			if expression.findall(mcd_conf):
-				write_file(mcd_conf_path, re.sub(expression, substitute, mcd_conf), logger=self._logger)
+			if self.expression.findall(mcd_conf):
+				write_file(self.mcd_conf_path, re.sub(self.expression, self.substitute, mcd_conf), logger=self._logger)
 			else:
-				write_file(mcd_conf_path, substitute, mode='a', logger = self._logger)
+				write_file(self.mcd_conf_path, self.substitute, mode='a', logger = self._logger)
 				
 		try:
 			self._logger.info("Reloading memcached")
