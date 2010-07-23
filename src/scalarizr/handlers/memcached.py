@@ -10,6 +10,7 @@ from scalarizr.util import disttool, initd
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr.util import iptables
 from scalarizr.util.iptables import IpTables, RuleSpec
+from scalarizr.messaging import Messages
 import logging
 import re
 import os
@@ -54,6 +55,14 @@ class MemcachedHandler(Handler):
 
 		self.ip_tables = IpTables()
 		self.rules = []
+		
+		bus.on("init", self.on_init)
+	
+	
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return message.name == Messages.HOST_UP \
+			or message.name == Messages.HOST_DOWN	
+	
 	
 	def on_init(self):
 		bus.on("start", self.on_start)
@@ -67,7 +76,7 @@ class MemcachedHandler(Handler):
 			except initd.InitdError, e:
 				self._logger.error(e)
 	
-	def on_before_host_up(self):
+	def on_before_host_up(self, message):
 					
 		mcd_conf = read_file(self.mcd_conf_path, logger=self._logger)
 	
@@ -84,11 +93,13 @@ class MemcachedHandler(Handler):
 			self._logger.error(e)
 
 	
-	def on_HostUp(self):
+	def on_HostUp(self, message):
 		# Adding iptables rules
 		ips = []
+		roles = self._queryenv.list_roles()
+		self._logger.debug("MEMCACHED ASKED FOR % ROLES:",len(roles))
 		
-		for role in self._queryenv.list_roles():
+		for role in roles:
 			for host in role.hosts:
 				ips.append(host.internal_ip or host.external_ip)
 		
@@ -103,6 +114,7 @@ class MemcachedHandler(Handler):
 			self.ip_tables.append_rule(rule)
 		
 		
-	def on_HostDown(self):
+	def on_HostDown(self, message):
 		for rule in self.rules:
 			self.ip_tables.delete_rule(rule)
+		 
