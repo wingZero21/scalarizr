@@ -5,7 +5,6 @@ Created on Jul 23, 2010
 @author: shaitanich
 '''
 from scalarizr.bus import bus
-from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler, HandlerError, lifecircle
 from scalarizr.util import disttool, initd
 from scalarizr.util.filetool import read_file, write_file
@@ -15,12 +14,15 @@ import logging
 import re
 import os
 
-file = '/var/run/memcached.pid'
-pid_file = file if os.path.exists(file) else None
+pid_file = None
+if disttool.is_redhat_based():
+	pid_file = "/var/run/memcached/memcached.pid"
+elif disttool.is_debian_based():
+	pid_file = "/var/run/memcached.pid" 
 
 initd_script = '/etc/init.d/memcached'
 if not os.path.exists(initd_script):
-	raise HandlerError("Cannot find Apache init script at %s. Make sure that apache web server is installed" % initd_script)
+	raise HandlerError("Cannot find Memcached init script at %s. Make sure that apache web server is installed" % initd_script)
 
 # Register memcached service
 logger = logging.getLogger(__name__)
