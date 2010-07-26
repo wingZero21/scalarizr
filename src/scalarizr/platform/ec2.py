@@ -136,3 +136,25 @@ class Ec2Platform(Platform):
 		key_id, key = self.get_access_keys()
 		return connect_s3(key_id, key)
 
+
+class S3Uploader(object):
+	_queue = None
+	state = None
+	
+	def __init__(self, pool=2, max_attempts=3):
+		pass
+	
+	def upload(self, files, progress_cb=None):
+		# Enqueue 
+		for file in self.files:
+			self.queue.put((file, 0, "")) # filename, attempt, last_error
+		result = [] # list of turples (filename, ok, last_error)
+		self.state = "starting"
+		# Start workers
+		self.state = "in-progress"
+		# Join workers
+		self.state = "done"
+		return tuple(result)
+	
+	def _worker(self):
+		pass
