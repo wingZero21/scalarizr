@@ -81,7 +81,16 @@ def get_handlers ():
 class MysqlMessages:
 	CREATE_DATA_BUNDLE = "Mysql_CreateDataBundle"
 	CREATE_DATA_BUNDLE_RESULT = "Mysql_CreateDataBundleResult"
+	
 	CREATE_BACKUP = "Mysql_CreateBackup"
+	
+	CREATE_BACKUP_RESULT = "Mysql_CreateBackupResult"
+	"""
+	@ivar status: ok|error
+	@ivar last_error
+	@ivar backup_url: S3 URL
+	"""
+	
 	CREATE_PMA_USER = "Mysql_CreatePmaUser"
 	CREATE_PMA_USER_RESULT = "Mysql_CreatePmaUserResult"
 	
