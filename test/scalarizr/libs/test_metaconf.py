@@ -183,7 +183,9 @@ class IniFpTest(unittest.TestCase):
 		
 	def test_read_comment(self):
 		self.assertTrue(self.provider.read_comment('# Test ', self.root))
+		self.assertTrue(self.provider.read_comment('#Test ', self.root))
 		self.assertTrue(self.provider.read_comment('; Test ', self.root))
+		self.assertTrue(self.provider.read_comment(';Test ', self.root))		
 		self.assertFalse(self.provider.read_comment('Test # Another one', self.root))
 		
 	def test_read_section(self):
@@ -192,6 +194,7 @@ class IniFpTest(unittest.TestCase):
 
 	def test_read_blank(self):
 		self.assertTrue(self.provider.read_blank('       		   ', self.root))
+		self.assertTrue(self.provider.read_blank('', self.root))
 		self.assertFalse(self.provider.read_blank('!', self.root))
 		
 	def test_read_option(self):
@@ -221,6 +224,14 @@ class IniFpTest(unittest.TestCase):
 		self.assertTrue(self.provider.write_option(c, el))
 		self.assertEqual(c.getvalue(), 'option\t= value\n')
 		del(c, el)
+		
+	def test_write_amp(self):
+		el = ET.Element('option')
+		el.text = '&'
+		c = StringIO()
+		self.assertTrue(self.provider.write_option(c, el))
+		self.assertEqual(c.getvalue(), 'option\t= &\n')
+		
 		
 	def test_write_blank(self):
 		el = ET.Element('')
@@ -349,6 +360,8 @@ class MysqlFpTest(unittest.TestCase):
 	def test_read_include(self):
 		self.assertTrue(self.provider.read_include('!include /etc/somefile.conf', self.root))
 		self.assertTrue(self.provider.read_include('!includedir /etc/somedir', self.root))
+		self.assertTrue(self.provider.read_include('!includedir "/etc/somedir"', self.root))
+		self.assertTrue(self.provider.read_include('!includedir "C:\\Program Files\\MySQL\\conf\\twink.ini"', self.root))
 		self.assertFalse(self.provider.read_include('!includedir', self.root))
 	
 	def test_write_statement(self):
@@ -375,6 +388,13 @@ class MysqlFpTest(unittest.TestCase):
 		c = StringIO()
 		self.assertTrue(self.provider.write_include(c, el))
 		self.assertEqual(c.getvalue(), '!includedir /etc/mysql/somedir\n')
+
+		el = ET.Element('!includedir')
+		el.text = 'C:\\Program files\\twink'
+		c = StringIO()
+		self.assertTrue(self.provider.write_include(c, el))
+		self.assertEqual(c.getvalue(), '!includedir "C:\\Program files\\twink"\n')
+
 		
 		del(c, el)
 	
