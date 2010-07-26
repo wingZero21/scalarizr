@@ -6,7 +6,7 @@ Fedora 8			Amazon			ami-f51aff9c		i386
 CentOS 5.2			RightScale		ami-cb52b6a2		i386		
 CentOS 5.4			RightScale		ami-dc977fb5		i386		ebs
 CentOS 5.4			RightScale		ami-d0e901b9		x86_64		ebs
-Debian 5			alestic.com		ami-ed16f984		i386
+Debian 5			alestic.com		ami-dcf615b5		i386
 Ubuntu 9.04			alestic.com		ami-ccf615a5		i386
 Ubuntu 8.04 EBSboot alestic.com		ami-cb8d61a2		i386
 Ubuntu 8.04 EBSboot alestic.com		ami-cf8d61a6		x86_64
