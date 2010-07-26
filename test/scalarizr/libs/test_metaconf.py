@@ -363,6 +363,7 @@ class MysqlFpTest(unittest.TestCase):
 		self.assertTrue(self.provider.read_include('!includedir "/etc/somedir"', self.root))
 		self.assertTrue(self.provider.read_include('!includedir "C:\\Program Files\\MySQL\\conf\\twink.ini"', self.root))
 		self.assertFalse(self.provider.read_include('!includedir', self.root))
+		self.assertTrue(self.provider.read_include('!include "/etc/somefile.conf"', self.root))
 	
 	def test_write_statement(self):
 		el = ET.Element('quote-names')
@@ -390,7 +391,7 @@ class MysqlFpTest(unittest.TestCase):
 		self.assertEqual(c.getvalue(), '!includedir /etc/mysql/somedir\n')
 
 		el = ET.Element('!includedir')
-		el.text = 'C:\\Program files\\twink'
+		el.text = '"C:\\Program files\\twink"'
 		c = StringIO()
 		self.assertTrue(self.provider.write_include(c, el))
 		self.assertEqual(c.getvalue(), '!includedir "C:\\Program files\\twink"\n')

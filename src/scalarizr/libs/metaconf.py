@@ -22,9 +22,6 @@ from cStringIO import StringIO
 Comment , uncomment
 """
 
-
-
-
 format_providers = dict()
 default_format = "ini"
 	
@@ -806,10 +803,10 @@ class MysqlFormatProvider(IniFormatProvider):
 		
 	def read_include(self, line, root):
 		if not hasattr(self, "_inc_re"):
-			self._inc_re = re.compile(r'\s*(!include(dir)?)\s+([^\s]+)[^\w-]*$')
+			self._inc_re = re.compile(r'\s*(!include(dir)?)\s+(.+)$')
 		if self._inc_re.match(line):
 			new_include = ET.SubElement(self._cursect, quote(self._inc_re.match(line).group(1)))
-			new_include.text = self._inc_re.match(line).group(3)
+			new_include.text = self._inc_re.match(line).group(3).strip()
 			return True
 		return False
 
