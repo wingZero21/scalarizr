@@ -8,5 +8,9 @@ CentOS 5.4			RightScale		ami-dc977fb5		i386		ebs
 CentOS 5.4			RightScale		ami-d0e901b9		x86_64		ebs
 Debian 5			alestic.com		ami-ed16f984		i386
 Ubuntu 9.04			alestic.com		ami-ccf615a5		i386
+Ubuntu 8.04 EBSboot alestic.com		ami-cb8d61a2		i386
+Ubuntu 8.04 EBSboot alestic.com		ami-cf8d61a6		x86_64
+Ubuntu 10.04 EBS	alestic.com		ami-714ba518		i386
+Ubuntu 10.04 EBS	alestic.com		ami-4b4ba522		x86_64
 OpenSolaris 8.11	Sun				ami-35ac4a5c		i386
 OpenSolaris 9.06	Sun				ami-8f30d1e6		i386
