@@ -60,7 +60,7 @@ class MessagingHandler(logging.Handler):
 		self._lock = threading.Lock()
 		
 		self._sender_thread = threading.Thread(target=self._sender)
-		self._sender_thread.daemon = True
+		self._sender_thread.setDaemon(True)
 		self._sender_thread.start()		
 
 		self._initialized = True		

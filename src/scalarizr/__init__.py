@@ -630,7 +630,7 @@ def main():
 		elif NET_SNMPD:
 			# Start snmpd health check thread
 			t = threading.Thread(target=_snmpd_health_check)
-			t.daemon = True
+			t.setDaemon(True)
 			t.start()
 			
 		# Install  signal handlers	
