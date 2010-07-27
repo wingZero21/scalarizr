@@ -63,6 +63,7 @@ PARAM_DATA_STORAGE_ENGINE 	= "mysql_data_storage_engine"
 ROOT_USER = "scalr"
 REPL_USER = "scalr_repl"
 STAT_USER = "scalr_stat"
+PMA_USER = "pma"
 
 STORAGE_DEVNAME = "/dev/sdo"
 STORAGE_PATH = "/mnt/dbstorage"
@@ -92,7 +93,19 @@ class MysqlMessages:
 	"""
 	
 	CREATE_PMA_USER = "Mysql_CreatePmaUser"
+	"""
+	@ivar pma_server_ip: User host
+	@ivar farm_role_id
+	"""
+	
 	CREATE_PMA_USER_RESULT = "Mysql_CreatePmaUserResult"
+	"""
+	@ivar status: ok|error
+	@ivar last_error
+	@ivar pma_user
+	@ivar pma_password
+	@ivar farm_role_id
+	"""
 	
 	PROMOTE_TO_MASTER	= "Mysql_PromoteToMaster"
 	"""

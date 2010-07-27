@@ -105,7 +105,7 @@ Bundled: %(bundle_date)s
 			aws_account_id = self._platform.get_account_id()
 			avail_zone = self._platform.get_avail_zone()
 			region = avail_zone[0:2]
-			prefix = role_name + "-" + time.strftime("%Y%m%d%H%I")
+			prefix = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 			cert, pk = self._platform.get_cert_pk()
 			ec2_cert = self._platform.get_ec2_cert()
 			bucket = "scalr2-images-%s-%s" % (region, aws_account_id)		
