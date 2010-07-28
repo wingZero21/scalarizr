@@ -97,7 +97,7 @@ def read_file(filename, msg = None, error_msg="Cannot read from ", logger = None
 			logger.error(error_msg, filename, " : ", str(e))
 			return None
 		finally:
-			if not file.closed:
+			if file:
 				file.close()
 				
 	else:
@@ -124,7 +124,7 @@ def write_file(filename, data, mode = 'w', msg = None, error_msg="Cannot write t
 	except IOError, e:
 		logger.error(error_msg, filename, " : ", str(e))
 	finally:
-		if not file.closed:
+		if file:
 			file.close()
 		
 	return False
