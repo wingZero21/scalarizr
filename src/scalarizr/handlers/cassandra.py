@@ -6,12 +6,24 @@ Created on Jun 23, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
-from scalarizr.handlers import Handler
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
 import logging
 import os
-from scalarizr.util import configtool, fstool, system
+from scalarizr.util import configtool, fstool, system, initd
 from xml.dom.minidom import parse
+
+
+
+initd_script = "/etc/init.d/cassandra"
+if not os.path.exists(initd_script):
+	raise HandlerError("Cannot find Nginx init script at %s. Make sure that cassandra is installed" % initd_script)
+
+pid_file = '/var/run/cassandra.pid'
+
+logger = logging.getLogger(__name__)
+logger.debug("Explore Cassandra service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
+initd.explore("cassandra", initd_script, pid_file, tcp_port=80)
 
 
 class StorageError(BaseException): pass
@@ -52,6 +64,7 @@ class CassandraHandler(Handler):
 				self._port = '7000'
 
 		bus.on("init", self.on_init)
+		bus.on("before_host_down", self.on_before_host_down)
 
 	def on_init(self):
 		bus.on("before_host_up", self.on_before_host_up)
@@ -161,6 +174,15 @@ class CassandraHandler(Handler):
 		
 		# Update Seed configuration
 		pass
+	
+	def on_before_host_down(self):
+		try:
+			self._logger.info("Stopping Cassandra")
+			initd.stop("cassandra")
+		except initd.InitdError, e:
+			self._logger.error("Cannot stop Cassandra")
+			if initd.is_running("cassandra"):
+				raise
 	
 	def on_HostUp(self, message):
 		# Update Seed configuration
