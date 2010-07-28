@@ -57,6 +57,7 @@ class MemcachedHandler(Handler):
 		self.rules = []
 		
 		bus.on("init", self.on_init)
+		bus.on("before_host_down", self.on_before_host_down)
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
