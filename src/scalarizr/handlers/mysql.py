@@ -9,9 +9,13 @@ from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler, HandlerError, lifecircle
 from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
 		configtool, filetool, ping_service
+from scalarizr.platform.ec2 import S3Uploader, UD_OPT_S3_BUCKET_NAME
+		
+
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
-import logging, os, re, time, pexpect
+import logging, os, re,  pexpect, tarfile, tempfile
+import time
 import signal, pwd, random
 import shutil, ConfigParser
 from boto.exception import BotoServerError
@@ -69,6 +73,7 @@ STORAGE_DEVNAME = "/dev/sdo"
 STORAGE_PATH = "/mnt/dbstorage"
 STORAGE_DATA_DIR = "mysql-data"
 STORAGE_BINLOG_PATH = "mysql-misc/binlog.log"
+BACKUP_CHUNK_SIZE = 200*1024*1024
 
 if disttool.is_redhat_based():
 	MY_CNF_PATH = "/etc/my.cnf"
@@ -89,13 +94,14 @@ class MysqlMessages:
 	"""
 	@ivar status: ok|error
 	@ivar last_error
-	@ivar backup_url: S3 URL
+	@ivar backup_urls: S3 URL
 	"""
 	
 	CREATE_PMA_USER = "Mysql_CreatePmaUser"
 	"""
 	@ivar pma_server_ip: User host
 	@ivar farm_role_id
+	@ivar root_password
 	"""
 	
 	CREATE_PMA_USER_RESULT = "Mysql_CreatePmaUserResult"
@@ -205,21 +211,171 @@ class MysqlHandler(Handler):
 				or 	message.name == MysqlMessages.CREATE_DATA_BUNDLE
 				or 	message.name == MysqlMessages.CREATE_BACKUP
 				or 	message.name == MysqlMessages.CREATE_PMA_USER)
+		
+	def on_Mysql_CreatePmaUser(self, message):
+		try:			
+			try:
+				root_password = self._sect.get(OPT_ROOT_PASSWORD)
+			except Exception, e:
+				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
+			pma_server_ip = message.pma_server_ip
+			farm_role_id  = message.farm_role_id
+			
+			self._logger.info("Adding Pma system user")
+			
+			# Connecting to mysql 
+			myclient = pexpect.spawn('/usr/bin/mysql -u'+ROOT_USER+' -p')
+			myclient.expect('Enter password:')
+			myclient.sendline(root_password)
+			
+			# Retrieveing line with version info				
+			myclient.expect('mysql>')
+			myclient.sendline('SELECT VERSION();')
+			myclient.expect('mysql>')
+			mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), myclient.before)
+			
+			# Determine mysql server version 
+			if mysql_ver_str:
+				mysql_ver = version.StrictVersion(mysql_ver_str.group(0))
+				priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
+			else:
+				raise HandlerError("Cannot extract mysql version from string '%s'" % myclient.before)
+			
+			# Generating password for pma user
+			pma_password = re.sub('[^\w]','', cryptotool.keygen(20))
+			# Generating sql statement, which depends on mysql server version 
+			sql = "INSERT INTO mysql.user VALUES('"+pma_server_ip+"','"+PMA_USER+"',PASSWORD('"+pma_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
+			# Pass statement to mysql client
+			myclient.sendline(sql)
+			myclient.expect('mysql>')
+			
+			# Check for errors
+			if re.search('error', myclient.before, re.M | re.I):
+				raise HandlerError("Cannot add pma user '%s': '%s'" % (PMA_USER, myclient.before))
+			
+			myclient.sendline('FLUSH PRIVILEGES;')
+			myclient.terminate()
+			del(myclient)
+			
+			self._send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+				status       = 'ok',
+				pma_user	 = PMA_USER,
+				pma_password = pma_password,
+				farm_role_id = farm_role_id,
+			))
+			
+		except (Exception, BaseException), e:
+			self._send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+				status		= 'error',
+				last_error	=  str(e),
+				farm_role_id = farm_role_id
+			))
+	
+	def on_Mysql_CreateBackup(self, message):
+		
+		# Retrieve password for scalr mysql user
+		try:
+			try:
+				root_password = self._sect.get(OPT_ROOT_PASSWORD)
+			except Exception, e:
+				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
+			# Creating temp dir 
+			tmpdir = tempfile.mkdtemp()
+			
+			# Reading mysql config file
+			mysql_config = filetool.read_file(MY_CNF_PATH, self._logger)
+			
+			if not mysql_config:
+				raise HandlerError('Cannot read mysql config file %s' % (MY_CNF_PATH,))
+			
+			# Retrieveing datadir 
+			datadir_re = re.compile("^\s*datadir\s*=\s*(?P<datadir>.*?)$", re.M)	
+			result = re.search(datadir_re, mysql_config)			
+			
+			if not result:
+				raise HandlerError('Cannot get mysql data directory from mysql config file')
+			
+			datadir = result.group('datadir').strip()
+			
+			# Defining archive name and path
+			backup_filename = 'mysql-backup-'+time.strftime('%Y-%m-%d')+'.tar.gz'
+			backup_path = os.path.join('/tmp', backup_filename)
+			
+			# Creating archive 
+			backup = tarfile.open(backup_path, 'w:gz')
+
+			# Dump all databases
+			data_list = os.listdir(datadir)					
+			for file in data_list:
+				
+				if not os.path.isdir(os.path.join(datadir, file)):
+					continue
+							
+				db_name = os.path.basename(file)
+				dump_path = tmpdir + os.sep + db_name + '.sql'
+				mysql = pexpect.spawn('/bin/sh -c "/usr/bin/mysqldump -u ' + ROOT_USER + ' -p --create-options' + 
+									  ' --add-drop-database -q -Q --flush-privileges --databases ' + 
+									  db_name + '>' + dump_path +'"')
+				mysql.expect('Enter password:')
+				mysql.sendline(root_password)
+				
+				status = mysql.read()
+				if re.search(re.compile('error', re.M | re.I), status):
+					raise HandlerError('Error while dumping database %s: %s' % (file, status))
+				
+				backup.add(dump_path, arcname=file)
+				
+				mysql.close()
+				del(mysql)
+			
+			backup.close()
+			
+			# Creatin list of full paths to archive chunks
+			parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+					
+			self._logger.info("Uploading bundle")
+			
+			s3_conn = self._platform.new_s3_conn()
+			bucket_name = self._platform.get_user_data(UD_OPT_S3_BUCKET_NAME)
+			bucket = s3_conn.get_bucket(bucket_name)
+			
+			uploader = S3Uploader()
+			result = uploader.upload(parts, bucket, s3_conn)
+			
+			shutil.rmtree(tmpdir)
+			self._send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
+				status		= 'ok',
+				backup_urls	=  result
+			))
+						
+		except (Exception, BaseException), e:
+			self._send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
+				status		= 'error',
+				last_error	=  str(e)
+			))
+						
 
 	def on_Mysql_CreateDataBundle(self, message):
-		# Retrieve password for salr mysql user
+		# Retrieve password for scalr mysql user
 		try:
-			root_password = self._sect.get(OPT_ROOT_PASSWORD)
-		except Exception, e:
-			raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
-		# Creating snapshot
-		(snap_id, log_file, log_pos) = self._create_snapshot(ROOT_USER, root_password)
-		# Sending snapshot data to scalr
-		self._send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
-			snapshot_id=snap_id,
-			log_file=log_file,
-			log_pos=log_pos
-		))
+			try:
+				root_password = self._sect.get(OPT_ROOT_PASSWORD)
+			except Exception, e:
+				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
+			# Creating snapshot
+			(snap_id, log_file, log_pos) = self._create_snapshot(ROOT_USER, root_password)
+			# Sending snapshot data to scalr
+			self._send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+				snapshot_id=snap_id,
+				log_file=log_file,
+				log_pos=log_pos,
+				status='ok'			
+			))
+		except (Exception, BaseException), e:
+			self._send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+				status		='error',
+				last_error	= str(e)
+			))
 
 				
 	def on_Mysql_PromoteToMaster(self, message):
@@ -509,7 +665,6 @@ class MysqlHandler(Handler):
 					out, err, retcode = system(str(rsync))
 					if err:
 						raise HandlerError("Cannot copy data from ebs to ephemeral: %s" % (err,))
-					#TODO: Umount ebs device
 					# Detach and delete EBS Volume 
 					self._detach_delete_volume(ebs_volume)
 					shutil.rmtree(tmpdir)
@@ -561,24 +716,31 @@ class MysqlHandler(Handler):
 		)
 		
 	def _plug_storage(self, vol_id, mnt_point, vol=None):
-		devname = STORAGE_DEVNAME
+		# Getting free letter for device
+		dev_list = os.listdir('/dev')
+		for letter in map(chr, range(111, 123)):
+			device = 'sd'+letter
+			if not device in dev_list:
+				devname = '/dev/'+device
+				break
+
 		self._logger.info("Create EBS storage (volume: %s, devname: %s) and mount to %s", 
 				vol.id if vol else vol_id, devname, mnt_point)
-		
+
 		ec2_conn = self._get_ec2_conn()
 		if not vol:
 			try:
 				vol = ec2_conn.get_all_volumes([vol_id])[0]
 			except IndexError:
 				raise HandlerError("Volume %s not found" % vol_id)
-			
+
 		if 'available' != vol.volume_state():
 			self._logger.warning("Volume %s is not available. Force detach it from instance", vol.id)
 			vol.detach(force=True)
 			self._logger.debug('Checking that volume %s is available', vol.id)
 			self._wait_until(lambda: vol.update() == "available")
 			self._logger.debug("Volume %s available", vol.id)
-			
+
 		# Attach ebs
 		self._logger.info("Attaching volume %s as device %s", vol.id, devname)
 		try:
@@ -747,7 +909,7 @@ class MysqlHandler(Handler):
 		except BotoServerError, e:
 			self._logger.error("Cannot create MySQL data EBS snapshot. %s", e.message)
 			raise
-
+	
 	def _add_mysql_users(self, root_user, repl_user, stat_user):
 		self._stop_mysql()
 		self._logger.info("Adding mysql system users")
@@ -848,6 +1010,8 @@ class MysqlHandler(Handler):
 			file.write(my_cnf)
 		finally:
 			file.close()
+		if disttool.is_debian_based():
+			self._add_apparmor_rules(repl_conf_path)
 	
 
 	def _spawn_mysql(self, user, password):
@@ -991,9 +1155,13 @@ class MysqlHandler(Handler):
 			else:
 				myCnf += '\n' + directive + ' = ' + dirname		
 				
-		# Setting new directory permissions
+		# Recursively setting new directory permissions
 		try:
-			os.chown(directory, mysql_user.pw_uid, mysql_user.pw_gid)
+			for root, dirs, files in os.walk(directory):
+				for dir in dirs:
+					os.chown(os.path.join(root , dir), mysql_user.pw_uid, mysql_user.pw_gid)
+				for file in files:
+					os.chown(os.path.join(root, file), mysql_user.pw_uid, mysql_user.pw_gid)
 		except OSError, e:
 			self._logger.error('Cannot chown Mysql directory %s', directory)
 					
