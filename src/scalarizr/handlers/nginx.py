@@ -43,6 +43,7 @@ class NginxHandler(Handler):
 		self._queryenv = bus.queryenv_service	
 		bus.define_events("nginx_upstream_reload")
 		bus.on("start", self.on_start)
+		bus.on("before_host_down", self.on_before_host_down)
 		
 	def on_start(self):
 		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
@@ -205,10 +206,32 @@ class NginxHandler(Handler):
 					self._reload_nginx()
 
 		bus.fire("nginx_upstream_reload")
+		
+	
+	def on_before_host_down(self):
+		try:
+			self._logger.info("Stopping nginx")
+			initd.stop("nginx")
+		except initd.InitdError, e:
+			self._logger.error("Cannot stop nginx")
+			if initd.is_running("nginx"):
+				raise
+
+		
+	def on_BeforeHostTerminate(self, message):
+		config = bus.config
+		section = configtool.get_behaviour_section_name(Behaviours.WWW)
+		include_path = config.get(section, "app_include_path")
+		include = read_file(include_path, logger = self._logger)
+		if include and message.local_ip:
+			new_include = include.replace("\tserver %s:80;\n" % message.local_ip,"")
+			write_file(include_path, new_include, logger=self._logger)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.WWW in behaviour and \
-			(message.name == Messages.HOST_UP or message.name == Messages.HOST_DOWN)	
+			(message.name == Messages.HOST_UP or \
+			message.name == Messages.HOST_DOWN or \
+			message.name == Messages.BEFORE_HOST_TERMINATE)	
 	
 	def _reload_nginx(self):
 		nginx_pid = read_file(pid_file, logger = self._logger)

@@ -30,6 +30,27 @@ class CassandraHandler(Handler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
+		
+		config = bus.config
+		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
+		self._storage_path = config.get('behaviour_cassandra','storage_path')
+		self._storage_conf = config.get('behaviour_cassandra','storage_conf')
+		self.data_file_directory = self._storage_path + "/datafile" 
+		self.commit_log_directory = self._storage_path + "/commitlog"
+		
+		self.xml = parse(self._storage_conf)
+		
+		data = self.xml.documentElement
+		
+		if len(data.childNodes):
+			port_entry = data.getElementsByTagName("StoragePort")
+			
+			if port_entry:
+				self._port = port_entry[0].firstChild.nodeValue
+			else:
+				self._logger.error("Port value not found in cassandra config. Using 7000 for default.")
+				self._port = '7000'
+
 		bus.on("init", self.on_init)
 
 	def on_init(self):
@@ -47,18 +68,12 @@ class CassandraHandler(Handler):
 				ip = message.remote_ip
 			else:
 				ip = message.local_ip
-			self._add_iptables_rule(ip, Drop = True)
+			self._add_iptables_rule(ip)
 
 		
-	def on_before_host_up(self, message):
-		config = bus.config
-		role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
-		self._storage_path = config.get('behaviour_cassandra','storage_path')
-		self._storage_conf = config.get('behaviour_cassandra','storage_conf')
-		self.data_file_directory = self._storage_path + "/datafile" 
-		self.commit_log_directory = self._storage_path + "/commitlog" 
+	def on_before_host_up(self, message): 
 		# Init storage
-		role_params = self._queryenv.list_role_params(role_name)
+		role_params = self._queryenv.list_role_params(self._role_name)
 		try:
 			storage_name = role_params["cassandra_data_storage_engine"]
 		except KeyError:
@@ -72,8 +87,8 @@ class CassandraHandler(Handler):
 		if not os.path.exists(self.commit_log_directory):
 			os.makedirs(self.commit_log_directory)
 		
-		xml = parse(self._storage_conf)
-		data = xml.documentElement
+		
+		data = self.xml.documentElement
 		
 		if len(data.childNodes):
 			
@@ -117,11 +132,11 @@ class CassandraHandler(Handler):
 							seed_list.append("127.0.0.1")
 							
 				if seed_list:
-					new_section = xml.createElement('Seeds')
+					new_section = self.xml.createElement('Seeds')
 					
 					for seed_ip in seed_list:
-						seed_section = xml.createElement('Seed')
-						text = xml.createTextNode(seed_ip)
+						seed_section = self.xml.createElement('Seed')
+						text = self.xml.createTextNode(seed_ip)
 						seed_section.appendChild(text)
 						new_section.appendChild(seed_section)
 					
@@ -154,35 +169,22 @@ class CassandraHandler(Handler):
 	def on_HostDown(self, message):
 		# Update Seed configuration
 		# Update iptables rule
-		if not message.local_ip:
-			ip = message.remote_ip
-		else:
-			ip = message.local_ip
-		self._add_iptables_rule(ip)
-		pass
-	
-	def _add_iptables_rule(self, ip, drop = False):
-		if not self._port:
-			xml = parse(self._storage_conf)
-			data = xml.documentElement
-			
-			if len(data.childNodes):
-				port_entry = data.getElementsByTagName("StoragePort")
-				
-				if port_entry:
-					self._port = port_entry[0].firstChild.nodeValue
-				else:
-					self._logger.error("Port value not found in cassandra config. Using 7000 for default.")
-					self._port = '7000'
-					
-		if drop:
-			returncode = system("/sbin/iptables -A INPUT -p tcp --destination-port %s -j DROP" % (self._port,))[2]
-			if returncode :
-				self._logger.error("Cannot drop rules")
-				
-		returncode = system("/sbin/iptables -A INPUT -s %s -p tcp --destination-port %s -j ACCEPT" % (ip, self._port))[2]
+		self._drop_iptable_rules()
+
+
+	def _add_iptables_rule(self, ip):
+		rule = "/sbin/iptables -A INPUT -s %s -p tcp --destination-port %s -j ACCEPT" % (ip, self._port)
+		self._logger.debug("Adding rule to iptables: %s", rule)
+		returncode = system(rule)[2]
 		if returncode :
 			self._logger.error("Cannot add rule")
+			
+	def _drop_iptable_rules(self):
+		drop_rule = "/sbin/iptables -A INPUT -p tcp --destination-port %s -j DROP" % (self._port,)
+		self._logger.debug("Drop iptables rules on port %s: %s", self._port, drop_rule)
+		returncode = system(drop_rule)[2]
+		if returncode :
+			self._logger.error("Cannot drop rules")
 		
 class StorageProvider(object):
 	

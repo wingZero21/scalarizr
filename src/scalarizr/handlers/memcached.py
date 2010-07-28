@@ -92,6 +92,16 @@ class MemcachedHandler(Handler):
 		except initd.InitdError, e:
 			self._logger.error(e)
 
+
+	def on_before_host_down(self):
+		try:
+			self._logger.info("Stopping memcached")
+			initd.stop("memcached")
+		except initd.InitdError, e:
+			self._logger.error("Cannot stop memcached")
+			if initd.is_running("memcached"):
+				raise
+	
 	
 	def on_HostUp(self, message):
 		# Adding iptables rules
