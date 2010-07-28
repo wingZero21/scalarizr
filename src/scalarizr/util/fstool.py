@@ -193,3 +193,12 @@ def mkfs(device, fstype = 'ext3'):
 	if retcode:
 		raise FstoolError("Cannot create file system on device '%s'. %s" % (device, out), 
 				FstoolError.CANNOT_CREATE_FS)
+		
+def get_mysql_device():
+	import string
+	o_z = string.ascii_lowercase[14:]
+	for letter in o_z:
+		device_name = 'dev/sd'+letter
+		if not os.path.isfile(device_name):
+			return device_name
+	return None
