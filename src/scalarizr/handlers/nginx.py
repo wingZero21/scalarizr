@@ -116,6 +116,7 @@ class NginxHandler(Handler):
 		else:
 			self._logger.info("nginx upstream configuration was changed.")
 			self._logger.debug("Creating backup config files.")
+			print include
 			if os.path.isfile(include):
 				shutil.move(include, include+".save")
 				
