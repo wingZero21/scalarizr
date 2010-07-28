@@ -164,6 +164,7 @@ class MysqlHandler(Handler):
 		self._binlog_path = os.path.join(self._storage_path, STORAGE_BINLOG_PATH)
 		
 		bus.on("init", self.on_init)
+		bus.on("before_host_down", self.on_before_host_down)
 
 	def on_init(self):
 		bus.on("start", self.on_start)		
@@ -331,6 +332,9 @@ class MysqlHandler(Handler):
 			except initd.InitdError, e:
 				self._logger.error(e)
 
+	def on_before_host_down(self):
+		self._stop_mysql()	
+	
 	def on_before_reboot_start(self, *args, **kwargs):
 		"""
 		Stop MySQL and unplug storage
