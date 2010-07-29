@@ -4,60 +4,25 @@ Created on Dec 25, 2009
 @author: marat
 '''
 import unittest
+from scalarizr.bus import bus
+from scalarizr.util import init_tests
+from scalarizr.messaging import Message
+from scalarizr.platform.vps import VpsPlatform
+from scalarizr.handlers.script_executor import ScriptExecutor
 import os
 
 class Test(unittest.TestCase):
 
 	def test_all(self):
-		from scalarizr.core import Bus, BusEntries
-		bus = Bus()
+		config = bus.config
+		path = os.path.realpath(os.path.dirname(__file__) + "/../../resources/etc/public.d/handler.script_executor.ini") 
+		print path
+		config.read(path)
 		
-		from ConfigParser import ConfigParser
-		#from scalarizr.util import inject_config
-		config = bus[BusEntries.CONFIG]
-		cparser = ConfigParser()
-		cparser.read(os.path.dirname(__file__) + "/../../../../etc/include/handler.script_executor.ini")
- 		#inject_config(config, cparser)
-		
-		class _Bunch(dict):
-			__getattr__, __setattr__ = dict.get, dict.__setitem__
-			
-		class _QueryEnv:
-			def list_scripts(self, event_name):
-				return [_Bunch(
-					name="longplay.php",
-					asynchronous=True,
-					exec_timeout=2000,
-					body=open(os.path.dirname(__file__) + "/../../../resources/handlers/longplay.php").read()
-				), _Bunch(
-					name="tomanyout.php",
-					asynchronous=True,
-					exec_timeout=60000,
-					body=open(os.path.dirname(__file__) + "/../../../resources/handlers/tomanyout.php").read()
-				)]
-		
-		bus[BusEntries.QUERYENV_SERVICE] = _QueryEnv()
-		
-		from scalarizr.messaging import Message
-		class _MessageService:
-			def new_message(self, name=None):
-				return Message(name)
-			
-			def get_producer(self):
-				class _Producer:
-					def send(self, message):
-						pass
-				return _Producer()
-		bus[BusEntries.MESSAGE_SERVICE] = _MessageService()
-		
-		
-		from scalarizr.platform.vps import VpsPlatform
-		bus[BusEntries.PLATFORM] = VpsPlatform()
-		
-		from scalarizr.core.handlers.script_executor import ScriptExecutor
+		bus.messaging_service = _MessageService()
+		bus.platform = VpsPlatform()
 		handler = ScriptExecutor(wait_async=True)
-		
-		from scalarizr.messaging import Message
+
 		message = Message("EventNotice", {}, {
 				"InternalIP": "10.23.75.199", 
 				"RoleName": "app64", 
@@ -66,6 +31,35 @@ class Test(unittest.TestCase):
 		handler(message)
 
 
+class _Bunch(dict):
+	__getattr__, __setattr__ = dict.get, dict.__setitem__
+	
+class _QueryEnv:
+	def list_scripts(self, event_name, event_id):
+		return [_Bunch(
+			name="longplay.php",
+			asynchronous=True,
+			exec_timeout=2000,
+			body=open(os.path.realpath(os.path.dirname(__file__) + "/../../resources/handlers/longplay.php")).read()
+		), _Bunch(
+			name="tomanyout.php",
+			asynchronous=True,
+			exec_timeout=60000,
+			body=open(os.path.realpath(os.path.dirname(__file__) + "/../../resources/handlers/tomanyout.php")).read()
+		)]
+
+bus.queryenv_service = _QueryEnv()
+
+class _MessageService:
+	def new_message(self, msg_name, msg_meta, msg_body):
+		return Message(msg_name)
+	
+	def get_producer(self):
+		class _Producer:
+			def send(self,queue, msg):
+				pass
+		return _Producer()
+
 if __name__ == "__main__":
-	import scalarizr.core
+	init_tests()
 	unittest.main()
