@@ -8,12 +8,14 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Queues, Messages, MetaOptions
 from scalarizr.util import parse_size, format_size, configtool
+from scalarizr.util.filetool import read_file, write_file
 import threading
 try:
 	import time
 except ImportError:
 	import timemodule as time
 import subprocess
+import re
 import os
 import shutil
 import stat
@@ -74,6 +76,8 @@ class ScriptExecutor(Handler):
 		self._platform = bus.platform
 		self._config = bus.config
 		
+		self.hashbang_re = re.compile('^#!(\S+)\s*\n')
+		
 		sect_name = configtool.get_handler_section_name(self.name)
 		if not self._config.has_section(sect_name):
 			raise Exception("Script executor handler is not configured. "
@@ -98,16 +102,18 @@ class ScriptExecutor(Handler):
 		scripts = self._queryenv.list_scripts(event_name, event_id)
 		self._logger.debug("Fetched %d scripts", len(scripts))
 		
-		if len(scripts) > 0:
+		if scripts:
 			self._logger.info("Executing %d script(s) on event %s", len(scripts), event_name)
 			
 			self._exec_dir = self._exec_dir_prefix + str(time.time())
-			self._logger.debug("Create temp exec dir %s", self._exec_dir)
-			os.makedirs(self._exec_dir)
+			if not os.path.isdir(self._exec_dir):
+				self._logger.debug("Create temp exec dir %s", self._exec_dir)
+				os.makedirs(self._exec_dir)
 			
 			self._logs_dir = self._logs_dir_prefix + str(time.time())
-			self._logger.debug("Create temp logs dir %s", self._logs_dir)
-			os.makedirs(self._logs_dir) 
+			if not os.path.isdir(self._logs_dir):
+				self._logger.debug("Create temp logs dir %s", self._logs_dir)
+				os.makedirs(self._logs_dir) 
 
 			if self._wait_async:
 				async_threads = []
@@ -133,14 +139,14 @@ class ScriptExecutor(Handler):
 				for t in async_threads:
 					t.join()
 			shutil.rmtree(self._exec_dir)
+			shutil.rmtree(self._logs_dir)
 			
 	def _execute_script(self, script):
 		# Create script file in local fs
 		script_path = self._exec_dir + os.sep + script.name
 		self._logger.debug("Put script contents into file %s", script_path)
-		f = open(script_path, "w")
-		f.write(script.body)
-		f.close()
+		
+		write_file(script_path, script.body, logger=self._logger)
 		os.chmod(script_path, stat.S_IREAD | stat.S_IEXEC)
 
 		self._logger.info("Starting '%s' ...", script.name)
@@ -149,42 +155,53 @@ class ScriptExecutor(Handler):
 		stdout = open(self._logs_dir + os.sep + script.name + "-out", "w")
 		stderr = open(self._logs_dir + os.sep + script.name + "-err", "w")
 		self._logger.info("Redirect stdout > %s stderr > %s", stdout.name, stderr.name)		
+
+		interpreter = ''
+		hashbang = re.search(self.hashbang_re,script.body)
+		if hashbang:
+			interpreter = hashbang.group(1)
 		
-		# Start process
-		try:
-			proc = subprocess.Popen(script_path, stdout=stdout, stderr=stderr)
-		except OSError:
-			self._logger.error("Cannot execute script '%s' (script path: %s)", script.name, script_path)
-			raise
-		
-		# Communicate with process
-		self._logger.debug("Communicate with '%s'", script.name)
-		start_time = time.time()		
-		while time.time() - start_time < script.exec_timeout:
-			if proc.poll() is None:
-				time.sleep(0.5)
-			else:
-				# Process terminated
-				self._logger.debug("Script '%s' terminated", script.name)
-				break
+		if not hashbang or not os.path.exists(interpreter):
+			stderr.write('Script execution failed: Interpreter %s does not exist.' % interpreter)
+			elapsed_time = 0
+
 		else:
-			# Process timeouted
-			self._logger.warn("Script '%s' execution timeout (%d seconds). Kill process", 
-					script.name, script.exec_timeout)
-			if hasattr(proc, "kill"):
-				# python >= 2.6
-				proc.kill()
+			# Start process
+			try:
+				proc = subprocess.Popen(script_path, stdout=stdout, stderr=stderr)
+			except OSError:
+				self._logger.error("Cannot execute script '%s' (script path: %s)", script.name, script_path)
+				raise
+			
+			# Communicate with process
+			self._logger.debug("Communicate with '%s'", script.name)
+			start_time = time.time()		
+			while time.time() - start_time < script.exec_timeout:
+				if proc.poll() is None:
+					time.sleep(0.5)
+				else:
+					# Process terminated
+					self._logger.debug("Script '%s' terminated", script.name)
+					break
 			else:
-				import signal
-				os.kill(proc.pid, signal.SIGKILL)
-						
-		elapsed_time = time.time() - start_time
+				# Process timeouted
+				self._logger.warn("Script '%s' execution timeout (%d seconds). Kill process", 
+						script.name, script.exec_timeout)
+				if hasattr(proc, "kill"):
+					# python >= 2.6
+					proc.kill()
+				else:
+					import signal
+					os.kill(proc.pid, signal.SIGKILL)
+							
+			elapsed_time = time.time() - start_time
 		
 		stdout.close()
 		stderr.close()
+		
+		self._logger.debug('Removing script %s' % script_path)
 		os.remove(script_path)
-		
-		
+				
 		self._logger.info("Script '%s' execution finished. Elapsed time: %.2f seconds, stdout: %s, stderr: %s", 
 				script.name, elapsed_time, 
 				format_size(os.path.getsize(stdout.name)), 
