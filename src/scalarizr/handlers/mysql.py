@@ -213,7 +213,9 @@ class MysqlHandler(Handler):
 				or 	message.name == MysqlMessages.CREATE_PMA_USER)
 		
 	def on_Mysql_CreatePmaUser(self, message):
-		try:			
+		try:
+			if not int(self._sect.get(OPT_REPLICATION_MASTER)):
+				raise HandlerError('Cannot add pma user on slave')			
 			try:
 				root_password = self._sect.get(OPT_ROOT_PASSWORD)
 			except Exception, e:
@@ -275,6 +277,10 @@ class MysqlHandler(Handler):
 		
 		# Retrieve password for scalr mysql user
 		try:
+			# Do backup only if slave
+			if int(self._sect.get(OPT_REPLICATION_MASTER)):
+				raise HandlerError('Cannot create databases backup on mysql master')
+			
 			try:
 				root_password = self._sect.get(OPT_ROOT_PASSWORD)
 			except Exception, e:
@@ -570,18 +576,12 @@ class MysqlHandler(Handler):
 		
 		# Stop MySQL server
 		self._stop_mysql()
-							
+		self._flush_logs()
+		
 		msg_data = None
 		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
 
 		
-		if os.path.exists('/etc/mysql/debian.cnf'):
-			try:
-				self._logger.info("Copying debian.cnf file to storage")
-				shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
-			except BaseException, e:
-				self._logger.error("Cannot copy debian.cnf file to storage: ", e)
-				
 		# Patch configuration
 		self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
 		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
@@ -591,6 +591,14 @@ class MysqlHandler(Handler):
 		
 		# If It's 1st init of mysql master
 		if not storage_valid:
+			
+			if os.path.exists('/etc/mysql/debian.cnf'):
+				try:
+					self._logger.info("Copying debian.cnf file to storage")
+					shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
+				except BaseException, e:
+					self._logger.error("Cannot copy debian.cnf file to storage: ", e)
+					
 			root_password, repl_password, stat_password = \
 					self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER)
 			
@@ -613,6 +621,13 @@ class MysqlHandler(Handler):
 				root_password = self._sect.get(OPT_ROOT_PASSWORD)
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
+			
+			if disttool._is_debian_based and os.path.exists(os.path.join(STORAGE_PATH, 'debian.cnf')):
+				try:
+					self._logger.info("Copying debian.cnf file from storage")
+					shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
+				except BaseException, e:
+					self._logger.error("Cannot copy debian.cnf file from storage: ", e)
 			
 			# Updating snapshot
 			snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
@@ -673,7 +688,7 @@ class MysqlHandler(Handler):
 			"""
 			
 		self._stop_mysql()			
-				
+		self._flush_logs()
 		# Change configuration files
 		self._logger.info("Changing configuration files")
 		self._move_mysql_dir('datadir', self._data_dir, 'mysqld')
@@ -682,7 +697,7 @@ class MysqlHandler(Handler):
 		if disttool._is_debian_based and os.path.exists(STORAGE_PATH + os.sep +'debian.cnf') :
 			try:
 				self._logger.info("Copying debian.cnf from storage to mysql configuration directory")
-				shutil.copy(STORAGE_PATH + os.sep +'debian.cnf', '/etc/mysql/')
+				shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
 			except BaseException, e:
 				self._logger.error("Cannot copy debian.cnf file from storage: ", e)
 				
@@ -873,18 +888,29 @@ class MysqlHandler(Handler):
 			sql = self._spawn_mysql(root_user, root_password)
 			sql.sendline('FLUSH TABLES WITH READ LOCK;')
 			sql.expect('mysql>')
-			sql.sendline('SHOW MASTER STATUS;')
-			sql.expect('mysql>')
-			
-			# Retrieve log file and log position
-			lines = sql.before		
-			log_row = re.search(re.compile('^\|\s*([\w-]*\.\d*)\s*\|\s*(\d*)', re.MULTILINE), lines)
-			if log_row:
-				log_file = log_row.group(1)
-				log_pos = log_row.group(2)
+			if int(self._sect.get(OPT_REPLICATION_MASTER)):
+				sql.sendline('SHOW MASTER STATUS;')
+				sql.expect('mysql>')
+				
+				# Retrieve log file and log position
+				lines = sql.before		
+				log_row = re.search(re.compile('^\|\s*([\w-]*\.\d*)\s*\|\s*(\d*)', re.M), lines)
+				if log_row:
+					log_file = log_row.group(1)
+					log_pos = log_row.group(2)
+				else:
+					log_file = log_pos = None
 			else:
-				log_file = log_pos = None
-			
+				sql.sendline('SHOW SLAVE STATUS \G')
+				sql.expect('mysql>')
+				lines = sql.before
+				log_row = re.search(re.compile('Relay_Master_Log_File:\s*(.*?)$.*?Exec_Master_Log_Pos:\s*(.*?)$', re.M | re.S), lines)
+				if log_row:
+					log_file = log_row.group(1).strip()
+					log_pos = log_row.group(2).strip()
+				else:
+					log_file = log_pos = None
+
 			# Creating EBS snapshot
 			snap_id = None if dry_run else self._create_ebs_snapshot()
 	
@@ -1219,3 +1245,11 @@ class MysqlHandler(Handler):
 		if not hasattr(self, "_ec2_conn"):
 			self._ec2_conn = self._platform.new_ec2_conn()
 		return self._ec2_conn
+	
+	def _flush_logs(self):
+		info_files = ['relay-log.info', 'master.info']
+		files = os.listdir(self._data_dir)		
+		
+		for file in files:
+			if file in info_files or file.find('relay-bin') != -1:
+				os.remove(os.path.join(self._data_dir, file))		
