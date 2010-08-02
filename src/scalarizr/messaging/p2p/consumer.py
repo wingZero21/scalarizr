@@ -79,18 +79,21 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 	def message_handler (self):
 		store = P2pMessageStore()
 		while not self._shutdown_handler:
-			for unhandled in store.get_unhandled():
-				queue = unhandled[0]
-				message = unhandled[1]
-				try:
-					self._logger.info("Notify message listeners (message_id: %s)", message.id)
-					for ln in self._listeners:
-						ln(message, queue)
-				except (BaseException, Exception), e:
-					self._logger.exception(e)
-				finally:
-					self._logger.debug("Mark message (message_id: %s) as handled", message.id)
-					store.mark_as_handled(message.id)
+			try:
+				for unhandled in store.get_unhandled():
+					queue = unhandled[0]
+					message = unhandled[1]
+					try:
+						self._logger.info("Notify message listeners (message_id: %s)", message.id)
+						for ln in self._listeners:
+							ln(message, queue)
+					except (BaseException, Exception), e:
+						self._logger.exception(e)
+					finally:
+						self._logger.debug("Mark message (message_id: %s) as handled", message.id)
+						store.mark_as_handled(message.id)
+			except (BaseException, Exception), e:
+				self._logger.exception(e)
 					
 			time.sleep(0.2)
 		

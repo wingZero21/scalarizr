@@ -191,7 +191,7 @@ class ApacheHandler(Handler):
 			self._logger.debug("New vhosts configuration files created")
 			
 			if disttool.is_debian_based():
-				self._patch_default_conf_deb(vhosts_path)
+				self._patch_default_conf_deb(httpd_conf_path)
 			
 			self._logger.debug("Checking that vhosts directory included in main apache config")
 			index = 0
@@ -206,7 +206,7 @@ class ApacheHandler(Handler):
 				backup_file(httpd_conf_path)
 				msg = "Writing changes to main config file %s." % httpd_conf_path
 				error_message = 'Cannot write to main config file %s' % httpd_conf_path
-				write_file(httpd_conf_path, include_string, msg=msg, error_msg=error_message, logger=self._logger)
+				write_file(httpd_conf_path, include_string, msg=msg, mode = 'a', error_msg=error_message, logger=self._logger)
 
 
 	def _patch_ssl_conf(self, cert_path):
@@ -361,9 +361,9 @@ class ApacheHandler(Handler):
 			self._logger.error(e)
 	
 	
-	def _patch_default_conf_deb(self, vhosts_path):
+	def _patch_default_conf_deb(self, httpd_conf_path):
 		self._logger.debug("Replacing NameVirtualhost and Virtualhost ports especially for debian-based linux")
-		default_vhost_path = vhosts_path + '/' + '000-default'
+		default_vhost_path = os.path.dirname(httpd_conf_path) + '/sites-enabled' + '/' + '000-default'
 		
 		error_message = 'Cannot read default vhost config file %s' % default_vhost_path
 		default_vhost = read_file(default_vhost_path, error_msg=error_message, logger=self._logger)

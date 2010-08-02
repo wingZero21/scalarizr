@@ -9,6 +9,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler, async, HandlerError
 from scalarizr.messaging import Messages
 from scalarizr.util import system, disttool, cryptotool, fstool, filetool
+from scalarizr.platform.ec2 import S3Uploader
 
 import logging
 import time
@@ -27,6 +28,7 @@ from boto.s3 import Key
 from boto.s3.connection import Location
 from boto.resultset import ResultSet
 from boto.exception import BotoServerError
+
 
 # Workaround for python bug #5853
 # @see http://bugs.python.org/issue5853
@@ -105,7 +107,7 @@ Bundled: %(bundle_date)s
 			aws_account_id = self._platform.get_account_id()
 			avail_zone = self._platform.get_avail_zone()
 			region = avail_zone[0:2]
-			prefix = role_name + "-" + time.strftime("%Y%m%d%H%I")
+			prefix = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 			cert, pk = self._platform.get_cert_pk()
 			ec2_cert = self._platform.get_ec2_cert()
 			bucket = "scalr2-images-%s-%s" % (region, aws_account_id)		
@@ -139,10 +141,6 @@ Bundled: %(bundle_date)s
 			# Fire 'rebundle'
 			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)
 			
-			optparser = bus.optparser
-			if optparser.values.run_import:
-				print "Rebundle complete"
-			
 		except (Exception, BaseException), e:
 			self._logger.error("Rebundle failed. %s", e)
 			self._logger.exception(e)
@@ -156,10 +154,6 @@ Bundled: %(bundle_date)s
 			
 			# Fire 'rebundle_error'
 			bus.fire("rebundle_error", role_name=role_name, last_error=e.message)
-			
-			optparser = bus.optparser
-			if optparser.values.run_import:
-				print "Rebundle failed. %s" % (e.message,)
 			
 		finally:
 			try:
@@ -478,12 +472,20 @@ Bundled: %(bundle_date)s
 			# Create files queue
 			self._logger.info("Enqueue files to upload")
 			manifest_dir = os.path.dirname(manifest_path)
+			upload_files = [manifest_path]
+			"""
 			queue = Queue()
 			queue.put((manifest_path, 0))
+			"""
 			for part in manifest.parts:
-				queue.put((os.path.join(manifest_dir, part[0]), 0))
-			
+				#queue.put((os.path.join(manifest_dir, part[0]), 0))
+				upload_files.append(os.path.join(manifest_dir, part[0]))
+							
 			# Start uploaders
+			uploader = S3Uploader(pool=4, max_attempts=5)
+			uploader.upload(upload_files, bucket, s3_conn, acl)
+			
+			"""
 			self._logger.info("Start uploading with %d threads", self._NUM_UPLOAD_THREADS)
 			failed_files = []
 			failed_files_lock = Lock()
@@ -505,6 +507,7 @@ Bundled: %(bundle_date)s
 				raise BaseException("Cannot upload several files. %s" % [", ".join(failed_files)])
 			
 			self._logger.info("Upload complete!")
+			"""
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
 			
 		except (Exception, BaseException), e:
@@ -512,7 +515,7 @@ Bundled: %(bundle_date)s
 			raise
 
 
-
+	'''
 	def _uploader(self, queue, s3_conn, bucket, acl, failed_files, failed_files_lock):
 		"""
 		@param queue: files queue
@@ -546,7 +549,7 @@ Bundled: %(bundle_date)s
 							failed_files_lock.release()
 		except Empty:
 			return
-	
+	'''
 	
 	def _register_image(self, s3_manifest_path):
 		try:
@@ -613,6 +616,7 @@ if disttool.is_linux():
 			self._mount_image()
 			self._make_special_dirs()
 			self._copy_rec(self._volume, self._image_mpoint)
+			system("sync")  # Flush buffers
 			return self._image_mpoint
 			
 		def _create_image_file(self):

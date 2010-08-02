@@ -149,7 +149,7 @@ class Test(unittest.TestCase):
 		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '0')
 		handler = _MysqlHandler()
 		root_pass, repl_pass, stat_pass = handler._add_mysql_users(mysql.ROOT_USER, mysql.REPL_USER, mysql.STAT_USER)
-		handler._update_config( **{mysql.OPT_ROOT_PASSWORD : root_pass,
+		handler._update_config( {mysql.OPT_ROOT_PASSWORD : root_pass,
 								 mysql.OPT_REPL_PASSWORD : repl_pass,
 								 mysql.OPT_STAT_PASSWORD : stat_pass})
 		message = _Message()
@@ -190,6 +190,7 @@ class Test(unittest.TestCase):
 		message.log_pos = master_status[2].strip()
 		message.repl_user = mysql.REPL_USER
 		message.repl_password = repl_password
+		message.root_password = root_pass
 		handler.on_Mysql_NewMasterUp(message)
 		os.kill(myd.pid, signal.SIGTERM)
 		initd.stop("mysql")
@@ -289,7 +290,7 @@ class _Message:
 		self.mysql_stat_password = None
 		self.mysql_stat_user = None
 		self.local_ip = LOCAL_IP
-		self.replication_master = 1
+		self.mysql_replication_master = 1
 
 if __name__ == "__main__":
 	init_tests()

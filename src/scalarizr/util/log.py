@@ -32,6 +32,7 @@ class MessagingHandler(logging.Handler):
 	
 	num_entries = None
 	send_interval = None
+	sending_message = False
 	
 	_sender_thread = None
 	_send_event = None
@@ -60,14 +61,16 @@ class MessagingHandler(logging.Handler):
 		self._lock = threading.Lock()
 		
 		self._sender_thread = threading.Thread(target=self._sender)
-		self._sender_thread.daemon = True
+		self._sender_thread.setDaemon(True)
 		self._sender_thread.start()		
 
 		self._initialized = True		
 
 
 	def emit(self, record):
-		
+		if self.sending_message and record.name.startswith('scalarizr.messaging'):
+			return
+				
 		if not self._initialized:
 			self._init()
 		
@@ -111,14 +114,16 @@ class MessagingHandler(logging.Handler):
 				msg_service = bus.messaging_service
 				message = msg_service.new_message(Messages.LOG)
 				message.body["entries"] = entries
-				logger = logging.getLogger("scalarizr")
-				logger.removeHandler(self)	
+				#logger = logging.getLogger("scalarizr")
+				#logger.removeHandler(self)	
+				self.sending_message = True
 				msg_service.get_producer().send(Queues.LOG, message)
-				logger.addHandler(self)
+				#logger.addHandler(self)
 		except (BaseException, Exception):
 			# silently
 			pass	
-
+		finally:
+			self.sending_message = False
 	
 	def _sender(self):
 		while not self._stop_event.isSet():

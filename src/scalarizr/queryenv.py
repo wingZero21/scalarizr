@@ -223,7 +223,6 @@ class QueryEnvService(object):
 	
 	def _read_get_https_certificate_response(self, xml):
 		response = xml.documentElement
-		print xml.documentElement.toxml()
 		if len(response.childNodes):
 			virtualhost = response.firstChild
 			for ssl_data in virtualhost.childNodes:

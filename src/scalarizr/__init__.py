@@ -89,17 +89,27 @@ def _init():
 	if not os.path.exists(config_filename):
 		raise ScalarizrError("Configuration file '%s' doesn't exists" % (config_filename))
 	bus.etc_path = os.path.dirname(config_filename)
-
-			
+		
 
 	# Configure logging
 	if sys.version_info < (2,6):
-		# Fix logging handler resolve
+		# Fix logging handler resolve for python 2.5
 		from scalarizr.util.log import fix_python25_handler_resolve		
 		fix_python25_handler_resolve()
 	
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
 	logger = logging.getLogger(__name__)
+	
+	# During server import user must see all scalarizr activity in his terminal
+	# Add console handler if it doesn't configured in logging.ini	
+	if bus.optparser and bus.optparser.values.run_import:
+		if not any(isinstance(hdlr, logging.StreamHandler) \
+				and (hdlr.stream == sys.stdout or hdlr.stream == sys.stderr) 
+				for hdlr in logger.handlers):
+			hdlr = logging.StreamHandler(sys.stdout)
+			hdlr.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+			logger.addHandler(hdlr)
+	
 	logger.info("Initialize scalarizr...")
 
 	# Load main configuration
@@ -134,7 +144,8 @@ def _db_connect():
 	logger = logging.getLogger(__name__)
 	logger.debug("Open SQLite database (file: %s)" % (file))
 	
-	conn = sqlite.Connection(file)
+	conn = sqlite.connect(file, 5.0)
+	#sqlite.Connection(file)
 	conn.row_factory = sqlite.Row
 	return conn
 	
@@ -611,7 +622,7 @@ def main():
 			_configure()
 			if not optparser.values.run_import:
 				sys.exit()
-
+		
 		_read_bhs_config()		
 		
 		# Initialize scalarizr service
@@ -631,7 +642,7 @@ def main():
 		elif NET_SNMPD:
 			# Start snmpd health check thread
 			t = threading.Thread(target=_snmpd_health_check)
-			t.daemon = True
+			t.setDaemon(True)
 			t.start()
 			
 		# Install  signal handlers	
