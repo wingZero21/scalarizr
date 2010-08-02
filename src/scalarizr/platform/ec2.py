@@ -184,7 +184,7 @@ class S3Uploader(object):
 		self.state = "done"
 	
 		if self._failed_files:
-			raise BaseException("Cannot upload several files. %s" % [", ".join(self._failed_files)])
+			raise PlatformError("Cannot upload several files. %s" % [", ".join(self._failed_files)])
 		
 		self._logger.info("Upload complete!")
 

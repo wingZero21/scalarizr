@@ -8,6 +8,7 @@ from scalarizr.bus import bus
 from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingError
 import logging
 from scalarizr.util import configtool
+import threading
 
 
 class P2pConfigOptions:
@@ -80,8 +81,10 @@ class _P2pMessageStore:
 				cur.execute("""UPDATE p2p_message 
 						SET response_uuid = ? WHERE message_id = ?""", 
 						[message.id, message.meta[MetaOptions.REQUEST_ID]])
-				
+
+			self._logger.debug("Commiting put_ingoing")
 			conn.commit()
+			self._logger.debug("Commited put_ingoing")
 		finally:
 			cur.close()
 			
@@ -108,7 +111,10 @@ class _P2pMessageStore:
 			sql = """UPDATE p2p_message SET in_is_handled = ? 
 					WHERE message_id = ? AND is_ingoing = ?"""
 			cur.execute(sql, [1, message_id, 1])
+
+			self._logger.debug("Commiting mark_as_handled")
 			conn.commit()
+			self._logger.debug("Commited mark_as_handled")
 		finally:
 			cur.close()
 
@@ -121,7 +127,10 @@ class _P2pMessageStore:
 					VALUES 
 						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
 			cur.execute(sql, [str(message), message.id, message.name, queue, 0, 0, 0, sender])
+			
+			self._logger.debug("Commiting put_outgoing")
 			conn.commit()
+			self._logger.debug("Commited put_outgoing")
 		finally:
 			cur.close()
 

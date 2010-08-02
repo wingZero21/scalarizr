@@ -141,10 +141,6 @@ Bundled: %(bundle_date)s
 			# Fire 'rebundle'
 			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)
 			
-			optparser = bus.optparser
-			if optparser.values.run_import:
-				print "Rebundle complete"
-			
 		except (Exception, BaseException), e:
 			self._logger.error("Rebundle failed. %s", e)
 			self._logger.exception(e)
@@ -158,10 +154,6 @@ Bundled: %(bundle_date)s
 			
 			# Fire 'rebundle_error'
 			bus.fire("rebundle_error", role_name=role_name, last_error=e.message)
-			
-			optparser = bus.optparser
-			if optparser.values.run_import:
-				print "Rebundle failed. %s" % (e.message,)
 			
 		finally:
 			try:

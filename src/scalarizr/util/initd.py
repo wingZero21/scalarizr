@@ -87,7 +87,7 @@ def is_running(name):
 	if name == "mysql" and disttool.is_ubuntu() and disttool.linux_dist()[1] == '8.04':
 		return out.lower().find("Uptime:") != -1
 	else:
-		return out.lower().find("running") != -1
+		return out.lower().find("running") != -1 or out.lower().find("[ ok ]") != -1 or out.lower().find("done.") != -1
 
 
 
