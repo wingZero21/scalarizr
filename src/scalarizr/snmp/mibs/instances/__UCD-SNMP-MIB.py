@@ -176,7 +176,7 @@ class GetLaLoad():
 	def __init__(self, i=None):
 		self.i = i
 	def clone(self):
-		return laLoad.getSyntax().clone(str(round(os.getloadavg()[self.i], 2)))
+		return laLoad.getSyntax().clone('%.2f'%(os.getloadavg()[self.i]))
 
 class GetLaLoadInt():
 	def __init__(self, i=None):
