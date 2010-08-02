@@ -189,7 +189,6 @@ class S3Uploader(object):
 		self._logger.info("Upload complete!")
 
 		# Return tuple of all files	def set_access_data(self, access_data):
-		print bucket.generate_url()
 		return tuple([os.path.join(bucket.name, file) for file in self._result])
 
 	def _worker(self, s3_conn, bucket, acl):
@@ -197,7 +196,6 @@ class S3Uploader(object):
 		try:
 			while 1:
 				filename, upload_attempts = self._queue.get(False)
-				print filename, upload_attempts
 				try:
 					self._logger.info("Uploading '%s' to S3 bucket '%s'", filename, bucket.name)
 					key = Key(bucket)
