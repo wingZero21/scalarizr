@@ -143,3 +143,66 @@ def get_behaviour_ini_name(name):
 
 class MissingDataError(BaseException):
 	pass
+
+
+
+
+class Configurator(object):
+	def validate(self, config_path=None):
+		"""
+		Validates configuration 
+		"""
+		pass
+	
+	def configure(self, options=None, data=None, silent=False, yesall=False):
+		"""
+		if take value from data.
+			assign
+			fail assign -> collect error
+		if 
+		"""
+		"%%%%%%%%%%%%%%%%%%%%"
+		
+		for option in options:
+			if not silent:
+				doc = option.__doc__.split("\n")
+				title = doc[0]
+				doc = "\n".join(doc[1:])
+				print doc
+				
+				default = data[option.path] if option.path in data else option.default
+				prompt = "%s (%s): " % (title, default)
+				while True:
+					if yesall:
+						print prompt + default + "\n"
+						user_value = default
+					else:
+						user_value = raw_input(prompt)
+					try:
+						option.value = user_value
+						break
+					except ValueError, e:
+						print str(e)
+		else:
+			pass
+				
+			"""				
+				try:
+					option.value = 
+				except ValueError:
+					print "Value %s is not valid for option %s" % (data[option.path], option.path)
+			"""
+				
+
+class ConfigOption(object):
+	"""
+	Doc string
+	"""
+	
+	path = None
+	value = None
+	default = None
+	allowed = None	
+	type = None
+	required = False
+	 
