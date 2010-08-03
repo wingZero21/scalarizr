@@ -250,7 +250,18 @@ class Configuration:
 		#return ElementPath13.findall(self.etree, self._root_path + "*")
 		
 	def _find_all(self, path):
-		return self.etree.findall(self._root_path + quote(path))
+		ret = self.etree.findall(self._root_path + quote(path))
+		indexes = []
+		for node in ret:
+			if callable(node.tag):
+				indexes.append(ret.index(node))
+				
+		indexes.reverse()
+
+		for i in indexes:
+			del ret[i]
+
+		return ret
 		"""
 		ret = []
 		try:
@@ -482,20 +493,23 @@ class FormatProvider:
 			return list(root)
 		
 	def write(self, fp, etree):
-		if not (isinstance(etree, ET._ElementInterface) or isinstance(etree, ET.ElementTree)):
-			raise MetaconfError("etree param must be instance of _ElementInterface or ElementTree. %s passed" % (etree,))
-		errors = []
-		toplevel = list(etree.find('.'))
-		if not len(toplevel):
-			exit
-		for section in toplevel:
-			for writer in self._writers:
-				if writer(fp, section):
-					break
-			else:
-				errors.append(unquote(section.tag))
-		if errors:
-			raise MetaconfError(errors) 
+		try:
+			if not (isinstance(etree, ET._ElementInterface) or isinstance(etree, ET.ElementTree)):
+				raise MetaconfError("etree param must be instance of _ElementInterface or ElementTree. %s passed" % (etree,))
+			errors = []
+			toplevel = list(etree.find('.'))
+			if not len(toplevel):
+				exit
+			for section in toplevel:
+				for writer in self._writers:
+					if writer(fp, section):
+						break
+				else:
+					errors.append(unquote(section.tag))
+			if errors:
+				raise MetaconfError(errors)
+		finally:
+			fp.close()
 
 class IniFormatProvider(FormatProvider):
 	
@@ -723,8 +737,14 @@ class XmlFormatProvider:
 		indent(etree.getroot())
 		return [etree.getroot()]
 
-	def write(self, etree, fp):
-		etree.write(fp)
+	def write(self, fp, etree):
+		try:
+			new_tree = ET.ElementTree(list(etree.getroot())[0])
+			indent(new_tree.getroot())
+			new_tree.write(fp)
+		finally:
+			fp.close()
+
 
 format_providers["xml"] = XmlFormatProvider
 	
