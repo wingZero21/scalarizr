@@ -12,19 +12,21 @@ import logging
 import os
 from scalarizr.util import configtool, fstool, system, initd
 from xml.dom.minidom import parse
+from scalarizr.libs.metaconf import *
 
 
 
 initd_script = "/etc/init.d/cassandra"
 if not os.path.exists(initd_script):
-	raise HandlerError("Cannot find Nginx init script at %s. Make sure that cassandra is installed" % initd_script)
+	raise HandlerError("Cannot find Cassandra init script at %s. Make sure that cassandra is installed" % initd_script)
 
 pid_file = '/var/run/cassandra.pid'
 
 logger = logging.getLogger(__name__)
 logger.debug("Explore Cassandra service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
-initd.explore("cassandra", initd_script, pid_file, tcp_port=80)
+initd.explore("cassandra", initd_script, pid_file, tcp_port=7000)
 
+# TODO: rewrite initd to handle service's ip address
 
 class StorageError(BaseException): pass
 
@@ -38,10 +40,12 @@ class CassandraHandler(Handler):
 	_storage_path = None
 	_storage_conf = None
 	_port = None
+	_platform = None
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
+		self._platform = bus.platform
 		
 		config = bus.config
 		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
@@ -49,20 +53,31 @@ class CassandraHandler(Handler):
 		self._storage_conf = config.get('behaviour_cassandra','storage_conf')
 		self.data_file_directory = self._storage_path + "/datafile" 
 		self.commit_log_directory = self._storage_path + "/commitlog"
+
+		self._config = Configuration('xml')
+		self._config.read(self._storage_conf)
 		
+		try:
+			self._port = self._config.get('.//Storage/StoragePort')
+		except PathNotExistsError:
+			self._logger.error('Cannot get storage port from config: path not exists')
+			self._config.add('.//Storage/StoragePort', '7000')
+			self._port = '7000'
+			
+		"""
 		self.xml = parse(self._storage_conf)
-		
 		data = self.xml.documentElement
-		
+					
 		if len(data.childNodes):
 			port_entry = data.getElementsByTagName("StoragePort")
-			
+	
 			if port_entry:
 				self._port = port_entry[0].firstChild.nodeValue
 			else:
 				self._logger.error("Port value not found in cassandra config. Using 7000 for default.")
 				self._port = '7000'
-
+		"""
+		
 		bus.on("init", self.on_init)
 		bus.on("before_host_down", self.on_before_host_down)
 
@@ -72,7 +87,7 @@ class CassandraHandler(Handler):
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.CASSANDRA in behaviour and \
 				(message.name == Messages.HOST_INIT or
-				message.name == Messages.HOST_UP or 
+				message.name == Messages.HOST_UP or
 				message.name == Messages.HOST_DOWN)
 	
 	def on_HostInit(self, message):
@@ -96,11 +111,41 @@ class CassandraHandler(Handler):
 		self._storage.init(self._storage_path)
 		# Update CommitLogDirectory and DataFileDirectory in storage-conf.xml
 		if not os.path.exists(self.data_file_directory):
-			os.makedirs(self.data_file_directory) 
+			os.makedirs(self.data_file_directory)
 		if not os.path.exists(self.commit_log_directory):
 			os.makedirs(self.commit_log_directory)
+
+		self._config.set('.//Storage/CommitLogDirectory', self.commit_log_directory)
+		self._config.set('.//Storage/DataFileDirectory', self.data_file_directory)
 		
+		# TODO: Add farm id to cassandra cluster's name
+		self._config.set('.//Storage/ClusterName', 'cassandra-cluster-')
+
+		roles = self._queryenv.list_roles(behaviour = "cassandra")
+		seed_list = []
 		
+		#set list of seed`s IPs
+		for role in roles:
+			for host in role.hosts:
+				if host.internal_ip:
+					seed_list.append(host.internal_ip)
+				else:
+					seed_list.append(host.external_ip)
+		
+		if '127.0.0.1' in self._config.get_list('.//Storage/Seeds'):
+			seed_list.append('127.0.0.1')
+		
+		self._config.remove('.//Storage/Seeds/Seed')
+		
+		for seed in seed_list:
+			self._config.add('.//Storage/Seeds/Seed', seed)
+		
+		local_ip = self._platform.get_private_ip()
+		self._config.set('.//Storage/ListenAddress', local_ip)
+		self._config.set('.//Storage/ThriftAddress', '0.0.0.0')
+		self._config.write(open(self._storage_conf, 'w'))
+		
+		"""
 		data = self.xml.documentElement
 		
 		if len(data.childNodes):
@@ -125,55 +170,47 @@ class CassandraHandler(Handler):
 				cluster_name_entry[0].firstChild.nodeValue = "ololo" # set cassandra-cluster- + farmID
 			else:
 				self._logger.debug("ClusterName not found in cassandra config")
+
+		for role in roles:
+			for host in role.hosts:
+				if host.internal_ip:
+					seed_list.append(host.internal_ip)
+				else:
+					seed_list.append(host.external_ip)
 			
-			#set list of seed`s IPs
-			roles = self._queryenv.list_roles(behaviour = "cassandra")
-			seed_list = []
-			
-			for role in roles:
-				for host in role.hosts:
-					if host.internal_ip:
-						seed_list.append(host.internal_ip)
-					else:
-						seed_list.append(host.external_ip)
-				
-			seeds_section = data.getElementsByTagName("Seeds")
-			
-			if seeds_section:
-				for seed in seeds_section[0].childNodes:
-					if seed.nodeName == "Seed" and seed.firstChild.nodeValue == "127.0.0.1":
-							seed_list.append("127.0.0.1")
-							
-				if seed_list:
-					new_section = self.xml.createElement('Seeds')
-					
-					for seed_ip in seed_list:
-						seed_section = self.xml.createElement('Seed')
-						text = self.xml.createTextNode(seed_ip)
-						seed_section.appendChild(text)
-						new_section.appendChild(seed_section)
-					
-					data.replaceChild(new_section, seeds_section[0])
-				
-			else:
-				self._logger.debug("Seeds section not found in cassandra config")
-					
-			listen_entry = data.getElementsByTagName("ListenAddress")
-			if listen_entry:
-				self._logger.debug("Rewriting ListenAddress in cassandra config")
-				listen_entry[0].firstChild.nodeValue = "0.0.0.0"
-				
-			thrift_entry = data.getElementsByTagName("ThriftAddress")
-			if thrift_entry:
-				self._logger.debug("Rewriting ThriftAddress in cassandra config")
-				thrift_entry[0].firstChild.nodeValue = "0.0.0.0"
-				
-			fw = open(self._storage_conf, 'w')
-			fw.write(data.toxml())
-			fw.close()
+		seeds_section = data.getElementsByTagName("Seeds")
 		
-		# Update Seed configuration
-		pass
+		if seeds_section:
+			for seed in seeds_section[0].childNodes:
+				if seed.nodeName == "Seed" and seed.firstChild.nodeValue == "127.0.0.1":
+						seed_list.append("127.0.0.1")
+						
+			if seed_list:
+				new_section = self.xml.createElement('Seeds')
+				
+				for seed_ip in seed_list:
+					seed_section = self.xml.createElement('Seed')
+					text = self.xml.createTextNode(seed_ip)
+					seed_section.appendChild(text)
+					new_section.appendChild(seed_section)
+				
+				data.replaceChild(new_section, seeds_section[0])
+			
+		else:
+			self._logger.debug("Seeds section not found in cassandra config")
+
+		listen_entry = data.getElementsByTagName("ListenAddress")
+		if listen_entry:
+			self._logger.debug("Rewriting ListenAddress in cassandra config")
+			listen_entry[0].firstChild.nodeValue = "0.0.0.0"
+
+		thrift_entry = data.getElementsByTagName("ThriftAddress")
+		if thrift_entry:
+			self._logger.debug("Rewriting ThriftAddress in cassandra config")
+			thrift_entry[0].firstChild.nodeValue = "0.0.0.0"
+		"""
+
+
 	
 	def on_before_host_down(self):
 		try:
@@ -184,6 +221,7 @@ class CassandraHandler(Handler):
 			if initd.is_running("cassandra"):
 				raise
 	
+
 	def on_HostUp(self, message):
 		# Update Seed configuration
 		pass
