@@ -280,3 +280,10 @@ def ping_service(host=None, port=None, timeout=None, proto='tcp'):
 			time.sleep(0.1)
 			pass
 	raise UtilError ("Service unavailable after %d seconds of waiting" % timeout)
+
+def get_free_devname():
+	dev_list = os.listdir('/dev')
+	for letter in map(chr, range(111, 123)):
+		device = 'sd'+letter
+		if not device in dev_list:
+			return '/dev/'+device

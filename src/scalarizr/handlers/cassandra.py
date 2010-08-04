@@ -10,11 +10,15 @@ from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
 import logging
 import os
-from scalarizr.util import configtool, fstool, system, initd
+from scalarizr.util import configtool, fstool, system, initd, get_free_devname, filetool
 from xml.dom.minidom import parse
 from scalarizr.libs.metaconf import *
+import urllib2
+import tarfile
+import shutil
+import time
 
-
+TMP_EBS_MNTPOINT = '/mnt/temp_storage'
 
 initd_script = "/etc/init.d/cassandra"
 if not os.path.exists(initd_script):
@@ -24,7 +28,7 @@ pid_file = '/var/run/cassandra.pid'
 
 logger = logging.getLogger(__name__)
 logger.debug("Explore Cassandra service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
-initd.explore("cassandra", initd_script, pid_file, tcp_port=7000)
+initd.explore("cassandra", initd_script, pid_file)
 
 # TODO: rewrite initd to handle service's ip address
 
@@ -46,7 +50,6 @@ class CassandraHandler(Handler):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
-		
 		config = bus.config
 		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
 		self._storage_path = config.get('behaviour_cassandra','storage_path')
@@ -55,15 +58,9 @@ class CassandraHandler(Handler):
 		self.commit_log_directory = self._storage_path + "/commitlog"
 
 		self._config = Configuration('xml')
-		self._config.read(self._storage_conf)
+
+		self._private_ip = self._platform.get_private_ip()
 		
-		try:
-			self._port = self._config.get('.//Storage/StoragePort')
-		except PathNotExistsError:
-			self._logger.error('Cannot get storage port from config: path not exists')
-			self._config.add('.//Storage/StoragePort', '7000')
-			self._port = '7000'
-			
 		"""
 		self.xml = parse(self._storage_conf)
 		data = self.xml.documentElement
@@ -99,119 +96,177 @@ class CassandraHandler(Handler):
 			self._add_iptables_rule(ip)
 
 		
-	def on_before_host_up(self, message): 
-		# Init storage
+	def on_before_host_up(self, message):		
+
+		self._stop_cassandra()
+		# Getting storage conf from url
+		if message.storage_conf_url.startswith('s3://'):
+			pass
+		else:
+			try:
+				request = urllib2.Request(message.storage_conf_url)
+				result  = urllib2.urlopen(request)
+				self._config.readfp(result)
+			except urllib2.URLError, e:
+				raise HandlerError('Cannot retrieve cassandra storage configuration: %s', str(e))
+		
+		try:
+			self._port = self._config.get('Storage/StoragePort')
+		except:
+			self._logger.error('Cannot determine storage port from configuration file')
+			self._port = 7000
+			# Adding port to config
+			self._config.add('Storage/StoragePort', self._port)
+		
+		# Clear Seed list
+		self._config.remove('Storage/Seeds/Seed')
+		
+		roles = self._queryenv.list_roles(behaviour = "cassandra")
+		
+		# Fill seed list from queryenv answer
+		for role in roles:
+			for host in role.hosts:
+				if host.internal_ip:
+					self._config.add('Storage/Seeds/Seed', host.internal_ip)
+				else:
+					self._config.add('Storage/Seeds/Seed', host.external_ip)
+		
+		self._config.set('Storage/ClusterName', 'cassandra-cluster-')
+		self._config.set('Storage/ListenAddress', self._private_ip)
+		self._config.set('Storage/ThriftAddress', '0.0.0.0')
+		
+		# Temporary config write
+		self._config.write(open(self._storage_conf, 'w'))
+
+		# Determine startup type (server import, N-th startup, Scaling )
+		if   hasattr(message, 'snapshot_url'):
+			self._start_import_snapshot(message)
+		elif hasattr(message, 'snapshot_id'):
+			self._start_from_snap(message)
+		elif hasattr(message, 'auto_bootstrap') and message.auto_bootstrap:
+			self._start_bootstrap(message)
+		else:
+			raise HandlerError('Message does not containt enough data to determine start type')
+
+
+
+	def _start_import_snapshot(self, message):
+		
+		storage_size = message.storage_size
+		filename = os.path.basename(message.snapshot_url)
+		result = re.search('s3://(.*?)/(.*?)', message.snapshot_url)
+		if result:
+			bucket_name = result.group(1)
+			file_name   = result.group(2)
+			s3_conn = self._platform.new_s3_conn()
+			bucket = s3_conn.get_bucket(bucket_name)
+			key = bucket.get_key(file_name)
+			# TODO: Receive snapshot size, create temporary ebs and download file there
+			key.get_contents_to_file()
+		else:
+			result   = urllib2.urlopen(message.snapshot_url)
+			
+			# Determine snapshot size in Gb
+			try:
+				length = int(int(result.info()['con_storage_pathtent-length'])//(1024*1024*1024) +1 )
+			except:
+				self._logger.error('Cannot determine snapshot size. URL: %s', message.snapshot_url)
+				length = 10
+			
+			temp_ebs_size = length*10 if length*10 < 1000 else 1000
+			
+			temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, TMP_EBS_MNTPOINT)
+			
+			self._logger.debug('Starting download cassandra snapshot: %s', message.snapshot_url)
+			snap_path = os.path.join(TMP_EBS_MNTPOINT, filename)
+			
+			try:
+				fp = open(snap_path, 'wb')
+			except (Exception, BaseException), e:
+				raise HandlerError('Cannot open snapshot file %s for write: %s', (filename, str(e)))
+			else:
+				while True:
+					data = result.read(4096)
+					if not data:
+						break
+					fp.write(data)
+			finally:		
+				fp.close()
+
+		self._logger.debug('Trying to extract cassandra snapshot to temporary EBS storage')
+		snap = tarfile.open(snap_path)
+		snap.extractall(TMP_EBS_MNTPOINT)
+		snap.close()
+		self._logger.debug('Snapshot successfully extracted')
+		os.remove(snap_path)
+
+		ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, self._storage_path)
+		self._create_valid_storage()
+		
+		self._logger.debug('Copying snapshot')
+		rsync = filetool.Rsync().archive()
+		rsync.source(TMP_EBS_MNTPOINT+os.sep).dest(self.data_file_directory)
+		out = system(str(rsync))
+		
+		if out[2]:
+			raise HandlerError('Error while copying snapshot content from temp ebs to permanent: %s', out[1])
+
+		self._logger.debug('Snapshot successfully copied from temporary ebs to permanent')
+		
+		self._umount_detach_delete_volume(temp_ebs_dev)
+
+		self._set_use_storage()
+		snap_id = self._create_snapshot(ebs_volume.id)
+		self._start_cassandra()
+		message.cassandra = dict(volume_id = ebs_volume.id, snapshot_id=snap_id)
+			
+	def _start_from_snap(self, message):
+			
+		ebs_volume = self._create_attach_mount_volume(auto_mount=True, snapshot=message.snap_id, mpoint=self._storage_path)
+		
+		self._create_valid_storage()
+		self._set_use_storage()
+		
+		self._start_cassandra()
+		message.cassandra = dict(volume_id = ebs_volume.id)
+
+	def _start_bootstrap(self, message):
+		
+		storage_size = message.storage_size	
+		"""
 		role_params = self._queryenv.list_role_params(self._role_name)
+
 		try:
 			storage_name = role_params["cassandra_data_storage_engine"]
 		except KeyError:
 			storage_name = "eph"
-				
+		
 		self._storage = StorageProvider().new_storage(storage_name)
 		self._storage.init(self._storage_path)
-		# Update CommitLogDirectory and DataFileDirectory in storage-conf.xml
-		if not os.path.exists(self.data_file_directory):
-			os.makedirs(self.data_file_directory)
-		if not os.path.exists(self.commit_log_directory):
-			os.makedirs(self.commit_log_directory)
-
-		self._config.set('.//Storage/CommitLogDirectory', self.commit_log_directory)
-		self._config.set('.//Storage/DataFileDirectory', self.data_file_directory)
-		
-		# TODO: Add farm id to cassandra cluster's name
-		self._config.set('.//Storage/ClusterName', 'cassandra-cluster-')
-
-		roles = self._queryenv.list_roles(behaviour = "cassandra")
-		seed_list = []
-		
-		#set list of seed`s IPs
-		for role in roles:
-			for host in role.hosts:
-				if host.internal_ip:
-					seed_list.append(host.internal_ip)
-				else:
-					seed_list.append(host.external_ip)
-		
-		if '127.0.0.1' in self._config.get_list('.//Storage/Seeds'):
-			seed_list.append('127.0.0.1')
-		
-		self._config.remove('.//Storage/Seeds/Seed')
-		
-		for seed in seed_list:
-			self._config.add('.//Storage/Seeds/Seed', seed)
-		
-		local_ip = self._platform.get_private_ip()
-		self._config.set('.//Storage/ListenAddress', local_ip)
-		self._config.set('.//Storage/ThriftAddress', '0.0.0.0')
-		self._config.write(open(self._storage_conf, 'w'))
-		
 		"""
-		data = self.xml.documentElement
+		ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=self._storage_path)
+		self._create_valid_storage()
+
+		self._config.set('Storage/AutoBootstrap', 'True')
+		self._set_use_storage()
 		
-		if len(data.childNodes):
+		self._start_cassandra()
+		message.cassandra = dict(volume_id = ebs_volume.id)
+
+		# TODO: A lot of subprocess or pexpect: wait for streaming (nodetool streams)		
+
+	def on_HostUp(self, message):
+		if message.behaviour == Behaviours.CASSANDRA:
 			
-			log_entry = data.getElementsByTagName("CommitLogDirectory")
-			if log_entry:
-				self._logger.debug("Rewriting CommitLogDirectory in cassandra config")
-				log_entry[0].firstChild.nodeValue = self.commit_log_directory
+			if not message.local_ip:
+				ip = message.remote_ip
 			else:
-				self._logger.debug("CommitLogDirectory not found in cassandra config")
+				ip = message.local_ip
+
+			self._config.add('Storage/Seeds/Seed', ip)
+			self._config.write(open(self._storage_conf, 'w'))
+			self._restart_cassandra()
 			
-			data_entry = data.getElementsByTagName("DataFileDirectory")
-			if data_entry:
-				self._logger.debug("Rewriting DataFileDirectory in cassandra config")
-				data_entry[0].firstChild.nodeValue = self.data_file_directory
-			else:
-				self._logger.debug("DataFileDirectory not found in cassandra config")
-				
-			cluster_name_entry = data.getElementsByTagName("ClusterName")
-			if cluster_name_entry:
-				self._logger.debug("Rewriting ClusterName in cassandra config")
-				cluster_name_entry[0].firstChild.nodeValue = "ololo" # set cassandra-cluster- + farmID
-			else:
-				self._logger.debug("ClusterName not found in cassandra config")
-
-		for role in roles:
-			for host in role.hosts:
-				if host.internal_ip:
-					seed_list.append(host.internal_ip)
-				else:
-					seed_list.append(host.external_ip)
-			
-		seeds_section = data.getElementsByTagName("Seeds")
-		
-		if seeds_section:
-			for seed in seeds_section[0].childNodes:
-				if seed.nodeName == "Seed" and seed.firstChild.nodeValue == "127.0.0.1":
-						seed_list.append("127.0.0.1")
-						
-			if seed_list:
-				new_section = self.xml.createElement('Seeds')
-				
-				for seed_ip in seed_list:
-					seed_section = self.xml.createElement('Seed')
-					text = self.xml.createTextNode(seed_ip)
-					seed_section.appendChild(text)
-					new_section.appendChild(seed_section)
-				
-				data.replaceChild(new_section, seeds_section[0])
-			
-		else:
-			self._logger.debug("Seeds section not found in cassandra config")
-
-		listen_entry = data.getElementsByTagName("ListenAddress")
-		if listen_entry:
-			self._logger.debug("Rewriting ListenAddress in cassandra config")
-			listen_entry[0].firstChild.nodeValue = "0.0.0.0"
-
-		thrift_entry = data.getElementsByTagName("ThriftAddress")
-		if thrift_entry:
-			self._logger.debug("Rewriting ThriftAddress in cassandra config")
-			thrift_entry[0].firstChild.nodeValue = "0.0.0.0"
-		"""
-
-
-	
 	def on_before_host_down(self):
 		try:
 			self._logger.info("Stopping Cassandra")
@@ -220,16 +275,19 @@ class CassandraHandler(Handler):
 			self._logger.error("Cannot stop Cassandra")
 			if initd.is_running("cassandra"):
 				raise
-	
-
-	def on_HostUp(self, message):
-		# Update Seed configuration
-		pass
-	
+		
 	def on_HostDown(self, message):
-		# Update Seed configuration
-		# Update iptables rule
-		self._drop_iptable_rules()
+		
+		if message.behaviour == Behaviours.CASSANDRA:
+			
+			if not message.local_ip:
+				ip = message.remote_ip
+			else:
+				ip = message.local_ip
+				
+			self._config.remove('Storage/Seeds/Seed', ip)
+			self._del_iptables_rule(ip)
+			self._restart_cassandra()
 
 
 	def _add_iptables_rule(self, ip):
@@ -239,12 +297,117 @@ class CassandraHandler(Handler):
 		if returncode :
 			self._logger.error("Cannot add rule")
 			
+	def _del_iptables_rule(self, ip):
+		rule = "/sbin/iptables -D INPUT -s %s -p tcp --destination-port %s -j ACCEPT" % (ip, self._port)
+		self._logger.debug("Deleting rule from iptables: %s", rule)
+		returncode = system(rule)[2]
+		if returncode :
+			self._logger.error("Cannot delete rule")
+			
 	def _drop_iptable_rules(self):
 		drop_rule = "/sbin/iptables -A INPUT -p tcp --destination-port %s -j DROP" % (self._port,)
 		self._logger.debug("Drop iptables rules on port %s: %s", self._port, drop_rule)
 		returncode = system(drop_rule)[2]
 		if returncode :
 			self._logger.error("Cannot drop rules")
+			
+	def _restart_cassandra(self):
+		try:
+			self._logger.info("Restarting Cassandra service")
+			initd.restart("cassandra")
+			self._logger.debug("Cassandra service restarted")
+		except:
+			self._logger.error("Cannot restart Cassandra")
+			raise
+	
+	def _create_snapshot(self, vol_id):
+		ec2_conn = self._platform.new_ec2_conn()
+		snapshot  = ec2_conn.create_snapshot(vol_id)
+		del(ec2_conn)
+		return snapshot.id
+			
+	def _stop_cassandra(self):
+		try:
+			self._logger.info("Stopping Cassandra service")
+			initd.stop("cassandra")
+			self._logger.debug("Cassandra service stopped")
+		except:
+			self._logger.error("Cannot stop Cassandra")
+			raise
+
+	def _start_cassandra(self):
+		try:
+			self._logger.info("Starting Cassandra service")
+			initd.start("cassandra")
+			self._logger.debug("Cassandra service started")
+		except:
+			self._logger.error("Cannot start Cassandra")
+			raise
+		
+	def _wait_until(self, target, args=None, sleep=5):
+		args = args or ()
+		while not target(*args):
+			self._logger.debug("Wait %d seconds before the next attempt", sleep)
+			time.sleep(sleep)
+			
+	def _create_attach_mount_volume(self, size=None, auto_mount=False, snapshot=None, mpoint=None):
+		
+		if not size and not snapshot:
+			raise HandlerError('Cannot create volume without size or snapshot')
+		
+		if not self._zone:
+			self._zone     = self._platform.get_avail_zone()
+		if not self._inst_id:
+			self._inst_id  = self._platform.get_instance_id()
+		
+		ec2_conn = self._platform.new_ec2_conn()
+		self._logger.debug('Creating new EBS volume')
+		ebs_volume = ec2_conn.create_volume(size, self._zone, snapshot)
+		
+		self._logger.debug('Waiting for new ebs volume. ID=%s', (ebs_volume.id,))
+		self._wait_until(lambda: ebs_volume.update() == "available")
+		
+		device   = get_free_devname()
+		
+		self._logger.debug('Attaching volume ID=%s', (ebs_volume.id,))		
+		ebs_volume.attach(self._inst_id, device)
+		self._wait_until(lambda: ebs_volume.update() and ebs_volume.attachment_state() == "attached")
+
+		
+		if not os.path.exists(mpoint):
+			os.makedirs(mpoint)
+			
+		fstool.mount(device, mpoint, make_fs=True, auto_mount)
+		
+		del(ec2_conn)
+		
+		return ebs_volume
+	
+	def _umount_detach_delete_volume(self, volume):
+
+		fstool.umount(volume.device)
+		if volume.detach():
+			if not volume.delete():
+				raise HandlerError("Cannot delete volume ID=%s", (volume.id,))
+		else:
+			raise HandlerError("Cannot detach volume ID=%s" % (volume.id,))
+		
+	def _create_valid_storage(self):
+		if not os.path.exists(self.data_file_directory):
+			os.makedirs(self.data_file_directory)
+		if not os.path.exists(self.commit_log_directory):
+			os.makedirs(self.commit_log_directory)
+
+	def _write_config(self):
+		self._config.write(open(self._storage_conf, 'w'))
+		
+	def _set_use_storage(self):
+
+		self._config.set('Storage/CommitLogDirectory', self.commit_log_directory)
+		self._config.set('Storage/DataFileDirectory', self.data_file_directory)
+
+		self._write_config()
+	
 		
 class StorageProvider(object):
 	
