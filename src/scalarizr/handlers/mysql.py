@@ -277,6 +277,7 @@ class MysqlHandler(Handler):
 	def on_Mysql_CreateBackup(self, message):
 		
 		# Retrieve password for scalr mysql user
+		tmpdir = backup_path = None
 		try:
 			# Do backup only if slave
 			if int(self._sect.get(OPT_REPLICATION_MASTER)):
@@ -312,12 +313,13 @@ class MysqlHandler(Handler):
 			backup = tarfile.open(backup_path, 'w:gz')
 
 			# Dump all databases
+			self._logger.info("Dumping all databases")
 			data_list = os.listdir(datadir)					
 			for file in data_list:
 				
 				if not os.path.isdir(os.path.join(datadir, file)):
 					continue
-							
+					
 				db_name = os.path.basename(file)
 				dump_path = tmpdir + os.sep + db_name + '.sql'
 				mysql = pexpect.spawn('/bin/sh -c "/usr/bin/mysqldump -u ' + ROOT_USER + ' -p --create-options' + 
@@ -330,26 +332,28 @@ class MysqlHandler(Handler):
 				if re.search(re.compile('error', re.M | re.I), status):
 					raise HandlerError('Error while dumping database %s: %s' % (file, status))
 				
-				backup.add(dump_path, arcname=file)
+				backup.add(dump_path, os.path.basename(dump_path))
 				
 				mysql.close()
 				del(mysql)
 			
 			backup.close()
 			
-			# Creatin list of full paths to archive chunks
-			parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+			# Creating list of full paths to archive chunks
+			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+				parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+			else:
+				parts = [backup_path]
 					
-			self._logger.info("Uploading bundle")
-			
+			self._logger.info("Uploading backup")
 			s3_conn = self._platform.new_s3_conn()
 			bucket_name = self._platform.get_user_data(UD_OPT_S3_BUCKET_NAME)
 			bucket = s3_conn.get_bucket(bucket_name)
 			
 			uploader = S3Uploader()
 			result = uploader.upload(parts, bucket, s3_conn)
+			self._logger.info("Backup files(s) uploaded to S3 (%s)", ", ".join(result))
 			
-			shutil.rmtree(tmpdir)
 			self._send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
 				status		= 'ok',
 				backup_urls	=  result
@@ -360,6 +364,11 @@ class MysqlHandler(Handler):
 				status		= 'error',
 				last_error	=  str(e)
 			))
+		finally:
+			if tmpdir:
+				shutil.rmtree(tmpdir, ignore_errors=True)
+			if backup_path and os.path.exists(backup_path):
+				os.remove(backup_path)				
 						
 
 	def on_Mysql_CreateDataBundle(self, message):
@@ -1251,8 +1260,11 @@ class MysqlHandler(Handler):
 		return self._ec2_conn
 	
 	def _flush_logs(self):
+		if not os.path.exists(self._data_dir):
+			return
+		
 		info_files = ['relay-log.info', 'master.info']
-		files = os.listdir(self._data_dir)		
+		files = os.listdir(self._data_dir)	
 		
 		for file in files:
 			if file in info_files or file.find('relay-bin') != -1:
