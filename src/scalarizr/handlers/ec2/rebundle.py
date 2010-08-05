@@ -9,7 +9,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler, async, HandlerError
 from scalarizr.messaging import Messages
 from scalarizr.util import system, disttool, cryptotool, fstool, filetool
-from scalarizr.platform.ec2 import S3Uploader
+from scalarizr.platform.ec2 import S3Uploader, s3_location_from_region
 
 import logging
 import time
@@ -19,13 +19,10 @@ from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
-from threading import Thread, Lock
-from Queue import Queue, Empty
 import shutil
 import glob
 
-from boto.s3 import Key
-from boto.s3.connection import Location
+
 from boto.resultset import ResultSet
 from boto.exception import BotoServerError
 
@@ -105,8 +102,7 @@ Bundled: %(bundle_date)s
 			bus.fire("before_rebundle", role_name=role_name)
 			
 			aws_account_id = self._platform.get_account_id()
-			avail_zone = self._platform.get_avail_zone()
-			region = avail_zone[0:2]
+			region = self._platform.get_region()
 			prefix = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 			cert, pk = self._platform.get_cert_pk()
 			ec2_cert = self._platform.get_ec2_cert()
@@ -142,18 +138,17 @@ Bundled: %(bundle_date)s
 			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)
 			
 		except (Exception, BaseException), e:
-			self._logger.error("Rebundle failed. %s", e)
 			self._logger.exception(e)
-			
+			last_error = hasattr(e, "error_message") and e.error_message or str(e)
 			# Send message to Scalr
 			self._send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "error",
-				last_error = e.message if isinstance(e, BotoServerError) else str(e),
+				last_error = last_error,
 				bundle_task_id = message.bundle_task_id
 			))		
 			
 			# Fire 'rebundle_error'
-			bus.fire("rebundle_error", role_name=role_name, last_error=e.message)
+			bus.fire("rebundle_error", role_name=role_name, last_error=last_error)
 			
 		finally:
 			try:
@@ -161,7 +156,6 @@ Bundled: %(bundle_date)s
 					self._cleanup(image_file, image_mpoint)
 			except (Exception, BaseException), e2:
 				self._logger.exception(e2)
-				pass
 		
 		
 	def _before_rebundle(self, role_name):
@@ -226,20 +220,17 @@ Bundled: %(bundle_date)s
 					filetool.truncate(filename)
 				except OSError, e:
 					self._logger.error("Cannot truncate file '%s'. %s", filename, e)
-			
 		
 		# Cleanup user activity
 		for filename in ("root/.bash_history", "root/.lesshst", "root/.viminfo", 
-						"root/.mysql_history", "root/.history"):
+						"root/.mysql_history", "root/.history", "root/.sqlite_history"):
 			filename = os.path.join(image_mpoint, filename)
 			if os.path.exists(filename):
 				os.remove(filename)
 		
-		
 		# Cleanup scalarizr private data
 		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
 		shutil.rmtree(os.path.join(etc_path, "private.d"))
-		#os.makedirs(os.path.join(etc_path, "private.d/keys"))
 		
 		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
 
@@ -444,14 +435,13 @@ Bundled: %(bundle_date)s
 		out = system("id -u")[0]
 		return out.strip() == "0"
 	
-	def _upload_image(self, bucket_name, manifest_path, manifest, acl="aws-exec-read", region="US"):
+	def _upload_image(self, bucket_name, manifest_path, manifest, region=None, acl="aws-exec-read"):
 		try:
 			self._logger.info("Uploading bundle")
 			s3_conn = self._platform.new_s3_conn()
 			
 			# Create bucket
 			bucket = None
-			location = region.upper()
 			try:
 				self._logger.info("Lookup bucket '%s'", bucket_name)
 				try:
@@ -462,94 +452,29 @@ Bundled: %(bundle_date)s
 					# It's important to lockup bucket before creating it because if bucket exists
 					# and account has reached buckets limit S3 returns error.
 					self._logger.info("Creating bucket '%s'", bucket_name)					
-					bucket = s3_conn.create_bucket(bucket_name, 
-							location=Location.DEFAULT if location == "US" else location,
-							policy=acl)
+					bucket = s3_conn.create_bucket(bucket_name, location=s3_location_from_region(region), policy=acl)
+					#bucket = s3_conn.create_bucket(bucket_name, policy=acl)
 					
 			except BotoServerError, e:
-				raise BaseException("Cannot get bucket '%s'. %s" % (bucket_name, e.reason))
+				raise BaseException("Cannot lookup bucket '%s'. %s" % (bucket_name, e.error_message))
 			
 			# Create files queue
 			self._logger.info("Enqueue files to upload")
 			manifest_dir = os.path.dirname(manifest_path)
 			upload_files = [manifest_path]
-			"""
-			queue = Queue()
-			queue.put((manifest_path, 0))
-			"""
 			for part in manifest.parts:
-				#queue.put((os.path.join(manifest_dir, part[0]), 0))
 				upload_files.append(os.path.join(manifest_dir, part[0]))
 							
 			# Start uploaders
 			uploader = S3Uploader(pool=4, max_attempts=5)
 			uploader.upload(upload_files, bucket, s3_conn, acl)
 			
-			"""
-			self._logger.info("Start uploading with %d threads", self._NUM_UPLOAD_THREADS)
-			failed_files = []
-			failed_files_lock = Lock()
-			uploaders = []
-			for n in range(self._NUM_UPLOAD_THREADS):
-				uploader = Thread(name="Uploader-%s" % n, target=self._uploader, 
-						args=(queue, s3_conn, bucket, acl, failed_files, failed_files_lock))
-				self._logger.debug("Starting uploader '%s'", uploader.getName())
-				uploader.start()
-				uploaders.append(uploader)
-			
-			# Wait for uploaders
-			self._logger.debug("Wait for uploaders")
-			for uploader in uploaders:
-				uploader.join()
-				self._logger.debug("Uploader '%s' finished", uploader.getName())
-				
-			if failed_files:
-				raise BaseException("Cannot upload several files. %s" % [", ".join(failed_files)])
-			
-			self._logger.info("Upload complete!")
-			"""
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
 			
-		except (Exception, BaseException), e:
-			self._logger.error("Cannot upload image. %s", e)
+		except (Exception, BaseException):
+			self._logger.error("Cannot upload image")
 			raise
 
-
-	'''
-	def _uploader(self, queue, s3_conn, bucket, acl, failed_files, failed_files_lock):
-		"""
-		@param queue: files queue
-		@param s3_conn: S3 connection
-		@param bucket: S3 bucket object
-		@param acl: file S3 acl
-		@param failed_files: list of files that failed to upload
-		@param failed_files_lock: Lock object to synchronize access to `failed_files`
-		"""
-		self._logger.debug("queue: %s, bucket: %s", queue, bucket)
-		try:
-			while 1:
-				filename, upload_attempts = queue.get(False)
-				try:
-					self._logger.info("Uploading '%s' to S3 bucket '%s'", filename, bucket.name)
-					key = Key(bucket)
-					key.name = os.path.basename(filename)
-					file = open(filename, "rb")
-					key.set_contents_from_file(file, policy=acl)
-				except (BotoServerError, OSError), e:
-					self._logger.error("Cannot upload '%s'. %s", filename, e)
-					if upload_attempts < self._MAX_UPLOAD_ATTEMPTS:
-						self._logger.info("File '%s' will be uploaded within the next attempt", filename)
-						upload_attempts += 1
-						queue.put((filename, upload_attempts))
-					else:
-						try:
-							failed_files_lock.acquire()
-							failed_files.append(filename)
-						finally:
-							failed_files_lock.release()
-		except Empty:
-			return
-	'''
 	
 	def _register_image(self, s3_manifest_path):
 		try:
