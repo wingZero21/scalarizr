@@ -8,7 +8,7 @@ from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler, HandlerError, lifecircle
 from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
-		configtool, filetool, ping_service
+		configtool, filetool, ping_service, get_free_devname
 from scalarizr.platform.ec2 import S3Uploader, UD_OPT_S3_BUCKET_NAME
 		
 
@@ -745,12 +745,7 @@ class MysqlHandler(Handler):
 		
 	def _plug_storage(self, vol_id, mnt_point, vol=None):
 		# Getting free letter for device
-		dev_list = os.listdir('/dev')
-		for letter in map(chr, range(111, 123)):
-			device = 'sd'+letter
-			if not device in dev_list:
-				devname = '/dev/'+device
-				break
+		devname = get_free_devname()
 
 		self._logger.info("Create EBS storage (volume: %s, devname: %s) and mount to %s", 
 				vol.id if vol else vol_id, devname, mnt_point)
