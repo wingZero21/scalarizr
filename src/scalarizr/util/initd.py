@@ -21,9 +21,9 @@ class InitdError(UtilError):
 
 _services = dict()
 
-def explore(name, initd_script, pid_file=None, lock_file=None, tcp_port=None, udp_port=None, so_timeout=5):
+def explore(name, initd_script, pid_file=None, lock_file=None, host=None, tcp_port=None, udp_port=None, so_timeout=5):
 	_services[name] = dict(initd_script=initd_script, pid_file=pid_file, lock_file=lock_file,\
-							tcp_port=tcp_port, udp_port=udp_port, so_timeout=so_timeout)
+							host=host, tcp_port=tcp_port, udp_port=udp_port, so_timeout=so_timeout)
 
 def start(name):
 	return _start_stop_reload(name, "start")
@@ -64,10 +64,10 @@ def _start_stop_reload(name, action):
 		so_timeout = _services[name]["so_timeout"]
 		if _services[name]["tcp_port"]:
 			port = _services[name]["tcp_port"]
-			ping_service('127.0.0.1', port, so_timeout)
+			ping_service(_services[name]["host"], port, so_timeout)
 		elif _services[name]["udp_port"]:
 			port = _services[name]["udp_port"]
-			ping_service('127.0.0.1', port, so_timeout, 'udp')
+			ping_service(_services[name]["host"], port, so_timeout, 'udp')
 
 	
 	if pid_file:

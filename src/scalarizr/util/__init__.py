@@ -265,6 +265,8 @@ def init_tests():
 def ping_service(host=None, port=None, timeout=None, proto='tcp'):
 	if None == timeout:
 		timeout = 5
+	if None == host:
+		host = '127.0.0.1'
 	if 'udp' == proto:
 		socket_proto = socket.SOCK_DGRAM
 	else:

@@ -28,7 +28,7 @@ pid_file = '/var/run/cassandra.pid'
 
 logger = logging.getLogger(__name__)
 logger.debug("Explore Cassandra service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
-initd.explore("cassandra", initd_script, pid_file)
+initd.explore("cassandra", initd_script)
 
 # TODO: rewrite initd to handle service's ip address
 
@@ -45,7 +45,7 @@ class CassandraHandler(Handler):
 	_storage_conf = None
 	_port = None
 	_platform = None
-
+	_zone = None
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
@@ -60,23 +60,11 @@ class CassandraHandler(Handler):
 		self._config = Configuration('xml')
 
 		self._private_ip = self._platform.get_private_ip()
-		
-		"""
-		self.xml = parse(self._storage_conf)
-		data = self.xml.documentElement
-					
-		if len(data.childNodes):
-			port_entry = data.getElementsByTagName("StoragePort")
-	
-			if port_entry:
-				self._port = port_entry[0].firstChild.nodeValue
-			else:
-				self._logger.error("Port value not found in cassandra config. Using 7000 for default.")
-				self._port = '7000'
-		"""
-		
+		self._zone = self._platform.get_avail_zone()
+		self._inst_id = self._platform.get_instance_id()
+
 		bus.on("init", self.on_init)
-		bus.on("before_host_down", self.on_before_host_down)
+#		bus.on("before_host_down", self.on_before_host_down)
 
 	def on_init(self):
 		bus.on("before_host_up", self.on_before_host_up)
@@ -100,8 +88,16 @@ class CassandraHandler(Handler):
 
 		self._stop_cassandra()
 		# Getting storage conf from url
-		if message.storage_conf_url.startswith('s3://'):
-			pass
+		result = re.search('^s3://(.*?)/(.*?)$', message.storage_conf_url)
+		if result:
+			bucket_name = result.group(1)
+			file_name   = result.group(2)
+			s3_conn = self._platform.new_s3_conn()
+			bucket = s3_conn.get_bucket(bucket_name)
+			key = bucket.get_key(file_name)
+			key.open_read()
+			self._config.readfp(key)
+			del(s3_conn)
 		else:
 			try:
 				request = urllib2.Request(message.storage_conf_url)
@@ -131,13 +127,12 @@ class CassandraHandler(Handler):
 				else:
 					self._config.add('Storage/Seeds/Seed', host.external_ip)
 		
-		self._config.set('Storage/ClusterName', 'cassandra-cluster-')
 		self._config.set('Storage/ListenAddress', self._private_ip)
 		self._config.set('Storage/ThriftAddress', '0.0.0.0')
 		
 		# Temporary config write
-		self._config.write(open(self._storage_conf, 'w'))
-
+		self._write_config()
+		
 		# Determine startup type (server import, N-th startup, Scaling )
 		if   hasattr(message, 'snapshot_url'):
 			self._start_import_snapshot(message)
@@ -148,37 +143,44 @@ class CassandraHandler(Handler):
 		else:
 			raise HandlerError('Message does not containt enough data to determine start type')
 
-
-
 	def _start_import_snapshot(self, message):
 		
 		storage_size = message.storage_size
 		filename = os.path.basename(message.snapshot_url)
-		result = re.search('s3://(.*?)/(.*?)', message.snapshot_url)
+		snap_path = os.path.join(TMP_EBS_MNTPOINT, filename)
+		result = re.search('^s3://(.*?)/(.*?)$', message.snapshot_url)
+		# If s3 link
 		if result:
 			bucket_name = result.group(1)
 			file_name   = result.group(2)
 			s3_conn = self._platform.new_s3_conn()
 			bucket = s3_conn.get_bucket(bucket_name)
 			key = bucket.get_key(file_name)
-			# TODO: Receive snapshot size, create temporary ebs and download file there
-			key.get_contents_to_file()
+			if not key:
+				raise HandlerError('File %s does not exist on bucket %s', (file_name, bucket_name))
+			
+			length = int(key.size//(1024*1024*1024) +1)
+			
+			temp_ebs_size = length*10 if length*10 < 1000 else 1000
+			tmp_ebs_devname, temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, mpoint=TMP_EBS_MNTPOINT)
+			self._logger.debug('Starting download cassandra snapshot: %s', message.snapshot_url)			
+			key.get_contents_to_filename(snap_path)
+			
+		# Just usual http or ftp link
 		else:
 			result   = urllib2.urlopen(message.snapshot_url)
 			
 			# Determine snapshot size in Gb
 			try:
-				length = int(int(result.info()['con_storage_pathtent-length'])//(1024*1024*1024) +1 )
+				length = int(int(result.info()['content-length'])//(1024*1024*1024) + 1)
 			except:
 				self._logger.error('Cannot determine snapshot size. URL: %s', message.snapshot_url)
 				length = 10
 			
-			temp_ebs_size = length*10 if length*10 < 1000 else 1000
-			
-			temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, TMP_EBS_MNTPOINT)
+			temp_ebs_size = length*10 if length*10 < 1000 else 1000			
+			tmp_ebs_devname, temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, mpoint=TMP_EBS_MNTPOINT)
 			
 			self._logger.debug('Starting download cassandra snapshot: %s', message.snapshot_url)
-			snap_path = os.path.join(TMP_EBS_MNTPOINT, filename)
 			
 			try:
 				fp = open(snap_path, 'wb')
@@ -200,7 +202,7 @@ class CassandraHandler(Handler):
 		self._logger.debug('Snapshot successfully extracted')
 		os.remove(snap_path)
 
-		ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, self._storage_path)
+		ebs_devname, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, mpoint=self._storage_path)
 		self._create_valid_storage()
 		
 		self._logger.debug('Copying snapshot')
@@ -213,7 +215,8 @@ class CassandraHandler(Handler):
 
 		self._logger.debug('Snapshot successfully copied from temporary ebs to permanent')
 		
-		self._umount_detach_delete_volume(temp_ebs_dev)
+		self._umount_detach_delete_volume(tmp_ebs_devname, temp_ebs_dev)
+		self._config.set('Storage/AutoBootstrap', 'False')
 
 		self._set_use_storage()
 		snap_id = self._create_snapshot(ebs_volume.id)
@@ -233,6 +236,7 @@ class CassandraHandler(Handler):
 	def _start_bootstrap(self, message):
 		
 		storage_size = message.storage_size	
+		
 		"""
 		role_params = self._queryenv.list_role_params(self._role_name)
 
@@ -244,7 +248,8 @@ class CassandraHandler(Handler):
 		self._storage = StorageProvider().new_storage(storage_name)
 		self._storage.init(self._storage_path)
 		"""
-		ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=self._storage_path)
+		
+		ebs_device, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=self._storage_path)
 		self._create_valid_storage()
 
 		self._config.set('Storage/AutoBootstrap', 'True')
@@ -372,25 +377,23 @@ class CassandraHandler(Handler):
 		self._logger.debug('Attaching volume ID=%s', (ebs_volume.id,))		
 		ebs_volume.attach(self._inst_id, device)
 		self._wait_until(lambda: ebs_volume.update() and ebs_volume.attachment_state() == "attached")
-
-		
+	
 		if not os.path.exists(mpoint):
 			os.makedirs(mpoint)
 			
-		fstool.mount(device, mpoint, make_fs=True, auto_mount)
+		fstool.mount(device, mpoint, make_fs=True, auto_mount=auto_mount )
 		
 		del(ec2_conn)
 		
-		return ebs_volume
+		return device, ebs_volume
 	
-	def _umount_detach_delete_volume(self, volume):
+	def _umount_detach_delete_volume(self, devname, volume):
 
-		fstool.umount(volume.device)
-		if volume.detach():
-			if not volume.delete():
-				raise HandlerError("Cannot delete volume ID=%s", (volume.id,))
-		else:
-			raise HandlerError("Cannot detach volume ID=%s" % (volume.id,))
+		fstool.umount(devname)
+		
+		volume.detach()
+		self._wait_until(lambda: volume.update() and volume.volume_state() == "available")
+		volume.delete()
 		
 	def _create_valid_storage(self):
 		if not os.path.exists(self.data_file_directory):
@@ -404,7 +407,8 @@ class CassandraHandler(Handler):
 	def _set_use_storage(self):
 
 		self._config.set('Storage/CommitLogDirectory', self.commit_log_directory)
-		self._config.set('Storage/DataFileDirectory', self.data_file_directory)
+		self._config.remove('Storage/DataFileDirectories/DataFileDirectory')
+		self._config.add('Storage/DataFileDirectories/DataFileDirectory', self.data_file_directory)
 
 		self._write_config()
 	
@@ -472,4 +476,3 @@ class EphemeralStorage(Storage):
 		pass
 	
 StorageProvider().register_storage("eph", EphemeralStorage)	
-
