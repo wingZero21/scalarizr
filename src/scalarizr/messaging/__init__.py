@@ -250,6 +250,8 @@ class Messages:
 	Fires after rebundle task finished
 	"""
 	
+	REBUNDLE_LOG = "RebundleLog"
+	
 	LOG = "Log"
 	
 	###
