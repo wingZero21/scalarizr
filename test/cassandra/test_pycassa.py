@@ -214,9 +214,9 @@ def _long(i):
 
 
 if __name__ == "__main__":
-	R = Robot(100)
+	R = Robot(300)
 	R.start()
-	seconds = 6
+	seconds = 60
 	for i in range(1,seconds):
 		time.sleep(1)
 		print "%d seconds left. %d twits posted (TPS: %d)" % (seconds - i, R.twits, R.twits // i)
