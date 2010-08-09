@@ -367,7 +367,7 @@ def _configure_option(optparser, cli_opt_name, opt_title, opt_wrapper, ini_updat
 				continue
 			if not opt_wrapper.section in ini_updates:
 				ini_updates[opt_wrapper.section] = dict()
-			ini_updates[opt_wrapper.section][opt_wrapper.option] = input
+			ini_updates[opt_wrapper.section][opt_wrapper.option] = input or orig_value
 		if input or orig_value or allow_empty:
 			break
 		elif optparser.values.no_prompt:
