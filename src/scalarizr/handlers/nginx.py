@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import logging
+from datetime import datetime
 
 initd_script = "/etc/init.d/nginx"
 if not os.path.exists(initd_script):
@@ -43,6 +44,7 @@ class NginxHandler(Handler):
 		self._queryenv = bus.queryenv_service	
 		bus.define_events("nginx_upstream_reload")
 		bus.on("start", self.on_start)
+		bus.on("before_host_down", self.on_before_host_down)
 		
 	def on_start(self):
 		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
@@ -206,9 +208,80 @@ class NginxHandler(Handler):
 
 		bus.fire("nginx_upstream_reload")
 	
+	
+	def on_before_host_down(self):
+		try:
+			self._logger.info("Stopping nginx")
+			initd.stop("nginx")
+		except initd.InitdError, e:
+			self._logger.error("Cannot stop nginx")
+			if initd.is_running("nginx"):
+				raise
+
+		
+	def on_BeforeHostTerminate(self, message):
+		config = bus.config
+		section = configtool.get_behaviour_section_name(Behaviours.WWW)
+		include_path = config.get(section, "app_include_path")
+		include = read_file(include_path, logger = self._logger)
+		if include and message.local_ip:
+			new_include = include.replace("\tserver %s:80;\n" % message.local_ip,"")
+			write_file(include_path, new_include, logger=self._logger)
+	
+
+	def _update_vhosts(self):
+		self._logger.info("Requesting virtual hosts list")
+		received_vhosts = self._queryenv.list_virtual_hosts()
+		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
+				
+		if [] != received_vhosts:
+			
+			https_certificate = self._queryenv.get_https_certificate()
+			
+			cert_path = configtool.get_key_filename("https.crt", private=True)
+			pk_path = configtool.get_key_filename("https.key", private=True)
+			
+			if https_certificate[0]:
+				msg = 'Writing ssl cert' 
+				write_file(cert_path, https_certificate[0], msg=msg, logger=self._logger)
+			else:
+				self._logger.error('Scalr returned empty SSL Cert')
+				return
+				
+			if len(https_certificate)>1 and https_certificate[1]:
+				msg = 'Writing ssl key'
+				write_file(pk_path, https_certificate[1], msg=msg, logger=self._logger)
+			else:
+				self._logger.error('Scalr returned empty SSL Cert')
+				return
+			
+			https_config = None			
+			for vhost in received_vhosts:
+				if vhost.hostname:
+					https_config += vhost.raw + '\n'
+					
+		if https_config:
+			https_conf_path = bus.etc_path + '/nginx/https.include'
+			
+			if os.path.exists(https_conf_path) and read_file(https_conf_path, logger=self._logger):
+				time_suffix = str(datetime.now()).replace(' ','.')
+				shutil.move(https_conf_path, https_conf_path + time_suffix)
+			msg = 'Writing virtualhosts to https.include' 	
+			write_file(https_conf_path, https_config, msg=msg, logger=self._logger)
+		
+
+	def on_VhostReconfigure(self, message):
+		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
+		self._update_vhosts()
+		self.nginx_upstream_reload()
+	
+	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.WWW in behaviour and \
-			(message.name == Messages.HOST_UP or message.name == Messages.HOST_DOWN)	
+			(message.name == Messages.HOST_UP or \
+			message.name == Messages.HOST_DOWN or \
+			message.name == Messages.BEFORE_HOST_TERMINATE or \
+			message.name == Messages.VHOST_RECONFIGURE)	
 	
 	def _reload_nginx(self):
 		nginx_pid = read_file(pid_file, logger = self._logger)
