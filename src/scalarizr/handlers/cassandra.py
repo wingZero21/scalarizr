@@ -17,7 +17,10 @@ import urllib2
 import tarfile
 import shutil
 import time
+import pexpect
 
+OPT_SNAPSHOT_ID			= "snapshot_id"
+OPT_STORAGE_VOLUME_ID	= "volume_id" 
 TMP_EBS_MNTPOINT = '/mnt/temp_storage'
 
 initd_script = "/etc/init.d/cassandra"
@@ -31,6 +34,10 @@ logger.debug("Explore Cassandra service to initd module (initd_script: %s, pid_f
 initd.explore("cassandra", initd_script)
 
 # TODO: rewrite initd to handle service's ip address
+
+class CassandraMessages:
+	CREATE_DATA_BUNDLE = "Cassandra_CreateDataBundle"
+	CREATE_DATA_BUNDLE_RESULT = "Cassandra_CreateDataBundleResult"
 
 class StorageError(BaseException): pass
 
@@ -51,9 +58,15 @@ class CassandraHandler(Handler):
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
 		config = bus.config
+		
+		self._sect_name = configtool.get_behaviour_section_name(Behaviours.CASSANDRA)
+		self._sect = configtool.section_wrapper(bus.config, self._sect_name)
+		
 		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
-		self._storage_path = config.get('behaviour_cassandra','storage_path')
-		self._storage_conf = config.get('behaviour_cassandra','storage_conf')
+		
+		self._storage_path = self._sect.get('storage_path')
+		self._storage_conf = self._sect.get('storage_conf')
+		
 		self.data_file_directory = self._storage_path + "/datafile" 
 		self.commit_log_directory = self._storage_path + "/commitlog"
 
@@ -73,7 +86,8 @@ class CassandraHandler(Handler):
 		return Behaviours.CASSANDRA in behaviour and \
 				(message.name == Messages.HOST_INIT or
 				message.name == Messages.HOST_UP or
-				message.name == Messages.HOST_DOWN)
+				message.name == Messages.HOST_DOWN or
+				message.name == CassandraMessages.CREATE_DATA_BUNDLE)
 	
 	def on_HostInit(self, message):
 		if message.behaviour == Behaviours.CASSANDRA:
@@ -82,7 +96,38 @@ class CassandraHandler(Handler):
 			else:
 				ip = message.local_ip
 			self._add_iptables_rule(ip)
+			
+	def on_Cassandra_CreateEbsSnapshot(self):
+		try:
+			self._stop_cassandra()
+			volume_id = self._sect.get(OPT_STORAGE_VOLUME_ID)
+			snap_id = self._create_snapshot(volume_id)
+			self._start_cassandra()
+			# TODO: Send_message
+		except:
+			# TODO: Send error message
+			pass
 
+	def on_Cassandra_CreateDataBundle(self, message):
+		nodes = []
+		result = {}
+		out, err = system('nodetool -h localhost ring')[0:2]
+		if err:
+			raise HandlerError('Cannot get node list: %s' % err)
+		
+		lines = out.split('\n')
+		ip_re = re.compile()
+		for line in lines[1:]:
+			if not line:
+				continue
+			ip = line.split()[0]
+
+			if re.match('^\d{1,3}(\.\d{1,3}){3}$', ip) and ip != self._private_ip:
+				nodes.append(line.split()[0])
+					
+		for node in nodes:
+			# Some magic with sending Cassandra_CreateEbsSnapshot message and receiving result
+			result[node] = self._send_bundle(node)
 		
 	def on_before_host_up(self, message):		
 
@@ -168,7 +213,10 @@ class CassandraHandler(Handler):
 			
 		# Just usual http or ftp link
 		else:
-			result   = urllib2.urlopen(message.snapshot_url)
+			try:
+				result   = urllib2.urlopen(message.snapshot_url)
+			except urllib2.URLError:
+				raise HandlerError('Cannot download snapshot. URL: %s' % message.snapshot_url)
 			
 			# Determine snapshot size in Gb
 			try:
@@ -203,6 +251,7 @@ class CassandraHandler(Handler):
 		os.remove(snap_path)
 
 		ebs_devname, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, mpoint=self._storage_path)
+		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 		self._create_valid_storage()
 		
 		self._logger.debug('Copying snapshot')
@@ -214,7 +263,7 @@ class CassandraHandler(Handler):
 			raise HandlerError('Error while copying snapshot content from temp ebs to permanent: %s', out[1])
 
 		self._logger.debug('Snapshot successfully copied from temporary ebs to permanent')
-		
+
 		self._umount_detach_delete_volume(tmp_ebs_devname, temp_ebs_dev)
 		self._config.set('Storage/AutoBootstrap', 'False')
 
@@ -222,14 +271,15 @@ class CassandraHandler(Handler):
 		snap_id = self._create_snapshot(ebs_volume.id)
 		self._start_cassandra()
 		message.cassandra = dict(volume_id = ebs_volume.id, snapshot_id=snap_id)
-			
+
 	def _start_from_snap(self, message):
-			
-		ebs_volume = self._create_attach_mount_volume(auto_mount=True, snapshot=message.snap_id, mpoint=self._storage_path)
-		
+
+		ebs_volume = self._create_attach_mount_volume(auto_mount=True, snapshot=message.snap_id, mpoint=self._storage_path)[-1]
+		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
+
 		self._create_valid_storage()
 		self._set_use_storage()
-		
+
 		self._start_cassandra()
 		message.cassandra = dict(volume_id = ebs_volume.id)
 
@@ -237,28 +287,21 @@ class CassandraHandler(Handler):
 		
 		storage_size = message.storage_size	
 		
-		"""
-		role_params = self._queryenv.list_role_params(self._role_name)
-
-		try:
-			storage_name = role_params["cassandra_data_storage_engine"]
-		except KeyError:
-			storage_name = "eph"
-		
-		self._storage = StorageProvider().new_storage(storage_name)
-		self._storage.init(self._storage_path)
-		"""
-		
-		ebs_device, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=self._storage_path)
+		ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=self._storage_path)[-1]
+		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 		self._create_valid_storage()
 
 		self._config.set('Storage/AutoBootstrap', 'True')
 		self._set_use_storage()
 		
 		self._start_cassandra()
-		message.cassandra = dict(volume_id = ebs_volume.id)
 
-		# TODO: A lot of subprocess or pexpect: wait for streaming (nodetool streams)		
+		# The new node will log "Bootstrapping" when this is safe, 2 minutes after starting.
+		# http://wiki.apache.org/cassandra/Operations#line-57
+		time.sleep(120)
+
+		self._wait_until(self._bootstrap_finished, sleep = 10)
+		message.cassandra = dict(volume_id = ebs_volume.id)
 
 	def on_HostUp(self, message):
 		if message.behaviour == Behaviours.CASSANDRA:
@@ -269,17 +312,30 @@ class CassandraHandler(Handler):
 				ip = message.local_ip
 
 			self._config.add('Storage/Seeds/Seed', ip)
-			self._config.write(open(self._storage_conf, 'w'))
+			self._write_config()
 			self._restart_cassandra()
 			
 	def on_before_host_down(self):
 		try:
+			system('nodetool -h localhost decommission')
+			self._wait_until(self._decommissioned)
 			self._logger.info("Stopping Cassandra")
 			initd.stop("cassandra")
 		except initd.InitdError, e:
 			self._logger.error("Cannot stop Cassandra")
 			if initd.is_running("cassandra"):
 				raise
+			
+	def _bootstrap_finished(self):
+		try:
+			cass = pexpect.spawn('nodetool -h localhost streams')
+			out = cass.read()
+			if re.search('Mode: Normal', out):
+				return True
+			return False
+		finally:
+			del(cass)
+		
 		
 	def on_HostDown(self, message):
 		
@@ -290,10 +346,13 @@ class CassandraHandler(Handler):
 			else:
 				ip = message.local_ip
 				
-			self._config.remove('Storage/Seeds/Seed', ip)
-			self._del_iptables_rule(ip)
-			self._restart_cassandra()
-
+			try:
+				self._config.remove('Storage/Seeds/Seed', ip)
+				self._write_config()
+				self._del_iptables_rule(ip)
+				self._restart_cassandra()
+			except:
+				pass
 
 	def _add_iptables_rule(self, ip):
 		rule = "/sbin/iptables -A INPUT -s %s -p tcp --destination-port %s -j ACCEPT" % (ip, self._port)
@@ -412,6 +471,20 @@ class CassandraHandler(Handler):
 
 		self._write_config()
 	
+	def _decommissioned(self):
+		try:
+			cass = pexpect.spawn('nodetool -h localhost info')
+			out = cass.read()
+			if re.search('Deommissioned', out):
+				return True
+			return False
+		finally:
+			del(cass)
+			
+	def _update_config(self, data): 
+		updates = {self._sect_name: data}
+		configtool.update(configtool.get_behaviour_filename(Behaviours.CASSANDRA, ret=configtool.RET_PRIVATE), updates)
+	
 		
 class StorageProvider(object):
 	
@@ -443,10 +516,10 @@ class StorageProvider(object):
 class Storage(object):
 	def __init__(self):
 		pass
-	
+
 	def init(self, mpoint, *args, **kwargs):
 		pass
-	
+
 	def copy_data(self, src, *args, **kwargs):
 		pass
 
@@ -458,10 +531,10 @@ class EphemeralStorage(Storage):
 	def __init__(self):
 		self._platform = bus.platform
 		self._logger = logging.getLogger(__name__)
-		
+
 	def init(self, mpoint, *args, **kwargs):
 		devname = '/dev/' + self._platform.get_block_device_mapping()["ephemeral0"]
-		
+
 		try:
 			self._logger.debug("Trying to mount device %s and add it to fstab", devname)
 			fstool.mount(device = devname, mpoint = mpoint, options = ["-t auto"], auto_mount = True)
@@ -471,8 +544,8 @@ class EphemeralStorage(Storage):
 				fstool.mount(device = devname, mpoint = mpoint, options = ["-t auto"], make_fs = True, auto_mount = True)
 			else:
 				raise
-	
+
 	def copy_data(self, src, *args, **kwargs):
 		pass
-	
+
 StorageProvider().register_storage("eph", EphemeralStorage)	
