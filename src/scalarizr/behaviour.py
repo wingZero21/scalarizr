@@ -154,55 +154,59 @@ class Configurator(object):
 		"""
 		pass
 	
-	def configure(self, options=None, data=None, silent=False, yesall=False):
-		"""
-		if take value from data.
-			assign
-			fail assign -> collect error
-		if 
-		"""
-		"%%%%%%%%%%%%%%%%%%%%"
-		
-		for option in options:
-			if not silent:
-				doc = option.__doc__.split("\n")
-				title = doc[0]
-				doc = "\n".join(doc[1:])
-				print doc
-				
-				default = data[option.path] if option.path in data else option.default
-				prompt = "%s (%s): " % (title, default)
+	def configure(self):
+		pass
+	
+	def configure_option(self, option=None, value=None, silent=False, yesall=False):
+		'''
+		Assign option value from `value` or command prompt 
+		@param option: ConfigOption to configure
+		@param value: Default value
+		@param silent: when True doesn't produce any input or output
+		@param yesall: when True say yes to all questions (no user input)
+		'''
+		default = value or option.default
+		if not silent:
+			doc = filter(None, map(str.strip, option.__doc__.split("\n")))
+			title = doc[0]
+			desc = "\n".join(doc[1:])
+			if desc:
+				print desc
+			prompt = "%s (%s): " % (title, default)
+			if not yesall:
+				# Ask user forever until valid value entered
 				while True:
-					if yesall:
-						print prompt + default + "\n"
-						user_value = default
-					else:
-						user_value = raw_input(prompt)
+					print prompt
+					user_value = raw_input(prompt)
 					try:
 						option.value = user_value
 						break
 					except ValueError, e:
 						print str(e)
+			else:
+				# Take value from default 
+				print prompt + default + "\n"
+				option.value = default
 		else:
-			pass
-				
-			"""				
-				try:
-					option.value = 
-				except ValueError:
-					print "Value %s is not valid for option %s" % (data[option.path], option.path)
-			"""
+			option.value = default
 				
 
 class ConfigOption(object):
-	"""
-	Doc string
-	"""
+	'''
+	Option title.
+	Option description in two
+	or more lines.
+	'''
 	
-	path = None
-	value = None
+	name = None
+	_value = None
 	default = None
 	allowed = None	
 	type = None
 	required = False
-	 
+	
+	def _get_value(self):
+		return self._value
+	def _set_value(self, v):
+		self._value = v
+	value = property(_get_value, _set_value)

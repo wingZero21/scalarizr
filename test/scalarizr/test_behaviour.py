@@ -8,8 +8,36 @@ import ConfigParser
 from scalarizr.bus import bus
 from scalarizr import behaviour
 from scalarizr.util import init_tests
+from scalarizr.behaviour import ConfigOption
 
 
+long_ago_option = ConfigOption()
+
+class TestConfigurator(unittest.TestCase):
+	class LongAgoOption(behaviour.ConfigOption):
+		'''
+		Long distance runaround.
+		Long time waiting to feel the sound 
+		I still remember the dream there 
+		I still remember the time you said goodbye
+		'''
+		name = 'long_ago'
+		default = 3
+		
+		def _set_value(self, v):
+			print "call set"
+			if int(v) > 0 or int(v) < 10:
+				raise ValueError('Value must be between 1..9')
+			self._value = int(v)
+			
+	
+	def test_all(self):
+		c = behaviour.Configurator()
+		opt = self.LongAgoOption()
+		c.configure_option(opt)
+		self.assertTrue(opt.value is not None)
+
+'''
 class TestBehaviour(unittest.TestCase):
 	
 	def setUp(self):
@@ -42,7 +70,7 @@ class TestBehaviour(unittest.TestCase):
 		self.assertEquals(binary_path,'/usr/sbin/nginx')
 		self.assertEquals(https_include_path,'/etc/nginx/https.include')
 		self.assertEquals(app_port,'80')
-		
+'''	
 
 if __name__ == "__main__":
 	init_tests()
