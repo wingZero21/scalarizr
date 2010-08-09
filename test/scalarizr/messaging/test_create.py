@@ -23,5 +23,4 @@ class TestMessage(unittest.TestCase):
 
 
 if __name__ == "__main__":
-	import scalarizr.core
 	unittest.main()

@@ -2,7 +2,7 @@
 from scalarizr import behaviour
 from scalarizr.bus import bus
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
-from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
+from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
@@ -260,7 +260,6 @@ def _init_services():
 		kwargs = dict(config.items("messaging_" + adapter_name))
 		kwargs[P2pConfigOptions.SERVER_ID] = gen_sect.get(configtool.OPT_SERVER_ID)
 		kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = gen_sect.get(configtool.OPT_CRYPTO_KEY_PATH)
-		kwargs[P2pConfigOptions.PRODUCER_SENDER] = P2pSender.DAEMON
 		r = urlparse.urlparse(kwargs[P2pConfigOptions.CONSUMER_URL])
 		if r.hostname == "localhost":
 			# Replace localhost with public dns name in endpoint url
@@ -344,7 +343,6 @@ def init_script():
 	kwargs = dict(config.items("messaging_" + adapter))
 	kwargs[P2pConfigOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
 	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
-	kwargs[P2pConfigOptions.PRODUCER_SENDER] = P2pSender.SCRIPT
 	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
 	r = urlparse.urlparse(kwargs[P2pConfigOptions.PRODUCER_URL])
 	if r.hostname == "localhost":

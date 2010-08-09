@@ -67,7 +67,7 @@ class TestInteration(unittest.TestCase):
 				("p2p.consumer.endpoint", "http://localhost:8013"),
 				("p2p.producer.endpoint", "http://localhost:8013")))
 		self._consumer = self._service.get_consumer()
-		from scalarizr.core.handlers import MessageListener
+		from scalarizr.handlers import MessageListener
 		self._consumer.add_message_listener(MessageListener())
 		self._producer = self._service.get_producer()
 		
@@ -87,5 +87,4 @@ class TestInteration(unittest.TestCase):
 
 
 if __name__ == "__main__":
-	import scalarizr.core
 	unittest.main()

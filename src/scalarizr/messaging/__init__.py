@@ -1,5 +1,6 @@
 from scalarizr.util import Observable, xml_strip
 import xml.dom.minidom as dom
+import threading
 import logging
 
 class MessagingError(BaseException):
@@ -8,22 +9,23 @@ class MessagingError(BaseException):
 class MessageServiceFactory(object):
 	_adapters = {}
 	
-	def new_service (self, name, **kwargs):
+	def new_service (self, name, **params):
 		if not self._adapters.has_key(name):
 			adapter =  __import__("scalarizr.messaging." + name, 
 					globals(), locals(), ["new_service"])
 			self._adapters[name] = adapter
-		return self._adapters[name].new_service(**kwargs)
+		return self._adapters[name].new_service(**params)
 
 class MessageService(object):
 	def new_message(self, name=None, meta=None, body=None):
 		pass
 	
-	def get_consumer(self):
+	def new_consumer(self, **params):
 		pass
 	
-	def get_producer(self):
+	def new_producer(self, **params):
 		pass
+
 	
 class MetaOptions(object):
 	SERVER_ID 	= "server_id"
@@ -133,10 +135,14 @@ class Message(object):
 		else:	
 			el.appendChild(doc.createTextNode(str(value) if value is not None else ""))
 
-
 class MessageProducer(Observable):
+	filters = None
+	"""
+	Out filters for message
+	"""
 	def __init__(self):
 		Observable.__init__(self)
+		self.filters = []
 		self.define_events(
 			# Fires before message is send
 			"before_send", 
@@ -153,7 +159,9 @@ class MessageProducer(Observable):
 		pass
 	
 class MessageConsumer(object):
+	filters = None
 	_listeners = []
+	
 	
 	def add_message_listener(self, ln):
 		if not ln in self._listeners:

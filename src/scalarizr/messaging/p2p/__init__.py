@@ -11,6 +11,11 @@ from scalarizr.util import configtool
 import threading
 
 
+"""
+InFilter
+OutFilter
+"""
+
 class P2pConfigOptions:
 	SERVER_ID 						= "server_id"
 	CRYPTO_KEY_PATH 				= "crypto_key_path"
@@ -19,32 +24,42 @@ class P2pConfigOptions:
 	PRODUCER_SENDER					= "producer_sender"	
 	CONSUMER_URL 					= "consumer_url"
 
-class P2pSender:
-	DAEMON = "daemon"
-	SCRIPT = "script"
 
 class P2pMessageService(MessageService):
-	_kwargs = {}
-	_consumer = None
-	_producer = None
+	_params = {}
 	
-	def __init__(self, **kwargs):
-		self._kwargs = kwargs
+	def __init__(self, **params):
+		self._params = params
 
 	def new_message(self, name=None, meta=None, body=None):
 		return P2pMessage(name, meta, body)
 	
 	def get_consumer(self):
-		if self._consumer is None:
-			import consumer
-			self._consumer = consumer.P2pMessageConsumer(**self._kwargs)
-		return self._consumer
+		if not self._default_consumer:
+			self._default_consumer = self.new_consumer(
+				url=self._params[P2pConfigOptions.CONSUMER_URL],
+				server_id=self._params[P2pConfigOptions.SERVER_ID],
+				crypto_key_path=self._params[P2pConfigOptions.CRYPTO_KEY_PATH]
+			)
+		return self._default_consumer
+	
+	def new_consumer(self, **params):
+		import consumer
+		return consumer.P2pMessageConsumer(**params)
 	
 	def get_producer(self):
-		if self._producer is None:
-			import producer
-			self._producer = producer.P2pMessageProducer(**self._kwargs)
-		return self._producer
+		if not self._default_producer:
+			self._default_producer = self.new_producer(
+				url=self._params[P2pConfigOptions.PRODUCER_URL],
+				server_id=self._params[P2pConfigOptions.SERVER_ID],
+				crypto_key_path=self._params[P2pConfigOptions.CRYPTO_KEY_PATH]
+			)
+		return self._default_producer
+	
+	def new_producer(self, **params):
+		import producer
+		return producer.P2pMessageProducer(**params)
+		
 
 def new_service(**kwargs):
 	return P2pMessageService(**kwargs)
@@ -53,9 +68,9 @@ class _P2pBase(object):
 	server_id = None
 	crypto_key_path = None
 	
-	def __init__(self, **kwargs):
-		self.server_id = kwargs[P2pConfigOptions.SERVER_ID]
-		self.crypto_key_path = kwargs[P2pConfigOptions.CRYPTO_KEY_PATH]
+	def __init__(self, server_id=None, crypto_key_path=None):
+		self.server_id = server_id
+		self.crypto_key_path = crypto_key_path
 	
 class _P2pMessageStore:
 	_logger = None

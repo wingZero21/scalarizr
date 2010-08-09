@@ -4,7 +4,7 @@ Created on Dec 5, 2009
 @author: marat
 '''
 from scalarizr.messaging import MessageConsumer
-from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, _P2pBase, P2pConfigOptions
+from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, _P2pBase
 from scalarizr.util import cryptotool, configtool
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
@@ -28,9 +28,9 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 	_handler_thread = None
 	_shutdown_handler = False
 	
-	def __init__(self, **kwargs):
-		_P2pBase.__init__(self, **kwargs)
-		self.endpoint = kwargs[P2pConfigOptions.CONSUMER_URL]
+	def __init__(self, endpoint=None, server_id=None, crypto_key_path=None):
+		_P2pBase.__init__(self, server_id, crypto_key_path=None)
+		self.endpoint = endpoint
 		self._logger = logging.getLogger(__name__)
 		self._handler_thread = threading.Thread(name="MessageHandler", target=self.message_handler)
 			

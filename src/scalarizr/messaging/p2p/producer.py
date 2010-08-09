@@ -5,7 +5,7 @@ Created on Dec 5, 2009
 '''
 
 from scalarizr.messaging import MessageProducer
-from scalarizr.messaging.p2p import P2pMessageStore, _P2pBase, P2pConfigOptions
+from scalarizr.messaging.p2p import P2pMessageStore, _P2pBase
 from scalarizr.util import cryptotool, configtool
 from urllib import splitnport
 from urllib2 import urlopen, Request, URLError, HTTPError
@@ -22,19 +22,17 @@ except ImportError:
 class P2pMessageProducer(MessageProducer, _P2pBase):
 	endpoint = None
 	retries_progression = None
-	sender = None
+	sender = 'daemon'
 	_store = None
 	_logger = None
 	_stop_delivery = None
 	
-	def __init__(self, **kwargs):
+	def __init__(self, endpoint=None, retries_progression=None, server_id=None, crypto_key_path=None):
 		MessageProducer.__init__(self)
-		_P2pBase.__init__(self, **kwargs)
+		_P2pBase.__init__(self, server_id, crypto_key_path)
 		
-		self.endpoint = kwargs[P2pConfigOptions.PRODUCER_URL]
-		self.retries_progression = configtool.split_array(
-				kwargs[P2pConfigOptions.PRODUCER_RETRIES_PROGRESSION], ",")
-		self.sender = kwargs[P2pConfigOptions.PRODUCER_SENDER]
+		self.endpoint = endpoint
+		self.retries_progression = configtool.split_array(retries_progression, ",")
 				
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
