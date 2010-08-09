@@ -35,6 +35,18 @@ class Ec2Platform(Platform):
 	name = "ec2"
 	
 	_meta_url = "http://169.254.169.254/"
+	_ec2_endpoints = {
+		"us-east-1" 		: "ec2.amazonaws.com",
+		"us-west-1" 		: "ec2.us-west-1.amazonaws.com",
+		"eu-west-1" 		: "ec2.eu-west-1.amazonaws.com",
+		"ap-southeast-1" 	: "ec2.ap-southeast-1.amazonaws.com"
+	}
+	_s3_endpoints = {
+		'us-east-1' 		: 's3.amazonaws.com',
+		'us-west-1' 		: 's3-us-west-1.amazonaws.com',
+		'eu-west-1' 		: 's3.amazonaws.com',
+		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com'
+	}	
 	_properties = {}
 	_metadata = None
 	_logger = None
@@ -102,6 +114,9 @@ class Ec2Platform(Platform):
 	def get_avail_zone(self):
 		return self._get_property("latest/meta-data/placement/availability-zone")
 	
+	def get_region(self):
+		return self.get_avail_zone()[0:-1]
+	
 	def get_block_device_mapping(self):
 		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")
 		ret = {}
@@ -133,12 +148,23 @@ class Ec2Platform(Platform):
 	def new_ec2_conn(self):
 		""" @rtype: boto.ec2.connection.EC2Connection """
 		key_id, key = self.get_access_keys()
-		return connect_ec2(key_id, key, 
-				region=RegionInfo(name=self.get_avail_zone(), endpoint="ec2.amazonaws.com"))
+		region = self.get_region()
+		self._logger.info("Return ec2 connection (endpoint: %s)", self._ec2_endpoints[region])
+		return connect_ec2(key_id, key, region=RegionInfo(name=region, endpoint=self._ec2_endpoints[region]))
 
 	def new_s3_conn(self):
 		key_id, key = self.get_access_keys()
-		return connect_s3(key_id, key)
+		self._logger.info("Return s3 connection (endpoint: %s)", self._s3_endpoints[self.get_region()])
+		return connect_s3(key_id, key, host=self._s3_endpoints[self.get_region()])
+
+
+def s3_location_from_region(region):
+	if region == 'us-east-1' or not region:
+		return ''
+	elif region == 'eu-west-1':
+		return 'EU'
+	else: 
+		return region
 
 
 class S3Uploader(object):
@@ -150,7 +176,6 @@ class S3Uploader(object):
 		self._queue = Queue()
 		self._pool = pool
 		self._max_attempts = max_attempts
-		
 	
 	def upload(self, files, bucket, s3_conn=None, acl=None, progress_cb=None):
 		if not s3_conn:

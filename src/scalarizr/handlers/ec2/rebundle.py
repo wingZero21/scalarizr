@@ -7,9 +7,9 @@ Created on Mar 11, 2010
 import scalarizr
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler, async, HandlerError
-from scalarizr.messaging import Messages
+from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system, disttool, cryptotool, fstool, filetool
-from scalarizr.platform.ec2 import S3Uploader
+from scalarizr.platform.ec2 import S3Uploader, s3_location_from_region
 
 import logging
 import time
@@ -19,13 +19,10 @@ from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
-from threading import Thread, Lock
-from Queue import Queue, Empty
 import shutil
 import glob
 
-from boto.s3 import Key
-from boto.s3.connection import Location
+
 from boto.resultset import ResultSet
 from boto.exception import BotoServerError
 
@@ -70,7 +67,9 @@ Bundled: %(bundle_date)s
 	_MAX_UPLOAD_ATTEMPTS = 5
 	
 	def __init__(self):
+		self._log_hdlr = RebundleLogHandler()		
 		self._logger = logging.getLogger(__name__)
+		self._logger.addHandler(self._log_hdlr)
 		self._platform = bus.platform
 		
 		bus.define_events(
@@ -97,16 +96,16 @@ Bundled: %(bundle_date)s
 
 	def on_Rebundle(self, message):
 		try:
-			image_file = image_mpoint = None
+			self._log_hdlr.bundle_task_id = message.bundle_task_id
 			
+			image_file = image_mpoint = None
 			role_name = message.role_name.encode("ascii")
 			
 			self._before_rebundle(role_name)			
 			bus.fire("before_rebundle", role_name=role_name)
 			
 			aws_account_id = self._platform.get_account_id()
-			avail_zone = self._platform.get_avail_zone()
-			region = avail_zone[0:2]
+			region = self._platform.get_region()
 			prefix = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 			cert, pk = self._platform.get_cert_pk()
 			ec2_cert = self._platform.get_ec2_cert()
@@ -140,28 +139,28 @@ Bundled: %(bundle_date)s
 			
 			# Fire 'rebundle'
 			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)
+			self._logger.info('Rebundle complete! If you imported this server to Scalr, you can terminate Scalarizr now.')
 			
 		except (Exception, BaseException), e:
-			self._logger.error("Rebundle failed. %s", e)
 			self._logger.exception(e)
-			
+			last_error = hasattr(e, "error_message") and e.error_message or str(e)
 			# Send message to Scalr
 			self._send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "error",
-				last_error = e.message if isinstance(e, BotoServerError) else str(e),
+				last_error = last_error,
 				bundle_task_id = message.bundle_task_id
 			))		
 			
 			# Fire 'rebundle_error'
-			bus.fire("rebundle_error", role_name=role_name, last_error=e.message)
+			bus.fire("rebundle_error", role_name=role_name, last_error=last_error)
 			
 		finally:
 			try:
+				self._log_hdlr.bundle_task_id = None
 				if image_file or image_mpoint:
 					self._cleanup(image_file, image_mpoint)
 			except (Exception, BaseException), e2:
 				self._logger.exception(e2)
-				pass
 		
 		
 	def _before_rebundle(self, role_name):
@@ -172,7 +171,7 @@ Bundled: %(bundle_date)s
 	def _bundle_vol(self, prefix="", volume="/", destination=None, 
 				size=None, excludes=None):
 		try:
-			self._logger.info("Bundling volume '%s'", volume)
+			self._logger.info("Bundling volume %s", volume)
 			
 			self._logger.debug("Checking that user is root")
 			if not self._is_super_user():
@@ -183,7 +182,7 @@ Bundled: %(bundle_date)s
 			if size is None:
 				size = LoopbackImage.MAX_IMAGE_SIZE	
 			
-			self._logger.info("Creating directory exclude list")
+			self._logger.debug("Creating directory exclude list")
 			# Create list of directories to exclude from the image
 			if excludes is None:
 				excludes = []
@@ -226,20 +225,17 @@ Bundled: %(bundle_date)s
 					filetool.truncate(filename)
 				except OSError, e:
 					self._logger.error("Cannot truncate file '%s'. %s", filename, e)
-			
 		
 		# Cleanup user activity
 		for filename in ("root/.bash_history", "root/.lesshst", "root/.viminfo", 
-						"root/.mysql_history", "root/.history"):
+						"root/.mysql_history", "root/.history", "root/.sqlite_history"):
 			filename = os.path.join(image_mpoint, filename)
 			if os.path.exists(filename):
 				os.remove(filename)
 		
-		
 		# Cleanup scalarizr private data
 		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
 		shutil.rmtree(os.path.join(etc_path, "private.d"))
-		#os.makedirs(os.path.join(etc_path, "private.d/keys"))
 		
 		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
 
@@ -320,6 +316,7 @@ Bundled: %(bundle_date)s
 			tar.add(os.path.basename(image_file), os.path.dirname(image_file))
 			digest_file = os.path.join('/tmp', 'ec2-bundle-image-digest.sha1')
 
+			self._logger.info("Encrypting image")
 			system(" | ".join([
 				"%(openssl)s %(digest_algo)s -out %(digest_file)s < %(digest_pipe)s & %(tar)s", 
 				"tee %(digest_pipe)s",  
@@ -351,22 +348,24 @@ Bundled: %(bundle_date)s
 			# stream, so that the filenames of the parts can be easily
 			# tracked. The alternative is to create a dedicated output
 			# directory, but this leaves the user less choice.
+			self._logger.info("Splitting image into chunks")
 			part_names = filetool.split(bundled_file_path, name, self._IMAGE_CHUNK_SIZE, destination)
+			self._logger.debug("Image splitted into %s chunks", len(part_names))			
 			
 			# Sum the parts file sizes to get the encrypted file size.
-			self._logger.info("Sum the parts file sizes to get the encrypted file size")
 			bundled_size = 0
 			for part_name in part_names:
 				bundled_size += os.path.getsize(os.path.join(destination, part_name))
 	
 			
 			# Encrypt key and iv.
-			self._logger.debug("Encrypting keys")
+			self._logger.info("Encrypting keys")
 			padding = RSA.pkcs1_padding
 			user_encrypted_key = hexlify(user_public_key.get_rsa().public_encrypt(key, padding))
 			ec2_encrypted_key = hexlify(ec2_public_key.get_rsa().public_encrypt(key, padding))
 			user_encrypted_iv = hexlify(user_public_key.get_rsa().public_encrypt(iv, padding))
 			ec2_encrypted_iv = hexlify(ec2_public_key.get_rsa().public_encrypt(iv, padding))
+			self._logger.debug("Keys encrypted")
 			
 			# Digest parts.		
 			parts = self._digest_parts(part_names, destination)
@@ -404,7 +403,7 @@ Bundled: %(bundle_date)s
 	
 
 	def _digest_parts(self, part_names, destination):
-		self._logger.info("Generating digests for each part")
+		self._logger.info("Generating digests for each chunk")
 		part_digests = []
 		for part_name in part_names:
 			part_filename = os.path.join(destination, part_name)
@@ -414,7 +413,7 @@ Bundled: %(bundle_date)s
 				digest = EVP.MessageDigest("sha1")
 				part_digests.append((part_name, hexlify(cryptotool.digest_file(digest, f)))) 
 			except Exception, BaseException:
-				self._logger.error("Cannot generate digest for part '%s'", part_name)
+				self._logger.error("Cannot generate digest for chunk '%s'", part_name)
 				raise
 			finally:
 				if f is not None:
@@ -444,14 +443,13 @@ Bundled: %(bundle_date)s
 		out = system("id -u")[0]
 		return out.strip() == "0"
 	
-	def _upload_image(self, bucket_name, manifest_path, manifest, acl="aws-exec-read", region="US"):
+	def _upload_image(self, bucket_name, manifest_path, manifest, region=None, acl="aws-exec-read"):
 		try:
 			self._logger.info("Uploading bundle")
 			s3_conn = self._platform.new_s3_conn()
 			
 			# Create bucket
 			bucket = None
-			location = region.upper()
 			try:
 				self._logger.info("Lookup bucket '%s'", bucket_name)
 				try:
@@ -462,94 +460,30 @@ Bundled: %(bundle_date)s
 					# It's important to lockup bucket before creating it because if bucket exists
 					# and account has reached buckets limit S3 returns error.
 					self._logger.info("Creating bucket '%s'", bucket_name)					
-					bucket = s3_conn.create_bucket(bucket_name, 
-							location=Location.DEFAULT if location == "US" else location,
-							policy=acl)
+					bucket = s3_conn.create_bucket(bucket_name, location=s3_location_from_region(region), policy=acl)
+					#bucket = s3_conn.create_bucket(bucket_name, policy=acl)
 					
 			except BotoServerError, e:
-				raise BaseException("Cannot get bucket '%s'. %s" % (bucket_name, e.reason))
+				raise BaseException("Cannot lookup bucket '%s'. %s" % (bucket_name, e.error_message))
 			
 			# Create files queue
-			self._logger.info("Enqueue files to upload")
+			self._logger.debug("Enqueue files to upload")
 			manifest_dir = os.path.dirname(manifest_path)
 			upload_files = [manifest_path]
-			"""
-			queue = Queue()
-			queue.put((manifest_path, 0))
-			"""
 			for part in manifest.parts:
-				#queue.put((os.path.join(manifest_dir, part[0]), 0))
 				upload_files.append(os.path.join(manifest_dir, part[0]))
 							
 			# Start uploaders
+			self._logger.info("Uploading files")
 			uploader = S3Uploader(pool=4, max_attempts=5)
 			uploader.upload(upload_files, bucket, s3_conn, acl)
 			
-			"""
-			self._logger.info("Start uploading with %d threads", self._NUM_UPLOAD_THREADS)
-			failed_files = []
-			failed_files_lock = Lock()
-			uploaders = []
-			for n in range(self._NUM_UPLOAD_THREADS):
-				uploader = Thread(name="Uploader-%s" % n, target=self._uploader, 
-						args=(queue, s3_conn, bucket, acl, failed_files, failed_files_lock))
-				self._logger.debug("Starting uploader '%s'", uploader.getName())
-				uploader.start()
-				uploaders.append(uploader)
-			
-			# Wait for uploaders
-			self._logger.debug("Wait for uploaders")
-			for uploader in uploaders:
-				uploader.join()
-				self._logger.debug("Uploader '%s' finished", uploader.getName())
-				
-			if failed_files:
-				raise BaseException("Cannot upload several files. %s" % [", ".join(failed_files)])
-			
-			self._logger.info("Upload complete!")
-			"""
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
 			
-		except (Exception, BaseException), e:
-			self._logger.error("Cannot upload image. %s", e)
+		except (Exception, BaseException):
+			self._logger.error("Cannot upload image")
 			raise
 
-
-	'''
-	def _uploader(self, queue, s3_conn, bucket, acl, failed_files, failed_files_lock):
-		"""
-		@param queue: files queue
-		@param s3_conn: S3 connection
-		@param bucket: S3 bucket object
-		@param acl: file S3 acl
-		@param failed_files: list of files that failed to upload
-		@param failed_files_lock: Lock object to synchronize access to `failed_files`
-		"""
-		self._logger.debug("queue: %s, bucket: %s", queue, bucket)
-		try:
-			while 1:
-				filename, upload_attempts = queue.get(False)
-				try:
-					self._logger.info("Uploading '%s' to S3 bucket '%s'", filename, bucket.name)
-					key = Key(bucket)
-					key.name = os.path.basename(filename)
-					file = open(filename, "rb")
-					key.set_contents_from_file(file, policy=acl)
-				except (BotoServerError, OSError), e:
-					self._logger.error("Cannot upload '%s'. %s", filename, e)
-					if upload_attempts < self._MAX_UPLOAD_ATTEMPTS:
-						self._logger.info("File '%s' will be uploaded within the next attempt", filename)
-						upload_attempts += 1
-						queue.put((filename, upload_attempts))
-					else:
-						try:
-							failed_files_lock.acquire()
-							failed_files.append(filename)
-						finally:
-							failed_files_lock.release()
-		except Empty:
-			return
-	'''
 	
 	def _register_image(self, s3_manifest_path):
 		try:
@@ -607,8 +541,8 @@ if disttool.is_linux():
 			self._mtab = fstool.Mtab()
 		
 		def make(self):
-			self._logger.info("Copying %s into the image file %s", self._volume, self._image_file)
-			self._logger.info("Exclude list: %s", ":".join(self._excludes))
+			self._logger.info("Make image %s from volume %s (excludes: %s)", 
+					self._image_file, self._volume, ":".join(self._excludes))
 	
 			self._create_image_file()
 			self._format_image()
@@ -663,7 +597,7 @@ if disttool.is_linux():
 			system("ln -s null " + dev_dir +"/X0R")		
 		
 		def _copy_rec(self, source, dest, xattr=True):
-			self._logger.info("Copy volume to image file")
+			self._logger.info("Copying %s into the image file %s", source, dest)
 			rsync = filetool.Rsync()
 			#rsync.archive().times().sparse().links().quietly()
 			rsync.archive().times().sparse().links().verbose()
@@ -1000,3 +934,16 @@ class Manifest:
 	def endElement(self, name):
 		pass
 
+
+class RebundleLogHandler(logging.Handler):
+	def __init__(self, bundle_task_id=None):
+		logging.Handler.__init__(self)
+		self.bundle_task_id = bundle_task_id
+		self._msg_service = bus.messaging_service
+		
+	def emit(self, record):
+		msg = self._msg_service.new_message(Messages.REBUNDLE_LOG, body=dict(
+			bundle_task_id = self.bundle_task_id,
+			message = str(record.msg) % record.args if record.args else str(record.msg)
+		))
+		self._msg_service.get_producer().send(Queues.LOG, msg)

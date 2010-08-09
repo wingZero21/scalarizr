@@ -250,10 +250,30 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 	def _clear_flag(self, name):
 		os.remove(self._get_flag_filename(name))	
 	
+"""
+class State:
+	PENDING = "pending"
+	INITIALIZED = "initialized"
+	RUNNING = "running"
+	IMPORTING = "importing"
+	
+	@property
+	def current(self):
+		pass
+	
+	@current.setter
+	def current(self, value):
+		pass
+	
+	@current.deleter
+	def current(self):
+		pass
+"""
 
 STATE_PENDING = "pending" 
 STATE_INITIALIZED = "initialized"
 STATE_RUNNING = "running"
+STATE_IMPORTING = "importing"
 
 def get_state():
 	"""
@@ -264,4 +284,5 @@ def get_state():
 			return STATE_RUNNING
 		elif _lifecircle._flag_exists(_lifecircle.FLAG_HOST_INIT):
 			return STATE_INITIALIZED
+		
 	return STATE_PENDING
