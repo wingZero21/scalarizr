@@ -302,7 +302,8 @@ class Configuration:
 		return list(el.text for el in self._find_all(path))
 	
 	def get_dict(self, path):
-		return self._find(path).attrib
+		return [x.attrib for x in self._find_all(path) if x.attrib]
+
 	
 	def set(self, path, value, typecast=None):
 		"""
@@ -367,7 +368,7 @@ class Configuration:
 			parent.append(el)
 			self._set(el, value, typecast)
 		self._set(el, value, typecast)
-	
+
 
 				
 		"""

@@ -45,6 +45,7 @@ def get_handlers ():
 	return [CassandraHandler()]
 
 class CassandraHandler(Handler):
+	
 	_logger = None
 	_queryenv = None
 	_storage = None
@@ -53,6 +54,7 @@ class CassandraHandler(Handler):
 	_port = None
 	_platform = None
 	_zone = None
+	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
@@ -77,7 +79,7 @@ class CassandraHandler(Handler):
 		self._inst_id = self._platform.get_instance_id()
 
 		bus.on("init", self.on_init)
-#		bus.on("before_host_down", self.on_before_host_down)
+		bus.on("before_host_down", self.on_before_host_down)
 
 	def on_init(self):
 		bus.on("before_host_up", self.on_before_host_up)
@@ -108,6 +110,35 @@ class CassandraHandler(Handler):
 			# TODO: Send error message
 			pass
 
+	def on_Cassandra_ChangeReplFactor(self, message):
+		try:
+			new_rf = message.rf
+			keyspace = message.keyspace
+			try:
+				rf = self._config.get("Storage/Keyspaces/Keyspace[@Name='"+keyspace+"']/ReplicationFactor")
+			except PathNotExistsError:
+				raise HandlerError('Keyspace %s does not exist or configuration file is broken' % keyspace)
+			
+			if rf == new_rf:
+				# New and old rfs are equal
+				# Just send "OK" message
+				pass
+			
+			self._config.set("Storage/Keyspaces/Keyspace[@Name='"+keyspace+"']/ReplicationFactor", new_rf)
+			self._write_config()
+			self._restart_cassandra()
+			
+			if new_rf < rf:
+				self._cleanup()
+			elif new_rf > rf:
+				# Brainstorm here
+				pass
+
+				
+		except (Exception, BaseException), e:
+			#TODO: Send sad message with error
+			pass
+							
 	def on_Cassandra_CreateDataBundle(self, message):
 		nodes = []
 		result = {}
@@ -149,7 +180,7 @@ class CassandraHandler(Handler):
 				result  = urllib2.urlopen(request)
 				self._config.readfp(result)
 			except urllib2.URLError, e:
-				raise HandlerError('Cannot retrieve cassandra storage configuration: %s', str(e))
+				raise HandlerError('Cannot retrieve cassandra sConsistencyLeveltorage configuration: %s', str(e))
 		
 		try:
 			self._port = self._config.get('Storage/StoragePort')
@@ -177,7 +208,7 @@ class CassandraHandler(Handler):
 		
 		# Temporary config write
 		self._write_config()
-		
+		ConsistencyLevel
 		# Determine startup type (server import, N-th startup, Scaling )
 		if   hasattr(message, 'snapshot_url'):
 			self._start_import_snapshot(message)
@@ -203,7 +234,7 @@ class CassandraHandler(Handler):
 			key = bucket.get_key(file_name)
 			if not key:
 				raise HandlerError('File %s does not exist on bucket %s', (file_name, bucket_name))
-			
+			# Determine snapshot size in Gb			
 			length = int(key.size//(1024*1024*1024) +1)
 			
 			temp_ebs_size = length*10 if length*10 < 1000 else 1000
@@ -318,7 +349,7 @@ class CassandraHandler(Handler):
 	def on_before_host_down(self):
 		try:
 			system('nodetool -h localhost decommission')
-			self._wait_until(self._decommissioned)
+			self._wait_until(self._is_decommissioned)
 			self._logger.info("Stopping Cassandra")
 			initd.stop("cassandra")
 		except initd.InitdError, e:
@@ -471,11 +502,11 @@ class CassandraHandler(Handler):
 
 		self._write_config()
 	
-	def _decommissioned(self):
+	def _is_decommissioned(self):
 		try:
 			cass = pexpect.spawn('nodetool -h localhost info')
 			out = cass.read()
-			if re.search('Deommissioned', out):
+			if re.search('Decommissioned', out):
 				return True
 			return False
 		finally:
@@ -484,7 +515,12 @@ class CassandraHandler(Handler):
 	def _update_config(self, data): 
 		updates = {self._sect_name: data}
 		configtool.update(configtool.get_behaviour_filename(Behaviours.CASSANDRA, ret=configtool.RET_PRIVATE), updates)
-	
+		
+	def _cleanup(self):
+		out,err = system('nodetool -h localhost cleanup')[0:2]
+		if err: 
+			raise HandlerError('Cannot do cleanup: %s' % err)
+		
 		
 class StorageProvider(object):
 	
