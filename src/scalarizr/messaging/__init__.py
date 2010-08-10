@@ -16,6 +16,7 @@ class MessageServiceFactory(object):
 			self._adapters[name] = adapter
 		return self._adapters[name].new_service(**params)
 
+
 class MessageService(object):
 	def new_message(self, name=None, meta=None, body=None):
 		pass
@@ -138,11 +139,16 @@ class Message(object):
 class MessageProducer(Observable):
 	filters = None
 	"""
-	Out filters for message
+	Out message filter
+	Filter is a callable f(producer, queue, message, headers)
 	"""
+	
 	def __init__(self):
 		Observable.__init__(self)
-		self.filters = []
+		self.filters = {
+			'data' : [],
+			'protocol' : []
+		}
 		self.define_events(
 			# Fires before message is send
 			"before_send", 
@@ -160,16 +166,19 @@ class MessageProducer(Observable):
 	
 class MessageConsumer(object):
 	filters = None
-	_listeners = []
+	"""
+	In message filters
+	Filter is a callable f(consumer, queue, message)
+	"""
 	
+	listeners = None
 	
-	def add_message_listener(self, ln):
-		if not ln in self._listeners:
-			self._listeners.append(ln)
-			
-	def remove_message_listener(self, ln):
-		if ln in self._listeners:
-			self._listeners.remove(ln)
+	def __init__(self):
+		self.listeners = []
+		self.filters = {
+			'data' : [],
+			'protocol' : []
+		}
 	
 	def start(self):
 		pass

@@ -5,7 +5,6 @@ Created on Apr 6, 2010
 '''
 
 from scalarizr.util import Observable
-from optparse import OptionParser
 
 class Bus(Observable):
 	base_path = None
@@ -30,12 +29,20 @@ class Bus(Observable):
 	
 	db = None
 	"""
-	@ivar sqlalchemy.pool.SingletonThreadPool: Database connection pool
+	@ivar db: Database connection pool. Single connection per thread
+	@type db: scalarizr.util.SqliteLocalObject
 	"""
 	
 	messaging_service = None
 	"""
-	@ivar scalarizr.messaging.MessageService: Default message service 
+	@ivar messaging_service: Default message service (Scalarizr <-> Scalr) 
+	@type messaging_service: scalarizr.messaging.MessageService
+	"""
+	
+	int_messaging_service = None
+	"""
+	@ivar int_messaging_service: Cross-scalarizr internal messaging
+	@type int_messaging_service: scalarizr.handlers.lifecircle.IntMessagingService
 	"""
 	
 	queryenv_service = None

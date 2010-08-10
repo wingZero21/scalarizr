@@ -6,12 +6,14 @@ Created on Mar 3, 2010
 
 import scalarizr.handlers
 from scalarizr.bus import bus
-from scalarizr.messaging import Messages, MetaOptions
-from scalarizr.util import cryptotool, configtool, disttool, system
+from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
+from scalarizr.util import cryptotool, configtool
 import logging
 import os, sys
 import binascii
 from subprocess import Popen, PIPE
+from scalarizr.messaging.p2p import P2pConfigOptions
+import threading
 
 
 _lifecircle = None
@@ -109,6 +111,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 	
 	def on_init(self):
 		bus.on("start", self.on_start)
+		bus.on("host_init_response", self.on_host_init_response)
 		self._producer.on("before_send", self.on_before_message_send)
 		
 		# Add internal messages to scripting skip list
@@ -182,9 +185,8 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		del self._new_crypto_key
 		
 		self._set_flag(self.FLAG_HOST_INIT)
-		bus.fire("host_init")		
+		bus.fire("host_init")
 		
-
 	
 	def _start_import(self):
 		# Send Hello
@@ -192,6 +194,16 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		bus.fire("before_hello", msg)
 		self._send_message(msg)
 		bus.fire("hello")
+
+	def on_host_init_response(self, message):
+		farm_crypto_key = message.body.get('farm_crypto_key', '')
+		if farm_crypto_key:
+			key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_FARM_CRYPTO_KEY_PATH)
+			configtool.write_key(key_path, farm_crypto_key, key_title="Farm crypto key")
+			bus.int_messaging_service = IntMessagingService()
+			
+		else:
+			self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. Cross-scalarizr messaging not initialized")
 
 
 	def on_IntServerReboot(self, message):
@@ -250,6 +262,30 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 	def _clear_flag(self, name):
 		os.remove(self._get_flag_filename(name))	
 	
+
+
+class IntMessagingService(object):
+	msg_service = None
+	consumer = None
+	
+	def __init__(self):
+		config = bus.config
+		f = MessageServiceFactory()
+		self.msg_service = f.new_service("p2p", **{
+			P2pConfigOptions.SERVER_ID : config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID),
+			P2pConfigOptions.CRYPTO_KEY_PATH : config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH),
+			P2pConfigOptions.CONSUMER_URL : "http://0.0.0.0:8012"
+		})
+	
+	def start_consumer(self):
+		if not self.consumer:
+			self.consumer = self.msg_service.get_consumer()
+			t = threading.Thread(name="IntMessagingConsumer", target=self.consumer.start)
+			t.start()
+	
+	def new_producer(self, host):
+		return self.service.new_producer(endpoint="http://%s:8012" % host)
+
 """
 class State:
 	PENDING = "pending"

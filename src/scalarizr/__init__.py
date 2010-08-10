@@ -325,7 +325,7 @@ def _init_services():
 	# Initialize handlers
 	from scalarizr.handlers import MessageListener
 	consumer = service.get_consumer()
-	consumer.add_message_listener(MessageListener())
+	consumer.listeners.append(MessageListener())
 
 	bus.fire("init")
 	
@@ -532,13 +532,21 @@ def _shutdown(*args):
 				except OSError, e:
 					logger.error("Cannot kill SIGTERM to SNMP subprocess (pid: %d). %s", _snmp_pid, e)
 			
+			# Kill Scalr message consumer
 			msg_service = bus.messaging_service
 			consumer = msg_service.get_consumer()
 			consumer.stop()
 			consumer.shutdown()
 			
+			# Kill Scalr message producer
 			producer = msg_service.get_producer()
 			producer.shutdown()
+			
+			# Kill Cross-scalarizr message consumer
+			int_msg_service = bus.int_messaging_service
+			if int_msg_service and int_msg_service.consumer:
+				int_msg_service.consumer.stop()
+				int_msg_service.consumer.shutdown()
 			
 			# Fire terminate
 			bus.fire("terminate")

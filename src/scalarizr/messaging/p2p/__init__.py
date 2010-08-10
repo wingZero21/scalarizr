@@ -6,9 +6,11 @@ Created on Dec 5, 2009
 
 from scalarizr.bus import bus
 from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingError
-import logging
+from scalarizr.messaging.p2p.security import P2pMessageSecurity
 from scalarizr.util import configtool
+import logging
 import threading
+
 
 
 """
@@ -27,9 +29,15 @@ class P2pConfigOptions:
 
 class P2pMessageService(MessageService):
 	_params = {}
+	_default_producer = None
+	_default_consumer = None
 	
 	def __init__(self, **params):
 		self._params = params
+		self._security = P2pMessageSecurity(
+			self._params[P2pConfigOptions.SERVER_ID],
+			self._params[P2pConfigOptions.CRYPTO_KEY_PATH]
+		)
 
 	def new_message(self, name=None, meta=None, body=None):
 		return P2pMessage(name, meta, body)
@@ -37,40 +45,33 @@ class P2pMessageService(MessageService):
 	def get_consumer(self):
 		if not self._default_consumer:
 			self._default_consumer = self.new_consumer(
-				url=self._params[P2pConfigOptions.CONSUMER_URL],
-				server_id=self._params[P2pConfigOptions.SERVER_ID],
-				crypto_key_path=self._params[P2pConfigOptions.CRYPTO_KEY_PATH]
+				endpoint=self._params[P2pConfigOptions.CONSUMER_URL]
 			)
 		return self._default_consumer
 	
 	def new_consumer(self, **params):
 		import consumer
-		return consumer.P2pMessageConsumer(**params)
+		c = consumer.P2pMessageConsumer(**params)
+		c.filters['protocol'].append(self._security.in_protocol_filter)
+		return c
 	
 	def get_producer(self):
 		if not self._default_producer:
 			self._default_producer = self.new_producer(
-				url=self._params[P2pConfigOptions.PRODUCER_URL],
-				server_id=self._params[P2pConfigOptions.SERVER_ID],
-				crypto_key_path=self._params[P2pConfigOptions.CRYPTO_KEY_PATH]
+				endpoint=self._params[P2pConfigOptions.PRODUCER_URL],
+				retries_progression=self._params[P2pConfigOptions.PRODUCER_RETRIES_PROGRESSION],
 			)
 		return self._default_producer
 	
 	def new_producer(self, **params):
 		import producer
-		return producer.P2pMessageProducer(**params)
+		p = producer.P2pMessageProducer(**params)
+		p.filters['protocol'].append(self._security.out_protocol_filter)
+		return p
 		
 
 def new_service(**kwargs):
 	return P2pMessageService(**kwargs)
-	
-class _P2pBase(object):
-	server_id = None
-	crypto_key_path = None
-	
-	def __init__(self, server_id=None, crypto_key_path=None):
-		self.server_id = server_id
-		self.crypto_key_path = crypto_key_path
 	
 class _P2pMessageStore:
 	_logger = None

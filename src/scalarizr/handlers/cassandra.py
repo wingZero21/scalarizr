@@ -208,7 +208,7 @@ class CassandraHandler(Handler):
 		
 		# Temporary config write
 		self._write_config()
-		ConsistencyLevel
+
 		# Determine startup type (server import, N-th startup, Scaling )
 		if   hasattr(message, 'snapshot_url'):
 			self._start_import_snapshot(message)

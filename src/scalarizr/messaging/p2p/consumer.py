@@ -4,14 +4,12 @@ Created on Dec 5, 2009
 @author: marat
 '''
 from scalarizr.messaging import MessageConsumer
-from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage, _P2pBase
+from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage
 from scalarizr.util import cryptotool, configtool
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
-import socket
 import threading
 import logging
-import binascii
 import sys
 
 try:
@@ -21,26 +19,26 @@ except ImportError:
 import os.path
 
 
-class P2pMessageConsumer(MessageConsumer, _P2pBase):
+class P2pMessageConsumer(MessageConsumer):
 	endpoint = None
 	_server = None
 	_logger = None
 	_handler_thread = None
 	_shutdown_handler = False
 	
-	def __init__(self, endpoint=None, server_id=None, crypto_key_path=None):
-		_P2pBase.__init__(self, server_id, crypto_key_path=None)
+	def __init__(self, endpoint=None):
+		MessageConsumer.__init__(self)
 		self.endpoint = endpoint
 		self._logger = logging.getLogger(__name__)
-		self._handler_thread = threading.Thread(name="MessageHandler", target=self.message_handler)
+		self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
+		self.RequestHandler.consumer = self
 			
 	def start(self):
 		try:
 			if self._server is None:
 				r = urlparse(self.endpoint)
-				_HttpRequestHanler.consumer = self
 				server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-				self._server = server_cls((r.hostname, r.port),	_HttpRequestHanler)
+				self._server = server_cls((r.hostname, r.port),	self.RequestHandler)
 				self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
 		except (BaseException, Exception), e:
 			self._logger.error("Cannot build server. %s", e)
@@ -85,7 +83,7 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 					message = unhandled[1]
 					try:
 						self._logger.info("Notify message listeners (message_id: %s)", message.id)
-						for ln in self._listeners:
+						for ln in self.listeners:
 							ln(message, queue)
 					except (BaseException, Exception), e:
 						self._logger.exception(e)
@@ -97,58 +95,57 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 					
 			time.sleep(0.2)
 		
-	
-class _HttpRequestHanler(BaseHTTPRequestHandler):
-	consumer = None
-
-	def do_POST(self):
-		logger = logging.getLogger(__name__)
+	class RequestHandler(BaseHTTPRequestHandler):
+		consumer = None
+		'''
+		@cvar consumer:Message consumer instance
+		@type consumer: P2pMessageConsumer 
+		'''
 		
-		queue = os.path.basename(self.path)
-		rawmsg = self.rfile.read(int(self.headers["Content-length"]))
-		logger.debug("Received ingoing message in queue: '%s'", queue)
-		
-		try:
-			logger.debug("Decrypting message")
-			crypto_key = binascii.a2b_base64(configtool.read_key(self.consumer.crypto_key_path))
-			xml = cryptotool.decrypt(rawmsg, crypto_key)
-			# Remove special chars
-			xml = xml.strip(''.join(chr(i) for i in range(0, 31)))		
-		except (BaseException, Exception), e:
-			err = "Cannot decrypt message. error: %s; raw message: %s" % (str(e), rawmsg)
-			logger.error(err)
-			logger.exception(e)
-			self.send_response(400, err)
-			return
-		
-		try:
-			logger.debug("Decoding message")
-			message = P2pMessage()
-			message.fromxml(xml)
-		except (BaseException, Exception), e:
-			err = "Cannot decode message. error: %s; xml message: %s" % (str(e), xml)
-			logger.error(err)
-			logger.exception(e)
-			self.send_response(400, err)
-			return
-		
-		logger.info("Received ingoing message %s in queue %s", message.name, queue)
-		
-		try:
-			store = P2pMessageStore()
-			store.put_ingoing(message, queue)
+		def do_POST(self):
+			logger = logging.getLogger(__name__)
 			
-		except (BaseException, Exception), e: 
-			logger.exception(e) 
-			self.send_response(500, str(e))
-			return
-		
-		self.send_response(201)
-		
-		
-	def log_message(self, format, *args):
-		logger = logging.getLogger(__name__)
-		logger.info("%s %s\n", self.address_string(), format%args)
+			queue = os.path.basename(self.path)
+			rawmsg = self.rfile.read(int(self.headers["Content-length"]))
+			logger.debug("Received ingoing message in queue: '%s'", queue)
+			
+			try:
+				for f in self.consumer.filters['protocol']:
+					rawmsg = f(self.consumer, queue, rawmsg)
+			except (BaseException, Exception), e:
+				err = 'Message consumer protocol filter raises exception: %s' % str(e)
+				logger.error(err)
+				logger.exception(e)
+				self.send_response(400, str(e))
+			
+			try:
+				logger.debug("Decoding message")
+				message = P2pMessage()
+				message.fromxml(rawmsg)
+			except (BaseException, Exception), e:
+				err = "Cannot decode message. error: %s; xml message: %s" % (str(e), rawmsg)
+				logger.error(err)
+				logger.exception(e)
+				self.send_response(400, err)
+				return
+			
+			logger.info("Received ingoing message %s in queue %s", message.name, queue)
+			
+			try:
+				store = P2pMessageStore()
+				store.put_ingoing(message, queue)
+			except (BaseException, Exception), e: 
+				logger.exception(e) 
+				self.send_response(500, str(e))
+				return
+			
+			self.send_response(201)
+			
+			
+		def log_message(self, format, *args):
+			logger = logging.getLogger(__name__)
+			logger.info("%s %s\n", self.address_string(), format%args)		
+			pass
 
 
 if sys.version_info < (2,6):
