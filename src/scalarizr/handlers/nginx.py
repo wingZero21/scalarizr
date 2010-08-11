@@ -44,6 +44,7 @@ class NginxHandler(Handler):
 		self._queryenv = bus.queryenv_service	
 		bus.define_events("nginx_upstream_reload")
 		bus.on("start", self.on_start)
+		bus.define_events("before_host_down")
 		bus.on("before_host_down", self.on_before_host_down)
 		
 	def on_start(self):
@@ -255,17 +256,21 @@ class NginxHandler(Handler):
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
 			
-			https_config = None			
+			https_config = ''			
 			for vhost in received_vhosts:
-				if vhost.hostname:
+				if vhost.hostname and vhost.type == 'nginx': #and vhost.https
 					https_config += vhost.raw + '\n'
 					
+		else:
+			self._logger.debug('Scalr returned empty virtualhost list')
+		
 		if https_config:
 			https_conf_path = bus.etc_path + '/nginx/https.include'
 			
 			if os.path.exists(https_conf_path) and read_file(https_conf_path, logger=self._logger):
 				time_suffix = str(datetime.now()).replace(' ','.')
 				shutil.move(https_conf_path, https_conf_path + time_suffix)
+				
 			msg = 'Writing virtualhosts to https.include' 	
 			write_file(https_conf_path, https_config, msg=msg, logger=self._logger)
 		
