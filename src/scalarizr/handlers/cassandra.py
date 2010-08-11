@@ -12,6 +12,8 @@ import logging
 import os
 from scalarizr.util import configtool, fstool, system, initd, get_free_devname, filetool
 from xml.dom.minidom import parse
+from Queue import Queue, Empty
+from threading import Timer
 from scalarizr.libs.metaconf import *
 import urllib2
 import tarfile
@@ -19,9 +21,12 @@ import shutil
 import time
 import pexpect
 
+
 OPT_SNAPSHOT_ID			= "snapshot_id"
 OPT_STORAGE_VOLUME_ID	= "volume_id" 
-TMP_EBS_MNTPOINT = '/mnt/temp_storage'
+TMP_EBS_MNTPOINT        = '/mnt/temp_storage'
+CDB_TIMEOUT             = 120
+CDB_MAX_ATTEMPTS        = 3 
 
 initd_script = "/etc/init.d/cassandra"
 if not os.path.exists(initd_script):
@@ -40,6 +45,8 @@ class CassandraMessages:
 	
 	CREATE_DATA_BUNDLE_RESULT = "Cassandra_CreateDataBundleResult"
 	'''
+	@ivar status ok|error
+	@ivar last_error
 	@ivar bundles list(dict(remote_ip=ip, timestamp=123454, snapshot_id=snap-434244))
 	'''
 	
@@ -50,8 +57,11 @@ class CassandraMessages:
 	
 	INT_CREATE_DATA_BUNDLE_RESULT = "Cassandra_IntCreateDataBundleResult"
 	'''
+	@ivar status ok|error
+	@ivar last_error
 	@ivar timestamp
 	@ivar snapshot_id
+	@ivar remote_ip
 	'''
 
 class StorageError(BaseException): pass
@@ -69,6 +79,10 @@ class CassandraHandler(Handler):
 	_port = None
 	_platform = None
 	_zone = None
+	
+	_cdb_ok_hosts = None
+	_cdb_timeouted_hosts = None
+	_cdb_results  = None
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -92,7 +106,7 @@ class CassandraHandler(Handler):
 		self._private_ip = self._platform.get_private_ip()
 		self._zone = self._platform.get_avail_zone()
 		self._inst_id = self._platform.get_instance_id()
-
+		
 		bus.on("init", self.on_init)
 		bus.on("before_host_down", self.on_before_host_down)
 
@@ -104,8 +118,9 @@ class CassandraHandler(Handler):
 				(message.name == Messages.HOST_INIT or
 				message.name == Messages.HOST_UP or
 				message.name == Messages.HOST_DOWN or
-				message.name == CassandraMessages.CREATE_DATA_BUNDLE or
-				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE)
+				message.name == CassandraMessages.CREATE_DATA_BUNDLE or 
+				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE or
+				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT)
 	
 	def on_HostInit(self, message):
 		if message.behaviour == Behaviours.CASSANDRA:
@@ -115,17 +130,6 @@ class CassandraHandler(Handler):
 				ip = message.local_ip
 			self._add_iptables_rule(ip)
 			
-	def on_Cassandra_CreateEbsSnapshot(self):
-		try:
-			self._stop_cassandra()
-			volume_id = self._sect.get(OPT_STORAGE_VOLUME_ID)
-			snap_id = self._create_snapshot(volume_id)
-			self._start_cassandra()
-			# TODO: Send_message
-		except:
-			# TODO: Send error message
-			pass
-
 	def on_Cassandra_ChangeReplFactor(self, message):
 		try:
 			new_rf = message.rf
@@ -154,36 +158,160 @@ class CassandraHandler(Handler):
 		except (Exception, BaseException), e:
 			#TODO: Send sad message with error
 			pass
-					
+		
+
+	def on_Cassandra_CreateDataBundle(self, message):
+		try:
+			self._cdb_ok_hosts = set()
+			self._cdb_timeouted_hosts = set()
+			self._cdb_results = []
+			self._queue = Queue()
+	
+			"""
+			Get node list and fill the queue
+			"""
+			out, err = system('nodetool -h localhost ring')[0:2]
+			if err:
+				raise HandlerError('Cannot get node list: %s' % err)
+			
+			lines = out.split('\n')
+			ip_re = re.compile()
+			for line in lines[1:]:
+				if not line:
+					continue
+				ip = line.split()[0]
+	
+				if re.match('^\d{1,3}(\.\d{1,3}){3}$', ip) and ip != self._private_ip:
+					self._queue.put((line.split()[0], 0))
+			
+			if self._queue.is_empty():
+				raise HandlerError('Cannot get nodelist: queue is empty')
+			
+			self._cdb_attempts, self._cdb_host = self._queue.get(False)
+			
+			"""
+			Send first message
+			"""
+			self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE)
+			
+		except (Exception, BaseException), e:
+			self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+											status = 'error',
+											last_error = str(e) 
+							   ))
+
 	def on_Cassandra_IntCreateDataBundle(self, message):
-		# Slaves
-		pass
+		
+		leader_host = message.leader_host
+		int_msg  = bus.int_messaging_service
+		producer = int_msg.new_producer(leader_host)
+		try:
+			ret = dict()
+
+	
+			self._stop_cassandra()
+			volume_id          = self._sect.get(OPT_STORAGE_VOLUME_ID)
+			ret['remote_ip']   = self._private_ip	
+			ret['status']      = 'ok'
+			ret['snapshot_id'] = self._create_snapshot(volume_id)
+			ret['timestamp']   = time.strftime('%Y-%m-%d_%H-%M') 
+			
+			self._start_cassandra()
+			
+		except (Exception, BaseException), e:
+			ret  = dict(status = 'error', last_error = str(e), remote_ip = self._private_ip)
+		
+		finally:
+			message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = ret)
+			producer.send(Queues.CONTROL, message)
+
 	
 	def on_Cassandra_IntCreateDataBundleResult(self, message):
-		# Leader
-		pass
-
-							
-	def on_Cassandra_CreateDataBundle(self, message):
-		nodes = []
-		result = {}
-		out, err = system('nodetool -h localhost ring')[0:2]
-		if err:
-			raise HandlerError('Cannot get node list: %s' % err)
 		
-		lines = out.split('\n')
-		ip_re = re.compile()
-		for line in lines[1:]:
-			if not line:
-				continue
-			ip = line.split()[0]
+		try:		
+			if not self._cdb_results:
+				self._cdb_results = []
+			
+			if message.remote_ip == self._cdb_host:
+				self._cdb_timer.cancel()				
 
-			if re.match('^\d{1,3}(\.\d{1,3}){3}$', ip) and ip != self._private_ip:
-				nodes.append(line.split()[0])
+				if 'error' == message.status:
 					
-		for node in nodes:
-			# Some magic with sending Cassandra_CreateEbsSnapshot message and receiving result
-			result[node] = self._send_bundle(node)
+					if self._cdb_attempts + 1 >= CDB_MAX_ATTEMPTS:
+						result  = dict()
+						result['status']		= 'error' 
+						result['last_error']	= message.last_error
+						result['remote_ip']   = message.remote_ip
+						self._cdb_results.append(result)
+					else:
+						self._queue.put((message.remote_ip, self._cdb_attempts + 1))
+				else:
+					result  = dict()
+					result['snapshot_id'] = message.snapshot_id
+					result['timestamp']   = message.timestamp
+					result['remote_ip']   = message.remote_ip
+					self._cdb_results.append(result)
+					self._cdb_ok_hosts.add(message.remote_ip)				
+					
+					
+				try:
+					self._cdb_attempts, self._cdb_host = self._queue.get(False)					
+					while not self._cdb_host in self._cdb_ok_hosts:
+						self._cdb_attempts, self._cdb_host = self._queue.get(False)
+						
+				except Empty:
+					self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+												status = 'ok',
+												bundles = self._cdb_results
+											))
+					return
+				
+				self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE)
+				
+	
+			else:
+				# Timeouted message from some node
+				if not 'ok' == message.status:
+					return
+	
+				result  = dict()
+				result['snapshot_id'] = message.snapshot_id
+				result['timestamp']   = message.timestamp
+				result['remote_ip']   = message.remote_ip
+				
+				# Delete possible negative result if positive one arrived
+				for result in self._cdb_results:
+					if message.remote_ip in result.values() and result['status'] == 'error':
+						self._cdb_results.remove(result)
+
+				# Add positive result
+				self._cdb_results.append(result)
+				self._cdb_ok_hosts.add(message.remote_ip)
+
+		except (Exception, BaseException), e:
+			self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+											status = 'error',
+											last_error = str(e) 
+							   ))
+
+
+
+	def _send_cdb_message(self, host = None, msg_name = None, body = None):
+		int_msg  = bus.int_messaging_service
+		message  = int_msg.msg_service.new_message(msg_name, body = body)
+		producer = int_msg.new_producer(host)
+		producer.send(Queues.CONTROL, message)
+		self._cdb_timer = Timer(CDB_TIMEOUT, self._cdb_failed)
+
+		
+	def _cdb_failed(self):
+		# Imitate  error message from current node 
+		int_msg  = bus.int_messaging_service
+		err_msg  = dict()
+		err_msg['status'] = 'error'
+		err_msg['last_error'] = 'Timeout error occured while CreateDataBundle. Host: %s, timeout: %d' % (self._cdb_host, CDB_TIMEOUT)
+		message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = err_msg)
+		self.on_Cassandra_IntCreateDataBundleResult(message)
 		
 	def on_before_host_up(self, message):		
 
