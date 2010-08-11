@@ -37,7 +37,22 @@ initd.explore("cassandra", initd_script)
 
 class CassandraMessages:
 	CREATE_DATA_BUNDLE = "Cassandra_CreateDataBundle"
+	
 	CREATE_DATA_BUNDLE_RESULT = "Cassandra_CreateDataBundleResult"
+	'''
+	@ivar bundles list(dict(remote_ip=ip, timestamp=123454, snapshot_id=snap-434244))
+	'''
+	
+	INT_CREATE_DATA_BUNDLE = "Cassandra_IntCreateDataBundle"
+	'''
+	@ivar leader_host
+	'''
+	
+	INT_CREATE_DATA_BUNDLE_RESULT = "Cassandra_IntCreateDataBundleResult"
+	'''
+	@ivar timestamp
+	@ivar snapshot_id
+	'''
 
 class StorageError(BaseException): pass
 
@@ -89,7 +104,8 @@ class CassandraHandler(Handler):
 				(message.name == Messages.HOST_INIT or
 				message.name == Messages.HOST_UP or
 				message.name == Messages.HOST_DOWN or
-				message.name == CassandraMessages.CREATE_DATA_BUNDLE)
+				message.name == CassandraMessages.CREATE_DATA_BUNDLE or
+				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE)
 	
 	def on_HostInit(self, message):
 		if message.behaviour == Behaviours.CASSANDRA:
@@ -138,6 +154,15 @@ class CassandraHandler(Handler):
 		except (Exception, BaseException), e:
 			#TODO: Send sad message with error
 			pass
+					
+	def on_Cassandra_IntCreateDataBundle(self, message):
+		# Slaves
+		pass
+	
+	def on_Cassandra_IntCreateDataBundleResult(self, message):
+		# Leader
+		pass
+
 							
 	def on_Cassandra_CreateDataBundle(self, message):
 		nodes = []

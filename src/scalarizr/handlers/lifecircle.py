@@ -265,6 +265,13 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 
 
 class IntMessagingService(object):
+	'''
+	Usage:
+	s = bus.int_messaging_service
+	p = s.new_producer('10.152.12.38')
+	m = s.msg_service.new_message('Cassandra_IntCreateDataBundle')
+	p.send(Queues.CONTROL, m)
+	'''
 	msg_service = None
 	consumer = None
 	
@@ -287,6 +294,10 @@ class IntMessagingService(object):
 		return self.service.new_producer(endpoint="http://%s:8012" % host)
 
 """
+
+
+
+
 class State:
 	PENDING = "pending"
 	INITIALIZED = "initialized"
