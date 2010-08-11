@@ -120,6 +120,8 @@ class NginxHandler(Handler):
 			self._logger.debug("Creating backup config files.")
 			if os.path.isfile(include):
 				shutil.move(include, include+".save")
+			else:
+				self._logger.debug('%s does not exist. Nothing to backup.' % include)
 				
 			log_message = "Writing template to %s" % include			
 			write_file(include, template, msg = log_message, logger = self._logger)
@@ -200,8 +202,12 @@ class NginxHandler(Handler):
 					self._logger.error("Configuration error detected:" +  stderr + " Reverting configuration.")
 					if os.path.isfile(include):
 						shutil.move(include, include+".junk")
+					else:
+						self._logger.debug('%s does not exist', include)
 					if os.path.isfile(include+".save"):
 						shutil.move(include+".save", include)
+					else:
+						self._logger.debug('%s does not exist', include+".save")
 				
 				else:
 					# Reload nginx
