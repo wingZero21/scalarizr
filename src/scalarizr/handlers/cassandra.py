@@ -7,7 +7,7 @@ Created on Jun 23, 2010
 from scalarizr.bus import bus
 from scalarizr.behaviour import Behaviours
 from scalarizr.handlers import Handler, HandlerError
-from scalarizr.messaging import Messages
+from scalarizr.messaging import Messages, Queues
 import logging
 import os
 from scalarizr.util import configtool, fstool, system, initd, get_free_devname, filetool
@@ -66,8 +66,33 @@ class CassandraMessages:
 
 class StorageError(BaseException): pass
 
+cassandra = None
 def get_handlers ():
-	return [CassandraHandler()]
+	globals()['cassandra'] = Cassandra()
+	return [CassandraScalingHandler(), CassandraDataBundleHandler()]
+
+class Cassandra(object):
+	def __init__(self):
+		config = bus.config
+		
+		self._sect_name = configtool.get_behaviour_section_name(Behaviours.CASSANDRA)
+		self._sect = configtool.section_wrapper(bus.config, self._sect_name)
+		
+		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
+		
+		self._storage_path = self._sect.get('storage_path')
+		self._storage_conf = self._sect.get('storage_conf')
+		
+		self.data_file_directory = self._storage_path + "/datafile" 
+		self.commit_log_directory = self._storage_path + "/commitlog"
+
+		self._config = Configuration('xml')
+
+		self._private_ip = self._platform.get_private_ip()
+		self._zone = self._platform.get_avail_zone()
+		self._inst_id = self._platform.get_instance_id()
+	pass
+
 
 class CassandraHandler(Handler):
 	
