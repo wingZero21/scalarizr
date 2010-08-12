@@ -26,8 +26,9 @@ OPT_SNAPSHOT_ID			= "snapshot_id"
 OPT_STORAGE_VOLUME_ID	= "volume_id" 
 TMP_EBS_MNTPOINT        = '/mnt/temp_storage'
 CDB_TIMEOUT             = 120
-CDB_MAX_ATTEMPTS        = 3 
-
+CDB_MAX_ATTEMPTS        = 3
+CRF_TIMEOUT				= 100
+CRF_MAX_ATTEMPTS		= 3
 initd_script = "/etc/init.d/cassandra"
 if not os.path.exists(initd_script):
 	raise HandlerError("Cannot find Cassandra init script at %s. Make sure that cassandra is installed" % initd_script)
@@ -41,16 +42,39 @@ initd.explore("cassandra", initd_script)
 # TODO: rewrite initd to handle service's ip address
 
 class CassandraMessages:
-	CREATE_DATA_BUNDLE = "Cassandra_CreateDataBundle"
 	
-	CREATE_DATA_BUNDLE_RESULT = "Cassandra_CreateDataBundleResult"
+	CHANGE_RF					= 'Cassandra_ChangeReplFactor'
+	'''
+	@ivar rf_changes list( dict( name = 'Keyspace1', rf = 3)) 
+	'''
+	CHANGE_RF_RESULT			= 'Cassandra_ChangeReplFactorResult'
 	'''
 	@ivar status ok|error
 	@ivar last_error
 	@ivar bundles list(dict(remote_ip=ip, timestamp=123454, snapshot_id=snap-434244))
 	'''
 	
-	INT_CREATE_DATA_BUNDLE = "Cassandra_IntCreateDataBundle"
+	INT_CHANGE_RF				= 'Cassandra_IntChangeReplFactor'
+	'''
+	@ivar leader_host
+	'''
+	
+	INT_CHANGE_RF_RESULT		= 'Cassandra_IntChangeReplFactorResult'
+	'''
+	@ivar status ok|error
+	@ivar last_error
+	'''
+	
+	CREATE_DATA_BUNDLE			= "Cassandra_CreateDataBundle"
+	
+	CREATE_DATA_BUNDLE_RESULT 	= "Cassandra_CreateDataBundleResult"
+	'''
+	@ivar status ok|error
+	@ivar last_error
+	@ivar bundles list(dict(status = ok|error, last_error = , remote_ip=ip, timestamp=123454, snapshot_id=snap-434244))
+	'''
+	
+	INT_CREATE_DATA_BUNDLE 		= "Cassandra_IntCreateDataBundle"
 	'''
 	@ivar leader_host
 	'''
@@ -67,85 +91,114 @@ class CassandraMessages:
 class StorageError(BaseException): pass
 
 cassandra = None
+
 def get_handlers ():
 	globals()['cassandra'] = Cassandra()
 	return [CassandraScalingHandler(), CassandraDataBundleHandler()]
 
 class Cassandra(object):
-	def __init__(self):
-		config = bus.config
-		
-		self._sect_name = configtool.get_behaviour_section_name(Behaviours.CASSANDRA)
-		self._sect = configtool.section_wrapper(bus.config, self._sect_name)
-		
-		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
-		
-		self._storage_path = self._sect.get('storage_path')
-		self._storage_conf = self._sect.get('storage_conf')
-		
-		self.data_file_directory = self._storage_path + "/datafile" 
-		self.commit_log_directory = self._storage_path + "/commitlog"
 
-		self._config = Configuration('xml')
-
-		self._private_ip = self._platform.get_private_ip()
-		self._zone = self._platform.get_avail_zone()
-		self._inst_id = self._platform.get_instance_id()
-	pass
-
-
-class CassandraHandler(Handler):
-	
-	_logger = None
-	_queryenv = None
-	_storage = None
-	_storage_path = None
-	_storage_conf = None
-	_port = None
-	_platform = None
-	_zone = None
-	
-	_cdb_ok_hosts = None
-	_cdb_timeouted_hosts = None
-	_cdb_results  = None
-	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._queryenv = bus.queryenv_service
-		self._platform = bus.platform
+		
 		config = bus.config
+		self.queryenv = bus.queryenv_service
 		
-		self._sect_name = configtool.get_behaviour_section_name(Behaviours.CASSANDRA)
-		self._sect = configtool.section_wrapper(bus.config, self._sect_name)
+		self.platform = bus.platform
 		
-		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
+		self.private_ip = cassandra.platform.get_private_ip()
+		self.zone = cassandra.platform.get_avail_zone()
+		self.inst_id = cassandra.platform.get_instance_id()
 		
-		self._storage_path = self._sect.get('storage_path')
-		self._storage_conf = self._sect.get('storage_conf')
 		
-		self.data_file_directory = self._storage_path + "/datafile" 
-		self.commit_log_directory = self._storage_path + "/commitlog"
+		self.sect_name = configtool.get_behaviour_section_name(Behaviours.CASSANDRA)
+		self.sect = configtool.section_wrapper(config, self.sect_name)
 
+		self.role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
+
+		self.storage_path = self.sect.get('storage_path')
+		self.storage_conf = self.sect.get('storage_conf')
+
+		self.data_file_directory = self.storage_path + "/datafile"
+		self.commit_log_directory = self.storage_path + "/commitlog"
+
+	def restart_service(self):
+		try:
+			self._logger.info("Restarting Cassandra service")
+			initd.restart("cassandra")
+			self._logger.debug("Cassandra service restarted")
+		except:
+			self._logger.error("Cannot restart Cassandra")
+			raise		
+				
+	def stop_service(self):
+		try:
+			self._logger.info("Stopping Cassandra service")
+			initd.stop("cassandra")
+			self._logger.debug("Cassandra service stopped")
+		except:
+			self._logger.error("Cannot stop Cassandra")
+			raise
+
+	def start_service(self):
+		try:
+			self._logger.info("Starting Cassandra service")
+			initd.start("cassandra")
+			self._logger.debug("Cassandra service started")
+		except:
+			self._logger.error("Cannot start Cassandra")
+			raise
+
+	def create_snapshot(self, vol_id):
+		ec2_conn = cassandra.platform.new_ec2_conn()
+		snapshot  = ec2_conn.create_snapshot(vol_id)
+		del(ec2_conn)
+		return snapshot.id
+
+	def get_node_queue(self):
+		
+		queue = Queue()
+		out, err = system('nodetool -h localhost ring')[0:2]
+		if err:
+			raise HandlerError('Cannot get node list: %s' % err)
+		
+		lines = out.split('\n')
+		ip_re = re.compile()
+		for line in lines[1:]:
+			if not line:
+				continue
+			ip = line.split()[0]
+
+			if re.match('^\d{1,3}(\.\d{1,3}){3}$', ip) and ip != cassandra.private_ip:
+				queue.put((line.split()[0], 0))
+				
+		return queue
+
+
+class CassandraScalingHandler(Handler):
+	
+	_port = None
+
+	def __init__(self):
+		
+		self._logger = logging.getLogger(__name__)
 		self._config = Configuration('xml')
+		try:
+			self._config.read(cassandra.storage_conf)
+		except:
+			pass
 
-		self._private_ip = self._platform.get_private_ip()
-		self._zone = self._platform.get_avail_zone()
-		self._inst_id = self._platform.get_instance_id()
-		
 		bus.on("init", self.on_init)
 		bus.on("before_host_down", self.on_before_host_down)
 
 	def on_init(self):
 		bus.on("before_host_up", self.on_before_host_up)
-		
+			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.CASSANDRA in behaviour and \
-				(message.name == Messages.HOST_INIT or
+				( message.name == Messages.HOST_INIT or
 				message.name == Messages.HOST_UP or
-				message.name == Messages.HOST_DOWN or
-				message.name == CassandraMessages.CREATE_DATA_BUNDLE or 
-				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE or
-				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT)
+				message.name == Messages.HOST_DOWN )
 	
 	def on_HostInit(self, message):
 		if message.behaviour == Behaviours.CASSANDRA:
@@ -153,145 +206,117 @@ class CassandraHandler(Handler):
 				ip = message.remote_ip
 			else:
 				ip = message.local_ip
-			self._add_iptables_rule(ip)
+			self._add_iptables_rule(ip)		
+
+
+#
+#Begin copypasta
+#
 			
 	def on_Cassandra_ChangeReplFactor(self, message):
-		try:
-			new_rf = message.rf
-			keyspace = message.keyspace
-			try:
-				rf = self._config.get("Storage/Keyspaces/Keyspace[@Name='"+keyspace+"']/ReplicationFactor")
-			except PathNotExistsError:
-				raise HandlerError('Keyspace %s does not exist or configuration file is broken' % keyspace)
-			
-			if rf == new_rf:
-				# New and old rfs are equal
-				# Just send "OK" message
-				pass
-			
-			self._config.set("Storage/Keyspaces/Keyspace[@Name='"+keyspace+"']/ReplicationFactor", new_rf)
-			self._write_config()
-			self._restart_cassandra()
-			
-			if new_rf < rf:
-				self._cleanup()
-			elif new_rf > rf:
-				# Brainstorm here
-				pass
-
-				
-		except (Exception, BaseException), e:
-			#TODO: Send sad message with error
-			pass
 		
-
-	def on_Cassandra_CreateDataBundle(self, message):
 		try:
-			self._cdb_ok_hosts = set()
-			self._cdb_timeouted_hosts = set()
-			self._cdb_results = []
-			self._queue = Queue()
-	
-			"""
-			Get node list and fill the queue
-			"""
-			out, err = system('nodetool -h localhost ring')[0:2]
-			if err:
-				raise HandlerError('Cannot get node list: %s' % err)
+			self._rf_changes = message.rf_changes
+			self._crf_status = 'ok'
+			self._crf_last_err = ''
+			self._crf_ok_hosts = set()
+			self._crf_timeouted_hosts = set()
+			self._crf_results = []
 			
-			lines = out.split('\n')
-			ip_re = re.compile()
-			for line in lines[1:]:
-				if not line:
-					continue
-				ip = line.split()[0]
-	
-				if re.match('^\d{1,3}(\.\d{1,3}){3}$', ip) and ip != self._private_ip:
-					self._queue.put((line.split()[0], 0))
+			self._queue = cassandra.get_node_queue()
 			
 			if self._queue.is_empty():
 				raise HandlerError('Cannot get nodelist: queue is empty')
-			
-			self._cdb_attempts, self._cdb_host = self._queue.get(False)
+	
+			self._crf_attempts, self._crf_host = self._queue.get(False)
 			
 			"""
 			Send first message
 			"""
-			self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE)
-			
+			self._send_crf_message(self._crf_host, CassandraMessages.INT_CREATE_DATA_BUNDLE, self._rf_changes)
+		
 		except (Exception, BaseException), e:
-			self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
-											status = 'error',
-											last_error = str(e) 
-							   ))
-
-	def on_Cassandra_IntCreateDataBundle(self, message):
+				self._send_message(CassandraMessages.CHANGE_RF_RESULT, dict(
+												status = 'error',
+												last_error = str(e) 		
+								   ))
+			
+	def on_Cassandra_IntChangeReplFactor(self, message):
 		
 		leader_host = message.leader_host
 		int_msg  = bus.int_messaging_service
 		producer = int_msg.new_producer(leader_host)
+		
+		increase_ks_list = list()
 		try:
-			ret = dict()
+			changes = message.rf_changes
+			for keyspace in changes:
+				
+				keyspace_name = keyspace['name']
+				new_rf		  = keyspace['rf']
+				
+				try:
+					rf = self._config.get("Storage/Keyspaces/Keyspace[@Name='"+keyspace_name+"']/ReplicationFactor")
+				except PathNotExistsError:
+					raise HandlerError('Keyspace %s does not exist or configuration file is broken' % keyspace_name)
+				
+				if rf < new_rf:
+					increase_ks_list.append(keyspace_name)
+				self._config.set("Storage/Keyspaces/Keyspace[@Name='"+keyspace_name+"']/ReplicationFactor", new_rf)
+				
+			self._write_config()
+			cassandra.restart_service()
 
-	
-			self._stop_cassandra()
-			volume_id          = self._sect.get(OPT_STORAGE_VOLUME_ID)
-			ret['remote_ip']   = self._private_ip	
-			ret['status']      = 'ok'
-			ret['snapshot_id'] = self._create_snapshot(volume_id)
-			ret['timestamp']   = time.strftime('%Y-%m-%d_%H-%M') 
-			
-			self._start_cassandra()
-			
+			self._cleanup()
+			for keyspace in increase_ks_list:
+				self._repair(keyspace)
+
 		except (Exception, BaseException), e:
-			ret  = dict(status = 'error', last_error = str(e), remote_ip = self._private_ip)
+			ret  = dict(status = 'error', last_error = str(e), remote_ip = cassandra.private_ip)
 		
 		finally:
-			message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = ret)
+			message  = int_msg.msg_service.new_message(CassandraMessages.INT_CHANGE_RF_RESULT, body = ret)
 			producer.send(Queues.CONTROL, message)
-
-	
-	def on_Cassandra_IntCreateDataBundleResult(self, message):
 		
+	def on_Cassandra_IntChangeReplFactorResult(self, message):	
 		try:		
-			if not self._cdb_results:
-				self._cdb_results = []
+			if not self._crf_results:
+				self._crf_results = []
 			
-			if message.remote_ip == self._cdb_host:
-				self._cdb_timer.cancel()				
+			if message.remote_ip == self._crf_host:
+				self._crf_timer.cancel()				
 
-				if 'error' == message.status:
-					
-					if self._cdb_attempts + 1 >= CDB_MAX_ATTEMPTS:
+				if 'error' == message.status:					
+					if self._crf_attempts + 1 >= CRF_MAX_ATTEMPTS:
 						result  = dict()
-						result['status']		= 'error' 
-						result['last_error']	= message.last_error
+						result['status']		= 'error'
 						result['remote_ip']   = message.remote_ip
-						self._cdb_results.append(result)
+						result['last_error']	= message.last_error
+						self._crf_results.append(result)
+						self._crf_status = 'error'
+						self._crf_last_err = 'Host: %s, Error: %s' % (message.remote_ip, message.last_error)
 					else:
-						self._queue.put((message.remote_ip, self._cdb_attempts + 1))
+						self._queue.put((message.remote_ip, self._crf_attempts + 1))
 				else:
 					result  = dict()
-					result['snapshot_id'] = message.snapshot_id
-					result['timestamp']   = message.timestamp
+					result['status']		= 'ok' 
 					result['remote_ip']   = message.remote_ip
-					self._cdb_results.append(result)
-					self._cdb_ok_hosts.add(message.remote_ip)				
-					
+					self._crf_results.append(result)
+					self._crf_ok_hosts.add(message.remote_ip)
+											
 					
 				try:
-					self._cdb_attempts, self._cdb_host = self._queue.get(False)					
-					while not self._cdb_host in self._cdb_ok_hosts:
-						self._cdb_attempts, self._cdb_host = self._queue.get(False)
-						
+					self._crf_attempts, self._crf_host = self._queue.get(False)					
+					while not self._crf_host in self._crf_ok_hosts:
+						self._crf_attempts, self._crf_host = self._queue.get(False)
 				except Empty:
-					self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
-												status = 'ok',
-												bundles = self._cdb_results
-											))
+					res = dict(status = self._crf_status, bundles = self._crf_results)
+					if 'error' == self._crf_status:
+						res.update({'last_error':self._crf_last_err})					
+					self._send_message(CassandraMessages.CHANGE_RF_RESULT, res)
 					return
 				
-				self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE)
+				self._send_crf_message(self._crf_host, CassandraMessages.INT_CHANGE_RF, self._rf_changes)
 				
 	
 			else:
@@ -300,53 +325,55 @@ class CassandraHandler(Handler):
 					return
 	
 				result  = dict()
-				result['snapshot_id'] = message.snapshot_id
-				result['timestamp']   = message.timestamp
+				result['status']		= 'ok' 
 				result['remote_ip']   = message.remote_ip
 				
 				# Delete possible negative result if positive one arrived
-				for result in self._cdb_results:
+				for result in self._crf_results:
 					if message.remote_ip in result.values() and result['status'] == 'error':
-						self._cdb_results.remove(result)
+						self._crf_results.remove(result)
 
 				# Add positive result
-				self._cdb_results.append(result)
-				self._cdb_ok_hosts.add(message.remote_ip)
+				self._crf_results.append(result)
+				self._crf_ok_hosts.add(message.remote_ip)
 
 		except (Exception, BaseException), e:
-			self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+			self._send_message(CassandraMessages.CHANGE_RF_RESULT, dict(
 											status = 'error',
 											last_error = str(e) 
 							   ))
 
-
-
-	def _send_cdb_message(self, host = None, msg_name = None, body = None):
+	def _send_crf_message(self, host = None, msg_name = None, body = None):
 		int_msg  = bus.int_messaging_service
 		message  = int_msg.msg_service.new_message(msg_name, body = body)
 		producer = int_msg.new_producer(host)
 		producer.send(Queues.CONTROL, message)
-		self._cdb_timer = Timer(CDB_TIMEOUT, self._cdb_failed)
+		self._cdb_timer = Timer(CRF_TIMEOUT, self._crf_failed)
 
-		
-	def _cdb_failed(self):
-		# Imitate  error message from current node 
+
+	def _crf_failed(self):
+		# Imitate  error message from current node
 		int_msg  = bus.int_messaging_service
 		err_msg  = dict()
 		err_msg['status'] = 'error'
-		err_msg['last_error'] = 'Timeout error occured while CreateDataBundle. Host: %s, timeout: %d' % (self._cdb_host, CDB_TIMEOUT)
-		message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = err_msg)
-		self.on_Cassandra_IntCreateDataBundleResult(message)
-		
-	def on_before_host_up(self, message):		
+		err_msg['last_error'] = 'Timeout error occured while ChangeReplFactor. Host: %s, timeout: %d' % (self._crf_host, CRF_TIMEOUT)
+		message  = int_msg.msg_service.new_message(CassandraMessages.INT_CHANGE_RF_RESULT, body = err_msg)
+		self.on_Cassandra_IntChangeReplFactorResult(message)
 
-		self._stop_cassandra()
+#
+#End copypasta
+#
+
+	def on_before_host_up(self, message):
+
+		cassandra.stop_service()
 		# Getting storage conf from url
+		self._config = Configuration('xml')
 		result = re.search('^s3://(.*?)/(.*?)$', message.storage_conf_url)
 		if result:
 			bucket_name = result.group(1)
 			file_name   = result.group(2)
-			s3_conn = self._platform.new_s3_conn()
+			s3_conn = cassandra.platform.new_s3_conn()
 			bucket = s3_conn.get_bucket(bucket_name)
 			key = bucket.get_key(file_name)
 			key.open_read()
@@ -371,7 +398,7 @@ class CassandraHandler(Handler):
 		# Clear Seed list
 		self._config.remove('Storage/Seeds/Seed')
 		
-		roles = self._queryenv.list_roles(behaviour = "cassandra")
+		roles = cassandra.queryenv.list_roles(behaviour = "cassandra")
 		
 		# Fill seed list from queryenv answer
 		for role in roles:
@@ -381,7 +408,7 @@ class CassandraHandler(Handler):
 				else:
 					self._config.add('Storage/Seeds/Seed', host.external_ip)
 		
-		self._config.set('Storage/ListenAddress', self._private_ip)
+		self._config.set('Storage/ListenAddress', cassandra.private_ip)
 		self._config.set('Storage/ThriftAddress', '0.0.0.0')
 		
 		# Temporary config write
@@ -407,9 +434,9 @@ class CassandraHandler(Handler):
 		if result:
 			bucket_name = result.group(1)
 			file_name   = result.group(2)
-			s3_conn = self._platform.new_s3_conn()
-			bucket = s3_conn.get_bucket(bucket_name)
-			key = bucket.get_key(file_name)
+			s3_conn 	= cassandra.platform.new_s3_conn()
+			bucket 		= s3_conn.get_bucket(bucket_name)
+			key 		= bucket.get_key(file_name)
 			if not key:
 				raise HandlerError('File %s does not exist on bucket %s', (file_name, bucket_name))
 			# Determine snapshot size in Gb			
@@ -459,15 +486,15 @@ class CassandraHandler(Handler):
 		self._logger.debug('Snapshot successfully extracted')
 		os.remove(snap_path)
 
-		ebs_devname, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, mpoint=self._storage_path)
+		ebs_devname, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, mpoint=cassandra.storage_path)
 		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 		self._create_valid_storage()
 		
 		self._logger.debug('Copying snapshot')
 		rsync = filetool.Rsync().archive()
-		rsync.source(TMP_EBS_MNTPOINT+os.sep).dest(self.data_file_directory)
+		rsync.source(TMP_EBS_MNTPOINT+os.sep).dest(cassandra.data_file_directory)
 		out = system(str(rsync))
-		
+
 		if out[2]:
 			raise HandlerError('Error while copying snapshot content from temp ebs to permanent: %s', out[1])
 
@@ -477,33 +504,33 @@ class CassandraHandler(Handler):
 		self._config.set('Storage/AutoBootstrap', 'False')
 
 		self._set_use_storage()
-		snap_id = self._create_snapshot(ebs_volume.id)
-		self._start_cassandra()
+		snap_id = cassandra.create_snapshot(ebs_volume.id)
+		cassandra.start_service()
 		message.cassandra = dict(volume_id = ebs_volume.id, snapshot_id=snap_id)
 
 	def _start_from_snap(self, message):
 
-		ebs_volume = self._create_attach_mount_volume(auto_mount=True, snapshot=message.snap_id, mpoint=self._storage_path)[-1]
+		ebs_volume = self._create_attach_mount_volume(auto_mount=True, snapshot=message.snap_id, mpoint=cassandra.storage_path)[-1]
 		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 
 		self._create_valid_storage()
 		self._set_use_storage()
 
-		self._start_cassandra()
+		cassandra.start_service()
 		message.cassandra = dict(volume_id = ebs_volume.id)
 
 	def _start_bootstrap(self, message):
 		
 		storage_size = message.storage_size	
 		
-		ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=self._storage_path)[-1]
+		ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=cassandra.storage_path)[-1]
 		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 		self._create_valid_storage()
 
 		self._config.set('Storage/AutoBootstrap', 'True')
 		self._set_use_storage()
 		
-		self._start_cassandra()
+		cassandra.start_service()
 
 		# The new node will log "Bootstrapping" when this is safe, 2 minutes after starting.
 		# http://wiki.apache.org/cassandra/Operations#line-57
@@ -522,19 +549,16 @@ class CassandraHandler(Handler):
 
 			self._config.add('Storage/Seeds/Seed', ip)
 			self._write_config()
-			self._restart_cassandra()
+			cassandra.restart_service()
 			
-	def on_before_host_down(self):
-		try:
-			system('nodetool -h localhost decommission')
-			self._wait_until(self._is_decommissioned)
-			self._logger.info("Stopping Cassandra")
-			initd.stop("cassandra")
-		except initd.InitdError, e:
-			self._logger.error("Cannot stop Cassandra")
-			if initd.is_running("cassandra"):
-				raise
-			
+	def on_before_host_down(self):		
+		out, err = system('nodetool -h localhost decommission')[0:2]
+		if err:
+			raise HandlerError('Cannot decommission node: %s' % err)
+		self._wait_until(self._is_decommissioned)
+		cassandra.stop_service()
+
+
 	def _bootstrap_finished(self):
 		try:
 			cass = pexpect.spawn('nodetool -h localhost streams')
@@ -559,7 +583,7 @@ class CassandraHandler(Handler):
 				self._config.remove('Storage/Seeds/Seed', ip)
 				self._write_config()
 				self._del_iptables_rule(ip)
-				self._restart_cassandra()
+				cassandra.restart_service()
 			except:
 				pass
 
@@ -581,42 +605,10 @@ class CassandraHandler(Handler):
 		drop_rule = "/sbin/iptables -A INPUT -p tcp --destination-port %s -j DROP" % (self._port,)
 		self._logger.debug("Drop iptables rules on port %s: %s", self._port, drop_rule)
 		returncode = system(drop_rule)[2]
-		if returncode :
+		if returncode:
 			self._logger.error("Cannot drop rules")
 			
-	def _restart_cassandra(self):
-		try:
-			self._logger.info("Restarting Cassandra service")
-			initd.restart("cassandra")
-			self._logger.debug("Cassandra service restarted")
-		except:
-			self._logger.error("Cannot restart Cassandra")
-			raise
-	
-	def _create_snapshot(self, vol_id):
-		ec2_conn = self._platform.new_ec2_conn()
-		snapshot  = ec2_conn.create_snapshot(vol_id)
-		del(ec2_conn)
-		return snapshot.id
-			
-	def _stop_cassandra(self):
-		try:
-			self._logger.info("Stopping Cassandra service")
-			initd.stop("cassandra")
-			self._logger.debug("Cassandra service stopped")
-		except:
-			self._logger.error("Cannot stop Cassandra")
-			raise
 
-	def _start_cassandra(self):
-		try:
-			self._logger.info("Starting Cassandra service")
-			initd.start("cassandra")
-			self._logger.debug("Cassandra service started")
-		except:
-			self._logger.error("Cannot start Cassandra")
-			raise
-		
 	def _wait_until(self, target, args=None, sleep=5):
 		args = args or ()
 		while not target(*args):
@@ -628,14 +620,14 @@ class CassandraHandler(Handler):
 		if not size and not snapshot:
 			raise HandlerError('Cannot create volume without size or snapshot')
 		
-		if not self._zone:
-			self._zone     = self._platform.get_avail_zone()
-		if not self._inst_id:
-			self._inst_id  = self._platform.get_instance_id()
+		if not cassandra.zone:
+			cassandra.zone     = cassandra.platform.get_avail_zone()
+		if not cassandra.inst_id:
+			cassandra.inst_id  = cassandra.platform.get_instance_id()
 		
-		ec2_conn = self._platform.new_ec2_conn()
+		ec2_conn = cassandra.platform.new_ec2_conn()
 		self._logger.debug('Creating new EBS volume')
-		ebs_volume = ec2_conn.create_volume(size, self._zone, snapshot)
+		ebs_volume = ec2_conn.create_volume(size, cassandra.zone, snapshot)
 		
 		self._logger.debug('Waiting for new ebs volume. ID=%s', (ebs_volume.id,))
 		self._wait_until(lambda: ebs_volume.update() == "available")
@@ -643,7 +635,7 @@ class CassandraHandler(Handler):
 		device   = get_free_devname()
 		
 		self._logger.debug('Attaching volume ID=%s', (ebs_volume.id,))		
-		ebs_volume.attach(self._inst_id, device)
+		ebs_volume.attach(cassandra.inst_id, device)
 		self._wait_until(lambda: ebs_volume.update() and ebs_volume.attachment_state() == "attached")
 	
 		if not os.path.exists(mpoint):
@@ -664,19 +656,19 @@ class CassandraHandler(Handler):
 		volume.delete()
 		
 	def _create_valid_storage(self):
-		if not os.path.exists(self.data_file_directory):
+		if not os.path.exists(cassandra.data_file_directory):
 			os.makedirs(self.data_file_directory)
-		if not os.path.exists(self.commit_log_directory):
+		if not os.path.exists(cassandra.commit_log_directory):
 			os.makedirs(self.commit_log_directory)
 
 	def _write_config(self):
-		self._config.write(open(self._storage_conf, 'w'))
+		self._config.write(open(cassandra.storage_conf, 'w'))
 		
 	def _set_use_storage(self):
 
-		self._config.set('Storage/CommitLogDirectory', self.commit_log_directory)
+		self._config.set('Storage/CommitLogDirectory', cassandra.commit_log_directory)
 		self._config.remove('Storage/DataFileDirectories/DataFileDirectory')
-		self._config.add('Storage/DataFileDirectories/DataFileDirectory', self.data_file_directory)
+		self._config.add('Storage/DataFileDirectories/DataFileDirectory', cassandra.data_file_directory)
 
 		self._write_config()
 	
@@ -691,7 +683,7 @@ class CassandraHandler(Handler):
 			del(cass)
 			
 	def _update_config(self, data): 
-		updates = {self._sect_name: data}
+		updates = {cassandra.sect_name: data}
 		configtool.update(configtool.get_behaviour_filename(Behaviours.CASSANDRA, ret=configtool.RET_PRIVATE), updates)
 		
 	def _cleanup(self):
@@ -699,6 +691,168 @@ class CassandraHandler(Handler):
 		if err: 
 			raise HandlerError('Cannot do cleanup: %s' % err)
 		
+	def _repair(self, keyspace):
+		out,err = system('nodetool -h localhost repair %s' % keyspace)[0:2]
+		if err: 
+			raise HandlerError('Cannot do cleanup: %s' % err)
+
+		
+class CassandraDataBundleHandler(Handler):
+
+	
+	_cdb_ok_hosts			= None
+	_cdb_timeouted_hosts	= None
+	_cdb_results			= None
+	_queue					= None
+
+	def __init__(self):
+		self._logger = logging.getLogger(__name__)
+
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return Behaviours.CASSANDRA in behaviour and \
+				( message.name == CassandraMessages.CREATE_DATA_BUNDLE or
+				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE or
+				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT)
+
+	def on_Cassandra_CreateDataBundle(self, message):
+		try:
+			self._cdb_status = 'ok'
+			self._cdb_last_err = ''
+			self._cdb_ok_hosts = set()
+			self._cdb_timeouted_hosts = set()
+			self._cdb_results = []
+			
+			self._queue = cassandra.get_node_queue()
+			
+			if self._queue.is_empty():
+				raise HandlerError('Cannot get nodelist: queue is empty')
+
+			self._cdb_attempts, self._cdb_host = self._queue.get(False)
+			
+			"""
+			Send first message
+			"""
+			self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE)
+			
+		except (Exception, BaseException), e:
+			self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+											status = 'error',
+											last_error = str(e) 
+							   ))
+
+	def on_Cassandra_IntCreateDataBundle(self, message):
+		
+		leader_host = message.leader_host
+		int_msg  = bus.int_messaging_service
+		producer = int_msg.new_producer(leader_host)
+		
+		try:
+			ret = dict()
+
+
+			cassandra._stop_service()
+			volume_id          = cassandra.sect.get(OPT_STORAGE_VOLUME_ID)
+			ret['remote_ip']   = cassandra.private_ip	
+			ret['status']      = 'ok'
+			ret['snapshot_id'] = cassandra.create_snapshot(volume_id)
+			ret['timestamp']   = time.strftime('%Y-%m-%d_%H-%M') 
+			
+			cassandra._start_service()
+
+		except (Exception, BaseException), e:
+			ret  = dict(status = 'error', last_error = str(e), remote_ip = cassandra.private_ip)
+		
+		finally:
+			message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = ret)
+			producer.send(Queues.CONTROL, message)
+
+	
+	def on_Cassandra_IntCreateDataBundleResult(self, message):
+
+		try:		
+			if not self._cdb_results:
+				self._cdb_results = []
+			
+			if message.remote_ip == self._cdb_host:
+				self._cdb_timer.cancel()				
+
+				if 'error' == message.status:
+					
+					if self._cdb_attempts + 1 >= CDB_MAX_ATTEMPTS:
+						result  = dict()
+						result['status']		= 'error' 
+						result['last_error']	= message.last_error
+						result['remote_ip']     = message.remote_ip
+						self._cdb_results.append(result)
+						self._cdb_status = 'error'
+						self._cdb_last_err = 'Host: %s, Error: %s' % (message.remote_ip, message.last_error)
+					else:
+						self._queue.put((message.remote_ip, self._cdb_attempts + 1))
+				else:
+					result  = dict()
+					result['snapshot_id'] = message.snapshot_id
+					result['timestamp']   = message.timestamp
+					result['remote_ip']   = message.remote_ip
+					self._cdb_results.append(result)
+					self._cdb_ok_hosts.add(message.remote_ip)
+					
+				try:
+					self._cdb_attempts, self._cdb_host = self._queue.get(False)					
+					while not self._cdb_host in self._cdb_ok_hosts:
+						self._cdb_attempts, self._cdb_host = self._queue.get(False)
+						
+				except Empty:
+					res = dict(status = self._crf_status, bundles = self._cdb_results)
+					if 'error' == self._crf_status:
+						res.update({'last_error':self._cdb_last_err})
+					self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, res)
+					return
+				
+				self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE)
+
+
+			else:
+				# Timeouted message from some node
+				if not 'ok' == message.status:
+					return
+
+				result  = dict()
+				result['snapshot_id'] = message.snapshot_id
+				result['timestamp']   = message.timestamp
+				result['remote_ip']   = message.remote_ip
+				
+				# Delete possible negative result if positive one arrived
+				for result in self._cdb_results:
+					if message.remote_ip in result.values() and result['status'] == 'error':
+						self._cdb_results.remove(result)
+
+				# Add positive result
+				self._cdb_results.append(result)
+				self._cdb_ok_hosts.add(message.remote_ip)
+
+		except (Exception, BaseException), e:
+			self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+											status = 'error',
+											last_error = str(e) 
+							   ))
+
+	def _send_cdb_message(self, host = None, msg_name = None, body = None):
+		int_msg  = bus.int_messaging_service
+		message  = int_msg.msg_service.new_message(msg_name, body = body)
+		producer = int_msg.new_producer(host)
+		producer.send(Queues.CONTROL, message)
+		self._cdb_timer = Timer(CDB_TIMEOUT, self._cdb_failed)
+
+		
+	def _cdb_failed(self):
+		# Imitate  error message from current node
+		int_msg  = bus.int_messaging_service
+		err_msg  = dict()
+		err_msg['status'] = 'error'
+		err_msg['last_error'] = 'Timeout error occured while CreateDataBundle. Host: %s, timeout: %d' % (self._cdb_host, CDB_TIMEOUT)
+		message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = err_msg)
+		self.on_Cassandra_IntCreateDataBundleResult(message)
+
 		
 class StorageProvider(object):
 	
