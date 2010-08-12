@@ -250,14 +250,16 @@ class NginxHandler(Handler):
 			
 			if https_certificate[0]:
 				msg = 'Writing ssl cert' 
-				write_file(cert_path, https_certificate[0], msg=msg, logger=self._logger)
+				cert = https_certificate[0]
+				write_file(cert_path, cert, msg=msg, logger=self._logger)
 			else:
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
 				
 			if len(https_certificate)>1 and https_certificate[1]:
 				msg = 'Writing ssl key'
-				write_file(pk_path, https_certificate[1], msg=msg, logger=self._logger)
+				pk = https_certificate[1]
+				write_file(pk_path, pk, msg=msg, logger=self._logger)
 			else:
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
@@ -265,7 +267,9 @@ class NginxHandler(Handler):
 			https_config = ''			
 			for vhost in received_vhosts:
 				if vhost.hostname and vhost.type == 'nginx': #and vhost.https
-					https_config += vhost.raw + '\n'
+					raw = vhost.raw.replace('/etc/aws/keys/ssl/https.crt',cert_path)
+					raw = raw.replace('/etc/aws/keys/ssl/https.key',pk_path)
+					https_config += raw + '\n'
 					
 		else:
 			self._logger.debug('Scalr returned empty virtualhost list')
