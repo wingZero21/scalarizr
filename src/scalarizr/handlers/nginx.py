@@ -61,7 +61,7 @@ class NginxHandler(Handler):
 	def on_HostDown(self, message):
 		self.nginx_upstream_reload()
 	
-	def nginx_upstream_reload(self):
+	def nginx_upstream_reload(self, force_reload=False):
 		config = bus.config
 		section = configtool.get_behaviour_section_name(Behaviours.WWW)
 		nginx_binary = config.get(section, "binary_path")
@@ -113,7 +113,7 @@ class NginxHandler(Handler):
 			log_message = "Reading old configuration from %s" % include
 			old_include = read_file(include, msg = log_message, logger = self._logger)
 
-		if template == old_include:
+		if template == old_include and not force_reload:
 			self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:
 			self._logger.info("nginx upstream configuration was changed.")
@@ -284,7 +284,7 @@ class NginxHandler(Handler):
 	def on_VhostReconfigure(self, message):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
-		self.nginx_upstream_reload()
+		self.nginx_upstream_reload(True)
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
