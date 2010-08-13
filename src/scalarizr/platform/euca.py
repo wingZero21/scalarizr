@@ -6,9 +6,12 @@ Created on Aug 13, 2010
 
 from scalarizr.platform.ec2 import Ec2Platform
 from scalarizr.platform import PlatformError
+from scalarizr.util import configtool
 from urlparse import urlparse
 import boto
 import logging
+from scalarizr.bus import bus
+
 
 def get_platform():
 	return EucaPlatform()
@@ -16,6 +19,7 @@ def get_platform():
 """
 User data options 
 """
+
 UD_OPT_S3_URL = 's3_url'
 UD_OPT_EC2_URL = 'ec2_url'
 
@@ -26,16 +30,39 @@ class EucaPlatform(Ec2Platform):
 	def __init__(self):
 		Ec2Platform.__init__(self)
 		self._logger = logging.getLogger(__name__)
+
+		self.config = bus.config
+		self.sect_name = configtool.get_platform_section_name(self.name)
+
+		if not (UD_OPT_S3_URL and UD_OPT_EC2_URL):
+			pass
+		
+		return self._ec2_cert
 	
 	def _get_conn_params(self, service='ec2'):
+		
 		attr = '_%s_conn_params' % service
+		
 		if not hasattr(self, attr):
-			url = self.get_user_data(UD_OPT_EC2_URL if service == 'ec2' else UD_OPT_S3_URL)  
+			#read from config first 
+			s3_url = configtool.read_key(self.config.get(self.sect_name, UD_OPT_S3_URL))
+			ec2_url = configtool.read_key(self.config.get(self.sect_name, UD_OPT_EC2_URL))
+			#decide which one url needed based on 'service' value
+			url = ec2_url if service == 'ec2' else s3_url
+			#ask user data if config is empty
+			if not url:
+				url_opt_name = UD_OPT_EC2_URL if service == 'ec2' else UD_OPT_S3_URL
+				url = self.get_user_data(url_opt_name)
+			#if still there no data, raise error	
 			if not url:
 				s = service.upper() + " URL user data property is empty"
 				raise PlatformError(s)
+			#otherwise copy data to config
+			self.config.set(self.sect_name, url_opt_name, url)  
+			#then parse url & set attributes
 			u = urlparse(url)
 			setattr(self, attr, dict(is_secure=u.scheme, host=u.hostname, port=u.port, part='/'+u.path))
+			
 		return getattr(self, attr)
 	
 	def new_ec2_conn(self):
