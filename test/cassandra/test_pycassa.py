@@ -3,41 +3,6 @@ Created on Aug 03, 2010
 
 @author: Dmytro Korsakov
 '''
-#export PYTHONPATH=/root/twissandra/deps/
-#easy_install thrift
-#from pycassa import *
-
-"""
->>> from pycassa import *
->>> CLIENT = connect_thread_local(framed_transport=True)
->>> USER = ColumnFamily(CLIENT, 'Twissandra', 'User')
->>> USER.insert('a4a70900-24e1-11df-8924-001ff3591711',{'username':'ericflo'})
-1280839194579172L
->>> USER.get('a4a70900-24e1-11df-8924-001ff3591711')
-{'username': 'ericflo'}
->>> USER.remove('a4a70900-24e1-11df-8924-001ff3591711')
-1280839480802087L
->>> USER.get('a4a70900-24e1-11df-8924-001ff3591711')
-Traceback (most recent call last):
-  File "<stdin>", line 1, in <module>
-  File "pycassa/columnfamily.py", line 160, in get
-    raise NotFoundException()
-cassandra.ttypes.NotFoundException: NotFoundException()
-
->>> USER.insert('a4a70900-24e1-11df-8924-001ff3591711',{'username':'ericflo'})
-1280839567392101L
->>> USER.get('a4a70900-24e1-11df-8924-001ff3591711')
-{'username': 'ericflo'}
->>> USER.remove('a4a70900-24e1-11df-8924-001ff3591711')
-1280839574832068L
->>> USER.get('a4a70900-24e1-11df-8924-001ff3591711')
-Traceback (most recent call last):
-  File "<stdin>", line 1, in <module>
-  File "pycassa/columnfamily.py", line 160, in get
-    raise NotFoundException()
-cassandra.ttypes.NotFoundException: NotFoundException()
-"""
-
 
 import os
 import sys
@@ -48,14 +13,14 @@ import string
 import random
 import struct
 
-
-deps_path = '/root/twissandra/deps/'
+deps_path = os.path.realpath(os.path.join(os.path.dirname(__file__), 'pycassa'))
 if os.path.exists(deps_path):
 	sys.path.append(deps_path)
 else:
 	raise
 
-from pycassa import *
+from pycassa.connection import connect_thread_local
+from pycassa.columnfamily import ColumnFamily
 
 KEYSPACE = 'Twissandra'
 CF_USER = 'User'
@@ -66,17 +31,6 @@ CF_TWEET = 'Tweet'
 CF_TIMELINE = 'Timeline'
 CF_USERLINE = 'Userline'
 
-"""
-def connect_thread_local():
-	pass
-class ColumnFamily():
-	def __init__(self):
-		pass
-	def insert(self):
-		pass
-	def get(self):
-		pass
-"""
 
 class User:
 	
@@ -125,8 +79,6 @@ class User:
 		#feel Timeline
 		#timeline = ColumnFamily(self.client, KEYSPACE, CF_TIMELINE)
 		#timeline.insert(stamp,tweet_id)
-
-
 
 	def _get_id(self, username):
 		return self.username.get(username)['id']
@@ -222,4 +174,39 @@ if __name__ == "__main__":
 		print "%d seconds left. %d twits posted (TPS: %d)" % (seconds - i, R.twits, R.twits // i)
 	R.stop()
 
-									                                            
+
+
+"""
+#export PYTHONPATH=/root/twissandra/deps/
+#easy_install thrift
+#from pycassa import *
+
+>>> from pycassa import *
+>>> CLIENT = connect_thread_local(framed_transport=True)
+>>> USER = ColumnFamily(CLIENT, 'Twissandra', 'User')
+>>> USER.insert('a4a70900-24e1-11df-8924-001ff3591711',{'username':'ericflo'})
+1280839194579172L
+>>> USER.get('a4a70900-24e1-11df-8924-001ff3591711')
+{'username': 'ericflo'}
+>>> USER.remove('a4a70900-24e1-11df-8924-001ff3591711')
+1280839480802087L
+>>> USER.get('a4a70900-24e1-11df-8924-001ff3591711')
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "pycassa/columnfamily.py", line 160, in get
+    raise NotFoundException()
+cassandra.ttypes.NotFoundException: NotFoundException()
+
+>>> USER.insert('a4a70900-24e1-11df-8924-001ff3591711',{'username':'ericflo'})
+1280839567392101L
+>>> USER.get('a4a70900-24e1-11df-8924-001ff3591711')
+{'username': 'ericflo'}
+>>> USER.remove('a4a70900-24e1-11df-8924-001ff3591711')
+1280839574832068L
+>>> USER.get('a4a70900-24e1-11df-8924-001ff3591711')
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "pycassa/columnfamily.py", line 160, in get
+    raise NotFoundException()
+cassandra.ttypes.NotFoundException: NotFoundException()
+"""									                                            
