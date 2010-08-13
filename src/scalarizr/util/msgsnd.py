@@ -20,7 +20,7 @@ def main():
 	
 	(options, args) = parser.parse_args()
 	
-	if not options.msgfile or not options.queue or not options.name:
+	if not options.queue or not options.name or not options.msgfile:
 		print parser.format_help()
 		sys.exit()
 	
