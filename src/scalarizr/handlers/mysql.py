@@ -192,12 +192,13 @@ class MysqlHandler(Handler):
 		self._binlog_path = os.path.join(self._storage_path, STORAGE_BINLOG_PATH)
 		
 		bus.on("init", self.on_init)
-		bus.on("before_host_down", self.on_before_host_down)
+		
 
 	def on_init(self):
 		bus.on("start", self.on_start)		
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
+		bus.on("before_host_down", self.on_before_host_down)
 		
 		"""
 		@xxx: Storage unplug failed because scalarizr has no EC2 access keys
