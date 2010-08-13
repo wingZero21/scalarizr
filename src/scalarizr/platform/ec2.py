@@ -149,12 +149,12 @@ class Ec2Platform(Platform):
 		""" @rtype: boto.ec2.connection.EC2Connection """
 		key_id, key = self.get_access_keys()
 		region = self.get_region()
-		self._logger.info("Return ec2 connection (endpoint: %s)", self._ec2_endpoints[region])
+		self._logger.debug("Return ec2 connection (endpoint: %s)", self._ec2_endpoints[region])
 		return connect_ec2(key_id, key, region=RegionInfo(name=region, endpoint=self._ec2_endpoints[region]))
 
 	def new_s3_conn(self):
 		key_id, key = self.get_access_keys()
-		self._logger.info("Return s3 connection (endpoint: %s)", self._s3_endpoints[self.get_region()])
+		self._logger.debug("Return s3 connection (endpoint: %s)", self._s3_endpoints[self.get_region()])
 		return connect_s3(key_id, key, host=self._s3_endpoints[self.get_region()])
 
 

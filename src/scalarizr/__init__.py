@@ -465,7 +465,7 @@ def _configure ():
 		print "Done"
 
 
-_KNOWN_PLATFORMS = ("ec2", "rs", "vps")
+_KNOWN_PLATFORMS = ("ec2", "euca", "vps")
 	
 
 def _platform_validator(value):
