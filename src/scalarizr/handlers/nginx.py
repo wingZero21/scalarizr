@@ -44,7 +44,6 @@ class NginxHandler(Handler):
 		self._queryenv = bus.queryenv_service	
 		bus.define_events("nginx_upstream_reload")
 		bus.on("start", self.on_start)
-		bus.define_events("before_host_down")
 		bus.on("before_host_down", self.on_before_host_down)
 		
 	def on_start(self):
