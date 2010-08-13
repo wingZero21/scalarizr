@@ -64,6 +64,7 @@ class ApacheHandler(Handler):
 		self.ssl_conf_listen_regexp = re.compile(r"Listen\s+\d+\n",re.IGNORECASE)
 		bus.define_events('apache_reload')
 		bus.on("start", self.on_start)
+		bus.on("before_host_down", self.on_before_host_down)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
@@ -80,6 +81,15 @@ class ApacheHandler(Handler):
 				initd.start("apache")
 			except initd.InitdError, e:
 				self._logger.error(e)
+		
+	def on_before_host_down(self):
+		try:
+			self._logger.info("Stopping apache")
+			initd.stop("apache")
+		except initd.InitdError, e:
+			self._logger.error("Cannot stop apache")
+			if initd.is_running("apache"):
+				raise
 
 	def _update_vhosts(self):
 				
