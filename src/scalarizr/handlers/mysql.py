@@ -197,6 +197,7 @@ class MysqlHandler(Handler):
 		bus.on("start", self.on_start)		
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
+		bus.on("before_host_down", self.on_before_host_down)
 		
 		"""
 		@xxx: Storage unplug failed because scalarizr has no EC2 access keys
@@ -523,7 +524,10 @@ class MysqlHandler(Handler):
 				self._start_mysql()
 			except initd.InitdError, e:
 				self._logger.error(e)
-
+				
+	def on_before_host_down(self):
+		self._stop_mysql()	
+	
 	def on_before_reboot_start(self, *args, **kwargs):
 		"""
 		Stop MySQL and unplug storage
