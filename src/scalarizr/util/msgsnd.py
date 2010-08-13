@@ -35,7 +35,7 @@ def main():
 	msg = msg_service.new_message()
 
 	if options.msgfile:
-		str = read_file(options.msgfile, error_msg='Cannot open message file %' % options.msgfile)
+		str = read_file(options.msgfile, error_msg='Cannot open message file %s' % options.msgfile)
 		if str:
 			msg.fromxml(str)
 		
