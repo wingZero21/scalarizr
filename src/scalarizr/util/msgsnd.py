@@ -16,6 +16,7 @@ def main():
 	parser.add_option("-n", "--name", dest="name", help="Message name")
 	parser.add_option("-e", "--endpoint", dest="endpoint", default=None, help="Messaging server URL")
 	parser.add_option("-q", "--queue", dest="queue", help="Queue to send message into")
+	parser.add_option("-f", "--file", dest="msgfile", help="Take message from this file")
 	
 	(options, args) = parser.parse_args()
 	
