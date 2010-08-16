@@ -106,9 +106,9 @@ class Cassandra(object):
 		
 		self.platform = bus.platform
 		
-		self.private_ip = cassandra.platform.get_private_ip()
-		self.zone = cassandra.platform.get_avail_zone()
-		self.inst_id = cassandra.platform.get_instance_id()
+		self.private_ip = self.platform.get_private_ip()
+		self.zone = self.platform.get_avail_zone()
+		self.inst_id = self.platform.get_instance_id()
 		
 		
 		self.sect_name = configtool.get_behaviour_section_name(Behaviours.CASSANDRA)
@@ -123,13 +123,8 @@ class Cassandra(object):
 		self.commit_log_directory = self.storage_path + "/commitlog"
 
 	def restart_service(self):
-		try:
-			self._logger.info("Restarting Cassandra service")
-			initd.restart("cassandra")
-			self._logger.debug("Cassandra service restarted")
-		except:
-			self._logger.error("Cannot restart Cassandra")
-			raise		
+		self.stop_service()
+		self.start_service()
 				
 	def stop_service(self):
 		try:
@@ -193,6 +188,7 @@ class CassandraScalingHandler(Handler):
 
 	def on_init(self):
 		bus.on("before_host_up", self.on_before_host_up)
+		bus.on("host_init_response", self.on_host_init_response)
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return Behaviours.CASSANDRA in behaviour and \
@@ -363,13 +359,20 @@ class CassandraScalingHandler(Handler):
 #
 #End copypasta
 #
+	def on_host_init_response(self, message):
+
+		if not message.body.has_key("cassandra"):
+			raise HandlerError("HostInitResponse message for Cassandra behaviour must have 'cassandra' property")
+		self._logger.debug("Update cassandra config with %s", message.cassandra)
+		self._update_config(message.cassandra)
 
 	def on_before_host_up(self, message):
 
 		cassandra.stop_service()
 		# Getting storage conf from url
 		self._config = Configuration('xml')
-		result = re.search('^s3://(.*?)/(.*?)$', message.storage_conf_url)
+		storage_conf_url = cassandra.sect.get('storage_conf_url')
+		result = re.search('^s3://(.*?)/(.*?)$', storage_conf_url)
 		if result:
 			bucket_name = result.group(1)
 			file_name   = result.group(2)
@@ -381,7 +384,7 @@ class CassandraScalingHandler(Handler):
 			del(s3_conn)
 		else:
 			try:
-				request = urllib2.Request(message.storage_conf_url)
+				request = urllib2.Request(storage_conf_url)
 				result  = urllib2.urlopen(request)
 				self._config.readfp(result)
 			except urllib2.URLError, e:
@@ -408,6 +411,9 @@ class CassandraScalingHandler(Handler):
 				else:
 					self._config.add('Storage/Seeds/Seed', host.external_ip)
 		
+		if not self._config.get_list('Storage/Seeds/'):
+			self._config.add('Storage/Seeds/Seed', cassandra.private_ip)
+		
 		self._config.set('Storage/ListenAddress', cassandra.private_ip)
 		self._config.set('Storage/ThriftAddress', '0.0.0.0')
 		
@@ -415,21 +421,25 @@ class CassandraScalingHandler(Handler):
 		self._write_config()
 
 		# Determine startup type (server import, N-th startup, Scaling )
-		if   hasattr(message, 'snapshot_url'):
+		try:
+			cassandra.sect.get('snapshot_url')
 			self._start_import_snapshot(message)
-		elif hasattr(message, 'snapshot_id'):
-			self._start_from_snap(message)
-		elif hasattr(message, 'auto_bootstrap') and message.auto_bootstrap:
-			self._start_bootstrap(message)
-		else:
-			raise HandlerError('Message does not containt enough data to determine start type')
+		except:
+			try:
+				cassandra.sect.get('snapshot_id')
+				self._start_from_snap(message)
+			except:
+				cassandra.sect.get('auto_bootstrap')
+				self._start_bootstrap(message)
+
 
 	def _start_import_snapshot(self, message):
 		
-		storage_size = message.storage_size
-		filename = os.path.basename(message.snapshot_url)
+		storage_size = cassandra.sect.get('storage_size')
+		snapshot_url = cassandra.sect.get('snapshot_url')
+		filename = os.path.basename(snapshot_url)
 		snap_path = os.path.join(TMP_EBS_MNTPOINT, filename)
-		result = re.search('^s3://(.*?)/(.*?)$', message.snapshot_url)
+		result = re.search('^s3://(.*?)/(.*?)$', snapshot_url)
 		# If s3 link
 		if result:
 			bucket_name = result.group(1)
@@ -444,27 +454,27 @@ class CassandraScalingHandler(Handler):
 			
 			temp_ebs_size = length*10 if length*10 < 1000 else 1000
 			tmp_ebs_devname, temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, mpoint=TMP_EBS_MNTPOINT)
-			self._logger.debug('Starting download cassandra snapshot: %s', message.snapshot_url)			
+			self._logger.debug('Starting download cassandra snapshot: %s', snapshot_url)			
 			key.get_contents_to_filename(snap_path)
 			
 		# Just usual http or ftp link
 		else:
 			try:
-				result   = urllib2.urlopen(message.snapshot_url)
+				result   = urllib2.urlopen(snapshot_url)
 			except urllib2.URLError:
-				raise HandlerError('Cannot download snapshot. URL: %s' % message.snapshot_url)
+				raise HandlerError('Cannot download snapshot. URL: %s' % snapshot_url)
 			
 			# Determine snapshot size in Gb
 			try:
 				length = int(int(result.info()['content-length'])//(1024*1024*1024) + 1)
 			except:
-				self._logger.error('Cannot determine snapshot size. URL: %s', message.snapshot_url)
+				self._logger.error('Cannot determine snapshot size. URL: %s', snapshot_url)
 				length = 10
 			
 			temp_ebs_size = length*10 if length*10 < 1000 else 1000			
 			tmp_ebs_devname, temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, mpoint=TMP_EBS_MNTPOINT)
 			
-			self._logger.debug('Starting download cassandra snapshot: %s', message.snapshot_url)
+			self._logger.debug('Starting download cassandra snapshot: %s', snapshot_url)
 			
 			try:
 				fp = open(snap_path, 'wb')
@@ -501,6 +511,7 @@ class CassandraScalingHandler(Handler):
 		self._logger.debug('Snapshot successfully copied from temporary ebs to permanent')
 
 		self._umount_detach_delete_volume(tmp_ebs_devname, temp_ebs_dev)
+		os.removedirs(TMP_EBS_MNTPOINT)
 		self._config.set('Storage/AutoBootstrap', 'False')
 
 		self._set_use_storage()
@@ -521,7 +532,7 @@ class CassandraScalingHandler(Handler):
 
 	def _start_bootstrap(self, message):
 		
-		storage_size = message.storage_size	
+		storage_size = cassandra.sect.get('storage_size')
 		
 		ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=cassandra.storage_path)[-1]
 		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
@@ -657,9 +668,9 @@ class CassandraScalingHandler(Handler):
 		
 	def _create_valid_storage(self):
 		if not os.path.exists(cassandra.data_file_directory):
-			os.makedirs(self.data_file_directory)
+			os.makedirs(cassandra.data_file_directory)
 		if not os.path.exists(cassandra.commit_log_directory):
-			os.makedirs(self.commit_log_directory)
+			os.makedirs(cassandra.commit_log_directory)
 
 	def _write_config(self):
 		self._config.write(open(cassandra.storage_conf, 'w'))
