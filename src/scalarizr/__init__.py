@@ -1,12 +1,13 @@
 
-from scalarizr import behaviour
 from scalarizr.bus import bus
+from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState,\
+	ScalarizrOptions
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
 from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
-from scalarizr.util import configtool, cryptotool, SqliteLocalObject, url_replace_hostname,\
-	daemonize, system, disttool, fstool, initd
+from scalarizr.util import configtool, SqliteLocalObject, url_replace_hostname,\
+	daemonize, system, disttool, fstool, initd, firstmatched
 from scalarizr.util.configtool import ConfigError
 
 
@@ -26,6 +27,7 @@ import signal
 import shutil
 import string
 import traceback
+
 
 try:
 	import timemodule as time
@@ -55,42 +57,26 @@ def _init():
 	optparser = bus.optparser
 	bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
 	
-	# Selected etc path and get configuration filename
-	config_filename = None
-	if optparser and optparser.values.conf_path:
-		# Take config file from command-line options
-		config_filename = os.path.abspath(optparser.values.conf_path)			
-
-	else:
-		# Find configuration file among several places
-		if not bus.etc_path:
-			etc_places = (
-				"/etc/scalr",
-				"/etc/scalarizr", 
-				"/usr/etc/scalarizr", 
-				"/usr/local/etc/scalarizr",
-				os.path.join(bus.base_path, "etc-devel"),
-				os.path.join(bus.base_path, "etc")
-			)
-		else:
-			etc_places = (bus.etc_path,)	
+	# Initialize configuration
+	if not bus.etc_path:
+		etc_places = [
+			"/etc/scalr",
+			"/etc/scalarizr", 
+			"/usr/etc/scalarizr", 
+			"/usr/local/etc/scalarizr",
+			os.path.join(bus.base_path, "etc-devel"),
+			os.path.join(bus.base_path, "etc")
+		]
+		if optparser and optparser.values.etc_path:
+			# Insert command-line passed etc_path into begining
+			etc_places.index(optparser.values.etc_path, 0)
 			
-		# Find configuration file 
-		for etc_path in etc_places:
-			config_filename = os.path.join(etc_path, "config.ini")
-			if os.path.exists(config_filename) and os.path.isfile(config_filename):
-				break
-		
-		if config_filename is None:
-			# File not found
-			raise ScalarizrError("Cannot find scalarizr configuration file. " + 
-					"Search amoung the list %s returned no results" % (":".join(etc_places)))
+		bus.etc_path = firstmatched(lambda p: os.access(p, os.F_OK), etc_places)
+		if not bus.etc_path:
+			raise ScalarizrError('Cannot find scalarizr configuration dir')
+	bus.cnf = ScalarizrCnf(bus.etc_path)
 
-	if not os.path.exists(config_filename):
-		raise ScalarizrError("Configuration file '%s' doesn't exists" % (config_filename))
-	bus.etc_path = os.path.dirname(config_filename)
-		
-
+	
 	# Configure logging
 	if sys.version_info < (2,6):
 		# Fix logging handler resolve for python 2.5
@@ -102,20 +88,14 @@ def _init():
 	
 	# During server import user must see all scalarizr activity in his terminal
 	# Add console handler if it doesn't configured in logging.ini	
-	if bus.optparser and bus.optparser.values.run_import:
+	if bus.optparser and bus.optparser.values.import_server:
 		if not any(isinstance(hdlr, logging.StreamHandler) \
 				and (hdlr.stream == sys.stdout or hdlr.stream == sys.stderr) 
 				for hdlr in logger.handlers):
 			hdlr = logging.StreamHandler(sys.stdout)
 			hdlr.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
 			logger.addHandler(hdlr)
-	
-	logger.info("Initialize scalarizr...")
 
-	# Load main configuration
-	config = ConfigParser()
-	config.read(config_filename)
-	bus.config = config
 
 	# Registering in init.d
 	initd.explore("scalarizr", "/etc/init.d/scalarizr", tcp_port=8013)
@@ -137,10 +117,14 @@ def _init():
 		"terminate"
 	)	
 
+
+DB_NAME = 'db.sqlite'
+DB_SCRIPT = 'db.sql'
+
 def _db_connect():
-	config = bus.config
-	file = os.path.join(bus.etc_path, config.get(configtool.SECT_GENERAL, configtool.OPT_STORAGE_PATH))
-	
+	cnf = bus.cnf
+	file = cnf.private_path(DB_NAME)
+
 	logger = logging.getLogger(__name__)
 	logger.debug("Open SQLite database (file: %s)" % (file))
 	
@@ -149,97 +133,96 @@ def _db_connect():
 	conn.row_factory = sqlite.Row
 	return conn
 	
+def _create_db():
+	cnf = bus.cnf
+	conn = _db_connect()
+	conn.executescript(open(cnf.public_path(DB_SCRIPT)).read())
+	conn.commit()	
+	
+	
 def _mount_private_d():
 	configtool.mount_private_d(bus.etc_path + "/private.d", "/mnt/privated.img", 10000)
 
-	
-def _read_bhs_config():
-	# Inject behaviour configurations into global config
-	config = bus.config
-	logger = logging.getLogger(__name__)
-	logger.debug("Read behaviours configuration...")
-	
-	bhs = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
-	for behaviour in configtool.split_array(bhs):
-		behaviour = behaviour.strip()
-		for filename in configtool.get_behaviour_filename(behaviour, ret=configtool.RET_BOTH):
-			if os.path.exists(filename):
-				logger.debug("Read behaviour configuration file %s", filename)
-				config.read(filename)
 	
 def _init_services():
 	
 	logger = logging.getLogger(__name__)
 	config = bus.config
+	cnf = bus.cnf
 	
-	logger.debug("Initialize services...")
+	logger.info("Initialize services")
+	
+
 	
 	gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
 	messaging_sect = configtool.section_wrapper(config, configtool.SECT_MESSAGING)
 	
 	# Check that database exists (after rebundle for example)
-	db_file = os.path.join(bus.etc_path, gen_sect.get(configtool.OPT_STORAGE_PATH))
+	db_file = cnf.private_path(DB_NAME)
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
-		db_script_file = os.path.join(bus.etc_path, "public.d/db.sql")
-		logger.warning("Database doesn't exists, create new one from script '%s'", db_script_file)
-		db = bus.db
-		conn = db.get().get_connection()
-		conn.executescript(open(db_script_file).read())
-		conn.commit()		
-	
+		logger.warning("Database doesn't exists, create new one from script")
+		_create_db()		
+
 	# Initialize platform
 	logger.debug("Initialize platform")
 	pl_name = gen_sect.get(configtool.OPT_PLATFORM)
 	if pl_name:
-		for filename in configtool.get_platform_filename(pl_name, ret=configtool.RET_BOTH):
-			if os.path.exists(filename):
-				logger.debug("Read platform configuration file %s", filename)
-				config.read(filename)		
-		pl_factory = PlatformFactory()
-		bus.platform = pl_factory.new_platform(pl_name)
+		bus.platform = PlatformFactory().new_platform(pl_name)
 	else:
 		raise NotConfiguredError("Platform not defined")
-
 	platform = bus.platform
-	optparser = bus.optparser
+
+	
+	if cnf.state == ScalarizrState.UNKNOWN and platform.get_user_data():
+		# Apply configuration from user-data
+		o = ScalarizrOptions
+		cnf.reconfigure(
+			values={
+				o.server_id.name : platform.get_user_data(UserDataOptions.SERVER_ID),
+				o.crypto_key.name : platform.get_user_data(UserDataOptions.CRYPTO_KEY),
+				o.role_name.name : platform.get_user_data(UserDataOptions.ROLE_NAME),
+				o.queryenv_url.name : platform.get_user_data(UserDataOptions.QUERYENV_URL),
+				o.message_producer_url.name : platform.get_user_data(UserDataOptions.MESSAGE_SERVER_URL),
+				o.snmp_community_name.name : platform.get_user_data(UserDataOptions.FARM_HASH)
+			},
+			silent=True,
+			yesall=True
+		)
+		cnf.bootstrap(force_reload=True)
+		
+		# Validate configuration
+		errors = dict()
+		def on_error(o, e, errors=errors):
+			errors.append(e)
+			logger.error('[%s] %s', o.name, e)
+		logger.info('Validating configuration')
+		cnf.validate(on_error)		
+	
+		cnf.state = ScalarizrState.BOOTSTRAPPING
+	
 	
 	# Set server id
 	server_id_opt = gen_sect.option_wrapper(configtool.OPT_SERVER_ID)
-	server_id_opt.set_required(optparser.values.server_id \
-			or platform.get_user_data(UserDataOptions.SERVER_ID), 
-			NotConfiguredError)
+	server_id_opt.set_required(None, NotConfiguredError)
 	
 	# Set role name
 	role_name_opt = gen_sect.option_wrapper(configtool.OPT_ROLE_NAME)
-	role_name_opt.set_required(optparser.values.role_name \
-			or platform.get_user_data(UserDataOptions.ROLE_NAME), 
-			NotConfiguredError)
+	role_name_opt.set_required(None, NotConfiguredError)
 
 	# Set queryenv url
 	query_env_opt = gen_sect.option_wrapper(configtool.OPT_QUERYENV_URL)
-	query_env_opt.set_required(optparser.values.queryenv_url \
-			or platform.get_user_data(UserDataOptions.QUERYENV_URL), 
-			NotConfiguredError)
+	query_env_opt.set_required(None, NotConfiguredError)
 
 	# Set messaging producer url
 	msg_p2p_producer_url_opt = configtool.option_wrapper(config, "messaging_p2p", 
 			P2pConfigOptions.PRODUCER_URL)
-	msg_p2p_producer_url_opt.set_required(optparser.values.msg_p2p_producer_url \
-			or platform.get_user_data(UserDataOptions.MESSAGE_SERVER_URL), 
-			NotConfiguredError)
+	msg_p2p_producer_url_opt.set_required(None, NotConfiguredError)
 	
 	# Set crypto key
 	crypto_key_title = "Scalarizr crypto key"
-	crypto_key_opt = gen_sect.option_wrapper(configtool.OPT_CRYPTO_KEY_PATH)
-
 	crypto_key = None
-	if not os.path.exists(os.path.join(bus.etc_path, "private.d/.hostinit")):
-		# Override crypto key if server was'nt already initialized
-		crypto_key = optparser.values.crypto_key or platform.get_user_data(UserDataOptions.CRYPTO_KEY)
-		if crypto_key:
-			configtool.write_key(crypto_key_opt.get(), crypto_key, key_title=crypto_key_title)
 	try:
-		crypto_key = binascii.a2b_base64(configtool.read_key(crypto_key_opt.get(), key_title=crypto_key_title))
+		crypto_key = binascii.a2b_base64(cnf.read_key('default', title=crypto_key_title))
 	except ConfigError, e:
 		logger.warn(str(e))
 	if not crypto_key:
@@ -332,9 +315,11 @@ def _init_services():
 	
 def init_script():
 	_init()
-	_read_bhs_config()
 	
 	config = bus.config
+	cnf = bus.cnf
+	cnf.bootstrap()
+	
 	logger = logging.getLogger(__name__)
 	logger.debug("Initialize messaging")
 
@@ -355,135 +340,7 @@ def init_script():
 	msg_service = factory.new_service(adapter, **kwargs)
 	bus.messaging_service = msg_service
 
-def _configure_option(optparser, cli_opt_name, opt_title, opt_wrapper, ini_updates, 
-		validator=None, allow_empty=False):
-	orig_value = opt_wrapper.get()
-	while True:
-		input = optparser.values.__dict__[cli_opt_name] \
-				or (raw_input("Enter " + opt_title + (" ["+orig_value+"]" if orig_value else "") + ":") 
-						if not optparser.values.no_prompt else "")
-		if input or allow_empty:
-			if validator and not validator(input):
-				continue
-			if not opt_wrapper.section in ini_updates:
-				ini_updates[opt_wrapper.section] = dict()
-			ini_updates[opt_wrapper.section][opt_wrapper.option] = input or orig_value
-		if input or orig_value or allow_empty:
-			break
-		elif optparser.values.no_prompt:
-			# In automated mode raise error
-			raise ScalarizrError("Option '%s' is missed" % (cli_opt_name))
 
-def _configure ():
-	print "Configuring scalarizr..."
-	
-	optparser = bus.optparser
-	config = bus.config
-	gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
-	messaging_sect = configtool.section_wrapper(config, configtool.SECT_MESSAGING)
-	ini_updates = dict()
-
-	# Crypto key
-	crypto_key_path_opt = configtool.option_wrapper(gen_sect, configtool.OPT_CRYPTO_KEY_PATH)
-	try:
-		orig_crypto_key = configtool.read_key(crypto_key_path_opt.get())
-	except ConfigError, e:
-		orig_crypto_key = None
-	while True:
-		input = optparser.values.crypto_key \
-				or (raw_input("Enter crypto key" + (" ["+orig_crypto_key+"]" if orig_crypto_key else "") + ":")
-						if not optparser.values.no_prompt else None)
-		if input:
-			try:
-				binascii.a2b_base64(input)
-			except binascii.Error, e:
-				if optparser.values.crypto_key:
-					# In automated mode raise error
-					raise ScalarizrError("Cannot decode crypto key")
-				else:
-					# In interactive mode notify user, and go to enter key again 
-					print >> sys.stderr, "error: Cannot decode crypto key. %s" % (e)
-					continue
-			configtool.write_key(crypto_key_path_opt.get(), input)
-		if input or orig_crypto_key:
-			break
-	
-	# Server id
-	_configure_option(optparser, "server_id", "server id", 
-			configtool.option_wrapper(gen_sect, configtool.OPT_SERVER_ID), 
-			ini_updates)
-	
-	# Role name
-	_configure_option(optparser, "role_name", "role name",
-			configtool.option_wrapper(gen_sect, configtool.OPT_ROLE_NAME),
-			ini_updates)
-	
-	# QueryEnv 
-	_configure_option(optparser, "queryenv_url", "QueryEnv server URL",
-			configtool.option_wrapper(gen_sect, configtool.OPT_QUERYENV_URL), 
-			ini_updates)
-	
-	# Message server url
-	_configure_option(optparser, "msg_p2p_producer_url", "Messaging server URL", 
-			configtool.option_wrapper(config, "messaging_p2p", P2pConfigOptions.PRODUCER_URL), 
-			ini_updates)
-	
-	# Platform
-	_configure_option(optparser, "platform", "platform", 
-			configtool.option_wrapper(gen_sect, configtool.OPT_PLATFORM), 
-			ini_updates, validator=_platform_validator)
-	
-	# Behaviour
-	_configure_option(optparser, "behaviour", "behaviour", 
-			configtool.option_wrapper(gen_sect, configtool.OPT_BEHAVIOUR), 
-			ini_updates, validator=_behaviour_validator, allow_empty=True)
-	
-	try:
-		bhs = ini_updates[configtool.SECT_GENERAL][configtool.OPT_BEHAVIOUR]
-	except KeyError:
-		bhs = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
-
-	for bh in configtool.split_array(bhs):
-		configurator = behaviour.get_configurator(bh)
-		print "Configure %s behaviour" % (bh)
-		kwargs = {}
-		for opt in configurator.cli_options:
-			kwargs[opt.dest] = optparser.values.__dict__[bh + "_" + opt.dest]
-		configurator.configure(not optparser.values.no_prompt, **kwargs)
-		
-	configtool.update(os.path.join(bus.etc_path, "config.ini"), ini_updates)
-	
-	# Configure database
-	print "Create database"
-	conn = _db_connect()
-	conn.executescript(open(os.path.join(bus.etc_path, "public.d/db.sql")).read())
-	conn.commit()
-	
-	if optparser.values.run_import:
-		print "Starting import process..."
-		print "Don't terminate Scalarizr until Scalr will create the new role"
-	else:
-		print "Done"
-
-
-_KNOWN_PLATFORMS = ("ec2", "rs", "vps")
-	
-
-def _platform_validator(value):
-	if not value in _KNOWN_PLATFORMS:
-		print "invalid choice: '%s' (choose from %s)" % (value, ", ".join(_KNOWN_PLATFORMS))
-		return False
-	return True
-
-_KNOWN_BEHAVIOURS = ("www", "app", "mysql")
-
-def _behaviour_validator(value):
-	if value:
-		for bh in configtool.split_array(value):
-			if bh not in _KNOWN_BEHAVIOURS:
-				print "invalid choice: '%s' (choose from %s)" % (bh, ", ".join(_KNOWN_BEHAVIOURS))
-				return False
-	return True
 
 def _start_snmp_server():
 	# Start SNMP server in a separate process
@@ -549,6 +406,35 @@ def _shutdown(*args):
 	else:
 		logger.warning("Scalarizr is not running. Nothing to stop")	
 
+def do_validate(silent=False):
+	errors = list()
+	def on_error(o, e, errors=errors):
+		errors.append(e)
+		if not silent:
+			print >> sys.stderr, 'error: [%s] %s' % (o.name, e)
+		
+	if not silent:
+		print 'Validating scalarizr configuration'
+	cnf = bus.cnf
+	cnf.bootstrap()
+	cnf.validate(on_error)
+	return len(errors)
+
+def do_configure():
+	optparser = bus.optparser
+	cnf = bus.cnf
+	cnf.reconfigure(
+		values=CmdLineIni.to_kvals(optparser.values.cnf), 
+		silent=optparser.values.import_server, 
+		yesall=optparser.values.yesall or optparser.values.import_server
+	)
+
+
+def do_keygen():
+	from scalarizr.util import cryptotool
+	print cryptotool.keygen()	
+
+
 def main():
 	try:
 		logger = logging.getLogger(__name__)
@@ -558,71 +444,59 @@ def main():
 			
 	try:
 		optparser = bus.optparser = OptionParser()
-		optparser.add_option("-c", "--conf-path", dest="conf_path",
-				help="Configuration path")
+		optparser.add_option('-v', '--version', dest='version', action='store_true',
+				help='Show version information')
+		optparser.add_option('-c', '--etc-path', dest='etc_path',
+				help='Configuration directory location')
 		optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
-				help="Daemonize process")
-		optparser.add_option("-n", "--configure", dest="configure", action="store_true", default=False, 
-				help="Run installation process")
+				help='Daemonize process')
+		optparser.add_option('-n', '--configure', dest='configure', action="store_true", default=False, 
+				help="Configure Scalarizr in a intercative mode by default. " 
+				+ "When -y -o Scalarizr can be configuraed without user interaction")
 		optparser.add_option("-k", "--gen-key", dest="gen_key", action="store_true", default=False,
 				help="Generate crypto key")
+		optparser.add_option('-t', dest='validate_cnf', action='store_true', default=False,
+				help='Validate configuration')
+		optparser.add_option('-m', '--import', dest="import_server", action="store_true", default=False, 
+				help="Import service into Scalr")
+		optparser.add_option('-y', dest="yesall", action="store_true", default=False,
+				help="Answer yes for all questions")
+		optparser.add_option('-o', dest='cnf', action='append',
+				help='Runtime .ini option key=value')
 		
-		group = OptionGroup(optparser, "Installation and runtime override options")
-		
-		group.add_option("--no-prompt", dest="no_prompt", action="store_true", default=False,
-				help="Do not prompt user during installation. Use only command line options")
-		group.add_option("--import", dest="run_import", action="store_true", default=False, 
-				help="Start import process after configuring Scalarizr")
-		group.add_option("--server-id", dest="server_id", 
-				help="Unique server identificator in Scalr envirounment")
-		group.add_option("--role-name", dest="role_name",
-				help="Server role name")
-		group.add_option("--crypto-key", dest="crypto_key",
-				help="Scalarizr base64 encoded crypto key")
-		group.add_option("--platform", dest="platform", choices=_KNOWN_PLATFORMS,
-				help="Cloud platform (choises: %s)" % 
-				(", ".join(_KNOWN_PLATFORMS)))
-		group.add_option("--behaviour", dest="behaviour", 
-				help="Server behaviour (choises: %s). You can combine multiple using comma" %
-				(", ".join(_KNOWN_BEHAVIOURS)))
-		group.add_option("--queryenv-url", dest="queryenv_url",
-				help="URL to Scalr QueryEnv service (default: https://scalr.net/queryenv)")
-		group.add_option("--msg-producer-url", dest="msg_p2p_producer_url",
-				help="URL to Scalr messaging server (default: https://scalr.net/messaging)")
-		
-		optparser.add_option_group(group)
-		
-		# Add options from behaviour configurators
-		for bh_attr in [bh for bh in dir(behaviour.Behaviours) if not bh.startswith("__")]:
-			bh = getattr(behaviour.Behaviours, bh_attr)
-			configurator = behaviour.get_configurator(bh)
-			if configurator.cli_options:			
-				group = OptionGroup(optparser, "Installation options for '%s' behaviour" % (bh))
-				for opt in configurator.cli_options:
-					opt.dest = bh + "_" + opt.dest
-				group.add_options(configurator.cli_options)
-				optparser.add_option_group(group)
-			
+
 		optparser.parse_args()
+
+		
 		# Daemonize process
 		if optparser.values.daemonize:
 			daemonize()
 	
 		_init()
+		cnf = bus.cnf
 	
-		if optparser.values.gen_key:
-			print cryptotool.keygen()
+		if optparser.values.version:
+			print 'Scalarizr %s' % __version__
 			sys.exit()
+		if optparser.values.gen_key:
+			do_keygen()
+			sys.exit()
+		elif optparser.values.validate_cnf:
+			num_errors = do_validate()
+			sys.exit(int(not num_errors or 1))
 
 		_mount_private_d()
 
-		# Run installation process
 		if optparser.values.configure:
-			_configure()
-			if not optparser.values.run_import:
-				sys.exit()
+			do_configure()
+			sys.exit()
+		elif optparser.values.import_server:
+			print "Starting import process..."
+			print "Don't terminate Scalarizr until Scalr will create the new role"
+			do_configure()
+			cnf.state = ScalarizrState.IMPORTING
 		
-		_read_bhs_config()		
+		cnf.bootstrap(CmdLineIni.to_ini_sections(optparser.values.cnf))
 		
 		# Initialize scalarizr service
 		try:

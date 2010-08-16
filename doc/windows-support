@@ -15,7 +15,7 @@ http://pypi.python.org/pypi/pexpect/			http://pypi.python.org/pypi/winpexpect/
 												
 												
 m2crypto										supported
-http://pypi.python.org/pypi/m2crypto/			need to build 0.20.2 
+http://pypi.python.org/pypi/M2Crypto/			need to build 0.20.2 
 
 
 pysnmp											supported

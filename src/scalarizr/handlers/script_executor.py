@@ -6,9 +6,9 @@ Created on Dec 24, 2009
 
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.messaging import Queues, Messages, MetaOptions
-from scalarizr.util import parse_size, format_size, configtool
-from scalarizr.util.filetool import read_file, write_file
+from scalarizr.messaging import Queues, Messages
+from scalarizr.util import parse_size, format_size
+from scalarizr.util.filetool import write_file
 import threading
 try:
 	import time
@@ -22,19 +22,6 @@ import stat
 import logging
 import binascii
 
-
-#FIXME: Script 'phpinfo' terminated
-"""
-Exception in thread Thread-2:
-Traceback (most recent call last):
-  File "/usr/lib/python2.6/threading.py", line 525, in __bootstrap_inner
-    self.run()
-  File "/usr/lib/python2.6/threading.py", line 477, in run
-    self.__target(*self.__args, **self.__kwargs)
-  File "/opt/scalarizr/src/scalarizr/handlers/script_executor.py", line 174, in _execute_script
-    os.remove(script_path)
-OSError: [Errno 2] No such file or directory: '/usr/local/bin/scalr-scripting.1273578026.9/phpinfo'
-"""
 
 
 def get_handlers ():
@@ -82,7 +69,7 @@ class ScriptExecutor(Handler):
 		
 		self.hashbang_re = re.compile('^#!(\S+)\s*')
 		
-		sect_name = configtool.get_handler_section_name(self.name)
+		sect_name = self.name
 		if not self._config.has_section(sect_name):
 			raise Exception("Script executor handler is not configured. "
 						    + "Config has no section '%s'" % sect_name)

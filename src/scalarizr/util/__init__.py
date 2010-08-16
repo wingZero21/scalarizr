@@ -123,6 +123,30 @@ class _SqliteConnection(object):
 			self._conn = self._creator()
 		return self._conn
 	
+def cached(f, cache={}):
+	'''
+	Decorator
+	'''
+	def g(*args, **kwargs):
+		key = (f, tuple(args), frozenset(kwargs.items()))
+		if key not in cache:
+			cache[key] = f(*args, **kwargs)
+		return cache[key]
+	return g	
+
+def firstmatched(function, sequence, default=None):
+	for s in sequence:
+		if function(s):
+			return s
+			break
+	else:
+		return default	
+
+
+
+
+
+
 def daemonize():
 	# First fork
 	pid = os.fork()
@@ -260,7 +284,8 @@ def init_tests():
 	from scalarizr.bus import bus
 	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../test/resources/etc")
 	szr._init()
-	szr._read_bhs_config()
+	bus.cnf.bootstrap()
+
 	
 def ping_service(host=None, port=None, timeout=None, proto='tcp'):
 	if None == timeout:

@@ -52,9 +52,11 @@ class Ec2Platform(Platform):
 	_logger = None
 	
 	_ec2_cert = None
+	_cnf = None
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		self._cnf = bus.cnf
 	
 	def get_private_ip(self):
 		return self._get_property("latest/meta-data/local-ipv4")
@@ -139,10 +141,8 @@ class Ec2Platform(Platform):
 	
 	def get_ec2_cert(self):
 		if not self._ec2_cert:
-			config = bus.config
-			sect_name = configtool.get_platform_section_name(self.name)
-			self._ec2_cert = configtool.read_key(config.get(sect_name, OPT_EC2_CERT_PATH), 
-					key_title="EC2 certificate")
+			# XXX: not ok
+			self._ec2_cert = self._cnf.read_key(os.path.join(bus.etc_path, self._cnf.rawini.get(self.name, OPT_EC2_CERT_PATH)), title="EC2 certificate")
 		return self._ec2_cert
 	
 	def new_ec2_conn(self):

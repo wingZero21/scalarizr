@@ -5,13 +5,13 @@ Created on 14.06.2010
 @author: marat
 '''
 from scalarizr.bus import bus
-from scalarizr.behaviour import Behaviours
-from scalarizr.handlers import Handler, HandlerError, lifecircle
-from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
-		configtool, filetool, ping_service
-from scalarizr.platform.ec2 import S3Uploader, UD_OPT_S3_BUCKET_NAME
-		
+from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
+from scalarizr.util import validators
 
+from scalarizr.handlers import Handler, HandlerError
+from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
+		configtool, filetool, ping_service, firstmatched, cached
+from scalarizr.platform.ec2 import S3Uploader, UD_OPT_S3_BUCKET_NAME
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re,  pexpect, tarfile, tempfile
@@ -19,6 +19,11 @@ import time
 import signal, pwd, random
 import shutil, ConfigParser
 from boto.exception import BotoServerError
+
+
+BEHAVIOUR = BuiltinBehaviours.MYSQL
+CNF_SECTION = BEHAVIOUR
+CNF_NAME = BEHAVIOUR
 
 
 if disttool.is_redhat_based():
@@ -46,6 +51,69 @@ logger.debug("Explore MySQL service to initd module (initd_script: %s, pid_file:
 initd.explore("mysql", initd_script, pid_file, tcp_port=3306)
 
 
+class MysqlOptions(Configurator.Container):
+	'''
+	mysql behaviour
+	'''
+	class mysqld_path(Configurator.Option):
+		'''
+		MySQL daemon location
+		'''
+		name = CNF_NAME + '/mysqld_path'
+
+		@property
+		@cached
+		def default(self):
+			return firstmatched(lambda p: os.access(p, os.F_OK | os.X_OK), 
+					('/usr/libexec/mysqld', '/usr/sbin/mysqld'), '')
+		
+		@Configurator.Option.value.setter
+		@validators.validate(validators.executable)
+		def value(self, v):
+			p = Configurator.Option.value; p.fset(self, v)
+			
+	class mysql_path(Configurator.Option):
+		'''
+		MySQL cli location
+		'''
+		name = CNF_NAME + '/mysql_path'
+		default = '/usr/bin/mysql'
+
+		@Configurator.Option.value.setter
+		@validators.validate(validators.executable)
+		def value(self, v):
+			p = Configurator.Option.value; p.fset(self, v)
+
+	class mysqldump_path(Configurator.Option):
+		'''
+		mysqldump location
+		'''
+		name = CNF_NAME + '/mysqldump_path'
+		default = '/usr/bin/mysqldump'
+		
+		@Configurator.Option.value.setter
+		@validators.validate(validators.executable)
+		def value(self, v):
+			p = Configurator.Option.value; p.fset(self, v)
+			
+	class mycnf_path(Configurator.Option):
+		'''
+		my.cnf location
+		'''
+		name = CNF_NAME + '/mycnf_path'
+
+		@property		
+		@cached
+		def default(self):
+			return firstmatched(lambda p: os.access(p, os.F_OK), 
+					('/etc/my.cnf', '/etc/mysql/my.cnf'), '')
+			
+		@Configurator.Option.value.setter
+		@validators.validate(validators.file_exists)
+		def value(self, v):
+			p = Configurator.Option.value; p.fset(self, v)	
+		
+
 # Configuration options
 OPT_ROOT_USER   		= "root_user"
 OPT_ROOT_PASSWORD   	= "root_password"
@@ -58,6 +126,9 @@ OPT_SNAPSHOT_ID			= "snapshot_id"
 OPT_STORAGE_VOLUME_ID	= "volume_id" 
 OPT_LOG_FILE 			= "log_file"
 OPT_LOG_POS				= "log_pos"
+
+OPT_MYSQLD_PATH 		= 'mysqld_path'
+OPT_MYCNF_PATH 			= 'mycnf_path'
 
 # Role params
 PARAM_MASTER_EBS_VOLUME_ID 	= "mysql_master_ebs_volume_id"
@@ -74,11 +145,6 @@ STORAGE_PATH = "/mnt/dbstorage"
 STORAGE_DATA_DIR = "mysql-data"
 STORAGE_BINLOG_PATH = "mysql-misc/binlog.log"
 BACKUP_CHUNK_SIZE = 200*1024*1024
-
-if disttool.is_redhat_based():
-	MY_CNF_PATH = "/etc/my.cnf"
-else:
-	MY_CNF_PATH = "/etc/mysql/my.cnf"
 
 
 def get_handlers ():
@@ -175,17 +241,26 @@ class MysqlHandler(Handler):
 	_platform = None
 	""" @type _platform: scalarizr.platform.Ec2Platform """
 	
+	_cnf = None
+	''' @type _cnf: scalarizr.config.ScalarizrCnf '''
+	
 	_storage_path = _data_dir = _binlog_path = None
 	""" Storage parameters """
+	
+	_mycnf_path = None
+	_mysqld_path = None
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
-		self._sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		self._cnf = bus.cnf
+		self._sect_name = configtool.get_behaviour_section_name(BEHAVIOUR)
 		self._sect = configtool.section_wrapper(bus.config, self._sect_name)
 		config = bus.config
 		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
+		self._mycnf_path = config.get(CNF_SECTION, OPT_MYCNF_PATH)
+		self._mysqld_path = config.get(CNF_SECTION, OPT_MYSQLD_PATH)
 		
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
@@ -206,7 +281,7 @@ class MysqlHandler(Handler):
 		"""
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return Behaviours.MYSQL in behaviour and (
+		return BEHAVIOUR in behaviour and (
 					message.name == MysqlMessages.NEW_MASTER_UP
 				or 	message.name == MysqlMessages.PROMOTE_TO_MASTER
 				or 	message.name == MysqlMessages.CREATE_DATA_BUNDLE
@@ -291,10 +366,10 @@ class MysqlHandler(Handler):
 			tmpdir = tempfile.mkdtemp()
 			
 			# Reading mysql config file
-			mysql_config = filetool.read_file(MY_CNF_PATH, self._logger)
+			mysql_config = filetool.read_file(self._mycnf_path, self._logger)
 			
 			if not mysql_config:
-				raise HandlerError('Cannot read mysql config file %s' % (MY_CNF_PATH,))
+				raise HandlerError('Cannot read mysql config file %s' % (self._mycnf_path,))
 			
 			# Retrieveing datadir 
 			datadir_re = re.compile("^\s*datadir\s*=\s*(?P<datadir>.*?)$", re.M)	
@@ -519,7 +594,7 @@ class MysqlHandler(Handler):
 			self._logger.debug('Skip NewMasterUp. My replication role is master')		
 
 	def on_start(self):
-		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._start_mysql()
 			except initd.InitdError, e:
@@ -993,23 +1068,7 @@ class MysqlHandler(Handler):
 		return (root_password, repl_password, stat_password)
 	
 	def _update_config(self, data): 
-		updates = {self._sect_name: data}
-		configtool.update(configtool.get_behaviour_filename(Behaviours.MYSQL, ret=configtool.RET_PRIVATE), updates)
-		
-	"""
-	def _update_config_users(self, root_user, root_password, repl_user, repl_password,
-							       stat_user, stat_password):
-		conf_updates = {self._section : {
-			OPT_ROOT_USER		: root_user,
-			OPT_ROOT_PASSWORD	: root_password,
-			OPT_REPL_USER		: repl_user,
-			OPT_REPL_PASSWORD	: repl_password,
-			OPT_STAT_USER		: stat_user,
-			OPT_STAT_PASSWORD	: stat_password
-		}}
-		configtool.update(configtool.get_behaviour_filename(Behaviours.MYSQL, ret=configtool.RET_PRIVATE),
-			conf_updates)
-	"""
+		self._cnf.update_ini(BEHAVIOUR, {self._sect_name: data})
 		
 	def _replication_init(self, master=True):
 		if not os.path.exists('/etc/mysql'):
@@ -1033,14 +1092,14 @@ class MysqlHandler(Handler):
 		# Include farm-replication.cnf in my.cnf
 		self._logger.debug("Add farm-replication.cnf include in my.cnf")
 		try:
-			file = open(MY_CNF_PATH, 'a+')
+			file = open(self._mycnf_path, 'a+')
 		except IOError, e:
-			self._logger.error('Cannot open %s: %s', MY_CNF_PATH, e.strerror)
+			self._logger.error('Cannot open %s: %s', self._mycnf_path, e.strerror)
 			raise
 		else:
 			my_cnf = file.read()
 			file.close()
-			file = open(MY_CNF_PATH, 'w')
+			file = open(self._mycnf_path, 'w')
 			# Patch networking
 			network_re = re.compile('^([\t ]*((bind-address[\t ]*=)|(skip-networking)).*?)$', re.M)
 			my_cnf = re.sub(network_re, '#\\1', my_cnf)
@@ -1135,15 +1194,11 @@ class MysqlHandler(Handler):
 		ping_service("0.0.0.0", 3306, 5)	
 	
 	def _start_mysql_skip_grant_tables(self):
-		if disttool.is_redhat_based():
-			daemon = "/usr/libexec/mysqld"
-		else:
-			daemon = "/usr/sbin/mysqld"		
-		if os.path.exists(daemon) and os.access(daemon, os.X_OK):
+		if os.path.exists(self._mysqld_path) and os.access(self._mysqld_path, os.X_OK):
 			self._logger.info("Starting mysql server with --skip-grant-tables")
-			myd = Popen([daemon, '--skip-grant-tables'], stdin=PIPE, stdout=PIPE, stderr=STDOUT)
+			myd = Popen([self._mysqld_path, '--skip-grant-tables'], stdin=PIPE, stdout=PIPE, stderr=STDOUT)
 		else:
-			self._logger.error("MySQL daemon '%s' doesn't exists", daemon)
+			self._logger.error("MySQL daemon '%s' doesn't exists", self._mysqld_path)
 			return False
 		self._ping_mysql()
 		
@@ -1152,9 +1207,9 @@ class MysqlHandler(Handler):
 	def _move_mysql_dir(self, directive=None, dirname = None, section=None):
 		#Reading Mysql config file		
 		try:
-			file = open(MY_CNF_PATH, 'r')
+			file = open(self._mycnf_path, 'r')
 		except IOError, e:
-			raise HandlerError('Cannot open %s: %s' % (MY_CNF_PATH, e.strerror))
+			raise HandlerError('Cannot open %s: %s' % (self._mycnf_path, e.strerror))
 		else:
 			myCnf = file.read()
 			file.close					
@@ -1205,7 +1260,7 @@ class MysqlHandler(Handler):
 			self._logger.error('Cannot chown Mysql directory %s', directory)
 					
 		# Writing new MySQL config
-		file = open(MY_CNF_PATH, 'w')
+		file = open(self._mycnf_path, 'w')
 		file.write(myCnf)
 		file.close()	
 			

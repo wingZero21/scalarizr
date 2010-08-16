@@ -4,16 +4,25 @@ Created on Dec 25, 2009
 @author: marat
 @author: Dmytro Korsakov
 '''
+
 from scalarizr.bus import bus
-from scalarizr.behaviour import Behaviours
+from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import Handler, HandlerError, lifecircle
 from scalarizr.messaging import Messages
-from scalarizr.util import disttool, backup_file, initd
+from scalarizr.util import disttool, backup_file, initd, configtool, \
+	cached, firstmatched, validators
 from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util.initd import InitdError
 import logging
 import os
 import re
-from scalarizr.util.initd import InitdError
+
+
+
+
+BEHAVIOUR = BuiltinBehaviours.APP
+CNF_SECTION = BEHAVIOUR
+CNF_NAME = BEHAVIOUR + '.ini'
 
 
 if disttool.is_redhat_based():
@@ -43,16 +52,56 @@ logger.debug("Explore apache service to initd module (initd_script: %s, pid_file
 initd.explore("apache", initd_script, pid_file)
 
 
+# Export behavior configuration
+class ApacheOptions(Configurator.Container):
+	'''
+	app behavior
+	'''
+	cnf_name = CNF_NAME
+	
+	class apache_conf_path(Configurator.Option):
+		'''
+		Apache config file location.
+		'''
+		name = CNF_SECTION + '/apache_config_path'
+
+		@property 
+		@cached
+		def default(self):
+			return firstmatched(lambda p: os.path.exists(p),
+					('/etc/apache2/apache2.conf', '/etc/httpd/conf/httpd.conf'), '')
+		
+		@Configurator.Option.value.setter
+		@validators.validate(validators.file_exists)
+		def value(self, v):
+			p = Configurator.Option.value; p.fset(self, v)
+	
+	class vhosts_path(Configurator.Option):
+		'''
+		Scalr-managed virtual hosts path.
+		All Apache virtual hosts, created in Scalr panel 
+		are placed in a separate directory and included in main apache conf file.
+		'''
+		name = CNF_SECTION + '/vhosts_path'
+		default = 'private.d/vhosts'
+
+
+
 def get_handlers ():
 	return [ApacheHandler()]
 
 class ApacheHandler(Handler):
 	_logger = None
 	_queryenv = None
+	_cnf = None
+	'''
+	@type _cnf: scalarizr.config.ScalarizrCnf
+	'''
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
+		self._cnf = bus.cnf
 		self.name_vhost_regexp = re.compile(r'NameVirtualHost\s+\*[^:]')
 		self.vhost_regexp = re.compile('<VirtualHost\s+\*>')
 		self.strip_comments_regexp = re.compile( r"#.*\n")
@@ -67,7 +116,7 @@ class ApacheHandler(Handler):
 		bus.on("before_host_down", self.on_before_host_down)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
+		return BEHAVIOUR in behaviour and message.name == Messages.VHOST_RECONFIGURE
 
 	def on_VhostReconfigure(self, message):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
@@ -75,7 +124,7 @@ class ApacheHandler(Handler):
 		self._reload_apache()
 
 	def on_start(self):
-		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting Apache")
 				initd.start("apache")
@@ -95,7 +144,7 @@ class ApacheHandler(Handler):
 				
 		config = bus.config
 		vhosts_path = config.get('behaviour_app','vhosts_path')
-		httpd_conf_path = config.get('behaviour_app','httpd_conf_path')
+		httpd_conf_path = config.get('behaviour_app','apache_conf_path')
 		cert_path = bus.etc_path + '/private.d/keys'	
 		
 		self.server_root = self._get_server_root(httpd_conf_path)

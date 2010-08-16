@@ -84,7 +84,7 @@ def read_file(filename, msg = None, error_msg="Cannot read from ", logger = None
 	if not logger:
 		logger = logging.getLogger(__name__)
 	
-	logger.debug(msg) if msg else logger.debug("Reading from file %s", filename)
+	logger.debug(msg) if msg else logger.debug("Reading file %s", filename)
 
 	file = None
 	data = None	
@@ -108,7 +108,7 @@ def read_file(filename, msg = None, error_msg="Cannot read from ", logger = None
 def write_file(filename, data, mode = 'w', msg = None, error_msg="Cannot write to ", logger = None):
 	if not logger:
 		logger = logging.getLogger(__name__)
-	logger.debug(msg) if msg else logger.debug("Writing to file %s", filename)
+	logger.debug(msg) if msg else logger.debug("Writing file %s", filename)
 	if not os.path.isfile(filename):
 		logger.debug("File %s does not exist. Trying to create.", filename)
 		dir = os.path.dirname(filename)

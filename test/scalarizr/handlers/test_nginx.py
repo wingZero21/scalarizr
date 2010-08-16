@@ -9,7 +9,6 @@ from scalarizr.handlers import nginx
 from scalarizr.util import init_tests 
 from scalarizr.util.filetool import read_file, write_file
 import os
-from scalarizr.behaviour import Behaviours
 from scalarizr.util import configtool
 				
 class Test(unittest.TestCase):
@@ -46,7 +45,7 @@ class Test(unittest.TestCase):
 	
 	def _test_creating_vhosts(self):
 		config = bus.config
-		sect_name = configtool.get_behaviour_section_name(Behaviours.WWW)
+		sect_name = configtool.get_behaviour_section_name(nginx.BEHAVIOUR)
 		#nginx_incl = bus.etc_path + "/nginx/scalr-vhosts"
 		nginx_incl = "/etc/nginx/app-servers.include"
 		config.set(sect_name, "app_include_path",nginx_incl)

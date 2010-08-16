@@ -101,6 +101,9 @@ class MessagingHandler(logging.Handler):
 			self._lock.release()
 			
 	def _send_message(self):
+		if not bus.messaging_service:
+			return
+		
 		entries = ()
 		self._lock.acquire()
 		try:

@@ -6,12 +6,13 @@ Created on Mar 3, 2010
 
 import scalarizr.handlers
 from scalarizr.bus import bus
+from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions
-from scalarizr.util import cryptotool, configtool, disttool, system
-import logging
-import os, sys
-import binascii
+from scalarizr.util import cryptotool, configtool
+
+import logging, os, sys, binascii
 from subprocess import Popen, PIPE
+
 
 
 _lifecircle = None
@@ -27,13 +28,12 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 	_producer = None
 	_platform = None
 	_config = None
+	_cnf = None
 	
 	_new_crypto_key = None
 	
 	FLAG_REBOOT = "reboot"
 	FLAG_HALT = "halt"
-	FLAG_HOST_INIT = "hostinit"
-	FLAG_HOST_UP = "hostup"
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -97,6 +97,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		self._msg_service = bus.messaging_service
 		self._producer = self._msg_service.get_producer()
 		self._config = bus.config
+		self._cnf = bus.cnf
 		self._platform = bus.platform
 	
 	
@@ -135,11 +136,11 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 			self._clear_flag(self.FLAG_HALT)
 			self._start_after_stop()
 			
-		elif optparser.values.run_import:
+		elif optparser.values.import_server:
 			self._logger.info("Server will be imported into Scalr")
 			self._start_import()
 			
-		elif not self._flag_exists(self.FLAG_HOST_INIT):
+		elif self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
 			self._logger.info("Starting initialization")
 			self._start_init()
 		else:
@@ -181,7 +182,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		
 		del self._new_crypto_key
 		
-		self._set_flag(self.FLAG_HOST_INIT)
+		bus.cnf.state = ScalarizrState.INITIALIZING
 		bus.fire("host_init")		
 		
 
@@ -216,7 +217,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		msg = self._new_message(Messages.HOST_UP, broadcast=True)
 		bus.fire("before_host_up", msg)
 		self._send_message(msg)
-		self._set_flag(self.FLAG_HOST_UP)
+		bus.cnf.state = ScalarizrState.RUNNING
 		bus.fire("host_up")
 
 	def on_ScalarizrUpdateAvailable(self, message):
@@ -234,7 +235,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		
 		
 	def _get_flag_filename(self, name):
-		return os.path.join(bus.etc_path, "private.d", "." + name)
+		return self._cnf.private_path('.%s' % name)
 	
 	def _set_flag(self, name):
 		file = self._get_flag_filename(name)
@@ -250,39 +251,3 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 	def _clear_flag(self, name):
 		os.remove(self._get_flag_filename(name))	
 	
-"""
-class State:
-	PENDING = "pending"
-	INITIALIZED = "initialized"
-	RUNNING = "running"
-	IMPORTING = "importing"
-	
-	@property
-	def current(self):
-		pass
-	
-	@current.setter
-	def current(self, value):
-		pass
-	
-	@current.deleter
-	def current(self):
-		pass
-"""
-
-STATE_PENDING = "pending" 
-STATE_INITIALIZED = "initialized"
-STATE_RUNNING = "running"
-STATE_IMPORTING = "importing"
-
-def get_state():
-	"""
-	@xxx: Not good to call private methods 
-	"""
-	if  _lifecircle:
-		if _lifecircle._flag_exists(_lifecircle.FLAG_HOST_UP):
-			return STATE_RUNNING
-		elif _lifecircle._flag_exists(_lifecircle.FLAG_HOST_INIT):
-			return STATE_INITIALIZED
-		
-	return STATE_PENDING

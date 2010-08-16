@@ -5,10 +5,11 @@ Created on Jan 6, 2010
 @author: Dmytro Korsakov
 '''
 from scalarizr.bus import bus
+from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import Handler, HandlerError, lifecircle
-from scalarizr.behaviour import Behaviours
 from scalarizr.messaging import Messages
-from scalarizr.util import configtool, disttool, system, initd
+from scalarizr.util import configtool, disttool, system, initd, cached, firstmatched,\
+	validators
 from scalarizr.util.filetool import read_file, write_file
 import os
 import re
@@ -17,6 +18,12 @@ import subprocess
 import logging
 from datetime import datetime
 
+
+BEHAVIOUR = BuiltinBehaviours.WWW
+CNF_NAME = BEHAVIOUR
+CNF_SECTION = BEHAVIOUR
+
+# Explore service to initd utility
 initd_script = "/etc/init.d/nginx"
 if not os.path.exists(initd_script):
 	raise HandlerError("Cannot find Nginx init script at %s. Make sure that nginx is installed" % initd_script)
@@ -34,6 +41,58 @@ logger = logging.getLogger(__name__)
 logger.debug("Explore Nginx service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
 initd.explore("nginx", initd_script, pid_file, tcp_port=80)
 
+
+# Nginx behaviours configuration options
+class NginxOptions(Configurator.Container):
+	'''
+	www behaviour
+	'''
+	cnf_name = CNF_NAME
+	
+	class binary_path(Configurator.Option):
+		'''
+		Nginx binary location
+		'''
+		name = CNF_SECTION + '/binary_path'
+		
+		@property
+		@cached
+		def default(self):
+			return firstmatched(lambda p: os.access(p, os.F_OK | os.X_OK), 
+					('/usr/sbin/nginx',	'/usr/local/nginx/sbin/nginx'), '')
+
+		@Configurator.Option.value.setter
+		@validators.validate(validators.executable)
+		def value(self, v):
+			p = Configurator.Option.value; p.fset(self, v)
+
+	class app_port(Configurator.Option):
+		'''
+		App role port
+		'''
+		name = CNF_SECTION + '/app_port'
+		default = '80'
+		
+		@Configurator.Option.value.setter
+		@validators.validate(validators.portnumber())
+		def value(self, v):
+			p = Configurator.Option.value; p.fset(self, v)
+
+	class app_include_path(Configurator.Option):
+		'''
+		App config include location
+		'''
+		name = CNF_SECTION + '/app_include_path'
+		default = '/etc/nginx/app-servers.include'
+		
+	class https_include_path(Configurator.Option):
+		'''
+		HTTPS config include location 
+		'''
+		name = CNF_SECTION + '/https_include_path'
+		default = '/etc/nginx/https.include'
+
+
 def get_handlers():
 	return [NginxHandler()]
 
@@ -42,12 +101,13 @@ class NginxHandler(Handler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service	
+		self._cnf = bus.cnf
 		bus.define_events("nginx_upstream_reload")
 		bus.on("start", self.on_start)
 		bus.on("before_host_down", self.on_before_host_down)
 		
 	def on_start(self):
-		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting Nginx")
 				initd.start("nginx")
@@ -62,7 +122,7 @@ class NginxHandler(Handler):
 	
 	def nginx_upstream_reload(self, force_reload=False):
 		config = bus.config
-		section = configtool.get_behaviour_section_name(Behaviours.WWW)
+		section = configtool.get_behaviour_section_name(BEHAVIOUR)
 		nginx_binary = config.get(section, "binary_path")
 		app_port = config.get(section, "app_port") or "80"
 		include = config.get(section, "app_include_path")
@@ -71,7 +131,7 @@ class NginxHandler(Handler):
 		default_conf_path = config_dir + '/sites-enabled/' + 'default'
 		initd_script = "/etc/init.d/nginx"
 		
-		template_path = os.path.join(bus.etc_path, "public.d/handler.nginx/app-servers.tpl")
+		template_path = os.path.join(bus.etc_path, "public.d/nginx/app-servers.tpl")
 		
 		if not os.path.exists(template_path):
 			template_content = """\nupstream backend {\n\tip_hash;\n\n\t${upstream_hosts}\n}\n"""
@@ -81,7 +141,7 @@ class NginxHandler(Handler):
 
 		# Create upstream hosts configuration
 		upstream_hosts = ""
-		for app_serv in self._queryenv.list_roles(behaviour = Behaviours.APP):
+		for app_serv in self._queryenv.list_roles(behaviour = BuiltinBehaviours.APP):
 			for app_host in app_serv.hosts :
 				upstream_hosts += "\tserver %s:%s;\n" % (app_host.internal_ip, app_port)
 		if not upstream_hosts:
@@ -227,7 +287,7 @@ class NginxHandler(Handler):
 		
 	def on_BeforeHostTerminate(self, message):
 		config = bus.config
-		section = configtool.get_behaviour_section_name(Behaviours.WWW)
+		section = configtool.get_behaviour_section_name(BEHAVIOUR)
 		include_path = config.get(section, "app_include_path")
 		include = read_file(include_path, logger = self._logger)
 		if include and message.local_ip:
@@ -291,7 +351,7 @@ class NginxHandler(Handler):
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return Behaviours.WWW in behaviour and \
+		return BEHAVIOUR in behaviour and \
 			(message.name == Messages.HOST_UP or \
 			message.name == Messages.HOST_DOWN or \
 			message.name == Messages.BEFORE_HOST_TERMINATE or \
