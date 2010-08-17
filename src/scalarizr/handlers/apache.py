@@ -63,7 +63,7 @@ class ApacheOptions(Configurator.Container):
 		'''
 		Apache config file location.
 		'''
-		name = CNF_SECTION + '/apache_config_path'
+		name = CNF_SECTION + '/apache_conf_path'
 
 		@property 
 		@cached
@@ -145,8 +145,8 @@ class ApacheHandler(Handler):
 	def _update_vhosts(self):
 				
 		config = bus.config
-		vhosts_path = config.get('behaviour_app','vhosts_path')
-		httpd_conf_path = config.get('behaviour_app','apache_conf_path')
+		vhosts_path = config.get(CNF_SECTION,'vhosts_path')
+		httpd_conf_path = config.get(CNF_SECTION,'apache_conf_path')
 		cert_path = bus.etc_path + '/private.d/keys'	
 		
 		self.server_root = self._get_server_root(httpd_conf_path)
