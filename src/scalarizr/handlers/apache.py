@@ -150,7 +150,7 @@ class ApacheHandler(Handler):
 	def _update_vhosts(self):
 				
 		config = bus.config
-		vhosts_path = config.get(CNF_SECTION,'vhosts_path')
+		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION,'vhosts_path'))
 		httpd_conf_path = config.get(CNF_SECTION,'apache_conf_path')
 		cert_path = bus.etc_path + '/private.d/keys'	
 		
