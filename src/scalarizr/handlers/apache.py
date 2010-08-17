@@ -160,13 +160,16 @@ class ApacheHandler(Handler):
 		
 		if [] != received_vhosts:
 			if not os.path.exists(vhosts_path):
-				self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
-				try:
-					os.makedirs(vhosts_path)
-					self._logger.debug("Virtual hosts dir %s created", vhosts_path)
-				except OSError, e:
-					self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
-					raise
+				if not vhosts_path:
+					self._logger.error('Property vhosts_path is empty.')
+				else:
+					self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
+					try:
+						os.makedirs(vhosts_path)
+						self._logger.debug("Virtual hosts dir %s created", vhosts_path)
+					except OSError, e:
+						self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
+						raise
 			
 			list_vhosts = os.listdir(vhosts_path)
 			if [] != list_vhosts:
