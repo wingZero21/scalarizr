@@ -119,23 +119,13 @@ class QueryEnvService(object):
 		try:
 			self._logger.debug("QueryEnv request: %s", post_data)
 			req = Request(url, post_data, headers)
-			response = urlopen(req)
+			response = urlopen(req, timeout=15)
 		except URLError, e:
 			if isinstance(e, HTTPError):
 				resp_body = e.read() if e.fp is not None else ""
 				raise QueryEnvError("Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body))				
-				"""
-				if e.code == 401:
-					raise QueryEnvError("Cannot authenticate on QueryEnv server. %s" % [resp_body])
-				elif e.code == 400:
-					raise QueryEnvError("Malformed request. %s" % [resp_body])
-				elif e.code == 500:
-					raise QueryEnvError("QueryEnv failed. %s" % [resp_body])
-				else:
-					raise QueryEnvError("Request to QueryEnv server failed (code: %d). %s" % [e.code, str(e)])
-				"""
 			else:
-				host, port = splitnport(req.host, 80)
+				host, port = splitnport(req.host, req.port or 80)
 				raise QueryEnvError("Cannot connect to QueryEnv server on %s:%s. %s" 
 						% (host, port, str(e)))
 

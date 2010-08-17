@@ -116,7 +116,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			
 			url = self.endpoint + "/" + queue
 			req = Request(url, data, headers)
-			urlopen(req)
+			urlopen(req, timeout=15)
 			
 			self._message_delivered(queue, message, success_callback)
 		
@@ -139,7 +139,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 					self._logger.error("Cannot post message to %s. %s", url, e)
 						
 			elif isinstance(e, URLError):
-				host, port = splitnport(req.host, req.port)
+				host, port = splitnport(req.host, req.port or 80)
 				self._logger.error("Cannot connect to message server on %s:%s. %s", host, port, e)
 				
 			else:
