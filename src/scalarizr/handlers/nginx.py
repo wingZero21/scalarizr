@@ -51,7 +51,7 @@ class NginxOptions(Configurator.Container):
 	
 	class binary_path(Configurator.Option):
 		'''
-		Nginx binary location
+		Path to nginx binary
 		'''
 		name = CNF_SECTION + '/binary_path'
 		required = True
@@ -86,7 +86,7 @@ class NginxOptions(Configurator.Container):
 
 	class app_include_path(Configurator.Option):
 		'''
-		App config include location
+		App upstreams configuration file path.
 		'''
 		name = CNF_SECTION + '/app_include_path'
 		default = '/etc/nginx/app-servers.include'
@@ -94,7 +94,7 @@ class NginxOptions(Configurator.Container):
 		
 	class https_include_path(Configurator.Option):
 		'''
-		HTTPS config include location 
+		HTTPS configuration file path.
 		'''
 		name = CNF_SECTION + '/https_include_path'
 		default = '/etc/nginx/https.include'

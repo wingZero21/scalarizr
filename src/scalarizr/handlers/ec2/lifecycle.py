@@ -11,9 +11,9 @@ import os, re
 
 
 def get_handlers ():
-	return [Ec2LifeCircleHandler()]
+	return [Ec2LifeCycleHandler()]
 
-class Ec2LifeCircleHandler(Handler):
+class Ec2LifeCycleHandler(Handler):
 	_logger = None
 	_platform = None
 	"""

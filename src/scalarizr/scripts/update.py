@@ -16,10 +16,8 @@ def main():
 	if disttool.is_debian_based():
 		logger.info("Updating scalarizr with Apt")
 		system("apt-get -y install scalarizr")
-		system("/etc/init.d/scalarizr restart")
 	elif disttool.is_redhat_based():
 		logger.info("Updating scalarizr with Yum")
 		system("yum -y update scalarizr")
-		system("service scalarizr restart")
 	else:
 		logger.error("Don't know how to update scalarizr on %s", " ".join(disttool.linux_dist()))

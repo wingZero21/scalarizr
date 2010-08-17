@@ -447,12 +447,12 @@ def main():
 		optparser.add_option('-v', '--version', dest='version', action='store_true',
 				help='Show version information')
 		optparser.add_option('-c', '--etc-path', dest='etc_path',
-				help='Configuration directory location')
+				help='Configuration directory path')
 		optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
 				help='Daemonize process')
 		optparser.add_option('-n', '--configure', dest='configure', action="store_true", default=False, 
-				help="Configure Scalarizr in a intercative mode by default. " 
-				+ "When -y -o Scalarizr can be configuraed without user interaction")
+				help="Configure Scalarizr in the interactive mode by default. " 
+				+ "Use '-y -o' to configure Scalarizr non-interactively")
 		optparser.add_option("-k", "--gen-key", dest="gen_key", action="store_true", default=False,
 				help="Generate crypto key")
 		optparser.add_option('-t', dest='validate_cnf', action='store_true', default=False,
@@ -460,7 +460,7 @@ def main():
 		optparser.add_option('-m', '--import', dest="import_server", action="store_true", default=False, 
 				help="Import service into Scalr")
 		optparser.add_option('-y', dest="yesall", action="store_true", default=False,
-				help="Answer yes for all questions")
+				help='Answer "yes" to all questions')
 		optparser.add_option('-o', dest='cnf', action='append',
 				help='Runtime .ini option key=value')
 		

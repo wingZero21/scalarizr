@@ -61,7 +61,7 @@ class ApacheOptions(Configurator.Container):
 	
 	class apache_conf_path(Configurator.Option):
 		'''
-		Apache config file location.
+		Apache configuration file location.
 		'''
 		name = CNF_SECTION + '/apache_conf_path'
 		required = True
@@ -81,9 +81,9 @@ class ApacheOptions(Configurator.Container):
 	
 	class vhosts_path(Configurator.Option):
 		'''
-		Scalr-managed virtual hosts path.
-		All Apache virtual hosts, created in Scalr panel 
-		are placed in a separate directory and included in main apache conf file.
+		Directory to create virtual hosts configuration in.
+		All Apache virtual hosts, created in the Scalr user interface are placed in a separate
+		directory and included to the main Apache configuration file.
 		'''
 		name = CNF_SECTION + '/vhosts_path'
 		default = 'private.d/vhosts'

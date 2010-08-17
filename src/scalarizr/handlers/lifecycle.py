@@ -10,18 +10,18 @@ from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions
 from scalarizr.util import cryptotool, configtool
 
-import logging, os, sys, binascii
+import logging, os, sys, binascii, time
 from subprocess import Popen, PIPE
 
 
 
-_lifecircle = None
+_lifecycle = None
 def get_handlers():
-	if not _lifecircle:
-		globals()["_lifecircle"] = LifeCircleHandler()
-	return [_lifecircle]
+	if not _lifecycle:
+		globals()["_lifecycle"] = LifeCycleHandler()
+	return [_lifecycle]
 
-class LifeCircleHandler(scalarizr.handlers.Handler):
+class LifeCycleHandler(scalarizr.handlers.Handler):
 	_logger = None
 	_bus = None
 	_msg_service = None
@@ -126,7 +126,11 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 
 	def on_start(self):
 		optparser = bus.optparser
-		
+
+		file = self._get_flag_filename('update')
+		if not os.path.exists(file) or time.time() - os.stat(file).st_mtime > 86400:
+			self._update_package()
+
 		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")
 			self._clear_flag(self.FLAG_REBOOT)			
@@ -230,7 +234,7 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		cmd = [sys.executable, up_script]
 		p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
 		p.communicate()
-
+		self._set_flag('update')
 
 	def on_before_message_send(self, queue, message):
 		"""

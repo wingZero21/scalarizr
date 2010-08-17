@@ -57,7 +57,7 @@ class MysqlOptions(Configurator.Container):
 	'''
 	class mysqld_path(Configurator.Option):
 		'''
-		MySQL daemon location
+		MySQL daemon binary path
 		'''
 		name = CNF_NAME + '/mysqld_path'
 		required = True
@@ -76,7 +76,7 @@ class MysqlOptions(Configurator.Container):
 			
 	class mysql_path(Configurator.Option):
 		'''
-		MySQL cli location
+		MySQL command line tool path
 		'''
 		name = CNF_NAME + '/mysql_path'
 		default = '/usr/bin/mysql'
@@ -90,7 +90,7 @@ class MysqlOptions(Configurator.Container):
 
 	class mysqldump_path(Configurator.Option):
 		'''
-		mysqldump location
+		Path to the mysqldump utility
 		'''
 		name = CNF_NAME + '/mysqldump_path'
 		default = '/usr/bin/mysqldump'
@@ -104,7 +104,7 @@ class MysqlOptions(Configurator.Container):
 			
 	class mycnf_path(Configurator.Option):
 		'''
-		my.cnf location
+		MySQL configuration file path
 		'''
 		name = CNF_NAME + '/mycnf_path'
 		required = True

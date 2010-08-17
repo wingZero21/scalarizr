@@ -234,7 +234,7 @@ class ScalarizrOptions(Configurator.Container):
 	class behaviour(Configurator.Option):
 		'''
 		Server behaviour. 
-		Server behaviour is your server role. Built-in behaviours: {behaviours}
+		Server behaviour is a role your server acts as. Built-in behaviours: {behaviours}
 		'''
 		name = 'general/behaviour'
 		
