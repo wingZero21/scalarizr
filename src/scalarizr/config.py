@@ -64,16 +64,15 @@ class Configurator(object):
 		In terms of Scalarizr configuration it means that it will be stored in $etc/private.d/ 
 		'''
 	
-		
-		@property
-		def value(self):
+		def _get_value(self):
 			return self._value
-		@value.setter
-		def value(self, v):
+		
+		def _set_value(self, v):
 			if not v and self.required:
 				raise ValueError('empty value')
-			self._value = v	
-
+			self._value = v
+				
+		value = property(_get_value, _set_value)
 			
 	class Container(object):
 		'''
@@ -166,10 +165,10 @@ class ScalarizrOptions(Configurator.Container):
 		name = 'general/server_id'
 		private = True
 		
-		@Configurator.Option.value.setter
 		@validators.validate(validators.uuid4)
-		def value(self, v):
-			Configurator.Option.value.fset(self, v)
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
+		value = property(Configurator.Option._get_value, _set_value)
 		
 	class role_name(Configurator.Option):
 		'''
@@ -207,19 +206,20 @@ class ScalarizrOptions(Configurator.Container):
 		type = 'password'
 		default = ''
 		
-		@property
-		def value(self):
+		def _get_value(self):
 			if self._value is None:
 				try:
 					self._value = bus.cnf.read_key('default')
 				except:
 					self._value = ''
+
 			return self._value
 		
-		@value.setter
 		@validators.validate(validators.base64)
-		def value(self, v):
-			Configurator.Option.value.fset(self, v)
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
+			
+		value = property(_get_value, _set_value)
 			
 		def store(self):
 			bus.cnf.write_key('default', self.value, 'Scalarizr crypto key')
@@ -234,13 +234,14 @@ class ScalarizrOptions(Configurator.Container):
 		def __init__(self):
 			self.__doc__ = self.__doc__.replace('{behaviours}', ','.join(BuiltinBehaviours.values()))
 		
-		@Configurator.Option.value.setter
-		def value(self, v):
+		def _set_value(self, v):
 			v = split(v.strip())
 			bhvs = BuiltinBehaviours.values()
 			if any(vv not in bhvs for vv in v):
 				raise ValueError('unknown behaviour')
 			self._value = ','.join(v)
+		
+		value = property(Configurator.Option._get_value, _set_value)
 			
 	class platform(Configurator.Option):
 		'''
@@ -253,11 +254,12 @@ class ScalarizrOptions(Configurator.Container):
 		def __init__(self):
 			self.__doc__ = self.__doc__.replace('{platforms}', ','.join(BuiltinPlatforms.values()))
 		
-		@Configurator.Option.value.setter
-		def value(self, v):
+		def _set_value(self, v):
 			if not v in BuiltinPlatforms.values():
 				raise ValueError('unknown platform')
 			self._value = v
+
+		value = property(Configurator.Option._get_value, _set_value)		
 
 	class snmp_security_name(Configurator.Option):
 		'''
@@ -792,16 +794,16 @@ class ScalarizrCnf(object):
 			if file:
 				file.close()		
 
-	@property
-	def state(self):
+	def _get_state(self):
 		filename = self.private_path('.state')
 		if not os.path.exists(filename):
 			return ScalarizrState.UNKNOWN
 		return str.strip(filetool.read_file(filename, logger=self._logger))
 
-	@state.setter
-	def state(self, v):
-		filetool.write_file(self.private_path('.state'), v, logger=self._logger)
+	def _set_state(self, v):
+		filetool.write_file(self.private_path('.state'), v, logger=self._logger)		
+
+	state = property(_get_state, _set_state)
 
 	def private_path(self, name):
 		return os.path.join(self._priv_path, name)

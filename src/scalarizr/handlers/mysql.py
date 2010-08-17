@@ -67,10 +67,11 @@ class MysqlOptions(Configurator.Container):
 			return firstmatched(lambda p: os.access(p, os.F_OK | os.X_OK), 
 					('/usr/libexec/mysqld', '/usr/sbin/mysqld'), '')
 		
-		@Configurator.Option.value.setter
 		@validators.validate(validators.executable)
-		def value(self, v):
-			p = Configurator.Option.value; p.fset(self, v)
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
+		
+		value = property(Configurator.Option._get_value, _set_value)
 			
 	class mysql_path(Configurator.Option):
 		'''
@@ -79,10 +80,11 @@ class MysqlOptions(Configurator.Container):
 		name = CNF_NAME + '/mysql_path'
 		default = '/usr/bin/mysql'
 
-		@Configurator.Option.value.setter
 		@validators.validate(validators.executable)
-		def value(self, v):
-			p = Configurator.Option.value; p.fset(self, v)
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
+			
+		value = property(Configurator.Option._get_value, _set_value)
 
 	class mysqldump_path(Configurator.Option):
 		'''
@@ -91,10 +93,11 @@ class MysqlOptions(Configurator.Container):
 		name = CNF_NAME + '/mysqldump_path'
 		default = '/usr/bin/mysqldump'
 		
-		@Configurator.Option.value.setter
 		@validators.validate(validators.executable)
-		def value(self, v):
-			p = Configurator.Option.value; p.fset(self, v)
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
+			
+		value = property(Configurator.Option._get_value, _set_value)
 			
 	class mycnf_path(Configurator.Option):
 		'''
@@ -108,11 +111,11 @@ class MysqlOptions(Configurator.Container):
 			return firstmatched(lambda p: os.access(p, os.F_OK), 
 					('/etc/my.cnf', '/etc/mysql/my.cnf'), '')
 			
-		@Configurator.Option.value.setter
 		@validators.validate(validators.file_exists)
-		def value(self, v):
-			p = Configurator.Option.value; p.fset(self, v)	
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
 		
+		value = property(Configurator.Option._get_value, _set_value)
 
 # Configuration options
 OPT_ROOT_USER   		= "root_user"

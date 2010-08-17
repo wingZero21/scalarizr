@@ -34,20 +34,11 @@ class Test(unittest.TestCase):
 		
 	def tearDown(self):
 		del bus.cnf
-	
-	def test_state(self):
-		print ScalarizrCnf.state
-		cnf = ScalarizrCnf()
-		print cnf.state
-		cnf.state = 'running'
-		print cnf.state
-		'''
-		print bus.cnf.state
-		bus.cnf.state = 'running'
-		print bus.cnf.state
-		'''
-		pass
 
+	def test_reconfigure(self):
+		bus.cnf.reconfigure()
+		pass
+	
 	'''
 	def test_validate(self):
 		def on_error(o, e):

@@ -71,10 +71,12 @@ class ApacheOptions(Configurator.Container):
 			return firstmatched(lambda p: os.path.exists(p),
 					('/etc/apache2/apache2.conf', '/etc/httpd/conf/httpd.conf'), '')
 		
-		@Configurator.Option.value.setter
-		@validators.validate(validators.file_exists)
-		def value(self, v):
-			p = Configurator.Option.value; p.fset(self, v)
+		@validators.validate(validators.file_exists)		
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
+		
+		value = property(Configurator.Option._get_value, _set_value)
+
 	
 	class vhosts_path(Configurator.Option):
 		'''
