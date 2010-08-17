@@ -115,7 +115,7 @@ class ApacheHandler(Handler):
 		self.ssl_conf_listen_regexp = re.compile(r"Listen\s+\d+\n",re.IGNORECASE)
 		bus.define_events('apache_reload')
 		bus.on("start", self.on_start)
-		bus.on("before_host_down", self.on_before_host_down)
+		bus.on("init", self.on_init)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and message.name == Messages.VHOST_RECONFIGURE
@@ -124,6 +124,9 @@ class ApacheHandler(Handler):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
 		self._reload_apache()
+
+	def on_init(self):
+		bus.on("before_host_down", self.on_before_host_down)		
 
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
