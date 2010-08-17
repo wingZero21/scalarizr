@@ -133,10 +133,9 @@ class NginxHandler(Handler):
 	
 	def nginx_upstream_reload(self, force_reload=False):
 		config = bus.config
-		section = configtool.get_behaviour_section_name(BEHAVIOUR)
-		nginx_binary = config.get(section, "binary_path")
-		app_port = config.get(section, "app_port") or "80"
-		include = config.get(section, "app_include_path")
+		nginx_binary = config.get(CNF_SECTION, "binary_path")
+		app_port = config.get(CNF_SECTION, "app_port") or "80"
+		include = config.get(CNF_SECTION, "app_include_path")
 		config_dir = os.path.dirname(include)
 		nginx_conf_path = config_dir + '/nginx.conf'
 		default_conf_path = config_dir + '/sites-enabled/' + 'default'
@@ -298,8 +297,7 @@ class NginxHandler(Handler):
 		
 	def on_BeforeHostTerminate(self, message):
 		config = bus.config
-		section = configtool.get_behaviour_section_name(BEHAVIOUR)
-		include_path = config.get(section, "app_include_path")
+		include_path = config.get(CNF_SECTION, "app_include_path")
 		include = read_file(include_path, logger = self._logger)
 		if include and message.local_ip:
 			new_include = include.replace("\tserver %s:80;\n" % message.local_ip,"")
