@@ -122,7 +122,13 @@ class Configurator(object):
 		if nodefault and option.type != 'password':
 			auto_value = value
 		else:
-			auto_value = value if value is not None else option.default
+			if value or (value is not None and not option.required):
+				auto_value = value
+			# XXX:
+			elif option.type == 'password':
+				auto_value = value or option.value or option.default  
+			else:
+				auto_value = option.default
 
 		if not silent:
 			title, desc = self._extract_doc(option)
@@ -205,6 +211,7 @@ class ScalarizrOptions(Configurator.Container):
 		name = 'general/crypto_key'
 		type = 'password'
 		default = ''
+		required = True
 		
 		def _get_value(self):
 			if self._value is None:

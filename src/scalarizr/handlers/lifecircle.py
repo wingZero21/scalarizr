@@ -220,7 +220,12 @@ class LifeCircleHandler(scalarizr.handlers.Handler):
 		bus.cnf.state = ScalarizrState.RUNNING
 		bus.fire("host_up")
 
+
 	def on_ScalarizrUpdateAvailable(self, message):
+		self._update_package()
+
+
+	def _update_package(self):
 		up_script = self._config.get(configtool.SECT_GENERAL, configtool.OPT_SCRIPTS_PATH) + "/update"
 		cmd = [sys.executable, up_script]
 		p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)

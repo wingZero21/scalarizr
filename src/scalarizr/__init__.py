@@ -426,7 +426,7 @@ def do_configure():
 	cnf.reconfigure(
 		values=CmdLineIni.to_kvals(optparser.values.cnf), 
 		silent=optparser.values.import_server, 
-		yesall=optparser.values.yesall or optparser.values.import_server
+		yesall=optparser.values.yesall
 	)
 
 

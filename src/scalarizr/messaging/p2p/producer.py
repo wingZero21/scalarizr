@@ -116,7 +116,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			
 			url = self.endpoint + "/" + queue
 			req = Request(url, data, headers)
-			urlopen(req, timeout=15)
+			urlopen(req)
 			
 			self._message_delivered(queue, message, success_callback)
 		

@@ -119,7 +119,7 @@ class QueryEnvService(object):
 		try:
 			self._logger.debug("QueryEnv request: %s", post_data)
 			req = Request(url, post_data, headers)
-			response = urlopen(req, timeout=15)
+			response = urlopen(req)
 		except URLError, e:
 			if isinstance(e, HTTPError):
 				resp_body = e.read() if e.fp is not None else ""

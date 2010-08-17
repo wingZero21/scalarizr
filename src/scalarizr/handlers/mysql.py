@@ -60,6 +60,7 @@ class MysqlOptions(Configurator.Container):
 		MySQL daemon location
 		'''
 		name = CNF_NAME + '/mysqld_path'
+		required = True
 
 		@property
 		@cached
@@ -79,6 +80,7 @@ class MysqlOptions(Configurator.Container):
 		'''
 		name = CNF_NAME + '/mysql_path'
 		default = '/usr/bin/mysql'
+		required = True
 
 		@validators.validate(validators.executable)
 		def _set_value(self, v):
@@ -92,6 +94,7 @@ class MysqlOptions(Configurator.Container):
 		'''
 		name = CNF_NAME + '/mysqldump_path'
 		default = '/usr/bin/mysqldump'
+		required = True
 		
 		@validators.validate(validators.executable)
 		def _set_value(self, v):
@@ -104,6 +107,7 @@ class MysqlOptions(Configurator.Container):
 		my.cnf location
 		'''
 		name = CNF_NAME + '/mycnf_path'
+		required = True
 
 		@property		
 		@cached

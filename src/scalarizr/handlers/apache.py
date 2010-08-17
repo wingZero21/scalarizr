@@ -64,7 +64,8 @@ class ApacheOptions(Configurator.Container):
 		Apache config file location.
 		'''
 		name = CNF_SECTION + '/apache_conf_path'
-
+		required = True
+		
 		@property 
 		@cached
 		def default(self):
@@ -86,6 +87,7 @@ class ApacheOptions(Configurator.Container):
 		'''
 		name = CNF_SECTION + '/vhosts_path'
 		default = 'private.d/vhosts'
+		required = True
 
 
 

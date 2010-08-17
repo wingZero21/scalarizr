@@ -54,6 +54,7 @@ class NginxOptions(Configurator.Container):
 		Nginx binary location
 		'''
 		name = CNF_SECTION + '/binary_path'
+		required = True
 		
 		@property
 		@cached
@@ -74,6 +75,7 @@ class NginxOptions(Configurator.Container):
 		'''
 		name = CNF_SECTION + '/app_port'
 		default = '80'
+		required = True
 		
 		@validators.validate(validators.portnumber())
 		def _set_value(self, v):
@@ -88,6 +90,7 @@ class NginxOptions(Configurator.Container):
 		'''
 		name = CNF_SECTION + '/app_include_path'
 		default = '/etc/nginx/app-servers.include'
+		required = True
 		
 	class https_include_path(Configurator.Option):
 		'''
@@ -95,6 +98,7 @@ class NginxOptions(Configurator.Container):
 		'''
 		name = CNF_SECTION + '/https_include_path'
 		default = '/etc/nginx/https.include'
+		required = True
 
 
 def get_handlers():
