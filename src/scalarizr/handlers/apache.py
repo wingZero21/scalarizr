@@ -138,7 +138,7 @@ class ApacheHandler(Handler):
 			except initd.InitdError, e:
 				self._logger.error(e)
 		
-	def on_before_host_down(self):
+	def on_before_host_down(self, *args):
 		try:
 			self._logger.info("Stopping apache")
 			initd.stop("apache")
