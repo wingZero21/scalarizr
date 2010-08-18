@@ -177,7 +177,8 @@ def system(args, shell=True):
 	import subprocess
 	logger = logging.getLogger(__name__)
 	logger.debug("system: %s", args)
-	p = subprocess.Popen(args, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	p = subprocess.Popen(args, shell=shell, env={'LANG' : 'en_US'}, 
+			stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	out, err = p.communicate()
 	if out:
 		logger.debug("stdout: " + out)

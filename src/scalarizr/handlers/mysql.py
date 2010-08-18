@@ -318,7 +318,7 @@ class MysqlHandler(Handler):
 			myclient.sendline('SELECT VERSION();')
 			myclient.expect('mysql>')
 			mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), myclient.before)
-			
+
 			# Determine mysql server version 
 			if mysql_ver_str:
 				mysql_ver = version.StrictVersion(mysql_ver_str.group(0))
@@ -651,6 +651,16 @@ class MysqlHandler(Handler):
 		
 		#role_params = self._queryenv.list_role_params(self._role_name)
 		#if role_params[PARAM_DATA_STORAGE_ENGINE]:
+		try:
+			out = system("my_print_defaults mysqld")
+			result = re.search("--datadir=(.*)", out[0], re.MULTILINE)
+			if result:
+				datadir = result.group(1)
+				if os.path.isdir(datadir) and not os.path.isdir(os.path.join(datadir, 'mysql')):
+					self._start_mysql()	
+					self._stop_mysql()				
+		except:
+			pass
 
 		if int(self._sect.get(OPT_REPLICATION_MASTER)):
 			self._init_master(message)									  
@@ -983,6 +993,7 @@ class MysqlHandler(Handler):
 			sql = self._spawn_mysql(root_user, root_password)
 			sql.sendline('FLUSH TABLES WITH READ LOCK;')
 			sql.expect('mysql>')
+			system('sync')
 			if int(self._sect.get(OPT_REPLICATION_MASTER)):
 				sql.sendline('SHOW MASTER STATUS;')
 				sql.expect('mysql>')
@@ -1055,6 +1066,8 @@ class MysqlHandler(Handler):
 		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');"
 		sql += " FLUSH PRIVILEGES;"
 		out,err = myclient.communicate(sql)
+		if err:
+			raise HandlerError('Cannot add mysql users: %s', err)
 		
 		os.kill(myd.pid, signal.SIGTERM)
 		time.sleep(3)
@@ -1257,6 +1270,8 @@ class MysqlHandler(Handler):
 				myCnf += '\n' + directive + ' = ' + dirname		
 				
 		# Recursively setting new directory permissions
+		os.chown(directory, mysql_user.pw_uid, mysql_user.pw_gid)
+		
 		try:
 			for root, dirs, files in os.walk(directory):
 				for dir in dirs:
