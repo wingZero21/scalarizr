@@ -94,7 +94,7 @@ class MemcachedHandler(Handler):
 			self._logger.error(e)
 
 
-	def on_before_host_down(self):
+	def on_before_host_down(self, *args):
 		try:
 			self._logger.info("Stopping memcached")
 			initd.stop("memcached")

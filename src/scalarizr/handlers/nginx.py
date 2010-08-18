@@ -209,7 +209,7 @@ class NginxHandler(Handler):
 		bus.fire("nginx_upstream_reload")
 		
 	
-	def on_before_host_down(self):
+	def on_before_host_down(self, *args):
 		try:
 			self._logger.info("Stopping nginx")
 			initd.stop("nginx")

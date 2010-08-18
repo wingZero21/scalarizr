@@ -526,7 +526,7 @@ class MysqlHandler(Handler):
 			except initd.InitdError, e:
 				self._logger.error(e)
 
-	def on_before_host_down(self):
+	def on_before_host_down(self, *args):
 		self._stop_mysql()	
 	
 	def on_before_reboot_start(self, *args, **kwargs):

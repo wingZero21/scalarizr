@@ -562,7 +562,7 @@ class CassandraScalingHandler(Handler):
 			self._write_config()
 			cassandra.restart_service()
 			
-	def on_before_host_down(self):		
+	def on_before_host_down(self, *args):		
 		out, err = system('nodetool -h localhost decommission')[0:2]
 		if err:
 			raise HandlerError('Cannot decommission node: %s' % err)
