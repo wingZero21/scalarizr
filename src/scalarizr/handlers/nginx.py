@@ -6,7 +6,7 @@ Created on Jan 6, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import Handler, HandlerError, lifecircle
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
 from scalarizr.util import configtool, disttool, system, initd, cached, firstmatched,\
 	validators

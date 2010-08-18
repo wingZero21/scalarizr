@@ -7,7 +7,7 @@ Created on Dec 25, 2009
 
 from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import Handler, HandlerError, lifecircle
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
 from scalarizr.util import disttool, backup_file, initd, configtool, \
 	cached, firstmatched, validators
