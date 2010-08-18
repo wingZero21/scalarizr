@@ -111,19 +111,22 @@ class NginxHandler(Handler):
 		self._queryenv = bus.queryenv_service	
 		self._cnf = bus.cnf
 		bus.define_events("nginx_upstream_reload")
-		bus.on("start", self.on_start)
 		bus.on("init", self.on_init)
 		
 	def on_init(self):
+		bus.on("start", self.on_start)
+		bus.on('before_host_up', self.on_before_host_up)
 		bus.on("before_host_down", self.on_before_host_down)
 		
-	def on_start(self):
+	def on_start(self, *args):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting Nginx")
 				initd.start("nginx")
 			except initd.InitdError, e:
 				self._logger.error(e)	
+				
+	on_before_host_up = on_start
 	
 	def on_HostUp(self, message):
 		self.nginx_upstream_reload()

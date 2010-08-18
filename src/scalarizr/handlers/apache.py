@@ -116,7 +116,6 @@ class ApacheHandler(Handler):
 		self.ssl_conf_name_vhost_regexp = re.compile(r"NameVirtualHost\s+\*:\d+\n",re.IGNORECASE)
 		self.ssl_conf_listen_regexp = re.compile(r"Listen\s+\d+\n",re.IGNORECASE)
 		bus.define_events('apache_reload')
-		bus.on("start", self.on_start)
 		bus.on("init", self.on_init)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -128,15 +127,20 @@ class ApacheHandler(Handler):
 		self._reload_apache()
 
 	def on_init(self):
-		bus.on("before_host_down", self.on_before_host_down)		
+		bus.on("start", self.on_start)
+		bus.on('before_host_up', self.on_before_host_up)
+		bus.on("before_host_down", self.on_before_host_down)
+				
 
-	def on_start(self):
+	def on_start(self, *args):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting Apache")
 				initd.start("apache")
 			except initd.InitdError, e:
 				self._logger.error(e)
+
+	on_before_host_up = on_start
 		
 	def on_before_host_down(self, *args):
 		try:
