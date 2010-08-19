@@ -698,6 +698,7 @@ class ScalarizrCnf(object):
 			bus.config = ConfigParser()
 		self.ini = ScalarizrIni(bus.config)
 		
+		self._explored_keys = dict()
 		self.explore_key(self.DEFAULT_KEY, 'Scalarizr crypto key', True)
 		self.explore_key(self.FARM_KEY, 'Farm crypto key', True)
 		
