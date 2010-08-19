@@ -7,6 +7,7 @@ from scalarizr.bus import bus
 from scalarizr.util.filetool import read_file
 import os
 import re
+import socket
 
 class PlatformError(BaseException):
 	pass
@@ -35,16 +36,10 @@ class Platform():
 	_access_data = None
 	
 	def get_private_ip(self):
-		"""
-		@return string 
-		"""
-		pass
+		return self.get_public_ip()
 	
 	def get_public_ip(self):
-		"""
-		@return string 
-		"""
-		pass
+		return socket.gethostbyname(socket.gethostname())
 	
 	def get_user_data(self, key=None):
 		
