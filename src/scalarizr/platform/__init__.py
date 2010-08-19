@@ -4,6 +4,7 @@ Created on Dec 24, 2009
 @author: marat
 '''
 from scalarizr.bus import bus
+from scalarizr.util.filetool import read_file
 import os
 import re
 
@@ -46,10 +47,19 @@ class Platform():
 		pass
 	
 	def get_user_data(self, key=None):
-		"""
-		@return dict|any
-		"""
-		return {} if key else None
+		
+		if self._metadata is None:
+			rawmeta = read_file('/etc/scalr/private.d/.user-data')
+			if not rawmeta:
+				raise PlatformError("File with user-data doesn't exist")
+			
+			self._metadata = {}
+			for k, v in re.findall("([^=]+)=([^;]*);?", rawmeta):
+				self._metadata[k] = v			
+		if key:
+			return self._metadata[key] if key in self._metadata else None
+		else:
+			return self._metadata 
 
 	def set_access_data(self, access_data):
 		self._access_data = access_data
