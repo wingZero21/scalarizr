@@ -82,6 +82,7 @@ class MessageListener:
 					
 					# Read handler configuration.
 					# If will be available in global configuration
+					'''
 					for filename in configtool.get_handler_filename(handler_name, ret=configtool.RET_BOTH):
 						if os.path.exists(filename):
 							try:
@@ -93,7 +94,7 @@ class MessageListener:
 								self._logger.error("Cannot read handler configuraion (handler: %s, filename: %s)", 
 											handler_name, filename)
 								self._logger.exception(e)
-							
+					'''		
 					
 					# Import module
 					if not skip:

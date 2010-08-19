@@ -123,6 +123,30 @@ class _SqliteConnection(object):
 			self._conn = self._creator()
 		return self._conn
 	
+def cached(f, cache={}):
+	'''
+	Decorator
+	'''
+	def g(*args, **kwargs):
+		key = (f, tuple(args), frozenset(kwargs.items()))
+		if key not in cache:
+			cache[key] = f(*args, **kwargs)
+		return cache[key]
+	return g	
+
+def firstmatched(function, sequence, default=None):
+	for s in sequence:
+		if function(s):
+			return s
+			break
+	else:
+		return default	
+
+
+
+
+
+
 def daemonize():
 	# First fork
 	pid = os.fork()
@@ -153,7 +177,8 @@ def system(args, shell=True):
 	import subprocess
 	logger = logging.getLogger(__name__)
 	logger.debug("system: %s", args)
-	p = subprocess.Popen(args, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	p = subprocess.Popen(args, shell=shell, env={'LANG' : 'en_US'}, 
+			stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	out, err = p.communicate()
 	if out:
 		logger.debug("stdout: " + out)
@@ -260,7 +285,8 @@ def init_tests():
 	from scalarizr.bus import bus
 	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../test/resources/etc")
 	szr._init()
-	szr._read_bhs_config()
+	bus.cnf.bootstrap()
+
 	
 def ping_service(host=None, port=None, timeout=None, proto='tcp'):
 	if None == timeout:

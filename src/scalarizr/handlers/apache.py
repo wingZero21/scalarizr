@@ -4,16 +4,25 @@ Created on Dec 25, 2009
 @author: marat
 @author: Dmytro Korsakov
 '''
+
 from scalarizr.bus import bus
-from scalarizr.behaviour import Behaviours
-from scalarizr.handlers import Handler, HandlerError, lifecircle
+from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
-from scalarizr.util import disttool, backup_file, initd
+from scalarizr.util import disttool, backup_file, initd, configtool, \
+	cached, firstmatched, validators
 from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util.initd import InitdError
 import logging
 import os
 import re
-from scalarizr.util.initd import InitdError
+
+
+
+
+BEHAVIOUR = BuiltinBehaviours.APP
+CNF_SECTION = BEHAVIOUR
+CNF_NAME = BEHAVIOUR + '.ini'
 
 
 if disttool.is_redhat_based():
@@ -43,16 +52,60 @@ logger.debug("Explore apache service to initd module (initd_script: %s, pid_file
 initd.explore("apache", initd_script, pid_file)
 
 
+# Export behavior configuration
+class ApacheOptions(Configurator.Container):
+	'''
+	app behavior
+	'''
+	cnf_name = CNF_NAME
+	
+	class apache_conf_path(Configurator.Option):
+		'''
+		Apache configuration file location.
+		'''
+		name = CNF_SECTION + '/apache_conf_path'
+		required = True
+		
+		@property 
+		@cached
+		def default(self):
+			return firstmatched(lambda p: os.path.exists(p),
+					('/etc/apache2/apache2.conf', '/etc/httpd/conf/httpd.conf'), '')
+		
+		@validators.validate(validators.file_exists)		
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
+		
+		value = property(Configurator.Option._get_value, _set_value)
+
+	
+	class vhosts_path(Configurator.Option):
+		'''
+		Directory to create virtual hosts configuration in.
+		All Apache virtual hosts, created in the Scalr user interface are placed in a separate
+		directory and included to the main Apache configuration file.
+		'''
+		name = CNF_SECTION + '/vhosts_path'
+		default = 'private.d/vhosts'
+		required = True
+
+
+
 def get_handlers ():
 	return [ApacheHandler()]
 
 class ApacheHandler(Handler):
 	_logger = None
 	_queryenv = None
+	_cnf = None
+	'''
+	@type _cnf: scalarizr.config.ScalarizrCnf
+	'''
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
+		self._cnf = bus.cnf
 		self.name_vhost_regexp = re.compile(r'NameVirtualHost\s+\*[^:]')
 		self.vhost_regexp = re.compile('<VirtualHost\s+\*>')
 		self.strip_comments_regexp = re.compile( r"#.*\n")
@@ -63,26 +116,32 @@ class ApacheHandler(Handler):
 		self.ssl_conf_name_vhost_regexp = re.compile(r"NameVirtualHost\s+\*:\d+\n",re.IGNORECASE)
 		self.ssl_conf_listen_regexp = re.compile(r"Listen\s+\d+\n",re.IGNORECASE)
 		bus.define_events('apache_reload')
-		bus.on("start", self.on_start)
-		bus.on("before_host_down", self.on_before_host_down)
+		bus.on("init", self.on_init)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return Behaviours.APP in behaviour and message.name == Messages.VHOST_RECONFIGURE
+		return BEHAVIOUR in behaviour and message.name == Messages.VHOST_RECONFIGURE
 
-		
 	def on_VhostReconfigure(self, message):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
 		self._reload_apache()
 
-	def on_start(self):
-		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+	def on_init(self):
+		bus.on("start", self.on_start)
+		bus.on('before_host_up', self.on_before_host_up)
+		bus.on("before_host_down", self.on_before_host_down)
+				
+
+	def on_start(self, *args):
+		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting Apache")
 				initd.start("apache")
 			except initd.InitdError, e:
 				self._logger.error(e)
-							
+
+	on_before_host_up = on_start
+		
 	def on_before_host_down(self, *args):
 		try:
 			self._logger.info("Stopping apache")
@@ -92,12 +151,11 @@ class ApacheHandler(Handler):
 			if initd.is_running("apache"):
 				raise
 
-
 	def _update_vhosts(self):
 				
 		config = bus.config
-		vhosts_path = config.get('behaviour_app','vhosts_path')
-		httpd_conf_path = config.get('behaviour_app','httpd_conf_path')
+		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION,'vhosts_path'))
+		httpd_conf_path = config.get(CNF_SECTION,'apache_conf_path')
 		cert_path = bus.etc_path + '/private.d/keys'	
 		
 		self.server_root = self._get_server_root(httpd_conf_path)
@@ -108,13 +166,16 @@ class ApacheHandler(Handler):
 		
 		if [] != received_vhosts:
 			if not os.path.exists(vhosts_path):
-				self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
-				try:
-					os.makedirs(vhosts_path)
-					self._logger.debug("Virtual hosts dir %s created", vhosts_path)
-				except OSError, e:
-					self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
-					raise
+				if not vhosts_path:
+					self._logger.error('Property vhosts_path is empty.')
+				else:
+					self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
+					try:
+						os.makedirs(vhosts_path)
+						self._logger.debug("Virtual hosts dir %s created", vhosts_path)
+					except OSError, e:
+						self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
+						raise
 			
 			list_vhosts = os.listdir(vhosts_path)
 			if [] != list_vhosts:

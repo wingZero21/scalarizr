@@ -5,17 +5,25 @@ Created on Jan 6, 2010
 @author: Dmytro Korsakov
 '''
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler, HandlerError, lifecircle
-from scalarizr.behaviour import Behaviours
+from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
-from scalarizr.util import configtool, disttool, system, initd
+from scalarizr.util import configtool, disttool, system, initd, cached, firstmatched,\
+	validators
 from scalarizr.util.filetool import read_file, write_file
 import os
 import re
 import shutil
 import subprocess
 import logging
+from datetime import datetime
 
+
+BEHAVIOUR = BuiltinBehaviours.WWW
+CNF_NAME = BEHAVIOUR
+CNF_SECTION = BEHAVIOUR
+
+# Explore service to initd utility
 initd_script = "/etc/init.d/nginx"
 if not os.path.exists(initd_script):
 	raise HandlerError("Cannot find Nginx init script at %s. Make sure that nginx is installed" % initd_script)
@@ -33,6 +41,66 @@ logger = logging.getLogger(__name__)
 logger.debug("Explore Nginx service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
 initd.explore("nginx", initd_script, pid_file, tcp_port=80)
 
+
+# Nginx behaviours configuration options
+class NginxOptions(Configurator.Container):
+	'''
+	www behaviour
+	'''
+	cnf_name = CNF_NAME
+	
+	class binary_path(Configurator.Option):
+		'''
+		Path to nginx binary
+		'''
+		name = CNF_SECTION + '/binary_path'
+		required = True
+		
+		@property
+		@cached
+		def default(self):
+			return firstmatched(lambda p: os.access(p, os.F_OK | os.X_OK), 
+					('/usr/sbin/nginx',	'/usr/local/nginx/sbin/nginx'), '')
+
+		@validators.validate(validators.executable)
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
+			
+		value = property(Configurator.Option._get_value, _set_value)
+
+
+	class app_port(Configurator.Option):
+		'''
+		App role port
+		'''
+		name = CNF_SECTION + '/app_port'
+		default = '80'
+		required = True
+		
+		@validators.validate(validators.portnumber())
+		def _set_value(self, v):
+			Configurator.Option._set_value(self, v)
+		
+		value = property(Configurator.Option._get_value, _set_value)
+		
+
+	class app_include_path(Configurator.Option):
+		'''
+		App upstreams configuration file path.
+		'''
+		name = CNF_SECTION + '/app_include_path'
+		default = '/etc/nginx/app-servers.include'
+		required = True
+		
+	class https_include_path(Configurator.Option):
+		'''
+		HTTPS configuration file path.
+		'''
+		name = CNF_SECTION + '/https_include_path'
+		default = '/etc/nginx/https.include'
+		required = True
+
+
 def get_handlers():
 	return [NginxHandler()]
 
@@ -41,17 +109,24 @@ class NginxHandler(Handler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service	
+		self._cnf = bus.cnf
 		bus.define_events("nginx_upstream_reload")
+		bus.on("init", self.on_init)
+		
+	def on_init(self):
 		bus.on("start", self.on_start)
+		bus.on('before_host_up', self.on_before_host_up)
 		bus.on("before_host_down", self.on_before_host_down)
 		
-	def on_start(self):
-		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+	def on_start(self, *args):
+		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting Nginx")
 				initd.start("nginx")
 			except initd.InitdError, e:
 				self._logger.error(e)	
+				
+	on_before_host_up = on_start
 	
 	def on_HostUp(self, message):
 		self.nginx_upstream_reload()
@@ -59,18 +134,17 @@ class NginxHandler(Handler):
 	def on_HostDown(self, message):
 		self.nginx_upstream_reload()
 	
-	def nginx_upstream_reload(self):
+	def nginx_upstream_reload(self, force_reload=False):
 		config = bus.config
-		section = configtool.get_behaviour_section_name(Behaviours.WWW)
-		nginx_binary = config.get(section, "binary_path")
-		app_port = config.get(section, "app_port") or "80"
-		include = config.get(section, "app_include_path")
+		nginx_binary = config.get(CNF_SECTION, "binary_path")
+		app_port = config.get(CNF_SECTION, "app_port") or "80"
+		include = config.get(CNF_SECTION, "app_include_path")
 		config_dir = os.path.dirname(include)
 		nginx_conf_path = config_dir + '/nginx.conf'
 		default_conf_path = config_dir + '/sites-enabled/' + 'default'
 		initd_script = "/etc/init.d/nginx"
 		
-		template_path = os.path.join(bus.etc_path, "public.d/handler.nginx/app-servers.tpl")
+		template_path = os.path.join(bus.etc_path, "public.d/nginx/app-servers.tpl")
 		
 		if not os.path.exists(template_path):
 			template_content = """\nupstream backend {\n\tip_hash;\n\n\t${upstream_hosts}\n}\n"""
@@ -80,7 +154,7 @@ class NginxHandler(Handler):
 
 		# Create upstream hosts configuration
 		upstream_hosts = ""
-		for app_serv in self._queryenv.list_roles(behaviour = Behaviours.APP):
+		for app_serv in self._queryenv.list_roles(behaviour = BuiltinBehaviours.APP):
 			for app_host in app_serv.hosts :
 				upstream_hosts += "\tserver %s:%s;\n" % (app_host.internal_ip, app_port)
 		if not upstream_hosts:
@@ -111,14 +185,15 @@ class NginxHandler(Handler):
 			log_message = "Reading old configuration from %s" % include
 			old_include = read_file(include, msg = log_message, logger = self._logger)
 
-		if template == old_include:
+		if template == old_include and not force_reload:
 			self._logger.info("nginx upstream configuration wasn`t changed.")
 		else:
 			self._logger.info("nginx upstream configuration was changed.")
 			self._logger.debug("Creating backup config files.")
-			print include
 			if os.path.isfile(include):
 				shutil.move(include, include+".save")
+			else:
+				self._logger.debug('%s does not exist. Nothing to backup.' % include)
 				
 			log_message = "Writing template to %s" % include			
 			write_file(include, template, msg = log_message, logger = self._logger)
@@ -199,15 +274,19 @@ class NginxHandler(Handler):
 					self._logger.error("Configuration error detected:" +  stderr + " Reverting configuration.")
 					if os.path.isfile(include):
 						shutil.move(include, include+".junk")
+					else:
+						self._logger.debug('%s does not exist', include)
 					if os.path.isfile(include+".save"):
 						shutil.move(include+".save", include)
+					else:
+						self._logger.debug('%s does not exist', include+".save")
 				
 				else:
 					# Reload nginx
 					self._reload_nginx()
 
 		bus.fire("nginx_upstream_reload")
-		
+	
 	
 	def on_before_host_down(self, *args):
 		try:
@@ -221,18 +300,74 @@ class NginxHandler(Handler):
 		
 	def on_BeforeHostTerminate(self, message):
 		config = bus.config
-		section = configtool.get_behaviour_section_name(Behaviours.WWW)
-		include_path = config.get(section, "app_include_path")
+		include_path = config.get(CNF_SECTION, "app_include_path")
 		include = read_file(include_path, logger = self._logger)
 		if include and message.local_ip:
 			new_include = include.replace("\tserver %s:80;\n" % message.local_ip,"")
 			write_file(include_path, new_include, logger=self._logger)
 	
+
+	def _update_vhosts(self):
+		self._logger.info("Requesting virtual hosts list")
+		received_vhosts = self._queryenv.list_virtual_hosts()
+		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
+				
+		if [] != received_vhosts:
+			
+			https_certificate = self._queryenv.get_https_certificate()
+			
+			cert_path = configtool.get_key_filename("https.crt", private=True)
+			pk_path = configtool.get_key_filename("https.key", private=True)
+			
+			if https_certificate[0]:
+				msg = 'Writing ssl cert' 
+				cert = https_certificate[0]
+				write_file(cert_path, cert, msg=msg, logger=self._logger)
+			else:
+				self._logger.error('Scalr returned empty SSL Cert')
+				return
+				
+			if len(https_certificate)>1 and https_certificate[1]:
+				msg = 'Writing ssl key'
+				pk = https_certificate[1]
+				write_file(pk_path, pk, msg=msg, logger=self._logger)
+			else:
+				self._logger.error('Scalr returned empty SSL Cert')
+				return
+			
+			https_config = ''			
+			for vhost in received_vhosts:
+				if vhost.hostname and vhost.type == 'nginx': #and vhost.https
+					raw = vhost.raw.replace('/etc/aws/keys/ssl/https.crt',cert_path)
+					raw = raw.replace('/etc/aws/keys/ssl/https.key',pk_path)
+					https_config += raw + '\n'
+					
+		else:
+			self._logger.debug('Scalr returned empty virtualhost list')
+		
+		if https_config:
+			https_conf_path = bus.etc_path + '/nginx/https.include'
+			
+			if os.path.exists(https_conf_path) and read_file(https_conf_path, logger=self._logger):
+				time_suffix = str(datetime.now()).replace(' ','.')
+				shutil.move(https_conf_path, https_conf_path + time_suffix)
+				
+			msg = 'Writing virtualhosts to https.include' 	
+			write_file(https_conf_path, https_config, msg=msg, logger=self._logger)
+		
+
+	def on_VhostReconfigure(self, message):
+		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
+		self._update_vhosts()
+		self.nginx_upstream_reload(True)
+	
+	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return Behaviours.WWW in behaviour and \
+		return BEHAVIOUR in behaviour and \
 			(message.name == Messages.HOST_UP or \
 			message.name == Messages.HOST_DOWN or \
-			message.name == Messages.BEFORE_HOST_TERMINATE)	
+			message.name == Messages.BEFORE_HOST_TERMINATE or \
+			message.name == Messages.VHOST_RECONFIGURE)	
 	
 	def _reload_nginx(self):
 		nginx_pid = read_file(pid_file, logger = self._logger)

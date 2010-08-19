@@ -14,7 +14,7 @@ from scalarizr.util import system, initd, disttool, cryptotool, configtool
 from scalarizr.platform.ec2 import Ec2Platform
 from subprocess import Popen, PIPE, STDOUT
 import time, shutil, hashlib, pwd
-from scalarizr.behaviour import Behaviours
+
 
 class _Volume:
 	def __init__(self):
@@ -60,7 +60,7 @@ class Test(unittest.TestCase):
 		system('rm -rf /mnt/tmpdir/*')
 		initd.start("mysql")
 		config = bus.config
-		section	= configtool.get_behaviour_section_name(mysql.Behaviours.MYSQL)
+		section	= configtool.get_behaviour_section_name(mysql.BEHAVIOUR)
 		try:
 			config.remove_option(section, mysql.OPT_ROOT_USER)
 			config.remove_option(section, mysql.OPT_ROOT_PASSWORD)
@@ -145,7 +145,7 @@ class Test(unittest.TestCase):
 		bus.queryenv_service = _QueryEnv()
 		bus.platform = _Platform()
 		config = bus.config
-		sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		sect_name = configtool.get_behaviour_section_name(mysql.BEHAVIOUR)
 		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '0')
 		handler = _MysqlHandler()
 		root_pass, repl_pass, stat_pass = handler._add_mysql_users(mysql.ROOT_USER, mysql.REPL_USER, mysql.STAT_USER)
@@ -202,7 +202,7 @@ class Test(unittest.TestCase):
 		bus.platform = _Platform()
 		message = _Message()
 		config = bus.config
-		sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		sect_name = configtool.get_behaviour_section_name(mysql.BEHAVIOUR)
 		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '0')
 		bus.queryenv_service.storage = 'ebs'
 		handler = _MysqlHandler()
@@ -217,7 +217,7 @@ class Test(unittest.TestCase):
 		bus.platform = _Platform()
 		message = _Message()
 		config = bus.config
-		sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		sect_name = configtool.get_behaviour_section_name(mysql.BEHAVIOUR)
 		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '0')
 		bus.queryenv_service.storage = 'eph'
 		handler = _MysqlHandler()
@@ -231,7 +231,7 @@ class Test(unittest.TestCase):
 		bus.queryenv_service = _QueryEnv()
 		bus.platform = _Platform()
 		config = bus.config
-		sect_name = configtool.get_behaviour_section_name(Behaviours.MYSQL)
+		sect_name = configtool.get_behaviour_section_name(mysql.BEHAVIOUR)
 		config.set(sect_name, mysql.OPT_REPLICATION_MASTER, '0')
 		message = _Message()
 		message.root_password = '123'

@@ -24,7 +24,7 @@ class HooksHandler(Handler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		config = bus.config
-		self._hooks_path = config.get(configtool.get_handler_section_name(self.name), "hooks_path")
+		self._hooks_path = config.get(self.name, "hooks_path")
 		bus.on("init", self.on_init)
 		
 	def on_init(self):

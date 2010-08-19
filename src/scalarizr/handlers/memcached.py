@@ -5,7 +5,8 @@ Created on Jul 23, 2010
 @author: shaitanich
 '''
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler, HandlerError, lifecircle
+from scalarizr.config import ScalarizrState, BuiltinBehaviours
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.util import disttool, initd
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr.util import iptables
@@ -30,6 +31,8 @@ logger = logging.getLogger(__name__)
 logger.debug("Explore memcached service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
 initd.explore("memcached", initd_script, pid_file)
 
+BEHAVIOUR = BuiltinBehaviours.MEMCACHED
+
 def get_handlers():
 	return [MemcachedHandler()]
 
@@ -42,7 +45,7 @@ class MemcachedHandler(Handler):
 		self._logger = logging.getLogger(__name__)
 		
 		config = bus.config
-		cache_size = config.get('behaviour_memcached','cache_size')
+		cache_size = config.get(BEHAVIOUR, 'cache_size')
 		
 		if disttool._is_debian_based:
 			self.mcd_conf_path = '/etc/memcached.conf' 
@@ -69,11 +72,12 @@ class MemcachedHandler(Handler):
 		bus.on("start", self.on_start)
 		bus.on("before_host_up", self.on_before_host_up)
 
-	def on_start(self):
-		if lifecircle.get_state() == lifecircle.STATE_RUNNING:
+
+	def on_start(self, *args):
+		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting memcached")
-				initd.start("memcached")
+				initd.start("apache")
 			except initd.InitdError, e:
 				self._logger.error(e)
 	
@@ -98,7 +102,7 @@ class MemcachedHandler(Handler):
 		try:
 			self._logger.info("Stopping memcached")
 			initd.stop("memcached")
-		except initd.InitdError, e:
+		except initd.InitdError:
 			self._logger.error("Cannot stop memcached")
 			if initd.is_running("memcached"):
 				raise
@@ -108,7 +112,6 @@ class MemcachedHandler(Handler):
 		# Adding iptables rules
 		ips = []
 		roles = self._queryenv.list_roles()
-		self._logger.debug("MEMCACHED ASKED FOR % ROLES:",len(roles))
 		
 		for role in roles:
 			for host in role.hosts:
@@ -128,4 +131,3 @@ class MemcachedHandler(Handler):
 	def on_HostDown(self, message):
 		for rule in self.rules:
 			self.ip_tables.delete_rule(rule)
-		 

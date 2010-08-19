@@ -9,11 +9,13 @@ from scalarizr.handlers import Handler
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import configtool
-from scalarizr.behaviour import Behaviours
+from scalarizr.config import BuiltinBehaviours
 import logging
 import os
 
+# TODO: Configurator
 # TODO: handle IPAddressChanged
+
 
 def get_handlers ():
 	return [IpListBuilder()]
@@ -28,7 +30,7 @@ class IpListBuilder(Handler):
 		self._queryenv = bus.queryenv_service
 		
 		config = bus.config
-		self._base_path = config.get(configtool.get_handler_section_name(self.name), "base_path")
+		self._base_path = config.get(self.name, "base_path")
 		self._base_path = self._base_path.replace('$etc_path', bus.etc_path)
 		self._base_path = os.path.normpath(self._base_path)
 		bus.on("init", self.on_init)
@@ -65,7 +67,7 @@ class IpListBuilder(Handler):
 				rolename, behaviour, ip)
 		self._modify_tree(rolename, behaviour, ip, 
 				modfn=self._create_file, 
-				replication_master=behaviour == Behaviours.MYSQL and self._host_is_replication_master(ip, rolename))
+				replication_master=behaviour == BuiltinBehaviours.MYSQL and self._host_is_replication_master(ip, rolename))
 			
 	def on_HostDown(self, message):
 		behaviour = message.behaviour
@@ -76,7 +78,7 @@ class IpListBuilder(Handler):
 						rolename, behaviour, ip)
 		self._modify_tree(rolename, behaviour, ip, 
 				modfn=self._remove_file, 
-				replication_master=behaviour == Behaviours.MYSQL and self._host_is_replication_master(ip, rolename))
+				replication_master=behaviour == BuiltinBehaviours.MYSQL and self._host_is_replication_master(ip, rolename))
 
 	on_RebootStart = on_HostDown
 	
@@ -86,7 +88,7 @@ class IpListBuilder(Handler):
 		# Touch/Unlink %role_name%/xx.xx.xx.xx
 		modfn(os.path.join(self._base_path, rolename, ip))
 		
-		if behaviour == Behaviours.MYSQL:
+		if behaviour == BuiltinBehaviours.MYSQL:
 			suffix = "master" if replication_master else "slave"
 			# Touch/Unlink mysql-(master|slave)/xx.xx.xx.xx
 			mysql_path = os.path.join(self._base_path, "mysql-" + suffix)

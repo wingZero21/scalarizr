@@ -17,6 +17,12 @@ class Bus(Observable):
 	@ivar string: Application etc path 
 	"""
 	
+	cnf = None
+	'''
+	@ivar cnf: Scalarizr configuration facade. Access ini settings, read/write keys
+	@type cnf: scalarizr.config.ScalarizrCnf 
+	'''
+	
 	config = None
 	"""
 	@ivar ConfigParser.ConfigParser: Configuration (config.ini and includes) 

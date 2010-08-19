@@ -123,6 +123,8 @@ class EbsHandler(scalarizr.handlers.Handler):
 			
 		elif message.action == "remove":
 			self._logger.info("udev notified me that block device %s was detached", message.device)
+			fstab = fstool.Fstab()
+			fstab.remove(message.devname)
 			
 			self._send_message(
 				Messages.BLOCK_DEVICE_DETACHED, 

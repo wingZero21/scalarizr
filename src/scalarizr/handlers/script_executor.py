@@ -6,10 +6,11 @@ Created on Dec 24, 2009
 
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.messaging import Queues, Messages, MetaOptions
-from scalarizr.util import parse_size, format_size, configtool
-from scalarizr.util.filetool import read_file, write_file
+from scalarizr.messaging import Queues, Messages
+from scalarizr.util import parse_size, format_size
+from scalarizr.util.filetool import write_file
 import threading
+from scalarizr.config import ScalarizrState
 try:
 	import time
 except ImportError:
@@ -22,19 +23,6 @@ import stat
 import logging
 import binascii
 
-
-#FIXME: Script 'phpinfo' terminated
-"""
-Exception in thread Thread-2:
-Traceback (most recent call last):
-  File "/usr/lib/python2.6/threading.py", line 525, in __bootstrap_inner
-    self.run()
-  File "/usr/lib/python2.6/threading.py", line 477, in run
-    self.__target(*self.__args, **self.__kwargs)
-  File "/opt/scalarizr/src/scalarizr/handlers/script_executor.py", line 174, in _execute_script
-    os.remove(script_path)
-OSError: [Errno 2] No such file or directory: '/usr/local/bin/scalr-scripting.1273578026.9/phpinfo'
-"""
 
 
 def get_handlers ():
@@ -56,6 +44,7 @@ class ScriptExecutor(Handler):
 	_queryenv = None
 	_msg_service = None
 	_platform = None
+	_cnf = None
 	
 	_event_name = None
 	_num_pending_async = 0
@@ -78,11 +67,12 @@ class ScriptExecutor(Handler):
 		self._msg_service = bus.messaging_service
 		self._platform = bus.platform
 		self._config = bus.config
+		self._cnf = bus.cnf
 		self._lock = threading.Lock()
 		
 		self.hashbang_re = re.compile('^#!(\S+)\s*')
 		
-		sect_name = configtool.get_handler_section_name(self.name)
+		sect_name = self.name
 		if not self._config.has_section(sect_name):
 			raise Exception("Script executor handler is not configured. "
 						    + "Config has no section '%s'" % sect_name)
@@ -278,12 +268,9 @@ class ScriptExecutor(Handler):
 		self._event_name = message.event_name if message.name == Messages.EXEC_SCRIPT else message.name
 		self._logger.info("Scalr notified me that '%s' fired", self._event_name)		
 		
-		"""
-		mine_server_id = self._config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
-		if mine_server_id == message.meta[MetaOptions.SERVER_ID]:
-			self._logger.info("Ignore event with the same server_id as mine")
+		if self._cnf.state == ScalarizrState.IMPORTING:
+			self._logger.info('Scripting is OFF when state: %s', ScalarizrState.IMPORTING)
 			return
-		""" 
 		
 		if message.name == Messages.EXEC_SCRIPT:
 			self.exec_scripts_on_event(self._event_name, message.meta["event_id"])

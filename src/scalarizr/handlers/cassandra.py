@@ -5,7 +5,7 @@ Created on Jun 23, 2010
 @author: Dmytro Korsakov
 '''
 from scalarizr.bus import bus
-from scalarizr.behaviour import Behaviours
+from scalarizr.config import BuiltinBehaviours
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages, Queues
 import logging
@@ -40,6 +40,7 @@ logger.debug("Explore Cassandra service to initd module (initd_script: %s, pid_f
 initd.explore("cassandra", initd_script)
 
 # TODO: rewrite initd to handle service's ip address
+
 
 class CassandraMessages:
 	
@@ -111,7 +112,7 @@ class Cassandra(object):
 		self.inst_id = self.platform.get_instance_id()
 		
 		
-		self.sect_name = configtool.get_behaviour_section_name(Behaviours.CASSANDRA)
+		self.sect_name = BuiltinBehaviours.CASSANDRA
 		self.sect = configtool.section_wrapper(config, self.sect_name)
 
 		self.role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
@@ -191,13 +192,13 @@ class CassandraScalingHandler(Handler):
 		bus.on("host_init_response", self.on_host_init_response)
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return Behaviours.CASSANDRA in behaviour and \
+		return BuiltinBehaviours.CASSANDRA in behaviour and \
 				( message.name == Messages.HOST_INIT or
 				message.name == Messages.HOST_UP or
 				message.name == Messages.HOST_DOWN )
 	
 	def on_HostInit(self, message):
-		if message.behaviour == Behaviours.CASSANDRA:
+		if message.behaviour == BuiltinBehaviours.CASSANDRA:
 			if not message.local_ip:
 				ip = message.remote_ip
 			else:
@@ -551,7 +552,7 @@ class CassandraScalingHandler(Handler):
 		message.cassandra = dict(volume_id = ebs_volume.id)
 
 	def on_HostUp(self, message):
-		if message.behaviour == Behaviours.CASSANDRA:
+		if message.behaviour == BuiltinBehaviours.CASSANDRA:
 			
 			if not message.local_ip:
 				ip = message.remote_ip
@@ -583,7 +584,7 @@ class CassandraScalingHandler(Handler):
 		
 	def on_HostDown(self, message):
 		
-		if message.behaviour == Behaviours.CASSANDRA:
+		if message.behaviour == BuiltinBehaviours.CASSANDRA:
 			
 			if not message.local_ip:
 				ip = message.remote_ip
@@ -694,8 +695,8 @@ class CassandraScalingHandler(Handler):
 			del(cass)
 			
 	def _update_config(self, data): 
-		updates = {cassandra.sect_name: data}
-		configtool.update(configtool.get_behaviour_filename(Behaviours.CASSANDRA, ret=configtool.RET_PRIVATE), updates)
+		cnf = bus.cnf
+		cnf.update_ini(BuiltinBehaviours.CASSANDRA, {cassandra.sect_name: data})
 		
 	def _cleanup(self):
 		out,err = system('nodetool -h localhost cleanup')[0:2]
@@ -720,7 +721,7 @@ class CassandraDataBundleHandler(Handler):
 		self._logger = logging.getLogger(__name__)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return Behaviours.CASSANDRA in behaviour and \
+		return BuiltinBehaviours.CASSANDRA in behaviour and \
 				( message.name == CassandraMessages.CREATE_DATA_BUNDLE or
 				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE or
 				message.name == CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT)

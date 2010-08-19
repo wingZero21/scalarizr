@@ -2,6 +2,7 @@
 Created on Apr 1, 2010
 
 @author: marat
+@deprecated
 '''
 from scalarizr.bus import bus
 from ConfigParser import RawConfigParser
@@ -55,24 +56,33 @@ def _get_filename(basename, ret):
 	else:
 		raise ConfigError("Incorrect method call.`ret` must be one of RET_* constants")
 
+def get_handler_basename(handler_name):
+	return "handler.%s.ini" % handler_name
+
 def get_handler_filename(handler_name, ret=RET_BOTH):
-	return _get_filename("handler.%s.ini" % (handler_name), ret)
+	return _get_filename(get_handler_basename(handler_name), ret)
+
+def get_behaviour_basename(behaviour_name):
+	return "behaviour.%s.ini" % behaviour_name
 
 def get_behaviour_filename(behaviour_name, ret=RET_BOTH):
-	return _get_filename("behaviour.%s.ini" % (behaviour_name), ret)	
+	return _get_filename(get_behaviour_basename(behaviour_name), ret)	
+
+def get_platform_basename(platform_name):
+	return "platform.%s.ini" % platform_name
 
 def get_platform_filename(platform_name, ret=RET_BOTH):
-	return _get_filename("platform.%s.ini" % (platform_name), ret)
+	return _get_filename(get_platform_basename(platform_name), ret)
 
-def get_platform_section_name(platform_name):
-	return "platform_%s" % (platform_name)
+def get_handler_section_name(handler_name):
+	return "handler_%s" % (handler_name)
 
 def get_behaviour_section_name(behaviour_name):
 	return "behaviour_%s" % (behaviour_name)
 
-def get_handler_section_name(handler_name):
-	return "handler_%s" % (handler_name)
-	
+def get_platform_section_name(platform_name):
+	return "platform_%s" % (platform_name)
+
 def get_public_d_path(basename=None):
 	args = [bus.etc_path, "public.d"]
 	if basename:
