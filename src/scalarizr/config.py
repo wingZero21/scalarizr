@@ -411,8 +411,6 @@ class ScalarizrCnf(object):
 		
 		def __init__(self, cnf):
 			self.cnf = cnf
-			self.explore_key(self.DEFAULT_KEY, 'Scalarizr crypto key', True)
-			self.explore_key(self.FARM_KEY, 'Farm crypto key', True)
 			
 		def _ini_to_kvals(self, ini):
 			values = {}
@@ -699,6 +697,10 @@ class ScalarizrCnf(object):
 		if not bus.config:
 			bus.config = ConfigParser()
 		self.ini = ScalarizrIni(bus.config)
+		
+		self.explore_key(self.DEFAULT_KEY, 'Scalarizr crypto key', True)
+		self.explore_key(self.FARM_KEY, 'Farm crypto key', True)
+		
 		
 	def _chkdir(self, dir):
 		if not os.path.exists(dir) and os.path.isdir(dir):
