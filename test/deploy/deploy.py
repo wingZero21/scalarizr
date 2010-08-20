@@ -187,6 +187,9 @@ class Composer():
 		commands = []
 		# tar src
 		commands.append(PACK + params['source'] + ' scalarizr')
+		if params.has_key(LOCAL_SCRIPTS):
+			for local_script in params[LOCAL_SCRIPTS]:
+				commands.append(local_script[0] + ' ' + local_script[1])
 		# FUTURE: tar etc
 		return commands
 	
@@ -217,6 +220,24 @@ class Composer():
 		# execute import
 		if params.has_key('import_cmd'):
 			commands.append(params['import_cmd'])
+		#FILES
+		if params.has_key(FILES):
+			for file in params[FILES]:
+				source = os.path.join(params['tempdir'],file[0])
+				dest = file[1]
+				if source != dest:
+					commands.append('mv %s %s' % (source, dest))
+		#SCRIPTS
+		if params.has_key(SCRIPTS):
+			for file in params[SCRIPTS]:
+				source = os.path.join(params['tempdir'],file[0])
+				dest = file[1].split()[0]
+				if source != dest:
+					commands.append('mv %s %s' % (source, dest))
+				arguments = ''
+				for i in range(1,len(file[1].split())):
+					arguments += file[1].split()[i] + ' '
+				commands.append('%s %s' % (dest, arguments))		
 		# FUTURE: unzip etc tar
 		return commands
 	
@@ -228,6 +249,14 @@ class Composer():
 		paths[params['init_script']] = os.path.join(params['tempdir'], os.path.basename(params['init_script']))
 		#upload post.sh
 		paths[params['post_script']] = os.path.join(params['tempdir'], os.path.basename(params['post_script']))
+		#FILES
+		if params.has_key(FILES):
+			for file in params[FILES]:
+				paths[file[0]] = os.path.join(params['tempdir'], os.path.basename(file[1]))
+		#SCRIPTS
+		if params.has_key(SCRIPTS):
+			for file in params[SCRIPTS]:
+				paths[file[0]] = os.path.join(params['tempdir'], os.path.basename(file[1].split()[0]))		
 		#FUTURE: upload etc tar
 		return paths
 	
@@ -332,13 +361,10 @@ class Executor():
 		
 		
 def main():
-	params = Parametres().get_params()
 	connection = Parametres().get_connection_data()
-	composer = Composer()
-	executor = Executor(connection)
-	
-	run_list = composer.compose(params)
-	executor.run(run_list)
+	params = Parametres().get_params()
+	run_list = Composer().compose(params)
+	Executor(connection).run(run_list)
 	
 	
 if __name__ == "__main__":
