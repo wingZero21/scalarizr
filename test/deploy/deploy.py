@@ -24,10 +24,13 @@ MEMCACHED = 'memcached'
 BASE= 'base'
 ALL = 'ALL'
 FILES = 'FILES'
+SCRIPTS = 'scripts'
+LOCAL_SCRIPTS = 'local_scripts'
 
 TAR_FILE = 'scalarizr.tar.gz'
 PACK = 'tar -czf %s ' % TAR_FILE
 UNPACK = 'tar -xzf %s -C ' % TAR_FILE
+REMOTE_LOG = '/var/log/scalarizr.log'
 
 
 class Parametres():
@@ -37,16 +40,21 @@ class Parametres():
 	def __init__(self):
 		self.params = {}
 	
-	def get_params(self):
+	def get_params(self, interactive=True):
 		execution_params = self._get_execution_params()
 		self._add_default_params(execution_params)
 		
 		platform = execution_params['platform']
-		config_params = self._get_config_params(platform)
+		behaviour = execution_params['behaviour']
+		config_params = self._get_config_params(platform, behaviour)
 		
 		self.params.update(execution_params)
 		self.params.update(config_params)
-		self.params.update(self._get_import_command())
+		
+		if interactive:
+			import_cmd = self._get_import_command()
+			if import_cmd:
+				self.params.update(self._get_import_command())
 		
 		return self.params
 	
@@ -64,14 +72,25 @@ class Parametres():
 		parser.add_option("--init_script", dest="init_script", help=" path to init file")
 		parser.add_option("--post_script", dest="post_script", help="path to post.sh")
 		parser.add_option("-d", "--debug", dest="debug", default='1', help="set debug level")
+		parser.add_option('-l', '--get_log', dest="get_log", default='1', help='Fetch log file from instance.')
 		
 		(options, args) = parser.parse_args()
 		
 		if not options.key or not options.ip or not options.platform:
 			print parser.format_help()
 			sys.exit()
+			
+		if not os.path.exists(options.key):
+			print 'Wrong RSA key path. Exit'
+			sys.exit()
 		
-		return options
+		if options.source and not os.path.exists(options.source):
+			print 'Wrong source path. Exit'
+			sys.exit()
+		
+		return {'key':options.key, 'ip':options.ip, 'platform':options.platform, 'source':options.source\
+			, 'behaviour':options.behaviour, 'init_script':options.init_script, 'post_script':options.post_script\
+			, 'debug':options.debug, 'get_log':options.get_log}
 	
 	def _add_default_params(self,params):
 		if not params['init_script'] and os.path.isfile(os.path.realpath('scalarizr')):
@@ -85,12 +104,17 @@ class Parametres():
 			if os.path.exists(os.path.join(local_path, 'scalarizr')):
 				params['source'] = local_path
 	
-	def _get_config_params(self, platform):
+	def _get_config_params(self, platform, behaviour):
 		
 		options = {}
 			
 		config = ConfigParser.ConfigParser()
 		config_path = platform + '.ini'
+		
+		if not os.path.exists(config_path):
+			print '%s not found. Exit.' % config_path
+			sys.exit()
+			
 		config.read(config_path)
 		
 		try:
@@ -113,14 +137,37 @@ class Parametres():
 		if config.has_section(ALL):
 			options['apps'] =  config.get(ALL, 'apps')
 		
-		if config.has_section(options.behaviour):
-			options['apps'] += ' ' + config.get(options.behaviour, 'apps')
+		if config.has_section(behaviour):
+			if config.has_option(behaviour, 'apps'):
+				options['apps'] += ' ' + config.get(behaviour, 'apps')
 			options['install_cmd'] = options['install_cmd'].replace('_list_', options['apps'])
-
+		else:
+			print "Section %s not found in %s. Exit." % (behaviour, platform)
+			sys.exit()
+			
+		if config.has_section(FILES):
+			options[FILES] = config.items(FILES)
+					
+		if config.has_section(SCRIPTS):
+			options[SCRIPTS] = config.items(SCRIPTS)
+					
+		if config.has_section(LOCAL_SCRIPTS):
+			options[LOCAL_SCRIPTS] = config.items(LOCAL_SCRIPTS)
+		
 		return options
 	
+	def get_connection_data(self):
+		params = self.get_params(interactive=False)
+		return (params['key'], params['login'], params['ip'])
+	
 	def _get_import_command(self):
-		return {'import_cmd':raw_input('Copy input command here:')}
+		import_cmd = raw_input('Copy input command here:')
+		if import_cmd:
+			return {'import_cmd':import_cmd}
+		else: 
+			print 'WARNING: Empty import command. You will need to execute it manually!'
+			return ''
+	
 	
 class Composer():
 	
@@ -133,7 +180,8 @@ class Composer():
 		local = self._compose_local_commands(params)
 		sftp = self._get_sftp_paths(params)
 		remote = self._compose_remote_commands(params)
-		return (local, sftp, remote)
+		fetch = self._get_fetch_paths(params)
+		return (local, sftp, remote, fetch)
 	
 	def _compose_local_commands(self, params):
 		commands = []
@@ -151,7 +199,7 @@ class Composer():
 		# install apps
 		commands.append(params['install_cmd'])
 		# unzip src tar
-		commands.append(UNPACK + ['remote_src_path'])
+		commands.append(UNPACK + params['remote_src_path'])
 		# mv init
 		init_remote_source = os.path.join(params['tempdir'], os.path.basename(params['init_script']))
 		init_remote_dest = '/etc/init.d/scalarizr'
@@ -167,7 +215,8 @@ class Composer():
 		if params['debug']=='1':
 			commands.append('mv /etc/scalr/logging-debug.ini /etc/scalr/logging.ini')
 		# execute import
-		commands.append(params['import_cmd'])
+		if params.has_key('import_cmd'):
+			commands.append(params['import_cmd'])
 		# FUTURE: unzip etc tar
 		return commands
 	
@@ -181,14 +230,22 @@ class Composer():
 		paths[params['post_script']] = os.path.join(params['tempdir'], os.path.basename(params['post_script']))
 		#FUTURE: upload etc tar
 		return paths
-
 	
+	def _get_fetch_paths(self,params):
+		paths = {}
+		#fetch log
+		if params['get_log']=='1':
+			paths[REMOTE_LOG] = os.path.basename(REMOTE_LOG) + '-' + params['ip']
+		return paths
+		
+
 class Executor():
 	
-	def __init__(self):
-		#self.keyfile = keyfile
-		#self.user = user
-		#self.ip = ip
+	def __init__(self, connection):
+		
+		self.keyfile = connection[0]
+		self.user = connection[1]
+		self.ip = connection[2]
 		
 		console = logging.StreamHandler()
 		console.setLevel(logging.DEBUG)
@@ -212,37 +269,42 @@ class Executor():
 		local_commands = commands[0]
 		sftp_commands = commands[1]
 		remote_commands = commands[2]
+		fetch_commands = commands[3]
 		
 		self._logger.debug('Connecting to %s as %s with %s' 
-				% (commands['ip'], commands['login'], commands['key']))
+				% (self.ip, self.user, self.keyfile))
 		
 		for command in local_commands:
-			self._logger(command)
+			self._logger.debug(command)
 	
-		for local,remote in sftp_commands:
-			self._logger('Uploading %s to %s' % (local, remote))
+		for command in sftp_commands:
+			self._logger.debug('Uploading %s to %s' % (command, sftp_commands[command]))
 		
 		for command in remote_commands:
-			self.logger.debug('Executing on remote server: %s' % command)
+			self._logger.debug('Executing on remote server: %s' % command)
+			
+		for command in fetch_commands:
+			self._logger.debug('Fetching %s to %s' % (command, fetch_commands[command]))
 	
 	def _run_with_paramiko(self, commands):	
 
 		local_commands = commands[0]
 		sftp_commands = commands[1]
 		remote_commands = commands[2]
+		fetch_commands = commands[3]
 		
 		for command in local_commands:
 			self.system(command)
 		
 		ssh = paramiko.SSHClient()
 		ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-		ssh.connect(commands['ip'], username=commands['login'], key_filename=commands['key'])
+		ssh.connect(self.ip, username=self.user, key_filename=self.keyfile)
 		
 		ftp=ssh.open_sftp()  
 	
-		for local,remote in sftp_commands:
-			ftp.put(local, remote)
-			self._logger('Uploading %s to %s' % (local, remote))
+		for command in sftp_commands:
+			ftp.put(command, sftp_commands[command])
+			self._logger.debug('Uploading %s to %s' % (command, sftp_commands[command]))
 		
 		for command in remote_commands:
 			self.logger.debug('Executing on remote server: %s' % command)
@@ -251,6 +313,10 @@ class Executor():
 				self._logger.debug(stdout)
 			if stderr:
 				self._logger.error(stderr)
+				
+		for command in fetch_commands:
+			self._logger.debug('Fetching %s to %s' % (command, fetch_commands[command]))
+			ftp.get(command, sftp_commands[command])
 				
 		ssh.close()
 		
@@ -264,14 +330,16 @@ class Executor():
 			self._logger.warning("stderr: " + err)
 		return out, err, p.returncode
 		
+		
 def main():
-	
-	composer = Composer()
-	executor = Executor()
-	
 	params = Parametres().get_params()
+	connection = Parametres().get_connection_data()
+	composer = Composer()
+	executor = Executor(connection)
+	
 	run_list = composer.compose(params)
 	executor.run(run_list)
+	
 	
 if __name__ == "__main__":
 	main()
