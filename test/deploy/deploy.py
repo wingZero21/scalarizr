@@ -185,10 +185,10 @@ class Composer():
 	
 class Executor():
 	
-	def __init__(self, keyfile, user, ip):
-		self.keyfile = keyfile
-		self.user = user
-		self.ip = ip
+	def __init__(self):
+		#self.keyfile = keyfile
+		#self.user = user
+		#self.ip = ip
 		
 		console = logging.StreamHandler()
 		console.setLevel(logging.DEBUG)
@@ -204,7 +204,26 @@ class Executor():
 		self._logger = logger
 	
 	def run(self, commands):
-		self.run_with_paramiko(commands)
+		#self._run_with_paramiko(commands)
+		self._pseudo_run(commands)
+	
+	def _pseudo_run(self, commands):	
+
+		local_commands = commands[0]
+		sftp_commands = commands[1]
+		remote_commands = commands[2]
+		
+		self._logger.debug('Connecting to %s as %s with %s' 
+				% (commands['ip'], commands['login'], commands['key']))
+		
+		for command in local_commands:
+			self._logger(command)
+	
+		for local,remote in sftp_commands:
+			self._logger('Uploading %s to %s' % (local, remote))
+		
+		for command in remote_commands:
+			self.logger.debug('Executing on remote server: %s' % command)
 	
 	def _run_with_paramiko(self, commands):	
 
@@ -217,6 +236,7 @@ class Executor():
 		
 		ssh = paramiko.SSHClient()
 		ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+		ssh.connect(commands['ip'], username=commands['login'], key_filename=commands['key'])
 		
 		ftp=ssh.open_sftp()  
 	
