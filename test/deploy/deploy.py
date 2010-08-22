@@ -41,20 +41,21 @@ class Parametres():
 		self.params = {}
 	
 	def get_params(self, interactive=True):
-		execution_params = self._get_execution_params()
-		self._add_default_params(execution_params)
-		
-		platform = execution_params['platform']
-		behaviour = execution_params['behaviour']
-		config_params = self._get_config_params(platform, behaviour)
-		
-		self.params.update(execution_params)
-		self.params.update(config_params)
+		if not len(self.params):
+			execution_params = self._get_execution_params()
+			self._add_default_params(execution_params)
+			
+			platform = execution_params['platform']
+			behaviour = execution_params['behaviour']
+			config_params = self._get_config_params(platform, behaviour)
+			
+			self.params.update(execution_params)
+			self.params.update(config_params)
 		
 		if interactive:
 			import_cmd = self._get_import_command()
 			if import_cmd:
-				self.params.update(self._get_import_command())
+				self.params.update(import_cmd)
 		
 		return self.params
 	
@@ -63,13 +64,14 @@ class Parametres():
 		parser = OptionParser(usage="Usage: %prog key IP platform \
 			[source behaviour init_script, post_script debug_log]")
 		
-		parser.add_option("-k", "--key", dest="key", help="private key")
+		parser.add_option("-k", "--key", dest="key", help="path private key")
 		parser.add_option("-i", "--ip", dest="ip", help="instance ip")
 		parser.add_option("-p", "--platform", dest="platform", help="[ubuntu8, ubuntu10, centos]")
 		
-		parser.add_option("-s", "--source", dest="source", help="path to scalarizr src dir")	
+		parser.add_option("-s", "--source", dest="source", help="path to scalarizr src")	
+		parser.add_option("-e", "--etc", dest="etc", help="path to scalarizr etc")
 		parser.add_option("-b", "--behaviour", dest="behaviour", default='base', help="[base, app, www, mysql, cassandra, memcached]")
-		parser.add_option("--init_script", dest="init_script", help=" path to init file")
+		parser.add_option("--init_script", dest="init_script", help=" path to init file. Uses init-%platform% file in current dir by default")
 		parser.add_option("--post_script", dest="post_script", help="path to post.sh")
 		parser.add_option("-d", "--debug", dest="debug", default='1', help="set debug level")
 		parser.add_option('-l', '--get_log', dest="get_log", default='1', help='Fetch log file from instance.')
@@ -90,11 +92,11 @@ class Parametres():
 		
 		return {'key':options.key, 'ip':options.ip, 'platform':options.platform, 'source':options.source\
 			, 'behaviour':options.behaviour, 'init_script':options.init_script, 'post_script':options.post_script\
-			, 'debug':options.debug, 'get_log':options.get_log}
+			, 'debug':options.debug, 'get_log':options.get_log, 'etc':options.etc}
 	
 	def _add_default_params(self,params):
-		if not params['init_script'] and os.path.isfile(os.path.realpath('scalarizr')):
-			params['init_script'] = os.path.realpath('scalarizr')
+		if not params['init_script'] and os.path.isfile(os.path.realpath('scalarizr-'+params['platform'])):
+			params['init_script'] = os.path.realpath('scalarizr-'+params['platform'])
 			
 		if not params['post_script'] and os.path.isfile(os.path.realpath('post.sh')):
 			params['post_script'] = os.path.realpath('post.sh')
@@ -103,6 +105,11 @@ class Parametres():
 			local_path = os.path.dirname(__file__)
 			if os.path.exists(os.path.join(local_path, 'scalarizr')):
 				params['source'] = local_path
+		
+		if not params['etc']: 
+			local_path = os.path.dirname(__file__)
+			if os.path.exists(os.path.join(local_path, 'etc')):
+				params['etc'] = local_path
 	
 	def _get_config_params(self, platform, behaviour):
 		
@@ -157,9 +164,9 @@ class Parametres():
 		return options
 	
 	def get_connection_data(self):
-		params = self.get_params(interactive=False)
+		params = self.get_params(False)
 		return (params['key'], params['login'], params['ip'])
-	
+		
 	def _get_import_command(self):
 		import_cmd = raw_input('Copy input command here:')
 		if import_cmd:
@@ -190,7 +197,8 @@ class Composer():
 		if params.has_key(LOCAL_SCRIPTS):
 			for local_script in params[LOCAL_SCRIPTS]:
 				commands.append(local_script[0] + ' ' + local_script[1])
-		# FUTURE: tar etc
+		if params.has_key('etc') and params['etc']:
+			commands.append('tar -czf etc-scalr.tar.gz ' + params['source'] + ' etc')
 		return commands
 	
 	def _compose_remote_commands(self, params):
@@ -204,16 +212,18 @@ class Composer():
 		# unzip src tar
 		commands.append(UNPACK + params['remote_src_path'])
 		# mv init
-		init_remote_source = os.path.join(params['tempdir'], os.path.basename(params['init_script']))
-		init_remote_dest = '/etc/init.d/scalarizr'
-		commands.append('mv %s %s' % (init_remote_source, init_remote_dest))
-		# chmod init
-		commands.append('chmod +x %s' % init_remote_dest)
+		if params.has_key('init_script') and params['init_script']:
+			init_remote_source = os.path.join(params['tempdir'], os.path.basename(params['init_script']))
+			init_remote_dest = '/etc/init.d/scalarizr'
+			commands.append('mv %s %s' % (init_remote_source, init_remote_dest))
+			# chmod init
+			commands.append('chmod +x %s' % init_remote_dest)
 		# chmod post.sh
-		post_remote_path = os.path.join(params['tempdir'], os.path.basename(params['post_script']))
-		commands.append('chmod +x %s' % post_remote_path)
-		# execute post.sh
-		commands.append(post_remote_path)
+		if params.has_key('post_script') and params['post_script']:
+			post_remote_path = os.path.join(params['tempdir'], os.path.basename(params['post_script']))
+			commands.append('chmod +x %s' % post_remote_path)
+			# execute post.sh
+			commands.append(post_remote_path)
 		#mv logging if logging
 		if params['debug']=='1':
 			commands.append('mv /etc/scalr/logging-debug.ini /etc/scalr/logging.ini')
@@ -246,9 +256,11 @@ class Composer():
 		#upload src tar
 		paths[TAR_FILE] = os.path.join(params['tempdir'], TAR_FILE)
 		#upload init
-		paths[params['init_script']] = os.path.join(params['tempdir'], os.path.basename(params['init_script']))
+		if params.has_key('init_script') and params['init_script']:
+			paths[params['init_script']] = os.path.join(params['tempdir'], os.path.basename(params['init_script']))
 		#upload post.sh
-		paths[params['post_script']] = os.path.join(params['tempdir'], os.path.basename(params['post_script']))
+		if params.has_key('post_script') and params['post_script']:
+			paths[params['post_script']] = os.path.join(params['tempdir'], os.path.basename(params['post_script']))
 		#FILES
 		if params.has_key(FILES):
 			for file in params[FILES]:
@@ -361,8 +373,9 @@ class Executor():
 		
 		
 def main():
-	connection = Parametres().get_connection_data()
-	params = Parametres().get_params()
+	P = Parametres()
+	connection = P.get_connection_data()
+	params = P.get_params()
 	run_list = Composer().compose(params)
 	Executor(connection).run(run_list)
 	
