@@ -43,13 +43,14 @@ class Platform():
 	
 	def get_user_data(self, key=None):
 		
-		if self._metadata is None:
-			rawmeta = read_file('/etc/scalr/private.d/.user-data')
+		path = bus.cnf.private_path('.user-data')
+		if self._metadata is None and os.path.exists(path):
+			rawmeta = read_file(path)
 			if not rawmeta:
-				raise PlatformError("File with user-data doesn't exist")
+				raise PlatformError("Empty user-data")
 			
 			self._metadata = {}
-			for k, v in re.findall("([^=]+)=([^;]*);?", rawmeta):
+			for k, v in re.findall("([^=]+)=(user-data[^;]*);?", rawmeta):
 				self._metadata[k] = v			
 		if key:
 			return self._metadata[key] if key in self._metadata else None
