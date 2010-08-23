@@ -41,7 +41,10 @@ class BaseCollector:
 	def __init__(self, formatter):
 		self.formatter = formatter
 	
-	def add_data(self):
+	def get_raw_data(self):
+		pass
+	
+	def add_formatted_data(self):
 		pass
 
 
@@ -50,14 +53,14 @@ class Collector(BaseCollector):
 	def get_collectors(self):
 		return [DefaultDataCollector, ArgsCollector, ConfigCollector]
 	
-	def add_data(self):
+	def get_raw_data(self):
 		for collector in self.get_collectors():
-			self.data.update(collector.get_formatted_data())
+			self.data.update(collector.get_raw_data())
 			
-			
-class DefaultDataCollector(BaseCollector):
-	def add_data(self):
-		pass	
+	def add_formatted_data(self):
+		#self.formatter.build_connection(self.data['key'], None, self.data['ip'])
+		# call build_local_scripts and other Formatter methods	
+		pass 
 			
 			
 class ArgsCollector(BaseCollector):
@@ -97,20 +100,22 @@ class ArgsCollector(BaseCollector):
 			, 'behaviour':options.behaviour, 'init_script':options.init_script, 'post_script':options.post_script\
 			, 'debug':options.debug, 'get_log':options.get_log, 'etc':options.etc}
 	
-	def add_data(self):
-		raw_params = self._get_execution_params()
-		self.formatter.build_connection(raw_params['key'], None, raw_params['ip'])
-		# call build_local_scripts and other Formatter methods	
-		pass 
-	
+	def get_raw_data(self):
+		return self._get_execution_params()
+
+			
+class DefaultDataCollector(BaseCollector):
+	def get_raw_data(self):
+		pass	
+				
 	
 class ConfigCollector(BaseCollector):
-	def add_data(self):
+	def get_raw_data(self):
 		pass
 	
 	
 class EnvCollector(BaseCollector):
-	def add_data(self):
+	def get_raw_data(self):
 		pass
 		
 
