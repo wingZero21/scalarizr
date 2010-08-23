@@ -204,7 +204,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	def on_host_init_response(self, message):
 		farm_crypto_key = message.body.get('farm_crypto_key', '')
 		if farm_crypto_key:
-			self._cnf.write_key(self._cnf.FARM_KEY)
+			self._cnf.write_key(self._cnf.FARM_KEY, farm_crypto_key)
 			bus.int_messaging_service = IntMessagingService()
 		else:
 			self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 

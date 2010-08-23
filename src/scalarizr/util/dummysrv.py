@@ -42,6 +42,22 @@ def queryenv_main():
 					</response>
 					"""
 				self.wfile.write(xml)
+			
+			elif op == "list-roles":
+				self.send_response(200)
+				self.end_headers()
+	
+				xml = """<?xml version="1.0" encoding="UTF-8"?>
+					<response>
+							<roles>
+									<role behaviour="cassandra" name="szr-ubuntu10-cassandra">
+											<hosts>
+											</hosts>
+									</role>
+							</roles>
+					</response>
+						"""
+				self.wfile.write(xml)
 				
 			elif op == "list-ebs-mountpoints":
 				self.send_response(200)

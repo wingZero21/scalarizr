@@ -430,7 +430,6 @@ class CassandraScalingHandler(Handler):
 				cassandra.sect.get('snapshot_id')
 				self._start_from_snap(message)
 			except:
-				cassandra.sect.get('auto_bootstrap')
 				self._start_bootstrap(message)
 
 
@@ -543,11 +542,12 @@ class CassandraScalingHandler(Handler):
 		self._set_use_storage()
 		
 		cassandra.start_service()
+		self._logger.debug('Sleep 120 seconds because of http://wiki.apache.org/cassandra/Operations#line-57')
 
 		# The new node will log "Bootstrapping" when this is safe, 2 minutes after starting.
 		# http://wiki.apache.org/cassandra/Operations#line-57
 		time.sleep(120)
-
+		self._logger.debug('Waiting for bootstrap finish')
 		self._wait_until(self._bootstrap_finished, sleep = 10)
 		message.cassandra = dict(volume_id = ebs_volume.id)
 
