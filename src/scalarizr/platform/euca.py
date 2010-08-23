@@ -5,7 +5,6 @@ Created on Aug 13, 2010
 '''
 
 from scalarizr.platform.ec2 import Ec2Platform
-from scalarizr.platform import Platform
 from scalarizr.platform import PlatformError
 from scalarizr.util import configtool
 from urlparse import urlparse
@@ -39,8 +38,6 @@ class EucaPlatform(Ec2Platform):
 			pass
 		
 		return self._ec2_cert
-	
-	get_user_data = Platform.get_user_data
 	
 	def _get_conn_params(self, service='ec2'):
 		
