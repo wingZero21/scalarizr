@@ -128,7 +128,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	def on_start(self):
 		optparser = bus.optparser
-
+		
+		# Start internal messaging
+		if self._cnf.state == ScalarizrState.RUNNING:
+			# when farm key exists
+			if os.path.exists(self._cnf.key_path(self._cnf.FARM_KEY)):
+				self._start_int_messaging()
+		
+		# Update package with scalarizr daemon
 		file = self._get_flag_filename('update')
 		if not os.path.exists(file) or time.time() - os.stat(file).st_mtime > 86400:
 			self._update_package()
@@ -205,10 +212,15 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		farm_crypto_key = message.body.get('farm_crypto_key', '')
 		if farm_crypto_key:
 			self._cnf.write_key(self._cnf.FARM_KEY, farm_crypto_key)
-			bus.int_messaging_service = IntMessagingService()
+			self._start_int_messaging()
 		else:
 			self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
 					+ "Cross-scalarizr messaging not initialized")
+
+	def _start_int_messaging(self):
+		srv = IntMessagingService()
+		srv.start_consumer()
+		bus.int_messaging_service = srv
 
 
 	def on_IntServerReboot(self, message):
