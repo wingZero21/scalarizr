@@ -10,17 +10,21 @@ import threading
 
 class Handler(object):
 	
-	def _new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False):
-		srv = bus.messaging_service		
+	def _new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False):
+		srv = bus.messaging_service
+		pl = bus.platform		
+				
 		msg = srv.new_message(msg_name, msg_meta, msg_body)
 		if broadcast:
 			self._broadcast_message(msg)
+		if include_pad:
+			msg.body['platform_access_data'] = pl.get_access_data()
 		return msg
 	
-	def _send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, queue=Queues.CONTROL):
+	def _send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, queue=Queues.CONTROL):
 		srv = bus.messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
-				self._new_message(msg_name, msg_body, msg_meta, broadcast)
+				self._new_message(msg_name, msg_body, msg_meta, broadcast, include_pad)
 		srv.get_producer().send(queue, msg)
 
 	def _broadcast_message(self, msg):
@@ -33,7 +37,6 @@ class Handler(object):
 		msg.remote_ip = platform.get_public_ip()
 		msg.role_name = gen_sect.get(configtool.OPT_ROLE_NAME)	
 
-	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return False
 	
