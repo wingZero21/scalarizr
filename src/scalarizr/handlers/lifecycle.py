@@ -308,10 +308,8 @@ class IntMessagingService(object):
 	def start_consumer(self):
 		if not self.consumer:
 			self.consumer = self.msg_service.get_consumer()
-			# Copy listeners from default messaging 
-			def_msg_service = bus.messaging_service
-			def_consumer = def_msg_service.get_consumer()
-			self.consumer.listeners = def_consumer.listeners[:]
+			# IMPORTANT! to fix message double handling
+			self.consumer.create_handler_thread = False
 			# Start consumer thread
 			t = threading.Thread(name="IntMessagingConsumer", target=self.consumer.start)
 			t.start()

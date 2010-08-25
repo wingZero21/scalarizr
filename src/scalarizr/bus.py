@@ -4,7 +4,7 @@ Created on Apr 6, 2010
 @author: marat
 '''
 
-from scalarizr.util import Observable
+from scalarizr.libs.pubsub import Observable
 
 class Bus(Observable):
 	base_path = None

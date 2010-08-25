@@ -1,4 +1,5 @@
-from scalarizr.util import Observable, xml_strip
+from scalarizr.libs.pubsub import Observable
+from scalarizr.util import xml_strip
 import xml.dom.minidom as dom
 import threading
 import logging

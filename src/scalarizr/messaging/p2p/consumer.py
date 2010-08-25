@@ -25,12 +25,19 @@ class P2pMessageConsumer(MessageConsumer):
 	_logger = None
 	_handler_thread = None
 	_shutdown_handler = False
+
+	create_handler_thread = True
+	'''
+	FIXME: It's ugly to solve 2 messaging endpoints problem 
+	by disabling message handling in one of them
+	'''
 	
 	def __init__(self, endpoint=None):
 		MessageConsumer.__init__(self)
 		self.endpoint = endpoint
 		self._logger = logging.getLogger(__name__)
-		self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
+		if self.create_handler_thread:
+			self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
 		self.RequestHandler.consumer = self
 			
 	def start(self):
@@ -46,7 +53,8 @@ class P2pMessageConsumer(MessageConsumer):
 		self._logger.info("Starting message consumer")
 		
 		try:
-			self._handler_thread.start() 	# start message handler
+			if self.create_handler_thread:
+				self._handler_thread.start() 	# start message handler
 			self._server.serve_forever() 	# start http server
 		except (BaseException, Exception), e:
 			self._logger.error("Cannot start message consumer. %s", e)
@@ -61,10 +69,11 @@ class P2pMessageConsumer(MessageConsumer):
 			self._logger.debug("HTTP server stopped")
 
 			# stop message handler thread
-			self._logger.debug("Stopping message handler")
-			self._shutdown_handler = True
-			self._handler_thread.join()
-			self._logger.debug("Message handler stopped")
+			if self.create_handler_thread:
+				self._logger.debug("Stopping message handler")
+				self._shutdown_handler = True
+				self._handler_thread.join()
+				self._logger.debug("Message handler stopped")
 			
 			self._logger.info("Message consumer stopped")
 
