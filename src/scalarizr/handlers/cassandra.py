@@ -25,7 +25,7 @@ import pexpect
 OPT_SNAPSHOT_ID			= "snapshot_id"
 OPT_STORAGE_VOLUME_ID	= "volume_id" 
 TMP_EBS_MNTPOINT        = '/mnt/temp_storage'
-CDB_TIMEOUT             = 120
+CDB_TIMEOUT             = 60
 CDB_MAX_ATTEMPTS        = 3
 CRF_TIMEOUT				= 100
 CRF_MAX_ATTEMPTS		= 3
@@ -153,21 +153,35 @@ class Cassandra(object):
 
 	def get_node_queue(self):
 		
+		cassandra.start_service()
 		queue = Queue()
+		"""
 		out, err = system('nodetool -h localhost ring')[0:2]
 		if err:
 			raise HandlerError('Cannot get node list: %s' % err)
 		
 		lines = out.split('\n')
-		ip_re = re.compile()
+		ip_re = re.compile('^(\d{1,3}(\.\d{1,3}){3})')
 		for line in lines[1:]:
 			if not line:
 				continue
-			ip = line.split()[0]
+			
+			result = re.search(ip_re , line)
+			
+			if result:
+				self._logger.info('ADDING NODE %s TO QUEUE' % result.group(1))
+				queue.put((result.group(1), 0))
+		"""
+		roles = cassandra.queryenv.list_roles(behaviour = "cassandra")
+		
+		# Fill seed list from queryenv answer
+		for role in roles:
+			for host in role.hosts:
+				if host.internal_ip:
+					queue.put((host.internal_ip, 0))
+				else:
+					queue.put((host.external_ip, 0))
 
-			if re.match('^\d{1,3}(\.\d{1,3}){3}$', ip) and ip != cassandra.private_ip:
-				queue.put((line.split()[0], 0))
-				
 		return queue
 
 
@@ -222,10 +236,10 @@ class CassandraScalingHandler(Handler):
 			
 			self._queue = cassandra.get_node_queue()
 			
-			if self._queue.is_empty():
+			if self._queue.empty():
 				raise HandlerError('Cannot get nodelist: queue is empty')
 	
-			self._crf_attempts, self._crf_host = self._queue.get(False)
+			self._crf_host, self._crf_attempts = self._queue.get(False)
 			
 			"""
 			Send first message
@@ -296,7 +310,7 @@ class CassandraScalingHandler(Handler):
 						self._queue.put((message.remote_ip, self._crf_attempts + 1))
 				else:
 					result  = dict()
-					result['status']		= 'ok' 
+					result['status']		= 'ok'
 					result['remote_ip']   = message.remote_ip
 					self._crf_results.append(result)
 					self._crf_ok_hosts.add(message.remote_ip)
@@ -304,8 +318,8 @@ class CassandraScalingHandler(Handler):
 					
 				try:
 					self._crf_attempts, self._crf_host = self._queue.get(False)					
-					while not self._crf_host in self._crf_ok_hosts:
-						self._crf_attempts, self._crf_host = self._queue.get(False)
+					while self._crf_host in self._crf_ok_hosts:
+						self._crf_host, self._crf_attempts = self._queue.get(False)
 				except Empty:
 					res = dict(status = self._crf_status, bundles = self._crf_results)
 					if 'error' == self._crf_status:
@@ -412,9 +426,11 @@ class CassandraScalingHandler(Handler):
 				else:
 					self._config.add('Storage/Seeds/Seed', host.external_ip)
 		
+		no_seeds = False
 		if not self._config.get_list('Storage/Seeds/'):
 			self._config.add('Storage/Seeds/Seed', cassandra.private_ip)
-		
+			no_seeds = True
+					
 		self._config.set('Storage/ListenAddress', cassandra.private_ip)
 		self._config.set('Storage/ThriftAddress', '0.0.0.0')
 		
@@ -430,6 +446,8 @@ class CassandraScalingHandler(Handler):
 				cassandra.sect.get('snapshot_id')
 				self._start_from_snap(message)
 			except:
+				if no_seeds:
+					raise HandlerError('Cannot start bootstrap without seeds')
 				self._start_bootstrap(message)
 
 
@@ -558,10 +576,13 @@ class CassandraScalingHandler(Handler):
 				ip = message.remote_ip
 			else:
 				ip = message.local_ip
-
-			self._config.add('Storage/Seeds/Seed', ip)
-			self._write_config()
-			cassandra.restart_service()
+				
+			seeds = self._config.get_list('Storage/Seeds/')
+			
+			if not ip in seeds:
+				self._config.add('Storage/Seeds/Seed', ip)
+				self._write_config()
+				cassandra.restart_service()
 			
 	def on_before_host_down(self, *args):		
 		out, err = system('nodetool -h localhost decommission')[0:2]
@@ -734,17 +755,20 @@ class CassandraDataBundleHandler(Handler):
 			self._cdb_timeouted_hosts = set()
 			self._cdb_results = []
 			
+			
 			self._queue = cassandra.get_node_queue()
 			
-			if self._queue.is_empty():
+			if self._queue.empty():
 				raise HandlerError('Cannot get nodelist: queue is empty')
 
-			self._cdb_attempts, self._cdb_host = self._queue.get(False)
-			
+			self._cdb_host, self._cdb_attempts = self._queue.get(False)
+
 			"""
 			Send first message
 			"""
-			self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE)
+			body = {'leader_host' : cassandra.private_ip}
+			
+			self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE, body)
 			
 		except (Exception, BaseException), e:
 			self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
@@ -755,44 +779,50 @@ class CassandraDataBundleHandler(Handler):
 	def on_Cassandra_IntCreateDataBundle(self, message):
 		
 		leader_host = message.leader_host
+		"""
 		int_msg  = bus.int_messaging_service
 		producer = int_msg.new_producer(leader_host)
+		self._logger.info('###################### Message ######################')
+		self._logger.info(message)
+		"""
 		
 		try:
 			ret = dict()
 
-
-			cassandra._stop_service()
+			# TODO: Comments to snap 
+			cassandra.stop_service()
 			volume_id          = cassandra.sect.get(OPT_STORAGE_VOLUME_ID)
 			ret['remote_ip']   = cassandra.private_ip	
 			ret['status']      = 'ok'
 			ret['snapshot_id'] = cassandra.create_snapshot(volume_id)
 			ret['timestamp']   = time.strftime('%Y-%m-%d_%H-%M') 
 			
-			cassandra._start_service()
+			cassandra.start_service()
 
 		except (Exception, BaseException), e:
-			ret  = dict(status = 'error', last_error = str(e), remote_ip = cassandra.private_ip)
-		
+			ret.update(dict(status = 'error', last_error = str(e), remote_ip = cassandra.private_ip))
+	
 		finally:
+			"""
 			message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = ret)
 			producer.send(Queues.CONTROL, message)
-
+			"""
+			self._send_int_message(leader_host, CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, ret, include_pad=True)		
 	
 	def on_Cassandra_IntCreateDataBundleResult(self, message):
 
-		try:		
+		try:
 			if not self._cdb_results:
 				self._cdb_results = []
 			
 			if message.remote_ip == self._cdb_host:
-				self._cdb_timer.cancel()				
+				self._cdb_timer.cancel()
 
 				if 'error' == message.status:
-					
+				
 					if self._cdb_attempts + 1 >= CDB_MAX_ATTEMPTS:
 						result  = dict()
-						result['status']		= 'error' 
+						result['status']		= 'error'
 						result['last_error']	= message.last_error
 						result['remote_ip']     = message.remote_ip
 						self._cdb_results.append(result)
@@ -809,25 +839,26 @@ class CassandraDataBundleHandler(Handler):
 					self._cdb_ok_hosts.add(message.remote_ip)
 					
 				try:
-					self._cdb_attempts, self._cdb_host = self._queue.get(False)					
-					while not self._cdb_host in self._cdb_ok_hosts:
-						self._cdb_attempts, self._cdb_host = self._queue.get(False)
-						
+					self._cdb_host, self._cdb_attempts = self._queue.get(False)
+					while self._cdb_host in self._cdb_ok_hosts:
+						self._cdb_host, self._cdb_attempts = self._queue.get(False)
+
 				except Empty:
-					res = dict(status = self._crf_status, bundles = self._cdb_results)
-					if 'error' == self._crf_status:
+					res = dict(status = self._cdb_status, bundles = self._cdb_results)
+					if 'error' == self._cdb_status:
 						res.update({'last_error':self._cdb_last_err})
 					self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, res)
 					return
 				
-				self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE)
+				body = {'leader_host' : cassandra.private_ip}
+				self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE, body)
 
 
 			else:
 				# Timeouted message from some node
 				if not 'ok' == message.status:
 					return
-
+				
 				result  = dict()
 				result['snapshot_id'] = message.snapshot_id
 				result['timestamp']   = message.timestamp
@@ -849,22 +880,36 @@ class CassandraDataBundleHandler(Handler):
 							   ))
 
 	def _send_cdb_message(self, host = None, msg_name = None, body = None):
+		"""
 		int_msg  = bus.int_messaging_service
-		message  = int_msg.msg_service.new_message(msg_name, body = body)
+		message  = int_msg.msg_service.new_message(msg_name, body = body, include_pad=True)
 		producer = int_msg.new_producer(host)
 		producer.send(Queues.CONTROL, message)
-		self._cdb_timer = Timer(CDB_TIMEOUT, self._cdb_failed)
+		"""
+		try:
+			self._send_int_message(host, msg_name, body, include_pad = True)
+			self._cdb_timer = Timer(CDB_TIMEOUT, self._cdb_failed, [host])
+			self._cdb_timer.start()
+		except urllib2.URLError, e:
+			if self._queue.empty():
+				timer = Timer(CDB_TIMEOUT, self._cdb_failed, [host])
+				timer.start()
+			else:
+				self._cdb_failed(host)
 
 		
-	def _cdb_failed(self):
+	def _cdb_failed(self, host):
 		# Imitate  error message from current node
-		int_msg  = bus.int_messaging_service
 		err_msg  = dict()
 		err_msg['status'] = 'error'
+		err_msg['remote_ip'] = host
 		err_msg['last_error'] = 'Timeout error occured while CreateDataBundle. Host: %s, timeout: %d' % (self._cdb_host, CDB_TIMEOUT)
+		"""
 		message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = err_msg)
 		self.on_Cassandra_IntCreateDataBundleResult(message)
-
+		"""
+		
+		self._send_int_message(cassandra.private_ip, CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, err_msg, include_pad = True)
 		
 class StorageProvider(object):
 	

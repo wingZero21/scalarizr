@@ -315,4 +315,4 @@ class IntMessagingService(object):
 			t.start()
 	
 	def new_producer(self, host):
-		return self.service.new_producer(endpoint="http://%s:8012" % host)
+		return self.msg_service.new_producer(endpoint="http://%s:8012" % host)
