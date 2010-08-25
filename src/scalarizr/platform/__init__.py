@@ -34,6 +34,7 @@ class Platform():
 	name = None
 	_arch = None
 	_access_data = None
+	_metadata = None
 	
 	def get_private_ip(self):
 		return self.get_public_ip()
@@ -50,7 +51,7 @@ class Platform():
 				raise PlatformError("Empty user-data")
 			
 			self._metadata = {}
-			for k, v in re.findall("([^=]+)=(user-data[^;]*);?", rawmeta):
+			for k, v in re.findall("([^=]+)=([^;]*);?", rawmeta):
 				self._metadata[k] = v			
 		if key:
 			return self._metadata[key] if key in self._metadata else None

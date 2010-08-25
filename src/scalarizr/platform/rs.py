@@ -25,7 +25,6 @@ class rsPlatform(Platform):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._metadata = {}
 	
 	def _fetch_rs_meta(self, key):
 		url = self._meta_url + key
