@@ -4,7 +4,7 @@ Created on Mar 3, 2010
 @author: marat
 '''
 import unittest
-from scalarizr.util import Observable
+from scalarizr.libs.pubsub import Observable
 
 class Test(unittest.TestCase):
 
