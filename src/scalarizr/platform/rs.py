@@ -9,9 +9,9 @@ from scalarizr.util import system
 
 
 def get_platform():
-	return rsPlatform()
+	return RackspacePlatform()
 
-class rsPlatform(Platform):
+class RackspacePlatform(Platform):
 	
 	name 			= "rs"
 	
@@ -47,10 +47,10 @@ class rsPlatform(Platform):
 		pass
 
 	def get_private_ip(self):
-		return self._get_ip("eth0")
+		return self._get_ip("eth1")
 
 	def get_public_ip(self):
-		return self._get_ip("eth1")
+		return self._get_ip("eth0")
 	
 	def _get_ip(self, iface=None):
 		if not iface:
@@ -58,7 +58,7 @@ class rsPlatform(Platform):
 		if not hasattr(self, '_ip_re'):
 			self._ip_re = re.compile('inet\s*addr:(?P<ip>[\d\.]+)', re.M)
 			
-		out = system('ifconfig ' + iface)[0]
+		out = system('/sbin/ifconfig ' + iface)[0]
 		result = re.search(self._ip_re, out)
 		if not result:
 			return None		
