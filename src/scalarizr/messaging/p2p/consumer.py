@@ -132,7 +132,7 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 			self.send_response(400, err)
 			return
 		
-		logger.info("Received ingoing message %s in queue %s", message.name, queue)
+		logger.info("Received ingoing message '%s' in %s queue", message.name, queue)
 		
 		try:
 			store = P2pMessageStore()

@@ -24,22 +24,26 @@ from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
 
-if boto.Version <= '1.9b':
+if boto.Version == '1.9b':
 	# Workaround for http://code.google.com/p/boto/issues/detail?id=310
+	# `VirtualName` support in block device mapping
 	def build_list_params(self, params, prefix=''):
 		i = 1
 		for dev_name in self:
 			pre = '%sBlockDeviceMapping.%d' % (prefix, i)
 			params['%s.DeviceName' % pre] = dev_name
-			ebs = self[dev_name]
-			if ebs.snapshot_id:
-				params['%s.Ebs.SnapshotId' % pre] = ebs.snapshot_id
-			if ebs.size:
-				params['%s.Ebs.VolumeSize' % pre] = ebs.size
-			if ebs.delete_on_termination:
-				params['%s.Ebs.DeleteOnTermination' % pre] = 'true'
+			block_dev = self[dev_name]
+			if isinstance(block_dev, EBSBlockDeviceType):
+				if block_dev.snapshot_id:
+					params['%s.Ebs.SnapshotId' % pre] = block_dev.snapshot_id
+				if block_dev.size:
+					params['%s.Ebs.VolumeSize' % pre] = block_dev.size
+				if block_dev.delete_on_termination:
+					params['%s.Ebs.DeleteOnTermination' % pre] = 'true'
+				else:
+					params['%s.Ebs.DeleteOnTermination' % pre] = 'false'
 			else:
-				params['%s.Ebs.DeleteOnTermination' % pre] = 'false'
+				params['%s.VirtualName' % pre] = block_dev
 			i += 1		
 
 	BlockDeviceMapping.build_list_params = build_list_params
@@ -101,12 +105,26 @@ class Ec2RebundleHandler(Handler):
 	
 
 	def on_Rebundle(self, message):
+		'''
+		@param message: 
+			Rebundle message
+		@param message.role_name: *
+			Rebundled role name
+		@param message.excludes: * 
+			Directories exclude list. Ex: [/home/mysite, /root/.mysetting]
+		@param message.volume_size:  
+			New size for EBS-root device. 
+			By default current EBS-root size will be used (15G in most popular AMIs)	
+		@param message.volume_id  
+			EBS volume for root device copy.
+		'''
 		strategy = None
 		try:
 			self._log_hdlr.bundle_task_id = message.bundle_task_id
 			
 			# Obtain role name
 			role_name = message.role_name.encode("ascii")
+			image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 
 			# Create exclude directories list
 			excludes = message.excludes.encode("ascii").split(":") \
@@ -117,22 +135,21 @@ class Ec2RebundleHandler(Handler):
 			ec2_conn = pl.new_ec2_conn()
 			instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
 			if instance.root_device_name:
+				# EBS-root device instance
 				if 'volume_size' in message.body:
 					volume_size = message.volume_size
 				else:
 					root_bdt = instance.block_device_mapping[instance.root_device_name]
 					volume_size = ec2_conn.get_all_volumes([root_bdt.volume_id])[0].size
 				
-				strategy = RebundleEbsStrategy(
-					role_name, excludes, 
+				strategy = RebundleEbsStrategy(role_name, image_name, excludes,
 					devname='/dev/sdr', # TODO: use get_free_devname() in 0.6
 					volume_size=volume_size, 
 					volume_id=message.body.get('volume_id')
 				)
 			else:
-				pl = bus.platform
-				strategy = RebundleInstanceStoreStrategy(role_name, excludes, 
-						image_name=role_name + "-" + time.strftime("%Y%m%d%H%M%S"),
+				# Old-style instance-store
+				strategy = RebundleInstanceStoreStrategy(role_name, image_name, excludes,
 						s3_bucket_name="scalr2-images-%s-%s" % (pl.get_region(), pl.get_account_id()))
 
 			# Last moment before rebundle
@@ -174,7 +191,7 @@ class Ec2RebundleHandler(Handler):
 		
 	def _before_rebundle(self, role_name):
 		# Send wall message before rebundling. So console users can run away
-		system("wall \"%s\"" % [WALL_MESSAGE])
+		system('wall "%s" 2>&1' % [WALL_MESSAGE])
 	
 
 
@@ -182,12 +199,14 @@ class RebundleStratery:
 	_logger = None
 		
 	_role_name = None
+	_image_name = None
 	_excludes = None
 	_volume = None
 	_image = None
 	
-	def __init__(self, role_name, excludes, volume='/'):
+	def __init__(self, role_name, image_name, excludes, volume='/'):
 		self._role_name = role_name
+		self._image_name = image_name
 		self._excludes = excludes
 		self._volume = volume
 		self._logger = logging.getLogger(__name__)
@@ -224,26 +243,19 @@ class RebundleStratery:
 	
 	def _create_motd(self, image_mpoint, role_name=None):
 		# Create message of the day
-		motd_filename = os.path.join(image_mpoint, "etc/motd.tail" if disttool.is_debian_based() else "etc/motd")
-		if os.path.exists(motd_filename): 
-			motd_file = None		
-			try:
+		for name in ("etc/motd", "etc/motd.tail"):
+			motd_filename = os.path.join(image_mpoint, name)
+			if os.path.exists(motd_filename):
 				dist = disttool.linux_dist()
-				motd_file = open(motd_filename, "w")
-				motd_file.write(MOTD % dict(
+				motd = MOTD % dict(
 					dist_name = dist[0],
 					dist_version = dist[1],
 					bits = 64 if disttool.uname()[4] == "x86_64" else 32,
 					role_name = role_name,
 					bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
-				))
-			except OSError, e:
-				self._logger.warning("Cannot patch motd file '%s'. %s", motd_filename, str(e))
-			finally:
-				if motd_file:
-					motd_file.close()
-		else:
-			self._logger.warning("motd file doesn't exists on expected location '%s'", motd_filename)	
+				)
+				filetool.write_file(motd_filename, motd, error_msg="Cannot patch motd file '%s' %s %s")
+				
 	
 	def _cleanup_image(self, image_mpoint, role_name=None):
 		# Create message of the day
@@ -301,11 +313,10 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 	_s3_bucket_name = None
 	_platform = None
 	
-	def __init__(self, role_name, excludes, volume='/', destination='/mnt', 
-				image_name=None, image_size=None, s3_bucket_name=None):
-		RebundleStratery.__init__(self, role_name, excludes, volume)
+	def __init__(self, role_name, image_name, excludes, volume='/', 
+				destination='/mnt', image_size=None, s3_bucket_name=None):
+		RebundleStratery.__init__(self, role_name, image_name, excludes, volume)
 		self._destination = destination
-		self._image_name = image_name
 		self._image_size = image_size
 		self._s3_bucket_name = s3_bucket_name
 		self._platform = bus.platform
@@ -568,8 +579,9 @@ class RebundleEbsStrategy(RebundleStratery):
 	
 	_succeed = None
 	
-	def __init__(self, role_name, excludes, volume='/', volume_id=None, volume_size=None, devname='/dev/sdr'):
-		RebundleStratery.__init__(self, role_name, excludes, volume)
+	def __init__(self, role_name, image_name, excludes, volume='/', 
+				volume_id=None, volume_size=None, devname='/dev/sdr'):
+		RebundleStratery.__init__(self, role_name, image_name, excludes, volume)
 		self._devname = devname
 		self._volume_id = volume_id
 		self._volsize = volume_size
@@ -579,14 +591,15 @@ class RebundleEbsStrategy(RebundleStratery):
 	def _create_shapshot(self):
 		self._image.umount() 
 		vol = self._image.ebs_volume
-		self._logger.info('Creating snapshot for root device image %s', vol.id)
-		self._snap = vol.create_snapshot('Created by Scalarizr rebundle %s' % self._platform.get_instance_id())
+		self._logger.info('Creating snapshot of root device image %s', vol.id)
+		self._snap = vol.create_snapshot("Role %s root device created from %s" 
+					% (self._role_name, self._platform.get_instance_id()))
 
 		self._logger.debug('Checking that snapshot %s is completed', self._snap.id)
 		wait_until(lambda: self._snap.update() and self._snap.status == 'completed', logger=self._logger)
 		self._logger.debug('Snapshot %s completed', self._snap.id)
 		
-		self._logger.info('Snapshot %s for root device image %s created', self._snap.id, vol.id)
+		self._logger.info('Snapshot %s of root device image %s created', self._snap.id, vol.id)
 		return self._snap
 	
 	def _register_image(self):
@@ -596,9 +609,12 @@ class RebundleEbsStrategy(RebundleStratery):
 		root_dev_type.delete_on_termination = True
 		bdmap = BlockDeviceMapping(self._ec2_conn)
 		bdmap[root_dev_name] = root_dev_type
+		for virtual_name, dev_name in self._platform.get_block_device_mapping().items():
+			if virtual_name.startswith('ephemeral'):
+				bdmap[dev_name] = virtual_name
 
 		self._logger.info('Registering image')		
-		ami_id = self._ec2_conn.register_image(self._role_name, architecture=disttool.arch(), 
+		ami_id = self._ec2_conn.register_image(self._image_name, architecture=disttool.arch(), 
 				kernel_id=self._platform.get_kernel_id(), ramdisk_id=self._platform.get_ramdisk_id(),
 				root_device_name=root_dev_name, block_device_map=bdmap)
 			
@@ -684,7 +700,7 @@ if disttool.is_linux():
 		
 		def _format_image(self):
 			self._logger.info("Formatting image")
-			system("/sbin/mkfs.ext3 -F " + self.path)
+			system("/sbin/mkfs.ext3 -F " + self.path + " 2>&1")
 			system("/sbin/tune2fs -i 0 " + self.path)
 			self._logger.debug("Image %s formatted", self.path)
 
@@ -727,7 +743,7 @@ if disttool.is_linux():
 		
 		
 		def _copy_rec(self, source, dest, xattr=True):
-			self._logger.info("Copying %s into the image file %s", source, dest)
+			self._logger.info("Copying %s into the image %s", source, dest)
 			rsync = filetool.Rsync()
 			rsync.archive().times().sparse().links().quietly()
 			if xattr:

@@ -329,7 +329,7 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 			mpoint, privated_image, format_size(1024*blocks_count))
 	mtab = fstool.Mtab()
 	if mtab.contains(mpoint=mpoint): # if privated_image exists
-		logger.warning("private.d already mounted to %s", mpoint)
+		logger.debug("private.d already mounted to %s", mpoint)
 		return
 	
 	if not os.path.exists(mpoint):

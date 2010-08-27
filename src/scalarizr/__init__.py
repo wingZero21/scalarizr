@@ -160,7 +160,7 @@ def _init_services():
 	# Check that database exists (after rebundle for example)
 	db_file = cnf.private_path(DB_NAME)
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
-		logger.warning("Database doesn't exists, create new one from script")
+		logger.debug("Database doesn't exists, create new one from script")
 		_create_db()		
 
 	# Initialize platform
@@ -472,6 +472,7 @@ def main():
 		if optparser.values.daemonize:
 			daemonize()
 	
+		logger.info("Initialize Scalarizr...")
 		_init()
 		cnf = bus.cnf
 	
@@ -525,7 +526,7 @@ def main():
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
 		msg_thread = threading.Thread(target=consumer.start, name="Message consumer")
-		logger.info('Starting Scalarizr...')
+		logger.info('Starting Scalarizr')
 		msg_thread.start()
 	
 
