@@ -1,7 +1,7 @@
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.config import ScalarizrState
-from scalarizr.util.iptables import RuleSpec, IpTables
+from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 import logging
 
 
@@ -17,11 +17,13 @@ class RSLifeCycleHandler(Handler):
 		bus.on("init", self.on_init)
 	
 	def on_init(self, *args, **kwargs):	
+		
 		if ScalarizrState.BOOTSTRAPPING == bus.cnf.state:
 			iptables = IpTables()
-			self._logger.debug('Adding iptables rules for scalarizr ports')			
-			for port in [8013, 8014]:
-				rule = RuleSpec(dport=port, jump='ACCEPT')
-				iptables.insert_rule(rule)
-				
-				
+			self._logger.debug('Adding iptables rules for scalarizr ports')
+			
+			rules = []
+			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
+			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
+			for rule in rules:
+				iptables.insert_rule(None, rule_spec = rule)

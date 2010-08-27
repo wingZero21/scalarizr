@@ -136,7 +136,7 @@ class MemcachedHandler(Handler):
 				ip = message.local_ip
 				
 			rule = RuleSpec(source=ip, protocol=iptables.P_TCP, dport='11211', jump='ACCEPT')
-			self.ip_tables.insert_rule(rule)
+			self.ip_tables.insert_rule(None, rule)
 		
 		
 	def on_HostDown(self, message):

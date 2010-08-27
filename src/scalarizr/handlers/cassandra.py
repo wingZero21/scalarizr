@@ -656,8 +656,8 @@ class CassandraScalingHandler(Handler):
 	def _insert_iptables_rule(self, ip):
 		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='ACCEPT', source = ip)
 		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='ACCEPT', source = ip)
-		self._iptables.insert_rule(storage_rule)
-		self._iptables.insert_rule(thrift_rule)
+		self._iptables.insert_rule(None, storage_rule)
+		self._iptables.insert_rule(None, thrift_rule)
 		
 			
 	def _del_iptables_rule(self, ip):
