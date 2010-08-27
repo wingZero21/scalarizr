@@ -255,11 +255,29 @@ class RebundleStratery:
 					bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
 				)
 				filetool.write_file(motd_filename, motd, error_msg="Cannot patch motd file '%s' %s %s")
-				
+
+	def _fix_fstab(self, image_mpoint):
+		'''
+		Remove EBS volumes from fstab
+		'''
+		pl = bus.platform		
+		ec2_conn = pl.new_ec2_conn()
+		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
+		ebs_devs = list(vol.attach_data.device 
+					for vol in ec2_conn.get_all_volumes() 
+					if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id() 
+						and instance.root_device_name != vol.attach_data.device)
+		
+		fstab = fstool.Fstab(os.path.join(image_mpoint, 'etc/fstab'))
+		for devname in ebs_devs:
+			fstab.remove(devname, autosave=False)
+		fstab.save()
+
 	
 	def _cleanup_image(self, image_mpoint, role_name=None):
 		# Create message of the day
 		self._create_motd(image_mpoint, role_name)
+		self._fix_fstab(image_mpoint)
 		
 		# Truncate logs
 		logs_path = os.path.join(image_mpoint, "var/log")
@@ -651,7 +669,7 @@ class RebundleEbsStrategy(RebundleStratery):
 			
 	def cleanup(self):
 		RebundleStratery.cleanup(self)
-		if not self._succeed and self._snap.id:
+		if not self._succeed and self._snap:
 			self._logger.debug('Deleting snapshot %s', self._snap.id)
 			self._snap.delete()
 
