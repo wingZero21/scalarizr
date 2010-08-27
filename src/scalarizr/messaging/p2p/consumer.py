@@ -41,11 +41,11 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 				_HttpRequestHanler.consumer = self
 				server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
 				self._server = server_cls((r.hostname, r.port),	_HttpRequestHanler)
-				self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
+				self._logger.info("Build message consumer server on %s:%s", r.hostname, r.port)
 		except (BaseException, Exception), e:
 			self._logger.error("Cannot build server. %s", e)
 			
-		self._logger.info("Starting message consumer")
+		self._logger.debug("Starting message consumer")
 		
 		try:
 			self._handler_thread.start() 	# start message handler
@@ -55,7 +55,7 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 			
 	def stop(self):
 		if (not self._server is None):
-			self._logger.info("Stopping message consumer...")
+			self._logger.debug("Stopping message consumer...")
 		
 			# stop http server
 			self._logger.debug("Stopping HTTP server")
@@ -68,7 +68,7 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 			self._handler_thread.join()
 			self._logger.debug("Message handler stopped")
 			
-			self._logger.info("Message consumer stopped")
+			self._logger.debug("Message consumer stopped")
 
 	def shutdown(self):
 		self._logger.debug("Closing HTTP server")
@@ -84,7 +84,7 @@ class P2pMessageConsumer(MessageConsumer, _P2pBase):
 					queue = unhandled[0]
 					message = unhandled[1]
 					try:
-						self._logger.info("Notify message listeners (message_id: %s)", message.id)
+						self._logger.debug("Notify message listeners (message_id: %s)", message.id)
 						for ln in self._listeners:
 							ln(message, queue)
 					except (BaseException, Exception), e:
@@ -148,7 +148,7 @@ class _HttpRequestHanler(BaseHTTPRequestHandler):
 		
 	def log_message(self, format, *args):
 		logger = logging.getLogger(__name__)
-		logger.info("%s %s\n", self.address_string(), format%args)
+		logger.debug("%s %s\n", self.address_string(), format%args)
 
 
 if sys.version_info < (2,6):

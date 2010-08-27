@@ -166,9 +166,9 @@ class ScriptExecutor(Handler):
 			
 			write_file(script_path, script.body, logger=self._logger)
 			os.chmod(script_path, stat.S_IREAD | stat.S_IEXEC)
-			self._logger.info("%s exists: %s", script_path, os.path.exists(script_path))
+			self._logger.debug("%s exists: %s", script_path, os.path.exists(script_path))
 	
-			self._logger.info("Executing script '%s'", script.name)
+			self._logger.debug("Executing script '%s'", script.name)
 			
 			# Create stdout and stderr log files
 			stdout = open(stdout_path, "w")
@@ -222,7 +222,7 @@ class ScriptExecutor(Handler):
 			stdout.close()
 			stderr.close()
 			
-			self._logger.info("Script '%s' execution finished. Elapsed time: %.2f seconds, stdout: %s, stderr: %s", 
+			self._logger.debug("Script '%s' execution finished. Elapsed time: %.2f seconds, stdout: %s, stderr: %s", 
 					script.name, elapsed_time, 
 					format_size(os.path.getsize(stdout.name)), 
 					format_size(os.path.getsize(stderr.name)))
@@ -266,10 +266,10 @@ class ScriptExecutor(Handler):
 	
 	def __call__(self, message):
 		self._event_name = message.event_name if message.name == Messages.EXEC_SCRIPT else message.name
-		self._logger.info("Scalr notified me that '%s' fired", self._event_name)		
+		self._logger.debug("Scalr notified me that '%s' fired", self._event_name)		
 		
 		if self._cnf.state == ScalarizrState.IMPORTING:
-			self._logger.info('Scripting is OFF when state: %s', ScalarizrState.IMPORTING)
+			self._logger.debug('Scripting is OFF when state: %s', ScalarizrState.IMPORTING)
 			return
 		
 		if message.name == Messages.EXEC_SCRIPT:

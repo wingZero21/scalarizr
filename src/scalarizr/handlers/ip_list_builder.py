@@ -63,7 +63,7 @@ class IpListBuilder(Handler):
 		ip = message.local_ip or message.remote_ip
 		rolename = message.role_name
 
-		self._logger.info("Add host (role_name: %s, behaviour: %s, ip: %s)", 
+		self._logger.debug("Add host (role_name: %s, behaviour: %s, ip: %s)", 
 				rolename, behaviour, ip)
 		self._modify_tree(rolename, behaviour, ip, 
 				modfn=self._create_file, 
@@ -74,7 +74,7 @@ class IpListBuilder(Handler):
 		ip = message.local_ip or message.remote_ip
 		rolename = message.role_name
 		
-		self._logger.info("Remove host (role_name: %s, behaviour: %s, ip: %s)", 
+		self._logger.debug("Remove host (role_name: %s, behaviour: %s, ip: %s)", 
 						rolename, behaviour, ip)
 		self._modify_tree(rolename, behaviour, ip, 
 				modfn=self._remove_file, 

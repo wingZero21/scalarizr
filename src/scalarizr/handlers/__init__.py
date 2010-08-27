@@ -72,7 +72,7 @@ class MessageListener:
 	def _get_handlers_chain (self):
 		if self._handlers_chain is None:
 			self._handlers_chain = []
-			self._logger.info("Collecting handlers chain");
+			self._logger.debug("Collecting handlers chain");
 			
 			config = bus.config
 			for handler_name, module_name in config.items(configtool.SECT_HANDLERS):
@@ -114,12 +114,12 @@ class MessageListener:
 					self._logger.error("Unhandled exception in handler notification loop")
 					self._logger.exception(e)
 						
-			self._logger.info("Collected handlers chain: %s" % self._handlers_chain)
+			self._logger.debug("Collected handlers chain: %s" % self._handlers_chain)
 						
 		return self._handlers_chain
 	
 	def __call__(self, message, queue):
-		self._logger.info("Handle '%s'" % (message.name))
+		self._logger.debug("Handle '%s'" % (message.name))
 		
 		try:
 			# Each message can contains secret data to access platform services.
@@ -134,7 +134,7 @@ class MessageListener:
 				try:
 					if handler.accept(message, queue, **self._accept_kwargs):
 						accepted = True
-						self._logger.info("Call handler %s" % hnd_name)
+						self._logger.debug("Call handler %s" % hnd_name)
 						try:
 							handler(message)
 						except (BaseException, Exception), e:

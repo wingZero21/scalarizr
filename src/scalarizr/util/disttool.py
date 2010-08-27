@@ -59,3 +59,17 @@ def is_debian(): return _is_debian
 
 def uname(): return _uname
 def linux_dist(): return _linux_dist
+
+
+def arch():
+	if re.search("^i\\d86$", _uname[4]):
+		return Architectures.I386
+	elif re.search("^x86_64$", _uname[4]):
+		return Architectures.X86_64
+	return Architectures.UNKNOWN
+
+class Architectures:
+	I386 = "i386"
+	X86_64 = "x86_64"
+	UNKNOWN = "unknown"
+
