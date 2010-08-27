@@ -11,7 +11,10 @@ from scalarizr.messaging import Messages, Queues
 import logging
 import os
 from scalarizr.util import configtool, fstool, system, initd, get_free_devname, filetool
+from scalarizr.util import iptables
+from scalarizr.util.iptables import IpTables, RuleSpec
 from xml.dom.minidom import parse
+from ConfigParser import NoOptionError
 from Queue import Queue, Empty
 from threading import Timer
 from scalarizr.libs.metaconf import *
@@ -23,7 +26,8 @@ import pexpect
 
 
 OPT_SNAPSHOT_ID			= "snapshot_id"
-OPT_STORAGE_VOLUME_ID	= "volume_id" 
+OPT_STORAGE_VOLUME_ID	= "volume_id"
+OPT_STORAGE_DEVICE_NAME	= "device_name"
 TMP_EBS_MNTPOINT        = '/mnt/temp_storage'
 CDB_TIMEOUT             = 60
 CDB_MAX_ATTEMPTS        = 3
@@ -147,7 +151,8 @@ class Cassandra(object):
 
 	def create_snapshot(self, vol_id):
 		ec2_conn = cassandra.platform.new_ec2_conn()
-		snapshot  = ec2_conn.create_snapshot(vol_id)
+		desc = 'cassandra-backup_' + self.role_name + '_' + time.strftime('%Y%m%d%H%M%S')
+		snapshot  = ec2_conn.create_snapshot(vol_id, )
 		del(ec2_conn)
 		return snapshot.id
 
@@ -193,6 +198,7 @@ class CassandraScalingHandler(Handler):
 		
 		self._logger = logging.getLogger(__name__)
 		self._config = Configuration('xml')
+		self._iptables = IpTables()
 		try:
 			self._config.read(cassandra.storage_conf)
 		except:
@@ -200,6 +206,7 @@ class CassandraScalingHandler(Handler):
 
 		bus.on("init", self.on_init)
 		bus.on("before_host_down", self.on_before_host_down)
+		
 
 	def on_init(self):
 		bus.on("before_host_up", self.on_before_host_up)
@@ -209,7 +216,8 @@ class CassandraScalingHandler(Handler):
 		return BuiltinBehaviours.CASSANDRA in behaviour and \
 				( message.name == Messages.HOST_INIT or
 				message.name == Messages.HOST_UP or
-				message.name == Messages.HOST_DOWN )
+				message.name == Messages.HOST_DOWN or
+				message.name == Messages.BEFORE_HOST_TERMINATE )
 	
 	def on_HostInit(self, message):
 		if message.behaviour == BuiltinBehaviours.CASSANDRA:
@@ -217,9 +225,7 @@ class CassandraScalingHandler(Handler):
 				ip = message.remote_ip
 			else:
 				ip = message.local_ip
-			self._add_iptables_rule(ip)		
-
-
+			self._insert_iptables_rule(ip)
 #
 #Begin copypasta
 #
@@ -251,7 +257,7 @@ class CassandraScalingHandler(Handler):
 												status = 'error',
 												last_error = str(e) 		
 								   ))
-			
+
 	def on_Cassandra_IntChangeReplFactor(self, message):
 		
 		leader_host = message.leader_host
@@ -416,15 +422,26 @@ class CassandraScalingHandler(Handler):
 		# Clear Seed list
 		self._config.remove('Storage/Seeds/Seed')
 		
-		roles = cassandra.queryenv.list_roles(behaviour = "cassandra")
 		
-		# Fill seed list from queryenv answer
+		
+		roles = cassandra.queryenv.list_roles(behaviour = "cassandra")
+		ips = []
+		# Fill seed list from queryenv answer and creating iptables rules
 		for role in roles:
 			for host in role.hosts:
 				if host.internal_ip:
-					self._config.add('Storage/Seeds/Seed', host.internal_ip)
+					ips.append(host.internal_ip)
 				else:
-					self._config.add('Storage/Seeds/Seed', host.external_ip)
+					ips.append(host.external_ip)
+		
+		for ip in ips:
+			self._config.add('Storage/Seeds/Seed', ip)
+			self._insert_iptables_rule(ip)
+		
+		self._insert_iptables_rule(cassandra.private_ip)
+		self._drop_iptable_rules()
+		
+		
 		
 		no_seeds = False
 		if not self._config.get_list('Storage/Seeds/'):
@@ -441,106 +458,117 @@ class CassandraScalingHandler(Handler):
 		try:
 			cassandra.sect.get('snapshot_url')
 			self._start_import_snapshot(message)
-		except:
+		except NoOptionError:
 			try:
 				cassandra.sect.get('snapshot_id')
 				self._start_from_snap(message)
-			except:
+			except NoOptionError:
 				if no_seeds:
 					raise HandlerError('Cannot start bootstrap without seeds')
 				self._start_bootstrap(message)
-
-
+				
+				
 	def _start_import_snapshot(self, message):
-		
-		storage_size = cassandra.sect.get('storage_size')
-		snapshot_url = cassandra.sect.get('snapshot_url')
-		filename = os.path.basename(snapshot_url)
-		snap_path = os.path.join(TMP_EBS_MNTPOINT, filename)
-		result = re.search('^s3://(.*?)/(.*?)$', snapshot_url)
-		# If s3 link
-		if result:
-			bucket_name = result.group(1)
-			file_name   = result.group(2)
-			s3_conn 	= cassandra.platform.new_s3_conn()
-			bucket 		= s3_conn.get_bucket(bucket_name)
-			key 		= bucket.get_key(file_name)
-			if not key:
-				raise HandlerError('File %s does not exist on bucket %s', (file_name, bucket_name))
-			# Determine snapshot size in Gb			
-			length = int(key.size//(1024*1024*1024) +1)
-			
-			temp_ebs_size = length*10 if length*10 < 1000 else 1000
-			tmp_ebs_devname, temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, mpoint=TMP_EBS_MNTPOINT)
-			self._logger.debug('Starting download cassandra snapshot: %s', snapshot_url)			
-			key.get_contents_to_filename(snap_path)
-			
-		# Just usual http or ftp link
-		else:
-			try:
-				result   = urllib2.urlopen(snapshot_url)
-			except urllib2.URLError:
-				raise HandlerError('Cannot download snapshot. URL: %s' % snapshot_url)
-			
-			# Determine snapshot size in Gb
-			try:
-				length = int(int(result.info()['content-length'])//(1024*1024*1024) + 1)
-			except:
-				self._logger.error('Cannot determine snapshot size. URL: %s', snapshot_url)
-				length = 10
-			
-			temp_ebs_size = length*10 if length*10 < 1000 else 1000			
-			tmp_ebs_devname, temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, mpoint=TMP_EBS_MNTPOINT)
-			
-			self._logger.debug('Starting download cassandra snapshot: %s', snapshot_url)
-			
-			try:
-				fp = open(snap_path, 'wb')
-			except (Exception, BaseException), e:
-				raise HandlerError('Cannot open snapshot file %s for write: %s', (filename, str(e)))
+		try:
+			storage_size = cassandra.sect.get('storage_size')
+			snapshot_url = cassandra.sect.get('snapshot_url')
+			filename = os.path.basename(snapshot_url)
+			snap_path = os.path.join(TMP_EBS_MNTPOINT, filename)
+			result = re.search('^s3://(.*?)/(.*?)$', snapshot_url)
+			# If s3 link
+			if result:
+				bucket_name = result.group(1)
+				file_name   = result.group(2)
+				s3_conn 	= cassandra.platform.new_s3_conn()
+				bucket 		= s3_conn.get_bucket(bucket_name)
+				key 		= bucket.get_key(file_name)
+				if not key:
+					raise HandlerError('File %s does not exist on bucket %s', (file_name, bucket_name))
+				# Determine snapshot size in Gb			
+				length = int(key.size//(1024*1024*1024) +1)
+				
+				if length > storage_size:
+					raise HandlerError('Snapshot length (%s) is bigger then storage size (%s)' % (length, storage_size))
+				
+				temp_ebs_size = length*10 if length*10 < 1000 else 1000
+				tmp_ebs_devname, temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, mpoint=TMP_EBS_MNTPOINT)
+				self._logger.debug('Starting download cassandra snapshot: %s', snapshot_url)			
+				key.get_contents_to_filename(snap_path)
+				
+			# Just usual http or ftp link
 			else:
-				while True:
-					data = result.read(4096)
-					if not data:
-						break
-					fp.write(data)
-			finally:		
-				fp.close()
+				try:
+					result   = urllib2.urlopen(snapshot_url)
+				except urllib2.URLError:
+					raise HandlerError('Cannot download snapshot. URL: %s' % snapshot_url)
+				
+				# Determine snapshot size in Gb
+				try:
+					length = int(int(result.info()['content-length'])//(1024*1024*1024) + 1)
+				except:
+					self._logger.error('Cannot determine snapshot size. URL: %s', snapshot_url)
+					length = storage_size
+					
+				if length > storage_size:
+					raise HandlerError('Snapshot length (%s) is bigger then storage size (%s)' % (length, storage_size))
+				
+				temp_ebs_size = length*10 if length*10 < 1000 else 1000			
+				tmp_ebs_devname, temp_ebs_dev = self._create_attach_mount_volume(temp_ebs_size, auto_mount=False, mpoint=TMP_EBS_MNTPOINT)
+				
+				self._logger.debug('Starting download cassandra snapshot: %s', snapshot_url)
+				
+				try:
+					fp = open(snap_path, 'wb')
+				except (Exception, BaseException), e:
+					raise HandlerError('Cannot open snapshot file %s for write: %s', (filename, str(e)))
+				else:
+					while True:
+						data = result.read(4096)
+						if not data:
+							break
+						fp.write(data)
+				finally:		
+					fp.close()
+	
+			self._logger.debug('Trying to extract cassandra snapshot to temporary EBS storage')
+			snap = tarfile.open(snap_path)
+			snap.extractall(TMP_EBS_MNTPOINT)
+			snap.close()
+			self._logger.debug('Snapshot successfully extracted')
+			os.remove(snap_path)
+			
+			ebs_devname, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, mpoint=cassandra.storage_path)
+			self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id, OPT_STORAGE_DEVICE_NAME : ebs_devname})
+			self._create_valid_storage()
+			
+			self._logger.debug('Copying snapshot')
+			rsync = filetool.Rsync().archive()
+			rsync.source(TMP_EBS_MNTPOINT+os.sep).dest(cassandra.data_file_directory)
+			out = system(str(rsync))
+	
+			if out[2]:
+				raise HandlerError('Error while copying snapshot content from temp ebs to permanent: %s', out[1])
+	
+			self._logger.debug('Snapshot successfully copied from temporary ebs to permanent')
+	
+			self._config.set('Storage/AutoBootstrap', 'False')
+	
+			self._set_use_storage()
+			snap_id = cassandra.create_snapshot(ebs_volume.id)
+			cassandra.start_service()
+			message.cassandra = dict(volume_id = ebs_volume.id, snapshot_id=snap_id)
+		finally:
+			try:
+				self._umount_detach_delete_volume(tmp_ebs_devname, temp_ebs_dev)
+				os.removedirs(TMP_EBS_MNTPOINT)
+			except:
+				pass
 
-		self._logger.debug('Trying to extract cassandra snapshot to temporary EBS storage')
-		snap = tarfile.open(snap_path)
-		snap.extractall(TMP_EBS_MNTPOINT)
-		snap.close()
-		self._logger.debug('Snapshot successfully extracted')
-		os.remove(snap_path)
-
-		ebs_devname, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, mpoint=cassandra.storage_path)
-		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
-		self._create_valid_storage()
-		
-		self._logger.debug('Copying snapshot')
-		rsync = filetool.Rsync().archive()
-		rsync.source(TMP_EBS_MNTPOINT+os.sep).dest(cassandra.data_file_directory)
-		out = system(str(rsync))
-
-		if out[2]:
-			raise HandlerError('Error while copying snapshot content from temp ebs to permanent: %s', out[1])
-
-		self._logger.debug('Snapshot successfully copied from temporary ebs to permanent')
-
-		self._umount_detach_delete_volume(tmp_ebs_devname, temp_ebs_dev)
-		os.removedirs(TMP_EBS_MNTPOINT)
-		self._config.set('Storage/AutoBootstrap', 'False')
-
-		self._set_use_storage()
-		snap_id = cassandra.create_snapshot(ebs_volume.id)
-		cassandra.start_service()
-		message.cassandra = dict(volume_id = ebs_volume.id, snapshot_id=snap_id)
 
 	def _start_from_snap(self, message):
-
-		ebs_volume = self._create_attach_mount_volume(auto_mount=True, snapshot=message.snap_id, mpoint=cassandra.storage_path)[-1]
-		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
+		snap_id = cassandra.sect.get('snapshot_id')
+		ebs_devname, ebs_volume = self._create_attach_mount_volume(auto_mount=True, snapshot=snap_id, mpoint=cassandra.storage_path, mkfs=False)
+		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id, OPT_STORAGE_DEVICE_NAME : ebs_devname})
 
 		self._create_valid_storage()
 		self._set_use_storage()
@@ -552,8 +580,8 @@ class CassandraScalingHandler(Handler):
 		
 		storage_size = cassandra.sect.get('storage_size')
 		
-		ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=cassandra.storage_path)[-1]
-		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
+		ebs_devname, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=cassandra.storage_path)
+		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id, OPT_STORAGE_DEVICE_NAME : ebs_devname})
 		self._create_valid_storage()
 
 		self._config.set('Storage/AutoBootstrap', 'True')
@@ -584,13 +612,16 @@ class CassandraScalingHandler(Handler):
 				self._write_config()
 				cassandra.restart_service()
 			
-	def on_before_host_down(self, *args):		
+	def on_BeforeHostTerminate(self, *args):
+		cassandra.start_service()
 		out, err = system('nodetool -h localhost decommission')[0:2]
 		if err:
 			raise HandlerError('Cannot decommission node: %s' % err)
 		self._wait_until(self._is_decommissioned)
 		cassandra.stop_service()
-
+		
+	def on_before_host_down(self, *args):
+		cassandra.stop_service()
 
 	def _bootstrap_finished(self):
 		try:
@@ -619,28 +650,27 @@ class CassandraScalingHandler(Handler):
 				cassandra.restart_service()
 			except:
 				pass
+			
 
-	def _add_iptables_rule(self, ip):
-		rule = "/sbin/iptables -A INPUT -s %s -p tcp --destination-port %s -j ACCEPT" % (ip, self._port)
-		self._logger.debug("Adding rule to iptables: %s", rule)
-		returncode = system(rule)[2]
-		if returncode :
-			self._logger.error("Cannot add rule")
+
+	def _insert_iptables_rule(self, ip):
+		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='ACCEPT', source = ip)
+		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='ACCEPT', source = ip)
+		self._iptables.insert_rule(storage_rule)
+		self._iptables.insert_rule(thrift_rule)
+		
 			
 	def _del_iptables_rule(self, ip):
-		rule = "/sbin/iptables -D INPUT -s %s -p tcp --destination-port %s -j ACCEPT" % (ip, self._port)
-		self._logger.debug("Deleting rule from iptables: %s", rule)
-		returncode = system(rule)[2]
-		if returncode :
-			self._logger.error("Cannot delete rule")
+		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='ACCEPT', source = ip)
+		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='ACCEPT', source = ip)
+		self._iptables.delete_rule(storage_rule)
+		self._iptables.delete_rule(thrift_rule)
 			
 	def _drop_iptable_rules(self):
-		drop_rule = "/sbin/iptables -A INPUT -p tcp --destination-port %s -j DROP" % (self._port,)
-		self._logger.debug("Drop iptables rules on port %s: %s", self._port, drop_rule)
-		returncode = system(drop_rule)[2]
-		if returncode:
-			self._logger.error("Cannot drop rules")
-			
+		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='DROP')
+		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='DROP')
+		self._iptables.append_rule(storage_rule)
+		self._iptables.append_rule(thrift_rule)
 
 	def _wait_until(self, target, args=None, sleep=5):
 		args = args or ()
@@ -648,11 +678,11 @@ class CassandraScalingHandler(Handler):
 			self._logger.debug("Wait %d seconds before the next attempt", sleep)
 			time.sleep(sleep)
 			
-	def _create_attach_mount_volume(self, size=None, auto_mount=False, snapshot=None, mpoint=None):
+	def _create_attach_mount_volume(self, size=None, auto_mount=False, snapshot=None, mpoint=None, mkfs=True):
 		
 		if not size and not snapshot:
 			raise HandlerError('Cannot create volume without size or snapshot')
-		
+
 		if not cassandra.zone:
 			cassandra.zone     = cassandra.platform.get_avail_zone()
 		if not cassandra.inst_id:
@@ -674,7 +704,7 @@ class CassandraScalingHandler(Handler):
 		if not os.path.exists(mpoint):
 			os.makedirs(mpoint)
 			
-		fstool.mount(device, mpoint, make_fs=True, auto_mount=auto_mount )
+		fstool.mount(device, mpoint, make_fs=mkfs, auto_mount=auto_mount )
 		
 		del(ec2_conn)
 		
@@ -707,7 +737,7 @@ class CassandraScalingHandler(Handler):
 	
 	def _is_decommissioned(self):
 		try:
-			cass = pexpect.spawn('nodetool -h localhost info')
+			cass = pexpect.spawn('nodetool -h localhost streams')
 			out = cass.read()
 			if re.search('Decommissioned', out):
 				return True
@@ -728,7 +758,6 @@ class CassandraScalingHandler(Handler):
 		out,err = system('nodetool -h localhost repair %s' % keyspace)[0:2]
 		if err: 
 			raise HandlerError('Cannot do cleanup: %s' % err)
-
 		
 class CassandraDataBundleHandler(Handler):
 
@@ -785,19 +814,22 @@ class CassandraDataBundleHandler(Handler):
 		self._logger.info('###################### Message ######################')
 		self._logger.info(message)
 		"""
-		
+		umounted = False
 		try:
 			ret = dict()
 
-			# TODO: Comments to snap 
 			cassandra.stop_service()
+			system('sync')			
+						
+			device_name        = cassandra.sect.get(OPT_STORAGE_DEVICE_NAME)
+			fstool.umount(device_name)
+			umounted = True
+			
 			volume_id          = cassandra.sect.get(OPT_STORAGE_VOLUME_ID)
 			ret['remote_ip']   = cassandra.private_ip	
 			ret['status']      = 'ok'
 			ret['snapshot_id'] = cassandra.create_snapshot(volume_id)
-			ret['timestamp']   = time.strftime('%Y-%m-%d_%H-%M') 
-			
-			cassandra.start_service()
+			ret['timestamp']   = time.strftime('%Y-%m-%d_%H-%M')
 
 		except (Exception, BaseException), e:
 			ret.update(dict(status = 'error', last_error = str(e), remote_ip = cassandra.private_ip))
@@ -807,6 +839,9 @@ class CassandraDataBundleHandler(Handler):
 			message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = ret)
 			producer.send(Queues.CONTROL, message)
 			"""
+			if umounted:
+				fstool.mount(device_name, cassandra.storage_path)
+			cassandra.start_service()
 			self._send_int_message(leader_host, CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, ret, include_pad=True)		
 	
 	def on_Cassandra_IntCreateDataBundleResult(self, message):
@@ -816,7 +851,10 @@ class CassandraDataBundleHandler(Handler):
 				self._cdb_results = []
 			
 			if message.remote_ip == self._cdb_host:
-				self._cdb_timer.cancel()
+				try:
+					self._cdb_timer.cancel()
+				except:
+					pass
 
 				if 'error' == message.status:
 				
@@ -891,25 +929,30 @@ class CassandraDataBundleHandler(Handler):
 			self._cdb_timer = Timer(CDB_TIMEOUT, self._cdb_failed, [host])
 			self._cdb_timer.start()
 		except urllib2.URLError, e:
+			message = self._get_failed_message(host)
 			if self._queue.empty():
-				timer = Timer(CDB_TIMEOUT, self._cdb_failed, [host])
+				timer = Timer(CDB_TIMEOUT, self._cdb_failed, [message])
 				timer.start()
 			else:
-				self._cdb_failed(host)
+				self._cdb_failed(message)
 
 		
-	def _cdb_failed(self, host):
+	def _cdb_failed(self, message):
 		# Imitate  error message from current node
-		err_msg  = dict()
-		err_msg['status'] = 'error'
-		err_msg['remote_ip'] = host
-		err_msg['last_error'] = 'Timeout error occured while CreateDataBundle. Host: %s, timeout: %d' % (self._cdb_host, CDB_TIMEOUT)
 		"""
 		message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = err_msg)
 		self.on_Cassandra_IntCreateDataBundleResult(message)
 		"""
-		
-		self._send_int_message(cassandra.private_ip, CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, err_msg, include_pad = True)
+		self._send_int_message(cassandra.private_ip, message)
+
+	def _get_failed_message(self, host):
+		err_msg  = dict()
+		err_msg['status'] = 'error'
+		err_msg['remote_ip'] = host
+		err_msg['last_error'] = 'Timeout error occured while CreateDataBundle. Host: %s, timeout: %d' % (self._cdb_host, CDB_TIMEOUT)
+		message = self._new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, err_msg, include_pad = True)
+
+		return message
 		
 class StorageProvider(object):
 	

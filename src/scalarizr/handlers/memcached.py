@@ -65,7 +65,7 @@ class MemcachedHandler(Handler):
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.HOST_UP \
-			or message.name == Messages.HOST_DOWN	
+			or message.name == Messages.HOST_DOWN 	
 	
 	
 	def on_init(self):
@@ -77,7 +77,7 @@ class MemcachedHandler(Handler):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting memcached")
-				initd.start("apache")
+				initd.start("memcached")
 			except initd.InitdError, e:
 				self._logger.error(e)
 	
@@ -90,7 +90,26 @@ class MemcachedHandler(Handler):
 				write_file(self.mcd_conf_path, re.sub(self.expression, self.substitute, mcd_conf), logger=self._logger)
 			else:
 				write_file(self.mcd_conf_path, self.substitute, mode='a', logger = self._logger)
-				
+
+		
+		ips = []
+		roles = self._queryenv.list_roles()
+		
+		for role in roles:
+			for host in role.hosts:
+				ips.append(host.internal_ip or host.external_ip)
+		
+		for ip in ips:
+			allow_rule = RuleSpec(source=ip, protocol=iptables.P_TCP, dport='11211', jump='ACCEPT')
+			self.rules.append(allow_rule)
+		
+		drop_rule = RuleSpec(protocol=iptables.P_TCP, dport='11211', jump='DROP')
+		self.rules.append(drop_rule)
+			
+		for rule in self.rules:
+			self.ip_tables.append_rule(rule)
+
+
 		try:
 			self._logger.info("Reloading memcached")
 			initd.reload("memcached", force=True)
@@ -110,24 +129,28 @@ class MemcachedHandler(Handler):
 	
 	def on_HostUp(self, message):
 		# Adding iptables rules
-		ips = []
-		roles = self._queryenv.list_roles()
-		
-		for role in roles:
-			for host in role.hosts:
-				ips.append(host.internal_ip or host.external_ip)
-		
-		for ip in ips:
-			allow_rule = RuleSpec(source=ip, protocol=iptables.P_TCP, dport='11211', jump='ACCEPT')
-			self.rules.append(allow_rule)
-		
-		drop_rule = RuleSpec(protocol=iptables.P_TCP, dport='11211', jump='DROP')
-		self.rules.append(drop_rule)
-			
-		for rule in self.rules:
-			self.ip_tables.append_rule(rule)
+		if message.behaviour == BuiltinBehaviours.MEMCACHED:
+			if not message.local_ip:
+				ip = message.remote_ip
+			else:
+				ip = message.local_ip
+				
+			rule = RuleSpec(source=ip, protocol=iptables.P_TCP, dport='11211', jump='ACCEPT')
+			self.ip_tables.insert_rule(rule)
 		
 		
 	def on_HostDown(self, message):
+		if message.behaviour == BuiltinBehaviours.MEMCACHED:
+			
+			if not message.local_ip:
+				ip = message.remote_ip
+			else:
+				ip = message.local_ip
+
+			rule = RuleSpec(source=ip, protocol=iptables.P_TCP, dport='11211', jump='ACCEPT')
+			self.ip_tables.delete_rule(rule)
+
+		"""
 		for rule in self.rules:
 			self.ip_tables.delete_rule(rule)
+		"""
