@@ -954,6 +954,51 @@ class CassandraDataBundleHandler(Handler):
 
 		return message
 		
+class RingAggregator(Handler):
+	_contol_msg_name = None
+	_request_msg_name = None
+	_response_msg_name = None
+	
+	def __init__(self, control_msg_name, request_msg_name, response_msg_name):
+		pass
+	
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return BuiltinBehaviours.CASSANDRA in behaviour \
+				and message.name in (self._contol_msg_name, self._request_msg_name, self._response_msg_name)
+	
+	def _handle_control(self, contol_message):	
+		pass
+	
+	def _handle_request(self, req_message):
+		pass
+	
+	def _handle_response(self, resp_message):
+		pass
+		
+	def __call__(self, message):
+		if message.name == self._contol_msg_name:
+			self._status = 'ok'
+			self._last_err = ''
+			self._ok_hosts = set()
+			self._timeouted_hosts = set()
+			self._results = []			
+			
+			self._queue = cassandra.get_node_queue()
+			if self._queue.empty():
+				raise HandlerError('Cannot get nodelist: queue is empty')			
+			
+			request_message = self._new_message(
+				self._request_msg_name, 
+				msg_body={'leader_host' : cassandra.private_ip})
+	
+		elif message.name == self._response_msg_name:
+			pass
+		
+		elif message.name == self._request_msg_name:
+			resp_message = self._handle_request(message)
+			self._send_int_message(message.leader_host, resp_message)
+		
+	
 class StorageProvider(object):
 	
 	_providers = None

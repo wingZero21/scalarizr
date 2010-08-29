@@ -19,12 +19,29 @@ import time
 import signal, pwd, random
 import shutil, ConfigParser
 from boto.exception import BotoServerError
-
+from scalarizr.util import initdv2
 
 BEHAVIOUR = BuiltinBehaviours.MYSQL
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR
 
+class MysqlInitScript(initdv2.ParametrizedInitScript):
+	def __init__(self):
+		initd_script = disttool.is_redhat_based() and "/etc/init.d/mysqld" or "/etc/init.d/mysql"
+		
+		pid_file = None
+		try:
+			out = system("my_print_defaults mysqld")
+			m = re.search("--pid[-_]file=(.*)", out[0], re.MULTILINE)
+			if m:
+				pid_file = m.group(1)
+		except:
+			pass
+		
+		initdv2.ParametrizedInitScript.__init__(self, 'mysql', 
+				initd_script, pid_file, socks=[initdv2.SockParam(3066)])
+initdv2.explore(MysqlInitScript)
+		
 
 if disttool.is_redhat_based():
 	initd_script = "/etc/init.d/mysqld"
@@ -256,6 +273,8 @@ class MysqlHandler(Handler):
 	
 	_mycnf_path = None
 	_mysqld_path = None
+	
+	_initd = None
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -272,6 +291,7 @@ class MysqlHandler(Handler):
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
 		self._binlog_path = os.path.join(self._storage_path, STORAGE_BINLOG_PATH)
+		self._initd = initdv2.lockup('mysql')
 		
 		bus.on("init", self.on_init)
 
