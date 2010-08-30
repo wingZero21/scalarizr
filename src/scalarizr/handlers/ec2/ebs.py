@@ -57,7 +57,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 			pass
 	
 	def on_before_host_init(self, *args, **kwargs):
-		self._logger.info("Adding udev rule for EBS devices")
+		self._logger.debug("Adding udev rule for EBS devices")
 		try:
 			config = bus.config
 			scripts_path = config.get(configtool.SECT_GENERAL, configtool.OPT_SCRIPTS_PATH)
@@ -71,10 +71,9 @@ class EbsHandler(scalarizr.handlers.Handler):
 			raise
 
 	def on_MountPointsReconfigure(self, message):
-		self._logger.debug("Iterate over EBS mounpoints")
-		self._logger.info("Reconfiguring mpoints")
+		self._logger.info("Reconfiguring mountpoints")
 		for ebs_mpoint in self._queryenv.list_ebs_mountpoints():
-			self._logger.info("Processing %s", ebs_mpoint)
+			self._logger.debug("Processing %s", ebs_mpoint)
 			if ebs_mpoint.is_array:
 				# TODO: implement EBS arrays
 				self._logger.warning("EBS array %s skipped. EBS arrays not implemented yet", ebs_mpoint.name)
@@ -91,7 +90,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 			
 			mtab = fstool.Mtab()			
 			if not mtab.contains(devname, rescan=True):
-				self._logger.info("Mounting device %s to %s", devname, ebs_mpoint.dir)
+				self._logger.debug("Mounting device %s to %s", devname, ebs_mpoint.dir)
 				fstool.mount(devname, ebs_mpoint.dir, make_fs=ebs_mpoint.create_fs, auto_mount=True)
 				self._logger.debug("Device %s is mounted to %s", devname, ebs_mpoint.dir)
 				
@@ -105,13 +104,13 @@ class EbsHandler(scalarizr.handlers.Handler):
 				entry = mtab.find(devname)[0]
 				self._logger.debug("Skip device %s already mounted to %s", devname, entry.mpoint)
 				
-		self._logger.debug("Mpoints reconfigured")
+		self._logger.debug("Mountpoints reconfigured")
 		
 
 				
 	def on_IntBlockDeviceUpdated(self, message):
 		if message.action == "add":
-			self._logger.info("udev notified that block device %s was attached", message.devname)
+			self._logger.debug("udev notified me that block device %s was attached", message.devname)
 			
 			self._send_message(
 				Messages.BLOCK_DEVICE_ATTACHED, 
@@ -122,7 +121,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 			bus.fire("block_device_attached", device=message.devname)
 			
 		elif message.action == "remove":
-			self._logger.info("udev notified me that block device %s was detached", message.device)
+			self._logger.debug("udev notified me that block device %s was detached", message.device)
 			fstab = fstool.Fstab()
 			fstab.remove(message.devname)
 			

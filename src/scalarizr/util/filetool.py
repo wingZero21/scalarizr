@@ -27,7 +27,7 @@ def split(filename, part_name_prefix, chunk_size, dest_dir):
 		# before writing out data.
 		num_parts = int(math.ceil(float(os.path.getsize(filename))/chunk_size))
 		part_names = []
-		logger.info("Splitting file '%s' into %d chunks", filename, num_parts)
+		logger.debug("Splitting file '%s' into %d chunks", filename, num_parts)
 		for i in range(num_parts):
 			part_name_suffix = PART_SUFFIX + str(i).rjust(2, "0")
 			part_name = part_name_prefix + part_name_suffix
@@ -45,7 +45,7 @@ def split(filename, part_name_prefix, chunk_size, dest_dir):
 			part_filename = os.path.join(dest_dir, part_name)
 			cf = open(part_filename, "w")
 			try:
-				logger.info("Writing chunk '%s'", part_filename)
+				logger.debug("Writing chunk '%s'", part_filename)
 				_write_chunk(f, cf, chunk_size)
 			except OSError:
 				logger.error("Cannot write chunk file '%s'", part_filename)

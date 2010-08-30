@@ -326,11 +326,11 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 	from scalarizr.util.filetool import Rsync
 	logger = logging.getLogger(__name__)
 	
-	logger.info("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
+	logger.debug("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
 			mpoint, privated_image, format_size(1024*blocks_count))
 	mtab = fstool.Mtab()
 	if mtab.contains(mpoint=mpoint): # if privated_image exists
-		logger.warning("private.d already mounted to %s", mpoint)
+		logger.debug("private.d already mounted to %s", mpoint)
 		return
 	
 	if not os.path.exists(mpoint):
@@ -338,7 +338,7 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 		
 	mnt_opts = ('-t auto', '-o loop,rw')	
 	if not os.path.exists(privated_image):	
-		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s' % (privated_image, blocks_count)
+		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count)
 		retcode = system(build_image_cmd)[2]
 		if retcode:
 			logger.error('Cannot create image device')

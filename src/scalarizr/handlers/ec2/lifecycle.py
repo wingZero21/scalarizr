@@ -5,7 +5,7 @@ Created on Mar 2, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.util import system, filetool
+from scalarizr.util import system, filetool, disttool
 import logging
 import os, re
 
@@ -37,12 +37,13 @@ class Ec2LifeCycleHandler(Handler):
 		# Set the hostname to this instance's public hostname
 		system("hostname " + self._platform.get_public_hostname())
 		
-		# ec2 init script may disable root login
-		ec2_cfg_path = "/etc/ec2-init/ec2-config.cfg"
-		if os.path.exists(ec2_cfg_path):
-			c = filetool.read_file(ec2_cfg_path)
-			c = re.sub(re.compile("^disable_root.*", re.M), "disable_root=0", c)
-			filetool.write_file(ec2_cfg_path, c)
+		if disttool.is_ubuntu():
+			# Ubuntu cloud-init scripts may disable root ssh login
+			for path in ('/etc/ec2-init/ec2-config.cfg', '/etc/cloud/cloud.cfg'):
+				if os.path.exists(path):
+					c = filetool.read_file(path)
+					c = re.sub(re.compile(r'^disable_root[^:=]*([:=]).*', re.M), r'disable_root\1 0', c)
+					filetool.write_file(path, c)
 			
 		# Add server ssh public key to authorized_keys
 		authorized_keys_path = "/root/.ssh/authorized_keys"
@@ -51,7 +52,7 @@ class Ec2LifeCycleHandler(Handler):
 			ssh_key = self._platform.get_ssh_pub_key()
 			if c.find(ssh_key) == -1:
 				c += ssh_key + "\n"
-				self._logger.info("Add server ssh public key to authorized_keys")
+				self._logger.debug("Add server ssh public key to authorized_keys")
 				filetool.write_file(authorized_keys_path, c)
 
 	

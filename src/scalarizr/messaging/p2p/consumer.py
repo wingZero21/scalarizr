@@ -46,11 +46,11 @@ class P2pMessageConsumer(MessageConsumer):
 				r = urlparse(self.endpoint)
 				server_cls = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
 				self._server = server_cls((r.hostname, r.port),	self.RequestHandler)
-				self._logger.info("Build consumer server on %s:%s", r.hostname, r.port)
+				self._logger.info("Build message consumer server on %s:%s", r.hostname, r.port)
 		except (BaseException, Exception), e:
 			self._logger.error("Cannot build server. %s", e)
 			
-		self._logger.info("Starting message consumer")
+		self._logger.debug("Starting message consumer")
 		
 		try:
 			if self.create_handler_thread:
@@ -61,7 +61,7 @@ class P2pMessageConsumer(MessageConsumer):
 			
 	def stop(self):
 		if (not self._server is None):
-			self._logger.info("Stopping message consumer...")
+			self._logger.debug("Stopping message consumer...")
 		
 			# stop http server
 			self._logger.debug("Stopping HTTP server")
@@ -75,7 +75,7 @@ class P2pMessageConsumer(MessageConsumer):
 				self._handler_thread.join()
 				self._logger.debug("Message handler stopped")
 			
-			self._logger.info("Message consumer stopped")
+			self._logger.debug("Message consumer stopped")
 
 	def shutdown(self):
 		self._logger.debug("Closing HTTP server")
@@ -91,7 +91,7 @@ class P2pMessageConsumer(MessageConsumer):
 					queue = unhandled[0]
 					message = unhandled[1]
 					try:
-						self._logger.info("Notify message listeners (message_id: %s)", message.id)
+						self._logger.debug("Notify message listeners (message_id: %s)", message.id)
 						for ln in self.listeners:
 							ln(message, queue)
 					except (BaseException, Exception), e:
@@ -111,9 +111,10 @@ class P2pMessageConsumer(MessageConsumer):
 		@type consumer: P2pMessageConsumer 
 		'''
 		
+
 		def do_POST(self):
 			logger = logging.getLogger(__name__)
-			
+
 			queue = os.path.basename(self.path)
 			rawmsg = self.rfile.read(int(self.headers["Content-length"]))
 			logger.debug("Received ingoing message in queue: '%s'", queue)
@@ -138,7 +139,7 @@ class P2pMessageConsumer(MessageConsumer):
 				self.send_response(400, err)
 				return
 			
-			logger.info("Received ingoing message %s in queue %s", message.name, queue)
+			logger.info("Received ingoing message '%s' in queue %s", message.name, queue)
 			
 			try:
 				store = P2pMessageStore()
@@ -153,8 +154,7 @@ class P2pMessageConsumer(MessageConsumer):
 			
 		def log_message(self, format, *args):
 			logger = logging.getLogger(__name__)
-			logger.info("%s %s\n", self.address_string(), format%args)		
-			pass
+			logger.debug("%s %s\n", self.address_string(), format%args)		
 
 
 if sys.version_info < (2,6):

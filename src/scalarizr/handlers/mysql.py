@@ -11,7 +11,7 @@ from scalarizr.util import validators
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
 		configtool, filetool, ping_service, firstmatched, cached
-from scalarizr.platform.ec2 import S3Uploader, UD_OPT_S3_BUCKET_NAME
+from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re,  pexpect, tarfile, tempfile
@@ -326,7 +326,7 @@ class MysqlHandler(Handler):
 			pma_server_ip = message.pma_server_ip
 			farm_role_id  = message.farm_role_id
 			
-			self._logger.info("Adding Pma system user")
+			self._logger.info("Adding phpMyAdmin system user")
 			
 			# Connecting to mysql 
 			myclient = pexpect.spawn('/usr/bin/mysql -u'+ROOT_USER+' -p')
@@ -447,14 +447,14 @@ class MysqlHandler(Handler):
 			else:
 				parts = [backup_path]
 					
-			self._logger.info("Uploading backup")
+			self._logger.info("Uploading backup to S3")
 			s3_conn = self._platform.new_s3_conn()
 			bucket_name = self._platform.get_user_data(UD_OPT_S3_BUCKET_NAME)
 			bucket = s3_conn.get_bucket(bucket_name)
 			
-			uploader = S3Uploader()
+			uploader = s3tool.S3Uploader()
 			result = uploader.upload(parts, bucket, s3_conn)
-			self._logger.info("Backup files(s) uploaded to S3 (%s)", ", ".join(result))
+			self._logger.debug("Backup files(s) uploaded to S3 (%s)", ", ".join(result))
 			
 			self._send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
 				status		= 'ok',
@@ -590,12 +590,12 @@ class MysqlHandler(Handler):
 			self._logger.info("Switching replication to a new MySQL master %s", host)
 			mysql = self._spawn_mysql(ROOT_USER, message.root_password)
 						
-			self._logger.info("Stopping slave i/o thread")
+			self._logger.debug("Stopping slave i/o thread")
 			mysql.sendline("STOP SLAVE IO_THREAD;")
 			mysql.expect("mysql>")
 			self._logger.debug("Slave i/o thread stopped")
 			
-			self._logger.info("Retrieving current log_file and log_pos")
+			self._logger.debug("Retrieving current log_file and log_pos")
 			mysql.sendline("SHOW SLAVE STATUS\\G");
 			mysql.expect("mysql>")
 			log_file = log_pos = None
@@ -616,7 +616,7 @@ class MysqlHandler(Handler):
 				mysql_user=ROOT_USER,
 				mysql_password=message.root_password
 			)			
-			self._logger.info("Replication switched")
+			self._logger.debug("Replication switched")
 		else:
 			self._logger.debug('Skip NewMasterUp. My replication role is master')		
 
@@ -635,19 +635,24 @@ class MysqlHandler(Handler):
 		Stop MySQL and unplug storage
 		"""
 		self._stop_mysql()
+		'''
+		no need to plug/unplug storage since Scalarizr do EBS-root instances bundle 
 		try:
 			self._unplug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
 		except ConfigParser.NoOptionError:
-			self._logger.info("Skip storage unplug. There is no configured storage.")
+			self._logger.debug("Skip storage unplug. There is no configured storage.")
+		'''
 
 	def on_before_reboot_finish(self, *args, **kwargs):
 		"""
 		Start MySQL and plug storage
 		"""
+		'''
 		try:
 			self._plug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
 		except ConfigParser.NoOptionError:
-			self._logger.info("Skip storage plug. There is no configured storage.")
+			self._logger.debug("Skip storage plug. There is no configured storage.")
+		'''
 		self._start_mysql()
 
 	def on_host_init_response(self, message):
@@ -719,7 +724,7 @@ class MysqlHandler(Handler):
 			
 			if os.path.exists('/etc/mysql/debian.cnf'):
 				try:
-					self._logger.info("Copying debian.cnf file to storage")
+					self._logger.debug("Copying debian.cnf file to storage")
 					shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
 				except BaseException, e:
 					self._logger.error("Cannot copy debian.cnf file to storage: ", e)
@@ -749,7 +754,7 @@ class MysqlHandler(Handler):
 			
 			if disttool._is_debian_based and os.path.exists(os.path.join(STORAGE_PATH, 'debian.cnf')):
 				try:
-					self._logger.info("Copying debian.cnf file from storage")
+					self._logger.debug("Copying debian.cnf file from storage")
 					shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
 				except BaseException, e:
 					self._logger.error("Cannot copy debian.cnf file from storage: ", e)
@@ -776,7 +781,7 @@ class MysqlHandler(Handler):
 		"""
 		self._logger.info("Initializing MySQL slave")
 		if not self._storage_valid():
-			self._logger.info("Initialize slave storage")
+			self._logger.debug("Initialize slave storage")
 			
 			ebs_volume = self._create_volume_from_snapshot(self._sect.get(OPT_SNAPSHOT_ID))
 			message.mysql = dict(volume_id = ebs_volume.id)
@@ -821,7 +826,7 @@ class MysqlHandler(Handler):
 		self._replication_init(master=False)
 		if disttool._is_debian_based and os.path.exists(STORAGE_PATH + os.sep +'debian.cnf') :
 			try:
-				self._logger.info("Copying debian.cnf from storage to mysql configuration directory")
+				self._logger.debug("Copying debian.cnf from storage to mysql configuration directory")
 				shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
 			except BaseException, e:
 				self._logger.error("Cannot copy debian.cnf file from storage: ", e)
@@ -882,7 +887,7 @@ class MysqlHandler(Handler):
 			self._logger.debug("Volume %s available", vol.id)
 
 		# Attach ebs
-		self._logger.info("Attaching volume %s as device %s", vol.id, devname)
+		self._logger.debug("Attaching volume %s as device %s", vol.id, devname)
 		try:
 			vol.attach(self._platform.get_instance_id(), devname)
 		except BotoServerError, e:
@@ -892,7 +897,7 @@ class MysqlHandler(Handler):
 						"but attach operation failed with 'VolumeInUse' error. " +
 						"Sometimes this happens when plugging storage from crashed MySQL master server.")
 				try:
-					self._logger.info("Force detaching volume %s", vol.id)
+					self._logger.debug("Force detaching volume %s", vol.id)
 					vol.detach(True)
 					self._logger.debug("Volume %s detached", vol.id)
 				except BotoServerError, e:
@@ -907,7 +912,7 @@ class MysqlHandler(Handler):
 		self._logger.debug("Volume %s attached",  vol.id)
 			
 		# Wait when device will be added
-		self._logger.info("Checking that device %s is available", devname)
+		self._logger.debug("Checking that device %s is available", devname)
 		self._wait_until(lambda: os.access(devname, os.F_OK | os.R_OK))
 		self._logger.debug("Device %s is available", devname)
 		
@@ -928,12 +933,12 @@ class MysqlHandler(Handler):
 		
 		# Unmount volume
 		if os.path.ismount(self._storage_path):
-			self._logger.info("Unmounting storage %s", self._storage_path)
+			self._logger.debug("Unmounting storage %s", self._storage_path)
 			fstool.umount(self._storage_path, clean_fstab=True)
 			self._logger.debug("Storage %s unmounted", self._storage_path)
 		
 		# Detach volume
-		self._logger.info("Detaching storage volume %s", vol.id)
+		self._logger.debug("Detaching storage volume %s", vol.id)
 		vol.detach()
 		self._wait_until(lambda: vol.update() == "available")
 		self._logger.debug("Volume %s detached", vol.id)
@@ -948,13 +953,13 @@ class MysqlHandler(Handler):
 		ec2_conn = self._get_ec2_conn()
 		avail_zone = avail_zone or self._platform.get_avail_zone()
 		
-		self._logger.info("Creating EBS volume from snapshot %s in avail zone %s", snap_id, avail_zone)
+		self._logger.debug("Creating EBS volume from snapshot %s in avail zone %s", snap_id, avail_zone)
 		ebs_volume = ec2_conn.create_volume(None, avail_zone, snap_id)
 		self._logger.debug("Volume %s created from snapshot %s", ebs_volume.id, snap_id)
 		
-		self._logger.info('Checking that EBS volume %s is available', ebs_volume.id)
+		self._logger.debug('Checking that EBS volume %s is available', ebs_volume.id)
 		self._wait_until(lambda: ebs_volume.update() == "available")
-		self._logger.info("Volume %s available", ebs_volume.id)
+		self._logger.debug("Volume %s available", ebs_volume.id)
 		
 		return ebs_volume
 	
@@ -973,7 +978,7 @@ class MysqlHandler(Handler):
 
 	def _take_master_volume(self, volume_id):
 		# Lookup master volume
-		self._logger.info("Taking master EBS volume %s", volume_id)
+		self._logger.debug("Taking master EBS volume %s", volume_id)
 		ec2_conn = self._get_ec2_conn()
 		zone = self._platform.get_avail_zone()						
 		try:
@@ -985,7 +990,7 @@ class MysqlHandler(Handler):
 		# and create EBS in our avail zone
 		self._logger.debug("Taked master volume %s (zone: %s)", master_vol.id, master_vol.zone)
 		if master_vol.zone != zone:
-			self._logger.info("Master volume is in another zone (volume zone: %s, server zone: %s) " + 
+			self._logger.debug("Master volume is in another zone (volume zone: %s, server zone: %s) " + 
 					"Creating volume in %s zone", 
 					master_vol.id, zone, zone)
 			self._logger.debug("Creating snapshot from volume %s", master_vol.id)
@@ -998,7 +1003,7 @@ class MysqlHandler(Handler):
 				master_snap.delete()
 				self._logger.debug("Snapshot %s deleted", master_snap.id)
 				
-			self._logger.info("Use %s as master data volume", master_vol.id)
+			self._logger.debug("Use %s as master data volume", master_vol.id)
 		
 		return master_vol
 
@@ -1235,7 +1240,7 @@ class MysqlHandler(Handler):
 	
 	def _start_mysql_skip_grant_tables(self):
 		if os.path.exists(self._mysqld_path) and os.access(self._mysqld_path, os.X_OK):
-			self._logger.info("Starting mysql server with --skip-grant-tables")
+			self._logger.debug("Starting mysql server with --skip-grant-tables")
 			myd = Popen([self._mysqld_path, '--skip-grant-tables'], stdin=PIPE, stdout=PIPE, stderr=STDOUT)
 		else:
 			self._logger.error("MySQL daemon '%s' doesn't exists", self._mysqld_path)
@@ -1265,7 +1270,7 @@ class MysqlHandler(Handler):
 				os.makedirs(directory)
 				src_dir = os.path.dirname(src_dir_row.group(2) + "/") + "/"
 				if os.path.isdir(src_dir):
-					self._logger.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
+					self._logger.debug('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
 					system(str(rsync))
@@ -1336,7 +1341,7 @@ class MysqlHandler(Handler):
 	
 	def _mount_device(self, devname, mpoint):
 		try:
-			self._logger.info("Mounting device %s to %s", devname, mpoint)
+			self._logger.debug("Mounting device %s to %s", devname, mpoint)
 			fstool.mount(devname, mpoint, auto_mount=True)
 			self._logger.debug("Device %s is mounted to %s", devname, mpoint)
 		except fstool.FstoolError, e:

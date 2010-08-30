@@ -133,6 +133,14 @@ def system(args, shell=True):
 	return out, err, p.returncode
 
 
+def wait_until(target, args=None, sleep=5, logger=None):
+	args = args or ()
+	while not target(*args):
+		if logger:
+			logger.debug("Wait %d seconds before the next attempt", sleep)
+		time.sleep(sleep)
+
+
 def xml_strip(el):
 	for child in list(el.childNodes):
 		if child.nodeType==child.TEXT_NODE and child.nodeValue.strip() == '':

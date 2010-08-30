@@ -33,7 +33,7 @@ class HooksHandler(Handler):
 			
 	def create_hook(self, event):
 		def hook(*args, **kwargs):
-			self._logger.info("Hook on '"+event+"'" + str(args) + " " + str(kwargs))
+			self._logger.debug("Hook on '"+event+"'" + str(args) + " " + str(kwargs))
 
 			config = bus.config
 			environ = kwargs
@@ -64,7 +64,7 @@ class HooksHandler(Handler):
 								if is_start_failed:
 									self._logger.error("stderr: %s", stderr)
 									
-								self._logger.info("stdout: %s", stdout)	
+								self._logger.debug("stdout: %s", stdout)	
 							except OSError, e:
 								self._logger.error("Error in script '%s'. %s", fname, str(e.strerror))			
 		return hook

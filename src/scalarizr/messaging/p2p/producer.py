@@ -4,7 +4,7 @@ Created on Dec 5, 2009
 @author: marat
 '''
 
-from scalarizr.messaging import MessageProducer
+from scalarizr.messaging import MessageProducer, Queues
 from scalarizr.messaging.p2p import P2pMessageStore
 from scalarizr.util import configtool
 from urllib import splitnport
@@ -46,7 +46,7 @@ class P2pMessageProducer(MessageProducer):
 		self._stop_delivery.set()
 	
 	def send(self, queue, message):
-		self._logger.info("Sending message '%s' into queue '%s'", message.name, queue)
+		self._logger.debug("Sending message '%s' into queue '%s'", message.name, queue)
 
 		if message.id is None:
 			message.id = str(uuid.uuid4())
@@ -62,7 +62,7 @@ class P2pMessageProducer(MessageProducer):
 			#while not self._local.delivered and not self._stop_delivery.isSet():
 			while not self._local.delivered:			
 				if self._local.interval:
-					self._logger.info("Sleep %d seconds before next attempt", self._local.interval)
+					self._logger.debug("Sleep %d seconds before next attempt", self._local.interval)
 					time.sleep(self._local.interval)
 					# FIXME: SIGINT hanged
 					# strace:
@@ -76,6 +76,7 @@ class P2pMessageProducer(MessageProducer):
 				self._send0(queue, message, self._delivered_cb, self._undelivered_cb)
 		else:
 			self._send0(queue, message, self._delivered_cb, self._undelivered_cb_raises)
+
 
 	def _undelivered_cb_raises(self, queue, message, ex):
 		raise ex
@@ -141,7 +142,8 @@ class P2pMessageProducer(MessageProducer):
 
 
 	def _message_delivered(self, queue, message, callback=None):
-		self._logger.info("Message '%s' delivered (message_id: %s)", message.name, message.id)		
+		self._logger.log(queue == Queues.LOG and logging.DEBUG or logging.INFO, 
+				"Message '%s' delivered (message_id: %s)", message.name, message.id)
 		self._store.mark_as_delivered(message.id)
 		self.fire("send", queue, message)
 		if callback:

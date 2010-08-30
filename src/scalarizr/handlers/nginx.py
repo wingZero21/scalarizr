@@ -186,9 +186,9 @@ class NginxHandler(Handler):
 			old_include = read_file(include, msg = log_message, logger = self._logger)
 
 		if template == old_include and not force_reload:
-			self._logger.info("nginx upstream configuration wasn`t changed.")
+			self._logger.debug("nginx upstream configuration wasn`t changed.")
 		else:
-			self._logger.info("nginx upstream configuration was changed.")
+			self._logger.debug("nginx upstream configuration was changed.")
 			self._logger.debug("Creating backup config files.")
 			if os.path.isfile(include):
 				shutil.move(include, include+".save")
@@ -290,7 +290,7 @@ class NginxHandler(Handler):
 	
 	def on_before_host_down(self, *args):
 		try:
-			self._logger.info("Stopping nginx")
+			self._logger.info("Stopping Nginx")
 			initd.stop("nginx")
 		except initd.InitdError, e:
 			self._logger.error("Cannot stop nginx")
@@ -308,7 +308,7 @@ class NginxHandler(Handler):
 	
 
 	def _update_vhosts(self):
-		self._logger.info("Requesting virtual hosts list")
+		self._logger.debug("Requesting virtual hosts list")
 		received_vhosts = self._queryenv.list_virtual_hosts()
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
 				
@@ -373,11 +373,10 @@ class NginxHandler(Handler):
 		nginx_pid = read_file(pid_file, logger = self._logger)
 		if nginx_pid and nginx_pid.strip():
 			try:
-				self._logger.info("Reloading nginx")
+				self._logger.info("Reloading Nginx")
 				initd.reload("nginx")
 				self._logger.debug("nginx reloaded")
 			except:
 				self._logger.error("Cannot reloaded nginx")
 				raise
 
-logger = logging.getLogger(__name__)

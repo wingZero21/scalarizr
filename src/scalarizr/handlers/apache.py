@@ -144,7 +144,7 @@ class ApacheHandler(Handler):
 		
 	def on_before_host_down(self, *args):
 		try:
-			self._logger.info("Stopping apache")
+			self._logger.info("Stopping Apache")
 			initd.stop("apache")
 		except initd.InitdError, e:
 			self._logger.error("Cannot stop apache")
@@ -160,7 +160,7 @@ class ApacheHandler(Handler):
 		
 		self.server_root = self._get_server_root(httpd_conf_path)
 			
-		self._logger.info("Requesting virtual hosts list")
+		self._logger.debug("Requesting virtual hosts list")
 		received_vhosts = self._queryenv.list_virtual_hosts()
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
 		
@@ -179,7 +179,7 @@ class ApacheHandler(Handler):
 			
 			list_vhosts = os.listdir(vhosts_path)
 			if [] != list_vhosts:
-				self._logger.info("Deleting old vhosts configuration files")
+				self._logger.debug("Deleting old vhosts configuration files")
 				for fname in list_vhosts:
 					if '000-default' == fname:
 						continue
@@ -197,12 +197,12 @@ class ApacheHandler(Handler):
 							self._logger.error('Cannot delete vhost link %s. %s', vhost_file, e.strerror)
 				self._logger.debug("Old vhosts configuration files deleted")
 
-			self._logger.info("Creating new vhosts configuration files")
+			self._logger.debug("Creating new vhosts configuration files")
 			for vhost in received_vhosts:
 				if (None == vhost.hostname) or (None == vhost.raw):
 					continue
 				
-				self._logger.info("Processing %s", vhost.hostname)
+				self._logger.debug("Processing %s", vhost.hostname)
 				if vhost.https:
 					try:
 						self._logger.debug("Retrieving ssl cert and private key from Scalr.")
@@ -217,7 +217,7 @@ class ApacheHandler(Handler):
 						elif not https_certificate[1]:
 							self._logger.error("Scalar returned empty SSL key")
 						else:
-							self._logger.info("Saving SSL certificates for %s",vhost.hostname)
+							self._logger.debug("Saving SSL certificates for %s",vhost.hostname)
 							
 							key_error_message = 'Cannot write SSL key files to %s.' % cert_path
 							cert_error_message = 'Cannot write SSL certificate files to %s.' % cert_path
@@ -228,7 +228,7 @@ class ApacheHandler(Handler):
 							for cert_file in ['https.crt', vhost.hostname + '.crt']:
 								write_file(cert_path + '/' + cert_file, https_certificate[0], error_msg=cert_error_message, logger=self._logger)
 					
-					self._logger.info('Enabling SSL virtual host %s', vhost.hostname)
+					self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
 					
 					vhost_fullpath = vhosts_path + '/' + vhost.hostname + '-ssl.vhost.conf'
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
@@ -243,7 +243,7 @@ class ApacheHandler(Handler):
 					self._patch_ssl_conf(cert_path)
 			
 				else:
-					self._logger.info('Enabling virtual host %s', vhost.hostname)
+					self._logger.debug('Enabling virtual host %s', vhost.hostname)
 					vhost_fullpath = vhosts_path + '/' + vhost.hostname + '.vhost.conf'
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
 					write_file(vhost_fullpath, vhost.raw, error_msg=vhost_error_message, logger=self._logger)
@@ -314,7 +314,7 @@ class ApacheHandler(Handler):
 					self._logger.debug("Creating symlinks for mod_ssl files.", mods_enabled)
 					os.symlink(mods_available+'/ssl.conf', mods_enabled+'/ssl.conf')
 					os.symlink(mods_available+'/ssl.load', mods_enabled+'/ssl.load')
-					self._logger.info('SSL module has been enabled')
+					self._logger.debug('SSL module has been enabled')
 				except OSError, e:
 					self._logger.error('Cannot create symlinks for ssl.conf and ssl.load in %s. %s', 
 							mods_enabled, e.strerror)
@@ -379,7 +379,7 @@ class ApacheHandler(Handler):
 				
 				if ssl_conf_str and index == -1:
 					backup_file(httpd_conf_path)
-					self._logger.info('%s does not contain mod_ssl include. Patching httpd conf.',
+					self._logger.debug('%s does not contain mod_ssl include. Patching httpd conf.',
 								httpd_conf_path)
 					
 					pos = self.load_module_regexp.search(conf_str)
@@ -410,7 +410,7 @@ class ApacheHandler(Handler):
 			else:
 				self._logger.warning("ServerRoot not found in apache config file %s", httpd_conf_path)
 				server_root = os.path.dirname(httpd_conf_path)
-				self._logger.info("Use %s as ServerRoot", server_root)
+				self._logger.debug("Use %s as ServerRoot", server_root)
 				
 		return server_root
 	
@@ -453,7 +453,7 @@ class ApacheHandler(Handler):
 			for log_dir in dir_list:
 				try:
 					os.makedirs(log_dir)
-					self._logger.info('Created log directory %s', log_dir)
+					self._logger.debug('Created log directory %s', log_dir)
 				except OSError, e:
 					self._logger.error('Couldn`t create directory %s. %s', 
 							log_dir, e.strerror)

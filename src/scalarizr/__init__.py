@@ -150,7 +150,7 @@ def _init_services():
 	config = bus.config
 	cnf = bus.cnf
 	
-	logger.info("Initialize services")
+	logger.debug("Initialize services")
 	
 
 	
@@ -160,7 +160,7 @@ def _init_services():
 	# Check that database exists (after rebundle for example)
 	db_file = cnf.private_path(DB_NAME)
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
-		logger.warning("Database doesn't exists, create new one from script")
+		logger.debug("Database doesn't exists, create new one from script")
 		_create_db()		
 
 	# Initialize platform
@@ -195,7 +195,7 @@ def _init_services():
 		def on_error(o, e, errors=errors):
 			errors.append(e)
 			logger.error('[%s] %s', o.name, e)
-		logger.info('Validating configuration')
+		logger.debug('Validating configuration')
 		cnf.validate(on_error)		
 	
 		cnf.state = ScalarizrState.BOOTSTRAPPING
@@ -366,12 +366,12 @@ def _snmpd_health_check():
 
 def onSIGTERM(*args):
 	logger = logging.getLogger(__name__)
-	logger.info("Received SIGTERM")
+	logger.debug("Received SIGTERM")
 	_shutdown()
 
 def onSIGCHILD(*args):
 	logger = logging.getLogger(__name__)
-	logger.info("Received SIGCHILD from SNMP process")
+	logger.debug("Received SIGCHILD from SNMP process")
 	if globals()["_running"]:
 		_start_snmp_server()
 
@@ -478,6 +478,7 @@ def main():
 		if optparser.values.daemonize:
 			daemonize()
 	
+		logger.info("Initialize Scalarizr...")
 		_init()
 		cnf = bus.cnf
 	
@@ -531,6 +532,7 @@ def main():
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
 		msg_thread = threading.Thread(target=consumer.start, name="Message consumer")
+		logger.info('Starting Scalarizr')
 		msg_thread.start()
 	
 
