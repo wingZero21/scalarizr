@@ -1341,8 +1341,8 @@ class MysqlHandler(Handler):
 			self._logger.debug("Device %s is mounted to %s", devname, mpoint)
 		except fstool.FstoolError, e:
 			if fstool.FstoolError.NO_FS == e.code:
-				self._logger.warning("Mount failed with NO_FS error")
-				self._logger.info("Creating file system on device %s and mount it again", devname)
+				self._logger.warning("Mount failed with NO_FS error. " 
+						+ "Creating file system on device %s and mount it again", devname)
 				fstool.mount(devname, mpoint, make_fs=True, auto_mount=True)
 			else:
 				raise
