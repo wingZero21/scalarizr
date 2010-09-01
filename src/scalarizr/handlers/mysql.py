@@ -9,8 +9,8 @@ from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.util import validators
 
 from scalarizr.handlers import Handler, HandlerError
-from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
-		configtool, filetool, ping_service, firstmatched, cached
+from scalarizr.util import fstool, system, cryptotool, disttool,\
+		configtool, filetool, firstmatched, cached
 from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
@@ -20,6 +20,10 @@ import signal, pwd, random
 import shutil, ConfigParser
 from boto.exception import BotoServerError
 from scalarizr.util import initdv2
+from scalarizr.util.initdv2 import ParametrizedInitScript, ping_service2
+from scalarizr.util.initd import InitdError
+from scalarizr.libs.metaconf import *
+
 
 BEHAVIOUR = BuiltinBehaviours.MYSQL
 CNF_SECTION = BEHAVIOUR
@@ -39,33 +43,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			pass
 		
 		initdv2.ParametrizedInitScript.__init__(self, 'mysql', 
-				initd_script, pid_file, socks=[initdv2.SockParam(3066)])
-initdv2.explore(MysqlInitScript)
-		
+				initd_script, pid_file, socks=[initdv2.SockParam(3306)])
 
-if disttool.is_redhat_based():
-	initd_script = "/etc/init.d/mysqld"
-elif disttool.is_debian_based():
-	initd_script = "/etc/init.d/mysql"
-else:
-	initd_script = "/etc/init.d/mysql"
-	
-if not os.path.exists(initd_script):
-	raise HandlerError("Cannot find MySQL init script at %s. Make sure that mysql server is installed" % initd_script)
-
-pid_file = None
-try:
-	out = system("my_print_defaults mysqld")
-	m = re.search("--pid[-_]file=(.*)", out[0], re.MULTILINE)
-	if m:
-		pid_file = m.group(1)
-except:
-	pass
-
-# Register mysql service
-logger = logging.getLogger(__name__)
-logger.debug("Explore MySQL service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
-initd.explore("mysql", initd_script, pid_file, tcp_port=3306)
+initdv2.explore('mysql', MysqlInitScript)
 
 
 class MysqlOptions(Configurator.Container):
@@ -291,8 +271,15 @@ class MysqlHandler(Handler):
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
 		self._binlog_path = os.path.join(self._storage_path, STORAGE_BINLOG_PATH)
-		self._initd = initdv2.lockup('mysql')
+		self._initd = initdv2.lookup('mysql')
 		
+		self._config = Configuration('mysql')
+	
+		try:
+			self._config.read(self._mycnf_path)
+		except MetaconfError, e:
+			raise HandlerError('Cannot read mysql config %s : %s' % (self._mycnf_path, str(e)))
+			
 		bus.on("init", self.on_init)
 
 	def on_init(self):
@@ -393,19 +380,10 @@ class MysqlHandler(Handler):
 			tmpdir = tempfile.mkdtemp()
 			
 			# Reading mysql config file
-			mysql_config = filetool.read_file(self._mycnf_path, self._logger)
-			
-			if not mysql_config:
-				raise HandlerError('Cannot read mysql config file %s' % (self._mycnf_path,))
-			
-			# Retrieveing datadir 
-			datadir_re = re.compile("^\s*datadir\s*=\s*(?P<datadir>.*?)$", re.M)	
-			result = re.search(datadir_re, mysql_config)			
-			
-			if not result:
+			try:
+				datadir = self._config.get('mysqld/datadir')
+			except PathNotExistsError:
 				raise HandlerError('Cannot get mysql data directory from mysql config file')
-			
-			datadir = result.group('datadir').strip()
 			
 			# Defining archive name and path
 			backup_filename = 'mysql-backup-'+time.strftime('%Y-%m-%d')+'.tar.gz'
@@ -512,7 +490,7 @@ class MysqlHandler(Handler):
 			
 			try:
 				# Stop mysql
-				if initd.is_running("mysql"):
+				if self._initd.is_running():
 					mysql = self._spawn_mysql(ROOT_USER, message.root_password)
 					timeout = 180
 					try:
@@ -533,8 +511,8 @@ class MysqlHandler(Handler):
 				# Continue if master storage is a valid MySQL storage 
 				if self._storage_valid():
 					# Patch configuration files 
-					self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
-					self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
+					self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
+					self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
 					self._replication_init()
 					# Update behaviour configuration
 					updates = {
@@ -569,7 +547,7 @@ class MysqlHandler(Handler):
 
 			
 			# Start MySQL
-			self._start_mysql()				
+			self._initd.start()				
 			
 			if tx_complete:
 				# Delete slave EBS
@@ -623,8 +601,8 @@ class MysqlHandler(Handler):
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
-				self._start_mysql()
-			except initd.InitdError, e:
+				self._initd.start()
+			except InitdError, e:
 				self._logger.error(e)
 				
 	def on_before_host_down(self, *args):
@@ -653,7 +631,7 @@ class MysqlHandler(Handler):
 		except ConfigParser.NoOptionError:
 			self._logger.debug("Skip storage plug. There is no configured storage.")
 		'''
-		self._start_mysql()
+		self._initd.start()
 
 	def on_host_init_response(self, message):
 		"""
@@ -682,7 +660,7 @@ class MysqlHandler(Handler):
 			if result:
 				datadir = result.group(1)
 				if os.path.isdir(datadir) and not os.path.isdir(os.path.join(datadir, 'mysql')):
-					self._start_mysql()	
+					self._initd.start()	
 					self._stop_mysql()				
 		except:
 			pass
@@ -711,17 +689,16 @@ class MysqlHandler(Handler):
 		msg_data = None
 		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
 
-		
 		# Patch configuration
-		self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
-		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
+		self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
+		self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
 
 				
 		self._replication_init(master=True)
-		
+
 		# If It's 1st init of mysql master
 		if not storage_valid:
-			
+
 			if os.path.exists('/etc/mysql/debian.cnf'):
 				try:
 					self._logger.debug("Copying debian.cnf file to storage")
@@ -769,7 +746,7 @@ class MysqlHandler(Handler):
 			message.mysql = msg_data
 			self._update_config(msg_data)
 			
-		self._start_mysql()			
+		self._initd.start()			
 			
 			
 	
@@ -821,8 +798,8 @@ class MysqlHandler(Handler):
 		self._flush_logs()
 		# Change configuration files
 		self._logger.info("Changing configuration files")
-		self._move_mysql_dir('datadir', self._data_dir, 'mysqld')
-		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
+		self._move_mysql_dir('mysqld/datadir', self._data_dir)
+		self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
 		self._replication_init(master=False)
 		if disttool._is_debian_based and os.path.exists(STORAGE_PATH + os.sep +'debian.cnf') :
 			try:
@@ -832,7 +809,7 @@ class MysqlHandler(Handler):
 				self._logger.error("Cannot copy debian.cnf file from storage: ", e)
 				
 					
-		self._start_mysql()
+		self._initd.start()
 		
 		# Change replication master 
 		master_host = None
@@ -1008,11 +985,10 @@ class MysqlHandler(Handler):
 		return master_vol
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
-		was_running = initd.is_running("mysql")
+		was_running = self._initd.is_running()
 		try:
 			if not was_running:
-				self._start_mysql()
-				self._ping_mysql()
+				self._initd.start()
 			
 			# Lock tables
 			sql = self._spawn_mysql(root_user, root_password)
@@ -1082,6 +1058,7 @@ class MysqlHandler(Handler):
 			raise HandlerError("Cannot extract mysql version from string '%s'" % out)
 	
 		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+		
 		# Define users and passwords
 		root_password, repl_password, stat_password = map(lambda x: re.sub('[^\w]','', cryptotool.keygen(20)), range(3))
 		# Add users
@@ -1096,8 +1073,7 @@ class MysqlHandler(Handler):
 		
 		os.kill(myd.pid, signal.SIGTERM)
 		time.sleep(3)
-		self._start_mysql()
-		self._ping_mysql()		
+		self._initd.start()
 		"""
 		self._logger.debug("Checking that mysqld is terminated")
 		self._wait_until(lambda: not initd.is_running("mysql"))
@@ -1132,30 +1108,24 @@ class MysqlHandler(Handler):
 			file.write('[mysqld]\nserver-id\t\t=\t'+ str(server_id)+'\nmaster-connect-retry\t\t=\t15\n')
 			file.close()
 			os.chmod(repl_conf_path, 0644)
+			
 		self._logger.debug("farm-replication config created")
+		
+		if not repl_conf_path in self._config.get_list('*/!include'):
+			# Include farm-replication.cnf in my.cnf
+			self._config.add('!include', repl_conf_path)
+			
+		# Patch networking
+		for option in ['bind-address','skip-networking']:
+			try:
+				self._config.comment('mysqld/'+option)
+			except:
+				pass
+		self.write_config()
 
-		# Include farm-replication.cnf in my.cnf
-		self._logger.debug("Add farm-replication.cnf include in my.cnf")
-		try:
-			file = open(self._mycnf_path, 'a+')
-		except IOError, e:
-			self._logger.error('Cannot open %s: %s', self._mycnf_path, e.strerror)
-			raise
-		else:
-			my_cnf = file.read()
-			file.close()
-			file = open(self._mycnf_path, 'w')
-			# Patch networking
-			network_re = re.compile('^([\t ]*((bind-address[\t ]*=)|(skip-networking)).*?)$', re.M)
-			my_cnf = re.sub(network_re, '#\\1', my_cnf)
-			if not re.search(re.compile('^!include \/etc\/mysql\/farm-replication\.cnf', re.MULTILINE), my_cnf):
-				my_cnf += '\n!include /etc/mysql/farm-replication.cnf\n'
-			file.write(my_cnf)
-		finally:
-			file.close()
+
 		if disttool.is_debian_based():
-			self._add_apparmor_rules(repl_conf_path)
-	
+			self._add_apparmor_rules(repl_conf_path)	
 
 	def _spawn_mysql(self, user, password):
 		#mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p' + password)
@@ -1206,29 +1176,20 @@ class MysqlHandler(Handler):
 		
 		self._logger.debug('Replication master is changed to host %s', host)		
 
-	def _start_mysql(self):
-		try:
-			self._logger.info("Starting MySQL")
-			initd.start("mysql")
-		except:
-			self._logger.error("Cannot start MySQL")
-			if not initd.is_running("mysql"):				
-				raise
-
 	def _stop_mysql(self):
 		try:
 			self._logger.info("Stopping MySQL")
-			initd.stop("mysql")
+			self._initd.stop()
 		except:
 			self._logger.error("Cannot stop MySQL")
-			if initd.is_running("mysql"):
+			if self._initd.is_running():
 				raise
 
 			
 	def _restart_mysql(self):
 		try:
 			self._logger.info("Restarting MySQL")
-			initd.restart("mysql")
+			self._initd.restart()
 			self._logger.debug("MySQL restarted")
 		except:
 			self._logger.error("Cannot restart MySQL")
@@ -1236,7 +1197,8 @@ class MysqlHandler(Handler):
 	
 		
 	def _ping_mysql(self):
-		ping_service("0.0.0.0", 3306, 5)	
+		for sock in self._initd.socks:
+			ping_service2(sock)
 	
 	def _start_mysql_skip_grant_tables(self):
 		if os.path.exists(self._mysqld_path) and os.access(self._mysqld_path, os.X_OK):
@@ -1249,54 +1211,37 @@ class MysqlHandler(Handler):
 		
 		return myd
 			
-	def _move_mysql_dir(self, directive=None, dirname = None, section=None):
-		#Reading Mysql config file		
-		try:
-			file = open(self._mycnf_path, 'r')
-		except IOError, e:
-			raise HandlerError('Cannot open %s: %s' % (self._mycnf_path, e.strerror))
-		else:
-			myCnf = file.read()
-			file.close					
+	def _move_mysql_dir(self, directive=None, dirname = None):
+
 		# Retrieveing mysql user from passwd		
 		mysql_user	= pwd.getpwnam("mysql")
 		directory	= os.path.dirname(dirname)
-		sectionrow	= re.compile('(.*)(\['+str(section)+'\])(.*)', re.DOTALL)
-		search_row	= re.compile('(^\s*'+directive+'\s*=\s*)((/[\w-]+)+)[/\s]([\n\w-]+\.\w+)?', re.MULTILINE)
-		src_dir_row = re.search(search_row, myCnf)
-		
-		if src_dir_row:
+
+ 		try:
+			raw_value = self._config.get(directive)
 			if not os.path.isdir(directory):
 				os.makedirs(directory)
-				src_dir = os.path.dirname(src_dir_row.group(2) + "/") + "/"
+				src_dir = os.path.dirname(raw_value + "/") + "/"
 				if os.path.isdir(src_dir):
 					self._logger.debug('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
 					system(str(rsync))
-					myCnf = re.sub(search_row, '\\1'+ dirname + '\n' , myCnf)
+					self._config.set(directive, dirname)
 				else:
 					self._logger.debug('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
-					myCnf = re.sub(search_row, '' , myCnf)
-					regexp = re.search(sectionrow, myCnf)
-					if regexp:
-						myCnf = re.sub(sectionrow, '\\1\\2\n'+ directive + ' = ' + dirname + '\n\\3' , myCnf)
-					else:
-						myCnf += '\n' + directive + ' = ' + dirname
 			else:
-				myCnf = re.sub(search_row, '\\1'+ dirname + '\n' , myCnf)
-		else:
+				self._config.set(directive, dirname)
+				
+		except PathNotExistsError:
 			if not os.path.isdir(directory):
 				os.makedirs(directory)
-			regexp = re.search(sectionrow, myCnf)
-			if regexp:
-				myCnf = re.sub(sectionrow, '\\1\\2\n'+ directive + ' = ' +dirname + '\n\\3' , myCnf)
-			else:
-				myCnf += '\n' + directive + ' = ' + dirname		
-				
+			
+			self._config.add(directive, dirname)
+
+		self.write_config()
 		# Recursively setting new directory permissions
-		os.chown(directory, mysql_user.pw_uid, mysql_user.pw_gid)
-		
+		os.chown(directory, mysql_user.pw_uid, mysql_user.pw_gid)		
 		try:
 			for root, dirs, files in os.walk(directory):
 				for dir in dirs:
@@ -1305,11 +1250,6 @@ class MysqlHandler(Handler):
 					os.chown(os.path.join(root, file), mysql_user.pw_uid, mysql_user.pw_gid)
 		except OSError, e:
 			self._logger.error('Cannot chown Mysql directory %s', directory)
-					
-		# Writing new MySQL config
-		file = open(self._mycnf_path, 'w')
-		file.write(myCnf)
-		file.close()	
 			
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
@@ -1332,10 +1272,10 @@ class MysqlHandler(Handler):
 					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+' r,\n'+'\\2', app_rules)
 				file.write(app_rules)
 				file.close()
-				initd.explore('apparmor', '/etc/init.d/apparmor')
+				apparmor_initd = ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
 				try:
-					initd.reload('apparmor', True)
-				except initd.InitdError, e:
+					apparmor_initd.reload()
+				except InitdError, e:
 					self._logger.error('Cannot restart apparmor. %s', e)	
 
 	
@@ -1370,4 +1310,7 @@ class MysqlHandler(Handler):
 		
 		for file in files:
 			if file in info_files or file.find('relay-bin') != -1:
-				os.remove(os.path.join(self._data_dir, file))		
+				os.remove(os.path.join(self._data_dir, file))
+				
+	def write_config(self):
+		self._config.write(open(self._mycnf_path, 'w'))

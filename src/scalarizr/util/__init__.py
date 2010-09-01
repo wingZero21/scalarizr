@@ -239,28 +239,6 @@ def init_tests():
 	szr._init()
 	bus.cnf.bootstrap()
 
-	
-def ping_service(host=None, port=None, timeout=None, proto='tcp'):
-	if None == timeout:
-		timeout = 5
-	if None == host:
-		host = '127.0.0.1'
-	if 'udp' == proto:
-		socket_proto = socket.SOCK_DGRAM
-	else:
-		socket_proto = socket.SOCK_STREAM
-	s = socket.socket(socket.AF_INET, socket_proto)
-	time_start = time.time()
-	while time.time() - time_start < timeout:
-		try:
-			s.connect((host, port))
-			s.shutdown(2)
-			return
-		except:
-			time.sleep(0.1)
-			pass
-	raise UtilError ("Service unavailable after %d seconds of waiting" % timeout)
-
 def get_free_devname():
 	dev_list = os.listdir('/dev')
 	for letter in map(chr, range(111, 123)):

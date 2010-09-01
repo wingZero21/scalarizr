@@ -73,7 +73,7 @@ class Configuration:
 		self._config_count = 0
 	
 	def _init(self):
-		if not self._provider:
+		if not self._provider or self._config_count > 0:
 			self._provider = format_providers[self._format]()
 		if not self.etree:
 			root = ET.Element("mc_conf/")
@@ -87,14 +87,14 @@ class Configuration:
 		else:
 			for file in filenames:
 				self._read0(file)
-		if self.etree: 
+		if self.etree:
 			indent(self.etree.getroot())
 	
 	def _read0(self, file):
 		try:
 			fp = open(file)
-		except OSError:
-			pass
+		except OSError, e:
+			raise MetaconfError('Cannot read file %s: %s' % (file, str(e)))
 		else:
 			self.readfp(fp)
 
@@ -110,7 +110,7 @@ class Configuration:
 			root = self.etree.getroot()
 			for node in nodes:
 				root.append(node)
-		self._config_count += 1		
+		self._config_count += 1	
 		fp.close()
 		"""
 		self._init()
@@ -118,12 +118,12 @@ class Configuration:
 			self.etree.getroot().append(child)
 		"""
 			
-	def write(self, fp):
+	def write(self, fp, close = True):
 		"""
 		"""
 		if not self.etree or self.etree.getroot() == None:
 			raise MetaconfError("Nothing to write! Create the tree first (readfp or read)")
-		self._provider.write(fp, self.etree)
+		self._provider.write(fp, self.etree, close)
 	
 	def extend(self, conf):
 		"""
@@ -139,7 +139,7 @@ class Configuration:
 		
 		path = quote(path)
 		if not temp_nodes:
-			raise MetaconfError("Path %s doesn't exist" % unquote(path))
+			return
 
 		parent_els	= self._find_all(os.path.join(path,'..'))
 
@@ -150,7 +150,7 @@ class Configuration:
 			temp_root.append(temp_node)
 			new_conf	= Configuration(format=self._format, etree=temp_tree)
 			new_conf._init()
-			new_conf.write(comment_value)
+			new_conf.write(comment_value, close = False)
 			parent_el   = parent_els.pop(0)
 			it			= parent_el.getiterator()
 			comment		= ET.Comment(comment_value.getvalue().strip())
@@ -250,6 +250,8 @@ class Configuration:
 		#return ElementPath13.findall(self.etree, self._root_path + "*")
 		
 	def _find_all(self, path):
+		if not path:
+			path = '.'
 		ret = self.etree.findall(self._root_path + quote(path))
 		indexes = []
 		for node in ret:
@@ -339,12 +341,14 @@ class Configuration:
 					raise MetaconfError('Wrong typecast %s for value ' % (typecast,))
 			el.text = value
 	
-	def add(self, path, value, typecast=None, before_path=None):
+	def add(self, path, value=None, typecast=None, before_path=None):
+		if not self.etree:
+			self._init()
 		
 		after_element = None
 		before_element = None
 		
-		parent_path = os.path.dirname(path)			
+		parent_path = os.path.dirname(path) or '.'		
 		
 		parent		= self._find(parent_path)
 		el = ET.Element(os.path.basename(path))
@@ -493,7 +497,7 @@ class FormatProvider:
 		else:
 			return list(root)
 		
-	def write(self, fp, etree):
+	def write(self, fp, etree, close = True):
 		try:
 			if not (isinstance(etree, ET._ElementInterface) or isinstance(etree, ET.ElementTree)):
 				raise MetaconfError("etree param must be instance of _ElementInterface or ElementTree. %s passed" % (etree,))
@@ -510,7 +514,8 @@ class FormatProvider:
 			if errors:
 				raise MetaconfError(errors)
 		finally:
-			fp.close()
+			if close:
+				fp.close()
 
 class IniFormatProvider(FormatProvider):
 	
@@ -555,7 +560,6 @@ class IniFormatProvider(FormatProvider):
 			return True
 		return False
 	
-	
 	def read_option(self, line, root):
 		if not hasattr(self, "_opt_re"):
 			self._opt_re = re.compile(r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*?)\s*(?P<comment>[#;](.*))?$')
@@ -579,7 +583,7 @@ class IniFormatProvider(FormatProvider):
 	def write_section(self, fp, node):
 		if len(node):
 			fp.write('['+unquote(node.tag)+']\n')	
-			self.write(fp, node)
+			self.write(fp, node, False)
 			return True
 		return False
 	
@@ -603,8 +607,8 @@ class NginxFormatProvider(IniFormatProvider):
 	
 	def __init__(self):
 		IniFormatProvider.__init__(self)
-#		self._readers += (self.read_multiline,)
-#		self._writers += (self.write_multiline,)
+		self._readers += (self.read_statement,)
+		self._writers += (self.write_statement,)
 		self._nesting  = 0
 		self._pad = '	'
 			
@@ -656,6 +660,14 @@ class NginxFormatProvider(IniFormatProvider):
 				return True
 		return False
 	
+	def read_statement(self, line, root):
+		if not hasattr(self, "_stat_re"):
+			self._stat_re = re.compile(r'\s*([^\s\[\]]*)\s*;\s*$')
+		if self._stat_re.match(line):
+			ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)))
+			return True
+		return False
+	
 	def read_section(self, line, root):
 		if not hasattr(self, "_sect_re"):
 			self._sect_re = re.compile('\s*(?P<option>[^\s]+)\s*(?P<value>.*?)\s*{\s*(?P<comment>#(.*))?\s*')
@@ -699,13 +711,19 @@ class NginxFormatProvider(IniFormatProvider):
 			return True
 		return False
 	
+	def write_statement(self, fp, node):
+		if not callable(node.tag) and not node.text and not len(node):
+			fp.write(self._pad*self._nesting + unquote(node.tag)+';\n')
+			return True
+		return False
+	
 	def write_section(self, fp, node):
 		if len(node):
 			value = unquote(node.text.strip()) if node.text else ''
 			fp.write(self._pad*self._nesting + unquote(node.tag) + ' ' + value + ' {\n')
 			self._nesting +=1
 			try:
-				self.write(fp, node)
+				self.write(fp, node, False)
 			finally:
 				self._nesting -=1
 			fp.write(self._pad*self._nesting + '}\n')
@@ -808,15 +826,15 @@ platform = vps
 class MysqlFormatProvider(IniFormatProvider):
 	def __init__(self):
 		IniFormatProvider.__init__(self)
-		self._readers  += (self.read_statement,
-						   self.read_include)
+		self._readers  = (self.read_statement,
+						   self.read_include) + self._readers
 		
-		self._writers  += (self.write_statement,
-						   self.write_include)
+		self._writers  = (self.write_statement,
+						   self.write_include) + self._writers
 	
 	def read_statement(self, line, root):
 		if not hasattr(self, "_stat_re"):
-			self._stat_re = re.compile(r'\s*([^\s*]*)\s*$')
+			self._stat_re = re.compile(r'\s*([^\s\[\]]*)\s*$')
 		if self._stat_re.match(line):
 			ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)))
 			return True
@@ -839,7 +857,7 @@ class MysqlFormatProvider(IniFormatProvider):
 		return False
 	
 	def write_include(self, fp, node):
-		if '!include' in node.tag:
+		if not callable(node.tag) and '!include' in node.tag:
 			fp.write(unquote(node.tag)+" "+node.text.strip()+'\n')
 			return True
 		return False

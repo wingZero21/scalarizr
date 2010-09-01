@@ -1,3 +1,4 @@
+http {
     server {
         listen       80;
     
@@ -29,3 +30,4 @@
                 root   /var/www/nginx-default;
         }
     }
+}

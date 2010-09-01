@@ -3,9 +3,10 @@ Created on Jun 17, 2010
 
 @author: marat
 '''
-from scalarizr.util import UtilError, system, ping_service, disttool
+from scalarizr.util import UtilError, system, disttool
 import time
 import os
+import socket
 from subprocess import Popen, PIPE
 
 class InitdError(UtilError):
@@ -89,6 +90,26 @@ def is_running(name):
 	else:
 		return out.lower().find("running") != -1 or out.lower().find("[ ok ]") != -1 or out.lower().find("done.") != -1
 
+def ping_service(host=None, port=None, timeout=None, proto='tcp'):
+	if None == timeout:
+		timeout = 5
+	if None == host:
+		host = '127.0.0.1'
+	if 'udp' == proto:
+		socket_proto = socket.SOCK_DGRAM
+	else:
+		socket_proto = socket.SOCK_STREAM
+	s = socket.socket(socket.AF_INET, socket_proto)
+	time_start = time.time()
+	while time.time() - time_start < timeout:
+		try:
+			s.connect((host, port))
+			s.shutdown(2)
+			return
+		except:
+			time.sleep(0.1)
+			pass
+	raise InitdError("Service unavailable after %d seconds of waiting" % timeout)
 
 
 
