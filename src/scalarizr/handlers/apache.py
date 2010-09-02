@@ -9,7 +9,7 @@ from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
-from scalarizr.util import disttool, backup_file, initd, configtool, \
+from scalarizr.util import disttool, backup_file, initd, \
 	cached, firstmatched, validators
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr.util.initd import InitdError

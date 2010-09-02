@@ -12,6 +12,26 @@ from ConfigParser import ConfigParser, RawConfigParser, NoOptionError, NoSection
 from getpass import getpass
 import os, sys, logging
 
+SECT_GENERAL = "general"
+OPT_SERVER_ID = "server_id"
+OPT_BEHAVIOUR = "behaviour"
+OPT_ROLE_NAME = "role_name"
+OPT_STORAGE_PATH = "storage_path"
+OPT_CRYPTO_KEY_PATH = "crypto_key_path"
+OPT_FARM_CRYPTO_KEY_PATH = "farm_crypto_key_path"
+OPT_PLATFORM = "platform"
+OPT_QUERYENV_URL = "queryenv_url"
+OPT_SCRIPTS_PATH = "scripts_path"
+
+SECT_MESSAGING = "messaging"
+OPT_ADAPTER = "adapter"
+
+SECT_SNMP = "snmp"
+OPT_PORT = "port"
+OPT_SECURITY_NAME = "security_name"
+OPT_COMMUNITY_NAME = "community_name"
+
+SECT_HANDLERS = "handlers"
 
 class ConfigError(BaseException):
 	pass

@@ -18,9 +18,6 @@ import re
 import os
 from cStringIO import StringIO
 
-"""
-Comment , uncomment
-"""
 
 format_providers = dict()
 default_format = "ini"
@@ -120,6 +117,8 @@ class Configuration:
 			
 	def write(self, fp, close = True):
 		"""
+		Writes configuration to fp with provider's method 'write'.
+		If 'close' parameter passed with 'False' value, fp won't be closed.
 		"""
 		if not self.etree or self.etree.getroot() == None:
 			raise MetaconfError("Nothing to write! Create the tree first (readfp or read)")

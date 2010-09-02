@@ -5,7 +5,6 @@ Created on Aug 29, 2010
 @author: spike
 '''
 import socket
-from scalarizr.util.initd import InitdError
 import os
 import time
 from subprocess import Popen, PIPE
@@ -104,7 +103,7 @@ class ParametrizedInitScript(InitScript):
 		
 		if action != "stop" and self.socks:
 			for sock in self.socks:
-				ping_service2(sock)
+				wait_sock(sock)
 			
 		if self.pid_file:
 			if (action == "start" or action == "restart") and not os.path.exists(self.pid_file):
@@ -129,13 +128,14 @@ class ParametrizedInitScript(InitScript):
 	def status(self):
 		try:
 			for sock in self.socks:
-				ping_service2(sock)
+				wait_sock(sock)
 		except InitdError:
 			return Status.NOT_RUNNING
 		
 		return Status.RUNNING
 	
-	def is_running(self):
+	@property
+	def running(self):
 		return not self.status()
 		
 
@@ -154,7 +154,7 @@ def lookup(name):
 		
 	return _instances[name]
 		
-def ping_service2(sock = None):
+def wait_sock(sock = None):
 	if not isinstance(sock, SockParam):
 		raise InitdError('Socks parameter must be instance of SockParam class')
 	

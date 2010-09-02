@@ -6,23 +6,23 @@ Created on 14.06.2010
 '''
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
+from scalarizr import config
 from scalarizr.util import validators
 
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.util import fstool, system, cryptotool, disttool,\
-		configtool, filetool, firstmatched, cached
+		 filetool, firstmatched, cached
 from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re,  pexpect, tarfile, tempfile
 import time
 import signal, pwd, random
-import shutil, ConfigParser
+import shutil
 from boto.exception import BotoServerError
 from scalarizr.util import initdv2
-from scalarizr.util.initdv2 import ParametrizedInitScript, ping_service2
-from scalarizr.util.initd import InitdError
-from scalarizr.libs.metaconf import *
+from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
+from scalarizr.libs.metaconf import Configuration, MetaconfError, PathNotExistsError
 
 
 BEHAVIOUR = BuiltinBehaviours.MYSQL
@@ -261,12 +261,12 @@ class MysqlHandler(Handler):
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
 		self._cnf = bus.cnf
-		self._sect_name = configtool.get_behaviour_section_name(BEHAVIOUR)
-		self._sect = configtool.section_wrapper(bus.config, self._sect_name)
-		config = bus.config
-		self._role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
-		self._mycnf_path = config.get(CNF_SECTION, OPT_MYCNF_PATH)
-		self._mysqld_path = config.get(CNF_SECTION, OPT_MYSQLD_PATH)
+		ini = self._cnf.rawini
+#		self._sect_name = configtool.get_behaviour_section_name(BEHAVIOUR)
+#		self._sect = configtool.section_wrapper(bus.config, self._sect_name)
+		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
+		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
 		
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
@@ -304,10 +304,10 @@ class MysqlHandler(Handler):
 		
 	def on_Mysql_CreatePmaUser(self, message):
 		try:
-			if not int(self._sect.get(OPT_REPLICATION_MASTER)):
+			if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 				raise HandlerError('Cannot add pma user on slave')			
 			try:
-				root_password = self._sect.get(OPT_ROOT_PASSWORD)
+				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
 			pma_server_ip = message.pma_server_ip
@@ -369,11 +369,11 @@ class MysqlHandler(Handler):
 		tmpdir = backup_path = None
 		try:
 			# Do backup only if slave
-			if int(self._sect.get(OPT_REPLICATION_MASTER)):
+			if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 				raise HandlerError('Cannot create databases backup on mysql master')
 			
 			try:
-				root_password = self._sect.get(OPT_ROOT_PASSWORD)
+				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
 			# Creating temp dir 
@@ -455,7 +455,7 @@ class MysqlHandler(Handler):
 		# Retrieve password for scalr mysql user
 		try:
 			try:
-				root_password = self._sect.get(OPT_ROOT_PASSWORD)
+				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 			# Creating snapshot
@@ -480,17 +480,17 @@ class MysqlHandler(Handler):
 		@type message: scalarizr.messaging.Message
 		@param message: Mysql_PromoteToMaster
 		"""
-		if not int(self._sect.get(OPT_REPLICATION_MASTER)):
+		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 			
 			ec2_conn = self._platform.new_ec2_conn()
-			slave_vol_id = 	self._sect.get(OPT_STORAGE_VOLUME_ID)
+			slave_vol_id = 	self._cnf.rawini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID)
 			master_vol_id = self._queryenv.list_role_params(self._role_name)[PARAM_MASTER_EBS_VOLUME_ID]
 			master_vol = None
 			tx_complete = False
 			
 			try:
 				# Stop mysql
-				if self._initd.is_running():
+				if self._initd.running:
 					mysql = self._spawn_mysql(ROOT_USER, message.root_password)
 					timeout = 180
 					try:
@@ -563,7 +563,7 @@ class MysqlHandler(Handler):
 		@type message: scalarizr.messaging.Message
 		@param message:  Mysql_NewMasterUp
 		"""
-		if not int(self._sect.get(OPT_REPLICATION_MASTER)):
+		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 			host = message.local_ip or message.remote_ip
 			self._logger.info("Switching replication to a new MySQL master %s", host)
 			mysql = self._spawn_mysql(ROOT_USER, message.root_password)
@@ -665,7 +665,7 @@ class MysqlHandler(Handler):
 		except:
 			pass
 
-		if int(self._sect.get(OPT_REPLICATION_MASTER)):
+		if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 			self._init_master(message)									  
 		else:
 			self._init_slave(message)		
@@ -680,7 +680,7 @@ class MysqlHandler(Handler):
 		self._logger.info("Initializing MySQL master")
 		
 		# Mount EBS
-		self._plug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
+		self._plug_storage(self._cnf.rawini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID), self._storage_path)
 		
 		# Stop MySQL server
 		self._stop_mysql()
@@ -725,7 +725,7 @@ class MysqlHandler(Handler):
 		else:
 			# Retrieve scalr's mysql username and password
 			try:
-				root_password = self._sect.get(OPT_ROOT_PASSWORD)
+				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 			
@@ -760,7 +760,7 @@ class MysqlHandler(Handler):
 		if not self._storage_valid():
 			self._logger.debug("Initialize slave storage")
 			
-			ebs_volume = self._create_volume_from_snapshot(self._sect.get(OPT_SNAPSHOT_ID))
+			ebs_volume = self._create_volume_from_snapshot(self._cnf.rawini.get(CNF_SECTION, OPT_SNAPSHOT_ID))
 			message.mysql = dict(volume_id = ebs_volume.id)
 			self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 			
@@ -830,11 +830,11 @@ class MysqlHandler(Handler):
 		self._change_master(
 			host=host, 
 			user=REPL_USER, 
-			password=self._sect.get(OPT_REPL_PASSWORD),
-			log_file=self._sect.get(OPT_LOG_FILE), 
-			log_pos=self._sect.get(OPT_LOG_POS), 
+			password=self._cnf.rawini.get(CNF_SECTION, OPT_REPL_PASSWORD),
+			log_file=self._cnf.rawini.get(CNF_SECTION, OPT_LOG_FILE), 
+			log_pos=self._cnf.rawini.get(CNF_SECTION, OPT_LOG_POS), 
 			mysql_user=ROOT_USER,
-			mysql_password=self._sect.get(OPT_ROOT_PASSWORD)
+			mysql_password=self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 		)
 		
 	def _plug_storage(self, vol_id, mnt_point, vol=None):
@@ -985,7 +985,7 @@ class MysqlHandler(Handler):
 		return master_vol
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
-		was_running = self._initd.is_running()
+		was_running = self._initd.running
 		try:
 			if not was_running:
 				self._initd.start()
@@ -995,7 +995,7 @@ class MysqlHandler(Handler):
 			sql.sendline('FLUSH TABLES WITH READ LOCK;')
 			sql.expect('mysql>')
 			system('sync')
-			if int(self._sect.get(OPT_REPLICATION_MASTER)):
+			if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 				sql.sendline('SHOW MASTER STATUS;')
 				sql.expect('mysql>')
 				
@@ -1036,7 +1036,7 @@ class MysqlHandler(Handler):
 			ec2_conn = self._get_ec2_conn()
 			""" @type ec2_conn: boto.ec2.connection.EC2Connection """
 			
-			snapshot = ec2_conn.create_snapshot(self._sect.get(OPT_STORAGE_VOLUME_ID))
+			snapshot = ec2_conn.create_snapshot(self._cnf.rawini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID))
 			self._logger.debug("Storage EBS snapshot %s created", snapshot.id)
 			return snapshot.id			
 		except BotoServerError, e:
@@ -1089,7 +1089,7 @@ class MysqlHandler(Handler):
 		return (root_password, repl_password, stat_password)
 	
 	def _update_config(self, data): 
-		self._cnf.update_ini(BEHAVIOUR, {self._sect_name: data})
+		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
 		
 	def _replication_init(self, master=True):
 		if not os.path.exists('/etc/mysql'):
@@ -1182,7 +1182,7 @@ class MysqlHandler(Handler):
 			self._initd.stop()
 		except:
 			self._logger.error("Cannot stop MySQL")
-			if self._initd.is_running():
+			if self._initd.running:
 				raise
 
 			
@@ -1198,7 +1198,7 @@ class MysqlHandler(Handler):
 		
 	def _ping_mysql(self):
 		for sock in self._initd.socks:
-			ping_service2(sock)
+			wait_sock(sock)
 	
 	def _start_mysql_skip_grant_tables(self):
 		if os.path.exists(self._mysqld_path) and os.access(self._mysqld_path, os.X_OK):
@@ -1306,7 +1306,7 @@ class MysqlHandler(Handler):
 			return
 		
 		info_files = ['relay-log.info', 'master.info']
-		files = os.listdir(self._data_dir)	
+		files = os.listdir(self._data_dir)
 		
 		for file in files:
 			if file in info_files or file.find('relay-bin') != -1:
