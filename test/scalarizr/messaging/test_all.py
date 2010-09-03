@@ -22,6 +22,7 @@ class TestMessage(unittest.TestCase):
 		msg.id = "12346xxxx-xxxx-xxx2221"
 		#print msg
 
+	'''
 	def test_message_fromxml(self):
 		xml = '<?xml version="1.0" ?>' \
 				'<message id="12346xxxx-xxxx-xxx2221" name="HostInit">' \
@@ -44,6 +45,7 @@ class TestMessage(unittest.TestCase):
 		self.assertEqual(msg.meta.values(), ["ec2", "linux", "Ubuntu linux 8.10"])
 		self.assertEqual(msg.body.keys(), ["ec2.sshPub"])
 		self.assertEqual(msg.body.values(), ["MIT...xx=="])
+	'''
 
 	def test_new_message(self):
 		from scalarizr.messaging import MessageService
@@ -51,8 +53,17 @@ class TestMessage(unittest.TestCase):
 		msg = ms.new_message("HostInit")
 		print msg
 
+	def test_cannot_decode_log_message(self):
+		xml = '''<?xml version="1.0" ?><message id="38011fd4-b36a-4d94-934e-520a80615373" name="Log"><meta><server_id>b65f191a-c469-4b3d-9184-d1398e1fec07</server_id></meta><body><entries><item><stack_trace></stack_trace><pathname>/usr/lib/python2.6/site-packages/scalarizr/scripts/update.py</pathname><name>scalarizr.scripts.update</name><level>INFO</level><msg>Starting update script...</msg><lineno>14</lineno></item><item><stack_trace></stack_trace><pathname>/usr/lib/python2.6/site-packages/scalarizr/scripts/update.py</pathname><name>scalarizr.scripts.update</name><level>INFO</level><msg>Updating scalarizr with Yum</msg><lineno>20</lineno></item></entries></body></message>'''
+		msg = Message()
+		msg.fromxml(xml)
+		
+		self.assertEqual(len(msg.entries), 2)
+		self.assertEqual(msg.entries[0]['stack_trace'], None)
+		self.assertEqual(msg.entries[0]['pathname'], '/usr/lib/python2.6/site-packages/scalarizr/scripts/update.py')
+		
 
-
+'''
 class TestInteration(unittest.TestCase):
 
 	_consumer = None
@@ -84,8 +95,9 @@ class TestInteration(unittest.TestCase):
 	def testAll(self):
 		message = self._service.new_message("HostUp", {"a" : "b"}, {"cx" : "dd"})
 		self._producer.send("control", message)	
-
+'''
 
 if __name__ == "__main__":
-	import scalarizr.core
+	from scalarizr.util import init_tests
+	init_tests()
 	unittest.main()

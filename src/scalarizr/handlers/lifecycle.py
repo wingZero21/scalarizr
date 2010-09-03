@@ -8,9 +8,9 @@ import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions
-from scalarizr.util import cryptotool, configtool
+from scalarizr.util import cryptotool, configtool, log
 
-import logging, os, sys, binascii, time
+import logging, os, sys, binascii
 from subprocess import Popen, PIPE
 
 
@@ -127,9 +127,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	def on_start(self):
 		optparser = bus.optparser
 
+		'''
 		file = self._get_flag_filename('update')
 		if not os.path.exists(file) or time.time() - os.stat(file).st_mtime > 86400:
 			self._update_package()
+		'''
 
 		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")

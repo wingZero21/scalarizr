@@ -1,6 +1,7 @@
 '''
 Created on 22.01.2010
 
+@author: marat
 @author: Dmytro Korsakov
 '''
 import re
@@ -13,8 +14,8 @@ import string
 import os
 
 from scalarizr.bus import bus
+from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Queues, Messages
-
 
 
 INTERVAL_RE = re.compile('((?P<minutes>\d+)min\s?)?((?P<seconds>\d+)s)?')
@@ -28,25 +29,28 @@ class RotatingFileHandler(logging.handlers.RotatingFileHandler):
 		except OSError:
 			pass
 		
+		
 class MessagingHandler(logging.Handler):
 	
 	num_entries = None
 	send_interval = None
-	sending_message = False
 	
 	_sender_thread = None
 	_send_event = None
 	_stop_event = None
 	_initialized = False
 	
-	def __init__(self, num_entries = 1, send_interval = "1s"):
+	_messaging_enabled = False
+	_msgsrv_subscribed = False
+	_sending_message = False
+	
+	def __init__(self, num_entries = 20, send_interval = '30s'):
 		logging.Handler.__init__(self)	
 		
 		m = INTERVAL_RE.match(send_interval)
 		self.send_interval = (int(m.group('seconds') or 0) + 60*int(m.group('minutes') or 0)) or 1
-		
-		self.num_entries = num_entries		
-	
+		self.num_entries = num_entries
+		self._logger = logging.getLogger(__name__)
 		
 	def __del__(self):
 		if self._send_event:
@@ -66,9 +70,46 @@ class MessagingHandler(logging.Handler):
 
 		self._initialized = True		
 
+	def _enable_messaging(self):
+		self._logger.debug('Enabling log messaging')
+		self._messaging_enabled = True
+		# Stop listening messaging events
+		m = bus.messaging_service; producer = m.get_producer(); consumer = m.get_consumer()
+		producer.un('send', self.on_out_message_send)
+		consumer.remove_message_listener(self.on_in_message_reseived)
+
+	def _subscribe_msgsrv(self):
+		self._msgsrv_subscribed = True
+		m = bus.messaging_service; producer = m.get_producer(); consumer = m.get_consumer()
+		producer.on('send', self.on_out_message_send)
+		consumer.add_message_listener(self.on_in_message_reseived)
+
+	def on_out_message_send(self, queue, message):
+		self._logger.debug('Handled on_out_message_send message: %s', message.name)
+		if message.name != Messages.HOST_INIT:
+			self._enable_messaging()
+	
+	def on_in_message_reseived(self, message, queue):
+		self._logger.debug('Handled on_in_message_reseived message: %s', message.name)		
+		if message.name == Messages.HOST_INIT_RESPONSE:
+			self._enable_messaging()
+
 
 	def emit(self, record):
-		if self.sending_message and record.name.startswith('scalarizr.messaging'):
+		if not self._messaging_enabled:
+			'''
+			Logging via scalarizr messaging is not enabled by startup. 
+			It'is related with Scalarizr one-time crypto key:
+			Crypto key updated on ->HostInit, and we know Scalr 100% obtained it on <-HostInitResponse
+			'''
+			cnf = bus.cnf
+			if cnf and cnf.state == ScalarizrState.RUNNING:
+				self._enable_messaging()
+			elif bus.messaging_service and not self._msgsrv_subscribed:
+				self._subscribe_msgsrv()
+		
+		if self._sending_message and record.name.startswith('scalarizr.messaging'):
+			# Skip all transport logs 
 			return
 				
 		if not self._initialized:
@@ -95,10 +136,13 @@ class MessagingHandler(logging.Handler):
 		self._lock.acquire()		
 		try:
 			self.entries.append(ent)
-			if len(self.entries) >= self.num_entries:
+			if self._time_has_come():
 				self._send_event.set()
 		finally:
 			self._lock.release()
+		
+	def _time_has_come(self):
+		return len(self.entries) >= self.num_entries
 			
 	def _send_message(self):
 		if not bus.messaging_service:
@@ -117,27 +161,25 @@ class MessagingHandler(logging.Handler):
 				msg_service = bus.messaging_service
 				message = msg_service.new_message(Messages.LOG)
 				message.body["entries"] = entries
-				#logger = logging.getLogger("scalarizr")
-				#logger.removeHandler(self)	
-				self.sending_message = True
+				self._sending_message = True
 				msg_service.get_producer().send(Queues.LOG, message)
-				#logger.addHandler(self)
 		except (BaseException, Exception):
 			# silently
 			pass	
 		finally:
-			self.sending_message = False
+			self._sending_message = False
 	
 	def _sender(self):
 		while not self._stop_event.isSet():
 			try:
 				self._send_event.wait(self.send_interval)
-				self._send_message()
+				if self._messaging_enabled and self.entries:
+					self._send_message()
 			finally:
 				self._send_event.clear()
 
 	
-def fix_python25_handler_resolve():
+def fix_py25_handler_resolving():
 	
 	def _resolve(name):
 		"""Resolve a dotted name to a global object."""
@@ -202,5 +244,4 @@ def fix_python25_handler_resolve():
 	logging.config._install_handlers = _install_handlers
 	logging.config._resolve = _resolve
 	logging.config._strip_spaces = _strip_spaces	
-	
 			

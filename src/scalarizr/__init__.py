@@ -7,7 +7,7 @@ from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import configtool, SqliteLocalObject, url_replace_hostname,\
-	daemonize, system, disttool, fstool, initd, firstmatched
+	daemonize, system, disttool, fstool, initd, firstmatched, log
 from scalarizr.util.configtool import ConfigError
 
 
@@ -74,28 +74,27 @@ def _init():
 		bus.etc_path = firstmatched(lambda p: os.access(p, os.F_OK), etc_places)
 		if not bus.etc_path:
 			raise ScalarizrError('Cannot find scalarizr configuration dir')
-	bus.cnf = ScalarizrCnf(bus.etc_path)
+	bus.cnf = cnf = ScalarizrCnf(bus.etc_path)
 
 	
 	# Configure logging
 	if sys.version_info < (2,6):
 		# Fix logging handler resolve for python 2.5
-		from scalarizr.util.log import fix_python25_handler_resolve		
-		fix_python25_handler_resolve()
+		from scalarizr.util.log import fix_py25_handler_resolving		
+		fix_py25_handler_resolving()
 	
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
 	logger = logging.getLogger(__name__)
 	
 	# During server import user must see all scalarizr activity in his terminal
 	# Add console handler if it doesn't configured in logging.ini	
-	if bus.optparser and bus.optparser.values.import_server:
+	if optparser and optparser.values.import_server:
 		if not any(isinstance(hdlr, logging.StreamHandler) \
 				and (hdlr.stream == sys.stdout or hdlr.stream == sys.stderr) 
 				for hdlr in logger.handlers):
 			hdlr = logging.StreamHandler(sys.stdout)
 			hdlr.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
 			logger.addHandler(hdlr)
-
 
 	# Registering in init.d
 	initd.explore("scalarizr", "/etc/init.d/scalarizr", tcp_port=8013)
@@ -321,7 +320,7 @@ def init_script():
 	cnf.bootstrap()
 	
 	logger = logging.getLogger(__name__)
-	logger.debug("Initialize messaging")
+	logger.debug("Initialize script messaging")
 
 	# Script producer url is scalarizr consumer url. 
 	# Script can't handle any messages by himself. Leave consumer url blank
@@ -397,6 +396,9 @@ def _shutdown(*args):
 			
 			producer = msg_service.get_producer()
 			producer.shutdown()
+			
+			snmp_server = bus.snmp_server
+			snmp_server.stop()
 			
 			# Fire terminate
 			bus.fire("terminate")
@@ -512,7 +514,8 @@ def main():
 		if EMBED_SNMPD:
 			# Start SNMP server in a separate process			
 			#signal.signal(signal.SIGCHLD, onSIGCHILD)
-			_start_snmp_server()
+			#_start_snmp_server()
+			pass
 		elif NET_SNMPD:
 			# Start snmpd health check thread
 			t = threading.Thread(target=_snmpd_health_check)
@@ -526,9 +529,10 @@ def main():
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
 		msg_thread = threading.Thread(target=consumer.start, name="Message consumer")
+		snmp_thread = threading.Thread(target=bus.snmp_server.start, name="SNMP server")
 		logger.info('Starting Scalarizr')
 		msg_thread.start()
-	
+		snmp_thread.start()
 
 		# Fire start
 		globals()["_running"] = True
