@@ -86,6 +86,7 @@ class Configuration:
 				self._read0(file)
 		if self.etree:
 			indent(self.etree.getroot())
+
 	
 	def _read0(self, file):
 		try:
@@ -134,6 +135,9 @@ class Configuration:
 			self._extend(node)
 			
 	def comment(self, path):
+		"""
+		Comment part of the configuration (one option or subtree)
+		"""
 		temp_nodes = self._find_all(path)
 		
 		path = quote(path)
@@ -157,6 +161,10 @@ class Configuration:
 			parent_el.remove(temp_node)
 
 	def uncomment(self, path):
+		"""
+		Try to find appropriate configuration piece in comments on path's level,
+		And then uncomment it		
+		"""
 		path = quote(path)
 		parent_path = os.path.dirname(path)
 		el_name = os.path.basename(path)
@@ -341,6 +349,10 @@ class Configuration:
 			el.text = value
 	
 	def add(self, path, value=None, typecast=None, before_path=None):
+		"""
+		Add value at path <path> use optional typecast <typecast> int|float
+		if before_path specified, new option will be added right after it.
+		"""
 		if not self.etree:
 			self._init()
 		
@@ -497,6 +509,9 @@ class FormatProvider:
 			return list(root)
 		
 	def write(self, fp, etree, close = True):
+		"""
+		Write ElementTree <etree> to filepointer <fp>. If <close> is True - close <fp> 
+		"""
 		try:
 			if not (isinstance(etree, ET._ElementInterface) or isinstance(etree, ET.ElementTree)):
 				raise MetaconfError("etree param must be instance of _ElementInterface or ElementTree. %s passed" % (etree,))

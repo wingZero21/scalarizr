@@ -9,14 +9,14 @@ from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
-from scalarizr.util import disttool, backup_file, initd, \
+from scalarizr.util import disttool, backup_file,  \
 	cached, firstmatched, validators
 from scalarizr.util.filetool import read_file, write_file
-from scalarizr.util.initd import InitdError
 import logging
 import os
 import re
-
+from scalarizr.util import initdv2, system
+from telnetlib import Telnet
 
 
 
@@ -24,32 +24,53 @@ BEHAVIOUR = BuiltinBehaviours.APP
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR + '.ini'
 
+class ApacheInitScript(initdv2.ParametrizedInitScript):
+	
+	def __init__(self):
+		if disttool.is_redhat_based():
+			initd_script = "/etc/init.d/httpd"
+		elif disttool.is_debian_based():
+			initd_script = "/etc/init.d/apache2"
+	
+		if not os.path.exists(initd_script):
+			raise HandlerError("Cannot find Apache init script at %s. Make sure that apache web server is installed" % initd_script)
 
-if disttool.is_redhat_based():
-	initd_script = "/etc/init.d/httpd"
-	pid_file = "/var/run/httpd/httpd.pid"
-elif disttool.is_debian_based():
-	initd_script = "/etc/init.d/apache2"
+		pid_file = None
+		
+		env_vars = read_file("/etc/apache2/envvars")
+		if env_vars:
+			m = re.search("export\sAPACHE_PID_FILE=(.*)", env_vars)
+			if m:
+				pid_file = m.group(1)
+		
+		initdv2.ParametrizedInitScript.__init__(self, 'apache', 
+				initd_script, pid_file, socks=[initdv2.SockParam(80)])
+		
+	def status(self):
+		status = initdv2.ParametrizedInitScript.status(self)
+		if not status and self.socks:
+			ip, port = self.socks[0].conn_address
+			telnet = Telnet(ip, port)
+			telnet.write('hello\n')
+			if 'apache' in telnet.read_all().lower():
+				return initdv2.Status.RUNNING
+			return initdv2.Status.UNKNOWN
+		return status
 	
-	pid_file = None
-	# Find option value
-	
-	env_vars = read_file("/etc/apache2/envvars")
-	if env_vars:
-		m = re.search("export\sAPACHE_PID_FILE=(.*)", env_vars)
-		if m:
-			pid_file = m.group(1)
-	
-else:
-	initd_script = "/etc/init.d/apache2"
-	
-if not os.path.exists(initd_script):
-	raise HandlerError("Cannot find Apache init script at %s. Make sure that apache web server is installed" % initd_script)
+	def configtest(self):
+		if not hasattr(self, 'app_ctl'):
+			if disttool.is_redhat_based():
+				app_ctl = "apachectl"
+			elif disttool.is_debian_based():
+				app_ctl = "apache2ctl"
+		out = system(app_ctl +' configtest')[1]
+		if 'error' in out.lower():
+			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
+		
+		
 
-# Register apache service
-logger = logging.getLogger(__name__)
-logger.debug("Explore apache service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
-initd.explore("apache", initd_script, pid_file)
+initdv2.explore('apache', ApacheInitScript)
+
 
 
 # Export behavior configuration
@@ -117,6 +138,7 @@ class ApacheHandler(Handler):
 		self.ssl_conf_listen_regexp = re.compile(r"Listen\s+\d+\n",re.IGNORECASE)
 		bus.define_events('apache_reload')
 		bus.on("init", self.on_init)
+		self._initd = initdv2.lookup('apache')
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and message.name == Messages.VHOST_RECONFIGURE
@@ -136,8 +158,8 @@ class ApacheHandler(Handler):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting Apache")
-				initd.start("apache")
-			except initd.InitdError, e:
+				self._initd.start()
+			except initdv2.InitdError, e:
 				self._logger.error(e)
 
 	on_before_host_up = on_start
@@ -145,10 +167,10 @@ class ApacheHandler(Handler):
 	def on_before_host_down(self, *args):
 		try:
 			self._logger.info("Stopping Apache")
-			initd.stop("apache")
-		except initd.InitdError, e:
+			self._initd.stop()
+		except initdv2.InitdError, e:
 			self._logger.error("Cannot stop apache")
-			if initd.is_running("apache"):
+			if self._initd.running:
 				raise
 
 	def _update_vhosts(self):
@@ -416,10 +438,7 @@ class ApacheHandler(Handler):
 	
 	
 	def _reload_apache(self):
-		try:
-			initd.reload("apache")
-		except InitdError, e:
-			self._logger.error(e)
+		self._initd.reload()
 	
 	
 	def _patch_default_conf_deb(self, httpd_conf_path):

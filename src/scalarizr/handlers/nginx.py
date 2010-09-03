@@ -14,11 +14,11 @@ from scalarizr.util.filetool import read_file, write_file
 import os
 import re
 import shutil
-import subprocess
 import logging
 from datetime import datetime
 from scalarizr.util import initdv2
 from scalarizr.libs.metaconf import Configuration
+from telnetlib import Telnet
 
 
 BEHAVIOUR = BuiltinBehaviours.WWW
@@ -48,11 +48,23 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		
 		initdv2.ParametrizedInitScript.__init__(self, 'nginx', 
 				initd_script, pid_file, socks=[initdv2.SockParam(80)])
-		
-	def status(self):
-		pass
-		# TODO: Connect to 80 port and make sure that server is nginx, not apache 
 
+	def status(self):
+		status = initdv2.ParametrizedInitScript.status(self)
+		if not status and self.socks:
+			ip, port = self.socks[0].conn_address
+			telnet = Telnet(ip, port)
+			telnet.write('hello\n')
+			if 'nginx' in telnet.read_all().lower():
+				return initdv2.Status.RUNNING
+			return initdv2.Status.UNKNOWN
+		return status
+
+	def configtest(self):
+		out = system('nginx -t')[1]
+		if 'failed' in out.lower():
+			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
+		
 initdv2.explore('nginx', NginxInitScript)
 
 # Nginx behaviours configuration options
@@ -235,31 +247,23 @@ class NginxHandler(Handler):
 			
 				self._logger.info("Testing new configuration.")
 			
-				if os.path.isfile(self._nginx_binary):
-				
-					nginx_test_command = [self._nginx_binary, "-t"]
-				
-					p = subprocess.Popen(nginx_test_command, 
-							stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-					stdout, stderr = p.communicate()
-					is_nginx_test_failed = p.poll()
-					
-					if is_nginx_test_failed:
-						self._logger.error("Configuration error detected:" +  stderr + " Reverting configuration.")
-						if os.path.isfile(self._include):
-							shutil.move(self._include, self._include+".junk")
-						else:
-							self._logger.debug('%s does not exist', self._include)
-						if os.path.isfile(self._include+".save"):
-							shutil.move(self._include+".save", self._include)
-						else:
-							self._logger.debug('%s does not exist', self._include+".save")
+				try:
+					self._initd.configtest()
+				except initdv2.InitdError, e:
+					self._logger.error("Configuration error detected:" +  str(e) + " Reverting configuration.")
+					if os.path.isfile(self._include):
+						shutil.move(self._include, self._include+".junk")
 					else:
-						# Reload nginx
-						self._initd.reload()
+						self._logger.debug('%s does not exist', self._include)
+					if os.path.isfile(self._include+".save"):
+						shutil.move(self._include+".save", self._include)
+					else:
+						self._logger.debug('%s does not exist', self._include+".save")
+				else:
+					# Reload nginx
+					self._initd.reload()
 
-		bus.fire("nginx_upstream_reload")
-	
+		bus.fire("nginx_upstream_reload")	
 	
 	def on_before_host_down(self, *args):
 		try:

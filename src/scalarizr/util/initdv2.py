@@ -66,6 +66,12 @@ class InitScript(object):
 		'''
 		pass
 
+	def configtest(self):
+		"""
+		@raise InitdError:
+		"""
+		pass
+
 class SockParam:
 	def __init__(self, port=None, family=socket.AF_INET, type=socket.SOCK_STREAM, conn_address=None, timeout=5):
 		
@@ -78,7 +84,6 @@ class ParametrizedInitScript(InitScript):
 	name = None
 	
 	def __init__(self, name, initd_script, pid_file=None, lock_file=None, socks=None):
-		
 		self.name = name
 		self.initd_script = initd_script
 		self.pid_file = pid_file
@@ -87,7 +92,6 @@ class ParametrizedInitScript(InitScript):
 		
 		'''
 		@param socks: list(SockParam)
-		@todo: implement all sclarizr.util.initd stuff here
 		'''
 		
 	def _start_stop_reload(self, action):
@@ -137,7 +141,6 @@ class ParametrizedInitScript(InitScript):
 	@property
 	def running(self):
 		return not self.status()
-		
 
 def explore(name, init_script_cls):
 	_services[name] = init_script_cls
