@@ -140,7 +140,7 @@ class ParametrizedInitScript(InitScript):
 	
 	@property
 	def running(self):
-		return not self.status()
+		return self.status() == Status.RUNNING
 
 def explore(name, init_script_cls):
 	_services[name] = init_script_cls
@@ -156,7 +156,7 @@ def lookup(name):
 		_instances[name] = _services[name]()
 		
 	return _instances[name]
-		
+	
 def wait_sock(sock = None):
 	if not isinstance(sock, SockParam):
 		raise InitdError('Socks parameter must be instance of SockParam class')

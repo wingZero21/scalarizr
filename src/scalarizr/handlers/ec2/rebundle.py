@@ -23,6 +23,7 @@ from boto.resultset import ResultSet
 from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
+from scalarizr.util.filetool import read_file
 
 if boto.Version == '1.9b':
 	# Workaround for http://code.google.com/p/boto/issues/detail?id=310
@@ -55,6 +56,11 @@ if boto.Version == '1.9b':
 import mimetypes
 mimetypes.init()
 
+class StopRebundle(BaseException): 
+	'''
+	Special exception for raising from 'before_rebundle' event listener to stop rebundle process 
+	'''
+	pass
 
 def get_handlers ():
 	return [Ec2RebundleHandler()]
@@ -101,7 +107,7 @@ class Ec2RebundleHandler(Handler):
 
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.REBUNDLE and platform == "ec2"	
+		return message.name == Messages.REBUNDLE
 	
 
 	def on_Rebundle(self, message):
@@ -149,8 +155,10 @@ class Ec2RebundleHandler(Handler):
 				)
 			else:
 				# Old-style instance-store
+				root_device_size = int(read_file('/sys/block/sda/sda1/size')) * 512 # Size in bytes
 				strategy = RebundleInstanceStoreStrategy(role_name, image_name, excludes,
-						s3_bucket_name="scalr2-images-%s-%s" % (pl.get_region(), pl.get_account_id()))
+						image_size = root_device_size / 1024 / 1024,
+						s3_bucket_name = "scalr2-images-%s-%s" % (pl.get_region(), pl.get_account_id()))
 
 			# Last moment before rebundle
 			self._before_rebundle(role_name)			
@@ -839,6 +847,12 @@ if disttool.is_linux():
 		_size = None
 		
 		def __init__(self, volume, image_file, image_size, excludes=None):
+			'''
+			@param volume: Path to mounted volume to create the bundle from. Ex: '/'
+			@param image_file:  Destination file to store the bundled image. Ex: /mnt/img
+			@param image_size: Image file size in Mb. Ex: 1408 (1Gb)
+			@param excludes: list of directories and files to exclude. Ex: /mnt, /root/.*
+			'''
 			LinuxImage.__init__(self, volume, image_file, excludes)
 			self._size = image_size or self.MAX_IMAGE_SIZE
 		

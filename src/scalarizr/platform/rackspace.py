@@ -1,19 +1,16 @@
 from scalarizr.platform import Platform, PlatformError
-from scalarizr.bus import bus
-import logging
-import urllib2
-import re
-from scalarizr.util import configtool
 from scalarizr.util import system
+from scalarizr.config import BuiltinPlatforms
 
+import logging
+import re
 
 
 def get_platform():
 	return RackspacePlatform()
 
 class RackspacePlatform(Platform):
-	
-	name 			= "rs"
+	name 			= BuiltinPlatforms.RACKSPACE
 	
 	_meta_url		= None
 	_storage_url	= None
@@ -26,6 +23,7 @@ class RackspacePlatform(Platform):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 	
+	'''
 	def _fetch_rs_meta(self, key):
 		url = self._meta_url + key
 		try:
@@ -37,22 +35,15 @@ class RackspacePlatform(Platform):
 					self._update_auth_data()
 					return self._fetch_rs_meta(key)
 			raise PlatformError("Cannot fetch rs metadata url '%s'. Error: %s" % (url, e))
-		
-
-	def _update_auth_data(self):
-		"""
-		Send request to Scalr.
-		Scalr returns new auth-token, api url, storage url and cdn url
-		"""
-		pass
+	'''
 
 	def get_private_ip(self):
-		return self._get_ip("eth1")
+		return self._get_netiface_ip("eth1")
 
 	def get_public_ip(self):
-		return self._get_ip("eth0")
+		return self._get_netiface_ip("eth0")
 	
-	def _get_ip(self, iface=None):
+	def _get_netiface_ip(self, iface=None):
 		if not iface:
 			raise PlatformError('You must specify interface name for getting ip address')
 		if not hasattr(self, '_ip_re'):

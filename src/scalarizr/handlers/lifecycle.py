@@ -92,6 +92,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			
 			# Fires after HostDown message is sent
 			"host_down"
+			
+			# 
+			# Service events
+			#
+			
+			# Fires when behaviour is configured
+			# @param service_name: Service name. Ex: mysql
+			"service_configured"
 		)
 		bus.on("init", self.on_init)
 		

@@ -11,6 +11,7 @@ from scalarizr.messaging.p2p import P2pConfigOptions
 from ConfigParser import ConfigParser, RawConfigParser, NoOptionError, NoSectionError
 from getpass import getpass
 import os, sys, logging
+from scalarizr.libs.pubsub import Observable
 
 SECT_GENERAL = "general"
 OPT_SERVER_ID = "server_id"
@@ -399,7 +400,7 @@ class ScalarizrIni:
 		self.handlers = self.handlers(ini) 
 
 
-class ScalarizrCnf(object):
+class ScalarizrCnf(Observable):
 	DEFAULT_KEY = 'default'
 	FARM_KEY = 'farm'
 	
@@ -421,8 +422,10 @@ class ScalarizrCnf(object):
 	_root_path = None
 	_priv_path = None
 	_pub_path = None
+	_home_path = None
 	_bootstrapped = False
 	_explored_keys = None
+	_loaded_ini_names = None
 
 	_reconfigure = None
 	class __reconfigure:
@@ -701,6 +704,7 @@ class ScalarizrCnf(object):
 					
 		
 	def __init__(self, root=None):
+		Observable.__init__(self)
 		if not root:
 			root = bus.etc_path
 		self._logger = logging.getLogger(__name__)
@@ -722,6 +726,14 @@ class ScalarizrCnf(object):
 		self.explore_key(self.DEFAULT_KEY, 'Scalarizr crypto key', True)
 		self.explore_key(self.FARM_KEY, 'Farm crypto key', True)
 		
+		self._loaded_ini_names = set()
+		
+		self.define_events(
+			# Fires when modules must apply user-data to configuration
+			# @param cnf: This configuration object
+			'apply_user_data'
+		)
+		
 		
 	def _chkdir(self, dir):
 		if not os.path.exists(dir) and os.path.isdir(dir):
@@ -734,12 +746,14 @@ class ScalarizrCnf(object):
 
 	def load_ini(self, name, configparser=None):
 		name = self._name(name)
-		files = (os.path.join(self._priv_path, name), os.path.join(self._pub_path, name))
-		ini = configparser or self.rawini 
-		for file in files:
-			if os.path.exists(file):
-				self._logger.debug('Reading configuration file %s', file)
-				ini.read(file)
+		if not name in self._loaded_ini_names:
+			files = (os.path.join(self._priv_path, name), os.path.join(self._pub_path, name))
+			ini = configparser or self.rawini 
+			for file in files:
+				if os.path.exists(file):
+					self._logger.debug('Reading configuration file %s', file)
+					ini.read(file)
+					self._loaded_ini_names.add(name)
 	
 	def update_ini(self, name, ini_sections, private=True):
 		if not self._update_ini:
@@ -747,10 +761,19 @@ class ScalarizrCnf(object):
 		return self._update_ini(name, ini_sections, private)
 	
 	
-	def bootstrap(self, runtime_ini_sections=None, force_reload=False):
+	def update(self, sections):
 		'''
-		Bootstrap configuration. 
-		Runtime options `rt_options` overrides ini options
+		Override runtime configuration with passed values
+		'''
+		for section in sections:
+			if self.rawini.has_section(section):
+				for option in sections:
+					self.rawini.set(section, option, sections[section][option])
+
+	
+	def bootstrap(self, force_reload=False):
+		'''
+		Bootstrap configuration from INI files. 
 		'''
 		if self._bootstrapped:
 			if force_reload:
@@ -776,12 +799,14 @@ class ScalarizrCnf(object):
 		for hd in self.rawini.options('handlers'):
 			self.load_ini(hd)
 			
+		'''
 		if runtime_ini_sections:
 			self._logger.debug('Apply run-time configuration values')
 			for section in runtime_ini_sections:
 				if self.rawini.has_section(section):
 					for option in runtime_ini_sections:
 						self.rawini.set(section, option, runtime_ini_sections[section][option])
+		'''
 						
 		self._bootstrapped = True
 	
@@ -843,11 +868,17 @@ class ScalarizrCnf(object):
 
 	state = property(_get_state, _set_state)
 
-	def private_path(self, name):
-		return os.path.join(self._priv_path, name)
+	def private_path(self, name=None):
+		return name and os.path.join(self._priv_path, name) or self._priv_path
 	
-	def public_path(self, name):
-		return os.path.join(self._pub_path, name)
+	def public_path(self, name=None):
+		return name and os.path.join(self._pub_path, name) or self._pub_path
+	
+	@property
+	def home_path(self):
+		if not self._home_path:
+			self._home_path = os.path.expanduser('~/.scalr')
+		return self._home_path
 	
 	def key_path(self, name, private=True):
 		return os.path.join(self._priv_path if private else self._pub_path, 'keys', name)
@@ -870,10 +901,10 @@ class BuiltinBehaviours:
 
 
 class BuiltinPlatforms:
-	VPS = 'vps'	
-	EC2 = 'ec2'
-	RS = 'rs'
-	EUCA = 'euca'
+	VPS 		= 'vps'	
+	EC2 		= 'ec2'
+	EUCA 		= 'euca'	
+	RACKSPACE 	= 'rackspace'
 
 	@staticmethod
 	def values():
@@ -929,7 +960,7 @@ class CmdLineIni:
 def split(value, separator=",", allow_empty=False, ct=list):
 	return ct(v.strip() for v in value.split(separator) if allow_empty or (not allow_empty and v)) if value else ct()
 	
-	
+
 class ScalarizrState:
 	BOOTSTRAPPING = "bootstrapping"
 	IMPORTING = "importing"	

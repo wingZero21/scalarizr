@@ -1,7 +1,9 @@
 
 from scalarizr.bus import bus
+from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Queues, Message
-from scalarizr.util import configtool
+from scalarizr.util import configtool, initdv2
+
 import os
 import platform
 import logging
@@ -168,54 +170,45 @@ def async(fn):
 	return decorated
 
 
-class ServiceConfigurationMixin:
-	_configurator = None
-	_behaviour = None
+class ServiceCtlMixin:
+	_service_name = None
+	_cnf_ctl = None
+	_init_script = None
 	
-	def __init__(self, behaviour, configurator):
-		self._behaviour = behaviour
-		self._configurator = configurator
-		#bus.on('init', self.on_init)
+	def __init__(self, service_name, init_script, cnf_ctl=None):
+		self._service_name
+		self._cnf_ctl = cnf_ctl
+		self._init_script = init_script
+		bus.on('init', self.sc_on_init)
 	
 	def on_UpdateServiceConfiguration(self, message):
-		#on_start
 		pass
-	
+
 	def sc_on_init(self):
-		bus.on('host_up', self.sc_on_host_up)
+		bus.on(
+			start=self.sc_on_start,
+			service_configured=self.sc_on_configured,
+			before_host_down=self.sc_on_before_host_down
+		)
 	
-	def sc_on_host_up(self, message):
-		pass
-
-
-class ServiceError(Exception):
-	def __init__(self, value):
-		self.value = value
-	def __str__(self):
-		return repr(self.value)
-
-
-from scalarizr.libs.metaconf import Configuration
-
-
-class PresetStore:
-	
-	DEFAULT = 'DEFAULT'
-	LAST_SUCCESSFUL = 'LAST_SUCCESSFUL'
-	CURRENT = 'CURRENT'
-	
-	def __init__(self):
-		self.presets_path = os.path.expanduser('~/.scalr/presets')
-	
-	def load(self, service_name, preset_type):
-		file = os.path.join(self.presets_path,service_name, '.', preset_type)
-		ini = Configuration('ini')
-		ini.read(file)
-		return ini.get_dict(service_name)
+	def sc_on_start(self):
+		# TODO: Apply configuration
 		
-	def save(self, service_name, dictionary, preset_type):
-		file = os.path.join(self.presets_path,service_name, '.', preset_type)
-		ini = Configuration('ini')
-		for k, v in dictionary:
-			ini.set('%s/%s' % (service_name, k), v)
-		ini.write(file)
+		szr_cnf = bus.cnf
+		if szr_cnf.state == ScalarizrState.RUNNING:
+			try:
+				self._init_script.start()
+			except initdv2.InitdError, e:
+				self._logger.error(e)		
+	
+	def sc_on_before_host_down(self):
+		try:
+			self._logger.info("Stopping %s", self._service_name)
+			self._init_script.stop()
+		except:
+			self._logger.error("Cannot stop %s", self._service_name)
+			if self._init_script.running:
+				raise		
+	
+	def sc_on_configured(self, service_name):
+		pass

@@ -89,12 +89,8 @@ class Configuration:
 
 	
 	def _read0(self, file):
-		try:
-			fp = open(file)
-		except OSError, e:
-			raise MetaconfError('Cannot read file %s: %s' % (file, str(e)))
-		else:
-			self.readfp(fp)
+		fp = open(file)
+		self.readfp(fp)
 
 
 		
