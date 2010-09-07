@@ -8,8 +8,8 @@ from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr import config
 from scalarizr.util import validators
-
-from scalarizr.handlers import Handler, HandlerError
+from scalarizr.me import Messages
+from scalarizr.handlers import Handler, HandlerError, ServiceConfigurationMixin
 from scalarizr.util import fstool, system, cryptotool, disttool,\
 		 filetool, firstmatched, cached
 from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME
@@ -236,7 +236,141 @@ class MysqlMessages:
 
 
 
-class MysqlHandler(Handler):
+
+from scalarizr.handlers import ServiceError
+
+class Preset:
+	name = None
+	settings = None
+	
+	def __init__(self, name=None, settings=None, restart_service=False):
+		self.name = name
+		self.settings = settings or {}
+		self.restart_service = restart_service
+
+
+class MysqlConfigurator:
+	
+	def __init__(self):
+		pass
+	
+	def current_preset(self):
+		
+		'''
+		try:
+			# need to login & enter password (pexpect)
+			out = system(['/usr/bin/mysql', '-e', 'show global variables'], shell=False)[0]
+		except OSError, e:
+			raise ServiceError(e)
+		if not out:
+			raise ServiceError('No output')
+			
+		raw_text = out.splitlines()
+		text = raw_text[1:]
+		vars = {}
+		
+		for line in text:
+			splitted_line = line.split('\t')					
+			name = splitted_line[0].strip()
+			value = splitted_line[1].strip() 
+			vars[name] = value
+		'''
+		
+		sql = self._get_connection()
+		sql.sendline('show global variables;')
+		sql.expect('mysql>')
+		out = sql.before
+		raw_text = out.splitlines()
+		text = raw_text[4:-3]
+		vars = {}
+		
+		for line in text:
+			splitted_line = line.split('|')					
+			name = splitted_line[1].strip()
+			value = splitted_line[2].strip() 
+			vars[name] = value
+					
+		return vars
+	
+	def apply_preset(self, preset_name, preset):
+		
+		static_vars = ['innodb_additional_mem_pool_size', 'innodb_buffer_pool_size', 
+					'back_log', 'ft_max_word_len', 'ft_min_word_len', 
+					'ft_query_expansion_limit', 'innodb_file_per_table','innodb_log_buffer_size',
+					'innodb_lock_wait_timeout', 'innodb_open_files', 'innodb_rollback_on_timeout',
+					'innodb_autoinc_lock_mode', 'innodb_adaptive_hash_index'] 
+		
+		versions = {'innodb_autoinc_lock_mode' : (5,1,22), 
+					'innodb_adaptive_hash_index' : (5,0,52), 
+					'innodb_use_legacy_cardinality_algorithm' : (5,1,35) ,
+					'innodb_stats_on_metadata' : (5,1,17),
+					'event_scheduler' : (5,1,12) ,
+					'general_log' : (5,1,12) ,
+					'keep_files_on_create' : (5,0,48) }
+		
+		conf_path = '/etc/my.cnf'
+		conf = Configuration('mysql')
+		conf.read(conf_path)
+		
+		sql = self._get_connection()
+		
+		for variable,value in preset.items():
+			
+			conf.add('mysqld/%s' % variable, value)
+			
+			if (variable not in static_vars) \
+					or (versions.has_key(variable) and not self._is_proper_version(value)):
+				continue
+			sql.sendline('SET GLOBAl %s = %s;' % (variable, value))
+			sql.expect('mysql>')
+			
+		sql.close()
+		conf.close()
+	
+	def _is_proper_version(self, variable_version):
+		server_version = self._get_mysql_version()
+		
+		for octet in range(3):
+			if variable_version[octet] > server_version[octet]:
+				return False
+		return True 
+	
+	def _get_mysql_version(self):
+		out = system(['/usr/bin/mysql', '-V'], shell=False)[0]
+		version = out.split()[4]
+		if version.endswith(','):
+			version = version[:-1]
+		return version.split('.')	
+
+	def _get_connection(self):
+		cnf = bus.cnf
+		root_password = None
+		try:
+			root_password = cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
+		except Exception, e:
+			raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
+		return _spawn_mysql(ROOT_USER, root_password)
+
+def _spawn_mysql(user, password):
+	mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
+	mysql.expect('Enter password:')
+	mysql.sendline(password)
+	mysql.expect('mysql>')
+	return mysql	
+
+	"""
+		#answer example
+		self._send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+			status       = 'ok',
+			pma_user	 = PMA_USER,
+			pma_password = pma_password,
+			farm_role_id = farm_role_id,
+		))
+				
+	"""
+	
+
+class MysqlHandler(Handler, ServiceConfigurationMixin):
 	_logger = None
 	
 	_queryenv = None
@@ -257,6 +391,9 @@ class MysqlHandler(Handler):
 	_initd = None
 
 	def __init__(self):
+		
+		#ServiceConfigurationMixin.__init__(self, behaviour, configurator)
+		
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
@@ -292,6 +429,7 @@ class MysqlHandler(Handler):
 		@xxx: Storage unplug failed because scalarizr has no EC2 access keys
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
+		
 		"""
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -300,7 +438,8 @@ class MysqlHandler(Handler):
 				or 	message.name == MysqlMessages.PROMOTE_TO_MASTER
 				or 	message.name == MysqlMessages.CREATE_DATA_BUNDLE
 				or 	message.name == MysqlMessages.CREATE_BACKUP
-				or 	message.name == MysqlMessages.CREATE_PMA_USER)
+				or 	message.name == MysqlMessages.CREATE_PMA_USER
+				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION) 
 		
 	def on_Mysql_CreatePmaUser(self, message):
 		try:
@@ -599,6 +738,7 @@ class MysqlHandler(Handler):
 			self._logger.debug('Skip NewMasterUp. My replication role is master')		
 
 	def on_start(self):
+		#move to mixin
 		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._initd.start()

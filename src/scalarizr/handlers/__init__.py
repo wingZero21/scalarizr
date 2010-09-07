@@ -166,4 +166,56 @@ def async(fn):
 		t.start()
 	
 	return decorated
+
+
+class ServiceConfigurationMixin:
+	_configurator = None
+	_behaviour = None
 	
+	def __init__(self, behaviour, configurator):
+		self._behaviour = behaviour
+		self._configurator = configurator
+		#bus.on('init', self.on_init)
+	
+	def on_UpdateServiceConfiguration(self, message):
+		#on_start
+		pass
+	
+	def sc_on_init(self):
+		bus.on('host_up', self.sc_on_host_up)
+	
+	def sc_on_host_up(self, message):
+		pass
+
+
+class ServiceError(Exception):
+	def __init__(self, value):
+		self.value = value
+	def __str__(self):
+		return repr(self.value)
+
+
+from scalarizr.libs.metaconf import Configuration
+
+
+class PresetStore:
+	
+	DEFAULT = 'DEFAULT'
+	LAST_SUCCESSFUL = 'LAST_SUCCESSFUL'
+	CURRENT = 'CURRENT'
+	
+	def __init__(self):
+		self.presets_path = os.path.expanduser('~/.scalr/presets')
+	
+	def load(self, service_name, preset_type):
+		file = os.path.join(self.presets_path,service_name, '.', preset_type)
+		ini = Configuration('ini')
+		ini.read(file)
+		return ini.get_dict(service_name)
+		
+	def save(self, service_name, dictionary, preset_type):
+		file = os.path.join(self.presets_path,service_name, '.', preset_type)
+		ini = Configuration('ini')
+		for k, v in dictionary:
+			ini.set('%s/%s' % (service_name, k), v)
+		ini.write(file)
