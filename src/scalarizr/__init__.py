@@ -460,10 +460,13 @@ def main():
 			print "Don't terminate Scalarizr until Scalr will create the new role"
 			cnf.state = ScalarizrState.IMPORTING
 			# Load Command-line configuration options and auto-configure Scalarizr
-			cnf.recofigure(values=CmdLineIni.to_kvals(optparser.values.cnf), silent=True, yesall=True)
+			cnf.reconfigure(values=CmdLineIni.to_kvals(optparser.values.cnf), silent=True, yesall=True)
 		
 		# Load INI files configuration
 		cnf.bootstrap(force_reload=True)
+		
+		# Initialize local database
+		_init_db()
 		
 		# Initialize platform module
 		_init_platform()

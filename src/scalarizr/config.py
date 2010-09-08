@@ -775,10 +775,12 @@ class ScalarizrCnf(Observable):
 		'''
 		Bootstrap configuration from INI files. 
 		'''
+		self._logger.debug('Bootstrap INI configuration (reload=%s)', force_reload)
 		if self._bootstrapped:
 			if force_reload:
 				for section in self.rawini.sections():
 					self.rawini.remove_section(section)
+				self._loaded_ini_names = set()
 			else:
 				return 
 		
