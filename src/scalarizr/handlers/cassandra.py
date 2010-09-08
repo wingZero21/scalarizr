@@ -10,17 +10,17 @@ from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages, Queues
 import logging
 import os
-from scalarizr.util import configtool, fstool, system, initd, get_free_devname, filetool
+import re
+from scalarizr.util import configtool, fstool, system, get_free_devname, filetool
+from scalarizr.util import initdv2
 from scalarizr.util import iptables
 from scalarizr.util.iptables import IpTables, RuleSpec
-from xml.dom.minidom import parse
 from ConfigParser import NoOptionError
 from Queue import Queue, Empty
 from threading import Timer
-from scalarizr.libs.metaconf import *
+from scalarizr.libs.metaconf import Configuration, PathNotExistsError
 import urllib2
 import tarfile
-import shutil
 import time
 import pexpect
 
@@ -33,17 +33,17 @@ CDB_TIMEOUT             = 60
 CDB_MAX_ATTEMPTS        = 3
 CRF_TIMEOUT				= 100
 CRF_MAX_ATTEMPTS		= 3
-initd_script = "/etc/init.d/cassandra"
-if not os.path.exists(initd_script):
-	raise HandlerError("Cannot find Cassandra init script at %s. Make sure that cassandra is installed" % initd_script)
 
-pid_file = '/var/run/cassandra.pid'
 
-logger = logging.getLogger(__name__)
-logger.debug("Explore Cassandra service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
-initd.explore("cassandra", initd_script)
+class CassandraInitScript(initdv2.ParametrizedInitScript):
+	def __init__(self):
+		initd_script = "/etc/init.d/cassandra"
+		pid_file = '/var/run/cassandra.pid'
+		private_ip = bus.platform.get_private_ip()
+		socks = [initdv2.SockParam(port, conn_address = private_ip) for port in (7000, 9160)]
+		initdv2.ParametrizedInitScript.__init__(self, 'cassandra', initd_script, pid_file, socks=socks)
 
-# TODO: rewrite initd to handle service's ip address
+initdv2.explore('cassandra', CassandraInitScript)
 
 
 class CassandraMessages:
@@ -127,6 +127,8 @@ class Cassandra(object):
 		self.data_file_directory = self.storage_path + "/datafile"
 		self.commit_log_directory = self.storage_path + "/commitlog"
 
+		self._initd = initdv2.lookup('cassandra')
+		
 	def restart_service(self):
 		self.stop_service()
 		self.start_service()
@@ -134,7 +136,7 @@ class Cassandra(object):
 	def stop_service(self):
 		try:
 			self._logger.info("Stopping Cassandra service")
-			initd.stop("cassandra")
+			self._initd.stop()
 			self._logger.debug("Cassandra service stopped")
 		except:
 			self._logger.error("Cannot stop Cassandra")
@@ -143,7 +145,7 @@ class Cassandra(object):
 	def start_service(self):
 		try:
 			self._logger.info("Starting Cassandra service")
-			initd.start("cassandra")
+			self._initd.start()
 			self._logger.debug("Cassandra service started")
 		except:
 			self._logger.error("Cannot start Cassandra")

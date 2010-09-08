@@ -7,13 +7,15 @@ from scalarizr.bus import bus
 from scalarizr.platform import PlatformError
 from scalarizr.platform.ec2 import Ec2Platform
 
+from scalarizr.util.filetool import write_file
+
 import logging, os
 from urlparse import urlparse
 
 import boto
 from boto.ec2.regioninfo import RegionInfo
 from boto.s3.connection import OrdinaryCallingFormat
-
+import ssl
 
 def get_platform():
 	return EucaPlatform()
@@ -41,11 +43,18 @@ class EucaPlatform(Ec2Platform):
 			's3_url' : user_data[UD_OPT_S3_URL],
 			'ec2_url' : user_data[UD_OPT_EC2_URL] 
 		}})
+		
 			
 	def get_ec2_cert(self):
 		if not self._ec2_cert:
-			# XXX: not ok
-			self._ec2_cert = self._cnf.read_key(os.path.join(bus.etc_path, self._cnf.rawini.get(self.name, 'cloud_cert_path')), title="Eucalyptus certificate")
+			cert_path = os.path.join(bus.etc_path, self._cnf.rawini.get(self.name, 'cloud_cert_path'))
+			if not os.path.exists(cert_path):
+				ec2_url = self._cnf.rawini.get(self.name, 's3_url')
+				url = urlparse(ec2_url)
+				addr = (url.hostname, url.port if url.port else 80)
+				cert = ssl.get_server_certificate(addr)
+				write_file(cert_path, cert)
+			self._ec2_cert = self._cnf.read_key(cert_path, title="Eucalyptus certificate")
 		return self._ec2_cert	
 	
 	def new_ec2_conn(self):

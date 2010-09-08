@@ -63,7 +63,10 @@ class Configuration:
 		
 		if etree and not isinstance(etree, ET.ElementTree):
 			raise MetaconfError("etree param must be instance of ElementTree. %s passed" % (etree,))
-				
+		
+		if not format_providers.has_key(format):
+			raise MetaconfError("Unknown format: %s" % format)
+		
 		self._root_path = quote(root_path)
 		self._format = format
 		self.etree = etree
@@ -151,9 +154,9 @@ class Configuration:
 			new_conf._init()
 			new_conf.write(comment_value, close = False)
 			parent_el   = parent_els.pop(0)
-			it			= parent_el.getiterator()
+			index = list(parent_el).index(temp_node)
 			comment		= ET.Comment(comment_value.getvalue().strip())
-			parent_el.insert(it.index(temp_node), comment)
+			parent_el.insert(index, comment)
 			parent_el.remove(temp_node)
 
 	def uncomment(self, path):
@@ -169,7 +172,6 @@ class Configuration:
 		if not temp_nodes:
 			raise MetaconfError("Path %s doesn't exist" % unquote(path))
 		for temp_node in temp_nodes:
-			it	= temp_node.getiterator()
 			for child in temp_node:
 
 				if not callable(child.tag):
@@ -186,7 +188,7 @@ class Configuration:
 				if comment_node == None:
 					continue
 
-				temp_node.insert(it.index(child), comment_node)
+				temp_node.insert(list(temp_node).index(child), comment_node)
 				temp_node.remove(child)
 				del(temp_conf)
 
@@ -242,8 +244,7 @@ class Configuration:
 	def _add_element(self, after, parent, node):
 		after_element  = self.etree.findall(after)[-1]
 		parent_element = self.etree.find(parent)
-		it = parent_element.getiterator()
-		parent_element.insert(it.index(after_element), node)
+		parent_element.insert(list(parent_element).index(after_element), node)
 
 	def __iter__(self):
 		"""
@@ -370,11 +371,9 @@ class Configuration:
 			after_element = path_list[-1]
 		
 		if after_element != None:
-			it = parent.getiterator()
-			parent.insert(it.index(after_element), el)
+			parent.insert(list(parent).index(after_element) + 1, el)
 		elif before_element != None:
-			it = parent.getiterator()
-			parent.insert(it.index(before_element), el)
+			parent.insert(list(parent).index(before_element), el)
 		else:
 			parent.append(el)
 			self._set(el, value, typecast)
@@ -686,7 +685,7 @@ class NginxFormatProvider(IniFormatProvider):
 		if result:
 			new_section = ET.SubElement(self._cursect, quote(result.group('option').strip()))
 			if result.group('value'):
-				new_section.text = result.group('value').strip()
+				new_section.attrib['value'] = quote(result.group('value').strip())
 			if result.group('comment'):
 				new_section.append(ET.Comment(result.group(4)))
 			opened = 1 if '}' not in line.split('#')[0] else 0
@@ -729,7 +728,7 @@ class NginxFormatProvider(IniFormatProvider):
 	
 	def write_section(self, fp, node):
 		if len(node):
-			value = unquote(node.text.strip()) if node.text else ''
+			value = unquote(node.attrib['value']) if node.attrib.has_key('value') else ''
 			fp.write(self._pad*self._nesting + unquote(node.tag) + ' ' + value + ' {\n')
 			self._nesting +=1
 			try:
@@ -776,7 +775,107 @@ class XmlFormatProvider:
 
 
 format_providers["xml"] = XmlFormatProvider
+
+class ApacheFormatProvider(IniFormatProvider):
 	
+	_readers = None
+	_writers = None
+
+	def __init__(self):
+		IniFormatProvider.__init__(self)
+		self._nesting  = 0
+		self._pad = '	'
+		
+	def read_option(self, line, root):
+		if not hasattr(self, "_opt_re"):
+			self._opt_re = re.compile(r'\s*(?P<option>[^<].*?)\s+(?P<value>.*?)\s*?(?P<backslash>\\?)$')
+		result = self._opt_re.match(line)
+		if result:
+			new_opt = ET.SubElement(self._cursect, quote(result.group('option').strip()))
+			value = result.group('value')
+			if result.group('backslash'):
+				while True:
+					new_line = self._fp.readline()
+					if not new_line:
+						return False
+					raw_line = new_line.strip()
+					if raw_line.endswith('\\'):
+						value += ' ' + raw_line[:-1]
+					else:
+						value += ' ' + raw_line
+						break
+			new_opt.text = value
+			return True
+		return False
+	
+		
+	def write_option(self, fp, node):
+		if not len(node) and not callable(node.tag) and node.text:
+			fp.write(self._pad*self._nesting + unquote(node.tag)+"\t"+node.text+'\n')			
+			return True
+		return False
+	
+	def write_comment(self, fp, node):
+		if callable(node.tag):
+			comment_lines  = node.text.split('\n')
+			for line in comment_lines:
+				fp.write(self._pad*self._nesting + '#'+line+'\n')
+			return True
+		return False
+	
+	def read_section(self, line, root):
+		if not hasattr(self, "_sect_re"):
+			self._sect_re = re.compile('\s*<(?P<option>[^\s]+)\s*(?P<value>.*?)\s*>\s*$')
+			
+		result = self._sect_re.match(line)
+		if result:
+			tag = result.group('option').strip()
+			new_section = ET.SubElement(self._cursect, quote(tag))
+			value = result.group('value').strip()
+			if value:
+				new_section.attrib['value'] = value
+				
+			opened = 1 
+									
+			while opened != 0:
+				new_line = self._fp.readline()
+				if not new_line:
+					return False
+				
+				line += new_line
+				stripped = new_line.strip()
+				if stripped.startswith('</'+tag+'>'):
+					opened -= 1
+				if stripped.startswith('<'+tag):
+					opened += 1
+			
+			self._sections.append(self._cursect)
+			self._cursect = new_section
+			old_fp = self._fp
+			content = re.search(re.compile('.*?>\s*\n(.*)<.*?>',re.S), line).group(1).strip()
+			self.read(StringIO(content), self._lineno)
+			self._fp = old_fp
+			self._cursect = self._sections.pop()
+			self._lineno += 1
+			return True
+		return False
+	
+	def write_section(self, fp, node):
+		if len(node):
+			text = node.text.strip()
+			value = ' ' + node.attrib['value'] if node.attrib.has_key('value') else ''
+			tag = unquote(node.tag)
+			fp.write(self._pad*self._nesting + '<' + tag + value + '>\n')
+			self._nesting +=1
+			try:
+				self.write(fp, node, False)
+			finally:
+				self._nesting -=1
+			fp.write(self._pad*self._nesting + '</'+ tag +'>\n')
+			return True
+		return False
+	
+format_providers["apache"] = ApacheFormatProvider
 """
 class YamlFormatProvider:
 
@@ -891,10 +990,12 @@ def indent(elem, level=0):
 			elem.tail = i
 			
 def quote(line):
-	return re.sub(' ', '%20', line)
+	line = re.sub(' ', '%20', line)
+	return re.sub('"', '%22', line)
 
 def unquote(line):
-	return re.sub('%20', ' ', line)
+	line = re.sub('%20', ' ', line)
+	return re.sub('%22', '"', line)
 
 			
 class CommentedTreeBuilder ( ET.XMLTreeBuilder ):

@@ -6,30 +6,34 @@ Created on Jul 23, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState, BuiltinBehaviours
-from scalarizr.handlers import Handler, HandlerError
-from scalarizr.util import disttool, initd
+from scalarizr.handlers import Handler
+from scalarizr.util import disttool
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr.util import iptables
 from scalarizr.util.iptables import IpTables, RuleSpec
 from scalarizr.messaging import Messages
+from scalarizr.util import initdv2
 import logging
 import re
 import os
 
-pid_file = None
-if disttool.is_redhat_based():
-	pid_file = "/var/run/memcached/memcached.pid"
-elif disttool.is_debian_based():
-	pid_file = "/var/run/memcached.pid" 
+class MemcachedInitScript(initdv2.ParametrizedInitScript):
+	def __init__(self):
+		
+		pid_file = None
+		if disttool.is_redhat_based():
+			pid_file = "/var/run/memcached/memcached.pid"
+		elif disttool.is_debian_based():
+			pid_file = "/var/run/memcached.pid" 
+		
+		initd_script = '/etc/init.d/memcached'
+		if not os.path.exists(initd_script):
+			raise initdv2.InitdError("Cannot find Memcached init script at %s. Make sure that apache web server is installed" % initd_script)
 
-initd_script = '/etc/init.d/memcached'
-if not os.path.exists(initd_script):
-	raise HandlerError("Cannot find Memcached init script at %s. Make sure that apache web server is installed" % initd_script)
+		initdv2.ParametrizedInitScript.__init__(self, 'cassandra', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
 
-# Register memcached service
-logger = logging.getLogger(__name__)
-logger.debug("Explore memcached service to initd module (initd_script: %s, pid_file: %s)", initd_script, pid_file)
-initd.explore("memcached", initd_script, pid_file)
+initdv2.explore('memcached', MemcachedInitScript)
+
 
 BEHAVIOUR = BuiltinBehaviours.MEMCACHED
 
@@ -55,7 +59,8 @@ class MemcachedHandler(Handler):
 			self.mcd_conf_path = '/etc/sysconfig/memcached'
 			self.expression = re.compile('^\s*CACHESIZE\s*=\s*"\d*"$', re.M)
 			self.substitute = 'CACHESIZE="%s"' % cache_size		
-
+		
+		self._initd = initdv2.lookup('memcached')
 		self.ip_tables = IpTables()
 		self.rules = []
 		
@@ -77,8 +82,8 @@ class MemcachedHandler(Handler):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			try:
 				self._logger.info("Starting memcached")
-				initd.start("memcached")
-			except initd.InitdError, e:
+				self._initd.start()
+			except initdv2.InitdError, e:
 				self._logger.error(e)
 	
 	def on_before_host_up(self, message):
@@ -112,18 +117,18 @@ class MemcachedHandler(Handler):
 
 		try:
 			self._logger.info("Reloading memcached")
-			initd.reload("memcached", force=True)
-		except initd.InitdError, e:
+			self._initd.reload()
+		except initdv2.InitdError, e:
 			self._logger.error(e)
 
 
 	def on_before_host_down(self, *args):
 		try:
 			self._logger.info("Stopping memcached")
-			initd.stop("memcached")
-		except initd.InitdError:
+			self._initd.stop()
+		except initdv2.InitdError:
 			self._logger.error("Cannot stop memcached")
-			if initd.is_running("memcached"):
+			if self._initd.running:
 				raise
 	
 	
