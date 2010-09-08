@@ -49,7 +49,7 @@ class EucaPlatform(Ec2Platform):
 		if not self._ec2_cert:
 			cert_path = os.path.join(bus.etc_path, self._cnf.rawini.get(self.name, 'cloud_cert_path'))
 			if not os.path.exists(cert_path):
-				ec2_url = self._cnf.rawini.get(self.name, 's3_url')
+				ec2_url = self._cnf.rawini.get(self.name, 'ec2_url')
 				url = urlparse(ec2_url)
 				addr = (url.hostname, url.port if url.port else 80)
 				cert = ssl.get_server_certificate(addr)
