@@ -266,7 +266,7 @@ class MysqlCnfController(CnfController):
 	}		
 	
 	def __init__(self):
-		pass
+		self._logger = logging.getLogger(__name__)
 	
 	def current_preset(self):
 		self._logger.debug('Getting current MySQL preset')

@@ -200,24 +200,18 @@ class ServiceCtlHanler(Handler):
 		msg.status = 'ok'
 		
 		storage = CnfPresetStore()	
-		try:
-				
+		try:		
 			try:
 				if not self._init_script.running:
-					self._logger.debug('Service %s is not running. Trying to start.' % self._service_name)
 					self._start_service()
-				
-				
+					
 				last = self._cnf_ctl.current_preset()
 			
 			except (BaseException, Exception), e:
-				self._logger.debug('Failed. Loading default %s preset as last successful' % self._service_name)
 				last = storage.load(self._service_name, PresetType.DEFAULT)
 				self._start_service()
 			finally:
-				self._logger.debug('Saving last successful %s preset' % self._service_name)
 				storage.save(self._service_name, last, PresetType.LAST_SUCCESSFUL)
-			
 			
 			configuration = self._queryenv.get_service_configuration()
 			new_preset = CnfPreset(configuration.name, configuration.settings)
@@ -343,4 +337,4 @@ class ServiceCtlHanler(Handler):
 		storage = CnfPresetStore()
 		storage.save(service_name, last, PresetType.DEFAULT)
 		
-		self.sc_on_start()
+		self._reconfigure()	

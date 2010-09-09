@@ -23,6 +23,7 @@ class CnfPresetStore:
 		CURRENT = 'current'
 	
 	def __init__(self):
+		self._logger = logging.getLogger(__name__)
 		cnf = bus.cnf
 		self.presets_path = os.path.join(cnf.home_path, 'presets')
 		if not os.path.exists(self.presets_path):
@@ -39,6 +40,7 @@ class CnfPresetStore:
 		@rtype: Preset
 		@raise OSError, MetaconfError: 
 		'''
+		self._logger.debug('Loading %s %s preset' % (preset_type, service_name))
 		ini = Configuration('ini')
 		ini.read(self._filename(service_name, preset_type))
 		#why we need name section if we have preset_type variable?
@@ -50,6 +52,7 @@ class CnfPresetStore:
 		@type preset: CnfPreset
 		@type preset_type: CnfPresetStore.PresetType
 		'''
+		self._logger.debug('Saving preset as ' % preset_type)
 		ini = Configuration('ini')
 		ini.set('general/name', preset.name or 'Noname')
 		for k, v in preset.settings:
