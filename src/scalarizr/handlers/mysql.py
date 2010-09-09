@@ -9,7 +9,7 @@ from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr import config
 from scalarizr.util import validators
 from scalarizr.messaging import Messages
-from scalarizr.handlers import Handler, HandlerError, ServiceCtlMixin
+from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
 from scalarizr.util import fstool, system, cryptotool, disttool,\
 		 filetool, firstmatched, cached
 from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME
@@ -269,6 +269,7 @@ class MysqlCnfController(CnfController):
 		pass
 	
 	def current_preset(self):
+		self._logger.debug('Getting current MySQL preset')
 		mysql = None
 		try:
 			mysql = self._get_connection()
@@ -290,7 +291,7 @@ class MysqlCnfController(CnfController):
 			if mysql:
 				mysql.close()
 	
-	def apply_preset(self, preset_name, preset):
+	def apply_preset(self, preset):
 		szr_cnf = bus.cnf
 		conf = Configuration('mysql')
 		conf.read(szr_cnf.rawini.get(BEHAVIOUR, OPT_MYCNF_PATH))
@@ -342,7 +343,7 @@ def _spawn_mysql(user, password):
 	return mysql	
 
 
-class MysqlHandler(Handler, ServiceCtlMixin):
+class MysqlHandler(ServiceCtlHanler):
 	_logger = None
 	
 	_queryenv = None
@@ -383,15 +384,13 @@ class MysqlHandler(Handler, ServiceCtlMixin):
 			raise HandlerError('Cannot read mysql config %s : %s' % (self._mycnf_path, str(e)))
 
 		self._initd = initdv2.lookup(SERVICE_NAME)
-		ServiceCtlMixin.__init__(self, SERVICE_NAME, self._initd, MysqlCnfController())
+		ServiceCtlHanler.__init__(self, SERVICE_NAME, self._initd, MysqlCnfController())
 			
 		bus.on("init", self.on_init)
 
-	def on_init(self):
-		bus.on("start", self.on_start)		
+	def on_init(self):		
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
-		bus.on("before_host_down", self.on_before_host_down)
 		
 		"""
 		@xxx: Storage unplug failed because scalarizr has no EC2 access keys
@@ -705,15 +704,6 @@ class MysqlHandler(Handler, ServiceCtlMixin):
 		else:
 			self._logger.debug('Skip NewMasterUp. My replication role is master')		
 
-	def on_start(self):
-		if self._cnf.state == ScalarizrState.RUNNING:
-			try:
-				self._initd.start()
-			except InitdError, e:
-				self._logger.error(e)
-				
-	def on_before_host_down(self, *args):
-		self._stop_mysql()	
 	
 	def on_before_reboot_start(self, *args, **kwargs):
 		"""

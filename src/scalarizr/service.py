@@ -14,6 +14,7 @@ class CnfPreset:
 	def __init__(self, name=None, settings=None):
 		self.name = name
 		self.settings = settings or {}
+		#where is restart variable?
 
 class CnfPresetStore:
 	class PresetType:
@@ -24,6 +25,11 @@ class CnfPresetStore:
 	def __init__(self):
 		cnf = bus.cnf
 		self.presets_path = os.path.join(cnf.home_path, 'presets')
+		if not os.path.exists(self.presets_path):
+			try:
+				os.makedirs(self.presets_path)
+			except OSError,e:
+				pass
 	
 	def _filename(self, service_name, preset_type):
 		return os.path.join(self.presets_path,service_name, '.', preset_type)
@@ -35,7 +41,8 @@ class CnfPresetStore:
 		'''
 		ini = Configuration('ini')
 		ini.read(self._filename(service_name, preset_type))
-		return CnfPreset(ini.get('general/name'), ini.get_dict('settings'))
+		#why we need name section if we have preset_type variable?
+		return CnfPreset(ini.get('general/name'), ini.get_dict('settings')) 
 		
 	def save(self, service_name, preset, preset_type):
 		'''

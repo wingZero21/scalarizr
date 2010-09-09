@@ -302,6 +302,9 @@ class Messages:
 	
 	EXEC_SCRIPT = "ExecScript"
 	
+	UPDATE_SERVICE_CONFIGURATION = "UpdateServiceConfiguration"
+	
+	UPDATE_SERVICE_CONFIGURATION_RESULT = "UpdateServiceConfigurationResult"
 
 	###
 	# Internal events

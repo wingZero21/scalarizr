@@ -93,6 +93,13 @@ class QueryEnvService(object):
 		@return string
 		"""
 		return self._request("get-latest-version",{}, self._read_get_latest_version_response)
+	
+	def get_service_configuration(self):
+		"""
+		@return dict
+		"""
+		return self._request("get-service-configuration",{}, self._read_get_service_configuration_response)
+		
 
 	def _request (self, command, params={}, response_reader=None):
 		"""
@@ -242,6 +249,53 @@ class QueryEnvService(object):
 			ret.append(vhost)	
 				
 		return ret
+	
+	def _read_get_service_configuration_response(self, xml):
+		ret = {}
+		name = None
+		restart_service = None
+		
+		name_attr = 'preset-name'
+		restart_service_attr = 'restart-service'
+		key_attr = "key"
+		
+		response = xml.documentElement
+		
+		if response:
+			if response.firstChild.hasAttribute(name_attr):
+				name = response.firstChild.getAttribute(name_attr)
+				
+			if response.firstChild.hasAttribute(restart_service_attr):
+				restart_service = response.firstChild.getAttribute(restart_service_attr)
+			
+			for setting in response.firstChild.childNodes:
+				
+				if setting.hasAttribute(key_attr):
+					k = str(setting.getAttribute(key_attr))
+					v = str(setting.firstChild.nodeValue)
+					if k:
+						ret[k] = v
+					
+		preset = Preset()
+		preset.name = str(name)
+		preset.restart_service = restart_service
+		preset.settings = ret
+		return preset
+	
+
+class Preset(object):
+	settings = None
+	name = None
+	restart_service = None
+	
+	def __init__(self):
+		self.settings = {}
+	
+	def __repr__(self):
+		return 'name = ' + str(self.name) \
+	+ "; restart_service = " + str(self.restart_service) \
+	+ "; settings = " + str(self.settings)
+		
 	
 class Mountpoint(object):
 	name = None

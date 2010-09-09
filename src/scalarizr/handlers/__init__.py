@@ -1,8 +1,11 @@
 
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
-from scalarizr.messaging import Queues, Message
+from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import configtool, initdv2
+from scalarizr.util.initdv2 import Status
+from scalarizr.service import CnfPresetStore, CnfPreset
+from scalarizr.service.CnfPresetStore import  PresetType
 
 import os
 import platform
@@ -170,19 +173,151 @@ def async(fn):
 	return decorated
 
 
-class ServiceCtlMixin:
+class ServiceCtlHanler(Handler):
 	_service_name = None
-	_cnf_ctl = None
+	_cnf_ctl = None 
 	_init_script = None
+	_logger = None 
 	
 	def __init__(self, service_name, init_script, cnf_ctl=None):
-		self._service_name
+		self._service_name = service_name
 		self._cnf_ctl = cnf_ctl
 		self._init_script = init_script
+		
+		self._logger = logging.getLogger(__name__)
+		self._queryenv = bus.queryenv_service
+		
 		bus.on('init', self.sc_on_init)
+
+	def sc_on_start(self):
+		szr_cnf = bus.cnf
+		if szr_cnf.state == ScalarizrState.RUNNING and not self._init_script.running:
+			self._start_service()	
+		self._reconfigure()	
+
+	def _reconfigure(self):
+		msg = self._new_message(Messages.UPDATE_SERVICE_CONFIGURATION_RESULT)
+		msg.status = 'ok'
+		
+		storage = CnfPresetStore()	
+		try:
+				
+			try:
+				if not self._init_script.running:
+					self._logger.debug('Service %s is not running. Trying to start.' % self._service_name)
+					self._start_service()
+				
+				
+				last = self._cnf_ctl.current_preset()
+			
+			except (BaseException, Exception), e:
+				self._logger.debug('Failed. Loading default %s preset as last successful' % self._service_name)
+				last = storage.load(self._service_name, PresetType.DEFAULT)
+				self._start_service()
+			finally:
+				self._logger.debug('Saving last successful %s preset' % self._service_name)
+				storage.save(self._service_name, last, PresetType.LAST_SUCCESSFUL)
+			
+			
+			configuration = self._queryenv.get_service_configuration()
+			new_preset = CnfPreset(configuration.name, configuration.settings)
+			
+			CnfPresetStore.save(self._service_name, new_preset, PresetType.CURRENT)
+			self._cnf_ctl.apply_preset(self, new_preset)
+			
+			if new_preset.restart_service: 
+				try:
+					self._restart_service()
+				except initdv2.InitdError, e:	
+					self._cnf_ctl.apply_preset(last)
+					self._start_service()
+					storage.save(self._service_name, last, PresetType.CURRENT)	
+					
+		except (BaseException, Exception), e:
+			msg.status = 'error'
+			msg.last_error = str(e)	
+			self._logger.error(e)	
+		
+		self._send_message(msg)
+		
 	
 	def on_UpdateServiceConfiguration(self, message):
-		pass
+		if self._service_name != message.behaviour:
+			return
+
+		storage = CnfPresetStore()
+
+		msg = self._new_message(Messages.UPDATE_SERVICE_CONFIGURATION_RESULT)
+		msg.behaviour = message.behaviour
+		
+		if message.reset_to_defaults:
+			msg.preset = 'default'
+			msg.status = 'ok'
+			try:			
+				default_preset = storage.load(message.behaviour, PresetType.DEFAULT)
+				self._cnf_ctl.apply_preset(self, default_preset)
+				if message.restart_service:
+					self._restart_service()
+			except (BaseException, Exception), e:
+				msg.status = 'error'
+				msg.last_error = str(e)
+			
+			self._send_message(msg)
+				
+		else:
+			
+			self._reconfigure()
+
+			"""
+			try:
+				try:
+					if not self._init_script.running:
+						self._init_script.start()
+					last = self._cnf_ctl.current_preset()
+				except (BaseException, Exception), e:
+					last = storage.load(message.behaviour, PresetType.DEFAULT)
+				
+				storage.save(message.behaviour, last, PresetType.LAST_SUCCESSFUL)
+				
+				configuration = self._queryenv.get_service_configuration()
+				new_preset = CnfPreset(configuration.name, configuration.settings)
+				
+				CnfPresetStore.save(message.behaviour, new_preset, PresetType.CURRENT)
+				self._cnf_ctl.apply_preset(self, new_preset)
+				
+				if new_preset.restart_service: 
+					try:
+						self._restart_service(message.behaviour)
+					except initdv2.InitdError, e:	
+						self._cnf_ctl.apply_preset(last)
+						self._start_service(message.behaviour)
+						storage.save(message.behaviour, last, PresetType.CURRENT)
+						
+			except (BaseException, Exception), e:
+				msg.status = 'error'
+				msg.last_error = str(e)
+					
+			self._send_message(msg)
+			"""
+			
+			
+	def _start_service(self):
+		try:
+			self._logger.info("Starting %s" % self._service_name)
+			self._init_script.restart()
+			self._logger.debug("%s started" % self._service_name)
+		except initdv2.InitdError, e:
+			self._logger.error("Cannot start %s: e." % (self._service_name, e))
+			raise				
+	
+	def _restart_service(self):
+		try:
+			self._logger.info("Restarting %s" % self._service_name)
+			self._init_script.restart()
+			self._logger.debug("%s restarted" % self._service_name)
+		except initdv2.InitdError, e:
+			self._logger.error("Cannot restart %s\n%s\n. Trying to roll back." % (self._service_name,e))
+			raise
 
 	def sc_on_init(self):
 		bus.on(
@@ -190,17 +325,7 @@ class ServiceCtlMixin:
 			service_configured=self.sc_on_configured,
 			before_host_down=self.sc_on_before_host_down
 		)
-	
-	def sc_on_start(self):
-		# TODO: Apply configuration
-		
-		szr_cnf = bus.cnf
-		if szr_cnf.state == ScalarizrState.RUNNING:
-			try:
-				self._init_script.start()
-			except initdv2.InitdError, e:
-				self._logger.error(e)		
-	
+
 	def sc_on_before_host_down(self):
 		try:
 			self._logger.info("Stopping %s", self._service_name)
@@ -211,4 +336,11 @@ class ServiceCtlMixin:
 				raise		
 	
 	def sc_on_configured(self, service_name):
-		pass
+		if not self._init_script.running:
+			self._start_service()
+			
+		last = self._cnf_ctl.current_preset()
+		storage = CnfPresetStore()
+		storage.save(service_name, last, PresetType.DEFAULT)
+		
+		self.sc_on_start()
