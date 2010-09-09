@@ -168,7 +168,7 @@ class Ec2RebundleHandler(Handler):
 			ami_id = strategy.run()
 			
 			# Notify Scalr
-			self._send_message(Messages.REBUNDLE_RESULT, dict(
+			self.send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "ok",
 				snapshot_id = ami_id,
 				bundle_task_id = message.bundle_task_id															
@@ -182,7 +182,7 @@ class Ec2RebundleHandler(Handler):
 			self._logger.exception(e)
 			last_error = hasattr(e, "error_message") and e.error_message or str(e)
 			# Send message to Scalr
-			self._send_message(Messages.REBUNDLE_RESULT, dict(
+			self.send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "error",
 				last_error = last_error,
 				bundle_task_id = message.bundle_task_id

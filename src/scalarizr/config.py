@@ -767,7 +767,7 @@ class ScalarizrCnf(Observable):
 		'''
 		for section in sections:
 			if self.rawini.has_section(section):
-				for option in sections:
+				for option in sections[section]:
 					self.rawini.set(section, option, sections[section][option])
 
 	

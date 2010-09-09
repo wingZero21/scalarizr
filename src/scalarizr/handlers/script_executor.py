@@ -228,7 +228,7 @@ class ScriptExecutor(Handler):
 					format_size(os.path.getsize(stderr.name)))
 			
 			# Notify scalr
-			self._send_message(Messages.EXEC_SCRIPT_RESULT, dict(
+			self.send_message(Messages.EXEC_SCRIPT_RESULT, dict(
 				stdout=binascii.b2a_base64(self._get_truncated_log(stdout.name, self._logs_truncate_over)),
 				stderr=binascii.b2a_base64(self._get_truncated_log(stderr.name, self._logs_truncate_over)),
 				time_elapsed=elapsed_time,

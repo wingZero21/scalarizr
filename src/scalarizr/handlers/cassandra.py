@@ -11,7 +11,8 @@ from scalarizr.messaging import Messages, Queues
 import logging
 import os
 import re
-from scalarizr.util import configtool, fstool, system, get_free_devname, filetool
+from scalarizr.util import configtool, fstool, system, get_free_devname, filetool,\
+	firstmatched
 from scalarizr.util import initdv2
 from scalarizr.util import iptables
 from scalarizr.util.iptables import IpTables, RuleSpec
@@ -23,7 +24,10 @@ import urllib2
 import tarfile
 import time
 import pexpect
+from datetime import datetime, timedelta
 
+
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.CASSANDRA
 
 OPT_SNAPSHOT_ID			= "snapshot_id"
 OPT_STORAGE_VOLUME_ID	= "volume_id"
@@ -37,10 +41,10 @@ CRF_MAX_ATTEMPTS		= 3
 
 class CassandraInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
+		pl = bus.platform
 		initd_script = "/etc/init.d/cassandra"
 		pid_file = '/var/run/cassandra.pid'
-		private_ip = bus.platform.get_private_ip()
-		socks = [initdv2.SockParam(port, conn_address = private_ip) for port in (7000, 9160)]
+		socks = [initdv2.SockParam(port, conn_address = pl.get_private_ip()) for port in (7000, 9160)]
 		initdv2.ParametrizedInitScript.__init__(self, 'cassandra', initd_script, pid_file, socks=socks)
 
 initdv2.explore('cassandra', CassandraInitScript)
@@ -116,7 +120,7 @@ class Cassandra(object):
 		self.inst_id = self.platform.get_instance_id()
 		
 		
-		self.sect_name = BuiltinBehaviours.CASSANDRA
+		self.sect_name = BEHAVIOUR
 		self.sect = configtool.section_wrapper(config, self.sect_name)
 
 		self.role_name = config.get(configtool.SECT_GENERAL, configtool.OPT_ROLE_NAME)
@@ -157,6 +161,16 @@ class Cassandra(object):
 		snapshot  = ec2_conn.create_snapshot(vol_id, )
 		del(ec2_conn)
 		return snapshot.id
+
+	@property
+	def hosts(self):
+		ret = []
+		roles = self.queryenv.list_roles(behaviour = BEHAVIOUR)
+		for role in roles:
+			for host in role.hosts:
+				ret.append(host.internal_ip or host.external_ip)
+		return tuple(ret)
+
 
 	def get_node_queue(self):
 		
@@ -255,7 +269,7 @@ class CassandraScalingHandler(Handler):
 			self._send_crf_message(self._crf_host, CassandraMessages.INT_CREATE_DATA_BUNDLE, self._rf_changes)
 		
 		except (Exception, BaseException), e:
-				self._send_message(CassandraMessages.CHANGE_RF_RESULT, dict(
+				self.send_message(CassandraMessages.CHANGE_RF_RESULT, dict(
 												status = 'error',
 												last_error = str(e) 		
 								   ))
@@ -332,7 +346,7 @@ class CassandraScalingHandler(Handler):
 					res = dict(status = self._crf_status, bundles = self._crf_results)
 					if 'error' == self._crf_status:
 						res.update({'last_error':self._crf_last_err})					
-					self._send_message(CassandraMessages.CHANGE_RF_RESULT, res)
+					self.send_message(CassandraMessages.CHANGE_RF_RESULT, res)
 					return
 				
 				self._send_crf_message(self._crf_host, CassandraMessages.INT_CHANGE_RF, self._rf_changes)
@@ -357,7 +371,7 @@ class CassandraScalingHandler(Handler):
 				self._crf_ok_hosts.add(message.remote_ip)
 
 		except (Exception, BaseException), e:
-			self._send_message(CassandraMessages.CHANGE_RF_RESULT, dict(
+			self.send_message(CassandraMessages.CHANGE_RF_RESULT, dict(
 											status = 'error',
 											last_error = str(e) 
 							   ))
@@ -802,7 +816,7 @@ class CassandraDataBundleHandler(Handler):
 			self._send_cdb_message(self._cdb_host, CassandraMessages.INT_CREATE_DATA_BUNDLE, body)
 			
 		except (Exception, BaseException), e:
-			self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+			self.send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
 											status = 'error',
 											last_error = str(e) 
 							   ))
@@ -844,7 +858,7 @@ class CassandraDataBundleHandler(Handler):
 			if umounted:
 				fstool.mount(device_name, cassandra.storage_path)
 			cassandra.start_service()
-			self._send_int_message(leader_host, CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, ret, include_pad=True)		
+			self.send_int_message(leader_host, CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, ret, include_pad=True)		
 	
 	def on_Cassandra_IntCreateDataBundleResult(self, message):
 
@@ -887,7 +901,7 @@ class CassandraDataBundleHandler(Handler):
 					res = dict(status = self._cdb_status, bundles = self._cdb_results)
 					if 'error' == self._cdb_status:
 						res.update({'last_error':self._cdb_last_err})
-					self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, res)
+					self.send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, res)
 					return
 				
 				body = {'leader_host' : cassandra.private_ip}
@@ -914,7 +928,7 @@ class CassandraDataBundleHandler(Handler):
 				self._cdb_ok_hosts.add(message.remote_ip)
 
 		except (Exception, BaseException), e:
-			self._send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+			self.send_message(CassandraMessages.CREATE_DATA_BUNDLE_RESULT, dict(
 											status = 'error',
 											last_error = str(e) 
 							   ))
@@ -927,7 +941,7 @@ class CassandraDataBundleHandler(Handler):
 		producer.send(Queues.CONTROL, message)
 		"""
 		try:
-			self._send_int_message(host, msg_name, body, include_pad = True)
+			self.send_int_message(host, msg_name, body, include_pad = True)
 			self._cdb_timer = Timer(CDB_TIMEOUT, self._cdb_failed, [host])
 			self._cdb_timer.start()
 		except urllib2.URLError, e:
@@ -945,62 +959,344 @@ class CassandraDataBundleHandler(Handler):
 		message  = int_msg.msg_service.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, body = err_msg)
 		self.on_Cassandra_IntCreateDataBundleResult(message)
 		"""
-		self._send_int_message(cassandra.private_ip, message)
+		self.send_int_message(cassandra.private_ip, message)
 
 	def _get_failed_message(self, host):
 		err_msg  = dict()
 		err_msg['status'] = 'error'
 		err_msg['remote_ip'] = host
 		err_msg['last_error'] = 'Timeout error occured while CreateDataBundle. Host: %s, timeout: %d' % (self._cdb_host, CDB_TIMEOUT)
-		message = self._new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, err_msg, include_pad = True)
+		message = self.new_message(CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT, err_msg, include_pad = True)
 
 		return message
 		
-class RingAggregator(Handler):
-	_contol_msg_name = None
-	_request_msg_name = None
-	_response_msg_name = None
+		
+class OnEachRunnable:
+	command_name = None
+	command_message = None	
+	node_request_message = None
+	node_response_message = None
 	
-	def __init__(self, control_msg_name, request_msg_name, response_msg_name):
+	def create_node_request(self):
+		'''
+		Create node request message
+		@rtype: scalarizr.messaging.Message
+		'''
 		pass
+		
+	def create_node_response(self):
+		'''
+		Create node response message
+		@rtype: scalarizr.messaging.Message
+		'''
+		pass
+	
+	def create_command_result(self):
+		'''
+		Create ring result message 
+		@rtype: scalarizr.messaging.Message
+		'''
+		pass
+	
+	def handle_request(self, req_message, resp_message):
+		'''
+		Perform work on node and fill resp_message with results.
+		'''
+		pass	
+	
+		
+class OnEachExecutor(Handler):
+	_logger = None
+	
+	RESP_OK = 'ok'
+	RESP_ERROR = 'error'
+
+	request_timeout = 60
+	'''
+	Request timeout in seconds
+	'''
+	
+	resend_interval = 5
+	'''
+	Request resend interval in seconds
+	'''
+
+	class NodeData:
+		index = None
+		host = None
+		num_attempts = None		
+		last_attempt_time = None
+		req_message = None
+		req_ok = None		
+		timer = None
+	
+	class Context:
+		nodes = None
+		queue = None
+		current_node = None
+		timeframe = None
+		start_time = None
+		request_timeout = None
+		request_base_data = None
+		resend_interval = None
+		results = None
+		
+		def __init__(self, **params):
+			if params:
+				for key, value in params.items():
+					if hasattr(self, key):
+						setattr(self, key, value)
+		
+	context = None
+		
+	runnable = None
+	'''
+	@type runnable: OnEachRunnable
+	'''
+
+	def __init__(self, runnable, **params):
+		self._logger = logging.getLogger(__name__)
+		
+		self.runnable = runnable
+		if params:
+			for key, value in params.items():
+				if hasattr(self, key):
+					setattr(self, key, value)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		r = self.runnable
 		return BuiltinBehaviours.CASSANDRA in behaviour \
-				and message.name in (self._contol_msg_name, self._request_msg_name, self._response_msg_name)
+				and message.name in (r.node_request_message, r.node_response_message, r.command_message)
 	
-	def _handle_control(self, contol_message):	
-		pass
 	
-	def _handle_request(self, req_message):
-		pass
+	def _handle_control(self, contol_message):
+		if self.context:
+			start_dt = datetime.fromtimestamp(self.context.start_time)
+			end_dt = start_dt + timedelta(seconds=self.context.timeframe)
+			self._exception('Command %s is already running. (start: %s, estimated end: %s)' % (
+				self.runnable.command_name, 
+				start_dt.strftime("%Y-%m-%d %H:%M"), 
+				end_dt.strftime("%Y-%m-%d %H:%M")
+			))
+			return
+		
+		try:
+			hosts = cassandra.hosts
+			timeframe = int(len(hosts)*self.request_timeout*1.2) # 120% of time when all nodes reach timeout  
+			nodes = []
+			queue = Queue(len(hosts))
+			results = []
+			i = 0
+			for host in hosts:
+				ndata = self.NodeData()
+				ndata.index = i
+				ndata.host = host
+				ndata.num_attempts = 0
+				ndata.last_attempt_time = 0
+				req = self.runnable.create_node_request(self)
+				req.body.update(self.context.request_base_data)
+				ndata.req_message = req
+				
+				nodes.append(ndata)
+				queue.put(ndata.index)				
+				results.append(dict(
+					status = self.RESP_ERROR,
+					last_error = 'Command was not sent do to timeout (%d seconds)' % timeframe,
+					host = ndata.host
+				))
+				i += 1
+			
+			ctx = self.Context(
+				nodes = nodes,
+				queue = queue,
+				timeframe = timeframe,
+				start_time = time.time(),
+				request_timeout = self.request_timeout,
+				request_base_data = dict(leader_host=cassandra.private_ip),
+				resend_interval = self.resend_interval,
+				results = {}
+			)
+			self.context = ctx
+
+		except (BaseException, Exception), e:
+			self._exception(None, e)
+			return
+			
+		self._request_next_node()
+
+
+	def _request_next_node(self):
+		try:
+			if time.time() - self.context.start_time >= self.context.timeframe:
+				raise StopIteration('Command stopped due to timeout (%d seconds)' % self.context.timeframe)
+			
+			nindex = self.context.queue.get()
+			ndata = self.context.nodes[nindex]
+			t = time.time() - ndata.last_attempt_time
+			if t < self.context.resend_interval:
+				time.sleep(self.context.resend_interval - t)
+			
+			self.context.current_node = ndata
+			ndata.timer = Timer(self.context.request_timeout, self._request_timeouted, (ndata,))
+			ndata.timer.start()
+			
+			try:
+				self.send_int_message(ndata.host, ndata.req_message)
+			except (BaseException, Exception), e:
+				self._logger.debug('Cannot deliver message %s to node %s. Reset timer and put node to the end. %s', 
+						ndata.req_message.name, ndata.host, e)
+				self._request_failed(ndata)
+				
+		except (Empty, StopIteration), e:
+			self._result(e if isinstance(e, StopIteration) else None)
+
+
+	def _request_timeouted(self, ndata):
+		err = 'Request %s to node %s timeouted (%d seconds)' % (
+				ndata.req_message.name, ndata.host, self.context.request_timeout)
+		self.context.results[ndata.index]['last_error'] = err
+		self._logger.warning(err)
+		
+		self.context.current_node = None
+		self.context.queue.put(ndata.index)
 	
+	def _request_failed(self, ndata=None):
+		self._stop_node_timer(ndata)
+		self.context.current_node = None
+		self.context.queue.put(ndata.index)
+
+	def _stop_node_timer(self, ndata):
+		if ndata.timer:
+			try:
+				ndata.timer.cancel()
+			except:
+				pass
+			ndata.timer = None
+	
+	def _stop_current_node(self, ndata):
+		if self.context.current_node:
+			self._stop_node_timer(self.context.current_node)
+			self.context.current_node = None
+
 	def _handle_response(self, resp_message):
-		pass
+		current_node_respond = resp_message.from_host == self.context.current_node.host
+		ndata = firstmatched(lambda n: n.host == resp_message.from_host, self.context.nodes)
+		if not ndata:
+			self._logger.error('Recived response %s from unknown node %s', 
+					resp_message.name, getattr(resp_message, 'from_host', 'no.from_host.property'))
+			return
+		
+		if current_node_respond:
+			self._stop_node_timer(ndata)
+			
+		self.context.results[ndata.index] = resp_message.body
+		ndata.req_ok = resp_message.status == self.RESP_OK
+		if self.RESP_ERROR == resp_message.status:
+			self.context.queue.put(ndata.index)
+			
+		self._request_next_node()
+
+
+	def _exception(self, message=None, e=None):
+		msg = self.runnable.create_command_result(self)
+		msg.status = self.RESP_ERROR
+		msg.last_error = '%s%s' % (message and str(message) + '. ' or '', e or '')
+		self.send_message(msg)
+
+
+	def _result(self, e=None):
+		try:
+			msg = self.runnable.create_command_result(self)
+			msg.status = all(lambda n: n.req_ok, self.context.nodes) and self.RESP_OK or self.RESP_ERROR
+			
+			if e:
+				msg.last_error = str(e)
+			else:
+				failed_row = firstmatched(lambda row: row['last_error'], self.context.results)
+				if failed_row:
+					msg.last_error = failed_row['last_error']
+					
+			msg.rows = self.context.results
+			self.send_message(msg)
+		finally:
+			self.context = None
 		
 	def __call__(self, message):
-		if message.name == self._contol_msg_name:
-			self._status = 'ok'
-			self._last_err = ''
-			self._ok_hosts = set()
-			self._timeouted_hosts = set()
-			self._results = []			
-			
-			self._queue = cassandra.get_node_queue()
-			if self._queue.empty():
-				raise HandlerError('Cannot get nodelist: queue is empty')			
-			
-			request_message = self._new_message(
-				self._request_msg_name, 
-				msg_body={'leader_host' : cassandra.private_ip})
-	
-		elif message.name == self._response_msg_name:
-			pass
+		if message.name == self.runnable.command_message:
+			self._handle_control(message)
+		elif message.name == self.runnable.node_response_message:
+			self._handle_response(message)
 		
-		elif message.name == self._request_msg_name:
-			resp_message = self._handle_request(message)
-			self._send_int_message(message.leader_host, resp_message)
-		
+		elif message.name == self.runnable.node_request_message:
+			resp_message = self.runnable.create_node_response(self)
+			resp_message.from_host = cassandra.private_ip
+			try:
+				self.runnable.handle_request(message, resp_message)
+			except (BaseException, Exception), e:
+				resp_message.status = self.RESP_ERROR
+				resp_message.last_error = str(e)
+			self.send_int_message(message.leader_host, resp_message)
+
+
+
+class _CassandraCdbRunnable(OnEachRunnable):
 	
+	command_name = 'data bundle'
+	command_message = CassandraMessages.CREATE_DATA_BUNDLE
+	command_result_message = CassandraMessages.CREATE_DATA_BUNDLE_RESULT		
+	node_request_message = CassandraMessages.INT_CREATE_DATA_BUNDLE
+	node_response_message = CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT
+
+	def create_node_request(self, handler):
+		'''
+		Create node request message
+		@rtype: scalarizr.messaging.Message
+		'''
+		return handler.new_message(self.node_response_message, include_pad=True)
+		
+	def create_node_response(self, handler):
+		'''
+		Create node response message
+		@rtype: scalarizr.messaging.Message
+		'''
+		return handler.new_message(self.node_response_message)
+	
+	def create_command_result(self, handler):
+		'''
+		Create ring result message 
+		@rtype: scalarizr.messaging.Message
+		'''
+		return handler.new_message(self.command_result_message)
+	
+	def handle_request(self, req_message, resp_message):
+		'''
+		Perform work on node and fill resp_message with results.
+		'''
+		umounted = False
+		device_name = cassandra.sect.get(OPT_STORAGE_DEVICE_NAME)
+		
+		try:
+			cassandra.stop_service()
+			system('sync')			
+						
+			fstool.umount(device_name)
+			umounted = True
+			
+			volume_id = cassandra.sect.get(OPT_STORAGE_VOLUME_ID)
+			resp_message.body.update(dict(
+				snapshot_id = cassandra.create_snapshot(volume_id),
+				timestamp = time.strftime('%Y-%m-%d %H-%M')
+			))
+
+		finally:
+			if umounted:
+				fstool.mount(device_name, cassandra.storage_path)
+			cassandra.start_service()
+
+
+CassandraCdbHandler = OnEachExecutor(_CassandraCdbRunnable())	
+
+
 class StorageProvider(object):
 	
 	_providers = None

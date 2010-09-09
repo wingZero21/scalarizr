@@ -475,6 +475,9 @@ def main():
 		if cnf.state == ScalarizrState.UNKNOWN:
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			cnf.fire('apply_user_data', cnf)
+			
+		# Apply Command-line passed configuration options
+		cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))
 		
 		# Validate configuration
 		num_errors = do_validate_cnf()

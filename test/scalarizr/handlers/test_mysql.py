@@ -30,7 +30,7 @@ class _MysqlHandler(mysql.MysqlHandler):
 		return _Volume()
 	def _mount_device(self, devname, mnt_point):
 		pass
-	def _send_message(self, message):
+	def send_message(self, message):
 		self._messages.append(message)
 	def _create_ebs_snapshot(self):
 		pass

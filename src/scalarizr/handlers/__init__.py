@@ -15,7 +15,7 @@ import threading
 
 class Handler(object):
 	
-	def _new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
+	def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
 		srv = srv or bus.messaging_service
 		pl = bus.platform		
 				
@@ -26,18 +26,18 @@ class Handler(object):
 			msg.body['platform_access_data'] = pl.get_access_data()
 		return msg
 	
-	def _send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
+	def send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
 					queue=Queues.CONTROL):
 		srv = bus.messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
-				self._new_message(msg_name, msg_body, msg_meta, broadcast)
+				self.new_message(msg_name, msg_body, msg_meta, broadcast)
 		srv.get_producer().send(queue, msg)
 		
-	def _send_int_message(self, host, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
+	def send_int_message(self, host, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
 						include_pad=False, queue=Queues.CONTROL):
 		srv = bus.int_messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
-					self._new_message(msg_name, msg_body, msg_meta, broadcast, include_pad, srv.msg_service)
+					self.new_message(msg_name, msg_body, msg_meta, broadcast, include_pad, srv.msg_service)
 		srv.new_producer(host).send(queue, msg)
 
 	def _broadcast_message(self, msg):

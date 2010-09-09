@@ -94,7 +94,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 				fstool.mount(devname, ebs_mpoint.dir, make_fs=ebs_mpoint.create_fs, auto_mount=True)
 				self._logger.debug("Device %s is mounted to %s", devname, ebs_mpoint.dir)
 				
-				self._send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
+				self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
 					volume_id = ebs_volume.volume_id,
 					device_name = devname
 				), broadcast=True)
@@ -112,7 +112,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 		if message.action == "add":
 			self._logger.debug("udev notified me that block device %s was attached", message.devname)
 			
-			self._send_message(
+			self.send_message(
 				Messages.BLOCK_DEVICE_ATTACHED, 
 				{"device_name" : message.devname}, 
 				broadcast=True
@@ -125,7 +125,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 			fstab = fstool.Fstab()
 			fstab.remove(message.devname)
 			
-			self._send_message(
+			self.send_message(
 				Messages.BLOCK_DEVICE_DETACHED, 
 				{"device_name" : message.devname}, 
 				broadcast=True

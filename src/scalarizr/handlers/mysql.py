@@ -455,7 +455,7 @@ class MysqlHandler(ServiceCtlHanler):
 			myclient.terminate()
 			del(myclient)
 			
-			self._send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
 				status       = 'ok',
 				pma_user	 = PMA_USER,
 				pma_password = pma_password,
@@ -463,7 +463,7 @@ class MysqlHandler(ServiceCtlHanler):
 			))
 			
 		except (Exception, BaseException), e:
-			self._send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
 				status		= 'error',
 				last_error	=  str(e),
 				farm_role_id = farm_role_id
@@ -540,13 +540,13 @@ class MysqlHandler(ServiceCtlHanler):
 			result = uploader.upload(parts, bucket, s3_conn)
 			self._logger.debug("Backup files(s) uploaded to S3 (%s)", ", ".join(result))
 			
-			self._send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
+			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
 				status		= 'ok',
 				backup_urls	=  result
 			))
 						
 		except (Exception, BaseException), e:
-			self._send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
+			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
 				status		= 'error',
 				last_error	=  str(e)
 			))
@@ -567,14 +567,14 @@ class MysqlHandler(ServiceCtlHanler):
 			# Creating snapshot
 			(snap_id, log_file, log_pos) = self._create_snapshot(ROOT_USER, root_password)
 			# Sending snapshot data to scalr
-			self._send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
 				snapshot_id=snap_id,
 				log_file=log_file,
 				log_pos=log_pos,
 				status='ok'			
 			))
 		except (Exception, BaseException), e:
-			self._send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
 				status		='error',
 				last_error	= str(e)
 			))
@@ -630,7 +630,7 @@ class MysqlHandler(ServiceCtlHanler):
 					}
 					self._update_config(updates)
 					# Send message to Scalr
-					self._send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
+					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 						status="ok",
 						volume_id=master_vol.id																				
 					))
@@ -646,7 +646,7 @@ class MysqlHandler(ServiceCtlHanler):
 				if master_vol and master_vol.id != master_vol_id:
 					ec2_conn.delete_volume(master_vol.id)
 				
-				self._send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
+				self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 					status="error",
 					last_error=str(e)
 				))

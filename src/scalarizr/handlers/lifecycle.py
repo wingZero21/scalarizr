@@ -169,15 +169,15 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 	def _start_after_reboot(self):
-		msg = self._new_message(Messages.REBOOT_FINISH, broadcast=True)
+		msg = self.new_message(Messages.REBOOT_FINISH, broadcast=True)
 		bus.fire("before_reboot_finish", msg)
-		self._send_message(msg)
+		self.send_message(msg)
 		bus.fire("reboot_finish")		
 
 	def _start_after_stop(self):
-		msg = self._new_message(Messages.RESTART)
+		msg = self.new_message(Messages.RESTART)
 		bus.fire("before_restart". msg)
-		self._send_message(msg)
+		self.send_message(msg)
 		bus.fire("restart")
 	
 	def _start_init(self):
@@ -185,13 +185,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		self._new_crypto_key = cryptotool.keygen()
 		
 		# Prepare HostInit
-		msg = self._new_message(Messages.HOST_INIT, dict(
+		msg = self.new_message(Messages.HOST_INIT, dict(
 			crypto_key=self._new_crypto_key,
 			snmp_port=self._config.get(configtool.SECT_SNMP, configtool.OPT_PORT),
 			snmp_community_name=self._config.get(configtool.SECT_SNMP, configtool.OPT_COMMUNITY_NAME)
 		), broadcast=True)
 		bus.fire("before_host_init", msg)
-		self._send_message(msg)
+		self.send_message(msg)
 		
 		# Update key file
 		key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)		
@@ -210,9 +210,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	
 	def _start_import(self):
 		# Send Hello
-		msg = self._new_message(Messages.HELLO, {"architecture" : self._platform.get_architecture()})		
+		msg = self.new_message(Messages.HELLO, {"architecture" : self._platform.get_architecture()})		
 		bus.fire("before_hello", msg)
-		self._send_message(msg)
+		self.send_message(msg)
 		bus.fire("hello")
 
 
@@ -235,24 +235,24 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		# Scalarizr must detect that it was resumed after reboot
 		self._set_flag(self.FLAG_REBOOT)
 		# Send message 
-		msg = self._new_message(Messages.REBOOT_START, broadcast=True)
+		msg = self.new_message(Messages.REBOOT_START, broadcast=True)
 		bus.fire("before_reboot_start", msg)
-		self._send_message(msg)
+		self.send_message(msg)
 		bus.fire("reboot_start")
 		
 	
 	def on_IntServerHalt(self, message):
 		self._set_flag(self.FLAG_HALT)
-		msg = self._new_message(Messages.HOST_DOWN, broadcast=True)
+		msg = self.new_message(Messages.HOST_DOWN, broadcast=True)
 		bus.fire("before_host_down", msg)
-		self._send_message(msg)		
+		self.send_message(msg)		
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
 		bus.fire("host_init_response", message)
-		msg = self._new_message(Messages.HOST_UP, broadcast=True)
+		msg = self.new_message(Messages.HOST_UP, broadcast=True)
 		bus.fire("before_host_up", msg)
-		self._send_message(msg)
+		self.send_message(msg)
 		bus.cnf.state = ScalarizrState.RUNNING
 		bus.fire("host_up")
 
