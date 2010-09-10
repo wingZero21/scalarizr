@@ -4,6 +4,7 @@ Created on Jul 23, 2010
 @author: marat
 @author: shaitanich
 '''
+from scalarizr.handlers import HandlerError
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState, BuiltinBehaviours
 from scalarizr.handlers import Handler
@@ -28,7 +29,7 @@ class MemcachedInitScript(initdv2.ParametrizedInitScript):
 		
 		initd_script = '/etc/init.d/memcached'
 		if not os.path.exists(initd_script):
-			raise initdv2.InitdError("Cannot find Memcached init script at %s. Make sure that apache web server is installed" % initd_script)
+			raise HandlerError("Cannot find Memcached init script at %s. Make sure that memcached is installed" % initd_script)
 
 		initdv2.ParametrizedInitScript.__init__(self, 'cassandra', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
 

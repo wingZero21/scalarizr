@@ -15,7 +15,7 @@ from urlparse import urlparse
 import boto
 from boto.ec2.regioninfo import RegionInfo
 from boto.s3.connection import OrdinaryCallingFormat
-import ssl
+from M2Crypto import SSL
 
 def get_platform():
 	return EucaPlatform()
@@ -49,11 +49,18 @@ class EucaPlatform(Ec2Platform):
 		if not self._ec2_cert:
 			cert_path = os.path.join(bus.etc_path, self._cnf.rawini.get(self.name, 'cloud_cert_path'))
 			if not os.path.exists(cert_path):
+				
 				ec2_url = self._cnf.rawini.get(self.name, 'ec2_url')
 				url = urlparse(ec2_url)
 				addr = (url.hostname, url.port if url.port else 80)
-				cert = ssl.get_server_certificate(addr)
-				write_file(cert_path, cert)
+
+				ctx = SSL.Context()
+				conn = SSL.Connection(ctx)
+				conn.set_post_connection_check_callback(None)
+				conn.connect(addr)
+				cert = conn.get_peer_cert()
+				cert.save_pem(cert_path)
+				
 			self._ec2_cert = self._cnf.read_key(cert_path, title="Eucalyptus certificate")
 		return self._ec2_cert	
 	

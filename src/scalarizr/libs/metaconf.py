@@ -311,27 +311,15 @@ class Configuration:
 		return [x.attrib for x in self._find_all(path) if x.attrib]
 
 	
-	def set(self, path, value, typecast=None):
-		"""
-		Set value at path <path> use optional typecast <typecast> int|float
-		"""
-		"""
-		1.
-		conf.set("messaging/port", "1234", int)
-		value = typecast(value) if typecast else value
-		
-		2. 
-		conf.set("Keyspace1/ColumnFamily[1]", dict(Name="Standard2", CompareWith="UTF8Type"))
-		el.attrs = dict
-		"""
-		
-		"""
-		Find element, and call _set
-		"""
+	def set(self, path, value, typecast=None, force=False):
 		el = self.etree.find(self._root_path + quote(path))
 		#el = ElementPath13.find(self.etree, )
 		if el != None:
 			self._set(el, value, typecast)
+		elif force:
+			self.add(path, value, typecast)
+		else:
+			raise MetaconfError("Path %s doesn't exist" % path)
 	
 	def _set(self, el, value, typecast=None):
 		if isinstance(value, dict):
@@ -443,7 +431,10 @@ class Configuration:
 		self._find(path)
 		return Configuration(format=self._format, etree=self.etree, root_path=path+"/")
 	
-
+	
+	@property
+	def empty(self):
+		return not bool(list(self.etree.getroot()))
 
 """
 class PyConfigParserAdapter:

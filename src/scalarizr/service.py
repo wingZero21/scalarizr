@@ -62,14 +62,12 @@ class CnfPresetStore:
 class CnfController(object):
 	def current_preset(self):
 		'''
-		Собрать все настройки, подлежащие обязательному обязательному сохранению.
 		@rtype: CnfPreset
 		'''
 		pass
 
 	def apply_preset(self, preset):
 		'''
-		Применить настройки
 		@type preset: CnfPreset
 		@raise:
 		'''

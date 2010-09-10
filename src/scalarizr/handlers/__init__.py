@@ -5,7 +5,6 @@ from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import configtool, initdv2
 from scalarizr.util.initdv2 import Status
 from scalarizr.service import CnfPresetStore, CnfPreset
-from scalarizr.service.CnfPresetStore import  PresetType
 
 import os
 import platform
@@ -208,15 +207,15 @@ class ServiceCtlHanler(Handler):
 				last = self._cnf_ctl.current_preset()
 			
 			except (BaseException, Exception), e:
-				last = storage.load(self._service_name, PresetType.DEFAULT)
+				last = storage.load(self._service_name, CnfPresetStore.PresetType.DEFAULT)
 				self._start_service()
 			finally:
-				storage.save(self._service_name, last, PresetType.LAST_SUCCESSFUL)
+				storage.save(self._service_name, last, CnfPresetStore.PresetType.LAST_SUCCESSFUL)
 			
 			configuration = self._queryenv.get_service_configuration()
 			new_preset = CnfPreset(configuration.name, configuration.settings)
 			
-			CnfPresetStore.save(self._service_name, new_preset, PresetType.CURRENT)
+			CnfPresetStore.save(self._service_name, new_preset, CnfPresetStore.PresetType.CURRENT)
 			self._cnf_ctl.apply_preset(self, new_preset)
 			
 			if new_preset.restart_service: 
@@ -225,7 +224,7 @@ class ServiceCtlHanler(Handler):
 				except initdv2.InitdError, e:	
 					self._cnf_ctl.apply_preset(last)
 					self._start_service()
-					storage.save(self._service_name, last, PresetType.CURRENT)	
+					storage.save(self._service_name, last, CnfPresetStore.PresetType.CURRENT)	
 					
 		except (BaseException, Exception), e:
 			msg.status = 'error'
@@ -248,7 +247,7 @@ class ServiceCtlHanler(Handler):
 			msg.preset = 'default'
 			msg.status = 'ok'
 			try:			
-				default_preset = storage.load(message.behaviour, PresetType.DEFAULT)
+				default_preset = storage.load(message.behaviour, CnfPresetStore.PresetType.DEFAULT)
 				self._cnf_ctl.apply_preset(self, default_preset)
 				if message.restart_service:
 					self._restart_service()
@@ -335,6 +334,6 @@ class ServiceCtlHanler(Handler):
 			
 		last = self._cnf_ctl.current_preset()
 		storage = CnfPresetStore()
-		storage.save(service_name, last, PresetType.DEFAULT)
+		storage.save(service_name, last, CnfPresetStore.PresetType.DEFAULT)
 		
 		self._reconfigure()	

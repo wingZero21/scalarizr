@@ -22,7 +22,8 @@ import shutil
 from boto.exception import BotoServerError
 from scalarizr.util import initdv2
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
-from scalarizr.libs.metaconf import Configuration, MetaconfError, PathNotExistsError
+from scalarizr.libs.metaconf import Configuration, MetaconfError, PathNotExistsError,\
+	ParseError
 from scalarizr.service import CnfController
 
 
@@ -33,6 +34,9 @@ CNF_NAME = BEHAVIOUR
 class MysqlInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
 		initd_script = disttool.is_redhat_based() and "/etc/init.d/mysqld" or "/etc/init.d/mysql"
+		
+		if not os.path.exists(initd_script):
+			raise HandlerError("Cannot find MySQL init script at %s. Make sure that MySQL is installed" % initd_script)
 		
 		pid_file = None
 		try:
@@ -369,6 +373,8 @@ def _spawn_mysql(user, password):
 class MysqlHandler(ServiceCtlHanler):
 	_logger = None
 	
+	_config = None
+	
 	_queryenv = None
 	""" @type _queryenv: scalarizr.queryenv.QueryEnvService	"""
 	
@@ -399,17 +405,24 @@ class MysqlHandler(ServiceCtlHanler):
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
 		self._binlog_path = os.path.join(self._storage_path, STORAGE_BINLOG_PATH)
-		
-		self._config = Configuration('mysql')
-		try:
-			self._config.read(self._mycnf_path)
-		except MetaconfError, e:
-			raise HandlerError('Cannot read mysql config %s : %s' % (self._mycnf_path, str(e)))
 
 		self._initd = initdv2.lookup(SERVICE_NAME)
 		ServiceCtlHanler.__init__(self, SERVICE_NAME, self._initd, MysqlCnfController())
 			
 		bus.on("init", self.on_init)
+
+
+	@staticmethod
+	def reload_mycnf(f):
+		def g(*args):
+			inst = f.__self__
+			inst._config = Configuration('mysql')
+			try:
+				inst._config.read(inst._mycnf_path)
+			except (OSError, MetaconfError, ParseError), e:
+				raise HandlerError('Cannot read mysql config %s : %s' % (inst._mycnf_path, str(e)))
+			f(*args)
+		return g
 
 	def on_init(self):		
 		bus.on("host_init_response", self.on_host_init_response)
@@ -419,7 +432,6 @@ class MysqlHandler(ServiceCtlHanler):
 		@xxx: Storage unplug failed because scalarizr has no EC2 access keys
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
-		
 		"""
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -429,7 +441,7 @@ class MysqlHandler(ServiceCtlHanler):
 				or 	message.name == MysqlMessages.CREATE_DATA_BUNDLE
 				or 	message.name == MysqlMessages.CREATE_BACKUP
 				or 	message.name == MysqlMessages.CREATE_PMA_USER
-				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION) 
+				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
 		
 	def on_Mysql_CreatePmaUser(self, message):
 		try:
@@ -492,6 +504,7 @@ class MysqlHandler(ServiceCtlHanler):
 				farm_role_id = farm_role_id
 			))
 	
+	@MysqlHandler.reload_mycnf	
 	def on_Mysql_CreateBackup(self, message):
 		
 		# Retrieve password for scalr mysql user
@@ -602,7 +615,7 @@ class MysqlHandler(ServiceCtlHanler):
 				last_error	= str(e)
 			))
 
-				
+	@MysqlHandler.reload_mycnf				
 	def on_Mysql_PromoteToMaster(self, message):
 		"""
 		Promote slave to master
@@ -685,7 +698,7 @@ class MysqlHandler(ServiceCtlHanler):
 		else:
 			self._logger.warning('Cannot promote to master. Already master')
 
-
+	@MysqlHandler.reload_mycnf
 	def on_Mysql_NewMasterUp(self, message):
 		"""
 		Switch replication to a new master server
@@ -764,7 +777,7 @@ class MysqlHandler(ServiceCtlHanler):
 		self._logger.debug("Update mysql config with %s", message.mysql)
 		self._update_config(message.mysql)
 		
-
+	@MysqlHandler.reload_mycnf
 	def on_before_host_up(self, message):
 		"""
 		Configure MySQL behaviour
