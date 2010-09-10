@@ -202,12 +202,12 @@ class Rsync(object):
 		return self
 	
 	def __str__(self):
-		ret = "%(executable)s %(options)s %(src)s %(dst)s %(quiet)s" % dict(
+		ret = "sync; %(executable)s %(options)s %(src)s %(dst)s %(quiet)s" % dict(
 			executable=self._executable,
 			options=" ".join(self._options),
 			src=self._src,
 			dst=self._dst,
-			quiet="2>&1 > /dev/null" if self._quiet else ""
+			quiet="2>&1 > /dev/null; sync" if self._quiet else ""
 		)
 		return ret.strip()
 

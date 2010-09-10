@@ -11,13 +11,11 @@ from scalarizr.util import validators
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
 		configtool, filetool, ping_service, firstmatched, cached
-from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME
+from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME, ebstool
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
-import logging, os, re,  pexpect, tarfile, tempfile
-import time
-import signal, pwd, random
-import shutil, ConfigParser
+import logging, os, re,  pexpect, tarfile, tempfile, glob
+import time, signal, pwd, random, shutil
 from boto.exception import BotoServerError
 
 
@@ -691,59 +689,65 @@ class MysqlHandler(Handler):
 		msg_data = None
 		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
 
-		
-		# Patch configuration
-		self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
-		self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
-
-				
-		self._replication_init(master=True)
-		
-		# If It's 1st init of mysql master
-		if not storage_valid:
-			
-			if os.path.exists('/etc/mysql/debian.cnf'):
-				try:
-					self._logger.debug("Copying debian.cnf file to storage")
-					shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
-				except BaseException, e:
-					self._logger.error("Cannot copy debian.cnf file to storage: ", e)
+		try:
+			# Patch configuration
+			self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
+			self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
+	
 					
-			root_password, repl_password, stat_password = \
-					self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER)
+			self._replication_init(master=True)
 			
-			# Get binary logfile, logpos and create data snapshot if needed
-			snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-
-			msg_data = dict(
-				root_password=root_password,
-				repl_password=repl_password,
-				stat_password=stat_password,
-				snapshot_id=snap_id,
-				log_file=log_file,
-				log_pos=log_pos			
-			)
-			
-		# If EBS volume had mysql dirs (N-th init)
-		else:
-			# Retrieve scalr's mysql username and password
-			try:
-				root_password = self._sect.get(OPT_ROOT_PASSWORD)
-			except Exception, e:
-				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
-			
-			if disttool._is_debian_based and os.path.exists(os.path.join(STORAGE_PATH, 'debian.cnf')):
+			# If It's 1st init of mysql master
+			if not storage_valid:
+				
+				if os.path.exists('/etc/mysql/debian.cnf'):
+					try:
+						self._logger.debug("Copying debian.cnf file to storage")
+						shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
+					except BaseException, e:
+						self._logger.error("Cannot copy debian.cnf file to storage: ", e)
+						
+				root_password, repl_password, stat_password = \
+						self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER)
+				
+				# Get binary logfile, logpos and create data snapshot if needed
+				snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+	
+				msg_data = dict(
+					root_password=root_password,
+					repl_password=repl_password,
+					stat_password=stat_password,
+					snapshot_id=snap_id,
+					log_file=log_file,
+					log_pos=log_pos			
+				)
+				
+			# If EBS volume had mysql dirs (N-th init)
+			else:
+				# Retrieve scalr's mysql username and password
 				try:
-					self._logger.debug("Copying debian.cnf file from storage")
-					shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
-				except BaseException, e:
-					self._logger.error("Cannot copy debian.cnf file from storage: ", e)
-			
-			# Updating snapshot
-			snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-			
-			# Send updated metadata to Scalr
-			msg_data = dict(snapshot_id=snap_id, log_file=log_file, log_pos=log_pos)
+					root_password = self._sect.get(OPT_ROOT_PASSWORD)
+				except Exception, e:
+					raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
+				
+				if disttool._is_debian_based and os.path.exists(os.path.join(STORAGE_PATH, 'debian.cnf')):
+					try:
+						self._logger.debug("Copying debian.cnf file from storage")
+						shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
+					except BaseException, e:
+						self._logger.error("Cannot copy debian.cnf file from storage: ", e)
+				
+				# Updating snapshot
+				snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+				
+				# Send updated metadata to Scalr
+				msg_data = dict(snapshot_id=snap_id, log_file=log_file, log_pos=log_pos)
+		except (BaseException, Exception):
+			if not storage_valid and self._storage_path:
+				# Perform cleanup
+				system('rm -rf %s' % os.path.join(self._storage_path, '*'))
+			raise
+		
 			
 		if msg_data:
 			message.mysql = msg_data
@@ -762,40 +766,17 @@ class MysqlHandler(Handler):
 		self._logger.info("Initializing MySQL slave")
 		if not self._storage_valid():
 			self._logger.debug("Initialize slave storage")
+
+			self._logger.info('Checking that master data bundle snapshot completed')
+			snap_id = self._sect.get(OPT_SNAPSHOT_ID)			
+			ebstool.wait_snapshot(self._platform.new_ec2_conn(), snap_id, self._logger)
 			
-			ebs_volume = self._create_volume_from_snapshot(self._sect.get(OPT_SNAPSHOT_ID))
+			ebs_volume = self._create_volume_from_snapshot()
 			message.mysql = dict(volume_id = ebs_volume.id)
 			self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 			
-			# Waiting until ebs volume will be created							
-			#if "ebs" == role_params[PARAM_DATA_STORAGE_ENGINE]:
 			self._plug_storage(None, self._storage_path, vol=ebs_volume)
 
-			"""	
-			elif "eph" == role_params[PARAM_DATA_STORAGE_ENGINE]:
-				# Mount ephemeral device
-				try:
-					devname = '/dev/' + self._platform.get_block_device_mapping()["ephemeral0"]
-				except Exception, e:
-					raise HandlerError('Cannot retrieve ephemeral device info. %s' % (e,))
-				self._mount_device(devname, self._storage_path)
-				
-				# Mount EBS with mysql data
-				tmpdir = '/mnt/tmpdir'
-				self._plug_storage(ebs_volume.id, tmpdir)
-				if self._storage_valid(tmpdir):
-					# Rsync data from ebs to ephemeral device
-					rsync = filetool.Rsync().archive()
-					rsync.source(tmpdir + os.sep).dest(self._storage_path + os.sep)
-					out, err, retcode = system(str(rsync))
-					if err:
-						raise HandlerError("Cannot copy data from ebs to ephemeral: %s" % (err,))
-					# Detach and delete EBS Volume 
-					self._detach_delete_volume(ebs_volume)
-					shutil.rmtree(tmpdir)
-				else:
-					raise HandlerError("EBS Volume does not contain mysql data")
-			"""
 			
 		self._stop_mysql()			
 		self._flush_logs()
