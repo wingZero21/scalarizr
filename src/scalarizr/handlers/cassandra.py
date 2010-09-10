@@ -5,29 +5,31 @@ Created on Jun 23, 2010
 @author: Dmytro Korsakov
 '''
 from scalarizr.bus import bus
-from scalarizr.config import BuiltinBehaviours
+from scalarizr import config
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
 import logging
 import os
 import re
 from scalarizr.util import  fstool, system, get_free_devname, filetool,\
-	firstmatched
+	firstmatched, wait_until
 from scalarizr.util import initdv2
 from scalarizr.util import iptables
 from scalarizr.util.iptables import IpTables, RuleSpec
 from ConfigParser import NoOptionError
 from Queue import Queue, Empty
 from threading import Timer
-from scalarizr.libs.metaconf import Configuration, PathNotExistsError
+from scalarizr.libs.metaconf import Configuration, PathNotExistsError,\
+	MetaconfError
 import urllib2
 import tarfile
 import time
 import pexpect
 from datetime import datetime, timedelta
+from scalarizr.platform.ec2 import ebstool
 
 
-BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.CASSANDRA
+BEHAVIOUR = SERVICE_NAME = config.BuiltinBehaviours.CASSANDRA
 CNF_SECTION 			= BEHAVIOUR
 CNF_NAME 				= BEHAVIOUR
 
@@ -35,15 +37,11 @@ OPT_STORAGE_SIZE		= 'storage_size'
 OPT_SNAPSHOT_URL		= 'snapshot_url'
 OPT_STORAGE_CNF_URL		= 'storage_conf_url'
 OPT_STORAGE_PATH 		= 'storage_path'
-OPT_STORAGE_CNF 		= 'storage_conf'
+OPT_STORAGE_CNF_PATH 	= 'storage_conf_path'
 OPT_SNAPSHOT_ID			= "snapshot_id"
 OPT_STORAGE_VOLUME_ID	= "volume_id"
 OPT_STORAGE_DEVICE_NAME	= "device_name"
 TMP_EBS_MNTPOINT        = '/mnt/temp_storage'
-CDB_TIMEOUT             = 60
-CDB_MAX_ATTEMPTS        = 3
-CRF_TIMEOUT				= 100
-CRF_MAX_ATTEMPTS		= 3
 
 
 class CassandraInitScript(initdv2.ParametrizedInitScript):
@@ -64,13 +62,13 @@ class CassandraMessages:
 	
 	CHANGE_RF					= 'Cassandra_ChangeReplFactor'
 	'''
-	@ivar rf_changes list( dict( name = 'Keyspace1', rf = 3)) 
+	@ivar changes list( dict( name = 'Keyspace1', rf = 3)) 
 	'''
 	CHANGE_RF_RESULT			= 'Cassandra_ChangeReplFactorResult'
 	'''
 	@ivar status ok|error
 	@ivar last_error
-	@ivar bundles list(dict(remote_ip=ip, timestamp=123454, snapshot_id=snap-434244))
+	@ivar rows list(dict(host=ip))
 	'''
 	
 	INT_CHANGE_RF				= 'Cassandra_IntChangeReplFactor'
@@ -90,7 +88,7 @@ class CassandraMessages:
 	'''
 	@ivar status ok|error
 	@ivar last_error
-	@ivar bundles list(dict(status = ok|error, last_error = , remote_ip=ip, timestamp=123454, snapshot_id=snap-434244))
+	@ivar rows list(dict(status = ok|error, last_error = , host=ip, timestamp=123454, snapshot_id=snap-434244))
 	'''
 	
 	INT_CREATE_DATA_BUNDLE 		= "Cassandra_IntCreateDataBundle"
@@ -120,33 +118,28 @@ class Cassandra(object):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		
-		config = bus.config
 		self.queryenv = bus.queryenv_service
-		
 		self.platform = bus.platform
-		
 		self.private_ip = self.platform.get_private_ip()
 		self.zone = self.platform.get_avail_zone()
-		self.inst_id = self.platform.get_instance_id()
-		
-		self.ini = bus.cnf.rawini
+		cnf = bus.cnf 
+		self.ini = cnf.rawini
 		
 		self.role_name = self.ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 
-		self.storage_path = self.ini.get(CNF_SECTION, OPT_STORAGE_PATH)
-		self.storage_conf = self.ini.get(CNF_SECTION, OPT_STORAGE_CNF)
+		self.storage_path = self.ini.get(BEHAVIOUR, OPT_STORAGE_PATH)
+		self.storage_conf_path = self.ini.get(BEHAVIOUR, OPT_STORAGE_CNF_PATH)
 
 		self.data_file_directory = self.storage_path + "/datafile"
 		self.commit_log_directory = self.storage_path + "/commitlog"
 		
-		self.cassandra_conf = Configuration('cassandra')
-		
+		self.cassandra_conf = Configuration('xml')
 		try:
-			self.cassandra_conf.read(self.storage_conf)
-		except:
-			pass
+			self.cassandra_conf.read(self.storage_conf_path)
+		except (OSError, MetaconfError), e:
+			self._logger.error('Cassandra storage-conf.xml is broken. %s' % e)
 		
-		self._initd = initdv2.lookup('cassandra')
+		self._initd = initdv2.lookup(SERVICE_NAME)
 		
 	def restart_service(self):
 		self.stop_service()
@@ -186,42 +179,8 @@ class Cassandra(object):
 				ret.append(host.internal_ip or host.external_ip)
 		return tuple(ret)
 
-
-	def get_node_queue(self):
-		
-		cassandra.start_service()
-		queue = Queue()
-		"""
-		out, err = system('nodetool -h localhost ring')[0:2]
-		if err:
-			raise HandlerError('Cannot get node list: %s' % err)
-		
-		lines = out.split('\n')
-		ip_re = re.compile('^(\d{1,3}(\.\d{1,3}){3})')
-		for line in lines[1:]:
-			if not line:
-				continue
-			
-			result = re.search(ip_re , line)
-			
-			if result:
-				self._logger.info('ADDING NODE %s TO QUEUE' % result.group(1))
-				queue.put((result.group(1), 0))
-		"""
-		roles = cassandra.queryenv.list_roles(behaviour = "cassandra")
-		
-		# Fill seed list from queryenv answer
-		for role in roles:
-			for host in role.hosts:
-				if host.internal_ip:
-					queue.put((host.internal_ip, 0))
-				else:
-					queue.put((host.external_ip, 0))
-
-		return queue
-
 	def write_config(self):
-		self.cassandra_conf.write(open(self.storage_conf,'w'))
+		self.cassandra_conf.write(open(self.storage_conf_path,'w'))
 
 class CassandraScalingHandler(Handler):
 	
@@ -241,19 +200,15 @@ class CassandraScalingHandler(Handler):
 		bus.on("host_init_response", self.on_host_init_response)
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return BuiltinBehaviours.CASSANDRA in behaviour and \
+		return config.BuiltinBehaviours.CASSANDRA in behaviour and \
 				( message.name == Messages.HOST_INIT or
 				message.name == Messages.HOST_UP or
 				message.name == Messages.HOST_DOWN or
 				message.name == Messages.BEFORE_HOST_TERMINATE )
 	
 	def on_HostInit(self, message):
-		if message.behaviour == BuiltinBehaviours.CASSANDRA:
-			if not message.local_ip:
-				ip = message.remote_ip
-			else:
-				ip = message.local_ip
-			self._insert_iptables_rule(ip)
+		if message.behaviour == config.BuiltinBehaviours.CASSANDRA:
+			self._insert_iptables_rule(message.local_ip or message.remote_ip)
 
 	def on_host_init_response(self, message):
 
@@ -266,7 +221,6 @@ class CassandraScalingHandler(Handler):
 
 		cassandra.stop_service()
 		# Getting storage conf from url
-		cassandra.cassandra_conf = Configuration('cassandra')
 		storage_conf_url = cassandra.ini.get(CNF_SECTION, OPT_STORAGE_CNF_URL)
 		result = re.search('^s3://(.*?)/(.*?)$', storage_conf_url)
 		if result:
@@ -297,26 +251,19 @@ class CassandraScalingHandler(Handler):
 		# Clear Seed list
 		cassandra.cassandra_conf.remove('Storage/Seeds/Seed')
 		
-		
-		
-		roles = cassandra.queryenv.list_roles(behaviour = "cassandra")
+		# Fill seed list from queryenv answer and create iptables rules		
 		ips = []
-		# Fill seed list from queryenv answer and creating iptables rules
-		for role in roles:
+		for role in cassandra.queryenv.list_roles(behaviour = BEHAVIOUR):
 			for host in role.hosts:
-				if host.internal_ip:
-					ips.append(host.internal_ip)
-				else:
-					ips.append(host.external_ip)
-		
+				ips.append(host.internal_ip or host.external_ip)
+				
 		for ip in ips:
 			cassandra.cassandra_conf.add('Storage/Seeds/Seed', ip)
 			self._insert_iptables_rule(ip)
-		
+			
 		self._insert_iptables_rule(cassandra.private_ip)
 		self._drop_iptable_rules()
-		
-		
+	
 		
 		no_seeds = False
 		if not cassandra.cassandra_conf.get_list('Storage/Seeds/'):
@@ -414,7 +361,7 @@ class CassandraScalingHandler(Handler):
 			
 			ebs_devname, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, mpoint=cassandra.storage_path)
 			self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id, OPT_STORAGE_DEVICE_NAME : ebs_devname})
-			self._create_valid_storage()
+			self._create_dbstorage_fslayout()
 			
 			self._logger.debug('Copying snapshot')
 			rsync = filetool.Rsync().archive()
@@ -428,7 +375,7 @@ class CassandraScalingHandler(Handler):
 	
 			cassandra.cassandra_conf.set('Storage/AutoBootstrap', 'False')
 	
-			self._set_use_storage()
+			self._change_dbstorage_location()
 			snap_id = cassandra.create_snapshot(ebs_volume.id)
 			cassandra.start_service()
 			message.cassandra = dict(volume_id = ebs_volume.id, snapshot_id=snap_id)
@@ -445,22 +392,21 @@ class CassandraScalingHandler(Handler):
 		ebs_devname, ebs_volume = self._create_attach_mount_volume(auto_mount=True, snapshot=snap_id, mpoint=cassandra.storage_path, mkfs=False)
 		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id, OPT_STORAGE_DEVICE_NAME : ebs_devname})
 
-		self._create_valid_storage()
-		self._set_use_storage()
+		self._create_dbstorage_fslayout()
+		self._change_dbstorage_location()
 
 		cassandra.start_service()
 		message.cassandra = dict(volume_id = ebs_volume.id)
 
 	def _start_bootstrap(self, message):
-		
 		storage_size = cassandra.ini.get(CNF_SECTION, OPT_STORAGE_SIZE)
 		
 		ebs_devname, ebs_volume = self._create_attach_mount_volume(storage_size, auto_mount=True, snapshot=None, mpoint=cassandra.storage_path)
 		self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id, OPT_STORAGE_DEVICE_NAME : ebs_devname})
-		self._create_valid_storage()
+		self._create_dbstorage_fslayout()
 
 		cassandra.cassandra_conf.set('Storage/AutoBootstrap', 'True')
-		self._set_use_storage()
+		self._change_dbstorage_location()
 		
 		cassandra.start_service()
 		self._logger.debug('Sleep 120 seconds because of http://wiki.apache.org/cassandra/Operations#line-57')
@@ -469,17 +415,12 @@ class CassandraScalingHandler(Handler):
 		# http://wiki.apache.org/cassandra/Operations#line-57
 		time.sleep(120)
 		self._logger.debug('Waiting for bootstrap finish')
-		self._wait_until(self._bootstrap_finished, sleep = 10)
+		wait_until(self._bootstrap_finished, sleep = 10)
 		message.cassandra = dict(volume_id = ebs_volume.id)
 
 	def on_HostUp(self, message):
-		if message.behaviour == BuiltinBehaviours.CASSANDRA:
-			
-			if not message.local_ip:
-				ip = message.remote_ip
-			else:
-				ip = message.local_ip
-				
+		if message.behaviour == config.BuiltinBehaviours.CASSANDRA:
+			ip = message.local_ip or message.remote_ip
 			seeds = cassandra.cassandra_conf.get_list('Storage/Seeds/')
 			
 			if not ip in seeds:
@@ -487,45 +428,38 @@ class CassandraScalingHandler(Handler):
 				cassandra.write_config()
 				cassandra.restart_service()
 			
+			
 	def on_BeforeHostTerminate(self, *args):
 		cassandra.start_service()
 		err = system('nodetool -h localhost decommission')[2]
 		if err:
 			raise HandlerError('Cannot decommission node: %s' % err)
-		self._wait_until(self._is_decommissioned)
+		wait_until(self._is_decommissioned)
 		cassandra.stop_service()
+		
 		
 	def on_before_host_down(self, *args):
 		cassandra.stop_service()
+
 
 	def _bootstrap_finished(self):
 		try:
 			cass = pexpect.spawn('nodetool -h localhost streams')
 			out = cass.read()
-			if re.search('Mode: Normal', out):
-				return True
-			return False
+			return bool(re.search('Mode: Normal', out))
 		finally:
 			del(cass)
 		
 	def on_HostDown(self, message):
-		
-		if message.behaviour == BuiltinBehaviours.CASSANDRA:
-			
-			if not message.local_ip:
-				ip = message.remote_ip
-			else:
-				ip = message.local_ip
-				
+		if message.behaviour == config.BuiltinBehaviours.CASSANDRA:
 			try:
+				ip = message.local_ip or message.remote_ip
 				cassandra.cassandra_conf.remove('Storage/Seeds/Seed', ip)
 				cassandra.write_config()
 				self._del_iptables_rule(ip)
 				cassandra.restart_service()
 			except:
 				pass
-			
-
 
 	def _insert_iptables_rule(self, ip):
 		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='ACCEPT', source = ip)
@@ -545,67 +479,7 @@ class CassandraScalingHandler(Handler):
 		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='DROP')
 		self._iptables.append_rule(storage_rule)
 		self._iptables.append_rule(thrift_rule)
-
-	def _wait_until(self, target, args=None, sleep=5):
-		args = args or ()
-		while not target(*args):
-			self._logger.debug("Wait %d seconds before the next attempt", sleep)
-			time.sleep(sleep)
 			
-	def _create_attach_mount_volume(self, size=None, auto_mount=False, snapshot=None, mpoint=None, mkfs=True):
-		
-		if not size and not snapshot:
-			raise HandlerError('Cannot create volume without size or snapshot')
-
-		if not cassandra.zone:
-			cassandra.zone     = cassandra.platform.get_avail_zone()
-		if not cassandra.inst_id:
-			cassandra.inst_id  = cassandra.platform.get_instance_id()
-		
-		ec2_conn = cassandra.platform.new_ec2_conn()
-		self._logger.debug('Creating new EBS volume')
-		ebs_volume = ec2_conn.create_volume(size, cassandra.zone, snapshot)
-		
-		self._logger.debug('Waiting for new ebs volume. ID=%s', (ebs_volume.id,))
-		self._wait_until(lambda: ebs_volume.update() == "available")
-		
-		device   = get_free_devname()
-		
-		self._logger.debug('Attaching volume ID=%s', (ebs_volume.id,))		
-		ebs_volume.attach(cassandra.inst_id, device)
-		self._wait_until(lambda: ebs_volume.update() and ebs_volume.attachment_state() == "attached")
-	
-		if not os.path.exists(mpoint):
-			os.makedirs(mpoint)
-			
-		fstool.mount(device, mpoint, make_fs=mkfs, auto_mount=auto_mount )
-		
-		del(ec2_conn)
-		
-		return device, ebs_volume
-	
-	def _umount_detach_delete_volume(self, devname, volume):
-
-		fstool.umount(devname)
-		
-		volume.detach()
-		self._wait_until(lambda: volume.update() and volume.volume_state() == "available")
-		volume.delete()
-		
-	def _create_valid_storage(self):
-		if not os.path.exists(cassandra.data_file_directory):
-			os.makedirs(cassandra.data_file_directory)
-		if not os.path.exists(cassandra.commit_log_directory):
-			os.makedirs(cassandra.commit_log_directory)
-		
-	def _set_use_storage(self):
-
-		self._config.set('Storage/CommitLogDirectory', cassandra.commit_log_directory)
-		self._config.remove('Storage/DataFileDirectories/DataFileDirectory')
-		self._config.add('Storage/DataFileDirectories/DataFileDirectory', cassandra.data_file_directory)
-
-		cassandra.write_config()
-	
 	def _is_decommissioned(self):
 		try:
 			cass = pexpect.spawn('nodetool -h localhost streams')
@@ -618,7 +492,52 @@ class CassandraScalingHandler(Handler):
 			
 	def _update_config(self, data): 
 		cnf = bus.cnf
-		cnf.update_ini(BuiltinBehaviours.CASSANDRA, {CNF_SECTION: data})
+		cnf.update_ini(config.BuiltinBehaviours.CASSANDRA, {CNF_SECTION: data})
+
+
+	#
+	# DbStorage methods
+	# TODO: extract DbStorage abstraction
+	#
+
+	def _create_attach_mount_volume(self, size=None, auto_mount=False, snapshot=None, mpoint=None, mkfs=True):
+		pl = cassandra.platform
+		ec2_conn = pl.new_ec2_conn()
+		
+		# Create volume
+		vol = ebstool.create_volume(ec2_conn, size, 
+				pl.get_avail_zone(), snapshot, self._logger)
+		
+		# Attach 
+		devname = get_free_devname()
+		ebstool.attach_volume(ec2_conn, vol, pl.get_instance_id(), devname, to_me=True, logger=self._logger)
+		
+		# Mount
+		fstool.mount(devname, mpoint, make_fs=mkfs, auto_mount=auto_mount)		
+		
+		del(ec2_conn)
+		return devname, vol
+	
+	def _umount_detach_delete_volume(self, devname, volume):
+		fstool.umount(devname)
+		ebstool.detach_volume(None, volume, logger=self._logger)
+		volume.delete()
+		
+	def _create_dbstorage_fslayout(self):
+		if not os.path.exists(cassandra.data_file_directory):
+			os.makedirs(cassandra.data_file_directory)
+		if not os.path.exists(cassandra.commit_log_directory):
+			os.makedirs(cassandra.commit_log_directory)
+		
+	def _change_dbstorage_location(self):
+
+		self._config.set('Storage/CommitLogDirectory', cassandra.commit_log_directory)
+		self._config.remove('Storage/DataFileDirectories/DataFileDirectory')
+		self._config.add('Storage/DataFileDirectories/DataFileDirectory', cassandra.data_file_directory)
+
+		cassandra.write_config()
+		
+	# End DbStorage methods
 		
 		
 class OnEachRunnable:
@@ -715,7 +634,7 @@ class OnEachExecutor(Handler):
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		r = self.runnable
-		return BuiltinBehaviours.CASSANDRA in behaviour \
+		return config.BuiltinBehaviours.CASSANDRA in behaviour \
 				and message.name in (r.node_request_message, r.node_response_message, r.command_message)
 
 
@@ -910,30 +829,15 @@ class _CassandraCdbRunnable(OnEachRunnable):
 	node_response_message = CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT
 
 	def create_node_request(self, handler):
-		'''
-		Create node request message
-		@rtype: scalarizr.messaging.Message
-		'''
 		return handler.new_message(self.node_response_message, include_pad=True)
 		
 	def create_node_response(self, handler):
-		'''
-		Create node response message
-		@rtype: scalarizr.messaging.Message
-		'''
 		return handler.new_message(self.node_response_message)
 	
 	def create_command_result(self, handler):
-		'''
-		Create ring result message 
-		@rtype: scalarizr.messaging.Message
-		'''
 		return handler.new_message(self.command_result_message)
 	
 	def handle_request(self, req_message, resp_message):
-		'''
-		Perform work on node and fill resp_message with results.
-		'''
 		umounted = False
 		device_name = cassandra.ini.get(CNF_SECTION, OPT_STORAGE_DEVICE_NAME)
 		
@@ -987,8 +891,7 @@ class _CassandraCrfRunnable(OnEachRunnable):
 				raise HandlerError('Cannot do cleanup: %s' % err)
 
 		increase_ks_list = list()
-		changes = req_message.rf_changes
-		for keyspace in changes:
+		for keyspace in req_message.changes:
 			
 			keyspace_name = keyspace['name']
 			new_rf		  = keyspace['rf']
@@ -1010,7 +913,7 @@ class _CassandraCrfRunnable(OnEachRunnable):
 			repair(keyspace)
 
 
-CassandraCrfHandler = OnEachExecutor(_CassandraCrfRunnable())	
+CassandraCrfHandler = OnEachExecutor(_CassandraCrfRunnable(), request_timeout=100)	
 
 
 """
