@@ -1136,6 +1136,8 @@ class OnEachExecutor(Handler):
 			if t < self.context.resend_interval:
 				time.sleep(self.context.resend_interval - t)
 			
+			ndata.last_attempt_time = time.time()
+			ndata.num_attempts += 1
 			self.context.current_node = ndata
 			ndata.timer = Timer(self.context.request_timeout, self._request_timeouted, (ndata,))
 			ndata.timer.start()
@@ -1183,7 +1185,7 @@ class OnEachExecutor(Handler):
 		ndata = firstmatched(lambda n: n.host == resp_message.from_host, self.context.nodes)
 		if not ndata:
 			self._logger.error('Recived response %s from unknown node %s', 
-					resp_message.name, getattr(resp_message, 'from_host', 'no.from_host.property'))
+					resp_message.name, getattr(resp_message, 'from_host', '*unknown*'))
 			return
 		
 		if current_node_respond:
@@ -1225,7 +1227,11 @@ class OnEachExecutor(Handler):
 		if message.name == self.runnable.command_message:
 			self._handle_control(message)
 		elif message.name == self.runnable.node_response_message:
-			self._handle_response(message)
+			if self.context:
+				self._handle_response(message)
+			else:
+				self._logger.warning('Recived response %s from node %s when timeframe is already closed', 
+						message.name, getattr(message, 'from_host', '*unknown*'))
 		
 		elif message.name == self.runnable.node_request_message:
 			resp_message = self.runnable.create_node_response(self)
