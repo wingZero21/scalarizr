@@ -6,6 +6,7 @@ Created on Sep 7, 2010
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration
 import os
+import logging
 
 class CnfPreset:
 	name = None
