@@ -237,6 +237,29 @@ class MysqlMessages:
 
 
 class MysqlCnfController(CnfController):
+	
+	class OptionSpec:
+		section = None
+		name = None
+		readonly = None
+		supported_from = None
+		
+		def __init__(self, name, section='mysqld', readonly=False, supported_from=None):
+			self.name = name			
+			self.section = section
+			self.readonly = readonly
+			self.supported_from = supported_from
+	
+	class Options:
+		def __init__(self, *args):
+			for optspec in args:
+				setattr(self, optspec.name, optspec)
+			
+	options = Options(
+		OptionSpec('innodb_additional_mem_pool_size', readonly=True)
+	)
+	
+
 	_mysql_version = None
 	
 	_readonly_vars = (
