@@ -187,6 +187,11 @@ class ServiceCtlHanler(Handler):
 		self._queryenv = bus.queryenv_service
 		
 		bus.on('init', self.sc_on_init)
+		
+	def preset_changed(self, old, new):
+		temp = new.copy()
+		temp.update(old)
+		return temp != new
 
 	def sc_on_start(self):
 		szr_cnf = bus.cnf
@@ -215,10 +220,15 @@ class ServiceCtlHanler(Handler):
 			configuration = self._queryenv.get_service_configuration()
 			new_preset = CnfPreset(configuration.name, configuration.settings)
 			
+			if not self.preset_changed(last, new_preset.settings):
+				self._logger.debug('%s configuration of wasn`t changed. No need to apply preset.' 
+						% self._service_name)
+				break
+			
 			CnfPresetStore.save(self._service_name, new_preset, CnfPresetStore.PresetType.CURRENT)
 			self._cnf_ctl.apply_preset(self, new_preset)
 			
-			if new_preset.restart_service: 
+			if configuration.restart_service: 
 				try:
 					self._restart_service()
 				except initdv2.InitdError, e:	
@@ -260,38 +270,6 @@ class ServiceCtlHanler(Handler):
 		else:
 			
 			self._reconfigure()
-
-			"""
-			try:
-				try:
-					if not self._init_script.running:
-						self._init_script.start()
-					last = self._cnf_ctl.current_preset()
-				except (BaseException, Exception), e:
-					last = storage.load(message.behaviour, PresetType.DEFAULT)
-				
-				storage.save(message.behaviour, last, PresetType.LAST_SUCCESSFUL)
-				
-				configuration = self._queryenv.get_service_configuration()
-				new_preset = CnfPreset(configuration.name, configuration.settings)
-				
-				CnfPresetStore.save(message.behaviour, new_preset, PresetType.CURRENT)
-				self._cnf_ctl.apply_preset(self, new_preset)
-				
-				if new_preset.restart_service: 
-					try:
-						self._restart_service(message.behaviour)
-					except initdv2.InitdError, e:	
-						self._cnf_ctl.apply_preset(last)
-						self._start_service(message.behaviour)
-						storage.save(message.behaviour, last, PresetType.CURRENT)
-						
-			except (BaseException, Exception), e:
-				msg.status = 'error'
-				msg.last_error = str(e)
-					
-			self._send_message(msg)
-			"""
 			
 			
 	def _start_service(self):
