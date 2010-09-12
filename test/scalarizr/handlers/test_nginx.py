@@ -10,9 +10,20 @@ from scalarizr.util import init_tests
 from scalarizr.util.filetool import read_file, write_file
 import os
 from scalarizr.util import configtool
+from scalarizr.util.filetool import read_file, write_file
+
+class Message:
+	local_ip = '8.8.8.8'
+	
 				
 class Test(unittest.TestCase):
 	
+
+	def setUp(self):
+		bus.queryenv_service = _EmptyQueryEnv()
+		bus.define_events("before_host_down")
+	
+
 	def test_reconfigure(self):
 		bus.queryenv_service = _QueryEnv()
 		
@@ -52,7 +63,6 @@ class Test(unittest.TestCase):
 		if os.path.exists(nginx_incl):
 			os.remove(nginx_incl)
 		
-		bus.queryenv_service = _EmptyQueryEnv()
 		n = nginx.NginxHandler()
 		n.nginx_upstream_reload()
 		
@@ -60,18 +70,30 @@ class Test(unittest.TestCase):
 	
 	def _test_creating_template(self):
 		include_tpl = bus.etc_path + "/public.d/handler.nginx/app-servers.tpl"
+		config = bus.config
+	
 		if os.path.exists(include_tpl):
 			os.remove(include_tpl)
 		
-		bus.queryenv_service = _QueryEnv()
 		n = nginx.NginxHandler()
 		n.nginx_upstream_reload()
 		
 		self.assertTrue(os.path.exists(include_tpl))
 
-	def _test_nginx_upstream_reload(self):
-		pass
-
+	def test_on_BeforeHostTerminate(self):
+		print "TROLOLO"
+		config = bus.config
+		include_path = bus.etc_path + "/nginx/app-servers.include"
+		config.set('behaviour_www','app_include_path',include_path)
+		data = """\nupstream backend {\n\tip_hash;\n\n\t\tserver 8.8.8.8:80;\n\n}"""
+		write_file(include_path, data)	
+		
+		n = nginx.NginxHandler()
+		n.on_BeforeHostTerminate(Message)
+		
+		new_data = read_file(include_path)
+		self.assertEquals(new_data,"""\nupstream backend {\n\tip_hash;\n\n\t\n}""")
+		
 class _Bunch(dict):
 			__getattr__, __setattr__ = dict.get, dict.__setitem__
 			
