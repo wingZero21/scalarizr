@@ -315,8 +315,15 @@ class Configuration:
 	
 	def get_dict(self, path):
 		return [x.attrib for x in self._find_all(path) if x.attrib]
-
 	
+	def get_kv_dict(self, path):
+		nodes = [node for node in self._find_all(quote(path)) if node.tag and not callable(node.tag)]
+		ret = {}
+		for node in nodes:
+			ret[node.tag] = node.text
+			
+		return ret
+				
 	def set(self, path, value, typecast=None, force=False):
 		if not self.etree:
 			self._init()
