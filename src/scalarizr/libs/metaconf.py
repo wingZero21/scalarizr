@@ -254,6 +254,8 @@ class Configuration:
 		#return ElementPath13.findall(self.etree, self._root_path + "*")
 		
 	def _find_all(self, path):
+		if not self.etree:
+			self._init()
 		if not path:
 			path = '.'
 		ret = self.etree.findall(self._root_path + quote(path))
@@ -279,6 +281,8 @@ class Configuration:
 		"""
 		
 	def _find(self, path):
+		if not self.etree:
+			self._init()
 		el = self.etree.find(self._root_path + quote(path))
 		# el = ElementPath13.find(self.etree, self._root_path + quote(path))
 		if el != None:
@@ -287,6 +291,8 @@ class Configuration:
 			raise PathNotExistsError(quote(path))
 	
 	def get(self, path):
+		if not self.etree:
+			self._init()
 		"""
 		@see http://effbot.org/zone/element-xpath.htm
 		v = conf.get("general/server_id")
@@ -312,6 +318,8 @@ class Configuration:
 
 	
 	def set(self, path, value, typecast=None, force=False):
+		if not self.etree:
+			self._init()
 		el = self.etree.find(self._root_path + quote(path))
 		#el = ElementPath13.find(self.etree, )
 		if el != None:
