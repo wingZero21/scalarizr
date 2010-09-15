@@ -26,12 +26,12 @@ def main():
 	
 	
 	init_script()
-	
+
 	msg_service = bus.messaging_service
 	producer = msg_service.get_producer()
 	if options.endpoint:
 		producer.endpoint = options.endpoint
-	
+
 	msg = msg_service.new_message()
 
 	if options.msgfile:

@@ -766,12 +766,12 @@ class XmlFormatProvider:
 		try:
 			etree = ET.parse(fp, parser=CommentedTreeBuilder())
 		except Exception, e:
-			raise ParseError((e,))
+			raise ParseError(())
 
 		indent(etree.getroot())
 		return [etree.getroot()]
 
-	def write(self, fp, etree):
+	def write(self, fp, etree, close):
 		try:
 			new_tree = ET.ElementTree(list(etree.getroot())[0])
 			indent(new_tree.getroot())

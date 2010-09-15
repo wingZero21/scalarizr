@@ -10,6 +10,7 @@ from scalarizr.handlers import Handler, async, HandlerError
 from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system, disttool, cryptotool, fstool, filetool,\
 	wait_until
+from scalarizr.util import software
 from scalarizr.platform.ec2 import s3tool, ebstool
 
 from M2Crypto import X509, EVP, Rand, RSA
@@ -167,14 +168,29 @@ class Ec2RebundleHandler(Handler):
 			# Run rebundle
 			ami_id = strategy.run()
 			
+			# Software list creation
+			software_list = []			
+			installed_list = software.all_installed()
+			for software_info in installed_list:
+				software_list.append(dict(name 	 = software_info.name,
+									      version = '.'.join([str(x) for x in software_info.version]),
+									      string_version = software_info.string_version
+									      ))
+			
+			os_info = {}
+			os_info['version'] = ' '.join(disttool.linux_dist())
+			os_info['string_version'] = ' '.join(disttool.uname()).strip()
+			
 			# Notify Scalr
 			self.send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "ok",
 				snapshot_id = ami_id,
-				bundle_task_id = message.bundle_task_id															
+				bundle_task_id = message.bundle_task_id,
+				software = software_list,
+				os = os_info
 			))
 			
-			# Fire 'rebundle'
+			# Fire 'rebundle'diss
 			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)
 			self._logger.info('Rebundle complete! If you imported this server to Scalr, you can terminate Scalarizr now.')
 			

@@ -4,7 +4,7 @@ Created on Sep 10, 2010
 @author: marat
 '''
 from scalarizr.util import disttool, system
-import os, re
+import os, re, zipfile
 
 __all__ = ('all_installed', 'software_info', 'explore', 'whereis')
 
@@ -25,6 +25,7 @@ def software_info(name):
 
 def explore(name, lookup_fn):
 	if name in software_list.keys():
+		
 		raise Exception("'%s' software has been already explored" % name)
 	software_list[name] = lookup_fn
 	
@@ -47,11 +48,15 @@ class SoftwareInfo:
 	'''
 	version_string = None
 	
-	def __init__(self, name, version, version_string):
+	def __init__(self, name, version, string_version):
 		self.name    		= name
-		self.version_string = version_string
-		self.version		= tuple(version.split('.'))		
-	
+		self.string_version = string_version
+		ver_nums		= version.split('.')
+		if len(ver_nums) < 3: 
+			for i in range(len(ver_nums), 3):
+				ver_nums.append('0')
+		self.version = tuple(ver_nums)
+		
 software_list = dict()
 
 def mysql_software_info():
@@ -64,7 +69,7 @@ def mysql_software_info():
 	if not version_string:
 		raise SoftwareError
 
-	res = re.search('Ver\s+(\d+(\.[\d-]+){2})', version_string)
+	res = re.search('Ver\s+([\d\.-]+)', version_string)
 	if res:
 		version = res.group(1)
 		return SoftwareInfo('mysql', version, version_string)
@@ -83,7 +88,7 @@ def nginx_software_info():
 		raise SoftwareError
 	
 	version_string = out.splitlines()[0]
-	res = re.search('\d+(\.[\d-]+){2}', version_string)
+	res = re.search('[\d\.-]+', version_string)
 	if res:
 		version = res.group(0)
 		return SoftwareInfo('nginx', version, out)
@@ -103,7 +108,7 @@ def memcached_software_info():
 	
 	version_string = out.splitlines()[0]
 	
-	res = re.search('memcached\s+(\d+(\.[\d-]+){2})', version_string)
+	res = re.search('memcached\s+([\d\.-]+)', version_string)
 	if res:
 		version = res.group(1)
 		return SoftwareInfo('memcached', version, version_string)
@@ -122,7 +127,7 @@ def php_software_info():
 	
 	version_string = out.splitlines()[0]
 	
-	res = re.search('PHP\s+(\d+(\.[\d-]+){2})', version_string)
+	res = re.search('PHP\s+([\d\.-]+)', version_string)
 	
 	if res:
 		version = res.group(1)
@@ -142,7 +147,7 @@ def python_software_info():
 	
 	version_string = version_string.splitlines()[0]
 	
-	res = re.search('Python\s+(\d+(\.[\d-]+){2})', version_string)
+	res = re.search('Python\s+([\d\.-]+)', version_string)
 	
 	if res:
 		version = res.group(1)
@@ -164,7 +169,7 @@ def apache_software_info():
 		raise SoftwareError
 	
 	version_string = out.splitlines()[0]
-	res = re.search('\d+(\.[\d-]+){2}', version_string)
+	res = re.search('[\d\.-]+', version_string)
 	if res:
 		version = res.group(0)
 	
@@ -175,21 +180,98 @@ def apache_software_info():
 explore('apache', apache_software_info)
 
 def tomcat_software_info():
+	
 	tomcat_dir = [os.path.join('/usr/share', location) for location in os.listdir('/usr/share') if 'tomcat' in location]
 	if not tomcat_dir:
 		raise SoftwareError("Can't find tomcat server location")
-	version_script_path = os.path.join(tomcat_dir[0], 'bin/version.sh')
-	if not os.path.exists(version_script_path):
+	
+	catalina_path = os.path.join(tomcat_dir[0], 'lib/catalina.jar')
+	
+	if not os.path.exists(catalina_path):
 		raise SoftwareError("Version script doesn't exist")
 		
-	out = system(version_script_path, False)[0]
-	if not out:
+	catalina = zipfile.ZipFile(catalina_path, 'r')
+	try:
+		properties_path = 'org/apache/catalina/util/ServerInfo.properties'
+		if not properties_path in catalina.namelist():
+			raise SoftwareError("ServerInfo.properties file isn't in catalina.jar")
+		
+		properties = catalina.read(properties_path)
+		properties = re.sub(re.compile('^#.*$', re.M), '', properties).strip()
+		
+		res = re.search('^server.info=Apache\s+Tomcat/([\d\.-]+)', properties, re.M)
+		if res:
+			version = res.group(1)
+			return SoftwareInfo('tomcat', version, properties)
 		raise SoftwareError
-	res = re.search(re.compile('^Server\s+version:.*?(\d+(\.[\d-]+){2})\s*$', re.M), out)
-	if res:
-		version = res.group(1)
-		return SoftwareInfo('tomcat', version, out)
-	raise SoftwareError
-
+	finally:
+		catalina.close()
+		
 explore('tomcat', tomcat_software_info)
 
+def varnish_software_info():	
+	binaries = whereis('varnishd')
+	if not binaries:
+		raise SoftwareError("Can't find executable for varnish HTTP accelerator")
+
+	out = system((binaries[0], '-V'), False)[1].strip()
+	if not out:
+		raise SoftwareError
+	
+	version_string = out.splitlines()[0]
+	
+	res = re.search('varnish-([\d\.-]+)', version_string)
+	
+	if res:
+		version = res.group(1)
+		return SoftwareInfo('varnish', version, out)
+	
+	raise SoftwareError
+
+explore('varnish', varnish_software_info)
+
+def rails_software_info():
+	binaries = whereis('gem')
+	
+	if not binaries:
+		raise SoftwareError("Can't find executable for varnish HTTP accelerator")
+
+	out = system((binaries[0], 'list', 'rails'), False)[0].strip()
+	
+	if not out:
+		raise SoftwareError	
+
+	res = re.search('\(([\d\.-]+)\)', out)
+	
+	if res:
+		version = res.group(1)
+		return SoftwareInfo('rails', version, '')
+	
+	raise SoftwareError
+
+explore('rails', rails_software_info)
+
+def cassandra_software_info():
+	cassandra_path = '/usr/share/cassandra/apache-cassandra.jar'
+	
+	if not os.path.exists(cassandra_path):
+		raise SoftwareError("Can't find apache-cassandra.jar file with Cassandra version info")
+
+	cassandra = zipfile.ZipFile(cassandra_path)
+	
+	try:
+		properties_path = 'META-INF/MANIFEST.MF'
+		
+		if not properties_path in cassandra.namelist():
+			raise SoftwareError("MANIFEST.MF file isn't in apache-cassandra.jar")
+		
+		properties = cassandra.read(properties_path)
+		
+		res = re.search('^Implementation-Version:\s*([\d\.-]+)', properties, re.M)
+		if res:
+			version = res.group(1)
+			return SoftwareInfo('cassandra', version, '')
+		raise SoftwareError
+	finally:
+		cassandra.close()
+explore('cassandra', cassandra_software_info)

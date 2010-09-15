@@ -223,7 +223,7 @@ class ServiceCtlHanler(Handler):
 			if not self.preset_changed(last, new_preset.settings):
 				self._logger.debug('%s configuration of wasn`t changed. No need to apply preset.' 
 						% self._service_name)
-				break
+				return
 			
 			CnfPresetStore.save(self._service_name, new_preset, CnfPresetStore.PresetType.CURRENT)
 			self._cnf_ctl.apply_preset(self, new_preset)

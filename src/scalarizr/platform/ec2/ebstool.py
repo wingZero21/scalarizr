@@ -11,7 +11,7 @@ from boto.exception import BotoServerError
 def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None):
 	logger = logger or logging.getLogger(__name__)
 	msg = 'Creating EBS volume%s%s in avail zone %s' % (
-		size and ' (size: %dG)' % size or '', 
+		size and ' (size: %sG)' % size or '', 
 		snap_id and ' from snapshot %s' % snap_id or '',
 		avail_zone
 	)

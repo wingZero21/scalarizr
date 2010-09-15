@@ -20,7 +20,7 @@ from ConfigParser import NoOptionError
 from Queue import Queue, Empty
 from threading import Timer
 from scalarizr.libs.metaconf import Configuration, PathNotExistsError,\
-	MetaconfError
+	MetaconfError, ParseError
 import urllib2
 import tarfile
 import time
@@ -37,7 +37,7 @@ OPT_STORAGE_SIZE		= 'storage_size'
 OPT_SNAPSHOT_URL		= 'snapshot_url'
 OPT_STORAGE_CNF_URL		= 'storage_conf_url'
 OPT_STORAGE_PATH 		= 'storage_path'
-OPT_STORAGE_CNF_PATH 	= 'storage_conf_path'
+OPT_STORAGE_CNF_PATH 	= 'storage_conf'
 OPT_SNAPSHOT_ID			= "snapshot_id"
 OPT_STORAGE_VOLUME_ID	= "volume_id"
 OPT_STORAGE_DEVICE_NAME	= "device_name"
@@ -52,7 +52,7 @@ class CassandraInitScript(initdv2.ParametrizedInitScript):
 			raise HandlerError("Cannot find Cassandra init script at %s. Make sure that Cassandra is installed" % initd_script)
 		
 		pid_file = '/var/run/cassandra.pid'
-		socks = [initdv2.SockParam(port, conn_address = pl.get_private_ip()) for port in (7000, 9160)]
+		socks = [initdv2.SockParam(port, conn_address = pl.get_private_ip(), timeout = 30) for port in (7000, 9160)]
 		initdv2.ParametrizedInitScript.__init__(self, 'cassandra', initd_script, pid_file, socks=socks)
 
 initdv2.explore('cassandra', CassandraInitScript)
@@ -127,8 +127,8 @@ class Cassandra(object):
 		
 		self.role_name = self.ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 
-		self.storage_path = self.ini.get(BEHAVIOUR, OPT_STORAGE_PATH)
-		self.storage_conf_path = self.ini.get(BEHAVIOUR, OPT_STORAGE_CNF_PATH)
+		self.storage_path = self.ini.get(CNF_SECTION, OPT_STORAGE_PATH)
+		self.storage_conf_path = self.ini.get(CNF_SECTION, OPT_STORAGE_CNF_PATH)
 
 		self.data_file_directory = self.storage_path + "/datafile"
 		self.commit_log_directory = self.storage_path + "/commitlog"
@@ -136,7 +136,7 @@ class Cassandra(object):
 		self.cassandra_conf = Configuration('xml')
 		try:
 			self.cassandra_conf.read(self.storage_conf_path)
-		except (OSError, MetaconfError), e:
+		except (OSError, MetaconfError, ParseError), e:
 			self._logger.error('Cassandra storage-conf.xml is broken. %s' % e)
 		
 		self._initd = initdv2.lookup(SERVICE_NAME)
@@ -531,9 +531,9 @@ class CassandraScalingHandler(Handler):
 		
 	def _change_dbstorage_location(self):
 
-		self._config.set('Storage/CommitLogDirectory', cassandra.commit_log_directory)
-		self._config.remove('Storage/DataFileDirectories/DataFileDirectory')
-		self._config.add('Storage/DataFileDirectories/DataFileDirectory', cassandra.data_file_directory)
+		cassandra.cassandra_conf.set('Storage/CommitLogDirectory', cassandra.commit_log_directory)
+		cassandra.cassandra_conf.remove('Storage/DataFileDirectories/DataFileDirectory')
+		cassandra.cassandra_conf.add('Storage/DataFileDirectories/DataFileDirectory', cassandra.data_file_directory)
 
 		cassandra.write_config()
 		
@@ -663,7 +663,7 @@ class OnEachExecutor(Handler):
 				ndata.num_attempts = 0
 				ndata.last_attempt_time = 0
 				req = self.runnable.create_node_request(self)
-				req.body.update(self.context.request_base_data)
+				req.body.update(dict(leader_host=cassandra.private_ip))
 				ndata.req_message = req
 				
 				nodes.append(ndata)
@@ -699,7 +699,7 @@ class OnEachExecutor(Handler):
 			if time.time() - self.context.start_time >= self.context.timeframe:
 				raise StopIteration('Command stopped due to timeout (%d seconds)' % self.context.timeframe)
 
-			nindex = self.context.queue.get()
+			nindex = self.context.queue.get(False)
 			ndata = self.context.nodes[nindex]
 			t = time.time() - ndata.last_attempt_time
 			if t < self.context.resend_interval:
@@ -784,15 +784,15 @@ class OnEachExecutor(Handler):
 	def _result(self, e=None):
 		try:
 			msg = self.runnable.create_command_result(self)
-			msg.status = all(lambda n: n.req_ok, self.context.nodes) and self.RESP_OK or self.RESP_ERROR
-			
+			msg.status = all([n.req_ok for n in self.context.nodes]) and self.RESP_OK or self.RESP_ERROR
+
 			if e:
 				msg.last_error = str(e)
 			else:
-				failed_row = firstmatched(lambda row: row['last_error'], self.context.results)
+				self._logger.debug(str(self.context.results))
+				failed_row = firstmatched(lambda row: row.has_key('last_error') and row['last_error'], self.context.results.values())
 				if failed_row:
 					msg.last_error = failed_row['last_error']
-					
 			msg.rows = self.context.results
 			self.send_message(msg)
 		finally:
@@ -829,7 +829,7 @@ class _CassandraCdbRunnable(OnEachRunnable):
 	node_response_message = CassandraMessages.INT_CREATE_DATA_BUNDLE_RESULT
 
 	def create_node_request(self, handler):
-		return handler.new_message(self.node_response_message, include_pad=True)
+		return handler.new_message(self.node_request_message, include_pad=True)
 		
 	def create_node_response(self, handler):
 		return handler.new_message(self.node_response_message)

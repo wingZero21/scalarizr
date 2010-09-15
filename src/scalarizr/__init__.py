@@ -48,7 +48,7 @@ _snmp_pid = None
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
-		initdv2.ParametrizedInitScript.__init__('scalarizr', "/etc/init.d/scalarizr", socks=initdv2.SockParam(8013))
+		initdv2.ParametrizedInitScript.__init__(self, 'scalarizr', "/etc/init.d/scalarizr", socks=[initdv2.SockParam(8013)])
 
 def _init():
 	optparser = bus.optparser
