@@ -19,6 +19,7 @@ from datetime import datetime
 from scalarizr.util import initdv2
 from scalarizr.libs.metaconf import Configuration
 from telnetlib import Telnet
+from scalarizr.service import CnfPresetStore, CnfPreset, CnfController, Options
 
 
 BEHAVIOUR = BuiltinBehaviours.WWW
@@ -128,6 +129,155 @@ class NginxOptions(Configurator.Container):
 
 def get_handlers():
 	return [NginxHandler()]
+
+
+class NginxCnfController(CnfController):
+	
+	class OptionSpec:
+		section = None
+		name = None
+		
+		def __init__(self, name, context=None, default_value = None, supported_from = None):
+			self.name = name			
+			self.context = context
+			supported_from = None
+					
+			
+	options = Options(
+		# http://wiki.nginx.org/NginxDirectiveIndex
+		OptionSpec('daemon', default_value = 'on'),
+		OptionSpec('env', default_value = 'TZ'), #multiple
+		OptionSpec('debug_points', default_value = 'none'),
+		OptionSpec('error_log', default_value = '${prefix}/logs/error.log'), #multiple
+		#OptionSpec('log_not_found'), location only
+		OptionSpec('include', default_value = 'none'),
+		OptionSpec('lock_file'), #default_value = #compile-time option 
+		OptionSpec('master_process', default_value = 'on'), 
+		OptionSpec('pid'), #default_value = #compile-time option 
+		OptionSpec('ssl_engine'), #default_value = system dependent
+		OptionSpec('timer_resolution', default_value = 'none'),
+		OptionSpec('user', default_value = 'nobody nobody'),
+		OptionSpec('worker_cpu_affinity', default_value = 'none'),
+		OptionSpec('worker_priority', default_value = 'on'),
+		OptionSpec('worker_processes', default_value = '1'),
+		OptionSpec('worker_rlimit_core'), #no default value in documentation
+		OptionSpec('worker_rlimit_nofile'),  #no default value in documentation
+		OptionSpec('worker_rlimit_sigpending'),  #no default value in documentation
+		OptionSpec('working_directory', default_value = '--prefix'),
+
+		OptionSpec('accept_mutex', 'events', 'on'),
+		OptionSpec('accept_mutex_delay', 'events', '500ms'),
+		OptionSpec('debug_connection', 'events', 'none'),
+		OptionSpec('devpoll_changes', 'events', '32'), 
+		OptionSpec('devpoll_events', 'events', '32'),  
+		OptionSpec('kqueue_changes', 'events', '512'), 
+		OptionSpec('kqueue_events', 'events', '512'), 
+		OptionSpec('epoll_events', 'events', '512'), 
+		OptionSpec('multi_accept', 'events', 'off'),
+		OptionSpec('rtsig_signo', 'events', '40'),
+		OptionSpec('rtsig_overflow_events', 'events', '16'),
+		OptionSpec('rtsig_overflow_test', 'events', '32'),
+		OptionSpec('rtsig_overflow_threshold', 'events'), #no default value in documentation
+		OptionSpec('use', 'events'),  #no default value in documentation
+		OptionSpec('worker_connections', 'events'), #no default value in documentation
+		
+		OptionSpec('keepalive_timeout', 'http', '75'),
+		OptionSpec('keepalive_requests', 'http', '100', supported_from = (0,8,0)),
+		OptionSpec('tcp_nodelay', 'http','on'),
+		OptionSpec('tcp_nopush', 'http', 'off'),
+		OptionSpec('directio', 'http', 'off'),
+		OptionSpec('sendfile', 'http', 'off'),
+		OptionSpec('large_client_header_buffers', 'http', '4 4k/8k'),
+		OptionSpec('limit_rate', 'http', 'no'),
+		OptionSpec('limit_rate_after', 'http', '1m'),
+		OptionSpec('log_not_found', 'http', 'on'),
+		OptionSpec('msie_padding', 'http', 'on'),
+		OptionSpec('msie_refresh', 'http', 'off'),
+		OptionSpec('open_file_cache', 'http', 'off'), #multiple
+		OptionSpec('open_file_cache_errors', 'http', 'off'),
+		OptionSpec('open_file_cache_min_uses', 'http', '1'),
+		OptionSpec('open_file_cache_valid', 'http', '60'),
+		OptionSpec('optimize_server_names', 'http', 'on'),
+		OptionSpec('port_in_redirect', 'http', 'on'),
+		OptionSpec('error_page', 'http', 'no'), #multiple
+		OptionSpec('resolver', 'http', 'no'),
+		OptionSpec('resolver_timeout', 'http', '30s'),
+		OptionSpec('root', 'http', 'html'),
+		OptionSpec('send_timeout', 'http', '60'),
+		#server_name - exists only in server context
+		OptionSpec('server_name_in_redirect', 'http', 'on'),
+		OptionSpec('server_names_hash_max_size', 'http', '512'),
+		OptionSpec('server_names_hash_bucket_size', 'http', '32/64/128'),
+		OptionSpec('server_tokens', 'http', 'on'),
+		OptionSpec('listen', 'http', '80'),
+		#0.7.x syntax: listen address:port [ default [ backlog=num | rcvbuf=size | sndbuf=size | accept_filter=filter | deferred | bind | ssl ] ]
+		#0.8.x syntax: listen address:port [ default_server [ backlog=num | rcvbuf=size | sndbuf=size | accept_filter=filter | deferred | bind | ssl ] ]
+		
+		OptionSpec('client_body_in_file_only', 'http', 'off'),
+		OptionSpec('client_body_in_single_buffer', 'http', 'off'),
+		OptionSpec('client_body_buffer_size', 'http', '8k/16k'),
+		OptionSpec('client_body_temp_path', 'http', 'client_body_temp'),
+		OptionSpec('client_body_timeout', 'http', '60'),
+		OptionSpec('client_header_buffer_size', 'http', '1k'),
+		OptionSpec('client_header_timeout', 'http', '60'),
+		OptionSpec('client_max_body_size', 'http', '1m'),
+		
+		OptionSpec('proxy_buffer_size', 'http', '4k/8k'),
+		OptionSpec('proxy_buffering', 'http', 'on'),
+		OptionSpec('proxy_buffers', 'http', '8 4k/8k'),
+		OptionSpec('proxy_busy_buffers_size', 'http', '["#proxy buffer size"] * 2'),
+		OptionSpec('proxy_cache', 'http', 'None'),
+		OptionSpec('proxy_cache_key', 'http', '$scheme$proxy_host$request_uri'),
+		OptionSpec('proxy_cache_path', 'http', 'None'),
+		OptionSpec('proxy_cache_methods', 'http', 'GET HEAD'),
+		OptionSpec('proxy_cache_min_uses', 'http', '1'),
+		OptionSpec('proxy_cache_valid', 'http', 'None'),
+		OptionSpec('proxy_cache_use_stale', 'http', 'off'),
+		OptionSpec('proxy_connect_timeout', 'http', '60'),
+		OptionSpec('proxy_headers_hash_bucket_size', 'http', '64'),
+		OptionSpec('proxy_headers_hash_max_size', 'http', '512'),
+		OptionSpec('proxy_hide_header', 'http'), #no default value in docs
+		OptionSpec('proxy_ignore_client_abort', 'http', 'off'),
+		OptionSpec('proxy_ignore_headers', 'http', 'none'),
+		OptionSpec('proxy_intercept_errors', 'http', 'off'),
+		OptionSpec('proxy_max_temp_file_size', 'http', '1G'),
+		OptionSpec('proxy_method', 'http', 'None'),
+		OptionSpec('proxy_next_upstream', 'http', 'error timeout'),
+		OptionSpec('proxy_no_cache', 'http', 'None'), #multiple
+		OptionSpec('proxy_pass_header', 'http'), #no default value in docs
+		OptionSpec('proxy_pass_request_body', 'http', 'on'),
+		OptionSpec('proxy_pass_request_headers', 'http', 'on'),
+		OptionSpec('proxy_redirect', 'http', 'default'),
+		OptionSpec('proxy_read_timeout', 'http', '60'),
+		#OptionSpec('proxy_redirect_errors', 'http'), #deprecated
+		OptionSpec('proxy_send_lowat', 'http', 'off'),
+		OptionSpec('proxy_send_timeout', 'http', '60'),
+		OptionSpec('proxy_set_body', 'http', 'off'),
+		OptionSpec('proxy_set_header', 'http', 'Host and Connection'),
+		OptionSpec('proxy_store', 'http', 'off'),
+		OptionSpec('proxy_store_access', 'http', 'user:rw'), #multiple
+		OptionSpec('proxy_temp_file_write_size', 'http', '["#proxy buffer size"] * 2'),
+		OptionSpec('proxy_temp_path', 'http', '$NGX_PREFIX/proxy_temp'),
+		#OptionSpec('proxy_upstream_max_fails', 'http'), #deprecated since 0.5.0
+		#OptionSpec('proxy_upstream_fail_timeout', 'http'), #deprecated since 0.5.0
+		OptionSpec('access_log', 'http', 'log/access.log combined'), #multiple
+		OptionSpec('log_format', 'http', 'combined "..."'),
+		OptionSpec('open_log_file_cache', 'http', 'off'), #multiple
+	)
+	
+	def __init__(self):
+		self._cnf = bus.cnf
+		ini = self._cnf.rawini
+		self._include = ini.get(CNF_SECTION, APP_INC_PATH)
+		config_dir = os.path.dirname(self._include)
+		self.nginx_conf_path = config_dir + '/nginx.conf'
+		
+	def current_preset(self):
+		pass
+	
+	def apply_preset(self, preset, changes_only = True):
+		pass
+
 
 class NginxHandler(Handler):
 	

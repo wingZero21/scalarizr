@@ -24,7 +24,7 @@ from scalarizr.util import initdv2
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 from scalarizr.libs.metaconf import Configuration, MetaconfError, PathNotExistsError,\
 	ParseError
-from scalarizr.service import CnfController
+from scalarizr.service import CnfController, CnfPreset, Options
 
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
@@ -255,21 +255,7 @@ class MysqlCnfController(CnfController):
 			self.static = static
 			self.supported_from = supported_from
 	
-	class Options:
-		
-		options = None 
-		
-		def __init__(self, *args):
-			self.options = args
-			
-			for optspec in args:
-				setattr(self, optspec.name, optspec)
-		
-		def get_variable(self, name):
-			for option in self.options:
-				if option.name == name:
-					return option
-			return None					
+				
 			
 	options = Options(
 		#static variables in [mysqld]
@@ -343,34 +329,7 @@ class MysqlCnfController(CnfController):
 		OptionSpec('character_set_server', section='client'),
 		
 	)
-	_mysql_version = None
-	
-	_readonly_vars = (
-		'innodb_additional_mem_pool_size', 
-		'innodb_buffer_pool_size', 
-		'back_log', 
-		'ft_max_word_len', 
-		'ft_min_word_len', 
-		'ft_query_expansion_limit', 
-		'innodb_file_per_table',
-		'innodb_log_buffer_size',
-		'innodb_lock_wait_timeout', 
-		'innodb_open_files', 
-		'innodb_rollback_on_timeout',
-		'innodb_autoinc_lock_mode', 
-		'innodb_adaptive_hash_index'
-	)
-	
-	supported_from = {
-		'innodb_autoinc_lock_mode' : (5,1,22), 
-		'innodb_adaptive_hash_index' : (5,0,52), 
-		
-		'innodb_use_legacy_cardinality_algorithm' : (5,1,35) ,
-		'innodb_stats_on_metadata' : (5,1,17),
-		'event_scheduler' : (5,1,12) ,
-		'general_log' : (5,1,12) ,
-		'keep_files_on_create' : (5,0,48) 
-	}		
+	_mysql_version = None	
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -378,6 +337,7 @@ class MysqlCnfController(CnfController):
 	def current_preset(self):
 		self._logger.debug('Getting current MySQL preset')
 		mysql = None
+		preset = CnfPreset(name='last successful')
 		try:
 			mysql = self._get_connection()
 			mysql.sendline('SHOW GLOBAL VARIABLES;')
@@ -396,47 +356,65 @@ class MysqlCnfController(CnfController):
 					if hasattr(self.options, name):
 						vars[name] = value
 				except AttributeError:
-					self._logger.error('No spec for %s' % name)					
-			return vars
+					self._logger.error('No spec for %s' % name)	
+			preset.settings = vars				
+			return preset
 		finally:
 			if mysql:
 				mysql.close()
 	
-	def apply_preset(self, preset):
+	def apply_preset(self, preset, changes_only = True):
+		
+		#if changes_only:
+		#	current_preset = self.current_preset()
+		
+		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
 		szr_cnf = bus.cnf
 		conf = Configuration('mysql')
 		conf.read(szr_cnf.rawini.get(BEHAVIOUR, OPT_MYCNF_PATH))
 		
+		sendline = ''
 		mysql = None
 		try:
 			mysql = self._get_connection()
-			
 			for option, value in preset.settings.items():
 				try:
 					optspec = getattr(self.options, option)
 					# Skip unsupported
-					if optspec.supported_from < self._get_mysql_version():
-						continue 
+					if optspec.supported_from and optspec.supported_from > self._get_mysql_version():
+						self._logger.debug('%s supported from %s. Cannot apply.' % (option, optspec.supported_from))
+						continue
+					#if changes_only and current_preset.settings[option] == value:
+						#self._logger.debug('Option %s has the same value as the system variable. Skipping.' % option)
+						#continue
 					# Write option into [mysqld] section
 					conf.add('%s/%s' % (optspec.section, option), value)
 					# Hot apply mutable options
 					if not optspec.static:
-						mysql.sendline('SET GLOBAL %s = %s;' % (option, value))
-						mysql.expect('mysql>')		
+						sendline += 'SET GLOBAL %s = %s; ' % (option, value)
 				except AttributeError:
-					self._logger.error('No spec for %s' % option)
+					self._logger.error('No spec for %s. Skipping.' % option)
+			if sendline:
+				self._logger.debug(sendline)
+				mysql.sendline(sendline)
+				mysql.expect('mysql>')
+			else:
+				self._logger.debug('No global variables changed. Nothing to set.')
 		finally:
 			if mysql:
 				mysql.close()
-			conf.close()
-	
+			#conf.close()
+
 	def _get_mysql_version(self):
+		#TODO: change to new version from module 'software' 
 		if not self._mysql_version:
 			out = system(['/usr/bin/mysql', '-V'], shell=False)[0]
 			version = out.split()[4]
 			if version.endswith(','):
 				version = version[:-1]
 			self._mysql_version = version.split('.')
+			if self._mysql_version:
+				self._mysql_version = tuple(map(int, self._mysql_version))
 		return self._mysql_version	
 
 	def _get_connection(self):
@@ -447,7 +425,6 @@ class MysqlCnfController(CnfController):
 		except Exception, e:
 			raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
 		return _spawn_mysql(ROOT_USER, root_password)
-
 
 
 def _spawn_mysql(user, password):
@@ -592,7 +569,7 @@ class MysqlHandler(ServiceCtlHanler):
 				farm_role_id = farm_role_id
 			))
 	
-	@MysqlHandler.reload_mycnf	
+	#@MysqlHandler.reload_mycnf
 	def on_Mysql_CreateBackup(self, message):
 		
 		# Retrieve password for scalr mysql user
@@ -703,7 +680,7 @@ class MysqlHandler(ServiceCtlHanler):
 				last_error	= str(e)
 			))
 
-	@MysqlHandler.reload_mycnf				
+	#@MysqlHandler.reload_mycnf				
 	def on_Mysql_PromoteToMaster(self, message):
 		"""
 		Promote slave to master
@@ -786,7 +763,7 @@ class MysqlHandler(ServiceCtlHanler):
 		else:
 			self._logger.warning('Cannot promote to master. Already master')
 
-	@MysqlHandler.reload_mycnf
+	#@MysqlHandler.reload_mycnf
 	def on_Mysql_NewMasterUp(self, message):
 		"""
 		Switch replication to a new master server
@@ -865,7 +842,7 @@ class MysqlHandler(ServiceCtlHanler):
 		self._logger.debug("Update mysql config with %s", message.mysql)
 		self._update_config(message.mysql)
 		
-	@MysqlHandler.reload_mycnf
+	#@MysqlHandler.reload_mycnf
 	def on_before_host_up(self, message):
 		"""
 		Configure MySQL behaviour

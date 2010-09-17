@@ -13,7 +13,18 @@ class Test(unittest.TestCase):
 
 	def setUp (self):
 		self._queryenv = QueryEnvService("http://ec2farm-dev.bsd2.webta.local/query-env/","127","c+/g0PyouaqXMbuJ5Vtux34Mft7jLe5H5u8tUmyhldjwTfgm7BI6MOA8F6BwkzQnpWEOcHx+A+TRJh0u3PElQQ0SiwdwrlgpQMbj8NBxbxBgfxA9WisgvfQu5ZPYou6Gz3oUAQdWfFlFdY2ACOjmqa3DGogge+TlXtV2Xagm0rw=")
-		
+
+	def test_get_service_configuration_response(self):
+		xmlfile = os.path.realpath(os.path.dirname(__file__) + "/../resources/get-service-configuration_response.xml")
+		xml = xml_strip(parseString(open(xmlfile, "r").read()))
+		ret = self._queryenv._read_get_service_configuration_response(xml)
+		print ret
+		self.assertFalse(ret is None)
+		self.assertTrue(type(ret.settings) is type({}))
+		self.assertTrue(type(ret.name) is type(""))
+		self.assertEqual(ret.settings,{u'safe_mysqld/open_files_limit': u'8192', u'mysqld/wait_timeout': u'15'})
+		self.assertEqual(ret.name, "test1")
+				
 	def test_get_latest_version_response(self):
 		xmlfile = os.path.realpath(os.path.dirname(__file__) + "/../resources/get_latest_version_response.xml")
 		xml = xml_strip(parseString(open(xmlfile, "r").read()))

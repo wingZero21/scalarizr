@@ -94,7 +94,7 @@ class QueryEnvService(object):
 		"""
 		return self._request("get-latest-version",{}, self._read_get_latest_version_response)
 	
-	def get_service_configuration(self):
+	def get_service_configuration(self, behaviour=None):
 		"""
 		@return dict
 		"""
@@ -288,8 +288,10 @@ class Preset(object):
 	name = None
 	restart_service = None
 	
-	def __init__(self):
-		self.settings = {}
+	def __init__(self, name = None, settings = None, restart_service = None):
+		self.settings = {} if not settings else settings
+		self.name = None if not name else name
+		self.restart_service = None if not restart_service else restart_service
 	
 	def __repr__(self):
 		return 'name = ' + str(self.name) \

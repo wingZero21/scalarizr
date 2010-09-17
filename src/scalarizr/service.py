@@ -15,7 +15,11 @@ class CnfPreset:
 	def __init__(self, name=None, settings=None):
 		self.name = name
 		self.settings = settings or {}
-		#where is restart variable?
+
+	def __repr__(self):
+		return 'name = ' + str(self.name) \
+	+ "; settings = " + str(self.settings)
+		
 
 class CnfPresetStore:
 	class PresetType:
@@ -34,7 +38,7 @@ class CnfPresetStore:
 				pass
 	
 	def _filename(self, service_name, preset_type):
-		return os.path.join(self.presets_path,service_name, '.', preset_type)
+		return os.path.join(self.presets_path,service_name + '.' + preset_type)
 	
 	def load(self, service_name, preset_type):
 		'''
@@ -44,8 +48,7 @@ class CnfPresetStore:
 		self._logger.debug('Loading %s %s preset' % (preset_type, service_name))
 		ini = Configuration('ini')
 		ini.read(self._filename(service_name, preset_type))
-		#why we need name section if we have preset_type variable?
-		return CnfPreset(ini.get('general/name'), ini.get_dict('settings')) 
+		return CnfPreset(ini.get('general/name'), ini.get_kv_dict('settings/')) 
 		
 	def save(self, service_name, preset, preset_type):
 		'''
@@ -53,12 +56,19 @@ class CnfPresetStore:
 		@type preset: CnfPreset
 		@type preset_type: CnfPresetStore.PresetType
 		'''
-		self._logger.debug('Saving preset as ' % preset_type)
+		if not preset or not hasattr(preset, 'settings'):
+			self._logger.error('Cannot save preset: No settings in preset found.')
+			return
+		
+		self._logger.debug('Saving preset as %s' % preset_type)
 		ini = Configuration('ini')
-		ini.set('general/name', preset.name or 'Noname')
-		for k, v in preset.settings:
-			ini.set('settings/%s' % k, v)
-		ini.write(self._filename(service_name, preset_type))
+		ini.add('general')
+		ini.add('general/name', preset.name if (hasattr(preset, 'name') and preset.name) else 'Noname')
+		ini.add('settings')
+		print 'saving:', preset
+		for k, v in preset.settings.items():
+			ini.add('settings/%s' % k, v)
+		ini.write(open(self._filename(service_name, preset_type), 'w'))
 		
 class CnfController(object):
 	def current_preset(self):
@@ -73,3 +83,13 @@ class CnfController(object):
 		@raise:
 		'''
 		pass	
+
+class Options:
+	
+	options = None 
+	
+	def __init__(self, *args):
+		self.options = args
+		
+		for optspec in args:
+			setattr(self, optspec.name, optspec)	

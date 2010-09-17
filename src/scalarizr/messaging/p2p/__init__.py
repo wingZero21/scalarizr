@@ -262,6 +262,7 @@ def P2pMessageStore():
 		_message_store = _P2pMessageStore()
 	return _message_store
 
+
 class P2pMessage(Message):
 
 	def __init__(self, name=None, meta=None, body=None):
