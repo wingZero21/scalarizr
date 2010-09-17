@@ -4,7 +4,7 @@ from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import configtool, initdv2
 from scalarizr.util.initdv2 import Status
-from scalarizr.service import CnfPresetStore, CnfPreset
+from scalarizr.service import CnfPresetStore, CnfPreset, CnfController
 
 import os
 import platform
@@ -189,59 +189,76 @@ class ServiceCtlHanler(Handler):
 		bus.on('init', self.sc_on_init)
 		
 	def preset_changed(self, old, new):
-		temp = new.copy()
-		temp.update(old)
-		return temp != new
-
+		excludes = ['join_buffer_size', 'key_cache_age_threshold']	
+		
+		if old == new:
+			return False
+		
+		if not old or not new:
+			return True 
+		
+		for key in old:
+			if key in excludes or key not in new: 
+				continue 
+			if new[key] != old[key]:
+				return True
+		return False
+			
+		
 	def sc_on_start(self):
 		szr_cnf = bus.cnf
 		if szr_cnf.state == ScalarizrState.RUNNING and not self._init_script.running:
 			self._start_service()	
 		self._reconfigure()	
 
-	def _reconfigure(self):
-		msg = self._new_message(Messages.UPDATE_SERVICE_CONFIGURATION_RESULT)
+	def _reconfigure(self, restart_service = False):
+		msg = self.new_message(Messages.UPDATE_SERVICE_CONFIGURATION_RESULT)
 		msg.status = 'ok'
-		
 		storage = CnfPresetStore()	
 		try:		
 			try:
 				if not self._init_script.running:
 					self._start_service()
-					
 				last = self._cnf_ctl.current_preset()
-			
 			except (BaseException, Exception), e:
 				last = storage.load(self._service_name, CnfPresetStore.PresetType.DEFAULT)
 				self._start_service()
 			finally:
-				storage.save(self._service_name, last, CnfPresetStore.PresetType.LAST_SUCCESSFUL)
-			
-			configuration = self._queryenv.get_service_configuration()
+				if last:
+					storage.save(self._service_name, last, CnfPresetStore.PresetType.LAST_SUCCESSFUL)
+				else:
+					self._logger.error('Preset not found. No data to set.')
+			configuration = self._queryenv.get_service_configuration(self._service_name)
 			new_preset = CnfPreset(configuration.name, configuration.settings)
-			
-			if not self.preset_changed(last, new_preset.settings):
+
+			if not self.preset_changed(last.settings, new_preset.settings):
 				self._logger.debug('%s configuration of wasn`t changed. No need to apply preset.' 
 						% self._service_name)
+				self.send_message(msg)
 				return
 			
-			CnfPresetStore.save(self._service_name, new_preset, CnfPresetStore.PresetType.CURRENT)
-			self._cnf_ctl.apply_preset(self, new_preset)
+			if new_preset.name == 'default' and new_preset.settings == {}:
+				self._logger.debug('QueryEnv returned empty "default" preset for service %s. No need to apply.' 
+						% self._service_name)
+				self.send_message(msg)
+				return
+			storage.save(self._service_name, new_preset, CnfPresetStore.PresetType.CURRENT)
+			self._cnf_ctl.apply_preset(new_preset)
 			
-			if configuration.restart_service: 
+			if restart_service or configuration.restart_service: 
 				try:
 					self._restart_service()
 				except initdv2.InitdError, e:	
 					self._cnf_ctl.apply_preset(last)
 					self._start_service()
 					storage.save(self._service_name, last, CnfPresetStore.PresetType.CURRENT)	
-					
+				
 		except (BaseException, Exception), e:
 			msg.status = 'error'
 			msg.last_error = str(e)	
 			self._logger.error(e)	
 		
-		self._send_message(msg)
+		self.send_message(msg)
 		
 	
 	def on_UpdateServiceConfiguration(self, message):
@@ -250,7 +267,7 @@ class ServiceCtlHanler(Handler):
 
 		storage = CnfPresetStore()
 
-		msg = self._new_message(Messages.UPDATE_SERVICE_CONFIGURATION_RESULT)
+		msg = self.new_message(Messages.UPDATE_SERVICE_CONFIGURATION_RESULT)
 		msg.behaviour = message.behaviour
 		
 		if message.reset_to_defaults:
@@ -258,18 +275,18 @@ class ServiceCtlHanler(Handler):
 			msg.status = 'ok'
 			try:			
 				default_preset = storage.load(message.behaviour, CnfPresetStore.PresetType.DEFAULT)
-				self._cnf_ctl.apply_preset(self, default_preset)
+				self._cnf_ctl.apply_preset(default_preset)
 				if message.restart_service:
 					self._restart_service()
 			except (BaseException, Exception), e:
 				msg.status = 'error'
 				msg.last_error = str(e)
 			
-			self._send_message(msg)
+			self.send_message(msg)
 				
 		else:
 			
-			self._reconfigure()
+			self._reconfigure(message.restart_service)
 			
 			
 	def _start_service(self):
@@ -309,9 +326,8 @@ class ServiceCtlHanler(Handler):
 	def sc_on_configured(self, service_name):
 		if not self._init_script.running:
 			self._start_service()
-			
 		last = self._cnf_ctl.current_preset()
 		storage = CnfPresetStore()
 		storage.save(service_name, last, CnfPresetStore.PresetType.DEFAULT)
-		
 		self._reconfigure()	
+		
