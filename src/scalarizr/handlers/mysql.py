@@ -404,7 +404,7 @@ class MysqlCnfController(CnfController):
 		finally:
 			if mysql:
 				mysql.close()
-			conf.write(open(mycnf),'w')
+			conf.write(open(mycnf,'w'))
 
 	def _get_mysql_version(self):
 		#TODO: change to new version from module 'software' 

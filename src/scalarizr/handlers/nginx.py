@@ -266,6 +266,8 @@ class NginxCnfController(CnfController):
 		OptionSpec('open_log_file_cache', 'http', 'off'), #multiple
 	)
 	
+	_nginx_version = None
+	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
@@ -312,7 +314,13 @@ class NginxCnfController(CnfController):
 			if preset.settings.has_key(option_spec.name):
 				
 				var = option_spec.name if not option_spec.context else '%s/%s'%(option_spec.context, option_spec.name)
-				
+	
+				# Skip unsupported
+				if option_spec.supported_from and option_spec.supported_from > self._get_nginx_version():
+					self._logger.debug('%s supported from %s. Cannot apply.' 
+							% (option_spec.name, option_spec.supported_from))
+					continue
+								
 				if not option_spec.default_value:
 					self._logger.debug('No default value for %s' % option_spec.name)
 					
@@ -334,7 +342,19 @@ class NginxCnfController(CnfController):
 					conf.add(var, preset.settings[option_spec.name])
 		conf.write(open(self.nginx_conf_path + '_test', 'w'))
 				
-					
+	def _get_nginx_version(self):
+		self._logger.debug('Getting nginx version')
+		#TODO: change to new version from module 'software' 
+		if not self._nginx_version:
+			out = system(['/usr/sbin/nginx', '-V'], shell=False)[1]
+			raw_version = out.split()[2]
+			version = raw_version.split('/')[1]
+			self._nginx_version = version.split('.')
+			if self._nginx_version:
+				self._nginx_version = tuple(map(int, self._nginx_version))
+		return self._nginx_version
+
+
 class NginxHandler(Handler):
 	
 	def __init__(self):
