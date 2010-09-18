@@ -211,6 +211,7 @@ class ServiceCtlHanler(Handler):
 			self._start_service()	
 		self._reconfigure()	
 
+		
 	def _reconfigure(self, restart_service = False):
 		msg = self.new_message(Messages.UPDATE_SERVICE_CONFIGURATION_RESULT)
 		msg.status = 'ok'
@@ -230,18 +231,19 @@ class ServiceCtlHanler(Handler):
 					self._logger.error('Preset not found. No data to set.')
 			configuration = self._queryenv.get_service_configuration(self._service_name)
 			new_preset = CnfPreset(configuration.name, configuration.settings)
-
+	
 			if not self.preset_changed(last.settings, new_preset.settings):
 				self._logger.debug('%s configuration of wasn`t changed. No need to apply preset.' 
-						% self._service_name)
+							% self._service_name)
 				self.send_message(msg)
 				return
 			
 			if new_preset.name == 'default' and new_preset.settings == {}:
-				self._logger.debug('QueryEnv returned empty "default" preset for service %s. No need to apply.' 
+				self._logger.debug('QueryEnv returned empty "default" preset for service %s. No need to apply.' \
 						% self._service_name)
 				self.send_message(msg)
 				return
+			
 			storage.save(self._service_name, new_preset, CnfPresetStore.PresetType.CURRENT)
 			self._cnf_ctl.apply_preset(new_preset)
 			
