@@ -83,6 +83,7 @@ class MockMessage():
 		self.reset_to_defaults = reset_to_defaults
 		self.restart_service = restart_service
 
+
 class TestNginxCnfController(unittest.TestCase):
 
 	def setUp(self):
@@ -95,10 +96,20 @@ class TestNginxCnfController(unittest.TestCase):
 	
 	def test_current_preset(self):
 		preset = self.ctl.current_preset()
-		print preset
+		self.assertEqual(preset.settings['user'], 'www-data')
+		
+		test_key = 'ololo'
+		preset.settings[test_key] = 'trololo'
 		self.ctl.apply_preset(preset)
+		
+		new_preset = self.ctl.current_preset()
+		self.assertEqual(new_preset.settings['user'],preset.settings['user'])
+		self.assertFalse(new_preset.settings.has_key(test_key))
+		
+	def test_get_nginx_version(self):
+		self.assertEqual(self.ctl._get_nginx_version(), (0, 7, 65))
 
-"""
+
 class TestMysqlCnfController(unittest.TestCase):
 
 	def setUp(self):
@@ -142,7 +153,7 @@ class TestMysqlCnfController(unittest.TestCase):
 	def test_get_mysql_version(self):
 		self.assertEqual(self.ctl._get_mysql_version(), (5, 1, 41))
 		
-"""
+			
 
 if __name__ == "__main__":
 	init_tests()
