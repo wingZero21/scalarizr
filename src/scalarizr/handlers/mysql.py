@@ -365,7 +365,6 @@ class MysqlCnfController(CnfController):
 	
 	def apply_preset(self, preset):
 		
-
 		current_preset = self.current_preset()
 		
 		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
