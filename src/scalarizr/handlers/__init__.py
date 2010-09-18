@@ -301,13 +301,24 @@ class ServiceCtlHanler(Handler):
 			raise				
 	
 	def _restart_service(self):
-		try:
-			self._logger.info("Restarting %s" % self._service_name)
-			self._init_script.restart()
-			self._logger.debug("%s restarted" % self._service_name)
-		except initdv2.InitdError, e:
-			self._logger.error("Cannot restart %s\n%s\n. Trying to roll back." % (self._service_name,e))
-			raise
+		need_reload  = ('www', 'app')
+		#need_restart = ('mysql, memcached', 'Mock')
+		f = None
+		msg = None
+		if self._service_name in need_reload:
+			msg = "reload"
+			f = self._init_script.reload
+		else:
+			msg = "restart" 
+			f = self._init_script.restart
+		if f:	
+			try:
+				self._logger.info('%sing %s' %(msg, self._service_name))
+				f()
+				self._logger.debug("%sed" % (msg, self._service_name))
+			except initdv2.InitdError, e:
+				self._logger.error("Cannot %s %s\n%s\n. Trying to roll back." % (msg,self._service_name,e))
+				raise
 
 	def sc_on_init(self):
 		bus.on(
