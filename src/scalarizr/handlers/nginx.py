@@ -17,7 +17,7 @@ import shutil
 import logging
 from datetime import datetime
 from scalarizr.util import initdv2
-from scalarizr.libs.metaconf import Configuration
+from scalarizr.libs.metaconf import Configuration, PathNotExistsError
 from telnetlib import Telnet
 from scalarizr.service import CnfPresetStore, CnfPreset, CnfController, Options
 
@@ -140,12 +140,13 @@ class NginxCnfController(CnfController):
 		def __init__(self, name, context=None, default_value = None, supported_from = None):
 			self.name = name			
 			self.context = context
-			supported_from = None
+			self.supported_from = supported_from
+			self.default_value = default_value
 					
 			
 	options = Options(
 		# http://wiki.nginx.org/NginxDirectiveIndex
-		OptionSpec('daemon', default_value = 'on'),
+		OptionSpec(name = 'daemon', default_value = 'on'),
 		OptionSpec('env', default_value = 'TZ'), #multiple
 		OptionSpec('debug_points', default_value = 'none'),
 		OptionSpec('error_log', default_value = '${prefix}/logs/error.log'), #multiple
@@ -266,6 +267,7 @@ class NginxCnfController(CnfController):
 	)
 	
 	def __init__(self):
+		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._include = ini.get(CNF_SECTION, APP_INC_PATH)
@@ -273,12 +275,66 @@ class NginxCnfController(CnfController):
 		self.nginx_conf_path = config_dir + '/nginx.conf'
 		
 	def current_preset(self):
-		pass
+		self._logger.debug('Getting current Nginx preset')
+		preset = CnfPreset(name='current')
+		
+		conf = Configuration('nginx')
+		conf.read(self.nginx_conf_path)
+		
+		vars = {}
+		
+		for option_spec in self.options.options:
+			try:
+				if option_spec.context:
+					vars[option_spec.name] = conf.get('%s/%s'%(option_spec.context, option_spec.name))
+				else:
+					vars[option_spec.name] = conf.get(option_spec.name)
+			except PathNotExistsError:
+				self._logger.debug('%s/%s does not exist in %s. Using default value' 
+						%(option_spec.context, option_spec.name, self.nginx_conf_path))
+
+				if option_spec.default_value:
+					vars[option_spec.name] = option_spec.default_value
+				else:
+					self._logger.error('default value for %s not found'%(option_spec.name))
+				
+		preset.settings = vars
+		return preset
 	
-	def apply_preset(self, preset, changes_only = True):
-		pass
+	
+	def apply_preset(self, preset):
+		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
+		
+		conf = Configuration('nginx')
+		conf.read(self.nginx_conf_path)
+		
+		for option_spec in self.options.options:
+			if preset.settings.has_key(option_spec.name):
+				
+				var = option_spec.name if not option_spec.context else '%s/%s'%(option_spec.context, option_spec.name)
+				
+				if not option_spec.default_value:
+					self._logger.debug('No default value for %s' % option_spec.name)
+					
+				elif preset.settings[option_spec.name] == option_spec.default_value:
+					try:
+						conf.remove(var)
+						self._logger.debug('%s value is equal to default. Removed from config.' % option_spec.name)
+					except PathNotExistsError:
+						pass
+					continue	
 
-
+				try:
+					if conf.get(var) != preset.settings[option_spec.name]:
+						self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
+						conf.set(var, preset.settings[option_spec.name])
+					else:
+						self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
+				except PathNotExistsError:
+					conf.add(var, preset.settings[option_spec.name])
+		conf.write(open(self.nginx_conf_path + '_test', 'w'))
+				
+					
 class NginxHandler(Handler):
 	
 	def __init__(self):

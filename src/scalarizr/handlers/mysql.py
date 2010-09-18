@@ -363,15 +363,16 @@ class MysqlCnfController(CnfController):
 			if mysql:
 				mysql.close()
 	
-	def apply_preset(self, preset, changes_only = True):
+	def apply_preset(self, preset):
 		
-		#if changes_only:
-		#	current_preset = self.current_preset()
+
+		current_preset = self.current_preset()
 		
 		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
 		szr_cnf = bus.cnf
 		conf = Configuration('mysql')
-		conf.read(szr_cnf.rawini.get(BEHAVIOUR, OPT_MYCNF_PATH))
+		mycnf = szr_cnf.rawini.get(BEHAVIOUR, OPT_MYCNF_PATH)
+		conf.read(mycnf)
 		
 		sendline = ''
 		mysql = None
@@ -384,9 +385,9 @@ class MysqlCnfController(CnfController):
 					if optspec.supported_from and optspec.supported_from > self._get_mysql_version():
 						self._logger.debug('%s supported from %s. Cannot apply.' % (option, optspec.supported_from))
 						continue
-					#if changes_only and current_preset.settings[option] == value:
-						#self._logger.debug('Option %s has the same value as the system variable. Skipping.' % option)
-						#continue
+					if current_preset.settings[option] == value:
+						self._logger.debug('Option %s has the same value as the system variable. Skipping.' % option)
+						continue
 					# Write option into [mysqld] section
 					conf.add('%s/%s' % (optspec.section, option), value)
 					# Hot apply mutable options
@@ -403,7 +404,7 @@ class MysqlCnfController(CnfController):
 		finally:
 			if mysql:
 				mysql.close()
-			#conf.close()
+			conf.write(open(mycnf),'w')
 
 	def _get_mysql_version(self):
 		#TODO: change to new version from module 'software' 
