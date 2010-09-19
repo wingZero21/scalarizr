@@ -134,8 +134,10 @@ def get_handlers():
 class NginxCnfController(CnfController):
 	
 	class OptionSpec:
-		section = None
+		context = None
 		name = None
+		supported_from = None
+		default_value = None
 		
 		def __init__(self, name, context=None, default_value = None, supported_from = None):
 			self.name = name			
@@ -292,8 +294,8 @@ class NginxCnfController(CnfController):
 				else:
 					vars[option_spec.name] = conf.get(option_spec.name)
 			except PathNotExistsError:
-				self._logger.debug('%s/%s does not exist in %s. Using default value' 
-						%(option_spec.context, option_spec.name, self.nginx_conf_path))
+				self._logger.debug('%s does not exist in %s. Using default value' 
+						%(option_spec.name, self.nginx_conf_path))
 
 				if option_spec.default_value:
 					vars[option_spec.name] = option_spec.default_value
@@ -343,16 +345,16 @@ class NginxCnfController(CnfController):
 		conf.write(open(self.nginx_conf_path + '_test', 'w'))
 				
 	def _get_nginx_version(self):
-		self._logger.debug('Getting nginx version')
+		self._logger.debug('Getting apache version')
 		#TODO: change to new version from module 'software' 
-		if not self._nginx_version:
+		if not self._apache_version:
 			out = system(['/usr/sbin/nginx', '-V'], shell=False)[1]
 			raw_version = out.split()[2]
 			version = raw_version.split('/')[1]
 			self._nginx_version = version.split('.')
 			if self._nginx_version:
 				self._nginx_version = tuple(map(int, self._nginx_version))
-		return self._nginx_version
+		return self._nginx_version			
 
 
 class NginxHandler(Handler):
