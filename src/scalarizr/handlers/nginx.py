@@ -6,7 +6,7 @@ Created on Jan 6, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import Handler, HandlerError
+from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
 from scalarizr.messaging import Messages
 from scalarizr.util import system, cached, firstmatched,\
 	validators
@@ -369,6 +369,7 @@ class NginxHandler(Handler):
 		self._app_port = ini.get(CNF_SECTION, APP_PORT)
 		self._include = ini.get(CNF_SECTION, APP_INC_PATH)
 		bus.define_events("nginx_upstream_reload")
+		ServiceCtlHanler.__init__(self, BEHAVIOUR, self._initd, NginxCnfController())
 		bus.on("init", self.on_init)
 
 		
@@ -575,4 +576,5 @@ class NginxHandler(Handler):
 			(message.name == Messages.HOST_UP or \
 			message.name == Messages.HOST_DOWN or \
 			message.name == Messages.BEFORE_HOST_TERMINATE or \
-			message.name == Messages.VHOST_RECONFIGURE)	
+			message.name == Messages.VHOST_RECONFIGURE or \
+			message.name == Messages.UPDATE_SERVICE_CONFIGURATION)	
