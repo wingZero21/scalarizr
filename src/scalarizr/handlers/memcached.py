@@ -17,6 +17,27 @@ from scalarizr.util import initdv2
 import logging
 import re
 import os
+from scalarizr.service import CnfController, CnfPreset, Options
+
+		
+if disttool._is_debian_based:
+	mcd_conf_path = '/etc/memcached.conf' 
+	expression = re.compile('^\s*-m\s*\d*$', re.M) 
+	substitute = '-m AMOUNT' 
+else:
+	mcd_conf_path = '/etc/sysconfig/memcached'
+	expression = re.compile('^\s*CACHESIZE\s*=\s*"\d*"$', re.M)
+	template = 'CACHESIZE="AMOUNT"' 	
+
+def set_cache_size(sub):
+		mcd_conf = read_file(mcd_conf_path)
+	
+		if mcd_conf:
+			if expression.findall(mcd_conf):
+				write_file(mcd_conf_path, re.sub(expression, sub, mcd_conf))
+			else:
+				write_file(mcd_conf_path, sub, mode='a')
+	
 
 class MemcachedInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -38,6 +59,38 @@ initdv2.explore('memcached', MemcachedInitScript)
 
 BEHAVIOUR = BuiltinBehaviours.MEMCACHED
 
+
+class MemcachedCnfController(CnfController):
+	
+	class OptionSpec:
+		name = None
+		func = None
+		
+		def __init__(self, name, func):
+			self.name = name	
+			self.func = func	
+			
+	options = Options(
+		OptionSpec('cache_size', set_cache_size)
+		)
+	
+	def __init__(self):
+		self._logger = logging.getLogger(__name__)
+		
+	def get_cache_size(self):
+		return 0
+	
+	def current_preset(self):
+		self._logger.debug('Getting current Memcached preset')	
+		
+	def apply_preset(self, preset):	
+		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
+			
+		for option_spec in self.options.options:
+			if preset.settings.has_key(option_spec.name):
+				option_spec.func(preset.settings[option_spec.name])
+
+
 def get_handlers():
 	return [MemcachedHandler()]
 
@@ -51,15 +104,7 @@ class MemcachedHandler(Handler):
 		
 		config = bus.config
 		cache_size = config.get(BEHAVIOUR, 'cache_size')
-		
-		if disttool._is_debian_based:
-			self.mcd_conf_path = '/etc/memcached.conf' 
-			self.expression = re.compile('^\s*-m\s*\d*$', re.M) 
-			self.substitute = '-m %s' % cache_size
-		else:
-			self.mcd_conf_path = '/etc/sysconfig/memcached'
-			self.expression = re.compile('^\s*CACHESIZE\s*=\s*"\d*"$', re.M)
-			self.substitute = 'CACHESIZE="%s"' % cache_size		
+		self.substitute = template.replace('AMOUNT', cache_size)
 		
 		self._initd = initdv2.lookup('memcached')
 		self.ip_tables = IpTables()
@@ -88,16 +133,9 @@ class MemcachedHandler(Handler):
 				self._logger.error(e)
 	
 	def on_before_host_up(self, message):
-					
-		mcd_conf = read_file(self.mcd_conf_path, logger=self._logger)
-	
-		if mcd_conf:
-			if self.expression.findall(mcd_conf):
-				write_file(self.mcd_conf_path, re.sub(self.expression, self.substitute, mcd_conf), logger=self._logger)
-			else:
-				write_file(self.mcd_conf_path, self.substitute, mode='a', logger = self._logger)
-
 		
+		set_cache_size(self.substitute)
+							
 		ips = []
 		roles = self._queryenv.list_roles()
 		
