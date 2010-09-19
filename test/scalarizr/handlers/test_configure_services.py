@@ -4,7 +4,6 @@ Created on Sep 12, 2010
 @author: shaitanich
 '''
 import unittest
-from scalarizr.handlers.mysql import MysqlCnfController
 from scalarizr.handlers.mysql import _spawn_mysql
 from scalarizr.util import init_tests, initdv2
 from scalarizr.handlers import ServiceCtlHanler
@@ -12,8 +11,10 @@ from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Queues, Message
 from scalarizr.bus import bus
 from scalarizr.queryenv import Preset
+from scalarizr.handlers.mysql import MysqlCnfController
 from scalarizr.handlers.nginx import NginxCnfController
 from scalarizr.handlers.apache import ApacheCnfController
+from scalarizr.handlers.memcached import MemcachedCnfController
 
 class _EmptyQueryEnv:
 	def get_service_configuration(self):
@@ -84,6 +85,32 @@ class MockMessage():
 		self.reset_to_defaults = reset_to_defaults
 		self.restart_service = restart_service
 
+class TestMemcachedCnfController(unittest.TestCase):
+
+	def setUp(self):
+		self.ctl = MemcachedCnfController()
+		pass
+		
+	def tearDown(self):
+		pass
+	
+	def test_current_preset(self):
+		preset = self.ctl.current_preset()
+		self.assertEqual(preset.settings['cache_size'], '64')
+		
+		test_key = 'ololo'
+		preset.settings[test_key] = 'trololo'
+		preset.settings['cache_size'] = '1536'
+		self.ctl.apply_preset(preset)
+		
+		new_preset = self.ctl.current_preset()
+		self.assertEqual(new_preset.settings['cache_size'],'1536')
+		self.assertFalse(new_preset.settings.has_key(test_key))
+		
+		preset.settings['cache_size'] = '64'
+		self.ctl.apply_preset(preset)
+
+
 class TestApacheCnfController(unittest.TestCase):
 
 	def setUp(self):
@@ -109,7 +136,7 @@ class TestApacheCnfController(unittest.TestCase):
 		self.assertEqual(self.ctl._get_apache_version(), (2,2,14))
 
 
-"""
+
 class TestNginxCnfController(unittest.TestCase):
 
 	def setUp(self):
@@ -151,7 +178,6 @@ class TestMysqlCnfController(unittest.TestCase):
 		
 		preset = self.ctl.current_preset()
 		self.assertEqual(preset.settings['log_warnings'], '1')
-		print preset.settings
 		
 		preset.settings['ololo'] = 'trololo'
 		
@@ -179,7 +205,6 @@ class TestMysqlCnfController(unittest.TestCase):
 	def test_get_mysql_version(self):
 		self.assertEqual(self.ctl._get_mysql_version(), (5, 1, 41))
 		
-"""		
 			
 
 if __name__ == "__main__":

@@ -345,9 +345,9 @@ class NginxCnfController(CnfController):
 		conf.write(open(self.nginx_conf_path + '_test', 'w'))
 				
 	def _get_nginx_version(self):
-		self._logger.debug('Getting apache version')
+		self._logger.debug('Getting nginx version')
 		#TODO: change to new version from module 'software' 
-		if not self._apache_version:
+		if not self._nginx_version:
 			out = system(['/usr/sbin/nginx', '-V'], shell=False)[1]
 			raw_version = out.split()[2]
 			version = raw_version.split('/')[1]

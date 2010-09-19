@@ -23,10 +23,12 @@ from scalarizr.service import CnfController, CnfPreset, Options
 if disttool._is_debian_based:
 	mcd_conf_path = '/etc/memcached.conf' 
 	expression = re.compile('^\s*-m\s*\d*$', re.M) 
-	substitute = '-m AMOUNT' 
+	mem_re = re.compile('^-m\s+(?P<memory>\d+)\s*$', re.M)
+	template = '-m AMOUNT' 
 else:
 	mcd_conf_path = '/etc/sysconfig/memcached'
 	expression = re.compile('^\s*CACHESIZE\s*=\s*"\d*"$', re.M)
+	mem_re = re.compile('^\s*CACHESIZE\s*=\s*"(?P<memory>\d+)"\s*$', re.M)
 	template = 'CACHESIZE="AMOUNT"' 	
 
 def set_cache_size(sub):
@@ -37,7 +39,17 @@ def set_cache_size(sub):
 				write_file(mcd_conf_path, re.sub(expression, sub, mcd_conf))
 			else:
 				write_file(mcd_conf_path, sub, mode='a')
+		print ">>>", read_file(mcd_conf_path)
 	
+def get_cache_size():
+	mcd_conf = read_file(mcd_conf_path)
+	if mcd_conf:
+		result = re.search(mem_re, mcd_conf)
+		if result:
+			return result.group('memory')
+		else: 
+			return MemcachedCnfController.options.cache_size.default_value
+			
 
 class MemcachedInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -55,8 +67,6 @@ class MemcachedInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.__init__(self, 'cassandra', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
 
 initdv2.explore('memcached', MemcachedInitScript)
-
-
 BEHAVIOUR = BuiltinBehaviours.MEMCACHED
 
 
@@ -64,31 +74,47 @@ class MemcachedCnfController(CnfController):
 	
 	class OptionSpec:
 		name = None
-		func = None
+		get_func = None
+		default_value = None
+		set_func = None
 		
-		def __init__(self, name, func):
+		def __init__(self, name, get_func, set_func, default_value = None):
 			self.name = name	
-			self.func = func	
+			self.get_func = get_func	
+			self.set_func = set_func
+			self.default_value = default_value
 			
 	options = Options(
-		OptionSpec('cache_size', set_cache_size)
+		OptionSpec('cache_size', get_cache_size, set_cache_size,'64')
 		)
 	
 	def __init__(self):
-		self._logger = logging.getLogger(__name__)
-		
-	def get_cache_size(self):
-		return 0
+		self._logger = logging.getLogger(__name__)		
 	
 	def current_preset(self):
 		self._logger.debug('Getting current Memcached preset')	
+		preset = CnfPreset(name='current')
+		
+		vars = {}
+		
+		for option_spec in self.options.options:
+			current_value = option_spec.get_func()
+			vars[option_spec.name] = current_value if current_value else option_spec.default_value
+		
+		preset.settings = vars
+		return preset
 		
 	def apply_preset(self, preset):	
 		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
 			
 		for option_spec in self.options.options:
 			if preset.settings.has_key(option_spec.name):
-				option_spec.func(preset.settings[option_spec.name])
+				current_value = option_spec.get_func()
+				
+				if preset.settings[option_spec.name] == current_value:
+					self._logger.debug('%s wasn`t changed.' % option_spec.name)
+				else:
+					option_spec.set_func(template.replace('AMOUNT', preset.settings[option_spec.name]))
 
 
 def get_handlers():

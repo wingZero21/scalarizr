@@ -254,12 +254,12 @@ class ServiceCtlHanler(Handler):
 					self._cnf_ctl.apply_preset(last)
 					self._start_service()
 					storage.save(self._service_name, last, CnfPresetStore.PresetType.CURRENT)	
-				
+			
 		except (BaseException, Exception), e:
 			msg.status = 'error'
 			msg.last_error = str(e)	
 			self._logger.error(e)	
-		
+	
 		self.send_message(msg)
 		
 	
@@ -315,7 +315,7 @@ class ServiceCtlHanler(Handler):
 			try:
 				self._logger.info('%sing %s' %(msg, self._service_name))
 				f()
-				self._logger.debug("%sed" % (msg, self._service_name))
+				self._logger.debug("%s %sed" % (self._service_name, msg))
 			except initdv2.InitdError, e:
 				self._logger.error("Cannot %s %s\n%s\n. Trying to roll back." % (msg,self._service_name,e))
 				raise

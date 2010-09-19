@@ -385,7 +385,7 @@ class MysqlCnfController(CnfController):
 						self._logger.debug('%s supported from %s. Cannot apply.' % (option, optspec.supported_from))
 						continue
 					if current_preset.settings[option] == value:
-						self._logger.debug('Option %s has the same value as the system variable. Skipping.' % option)
+						#self._logger.debug('Option %s has the same value as the system variable. Skipping.' % option)
 						continue
 					# Write option into [mysqld] section
 					conf.add('%s/%s' % (optspec.section, option), value)
