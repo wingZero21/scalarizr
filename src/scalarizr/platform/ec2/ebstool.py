@@ -7,6 +7,27 @@ from scalarizr.util import wait_until
 from boto.ec2.volume import Volume
 import logging, os
 from boto.exception import BotoServerError
+from boto.ec2.snapshot import Snapshot
+from scalarizr.platform import PlatformError
+
+def wait_snapshot(ec2_conn, snap_id, logger=None):
+	'''
+	Waits until snapshot becomes 'completed' or 'error'
+	'''
+	logger = logger or logging.getLogger(__name__)
+	if isinstance(snap_id, str):
+		snap = Snapshot(ec2_conn)
+		snap.id = snap_id
+	else:
+		snap = snap_id
+	
+	logger.debug('Checking that snapshot %s is completed', snap.id)
+	wait_until(lambda: snap.update() and snap.status != 'pending', logger=logger)
+	if snap.status == 'error':
+		raise PlatformError('Snapshot %s creation failed' % snap.id)
+	elif snap.status == 'completed':
+		logger.debug('Snapshot %s completed', snap.id)
+
 
 def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None):
 	logger = logger or logging.getLogger(__name__)

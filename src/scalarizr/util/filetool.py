@@ -207,7 +207,7 @@ class Rsync(object):
 			options=" ".join(self._options),
 			src=self._src,
 			dst=self._dst,
-			quiet="2>&1 > /dev/null" if self._quiet else ""
+			quiet="2>&1 > /dev/null; sync" if self._quiet else ""
 		)
 		return ret.strip()
 
@@ -291,79 +291,3 @@ class Tar:
 			files=" ".join(self._files)
 		)
 		return ret.strip()
-
-
-
-"""
-class FileTool:
-	BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
-	PART_SUFFIX = '.part.'	
-	
-	@staticmethod
-	def split(filename, part_name_prefix, chunk_size, dest_dir):
-		logger = logging.getLogger(__name__)
-		f = None
-		try:
-			try:
-				f = open(filename, "r")
-			except OSError:
-				logger.error("Cannot open file to split '%s'", filename)
-				raise
-			
-			# Create the part file upfront to catch any creation/access errors
-			# before writing out data.
-			num_parts = int(math.ceil(float(os.path.getsize(filename))/chunk_size))
-			part_names = []
-			logger.info("Splitting file '%s' into %d chunks", filename, num_parts)
-			for i in range(num_parts):
-				part_name_suffix = FileTool.PART_SUFFIX + str(i).rjust(2, "0")
-				part_name = part_name_prefix + part_name_suffix
-				part_names.append(part_name)
-				
-				part_filename = os.path.join(dest_dir, part_name)
-				try:
-					FileTool.touch(part_filename)
-				except OSError:
-					logger.error("Cannot create part file '%s'", part_filename)
-					raise
-						
-			# Write parts to files.
-			for part_name in part_names:
-				part_filename = os.path.join(dest_dir, part_name)
-				cf = open(part_filename, "w")
-				try:
-					logger.info("Writing chunk '%s'", part_filename)
-					FileTool._write_chunk(f, cf, chunk_size)
-				except OSError:
-					logger.error("Cannot write chunk file '%s'", part_filename)
-					raise
-				
-			return part_names
-		finally:
-			if f is not None:
-				f.close()
-	
-	@staticmethod	
-	def _write_chunk(source_file, chunk_file, chunk_size):
-		bytes_written = 0  # Bytes written.
-		bytes_left = chunk_size	# Bytes left to write in this chunk.
-		
-		while bytes_left > 0:
-			size = FileTool.BUFFER_SIZE if FileTool.BUFFER_SIZE < bytes_left else bytes_left
-			buf = source_file.read(size)
-			chunk_file.write(buf)
-			bytes_written += len(buf)
-			bytes_left = chunk_size - bytes_written
-			if len(buf) < size:
-				bytes_left = 0 # EOF
-	
-	@staticmethod
-	def touch(filename):
-		open(filename, "w+").close()
-
-	@staticmethod
-	def truncate(filename):
-		f = open(filename, "w+")
-		f.truncate(0)
-		f.close()
-"""

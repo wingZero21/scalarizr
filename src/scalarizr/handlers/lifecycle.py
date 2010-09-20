@@ -4,14 +4,14 @@ Created on Mar 3, 2010
 @author: marat
 '''
 
+import scalarizr
 import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import cryptotool, configtool
-
-import logging, os, sys, binascii, time, threading
+import logging, os, sys, binascii, threading
 from subprocess import Popen, PIPE
 
 
@@ -144,9 +144,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 				self._start_int_messaging()
 		
 		# Update package with scalarizr daemon
+		'''
 		file = self._get_flag_filename('update')
 		if not os.path.exists(file) or time.time() - os.stat(file).st_mtime > 86400:
 			self._update_package()
+		'''
 
 		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")

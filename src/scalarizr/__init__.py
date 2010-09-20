@@ -6,10 +6,11 @@ from scalarizr.messaging import MessageServiceFactory, MessageService, MessageCo
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
-from scalarizr.util import SqliteLocalObject, daemonize, system, disttool, fstool, initdv2, firstmatched,\
-	filetool, format_size
 from scalarizr.snmp.agent import SnmpServer
-from scalarizr.util import configtool
+
+from scalarizr.util import configtool, SqliteLocalObject, url_replace_hostname,\
+	daemonize, system, disttool, fstool, initdv2, firstmatched, log, format_size, filetool
+from scalarizr.util.configtool import ConfigError
 
 import os, sys, re, shutil
 import sqlite3 as sqlite
@@ -71,14 +72,14 @@ def _init():
 		bus.etc_path = firstmatched(lambda p: os.access(p, os.F_OK), etc_places)
 		if not bus.etc_path:
 			raise ScalarizrError('Cannot find scalarizr configuration dir')
-	bus.cnf = ScalarizrCnf(bus.etc_path)
+	bus.cnf = cnf = ScalarizrCnf(bus.etc_path)
 
 	
 	# Configure logging
 	if sys.version_info < (2,6):
 		# Fix logging handler resolve for python 2.5
-		from scalarizr.util.log import fix_python25_handler_resolve		
-		fix_python25_handler_resolve()
+		from scalarizr.util.log import fix_py25_handler_resolving		
+		fix_py25_handler_resolving()
 	
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
 	logger = logging.getLogger(__name__)
@@ -92,7 +93,6 @@ def _init():
 			hdlr = logging.StreamHandler(sys.stdout)
 			hdlr.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
 			logger.addHandler(hdlr)
-
 
 	# Registering in init.d
 	initdv2.explore("scalarizr", ScalarizrInitScript)
@@ -289,7 +289,7 @@ def init_script():
 	cnf.bootstrap()
 	
 	logger = logging.getLogger(__name__)
-	logger.debug("Initialize messaging")
+	logger.debug("Initialize script messaging")
 
 	# Script producer url is scalarizr consumer url. 
 	# Script can't handle any messages by himself. Leave consumer url blank
@@ -304,32 +304,10 @@ def init_script():
 	bus.messaging_service = msg_service
 
 
-
-def _start_snmp_server():
-	# Start SNMP server in a separate process
-	pid = os.fork()
-	if pid == 0:
-		snmp_server = bus.snmp_server
-		snmp_server.start()
-		sys.exit()
-	else:
-		globals()["_snmp_pid"] = pid
-
-def _snmp_crash_handler(signum, frame):
-	if _running:
-		_start_snmp_server()
-
 def onSIGTERM(*args):
 	logger = logging.getLogger(__name__)
 	logger.debug("Received SIGTERM")
 	_shutdown()
-
-def onSIGCHILD(*args):
-	logger = logging.getLogger(__name__)
-	logger.debug("Received SIGCHILD from SNMP process")
-	if globals()["_running"]:
-		_start_snmp_server()
-
 
 def _shutdown(*args):
 	logger = logging.getLogger(__name__)
@@ -359,6 +337,9 @@ def _shutdown(*args):
 				int_msg_service.consumer.stop()
 				int_msg_service.consumer.shutdown()
 			
+			snmp_server = bus.snmp_server
+			snmp_server.stop()
+			
 			# Fire terminate
 			bus.fire("terminate")
 			logger.info("Stopped")
@@ -367,12 +348,16 @@ def _shutdown(*args):
 	else:
 		logger.warning("Scalarizr is not running. Nothing to stop")	
 
-def do_validate_cnf():
+
+def do_validate(silent=False):
 	errors = list()
 	def on_error(o, e, errors=errors):
 		errors.append(e)
-		print >> sys.stderr, 'error: [%s] %s' % (o.name, e)
+		if not silent:
+			print >> sys.stderr, 'error: [%s] %s' % (o.name, e)
 		
+	if not silent:
+		print 'Validating scalarizr configuration'
 	cnf = bus.cnf
 	cnf.bootstrap()
 	cnf.validate(on_error)
@@ -386,7 +371,6 @@ def do_configure():
 		silent=optparser.values.import_server, 
 		yesall=optparser.values.yesall
 	)
-
 
 def do_keygen():
 	from scalarizr.util import cryptotool
@@ -428,74 +412,58 @@ def main():
 		if optparser.values.daemonize:
 			daemonize()
 	
-		logger.info('Initialize Scalarizr...')
+		logger.info("Initialize Scalarizr...")
 		_init()
+		cnf = bus.cnf
 	
 		if optparser.values.version:
-			# Report scalarizr version
 			print 'Scalarizr %s' % __version__
 			sys.exit()
-			
-		elif optparser.values.gen_key:
-			# Generate key-pair
+		if optparser.values.gen_key:
 			do_keygen()
 			sys.exit()
+		elif optparser.values.validate_cnf:
+			num_errors = do_validate()
+			sys.exit(int(not num_errors or 1))
 
-		# Starting scalarizr daemon initialization
-		cnf = bus.cnf
-		cnf.on('apply_user_data', _apply_user_data)
-		
-		# Move private configuration to loop device
-		privated_img_path = '/mnt/privated.img'
-		if cnf.state == ScalarizrState.UNKNOWN and os.path.exists(privated_img_path):
-			os.remove(privated_img_path)
-		_mount_private_d(cnf.private_path(), privated_img_path, 10000)
-		
+		_mount_private_d()
+
 		if optparser.values.configure:
 			do_configure()
 			sys.exit()
-			
 		elif optparser.values.import_server:
 			print "Starting import process..."
 			print "Don't terminate Scalarizr until Scalr will create the new role"
+			do_configure()
 			cnf.state = ScalarizrState.IMPORTING
-			# Load Command-line configuration options and auto-configure Scalarizr
-			cnf.reconfigure(values=CmdLineIni.to_kvals(optparser.values.cnf), silent=True, yesall=True)
 		
-		# Load INI files configuration
-		cnf.bootstrap(force_reload=True)
+		cnf.bootstrap(CmdLineIni.to_ini_sections(optparser.values.cnf))
 		
-		# Initialize local database
-		_init_db()
-		
-		# Initialize platform module
-		_init_platform()
-		
-		# At first scalarizr startup platform user-data should be applied
-		if cnf.state == ScalarizrState.UNKNOWN:
-			cnf.state = ScalarizrState.BOOTSTRAPPING
-			cnf.fire('apply_user_data', cnf)
-			
-		# Apply Command-line passed configuration options
-		cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))
-		
-		# Validate configuration
-		num_errors = do_validate_cnf()
-		if num_errors or optparser.values.validate_cnf:
-			sys.exit(int(not num_errors or 1))		
-		
-		_init_services()
-		_start_snmp_server()
+		# Initialize scalarizr service
+		try:
+			_init_services()
+		except NotConfiguredError, e:
+			logger.error("Scalarizr is not properly configured. %s", e)
+			print >> sys.stderr, "error: %s" % (e)
+			print >> sys.stdout, "Execute instalation process first: 'scalarizr --configure'"
+			sys.exit(1)
 		
 		# Install  signal handlers	
 		signal.signal(signal.SIGTERM, onSIGTERM)
 
-		# Start messaging server
+		# Create messaging server thread
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
-		msg_thread = threading.Thread(target=consumer.start, name="Message consumer")
+		msg_thread = threading.Thread(target=consumer.start, name="Message server")
+		
+		# Create SNMP server thread
+		snmp_server = bus.snmp_server
+		snmp_thread = threading.Thread(target=snmp_server.start, name="SNMP server")
+		
+		# Start scalarizr
 		logger.info('Starting Scalarizr')
 		msg_thread.start()
+		snmp_thread.start()
 
 		# Fire start
 		globals()["_running"] = True
