@@ -52,7 +52,7 @@ class CassandraInitScript(initdv2.ParametrizedInitScript):
 			raise HandlerError("Cannot find Cassandra init script at %s. Make sure that Cassandra is installed" % initd_script)
 		
 		pid_file = '/var/run/cassandra.pid'
-		socks = [initdv2.SockParam(port, conn_address = pl.get_private_ip(), timeout = 30) for port in (7000, 9160)]
+		socks = [initdv2.SockParam(7000, conn_address = pl.get_private_ip(), timeout = 30)]
 		initdv2.ParametrizedInitScript.__init__(self, 'cassandra', initd_script, pid_file, socks=socks)
 
 initdv2.explore('cassandra', CassandraInitScript)
@@ -638,7 +638,7 @@ class OnEachExecutor(Handler):
 				and message.name in (r.node_request_message, r.node_response_message, r.command_message)
 
 
-	def _handle_control(self, contol_message):
+	def _handle_control(self, control_message):
 		if self.context:
 			start_dt = datetime.fromtimestamp(self.context.start_time)
 			end_dt = start_dt + timedelta(seconds=self.context.timeframe)
@@ -664,6 +664,10 @@ class OnEachExecutor(Handler):
 				ndata.last_attempt_time = 0
 				req = self.runnable.create_node_request(self)
 				req.body.update(dict(leader_host=cassandra.private_ip))
+				if hasattr(control_message, 'cassandra'):
+					req.body.update(dict(cassandra=control_message.cassandra))
+										
+				req.body.update()
 				ndata.req_message = req
 				
 				nodes.append(ndata)
@@ -725,22 +729,28 @@ class OnEachExecutor(Handler):
 	def _request_timeouted(self, ndata):
 		err = 'Request %s to node %s timeouted (%d seconds). Number of attempts: %s' % (
 				ndata.req_message.name, ndata.host, self.context.request_timeout, ndata.num_attempts)
+		if not self.context.results.has_key(ndata.index):
+			self.context.results[ndata.index] = {}
 		self.context.results[ndata.index]['last_error'] = err
 		self._logger.warning(err)
 		
 		self.context.current_node = None
 		self.context.queue.put(ndata.index)
+		self._request_next_node()
 	
 	def _request_failed(self, ndata=None):
 		self._stop_node_timer(ndata)
 		
-		err = 'Request %s to node %s failed. Number of attempts: %s' % (
+		err = 'Request %s to node %s failed. Timeout: %s. Number of attempts: %s' % (
 			ndata.req_message.name, ndata.host, self.context.request_timeout, ndata.num_attempts)
+		if not self.context.results.has_key(ndata.index):
+			self.context.results[ndata.index] = {}
 		self.context.results[ndata.index]['last_error'] = err
 		self._logger.warning(err)
 		
 		self.context.current_node = None
 		self.context.queue.put(ndata.index)
+		self._request_next_node()
 
 	def _stop_node_timer(self, ndata):
 		if ndata.timer:
@@ -765,7 +775,7 @@ class OnEachExecutor(Handler):
 		
 		if current_node_respond:
 			self._stop_node_timer(ndata)
-			
+
 		self.context.results[ndata.index] = resp_message.body
 		ndata.req_ok = resp_message.status == self.RESP_OK
 		if self.RESP_ERROR == resp_message.status:
@@ -840,25 +850,34 @@ class _CassandraCdbRunnable(OnEachRunnable):
 	def handle_request(self, req_message, resp_message):
 		umounted = False
 		device_name = cassandra.ini.get(CNF_SECTION, OPT_STORAGE_DEVICE_NAME)
-		
 		try:
-			cassandra.stop_service()
-			system('sync')			
-						
-			fstool.umount(device_name)
-			umounted = True
+			try:
+				cassandra.stop_service()
+				system('sync')			
+							
+				fstool.umount(device_name)
+				umounted = True
+				
+				volume_id = cassandra.ini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID)
+				resp_message.body.update(dict(
+					status		= 'ok',						
+					snapshot_id = cassandra.create_snapshot(volume_id),
+					timestamp   = time.strftime('%Y-%m-%d %H-%M')
+				))
 			
-			volume_id = cassandra.ini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID)
-			resp_message.body.update(dict(
-				snapshot_id = cassandra.create_snapshot(volume_id),
-				timestamp = time.strftime('%Y-%m-%d %H-%M')
-			))
 
-		finally:
-			if umounted:
-				fstool.mount(device_name, cassandra.storage_path)
-			cassandra.start_service()
-			
+			finally:
+				if umounted:
+					fstool.mount(device_name, cassandra.storage_path)
+				cassandra.start_service()
+				
+		except (Exception, BaseException), e:
+			if not resp_message.body.has_key('snapshot_id'):
+				resp_message.body.update(dict(
+					status		= 'error',
+					last_error  =  str(e)
+				))
+				
 CassandraCdbHandler = OnEachExecutor(_CassandraCdbRunnable())	
 
 class _CassandraCrfRunnable(OnEachRunnable):
@@ -870,7 +889,7 @@ class _CassandraCrfRunnable(OnEachRunnable):
 	node_response_message = CassandraMessages.INT_CHANGE_RF_RESULT
 
 	def create_node_request(self, handler):
-		return handler.new_message(self.node_response_message, include_pad=True)
+		return handler.new_message(self.node_request_message)
 		
 	def create_node_response(self, handler):
 		return handler.new_message(self.node_response_message)
@@ -880,38 +899,45 @@ class _CassandraCrfRunnable(OnEachRunnable):
 	
 	def handle_request(self, req_message, resp_message):
 		
-		def cleanup(self):
+		def cleanup():
 			err = system('nodetool -h localhost cleanup')[2]
 			if err: 
 				raise HandlerError('Cannot do cleanup: %s' % err)
 		
-		def repair(self, keyspace):
+		def repair(keyspace):
 			err = system('nodetool -h localhost repair %s' % keyspace)[2]
 			if err: 
 				raise HandlerError('Cannot do cleanup: %s' % err)
+			
+		try:
 
-		increase_ks_list = list()
-		for keyspace in req_message.changes:
-			
-			keyspace_name = keyspace['name']
-			new_rf		  = keyspace['rf']
-			
+			keyspace_name = req_message.cassandra['keyspace']
+			new_rf		  = req_message.cassandra['rf']
+
 			try:
 				rf = cassandra.cassandra_conf.get("Storage/Keyspaces/Keyspace[@Name='"+keyspace_name+"']/ReplicationFactor")
 			except PathNotExistsError:
 				raise HandlerError('Keyspace %s does not exist or configuration file is broken' % keyspace_name)
 			
-			if rf < new_rf:
-				increase_ks_list.append(keyspace_name)
-			cassandra.cassandra_conf.set("Storage/Keyspaces/Keyspace[@Name='"+keyspace_name+"']/ReplicationFactor", new_rf)
+			if not rf == new_rf:
+				cassandra.cassandra_conf.set("Storage/Keyspaces/Keyspace[@Name='"+keyspace_name+"']/ReplicationFactor", new_rf)
+	
+				cassandra.write_config()
+				cassandra.restart_service()
+	
+				cleanup()
+				if rf < new_rf:
+					repair(keyspace_name)
+
+			resp_message.body.update(dict(
+				status		= 'ok'
+			))
 			
-		cassandra.write_config()
-		cassandra.restart_service()
-
-		cleanup()
-		for keyspace in increase_ks_list:
-			repair(keyspace)
-
+		except (Exception, BaseException), e:
+			resp_message.body.update(dict(
+				status		= 'error',
+				last_error  =  str(e)
+			))
 
 CassandraCrfHandler = OnEachExecutor(_CassandraCrfRunnable(), request_timeout=100)	
 
