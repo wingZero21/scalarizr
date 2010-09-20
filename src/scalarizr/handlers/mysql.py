@@ -387,7 +387,7 @@ class MysqlCnfController(CnfController):
 						#self._logger.debug('Option %s has the same value as the system variable. Skipping.' % option)
 						continue
 					# Write option into [mysqld] section
-					conf.add('%s/%s' % (optspec.section, option), value)
+					conf.set('%s/%s' % (optspec.section, option), value, force=True)
 					# Hot apply mutable options
 					if not optspec.static:
 						sendline += 'SET GLOBAL %s = %s; ' % (option, value)

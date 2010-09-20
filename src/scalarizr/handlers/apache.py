@@ -220,14 +220,12 @@ class ApacheCnfController(CnfController):
 						pass
 					continue	
 
-				try:
-					if conf.get(option_spec.name) != preset.settings[option_spec.name]:
-						self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
-						conf.set(option_spec.name, preset.settings[option_spec.name])
-					else:
+					if conf.get(option_spec.name) == preset.settings[option_spec.name]:
 						self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
-				except PathNotExistsError:
-					conf.add(option_spec.name, preset.settings[option_spec.name])
+					else:
+						self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
+						conf.set(option_spec.name, preset.settings[option_spec.name], force=True)
+
 		conf.write(open(self._config + '_test', 'w'))
 
 	_apache_version = None

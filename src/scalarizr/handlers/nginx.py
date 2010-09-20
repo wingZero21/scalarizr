@@ -334,21 +334,19 @@ class NginxCnfController(CnfController):
 						pass
 					continue	
 
-				try:
-					if conf.get(var) != preset.settings[option_spec.name]:
-						self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
-						conf.set(var, preset.settings[option_spec.name])
-					else:
-						self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
-				except PathNotExistsError:
-					conf.add(var, preset.settings[option_spec.name])
+				if conf.get(var) == preset.settings[option_spec.name]:
+					self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
+				else:
+					self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
+					conf.set(var, preset.settings[option_spec.name], force=True)
+
 		conf.write(open(self.nginx_conf_path + '_test', 'w'))
 				
 	def _get_nginx_version(self):
 		self._logger.debug('Getting nginx version')
 		if not self._nginx_version:
 			info = software.software_info('nginx')
-			self._nginx_version = info.version()
+			self._nginx_version = info.version
 		return self._nginx_version
 
 		
