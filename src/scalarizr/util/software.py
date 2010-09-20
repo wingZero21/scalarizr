@@ -51,10 +51,10 @@ class SoftwareInfo:
 	def __init__(self, name, version, string_version):
 		self.name    		= name
 		self.string_version = string_version
-		ver_nums		= version.split('.')
+		ver_nums		= tuple(map(int, version.split('.')))
 		if len(ver_nums) < 3: 
 			for i in range(len(ver_nums), 3):
-				ver_nums.append('0')
+				ver_nums.append(0)
 		self.version = tuple(ver_nums)
 		
 software_list = dict()
@@ -69,7 +69,7 @@ def mysql_software_info():
 	if not version_string:
 		raise SoftwareError
 
-	res = re.search('Ver\s+([\d\.-]+)', version_string)
+	res = re.search('Ver\s+([\d\.]+)', version_string)
 	if res:
 		version = res.group(1)
 		return SoftwareInfo('mysql', version, version_string)
@@ -88,7 +88,7 @@ def nginx_software_info():
 		raise SoftwareError
 	
 	version_string = out.splitlines()[0]
-	res = re.search('[\d\.-]+', version_string)
+	res = re.search('[\d\.]+', version_string)
 	if res:
 		version = res.group(0)
 		return SoftwareInfo('nginx', version, out)
@@ -108,7 +108,7 @@ def memcached_software_info():
 	
 	version_string = out.splitlines()[0]
 	
-	res = re.search('memcached\s+([\d\.-]+)', version_string)
+	res = re.search('memcached\s+([\d\.]+)', version_string)
 	if res:
 		version = res.group(1)
 		return SoftwareInfo('memcached', version, version_string)
@@ -127,7 +127,7 @@ def php_software_info():
 	
 	version_string = out.splitlines()[0]
 	
-	res = re.search('PHP\s+([\d\.-]+)', version_string)
+	res = re.search('PHP\s+([\d\.]+)', version_string)
 	
 	if res:
 		version = res.group(1)
@@ -147,7 +147,7 @@ def python_software_info():
 	
 	version_string = version_string.splitlines()[0]
 	
-	res = re.search('Python\s+([\d\.-]+)', version_string)
+	res = re.search('Python\s+([\d\.]+)', version_string)
 	
 	if res:
 		version = res.group(1)
@@ -169,7 +169,7 @@ def apache_software_info():
 		raise SoftwareError
 	
 	version_string = out.splitlines()[0]
-	res = re.search('[\d\.-]+', version_string)
+	res = re.search('[\d\.]+', version_string)
 	if res:
 		version = res.group(0)
 	
@@ -199,7 +199,7 @@ def tomcat_software_info():
 		properties = catalina.read(properties_path)
 		properties = re.sub(re.compile('^#.*$', re.M), '', properties).strip()
 		
-		res = re.search('^server.info=Apache\s+Tomcat/([\d\.-]+)', properties, re.M)
+		res = re.search('^server.info=Apache\s+Tomcat/([\d\.]+)', properties, re.M)
 		if res:
 			version = res.group(1)
 			return SoftwareInfo('tomcat', version, properties)
@@ -220,7 +220,7 @@ def varnish_software_info():
 	
 	version_string = out.splitlines()[0]
 	
-	res = re.search('varnish-([\d\.-]+)', version_string)
+	res = re.search('varnish-([\d\.]+)', version_string)
 	
 	if res:
 		version = res.group(1)
@@ -241,7 +241,7 @@ def rails_software_info():
 	if not out:
 		raise SoftwareError	
 
-	res = re.search('\(([\d\.-]+)\)', out)
+	res = re.search('\(([\d\.]+)\)', out)
 	
 	if res:
 		version = res.group(1)
@@ -267,7 +267,7 @@ def cassandra_software_info():
 		
 		properties = cassandra.read(properties_path)
 		
-		res = re.search('^Implementation-Version:\s*([\d\.-]+)', properties, re.M)
+		res = re.search('^Implementation-Version:\s*([\d\.]+)', properties, re.M)
 		if res:
 			version = res.group(1)
 			return SoftwareInfo('cassandra', version, '')
