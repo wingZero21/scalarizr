@@ -182,8 +182,9 @@ class ApacheCnfController(CnfController):
 			try:
 				vars[option_spec.name] = conf.get(option_spec.name)
 			except PathNotExistsError:
-				self._logger.debug('%s does not exist in %s. Using default value' 
-						%(option_spec.name, self._config))
+				#self._logger.debug('%s does not exist in %s. Using default value' 
+				#		%(option_spec.name, self._config))
+				pass
 
 				if option_spec.default_value:
 					vars[option_spec.name] = option_spec.default_value

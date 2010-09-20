@@ -294,8 +294,9 @@ class NginxCnfController(CnfController):
 				else:
 					vars[option_spec.name] = conf.get(option_spec.name)
 			except PathNotExistsError:
-				self._logger.debug('%s does not exist in %s. Using default value' 
-						%(option_spec.name, self.nginx_conf_path))
+				#self._logger.debug('%s does not exist in %s. Using default value' 
+				#		%(option_spec.name, self.nginx_conf_path))
+				pass
 
 				if option_spec.default_value:
 					vars[option_spec.name] = option_spec.default_value
