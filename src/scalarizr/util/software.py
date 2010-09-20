@@ -234,7 +234,7 @@ def rails_software_info():
 	binaries = whereis('gem')
 	
 	if not binaries:
-		raise SoftwareError("Can't find executable for varnish HTTP accelerator")
+		raise SoftwareError("Can't find executable for ruby gem packet manager")
 
 	out = system((binaries[0], 'list', 'rails'), False)[0].strip()
 	

@@ -266,7 +266,7 @@ class ApacheHandler(Handler):
 		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)		
 		self._initd = initdv2.lookup('apache')
 		bus.define_events('apache_reload')
-		ServiceCtlHanler.__init__(self, BEHAVIOUR, self._initd, NginxCnfController())
+		ServiceCtlHanler.__init__(self, BEHAVIOUR, self._initd, ApacheCnfController())
 		bus.on("init", self.on_init)
 		
 
