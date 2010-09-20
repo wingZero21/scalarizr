@@ -233,20 +233,11 @@ class ApacheCnfController(CnfController):
 	_apache_version = None
 
 	def _get_apache_version(self):
-		"""
 		self._logger.debug('Getting nginx version')
 		if not self._apache_version:
-			out = system(['/usr/sbin/apache2ctl', '-V'], shell=False)[0]
-			raw_version = out.split()[2]
-			version = raw_version.split('/')[1]
-			self._apache_version = version.split('.')
-			if self._apache_version:
-				self._apache_version = tuple(map(int, self._apache_version))
-		
+			info = software.software_info('apache')
+			self._apache_version = info.version
 		return self._apache_version		
-		"""
-		info = software.software_info('apache')
-		return info.version
 		
 		
 def get_handlers ():

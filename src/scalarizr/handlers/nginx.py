@@ -345,19 +345,12 @@ class NginxCnfController(CnfController):
 		conf.write(open(self.nginx_conf_path + '_test', 'w'))
 				
 	def _get_nginx_version(self):
-		info = software.software_info('nginx')
-		return info.version()
-		"""
 		self._logger.debug('Getting nginx version')
 		if not self._nginx_version:
-			out = system(['/usr/sbin/nginx', '-V'], shell=False)[1]
-			raw_version = out.split()[2]
-			version = raw_version.split('/')[1]
-			self._nginx_version = version.split('.')
-			if self._nginx_version:
-				self._nginx_version = tuple(map(int, self._nginx_version))
-		return self._nginx_version			
-		"""
+			info = software.software_info('nginx')
+			self._nginx_version = info.version()
+		return self._nginx_version
+
 		
 class NginxHandler(Handler):
 	

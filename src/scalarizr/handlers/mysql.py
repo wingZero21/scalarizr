@@ -405,19 +405,10 @@ class MysqlCnfController(CnfController):
 			conf.write(open(mycnf,'w'))
 
 	def _get_mysql_version(self):
-		info = software.software_info('mysql')
-		return info.version
-		"""
 		if not self._mysql_version:
-			out = system(['/usr/bin/mysql', '-V'], shell=False)[0]
-			version = out.split()[4]
-			if version.endswith(','):
-				version = version[:-1]
-			self._mysql_version = version.split('.')
-			if self._mysql_version:
-				self._mysql_version = tuple(map(int, self._mysql_version))
-		return self._mysql_version	
-		"""
+			info = software.software_info('mysql')
+			self._mysql_version = info.version
+		return self._mysql_version
 		
 		
 	def _get_connection(self):
