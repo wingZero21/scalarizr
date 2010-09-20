@@ -178,7 +178,7 @@ class ApacheCnfController(CnfController):
 		
 		vars = {}
 		
-		for option_spec in self.options.options:
+		for option_spec in self.options:
 			try:
 				vars[option_spec.name] = conf.get(option_spec.name)
 			except PathNotExistsError:
@@ -200,7 +200,7 @@ class ApacheCnfController(CnfController):
 		conf = Configuration('apache')
 		conf.read(self._config)
 		
-		for option_spec in self.options.options:
+		for option_spec in self.options:
 			if preset.settings.has_key(option_spec.name):
 				
 				# Skip unsupported

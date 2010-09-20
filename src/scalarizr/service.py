@@ -86,10 +86,13 @@ class CnfController(object):
 
 class Options:
 	
-	options = None 
+	_options = None 
 	
 	def __init__(self, *args):
-		self.options = args
+		self._options = args
 		
 		for optspec in args:
 			setattr(self, optspec.name, optspec)	
+			
+	def __iter__(self):
+		return self._options.__iter__()

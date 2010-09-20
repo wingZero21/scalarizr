@@ -287,7 +287,7 @@ class NginxCnfController(CnfController):
 		
 		vars = {}
 		
-		for option_spec in self.options.options:
+		for option_spec in self.options:
 			try:
 				if option_spec.context:
 					vars[option_spec.name] = conf.get('%s/%s'%(option_spec.context, option_spec.name))
@@ -312,7 +312,7 @@ class NginxCnfController(CnfController):
 		conf = Configuration('nginx')
 		conf.read(self.nginx_conf_path)
 		
-		for option_spec in self.options.options:
+		for option_spec in self.options:
 			if preset.settings.has_key(option_spec.name):
 				
 				var = option_spec.name if not option_spec.context else '%s/%s'%(option_spec.context, option_spec.name)

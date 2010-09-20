@@ -97,7 +97,7 @@ class MemcachedCnfController(CnfController):
 		
 		vars = {}
 		
-		for option_spec in self.options.options:
+		for option_spec in self.options:
 			current_value = option_spec.get_func()
 			vars[option_spec.name] = current_value if current_value else option_spec.default_value
 		
@@ -107,7 +107,7 @@ class MemcachedCnfController(CnfController):
 	def apply_preset(self, preset):	
 		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
 			
-		for option_spec in self.options.options:
+		for option_spec in self.options:
 			if preset.settings.has_key(option_spec.name):
 				current_value = option_spec.get_func()
 				
