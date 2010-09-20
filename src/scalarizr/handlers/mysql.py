@@ -11,7 +11,7 @@ from scalarizr.util import validators
 from scalarizr.messaging import Messages
 from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
 from scalarizr.util import fstool, system, cryptotool, disttool,\
-		 filetool, firstmatched, cached
+		 filetool, firstmatched, cached, software
 from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
@@ -406,7 +406,9 @@ class MysqlCnfController(CnfController):
 			conf.write(open(mycnf,'w'))
 
 	def _get_mysql_version(self):
-		#TODO: change to new version from module 'software' 
+		info = software.software_info('mysql')
+		return info.version
+		"""
 		if not self._mysql_version:
 			out = system(['/usr/bin/mysql', '-V'], shell=False)[0]
 			version = out.split()[4]
@@ -416,7 +418,9 @@ class MysqlCnfController(CnfController):
 			if self._mysql_version:
 				self._mysql_version = tuple(map(int, self._mysql_version))
 		return self._mysql_version	
-
+		"""
+		
+		
 	def _get_connection(self):
 		szr_cnf = bus.cnf
 		root_password = None

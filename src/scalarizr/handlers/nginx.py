@@ -9,7 +9,7 @@ from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
 from scalarizr.messaging import Messages
 from scalarizr.util import system, cached, firstmatched,\
-	validators
+	validators, software
 from scalarizr.util.filetool import read_file, write_file
 import os
 import re
@@ -345,8 +345,10 @@ class NginxCnfController(CnfController):
 		conf.write(open(self.nginx_conf_path + '_test', 'w'))
 				
 	def _get_nginx_version(self):
+		info = software.software_info('nginx')
+		return info.version()
+		"""
 		self._logger.debug('Getting nginx version')
-		#TODO: change to new version from module 'software' 
 		if not self._nginx_version:
 			out = system(['/usr/sbin/nginx', '-V'], shell=False)[1]
 			raw_version = out.split()[2]
@@ -355,8 +357,8 @@ class NginxCnfController(CnfController):
 			if self._nginx_version:
 				self._nginx_version = tuple(map(int, self._nginx_version))
 		return self._nginx_version			
-
-
+		"""
+		
 class NginxHandler(Handler):
 	
 	def __init__(self):

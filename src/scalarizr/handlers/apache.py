@@ -10,7 +10,7 @@ from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
 from scalarizr.messaging import Messages
 from scalarizr.util import disttool, backup_file,  \
-	cached, firstmatched, validators
+	cached, firstmatched, validators, software
 from scalarizr.util.filetool import read_file, write_file
 import logging
 import os
@@ -233,8 +233,8 @@ class ApacheCnfController(CnfController):
 	_apache_version = None
 
 	def _get_apache_version(self):
+		"""
 		self._logger.debug('Getting nginx version')
-		#TODO: change to new version from module 'software' 
 		if not self._apache_version:
 			out = system(['/usr/sbin/apache2ctl', '-V'], shell=False)[0]
 			raw_version = out.split()[2]
@@ -242,10 +242,26 @@ class ApacheCnfController(CnfController):
 			self._apache_version = version.split('.')
 			if self._apache_version:
 				self._apache_version = tuple(map(int, self._apache_version))
+		
 		return self._apache_version		
+		"""
+		info = software.software_info('apache')
+		return info.version
+		
 		
 def get_handlers ():
 	return [ApacheHandler()]
+
+def reload_apache_conf(f):
+	def g(*args):
+		inst = f.__self__
+		inst._config = Configuration('apache')
+		try:
+			inst._config.read(inst._httpd_conf_path)
+		except (OSError, MetaconfError, ParseError), e:
+			raise HandlerError('Cannot read Apache config %s : %s' % (inst._httpd_conf_path, str(e)))
+		f(*args)
+	return g
 
 class ApacheHandler(Handler):
 	
@@ -270,18 +286,6 @@ class ApacheHandler(Handler):
 		bus.on("init", self.on_init)
 		
 
-	@staticmethod
-	def reload_apache_conf(f):
-		def g(*args):
-			inst = f.__self__
-			inst._config = Configuration('apache')
-			try:
-				inst._config.read(inst._httpd_conf_path)
-			except (OSError, MetaconfError, ParseError), e:
-				raise HandlerError('Cannot read Apache config %s : %s' % (inst._httpd_conf_path, str(e)))
-			f(*args)
-		return g
-
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
 			(message.name == Messages.HOST_UP or \
@@ -289,7 +293,7 @@ class ApacheHandler(Handler):
 			message.name == Messages.VHOST_RECONFIGURE or \
 			message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
 
-	#@ApacheHandler.reload_apache_conf
+	@reload_apache_conf
 	def on_VhostReconfigure(self, message):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
