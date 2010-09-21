@@ -7,7 +7,7 @@ Created on Jul 23, 2010
 from scalarizr.handlers import HandlerError
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState, BuiltinBehaviours
-from scalarizr.handlers import Handler
+from scalarizr.handlers import Handler, ServiceCtlHanler
 from scalarizr.util import disttool
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr.util import iptables
@@ -135,7 +135,7 @@ class MemcachedHandler(Handler):
 		self._initd = initdv2.lookup('memcached')
 		self.ip_tables = IpTables()
 		self.rules = []
-		
+		ServiceCtlHanler.__init__(self, BEHAVIOUR, self._initd, MemcachedCnfController())
 		bus.on("init", self.on_init)
 		bus.on("before_host_down", self.on_before_host_down)
 	

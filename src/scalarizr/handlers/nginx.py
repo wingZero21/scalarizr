@@ -180,7 +180,7 @@ class NginxCnfController(CnfController):
 		OptionSpec('rtsig_signo', 'events', '40'),
 		OptionSpec('rtsig_overflow_events', 'events', '16'),
 		OptionSpec('rtsig_overflow_test', 'events', '32'),
-		OptionSpec('rtsig_overflow_threshold', 'events'), #no default value in documentation
+		#OptionSpec('rtsig_overflow_threshold', 'events'), #no default value in documentation, Linux 2.4.x
 		OptionSpec('use', 'events'),  #no default value in documentation
 		OptionSpec('worker_connections', 'events'), #no default value in documentation
 		
