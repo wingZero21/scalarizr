@@ -341,7 +341,7 @@ class NginxCnfController(CnfController):
 					self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
 					conf.set(var, preset.settings[option_spec.name], force=True)
 
-		conf.write(open(self.nginx_conf_path + '_test', 'w'))
+		conf.write(open(self.nginx_conf_path, 'w'))
 				
 	def _get_nginx_version(self):
 		self._logger.debug('Getting nginx version')

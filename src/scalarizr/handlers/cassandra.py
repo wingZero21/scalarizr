@@ -6,7 +6,7 @@ Created on Jun 23, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr import config
-from scalarizr.handlers import Handler, HandlerError
+from scalarizr.handlers import Handler, HandlerError, CnfController
 from scalarizr.messaging import Messages
 import logging
 import os
@@ -27,6 +27,7 @@ import time
 import pexpect
 from datetime import datetime, timedelta
 from scalarizr.platform.ec2 import ebstool
+from scalarizr.service import CnfPresetStore, CnfPreset, CnfController, Options
 
 
 BEHAVIOUR = SERVICE_NAME = config.BuiltinBehaviours.CASSANDRA
@@ -112,6 +113,103 @@ cassandra = None
 def get_handlers ():
 	globals()['cassandra'] = Cassandra()
 	return [CassandraScalingHandler(), CassandraCdbHandler, CassandraCrfHandler]
+
+
+class CassandraCnfController(CnfController):
+	
+	class OptionSpec:
+		name = None
+		default_value = None
+		context = None
+		
+		def __init__(self, name, context = 'Storage', default_value = None):
+			self.name = name			
+			self.default_value = default_value
+			self.context = context
+					
+	options = Options(
+			OptionSpec('RpcTimeoutInMillis', '10000'),
+			OptionSpec('CommitLogRotationThresholdInMB', '128'),
+			OptionSpec('DiskAccessMode', 'auto'),
+			OptionSpec('RowWarningThresholdInMB', '512'),
+			OptionSpec('SlicedBufferSizeInKB', '64'),
+			OptionSpec('FlushDataBufferSizeInMB', '32'),
+			OptionSpec('FlushIndexBufferSizeInMB', '8'),
+			OptionSpec('ColumnIndexSizeInKB', '64'),
+			OptionSpec('MemtableThroughputInMB', '64'),
+			OptionSpec('BinaryMemtableThroughputInMB', '32'),
+			OptionSpec('MemtableOperationsInMillions', '0.3'),
+			OptionSpec('MemtableFlushAfterMinutes', '60'),
+			OptionSpec('ConcurrentReads', '8'),
+			OptionSpec('ConcurrentWrites', '32'),
+			OptionSpec('CommitLogSync', 'periodic'),
+			OptionSpec('CommitLogSyncPeriodInMS', '10000'),
+			OptionSpec('GCGraceSeconds', '864000'),
+					)
+	
+	
+	def __init__(self):
+		self._logger = logging.getLogger(__name__)
+		self._cnf = bus.cnf
+		ini = self._cnf.rawini
+		self._config = ini.get(CNF_SECTION, OPT_STORAGE_CNF_PATH)
+		
+	def current_preset(self):
+		self._logger.debug('Getting current Cassandra preset')
+		preset = CnfPreset(name='current')
+		
+		conf = Configuration('cassandra')
+		conf.read(self._config)
+		
+		vars = {}
+		
+		for option_spec in self.options:
+			try:
+				vars[option_spec.name] = conf.get('%s/%s'%(option_spec.context, option_spec.name))
+			except PathNotExistsError:
+				#self._logger.debug('%s does not exist in %s. Using default value' 
+				#		%(option_spec.name, self._config))
+				pass
+
+				if option_spec.default_value:
+					vars[option_spec.name] = option_spec.default_value
+				else:
+					self._logger.error('default value for %s not found'%(option_spec.name))
+				
+		preset.settings = vars
+		return preset
+	
+
+	def apply_preset(self, preset):
+		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
+				
+		conf = Configuration('cassandra')
+		conf.read(self._config)
+		
+		for option_spec in self.options:
+			if preset.settings.has_key(option_spec.name):
+								
+				if not option_spec.default_value:
+					self._logger.debug('No default value for %s' % option_spec.name)
+					
+				elif preset.settings[option_spec.name] == option_spec.default_value:
+					try:
+						conf.remove(option_spec.name)
+						self._logger.debug('%s value is equal to default. Removed from config.' % option_spec.name)
+					except PathNotExistsError:
+						pass
+					continue	
+
+				elif preset.settings[option_spec.name] == conf.get(option_spec.name):
+					self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
+				else:
+					self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
+					conf.set(option_spec.name, preset.settings[option_spec.name], force=True)
+
+		conf.write(open(self._config, 'w'))
+
+	_apache_version = None
+
 
 class Cassandra(object):
 

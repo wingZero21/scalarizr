@@ -221,13 +221,13 @@ class ApacheCnfController(CnfController):
 						pass
 					continue	
 
-					if conf.get(option_spec.name) == preset.settings[option_spec.name]:
-						self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
-					else:
-						self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
-						conf.set(option_spec.name, preset.settings[option_spec.name], force=True)
+				elif preset.settings[option_spec.name] == conf.get(option_spec.name):
+					self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
+				else:
+					self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
+					conf.set(option_spec.name, preset.settings[option_spec.name], force=True)
 
-		conf.write(open(self._config + '_test', 'w'))
+		conf.write(open(self._config, 'w'))
 
 	_apache_version = None
 
