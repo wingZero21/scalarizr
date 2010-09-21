@@ -45,7 +45,7 @@ class Test(unittest.TestCase):
 		
 	def test_unfail(self):
 		ln = MessageListener()
-		self._consumer.add_message_listener(ln)
+		self._consumer.listeners.append(ln)
 		
 		msg = self._srv.new_message("raise")
 		self._producer.send("q1", msg)

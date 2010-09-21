@@ -79,7 +79,7 @@ class TestInteration(unittest.TestCase):
 				("p2p.producer.endpoint", "http://localhost:8013")))
 		self._consumer = self._service.get_consumer()
 		from scalarizr.handlers import MessageListener
-		self._consumer.add_message_listener(MessageListener())
+		self._consumer.listeners.append(MessageListener())
 		self._producer = self._service.get_producer()
 		
 		t = Thread(target=self._start_consumer)

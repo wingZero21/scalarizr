@@ -147,10 +147,7 @@ def _create_db():
 	conn.commit()	
 	
 
-def _mount_private_d():
-	mpoint = bus.etc_path + "/private.d"
-	privated_image = "/mnt/privated.img"
-	blocks_count = 10240
+def _mount_private_d(mpoint, privated_image, blocks_count):
 	logger = logging.getLogger(__name__)
 	
 	logger.debug("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
@@ -352,15 +349,12 @@ def _shutdown(*args):
 		logger.warning("Scalarizr is not running. Nothing to stop")	
 
 
-def do_validate(silent=False):
+def do_validate_cnf():
 	errors = list()
 	def on_error(o, e, errors=errors):
 		errors.append(e)
-		if not silent:
-			print >> sys.stderr, 'error: [%s] %s' % (o.name, e)
+		print >> sys.stderr, 'error: [%s] %s' % (o.name, e)
 		
-	if not silent:
-		print 'Validating scalarizr configuration'
 	cnf = bus.cnf
 	cnf.bootstrap()
 	cnf.validate(on_error)
@@ -417,39 +411,63 @@ def main():
 	
 		logger.info("Initialize Scalarizr...")
 		_init()
-		cnf = bus.cnf
 	
 		if optparser.values.version:
+			# Report scalarizr version
 			print 'Scalarizr %s' % __version__
 			sys.exit()
-		if optparser.values.gen_key:
+			
+		elif optparser.values.gen_key:
+			# Generate key-pair
 			do_keygen()
 			sys.exit()
-		elif optparser.values.validate_cnf:
-			num_errors = do_validate()
-			sys.exit(int(not num_errors or 1))
 
-		_mount_private_d()
+		# Starting scalarizr daemon initialization
+		cnf = bus.cnf
+		cnf.on('apply_user_data', _apply_user_data)
+		
+		# Move private configuration to loop device
+		privated_img_path = '/mnt/privated.img'
+		if cnf.state == ScalarizrState.UNKNOWN and os.path.exists(privated_img_path):
+			os.remove(privated_img_path)
+		_mount_private_d(cnf.private_path(), privated_img_path, 10240)
+		
 
 		if optparser.values.configure:
 			do_configure()
 			sys.exit()
+			
 		elif optparser.values.import_server:
 			print "Starting import process..."
 			print "Don't terminate Scalarizr until Scalr will create the new role"
-			do_configure()
 			cnf.state = ScalarizrState.IMPORTING
+			# Load Command-line configuration options and auto-configure Scalarizr
+			cnf.reconfigure(values=CmdLineIni.to_kvals(optparser.values.cnf), silent=True, yesall=True)
 		
-		cnf.bootstrap(CmdLineIni.to_ini_sections(optparser.values.cnf))
+		# Load INI files configuration
+		cnf.bootstrap(force_reload=True)
 		
-		# Initialize scalarizr service
-		try:
-			_init_services()
-		except NotConfiguredError, e:
-			logger.error("Scalarizr is not properly configured. %s", e)
-			print >> sys.stderr, "error: %s" % (e)
-			print >> sys.stdout, "Execute instalation process first: 'scalarizr --configure'"
-			sys.exit(1)
+		# Initialize local database
+		_init_db()
+		
+		# Initialize platform module
+		_init_platform()
+		
+		# At first scalarizr startup platform user-data should be applied
+		if cnf.state == ScalarizrState.UNKNOWN:
+			cnf.state = ScalarizrState.BOOTSTRAPPING
+			cnf.fire('apply_user_data', cnf)
+			
+		# Apply Command-line passed configuration options
+		cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))
+		
+		# Validate configuration
+		num_errors = do_validate_cnf()
+		if num_errors or optparser.values.validate_cnf:
+			sys.exit(int(not num_errors or 1))		
+		
+		# Initialize scalarizr services
+		_init_services()
 		
 		# Install  signal handlers	
 		signal.signal(signal.SIGTERM, onSIGTERM)

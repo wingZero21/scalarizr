@@ -76,13 +76,13 @@ class MessagingHandler(logging.Handler):
 		# Stop listening messaging events
 		m = bus.messaging_service; producer = m.get_producer(); consumer = m.get_consumer()
 		producer.un('send', self.on_out_message_send)
-		consumer.remove_message_listener(self.on_in_message_reseived)
+		consumer.listeners.remove(self.on_in_message_reseived)
 
 	def _subscribe_msgsrv(self):
 		self._msgsrv_subscribed = True
 		m = bus.messaging_service; producer = m.get_producer(); consumer = m.get_consumer()
 		producer.on('send', self.on_out_message_send)
-		consumer.add_message_listener(self.on_in_message_reseived)
+		consumer.listeners.append(self.on_in_message_reseived)
 
 	def on_out_message_send(self, queue, message):
 		self._logger.debug('Handled on_out_message_send message: %s', message.name)
