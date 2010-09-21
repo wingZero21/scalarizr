@@ -146,8 +146,11 @@ def _create_db():
 	conn.executescript(open(cnf.public_path(DB_SCRIPT)).read())
 	conn.commit()	
 	
-	
-def _mount_private_d(mpoint, privated_image, blocks_count):
+
+def _mount_private_d():
+	mpoint = bus.etc_path + "/private.d"
+	privated_image = "/mnt/privated.img"
+	blocks_count = 10240
 	logger = logging.getLogger(__name__)
 	
 	logger.debug("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
