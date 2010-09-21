@@ -393,12 +393,14 @@ class MysqlCnfController(CnfController):
 						sendline += 'SET GLOBAL %s = %s; ' % (option, value)
 				except AttributeError:
 					self._logger.error('No spec for %s. Skipping.' % option)
-			if sendline:
+			if sendline and mysql:
 				self._logger.debug(sendline)
 				mysql.sendline(sendline)
 				mysql.expect('mysql>')
-			else:
+			elif not sendline:
 				self._logger.debug('No global variables changed. Nothing to set.')
+			elif not mysql:
+				self._logger.debug('No connection to MySQL. Skipping SETs.')
 		finally:
 			if mysql:
 				mysql.close()
@@ -416,17 +418,24 @@ class MysqlCnfController(CnfController):
 		root_password = None
 		try:
 			root_password = szr_cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
+			connection = _spawn_mysql(ROOT_USER, root_password)
 		except Exception, e:
-			raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
-		return _spawn_mysql(ROOT_USER, root_password)
+			connection = None
+		finally:
+			return connection
 
 
 def _spawn_mysql(user, password):
-	mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
-	mysql.expect('Enter password:')
-	mysql.sendline(password)
-	mysql.expect('mysql>')
-	return mysql	
+	try:
+		mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
+		mysql.expect('Enter password:')
+		mysql.sendline(password)
+		mysql.expect('mysql>')
+	except Exception, e:
+		raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
+	finally:
+		return mysql
+	
 
 
 class MysqlHandler(ServiceCtlHanler):
