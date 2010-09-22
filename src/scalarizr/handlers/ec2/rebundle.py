@@ -1,6 +1,5 @@
 '''
 Created on Mar 11, 2010
-
 @author: marat
 '''
 
@@ -9,7 +8,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler, async, HandlerError
 from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system, disttool, cryptotool, fstool, filetool,\
-	wait_until
+	wait_until, get_free_devname
 from scalarizr.util import software
 from scalarizr.platform.ec2 import s3tool, ebstool
 
@@ -150,7 +149,7 @@ class Ec2RebundleHandler(Handler):
 					volume_size = ec2_conn.get_all_volumes([root_bdt.volume_id])[0].size
 				
 				strategy = RebundleEbsStrategy(role_name, image_name, excludes,
-					devname='/dev/sdr', # TODO: use get_free_devname() in 0.6
+					devname=get_free_devname(), 
 					volume_size=volume_size, 
 					volume_id=message.body.get('volume_id')
 				)
