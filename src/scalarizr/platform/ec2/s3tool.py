@@ -9,7 +9,7 @@ from scalarizr.platform import PlatformError
 
 from Queue import Queue, Empty
 from threading import Thread, Lock
-from boto.s3 import key
+from boto.s3 import Key
 from boto.exception import BotoServerError
 import os, logging
 

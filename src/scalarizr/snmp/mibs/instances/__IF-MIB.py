@@ -3,11 +3,11 @@ from time import time
 from pysnmp import majorVersionId
 import os, re
 from pyasn1.type import constraint, namedval
-
+from scalarizr.snmp.mibs import validate
 
 ( Integer, OctetString, ) = mibBuilder.importSymbols("ASN1", "Integer", "OctetString")
 ( DisplayString,) = mibBuilder.importSymbols("SNMPv2-TC", "DisplayString")
-
+(Counter32,) = mibBuilder.importSymbols("SNMPv2-SMI", "Counter32")
 
 
 ( MibScalarInstance,) = mibBuilder.importSymbols(
@@ -50,8 +50,8 @@ class GetOctets():
 				row = re.sub(':', ' ', row)
 				if re.match('^\s+' + self.iface, row):
 					values = row.split()	
-					return ifInOctets.getSyntax().clone(int(values[directions[self.direction]]))
-	
+					return validate(Counter32(), values[directions[self.direction]])
+
 file = open('/proc/net/dev', "r")
 ifacesList = file.readlines()
 file.close()

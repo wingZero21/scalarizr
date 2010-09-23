@@ -373,7 +373,12 @@ class CassandraScalingHandler(Handler):
 		
 		# Temporary config write
 		cassandra.write_config()
-
+		
+		# Getting list of keyspaces from cassandra's configuration file
+		keyspaces = [ks['NAME'] for ks in cassandra.cassandra_conf.get_dict('Storage/Keyspaces/Keyspace')]
+		message.cassandra = dict(keyspaces = keyspaces)
+		
+		
 		# Determine startup type (server import, N-th startup, Scaling )
 		try:
 			cassandra.ini.get(CNF_SECTION, OPT_SNAPSHOT_URL)
@@ -476,7 +481,7 @@ class CassandraScalingHandler(Handler):
 			self._change_dbstorage_location()
 			snap_id = cassandra.create_snapshot(ebs_volume.id)
 			cassandra.start_service()
-			message.cassandra = dict(volume_id = ebs_volume.id, snapshot_id=snap_id)
+			message.cassandra.update(dict(volume_id = ebs_volume.id, snapshot_id=snap_id))
 		finally:
 			try:
 				self._umount_detach_delete_volume(tmp_ebs_devname, temp_ebs_dev)
@@ -494,7 +499,7 @@ class CassandraScalingHandler(Handler):
 		self._change_dbstorage_location()
 
 		cassandra.start_service()
-		message.cassandra = dict(volume_id = ebs_volume.id)
+		message.cassandra.update(dict(volume_id = ebs_volume.id))
 
 	def _start_bootstrap(self, message):
 		storage_size = cassandra.ini.get(CNF_SECTION, OPT_STORAGE_SIZE)
@@ -514,7 +519,7 @@ class CassandraScalingHandler(Handler):
 		time.sleep(120)
 		self._logger.debug('Waiting for bootstrap finish')
 		wait_until(self._bootstrap_finished, sleep = 10)
-		message.cassandra = dict(volume_id = ebs_volume.id)
+		message.cassandra.update(dict(volume_id = ebs_volume.id))
 
 	def on_HostUp(self, message):
 		if message.behaviour == config.BuiltinBehaviours.CASSANDRA:

@@ -5,11 +5,11 @@ import os, re
 import UserDict
 from pyasn1.type import constraint, namedval
 from pysnmp.smi import error
+from scalarizr.snmp.mibs import validate
 
 ( DisplayString,) = mibBuilder.importSymbols("SNMPv2-TC", "DisplayString")
 
 ( MibScalarInstance, MibTableRow, MibTable, MibTableColumn, Integer32, Counter32, Counter64) = mibBuilder.importSymbols('SNMPv2-SMI','MibScalarInstance', 'MibTableRow' , 'MibTable', 'MibTableColumn', 'Integer32',  'Counter32', 'Counter64')
-
 
 class NewMibTable(MibTable):
 	
@@ -63,12 +63,12 @@ def values():
 		devicelist['diskIOIndex' + str(index)]		= MibScalarInstance(diskIOIndex.getName(), (int(index)+1 ,), diskIOIndex.getSyntax().clone(int(index)+1))
 		devicelist['diskIODevice' + str(index)]     = MibScalarInstance(diskIODevice.getName(), (int(index)+1,), diskIODevice.getSyntax().clone(values[2]))
 		
-		devicelist['diskIONRead' + str(index)]      = MibScalarInstance(diskIONRead.getName(), (int(index)+1,), diskIONRead.getSyntax().clone(int(values[5])*512))
-		devicelist['diskIONWritten' + str(index)]   = MibScalarInstance(diskIONWritten.getName(), (int(index)+1,), diskIONWritten.getSyntax().clone(int(values[9])*512))
-		devicelist['diskIOReads' + str(index)]		= MibScalarInstance(diskIOReads.getName(), (int(index)+1,), diskIOReads.getSyntax().clone(int(values[3])))	
-		devicelist['diskIOWrites' + str(index)]	    = MibScalarInstance(diskIOWrites.getName(), (int(index)+1,), diskIOWrites.getSyntax().clone(int(values[7])))	
-		devicelist['diskIONReadX' + str(index)]  	= MibScalarInstance(diskIONReadX.getName(), (int(index)+1,), diskIONReadX.getSyntax().clone(int(values[5])*512))	
-		devicelist['diskIONWrittenX' + str(index)]	= MibScalarInstance(diskIONWrittenX.getName(), (int(index)+1,), diskIONWrittenX.getSyntax().clone(int(values[9])*512))	
+		devicelist['diskIONRead' + str(index)]      = MibScalarInstance(diskIONRead.getName(), (int(index)+1,), validate(Counter32(), int(values[5])*512))
+		devicelist['diskIONWritten' + str(index)]   = MibScalarInstance(diskIONWritten.getName(), (int(index)+1,), validate(Counter32(), int(values[9])*512))
+		devicelist['diskIOReads' + str(index)]		= MibScalarInstance(diskIOReads.getName(), (int(index)+1,), validate(Counter32(), values[3]))
+		devicelist['diskIOWrites' + str(index)]	    = MibScalarInstance(diskIOWrites.getName(), (int(index)+1,), validate(Counter32(), values[7]))
+		devicelist['diskIONReadX' + str(index)]  	= MibScalarInstance(diskIONReadX.getName(), (int(index)+1,), validate(Counter64(), int(values[5])*512))
+		devicelist['diskIONWrittenX' + str(index)]	= MibScalarInstance(diskIONWrittenX.getName(), (int(index)+1,), validate(Counter64(), int(values[9])*512)) 
 	
 	return devicelist
 
