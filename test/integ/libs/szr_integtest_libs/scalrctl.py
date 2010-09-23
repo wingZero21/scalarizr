@@ -3,8 +3,6 @@ Created on Sep 23, 2010
 
 @author: marat
 '''
-from scalarizr.integ_test.libs import session
-
 
 EC2_ROLE_DEFAULT_SETTINGS = {
 	'aws.availability_zone' : 'us-east-1a',
@@ -25,7 +23,7 @@ class FarmUI:
 	def use(self, farm_id):
 		self.farm_id = farm_id
 		login(self.sel)
-		sel.open('/farms_add.php?id=%s' % self.farm_id)
+		self.sel.open('/farms_add.php?id=%s' % self.farm_id)
 	
 	def add_role(self, role_name, min_servers=1, max_servers=2, settings=None):
 		pass

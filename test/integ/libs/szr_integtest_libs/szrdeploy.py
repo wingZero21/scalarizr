@@ -6,7 +6,7 @@ Created on Sep 23, 2010
 
 class ScalarizrDeploy:
 	def __init__(self):
-
+		pass
 
 def add_repos(ssh):
 	pass
