@@ -15,7 +15,7 @@ def wait_snapshot(ec2_conn, snap_id, logger=None):
 	Waits until snapshot becomes 'completed' or 'error'
 	'''
 	logger = logger or logging.getLogger(__name__)
-	if isinstance(snap_id, str):
+	if isinstance(snap_id, basestring):
 		snap = Snapshot(ec2_conn)
 		snap.id = snap_id
 	else:
@@ -48,7 +48,7 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None):
 
 def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger=None):
 	logger = logger or logging.getLogger(__name__)
-	if isinstance(volume_id, str):
+	if isinstance(volume_id, basestring):
 		vol = Volume(ec2_conn)
 		vol.id = volume_id
 	else:
@@ -71,7 +71,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 
 def detach_volume(ec2_conn, volume_id, logger=None):
 	logger = logger or logging.getLogger(__name__)
-	if isinstance(volume_id, str):
+	if isinstance(volume_id, basestring):
 		vol = Volume(ec2_conn)
 		vol.id = volume_id
 	else:
@@ -91,4 +91,4 @@ def detach_volume(ec2_conn, volume_id, logger=None):
 def delete_volume(ec2_conn, volume_id, logger=None):
 	logger = logger or logging.getLogger(__name__)
 	logger.debug('Deleting volume %s', volume_id)
-	ec2_conn.delete_volume(isinstance(volume_id, str) and volume_id or volume_id.id)
+	ec2_conn.delete_volume(isinstance(volume_id, basestring) and volume_id or volume_id.id)
