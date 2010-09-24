@@ -14,7 +14,7 @@ from scalarizr.util import fstool, system, cryptotool, initd, disttool,\
 from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME, ebstool
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
-import logging, os, re,  pexpect, tarfile, tempfile, glob
+import logging, os, re,  pexpect, tarfile, tempfile
 import time, signal, pwd, random, shutil
 from boto.exception import BotoServerError
 
@@ -771,7 +771,7 @@ class MysqlHandler(Handler):
 			snap_id = self._sect.get(OPT_SNAPSHOT_ID)			
 			ebstool.wait_snapshot(self._platform.new_ec2_conn(), snap_id, self._logger)
 			
-			ebs_volume = self._create_volume_from_snapshot()
+			ebs_volume = self._create_volume_from_snapshot(snap_id)
 			message.mysql = dict(volume_id = ebs_volume.id)
 			self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 			
