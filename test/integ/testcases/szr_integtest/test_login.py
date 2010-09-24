@@ -4,7 +4,7 @@ Created on Sep 22, 2010
 @author: marat
 '''
 import unittest
-from . import get_selenium, config
+from szr_integtest import get_selenium, config
 
 class TestLogin(unittest.TestCase):
 
