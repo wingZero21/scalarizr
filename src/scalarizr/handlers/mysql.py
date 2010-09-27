@@ -371,6 +371,7 @@ class MysqlCnfController(CnfController):
 	def apply_preset(self, preset):
 		
 		CnfController.apply_preset(self, preset)
+		#TODO: apply dynamic variables 
 		"""
 		current_preset = self.current_preset()
 		
