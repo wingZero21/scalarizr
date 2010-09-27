@@ -111,129 +111,19 @@ class ApacheOptions(Configurator.Container):
 		required = True
 
 class ApacheCnfController(CnfController):
-	
-	class OptionSpec:
-		name = None
-		default_value = None
-		supported_from = None
-		
-		def __init__(self, name, default_value = None, supported_from = None):
-			self.name = name			
-			self.default_value = default_value
-			self.supported_from = supported_from
-					
-	options = Options(
-		# http://httpd.apache.org/docs/current/mod/core.html
-		OptionSpec(name = 'DocumentRoot', default_value = '/usr/local/apache/htdocs'),
-		OptionSpec(name = 'EnableMMAP', default_value = 'On'),
-		OptionSpec(name = 'EnableSendfile', default_value = 'On'),
-		OptionSpec(name = 'ErrorDocument'),
-		OptionSpec(name = 'ErrorLog', default_value = 'logs/error_log'),
-		OptionSpec(name = 'DefaultType', default_value = 'text/plain'),
-		OptionSpec(name = 'KeepAlive', default_value = 'On'),
-		OptionSpec(name = 'KeepAliveTimeout', default_value = '5'),
-		OptionSpec(name = 'LimitInternalRecursion', default_value = '10'),
-		OptionSpec(name = 'LimitRequestBody', default_value = '0'),
-		OptionSpec(name = 'LimitRequestFields', default_value = '100'),
-		OptionSpec(name = 'LimitRequestFieldSize', default_value = '8190'),
-		OptionSpec(name = 'LimitRequestLine', default_value = '8190'),
-		OptionSpec(name = 'LimitXMLRequestBody', default_value = '1000000'),
-		OptionSpec(name = 'LogLevel', default_value = 'warn'),
-		OptionSpec(name = 'MaxKeepAliveRequests', default_value = '100'),
-		OptionSpec(name = 'NameVirtualHost'),
-		OptionSpec(name = 'Options', default_value = 'All'),
-		#OptionSpec(name = 'Require'), #Context:	directory, .htaccess
-		OptionSpec(name = 'RLimitCPU'), #Default:	Unset; uses operating system defaults
-		OptionSpec(name = 'RLimitMEM'), #Default:	Unset; uses operating system defaults
-		OptionSpec(name = 'RLimitNPROC'), #Default:	Unset; uses operating system defaults
-		OptionSpec(name = 'Satisfy', default_value = 'All'),
-		OptionSpec(name = 'ScriptInterpreterSource', default_value = 'Script'),
-		OptionSpec(name = 'ServerAdmin'),
-		#OptionSpec(name = 'ServerAlias'), #Context:	virtual host
-		OptionSpec(name = 'ServerName'),
-		#OptionSpec(name = 'ServerPath'), #Context:	virtual host
-		OptionSpec(name = 'ServerRoot', default_value = '/usr/local/apache'),
-		OptionSpec(name = 'ServerSignature', default_value = 'Off'),
-		OptionSpec(name = 'ServerTokens', default_value = 'Full'),
-		OptionSpec(name = 'SetHandler'),
-		OptionSpec(name = 'SetInputFilter'),
-		OptionSpec(name = 'SetOutputFilter'),
-		OptionSpec(name = 'TimeOut', default_value = '300'),
-		OptionSpec(name = 'TraceEnable', default_value = 'on'),
-		OptionSpec(name = 'UseCanonicalName', default_value = 'Off'),
-		)
-	
+
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._config = ini.get(CNF_SECTION, APP_CONF_PATH)
+		CnfController.__init__(self, BEHAVIOUR, self._config)
 		
-	def current_preset(self):
-		self._logger.debug('Getting current Apache preset')
-		preset = CnfPreset(name='current')
-		
-		conf = Configuration('apache')
-		conf.read(self._config)
-		
-		vars = {}
-		
-		for option_spec in self.options:
-			try:
-				vars[option_spec.name] = conf.get(option_spec.name)
-			except PathNotExistsError:
-				#self._logger.debug('%s does not exist in %s. Using default value' 
-				#		%(option_spec.name, self._config))
-				pass
-
-				if option_spec.default_value:
-					vars[option_spec.name] = option_spec.default_value
-				else:
-					self._logger.error('default value for %s not found'%(option_spec.name))
-				
-		preset.settings = vars
-		return preset
-	
-
-	def apply_preset(self, preset):
-		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
-				
-		conf = Configuration('apache')
-		conf.read(self._config)
-		
-		for option_spec in self.options:
-			if preset.settings.has_key(option_spec.name):
-				
-				# Skip unsupported
-				if option_spec.supported_from and option_spec.supported_from > self._get_apache_version():
-					self._logger.debug('%s supported from %s. Cannot apply.' 
-							% (option_spec.name, option_spec.supported_from))
-					continue
-								
-				if not option_spec.default_value:
-					self._logger.debug('No default value for %s' % option_spec.name)
-					
-				elif preset.settings[option_spec.name] == option_spec.default_value:
-					try:
-						conf.remove(option_spec.name)
-						self._logger.debug('%s value is equal to default. Removed from config.' % option_spec.name)
-					except PathNotExistsError:
-						pass
-					continue	
-
-				elif preset.settings[option_spec.name] == conf.get(option_spec.name):
-					self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
-				else:
-					self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
-					conf.set(option_spec.name, preset.settings[option_spec.name], force=True)
-
-		conf.write(open(self._config, 'w'))
-
 	_apache_version = None
 
-	def _get_apache_version(self):
-		self._logger.debug('Getting nginx version')
+	def _get_version(self):
 		if not self._apache_version:
+			self._logger.debug('Getting apache version')
 			info = software.software_info('apache')
 			self._apache_version = info.version
 		return self._apache_version		

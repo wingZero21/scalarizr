@@ -39,7 +39,6 @@ def set_cache_size(sub):
 				write_file(mcd_conf_path, re.sub(expression, sub, mcd_conf))
 			else:
 				write_file(mcd_conf_path, sub, mode='a')
-		print ">>>", read_file(mcd_conf_path)
 	
 def get_cache_size():
 	mcd_conf = read_file(mcd_conf_path)

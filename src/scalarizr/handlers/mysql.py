@@ -240,11 +240,11 @@ class MysqlMessages:
 
 
 class MysqlCnfController(CnfController):
-	
+	"""
 	class OptionSpec:
 		section = None
 		name = None
-		readonly = None
+		static = None
 		supported_from = None
 		
 		def __init__(self, name, section='mysqld', static=False, supported_from=None):
@@ -254,10 +254,10 @@ class MysqlCnfController(CnfController):
 			self.static = static
 			self.supported_from = supported_from
 	
-				
-			
+					
 	options = Options(
 		#static variables in [mysqld]
+		# static=1
 		OptionSpec('innodb_additional_mem_pool_size', static=True),
 		OptionSpec('innodb_buffer_pool_size', static=True),
 		OptionSpec('back_log', static=True),
@@ -311,7 +311,7 @@ class MysqlCnfController(CnfController):
 		OptionSpec('lc_time_names'),
 		OptionSpec('log_bin_trust_function_creators'),
 		OptionSpec('log_warnings'),
-		OptionSpec('long_query_time'),
+		OptionSpec('long_query_time', supported_from=(5,1,21)),
 		OptionSpec('low_priority_updates'),
 		OptionSpec('auto_increment_increment'),
 		OptionSpec('auto_increment_offset'),
@@ -328,15 +328,21 @@ class MysqlCnfController(CnfController):
 		OptionSpec('character_set_server', section='client'),
 		
 	)
+	"""
 	_mysql_version = None	
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		
+		self._cnf = bus.cnf
+		ini = self._cnf.rawini
+		self._config = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
+		CnfController.__init__(self, BEHAVIOUR, self._config)
 	
 	def current_preset(self):
 		self._logger.debug('Getting current MySQL preset')
 		mysql = None
-		preset = CnfPreset(name='last successful')
+		preset = CnfPreset(name='last successful', behaviour=BEHAVIOUR)
 		try:
 			mysql = self._get_connection()
 			mysql.sendline('SHOW GLOBAL VARIABLES;')
@@ -364,6 +370,8 @@ class MysqlCnfController(CnfController):
 	
 	def apply_preset(self, preset):
 		
+		CnfController.apply_preset(self, preset)
+		"""
 		current_preset = self.current_preset()
 		
 		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
@@ -380,7 +388,7 @@ class MysqlCnfController(CnfController):
 				try:
 					optspec = getattr(self.options, option)
 					# Skip unsupported
-					if optspec.supported_from and optspec.supported_from > self._get_mysql_version():
+					if optspec.supported_from and optspec.supported_from > self._get_version():
 						self._logger.debug('%s supported from %s. Cannot apply.' % (option, optspec.supported_from))
 						continue
 					if current_preset.settings[option] == value:
@@ -405,8 +413,8 @@ class MysqlCnfController(CnfController):
 			if mysql:
 				mysql.close()
 			conf.write(open(mycnf,'w'))
-
-	def _get_mysql_version(self):
+		"""
+	def _get_version(self):
 		if not self._mysql_version:
 			info = software.software_info('mysql')
 			self._mysql_version = info.version

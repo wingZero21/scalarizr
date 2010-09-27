@@ -321,8 +321,15 @@ class Configuration:
 		ret = {}
 		for node in nodes:
 			ret[node.tag] = node.text
-			
 		return ret
+	
+	def get_child_list(self, path):
+		ret_list = self._find_all(quote(path))
+		return [node.tag for node in ret_list if node.tag and not callable(node.tag)]
+	
+	def get_sections_list(self, path):
+		ret_list = self._find_all(quote(path))
+		return [node.tag for node in ret_list if node.tag and not callable(node.tag) and len(node)]
 				
 	def set(self, path, value, typecast=None, force=False):
 		if not self.etree:

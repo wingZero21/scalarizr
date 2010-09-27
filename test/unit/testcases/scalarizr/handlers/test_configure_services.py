@@ -15,6 +15,7 @@ from scalarizr.handlers.mysql import MysqlCnfController
 from scalarizr.handlers.nginx import NginxCnfController
 from scalarizr.handlers.apache import ApacheCnfController
 from scalarizr.handlers.memcached import MemcachedCnfController
+from scalarizr.handlers.cassandra import CassandraCnfController
 
 class _EmptyQueryEnv:
 	def get_service_configuration(self):
@@ -85,6 +86,7 @@ class MockMessage():
 		self.reset_to_defaults = reset_to_defaults
 		self.restart_service = restart_service
 
+
 class TestMemcachedCnfController(unittest.TestCase):
 
 	def setUp(self):
@@ -111,58 +113,43 @@ class TestMemcachedCnfController(unittest.TestCase):
 		self.ctl.apply_preset(preset)
 
 
-class TestApacheCnfController(unittest.TestCase):
+class TestCnfControllers(unittest.TestCase):
 
 	def setUp(self):
-		self.ctl = ApacheCnfController()
-		pass
+		self.test_data = {
+						ApacheCnfController: ('DocumentRoot', '/usr/local/apache/htdocs'),
+						NginxCnfController:  ('user','www-data'),
+						_MysqlCnfController: ('log_warnings','1'),
+						#CassandraCnfController(): ('RpcTimeoutInMillis','10000')
+						}
 		
 	def tearDown(self):
 		pass
 	
 	def test_current_preset(self):
-		preset = self.ctl.current_preset()
-		self.assertEqual(preset.settings['DocumentRoot'], '/usr/local/apache/htdocs')
+		for controller,standart in self.test_data.items():
+			ctl = controller()
+			preset = ctl.current_preset()
+			self.assertEqual(preset.settings[standart[0]],standart[1])
 		
-		test_key = 'ololo'
-		preset.settings[test_key] = 'trololo'
-		self.ctl.apply_preset(preset)
+			test_key = 'ololo'
+			preset.settings[test_key] = 'trololo'
+			ctl.apply_preset(preset)
 		
-		new_preset = self.ctl.current_preset()
-		self.assertEqual(new_preset.settings['DocumentRoot'],preset.settings['DocumentRoot'])
-		self.assertFalse(new_preset.settings.has_key(test_key))
-		
-	def test_get_apache_version(self):
-		self.assertEqual(self.ctl._get_apache_version(), (2,2,14))
+			new_preset = ctl.current_preset()
+			self.assertEqual(new_preset.settings[standart[0]],preset.settings[standart[0]])
+			self.assertFalse(new_preset.settings.has_key(test_key))	
+			
+	def test_get_version(self):
+		for controller in self.test_data.keys():
+			ctl = controller()
+			ver = ctl._get_version()
+			self.assertEqual(type(ver), tuple)
+			self.assertTrue(len(ver))
+			for num in ver:
+				self.assertTrue(type(num), int)
 
-
-
-class TestNginxCnfController(unittest.TestCase):
-
-	def setUp(self):
-		self.ctl = NginxCnfController()
-		pass
-		
-	def tearDown(self):
-		
-		pass
-	
-	def test_current_preset(self):
-		preset = self.ctl.current_preset()
-		self.assertEqual(preset.settings['user'], 'www-data')
-		
-		test_key = 'ololo'
-		preset.settings[test_key] = 'trololo'
-		self.ctl.apply_preset(preset)
-		
-		new_preset = self.ctl.current_preset()
-		self.assertEqual(new_preset.settings['user'],preset.settings['user'])
-		self.assertFalse(new_preset.settings.has_key(test_key))
-		
-	def test_get_nginx_version(self):
-		self.assertEqual(self.ctl._get_nginx_version(), (0, 7, 65))
-
-
+"""	
 class TestMysqlCnfController(unittest.TestCase):
 
 	def setUp(self):
@@ -185,7 +172,7 @@ class TestMysqlCnfController(unittest.TestCase):
 		self.ctl.apply_preset(preset)
 		new_preset = self.ctl.current_preset()
 		self.assertEqual(new_preset.settings['log_warnings'],preset.settings['log_warnings'])
-	
+
 	def test_comparator(self):
 		ctl = ServiceCtlHanler(None, None)
 		self.assertFalse(ctl.preset_changed({'1':'one', '2':'two'}, {'1':'one', '2':'two', '3':'three'}))
@@ -202,10 +189,10 @@ class TestMysqlCnfController(unittest.TestCase):
 		handler.on_UpdateServiceConfiguration(MockMessage(MockHandler.SERVICE_NAME, True, True))
 
 
-	def test_get_mysql_version(self):
-		self.assertEqual(self.ctl._get_mysql_version(), (5, 1, 41))
-		
-			
+	def test_get_version(self):
+		self.assertEqual(self.ctl._get_version(), (5, 1, 41))
+"""
+	
 
 if __name__ == "__main__":
 	init_tests()
