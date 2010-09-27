@@ -2,6 +2,7 @@
 Created on Jun 23, 2010
 
 @author: marat
+@author: spike
 @author: Dmytro Korsakov
 '''
 from scalarizr.bus import bus

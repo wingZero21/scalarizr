@@ -61,7 +61,7 @@ class CnfPresetStore:
 		self._logger.debug('Loading %s %s preset' % (preset_type, service_name))
 		ini = Configuration('ini')
 		ini.read(self._filename(service_name, preset_type))
-		return CnfPreset(ini.get('general/name'), ini.get_kv_dict('settings/')) 
+		return CnfPreset(ini.get('general/name'), dict(ini.items('settings/'))) 
 		
 	def save(self, service_name, preset, preset_type):
 		'''
@@ -89,18 +89,20 @@ class CnfController(object):
 	behaviour = None
 	options = None
 	_config = None
+	_config_format = None
 	
 	def __init__(self, behaviour, config):
 		self._logger = logging.getLogger(__name__)
 		self.behaviour = behaviour
 		self._config = config
-		self.options=_Options(self._get_manifest(self.behaviour))
+		self.options=_CnfManifest(self._get_manifest(self.behaviour))
 
 	def current_preset(self):
 		self._logger.debug('Getting current %s preset', self.behaviour)
 		preset = CnfPreset(name='current', behaviour = self.behaviour)
 		
-		conf = Configuration(self._get_config_type(self.behaviour))
+		#conf = Configuration(self._get_config_type(self.behaviour))
+		conf = Configuration(self._config_format)
 		conf.read(self._config)
 		
 		vars = {}
@@ -122,7 +124,7 @@ class CnfController(object):
 		return preset
 
 	def apply_preset(self, preset):
-		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
+		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined',))
 		
 		conf = Configuration(self._get_config_type(self.behaviour))
 		conf.read(self._config)
@@ -194,35 +196,72 @@ class Options:
 
 class _OptionSpec():
 	name = None
-	_specs = None
-	def __init__(self, name, **kwargs):
+	section = None
+	default_value = None
+	supported_from = None
+	need_restart = None
+	inaccurate = None
+	extension = None
+	
+	def __init__(self, name, section, default_value=None, supported_from=None, 
+				need_restart=False, inaccurate=False, **extension):
 		self.name = name
-		self._specs = kwargs
-		for key,value in self._specs.items():
-			setattr(self, key, value)
+		self.section = section
+		self.default_value = default_value
+		self.supported_from = supported_from
+		self.need_restart = need_restart
+		self.inaccurate = inaccurate
+		self.extension = extension
+			
+	__ini_mapping = {
+		'section':'config-section',
+		'default_value':'default-value',
+		'supported_from':'supported-from',
+		'need_restart':'need-restart',
+		'inaccurate':'inaccurate'
+	}
+			
+	@staticmethod
+	def from_ini(ini, section, defaults=None):
+		ret = _OptionSpec(section)
+		
+		ini_pairs = dict(ini.items(section))
+		defaults = defaults or _OptionSpec(None, None)	
+			
+		ret.section = ini_pairs.get('config-section', defaults.get('config-section', None))
+		ret.default_value = ini_pairs.get('default-value', defaults.default_value)
+		#ret.supported_from = tuple(map(int, ini_pairs['supported-from'].split('.')))
+
+
 			
 	def __repr__(self):
-		return self.name + ' ' + str(self._specs) + '\n'
+		return '%s (section: %s, default_value: %s)' % (self.name, self.section, self.default_value)
 		
 	
-class _Options:
+class _CnfManifest:
 	_options = None
+	_defaults = None
 		
-	def __init__(self, manifest):
-		
-		default_section = '__defaults__'
+	def __init__(self, manifest_path):
 		self._options = []
 		ini = Configuration('ini')
-		ini.read(manifest)
-		variables = ini.get_sections_list("./")
+		ini.read(manifest_path)
+		try:
+			self._defaults = dict(ini.items('__defaults__'))
+		except PathNotExistsError:
+			self._defaults = None
 		
+		for name in ini.sections("./"):
+			self._options.append(_OptionSpec.from_ini(ini, name, self._defaults))
+			
+		'''
 		params = {
-				'section':'config-section',
-				'default_value':'default-value',
-				'supported_from':'supported-from',
-				'need_restart':'need-restart',
-				'inaccurate':'inaccurate'
-				}
+			'section':'config-section',
+			'default_value':'default-value',
+			'supported_from':'supported-from',
+			'need_restart':'need-restart',
+			'inaccurate':'inaccurate'
+		}
 		
 		for name in variables:
 			if name == default_section:
@@ -263,6 +302,7 @@ class _Options:
 				specs['inaccurate'] = False
 						
 			self._options.append(_OptionSpec(name,**specs))
+		'''
 		
 	def __iter__(self):
 		return self._options.__iter__()			

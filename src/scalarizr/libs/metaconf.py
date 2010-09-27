@@ -316,20 +316,38 @@ class Configuration:
 	def get_dict(self, path):
 		return [x.attrib for x in self._find_all(path) if x.attrib]
 	
-	def get_kv_dict(self, path):
+	def items(self, path):
+		'''
+		Returns a list of (name, value) pairs
+		'''
 		nodes = [node for node in self._find_all(quote(path)) if node.tag and not callable(node.tag)]
 		ret = {}
 		for node in nodes:
 			ret[node.tag] = node.text
 		return ret
 	
-	def get_child_list(self, path):
+	def children(self, path):
+		'''
+		Returns a list of child names (options and sections)
+		'''
 		ret_list = self._find_all(quote(path))
 		return [node.tag for node in ret_list if node.tag and not callable(node.tag)]
 	
-	def get_sections_list(self, path):
-		ret_list = self._find_all(quote(path))
-		return [node.tag for node in ret_list if node.tag and not callable(node.tag) and len(node)]
+	def sections(self, path):
+		'''
+		Returns a list of child sections
+		'''
+		nodes = self._find_all(quote(path))
+		return tuple(node.tag for node in nodes 
+				if node.tag and not callable(node.tag) and len(node))
+		
+	def options(self, path):
+		'''
+		Returns a list of child options
+		'''
+		nodes = self._find_all(quote(path))
+		return tuple(node.tag for node in nodes 
+				if node.tag and not callable(node.tag) and not len(node))
 				
 	def set(self, path, value, typecast=None, force=False):
 		if not self.etree:

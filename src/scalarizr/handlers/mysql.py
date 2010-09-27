@@ -441,7 +441,7 @@ def _spawn_mysql(user, password):
 		mysql.sendline(password)
 		mysql.expect('mysql>')
 	except Exception, e:
-		raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
+		raise HandlerError('Cannot start mysql client tool: %s' % (e,))
 	finally:
 		return mysql
 	

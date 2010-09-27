@@ -4,7 +4,7 @@ Created on Sep 13, 2010
 @author: shaitanich
 '''
 import unittest
-from scalarizr.service import CnfPreset, CnfPresetStore, _Options, CnfController
+from scalarizr.service import CnfPreset, CnfPresetStore, _CnfManifest, CnfController
 from scalarizr.util import init_tests
 import os
 
@@ -31,11 +31,11 @@ class Test(unittest.TestCase):
 		self.assertEqual(mock_name, preset.name)
 		self.assertEqual(mock_settings, preset.settings)
 		
-	def test__Options(self):
+	def test__CnfManifest(self):
 		behaviour = 'www'
 		C = CnfController()
 		www = C._get_manifest(behaviour)
-		options = _Options(www)
+		options = _CnfManifest(www)
 		for option in options:
 			print option
 		
