@@ -1,4 +1,4 @@
-import os
+import os, re
 import logging
 import threading
 import weakref
@@ -158,6 +158,29 @@ def url_replace_hostname(url, newhostname):
 		r2[1] += ":" + str(r.port)
 	return urlparse.urlunparse(r2)
 	
+
+
+def read_shebang(path=None, script=None):
+	if path:
+		file = first_line = None
+		try:
+			file = open(path, 'r')
+			first_line = file.readline()
+		finally:
+			if file:
+				file.close()
+	elif script:
+		if not isinstance(script, basestring):
+			raise ValueError('argument `script` should be a basestring subclass')
+		eol_index = script.find(os.linesep)
+		first_line = eol_index != -1 and script[0:eol_index] or script
+	else:
+		raise ValueError('one of arguments `path` or `script` should be passed')
+
+	shebang = re.search(re.compile('^#!(\S+)\s*'), first_line)
+	if shebang:
+		return shebang.group(1)
+	return None
 
 def parse_size(size):
 	"""

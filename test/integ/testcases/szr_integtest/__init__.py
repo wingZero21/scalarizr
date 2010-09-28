@@ -6,7 +6,7 @@ import os
 import signal
 import sys
 
-BASE_PATH = os.path.join(os.path.dirname(__file__), '..' + os.path.sep + '..' + os.path.sep)
+BASE_PATH = os.path.join(os.path.dirname(__file__), '..' + os.path.sep + '..')
 RESOURCE_PATH = os.path.join(BASE_PATH, 'resources')
 OPT_SESSION_ID = 'session_id'
 

@@ -7,7 +7,7 @@ Created on Dec 24, 2009
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Queues, Messages
-from scalarizr.util import parse_size, format_size
+from scalarizr.util import parse_size, format_size, read_shebang
 from scalarizr.util.filetool import write_file
 import threading
 from scalarizr.config import ScalarizrState
@@ -69,8 +69,6 @@ class ScriptExecutor(Handler):
 		self._config = bus.config
 		self._cnf = bus.cnf
 		self._lock = threading.Lock()
-		
-		self.hashbang_re = re.compile('^#!(\S+)\s*')
 		
 		sect_name = self.name
 		if not self._config.has_section(sect_name):
@@ -177,13 +175,10 @@ class ScriptExecutor(Handler):
 	
 	
 			self._logger.debug("Finding interpreter path in the scripts first line")
-			interpreter = ''
-			hashbang = re.search(self.hashbang_re,script.body)
-			if hashbang:
-				interpreter = hashbang.group(1)
-				self._logger.debug("Found interpreter %s", interpreter)
-			if hashbang and not os.path.exists(interpreter):
-				stderr.write('Script execution failed: Interpreter %s does not exist.' % interpreter)
+			
+			shebang = read_shebang(script=script.body)
+			if not shebang:
+				stderr.write('Script execution failed: Shebang not found.')
 				elapsed_time = 0
 				
 			else:

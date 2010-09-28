@@ -20,5 +20,8 @@ def update_package(ssh):
 def apply_changes_from_svn(ssh, repo_url):
 	pass
 
-def create_nightly_build():
+def create_nightly_build(svn_repo, dist):
+	'''
+	Requires that /usr/bin/szrbuild is installed
+	'''
 	pass

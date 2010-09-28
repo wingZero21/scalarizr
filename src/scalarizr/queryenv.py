@@ -22,7 +22,7 @@ class QueryEnvService(object):
 	key = None
 	server_id = None
 	
-	def __init__(self, url, server_id=None, key=None, api_version="2009-03-05"):
+	def __init__(self, url, server_id=None, key=None, api_version='2010-09-23'):
 		self._logger = logging.getLogger(__name__)
 		self.url = url if url[-1] != "/" else url[0:-1]
 		self.server_id = server_id		
@@ -99,7 +99,13 @@ class QueryEnvService(object):
 		@return dict
 		"""
 		return self._request("get-service-configuration",{}, self._read_get_service_configuration_response)
-		
+
+	def get_scaling_metrics(self):
+		'''
+		@return: list of ScalingMetric
+		'''
+		return self._request('get-scaling-metrics', {}, self._read_get_scaling_metrics_response)
+		pass
 
 	def _request (self, command, params={}, response_reader=None):
 		"""
@@ -282,6 +288,25 @@ class QueryEnvService(object):
 		preset.settings = ret
 		return preset
 	
+	def _read_get_scaling_metrics_response(self, xml):
+		ret = []
+		
+		response = xml.documentElement
+		for metric_el in response.firstChild.childNodes:
+			m = ScalingMetric()
+			m.id = metric_el.getAttribute('id')
+			m.name = metric_el.getAttribute('name')
+			
+			tpl = metric_el.childNodes[0].firstChild
+			m.path = tpl and tpl.nodeValue or None
+			
+			tpl = metric_el.childNodes[1].firstChild
+			m.retrieve_method = tpl and tpl.nodeValue or None
+			
+			ret.append(m)
+			
+		return ret
+
 
 class Preset(object):
 	settings = None
@@ -383,3 +408,26 @@ class VirtualHost(object):
 	+ "; type = " + str(self.type) \
 	+ "; raw = " + str(self.raw) \
 	+ "; https = " + str(self.https)
+
+class ScalingMetric(object):
+	class RetriveMethod:
+		EXECUTE = 'execute'
+		READ = 'read'
+	
+	id = None
+	name = None
+	path = None
+	
+	_retrieve_method = None
+	def _get_retrieve_method(self):
+		return self._retrieve_method
+	def _set_retrieve_method(self, v):
+		if v in (self.RetriveMethod.EXECUTE, self.RetriveMethod.READ):
+			self._retrieve_method = v
+		else:
+			raise ValueError("Invalid value '%s' for ScalingMetric.retrieve_method") 
+	
+	retrieve_method = property(_get_retrieve_method, _set_retrieve_method)
+	
+	def __repr__(self):
+		return 'qe:ScalingMetric(%s, id: %s, path: %s:%s)' % (self.name, self.id, self.path, self.retrieve_method)

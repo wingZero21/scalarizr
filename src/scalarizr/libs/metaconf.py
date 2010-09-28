@@ -82,7 +82,7 @@ class Configuration:
 		self._cursect = './'
 	
 	def read(self, filenames):
-		if isinstance(filenames, str):
+		if isinstance(filenames, basestring):
 			self._read0(filenames)
 		else:
 			for file in filenames:
