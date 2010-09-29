@@ -4,6 +4,7 @@ Created on Sep 23, 2010
 @author: marat
 '''
 
+
 class ScalarizrDeploy:
 	def __init__(self):
 		pass

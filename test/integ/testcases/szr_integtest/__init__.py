@@ -60,7 +60,10 @@ def get_selenium():
 		globals()['_sel_started'] = False
 			
 	if not _sel_started:
-		_sel.start()
+		try:
+			_sel.start()
+		except (Exception, BaseException), e:
+			raise Exception("Can't connect to selenium RC or start a session: %s" % e)
 		globals()['_sel_started'] = True
 		
 	config.set('general', OPT_SESSION_ID, _sel.sessionId)
