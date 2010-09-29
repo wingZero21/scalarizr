@@ -37,7 +37,7 @@ class ParseError(BaseException):
 	def __str__(self):
 		return self._err
 
-class PathNotExistsError(BaseException):
+class NoPathError(BaseException):
 	pass
 
 
@@ -288,7 +288,7 @@ class Configuration:
 		if el != None:
 			return el
 		else:
-			raise PathNotExistsError(quote(path))
+			raise NoPathError(quote(path))
 	
 	def get(self, path):
 		if not self.etree:
@@ -447,7 +447,11 @@ class Configuration:
 		conf.remove("Seeds/Seed", "143.66.21.76")
 		remove "143.66.21.76" from list
 		"""
-		opt_list = self._find_all(path)
+		try:
+			opt_list = self._find_all(path)
+		except NoPathError:
+			return
+		
 		parent = self.subset(path)._find('..')
 		if value:
 			for opt in opt_list:
