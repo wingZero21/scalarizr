@@ -174,10 +174,8 @@ class CnfController(object):
 		pass
 	
 	@property
-	def _manifest(self):
-		scalr_url = 'http://scalr-dev.local.webta.net' #temporary, will be changed to bus.scalr_url
-		
-		manifest_url = scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour		
+	def _manifest(self):		
+		manifest_url = bus.scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour		
 		manifests_dir = self.presets_path + "/manifests"
 		path = os.path.join(manifests_dir, self.behaviour + '.ini')
 		
