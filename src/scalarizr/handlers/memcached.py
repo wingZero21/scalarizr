@@ -4,20 +4,21 @@ Created on Jul 23, 2010
 @author: marat
 @author: shaitanich
 '''
-from scalarizr.handlers import HandlerError
+
+# Core
 from scalarizr.bus import bus
-from scalarizr.config import ScalarizrState, BuiltinBehaviours
-from scalarizr.handlers import Handler, ServiceCtlHanler
-from scalarizr.util import disttool
-from scalarizr.util.filetool import read_file, write_file
-from scalarizr.util import iptables
-from scalarizr.util.iptables import IpTables, RuleSpec
-from scalarizr.messaging import Messages
-from scalarizr.util import initdv2
-import logging
-import re
-import os
+from scalarizr.config import BuiltinBehaviours
 from scalarizr.service import CnfController, CnfPreset, Options
+from scalarizr.handlers import ServiceCtlHanler, HandlerError
+from scalarizr.messaging import Messages
+
+# Libs
+from scalarizr.util import disttool, initdv2
+from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+
+# Stdlibs
+import logging, re, os
 
 		
 if disttool._is_debian_based:
@@ -66,9 +67,9 @@ class MemcachedInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.__init__(self, 'cassandra', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
 
 initdv2.explore('memcached', MemcachedInitScript)
-BEHAVIOUR = BuiltinBehaviours.MEMCACHED
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MEMCACHED
 
-
+# FIXME: use manifest
 class MemcachedCnfController(CnfController):
 	
 	class OptionSpec:
@@ -119,107 +120,63 @@ class MemcachedCnfController(CnfController):
 def get_handlers():
 	return [MemcachedHandler()]
 
-class MemcachedHandler(Handler):
-	
+class MemcachedHandler(ServiceCtlHanler):
 	_logger = None
+	_queryenv = None
+	_ip_tables = None
+	_port = None
 	
 	def __init__(self):
-		self._queryenv = bus.queryenv_service
+		ServiceCtlHanler.__init__(self, SERVICE_NAME, initdv2.lookup('memcached'), MemcachedCnfController())
+		
 		self._logger = logging.getLogger(__name__)
-		
-		config = bus.config
-		cache_size = config.get(BEHAVIOUR, 'cache_size')
-		self.substitute = template.replace('AMOUNT', cache_size)
-		
-		self._initd = initdv2.lookup('memcached')
-		self.ip_tables = IpTables()
-		self.rules = []
-		ServiceCtlHanler.__init__(self, BEHAVIOUR, self._initd, MemcachedCnfController())
+		self._queryenv = bus.queryenv_service
+		self._ip_tables = IpTables()
+		self._port = 11211
+
 		bus.on("init", self.on_init)
-		bus.on("before_host_down", self.on_before_host_down)
-	
+
+	def on_init(self):
+		bus.on("before_host_up", self.on_before_host_up)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.HOST_UP \
-			or message.name == Messages.HOST_DOWN 	
-	
-	
-	def on_init(self):
-		bus.on("start", self.on_start)
-		bus.on("before_host_up", self.on_before_host_up)
-
-
-	def on_start(self, *args):
-		if self._cnf.state == ScalarizrState.RUNNING:
-			try:
-				self._logger.info("Starting memcached")
-				self._initd.start()
-			except initdv2.InitdError, e:
-				self._logger.error(e)
+		return message.name in (Messages.HOST_UP, Messages.HOST_DOWN) \
+				and BEHAVIOUR in message.behaviour
 	
 	def on_before_host_up(self, message):
-		
-		set_cache_size(self.substitute)
-							
+		# Collect farm servers IP-s					
 		ips = []
-		roles = self._queryenv.list_roles()
-		
-		for role in roles:
+		for role in self._queryenv.list_roles():
 			for host in role.hosts:
 				ips.append(host.internal_ip or host.external_ip)
 		
+		# Allow access from all these IP-s
+		rules = []
 		for ip in ips:
-			allow_rule = RuleSpec(source=ip, protocol=iptables.P_TCP, dport='11211', jump='ACCEPT')
-			self.rules.append(allow_rule)
+			allow_rule = RuleSpec(source=ip, protocol=P_TCP, dport=self._port, jump='ACCEPT')
+			rules.append(allow_rule)
 		
-		drop_rule = RuleSpec(protocol=iptables.P_TCP, dport='11211', jump='DROP')
-		self.rules.append(drop_rule)
+		# Deny from all
+		drop_rule = RuleSpec(protocol=P_TCP, dport=self._port, jump='DROP')
+		rules.append(drop_rule)
 			
-		for rule in self.rules:
-			self.ip_tables.append_rule(rule)
-
-
-		try:
-			self._logger.info("Reloading memcached")
-			self._initd.reload()
-		except initdv2.InitdError, e:
-			self._logger.error(e)
-
-
-	def on_before_host_down(self, *args):
-		try:
-			self._logger.info("Stopping memcached")
-			self._initd.stop()
-		except initdv2.InitdError:
-			self._logger.error("Cannot stop memcached")
-			if self._initd.running:
-				raise
-	
+		# Apply iptables rules
+		for rule in rules:
+			self._ip_tables.append_rule(rule)
+			
+		# Service configured
+		bus.fire('service_configured', service_name=SERVICE_NAME)
 	
 	def on_HostUp(self, message):
-		# Adding iptables rules
-		if message.behaviour == BuiltinBehaviours.MEMCACHED:
-			if not message.local_ip:
-				ip = message.remote_ip
-			else:
-				ip = message.local_ip
-				
-			rule = RuleSpec(source=ip, protocol=iptables.P_TCP, dport='11211', jump='ACCEPT')
-			self.ip_tables.insert_rule(None, rule)
+		# Append new server to allowed list
+		ip = message.local_ip or message.remote_ip
+		rule = RuleSpec(source=ip, protocol=P_TCP, dport=self._port, jump='ACCEPT')
+		self._ip_tables.insert_rule(None, rule)
 		
 		
 	def on_HostDown(self, message):
-		if message.behaviour == BuiltinBehaviours.MEMCACHED:
-			
-			if not message.local_ip:
-				ip = message.remote_ip
-			else:
-				ip = message.local_ip
+		# Remove terminated server from allowed list
+		ip = message.local_ip or message.remote_ip
+		rule = RuleSpec(source=ip, protocol=P_TCP, dport=self._port, jump='ACCEPT')
+		self._ip_tables.delete_rule(rule)
 
-			rule = RuleSpec(source=ip, protocol=iptables.P_TCP, dport='11211', jump='ACCEPT')
-			self.ip_tables.delete_rule(rule)
-
-		"""
-		for rule in self.rules:
-			self.ip_tables.delete_rule(rule)
-		"""

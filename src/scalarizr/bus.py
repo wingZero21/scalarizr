@@ -17,6 +17,11 @@ class Bus(Observable):
 	@ivar string: Application etc path 
 	"""
 	
+	scalr_url = None
+	"""
+	@ivar string: Base URL to Scalr service
+	"""
+	
 	cnf = None
 	'''
 	@ivar cnf: Scalarizr configuration facade. Access ini settings, read/write keys

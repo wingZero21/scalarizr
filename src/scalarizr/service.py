@@ -5,11 +5,9 @@ Created on Sep 7, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.util.filetool import read_file, write_file
-import os
-import time
-import logging
-import urllib2
+from scalarizr.util.filetool import write_file
+import os, time, logging
+import shutil, urllib2
 
 
 class CnfPreset:
@@ -25,42 +23,43 @@ class CnfPreset:
 	def __repr__(self):
 		return 'name = ' + str(self.name) \
 	+ "; settings = " + str(self.settings)
-		
+	
+class PresetType:
+	DEFAULT = 'default'
+	LAST_SUCCESSFUL = 'last_successful'
+	CURRENT = 'current'	
 
 class CnfPresetStore:
-	class PresetType:
-		DEFAULT = 'default'
-		LAST_SUCCESSFUL = 'last_successful'
-		CURRENT = 'current'
+	service_name = None
 	
-	def __init__(self):
+	def __init__(self, service_name):
 		self._logger = logging.getLogger(__name__)
+		self.service_name = service_name
 		cnf = bus.cnf
 		self.presets_path = os.path.join(cnf.home_path, 'presets')
 		if not os.path.exists(self.presets_path):
 			try:
 				os.makedirs(self.presets_path)
-			except OSError,e:
+			except OSError:
 				pass
 	
-	def _filename(self, service_name, preset_type):
-		return os.path.join(self.presets_path,service_name + '.' + preset_type)
+	def _filename(self, preset_type):
+		return os.path.join(self.presets_path, self.service_name + '.' + preset_type)
 	
-	def load(self, service_name, preset_type):
+	def load(self, preset_type):
 		'''
 		@rtype: Preset
 		@raise OSError: When cannot read preset file
 		@raise MetaconfError: When experience problems with preset file parsing
 		'''
-		self._logger.debug('Loading %s %s preset' % (preset_type, service_name))
+		self._logger.debug('Loading %s %s preset' % (preset_type, self.service_name))
 		ini = Configuration('ini')
-		ini.read(self._filename(service_name, preset_type))
+		ini.read(self._filename(preset_type))
 		
 		return CnfPreset(ini.get('general/name'), dict(ini.items('settings/'))) 
 		
-	def save(self, service_name, preset, preset_type):
+	def save(self, preset, preset_type):
 		'''
-		@type service_name: str
 		@type preset: CnfPreset
 		@type preset_type: CnfPresetStore.PresetType
 		@raise ValueError: When `preset` is not an instance of CnfPreset
@@ -77,7 +76,11 @@ class CnfPresetStore:
 
 		for k, v in preset.settings.items():
 			ini.add('settings/%s' % k, v)
-		ini.write(open(self._filename(service_name, preset_type), 'w'))
+		ini.write(open(self._filename(preset_type), 'w'))
+		
+	def copy(self, src_preset_type, dst_preset_type):
+		shutil.copy(self._filename(self.service_name, src_preset_type), 
+				self._filename(self.service_name, dst_preset_type))
 		
 		
 class CnfController(object):
@@ -91,6 +94,24 @@ class CnfController(object):
 		self.behaviour = behaviour
 		self._config_path = config_path
 		self._config_format = config_format
+
+	def preset_equals(self, this, that):
+		if not this or not that:
+			return False
+
+		if this == that:
+			return True
+		
+		for variable in self._manifest:
+			if variable.inaccurate:
+				continue
+			if not that.settings.has_key(variable.name):
+				if not variable.default_value or variable.default_value == this.settings[variable.name]:
+					continue
+			if that.settings[variable.name] != this.settings[variable.name]:
+				return False
+			
+		return True
 
 	def current_preset(self):
 		self._logger.debug('Getting %s current configuration preset', self.behaviour)
@@ -182,6 +203,7 @@ class CnfController(object):
 		if not os.path.exists(manifests_dir):
 			os.makedirs(manifests_dir)
 			
+		# FIXME: Send HEAD instead of GET
 		req = urllib2.Request(manifest_url)
 		url_handle = urllib2.urlopen(req)
 		headers = url_handle.info()
@@ -194,6 +216,7 @@ class CnfController(object):
 			data = response.read()
 			if data:
 				write_file(path, data, logger=self._logger)
+				# FIXME: Update file mtime with value from Last-Modified
 		
 		return _CnfManifest(path)
 	

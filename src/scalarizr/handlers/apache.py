@@ -5,23 +5,26 @@ Created on Dec 25, 2009
 @author: Dmytro Korsakov
 '''
 
+# Core
 from scalarizr.bus import bus
-from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
+from scalarizr.config import Configurator, BuiltinBehaviours
+from scalarizr.service import CnfController
 from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
 from scalarizr.messaging import Messages
-from scalarizr.util import disttool, backup_file,  \
-	cached, firstmatched, validators, software
-from scalarizr.util.filetool import read_file, write_file
-import logging
-import os
-import re
-from scalarizr.util import initdv2, system
-from telnetlib import Telnet
+
+# Libs
 from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
-	PathNotExistsError
-from scalarizr.service import CnfPresetStore, CnfPreset, CnfController, Options
+	NoPathError
+from scalarizr.util import disttool, cached, firstmatched, validators, software
+from scalarizr.util import initdv2, system
+from scalarizr.util.filetool import read_file, write_file
+
+# Stdlibs
+import logging, os, re
+from telnetlib import Telnet
 
 
+SERVICE_NAME = 'apache'
 BEHAVIOUR = BuiltinBehaviours.APP
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR + '.ini'
@@ -113,20 +116,12 @@ class ApacheOptions(Configurator.Container):
 class ApacheCnfController(CnfController):
 
 	def __init__(self):
-		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
-		ini = self._cnf.rawini
-		self._config = ini.get(CNF_SECTION, APP_CONF_PATH)
-		CnfController.__init__(self, BEHAVIOUR, self._config)
+		cnf = bus.cnf; ini = cnf.rawini
+		CnfController.__init__(self, BEHAVIOUR, ini.get(CNF_SECTION, APP_CONF_PATH), 'apache')
 		
-	_apache_version = None
-
-	def _get_version(self):
-		if not self._apache_version:
-			self._logger.debug('Getting apache version')
-			info = software.software_info('apache')
-			self._apache_version = info.version
-		return self._apache_version		
+	@property
+	def _software_version(self):
+		return software.software_info('apache').version
 		
 		
 def get_handlers ():
@@ -154,17 +149,16 @@ class ApacheHandler(Handler):
 	'''
 
 	def __init__(self):
+		ServiceCtlHanler.__init__(self, BEHAVIOUR, initdv2.lookup('apache'), ApacheCnfController())		
+		
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
 		self._cnf = bus.cnf
-		
 		ini = self._cnf.rawini
 		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)		
-		self._initd = initdv2.lookup('apache')
-		bus.define_events('apache_reload')
-		ServiceCtlHanler.__init__(self, BEHAVIOUR, self._initd, ApacheCnfController())
-		bus.on("init", self.on_init)
 		
+		bus.define_events('apache_reload')
+		bus.on("init", self.on_init)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -177,33 +171,14 @@ class ApacheHandler(Handler):
 	def on_VhostReconfigure(self, message):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
-		self._reload_apache()
+		self._reload_service()
 
 	def on_init(self):
-		bus.on("start", self.on_start)
 		bus.on('before_host_up', self.on_before_host_up)
-		bus.on("before_host_down", self.on_before_host_down)
-				
 
-	def on_start(self, *args):
-		if self._cnf.state == ScalarizrState.RUNNING:
-			try:
-				self._logger.info("Starting Apache")
-				self._initd.start()
-			except initdv2.InitdError, e:
-				self._logger.error(e)
-
-	on_before_host_up = on_start
+	def on_before_host_up(self, message):
+		bus.fire('service_configured', service_name=SERVICE_NAME)
 		
-	def on_before_host_down(self, *args):
-		try:
-			self._logger.info("Stopping Apache")
-			self._initd.stop()
-		except initdv2.InitdError, e:
-			self._logger.error("Cannot stop apache")
-			if self._initd.running:
-				raise
-
 	def _update_vhosts(self):
 		
 		config = bus.config
@@ -444,16 +419,11 @@ class ApacheHandler(Handler):
 			
 			try:
 				server_root = self._config.get('ServerRoot')
-			except PathNotExistsError:
+			except NoPathError:
 				self._logger.warning("ServerRoot not found in apache config file %s", self._httpd_conf_path)
 				server_root = os.path.dirname(self._httpd_conf_path)
 				self._logger.debug("Use %s as ServerRoot", server_root)
 		return server_root
-	
-	
-	def _reload_apache(self):
-		self._initd.reload()
-	
 	
 	def _patch_default_conf_deb(self):
 		self._logger.debug("Replacing NameVirtualhost and Virtualhost ports especially for debian-based linux")

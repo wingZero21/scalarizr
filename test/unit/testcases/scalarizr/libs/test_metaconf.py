@@ -68,7 +68,7 @@ class PhpIniTest(unittest.TestCase):
 	def test_del(self):
 		self.assertEqual(self.conf.get('PHP/zend.ze1_compatibility_mode'), 'Off')
 		self.conf.remove('PHP/zend.ze1_compatibility_mode')
-		self.assertRaises(PathNotExistsError, self.conf.get, 'PHP/zend.ze1_compatibility_mode')
+		self.assertRaises(NoPathError, self.conf.get, 'PHP/zend.ze1_compatibility_mode')
 		
 	def test_errors(self):
 		self.assertRaises(MetaconfError, Configuration, 'ini', '', 'not_tree')
@@ -112,10 +112,10 @@ class XmlTest(unittest.TestCase):
 	def test_remove(self):
 		self.assertEqual(self.conf.get('.//Seeds/Seed[2]'), '192.168.1.200')
 		self.conf.remove('.//Seeds/Seed', '192.168.1.200')
-		self.assertRaises(PathNotExistsError, self.conf.get, './/Seeds/Seed[2]')
+		self.assertRaises(NoPathError, self.conf.get, './/Seeds/Seed[2]')
 		
 	def test_add(self):
-		self.assertRaises(PathNotExistsError, self.conf.get, './/Seeds/Test')
+		self.assertRaises(NoPathError, self.conf.get, './/Seeds/Test')
 		self.conf.add('.//Seeds/Test', '123', before_path='Seed[1]')
 		self.assertEqual(self.conf.get('.//Seeds/Test'), '123')
 		self.assertEqual(self.conf.get_list('.//Seeds/*')[1], '123')
@@ -151,7 +151,7 @@ class NginxTest(unittest.TestCase):
 	def test_del(self):
 		self.assertEqual(self.conf.get('http/server/listen'), '80')
 		self.conf.remove('http/server/listen')
-		self.assertRaises(PathNotExistsError, self.conf.get, 'http/server/listen')
+		self.assertRaises(NoPathError, self.conf.get, 'http/server/listen')
 		
 	def test_set(self):
 		self.assertEqual(self.conf.get('http/server/listen'), '80')
@@ -161,7 +161,7 @@ class NginxTest(unittest.TestCase):
 	def test_comment(self):
 		self.assertEqual(self.conf.get('http/server/listen'), '80')
 		self.conf.comment('http/server/listen')
-		self.assertRaises(PathNotExistsError, self.conf.get, 'http/server/listen')
+		self.assertRaises(NoPathError, self.conf.get, 'http/server/listen')
 		self.conf.uncomment('http/server/listen')
 		self.assertEqual(self.conf.get('http/server/listen'), '80')
 		

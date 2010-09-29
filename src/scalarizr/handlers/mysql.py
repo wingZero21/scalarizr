@@ -4,26 +4,32 @@ Created on 14.06.2010
 @author: spike
 @author: marat
 '''
+
+# Core
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours, Configurator
-from scalarizr.service import CnfController, CnfPreset, Options
+from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME, ebstool
 
+# Libs
+from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError,\
+	ParseError
 from scalarizr.util import fstool, system, cryptotool, disttool,\
 		 filetool, firstmatched, cached, validators, initdv2, software
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
-from scalarizr.libs.metaconf import Configuration, MetaconfError, PathNotExistsError,\
-	ParseError
-	
+# Stdlibs
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
-import logging, os, re,  pexpect, tarfile, tempfile
+import logging, os, re, tarfile, tempfile
 import time, signal, pwd, random, shutil
+
+# Extra
 from boto.exception import BotoServerError
+import pexpect
 
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
@@ -608,7 +614,7 @@ class MysqlHandler(ServiceCtlHanler):
 			# Reading mysql config file
 			try:
 				datadir = self._config.get('mysqld/datadir')
-			except PathNotExistsError:
+			except NoPathError:
 				raise HandlerError('Cannot get mysql data directory from mysql config file')
 			
 			# Defining archive name and path
@@ -887,7 +893,7 @@ class MysqlHandler(ServiceCtlHanler):
 		else:
 			self._init_slave(message)		
 		
-		bus.fire('service_configured', SERVICE_NAME)
+		bus.fire('service_configured', service_name=SERVICE_NAME)
 	
 	def _init_master(self, message):
 		"""
@@ -1435,7 +1441,7 @@ class MysqlHandler(ServiceCtlHanler):
 			else:
 				self._config.set(directive, dirname)
 				
-		except PathNotExistsError:
+		except NoPathError:
 			if not os.path.isdir(directory):
 				os.makedirs(directory)
 			

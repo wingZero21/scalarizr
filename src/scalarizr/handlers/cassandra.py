@@ -5,29 +5,34 @@ Created on Jun 23, 2010
 @author: spike
 @author: Dmytro Korsakov
 '''
-from scalarizr.bus import bus
+
+# Core
 from scalarizr import config
-from scalarizr.handlers import Handler, HandlerError, CnfController
+from scalarizr.bus import bus
+from scalarizr.service import CnfController
+from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
 from scalarizr.messaging import Messages
-import logging
-import os
-import re
+from scalarizr.platform.ec2 import ebstool
+
+# Libs
+from scalarizr.libs.metaconf import Configuration, NoPathError,\
+	MetaconfError, ParseError
 from scalarizr.util import  fstool, system, get_free_devname, filetool,\
 	firstmatched, wait_until
 from scalarizr.util import initdv2, iptables, software
 from scalarizr.util.iptables import IpTables, RuleSpec
+
+# Stdlibs
+import logging, os, re
+import urllib2, tarfile, time
+from datetime import datetime, timedelta
 from ConfigParser import NoOptionError
 from Queue import Queue, Empty
 from threading import Timer
-from scalarizr.libs.metaconf import Configuration, PathNotExistsError,\
-	MetaconfError, ParseError
-import urllib2
-import tarfile
-import time
+
+# Extra
 import pexpect
-from datetime import datetime, timedelta
-from scalarizr.platform.ec2 import ebstool
-from scalarizr.service import CnfPresetStore, CnfPreset, CnfController, Options
+
 
 
 BEHAVIOUR = SERVICE_NAME = config.BuiltinBehaviours.CASSANDRA
@@ -118,20 +123,12 @@ def get_handlers ():
 class CassandraCnfController(CnfController):
 	
 	def __init__(self):
-		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
-		ini = self._cnf.rawini
-		self._config = ini.get(CNF_SECTION, OPT_STORAGE_CNF_PATH)
-		CnfController.__init__(self, BEHAVIOUR, self._config)
+		cnf = bus.cnf; ini = cnf.rawini
+		CnfController.__init__(self, BEHAVIOUR, ini.get(CNF_SECTION, OPT_STORAGE_CNF_PATH), 'xml')
 	
-	_cassandra_version = None 
-	
-	def _get_version(self):
-		if not self._cassandra_version:
-			self._logger.debug('Getting cassandra version')
-			info = software.software_info('cassandra')
-			self._cassandra_version = info.version
-		return self._cassandra_version	
+	@property
+	def _software_version(self):
+		return software.software_info('cassandra').version
 
 
 class Cassandra(object):
@@ -203,18 +200,15 @@ class Cassandra(object):
 	def write_config(self):
 		self.cassandra_conf.write(open(self.storage_conf_path,'w'))
 
-class CassandraScalingHandler(Handler):
+class CassandraScalingHandler(ServiceCtlHanler):
 	
 	_port = None
 
 	def __init__(self):
-		
 		self._logger = logging.getLogger(__name__)
 		self._iptables = IpTables()
 
 		bus.on("init", self.on_init)
-		bus.on("before_host_down", self.on_before_host_down)
-		
 
 	def on_init(self):
 		bus.on("before_host_up", self.on_before_host_up)
@@ -301,7 +295,6 @@ class CassandraScalingHandler(Handler):
 		keyspaces = [ks['NAME'] for ks in cassandra.cassandra_conf.get_dict('Storage/Keyspaces/Keyspace')]
 		message.cassandra = dict(keyspaces = keyspaces)
 		
-		
 		# Determine startup type (server import, N-th startup, Scaling )
 		try:
 			cassandra.ini.get(CNF_SECTION, OPT_SNAPSHOT_URL)
@@ -314,6 +307,9 @@ class CassandraScalingHandler(Handler):
 				if no_seeds:
 					raise HandlerError('Cannot start bootstrap without seeds')
 				self._start_bootstrap(message)
+		
+		# Service partially configured at this time 
+		bus.fire('service_configured', service_name=SERVICE_NAME)				
 				
 				
 	def _start_import_snapshot(self, message):
@@ -464,10 +460,6 @@ class CassandraScalingHandler(Handler):
 		cassandra.stop_service()
 		
 		
-	def on_before_host_down(self, *args):
-		cassandra.stop_service()
-
-
 	def _bootstrap_finished(self):
 		try:
 			cass = pexpect.spawn('nodetool -h localhost streams')
@@ -944,7 +936,7 @@ class _CassandraCrfRunnable(OnEachRunnable):
 
 		try:
 			rf = cassandra.cassandra_conf.get("Storage/Keyspaces/Keyspace[@Name='"+keyspace_name+"']/ReplicationFactor")
-		except PathNotExistsError:
+		except NoPathError:
 			raise HandlerError('Keyspace %s does not exist or configuration file is broken' % keyspace_name)
 
 		if not rf == new_rf:

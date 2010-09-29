@@ -4,25 +4,28 @@ Created on Jan 6, 2010
 @author: marat
 @author: Dmytro Korsakov
 '''
+
+# Core components
 from scalarizr.bus import bus
-from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
+from scalarizr.config import Configurator, BuiltinBehaviours
+from scalarizr.service import CnfController
+from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.messaging import Messages
+
+# Libs
+from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import system, cached, firstmatched,\
-	validators, software
+	validators, software, initdv2
 from scalarizr.util.filetool import read_file, write_file
-import os
-import re
-import shutil
-import logging
-from datetime import datetime
-from scalarizr.util import initdv2
-from scalarizr.libs.metaconf import Configuration, PathNotExistsError
+
+# Stdlibs
+import os, re, logging, shutil
 from telnetlib import Telnet
-from scalarizr.service import CnfPresetStore, CnfPreset, CnfController, Options
+from datetime import datetime
 
 
-BEHAVIOUR = BuiltinBehaviours.WWW
+
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.WWW
 CNF_NAME = BEHAVIOUR
 CNF_SECTION = BEHAVIOUR
 
@@ -132,58 +135,39 @@ def get_handlers():
 
 
 class NginxCnfController(CnfController):
-
-	_nginx_version = None
-	
 	def __init__(self):
-		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
-		ini = self._cnf.rawini
-		self._include = ini.get(CNF_SECTION, APP_INC_PATH)
-		config_dir = os.path.dirname(self._include)
-		self._nginx_conf_path = config_dir + '/nginx.conf'
-		CnfController.__init__(self, BEHAVIOUR, self._nginx_conf_path)
+		cnf = bus.cnf; ini = cnf.rawini
+		nginx_conf_path = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)) + '/nginx.conf'
+		CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx')
 		
-	def _get_version(self):
-		if not self._nginx_version:
-			self._logger.debug('Getting nginx version')
-			info = software.software_info('nginx')
-			self._nginx_version = info.version
-		return self._nginx_version
+	@property
+	def _software_version(self):
+		return software.software_info('nginx').version
 
 		
-class NginxHandler(Handler):
+class NginxHandler(ServiceCtlHanler):
 	
 	def __init__(self):
+		ServiceCtlHanler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
+				
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service	
 		self._cnf = bus.cnf
-		self._initd = initdv2.lookup('nginx')
 		
 		ini = self._cnf.rawini
 		self._https_conf_path = ini.get(CNF_SECTION, HTTPS_INC_PATH)
 		self._nginx_binary = ini.get(CNF_SECTION, BIN_PATH)
 		self._app_port = ini.get(CNF_SECTION, APP_PORT)
 		self._include = ini.get(CNF_SECTION, APP_INC_PATH)
+		
 		bus.define_events("nginx_upstream_reload")
-		ServiceCtlHanler.__init__(self, BEHAVIOUR, self._initd, NginxCnfController())
 		bus.on("init", self.on_init)
-
 		
 	def on_init(self):
-		bus.on("start", self.on_start)
 		bus.on('before_host_up', self.on_before_host_up)
-		bus.on("before_host_down", self.on_before_host_down)
 		
-	def on_start(self, *args):
-		if self._cnf.state == ScalarizrState.RUNNING:
-			try:
-				self._logger.info("Starting Nginx")
-				self._initd.start()
-			except initdv2.InitdError, e:
-				self._logger.error(e)	
-				
-	on_before_host_up = on_start
+	def on_before_host_up (self):
+		bus.fire('service_configured', service_name=SERVICE_NAME)
 	
 	def on_HostUp(self, message):
 		self.nginx_upstream_reload()
@@ -272,7 +256,7 @@ class NginxHandler(Handler):
 				self._logger.info("Testing new configuration.")
 			
 				try:
-					self._initd.configtest()
+					self._init_script.configtest()
 				except initdv2.InitdError, e:
 					self._logger.error("Configuration error detected:" +  str(e) + " Reverting configuration.")
 					if os.path.isfile(self._include):
@@ -284,21 +268,10 @@ class NginxHandler(Handler):
 					else:
 						self._logger.debug('%s does not exist', self._include+".save")
 				else:
-					# Reload nginx
-					self._initd.reload()
+					self._reload_service()
 
 		bus.fire("nginx_upstream_reload")	
-	
-	def on_before_host_down(self, *args):
-		try:
-			self._logger.info("Stopping Nginx")
-			self._initd.stop()
-		except initdv2.InitdError, e:
-			self._logger.error("Cannot stop nginx: %s" % str(e))
-			if self._initd.running:
-				raise
 
-		
 	def on_BeforeHostTerminate(self, message):
 		config = bus.config
 		include_path = config.get(CNF_SECTION, "app_include_path")
@@ -311,7 +284,7 @@ class NginxHandler(Handler):
 		if server_ip in include.get_list('upstream/server'):
 			include.remove('upstream/server', server_ip)
 		include.write(open(include_path, 'w'))
-		self._initd.restart()
+		self._restart_service()
 
 	def _update_vhosts(self):
 		self._logger.debug("Requesting virtual hosts list")

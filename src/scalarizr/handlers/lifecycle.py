@@ -4,13 +4,17 @@ Created on Mar 3, 2010
 @author: marat
 '''
 
-import scalarizr
+# Core
 import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
+
+# Libs
 from scalarizr.util import cryptotool, configtool
+
+# Stdlibs
 import logging, os, sys, binascii, threading
 from subprocess import Popen, PIPE
 

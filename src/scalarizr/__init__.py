@@ -20,7 +20,7 @@ from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 import binascii, string, traceback
 import threading, socket, signal
-import urlparse
+from urlparse import urlparse, urlunparse
 
 
 try:
@@ -279,6 +279,10 @@ def _apply_user_data(cnf):
 		}
 	))
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
+	
+	# Set base URL
+	pr = urlparse(g(UserDataOptions.QUERYENV_URL))
+	bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
 
 	
 def init_script():
