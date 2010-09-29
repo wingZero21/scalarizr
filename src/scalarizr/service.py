@@ -4,14 +4,13 @@ Created on Sep 7, 2010
 @author: marat
 '''
 from scalarizr.bus import bus
-from scalarizr.libs.metaconf import Configuration
+from scalarizr.libs.metaconf import Configuration, NoPathError
+
 import os
 import logging
-from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
-	PathNotExistsError
+
 
 class CnfPreset:
-	#TODO: overload equasion
 	name = None
 	settings = None
 	behaviour = None
@@ -56,11 +55,13 @@ class CnfPresetStore:
 	def load(self, service_name, preset_type):
 		'''
 		@rtype: Preset
-		@raise OSError, MetaconfError: 
+		@raise OSError: When cannot read preset file
+		@raise MetaconfError: When experience problems with preset file parsing
 		'''
 		self._logger.debug('Loading %s %s preset' % (preset_type, service_name))
 		ini = Configuration('ini')
 		ini.read(self._filename(service_name, preset_type))
+		
 		return CnfPreset(ini.get('general/name'), dict(ini.items('settings/'))) 
 		
 	def save(self, service_name, preset, preset_type):
@@ -68,57 +69,55 @@ class CnfPresetStore:
 		@type service_name: str
 		@type preset: CnfPreset
 		@type preset_type: CnfPresetStore.PresetType
+		@raise ValueError: When `preset` is not an instance of CnfPreset
+		@raise OSError: When cannot save preset file
 		'''
-		if not preset or not hasattr(preset, 'settings'):
-			self._logger.error('Cannot save preset: No settings in preset found.')
-			return
+		if not isinstance(preset, CnfPreset):
+			raise ValueError('argument `preset` should be a CnfPreset instance, %s is given', type(preset))
 		
 		self._logger.debug('Saving preset as %s' % preset_type)
 		ini = Configuration('ini')
 		ini.add('general')
 		ini.add('general/name', preset.name if (hasattr(preset, 'name') and preset.name) else 'Noname')
 		ini.add('settings')
-		print 'saving:', preset
+
 		for k, v in preset.settings.items():
 			ini.add('settings/%s' % k, v)
 		ini.write(open(self._filename(service_name, preset_type), 'w'))
 		
 		
 class CnfController(object):
-	
 	behaviour = None
-	options = None
-	_config = None
+
+	_config_path = None
 	_config_format = None
 	
-	def __init__(self, behaviour, config):
+	def __init__(self, behaviour, config_path, config_format):
 		self._logger = logging.getLogger(__name__)
 		self.behaviour = behaviour
-		self._config = config
-		self.options=_CnfManifest(self._get_manifest(self.behaviour))
+		self._config_path = config_path
+		self._config_format = config_format
 
 	def current_preset(self):
-		self._logger.debug('Getting current %s preset', self.behaviour)
+		self._logger.debug('Getting %s current configuration preset', self.behaviour)
 		preset = CnfPreset(name='current', behaviour = self.behaviour)
 		
-		#conf = Configuration(self._get_config_type(self.behaviour))
 		conf = Configuration(self._config_format)
-		conf.read(self._config)
+		conf.read(self._config_path)
 		
 		vars = {}
-		
-		for option_spec in self.options:
+		for opt in self._manifest:
 			try:
-				vars[option_spec.name] = conf.get(option_spec.name)
-			except PathNotExistsError:
+				vars[opt.name] = conf.get(opt.name)
+			except NoPathError:
 				#self._logger.debug('%s does not exist in %s. Using default value' 
 				#		%(option_spec.name, self._config))
 				pass
 
-				if option_spec.default_value:
-					vars[option_spec.name] = option_spec.default_value
+				if opt.default_value:
+					vars[opt.name] = opt.default_value
 				else:
-					self._logger.debug('default value for %s not found'%(option_spec.name))
+					self._logger.debug("Option '%s' has no default value" % opt.name)
 				
 		preset.settings = vars
 		return preset
@@ -127,58 +126,82 @@ class CnfController(object):
 		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined',))
 		
 		conf = Configuration(self._get_config_type(self.behaviour))
-		conf.read(self._config)
+		conf.read(self._config_path)
 		
-		for option_spec in self.options:
-			var = option_spec.name if not option_spec.section else '%s/%s'%(option_spec.section, option_spec.name)
+		self._before_apply_preset()
+		
+		ver = self._software_version
+		for opt in self._manifest:
+			path = opt.name if not opt.section else '%s/%s' % (opt.section, opt.name)
 			
-			if preset.settings.has_key(option_spec.name):
+			if opt.name in preset.settings:
+				new_value = preset.settings[opt.name]
 				
 				# Skip unsupported
-				if option_spec.supported_from and option_spec.supported_from > self._get_version():
-					self._logger.debug('%s supported from %s. Cannot apply.' 
-							% (option_spec.name, option_spec.supported_from))
+				if ver and opt.supported_from and opt.supported_from > ver:
+					self._logger.debug("Skip option '%s'. Supported from %s; installed %s" % 
+							(opt.name, opt.supported_from, ver))
 					continue
 								
-				if not option_spec.default_value:
-					self._logger.debug('No default value for %s' % option_spec.name)
+				if not opt.default_value:
+					self._logger.debug("Option '%s' has no default value" % opt.name)
 					
-				elif preset.settings[option_spec.name] == option_spec.default_value:
-					try:
-						conf.remove(var)
-						self._logger.debug('%s value is equal to default. Removed from config.' % option_spec.name)
-					except PathNotExistsError:
-						pass
+				elif new_value == opt.default_value:
+					self._logger.debug("Remove option '%s'. Equal to default" % opt.name)						
+					conf.remove(path)
+					self._after_remove_option(opt)				
 					continue	
 
-				if conf.get(var) == preset.settings[option_spec.name]:
-					self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
+				if conf.get(path) == new_value:
+					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 				else:
-					self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
-					conf.set(var, preset.settings[option_spec.name], force=True)
-					
+					self._logger.debug("Set option '%s' = '%s'" % (opt.name, new_value))
+					conf.set(path, new_value, force=True)
+					self._after_set_option(opt, path)
 			else:
-				try:
-					conf.remove(var)
-					self._logger.debug('%s option not found in preset. Removing from config.' % option_spec.name)
-				except PathNotExistsError:
-					pass							
+				self._logger.debug("Remove option '%s'. Not found in preset" % opt.name)					
+				conf.remove(path)
+				self._after_remove_option(opt)
+				
+		self._after_apply_preset()						
 
-		conf.write(open(self._config, 'w'))	
+		conf.write(open(self._config_path, 'w'))	
 	
-	def _get_manifest(self, behaviour):
-		#TODO: make GET query to scalr
-		return os.path.join(os.path.realpath('./test/unit/resources/manifest'), behaviour + '.ini')
+	def _after_set_option(self, option_spec, value):
+		pass
 	
+	def _after_remove_option(self, option_spec):
+		pass
+	
+	def _before_apply_preset(self):
+		pass
+	
+	def _after_apply_preset(self):
+		pass
+	
+	@property
+	def _manifest(self):
+		#TODO: cache manifest in ~/. HEAD first, then GET if modified
+		path = os.path.join(os.path.realpath('./test/unit/resources/manifest'), self.behaviour + '.ini') 
+		return _CnfManifest(path)
+	
+	@property
+	def _software_version(self):
+		'''
+		Override is subclass
+		'''
+		pass
+	
+	'''
+	Move into <Service>CnfController
 	def _get_config_type(self, service_name):
 		services = {'mysql':'mysql',
 				'app':'apache',
 				'www':'nginx',
 				'cassandra':'cassandra'}
 		return services[service_name] if services.has_key(service_name) else service_name
- 			
-	def _get_version(self):
-		pass
+	'''
+
 
 class Options:
 	
@@ -204,35 +227,38 @@ class _OptionSpec():
 	extension = None
 	
 	def __init__(self, name, section, default_value=None, supported_from=None, 
-				need_restart=False, inaccurate=False, **extension):
+				need_restart=True, inaccurate=False, **extension):
 		self.name = name
 		self.section = section
 		self.default_value = default_value
 		self.supported_from = supported_from
 		self.need_restart = need_restart
 		self.inaccurate = inaccurate
-		self.extension = extension
-			
-	__ini_mapping = {
-		'section':'config-section',
-		'default_value':'default-value',
-		'supported_from':'supported-from',
-		'need_restart':'need-restart',
-		'inaccurate':'inaccurate'
-	}
+		self.extension = extension or dict()
 			
 	@staticmethod
 	def from_ini(ini, section, defaults=None):
 		ret = _OptionSpec(section)
 		
-		ini_pairs = dict(ini.items(section))
-		defaults = defaults or _OptionSpec(None, None)	
+		spec = dict(ini.items(section))
+		defaults = defaults or dict()
 			
-		ret.section = ini_pairs.get('config-section', defaults.get('config-section', None))
-		ret.default_value = ini_pairs.get('default-value', defaults.default_value)
-		#ret.supported_from = tuple(map(int, ini_pairs['supported-from'].split('.')))
-
-
+		for key, value in spec:
+			if 'config-section' == key:
+				ret.section = spec.get(key, defaults.get(key, None))
+			elif 'default-value' == key:
+				ret.default_value = spec.get(key, defaults.get(key, None))
+			elif 'supported-from' == key:
+				tmp = spec.get(key, defaults.get(key, None))
+				ret.supported_from = tmp and tuple(map(int, tmp.split('.'))) or None
+			elif 'need-restart' == key:
+				ret.need_restart = bool(spec.get(key, defaults.get(key, True)))
+			elif 'inaccurate' == key:
+				ret.inaccurate = bool(spec.get(key, defaults.get(key, False)))
+			else:
+				ret.extension[key] = value
+				
+		return ret
 			
 	def __repr__(self):
 		return '%s (section: %s, default_value: %s)' % (self.name, self.section, self.default_value)
@@ -248,8 +274,8 @@ class _CnfManifest:
 		ini.read(manifest_path)
 		try:
 			self._defaults = dict(ini.items('__defaults__'))
-		except PathNotExistsError:
-			self._defaults = None
+		except NoPathError:
+			self._defaults = dict()
 		
 		for name in ini.sections("./"):
 			self._options.append(_OptionSpec.from_ini(ini, name, self._defaults))
