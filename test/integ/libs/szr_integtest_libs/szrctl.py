@@ -43,7 +43,7 @@ class TailLogSpawner:
 		start_time = time.time()
 		while time.time() - start_time < self.timeout:
 			try:
-				self.ssh.connect(self.host, key_filename = self.key)
+				self.ssh.connect(self.host, key_filename = self.key, username='root')
 				break
 			except:
 				continue
