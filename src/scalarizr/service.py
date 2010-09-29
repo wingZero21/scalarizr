@@ -5,9 +5,11 @@ Created on Sep 7, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
-
+from scalarizr.util.filetool import read_file, write_file
 import os
+import time
 import logging
+import urllib2
 
 
 class CnfPreset:
@@ -23,14 +25,6 @@ class CnfPreset:
 	def __repr__(self):
 		return 'name = ' + str(self.name) \
 	+ "; settings = " + str(self.settings)
-	
-	def __eq__(self, preset):
-		#fetch manifest
-		#iter manifest
-		#ignore inaccurate values
-		#if no key in preset
-		#if keys in preset.settings and self.settings ain`t equal
-		return False
 		
 
 class CnfPresetStore:
@@ -181,8 +175,28 @@ class CnfController(object):
 	
 	@property
 	def _manifest(self):
-		#TODO: cache manifest in ~/. HEAD first, then GET if modified
-		path = os.path.join(os.path.realpath('./test/unit/resources/manifest'), self.behaviour + '.ini') 
+		scalr_url = 'http://scalr-dev.local.webta.net' #temporary, will be changed to bus.scalr_url
+		
+		manifest_url = scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour		
+		manifests_dir = self.presets_path + "/manifests"
+		path = os.path.join(manifests_dir, self.behaviour + '.ini')
+		
+		if not os.path.exists(manifests_dir):
+			os.makedirs(manifests_dir)
+			
+		req = urllib2.Request(manifest_url)
+		url_handle = urllib2.urlopen(req)
+		headers = url_handle.info()
+		url_last_modified = headers.getdate("Last-Modified")
+		
+		file_modified = tuple(time.localtime(os.path.getmtime(path))) if os.path.exists(path) else None
+		
+		if not file_modified or url_last_modified > file_modified:
+			response = urllib2.urlopen(manifest_url)
+			data = response.read()
+			if data:
+				write_file(path, data, logger=self._logger)
+		
 		return _CnfManifest(path)
 	
 	@property
@@ -198,7 +212,7 @@ class CnfController(object):
 		services = {'mysql':'mysql',
 				'app':'apache',
 				'www':'nginx',
-				'cassandra':'cassandra'}
+				'cassandra':'xml'}
 		return services[service_name] if services.has_key(service_name) else service_name
 	'''
 
