@@ -1,11 +1,7 @@
 from szr_integtest import get_selenium, config
 from szr_integtest_libs import expect
 from szr_integtest_libs.scalrctl import FarmUI
-from ConfigParser import ConfigParser
-import os
 import re
-import time
-import paramiko
 from scalarizr.util import system
 from szr_integtest_libs.szrctl import TailLogSpawner
 

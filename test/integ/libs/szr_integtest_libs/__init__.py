@@ -4,6 +4,7 @@ import signal
 import re
 import select
 from threading import Thread, Event
+import paramiko
 
 class SshPool:
 	def __new__(self):
@@ -24,6 +25,71 @@ class SshPool:
 		'''
 		pass
 
+class SshManager:
+	
+	transport = None
+	connected = False
+	channels  = []
+	
+	def __init__(self, host, key, timeout = 60):
+		self.host = host
+		self.key = key
+		if not os.path.exists(self.key):
+			raise Exception("Key file '%s' doesn't exist")
+		self.timeout = timeout
+		self.user = 'root'
+		self.ssh = paramiko.SSHClient()
+		self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+		
+	def connect(self):
+		start_time = time.time()
+		while time.time() - start_time < self.timeout:
+			try:
+				self.ssh.connect(self.host, key_filename = self.key, username=self.user)
+				break
+			except:
+				continue
+		else:
+			raise Exception("Cannot connect to server %s" % self.host)
+		
+		transport = self.ssh.get_transport()
+		channel = transport.open_session()
+		channel.get_pty()
+		channel.invoke_shell()
+		time.sleep(1)
+		
+		if channel.closed:
+			raise Exception ("Can't open new session")
+		
+		out = ''
+		while channel.recv_ready():
+			out += channel.recv(1)
+			
+		if 	'Please login as the ubuntu user rather than root user' in out:
+			self.user = 'ubuntu'
+			self.connect()
+		else:
+			self.connected = True
+		channel.close()
+		
+		
+	def get_root_ssh_channel(self):
+		
+		if not self.connected:
+			self.connect()
+			
+		if not self.transport:
+			self.transport = self.ssh.get_transport()
+			self.transport.set_keepalive(60)
+			
+		channel = self.transport.open_session()
+		channel.get_pty()
+		channel.invoke_shell()
+		self.channels.append(channel)
+		if self.user == 'ubuntu':
+			channel.send('sudo -i\n')
+		
+		return channel
 
 class LogReader:
 	
