@@ -246,95 +246,6 @@ class MysqlMessages:
 
 
 class MysqlCnfController(CnfController):
-	"""
-	class OptionSpec:
-		section = None
-		name = None
-		static = None
-		supported_from = None
-		
-		def __init__(self, name, section='mysqld', static=False, supported_from=None):
-			self.name = name			
-			self.section = section
-			#in mysql docs variables wich cannot be changed by SET query called 'static variables'.
-			self.static = static
-			self.supported_from = supported_from
-	
-					
-	options = Options(
-		#static variables in [mysqld]
-		# static=1
-		OptionSpec('innodb_additional_mem_pool_size', static=True),
-		OptionSpec('innodb_buffer_pool_size', static=True),
-		OptionSpec('back_log', static=True),
-		OptionSpec('ft_max_word_len', static=True),
-		OptionSpec('ft_min_word_len', static=True),
-		OptionSpec('ft_query_expansion_limit', static=True),
-		OptionSpec('innodb_file_per_table', static=True),
-		OptionSpec('innodb_log_buffer_size', static=True),
-		OptionSpec('innodb_lock_wait_timeout', static=True),
-		OptionSpec('innodb_open_files', static=True),
-		OptionSpec('innodb_rollback_on_timeout', static=True),
-		OptionSpec('innodb_autoinc_lock_mode', static=True, supported_from=(5,1,22)),
-		OptionSpec('innodb_adaptive_hash_index', static=True, supported_from=(5,0,52)),
-		#dynamic variables in [mysqld]
-		OptionSpec('binlog_cache_size'),
-		OptionSpec('key_buffer_size'),
-		OptionSpec('local_infile'),
-		OptionSpec('automatic_sp_privileges'),
-		OptionSpec('bulk_insert_buffer_size'),
-		OptionSpec('character_set_client'),
-		OptionSpec('character_set_connection'),
-		OptionSpec('character_set_filesystem'),
-		OptionSpec('collation_connection'),
-		OptionSpec('collation_server'),
-		OptionSpec('completion_type'),
-		OptionSpec('concurrent_insert'),
-		OptionSpec('connect_timeout'),
-		OptionSpec('default_week_format'),
-		OptionSpec('delay_key_write'),
-		OptionSpec('delayed_insert_limit'),
-		OptionSpec('delayed_insert_timeout'),
-		OptionSpec('delayed_queue_size'),
-		OptionSpec('div_precision_increment'),
-		OptionSpec('flush_time'),
-		OptionSpec('group_concat_max_len'),
-		OptionSpec('init_connect '),
-		OptionSpec('innodb_autoextend_increment '),
-		OptionSpec('innodb_commit_concurrency'),
-		OptionSpec('innodb_concurrency_tickets'),
-		OptionSpec('innodb_flush_log_at_trx_commit'),
-		OptionSpec('innodb_max_dirty_pages_pct'),
-		OptionSpec('innodb_max_purge_lag'),
-		OptionSpec('innodb_support_xa'),
-		OptionSpec('innodb_sync_spin_loops'),
-		OptionSpec('innodb_table_locks'),
-		OptionSpec('innodb_thread_concurrency'),
-		OptionSpec('innodb_thread_sleep_delay'),
-		OptionSpec('interactive_timeout'),
-		OptionSpec('key_cache_block_size'),
-		OptionSpec('key_cache_division_limit'),
-		OptionSpec('lc_time_names'),
-		OptionSpec('log_bin_trust_function_creators'),
-		OptionSpec('log_warnings'),
-		OptionSpec('long_query_time', supported_from=(5,1,21)),
-		OptionSpec('low_priority_updates'),
-		OptionSpec('auto_increment_increment'),
-		OptionSpec('auto_increment_offset'),
-		OptionSpec('max_allowed_packet'),
-		OptionSpec('innodb_use_legacy_cardinality_algorithm', supported_from=(5,1,35)),
-		OptionSpec('innodb_stats_on_metadata', supported_from=(5,1,17)),
-		OptionSpec('event_scheduler', supported_from=(5,1,12)),
-		OptionSpec('general_log', supported_from=(5,1,12)),
-		OptionSpec('keep_files_on_create', supported_from=(5,0,48)),
-		OptionSpec('join_buffer_size'),
-		OptionSpec('key_cache_age_threshold'),
-		#dynamic variables in [client]
-		OptionSpec('character_set_results', section='client'),
-		OptionSpec('character_set_server', section='client'),
-		
-	)
-	"""
 	_mysql_version = None	
 	
 	def __init__(self):
@@ -343,7 +254,7 @@ class MysqlCnfController(CnfController):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._config = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
-		CnfController.__init__(self, BEHAVIOUR, self._config) #TRUE,FALSE
+		CnfController.__init__(self, BEHAVIOUR, self._config, 'mysql') #TRUE,FALSE
 	
 	def current_preset(self):
 		self._logger.debug('Getting current MySQL preset')
@@ -361,14 +272,22 @@ class MysqlCnfController(CnfController):
 			for line in text:
 				splitted_line = line.split('|')					
 				name = splitted_line[1].strip()
-				value = splitted_line[2].strip() 
+				value = splitted_line[2].strip()
+				"""
+				print name, value 
 				try:
-					#remove odd 
-					if hasattr(self.options, name):
+					remove odd 
+					if hasattr(self._manifest, name):
 						vars[name] = value
 				except AttributeError:
 					self._logger.error('No spec for %s' % name)	
-			preset.settings = vars				
+					pass
+				"""
+				vars[name] = value
+				
+			for opt in self._manifest:
+				if opt.name in vars:
+					preset.settings[opt.name] = vars[opt.name]
 			return preset
 		finally:
 			if mysql:

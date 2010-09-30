@@ -302,5 +302,4 @@ class ServiceCtlHanler(Handler):
 			
 		# Start service with updated configuration
 		self._start_service_with_preset(cur_preset)
-
 		
