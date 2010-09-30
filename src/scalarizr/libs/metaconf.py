@@ -626,7 +626,7 @@ class IniFormatProvider(FormatProvider):
 			value = self._opt_re.match(line).group('value')
 			if value[0] in ('"', "'") and value[-1] in ('"', "'") and value[0] == value[-1]:
 				value = value[1:-1]
-			new_opt.text = self._opt_re.match(line).group('value')
+			new_opt.text = value
 			return True
 		return False
 	
