@@ -316,38 +316,46 @@ class Configuration:
 	def get_dict(self, path):
 		return [x.attrib for x in self._find_all(path) if x.attrib]
 	
+	def _normalize_path(self, path):
+		if path[-1] != '/':
+			path = path + '/'
+		return path
+
+	def _is_element(self, node):
+		return node.tag and not callable(node.tag)
+	
 	def items(self, path):
 		'''
 		Returns a list of (name, value) pairs
 		'''
-		nodes = [node for node in self._find_all(quote(path)) if node.tag and not callable(node.tag)]
-		ret = {}
-		for node in nodes:
-			ret[node.tag] = node.text
-		return ret
+		return tuple(
+			(node.tag, node.text) 
+			for node in self._find_all(quote(self._normalize_path(path)))
+			if self._is_element(node)
+		)
 	
 	def children(self, path):
 		'''
 		Returns a list of child names (options and sections)
 		'''
-		ret_list = self._find_all(quote(path))
-		return [node.tag for node in ret_list if node.tag and not callable(node.tag)]
+		ret_list = self._find_all(quote(self._normalize_path(path)))
+		return tuple(node.tag for node in ret_list if self._is_element(node))
 	
 	def sections(self, path):
 		'''
 		Returns a list of child sections
 		'''
-		nodes = self._find_all(quote(path))
+		nodes = self._find_all(quote(self._normalize_path(path)))
 		return tuple(node.tag for node in nodes 
-				if node.tag and not callable(node.tag) and len(node))
+				if self._is_element(node) and len(node))
 		
 	def options(self, path):
 		'''
 		Returns a list of child options
 		'''
-		nodes = self._find_all(quote(path))
+		nodes = self._find_all(quote(self._normalize_path(path)))
 		return tuple(node.tag for node in nodes 
-				if node.tag and not callable(node.tag) and not len(node))
+				if self._is_element(node) and not len(node))
 				
 	def set(self, path, value, typecast=None, force=False):
 		if not self.etree:
@@ -1042,6 +1050,7 @@ class CommentedTreeBuilder ( ET.XMLTreeBuilder ):
 		self._target.start( ET.Comment, {} )
 		self._target.data( data.strip() )
 		self._target.end( ET.Comment )
+		
 '''
 # use for xml.etree.ElementTree for hierarchy
 
