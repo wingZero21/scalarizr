@@ -205,9 +205,12 @@ class Configuration:
 							self._extend(child)
 						self._cursect  = self._sections.pop()
 					else:
-						if node.text != exist_list[0].text and \
-											(len(node.attrib) ^ (exist_list[0].attrib != node.attrib)):
+						if exist_list[0].attrib == node.attrib:
 							self._add_element(cursect, self._cursect, node)
+							self.etree.find(self._cursect).remove(exist_list[0])
+							
+						#if node.text != exist_list[0].text or (bool(exist_list[0].attrib or node.attrib) ^ (exist_list[0].attrib != node.attrib)):
+						#	self._add_element(cursect, self._cursect, node)
 				else:
 					equal = 0
 					for exist_node in exist_list:
@@ -620,6 +623,9 @@ class IniFormatProvider(FormatProvider):
 				comment = ET.Comment(self._opt_re.match(line).group('comment')[1:])
 				self._cursect.append(comment)
 			new_opt = ET.SubElement(self._cursect, quote(self._opt_re.match(line).group('option').strip()))
+			value = self._opt_re.match(line).group('value')
+			if value[0] in ('"', "'") and value[-1] in ('"', "'") and value[0] == value[-1]:
+				value = value[1:-1]
 			new_opt.text = self._opt_re.match(line).group('value')
 			return True
 		return False
@@ -641,7 +647,10 @@ class IniFormatProvider(FormatProvider):
 	
 	def write_option(self, fp, node):
 		if not len(node) and not callable(node.tag) and node.text:
-			fp.write(unquote(node.tag)+"\t= "+node.text+'\n')
+			value = node.text
+			if re.search('\s', value):
+				value = '"' + value + '"'
+			fp.write(unquote(node.tag)+"\t= "+value+'\n')
 			return True
 		return False
 	
