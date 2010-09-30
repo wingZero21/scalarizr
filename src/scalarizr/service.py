@@ -21,8 +21,9 @@ class CnfPreset:
 		self.behaviour = behaviour
 
 	def __repr__(self):
-		return 'name = ' + str(self.name) \
-	+ "; settings = " + str(self.settings)
+		return 'name=' + str(self.name) \
+				+ "behaviour=" + str(self.behaviour) \
+				+ "; settings=" + str(self.settings)
 	
 class PresetType:
 	DEFAULT = 'default'
@@ -142,7 +143,7 @@ class CnfController(object):
 	def apply_preset(self, preset):
 		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined',))
 		
-		conf = Configuration(self._get_config_type(self.behaviour))
+		conf = Configuration(self._config_format)
 		conf.read(self._config_path)
 		
 		self._before_apply_preset()
@@ -164,12 +165,22 @@ class CnfController(object):
 					self._logger.debug("Option '%s' has no default value" % opt.name)
 					
 				elif new_value == opt.default_value:
-					self._logger.debug("Remove option '%s'. Equal to default" % opt.name)						
-					conf.remove(path)
+					self._logger.debug("Remove option '%s'. Equal to default" % opt.name)
+											
+					try:
+						conf.remove(path)
+					except NoPathError:
+						pass
+					
 					self._after_remove_option(opt)				
 					continue	
-
-				if conf.get(path) == new_value:
+				
+				try:
+					value = conf.get(path)
+				except NoPathError:
+					value = None
+				
+				if value == new_value:
 					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 				else:
 					if self.definitions and new_value in self.definitions:
@@ -179,8 +190,11 @@ class CnfController(object):
 					conf.set(path, new_value, force=True)
 					self._after_set_option(opt, path)
 			else:
-				self._logger.debug("Remove option '%s'. Not found in preset" % opt.name)					
-				conf.remove(path)
+				self._logger.debug("Remove option '%s'. Not found in preset" % opt.name)	
+				try:				
+					conf.remove(path)
+				except NoPathError:
+					pass	
 				self._after_remove_option(opt)
 				
 		self._after_apply_preset()						
@@ -205,9 +219,11 @@ class CnfController(object):
 		class HeadRequest(urllib2.Request):
 			def get_method(self):
 				return "HEAD"
-
-		manifest_url = bus.scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour		
-		manifests_dir = self.presets_path + "/manifests"
+		
+		cnf = bus.cnf
+		presets_path = os.path.join(cnf.home_path, 'presets')	
+		manifests_dir = presets_path + "/manifests"
+		manifest_url = bus.scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour	
 		path = os.path.join(manifests_dir, self.behaviour + '.ini')
 		
 		if not os.path.exists(manifests_dir):
@@ -269,7 +285,7 @@ class _OptionSpec():
 	inaccurate = None
 	extension = None
 	
-	def __init__(self, name, section, default_value=None, supported_from=None, 
+	def __init__(self, name=None, section=None, default_value=None, supported_from=None, 
 				need_restart=True, inaccurate=False, **extension):
 		self.name = name
 		self.section = section
@@ -282,11 +298,10 @@ class _OptionSpec():
 	@staticmethod
 	def from_ini(ini, section, defaults=None):
 		ret = _OptionSpec(section)
-		
 		spec = dict(ini.items(section))
 		defaults = defaults or dict()
 			
-		for key, value in spec:
+		for key, value in spec.items():
 			if 'config-section' == key:
 				ret.section = spec.get(key, defaults.get(key, None))
 			elif 'default-value' == key:
@@ -321,6 +336,8 @@ class _CnfManifest:
 			self._defaults = dict()
 		
 		for name in ini.sections("./"):
+			if name == '__defaults__':
+				continue
 			self._options.append(_OptionSpec.from_ini(ini, name, self._defaults))
 		
 	def __iter__(self):
