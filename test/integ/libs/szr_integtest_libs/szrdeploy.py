@@ -3,11 +3,11 @@ Created on Sep 23, 2010
 
 @author: marat
 '''
-from scalarizr.libs.metaconf import Configuration, NoPathError
+from scalarizr.libs.metaconf import NoPathError
 from szr_integtest import config
+from szr_integtest_libs import exec_command
 import os
 import re
-import time
 
 DISTR_DETECTION_STRING = "python -c \"import platform; d = platform.dist(); print int(d[0].lower() in ['centos', 'rhel', 'redhat'] and d[1].split('.')[0]); \
 print int((d[0].lower() == 'fedora' or (d[0].lower() == 'redhat' and d[2].lower() == 'werewolf')) and d[1].split('.')[0])\""
@@ -173,30 +173,7 @@ class ScalarizrDeploy:
 			raise Exception('Install scalarizr package first!')
 				
 
-def exec_command(channel, cmd, timeout = 60):
-	while channel.recv_ready():
-		channel.recv(1)
-	channel.send(cmd)
-	command = channel.recv(len(cmd))
-	newlines = re.findall('\r', command)
-	if newlines:
-		channel.recv(len(newlines))
-	channel.send('\n')
-	out = ''
-	start_time = time.time()
-	
-	while time.time() - start_time < timeout:
-		if channel.recv_ready():
-			out += channel.recv(1024)
-			if re.search('root@.*?#', out):
-				break
-	else:
-		raise Exception('Timeout while doing "%s"' % cmd)
-	lines = out.splitlines()
-	if len(lines) > 2:
-		return '\n'.join(lines[1:-1]).strip()
-	else:
-		return ''
+
 			
 def create_nightly_build(svn_repo, dist):
 	'''

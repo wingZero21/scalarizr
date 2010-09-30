@@ -3,46 +3,37 @@ Created on Sep 23, 2010
 
 @author: marat
 '''
-from szr_integtest_libs import SshManager
+from szr_integtest_libs import exec_command
+
+INIT_SCRIPT = '/etc/init.d/scalarizr'
+
 
 class Scalarizr:
 	def __init__(self):
 		pass
 	
-	def use(self, ssh):
-		pass
+	def use(self, channel):
+		if channel.closed:
+			raise Exception('Channel closed')
+		
+		self.channel = channel
 	
 	def restart(self):
-		pass
+		self._start_stop_reload('restart')
 	
 	def start(self):
-		pass
+		self._start_stop_reload('start')
 	
 	def stop(self):
-		pass
+		self._start_stop_reload('stop')
 	
+	def _start_stop_reload(self, cmd):
+		out = exec_command(self.channel, INIT_SCRIPT + ' ' + cmd)
+		if self._get_ret_code() != '0':
+			raise Exception("Cannot %s scalarizr. Out: %s" % (cmd, out))
+		
 	def execute(self, options=None):
 		pass
 
-class TailLogSpawner:
-	
-	def __init__(self, host, key, timeout= 60):
-		self.host = host
-		self.key = key
-		self.timeout = timeout
-		self.sshmanager = SshManager(host, key)
-		self.sshmanager.connect()
-		self.channel = self.sshmanager.get_root_ssh_channel()
-		
-	def spawn(self):
-		while self.channel.recv_ready():
-			self.channel.recv(1)
-		cmd = 'tail -f -n 0 /var/log/scalarizr.log\n'
-		self.channel.send(cmd)
-		self.channel.recv(len(cmd))
-
-		return self.channel
-	
-
-
-	#return pexpect.spawn('/usr/bin/ssh -o StrictHostKeyChecking=no -i %s %s tail -f /var/log/scalarizr.log' % (key_path, host))
+	def _get_ret_code(self):		
+		return exec_command(self.channel, 'echo $?')

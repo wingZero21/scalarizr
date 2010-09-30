@@ -3,7 +3,7 @@ from szr_integtest_libs import expect
 from szr_integtest_libs.scalrctl import FarmUI
 import re
 from scalarizr.util import system
-from szr_integtest_libs.szrctl import TailLogSpawner
+from szr_integtest_libs import TailLogSpawner
 
 
 

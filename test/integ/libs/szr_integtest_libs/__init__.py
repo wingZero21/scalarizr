@@ -141,9 +141,51 @@ class LogReader:
 					self.ret = re.search(regexp, line)
 					break_tail.set()
 					break
+
+class TailLogSpawner:
 	
+	def __init__(self, host, key, timeout= 60):
+		self.host = host
+		self.key = key
+		self.timeout = timeout
+		self.sshmanager = SshManager(host, key)
+		self.sshmanager.connect()
+		self.channel = self.sshmanager.get_root_ssh_channel()
+		
+	def spawn(self):
+		while self.channel.recv_ready():
+			self.channel.recv(1)
+		cmd = 'tail -f -n 0 /var/log/scalarizr.log\n'
+		self.channel.send(cmd)
+		self.channel.recv(len(cmd))
+
+		return self.channel
 	
 def expect(channel, regexp, timeframe):
 	reader = LogReader()
 	return reader.expect(regexp, timeframe, channel)
+
+def exec_command(channel, cmd, timeout = 60):
+	while channel.recv_ready():
+		channel.recv(1)
+	channel.send(cmd)
+	command = channel.recv(len(cmd))
+	newlines = re.findall('\r', command)
+	if newlines:
+		channel.recv(len(newlines))
+	channel.send('\n')
+	out = ''
+	start_time = time.time()
 	
+	while time.time() - start_time < timeout:
+		if channel.recv_ready():
+			out += channel.recv(1024)
+			if re.search('root@.*?#', out):
+				break
+	else:
+		raise Exception('Timeout while doing "%s"' % cmd)
+	lines = out.splitlines()
+	if len(lines) > 2:
+		return '\n'.join(lines[1:-1]).strip()
+	else:
+		return ''
