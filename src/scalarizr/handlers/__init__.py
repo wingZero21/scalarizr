@@ -152,6 +152,7 @@ def async(fn):
 	
 	return decorated
 
+
 class ServiceCtlHanler(Handler):
 	_logger = None 	
 	
@@ -170,65 +171,7 @@ class ServiceCtlHanler(Handler):
 		
 		self._queryenv = bus.queryenv_service
 		bus.on('init', self.sc_on_init)
-		
 
-	'''
-	def _reconfigure(self, restart_service = False, send_result_message=False):
-		msg = self.new_message(Messages.UPDATE_SERVICE_CONFIGURATION_RESULT)
-		msg.status = 'ok'
-		storage = CnfPresetStore()	
-		try:		
-			try:
-				# Extract preset from service configuration  
-				if not self._init_script.running:
-					self._start_service()
-				last = self._cnf_ctl.current_preset()
-				
-			except (BaseException, Exception), e:
-				# ... failed. Okay, load default one
-				try: 
-					last = storage.load(self._service_name, CnfPresetStore.PresetType.DEFAULT)
-				except (BaseException, Exception), e:
-					self._logger.error('Cannot load %s default preset. %s', self._service_name, e)
-				self._start_service()
-			finally:
-				if last:
-					storage.save(self._service_name, last, CnfPresetStore.PresetType.LAST_SUCCESSFUL)					
-					
-			service_conf = self._queryenv.get_service_configuration(self._service_name)
-			new_preset = CnfPreset(service_conf.name, service_conf.settings)
-	
-			if self.preset_equals(last, new_preset):
-				self._logger.debug("%s configuration satisfies new preset '%s'" % (self._service_name, new_preset.name))
-				if send_result_message:
-					self.send_message(msg)
-				return
-			
-			if new_preset.name == 'default':
-				#self._logger.debug("%s default configuration preset will be applied" % self._service_name)
-				self._logger.debug(' QueryEnv returned empty "default" preset for service %s. No need to apply.' \
-						% self._service_name)
-				self.send_message(msg)
-				return
-			
-			storage.save(self._service_name, new_preset, CnfPresetStore.PresetType.CURRENT)
-			self._cnf_ctl.apply_preset(new_preset)
-			
-			if restart_service or service_conf.restart_service: 
-				try:
-					self._restart_service()
-				except initdv2.InitdError, e:	
-					self._cnf_ctl.apply_preset(last)
-					self._start_service()
-					storage.save(self._service_name, last, CnfPresetStore.PresetType.CURRENT)	
-			
-		except (BaseException, Exception), e:
-			msg.status = 'error'
-			msg.last_error = str(e)	
-			self._logger.error(e)	
-	
-		self.send_message(msg)
-	'''
 		
 	
 	def on_UpdateServiceConfiguration(self, message):

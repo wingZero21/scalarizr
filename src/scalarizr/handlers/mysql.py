@@ -343,7 +343,7 @@ class MysqlCnfController(CnfController):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._config = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
-		CnfController.__init__(self, BEHAVIOUR, self._config)
+		CnfController.__init__(self, BEHAVIOUR, self._config) #TRUE,FALSE
 	
 	def current_preset(self):
 		self._logger.debug('Getting current MySQL preset')
@@ -377,53 +377,37 @@ class MysqlCnfController(CnfController):
 	def apply_preset(self, preset):
 		
 		CnfController.apply_preset(self, preset)
-
-		current_preset = self.current_preset()		
-		self._logger.debug('Applying dynamic variables')
+	
+	def _before_apply_preset(self):
+		self.sendline = ''
 		
-		sendline = ''
+	def _after_set_option(self, option_spec, value):
+		self._logger.debug('Setting variable %s to %s' % (option_spec.name, value))
+		self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, value)
+
+
+	def _after_remove_option(self, option_spec):
+		if not option_spec.default_value:
+			self._logger.debug('No default value for %s' % option_spec.name)
+		else:
+			self._logger.debug('Setting variable %s to default' % option_spec.name)
+			self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, option_spec.default_value)
+	
+	def _after_apply_preset(self):
 		mysql = self._get_connection()
-		
 		try:
-			for option_spec in self.options:
-				if preset.settings.has_key(option_spec.name):
-					# Skip static
-					if option_spec.need_restart:
-						continue
-					
-					# Skip unsupported
-					if option_spec.supported_from and option_spec.supported_from > self._get_version():
-						self._logger.debug('%s supported from %s. Cannot apply.' 
-								% (option_spec.name, option_spec.supported_from))
-						continue
-
-					if current_preset.settings[option_spec.name] == preset.settings[option_spec.name]:
-						self._logger.debug('Variable %s wasn`t changed. Skipping.' % option_spec.name)
-					else:
-						self._logger.debug('Setting variable %s to %s' % (option_spec.name, preset.settings[option_spec.name]))
-						sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, preset.settings[option_spec.name])
-					
+			if self.sendline and mysql:
+				self._logger.debug(self.sendline)
+				mysql.sendline(self.sendline)
+				index = mysql.expect(['mysql>', pexpect.EOF, pexpect.TIMEOUT])
+				if 1==index or 2==index:
+					self._logger.error('Cannot set global variables: %s' % mysql.before)
 				else:
-					
-					if not option_spec.default_value:
-						self._logger.debug('No default value for %s' % option_spec.name)
-					
-					elif preset.settings[option_spec.name] == option_spec.default_value:
-						self._logger.debug('%s value is equal to default. Nothing to set.' % option_spec.name)
-						pass
-					else:
-						self._logger.debug('Setting variable %s to default' % option_spec.name)
-						sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, option_spec.default_value)
-						
-			if sendline and mysql:
-				self._logger.debug(sendline)
-				mysql.sendline(sendline)
-				mysql.expect('mysql>')
-			elif not sendline:
+					self._logger.debug('All global variables has been set.')
+			elif not self.sendline:
 				self._logger.debug('No global variables changed. Nothing to set.')
 			elif not mysql:
 				self._logger.debug('No connection to MySQL. Skipping SETs.')
-		
 		finally:
 			if mysql:
 				mysql.close()

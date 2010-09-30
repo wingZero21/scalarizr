@@ -89,11 +89,13 @@ class CnfController(object):
 	_config_path = None
 	_config_format = None
 	
-	def __init__(self, behaviour, config_path, config_format):
+	def __init__(self, behaviour, config_path, config_format, definitions=None): 
+		#you may redefine config values in defenitions (like {'1':'on','0':'off'})
 		self._logger = logging.getLogger(__name__)
 		self.behaviour = behaviour
 		self._config_path = config_path
 		self._config_format = config_format
+		self.definitions = definitions
 
 	def preset_equals(self, this, that):
 		if not this or not that:
@@ -170,6 +172,9 @@ class CnfController(object):
 				if conf.get(path) == new_value:
 					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 				else:
+					if self.definitions and new_value in self.definitions:
+						new_value = self.definitions[new_value]
+						
 					self._logger.debug("Set option '%s' = '%s'" % (opt.name, new_value))
 					conf.set(path, new_value, force=True)
 					self._after_set_option(opt, path)
@@ -196,6 +201,11 @@ class CnfController(object):
 	
 	@property
 	def _manifest(self):		
+		
+		class HeadRequest(urllib2.Request):
+			def get_method(self):
+				return "HEAD"
+
 		manifest_url = bus.scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour		
 		manifests_dir = self.presets_path + "/manifests"
 		path = os.path.join(manifests_dir, self.behaviour + '.ini')
@@ -203,9 +213,7 @@ class CnfController(object):
 		if not os.path.exists(manifests_dir):
 			os.makedirs(manifests_dir)
 			
-		# FIXME: Send HEAD instead of GET
-		req = urllib2.Request(manifest_url)
-		url_handle = urllib2.urlopen(req)
+		url_handle = urllib2.urlopen(HeadRequest(manifest_url))
 		headers = url_handle.info()
 		url_last_modified = headers.getdate("Last-Modified")
 		
@@ -314,56 +322,6 @@ class _CnfManifest:
 		
 		for name in ini.sections("./"):
 			self._options.append(_OptionSpec.from_ini(ini, name, self._defaults))
-			
-		'''
-		params = {
-			'section':'config-section',
-			'default_value':'default-value',
-			'supported_from':'supported-from',
-			'need_restart':'need-restart',
-			'inaccurate':'inaccurate'
-		}
-		
-		for name in variables:
-			if name == default_section:
-				continue
-			
-			specs = {}
-			
-			for param, manifest_param in params.items():
-				
-				specs[param] = None
-				
-				try:
-					specs[param] = ini.get('./' +name+ '/' + manifest_param)
-				except:
-
-					try:
-						specs[param] = ini.get('./' + default_section + '/' + manifest_param)
-					except:
-						pass
-					
-				if type(specs[param]) == type(""):
-					if specs[param].startswith('"'):
-						specs[param] = specs[param][1:]
-					if specs[param].endswith('"'):
-						specs[param] = specs[param][:-1]
-			
-			#conversions
-			if specs['section']	== '""':
-				specs['section'] = None
-			
-			if specs['supported_from']:
-				specs['supported_from'] = tuple(map(int,specs['supported_from'].split('.')))
-				
-			if specs['need_restart']:
-				specs['need_restart'] = False if '0' == specs['need_restart'] else True
-				
-			if not specs['inaccurate']:
-				specs['inaccurate'] = False
-						
-			self._options.append(_OptionSpec(name,**specs))
-		'''
 		
 	def __iter__(self):
 		return self._options.__iter__()			

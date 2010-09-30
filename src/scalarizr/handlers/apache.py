@@ -117,7 +117,7 @@ class ApacheCnfController(CnfController):
 
 	def __init__(self):
 		cnf = bus.cnf; ini = cnf.rawini
-		CnfController.__init__(self, BEHAVIOUR, ini.get(CNF_SECTION, APP_CONF_PATH), 'apache')
+		CnfController.__init__(self, BEHAVIOUR, ini.get(CNF_SECTION, APP_CONF_PATH), 'apache', {'1':'on','0':'off'})
 		
 	@property
 	def _software_version(self):
