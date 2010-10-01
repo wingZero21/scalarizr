@@ -9,6 +9,7 @@ INIT_SCRIPT = '/etc/init.d/scalarizr'
 
 
 class Scalarizr:
+	in_use = False
 	def __init__(self):
 		pass
 	
@@ -16,7 +17,12 @@ class Scalarizr:
 		if channel.closed:
 			raise Exception('Channel closed')
 		
+		out = exec_command(channel, 'ls -la /etc/init.d/scalarizr 2>/dev/null')
+		if not out:
+			raise Exception("Scalarizr isn't installed")
+				
 		self.channel = channel
+		self.in_use = True
 	
 	def restart(self):
 		self._start_stop_reload('restart')
@@ -28,9 +34,9 @@ class Scalarizr:
 		self._start_stop_reload('stop')
 	
 	def _start_stop_reload(self, cmd):
-		out = exec_command(self.channel, INIT_SCRIPT + ' ' + cmd)
+		exec_command(self.channel, INIT_SCRIPT + ' ' + cmd)
 		if self._get_ret_code() != '0':
-			raise Exception("Cannot %s scalarizr. Out: %s" % (cmd, out))
+			raise Exception("Cannot %s scalarizr." % cmd)
 		
 	def execute(self, options=None):
 		pass

@@ -8,8 +8,8 @@ from szr_integtest_libs import TailLogSpawner
 
 
 role_name = 'mysql-058-u1004'
-farm_id = config.get('test-farm', 'farm_id')
-farm_key = config.get('test-farm', 'farm_key')
+farm_id = config.get('./test-farm/farm_id')
+farm_key = config.get('./test-farm/farm_key')
 
 server_id_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)' % (farm_id, role_name), re.M)
 

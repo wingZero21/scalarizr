@@ -395,11 +395,14 @@ class Configuration:
 		after_element = None
 		before_element = None
 		
+		if path.endswith('/'):
+			path = path[:-1]
+		
 		parent_path = os.path.dirname(path) or '.'		
 		
 		parent		= self._find(parent_path)
-		el = ET.Element(os.path.basename(path))
-		
+		el = self._provider.create_element(self.etree, os.path.join(self._root_path, path), value)
+				
 		if before_path:
 			path_list = self._find_all(parent_path +'/'+ before_path)
 			if len(path_list):
@@ -417,8 +420,6 @@ class Configuration:
 			parent.append(el)
 			self._set(el, value, typecast)
 		self._set(el, value, typecast)
-
-
 				
 		"""
 		1.
@@ -519,6 +520,9 @@ class FormatProvider:
 		self._sections = []
 		self._errors = []
 		
+	def create_element(self, etree, path, value):
+		return ET.Element(quote(os.path.basename(path)))
+		
 	def read(self, fp, baseline = 0):
 		"""
 		@return: xml.etree.ElementTree
@@ -592,7 +596,21 @@ class IniFormatProvider(FormatProvider):
 			self.write_option
 		)
 		
-	def read_comment(self, line, root):
+	def create_element(self, etree, path, value):
+		el = FormatProvider.create_element(self, etree, path, value)
+		parent_path = os.path.dirname(path)
+		if os.path.dirname(parent_path) not in ('.', ''):
+			raise MetaconfError('Maximum nesting level for ini format is 2')
+		elif parent_path in ('.', ''):
+			if etree.find(path) is not None:
+				raise MetaconfError("Ini file can't contain two identical sections")
+			el.attrib['mc_type'] = 'section'
+		else:
+			el.attrib['mc_type'] = 'option'			
+		return el
+
+		
+	def read_comment(self, line, root):		
 		if not hasattr(self, "_comment_re"):
 			self._comment_re = re.compile('\s*[#;](.*)$')
 		if self._comment_re.match(line):
@@ -606,6 +624,7 @@ class IniFormatProvider(FormatProvider):
 			self._sect_re = re.compile(r'\[(?P<header>[^]]+)\]')
 		if self._sect_re.match(line):
 			self._cursect = ET.SubElement(root, quote(self._sect_re.match(line).group('header')))
+			self._cursect.attrib['mc_type'] = 'section'
 			return True
 		return False
 	
@@ -627,6 +646,7 @@ class IniFormatProvider(FormatProvider):
 			if len(value) > 2 and value[0] in ('"', "'") and value[-1] in ('"', "'") and value[0] == value[-1]:
 				value = value[1:-1]
 			new_opt.text = value
+			new_opt.attrib['mc_type'] = 'option'
 			return True
 		return False
 	
@@ -639,14 +659,14 @@ class IniFormatProvider(FormatProvider):
 		return False
 	
 	def write_section(self, fp, node):
-		if len(node):
+		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'section': 
 			fp.write('['+unquote(node.tag)+']\n')	
 			self.write(fp, node, False)
 			return True
 		return False
 	
 	def write_option(self, fp, node):
-		if not len(node) and not callable(node.tag) and node.text:
+		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
 			value = node.text
 			if re.search('\s', value):
 				value = '"' + value + '"'
@@ -672,6 +692,22 @@ class NginxFormatProvider(IniFormatProvider):
 		self._writers += (self.write_statement,)
 		self._nesting  = 0
 		self._pad = '	'
+	
+	def create_element(self, etree, path, value):
+		el = FormatProvider.create_element(self, etree, path, value)
+		
+		parent_path = os.path.dirname(path)
+		if parent_path not in  ('.', ''):
+			parent = etree.find(parent_path)
+			# We are sure that parent element exists, because Configuration calls private method '_find' first
+			if parent.attrib.has_key('mc_type') and parent.attrib.has_key('mc_type') != 'section':
+				parent.attrib['mc_type'] = 'section'
+				if parent.text.strip():
+					parent.attrib['value'] = parent.text.strip()
+					parent.text = ''				
+		
+		el.attrib['mc_type'] = 'option' if value else 'statement'
+		return el
 			
 	def read_comment(self, line, root):
 		if not hasattr(self, "_comment_re"):
@@ -682,6 +718,7 @@ class NginxFormatProvider(IniFormatProvider):
 			return True
 		return False
 	
+	
 	def read_option(self, line, root):
 		if not hasattr(self, "_multi_re"):
 			self._multi_re = re.compile("\s*(?P<statement>[^\s]+)\s+(?P<value>.+?)(?P<multi_end>;)?\s*(#(?P<comment>.*))?$")
@@ -690,6 +727,7 @@ class NginxFormatProvider(IniFormatProvider):
 
 		if result:
 			new_multi = ET.Element(quote(result.group('statement').strip()))
+			new_multi.attrib['mc_type'] = 'option'
 			multi_value = quote(result.group('value').strip())
 			if result.group('comment'):
 				comment = ET.Comment(result.group('comment').strip())
@@ -725,7 +763,8 @@ class NginxFormatProvider(IniFormatProvider):
 		if not hasattr(self, "_stat_re"):
 			self._stat_re = re.compile(r'\s*([^\s\[\]]*)\s*;\s*$')
 		if self._stat_re.match(line):
-			ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)))
+			new_statement = ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)))
+			new_statement.attrib['mc_type'] = 'statement'			
 			return True
 		return False
 	
@@ -736,6 +775,7 @@ class NginxFormatProvider(IniFormatProvider):
 		result = self._sect_re.match(line)
 		if result:
 			new_section = ET.SubElement(self._cursect, quote(result.group('option').strip()))
+			new_section.attrib['mc_type'] = 'section'
 			if result.group('value'):
 				new_section.attrib['value'] = quote(result.group('value').strip())
 			if result.group('comment'):
@@ -773,13 +813,13 @@ class NginxFormatProvider(IniFormatProvider):
 		return False
 	
 	def write_statement(self, fp, node):
-		if not callable(node.tag) and not node.text and not len(node):
+		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'statement':
 			fp.write(self._pad*self._nesting + unquote(node.tag)+';\n')
 			return True
 		return False
 	
 	def write_section(self, fp, node):
-		if len(node):
+		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'section':
 			value = unquote(node.attrib['value']) if node.attrib.has_key('value') else ''
 			fp.write(self._pad*self._nesting + unquote(node.tag) + ' ' + value + ' {\n')
 			self._nesting +=1
@@ -792,7 +832,7 @@ class NginxFormatProvider(IniFormatProvider):
 		return False
 	
 	def write_option(self, fp, node):
-		if not len(node) and not callable(node.tag) and node.text:
+		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
 			values = node.text.split('\n')
 			fp.write (self._pad*self._nesting + unquote(node.tag)+ self._pad + unquote(values.pop(0)))
 			if len(values):
@@ -808,6 +848,10 @@ format_providers["nginx"] = NginxFormatProvider
 
 
 class XmlFormatProvider:
+	
+	def create_element(self, etree, path, value):
+		return ET.Element(quote(os.path.basename(path)))
+		
 	def read(self, fp):
 		try:
 			etree = ET.parse(fp, parser=CommentedTreeBuilder())
@@ -833,6 +877,21 @@ class ApacheFormatProvider(IniFormatProvider):
 	_readers = None
 	_writers = None
 
+	def create_element(self, etree, path, value):
+		el = FormatProvider.create_element(self, etree, path, value)
+		parent_path = os.path.dirname(path)
+		if parent_path not in  ('.', ''):
+			parent = etree.find(parent_path)
+			# We are sure that parent element exists, because Configuration calls private method '_find' first
+			if parent.attrib.has_key('mc_type') and parent.attrib.has_key('mc_type') != 'section':
+				parent.attrib['mc_type'] = 'section'
+				if parent.text.strip():
+					parent.attrib['value'] = parent.text.strip()
+					parent.text = ''
+		
+		el.attrib['mc_type'] = 'option'
+		return el
+
 	def __init__(self):
 		IniFormatProvider.__init__(self)
 		self._nesting  = 0
@@ -844,6 +903,7 @@ class ApacheFormatProvider(IniFormatProvider):
 		result = self._opt_re.match(line)
 		if result:
 			new_opt = ET.SubElement(self._cursect, quote(result.group('option').strip()))
+			new_opt.attrib['mc_type'] = 'option'
 			value = result.group('value')
 			if result.group('backslash'):
 				while True:
@@ -862,8 +922,8 @@ class ApacheFormatProvider(IniFormatProvider):
 	
 		
 	def write_option(self, fp, node):
-		if not len(node) and not callable(node.tag) and node.text:
-			fp.write(self._pad*self._nesting + unquote(node.tag)+"\t"+node.text+'\n')			
+		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
+			fp.write(self._pad*self._nesting + unquote(node.tag)+"\t"+node.text+'\n')
 			return True
 		return False
 	
@@ -883,6 +943,7 @@ class ApacheFormatProvider(IniFormatProvider):
 		if result:
 			tag = result.group('option').strip()
 			new_section = ET.SubElement(self._cursect, quote(tag))
+			new_section.attrib['mc_type'] = 'section'
 			value = result.group('value').strip()
 			if value:
 				new_section.attrib['value'] = value
@@ -913,7 +974,7 @@ class ApacheFormatProvider(IniFormatProvider):
 		return False
 	
 	def write_section(self, fp, node):
-		if len(node):
+		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'section':
 			text = node.text.strip()
 			value = ' ' + node.attrib['value'] if node.attrib.has_key('value') else ''
 			tag = unquote(node.tag)
