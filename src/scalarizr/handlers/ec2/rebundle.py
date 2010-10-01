@@ -782,7 +782,7 @@ if disttool.is_linux():
 					"rsync with preservation of extended file attributes failed. Retrying rsync " +
 	           		"without attempting to preserve extended file attributes...")
 				self._copy_rec(source, dest, xattr=False)
-			else:
+			elif exitcode > 0:
 				raise HandlerError('rsync failed with exit code %s' % (exitcode,))
 		
 		
