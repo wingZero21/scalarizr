@@ -301,21 +301,27 @@ class _OptionSpec():
 		spec = dict(ini.items(section))
 		defaults = defaults or dict()
 			
+		key = 'config-section'
+		ret.section = spec.get(key, defaults.get(key, None))
+		
+		key = 'default-value'	
+		ret.default_value = spec.get(key, defaults.get(key, None))
+		
+		key = 'supported-from'
+		tmp = spec.get(key, defaults.get(key, None))
+		ret.supported_from = tmp and tuple(map(int, tmp.split('.'))) or None
+		
+		key = 'need-restart'
+		ret.need_restart = bool(spec.get(key, defaults.get(key, True)))
+		
+		key = 'inaccurate'
+		ret.inaccurate = bool(spec.get(key, defaults.get(key, False)))
+		
 		for key, value in spec.items():
-			if 'config-section' == key:
-				ret.section = spec.get(key, defaults.get(key, None))
-			elif 'default-value' == key:
-				ret.default_value = spec.get(key, defaults.get(key, None))
-			elif 'supported-from' == key:
-				tmp = spec.get(key, defaults.get(key, None))
-				ret.supported_from = tmp and tuple(map(int, tmp.split('.'))) or None
-			elif 'need-restart' == key:
-				ret.need_restart = bool(spec.get(key, defaults.get(key, True)))
-			elif 'inaccurate' == key:
-				ret.inaccurate = bool(spec.get(key, defaults.get(key, False)))
-			else:
+			if not key in ('config-section', 'default-value', 
+					'supported-from', 'need-restart', 'inaccurate'):
 				ret.extension[key] = value
-				
+			
 		return ret
 			
 	def __repr__(self):
@@ -332,6 +338,7 @@ class _CnfManifest:
 		ini.read(manifest_path)
 		try:
 			self._defaults = dict(ini.items('__defaults__'))
+			print "DEFAULTS:::::::", self._defaults
 		except NoPathError:
 			self._defaults = dict()
 		
