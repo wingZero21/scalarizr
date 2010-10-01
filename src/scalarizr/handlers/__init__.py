@@ -1,8 +1,9 @@
 
+from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import configtool, initdv2
+from scalarizr.util import initdv2, disttool
 from scalarizr.util.initdv2 import Status
 from scalarizr.service import CnfPresetStore, CnfPreset, CnfController,\
 	PresetType
@@ -41,14 +42,13 @@ class Handler(object):
 		srv.new_producer(host).send(queue, msg)
 
 	def _broadcast_message(self, msg):
-		config = bus.config
+		cnf = bus.cnf
 		platform = bus.platform
-		gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
-		
-		msg.behaviour = configtool.split_array(gen_sect.get(configtool.OPT_BEHAVIOUR))
+
 		msg.local_ip = platform.get_private_ip()
 		msg.remote_ip = platform.get_public_ip()
-		msg.role_name = gen_sect.get(configtool.OPT_ROLE_NAME)	
+		msg.behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR))
+		msg.role_name = cnf.rawini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return False
@@ -71,14 +71,15 @@ class MessageListener:
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		config = bus.config
+		cnf = bus.config
+		platform = bus.platform
 
 		self._logger.debug("Initialize message listener");
 		self._accept_kwargs = dict(
-			behaviour = configtool.split_array(config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)),
-			platform = getattr(bus.platform, "name"),
-			os = platform.uname(),
-			dist = platform.dist()
+			behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
+			platform = platform.name,
+			os = disttool.uname(),
+			dist = disttool.linux_dist()
 		)
 		self._logger.debug("Gathered _accept_kwargs: %s", self._accept_kwargs)
 		
@@ -90,10 +91,10 @@ class MessageListener:
 			self._handlers_chain = []
 			self._logger.debug("Collecting handlers chain");
 			
-			config = bus.config
-			for handler_name, module_name in config.items(configtool.SECT_HANDLERS):
+			cnf = bus.cnf 
+			for handler_name, module_name in cnf.rawini.items(config.SECT_HANDLERS):
 				try:
-					module_name = config.get("handlers", handler_name)
+					module_name = cnf.rawini.get(config.SECT_HANDLERS, handler_name)
 					try:
 						module = __import__(module_name, globals(), locals(), ["get_handlers"], -1)
 						try:
@@ -107,7 +108,7 @@ class MessageListener:
 						self._logger.exception(e)
 							
 				except (BaseException, Exception), e:
-					self._logger.error("Unhandled exception in handler notification loop")
+					self._logger.error('Unhandled exception in notification loop')
 					self._logger.exception(e)
 						
 			self._logger.debug("Collected handlers chain: %s" % self._handlers_chain)

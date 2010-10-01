@@ -222,7 +222,7 @@ class CassandraScalingHandler(ServiceCtlHanler):
 				message.name == Messages.BEFORE_HOST_TERMINATE )
 	
 	def on_HostInit(self, message):
-		if message.behaviour == config.BuiltinBehaviours.CASSANDRA:
+		if config.BuiltinBehaviours.CASSANDRA in message.behaviour:
 			self._insert_iptables_rule(message.local_ip or message.remote_ip)
 
 	def on_host_init_response(self, message):
@@ -441,7 +441,7 @@ class CassandraScalingHandler(ServiceCtlHanler):
 		message.cassandra.update(dict(volume_id = ebs_volume.id))
 
 	def on_HostUp(self, message):
-		if message.behaviour == config.BuiltinBehaviours.CASSANDRA:
+		if config.BuiltinBehaviours.CASSANDRA in message.behaviour:
 			ip = message.local_ip or message.remote_ip
 			seeds = cassandra.cassandra_conf.get_list('Storage/Seeds/')
 			
@@ -469,7 +469,7 @@ class CassandraScalingHandler(ServiceCtlHanler):
 			del(cass)
 		
 	def on_HostDown(self, message):
-		if message.behaviour == config.BuiltinBehaviours.CASSANDRA:
+		if config.BuiltinBehaviours.CASSANDRA in message.behaviour:
 			try:
 				ip = message.local_ip or message.remote_ip
 				cassandra.cassandra_conf.remove('Storage/Seeds/Seed', ip)

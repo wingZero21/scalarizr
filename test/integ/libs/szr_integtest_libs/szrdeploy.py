@@ -3,7 +3,7 @@ Created on Sep 23, 2010
 
 @author: marat
 '''
-from scalarizr.libs.metaconf import NoPathError
+from scalarizr.libs.metaconf import Configuration, NoPathError
 from szr_integtest import config
 from szr_integtest_libs import exec_command
 import os

@@ -161,7 +161,9 @@ class QueryEnvService(object):
 		response = xml.documentElement
 		for role_el in response.firstChild.childNodes:
 			role = Role()
-			role.behaviour = role_el.getAttribute("behaviour")
+			role.behaviour = role_el.getAttribute("behaviour").split('.')
+			if role.behaviour == ('base',) or role.behaviour == ('',):
+				role.behaviour = ()
 			role.name = role_el.getAttribute("name")
 			for host_el in role_el.firstChild.childNodes:
 				host = RoleHost()

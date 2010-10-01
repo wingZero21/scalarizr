@@ -46,8 +46,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 		)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, Messages.MOUNTPOINTS_RECONFIGURE) \
-				and platform == "ec2"
+		return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, Messages.MOUNTPOINTS_RECONFIGURE)
 
 	def on_init(self):
 		bus.on("before_host_init", self.on_before_host_init)

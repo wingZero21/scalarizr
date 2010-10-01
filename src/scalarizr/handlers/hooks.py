@@ -5,9 +5,9 @@ Created on Mar 3, 2010
 @author: Dmytro Korsakov
 '''
 
+from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.util import configtool
 import logging
 import os
 import subprocess
@@ -35,10 +35,10 @@ class HooksHandler(Handler):
 		def hook(*args, **kwargs):
 			self._logger.debug("Hook on '"+event+"'" + str(args) + " " + str(kwargs))
 
-			config = bus.config
+			cnf = bus.cnf; ini = cnf.rawini
 			environ = kwargs
-			environ["server_id"] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
-			environ["behaviour"] = config.get(configtool.SECT_GENERAL, configtool.OPT_BEHAVIOUR)
+			environ["server_id"] = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+			environ["behaviour"] = ini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)
 			
 			if os.path.isdir(self._hooks_path):
 				reg = re.compile(r"^\d+\-"+event+"$")				

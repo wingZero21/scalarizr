@@ -67,7 +67,7 @@ class IpListBuilder(Handler):
 				rolename, behaviour, ip)
 		self._modify_tree(rolename, behaviour, ip, 
 				modfn=self._create_file, 
-				replication_master=behaviour == BuiltinBehaviours.MYSQL and self._host_is_replication_master(ip, rolename))
+				replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
 			
 	def on_HostDown(self, message):
 		behaviour = message.behaviour
@@ -78,24 +78,25 @@ class IpListBuilder(Handler):
 						rolename, behaviour, ip)
 		self._modify_tree(rolename, behaviour, ip, 
 				modfn=self._remove_file, 
-				replication_master=behaviour == BuiltinBehaviours.MYSQL and self._host_is_replication_master(ip, rolename))
+				replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
 
 	on_RebootStart = on_HostDown
 	
 	on_RebootFinish = on_HostUp 				
 
-	def _modify_tree(self, rolename, behaviour, ip, modfn=None, replication_master=None):
+	def _modify_tree(self, rolename, behaviours, ip, modfn=None, replication_master=None):
 		# Touch/Unlink %role_name%/xx.xx.xx.xx
 		modfn(os.path.join(self._base_path, rolename, ip))
 		
-		if behaviour == BuiltinBehaviours.MYSQL:
-			suffix = "master" if replication_master else "slave"
-			# Touch/Unlink mysql-(master|slave)/xx.xx.xx.xx
-			mysql_path = os.path.join(self._base_path, "mysql-" + suffix)
-			modfn(os.path.join(mysql_path, ip))
-		else:
-			# Touch/Unlink %behaviour%/xx.xx.xx.xx
-			modfn(os.path.join(self._base_path, behaviour, ip))	
+		for behaviour in behaviours:
+			if behaviour == BuiltinBehaviours.MYSQL:
+				suffix = "master" if replication_master else "slave"
+				# Touch/Unlink mysql-(master|slave)/xx.xx.xx.xx
+				mysql_path = os.path.join(self._base_path, "mysql-" + suffix)
+				modfn(os.path.join(mysql_path, ip))
+			else:
+				# Touch/Unlink %behaviour%/xx.xx.xx.xx
+				modfn(os.path.join(self._base_path, behaviour, ip))	
 
 	def _create_dir(self, d):
 		if not os.path.exists(d):
