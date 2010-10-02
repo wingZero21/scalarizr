@@ -15,9 +15,8 @@ EPEL_PACKAGE = "http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5
 
 
 class RepoType:
-	LOCAL = 'local'
-	PRODUCTION = 'production'
-	NIGHTLY_BUILD = 'nightly_build'
+	NIGHTLY_BUILD = 'nightly'	
+	RC = 'rc'
 	RELEASE = 'release'
 
 class ScalarizrDeploy:
@@ -132,13 +131,19 @@ class ScalarizrDeploy:
 			scalarizr_path = "/var/lib/python-support/python2.%s/scalarizr" % py_version
 		
 		exec_command(self.channel, 'rm -rf ' + scalarizr_path)
-		
-		cmd = 'svn export %s %s' % (svn_repo, scalarizr_path)
-		cmd += (' --username %s ' % svn_user) if svn_user else ''
-		cmd += (' --password %s ' % svn_password) if svn_password else ''
+		cmd = 'echo yes | '
+		cmd += 'svn export %s %s' % (os.path.join(svn_repo, 'src/scalarizr'), scalarizr_path)
+		cmd += (' --username "%s" ' % svn_user) if svn_user else ''
+		cmd += (' --password "%s" ' % svn_password) if svn_password else ''
 		out = exec_command(self.channel, cmd)
 		if not 'Exported revision' in out:
-			raise Exception('Svn export failed.')
+			raise Exception('Svn export failed')
+
+	def apply_changes_from_tarball(self, file):
+		'''
+		@todo: upload tar.gz and extract it into site-packages/scalarizr
+		'''
+		raise BaseException('Not implemented')
 
 	def detect_distr(self):
 		if not self.distr:

@@ -29,6 +29,7 @@ class QueryEnvService(object):
 		self.key = key
 		self.api_version = api_version
 	
+	
 	def list_roles (self, role_name=None, behaviour=None):
 		"""
 		@return Role[]

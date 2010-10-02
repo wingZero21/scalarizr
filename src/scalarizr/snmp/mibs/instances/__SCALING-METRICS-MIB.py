@@ -12,6 +12,7 @@ from subprocess import Popen, PIPE
 
 # SNMP imports
 from pysnmp.smi.builder import MibBuilder
+from scalarizr.config import ScalarizrState
 (MibScalarInstance, MibTableRow, MibTable, MibTableColumn, Integer32) = mibBuilder.importSymbols(
 		'SNMPv2-SMI',
 		'MibScalarInstance', 'MibTableRow' , 'MibTable', 'MibTableColumn', 'Integer32')
@@ -44,12 +45,16 @@ class MtxTableImpl(MibTable):
 
 	def values(self):
 		queryenv = bus.queryenv_service
+		cnf = bus.cnf
 		
 		# Obtain scaling metrics from Scalr. Cache result for 30 minutes
 		now = time.time()
 		if not self._metrics or now - self._metrics_timestamp > 1800:
-			self._metrics = queryenv.get_scaling_metrics()
-			self._metrics_timestamp = now
+			if cnf.state != ScalarizrState.IMPORTING: 
+				self._metrics = queryenv.get_scaling_metrics()
+				self._metrics_timestamp = now
+			else:
+				return dict()
 
 		# TODO: investigate how efficiently will be do calculations in parallel
 		
