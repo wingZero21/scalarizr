@@ -296,6 +296,7 @@ class Configuration:
 	def get(self, path):
 		if not self.etree:
 			self._init()
+				
 		"""
 		@see http://effbot.org/zone/element-xpath.htm
 		v = conf.get("general/server_id")
@@ -460,18 +461,17 @@ class Configuration:
 		remove "143.66.21.76" from list
 		"""
 		try:
-			opt_list = self._find_all(path)
-		except NoPathError:
-			return
-		
-		parent = self.subset(path)._find('..')
-		if value:
-			for opt in opt_list:
-				if opt.text.strip() == value:
+			opt_list = self._find_all(path)			
+			parent = self.subset(path)._find('..')
+			if value:
+				for opt in opt_list:
+					if opt.text.strip() == value:
+						parent.remove(opt)
+			else:	
+				for opt in opt_list:
 					parent.remove(opt)
-		else:	
-			for opt in opt_list:
-				parent.remove(opt)			
+		except NoPathError:
+			pass			
 
 	def subset(self, path):
 		"""
