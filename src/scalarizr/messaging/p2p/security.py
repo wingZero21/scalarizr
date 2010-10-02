@@ -5,7 +5,7 @@ Created on Aug 10, 2010
 '''
 
 import logging, binascii
-from scalarizr.util import configtool, cryptotool
+from scalarizr.util import cryptotool
 from scalarizr.messaging import MessagingError
 
 

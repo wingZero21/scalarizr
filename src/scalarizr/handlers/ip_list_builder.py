@@ -5,13 +5,14 @@ Created on Dec 11, 2009
 @author: marat
 '''
 
-from scalarizr.handlers import Handler
+# Core
 from scalarizr.bus import bus
+from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
-from scalarizr.util import configtool
 from scalarizr.config import BuiltinBehaviours
-import logging
-import os
+
+# Stdlibs
+import logging, os
 
 # TODO: Configurator
 # TODO: handle IPAddressChanged

@@ -1,4 +1,6 @@
 
+# Core 
+from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions
 from scalarizr.handlers import MessageListener
@@ -8,25 +10,20 @@ from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.snmp.agent import SnmpServer
 
-from scalarizr.util import configtool, SqliteLocalObject, url_replace_hostname,\
-	daemonize, system, disttool, fstool, initdv2, firstmatched, log, format_size, filetool
-from scalarizr.util.configtool import ConfigError
+# Utils
+from scalarizr.util import initdv2, fstool, filetool, log
+from scalarizr.util import SqliteLocalObject, daemonize, system, disttool, firstmatched, format_size
 
-import os, sys, re, shutil
-import sqlite3 as sqlite
+# Stdlibs
 import logging
 import logging.config
+import os, sys, re, shutil, time
+import binascii, string, traceback
+import sqlite3 as sqlite
+import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
-import binascii, string, traceback
-import threading, socket, signal
 from urlparse import urlparse, urlunparse
-
-
-try:
-	import timemodule as time
-except ImportError:
-	import time
 
 
 class ScalarizrError(BaseException):
@@ -288,7 +285,6 @@ def _apply_user_data(cnf):
 def init_script():
 	_init()
 	
-	config = bus.config
 	cnf = bus.cnf
 	cnf.bootstrap()
 	
@@ -297,10 +293,10 @@ def init_script():
 
 	# Script producer url is scalarizr consumer url. 
 	# Script can't handle any messages by himself. Leave consumer url blank
-	adapter = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)	
-	kwargs = dict(config.items("messaging_" + adapter))
-	kwargs[P2pConfigOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
-	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
+	adapter = cnf.rawini.get(config.SECT_MESSAGING, config.OPT_ADAPTER)	
+	kwargs = dict(cnf.rawini.items("messaging_" + adapter))
+	kwargs[P2pConfigOptions.SERVER_ID] = cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.rawini.get(config.SECT_GENERAL, config.OPT_CRYPTO_KEY_PATH)
 	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
 	
 	factory = MessageServiceFactory()		

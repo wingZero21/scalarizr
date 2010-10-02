@@ -4,11 +4,12 @@ Created on Mar 1, 2010
 @author: marat
 '''
 
-import scalarizr.handlers
 from scalarizr.bus import bus
+from scalarizr import config, handlers
 from scalarizr.messaging import Messages
-from scalarizr.util import system, fstool, configtool
-from binascii import hexlify
+from scalarizr.util import fstool
+
+
 import os
 import logging
 
@@ -17,7 +18,7 @@ import logging
 def get_handlers ():
 	return [EbsHandler()]
 
-class EbsHandler(scalarizr.handlers.Handler):
+class EbsHandler(handlers.Handler):
 	_logger = None
 	_platform = None
 	_queryenv = None
@@ -51,15 +52,15 @@ class EbsHandler(scalarizr.handlers.Handler):
 	def on_init(self):
 		bus.on("before_host_init", self.on_before_host_init)
 		try:
-			scalarizr.handlers.script_executor.skip_events.add(Messages.INT_BLOCK_DEVICE_UPDATED)
+			handlers.script_executor.skip_events.add(Messages.INT_BLOCK_DEVICE_UPDATED)
 		except AttributeError:
 			pass
 	
 	def on_before_host_init(self, *args, **kwargs):
 		self._logger.debug("Adding udev rule for EBS devices")
 		try:
-			config = bus.config
-			scripts_path = config.get(configtool.SECT_GENERAL, configtool.OPT_SCRIPTS_PATH)
+			cnf = bus.cnf
+			scripts_path = cnf.rawini.get(config.SECT_GENERAL, config.OPT_SCRIPTS_PATH)
 			if scripts_path[0] != "/":
 				scripts_path = os.path.join(bus.base_path, scripts_path)
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")

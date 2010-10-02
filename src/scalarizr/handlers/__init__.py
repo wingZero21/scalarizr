@@ -71,7 +71,7 @@ class MessageListener:
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		cnf = bus.config
+		cnf = bus.cnf
 		platform = bus.platform
 
 		self._logger.debug("Initialize message listener");

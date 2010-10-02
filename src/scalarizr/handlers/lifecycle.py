@@ -7,12 +7,13 @@ Created on Mar 3, 2010
 # Core
 import scalarizr.handlers
 from scalarizr.bus import bus
+from scalarizr import config
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 
 # Libs
-from scalarizr.util import cryptotool, configtool
+from scalarizr.util import cryptotool
 
 # Stdlibs
 import logging, os, sys, binascii, threading
@@ -32,7 +33,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	_msg_service = None
 	_producer = None
 	_platform = None
-	_config = None
 	_cnf = None
 	
 	_new_crypto_key = None
@@ -109,7 +109,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		
 		self._msg_service = bus.messaging_service
 		self._producer = self._msg_service.get_producer()
-		self._config = bus.config
 		self._cnf = bus.cnf
 		self._platform = bus.platform
 	
@@ -193,15 +192,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		# Prepare HostInit
 		msg = self.new_message(Messages.HOST_INIT, dict(
 			crypto_key=self._new_crypto_key,
-			snmp_port=self._config.get(configtool.SECT_SNMP, configtool.OPT_PORT),
-			snmp_community_name=self._config.get(configtool.SECT_SNMP, configtool.OPT_COMMUNITY_NAME)
+			snmp_port=self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
+			snmp_community_name=self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
 		), broadcast=True)
 		bus.fire("before_host_init", msg)
 		self.send_message(msg)
 		
 		# Update key file
-		key_path = self._config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)		
-		configtool.write_key(key_path, self._new_crypto_key, key_title="Scalarizr crypto key")
+		self._cnf.write_key(self._cnf.DEFAULT_KEY, self._new_crypto_key)		
 
 		# Update key in QueryEnv
 		queryenv = bus.queryenv_service
@@ -268,7 +266,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 	def _update_package(self):
-		up_script = self._config.get(configtool.SECT_GENERAL, configtool.OPT_SCRIPTS_PATH) + "/update"
+		up_script = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_SCRIPTS_PATH) + '/update'
 		cmd = [sys.executable, up_script]
 		p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
 		p.communicate()
@@ -314,7 +312,7 @@ class IntMessagingService(object):
 		cnf = bus.cnf
 		f = MessageServiceFactory()
 		self.msg_service = f.new_service("p2p", **{
-			P2pConfigOptions.SERVER_ID : cnf.rawini.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID),
+			P2pConfigOptions.SERVER_ID : cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID),
 			P2pConfigOptions.CRYPTO_KEY_PATH : cnf.key_path(cnf.FARM_KEY),
 			P2pConfigOptions.CONSUMER_URL : "http://0.0.0.0:8012"
 		})
