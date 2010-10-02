@@ -88,7 +88,17 @@ class SshManager:
 		self.channels.append(channel)
 		if self.user == 'ubuntu':
 			channel.send('sudo -i\n')
-		
+			
+		start_time = time.time()
+		timeout = 5
+		out = ''
+		while time.time() - start_time < timeout:
+			if channel.recv_ready():
+				out += channel.recv(1024)
+				if re.search('root@.*?#', out):
+					break
+		else:
+			raise Exception('Timeout while trying get root session')			
 		return channel
 
 class LogReader:

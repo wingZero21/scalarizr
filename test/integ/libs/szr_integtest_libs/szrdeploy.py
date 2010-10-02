@@ -18,6 +18,7 @@ class RepoType:
 	LOCAL = 'local'
 	PRODUCTION = 'production'
 	NIGHTLY_BUILD = 'nightly_build'
+	RELEASE = 'release'
 
 class ScalarizrDeploy:
 	distr = None
