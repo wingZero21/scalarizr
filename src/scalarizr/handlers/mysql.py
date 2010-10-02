@@ -301,15 +301,17 @@ class MysqlCnfController(CnfController):
 		self.sendline = ''
 		
 	def _after_set_option(self, option_spec, value):
-		self._logger.debug('Setting variable %s to %s' % (option_spec.name, value))
-		self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, value)
+		if value != option_spec.default_value:
+			#self._logger.debug('Setting variable %s to %s' % (option_spec.name, value))
+			self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, value)
 
 
 	def _after_remove_option(self, option_spec):
 		if not option_spec.default_value:
-			self._logger.debug('No default value for %s' % option_spec.name)
+			#self._logger.debug('No default value for %s' % option_spec.name)
+			pass
 		else:
-			self._logger.debug('Setting variable %s to default' % option_spec.name)
+			#self._logger.debug('Setting variable %s to default' % option_spec.name)
 			self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, option_spec.default_value)
 	
 	def _after_apply_preset(self):

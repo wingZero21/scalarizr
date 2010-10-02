@@ -173,8 +173,7 @@ class ServiceCtlHanler(Handler):
 		self._queryenv = bus.queryenv_service
 		bus.on('init', self.sc_on_init)
 
-		
-	
+
 	def on_UpdateServiceConfiguration(self, message):
 		if self._service_name != message.behaviour:
 			return

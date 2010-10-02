@@ -135,7 +135,8 @@ class CnfController(object):
 				if opt.default_value:
 					vars[opt.name] = opt.default_value
 				else:
-					self._logger.debug("Option '%s' has no default value" % opt.name)
+					#self._logger.debug("Option '%s' has no default value" % opt.name)
+					pass
 				
 		preset.settings = vars
 		return preset
@@ -157,21 +158,17 @@ class CnfController(object):
 				
 				# Skip unsupported
 				if ver and opt.supported_from and opt.supported_from > ver:
-					self._logger.debug("Skip option '%s'. Supported from %s; installed %s" % 
-							(opt.name, opt.supported_from, ver))
+					#self._logger.debug("Skip option '%s'. Supported from %s; installed %s" % 
+					#		(opt.name, opt.supported_from, ver))
 					continue
 								
 				if not opt.default_value:
-					self._logger.debug("Option '%s' has no default value" % opt.name)
+					#self._logger.debug("Option '%s' has no default value" % opt.name)
+					pass
 					
 				elif new_value == opt.default_value:
-					self._logger.debug("Remove option '%s'. Equal to default" % opt.name)
-											
-					try:
-						conf.remove(path)
-					except NoPathError:
-						pass
-					
+					#self._logger.debug("Remove option '%s'. Equal to default" % opt.name)
+					conf.remove(path)
 					self._after_remove_option(opt)				
 					continue	
 				
@@ -181,7 +178,8 @@ class CnfController(object):
 					value = None
 				
 				if value == new_value:
-					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
+					#self._logger.debug("Skip option '%s'. Not changed" % opt.name)
+					pass
 				else:
 					if self.definitions and new_value in self.definitions:
 						new_value = self.definitions[new_value]
@@ -190,11 +188,8 @@ class CnfController(object):
 					conf.set(path, new_value, force=True)
 					self._after_set_option(opt, path)
 			else:
-				self._logger.debug("Remove option '%s'. Not found in preset" % opt.name)	
-				try:				
-					conf.remove(path)
-				except NoPathError:
-					pass	
+				#self._logger.debug("Remove option '%s'. Not found in preset" % opt.name)	
+				conf.remove(path)
 				self._after_remove_option(opt)
 				
 		self._after_apply_preset()						
@@ -338,7 +333,6 @@ class _CnfManifest:
 		ini.read(manifest_path)
 		try:
 			self._defaults = dict(ini.items('__defaults__'))
-			print "DEFAULTS:::::::", self._defaults
 		except NoPathError:
 			self._defaults = dict()
 		
