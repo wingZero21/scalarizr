@@ -86,11 +86,6 @@ def firstmatched(function, sequence, default=None):
 	else:
 		return default	
 
-
-
-
-
-
 def daemonize():
 	# First fork
 	pid = os.fork()

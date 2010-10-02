@@ -39,6 +39,10 @@ class _QueryEnvResponder(BaseHTTPRequestHandler):
 			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-stderr</path>
 			    <retrieve-method>execute</retrieve-method>
 			  </metric>
+			  <metric id="1238" name="Test-Execute-Error-Timeout">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
 			</metrics>
 			</response>			
 			''' % dict(resources_path=szr_unittest.RESOURCE_PATH)			
@@ -117,8 +121,9 @@ class TestMtxTableImpl(unittest.TestCase):
 		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.3 = STRING: "0.0000000"') != -1)
 		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.3 = STRING: "exitcode: 23"') != -1)
 		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.4 = STRING: "0.0000000"') != -1)
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.4 = STRING: "Application error taken from stderr"') != -1)		
-
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.4 = STRING: "Application error taken from stderr"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.5 = STRING: "0.0000000"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.5 = STRING: "Timeouted"') != -1)
 
 if __name__ == "__main__":
 	unittest.main()

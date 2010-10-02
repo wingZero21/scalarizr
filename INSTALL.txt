@@ -31,7 +31,8 @@ Installation on Fedora / CentOS / RHEL
 
 RHEL 5 distributes with python2.4. 
 However EPEL community maintains python2.6 and other fresh software for RHEL.    
-Use this how-to http://fedoraproject.org/wiki/EPEL/FAQ#howtouse to add thir repos and install python2.6 with this command
+Use this how-to http://fedoraproject.org/wiki/EPEL/FAQ#howtouse to add their repos, 
+then install python2.6 with this command
 
 	yum install python2.6
 	
