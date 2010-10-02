@@ -19,6 +19,13 @@ EC2_MYSQL_ROLE_DEFAULT_SETTINGS = {
 	'mysql.ebs_volume_size' : '1'
 }
 
+PLATFORM_EC2 	= 'Amazon EC2'
+PLATFORM_RS  	= 'Rackspace'
+
+BEHAVIOUR_BASE  = 'Base images'
+BEHAVIOUR_APP   = 'Application servers'
+BEHAVIOUR_MYSQL = 'Database servers'    
+
 class FarmUI:
 	sel = None
 	farm_id = None	
@@ -155,6 +162,38 @@ class FarmUI:
 			raise FarmUIError("Cannot retrieve server's public ip. Server id: %s " % server_id)
 		self.servers.append(public_ip)
 		return public_ip
+	
+def import_server(sel, platform_name, behaviour, host, role_name):
+	'''
+	@return: import shell command
+	'''
+	login(sel)
+	sel.open('szr_server_import.php')
+	
+	platforms = sel.get_select_options('//td[@class="Inner_Gray"]/table/tbody/tr[2]/td[2]/select')
+	if not platform_name in platforms:
+		raise Exception('Unknown platform: %s' % platform_name)
+	sel.select('//td[@class="Inner_Gray"]/table/tbody/tr[2]/td[2]/select', platform_name)
+	
+	behaviours = sel.get_select_options('//td[@class="Inner_Gray"]/table/tbody/tr[3]/td[2]/select')
+	if not behaviour in behaviours:
+		raise Exception('Unknown behaviour: %s' % behaviour)
+	sel.select('//td[@class="Inner_Gray"]/table/tbody/tr[3]/td[2]/select', behaviour)
+	
+	sel.type('//td[@class="Inner_Gray"]/table/tbody/tr[4]/td[2]/input', host)
+	sel.type('//td[@class="Inner_Gray"]/table/tbody/tr[5]/td[2]/input', role_name)
+	sel.click('cbtn_2')
+	sel.wait_for_page_to_load(15000)
+	if not sel.is_text_present('Step 2'):
+		try:
+			text = sel.get_text('//div[@class="viewers-messages viewers-errormessage"]/')
+			raise Exception('Something wrong with importing server: %s' % text)
+		except FarmUIError, e:
+			print str(e)
+		except:
+			raise Exception("Can't import server for unknow reason (Step 1)")
+		
+	return sel.get_text('//td[@class="Inner_Gray"]/table/tbody/tr[3]/td[1]/textarea')
 	
 def login(sel):
 	config = ConfigParser()
