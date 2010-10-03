@@ -643,7 +643,7 @@ class IniFormatProvider(FormatProvider):
 				self._cursect.append(comment)
 			new_opt = ET.SubElement(self._cursect, quote(self._opt_re.match(line).group('option').strip()))
 			value = self._opt_re.match(line).group('value')
-			if len(value) > 2 and value[0] in ('"', "'") and value[-1] in ('"', "'") and value[0] == value[-1]:
+			if len(value) > 1 and value[0] in ('"', "'") and value[-1] in ('"', "'") and value[0] == value[-1]:
 				value = value[1:-1]
 			new_opt.text = value
 			new_opt.attrib['mc_type'] = 'option'
