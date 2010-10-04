@@ -37,7 +37,6 @@ mtxError = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 5), DisplayString()).s
 _metrics = None
 _metrics_timestamp = None
 
-logger = logging.getLogger(__name__)
 
 class MtxTableImpl(MibTable):
 
@@ -50,7 +49,6 @@ class MtxTableImpl(MibTable):
 	_metrics_timestamp = None
 	
 	def getNextNode(self, name, idx):
-		print 'Metric getnextnode'
 		mibBuilder.lastBuildId += 1
 		
 		# Clean old values
@@ -69,7 +67,6 @@ def values():
 	global _metrics
 	global _metrics_timestamp
 	
-	logger.info('metric values')
 	queryenv = bus.queryenv_service
 	cnf = bus.cnf
 	
@@ -115,7 +112,6 @@ def values():
 	return ret
 
 def _get_execute( metric):
-	logger.info('metric get execute')
 	if not os.access(metric.path, os.X_OK):
 		raise BaseException("File is not executable: '%s'" % metric.path)
 	
@@ -127,31 +123,23 @@ def _get_execute( metric):
 		else:
 			break
 	else:
-		print 'TimeOUT!!!', time.time() - start_time,
 		if hasattr(proc, 'kill'):
 			# python >= 2.6
-			
-			print 'Killing 2.6'
 			kill_childs(proc.pid)
 			proc.terminate()
 		else:
-			print 'Killing %s' % proc.pid
 			kill_childs(proc.pid)
 			os.kill(proc.pid, signal.SIGTERM)
 		raise BaseException('Timeouted')
 							
-	print 'Communication',
-
 	stdout, stderr = proc.communicate()
 	
 	if proc.returncode > 0:
 		raise BaseException(stderr if stderr else 'exitcode: %d' % proc.returncode)
 	
-	logger.info('returning %s', stdout)
 	return stdout
 
 def _get_read( metric):
-	print 'metric get read'
 	if not os.access(metric.path, os.R_OK):
 		raise BaseException("File is not readable: '%s'" % metric.path)
 	
