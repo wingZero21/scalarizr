@@ -16,6 +16,7 @@ from scalarizr.handlers.nginx import NginxCnfController
 from scalarizr.handlers.apache import ApacheCnfController
 from scalarizr.handlers.memcached import MemcachedCnfController
 from scalarizr.handlers.cassandra import CassandraCnfController
+import shutil
 
 class _EmptyQueryEnv:
 	def get_service_configuration(self):
@@ -87,6 +88,9 @@ class MockMessage():
 		self.restart_service = restart_service
 
 
+
+
+"""
 class TestMemcachedCnfController(unittest.TestCase):
 
 	def setUp(self):
@@ -117,7 +121,7 @@ class TestCnfControllers(unittest.TestCase):
 
 	def setUp(self):
 		self.test_data = {
-						ApacheCnfController: ('DocumentRoot', '/usr/local/apache/htdocs'),
+						#ApacheCnfController: ('EnableMMAP', 'on'),
 						NginxCnfController:  ('user','www-data'),
 						_MysqlCnfController: ('log_warnings','1'),
 						#CassandraCnfController(): ('RpcTimeoutInMillis','10000')
@@ -139,45 +143,39 @@ class TestCnfControllers(unittest.TestCase):
 			new_preset = ctl.current_preset()
 			self.assertEqual(new_preset.settings[standart[0]],preset.settings[standart[0]])
 			self.assertFalse(new_preset.settings.has_key(test_key))	
-			
-	def test_get_version(self):
-		for controller in self.test_data.keys():
-			ctl = controller()
-			ver = ctl._get_version()
-			self.assertEqual(type(ver), tuple)
-			self.assertTrue(len(ver))
-			for num in ver:
-				self.assertTrue(type(num), int)
 
-"""	
+"""
 class TestMysqlCnfController(unittest.TestCase):
 
 	def setUp(self):
 		self.ctl = _MysqlCnfController()
-		self.default_preset = self.ctl.current_preset()
-		pass
+		shutil.copy('/etc/mysql/my.cnf', '/etc/mysql/my.cnf.test')
 		
+
 	def tearDown(self):
-		self.ctl.apply_preset(self.default_preset)
-		pass
+		shutil.copy('/etc/mysql/my.cnf.test', '/etc/mysql/my.cnf')
+
 
 	def test_current_preset(self):
 		
 		preset = self.ctl.current_preset()
-		self.assertEqual(preset.settings['log_warnings'], '1')
 		
 		preset.settings['ololo'] = 'trololo'
-		
-		preset.settings['log_warnings'] = '0'
+		preset.settings['log_warnings'] = '0' # static value
+		preset.settings['back_log'] = '51' #dynamic value
 		self.ctl.apply_preset(preset)
+		
 		new_preset = self.ctl.current_preset()
 		self.assertEqual(new_preset.settings['log_warnings'],preset.settings['log_warnings'])
+		self.assertNotEqual(new_preset.settings['back_log'],preset.settings['back_log'])
 
-	def test_comparator(self):
+	
+	"""
+	def _test_comparator(self):
 		ctl = ServiceCtlHanler(None, None)
 		self.assertFalse(ctl.preset_changed({'1':'one', '2':'two'}, {'1':'one', '2':'two', '3':'three'}))
 		self.assertFalse(ctl.preset_changed({'1':'one', '2':'two', 'key_cache_age_threshold':''}, {'1':'one', '2':'two', 'join_buffer_size':''}))
-
+	"""
 	def test_ServiceCtlHanler(self):		
 		bus.queryenv_service = _QueryEnv()
 		handler = MockHandler()
@@ -189,11 +187,12 @@ class TestMysqlCnfController(unittest.TestCase):
 		handler.on_UpdateServiceConfiguration(MockMessage(MockHandler.SERVICE_NAME, True, True))
 
 
-	def test_get_version(self):
+	def _test_get_version(self):
 		self.assertEqual(self.ctl._get_version(), (5, 1, 41))
-"""
+	
 	
 
 if __name__ == "__main__":
+	bus.scalr_url = 'http://scalr-dev.local.webta.net'
 	init_tests()
 	unittest.main()

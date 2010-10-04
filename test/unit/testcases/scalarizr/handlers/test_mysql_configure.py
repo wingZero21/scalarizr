@@ -97,7 +97,6 @@ class TestMysqlCnfController(unittest.TestCase):
 		
 		preset = self.ctl.current_preset()
 		self.assertEqual(preset.settings['log_warnings'], '1')
-		print preset.settings
 		
 		preset.settings['ololo'] = 'trololo'
 		

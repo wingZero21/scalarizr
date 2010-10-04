@@ -365,7 +365,6 @@ class Configuration:
 		if not self.etree:
 			self._init()
 		el = self.etree.find(self._root_path + quote(path))
-		#el = ElementPath13.find(self.etree, )
 		if el != None:
 			self._set(el, value)
 		elif force:
@@ -545,7 +544,6 @@ class FormatProvider:
 
 		indent(root)
 		if self._errors and not self._sections:
-			#print self._errors
 			raise ParseError(self._errors)
 		else:
 			return list(root)
@@ -603,11 +601,11 @@ class IniFormatProvider(FormatProvider):
 				raise MetaconfError("Ini file can't contain two identical sections")
 			el.attrib['mc_type'] = 'section'
 		else:
-			el.attrib['mc_type'] = 'option'			
+			el.attrib['mc_type'] = 'option'
 		return el
 
 		
-	def read_comment(self, line, root):		
+	def read_comment(self, line, root):	
 		if not hasattr(self, "_comment_re"):
 			self._comment_re = re.compile('\s*[#;](.*)$')
 		if self._comment_re.match(line):
@@ -665,11 +663,8 @@ class IniFormatProvider(FormatProvider):
 	def write_option(self, fp, node):
 		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
 			value = node.text
-			try:
-				if re.search('\s', value):
-					value = '"' + value + '"'
-			except Exception, e:
-				print 'ERROR', value, str(e)
+			if re.search('\s', value):
+				value = '"' + value + '"'
 			fp.write(unquote(node.tag)+"\t= "+value+'\n')
 			return True
 		return False
