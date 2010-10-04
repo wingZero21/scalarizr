@@ -361,35 +361,32 @@ class Configuration:
 		return tuple(node.tag for node in nodes 
 				if self._is_element(node) and not len(node))
 				
-	def set(self, path, value, typecast=None, force=False):
+	def set(self, path, value, force=False):
 		if not self.etree:
 			self._init()
 		el = self.etree.find(self._root_path + quote(path))
 		#el = ElementPath13.find(self.etree, )
 		if el != None:
-			self._set(el, value, typecast)
+			self._set(el, value)
 		elif force:
-			self.add(path, value, typecast)
+			self.add(path, value)
 		else:
 			raise MetaconfError("Path %s doesn't exist" % path)
 	
-	def _set(self, el, value, typecast=None):
+	def _set(self, el, value):
 		if isinstance(value, dict):
 			for key in value:
 				el.attrib.update({key: value[key]})
 		else:
-			if typecast in (float, int):
-				try:
-					value = str(typecast(value))
-				except AttributeError:
-					raise MetaconfError('Wrong typecast %s for value ' % (typecast,))
 			el.text = value
 	
-	def add(self, path, value=None, typecast=None, before_path=None):
+	def add(self, path, value=None, before_path=None):
 		"""
-		Add value at path <path> use optional typecast <typecast> int|float
+		Add value at path <path> 
 		if before_path specified, new option will be added right after it.
 		"""
+		value = str(value)
+		
 		if not self.etree:
 			self._init()
 		
@@ -399,7 +396,7 @@ class Configuration:
 		if path.endswith('/'):
 			path = path[:-1]
 		
-		parent_path = os.path.dirname(path) or '.'		
+		parent_path = os.path.dirname(path) or '.'
 		
 		parent		= self._find(parent_path)
 		el = self._provider.create_element(self.etree, os.path.join(self._root_path, path), value)
@@ -419,8 +416,8 @@ class Configuration:
 			parent.insert(list(parent).index(before_element), el)
 		else:
 			parent.append(el)
-			self._set(el, value, typecast)
-		self._set(el, value, typecast)
+			self._set(el, value)
+		self._set(el, value)
 				
 		"""
 		1.
@@ -668,8 +665,11 @@ class IniFormatProvider(FormatProvider):
 	def write_option(self, fp, node):
 		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
 			value = node.text
-			if re.search('\s', value):
-				value = '"' + value + '"'
+			try:
+				if re.search('\s', value):
+					value = '"' + value + '"'
+			except Exception, e:
+				print 'ERROR', value, str(e)
 			fp.write(unquote(node.tag)+"\t= "+value+'\n')
 			return True
 		return False
