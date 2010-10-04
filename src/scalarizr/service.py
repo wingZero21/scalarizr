@@ -175,26 +175,26 @@ class CnfController(object):
 				try:
 					value = conf.get(path)
 				except NoPathError:
-					value = None
+					value = ''
 				
+				self._logger.debug("Check that value changed. %s %s", value, new_value)
 				if value == new_value:
 					#self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 					pass
 				else:
 					if self.definitions and new_value in self.definitions:
 						new_value = self.definitions[new_value]
-						
 					self._logger.debug("Set option '%s' = '%s'" % (opt.name, new_value))
+					self._logger.debug('Set path %s = %s', path, new_value)
 					conf.set(path, new_value, force=True)
-					self._after_set_option(opt, path)
+					self._after_set_option(opt, new_value)
 			else:
 				#self._logger.debug("Remove option '%s'. Not found in preset" % opt.name)	
 				conf.remove(path)
 				self._after_remove_option(opt)
-				
+		
 		self._after_apply_preset()						
-
-		conf.write(open(self._config_path, 'w'))	
+		conf.write(open(self._config_path, 'w'))
 	
 	def _after_set_option(self, option_spec, value):
 		pass
