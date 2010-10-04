@@ -3,6 +3,7 @@ from time import time
 from pysnmp import majorVersionId
 import os, re
 from pyasn1.type import constraint, namedval
+from scalarizr.snmp.mibs import validate
 
 
 ( Integer, OctetString, ) = mibBuilder.importSymbols("ASN1", "Integer", "OctetString")
@@ -91,69 +92,68 @@ class UCDErrorFlag(Integer):
 class MemTotalReal(Integer32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_memory_value('MemTotal')
+			kwargs['value'] = validate(Integer32(), _get_memory_value('MemTotal'), False)
 			return apply(Integer32.clone, [self], kwargs)
 		
 class MemTotalSwap(Integer32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_memory_value('SwapTotal')
+			kwargs['value'] = validate(Integer32(), _get_memory_value('SwapTotal'), False)
 			return apply(Integer32.clone, [self], kwargs)
 
 class MemAvailSwap(Integer32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_memory_value('SwapFree')
+			kwargs['value'] = validate(Integer32(), _get_memory_value('SwapFree'), False)
 			return apply(Integer32.clone, [self], kwargs)
 
 class MemTotalFree(Integer32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_memory_value('MemFree')
+			kwargs['value'] = validate(Integer32(), _get_memory_value('MemFree'), False)
 			return apply(Integer32.clone, [self], kwargs)
 
 class MemShared(Integer32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_memory_value('Shmem')
+			kwargs['value'] = validate(Integer32(), _get_memory_value('Shmem'), False)
 			return apply(Integer32.clone, [self], kwargs)
 
 class MemBuffer(Integer32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_memory_value('Buffers')
+			kwargs['value'] = validate(Integer32(), _get_memory_value('Buffers'), False)
 			return apply(Integer32.clone, [self], kwargs)
 		
 class MemCached(Integer32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_memory_value('^Cached:')
+			kwargs['value'] = validate(Integer32(), _get_memory_value('^Cached:'), False)
 			return apply(Integer32.clone, [self], kwargs)
 
 class SsCpuRawUser(Counter32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_cpu_value('user')
+			kwargs['value'] = validate(Counter32(), _get_cpu_value('user'), False)
 			return apply(Counter32.clone, [self], kwargs)
 
 class SsCpuRawNice(Counter32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_cpu_value('nice')
+			kwargs['value'] = validate(Counter32(), _get_cpu_value('nice'), False)
 			return apply(Counter32.clone, [self], kwargs)
 
 class SsCpuRawIdle(Counter32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_cpu_value('idle')
+			kwargs['value'] = validate(Counter32(), _get_cpu_value('idle'), False)
 			return apply(Counter32.clone, [self], kwargs)
 
 class SsCpuRawSystem(Counter32):
 	def clone(self, **kwargs):
 		if kwargs.get('value') is None:
-			kwargs['value'] = _get_cpu_value('system')
+			kwargs['value'] = validate(Counter32(), _get_cpu_value('system'), False)
 			return apply(Counter32.clone, [self], kwargs)
-
 
 
 def _get_memory_value(key=None):
@@ -217,7 +217,6 @@ for i in [0, 1, 2]:
 	laLoadInst		= MibScalarInstance(laLoad.getName(), (i+1,), GetLaLoad(i))
 	laConfigInst	= MibScalarInstance(laConfig.getName(), (i+1,), laConfig.getSyntax().clone(laMax))
 	laLoadIntInst	= MibScalarInstance(laLoadInt.getName(), (i+1,), GetLaLoadInt(i))
-#	laLoadFloatInst = MibScalarInstance(laLoadFloat.getName(), (i,), GetLaLoadFloat(i))
 	laErrorFlagInst = MibScalarInstance(laErrorFlag.getName(), (i+1,), GetLaErrorFlag(i))
 	laErrMessageInst= MibScalarInstance(laErrMessage.getName(), (i+1,), GetLaErrorMsg(i))
 
@@ -262,6 +261,3 @@ mibBuilder.exportSymbols(
     ssCpuRawIdle = __ssCpuRawIdle,
     ssCpuRawSystem = __ssCpuRawSystem
     )
-
-
-
