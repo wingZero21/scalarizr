@@ -15,14 +15,14 @@ from scalarizr.queryenv import QueryEnvService
 
 import logging, time, re
 
-
-class _QueryEnvResponder(BaseHTTPRequestHandler):
-	def do_POST(self):
-		self.send_response(200)
-		self.end_headers()
-		self.wfile.write('''<?xml version="1.0" encoding="UTF-8"?>
-			<response>
-			<metrics>
+'''
+			  <!--
+			  <metric id="1238" name="Test-Execute-Error-Timeout">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  
+			  
 			  <metric id="1234" name="Test-Read">
 			    <path>%(resources_path)s/snmp/metric-getter-test-read</path>
 			    <retrieve-method>read</retrieve-method>
@@ -39,7 +39,53 @@ class _QueryEnvResponder(BaseHTTPRequestHandler):
 			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-stderr</path>
 			    <retrieve-method>execute</retrieve-method>
 			  </metric>
+			  -->
+'''
+
+class _QueryEnvResponder(BaseHTTPRequestHandler):
+	def do_POST(self):
+		self.send_response(200)
+		self.end_headers()
+		self.wfile.write('''<?xml version="1.0" encoding="UTF-8"?>
+			<response>
+			<metrics>
 			  <metric id="1238" name="Test-Execute-Error-Timeout">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  <metric id="1239" name="Test-Execute-Error-Timeout1">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  <metric id="1240" name="Test-Execute-Error-Timeout2">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  <metric id="1241" name="Test-Execute-Error-Timeout3">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  <metric id="1242" name="Test-Execute-Error-Timeout4">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  <metric id="1243" name="Test-Execute-Error-Timeout5">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  <metric id="1244" name="Test-Execute-Error-Timeout6">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  <metric id="1245" name="Test-Execute-Error-Timeout7">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  <metric id="1246" name="Test-Execute-Error-Timeout8">
+			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
+			    <retrieve-method>execute</retrieve-method>
+			  </metric>
+			  <metric id="1247" name="Test-Execute-Error-Timeout9">
 			    <path>%(resources_path)s/snmp/metric-getter-test-execute-error-timeout</path>
 			    <retrieve-method>execute</retrieve-method>
 			  </metric>
@@ -47,6 +93,8 @@ class _QueryEnvResponder(BaseHTTPRequestHandler):
 			</response>			
 			''' % dict(resources_path=szr_unittest.RESOURCE_PATH)			
 		)
+class  _cnf:
+	state = 'running'
 
 
 class TestMtxTableImpl(unittest.TestCase):
@@ -86,11 +134,13 @@ class TestMtxTableImpl(unittest.TestCase):
 			'JJs61qvMBvxU3qHWgUlkLAY/ypI1KVwF0qQynzVHb4B91bAKgSoo2A=='
 		)
 		
+		bus.cnf = _cnf()
+		
 		# Create SNMP server
 		self._snmp_server = SnmpServer(
 			self.SNMP_PORT, 
 			self.SECURITY_NAME, self.COMMUNITY_NAME,
-			('__SCALING-METRICS-MIB',)
+			('__SCALING-METRICS-MIB', '__UCD-DISKIO-MIB')
 		)
 
 		# Start SNMP server in separate thread
@@ -115,8 +165,9 @@ class TestMtxTableImpl(unittest.TestCase):
 		self._snmp_thread.join()
 
 	def test_values(self):
-		out = system('/usr/bin/snmpwalk -v 2c -c public localhost:%s %s' % (self.SNMP_PORT, self.OID))[0]
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.1 = STRING: "7.0000000"') != -1)
+
+		out = system('/usr/bin/snmpwalk -t 45 -v 2c -c public localhost:%s %s' % (self.SNMP_PORT, self.OID))[0]
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.1 = STRING: "9.0000000"') != -1)
 		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.2 = STRING: "87.1500000"') != -1)
 		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.3 = STRING: "0.0000000"') != -1)
 		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.3 = STRING: "exitcode: 23"') != -1)
@@ -124,6 +175,8 @@ class TestMtxTableImpl(unittest.TestCase):
 		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.4 = STRING: "Application error taken from stderr"') != -1)
 		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.5 = STRING: "0.0000000"') != -1)
 		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.5 = STRING: "Timeouted"') != -1)
+
+		
 
 if __name__ == "__main__":
 	unittest.main()

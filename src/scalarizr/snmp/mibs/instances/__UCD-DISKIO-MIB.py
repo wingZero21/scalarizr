@@ -44,15 +44,7 @@ def values():
 					  diskIOWrites = diskIOWrites,
 					  diskIONReadX = diskIONReadX, 
 					  diskIONWrittenX = diskIONWrittenX)
-	"""
-	blockDevices = []
-	for device in os.listdir('/sys/block/'):
-		blockDevices.append(device)
-		subDevices = os.listdir('/sys/block/' + device)
-		for subDevice in subDevices:
-			if re.match("^[hs]d[a-z]\d+", subDevice):
-				blockDevices.append(subDevice)			
-	"""
+
 	fp = open('/proc/diskstats')
 	diskstats = fp.readlines()
 	fp.close()

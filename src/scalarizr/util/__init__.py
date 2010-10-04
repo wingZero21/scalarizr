@@ -5,6 +5,7 @@ import weakref
 import time
 import sys
 import socket
+import signal
 
 
 class UtilError(BaseException):
@@ -263,3 +264,25 @@ def get_free_devname():
 		device = 'sd'+letter
 		if not device in dev_list:
 			return '/dev/'+device
+		
+def kill_childs(pid):
+	ppid_re = re.compile('^PPid:\s*(?P<pid>\d+)\s*$', re.M)
+	for process in os.listdir('/proc'):
+		if not re.match('\d+', process):
+			continue
+		try:
+			fp = open('/proc/' + process + '/status')
+			process_info = fp.read()
+			fp.close()
+		except:
+			pass
+		
+		Ppid_result = re.search(ppid_re, process_info)
+		if not Ppid_result:
+			continue
+		ppid = Ppid_result.group('pid')
+		if int(ppid) == pid:
+			try:
+				os.kill(int(process), signal.SIGKILL)
+			except:
+				pass
