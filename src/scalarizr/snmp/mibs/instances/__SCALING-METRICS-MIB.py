@@ -16,23 +16,13 @@ from Queue import Queue, Empty
 # SNMP imports
 from pysnmp.smi.builder import MibBuilder
 from scalarizr.config import ScalarizrState
-(MibScalarInstance, MibTableRow, MibTable, MibTableColumn, Integer32, ModuleIdentity) = mibBuilder.importSymbols(
-		'SNMPv2-SMI',
-		'MibScalarInstance', 'MibTableRow' , 'MibTable', 'MibTableColumn', 'Integer32', 'ModuleIdentity')
-(DisplayString, ) = mibBuilder.importSymbols('SNMPv2-TC', 'DisplayString')
-#(mtxTable, mtxEntry, mtxIndex, mtxId, mtxName, mtxValue, mtxError) = mibBuilder.importSymbols(
-#		'SCALING-METRICS-MIB', 
-#		'mtxTable', 'mtxEntry', 'mtxIndex', 'mtxId', 'mtxName', 'mtxValue', 'mtxError')
 
+(scalr, mtxTable, mtxEntry, mtxIndex, mtxId, mtxName, mtxValue, mtxError) = mibBuilder.importSymbols(
+		'SCALING-METRICS-MIB', 
+		'scalr', 'mtxTable', 'mtxEntry', 'mtxIndex', 'mtxId', 'mtxName', 'mtxValue', 'mtxError')
 
-scalr = ModuleIdentity((1, 3, 6, 1, 4, 1, 40000))
-mtxTable = MibTable((1, 3, 6, 1, 4, 1, 40000, 5))
-mtxEntry = MibTableRow((1, 3, 6, 1, 4, 1, 40000, 5, 1)).setIndexNames((0, "SCALING-METRICS-MIB", "mtxIndex"))
-mtxIndex = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 1), Integer32()).setMaxAccess("readonly")
-mtxId = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 2), Integer32()).setMaxAccess("readonly")
-mtxName = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 3), DisplayString()).setMaxAccess("readonly")
-mtxValue = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 4), DisplayString()).setMaxAccess("readonly")
-mtxError = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 5), DisplayString()).setMaxAccess("readonly")
+(MibTable, MibScalarInstance) = mibBuilder.importSymbols('SNMPv2-SMI','MibTable', 'MibScalarInstance')
+
 
 _metrics = None
 _metrics_timestamp = None
@@ -52,12 +42,12 @@ class MtxTableImpl(MibTable):
 		mibBuilder.lastBuildId += 1
 		
 		# Clean old values
-		for k in mibBuilder.mibSymbols['__SCALING-METRICS-MIB'].keys():
+		for k in mibBuilder.mibSymbols['SCALING-METRICS-MIB'].keys():
 			if k.startswith('mtxIndex') or k.startswith('mtxId') or k.startswith('mtxName') or k.startswith('mtxValue') or k.startswith('mtxEntry') or k.startswith('mtxError'):
-				del mibBuilder.mibSymbols['__SCALING-METRICS-MIB'][k]
+				del mibBuilder.mibSymbols['SCALING-METRICS-MIB'][k]
 				
 		# Update with new values
-		mibBuilder.mibSymbols['__SCALING-METRICS-MIB'].update(values())
+		mibBuilder.mibSymbols['SCALING-METRICS-MIB'].update(values())
 		return MibTable.getNextNode(self, name, idx)
 
 
@@ -203,4 +193,4 @@ def update_metric(queue, index, ret):
 	})
 	
 
-mibBuilder.mibSymbols["__SCALING-METRICS-MIB"] = values()
+mibBuilder.mibSymbols["SCALING-METRICS-MIB"] = values()

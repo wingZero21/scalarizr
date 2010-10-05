@@ -16,7 +16,11 @@ else:
 	from scalarizr.externals.etree import ElementTree as ET
 import re
 import os
-from cStringIO import StringIO
+try:
+	from  cStringIO import StringIO
+except ImportError:
+	from StringIO import StringIO
+
 
 
 format_providers = dict()
@@ -662,13 +666,13 @@ class IniFormatProvider(FormatProvider):
 	
 	def write_option(self, fp, node):
 		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
-			value = node.text
+			value = node.text if node.text else ''
 			if re.search('\s', value):
 				value = '"' + value + '"'
 			fp.write(unquote(node.tag)+"\t= "+value+'\n')
 			return True
 		return False
-	
+
 	def write_blank(self, fp, node):
 		if not node.tag and not callable(node.tag):
 			fp.write('\n')
@@ -1048,12 +1052,31 @@ class MysqlFormatProvider(IniFormatProvider):
 		
 		self._writers  = (self.write_statement,
 						   self.write_include) + self._writers
+
+	def create_element(self, etree, path, value):
+		el = FormatProvider.create_element(self, etree, path, value)
+		
+		parent_path = os.path.dirname(path)
+		
+		if os.path.dirname(parent_path) not in ('.', ''):
+			raise MetaconfError('Maximum nesting level for ini format is 2')
+		elif parent_path in ('.', ''):
+			if etree.find(path) is not None:
+				raise MetaconfError("Ini file can't contain two identical sections")
+			el.attrib['mc_type'] = 'section'
+		else:
+			if value:
+				el.attrib['mc_type'] = 'include' if '!include' in el.tag else 'option' 
+			else:
+				el.attrib['mc_type'] = 'statement'			
+		return el
 	
 	def read_statement(self, line, root):
 		if not hasattr(self, "_stat_re"):
-			self._stat_re = re.compile(r'\s*([^\s\[\]]*)\s*$')
+			self._stat_re = re.compile(r'\s*[^#]([^\s\[\]]+)\s*$')
 		if self._stat_re.match(line):
-			ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)))
+			new_statement = ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)))
+			new_statement.attrib['mc_type'] = 'statement'
 			return True
 		return False
 		
@@ -1063,18 +1086,19 @@ class MysqlFormatProvider(IniFormatProvider):
 		if self._inc_re.match(line):
 			new_include = ET.SubElement(self._cursect, quote(self._inc_re.match(line).group(1)))
 			new_include.text = self._inc_re.match(line).group(3).strip()
+			new_include.attrib['mc_type'] = 'include'
 			return True
 		return False
 
 
 	def write_statement(self, fp, node):
-		if not callable(node.tag) and not node.text and not len(node):
+		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'statement': 
 			fp.write(unquote(node.tag)+'\n')
 			return True
 		return False
 	
 	def write_include(self, fp, node):
-		if not callable(node.tag) and '!include' in node.tag:
+		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'include': 
 			fp.write(unquote(node.tag)+" "+node.text.strip()+'\n')
 			return True
 		return False
