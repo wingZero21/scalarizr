@@ -82,15 +82,17 @@ class SshManager:
 			self.transport = self.ssh.get_transport()
 			self.transport.set_keepalive(60)
 			
-		channel = self.transport.open_session()
-		channel.get_pty()
-		channel.invoke_shell()
+		channel = self.ssh.invoke_shell()
+		channel.resize_pty(500, 500)
 		self.channels.append(channel)
 		if self.user == 'ubuntu':
 			channel.send('sudo -i\n')
 			
-		wait_for_root_prompt(channel, 5)			
+		out = clean_output(channel, 5)			
 		return channel
+	
+	def get_sftp_client(self):
+		return self.ssh.open_sftp()
 
 class LogReader:
 	
@@ -167,29 +169,27 @@ def expect(channel, regexp, timeframe):
 	return reader.expect(regexp, timeframe, channel)
 
 def exec_command(channel, cmd, timeout = 60):
+	
 	while channel.recv_ready():
 		channel.recv(1)
-	channel.send(cmd)
-	command = channel.recv(len(cmd))
-	newlines = re.findall('\r', command)
-	if newlines:
-		channel.recv(len(newlines))
+	bytes_amount = channel.send(cmd)
+	time.sleep(0.3)
+	channel.recv(bytes_amount)
 	channel.send('\n')
-	out = wait_for_root_prompt(channel, timeout)
+	out = clean_output(channel, timeout)
 	lines = out.splitlines()
 	if len(lines) > 2:
 		return '\n'.join(lines[1:-1]).strip()
 	else:
 		return ''
 	
-def wait_for_root_prompt(channel, timeout):
+def clean_output(channel, timeout = 60):
 	out = ''
-	start_time = time.time()
-	
+	start_time = time.time()	
 	while time.time() - start_time < timeout:
 		if channel.recv_ready():
 			out += channel.recv(1024)
-			if re.search('root@.*?#', out):
+			if re.search('.+:.+#', out):
 				break
 	else:
 		raise Exception('Timeout while waiting for root prompt')	

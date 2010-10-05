@@ -83,7 +83,7 @@ class Configuration:
 			root = ET.Element("mc_conf/")
 			self.etree = ET.ElementTree(root)
 		self._sections = []
-		self._cursect = './'
+		self._cursect = '.'
 	
 	def read(self, filenames):
 		if isinstance(filenames, basestring):

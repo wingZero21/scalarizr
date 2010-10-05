@@ -26,17 +26,17 @@ else:
 	basepath = os.path.dirname(_user_ini_path)
 	if not os.path.isdir(basepath):
 		os.makedirs(basepath)
-	user_config.add('./general')
+	user_config.add('./selenium')
 
 
 _sel_started = False
 
 try:
 	_sel = selenium(
-			config.get('./general/selenium_rc_host'), 
-			config.get('./general/selenium_rc_port'), 
-			'*firefox', 
-			config.get('./general/scalr_net_url')
+			config.get('./selenium/host'), 
+			config.get('./selenium/port'), 
+			'*firefox',
+			config.get('./scalr/url')
 			)
 	
 except NoPathError:
@@ -47,11 +47,11 @@ def check_windows(_sel):
 	try:
 		_sel.get_all_window_titles()
 	except:
-		sys.exit(-1)	
+		sys.exit(-1)
 
 def get_selenium():
 	try:
-		session_id = config.get('./general/' + OPT_SESSION_ID)
+		session_id = config.get('./selenium/' + OPT_SESSION_ID)
 		try:
 			_sel.sessionId = unicode(session_id)
 			t = Process(target=check_windows, args=(_sel,))
@@ -82,9 +82,7 @@ def get_selenium():
 			raise Exception("Can't connect to selenium RC or start a session: %s" % e)
 		globals()['_sel_started'] = True
 		
-		config.set('./general/' + OPT_SESSION_ID, _sel.sessionId)
-		user_config.set('./general/' + OPT_SESSION_ID, _sel.sessionId, force = True)
+		config.set('./selenium/' + OPT_SESSION_ID, _sel.sessionId)
+		user_config.set('./selenium/' + OPT_SESSION_ID, _sel.sessionId, force = True)
 		user_config.write(open(_user_ini_path, 'w'))
 	return _sel
-		
-	

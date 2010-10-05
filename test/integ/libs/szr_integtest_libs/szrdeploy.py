@@ -8,11 +8,13 @@ from szr_integtest import config
 from szr_integtest_libs import exec_command
 import os
 import re
+import tarfile 
+import time
 
 DISTR_DETECTION_STRING = "python -c \"import platform; d = platform.dist(); print int(d[0].lower() in ['centos', 'rhel', 'redhat'] and d[1].split('.')[0]); \
 print int((d[0].lower() == 'fedora' or (d[0].lower() == 'redhat' and d[2].lower() == 'werewolf')) and d[1].split('.')[0])\""
 EPEL_PACKAGE = "http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm"
-
+SZR_PATH = os.path.realpath(os.path.join(os.path.dirname(__file__), '../../../../src/scalarizr'))
 
 class RepoType:
 	NIGHTLY_BUILD = 'nightly'	
@@ -22,9 +24,12 @@ class RepoType:
 class ScalarizrDeploy:
 	distr = None
 	
-	def __init__(self, channel):
-		self.channel = channel
+	def __init__(self, sshmanager):
+		self.ssh = sshmanager
+		if not self.ssh.connected:
+			self.ssh.connect()
 		self.config = config
+		self.channel = sshmanager.get_root_ssh_channel()
 		self.detect_distr()
 		
 	def add_repos(self, repo_type):
@@ -101,9 +106,9 @@ class ScalarizrDeploy:
 	def apply_changes_from_svn(self):
 		self.check_scalarizr_installed()		
 		try:
-			svn_repo = config.get('./general/svn_repo')
-			svn_user = config.get('./general/svn_user')
-			svn_password = config.get('./general/svn_password')
+			svn_repo = config.get('./repos-svn/repo_url')
+			svn_user = config.get('./repos-svn/user')
+			svn_password = config.get('./repos-svn/password')
 		except:
 			raise Exception("Can't retrieve necessary options from config")
 		
@@ -123,12 +128,7 @@ class ScalarizrDeploy:
 				if error:
 					raise Exception("Can't install subversion package: '%s'" % error.group('err_text'))
 		
-		py_version = self.get_python_version()
-		
-		if self.distr in ('rhel', 'fedora'):
-			scalarizr_path = "/usr/lib/python2.%s/site-packages/scalarizr"  % py_version
-		else:
-			scalarizr_path = "/var/lib/python-support/python2.%s/scalarizr" % py_version
+		scalarizr_path = self.get_scalarizr_path()
 		
 		exec_command(self.channel, 'rm -rf ' + scalarizr_path)
 		cmd = 'echo yes | '
@@ -139,12 +139,26 @@ class ScalarizrDeploy:
 		if not 'Exported revision' in out:
 			raise Exception('Svn export failed')
 
-	def apply_changes_from_tarball(self, file):
-		'''
-		@todo: upload tar.gz and extract it into site-packages/scalarizr
-		'''
-		raise BaseException('Not implemented')
+	def apply_changes_from_tarball(self):
 
+		file = 'szr-tarball.%s' % time.strftime('%Y_%m_%d.%H_%M') + '.tar.gz'
+		file_path = '/tmp/' + file
+		tarball = tarfile.open(file_path , 'w:gz')
+		tarball.add(SZR_PATH, os.path.basename(SZR_PATH))
+		tarball.close()
+		
+		sftp = self.ssh.get_sftp_client()
+		
+		try:
+			sftp.put(file_path, file_path)
+		except (Exception, BaseException), e:
+			raise BaseException('Error while uploading file %s: %s' % (file, e))
+
+		scalarizr_path = self.get_scalarizr_path()
+		exec_command(self.channel, 'rm -rf ' + scalarizr_path)
+		exec_command(self.channel, 'tar -xzf ' + file_path + ' -C '+ os.path.dirname(scalarizr_path))
+				
+		
 	def detect_distr(self):
 		if not self.distr:
 			ret = exec_command(self.channel, DISTR_DETECTION_STRING)
@@ -178,8 +192,15 @@ class ScalarizrDeploy:
 		if not scalarizr_installed:
 			raise Exception('Install scalarizr package first!')
 				
+	def get_scalarizr_path(self):
+		py_version = self.get_python_version()
+		
+		if self.distr in ('rhel', 'fedora'):
+			scalarizr_path = "/usr/lib/python2.%s/site-packages/scalarizr"  % py_version
+		else:
+			scalarizr_path = "/var/lib/python-support/python2.%s/scalarizr" % py_version
 
-
+		return scalarizr_path
 			
 def create_nightly_build(svn_repo, dist):
 	'''

@@ -6,6 +6,10 @@ Created on Sep 23, 2010
 import time
 import os
 from ConfigParser import ConfigParser
+from szr_integtest import config
+from scalarizr.libs.metaconf import NoPathError
+import paramiko
+from szr_integtest_libs import exec_command, clean_output
 
 class FarmUIError(Exception):
 	pass
@@ -19,12 +23,14 @@ EC2_MYSQL_ROLE_DEFAULT_SETTINGS = {
 	'mysql.ebs_volume_size' : '1'
 }
 
-PLATFORM_EC2 	= 'Amazon EC2'
-PLATFORM_RS  	= 'Rackspace'
-
-BEHAVIOUR_BASE  = 'Base images'
-BEHAVIOUR_APP   = 'Application servers'
-BEHAVIOUR_MYSQL = 'Database servers'    
+class ScalrConsts:
+	class Platforms:
+		PLATFORM_EC2 	= 'Amazon EC2'
+		PLATFORM_RS  	= 'Rackspace'
+	class Behaviours:
+		BEHAVIOUR_BASE  = 'Base images'
+		BEHAVIOUR_APP   = 'Application servers'
+		BEHAVIOUR_MYSQL = 'Database servers'    
 
 class FarmUI:
 	sel = None
@@ -196,15 +202,10 @@ def import_server(sel, platform_name, behaviour, host, role_name):
 	return sel.get_text('//td[@class="Inner_Gray"]/table/tbody/tr[3]/td[1]/textarea')
 	
 def login(sel):
-	config = ConfigParser()
-	
-	_user_ini = os.path.expanduser('~/.scalr-dev/integ_test.ini')
-	if not os.path.exists(_user_ini):
-		raise Exception("User's ini file with scalr's settings doesn't exist")
-	config.read(_user_ini)
+
 	try:
-		login = config.get('general', 'scalr_net_login')
-		password = config.get('general', 'scalr_net_password')
+		login = config.get('./scalr/admin_login')
+		password = config.get('./scalr/admin_password')
 	except:
 		raise Exception("User's ini file doesn't contain username or password")
 
@@ -222,5 +223,29 @@ def login(sel):
 def reset_farm(ssh, farm_id):
 	pass
 
-def exec_cronjob(ssh, name):
-	pass
+def exec_cronjob(name):
+	cron_keys = ['BundleTasksManager']
+	cron_ng_keys = ['Scaling', 'ScalarizrMessaging', 'MessagingQueue', 'Poller']
+	if not name in cron_keys and not name in cron_ng_keys:
+		raise Exception('Unknown cronjob %s' % name)
+
+	cron_php_path = ('cron-ng/' if name in cron_ng_keys else 'cron/') +'cron.php'
+	
+	scalr_host = config.get('./scalr/hostname')
+	ssh_key_path = config.get('./scalr/ssh_key_path')
+	if not os.path.exists(ssh_key_path):
+		raise Exception("Key file %s doesn't exist" % ssh_key_path)
+	ssh_key_password = config.get('./scalr/ssh_key_password')
+	home_path = config.get('./scalr/home_path')
+	
+	ssh = paramiko.SSHClient()
+	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+	key = paramiko.RSAKey.from_private_key_file(ssh_key_path, password = ssh_key_password)
+	ssh.connect(scalr_host, pkey = key, username='root')
+	channel = ssh.invoke_shell()
+	clean_output(channel, 5)
+	exec_command(channel, 'cd ' + home_path)
+	
+	out = exec_command(channel, 'php -q ' + cron_php_path + ' --%s' % name)
+	channel.close()
+	return out
