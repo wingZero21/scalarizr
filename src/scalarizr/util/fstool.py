@@ -28,9 +28,10 @@ class FstoolError(BaseException):
 
 
 class Fstab:
-	"""
-	Wrapper over /etc/fstab
-	"""
+	'''
+	Utility for /etc/fstab
+	@see http://www.debianhelp.co.uk/fstab.htm
+	'''
 	LOCATION = None
 	filename = None	
 	_entries = None
@@ -39,18 +40,20 @@ class Fstab:
 	def __init__(self, filename=None):
 		self.filename = filename if not filename is None else self.LOCATION
 		self._entries = []
-		self._re = re.compile("^(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+).*$")
+		self._re = re.compile("\\s+")
 		
 	def _rescan(self):
 		self._entries = []
 		f = open(self.filename, "r")
+		print
 		for line in f:
 			if line[0:1] == "#":
 				continue
-			m = self._re.match(line)
-			if m:
-				self._entries.append(TabEntry(m.group(1), m.group(2), 
-						m.group(3), m.group(4), line.strip()))
+			m = filter(None, self._re.split(line))
+			if m: 
+				if len(m) < 6:
+					m += [None] * (6 - len(m))
+				self._entries.append(TabEntry(*m))
 		f.close()
 		
 		
@@ -73,10 +76,10 @@ class Fstab:
 		eq = dict(devname=devname, mpoint=mpoint, fstype=fstype)
 		return list(entry for entry in self.list_entries(rescan) if self._cmp(entry, eq))
 
-	def append(self, devname, mpoint, fstype="auto", options="defaults\t0\t0", autosave=True):
+	def append(self, devname, mpoint, fstype="auto", options="defaults", dump=0, fsckorder=0, autosave=True):
 		if not self._entries:
 			self._rescan()
-		self._entries.append(TabEntry(devname, mpoint, fstype, options))
+		self._entries.append(TabEntry(devname, mpoint, fstype, options, dump, fsckorder))
 		if autosave:
 			self.save()
 	
@@ -100,13 +103,34 @@ class Fstab:
 		
 	
 	def __str__(self):
-		return "\n".join(map(str, self._entries)) + "\n"
+		lens = [[], [], [], [], [], []]
+		
+		# Calculate length of each cell
+		for entry in self._entries:
+			i = 0
+			for val in entry.values():
+				lens[i].append(len(str(val)))
+				i += 1
+				
+		# Calculate max length		
+		lens = list(max(v) for v in lens)		
+		
+		# Build beautiful fstab
+		ret = ''
+		for entry in self._entries:
+			i = 0
+			for val in entry.values():
+				ret += val + ' '*(lens[i] - len(val) + 2)
+				i += 1
+			ret += '\n'
+			
+		return ret
 	
 
 class Mtab(Fstab):
-	"""
-	Wrapper over /etc/mtab
-	"""
+	'''
+	Utility for /etc/mtab
+	'''
 	LOCAL_FS_TYPES = None	
 
 		
@@ -114,26 +138,31 @@ class TabEntry(object):
 	devname = None
 	mpoint = None
 	fstype = None
-	options = None	
-	value = None
+	options = None
+	dump = None
+	fsckorder = None	
 	
-	def __init__(self, devname, mpoint, fstype, options, value=None):
-		"""
-		@param  str devname:
-		@param str mpoint:
-		@param str fstype:
-		@param str options:
-		@param str value: Original fstab line
-		"""
-		
+	def __init__(self, devname, mpoint, fstype='auto', options='default', dump=0, fsckorder=0):
 		self.devname = devname
 		self.mpoint = mpoint
 		self.fstype = fstype
 		self.options = options
-		self.value = value
+		self.dump = dump
+		self.fsckorder = fsckorder
+		
+	def values(self):
+		ret = [self.devname, self.mpoint, self.fstype, self.options, \
+			 self.dump if self.dump is not None else '', \
+			 self.fsckorder if self.fsckorder is not None else '']
+		return ['%s' % (v,) for v in ret]
+	
 		
 	def __str__(self):
-		return "%s\t%s\t%s\t%s" % (self.devname, self.mpoint, self.fstype, self.options)
+		return "%s\t%s\t%s\t%s\t%s\t%s" % (
+			self.devname, self.mpoint, self.fstype, self.options, 
+			self.dump if self.dump is not None else '', 
+			self.fsckorder if self.fsckorder is not None else '' 
+		)
 
 		
 if disttool.is_linux():

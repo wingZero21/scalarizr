@@ -13,3 +13,4 @@ devpts                  /dev/pts                devpts  gid=5,mode=620  0 0
 sysfs                   /sys                    sysfs   defaults        0 0
 proc                    /proc                   proc    defaults        0 0
 UUID=a2f4a566-594b-4b0d-a1e7-827070cf0a05 swap                    swap    defaults        0 0
+/dev/hdb3    none                        swap                sw

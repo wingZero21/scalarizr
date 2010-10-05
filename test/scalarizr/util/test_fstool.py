@@ -41,13 +41,12 @@ class Test(unittest.TestCase):
 		self.assertEqual(entries[0].mpoint, "/")
 		self.assertEqual(entries[0].fstype, "ext3")
 		self.assertEqual(entries[0].options, "rw")
-		self.assertEqual(entries[0].value, "/dev/sda1 / ext3 rw 0 0")
+		self.assertEqual(entries[0].dump, "0")
 		
 		self.assertEqual(entries[3].devname, "devpts")
 		self.assertEqual(entries[3].mpoint, "/dev/pts")
 		self.assertEqual(entries[3].fstype, "devpts")
 		self.assertEqual(entries[3].options, "rw,gid=5,mode=620")
-		self.assertEqual(entries[3].value, "devpts /dev/pts devpts rw,gid=5,mode=620 0 0")
 		
 		excludes = list(entry.mpoint for entry in mtab.list_entries()  
 					if entry.fstype in fstool.Mtab.LOCAL_FS_TYPES)
@@ -69,12 +68,17 @@ class Test(unittest.TestCase):
 		self.assertEqual(entries[0].mpoint, "/")
 		self.assertEqual(entries[0].fstype, "ext3")
 		self.assertEqual(entries[0].options, "defaults")
-		self.assertEqual(entries[0].value, "UUID=c5662397-b99a-468c-9a75-bf6cefc260d7 /     ext3    defaults     1 1")
+		self.assertEqual(entries[0].dump, '1')
+		self.assertEqual(entries[0].fsckorder, '1')
 		
 		self.assertTrue(fstab.contains("proc"))
 		self.assertFalse(fstab.contains("/dev/sdn"))
 		self.assertTrue(fstab.contains(mpoint="/"))
 		self.assertFalse(fstab.contains(mpoint="/mnt"))
+		
+		last = fstab.find(devname='/dev/hdb3')[0]
+		self.assertTrue(last.dump is None)
+		self.assertTrue(last.fsckorder is None)
 		
 		self.assertFalse(fstab.contains(devname="UUID=9cc535dd-9a2c-4504-8f5f-1bd0b91a0086", mpoint="/non-existed"))
 
@@ -90,15 +94,14 @@ class Test(unittest.TestCase):
 		self.assertTrue(fstab2.contains("/dev/sdo"))
 		
 		
-		fstab.remove("UUID=9cc535dd-9a2c-4504-8f5f-1bd0b91a0086")
+		fstab.remove("UUID=a2f4a566-594b-4b0d-a1e7-827070cf0a05")
 		# Check that it was removed
-		self.assertFalse(fstab.contains("UUID=9cc535dd-9a2c-4504-8f5f-1bd0b91a0086"))
+		self.assertFalse(fstab.contains("UUID=a2f4a566-594b-4b0d-a1e7-827070cf0a05"))
 		
 		# Check that it was written to disk		
 		fstab2 = fstool.Fstab(self._fstab_path)
-		self.assertFalse(fstab2.contains("UUID=9cc535dd-9a2c-4504-8f5f-1bd0b91a0086"))
-		
-		
+		self.assertFalse(fstab2.contains("UUID=a2f4a566-594b-4b0d-a1e7-827070cf0a05"))
+
 
 if __name__ == "__main__":
 	init_tests()
