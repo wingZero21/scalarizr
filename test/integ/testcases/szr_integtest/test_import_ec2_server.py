@@ -28,9 +28,9 @@ vals = parser.values
 
 class TestImportEc2Server(unittest.TestCase):
 
-	def _install_software(self):
+	def _install_software(self, channel, distr):
 		pass
-
+	
 	def test_import(self):
 		logger = logging.getLogger(__name__)
 		try:
@@ -56,6 +56,7 @@ class TestImportEc2Server(unittest.TestCase):
 		sshmanager.connect()
 		
 		deployer = ScalarizrDeploy(sshmanager)
+		distr = deployer.distr
 		
 		# TODO: add nightly-build support
 		logger.info("Adding repository")
@@ -77,7 +78,7 @@ class TestImportEc2Server(unittest.TestCase):
 		exec_command(channel, 'mv /etc/scalr/logging-debug.ini /etc/scalr/logging.ini')
 		exec_command(channel, "sed -i 's/consumer_url = http:\/\/localhost/consumer_url = http:\/\/0.0.0.0/g' /etc/scalr/public.d/config.ini")
 
-		self._install_software()
+		self._install_software(channel, distr)
 
 		exec_command(channel, import_server_str)
 		tail_log_channel(channel)
