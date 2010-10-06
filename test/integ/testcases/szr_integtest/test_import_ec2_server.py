@@ -6,13 +6,12 @@ Created on Oct 2, 2010
 import unittest
 
 from szr_integtest_libs.scalrctl import FarmUI, FarmUIError, import_server, ScalrConsts, exec_cronjob
-from szr_integtest import get_selenium
-from szr_integtest import config
+from szr_integtest import get_selenium, Ec2TestAmis, config
 import socket
 from boto.ec2.connection import EC2Connection
 from scalarizr.libs.metaconf import NoPathError
 import time
-from szr_integtest_libs import SshManager, exec_command, make_spawn_channel, expect
+from szr_integtest_libs import SshManager, exec_command, tail_log_channel, expect
 from szr_integtest_libs.szrdeploy import ScalarizrDeploy
 from scalarizr.util import init_tests
 import logging
@@ -22,10 +21,15 @@ UBUNTU_AMI = 'ami-714ba518'
 SECURITY_GROUP = 'webta.scalarizr'
 
 parser = OptionParser()
-cmds.add_option('-d', '--delete-role', dest='del_role', action='store_true', help='Delete role and ami')
-
+parser.add_option('-d', '--delete-role', dest='del_role', action='store_true', help='Delete role and ami')
+parser.add_option('-m', '--ami', dest='ami', default=Ec2TestAmis.UBUNTU_1004_EBS, help='Amazon AMI')
+parser.parse_args()
+vals = parser.values
 
 class TestImportEc2Server(unittest.TestCase):
+
+	def _install_software(self):
+		pass
 
 	def test_import(self):
 		logger = logging.getLogger(__name__)
@@ -46,7 +50,7 @@ class TestImportEc2Server(unittest.TestCase):
 			instance.update()
 			time.sleep(10)
 		logger.info("Instance's %s state is 'running'" , instance.id)
-		ip_address = socket.gethostbyname(instance.public_dns_name)
+		ip_address = socket.gethostbyname(instance.infopublic_dns_name)
 		
 		sshmanager = SshManager(ip_address, key_path)
 		sshmanager.connect()
@@ -73,8 +77,10 @@ class TestImportEc2Server(unittest.TestCase):
 		exec_command(channel, 'mv /etc/scalr/logging-debug.ini /etc/scalr/logging.ini')
 		exec_command(channel, "sed -i 's/consumer_url = http:\/\/localhost/consumer_url = http:\/\/0.0.0.0/g' /etc/scalr/public.d/config.ini")
 
+		self._install_software()
+
 		exec_command(channel, import_server_str)
-		make_spawn_channel(channel)
+		tail_log_channel(channel)
 		expect(channel, "Message 'Hello' delivered", 15)
 		logger.info("Hello delivered")
 		
