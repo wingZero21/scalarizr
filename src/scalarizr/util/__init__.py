@@ -254,7 +254,7 @@ def init_tests():
 			level=logging.DEBUG)
 	import scalarizr as szr
 	from scalarizr.bus import bus
-	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../test/resources/etc")
+	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../etc")
 	szr._init()
 	bus.cnf.bootstrap()
 

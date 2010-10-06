@@ -193,7 +193,7 @@ def import_server(sel, platform_name, behaviour, host, role_name):
 	if not sel.is_text_present('Step 2'):
 		try:
 			text = sel.get_text('//div[@class="viewers-messages viewers-errormessage"]/')
-			raise Exception('Something wrong with importing server: %s' % text)
+			raise FarmUIError('Something wrong with importing server: %s' % text)
 		except FarmUIError, e:
 			print str(e)
 		except:

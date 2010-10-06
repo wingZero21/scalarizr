@@ -103,6 +103,7 @@ class LogReader:
 		self.err_re = re.compile('^\d+-\d+-\d+\s+\d+:\d+:\d+,\d+\s+-\s+ERROR\s+-\s+.*?^(?P<traceback>Traceback.*?$(\n[^\d].*?$)*)?', re.M | re.S)
 
 	def expect(self, regexp, timeframe, channel):
+		self.out = ''
 		self._error = ''
 		self.ret = None
 		break_tail = Event()
@@ -123,10 +124,27 @@ class LogReader:
 					raise Exception('Something bad happened')
 		else:
 			break_tail.set()
-			raise Exception('Timeout after %s' % timeframe)				
+			raise Exception('Timeout after %s. %s' % (timeframe, self.out))				
 	
 	def reader_thread(self, channel, regexp, break_tail):
+		search_re = re.compile(regexp) if type(regexp) == str else regexp
 		while not break_tail.is_set():
+			while channel.recv_ready():
+				self.out += channel.recv(1)
+				
+				if re.search(self.err_re, self.out):
+					self._error = re.search(self.err_re, self.out).group(0)
+					break_tail.set()
+					break
+					
+				if re.search(search_re, self.out):
+					self.ret = re.search(search_re, self.out)
+					break_tail.set()
+					break
+				
+			time.sleep(0.5)				
+			
+			"""
 			rl = select.select([channel],[],[],0.0)[0]
 			if len(rl) > 0:
 				
@@ -144,7 +162,8 @@ class LogReader:
 					self.ret = re.search(regexp, line)
 					break_tail.set()
 					break
-
+			"""
+'''
 class TailLogSpawner:
 	
 	def __init__(self, host, key, timeout= 60):
@@ -154,15 +173,19 @@ class TailLogSpawner:
 		self.sshmanager = SshManager(host, key)
 		self.sshmanager.connect()
 		self.channel = self.sshmanager.get_root_ssh_channel()
-		
-	def spawn(self):
-		while self.channel.recv_ready():
-			self.channel.recv(1)
-		cmd = 'tail -f -n 0 /var/log/scalarizr.log\n'
-		self.channel.send(cmd)
-		self.channel.recv(len(cmd))
+'''
 
-		return self.channel
+def make_spawn_channel(channel):
+	if channel.closed:
+		raise Exception('Channel is closed')
+	
+	while channel.recv_ready():
+		channel.recv(1)
+		
+	cmd = 'tail -f -n 0 /var/log/scalarizr.log\n'
+	channel.send(cmd)
+	channel.recv(len(cmd))
+
 	
 def expect(channel, regexp, timeframe):
 	reader = LogReader()

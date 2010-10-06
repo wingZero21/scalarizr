@@ -1,9 +1,8 @@
 from szr_integtest import get_selenium, config
-from szr_integtest_libs import expect
 from szr_integtest_libs.scalrctl import FarmUI
 import re
 from scalarizr.util import system
-from szr_integtest_libs import TailLogSpawner
+from szr_integtest_libs import make_spawn_channel, expect, SshManager
 
 
 
@@ -30,8 +29,10 @@ print "New server id: %s" % server_id
 ip = farm.get_public_ip(server_id)
 print "New server's ip: %s" % ip
 
-spawner = TailLogSpawner(ip, farm_key)
-channel = spawner.spawn()
+ssh = SshManager(ip, farm_key)
+ssh.connect()
+channel = ssh.get_root_ssh_channel()
+make_spawn_channel(channel)
 
 sequence = ['HostInitResponse', 'Initializing MySQL master', "Message 'HostUp' delivered"]
 system('php -q /home/spike/workspace/scalr/scalr.net-trunk/app/cron-ng/cron.php --ScalarizrMessaging')
