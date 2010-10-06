@@ -33,7 +33,7 @@ class SshManager:
 	
 	def __init__(self, host, key, timeout = 60):
 		self.host = host
-		self.key = key
+		self.key = os.path.expanduser(key)
 		if not os.path.exists(self.key):
 			raise Exception("Key file '%s' doesn't exist")
 		self.timeout = timeout

@@ -219,6 +219,7 @@ class CnfController(object):
 		presets_path = os.path.join(cnf.home_path, 'presets')	
 		manifests_dir = presets_path + "/manifests"
 		manifest_url = bus.scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour	
+		print manifest_url
 		path = os.path.join(manifests_dir, self.behaviour + '.ini')
 		
 		if not os.path.exists(manifests_dir):

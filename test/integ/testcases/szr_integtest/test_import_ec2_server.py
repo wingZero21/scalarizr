@@ -14,6 +14,8 @@ import time
 from szr_integtest_libs import SshManager, exec_command, tail_log_channel, expect
 from szr_integtest_libs.szrdeploy import ScalarizrDeploy
 import logging
+import szr_integtest
+from optparse import OptionParser
 
 SECURITY_GROUP = 'webta.scalarizr'
 
@@ -26,11 +28,16 @@ class TestImportEc2Server(unittest.TestCase):
 	def _install_software(self, channel, distr):
 		pass
 	
+	def _import_server(self, role_name):
+		return import_server(get_selenium(), ScalrConsts.Platforms.PLATFORM_EC2 ,\
+			ScalrConsts.Behaviours.BEHAVIOUR_BASE , self.ip_address, role_name)
+			
 	def setUp(self):
 		self.passed = True
+		self.sys_args = _parse_args()
 
 	def tearDown(self):
-		if not sys_args.no_cleanup:
+		if not self.sys_args.no_cleanup:
 			if self.instance:
 				self.instance.terminate()
 			
@@ -50,14 +57,14 @@ class TestImportEc2Server(unittest.TestCase):
 		
 		self.ec2 = EC2Connection(ec2_key_id, ec2_key)
 
-		reservation = self.ec2.run_instances(sys_args.ami, security_groups = [SECURITY_GROUP], instance_type='m1.small', placement = 'us-east-1a', key_name = key_name)
+		reservation = self.ec2.run_instances(self.sys_args.ami, security_groups = [SECURITY_GROUP], instance_type='m1.small', placement = 'us-east-1a', key_name = key_name)
 		self.instance = reservation.instances[0]
 		logger.info('Started instance %s', self.instance.id)
 		while not self.instance.state == 'running':
 			self.instance.update()
 			time.sleep(10)
 		logger.info("Instance's %s state is 'running'" , self.instance.id)
-		self.ip_address = socket.gethostbyname(self.instance.infopublic_dns_name)
+		self.ip_address = socket.gethostbyname(self.instance.public_dns_name)
 		
 		sshmanager = SshManager(self.ip_address, key_path)
 		sshmanager.connect()
@@ -76,8 +83,7 @@ class TestImportEc2Server(unittest.TestCase):
 		role_name = 'Test_base_%s' % time.strftime('%Y_%m_%d_%H%M')
 		logger.info("Role name: %s", role_name)
 		logger.info("Importing server in scalr's interface")	#import sys;sys.argv = ['', 'Test.test_ ']
-		import_server_str = import_server(get_selenium(), ScalrConsts.Platforms.PLATFORM_EC2 ,\
-										ScalrConsts.Behaviours.BEHAVIOUR_BASE , self.ip_address, role_name)
+		import_server_str = self._import_server(role_name)
 		
 		import_server_str += ' &'
 		channel = sshmanager.get_root_ssh_channel()
@@ -112,15 +118,21 @@ class TestImportEc2Server(unittest.TestCase):
 		#exec_command(channel,)
 		# TODO: run <import_server_str> on instance, read log while bundle not complete, return ami id . 
 		# Don't forget to run crons!
-			
-if __name__ == "__main__":
-	import szr_integtest
-	from optparse import OptionParser	
+def _parse_args():
+	parser = OptionParser()
+	parser.add_option('-c', '--no-cleanup', dest='no_cleanup', action='store_true', default=False, help='Do not cleanup test data')
+	parser.add_option('-m', '--ami', dest='ami', default=Ec2TestAmis.UBUNTU_1004_EBS, help='Amazon AMI')
+	parser.parse_args()
+	return parser.values
 	
+				
+if __name__ == "__main__":
+
+	"""
 	parser = OptionParser()
 	parser.add_option('-c', '--no-cleanup', dest='no_cleanup', action='store_true', default=False, help='Do not cleanup test data')
 	parser.add_option('-m', '--ami', dest='ami', default=Ec2TestAmis.UBUNTU_1004_EBS, help='Amazon AMI')
 	parser.parse_args()
 	sys_args = parser.values
-	
+	"""
 	unittest.main()

@@ -52,6 +52,10 @@ class FarmUI:
 			raise Exception("Farm %s doesn't exist" % self.farm_id)
 		
 	def add_role(self, role_name, min_servers=1, max_servers=2, settings=None):
+		settings = settings or dict()
+		if not 'aws.instance_type' in settings:
+			settings['aws.instance_type'] = 't1.micro'
+			
 		if not 'farms_add.php?id=' in self.sel.get_location():
 			raise FarmUIError("Farm's settings page hasn't been opened. Use farm first")
 		try:
