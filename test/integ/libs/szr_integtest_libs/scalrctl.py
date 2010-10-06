@@ -30,7 +30,8 @@ class ScalrConsts:
 	class Behaviours:
 		BEHAVIOUR_BASE  = 'Base images'
 		BEHAVIOUR_APP   = 'Application servers'
-		BEHAVIOUR_MYSQL = 'Database servers'    
+		BEHAVIOUR_MYSQL = 'Database servers' 
+
 
 class FarmUI:
 	sel = None

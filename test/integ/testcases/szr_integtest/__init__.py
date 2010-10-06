@@ -7,10 +7,16 @@ import os
 import signal
 import sys
 import paramiko
+import logging
 
 BASE_PATH = os.path.join(os.path.dirname(__file__), '..' + os.path.sep + '..')
 RESOURCE_PATH = os.path.join(BASE_PATH, 'resources')
 OPT_SESSION_ID = 'session_id'
+
+logging.basicConfig(
+		format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", 
+		stream=sys.stdout, 
+		level=logging.DEBUG)
 
 config = Configuration('ini')
 user_config = Configuration('ini')
@@ -86,3 +92,17 @@ def get_selenium():
 		user_config.set('./selenium/' + OPT_SESSION_ID, _sel.sessionId, force = True)
 		user_config.write(open(_user_ini_path, 'w'))
 	return _sel
+
+
+class Ec2TestAmis:
+	UBUNTU_1004_EBS = 'ami-714ba518'
+	UBUNTU_1004_IS  = 'ami-2d4aa444'
+	UBUNTU_804_EBS  = 'ami-cb8d61a2'
+	UBUNTU_804_IS   = 'ami-59b35f30'
+	CENTOS_5_EBS    = ''
+	CENTOS_5_IS     = ''
+	
+	UNUBTU_1010_EBS = ''
+	UBUNTU_1010_IS  = ''
+	
+	

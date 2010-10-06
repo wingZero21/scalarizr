@@ -175,7 +175,7 @@ class TailLogSpawner:
 		self.channel = self.sshmanager.get_root_ssh_channel()
 '''
 
-def make_spawn_channel(channel):
+def tail_log_channel(channel):
 	if channel.closed:
 		raise Exception('Channel is closed')
 	
