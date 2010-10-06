@@ -155,7 +155,10 @@ class Ec2RebundleHandler(Handler):
 				)
 			else:
 				# Old-style instance-store
-				root_device_size = int(read_file('/sys/block/sda/sda1/size')) * 512 # Size in bytes
+				sda1_ko = filter(lambda x: os.path.exists(x), ('/sys/block/sda1', '/sys/block/sda/sda1'))
+				if not sda1_ko:
+					raise HandlerError('Cannot find sda1 kobject in sysfs')
+				root_device_size = int(read_file(sda1_ko[0] + '/size')) * 512 # Size in bytes
 				strategy = RebundleInstanceStoreStrategy(role_name, image_name, excludes,
 						image_size = root_device_size / 1024 / 1024,
 						s3_bucket_name = "scalr2-images-%s-%s" % (pl.get_region(), pl.get_account_id()))
@@ -246,17 +249,8 @@ class RebundleStratery:
 				raise HandlerError("You need to be root to run rebundle")
 			self._logger.debug("User check success")
 			
-			# Exclude mounted non-local filesystems if they are under the volume root
-			self._logger.debug("Creating directory exclude list")
-			mtab = fstool.Mtab()
-			image.excludes += list(entry.mpoint
-					for entry in mtab.list_entries()  
-					if entry.fstype in fstool.Mtab.LOCAL_FS_TYPES and entry.mpoint.startswith(self._volume))
-			# Unique list
-			image.excludes = list(set(image.excludes))
-			self._logger.debug('Exclude list: %s', image.excludes)					
-			
 			# Create image from volume
+			self._logger.debug('Exclude list: %s', image.excludes)			
 			image.make()
 			self._logger.info("Volume bundle complete!")
 
@@ -698,12 +692,15 @@ class RebundleEbsStrategy(RebundleStratery):
 
 if disttool.is_linux():
 	class LinuxImage:
+		SPECIAL_DIRS = ('/dev', '/media' '/mnt', '/proc', '/sys', '/cdrom', '/tmp')
+	
 		_logger = None
 		
 		_volume = None
 		path = None
 		mpoint = '/mnt/img-mnt'		
 		excludes = None
+		
 		
 		_mtab = None
 		
@@ -712,10 +709,16 @@ if disttool.is_linux():
 			self._mtab = fstool.Mtab()
 			self._volume = volume
 			self.path = path
-			self.excludes = excludes or []
+			
+			# Create rsync excludes list
+			self.excludes = set(self.SPECIAL_DIRS) # Add special dirs
+			self.excludes.update(excludes or ()) # Add user input
 			if self.mpoint.startswith(volume):
-				self.excludes.append(self.mpoint)
-
+				self.excludes.add(self.mpoint) # Add root volume
+			self.excludes.update(set(entry.mpoint
+					for entry in self._mtab.list_entries()  
+					if entry.fstype not in fstool.Mtab.LOCAL_FS_TYPES \
+						and entry.mpoint.startswith(self._volume))) # Add non-local mounted filesystems
 		
 		def make(self):
 			self._create_image()
@@ -760,17 +763,17 @@ if disttool.is_linux():
 		def _make_special_dirs(self):
 			self._logger.info("Making special directories")
 			
-			special_dirs = list(entry.mpoint
-					for entry in self._mtab.list_entries(rescan=True)  
-					if entry.fstype in fstool.Mtab.LOCAL_FS_TYPES)
-			special_dirs.extend(["/mnt", "/proc", "/sys", "/dev"])
+			special_dirs = set(self.SPECIAL_DIRS)
+			special_dirs.update(set(entry.mpoint for entry in self._mtab.list_entries(rescan=True)))
 			
 			# Create empty special dirs
 			for dir in special_dirs:
 				spec_dir = self.mpoint + dir
-				if not os.path.exists(spec_dir):
+				if os.path.exists(dir) and not os.path.exists(spec_dir):
 					self._logger.debug("Create spec dir %s", spec_dir)
 					os.makedirs(spec_dir)
+					if dir == '/tmp':
+						os.chmod(spec_dir, 01777)
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
 			dev_dir = self.mpoint + "/dev"			

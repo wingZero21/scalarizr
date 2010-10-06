@@ -12,6 +12,7 @@ For all:
 	pyasn1 >= 0.0.8a
 	pysnmp >= 4.1
 	pexpect >= 2.3
+	rsync >= 2.6.8
 
 To run on EC2 and Eucalyptus:
 

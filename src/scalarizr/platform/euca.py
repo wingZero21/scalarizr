@@ -73,7 +73,7 @@ class EucaPlatform(Ec2Platform):
 				raise PlatformError('EC2(Eucalyptus) url is empty')
 			u = urlparse(url)
 			self._ec2_conn_params = dict(
-				is_secure = u.scheme, 
+				is_secure = u.scheme == 'https', 
 				port = u.port, 
 				path = '/'+u.path,
 				region = RegionInfo(name='euca', endpoint=u.hostname)
@@ -90,7 +90,7 @@ class EucaPlatform(Ec2Platform):
 				raise PlatformError('S3(Walrus) url is empty')
 			u = urlparse(url)
 			self._s3_conn_params = dict(
-				is_secure = u.scheme, 
+				is_secure = u.scheme == 'https', 
 				port = u.port, 
 				path = '/'+u.path,
 				host = u.hostname,

@@ -28,6 +28,7 @@ from szr_integtest_libs.szrdeploy import RepoType, ScalarizrDeploy
 parser = OptionParser()
 parser.add_option('--host', dest='host', action='store', help='Server host')
 parser.add_option('-i', '--key', dest='key', action='store', help='SSH private key path')
+parser.add_option('-v', '--verbose', dest='verbose', action='store_true', help='Verbose output')
 
 cmds = parser.add_option_group('Installation commands')
 cmds.add_option('--nightly', dest='nightly', action='store_true', help='Install nightly build')
@@ -56,7 +57,7 @@ if not vals.key:
 logging.basicConfig(
 		format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", 
 		stream=sys.stdout, 
-		level=logging.INFO)
+		level=vals.verbose and logging.DEBUG or logging.INFO)
 logger = logging.getLogger('deploy')
 
 	

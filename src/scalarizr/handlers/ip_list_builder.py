@@ -64,22 +64,24 @@ class IpListBuilder(Handler):
 		ip = message.local_ip or message.remote_ip
 		rolename = message.role_name
 
-		self._logger.debug("Add host (role_name: %s, behaviour: %s, ip: %s)", 
-				rolename, behaviour, ip)
-		self._modify_tree(rolename, behaviour, ip, 
-				modfn=self._create_file, 
-				replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
+		if ip and rolename and behaviour:
+			self._logger.debug("Add host (role_name: %s, behaviour: %s, ip: %s)", 
+					rolename, behaviour, ip)
+			self._modify_tree(rolename, behaviour, ip, 
+					modfn=self._create_file, 
+					replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
 			
 	def on_HostDown(self, message):
 		behaviour = message.behaviour
 		ip = message.local_ip or message.remote_ip
 		rolename = message.role_name
-		
-		self._logger.debug("Remove host (role_name: %s, behaviour: %s, ip: %s)", 
-						rolename, behaviour, ip)
-		self._modify_tree(rolename, behaviour, ip, 
-				modfn=self._remove_file, 
-				replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
+
+		if ip and rolename and behaviour:		
+			self._logger.debug("Remove host (role_name: %s, behaviour: %s, ip: %s)", 
+							rolename, behaviour, ip)
+			self._modify_tree(rolename, behaviour, ip, 
+					modfn=self._remove_file, 
+					replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
 
 	on_RebootStart = on_HostDown
 	
