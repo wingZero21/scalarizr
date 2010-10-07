@@ -17,6 +17,7 @@ class NewMibTable(MibTable):
 		MibTable.__init__(self, name)
 	
 	def getNextNode(self, name, idx):
+		print 'diskio getnextnode'
 		mibBuilder.lastBuildId += 1
 		mibBuilder.mibSymbols['__UCD-DISKIO-MIB'] = values()
 		return MibTable.getNextNode(self, name, idx)

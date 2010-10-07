@@ -316,6 +316,7 @@ class RebundleStratery:
 		# Cleanup scalarizr private data
 		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
 		shutil.rmtree(os.path.join(etc_path, "private.d"))
+		os.mkdir(os.path.join(etc_path, "private.d"))
 		
 		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)	
 	
@@ -807,7 +808,9 @@ if disttool.is_linux():
 				self._logger.warning(
 					"rsync with preservation of extended file attributes failed. Retrying rsync " +
 	           		"without attempting to preserve extended file attributes...")
-				self._copy_rec(source, dest, xattr=False)		
+				self._copy_rec(source, dest, xattr=False)
+			elif exitcode > 0:
+				raise HandlerError('rsync failed with exit code %s' % (exitcode,))
 		
 		
 	
@@ -881,7 +884,7 @@ if disttool.is_linux():
 			
 		def _create_image(self):
 			self._logger.debug('Creating image file %s', self.path)
-			system("dd if=/dev/zero of=%s bs=1M count=1 seek=%s" % (self.path, self._size))
+			system("dd if=/dev/zero of=%s bs=1M count=1 seek=%s" % (self.path, self._size - 1))
 			self._logger.debug('Image file %s created', self.path)
 		
 		def _mount_image(self):

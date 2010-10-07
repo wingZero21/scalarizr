@@ -24,7 +24,7 @@ from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 # Stdlibs
 from distutils import version
 from subprocess import Popen, PIPE, STDOUT
-import logging, os, re, tarfile, tempfile
+import logging, os, re,  tarfile, tempfile
 import time, signal, pwd, random, shutil
 
 # Extra
