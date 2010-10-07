@@ -158,6 +158,7 @@ class ApacheHandler(ServiceCtlHanler):
 		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)		
 		
 		bus.define_events('apache_reload')
+		bus.define_events('service_configured')
 		bus.on("init", self.on_init)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
