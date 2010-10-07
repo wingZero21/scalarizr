@@ -129,6 +129,7 @@ class Ec2RebundleHandler(Handler):
 			# Create exclude directories list
 			excludes = message.excludes.encode("ascii").split(":") \
 					if message.body.has_key("excludes") and message.excludes else []
+			excludes.append('/mnt/privated.img')
 
 			# Take rebundle strategy
 			pl = bus.platform 
@@ -257,12 +258,12 @@ class RebundleStratery:
 				filetool.write_file(motd_filename, motd, error_msg="Cannot patch motd file '%s' %s %s")
 
 	def _fix_fstab(self, image_mpoint):
-		'''
-		Remove EBS volumes from fstab
-		'''
-		pl = bus.platform		
+		pl = bus.platform	
+		
+		# Remove EBS volumes from fstab	
 		ec2_conn = pl.new_ec2_conn()
 		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
+		
 		ebs_devs = list(vol.attach_data.device 
 					for vol in ec2_conn.get_all_volumes() 
 					if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id() 
@@ -271,6 +272,20 @@ class RebundleStratery:
 		fstab = fstool.Fstab(os.path.join(image_mpoint, 'etc/fstab'))
 		for devname in ebs_devs:
 			fstab.remove(devname, autosave=False)
+			
+		# Ubuntu 10.04 mountall workaround
+		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
+		# @see http://alestic.com/2010/09/ec2-bug-mountall
+		if disttool.is_ubuntu():
+			try:
+				mnt = fstab.find(mpoint='/mnt')[0]
+				if mnt.options.find('nobootwait') >= 0:			
+					mnt.options = re.sub(r'(nobootwait),(\S+)', r'\2,\1', mnt.options)
+				else:
+					mnt.options += ',nobootwait'
+			except IndexError:
+				pass
+			
 		fstab.save()
 
 	

@@ -140,7 +140,11 @@ def _create_db():
 	
 	
 def _mount_private_d():
-	configtool.mount_private_d(bus.etc_path + "/private.d", "/mnt/privated.img", 10000)
+	cnf = bus.cnf
+	img_path = '/mnt/privated.img'
+	if cnf.state == ScalarizrState.UNKNOWN and os.path.exists(img_path):
+		os.remove(img_path)
+	configtool.mount_private_d(bus.etc_path + "/private.d", img_path, 10000)
 
 	
 def _init_services():
