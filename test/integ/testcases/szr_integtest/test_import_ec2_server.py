@@ -39,11 +39,11 @@ class ImportEc2Server:
 	def cleanup(self):
 		if not self.sys_args.no_cleanup:
 			if self.instance:
-				self.ec2.terminate_instances(str(self.instance.id))
+				self.ec2.terminate_instances([str(self.instance.id)])
 			
 			if self.ami and self.ec2:
 				image = self.ec2.get_image(self.ami)
-				snap_id = image.block_device_mapping['/dev/sda1']
+				snap_id = image.block_device_mapping['/dev/sda1'].snapshot_id
 				self.ec2.deregister_image(self.ami)
 				self.ec2.delete_snapshot(snap_id)
 				#TODO: Clean scalr's database 
