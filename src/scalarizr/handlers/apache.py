@@ -138,7 +138,7 @@ def reload_apache_conf(f):
 		f(*args)
 	return g
 
-class ApacheHandler(Handler):
+class ApacheHandler(ServiceCtlHanler):
 	
 	_config = None
 	_logger = None
