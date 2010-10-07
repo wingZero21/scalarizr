@@ -19,33 +19,34 @@ from optparse import OptionParser
 
 SECURITY_GROUP = 'webta.scalarizr'
 
-class TestImportEc2Server(unittest.TestCase):
+
+class ImportEc2Server:
 	ami        = None
 	ip_address = None
 	ec2 	   = None
-	instance   = None
+	instance   = None	
 	
+	def __init__(self):
+		self.passed = True
+		self.sys_args = _parse_args()
+
 	def _install_software(self, channel, distr):
 		pass
 	
 	def _import_server(self, role_name):
 		return import_server(get_selenium(), ScalrConsts.Platforms.PLATFORM_EC2 ,\
 			ScalrConsts.Behaviours.BEHAVIOUR_BASE , self.ip_address, role_name)
-			
-	def setUp(self):
-		self.passed = True
-		self.sys_args = _parse_args()
-
-	def tearDown(self):
+	
+	def cleanup(self):
 		if not self.sys_args.no_cleanup:
 			if self.instance:
 				self.instance.terminate()
 			
 			if self.ami and self.ec2:
 				self.ec2.deregister_image(self.ami)				
-			pass
+			pass		
 
-	def test_import(self):
+	def test_import(self, test):
 		logger = logging.getLogger(__name__)
 		try:
 			ec2_key_id = config.get('./boto-ec2/ec2_key_id')
@@ -113,26 +114,31 @@ class TestImportEc2Server(unittest.TestCase):
 		exec_cronjob('ScalarizrMessaging')
 		exec_cronjob('BundleTasksManager')
 		exec_cronjob('BundleTasksManager')
-
 		
 		#exec_command(channel,)
 		# TODO: run <import_server_str> on instance, read log while bundle not complete, return ami id . 
 		# Don't forget to run crons!
+
+
 def _parse_args():
 	parser = OptionParser()
 	parser.add_option('-c', '--no-cleanup', dest='no_cleanup', action='store_true', default=False, help='Do not cleanup test data')
 	parser.add_option('-m', '--ami', dest='ami', default=Ec2TestAmis.UBUNTU_1004_EBS, help='Amazon AMI')
 	parser.parse_args()
 	return parser.values
-	
-				
-if __name__ == "__main__":
 
-	"""
-	parser = OptionParser()
-	parser.add_option('-c', '--no-cleanup', dest='no_cleanup', action='store_true', default=False, help='Do not cleanup test data')
-	parser.add_option('-m', '--ami', dest='ami', default=Ec2TestAmis.UBUNTU_1004_EBS, help='Amazon AMI')
-	parser.parse_args()
-	sys_args = parser.values
-	"""
+
+class TestImportEc2Server(unittest.TestCase):
+	
+	def setUp(self):
+		self.importer = ImportEc2Server()
+		self.importer.test_import()
+		
+	def tearDown(self):
+		self.importer.cleanup()
+	
+			
+if __name__ == "__main__":
+	
 	unittest.main()
+	
