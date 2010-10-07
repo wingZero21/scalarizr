@@ -14,7 +14,6 @@ import time
 from szr_integtest_libs import SshManager, exec_command, tail_log_channel, expect
 from szr_integtest_libs.szrdeploy import ScalarizrDeploy
 import logging
-import szr_integtest
 from optparse import OptionParser
 
 SECURITY_GROUP = 'webta.scalarizr'
@@ -40,13 +39,16 @@ class ImportEc2Server:
 	def cleanup(self):
 		if not self.sys_args.no_cleanup:
 			if self.instance:
-				self.instance.terminate()
+				self.ec2.terminate_instances(str(self.instance.id))
 			
 			if self.ami and self.ec2:
-				self.ec2.deregister_image(self.ami)				
-			pass		
+				image = self.ec2.get_image(self.ami)
+				snap_id = image.block_device_mapping['/dev/sda1']
+				self.ec2.deregister_image(self.ami)
+				self.ec2.delete_snapshot(snap_id)
+				#TODO: Clean scalr's database 
 
-	def test_import(self, test):
+	def test_import(self):
 		logger = logging.getLogger(__name__)
 		try:
 			ec2_key_id = config.get('./boto-ec2/ec2_key_id')
@@ -63,13 +65,13 @@ class ImportEc2Server:
 		logger.info('Started instance %s', self.instance.id)
 		while not self.instance.state == 'running':
 			self.instance.update()
-			time.sleep(10)
+			time.sleep(5)
 		logger.info("Instance's %s state is 'running'" , self.instance.id)
 		self.ip_address = socket.gethostbyname(self.instance.public_dns_name)
 		
 		sshmanager = SshManager(self.ip_address, key_path)
 		sshmanager.connect()
-		
+
 		deployer = ScalarizrDeploy(sshmanager)
 		distr = deployer.distr
 		
@@ -104,7 +106,7 @@ class ImportEc2Server:
 		expect(channel, "Make EBS volume /dev/sd.+ from volume /", 240)
 		expect(channel, "Volume bundle complete!", 240)
 		logger.info("Volume with / bundled")
-		ami_result = expect(channel, "Image (?P<ami>ami-\w+) available", 240)
+		ami_result = expect(channel, "Image (?P<ami>ami-\w+) available", 360)
 		self.ami = ami_result.group('ami')
 		logger.info("Ami created: %s", self.ami)
 		expect(channel, "Image registered and available for use", 240)
@@ -130,15 +132,18 @@ def _parse_args():
 
 class TestImportEc2Server(unittest.TestCase):
 	
+	importer = None
+	
 	def setUp(self):
 		self.importer = ImportEc2Server()
+
+	def test_import(self):
 		self.importer.test_import()
 		
 	def tearDown(self):
 		self.importer.cleanup()
 	
 			
-if __name__ == "__main__":
-	
+if __name__ == "__main__":	
 	unittest.main()
 	
