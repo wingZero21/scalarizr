@@ -88,7 +88,7 @@ def get_selenium():
 			raise Exception("Can't connect to selenium RC or start a session: %s" % e)
 		globals()['_sel_started'] = True
 		
-		config.set('./selenium/' + OPT_SESSION_ID, _sel.sessionId)
+		config.set('./selenium/' + OPT_SESSION_ID, _sel.sessionId, force = True)
 		user_config.set('./selenium/' + OPT_SESSION_ID, _sel.sessionId, force = True)
 		user_config.write(open(_user_ini_path, 'w'))
 	return _sel

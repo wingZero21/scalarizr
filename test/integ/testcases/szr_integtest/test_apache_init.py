@@ -37,9 +37,13 @@ class ImportAppServer(ImportEc2Server):
 			ScalrConsts.Behaviours.BEHAVIOUR_APP, self.ip_address, role_name)	
 
 class TestImportAppServer(unittest.TestCase):
+		
+	importer = None
 	
 	def setUp(self):
 		self.importer = ImportAppServer()
+
+	def test_import(self):
 		self.importer.test_import()
 		
 	def tearDown(self):
