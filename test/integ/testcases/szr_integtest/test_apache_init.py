@@ -15,14 +15,15 @@ import re
 class ImportAppServer(ImportEc2Server):
 
 	def _install_software(self, channel, distr):
-		logger = logging.getLogger(__name__)
 		#rhel , fedora, ubuntu
-		ubuntu = distr is 'ubuntu'
-		prefix, software  = ('apt-get -y ',['apache2']) if ubuntu else ('yum -y install ', ['httpd', 'mod_ssl'])
+		self._logger.debug("PLATFORM: %s" % distr)
+		debian = distr is 'debian'
+		prefix, software  = ('apt-get -y install ',['apache2']) if debian else ('yum -y install ', ['httpd', 'mod_ssl'])
 		install_cmd = prefix + ' '.join(software)
+		self._logger.debug("Installing software: %s" % install_cmd)
 		out = exec_command(channel, install_cmd)
 		
-		if ubuntu:
+		if debian:
 			error = re.search('^E:\s*(?P<err_text>.+?)$', out, re.M)
 			if error:
 				raise Exception("Can't install %s: '%s'" % (software, error.group('err_text')))	
@@ -47,7 +48,8 @@ class TestImportAppServer(unittest.TestCase):
 		self.importer.test_import()
 		
 	def tearDown(self):
-		self.importer.cleanup()
+		#self.importer.cleanup()
+		pass
 	
 
 if __name__ == "__main__":

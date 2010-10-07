@@ -26,6 +26,7 @@ class ImportEc2Server:
 	instance   = None	
 	
 	def __init__(self):
+		self._logger = logging.getLogger(__name__)
 		self.passed = True
 		self.sys_args = _parse_args()
 
@@ -39,6 +40,8 @@ class ImportEc2Server:
 	def cleanup(self):
 		if not self.sys_args.no_cleanup:
 			if self.instance:
+
+				self._logger.debug('Terminating instance %s ' % str(self.instance.id))
 				self.ec2.terminate_instances([str(self.instance.id)])
 			
 			if self.ami and self.ec2:
@@ -49,7 +52,7 @@ class ImportEc2Server:
 				#TODO: Clean scalr's database 
 
 	def test_import(self):
-		logger = logging.getLogger(__name__)
+		
 		try:
 			ec2_key_id = config.get('./boto-ec2/ec2_key_id')
 			ec2_key    = config.get('./boto-ec2/ec2_key')
@@ -62,11 +65,11 @@ class ImportEc2Server:
 
 		reservation = self.ec2.run_instances(self.sys_args.ami, security_groups = [SECURITY_GROUP], instance_type='m1.small', placement = 'us-east-1a', key_name = key_name)
 		self.instance = reservation.instances[0]
-		logger.info('Started instance %s', self.instance.id)
+		self._logger.info('Started instance %s', self.instance.id)
 		while not self.instance.state == 'running':
 			self.instance.update()
 			time.sleep(5)
-		logger.info("Instance's %s state is 'running'" , self.instance.id)
+		self._logger.info("Instance's %s state is 'running'" , self.instance.id)
 		self.ip_address = socket.gethostbyname(self.instance.public_dns_name)
 		
 		sshmanager = SshManager(self.ip_address, key_path)
@@ -76,21 +79,21 @@ class ImportEc2Server:
 		distr = deployer.distr
 		
 		# TODO: add nightly-build support
-		logger.info("Adding repository")
+		self._logger.info("Adding repository")
 		deployer.add_repos('release')
-		logger.info("Installing package")
+		self._logger.info("Installing package")
 		deployer.install_package()
-		logger.info("Apply changes from dev branch (tarball)")
+		self._logger.info("Apply changes from dev branch (tarball)")
 		deployer.apply_changes_from_tarball()
 		
 		role_name = 'Test_base_%s' % time.strftime('%Y_%m_%d_%H%M')
-		logger.info("Role name: %s", role_name)
-		logger.info("Importing server in scalr's interface")	#import sys;sys.argv = ['', 'Test.test_ ']
+		self._logger.info("Role name: %s", role_name)
+		self._logger.info("Importing server in scalr's interface")	#import sys;sys.argv = ['', 'Test.test_ ']
 		import_server_str = self._import_server(role_name)
 		
 		import_server_str += ' &'
 		channel = sshmanager.get_root_ssh_channel()
-		logger.info("Hacking configuration files")
+		self._logger.info("Hacking configuration files")
 		exec_command(channel, 'mv /etc/scalr/logging-debug.ini /etc/scalr/logging.ini')
 		exec_command(channel, "sed -i 's/consumer_url = http:\/\/localhost/consumer_url = http:\/\/0.0.0.0/g' /etc/scalr/public.d/config.ini")
 
@@ -99,19 +102,19 @@ class ImportEc2Server:
 		exec_command(channel, import_server_str)
 		tail_log_channel(channel)
 		expect(channel, "Message 'Hello' delivered", 15)
-		logger.info("Hello delivered")
+		self._logger.info("Hello delivered")
 		
 		exec_cronjob('ScalarizrMessaging')
 		
 		expect(channel, "Make EBS volume /dev/sd.+ from volume /", 240)
 		expect(channel, "Volume bundle complete!", 240)
-		logger.info("Volume with / bundled")
+		self._logger.info("Volume with / bundled")
 		ami_result = expect(channel, "Image (?P<ami>ami-\w+) available", 360)
 		self.ami = ami_result.group('ami')
-		logger.info("Ami created: %s", self.ami)
+		self._logger.info("Ami created: %s", self.ami)
 		expect(channel, "Image registered and available for use", 240)
 		expect(channel, "Rebundle complete!", 240)
-		logger.info("Rebundle complete!")
+		self._logger.info("Rebundle complete!")
 		
 		exec_cronjob('ScalarizrMessaging')
 		exec_cronjob('BundleTasksManager')
