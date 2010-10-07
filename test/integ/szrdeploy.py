@@ -64,8 +64,7 @@ logger = logging.getLogger('deploy')
 # Deploy scalarizr
 logger.info('Connecting to server %s', vals.host)
 ssh = SshManager(vals.host, vals.key)
-ssh.connect()
-deploy = ScalarizrDeploy(ssh.get_root_ssh_channel())
+deploy = ScalarizrDeploy(ssh)
 
 
 if vals.nightly or vals.rc or vals.release:
@@ -88,9 +87,7 @@ elif vals.update_from_svn:
 	deploy.apply_changes_from_svn()
 elif vals.update_from_lc:
 	logger.info('Updating files from local copy')
-	tarball  = '/tmp/scalarizr.tar.gz'
-	system('tar -czf %s -C %s src' % (tarball, os.path.abspath(pwd + '/../..')))
-	deploy.apply_changes_from_tarball(tarball)
+	deploy.apply_changes_from_tarball()
 	os.remove(tarball)
 	
 else:
