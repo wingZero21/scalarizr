@@ -8,9 +8,10 @@ import unittest
 from szr_integtest import get_selenium, config, Ec2TestAmis
 from szr_integtest_libs import expect, SshManager, exec_command
 from szr_integtest_libs.scalrctl import FarmUI, import_server, ScalrConsts
-from test_import_ec2_server import ImportEc2Server
+from test_import_ec2_server import ImportEc2Server, _parse_args
 import logging
 import time
+import sys
 import re 
 
 class ImportAppServer(ImportEc2Server):
@@ -56,5 +57,6 @@ class TestImportAppServer(unittest.TestCase):
 	
 
 if __name__ == "__main__":
-	
+	sysargs = _parse_args()
+	del sys.argv[1:]
 	unittest.main()
