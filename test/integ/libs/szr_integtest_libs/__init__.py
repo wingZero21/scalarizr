@@ -124,7 +124,7 @@ class LogReader:
 					raise Exception('Something bad happened')
 		else:
 			break_tail.set()
-			raise Exception('Timeout after %s. %s' % (timeframe, self.out))				
+			raise Exception('Timeout after %s. ' % timeframe)				
 	
 	def reader_thread(self, channel, regexp, break_tail):
 		search_re = re.compile(regexp) if type(regexp) == str else regexp
