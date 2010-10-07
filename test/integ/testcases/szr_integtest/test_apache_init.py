@@ -10,6 +10,7 @@ from szr_integtest_libs import expect, SshManager, exec_command
 from szr_integtest_libs.scalrctl import FarmUI, import_server, ScalrConsts
 from test_import_ec2_server import ImportEc2Server
 import logging
+import time
 import re 
 
 class ImportAppServer(ImportEc2Server):
@@ -32,6 +33,8 @@ class ImportAppServer(ImportEc2Server):
 			if not re.search('Complete!|Nothing to do', out):
 				raise Exception('Cannot install scalarizr')	
 			
+	def _get_role_name(self):
+		return 'Test_app_%s' % time.strftime('%Y_%m_%d_%H%M')
 	
 	def _import_server(self, role_name):
 		return import_server(get_selenium(), ScalrConsts.Platforms.PLATFORM_EC2 ,\

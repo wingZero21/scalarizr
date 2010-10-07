@@ -36,6 +36,9 @@ class ImportEc2Server:
 	def _import_server(self, role_name):
 		return import_server(get_selenium(), ScalrConsts.Platforms.PLATFORM_EC2 ,\
 			ScalrConsts.Behaviours.BEHAVIOUR_BASE , self.ip_address, role_name)
+		
+	def _get_role_name(self):
+		return 'Test_base_%s' % time.strftime('%Y_%m_%d_%H%M')
 	
 	def cleanup(self):
 		if not self.sys_args.no_cleanup:
@@ -86,7 +89,7 @@ class ImportEc2Server:
 		self._logger.info("Apply changes from dev branch (tarball)")
 		deployer.apply_changes_from_tarball()
 		
-		role_name = 'Test_base_%s' % time.strftime('%Y_%m_%d_%H%M')
+		role_name = self._get_role_name()
 		self._logger.info("Role name: %s", role_name)
 		self._logger.info("Importing server in scalr's interface")	#import sys;sys.argv = ['', 'Test.test_ ']
 		import_server_str = self._import_server(role_name)
