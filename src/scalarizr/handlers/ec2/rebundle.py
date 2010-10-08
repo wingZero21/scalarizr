@@ -581,6 +581,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			ami_id = getattr(rs, 'imageId', None)
 			
 			self._logger.info("Registration complete!")
+			self._logger.debug('Image %s available', ami_id)
 			return ami_id
 		except (BaseException, Exception), e:
 			self._logger.error("Cannot register image on EC2. %s", e)

@@ -69,7 +69,7 @@ class ImportEc2Server:
 		self.ec2 = EC2Connection(ec2_key_id, ec2_key)
 
 		if not self.sys_args.inst_id:
-			reservation = self.ec2.run_instances(self.sys_args.ami, security_groups = [SECURITY_GROUP], instance_type='m1.small', placement = 'us-east-1a', key_name = key_name)
+			reservation = self.ec2.run_instances(self.sys_args.ami, security_groups = [SECURITY_GROUP], instance_type='t1.micro', placement = 'us-east-1a', key_name = key_name)
 			self.instance = reservation.instances[0]
 			self._logger.info('Started instance %s', self.instance.id)
 			while not self.instance.state == 'running':
@@ -81,13 +81,13 @@ class ImportEc2Server:
 				reservation = self.ec2.get_all_instances(self.sys_args.inst_id)[0]
 			except:
 				raise Exception('Instance %s does not exist' % self.sys_args.inst_id)
-			
+	
 			self.instance = reservation.instances[0]
-			
+		
 		self.root_device = self.instance.rootDeviceType
 
 		self.ip_address = socket.gethostbyname(self.instance.public_dns_name)
-		
+
 		sshmanager = SshManager(self.ip_address, key_path, key_pass = key_password)
 		sshmanager.connect()
 
@@ -129,34 +129,50 @@ class ImportEc2Server:
 		exec_cronjob('ScalarizrMessaging')
 		
 		if self.root_device == 'instance-store':
-			out = expect(channel, "Make image .+ from volume .+",			 			240)
-			self._logger.info(out)
+			expect(channel, "Make image .+ from volume /",			 					240)
 		else:
 			expect(channel, "Make EBS volume /dev/sd.+ from volume /", 					240)
 
-		expect(channel, "Volume bundle complete!", 										360)
-
+		expect(    channel, "Volume bundle complete!", 									600)
 		self._logger.info("Volume with / bundled")
 		
-		expect(channel, "Creating snapshot of root device image", 						240)
-		expect(channel, "Checking that snapshot (?P<snap_id>snap-\w+) is completed",	240)
-		expect(channel, "Snapshot snap-\w+ completed", 									240)
+
+		if self.root_device == 'instance-store':
+			expect(channel, 'Bundling image...',										240)
+			expect(channel, 'Encrypting image',											240)
+			expect(channel, 'Splitting image into chunks',								240)
+			expect(channel, 'Encrypting keys',											240)
+			expect(channel, 'Image bundle complete!',									240)
+			
+			self._logger.info("Image bundled!")
+			
+			expect(channel, 'Uploading bundle',											240)
+			expect(channel, 'Enqueue files to upload',									240)
+			expect(channel, 'Uploading files',											240)
+			expect(channel, 'Registration complete!',									240)
+			self.ami = expect(
+				   channel, "Image (?P<ami_id>ami-\w+) available", 						360).group('ami_id')
+
+		else:
+			expect(channel, "Creating snapshot of root device image", 					240)
+			self._logger.info("Creating snapshot of root device image")
+			expect(channel, "Checking that snapshot (?P<snap_id>snap-\w+) is completed",240)
+			self._logger.info("Checking that snapshot is completed")
+			expect(channel, "Snapshot snap-\w+ completed", 								240)
+			self._logger.info("Snapshot completed")
+			expect(channel, "Registering image", 										120)
 		
-		self._logger.info("Snapshot completed")
-		
-		expect(channel, "Registering image", 											120)
-		self.ami = expect(
+			self.ami = expect(
 			   channel, "Checking that (?P<ami_id>ami-\w+) is available", 				120).group('ami_id')
 
-		self._logger.info("Checking for %s completed", self.ami)
+			self._logger.info("Checking for %s completed", self.ami)
+			expect(channel, "Image (?P<ami>ami-\w+) available", 						360)
 		
-		expect(channel, "Image (?P<ami>ami-\w+) available", 							360)
+			self._logger.info("Ami created: %s", self.ami)
 		
-		self._logger.info("Ami created: %s", self.ami)
-		
-		expect(channel, "Image registered and available for use", 						240)
-		expect(channel, "Rebundle complete!", 											240)
-		
+			expect(channel, "Image registered and available for use", 					240)
+			
+		expect(channel, "Rebundle complete!", 											240)		
 		self._logger.info("Rebundle complete!")
 		
 		exec_cronjob('ScalarizrMessaging')
