@@ -12,7 +12,7 @@ class TestLogin(unittest.TestCase):
 		sel = get_selenium()
 		sel.open('/')
 		sel.click('//div[@class="login-trigger"]/a')
-		sel.type('login', config.get('general', 'scalr_net_login'))
+		sel.type('login', config.get('./scalr/scalr_net_login'))
 		sel.type('pass', config.get('general', 'scalr_net_password'))
 		sel.click('//form/button')
 		sel.wait_for_page_to_load(30000)
