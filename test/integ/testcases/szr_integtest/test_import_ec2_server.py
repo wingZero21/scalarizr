@@ -82,6 +82,8 @@ class ImportEc2Server:
 				raise Exception('Instance %s does not exist' % self.sys_args.inst_id)
 			
 			self.instance = reservation.instances[0]
+			
+		self.root_device = self.instance.rootDeviceType
 
 		self.ip_address = socket.gethostbyname(self.instance.public_dns_name)
 		
@@ -125,7 +127,12 @@ class ImportEc2Server:
 		self._logger.info("Hello delivered")
 		exec_cronjob('ScalarizrMessaging')
 		
-		expect(channel, "Make EBS volume /dev/sd.+ from volume /", 						240)
+		if self.root_device == 'instance-store':
+			out = expect(channel, "Make image .+ from volume .+",			 			240)
+			self._logger.info(out)
+		else:
+			expect(channel, "Make EBS volume /dev/sd.+ from volume /", 					240)
+			
 		expect(channel, "Volume bundle complete!", 										240)
 		
 		self._logger.info("Volume with / bundled")
@@ -178,7 +185,7 @@ class TestImportEc2Server(unittest.TestCase):
 
 	def test_import(self):
 		self.importer.test_import()
-		
+
 	def tearDown(self):
 		self.importer.cleanup()
 	

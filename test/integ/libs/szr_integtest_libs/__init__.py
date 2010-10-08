@@ -25,6 +25,11 @@ class SshPool:
 		'''
 		pass
 
+regexps = ['root@.*#',
+		   '.+:.*#']
+
+root_re = '|'.join(regexps)
+
 class SshManager:
 	
 	transport = None
@@ -124,8 +129,8 @@ class LogReader:
 					raise Exception('Something bad happened')
 		else:
 			break_tail.set()
-			raise Exception('Timeout after %s. ' % timeframe)				
-	
+			raise Exception('Timeout after %s.' % timeframe)				
+
 	def reader_thread(self, channel, regexp, break_tail):
 		search_re = re.compile(regexp) if type(regexp) == str else regexp
 		while not break_tail.is_set():
@@ -212,7 +217,7 @@ def clean_output(channel, timeout = 60):
 	while time.time() - start_time < timeout:
 		if channel.recv_ready():
 			out += channel.recv(1024)
-			if re.search('.+:.+#', out):
+			if re.search(root_re, out):
 				break
 	else:
 		raise Exception('Timeout while waiting for root prompt')	

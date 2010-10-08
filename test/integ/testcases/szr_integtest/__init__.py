@@ -16,7 +16,7 @@ OPT_SESSION_ID = 'session_id'
 logging.basicConfig(
 		format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", 
 		stream=sys.stdout, 
-		level=logging.DEBUG)
+		level=logging.INFO)
 
 config = Configuration('ini')
 user_config = Configuration('ini')

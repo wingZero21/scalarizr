@@ -53,7 +53,7 @@ class RoleInit:
 			self._logger.debug("regexp OK")
 			
 			
-class TestApacheInit(unittest.TestCase):
+class TestMysqlInit(unittest.TestCase):
 	
 	def setUp(self):
 		role_name = 'mysql-058-u1004'

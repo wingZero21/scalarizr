@@ -197,10 +197,10 @@ def import_server(sel, platform_name, behaviour, host, role_name):
 	sel.wait_for_page_to_load(15000)
 	if not sel.is_text_present('Step 2'):
 		try:
-			text = sel.get_text('//div[@class="viewers-messages viewers-errormessage"]/')
+			text = sel.get_text('//div[@class="viewers-messages viewers-errormessage"]/span')			
 			raise FarmUIError('Something wrong with importing server: %s' % text)
 		except FarmUIError, e:
-			print str(e)
+			raise
 		except:
 			raise Exception("Can't import server for unknow reason (Step 1)")
 		

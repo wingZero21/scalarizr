@@ -44,7 +44,7 @@ class ScalarizrDeploy:
 				python_ver = self.get_python_version()
 				if python_ver < 6:
 					exec_command(self.channel, 'rpm -Uvh ' + EPEL_PACKAGE)
-					out = exec_command(self.channel, 'yum -y install python26')
+					out = exec_command(self.channel, 'yum -y install python26', 120)
 					if not re.search('Complete!|Nothing to do', out):
 						raise Exception("Can't install python 2.6")
 				
@@ -55,7 +55,7 @@ class ScalarizrDeploy:
 				raise Exception("Configuration file doesn't contain %s repository url" % repo_type)
 			# Add repo
 			baseurl = os.path.join(repo_url, '%s/$releasever/$basearch' % self.distr)
-			self.channel.send("echo -e '[scalarizr]\nname=scalarizr\nbaseurl=%s\nenabled=1\ngpgcheck=0' > /etc/yum.repos.d/scalarizr.repo\n" % baseurl)		
+			exec_command(self.channel, "echo -e '[scalarizr]\nname=scalarizr\nbaseurl=%s\nenabled=1\ngpgcheck=0' > /etc/yum.repos.d/scalarizr.repo" % baseurl)		
 
 		else:
 			# Debian based
@@ -86,7 +86,7 @@ class ScalarizrDeploy:
 			# Install scalarizr
 			out = exec_command(self.channel, 'yum -y install scalarizr', 120)
 			if not re.search('Complete!|Nothing to do', out):
-				raise Exception('Cannot install scalarizr')
+				raise Exception('Cannot install scalarizr %s' % out)
 		else:
 			# Debian based
 			out = exec_command(self.channel, 'apt-get -y install scalarizr')
