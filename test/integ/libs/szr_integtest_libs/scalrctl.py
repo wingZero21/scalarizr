@@ -229,8 +229,8 @@ def reset_farm(ssh, farm_id):
 	pass
 
 def exec_cronjob(name):
-	cron_keys = ['BundleTasksManager']
-	cron_ng_keys = ['Scaling', 'ScalarizrMessaging', 'MessagingQueue', 'Poller']
+	cron_keys = ['BundleTasksManager', 'Scaling', 'Poller']
+	cron_ng_keys = ['ScalarizrMessaging', 'MessagingQueue']
 	if not name in cron_keys and not name in cron_ng_keys:
 		raise Exception('Unknown cronjob %s' % name)
 
@@ -250,7 +250,9 @@ def exec_cronjob(name):
 	channel = ssh.invoke_shell()
 	clean_output(channel, 5)
 	exec_command(channel, 'cd ' + home_path)
-	
-	out = exec_command(channel, 'php -q ' + cron_php_path + ' --%s' % name)
+	print 'cd %s' % home_path 
+	job_cmd = 'php -q ' + cron_php_path + ' --%s' % name
+	print job_cmd
+	out = exec_command(channel, job_cmd)
 	channel.close()
 	return out
