@@ -28,6 +28,7 @@ from szr_integtest_libs.szrdeploy import RepoType, ScalarizrDeploy
 parser = OptionParser()
 parser.add_option('--host', dest='host', action='store', help='Server host')
 parser.add_option('-i', '--key', dest='key', action='store', help='SSH private key path')
+parser.add_option('-p', '--password', dest='password', action='store',  help='SSH private key password')
 parser.add_option('-v', '--verbose', dest='verbose', action='store_true', help='Verbose output')
 
 cmds = parser.add_option_group('Installation commands')
@@ -63,7 +64,7 @@ logger = logging.getLogger('deploy')
 	
 # Deploy scalarizr
 logger.info('Connecting to server %s', vals.host)
-ssh = SshManager(vals.host, vals.key)
+ssh = SshManager(vals.host, vals.key, key_pass = vals.password)
 deploy = ScalarizrDeploy(ssh)
 
 
