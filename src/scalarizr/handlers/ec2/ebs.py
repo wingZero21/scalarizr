@@ -89,7 +89,7 @@ class EbsHandler(handlers.Handler):
 			devname = ebs_volume.device
 			
 			mtab = fstool.Mtab()			
-			if not mtab.contains(devname, rescan=True):
+			if not mtab.contains(devname, reload=True):
 				self._logger.debug("Mounting device %s to %s", devname, ebs_mpoint.dir)
 				fstool.mount(devname, ebs_mpoint.dir, make_fs=ebs_mpoint.create_fs, auto_mount=True)
 				self._logger.debug("Device %s is mounted to %s", devname, ebs_mpoint.dir)

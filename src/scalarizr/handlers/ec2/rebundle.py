@@ -276,6 +276,7 @@ class RebundleStratery:
 
 	def _fix_fstab(self, image_mpoint):
 		pl = bus.platform	
+		fstab = fstool.Fstab(os.path.join(image_mpoint, 'etc/fstab'), True)		
 		
 		# Remove EBS volumes from fstab	
 		ec2_conn = pl.new_ec2_conn()
@@ -286,7 +287,6 @@ class RebundleStratery:
 					if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id() 
 						and instance.root_device_name != vol.attach_data.device)
 		
-		fstab = fstool.Fstab(os.path.join(image_mpoint, 'etc/fstab'))
 		for devname in ebs_devs:
 			fstab.remove(devname, autosave=False)
 			
@@ -753,7 +753,7 @@ if disttool.is_linux():
 				os.rmdir(self.mpoint)
 		
 		def umount(self):
-			if self._mtab.contains(mpoint=self.mpoint, rescan=True):
+			if self._mtab.contains(mpoint=self.mpoint, reload=True):
 				self._logger.debug("Unmounting '%s'", self.mpoint)				
 				system("umount -d " + self.mpoint)
 
@@ -780,7 +780,7 @@ if disttool.is_linux():
 			self._logger.info("Making special directories")
 			
 			special_dirs = set(self.SPECIAL_DIRS)
-			special_dirs.update(set(entry.mpoint for entry in self._mtab.list_entries(rescan=True)))
+			special_dirs.update(set(entry.mpoint for entry in self._mtab.list_entries(reload=True)))
 			
 			# Create empty special dirs
 			for dir in special_dirs:
