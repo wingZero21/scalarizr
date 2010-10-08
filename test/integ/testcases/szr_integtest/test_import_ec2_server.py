@@ -62,6 +62,7 @@ class ImportEc2Server:
 			ec2_key    = config.get('./boto-ec2/ec2_key')
 			key_name   = config.get('./boto-ec2/key_name')
 			key_path   = config.get('./boto-ec2/key_path')
+			key_password   = config.get('./boto-ec2/ssh_key_password')
 		except NoPathError:
 			raise Exception("Configuration file doesn't contain ec2 credentials")
 		
@@ -87,7 +88,7 @@ class ImportEc2Server:
 
 		self.ip_address = socket.gethostbyname(self.instance.public_dns_name)
 		
-		sshmanager = SshManager(self.ip_address, key_path)
+		sshmanager = SshManager(self.ip_address, key_path, key_password)
 		sshmanager.connect()
 
 		deployer = ScalarizrDeploy(sshmanager)
@@ -132,9 +133,9 @@ class ImportEc2Server:
 			self._logger.info(out)
 		else:
 			expect(channel, "Make EBS volume /dev/sd.+ from volume /", 					240)
-			
-		expect(channel, "Volume bundle complete!", 										240)
-		
+
+		expect(channel, "Volume bundle complete!", 										360)
+
 		self._logger.info("Volume with / bundled")
 		
 		expect(channel, "Creating snapshot of root device image", 						240)

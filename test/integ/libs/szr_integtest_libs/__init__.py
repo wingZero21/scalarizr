@@ -36,11 +36,13 @@ class SshManager:
 	connected = False
 	channels  = []
 	
-	def __init__(self, host, key, timeout = 60):
+	def __init__(self, host, key, timeout = 60, key_pass = None):
 		self.host = host
-		self.key = os.path.expanduser(key)
+		key_file = os.path.expanduser(key)
 		if not os.path.exists(self.key):
 			raise Exception("Key file '%s' doesn't exist")
+		self.key = paramiko.RSAKey.from_private_key_file(key_file, password = key_pass if key_pass else None)
+
 		self.timeout = timeout
 		self.user = 'root'
 		self.ssh = paramiko.SSHClient()
@@ -50,7 +52,7 @@ class SshManager:
 		start_time = time.time()
 		while time.time() - start_time < self.timeout:
 			try:
-				self.ssh.connect(self.host, key_filename = self.key, username=self.user)
+				self.ssh.connect(self.host, pkey = self.key, username=self.user)
 				break
 			except:
 				continue
