@@ -163,6 +163,7 @@ def _get_memory_value(key=None):
 	for line in meminfo:
 		if re.match(key, line) :
 			return int(line.split()[1])
+	return 0
 		
 def _get_cpu_value(key=None):
 	cpuvalues = {'user' : 1, 'nice' : 2, 'system' : 3, 'idle' : 4}
@@ -171,6 +172,7 @@ def _get_cpu_value(key=None):
 		cpuinfo = file.readline()
 		file.close()
 		return int(cpuinfo.split()[cpuvalues[key]])
+	return 0
 
 class GetLaLoad():
 	def __init__(self, i=None):

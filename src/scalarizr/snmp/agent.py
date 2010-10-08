@@ -8,7 +8,7 @@ Created on Jun 4, 2010
 from pysnmp.entity import engine, config
 from pysnmp.carrier.asynsock.dgram import udp
 from pysnmp.entity.rfc3413 import cmdrsp, context
-import os, re, sys, logging, socket
+import os, logging, select, time
 from pysnmp.carrier.error import CarrierError
 from pysnmp.smi.error import SmiError
 
@@ -33,7 +33,7 @@ class SnmpServer():
 			# Setup UDP over IPv4 transport endpoint
 		try:
 			iface = ('0.0.0.0', self.port)
-			self._logger.info("Starting SNMP server on %s:%d", *iface)
+			self._logger.info("[pid: %d] Starting SNMP server on %s:%d",  os.getpid(), iface[0], iface[1])
 			config.addSocketTransport(
 			self._engine,
 			udp.domainName,
@@ -76,9 +76,20 @@ class SnmpServer():
 			
 		# Start server
 		self._engine.transportDispatcher.jobStarted(1)
-		self._engine.transportDispatcher.runDispatcher()
+		try:
+			self._engine.transportDispatcher.runDispatcher()
+		except select.error, e:
+			if e.args[0] == 9: 
+				# 'Bad file descriptor'
+				# Throws when dispatcher closed from another thread
+				pass
+		except KeyboardInterrupt:
+			pass
+		except (BaseException, Exception), e2:
+			self._logger.exception(e2)
 	
 	def stop(self):
-		udp.UdpSocketTransport().handle_close()
+		if self._engine:
+			self._engine.transportDispatcher.closeDispatcher()
 
 
