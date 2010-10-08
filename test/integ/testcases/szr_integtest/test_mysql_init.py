@@ -18,7 +18,6 @@ class RoleInit:
 		self.sequence = sequence
 		self.farm_id = config.get('./test-farm/farm_id')
 		self.farm_key = config.get('./test-farm/farm_key')
-		self.key_password   = config.get('./boto-ec2/ssh_key_password')
 		self.server_id_re = re.compile(
 				'\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)' \
 				% (self.farm_id, self.role_name), re.M)
@@ -42,7 +41,7 @@ class RoleInit:
 		ip = farm.get_public_ip(server_id)
 		self._logger.debug("New server's ip: %s" % ip)
 		
-		ssh = SshManager(ip, self.farm_key, self.key_password)
+		ssh = SshManager(ip, self.farm_key)
 		ssh.connect()
 		channel = ssh.get_root_ssh_channel()
 		tail_log_channel(channel)
