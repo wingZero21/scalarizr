@@ -88,7 +88,7 @@ class ImportEc2Server:
 
 		self.ip_address = socket.gethostbyname(self.instance.public_dns_name)
 		
-		sshmanager = SshManager(self.ip_address, key_path, key_password)
+		sshmanager = SshManager(self.ip_address, key_path, key_pass = key_password)
 		sshmanager.connect()
 
 		deployer = ScalarizrDeploy(sshmanager)
