@@ -428,8 +428,8 @@ def main():
 		
 		# Move private configuration to loop device
 		privated_img_path = '/mnt/privated.img'
-		if cnf.state == ScalarizrState.UNKNOWN and os.path.exists(privated_img_path):
-			os.remove(privated_img_path)
+		#if cnf.state == ScalarizrState.UNKNOWN and os.path.exists(privated_img_path):
+		#	os.remove(privated_img_path)
 		_mount_private_d(cnf.private_path(), privated_img_path, 10240)
 		
 
