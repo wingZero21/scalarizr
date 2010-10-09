@@ -95,11 +95,12 @@ class QueryEnvService(object):
 		"""
 		return self._request("get-latest-version",{}, self._read_get_latest_version_response)
 	
-	def get_service_configuration(self, behaviour=None):
+	def get_service_configuration(self, behaviour):
 		"""
 		@return dict
 		"""
-		return self._request("get-service-configuration",{}, self._read_get_service_configuration_response)
+		return self._request("get-service-configuration",{}, 
+				self._read_get_service_configuration_response, (behaviour,))
 
 	def get_scaling_metrics(self):
 		'''
@@ -108,7 +109,7 @@ class QueryEnvService(object):
 		return self._request('get-scaling-metrics', {}, self._read_get_scaling_metrics_response)
 		pass
 
-	def _request (self, command, params={}, response_reader=None):
+	def _request (self, command, params={}, response_reader=None, response_reader_args=None):
 		"""
 		@return object
 		"""
@@ -153,7 +154,8 @@ class QueryEnvService(object):
 			xml = xml_strip(parseString(resp_body))
 		except (Exception, BaseException), e:
 			raise QueryEnvError("Cannot parse XML. %s" % [str(e)])
-		return response_reader(xml)
+		response_reader_args = response_reader_args or ()
+		return response_reader(xml, *response_reader_args)
 
 		
 	def _read_list_roles_response(self, xml):
@@ -259,7 +261,7 @@ class QueryEnvService(object):
 				
 		return ret
 	
-	def _read_get_service_configuration_response(self, xml):
+	def _read_get_service_configuration_response(self, xml, behaviour):
 		ret = {}
 		name = None
 		restart_service = None
@@ -270,7 +272,9 @@ class QueryEnvService(object):
 		
 		response = xml.documentElement
 		
-		if response:
+		if not response or not response.firstChild:
+			return QueryEnvError("Expected element 'settings' not found in QueryEnv response")
+		else:
 			if response.firstChild.hasAttribute(name_attr):
 				name = response.firstChild.getAttribute(name_attr)
 				

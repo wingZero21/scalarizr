@@ -231,9 +231,17 @@ class ServiceCtlHanler(Handler):
 		
 	def _obtain_current_preset(self):
 		service_conf = self._queryenv.get_service_configuration(self._service_name)
+		
 		cur_preset = CnfPreset(service_conf.name, service_conf.settings)			
 		if cur_preset.name == 'default':
-			cur_preset = self._preset_store.load(PresetType.DEFAULT)
+			try:
+				cur_preset = self._preset_store.load(PresetType.DEFAULT)
+			except OSError, e:
+				if e.errno == 2:
+					cur_preset = self._cnf_ctl.current_preset()
+					self._preset_store.save(cur_preset, PresetType.DEFAULT)
+				else:
+					raise
 		return cur_preset
 
 	def _start_service_with_preset(self, preset):
@@ -263,8 +271,8 @@ class ServiceCtlHanler(Handler):
 			self._stop_service()
 			
 			# Obtain current configuration preset
-			cur_preset = self._obtain_current_preset() 
-		
+			cur_preset = self._obtain_current_preset()
+				 
 			# Apply current preset
 			my_preset = self._cnf_ctl.current_preset()
 			if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
@@ -274,6 +282,7 @@ class ServiceCtlHanler(Handler):
 				
 			# Start service with updated configuration
 			self._start_service_with_preset(cur_preset)
+
 
 	sc_on_before_host_down = _stop_service
 	
