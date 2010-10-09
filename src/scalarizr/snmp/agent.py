@@ -87,6 +87,8 @@ class SnmpServer():
 			pass
 		except (BaseException, Exception), e2:
 			self._logger.exception(e2)
+			raise
+			
 	
 	def stop(self):
 		if self._engine:

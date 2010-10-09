@@ -326,7 +326,7 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 	logger = logging.getLogger(__name__)
 	
 	logger.debug("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
-			mpoint, privated_image, format_size(1024*blocks_count))
+			mpoint, privated_image, format_size(1024*(blocks_count-1)))
 	mtab = fstool.Mtab()
 	if mtab.contains(mpoint=mpoint): # if privated_image exists
 		logger.debug("private.d already mounted to %s", mpoint)
@@ -337,7 +337,7 @@ def mount_private_d(mpoint, privated_image, blocks_count):
 		
 	mnt_opts = ('-t auto', '-o loop,rw')	
 	if not os.path.exists(privated_image):	
-		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count)
+		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count-1)
 		retcode = system(build_image_cmd)[2]
 		if retcode:
 			logger.error('Cannot create image device')

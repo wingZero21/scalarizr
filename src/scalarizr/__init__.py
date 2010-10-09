@@ -367,8 +367,14 @@ def _start_snmp_server():
 	pid = os.fork()
 	if pid == 0:
 		globals()['_pid'] = 0
-		snmp_server.start()
-		sys.exit()
+		try:
+			snmp_server.start()
+			logger.info('[pid: %d] SNMP process terminated', os.getpid())
+			sys.exit(0)
+		except SystemExit:
+			raise
+		except:
+			sys.exit(1)
 	else:
 		globals()["_snmp_pid"] = pid
 
@@ -388,23 +394,36 @@ def _snmpd_health_check():
 
 def onSIGTERM(*args):
 	logger = logging.getLogger(__name__)
-	logger.debug("Received SIGTERM")
-	if os.getpid() == _pid:
+	logger.debug('Received SIGTERM')
+		
+	pid = os.getpid()
+	if pid == _pid:
+		# Main process
+		logger.debug('Shutdown main process (pid: %d)', pid)
 		_shutdown()
+	else:
+		# SNMP process
+		logger.debug('Shutdown SNMP server process (pid: %d)', pid)
+		snmp = bus.snmp_server
+		snmp.stop()
 
 def onSIGCHILD(*args):
 	logger = logging.getLogger(__name__)
 	logger.debug("Received SIGCHILD")
-	if globals()["_running"]:
+	
+	if globals()["_running"] and _snmp_pid:
 		try:
-			pid = os.wait()[0]
-			if pid == _snmp_pid:		
+			# Restart SNMP process if it terminates unexpectedly
+			pid, sts = os.waitpid(_snmp_pid, os.WNOHANG)
+			logger.debug('Child terminated (pid: %d, status: %s, WIFEXITED: %s, WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)', 
+						pid, sts, os.WIFEXITED(sts), os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts))
+			if pid == _snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
 				logger.warning('SNMP process [pid: %d] died unexpectedly. '
 						'Restart it after %d seconds', _snmp_pid, SNMP_RESTART_DELAY)
-				globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY		
+				globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY
 				globals()['_snmp_pid'] = None
 		except OSError:
-			pass
+			pass	
 	
 
 def _shutdown(*args):
@@ -412,7 +431,12 @@ def _shutdown(*args):
 	globals()["_running"] = False
 		
 	try:
-		logger.info("[pid: %d] Stopping scalarizr", os.getpid())		
+		logger.info("[pid: %d] Stopping scalarizr", os.getpid())
+		
+		if _snmp_pid:
+			logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
+			os.kill(_snmp_pid, signal.SIGTERM)
+				
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
 		consumer.stop()
@@ -430,7 +454,7 @@ def _shutdown(*args):
 	except:
 		pass
 	
-	logger.debug('[pid: %d] Stopped', os.getpid())
+	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
 
 
 def do_validate(silent=False):
@@ -575,7 +599,11 @@ def main():
 				_shutdown()
 			
 	except (BaseException, Exception), e:
-		if not (isinstance(e, SystemExit) or isinstance(e, KeyboardInterrupt)):
+		if isinstance(e, SystemExit):
+			raise
+		elif isinstance(e, KeyboardInterrupt):
+			pass
+		else:
 			traceback.print_exc(file=sys.stderr)
 			logger.exception(e)
 			sys.exit(1)
