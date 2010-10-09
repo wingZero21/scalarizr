@@ -91,7 +91,14 @@ class EbsHandler(scalarizr.handlers.Handler):
 			mtab = fstool.Mtab()			
 			if not mtab.contains(devname, rescan=True):
 				self._logger.debug("Mounting device %s to %s", devname, ebs_mpoint.dir)
-				fstool.mount(devname, ebs_mpoint.dir, make_fs=ebs_mpoint.create_fs, auto_mount=True)
+				try:
+					fstool.mount(devname, ebs_mpoint.dir, make_fs=ebs_mpoint.create_fs, auto_mount=True)
+				except fstool.FstoolError, e:
+					if e.code == fstool.FstoolError.NO_FS:
+						self._logger.debug('Creating filesystem and mount device %s to %s', devname, ebs_mpoint.dir)
+						fstool.mount(devname, ebs_mpoint.dir, make_fs=True, auto_mount=True)
+					else:
+						raise
 				self._logger.debug("Device %s is mounted to %s", devname, ebs_mpoint.dir)
 				
 				self._send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(

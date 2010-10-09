@@ -396,11 +396,15 @@ def onSIGCHILD(*args):
 	logger = logging.getLogger(__name__)
 	logger.debug("Received SIGCHILD")
 	if globals()["_running"]:
-		pid = os.wait()[0]		
-		logger.warning('SNMP process [pid: %d] died unexpectedly. '
-				'Restart it after %d seconds', pid, SNMP_RESTART_DELAY)
-		globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY		
-		globals()['_snmp_pid'] = None
+		try:
+			pid = os.wait()[0]
+			if pid == _snmp_pid:		
+				logger.warning('SNMP process [pid: %d] died unexpectedly. '
+						'Restart it after %d seconds', _snmp_pid, SNMP_RESTART_DELAY)
+				globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY		
+				globals()['_snmp_pid'] = None
+		except OSError:
+			pass
 	
 
 def _shutdown(*args):
