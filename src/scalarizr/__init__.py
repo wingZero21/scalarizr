@@ -225,7 +225,7 @@ def _init_services():
 	
 
 	logger.debug("Initialize QueryEnv client")
-	queryenv = QueryEnvService(queryenv_url, server_id, crypto_key)
+	queryenv = QueryEnvService(queryenv_url, server_id, binascii.a2b_base64(crypto_key))
 	bus.queryenv_service = queryenv
 
 	
