@@ -107,7 +107,8 @@ class LogReader:
 	_error     = ''
 	
 	def __init__(self):
-		self.err_re = re.compile('^\d+-\d+-\d+\s+\d+:\d+:\d+,\d+\s+-\s+ERROR\s+-\s+.*?^(?P<traceback>Traceback.*?$(\n[^\d].*?$)*)?', re.M | re.S)
+		self.err_re = re.compile('^\d+-\d+-\d+\s+\d+:\d+:\d+,\d+\s+-\s+ERROR\s+-\s+.+$', re.M)
+		self.traceback_re = re.compile('Traceback.+')
 
 	def expect(self, regexp, timeframe, channel):
 		self.out = ''
@@ -138,18 +139,41 @@ class LogReader:
 		while not break_tail.is_set():
 			while channel.recv_ready():
 				self.out += channel.recv(1)
-				
-				if re.search(self.err_re, self.out):
-					self._error = re.search(self.err_re, self.out).group(0)
-					break_tail.set()
+				if self.out[-1] == '\n':
 					break
-					
-				if re.search(search_re, self.out):
-					self.ret = re.search(search_re, self.out)
-					break_tail.set()
-					break
+			
+			error = re.search(self.err_re, self.out)
+			if error:
+				# Detect if traceback presents
+				traceback = ''
+				while channel.recv_ready():
+					traceback += channel.recv(1)
+					if traceback[-1] == '\n':
+						break
 				
-			time.sleep(0.5)				
+				if re.search(self.traceback_re, traceback):
+					newline = ''
+					while channel.recv_ready():
+						newline += channel.recv(1)
+						if newline[-1] == '\n':
+							newline
+							traceback += newline
+							if not newline.startswith(' '):
+								break
+							newline = ''
+
+					self._error = error.group(0) + traceback
+				else:
+					self._error = error.group(0)
+				break_tail.set()
+				break
+				
+			if re.search(search_re, self.out):
+				self.ret = re.search(search_re, self.out)
+				break_tail.set()
+				break
+				
+			time.sleep(0.1)				
 			
 			"""
 			rl = select.select([channel],[],[],0.0)[0]

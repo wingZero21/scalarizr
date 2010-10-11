@@ -69,7 +69,7 @@ class ImportEc2Server:
 		self.ec2 = EC2Connection(ec2_key_id, ec2_key)
 
 		if not self.sys_args.inst_id:
-			reservation = self.ec2.run_instances(self.sys_args.ami, security_groups = [SECURITY_GROUP], instance_type='t1.micro', placement = 'us-east-1a', key_name = key_name)
+			reservation = self.ec2.run_instances(self.sys_args.ami, security_groups = [SECURITY_GROUP], instance_type='m1.small', placement = 'us-east-1a', key_name = key_name)
 			self.instance = reservation.instances[0]
 			self._logger.info('Started instance %s', self.instance.id)
 			while not self.instance.state == 'running':
@@ -120,6 +120,8 @@ class ImportEc2Server:
 		self._install_software(channel, distr)
 
 		exec_command(channel, import_server_str)
+		# Sleep for a while for scalarizr initializing
+		time.sleep(2)
 		tail_log_channel(channel)
 		# RegExp   																		# Timeout
 		
