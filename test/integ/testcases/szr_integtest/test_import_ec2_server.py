@@ -41,6 +41,13 @@ class ImportEc2Server:
 	def _get_role_name(self):
 		return 'Test_base_%s' % time.strftime('%Y_%m_%d_%H%M')
 	
+	def _avoid_updates(self, channel, distr):
+		self._logger.debug('Turning off updates from SVN.')
+		debian = distr is 'debian'
+		rm_updates_str = 'update-rc.d scalarizr_update remove' if debian else '/sbin/chkconfig --del scalarizr_update'
+		exec_command(channel, rm_updates_str)
+	
+	
 	def cleanup(self):
 		if not self.sys_args.no_cleanup:
 			if self.instance:
@@ -113,10 +120,14 @@ class ImportEc2Server:
 		
 		import_server_str += ' &'
 		channel = sshmanager.get_root_ssh_channel()
+		
 		self._logger.info("Hacking configuration files")
 		exec_command(channel, 'mv /etc/scalr/logging-debug.ini /etc/scalr/logging.ini')
 		exec_command(channel, "sed -i 's/consumer_url = http:\/\/localhost/consumer_url = http:\/\/0.0.0.0/g' /etc/scalr/public.d/config.ini")
 
+		if self.sys_args.no_updates:
+			self._avoid_updates(channel, distr)
+		
 		self._install_software(channel, distr)
 
 		exec_command(channel, import_server_str)
@@ -191,6 +202,8 @@ def _parse_args():
 	parser.add_option('-c', '--no-cleanup', dest='no_cleanup', action='store_true', default=False, help='Do not cleanup test data')
 	parser.add_option('-m', '--ami', dest='ami', default=Ec2TestAmis.UBUNTU_1004_EBS, help='Amazon AMI')
 	parser.add_option('-i', '--instance-id', dest='inst_id', default=None, help='Running instance')
+	parser.add_option('-n', '--no-updates', dest='no_updates', default=None, help='Turn off updates from SVN')
+	
 	parser.parse_args()
 	return parser.values
 
