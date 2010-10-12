@@ -8,6 +8,7 @@ from scalarizr.util import disttool
 import os
 import math
 import logging
+from subprocess import Popen, PIPE, STDOUT
 
 
 BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
@@ -18,7 +19,7 @@ def split(filename, part_name_prefix, chunk_size, dest_dir):
 	f = None
 	try:
 		try:
-			f = open(filename, "r")
+			f = open(filename, "rb")
 		except OSError:
 			logger.error("Cannot open file to split '%s'", filename)
 			raise
@@ -43,7 +44,7 @@ def split(filename, part_name_prefix, chunk_size, dest_dir):
 		# Write parts to files.
 		for part_name in part_names:
 			part_filename = os.path.join(dest_dir, part_name)
-			cf = open(part_filename, "w")
+			cf = open(part_filename, "wb")
 			try:
 				logger.debug("Writing chunk '%s'", part_filename)
 				_write_chunk(f, cf, chunk_size)
@@ -182,7 +183,7 @@ class Rsync(object):
 
 	def exclude(self, files):
 		for file in files:
-			self._options.append("--exclude " + file)
+			self._options += ['--exclude', file]
 		return self
 
 	def version(self):
@@ -200,6 +201,18 @@ class Rsync(object):
 	def quietly(self):
 		self._quiet = True
 		return self
+	
+	def _sync(self):
+		Popen(['sync'], stdout=PIPE, stderr=PIPE).communicate()
+	
+	def execute(self):
+		self._sync()
+		rsync_cmd = [self._executable] + self._options + [self._src, self._dst]
+		print rsync_cmd
+		rsync = Popen(rsync_cmd, stdout=PIPE, stderr=PIPE)
+		out, err = rsync.communicate()
+		self._sync()
+		return out, err, rsync.returncode		
 	
 	def __str__(self):
 		ret = "sync && %(executable)s %(options)s %(src)s %(dst)s %(quiet)s" % dict(

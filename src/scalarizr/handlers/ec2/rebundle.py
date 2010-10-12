@@ -12,6 +12,7 @@ from scalarizr.util import system, disttool, cryptotool, fstool, filetool,\
 from scalarizr.util import software
 from scalarizr.platform.ec2 import s3tool, ebstool
 
+from subprocess import Popen
 from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
@@ -68,7 +69,10 @@ def get_handlers ():
 
 BUNDLER_NAME = "scalarizr"
 BUNDLER_VERSION = scalarizr.__version__
-BUNDLER_RELEASE = "445"
+BUNDLER_RELEASE = "672"
+#BUNDLER_NAME = "euca-tools"
+#BUNDLER_VERSION = '1.3'
+#BUNDLER_RELEASE = "31337"
 DIGEST_ALGO = "sha1"
 CRYPTO_ALGO = "aes-128-cbc"
 
@@ -82,11 +86,16 @@ Bundled: %(bundle_date)s
 
 class Ec2RebundleHandler(Handler):
 	_logger = None
+	_ebs_strategy_cls = None
+	_instance_store_strategy_cls = None
 	
-	def __init__(self):
+	def __init__(self, ebs_strategy_cls=None, instance_store_strategy_cls=None):
 		self._log_hdlr = RebundleLogHandler()		
 		self._logger = logging.getLogger(__name__)
-		self._logger.addHandler(self._log_hdlr)
+		#self._logger.addHandler(self._log_hdlr)
+		
+		self._ebs_strategy_cls = ebs_strategy_cls or RebundleEbsStrategy
+		self._instance_store_strategy_cls = instance_store_strategy_cls or RebundleInstanceStoreStrategy
 		
 		bus.define_events(
 			# Fires before rebundle starts
@@ -135,7 +144,6 @@ class Ec2RebundleHandler(Handler):
 			# Create exclude directories list
 			excludes = message.excludes.encode("ascii").split(":") \
 					if message.body.has_key("excludes") and message.excludes else []
-			excludes.append('/mnt/privated.img')
 
 			# Take rebundle strategy
 			pl = bus.platform 
@@ -149,20 +157,27 @@ class Ec2RebundleHandler(Handler):
 					root_bdt = instance.block_device_mapping[instance.root_device_name]
 					volume_size = ec2_conn.get_all_volumes([root_bdt.volume_id])[0].size
 				
-				strategy = RebundleEbsStrategy(role_name, image_name, excludes,
+				strategy = self._ebs_strategy_cls(
+					role_name, image_name, excludes,
 					devname=get_free_devname(), 
 					volume_size=volume_size, 
 					volume_id=message.body.get('volume_id')
 				)
 			else:
 				# Old-style instance-store
-				sda1_ko = filter(lambda x: os.path.exists(x), ('/sys/block/sda1', '/sys/block/sda/sda1'))
-				if not sda1_ko:
+				sda1_kobject = filter(
+					lambda x: os.path.exists(x), 
+					('/sys/block/sda1', '/sys/block/sda/sda1')
+				)
+				if not sda1_kobject:
 					raise HandlerError('Cannot find sda1 kobject in sysfs')
-				root_device_size = int(read_file(sda1_ko[0] + '/size')) * 512 # Size in bytes
-				strategy = RebundleInstanceStoreStrategy(role_name, image_name, excludes,
-						image_size = root_device_size / 1024 / 1024,
-						s3_bucket_name = "scalr2-images-%s-%s" % (pl.get_region(), pl.get_account_id()))
+				root_device_size = int(read_file(sda1_kobject[0] + '/size')) * 512 # Size in bytes
+				
+				strategy = self._instance_store_strategy_cls(
+					role_name, image_name, excludes,
+					image_size = root_device_size / 1024 / 1024,
+					s3_bucket_name = "scalr2-images-%s-%s" % (pl.get_region(), pl.get_account_id())
+				)
 
 			# Last moment before rebundle
 			self._before_rebundle(role_name)			
@@ -212,14 +227,16 @@ class Ec2RebundleHandler(Handler):
 			
 		finally:
 			self._log_hdlr.bundle_task_id = None
-			if strategy:
-				strategy.cleanup()
+			#if strategy:
+			#	strategy.cleanup()
 		
 		
 	def _before_rebundle(self, role_name):
 		# Send wall message before rebundling. So console users can run away
-		system('wall "%s" 2>&1' % [WALL_MESSAGE])
-	
+		try:
+			Popen(['wall', WALL_MESSAGE]).communicate()
+		except OSError, e:
+			self._logger.warning(e)
 
 
 class RebundleStratery:
@@ -333,7 +350,10 @@ class RebundleStratery:
 		shutil.rmtree(os.path.join(etc_path, "private.d"))
 		os.mkdir(os.path.join(etc_path, "private.d"))
 		
-		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)	
+		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
+		
+		# Sync filesystem buffers
+		Popen(['sync']).communicate()	
 	
 	
 	def run(self):
@@ -372,8 +392,14 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 		self._s3_bucket_name = s3_bucket_name
 		self._platform = bus.platform
 
+	def _get_arch(self):
+		arch = disttool.uname()[4]
+		if re.search("^i\d86$", arch):
+			arch = "i386"
+		return arch		
+
 	def _bundle_image(self, name, image_file, user, destination, user_private_key_string, 
-					user_cert_string, ec2_cert_string):
+					user_cert_string, ec2_cert_string, key=None, iv=None):
 		try:
 			self._logger.info("Bundling image...")
 			# Create named pipes.
@@ -405,8 +431,10 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			except:
 				self._logger.error("Cannot read EC2 certificate")
 				raise
-			key = hexlify(Rand.rand_bytes(16))
-			iv = hexlify(Rand.rand_bytes(8))
+			key = key or hexlify(Rand.rand_bytes(16))
+			iv = iv or hexlify(Rand.rand_bytes(8))
+			self._logger.debug('Key: %s', key)
+			self._logger.debug('IV: %s', iv)
 	
 	
 			# Bundle the AMI.
@@ -419,10 +447,11 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			# it from disk.
 			openssl = "/usr/sfw/bin/openssl" if disttool.is_sun() else "openssl"
 			tar = filetool.Tar()
-			tar.create().dereference().sparse()
+			#tar.create().dereference().sparse()
+			tar.create().sparse()
 			tar.add(os.path.basename(image_file), os.path.dirname(image_file))
 			digest_file = os.path.join('/tmp', 'ec2-bundle-image-digest.sha1')
-
+			
 			self._logger.info("Encrypting image")
 			system(" | ".join([
 				"%(openssl)s %(digest_algo)s -out %(digest_file)s < %(digest_pipe)s & %(tar)s", 
@@ -448,7 +477,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			finally:
 				os.remove(digest_file)
 			
-			# digest = "88935fe66e78ce819789dc4a4ef6461f72db6342"
+			#digest = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
 	
 			# Split the bundled AMI. 
 			# Splitting is not done as part of the compress, encrypt digest
@@ -463,6 +492,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			bundled_size = 0
 			for part_name in part_names:
 				bundled_size += os.path.getsize(os.path.join(destination, part_name))
+			self._logger.debug('Image size: %d bytes', bundled_size)
 	
 			
 			# Encrypt key and iv.
@@ -477,15 +507,11 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			# Digest parts.		
 			parts = self._digest_parts(part_names, destination)
 			
-			arch = disttool.uname()[4]
-			if re.search("^i\d86$", arch):
-				arch = "i386"
-			
 			# Create bundle manifest
 			manifest = AmiManifest(
 				name=name,
 				user=user, 
-				arch=arch, 
+				arch=self._get_arch(), 
 				parts=parts, 
 				image_size=os.path.getsize(image_file), 
 				bundled_size=bundled_size, 
@@ -498,7 +524,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 				kernel_id=self._platform.get_kernel_id(), 
 				ramdisk_id=self._platform.get_ramdisk_id(), 
 				ancestor_ami_ids=self._platform.get_ancestor_ami_ids(), 
-				block_device_mapping=self._platform.get_block_device_mapping()
+				block_device_mapping=self._platform.block_devs_mapping()
 			)
 			manifest.save(manifest_file)
 			
@@ -574,8 +600,8 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 		try:
 			self._logger.info("Registering image '%s'", s3_manifest_path)
 			ec2_conn = self._platform.new_ec2_conn()
-			
-			# TODO: describe this strange bug in boto when istead of `ImageLocation` param `Location` is sent
+
+			# @see http://code.google.com/p/boto/issues/detail?id=323			
 			#ami_id = ec2_conn.register_image(None, None, image_location=s3_manifest_path)
 			rs = ec2_conn.get_object('RegisterImage', {"ImageLocation" : s3_manifest_path}, ResultSet)
 			ami_id = getattr(rs, 'imageId', None)
@@ -709,7 +735,7 @@ class RebundleEbsStrategy(RebundleStratery):
 
 if disttool.is_linux():
 	class LinuxImage:
-		SPECIAL_DIRS = ('/dev', '/media' '/mnt', '/proc', '/sys', '/cdrom', '/tmp')
+		SPECIAL_DIRS = ('/dev', '/media', '/mnt', '/proc', '/sys', '/cdrom', '/tmp')
 	
 		_logger = None
 		
@@ -728,14 +754,15 @@ if disttool.is_linux():
 			self.path = path
 			
 			# Create rsync excludes list
-			self.excludes = set(self.SPECIAL_DIRS) # Add special dirs
-			self.excludes.update(excludes or ()) # Add user input
-			if self.mpoint.startswith(volume):
-				self.excludes.add(self.mpoint) # Add root volume
+			self.excludes = set(self.SPECIAL_DIRS) 	# Add special dirs
+			self.excludes.update(excludes or ()) 	# Add user input
+			self.excludes.add(self.mpoint) 			# Add image mount point
+			self.excludes.add(self.path) 			# Add image path
+			# Add mounted non-local filesystems under volume
 			self.excludes.update(set(entry.mpoint
-					for entry in self._mtab.list_entries()  
-					if entry.fstype not in fstool.Mtab.LOCAL_FS_TYPES \
-						and entry.mpoint.startswith(self._volume))) # Add non-local mounted filesystems
+					for entry in self._mtab.list_entries() 
+					if entry.mpoint.startswith(self._volume) and \
+					entry.fstype not in fstool.Mtab.LOCAL_FS_TYPES)) 
 		
 		def make(self):
 			self._create_image()
@@ -780,11 +807,11 @@ if disttool.is_linux():
 		def _make_special_dirs(self):
 			self._logger.info("Making special directories")
 			
-			special_dirs = set(self.SPECIAL_DIRS)
-			special_dirs.update(set(entry.mpoint for entry in self._mtab.list_entries(reload=True)))
+			#special_dirs = set(self.SPECIAL_DIRS)
+			#special_dirs.update(set(entry.mpoint for entry in self._mtab.list_entries(reload=True)))
 			
 			# Create empty special dirs
-			for dir in special_dirs:
+			for dir in self.SPECIAL_DIRS:
 				spec_dir = self.mpoint + dir
 				if os.path.exists(dir) and not os.path.exists(spec_dir):
 					self._logger.debug("Create spec dir %s", spec_dir)
@@ -793,12 +820,20 @@ if disttool.is_linux():
 						os.chmod(spec_dir, 01777)
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
-			dev_dir = self.mpoint + "/dev"			
+			dev_dir = self.mpoint + "/dev"
+			system("mknod " + dev_dir + "/console c 5 1")
+			system("mknod " + dev_dir + "/full c 1 7")									
 			system("mknod " + dev_dir + "/null c 1 3")
+			system("ln -s null " + dev_dir +"/X0R")			
 			system("mknod " + dev_dir + "/zero c 1 5")
 			system("mknod " + dev_dir + "/tty c 5 0")
-			system("mknod " + dev_dir + "/console c 5 1")
-			system("ln -s null " + dev_dir +"/X0R")
+			system("mknod " + dev_dir + "/tty0 c 4 0")
+			system("mknod " + dev_dir + "/tty1 c 4 1")
+			system("mknod " + dev_dir + "/tty2 c 4 2")
+			system("mknod " + dev_dir + "/tty3 c 4 3")
+			system("mknod " + dev_dir + "/tty4 c 4 4")
+			system("mknod " + dev_dir + "/tty5 c 4 5")
+			system("mknod " + dev_dir + "/xvc0 c 204 191")
 			
 			self._logger.debug("Special directories maked")			
 		
@@ -807,11 +842,15 @@ if disttool.is_linux():
 			self._logger.info("Copying %s into the image %s", source, dest)
 			rsync = filetool.Rsync()
 			rsync.archive().times().sparse().links().quietly()
+			#rsync.archive().sparse().xattributes()
 			if xattr:
 				rsync.xattributes()
 			rsync.exclude(self.excludes)
-			rsync.source(os.path.join(source, "/*")).dest(dest)
-			exitcode = system(str(rsync))[2]
+			rsync.source(source).dest(dest)
+			out, err, exitcode = rsync.execute()
+			self._logger.debug('rsync stdout: %s', out)
+			self._logger.debug('rsync stderr: %s', err)
+			
 			if exitcode == 23 and filetool.Rsync.usable():
 				self._logger.warning(
 					"rsync seemed successful but exited with error code 23. This probably means " +
@@ -1023,7 +1062,7 @@ class AmiManifest:
 		# /manifest/machine_configuration/block_device_mapping
 		if self.block_device_mapping:
 			block_dev_mapping_elem = el("block_device_mapping")
-			for virtual, device in self.block_device_mapping.items():
+			for virtual, device in self.block_device_mapping:
 				mapping_elem = el("mapping")
 				
 				virtual_elem = el("virtual")

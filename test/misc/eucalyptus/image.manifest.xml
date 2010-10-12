@@ -1,0 +1,187 @@
+<?xml version="1.0" ?>
+<manifest>
+	<version>2007-10-10</version>
+	<bundler>
+		<name>euca-tools</name>
+		<version>1.3</version>
+		<release>31337</release>
+	</bundler>
+	<machine_configuration>
+		<architecture>x86_64</architecture>
+		<block_device_mapping>
+			<mapping>
+				<virtual>emi</virtual>
+				<device>sda1</device>
+			</mapping>
+			<mapping>
+				<virtual>ephemeral0</virtual>
+				<device>Failure: 500 Internal Server Error
+					null
+
+</device>
+			</mapping>
+			<mapping>
+				<virtual>root</virtual>
+				<device>/dev/sda1</device>
+			</mapping>
+			<mapping>
+				<virtual>swap</virtual>
+				<device>sda3</device>
+			</mapping>
+		</block_device_mapping>
+		<product_codes>
+			<product_code></product_code>
+		</product_codes>
+		<kernel_id>eki-AE7F138B</kernel_id>
+		<ramdisk_id>eri-91061322</ramdisk_id>
+	</machine_configuration>
+	<image>
+		<name>image.img</name>
+		<user>339620379587367172080457814281190445120</user>
+		<type>machine</type>
+		<ancestry>
+			<ancestor_ami_id></ancestor_ami_id>
+		</ancestry>
+		<digest algorithm="SHA1">da39a3ee5e6b4b0d3255bfef95601890afd80709
+		</digest>
+		<size>1049624576</size>
+		<bundled_size>260642352</bundled_size>
+		<ec2_encrypted_key algorithm="AES-128-CBC">33729000d3682142b531e241b0baf059d2dcb5c9e0fd502889bcd1598f6a422f498b5a444312fdb8e5c12b9465e5b1db34d910fba6f563ab6a24b3be1a671c3645634b6a8d279d8a8de9299c4faf79c1e0b101e15e9b97efd95dc6263be6c19e5623ec135f8130df5ea25e88d772c8398c252d25f9dd505e6b4d8b448d53251f085fae58e346476090d9005332618a12be6e0f9a1474151e721a28d430295e300a38e2b6180cbd28c662db8c945e929775eb57c2979545c34aab96e2a1077af86a007e515bce0b847600b47149290faa109c2d3edbd1e0449900093c91e485d2689e3eb811e16c9407fb00a1c8dd13af3a412f551df5869147f0face8af3bc62
+		</ec2_encrypted_key>
+		<user_encrypted_key algorithm="AES-128-CBC">288fc1c317cbbb9d8138e679ec806bf3e2d55ad9a714c2826c573b3fd35a16c312608971548545d63e56016961c3e038b8571c5305c3963765cfc4a9c7b60ed30dd7445869153817b1524a44965eb347ab60e826d38f37cc42b0bf2fb6b0bc09ad2c401b5f8edf44052bedd8fad0bff5ce6a807591bc786d786a11a56c1a8b57cb3ff6b4452049047ab99dfee91995803d70089590b47bbd3ad3f01130eec02883b26c29c441d07aeb5594df59b777d12da546f00394adb7e74ff2d0539a562d61a883fa309e5cb4b730d325434028e27cf6df031dd34fac05916f53edcce791509e216f7ba564f345be9d4c7a91ab1464fddd3903fb06698c9b5cb501640b01
+		</user_encrypted_key>
+		<ec2_encrypted_iv>448b66d5505cb59437002de7407764705bf0ada9c057f925bbb7347c5a52c566ab32b137430eab7db8b22427433b2cd981d1096019b97087a954b1ac2884239487befaeb498443f05c90c65c619cd138ecea228dd34a945143355aa50da8e38b7904f4ae9953595a6f95fe07e30ba6f6a40753257c55369328b8a90a1d7e96660db94efd9c777ef603c2bc2c512d0411622c9b8856a06879924fd8fbde32b362eda50613a0aa539e39761802816a762c41eb9e9e34c9e5076e3758b12fe26f90747848fe98ffcc1fd767be358ff9783498d8bd43171faac6c24c571262a9327746a1921bbf0a5d37fed2dcc0f5ea2d0fa6f27bccf3a82686cbe4eb4471156303
+		</ec2_encrypted_iv>
+		<user_encrypted_iv>749dc6f908e1e26c78ce1a78728ad974c7b5d56b6d5a7043dbe171ffc7dbbd08f9c0ef0a199c762a25bef53de02862de08390681e51feabdc5c40ca61511f1e1e1e7c07a90d6b07942b1d468d347232ca9eb22efcbea9de4e933964a01111284c62a6ec5278483661277a485f10a1bb5e8478003631020371e5b9fd0b2eb8a4e1d8c32eb6658fb9418b494849e84e32ad9f4cec68aa40aa4648f75267c2759c2217ffe81b9791284479997a9c7395dbf9eef81728719b6f503fcb6be11d3e861b64dd3199b65461002418f5d43e96dc37225b6fdfb0dc7c5e31c177a4a5d4a637b94cc1c9fcef0e7d1a88ea28f252c3e6ca9f519cdc574c57fe4abb1601f5c27
+		</user_encrypted_iv>
+		<parts count="25">
+			<part index="0">
+				<filename>image.part.0</filename>
+				<digest algorithm="SHA1">ff441f7ef76ae208646a29c8f28c92945bc96b55
+				</digest>
+			</part>
+			<part index="1">
+				<filename>image.part.1</filename>
+				<digest algorithm="SHA1">46eb1959349c5417358700e2f6ac66eea7dd3a3c
+				</digest>
+			</part>
+			<part index="2">
+				<filename>image.part.2</filename>
+				<digest algorithm="SHA1">b7410b7ccce76ff0c22867a0fd1f64278cc31bc9
+				</digest>
+			</part>
+			<part index="3">
+				<filename>image.part.3</filename>
+				<digest algorithm="SHA1">7a77156f1039577051bd7baef3ff1769d9740ad3
+				</digest>
+			</part>
+			<part index="4">
+				<filename>image.part.4</filename>
+				<digest algorithm="SHA1">cc76576eec08da23b1bb86c9da0532b33f9aeb64
+				</digest>
+			</part>
+			<part index="5">
+				<filename>image.part.5</filename>
+				<digest algorithm="SHA1">979c8bdcf8ef46510f480a6ce30fd3e488087e42
+				</digest>
+			</part>
+			<part index="6">
+				<filename>image.part.6</filename>
+				<digest algorithm="SHA1">7e8de55ffe7b115102347c3bb21c2ffcd22d84c8
+				</digest>
+			</part>
+			<part index="7">
+				<filename>image.part.7</filename>
+				<digest algorithm="SHA1">ad47caeb93dd2b79f3c5a6b19d087ecefbbad2bc
+				</digest>
+			</part>
+			<part index="8">
+				<filename>image.part.8</filename>
+				<digest algorithm="SHA1">8fa0b2026104db35d3ab2392b1a3cc3c09dab016
+				</digest>
+			</part>
+			<part index="9">
+				<filename>image.part.9</filename>
+				<digest algorithm="SHA1">32e2f55ab61d90b06e40df8d9238c2565531f452
+				</digest>
+			</part>
+			<part index="10">
+				<filename>image.part.10</filename>
+				<digest algorithm="SHA1">dda532a0d68d71bf41ba864f72b6b049d49571a3
+				</digest>
+			</part>
+			<part index="11">
+				<filename>image.part.11</filename>
+				<digest algorithm="SHA1">4fe21945afd262d07446d2990a15a8fd5765b75a
+				</digest>
+			</part>
+			<part index="12">
+				<filename>image.part.12</filename>
+				<digest algorithm="SHA1">6a533d0951cf551b525202775f9f3ab765a796e9
+				</digest>
+			</part>
+			<part index="13">
+				<filename>image.part.13</filename>
+				<digest algorithm="SHA1">39a852659ac6cf2bc740ac481a92a6995f252eb1
+				</digest>
+			</part>
+			<part index="14">
+				<filename>image.part.14</filename>
+				<digest algorithm="SHA1">76f896185d7838db5a090447a7968648bb2e4a5d
+				</digest>
+			</part>
+			<part index="15">
+				<filename>image.part.15</filename>
+				<digest algorithm="SHA1">8e194d9ef8af59d2e7cbf03296c41bc6c9a2be01
+				</digest>
+			</part>
+			<part index="16">
+				<filename>image.part.16</filename>
+				<digest algorithm="SHA1">47f91fb0d394622b61cb8517664878c6ece0c414
+				</digest>
+			</part>
+			<part index="17">
+				<filename>image.part.17</filename>
+				<digest algorithm="SHA1">12d4d4d45966e4a4ef006ef014dffc6ca3d517d5
+				</digest>
+			</part>
+			<part index="18">
+				<filename>image.part.18</filename>
+				<digest algorithm="SHA1">f8f0ab81e73b000306bdb85c3a6682406f665938
+				</digest>
+			</part>
+			<part index="19">
+				<filename>image.part.19</filename>
+				<digest algorithm="SHA1">8b7b4cd96d3d46fd7281aca1b6517efbbaece87d
+				</digest>
+			</part>
+			<part index="20">
+				<filename>image.part.20</filename>
+				<digest algorithm="SHA1">11c02b929b94886ab1b99b8e1ff8035149baa1b7
+				</digest>
+			</part>
+			<part index="21">
+				<filename>image.part.21</filename>
+				<digest algorithm="SHA1">a48be469ef961ebbe65c6f995302c06e116835a2
+				</digest>
+			</part>
+			<part index="22">
+				<filename>image.part.22</filename>
+				<digest algorithm="SHA1">50e59d40d2d6606cbef0be53a57ebcc202cd34db
+				</digest>
+			</part>
+			<part index="23">
+				<filename>image.part.23</filename>
+				<digest algorithm="SHA1">5bbc739398428fba3db3bd6578581b3fa11c8453
+				</digest>
+			</part>
+			<part index="24">
+				<filename>image.part.24</filename>
+				<digest algorithm="SHA1">e156cf4dfa68562ef684bb64a3de4bc0c926f9dd
+				</digest>
+			</part>
+		</parts>
+	</image>
+	<signature>79eabf39db5383792e83409af14602576e964aae6f6bfccf723a2483844c79bbff4dbc7e952dcfa8d48fff603a689a3fa4436d1d82899af7da6ad9d2b3026140eb7261e98993a1b83418aeb371e135781e0c1d2a44ea6db8e78991620e45defb98b54059cb447cb9ee9e95af71aec42e848e567473402753ca644b2493b1a8e8d0704197ee9ca6cf4b9e278416a6627ff459cdf78350290d3909386163327bf9ba51f18f8e9f5afb243798f6f047c91a76dad159c2c0b5f59335623fe819190ed2095c70f3f144506c60257ebe96b4c471339db57e7aea9c77bde0f2adbc6ca34d32f7bff4989d36480b779cb44a89facc9c1107e2d5bf71869156b5de254681
+	</signature>
+</manifest>

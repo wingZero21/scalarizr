@@ -125,6 +125,13 @@ class Ec2Platform(Platform):
 		for key in keys:
 			ret[key] = self._get_property("latest/meta-data/block-device-mapping/" + key)
 		return ret
+	
+	def block_devs_mapping(self):
+		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")
+		ret = list()
+		for key in keys:
+			ret.append((key, self._get_property("latest/meta-data/block-device-mapping/" + key)))
+		return ret
 		
 	def get_ssh_pub_key(self):
 		return self._get_property("latest/meta-data/public-keys/0/openssh-key")

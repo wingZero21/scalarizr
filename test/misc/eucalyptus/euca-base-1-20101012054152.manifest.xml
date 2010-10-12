@@ -1,0 +1,181 @@
+<?xml version="1.0" ?>
+<manifest>
+	<version>2007-10-10</version>
+	<bundler>
+		<name>euca-tools</name>
+		<version>1.3</version>
+		<release>31337</release>
+	</bundler>
+	<machine_configuration>
+		<architecture>x86_64</architecture>
+		<block_device_mapping>
+			<mapping>
+				<virtual>emi</virtual>
+				<device>sda1</device>
+			</mapping>
+			<mapping>
+				<virtual>ephemeral0</virtual>
+				<device>/dev/sda2</device>
+			</mapping>
+			<mapping>
+				<virtual>root</virtual>
+				<device>/dev/sda1</device>
+			</mapping>
+			<mapping>
+				<virtual>swap</virtual>
+				<device>sda3</device>
+			</mapping>
+		</block_device_mapping>
+		<kernel_id>eki-AE7F138B</kernel_id>
+		<ramdisk_id>eri-91061322</ramdisk_id>
+	</machine_configuration>
+	<image>
+		<name>euca-base-1-20101012054152</name>
+		<user>339620379587367172080457814281190445120</user>
+		<type>machine</type>
+		<ancestry>
+			<ancestor_ami_id></ancestor_ami_id>
+		</ancestry>
+		<digest algorithm="SHA1">038e10ff3dc4fadddd8b70b596a598b3b0201a44
+		</digest>
+		<size>1049624576</size>
+		<bundled_size>260635056</bundled_size>
+		<ec2_encrypted_key algorithm="AES-128-CBC">7d776c77ba0cf24057b844b948d52f6dd7f14f66c880e77118288ad27c975b0dbfb748c233a04ba2e6225f9624cf997dfccb4b9a699158bab2067421b7fbab12c4b653205a8781bff9a006f6cc2ad59235a6e9d6b4b5279e905f177996ca28bd42455c587a4814af86d84348349a23b4883dea8a5292525dcb9d8bfa28bf88c766c9f8194d1752d48dbb5d56b88c860caf76cd365cba337de4de1a13d851ce24c50a13e31abfe7344fc5e12126e5e342c18045edf9f06ff27f95e0e9f021ca8c4c457adee35dbf6ffa31f15f19b446fb26e5b525740e806a4d3b70898b6d9be14a301c93f26c72359dc6f36ccbb020d89b82f73c742d7071fb39616ee666fb65
+		</ec2_encrypted_key>
+		<user_encrypted_key algorithm="AES-128-CBC">0b742d8fd6f8f06324003169ab9e8eb0e7fc6c6e9bf8426afb2754d10ce9eb9f8e18cae377c96f6da27195fa78362f88dc45b1e733123c08d34d1ae12e66777befe5ebdb96a9f0bbe71eb1625525f9f05f92dce642537b5dbdcb2e2457c71e31ab24fe5ebe871b93aa9a0041bf2490d0253d1e2a45bf415eec46abd70b1be89392375a820669d153cb1dd78e64379ceb45a8b924c1d5d498fb6927ce1c123a057d283253d205dc49b936c21e5687f975d9e9d33c77699b662637b20687c652b8b367cb1bb27f3bcb1bc5bb34883bab78bab545c9596ce25bb3c2fb29dbc26bd181d1dddebd6981e3915c9ef02e523ee4b177e530c896a565b0b72b0c01bd48f7
+		</user_encrypted_key>
+		<ec2_encrypted_iv>56f8458b3574183a25ce7bddc4964a82b80e5393e0baa8c30433c76b90b6abd74540e7aa574a3dba0c5a0f65bbb498827351ab3c5b7df8bbf2ab5382ddca40a502874ef1e0fb8d4a3801a605eb016055ee15e157320cf2d620295a2ad3a42be2a2ae1d4900dc1146a02260647a145d511a78c5aa40762be7254c2c803df7f318e69aa501a3557e4145fa6557b8458cd86fba1573de9080f4075320e8fa132c513057b963e5fff1e564543d8c7149c6a279544e7a66d637736f85b5277e6dab887224b04408a7ae3a862a908b9a0587753a4b12853f2057099b3a623c15a2e4dc12d208b4e83688d52e6b557e3475dadff5b3f7045b80e02102a2cc064284853a
+		</ec2_encrypted_iv>
+		<user_encrypted_iv>560d882cf0f740730a00dd5e47609b5652e0a594f447f33f0de40f7bb93adc08ca5780c90c8efc14f3e761eab974af44a09c10a09d046dc321bc48aa343f5fde136b2e63480200dcb95259b4ad972a5a687c9574d364b0ef9172441424231363a4ef860e3d3213f3ee2f859f1f606b6a714f194432996cc37e05bb0514ba811061b08e0c4e9956eb016dca459112ca4f474e92eb65b26b06031b2ffccc38d00538e5187401a2f3f071421597db59595ebde9898994817b10b65685b5bffb5a2d0b4e70ed59098b7e20430ea8d795d1953ceee773fde0706633ec1a4a531cd1beee20d73e20a5fbaf4662b8691454acfcfbcd45e1e5725e3a12d225f24423a625
+		</user_encrypted_iv>
+		<parts count="25">
+			<part index="0">
+				<filename>euca-base-1-20101012054152.part.00</filename>
+				<digest algorithm="SHA1">f050fb9e12d70cee7683319250d488acf3672d41
+				</digest>
+			</part>
+			<part index="1">
+				<filename>euca-base-1-20101012054152.part.01</filename>
+				<digest algorithm="SHA1">30ae38d317ba558265aa5f7c22567098fa9fe94f
+				</digest>
+			</part>
+			<part index="2">
+				<filename>euca-base-1-20101012054152.part.02</filename>
+				<digest algorithm="SHA1">1a423023cbb3abbd5272a2a633b3e983708af1f7
+				</digest>
+			</part>
+			<part index="3">
+				<filename>euca-base-1-20101012054152.part.03</filename>
+				<digest algorithm="SHA1">b01f39152841b9bf230ecd109c956d2d32adf21a
+				</digest>
+			</part>
+			<part index="4">
+				<filename>euca-base-1-20101012054152.part.04</filename>
+				<digest algorithm="SHA1">e48e8f41c26d217b529676dd4754a72f1dfcdf50
+				</digest>
+			</part>
+			<part index="5">
+				<filename>euca-base-1-20101012054152.part.05</filename>
+				<digest algorithm="SHA1">ee4e04a762b22219dc092c231e169187e65168b9
+				</digest>
+			</part>
+			<part index="6">
+				<filename>euca-base-1-20101012054152.part.06</filename>
+				<digest algorithm="SHA1">33c449ced7db23de7d820fcc9c17f70e5291a569
+				</digest>
+			</part>
+			<part index="7">
+				<filename>euca-base-1-20101012054152.part.07</filename>
+				<digest algorithm="SHA1">4193aece4f728a03f59e97addbcd38614df3bafe
+				</digest>
+			</part>
+			<part index="8">
+				<filename>euca-base-1-20101012054152.part.08</filename>
+				<digest algorithm="SHA1">6c5855fa6939e8d901b4e14209b47220e7988dc3
+				</digest>
+			</part>
+			<part index="9">
+				<filename>euca-base-1-20101012054152.part.09</filename>
+				<digest algorithm="SHA1">b66c308f2bcc56d63b73e2e3533cae2500a40f2a
+				</digest>
+			</part>
+			<part index="10">
+				<filename>euca-base-1-20101012054152.part.10</filename>
+				<digest algorithm="SHA1">789b8ded8cbd9f94654edba84ca1107f0d2304fc
+				</digest>
+			</part>
+			<part index="11">
+				<filename>euca-base-1-20101012054152.part.11</filename>
+				<digest algorithm="SHA1">e280625536ba77bcf5364173132f9b53d9083655
+				</digest>
+			</part>
+			<part index="12">
+				<filename>euca-base-1-20101012054152.part.12</filename>
+				<digest algorithm="SHA1">99073bfadbd18d1a52cd2c1fa9874d335e27adfd
+				</digest>
+			</part>
+			<part index="13">
+				<filename>euca-base-1-20101012054152.part.13</filename>
+				<digest algorithm="SHA1">8bb27f88b3912ffb54e94800e947990cebde0f30
+				</digest>
+			</part>
+			<part index="14">
+				<filename>euca-base-1-20101012054152.part.14</filename>
+				<digest algorithm="SHA1">1d161076e371c85ac6fb5034b014fcc5e2e97850
+				</digest>
+			</part>
+			<part index="15">
+				<filename>euca-base-1-20101012054152.part.15</filename>
+				<digest algorithm="SHA1">45022ca1bf2bc999e741c944a21046042bf6e8ca
+				</digest>
+			</part>
+			<part index="16">
+				<filename>euca-base-1-20101012054152.part.16</filename>
+				<digest algorithm="SHA1">f93ff41992d441bc1133a7546dac98b52ed7156d
+				</digest>
+			</part>
+			<part index="17">
+				<filename>euca-base-1-20101012054152.part.17</filename>
+				<digest algorithm="SHA1">6e439deff148bb279283c6ef97e7a745a0cd092a
+				</digest>
+			</part>
+			<part index="18">
+				<filename>euca-base-1-20101012054152.part.18</filename>
+				<digest algorithm="SHA1">43cf716ae997e89d01fd34ff9974e06800d5959c
+				</digest>
+			</part>
+			<part index="19">
+				<filename>euca-base-1-20101012054152.part.19</filename>
+				<digest algorithm="SHA1">523e986c65e95c257649ba4b1b13522ae4f1d636
+				</digest>
+			</part>
+			<part index="20">
+				<filename>euca-base-1-20101012054152.part.20</filename>
+				<digest algorithm="SHA1">adda05b97c1c6343a724e344bed37486dca4cdf8
+				</digest>
+			</part>
+			<part index="21">
+				<filename>euca-base-1-20101012054152.part.21</filename>
+				<digest algorithm="SHA1">bb3580f295f47039a7b25615089360f35d3c9196
+				</digest>
+			</part>
+			<part index="22">
+				<filename>euca-base-1-20101012054152.part.22</filename>
+				<digest algorithm="SHA1">5c05e5bd7ffdf76549c9d7a8de8d30d1a1015082
+				</digest>
+			</part>
+			<part index="23">
+				<filename>euca-base-1-20101012054152.part.23</filename>
+				<digest algorithm="SHA1">4b8a67d6b277cd4246b9bb89b5e65da582355a1b
+				</digest>
+			</part>
+			<part index="24">
+				<filename>euca-base-1-20101012054152.part.24</filename>
+				<digest algorithm="SHA1">74345c32c71f63c0a6f63dc221026cb6c374a633
+				</digest>
+			</part>
+		</parts>
+	</image>
+	<signature>83c1eef0b9d6d3dc44aa27ef72fc654eab183a58b39dee15679e153bc25bfffbf9f3d28e64c01dbb8afd2bac004a4fad03c3b69ccb29555acb6aaeb3a25eb37f8304143ac4a71c0357f61a99b261b95fbe3e3ccc73672cb9ab2b84596aed2abe318f3b2dae988d3ff206179a421226c1dc4b47808f3efc67511103df9dddd1615712e5d697e361262fd30b2dea4be1187b5727dcf9e218f7d1c0c8a1108388c290f03df0685bc5f353d3aeda1ec7901e95a27852beec473b427550b7931bf0a9c87e82438870c43faa3cca701f853356e5d24fa96dd633576d04220e5a81349f338d4df9e426badab3dac66d148f8fc286442fb91b9b263ccfed10905e90fe46
+	</signature>
+</manifest>

@@ -11,11 +11,13 @@ from scalarizr.util.filetool import write_file
 
 import logging, os
 from urlparse import urlparse
+import urllib2
 
 import boto
 from boto.ec2.regioninfo import RegionInfo
 from boto.s3.connection import OrdinaryCallingFormat
 from M2Crypto import SSL
+from scalarizr.util import firstmatched
 
 def get_platform():
 	return EucaPlatform()
@@ -44,6 +46,34 @@ class EucaPlatform(Ec2Platform):
 			'ec2_url' : user_data[UD_OPT_EC2_URL] 
 		}})
 		
+		
+	def get_block_device_mapping(self):
+		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")
+		ret = {}
+		for key in keys:
+			try:
+				ret[key] = self._get_property('latest/meta-data/block-device-mapping/' + key)
+			except PlatformError, e:
+				# Workaround 
+				if key == 'ephemeral0' and str(e).find('HTTP Error 500') >= 0:
+					ret[key] = firstmatched(lambda x: os.path.exists(x), ('/dev/sda2', '/dev/sdb'))
+				else:
+					raise
+		return ret
+	
+	def block_devs_mapping(self):
+		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")
+		ret = list()
+		for key in keys:
+			try:
+				ret.append((key, self._get_property("latest/meta-data/block-device-mapping/" + key)))
+			except PlatformError, e:
+				if key == 'ephemeral0' and str(e).find('HTTP Error 500') >= 0:
+					ret.append((key, firstmatched(lambda x: os.path.exists(x), ('/dev/sda2', '/dev/sdb'))))
+				else:
+					raise
+		return ret		
+	
 			
 	def get_ec2_cert(self):
 		if not self._ec2_cert:
@@ -52,14 +82,15 @@ class EucaPlatform(Ec2Platform):
 				
 				ec2_url = self._cnf.rawini.get(self.name, 'ec2_url')
 				url = urlparse(ec2_url)
-				addr = (url.hostname, url.port if url.port else 80)
-
-				ctx = SSL.Context()
-				conn = SSL.Connection(ctx)
-				conn.set_post_connection_check_callback(None)
-				conn.connect(addr)
-				cert = conn.get_peer_cert()
-				cert.save_pem(cert_path)
+				if url.schema == 'https':
+					addr = (url.hostname, url.port if url.port else 443)
+	
+					ctx = SSL.Context()
+					conn = SSL.Connection(ctx)
+					conn.set_post_connection_check_callback(None)
+					conn.connect(addr)
+					cert = conn.get_peer_cert()
+					cert.save_pem(cert_path)
 				
 			self._ec2_cert = self._cnf.read_key(cert_path, title="Eucalyptus certificate")
 		return self._ec2_cert	
