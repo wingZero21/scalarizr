@@ -95,7 +95,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			"before_host_down",
 			
 			# Fires after HostDown message is sent
-			"host_down"
+			"host_down",
 			
 			# 
 			# Service events
