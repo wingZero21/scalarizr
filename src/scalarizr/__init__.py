@@ -33,20 +33,39 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.5"	
+__version__ = "0.6"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
 
+SNMP_RESTART_DELAY = 5 # Seconds
+
 _running = False
-""" @var _running: True when scalarizr is running """
+'''
+True when scalarizr daemon should be running
+'''
+
+_pid = None
+'''
+Scalarizr main process PID
+'''
 
 _snmp_pid = None
-""" @var _snmp_pid: Embed snmpd process pid"""
+'''
+Embed SNMP server process PID
+'''
+
+_snmp_scheduled_start_time = None
+'''
+Next time when SNMP process should be forked
+'''
+
+
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
 		initdv2.ParametrizedInitScript.__init__(self, 'scalarizr', "/etc/init.d/scalarizr", socks=[initdv2.SockParam(8013)])
+
 
 def _init():
 	optparser = bus.optparser
@@ -214,20 +233,14 @@ def _init_platform():
 def _init_services():
 	logger = logging.getLogger(__name__)
 	cnf = bus.cnf; ini = cnf.rawini
-
 	server_id = ini.get('general', 'server_id')
 	queryenv_url = ini.get('general', 'queryenv_url')
 	crypto_key = cnf.read_key(cnf.DEFAULT_KEY)
 	messaging_adp = ini.get('messaging', 'adapter')
-	snmp_port = ini.get('snmp', 'port')
-	snmp_security_name = ini.get('snmp', 'security_name')
-	snmp_community_name = ini.get('snmp', 'community_name')
-	
 
 	logger.debug("Initialize QueryEnv client")
 	queryenv = QueryEnvService(queryenv_url, server_id, binascii.a2b_base64(crypto_key))
 	bus.queryenv_service = queryenv
-
 	
 	logger.debug("Initialize messaging")
 	factory = MessageServiceFactory()
@@ -240,18 +253,13 @@ def _init_services():
 		bus.messaging_service = msg_service
 	except (BaseException, Exception):
 		raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
-
+		
 	logger.debug('Initialize message handlers')
 	consumer = msg_service.get_consumer()
 	consumer.listeners.append(MessageListener())
-
 	
-	logger.debug('Initialize embed SNMP server')
-	bus.snmp_server = SnmpServer(
-		port=int(snmp_port), 
-		security_name=snmp_security_name, 
-		community_name=snmp_community_name
-	)
+	logger.debug('Schedule SNMP process')
+	globals()['_snmp_scheduled_start_time'] = time.time()		
 
 	bus.fire("init")
 
@@ -287,16 +295,17 @@ def init_script():
 	
 	cnf = bus.cnf
 	cnf.bootstrap()
+	ini = cnf.rawini
 	
 	logger = logging.getLogger(__name__)
 	logger.debug("Initialize script messaging")
 
 	# Script producer url is scalarizr consumer url. 
 	# Script can't handle any messages by himself. Leave consumer url blank
-	adapter = cnf.rawini.get(config.SECT_MESSAGING, config.OPT_ADAPTER)	
-	kwargs = dict(cnf.rawini.items("messaging_" + adapter))
-	kwargs[P2pConfigOptions.SERVER_ID] = cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.rawini.get(config.SECT_GENERAL, config.OPT_CRYPTO_KEY_PATH)
+	adapter = ini.get(config.SECT_MESSAGING, config.OPT_ADAPTER)	
+	kwargs = dict(ini.items("messaging_" + adapter))
+	kwargs[P2pConfigOptions.SERVER_ID] = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = ini.get(config.SECT_GENERAL, config.OPT_CRYPTO_KEY_PATH)
 	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
 	
 	factory = MessageServiceFactory()		
@@ -304,49 +313,109 @@ def init_script():
 	bus.messaging_service = msg_service
 
 
+def _start_snmp_server():
+	logger = logging.getLogger(__name__)
+	# Start SNMP server in a separate process
+	cnf = bus.cnf; ini = cnf.rawini
+	
+	snmp_server = SnmpServer(
+		port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
+		security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
+		community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
+	)
+	bus.snmp_server = snmp_server
+	
+	pid = os.fork()
+	if pid == 0:
+		globals()['_pid'] = 0
+		try:
+			snmp_server.start()
+			logger.info('[pid: %d] SNMP process terminated', os.getpid())
+			sys.exit(0)
+		except SystemExit:
+			raise
+		except:
+			sys.exit(1)
+	else:
+		globals()["_snmp_pid"] = pid
+
+
 def onSIGTERM(*args):
 	logger = logging.getLogger(__name__)
-	logger.debug("Received SIGTERM")
-	_shutdown()
+	logger.debug('Received SIGTERM')
+		
+	pid = os.getpid()
+	if pid == _pid:
+		# Main process
+		logger.debug('Shutdown main process (pid: %d)', pid)
+		_shutdown()
+	else:
+		# SNMP process
+		logger.debug('Shutdown SNMP server process (pid: %d)', pid)
+		snmp = bus.snmp_server
+		snmp.stop()
+
+def onSIGCHILD(*args):
+	logger = logging.getLogger(__name__)
+	logger.debug("Received SIGCHILD")
+	
+	if globals()["_running"] and _snmp_pid:
+		try:
+			# Restart SNMP process if it terminates unexpectedly
+			pid, sts = os.waitpid(_snmp_pid, os.WNOHANG)
+			logger.debug(
+				'Child terminated (pid: %d, status: %s, WIFEXITED: %s, '
+				'WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)', 
+				pid, sts, os.WIFEXITED(sts), 
+				os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts)
+			)
+			if pid == _snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
+				logger.warning(
+					'SNMP process [pid: %d] died unexpectedly. '
+					'Restart it after %d seconds', 
+					_snmp_pid, SNMP_RESTART_DELAY
+				)
+				globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY
+				globals()['_snmp_pid'] = None
+		except OSError:
+			pass	
+	
 
 def _shutdown(*args):
 	logger = logging.getLogger(__name__)
-	if globals()["_running"]:
-		logger.info("Stopping scalarizr...")
-		try:		
-			if EMBED_SNMPD and _snmp_pid:
-				try:
-					logging.debug("Stopping SNMP subprocess")
-					os.kill(_snmp_pid, signal.SIGTERM)
-				except OSError, e:
-					logger.error("Cannot kill SIGTERM to SNMP subprocess (pid: %d). %s", _snmp_pid, e)
-			
-			# Kill Scalr message consumer
-			msg_service = bus.messaging_service
-			consumer = msg_service.get_consumer()
-			consumer.stop()
-			consumer.shutdown()
-			
-			# Kill Scalr message producer
-			producer = msg_service.get_producer()
-			producer.shutdown()
-			
-			# Kill Cross-scalarizr message consumer
-			int_msg_service = bus.int_messaging_service
-			if int_msg_service and int_msg_service.consumer:
-				int_msg_service.consumer.stop()
-				int_msg_service.consumer.shutdown()
-			
+	globals()["_running"] = False
+		
+	try:
+		logger.info("[pid: %d] Stopping scalarizr", os.getpid())
+		
+		if _snmp_pid:
+			logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
+			os.kill(_snmp_pid, signal.SIGTERM)
+				
+		msg_service = bus.messaging_service
+		consumer = msg_service.get_consumer()
+		consumer.stop()
+		consumer.shutdown()
+		
+		producer = msg_service.get_producer()
+		producer.shutdown()
+		
+		# Kill Cross-scalarizr message consumer
+		int_msg_service = bus.int_messaging_service
+		if int_msg_service and int_msg_service.consumer:
+			int_msg_service.consumer.stop()
+			int_msg_service.consumer.shutdown()
+		
+		if _snmp_pid:
 			snmp_server = bus.snmp_server
 			snmp_server.stop()
-			
-			# Fire terminate
-			bus.fire("terminate")
-			logger.info("Stopped")
-		finally:
-			globals()["_running"] = False
-	else:
-		logger.warning("Scalarizr is not running. Nothing to stop")	
+		
+		# Fire terminate
+		bus.fire("terminate")
+	except:
+		pass
+	
+	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
 
 
 def do_validate_cnf():
@@ -428,8 +497,6 @@ def main():
 		
 		# Move private configuration to loop device
 		privated_img_path = '/mnt/privated.img'
-		#if cnf.state == ScalarizrState.UNKNOWN and os.path.exists(privated_img_path):
-		#	os.remove(privated_img_path)
 		_mount_private_d(cnf.private_path(), privated_img_path, 10240)
 		
 
@@ -469,38 +536,41 @@ def main():
 		# Initialize scalarizr services
 		_init_services()
 		
-		# Install  signal handlers	
+		# Install signal handlers
+		signal.signal(signal.SIGCHLD, onSIGCHILD)	
 		signal.signal(signal.SIGTERM, onSIGTERM)
 
-		# Create messaging server thread
+		# Create message server thread
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
 		msg_thread = threading.Thread(target=consumer.start, name="Message server")
-		
-		# Create SNMP server thread
-		snmp_server = bus.snmp_server
-		snmp_thread = threading.Thread(target=snmp_server.start, name="SNMP server")
-		
-		# Start scalarizr
-		logger.info('Starting Scalarizr')
+
+		# Start message server
+		logger.info('[pid: %d] Starting scalarizr', os.getpid())
 		msg_thread.start()
-		snmp_thread.start()
 
 		# Fire start
 		globals()["_running"] = True
+		globals()['_pid'] = os.getpid()
 		bus.fire("start")
 	
 		try:
 			while _running:
 				msg_thread.join(0.2)
+				if not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
+					_start_snmp_server()
 		except KeyboardInterrupt:
 			pass
 		finally:
-			if _running:
+			if _running and os.getpid() == _pid:
 				_shutdown()
 			
 	except (BaseException, Exception), e:
-		if not (isinstance(e, SystemExit) or isinstance(e, KeyboardInterrupt)):
+		if isinstance(e, SystemExit):
+			raise
+		elif isinstance(e, KeyboardInterrupt):
+			pass
+		else:
 			traceback.print_exc(file=sys.stderr)
 			logger.exception(e)
 			sys.exit(1)

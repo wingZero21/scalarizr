@@ -5,15 +5,14 @@ Created on Jun 4, 2010
 @author: spike
 '''
 
+import os, logging
+import select
+
 from pysnmp.entity import engine, config
 from pysnmp.entity.rfc3413 import cmdrsp, context
 from pysnmp.carrier.asynsock.dgram import udp
 from pysnmp.carrier.error import CarrierError
 from pysnmp.smi.error import SmiError
-
-import os, logging
-import select
-
 
 known_modules = (
 	'__UCD-SNMP-MIB', 
@@ -46,7 +45,7 @@ class SnmpServer():
 			# Setup UDP over IPv4 transport endpoint
 		try:
 			iface = ('0.0.0.0', self.port)
-			self._logger.info("Starting SNMP server on %s:%d", *iface)
+			self._logger.info("[pid: %d] Starting SNMP server on %s:%d",  os.getpid(), iface[0], iface[1])
 			config.addSocketTransport(
 			self._engine,
 			udp.domainName,
@@ -94,9 +93,12 @@ class SnmpServer():
 				# 'Bad file descriptor'
 				# Throws when dispatcher closed from another thread
 				pass
-			else:
-				raise  
+		except KeyboardInterrupt:
+			pass
+		except (BaseException, Exception), e2:
+			self._logger.exception(e2)
+			raise
 	
 	def stop(self):
-		self._engine.transportDispatcher.closeDispatcher()
-		
+		if self._engine:
+			self._engine.transportDispatcher.closeDispatcher()
