@@ -3,7 +3,7 @@
 # scalarizr - this script starts and stops the scalarizr daemon
 #
 # chkconfig:   2345 85 15
-# description:  Scalarizr is a part of Scalr project
+# description: Converts any server to Scalr-manageable node
 # processname: scalarizr
 # config:      /etc/scalarizr/config.ini
 # config:      /etc/sysconfig/scalarizr

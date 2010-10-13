@@ -11,7 +11,7 @@
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: Scalarizr
-# Description:       Scalarizr converts any server to Scalr-manageable node
+# Description:       Converts any server to Scalr-manageable node
 ### END INIT INFO
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin

@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# scalarizr - Scalarizr update tool
+#
+### BEGIN INIT INFO
+# Provides:          scalarizr
+# Required-Start:    $network $local_fs
+# Required-Stop:
+# Should-Start:      $named
+# Should-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Scalarizr update tool
+# Description:       Scalarizr is a part of Scalr project
+### END INIT INFO
+
+
+update_flag="/etc/scalr/private.d/.update"
+
+case "$1" in
+        start)
+                time_has_come=$(python -c "import os, sys, time; print int(not os.path.exists(sys.argv[1]) or time.time() - os.stat(sys.argv[1]).st_mtime > 86400)" $update_flag)
+                if [ "1" == "$time_has_come" ]; then
+                        echo 'Updating scalarizr...'
+                        apt-get update
+						export DEBIAN_FRONTEND=noninteractive
+						export DEBIAN_PRIORITY=critical                        
+                        apt-get install -q -y scalarizr/scalr && touch $update_flag
+                fi
+                ;;
+                
+        stop)
+				;;
+
+        status)
+                if [ -f $update_flag ]; then
+                        last_update=$(date -r $update_flag)
+                else
+                        last_update="never"
+                fi
+                [ -x /usr/local/bin/scalarizr ] && /usr/local/bin/scalarizr -v
+                echo "Last update:  $last_update"
+                ;;
+
+        *)
+                echo "Usage: $0 {start|status}"
+                ;;
+esac

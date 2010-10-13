@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# scalarizr_update Scalarizr update tool
+#
+# chkconfig:   2345 84 15
+# description: Scalarizr is a part of Scalr project
+
+
+update_flag="/etc/scalr/private.d/.update"
+
+case "$1" in
+        start)
+                time_has_come=$(python -c "import os, sys, time; print int(not os.path.exists(sys.argv[1]) or time.time() - os.stat(sys.argv[1]).st_mtime > 86400)" $update_flag)
+                if [ "1" == "$time_has_come" ]; then
+                        echo 'Updating scalarizr...'
+                        yum -y update scalarizr && touch $update_flag
+                fi
+                ;;
+        stop)
+				;;        
+
+        status)
+                if [ -f $update_flag ]; then
+                        last_update=$(date -r $update_flag)
+                else
+                        last_update="never"
+                fi
+                [ -x /usr/local/bin/scalarizr ] && /usr/local/bin/scalarizr -v
+                echo "Last update:  $last_update"
+                ;;
+
+        *)
+                echo $"Usage: $0 {start|status}"
+esac
+

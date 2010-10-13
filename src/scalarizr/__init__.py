@@ -61,10 +61,13 @@ Next time when SNMP process should be forked
 '''
 
 
-
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
-		initdv2.ParametrizedInitScript.__init__(self, 'scalarizr', "/etc/init.d/scalarizr", socks=[initdv2.SockParam(8013)])
+		initdv2.ParametrizedInitScript.__init__(self, 
+			'scalarizr', 
+			'/etc/init.d/scalarizr', 
+			socks=[initdv2.SockParam(8013)]
+		)
 
 
 def _init():
@@ -78,7 +81,6 @@ def _init():
 			"/etc/scalarizr", 
 			"/usr/etc/scalarizr", 
 			"/usr/local/etc/scalarizr",
-			os.path.join(bus.base_path, "etc-devel"),
 			os.path.join(bus.base_path, "etc")
 		]
 		if optparser and optparser.values.etc_path:
@@ -88,7 +90,7 @@ def _init():
 		bus.etc_path = firstmatched(lambda p: os.access(p, os.F_OK), etc_places)
 		if not bus.etc_path:
 			raise ScalarizrError('Cannot find scalarizr configuration dir')
-	bus.cnf = cnf = ScalarizrCnf(bus.etc_path)
+	bus.cnf = ScalarizrCnf(bus.etc_path)
 
 	
 	# Configure logging
@@ -167,7 +169,7 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 	logger = logging.getLogger(__name__)
 	
 	logger.debug("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
-			mpoint, privated_image, format_size(1024*blocks_count))
+			mpoint, privated_image, format_size(1024*(blocks_count-1)))
 	mtab = fstool.Mtab()
 	if mtab.contains(mpoint=mpoint): # if privated_image exists
 		logger.debug("private.d already mounted to %s", mpoint)
@@ -178,7 +180,7 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 		
 	mnt_opts = ('-t auto', '-o loop,rw')	
 	if not os.path.exists(privated_image):	
-		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count)
+		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count-1)
 		retcode = system(build_image_cmd)[2]
 		if retcode:
 			logger.error('Cannot create image device')
@@ -497,7 +499,7 @@ def main():
 		
 		# Move private configuration to loop device
 		privated_img_path = '/mnt/privated.img'
-		_mount_private_d(cnf.private_path(), privated_img_path, 10240)
+		_mount_private_d(cnf.private_path(), privated_img_path, 10000)
 		
 
 		if optparser.values.configure:
