@@ -905,7 +905,7 @@ class BuiltinBehaviours:
 class BuiltinPlatforms:
 	VPS 		= 'vps'	
 	EC2 		= 'ec2'
-	EUCA 		= 'euca'	
+	EUCA 		= 'eucalyptus'	
 	RACKSPACE 	= 'rackspace'
 
 	@staticmethod

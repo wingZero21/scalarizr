@@ -7,8 +7,6 @@ from scalarizr.bus import bus
 from scalarizr.platform import PlatformError
 from scalarizr.platform.ec2 import Ec2Platform
 
-from scalarizr.util.filetool import write_file
-
 import logging, os
 from urlparse import urlparse
 import urllib2
@@ -22,30 +20,52 @@ from scalarizr.util import firstmatched
 def get_platform():
 	return EucaPlatform()
 
-"""
-User data options 
-"""
 
-UD_OPT_S3_URL = 's3_url'
-UD_OPT_EC2_URL = 'ec2_url'
-
+SECTION = 'eucalyptus'
+CLOUD_CERT = 'euca_cloud_cert.pem'
+OPT_S3_URL = 's3_url'
+OPT_EC2_URL = 'ec2_url'
+OPT_CLOUD_CERT = 'cloud_cert'
+OPT_CLOUD_CERT_PATH = 'cloud_cert_path'
 
 class EucaPlatform(Ec2Platform):
-	name = 'euca'
+	name = 'eucalyptus'
 
 	def __init__(self):
 		Ec2Platform.__init__(self)
 		self._logger = logging.getLogger(__name__)
-		cnf = bus.cnf; 
+		
+		cnf = bus.cnf
+		cnf.explore_key(CLOUD_CERT, 'Eucalyptus cloud certificate', private=False)
 		cnf.on('apply_user_data', self.on_cnf_apply_user_data)
 			
 	def on_cnf_apply_user_data(self, cnf):
 		user_data = self.get_user_data()
 		cnf.update_ini(self.name, {self.name: {
-			's3_url' : user_data[UD_OPT_S3_URL],
-			'ec2_url' : user_data[UD_OPT_EC2_URL] 
+			OPT_S3_URL 	: user_data[OPT_S3_URL],
+			OPT_EC2_URL : user_data[OPT_EC2_URL] 
 		}})
 		
+	def set_access_data(self, access_data):
+		'''
+		Eucalyptus cloud_cert, ec2_url, s3_url may be passed within access data.
+		Accept them if they are not precented in configuration
+		'''
+		cnf = bus.cnf; ini = cnf.rawini
+		'''
+		if not cnf.key_exists(CLOUD_CERT):
+			cnf.write_key(CLOUD_CERT, access_data[OPT_CLOUD_CERT])
+		'''
+		
+		if not os.path.exists(cnf.key_path(self.CLOUD_CERT, private=False)):
+			cnf.write_key(CLOUD_CERT, access_data[OPT_CLOUD_CERT], private=False)
+		if not ini.has_section(SECTION) or not ini.has_option(SECTION, OPT_EC2_URL):
+			cnf.update_ini(self.name, {self.name: {
+				OPT_S3_URL 	: access_data[OPT_S3_URL],
+				OPT_EC2_URL : access_data[OPT_EC2_URL] 
+			}})
+			
+		Ec2Platform.set_access_data(self, access_data)
 		
 	def get_block_device_mapping(self):
 		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")
@@ -77,14 +97,14 @@ class EucaPlatform(Ec2Platform):
 			
 	def get_ec2_cert(self):
 		if not self._ec2_cert:
-			cert_path = os.path.join(bus.etc_path, self._cnf.rawini.get(self.name, 'cloud_cert_path'))
+			cnf = bus.cnf
+			cert_path = os.path.join(bus.etc_path, cnf.rawini.get(self.name, OPT_CLOUD_CERT_PATH))
 			if not os.path.exists(cert_path):
-				
-				ec2_url = self._cnf.rawini.get(self.name, 'ec2_url')
+				ec2_url = cnf.rawini.get(self.name, OPT_EC2_URL)
 				url = urlparse(ec2_url)
 				if url.schema == 'https':
+					# Open SSL connection and retrieve certificate
 					addr = (url.hostname, url.port if url.port else 443)
-	
 					ctx = SSL.Context()
 					conn = SSL.Connection(ctx)
 					conn.set_post_connection_check_callback(None)
@@ -92,14 +112,14 @@ class EucaPlatform(Ec2Platform):
 					cert = conn.get_peer_cert()
 					cert.save_pem(cert_path)
 				
-			self._ec2_cert = self._cnf.read_key(cert_path, title="Eucalyptus certificate")
+			self._ec2_cert = cnf.read_key(CLOUD_CERT)
 		return self._ec2_cert	
 	
 	def new_ec2_conn(self):
 		''' @rtype: boto.ec2.connection.EC2Connection '''
 		self._logger.debug('Creating eucalyptus ec2 connection')
 		if not hasattr(self, '_ec2_conn_params'):
-			url = self._cnf.rawini.get(self.name, 'ec2_url')
+			url = self._cnf.rawini.get(self.name, OPT_EC2_URL)
 			if not url:
 				raise PlatformError('EC2(Eucalyptus) url is empty')
 			u = urlparse(url)
@@ -116,7 +136,7 @@ class EucaPlatform(Ec2Platform):
 		''' @rtype: boto.ec2.connection.S3Connection '''		
 		self._logger.debug('Creating eucalyptus s3 connection')
 		if not hasattr(self, '_s3_conn_params'):
-			url = self._cnf.rawini.get(self.name, 's3_url')
+			url = self._cnf.rawini.get(self.name, OPT_S3_URL)
 			if not url:
 				raise PlatformError('S3(Walrus) url is empty')
 			u = urlparse(url)

@@ -27,7 +27,8 @@ class SshPool:
 
 regexps = ['root@.*#',
 		   '.+:.*#',
-		   'local2:.*#']
+		   'local2:.*#',
+		   '\-bash\-.*#']
 
 root_re = '|'.join(regexps)
 
