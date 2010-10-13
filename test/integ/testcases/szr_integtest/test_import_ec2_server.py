@@ -21,7 +21,7 @@ import sys
 SECURITY_GROUP = 'webta.scalarizr'
 
 class ImportEc2Server:
-	ami        = None
+	ami        = None	
 	ip_address = None
 	ec2 	   = None
 	instance   = None
@@ -222,7 +222,8 @@ class TestImportEc2Server(unittest.TestCase):
 		self.importer.test_import()
 
 	def tearDown(self):
-		self.importer.cleanup()
+		pass
+		#self.importer.cleanup()
 	
 			
 if __name__ == "__main__":
