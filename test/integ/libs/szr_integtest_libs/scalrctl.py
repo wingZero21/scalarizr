@@ -52,12 +52,13 @@ class FarmUI:
 
 		
 	def add_role(self, role_name, min_servers=1, max_servers=2, settings=None):
-#		'/div[@class="viewers-selrolesviewer-blocks viewers-selrolesviewer-add"]'
-		'''
-				settings = settings or dict()
-				if not 'aws.instance_type' in settings:
-					settings['aws.instance_type'] = 't1.micro'
-		'''			
+
+		settings = settings or dict()
+		if not 'aws.instance_type' in settings:
+			settings['aws.instance_type'] = 't1.micro'
+		settings['scaling.min_instances'] = min_servers
+		settings['scaling.max_instances'] = max_servers
+			
 		if not 'farms_builder.php?id=' in self.sel.get_location():
 			raise FarmUIError("Farm's settings page hasn't been opened. Use farm first")
 	
@@ -69,9 +70,12 @@ class FarmUI:
 			self.sel.click('//li[@itemname="%s"]' % role_name)
 			time.sleep(0.5)
 			self.sel.click('//li[@itemname="%s"]/div[@class="info"]/img[1]' % role_name)
-			self.sel.click('//label[text()="Location:"]')
-			self.sel.click('//div[@class="x-combo-list-inner"]/div[1]')
-			self.sel.click('//button[text()="Add"]')
+			if self.sel.is_element_present('//label[text()="Location:"]'):
+				self.sel.click('//label[text()="Platform:"]')
+				self.sel.click('//div[text()="Amazon EC2"]')
+				self.sel.click('//label[text()="Location:"]')
+				self.sel.click('//div[@class="x-combo-list-inner"]/div[text()="AWS / US East 1"]')
+				self.sel.click('//button[text()="Add"]')
 		except:
 			raise Exception("Role '%s' doesn't exist" % role_name)
 		try:
@@ -79,32 +83,23 @@ class FarmUI:
 			self.sel.click('//span[@class="short" and text()="%s"]' % role_name)
 		except:
 			self.sel.click('//div[@class="full" and text()="%s"]' % role_name)
-			
+		
+		i = 1
 		while True:
 			try:
-				self.sel.click('//div')
-		'''
-		pic = self.sel.get_attribute('//span[text()="%s"]/../../td[2]/img/@src' % role_name)
-		if 'iconUnCheckAll' in pic:
-			self.sel.click('//span[text()="%s"]/../../td[2]/img[@src="%s"]' % (role_name, pic))
-		elif 'iconCheckAll' in pic:
-			self.sel.click('//span[text()="%s"]' %  role_name)
-			pass
-		elif 'iconUncheckDis' in pic:
-			raise Exception("Cannot enable role %s: Cannot check in user interface")
-		else:
-			raise Exception("Nothing to do")
-		
-		self.sel.type('scaling.min_instances', min_servers)
-		self.sel.type('scaling.max_instances', max_servers)
-		
-		if settings and isinstance(settings, dict):
-			for option, value in settings.iteritems():
-				try:
-					self.sel.type(option, value)
-				except:
-					pass
-		'''			
+				self.sel.click('//div[@class="viewers-farmrolesedit-tab" and position()=%s]' % i)
+				time.sleep(0.3)
+				for option, value in settings.iteritems():
+					try:
+						self.sel.type('//div[@class=" x-panel x-panel-noborder"]//*[@name="%s"]' % option, value)
+					except:
+						pass
+				i += 1
+			except:
+				break
+				
+		self.sel.click('//div[@class="viewers-selrolesviewer-blocks viewers-selrolesviewer-add"]')
+
 	def remove_role(self, role_name):
 		if not 'farms_builder.php?id=' in self.sel.get_location():
 			raise Exception("Farm's settings page hasn't been opened. Use farm first")
