@@ -89,7 +89,6 @@ elif vals.update_from_svn:
 elif vals.update_from_lc:
 	logger.info('Updating files from local copy')
 	deploy.apply_changes_from_tarball()
-	os.remove(tarball)
 	
 else:
 	logger.info('nothing to do')
