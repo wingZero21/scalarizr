@@ -29,9 +29,9 @@ class ScalrConsts:
 		PLATFORM_EC2 	= 'Amazon EC2'
 		PLATFORM_RS  	= 'Rackspace'
 	class Behaviours:
-		BEHAVIOUR_BASE  = 'Base images'
-		BEHAVIOUR_APP   = 'Application servers'
-		BEHAVIOUR_MYSQL = 'Database servers' 
+		BEHAVIOUR_BASE  = 'Base'
+		BEHAVIOUR_APP   = 'Apache'
+		BEHAVIOUR_MYSQL = 'MySQL' 
 
 
 class FarmUI:
@@ -78,6 +78,7 @@ class FarmUI:
 				self.sel.click('//button[text()="Add"]')
 		except:
 			raise Exception("Role '%s' doesn't exist" % role_name)
+		
 		try:
 			# uncutted 
 			self.sel.click('//span[@class="short" and text()="%s"]' % role_name)

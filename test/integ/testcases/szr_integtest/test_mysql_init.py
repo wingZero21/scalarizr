@@ -89,23 +89,37 @@ class MysqlRoleHandler(RoleHandler):
 			expect(channel, regexp, 60)
 			self._logger.info("%s appeared in scalarizr.log", regexp)
 
+	def test_add_pma_users(self):
 		
+		channel = self.ssh.get_root_ssh_channel()
+		tail_log_channel(channel)
+		# TODO: send 'create_pma' message from scalr's interface
+		sequence = ['Adding phpMyAdmin system user']		
+		for regexp in sequence:
+			expect(channel, regexp, 60)
+			self._logger.info("'%s' appeared in scalarizr.log", regexp)
+		
+	def test_create_mysql_backup(self):
+		channel = self.slave_ssh.get_root_ssh_channel()
+		tail_log_channel(channel)
+		# TODO: send 'create_backup' message from scalr's interface
+		sequence = ['Dumping all databases', 'Uploading backup to S3', 'Backup files(s) uploaded to S3']
+		for regexp in sequence:
+			expect(channel, regexp, 60)
+			self._logger.info("'%s' appeared in scalarizr.log", regexp)
 				
 class TestMysqlInit(unittest.TestCase):
 
 	def setUp(self):
-		role_name = 'Test_mysql_2010_10_12_1324'
-		role_opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
-		role_opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-		self.role_init = MysqlRoleHandler(role_name, role_opts)
+		role_name = 'szr-mysql-ubuntu-10.04'
+		self.role_init = MysqlRoleHandler(role_name, EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
 
 	def test_init(self):
 		sequence = ['HostInitResponse', 'Initializing MySQL master', 'Create EBS storage (volume:',
 					'farm-replication config created', 'MySQL system users added', 'Creating storage EBS snapshot',
 					"Message 'HostUp' delivered"]
 		self.role_init.test_init(sequence)
-		self.role_init.test_slave_init()
-		
+				
 	
 	def tearDown(self):
 		pass
