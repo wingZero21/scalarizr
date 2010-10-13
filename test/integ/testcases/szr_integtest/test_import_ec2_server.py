@@ -6,7 +6,7 @@ Created on Oct 2, 2010
 
 import unittest
 
-from szr_integtest_libs.scalrctl import import_server, ScalrConsts, exec_cronjob
+from szr_integtest_libs.scalrctl import import_server, ScalrConsts, ScalrCtl
 from szr_integtest import get_selenium, Ec2TestAmis, config
 import socket
 from boto.ec2.connection import EC2Connection
@@ -30,6 +30,7 @@ class ImportEc2Server:
 		self._logger = logging.getLogger(__name__)
 		self.passed = True
 		self.sys_args = sysargs
+		self.scalr_ctl = ScalrCtl()
 
 	def _install_software(self, channel, distr):
 		pass
@@ -141,7 +142,7 @@ class ImportEc2Server:
 		expect(channel, "Message 'Hello' delivered", 									15)
 		
 		self._logger.info("Hello delivered")
-		exec_cronjob('ScalarizrMessaging')
+		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		
 		if self.root_device == 'instance-store':
 			expect(channel, "Make image .+ from volume /",			 					240)
@@ -190,9 +191,9 @@ class ImportEc2Server:
 		expect(channel, "Rebundle complete!", 											240)		
 		self._logger.info("Rebundle complete!")
 		
-		exec_cronjob('ScalarizrMessaging')
-		exec_cronjob('BundleTasksManager')
-		exec_cronjob('BundleTasksManager')
+		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
+		self.scalr_ctl.exec_cronjob('BundleTasksManager')
+		self.scalr_ctl.exec_cronjob('BundleTasksManager')
 		
 		#exec_command(channel,)
 		# TODO: run <import_server_str> on instance, read log while bundle not complete, return ami id . 

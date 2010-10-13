@@ -5,7 +5,7 @@ Created on Oct 2010
 '''
 from szr_integtest import get_selenium, config
 from szr_integtest_libs import tail_log_channel, expect, SshManager
-from szr_integtest_libs.scalrctl import FarmUI, exec_cronjob, EC2_MYSQL_ROLE_DEFAULT_SETTINGS, EC2_ROLE_DEFAULT_SETTINGS
+from szr_integtest_libs.scalrctl import FarmUI, ScalrCtl, EC2_MYSQL_ROLE_DEFAULT_SETTINGS, EC2_ROLE_DEFAULT_SETTINGS
 import logging
 import re
 import unittest
@@ -21,6 +21,7 @@ class RoleHandler:
 		self.server_id_re = re.compile(
 				'\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)' \
 				% (self.farm_id, self.role_name), re.M)
+		self.scalr_ctl = ScalrCtl()
 	
 	def test_init(self, sequence):
 		self.farm = FarmUI(get_selenium())
@@ -32,7 +33,7 @@ class RoleHandler:
 		self.farm.launch()
 		
 		self._logger.info("Farm launched")
-		out = exec_cronjob('Scaling')
+		out = self.scalr_ctl.exec_cronjob('Scaling')
 
 		result = re.search(self.server_id_re, out)
 		if not result:
@@ -48,7 +49,7 @@ class RoleHandler:
 		channel = self.ssh.get_root_ssh_channel()
 		tail_log_channel(channel)
 		
-		exec_cronjob('ScalarizrMessaging')
+		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 	
 		for regexp in sequence:
 			expect(channel, regexp, 60)
@@ -62,9 +63,9 @@ class MysqlRoleHandler(RoleHandler):
 	
 	def test_slave_init(self):
 		self._logger.info('Running slave instance')
-		exec_cronjob('ScalarizrMessaging')
+		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		
-		out = exec_cronjob('Scaling')		
+		out = self.scalr_ctl.exec_cronjob('Scaling')		
 
 		result = re.search(self.server_id_re, out)
 		if not result:
@@ -80,7 +81,7 @@ class MysqlRoleHandler(RoleHandler):
 		channel = self.slave_ssh.get_root_ssh_channel()
 		tail_log_channel(channel)
 		
-		exec_cronjob('ScalarizrMessaging')
+		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		
 		sequence = ['HostInitResponse', 'Initializing MySQL slave', 'Creating EBS volume from snapshot',
 			'farm-replication config created', 'Replication master is changed to host', "Message 'HostUp' delivered"]
@@ -107,6 +108,10 @@ class MysqlRoleHandler(RoleHandler):
 		for regexp in sequence:
 			expect(channel, regexp, 60)
 			self._logger.info("'%s' appeared in scalarizr.log", regexp)
+			
+	def test_promote_to_master(self):
+		pass
+		
 				
 class TestMysqlInit(unittest.TestCase):
 

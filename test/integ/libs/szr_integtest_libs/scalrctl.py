@@ -9,7 +9,7 @@ from ConfigParser import ConfigParser
 from szr_integtest import config
 from scalarizr.libs.metaconf import NoPathError
 import paramiko
-from szr_integtest_libs import exec_command, clean_output
+from szr_integtest_libs import exec_command, clean_output, SshManager
 from selenium import selenium
 
 class FarmUIError(Exception):
@@ -255,31 +255,45 @@ def login(sel):
 def reset_farm(ssh, farm_id):
 	pass
 
-def exec_cronjob(name):
-	cron_keys = ['BundleTasksManager', 'Scaling', 'Poller']
-	cron_ng_keys = ['ScalarizrMessaging', 'MessagingQueue']
-	if not name in cron_keys and not name in cron_ng_keys:
-		raise Exception('Unknown cronjob %s' % name)
+class ScalrCtl:
+	def __init__(self):
+		scalr_host = config.get('./scalr/hostname')
+		ssh_key_path = config.get('./scalr/ssh_key_path')
+		if not os.path.exists(ssh_key_path):
+			raise Exception("Key file %s doesn't exist" % ssh_key_path)
+		ssh_key_password = config.get('./scalr/ssh_key_password')
+		
+		self.ssh = SshManager(scalr_host, ssh_key_path, key_pass = ssh_key_password)
+		self.ssh.connect()
+		self.channel = self.ssh.get_root_ssh_channel()
+		
 
-	cron_php_path = ('cron-ng/' if name in cron_ng_keys else 'cron/') +'cron.php'
+	def exec_cronjob(self, name):
+		if self.channel.closed:
+			self.channel = self.ssh.get_root_ssh_channel()
+			
+		cron_keys = ['BundleTasksManager', 'Scaling', 'Poller']
+		cron_ng_keys = ['ScalarizrMessaging', 'MessagingQueue']
+		
+		if not name in cron_keys and not name in cron_ng_keys:
+			raise Exception('Unknown cronjob %s' % name)
 	
-	scalr_host = config.get('./scalr/hostname')
-	ssh_key_path = config.get('./scalr/ssh_key_path')
-	if not os.path.exists(ssh_key_path):
-		raise Exception("Key file %s doesn't exist" % ssh_key_path)
-	ssh_key_password = config.get('./scalr/ssh_key_password')
-	home_path = config.get('./scalr/home_path')
+		cron_php_path = ('cron-ng/' if name in cron_ng_keys else 'cron/') +'cron.php'	
+		
+		home_path = config.get('./scalr/home_path')
+		clean_output(self.channel, 5)
+		exec_command(self.channel, 'cd ' + home_path)
+		job_cmd = 'php -q ' + cron_php_path + ' --%s' % name
+		out = exec_command(self.channel, job_cmd)
+		return out
 	
-	ssh = paramiko.SSHClient()
-	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-	key = paramiko.RSAKey.from_private_key_file(ssh_key_path, password = ssh_key_password)
-	ssh.connect(scalr_host, pkey = key, username='root')
-	channel = ssh.invoke_shell()
-	clean_output(channel, 5)
-	exec_command(channel, 'cd ' + home_path)
-	print 'cd %s' % home_path 
-	job_cmd = 'php -q ' + cron_php_path + ' --%s' % name
-	print job_cmd
-	out = exec_command(channel, job_cmd)
-	channel.close()
-	return out
+	def enable_svn_access(self, ip):
+		if self.channel.closed:
+			self.channel = self.ssh.get_root_ssh_channel()
+			
+		out = exec_command(self.channel, 'svn2allow %s' % ip)
+		
+		if not 'Successfully enabled SVN access' in out:
+			raise Exception("Can't enable SVN access to %s. Output: \n%s" % (ip, out))
+		
+		
