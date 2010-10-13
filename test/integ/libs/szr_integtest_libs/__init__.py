@@ -26,7 +26,8 @@ class SshPool:
 		pass
 
 regexps = ['root@.*#',
-		   '.+:.*#']
+		   '.+:.*#',
+		   'local2:.*#']
 
 root_re = '|'.join(regexps)
 
@@ -95,7 +96,8 @@ class SshManager:
 		if self.user == 'ubuntu':
 			channel.send('sudo -i\n')
 			
-		out = clean_output(channel, 5)			
+		out = clean_output(channel, 5)	
+		print "Returned channel: %s" % out		
 		return channel
 	
 	def get_sftp_client(self):
@@ -206,9 +208,15 @@ def exec_command(channel, cmd, timeout = 60):
 	
 def clean_output(channel, timeout = 60):
 	out = ''
-	last_recv_time = time.time()	
+	
+	#not the best solution
+	#if not channel.recv_ready():
+	#	return out
+	
+	last_recv_time = time.time()
 	while True:
 		if channel.recv_ready():
+			print "Ready"
 			last_recv_time = time.time()
 			out += channel.recv(1024)
 			if re.search(root_re, out):
