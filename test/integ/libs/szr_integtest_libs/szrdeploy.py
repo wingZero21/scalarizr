@@ -73,7 +73,7 @@ class ScalarizrDeploy:
 				raise Exception("Configuration file doesn't contain %s repository url" % repo_type)
 			
 			exec_command(self.channel, "echo %s > /etc/apt/sources.list.d/scalr.list" % repo_url)
-			out = exec_command(self.channel, "apt-get update")
+			out = exec_command(self.channel, "apt-get update", 120)
 			if not "Reading package lists... Done" in out:
 				raise Exception("Something wrong with updating package list")					
 	

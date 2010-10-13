@@ -10,6 +10,7 @@ from szr_integtest import config
 from scalarizr.libs.metaconf import NoPathError
 import paramiko
 from szr_integtest_libs import exec_command, clean_output
+from selenium import selenium
 
 class FarmUIError(Exception):
 	pass
@@ -45,24 +46,44 @@ class FarmUI:
 		self.servers = []
 		self.farm_id = farm_id
 		login(self.sel)
-		self.sel.open('/farms_add.php?id=%s' % self.farm_id)
+		self.sel.open('farms_builder.php?id=%s' % self.farm_id)
 		self.sel.wait_for_page_to_load(30000)
 		time.sleep(1)
-		if self.sel.is_text_present('Unrecoverable error'):
-			raise Exception("Farm %s doesn't exist" % self.farm_id)
+
 		
 	def add_role(self, role_name, min_servers=1, max_servers=2, settings=None):
-		settings = settings or dict()
-		if not 'aws.instance_type' in settings:
-			settings['aws.instance_type'] = 't1.micro'
-			
-		if not 'farms_add.php?id=' in self.sel.get_location():
+#		'/div[@class="viewers-selrolesviewer-blocks viewers-selrolesviewer-add"]'
+		'''
+				settings = settings or dict()
+				if not 'aws.instance_type' in settings:
+					settings['aws.instance_type'] = 't1.micro'
+		'''			
+		if not 'farms_builder.php?id=' in self.sel.get_location():
 			raise FarmUIError("Farm's settings page hasn't been opened. Use farm first")
+	
+		self.sel.click('//span[text()="Roles"]')
+		self.sel.click('//div[@class="viewers-selrolesviewer-blocks viewers-selrolesviewer-add"]')
+		self.sel.wait_for_condition(
+				"selenium.browserbot.getCurrentWindow().document.getElementById('viewers-addrolesviewer')", 5000)
 		try:
-			self.sel.click('//span[text()="%s"]' % role_name)
+			self.sel.click('//li[@itemname="%s"]' % role_name)
+			time.sleep(0.5)
+			self.sel.click('//li[@itemname="%s"]/div[@class="info"]/img[1]' % role_name)
+			self.sel.click('//label[text()="Location:"]')
+			self.sel.click('//div[@class="x-combo-list-inner"]/div[1]')
+			self.sel.click('//button[text()="Add"]')
 		except:
 			raise Exception("Role '%s' doesn't exist" % role_name)
-		
+		try:
+			# uncutted 
+			self.sel.click('//span[@class="short" and text()="%s"]' % role_name)
+		except:
+			self.sel.click('//div[@class="full" and text()="%s"]' % role_name)
+			
+		while True:
+			try:
+				self.sel.click('//div')
+		'''
 		pic = self.sel.get_attribute('//span[text()="%s"]/../../td[2]/img/@src' % role_name)
 		if 'iconUnCheckAll' in pic:
 			self.sel.click('//span[text()="%s"]/../../td[2]/img[@src="%s"]' % (role_name, pic))
@@ -83,36 +104,46 @@ class FarmUI:
 					self.sel.type(option, value)
 				except:
 					pass
-					
+		'''			
 	def remove_role(self, role_name):
-		if not 'farms_add.php?id=' in self.sel.get_location():
+		if not 'farms_builder.php?id=' in self.sel.get_location():
 			raise Exception("Farm's settings page hasn't been opened. Use farm first")
+		
+		self.sel.click('//span[text()="Roles"]')
+		
 		try:
-			self.sel.click('//span[text()="%s"]' % role_name)
+			self.sel.click('//div[text()="%s"]/../a' % role_name)
+			self.sel.click('//button[text()="Yes"]')
 		except:
 			raise Exception("Role '%s' doesn't exist" % role_name)
+
+			
+	def remove_all_roles(self):
+		if not 'farms_builder.php?id=' in self.sel.get_location():
+			raise Exception("Farm's settings page hasn't been opened. Use farm first")
 		
-		pic = self.sel.get_attribute('//span[text()="%s"]/../../td[2]/img/@src' % role_name)
+		self.sel.click('//span[text()="Roles"]')
+		while True:
+			try:
+				self.sel.click('//div[@id="viewers-selrolesviewer"]/ul/li/a/')
+				self.sel.click('//button[text()="Yes"]')
+			except:
+				break
 		
-		if 'iconCheckAll' in pic:
-			self.sel.click('//span[text()="%s"]/../../td[2]/img[@src="%s"]' % (role_name, pic))
-	
-	
 	def save(self):
-		if not 'farms_add.php?id=' in self.sel.get_location():
+		if not 'farms_builder.php?id=' in self.sel.get_location():
 			raise Exception("Farm's settings page hasn't been opened. Use farm first")
 
-		try:
-			self.sel.click('button_js')
-			self.sel.wait_for_page_to_load(15000)
-		except:
+		self.sel.click('//button[text() = "Save"]')
+		while True:
 			try:
-				text = self.sel.get_text('//div[@class="viewers-messages viewers-errormessage"]/')
-				raise FarmUIError('Something wrong with saving farm %s : %s' % (self.farm_id, text))
-			except FarmUIError, e:
-				print str(e)
-			except Exception, e:
-				print 'Cannot save farm for unknown reason'
+				text = self.sel.get_text('//div[@id="top-messages"]/div[last()]')
+				break
+			except:
+				continue
+
+		if text != 'Farm saved':
+			raise FarmUIError('Something wrong with saving farm %s : %s' % (self.farm_id, text))
 			
 	def launch(self):
 		if not hasattr(self, 'farm_id'):

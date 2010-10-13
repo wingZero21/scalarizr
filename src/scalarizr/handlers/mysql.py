@@ -584,7 +584,6 @@ class MysqlHandler(ServiceCtlHanler):
 				shutil.rmtree(tmpdir, ignore_errors=True)
 			if backup_path and os.path.exists(backup_path):
 				os.remove(backup_path)				
-						
 
 	def on_Mysql_CreateDataBundle(self, message):
 		# Retrieve password for scalr mysql user

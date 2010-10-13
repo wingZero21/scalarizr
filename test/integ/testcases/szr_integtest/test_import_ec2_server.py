@@ -6,7 +6,7 @@ Created on Oct 2, 2010
 
 import unittest
 
-from szr_integtest_libs.scalrctl import FarmUI, FarmUIError, import_server, ScalrConsts, exec_cronjob
+from szr_integtest_libs.scalrctl import import_server, ScalrConsts, exec_cronjob
 from szr_integtest import get_selenium, Ec2TestAmis, config
 import socket
 from boto.ec2.connection import EC2Connection
@@ -26,7 +26,7 @@ class ImportEc2Server:
 	ec2 	   = None
 	instance   = None
 	
-	def __init__(self):
+	def __init__(self, sysargs):
 		self._logger = logging.getLogger(__name__)
 		self.passed = True
 		self.sys_args = sysargs
@@ -42,7 +42,7 @@ class ImportEc2Server:
 		return 'Test_base_%s' % time.strftime('%Y_%m_%d_%H%M')
 	
 	def _avoid_updates(self, channel, distr):
-		self._logger.debug('Turning off updates from SVN.')
+		self._logger.info('Turning off updates from SVN.')
 		debian = distr is 'debian'
 		rm_updates_str = 'update-rc.d scalarizr_update remove' if debian else '/sbin/chkconfig --del scalarizr_update'
 		exec_command(channel, rm_updates_str)
@@ -52,7 +52,7 @@ class ImportEc2Server:
 		if not self.sys_args.no_cleanup:
 			if self.instance:
 
-				self._logger.debug('Terminating instance %s ' % str(self.instance.id))
+				self._logger.info('Terminating instance %s ' % str(self.instance.id))
 				self.ec2.terminate_instances([str(self.instance.id)])
 			
 			if self.ami and self.ec2:
@@ -76,7 +76,7 @@ class ImportEc2Server:
 		self.ec2 = EC2Connection(ec2_key_id, ec2_key)
 
 		if not self.sys_args.inst_id:
-			reservation = self.ec2.run_instances(self.sys_args.ami, security_groups = [SECURITY_GROUP], instance_type='m1.small', placement = 'us-east-1a', key_name = key_name)
+			reservation = self.ec2.run_instances(self.sys_args.ami, security_groups = [SECURITY_GROUP], instance_type='t1.micro', placement = 'us-east-1a', key_name = key_name)
 			self.instance = reservation.instances[0]
 			self._logger.info('Started instance %s', self.instance.id)
 			while not self.instance.state == 'running':
@@ -129,11 +129,13 @@ class ImportEc2Server:
 			self._avoid_updates(channel, distr)
 		
 		self._install_software(channel, distr)
-
+		
+		self._logger.info("Running scalarizr with import options")
 		exec_command(channel, import_server_str)
 		# Sleep for a while for scalarizr initializing
 		time.sleep(2)
 		tail_log_channel(channel)
+		self._logger.info("Waiting for hello message delivered")
 		# RegExp   																		# Timeout
 		
 		expect(channel, "Message 'Hello' delivered", 									15)
@@ -202,7 +204,7 @@ def _parse_args():
 	parser.add_option('-c', '--no-cleanup', dest='no_cleanup', action='store_true', default=False, help='Do not cleanup test data')
 	parser.add_option('-m', '--ami', dest='ami', default=Ec2TestAmis.UBUNTU_1004_EBS, help='Amazon AMI')
 	parser.add_option('-i', '--instance-id', dest='inst_id', default=None, help='Running instance')
-	parser.add_option('-n', '--no-updates', dest='no_updates', default=None, help='Turn off updates from SVN')
+	parser.add_option('-n', '--no-updates', dest='no_updates', action='store_true', default=False, help='Turn off updates from SVN')
 	
 	parser.parse_args()
 	return parser.values
@@ -213,7 +215,7 @@ class TestImportEc2Server(unittest.TestCase):
 	importer = None
 	
 	def setUp(self):
-		self.importer = ImportEc2Server()
+		self.importer = ImportEc2Server(sysargs)
 
 	def test_import(self):
 		self.importer.test_import()

@@ -172,39 +172,6 @@ class LogReader:
 				self.ret = re.search(search_re, self.out)
 				break_tail.set()
 				break
-				
-			time.sleep(0.1)				
-			
-			"""
-			rl = select.select([channel],[],[],0.0)[0]
-			if len(rl) > 0:
-				
-				line = channel.recv(1024)
-				if not line:
-					self._error = 'Channel has been closed'
-					break_tail.set()
-					
-				if re.search(self.err_re, line):
-					self._error = re.search(self.err_re, line).group(0)
-					break_tail.set()
-					break
-					
-				if re.search(regexp, line):
-					self.ret = re.search(regexp, line)
-					break_tail.set()
-					break
-			"""
-'''
-class TailLogSpawner:
-	
-	def __init__(self, host, key, timeout= 60):
-		self.host = host
-		self.key = key
-		self.timeout = timeout
-		self.sshmanager = SshManager(host, key)
-		self.sshmanager.connect()
-		self.channel = self.sshmanager.get_root_ssh_channel()
-'''
 
 def tail_log_channel(channel):
 	if channel.closed:
@@ -239,12 +206,14 @@ def exec_command(channel, cmd, timeout = 60):
 	
 def clean_output(channel, timeout = 60):
 	out = ''
-	start_time = time.time()	
-	while time.time() - start_time < timeout:
+	last_recv_time = time.time()	
+	while True:
 		if channel.recv_ready():
+			last_recv_time = time.time()
 			out += channel.recv(1024)
 			if re.search(root_re, out):
 				break
-	else:
-		raise Exception('Timeout while waiting for root prompt')	
+		else:
+			if time.time() - last_recv_time > timeout:
+				raise Exception('Timeout (%s sec) while waiting for root prompt. Out:\n%s' % (timeout, out))	
 	return out
