@@ -11,6 +11,7 @@ from scalarizr.libs.metaconf import NoPathError
 import paramiko
 from szr_integtest_libs import exec_command, clean_output, SshManager
 from selenium import selenium
+import logging
 
 class FarmUIError(Exception):
 	pass
@@ -257,19 +258,26 @@ def reset_farm(ssh, farm_id):
 
 class ScalrCtl:
 	def __init__(self):
+		self._logger = logging.getLogger(__name__)
+		
 		scalr_host = config.get('./scalr/hostname')
 		ssh_key_path = config.get('./scalr/ssh_key_path')
+		
 		if not os.path.exists(ssh_key_path):
 			raise Exception("Key file %s doesn't exist" % ssh_key_path)
 		ssh_key_password = config.get('./scalr/ssh_key_password')
 		
 		self.ssh = SshManager(scalr_host, ssh_key_path, key_pass = ssh_key_password)
 		self.ssh.connect()
+		
 		self.channel = self.ssh.get_root_ssh_channel()
+		self._logger.info('Estabilished connection to %s' % scalr_host)
+		
 		
 
 	def exec_cronjob(self, name):
 		if self.channel.closed:
+			print "channel was closed. getting new one."
 			self.channel = self.ssh.get_root_ssh_channel()
 			
 		cron_keys = ['BundleTasksManager', 'Scaling', 'Poller']
@@ -281,10 +289,16 @@ class ScalrCtl:
 		cron_php_path = ('cron-ng/' if name in cron_ng_keys else 'cron/') +'cron.php'	
 		
 		home_path = config.get('./scalr/home_path')
-		clean_output(self.channel, 5)
+		self._logger.info('channel: %s' % type(self.channel))
+		#clean_output(self.channel, 5)
+		
+		self._logger.info('cd %s' % home_path)
 		exec_command(self.channel, 'cd ' + home_path)
+		
 		job_cmd = 'php -q ' + cron_php_path + ' --%s' % name
+		self._logger.info('Strating cronjob: %s' % job_cmd)
 		out = exec_command(self.channel, job_cmd)
+		
 		return out
 	
 	def enable_svn_access(self, ip):
