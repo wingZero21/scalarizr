@@ -216,7 +216,6 @@ def clean_output(channel, timeout = 60):
 	last_recv_time = time.time()
 	while True:
 		if channel.recv_ready():
-			print "Ready"
 			last_recv_time = time.time()
 			out += channel.recv(1024)
 			if re.search(root_re, out):
