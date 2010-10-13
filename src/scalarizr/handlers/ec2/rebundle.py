@@ -70,9 +70,7 @@ def get_handlers ():
 BUNDLER_NAME = "scalarizr"
 BUNDLER_VERSION = scalarizr.__version__
 BUNDLER_RELEASE = "672"
-#BUNDLER_NAME = "euca-tools"
-#BUNDLER_VERSION = '1.3'
-#BUNDLER_RELEASE = "31337"
+
 DIGEST_ALGO = "sha1"
 CRYPTO_ALGO = "aes-128-cbc"
 
@@ -92,7 +90,7 @@ class Ec2RebundleHandler(Handler):
 	def __init__(self, ebs_strategy_cls=None, instance_store_strategy_cls=None):
 		self._log_hdlr = RebundleLogHandler()		
 		self._logger = logging.getLogger(__name__)
-		#self._logger.addHandler(self._log_hdlr)
+		self._logger.addHandler(self._log_hdlr)
 		
 		self._ebs_strategy_cls = ebs_strategy_cls or RebundleEbsStrategy
 		self._instance_store_strategy_cls = instance_store_strategy_cls or RebundleInstanceStoreStrategy
@@ -227,8 +225,8 @@ class Ec2RebundleHandler(Handler):
 			
 		finally:
 			self._log_hdlr.bundle_task_id = None
-			#if strategy:
-			#	strategy.cleanup()
+			if strategy:
+				strategy.cleanup()
 		
 		
 	def _before_rebundle(self, role_name):
@@ -447,8 +445,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			# it from disk.
 			openssl = "/usr/sfw/bin/openssl" if disttool.is_sun() else "openssl"
 			tar = filetool.Tar()
-			#tar.create().dereference().sparse()
-			tar.create().sparse()
+			tar.create().dereference().sparse()
 			tar.add(os.path.basename(image_file), os.path.dirname(image_file))
 			digest_file = os.path.join('/tmp', 'ec2-bundle-image-digest.sha1')
 			
@@ -543,7 +540,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			f = None
 			try:
 				f = open(part_filename)
-				digest = EVP.MessageDigest("sha1")
+				digest = EVP.MessageDigest(DIGEST_ALGO)
 				part_digests.append((part_name, hexlify(cryptotool.digest_file(digest, f)))) 
 			except Exception, BaseException:
 				self._logger.error("Cannot generate digest for chunk '%s'", part_name)
@@ -824,7 +821,7 @@ if disttool.is_linux():
 			system("mknod " + dev_dir + "/console c 5 1")
 			system("mknod " + dev_dir + "/full c 1 7")									
 			system("mknod " + dev_dir + "/null c 1 3")
-			system("ln -s null " + dev_dir +"/X0R")			
+			#system("ln -s null " + dev_dir +"/X0R")		
 			system("mknod " + dev_dir + "/zero c 1 5")
 			system("mknod " + dev_dir + "/tty c 5 0")
 			system("mknod " + dev_dir + "/tty0 c 4 0")
@@ -841,8 +838,8 @@ if disttool.is_linux():
 		def _copy_rec(self, source, dest, xattr=True):
 			self._logger.info("Copying %s into the image %s", source, dest)
 			rsync = filetool.Rsync()
-			rsync.archive().times().sparse().links().quietly()
-			#rsync.archive().sparse().xattributes()
+			#rsync.archive().times().sparse().links().quietly()
+			rsync.archive().sparse().xattributes()
 			if xattr:
 				rsync.xattributes()
 			rsync.exclude(self.excludes)

@@ -24,11 +24,11 @@ def get_handlers ():
 class EucaRebundleHandler(Ec2RebundleHandler):
 	def __init__(self):
 		Ec2RebundleHandler.__init__(self, instance_store_strategy_cls=EucaRebundleInstanceStoreStrategy)
-		self._logger = logging.getLogger(__name__)
 	
 class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
 	def _bundle_image(self, name, image_file, user, destination, user_private_key_string, 
 					user_cert_string, ec2_cert_string, key=None, iv=None):
+		self._logger = logging.getLogger(__name__)
 		self._logger.info("Bundling image...")
 		Popen(['sync']).communicate()
 		
@@ -54,7 +54,7 @@ class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
 			name=name,
 			user=user, 
 			arch=self._get_arch(), 
-			parts=zip(parts, parts_digest), 
+			parts=zip(map(lambda x: os.path.basename(x), parts), parts_digest), 
 			image_size=image_size, 
 			bundled_size=bundled_size, 
 			user_encrypted_key=user_encrypted_key, 
@@ -79,8 +79,11 @@ class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
 			os.makedirs(path)
 		image_size = os.path.getsize(image_file)
 		self._logger.debug('Image size: %d bytes', image_size)
+
+		# Euca2ool 1.3 main-31337 2009-04-04
+		# Buggy calculates signature from empty string 
+		#return (image_size, 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
 		
-		# FIXME: Due to bug in euca2ools sha1 sum calculated from empty string
 		in_file = open(image_file, 'rb')
 		sha_image = sha1()
 		while 1:
@@ -88,8 +91,7 @@ class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
 			if not buf:
 				break
 			sha_image.update(buf)
-		return (image_size, hexlify(sha_image.digest()))		
-		#return (image_size, 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
+		return (image_size, hexlify(sha_image.digest()))
 	
 	
 	def tarzip_image(self, prefix, file, path):

@@ -208,7 +208,6 @@ class Rsync(object):
 	def execute(self):
 		self._sync()
 		rsync_cmd = [self._executable] + self._options + [self._src, self._dst]
-		print rsync_cmd
 		rsync = Popen(rsync_cmd, stdout=PIPE, stderr=PIPE)
 		out, err = rsync.communicate()
 		self._sync()
