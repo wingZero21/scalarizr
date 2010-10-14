@@ -146,13 +146,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			if os.path.exists(self._cnf.key_path(self._cnf.FARM_KEY)):
 				self._start_int_messaging()
 		
-		# Update package with scalarizr daemon
-		'''
-		file = self._get_flag_filename('update')
-		if not os.path.exists(file) or time.time() - os.stat(file).st_mtime > 86400:
-			self._update_package()
-		'''
-
 		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")
 			self._clear_flag(self.FLAG_REBOOT)			
@@ -166,9 +159,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			self._logger.info("Server will be imported into Scalr")
 			self._start_import()
 			
-		elif self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
+		elif self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._logger.info("Starting initialization")
 			self._start_init()
+			
 		else:
 			self._logger.info("Normal start")
 
