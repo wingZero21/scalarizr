@@ -43,8 +43,8 @@ class Platform():
 		return socket.gethostbyname(socket.gethostname())
 	
 	def get_user_data(self, key=None):
-		
-		path = bus.cnf.private_path('.user-data')
+		cnf = bus.cnf
+		path = cnf.private_path('.user-data')
 		if self._metadata is None and os.path.exists(path):
 			rawmeta = read_file(path)
 			if not rawmeta:

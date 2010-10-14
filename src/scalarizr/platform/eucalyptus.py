@@ -37,7 +37,7 @@ class EucaPlatform(Ec2Platform):
 		
 		cnf = bus.cnf
 		cnf.explore_key(CLOUD_CERT, 'Eucalyptus cloud certificate', private=False)
-		cnf.on('apply_user_data', self.on_cnf_apply_user_data)
+		#cnf.on('apply_user_data', self.on_cnf_apply_user_data)
 			
 	def on_cnf_apply_user_data(self, cnf):
 		user_data = self.get_user_data()

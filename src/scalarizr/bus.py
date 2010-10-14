@@ -6,7 +6,7 @@ Created on Apr 6, 2010
 
 from scalarizr.libs.pubsub import Observable
 
-class Bus(Observable):
+class _Bus(Observable):
 	base_path = None
 	"""
 	@ivar string: Application base path
@@ -70,5 +70,10 @@ class Bus(Observable):
 	"""
 	@ivar scalarizr.platform.Platform: Platform (ec2, rs, vps...)
 	"""
+	
+	periodical_executor = None
+	'''
+	@ivar: scalarizr.util.PeriodicalExecutor
+	'''
 
-bus = Bus()
+bus = _Bus()

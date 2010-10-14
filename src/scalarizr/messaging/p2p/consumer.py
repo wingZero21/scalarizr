@@ -105,6 +105,7 @@ class P2pMessageConsumer(MessageConsumer):
 			time.sleep(0.2)
 		
 	class RequestHandler(BaseHTTPRequestHandler):
+		# FIXME: internal messaging overrides default consumer and ingoing messages doesn't read anymore
 		consumer = None
 		'''
 		@cvar consumer:Message consumer instance
@@ -127,6 +128,7 @@ class P2pMessageConsumer(MessageConsumer):
 				logger.error(err)
 				logger.exception(e)
 				self.send_response(400, str(e))
+				return
 			
 			try:
 				logger.debug("Decoding message")

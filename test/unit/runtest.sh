@@ -6,10 +6,11 @@ else
   runner="$0"
 fi
 
-testdir=`dirname "$runner"`
-basedir=`dirname "$testdir"`
+base_dir=`dirname "$runner"`
+src_dir=$(readlink -f "$base_dir/../../src")
 
-pypath=$basedir/../src:$testdir/testcases
+pypath="$src_dir:$base_dir/testcases"
+echo $pypath
 
 export PYTHONPATH=$pypath
 

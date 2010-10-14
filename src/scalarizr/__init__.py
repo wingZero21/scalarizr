@@ -144,7 +144,6 @@ def _db_connect():
 	logger.debug("Open SQLite database (file: %s)" % (file))
 	
 	conn = sqlite.connect(file, 5.0)
-	#sqlite.Connection(file)
 	conn.row_factory = sqlite.Row
 	return conn
 

@@ -222,7 +222,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		farm_crypto_key = message.body.get('farm_crypto_key', '')
 		if farm_crypto_key:
 			self._cnf.write_key(self._cnf.FARM_KEY, farm_crypto_key)
-			self._start_int_messaging()
+			# FIXME: Starting internal messaging corrupts public one,
+			# don't uncomment this line until messaging will be gracefully refactored O-HO-HO !!!
+			#self._start_int_messaging()
 		else:
 			self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
 					+ "Cross-scalarizr messaging not initialized")

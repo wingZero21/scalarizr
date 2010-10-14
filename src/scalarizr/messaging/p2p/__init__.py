@@ -72,16 +72,31 @@ class P2pMessageService(MessageService):
 
 def new_service(**kwargs):
 	return P2pMessageService(**kwargs)
-	
+
 class _P2pMessageStore:
-	_logger = None
+	_logger = None	
+	
+	TAIL_LENGTH = 50	
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		ex = bus.periodical_executor
+		if ex: 
+			ex.add_task(self.rotate, 600, 'Rotate messages sqlite table')
 
 	def _conn(self):
 		db = bus.db
 		return db.get().get_connection()
+		
+	def rotate(self):
+		conn = self._conn()
+		cur = conn.cursor()
+		cur.execute('SELECT * FROM p2p_message ORDER BY id ASC LIMIT %d, 1' % self.TAIL_LENGTH)
+		row = cur.fetchall()
+		if row:
+			self._logger.debug('Deleting messages older then messageid: %d', row['message_id'])
+			cur.execute('DELETE FROM p2p_message WHERE id >= ?' (row['id'],))
+		conn.commit()
 		
 	def put_ingoing(self, message, queue):
 		conn = self._conn()

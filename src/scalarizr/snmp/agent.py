@@ -85,8 +85,10 @@ class SnmpServer():
 		cmdrsp.BulkCommandResponder(self._engine, snmpContext)
 			
 		# Start server
+		self._logger.debug('Starting transport dispatcher')
 		self._engine.transportDispatcher.jobStarted(1)
 		try:
+			self._logger.debug('Run transport dispatcher')
 			self._engine.transportDispatcher.runDispatcher()
 		except select.error, e:
 			if e.args[0] == 9: 

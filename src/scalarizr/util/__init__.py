@@ -6,6 +6,9 @@ import time
 import sys
 import socket
 import signal
+from collections import namedtuple
+
+from scalarizr.bus import bus
 
 
 class UtilError(BaseException):
@@ -286,3 +289,70 @@ def kill_childs(pid):
 				os.kill(int(process), signal.SIGKILL)
 			except:
 				pass
+		
+		
+class PeriodicalExecutor:
+	_logger = None
+	_tasks = None
+	_lock = None
+	_ex_thread = None
+	_shutdown = None
+	
+	def __init__(self):
+		self._logger = logging.getLogger(__name__ + '.PeriodicalExecutor')
+		self._tasks = dict()
+		self._ex_thread = threading.Thread(target=self._executor, name='PeriodicalExecutor')
+		self._ex_thread.setDaemon(True)
+		self._lock = threading.Lock()
+	
+	def start(self):
+		self._shutdown = False		
+		self._ex_thread.start()
+		
+	def shutdown(self):
+		self._shutdown = True
+		self._ex_thread.join(1)
+	
+	def add_task(self, fn, interval, title=None):
+		self._lock.acquire()
+		try:
+			if fn in self._tasks:
+				raise BaseException('Task %s already registered in executor with an interval %s minutes', 
+					fn, self._tasks[fn])
+			if interval <= 0:
+				raise ValueError('interval should be > 0')
+			self._tasks[fn] = dict(fn=fn, interval=interval, title=title, last_exec_time=0)
+		finally:
+			self._lock.release()
+	
+	def remove_task(self, fn):
+		self._lock.acquire()
+		try:
+			if fn in self._tasks:
+				del self._tasks[fn]
+		finally:
+			self._lock.release()
+		
+	def _tasks_to_execute(self):
+		self._lock.acquire()		
+		try:
+			now = time.time()			
+			return list(task for task in self._tasks.values()
+					if now - task['last_exec_time'] > task['interval'])
+		finally:
+			self._lock.release()
+		
+	def _executor(self):
+		while not self._shutdown:
+			for task in self._tasks_to_execute():
+				self._logger.debug('Executing task %s', task['title'] or task['fn'])
+				try:
+					task['last_exec_time'] = time.time()
+					task['fn']()
+				except (BaseException, Exception), e:
+					self._logger.exception(e)
+				if self._shutdown:
+					break
+			if not self._shutdown:
+				time.sleep(1)
+

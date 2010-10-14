@@ -21,6 +21,8 @@ class P2pMessageSecurity(object):
 	def in_protocol_filter(self, consumer, queue, message):
 		try:
 			self._logger.debug('Decrypting message')
+			crypto_key = configtool.read_key(self.crypto_key_path)
+			self._logger.debug('Key: %s', crypto_key)
 			crypto_key = binascii.a2b_base64(configtool.read_key(self.crypto_key_path))
 			xml = cryptotool.decrypt(message, crypto_key)
 			# Remove special chars
@@ -34,7 +36,10 @@ class P2pMessageSecurity(object):
 			self._logger.debug('Encrypting message')
 			
 			# Crypt
+			crypto_key = configtool.read_key(self.crypto_key_path)
+			self._logger.debug('Key: %s', crypto_key)
 			crypto_key = binascii.a2b_base64(configtool.read_key(self.crypto_key_path))
+			
 			data = cryptotool.encrypt(message, crypto_key)
 			
 			# Sign

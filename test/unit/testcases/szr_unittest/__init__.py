@@ -8,3 +8,14 @@ logging.basicConfig(
 		stream=sys.stdout, 
 		level=logging.DEBUG)	
 
+import scalarizr
+from scalarizr.util import *
+
+def db_connect(file):
+	import sqlite3 as sqlite
+	
+	def fn():
+		conn = sqlite.connect(file, 5.0)
+		conn.row_factory = sqlite.Row
+		return conn	
+	return SqliteLocalObject(fn)
