@@ -338,7 +338,8 @@ def _start_snmp_server():
 			sys.exit(0)
 		except SystemExit:
 			raise
-		except:
+		except (BaseException, Exception), e:
+			logger.exception(e)
 			sys.exit(1)
 	else:
 		globals()["_snmp_pid"] = pid

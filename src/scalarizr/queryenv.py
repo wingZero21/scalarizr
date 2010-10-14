@@ -436,5 +436,5 @@ class ScalingMetric(object):
 	
 	retrieve_method = property(_get_retrieve_method, _set_retrieve_method)
 	
-	def __repr__(self):
+	def __str__(self):
 		return 'qe:ScalingMetric(%s, id: %s, path: %s:%s)' % (self.name, self.id, self.path, self.retrieve_method)

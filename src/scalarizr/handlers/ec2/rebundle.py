@@ -174,7 +174,7 @@ class Ec2RebundleHandler(Handler):
 				strategy = self._instance_store_strategy_cls(
 					role_name, image_name, excludes,
 					image_size = root_device_size / 1024 / 1024,
-					s3_bucket_name = "scalr2-images-%s-%s" % (pl.get_region(), pl.get_account_id())
+					s3_bucket_name = self._s3_bucket_name
 				)
 
 			# Last moment before rebundle
@@ -227,7 +227,11 @@ class Ec2RebundleHandler(Handler):
 			self._log_hdlr.bundle_task_id = None
 			if strategy:
 				strategy.cleanup()
-		
+				
+	@property
+	def _s3_bucket_name(self):
+		pl = bus.platform
+		return 'scalr2-images-%s-%s' % (pl.get_region(), pl.get_account_id())
 		
 	def _before_rebundle(self, role_name):
 		# Send wall message before rebundling. So console users can run away

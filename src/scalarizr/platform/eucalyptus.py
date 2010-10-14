@@ -37,8 +37,10 @@ class EucaPlatform(Ec2Platform):
 		
 		cnf = bus.cnf
 		cnf.explore_key(CLOUD_CERT, 'Eucalyptus cloud certificate', private=False)
+		# TODO: ec2_url, s3_url doesn't appears in user-data, we should remove listener?
 		#cnf.on('apply_user_data', self.on_cnf_apply_user_data)
-			
+
+	
 	def on_cnf_apply_user_data(self, cnf):
 		user_data = self.get_user_data()
 		cnf.update_ini(self.name, {self.name: {
@@ -62,6 +64,9 @@ class EucaPlatform(Ec2Platform):
 			}})
 			
 		Ec2Platform.set_access_data(self, access_data)
+		
+	def get_region(self):
+		return 'Eucalyptus'		
 		
 	def get_block_device_mapping(self):
 		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")

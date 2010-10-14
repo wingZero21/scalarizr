@@ -82,6 +82,7 @@ class _P2pMessageStore:
 		self._logger = logging.getLogger(__name__)
 		ex = bus.periodical_executor
 		if ex: 
+			self._logger.debug('Add rotate messages table task for periodical executor')
 			ex.add_task(self.rotate, 600, 'Rotate messages sqlite table')
 
 	def _conn(self):

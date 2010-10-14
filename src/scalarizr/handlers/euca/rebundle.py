@@ -4,7 +4,7 @@ Created on Oct 12, 2010
 @author: marat
 '''
 
-
+from scalarizr.bus import bus
 from scalarizr.handlers.ec2.rebundle import Ec2RebundleHandler, RebundleInstanceStoreStrategy, AmiManifest
 from scalarizr.handlers import HandlerError
 
@@ -24,6 +24,12 @@ def get_handlers ():
 class EucaRebundleHandler(Ec2RebundleHandler):
 	def __init__(self):
 		Ec2RebundleHandler.__init__(self, instance_store_strategy_cls=EucaRebundleInstanceStoreStrategy)
+	
+	@property
+	def _s3_bucket_name(self):
+		pl = bus.platform
+		return 'scalr2-images-%s' % pl.get_account_id()
+	
 	
 class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
 	def _bundle_image(self, name, image_file, user, destination, user_private_key_string, 

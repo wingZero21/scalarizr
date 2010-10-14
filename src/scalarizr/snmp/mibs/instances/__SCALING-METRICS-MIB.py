@@ -102,9 +102,11 @@ def values():
 	return ret
 
 def _get_execute( metric):
+	logger = logging.getLogger(__name__)
 	if not os.access(metric.path, os.X_OK):
 		raise BaseException("File is not executable: '%s'" % metric.path)
 	
+	logger.debug('Executing %s', metric.path)
 	proc = Popen(metric.path, stdout=PIPE, stderr=PIPE, close_fds=True)
 	start_time = time.time()
 	while time.time() - start_time < MtxTableImpl.EXEC_TIMEOUT:
@@ -145,6 +147,7 @@ def _get_read( metric):
 	return value
 
 def update_metric(queue, index, ret):
+	logger = logging.getLogger(__name__)
 	error = ''
 	value = 0.0
 	try:
@@ -154,6 +157,7 @@ def update_metric(queue, index, ret):
 			
 	try:
 		# Retrieve metric value
+		logger.debug('Updating metric %s', metric)
 		if ScalingMetric.RetriveMethod.EXECUTE == metric.retrieve_method:
 			value = _get_execute(metric)
 		elif ScalingMetric.RetriveMethod.READ  == metric.retrieve_method:
