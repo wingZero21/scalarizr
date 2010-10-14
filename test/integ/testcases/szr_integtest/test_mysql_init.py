@@ -54,14 +54,15 @@ class RoleHandler:
 	
 		self.expect_sequence(channel, sequence)
 			
-		self._logger.info('Role has been successfully initialized')
+		self._logger.info('>>> Role has been successfully initialized.')
 		
-	def expect_sequence(self, channel, sequence):
+	def expect_sequence(self, channel, sequence, timeout = 60):
 		for regexp in sequence:
-			ret = expect(channel, regexp, 60)
+			ret = expect(channel, regexp, timeout)
 			self._logger.info("%s appeared in scalarizr.log", ret.group(0))
 		
 class MysqlRoleHandler(RoleHandler):
+	slaves_ssh = []
 	
 	def test_slave_init(self):
 		self._logger.info('Running slave instance')
@@ -73,14 +74,15 @@ class MysqlRoleHandler(RoleHandler):
 		if not result:
 			raise Exception('Farm hasn\'t been scaled up')
 		
-		self.slave_server_id = result.group('server_id')
-		self._logger.info("Slave server's id: %s" % self.slave_server_id)
-		self.slave_ip = self.farm.get_public_ip(self.slave_server_id)
-		self._logger.info("Slave server's ip: %s" % self.slave_ip)
+		slave_server_id = result.group('server_id')
+		self._logger.info("Slave server's id: %s" % slave_server_id)
+		slave_ip = self.farm.get_public_ip(slave_server_id)
+		self._logger.info("Slave server's ip: %s" % slave_ip)
 	
-		self.slave_ssh = SshManager(self.ip, self.farm_key)
-		self.slave_ssh.connect()
-		channel = self.slave_ssh.get_root_ssh_channel()
+		slave_ssh = SshManager(slave_ip, self.farm_key)
+		slave_ssh.connect()
+		self.slaves_ssh.append(slave_ssh)
+		channel = slave_ssh.get_root_ssh_channel()
 		tail_log_channel(channel)
 		
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
@@ -89,7 +91,7 @@ class MysqlRoleHandler(RoleHandler):
 			'farm-replication config created', 'Replication master is changed to host', "Message 'HostUp' delivered"]
 		
 		self.expect_sequence(channel, sequence)
-		self._logger.info('>>> ')
+		self._logger.info('>>> Mysql slave successfully initialized')
 		
 	def test_add_pma_users(self):
 		
@@ -101,7 +103,8 @@ class MysqlRoleHandler(RoleHandler):
 		self._logger.info('>>> PhpMyAdmin system users were added.')
 		
 	def test_create_mysql_backup(self):
-		channel = self.slave_ssh.get_root_ssh_channel()
+		slave_ssh = self.slaves_ssh[0]
+		channel = slave_ssh.get_root_ssh_channel()
 		tail_log_channel(channel)
 		# TODO: send 'create_backup' message from scalr's interface
 		sequence = ['Dumping all databases', 'Uploading backup to S3', 'Backup files(s) uploaded to S3']
@@ -111,16 +114,23 @@ class MysqlRoleHandler(RoleHandler):
 	def test_promote_to_master(self):
 		channel = self.ssh.get_root_ssh_channel()
 		exec_command(channel, 'halt')
-		slave_channel = self.slave_ssh.get_root_ssh_channel()
+		slave_channel = self.slaves_ssh[0].get_root_ssh_channel()
 		tail_log_channel(slave_channel)
 		self.scalr_ctl.exec_cronjob('Scalarizrmessaging')
 		sequence = ['Unplug EBS storage (volume:', 'Volume [\w-]+ detached', 'Taking master EBS volume',
 				    'Taked master volume', 'Create EBS storage (volume:', 'Attaching volume [\w-]+ as device',
-				    'Volume [\w-]+ attached', 'Device [\w-] is available', 'Device [\w-] is mounted', 
+				    'Volume [\w-]+ attached', 'Device [\w-]+ is available', 'Device [\w-]+ is mounted', 
 				    'farm-replication config created']
-		self.expect_sequence(channel, sequence)
+		self.expect_sequence(slave_channel, sequence, 200)
 		self._logger.info('>>> Successfully promoted to master.')
 		
+	def test_new_master_up(self):
+		slave_channel = self.slaves_ssh[-1].get_root_ssh_channel()
+		tail_log_channel(slave_channel)
+		self.scalr_ctl.exec_cronjob('Scalarizrmessaging')
+		sequence = ['Switching replication to a new MySQL master', 'Replication switched']
+		self.expect_sequence(slave_channel, sequence)
+		self._logger.info('>>> Successfully switched to new master.')
 				
 class TestMysqlInit(unittest.TestCase):
 
@@ -133,10 +143,17 @@ class TestMysqlInit(unittest.TestCase):
 					'farm-replication config created', 'MySQL system users added', 'Creating storage EBS snapshot',
 					"Message 'HostUp' delivered"]
 		self.role_init.test_init(sequence)
-				
+		self.role_init.test_slave_init()
+		self.role_init.test_add_pma_users()
+		self.role_init.test_create_mysql_backup()
+		self.role_init.test_slave_init()
+		self.role_init.test_promote_to_master()
+		self.role_init.test_new_master_up()				
 	
 	def tearDown(self):
-		pass
+		self.role_init.ssh.close_all_channels()
+		for slave_ssh in self.role_init.slaves_ssh:
+			slave_ssh.close_all_channels()
 	
 
 if __name__ == "__main__":

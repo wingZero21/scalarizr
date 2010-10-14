@@ -103,6 +103,10 @@ class SshManager:
 	
 	def get_sftp_client(self):
 		return self.ssh.open_sftp()
+	
+	def close_all_channels(self):
+		for channel in self.channels:
+			channel.close()
 
 class LogReader:
 	
