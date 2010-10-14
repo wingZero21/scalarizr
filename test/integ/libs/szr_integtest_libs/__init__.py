@@ -97,8 +97,7 @@ class SshManager:
 		if self.user == 'ubuntu':
 			channel.send('sudo -i\n')
 			
-		out = clean_output(channel, 5)	
-		print "Returned channel: %s" % out		
+		clean_output(channel, 5)	
 		return channel
 	
 	def get_sftp_client(self):
@@ -107,6 +106,7 @@ class SshManager:
 	def close_all_channels(self):
 		for channel in self.channels:
 			channel.close()
+		self.channels = []
 
 class LogReader:
 	

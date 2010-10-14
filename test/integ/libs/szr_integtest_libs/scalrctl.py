@@ -86,16 +86,19 @@ class FarmUI:
 		except:
 			self.sel.click('//div[@class="full" and text()="%s"]' % role_name)
 		
+				
 		i = 1
 		while True:
 			try:
-				self.sel.click('//div[@class="viewers-farmrolesedit-tab" and position()=%s]' % i)
-				time.sleep(0.3)
+				self.sel.click('//div[@class="viewers-farmrolesedit-tab" and position()=%s]' % i)		
+				time.sleep(0.5)
 				for option, value in settings.iteritems():
 					try:
-						self.sel.type('//div[@class=" x-panel x-panel-noborder"]//*[@name="%s"]' % option, value)
+						id = self.sel.get_attribute('//div[@class=" x-panel x-panel-noborder"]//*[@name="%s"]/@id' % option)
+						self.sel.run_script("with (Ext.getCmp('%s')) { setValue('%s'); fireEvent('select'); }" % (id, value))
 					except:
 						pass
+				time.sleep(0.5)
 				i += 1
 			except:
 				break

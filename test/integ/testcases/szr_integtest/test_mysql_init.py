@@ -6,10 +6,12 @@ Created on Oct 2010
 from szr_integtest import get_selenium, config
 from szr_integtest_libs import tail_log_channel, expect, SshManager,\
 	exec_command
+from szr_integtest_libs.szrdeploy import ScalarizrDeploy
 from szr_integtest_libs.scalrctl import FarmUI, ScalrCtl, EC2_MYSQL_ROLE_DEFAULT_SETTINGS, EC2_ROLE_DEFAULT_SETTINGS
 import logging
 import re
 import unittest
+import time
 
 class RoleHandler:
 	
@@ -28,9 +30,9 @@ class RoleHandler:
 		self.farm = FarmUI(get_selenium())
 		self._logger.info("Launching farm")
 		self.farm.use(self.farm_id)
-		self.farm.remove_all_roles()
-		self.farm.add_role(self.role_name, 1, 2, self.role_opts)
-		self.farm.save()
+		#self.farm.remove_all_roles()
+		#self.farm.add_role(self.role_name, 1, 2, self.role_opts)
+		#self.farm.save()
 		self.farm.launch()
 		
 		self._logger.info("Farm launched")
@@ -38,7 +40,7 @@ class RoleHandler:
 
 		result = re.search(self.server_id_re, out)
 		if not result:
-			raise Exception('Farm hasn\'t been scaled up')
+			raise Exception('Farm hasn\'t been scaled up. Out:\n%s' % out)
 		
 		self.server_id = result.group('server_id')
 		self._logger.info("New server id: %s" % self.server_id)
@@ -47,7 +49,21 @@ class RoleHandler:
 		
 		self.ssh = SshManager(self.ip, self.farm_key)
 		self.ssh.connect()
+		self._logger.info("Connected to instance")
+		
+		# Temporary solution
+		self._logger.info("Deploying dev branch")
+		deployer = ScalarizrDeploy(self.ssh)
+		deployer.apply_changes_from_tarball()
+		del(deployer)		
+		self.ssh.close_all_channels()
+		
 		channel = self.ssh.get_root_ssh_channel()
+
+		exec_command(channel, '/etc/init.d/scalarizr stop')
+		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
+		exec_command(channel, '/etc/init.d/scalarizr start')
+		time.sleep(2)
 		tail_log_channel(channel)
 		
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
@@ -82,7 +98,19 @@ class MysqlRoleHandler(RoleHandler):
 		slave_ssh = SshManager(slave_ip, self.farm_key)
 		slave_ssh.connect()
 		self.slaves_ssh.append(slave_ssh)
+		
+		# Temporary solution
+		deployer = ScalarizrDeploy(slave_ssh)
+		deployer.apply_changes_from_tarball()
+		del(deployer)		
+		slave_ssh.close_all_channels()		
 		channel = slave_ssh.get_root_ssh_channel()
+
+		exec_command(channel, '/etc/init.d/scalarizr stop')
+		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
+		exec_command(channel, '/etc/init.d/scalarizr start')
+		time.sleep(2)
+		
 		tail_log_channel(channel)
 		
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
@@ -135,8 +163,11 @@ class MysqlRoleHandler(RoleHandler):
 class TestMysqlInit(unittest.TestCase):
 
 	def setUp(self):
-		role_name = 'szr-mysql-ubuntu-10.04'
-		self.role_init = MysqlRoleHandler(role_name, EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
+		role_name = 'Test_mysql_2010_10_14_1816'
+		opts = {}
+		opts.update(EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
+		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
+		self.role_init = MysqlRoleHandler(role_name, opts)
 
 	def test_init(self):
 		sequence = ['HostInitResponse', 'Initializing MySQL master', 'Create EBS storage (volume:',
@@ -144,8 +175,8 @@ class TestMysqlInit(unittest.TestCase):
 					"Message 'HostUp' delivered"]
 		self.role_init.test_init(sequence)
 		self.role_init.test_slave_init()
-		self.role_init.test_add_pma_users()
-		self.role_init.test_create_mysql_backup()
+		#self.role_init.test_add_pma_users()
+		#self.role_init.test_create_mysql_backup()
 		self.role_init.test_slave_init()
 		self.role_init.test_promote_to_master()
 		self.role_init.test_new_master_up()				

@@ -17,6 +17,7 @@ from szr_integtest_libs.szrdeploy import ScalarizrDeploy
 import logging
 from optparse import OptionParser
 import sys
+import re
 
 SECURITY_GROUP = 'webta.scalarizr'
 
@@ -118,7 +119,6 @@ class ImportEc2Server:
 		self._logger.info("Role name: %s", role_name)
 		self._logger.info("Importing server in scalr's interface")	#import sys;sys.argv = ['', 'Test.test_ ']
 		import_server_str = self._import_server(role_name)
-		
 		import_server_str += ' &'
 		channel = sshmanager.get_root_ssh_channel()
 		
