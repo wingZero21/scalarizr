@@ -52,12 +52,8 @@ class EucaPlatform(Ec2Platform):
 		Accept them if they are not precented in configuration
 		'''
 		cnf = bus.cnf; ini = cnf.rawini
-		'''
-		if not cnf.key_exists(CLOUD_CERT):
-			cnf.write_key(CLOUD_CERT, access_data[OPT_CLOUD_CERT])
-		'''
 		
-		if not os.path.exists(cnf.key_path(self.CLOUD_CERT, private=False)):
+		if not os.path.exists(cnf.key_path(CLOUD_CERT, private=False)):
 			cnf.write_key(CLOUD_CERT, access_data[OPT_CLOUD_CERT], private=False)
 		if not ini.has_section(SECTION) or not ini.has_option(SECTION, OPT_EC2_URL):
 			cnf.update_ini(self.name, {self.name: {
@@ -98,7 +94,7 @@ class EucaPlatform(Ec2Platform):
 	def get_ec2_cert(self):
 		if not self._ec2_cert:
 			cnf = bus.cnf
-			cert_path = os.path.join(bus.etc_path, cnf.rawini.get(self.name, OPT_CLOUD_CERT_PATH))
+			cert_path = cnf.key_path(CLOUD_CERT, private=False)
 			if not os.path.exists(cert_path):
 				ec2_url = cnf.rawini.get(self.name, OPT_EC2_URL)
 				url = urlparse(ec2_url)
@@ -112,7 +108,7 @@ class EucaPlatform(Ec2Platform):
 					cert = conn.get_peer_cert()
 					cert.save_pem(cert_path)
 				
-			self._ec2_cert = cnf.read_key(CLOUD_CERT)
+			self._ec2_cert = cnf.read_key(CLOUD_CERT, private=False)
 		return self._ec2_cert	
 	
 	def new_ec2_conn(self):

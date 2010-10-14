@@ -150,14 +150,18 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			self._logger.info("Scalarizr resumed after reboot")
 			self._clear_flag(self.FLAG_REBOOT)			
 			self._start_after_reboot()
+			
 		elif self._flag_exists(self.FLAG_HALT):
 			self._logger.info("Scalarizr resumed after stop")
 			self._clear_flag(self.FLAG_HALT)
 			self._start_after_stop()
 			
 		elif optparser.values.import_server:
-			self._logger.info("Server will be imported into Scalr")
+			self._logger.info('Server will be imported into Scalr')				
 			self._start_import()
+				
+		elif self._cnf.state == ScalarizrState.IMPORTING:
+			self._logger.info('Server import resumed. Awaiting Rebundle message')
 			
 		elif self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._logger.info("Starting initialization")
