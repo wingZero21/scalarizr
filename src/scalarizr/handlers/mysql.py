@@ -483,6 +483,8 @@ class MysqlHandler(ServiceCtlHanler):
 			myclient.terminate()
 			del(myclient)
 			
+			self._logger.info('PhpMyAdmin system user successfully added')
+			
 			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
 				status       = 'ok',
 				pma_user	 = PMA_USER,

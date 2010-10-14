@@ -4,7 +4,8 @@ Created on Oct 2010
 @author: spike
 '''
 from szr_integtest import get_selenium, config
-from szr_integtest_libs import tail_log_channel, expect, SshManager
+from szr_integtest_libs import tail_log_channel, expect, SshManager,\
+	exec_command
 from szr_integtest_libs.scalrctl import FarmUI, ScalrCtl, EC2_MYSQL_ROLE_DEFAULT_SETTINGS, EC2_ROLE_DEFAULT_SETTINGS
 import logging
 import re
@@ -51,13 +52,14 @@ class RoleHandler:
 		
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 	
-		for regexp in sequence:
-			expect(channel, regexp, 60)
-			self._logger.info("%s appeared in scalarizr.log", regexp)
+		self.expect_sequence(channel, sequence)
 			
 		self._logger.info('Role has been successfully initialized')
-
 		
+	def expect_sequence(self, channel, sequence):
+		for regexp in sequence:
+			ret = expect(channel, regexp, 60)
+			self._logger.info("%s appeared in scalarizr.log", ret.group(0))
 		
 class MysqlRoleHandler(RoleHandler):
 	
@@ -86,31 +88,38 @@ class MysqlRoleHandler(RoleHandler):
 		sequence = ['HostInitResponse', 'Initializing MySQL slave', 'Creating EBS volume from snapshot',
 			'farm-replication config created', 'Replication master is changed to host', "Message 'HostUp' delivered"]
 		
-		for regexp in sequence:
-			expect(channel, regexp, 60)
-			self._logger.info("%s appeared in scalarizr.log", regexp)
-
+		self.expect_sequence(channel, sequence)
+		self._logger.info('>>> ')
+		
 	def test_add_pma_users(self):
 		
 		channel = self.ssh.get_root_ssh_channel()
 		tail_log_channel(channel)
 		# TODO: send 'create_pma' message from scalr's interface
-		sequence = ['Adding phpMyAdmin system user']		
-		for regexp in sequence:
-			expect(channel, regexp, 60)
-			self._logger.info("'%s' appeared in scalarizr.log", regexp)
+		sequence = ['Adding phpMyAdmin system user', 'PhpMyAdmin system user successfully added']		
+		self.expect_sequence(channel, sequence)
+		self._logger.info('>>> PhpMyAdmin system users were added.')
 		
 	def test_create_mysql_backup(self):
 		channel = self.slave_ssh.get_root_ssh_channel()
 		tail_log_channel(channel)
 		# TODO: send 'create_backup' message from scalr's interface
 		sequence = ['Dumping all databases', 'Uploading backup to S3', 'Backup files(s) uploaded to S3']
-		for regexp in sequence:
-			expect(channel, regexp, 60)
-			self._logger.info("'%s' appeared in scalarizr.log", regexp)
+		self.expect_sequence(channel, sequence)
+		self._logger.info('>>> Successfully created MySQL backup.')
 			
 	def test_promote_to_master(self):
-		pass
+		channel = self.ssh.get_root_ssh_channel()
+		exec_command(channel, 'halt')
+		slave_channel = self.slave_ssh.get_root_ssh_channel()
+		tail_log_channel(slave_channel)
+		self.scalr_ctl.exec_cronjob('Scalarizrmessaging')
+		sequence = ['Unplug EBS storage (volume:', 'Volume [\w-]+ detached', 'Taking master EBS volume',
+				    'Taked master volume', 'Create EBS storage (volume:', 'Attaching volume [\w-]+ as device',
+				    'Volume [\w-]+ attached', 'Device [\w-] is available', 'Device [\w-] is mounted', 
+				    'farm-replication config created']
+		self.expect_sequence(channel, sequence)
+		self._logger.info('>>> Successfully promoted to master.')
 		
 				
 class TestMysqlInit(unittest.TestCase):

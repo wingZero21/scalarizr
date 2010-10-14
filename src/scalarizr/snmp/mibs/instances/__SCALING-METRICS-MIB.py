@@ -62,7 +62,7 @@ def values():
 	
 	# Obtain scaling metrics from Scalr. Cache result for 30 minutes
 	now = time.time()
-	if _metrics is None or now - _metrics_timestamp > 1800:
+	if _metrics is None or now - _metrics_timestamp > 600:
 		if cnf.state != ScalarizrState.IMPORTING: 
 			_metrics = queryenv.get_scaling_metrics()
 			_metrics_timestamp = now

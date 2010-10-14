@@ -14,14 +14,14 @@ class Float(Opaque):
     fixedLength = 7
     pass
 '''
-scalr = ModuleIdentity((1, 3, 6, 1, 4, 1, 40000))
-mtxTable = MibTable((1, 3, 6, 1, 4, 1, 40000, 5))
-mtxEntry = MibTableRow((1, 3, 6, 1, 4, 1, 40000, 5, 1)).setIndexNames((0, "SCALING-METRICS-MIB", "mtxIndex"))
-mtxIndex = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 1), Integer32()).setMaxAccess("readonly")
-mtxId = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 2), Integer32()).setMaxAccess("readonly")
-mtxName = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 3), DisplayString()).setMaxAccess("readonly")
-mtxValue = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 4), DisplayString()).setMaxAccess("readonly")
-mtxError = MibTableColumn((1, 3, 6, 1, 4, 1, 40000, 5, 1, 5), DisplayString()).setMaxAccess("readonly")
+scalr = ModuleIdentity((1, 3, 6, 1, 4, 1, 36632))
+mtxTable = MibTable((1, 3, 6, 1, 4, 1, 36632, 5))
+mtxEntry = MibTableRow((1, 3, 6, 1, 4, 1, 36632, 5, 1)).setIndexNames((0, "SCALING-METRICS-MIB", "mtxIndex"))
+mtxIndex = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 1), Integer32()).setMaxAccess("readonly")
+mtxId = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 2), Integer32()).setMaxAccess("readonly")
+mtxName = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 3), DisplayString()).setMaxAccess("readonly")
+mtxValue = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 4), DisplayString()).setMaxAccess("readonly")
+mtxError = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 5), DisplayString()).setMaxAccess("readonly")
 
 mibBuilder.exportSymbols("SCALING-METRICS-MIB", PYSNMP_MODULE_ID=scalr)
 
