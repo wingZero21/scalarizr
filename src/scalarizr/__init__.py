@@ -282,6 +282,7 @@ def _apply_user_data(cnf):
 			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
 		},
 		snmp={
+			'security_name' : 'notConfigUser',			
 			'community_name' : g(UserDataOptions.FARM_HASH)
 		}
 	))
