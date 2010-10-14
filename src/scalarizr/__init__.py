@@ -11,7 +11,7 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.snmp.agent import SnmpServer
 
 # Utils
-from scalarizr.util import initdv2, fstool, filetool, log
+from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system, disttool, firstmatched, format_size
 
 # Stdlibs
@@ -118,6 +118,8 @@ def _init():
 	# Configure database connection pool
 	bus.db = SqliteLocalObject(_db_connect)
 
+	# Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
+	bus.periodical_executor = PeriodicalExecutor()
 	
 	# Define scalarizr events
 	bus.define_events(

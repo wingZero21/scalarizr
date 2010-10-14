@@ -144,7 +144,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			# when farm key exists
 			if os.path.exists(self._cnf.key_path(self._cnf.FARM_KEY)):
-				self._start_int_messaging()
+				#self._start_int_messaging()
+				pass
 		
 		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")
