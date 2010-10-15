@@ -299,7 +299,7 @@ class ServiceCtlHanler(Handler):
 		# Fetch current configuration preset
 		service_conf = self._queryenv.get_service_configuration(self._service_name)
 		cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
-		self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
+		self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
 		
 		if cur_preset.name == 'default':
 			# Scalr respond with default preset
