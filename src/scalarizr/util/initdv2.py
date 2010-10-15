@@ -103,7 +103,7 @@ class ParametrizedInitScript(InitScript):
 			raise InitdError("Popen failed with error %s" % (e.strerror,))
 		
 		if proc.returncode:
-			raise InitdError("Cannot %s %s" % (action, self.name), output=out + " " + err)
+			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err))
 		
 		if action != "stop" and self.socks:
 			for sock in self.socks:
