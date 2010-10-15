@@ -79,8 +79,17 @@ class CnfPresetStore:
 			ini.add('settings/%s' % k, v)
 		ini.write(open(self._filename(preset_type), 'w'))
 		
-	def copy(self, src_preset_type, dst_preset_type):
-		shutil.copy(self._filename(src_preset_type), self._filename(dst_preset_type))		
+	def copy(self, src_preset_type, dst_preset_type, override = True):
+		src = self._filename(src_preset_type)
+		dst = self._filename(dst_preset_type)
+		
+		if not override and os.path.exists(dst):
+			self._logger.debug('%s file already exists.' % dst_preset_type)
+			return
+		elif not os.path.exists(src):
+			self._logger.error('Source file %s does not exist. Nothing to copy.' % src)
+		else:
+			shutil.copy(src, dst)		
 		
 		
 class CnfController(object):
