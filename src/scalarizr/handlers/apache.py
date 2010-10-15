@@ -163,9 +163,7 @@ class ApacheHandler(ServiceCtlHanler):
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
-			(message.name == Messages.HOST_UP or \
-			message.name == Messages.HOST_DOWN or \
-			message.name == Messages.VHOST_RECONFIGURE or \
+			(message.name == Messages.VHOST_RECONFIGURE or \
 			message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
 
 	@reload_apache_conf
