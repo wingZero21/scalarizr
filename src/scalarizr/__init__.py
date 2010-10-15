@@ -240,6 +240,11 @@ def _init_services():
 	queryenv_url = ini.get('general', 'queryenv_url')
 	messaging_adp = ini.get('messaging', 'adapter')
 
+	# Set base URL
+	pr = urlparse(queryenv_url)
+	bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
+	logger.debug("Got scalr url: '%s'" % bus.scalr_url)
+
 	logger.debug("Initialize QueryEnv client")
 	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY))
 	bus.queryenv_service = queryenv
@@ -287,10 +292,6 @@ def _apply_user_data(cnf):
 		}
 	))
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
-	
-	# Set base URL
-	pr = urlparse(g(UserDataOptions.QUERYENV_URL))
-	bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
 
 	
 def init_script():
