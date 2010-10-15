@@ -80,8 +80,7 @@ class CnfPresetStore:
 		ini.write(open(self._filename(preset_type), 'w'))
 		
 	def copy(self, src_preset_type, dst_preset_type):
-		shutil.copy(self._filename(self.service_name, src_preset_type), 
-				self._filename(self.service_name, dst_preset_type))
+		shutil.copy(self._filename(src_preset_type), self._filename(dst_preset_type))		
 		
 		
 class CnfController(object):
@@ -99,10 +98,10 @@ class CnfController(object):
 		self.definitions = definitions
 
 	def preset_equals(self, this, that):
-		if not this or not that:
+		if not this.settings or not that.settings:
 			return False
 
-		if this == that:
+		if this.settings == that.settings:
 			return True
 		
 		for variable in self._manifest:
@@ -218,8 +217,8 @@ class CnfController(object):
 		cnf = bus.cnf
 		presets_path = os.path.join(cnf.home_path, 'presets')	
 		manifests_dir = presets_path + "/manifests"
+		self._logger.debug("scalr url: '%s'" % bus.scalr_url)
 		manifest_url = bus.scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour	
-		print manifest_url
 		path = os.path.join(manifests_dir, self.behaviour + '.ini')
 		
 		if not os.path.exists(manifests_dir):
@@ -236,7 +235,6 @@ class CnfController(object):
 			data = response.read()
 			if data:
 				write_file(path, data, logger=self._logger)
-				# FIXME: Update file mtime with value from Last-Modified
 		
 		return _CnfManifest(path)
 	
