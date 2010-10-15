@@ -262,6 +262,7 @@ class QueryEnvService(object):
 		return ret
 	
 	def _read_get_service_configuration_response(self, xml, behaviour):
+		#TODO: use behaviour
 		ret = {}
 		name = None
 		restart_service = None
@@ -285,7 +286,7 @@ class QueryEnvService(object):
 				
 				if setting.hasAttribute(key_attr):
 					k = str(setting.getAttribute(key_attr))
-					v = str(setting.firstChild.nodeValue)
+					v = str(setting.nodeValue)
 					if k:
 						ret[k] = v
 					
