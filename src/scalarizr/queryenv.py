@@ -292,12 +292,10 @@ class QueryEnvService(object):
 					restart_service = settings.getAttribute(restart_service_attr)
 				
 				for setting in settings.childNodes:
-					
 					if setting.hasAttribute(key_attr):
 						k = setting.getAttribute(key_attr)
-						v = setting.firstChild.nodeValue if setting.firstChild else None
-						if k:
-							ret[k] = v
+						if k and setting.firstChild:
+							ret[k] = setting.firstChild.nodeValue
 					
 		preset = Preset()
 		preset.name = str(name)
