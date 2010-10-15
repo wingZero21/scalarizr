@@ -9,17 +9,17 @@ from szr_integtest_libs import expect, SshManager, tail_log_channel
 from szr_integtest_libs.scalrctl import FarmUI, exec_cronjob
 import logging
 import re
-from szr_integtest.test_mysql_init import RoleInit
+from szr_integtest.test_mysql_init import RoleHandler
 			
 class TestApacheInit(unittest.TestCase):
 	
 	def setUp(self):
 		role_name = 'Test_app_2010_10_07_1654'
-		sequence = ['HostInitResponse', 'Initializing apache', "Message 'HostUp' delivered"]
-		self.test_role = RoleInit(role_name, sequence)
+		self.test_role = RoleHandler(role_name)
 	
 	def test_init(self):
-		self.test_role.test_init()
+		sequence = ['HostInitResponse', 'Initializing apache', "Message 'HostUp' delivered"]
+		self.test_role.test_init(sequence)
 	
 	def tearDown(self):
 		pass

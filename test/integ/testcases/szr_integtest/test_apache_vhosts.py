@@ -8,7 +8,7 @@ from szr_integtest import get_selenium, config
 from szr_integtest_libs.scalrctl import login
 import os
 
-
+#TODO: rewrite as usable class
 class TestVhosts(unittest.TestCase):
 
 
@@ -27,11 +27,13 @@ class TestVhosts(unittest.TestCase):
 		farm = 'dima@us-east-1'
 		domain = 'dima.com'
 		document_root = '/var/www/dima.com/'
+		e_mail = 'admin@dima.com'
 
 		self.sel.type('domain_name', domain)
 		self.sel.type('farm_target', farm)
 		self.sel.uncheck('isSslEnabled')
 		self.sel.type('document_root_dir', document_root)
+		self.sel.type('server_admin', e_mail)
 		self.sel.click('button_js')
 		
 	def test_configure_ssl(self):
@@ -52,15 +54,18 @@ class TestVhosts(unittest.TestCase):
 		
 		self.sel.type('document_root_dir', document_root)
 		self.sel.click('button_js')
-		#login to server
+		#TODO: login to server
 		index_file = os.path.join(document_root, 'index.html')
 		msg = "hello from %s!" % index_file
 		vhost_cmd = 'mkdir %s; echo  > %s' \
 				% (document_root, domain)
 		hosts_line = "echo '\n127.0.0.1 %s\n' >> /etc/hosts" % domain
 		curl_cmd = "curl http://127.0.0.1"
+		#TODO:
+		#find ip in scaling optput
 		#execute vhost_cmd, hosts_line, curl_cmd
 		#search in curl output for msg
+		#stop the farm, check before_host_down & before_host_terminate
 
 if __name__ == "__main__":
 	unittest.main()

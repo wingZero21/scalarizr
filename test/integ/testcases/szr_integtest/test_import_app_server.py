@@ -39,13 +39,17 @@ class ImportAppServer(ImportEc2Server):
 	def _import_server(self, role_name):
 		return import_server(get_selenium(), ScalrConsts.Platforms.PLATFORM_EC2 ,\
 			ScalrConsts.Behaviours.BEHAVIOUR_APP, self.ip_address, role_name)	
+	#temporary!		
+	def _change_behaviour(self, import_server_str):
+		return re.sub('behaviour=[\w-]*', 'behaviour=app', import_server_str)
+		
 
 class TestImportAppServer(unittest.TestCase):
 		
 	importer = None
 	
 	def setUp(self):
-		self.importer = ImportAppServer()
+		self.importer = ImportAppServer(sysargs)
 
 	def test_import(self):
 		self.importer.test_import()
