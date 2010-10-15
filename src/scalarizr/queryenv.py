@@ -9,6 +9,7 @@ import logging
 from urllib2 import urlopen, Request, URLError, HTTPError
 from urllib import urlencode, splitnport
 from xml.dom.minidom import parseString
+import binascii
 
 
 class QueryEnvError(Exception):
@@ -19,14 +20,14 @@ class QueryEnvService(object):
 	
 	url = None
 	api_version = None
-	key = None
+	key_path = None
 	server_id = None
 	
-	def __init__(self, url, server_id=None, key=None, api_version='2010-09-23'):
+	def __init__(self, url, server_id=None, key_path=None, api_version='2010-09-23'):
 		self._logger = logging.getLogger(__name__)
 		self.url = url if url[-1] != "/" else url[0:-1]
 		self.server_id = server_id		
-		self.key = key
+		self.key_path = key_path
 		self.api_version = api_version
 	
 	
@@ -121,8 +122,12 @@ class QueryEnvService(object):
 		if {} != params :
 			for key, value in params.items():
 				request_body[key] = value
-				
-		signature, timestamp = sign_http_request(request_body, self.key)		
+		
+		file = open(self.key_path)
+		key = binascii.a2b_base64(file.read())
+		file.close()
+
+		signature, timestamp = sign_http_request(request_body, key)		
 		
 		post_data = urlencode(request_body)
 		headers = {

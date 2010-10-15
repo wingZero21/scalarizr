@@ -186,25 +186,19 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	
 	def _start_init(self):
 		# Regenerage key
-		self._new_crypto_key = cryptotool.keygen()
+		new_crypto_key = cryptotool.keygen()
 		
 		# Prepare HostInit
 		msg = self.new_message(Messages.HOST_INIT, dict(
-			crypto_key=self._new_crypto_key,
-			snmp_port=self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
-			snmp_community_name=self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
+			crypto_key = new_crypto_key,
+			snmp_port = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
+			snmp_community_name = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
 		), broadcast=True)
 		bus.fire("before_host_init", msg)
 		self.send_message(msg)
 		
 		# Update key file
-		self._cnf.write_key(self._cnf.DEFAULT_KEY, self._new_crypto_key)		
-
-		# Update key in QueryEnv
-		queryenv = bus.queryenv_service
-		queryenv.key = binascii.a2b_base64(self._new_crypto_key)
-		
-		del self._new_crypto_key
+		self._cnf.write_key(self._cnf.DEFAULT_KEY, new_crypto_key)		
 		
 		bus.cnf.state = ScalarizrState.INITIALIZING
 		bus.fire("host_init")		

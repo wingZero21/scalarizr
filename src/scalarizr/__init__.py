@@ -8,7 +8,7 @@ from scalarizr.messaging import MessageServiceFactory, MessageService, MessageCo
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
-from scalarizr.snmp.agent import SnmpServer
+
 
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
@@ -238,11 +238,10 @@ def _init_services():
 	cnf = bus.cnf; ini = cnf.rawini
 	server_id = ini.get('general', 'server_id')
 	queryenv_url = ini.get('general', 'queryenv_url')
-	crypto_key = cnf.read_key(cnf.DEFAULT_KEY)
 	messaging_adp = ini.get('messaging', 'adapter')
 
 	logger.debug("Initialize QueryEnv client")
-	queryenv = QueryEnvService(queryenv_url, server_id, binascii.a2b_base64(crypto_key))
+	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY))
 	bus.queryenv_service = queryenv
 	
 	logger.debug("Initialize messaging")
@@ -320,18 +319,18 @@ def init_script():
 def _start_snmp_server():
 	logger = logging.getLogger(__name__)
 	# Start SNMP server in a separate process
-	cnf = bus.cnf; ini = cnf.rawini
-	
-	snmp_server = SnmpServer(
-		port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
-		security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
-		community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
-	)
-	bus.snmp_server = snmp_server
-	
 	pid = os.fork()
 	if pid == 0:
+		from scalarizr.snmp.agent import SnmpServer
 		globals()['_pid'] = 0
+		cnf = bus.cnf; ini = cnf.rawini		
+		snmp_server = SnmpServer(
+			port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
+			security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
+			community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
+		)
+		bus.snmp_server = snmp_server
+		
 		try:
 			snmp_server.start()
 			logger.info('[pid: %d] SNMP process terminated', os.getpid())
@@ -410,10 +409,6 @@ def _shutdown(*args):
 		if int_msg_service and int_msg_service.consumer:
 			int_msg_service.consumer.stop()
 			int_msg_service.consumer.shutdown()
-		
-		if _snmp_pid:
-			snmp_server = bus.snmp_server
-			snmp_server.stop()
 		
 		# Fire terminate
 		bus.fire("terminate")
