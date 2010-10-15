@@ -217,7 +217,6 @@ class CnfController(object):
 		cnf = bus.cnf
 		presets_path = os.path.join(cnf.home_path, 'presets')	
 		manifests_dir = presets_path + "/manifests"
-		self._logger.debug("scalr url: '%s'" % bus.scalr_url)
 		manifest_url = bus.scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour	
 		path = os.path.join(manifests_dir, self.behaviour + '.ini')
 		
