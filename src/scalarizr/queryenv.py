@@ -275,19 +275,24 @@ class QueryEnvService(object):
 		if not response or not response.firstChild:
 			return QueryEnvError("Expected element 'settings' not found in QueryEnv response")
 		else:
-			if response.firstChild.hasAttribute(name_attr):
-				name = response.firstChild.getAttribute(name_attr)
+			for settings in response.childNodes:
 				
-			if response.firstChild.hasAttribute(restart_service_attr):
-				restart_service = response.firstChild.getAttribute(restart_service_attr)
+				if settings.hasAttribute('behaviour') and settings.getAttribute('behaviour') != behaviour:
+					continue
 			
-			for setting in response.firstChild.childNodes:
+				if settings.hasAttribute(name_attr):
+					name = settings.getAttribute(name_attr)
+					
+				if settings.hasAttribute(restart_service_attr):
+					restart_service = settings.getAttribute(restart_service_attr)
 				
-				if setting.hasAttribute(key_attr):
-					k = str(setting.getAttribute(key_attr))
-					v = str(setting.nodeValue)
-					if k:
-						ret[k] = v
+				for setting in settings.childNodes:
+					
+					if setting.hasAttribute(key_attr):
+						k = setting.getAttribute(key_attr)
+						v = setting.firstChild.nodeValue if setting.firstChild else None
+						if k:
+							ret[k] = v
 					
 		preset = Preset()
 		preset.name = str(name)
