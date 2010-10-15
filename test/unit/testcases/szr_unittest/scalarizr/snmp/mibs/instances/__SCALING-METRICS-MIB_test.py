@@ -102,7 +102,7 @@ class TestMtxTableImpl(unittest.TestCase):
 	SECURITY_NAME = 'noAuthNoPriv'
 	COMMUNITY_NAME = 'public'
 	SNMP_PORT = 8114
-	OID = '1.3.6.1.4.1.40000.5'
+	OID = '1.3.6.1.4.1.36632.5'
 	
 	QUERYENV_PORT = 9999
 	QUERYENV_HOST = '0.0.0.0'
@@ -166,14 +166,14 @@ class TestMtxTableImpl(unittest.TestCase):
 	def test_values(self):
 
 		out = system('/usr/bin/snmpwalk -t 7 -v 2c -c public localhost:%s %s' % (self.SNMP_PORT, self.OID))[0]
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.1 = STRING: "9.0000000"') != -1)
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.2 = STRING: "87.1500000"') != -1)
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.3 = STRING: "0.0000000"') != -1)
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.3 = STRING: "exitcode: 23"') != -1)
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.4 = STRING: "0.0000000"') != -1)
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.4 = STRING: "Application error taken from stderr"') != -1)
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.4.5 = STRING: "0.0000000"') != -1)
-		self.assertTrue(out.find('SNMPv2-SMI::enterprises.40000.5.1.5.5 = STRING: "Timeouted"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.36632.5.1.4.1 = STRING: "9.0000000"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.36632.5.1.4.2 = STRING: "87.1500000"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.36632.5.1.4.3 = STRING: "0.0000000"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.36632.5.1.5.3 = STRING: "exitcode: 23"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.36632.5.1.4.4 = STRING: "0.0000000"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.36632.5.1.5.4 = STRING: "Application error taken from stderr"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.36632.5.1.4.5 = STRING: "0.0000000"') != -1)
+		self.assertTrue(out.find('SNMPv2-SMI::enterprises.36632.5.1.5.5 = STRING: "Timeouted"') != -1)
 
 		
 

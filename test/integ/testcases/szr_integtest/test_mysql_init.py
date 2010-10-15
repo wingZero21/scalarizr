@@ -52,18 +52,22 @@ class RoleHandler:
 		self._logger.info("Connected to instance")
 		
 		# Temporary solution
-		self._logger.info("Deploying dev branch")
-		deployer = ScalarizrDeploy(self.ssh)
-		deployer.apply_changes_from_tarball()
-		del(deployer)		
-		self.ssh.close_all_channels()
-		
+#		self._logger.info("Deploying dev branch")
+#		deployer = ScalarizrDeploy(self.ssh)
+#		deployer.apply_changes_from_tarball()
+#		del(deployer)		
+#		self.ssh.close_all_channels()
+#		
 		channel = self.ssh.get_root_ssh_channel()
-
-		exec_command(channel, '/etc/init.d/scalarizr stop')
-		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
-		exec_command(channel, '/etc/init.d/scalarizr start')
-		time.sleep(2)
+#
+#		exec_command(channel, '/etc/init.d/scalarizr stop')
+#		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
+#		exec_command(channel, '/etc/init.d/scalarizr start')
+#		time.sleep(2)
+		
+		
+		
+		
 		tail_log_channel(channel)
 		
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
@@ -100,16 +104,19 @@ class MysqlRoleHandler(RoleHandler):
 		self.slaves_ssh.append(slave_ssh)
 		
 		# Temporary solution
-		deployer = ScalarizrDeploy(slave_ssh)
-		deployer.apply_changes_from_tarball()
-		del(deployer)		
-		slave_ssh.close_all_channels()		
+#		deployer = ScalarizrDeploy(slave_ssh)
+#		deployer.apply_changes_from_tarball()
+#		del(deployer)		
+#		slave_ssh.close_all_channels()		
 		channel = slave_ssh.get_root_ssh_channel()
+#
+#		exec_command(channel, '/etc/init.d/scalarizr stop')
+#		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
+#		exec_command(channel, '/etc/init.d/scalarizr start')
+#		time.sleep(2)
 
-		exec_command(channel, '/etc/init.d/scalarizr stop')
-		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
-		exec_command(channel, '/etc/init.d/scalarizr start')
-		time.sleep(2)
+		
+		
 		
 		tail_log_channel(channel)
 		
@@ -163,7 +170,7 @@ class MysqlRoleHandler(RoleHandler):
 class TestMysqlInit(unittest.TestCase):
 
 	def setUp(self):
-		role_name = 'Test_mysql_2010_10_14_1816'
+		role_name = 'Test_mysql_2010_10_15_1542'
 		opts = {}
 		opts.update(EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)

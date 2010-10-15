@@ -119,6 +119,7 @@ class ImportEc2Server:
 		self._logger.info("Role name: %s", role_name)
 		self._logger.info("Importing server in scalr's interface")	#import sys;sys.argv = ['', 'Test.test_ ']
 		import_server_str = self._import_server(role_name)
+		import_server_str = re.sub('behaviour=[\w-]*', 'behaviour=mysql', import_server_str)
 		import_server_str += ' &'
 		channel = sshmanager.get_root_ssh_channel()
 		
