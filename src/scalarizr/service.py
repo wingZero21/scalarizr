@@ -107,6 +107,7 @@ class CnfController(object):
 		self.definitions = definitions
 
 	def preset_equals(self, this, that):
+		#usage: preset_equals(queryenv_preset, local_preset)
 		if not this.settings or not that.settings:
 			return False
 
@@ -116,9 +117,11 @@ class CnfController(object):
 		for variable in self._manifest:
 			if variable.inaccurate:
 				continue
+
 			if not that.settings.has_key(variable.name):
 				if not variable.default_value or variable.default_value == this.settings[variable.name]:
 					continue
+					
 			if that.settings[variable.name] != this.settings[variable.name]:
 				return False
 			
@@ -174,7 +177,7 @@ class CnfController(object):
 					#self._logger.debug("Option '%s' has no default value" % opt.name)
 					pass
 					
-				elif new_value == opt.default_value:
+				elif not new_value or new_value == opt.default_value:
 					#self._logger.debug("Remove option '%s'. Equal to default" % opt.name)
 					conf.remove(path)
 					self._after_remove_option(opt)				
@@ -185,7 +188,7 @@ class CnfController(object):
 				except NoPathError:
 					value = ''
 				
-				self._logger.debug("Check that value changed. %s %s", value, new_value)
+				#self._logger.debug("Check that value changed. %s %s", value, new_value)
 				if value == new_value:
 					#self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 					pass
@@ -314,7 +317,7 @@ class _OptionSpec():
 		ret.supported_from = tmp and tuple(map(int, tmp.split('.'))) or None
 		
 		key = 'need-restart'
-		ret.need_restart = bool(spec.get(key, defaults.get(key, True)))
+		ret.need_restart = bool(int(spec.get(key, defaults.get(key))))
 		
 		key = 'inaccurate'
 		ret.inaccurate = bool(spec.get(key, defaults.get(key, False)))
