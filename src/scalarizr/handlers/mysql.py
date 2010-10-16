@@ -253,8 +253,8 @@ class MysqlCnfController(CnfController):
 		
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
-		self._config = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
-		CnfController.__init__(self, BEHAVIOUR, self._config, 'mysql') #TRUE,FALSE
+		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
+		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql') #TRUE,FALSE
 	
 	def current_preset(self):
 		self._logger.debug('Getting current MySQL preset')
@@ -362,11 +362,10 @@ def _spawn_mysql(user, password):
 		return mysql
 	
 
-
 class MysqlHandler(ServiceCtlHanler):
 	_logger = None
 	
-	_config = None
+	_mysql_config = None
 	
 	_queryenv = None
 	""" @type _queryenv: scalarizr.queryenv.QueryEnvService	"""
@@ -394,6 +393,7 @@ class MysqlHandler(ServiceCtlHanler):
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
 		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
+
 		
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
@@ -404,17 +404,14 @@ class MysqlHandler(ServiceCtlHanler):
 			
 		bus.on("init", self.on_init)
 
-
-	@staticmethod
-	def reload_mycnf(f):
-		def g(*args):
-			inst = f.__self__
-			inst._config = Configuration('mysql')
+	def _reload_mycnf(f):
+		def g(self, *args):
+			self._mysql_config = Configuration('mysql')
 			try:
-				inst._config.read(inst._mycnf_path)
+				self._mysql_config.read(self._mycnf_path)
 			except (OSError, MetaconfError, ParseError), e:
-				raise HandlerError('Cannot read mysql config %s : %s' % (inst._mycnf_path, str(e)))
-			f(*args)
+				raise HandlerError('Cannot read mysql config %s : %s' % (self._mycnf_path, str(e)))
+			f(self, *args)
 		return g
 
 	def on_init(self):		
@@ -499,7 +496,7 @@ class MysqlHandler(ServiceCtlHanler):
 				farm_role_id = farm_role_id
 			))
 	
-	#@MysqlHandler.reload_mycnf
+	@_reload_mycnf
 	def on_Mysql_CreateBackup(self, message):
 		
 		# Retrieve password for scalr mysql user
@@ -518,7 +515,7 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Reading mysql config file
 			try:
-				datadir = self._config.get('mysqld/datadir')
+				datadir = self._mysql_config.get('mysqld/datadir')
 			except NoPathError:
 				raise HandlerError('Cannot get mysql data directory from mysql config file')
 			
@@ -609,7 +606,7 @@ class MysqlHandler(ServiceCtlHanler):
 				last_error	= str(e)
 			))
 
-	#@MysqlHandler.reload_mycnf				
+	@_reload_mycnf				
 	def on_Mysql_PromoteToMaster(self, message):
 		"""
 		Promote slave to master
@@ -692,7 +689,7 @@ class MysqlHandler(ServiceCtlHanler):
 		else:
 			self._logger.warning('Cannot promote to master. Already master')
 
-	#@MysqlHandler.reload_mycnf
+	@_reload_mycnf
 	def on_Mysql_NewMasterUp(self, message):
 		"""
 		Switch replication to a new master server
@@ -771,7 +768,7 @@ class MysqlHandler(ServiceCtlHanler):
 		self._logger.debug("Update mysql config with %s", message.mysql)
 		self._update_config(message.mysql)
 		
-	#@MysqlHandler.reload_mycnf
+	@_reload_mycnf
 	def on_before_host_up(self, message):
 		"""
 		Configure MySQL behaviour
@@ -820,8 +817,8 @@ class MysqlHandler(ServiceCtlHanler):
 
 		try:
 			# Patch configuration
-			self._move_mysql_dir('datadir', self._data_dir + os.sep, 'mysqld')
-			self._move_mysql_dir('log_bin', self._binlog_path, 'mysqld')
+			self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
+			self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
 	
 					
 			self._replication_init(master=True)
@@ -874,7 +871,8 @@ class MysqlHandler(ServiceCtlHanler):
 		except (BaseException, Exception):
 			if not storage_valid and self._storage_path:
 				# Perform cleanup
-				system('rm -rf %s' % os.path.join(self._storage_path, '*'))
+				#system('rm -rf %s' % os.path.join(self._storage_path, '*'))
+				pass
 			raise
 			
 		if msg_data:
@@ -1223,14 +1221,14 @@ class MysqlHandler(ServiceCtlHanler):
 			
 		self._logger.debug("farm-replication config created")
 		
-		if not repl_conf_path in self._config.get_list('*/!include'):
+		if not repl_conf_path in self._mysql_config.get_list('*/!include'):
 			# Include farm-replication.cnf in my.cnf
-			self._config.add('!include', repl_conf_path)
+			self._mysql_config.add('!include', repl_conf_path)
 			
 		# Patch networking
 		for option in ['bind-address','skip-networking']:
 			try:
-				self._config.comment('mysqld/'+option)
+				self._mysql_config.comment('mysqld/'+option)
 			except:
 				pass
 		self.write_config()
@@ -1315,7 +1313,7 @@ class MysqlHandler(ServiceCtlHanler):
 	def _start_mysql_skip_grant_tables(self):
 		if os.path.exists(self._mysqld_path) and os.access(self._mysqld_path, os.X_OK):
 			self._logger.debug("Starting mysql server with --skip-grant-tables")
-			myd = Popen([self._mysqld_path, '--skip-grant-tables'], stdin=PIPE, stdout=PIPE, stderr=STDOUT)
+			myd = Popen([self._mysqld_path, '--skip-grant-tables'], stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds = True)
 		else:
 			self._logger.error("MySQL daemon '%s' doesn't exists", self._mysqld_path)
 			return False
@@ -1330,7 +1328,7 @@ class MysqlHandler(ServiceCtlHanler):
 		directory	= os.path.dirname(dirname)
 
  		try:
-			raw_value = self._config.get(directive)
+			raw_value = self._mysql_config.get(directive)
 			if not os.path.isdir(directory):
 				os.makedirs(directory)
 				src_dir = os.path.dirname(raw_value + "/") + "/"
@@ -1339,17 +1337,17 @@ class MysqlHandler(ServiceCtlHanler):
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
 					system(str(rsync))
-					self._config.set(directive, dirname)
+					self._mysql_config.set(directive, dirname)
 				else:
 					self._logger.debug('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
 			else:
-				self._config.set(directive, dirname)
+				self._mysql_config.set(directive, dirname)
 				
 		except NoPathError:
 			if not os.path.isdir(directory):
 				os.makedirs(directory)
 			
-			self._config.add(directive, dirname)
+			self._mysql_config.add(directive, dirname)
 
 		self.write_config()
 		# Recursively setting new directory permissions
@@ -1425,4 +1423,4 @@ class MysqlHandler(ServiceCtlHanler):
 				os.remove(os.path.join(self._data_dir, file))
 				
 	def write_config(self):
-		self._config.write(open(self._mycnf_path, 'w'))
+		self._mysql_config.write(open(self._mycnf_path, 'w'))

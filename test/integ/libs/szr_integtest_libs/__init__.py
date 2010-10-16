@@ -38,7 +38,7 @@ class SshManager:
 	connected = False
 	channels  = []
 	
-	def __init__(self, host, key, timeout = 60, key_pass = None):
+	def __init__(self, host, key, timeout = 90, key_pass = None):
 		self.host = host
 		key_file = os.path.expanduser(key)
 		if not os.path.exists(key_file):

@@ -1060,9 +1060,9 @@ class MysqlFormatProvider(IniFormatProvider):
 		
 		if os.path.dirname(parent_path) not in ('.', ''):
 			raise MetaconfError('Maximum nesting level for ini format is 2')
-		elif parent_path in ('.', ''):
+		elif parent_path in ('.', '') and not '!include' in el.tag:
 			if etree.find(path) is not None:
-				raise MetaconfError("Ini file can't contain two identical sections")
+				raise MetaconfError("Mysql file can't contain two identical sections")
 			el.attrib['mc_type'] = 'section'
 		else:
 			if value:
@@ -1073,7 +1073,7 @@ class MysqlFormatProvider(IniFormatProvider):
 	
 	def read_statement(self, line, root):
 		if not hasattr(self, "_stat_re"):
-			self._stat_re = re.compile(r'\s*[^#]([^\s\[\]]+)\s*$')
+			self._stat_re = re.compile(r'\s*([^#\s\[\]]+)\s*$')
 		if self._stat_re.match(line):
 			new_statement = ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)))
 			new_statement.attrib['mc_type'] = 'statement'

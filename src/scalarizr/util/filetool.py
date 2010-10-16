@@ -219,7 +219,7 @@ class Rsync(object):
 			options=" ".join(self._options),
 			src=self._src,
 			dst=self._dst,
-			quiet="2>&1 > /dev/null && sync" if self._quiet else ""
+			quiet="2>&1 > /dev/null && sync" if self._quiet else "&& sync"
 		)
 		return ret.strip()
 

@@ -52,19 +52,19 @@ class RoleHandler:
 		self._logger.info("Connected to instance")
 		
 		# Temporary solution
-#		self._logger.info("Deploying dev branch")
-#		deployer = ScalarizrDeploy(self.ssh)
-#		deployer.apply_changes_from_tarball()
-#		del(deployer)		
-#		self.ssh.close_all_channels()
+		self._logger.info("Deploying dev branch")
+		deployer = ScalarizrDeploy(self.ssh)
+		deployer.apply_changes_from_tarball()
+		del(deployer)		
+		self.ssh.close_all_channels()
 #		
 		channel = self.ssh.get_root_ssh_channel()
-#
-#		exec_command(channel, '/etc/init.d/scalarizr stop')
+##
+		exec_command(channel, '/etc/init.d/scalarizr stop')
 #		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
-#		exec_command(channel, '/etc/init.d/scalarizr start')
-#		time.sleep(2)
-		
+		exec_command(channel, '/etc/init.d/scalarizr start')
+		time.sleep(2)
+#		
 		
 		
 		
@@ -104,16 +104,16 @@ class MysqlRoleHandler(RoleHandler):
 		self.slaves_ssh.append(slave_ssh)
 		
 		# Temporary solution
-#		deployer = ScalarizrDeploy(slave_ssh)
-#		deployer.apply_changes_from_tarball()
-#		del(deployer)		
-#		slave_ssh.close_all_channels()		
+		deployer = ScalarizrDeploy(slave_ssh)
+		deployer.apply_changes_from_tarball()
+		del(deployer)		
+		slave_ssh.close_all_channels()		
 		channel = slave_ssh.get_root_ssh_channel()
 #
-#		exec_command(channel, '/etc/init.d/scalarizr stop')
+		exec_command(channel, '/etc/init.d/scalarizr stop')
 #		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
-#		exec_command(channel, '/etc/init.d/scalarizr start')
-#		time.sleep(2)
+		exec_command(channel, '/etc/init.d/scalarizr start')
+		time.sleep(2)
 
 		
 		
@@ -152,7 +152,7 @@ class MysqlRoleHandler(RoleHandler):
 		slave_channel = self.slaves_ssh[0].get_root_ssh_channel()
 		tail_log_channel(slave_channel)
 		self.scalr_ctl.exec_cronjob('Scalarizrmessaging')
-		sequence = ['Unplug EBS storage (volume:', 'Volume [\w-]+ detached', 'Taking master EBS volume',
+		sequence = ['Unplug EBS storage \(volume:', 'Volume [\w-]+ detached', 'Taking master EBS volume',
 				    'Taked master volume', 'Create EBS storage (volume:', 'Attaching volume [\w-]+ as device',
 				    'Volume [\w-]+ attached', 'Device [\w-]+ is available', 'Device [\w-]+ is mounted', 
 				    'farm-replication config created']
@@ -170,14 +170,14 @@ class MysqlRoleHandler(RoleHandler):
 class TestMysqlInit(unittest.TestCase):
 
 	def setUp(self):
-		role_name = 'Test_mysql_2010_10_15_1542'
+		role_name = 'Test_mysql_2010_10_16_1033'
 		opts = {}
 		opts.update(EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
 		self.role_init = MysqlRoleHandler(role_name, opts)
 
 	def test_init(self):
-		sequence = ['HostInitResponse', 'Initializing MySQL master', 'Create EBS storage (volume:',
+		sequence = ['HostInitResponse', 'Initializing MySQL master', 'Create EBS storage \(volume:',
 					'farm-replication config created', 'MySQL system users added', 'Creating storage EBS snapshot',
 					"Message 'HostUp' delivered"]
 		self.role_init.test_init(sequence)
@@ -189,7 +189,8 @@ class TestMysqlInit(unittest.TestCase):
 		self.role_init.test_new_master_up()				
 	
 	def tearDown(self):
-		self.role_init.ssh.close_all_channels()
+		if hasattr(self.role_init, 'ssh'):
+			self.role_init.ssh.close_all_channels()
 		for slave_ssh in self.role_init.slaves_ssh:
 			slave_ssh.close_all_channels()
 	
