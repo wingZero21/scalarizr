@@ -312,6 +312,9 @@ class MysqlCnfController(CnfController):
 		self.sendline = ''
 		
 	def _after_set_option(self, option_spec, value):
+		self._logger.debug('callback "_after_set_option": %s %s (Need restart: %s)' 
+				% (option_spec, value, option_spec.need_restart))
+		
 		if value != option_spec.default_value and not option_spec.need_restart:
 			self._logger.debug('Setting variable %s to %s' % (option_spec.name, value))
 			self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, value)
