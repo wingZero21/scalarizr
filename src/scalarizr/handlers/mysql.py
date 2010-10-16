@@ -250,16 +250,27 @@ class MysqlCnfController(CnfController):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		
+		self._init_script = initdv2.lookup(SERVICE_NAME)
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
 		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql') #TRUE,FALSE
+
+	def _start_service(self):
+		self._logger.info("Starting %s" % self.behaviour)
+		if not self._init_script.running:
+			try:
+				self._init_script.start()
+			except:
+				if not self._init_script.running:
+					raise
+			self._logger.debug("%s started" % self.behaviour)
 	
 	def current_preset(self):
 		self._logger.debug('Getting current MySQL preset')
 		mysql = None
 		preset = CnfPreset(name='last successful', behaviour=BEHAVIOUR)
+		self._start_service()
 		try:
 			mysql = self._get_connection()
 			mysql.sendline('SHOW GLOBAL VARIABLES;')
