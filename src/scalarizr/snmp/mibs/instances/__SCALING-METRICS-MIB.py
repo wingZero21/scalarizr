@@ -61,7 +61,7 @@ def values():
 	cnf = bus.cnf
 
 	if cnf.state != ScalarizrState.RUNNING:
-		dict()
+		return dict()
 	
 	# Obtain scaling metrics from Scalr. Cache result for 30 minutes
 	now = time.time()
