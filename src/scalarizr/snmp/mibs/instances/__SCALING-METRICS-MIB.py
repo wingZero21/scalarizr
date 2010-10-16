@@ -59,6 +59,9 @@ def values():
 	
 	queryenv = bus.queryenv_service
 	cnf = bus.cnf
+
+	if cnf.state != ScalarizrState.RUNNING:
+		dict()
 	
 	# Obtain scaling metrics from Scalr. Cache result for 30 minutes
 	now = time.time()
@@ -147,10 +150,6 @@ def _get_read( metric):
 	return value
 
 def update_metric(queue, index, ret):
-	cnf = bus.cnf
-	if cnf.state != ScalarizrState.RUNNING:
-		return
-	
 	logger = logging.getLogger(__name__)
 	error = ''
 	value = 0.0
