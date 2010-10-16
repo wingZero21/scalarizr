@@ -24,8 +24,11 @@ from scalarizr.config import ScalarizrState
 (MibTable, MibScalarInstance) = mibBuilder.importSymbols('SNMPv2-SMI','MibTable', 'MibScalarInstance')
 
 
+CACHE_TIME = 600 # 10 minutes
+
 _metrics = None
-_metrics_timestamp = None
+_metrics_timestamp = 0
+logger = logging.getLogger('scalarizr.snmp.mibs.SCALING-METRICS-MIB')
 
 
 class MtxTableImpl(MibTable):
@@ -34,20 +37,20 @@ class MtxTableImpl(MibTable):
 	'''
 	Executing timeout for script when obtain metric with 'execute' method 
 	'''
-
-	_metrics = None
-	_metrics_timestamp = None
+	
+	CACHE_TIME = 5
+	
+	_last_request_time = None
 	
 	def getNextNode(self, name, idx):
+		logger.debug('Entering mtxTable.getNextNode %s', name)
 		mibBuilder.lastBuildId += 1
 		
-		# Clean old values
-		for k in mibBuilder.mibSymbols['SCALING-METRICS-MIB'].keys():
-			if k.startswith('mtxIndex') or k.startswith('mtxId') or k.startswith('mtxName') or k.startswith('mtxValue') or k.startswith('mtxEntry') or k.startswith('mtxError'):
-				del mibBuilder.mibSymbols['SCALING-METRICS-MIB'][k]
-				
-		# Update with new values
-		mibBuilder.mibSymbols['SCALING-METRICS-MIB'].update(values())
+		now = time.time()
+		if self._last_request_time is None or now - self._last_request_time > self.CACHE_TIME:
+			self._last_request_time = now
+			# Update with new values
+			mibBuilder.mibSymbols['SCALING-METRICS-MIB'] = values()
 		return MibTable.getNextNode(self, name, idx)
 
 
@@ -59,24 +62,7 @@ def values():
 	
 	queryenv = bus.queryenv_service
 	cnf = bus.cnf
-
-	if cnf.state != ScalarizrState.RUNNING:
-		return dict()
-	
-	# Obtain scaling metrics from Scalr. Cache result for 30 minutes
-	now = time.time()
-	if _metrics is None or now - _metrics_timestamp > 600:
-		if cnf.state != ScalarizrState.IMPORTING: 
-			_metrics = queryenv.get_scaling_metrics()
-			_metrics_timestamp = now
-		else:
-			return dict()
-
-	# TODO: investigate how efficiently will be do calculations in parallel
-	
-	ret = dict()
-	
-	ret.update({
+	ret = {
 		'mtxTable' : MtxTableInst,
 		'scalr'    : scalr,
 		'mtxIndex' : mtxIndex,
@@ -85,7 +71,21 @@ def values():
 		'mtxValue' : mtxValue,
 		'mtxError' : mtxError,
 		'mtxEntry' : mtxEntry
-		})
+	}
+
+
+	if cnf.state != ScalarizrState.RUNNING:
+		return ret
+	
+	# Obtain scaling metrics from Scalr. Cache result
+	now = time.time()
+	if _metrics is None or now - _metrics_timestamp > CACHE_TIME:
+		logger.debug('Obtain scaling metrics from QueryEnv')
+		_metrics = queryenv.get_scaling_metrics()
+		_metrics_timestamp = now
+	else:
+		logger.debug('Use cached scaling metrics. Expires: %s', 
+				time.strftime('"%Y-%m-%d %H:%M:%S', time.localtime(_metrics_timestamp + CACHE_TIME)))
 	
 	index = 0
 	queue = Queue()
@@ -105,7 +105,6 @@ def values():
 	return ret
 
 def _get_execute( metric):
-	logger = logging.getLogger(__name__)
 	if not os.access(metric.path, os.X_OK):
 		raise BaseException("File is not executable: '%s'" % metric.path)
 	
@@ -150,7 +149,6 @@ def _get_read( metric):
 	return value
 
 def update_metric(queue, index, ret):
-	logger = logging.getLogger(__name__)
 	error = ''
 	value = 0.0
 	try:

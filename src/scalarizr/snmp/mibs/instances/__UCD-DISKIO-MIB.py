@@ -1,7 +1,7 @@
 from sys import version
 from time import time
 from pysnmp import majorVersionId
-import os, re
+import os, re, logging
 import UserDict
 from pyasn1.type import constraint, namedval
 from pysnmp.smi import error
@@ -24,14 +24,18 @@ class NewMibTableColumn(MibTableColumn):
 		pass
 '''
 
+logger = logging.getLogger('scalarizr.snmp.mibs.UCD-DISKIO-MIB')
+
 class NewMibTableRow(MibTableRow):
 	
 	last_request_time = time.time()
 	buffer_time = 5
 	
 	def getNextNode(self, name, idx):
+		logger.debug('Entering diskIOTable %s', name)
 		# MibTableRow's getNextnode method calls 2 times for each column and node
 		# Buffer values for 5 secs for better performance
+		
 		if time.time() - self.last_request_time > self.buffer_time:
 			self.last_request_time = time.time()
 			mibBuilder.lastBuildId += 1
