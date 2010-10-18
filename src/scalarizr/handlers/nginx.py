@@ -166,7 +166,7 @@ class NginxHandler(ServiceCtlHanler):
 	def on_init(self):
 		bus.on('before_host_up', self.on_before_host_up)
 		
-	def on_before_host_up (self):
+	def on_before_host_up(self, message):
 		bus.fire('service_configured', service_name=SERVICE_NAME)
 	
 	def on_HostUp(self, message):
