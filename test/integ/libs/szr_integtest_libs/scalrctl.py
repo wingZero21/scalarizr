@@ -33,6 +33,7 @@ class ScalrConsts:
 		BEHAVIOUR_BASE  = 'Base'
 		BEHAVIOUR_APP   = 'Apache'
 		BEHAVIOUR_MYSQL = 'MySQL' 
+		BEHAVIOUR_WWW = 'Nginx'
 
 
 class FarmUI:
