@@ -34,7 +34,7 @@ class ImportAppServer(ImportEc2Server):
 				raise Exception('Cannot install scalarizr')	
 			
 	def _get_role_name(self):
-		return 'Test_app_%s' % time.strftime('%Y_%m_%d_%H%M')
+		return 'Test-app-%s' % time.strftime('%Y-%m-%d-%H%M')
 	
 	def _import_server(self, role_name):
 		return import_server(get_selenium(), ScalrConsts.Platforms.PLATFORM_EC2 ,\
