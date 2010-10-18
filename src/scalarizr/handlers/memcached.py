@@ -83,6 +83,7 @@ class MemcachedCnfController(CnfController):
 			self.get_func = get_func	
 			self.set_func = set_func
 			self.default_value = default_value
+			CnfController.__init__(self, BEHAVIOUR, mcd_conf_path, 'memcached')
 			
 	options = Options(
 		OptionSpec('cache_size', get_cache_size, set_cache_size,'64')
