@@ -48,7 +48,7 @@ class Fstab:
 	def reload(self):
 		self._entries = []
 		f = open(self.filename, "r")
-		print
+
 		for line in f:
 			if line[0:1] == "#":
 				continue
