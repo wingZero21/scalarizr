@@ -350,8 +350,10 @@ class RebundleStratery:
 		
 		# Cleanup scalarizr private data
 		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
-		shutil.rmtree(os.path.join(etc_path, "private.d"))
-		os.mkdir(os.path.join(etc_path, "private.d"))
+		privated = os.path.join(etc_path, "private.d")
+		if os.path.exists(privated):
+			shutil.rmtree(privated)
+			os.mkdir(privated)
 		
 		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
 		
@@ -826,10 +828,11 @@ if disttool.is_linux():
 					if dir == '/tmp':
 						os.chmod(spec_dir, 01777)
 						
-			# Create excluded mpoints dirs
+			# Create excluded mpoints dirs (not under special dirs)
 			for dir in self._excluded_mpoints:
-				self._logger.debug('Create mpoint dir %s', dir)
-				os.makedirs(self.mpoint + dir)
+				if not list(dir for spec_dir in self.SPECIAL_DIRS if dir.startswith(spec_dir)):
+					self._logger.debug('Create mpoint dir %s', dir)
+					os.makedirs(self.mpoint + dir)
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
 			dev_dir = self.mpoint + "/dev"

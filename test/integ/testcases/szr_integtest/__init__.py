@@ -1,4 +1,5 @@
 from ConfigParser import ConfigParser
+from optparse import OptionParser
 from selenium import selenium
 from multiprocessing import Process
 from scalarizr.libs.metaconf import NoPathError, Configuration
@@ -8,6 +9,7 @@ import signal
 import sys
 import paramiko
 import logging
+
 
 BASE_PATH = os.path.join(os.path.dirname(__file__), '..' + os.path.sep + '..')
 RESOURCE_PATH = os.path.join(BASE_PATH, 'resources')
@@ -35,6 +37,35 @@ else:
 	user_config.add('./selenium')
 
 
+opts = OptionParser()
+opts.add_option('-v', '--verbose', action='store_true', default=False, help='Verbose output')
+
+_g0 = opts.add_option_group('Dist coverage options')
+_g0.add_option('--centos5', action='store_true', help='CentOS 5')
+_g0.add_option('--ubuntu8-04', action='store_true', help='Ubuntu 8.04')
+_g0.add_option('--ubuntu10-04', action='store_true', help='Ubuntu 10.04')
+
+_g1 = opts.add_option_group('Cloud coverage options')
+_g1.add_option('--ec2', action='store_true', help='Amazon EC2')
+_g1.add_option('--euca', action='store_true', help='Eucalyptus')
+
+
+def main():
+	opts.parse_args()
+	vals = opts.values
+	
+	if not any(getattr(vals, opt.dest) for opt in opts.option_groups[0].option_list):
+		print 'error: Dist coverage option required'
+		opts.print_help()
+		sys.exit(1)
+		
+	if not any(getattr(vals, opt.dest) for opt in opts.option_groups[1].option_list):
+		print 'error: Cloud coverage option required'
+		opts.print_help()
+		sys.exit(1)
+
+	sys.argv = sys.argv[0:1]
+	
 _sel_started = False
 
 try:
