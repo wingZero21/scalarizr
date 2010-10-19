@@ -128,15 +128,15 @@ def get_handlers ():
 	return [ApacheHandler()]
 
 def reload_apache_conf(f):
-	def g(*args):
-		inst = f.__self__
-		inst._config = Configuration('apache')
+	def g(self,*args):
+		self._config = Configuration('apache')
 		try:
-			inst._config.read(inst._httpd_conf_path)
+			self._config.read(self._httpd_conf_path)
 		except (OSError, MetaconfError, ParseError), e:
-			raise HandlerError('Cannot read Apache config %s : %s' % (inst._httpd_conf_path, str(e)))
-		f(*args)
+			raise HandlerError('Cannot read Apache config %s : %s' % (self._httpd_conf_path, str(e)))
+		f(self,*args)
 	return g
+
 
 class ApacheHandler(ServiceCtlHanler):
 	
