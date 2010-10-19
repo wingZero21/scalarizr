@@ -199,7 +199,7 @@ class CnfController(object):
 					self._after_remove_option(opt)				
 					continue	
 				
-				self._logger.debug("Check that value changed. %s %s", value, new_value)
+				self._logger.debug("Check that '%s' value changed:'%s'='%s'"%(opt.name, value, new_value))
 				if new_value == value:
 					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 					pass
