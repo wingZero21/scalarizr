@@ -294,8 +294,8 @@ class QueryEnvService(object):
 				for setting in settings.childNodes:
 					if setting.hasAttribute(key_attr):
 						k = setting.getAttribute(key_attr)
-						if k:
-							ret[k] = setting.firstChild.nodeValue if setting.firstChild else ''
+						if k and setting.firstChild:
+							ret[k] = setting.firstChild.nodeValue
 					
 		preset = Preset()
 		preset.name = str(name)
