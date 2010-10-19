@@ -175,6 +175,7 @@ class ServiceCtlHanler(Handler):
 
 
 	def on_UpdateServiceConfiguration(self, message):
+		self._logger.error(self._service_name != message.behaviour)
 		if self._service_name != message.behaviour:
 			return
 
