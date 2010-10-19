@@ -141,8 +141,8 @@ class MemcachedHandler(ServiceCtlHanler):
 		bus.on("before_host_up", self.on_before_host_up)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name in (Messages.HOST_UP, Messages.HOST_DOWN) \
-				and BEHAVIOUR in message.behaviour
+		return message.name in (Messages.HOST_UP, Messages.HOST_DOWN, Messages.UPDATE_SERVICE_CONFIGURATION) \
+				and BEHAVIOUR in behaviour
 	
 	def on_before_host_up(self, message):
 		# Collect farm servers IP-s					
