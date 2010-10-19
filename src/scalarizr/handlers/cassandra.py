@@ -198,7 +198,7 @@ class Cassandra(object):
 		return tuple(ret)
 
 	def write_config(self):
-		self.cassandra_conf.write(open(self.storage_conf_path,'w'))
+		self.cassandra_conf.write(self.storage_conf_path)
 
 class CassandraScalingHandler(ServiceCtlHanler):
 	

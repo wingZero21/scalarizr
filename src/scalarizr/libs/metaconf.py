@@ -119,7 +119,7 @@ class Configuration:
 			self.etree.getroot().append(child)
 		"""
 			
-	def write(self, fp, close = True):
+	def write_fp(self, fp, close = True):
 		"""
 		Writes configuration to fp with provider's method 'write'.
 		If 'close' parameter passed with 'False' value, fp won't be closed.
@@ -127,6 +127,19 @@ class Configuration:
 		if not self.etree or self.etree.getroot() == None:
 			raise MetaconfError("Nothing to write! Create the tree first (readfp or read)")
 		self._provider.write(fp, self.etree, close)
+		
+	def write(self, file_path):
+		if not self.etree or self.etree.getroot() == None:
+			raise MetaconfError("Nothing to write! Create the tree first (readfp or read)")
+		
+		tmp_str = StringIO()
+		try:
+			self._provider.write(tmp_str, self.etree, close = False)
+			fp = open(file_path, 'w')
+			fp.write(tmp_str.getvalue())
+			fp.close()
+		except:
+			raise
 	
 	def extend(self, conf):
 		"""
@@ -156,7 +169,7 @@ class Configuration:
 			temp_root.append(temp_node)
 			new_conf	= Configuration(format=self._format, etree=temp_tree)
 			new_conf._init()
-			new_conf.write(comment_value, close = False)
+			new_conf.write_fp(comment_value, close = False)
 			parent_el   = parent_els.pop(0)
 			index = list(parent_el).index(temp_node)
 			comment		= ET.Comment(comment_value.getvalue().strip())
@@ -1073,7 +1086,7 @@ class MysqlFormatProvider(IniFormatProvider):
 	
 	def read_statement(self, line, root):
 		if not hasattr(self, "_stat_re"):
-			self._stat_re = re.compile(r'\s*([^#\s\[\]]+)\s*$')
+			self._stat_re = re.compile(r'\s*([^#=\s\[\]]+)\s*$')
 		if self._stat_re.match(line):
 			new_statement = ET.SubElement(self._cursect, quote(self._stat_re.match(line).group(1)))
 			new_statement.attrib['mc_type'] = 'statement'

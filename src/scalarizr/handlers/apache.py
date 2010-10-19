@@ -287,7 +287,7 @@ class ApacheHandler(ServiceCtlHanler):
 			includes = self._config.get_list('Include')
 			if not vhosts_path + '/*' in includes:
 				self._config.add('Include', vhosts_path + '/*')
-				self._config.write(open(self._httpd_conf_path, 'w'))			
+				self._config.write(self._httpd_conf_path)			
 
 	def _patch_ssl_conf(self, cert_path):
 		key_path = cert_path + '/https.key'
@@ -299,7 +299,7 @@ class ApacheHandler(ServiceCtlHanler):
 			ssl_conf.read(ssl_conf_path)
 			ssl_conf.set(".//SSLCertificateFile", crt_path)
 			ssl_conf.set(".//SSLCertificateKeyFile", key_path)
-			ssl_conf.write(open(ssl_conf_path, 'w'))
+			ssl_conf.write(ssl_conf_path)
 		else:
 			raise HandlerError("Apache's ssl configuration file %s doesn't exist" % ssl_conf_path)
 
@@ -378,7 +378,7 @@ class ApacheHandler(ServiceCtlHanler):
 						else:
 							self._logger.debug("NameVirtualHost directive inserted after Listen directive.")
 							ssl_conf.add('NameVirtualHost', '*:443', 'Listen')
-				ssl_conf.write(open(ssl_conf_path, 'w'))
+				ssl_conf.write(ssl_conf_path)
 			
 			loaded_in_main = [module for module in self._config.get_list('LoadModule') if 'mod_ssl.so' in module]
 			
@@ -387,7 +387,7 @@ class ApacheHandler(ServiceCtlHanler):
 					loaded_in_ssl = [module for module in ssl_conf.get_list('LoadModule') if 'mod_ssl.so' in module]
 					if not loaded_in_ssl:
 						self._config.add('LoadModule', 'ssl_module modules/mod_ssl.so')
-						self._config.write(open(self._httpd_conf_path, 'w'))
+						self._config.write(self._httpd_conf_path)
 						
 				
 				"""
@@ -432,7 +432,7 @@ class ApacheHandler(ServiceCtlHanler):
 			default_vhost.read(default_vhost_path)
 			default_vhost.set('NameVirtualHost', '*:80', force=True)
 			default_vhost.set('VirtualHost', '*:80')
-			default_vhost.write(open(default_vhost_path, 'w'))
+			default_vhost.write(default_vhost_path)
 		else:
 			self._logger.error('Cannot read default vhost config file %s' % default_vhost_path)
 

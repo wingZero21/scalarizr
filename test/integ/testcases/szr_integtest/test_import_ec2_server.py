@@ -181,7 +181,7 @@ class ImportEc2Server:
 			self._logger.info("Creating snapshot of root device image")
 			expect(channel, "Checking that snapshot (?P<snap_id>snap-\w+) is completed",240)
 			self._logger.info("Checking that snapshot is completed")
-			expect(channel, "Snapshot snap-\w+ completed", 								240)
+			expect(channel, "Snapshot snap-\w+ completed", 								420)
 			self._logger.info("Snapshot completed")
 			expect(channel, "Registering image", 										120)
 		

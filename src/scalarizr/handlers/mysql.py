@@ -254,10 +254,18 @@ class MysqlCnfController(CnfController):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
+#		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
 		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql') #TRUE,FALSE
 
 	def _start_service(self):
+#		if not hasattr(self, '_mysql_cnf_err_re'):
+#			self._mysql_cnf_err_re = re.compile('Unknown option|ERROR')
+#		out = system('%s --help 1>/dev/null' % self._mysqld_path)
+#		if re.search(self._mysql_cnf_err_re, out):
+#			raise Exception('Error in mysql configuration detected. Output:\n%s' % out)
+		
 		self._logger.info("Starting %s" % self.behaviour)
+		
 		if not self._init_script.running:
 			try:
 				self._init_script.start()
@@ -396,8 +404,6 @@ class MysqlHandler(ServiceCtlHanler):
 	_mycnf_path = None
 	_mysqld_path = None
 	
-	_initd = None
-
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
@@ -413,8 +419,8 @@ class MysqlHandler(ServiceCtlHanler):
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
 		self._binlog_path = os.path.join(self._storage_path, STORAGE_BINLOG_PATH)
 
-		self._initd = initdv2.lookup(SERVICE_NAME)
-		ServiceCtlHanler.__init__(self, SERVICE_NAME, self._initd, MysqlCnfController())
+		initd = initdv2.lookup(SERVICE_NAME)
+		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
 			
 		bus.on("init", self.on_init)
 
@@ -637,7 +643,7 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			try:
 				# Stop mysql
-				if self._initd.running:
+				if self._init_script.running:
 					mysql = self._spawn_mysql(ROOT_USER, message.root_password)
 					timeout = 180
 					try:
@@ -648,7 +654,7 @@ class MysqlHandler(ServiceCtlHanler):
 								"while waiting for slave stop" % (timeout,))
 					finally:
 						mysql.close()
-					self._stop_mysql()
+					self._stop_service()
 					
 				# Unplug slave storage and plug master one
 				self._unplug_storage(slave_vol_id, self._storage_path)
@@ -694,7 +700,7 @@ class MysqlHandler(ServiceCtlHanler):
 
 			
 			# Start MySQL
-			self._initd.start()				
+			self._start_service()				
 			
 			if tx_complete:
 				# Delete slave EBS
@@ -750,7 +756,7 @@ class MysqlHandler(ServiceCtlHanler):
 		"""
 		Stop MySQL and unplug storage
 		"""
-		self._stop_mysql()
+		self._stop_service()
 		'''
 		no need to plug/unplug storage since Scalarizr do EBS-root instances bundle 
 		try:
@@ -769,7 +775,7 @@ class MysqlHandler(ServiceCtlHanler):
 		except ConfigParser.NoOptionError:
 			self._logger.debug("Skip storage plug. There is no configured storage.")
 		'''
-		self._initd.start()
+		self._start_service()
 
 	def on_host_init_response(self, message):
 		"""
@@ -798,8 +804,8 @@ class MysqlHandler(ServiceCtlHanler):
 			if result:
 				datadir = result.group(1)
 				if os.path.isdir(datadir) and not os.path.isdir(os.path.join(datadir, 'mysql')):
-					self._initd.start()	
-					self._stop_mysql()				
+					self._start_service()	
+					self._stop_service()				
 		except:
 			pass
 
@@ -822,7 +828,7 @@ class MysqlHandler(ServiceCtlHanler):
 		self._plug_storage(self._cnf.rawini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID), self._storage_path)
 		
 		# Stop MySQL server
-		self._stop_mysql()
+		self._stop_service()
 		self._flush_logs()
 		
 		msg_data = None
@@ -866,7 +872,7 @@ class MysqlHandler(ServiceCtlHanler):
 			else:
 				# Retrieve scalr's mysql username and password
 				try:
-					root_password = self._sect.get(OPT_ROOT_PASSWORD)
+					root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 				except Exception, e:
 					raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 				
@@ -892,7 +898,7 @@ class MysqlHandler(ServiceCtlHanler):
 			message.mysql = msg_data
 			self._update_config(msg_data)
 			
-		self._initd.start()			
+		self._start_service()	
 			
 			
 	
@@ -917,7 +923,7 @@ class MysqlHandler(ServiceCtlHanler):
 			self._plug_storage(None, self._storage_path, vol=ebs_volume)
 
 			
-		self._stop_mysql()			
+		self._stop_service()			
 		self._flush_logs()
 		# Change configuration files
 		self._logger.info("Changing configuration files")
@@ -932,7 +938,7 @@ class MysqlHandler(ServiceCtlHanler):
 				self._logger.error("Cannot copy debian.cnf file from storage: ", e)
 				
 					
-		self._initd.start()
+		self._start_service()
 		
 		# Change replication master 
 		master_host = None
@@ -1108,10 +1114,10 @@ class MysqlHandler(ServiceCtlHanler):
 		return master_vol
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
-		was_running = self._initd.running
+		was_running = self._init_script.running
 		try:
 			if not was_running:
-				self._initd.start()
+				self._start_service()
 			
 			# Lock tables
 			sql = self._spawn_mysql(root_user, root_password)
@@ -1150,7 +1156,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		finally:
 			if not was_running:
-				self._stop_mysql()
+				self._stop_service()
 
 			
 	def _create_ebs_snapshot(self):
@@ -1167,7 +1173,7 @@ class MysqlHandler(ServiceCtlHanler):
 			raise
 	
 	def _add_mysql_users(self, root_user, repl_user, stat_user):
-		self._stop_mysql()
+		self._stop_service()
 		self._logger.info("Adding mysql system users")
 
 		myd = self._start_mysql_skip_grant_tables()
@@ -1196,7 +1202,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		os.kill(myd.pid, signal.SIGTERM)
 		time.sleep(3)
-		self._initd.start()
+		self._start_service()
 		"""
 		self._logger.debug("Checking that mysqld is terminated")
 		self._wait_until(lambda: not initd.is_running("mysql"))
@@ -1299,28 +1305,8 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		self._logger.debug('Replication master is changed to host %s', host)		
 
-	def _stop_mysql(self):
-		try:
-			self._logger.info("Stopping MySQL")
-			self._initd.stop()
-		except:
-			self._logger.error("Cannot stop MySQL")
-			if self._initd.running:
-				raise
-
-			
-	def _restart_mysql(self):
-		try:
-			self._logger.info("Restarting MySQL")
-			self._initd.restart()
-			self._logger.debug("MySQL restarted")
-		except:
-			self._logger.error("Cannot restart MySQL")
-			raise
-	
-		
 	def _ping_mysql(self):
-		for sock in self._initd.socks:
+		for sock in self._init_script.socks:
 			wait_sock(sock)
 	
 	def _start_mysql_skip_grant_tables(self):
@@ -1357,6 +1343,7 @@ class MysqlHandler(ServiceCtlHanler):
 				self._mysql_config.set(directive, dirname)
 				
 		except NoPathError:
+			self._logger.debug('There is no such option "%s" in mysql config.' % directive)
 			if not os.path.isdir(directory):
 				os.makedirs(directory)
 			
@@ -1436,4 +1423,4 @@ class MysqlHandler(ServiceCtlHanler):
 				os.remove(os.path.join(self._data_dir, file))
 				
 	def write_config(self):
-		self._mysql_config.write(open(self._mycnf_path, 'w'))
+		self._mysql_config.write(self._mycnf_path)

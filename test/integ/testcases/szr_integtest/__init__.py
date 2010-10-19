@@ -121,7 +121,7 @@ def get_selenium():
 		
 		config.set('./selenium/' + OPT_SESSION_ID, _sel.sessionId, force = True)
 		user_config.set('./selenium/' + OPT_SESSION_ID, _sel.sessionId, force = True)
-		user_config.write(open(_user_ini_path, 'w'))
+		user_config.write(_user_ini_path)
 	return _sel
 
 

@@ -13,6 +13,8 @@ from szr_integtest_libs import exec_command, clean_output, SshManager
 from selenium import selenium
 import logging
 
+log_path = os.path.expanduser('~/.scalr-dev/logs')
+
 class FarmUIError(Exception):
 	pass
 
@@ -207,6 +209,28 @@ class FarmUI:
 		self.servers.append(public_ip)
 		return public_ip
 	
+	def create_mysql_backup(self):
+		self._open_mysql_status_page()
+		self.sel.click('//input[@name="run_bcp"]')
+		
+	def create_pma_users(self):
+		self._open_mysql_status_page()
+		try:
+			self.sel.click('//input[@name="pma_request_credentials"]')
+		except:
+			raise FarmUIError('PhpMyAdmin user creation request has been already sent.')
+		
+	def _open_mysql_status_page(self):
+		if not hasattr(self, 'farm_id'):
+			raise FarmUIError("Can't launch farm without farm_id: use the farm first")
+		
+		self.sel.open('/farm_mysql_info.php?farmid=%s' % self.farm_id)
+		self.sel.wait_for_page_to_load(30000)
+		if not self.sel.is_text_present('Replication status'):
+			raise FarmUIError("Error while opening MySQL status page for farm ID=%s. Make sure your farm has MySQL role enabled." % self.farm_id)
+
+
+		
 def import_server(sel, platform_name, behaviour, host, role_name):
 	'''
 	@return: import shell command
@@ -277,8 +301,8 @@ class ScalrCtl:
 		
 		self.channel = self.ssh.get_root_ssh_channel()
 		self._logger.info('Estabilished connection to %s' % scalr_host)
-		
-		
+		if not os.path.isdir(log_path):
+			os.makedirs(log_path)		
 
 	def exec_cronjob(self, name):
 		if self.channel.closed:
@@ -301,9 +325,15 @@ class ScalrCtl:
 		exec_command(self.channel, 'cd ' + home_path)
 		
 		job_cmd = 'php -q ' + cron_php_path + ' --%s' % name
-		self._logger.info('Strating cronjob: %s' % job_cmd)
+		self._logger.info('Starting cronjob: %s' % job_cmd)
 		out = exec_command(self.channel, job_cmd)
-		
+		log_filename = name + time.strftime('_%d_%b_%H-%M') + '.log'
+		try:
+			fp = open(os.path.join(log_path, log_filename), 'w')
+			fp.write(out)
+			fp.close()
+		except:
+			pass
 		return out
 	
 	def enable_svn_access(self, ip):

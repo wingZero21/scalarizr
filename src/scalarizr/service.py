@@ -77,7 +77,7 @@ class CnfPresetStore:
 
 		for k, v in preset.settings.items():
 			ini.add('settings/%s' % k, v)
-		ini.write(open(self._filename(preset_type), 'w'))
+		ini.write(self._filename(preset_type))
 		
 	def copy(self, src_preset_type, dst_preset_type, override = True):
 		src = self._filename(src_preset_type)
@@ -218,7 +218,7 @@ class CnfController(object):
 				self._after_remove_option(opt)
 		
 		self._after_apply_preset()						
-		conf.write(open(self._config_path, 'w'))
+		conf.write(self._config_path)
 	
 	def _after_set_option(self, option_spec, value):
 		pass

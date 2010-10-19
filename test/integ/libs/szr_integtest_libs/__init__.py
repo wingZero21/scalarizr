@@ -26,7 +26,6 @@ class SshPool:
 		pass
 
 regexps = ['root@.*#',
-		   '.+:.*#',
 		   'local2:.*#',
 		   '\-bash\-.*#']
 
@@ -37,7 +36,7 @@ class SshManager:
 	transport = None
 	connected = False
 	channels  = []
-	
+
 	def __init__(self, host, key, timeout = 90, key_pass = None):
 		self.host = host
 		key_file = os.path.expanduser(key)
@@ -49,6 +48,10 @@ class SshManager:
 		self.user = 'root'
 		self.ssh = paramiko.SSHClient()
 		self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+		
+	def _check_connection(self):
+		if not self.connected or (self.connected and not self.ssh._transport.is_alive()):
+			self.connect()
 		
 	def connect(self):
 		start_time = time.time()
@@ -62,6 +65,7 @@ class SshManager:
 			raise Exception("Cannot connect to server %s" % self.host)
 		
 		transport = self.ssh.get_transport()
+		transport.banner_timeout = 60
 		channel = transport.open_session()
 		channel.get_pty()
 		channel.invoke_shell()
@@ -81,11 +85,9 @@ class SshManager:
 			self.connected = True
 		channel.close()
 		
-		
+
 	def get_root_ssh_channel(self):
-		
-		if not self.connected:
-			self.connect()
+		self._check_connection()
 			
 		if not self.transport:
 			self.transport = self.ssh.get_transport()
@@ -97,16 +99,18 @@ class SshManager:
 		if self.user == 'ubuntu':
 			channel.send('sudo -i\n')
 			
-		clean_output(channel, 5)	
+		clean_output(channel, 5)
 		return channel
 	
 	def get_sftp_client(self):
+		self._check_connection()
 		return self.ssh.open_sftp()
 	
 	def close_all_channels(self):
 		for channel in self.channels:
 			channel.close()
 		self.channels = []
+		
 
 class LogReader:
 	
@@ -227,5 +231,6 @@ def clean_output(channel, timeout = 60):
 				break
 		else:
 			if time.time() - last_recv_time > timeout:
-				raise Exception('Timeout (%s sec) while waiting for root prompt. Out:\n%s' % (timeout, out))	
+				#raise Exception('Timeout (%s sec) while waiting for root prompt. Out:\n%s' % (timeout, out))	
+				raise Exception('Timeout (%s sec) while waiting for root prompt. ' % timeout)	
 	return out

@@ -198,7 +198,7 @@ class NginxHandler(ServiceCtlHanler):
 			'''
 			backend_include.add('upstream', 'backend')
 			backend_include.add('upstream/ip_hash')
-			backend_include.write(open(template_path, 'w'))
+			backend_include.write(template_path)
 		else:
 			backend_include.read(template_path)
 
@@ -240,7 +240,7 @@ class NginxHandler(ServiceCtlHanler):
 				self._logger.debug('%s does not exist. Nothing to backup.' % self._include)
 				
 			self._logger.debug("Writing template to %s" % self._include)
-			backend_include.write(open(self._include, 'w'))
+			backend_include.write(self._include)
 			#Patching main config file
 			if 'http://backend' in self._config.get_list('http/server/location/proxy_pass') and \
 						self._include in self._config.get_list('http/include'):
@@ -251,7 +251,7 @@ class NginxHandler(ServiceCtlHanler):
 				self._config.comment('http/server')
 				self._config.read(os.path.join(self._cnf.private_path(), "nginx/server.tpl"))
 				self._config.add('http/include', self._include)
-				self._config.write(open(nginx_conf_path, 'w'))
+				self._config.write(nginx_conf_path)
 			
 				self._logger.info("Testing new configuration.")
 			
@@ -283,7 +283,7 @@ class NginxHandler(ServiceCtlHanler):
 		server_ip = '%s:80' % message.local_ip or message.remote_ip
 		if server_ip in include.get_list('upstream/server'):
 			include.remove('upstream/server', server_ip)
-		include.write(open(include_path, 'w'))
+		include.write(include_path)
 		self._restart_service()
 
 	def _update_vhosts(self):

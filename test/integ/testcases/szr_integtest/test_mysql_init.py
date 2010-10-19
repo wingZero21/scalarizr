@@ -44,10 +44,12 @@ class RoleHandler:
 		
 		self.server_id = result.group('server_id')
 		self._logger.info("New server id: %s" % self.server_id)
-		self.ip = self.farm.get_public_ip(self.server_id)
+		self.ip = self.farm.get_public_ip(self.server_id, 180)
 		self._logger.info("New server's ip: %s" % self.ip)
 		
-		self.ssh = SshManager(self.ip, self.farm_key)
+		self.ssh = SshManager(self.ip, self.farm_key, 180)
+		self._logger.info('Sleeping for 15 sec while instance stands up')
+		time.sleep(15)
 		self.ssh.connect()
 		self._logger.info("Connected to instance")
 		
@@ -63,7 +65,7 @@ class RoleHandler:
 		exec_command(channel, '/etc/init.d/scalarizr stop')
 #		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
 		exec_command(channel, '/etc/init.d/scalarizr start')
-		time.sleep(2)
+		time.sleep(5)
 #		
 		
 		
@@ -76,7 +78,7 @@ class RoleHandler:
 			
 		self._logger.info('>>> Role has been successfully initialized.')
 		
-	def expect_sequence(self, channel, sequence, timeout = 60):
+	def expect_sequence(self, channel, sequence, timeout = 120):
 		for regexp in sequence:
 			ret = expect(channel, regexp, timeout)
 			self._logger.info("%s appeared in scalarizr.log", ret.group(0))
@@ -85,7 +87,7 @@ class MysqlRoleHandler(RoleHandler):
 	slaves_ssh = []
 	
 	def test_slave_init(self):
-		self._logger.info('Running slave instance')
+		self._logger.info('>>>>>> Running slave instance <<<<<<')
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		
 		out = self.scalr_ctl.exec_cronjob('Scaling')		
@@ -96,10 +98,12 @@ class MysqlRoleHandler(RoleHandler):
 		
 		slave_server_id = result.group('server_id')
 		self._logger.info("Slave server's id: %s" % slave_server_id)
-		slave_ip = self.farm.get_public_ip(slave_server_id)
+		slave_ip = self.farm.get_public_ip(slave_server_id, 180)
 		self._logger.info("Slave server's ip: %s" % slave_ip)
-	
-		slave_ssh = SshManager(slave_ip, self.farm_key)
+		
+		slave_ssh = SshManager(slave_ip, self.farm_key, 180)
+		self._logger.info('Sleeping for 15 sec while instance stands up')
+		time.sleep(15)
 		slave_ssh.connect()
 		self.slaves_ssh.append(slave_ssh)
 		
@@ -113,7 +117,7 @@ class MysqlRoleHandler(RoleHandler):
 		exec_command(channel, '/etc/init.d/scalarizr stop')
 #		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
 		exec_command(channel, '/etc/init.d/scalarizr start')
-		time.sleep(2)
+		time.sleep(5)
 
 		
 		
@@ -126,51 +130,58 @@ class MysqlRoleHandler(RoleHandler):
 			'farm-replication config created', 'Replication master is changed to host', "Message 'HostUp' delivered"]
 		
 		self.expect_sequence(channel, sequence)
-		self._logger.info('>>> Mysql slave successfully initialized')
+		self._logger.info('>>>>> Mysql slave successfully initialized <<<<<')
 		
 	def test_add_pma_users(self):
-		
+		self._logger.info('>>>>> Starting MySQL add pma users test. <<<<<')
 		channel = self.ssh.get_root_ssh_channel()
 		tail_log_channel(channel)
-		# TODO: send 'create_pma' message from scalr's interface
+		self.farm.create_pma_users()
 		sequence = ['Adding phpMyAdmin system user', 'PhpMyAdmin system user successfully added']		
 		self.expect_sequence(channel, sequence)
-		self._logger.info('>>> PhpMyAdmin system users were added.')
+		self._logger.info('>>>>> PhpMyAdmin system users were added. <<<<<')
 		
 	def test_create_mysql_backup(self):
+		self._logger.info('>>>>> Starting MySQL create backup test. <<<<<')
 		slave_ssh = self.slaves_ssh[0]
 		channel = slave_ssh.get_root_ssh_channel()
 		tail_log_channel(channel)
-		# TODO: send 'create_backup' message from scalr's interface
-		sequence = ['Dumping all databases', 'Uploading backup to S3', 'Backup files(s) uploaded to S3']
+		self.farm.create_mysql_backup()
+		sequence = ['Dumping all databases', 'Uploading backup to S3', 'Backup files\(s\) uploaded to S3']
 		self.expect_sequence(channel, sequence)
-		self._logger.info('>>> Successfully created MySQL backup.')
+		self._logger.info('>>>>> Successfully created MySQL backup. <<<<<<')
 			
 	def test_promote_to_master(self):
+		self._logger.info('>>>>> Starting MySQL promote to master test <<<<<')
 		channel = self.ssh.get_root_ssh_channel()
+		self._logger.info('Terminating MySQL master instance.')
 		exec_command(channel, 'halt')
+		self._logger.info('Sleeping for 15 sec while instance sending HostDown message')
+		time.sleep(15)
 		slave_channel = self.slaves_ssh[0].get_root_ssh_channel()
 		tail_log_channel(slave_channel)
-		self.scalr_ctl.exec_cronjob('Scalarizrmessaging')
+		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		sequence = ['Unplug EBS storage \(volume:', 'Volume [\w-]+ detached', 'Taking master EBS volume',
-				    'Taked master volume', 'Create EBS storage (volume:', 'Attaching volume [\w-]+ as device',
-				    'Volume [\w-]+ attached', 'Device [\w-]+ is available', 'Device [\w-]+ is mounted', 
-				    'farm-replication config created']
+				    'Taked master volume', 'Create EBS storage \(volume:', 'Attaching volume [\w-]+ as device',
+				    'Volume [\w-]+ attached', 'Device [\/\w-]+ is available', 'Device [\/\w-]+ is mounted', 
+				    'farm-replication config created', 'name="Mysql_PromoteToMasterResult".+<status>ok</status>',
+				     "Message 'Mysql_PromoteToMasterResult' delivered"]
 		self.expect_sequence(slave_channel, sequence, 200)
-		self._logger.info('>>> Successfully promoted to master.')
+		self._logger.info('>>> Successfully promoted to master. <<<<<')
 		
 	def test_new_master_up(self):
+		self._logger.info('>>>>> Starting MySQL promote to master test. <<<<<')
 		slave_channel = self.slaves_ssh[-1].get_root_ssh_channel()
 		tail_log_channel(slave_channel)
-		self.scalr_ctl.exec_cronjob('Scalarizrmessaging')
+		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		sequence = ['Switching replication to a new MySQL master', 'Replication switched']
 		self.expect_sequence(slave_channel, sequence)
-		self._logger.info('>>> Successfully switched to new master.')
+		self._logger.info('>>> Successfully switched to new master. <<<<<')
 				
 class TestMysqlInit(unittest.TestCase):
 
 	def setUp(self):
-		role_name = 'Test_mysql_2010_10_16_1033'
+		role_name = 'Test_mysql_2010_10_19_1726'
 		opts = {}
 		opts.update(EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
@@ -182,8 +193,8 @@ class TestMysqlInit(unittest.TestCase):
 					"Message 'HostUp' delivered"]
 		self.role_init.test_init(sequence)
 		self.role_init.test_slave_init()
-		#self.role_init.test_add_pma_users()
-		#self.role_init.test_create_mysql_backup()
+		self.role_init.test_add_pma_users()
+		self.role_init.test_create_mysql_backup()
 		self.role_init.test_slave_init()
 		self.role_init.test_promote_to_master()
 		self.role_init.test_new_master_up()				
