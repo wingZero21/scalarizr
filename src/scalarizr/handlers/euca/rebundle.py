@@ -8,7 +8,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers.ec2.rebundle import Ec2RebundleHandler, RebundleInstanceStoreStrategy, AmiManifest
 from scalarizr.handlers import HandlerError
 
-import os, logging
+import os
 from subprocess import Popen, PIPE
 from binascii import hexlify, unhexlify
 from hashlib import sha1
@@ -34,7 +34,6 @@ class EucaRebundleHandler(Ec2RebundleHandler):
 class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
 	def _bundle_image(self, name, image_file, user, destination, user_private_key_string, 
 					user_cert_string, ec2_cert_string, key=None, iv=None):
-		self._logger = logging.getLogger(__name__)
 		self._logger.info("Bundling image...")
 		Popen(['sync']).communicate()
 		

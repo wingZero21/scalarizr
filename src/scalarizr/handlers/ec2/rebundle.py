@@ -90,7 +90,6 @@ class Ec2RebundleHandler(Handler):
 	def __init__(self, ebs_strategy_cls=None, instance_store_strategy_cls=None):
 		self._log_hdlr = RebundleLogHandler()		
 		self._logger = logging.getLogger(__name__)
-		self._logger.addHandler(self._log_hdlr)
 		
 		self._ebs_strategy_cls = ebs_strategy_cls or RebundleEbsStrategy
 		self._instance_store_strategy_cls = instance_store_strategy_cls or RebundleInstanceStoreStrategy
@@ -134,6 +133,7 @@ class Ec2RebundleHandler(Handler):
 		strategy = None
 		try:
 			self._log_hdlr.bundle_task_id = message.bundle_task_id
+			self._logger.addHandler(self._log_hdlr)			
 			
 			# Obtain role name
 			role_name = message.role_name.encode("ascii")
@@ -225,6 +225,7 @@ class Ec2RebundleHandler(Handler):
 			
 		finally:
 			self._log_hdlr.bundle_task_id = None
+			self._logger.removeHandler(self._log_hdlr)
 			if strategy:
 				strategy.cleanup()
 				
@@ -742,9 +743,9 @@ if disttool.is_linux():
 		
 		_volume = None
 		path = None
-		mpoint = '/mnt/img-mnt'		
+		mpoint = '/mnt/img-mnt'	
 		excludes = None
-		
+		_excluded_mpoints = None
 		
 		_mtab = None
 		
@@ -759,11 +760,19 @@ if disttool.is_linux():
 			self.excludes.update(excludes or ()) 	# Add user input
 			self.excludes.add(self.mpoint) 			# Add image mount point
 			self.excludes.add(self.path) 			# Add image path
-			# Add mounted non-local filesystems under volume
+			# Add all mounted filesystems, except bundle volume 
+			self._excluded_mpoints = (entry.mpoint
+					for entry in self._mtab.list_entries() 
+					if entry.mpoint.startswith(self._volume) and entry.mpoint != self._volume)
+			self.excludes.update(self._excluded_mpoints)
+			'''
+			# Add mounted non-local filesystems under volume			
 			self.excludes.update(set(entry.mpoint
 					for entry in self._mtab.list_entries() 
 					if entry.mpoint.startswith(self._volume) and \
-					entry.fstype not in fstool.Mtab.LOCAL_FS_TYPES)) 
+					entry.fstype not in fstool.Mtab.LOCAL_FS_TYPES))
+			'''
+
 		
 		def make(self):
 			self._create_image()
@@ -806,19 +815,21 @@ if disttool.is_linux():
 		
 		
 		def _make_special_dirs(self):
-			self._logger.info("Making special directories")
-			
-			#special_dirs = set(self.SPECIAL_DIRS)
-			#special_dirs.update(set(entry.mpoint for entry in self._mtab.list_entries(reload=True)))
+			self._logger.info('Making special directories')
 			
 			# Create empty special dirs
 			for dir in self.SPECIAL_DIRS:
 				spec_dir = self.mpoint + dir
 				if os.path.exists(dir) and not os.path.exists(spec_dir):
-					self._logger.debug("Create spec dir %s", spec_dir)
+					self._logger.debug("Create spec dir %s", dir)
 					os.makedirs(spec_dir)
 					if dir == '/tmp':
 						os.chmod(spec_dir, 01777)
+						
+			# Create excluded mpoints dirs
+			for dir in self._excluded_mpoints:
+				self._logger.debug('Create mpoint dir %s', dir)
+				os.makedirs(self.mpoint + dir)
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
 			dev_dir = self.mpoint + "/dev"
