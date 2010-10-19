@@ -164,33 +164,32 @@ class CnfController(object):
 		for opt in self._manifest:
 			path = opt.name if not opt.section else '%s/%s' % (opt.section, opt.name)
 			
+			try:
+				value = conf.get(path)
+			except NoPathError:
+				value = ''
+			
 			if opt.name in preset.settings:
 				new_value = preset.settings[opt.name]
 				
 				# Skip unsupported
 				if ver and opt.supported_from and opt.supported_from > ver:
-					#self._logger.debug("Skip option '%s'. Supported from %s; installed %s" % 
-					#		(opt.name, opt.supported_from, ver))
+					self._logger.debug("Skipping option '%s' supported from %s; installed %s" % 
+							(opt.name, opt.supported_from, ver))
 					continue
 								
 				if not opt.default_value:
 					#self._logger.debug("Option '%s' has no default value" % opt.name)
-					pass
-					
+					pass		
 				elif not new_value or new_value == opt.default_value:
-					#self._logger.debug("Remove option '%s'. Equal to default" % opt.name)
+					self._logger.debug("Option '%s' equal to default. Removing." % opt.name)
 					conf.remove(path)
 					self._after_remove_option(opt)				
 					continue	
 				
-				try:
-					value = conf.get(path)
-				except NoPathError:
-					value = ''
-				
 				#self._logger.debug("Check that value changed. %s %s", value, new_value)
-				if value == new_value:
-					#self._logger.debug("Skip option '%s'. Not changed" % opt.name)
+				if new_value == value:
+					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 					pass
 				else:
 					if self.definitions and new_value in self.definitions:
@@ -200,8 +199,9 @@ class CnfController(object):
 					conf.set(path, new_value, force=True)
 					self._after_set_option(opt, new_value)
 			else:
-				#self._logger.debug("Remove option '%s'. Not found in preset" % opt.name)	
-				conf.remove(path)
+				if value:
+					self._logger.debug("Removing option '%s'. Not found in preset" % opt.name)	
+					conf.remove(path)
 				self._after_remove_option(opt)
 		
 		self._after_apply_preset()						
