@@ -117,10 +117,15 @@ class CnfController(object):
 		for variable in self._manifest:
 			if variable.inaccurate:
 				continue
-
+			
+			#if variable does not exist in local preset:
 			if not that.settings.has_key(variable.name):
 				if not variable.default_value or variable.default_value == this.settings[variable.name]:
 					continue
+			#if variable does not exist in QueryEnv preset:	
+			elif not this.settings.has_key(variable.name):
+				if not variable.default_value or variable.default_value == that.settings[variable.name]:
+					continue			
 					
 			if that.settings[variable.name] != this.settings[variable.name]:
 				return False
