@@ -193,7 +193,7 @@ class CnfController(object):
 				if not opt.default_value:
 					#self._logger.debug("Option '%s' has no default value" % opt.name)
 					pass		
-				elif not new_value or new_value == opt.default_value:
+				elif new_value == opt.default_value and value:
 					self._logger.debug("Option '%s' equal to default. Removing." % opt.name)
 					conf.remove(path)
 					self._after_remove_option(opt)				
