@@ -21,21 +21,23 @@ class ApacheRoleHandler(RoleHandler):
 	
 	def test_configure(self):
 		self.domain = 'dima3.com'
+		farm_name = 'dima@us-east'
 		document_root = os.path.join('/var/www/',self.domain)
+		
 		channel = self.ssh.get_root_ssh_channel()
 		exec_command(channel, 'mkdir %s' % document_root)
 		exec_command(channel, 'echo "Test1" > %s/index.html' % document_root)
-		exec_command(channel, 'echo "127.0.0.1 %s" >> /etc/hosts' % self.domain)
+		exec_command(channel, 'echo "127.0.0.1 www.%s" >> /etc/hosts' % self.domain)
 
 		self.sel.open('/apache_vhost_add.php')		
 		self.sel.type('domain_name', self.domain)
-		self.sel.type('farm_target', 'dima@us-east-1')
+		self.sel.type('farm_target', farm_name)
 		self.sel.uncheck('isSslEnabled')
 		self.sel.type('document_root_dir', document_root)
 		self.sel.type('server_admin', 'admin@%s' % self.domain)		
 		self.sel.click('button_js')
 		
-		out = exec_command(channel, 'curl %s' % self.domain)
+		out = exec_command(channel, 'curl www.%s' % self.domain)
 		if not 'Test1' in out:
 			raise Exception('%s returned data different from expected: %s' % (self.domain, out))
 		
@@ -48,6 +50,7 @@ class ApacheRoleHandler(RoleHandler):
 			self.sel.click('//span[text()="Delete"]')
 			self.sel.click('//button[text()="Yes"]')
 		self.farm.terminate()
+		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		
 		
 
@@ -60,6 +63,8 @@ class TestApacheInit(unittest.TestCase):
 	def test_init(self):
 		sequence = ['HostInitResponse', "Hook on 'service_configured'", "Message 'HostUp' delivered"]
 		self.test_role.test_init(sequence)
+		self.test_role.scalr_ctl.exec_cronjob('ScalarizrMessaging')
+		self.test_role.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		self.test_role.test_configure()
 	
 	def tearDown(self):
