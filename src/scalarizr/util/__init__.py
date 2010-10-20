@@ -125,10 +125,8 @@ def system(args, shell=True):
 	out, err = p.communicate()
 	if out:
 		logger.debug("stdout: " + out)
-		#print "stdout: " + out
 	if err:
-		logger.warning("stderr: " + err)
-		#print "stderr: " + err
+		logger.debug("stderr: " + err)
 	return out, err, p.returncode
 
 

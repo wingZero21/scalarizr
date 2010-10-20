@@ -17,11 +17,13 @@ from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import system, cached, firstmatched,\
 	validators, software, initdv2
 from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util.software import whereis
 
 # Stdlibs
 import os, re, logging, shutil
 from telnetlib import Telnet
 from datetime import datetime
+
 
 
 
@@ -43,10 +45,12 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
 		pid_file = None
 		try:
-			out = system("nginx -V")[1]
-			m = re.search("--pid-path=(.*?)\s", out)
-			if m:
-					pid_file = m.group(1)
+			nginx = whereis('nginx')
+			if nginx:
+				out = system('%s -V' % nginx[0])[1]
+				m = re.search("--pid-path=(.*?)\s", out)
+				if m:
+						pid_file = m.group(1)
 		except:
 			pass
 		

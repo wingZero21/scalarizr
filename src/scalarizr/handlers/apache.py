@@ -29,6 +29,7 @@ BEHAVIOUR = BuiltinBehaviours.APP
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR + '.ini'
 APP_CONF_PATH = 'apache_conf_path'
+
 class ApacheInitScript(initdv2.ParametrizedInitScript):
 	
 	def __init__(self):
@@ -42,8 +43,8 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
 		pid_file = None
 		
-		env_vars = read_file("/etc/apache2/envvars")
-		if env_vars:
+		if os.path.exists("/etc/apache2/envvars"):
+			env_vars = read_file("/etc/apache2/envvars")
 			m = re.search("export\sAPACHE_PID_FILE=(.*)", env_vars)
 			if m:
 				pid_file = m.group(1)
