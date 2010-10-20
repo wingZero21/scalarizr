@@ -5,6 +5,7 @@ import re
 import select
 from threading import Thread, Event
 import paramiko
+import socket
 
 class SshPool:
 	def __new__(self):
@@ -39,6 +40,7 @@ class SshManager:
 
 	def __init__(self, host, key, timeout = 90, key_pass = None):
 		self.host = host
+		self.ip   = socket.gethostbyname(host)
 		key_file = os.path.expanduser(key)
 		if not os.path.exists(key_file):
 			raise Exception("Key file '%s' doesn't exist", key_file)

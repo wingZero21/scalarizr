@@ -18,7 +18,7 @@ from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME, ebstool
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError,\
 	ParseError
 from scalarizr.util import fstool, system, cryptotool, disttool,\
-		 filetool, firstmatched, cached, validators, initdv2, software
+		 filetool, firstmatched, cached, validators, initdv2, software, get_free_devname
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
@@ -254,15 +254,15 @@ class MysqlCnfController(CnfController):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
-#		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
+		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
 		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql') #TRUE,FALSE
 
 	def _start_service(self):
-#		if not hasattr(self, '_mysql_cnf_err_re'):
-#			self._mysql_cnf_err_re = re.compile('Unknown option|ERROR')
-#		out = system('%s --help 1>/dev/null' % self._mysqld_path)
-#		if re.search(self._mysql_cnf_err_re, out):
-#			raise Exception('Error in mysql configuration detected. Output:\n%s' % out)
+		if not hasattr(self, '_mysql_cnf_err_re'):
+			self._mysql_cnf_err_re = re.compile('Unknown option|ERROR')
+		stderr = system('%s --help' % self._mysqld_path)[1]
+		if re.search(self._mysql_cnf_err_re, stderr):
+			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
 		
 		self._logger.info("Starting %s" % self.behaviour)
 		
@@ -688,7 +688,7 @@ class MysqlHandler(ServiceCtlHanler):
 				self._logger.error("Promote to master failed. %s", e)
 
 				# Get back slave storage
-				self._plug_storage(slave_vol_id, self._storage_path)
+				self._plug_storage(slave_vol_id, self._storage_path, master = False)
 				
 				if master_vol and master_vol.id != master_vol_id:
 					ec2_conn.delete_volume(master_vol.id)
@@ -920,7 +920,7 @@ class MysqlHandler(ServiceCtlHanler):
 			message.mysql = dict(volume_id = ebs_volume.id)
 			self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
 			
-			self._plug_storage(None, self._storage_path, vol=ebs_volume)
+			self._plug_storage(None, self._storage_path, vol=ebs_volume, master=False)
 
 			
 		self._stop_service()			
@@ -966,15 +966,15 @@ class MysqlHandler(ServiceCtlHanler):
 			mysql_password=self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 		)
 		
-	def _plug_storage(self, vol_id, mnt_point, vol=None):
+	def _plug_storage(self, vol_id, mnt_point, vol=None, master=True):
 		# Getting free letter for device
-		dev_list = os.listdir('/dev')
-		for letter in map(chr, range(111, 123)):
-			device = 'sd'+letter
-			if not device in dev_list:
-				devname = '/dev/'+device
-				break
-
+		devname = get_free_devname()
+		if not master:
+			while True:
+				devname = devname[:-1]+ chr(ord(devname[-1:])+1)
+				if not os.path.exists(devname):
+					break
+		
 		self._logger.info("Create EBS storage (volume: %s, devname: %s) and mount to %s", 
 				vol.id if vol else vol_id, devname, mnt_point)
 

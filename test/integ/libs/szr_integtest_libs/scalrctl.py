@@ -194,20 +194,36 @@ class FarmUI:
 			raise Exception('Farm %s has been already terminated' % self.farm_id)
 		
 	def get_public_ip(self, server_id, timeout = 45):
+		search_str = '//table[@id="Webta_InnerTable_Platform specific details"]/tbody/tr[8]/td[2]'
+		try:
+			public_ip = self._get_server_info(server_id, search_str, timeout)
+		except:
+			raise FarmUIError("Can't retrieve instance's public ip from user interface")
+		self.servers.append(public_ip)
+		return public_ip
+	
+	def get_instance_id(self, server_id, timeout = 45):
+		search_str = '//table[@id="Webta_InnerTable_Platform specific details"]/tbody/tr[2]/td[2]'
+		try:
+			inst_id = self._get_server_info(server_id, search_str, timeout)
+		except:
+			raise FarmUIError("Can't retrieve instance id from user interface")
+		return inst_id		
+		
+	def _get_server_info(self, server_id, search_str ,timeout):
 		start_time = time.time()
 		while time.time() - start_time < timeout:
 			self.sel.open('server_view_extended_info.php?server_id=%s' % server_id)
 			self.sel.wait_for_page_to_load(15000)
 			try:
-				public_ip = self.sel.get_text('//table[@id="Webta_InnerTable_Platform specific details"]/tbody/tr[8]/td[2]').strip()
+				server_info = self.sel.get_text(search_str).strip()
 			except:
 				raise FarmUIError('Server %s doesn\'t exist')
-			if public_ip:
+			if server_info:
 				break
 		else:
-			raise FarmUIError("Cannot retrieve server's public ip. Server id: %s " % server_id)
-		self.servers.append(public_ip)
-		return public_ip
+			raise FarmUIError("Cannot retrieve server's information. Server id: %s " % server_id)
+		return server_info
 	
 	def create_mysql_backup(self):
 		self._open_mysql_status_page()
@@ -304,7 +320,7 @@ class ScalrCtl:
 		if not os.path.isdir(log_path):
 			os.makedirs(log_path)		
 
-	def exec_cronjob(self, name):
+	def exec_cronjob(self, name, farmid=None):
 		if self.channel.closed:
 			print "channel was closed. getting new one."
 			self.channel = self.ssh.get_root_ssh_channel()

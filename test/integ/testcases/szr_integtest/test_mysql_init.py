@@ -12,6 +12,7 @@ import logging
 import re
 import unittest
 import time
+from boto.ec2.connection import EC2Connection
 
 class RoleHandler:
 	
@@ -25,6 +26,7 @@ class RoleHandler:
 				'\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)' \
 				% (self.farm_id, self.role_name), re.M)
 		self.scalr_ctl = ScalrCtl()
+
 	
 	def test_init(self, sequence):
 		self.farm = FarmUI(get_selenium())
@@ -44,7 +46,8 @@ class RoleHandler:
 		
 		self.server_id = result.group('server_id')
 		self._logger.info("New server id: %s" % self.server_id)
-		self.ip = self.farm.get_public_ip(self.server_id, 180)
+		self.ip        = self.farm.get_public_ip(self.server_id, 180)
+		self.inst_id   = self.farm.get_instance_id(self.server_id, 180)
 		self._logger.info("New server's ip: %s" % self.ip)
 		
 		self.ssh = SshManager(self.ip, self.farm_key, 180)
@@ -54,29 +57,27 @@ class RoleHandler:
 		self._logger.info("Connected to instance")
 		
 		# Temporary solution
-		self._logger.info("Deploying dev branch")
-		deployer = ScalarizrDeploy(self.ssh)
-		deployer.apply_changes_from_tarball()
-		del(deployer)		
-		self.ssh.close_all_channels()
+		#self._logger.info("Deploying dev branch")
+		#channel = self.ssh.get_root_ssh_channel()
+		#exec_command(channel, '/etc/init.d/scalarizr stop')
+		#exec_command(channel, 'echo "" > /var/log/scalarizr.log')
+		#deployer = ScalarizrDeploy(self.ssh)
+		#deployer.apply_changes_from_tarball()
+		#del(deployer)		
+		#self.ssh.close_all_channels()
 #		
 		channel = self.ssh.get_root_ssh_channel()
 ##
-		exec_command(channel, '/etc/init.d/scalarizr stop')
 #		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
-		exec_command(channel, '/etc/init.d/scalarizr start')
-		time.sleep(5)
+		#exec_command(channel, '/etc/init.d/scalarizr start')
 #		
-		
-		
-		
 		tail_log_channel(channel)
 		
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 	
 		self.expect_sequence(channel, sequence)
 			
-		self._logger.info('>>> Role has been successfully initialized.')
+		self._logger.info('>>>>>> Role has been successfully initialized. <<<<<<')
 		
 	def expect_sequence(self, channel, sequence, timeout = 120):
 		for regexp in sequence:
@@ -108,19 +109,15 @@ class MysqlRoleHandler(RoleHandler):
 		self.slaves_ssh.append(slave_ssh)
 		
 		# Temporary solution
-		deployer = ScalarizrDeploy(slave_ssh)
-		deployer.apply_changes_from_tarball()
-		del(deployer)		
-		slave_ssh.close_all_channels()		
 		channel = slave_ssh.get_root_ssh_channel()
-#
-		exec_command(channel, '/etc/init.d/scalarizr stop')
-#		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
-		exec_command(channel, '/etc/init.d/scalarizr start')
-		time.sleep(5)
-
-		
-		
+		#exec_command(channel, '/etc/init.d/scalarizr stop')
+		#exec_command(channel, 'echo "" > /var/log/scalarizr.log')
+		#deployer = ScalarizrDeploy(slave_ssh)
+		#deployer.apply_changes_from_tarball()
+		#del(deployer)
+		#slave_ssh.close_all_channels()
+		#channel = slave_ssh.get_root_ssh_channel()
+		#exec_command(channel, '/etc/init.d/scalarizr start')	
 		
 		tail_log_channel(channel)
 		
@@ -153,9 +150,15 @@ class MysqlRoleHandler(RoleHandler):
 			
 	def test_promote_to_master(self):
 		self._logger.info('>>>>> Starting MySQL promote to master test <<<<<')
-		channel = self.ssh.get_root_ssh_channel()
-		self._logger.info('Terminating MySQL master instance.')
-		exec_command(channel, 'halt')
+		self._logger.info('Terminating MySQL master instance.')		
+		try:
+			ec2_key_id = config.get('./boto-ec2/ec2_key_id')
+			ec2_key    = config.get('./boto-ec2/ec2_key')
+		except:
+			raise Exception('Configuration file doesn\'t contain ec2 credentials')
+		ec2 = EC2Connection(ec2_key_id, ec2_key)
+		ec2.terminate_instances([self.inst_id])				
+		
 		self._logger.info('Sleeping for 15 sec while instance sending HostDown message')
 		time.sleep(15)
 		slave_channel = self.slaves_ssh[0].get_root_ssh_channel()
@@ -181,7 +184,7 @@ class MysqlRoleHandler(RoleHandler):
 class TestMysqlInit(unittest.TestCase):
 
 	def setUp(self):
-		role_name = 'Test_mysql_2010_10_19_1726'
+		role_name = 'Test_mysql_2010_10_20_1348'
 		opts = {}
 		opts.update(EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
