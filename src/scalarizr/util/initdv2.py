@@ -109,11 +109,11 @@ class ParametrizedInitScript(InitScript):
 			for sock in self.socks:
 				wait_sock(sock)
 			
-		if self.pid_file:
-			if (action == "start" or action == "restart") and not os.path.exists(self.pid_file):
-				raise InitdError("Cannot start %s. pid file %s doesn't exists" % (self.name, self.pid_file))
-			if action == "stop" and os.path.exists(self.pid_file):
-				raise InitdError("Cannot stop %s. pid file %s still exists" % (self.name, self.pid_file))	
+#		if self.pid_file:
+#			if (action == "start" or action == "restart") and not os.path.exists(self.pid_file):
+#				raise InitdError("Cannot start %s. pid file %s doesn't exists" % (self.name, self.pid_file))
+#			if action == "stop" and os.path.exists(self.pid_file):
+#				raise InitdError("Cannot stop %s. pid file %s still exists" % (self.name, self.pid_file))	
 			
 		return True
 	
