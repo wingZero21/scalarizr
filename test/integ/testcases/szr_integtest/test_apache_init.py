@@ -8,31 +8,46 @@ from szr_integtest import get_selenium, config
 from szr_integtest_libs import expect, SshManager, tail_log_channel, exec_command
 from szr_integtest_libs.scalrctl import FarmUI, ScalrCtl, login
 import logging
+import os
 import re
 from szr_integtest.test_mysql_init import RoleHandler
 
 class ApacheRoleHandler(RoleHandler):
 	
+	def __init__(self, role_name, role_opts):
+		self.sel = get_selenium()
+		login(self.sel)
+		RoleHandler.__init__(self, role_name, role_opts)
+	
 	def test_configure(self):
-		document_root = '/var/www/dima.com'
+		self.domain = 'dima3.com'
+		document_root = os.path.join('/var/www/',self.domain)
 		channel = self.ssh.get_root_ssh_channel()
 		exec_command(channel, 'mkdir %s' % document_root)
 		exec_command(channel, 'echo "Test1" > %s/index.html' % document_root)
-		exec_command(channel, 'echo "127.0.0.1 dima.com" >> /etc/hosts')
-		sel = get_selenium()
-		login(sel)
-		sel.open('/apache_vhost_add.php')
+		exec_command(channel, 'echo "127.0.0.1 %s" >> /etc/hosts' % self.domain)
+
+		self.sel.open('/apache_vhost_add.php')		
+		self.sel.type('domain_name', self.domain)
+		self.sel.type('farm_target', 'dima@us-east-1')
+		self.sel.uncheck('isSslEnabled')
+		self.sel.type('document_root_dir', document_root)
+		self.sel.type('server_admin', 'admin@%s' % self.domain)		
+		self.sel.click('button_js')
 		
-		sel.type('domain_name', 'dima.com')
-		sel.type('farm_target', 'dima@us-east-1')
-		sel.uncheck('isSslEnabled')
-		sel.type('document_root_dir', document_root)
-		sel.type('server_admin', 'admin@dima.com')		
-		sel.click('button_js')
-		
-		out = exec_command(channel, 'curl dima.com')
+		out = exec_command(channel, 'curl %s' % self.domain)
 		if not 'Test1' in out:
-			raise Exception('Blablabla')
+			raise Exception('%s returned data different from expected: %s' % (self.domain, out))
+		
+	
+	def cleanup(self):		
+		if hasattr(self, 'domain'):
+			self.sel.open('/apache_vhosts_view.php')
+			self.sel.click('//em[text()="%s"]/../../dt[last()]/em/input' % self.domain)	
+			self.sel.click('//button[text()="With selected"]')
+			self.sel.click('//span[text()="Delete"]')
+			self.sel.click('//button[text()="Yes"]')
+		self.farm.terminate()
 		
 		
 
@@ -48,7 +63,7 @@ class TestApacheInit(unittest.TestCase):
 		self.test_role.test_configure()
 	
 	def tearDown(self):
-		pass
+		self.test_role.cleanup()
 	
 if __name__ == "__main__":
 	unittest.main()

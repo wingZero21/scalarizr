@@ -36,7 +36,7 @@ class TestVhosts(unittest.TestCase):
 		self.sel.type('server_admin', e_mail)
 		self.sel.click('button_js')
 		
-	def test_configure_ssl(self):
+	def _test_configure_ssl(self):
 		farm = 'dima@us-east-1'
 		domain = 'ssl.dima.com'
 		document_root = '/var/www/ssl.dima.com/'
@@ -57,8 +57,8 @@ class TestVhosts(unittest.TestCase):
 		#TODO: login to server
 		index_file = os.path.join(document_root, 'index.html')
 		msg = "hello from %s!" % index_file
-		vhost_cmd = 'mkdir %s; echo  > %s' \
-				% (document_root, domain)
+		vhost_cmd = 'mkdir %s; echo %s > %s' \
+				% (document_root, msg, domain)
 		hosts_line = "echo '\n127.0.0.1 %s\n' >> /etc/hosts" % domain
 		curl_cmd = "curl http://127.0.0.1"
 		#TODO:
