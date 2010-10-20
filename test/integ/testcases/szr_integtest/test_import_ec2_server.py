@@ -156,7 +156,7 @@ class ImportEc2Server:
 		else:
 			expect(channel, "Make EBS volume /dev/sd.+ from volume /", 					240)
 
-		expect(    channel, "Volume bundle complete!", 									1200)
+		expect(    channel, "Volume bundle complete!", 									2400)
 		self._logger.info("Volume with / bundled")
 		
 
