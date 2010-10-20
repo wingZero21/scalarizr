@@ -763,7 +763,7 @@ if disttool.is_linux():
 			self.excludes.add(self.mpoint) 			# Add image mount point
 			self.excludes.add(self.path) 			# Add image path
 			# Add all mounted filesystems, except bundle volume 
-			self._excluded_mpoints = (entry.mpoint
+			self._excluded_mpoints = list(entry.mpoint
 					for entry in self._mtab.list_entries() 
 					if entry.mpoint.startswith(self._volume) and entry.mpoint != self._volume)
 			self.excludes.update(self._excluded_mpoints)
