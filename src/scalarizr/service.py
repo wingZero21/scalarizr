@@ -93,6 +93,7 @@ class CnfPresetStore:
 		
 		
 class CnfController(object):
+	_logger = None
 	behaviour = None
 
 	_config_path = None
@@ -141,7 +142,7 @@ class CnfController(object):
 
 	def current_preset(self):
 		self._logger.debug('Getting %s current configuration preset', self.behaviour)
-		preset = CnfPreset(name='current', behaviour = self.behaviour)
+		preset = CnfPreset(name='System', behaviour = self.behaviour)
 		
 		conf = Configuration(self._config_format)
 		conf.read(self._config_path)
@@ -255,6 +256,7 @@ class CnfController(object):
 		file_modified = tuple(time.localtime(os.path.getmtime(path))) if os.path.exists(path) else None
 		
 		if not file_modified or url_last_modified > file_modified:
+			self._logger.debug('Fetching %s', manifest_url)
 			response = urllib2.urlopen(manifest_url)
 			data = response.read()
 			if data:

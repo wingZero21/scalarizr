@@ -277,7 +277,7 @@ class MysqlCnfController(CnfController):
 	def current_preset(self):
 		self._logger.debug('Getting current MySQL preset')
 		mysql = None
-		preset = CnfPreset(name='last successful', behaviour=BEHAVIOUR)
+		preset = CnfPreset(name='System', behaviour=BEHAVIOUR)
 		self._start_service()
 		try:
 			mysql = self._get_connection()
@@ -690,6 +690,7 @@ class MysqlHandler(ServiceCtlHanler):
 				# Get back slave storage
 				self._plug_storage(slave_vol_id, self._storage_path, master = False)
 				
+				# Delete unborn master volume
 				if master_vol and master_vol.id != master_vol_id:
 					ec2_conn.delete_volume(master_vol.id)
 				
@@ -1396,7 +1397,7 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.debug("Device %s is mounted to %s", devname, mpoint)
 		except fstool.FstoolError, e:
 			if fstool.FstoolError.NO_FS == e.code:
-				self._logger.warning("Mount failed with NO_FS error. " 
+				self._logger.debug("Mount failed with NO_FS error. " 
 						+ "Creating file system on device %s and mount it again", devname)
 				fstool.mount(devname, mpoint, make_fs=True, auto_mount=True)
 			else:

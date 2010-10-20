@@ -10,9 +10,12 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours
+from scalarizr.handlers.mysql import MysqlMessages
 
 # Stdlibs
 import logging, os
+import shutil
+
 
 # TODO: Configurator
 # TODO: handle IPAddressChanged
@@ -43,7 +46,8 @@ class IpListBuilder(Handler):
 		return message.name == Messages.HOST_UP \
 			or message.name == Messages.HOST_DOWN \
 			or message.name == Messages.REBOOT_START \
-			or message.name == Messages.REBOOT_FINISH
+			or message.name == Messages.REBOOT_FINISH \
+			or message.name == MysqlMessages.NEW_MASTER_UP
 			
 	def on_before_host_up(self, message):
 		"""
@@ -83,6 +87,16 @@ class IpListBuilder(Handler):
 					modfn=self._remove_file, 
 					replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
 
+	def on_Mysql_NewMasterUp(self, message):
+		ip = message.local_ip or message.remote_ip
+		if ip:
+			self._remove_file(os.path.join(self._base_path, 'mysql-slave', ip))
+
+			master_path = os.path.join(self._base_path, 'mysql-master')
+			shutil.rmtree(master_path)
+			self._create_dir(master_path)
+			self._create_file(os.path.join(master_path, ip))
+
 	on_RebootStart = on_HostDown
 	
 	on_RebootFinish = on_HostUp 				
@@ -105,7 +119,7 @@ class IpListBuilder(Handler):
 		if not os.path.exists(d):
 			try:
 				self._logger.debug("Create dir %s", d)
-				os.makedirs(d)
+				os.makedirs(d, 0644)
 			except OSError, x:
 				self._logger.exception(x)
 	
@@ -114,6 +128,7 @@ class IpListBuilder(Handler):
 		try:
 			self._logger.debug("Touch file %s", f)
 			open(f, 'w').close()
+			os.chmod(f, 0644)
 		except OSError, x:
 			self._logger.error(x)
 	

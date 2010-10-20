@@ -94,7 +94,7 @@ class MemcachedCnfController(CnfController):
 	
 	def current_preset(self):
 		self._logger.debug('Getting current Memcached preset')	
-		preset = CnfPreset(name='current')
+		preset = CnfPreset(name='System')
 		
 		vars = {}
 		

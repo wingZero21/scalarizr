@@ -182,7 +182,7 @@ class ServiceCtlHanler(Handler):
 		result.behaviour = message.behaviour
 		
 		# Obtain current configuration preset
-		if message.reset_to_defaults:
+		if message.reset_to_defaults == '1':
 			new_preset = self._preset_store.load(PresetType.DEFAULT)
 		else:
 			new_preset = self._obtain_current_preset()
@@ -191,7 +191,7 @@ class ServiceCtlHanler(Handler):
 		# Apply current preset
 		try:
 			self._cnf_ctl.apply_preset(new_preset)
-			if message.restart_service:
+			if message.restart_service == '1':
 				self._start_service_with_preset(new_preset)
 			result.status = 'ok'
 		except (BaseException, Exception), e:
@@ -236,7 +236,7 @@ class ServiceCtlHanler(Handler):
 		if cur_preset.name == 'default':
 			try:
 				cur_preset = self._preset_store.load(PresetType.DEFAULT)
-			except OSError, e:
+			except IOError, e:
 				if e.errno == 2:
 					cur_preset = self._cnf_ctl.current_preset()
 					self._preset_store.save(cur_preset, PresetType.DEFAULT)

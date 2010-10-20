@@ -50,7 +50,7 @@ class MtxTableImpl(MibTable):
 		if self._last_request_time is None or now - self._last_request_time > self.CACHE_TIME:
 			self._last_request_time = now
 			# Update with new values
-			mibBuilder.mibSymbols['SCALING-METRICS-MIB'] = values()
+			mibBuilder.mibSymbols['__SCALING-METRICS-MIB'] = values()
 		return MibTable.getNextNode(self, name, idx)
 
 
@@ -198,4 +198,4 @@ def update_metric(queue, index, ret):
 	})
 	
 
-mibBuilder.mibSymbols["SCALING-METRICS-MIB"] = values()
+mibBuilder.mibSymbols["__SCALING-METRICS-MIB"] = values()
