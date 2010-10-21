@@ -15,6 +15,7 @@ DISTR_DETECTION_STRING = "python -c \"import platform; d = platform.dist(); prin
 print int((d[0].lower() == 'fedora' or (d[0].lower() == 'redhat' and d[2].lower() == 'werewolf')) and d[1].split('.')[0])\""
 EPEL_PACKAGE = "http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm"
 SZR_PATH = os.path.realpath(os.path.join(os.path.dirname(__file__), '../../../../src/scalarizr'))
+SHARE_PATH = os.path.realpath(os.path.join(os.path.dirname(__file__), '../../../../share'))
 
 class RepoType:
 	NIGHTLY_BUILD = 'nightly'	
@@ -138,6 +139,18 @@ class ScalarizrDeploy:
 		out = exec_command(self.channel, cmd)
 		if not 'Exported revision' in out:
 			raise Exception('Svn export failed')
+		
+		# Export share
+		share_path = '/usr/share/scalr'
+		exec_command(self.channel, 'rm -rf ' + share_path)
+		cmd = 'echo yes | '
+		cmd += 'svn export %s %s' % (os.path.join(svn_repo, 'share'), share_path)
+		cmd += (' --username "%s" ' % svn_user) if svn_user else ''
+		cmd += (' --password "%s" ' % svn_password) if svn_password else ''
+		out = exec_command(self.channel, cmd)
+		if not 'Exported revision' in out:
+			raise Exception('Svn export failed')
+		
 
 	def apply_changes_from_tarball(self):
 
@@ -145,6 +158,7 @@ class ScalarizrDeploy:
 		file_path = '/tmp/' + file
 		tarball = tarfile.open(file_path , 'w:gz')
 		tarball.add(SZR_PATH, os.path.basename(SZR_PATH))
+		tarball.add(SHARE_PATH, os.path.basename(SHARE_PATH))
 		tarball.close()
 		
 		sftp = self.ssh.get_sftp_client()
@@ -157,6 +171,7 @@ class ScalarizrDeploy:
 		scalarizr_path = self.get_scalarizr_path()
 		exec_command(self.channel, 'rm -rf ' + scalarizr_path)
 		exec_command(self.channel, 'tar -xzf ' + file_path + ' -C '+ os.path.dirname(scalarizr_path))
+		exec_command(self.channel, 'mv ' + os.path.dirname(scalarizr_path) + '/share /usr/share/scalr')
 				
 		
 	def detect_distr(self):
