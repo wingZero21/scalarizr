@@ -34,8 +34,19 @@ class ImportEc2Server:
 		self.scalr_ctl = ScalrCtl()
 
 	def _install_software(self, channel, distr):
-		pass
-	#temporary!
+		self._logger.info("Installing screen")
+		if distr == 'debian':
+			out = exec_command(channel, 'apt-get -y install screen', 240)
+			error = re.search('^E:\s*(?P<err_text>.+?)$', out, re.M)
+			if error:
+				raise Exception("Can't install screen package: '%s'" % error.group('err_text'))		
+
+		else:
+			out = exec_command(channel, 'yum -y install screen', 240)
+			if not re.search('Complete!|Nothing to do', out):
+				raise Exception('Cannot install screen %s' % out)
+			exec_command(channel, 'chmod 777 /var/run/screen')
+
 	def _change_behaviour(self, import_server_str):
 		return re.sub('behaviour=[\w-]*', 'behaviour=mysql', import_server_str)
 	
@@ -126,7 +137,7 @@ class ImportEc2Server:
 		#temporary!
 		import_server_str = self._change_behaviour(import_server_str)
 
-		import_server_str += ' &'
+		#import_server_str += ' &'
 		channel = sshmanager.get_root_ssh_channel()
 		
 		self._logger.info("Hacking configuration files")
@@ -139,7 +150,7 @@ class ImportEc2Server:
 		self._install_software(channel, distr)
 		
 		self._logger.info("Running scalarizr with import options")
-		exec_command(channel, import_server_str)
+		exec_command(channel, 'screen -md %s' % import_server_str)
 		# Sleep for a while for scalarizr initializing
 		time.sleep(2)
 		tail_log_channel(channel)

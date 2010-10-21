@@ -28,6 +28,8 @@ class ImportMysqlServer(ImportEc2Server):
 			if not re.search('Complete!|Nothing to do', out):
 				raise Exception('Cannot install mysql %s' % out)
 			
+		ImportEc2Server._install_software(self, channel, distr)
+
 	def _import_server(self, role_name):
 		return import_server(get_selenium(), ScalrConsts.Platforms.PLATFORM_EC2 ,\
 			ScalrConsts.Behaviours.BEHAVIOUR_MYSQL, self.ip_address, role_name)

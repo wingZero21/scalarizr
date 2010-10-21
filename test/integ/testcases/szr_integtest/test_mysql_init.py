@@ -72,7 +72,8 @@ class RoleHandler:
 		#exec_command(channel, '/etc/init.d/scalarizr start')
 #		
 		tail_log_channel(channel)
-		
+		time.sleep(5)
+		expect(channel , "Message 'HostInit' delivered", 90)
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 	
 		self.expect_sequence(channel, sequence)
@@ -103,8 +104,8 @@ class MysqlRoleHandler(RoleHandler):
 		self._logger.info("Slave server's ip: %s" % slave_ip)
 		
 		slave_ssh = SshManager(slave_ip, self.farm_key, 180)
-		self._logger.info('Sleeping for 15 sec while instance stands up')
-		time.sleep(15)
+		self._logger.info('Sleeping for 30 sec while instance stands up')
+		time.sleep(30)
 		slave_ssh.connect()
 		self.slaves_ssh.append(slave_ssh)
 		
@@ -120,7 +121,8 @@ class MysqlRoleHandler(RoleHandler):
 		#exec_command(channel, '/etc/init.d/scalarizr start')	
 		
 		tail_log_channel(channel)
-		
+		time.sleep(5)
+		expect(channel, "Message 'HostInit' delivered", 90)
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		
 		sequence = ['HostInitResponse', 'Initializing MySQL slave', 'Creating EBS volume from snapshot',
@@ -161,30 +163,41 @@ class MysqlRoleHandler(RoleHandler):
 		
 		self._logger.info('Sleeping for 15 sec while instance sending HostDown message')
 		time.sleep(15)
-		slave_channel = self.slaves_ssh[0].get_root_ssh_channel()
-		tail_log_channel(slave_channel)
-		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
-		sequence = ['Unplug EBS storage \(volume:', 'Volume [\w-]+ detached', 'Taking master EBS volume',
+		
+		first_slave_channel = self.slaves_ssh[0].get_root_ssh_channel()
+		second_slave_channel = self.slaves_ssh[1].get_root_ssh_channel()
+		tail_log_channel(first_slave_channel)
+		tail_log_channel(second_slave_channel)
+		time.sleep(5)
+		
+		### Detect 'promote to master' message receiver
+		out = self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
+		new_master_ip_res = re.search("Mysql_PromoteToMaster\\\\' via REST to server \\\\'(?P<ip>[\d\.]+)", out)
+		if not new_master_ip_res:
+			raise Exception('Promote to master message hasn\'t been sent')
+		new_master_ip = new_master_ip_res.group('ip')
+		### Define sequences 
+		promote_sequence = ['Unplug EBS storage \(volume:', 'Volume [\w-]+ detached', 'Taking master EBS volume',
 				    'Taked master volume', 'Create EBS storage \(volume:', 'Attaching volume [\w-]+ as device',
 				    'Volume [\w-]+ attached', 'Device [\/\w-]+ is available', 'Device [\/\w-]+ is mounted', 
 				    'farm-replication config created', 'name="Mysql_PromoteToMasterResult".+<status>ok</status>',
 				     "Message 'Mysql_PromoteToMasterResult' delivered"]
-		self.expect_sequence(slave_channel, sequence, 200)
-		self._logger.info('>>> Successfully promoted to master. <<<<<')
-		
-	def test_new_master_up(self):
-		self._logger.info('>>>>> Starting MySQL promote to master test. <<<<<')
-		slave_channel = self.slaves_ssh[-1].get_root_ssh_channel()
-		tail_log_channel(slave_channel)
-		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
-		sequence = ['Switching replication to a new MySQL master', 'Replication switched']
-		self.expect_sequence(slave_channel, sequence)
-		self._logger.info('>>> Successfully switched to new master. <<<<<')
+		new_master_sequence = ['Switching replication to a new MySQL master', 'Replication switched']
+		### Expect 
+		if self.slaves_ssh[0].ip == new_master_ip:
+			self.expect_sequence(first_slave_channel, promote_sequence, 200)
+			self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
+			self.expect_sequence(second_slave_channel, new_master_sequence, 200)
+		else:
+			self.expect_sequence(second_slave_channel, promote_sequence, 200)
+			self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
+			self.expect_sequence(first_slave_channel, new_master_sequence, 200)
+		self._logger.info('>>> Successfully promoted to master and switched to new master. <<<<<')
 				
 class TestMysqlInit(unittest.TestCase):
 
 	def setUp(self):
-		role_name = 'Test_mysql_2010_10_20_1348'
+		role_name = 'Test_mysql_2010_10_21_1526'
 		opts = {}
 		opts.update(EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
@@ -200,7 +213,7 @@ class TestMysqlInit(unittest.TestCase):
 		self.role_init.test_create_mysql_backup()
 		self.role_init.test_slave_init()
 		self.role_init.test_promote_to_master()
-		self.role_init.test_new_master_up()				
+	
 	
 	def tearDown(self):
 		if hasattr(self.role_init, 'ssh'):
