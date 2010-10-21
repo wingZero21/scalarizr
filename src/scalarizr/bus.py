@@ -14,8 +14,13 @@ class _Bus(Observable):
 	
 	etc_path = None
 	"""
-	@ivar string: Application etc path 
+	@ivar string: etc path 
 	"""
+	
+	share_path = None
+	'''
+	@ivar string: Shared resources path
+	'''
 	
 	scalr_url = None
 	"""

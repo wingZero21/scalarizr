@@ -81,7 +81,7 @@ def _init():
 			"/etc/scalarizr", 
 			"/usr/etc/scalarizr", 
 			"/usr/local/etc/scalarizr",
-			os.path.join(bus.base_path, "etc")
+			os.path.join(bus.base_path, 'etc')
 		]
 		if optparser and optparser.values.etc_path:
 			# Insert command-line passed etc_path into begining
@@ -89,8 +89,19 @@ def _init():
 			
 		bus.etc_path = firstmatched(lambda p: os.access(p, os.F_OK), etc_places)
 		if not bus.etc_path:
-			raise ScalarizrError('Cannot find scalarizr configuration dir')
+			raise ScalarizrError('Cannot find scalarizr configuration dir. Search path: %s' % ':'.join(etc_places))
 	bus.cnf = ScalarizrCnf(bus.etc_path)
+	
+	# Find shared resources dir
+	if not bus.share_path:
+		share_places = [
+			'/usr/share/scalr',
+			'/usr/local/share/scalr',
+			os.path.join(bus.base_path, 'share')
+		]
+		bus.share_path = firstmatched(lambda p: os.access(p, os.F_OK), share_places)
+		if not bus.share_path:
+			raise ScalarizrError('Cannot find scalarizr share dir. Search path: %s' % ':'.join(share_places))
 
 	
 	# Configure logging

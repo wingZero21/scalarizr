@@ -171,6 +171,8 @@ class NginxHandler(ServiceCtlHanler):
 		bus.on('before_host_up', self.on_before_host_up)
 		
 	def on_before_host_up(self, message):
+		self._update_vhosts()		
+		self.nginx_upstream_reload()
 		bus.fire('service_configured', service_name=SERVICE_NAME)
 	
 	def on_HostUp(self, message):
@@ -191,20 +193,8 @@ class NginxHandler(ServiceCtlHanler):
 			except (Exception, BaseException), e:
 				raise HandlerError('Cannot read/parse nginx main configuration file: %s' % str(e))
 
-		template_path = os.path.join(self._cnf.public_path(), "nginx/app-servers.tpl")
-		
 		backend_include = Configuration('nginx')
-		if not os.path.exists(template_path):
-			'''
-			template_content = """\nupstream backend {\n\tip_hash;\n\n\t${upstream_hosts}\n}\n"""
-			log_message = "nginx template '%s' doesn't exists. Creating default template" % (template_path,)
-			write_file(template_path, template_content, msg = log_message, logger = self._logger)
-			'''
-			backend_include.add('upstream', 'backend')
-			backend_include.add('upstream/ip_hash')
-			backend_include.write(template_path)
-		else:
-			backend_include.read(template_path)
+		backend_include.read(os.path.join(bus.share_path, 'nginx/app-servers.tpl'))
 
 		# Create upstream hosts configuration
 		for app_serv in self._queryenv.list_roles(behaviour = BuiltinBehaviours.APP):
@@ -253,7 +243,7 @@ class NginxHandler(ServiceCtlHanler):
 								self._include, nginx_conf_path)
 			else:
 				self._config.comment('http/server')
-				self._config.read(os.path.join(self._cnf.private_path(), "nginx/server.tpl"))
+				self._config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
 				self._config.add('http/include', self._include)
 				self._config.write(nginx_conf_path)
 			
@@ -297,12 +287,11 @@ class NginxHandler(ServiceCtlHanler):
 		
 		https_config = ''
 		
-		if [] != received_vhosts:
-			
+		if received_vhosts:
 			https_certificate = self._queryenv.get_https_certificate()
 			
-			cert_path = self._cnf("https.crt")
-			pk_path = self._cnf("https.key")
+			cert_path = self._cnf.key_path("https.crt")
+			pk_path = self._cnf.key_path("https.key")
 			
 			if https_certificate[0]:
 				msg = 'Writing ssl cert' 
