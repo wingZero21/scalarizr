@@ -305,6 +305,7 @@ class ServiceCtlHanler(Handler):
 			# Scalr respond with default preset
 			self._logger.debug('%s configuration is default', self._service_name)
 			#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
+			self._start_service()
 			return
 		
 		elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
