@@ -73,7 +73,7 @@ class RoleHandler:
 #		
 		tail_log_channel(channel)
 		time.sleep(5)
-		expect(channel , "Message 'HostInit' delivered", 90)
+		expect(channel , "Message 'HostInit' delivered", 180)
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 	
 		self.expect_sequence(channel, sequence)
