@@ -104,7 +104,7 @@ class ParametrizedInitScript(InitScript):
 		
 		if proc.returncode:
 			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err))
-		
+		#
 		if (action != "stop" or not (action == 'reload' and self.running)) and self.socks:
 			for sock in self.socks:
 				wait_sock(sock)
