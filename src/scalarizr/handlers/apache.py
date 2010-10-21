@@ -31,26 +31,29 @@ CNF_NAME = BEHAVIOUR + '.ini'
 APP_CONF_PATH = 'apache_conf_path'
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
-	
 	def __init__(self):
 		if disttool.is_redhat_based():
-			initd_script = "/etc/init.d/httpd"
+			initd_script = '/etc/init.d/httpd'
 		elif disttool.is_debian_based():
-			initd_script = "/etc/init.d/apache2"
-	
-		if not os.path.exists(initd_script):
-			raise HandlerError("Cannot find Apache init script at %s. Make sure that apache web server is installed" % initd_script)
-
-		pid_file = None
+			initd_script = '/etc/init.d/apache2'
+		else:
+			initd_script = '/etc/init.d/apache2'
 		
+		'''
+		pid_file = None
 		if os.path.exists("/etc/apache2/envvars"):
 			env_vars = read_file("/etc/apache2/envvars")
 			m = re.search("export\sAPACHE_PID_FILE=(.*)", env_vars)
 			if m:
 				pid_file = m.group(1)
+		'''
 		
-		initdv2.ParametrizedInitScript.__init__(self, 'apache', 
-				initd_script, pid_file, socks=[initdv2.SockParam(80)])
+		initdv2.ParametrizedInitScript.__init__(
+			self, 
+			'apache', 
+			initd_script,
+			socks=[initdv2.SockParam(80)]
+		)
 		
 	def status(self):
 		status = initdv2.ParametrizedInitScript.status(self)
@@ -62,14 +65,18 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 				return initdv2.Status.RUNNING
 			return initdv2.Status.NOT_RUNNING
 		return status
+
 	
 	def configtest(self):
-		if not hasattr(self, 'app_ctl'):
+		if not hasattr(self, 'apachectl'):
 			if disttool.is_redhat_based():
-				app_ctl = "apachectl"
+				self.apachectl = '/usr/sbin/apachectl'
 			elif disttool.is_debian_based():
-				app_ctl = "apache2ctl"
-		out = system(app_ctl +' configtest')[1]
+				self.apachectl = '/usr/sbin/apache2ctl'
+			else:
+				self.apachectl = '/usr/sbin/apachectl'	
+				
+		out = system(self.apachectl +' configtest')[1]
 		if 'error' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 

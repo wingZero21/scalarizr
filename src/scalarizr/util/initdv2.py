@@ -14,6 +14,7 @@ _services  = dict()
 _instances = dict()
 
 
+# TODO: error codes not used 
 class InitdError(BaseException):
 	GENERIC_ERR = 1
 	INVALID_ARG = 2
@@ -84,7 +85,11 @@ class ParametrizedInitScript(InitScript):
 	name = None
 	
 	def __init__(self, name, initd_script, pid_file=None, lock_file=None, socks=None):
-		self.name = name
+		if not os.access(initd_script, os.F_OK | os.X_OK):
+			err = 'Cannot find %s init script at %s. Make sure that %s is installed' % (name, initd_script)
+			raise InitdError(err)
+		
+		self.name = name		
 		self.initd_script = initd_script
 		self.pid_file = pid_file
 		self.lock_file = lock_file
