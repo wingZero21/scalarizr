@@ -25,7 +25,7 @@ class RoleHandler:
 		self.server_id_re = re.compile(
 				'\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)' \
 				% (self.farm_id, self.role_name), re.M)
-		self.scalr_ctl = ScalrCtl()
+		self.scalr_ctl = ScalrCtl(self.farm_id)
 
 	
 	def test_init(self, sequence):

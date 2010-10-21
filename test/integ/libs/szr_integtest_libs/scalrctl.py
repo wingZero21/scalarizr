@@ -302,9 +302,10 @@ def reset_farm(ssh, farm_id):
 	pass
 
 class ScalrCtl:
-	def __init__(self):
+	def __init__(self, farmid=None):
 		self._logger = logging.getLogger(__name__)
 		
+		self.farmid = farmid
 		scalr_host = config.get('./scalr/hostname')
 		ssh_key_path = config.get('./scalr/ssh_key_path')
 		
@@ -320,7 +321,7 @@ class ScalrCtl:
 		if not os.path.isdir(log_path):
 			os.makedirs(log_path)		
 
-	def exec_cronjob(self, name, farmid=None):
+	def exec_cronjob(self, name):
 		if self.channel.closed:
 			print "channel was closed. getting new one."
 			self.channel = self.ssh.get_root_ssh_channel()
@@ -339,8 +340,8 @@ class ScalrCtl:
 		
 		self._logger.info('cd %s' % home_path)
 		exec_command(self.channel, 'cd ' + home_path)
-		
-		job_cmd = 'php -q ' + cron_php_path + ' --%s' % name
+		farm_str = ('--farm-id=%s' % self.farmid) if (self.farmid and name == 'ScalarizrMessaging') else ''
+		job_cmd = 'php -q ' + cron_php_path + ' --%s %s' % (name, farm_str)
 		self._logger.info('Starting cronjob: %s' % job_cmd)
 		out = exec_command(self.channel, job_cmd)
 		log_filename = name + time.strftime('_%d_%b_%H-%M') + '.log'
