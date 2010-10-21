@@ -24,7 +24,7 @@ class TestVhosts(unittest.TestCase):
 
 
 	def test_configure(self):
-		farm = 'dima@us-east-1'
+		farm = 'dima@us-east'
 		domain = 'dima.com'
 		document_root = '/var/www/dima.com/'
 		e_mail = 'admin@dima.com'
