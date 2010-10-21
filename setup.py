@@ -63,8 +63,9 @@ def make_data_files(dst, src):
 description = "Scalarizr converts any server to Scalr-manageable node"
 
 
-data_files = make_data_files("/etc/scalr", "etc")
-data_files.extend(make_data_files("/usr/local/scalarizr/scripts", "scripts"))
+data_files = make_data_files('/etc/scalr', 'etc')
+data_files.extend(make_data_files('/usr/share/scalr', 'share'))
+data_files.extend(make_data_files('/usr/local/scalarizr/scripts', 'scripts'))
 data_files.append(["/usr/local/bin", ["bin/scalarizr"]])
 
 
