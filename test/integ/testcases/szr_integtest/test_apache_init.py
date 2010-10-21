@@ -23,6 +23,7 @@ class ApacheRoleHandler(RoleHandler):
 		self.domain = 'dima3.com'
 		farm_name = 'dima@us-east'
 		document_root = os.path.join('/var/www/',self.domain)
+		role_name = 'Test-app-2010-10-20-1411'
 		
 		channel = self.ssh.get_root_ssh_channel()
 		exec_command(channel, 'mkdir %s' % document_root)
@@ -32,10 +33,14 @@ class ApacheRoleHandler(RoleHandler):
 		self.sel.open('/apache_vhost_add.php')		
 		self.sel.type('domain_name', self.domain)
 		self.sel.type('farm_target', farm_name)
+		self.sel.type('role_target', role_name)
 		self.sel.uncheck('isSslEnabled')
 		self.sel.type('document_root_dir', document_root)
 		self.sel.type('server_admin', 'admin@%s' % self.domain)		
 		self.sel.click('button_js')
+		
+		ret = expect(channel, 'app reloaded', 15)
+		self._logger.info("%s appeared in scalarizr.log", ret.group(0))
 		
 		out = exec_command(channel, 'curl www.%s' % self.domain)
 		if not 'Test1' in out:
