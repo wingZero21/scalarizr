@@ -20,7 +20,7 @@ class my_install_data(install_data):
 		d = platform.dist();
 		rhel =  int(d[0].lower() in ['centos', 'rhel', 'redhat']) and int(d[1].split('.')[0])
 		
-		entries = list(t for t in self.data_files if t[0].startswith("/usr/local/scalarizr/scripts"))
+		entries = list(t for t in self.data_files if t[0].startswith("/usr/local"))
 		for ent in entries:
 			dir = change_root(self.root, ent[0])			
 			for file in ent[1]:
