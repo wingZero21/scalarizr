@@ -31,7 +31,9 @@ class ImportWwwServer(ImportEc2Server):
 		
 		else:
 			if not re.search('Complete!|Nothing to do', out):
-				raise Exception('Cannot install scalarizr')	
+				raise Exception('Cannot install nginx')
+			
+		ImportEc2Server._install_software(self, channel, distr)
 			
 	def _get_role_name(self):
 		return 'Test-www-%s' % time.strftime('%Y-%m-%d-%H%M')
