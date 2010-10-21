@@ -75,7 +75,7 @@ class ApacheRoleHandler(RoleHandler):
 		self.sel.type('server_admin', 'admin@%s' % self.domain)	
 		self.sel.click('button_js')
 		
-		ret = expect(self._channel, 'app reloaded', 15)
+		ret = expect(self._channel, 'app reloaded', 30)
 		self._logger.info("%s appeared in scalarizr.log", ret.group(0))
 
 		out = exec_command(self._channel, 'curl -k www.%s' % self.domain)
@@ -115,7 +115,8 @@ class TestApacheInit(unittest.TestCase):
 		self.test_role.cleanup()
 	
 	def tearDown(self):
-		self.test_role.shutdown()
+		pass
+		#self.test_role.shutdown()
 		
 	
 if __name__ == "__main__":
