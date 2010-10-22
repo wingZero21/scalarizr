@@ -18,22 +18,21 @@ class ApacheRoleHandler(RoleHandler):
 		self.sel = get_selenium()
 		login(self.sel)
 		RoleHandler.__init__(self, role_name, role_opts)
-		self.domain = 'dima3.com'
+		self.domain = None
 		self.farm_id = '64'
 		self.role_id = '255'
-		self._channel = None
 		
 	def test_configure(self):
-		if not self._channel:
-			self._channel = self.ssh.get_root_ssh_channel()
+		_channel = self.ssh.get_root_ssh_channel()
 		
+		self.domain = 'dima3.com'
 		document_root = os.path.join('/var/www/',self.domain)		
 		
 		self._logger.info("making site dir %s and filling index.html" % document_root)
-		exec_command(self._channel, 'mkdir %s' % document_root)
-		exec_command(self._channel, 'echo "Test1" > %s/index.html' % document_root)
+		exec_command(_channel, 'mkdir %s' % document_root)
+		exec_command(_channel, 'echo "Test1" > %s/index.html' % document_root)
 		self._logger.info("adding %s to server`s /etc/hosts" % self.domain)
-		exec_command(self._channel, 'echo "127.0.0.1 www.%s\n" >> /etc/hosts' % self.domain)
+		exec_command(_channel, 'echo "127.0.0.1 www.%s\n" >> /etc/hosts' % self.domain)
 
 		self._logger.info("Going to apache_vhost_add.php")
 		self.sel.open('/apache_vhost_add.php')		
@@ -46,19 +45,20 @@ class ApacheRoleHandler(RoleHandler):
 		self._logger.info("Sending vhost")	
 		self.sel.click('button_js')
 		
-		tail_log_channel(self._channel)
+		tail_log_channel(_channel)
 		self._logger.info("Waiting for 'app reloaded'")
-		ret = expect(self._channel, 'app reloaded', 45)
+		ret = expect(_channel, 'app reloaded', 45)
 		self._logger.info("%s appeared in scalarizr.log", ret.group(0))
 		
+		cmd_channel = self.ssh.get_root_ssh_channel()
 		self._logger.info("Getting site content with curl")
-		out = exec_command(self._channel, 'curl www.%s' % self.domain)
+		out = exec_command(cmd_channel, 'curl www.%s' % self.domain)
 		if not 'Test1' in out:
 			raise Exception('%s returned data different from expected: %s' % (self.domain, out))
+		self._logger.info('%s Ok.' % self.domain)
 		
 	def test_configure_ssl(self):
-		if not self._channel:
-			self._channel = self.ssh.get_root_ssh_channel()
+		_channel = self.ssh.get_root_ssh_channel()
 			
 		self.domain = 'ssl.dima2.com'
 		document_root = os.path.join('/var/www/',self.domain)
@@ -66,9 +66,9 @@ class ApacheRoleHandler(RoleHandler):
 		ssl_key = '~/.scalr/apache/server.key'
 		ca_cert = '~/.scalr/apache/ca.crt'
 		
-		exec_command(self._channel, 'mkdir %s' % document_root)
-		exec_command(self._channel, 'echo "Test1" > %s/index.html' % document_root)
-		exec_command(self._channel, 'echo "127.0.0.1 www.%s\n" >> /etc/hosts' % self.domain)
+		exec_command(_channel, 'mkdir %s' % document_root)
+		exec_command(_channel, 'echo "Test1" > %s/index.html' % document_root)
+		exec_command(_channel, 'echo "127.0.0.1 www.%s\n" >> /etc/hosts' % self.domain)
 
 		self.sel.open('/apache_vhost_add.php')
 		self.sel.type('domain_name', self.domain)
@@ -82,12 +82,15 @@ class ApacheRoleHandler(RoleHandler):
 		self.sel.type('server_admin', 'admin@%s' % self.domain)	
 		self.sel.click('button_js')
 		
-		ret = expect(self._channel, 'app reloaded', 30)
+		tail_log_channel(_channel)
+		ret = expect(_channel, 'app reloaded', 45)
 		self._logger.info("%s appeared in scalarizr.log", ret.group(0))
-
-		out = exec_command(self._channel, 'curl -k www.%s' % self.domain)
+		
+		cmd_channel = self.ssh.get_root_ssh_channel()
+		out = exec_command(cmd_channel, 'curl -k www.%s' % self.domain)
 		if not 'Test1' in out:
 			raise Exception('%s returned data different from expected: %s' % (self.domain, out))
+		self._logger.info('%s Ok.' % self.domain)
 	
 	def cleanup(self):		
 		if hasattr(self, 'domain'):
