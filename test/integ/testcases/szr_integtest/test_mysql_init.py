@@ -63,21 +63,21 @@ class RoleHandler:
 		self._logger.info("Connected")
 		
 		# Temporary solution
-		#self._logger.info("Deploying dev branch")
-		#channel = self.ssh.get_root_ssh_channel()
-		#exec_command(channel, '/etc/init.d/scalarizr stop')
-		#exec_command(channel, 'echo "" > /var/log/scalarizr.log')
-		#deployer = ScalarizrDeploy(self.ssh)
-		#deployer.apply_changes_from_tarball()
-		#del(deployer)		
-		#self.ssh.close_all_channels()
-#		
+		self._logger.info("Deploying dev branch")
+		channel = self.ssh.get_root_ssh_channel()
+		exec_command(channel, '/etc/init.d/scalarizr stop')
+		exec_command(channel, 'echo "" > /var/log/scalarizr.log')
+		deployer = ScalarizrDeploy(self.ssh)
+		deployer.apply_changes_from_tarball()
+		del(deployer)		
+		self.ssh.close_all_channels()
+		
 		self._logger.info("Getting root channel")
 		channel = self.ssh.get_root_ssh_channel()
-##
+
 #		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
-		#exec_command(channel, '/etc/init.d/scalarizr start')
-#		
+		exec_command(channel, '/etc/init.d/scalarizr start')
+		
 		self._logger.info("Tailing log")
 		tail_log_channel(channel)
 		
