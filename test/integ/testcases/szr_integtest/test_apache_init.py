@@ -20,7 +20,7 @@ class ApacheRoleHandler(RoleHandler):
 		RoleHandler.__init__(self, role_name, role_opts)
 		self.domain = 'dima3.com'
 		self.farm_id = '64'
-		self.role_id = '238'
+		self.role_id = '255'
 		self._channel = None
 		
 	def test_configure(self):
@@ -46,6 +46,7 @@ class ApacheRoleHandler(RoleHandler):
 		self._logger.info("Sending vhost")	
 		self.sel.click('button_js')
 		
+		tail_log_channel(self._channel)
 		self._logger.info("Waiting for 'app reloaded'")
 		ret = expect(self._channel, 'app reloaded', 45)
 		self._logger.info("%s appeared in scalarizr.log", ret.group(0))
@@ -105,7 +106,7 @@ class ApacheRoleHandler(RoleHandler):
 class TestApacheInit(unittest.TestCase):
 	
 	def setUp(self):
-		role_name = 'Test-app-2010-10-20-1411'
+		role_name = 'Test-app-2010-10-22-1656'
 		self.test_role = ApacheRoleHandler(role_name, {})
 	
 	def test_init(self):
