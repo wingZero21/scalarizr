@@ -55,7 +55,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			socks=[initdv2.SockParam(80)]
 		)
 		
-	def status(self):
+	def status(self):		
 		status = initdv2.ParametrizedInitScript.status(self)
 		if not status and self.socks:
 			ip, port = self.socks[0].conn_address
