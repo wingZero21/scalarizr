@@ -7,7 +7,7 @@ http {
                 return 302;
         }
         location /noapp.html {
-                root /usr/local/share/scalr/nginx/html;
+                root /usr/share/scalr/nginx/html;
         } 
     
         location /    {
@@ -23,11 +23,11 @@ http {
         }
     
         location /500.html {
-                root   /usr/local/share/scalr/nginx/html;
+                root   /usr/share/scalr/nginx/html;
         }
     
         location /502.html {
-                root   /usr/local/share/scalr/nginx/html;
+                root   /usr/share/scalr/nginx/html;
         }
     }
 }
