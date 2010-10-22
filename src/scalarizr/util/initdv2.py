@@ -6,7 +6,7 @@ Created on Aug 29, 2010
 '''
 import socket
 import os
-import time
+import time, logging
 from subprocess import Popen, PIPE
 
 
@@ -118,6 +118,8 @@ class ParametrizedInitScript(InitScript):
 		if proc.returncode:
 			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), proc.returncode)
 
+		logger = logging.getLogger()
+		logger.debug('action: %s, running: %s', action, self.running)
 		if self.socks and (action != "stop" and not (action == 'reload' and not self.running)):
 			for sock in self.socks:
 				wait_sock(sock)
@@ -143,6 +145,8 @@ class ParametrizedInitScript(InitScript):
 		return self._start_stop_reload('reload') 
 	
 	def status(self):
+		logger = logging.getLogger()
+		logger.debug('Entering ParametrizedInitScript.status')
 		try:
 			for sock in self.socks:
 				wait_sock(sock)
