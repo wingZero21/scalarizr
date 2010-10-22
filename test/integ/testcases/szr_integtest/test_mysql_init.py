@@ -43,18 +43,24 @@ class RoleHandler:
 		result = re.search(self.server_id_re, out)
 		if not result:
 			raise Exception('Farm hasn\'t been scaled up. Out:\n%s' % out)
-		
 		self.server_id = result.group('server_id')
 		self._logger.info("New server id: %s" % self.server_id)
+		
+		self._logger.info("Waiting for server's ip")
 		self.ip        = self.farm.get_public_ip(self.server_id, 180)
+		
+		self._logger.info("Waiting for instance id")
 		self.inst_id   = self.farm.get_instance_id(self.server_id, 180)
 		self._logger.info("New server's ip: %s" % self.ip)
 		
+		self._logger.info("Getting ssh manager")
 		self.ssh = SshManager(self.ip, self.farm_key, 180)
+		
 		self._logger.info('Sleeping for 15 sec while instance stands up')
 		time.sleep(15)
+		self._logger.info("Connecting to instance")
 		self.ssh.connect()
-		self._logger.info("Connected to instance")
+		self._logger.info("Connected")
 		
 		# Temporary solution
 		#self._logger.info("Deploying dev branch")
@@ -66,14 +72,21 @@ class RoleHandler:
 		#del(deployer)		
 		#self.ssh.close_all_channels()
 #		
+		self._logger.info("Getting root channel")
 		channel = self.ssh.get_root_ssh_channel()
 ##
 #		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
 		#exec_command(channel, '/etc/init.d/scalarizr start')
 #		
+		self._logger.info("Tailing log")
 		tail_log_channel(channel)
+		
+		self._logger.info("Sleeping 5 seconds")
 		time.sleep(5)
+		
+		self._logger.info("Checking that HostInit message delivered")
 		expect(channel , "Message 'HostInit' delivered", 180)
+		
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 	
 		self.expect_sequence(channel, sequence)
@@ -82,6 +95,7 @@ class RoleHandler:
 		
 	def expect_sequence(self, channel, sequence, timeout = 120):
 		for regexp in sequence:
+			self._logger.info("Checking %s" % regexp)
 			ret = expect(channel, regexp, timeout)
 			self._logger.info("%s appeared in scalarizr.log", ret.group(0))
 		
