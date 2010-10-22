@@ -64,7 +64,7 @@ class RoleHandler:
 		
 		self._logger.info("Getting root channel")
 		channel = self.ssh.get_root_ssh_channel()		
-		exec_command(channel, 'echo -n > /var/log/scalarizr.log')
+		exec_command(channel, 'ls /var/log/scalarizr.log || echo -n > /var/log/scalarizr.log')
 		self._logger.info("Tailing log")
 		tail_log_channel(channel)
 		
