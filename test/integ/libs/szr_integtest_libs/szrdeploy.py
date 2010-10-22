@@ -208,12 +208,12 @@ class ScalarizrDeploy:
 			raise Exception('Install scalarizr package first!')
 				
 	def get_scalarizr_path(self):
-		py_version = self.get_python_version()
 		
 		if self.distr in ('rhel', 'fedora'):
+			py_version = self.get_python_version()
 			scalarizr_path = "/usr/lib/python2.%s/site-packages/scalarizr"  % py_version
 		else:
-			scalarizr_path = "/var/lib/python-support/python2.%s/scalarizr" % py_version
+			scalarizr_path = "/usr/share/python-support/scalarizr/scalarizr"
 
 		return scalarizr_path
 			

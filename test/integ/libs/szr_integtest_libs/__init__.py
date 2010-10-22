@@ -145,7 +145,7 @@ class LogReader:
 					raise Exception('Something bad happened')
 		else:
 			break_tail.set()
-			raise Exception('Timeout after %s.' % timeframe)				
+			raise Exception('Timeout after %s. %s' % (timeframe, self.out))				
 
 	def reader_thread(self, channel, regexp, break_tail):
 		search_re = re.compile(regexp) if type(regexp) == str else regexp
@@ -193,7 +193,7 @@ def tail_log_channel(channel):
 	while channel.recv_ready():
 		channel.recv(1)
 		
-	cmd = 'tail -f -n 0 /var/log/scalarizr.log\n'
+	cmd = 'tail -f /var/log/scalarizr.log\n'
 	channel.send(cmd)
 	channel.recv(len(cmd))
 
