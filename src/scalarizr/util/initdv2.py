@@ -22,7 +22,15 @@ class InitdError(BaseException):
 	INSUFFICIENT_PRIVILEGE = 4
 	NOT_INSTALLED = 5
 	NOT_CONFIGURED = 6
-	NOT_RUNNING = 7	
+	NOT_RUNNING = 7
+	
+	@property
+	def code(self):
+		return len(self.args) > 1 and self.args[1] or None
+	
+	@property
+	def message(self):
+		return self.args[0]
 
 class Status:
 	RUNNING = 0
@@ -108,9 +116,9 @@ class ParametrizedInitScript(InitScript):
 			raise InitdError("Popen failed with error %s" % (e.strerror,))
 		
 		if proc.returncode:
-			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err))
-		#
-		if (action != "stop" or not (action == 'reload' and self.running)) and self.socks:
+			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), proc.returncode)
+
+		if self.socks and (action != "stop" and not (action == 'reload' and not self.running)):
 			for sock in self.socks:
 				wait_sock(sock)
 			

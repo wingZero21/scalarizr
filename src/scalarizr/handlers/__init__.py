@@ -226,7 +226,13 @@ class ServiceCtlHanler(Handler):
 
 	def _reload_service(self):
 		self._logger.info("Reloading %s", self._service_name)
-		self._init_script.reload()
+		try:
+			self._init_script.reload()
+		except initdv2.InitdError, e:
+			if e.code == initdv2.InitdError.NOT_RUNNING:
+				self._logger.debug('%s not running')
+			else:
+				raise
 		self._logger.debug("%s reloaded", self._service_name)
 		
 	def _obtain_current_preset(self):
