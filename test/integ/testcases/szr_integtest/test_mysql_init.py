@@ -62,25 +62,27 @@ class RoleHandler:
 		self.ssh.connect()
 		self._logger.info("Connected")
 		
-		# Temporary solution
-		self._logger.info("Deploying dev branch")
-		channel = self.ssh.get_root_ssh_channel()
-		exec_command(channel, '/etc/init.d/scalarizr stop')
-		exec_command(channel, 'echo "" > /var/log/scalarizr.log')
-		deployer = ScalarizrDeploy(self.ssh)
-		deployer.apply_changes_from_tarball()
-		del(deployer)		
-		self.ssh.close_all_channels()
-		
 		self._logger.info("Getting root channel")
-		channel = self.ssh.get_root_ssh_channel()
-
-#		exec_command(channel, 'rm -f /etc/scalr/private.d/.state')
-		exec_command(channel, '/etc/init.d/scalarizr start')
-		
+		channel = self.ssh.get_root_ssh_channel()		
+		exec_command(channel, 'echo -n > /var/log/scalarizr.log')
 		self._logger.info("Tailing log")
 		tail_log_channel(channel)
 		
+		# Temporary solution
+		self._logger.info("Deploying dev branch")
+		cmd_channel = self.ssh.get_root_ssh_channel()
+		self._logger.info("Stopping scalarizr")
+		exec_command(cmd_channel, '/etc/init.d/scalarizr stop')
+		#exec_command(cmd_channel, 'echo "" > /var/log/scalarizr.log')
+		self._logger.info("Deploying from local source")
+		deployer = ScalarizrDeploy(self.ssh)
+		self._logger.info("Applying changes from tarball")
+		deployer.apply_changes_from_tarball()
+		del(deployer)		
+		self._logger.info("Starting scalarizr")
+		exec_command(cmd_channel, '/etc/init.d/scalarizr start')
+		#self.ssh.close_all_channels()
+
 		self._logger.info("Sleeping 5 seconds")
 		time.sleep(5)
 		
