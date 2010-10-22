@@ -7,9 +7,9 @@ Created on Dec 25, 2009
 
 # Core
 from scalarizr.bus import bus
-from scalarizr.config import Configurator, BuiltinBehaviours
+from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
-from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
+from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.messaging import Messages
 
 # Libs
@@ -17,7 +17,7 @@ from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 	NoPathError
 from scalarizr.util import disttool, cached, firstmatched, validators, software
 from scalarizr.util import initdv2, system
-from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util.filetool import write_file
 
 # Stdlibs
 import logging, os, re
@@ -169,22 +169,79 @@ class ApacheHandler(ServiceCtlHanler):
 		bus.define_events('service_configured')
 		bus.on("init", self.on_init)
 
+	def on_init(self):
+		bus.on('start', self.on_start)
+		bus.on('before_host_up', self.on_before_host_up)
+
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
 			(message.name == Messages.VHOST_RECONFIGURE or \
-			message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
+			message.name == Messages.UPDATE_SERVICE_CONFIGURATION or \
+			message.name == Messages.HOST_UP or \
+			message.name == Messages.HOST_DOWN or \
+			message.name == Messages.BEFORE_HOST_TERMINATE)
+
+	def on_start(self):
+		if self._cnf.state == ScalarizrState.RUNNING:
+			self._rpaf_reload()
+
+	def on_before_host_up(self, message):
+		self._rpaf_reload()
+		bus.fire('service_configured', service_name=SERVICE_NAME)
+
+	def on_HostUp(self, message):
+		if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
+			self._rpaf_modify_proxy_ips([message.local_ip], operation='add')
+	
+	def on_HostDown(self, message):
+		if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
+			self._rpaf_modify_proxy_ips([message.local_ip], operation='remove')
+	
+	on_BeforeHostTerminate = on_HostDown
 
 	@reload_apache_conf
 	def on_VhostReconfigure(self, message):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
 		self._reload_service()
+		
+	def _rpaf_modify_proxy_ips(self, ips, operation=None):
+		self._logger.debug('Modify RPAFproxy_ips (operation: %s, ips: %s)', operation, ','.join(ips))
+		file = firstmatched(
+			lambda x: os.access(x, os.F_OK), 
+			('/etc/httpd/conf.d/mod_rpaf.conf', '/etc/apache2/mods-available/rpaf.conf')
+		)
+		if file:
+			rpaf = Configuration('apache')
+			rpaf.read(file)
+			
+			if operation == 'add' or operation == 'remove':
+				proxy_ips = set(re.split(r'\s+', rpaf.get('//RPAFproxy_ips')))
+				if operation == 'add':
+					proxy_ips |= set(ips)
+				else:
+					proxy_ips -= set(ips)
+			elif operation == 'update':
+				proxy_ips = set(ips)
+			if not proxy_ips:
+				proxy_ips.add('127.0.0.1')
+				
+			self._logger.info('Updating RPAFproxy_ips: %s', ' '.join(proxy_ips))
+			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
+			rpaf.write(file)
+			
+			self._reload_service()
+		else:
+			self._logger.debug('Nothing to do with rpaf: mod_rpaf configuration file not found')
 
-	def on_init(self):
-		bus.on('before_host_up', self.on_before_host_up)
-
-	def on_before_host_up(self, message):
-		bus.fire('service_configured', service_name=SERVICE_NAME)
+		
+	def _rpaf_reload(self):
+		lb_hosts = []
+		for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
+			for host in role.hosts:
+				lb_hosts.append(host.internal_ip)
+		self._rpaf_modify_proxy_ips(lb_hosts, operation='update')
+		
 		
 	def _update_vhosts(self):
 		
@@ -322,8 +379,11 @@ class ApacheHandler(ServiceCtlHanler):
 	def _check_mod_ssl_deb(self):
 		mods_available = os.path.dirname(self._httpd_conf_path) + '/mods-available'
 		mods_enabled = os.path.dirname(self._httpd_conf_path) + '/mods-enabled'
-		if not os.path.exists(mods_enabled + '/ssl.conf') and not os.path.exists(mods_enabled + '/ssl.load'):
-			if os.path.exists(mods_available) and os.path.exists(mods_available+'/ssl.conf') and os.path.exists(mods_available+'/ssl.load'):
+		if not os.path.exists(mods_enabled + '/ssl.conf') and \
+				not os.path.exists(mods_enabled + '/ssl.load'):
+			if os.path.exists(mods_available) and \
+				 os.path.exists(mods_available+'/ssl.conf') and \
+				 os.path.exists(mods_available+'/ssl.load'):
 				if not os.path.exists(mods_enabled):
 					try:
 						self._logger.debug("Creating directory %s.",  
@@ -346,7 +406,6 @@ class ApacheHandler(ServiceCtlHanler):
 			
 				
 	def _check_mod_ssl_redhat(self):
-		include_mod_ssl = 'LoadModule ssl_module modules/mod_ssl.so'
 		mod_ssl_file = self.server_root + '/modules/mod_ssl.so'
 		
 		if not os.path.isfile(mod_ssl_file) and not os.path.islink(mod_ssl_file):
