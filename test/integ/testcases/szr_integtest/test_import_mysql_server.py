@@ -14,6 +14,9 @@ from szr_integtest import get_selenium
 from szr_integtest_libs import exec_command
 
 class ImportMysqlServer(ImportEc2Server):
+	
+	def _change_behaviour(self, import_server_str):
+		return re.sub('behaviour=[\w-]*', 'behaviour=mysql', import_server_str)
 		
 	def _install_software(self, channel, distr):
 		self._logger.info("Installing mysql server")

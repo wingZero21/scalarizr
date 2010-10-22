@@ -3,10 +3,14 @@ import os
 import signal
 import re
 import select
-from threading import Thread, Event
 import paramiko
 import socket
+import pexpect
+import logging
+import tempfile
+from Queue import Queue, Empty
 
+"""
 class SshPool:
 	def __new__(self):
 		pass
@@ -25,7 +29,7 @@ class SshPool:
 		NOOP ssh sessions
 		'''
 		pass
-
+"""
 regexps = ['root@.*#',
 		   'local2:.*#',
 		   '\-bash\-.*#']
@@ -113,94 +117,16 @@ class SshManager:
 			channel.close()
 		self.channels = []
 		
-
-class LogReader:
-	
-	_exception = None
-	_error     = ''
-	
-	def __init__(self):
-		self.err_re = re.compile('^\d+-\d+-\d+\s+\d+:\d+:\d+,\d+\s+-\s+ERROR\s+-\s+.+$', re.M)
-		self.traceback_re = re.compile('Traceback.+')
-
-	def expect(self, regexp, timeframe, channel):
-		self.out = ''
-		self._error = ''
-		self.ret = None
-		break_tail = Event()
-
-		t = Thread(target =self.reader_thread, args=(channel, regexp, break_tail))
-		t.start()
-		
-		start_time = time.time()
-		
-		while time.time() - start_time < timeframe:
-			time.sleep(0.1)
-			if break_tail.is_set():
-				if self._error:
-					raise Exception('Error detected: %s' % self._error)
-				if self.ret:
-					return self.ret
-				else:
-					raise Exception('Something bad happened')
-		else:
-			break_tail.set()
-			raise Exception('Timeout after %s. %s' % (timeframe, self.out))				
-
-	def reader_thread(self, channel, regexp, break_tail):
-		search_re = re.compile(regexp) if type(regexp) == str else regexp
-		while not break_tail.is_set():
-			while channel.recv_ready():
-				self.out += channel.recv(1)
-				if self.out[-1] == '\n':
-					break
-			
-			error = re.search(self.err_re, self.out)
-			if error:
-				# Detect if traceback presents
-				traceback = ''
-				while channel.recv_ready():
-					traceback += channel.recv(1)
-					if traceback[-1] == '\n':
-						break
-				
-				if re.search(self.traceback_re, traceback):
-					newline = ''
-					while channel.recv_ready():
-						newline += channel.recv(1)
-						if newline[-1] == '\n':
-							newline
-							traceback += newline
-							if not newline.startswith(' '):
-								break
-							newline = ''
-
-					self._error = error.group(0) + traceback
-				else:
-					self._error = error.group(0)
-				break_tail.set()
-				break
-				
-			if re.search(search_re, self.out):
-				self.ret = re.search(search_re, self.out)
-				break_tail.set()
-				break
-
-def tail_log_channel(channel):
-	if channel.closed:
-		raise Exception('Channel is closed')
-	
-	while channel.recv_ready():
-		channel.recv(1)
-		
-	cmd = 'tail -f /var/log/scalarizr.log\n'
-	channel.send(cmd)
-	channel.recv(len(cmd))
-
-	
-def expect(channel, regexp, timeframe):
-	reader = LogReader()
-	return reader.expect(regexp, timeframe, channel)
+#def tail_log_channel(channel):
+#	if channel.closed:
+#		raise Exception('Channel is closed')
+#	
+#	while channel.recv_ready():
+#		channel.recv(1)
+#		
+#	cmd = 'tail -f -n 0 /var/log/scalarizr.log\n'
+#	channel.send(cmd)
+#	channel.recv(len(cmd))
 
 def exec_command(channel, cmd, timeout = 60):
 	

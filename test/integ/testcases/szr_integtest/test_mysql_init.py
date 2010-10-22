@@ -3,104 +3,17 @@ Created on Oct 2010
 
 @author: spike
 '''
-from szr_integtest import get_selenium, config
-from szr_integtest_libs import tail_log_channel, expect, SshManager,\
-	exec_command
+from szr_integtest import config
+from szr_integtest import MutableLogFile
+from szr_integtest.roleinit import RoleHandler
+from szr_integtest_libs import SshManager, exec_command
 from szr_integtest_libs.szrdeploy import ScalarizrDeploy
-from szr_integtest_libs.scalrctl import FarmUI, ScalrCtl, EC2_MYSQL_ROLE_DEFAULT_SETTINGS, EC2_ROLE_DEFAULT_SETTINGS
-import logging
+from szr_integtest_libs.scalrctl import  EC2_MYSQL_ROLE_DEFAULT_SETTINGS, EC2_ROLE_DEFAULT_SETTINGS
 import re
 import unittest
 import time
 from boto.ec2.connection import EC2Connection
 
-class RoleHandler:
-	
-	def __init__(self, role_name, role_opts):
-		self.role_opts = role_opts
-		self._logger = logging.getLogger(__name__)
-		self.role_name = role_name
-		self.farm_id = config.get('./test-farm/farm_id')
-		self.farm_key = config.get('./test-farm/farm_key')
-		self.server_id_re = re.compile(
-				'\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)' \
-				% (self.farm_id, self.role_name), re.M)
-		self.scalr_ctl = ScalrCtl(self.farm_id)
-
-	
-	def test_init(self, sequence):
-		self.farm = FarmUI(get_selenium())
-		self._logger.info("Launching farm")
-		self.farm.use(self.farm_id)
-		#self.farm.remove_all_roles()
-		#self.farm.add_role(self.role_name, 1, 2, self.role_opts)
-		#self.farm.save()
-		self.farm.launch()
-		
-		self._logger.info("Farm launched")
-		out = self.scalr_ctl.exec_cronjob('Scaling')
-
-		result = re.search(self.server_id_re, out)
-		if not result:
-			raise Exception('Farm hasn\'t been scaled up. Out:\n%s' % out)
-		self.server_id = result.group('server_id')
-		self._logger.info("New server id: %s" % self.server_id)
-		
-		self._logger.info("Waiting for server's ip")
-		self.ip        = self.farm.get_public_ip(self.server_id, 180)
-		
-		self._logger.info("Waiting for instance id")
-		self.inst_id   = self.farm.get_instance_id(self.server_id, 180)
-		self._logger.info("New server's ip: %s" % self.ip)
-		
-		self._logger.info("Getting ssh manager")
-		self.ssh = SshManager(self.ip, self.farm_key, 180)
-		
-		self._logger.info('Sleeping for 15 sec while instance stands up')
-		time.sleep(15)
-		self._logger.info("Connecting to instance")
-		self.ssh.connect()
-		self._logger.info("Connected")
-		
-		self._logger.info("Getting root channel")
-		channel = self.ssh.get_root_ssh_channel()		
-		exec_command(channel, 'ls /var/log/scalarizr.log || echo -n > /var/log/scalarizr.log')
-		self._logger.info("Tailing log")
-		tail_log_channel(channel)
-		
-		# Temporary solution
-		self._logger.info("Deploying dev branch")
-		cmd_channel = self.ssh.get_root_ssh_channel()
-		self._logger.info("Stopping scalarizr")
-		exec_command(cmd_channel, '/etc/init.d/scalarizr stop')
-		#exec_command(cmd_channel, 'echo "" > /var/log/scalarizr.log')
-		self._logger.info("Deploying from local source")
-		deployer = ScalarizrDeploy(self.ssh)
-		self._logger.info("Applying changes from tarball")
-		deployer.apply_changes_from_tarball()
-		del(deployer)		
-		self._logger.info("Starting scalarizr")
-		exec_command(cmd_channel, '/etc/init.d/scalarizr start')
-		#self.ssh.close_all_channels()
-
-		self._logger.info("Sleeping 5 seconds")
-		time.sleep(5)
-		
-		self._logger.info("Checking that HostInit message delivered")
-		expect(channel , "Message 'HostInit' delivered", 180)
-		
-		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
-	
-		self.expect_sequence(channel, sequence)
-			
-		self._logger.info('>>>>>> Role has been successfully initialized. <<<<<<')
-		
-	def expect_sequence(self, channel, sequence, timeout = 120):
-		for regexp in sequence:
-			self._logger.info("Checking %s" % regexp)
-			ret = expect(channel, regexp, timeout)
-			self._logger.info("%s appeared in scalarizr.log", ret.group(0))
-		
 class MysqlRoleHandler(RoleHandler):
 	slaves_ssh = []
 	
@@ -136,34 +49,36 @@ class MysqlRoleHandler(RoleHandler):
 		#channel = slave_ssh.get_root_ssh_channel()
 		#exec_command(channel, '/etc/init.d/scalarizr start')	
 		
-		tail_log_channel(channel)
-		time.sleep(5)
-		expect(channel, "Message 'HostInit' delivered", 90)
+		log = MutableLogFile(channel)
+		reader = log.head()
+		reader.expect("Message 'HostInit' delivered", 90)
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		
 		sequence = ['HostInitResponse', 'Initializing MySQL slave', 'Creating EBS volume from snapshot',
 			'farm-replication config created', 'Replication master is changed to host', "Message 'HostUp' delivered"]
 		
-		self.expect_sequence(channel, sequence)
+		self.expect_sequence(reader, sequence)
 		self._logger.info('>>>>> Mysql slave successfully initialized <<<<<')
 		
 	def test_add_pma_users(self):
 		self._logger.info('>>>>> Starting MySQL add pma users test. <<<<<')
 		channel = self.ssh.get_root_ssh_channel()
-		tail_log_channel(channel)
+		log = MutableLogFile(channel)
+		reader = log.tail()
 		self.farm.create_pma_users()
 		sequence = ['Adding phpMyAdmin system user', 'PhpMyAdmin system user successfully added']		
-		self.expect_sequence(channel, sequence)
+		self.expect_sequence(reader, sequence)
 		self._logger.info('>>>>> PhpMyAdmin system users were added. <<<<<')
 		
 	def test_create_mysql_backup(self):
 		self._logger.info('>>>>> Starting MySQL create backup test. <<<<<')
 		slave_ssh = self.slaves_ssh[0]
 		channel = slave_ssh.get_root_ssh_channel()
-		tail_log_channel(channel)
+		log = MutableLogFile(channel)
+		reader = log.tail()
 		self.farm.create_mysql_backup()
 		sequence = ['Dumping all databases', 'Uploading backup to S3', 'Backup files\(s\) uploaded to S3']
-		self.expect_sequence(channel, sequence)
+		self.expect_sequence(reader, sequence)
 		self._logger.info('>>>>> Successfully created MySQL backup. <<<<<<')
 			
 	def test_promote_to_master(self):
@@ -182,9 +97,10 @@ class MysqlRoleHandler(RoleHandler):
 		
 		first_slave_channel = self.slaves_ssh[0].get_root_ssh_channel()
 		second_slave_channel = self.slaves_ssh[1].get_root_ssh_channel()
-		tail_log_channel(first_slave_channel)
-		tail_log_channel(second_slave_channel)
-		time.sleep(5)
+		first_slave_log = MutableLogFile(first_slave_channel)
+		second_slave_log = MutableLogFile(second_slave_channel)
+		first_slave_reader = first_slave_log.tail()
+		second_slave_reader = second_slave_log.tail()
 		
 		### Detect 'promote to master' message receiver
 		out = self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
@@ -201,19 +117,19 @@ class MysqlRoleHandler(RoleHandler):
 		new_master_sequence = ['Switching replication to a new MySQL master', 'Replication switched']
 		### Expect 
 		if self.slaves_ssh[0].ip == new_master_ip:
-			self.expect_sequence(first_slave_channel, promote_sequence, 200)
+			self.expect_sequence(first_slave_reader, promote_sequence, 200)
 			self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
-			self.expect_sequence(second_slave_channel, new_master_sequence, 200)
+			self.expect_sequence(second_slave_reader, new_master_sequence, 200)
 		else:
-			self.expect_sequence(second_slave_channel, promote_sequence, 200)
+			self.expect_sequence(second_slave_reader, promote_sequence, 200)
 			self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
-			self.expect_sequence(first_slave_channel, new_master_sequence, 200)
+			self.expect_sequence(first_slave_reader, new_master_sequence, 200)
 		self._logger.info('>>> Successfully promoted to master and switched to new master. <<<<<')
 				
 class TestMysqlInit(unittest.TestCase):
 
 	def setUp(self):
-		role_name = 'Test_mysql_2010_10_21_1526'
+		role_name = 'Test_mysql_2010_10_20_1348'
 		opts = {}
 		opts.update(EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)

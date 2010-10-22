@@ -7,12 +7,12 @@ Created on Oct 2, 2010
 import unittest
 
 from szr_integtest_libs.scalrctl import import_server, ScalrConsts, ScalrCtl
-from szr_integtest import get_selenium, Ec2TestAmis, config
+from szr_integtest import get_selenium, Ec2TestAmis, config, MutableLogFile
 import socket
 from boto.ec2.connection import EC2Connection
 from scalarizr.libs.metaconf import NoPathError
 import time
-from szr_integtest_libs import SshManager, exec_command, tail_log_channel, expect
+from szr_integtest_libs import SshManager, exec_command
 from szr_integtest_libs.szrdeploy import ScalarizrDeploy
 import logging
 from optparse import OptionParser
@@ -48,7 +48,7 @@ class ImportEc2Server:
 			exec_command(channel, 'chmod 777 /var/run/screen')
 
 	def _change_behaviour(self, import_server_str):
-		return re.sub('behaviour=[\w-]*', 'behaviour=mysql', import_server_str)
+		return import_server_str
 	
 	def _import_server(self, role_name):
 		return import_server(get_selenium(), ScalrConsts.Platforms.PLATFORM_EC2 ,\
@@ -153,62 +153,63 @@ class ImportEc2Server:
 		exec_command(channel, 'screen -md %s' % import_server_str)
 		# Sleep for a while for scalarizr initializing
 		time.sleep(2)
-		tail_log_channel(channel)
+		#tail_log_channel(channel)
+		log = MutableLogFile(channel)
+		reader = log.head()
 		self._logger.info("Waiting for hello message delivered")
 		# RegExp   																		# Timeout
 		
-		expect(channel, "Message 'Hello' delivered", 									15)
+		reader.expect("Message 'Hello' delivered", 										15)
 		
 		self._logger.info("Hello delivered")
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		
 		if self.root_device == 'instance-store':
-			expect(channel, "Make image .+ from volume /",			 					240)
+			reader.expect("Make image .+ from volume /",			 					240)
 		else:
-			expect(channel, "Make EBS volume /dev/sd.+ from volume /", 					240)
+			reader.expect("Make EBS volume /dev/sd.+ from volume /", 					240)
 
-		expect(    channel, "Volume bundle complete!", 									2400)
+		reader.expect("Volume bundle complete!", 										2400)
 		self._logger.info("Volume with / bundled")
 		
 
 		if self.root_device == 'instance-store':
-			expect(channel, 'Bundling image...',										240)
-			expect(channel, 'Encrypting image',											240)
-			expect(channel, 'Splitting image into chunks',								240)
-			expect(channel, 'Encrypting keys',											240)
-			expect(channel, 'Image bundle complete!',									240)
+			reader.expect( 'Bundling image...',								    	    240)
+			reader.expect( 'Encrypting image',											240)
+			reader.expect( 'Splitting image into chunks',								240)
+			reader.expect( 'Encrypting keys',											240)
+			reader.expect( 'Image bundle complete!',									240)
 			
 			self._logger.info("Image bundled!")
 			
-			expect(channel, 'Uploading bundle',											240)
-			expect(channel, 'Enqueue files to upload',									240)
-			expect(channel, 'Uploading files',											240)
-			expect(channel, 'Registration complete!',									240)
-			self.ami = expect(
-				   channel, "Image (?P<ami_id>ami-\w+) available", 						360).group('ami_id')
+			reader.expect( 'Uploading bundle',											240)
+			reader.expect( 'Enqueue files to upload',									240)
+			reader.expect( 'Uploading files',											240)
+			reader.expect( 'Registration complete!',									240)
+			self.ami = reader.expect("Image (?P<ami_id>ami-\w+) available", 			360).group('ami_id')
 
 		else:
-			expect(channel, "Creating snapshot of root device image", 					240)
+			reader.expect( "Creating snapshot of root device image", 					240)
 			self._logger.info("Creating snapshot of root device image")
-			expect(channel, "Checking that snapshot (?P<snap_id>snap-\w+) is completed",240)
+			reader.expect( "Checking that snapshot (?P<snap_id>snap-\w+) is completed",240)
 			self._logger.info("Checking that snapshot is completed")
-			expect(channel, "Snapshot snap-\w+ completed", 								420)
+			reader.expect( "Snapshot snap-\w+ completed", 								420)
 			self._logger.info("Snapshot completed")
-			expect(channel, "Registering image", 										120)
+			reader.expect( "Registering image", 										120)
 		
-			self.ami = expect(
-			   channel, "Checking that (?P<ami_id>ami-\w+) is available", 				120).group('ami_id')
+			self.ami = reader.expect("Checking that (?P<ami_id>ami-\w+) is available",  120).group('ami_id')
 
 			self._logger.info("Checking for %s completed", self.ami)
-			expect(channel, "Image (?P<ami>ami-\w+) available", 						360)
+			reader.expect( "Image (?P<ami>ami-\w+) available", 						    360)
 		
 			self._logger.info("Ami created: %s", self.ami)
 		
-			expect(channel, "Image registered and available for use", 					240)
+			reader.expect( "Image registered and available for use", 					240)
 			
-		expect(channel, "Rebundle complete!", 											240)		
+		reader.expect( "Rebundle complete!", 											240)
 		self._logger.info("Rebundle complete!")
-		
+		log.detach(reader.queue)
+		del(reader)
 		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
 		self.scalr_ctl.exec_cronjob('BundleTasksManager')
 		self.scalr_ctl.exec_cronjob('BundleTasksManager')
@@ -216,7 +217,6 @@ class ImportEc2Server:
 		#exec_command(channel,)
 		# TODO: run <import_server_str> on instance, read log while bundle not complete, return ami id . 
 		# Don't forget to run crons!
-
 
 def _parse_args():
 	parser = OptionParser()
