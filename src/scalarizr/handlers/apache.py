@@ -17,7 +17,7 @@ from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 	NoPathError
 from scalarizr.util import disttool, cached, firstmatched, validators, software
 from scalarizr.util import initdv2, system
-from scalarizr.util.filetool import write_file
+from scalarizr.util.filetool import write_file, read_file
 
 # Stdlibs
 import logging, os, re
@@ -39,24 +39,26 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		else:
 			initd_script = '/etc/init.d/apache2'
 		
-		'''
+
 		pid_file = None
 		if os.path.exists("/etc/apache2/envvars"):
 			env_vars = read_file("/etc/apache2/envvars")
 			m = re.search("export\sAPACHE_PID_FILE=(.*)", env_vars)
 			if m:
 				pid_file = m.group(1)
-		'''
+
 		
 		initdv2.ParametrizedInitScript.__init__(
 			self, 
 			'apache', 
 			initd_script,
+			pid_file = pid_file,
 			socks=[initdv2.SockParam(80)]
 		)
 		
-	def status(self):		
+	def status(self):
 		status = initdv2.ParametrizedInitScript.status(self)
+		# If 'running' and socks were passed
 		if not status and self.socks:
 			ip, port = self.socks[0].conn_address
 			telnet = Telnet(ip, port)

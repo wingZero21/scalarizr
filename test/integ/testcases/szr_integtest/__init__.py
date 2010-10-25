@@ -243,7 +243,7 @@ class MutableLogFile:
 		cmd = 'tail -f -n +0 %s\n' % self._log_file
 		self._channel.send(cmd)
 		time.sleep(0.3)
-		print self._channel.recv(len(cmd))
+		self._channel.recv(len(cmd))
 		
 		# Read log file
 		self._logger.debug('Entering read log file loop')

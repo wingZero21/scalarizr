@@ -8,7 +8,8 @@ import socket
 import os
 import time
 from subprocess import Popen, PIPE
-
+from scalarizr.util.filetool import read_file
+import re
 
 _services  = dict()
 _instances = dict()
@@ -143,6 +144,23 @@ class ParametrizedInitScript(InitScript):
 		return self._start_stop_reload('reload') 
 	
 	def status(self):
+		if self.pid_file:
+			if not os.path.exists(self.pid_file):
+				return Status.NOT_RUNNING
+			pid = read_file(self.pid_file).strip()
+			if os.path.isfile('/proc/%s/status' % pid):
+				try:
+					fp = open('/proc/%s/status' % pid)
+					status = fp.read()
+				except:
+					return Status.NOT_RUNNING
+				finally:
+					fp.close()
+					
+				if status:
+					pid_state = re.search('State:\s+(?P<state>\w)', status).group('state')
+					if pid_state in ('T', 'Z'):
+						return Status.NOT_RUNNING
 		try:
 			for sock in self.socks:
 				wait_sock(sock)
