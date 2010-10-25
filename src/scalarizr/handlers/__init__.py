@@ -273,54 +273,60 @@ class ServiceCtlHanler(Handler):
 	def sc_on_start(self):
 		szr_cnf = bus.cnf
 		if szr_cnf.state == ScalarizrState.RUNNING:
-			# Stop servive if it's already running
-			self._stop_service()
-			
-			# Obtain current configuration preset
-			cur_preset = self._obtain_current_preset()
-				 
-			# Apply current preset
-			my_preset = self._cnf_ctl.current_preset()
-			if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
-				self._cnf_ctl.apply_preset(cur_preset)
-			else:
-				self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+			if self._cnf_ctl:
+				# Stop servive if it's already running
+				self._stop_service()
 				
-			# Start service with updated configuration
-			self._start_service_with_preset(cur_preset)
+				# Obtain current configuration preset
+				cur_preset = self._obtain_current_preset()
+					 
+				# Apply current preset
+				my_preset = self._cnf_ctl.current_preset()
+				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
+					self._cnf_ctl.apply_preset(cur_preset)
+				else:
+					self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+					
+				# Start service with updated configuration
+				self._start_service_with_preset(cur_preset)
+			else:
+				self._start_service()
 
 
 	def sc_on_before_host_down(self, msg): 
 		self._stop_service()
 	
 	def sc_on_configured(self, service_name):
-		# Stop service if it's already running
-		self._stop_service()		
-		
-		# Backup default configuration
-		my_preset = self._cnf_ctl.current_preset()
-		self._preset_store.save(my_preset, PresetType.DEFAULT)
-		
-		
-		# Fetch current configuration preset
-		service_conf = self._queryenv.get_service_configuration(self._service_name)
-		cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
-		self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
-		
-		if cur_preset.name == 'default':
-			# Scalr respond with default preset
-			self._logger.debug('%s configuration is default', self._service_name)
-			#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
-			self._start_service()
-			return
-		
-		elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
-			self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
-			return
-		
-		else:
-			self._cnf_ctl.apply_preset(cur_preset)
+		if self._cnf_ctl:
+			# Stop service if it's already running
+			self._stop_service()		
 			
-		# Start service with updated configuration
-		self._start_service_with_preset(cur_preset)
+			# Backup default configuration
+			my_preset = self._cnf_ctl.current_preset()
+			self._preset_store.save(my_preset, PresetType.DEFAULT)
+			
+			
+			# Fetch current configuration preset
+			service_conf = self._queryenv.get_service_configuration(self._service_name)
+			cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
+			self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
+			
+			if cur_preset.name == 'default':
+				# Scalr respond with default preset
+				self._logger.debug('%s configuration is default', self._service_name)
+				#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
+				self._start_service()
+				return
+			
+			elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
+				self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+				return
+			
+			else:
+				self._cnf_ctl.apply_preset(cur_preset)
+				
+			# Start service with updated configuration
+			self._start_service_with_preset(cur_preset)
+		else:
+			self._start_service()
 		

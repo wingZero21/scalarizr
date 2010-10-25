@@ -744,9 +744,28 @@ if disttool.is_linux():
 		_logger = None
 		
 		_volume = None
+		
 		path = None
-		mpoint = '/mnt/img-mnt'	
+		'''
+		Image file
+		'''
+		
+		devname = None
+		'''
+		Image device name
+		Returned by _create_image def
+		'''
+		
+		mpoint = None
+		'''
+		Image mount point
+		'''
+			
 		excludes = None
+		'''
+		Directories excludes list
+		'''
+		
 		_excluded_mpoints = None
 		
 		_mtab = None
@@ -755,6 +774,7 @@ if disttool.is_linux():
 			self._logger = logging.getLogger(__name__)
 			self._mtab = fstool.Mtab()
 			self._volume = volume
+			self.mpoint = '/mnt/img-mnt'
 			self.path = path
 			
 			# Create rsync excludes list
@@ -767,17 +787,10 @@ if disttool.is_linux():
 					for entry in self._mtab.list_entries() 
 					if entry.mpoint.startswith(self._volume) and entry.mpoint != self._volume)
 			self.excludes.update(self._excluded_mpoints)
-			'''
-			# Add mounted non-local filesystems under volume			
-			self.excludes.update(set(entry.mpoint
-					for entry in self._mtab.list_entries() 
-					if entry.mpoint.startswith(self._volume) and \
-					entry.fstype not in fstool.Mtab.LOCAL_FS_TYPES))
-			'''
 
 		
 		def make(self):
-			self._create_image()
+			self.devname = self._create_image()
 			self._format_image()
 			system("sync")  # Flush so newly formatted filesystem is ready to mount.
 			self._mount_image()
@@ -796,13 +809,20 @@ if disttool.is_linux():
 			if self._mtab.contains(mpoint=self.mpoint, reload=True):
 				self._logger.debug("Unmounting '%s'", self.mpoint)				
 				system("umount -d " + self.mpoint)
-
 		
 		def _format_image(self):
 			self._logger.info("Formatting image")
-			system("/sbin/mkfs.ext3 -F " + self.path + " 2>&1")
-			system("/sbin/tune2fs -i 0 " + self.path)
-			self._logger.debug("Image %s formatted", self.path)
+			vol_entry = self._mtab.find(mpoint=self._volume)[0]
+			system('/sbin/mkfs.%s -F %s 2>&1' % (vol_entry.fstype, self.devname))
+			system('/sbin/tune2fs -i 0 %s' % self.devname)
+			self._logger.debug('Image %s formatted', self.devname)
+			
+			# Set volume label
+			if vol_entry.fstype in ('ext2', 'ext3', 'ext4'):
+				label = system('/sbin/e2label %s' % vol_entry.devname)[0].strip()
+				if label:
+					self._logger.debug('Set volume label: %s', label)
+					system('/sbin/e2label %s %s' % (self.devname, label))
 
 
 		def _create_image(self):
@@ -813,7 +833,7 @@ if disttool.is_linux():
 			self._logger.info("Mounting image")
 			if self._mtab.contains(mpoint=self.mpoint):
 				raise HandlerError("Image already mounted")
-			fstool.mount(self.path, self.mpoint, options)
+			fstool.mount(self.devname, self.mpoint, options)
 		
 		
 		def _make_special_dirs(self):
@@ -897,6 +917,7 @@ if disttool.is_linux():
 		def __init__(self, volume, devname, ec2_conn, avail_zone, instance_id, 
 					volume_size=None, volume_id=None, excludes=None):
 			LinuxImage.__init__(self, volume, devname, excludes)
+			self.devname = devname
 			self._ec2_conn = ec2_conn
 			self._avail_zone = avail_zone
 			self._instance_id = instance_id
@@ -911,11 +932,12 @@ if disttool.is_linux():
 				self.ebs_volume = ebstool.create_volume(self._ec2_conn, self._volume_size, 
 						self._avail_zone, logger=self._logger)
 			ebstool.attach_volume(self._ec2_conn, self.ebs_volume, 
-					self._instance_id, self.path, to_me=True, logger=self._logger)
+					self._instance_id, self.devname, to_me=True, logger=self._logger)
+			return self.devname
 			
 		def make(self):
 			self._logger.info("Make EBS volume %s from volume %s (excludes: %s)", 
-					self.path, self._volume, ":".join(self.excludes))
+					self.devname, self._volume, ":".join(self.excludes))
 			LinuxImage.make(self)
 			
 		def cleanup(self):
@@ -955,13 +977,21 @@ if disttool.is_linux():
 		def _create_image(self):
 			self._logger.debug('Creating image file %s', self.path)
 			system("dd if=/dev/zero of=%s bs=1M count=1 seek=%s" % (self.path, self._size - 1))
-			self._logger.debug('Image file %s created', self.path)
-		
-		def _mount_image(self):
-			'''
-			Mount the image file as a loopback device.		
-			'''
-			LinuxImage._mount_image(self, options=["-o loop"])
+			self._logger.debug('Image file %s created', self.path)			
+			
+			self._logger.debug('Associate loop device with a %s', self.path)
+			out, err, retcode = system('/sbin/losetup -f --show %s', self.path)
+			if retcode > 0:
+				raise HandlerError('Cannot setup loop device. Code: %d %s' % (retcode, err))
+			devname = out.strip()
+			self._logger.debug('Associated %s with a file %s', devname, self.path)
+			
+			return devname
+			
+		def cleanup(self):
+			LinuxImage.cleanup(self)
+			if self.devname:
+				system('/sbin/losetup -d %s' % self.devname)
 				
 	LoopbackImage = LinuxLoopbackImage
 	EbsImage = LinuxEbsImage

@@ -40,7 +40,7 @@ class IpListBuilder(Handler):
 		bus.on("init", self.on_init)
 
 	def on_init(self, *args, **kwargs):
-		bus.on("before_host_up", self.on_before_host_up)
+		bus.on("start", self.on_start)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.HOST_UP \
@@ -49,10 +49,14 @@ class IpListBuilder(Handler):
 			or message.name == Messages.REBOOT_FINISH \
 			or message.name == MysqlMessages.NEW_MASTER_UP
 			
-	def on_before_host_up(self, message):
+	def on_start(self, *args):
 		"""
 		Build current hosts structure on farm
 		"""
+		self._logger.debug('Rebuild farm hosts structure')
+		if os.path.exists(self._base_path):
+			shutil.rmtree(self._base_path)
+		
 		for role in self._queryenv.list_roles():
 			for host in role.hosts:
 				self._modify_tree(
@@ -98,8 +102,6 @@ class IpListBuilder(Handler):
 			self._create_file(os.path.join(master_path, ip))
 
 	on_RebootStart = on_HostDown
-	
-	on_RebootFinish = on_HostUp 				
 
 	def _modify_tree(self, rolename, behaviours, ip, modfn=None, replication_master=None):
 		# Touch/Unlink %role_name%/xx.xx.xx.xx

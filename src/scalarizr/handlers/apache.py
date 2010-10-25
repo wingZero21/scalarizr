@@ -17,7 +17,7 @@ from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 	NoPathError
 from scalarizr.util import disttool, cached, firstmatched, validators, software
 from scalarizr.util import initdv2, system
-from scalarizr.util.filetool import write_file, read_file
+from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
 import logging, os, re
@@ -31,22 +31,27 @@ CNF_NAME = BEHAVIOUR + '.ini'
 APP_CONF_PATH = 'apache_conf_path'
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
+	_apachectl = None
+	
 	def __init__(self):
 		if disttool.is_redhat_based():
-			initd_script = '/etc/init.d/httpd'
+			self._apachectl = '/usr/sbin/apachectl'
+			initd_script 	= '/etc/init.d/httpd'			
+			pid_file 		= '/var/run/httpd.pid'
 		elif disttool.is_debian_based():
-			initd_script = '/etc/init.d/apache2'
-		else:
-			initd_script = '/etc/init.d/apache2'
-		
+			self._apachectl = '/usr/sbin/apache2ctl'			
+			initd_script 	= '/etc/init.d/apache2'
 
-		pid_file = None
-		if os.path.exists("/etc/apache2/envvars"):
 			env_vars = read_file("/etc/apache2/envvars")
 			m = re.search("export\sAPACHE_PID_FILE=(.*)", env_vars)
 			if m:
-				pid_file = m.group(1)
-
+				pid_file 	= m.group(1)
+			else:
+				pid_file	= '/var/run/apache2.pid'
+		else:
+			self._apachectl = '/usr/sbin/apachectl'			
+			initd_script 	= '/etc/init.d/apache2'
+			pid_file 		= '/var/run/apache2.pid'
 		
 		initdv2.ParametrizedInitScript.__init__(
 			self, 
@@ -56,7 +61,13 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			socks=[initdv2.SockParam(80)]
 		)
 		
-	def status(self):
+	def reload(self):
+		if os.path.exists(self.pid_file):
+			out, err, retcode = system(self._apachectl + ' graceful')
+			if retcode > 0:
+				raise initdv2.InitdError('Cannot reload apache: %s' % err)
+		
+	def status(self):		
 		status = initdv2.ParametrizedInitScript.status(self)
 		# If 'running' and socks were passed
 		if not status and self.socks:
@@ -67,18 +78,9 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 				return initdv2.Status.RUNNING
 			return initdv2.Status.NOT_RUNNING
 		return status
-
 	
 	def configtest(self):
-		if not hasattr(self, 'apachectl'):
-			if disttool.is_redhat_based():
-				self.apachectl = '/usr/sbin/apachectl'
-			elif disttool.is_debian_based():
-				self.apachectl = '/usr/sbin/apache2ctl'
-			else:
-				self.apachectl = '/usr/sbin/apachectl'	
-				
-		out = system(self.apachectl +' configtest')[1]
+		out = system(self._apachectl +' configtest')[1]
 		if 'error' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 

@@ -362,14 +362,8 @@ class MysqlCnfController(CnfController):
 		
 	def _get_connection(self):
 		szr_cnf = bus.cnf
-		root_password = None
-		try:
-			root_password = szr_cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
-			connection = _spawn_mysql(ROOT_USER, root_password)
-		except Exception, e:
-			connection = None
-		finally:
-			return connection
+		root_password = szr_cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
+		return _spawn_mysql(ROOT_USER, root_password)
 
 
 def _spawn_mysql(user, password):
@@ -899,7 +893,7 @@ class MysqlHandler(ServiceCtlHanler):
 			message.mysql = msg_data
 			self._update_config(msg_data)
 			
-		self._start_service()	
+		#self._start_service()	
 			
 			
 	
