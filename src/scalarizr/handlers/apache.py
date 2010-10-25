@@ -15,14 +15,16 @@ from scalarizr.messaging import Messages
 # Libs
 from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 	NoPathError
-from scalarizr.util import disttool, cached, firstmatched, validators, software
+from scalarizr.util import disttool, cached, firstmatched, validators, software,\
+	wait_until
 from scalarizr.util import initdv2, system
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
 import logging, os, re
 from telnetlib import Telnet
-
+from scalarizr.util.initdv2 import InitdError
+import time
 
 SERVICE_NAME = 'apache'
 BEHAVIOUR = BuiltinBehaviours.APP
@@ -66,6 +68,8 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			out, err, retcode = system(self._apachectl + ' graceful')
 			if retcode > 0:
 				raise initdv2.InitdError('Cannot reload apache: %s' % err)
+		else:
+			raise InitdError('Service "%s" is not running' % self.name, InitdError.NOT_RUNNING)
 		
 	def status(self):		
 		status = initdv2.ParametrizedInitScript.status(self)
@@ -83,6 +87,26 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		out = system(self._apachectl +' configtest')[1]
 		if 'error' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
+		
+	def start(self):
+		ret = initdv2.ParametrizedInitScript.start(self)
+		if self.pid_file:
+			try:
+				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=5)
+			except:
+				raise initdv2.InitdError('Cannot start Apache: pid file hasn\'t been created')
+			return ret
+		return ret
+	
+	def restart(self):
+		ret = initdv2.ParametrizedInitScript.restart(self)
+		if self.pid_file:
+			try:
+				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=5)
+			except:
+				raise initdv2.InitdError('Cannot restart Apache: pid file hasn\'t been created')
+			return ret
+		return ret
 
 initdv2.explore('apache', ApacheInitScript)
 

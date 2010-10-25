@@ -141,6 +141,8 @@ class ParametrizedInitScript(InitScript):
 		return self._start_stop_reload('restart')
 	
 	def reload(self):
+		if not self.running:
+			raise InitdError('Service "%s" is not running' % self.name, InitdError.NOT_RUNNING)
 		return self._start_stop_reload('reload') 
 	
 	def status(self):
@@ -163,7 +165,12 @@ class ParametrizedInitScript(InitScript):
 						return Status.NOT_RUNNING
 		try:
 			for sock in self.socks:
-				wait_sock(sock)
+				timeout = sock.timeout
+				sock.timeout = 1
+				try:
+					wait_sock(sock)
+				finally:
+					sock.timeout = timeout
 		except InitdError:
 			return Status.NOT_RUNNING
 		

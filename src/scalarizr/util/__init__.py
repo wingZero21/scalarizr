@@ -130,13 +130,15 @@ def system(args, shell=True):
 	return out, err, p.returncode
 
 
-def wait_until(target, args=None, sleep=5, logger=None, time_until=None):
+def wait_until(target, args=None, sleep=5, logger=None, time_until=None, timeout=None):
 	args = args or ()
+	if timeout:
+		time_until = time.time() + timeout
 	while not target(*args):
 		if time_until and time.time() >= time_until:
 			raise BaseException('Time until: %d reached' % time_until)
 		if logger:
-			logger.debug("Wait %d seconds before the next attempt", sleep)
+			logger.debug("Wait %.2f seconds before the next attempt", sleep)
 		time.sleep(sleep)
 
 

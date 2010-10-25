@@ -20,7 +20,7 @@ from scalarizr.util import system, cached, firstmatched,\
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
-import os, logging, shutil
+import os, logging, shutil, re
 from telnetlib import Telnet
 from datetime import datetime
 
@@ -41,10 +41,10 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		cnf = bus.cnf; ini = cnf.rawini
 		self._nginx_binary = ini.get(CNF_SECTION, BIN_PATH)
 		
-		'''
+
 		pid_file = None
 		try:
-			nginx = whereis('nginx')
+			nginx = software.whereis('nginx')
 			if nginx:
 				out = system('%s -V' % nginx[0])[1]
 				m = re.search("--pid-path=(.*?)\s", out)
@@ -52,12 +52,12 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 						pid_file = m.group(1)
 		except:
 			pass
-		'''
-				
+						
 		initdv2.ParametrizedInitScript.__init__(
 			self, 
 			'nginx', 
-			'/etc/init.d/nginx', 
+			'/etc/init.d/nginx',
+			pid_file = pid_file, 
 			socks=[initdv2.SockParam(80)]
 		)
 
