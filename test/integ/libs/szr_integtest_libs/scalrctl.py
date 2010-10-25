@@ -20,7 +20,7 @@ class FarmUIError(Exception):
 
 EC2_ROLE_DEFAULT_SETTINGS = {
 	'aws.availability_zone' : 'us-east-1a',
-	'aws.instance_type' : 't1.micro'
+	'aws.instance_type' : 't1.micro',
 }
 
 EC2_MYSQL_ROLE_DEFAULT_SETTINGS = {
