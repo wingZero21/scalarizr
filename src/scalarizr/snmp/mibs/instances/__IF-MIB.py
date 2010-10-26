@@ -52,6 +52,7 @@ class GetOctets():
 					values = row.split()	
 					return validate(Counter32(), values[directions[self.direction]])
 	
+
 file = open('/proc/net/dev', "r")
 ifacesList = file.readlines()
 file.close()

@@ -5,13 +5,12 @@ Created on Dec 5, 2009
 '''
 
 from scalarizr.messaging import MessageProducer, Queues
-from scalarizr.messaging.p2p import P2pMessageStore, _P2pBase, P2pConfigOptions
-from scalarizr.util import cryptotool, configtool
+from scalarizr.messaging.p2p import P2pMessageStore
+from scalarizr.util import configtool
 from urllib import splitnport
 from urllib2 import urlopen, Request, URLError, HTTPError
 import logging
 import uuid
-import binascii
 import threading
 try:
 	import timemodule as time
@@ -19,22 +18,22 @@ except ImportError:
 	import time	
 
 
-class P2pMessageProducer(MessageProducer, _P2pBase):
+class P2pMessageProducer(MessageProducer):
 	endpoint = None
 	retries_progression = None
-	sender = None
+	no_retry = False
+	sender = 'daemon'
 	_store = None
 	_logger = None
 	_stop_delivery = None
 	
-	def __init__(self, **kwargs):
+	def __init__(self, endpoint=None, retries_progression=None):
 		MessageProducer.__init__(self)
-		_P2pBase.__init__(self, **kwargs)
-		
-		self.endpoint = kwargs[P2pConfigOptions.PRODUCER_URL]
-		self.retries_progression = configtool.split_array(
-				kwargs[P2pConfigOptions.PRODUCER_RETRIES_PROGRESSION], ",")
-		self.sender = kwargs[P2pConfigOptions.PRODUCER_SENDER]
+		self.endpoint = endpoint
+		if retries_progression:
+			self.retries_progression = configtool.split_array(retries_progression, ",")
+		else:
+			self.no_retry = True
 				
 		self._logger = logging.getLogger(__name__)
 		self._store = P2pMessageStore()
@@ -54,35 +53,40 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 		self.fire("before_send", queue, message)
 		self._store.put_outgoing(message, queue, self.sender)
 		
-		if not hasattr(self._local, "interval"):
-			for k, v in self._local_defaults.items():
-				setattr(self._local, k, v)
-				
-		self._local.delivered = False
-		#while not self._local.delivered and not self._stop_delivery.isSet():
-		while not self._local.delivered:			
-			if self._local.interval:
-				self._logger.debug("Sleep %d seconds before next attempt", self._local.interval)
-				time.sleep(self._local.interval)
-				# FIXME: SIGINT hanged
-				# strace:
-				# --- SIGINT (Interrupt) @ 0 (0) ---
-				# rt_sigaction(SIGINT, {0x36b9210, [], 0}, {0x36b9210, [], 0}, 8) = 0
-				# sigreturn()                             = ? (mask now [])
-				
-				# futex(0xa3f5d78, FUTEX_WAIT_PRIVATE, 0, NUL
-			#if not self._stop_delivery.isSet():
-			#	self._send0(queue, message, self._delivered_cb, self._undelivered_cb)
-			self._send0(queue, message, self._delivered_cb, self._undelivered_cb)
-				
+		if not self.no_retry:
+			if not hasattr(self._local, "interval"):
+				for k, v in self._local_defaults.items():
+					setattr(self._local, k, v)
+					
+			self._local.delivered = False
+			#while not self._local.delivered and not self._stop_delivery.isSet():
+			while not self._local.delivered:			
+				if self._local.interval:
+					self._logger.debug("Sleep %d seconds before next attempt", self._local.interval)
+					time.sleep(self._local.interval)
+					# FIXME: SIGINT hanged
+					# strace:
+					# --- SIGINT (Interrupt) @ 0 (0) ---
+					# rt_sigaction(SIGINT, {0x36b9210, [], 0}, {0x36b9210, [], 0}, 8) = 0
+					# sigreturn()                             = ? (mask now [])
+					
+					# futex(0xa3f5d78, FUTEX_WAIT_PRIVATE, 0, NUL
+				#if not self._stop_delivery.isSet():
+				#	self._send0(queue, message, self._delivered_cb, self._undelivered_cb)
+				self._send0(queue, message, self._delivered_cb, self._undelivered_cb)
+		else:
+			self._send0(queue, message, self._delivered_cb, self._undelivered_cb_raises)
 
+
+	def _undelivered_cb_raises(self, queue, message, ex):
+		raise ex
 
 	def _delivered_cb(self, queue, message):
 		self._local.next_retry_index = 0
 		self._local.interval = None
 		self._local.delivered = True
 	
-	def _undelivered_cb(self, queue, message):
+	def _undelivered_cb(self, queue, message, ex):
 		self._local.interval = self._get_next_interval()
 		if self._local.next_retry_index < len(self.retries_progression):
 			self._local.next_retry_index += 1	
@@ -96,23 +100,10 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			xml = message.toxml()
 			self._logger.debug("Delivering message '%s' %s", message.name, xml)
 			
-			# Crypt
-			crypto_key = binascii.a2b_base64(configtool.read_key(self.crypto_key_path))
-			data = cryptotool.encrypt(xml, crypto_key)
-			
-			# Sign
-			signature, timestamp = cryptotool.sign_http_request(data, crypto_key)
-			
-			# Send request
-			headers = {
-				"Date": timestamp, 
-				"X-Signature": signature, 
-				"X-Server-Id": self.server_id
-			}
-			self._logger.debug("Date: " + timestamp)			
-			self._logger.debug("X-Signature: " + signature)
-			self._logger.debug("X-Server-Id: " + self.server_id)
-			self._logger.debug("Payload: " + data)
+			headers = {}
+			data = xml
+			for f in self.filters['protocol']:
+				data = f(self, queue, xml, headers)
 			
 			url = self.endpoint + "/" + queue
 			req = Request(url, data, headers)
@@ -147,7 +138,7 @@ class P2pMessageProducer(MessageProducer, _P2pBase):
 			
 			# Call user code
 			if fail_callback:
-				fail_callback(queue, message)
+				fail_callback(queue, message, e)
 
 
 	def _message_delivered(self, queue, message, callback=None):

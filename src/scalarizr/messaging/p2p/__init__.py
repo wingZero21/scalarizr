@@ -6,10 +6,17 @@ Created on Dec 5, 2009
 
 from scalarizr.bus import bus
 from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingError
-import logging
+from scalarizr.messaging.p2p.security import P2pMessageSecurity
 from scalarizr.util import configtool
+import logging
 import threading
 
+
+
+"""
+InFilter
+OutFilter
+"""
 
 class P2pConfigOptions:
 	SERVER_ID 						= "server_id"
@@ -19,53 +26,78 @@ class P2pConfigOptions:
 	PRODUCER_SENDER					= "producer_sender"	
 	CONSUMER_URL 					= "consumer_url"
 
-class P2pSender:
-	DAEMON = "daemon"
-	SCRIPT = "script"
 
 class P2pMessageService(MessageService):
-	_kwargs = {}
-	_consumer = None
-	_producer = None
+	_params = {}
+	_default_producer = None
+	_default_consumer = None
 	
-	def __init__(self, **kwargs):
-		self._kwargs = kwargs
+	def __init__(self, **params):
+		self._params = params
+		self._security = P2pMessageSecurity(
+			self._params[P2pConfigOptions.SERVER_ID],
+			self._params[P2pConfigOptions.CRYPTO_KEY_PATH]
+		)
 
 	def new_message(self, name=None, meta=None, body=None):
 		return P2pMessage(name, meta, body)
 	
 	def get_consumer(self):
-		if self._consumer is None:
-			import consumer
-			self._consumer = consumer.P2pMessageConsumer(**self._kwargs)
-		return self._consumer
+		if not self._default_consumer:
+			self._default_consumer = self.new_consumer(
+				endpoint=self._params[P2pConfigOptions.CONSUMER_URL]
+			)
+		return self._default_consumer
+	
+	def new_consumer(self, **params):
+		import consumer
+		c = consumer.P2pMessageConsumer(**params)
+		c.filters['protocol'].append(self._security.in_protocol_filter)
+		return c
 	
 	def get_producer(self):
-		if self._producer is None:
-			import producer
-			self._producer = producer.P2pMessageProducer(**self._kwargs)
-		return self._producer
+		if not self._default_producer:
+			self._default_producer = self.new_producer(
+				endpoint=self._params[P2pConfigOptions.PRODUCER_URL],
+				retries_progression=self._params[P2pConfigOptions.PRODUCER_RETRIES_PROGRESSION],
+			)
+		return self._default_producer
+	
+	def new_producer(self, **params):
+		import producer
+		p = producer.P2pMessageProducer(**params)
+		p.filters['protocol'].append(self._security.out_protocol_filter)
+		return p
+		
 
 def new_service(**kwargs):
 	return P2pMessageService(**kwargs)
-	
-class _P2pBase(object):
-	server_id = None
-	crypto_key_path = None
-	
-	def __init__(self, **kwargs):
-		self.server_id = kwargs[P2pConfigOptions.SERVER_ID]
-		self.crypto_key_path = kwargs[P2pConfigOptions.CRYPTO_KEY_PATH]
-	
+
 class _P2pMessageStore:
-	_logger = None
+	_logger = None	
+	
+	TAIL_LENGTH = 50	
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		ex = bus.periodical_executor
+		if ex: 
+			self._logger.debug('Add rotate messages table task for periodical executor')
+			ex.add_task(self.rotate, 600, 'Rotate messages sqlite table')
 
 	def _conn(self):
 		db = bus.db
 		return db.get().get_connection()
+		
+	def rotate(self):
+		conn = self._conn()
+		cur = conn.cursor()
+		cur.execute('SELECT * FROM p2p_message ORDER BY id ASC LIMIT %d, 1' % self.TAIL_LENGTH)
+		row = cur.fetchall()
+		if row:
+			self._logger.debug('Deleting messages older then messageid: %d', row['message_id'])
+			cur.execute('DELETE FROM p2p_message WHERE id >= ?' (row['id'],))
+		conn.commit()
 		
 	def put_ingoing(self, message, queue):
 		conn = self._conn()
@@ -245,6 +277,7 @@ def P2pMessageStore():
 	if _message_store is None:
 		_message_store = _P2pMessageStore()
 	return _message_store
+
 
 class P2pMessage(Message):
 

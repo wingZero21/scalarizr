@@ -2,27 +2,39 @@
 Created on Jun 4, 2010
 
 @author: marat
+@author: spike
 '''
 
-# Command Responder
+import os, logging
+import select
+
 from pysnmp.entity import engine, config
-from pysnmp.carrier.asynsock.dgram import udp
 from pysnmp.entity.rfc3413 import cmdrsp, context
-import os, logging, select, time
+from pysnmp.carrier.asynsock.dgram import udp
 from pysnmp.carrier.error import CarrierError
 from pysnmp.smi.error import SmiError
+
+known_modules = (
+	'__UCD-SNMP-MIB', 
+	'__UCD-DISKIO-MIB', 
+	'__IF-MIB', 
+	'__HOST-RESOURCES-MIB', 
+	'__SCALING-METRICS-MIB'					
+)
 
 class SnmpServer():
 	port = None
 	_security_name = None
 	_community_name = None
-	_engine = None 
+	_engine = None
+	_modules = None 
 	
-	def __init__(self, port=None, security_name=None, community_name=None):
+	def __init__(self, port=None, security_name=None, community_name=None, modules=None):
 		self._logger = logging.getLogger(__name__)
 		self.port = port
 		self._security_name = security_name
 		self._community_name = community_name
+		self._modules = modules or known_modules
 	
 	def start(self):
 		if self._engine is None:
@@ -45,16 +57,14 @@ class SnmpServer():
 		
 		mibBuilder = self._engine.msgAndPduDsp.mibInstrumController.mibBuilder
 			
-		#mibBuilder
 		MibSources = mibBuilder.getMibPath()
-			
 		sources =  ['/mibs','/mibs/instances']
 		for source in sources:
 			MibSources += ((os.path.realpath(os.path.dirname(__file__) + source), ))
 		apply(mibBuilder.setMibPath, MibSources)
 			
 		try:
-			mibBuilder.loadModules('__UCD-SNMP-MIB', '__UCD-DISKIO-MIB', '__IF-MIB', '__HOST-RESOURCES-MIB')
+			mibBuilder.loadModules(*self._modules)
 		except SmiError:
 			self._logger.error('Can\'t load modules')
 			raise
@@ -75,23 +85,22 @@ class SnmpServer():
 		cmdrsp.BulkCommandResponder(self._engine, snmpContext)
 			
 		# Start server
+		self._logger.debug('Starting transport dispatcher')
 		self._engine.transportDispatcher.jobStarted(1)
 		try:
+			self._logger.debug('Run transport dispatcher')
 			self._engine.transportDispatcher.runDispatcher()
 		except select.error, e:
 			if e.args[0] == 9: 
 				# 'Bad file descriptor'
 				# Throws when dispatcher closed from another thread
 				pass
+			else:
+				raise
 		except KeyboardInterrupt:
 			pass
-		except (BaseException, Exception), e2:
-			self._logger.exception(e2)
-			raise
-			
+
 	
 	def stop(self):
 		if self._engine:
 			self._engine.transportDispatcher.closeDispatcher()
-
-

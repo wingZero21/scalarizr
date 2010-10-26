@@ -4,11 +4,12 @@ Created on Mar 1, 2010
 @author: marat
 '''
 
-import scalarizr.handlers
 from scalarizr.bus import bus
+from scalarizr import config, handlers
 from scalarizr.messaging import Messages
-from scalarizr.util import system, fstool, configtool
-from binascii import hexlify
+from scalarizr.util import fstool
+
+
 import os
 import logging
 
@@ -17,7 +18,7 @@ import logging
 def get_handlers ():
 	return [EbsHandler()]
 
-class EbsHandler(scalarizr.handlers.Handler):
+class EbsHandler(handlers.Handler):
 	_logger = None
 	_platform = None
 	_queryenv = None
@@ -46,21 +47,20 @@ class EbsHandler(scalarizr.handlers.Handler):
 		)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, Messages.MOUNTPOINTS_RECONFIGURE) \
-				and platform == "ec2"
+		return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, Messages.MOUNTPOINTS_RECONFIGURE)
 
 	def on_init(self):
 		bus.on("before_host_init", self.on_before_host_init)
 		try:
-			scalarizr.handlers.script_executor.skip_events.add(Messages.INT_BLOCK_DEVICE_UPDATED)
+			handlers.script_executor.skip_events.add(Messages.INT_BLOCK_DEVICE_UPDATED)
 		except AttributeError:
 			pass
 	
 	def on_before_host_init(self, *args, **kwargs):
 		self._logger.debug("Adding udev rule for EBS devices")
 		try:
-			config = bus.config
-			scripts_path = config.get(configtool.SECT_GENERAL, configtool.OPT_SCRIPTS_PATH)
+			cnf = bus.cnf
+			scripts_path = cnf.rawini.get(config.SECT_GENERAL, config.OPT_SCRIPTS_PATH)
 			if scripts_path[0] != "/":
 				scripts_path = os.path.join(bus.base_path, scripts_path)
 			f = open("/etc/udev/rules.d/84-ebs.rules", "w+")
@@ -89,7 +89,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 			devname = ebs_volume.device
 			
 			mtab = fstool.Mtab()			
-			if not mtab.contains(devname, rescan=True):
+			if not mtab.contains(devname, reload=True):
 				self._logger.debug("Mounting device %s to %s", devname, ebs_mpoint.dir)
 				try:
 					fstool.mount(devname, ebs_mpoint.dir, make_fs=ebs_mpoint.create_fs, auto_mount=True)
@@ -101,7 +101,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 						raise
 				self._logger.debug("Device %s is mounted to %s", devname, ebs_mpoint.dir)
 				
-				self._send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
+				self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
 					volume_id = ebs_volume.volume_id,
 					device_name = devname
 				), broadcast=True)
@@ -119,7 +119,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 		if message.action == "add":
 			self._logger.debug("udev notified me that block device %s was attached", message.devname)
 			
-			self._send_message(
+			self.send_message(
 				Messages.BLOCK_DEVICE_ATTACHED, 
 				{"device_name" : message.devname}, 
 				broadcast=True
@@ -132,7 +132,7 @@ class EbsHandler(scalarizr.handlers.Handler):
 			fstab = fstool.Fstab()
 			fstab.remove(message.devname)
 			
-			self._send_message(
+			self.send_message(
 				Messages.BLOCK_DEVICE_DETACHED, 
 				{"device_name" : message.devname}, 
 				broadcast=True

@@ -4,8 +4,10 @@ Created on Dec 24, 2009
 @author: marat
 '''
 from scalarizr.bus import bus
+from scalarizr.util.filetool import read_file
 import os
 import re
+import socket
 
 class PlatformError(BaseException):
 	pass
@@ -32,24 +34,29 @@ class Platform():
 	name = None
 	_arch = None
 	_access_data = None
+	_metadata = None
 	
 	def get_private_ip(self):
-		"""
-		@return string 
-		"""
-		pass
+		return self.get_public_ip()
 	
 	def get_public_ip(self):
-		"""
-		@return string 
-		"""
-		pass
+		return socket.gethostbyname(socket.gethostname())
 	
 	def get_user_data(self, key=None):
-		"""
-		@return dict|any
-		"""
-		return {} if key else None
+		cnf = bus.cnf
+		path = cnf.private_path('.user-data')
+		if self._metadata is None and os.path.exists(path):
+			rawmeta = read_file(path)
+			if not rawmeta:
+				raise PlatformError("Empty user-data")
+			
+			self._metadata = {}
+			for k, v in re.findall("([^=]+)=([^;]*);?", rawmeta):
+				self._metadata[k] = v			
+		if key:
+			return self._metadata[key] if key in self._metadata else None
+		else:
+			return self._metadata 
 
 	def set_access_data(self, access_data):
 		self._access_data = access_data

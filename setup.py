@@ -20,7 +20,7 @@ class my_install_data(install_data):
 		d = platform.dist();
 		rhel =  int(d[0].lower() in ['centos', 'rhel', 'redhat']) and int(d[1].split('.')[0])
 		
-		entries = list(t for t in self.data_files if t[0].startswith("/usr"))
+		entries = list(t for t in self.data_files if t[0].startswith("/usr/local"))
 		for ent in entries:
 			dir = change_root(self.root, ent[0])			
 			for file in ent[1]:
@@ -63,8 +63,9 @@ def make_data_files(dst, src):
 description = "Scalarizr converts any server to Scalr-manageable node"
 
 
-data_files = make_data_files("/etc/scalr", "etc")
-data_files.extend(make_data_files("/usr/local/scalarizr/scripts", "scripts"))
+data_files = make_data_files('/etc/scalr', 'etc')
+data_files.extend(make_data_files('/usr/share/scalr', 'share'))
+data_files.extend(make_data_files('/usr/local/scalarizr/scripts', 'scripts'))
 data_files.append(["/usr/local/bin", ["bin/scalarizr"]])
 
 

@@ -15,7 +15,6 @@ except ImportError:
 	import time
 
 crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
-#m2_version_info = tuple(map(int, M2Crypto.version.split(".")))
 
 def keygen(length=40):
 	return binascii.b2a_base64(rand_bytes(length))	

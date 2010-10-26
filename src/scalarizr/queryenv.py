@@ -9,6 +9,7 @@ import logging
 from urllib2 import urlopen, Request, URLError, HTTPError
 from urllib import urlencode, splitnport
 from xml.dom.minidom import parseString
+import binascii
 
 
 class QueryEnvError(Exception):
@@ -19,15 +20,16 @@ class QueryEnvService(object):
 	
 	url = None
 	api_version = None
-	key = None
+	key_path = None
 	server_id = None
 	
-	def __init__(self, url, server_id=None, key=None, api_version="2009-03-05"):
+	def __init__(self, url, server_id=None, key_path=None, api_version='2010-09-23'):
 		self._logger = logging.getLogger(__name__)
 		self.url = url if url[-1] != "/" else url[0:-1]
 		self.server_id = server_id		
-		self.key = key
+		self.key_path = key_path
 		self.api_version = api_version
+	
 	
 	def list_roles (self, role_name=None, behaviour=None):
 		"""
@@ -93,8 +95,22 @@ class QueryEnvService(object):
 		@return string
 		"""
 		return self._request("get-latest-version",{}, self._read_get_latest_version_response)
+	
+	def get_service_configuration(self, behaviour):
+		"""
+		@return dict
+		"""
+		return self._request("get-service-configuration",{}, 
+				self._read_get_service_configuration_response, (behaviour,))
 
-	def _request (self, command, params={}, response_reader=None):
+	def get_scaling_metrics(self):
+		'''
+		@return: list of ScalingMetric
+		'''
+		return self._request('get-scaling-metrics', {}, self._read_get_scaling_metrics_response)
+		pass
+
+	def _request (self, command, params={}, response_reader=None, response_reader_args=None):
 		"""
 		@return object
 		"""
@@ -106,8 +122,12 @@ class QueryEnvService(object):
 		if {} != params :
 			for key, value in params.items():
 				request_body[key] = value
-				
-		signature, timestamp = sign_http_request(request_body, self.key)		
+		
+		file = open(self.key_path)
+		key = binascii.a2b_base64(file.read())
+		file.close()
+
+		signature, timestamp = sign_http_request(request_body, key)		
 		
 		post_data = urlencode(request_body)
 		headers = {
@@ -139,7 +159,8 @@ class QueryEnvService(object):
 			xml = xml_strip(parseString(resp_body))
 		except (Exception, BaseException), e:
 			raise QueryEnvError("Cannot parse XML. %s" % [str(e)])
-		return response_reader(xml)
+		response_reader_args = response_reader_args or ()
+		return response_reader(xml, *response_reader_args)
 
 		
 	def _read_list_roles_response(self, xml):
@@ -148,7 +169,9 @@ class QueryEnvService(object):
 		response = xml.documentElement
 		for role_el in response.firstChild.childNodes:
 			role = Role()
-			role.behaviour = role_el.getAttribute("behaviour")
+			role.behaviour = role_el.getAttribute("behaviour").split('.')
+			if role.behaviour == ('base',) or role.behaviour == ('',):
+				role.behaviour = ()
 			role.name = role_el.getAttribute("name")
 			for host_el in role_el.firstChild.childNodes:
 				host = RoleHost()
@@ -243,6 +266,79 @@ class QueryEnvService(object):
 				
 		return ret
 	
+	def _read_get_service_configuration_response(self, xml, behaviour):
+		ret = {}
+		name = None
+		restart_service = None
+		
+		name_attr = 'preset-name'
+		restart_service_attr = 'restart-service'
+		key_attr = "key"
+		
+		response = xml.documentElement
+		
+		if not response or not response.firstChild:
+			return QueryEnvError("Expected element 'settings' not found in QueryEnv response")
+		else:
+			for settings in response.childNodes:
+				
+				if settings.hasAttribute('behaviour') and settings.getAttribute('behaviour') != behaviour:
+					continue
+			
+				if settings.hasAttribute(name_attr):
+					name = settings.getAttribute(name_attr)
+					
+				if settings.hasAttribute(restart_service_attr):
+					restart_service = settings.getAttribute(restart_service_attr)
+				
+				for setting in settings.childNodes:
+					if setting.hasAttribute(key_attr):
+						k = setting.getAttribute(key_attr)
+						if k and setting.firstChild:
+							ret[k] = setting.firstChild.nodeValue
+					
+		preset = Preset()
+		preset.name = str(name)
+		preset.restart_service = restart_service
+		preset.settings = ret
+		return preset
+	
+	def _read_get_scaling_metrics_response(self, xml):
+		ret = []
+		
+		response = xml.documentElement
+		for metric_el in response.firstChild.childNodes:
+			m = ScalingMetric()
+			m.id = metric_el.getAttribute('id')
+			m.name = metric_el.getAttribute('name')
+			
+			tpl = metric_el.childNodes[0].firstChild
+			m.path = tpl and tpl.nodeValue or None
+			
+			tpl = metric_el.childNodes[1].firstChild
+			m.retrieve_method = tpl and tpl.nodeValue or None
+			
+			ret.append(m)
+			
+		return ret
+
+
+class Preset(object):
+	settings = None
+	name = None
+	restart_service = None
+	
+	def __init__(self, name = None, settings = None, restart_service = None):
+		self.settings = {} if not settings else settings
+		self.name = None if not name else name
+		self.restart_service = None if not restart_service else restart_service
+	
+	def __repr__(self):
+		return 'name = ' + str(self.name) \
+	+ "; restart_service = " + str(self.restart_service) \
+	+ "; settings = " + str(self.settings)
+		
+	
 class Mountpoint(object):
 	name = None
 	dir = None
@@ -327,3 +423,26 @@ class VirtualHost(object):
 	+ "; type = " + str(self.type) \
 	+ "; raw = " + str(self.raw) \
 	+ "; https = " + str(self.https)
+
+class ScalingMetric(object):
+	class RetriveMethod:
+		EXECUTE = 'execute'
+		READ = 'read'
+	
+	id = None
+	name = None
+	path = None
+	
+	_retrieve_method = None
+	def _get_retrieve_method(self):
+		return self._retrieve_method
+	def _set_retrieve_method(self, v):
+		if v in (self.RetriveMethod.EXECUTE, self.RetriveMethod.READ):
+			self._retrieve_method = v
+		else:
+			raise ValueError("Invalid value '%s' for ScalingMetric.retrieve_method") 
+	
+	retrieve_method = property(_get_retrieve_method, _set_retrieve_method)
+	
+	def __str__(self):
+		return 'qe:ScalingMetric(%s, id: %s, path: %s:%s)' % (self.name, self.id, self.path, self.retrieve_method)

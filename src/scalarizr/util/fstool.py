@@ -36,16 +36,19 @@ class Fstab:
 	filename = None	
 	_entries = None
 	_re = None
+	loaded = False
 	
-	def __init__(self, filename=None):
+	def __init__(self, filename=None, autoload=False):
 		self.filename = filename if not filename is None else self.LOCATION
 		self._entries = []
 		self._re = re.compile("\\s+")
+		if autoload:
+			self.reload()
 		
-	def _rescan(self):
+	def reload(self):
 		self._entries = []
 		f = open(self.filename, "r")
-		print
+
 		for line in f:
 			if line[0:1] == "#":
 				continue
@@ -55,16 +58,16 @@ class Fstab:
 					m += [None] * (6 - len(m))
 				self._entries.append(TabEntry(*m))
 		f.close()
+		self.loaded = True
 		
-		
-	def list_entries(self, rescan=False):
-		if not self._entries or rescan:
-			self._rescan()
+	def list_entries(self, reload=False):
+		if not self._entries or reload:
+			self.reload()
 		return list(self._entries)
 
-	def contains(self, devname=None, mpoint=None, rescan=False):
+	def contains(self, devname=None, mpoint=None, reload=False):
 		eq = dict(devname=devname, mpoint=mpoint)
-		for entry in self.list_entries(rescan):
+		for entry in self.list_entries(reload):
 			if self._cmp(entry, eq):
 				return True
 		return False
@@ -72,19 +75,19 @@ class Fstab:
 	def _cmp(self, entry, eq):
 		return all(list(getattr(entry, k) == v for k, v in eq.items() if v))	
 		
-	def find(self, devname=None, mpoint=None, fstype=None, rescan=False):
+	def find(self, devname=None, mpoint=None, fstype=None, reload=False):
 		eq = dict(devname=devname, mpoint=mpoint, fstype=fstype)
-		return list(entry for entry in self.list_entries(rescan) if self._cmp(entry, eq))
+		return list(entry for entry in self.list_entries(reload) if self._cmp(entry, eq))
 
 	def append(self, devname, mpoint, fstype="auto", options="defaults", dump=0, fsckorder=0, autosave=True):
 		if not self._entries:
-			self._rescan()
+			self.reload()
 		self._entries.append(TabEntry(devname, mpoint, fstype, options, dump, fsckorder))
 		if autosave:
 			self.save()
 	
-	def remove(self, devname=None, mpoint=None, fstype=None, rescan=False, autosave=True):
-		ent = self.find(devname, mpoint, fstype, rescan)
+	def remove(self, devname=None, mpoint=None, fstype=None, reload=False, autosave=True):
+		ent = self.find(devname, mpoint, fstype, reload)
 		if len(ent):
 			self._entries.remove(ent[0])
 			if autosave:
@@ -104,6 +107,8 @@ class Fstab:
 	
 	def __str__(self):
 		lens = [[], [], [], [], [], []]
+		if not self.loaded:
+			self.reload()
 		
 		# Calculate length of each cell
 		for entry in self._entries:
@@ -198,7 +203,7 @@ def mount (device, mpoint = '/mnt', options=None, make_fs=False, fstype='ext3', 
 	
 	if auto_mount:
 		fstab = Fstab()
-		if not fstab.contains(device, mpoint=mpoint, rescan=True):
+		if not fstab.contains(device, mpoint=mpoint, reload=True):
 			fstab.append(device, mpoint)
 
 def umount(device=None, mpoint=None, options=None, clean_fstab = False):
@@ -222,3 +227,12 @@ def mkfs(device, fstype = 'ext3'):
 	if retcode:
 		raise FstoolError("Cannot create file system on device '%s'. %s" % (device, out), 
 				FstoolError.CANNOT_CREATE_FS)
+		
+def get_mysql_device():
+	import string
+	o_z = string.ascii_lowercase[14:]
+	for letter in o_z:
+		device_name = 'dev/sd'+letter
+		if not os.path.isfile(device_name):
+			return device_name
+	return None

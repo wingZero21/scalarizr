@@ -1,5 +1,7 @@
-from scalarizr.util import Observable, xml_strip
+from scalarizr.libs.pubsub import Observable
+from scalarizr.util import xml_strip
 import xml.dom.minidom as dom
+import threading
 import logging
 
 class MessagingError(BaseException):
@@ -8,22 +10,24 @@ class MessagingError(BaseException):
 class MessageServiceFactory(object):
 	_adapters = {}
 	
-	def new_service (self, name, **kwargs):
+	def new_service (self, name, **params):
 		if not self._adapters.has_key(name):
 			adapter =  __import__("scalarizr.messaging." + name, 
 					globals(), locals(), ["new_service"])
 			self._adapters[name] = adapter
-		return self._adapters[name].new_service(**kwargs)
+		return self._adapters[name].new_service(**params)
+
 
 class MessageService(object):
 	def new_message(self, name=None, meta=None, body=None):
 		pass
 	
-	def get_consumer(self):
+	def new_consumer(self, **params):
 		pass
 	
-	def get_producer(self):
+	def new_producer(self, **params):
 		pass
+
 	
 class MetaOptions(object):
 	SERVER_ID 	= "server_id"
@@ -125,10 +129,19 @@ class Message(object):
 		else:	
 			el.appendChild(doc.createTextNode(str(value) if value is not None else ""))
 
-
 class MessageProducer(Observable):
+	filters = None
+	"""
+	Out message filter
+	Filter is a callable f(producer, queue, message, headers)
+	"""
+	
 	def __init__(self):
 		Observable.__init__(self)
+		self.filters = {
+			'data' : [],
+			'protocol' : []
+		}
 		self.define_events(
 			# Fires before message is send
 			"before_send", 
@@ -145,15 +158,20 @@ class MessageProducer(Observable):
 		pass
 	
 class MessageConsumer(object):
-	_listeners = []
+	filters = None
+	"""
+	In message filters
+	Filter is a callable f(consumer, queue, message)
+	"""
 	
-	def add_message_listener(self, ln):
-		if not ln in self._listeners:
-			self._listeners.append(ln)
-			
-	def remove_message_listener(self, ln):
-		if ln in self._listeners:
-			self._listeners.remove(ln)
+	listeners = None
+	
+	def __init__(self):
+		self.listeners = []
+		self.filters = {
+			'data' : [],
+			'protocol' : []
+		}
 	
 	def start(self):
 		pass
@@ -181,7 +199,11 @@ class Messages:
 	HOST_INIT = "HostInit"
 	"""
 	@broadcast
-	Fires when scalarizr is initialized and ready to be configured 
+	Fires when scalarizr is initialized and ready to be configured
+	@ivar behaviour
+	@ivar local_ip
+	@ivar remote_ip
+	@ivar role_name 
 	"""
 
 	HOST_UP = "HostUp"
@@ -272,6 +294,9 @@ class Messages:
 	
 	EXEC_SCRIPT = "ExecScript"
 	
+	UPDATE_SERVICE_CONFIGURATION = "UpdateServiceConfiguration"
+	
+	UPDATE_SERVICE_CONFIGURATION_RESULT = "UpdateServiceConfigurationResult"
 
 	###
 	# Internal events

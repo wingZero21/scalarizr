@@ -5,13 +5,17 @@ Created on Dec 11, 2009
 @author: marat
 '''
 
-from scalarizr.handlers import Handler
+# Core
 from scalarizr.bus import bus
+from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
-from scalarizr.util import configtool
 from scalarizr.config import BuiltinBehaviours
-import logging
-import os
+from scalarizr.handlers.mysql import MysqlMessages
+
+# Stdlibs
+import logging, os
+import shutil
+
 
 # TODO: Configurator
 # TODO: handle IPAddressChanged
@@ -36,18 +40,23 @@ class IpListBuilder(Handler):
 		bus.on("init", self.on_init)
 
 	def on_init(self, *args, **kwargs):
-		bus.on("before_host_up", self.on_before_host_up)
+		bus.on("start", self.on_start)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.HOST_UP \
 			or message.name == Messages.HOST_DOWN \
 			or message.name == Messages.REBOOT_START \
-			or message.name == Messages.REBOOT_FINISH
+			or message.name == Messages.REBOOT_FINISH \
+			or message.name == MysqlMessages.NEW_MASTER_UP
 			
-	def on_before_host_up(self, message):
+	def on_start(self, *args):
 		"""
 		Build current hosts structure on farm
 		"""
+		self._logger.debug('Rebuild farm hosts structure')
+		if os.path.exists(self._base_path):
+			shutil.rmtree(self._base_path)
+		
 		for role in self._queryenv.list_roles():
 			for host in role.hosts:
 				self._modify_tree(
@@ -63,45 +72,56 @@ class IpListBuilder(Handler):
 		ip = message.local_ip or message.remote_ip
 		rolename = message.role_name
 
-		self._logger.debug("Add host (role_name: %s, behaviour: %s, ip: %s)", 
-				rolename, behaviour, ip)
-		self._modify_tree(rolename, behaviour, ip, 
-				modfn=self._create_file, 
-				replication_master=behaviour == BuiltinBehaviours.MYSQL and self._host_is_replication_master(ip, rolename))
+		if ip and rolename and behaviour:
+			self._logger.debug("Add host (role_name: %s, behaviour: %s, ip: %s)", 
+					rolename, behaviour, ip)
+			self._modify_tree(rolename, behaviour, ip, 
+					modfn=self._create_file, 
+					replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
 			
 	def on_HostDown(self, message):
 		behaviour = message.behaviour
 		ip = message.local_ip or message.remote_ip
 		rolename = message.role_name
-		
-		self._logger.debug("Remove host (role_name: %s, behaviour: %s, ip: %s)", 
-						rolename, behaviour, ip)
-		self._modify_tree(rolename, behaviour, ip, 
-				modfn=self._remove_file, 
-				replication_master=behaviour == BuiltinBehaviours.MYSQL and self._host_is_replication_master(ip, rolename))
+
+		if ip and rolename and behaviour:		
+			self._logger.debug("Remove host (role_name: %s, behaviour: %s, ip: %s)", 
+							rolename, behaviour, ip)
+			self._modify_tree(rolename, behaviour, ip, 
+					modfn=self._remove_file, 
+					replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
+
+	def on_Mysql_NewMasterUp(self, message):
+		ip = message.local_ip or message.remote_ip
+		if ip:
+			self._remove_file(os.path.join(self._base_path, 'mysql-slave', ip))
+
+			master_path = os.path.join(self._base_path, 'mysql-master')
+			shutil.rmtree(master_path)
+			self._create_dir(master_path)
+			self._create_file(os.path.join(master_path, ip))
 
 	on_RebootStart = on_HostDown
-	
-	on_RebootFinish = on_HostUp 				
 
-	def _modify_tree(self, rolename, behaviour, ip, modfn=None, replication_master=None):
+	def _modify_tree(self, rolename, behaviours, ip, modfn=None, replication_master=None):
 		# Touch/Unlink %role_name%/xx.xx.xx.xx
 		modfn(os.path.join(self._base_path, rolename, ip))
 		
-		if behaviour == BuiltinBehaviours.MYSQL:
-			suffix = "master" if replication_master else "slave"
-			# Touch/Unlink mysql-(master|slave)/xx.xx.xx.xx
-			mysql_path = os.path.join(self._base_path, "mysql-" + suffix)
-			modfn(os.path.join(mysql_path, ip))
-		else:
-			# Touch/Unlink %behaviour%/xx.xx.xx.xx
-			modfn(os.path.join(self._base_path, behaviour, ip))	
+		for behaviour in behaviours:
+			if behaviour == BuiltinBehaviours.MYSQL:
+				suffix = "master" if replication_master else "slave"
+				# Touch/Unlink mysql-(master|slave)/xx.xx.xx.xx
+				mysql_path = os.path.join(self._base_path, "mysql-" + suffix)
+				modfn(os.path.join(mysql_path, ip))
+			else:
+				# Touch/Unlink %behaviour%/xx.xx.xx.xx
+				modfn(os.path.join(self._base_path, behaviour, ip))	
 
 	def _create_dir(self, d):
 		if not os.path.exists(d):
 			try:
 				self._logger.debug("Create dir %s", d)
-				os.makedirs(d)
+				os.makedirs(d, 0644)
 			except OSError, x:
 				self._logger.exception(x)
 	
@@ -110,6 +130,7 @@ class IpListBuilder(Handler):
 		try:
 			self._logger.debug("Touch file %s", f)
 			open(f, 'w').close()
+			os.chmod(f, 0644)
 		except OSError, x:
 			self._logger.error(x)
 	

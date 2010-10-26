@@ -1,72 +1,20 @@
-import os
+import os, re
 import logging
 import threading
 import weakref
 import time
 import sys
 import socket
+import signal
+from collections import namedtuple
+
+from scalarizr.bus import bus
 
 
 class UtilError(BaseException):
 	pass
 
-class Observable(object):
-	
-	def __init__(self):
-		self._listeners = {}
-		self._events_suspended = False
-	
-	def define_events(self, *args):
-		for event in args:
-			self._listeners[event] = list()
-	
-	def list_events(self):
-		return self._listeners.keys()
-	
-	def fire(self, event, *args, **kwargs):
-		logger = logging.getLogger(__name__)
-		logger.debug(self.__class__.__name__ + " fires " + event)
-		if not self._events_suspended:
-			if self._listeners.has_key(event):
-				for ln in self._listeners[event]:
-					ln(*args, **kwargs)
 
-	
-	def on(self, *args, **kwargs):
-		"""
-		Add listener
-		
-		1) Add listeners to one event
-		obj.on("add", func1, func2, ...)
-		2) Add listeners to many events
-		obj.on(add=func1, remove=func2, apply=func3, ...)
-		"""
-		if len(args) >= 2:
-			event = args[0]
-			if not self._listeners.has_key(event):
-				raise Exception("Event '%s' is not defined" % event)
-			for listener in args[1:]:
-				if not listener in self._listeners[event]:
-					self._listeners[event].append(listener)
-		elif kwargs:
-			for event in kwargs.keys():
-				self.on(event, kwargs[event])
-	
-	def un(self, event, listener):
-		"""
-		Remove listener
-		"""
-		if self._listeners.has_key(event):
-			if listener in self._listeners[event]:
-				self._listeners[event].remove(listener)
-	
-	def suspend_events(self):
-		self._events_suspended = True
-	
-	def resume_events(self):
-		self._events_suspended = False
-
-	
 class LocalObject:
 	def __init__(self, creator, pool_size=10):
 		self._logger = logging.getLogger(__name__)
@@ -142,11 +90,6 @@ def firstmatched(function, sequence, default=None):
 	else:
 		return default	
 
-
-
-
-
-
 def daemonize():
 	# First fork
 	pid = os.fork()
@@ -182,18 +125,20 @@ def system(args, shell=True):
 	out, err = p.communicate()
 	if out:
 		logger.debug("stdout: " + out)
-		#print "stdout: " + out
 	if err:
-		logger.warning("stderr: " + err)
-		#print "stderr: " + err
+		logger.debug("stderr: " + err)
 	return out, err, p.returncode
 
 
-def wait_until(target, args=None, sleep=5, logger=None):
+def wait_until(target, args=None, sleep=5, logger=None, time_until=None, timeout=None):
 	args = args or ()
+	if timeout:
+		time_until = time.time() + timeout
 	while not target(*args):
+		if time_until and time.time() >= time_until:
+			raise BaseException('Time until: %d reached' % time_until)
 		if logger:
-			logger.debug("Wait %d seconds before the next attempt", sleep)
+			logger.debug("Wait %.2f seconds before the next attempt", sleep)
 		time.sleep(sleep)
 
 
@@ -214,6 +159,29 @@ def url_replace_hostname(url, newhostname):
 		r2[1] += ":" + str(r.port)
 	return urlparse.urlunparse(r2)
 	
+
+
+def read_shebang(path=None, script=None):
+	if path:
+		file = first_line = None
+		try:
+			file = open(path, 'r')
+			first_line = file.readline()
+		finally:
+			if file:
+				file.close()
+	elif script:
+		if not isinstance(script, basestring):
+			raise ValueError('argument `script` should be a basestring subclass')
+		eol_index = script.find(os.linesep)
+		first_line = eol_index != -1 and script[0:eol_index] or script
+	else:
+		raise ValueError('one of arguments `path` or `script` should be passed')
+
+	shebang = re.search(re.compile('^#!(\S+)\s*'), first_line)
+	if shebang:
+		return shebang.group(1)
+	return None
 
 def parse_size(size):
 	"""
@@ -291,26 +259,102 @@ def init_tests():
 			level=logging.DEBUG)
 	import scalarizr as szr
 	from scalarizr.bus import bus
-	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../test/resources/etc")
+	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../etc")
 	szr._init()
 	bus.cnf.bootstrap()
 
-	
-def ping_service(host=None, port=None, timeout=None, proto='tcp'):
-	if None == timeout:
-		timeout = 5
-	if 'udp' == proto:
-		socket_proto = socket.SOCK_DGRAM
-	else:
-		socket_proto = socket.SOCK_STREAM
-	s = socket.socket(socket.AF_INET, socket_proto)
-	time_start = time.time()
-	while time.time() - time_start < timeout:
+def get_free_devname():
+	dev_list = os.listdir('/dev')
+	for letter in map(chr, range(111, 123)):
+		device = 'sd'+letter
+		if not device in dev_list:
+			return '/dev/'+device
+		
+def kill_childs(pid):
+	ppid_re = re.compile('^PPid:\s*(?P<pid>\d+)\s*$', re.M)
+	for process in os.listdir('/proc'):
+		if not re.match('\d+', process):
+			continue
 		try:
-			s.connect((host, port))
-			s.shutdown(2)
-			return
+			fp = open('/proc/' + process + '/status')
+			process_info = fp.read()
+			fp.close()
 		except:
-			time.sleep(0.1)
 			pass
-	raise UtilError ("Service unavailable after %d seconds of waiting" % timeout)
+		
+		Ppid_result = re.search(ppid_re, process_info)
+		if not Ppid_result:
+			continue
+		ppid = Ppid_result.group('pid')
+		if int(ppid) == pid:
+			try:
+				os.kill(int(process), signal.SIGKILL)
+			except:
+				pass
+		
+		
+class PeriodicalExecutor:
+	_logger = None
+	_tasks = None
+	_lock = None
+	_ex_thread = None
+	_shutdown = None
+	
+	def __init__(self):
+		self._logger = logging.getLogger(__name__ + '.PeriodicalExecutor')
+		self._tasks = dict()
+		self._ex_thread = threading.Thread(target=self._executor, name='PeriodicalExecutor')
+		self._ex_thread.setDaemon(True)
+		self._lock = threading.Lock()
+	
+	def start(self):
+		self._shutdown = False		
+		self._ex_thread.start()
+		
+	def shutdown(self):
+		self._shutdown = True
+		self._ex_thread.join(1)
+	
+	def add_task(self, fn, interval, title=None):
+		self._lock.acquire()
+		try:
+			if fn in self._tasks:
+				raise BaseException('Task %s already registered in executor with an interval %s minutes', 
+					fn, self._tasks[fn])
+			if interval <= 0:
+				raise ValueError('interval should be > 0')
+			self._tasks[fn] = dict(fn=fn, interval=interval, title=title, last_exec_time=0)
+		finally:
+			self._lock.release()
+	
+	def remove_task(self, fn):
+		self._lock.acquire()
+		try:
+			if fn in self._tasks:
+				del self._tasks[fn]
+		finally:
+			self._lock.release()
+		
+	def _tasks_to_execute(self):
+		self._lock.acquire()		
+		try:
+			now = time.time()			
+			return list(task for task in self._tasks.values()
+					if now - task['last_exec_time'] > task['interval'])
+		finally:
+			self._lock.release()
+		
+	def _executor(self):
+		while not self._shutdown:
+			for task in self._tasks_to_execute():
+				self._logger.debug('Executing task %s', task['title'] or task['fn'])
+				try:
+					task['last_exec_time'] = time.time()
+					task['fn']()
+				except (BaseException, Exception), e:
+					self._logger.exception(e)
+				if self._shutdown:
+					break
+			if not self._shutdown:
+				time.sleep(1)
+

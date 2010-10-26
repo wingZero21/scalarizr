@@ -1,38 +1,29 @@
 
+# Core 
+from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState,\
-	ScalarizrOptions
+from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions
+from scalarizr.handlers import MessageListener
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
-from scalarizr.messaging.p2p import P2pConfigOptions, P2pSender
+from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
-from scalarizr.util import configtool, SqliteLocalObject, url_replace_hostname,\
-	daemonize, system, disttool, fstool, initd, firstmatched, log
-from scalarizr.util.configtool import ConfigError
 
 
-import os
-import sys
-import re
-import sqlite3 as sqlite
-from ConfigParser import ConfigParser
+# Utils
+from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
+from scalarizr.util import SqliteLocalObject, daemonize, system, disttool, firstmatched, format_size
+
+# Stdlibs
 import logging
 import logging.config
+import os, sys, re, shutil, time
+import binascii, string, traceback
+import sqlite3 as sqlite
+import threading, socket, signal
+from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
-import binascii
-import threading
-import urlparse
-import socket
-import signal
-import shutil
-import string
-import traceback
-
-
-try:
-	import timemodule as time
-except ImportError:
-	import time
+from urlparse import urlparse, urlunparse
 
 
 class ScalarizrError(BaseException):
@@ -42,7 +33,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.5"	
+__version__ = "0.6"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -50,14 +41,34 @@ NET_SNMPD = False
 SNMP_RESTART_DELAY = 5 # Seconds
 
 _running = False
-""" @var _running: True when scalarizr is running """
-
-_snmp_pid = None
-""" @var _snmp_pid: Embed snmpd process pid"""
-
-_snmp_scheduled_start_time = None
+'''
+True when scalarizr daemon should be running
+'''
 
 _pid = None
+'''
+Scalarizr main process PID
+'''
+
+_snmp_pid = None
+'''
+Embed SNMP server process PID
+'''
+
+_snmp_scheduled_start_time = None
+'''
+Next time when SNMP process should be forked
+'''
+
+
+class ScalarizrInitScript(initdv2.ParametrizedInitScript):
+	def __init__(self):
+		initdv2.ParametrizedInitScript.__init__(self, 
+			'scalarizr', 
+			'/etc/init.d/scalarizr', 
+			socks=[initdv2.SockParam(8013)]
+		)
+
 
 def _init():
 	optparser = bus.optparser
@@ -70,8 +81,7 @@ def _init():
 			"/etc/scalarizr", 
 			"/usr/etc/scalarizr", 
 			"/usr/local/etc/scalarizr",
-			os.path.join(bus.base_path, "etc-devel"),
-			os.path.join(bus.base_path, "etc")
+			os.path.join(bus.base_path, 'etc')
 		]
 		if optparser and optparser.values.etc_path:
 			# Insert command-line passed etc_path into begining
@@ -79,8 +89,19 @@ def _init():
 			
 		bus.etc_path = firstmatched(lambda p: os.access(p, os.F_OK), etc_places)
 		if not bus.etc_path:
-			raise ScalarizrError('Cannot find scalarizr configuration dir')
-	bus.cnf = cnf = ScalarizrCnf(bus.etc_path)
+			raise ScalarizrError('Cannot find scalarizr configuration dir. Search path: %s' % ':'.join(etc_places))
+	bus.cnf = ScalarizrCnf(bus.etc_path)
+	
+	# Find shared resources dir
+	if not bus.share_path:
+		share_places = [
+			'/usr/share/scalr',
+			'/usr/local/share/scalr',
+			os.path.join(bus.base_path, 'share')
+		]
+		bus.share_path = firstmatched(lambda p: os.access(p, os.F_OK), share_places)
+		if not bus.share_path:
+			raise ScalarizrError('Cannot find scalarizr share dir. Search path: %s' % ':'.join(share_places))
 
 	
 	# Configure logging
@@ -103,11 +124,13 @@ def _init():
 			logger.addHandler(hdlr)
 
 	# Registering in init.d
-	initd.explore("scalarizr", "/etc/init.d/scalarizr", tcp_port=8013)
+	initdv2.explore("scalarizr", ScalarizrInitScript)
 
 	# Configure database connection pool
 	bus.db = SqliteLocalObject(_db_connect)
 
+	# Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
+	bus.periodical_executor = PeriodicalExecutor()
 	
 	# Define scalarizr events
 	bus.define_events(
@@ -127,16 +150,25 @@ DB_NAME = 'db.sqlite'
 DB_SCRIPT = 'db.sql'
 
 def _db_connect():
+	logger = logging.getLogger(__name__)	
 	cnf = bus.cnf
 	file = cnf.private_path(DB_NAME)
 
-	logger = logging.getLogger(__name__)
 	logger.debug("Open SQLite database (file: %s)" % (file))
 	
 	conn = sqlite.connect(file, 5.0)
-	#sqlite.Connection(file)
 	conn.row_factory = sqlite.Row
 	return conn
+
+def _init_db():
+	logger = logging.getLogger(__name__)	
+	cnf = bus.cnf
+
+	# Check that database exists (after rebundle for example)	
+	db_file = cnf.private_path(DB_NAME)
+	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
+		logger.debug("Database doesn't exists, create new one from script")
+		_create_db()
 	
 def _create_db():
 	cnf = bus.cnf
@@ -144,253 +176,185 @@ def _create_db():
 	conn.executescript(open(cnf.public_path(DB_SCRIPT)).read())
 	conn.commit()	
 	
-	
-def _mount_private_d():
-	configtool.mount_private_d(bus.etc_path + "/private.d", '/mnt/privated.img', 10000)
 
-	
-def _init_services():
-	
+def _mount_private_d(mpoint, privated_image, blocks_count):
 	logger = logging.getLogger(__name__)
-	config = bus.config
-	cnf = bus.cnf
 	
-	logger.debug("Initialize services")
+	logger.debug("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
+			mpoint, privated_image, format_size(1024*(blocks_count-1)))
+	mtab = fstool.Mtab()
+	if mtab.contains(mpoint=mpoint): # if privated_image exists
+		logger.debug("private.d already mounted to %s", mpoint)
+		return
 	
+	if not os.path.exists(mpoint):
+		os.makedirs(mpoint)
+		
+	mnt_opts = ('-t auto', '-o loop,rw')	
+	if not os.path.exists(privated_image):	
+		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count-1)
+		retcode = system(build_image_cmd)[2]
+		if retcode:
+			logger.error('Cannot create image device')
+		os.chmod(privated_image, 0600)
+			
+		logger.debug("Creating file system on image device")
+		fstool.mkfs(privated_image)
+		
+	if os.listdir(mpoint):
+		logger.debug("%s contains data. Need to copy it ot image before mounting", mpoint)
+		# If mpoint not empty copy all data to the image
+		try:
+			tmp_mpoint = "/mnt/tmp-privated"
+			os.makedirs(tmp_mpoint)
+			logger.debug("Mounting %s to %s", privated_image, tmp_mpoint)
+			fstool.mount(privated_image, tmp_mpoint, mnt_opts)
+			logger.debug("Copy data from %s to %s", mpoint, tmp_mpoint)
+			system(str(filetool.Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)))
+			private_list = os.listdir(mpoint)
+			for file in private_list:
+				path = os.path.join(mpoint, file)
+				if os.path.isdir(path):
+					shutil.rmtree(path)
+				else:
+					os.remove(path)
+		finally:
+			try:
+				fstool.umount(mpoint=tmp_mpoint)
+			except fstool.FstoolError:
+				pass
+			try:
+				os.removedirs(tmp_mpoint)
+			except OSError:
+				pass
+		
+	logger.debug("Mounting %s to %s", privated_image, mpoint)
+	fstool.mount(privated_image, mpoint, mnt_opts)	
 
-	
-	gen_sect = configtool.section_wrapper(config, configtool.SECT_GENERAL)
-	messaging_sect = configtool.section_wrapper(config, configtool.SECT_MESSAGING)
-	
-	# Check that database exists (after rebundle for example)
-	db_file = cnf.private_path(DB_NAME)
-	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
-		logger.debug("Database doesn't exists, create new one from script")
-		_create_db()		
 
+def _init_platform():
+	logger = logging.getLogger(__name__)
+	cnf = bus.cnf; ini = cnf.rawini
+	
 	# Initialize platform
 	logger.debug("Initialize platform")
-	pl_name = gen_sect.get(configtool.OPT_PLATFORM)
-	if pl_name:
-		bus.platform = PlatformFactory().new_platform(pl_name)
+	name = ini.get('general', 'platform')
+	if name:
+		bus.platform = PlatformFactory().new_platform(name)
 	else:
-		raise NotConfiguredError("Platform not defined")
-	platform = bus.platform
+		raise ScalarizrError("Platform not defined")
 
-	
-	if cnf.state == ScalarizrState.UNKNOWN and platform.get_user_data():
-		# Apply configuration from user-data
-		o = ScalarizrOptions
-		cnf.reconfigure(
-			values={
-				o.server_id.name : platform.get_user_data(UserDataOptions.SERVER_ID),
-				o.crypto_key.name : platform.get_user_data(UserDataOptions.CRYPTO_KEY),
-				o.role_name.name : platform.get_user_data(UserDataOptions.ROLE_NAME),
-				o.queryenv_url.name : platform.get_user_data(UserDataOptions.QUERYENV_URL),
-				o.message_producer_url.name : platform.get_user_data(UserDataOptions.MESSAGE_SERVER_URL),
-				o.snmp_community_name.name : platform.get_user_data(UserDataOptions.FARM_HASH)
-			},
-			silent=True,
-			yesall=True
-		)
-		cnf.bootstrap(force_reload=True)
-		
-		# Validate configuration
-		errors = dict()
-		def on_error(o, e, errors=errors):
-			errors.append(e)
-			logger.error('[%s] %s', o.name, e)
-		logger.debug('Validating configuration')
-		cnf.validate(on_error)		
-	
-		cnf.state = ScalarizrState.BOOTSTRAPPING
-	
-	
-	# Set server id
-	server_id_opt = gen_sect.option_wrapper(configtool.OPT_SERVER_ID)
-	server_id_opt.set_required(None, NotConfiguredError)
-	
-	# Set role name
-	role_name_opt = gen_sect.option_wrapper(configtool.OPT_ROLE_NAME)
-	role_name_opt.set_required(None, NotConfiguredError)
+def _init_services():
+	logger = logging.getLogger(__name__)
+	cnf = bus.cnf; ini = cnf.rawini
+	server_id = ini.get('general', 'server_id')
+	queryenv_url = ini.get('general', 'queryenv_url')
+	messaging_adp = ini.get('messaging', 'adapter')
 
-	# Set queryenv url
-	query_env_opt = gen_sect.option_wrapper(configtool.OPT_QUERYENV_URL)
-	query_env_opt.set_required(None, NotConfiguredError)
+	# Set base URL
+	pr = urlparse(queryenv_url)
+	bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
+	logger.debug("Got scalr url: '%s'" % bus.scalr_url)
 
-	# Set messaging producer url
-	msg_p2p_producer_url_opt = configtool.option_wrapper(config, "messaging_p2p", 
-			P2pConfigOptions.PRODUCER_URL)
-	msg_p2p_producer_url_opt.set_required(None, NotConfiguredError)
-	
-	# Set crypto key
-	crypto_key_title = "Scalarizr crypto key"
-	crypto_key = None
-	try:
-		crypto_key = binascii.a2b_base64(cnf.read_key('default', title=crypto_key_title))
-	except ConfigError, e:
-		logger.warn(str(e))
-	if not crypto_key:
-		raise NotConfiguredError("%s is empty" % (crypto_key_title))
-
-	
-	# Initialize QueryEnv
 	logger.debug("Initialize QueryEnv client")
-	queryenv = QueryEnvService(query_env_opt.get(), server_id_opt.get(), crypto_key)
+	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY))
 	bus.queryenv_service = queryenv
-
 	
-	# Initialize messaging
 	logger.debug("Initialize messaging")
 	factory = MessageServiceFactory()
-	adapter_name = messaging_sect.get(configtool.OPT_ADAPTER)
 	try:
-		kwargs = dict(config.items("messaging_" + adapter_name))
-		kwargs[P2pConfigOptions.SERVER_ID] = gen_sect.get(configtool.OPT_SERVER_ID)
-		kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = gen_sect.get(configtool.OPT_CRYPTO_KEY_PATH)
-		kwargs[P2pConfigOptions.PRODUCER_SENDER] = P2pSender.DAEMON
-		r = urlparse.urlparse(kwargs[P2pConfigOptions.CONSUMER_URL])
-		if r.hostname == "localhost":
-			# Replace localhost with public dns name in endpoint url
-			kwargs[P2pConfigOptions.CONSUMER_URL] = url_replace_hostname(r, socket.gethostname())
+		params = dict(ini.items("messaging_" + messaging_adp))
+		params[P2pConfigOptions.SERVER_ID] = server_id
+		params[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.key_path(cnf.DEFAULT_KEY)
 		
-		service = factory.new_service(adapter_name, **kwargs)
-		bus.messaging_service = service
+		msg_service = factory.new_service(messaging_adp, **params)
+		bus.messaging_service = msg_service
 	except (BaseException, Exception):
-		logger.error("Cannot create messaging service adapter '%s'" % (adapter_name))
-		raise
+		raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
 		
-		
-	# Initialize SNMP server
-	snmp_sect = configtool.section_wrapper(config, configtool.SECT_SNMP)	
-	if EMBED_SNMPD:
-		pass
-		'''
-		logger.debug("Initialize embed SNMP server")
-		from scalarizr.snmp.agent import SnmpServer
-		bus.snmp_server = SnmpServer(
-			port=int(snmp_sect.get(configtool.OPT_PORT)),
-			security_name=snmp_sect.get(configtool.OPT_SECURITY_NAME),
-			community_name=platform.get_user_data(UserDataOptions.FARM_HASH) \
-					or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)  
-		)
-		'''
-	if NET_SNMPD:
-		logger.debug("Initialize snmpd")
-		snmpd_conf = "/etc/snmp/snmpd.conf"
-		if not os.path.exists(snmpd_conf):
-			raise ScalarizrError("File %s doesn't exists. snmpd is not installed" % (snmpd_conf,))
-		
-		if not os.path.exists(snmpd_conf + ".orig"):
-			shutil.copy(snmpd_conf, snmpd_conf + ".orig")
-		else:
-			shutil.copy(snmpd_conf, snmpd_conf + ".bak")
-			
-		inp = open(snmpd_conf, "r")
-		lines = inp.readlines()
-		inp.close()
-		
-		out = open(snmpd_conf, "w")
-		ucdDiskIOMIB = ".1.3.6.1.4.1.2021.13.15"
-		ucdDiskIOMIB_included = False		
-		for line in lines:
-			if re.match("^(com2sec.+)", line):
-				# Modify community name
-				community_name = platform.get_user_data(UserDataOptions.FARM_HASH) \
-						or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)
-				line = line.replace(line.split()[3], community_name)
-				
-			elif re.match("^view\\s+systemview\\s+included", line):
-				if line.split()[3] == ucdDiskIOMIB:
-					ucdDiskIOMIB_included = True
-				
-			out.write(line)
-			
-		if not ucdDiskIOMIB_included:
-			out.write("view systemview included " + ucdDiskIOMIB)
-			
-		out.close()
-		
-		# Add UCD-DISKIO-MIB
-			
-		
-	# Initialize handlers
-	from scalarizr.handlers import MessageListener
-	consumer = service.get_consumer()
-	consumer.add_message_listener(MessageListener())
+	logger.debug('Initialize message handlers')
+	consumer = msg_service.get_consumer()
+	consumer.listeners.append(MessageListener())
+	
+	logger.debug('Schedule SNMP process')
+	globals()['_snmp_scheduled_start_time'] = time.time()		
 
 	bus.fire("init")
+
+
+def _apply_user_data(cnf):
+	logger = logging.getLogger(__name__)
+	platform = bus.platform
+	g = platform.get_user_data
+	
+	logger.debug('Apply scalarizr user-data to configuration')
+	cnf.update_ini('config.ini', dict(
+		general={
+			'server_id' : g(UserDataOptions.SERVER_ID),
+			'role_name' : g(UserDataOptions.ROLE_NAME),
+			'queryenv_url' : g(UserDataOptions.QUERYENV_URL),
+		},
+		messaging_p2p={
+			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
+		},
+		snmp={
+			'security_name' : 'notConfigUser',			
+			'community_name' : g(UserDataOptions.FARM_HASH)
+		}
+	))
+	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
+
 	
 def init_script():
 	_init()
 	
-	config = bus.config
 	cnf = bus.cnf
 	cnf.bootstrap()
+	ini = cnf.rawini
 	
 	logger = logging.getLogger(__name__)
 	logger.debug("Initialize script messaging")
 
 	# Script producer url is scalarizr consumer url. 
 	# Script can't handle any messages by himself. Leave consumer url blank
-	adapter = config.get(configtool.SECT_MESSAGING, configtool.OPT_ADAPTER)	
-	kwargs = dict(config.items("messaging_" + adapter))
-	kwargs[P2pConfigOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
-	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = config.get(configtool.SECT_GENERAL, configtool.OPT_CRYPTO_KEY_PATH)
-	kwargs[P2pConfigOptions.PRODUCER_SENDER] = P2pSender.SCRIPT
+	adapter = ini.get(config.SECT_MESSAGING, config.OPT_ADAPTER)	
+	kwargs = dict(ini.items("messaging_" + adapter))
+	kwargs[P2pConfigOptions.SERVER_ID] = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = ini.get(config.SECT_GENERAL, config.OPT_CRYPTO_KEY_PATH)
 	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
-	r = urlparse.urlparse(kwargs[P2pConfigOptions.PRODUCER_URL])
-	if r.hostname == "localhost":
-		# Replace localhost with public dns name in endpoint url
-		kwargs[P2pConfigOptions.PRODUCER_URL] = url_replace_hostname(r, socket.gethostname())
 	
 	factory = MessageServiceFactory()		
 	msg_service = factory.new_service(adapter, **kwargs)
 	bus.messaging_service = msg_service
 
 
-
 def _start_snmp_server():
 	logger = logging.getLogger(__name__)
 	# Start SNMP server in a separate process
-	from scalarizr.snmp.agent import SnmpServer
-	platform = bus.platform
-	snmp_sect = configtool.section_wrapper(bus.config, configtool.SECT_SNMP)
-	snmp_server = SnmpServer(
-		port=int(snmp_sect.get(configtool.OPT_PORT)),
-		security_name=snmp_sect.get(configtool.OPT_SECURITY_NAME),
-		community_name=platform.get_user_data(UserDataOptions.FARM_HASH) \
-				or snmp_sect.get(configtool.OPT_COMMUNITY_NAME)  
-	)
-	bus.snmp_server = snmp_server
-	
 	pid = os.fork()
 	if pid == 0:
+		from scalarizr.snmp.agent import SnmpServer
 		globals()['_pid'] = 0
+		cnf = bus.cnf; ini = cnf.rawini		
+		snmp_server = SnmpServer(
+			port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
+			security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
+			community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
+		)
+		bus.snmp_server = snmp_server
+		
 		try:
 			snmp_server.start()
 			logger.info('[pid: %d] SNMP process terminated', os.getpid())
 			sys.exit(0)
 		except SystemExit:
 			raise
-		except:
+		except (BaseException, Exception), e:
+			logger.exception(e)
 			sys.exit(1)
 	else:
 		globals()["_snmp_pid"] = pid
 
-def _snmp_crash_handler(signum, frame):
-	if _running:
-		_start_snmp_server()
-
-def _snmpd_health_check():
-	logger = logging.getLogger(__name__)
-	while True:
-		if not os.path.exists("/var/run/snmpd.pid"):
-			logger.warning("snmpd is not running. trying to start it")
-			out, err, retcode = system("/etc/init.d/snmpd start")
-			if retcode > 0 or out.lower().find("failed") != -1:
-				logger.error("Canot start snmpd. %s", out)
-		time.sleep(60)
 
 def onSIGTERM(*args):
 	logger = logging.getLogger(__name__)
@@ -415,11 +379,18 @@ def onSIGCHILD(*args):
 		try:
 			# Restart SNMP process if it terminates unexpectedly
 			pid, sts = os.waitpid(_snmp_pid, os.WNOHANG)
-			logger.debug('Child terminated (pid: %d, status: %s, WIFEXITED: %s, WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)', 
-						pid, sts, os.WIFEXITED(sts), os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts))
+			logger.debug(
+				'Child terminated (pid: %d, status: %s, WIFEXITED: %s, '
+				'WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)', 
+				pid, sts, os.WIFEXITED(sts), 
+				os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts)
+			)
 			if pid == _snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
-				logger.warning('SNMP process [pid: %d] died unexpectedly. '
-						'Restart it after %d seconds', _snmp_pid, SNMP_RESTART_DELAY)
+				logger.warning(
+					'SNMP process [pid: %d] died unexpectedly. '
+					'Restart it after %d seconds', 
+					_snmp_pid, SNMP_RESTART_DELAY
+				)
 				globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY
 				globals()['_snmp_pid'] = None
 		except OSError:
@@ -445,9 +416,11 @@ def _shutdown(*args):
 		producer = msg_service.get_producer()
 		producer.shutdown()
 		
-		if _snmp_pid:
-			snmp_server = bus.snmp_server
-			snmp_server.stop()
+		# Kill Cross-scalarizr message consumer
+		int_msg_service = bus.int_messaging_service
+		if int_msg_service and int_msg_service.consumer:
+			int_msg_service.consumer.stop()
+			int_msg_service.consumer.shutdown()
 		
 		# Fire terminate
 		bus.fire("terminate")
@@ -457,15 +430,12 @@ def _shutdown(*args):
 	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
 
 
-def do_validate(silent=False):
+def do_validate_cnf():
 	errors = list()
 	def on_error(o, e, errors=errors):
 		errors.append(e)
-		if not silent:
-			print >> sys.stderr, 'error: [%s] %s' % (o.name, e)
+		print >> sys.stderr, 'error: [%s] %s' % (o.name, e)
 		
-	if not silent:
-		print 'Validating scalarizr configuration'
 	cnf = bus.cnf
 	cnf.bootstrap()
 	cnf.validate(on_error)
@@ -479,7 +449,6 @@ def do_configure():
 		silent=optparser.values.import_server, 
 		yesall=optparser.values.yesall
 	)
-
 
 def do_keygen():
 	from scalarizr.util import cryptotool
@@ -505,17 +474,15 @@ def main():
 				help="Configure Scalarizr in the interactive mode by default. " 
 				+ "Use '-y -o' to configure Scalarizr non-interactively")
 		optparser.add_option("-k", "--gen-key", dest="gen_key", action="store_true", default=False,
-				help="Generate crypto key")
+				help='Generate crypto key')
 		optparser.add_option('-t', dest='validate_cnf', action='store_true', default=False,
 				help='Validate configuration')
 		optparser.add_option('-m', '--import', dest="import_server", action="store_true", default=False, 
-				help="Import service into Scalr")
+				help='Import service into Scalr')
 		optparser.add_option('-y', dest="yesall", action="store_true", default=False,
 				help='Answer "yes" to all questions')
 		optparser.add_option('-o', dest='cnf', action='append',
 				help='Runtime .ini option key=value')
-		
-
 		optparser.parse_args()
 
 		
@@ -525,62 +492,74 @@ def main():
 	
 		logger.info("Initialize Scalarizr...")
 		_init()
-		cnf = bus.cnf
 	
 		if optparser.values.version:
+			# Report scalarizr version
 			print 'Scalarizr %s' % __version__
 			sys.exit()
-		if optparser.values.gen_key:
+			
+		elif optparser.values.gen_key:
+			# Generate key-pair
 			do_keygen()
 			sys.exit()
-		elif optparser.values.validate_cnf:
-			num_errors = do_validate()
-			sys.exit(int(not num_errors or 1))
 
-		_mount_private_d()
+		# Starting scalarizr daemon initialization
+		cnf = bus.cnf
+		cnf.on('apply_user_data', _apply_user_data)
+		
+		# Move private configuration to loop device
+		privated_img_path = '/mnt/privated.img'
+		_mount_private_d(cnf.private_path(), privated_img_path, 10000)
+		
 
 		if optparser.values.configure:
 			do_configure()
 			sys.exit()
+			
 		elif optparser.values.import_server:
 			print "Starting import process..."
 			print "Don't terminate Scalarizr until Scalr will create the new role"
-			do_configure()
 			cnf.state = ScalarizrState.IMPORTING
+			# Load Command-line configuration options and auto-configure Scalarizr
+			cnf.reconfigure(values=CmdLineIni.to_kvals(optparser.values.cnf), silent=True, yesall=True)
 		
-		cnf.bootstrap(CmdLineIni.to_ini_sections(optparser.values.cnf))
+		# Load INI files configuration
+		cnf.bootstrap(force_reload=True)
 		
-		# Initialize scalarizr service
-		try:
-			_init_services()
-		except NotConfiguredError, e:
-			logger.error("Scalarizr is not properly configured. %s", e)
-			print >> sys.stderr, "error: %s" % (e)
-			print >> sys.stdout, "Execute instalation process first: 'scalarizr --configure'"
-			sys.exit(1)
+		# Initialize local database
+		_init_db()
 		
-
-		if EMBED_SNMPD:
-			# Start SNMP server in a separate process
-			signal.signal(signal.SIGCHLD, onSIGCHILD)
-			globals()['_snmp_scheduled_start_time'] = time.time()
-		elif NET_SNMPD:
-			# Start snmpd health check thread
-			t = threading.Thread(target=_snmpd_health_check)
-			t.setDaemon(True)
-			t.start()
+		# Initialize platform module
+		_init_platform()
+		
+		# At first scalarizr startup platform user-data should be applied
+		if cnf.state == ScalarizrState.UNKNOWN:
+			cnf.state = ScalarizrState.BOOTSTRAPPING
+			cnf.fire('apply_user_data', cnf)
 			
-		# Install  signal handlers	
+		# Apply Command-line passed configuration options
+		cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))
+		
+		# Validate configuration
+		num_errors = do_validate_cnf()
+		if num_errors or optparser.values.validate_cnf:
+			sys.exit(int(not num_errors or 1))		
+		
+		# Initialize scalarizr services
+		_init_services()
+		
+		# Install signal handlers
+		signal.signal(signal.SIGCHLD, onSIGCHILD)	
 		signal.signal(signal.SIGTERM, onSIGTERM)
 
-		# Start messaging server
+		# Create message server thread
 		msg_service = bus.messaging_service
 		consumer = msg_service.get_consumer()
-		msg_thread = threading.Thread(target=consumer.start, name="Message consumer")
-		#snmp_thread = threading.Thread(target=bus.snmp_server.start, name="SNMP server")
+		msg_thread = threading.Thread(target=consumer.start, name="Message server")
+
+		# Start message server
 		logger.info('[pid: %d] Starting scalarizr', os.getpid())
 		msg_thread.start()
-		#snmp_thread.start()
 
 		# Fire start
 		globals()["_running"] = True

@@ -1,13 +1,91 @@
-============
+==================
+Installation guide
+==================
+
 Requirements
-============
+------------
 
-python >= 2.5.1 
-tar >= 1.15 recomended (for EC2 bundle) 
+For all:
+	
+	python >= 2.5
+	m2crypto >= 0.20
+	pyasn1 >= 0.0.8a
+	pysnmp >= 4.1
+	pexpect >= 2.3
+	rsync >= 2.6.8
+
+To run on EC2 and Eucalyptus:
+
+	boto >= 1.9b
+	tar >= 1.15 recomended (for EC2 bundle)
+	openssl >= 0.9.7 
+
+To run tests:
+
+	paramiko >= 1.7.6
 
 
-Python modules
---------------
+Installation on Fedora / CentOS / RHEL
+--------------------------------------
+
+1) Install python2.6 for CentOS 5 / RHEL 5
+
+RHEL 5 distributes with python2.4. 
+However EPEL community maintains python2.6 and other fresh software for RHEL.    
+Use this how-to http://fedoraproject.org/wiki/EPEL/FAQ#howtouse to add their repos, 
+then install python2.6 with this command
+
+	yum install python2.6
+	
+	
+2) Add Scalr repo:
+
+	vim /etc/yum.repos.d/scalr.repo
+	[scalarizr]
+	name=scalarizr
+	baseurl=<url> 
+	enabled=1
+	gpgcheck=0
+
+Where <url> is
+
+	For RHEL/CentOS: 
+		http://rpm.scalr.net/rpm/rhel/$releasever/$basearch
+		
+	For Fedora: 
+		http://rpm.scalr.net/rpm/fedora/$releasever/$basearch
+
+
+3) Install Scalarizr
+
+	yum install scalarizr
+	
+
+Installation on Ubuntu / Debian
+-------------------------------
+
+1) Add Scalr repo
+
+Download and install scalr_repository package:
+
+	wget http://apt.scalr.net/scalr-repository_0.2_all.deb
+	dpkg -i scalr-repository_0.2_all.deb
+
+Download the list of packages in repository:
+
+	apt-get update
+
+
+2) Install Scalarizr
+
+	apt-get install scalarizr
+
+
+
+Links
+-----
+
+
 
 Mandatory
 ~~~~~~~~~

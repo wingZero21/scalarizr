@@ -4,10 +4,9 @@ Created on Apr 6, 2010
 @author: marat
 '''
 
-from scalarizr.util import Observable
-from optparse import OptionParser
+from scalarizr.libs.pubsub import Observable
 
-class Bus(Observable):
+class _Bus(Observable):
 	base_path = None
 	"""
 	@ivar string: Application base path
@@ -15,7 +14,17 @@ class Bus(Observable):
 	
 	etc_path = None
 	"""
-	@ivar string: Application etc path 
+	@ivar string: etc path 
+	"""
+	
+	share_path = None
+	'''
+	@ivar string: Shared resources path
+	'''
+	
+	scalr_url = None
+	"""
+	@ivar string: Base URL to Scalr service
 	"""
 	
 	cnf = None
@@ -36,12 +45,20 @@ class Bus(Observable):
 	
 	db = None
 	"""
-	@ivar sqlalchemy.pool.SingletonThreadPool: Database connection pool
+	@ivar db: Database connection pool. Single connection per thread
+	@type db: scalarizr.util.SqliteLocalObject
 	"""
 	
 	messaging_service = None
 	"""
-	@ivar scalarizr.messaging.MessageService: Default message service 
+	@ivar messaging_service: Default message service (Scalarizr <-> Scalr) 
+	@type messaging_service: scalarizr.messaging.MessageService
+	"""
+	
+	int_messaging_service = None
+	"""
+	@ivar int_messaging_service: Cross-scalarizr internal messaging
+	@type int_messaging_service: scalarizr.handlers.lifecircle.IntMessagingService
 	"""
 	
 	queryenv_service = None
@@ -58,5 +75,10 @@ class Bus(Observable):
 	"""
 	@ivar scalarizr.platform.Platform: Platform (ec2, rs, vps...)
 	"""
+	
+	periodical_executor = None
+	'''
+	@ivar: scalarizr.util.PeriodicalExecutor
+	'''
 
-bus = Bus()
+bus = _Bus()

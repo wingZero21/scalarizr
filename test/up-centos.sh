@@ -8,7 +8,7 @@ cd ../src
 rm -f scalarizr.tar.gz
 tar -czf scalarizr.tar.gz scalarizr
 echo "Uploading"
-scp -i $pk scalarizr.tar.gz root@$host:/root/
+scp -i $pk -o stricthostkeychecking=no scalarizr.tar.gz root@$host:/root/
 echo "Extracting"
-ssh -i $pk -l root $host tar -xzf /root/scalarizr.tar.gz -C /usr/lib/python2.6/site-packages/
+ssh -i $pk -o stricthostkeychecking=no -l root $host tar -xzf /root/scalarizr.tar.gz -C /usr/lib/python2.6/site-packages/
 echo "Done"
