@@ -54,6 +54,11 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		
 		initdv2.ParametrizedInitScript.__init__(self, SERVICE_NAME, 
 				initd_script, pid_file, socks=[initdv2.SockParam(3306)])
+		
+	def stop(self):
+		if not self.running:
+			return True
+		initdv2.ParametrizedInitScript.stop(self)
 
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
 

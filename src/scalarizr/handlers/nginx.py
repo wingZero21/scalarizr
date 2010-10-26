@@ -20,7 +20,7 @@ from scalarizr.util import system, cached, firstmatched,\
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
-import os, logging, shutil, re
+import os, logging, shutil, re, time
 from telnetlib import Telnet
 from datetime import datetime
 
@@ -76,6 +76,19 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		out = system('%s -t' % self._nginx_binary)[1]
 		if 'failed' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
+		
+	def stop(self):
+		if not self.running:
+			return True
+		ret =  initdv2.ParametrizedInitScript.stop(self)
+		time.sleep(1)
+		return ret
+	
+	def restart(self):
+		ret = initdv2.ParametrizedInitScript.restart(self)
+		time.sleep(1)
+		return ret
+	
 		
 initdv2.explore('nginx', NginxInitScript)
 

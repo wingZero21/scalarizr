@@ -10,9 +10,6 @@ from scalarizr.handlers.mysql import MysqlInitScript
 import time, os
 from scalarizr.util.initdv2 import InitdError
 
-
-
-
 class Test(unittest.TestCase):
 	mysql  = None
 	nginx  = None
@@ -29,6 +26,7 @@ class Test(unittest.TestCase):
 		print 'run setup'
 		self.nginx.stop()
 		self.apache.stop()
+		print 'finished setup'
 		
 	def test_mysql(self):
 		print 'run mysql test'
@@ -41,13 +39,14 @@ class Test(unittest.TestCase):
 		status = self.mysql.status()
 		run_time = time.time() - start_time
 		self.assertEqual(status, 3)
-		self.assertTrue(run_time < 1.1)
+		self.assertTrue(run_time < 1.2)
 		# Start
 		self.mysql.start()
 		#self.assertEqual(self.mysql.status(), 0)
 		# Restart
 		self.mysql.restart()
-		self.assertTrue(self.mysql.running)	
+		self.assertTrue(self.mysql.running)
+		self.mysql.reload()
 		
 		
 	def test_nginx(self):
@@ -68,6 +67,7 @@ class Test(unittest.TestCase):
 		# Restart
 		self.nginx.restart()
 		self.assertTrue(self.nginx.running)
+		self.nginx.reload()
 		
 	def test_apache(self):
 		print 'run mysql test'
@@ -86,6 +86,8 @@ class Test(unittest.TestCase):
 		# Restart
 		self.apache.restart()
 		self.assertTrue(self.apache.running)
+		self.apache.reload()
+		
 
 class _Cnf:
 

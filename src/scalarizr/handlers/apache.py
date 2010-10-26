@@ -64,7 +64,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		)
 		
 	def reload(self):
-		if os.path.exists(self.pid_file):
+		if self.pid_file and os.path.exists(self.pid_file):
 			out, err, retcode = system(self._apachectl + ' graceful')
 			if retcode > 0:
 				raise initdv2.InitdError('Cannot reload apache: %s' % err)
@@ -90,22 +90,33 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		
 	def start(self):
 		ret = initdv2.ParametrizedInitScript.start(self)
+		#out = system(self._apachectl +' start')[1]
+		#if 'error' in out.lower():
+		#	raise initdv2.InitdError("Error while starting apache: %s" % out)
+
+		#if disttool.is_redhat_based():
+		#	time.sleep(1)
 		if self.pid_file:
 			try:
 				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=5)
 			except:
 				raise initdv2.InitdError('Cannot start Apache: pid file hasn\'t been created')
-			return ret
-		return ret
+		time.sleep(0.5)
+		return True
 	
 	def restart(self):
 		ret = initdv2.ParametrizedInitScript.restart(self)
+		#out = system(self._apachectl +' restart')[1]
+		#if 'error' in out.lower():
+		#	raise initdv2.InitdError("Error while restarting apache: %s" % out)
+		#time.sleep(0.5)
+		
 		if self.pid_file:
 			try:
 				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=5)
 			except:
 				raise initdv2.InitdError('Cannot restart Apache: pid file hasn\'t been created')
-			return ret
+		time.sleep(0.5)
 		return ret
 
 initdv2.explore('apache', ApacheInitScript)
