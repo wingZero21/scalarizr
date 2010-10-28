@@ -980,10 +980,10 @@ if disttool.is_linux():
 			self._logger.debug('Image file %s created', self.path)			
 			
 			self._logger.debug('Associate loop device with a %s', self.path)
-			out, err, retcode = system('/sbin/losetup -f --show %s', self.path)
+			devname = system('/sbin/losetup -f')[0].strip()
+			out, err, retcode = system('/sbin/losetup %s %s' % (devname, self.path))
 			if retcode > 0:
 				raise HandlerError('Cannot setup loop device. Code: %d %s' % (retcode, err))
-			devname = out.strip()
 			self._logger.debug('Associated %s with a file %s', devname, self.path)
 			
 			return devname
