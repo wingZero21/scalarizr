@@ -252,16 +252,11 @@ def timethis(what):
 		return benchmark()
 """
 
-def init_tests():
-	logging.basicConfig(
-			format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", 
-			stream=sys.stdout, 
-			level=logging.DEBUG)
-	import scalarizr as szr
-	from scalarizr.bus import bus
-	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../etc")
-	szr._init()
-	bus.cnf.bootstrap()
+def split_ex(value, separator=",", allow_empty=False, ct=list):
+	return ct(v.strip() 
+			for v in value.split(separator) 
+			if allow_empty or (not allow_empty and v)) if value else ct()
+
 
 def get_free_devname():
 	dev_list = os.listdir('/dev')

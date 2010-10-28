@@ -4,9 +4,15 @@ Created on Aug 10, 2010
 @author: marat
 '''
 
-import logging, binascii
-from scalarizr.util import cryptotool, configtool
+# Core
+from scalarizr.bus import bus
 from scalarizr.messaging import MessagingError
+
+# Utils
+from scalarizr.util import cryptotool
+
+# Stdlibs
+import logging, binascii
 
 
 class P2pMessageSecurity(object):
@@ -20,11 +26,12 @@ class P2pMessageSecurity(object):
 	
 	def in_protocol_filter(self, consumer, queue, message):
 		try:
+			# Decrypt message
+			cnf = bus.cnf			
 			self._logger.debug('Decrypting message')
-			crypto_key = configtool.read_key(self.crypto_key_path)
-			self._logger.debug('Key: %s', crypto_key)
-			crypto_key = binascii.a2b_base64(configtool.read_key(self.crypto_key_path))
+			crypto_key = binascii.a2b_base64(cnf.read_key(self.crypto_key_path))
 			xml = cryptotool.decrypt(message, crypto_key)
+			
 			# Remove special chars
 			return xml.strip(''.join(chr(i) for i in range(0, 31)))
 				
@@ -33,19 +40,16 @@ class P2pMessageSecurity(object):
 	
 	def out_protocol_filter(self, producer, queue, message, headers):
 		try:
+			# Encrypt message
+			cnf = bus.cnf
 			self._logger.debug('Encrypting message')
-			
-			# Crypt
-			crypto_key = configtool.read_key(self.crypto_key_path)
-			self._logger.debug('Key: %s', crypto_key)
-			crypto_key = binascii.a2b_base64(configtool.read_key(self.crypto_key_path))
-			
+			crypto_key = binascii.a2b_base64(cnf.read_key(self.crypto_key_path))
 			data = cryptotool.encrypt(message, crypto_key)
 			
-			# Sign
+			# Generate signature
 			signature, timestamp = cryptotool.sign_http_request(data, crypto_key)
 			
-			# Modify headers
+			# Add extra headers
 			headers['Date'] = timestamp
 			headers['X-Signature'] = signature
 			headers['X-Server-Id'] = self.server_id

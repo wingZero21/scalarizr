@@ -149,31 +149,30 @@ def _init():
 DB_NAME = 'db.sqlite'
 DB_SCRIPT = 'db.sql'
 
-def _db_connect():
-	logger = logging.getLogger(__name__)	
+def _db_connect(file=None):
+	logger = logging.getLogger(__name__)
 	cnf = bus.cnf
-	file = cnf.private_path(DB_NAME)
 
-	logger.debug("Open SQLite database (file: %s)" % (file))
-	
+	logger.debug("Open SQLite database (file: %s)" % (file))	
+	file = file or cnf.private_path(DB_NAME)
 	conn = sqlite.connect(file, 5.0)
 	conn.row_factory = sqlite.Row
 	return conn
 
-def _init_db():
+def _init_db(file=None):
 	logger = logging.getLogger(__name__)	
 	cnf = bus.cnf
 
 	# Check that database exists (after rebundle for example)	
-	db_file = cnf.private_path(DB_NAME)
+	db_file = file or cnf.private_path(DB_NAME)
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
 		logger.debug("Database doesn't exists, create new one from script")
-		_create_db()
+		_create_db(file)
 	
-def _create_db():
+def _create_db(db_file=None, script_file=None):
 	cnf = bus.cnf
-	conn = _db_connect()
-	conn.executescript(open(cnf.public_path(DB_SCRIPT)).read())
+	conn = _db_connect(db_file)
+	conn.executescript(open(script_file or cnf.public_path(DB_SCRIPT)).read())
 	conn.commit()	
 	
 
@@ -408,19 +407,15 @@ def _shutdown(*args):
 			logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
 			os.kill(_snmp_pid, signal.SIGTERM)
 				
+		# Shutdown messaging
 		msg_service = bus.messaging_service
-		consumer = msg_service.get_consumer()
-		consumer.stop()
-		consumer.shutdown()
+		msg_service.get_consumer().shutdown()
+		msg_service.get_producer().shutdown()
 		
-		producer = msg_service.get_producer()
-		producer.shutdown()
-		
-		# Kill Cross-scalarizr message consumer
+		# Shutdown internal messaging
 		int_msg_service = bus.int_messaging_service
-		if int_msg_service and int_msg_service.consumer:
-			int_msg_service.consumer.stop()
-			int_msg_service.consumer.shutdown()
+		if int_msg_service:
+			int_msg_service.get_consumer().shutdown()
 		
 		# Fire terminate
 		bus.fire("terminate")

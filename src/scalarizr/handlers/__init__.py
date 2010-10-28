@@ -38,7 +38,7 @@ class Handler(object):
 						include_pad=False, queue=Queues.CONTROL):
 		srv = bus.int_messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
-					self.new_message(msg_name, msg_body, msg_meta, broadcast, include_pad, srv.msg_service)
+					self.new_message(msg_name, msg_body, msg_meta, broadcast, include_pad, srv)
 		srv.new_producer(host).send(queue, msg)
 
 	def _broadcast_message(self, msg):

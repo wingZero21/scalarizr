@@ -8,6 +8,8 @@ from scalarizr.util import PeriodicalExecutor
 import unittest
 import time
 
+import szr_unittest
+
 class TestPeriodicalExecutor(unittest.TestCase):
 
 	counter1 = None
@@ -43,5 +45,5 @@ class TestPeriodicalExecutor(unittest.TestCase):
 
 
 if __name__ == "__main__":
-	import szr_unittest
+	szr_unittest.main()
 	unittest.main()

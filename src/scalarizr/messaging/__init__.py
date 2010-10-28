@@ -165,6 +165,7 @@ class MessageConsumer(object):
 	"""
 	
 	listeners = None
+	running = False
 	
 	def __init__(self):
 		self.listeners = []
@@ -174,9 +175,6 @@ class MessageConsumer(object):
 		}
 	
 	def start(self):
-		pass
-	
-	def stop(self):
 		pass
 	
 	def shutdown(self):

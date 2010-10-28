@@ -3,19 +3,20 @@ Created on Dec 5, 2009
 
 @author: marat
 '''
-
+# Core
 from scalarizr.messaging import MessageProducer, Queues
 from scalarizr.messaging.p2p import P2pMessageStore
-from scalarizr.util import configtool
+
+# Utils
+from scalarizr.util import split_ex
+
+# Stdlibs
 from urllib import splitnport
 from urllib2 import urlopen, Request, URLError, HTTPError
 import logging
 import uuid
 import threading
-try:
-	import timemodule as time
-except ImportError:
-	import time	
+import time
 
 
 class P2pMessageProducer(MessageProducer):
@@ -31,7 +32,7 @@ class P2pMessageProducer(MessageProducer):
 		MessageProducer.__init__(self)
 		self.endpoint = endpoint
 		if retries_progression:
-			self.retries_progression = configtool.split_array(retries_progression, ",")
+			self.retries_progression = split_ex(retries_progression, ",")
 		else:
 			self.no_retry = True
 				
