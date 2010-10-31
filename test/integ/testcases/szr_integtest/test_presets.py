@@ -59,16 +59,23 @@ class PresetConfigurator:
 			self.new_preset(preset_name, behaviour, settings, apply)
 		
 	
-	def delete_preset(self, preset_name, behaviour):
+	def delete_preset(self, preset_name, behaviour, force=True):
 		self.sel.open(self.presets_page)
+
 		try:
 			wait_until(lambda:
 					self.sel.is_element_present('//em[text()="%s"]' % preset_name) == True,
 					sleep=1, 
-					time_until=3)
+					timeout=3)
 		except BaseException:
+			self._logger.error('Cannot delete preset %s. Timeout reached.' % preset_name)
 			return
-		
+
+		self.sel.click('//em[text()="%s"]/../../dt[last()]/em/input' % preset_name)
+		self.sel.click('//button[text()="With selected"]')
+		self.sel.click('//span[text()="Delete"]')
+		if force:
+			self.sel.click('//button[text()="Yes"]')
 	
 	def get_preset_id(self, preset_name):
 		#TODO: use behaviour, Luke. Sometimes even names can be equal.
@@ -78,7 +85,7 @@ class PresetConfigurator:
 			wait_until(lambda: 
 					self.sel.is_element_present('//em[text()="%s"]' % preset_name) == True, 
 					sleep=1, 
-					time_until=3)
+					timeout=5)
 		except BaseException:
 			return None
 		return str(self.sel.get_text('//em[text()="%s"]/../../dt[1]/em' % preset_name))
@@ -96,8 +103,7 @@ class Test(unittest.TestCase):
 
 	def test_new_preset(self):
 		pc = PresetConfigurator()
-		#pc.edit_preset('test-preset', behaviour='app', settings = {'KeepAliveTimeout':'6'}, apply=False)
-		#print pc.get_preset_id('test-preset')
+		#pc.edit_preset('test-preset', behaviour='app', settings = {'KeepAliveTimeout':'6'}, apply=True)
 		pc.delete_preset('test-preset', behaviour='app')
 
 
