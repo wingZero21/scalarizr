@@ -9,7 +9,7 @@ Created on Dec 11, 2009
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
-from scalarizr.config import BuiltinBehaviours
+from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers.mysql import MysqlMessages
 
 # Stdlibs
@@ -41,6 +41,7 @@ class IpListBuilder(Handler):
 
 	def on_init(self, *args, **kwargs):
 		bus.on("start", self.on_start)
+		bus.on("before_host_up", self.on_before_host_up)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.HOST_UP \
@@ -50,6 +51,14 @@ class IpListBuilder(Handler):
 			or message.name == MysqlMessages.NEW_MASTER_UP
 			
 	def on_start(self, *args):
+		cnf = bus.cnf
+		if cnf.state == ScalarizrState.RUNNING:
+			self._rebuild()
+				
+	def on_before_host_up(self, *args):
+		self._rebuild()
+
+	def _rebuild(self):
 		"""
 		Build current hosts structure on farm
 		"""
