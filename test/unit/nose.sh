@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 self=$(dirname $(readlink -f $0))
 
 path[0]="$self/testcases"
