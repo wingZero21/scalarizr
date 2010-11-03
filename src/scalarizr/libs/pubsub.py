@@ -12,7 +12,9 @@ class Observable(object):
 	
 	def define_events(self, *args):
 		for event in args:
-			self._listeners[event] = list()
+			#we can`t allow user to define the same event twice and lose subscribers
+			if not self._listeners.has_key(event): 
+				self._listeners[event] = list()
 	
 	def list_events(self):
 		return self._listeners.keys()
