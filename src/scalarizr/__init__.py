@@ -422,6 +422,9 @@ def _shutdown(*args):
 			int_msg_service.consumer.stop()
 			int_msg_service.consumer.shutdown()
 		
+		ex = bus.periodical_executor
+		ex.shutdown()
+		
 		# Fire terminate
 		bus.fire("terminate")
 	except:
@@ -560,7 +563,11 @@ def main():
 		# Start message server
 		logger.info('[pid: %d] Starting scalarizr', os.getpid())
 		msg_thread.start()
-
+		
+		# Start periodical executor
+		ex = bus.periodical_executor
+		ex.start()
+		
 		# Fire start
 		globals()["_running"] = True
 		globals()['_pid'] = os.getpid()

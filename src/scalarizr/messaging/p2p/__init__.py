@@ -83,7 +83,7 @@ class _P2pMessageStore:
 		ex = bus.periodical_executor
 		if ex: 
 			self._logger.debug('Add rotate messages table task for periodical executor')
-			ex.add_task(self.rotate, 600, 'Rotate messages sqlite table')
+			ex.add_task(self.rotate, 604800, 'Rotate messages sqlite table') # each 7 days
 
 	def _conn(self):
 		db = bus.db
@@ -92,11 +92,11 @@ class _P2pMessageStore:
 	def rotate(self):
 		conn = self._conn()
 		cur = conn.cursor()
-		cur.execute('SELECT * FROM p2p_message ORDER BY id ASC LIMIT %d, 1' % self.TAIL_LENGTH)
-		row = cur.fetchall()
+		cur.execute('SELECT * FROM p2p_message ORDER BY id DESC LIMIT %d, 1' % self.TAIL_LENGTH)
+		row = cur.fetchone()
 		if row:
-			self._logger.debug('Deleting messages older then messageid: %d', row['message_id'])
-			cur.execute('DELETE FROM p2p_message WHERE id >= ?' (row['id'],))
+			self._logger.debug('Deleting messages older then messageid: %s', row['message_id'])
+			cur.execute('DELETE FROM p2p_message WHERE id <= ?', (row['id'],))
 		conn.commit()
 		
 	def put_ingoing(self, message, queue):
