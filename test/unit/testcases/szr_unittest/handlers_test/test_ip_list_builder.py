@@ -2,7 +2,6 @@
 @author: Dmytro Korsakov
 '''
 import unittest
-#from scalarizr.util import init_tests
 import os
 import ConfigParser
 from scalarizr.bus import bus
@@ -17,7 +16,7 @@ class _Bunch(dict):
 class _QueryEnv:
 	def list_roles(self, role_name=None, behaviour=None):
 		return [_Bunch(
-			behaviour = "mysql",
+			behaviour = ["mysql"],
 			name = "mysql-lvm",
 			hosts = [_Bunch(
 				index='1',
@@ -38,12 +37,13 @@ class _QueryEnv:
 class TestIpListBuilder(unittest.TestCase):
 	
 	def setUp(self):
-		cnf = ScalarizrCnf(os.path.join(RESOURCE_PATH, 'etc'))
+		bus.etc_path = os.path.join(RESOURCE_PATH, 'etc')
+		cnf = ScalarizrCnf(bus.etc_path)
 		cnf.load_ini('ip_list_builder')
 		bus.cnf = cnf
 		
 		bus.queryenv_service = _QueryEnv()	
-		bus.define_events("before_host_up")			
+		bus.define_events("before_host_up", "init")			
 		
 		self.ip_lb = ip_list_builder.IpListBuilder()
 	
@@ -58,7 +58,7 @@ class TestIpListBuilder(unittest.TestCase):
 		role_file = role_dir + os.sep + internal_ip
 		mysql_dir = self.ip_lb._base_path + os.sep + role_alias + prefix #
 		mysql_file = mysql_dir + os.sep + internal_ip
-		msg = Message(body=dict(role_name=role_name, behaviour=role_alias, local_ip=internal_ip))
+		msg = Message(body=dict(role_name=role_name, behaviour=[role_alias], local_ip=internal_ip))
 		self.ip_lb.on_HostUp(msg)
 
 		self.assertTrue(os.path.exists(role_dir) and os.path.isdir(role_dir))
