@@ -90,11 +90,11 @@ class _P2pMessageStore:
 	def rotate(self):
 		conn = self._conn()
 		cur = conn.cursor()
-		cur.execute('SELECT * FROM p2p_message ORDER BY id ASC LIMIT %d, 1' % self.TAIL_LENGTH)
+		cur.execute('SELECT * FROM p2p_message ORDER BY id DESC LIMIT %d, 1' % self.TAIL_LENGTH)
 		row = cur.fetchone()
 		if row:
 			self._logger.debug('Deleting messages older then messageid: %s', row['message_id'])
-			cur.execute('DELETE FROM p2p_message WHERE id >= ?', (row['id'],))
+			cur.execute('DELETE FROM p2p_message WHERE id <= ?', (row['id'],))
 		conn.commit()
 		
 	def put_ingoing(self, message, queue, consumer_id):

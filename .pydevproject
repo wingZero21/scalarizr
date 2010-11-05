@@ -10,5 +10,6 @@
 <path>/scalarizr-branch-0.6/test/integ/testcases</path>
 <path>/scalarizr-branch-0.6/test/integ/libs</path>
 <path>/scalarizr-branch-0.6/test/unit/testcases</path>
+<path>/scalarizr-branch-0.6/test/unit/libs</path>
 </pydev_pathproperty>
 </pydev_project>

@@ -1303,3 +1303,7 @@ format_providers["xml"] = XmlFormatProvider
 
 
 """
+
+
+def strip_quotes(s):
+	return re.sub(r'^["\'](.+)["\']$', r'\1', s)

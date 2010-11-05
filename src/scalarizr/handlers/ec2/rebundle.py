@@ -165,7 +165,7 @@ class Ec2RebundleHandler(Handler):
 				# Old-style instance-store
 				sda1_kobject = filter(
 					lambda x: os.path.exists(x), 
-					('/sys/block/sda1', '/sys/block/sda/sda1')
+					('/sys/block/sda1', '/sys/block/sda/sda1', '/sys/block/xvda1')
 				)
 				if not sda1_kobject:
 					raise HandlerError('Cannot find sda1 kobject in sysfs')

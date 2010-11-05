@@ -14,7 +14,7 @@ from scalarizr.messaging import Messages
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
-	NoPathError
+	NoPathError, strip_quotes
 from scalarizr.util import disttool, cached, firstmatched, validators, software,\
 	wait_until
 from scalarizr.util import initdv2, system
@@ -523,7 +523,7 @@ class ApacheHandler(ServiceCtlHanler):
 			self._logger.debug("Searching in apache config file %s to find server root", self._httpd_conf_path)
 			
 			try:
-				server_root = self._config.get('ServerRoot')
+				server_root = strip_quotes(self._config.get('ServerRoot'))
 			except NoPathError:
 				self._logger.warning("ServerRoot not found in apache config file %s", self._httpd_conf_path)
 				server_root = os.path.dirname(self._httpd_conf_path)
