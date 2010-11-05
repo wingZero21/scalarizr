@@ -15,7 +15,7 @@ class Message:
 	local_ip = '8.8.8.8'
 	
 				
-class Test(unittest.TestCase):
+class TestNginx(unittest.TestCase):
 	
 
 	def setUp(self):
@@ -31,12 +31,12 @@ class Test(unittest.TestCase):
 		
 		bus.queryenv_service = _EmptyQueryEnv()
 		bus.define_events("before_host_down", "init")
-	
 
-	def test_reconfigure(self):
-		bus.queryenv_service = _QueryEnv()
-		
+
+	def test_on_VhostReconfigure(self):
 		https_include_path = "/etc/nginx/https.include"
+		_queryenv = bus.queryenv_service = _QueryEnv()
+
 		https_include = read_file(https_include_path)
 		
 		cert_path =  self._cnf.key_path("https.crt")
@@ -58,15 +58,14 @@ class Test(unittest.TestCase):
 		self.assertTrue(os.path.isfile(cert_path))
 		self.assertTrue(os.path.isfile(pk_path))
 				
-		self.assertEquals(bus.queryenv_service.list_virtual_hosts()[0]['raw']+'\n', https_include)
-		self.assertEquals(bus.queryenv_service.get_https_certificate()[0], cert)
-		self.assertEquals(bus.queryenv_service.get_https_certificate()[1], pk)
+		self.assertEquals(_queryenv.list_virtual_hosts()[0]['raw']+'\n', https_include)
+		self.assertEquals(_queryenv.get_https_certificate()[0], cert)
+		self.assertEquals(_queryenv.get_https_certificate()[1], pk)
 		
 		
 	def test_creating_vhosts(self):
 		config = bus.config
 		sect_name = nginx.CNF_SECTION
-		#nginx_incl = bus.etc_path + "/nginx/scalr-vhosts"
 		nginx_incl = "/etc/nginx/app-servers.include"
 		config.set(sect_name, "app_include_path",nginx_incl)
 		if os.path.exists(nginx_incl):

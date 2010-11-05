@@ -8,7 +8,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import ip_list_builder
 from scalarizr.messaging import Message
 from szr_unittest import RESOURCE_PATH
-from scalarizr.config import ScalarizrIni, ScalarizrCnf
+from scalarizr.config import ScalarizrCnf
 
 class _Bunch(dict):
 			__getattr__, __setattr__ = dict.get, dict.__setitem__
