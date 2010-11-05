@@ -180,7 +180,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	def _start_after_stop(self):
 		msg = self.new_message(Messages.RESTART)
-		bus.fire("before_restart". msg)
+		bus.fire("before_restart", msg)
 		self.send_message(msg)
 		bus.fire("restart")
 	

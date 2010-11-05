@@ -74,7 +74,7 @@ BUNDLER_RELEASE = "672"
 DIGEST_ALGO = "sha1"
 CRYPTO_ALGO = "aes-128-cbc"
 
-WALL_MESSAGE = 'Server is going to rebundle. Please logout from terminal'
+WALL_MESSAGE = 'Server is going to rebundle'
 
 MOTD = '''Scalr image 
 %(dist_name)s %(dist_version)s %(bits)d-bit

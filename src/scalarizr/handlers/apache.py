@@ -447,7 +447,7 @@ class ApacheHandler(ServiceCtlHanler):
 	def _check_mod_ssl_redhat(self):
 		mod_ssl_file = self.server_root + '/modules/mod_ssl.so'
 		
-		if not os.path.isfile(mod_ssl_file) and not os.path.islink(mod_ssl_file):
+		if os.path.exists(mod_ssl_file):
 			self._logger.error('%s does not exist. Try "sudo yum install mod_ssl" ',
 						mod_ssl_file)
 		else:			
@@ -524,6 +524,7 @@ class ApacheHandler(ServiceCtlHanler):
 			
 			try:
 				server_root = self._config.get('ServerRoot')
+				server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
 			except NoPathError:
 				self._logger.warning("ServerRoot not found in apache config file %s", self._httpd_conf_path)
 				server_root = os.path.dirname(self._httpd_conf_path)
