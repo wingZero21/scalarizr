@@ -159,7 +159,7 @@ def get_handlers():
 class NginxCnfController(CnfController):
 	def __init__(self):
 		cnf = bus.cnf; ini = cnf.rawini
-		nginx_conf_path = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)) + '/nginx.conf'
+		nginx_conf_path = os.path.join(os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)), 'nginx.conf')
 		CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx', {'1':'on','0':'off'})
 		
 	@property
@@ -184,12 +184,12 @@ class NginxHandler(ServiceCtlHanler):
 		
 		bus.define_events("nginx_upstream_reload")
 		bus.on("init", self.on_init)
-
+		
 		
 	def on_init(self):
 		bus.on('before_host_up', self.on_before_host_up)
-
-	
+		
+		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
 			(message.name == Messages.HOST_UP or \
@@ -197,6 +197,7 @@ class NginxHandler(ServiceCtlHanler):
 			message.name == Messages.BEFORE_HOST_TERMINATE or \
 			message.name == Messages.VHOST_RECONFIGURE or \
 			message.name == Messages.UPDATE_SERVICE_CONFIGURATION)		
+		
 		
 	def on_before_host_up(self, message):
 		self._update_vhosts()		
@@ -241,7 +242,7 @@ class NginxHandler(ServiceCtlHanler):
 	def _reload_upstream(self, force_reload=False):
 
 		config_dir = os.path.dirname(self._app_inc_path)
-		nginx_conf_path = config_dir + '/nginx.conf'
+		nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
 		
 		if not hasattr(self, '_config'):
 			try:
@@ -308,7 +309,7 @@ class NginxHandler(ServiceCtlHanler):
 			try:
 				self._init_script.configtest()
 			except initdv2.InitdError, e:
-				self._logger.error("Configuration error detected:" +  str(e) + " Reverting configuration.")
+				self._logger.error("Configuration error detected: %s Reverting configuration." % str(e))
 				if os.path.isfile(self._app_inc_path):
 					shutil.move(self._app_inc_path, self._app_inc_path+".junk")
 				else:
