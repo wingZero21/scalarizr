@@ -6,7 +6,7 @@ Created on Nov 05, 2010
 import unittest
 import os
 from szr_unittest import RESOURCE_PATH
-from scalarizr.util.filetool import write_file, read_file
+from scalarizr.util.filetool import write_file, read_file, split
 
 
 class TestSplit(unittest.TestCase):
@@ -17,10 +17,31 @@ class TestSplit(unittest.TestCase):
 	def tearDown(self):
 		pass
 	
-	def test_one(self):
-		self.assertEqual(1,2)
-		print "TestOne"
-
+	def test_split(self):
+		bytes = 1024
+		path = 'test_split.txt'
+		cur_dir = './'
+		prefix = '1'
+		
+		file = open(path, 'w')
+		file.write(''.join(['a' for i in range(bytes)]))
+		file.close()
+		
+		split(path,prefix, bytes/2, cur_dir)
+		
+		chunks = 0
+		for fname in os.listdir(cur_dir):
+			if fname.startswith(prefix+'.'):
+				chunks += 1
+				os.remove(os.path.join(cur_dir, fname))
+				
+		self.assertEqual(chunks, 2)
+		
+	def test_split_Null(self):
+		fname = r'/*not_real_name*/'
+		self.assertRaises(IOError, split, *(fname,'1', 512, '.'))
+				
+		
 class TestFileTool(unittest.TestCase):
 
 	def setUp(self):
@@ -108,9 +129,8 @@ class TestFileTool(unittest.TestCase):
 		if os.path.exists(self.testfile):
 			os.remove(self.testfile)
 
-#A = unittest.TestSuite((TestSplit(),))
 
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
-	unittest.main(A)
+	unittest.main()
