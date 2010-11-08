@@ -20,7 +20,7 @@ def split(filename, part_name_prefix, chunk_size, dest_dir):
 	try:
 		try:
 			f = open(filename, "rb")
-		except OSError:
+		except (OSError,IOError):
 			logger.error("Cannot open file to split '%s'", filename)
 			raise
 		
