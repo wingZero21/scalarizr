@@ -10,6 +10,9 @@ import os
 from scalarizr.util.filetool import read_file, write_file
 from szr_unittest import RESOURCE_PATH
 from scalarizr.config import ScalarizrCnf
+from szr_unittest_libs.mock import QueryEnvService
+from scalarizr.queryenv import Role, RoleHost, VirtualHost
+
 
 class Message:
 	local_ip = '8.8.8.8'
@@ -35,8 +38,8 @@ class TestNginx(unittest.TestCase):
 
 	def test_on_VhostReconfigure(self):
 		https_include_path = "/etc/nginx/https.include"
-		_queryenv = bus.queryenv_service = _QueryEnv()
-
+		#_queryenv = bus.queryenv_service = _QueryEnv()
+		_queryenv = bus.queryenv_service = qe
 		https_include = read_file(https_include_path)
 		
 		cert_path =  self._cnf.key_path("https.crt")
@@ -89,6 +92,51 @@ class TestNginx(unittest.TestCase):
 		
 		new_data = read_file(include_path)
 		self.assertEquals(new_data,"""\nupstream backend {\n\tip_hash;\n\n\tserver\t127.0.0.1:80;\n}\n""")
+
+
+
+#-----mock-----
+
+qe = QueryEnvService(
+	list_roles=list(
+		Role(
+			["app"], 
+			"nginx", 
+			list(RoleHost(
+				index='1',
+				replication_master="1",
+				internal_ip="8.8.8.8",
+				external_ip="192.168.1.93"
+				),)
+			),
+	),
+	
+	list_virtual_hosts = list(
+		VirtualHost(
+			hostname = "test1.net",
+			type = "nginx",
+			raw= """http {
+  server {
+    listen          80 default;
+    server_name     _;
+    access_log      logs/default.access.log main;
+ 
+    server_name_in_redirect  off;
+ 
+    index index.html;
+    root  /var/www/default/htdocs;
+  }
+}""",							
+			https = True),),
+		
+	get_https_certificate = ("MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN","MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN")	
+)
+
+bus.queryenv_service = qe
+
+
+'''
+#-------old code------
 		
 class _Bunch(dict):
 			__getattr__, __setattr__ = dict.get, dict.__setitem__
@@ -122,6 +170,9 @@ class _QueryEnv:
 		
 	def get_https_certificate(self):
 		return ("MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN","MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN")
+
+#------end code-----	
+'''	
 		
 
 class _EmptyQueryEnv:
