@@ -590,6 +590,5 @@ def main():
 		elif isinstance(e, KeyboardInterrupt):
 			pass
 		else:
-			traceback.print_exc(file=sys.stderr)
 			logger.exception(e)
 			sys.exit(1)

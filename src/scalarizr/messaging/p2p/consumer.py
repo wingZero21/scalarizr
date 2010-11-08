@@ -3,14 +3,16 @@ Created on Dec 5, 2009
 
 @author: marat
 '''
-from scalarizr.messaging import MessageConsumer
+from scalarizr.messaging import MessageConsumer, MessagingError
 from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage
 from scalarizr.util import cryptotool, configtool
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
 import threading
 import logging
+import socket
 import sys
+
 
 try:
 	import time
@@ -34,8 +36,19 @@ class P2pMessageConsumer(MessageConsumer):
 	
 	def __init__(self, endpoint=None):
 		MessageConsumer.__init__(self)
+		self._logger = logging.getLogger(__name__)		
+		
+		self._logger.debug('Create test socket to validate endpoint')
+		r = urlparse(endpoint)
+		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		try:
+			sock.bind((r.hostname, r.port))
+		except socket.error, e:
+			raise MessagingError('Cannot initialize message server. socket.error: %s' % e)
+		finally:
+			sock.close()
 		self.endpoint = endpoint
-		self._logger = logging.getLogger(__name__)
+		
 		if self.create_handler_thread:
 			self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
 		self.RequestHandler.consumer = self
