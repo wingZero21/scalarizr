@@ -39,7 +39,7 @@ class TestSplit(unittest.TestCase):
 		
 	def test_split_Null(self):
 		fname = r'/*not_real_name*/'
-		self.assertRaises(IOError, split, *(fname,'1', 512, '.'))
+		self.assertRaises((OSError,IOError), split, *(fname,'1', 512, '.'))
 				
 		
 class TestFileTool(unittest.TestCase):
