@@ -562,6 +562,7 @@ def main():
 
 		# Start message server
 		logger.info('[pid: %d] Starting scalarizr', os.getpid())
+		consumer.starttest()		
 		msg_thread.start()
 		
 		# Start periodical executor
