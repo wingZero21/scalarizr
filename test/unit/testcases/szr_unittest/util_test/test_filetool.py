@@ -8,6 +8,19 @@ import os
 from szr_unittest import RESOURCE_PATH
 from scalarizr.util.filetool import write_file, read_file
 
+
+class TestSplit(unittest.TestCase):
+	
+	def setUp(self):
+		pass
+
+	def tearDown(self):
+		pass
+	
+	def test_one(self):
+		self.assertEqual(1,2)
+		print "TestOne"
+
 class TestFileTool(unittest.TestCase):
 
 	def setUp(self):
@@ -95,7 +108,9 @@ class TestFileTool(unittest.TestCase):
 		if os.path.exists(self.testfile):
 			os.remove(self.testfile)
 
+#A = unittest.TestSuite((TestSplit(),))
+
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
-	unittest.main()
+	unittest.main(A)
