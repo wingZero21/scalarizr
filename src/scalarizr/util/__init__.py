@@ -178,9 +178,9 @@ def read_shebang(path=None, script=None):
 	else:
 		raise ValueError('one of arguments `path` or `script` should be passed')
 
-	shebang = re.search(re.compile('^#!(\S+)\s*'), first_line)
+	shebang = re.search(re.compile('^#!(\S+).+'), first_line)
 	if shebang:
-		return shebang.group(1)
+		return shebang.group(0)
 	return None
 
 def parse_size(size):
