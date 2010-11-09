@@ -6,7 +6,38 @@ Created on Nov 05, 2010
 import unittest
 import os
 from szr_unittest import RESOURCE_PATH
-from scalarizr.util.filetool import write_file, read_file, split
+from scalarizr.util.filetool import write_file, read_file, split, touch, truncate
+
+
+class TestTouch(unittest.TestCase):
+	
+	def test_touch(self):
+		path = 'test_touch.txt'
+		
+		if os.path.exists(path):
+			os.remove(path)
+		
+		touch(path)
+		
+		self.assertTrue(os.path.exists(path))
+		
+		os.remove(path)
+		
+		
+class TestTruncate(unittest.TestCase):
+	
+	def test_truncate(self):
+		path = 'test_truncate.txt'
+		
+		file = open(path, 'w')
+		file.write(''.join(['a' for i in range(1024)]))
+		file.close()
+
+		truncate(path)
+		
+		self.assertEqual(0,os.path.getsize(path))
+		
+		os.remove(path)
 
 
 class TestSplit(unittest.TestCase):
