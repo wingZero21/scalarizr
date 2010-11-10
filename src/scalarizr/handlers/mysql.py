@@ -26,6 +26,7 @@ from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re,  tarfile, tempfile
 import time, signal, pwd, random, shutil
+import glob
 
 # Extra
 from boto.exception import BotoServerError
@@ -162,7 +163,7 @@ PMA_USER = "pma"
 STORAGE_DEVNAME = "/dev/sdo"
 STORAGE_PATH = "/mnt/dbstorage"
 STORAGE_DATA_DIR = "mysql-data"
-STORAGE_BINLOG_PATH = "mysql-misc/binlog.log"
+STORAGE_BINLOG = "mysql-misc/binlog"
 BACKUP_CHUNK_SIZE = 200*1024*1024
 
 
@@ -416,7 +417,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
-		self._binlog_path = os.path.join(self._storage_path, STORAGE_BINLOG_PATH)
+		self._binlog_base = os.path.join(self._storage_path, STORAGE_BINLOG)
 
 		initd = initdv2.lookup(SERVICE_NAME)
 		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
@@ -663,7 +664,7 @@ class MysqlHandler(ServiceCtlHanler):
 				# Continue if master storage is a valid MySQL storage 
 				if self._storage_valid():
 					# Patch configuration files 
-					self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
+					self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 					self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
 					self._replication_init()
 					# Update behaviour configuration
@@ -836,14 +837,18 @@ class MysqlHandler(ServiceCtlHanler):
 
 
 		try:
+			if not storage_valid and self._mysql_config.get('mysqld/datadir').find(self._data_dir) == 0:
+				# When role was created from another mysql role it contains modified my.cnf settings 
+				self._repair_original_mycnf()
+			
 			# Patch configuration
 			self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
-			self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
+			self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 	
 					
 			self._replication_init(master=True)
 			
-			# If It's 1st init of mysql master
+			# If It's 1st init of mysql master storage
 			if not storage_valid:
 				
 				if os.path.exists('/etc/mysql/debian.cnf'):
@@ -928,7 +933,7 @@ class MysqlHandler(ServiceCtlHanler):
 		# Change configuration files
 		self._logger.info("Changing configuration files")
 		self._move_mysql_dir('mysqld/datadir', self._data_dir)
-		self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
+		self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 		self._replication_init(master=False)
 		if disttool._is_debian_based and os.path.exists(STORAGE_PATH + os.sep +'debian.cnf') :
 			try:
@@ -1052,8 +1057,8 @@ class MysqlHandler(ServiceCtlHanler):
 	
 	def _storage_valid(self, path=None):
 		data_dir = os.path.join(path, STORAGE_DATA_DIR) if path else self._data_dir
-		binlog_path = os.path.join(path, STORAGE_BINLOG_PATH) if path else os.path.dirname(self._binlog_path)
-		return os.path.exists(data_dir) and os.path.exists(binlog_path)
+		binlog_base = os.path.join(path, STORAGE_BINLOG) if path else self._binlog_base
+		return os.path.exists(data_dir) and glob.glob(binlog_base + '*')
 	
 	def _create_volume_from_snapshot(self, snap_id, avail_zone=None):
 		ec2_conn = self._get_ec2_conn()
@@ -1171,6 +1176,11 @@ class MysqlHandler(ServiceCtlHanler):
 		except BotoServerError, e:
 			self._logger.error("Cannot create MySQL data EBS snapshot. %s", e.message)
 			raise
+	
+	def _repair_original_mycnf(self):
+		self._mysql_config.set('mysqld/datadir', '/var/lib/mysql')
+		self._mysql_config.remove('mysqld/log_bin')
+
 	
 	def _add_mysql_users(self, root_user, repl_user, stat_user):
 		self._stop_service()
@@ -1326,7 +1336,7 @@ class MysqlHandler(ServiceCtlHanler):
 		mysql_user	= pwd.getpwnam("mysql")
 		directory	= os.path.dirname(dirname)
 
- 		try:
+		try:
 			raw_value = self._mysql_config.get(directive)
 			if not os.path.isdir(directory):
 				os.makedirs(directory)
