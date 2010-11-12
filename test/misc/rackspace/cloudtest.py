@@ -88,7 +88,7 @@ class CloudTest:
 		container = conn.get_container(container_name)
 		objects = container.get_objects(path=remote_location)
 		for obj in objects:
-			self.logger.info('etrieving object %s' % obj.name)
+			self.logger.info('retrieving object %s' % obj.name)
 			target_file = os.path.join(location, obj.name)
 			obj.save_to_filename(target_file)
 
@@ -124,4 +124,4 @@ if __name__ == '__main__':
 	#CT.make_shadow_copy('/dev/loop0', '/mnt/dest')
 	#CT.upload_files(location, remote_location)
 	#CT.download_files(location, remote_location)
-	CT.extract_from_copy('/mnt/dest', '/media/media/extracted.img')
+	#CT.extract_from_copy('/mnt/dest', '/media/media/extracted.img')
