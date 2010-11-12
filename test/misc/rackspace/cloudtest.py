@@ -7,7 +7,7 @@ import cloudfiles
 import logging
 
 
-def timeit(method):
+def time_it(method):
 
 	def timed(*args, **kw):
 		ts = time.time()
@@ -33,7 +33,7 @@ class CloudTest:
 	def get_mount_point(self, loop_device):
 		pass
 
-	@timeit
+	@time_it
 	def make_shadow_copy(self, source_volume, dest_dir, chunk_size = '30M'):
 		#TODO: change dest_dir to loop device name and mount it into dest_dir if needed
 		#TODO: write checksum
@@ -47,7 +47,7 @@ class CloudTest:
 		output = p3.communicate()[0]
 		print output
 
-	@timeit
+	@time_it
 	def upload_files(self,location, remote_location, container_name='test_container', cleanup=True):
 		#TODO: think about rotation
 		conn = cloudfiles.get_connection(username=self.login, api_key=self.key, serviceNet=True)
@@ -65,8 +65,8 @@ class CloudTest:
 		for file in files:
 			self.logger.info('Uploading %s to container %s' % (file, container_name))
 			full_path = os.path.join(location,file)
-			basename = os.path.basename(file)
-			o = container.create_object(remote_location+'/'+basename)
+			base_name = os.path.basename(file)
+			o = container.create_object(remote_location+'/'+base_name)
 			o.load_from_filename(full_path)
 
 			if cleanup:
@@ -75,8 +75,9 @@ class CloudTest:
 
 		self.logger.info('done.')
 
-	@timeit
+	@time_it
 	def download_files(self, location, remote_location, container_name='test_container', cleanup=False):
+		#todo: cleanup source dir, find out if there is still enough free disk space
 		conn = cloudfiles.get_connection(username=self.login, api_key=self.key, serviceNet=True)
 
 		containers = conn.get_all_containers()
@@ -91,22 +92,24 @@ class CloudTest:
 			target_file = os.path.join(location, obj.name)
 			obj.save_to_filename(target_file)
 
-	def extract_from_copy(self, source_dir, dest_dir, cleanup=False):
-		files = os.listdir(source_dir)
+	@time_it
+	def extract_from_copy(self, source_dir, dest_file, cleanup=False):
+		#cat 1.gz.aaa 1.gz.aab 1.gz.aac | gunzip > 1
+		files = [os.path.join(source_dir, file) for file in os.listdir(source_dir)]
 		files.sort()
 		cat = ['cat']
 		cat.extend(files)
-		#cat 1.gz.aaa 1.gz.aab 1.gz.aac | gunzip > 1
 		gunzip = ['gunzip']
-		dest_path = os.path.join(dest_dir, 'extracted.img')
-		dest_pointer = open(dest_path, 'w')
-		#Todo: find out where to extract file end how loop device will react
+		dest = open(dest_file, 'w')
+		#Todo: find out where to extract file
 		p1 = subprocess.Popen(cat, stdout=subprocess.PIPE)
-		p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest_pointer)
+		p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest)
 		err = p2.communicate()[1]
-		dest_pointer.close()
+		dest.close()
 		if err:
 			self.logger.error(err)
+		else:
+			self.logger.info('Archive was successfully extracted to %s' % source_dir)
 
 
 if __name__ == '__main__':
@@ -120,3 +123,5 @@ if __name__ == '__main__':
 	CT = CloudTest(login, key)
 	#CT.make_shadow_copy('/dev/loop0', '/mnt/dest')
 	#CT.upload_files(location, remote_location)
+	#CT.download_files(location, remote_location)
+	CT.extract_from_copy('/mnt/dest', '/media/media/extracted.img')
