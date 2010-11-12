@@ -27,7 +27,18 @@ class Lvm2:
 		system(['vgreduce', group, name])
 		system(['pvremove ', name])
 	
-	def create_volume_group(self, group=None, block_size='32M', *args):
+		
+	'''
+	def get_vg_size(self, group):
+		return None
+	
+	def get_optimal_block_size(self, group):
+		max_chunks = 64000
+		size = self.get_optimal_block_size(group)
+		return size / max_chunks
+	'''
+	
+	def create_volume_group(self, group=None, block_size=None, *args):
 		if not group: group = self.group
 		system(['vgcreate', '-s', block_size, group] + args)
 	
