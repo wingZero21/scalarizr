@@ -712,7 +712,7 @@ class NginxFormatProvider(IniFormatProvider):
 		if parent_path not in  ('.', ''):
 			parent = etree.find(parent_path)
 			# We are sure that parent element exists, because Configuration calls private method '_find' first
-			if parent.attrib.has_key('mc_type') and parent.attrib.has_key('mc_type') != 'section':
+			if parent.attrib.has_key('mc_type') and parent.attrib['mc_type'] != 'section':
 				parent.attrib['mc_type'] = 'section'
 				if parent.text.strip():
 					parent.attrib['value'] = parent.text.strip()
@@ -895,7 +895,7 @@ class ApacheFormatProvider(IniFormatProvider):
 		if parent_path not in  ('.', ''):
 			parent = etree.find(parent_path)
 			# We are sure that parent element exists, because Configuration calls private method '_find' first
-			if parent.attrib.has_key('mc_type') and parent.attrib.has_key('mc_type') != 'section':
+			if parent.attrib.has_key('mc_type') and parent.attrib['mc_type'] != 'section':
 				parent.attrib['mc_type'] = 'section'
 				if parent.text.strip():
 					parent.attrib['value'] = parent.text.strip()
