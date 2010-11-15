@@ -25,7 +25,7 @@ class Lvm2:
 		if not group: group = self.group
 		system(['pvmove ', name])
 		system(['vgreduce', group, name])
-		system(['pvremove ', name])
+		system(['pvremove ', '-f', name])
 	
 	def create_volume_group(self, group=None, block_size=None, *args):
 		if not group: group = self.group
