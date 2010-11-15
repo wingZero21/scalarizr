@@ -27,17 +27,6 @@ class Lvm2:
 		system(['vgreduce', group, name])
 		system(['pvremove ', name])
 	
-		
-	'''
-	def get_vg_size(self, group):
-		return None
-	
-	def get_optimal_block_size(self, group):
-		max_chunks = 64000
-		size = self.get_optimal_block_size(group)
-		return size / max_chunks
-	'''
-	
 	def create_volume_group(self, group=None, block_size=None, *args):
 		if not group: group = self.group
 		system(['vgcreate', '-s', block_size, group] + args)
@@ -48,7 +37,11 @@ class Lvm2:
 	
 	def create_logic_volume(self, volume_name, size, group=None):
 		if not group: group = self.group
-		system(['lvcreate', '-n', volume_name, '-L', size, group])		
+		system(['lvcreate', '-n', volume_name, '-L', size, group])
+		
+	def create_snapshot_volume(self, volume_name, buf_size, group=None, l_volume):	
+		if not group: group = self.group
+		system(['lvcreate', '-s', '-n', volume_name, '-L', buf_size, '/dev/%s/%s'%(group,l_volume)])	
 		
 	def get_logic_volume_list(self):
 		#TODO: parse output
@@ -56,7 +49,7 @@ class Lvm2:
 	
 	def remove_logic_volume(self, group, volume_name):
 		if not group: group = self.group
-		system(['lvremove','%/%' % (group, volume_name)])
+		system(['lvremove', '-f', '%/%' % (group, volume_name)])
 			
 	def repair_group(self, group):
 		if not group: group = self.group
