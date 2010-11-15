@@ -1,4 +1,4 @@
-
+from scalarizr.util import system
 
 # ebs-raid0-lvm-ext3
 # ebs-raid0-xfs
@@ -158,3 +158,9 @@ class EphSnapshotMgr:
 		#    untar
 		#    write to volume.devname
 		pass
+
+def _system(cmd, error):
+	out,rcode = system(cmd + ' 2>&1', True)[0::2]
+	if rcode:
+		raise Exception(error+"\n" + "Return code: %s. Error: %s" % (rcode, out))
+	return out

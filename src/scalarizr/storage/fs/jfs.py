@@ -6,6 +6,7 @@ Created on Nov 11, 2010
 
 import re, os
 from . import FileSystem
+from scalarizr.storage import _system
 from scalarizr.util import system
 from . import MOUNT_PATH, MKFS_PATH
 
@@ -28,7 +29,7 @@ class JfsFileSystem(FileSystem):
 		
 		cmd = '%s -t %s -q %s' % (MKFS_PATH, self._fsname, device)
 		error = "Error occured during filesystem creation on device '%s'" % device
-		self._system(cmd, error)
+		_system(cmd, error)
 
 		
 	def set_label(self, device, label):
@@ -40,7 +41,7 @@ class JfsFileSystem(FileSystem):
 	def get_label(self, device):
 		cmd = '%s -l %s' % (JFS_TUNE_PATH, device)
 		error = "Error while getting info for device '%s'" % device
-		out = self._system(cmd, error)
+		out = _system(cmd, error)
 		
 		res = re.search(self.__label_re, out)
 		if not res:
@@ -58,7 +59,7 @@ class JfsFileSystem(FileSystem):
 		mpoint = res.group('mpoint')
 		cmd = '%s -o remount,resize %s' % (MOUNT_PATH, mpoint)
 		error = 'Error occured during filesystem remount. Mpoint: %s' % mpoint
-		self._system(cmd, error)
+		_system(cmd, error)
 		
 		
 		

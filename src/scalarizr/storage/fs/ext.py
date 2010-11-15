@@ -4,6 +4,7 @@ Created on Nov 11, 2010
 @author: marat
 '''
 from . import FileSystem
+from scalarizr.storage import _system
 import os
 import subprocess
 
@@ -32,19 +33,19 @@ class ExtFileSystem(FileSystem):
 		
 		cmd = '%s %s' % (RESIZE2FS_PATH, device)
 		error = "Error occured during filesystem resize on device '%s'" % device
-		self._system(cmd, error)
+		_system(cmd, error)
 
 	def set_label(self, device, label):
 		label	= label[:self.__max_label_length]
 		
 		cmd		= '%s %s %s' % (E2LABEL_PATH, device, label)
 		error	= "Error while setting label for device '%s'" % device
-		self._system(cmd, error)
+		_system(cmd, error)
 	
 	def get_label(self, device):
 		cmd		= '%s %s' % (E2LABEL_PATH, device)
 		error	= "Error while getting label for device '%s'" % device
-		out = self._system(cmd, error)		
+		out = _system(cmd, error)		
 		return out.strip()
 	
 class Ext3FileSystem(ExtFileSystem):

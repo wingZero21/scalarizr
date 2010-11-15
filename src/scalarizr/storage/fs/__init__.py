@@ -1,12 +1,12 @@
-from scalarizr.util import system
 import os
-
+from scalarizr.storage import _system
 MKFS_PATH		= "mkfs"
 MOUNT_PATH		= "/bin/mount"
 
+
 class FileSystem:
 	freezable = False
-	
+
 	def mkfs(self, device, **options):
 		
 		if not hasattr(self, '_fsname'):
@@ -17,7 +17,7 @@ class FileSystem:
 		
 		cmd = '%s -t %s %s' % (MKFS_PATH, self._fsname, device)
 		error = "Error occured during filesystem creation on device '%s'" % device
-		self._system(cmd, error)
+		_system(cmd, error)
 	
 	def resize(self, device, size=None, **options):
 		'''
@@ -30,12 +30,6 @@ class FileSystem:
 	
 	def get_label(self, device):
 		pass
-	
-	def _system(self, cmd, error):
-		out,rcode = system(cmd + ' 2>&1', True)[0::2]
-		if rcode:
-			raise Exception(error+"\n" + "Return code: %s. Error: %s" % (rcode, out))
-		return out
 	
 #	label = property(_get_label, _set_label)
 	'''

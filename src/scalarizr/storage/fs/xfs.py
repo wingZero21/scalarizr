@@ -5,6 +5,7 @@ Created on Nov 11, 2010
 '''
 
 from . import FileSystem
+from scalarizr.storage import _system
 import re, os
 from scalarizr.util import system
 from . import MOUNT_PATH
@@ -25,12 +26,12 @@ class XfsFileSystem(FileSystem):
 	def set_label(self, device, label):
 		cmd   = '%s -L "%s" %s' % (XFS_ADMIN_PATH, label, device)
 		error = "Error while setting label for device '%s'" % device 
-		self._system(cmd, error)
+		_system(cmd, error)
 
 	def get_label(self, device):
 		cmd   = '%s -l %s' % (XFS_ADMIN_PATH, device)
 		error = "Error while getting label for device '%s'" % device 
-		res   = re.search(self.__label_re, self._system(cmd, error))
+		res   = re.search(self.__label_re, _system(cmd, error))
 		if not res:
 			raise Exception("Volume label wasn't found in xfs_admin's output")
 		return res.group('label')
@@ -44,6 +45,6 @@ class XfsFileSystem(FileSystem):
 			raise Exception('Mount device before resizing jfs file system')
 		cmd = "%s %s" % (XFS_GROWFS_PATH, res.group('mpoint'))
 		error = "Error occured during file system resize operation"
-		self._system(cmd, error)
+		_system(cmd, error)
 
 filesystems = dict(XfsFileSystem=('xfs',))
