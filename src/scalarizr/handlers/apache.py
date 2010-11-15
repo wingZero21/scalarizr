@@ -355,18 +355,26 @@ class ApacheHandler(ServiceCtlHanler):
 							
 							key_error_message = 'Cannot write SSL key files to %s.' % cert_path
 							cert_error_message = 'Cannot write SSL certificate files to %s.' % cert_path
+							ca_cert_error_message = 'Cannot write CA certificate to %s.' % cert_path
 							
 							for key_file in ['https.key', vhost.hostname + '.key']:
 								write_file(cert_path + '/' + key_file, https_certificate[1], error_msg=key_error_message, logger=self._logger)
+								os.chmod(cert_path + '/' + key_file, 0644)
 														
 							for cert_file in ['https.crt', vhost.hostname + '.crt']:
 								write_file(cert_path + '/' + cert_file, https_certificate[0], error_msg=cert_error_message, logger=self._logger)
+								os.chmod(cert_path + '/' + cert_file, 0644)
+								
+							if https_certificate[2]:
+								for filename in ('https-ca.crt', vhost.hostname + '-ca.crt'):
+									write_file(os.path.join(cert_path, filename), https_certificate[2], error_msg=ca_cert_error_message, logger=self._logger)
+									os.chmod(os.path.join(cert_path, filename), 0644)
 					
 					self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
 					
 					vhost_fullpath = vhosts_path + '/' + vhost.hostname + '-ssl.vhost.conf'
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
-					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl',cert_path), error_msg=vhost_error_message, logger = self._logger)
+					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl', cert_path), error_msg=vhost_error_message, logger = self._logger)
 					
 					self._create_vhost_paths(vhost_fullpath) 	
 
@@ -398,6 +406,7 @@ class ApacheHandler(ServiceCtlHanler):
 	def _patch_ssl_conf(self, cert_path):
 		key_path = cert_path + '/https.key'
 		crt_path = cert_path + '/https.crt'
+		ca_crt_path = cert_path + '/https-ca.crt'
 
 		ssl_conf_path = self.server_root + ('/conf.d/ssl.conf' if disttool.is_redhat_based() else '/sites-available/default-ssl')
 		if os.path.exists(ssl_conf_path):			
@@ -405,6 +414,17 @@ class ApacheHandler(ServiceCtlHanler):
 			ssl_conf.read(ssl_conf_path)
 			ssl_conf.set(".//SSLCertificateFile", crt_path)
 			ssl_conf.set(".//SSLCertificateKeyFile", key_path)
+			if os.path.exists(ca_crt_path):
+				try:
+					ssl_conf.set('.//SSLCACertificateFile', ca_crt_path)
+				except NoPathError:
+					# XXX: ugly hack
+					parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
+					before_el = ssl_conf.etree.find('.//SSLCertificateFile')
+					ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCACertificateFile', ca_crt_path)
+					ch.text = ca_crt_path
+					parent.insert(list(parent).index(before_el), ch)
+					
 			ssl_conf.write(ssl_conf_path)
 		else:
 			raise HandlerError("Apache's ssl configuration file %s doesn't exist" % ssl_conf_path)

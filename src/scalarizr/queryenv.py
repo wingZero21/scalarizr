@@ -80,7 +80,7 @@ class QueryEnvService(object):
 	
 	def get_https_certificate (self):
 		"""
-		@return (cert, pkey)
+		@return (cert, pkey, cacert)
 		"""
 		return self._request("get-https-certificate",{}, self._read_get_https_certificate_response)
 	
@@ -238,18 +238,21 @@ class QueryEnvService(object):
 		response = xml.documentElement
 		if len(response.childNodes):
 			virtualhost = response.firstChild
+			ca_cert = None
 			for ssl_data in virtualhost.childNodes:
-				if ssl_data.nodeName=="cert":
+				if ssl_data.nodeName == "cert":
 					cert = ssl_data.firstChild.nodeValue
-				elif ssl_data.nodeName=="pkey":
+				elif ssl_data.nodeName == "pkey":
 					pkey = ssl_data.firstChild.nodeValue
+				elif ssl_data.nodeName == "ca_cert":
+					ca_cert = ssl_data.firstChild.nodeValue
 			if not cert:
 				self._logger.error("Queryenv didn`t return SSL cert")
 			if not pkey:
 				self._logger.error("Queryenv didn`t return SSL keys")
-			return (cert, pkey)
+			return (cert, pkey, ca_cert)
 		self._logger.error("Queryenv return empty SSL cert & keys")
-		return (None, None)	
+		return (None, None, None)	
 
 	def _read_list_virtualhosts_response(self, xml):
 		ret = []

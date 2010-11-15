@@ -41,7 +41,7 @@ class ParseError(BaseException):
 	def __str__(self):
 		return self._err
 
-class NoPathError(BaseException):
+class NoPathError(MetaconfError):
 	pass
 
 
@@ -387,7 +387,7 @@ class Configuration:
 		elif force:
 			self.add(path, value)
 		else:
-			raise MetaconfError("Path %s doesn't exist" % path)
+			raise NoPathError("Path %s doesn't exist" % path)
 	
 	def _set(self, el, value):
 		if isinstance(value, dict):
