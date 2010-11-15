@@ -31,8 +31,8 @@ class FileSystem:
 	def get_label(self, device):
 		pass
 	
-	def _system(self, cmd, error, shell=False):
-		out,rcode = system(cmd + ' 2>&1', shell)[0::2]
+	def _system(self, cmd, error):
+		out,rcode = system(cmd + ' 2>&1', True)[0::2]
 		if rcode:
 			raise Exception(error+"\n" + "Return code: %s. Error: %s" % (rcode, out))
 		return out

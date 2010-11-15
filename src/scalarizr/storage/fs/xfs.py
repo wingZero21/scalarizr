@@ -19,7 +19,7 @@ class XfsFileSystem(FileSystem):
 	
 	def __init__(self):
 		self._fsname    = 'xfs'
-		self.__label_re  = re.compile('label\s+=\s+"(?P<label>).*"', re.IGNORECASE)
+		self.__label_re  = re.compile('label\s+=\s+"(?P<label>.*)"', re.IGNORECASE)
 		umount_on_resize = False
 
 	def set_label(self, device, label):
@@ -42,7 +42,7 @@ class XfsFileSystem(FileSystem):
 		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % device, system(MOUNT_PATH)[0])
 		if not res:
 			raise Exception('Mount device before resizing jfs file system')
-		cmd = "%s -o remount,resize %s" % (MOUNT_PATH, res.group('mpoint'))
+		cmd = "%s %s" % (XFS_GROWFS_PATH, res.group('mpoint'))
 		error = "Error occured during file system resize operation"
 		self._system(cmd, error)
 

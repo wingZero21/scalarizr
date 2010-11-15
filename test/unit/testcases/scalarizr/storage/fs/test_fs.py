@@ -5,34 +5,36 @@ Created on Nov 14, 2010
 '''
 import unittest
 from scalarizr.util import system
-from scalarizr.storage.fs.ext import ExtFileSystem
+from scalarizr.storage.fs.ext import Ext3FileSystem, Ext4FileSystem
 from scalarizr.storage.fs.jfs import JfsFileSystem
 from scalarizr.storage.fs.xfs import XfsFileSystem
 import os
 import re
+import logging
 
 
 class FileSystemTest(unittest.TestCase):
 
-	device = None
+	device   = None
 	img_file = None
-	mpoint = None
+	mpoint   = None
 
 	def __init__(self, methodName):
 		self.img_file = '/tmp/device'
 		self.mpoint   = '/mnt/testdir'
 		if not os.path.exists(self.mpoint):
 			os.makedirs(self.mpoint)
+		self._logger = logging.getLogger(__name__)
 		return unittest.TestCase.__init__(self, methodName)
 	
 	def setUp(self):
 		system("dd if=/dev/zero of=%s bs=1M count=50" % self.img_file)
 		self.device, err, rcode = system('losetup -f --show %s' % self.img_file)
 		if rcode:
-			raise Exception('Error occured during loop device creation.\n\
-			                 Return code: %s. Error: %s' % (rcode, err))
+			raise Exception('Error occured during loop device creation.\nReturn code: %s. Error: %s' % (rcode, err))
 		self.device = self.device.strip()
-		
+
+	
 	def tearDown(self):
 		if self.device:
 			system('umount %s' % self.device)
@@ -41,7 +43,8 @@ class FileSystemTest(unittest.TestCase):
 		system('rm -f %s' % self.img_file)
 		
 	def test_ext3(self):
-		fs = ExtFileSystem()
+		
+		fs = Ext3FileSystem()
 		fs.mkfs(self.device)
 		self.assertFalse(fs.get_label(self.device))
 		fs.set_label(self.device, 'testlabel')
@@ -53,7 +56,32 @@ class FileSystemTest(unittest.TestCase):
 		fs.resize(self.device)
 		self._mount()
 		self.assertEqual(self._get_size(), 99384)		
-	
+		
+	def test_jfs(self):
+		fs = JfsFileSystem()
+		fs.mkfs(self.device)
+		self.assertFalse(fs.get_label(self.device))
+		fs.set_label(self.device, 'testlabel')
+
+		self.assertEqual('testlabel', fs.get_label(self.device))
+		self._mount()
+		self.assertEqual(self._get_size(), 49968)
+		self._grow_partition()
+		fs.resize(self.device)
+		self.assertEqual(self._get_size(), 101168)
+		
+	def test_xfs(self):
+		fs = XfsFileSystem()
+		fs.mkfs(self.device)
+		self.assertFalse(fs.get_label(self.device))
+		fs.set_label(self.device, 'testlabel')
+		self.assertEqual('testlabel', fs.get_label(self.device))
+		self._mount()
+		self.assertEqual(self._get_size(), 46400)
+		self._grow_partition()
+		fs.resize(self.device)
+		self.assertEqual(self._get_size(), 97600)
+		
 	def _grow_partition(self):
 		system('dd if=/dev/zero of=%s bs=1M count=50 seek=50' % self.img_file)
 		system('losetup -c %s' % self.device)
