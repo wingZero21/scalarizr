@@ -172,6 +172,11 @@ class ServiceCtlHanler(Handler):
 		
 		self._queryenv = bus.queryenv_service
 		bus.on('init', self.sc_on_init)
+		bus.define_events(
+			self._service_name + '_reload',
+			'before_' + self._service_name + '_configure',
+			self._service_name + '_configure'
+		)
 
 
 	def on_UpdateServiceConfiguration(self, message):
@@ -228,6 +233,7 @@ class ServiceCtlHanler(Handler):
 		self._logger.info("Reloading %s", self._service_name)
 		try:
 			self._init_script.reload()
+			bus.fire(self._service_name + '_reload')
 		except initdv2.InitdError, e:
 			if e.code == initdv2.InitdError.NOT_RUNNING:
 				self._logger.debug('%s not running')
@@ -296,7 +302,7 @@ class ServiceCtlHanler(Handler):
 	def sc_on_before_host_down(self, msg): 
 		self._stop_service()
 	
-	def sc_on_configured(self, service_name):
+	def sc_on_configured(self, service_name, **kwargs):
 		if self._cnf_ctl:
 			# Stop service if it's already running
 			self._stop_service()		
@@ -329,4 +335,6 @@ class ServiceCtlHanler(Handler):
 			self._start_service_with_preset(cur_preset)
 		else:
 			self._start_service()
+			
+		bus.fire(self._service_name + '_configure', **kwargs)		
 		

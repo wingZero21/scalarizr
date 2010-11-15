@@ -423,6 +423,19 @@ class MysqlHandler(ServiceCtlHanler):
 		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
 			
 		bus.on("init", self.on_init)
+		bus.define_events(
+			'before_mysql_data_bundle',
+			
+			'mysql_data_bundle',
+			
+			# @param host: New master hostname 
+			'before_mysql_change_master',
+			
+			# @param host: New master hostname 
+			# @param log_file: log file to start from 
+			# @param log_pos: log pos to start from 
+			'mysql_change_master'
+		)
 
 	def _reload_mycnf(f):
 		def g(self, *args):
@@ -607,12 +620,16 @@ class MysqlHandler(ServiceCtlHanler):
 	def on_Mysql_CreateDataBundle(self, message):
 		# Retrieve password for scalr mysql user
 		try:
+			bus.fire('before_mysql_data_bundle')
 			try:
 				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 			# Creating snapshot
 			(snap_id, log_file, log_pos) = self._create_snapshot(ROOT_USER, root_password)
+			
+			bus.fire('mysql_data_bundle')			
+			
 			# Sending snapshot data to scalr
 			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
 				snapshot_id=snap_id,
@@ -620,6 +637,7 @@ class MysqlHandler(ServiceCtlHanler):
 				log_pos=log_pos,
 				status='ok'			
 			))
+
 		except (Exception, BaseException), e:
 			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
 				status		='error',
@@ -720,6 +738,8 @@ class MysqlHandler(ServiceCtlHanler):
 		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 			host = message.local_ip or message.remote_ip
 			self._logger.info("Switching replication to a new MySQL master %s", host)
+			bus.fire('before_mysql_change_master', host=host)			
+			
 			mysql = self._spawn_mysql(ROOT_USER, message.root_password)
 						
 			self._logger.debug("Stopping slave i/o thread")
@@ -749,6 +769,7 @@ class MysqlHandler(ServiceCtlHanler):
 				mysql_password=message.root_password
 			)			
 			self._logger.debug("Replication switched")
+			bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
 		else:
 			self._logger.debug('Skip NewMasterUp. My replication role is master')		
 
@@ -810,12 +831,15 @@ class MysqlHandler(ServiceCtlHanler):
 		except:
 			pass
 
-		if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
+		repl = 'master' if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else 'slave'
+		if repl == 'master':
+			bus.fire('before_mysql_configure', replication=repl)
 			self._init_master(message)									  
 		else:
+			bus.fire('before_mysql_configure', replication=repl)
 			self._init_slave(message)		
 		
-		bus.fire('service_configured', service_name=SERVICE_NAME)
+		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 	
 	def _init_master(self, message):
 		"""

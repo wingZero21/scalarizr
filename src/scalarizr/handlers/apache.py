@@ -204,9 +204,10 @@ class ApacheHandler(ServiceCtlHanler):
 		ini = self._cnf.rawini
 		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)		
 		
-		bus.define_events('apache_reload')
-		bus.define_events('service_configured')
 		bus.on("init", self.on_init)
+		bus.define_events(
+			'apache_rpaf_reload'
+		)
 
 	def on_init(self):
 		bus.on('start', self.on_start)
@@ -280,6 +281,7 @@ class ApacheHandler(ServiceCtlHanler):
 			for host in role.hosts:
 				lb_hosts.append(host.internal_ip)
 		self._rpaf_modify_proxy_ips(lb_hosts, operation='update')
+		bus.fire('apache_rpaf_reload')
 		
 		
 	def _update_vhosts(self):
@@ -447,7 +449,7 @@ class ApacheHandler(ServiceCtlHanler):
 	def _check_mod_ssl_redhat(self):
 		mod_ssl_file = self.server_root + '/modules/mod_ssl.so'
 		
-		if os.path.exists(mod_ssl_file):
+		if not os.path.exists(mod_ssl_file):
 			self._logger.error('%s does not exist. Try "sudo yum install mod_ssl" ',
 						mod_ssl_file)
 		else:			
