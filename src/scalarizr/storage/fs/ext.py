@@ -60,5 +60,5 @@ class Ext4FileSystem(ExtFileSystem):
 		self._fsname = 'ext4'
 		ExtFileSystem.__init__(self)
 
-filesystems = dict(ExtFileSystem=('ext3', 'ext4'))
+filesystems = dict(Ext3FileSystem=('ext3',), Ext4FileSystem=('ext4'))
 

@@ -59,10 +59,6 @@ class JfsFileSystem(FileSystem):
 		mpoint = res.group('mpoint')
 		cmd = '%s -o remount,resize %s' % (MOUNT_PATH, mpoint)
 		error = 'Error occured during filesystem remount. Mpoint: %s' % mpoint
-		_system(cmd, error)
-		
-		
-		
-		
+		_system(cmd, error)		
 
-filesystems = dict(JfsFileSystem=('jfs', 'jfs2'))
+filesystems = dict(JfsFileSystem=('jfs'))
