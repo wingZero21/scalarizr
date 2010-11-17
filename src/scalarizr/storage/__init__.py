@@ -44,10 +44,8 @@ snap = vol.snapshot()
 '''
 
 
-
 def mkloop(size):
 	pass
-
 
 
 class StorageMgr:
@@ -147,57 +145,79 @@ class ReliableVolume(Volume):
 		pass
 	pass
 	
+class Registry:
+	@classmethod
+	def lookup_snapshot_backend(self, schema):
+		pass
+	
+	@classmethod
+	def explore_snapshot_backend(self, schema, BackendClass):
+		pass
+	
+	@classmethod
+	def lookup_filesystem(self, fstype):
+		pass
+
+	@classmethod
+	def explore_filesystem(self, fstype, FSClass):
+		pass
+
+	
 class EphSnapshotMgr:
 
+	backup_devname = None
 	backend = None
+	fstype = None
 	chunk_size = None
 	PREFIX = 'snapshot'
-	backup_dir = None
 	
-	def __init__(self, devname, backend, fstype='ext3', chunk_size=10):
-		self.chunk_size = chunk_size
+	def __init__(self, backup_devname, backend, fstype='ext3', chunk_size=10):
+		self.backup_devname = backup_devname
 		self.backend = backend
+		self.fstype = fstype
+		self.chunk_size = chunk_size
+		
 		self._logger = logging.getLogger(__name__)
 		self._config = Configuration('ini')
-		self.backup_dir = self._generate_backup_dir('/mnt/backup')
-		fs = FileSystemProvider.lookup(fstype)
-		fs.mkfs(devname)
 		
-	def _generate_backup_dir(self, backup_dir):
-		while os.path.exists(backup_dir):
-			backup_dir = '/mnt/backup' + str(randint(1000000, 9999999))
-		os.makedirs(backup_dir)
-		return backup_dir
+	def _make_unique_dir(self, directory):
+		while os.path.exists(directory):
+			directory += str(randint(1000000, 9999999))
+		os.makedirs(directory)
+		return directory
 	
-	def create(self, volume):		
-		if not volume.mounted:
-			volume.mount(self.backup_dir)
-		else:
-			self.backup_dir = volume.mpoint
-			
-		# freeze source
-		cmd1 = ['dd', 'if=%s' % volume]
+	def create(self, volume, snap_name=None):
+		#prepare backup volume
+		fs = FileSystemProvider.lookup(self.fstype)
+		fs.mkfs(self.backup_devname)
+		backup_dir = self._make_unique_dir('/mnt/backup')
+		backup_volume = Volume(self.backup_devname, backup_dir, self.fstype)
+		backup_volume.mount(backup_dir)
+		# create lvm snapshot ; calculate buf size first
+		cmd1 = ['dd', 'if=%s' % volume.devname]
 		cmd2 = ['gzip']
 		cmd3 = ['split', '-a','3', '-b', '%s'%self.chunk_size, '-', '%s/%s.gz.' 
-			% (self.backup_dir, self.PREFIX)]
+			% (backup_dir, self.PREFIX)]
 		p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE)
 		p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE)
 		p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE)
 		self._logger.info('Making shadow copy')
 		output = p3.communicate()[0]
-		#unfreeze 
+		#unfreeze - delete lvm snapshot
+		if output:
+			self._logger.debug(output)
 		
-		self._logger.debug(output)
-		
-		self._config.add('./chunks')
+		self._config.add('./%s/%s'%('snapshot_name', 'name'), snap_name, force=True)
 		for chunk in os.listdir(self.backup_dir):
 			full_path = os.path.join(self.backup_dir, chunk)
-			self._config.add('./%s/%s'%('chunks', chunk), self._md5(full_path))
+			self._config.add('./%s/%s'%('chunks', chunk), self._md5(full_path), force=True)
 		self._config.write(os.path.join(self.backup_dir, 'manifest.ini'))
 		
 		self.backend.save(self.backup_dir)
-		volume.umount()
+		backup_volume.umount()
 		os.rmdir(self.backup_dir)
+		
+		return Snapshot(name=snap_name)#why do we need to return this and where to find ID?
 	
 	def _md5(self, file, block_size=4096):
 		md5 = hashlib.md5()
@@ -208,7 +228,15 @@ class EphSnapshotMgr:
 			md5.update(data)
 		return md5.digest()
 
-	def restore(self, volume):
+	def restore(self, snapshot, volume):
+		# backend: load snapshot into `dir`
+		# restore chunks from `dir` into volume.devname
+		 
+		#find temporary place for chunks
+		#mount with rw 
+		#download [which prefix?!]
+		
+		
 		# foreach chunk
 		#    ungzip
 		#    untar
