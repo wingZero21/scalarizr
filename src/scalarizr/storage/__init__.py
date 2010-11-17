@@ -6,6 +6,7 @@ import os
 
 from scalarizr.util import system
 from scalarizr.storage.fs.ext import Ext3FileSystem
+from scalarizr.storage.lvm2 import Lvm2
 from scalarizr.libs.metaconf import Configuration
 
 # ebs-raid0-lvm-ext3
@@ -170,6 +171,7 @@ class EphSnapshotMgr:
 	fstype = None
 	chunk_size = None
 	PREFIX = 'snapshot'
+	MANIFEST = 'manifest.ini'
 	
 	def __init__(self, backup_devname, backend, fstype='ext3', chunk_size=10):
 		self.backup_devname = backup_devname
@@ -177,8 +179,8 @@ class EphSnapshotMgr:
 		self.fstype = fstype
 		self.chunk_size = chunk_size
 		
-		self._logger = logging.getLogger(__name__)
-		self._config = Configuration('ini')
+		self._logger = logging.getLogger(__name__)		
+		self.lvm = Lvm2()
 		
 	def _make_unique_dir(self, directory):
 		while os.path.exists(directory):
@@ -186,15 +188,29 @@ class EphSnapshotMgr:
 		os.makedirs(directory)
 		return directory
 	
-	def create(self, volume, snap_name=None):
-		#prepare backup volume
+	def _prepare_backup_volume(self):
 		fs = FileSystemProvider.lookup(self.fstype)
 		fs.mkfs(self.backup_devname)
+		
 		backup_dir = self._make_unique_dir('/mnt/backup')
 		backup_volume = Volume(self.backup_devname, backup_dir, self.fstype)
+		
+		if backup_volume.mounted:
+			backup_volume.umount()
+		
 		backup_volume.mount(backup_dir)
+		return backup_volume
+	
+	def create(self, volume, snap_name=None):
+		backup_volume = self._prepare_backup_volume()
+		backup_dir = backup_volume.mpoint
+		
 		# create lvm snapshot ; calculate buf size first
-		cmd1 = ['dd', 'if=%s' % volume.devname]
+		vg = self.lvm.get_volume_groups()[0]
+		self.lvm.create_snapshot_volume('snv', buf_size='4M', group=vg, l_volume=volume.devname)
+		snv_devname = '/dev/%s/snv' % vg
+		
+		cmd1 = ['dd', 'if=%s' % snv_devname]
 		cmd2 = ['gzip']
 		cmd3 = ['split', '-a','3', '-b', '%s'%self.chunk_size, '-', '%s/%s.gz.' 
 			% (backup_dir, self.PREFIX)]
@@ -203,21 +219,27 @@ class EphSnapshotMgr:
 		p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE)
 		self._logger.info('Making shadow copy')
 		output = p3.communicate()[0]
+		
 		#unfreeze - delete lvm snapshot
+		self.lvm.remove_logic_volume(group=vg, volume_name=snv_devname)
+		
 		if output:
 			self._logger.debug(output)
-		
-		self._config.add('./%s/%s'%('snapshot_name', 'name'), snap_name, force=True)
+			
+		config = Configuration('ini')
+		config.add('./%s/%s'%('snapshot_name', 'name'), snap_name, force=True)
 		for chunk in os.listdir(self.backup_dir):
-			full_path = os.path.join(self.backup_dir, chunk)
-			self._config.add('./%s/%s'%('chunks', chunk), self._md5(full_path), force=True)
-		self._config.write(os.path.join(self.backup_dir, 'manifest.ini'))
+			if chunk.startswith(self.PREFIX):
+				full_path = os.path.join(self.backup_dir, chunk)
+				config.add('./%s/%s'%('chunks', chunk), self._md5(full_path), force=True)
+		config.write(os.path.join(self.backup_dir, self.MANIFEST))
 		
 		self.backend.save(self.backup_dir)
 		backup_volume.umount()
 		os.rmdir(self.backup_dir)
 		
-		return Snapshot(name=snap_name)#why do we need to return this and where to find ID?
+		#where to find ID?
+		return Snapshot(name=snap_name)
 	
 	def _md5(self, file, block_size=4096):
 		md5 = hashlib.md5()
@@ -229,19 +251,46 @@ class EphSnapshotMgr:
 		return md5.digest()
 
 	def restore(self, snapshot, volume):
+		#prepare bv
+		backup_volume = self._prepare_backup_volume()
+		backup_dir = backup_volume.mpoint
+		
 		# backend: load snapshot into `dir`
+		self.backend.load(snapshot, backup_dir)
+		
+		#check manifest
+		config = Configuration('ini')
+		config.read(os.path.join(backup_dir, self.MANIFEST))
+		checksumms = config.get_dict('chunks')
+		for chunk in os.listdir(self.backup_dir):
+			full_path = os.path.join(self.backup_dir, chunk)
+			if chunk.startswith(self.PREFIX) and self._md5(full_path) != checksumms[chunk]:
+				raise BaseException('Backup failed: checksumms are different.')
+
+		#umount device if mounted!
+		if volume.mounted:
+			volume.umount()
+		
 		# restore chunks from `dir` into volume.devname
-		 
-		#find temporary place for chunks
+		files = [os.path.join(backup_dir, file) for file in os.listdir(backup_dir)]
+		files.sort()
+		cat = ['cat']
+		cat.extend(files)
+		gunzip = ['gunzip']
+		dest = open(volume.devname, 'w')
+		#Todo: find out where to extract file
+		p1 = subprocess.Popen(cat, stdout=subprocess.PIPE)
+		p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest)
+		err = p2.communicate()[1]
+		dest.close()
+		if err:
+			self.logger.error(err)
+		else:
+			self.logger.info('Archive was successfully extracted to %s' % backup_dir)		
+
+
 		#mount with rw 
-		#download [which prefix?!]
-		
-		
-		# foreach chunk
-		#    ungzip
-		#    untar
-		#    write to volume.devname
-		pass
+		volume.mount(volume.mpoint)
 
 
 def _system(cmd, error):
