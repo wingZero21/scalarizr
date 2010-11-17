@@ -210,8 +210,10 @@ class ApacheHandler(ServiceCtlHanler):
 		)
 
 	def on_init(self):
-		bus.on('start', self.on_start)
-		bus.on('before_host_up', self.on_before_host_up)
+		bus.on(
+			start = self.on_start, 
+			before_host_up = self.on_before_host_up
+		)		
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -224,6 +226,7 @@ class ApacheHandler(ServiceCtlHanler):
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			self._rpaf_reload()
+			self._update_vhosts()			
 
 	def on_before_host_up(self, message):
 		self._rpaf_reload()
@@ -266,7 +269,7 @@ class ApacheHandler(ServiceCtlHanler):
 			if not proxy_ips:
 				proxy_ips.add('127.0.0.1')
 				
-			self._logger.info('Updating RPAFproxy_ips: %s', ' '.join(proxy_ips))
+			self._logger.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
 			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
 			rpaf.write(file)
 			

@@ -628,7 +628,7 @@ class MysqlHandler(ServiceCtlHanler):
 			# Creating snapshot
 			(snap_id, log_file, log_pos) = self._create_snapshot(ROOT_USER, root_password)
 			
-			bus.fire('mysql_data_bundle')			
+			bus.fire('mysql_data_bundle', snapshot_id=snap_id)			
 			
 			# Sending snapshot data to scalr
 			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
@@ -1222,13 +1222,19 @@ class MysqlHandler(ServiceCtlHanler):
 	
 		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
 		
-		# Define users and passwords
+		# Generate passwords
 		root_password, repl_password, stat_password = map(lambda x: re.sub('[^\w]','', cryptotool.keygen(20)), range(3))
+		
 		# Add users
-		sql = "INSERT INTO mysql.user VALUES('%','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
-		sql += " INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
+		#sql = "INSERT INTO mysql.user VALUES('%','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
+		
+		# scalr@localhost allow all
+		sql = "INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
+		# scalr_repl@% allow Repl_slave_priv
 		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_slave_priv) VALUES ('%','"+repl_user+"',PASSWORD('"+repl_password+"'),'Y');"
+		# scalr_stat@% allow Repl_client_priv
 		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');"
+		
 		sql += " FLUSH PRIVILEGES;"
 		out,err = myclient.communicate(sql)
 		if err:
