@@ -29,11 +29,34 @@ class Lvm2:
 	
 	def create_volume_group(self, group=None, block_size=None, *args):
 		if not group: group = self.group
+		if not block_size: block_size = '32M'
 		system(['vgcreate', '-s', block_size, group] + args)
 	
-	def get_volume_group_list(self):
+	def get_volume_groups_info(self):
 		#TODO: parse output
-		return system(['vgs'])[0]
+		return [i.split() for i in system(['vgs'])[0].split('\n')[1:-1]]
+	
+	def get_logic_volumes_info(self):
+		return [i.split() for i in system(['lvs'])[0].split('\n')[1:-1]]
+	
+	def get_logic_volume_size(self, lv_name):
+		lv_info = self.get_logic_volumes_info()
+		if lv_info:
+			for lv in lv_info:
+				if lv[0] == lv_name:
+					return lv[3]
+		return 0
+	
+	def get_volume_groups(self):
+		vgs = self.get_volume_groups_info()
+		if vgs:
+			return [j[0] for j in vgs]
+	
+	def get_available_free_space(self, group_name):
+		for group in self.get_volume_group_list():
+			if group[0]==group_name:
+				return group[-1]
+		return 0
 	
 	def create_logic_volume(self, volume_name, size, group=None):
 		if not group: group = self.group
