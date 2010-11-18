@@ -20,7 +20,6 @@ def time_it(method):
 
 	return timed
 
-
 class CloudTest:
 
 	PREFIX  = 'snapshot'
@@ -50,6 +49,7 @@ class CloudTest:
 	@time_it
 	def upload_files(self,location, remote_location, container_name='test_container', cleanup=True):
 		#TODO: think about rotation
+		#TODO: add N attempts
 		conn = cloudfiles.get_connection(username=self.login, api_key=self.key, serviceNet=True)
 
 		files = []
