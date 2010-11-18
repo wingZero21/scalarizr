@@ -5,7 +5,6 @@ import logging
 import os
 
 from scalarizr.util import system
-from scalarizr.storage.fs.ext import Ext3FileSystem
 from scalarizr.storage.lvm2 import Lvm2
 from scalarizr.libs.metaconf import Configuration
 
@@ -208,7 +207,7 @@ class EphSnapshotMgr:
 		
 		# create lvm snapshot ; calculate buf size first
 		vg = self.lvm.get_volume_group(volume.devname)
-		self.lvm.create_snapshot_volume(self.SNAPSHOT_VOLUME, buf_size='4M', group=vg, l_volume=volume.devname)
+		self.lvm.create_snapshot_volume(self.SNAPSHOT_VOLUME, buf_size='4M', l_volume=volume.devname, group=vg)
 		snv_devname = '/dev/%s/%s' % (vg, self.SNAPSHOT_VOLUME)
 		
 		cmd1 = ['dd', 'if=%s' % snv_devname]
