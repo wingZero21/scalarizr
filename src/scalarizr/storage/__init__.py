@@ -172,6 +172,7 @@ class EphSnapshotMgr:
 	chunk_size = None
 	PREFIX = 'snapshot'
 	MANIFEST = 'manifest.ini'
+	SNAPSHOT_VOLUME = 'snv'
 	
 	def __init__(self, backup_devname, backend, fstype='ext3', chunk_size=10):
 		self.backup_devname = backup_devname
@@ -207,8 +208,8 @@ class EphSnapshotMgr:
 		
 		# create lvm snapshot ; calculate buf size first
 		vg = self.lvm.get_volume_groups()[0]
-		self.lvm.create_snapshot_volume('snv', buf_size='4M', group=vg, l_volume=volume.devname)
-		snv_devname = '/dev/%s/snv' % vg
+		self.lvm.create_snapshot_volume(self.SNAPSHOT_VOLUME, buf_size='4M', group=vg, l_volume=volume.devname)
+		snv_devname = '/dev/%s/%s' % (vg, self.SNAPSHOT_VOLUME)
 		
 		cmd1 = ['dd', 'if=%s' % snv_devname]
 		cmd2 = ['gzip']
