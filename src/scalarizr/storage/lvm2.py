@@ -37,7 +37,8 @@ class Lvm2:
 		return [i.split() for i in system(['vgs'])[0].split('\n')[1:-1]]
 	
 	def get_logic_volumes_info(self):
-		return [i.split() for i in system(['lvs'])[0].split('\n')[1:-1]]
+		return [i.strip().split('|') for i in 
+				system(['/sbin/lvs', '--separator', "|"], shell=False)[0].split('\n')[1:-1]]
 	
 	def get_logic_volume_size(self, lv_name):
 		lv_info = self.get_logic_volumes_info()
@@ -51,6 +52,15 @@ class Lvm2:
 		vgs = self.get_volume_groups_info()
 		if vgs:
 			return [j[0] for j in vgs]
+		
+			
+	def get_volume_group(self, device):
+		lvs_info = self.get_logic_volumes_info()
+		if lvs_info:
+			for volume in lvs_info:
+				if device.endswith(volume[0]):
+					return volume[1]
+		return None
 	
 	def get_available_free_space(self, group_name):
 		for group in self.get_volume_group_list():
