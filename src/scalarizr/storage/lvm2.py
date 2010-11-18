@@ -72,7 +72,7 @@ class Lvm2:
 		if not group: group = self.group
 		system(['lvcreate', '-n', volume_name, '-L', size, group])
 		
-	def create_snapshot_volume(self, volume_name, buf_size, group=None, l_volume):	
+	def create_snapshot_volume(self, volume_name, buf_size, l_volume, group=None):	
 		if not group: group = self.group
 		system(['lvcreate', '-s', '-n', volume_name, '-L', buf_size, '/dev/%s/%s'%(group,l_volume)])	
 		
