@@ -35,7 +35,7 @@ class Mdadm:
 			except:
 				pass
 			
-		cmd = '%s --create %s --level=%s -f -n %s %s' % (MDADM_PATH, devname, level, len(devices), ' '.join(devices))
+		cmd = '%s --create %s --level=%s -f -e default -n %s %s' % (MDADM_PATH, devname, level, len(devices), ' '.join(devices))
 		error = 'Error occured during raid device creation.'
 		_system(cmd, error)
 		return devname
