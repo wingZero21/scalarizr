@@ -235,12 +235,11 @@ class EphSnapshotMgr:
 				config.add('./%s/%s'%('chunks', chunk), self._md5(full_path), force=True)
 		config.write(os.path.join(self.backup_dir, self.MANIFEST))
 		
-		self.backend.save(self.backup_dir)
+		id = self.backend.save(self.backup_dir)
 		backup_volume.umount()
 		os.rmdir(self.backup_dir)
 		
-		#where to find ID?
-		return Snapshot(name=snap_name)
+		return Snapshot(id, snap_name)
 	
 	def _md5(self, file, block_size=4096):
 		md5 = hashlib.md5()
