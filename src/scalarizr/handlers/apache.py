@@ -201,8 +201,11 @@ class ApacheHandler(ServiceCtlHanler):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
 		self._cnf = bus.cnf
+
 		ini = self._cnf.rawini
-		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)		
+		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)
+		self._config = Configuration('apache')
+		self._config.read(self._httpd_conf_path)
 		
 		bus.on("init", self.on_init)
 		bus.define_events(
