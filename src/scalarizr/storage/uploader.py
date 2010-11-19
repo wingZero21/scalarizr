@@ -97,18 +97,19 @@ class S3UploadDest(UploadDest):
 	
 	def put(self, filename):
 		self._logger.info("Uploading '%s' to S3 bucket '%s'", filename, self.bucket.name)
-		
+		file = None
 		try:
 			key = Key(self.bucket)
-			key.name = os.path.basename(self.filename)
-			
+			key.name = os.path.basename(filename)
 			file = open(filename, "rb")
+			
 			key.set_contents_from_file(file, policy=self.acl)
 			
 		except (BotoServerError, OSError), e:
 			raise UploadError, e
 		finally:
-			file.close()
+			if file:
+				file.close()
 		
 		return os.path.join(self.bucket.name, key.name)
 
