@@ -113,11 +113,7 @@ class Lvm2:
 		for group in self.get_volume_group_list():
 			if group[0]==group_name:
 				return group[-1]
-		return 0	
-		
-	def extend_vg(self,group=None, *args):
-		if not group: group = self.group
-		system(['vgextend', group] + list(args))	
+		return 0		
 
 	def get_vg_name(self, device):
 		lvs_info = self.get_logic_volumes_info()
@@ -127,10 +123,16 @@ class Lvm2:
 					return volume[1]
 		return None
 			
+	def extend_vg(self,group=None, *args):
+		if not group: group = self.group
+		system(['vgextend', group] + list(args))
+		
 	def repair_vg(self, group):
 		if not group: group = self.group
 		system(['vgreduce', '--removemissing', group])
 		system('vgchange', '-a', 'y', group)
+		
+		
 		
 	def dm_mod(self):
 		'''
