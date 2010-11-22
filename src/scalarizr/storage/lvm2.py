@@ -31,12 +31,12 @@ class Lvm2:
 		
 		
 	
-	def add_physical_volumes(self, *args):
+	def add_pv(self, *args):
 		e = system(['pvcreate'] + list(args))[1]	
 		if e:
 			raise Lvm2Error(e)
 	
-	def remove_physical_volume(self, name, group=None):
+	def remove_pv(self, name, group=None):
 		if not group: group = self.group
 		system(['pvmove ', name])
 		system(['vgreduce', group, name])
@@ -46,31 +46,31 @@ class Lvm2:
 		return [i.strip().split('|') for i in 
 				system(['/sbin/pvs', '--separator', "|"], shell=False)[0].split('\n')[1:-1]]
 		
-	def get_physical_volumes(self):
+	def get_pv_list(self):
 		pvs = self.get_pv_info()
 		if pvs:
 			return [j[0] for j in pvs]
 		
 	
-	def create_volume_group(self, group, block_size, *args):
+	def create_vg(self, group, block_size, *args):
 		if not group: group = self.group
 		if not block_size: block_size = '16M'
 		print ['/sbin/vgcreate', '-s', block_size, group] + list(args)
 		system(['/sbin/vgcreate', '-s', block_size, group] + list(args),  shell=False)
 	
-	def extend_group(self,group=None, *args):
+	def extend_vg(self,group=None, *args):
 		if not group: group = self.group
 		system(['vgextend', group] + list(args))	
 		
-	def remove_volume_group(self, group=None):
+	def remove_vg(self, group=None):
 		if not group: group = self.group
 		system(['vgremove', group])
 	
-	def get_volume_groups_info(self):
+	def get_vg_info(self):
 		#TODO: parse output
 		return [i.split() for i in system(['vgs'])[0].split('\n')[1:-1]]
 	
-	def get_logic_volume_size(self, lv_name):
+	def get_lv_size(self, lv_name):
 		lv_info = self.get_logic_volumes_info()
 		if lv_info:
 			for lv in lv_info:
@@ -78,17 +78,17 @@ class Lvm2:
 					return lv[3]
 		return 0
 	
-	def get_volume_groups(self):
+	def get_vg_list(self):
 		vgs = self.get_volume_groups_info()
 		if vgs:
 			return [j[0] for j in vgs]
 			
 	
-	def get_logic_volumes_info(self):
+	def get_lv_info(self):
 		return [i.strip().split('|') for i in 
 				system(['/sbin/lvs', '--separator', "|"], shell=False)[0].split('\n')[1:-1]]
 		
-	def get_volume_group(self, device):
+	def get_vg_name(self, device):
 		lvs_info = self.get_logic_volumes_info()
 		if lvs_info:
 			for volume in lvs_info:
@@ -102,19 +102,19 @@ class Lvm2:
 				return group[-1]
 		return 0
 	
-	def create_logic_volume(self, volume_name, size, group=None):
+	def create_lv(self, volume_name, size, group=None):
 		if not group: group = self.group
 		system(['lvcreate', '-n', volume_name, '-L', size, group])
 		
-	def create_snapshot_volume(self, volume_name, buf_size, l_volume, group=None):	
+	def create_lv_snapshot(self, volume_name, buf_size, l_volume, group=None):	
 		if not group: group = self.group
 		system(['lvcreate', '-s', '-n', volume_name, '-L', buf_size, '/dev/%s/%s'%(group,l_volume)])	
 	
-	def remove_logic_volume(self, group, volume_name):
+	def remove_lv(self, group, volume_name):
 		if not group: group = self.group
 		system(['lvremove', '-f', '%/%' % (group, volume_name)])
 			
-	def repair_group(self, group):
+	def repair_vg(self, group):
 		if not group: group = self.group
 		system(['vgreduce', '--removemissing', group])
 		system('vgchange', '-a', 'y', group)
