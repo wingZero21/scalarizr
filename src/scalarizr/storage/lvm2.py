@@ -73,14 +73,19 @@ class Lvm2:
 		return system(['/sbin/vgcreate', '-s', block_size, group] + list(args), shell=False)
 	
 	@err_handle	
-	def create_lv(self, volume_name, size, group=None):
+	def create_lv(self, volume_name, percentage, group=None):
 		if not group: group = self.group
-		return system(['/sbin/lvcreate', '-n', volume_name, '-L', size, group], shell=False)
+		if type(percentage) not in (int, float) or (100 > percentage <= 0):
+			raise Lvm2Error('Wrong persentage')
+		return system(['/sbin/lvcreate', '-n', volume_name, '-l%s%VG' % percentage, group], shell=False)
 	
 	@err_handle	
-	def create_lv_snapshot(self, volume_name, buf_size, l_volume, group=None):	
+	def create_snapshot(self, snap_name, percentage, source_volume, group=None):	
 		if not group: group = self.group
-		return system(['/sbin/lvcreate', '-s', '-n', volume_name, '-L', buf_size, '/dev/%s/%s'%(group,l_volume)], shell=False)
+		if type(percentage) not in (int, float) or (100 > percentage <= 0):
+			raise Lvm2Error('Wrong persentage')
+		return system(['/sbin/lvcreate', '-s', '-n', snap_name, '-l%s%VG' % percentage, 
+					'/dev/%s/%s'%(group,source_volume)], shell=False)
 	
 	
 	@err_handle
