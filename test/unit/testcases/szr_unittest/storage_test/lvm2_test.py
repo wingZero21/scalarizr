@@ -27,21 +27,27 @@ class Test(unittest.TestCase):
 	def tearDown(self):
 		pass
 
-
+	def _test_parse_table(self):
+		for cmd, length in {'lvs':10, 'vgs':7, 'pvs':6}.items():
+			table = self.lvm._parse_table(cmd)
+			print table
+			self.assertEquals(len(table[0]), length)
+	
 	def testLvm2(self):
-		self.lvm.add_physical_volumes(self.loop_devname)
-		self.assertTrue(self.lvm.get_physical_volumes())
-		self.assertTrue(self.loop_devname in self.lvm.get_physical_volumes())
+		self.lvm.create_pv(self.loop_devname)
+		self.assertTrue(self.lvm.get_pv_list())
+		self.assertTrue(self.loop_devname in self.lvm.get_pv_list())
 		
-		self.lvm.create_volume_group(self.group_name, '16M', self.loop_devname)	
-		self.assertTrue(self.group_name in self.lvm.get_volume_groups())	
+		self.lvm.create_vg(self.group_name, '16M', self.loop_devname)	
+		self.assertTrue(self.group_name in self.lvm.get_vg_list())
 		
-		self.lvm.remove_physical_volume(self.loop_devname)
-		self.assertFalse(self.loop_devname in self.lvm.get_physical_volumes())
-					
-		self.lvm.remove_volume_group()
-		self.assertTrue(self.group_name in self.lvm.get_volume_groups())
+		#cleaning
+		self.lvm.remove_vg()
+		self.assertFalse(self.group_name in self.lvm.get_vg_list())	
 		
+		self.lvm.remove_pv(self.loop_devname)
+		self.assertFalse(self.loop_devname in self.lvm.get_pv_list())
+			
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
