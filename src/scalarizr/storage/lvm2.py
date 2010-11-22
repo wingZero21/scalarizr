@@ -54,39 +54,38 @@ class Lvm2:
 
 
 	def create_pv(self, *args):
-		e = system(['pvcreate'] + list(args))[1]	
+		e = system(['/sbin/pvcreate'] + list(args), shell=False)[1]	
 		if e:
 			raise Lvm2Error(e)
 
 	def create_vg(self, group, block_size, *args):
 		if not group: group = self.group
-		if not block_size: block_size = '16M'
-		print ['/sbin/vgcreate', '-s', block_size, group] + list(args)
-		system(['/sbin/vgcreate', '-s', block_size, group] + list(args),  shell=False)
+		if not block_size: block_size = '4M'
+		system(['/sbin/vgcreate', '-s', block_size, group] + list(args), shell=False)
 		
 	def create_lv(self, volume_name, size, group=None):
 		if not group: group = self.group
-		system(['lvcreate', '-n', volume_name, '-L', size, group])
+		system(['/sbin/lvcreate', '-n', volume_name, '-L', size, group], shell=False)
 		
 	def create_lv_snapshot(self, volume_name, buf_size, l_volume, group=None):	
 		if not group: group = self.group
-		system(['lvcreate', '-s', '-n', volume_name, '-L', buf_size, '/dev/%s/%s'%(group,l_volume)])
+		system(['/sbin/lvcreate', '-s', '-n', volume_name, '-L', buf_size, '/dev/%s/%s'%(group,l_volume)], shell=False)
 	
 	
 	
 	def remove_pv(self, name, group=None):
 		if not group: group = self.group
-		system(['pvmove ', name])
-		system(['vgreduce', group, name])
-		system(['pvremove ', '-f', name])
+		#system(['/sbin/pvmove', name], shell=False)
+		#system(['/sbin/vgreduce', group, name], shell=False)
+		system(['/sbin/pvremove', '-ff', name], shell=False)
 		
 	def remove_vg(self, group=None):
 		if not group: group = self.group
-		system(['vgremove', group])		
+		system(['/sbin/vgremove', group], shell=False)		
 
 	def remove_lv(self, group, volume_name):
 		if not group: group = self.group
-		system(['lvremove', '-f', '%/%' % (group, volume_name)])	
+		system(['/sbin/lvremove', '-f', '%/%' % (group, volume_name)], shell=False)	
 		
 	def remove_lv_snapshot(self):
 		pass	
@@ -125,12 +124,12 @@ class Lvm2:
 			
 	def extend_vg(self,group=None, *args):
 		if not group: group = self.group
-		system(['vgextend', group] + list(args))
+		system(['/sbin/vgextend', group] + list(args), shell=False)
 		
 	def repair_vg(self, group):
 		if not group: group = self.group
-		system(['vgreduce', '--removemissing', group])
-		system('vgchange', '-a', 'y', group)
+		system(['/sbin/vgreduce', '--removemissing', group], shell=False)
+		system(['/sbin/vgchange', '-a', 'y', group], shell=False)
 		
 		
 		
