@@ -77,14 +77,14 @@ class Lvm2:
 		if not group: group = self.group
 		if type(percentage) not in (int, float) or (100 > percentage <= 0):
 			raise Lvm2Error('Wrong persentage')
-		return system(['/sbin/lvcreate', '-n', volume_name, '-l%s%VG' % percentage, group], shell=False)
+		return system(['/sbin/lvcreate', '-n', volume_name, '-l%s%%VG' % percentage, group], shell=False)
 	
 	@err_handle	
 	def create_snapshot(self, snap_name, percentage, source_volume, group=None):	
 		if not group: group = self.group
 		if type(percentage) not in (int, float) or (100 > percentage <= 0):
 			raise Lvm2Error('Wrong persentage')
-		return system(['/sbin/lvcreate', '-s', '-n', snap_name, '-l%s%VG' % percentage, 
+		return system(['/sbin/lvcreate', '-s', '-n', snap_name, '-l%s%%VG' % percentage, 
 					'/dev/%s/%s'%(group,source_volume)], shell=False)
 	
 	
@@ -101,12 +101,13 @@ class Lvm2:
 		return system(['/sbin/vgremove', group], shell=False)		
 	
 	@err_handle
-	def remove_lv(self, group, volume_name):
+	def remove_lv(self, volume_name, group=None):
 		if not group: group = self.group
-		return system(['/sbin/lvremove', '-f', '%/%' % (group, volume_name)], shell=False)	
+		return system(['/sbin/lvremove', '-f', '/dev/%s/%s' % (group, volume_name)], shell=False)	
 		
-	def remove_lv_snapshot(self):
-		pass	
+	def remove_snapshot(self, volume_name, group=None):
+		if not group: group = self.group
+		self.remove_lv(volume_name, group)	
 	
 	
 
@@ -126,18 +127,18 @@ class Lvm2:
 	
 	
 	
-	def get_vg_free_space(self, group_name=None):
+	def get_vg_free_space(self, group=None):
 		'''
 		@return tuple('amount','suffix')
 		'''
-		if not group_name: group_name = self.group
-		for group in self.get_vg_info():
-			if group[0]==group_name:
-				raw = re.search('(\d+\.*\d*)(\D*)',group[-1])
+		if not group: group = self.group
+		for group_name in self.get_vg_info():
+			if group_name[0]==group:
+				raw = re.search('(\d+\.*\d*)(\D*)',group_name[-1])
 				if raw:
 					return (raw.group(1), raw.group(2))
-				raise Lvm2Error('Cannot determine available free space in group %s' % group_name)
-		raise Lvm2Error('Group %s not found' % group_name)		
+				raise Lvm2Error('Cannot determine available free space in group %s' % group)
+		raise Lvm2Error('Group %s not found' % group)		
 
 	def get_vg_name(self, device):
 		lvs_info = self.get_logic_volumes_info()

@@ -40,8 +40,26 @@ class Test(unittest.TestCase):
 		
 		self.lvm.create_vg(self.group_name, '16M', self.loop_devname)	
 		self.assertTrue(self.group_name in self.lvm.get_vg_list())
+		print self.lvm.get_vg_free_space()
+		
+		lv = 'test_lv_1'
+		self.lvm.create_lv(lv, 50)
+		self.assertTrue(lv in self.lvm.get_lv_list())
+		print self.lvm.get_vg_free_space()
+		
+		snv = 'test_snv_1'
+		self.lvm.create_snapshot(snv, 50, lv)
+		self.assertTrue(snv in self.lvm.get_lv_list())
+		print self.lvm.get_vg_free_space()
 		
 		#cleaning
+		self.lvm.remove_snapshot(snv)
+		print self.lvm.get_vg_free_space()
+		
+		self.lvm.remove_lv(lv)
+		self.assertFalse(lv in self.lvm.get_lv_list())
+		print self.lvm.get_vg_free_space()
+		
 		self.lvm.remove_vg()
 		self.assertFalse(self.group_name in self.lvm.get_vg_list())	
 		
