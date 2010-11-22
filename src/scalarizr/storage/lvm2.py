@@ -4,6 +4,7 @@ Created on Nov 11, 2010
 @author: Dmytro Korsakov
 '''
 
+import os
 from scalarizr.util import system
 
 class Lvm2Error(BaseException):
@@ -20,19 +21,13 @@ class Lvm2:
 		
 	def _parse_table(self, cmd='lvs'):
 		full_path = '/sbin/%s' % cmd
-		if not os.
+		if not os.path.exists(full_path) or cmd not in ('lvs','vgs', 'pvs'):
+			raise Lvm2Error('Cannot parse output')
 		return [i.strip().split('|') for i in 
 				system([full_path, '--separator', "|"], shell=False)[0].split('\n')[1:-1]]		
 		
 		
-		
-		
-		
-		
-		
-		
-		
-		
+	
 		
 		
 	
