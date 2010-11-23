@@ -314,3 +314,5 @@ class Messages:
 	"""
 	Fired by scripts/halt.py when server is going to halt
 	"""
+	
+	UPDATE_SSH_AUTHORIZED_KEYS = "UpdateSshAuthorizedKeys"
