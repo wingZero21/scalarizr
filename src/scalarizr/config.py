@@ -981,4 +981,5 @@ class ScalarizrState:
 	IMPORTING = "importing"	
 	INITIALIZING = "initializing"
 	RUNNING = "running"
-	UNKNOWN = "unknown"		
+	UNKNOWN = "unknown"
+	REBUNDLING = "rebundling"

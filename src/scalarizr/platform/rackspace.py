@@ -4,6 +4,8 @@ from scalarizr.config import BuiltinPlatforms
 
 import logging
 import re
+from cloudservers import CloudServers
+import cloudservers
 
 
 def get_platform():
@@ -45,7 +47,7 @@ class RackspacePlatform(Platform):
 	
 	def _get_netiface_ip(self, iface=None):
 		if not iface:
-			raise PlatformError('You must specify interface name for getting ip address')
+			raise PlatformError('You must specify interface name to retrieve ip address')
 		if not hasattr(self, '_ip_re'):
 			self._ip_re = re.compile('inet\s*addr:(?P<ip>[\d\.]+)', re.M)
 			
@@ -54,4 +56,11 @@ class RackspacePlatform(Platform):
 		if not result:
 			return None		
 		return result.group('ip')
-			
+	
+	def get_access_keys(self):
+		return (self.get_access_data("username").encode("ascii"), self.get_access_data("api_key").encode("ascii"))
+	
+	def new_rackspace_conn(self):
+		username, apikey = self.get_access_keys()
+		return CloudServers(username, apikey)
+		

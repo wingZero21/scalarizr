@@ -528,7 +528,7 @@ def main():
 		_init_platform()
 		
 		# At first scalarizr startup platform user-data should be applied
-		if cnf.state == ScalarizrState.UNKNOWN:
+		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			cnf.fire('apply_user_data', cnf)
 			
