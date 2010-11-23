@@ -4,10 +4,9 @@ Created on Nov 4, 2010
 @author: marat
 '''
 
-def _wrapper(reference): return (lambda *args: reference)
+def _wrapper(reference): return (lambda *args,**kwargs: reference)
 
 class Mock:
-	
 	def __init__(self, **kwargs):
 		for method, reference in kwargs.items():
 			setattr(self, method, _wrapper(reference))
