@@ -4,7 +4,15 @@ Created on Nov 4, 2010
 @author: marat
 '''
 
-class QueryEnvService:
+def _wrapper(reference): return (lambda *args: reference)
+
+class Mock:
+	
+	def __init__(self, **kwargs):
+		for method, reference in kwargs.items():
+			setattr(self, method, _wrapper(reference))
+				
+class QueryEnvService(Mock):
 	'''
 	Usage:
 	qe = QueryEnvService(
@@ -15,13 +23,16 @@ class QueryEnvService:
 	)
 	bus.queryenv_service = qe
 	'''
-	
-	def __init__(self, **kwargs):
-		pass
+	pass
 
-
-class MessageService:
+class MessageService(Mock):
 	'''
 	Send nothing
 	'''
+	pass
+
+class MessageProducer(Mock):
+	pass
+
+class MessageConsumer(Mock):
 	pass
