@@ -205,8 +205,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	
 	def _start_import(self):
-		# Send Hello
-		msg = self.new_message(Messages.HELLO, {"architecture" : self._platform.get_architecture()})		
+		# Send Hello 
+		msg = self.new_message(Messages.HELLO, 
+			{"architecture" : self._platform.get_architecture()}, 
+			broadcast=True # It's not really broadcast but need to contain broadcast message data 
+		)		
 		bus.fire("before_hello", msg)
 		self.send_message(msg)
 		bus.fire("hello")
