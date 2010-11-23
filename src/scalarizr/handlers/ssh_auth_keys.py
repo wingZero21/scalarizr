@@ -36,6 +36,7 @@ class SSHKeys(Handler):
 				content = self._remove_key(content, key)
 				
 		if content:
+			content = self._check(content)
 			self._write_ssh_keys_file(content)
 	
 	def _read_ssh_keys_file(self):
@@ -45,7 +46,7 @@ class SSHKeys(Handler):
 		return content
 	
 	def _write_ssh_keys_file(self, content):
-		ret = write_file(self.PATH, self._check(content), msg='Writing authorized keys', logger=self._logger)
+		ret = write_file(self.PATH, content, msg='Writing authorized keys', logger=self._logger)
 		if not ret:
 			raise UpdateSshAuthorizedKeysError('Unable to write ssh keys to %s' % self.PATH)
 	
