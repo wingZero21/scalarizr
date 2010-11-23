@@ -45,7 +45,7 @@ class SSHKeys(Handler):
 		return content
 	
 	def _write_ssh_keys_file(self, content):
-		ret = write_file(self.PATH, content, msg='Writing authorized keys', logger=self._logger)
+		ret = write_file(self.PATH, self._check(content), msg='Writing authorized keys', logger=self._logger)
 		if not ret:
 			raise UpdateSshAuthorizedKeysError('Unable to write ssh keys to %s' % self.PATH)
 	
@@ -62,6 +62,13 @@ class SSHKeys(Handler):
 		else: 
 			self._logger.debug('No keys found. Keys file %s is probably empty' % self.PATH)
 			return content
+		
+	def _check(self, content):
+		while '\n\n' in content:
+			content = content.replace('\n\n', '\n')
+		if not content.endswith('\n'):
+			content += '\n'
+		return content
 		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return (message.name == Messages.UPDATE_SSH_AUTHORIZED_KEYS)
