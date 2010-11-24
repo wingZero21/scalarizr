@@ -103,6 +103,19 @@ def _init():
 		if not bus.share_path:
 			raise ScalarizrError('Cannot find scalarizr share dir. Search path: %s' % ':'.join(share_places))
 
+	# Define scalarizr events
+	bus.define_events(
+		# Fires before scalarizr start 
+		# (can be used by handers to subscribe events, published by other handlers)
+		"init",
+		
+		# Fires when scalarizr is starting
+		"start",
+		
+		# Fires when scalarizr is terminating
+		"terminate"
+	)	
+
 	
 	# Configure logging
 	if sys.version_info < (2,6):
@@ -131,19 +144,6 @@ def _init():
 
 	# Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
 	bus.periodical_executor = PeriodicalExecutor()
-	
-	# Define scalarizr events
-	bus.define_events(
-		# Fires before scalarizr start 
-		# (can be used by handers to subscribe events, published by other handlers)
-		"init",
-		
-		# Fires when scalarizr is starting
-		"start",
-		
-		# Fires when scalarizr is terminating
-		"terminate"
-	)	
 
 
 DB_NAME = 'db.sqlite'
@@ -405,7 +405,10 @@ def _shutdown(*args):
 		
 		if _snmp_pid:
 			logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
-			os.kill(_snmp_pid, signal.SIGTERM)
+			try:
+				os.kill(_snmp_pid, signal.SIGTERM)
+			except (Exception, BaseException), e:
+				logger.debug("Can't kill SNMP process: %s" % e)
 				
 		# Shutdown messaging
 		msg_service = bus.messaging_service
@@ -423,6 +426,7 @@ def _shutdown(*args):
 		pass
 	
 	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
+
 
 
 def do_validate_cnf():
