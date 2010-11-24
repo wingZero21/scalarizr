@@ -228,8 +228,8 @@ class ApacheHandler(ServiceCtlHanler):
 
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
-			self._rpaf_reload()
 			self._update_vhosts()			
+			self._rpaf_reload()
 
 	def on_before_host_up(self, message):
 		self._rpaf_reload()
