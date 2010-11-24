@@ -163,3 +163,13 @@ class Ec2Platform(Platform):
 		key_id, key = self.get_access_keys()
 		self._logger.debug("Return s3 connection (endpoint: %s)", self._s3_endpoints[self.get_region()])
 		return connect_s3(key_id, key, host=self._s3_endpoints[self.get_region()])
+	
+	def set_access_data(self, access_data):
+		Platform.set_access_data(self, access_data)
+		os.environ['AWS_ACCESS_KEY_ID'] = access_data.get('key_id', None)
+		os.environ['AWS_SECRET_ACCESS_KEY'] = access_data.get('key', None)
+
+	def  clear_access_data(self):
+		Platform.clear_access_data(self)
+		del os.environ['AWS_ACCESS_KEY_ID']
+		del os.environ['AWS_SECRET_ACCESS_KEY']
