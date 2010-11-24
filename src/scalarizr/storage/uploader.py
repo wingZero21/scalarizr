@@ -5,16 +5,12 @@ Created on Aug 25, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.bus import bus
-from scalarizr.platform import PlatformError
-
+import logging
 from Queue import Queue, Empty
 from threading import Thread, Lock
-from boto.s3.key import Key
-from boto.exception import BotoServerError
-import os, logging
-import cloudfiles
 
+class UploadError(BaseException):
+	pass
 
 class Uploader(object):
 	_queue = None
@@ -53,7 +49,7 @@ class Uploader(object):
 		self.state = "done"
 	
 		if self._failed_files:
-			raise PlatformError("Cannot upload several files. %s" % [", ".join(self._failed_files)])
+			raise UploadError("Cannot upload several files. %s" % [", ".join(self._failed_files)])
 		
 		self._logger.info("Upload complete!")
 
@@ -87,67 +83,10 @@ class UploadDest:
 	def put(self, filename):
 		pass
 		
-		
-class S3UploadDest(UploadDest):
-	
-	def __init__(self, bucket, acl=None, logger=None):
-		self.bucket = bucket
-		self.acl = acl 
-		self._logger = logger or logging.getLogger(__name__)
-	
-	def put(self, filename):
-		self._logger.info("Uploading '%s' to S3 bucket '%s'", filename, self.bucket.name)
-		file = None
-		try:
-			key = Key(self.bucket)
-			key.name = os.path.basename(filename)
-			file = open(filename, "rb")
-			
-			key.set_contents_from_file(file, policy=self.acl)
-			
-		except (BotoServerError, OSError), e:
-			raise UploadError, e
-		finally:
-			if file:
-				file.close()
-		
-		return os.path.join(self.bucket.name, key.name)
 
-
-class CloudFilesUploadDest(UploadDest):
-	
-	def __init__(self, container_name, prefix, logger=None):
-		self.container_name = container_name
-		self.prefix = prefix
-		self._logger = logger or logging.getLogger(__name__)
-		
-	def put(self, filename):
-		self._logger.info('Uploading %s in CloudFiles container %s' % (file, self.container_name))
-		base_name = os.path.basename(filename)
-		obj_path = self.prefix + '/' + base_name
-		try:		
-			connection = cloudfiles.get_connection(username=os.environ["username"], api_key=os.environ["api_key"], serviceNet=True)
-			
-			try:
-				container = connection.get_container(self.container_name)
-			except cloudfiles.errors.NoSuchContainer:
-				container = connection.create_container(self.container_name)
-				
-			o = container.create_object(obj_path)
-			o.load_from_filename(filename)
-			
-		except (cloudfiles.errors.ResponseError, OSError, Exception), e:
-			raise UploadError, e
-		
-		return os.path.join(self.container_name, obj_path)
-
-class UploadError(BaseException):
+class Downloader:
 	pass
 
-def location_from_region(region):
-	if region == 'us-east-1' or not region:
-		return ''
-	elif region == 'eu-west-1':
-		return 'EU'
-	else: 
-		return region
+class DownloadSource:
+	def get(self, filename, dest):
+		pass

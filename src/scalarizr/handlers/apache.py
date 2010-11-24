@@ -192,7 +192,8 @@ class ApacheHandler(ServiceCtlHanler):
 		self._queryenv = bus.queryenv_service
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
-		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)		
+		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)
+				
 		
 		bus.define_events('apache_reload')
 		bus.define_events('service_configured')
@@ -212,6 +213,7 @@ class ApacheHandler(ServiceCtlHanler):
 
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
+			self._update_vhosts()			
 			self._rpaf_reload()
 
 	def on_before_host_up(self, message):
