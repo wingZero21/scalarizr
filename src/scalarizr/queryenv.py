@@ -376,8 +376,10 @@ class Role(object):
 	name = None
 	hosts = None
 	
-	def __init__(self):
-		self.hosts = []
+	def __init__(self, behaviour=None, name=None, hosts=None):
+		self.behaviour = behaviour
+		self.name = name
+		self.hosts = hosts or []
 	
 	def __str__(self):
 		opts = (self.name, self.behaviour, len(self.hosts))
@@ -393,6 +395,13 @@ class RoleHost(object):
 	replication_master = False
 	internal_ip = None
 	external_ip	= None
+	
+	def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None):
+		self.index = index
+		self.replication_master = replication_master
+		self.internal_ip = internal_ip
+		self.external_ip = external_ip
+		
 	
 	def __repr__(self):
 		return "index = " + str(self.index) \
@@ -417,6 +426,13 @@ class VirtualHost(object):
 	type = None
 	raw = None
 	https = False
+	
+	def __init__(self, hostname=None, type=None, raw=None, https=False):
+		self.hostname = hostname
+		self.type = type
+		self.raw = raw
+		self.https = https
+	
 	
 	def __repr__(self):
 		return "hostname = " + str(self.hostname) \
