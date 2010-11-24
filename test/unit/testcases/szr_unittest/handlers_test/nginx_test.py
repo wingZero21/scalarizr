@@ -61,7 +61,7 @@ class TestNginx(unittest.TestCase):
 		self.assertTrue(os.path.isfile(cert_path))
 		self.assertTrue(os.path.isfile(pk_path))
 				
-		self.assertEquals(_queryenv.list_virtual_hosts()[0]['raw']+'\n', https_include)
+		self.assertEquals(_queryenv.list_virtual_hosts()[0].raw+'\n', https_include)
 		self.assertEquals(_queryenv.get_https_certificate()[0], cert)
 		self.assertEquals(_queryenv.get_https_certificate()[1], pk)
 		
@@ -97,82 +97,61 @@ class TestNginx(unittest.TestCase):
 
 #-----mock-----
 
+role_host = RoleHost(
+						index='1',
+						replication_master="1",
+						internal_ip="8.8.8.8",
+						external_ip="192.168.1.93")
+vhost = VirtualHost(
+			hostname = "test1.net",type = "nginx",raw= """server { 
+	  listen       443;
+        server_name  test.org www.test.org www2.test.org;
+
+        ssl                  on;
+        ssl_certificate      /home/shaitanich/workspace/scalarizr-trunk-06/test/unit/resources/etc/private.d/keys/https.crt;
+        ssl_certificate_key  /home/shaitanich/workspace/scalarizr-trunk-06/test/unit/resources/etc/private.d/keys/https.key;
+
+        ssl_session_timeout  10m;
+        ssl_session_cache    shared:SSL:10m;
+
+        ssl_protocols  SSLv2 SSLv3 TLSv1;
+        ssl_ciphers  ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP;
+        ssl_prefer_server_ciphers   on;
+
+        location / {
+            proxy_pass         http://backend;
+            proxy_set_header   Host             $host;
+            proxy_set_header   X-Real-IP        $remote_addr;
+            proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
+
+            client_max_body_size       10m;
+            client_body_buffer_size    128k;
+
+          
+            proxy_buffering on;
+            proxy_connect_timeout 15;
+            proxy_intercept_errors on;  
+        }
+    } """,							
+			https = True)
+
+cert_dir = os.path.join(RESOURCE_PATH, '../../integ/resources/apache-cert/')
+print os.path.exists(cert_dir)
+
 qe = QueryEnvService(
-	list_roles=list(
-		Role(
-			["app"], 
-			"nginx", 
-			list(RoleHost(
-				index='1',
-				replication_master="1",
-				internal_ip="8.8.8.8",
-				external_ip="192.168.1.93"
-				),)
-			),
-	),
+	list_roles=[Role(["www"], "nginx", [role_host])],
 	
-	list_virtual_hosts = list(
-		VirtualHost(
-			hostname = "test1.net",
-			type = "nginx",
-			raw= """http {
-  server {
-    listen          80 default;
-    server_name     _;
-    access_log      logs/default.access.log main;
- 
-    server_name_in_redirect  off;
- 
-    index index.html;
-    root  /var/www/default/htdocs;
-  }
-}""",							
-			https = True),),
+	list_virtual_hosts = [vhost],
 		
-	get_https_certificate = ("MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN","MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN")	
+	get_https_certificate = (read_file(os.path.join(cert_dir, 'server.crt')),
+							read_file(os.path.join(cert_dir, 'server.key')),
+							read_file(os.path.join(cert_dir, 'ca.crt')),)	
 )
 
 bus.queryenv_service = qe
-
-
-'''
-#-------old code------
-		
-class _Bunch(dict):
-			__getattr__, __setattr__ = dict.get, dict.__setitem__
-			
-class _QueryEnv:
-	
-	def list_roles(self, behaviour):
-		return [_Bunch(
-			behaviour = ["app"],
-			name = "nginx",
-			hosts = [_Bunch(index='1',replication_master="1",internal_ip="8.8.8.8",external_ip="192.168.1.93")]
-			)]
-		
-	def list_virtual_hosts(self, name = None, https=False):
-		return [_Bunch(hostname = "test1.net",
-						type = "nginx",
-						raw= """http {
-  server {
-    listen          80 default;
-    server_name     _;
-    access_log      logs/default.access.log main;
- 
-    server_name_in_redirect  off;
- 
-    index index.html;
-    root  /var/www/default/htdocs;
-  }
-}""",							
-			https = True,
-			)]		
-		
-	def get_https_certificate(self):
-		return ("MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN","MIICWjCCAhigAwIBAgIESPX5.....1myoZSPFYXZ3AA9kwc4uOwhN")
-
-#------end code-----	
-'''	
+print qe
+print qe.list_roles()
+#print qe.list_virtual_hosts()
 		
 
 class _EmptyQueryEnv:
