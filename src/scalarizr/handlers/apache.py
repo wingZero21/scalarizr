@@ -232,6 +232,7 @@ class ApacheHandler(ServiceCtlHanler):
 			self._rpaf_reload()
 
 	def on_before_host_up(self, message):
+		self._update_vhosts()
 		self._rpaf_reload()
 		bus.fire('service_configured', service_name=SERVICE_NAME)
 
@@ -293,7 +294,19 @@ class ApacheHandler(ServiceCtlHanler):
 	def _update_vhosts(self):
 		
 		config = bus.config
-		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION,'vhosts_path'))
+		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION, 'vhosts_path'))
+		if not os.path.exists(vhosts_path):
+			if not vhosts_path:
+				self._logger.error('Property vhosts_path is empty.')
+			else:
+				self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
+				try:
+					os.makedirs(vhosts_path)
+					self._logger.debug("Virtual hosts dir %s created", vhosts_path)
+				except OSError, e:
+					self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
+					raise
+		
 		cert_path = bus.etc_path + '/private.d/keys'	
 		
 		self.server_root = self._get_server_root()
@@ -303,18 +316,6 @@ class ApacheHandler(ServiceCtlHanler):
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
 		
 		if [] != received_vhosts:
-			if not os.path.exists(vhosts_path):
-				if not vhosts_path:
-					self._logger.error('Property vhosts_path is empty.')
-				else:
-					self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
-					try:
-						os.makedirs(vhosts_path)
-						self._logger.debug("Virtual hosts dir %s created", vhosts_path)
-					except OSError, e:
-						self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
-						raise
-			
 			list_vhosts = os.listdir(vhosts_path)
 			if [] != list_vhosts:
 				self._logger.debug("Deleting old vhosts configuration files")
