@@ -9,10 +9,10 @@ import logging
 from Queue import Queue, Empty
 from threading import Thread, Lock
 
-class UploadError(BaseException):
+class TransferError(BaseException):
 	pass
 
-class Uploader(object):
+class Transfer(object):
 	_queue = None
 	state = None
 	
@@ -21,54 +21,64 @@ class Uploader(object):
 		self._queue = Queue()
 		self._pool = pool
 		self._max_attempts = max_attempts
-	
+
 	def upload(self, files, UploadDest, progress_cb=None):
+		action = UploadDest.run('put')	
+		self._transfer(files, UploadDest, action)
+		
+	def download(self, place, DownloadSrc):
+		files = DownloadSrc.get_list_files()
+
+		action = DownloadSrc.run('get', place)
+		self._transfer(files, DownloadSrc, action)	
+	
+	def _transfer(self, files, UploadDest, action, progress_cb=None):
 		# Enqueue 
 		for file in files:
 			self._queue.put((file, 0)) 
 			
 		self.state = "starting"
-		self._uploaders = []
+		self._workers = []
 		self._failed_files = []
 		self._result = []
 		self._failed_files_lock = Lock()
 		
 		#Starting threads
 		for n in range(self._pool):
-			uploader = Thread(name="Uploader-%s" % n, target=self._worker, 
-					args=(UploadDest,))
-			self._logger.debug("Starting uploader '%s'", uploader.getName())
-			uploader.start()
-			self._uploaders.append(uploader)
+			worker = Thread(name="Worker-%s" % n, target=self._worker, 
+					args=(UploadDest, action))
+			self._logger.debug("Starting worker '%s'", worker.getName())
+			worker.start()
+			self._workers.append(worker)
 		
 		# Join workers
 		self.state = "in-progress"
-		for uploader in self._uploaders:
-			uploader.join()
-			self._logger.debug("Uploader '%s' finished", uploader.getName())
+		for worker in self._workers:
+			worker.join()
+			self._logger.debug("Worker '%s' finished", worker.getName())
 		self.state = "done"
 	
 		if self._failed_files:
-			raise UploadError("Cannot upload several files. %s" % [", ".join(self._failed_files)])
+			raise TransferError("Cannot process several files. %s" % [", ".join(self._failed_files)])
 		
 		self._logger.info("Upload complete!")
 
 		# Return tuple of all files	def set_access_data(self, access_data):
 		return tuple(self._result)
 
-	def _worker(self, upload_dest):
+	def _worker(self, upload_dest, action):
 		self._logger.debug("queue: %s", self._queue)
 		try:
 			while 1:
-				filename, upload_attempts = self._queue.get(False)
+				filename, attempts = self._queue.get(False)
 				try:
-					self._result.append(upload_dest.put(filename))
-				except UploadError, e:
+					self._result.append(action(filename))
+				except TransferError, e:
 					self._logger.error("Cannot upload '%s'. %s", filename, e)
-					if upload_attempts < self._max_attempts:
+					if attempts < self._max_attempts:
 						self._logger.debug("File '%s' will be uploaded within the next attempt", filename)
-						upload_attempts += 1
-						self._queue.put((filename, upload_attempts))
+						attempts += 1
+						self._queue.put((filename, attempts))
 					else:
 						try:
 							self._failed_files_lock.acquire()
@@ -76,17 +86,24 @@ class Uploader(object):
 						finally:
 							self._failed_files_lock.release()
 		except Empty:
-			return
-	
+			return	
+
 
 class UploadDest:
 	def put(self, filename):
 		pass
-		
-
-class Downloader:
-	pass
-
-class DownloadSource:
+	
 	def get(self, filename, dest):
 		pass
+	
+	def get_list_files(self):
+		pass
+	
+	def run(self, action, dest=None):
+		def _action(filename=None):
+			if action == 'put':
+				self.put(filename)
+			if action == 'get':
+				self.get(filename, dest)
+		return _action
+	

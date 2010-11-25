@@ -8,7 +8,11 @@ Created on Nov 18, 2010
 import unittest
 from random import randint
 from scalarizr.storage import uploader
+from scalarizr.platform.ec2.storage import S3UploadDest 
+from scalarizr.platform.rackspace.storage import CloudFilesUploadDest 
+from szr_unittest import main
 import os 
+import logging
 import cloudfiles
 from boto.s3.connection import S3Connection
 
@@ -17,6 +21,10 @@ class UploaderTest(unittest.TestCase):
 
 
 	def setUp(self):
+		
+		os.environ["username"]='rackcloud05'
+		os.environ["api_key"]='27630d6e96e72fa43233a185a0518f0e'
+		
 		self.fname = str(randint(1000000, 9999999))
 		self.cont = str(randint(1000000, 9999999))
 		self.prefix = str(randint(1000000, 9999999))
@@ -27,6 +35,7 @@ class UploaderTest(unittest.TestCase):
 		file.close()
 		self.files = [self.fname]
 		self.obj_name = '%s/%s'%(self.prefix, self.fname)
+		self._logger = logging.getLogger(__name__)
 
 
 	def tearDown(self):
@@ -41,8 +50,8 @@ class UploaderTest(unittest.TestCase):
 		else:
 			bucket = conn.get_bucket(self.cont)
 		
-		U = uploader.Uploader(pool=2)
-		s3ud = uploader.S3UploadDest(bucket)
+		U = uploader.Transfer(pool=2, logger=self._logger)
+		s3ud = S3UploadDest(bucket)
 		U.upload(self.files, s3ud)
 		
 		#check container exists
@@ -66,9 +75,9 @@ class UploaderTest(unittest.TestCase):
 		conn.delete_bucket(self.cont)
 	
 
-	def _test_cloud_files(self):		
-		U = uploader.Uploader(pool=2)
-		cfud = uploader.CloudFilesUploadDest(self.cont, self.prefix)
+	def test_cloud_files(self):		
+		U = uploader.Transfer(pool=2, logger=self._logger)
+		cfud = CloudFilesUploadDest(self.cont, self.prefix)
 		U.upload(self.files, cfud)
 		
 		connection = cloudfiles.get_connection(username=os.environ["username"], api_key=os.environ["api_key"], serviceNet=True)
@@ -95,4 +104,5 @@ class UploaderTest(unittest.TestCase):
 		
 		
 if __name__ == "__main__":
+	main()
 	unittest.main()

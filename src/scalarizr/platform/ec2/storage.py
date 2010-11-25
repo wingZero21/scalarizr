@@ -17,7 +17,7 @@ from boto.exception import BotoServerError
 
 class EbsVolume(Volume):
 	ec2_volume_id = None
-	def __init__(self,  devname, mpoint, fstype=None, ec2_volume_id):
+	def __init__(self,  devname, mpoint, fstype=None, ec2_volume_id=None):
 		Volume.__init__(self, devname, mpoint, fstype)
 		self.ec2_volume_id = ec2_volume_id
 	
@@ -45,13 +45,25 @@ class S3UploadDest(uploader.UploadDest):
 			key.set_contents_from_file(file, policy=self.acl)
 			
 		except (BotoServerError, OSError), e:
-			raise uploader.UploadError, e
+			raise uploader.TransferError, e
 		finally:
 			if file:
 				file.close()
 		
 		return os.path.join(self.bucket.name, key.name)
+
 	
+	def get(self, filename, dest):
+		dest_path = os.path.join(dest, os.path.basename(filename))
+		try:
+			key = self.bucket.get_key(filename)
+			key.get_contents_to_filename(dest_path)
+		except (BotoServerError, OSError), e:
+			raise uploader.TransferError, e
+		return os.path.join(self.container_name, dest_path)
+	
+	def get_list_files(self):
+		return [key.name for key in self.bucket.get_all_keys()]
 	
 def location_from_region(region):
 	if region == 'us-east-1' or not region:
