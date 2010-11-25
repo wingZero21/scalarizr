@@ -525,11 +525,25 @@ def main():
 		# Load INI files configuration
 		cnf.bootstrap(force_reload=True)
 		
+		# At first startup cleanup private configuration
+		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
+			cnf.state = ScalarizrState.BOOTSTRAPPING
+			priv_path = cnf.private_path()
+			for file in os.listdir(priv_path):
+				if file == '.user-data':
+					continue
+				path = os.path.join(priv_path, file)
+				os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+		
 		# Initialize local database
 		_init_db()
 		
 		# Initialize platform module
 		_init_platform()
+		
+		# At first startup platform user-data should be applied
+		if cnf.state == ScalarizrState.BOOTSTRAPPING:
+			cnf.fire('apply_user_data', cnf)			
 		
 		# At first scalarizr startup platform user-data should be applied
 		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
