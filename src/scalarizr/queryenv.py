@@ -241,11 +241,11 @@ class QueryEnvService(object):
 			ca_cert = None
 			for ssl_data in virtualhost.childNodes:
 				if ssl_data.nodeName == "cert":
-					cert = ssl_data.firstChild.nodeValue
+					cert = ssl_data.firstChild.nodeValue if ssl_data.firstChild else None
 				elif ssl_data.nodeName == "pkey":
-					pkey = ssl_data.firstChild.nodeValue
+					pkey = ssl_data.firstChild.nodeValue if ssl_data.firstChild else None
 				elif ssl_data.nodeName == "ca_cert":
-					ca_cert = ssl_data.firstChild.nodeValue
+					ca_cert = ssl_data.firstChild.nodeValue if ssl_data.firstChild else None
 			if not cert:
 				self._logger.error("Queryenv didn`t return SSL cert")
 			if not pkey:
