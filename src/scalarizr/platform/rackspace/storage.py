@@ -38,7 +38,7 @@ class CloudFilesUploadDest(uploader.UploadDest):
 			
 		except (cloudfiles.errors.ResponseError, OSError, Exception, socket.timeout), e:
 			raise uploader.TransferError, e
-		
+
 		return os.path.join(self.container_name, obj_path)
 	
 	def get(self, filename, dest):

@@ -29,17 +29,20 @@ class EbsVolume(Volume):
 	
 class S3UploadDest(uploader.UploadDest):
 	
-	def __init__(self, bucket, acl=None, logger=None):
+	def __init__(self, bucket, prefix=None, acl=None, logger=None):
 		self.bucket = bucket
+		self.prefix = prefix
 		self.acl = acl 
 		self._logger = logger or logging.getLogger(__name__)
 	
 	def put(self, filename):
 		self._logger.info("Uploading '%s' to S3 bucket '%s'", filename, self.bucket.name)
 		file = None
+		base_name = os.path.basename(filename)
+		obj_path = os.path.join(self.prefix, base_name) if self.prefix else base_name
 		try:
 			key = Key(self.bucket)
-			key.name = os.path.basename(filename)
+			key.name = obj_path
 			file = open(filename, "rb")
 			
 			key.set_contents_from_file(file, policy=self.acl)
@@ -63,7 +66,9 @@ class S3UploadDest(uploader.UploadDest):
 		return os.path.join(self.bucket.name, dest_path)
 	
 	def get_list_files(self):
-		return [key.name for key in self.bucket.get_all_keys()]
+		files = [key.name for key in self.bucket.get_all_keys(prefix=self.prefix)] \
+			if self.prefix else [key.name for key in self.bucket.get_all_keys()]
+		return files
 	
 def location_from_region(region):
 	if region == 'us-east-1' or not region:

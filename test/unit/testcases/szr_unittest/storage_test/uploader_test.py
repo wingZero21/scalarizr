@@ -59,7 +59,7 @@ class UploaderTest(unittest.TestCase):
 			bucket = conn.get_bucket(self.cont)
 		
 		U = uploader.Transfer(pool=2, logger=self._logger)
-		s3ud = S3UploadDest(bucket)
+		s3ud = S3UploadDest(bucket, self.prefix)
 		U.upload(self.files, s3ud)
 		
 		#check container exists
@@ -68,7 +68,7 @@ class UploaderTest(unittest.TestCase):
 		
 		#check file uploaded and prefix is ok
 		objects = [key.name for key in bucket.get_all_keys()]
-		self.assertTrue(self.fname in objects)
+		self.assertTrue(self.obj_name in objects)
 		
 		#check file contains appropriate data
 		U.download(self.new_dir, s3ud)

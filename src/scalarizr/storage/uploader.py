@@ -73,7 +73,6 @@ class Transfer(object):
 				filename, attempts = self._queue.get(False)
 				try:
 					result = action(filename)
-					self._logger.info("result: %s" % str(result))
 					self._result.append(result)
 				except TransferError, e:
 					self._logger.error("Cannot transfer '%s'. %s", filename, e)
