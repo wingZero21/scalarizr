@@ -61,7 +61,7 @@ class Transfer(object):
 		if self._failed_files:
 			raise TransferError("Cannot process several files. %s" % [", ".join(self._failed_files)])
 		
-		self._logger.info("Upload complete!")
+		self._logger.info("Transfer complete!")
 
 		# Return tuple of all files	def set_access_data(self, access_data):
 		return tuple(self._result)
@@ -72,11 +72,13 @@ class Transfer(object):
 			while 1:
 				filename, attempts = self._queue.get(False)
 				try:
-					self._result.append(action(filename))
+					result = action(filename)
+					self._logger.info("result: %s" % str(result))
+					self._result.append(result)
 				except TransferError, e:
-					self._logger.error("Cannot upload '%s'. %s", filename, e)
+					self._logger.error("Cannot transfer '%s'. %s", filename, e)
 					if attempts < self._max_attempts:
-						self._logger.debug("File '%s' will be uploaded within the next attempt", filename)
+						self._logger.debug("File '%s' will be transfered within the next attempt", filename)
 						attempts += 1
 						self._queue.put((filename, attempts))
 					else:
@@ -102,8 +104,8 @@ class UploadDest:
 	def run(self, action, dest=None):
 		def _action(filename=None):
 			if action == 'put':
-				self.put(filename)
+				return self.put(filename)
 			if action == 'get':
-				self.get(filename, dest)
+				return self.get(filename, dest)
 		return _action
 	

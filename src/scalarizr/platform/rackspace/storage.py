@@ -7,6 +7,7 @@ Created on Nov 24, 2010
 
 from scalarizr.storage import uploader
 import logging
+import socket
 import os
 import cloudfiles
 from scalarizr.storage.uploader import TransferError
@@ -19,7 +20,7 @@ class CloudFilesUploadDest(uploader.UploadDest):
 		self._logger = logger or logging.getLogger(__name__)
 		
 	def put(self, filename):
-		self._logger.info('Uploading %s in CloudFiles container %s' % (file, self.container_name))
+		self._logger.info('Uploading %s in CloudFiles container %s' % (filename, self.container_name))
 		base_name = os.path.basename(filename)
 		obj_path = self.prefix + '/' + base_name
 		try:		
@@ -35,16 +36,17 @@ class CloudFilesUploadDest(uploader.UploadDest):
 			o = container.create_object(obj_path)
 			o.load_from_filename(filename)
 			
-		except (cloudfiles.errors.ResponseError, OSError, Exception), e:
+		except (cloudfiles.errors.ResponseError, OSError, Exception, socket.timeout), e:
 			raise uploader.TransferError, e
 		
 		return os.path.join(self.container_name, obj_path)
 	
 	def get(self, filename, dest):
-		self._logger.info('Getting %s from CloudFiles container %s' % (file, self.container_name))
+		self._logger.info('Getting %s from CloudFiles container %s' % (filename, self.container_name))
 		dest_path = os.path.join(dest, os.path.basename(filename))
 		try:		
-			container, obj = None
+			obj = None
+			container = None
 			connection = self._get_connection()
 			
 			try:
@@ -68,7 +70,8 @@ class CloudFilesUploadDest(uploader.UploadDest):
 		connection = self._get_connection()
 		container = connection.get_container(self.container_name)
 		objects = container.get_objects(path=self.prefix)
-		return [obj.name for obj in objects]		
+		self._logger.info([obj.name for obj in objects])
+		return [obj.name for obj in objects] if objects else []	
 
 	def _get_connection(self):
 		return cloudfiles.get_connection(username=os.environ["username"], api_key=os.environ["api_key"], serviceNet=True)

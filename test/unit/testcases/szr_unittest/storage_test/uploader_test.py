@@ -36,9 +36,17 @@ class UploaderTest(unittest.TestCase):
 		self.files = [self.fname]
 		self.obj_name = '%s/%s'%(self.prefix, self.fname)
 		self._logger = logging.getLogger(__name__)
+		self.new_dir = os.path.join(os.path.curdir, 'downloads')
+		if not os.path.exists(self.new_dir):
+			os.makedirs(self.new_dir)
 
 
 	def tearDown(self):
+		#cleaning downloaded junk
+		for junk in os.listdir(self.new_dir):
+			os.remove(os.path.join(self.new_dir,junk))
+		if os.path.exists(self.new_dir):
+			os.removedirs(self.new_dir)
 		#delete file and entry in cloud
 		os.remove(self.fname)
 		
@@ -63,9 +71,8 @@ class UploaderTest(unittest.TestCase):
 		self.assertTrue(self.fname in objects)
 		
 		#check file contains appropriate data
-		key = bucket.get_key(self.fname)
-		key.get_contents_to_filename(self.target_file)
-		t_content = open(self.target_file, 'r').read()
+		U.download(self.new_dir, s3ud)
+		t_content = open(os.path.join(self.new_dir, os.path.basename(self.fname)), 'r').read()
 		self.assertEquals(self.content, t_content)
 		
 		#delete files
@@ -91,16 +98,20 @@ class UploaderTest(unittest.TestCase):
 		self.assertTrue(self.obj_name in objects)
 		
 		#check file contains appropriate data
+		U.download(self.new_dir, cfud)
+		t_content = open(os.path.join(self.new_dir, os.path.basename(self.fname)), 'r').read()
+		self.assertEquals(self.content, t_content)
+				
+		'''
+		#check file contains appropriate data
 		obj = container.get_object(self.obj_name)
 		obj.save_to_filename(self.target_file)
 		t_content = open(self.target_file, 'r').read()
 		self.assertEquals(self.content, t_content)
-		
+		'''
 		container.delete_object(self.obj_name)
 		#delete container
 		connection.delete_container(self.cont)
-		#remove target file
-		os.remove(self.target_file) 
 		
 		
 if __name__ == "__main__":

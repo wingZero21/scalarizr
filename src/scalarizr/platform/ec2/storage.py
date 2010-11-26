@@ -60,7 +60,7 @@ class S3UploadDest(uploader.UploadDest):
 			key.get_contents_to_filename(dest_path)
 		except (BotoServerError, OSError), e:
 			raise uploader.TransferError, e
-		return os.path.join(self.container_name, dest_path)
+		return os.path.join(self.bucket.name, dest_path)
 	
 	def get_list_files(self):
 		return [key.name for key in self.bucket.get_all_keys()]
