@@ -1,0 +1,33 @@
+#!/bin/bash
+
+rhel=$(python -c "import platform; d = platform.dist(); print int(d[0].lower() in ['centos', 'rhel', 'redhat'] and d[1].split('.')[0])")
+fedora=$(python -c "import platform; d = platform.dist(); print int((d[0].lower() == 'fedora' or (d[0].lower() == 'redhat' and d[2].lower() == 'werewolf')) and d[1].split('.')[0])")
+
+echo "Installing ruby"
+if [ "$rhel" -eq 0 ] && [ "$fedora" -eq 0 ]; then
+        sudo apt-get update && sudo apt-get -y install ruby ruby-dev libopenssl-ruby rdoc ri irb build-essential wget ssl-cert 1>/dev/null
+else
+        sudo rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm  1>/dev/null
+		sudo rpm -Uvh http://download.elff.bravenet.com/5/i386/elff-release-5-3.noarch.rpm               1>/dev/null
+		sudo yum -y install ruby ruby-shadow ruby-ri ruby-rdoc gcc gcc-c++ ruby-devel ruby-static        1>/dev/null
+fi
+
+cd /tmp
+echo "Downloading rubygems"
+wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz    1>/dev/null
+tar zxf rubygems-1.3.7.tgz                                            1>/dev/null
+cd rubygems-1.3.7
+echo "Installing rubygems"
+ruby setup.rb --no-format-executable                                  1>/dev/null
+echo "Installing chef"
+gem install chef --no-ri --no-rdoc                                    1>/dev/null
+mkdir -p /tmp/chef-solo
+echo "Configuring chef"
+echo -e 'file_cache_path "/tmp/chef-solo"\r\ncookbook_path "/tmp/chef-solo"' > /etc/solo.rb
+cd /tmp/chef-solo
+echo "Downloading and unpacking cookbooks"
+wget http://ge.tt/67CQ4JJ/recipes.tar.gz 1>/dev/null
+tar zxvf recipes.tar.gz && rm -f recipes.tar.gz 1>/dev/null
+echo -e '{ "recipes": [ "scalarizr", "nginx", "mysql::server" ] }' > /tmp/soft.json
+echo "Installing software"
+chef-solo -c /etc/solo.rb -j /tmp/soft.json 1>/dev/null
