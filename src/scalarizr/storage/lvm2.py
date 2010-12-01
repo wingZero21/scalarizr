@@ -172,10 +172,13 @@ class Lvm2:
 		system(('/sbin/vgremove', '-ff', group), error_text='Cannot remove volume group')
 	
 	def remove_lv(self, lvolume):
+		system(('/sbin/lvremove', '-f', '%s/%s' % extract_vg_lvol(lvolume)), error_text='Cannot remove logical volume')
+		'''
 		lvi = self.lv_info(lvolume)
-		if 'a' in lvi.attr:
+		if 'a' in lvi.attr and not 's' in lvi.attr:
 			self.change_lv(lvolume, available=False)
-		system(('/sbin/lvremove', '-f', normalize_lvname(lvolume)), error_text='Cannot remove logical volume')	
+		system(('/sbin/lvremove', '-f', normalize_lvname(lvolume)), error_text='Cannot remove logical volume')
+		'''	
 
 	def extend_vg(self, group, *ph_volumes):
 		system(['/sbin/vgextend', group] + list(ph_volumes), error_text='Cannot extend volume group')

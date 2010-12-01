@@ -1,9 +1,10 @@
 
 from .lvm2 import Lvm2
 from .raid import Mdadm
-from .fs import MOUNT_PATH, UMOUNT_PATH, SYNC_PATH
+from .fs import MOUNT_EXEC, UMOUNT_EXEC, SYNC_EXEC
 
-from scalarizr.util import system2, PopenError, firstmatched
+from scalarizr.util import system2, PopenError, firstmatched, wait_until
+from scalarizr.util.filetool import read_file
 from scalarizr.libs.metaconf import Configuration
 
 import urlparse
@@ -15,7 +16,10 @@ import os
 import re
 import time
 import glob
-from scalarizr.util.filetool import read_file
+import signal
+from binascii import hexlify
+
+
 
 
 # ebs-raid0-lvm-ext3
@@ -165,7 +169,7 @@ class Storage:
 
 		# Create tranzit volume (should be 5% bigger then data vol)
 		size_in_KB = int(read_file('/sys/block/%s/size' % os.path.basename(os.readlink(data_lv)))) / 2
-		tranzit_lv = self._lvm.create_lv(vg, 'tranzit', size='%dK' % size_in_KB*1.05)
+		tranzit_lv = self._lvm.create_lv(vg, 'tranzit', size='%dK' % (size_in_KB*1.05,))
 		
 		# Init snapshot provider 
 		snap_pvd = snap_pvd or EphSnapshotProvider()
@@ -269,17 +273,17 @@ class Volume:
 		return self._fs.unfreeze(self.devname)
 	
 	def mounted(self):
-		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % self.devname, system(MOUNT_PATH)[0])
+		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % self.devname, system(MOUNT_EXEC)[0])
 		return bool(res)		
 
 	def mount(self, mpoint=None):
 		mpoint = mpoint or self.mpoint
-		cmd = (MOUNT_PATH, self.devname, mpoint)
+		cmd = (MOUNT_EXEC, self.devname, mpoint)
 		system(cmd, error_text='Cannot mount device %s' % self.devname)
 		self.mpoint = mpoint
 	
 	def umount(self):
-		cmd = (UMOUNT_PATH, '-f', self.devname)
+		cmd = (UMOUNT_EXEC, '-f', self.devname)
 		try:
 			system(cmd, error_text='Cannot umount device %s' % self.devname)
 		except BaseException, e:
@@ -288,7 +292,7 @@ class Volume:
 	
 	def snapshot(self, description=None):
 		if self._fs:
-			system(SYNC_PATH)
+			system(SYNC_EXEC)
 			self.freeze()
 		snap = self._create_snapshot(description)
 		if self._fs:
@@ -416,34 +420,39 @@ class EphSnapshotProvider(IEphSnapshotProvider):
 	
 	def create(self, snapshot, volume, tranzit_path):
 		# Create LVM snapshot
-		snap_devname = None
+		snap_lv = None
 		try:
-			snap_devname = self._lvm.create_lv_snapshot(volume.devname, self.SNAPSHOT_LV_NAME, extents='100%FREE')
+			snap_lv = self._lvm.create_lv_snapshot(volume.devname, self.SNAPSHOT_LV_NAME, extents='100%FREE')
 			
 			# Copy|gzip|split snapshot into tranzit volume directory
 			self._logger.info('Packing volume %s -> %s', volume.devname, tranzit_path) 
-			cmd1 = ['dd', 'if=%s' % snap_devname]
+			cmd1 = ['dd', 'if=%s' % snap_lv]
 			cmd2 = ['gzip']
-			cmd3 = ['split', '-a','3', '-d' '-b', '%sM' % self.chunk_size, '-', '%s/%s.gz.' % 
+			cmd3 = ['split', '-a','3', '-d', '-b', '%sM' % self.chunk_size, '-', '%s/%s.gz.' % 
 					(tranzit_path, self.CHUNK_PREFIX)]
 			p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			out, err = p3.communicate()
+
 			if p3.returncode:
+				p1.stdout.close()
+				p2.stdout.close()				
+				p1.wait()
+				p2.wait()
 				raise StorageError('Error during coping LVM snapshot device (code: %d) <out>: %s <err>: %s' % 
 						(p3.returncode, out, err))
 		finally:
 			# Remove LVM snapshot			
-			if snap_devname:
-				self._lvm.remove_lv(snap_devname)			
+			if snap_lv:
+				self._lvm.remove_lv(snap_lv)			
 					
 		# Make snapshot manifest
 		config = Configuration('ini')
 		config.add('snapshot/description', snapshot.description, force=True)
 		config.add('snapshot/created_at', time.strftime("%Y-%m-%d %H:%M:%S"))
 		config.add('snapshot/pack_method', 'gzip') # Not used yet
-		for chunk in glob.glob(os.path.join(tranzit_path, self.CHUNK_PREFIX)):
+		for chunk in glob.glob(os.path.join(tranzit_path, self.CHUNK_PREFIX + '*')):
 			config.add('chunks/%s' % os.path.basename(chunk), self._md5sum(chunk), force=True)
 		
 		manifest_path = os.path.join(tranzit_path, self.MANIFEST_NAME)
@@ -458,7 +467,7 @@ class EphSnapshotProvider(IEphSnapshotProvider):
 		mnf.read(os.path.join(tranzit_path, self.MANIFEST))
 		
 		# Checksum
-		for chunk, md5sum_o in mnf.get_dict('chunks').items():
+		for chunk, md5sum_o in mnf.items('chunks'):
 			chunkpath = os.path.join(tranzit_path, chunk)
 			md5sum_a = self._md5sum(chunkpath)
 			if md5sum_a != md5sum_o:
@@ -483,13 +492,17 @@ class EphSnapshotProvider(IEphSnapshotProvider):
 
 
 	def _md5sum(self, file, block_size=4096):
-		md5 = hashlib.md5()
-		while True:
-			data = file.read(block_size)
-			if not data:
-				break
-			md5.update(data)
-		return md5.digest()
+		fp = open(file, 'rb')
+		try:
+			md5 = hashlib.md5()
+			while True:
+				data = fp.read(block_size)
+				if not data:
+					break
+				md5.update(data)
+			return hexlify(md5.digest())
+		finally:
+			fp.close()
 
 
 class EphSnapshotBackend(IEphSnapshotBackend):

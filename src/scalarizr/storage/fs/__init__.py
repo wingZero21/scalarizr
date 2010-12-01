@@ -13,10 +13,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-MKFS_PATH		= '/sbin/mkfs'
-MOUNT_PATH		= '/bin/mount'
-UMOUNT_PATH 	= '/bin/umount'
-SYNC_PATH 		= '/bin/sync'
+MKFS_EXEC		= '/sbin/mkfs'
+MOUNT_EXEC		= '/bin/mount'
+UMOUNT_EXEC 	= '/bin/umount'
+SYNC_EXEC 		= '/bin/sync'
 
 class FileSystemError(PopenError):
 	pass	
@@ -49,7 +49,7 @@ class FileSystem:
 
 	@device_should_exists
 	def mkfs(self, device, **options):
-		cmd = (MKFS_PATH, '-t', self.name, device)
+		cmd = (MKFS_EXEC, '-t', self.name, device)
 		system(cmd, error_text=self.E_MKFS % device)
 	
 	def resize(self, device, size=None, **options):
@@ -71,7 +71,7 @@ class FileSystem:
 		pass
 	
 	def _check_mounted(self, device):
-		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % device, system(MOUNT_PATH)[0])
+		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % device, system(MOUNT_EXEC)[0])
 		if not res:
 			raise FileSystemError(self.E_NOT_MOUNTED % device)
 		return res.group('mpoint')

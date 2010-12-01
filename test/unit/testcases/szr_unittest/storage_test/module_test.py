@@ -14,6 +14,7 @@ import os
 import time
 from random import randint
 import shutil
+from scalarizr.libs.metaconf import Configuration
 
 
 class TestMkloop(unittest.TestCase):
@@ -128,7 +129,7 @@ class TestVolume(unittest.TestCase):
 		self.assertEqual(snap.description, 'test snap')
 
 
-
+'''
 class TestEphStorageCreate(unittest.TestCase):
 	filename = None
 	device = None
@@ -173,7 +174,7 @@ class TestEphStorageCreate(unittest.TestCase):
 								snap_pvd=SnapProvider(), snap_backend=SnapBackend())
 		snap = self.vol.snapshot()
 		self.vol.restore(snap)
-		
+'''	
 
 class TestEphStorageSnapshotRestore(unittest.TestCase):
 	
@@ -184,7 +185,7 @@ class TestEphStorageSnapshotRestore(unittest.TestCase):
 		self.vols = [None, None, None]		
 		for i in range(3):
 			self.filenames.append('/tmp/pv%s' % randint(11, 99))
-			self.devices.append(mkloop(self.filenames[i], size=200, quick=True))
+			self.devices.append(mkloop(self.filenames[i], size=100, quick=True))
 			if not os.path.exists(self.mpoints[i]):
 				os.makedirs(self.mpoints[i])
 
@@ -204,25 +205,37 @@ class TestEphStorageSnapshotRestore(unittest.TestCase):
 	def test_1(self):
 		class SnapBackend(IEphSnapshotBackend):
 			scheme = 'file'
+			tc = None
 			def __init__(self, dest_path=None):
 				self.dest_path = dest_path
 				
 			def upload(self, snapshot, tranzit_path):
-				#manifest = 
+				manifest = Configuration('ini')
+				manifest.read(snapshot.id)				
 				
-				for file in os.listdir(tranzit_path):
-					shutil.copy(os.path.join(tranzit_path, file), self.dest_path)
+				self.tc.assertEqual(manifest.get('snapshot/description'), 'snapall')
+				self.tc.assertTrue(manifest.get('snapshot/created_at'))
+				self.tc.assertTrue(manifest.get('snapshot/pack_method'))
+				self.tc.assertTrue(len(manifest.get_dict('chunks')) > 0)
+				
+				for chunk, md5sum in manifest.items('chunks'):
+					shutil.copy(os.path.join(tranzit_path, chunk), self.dest_path)
+				shutil.copy(snapshot.id, self.dest_path)
+				
 				snapshot.id = self.scheme + '://' + self.dest_path
+			
 				
 			def download(self, id, tranzit_path):
 				src_path = id[len(self.scheme + '://'):]
 				for file in os.listdir(src_path):
-					shutil.copy(file, tranzit_path)
+					if not 'lost+found' in file:
+						shutil.copy(file, tranzit_path)
 		
 		self.vols[1] = Volume(self.devices[1], self.mpoints[1], 'ext3')
 		self.vols[1].mkfs()
 		self.vols[1].mount()
 		backend = SnapBackend(self.mpoints[1])
+		backend.tc = self
 
 		bigfile = os.path.join(self.mpoints[0], 'bigfile')
 		
@@ -232,16 +245,14 @@ class TestEphStorageSnapshotRestore(unittest.TestCase):
 		self.vols[0].mount(self.mpoints[0])
 		
 		# Create big file
-		system(('dd', 'if=/dev/urandom', 'of=%s' % bigfile, 'bs=1M', 'count=50'))
+		system(('dd', 'if=/dev/urandom', 'of=%s' % bigfile, 'bs=1M', 'count=30'))
 		bigsize = os.path.getsize(bigfile)
 		self.assertTrue(bigsize > 0)
 		md5sum = system(('/usr/bin/md5sum', bigfile))[0].strip().split(' ')[0]		
 		
 		# Snapshot storage
-		snap = self.vols[0].snapshot()
-		system(('ls', '-la', '/mnt/snapshot'))
-		
-		'''
+		snap = self.vols[0].snapshot('snapall')
+
 		# Restore snapshot on storage 2
 		self.vols[2] = Storage.create_ephs(self.devices[2], 'casstorage2')
 		self.vols[2].restore(snap)
@@ -252,7 +263,7 @@ class TestEphStorageSnapshotRestore(unittest.TestCase):
 
 		md5sum2 = system(('/usr/bin/md5sum', bigfile2))[0].strip().split(' ')[0]
 		self.assertEqual(md5sum, md5sum2)
-		'''
+
 		
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']

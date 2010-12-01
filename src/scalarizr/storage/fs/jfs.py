@@ -4,7 +4,7 @@ Created on Nov 11, 2010
 @author: spike
 @author: marat
 '''
-from . import MOUNT_PATH, MKFS_PATH
+from . import MOUNT_EXEC, MKFS_EXEC
 from . import FileSystem, device_should_exists, system 
 
 from scalarizr.util import disttool
@@ -32,7 +32,7 @@ class JfsFileSystem(FileSystem):
 		
 	@device_should_exists
 	def mkfs(self, device, **options):
-		cmd = (MKFS_PATH, '-t', self.name, '-q', device)
+		cmd = (MKFS_EXEC, '-t', self.name, '-q', device)
 		system(cmd, error_text=self.E_MKFS % device)
 		
 	@device_should_exists		
@@ -52,7 +52,7 @@ class JfsFileSystem(FileSystem):
 	@device_should_exists
 	def resize(self, device, size=None, **options):
 		mpoint = self._check_mounted(device)
-		cmd = (MOUNT_PATH, '-o', 'remount,resize', mpoint)
+		cmd = (MOUNT_EXEC, '-o', 'remount,resize', mpoint)
 		system(cmd, error_text=self.E_RESIZE % device)		
 
 __filesystem__ = JfsFileSystem
