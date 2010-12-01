@@ -5,8 +5,9 @@ Created on Nov 17, 2010
 '''
 import unittest
 from scalarizr.storage.raid import Mdadm
-from scalarizr.util import firstmatched, system, wait_until
+from scalarizr.util import firstmatched, system
 import os
+import szr_unittest
 
 class Test(unittest.TestCase):
 	arrays  = None
@@ -25,7 +26,7 @@ class Test(unittest.TestCase):
 			system('mdadm -S -f %s' % array)
 			system('mdadm --remove -f %s' % array)
 		for device in self.devices:
-			system('losetup -d %s' % device)
+			system('/sbin/losetup -d %s' % device)
 		system('rm -f /tmp/device*')
 
 	def testRaid0(self):
@@ -41,7 +42,7 @@ class Test(unittest.TestCase):
 		self.assertEqual(info['level'], 'raid0')
 		self.assertEqual(info['raid_devices'], 2)
 		self.assertEqual(info['total_devices'], 2)
-		self.assertRaises(Exception, self.raid.replace, (self.devices[0], new_device))
+		self.assertRaises(Exception, self.raid.replace_disk, (self.devices[0], new_device))
 		self.raid.delete(array)
 		self.arrays.remove(array)
 		
@@ -67,7 +68,7 @@ class Test(unittest.TestCase):
 		
 		another_device = self._get_loopback()
 		self.devices.append(another_device)
-		self.raid.replace(new_device, another_device)
+		self.raid.replace_disk(new_device, another_device)
 		array_devices = self.raid.get_array_devices(array)
 		self.assertTrue(os.path.basename(another_device) in array_devices)
 		self.assertFalse(os.path.basename(new_device) in array_devices)
@@ -102,7 +103,7 @@ class Test(unittest.TestCase):
 		
 		another_device = self._get_loopback()
 		self.devices.append(another_device)
-		self.raid.replace(new_device, another_device)
+		self.raid.replace_disk(new_device, another_device)
 		array_devices = self.raid.get_array_devices(array)
 		self.assertTrue(os.path.basename(another_device) in array_devices)
 		self.assertFalse(os.path.basename(new_device) in array_devices)
@@ -118,9 +119,10 @@ class Test(unittest.TestCase):
 	def _get_loopback(self):
 		image = '/tmp/device%s' % firstmatched(lambda x: not os.path.exists('/tmp/device%s' % x), range(100))
 		system("dd if=/dev/zero of=%s bs=1M count=15" % image)
-		loop_dev = system('losetup -f --show %s' % image)[0].strip()
+		loop_dev = system('/sbin/losetup -f --show %s' % image)[0].strip()
 		return loop_dev
 	
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
+	szr_unittest.main()
 	unittest.main()

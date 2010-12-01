@@ -4,112 +4,188 @@ Created on Nov 11, 2010
 @author: Dmytro Korsakov
 '''
 
-import os
+from scalarizr.util import system2, disttool, firstmatched, PopenError
+
 import re
-from scalarizr.util import system, disttool
+from collections import namedtuple
+import logging
+import os
 
-def err_handle(_system):
-	def handle(*args):
-		out = _system(*args)
-		if out and type(out)==tuple and len(out)>1:
-			e = out[1] 
-			if e:
-				raise Lvm2Error(e)
-	return handle
+logger = logging.getLogger(__name__)
 
-class Lvm2Error(BaseException):
+def system(*args, **kwargs):
+	kwargs['logger'] = logger
+	kwargs['close_fds'] = True
+	'''
+	To prevent this garbage in stderr (Fedora/CentOS):
+	File descriptor 6 (/tmp/ffik4yjng (deleted)) leaked on lv* invocation. 
+	Parent PID 29542: /usr/bin/python
+	'''
+	kwargs['exc_class'] = Lvm2Error
+	return system2(*args, **kwargs)
+
+class Lvm2Error(PopenError):
 	pass
+
+class PVInfo(namedtuple('PVInfo', 'pv vg format attr size free')):
+	pass
+
+class VGInfo(namedtuple('VGInfo', 'vg num_pv num_lv num_sn attr size free')):
+	@property
+	def path(self):
+		return '/dev/%s' % (self[0],)
+	
+class LVInfo(namedtuple('LVInfo', 'lv vg attr size origin snap_pc move log copy_pc convert')):
+	@property
+	def path(self):
+		return lvpath(self[1], self[0])
+
+def lvpath(group, lvol):
+	return '/dev/mapper/%s-%s' % (group.replace('-', '--'), lvol.replace('-', '--'))
+
+def extract_vg_lvol(lvolume):
+	''' 
+	Return (vg, lvol) from logical device name 
+	Example:
+		/dev/mapper/vg0-vol0 -> ('vg0', 'vol0')
+		/dev/mapper/my--volume--group-data -> ('my-volume-group' ,'data')
+	'''
+	vg_lvol = os.path.basename(lvolume).split('-')
+	if len(vg_lvol) > 2:
+		ret = []
+		for s in vg_lvol:
+			if len(ret) and not ret[-1][-1] or not s:
+				ret[-1].append(s)
+			else:
+				ret.append([s])
+		vg_lvol = map(lambda x: '-'.join(filter(None, x)), ret)
+	return tuple(vg_lvol)	
+
+def normalize_lvname(lvolume):
+	if '/dev/mapper' in lvolume:
+		return '/dev/%s/%s' % extract_vg_lvol(lvolume)
+	else:
+		return lvolume
+
+
 
 class Lvm2:
 	'''
-	object-oriented interface to lvm2
+	Object-oriented interface to lvm2
 	'''
-	group = None
 	
-	def __init__(self, group='vg'):
-		self.group = group
+	def __init__(self):
+		if disttool.is_debian_based():
+			system(['sbin/modprobe', 'dm_mod', 'dm_snapshot'], 
+					error_text='Cannot load device mapper kernel module')
 		
-	def _parse_table(self, cmd='lvs'):
-		full_path = '/sbin/%s' % cmd
-		if not os.path.exists(full_path) or cmd not in ('lvs','vgs', 'pvs'):
-			raise Lvm2Error('Cannot parse output')
+	def _parse_status_table(self, name, ResultClass):
+		if not name in ('lvs','vgs', 'pvs'):
+			raise ValueError('Unexpected value: %s' % name)
+		if isinstance(ResultClass, tuple):
+			raise ValueError('ResultClass should be a namedtuple subclass. %s taken' % type(ResultClass))
 		
-		out = system([full_path, '--separator', "|"], shell=False)[0]
-		if not out:
-			raise Lvm2Error('%s returned empty output') % full_path
-		return [i.strip().split('|') for i in out.split('\n')[1:-1]]		
-		
-		
-		
-	def get_pv_info(self):
-		return self._parse_table('pvs')
-		
-	def get_vg_info(self):
-		return self._parse_table('vgs')				
-	
-	def get_lv_info(self):
-		return self._parse_table('lvs')		
-	
-	
-	
-	def get_pv_list(self):
-		return [j[0] for j in self.get_pv_info()]
-		
-	def get_vg_list(self):
-		return [j[0] for j in self.get_vg_info()]
-		
-	def get_lv_list(self):
-		return [j[0] for j in self.get_lv_info()]	
-		
+		out = system(['/sbin/%s' % name, '--separator', '|'])[0].strip()
+		if out:
+			return tuple(ResultClass(*line.strip().split('|')) for line in out.split('\n')[1:])
+		return ()
 
-	@err_handle
-	def create_pv(self, *args):
-		return system(['/sbin/pvcreate'] + list(args), shell=False)
+	def _status(self, name, ResultClass, column=None):
+		rows = self._parse_status_table(name, ResultClass)
+		if column:
+			return tuple(getattr(o, column) for o in rows)
+		return rows
 		
-	@err_handle
-	def create_vg(self, group, block_size, *args):
-		if not group: group = self.group
-		if not block_size: block_size = '4M'
-		return system(['/sbin/vgcreate', '-s', block_size, group] + list(args), shell=False)
+	def pv_status(self, column=None):
+		return self._status('pvs', PVInfo, column)
 	
-	@err_handle	
-	def create_lv(self, volume_name, percentage, group=None):
-		if not group: group = self.group
-		if type(percentage) not in (int, float) or (100 > percentage <= 0):
-			raise Lvm2Error('Wrong persentage')
-		return system(['/sbin/lvcreate', '-n', volume_name, '-l%s%%VG' % percentage, group], shell=False)
+	def vg_status(self, column=None):
+		return self._status('vgs', VGInfo, column)				
 	
-	@err_handle	
-	def create_snapshot(self, snap_name, percentage, source_volume, group=None):	
-		if not group: group = self.group
-		if type(percentage) not in (int, float) or (100 > percentage <= 0):
-			raise Lvm2Error('Wrong persentage')
-		return system(['/sbin/lvcreate', '-s', '-n', snap_name, '-l%s%%VG' % percentage, 
-					'/dev/%s/%s'%(group,source_volume)], shell=False)
+	def lv_status(self, column=None):
+		return self._status('lvs', LVInfo, column)		
+
+	def pv_info(self, ph_volume):
+		info = firstmatched(lambda inf: inf.pv == ph_volume, self.pv_status())
+		if info:
+			return info
+		raise LookupError('Physical volume %s not found' % ph_volume)
+
+	def vg_info(self, group):
+		info = firstmatched(lambda inf: inf.vg == group, self.vg_status())
+		if info:
+			return info
+		raise LookupError('Volume group %s not found' % group)
 	
+	def lv_info(self, lvolume=None, group=None, name=None):
+		lvolume = lvolume if lvolume else '/dev/%s/%s' % (group, name)
+		info = firstmatched(lambda inf: inf.path == lvolume, self.lv_status())
+		if info:
+			return info
+		raise LookupError('Logical volume %s not found' % lvolume)
 	
-	@err_handle
-	def remove_pv(self, name, group=None):
-		if not group: group = self.group
-		#system(['/sbin/pvmove', name], shell=False)
-		#system(['/sbin/vgreduce', group, name], shell=False)
-		return  system(['/sbin/pvremove', '-ff', name], shell=False)
-	
-	@err_handle	
-	def remove_vg(self, group=None):
-		if not group: group = self.group
-		return system(['/sbin/vgremove', group], shell=False)		
-	
-	@err_handle
-	def remove_lv(self, volume_name, group=None):
-		if not group: group = self.group
-		return system(['/sbin/lvremove', '-f', '/dev/%s/%s' % (group, volume_name)], shell=False)	
+	def create_pv(self, *devices):
+		system(['/sbin/pvcreate'] + list(devices), 
+				error_text='Cannot initiate a disk for use by LVM')
 		
-	def remove_snapshot(self, volume_name, group=None):
-		if not group: group = self.group
-		self.remove_lv(volume_name, group)	
+	def create_vg(self, group, ph_volumes, ph_extent_size=4):
+		system(['/sbin/vgcreate', '-s', ph_extent_size, group] + list(ph_volumes), 
+				error_text='Cannot create a volume group %s' % group)
+		return '/dev/%s' % group
 	
+	def create_lv(self, group=None, name=None, extents=None, size=None, segment_type=None, ph_volumes=None):
+		args = ['/sbin/lvcreate']
+		if name:
+			args += ('-n', name)
+		if extents:
+			args += ('-l', extents)
+		elif size:
+			args += ('-L', size)
+		if segment_type:
+			args += ('--type=' + segment_type,)
+		if group and segment_type != 'snapshot':
+			args.append(group)
+		if ph_volumes:
+			args += ph_volumes
+		
+		out = system(args, error_text='Cannot create logical volume')[0].strip()
+		vol = re.match(r'Logical volume "([^\"]+)" created', out.split('\n')[-1].strip()).group(1)
+		return lvpath(os.path.basename(group), vol)
 	
+	def create_lv_snapshot(self, lvolume, name=None, extents=None, size=None):
+		vg = extract_vg_lvol(lvolume)[0]
+		return self.create_lv(vg, name, extents, size, segment_type='snapshot', ph_volumes=(normalize_lvname(lvolume),))
+	
+	def change_lv(self, lvolume, available=None):
+		cmd = ['/sbin/lvchange']
+		if available is not None:
+			cmd.append('-ay' if available else '-an')
+		cmd.append(normalize_lvname(lvolume))
+		system(cmd, error_text='Cannot change logical volume attributes')
+	
+	def remove_pv(self, ph_volume):
+		if self.pv_info(ph_volume).vg:
+			system(('/sbin/vgreduce', '-f', ph_volume), error_text='Cannot reduce volume group')
+		system(('/sbin/pvremove', '-ff', ph_volume), error_text='Cannot remove a physical volume')
+	
+	def remove_vg(self, group):
+		system(('/sbin/vgremove', '-ff', group), error_text='Cannot remove volume group')
+	
+	def remove_lv(self, lvolume):
+		lvi = self.lv_info(lvolume)
+		if 'a' in lvi.attr:
+			self.change_lv(lvolume, available=False)
+		system(('/sbin/lvremove', '-f', normalize_lvname(lvolume)), error_text='Cannot remove logical volume')	
+
+	def extend_vg(self, group, *ph_volumes):
+		system(['/sbin/vgextend', group] + list(ph_volumes), error_text='Cannot extend volume group')
+	
+	def repair_vg(self, group):
+		system(('/sbin/vgreduce', '--removemissing', group))
+		system(('/sbin/vgchange', '-a', 'y', group))
+
+
+	# Untested ---> 
 
 	def get_lv_size(self, lv_name):
 		lv_info = self.get_logic_volumes_info()
@@ -118,14 +194,6 @@ class Lvm2:
 				if lv[0] == lv_name:
 					return lv[3]
 		return 0
-	
-	def get_pv_size(self, pv_name):
-		pass
-	
-	def get_vg_size(self, vg_name):
-		pass
-	
-	
 	
 	def get_vg_free_space(self, group=None):
 		'''
@@ -139,36 +207,4 @@ class Lvm2:
 					return (raw.group(1), raw.group(2))
 				raise Lvm2Error('Cannot determine available free space in group %s' % group)
 		raise Lvm2Error('Group %s not found' % group)		
-
-	def get_vg_name(self, device):
-		lvs_info = self.get_logic_volumes_info()
-		if lvs_info:
-			for volume in lvs_info:
-				if device.endswith(volume[0]):
-					return volume[1]
-		return None
-	
-	@err_handle		
-	def extend_vg(self,group=None, *args):
-		if not group: group = self.group
-		return system(['/sbin/vgextend', group] + list(args), shell=False)
-	
-	@err_handle	
-	def repair_vg(self, group):
-		if not group: group = self.group
-		e = system(['/sbin/vgreduce', '--removemissing', group], shell=False)[1]
-		if e:
-			raise Lvm2Error
-
-		return system(['/sbin/vgchange', '-a', 'y', group], shell=False)
-		
-		
-	@err_handle		
-	def dm_mod(self):
-		'''
-		Ubuntu 8 needs add dm_mod to kernel manually
-		'''
-		if disttool.is_ubuntu():
-			#modprobe dm_mod 
-			return system('/sbin/modprobe', 'dm_mod', shell=False)
 	

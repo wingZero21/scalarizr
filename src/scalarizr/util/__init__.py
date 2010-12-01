@@ -129,6 +129,96 @@ def system(args, shell=True):
 		logger.debug("stderr: " + err)
 	return out, err, p.returncode
 
+class PopenError(BaseException):
+	
+	def __str__(self):
+		if len(self.args) >= 5:
+			args = [self.error_text or '']
+			args += [self.proc_args[0] if hasattr(self.proc_args, '__iter__') else self.proc_args.split(' ')[0]]
+			args += [self.returncode, self.out, self.err, self.proc_args]
+
+			ret = '%s %s (code: %s) <out>: %s <err>: %s <args>: %s' % tuple(args)
+			return ret.strip()
+		else:
+			return self.error_text
+	
+	@property
+	def error_text(self):
+		return self.args[0]
+	
+	@property
+	def out(self):
+		return self.args[1]
+	
+	@property
+	def err(self):
+		return self.args[2]
+
+	@property
+	def returncode(self):
+		return self.args[3]
+	
+	@property
+	def proc_args(self):
+		return self.args[4]
+
+def system2(*popenargs, **kwargs):
+	import subprocess, cStringIO
+	
+	logger 		= kwargs.get('logger', logging.getLogger(__name__))
+	warn_stderr = kwargs.get('warn_stderr')
+	raise_error = kwargs.get('raise_error', True)
+	ExcClass 	= kwargs.get('exc_class', PopenError)
+	error_text 	= kwargs.get('error_text')
+	input 		= None
+	
+	if kwargs.get('err2out'):
+		# Redirect stderr -> stdout
+		kwargs['stderr'] = subprocess.STDOUT
+		
+	if not 'stdout' in kwargs:
+		# Capture stdout
+		kwargs['stdout'] = subprocess.PIPE
+		
+	if not 'stderr' in kwargs:
+		# Capture stderr
+		kwargs['stderr'] = subprocess.PIPE
+		
+	if isinstance(kwargs.get('stdin'),  basestring):
+		# Pass string into stdin
+		input = kwargs['stdin']
+		kwargs['stdin'] = subprocess.PIPE
+		
+	if len(popenargs) > 0 and hasattr(popenargs[0], '__iter__'):
+		# Cast arguments to str
+		popenargs = list(popenargs)
+		popenargs[0] = tuple('%s' % arg for arg in popenargs[0])
+		
+	if kwargs.get('shell'):
+		# Set en_US locale
+		if not 'env' in kwargs:
+			kwargs['env'] = {}
+		kwargs['env']['LANG'] = 'en_US'
+		
+	for k in ('logger', 'err2out', 'warn_stderr', 'raise_error', 'exc_class', 'error_text'):
+		try:
+			del kwargs[k]
+		except KeyError:
+			pass
+		
+	logger.debug('system: %s' % (popenargs[0],))
+	p = subprocess.Popen(*popenargs, **kwargs)
+	out, err = p.communicate(input=input)
+	
+	if out:
+		logger.debug('stdout: ' + out)
+	if err:
+		logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
+	if p.returncode and raise_error:
+		raise ExcClass(error_text, out.strip(), err.strip(), p.returncode, popenargs[0])
+
+	return out, err, p.returncode
+
 
 def wait_until(target, args=None, sleep=5, logger=None, time_until=None, timeout=None):
 	args = args or ()

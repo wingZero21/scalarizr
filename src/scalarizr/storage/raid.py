@@ -3,10 +3,23 @@ Created on Nov 11, 2010
 
 @author: marat
 '''
+
+from scalarizr.util import system2, wait_until, firstmatched, filetool
+from scalarizr.util import PopenError
+
+import logging
 import os
 import re
-from scalarizr.util import firstmatched, system, filetool, wait_until
-from scalarizr.storage import _system
+
+logger = logging.getLogger(__name__)
+
+def system(*popenargs, **kwargs):
+	kwargs['logger'] = logger
+	kwargs['exc_class'] = MdadmError
+	return system2(*popenargs, **kwargs)
+
+class MdadmError(PopenError):
+	pass
 
 
 MDADM_PATH='/sbin/mdadm'
@@ -16,17 +29,19 @@ class Mdadm:
 
 	def __init__(self):
 		if not os.path.exists(MDADM_PATH):
-			raise Exception("Make sure you have mdadm package installed.")
-		self.__raid_devices_re  = re.compile('Raid\s+Devices\s+:\s+(?P<count>\d+)')
-		self.__total_devices_re = re.compile('Total\s+Devices\s+:\s+(?P<count>\d+)')
-		self.__state_re         = re.compile('State\s+:\s+(?P<state>.+)')
-		self.__rebuild_re       = re.compile('Rebuild\s+Status\s+:\s+(?P<percent>\d+)%')
-		self.__level_re			= re.compile('Raid Level : (?P<level>.+)')
+			raise MdadmError("Make sure you have mdadm package installed.")
+		self._raid_devices_re  	= re.compile('Raid\s+Devices\s+:\s+(?P<count>\d+)')
+		self._total_devices_re 	= re.compile('Total\s+Devices\s+:\s+(?P<count>\d+)')
+		self._state_re         	= re.compile('State\s+:\s+(?P<state>.+)')
+		self._rebuild_re       	= re.compile('Rebuild\s+Status\s+:\s+(?P<percent>\d+)%')
+		self._level_re			= re.compile('Raid Level : (?P<level>.+)')
 		
 	def create(self, devices, level=1):
+		# Validate RAID level
 		if not int(level) in (0,1,5):
-			raise Exception('Unknown RAID level: %s' % level)
+			raise MdadmError('Unknown RAID level: %s' % level)
 		
+		# Select RAID device name 
 		devname = '/dev/md%s' % firstmatched(lambda x: not os.path.exists('/dev/md%s' % x), range(100))
 		
 		for device in devices:
@@ -35,40 +50,44 @@ class Mdadm:
 			except:
 				pass
 			
-		cmd = '%s --create %s --level=%s -f -e default -n %s %s' % (MDADM_PATH, devname, level, len(devices), ' '.join(devices))
-		error = 'Error occured during raid device creation.'
-		_system(cmd, error)
+		# Create RAID device
+		cmd = [MDADM_PATH, '--create', devname, '--level=%d' % level, '-f', '-e', 'default', '-n', len(devices)]
+		cmd.extend(devices)
+		system(cmd, error_text='Error occured during raid device creation')
+		
 		return devname
 
 		
 	def delete(self, array):
 		if not os.path.exists(array):
-			raise Exception('Device %s does not exist' % array)
+			raise MdadmError('Device %s does not exist' % array)
 		
+		# Stop raid
 		devices = self.get_array_devices(array)
 		wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
-		_system('%s -S -f %s' % (MDADM_PATH, array), 'Error occured during array stopping')
+		cmd = (MDADM_PATH, '-S', '-f', array)
+		system(cmd, error_text='Error occured during array stopping')
+
+		# Delete raid
 		try:
-			_system('%s --remove -f %s' % (MDADM_PATH, array), 'Error occured during array deletion')
+			cmd = (MDADM_PATH, '--remove', '-f', array)
+			system(cmd, error_text='Error occured during array deletion')
 		except Exception, e:
 			if not 'No such file or directory' in str(e):
 				raise
-			
+
 		for device in devices:
 			self._zero_superblock(device)
 
-	def remove_disk(self, device):
-		array = self._get_array_by_device(device)
-		wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
-		_system('%s %s -f --fail %s' %(MDADM_PATH, array, device), 'Error occured while markin device as failed')
-		_system('%s %s -f --remove %s' %(MDADM_PATH, array, device), 'Error occured during device removal')
 
 	def add_disk(self, array, device, grow=True):
 		info = self.get_array_info(array)
 		if info['level'] == 'raid0':
-			raise Exception("Can't add devices to raid level 0.")
+			raise MdadmError("Can't add devices to raid level 0.")
+		
 		wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
-		_system('%s --add %s %s' % (MDADM_PATH, array, device), 'Error occured during device addition')
+		cmd = (MDADM_PATH, '--add', array, device)
+		system(cmd, error_text='Error occured during device addition')
 		
 		if grow:
 			array_info = self.get_array_info(array)
@@ -76,17 +95,37 @@ class Mdadm:
 			total_devs = array_info['total_devices']
 		
 			if total_devs > raid_devs:
-				_system('%s --grow %s --raid-devices=%s' % (MDADM_PATH, array, total_devs),\
-					    'Error occured during array "%s" growth')		
+				cmd = (MDADM_PATH, '--grow', array, '--raid-devices=%d' % total_devs)
+				system(cmd, error_text='Error occured during array "%s" growth')
+
+	def remove_disk(self, device):
+		array = self._get_array_by_device(device)
+		wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
+
+		cmd = (MDADM_PATH, array, '-f', '--fail', device)	
+		system(cmd, error_text='Error occured while markin device as failed')
+		
+		cmd = (MDADM_PATH, array, '-f', '--remove', device)
+		system(cmd, error_text='Error occured during device removal')
+
+	def replace_disk(self, old, new):
+		array = self._get_array_by_device(old)
+		if self.get_array_info(array)['level'] == 'raid0':
+			raise MdadmError("Can't replace disk in raid level 0.")
+		self.add_disk(array, new, False)
+		self.remove_disk(old)
+
 
 	def get_array_info(self, array):
 		ret = {}
-		out = _system('%s -D %s' % (MDADM_PATH, array), 'Error occured while array "%s" info obtaining' % array)
-		ret['raid_devices']   = int(re.search(self.__raid_devices_re, out).group('count'))
-		ret['total_devices']  = int(re.search(self.__total_devices_re, out).group('count'))
-		ret['state']		  = re.search(self.__state_re, out).group('state')
-		ret['level']		  = re.search(self.__level_re, out).group('level')
-		rebuild_res    		  = re.search(self.__rebuild_re, out)
+		cmd = (MDADM_PATH, '-D', array)
+		error_text = 'Error occured while obtaining array %s info' % array
+		out = system(cmd, error_text=error_text)[0]
+		ret['raid_devices']   = int(re.search(self._raid_devices_re, out).group('count'))
+		ret['total_devices']  = int(re.search(self._total_devices_re, out).group('count'))
+		ret['state']		  = re.search(self._state_re, out).group('state')
+		ret['level']		  = re.search(self._level_re, out).group('level')
+		rebuild_res    		  = re.search(self._rebuild_re, out)
 		ret['rebuild_status'] = rebuild_res.group('percent') if rebuild_res else None
 		return ret
 
@@ -107,15 +146,8 @@ class Mdadm:
 
 	def _zero_superblock(self, device):
 		devname = os.path.basename(device)
-		_system('%s --zero-superblock -f /dev/%s' % (MDADM_PATH, devname), 'Error occured during zeroing superblock of %s' % device)
-
-	def replace(self, old, new):
-		array = self._get_array_by_device(old)
-		if self.get_array_info(array)['level'] == 'raid0':
-			raise Exception("Can't replace disk in raid level 0.")
-		self.add_disk(array, new, False)
-		self.remove_disk(old)
-
+		cmd = (MDADM_PATH, '--zero-superblock', '-f', '/dev/%s' % devname)
+		system(cmd, error_text='Error occured during zeroing superblock on %s' % device)
 
 	def get_array_devices(self, array):
 		devname = os.path.basename(array)
@@ -131,4 +163,5 @@ class Mdadm:
 			break
 		else:
 			devices = []
-		return devices	
+		return devices
+	

@@ -1,50 +1,54 @@
 '''
 Created on Nov 11, 2010
 
+@author: spike
 @author: marat
 '''
 
-from . import FileSystem
-from scalarizr.storage import _system
-import re, os
-from scalarizr.util import system
-from . import MOUNT_PATH
+from . import FileSystem, device_should_exists, system
+
+import re
+
 
 XFS_ADMIN_PATH  = "/usr/sbin/xfs_admin"
 XFS_GROWFS_PATH = "/usr/sbin/xfs_growfs"
+XFS_FREEZE_PATH = "/usr/sbin/xfs_freeze"
 
 
 class XfsFileSystem(FileSystem):
-	_fsname = None
-	umount_on_resize	= None
+	name = 'xfs'
+	umount_on_resize = False
 	
 	def __init__(self):
-		self._fsname    = 'xfs'
-		self.__label_re  = re.compile('label\s+=\s+"(?P<label>.*)"', re.IGNORECASE)
-		umount_on_resize = False
+		self._label_re  = re.compile('label\s+=\s+"(?P<label>.*)"', re.IGNORECASE)
 
+	@device_should_exists
 	def set_label(self, device, label):
-		cmd   = '%s -L "%s" %s' % (XFS_ADMIN_PATH, label, device)
-		error = "Error while setting label for device '%s'" % device 
-		_system(cmd, error)
+		cmd = (XFS_ADMIN_PATH, '-L', label, device)
+		system(cmd, error_text=self.E_SET_LABEL % device)
 
+	@device_should_exists
 	def get_label(self, device):
-		cmd   = '%s -l %s' % (XFS_ADMIN_PATH, device)
-		error = "Error while getting label for device '%s'" % device 
-		res   = re.search(self.__label_re, _system(cmd, error))
-		if not res:
-			raise Exception("Volume label wasn't found in xfs_admin's output")
-		return res.group('label')
-	
-	def resize(self, device, size=None, **options):
-		if not os.path.exists(device):
-			raise Exception("Device %s doesn't exist." % device)
-		
-		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % device, system(MOUNT_PATH)[0])
-		if not res:
-			raise Exception('Mount device before resizing jfs file system')
-		cmd = "%s %s" % (XFS_GROWFS_PATH, res.group('mpoint'))
-		error = "Error occured during file system resize operation"
-		_system(cmd, error)
+		cmd = (XFS_ADMIN_PATH, '-l', device)
+		res = re.search(self._label_re, system(cmd, error_text=self.E_GET_LABEL % device)[0])
+		return res.group('label') if res else ''
 
-filesystems = dict(XfsFileSystem=('xfs',))
+	@device_should_exists	
+	def resize(self, device, size=None, **options):
+		mpoint = self._check_mounted(device)
+		cmd = (XFS_GROWFS_PATH, mpoint)
+		system(cmd, error_text=self.E_RESIZE % device)
+	
+	@device_should_exists	
+	def freeze(self, device):
+		mpoint = self._check_mounted(device)
+		cmd = (XFS_FREEZE_PATH, '-f', mpoint)
+		system(cmd, error_text=self.E_FREEZE % device)
+		
+	@device_should_exists
+	def unfreeze(self, device):
+		mpoint = self._check_mounted(device)
+		cmd = (XFS_FREEZE_PATH, '-u', mpoint)
+		system(cmd, error_text=self.E_UNFREEZE % device)
+
+__filesystem__ = XfsFileSystem

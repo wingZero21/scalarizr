@@ -4,13 +4,14 @@ Created on Nov 14, 2010
 @author: spike
 '''
 import unittest
-from scalarizr.util import system
-from scalarizr.storage.fs.ext import Ext3FileSystem, Ext4FileSystem
+from scalarizr.util import system2
+from scalarizr.storage.fs.ext3 import Ext3FileSystem
 from scalarizr.storage.fs.jfs import JfsFileSystem
 from scalarizr.storage.fs.xfs import XfsFileSystem
 import os
 import re
 import logging
+from scalarizr.storage import mkloop
 
 
 class FileSystemTest(unittest.TestCase):
@@ -28,19 +29,14 @@ class FileSystemTest(unittest.TestCase):
 		return unittest.TestCase.__init__(self, methodName)
 	
 	def setUp(self):
-		system("dd if=/dev/zero of=%s bs=1M count=50" % self.img_file)
-		self.device, err, rcode = system('losetup -f --show %s' % self.img_file)
-		if rcode:
-			raise Exception('Error occured during loop device creation.\nReturn code: %s. Error: %s' % (rcode, err))
-		self.device = self.device.strip()
-
+		self.device  = mkloop(self.img_file, size=50)
 	
 	def tearDown(self):
 		if self.device:
-			system('umount %s' % self.device)
-			system('losetup -d %s' % self.device)
+			system2('umount %s' % self.device, shell=True, raise_error=False)
+			system2('/sbin/losetup -d %s' % self.device, shell=True)
 			self.device = None			
-		system('rm -f %s' % self.img_file)
+		system2('rm -f %s' % self.img_file, shell=True)
 		
 	def test_ext3(self):
 		
@@ -83,21 +79,21 @@ class FileSystemTest(unittest.TestCase):
 		self.assertEqual(self._get_size(), 97600)
 		
 	def _grow_partition(self):
-		system('dd if=/dev/zero of=%s bs=1M count=50 seek=50' % self.img_file)
-		system('losetup -c %s' % self.device)
+		system2('dd if=/dev/zero of=%s bs=1M count=50 seek=50' % self.img_file, shell=True)
+		system2('/sbin/losetup -c %s' % self.device, shell=True)
 		
 	def _mount(self):
-		out,err,rcode = system('mount %s %s' % (self.device, self.mpoint))
+		out,err,rcode = system2('mount %s %s' % (self.device, self.mpoint), shell=True)
 		if rcode:
 			raise Exception('Error occured during mount operation.\n>>>Out:\n%s,\n>>>Err:\n%s' % (out, err))
 	
 	def _umount(self):
-		out,err,rcode = system('umount %s' % self.device)
+		out,err,rcode = system2('umount %s' % self.device, shell=True)
 		if rcode:
 			raise Exception('Error occured during umount operation.\n>>>Out:\n%s,\n>>>Err:\n%s' % (out, err))
 		
 	def _get_size(self):
-		out = system('df')[0]
+		out = system2('df')[0]
 		res = re.search('%s\s+(?P<size>\d+)' % self.device, out)
 		if not res:
 			raise Exception('Mount device before trying to get size of it.')

@@ -1,64 +1,58 @@
 '''
 Created on Nov 11, 2010
 
+@author: spike
 @author: marat
 '''
-
-import re, os
-from . import FileSystem
-from scalarizr.storage import _system
-from scalarizr.util import system
 from . import MOUNT_PATH, MKFS_PATH
+from . import FileSystem, device_should_exists, system 
 
-JFS_TUNE_PATH	= "/sbin/jfs_tune"
+from scalarizr.util import disttool
+
+import re
+import os
+
+
+JFS_TUNE_PATH	= '/sbin/jfs_tune'
 
 class JfsFileSystem(FileSystem):
+	name = 'jfs'
+	umount_on_resize = False
 		
-	_fsname 		 = None
-	__label_re 		 = None
-	umount_on_resize = None
+	_label_re  = None
 	
 	def __init__(self):
-		self._fsname    = 'jfs'
-		self.__label_re  = re.compile("volume\s+label:\s+'(?P<label>.*)'", re.IGNORECASE)
-		umount_on_resize = False
+		self._label_re  = re.compile("volume\s+label:\s+'(?P<label>.*)'", re.IGNORECASE)
+		if not os.path.exists(JFS_TUNE_PATH):
+			system(('/sbin/modprobe', 'jfs'), error_text="Cannot load 'jfs' kernel module")
+			if disttool.is_redhat_based():
+				system(('/usr/bin/yum', '-y', 'install', 'jfsutils'))
+			else:
+				system(('/usr/bin/apt-get', '-y', 'install', 'jfsutils'))			
 		
+	@device_should_exists
 	def mkfs(self, device, **options):
-		if not os.path.exists(device):
-			raise Exception("Device %s doesn't exist." % device)
+		cmd = (MKFS_PATH, '-t', self.name, '-q', device)
+		system(cmd, error_text=self.E_MKFS % device)
 		
-		cmd = '%s -t %s -q %s' % (MKFS_PATH, self._fsname, device)
-		error = "Error occured during filesystem creation on device '%s'" % device
-		_system(cmd, error)
-
-		
+	@device_should_exists		
 	def set_label(self, device, label):
-		out,err,rcode = system('%s -L "%s" %s' % (JFS_TUNE_PATH, label, device))
-		if rcode or err:
-			raise Exception("Error while setting label for device '%s'.\
-							 Return code: %s.\nSTDERR: %s " % (device, rcode, err))
+		cmd = (JFS_TUNE_PATH, '-L', label, device)
+		system(cmd, error_text=self.E_SET_LABEL % device)
 	
+	@device_should_exists
 	def get_label(self, device):
-		cmd = '%s -l %s' % (JFS_TUNE_PATH, device)
-		error = "Error while getting info for device '%s'" % device
-		out = _system(cmd, error)
+		cmd = (JFS_TUNE_PATH, '-l', device)
+		error_text = 'Error while listing contents of the JFS file system on device %s' % device
+		out = system(cmd, error_text=error_text)[0]
 		
-		res = re.search(self.__label_re, out)
-		if not res:
-			raise Exception("Volume label wasn't found in jfs_tune's output")
-		return res.group('label')
+		res = re.search(self._label_re, out)
+		return res.group('label') if res else ''
 	
+	@device_should_exists
 	def resize(self, device, size=None, **options):
-		if not os.path.exists(device):
-			raise Exception("Device %s doesn't exist." % device)
-		
-		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % device, system(MOUNT_PATH)[0])
-		if not res:
-			raise Exception('Mount device before resizing jfs file system')
-		
-		mpoint = res.group('mpoint')
-		cmd = '%s -o remount,resize %s' % (MOUNT_PATH, mpoint)
-		error = 'Error occured during filesystem remount. Mpoint: %s' % mpoint
-		_system(cmd, error)		
+		mpoint = self._check_mounted(device)
+		cmd = (MOUNT_PATH, '-o', 'remount,resize', mpoint)
+		system(cmd, error_text=self.E_RESIZE % device)		
 
-filesystems = dict(JfsFileSystem=('jfs'))
+__filesystem__ = JfsFileSystem
