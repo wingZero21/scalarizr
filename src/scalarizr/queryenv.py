@@ -30,6 +30,57 @@ class QueryEnvService(object):
 		self.key_path = key_path
 		self.api_version = api_version
 	
+	def fetch(self, command, **params):
+		"""
+		@return object
+		"""
+		# Perform HTTP request
+		url = "%s/%s/%s" % (self.url, self.api_version, command)
+		request_body = {}
+		request_body["operation"] = command
+		request_body["version"] = self.api_version
+		if {} != params :
+			for key, value in params.items():
+				request_body[key] = value
+		
+		file = open(self.key_path)
+		key = binascii.a2b_base64(file.read())
+		file.close()
+
+		signature, timestamp = sign_http_request(request_body, key)		
+		
+		post_data = urlencode(request_body)
+		headers = {
+			"Date": timestamp, 
+			"X-Signature": signature, 
+			"X-Server-Id": self.server_id
+		}
+		response = None
+		try:
+			self._logger.debug("QueryEnv request: %s", post_data)
+			req = Request(url, post_data, headers)
+			response = urlopen(req)
+		except URLError, e:
+			if isinstance(e, HTTPError):
+				resp_body = e.read() if e.fp is not None else ""
+				raise QueryEnvError("Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body))				
+			else:
+				host, port = splitnport(req.host, req.port or 80)
+				raise QueryEnvError("Cannot connect to QueryEnv server on %s:%s. %s" 
+						% (host, port, str(e)))
+
+		resp_body = response.read()
+		self._logger.debug("QueryEnv response: %s", resp_body)
+
+
+		# Parse XML response
+		xml = None
+		try:
+			xml = xml_strip(parseString(resp_body))
+		except (Exception, BaseException), e:
+			raise QueryEnvError("Cannot parse XML. %s" % [str(e)])		
+		return xml
+	
 	
 	def list_roles (self, role_name=None, behaviour=None):
 		"""
@@ -111,58 +162,11 @@ class QueryEnvService(object):
 		pass
 
 	def _request (self, command, params={}, response_reader=None, response_reader_args=None):
-		"""
-		@return object
-		"""
-		# Perform HTTP request
-		url = "%s/%s/%s" % (self.url, self.api_version, command)
-		request_body = {}
-		request_body["operation"] = command
-		request_body["version"] = self.api_version
-		if {} != params :
-			for key, value in params.items():
-				request_body[key] = value
-		
-		file = open(self.key_path)
-		key = binascii.a2b_base64(file.read())
-		file.close()
-
-		signature, timestamp = sign_http_request(request_body, key)		
-		
-		post_data = urlencode(request_body)
-		headers = {
-			"Date": timestamp, 
-			"X-Signature": signature, 
-			"X-Server-Id": self.server_id
-		}
-		response = None
-		try:
-			self._logger.debug("QueryEnv request: %s", post_data)
-			req = Request(url, post_data, headers)
-			response = urlopen(req)
-		except URLError, e:
-			if isinstance(e, HTTPError):
-				resp_body = e.read() if e.fp is not None else ""
-				raise QueryEnvError("Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body))				
-			else:
-				host, port = splitnport(req.host, req.port or 80)
-				raise QueryEnvError("Cannot connect to QueryEnv server on %s:%s. %s" 
-						% (host, port, str(e)))
-
-		resp_body = response.read()
-		self._logger.debug("QueryEnv response: %s", resp_body)
-
-
-		# Parse XML response
-		xml = None
-		try:
-			xml = xml_strip(parseString(resp_body))
-		except (Exception, BaseException), e:
-			raise QueryEnvError("Cannot parse XML. %s" % [str(e)])
+		xml = self.fetch(command, **params)
 		response_reader_args = response_reader_args or ()
 		return response_reader(xml, *response_reader_args)
 
-		
+	
 	def _read_list_roles_response(self, xml):
 		ret = []
 		
@@ -346,8 +350,12 @@ class Mountpoint(object):
 	is_array = False
 	volumes  = None
 	
-	def __init__(self):
-		self.volumes = []
+	def __init__(self, name=None, dir=None, create_fs=False, is_array=False, volumes=None):
+		self.volumes = volumes or []
+		self.name = name
+		self.dir = dir
+		self.create_fs = create_fs
+		self.is_array = is_array
 	
 	def __str__(self):
 		opts = (self.name, self.dir, self.create_fs, len(self.volumes))
@@ -363,6 +371,10 @@ class Mountpoint(object):
 class Volume(object):
 	volume_id  = None
 	device = None
+	
+	def __init__(self, volume_id, device):
+		self.volume_id = volume_id
+		self.device = device
 	
 	def __str__(self):
 		return "qe:Volume(volume_id: %s, device: %s)" % (self.volume_id, self.device)
@@ -414,6 +426,12 @@ class Script(object):
 	exec_timeout = None 
 	name = None
 	body = None
+	
+	def __init__(self, asynchronous=False, exec_timeout=None, name=None, body=None):
+		self.asynchronous = asynchronous
+		self.exec_timeout = exec_timeout
+		self.name = name
+		self.body = body
 	
 	def __repr__(self):
 		return "asynchronous = " + str(self.asynchronous) \
