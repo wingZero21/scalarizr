@@ -54,7 +54,24 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			pass
 		
 		initdv2.ParametrizedInitScript.__init__(self, SERVICE_NAME, 
-				initd_script, pid_file, socks=[initdv2.SockParam(3306)])
+				initd_script, pid_file, socks=[initdv2.SockParam(3306, timeout=60)])
+		'''
+		timeout=60 is no chance
+		when server starts after rebundle, mysql takes too long to start on the attached EBS storage.
+		
+		Scalarizr:
+		2010-12-02 10:31:12,086 - INFO - scalarizr.handlers - Starting mysql
+		
+		MySQL:
+		Version: '5.1.41-3ubuntu12.7-log'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  (Ubuntu)
+		101202 10:31:30 [Note] Plugin 'FEDERATED' is disabled.
+		101202 10:31:31  InnoDB: Started; log sequence number 0 44556
+		101202 10:31:31 [Note] Event Scheduler: Loaded 0 events
+		
+		Over 15 seconds! OMFG!!
+		XXX: Requires investigation
+		'''
+		
 		
 	def stop(self):
 		if not self.running:
