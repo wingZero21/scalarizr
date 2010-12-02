@@ -2,7 +2,7 @@
 Created on Jul 23, 2010
 
 @author: marat
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 
 # Core
