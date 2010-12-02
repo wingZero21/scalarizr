@@ -6,6 +6,7 @@ from .fs import MOUNT_EXEC, UMOUNT_EXEC, SYNC_EXEC
 from scalarizr.util import system2, PopenError, firstmatched, wait_until
 from scalarizr.util.filetool import read_file
 from scalarizr.libs.metaconf import Configuration
+from scalarizr.util.filetool import read_file
 
 import urlparse
 import subprocess
@@ -17,7 +18,13 @@ import re
 import time
 import glob
 import signal
+import base64
 from binascii import hexlify
+
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
 
 
@@ -60,6 +67,34 @@ vol = Storage.create_ephs('/dev/sdb', 'dbstorage',
 
 vol.restore(snap)
 vol.mount('/mnt/mysql-storage')
+
+
+
+# ebs-raid0-ext3
+1. Create and snapshot
+ec2_vol1 = ec2.create_volume('us-east-1a', 20)
+ec2.attach_volume(ec2_vol1.id, '/dev/sdh')
+ebs1 = EbsVolume('/dev/sdh', ec2_volume_id=ec2_vol1.id)
+
+ec2_vol2 = ec2.create_volume('us-east-1a', 20)
+ec2.attach_volume(ec2_vol2.id, '/dev/sdg')
+ebs2 = EbsVolume('/dev/sdh', ec2_volume_id=ec2_vol2.id)
+
+def create_snap_pv():
+	vol = ec2.create_volume('us-east-1a', 1)
+	return EbsVolume('/dev/sdj', ec2_volume_id=vol.id)
+
+raid = Storage.create_raid((ebs1, ebs2), level=0, snap_pv=create_snap_pv)
+raid.mkfs('ext3')
+raid.mount('/mnt/mysql-storage')
+
+snap = raid.snapshot('mysql data bundle 2010-12-02')
+
+
+2. Restore from snapshot
+
+
+Storage.restore_raid()
 
 
 
@@ -112,7 +147,8 @@ def mkloop(filename, size=None, quick=False):
 	return devname
 
 def listloop():
-	# TODO
+	devices = system(('/sbin/losetup', '-a'))[0].strip()
+	
 	pass
 
 def rmloop(device):
@@ -159,12 +195,19 @@ ResourceMgr.reset()
 
 class Storage:
 	_lvm = None
+	_mdadm = None
 	
 	@staticmethod
 	def _init_lvm():
 		self = Storage
 		if not self._lvm:
 			self._lvm = Lvm2()
+	
+	@staticmethod
+	def _init_mdadm():
+		self = Storage
+		if not self._mdadm:
+			self._mdadm = Mdadm()
 	
 	@staticmethod
 	def create_ephs(device, vg_name, vg_options=None, 
@@ -218,8 +261,22 @@ class Storage:
 				
 				
 	@staticmethod
-	def create_raid(devices, level):
-		pass
+	def create_raid(volumes, level, vg_name=None, vg_options=None, snap_pv=None, mpoint=None, fstype=None):
+		self = Storage
+
+		self._init_mdadm()
+		raid_pv = self._mdadm.create(list(vol.devname for vol in volumes), level)
+
+		self._init_lvm()
+		vg_name = vg_name or os.path.basename(raid_pv)
+		vg_options = vg_options or dict()
+		self._lvm.create_pv(raid_pv)
+		raid_vg = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
+		
+		raid_lv = self._lvm.create_lv(vg_name, extents='100%FREE')
+		
+		return RaidVolume(raid_lv, mpoint, fstype, raid_pv, snap_pv, raid_vg, volumes)
+		
 
 	@staticmethod
 	def remove_raid(vol):
@@ -540,4 +597,50 @@ class EphSnapshotBackend(IEphSnapshotBackend):
 	
 	
 class RaidVolume(Volume):
-	pass
+	raid_pv = None
+	snap_pv = None
+	raid_vg = None
+	volumes = None
+
+	_snap_pv_creator = None
+	
+	def __init__(self, devname, mpoint=None, fstype=None, raid_pv=None, snap_pv=None, raid_vg=None, volumes=None):
+		Volume.__init__(self, devname, mpoint, fstype)
+		self.raid_pv = raid_pv
+		if callable(snap_pv):
+			self._snap_pv_creator = snap_pv
+		else:
+			self.snap_pv = snap_pv
+		self.raid_vg = raid_vg
+		self.volumes = volumes
+		self._lvm = Lvm2()
+
+	def _create_snapshot(self, description):
+		snap_pv = self.snap_pv or self._snap_pv_creator()
+		try:
+			self._lvm.pv_info(snap_pv)
+		except LookupError:
+			self._lvm.create_pv((snap_pv,))
+		
+		if not self._lvm.pv_info(snap_pv).vg == self.raid_vg:
+			self._lvm.extend_vg(self.raid_vg, (snap_pv,))
+			
+		self._lvm.create_lv_snapshot(self.devname, 'backup', '100%FREE')
+		raw_id = {}
+		raw_id['type'] 		= 'raid'
+		raw_id['voltype']	= self.volumes[0].__class__
+		raw_id['snapshots'] = []
+		for vol in self.volumes:
+			raw_id['snapshots'].append(vol.snapshot(description).id)
+		
+		lvmgroupcfg = read_file('/etc/lvm/backup/%s' % self.raid_vg)
+		if lvmgroupcfg is None:
+			raise StorageError('Backup file for volume group "%s" does not exist' % self.raid_vg)
+		raw_id['lvmgroupcfg'] = base64.b64encode(lvmgroupcfg)
+		id = json.dumps(raw_id)
+		
+		'''
+		id = "{type: raid, voltype: ebs, snapshots:[], level: 0, lvmgroupcfg: base64encoded}"
+		'''
+		
+		return Snapshot(id, description)

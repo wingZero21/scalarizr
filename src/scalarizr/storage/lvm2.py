@@ -76,7 +76,7 @@ class Lvm2:
 	
 	def __init__(self):
 		if disttool.is_debian_based():
-			system(['sbin/modprobe', 'dm_mod', 'dm_snapshot'], 
+			system(['/sbin/modprobe', 'dm_mod', 'dm_snapshot'], 
 					error_text='Cannot load device mapper kernel module')
 		
 	def _parse_status_table(self, name, ResultClass):
