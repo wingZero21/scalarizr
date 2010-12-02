@@ -1,7 +1,7 @@
 '''
 Created on Jul 21, 2010
 
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 
 from scalarizr.util import system
