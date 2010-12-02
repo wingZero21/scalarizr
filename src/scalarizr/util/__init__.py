@@ -6,6 +6,7 @@ import time
 import sys
 import socket
 import signal
+import string
 from collections import namedtuple
 
 from scalarizr.bus import bus
@@ -349,8 +350,9 @@ def split_ex(value, separator=",", allow_empty=False, ct=list):
 
 
 def get_free_devname():
+	#[o..z]
 	dev_list = os.listdir('/dev')
-	for letter in map(chr, range(111, 123)):
+	for letter in string.ascii_lowercase[14:]:
 		device = 'sd'+letter
 		if not device in dev_list:
 			return '/dev/'+device
