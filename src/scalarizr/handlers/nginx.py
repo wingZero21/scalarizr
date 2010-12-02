@@ -269,7 +269,7 @@ class NginxHandler(ServiceCtlHanler):
 				and os.access(self._cnf.key_path("https.crt"), os.F_OK) \
 				and os.access(self._cnf.key_path("https.key"), os.F_OK):
 			self._logger.debug('Add https include %s', self._https_inc_path)
-			backend_include.add('include', self._https_inc_path + ';')
+			backend_include.add('include', self._https_inc_path)
 		
 		old_include = None
 		if os.path.isfile(self._app_inc_path):
