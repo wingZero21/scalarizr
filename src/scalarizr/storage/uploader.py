@@ -24,7 +24,7 @@ class Transfer(object):
 
 	def upload(self, files, UploadDest, progress_cb=None):
 		action = UploadDest.run('put')	
-		self._transfer(files, UploadDest, action)
+		return self._transfer(files, UploadDest, action)
 		
 	def download(self, place, DownloadSrc):
 		files = DownloadSrc.get_list_files()
@@ -98,6 +98,9 @@ class UploadDest:
 		pass
 	
 	def get_list_files(self):
+		pass
+	
+	def get_prefix(self):
 		pass
 	
 	def run(self, action, dest=None):

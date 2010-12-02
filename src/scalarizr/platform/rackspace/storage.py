@@ -65,6 +65,9 @@ class CloudFilesUploadDest(uploader.UploadDest):
 		except (cloudfiles.errors.ResponseError, OSError, Exception), e:
 			raise uploader.TransferError, e
 		return os.path.join(self.container_name, dest_path)
+	
+	def get_prefix(self):
+		return self.prefix
 		
 	def get_list_files(self):
 		connection = self._get_connection()

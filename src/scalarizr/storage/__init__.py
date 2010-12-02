@@ -43,11 +43,24 @@ snap = vol.snapshot()
 
 
 # eph-lvm-ext3
-vol = mgr.create_reliable_volume(device='/dev/sdb', shadow='/dev/sdd', 
-		snapshot_backend=CloudfilesSnapshotBackend('/container/key-basename')
-vol = mgr.lvm_wrapper(vol, buffer_device='/dev/loop0')
+1. Create and snapshot
+vol = Storage.create_ephs('/dev/sdb', 'dbstorage', 
+		snap_backend=EphSnapshotBackend('cf', *('container', 'path/to/snap')))
 vol.mkfs('ext3')
-snap = vol.snapshot()
+vol.mount('/mnt/mysql-storage')
+...
+snap = vol.snapshot('mysql backup 2010-12-02 15:10')
+print snap
+(id: 'cf://container/path/to/snap/snap-23aef662/manifest.ini', description: 'mysql backup 2010-12-02 15:10')
+
+
+2. Restore
+vol = Storage.create_ephs('/dev/sdb', 'dbstorage', 
+		snap_backend=CloudfilesSnapshotBackend('container', 'path/to/snap'))
+
+vol.restore(snap)
+vol.mount('/mnt/mysql-storage')
+
 
 
 # eph-xfs
@@ -472,7 +485,7 @@ class EphSnapshotProvider(IEphSnapshotProvider):
 			md5sum_a = self._md5sum(chunkpath)
 			if md5sum_a != md5sum_o:
 				raise StorageError(
-						'Chunk file %s checksum mismatch. Actial md5sum %s != %s defined in snapshot manifest', 
+						'Chunk file %s checksum mismatch. Actual md5sum %s != %s defined in snapshot manifest', 
 						chunkpath, md5sum_a, md5sum_o)
 		
 		# Restore chunks 
@@ -506,18 +519,24 @@ class EphSnapshotProvider(IEphSnapshotProvider):
 
 
 class EphSnapshotBackend(IEphSnapshotBackend):
-	uploader = None
-	def __init__(self, scheme, uploader):
+	transfer = None
+	def __init__(self, scheme, *transfer_args):
+		'''
 		self.scheme = scheme
-		self.uploader = uploader
-	
+		self.transfer = transfer
+		self.upload_dest = upload_dest
+		'''
 	def upload(self, snapshot, tranzit_path):
-		# Save snapshot from `tranzit_vol` to cloud storage and updates it `id`
-		pass
+		mnf = Configuration('ini')
+		mnf.read(os.path.join(tranzit_path, snapshot.id))
+		files = [os.path.join(tranzit_path, chunk) for chunk in mnf.get_dict('chunks')]
+		
+		self.transfer.upload(files, self.upload_dest)
+		snapshot.id = self.scheme + '://' + self.upload_dest.get_prefix()
 	
 	def download(self, id, tranzit_path):
 		# Load snapshot from cloud storage to `tranzit_vol` (it should be mounted)
-		pass
+		self.transfer.download(tranzit_path, self.upload_dest)
 	
 	
 class RaidVolume(Volume):

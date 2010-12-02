@@ -65,6 +65,9 @@ class S3UploadDest(uploader.UploadDest):
 			raise uploader.TransferError, e
 		return os.path.join(self.bucket.name, dest_path)
 	
+	def get_prefix(self):
+		return self.prefix
+	
 	def get_list_files(self):
 		files = [key.name for key in self.bucket.get_all_keys(prefix=self.prefix)] \
 			if self.prefix else [key.name for key in self.bucket.get_all_keys()]
