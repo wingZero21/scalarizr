@@ -22,7 +22,7 @@ when "fedora"
     execute "yum -y install scalarizr"  
 end
 
-node[:szr][:behaviour].each do |behaviour|
+node[:scalarizr][:behaviour].each do |behaviour|
    execute "scalarizr -ay #{behaviour}"
 end
 

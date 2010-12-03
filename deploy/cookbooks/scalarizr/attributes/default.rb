@@ -1,1 +1,2 @@
-default[:szr][:behaviour] = [ "base" ]
+default[:scalarizr][:behaviour] = [ "base" ]
+default[:scalarizr][:serverid]  = None

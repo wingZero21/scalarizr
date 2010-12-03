@@ -1,33 +1,49 @@
 #!/bin/bash
 
-rhel=$(python -c "import platform; d = platform.dist(); print int(d[0].lower() in ['centos', 'rhel', 'redhat'] and d[1].split('.')[0])")
-fedora=$(python -c "import platform; d = platform.dist(); print int((d[0].lower() == 'fedora' or (d[0].lower() == 'redhat' and d[2].lower() == 'werewolf')) and d[1].split('.')[0])")
+log=/var/log/role-builder.log
 
-echo "Installing ruby"
+do_log () {
+	_col=$(stty -a | grep columns | awk '{print $7}' | sed 's/;//')
+	echo -ne $2
+	len=${#2}
+	eval $1 >> $log 2>&1
+	
+	if [ "$?" -ne 0 ]; then
+		printf "%$[_col-20-len]s [ \e[1;31mFailed\e[0m ]\r\nSee $log fore more info.\r\n"
+		exit 1
+	else
+		printf "%$[_col-20-len]s [ \e[1;32mOK\e[0m ]\r\n"
+	fi
+	
+	echo -e '\r\n\r\n' >> $log
+}
+
+rhel=$(python -c "import platform; d = platform.dist(); print int(d[0].lower() in ['centos', 'rhel', 'redhat'] and d[1].split('.')[0])")
+fedora=$(python -c "import platform; d = platform.dist(); print int((d[0].lower() == 'fedora' or (d[0].lower() == 'redhat' and d[2].lower() == 'werewolf')) a
+nd d[1].split('.')[0])")
+
 if [ "$rhel" -eq 0 ] && [ "$fedora" -eq 0 ]; then
-        sudo apt-get update && sudo apt-get -y install ruby ruby-dev libopenssl-ruby rdoc ri irb build-essential wget ssl-cert 1>/dev/null
+	do_log "sudo apt-get update && sudo apt-get -y install ruby ruby1.8-dev libopenssl-ruby rdoc ri irb build-essential wget ssl-cert" \
+			"Installing essential packages (ruby, build-essential, etc)"
 else
-        sudo rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm  1>/dev/null
-		sudo rpm -Uvh http://download.elff.bravenet.com/5/i386/elff-release-5-3.noarch.rpm               1>/dev/null
-		sudo yum -y install ruby ruby-shadow ruby-ri ruby-rdoc gcc gcc-c++ ruby-devel ruby-static        1>/dev/null
+	do_log "sudo rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm" "Installing EPEL repository"
+	do_log "sudo rpm -Uvh http://download.elff.bravenet.com/5/i386/elff-release-5-3.noarch.rpm" "Installing ELFF repository"
+	do_log "sudo yum -y install ruby ruby-shadow ruby-ri ruby-rdoc gcc gcc-c++ ruby-devel ruby-static" "Installing ruby"
 fi
 
 cd /tmp
-echo "Downloading rubygems"
-wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz    1>/dev/null
-tar zxf rubygems-1.3.7.tgz                                            1>/dev/null
+do_log "wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz" "Downloading rubygems"
+do_log "tar zxf rubygems-1.3.7.tgz" "Unpacking rubygems"
 cd rubygems-1.3.7
-echo "Installing rubygems"
-ruby setup.rb --no-format-executable                                  1>/dev/null
-echo "Installing chef"
-gem install chef --no-ri --no-rdoc                                    1>/dev/null
+do_log "ruby setup.rb --no-format-executable" "Installing rubygems"
+do_log "gem install chef --no-ri --no-rdoc" "Installing chef"
 mkdir -p /tmp/chef-solo
-echo "Configuring chef"
-echo -e 'file_cache_path "/tmp/chef-solo"\r\ncookbook_path "/tmp/chef-solo"' > /etc/solo.rb
+do_log 'echo -e "file_cache_path \"/tmp/chef-solo\"\r\ncookbook_path \"/tmp/chef-solo\"" | tee /etc/solo.rb' "Creating chef configuration file"
 cd /tmp/chef-solo
-echo "Downloading and unpacking cookbooks"
-wget http://ge.tt/67CQ4JJ/recipes.tar.gz 1>/dev/null
-tar zxvf recipes.tar.gz && rm -f recipes.tar.gz 1>/dev/null
-echo -e '{ "recipes": [ "scalarizr", "nginx", "mysql::server" ] }' > /tmp/soft.json
-echo "Installing software"
-chef-solo -c /etc/solo.rb -j /tmp/soft.json 1>/dev/null
+do_log "wget http://ge.tt/67CQ4JJ/recipes.tar.gz" "Downloading essential cookbooks"
+do_log "tar zxvf recipes.tar.gz && rm -f recipes.tar.gz" "Unpacking cookbooks"
+do_log 'echo -e "{ \"scalarizr\": { \"behaviour\": [\"mysql\", \"app\"]}, \"run_list\": [ \"recipe[nginx]\", \"recipe[mysql::server]\", \"recipe[scalarizr]\"
+ ] }" | tee /tmp/soft.json' "Creating runlist"
+do_log "chef-solo -c /etc/solo.rb -j /tmp/soft.json" "Installing software. It can take a while"
+echo "Done!"
+exit 0
