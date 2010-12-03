@@ -180,7 +180,8 @@ class ScriptExecutor(Handler):
 			if not shebang:
 				stderr.write('Script execution failed: Shebang not found.')
 				elapsed_time = 0
-				
+			elif not os.path.exists(shebang):
+				stderr.write('Script execution failed: Interpreter %s not found.' % shebang)				
 			else:
 				# Start process
 				try:
