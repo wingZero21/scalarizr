@@ -9,6 +9,37 @@ import logging
 from Queue import Queue, Empty
 from threading import Thread, Lock
 
+'''
+Example:
+
+trn = Transfer(pool=5, max_attempts=3)
+trn.upload(files, 'cf://container/path/to/candy')
+trn.download('s3://scalr-files/path/to/some-shit/', dst, recursive=True)
+
+Create separate envirounment for each operation
+
+trn.upload(files, 'cf://container/path/to/candy', pvd_options=None)
+  -> pvd = self._resolve_path(path, pvd_options=None)
+  -> create queue
+  -> create pool
+  -> start pool
+  -> pvd.put(file, os.path.join(path, os.path.basename(file)))
+  -> return tuple of remote path
+  
+  
+trn.download('s3://scalr-files/path/to/some-shit/', dst, recursive=True)
+	-> pvd = self._resolve_path()
+	-> if recursive:
+	->     files = pvd.list(path)
+	-> else:
+	->     files = (path,)
+	-> create queue
+	-> create pool
+	-> start pool
+	-> pvd.get(remote_path, os.path.join(dst, os.path.basename(remote_path)))
+	-> return tuple of local path
+'''
+
 class TransferError(BaseException):
 	pass
 
@@ -16,13 +47,29 @@ class Transfer(object):
 	_queue = None
 	state = None
 	
+	@staticmethod
+	def explore_provider(pvd):
+		pass
+	
+	@staticmethod
+	def lookup_provider(schema):
+		pass
+
+	@staticmethod
+	def create(*args, **kwargs):
+		pass
+
+	def _resolve_path(self, path):
+		
+		pass
+	
 	def __init__(self, pool=2, max_attempts=3, logger=None):
 		self._logger = logger or logging.getLogger(__name__) 
 		self._queue = Queue()
 		self._pool = pool
 		self._max_attempts = max_attempts
 
-	def upload(self, files, UploadDest, progress_cb=None):
+	def upload(self, files, pvd, progress_cb=None):
 		action = UploadDest.run('put')	
 		return self._transfer(files, UploadDest, action)
 		
@@ -31,6 +78,7 @@ class Transfer(object):
 
 		action = DownloadSrc.run('get', place)
 		self._transfer(files, DownloadSrc, action)	
+	
 	
 	def _transfer(self, files, UploadDest, action, progress_cb=None):
 		# Enqueue 
@@ -88,6 +136,25 @@ class Transfer(object):
 							self._failed_files_lock.release()
 		except Empty:
 			return	
+
+
+class TransferProvider:
+	schema = None
+	
+	def __init__(self, path=None, **kwargs):
+		pass
+	
+	def cd(self, remote_path):
+		pass
+	
+	def put(self, local_path, remote_path):
+		pass
+	
+	def get(self, remote_path, local_path, recursive=False):
+		pass
+	
+	def list(self, remote_path):
+		pass
 
 
 class UploadDest:

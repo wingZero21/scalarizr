@@ -7,14 +7,13 @@ import unittest
 
 from scalarizr.util import system2 as system
 from scalarizr.storage import mkloop, ResourceMgr, IEphSnapshotBackend, Volume,\
-	Snapshot, Storage, IEphSnapshotProvider, EphVolume, StorageError
+	Snapshot, Storage, EphVolume, StorageError, VolumeProvider
 from scalarizr.storage.fs import FileSystem
 
 import os
 import time
 from random import randint
 import shutil
-from scalarizr.libs.metaconf import Configuration
 
 
 class TestMkloop(unittest.TestCase):
@@ -100,14 +99,14 @@ class TestVolume(unittest.TestCase):
 			os.removedirs(self.mpoint)
 	
 	def test(self):
-		vol = Volume(self.device, self.mpoint, 'ext3')
+		vol = Volume(self.device, self.mpoint)
 		
 		# When trying to do filesystem operations without having a fs on volume ValueError raises
 		self.assertRaises(StorageError, vol.freeze)
 		self.assertRaises(StorageError, vol.unfreeze)
 		
 		# After creating a filesystem ValueError dissapears
-		vol.mkfs()
+		vol.mkfs('ext3')
 		self.assertTrue(vol.fstype, 'ext3')
 		vol.freeze()
 		vol.unfreeze()
@@ -128,141 +127,121 @@ class TestVolume(unittest.TestCase):
 		self.assertTrue(snap.id is None)
 		self.assertEqual(snap.description, 'test snap')
 
+class TestStorageProviders(unittest.TestCase):
+	_save_snap_pvd = None
+	_save_vol_pvd = None
+	_save_pvds = None
 
-'''
-class TestEphStorageCreate(unittest.TestCase):
-	filename = None
-	device = None
-	vol = None
-
-	def setUp(self):
-		self.filename = '/tmp/pv%s' % randint(11, 99)
-		self.device = mkloop(self.filename, size=200)
-		self.mpoint = '/mnt/ephstorage'
-		if not os.path.exists(self.mpoint):
-			os.makedirs(self.mpoint)
-
-	def tearDown(self):
-		if self.vol:
-			Storage.remove_ephs(self.vol)
-		if self.device:
-			system(('/sbin/losetup', '-d', self.device))
-		if os.path.exists(self.filename):
-			os.remove(self.filename)
-		os.removedirs(self.mpoint)
-	
-	def test_1(self):
-		class SnapProvider(IEphSnapshotProvider):
-			tc = self
-			def create(self, snapshot, volume, tranzit_path):
-				self.tc.assertTrue(isinstance(snapshot, Snapshot))
-				self.tc.assertTrue(isinstance(volume, EphVolume))
-				self.tc.assertTrue(os.access(tranzit_path, os.W_OK | os.F_OK))
-			
-			def restore(self, volume, tranzit_path):
-				self.tc.assertTrue(isinstance(volume, Volume))
-				self.tc.assertTrue(os.access(tranzit_path, os.W_OK | os.F_OK))
-				
-		class SnapBackend(IEphSnapshotBackend):
-			scheme = 'my'
-			def upload(self, snapshot, tranzit_path):
-				snapshot.id = 'my://bucket/path/to/snap'
-				
-		ResourceMgr.explore_snapshot_backend('my', SnapBackend)
-		
-		self.vol = Storage.create_ephs(self.device, 'dbstorage', 
-								snap_pvd=SnapProvider(), snap_backend=SnapBackend())
-		snap = self.vol.snapshot()
-		self.vol.restore(snap)
-'''	
-
-class TestEphStorageSnapshotRestore(unittest.TestCase):
+	class MyPvd(VolumeProvider):
+		type = 'myvol'
 	
 	def setUp(self):
-		self.filenames = []
-		self.devices = []
-		self.mpoints = ('/mnt/storage', '/mnt/snapshot', '/mnt/storage2')
-		self.vols = [None, None, None]		
-		for i in range(3):
-			self.filenames.append('/tmp/pv%s' % randint(11, 99))
-			self.devices.append(mkloop(self.filenames[i], size=100, quick=True))
-			if not os.path.exists(self.mpoints[i]):
-				os.makedirs(self.mpoints[i])
+		self._save_pvds = Storage.providers.copy()
+		Storage.providers.clear()
+		self._save_snap_pvd, Storage.default_snap_provider = Storage.default_snap_provider, None
+		self._save_vol_pvd, Storage.default_vol_provider = Storage.default_vol_provider, None
 
 	def tearDown(self):
-		for vol in self.vols:
-			if vol:
-				vol.umount()
-				if isinstance(vol, EphVolume):
-					Storage.remove_ephs(vol)
-		for device in self.devices:
-			system(('/sbin/losetup', '-d', device))
-		for file in self.filenames:
-			os.remove(file)
-		for mpoint in self.mpoints:
-			os.removedirs(mpoint)
-
-	def test_1(self):
-		class SnapBackend(IEphSnapshotBackend):
-			scheme = 'file'
-			tc = None
-			def __init__(self, dest_path=None):
-				self.dest_path = dest_path
-				
-			def upload(self, snapshot, tranzit_path):
-				manifest = Configuration('ini')
-				manifest.read(snapshot.id)				
-				
-				self.tc.assertEqual(manifest.get('snapshot/description'), 'snapall')
-				self.tc.assertTrue(manifest.get('snapshot/created_at'))
-				self.tc.assertTrue(manifest.get('snapshot/pack_method'))
-				self.tc.assertTrue(len(manifest.get_dict('chunks')) > 0)
-				
-				for chunk, md5sum in manifest.items('chunks'):
-					shutil.copy(os.path.join(tranzit_path, chunk), self.dest_path)
-				shutil.copy(snapshot.id, self.dest_path)
-				
-				snapshot.id = self.scheme + '://' + self.dest_path
+		Storage.providers = self._save_pvds
+		Storage.default_snap_provider = self._save_snap_pvd
+		Storage.default_vol_provider = self._save_vol_pvd
+	
+	def test_explore_provider(self):
+		Storage.explore_provider(self.MyPvd)
+		self.assertFalse(Storage.default_snap_provider)
+		self.assertFalse(Storage.default_vol_provider)
+		self.assertTrue(isinstance(Storage.lookup_provider(self.MyPvd.type), self.MyPvd))
+	
+	def test_explore_default_provider(self):
+		Storage.explore_provider(self.MyPvd, True)
+		self.assertFalse(Storage.default_snap_provider)
+		self.assertEqual(Storage.default_vol_provider, self.MyPvd.type)
+		
+		self.assertTrue(isinstance(Storage.lookup_provider(self.MyPvd.type), self.MyPvd))
+		self.assertTrue(isinstance(Storage.lookup_provider(), self.MyPvd))
+		
+	def test_explore_default_provider2(self):
+		Storage.explore_provider(self.MyPvd, default_for_snap=True)
+		self.assertEqual(Storage.default_snap_provider, self.MyPvd.type)
+		self.assertFalse(Storage.default_vol_provider)
+		
+		self.assertTrue(isinstance(Storage.lookup_provider(self.MyPvd.type), self.MyPvd))
+		self.assertTrue(isinstance(Storage.lookup_provider(None, True), self.MyPvd))
+	
+	
+class TestStorageCreate(unittest.TestCase):
+	class Vol(Volume):
+		def __init__(self, *args, **kwargs):
+			if kwargs:
+				for k, v in kwargs.items():
+					setattr(self, k, v)
+			Volume.__init__(self, *args, **kwargs)
 			
-				
-			def download(self, id, tranzit_path):
-				src_path = id[len(self.scheme + '://'):]
-				for file in os.listdir(src_path):
-					if not 'lost+found' in file:
-						shutil.copy(file, tranzit_path)
-		
-		self.vols[1] = Volume(self.devices[1], self.mpoints[1], 'ext3')
-		self.vols[1].mkfs()
-		self.vols[1].mount()
-		backend = SnapBackend(self.mpoints[1])
-		backend.tc = self
+	class VolPvd(VolumeProvider):
+		type = 'myvol'
+	
+	def setUp(self):
+		self.VolPvd.vol_class = self.Vol
+		Storage.explore_provider(self.VolPvd)
 
-		bigfile = os.path.join(self.mpoints[0], 'bigfile')
-		
-		# Create and mount storage
-		self.vols[0] = Storage.create_ephs(self.devices[0], 'casstorage', snap_backend=backend)
-		self.vols[0].mkfs('ext3')
-		self.vols[0].mount(self.mpoints[0])
-		
-		# Create big file
-		system(('dd', 'if=/dev/urandom', 'of=%s' % bigfile, 'bs=1M', 'count=30'))
-		bigsize = os.path.getsize(bigfile)
-		self.assertTrue(bigsize > 0)
-		md5sum = system(('/usr/bin/md5sum', bigfile))[0].strip().split(' ')[0]		
-		
-		# Snapshot storage
-		snap = self.vols[0].snapshot('snapall')
+	def tearDown(self):
+		pass
+	
+	def test_create_by_string_args(self):
+		vol = Storage.create('/dev/sdb')
+		self.assertEqual(vol.devname, '/dev/sdb')
 
-		# Restore snapshot on storage 2
-		self.vols[2] = Storage.create_ephs(self.devices[2], 'casstorage2')
-		self.vols[2].restore(snap)
-		self.vols[2].mount(self.mpoints[2])
-		bigfile2 = os.path.join(self.mpoints[2], 'bigfile')
+	def test_create_over_disk(self):
+		vol = Storage.create(type='myvol', device='/dev/lvolume', disk='/dev/sdb')
+		self.assertEqual(vol.disk.devname, '/dev/sdb')
 		
-		self.assertTrue(os.path.exists(bigfile2))
-
-		md5sum2 = system(('/usr/bin/md5sum', bigfile2))[0].strip().split(' ')[0]
-		self.assertEqual(md5sum, md5sum2)
+		vol = Storage.create(
+			type='myvol', 
+			device='/dev/ldevice2',
+			disk=dict(
+				type='myvol',
+				device='/dev/sdb',
+				param1='value1'
+			)
+		)
+		self.assertEqual(vol.disk.devname, '/dev/sdb')
+		self.assertEqual(vol.disk.param1, 'value1')
+		
+	def test_create_vol_container(self):
+		vol = Storage.create(
+			type='myvol',
+			device='/dev/gp0',
+			disks=('/dev/sdb', dict(type='myvol', device='/dev/sdd'))
+		)
+		self.assertEqual(len(vol.disks), 2)
+		self.assertEqual(vol.disks[0].devname, '/dev/sdb')
+		self.assertEqual(vol.disks[1].devname, '/dev/sdd')
+		self.assertEqual(vol.disks[1].type, 'myvol')
+	
+	def test_create_from_snapshot(self):
+		vol = Storage.create(
+			snapshot=dict(
+				type='base',
+				device='/dev/sdb',
+				mpoint='/mnt/dbstorage',
+				fstype='xfs'
+			)
+		)
+		self.assertEqual(vol.devname, '/dev/sdb')
+		self.assertEqual(vol.mpoint, '/mnt/dbstorage')
+		
+		vol = Storage.create(
+			device='/dev/sdd',
+			snapshot=dict(
+				type='myvol',
+				device='/dev/lvol',
+				param1='value1',
+				param2='value2'
+			)
+		)
+		self.assertEqual(vol.devname, '/dev/sdd')
+		self.assertEqual(vol.type, 'myvol')
+		self.assertEqual(vol.param1, 'value1')
 
 		
 if __name__ == "__main__":

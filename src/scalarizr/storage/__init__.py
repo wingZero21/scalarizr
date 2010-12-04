@@ -20,6 +20,7 @@ import glob
 import signal
 import base64
 from binascii import hexlify
+import binascii
 
 try:
 	import json
@@ -93,8 +94,98 @@ snap = raid.snapshot('mysql data bundle 2010-12-02')
 
 2. Restore from snapshot
 
+vol = Storage.restore(snapshot)
 
-Storage.restore_raid()
+snapshot.id : snap-013fb66b  == {
+	type: ebs,
+	id: snap-013fb66b
+}
+
+snapshot.id : {
+	type: raid,
+	level: 0
+	lvm_group_cfg: base64 encoded string,
+	disks: [{
+		type: ebs,
+		id: snap-013fb66b
+	}]
+}
+
+
+Storage.create({
+	type: raid,
+	level: 0,
+	disks: [{
+		type: loop
+		-- this
+		size: 100M
+		file: /media/storage.img
+		-- or this
+		device: /dev/loop0
+	}, {
+		device: /dev/sdb
+	}]
+})
+
+Storage.create({
+	type: eph
+	size: 40%VG
+	disk: {
+		device: /dev/sdb
+	}
+	vg: {
+		name: 'storage',
+		extent_size: 10M
+	}
+	backend: {
+		type: cf,
+		container: my-snapshots
+		key: path/to/snap
+	}
+})
+
+vol = Storage.create({
+	type: ebs,
+	zone: us-east-1a,
+	size: 20G
+})
+vol.snapshot()
+
+snapshot = {
+	type: ebs,
+	id: snap-dsdsdsds
+}
+
+raid = Storage.create({
+	type: raid,
+	level: 0
+	disks: [{
+		type: ebs,
+		snapshot: snap-dsdsdsds
+	}, {
+		type: ebs,
+		snapshot: snap-dsdsds43
+	}]
+})
+
+
+raid = Storage.create({
+	snapshot: {
+		type: raid,
+		level: 0
+		lvm_group_cfg: base64 encoded string,
+		disks: [{
+			snapshot: {
+				type: ebs,
+				id: snap-12345678
+			}
+		}]
+	}
+})
+
+Storage.destroy(raid)
+
+
 
 
 
@@ -281,7 +372,98 @@ class Storage:
 	@staticmethod
 	def remove_raid(vol):
 		pass
+	
+	@staticmethod
+	def explore_provider(PvdClass, default_for_vol=False, default_for_snap=False):
+		self = Storage
+		type = PvdClass.type
+		self.providers[type] = PvdClass
+		if default_for_vol:
+			self.default_vol_provider = type
+		if default_for_snap:
+			self.default_snap_provider = type
+	
+	providers = {}
+	default_vol_provider = None
+	default_snap_provider = None
+
+	@staticmethod
+	def lookup_provider(pvd_type=None, for_snap=False):
+		self = Storage
 		
+		if not pvd_type:
+			pvd_type = self.default_snap_provider if for_snap else self.default_vol_provider		
+		try:
+			pvd = self.providers[pvd_type]
+		except KeyError:
+			raise LookupError('Unknown volume provider "%s"' % (pvd_type,))
+		if hasattr(pvd, '__bases__'):
+			pvd = pvd()
+			self.providers[pvd_type] = pvd
+		return pvd
+
+	@staticmethod
+	def create(*args, **kwargs):
+		'''
+		@raise LookupError: When volume provider cannot be resolved
+		@raise StorageError: General error for all cases		
+		'''
+		self = Storage
+		args = args or list()
+		kwargs = kwargs or dict()
+		from_snap = False
+		
+		if 'snapshot' in kwargs:
+			# Save original kwargs
+			from_snap = True			
+			orig_kwargs = kwargs.copy()
+			
+			# Set kwargs to snapshow kwargs
+			kwargs = kwargs['snapshot']
+			if not isinstance(kwargs, dict):
+				args = None
+				kwargs = dict(device=kwargs)
+				
+			# Update kwargs with original one
+			del orig_kwargs['snapshot']
+			kwargs.update(orig_kwargs)
+			
+		if 'disks' in kwargs:
+			disks = []
+			for item in kwargs['disks']:
+				disk = self.create(**item) if isinstance(item, dict) else self.create(item)
+				disks.append(disk)
+			kwargs['disks'] = disks
+			
+		if 'disk' in kwargs:
+			disk = kwargs['disk']
+			if not isinstance(disk, Volume):
+				kwargs['disk'] = self.create(**disk) if isinstance(disk, dict) else self.create(disk)
+		
+		if args:
+			kwargs['device'] = args[0]
+			
+		# Find provider	
+		pvd = self.lookup_provider(kwargs.get('type'), from_snap)
+		return getattr(pvd, 'create_from_snapshot' if from_snap else 'create').__call__(**kwargs)
+	
+	@staticmethod
+	def create_from_snapshot(*args, **kwargs):
+		'''
+		@raise LookupError: When volume provider cannot be resolved
+		@raise StorageError: General error for all cases		
+		'''
+		snapshot = args[0] if args else kwargs
+		return Storage.create(snapshot=snapshot)
+	
+	@staticmethod
+	def destroy(self, vol):
+		'''
+		@raise StorageError: General error for all cases		
+		'''
+		pass
+		
+	
 def _fs_should_be_set(f):
 	def d(*args):
 		if args[0]._fs is None:
@@ -289,26 +471,30 @@ def _fs_should_be_set(f):
 		return f(*args)
 	return d
 
-class Volume:
+class Volume(object):
+	type = 'base'
 	devname = None
 	mpoint = None
 
 	_logger = None
 	_fs = None
 
-	def __init__(self, devname, mpoint=None, fstype=None):
+	def __init__(self, devname, mpoint=None, fstype=None, type=None, *args, **kwargs):
 		self._logger = logging.getLogger(__name__)
 		self.devname = devname
 		self.mpoint = mpoint
-		self.fstype = fstype
+		if fstype:
+			self.fstype = fstype
+		if type:
+			self.type = type		
 
-	def _set_fstype(self, fstype):
+	def _fstype_setter(self, fstype):
 		self._fs = ResourceMgr.lookup_filesystem(fstype)
 
-	def _get_fstype(self):
+	def _fstype_getter(self):
 		return self._fs.name if self._fs else None
 
-	fstype = property(_get_fstype, _set_fstype)
+	fstype = property(_fstype_getter, _fstype_setter)
 
 	def mkfs(self, fstype=None):
 		fstype = fstype or self.fstype
@@ -361,39 +547,228 @@ class Volume:
 				raise
 	
 	def snapshot(self, description=None):
+		# Freeze filesystem
 		if self._fs:
 			system(SYNC_EXEC)
 			self.freeze()
-		snap = self._create_snapshot(description)
+			
+		# Create snapshot
+		snap = Snapshot(None, description)
+		pvd = Storage.lookup_provider(self.type)
+		pvd.create_snapshot(self, snap)
+		
+		# Unfreeze filesystem
 		if self._fs:
 			self.unfreeze()
-		return self._save_snapshot(snap)
+			
+		# Save snapshot
+		return pvd.save_snapshot(self, snap)
 	
-	def _create_snapshot(self, description):
-		return Snapshot(None, description)
-	
-	def _save_snapshot(self, snapshot):
-		return snapshot
-	
-	def restore(self, snapshot):
-		pass
+	def destroy(self):
+		pvd = Storage.providers[self.type]
+		pvd.destroy(self)
 
 
-class Snapshot:
+class Snapshot(object):
 	description = None
 	id = None
 	def __init__(self, id=None, description=None):
 		self.id = id
 		self.description = description
+	
+	def __str__(self):
+		if self.id is None:
+			return ''
+		elif isinstance(self.id, basestring):
+			return self.id
+		else:
+			return json.dumps(self.id)
+
+
+
+class VolumeProvider(object):
+	type = 'base'
+	vol_class = Volume
+	
+	def create(self, **kwargs):
+		device = kwargs['device']
+		del kwargs['device']
+		if not kwargs.get('type'):
+			kwargs['type'] = self.type
+		return self.vol_class(device, **kwargs)
+	
+	def create_from_snapshot(self, **kwargs):
+		return self.create(**kwargs)
+	
+	def create_snapshot(self, vol, snap):
+		return snap
+	
+	def save_snapshot(self, vol, snap):
+		return snap
+
+	def destroy(self, vol):
+		vol.umount()
+		
+Storage.explore_provider(VolumeProvider, default_for_vol=True, default_for_snap=True)
+
+
+class LoopVolumeProvider(VolumeProvider):
+	type = 'loop'
+	
+	def create(self, **kwargs):
+		'''
+		@param file: Filename for loop device
+		@type file: basestring
+		
+		@param size: Size in MB
+		@type size: int
+		
+		@param zerofill: Fill device with zero bytes. Takes more time, but greater GZip compression
+		@type zerofill: bool
+		'''
+		kwargs['device'] = mkloop(kwargs['file'], kwargs.get('size'), not kwargs.get('zerofill')) 
+		return super(LoopVolumeProvider, self).create(**kwargs)
+	
+	def destroy(self, vol):
+		super(LoopVolumeProvider, self).destroy(vol)
+		rmloop(vol.device)
+		
+Storage.explore_provider(LoopVolumeProvider)
+
+
+class RaidVolume(Volume):
+	level = None
+	raid_pv = None
+	snap_pv = None
+	raid_vg = None
+	disks = None
+	
+	def __init__(self, devname, mpoint=None, fstype=None, type=None, 
+				level=None, disks=None, raid_vg=None, raid_pv=None, snap_pv=None):
+		Volume.__init__(self, devname, mpoint, fstype, type)
+		self.level = level
+		self.disks = disks		
+		self.raid_vg = raid_vg
+		self.raid_pv = raid_pv		
+		self.snap_pv = snap_pv
+
+
+class RaidVolumeProvider(VolumeProvider):
+	type = 'raid'
+	vol_class = RaidVolume
+
+	_mdadm = None
+	_lvm = None
+	
+	def __init__(self):
+		self._mdadm = Mdadm()
+		self._lvm = Lvm2()
+	
+	def create(self, **kwargs):
+		'''
+		@param disks: Raid disks
+		@type disks: list(Volume)
+		
+		@param level: Raid level 0, 1, 5 - are valid values
+		@type level: int
+		
+		@param vg: Volume group over RAID PV
+		@type vg: str|dict
+		
+		@param snap_pv: Phisical volume for LVM snapshot
+		@type snap_pv: str|dict|Volume
+		'''
+		raid_pv = self._mdadm.create(list(vol.devname for vol in kwargs['disks']), kwargs['level'])
+
+		if not isinstance(kwargs['vg'], dict):
+			kwargs['vg'] = dict(name=kwargs['vg'])
+		vg_name = kwargs['vg']['name']
+		del kwargs['vg']['name']
+		vg_options = kwargs['vg']
+
+		kwargs['vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
+		kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
+		kwargs['raid_pv'] = raid_pv
+		
+		return super(RaidVolumeProvider, self).create(**kwargs)		
+	
+	def create_from_snapshot(self, **kwargs):
+		'''
+		@param level: RAID level 0, 1, 5 - are valid values
+		@param lvm_group_cfg: Base64 encoded RAID volume group configuration
+		@param disks: Volumes
+		'''
+		pass
+	
+	def create_snapshot(self, vol, snap):
+		if not vol.snap_pv:
+			raise ValueError('Volume should have non-empty snap_pv attribute')
+		if isinstance(vol.snap_pv, Volume):
+			snap_pv = vol.snap_pv
+		elif isinstance(vol.snap_pv, dict):
+			snap_pv = Storage.create(**vol.snap_pv)
+		else:
+			snap_pv = Storage.create(vol.snap_pv)
+
+		# Extend RAID volume group with snapshot disk
+		self._lvm.create_pv(snap_pv)
+		if not self._lvm.pv_info(snap_pv).vg == vol.raid_vg:
+			self._lvm.extend_vg(self.raid_vg, snap_pv)
+			
+		# Create RAID LVM snapshot
+		snap_lv = self._lvm.create_lv_snapshot(vol.devname, 'snap', '100%FREE')
+		try:
+			# Creating RAID members snapshots  
+			id = {'type': self.type, 'level': vol.level, 'disks': []}
+			lvmgroupcfg = read_file('/etc/lvm/backup/%s' % self.raid_vg)
+			if lvmgroupcfg is None:
+				raise StorageError('Backup file for volume group "%s" does not exists' % vol.raid_vg)
+			id['lvm_group_cfg'] = binascii.b2a_base64(lvmgroupcfg)
+			
+			id['tmp_snaps'] = []
+			for _vol, i in zip(vol.disks, range(0, len(vol.disks))):
+				pvd = Storage.lookup_provider(_vol.type)
+				_snap = Snapshot(None, 'RAID%s disk #%d - %s' % (vol.level, i, snap.description))
+				id['tmp_snaps'].append((_vol, pvd.create_snapshot(_vol, _snap)))
+			
+			# TODO: store snap_pv configuration?
+			
+			snap.id = id
+			return snap
+		
+		finally:
+			self._lvm.remove_lv(snap_lv)
+			if not isinstance(vol.snap_pv, Volume):
+				# Destroy run-time created snap volume
+				self._lvm.remove_pv(snap_pv)
+				snap_pv.destroy()
+	
+	def save_snapshot(self, vol, snap):
+		# Saving RAID members snapshots
+		for _vol, _snap in snap.id.tmp_snaps:
+			pvd = Storage.lookup_provider(_vol.type)
+			snap.id['disks'].append({
+				'snapshot': pvd.save_snapshot(_vol, _snap).id 
+			})
+		del snap.id['tmp_snaps']
+			
+		return snap
+	
+	def destroy(self, vol):
+		# TODO: destroy RAID (don't destroy vol.disks !!!)
+		pass
+
+Storage.explore_provider(RaidVolumeProvider)
+
 
 
 class EphVolume(Volume):
-	snap_pvd = None
 	snap_backend = None
+	disk = None
 	vg = None
 	tranzit_vol = None
 	
-	def __init__(self, devname, mpoint=None, fstype=None, vg=None, tranzit_lv=None, snap_pvd=None, snap_backend=None):
+	def __init__(self, devname, mpoint=None, fstype=None, type=None, vg=None, tranzit_lv=None, snap_pvd=None, snap_backend=None):
 		Volume.__init__(self, devname, mpoint, fstype)
 		self.snap_pvd = snap_pvd
 		if isinstance(snap_backend, IEphSnapshotBackend):
@@ -401,36 +776,70 @@ class EphVolume(Volume):
 		elif snap_backend:
 			self.snap_backend = ResourceMgr.lookup_snapshot_backend(snap_backend)
 		self.vg = vg		
-		self.tranzit_vol = Volume(tranzit_lv, '/tmp/sntz' + str(randint(100, 999)), 'ext3') 
-	
-	def _prepare(self):
-		os.makedirs(self.tranzit_vol.mpoint)
-		self.tranzit_vol.mkfs()
-		self.tranzit_vol.mount()
-		
-	def _cleanup(self):
-		if self.tranzit_vol.mounted():
-			self.tranzit_vol.umount()
-		os.rmdir(self.tranzit_vol.mpoint)
-	
-	def _create_snapshot(self, description):
-		try:
-			self._prepare()
-			snapshot = Snapshot(None, description)
-			self.snap_pvd.create(snapshot, self, self.tranzit_vol.mpoint)
-			return snapshot
-		except:
-			self._cleanup()
-			raise
-	
-	def _save_snapshot(self, snapshot):
-		try:
-			self.snap_backend.upload(snapshot, self.tranzit_vol.mpoint)
-			return snapshot
-		finally:
-			self._cleanup()
 
-	def restore(self, snapshot):
+
+class EphVolumeProvider(VolumeProvider):
+	type = 'eph'
+	vol_class = EphVolume
+	
+	_lvm = None
+	_snap_pvd = None
+	
+	def __init__(self):
+		self._lvm = Lvm2()
+		self._snap_pvd = EphSnapshotProvider()
+	
+	def create(self, **kwargs):
+		'''
+		@param disk: Physical volume
+		@param vg: Uniting volume group
+		@param size: Useful storage size (in % of physican volume or MB)
+		@param backend: Snapshot backend
+		
+		Example: 
+		Storage.create({
+			'type': 'eph',
+			'disk': '/dev/sdb',
+			'size': '40%FREE',
+			'vg': {
+				'name': 'mysql_data',
+				'ph_extent_size': 10
+			},
+			'backend': {
+				'type': 'cf',
+				'container': 'mysql_backups'
+				'key': 'cloudsound/production'
+			}
+		})
+		'''
+
+		# Create PV
+		self._lvm.create_pv(kwargs['disk'].devname)		
+
+		# Create VG
+		if not isinstance(kwargs['vg'], dict):
+			kwargs['vg'] = dict(name=kwargs['vg'])
+		vg_name = kwargs['vg']['name']
+		del kwargs['vg']['name']
+		vg_options = kwargs['vg']
+		vg = self._lvm.create_vg(vg_name, [kwargs['device']], **vg_options)
+		
+		# Create data volume
+		lv_extents = kwargs.get('size', '40%VG')
+		data_lv = self._lvm.create_lv(vg, 'data', extents=lv_extents)
+
+		# Create tranzit volume (should be 5% bigger then data vol)
+		size_in_KB = int(read_file('/sys/block/%s/size' % os.path.basename(os.readlink(data_lv)))) / 2
+		tranzit_lv = self._lvm.create_lv(vg, 'tranzit', size='%dK' % (size_in_KB*1.05,))
+		
+		kwargs['device'] = data_lv
+		kwargs['tranzit_vol'] = Volume(tranzit_lv, '/tmp/sntz' + str(randint(100, 999)), 'ext3', 'base') 
+		kwargs['vg'] = vg
+		
+		return super(EphSnapshotProvider, self).create(**kwargs)
+
+	def create_from_snapshot(self, **kwargs):
+		'''
 		# Lookup snapshot backend
 		u = urlparse.urlparse(snapshot.id)
 		try:
@@ -444,11 +853,35 @@ class EphVolume(Volume):
 			snap_backend.download(snapshot.id, self.tranzit_vol.mpoint)
 			self.snap_pvd.restore(self, self.tranzit_vol.mpoint)
 		finally:
-			self._cleanup()
-			
-	def remove(self):
-		# TODO:
+			self._cleanup()		
+		'''
 		pass
+
+	def create_snapshot(self, vol, snap):
+		try:
+			self._prepare_tranzit_vol(vol.tranzit_vol)
+			self._snap_pvd.create(snap, vol, vol.tranzit_vol.mpoint)
+			return snap
+		except:
+			self._cleanup_tranzit_vol(vol.tranzit_vol)
+			raise
+	
+	def save_snapshot(self, vol, snap):
+		try:
+			vol.snap_backend.upload(snap, vol.tranzit_vol.mpoint)
+			return snap
+		finally:
+			self._cleanup_tranzit_vol(vol.tranzit_vol)
+
+
+	def _prepare_tranzit_vol(self, vol):
+		os.makedirs(vol.mpoint)
+		vol.mkfs()
+		vol.mount()
+		
+	def _cleanup_tranzit_vol(self, vol):
+		vol.umount()
+		os.rmdir(vol.mpoint)
 
 
 class IEphSnapshotBackend:
@@ -596,51 +1029,3 @@ class EphSnapshotBackend(IEphSnapshotBackend):
 		self.transfer.download(tranzit_path, self.upload_dest)
 	
 	
-class RaidVolume(Volume):
-	raid_pv = None
-	snap_pv = None
-	raid_vg = None
-	volumes = None
-
-	_snap_pv_creator = None
-	
-	def __init__(self, devname, mpoint=None, fstype=None, raid_pv=None, snap_pv=None, raid_vg=None, volumes=None):
-		Volume.__init__(self, devname, mpoint, fstype)
-		self.raid_pv = raid_pv
-		if callable(snap_pv):
-			self._snap_pv_creator = snap_pv
-		else:
-			self.snap_pv = snap_pv
-		self.raid_vg = raid_vg
-		self.volumes = volumes
-		self._lvm = Lvm2()
-
-	def _create_snapshot(self, description):
-		snap_pv = self.snap_pv or self._snap_pv_creator()
-		try:
-			self._lvm.pv_info(snap_pv)
-		except LookupError:
-			self._lvm.create_pv((snap_pv,))
-		
-		if not self._lvm.pv_info(snap_pv).vg == self.raid_vg:
-			self._lvm.extend_vg(self.raid_vg, (snap_pv,))
-			
-		self._lvm.create_lv_snapshot(self.devname, 'backup', '100%FREE')
-		raw_id = {}
-		raw_id['type'] 		= 'raid'
-		raw_id['voltype']	= self.volumes[0].__class__
-		raw_id['snapshots'] = []
-		for vol in self.volumes:
-			raw_id['snapshots'].append(vol.snapshot(description).id)
-		
-		lvmgroupcfg = read_file('/etc/lvm/backup/%s' % self.raid_vg)
-		if lvmgroupcfg is None:
-			raise StorageError('Backup file for volume group "%s" does not exist' % self.raid_vg)
-		raw_id['lvmgroupcfg'] = base64.b64encode(lvmgroupcfg)
-		id = json.dumps(raw_id)
-		
-		'''
-		id = "{type: raid, voltype: ebs, snapshots:[], level: 0, lvmgroupcfg: base64encoded}"
-		'''
-		
-		return Snapshot(id, description)
