@@ -5,7 +5,8 @@ Created on Nov 24, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.storage import uploader, Volume, Snapshot
+from scalarizr.bus import bus
+from scalarizr.storage import Volume, VolumeProvider
 
 import os
 import logging
@@ -13,20 +14,69 @@ import logging
 from boto import connect_ec2
 from boto.s3.key import Key
 from boto.exception import BotoServerError
-
+from scalarizr.platform.ec2 import ebstool
 
 class EbsVolume(Volume):
-	ec2_volume_id = None
-	def __init__(self,  devname, mpoint, fstype=None, ec2_volume_id=None):
-		Volume.__init__(self, devname, mpoint, fstype)
-		self.ec2_volume_id = ec2_volume_id
+	volume_id = None
+	def __init__(self,  devname, mpoint=None, fstype=None, type=None, volume_id=None, **kwargs):
+		Volume.__init__(self, devname, mpoint, fstype, type)
+		self.volume_id = volume_id
+
+
+class EbsVolumeProvider(VolumeProvider):
+	type = 'ebs'
+	vol_class = EbsVolume
 	
-	def _create_snapshot(self, description):
-		ec2_conn = connect_ec2()
-		snap = ec2_conn.create_snapshot(self.volume_id, description)
-		return Snapshot(snap.id, description)
+	_logger = None
 	
+	def __init__(self):
+		self._logger = logging.getLogger(__name__)
 	
+	def _create(self, **kwargs):
+		'''
+		@param size: Size in GB
+		@param avail_zone: Availability zone
+		@param snapshot_id: Snapshot id
+		'''
+		conn = connect_ec2()
+		pl = bus.platform
+		
+		ebs_vol = ebstool.create_volume(conn, kwargs['size'], kwargs['zone'], 
+				kwargs.get('snapshot_id'), logger=self._logger)
+		ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), kwargs['device'], 
+				to_me=True, logger=self._logger)
+		kwargs['volume_id'] = ebs_vol.id
+		
+		return super(EbsVolumeProvider, self).create(**kwargs)
+
+	create = _create
+	
+	def create_from_snapshot(self, **kwargs):
+		'''
+		@param size: Size in GB
+		@param avail_zone: Availability zone
+		@param id: Snapshot id
+		'''
+		kwargs['snapshot_id'] = kwargs['id']
+		return self._create(**kwargs)
+
+	def create_snapshot(self, vol, snap):
+		conn = connect_ec2()
+		ebs_snap = conn.create_snapshot(vol.volume_id, snap.description)
+		snap.id = dict(type=self.type, id=ebs_snap.id)
+		return snap
+
+	def destroy(self, vol):
+		'''
+		@type vol: EbsVolume
+		'''
+		super(EbsVolumeProvider, self).destroy(vol)
+		conn = connect_ec2()
+		conn.delete_volume(vol.volume_id)
+
+
+
+'''
 class S3UploadDest(uploader.UploadDest):
 	
 	def __init__(self, bucket, prefix=None, acl=None, logger=None):
@@ -80,3 +130,4 @@ def location_from_region(region):
 		return 'EU'
 	else: 
 		return region
+'''
