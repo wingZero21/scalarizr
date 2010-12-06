@@ -6,7 +6,7 @@ Created on Nov 24, 2010
 '''
 
 from scalarizr.bus import bus
-from scalarizr.storage import Volume, VolumeProvider
+from scalarizr.storage import Storage, Volume, VolumeProvider
 
 import os
 import logging
@@ -75,6 +75,7 @@ class EbsVolumeProvider(VolumeProvider):
 		conn.delete_volume(vol.volume_id)
 
 
+Storage.explore_provider(EbsVolumeProvider, default_for_snap=True)
 
 '''
 class S3UploadDest(uploader.UploadDest):
