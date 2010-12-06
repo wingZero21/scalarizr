@@ -60,6 +60,7 @@ _snmp_scheduled_start_time = None
 Next time when SNMP process should be forked
 '''
 
+_logging_configured = False
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -112,6 +113,7 @@ def _init():
 	
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
 	logger = logging.getLogger(__name__)
+	globals()['_logging_configured'] = True
 	
 	# During server import user must see all scalarizr activity in his terminal
 	# Add console handler if it doesn't configured in logging.ini	
@@ -591,5 +593,8 @@ def main():
 		elif isinstance(e, KeyboardInterrupt):
 			pass
 		else:
-			logger.exception(e)
+			if _logging_configured:
+				logger.exception(e)
+			else:
+				print >> sys.stderr, 'error: %s' % e
 			sys.exit(1)
