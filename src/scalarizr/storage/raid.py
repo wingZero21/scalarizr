@@ -42,7 +42,7 @@ class Mdadm:
 			raise MdadmError('Unknown RAID level: %s' % level)
 		
 		# Select RAID device name 
-		devname = '/dev/md%s' % firstmatched(lambda x: not os.path.exists('/dev/md%s' % x), range(100))
+		devname = self._get_free_md_devname()
 		
 		for device in devices:
 			try:
@@ -78,7 +78,12 @@ class Mdadm:
 
 		for device in devices:
 			self._zero_superblock(device)
-
+			
+	def assemble(self, devices):
+		md_devname = self._get_free_md_devname()
+		cmd = (MDADM_PATH, '--assemble', md_devname, ' '.join(devices))
+		system(cmd, error_text="Error occured during array assembling")
+		return md_devname
 
 	def add_disk(self, array, device, grow=True):
 		info = self.get_array_info(array)
@@ -148,6 +153,9 @@ class Mdadm:
 		devname = os.path.basename(device)
 		cmd = (MDADM_PATH, '--zero-superblock', '-f', '/dev/%s' % devname)
 		system(cmd, error_text='Error occured during zeroing superblock on %s' % device)
+		
+	def _get_free_md_devname(self):
+		return '/dev/md%s' % firstmatched(lambda x: not os.path.exists('/dev/md%s' % x), range(100))
 
 	def get_array_devices(self, array):
 		devname = os.path.basename(array)

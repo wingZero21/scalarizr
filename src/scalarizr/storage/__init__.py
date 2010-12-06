@@ -4,9 +4,8 @@ from .raid import Mdadm
 from .fs import MOUNT_EXEC, UMOUNT_EXEC, SYNC_EXEC
 
 from scalarizr.util import system2, PopenError, firstmatched, wait_until
-from scalarizr.util.filetool import read_file
+from scalarizr.util.filetool import read_file, write_file
 from scalarizr.libs.metaconf import Configuration
-from scalarizr.util.filetool import read_file
 
 import urlparse
 import subprocess
@@ -21,6 +20,7 @@ import signal
 import base64
 from binascii import hexlify
 import binascii
+import shutil
 
 try:
 	import json
@@ -105,6 +105,7 @@ snapshot.id : {
 	type: raid,
 	level: 0
 	lvm_group_cfg: base64 encoded string,
+	raid_vg: vg_name
 	disks: [{
 		type: ebs,
 		id: snap-013fb66b
@@ -239,12 +240,10 @@ def mkloop(filename, size=None, quick=False):
 
 def listloop():
 	devices = system(('/sbin/losetup', '-a'))[0].strip()
-	
-	pass
+	# TODO
 
 def rmloop(device):
-	# TODO
-	pass
+	system(('/sbin/losetup', '-d', device))
 
 class ResourceMgr:
 	@staticmethod
@@ -359,19 +358,20 @@ class Storage:
 		raid_pv = self._mdadm.create(list(vol.devname for vol in volumes), level)
 
 		self._init_lvm()
-		vg_name = vg_name or os.path.basename(raid_pv)
+		vg_name = vg_name or 'vg_'+os.path.basename(raid_pv)
 		vg_options = vg_options or dict()
 		self._lvm.create_pv(raid_pv)
 		raid_vg = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
 		
 		raid_lv = self._lvm.create_lv(vg_name, extents='100%FREE')
 		
-		return RaidVolume(raid_lv, mpoint, fstype, raid_pv, snap_pv, raid_vg, volumes)
+		return RaidVolume(raid_lv, mpoint, fstype, raid_pv=raid_pv, snap_pv=snap_pv, raid_vg=raid_vg, disks=volumes)
 		
 
 	@staticmethod
 	def remove_raid(vol):
-		pass
+		pvd = RaidVolumeProvider()
+		pvd.destroy(vol)
 	
 	@staticmethod
 	def explore_provider(PvdClass, default_for_vol=False, default_for_snap=False):
@@ -611,11 +611,20 @@ class VolumeProvider(object):
 		
 Storage.explore_provider(VolumeProvider, default_for_vol=True, default_for_snap=True)
 
+class LoopVolume(Volume):
 
+	file = None
+
+	def __init__(self, devname, mpoint=None, fstype=None, type=None, **kwargs):
+		Volume.__init__(self, devname, mpoint, fstype, type)
+		self.file = kwargs['file']
+		
 class LoopVolumeProvider(VolumeProvider):
 	type = 'loop'
+	vol_class = LoopVolume
 	
 	def create(self, **kwargs):
+		
 		'''
 		@param file: Filename for loop device
 		@type file: basestring
@@ -626,12 +635,26 @@ class LoopVolumeProvider(VolumeProvider):
 		@param zerofill: Fill device with zero bytes. Takes more time, but greater GZip compression
 		@type zerofill: bool
 		'''
+		
 		kwargs['device'] = mkloop(kwargs['file'], kwargs.get('size'), not kwargs.get('zerofill')) 
 		return super(LoopVolumeProvider, self).create(**kwargs)
 	
-	def destroy(self, vol):
+	def destroy(self, vol):		
 		super(LoopVolumeProvider, self).destroy(vol)
-		rmloop(vol.device)
+		rmloop(vol.devname)		
+		
+	def create_from_snapshot(self, **kwargs):
+		return self.create(**kwargs)
+	
+	def create_snapshot(self, vol, snap):
+		backup_filename = vol.file + '.%s.bak' % time.strftime('%d-%m-%Y_%H:%M')
+		shutil.copy(vol.file, backup_filename)
+		snap.id = {'file': backup_filename, 'type': 'loop'}
+		return snap
+	
+	def save_snapshot(self, vol, snap):
+		return snap
+
 		
 Storage.explore_provider(LoopVolumeProvider)
 
@@ -644,7 +667,7 @@ class RaidVolume(Volume):
 	disks = None
 	
 	def __init__(self, devname, mpoint=None, fstype=None, type=None, 
-				level=None, disks=None, raid_vg=None, raid_pv=None, snap_pv=None):
+				level=None, disks=None, raid_vg=None, raid_pv=None, snap_pv=None, **kwargs):
 		Volume.__init__(self, devname, mpoint, fstype, type)
 		self.level = level
 		self.disks = disks		
@@ -675,7 +698,7 @@ class RaidVolumeProvider(VolumeProvider):
 		@param vg: Volume group over RAID PV
 		@type vg: str|dict
 		
-		@param snap_pv: Phisical volume for LVM snapshot
+		@param snap_pv: Physical volume for LVM snapshot
 		@type snap_pv: str|dict|Volume
 		'''
 		raid_pv = self._mdadm.create(list(vol.devname for vol in kwargs['disks']), kwargs['level'])
@@ -686,19 +709,36 @@ class RaidVolumeProvider(VolumeProvider):
 		del kwargs['vg']['name']
 		vg_options = kwargs['vg']
 
-		kwargs['vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
+		kwargs['raid_vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
 		kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
 		kwargs['raid_pv'] = raid_pv
-		
 		return super(RaidVolumeProvider, self).create(**kwargs)		
 	
 	def create_from_snapshot(self, **kwargs):
 		'''
-		@param level: RAID level 0, 1, 5 - are valid values
+		@param level: Raid level 0, 1, 5 - are valid values
+		@param raid_vg: Volume group name to restore
 		@param lvm_group_cfg: Base64 encoded RAID volume group configuration
 		@param disks: Volumes
+		@param snap_pv: Physical volume for future LVM snapshot creation
 		'''
-		pass
+		raid_vg = kwargs['raid_vg']
+		kwargs['raid_pv'] = self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
+		lvm_raw_backup = base64.b64decode(kwargs['lvm_group_cfg'])
+		lvm_backup_filename = '/tmp/lvm_backup'
+		write_file(lvm_backup_filename, lvm_raw_backup, logger=logger)
+		try:
+			cmd = (('/sbin/vgcfgrestore', '-f', lvm_backup_filename, raid_vg))
+			system(cmd, error_text='Cannot restore lvm volume group %s from backup file.')
+		finally:
+			os.unlink(lvm_backup_filename)
+			
+		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg == raid_vg, self._lvm.lv_status())
+		if not lvinfo:
+			raise StorageError('Volume group %s does not contain any logical volume.')
+		kwargs['device'] = lvinfo.lv
+				
+		return super(RaidVolumeProvider, self).create(**kwargs)
 	
 	def create_snapshot(self, vol, snap):
 		if not vol.snap_pv:
@@ -718,8 +758,8 @@ class RaidVolumeProvider(VolumeProvider):
 		# Create RAID LVM snapshot
 		snap_lv = self._lvm.create_lv_snapshot(vol.devname, 'snap', '100%FREE')
 		try:
-			# Creating RAID members snapshots  
-			id = {'type': self.type, 'level': vol.level, 'disks': []}
+			# Creating RAID members snapshots
+			id = {'type': self.type, 'level': vol.level, 'raid_vg' : vol.raid_vg, 'disks': []}
 			lvmgroupcfg = read_file('/etc/lvm/backup/%s' % self.raid_vg)
 			if lvmgroupcfg is None:
 				raise StorageError('Backup file for volume group "%s" does not exists' % vol.raid_vg)
@@ -756,8 +796,12 @@ class RaidVolumeProvider(VolumeProvider):
 	
 	def destroy(self, vol):
 		# TODO: destroy RAID (don't destroy vol.disks !!!)
-		pass
-
+		vol.umount()
+		self._lvm.remove_lv(vol.devname)
+		self._lvm.remove_vg(vol.raid_vg)
+		self._lvm.remove_pv(vol.raid_pv)
+		self._mdadm.delete(vol.raid_pv)
+	
 Storage.explore_provider(RaidVolumeProvider)
 
 
