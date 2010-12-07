@@ -112,6 +112,8 @@ class IpListBuilder(Handler):
 
 	on_RebootStart = on_HostDown
 
+	on_RebootFinish = on_HostUp
+
 	def _modify_tree(self, rolename, behaviours, ip, modfn=None, replication_master=None):
 		# Touch/Unlink %role_name%/xx.xx.xx.xx
 		modfn(os.path.join(self._base_path, rolename, ip))
