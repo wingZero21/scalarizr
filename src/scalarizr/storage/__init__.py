@@ -298,7 +298,7 @@ class Storage:
 		self = Storage
 		if not self._mdadm:
 			self._mdadm = Mdadm()
-	
+	'''	
 	@staticmethod
 	def create_ephs(device, vg_name, vg_options=None, 
 				lv_extents='40%VG', snap_pvd=None, snap_backend=None, mpoint=None, fstype=None):
@@ -349,7 +349,7 @@ class Storage:
 			if not pvi.vg:
 				self._lvm.remove_pv(pv)
 				
-				
+			
 	@staticmethod
 	def create_raid(volumes, level, vg_name=None, vg_options=None, snap_pv=None, mpoint=None, fstype=None):
 		self = Storage
@@ -375,7 +375,7 @@ class Storage:
 		print '%s %s %s' % system('pvdisplay',)
 		print '%s %s %s' % system('lvdisplay',)
 		print '%s %s %s' % system(('cat', '/proc/mdstat'))
-		
+	'''		
 	
 	@staticmethod
 	def explore_provider(PvdClass, default_for_vol=False, default_for_snap=False):
@@ -458,15 +458,14 @@ class Storage:
 		@raise StorageError: General error for all cases		
 		'''
 		snapshot = args[0] if args else kwargs
-		tmp =  Storage.create(snapshot=snapshot)
-		return tmp
-	
+		return Storage.create(snapshot=snapshot)
+'''	
 	@staticmethod
 	def destroy(self, vol):
-		'''
+
 		@raise StorageError: General error for all cases		
-		'''
-		pass
+
+'''		
 		
 	
 def _fs_should_be_set(f):
@@ -538,10 +537,6 @@ class Volume(object):
 		return bool(res)		
 
 	def mount(self, mpoint=None):
-		print '######################################################################'
-		print '%s %s %s' % system('lvdisplay',)
-		print '%s %s %s' % system('pvdisplay',)
-		print '%s %s %s' % system(('ls', '/dev/dbstorage/lvol0'))
 		mpoint = mpoint or self.mpoint
 		cmd = (MOUNT_EXEC, self.devname, mpoint)
 		system(cmd, error_text='Cannot mount device %s' % self.devname)
@@ -819,7 +814,6 @@ class RaidVolumeProvider(VolumeProvider):
 	def destroy(self, vol):
 		# TODO: destroy RAID (don't destroy vol.disks !!!)
 		vol.umount()
-		print vol.devname
 		self._lvm.remove_lv(vol.devname)
 		self._lvm.remove_vg(vol.raid_vg)
 		self._lvm.remove_pv(vol.raid_pv)

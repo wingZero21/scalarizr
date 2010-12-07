@@ -19,9 +19,9 @@ class Test(unittest.TestCase):
 
 	def tearDown(self):
 		if hasattr(self, 'array') and self.array:
-			Storage.remove_raid(self.array)
+			self.array.destroy()
 		if hasattr(self, 'new_array') and self.new_array:
-			Storage.remove_raid(self.new_array)
+			self.new_array.destroy()
 			
 		for vol in self.vols:
 			system('losetup -d %s' % vol.devname)
@@ -31,15 +31,15 @@ class Test(unittest.TestCase):
 		
 
 	def _testCreateDestroyRaid(self):
-		array = Storage.create_raid(self.vols, 1, 'dbstorage')
-		Storage.remove_raid(array)
+		array = Storage.create(type='raid', disks=self.vols, level=1, vg='dbstorage')
+		array.destroy()
 		
 	def testBackupRestoreRaid(self):
 		mpoint = '/tmp/mpoint'
 		if not os.path.isdir(mpoint):
 			os.makedirs(mpoint)
 		
-		self.array = Storage.create_raid(self.vols, 1, 'dbstorage', snap_pv=self.snap_vol, fstype='ext3')
+		self.array = Storage.create(type='raid', disks=self.vols, level=1, vg='dbstorage', snap_pv=self.snap_vol, fstype='ext3')
 		self.array.mkfs()
 		self.array.mount(mpoint)
 		# Create big file
@@ -48,7 +48,7 @@ class Test(unittest.TestCase):
 		md5sum = system(('/usr/bin/md5sum %s' % bigfile_path))[0].strip().split(' ')[0]
 		
 		array_snap = self.array.snapshot()
-		Storage.remove_raid(self.array)
+		self.array.destroy()
 		del(self.array)
 		
 		self.new_array = Storage.create_from_snapshot(array_snap.id)
