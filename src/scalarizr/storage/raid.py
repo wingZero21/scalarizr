@@ -72,7 +72,7 @@ class Mdadm:
 		try:
 			cmd = (MDADM_PATH, '--remove', '-f', array)
 			system(cmd, error_text='Error occured during array deletion')
-		except Exception, e:
+		except (Exception, BaseException), e:
 			if not 'No such file or directory' in str(e):
 				raise
 
@@ -81,7 +81,7 @@ class Mdadm:
 			
 	def assemble(self, devices):
 		md_devname = self._get_free_md_devname()
-		cmd = (MDADM_PATH, '--assemble', md_devname, ' '.join(devices))
+		cmd = (MDADM_PATH, '--assemble', md_devname) + tuple(devices)
 		system(cmd, error_text="Error occured during array assembling")
 		return md_devname
 

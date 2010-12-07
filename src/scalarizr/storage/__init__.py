@@ -1,5 +1,5 @@
 
-from .lvm2 import Lvm2
+from .lvm2 import Lvm2, lvpath
 from .raid import Mdadm
 from .fs import MOUNT_EXEC, UMOUNT_EXEC, SYNC_EXEC
 
@@ -365,13 +365,17 @@ class Storage:
 		
 		raid_lv = self._lvm.create_lv(vg_name, extents='100%FREE')
 		
-		return RaidVolume(raid_lv, mpoint, fstype, raid_pv=raid_pv, snap_pv=snap_pv, raid_vg=raid_vg, disks=volumes)
+		return RaidVolume(raid_lv, mpoint, fstype, raid_pv=raid_pv, snap_pv=snap_pv, raid_vg=raid_vg, disks=volumes, level=level)
 		
 
 	@staticmethod
 	def remove_raid(vol):
 		pvd = RaidVolumeProvider()
 		pvd.destroy(vol)
+		print '%s %s %s' % system('pvdisplay',)
+		print '%s %s %s' % system('lvdisplay',)
+		print '%s %s %s' % system(('cat', '/proc/mdstat'))
+		
 	
 	@staticmethod
 	def explore_provider(PvdClass, default_for_vol=False, default_for_snap=False):
@@ -454,7 +458,8 @@ class Storage:
 		@raise StorageError: General error for all cases		
 		'''
 		snapshot = args[0] if args else kwargs
-		return Storage.create(snapshot=snapshot)
+		tmp =  Storage.create(snapshot=snapshot)
+		return tmp
 	
 	@staticmethod
 	def destroy(self, vol):
@@ -533,6 +538,10 @@ class Volume(object):
 		return bool(res)		
 
 	def mount(self, mpoint=None):
+		print '######################################################################'
+		print '%s %s %s' % system('lvdisplay',)
+		print '%s %s %s' % system('pvdisplay',)
+		print '%s %s %s' % system(('ls', '/dev/dbstorage/lvol0'))
 		mpoint = mpoint or self.mpoint
 		cmd = (MOUNT_EXEC, self.devname, mpoint)
 		system(cmd, error_text='Cannot mount device %s' % self.devname)
@@ -551,7 +560,7 @@ class Volume(object):
 		if self._fs:
 			system(SYNC_EXEC)
 			self.freeze()
-			
+
 		# Create snapshot
 		snap = Snapshot(None, description)
 		pvd = Storage.lookup_provider(self.type)
@@ -674,6 +683,7 @@ class RaidVolume(Volume):
 		self.raid_vg = raid_vg
 		self.raid_pv = raid_pv		
 		self.snap_pv = snap_pv
+		self.type = 'raid'
 
 
 class RaidVolumeProvider(VolumeProvider):
@@ -682,10 +692,13 @@ class RaidVolumeProvider(VolumeProvider):
 
 	_mdadm = None
 	_lvm = None
+	_logger = None
 	
 	def __init__(self):
 		self._mdadm = Mdadm()
 		self._lvm = Lvm2()
+		self._logger = logging.getLogger(__name__)
+		
 	
 	def create(self, **kwargs):
 		'''
@@ -701,6 +714,7 @@ class RaidVolumeProvider(VolumeProvider):
 		@param snap_pv: Physical volume for LVM snapshot
 		@type snap_pv: str|dict|Volume
 		'''
+
 		raid_pv = self._mdadm.create(list(vol.devname for vol in kwargs['disks']), kwargs['level'])
 
 		if not isinstance(kwargs['vg'], dict):
@@ -723,7 +737,8 @@ class RaidVolumeProvider(VolumeProvider):
 		@param snap_pv: Physical volume for future LVM snapshot creation
 		'''
 		raid_vg = kwargs['raid_vg']
-		kwargs['raid_pv'] = self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
+		raw_vg = os.path.basename(raid_vg)
+		raid_pv = self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
 		lvm_raw_backup = base64.b64decode(kwargs['lvm_group_cfg'])
 		lvm_backup_filename = '/tmp/lvm_backup'
 		write_file(lvm_backup_filename, lvm_raw_backup, logger=logger)
@@ -732,13 +747,19 @@ class RaidVolumeProvider(VolumeProvider):
 			system(cmd, error_text='Cannot restore lvm volume group %s from backup file.')
 		finally:
 			os.unlink(lvm_backup_filename)
-			
-		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg == raid_vg, self._lvm.lv_status())
+		
+		cmd = (('vgchange', '-ay', raw_vg))
+					
+		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg == raw_vg, self._lvm.lv_status())
 		if not lvinfo:
-			raise StorageError('Volume group %s does not contain any logical volume.')
-		kwargs['device'] = lvinfo.lv
-				
-		return super(RaidVolumeProvider, self).create(**kwargs)
+			raise StorageError('Volume group %s does not contain any logical volume.' % raw_vg)
+		
+		system(cmd, error_text='Cannot activate volume group %s' % raw_vg)
+		
+		raid_lv = lvpath(raw_vg, lvinfo.lv)
+		
+		# TODO : Where is snap_pv here? 
+		return RaidVolume(raid_lv, raid_pv=raid_pv, raid_vg=raid_vg, disks=kwargs['disks'], level=kwargs['level'])
 	
 	def create_snapshot(self, vol, snap):
 		if not vol.snap_pv:
@@ -751,20 +772,16 @@ class RaidVolumeProvider(VolumeProvider):
 			snap_pv = Storage.create(vol.snap_pv)
 
 		# Extend RAID volume group with snapshot disk
-		self._lvm.create_pv(snap_pv)
-		if not self._lvm.pv_info(snap_pv).vg == vol.raid_vg:
-			self._lvm.extend_vg(self.raid_vg, snap_pv)
+		self._lvm.create_pv(snap_pv.devname)
+		if not self._lvm.pv_info(snap_pv.devname).vg == vol.raid_vg:
+			self._lvm.extend_vg(vol.raid_vg, snap_pv.devname)
 			
 		# Create RAID LVM snapshot
 		snap_lv = self._lvm.create_lv_snapshot(vol.devname, 'snap', '100%FREE')
 		try:
 			# Creating RAID members snapshots
 			id = {'type': self.type, 'level': vol.level, 'raid_vg' : vol.raid_vg, 'disks': []}
-			lvmgroupcfg = read_file('/etc/lvm/backup/%s' % self.raid_vg)
-			if lvmgroupcfg is None:
-				raise StorageError('Backup file for volume group "%s" does not exists' % vol.raid_vg)
-			id['lvm_group_cfg'] = binascii.b2a_base64(lvmgroupcfg)
-			
+
 			id['tmp_snaps'] = []
 			for _vol, i in zip(vol.disks, range(0, len(vol.disks))):
 				pvd = Storage.lookup_provider(_vol.type)
@@ -784,19 +801,25 @@ class RaidVolumeProvider(VolumeProvider):
 				snap_pv.destroy()
 	
 	def save_snapshot(self, vol, snap):
+		raw_vg = os.path.basename(vol.raid_vg)
+		lvmgroupcfg = read_file('/etc/lvm/backup/%s' % raw_vg)
+		if lvmgroupcfg is None:
+			raise StorageError('Backup file for volume group "%s" does not exists' % raw_vg)
+		snap.id['lvm_group_cfg'] = binascii.b2a_base64(lvmgroupcfg)
+			
 		# Saving RAID members snapshots
-		for _vol, _snap in snap.id.tmp_snaps:
+		for _vol, _snap in snap.id['tmp_snaps']:
 			pvd = Storage.lookup_provider(_vol.type)
 			snap.id['disks'].append({
 				'snapshot': pvd.save_snapshot(_vol, _snap).id 
 			})
 		del snap.id['tmp_snaps']
-			
 		return snap
 	
 	def destroy(self, vol):
 		# TODO: destroy RAID (don't destroy vol.disks !!!)
 		vol.umount()
+		print vol.devname
 		self._lvm.remove_lv(vol.devname)
 		self._lvm.remove_vg(vol.raid_vg)
 		self._lvm.remove_pv(vol.raid_pv)
