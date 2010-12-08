@@ -88,7 +88,7 @@ class P2pMessageProducer(MessageProducer):
 	
 	def _undelivered_cb(self, queue, message, ex):
 		self._local.interval = self._get_next_interval()
-		if self._local.next_retry_index < len(self.retries_progression):
+		if self._local.next_retry_index < len(self.retries_progression) - 1:
 			self._local.next_retry_index += 1	
 
 	def _get_next_interval(self):
