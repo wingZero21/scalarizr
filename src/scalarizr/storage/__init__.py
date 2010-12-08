@@ -21,6 +21,7 @@ import base64
 from binascii import hexlify
 import binascii
 import shutil
+from scalarizr.storage.lvm2 import Lvm2Error
 
 try:
 	import json
@@ -239,8 +240,13 @@ def mkloop(filename, size=None, quick=False):
 	return devname
 
 def listloop():
-	devices = system(('/sbin/losetup', '-a'))[0].strip()
-	# TODO
+	ret = {}
+	loop_lines = system(('/sbin/losetup', '-a'))[0].strip().splitlines()
+	for loop_line in loop_lines:
+		words = loop_line.split()
+		ret[words[0][:-1]] = words[-1][1:-1]
+	return ret
+	
 
 def rmloop(device):
 	system(('/sbin/losetup', '-d', device))
@@ -372,9 +378,6 @@ class Storage:
 	def remove_raid(vol):
 		pvd = RaidVolumeProvider()
 		pvd.destroy(vol)
-		print '%s %s %s' % system('pvdisplay',)
-		print '%s %s %s' % system('lvdisplay',)
-		print '%s %s %s' % system(('cat', '/proc/mdstat'))
 	'''		
 	
 	@staticmethod
@@ -422,7 +425,7 @@ class Storage:
 			from_snap = True			
 			orig_kwargs = kwargs.copy()
 			
-			# Set kwargs to snapshow kwargs
+			# Set kwargs to snapshot kwargs
 			kwargs = kwargs['snapshot']
 			if not isinstance(kwargs, dict):
 				args = None
@@ -435,6 +438,9 @@ class Storage:
 		if 'disks' in kwargs:
 			disks = []
 			for item in kwargs['disks']:
+				if isinstance (item, Volume):
+					disks.append(item)
+					continue
 				disk = self.create(**item) if isinstance(item, dict) else self.create(item)
 				disks.append(disk)
 			kwargs['disks'] = disks
@@ -458,7 +464,7 @@ class Storage:
 		@raise StorageError: General error for all cases		
 		'''
 		snapshot = args[0] if args else kwargs
-		return Storage.create(snapshot=snapshot)
+		return Storage.create(snapshot=snapshot.id)
 '''	
 	@staticmethod
 	def destroy(self, vol):
@@ -479,6 +485,7 @@ class Volume(object):
 	type = 'base'
 	devname = None
 	mpoint = None
+	config = None
 
 	_logger = None
 	_fs = None
@@ -489,8 +496,11 @@ class Volume(object):
 		self.mpoint = mpoint
 		if fstype:
 			self.fstype = fstype
-		if type:
-			self.type = type		
+		self.type = type
+		self.config = dict(mpoint = mpoint,
+						   fstype = fstype,
+						   type   = type)
+		self.config.update(kwargs)		
 
 	def _fstype_setter(self, fstype):
 		self._fs = ResourceMgr.lookup_filesystem(fstype)
@@ -499,7 +509,14 @@ class Volume(object):
 		return self._fs.name if self._fs else None
 
 	fstype = property(_fstype_getter, _fstype_setter)
+	
+	def _check_devname(f):
+		def g(self, *args, **kwargs):
+			if self.devname:
+				return f(self, *args, **kwargs)
+		return g
 
+	@_check_devname
 	def mkfs(self, fstype=None):
 		fstype = fstype or self.fstype
 		if not fstype:
@@ -509,47 +526,56 @@ class Volume(object):
 		self.fstype = fstype
 		self._fs = fs
 	
+	@_check_devname
 	@_fs_should_be_set
 	def resize(self, size=None, **fsargs):
 		fsargs = fsargs or dict()
 		return self._fs.resize(self.devname, **fsargs)
 	
+	@_check_devname
 	@_fs_should_be_set
 	def _get_label(self):
 		return self._fs.get_label(self.devname)
 	
+	@_check_devname
 	@_fs_should_be_set
 	def _set_label(self, lbl):
 		self._fs.set_label(self.devname, lbl)
 		
 	label = property(_get_label, _set_label)
 	
+	@_check_devname
 	@_fs_should_be_set
 	def freeze(self):
 		return self._fs.freeze(self.devname)
 	
+	@_check_devname
 	@_fs_should_be_set
 	def unfreeze(self):
 		return self._fs.unfreeze(self.devname)
 	
+	@_check_devname
 	def mounted(self):
 		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % self.devname, system(MOUNT_EXEC)[0])
-		return bool(res)		
-
+		return bool(res)
+	
+	@_check_devname
 	def mount(self, mpoint=None):
 		mpoint = mpoint or self.mpoint
 		cmd = (MOUNT_EXEC, self.devname, mpoint)
 		system(cmd, error_text='Cannot mount device %s' % self.devname)
 		self.mpoint = mpoint
 	
-	def umount(self):
-		cmd = (UMOUNT_EXEC, '-f', self.devname)
+	@_check_devname
+	def umount(self, lazy=False):
+		cmd = (UMOUNT_EXEC, '-l' if lazy else '-f' , self.devname)
 		try:
 			system(cmd, error_text='Cannot umount device %s' % self.devname)
-		except BaseException, e:
+		except (Exception, BaseException), e:
 			if not 'not mounted' in str(e):
 				raise
 	
+	@_check_devname
 	def snapshot(self, description=None):
 		# Freeze filesystem
 		if self._fs:
@@ -568,9 +594,11 @@ class Volume(object):
 		# Save snapshot
 		return pvd.save_snapshot(self, snap)
 	
-	def destroy(self):
+	@_check_devname
+	def destroy(self, force=False, **kwargs):
 		pvd = Storage.providers[self.type]
-		pvd.destroy(self)
+		pvd.destroy(self, force, **kwargs)
+		self.devname = None
 
 
 class Snapshot(object):
@@ -610,8 +638,15 @@ class VolumeProvider(object):
 	def save_snapshot(self, vol, snap):
 		return snap
 
-	def destroy(self, vol):
-		vol.umount()
+	def destroy(self, vol, force=False):
+		try:
+			vol.umount()
+		except (Exception, BaseException), e:
+			if force:
+				vol.umount(lazy=True)
+			else:
+				raise
+		
 		
 Storage.explore_provider(VolumeProvider, default_for_vol=True, default_for_snap=True)
 
@@ -620,7 +655,7 @@ class LoopVolume(Volume):
 	file = None
 
 	def __init__(self, devname, mpoint=None, fstype=None, type=None, **kwargs):
-		Volume.__init__(self, devname, mpoint, fstype, type)
+		Volume.__init__(self, devname, mpoint, fstype, type, **kwargs)
 		self.file = kwargs['file']
 		
 class LoopVolumeProvider(VolumeProvider):
@@ -640,11 +675,11 @@ class LoopVolumeProvider(VolumeProvider):
 		@type zerofill: bool
 		'''
 		
-		kwargs['device'] = mkloop(kwargs['file'], kwargs.get('size'), not kwargs.get('zerofill')) 
+		kwargs['device'] = mkloop(kwargs['file'], kwargs.get('size'), not kwargs.get('zerofill'))
 		return super(LoopVolumeProvider, self).create(**kwargs)
 	
-	def destroy(self, vol):		
-		super(LoopVolumeProvider, self).destroy(vol)
+	def destroy(self, vol, force=False):		
+		super(LoopVolumeProvider, self).destroy(vol, force)
 		rmloop(vol.devname)		
 		
 	def create_from_snapshot(self, **kwargs):
@@ -672,15 +707,21 @@ class RaidVolume(Volume):
 	
 	def __init__(self, devname, mpoint=None, fstype=None, type=None, 
 				level=None, disks=None, raid_vg=None, raid_pv=None, snap_pv=None, **kwargs):
-		Volume.__init__(self, devname, mpoint, fstype, type)
+		
+		kwargs.update({'level' : level,
+					   'raid_vg': raid_vg,
+					   'raid_pv': raid_pv,
+					   'snap_pv' :snap_pv})
+		
+		Volume.__init__(self, devname, mpoint, fstype, type, **kwargs)
 		self.level = level
 		self.disks = disks		
 		self.raid_vg = raid_vg
 		self.raid_pv = raid_pv		
 		self.snap_pv = snap_pv
 		self.type = 'raid'
-
-
+	
+		
 class RaidVolumeProvider(VolumeProvider):
 	type = 'raid'
 	vol_class = RaidVolume
@@ -709,7 +750,6 @@ class RaidVolumeProvider(VolumeProvider):
 		@param snap_pv: Physical volume for LVM snapshot
 		@type snap_pv: str|dict|Volume
 		'''
-
 		raid_pv = self._mdadm.create(list(vol.devname for vol in kwargs['disks']), kwargs['level'])
 
 		if not isinstance(kwargs['vg'], dict):
@@ -721,7 +761,9 @@ class RaidVolumeProvider(VolumeProvider):
 		kwargs['raid_vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
 		kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
 		kwargs['raid_pv'] = raid_pv
-		return super(RaidVolumeProvider, self).create(**kwargs)		
+		volume = super(RaidVolumeProvider, self).create(**kwargs)
+		volume.config['disks'] = [vol.config for vol in kwargs['disks']]
+		return volume		
 	
 	def create_from_snapshot(self, **kwargs):
 		'''
@@ -786,14 +828,16 @@ class RaidVolumeProvider(VolumeProvider):
 			# TODO: store snap_pv configuration?
 			
 			snap.id = id
-			return snap
 		
 		finally:
 			self._lvm.remove_lv(snap_lv)
+			self._lvm.remove_pv(snap_pv.devname)
 			if not isinstance(vol.snap_pv, Volume):
 				# Destroy run-time created snap volume
 				self._lvm.remove_pv(snap_pv)
 				snap_pv.destroy()
+		
+		return snap
 	
 	def save_snapshot(self, vol, snap):
 		raw_vg = os.path.basename(vol.raid_vg)
@@ -811,13 +855,24 @@ class RaidVolumeProvider(VolumeProvider):
 		del snap.id['tmp_snaps']
 		return snap
 	
-	def destroy(self, vol):
-		# TODO: destroy RAID (don't destroy vol.disks !!!)
+	def destroy(self, vol, force=False, remove_disks=False):
 		vol.umount()
-		self._lvm.remove_lv(vol.devname)
+		try:
+			self._lvm.remove_lv(vol.devname)
+		except Lvm2Error, e:
+			if "Can't remove open logical volume" in str(e) and force:
+				self._logger.debug("Can't remove logical volume right now (still mounted?). Trying lazy umount.")
+				vol.umount(lazy=True)
+				self._lvm.remove_lv(vol.devname)
+			else:
+				raise
+							
 		self._lvm.remove_vg(vol.raid_vg)
 		self._lvm.remove_pv(vol.raid_pv)
 		self._mdadm.delete(vol.raid_pv)
+		if remove_disks and getattr(vol.disks, '__iter__', False):
+			for disk in vol.disks:
+				disk.destroy()
 	
 Storage.explore_provider(RaidVolumeProvider)
 
@@ -829,14 +884,20 @@ class EphVolume(Volume):
 	vg = None
 	tranzit_vol = None
 	
-	def __init__(self, devname, mpoint=None, fstype=None, type=None, vg=None, tranzit_lv=None, snap_pvd=None, snap_backend=None):
-		Volume.__init__(self, devname, mpoint, fstype)
+	def __init__(self, devname, mpoint=None, fstype=None, type=None, vg=None, tranzit_lv=None, snap_pvd=None, snap_backend=None, **kwargs):
+		
+		kwargs.update({			'vg' : vg,
+					   	'tranzit_lv' : tranzit_lv,
+					   	  'snap_pvd' : snap_pvd,
+					  'snap_backend' : snap_backend})
+		
+		Volume.__init__(self, devname, mpoint, fstype, **kwargs)
 		self.snap_pvd = snap_pvd
 		if isinstance(snap_backend, IEphSnapshotBackend):
 			self.snap_backend = snap_backend
 		elif snap_backend:
 			self.snap_backend = ResourceMgr.lookup_snapshot_backend(snap_backend)
-		self.vg = vg		
+		self.vg = vg
 
 
 class EphVolumeProvider(VolumeProvider):

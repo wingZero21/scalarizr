@@ -76,6 +76,8 @@ class Mdadm:
 			if not 'No such file or directory' in str(e):
 				raise
 
+		system(('rm', '-f', array))
+
 		for device in devices:
 			self._zero_superblock(device)
 			

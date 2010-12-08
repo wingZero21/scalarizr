@@ -164,8 +164,9 @@ class Lvm2:
 		system(cmd, error_text='Cannot change logical volume attributes')
 	
 	def remove_pv(self, ph_volume):
-		if self.pv_info(ph_volume).vg:
-			system(('/sbin/vgreduce', '-f', ph_volume), error_text='Cannot reduce volume group')
+		vg_of_ph_volume = self.pv_info(ph_volume).vg
+		if vg_of_ph_volume:
+			system(('/sbin/vgreduce', '-f', vg_of_ph_volume, ph_volume), error_text='Cannot reduce volume group')
 		system(('/sbin/pvremove', '-ff', ph_volume), error_text='Cannot remove a physical volume')
 	
 	def remove_vg(self, group):
