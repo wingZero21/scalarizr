@@ -45,7 +45,7 @@ class Test(unittest.TestCase):
 		array_snap = self.array.snapshot()
 		self.array.destroy(remove_disks=True)
 		
-		self.array = Storage.create_from_snapshot(array_snap)
+		self.array = Storage.create(snapshot=array_snap)
 		
 		new_mpoint = '/tmp/mpoint2'
 		if not os.path.isdir(new_mpoint):

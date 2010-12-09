@@ -150,7 +150,7 @@ class TestEphStorageSnapshot(unittest.TestCase):
 		self.vols[0] = None
 
 		# Restore snapshot
-		self.vols[2] = Storage.create(disk=self.devices[2], snapshot=snap.id)
+		self.vols[2] = Storage.create(disk=self.devices[2], snapshot=snap)
 		self.vols[2].mount(self.mpoints[2])
 		bigfile2 = os.path.join(self.mpoints[2], 'bigfile')
 		

@@ -1,5 +1,5 @@
 
-from .lvm2 import Lvm2, lvpath, VGCHANGE
+from .lvm2 import Lvm2, lvpath, VGCHANGE, Lvm2Error
 from .raid import Mdadm
 from .fs import MOUNT_EXEC, UMOUNT_EXEC, SYNC_EXEC
 from .transfer import Transfer
@@ -22,7 +22,6 @@ import signal
 import binascii
 import uuid
 import shutil
-from scalarizr.storage.lvm2 import Lvm2Error
 from scalarizr.util.software import whereis
 
 try:
@@ -189,30 +188,6 @@ raid = Storage.create({
 Storage.destroy(raid)
 
 
-
-
-
-# eph-xfs
-vol = mgr.create_reliable_volume(device='/dev/loop0', shadow='/dev/loop1', 
-		snapshot_backend=CloudfilesSnapshotBackend('/container/key-basename')
-vol.mkfs('xfs')
-snap = vol.snapshot()
-
-lvm = Lvm2()
-vg = lvm.create_vg(None, devices=('/dev/loop0',), ph_extent_size=16)
-lv1 = lvm.create_lv(vg, 'data', size=10)
-lv2 = lvm.create_lv(vg, 'backup', size=10)
-
-mgr.create_ephs(ph_device='/dev/loop', lv_ratio=(40, 40, 20), vg_name=None, vg_options=None, snap_backend=CloudfilesSnapshotBackend())
-mgr.create_ephs(lv_data=lv1, lv_backup=lv2, snap_size=5, snap_backend=CloudfilesSnapshotBackend())
-
-lvm = Lvm2()
-mdadm = Mdadm()
-md = mdadm.create(('/dev/sdebs1', '/dev/sdebs2'), level=0)
-vg = lvm.create_vg(None, devices=md)
-lv = lvm.create_lv(vg, num_extents='100%FREE')
-
-
 '''
 
 logger = logging.getLogger(__name__)
@@ -252,47 +227,11 @@ def listloop():
 def rmloop(device):
 	system(('/sbin/losetup', '-d', device))
 
-class ResourceMgr:
-	@staticmethod
-	def lookup_snapshot_backend(scheme):
-		self = ResourceMgr
-		if scheme in self._snap_backends:
-			return self._snap_backends[scheme]
-		raise LookupError('Unknown snapshot backend for schema %s://' % scheme)
-	
-	@staticmethod
-	def explore_snapshot_backend(schema, BackendClass):
-		self = ResourceMgr
-		self._snap_backends[schema] = BackendClass()
-	
-	@staticmethod
-	def lookup_filesystem(fstype):
-		self = ResourceMgr
-		if fstype in self._fs_drivers:
-			return self._fs_drivers[fstype]
-		try:
-			mod = __import__('scalarizr.storage.fs.%s' % fstype, globals(), locals(), ('__filesystem__',), -1)
-			self._fs_drivers[fstype] = mod.__filesystem__()
-			return self.lookup_filesystem(fstype)
-		except ImportError:
-			raise LookupError('Unknown filesystem %s' % fstype)
-
-	@staticmethod
-	def explore_filesystem(fstype, FileSystemClass):
-		self = ResourceMgr
-		self._fs_drivers[fstype] = FileSystemClass()
-
-	@staticmethod
-	def reset():
-		self = ResourceMgr
-		self._fs_drivers = {}
-		self._snap_backends = {}
-		
-ResourceMgr.reset()
 
 class Storage:
 	_lvm = None
 	_mdadm = None
+	_fs_drivers = {}
 	
 	@staticmethod
 	def _init_lvm():
@@ -305,81 +244,23 @@ class Storage:
 		self = Storage
 		if not self._mdadm:
 			self._mdadm = Mdadm()
-	'''	
+	
 	@staticmethod
-	def create_ephs(device, vg_name, vg_options=None, 
-				lv_extents='40%VG', snap_pvd=None, snap_backend=None, mpoint=None, fstype=None):
+	def lookup_filesystem(fstype):
 		self = Storage
-		self._init_lvm()
-		
-		# Create VG
-		vg_options = vg_options or dict()
-		self._lvm.create_pv(device)
-		vg = self._lvm.create_vg(vg_name, (device,), **vg_options)
-		
-		# Create data volume and tranzit volume with the same same
-		data_lv = self._lvm.create_lv(vg, 'data', extents=lv_extents)
-
-		# Create tranzit volume (should be 5% bigger then data vol)
-		size_in_KB = int(read_file('/sys/block/%s/size' % os.path.basename(os.readlink(data_lv)))) / 2
-		tranzit_lv = self._lvm.create_lv(vg, 'tranzit', size='%dK' % (size_in_KB*1.05,))
-		
-		# Init snapshot provider 
-		snap_pvd = snap_pvd or EphSnapshotProvider()
-		
-		# Construct storage volume
-		return EphVolume(data_lv, mpoint, fstype, vg, tranzit_lv, snap_pvd, snap_backend)
+		if fstype in self._fs_drivers:
+			return self._fs_drivers[fstype]
+		try:
+			mod = __import__('scalarizr.storage.fs.%s' % fstype, globals(), locals(), ('__filesystem__',), -1)
+			self._fs_drivers[fstype] = mod.__filesystem__()
+			return self.lookup_filesystem(fstype)
+		except ImportError:
+			raise LookupError('Unknown filesystem %s' % fstype)
 
 	@staticmethod
-	def remove_ephs(vol):
+	def explore_filesystem(fstype, FileSystemClass):
 		self = Storage
-		self._init_lvm()
-		
-		# Umount volumes
-		vol.umount()
-		vol.tranzit_vol.umount()
-		
-		# Find PV 
-		pv = None
-		pvi = firstmatched(lambda pvi: vol.vg in pvi.vg, self._lvm.pv_status())
-		if pvi:
-			pv = pvi.pv
-			
-		# Remove storage VG
-		self._lvm.change_lv(vol.devname, available=False)
-		self._lvm.change_lv(vol.tranzit_vol.devname, available=False)
-		self._lvm.remove_vg(vol.vg)
-		
-		if pv:
-			# Remove PV if it doesn't belongs to any other VG
-			pvi = self._lvm.pv_info(pv)
-			if not pvi.vg:
-				self._lvm.remove_pv(pv)
-				
-			
-	@staticmethod
-	def create_raid(volumes, level, vg_name=None, vg_options=None, snap_pv=None, mpoint=None, fstype=None):
-		self = Storage
-
-		self._init_mdadm()
-		raid_pv = self._mdadm.create(list(vol.devname for vol in volumes), level)
-
-		self._init_lvm()
-		vg_name = vg_name or 'vg_'+os.path.basename(raid_pv)
-		vg_options = vg_options or dict()
-		self._lvm.create_pv(raid_pv)
-		raid_vg = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
-		
-		raid_lv = self._lvm.create_lv(vg_name, extents='100%FREE')
-		
-		return RaidVolume(raid_lv, mpoint, fstype, raid_pv=raid_pv, snap_pv=snap_pv, raid_vg=raid_vg, disks=volumes, level=level)
-		
-
-	@staticmethod
-	def remove_raid(vol):
-		pvd = RaidVolumeProvider()
-		pvd.destroy(vol)
-	'''		
+		self._fs_drivers[fstype] = FileSystemClass()	
 	
 	@staticmethod
 	def explore_provider(PvdClass, default_for_vol=False, default_for_snap=False):
@@ -427,7 +308,7 @@ class Storage:
 			orig_kwargs = kwargs.copy()
 			
 			# Set kwargs to snapshot kwargs
-			kwargs = kwargs['snapshot']
+			kwargs = kwargs['snapshot'].config if isinstance(kwargs['snapshot'], Snapshot) else kwargs['snapshot']
 			if not isinstance(kwargs, dict):
 				args = None
 				kwargs = dict(device=kwargs)
@@ -465,7 +346,7 @@ class Storage:
 		@raise StorageError: General error for all cases		
 		'''
 		snapshot = args[0] if args else kwargs
-		return Storage.create(snapshot=snapshot.id)
+		return Storage.create(snapshot=snapshot)
 '''	
 	@staticmethod
 	def destroy(vol):
@@ -499,14 +380,16 @@ class Volume(object):
 		self.mpoint = mpoint
 		if fstype:
 			self.fstype = fstype
-		self.type = type
+		if type:
+			self.type = type
+		
 		self.config = dict(mpoint = mpoint,
 						   fstype = fstype,
 						   type   = type)
 		self.config.update(kwargs)		
 
 	def _fstype_setter(self, fstype):
-		self._fs = ResourceMgr.lookup_filesystem(fstype)
+		self._fs = Storage.lookup_filesystem(fstype)
 
 	def _fstype_getter(self):
 		return self._fs.name if self._fs else None
@@ -517,7 +400,7 @@ class Volume(object):
 		fstype = fstype or self.fstype
 		if not fstype:
 			raise ValueError('Filesystem cannot be None')
-		fs = ResourceMgr.lookup_filesystem(fstype) 
+		fs = Storage.lookup_filesystem(fstype) 
 		fs.mkfs(self.devname)
 		self.fstype = fstype
 		self._fs = fs
@@ -570,8 +453,8 @@ class Volume(object):
 			self.freeze()
 
 		# Create snapshot
-		snap = Snapshot(None, description)
 		pvd = Storage.lookup_provider(self.type)
+		snap = pvd.snapshot_factory(description)		
 		pvd.create_snapshot(self, snap)
 		
 		# Unfreeze filesystem
@@ -590,23 +473,35 @@ class Volume(object):
 class Snapshot(object):
 	type = None
 	description = None
-	id = None
 	
-	def __init__(self, id=None, description=None, type=None, **kwargs):
+	def __init__(self, type=None, description=None, **kwargs):
 		self.type = type
 		self.description = description
-		self.id = id
+		for k, v in kwargs.items():
+			if hasattr(self, k):
+				setattr(self, k, v)
 	
 	def __str__(self):
 		return '[snapshot:%s] %s' % (self.type, self.description)
-
-	def as_dict(self):
-		return dict(type=self.type, description=self.description)
+	
+	@property
+	def config(self):
+		attrs = tuple(attr for attr in dir(self) if not attr.startswith('_'))
+		ret = dict()
+		for attr in attrs:
+			if attr == 'config':
+				continue
+			if attr == 'disks':
+				ret['disks'] = tuple({'snapshot' : snap.config} for snap in self.disks)
+			else:
+				ret[attr] = getattr(self, attr)
+		return ret
 
 
 class VolumeProvider(object):
 	type = 'base'
 	vol_class = Volume
+	snap_class = Snapshot
 	
 	def create(self, **kwargs):
 		device = kwargs['device']
@@ -617,6 +512,11 @@ class VolumeProvider(object):
 	
 	def create_from_snapshot(self, **kwargs):
 		return self.create(**kwargs)
+	
+	def snapshot_factory(self, description, **kwargs):
+		kwargs['description'] = description
+		kwargs['type'] = self.type
+		return self.snap_class(**kwargs)
 	
 	def create_snapshot(self, vol, snap):
 		return snap
@@ -640,16 +540,20 @@ class VolumeProvider(object):
 Storage.explore_provider(VolumeProvider, default_for_vol=True, default_for_snap=True)
 
 class LoopVolume(Volume):
-
 	file = None
 
 	def __init__(self, devname, mpoint=None, fstype=None, type=None, **kwargs):
 		Volume.__init__(self, devname, mpoint, fstype, type, **kwargs)
 		self.file = kwargs['file']
 		
+class LoopSnapshot(Snapshot):
+	file = None
+
+	
 class LoopVolumeProvider(VolumeProvider):
 	type = 'loop'
 	vol_class = LoopVolume
+	snap_class = LoopSnapshot
 	
 	def create(self, **kwargs):
 		
@@ -677,7 +581,7 @@ class LoopVolumeProvider(VolumeProvider):
 	def create_snapshot(self, vol, snap):
 		backup_filename = vol.file + '.%s.bak' % time.strftime('%d-%m-%Y_%H:%M')
 		shutil.copy(vol.file, backup_filename)
-		snap.id = {'file': backup_filename, 'type': 'loop'}
+		snap.file = backup_filename
 		return snap
 	
 	def save_snapshot(self, vol, snap):
@@ -710,10 +614,18 @@ class RaidVolume(Volume):
 		self.snap_pv = snap_pv
 		self.type = 'raid'
 	
-		
+class RaidSnapshot(Snapshot):
+	level = None
+	raid_vg = None
+	lvm_group_cfg = None
+	snap_pv = None
+	disks = None
+
+	
 class RaidVolumeProvider(VolumeProvider):
 	type = 'raid'
 	vol_class = RaidVolume
+	snap_class = RaidSnapshot
 
 	_mdadm = None
 	_lvm = None
@@ -806,17 +718,18 @@ class RaidVolumeProvider(VolumeProvider):
 		snap_lv = self._lvm.create_lv_snapshot(vol.devname, 'snap', '100%FREE')
 		try:
 			# Creating RAID members snapshots
-			id = {'type': self.type, 'level': vol.level, 'raid_vg' : vol.raid_vg, 'disks': []}
+			snap.level = vol.level
+			snap.raid_vg = vol.raid_vg
+			snap.disks = []
 
-			id['tmp_snaps'] = []
+			snap.tmp_snaps = []
 			for _vol, i in zip(vol.disks, range(0, len(vol.disks))):
 				pvd = Storage.lookup_provider(_vol.type)
-				_snap = Snapshot(None, 'RAID%s disk #%d - %s' % (vol.level, i, snap.description))
-				id['tmp_snaps'].append((_vol, pvd.create_snapshot(_vol, _snap)))
+				_snap = pvd.snapshot_factory('RAID%s disk #%d - %s' % (vol.level, i, snap.description))
+				snap.tmp_snaps.append((_vol, pvd.create_snapshot(_vol, _snap)))
 			
 			# TODO: store snap_pv configuration?
-			
-			snap.id = id
+
 		
 		finally:
 			self._lvm.remove_lv(snap_lv)
@@ -833,15 +746,14 @@ class RaidVolumeProvider(VolumeProvider):
 		lvmgroupcfg = read_file('/etc/lvm/backup/%s' % raw_vg)
 		if lvmgroupcfg is None:
 			raise StorageError('Backup file for volume group "%s" does not exists' % raw_vg)
-		snap.id['lvm_group_cfg'] = binascii.b2a_base64(lvmgroupcfg)
+		snap.lvm_group_cfg = binascii.b2a_base64(lvmgroupcfg)
 			
 		# Saving RAID members snapshots
-		for _vol, _snap in snap.id['tmp_snaps']:
+		for _vol, _snap in snap.tmp_snaps:
 			pvd = Storage.lookup_provider(_vol.type)
-			snap.id['disks'].append({
-				'snapshot': pvd.save_snapshot(_vol, _snap).id 
-			})
-		del snap.id['tmp_snaps']
+			snap.disks.append(pvd.save_snapshot(_vol, _snap))
+		del snap.tmp_snaps
+		
 		return snap
 	
 	def destroy(self, vol, force=False, **kwargs):
@@ -883,6 +795,11 @@ class EphVolume(Volume):
 		self.disk = disk		
 		self.tranzit_vol = tranzit_vol
 		self.snap_backend = snap_backend
+
+class EphSnapshot(Snapshot):
+	path = None
+	size = None
+	vg = None
 
 
 class EphVolumeProvider(VolumeProvider):
@@ -964,11 +881,34 @@ class EphVolumeProvider(VolumeProvider):
 		'''
 		...
 		@param path: Path to snapshot manifest on remote storage
+		
+		Example: 
+		Storage.create(**{
+			'disk' : {
+				'type' : 'loop',
+				'file' : '/media/storage',
+				'size' : 1000
+			}
+			'snapshot': {
+				'type': 'eph',
+				'description': 'Last winter mysql backup',
+				'path': 'cf://mysql_backups/cloudsound/production/snap-14a356de.manifest.ini'
+				'size': '40%FREE',
+				'vg': {
+					'name': 'mysql_data',
+					'ph_extent_size': 10
+				}
+			}
+		})
+		
+		
 		'''
-		kwargs['snap_backend'] = os.path.dirname(kwargs['path'])
-		vol = self.create(**kwargs)
+		_kwargs = kwargs.copy()
+		if not 'snap_backend' in _kwargs:
+			_kwargs['snap_backend'] = os.path.dirname(_kwargs['path'])
+		vol = self.create(**_kwargs)
 
-		snap = Snapshot(id=dict(path=kwargs['path'])) # %) Ugly		
+		snap = self.snapshot_factory(**kwargs)
 		try:
 			self._prepare_tranzit_vol(vol.tranzit_vol)
 			self._snap_pvd.download(vol, snap, vol.tranzit_vol.mpoint)
@@ -1105,7 +1045,7 @@ class EphSnapshotProvider(object):
 	def restore(self, volume, snapshot, tranzit_path):
 		# Load manifest
 		mnf = Configuration('ini')
-		mnf.read(os.path.join(tranzit_path, os.path.basename(snapshot.id['path'])))
+		mnf.read(os.path.join(tranzit_path, os.path.basename(snapshot.path)))
 		
 		with timethis("checksum"):
 			# Checksum
@@ -1139,22 +1079,22 @@ class EphSnapshotProvider(object):
 
 	def upload(self, volume, snapshot, tranzit_path):
 		mnf = Configuration('ini')
-		mnf.read(snapshot.id['path'])
+		mnf.read(snapshot.path)
 		
-		files = [snapshot.id['path']]
+		files = [snapshot.path]
 		files += [os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks')]
 		
-		snapshot.id['path'] = self._transfer.upload(files, volume.snap_backend['path'])[0]
+		snapshot.path = self._transfer.upload(files, volume.snap_backend['path'])[0]
 		return snapshot
 
 	def download(self, volume, snapshot, tranzit_path):
 		# Load manifest
-		mnf_path = self._transfer.download(snapshot.id['path'], tranzit_path)[0]
+		mnf_path = self._transfer.download(snapshot.path, tranzit_path)[0]
 		mnf = Configuration('ini')
 		mnf.read(mnf_path)
 		
 		# Load files
-		remote_path = os.path.dirname(snapshot.id['path'])
+		remote_path = os.path.dirname(snapshot.path)
 		files = tuple(os.path.join(remote_path, chunk) for chunk in mnf.options('chunks'))
 		self._transfer.download(files, tranzit_path)
 

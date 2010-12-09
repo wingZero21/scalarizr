@@ -6,14 +6,12 @@ Created on Nov 25, 2010
 import unittest
 
 from scalarizr.util import system2 as system
-from scalarizr.storage import mkloop, ResourceMgr, IEphSnapshotBackend, Volume,\
-	Snapshot, Storage, EphVolume, StorageError, VolumeProvider
+from scalarizr.storage import mkloop, Volume, Snapshot, Storage, StorageError, VolumeProvider
 from scalarizr.storage.fs import FileSystem
 
 import os
 import time
 from random import randint
-import shutil
 
 
 class TestMkloop(unittest.TestCase):
@@ -53,24 +51,15 @@ class TestMkloop(unittest.TestCase):
 	def assert_size(self):
 		self.assertEqual(os.path.getsize(self.filename), self.SIZE * 1024 * 1024)
 		
-class TestResourceMgr(unittest.TestCase):
+class TestResourceManagement(unittest.TestCase):
 	mgr = None
 	def setUp(self):
-		self.mgr = ResourceMgr
-		self.mgr.reset()
+		self.mgr = Storage
+		self.mgr._fs_drivers = {}
 	
 	def tearDown(self):
 		pass
 	
-	def test_singleton_backend(self):
-		my = 'my'
-		class MySnapBackend(IEphSnapshotBackend):
-			scheme = my
-		self.mgr.explore_snapshot_backend(my, MySnapBackend)
-		o1 = self.mgr.lookup_snapshot_backend(my)
-		self.assertTrue(isinstance(o1, MySnapBackend))
-		self.assertEqual(o1, self.mgr.lookup_snapshot_backend(my))
-
 	def test_singleton_fs(self):
 		myfs = 'myfs'
 		class FSDriver(FileSystem):
@@ -124,7 +113,6 @@ class TestVolume(unittest.TestCase):
 		
 		snap = vol.snapshot(description='test snap')
 		self.assertTrue(isinstance(snap, Snapshot))
-		self.assertTrue(snap.id is None)
 		self.assertEqual(snap.description, 'test snap')
 
 class TestStorageProviders(unittest.TestCase):
