@@ -6,7 +6,8 @@ Created on Nov 25, 2010
 import unittest
 
 from scalarizr.util import system2 as system
-from scalarizr.storage import mkloop, Volume, Snapshot, Storage, StorageError, VolumeProvider
+from scalarizr.storage import mkloop, Volume, Snapshot, Storage, StorageError, VolumeProvider,\
+	EphSnapshot
 from scalarizr.storage.fs import FileSystem
 
 import os
@@ -155,6 +156,14 @@ class TestStorageProviders(unittest.TestCase):
 		
 		self.assertTrue(isinstance(Storage.lookup_provider(self.MyPvd.type), self.MyPvd))
 		self.assertTrue(isinstance(Storage.lookup_provider(None, True), self.MyPvd))
+	
+	def test_snapshot_factory(self):
+		Storage.providers = self._save_pvds		
+		pvd = Storage.lookup_provider('eph')
+		snap = pvd.snapshot_factory('hom')
+		self.assertEqual(snap.type, 'eph')
+		self.assertEqual(snap.description, 'hom')
+		self.assertTrue(isinstance(snap, EphSnapshot))
 	
 	
 class TestStorageCreate(unittest.TestCase):

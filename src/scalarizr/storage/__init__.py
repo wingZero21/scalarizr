@@ -278,6 +278,9 @@ class Storage:
 
 	@staticmethod
 	def lookup_provider(pvd_type=None, for_snap=False):
+		'''
+		XXX: for_snap confuse
+		'''
 		self = Storage
 		
 		if not pvd_type:
@@ -805,6 +808,7 @@ class EphSnapshot(Snapshot):
 class EphVolumeProvider(VolumeProvider):
 	type = 'eph'
 	vol_class = EphVolume
+	snap_class = EphSnapshot
 	
 	_lvm = None
 	_snap_pvd = None
@@ -909,6 +913,7 @@ class EphVolumeProvider(VolumeProvider):
 		vol = self.create(**_kwargs)
 
 		snap = self.snapshot_factory(**kwargs)
+		print snap
 		try:
 			self._prepare_tranzit_vol(vol.tranzit_vol)
 			self._snap_pvd.download(vol, snap, vol.tranzit_vol.mpoint)
@@ -1034,11 +1039,9 @@ class EphSnapshotProvider(object):
 		manifest_path = os.path.join(tranzit_path, '%s.%s' % (snap_id, self.MANIFEST_NAME))
 		config.write(manifest_path)
 
-		snapshot.id = dict(
-			type=EphVolumeProvider.type, 
-			path=manifest_path, 
-			vg=os.path.basename(volume.vg)
-		) 
+		snapshot.path = manifest_path
+		snapshot.vg = os.path.basename(volume.vg)
+		
 		return snapshot
 	
 	@timethis
@@ -1083,6 +1086,7 @@ class EphSnapshotProvider(object):
 		
 		files = [snapshot.path]
 		files += [os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks')]
+		print files
 		
 		snapshot.path = self._transfer.upload(files, volume.snap_backend['path'])[0]
 		return snapshot

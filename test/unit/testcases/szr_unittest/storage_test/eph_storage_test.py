@@ -21,7 +21,7 @@ class TestEphStorageCreate(unittest.TestCase):
 
 	def setUp(self):
 		self.filename = '/tmp/pv%s' % randint(11, 99)
-		self.device = mkloop(self.filename, size=100, quick=True)
+		self.device = mkloop(self.filename, size=50, quick=True)
 		self.mpoint = '/mnt/ephstorage'
 		if not os.path.exists(self.mpoint):
 			os.makedirs(self.mpoint)
@@ -133,17 +133,17 @@ class TestEphStorageSnapshot(unittest.TestCase):
 		
 		# Create big file
 		bigfile = os.path.join(self.mpoints[0], 'bigfile')		
-		system(('dd', 'if=/dev/urandom', 'of=%s' % bigfile, 'bs=1M', 'count=30'))
+		system(('dd', 'if=/dev/urandom', 'of=%s' % bigfile, 'bs=1M', 'count=15'))
 		bigsize = os.path.getsize(bigfile)
 		self.assertTrue(bigsize > 0)
 		md5sum = system(('/usr/bin/md5sum', bigfile))[0].strip().split(' ')[0]		
 		
 		# Snapshot storage
 		snap = self.vols[0].snapshot(description='Bigfile with us forever')
-		
-		self.assertTrue('manifest.ini' in snap.id['path'])
-		self.assertEqual(snap.id['type'], 'eph')
-		self.assertEqual(snap.id['vg'], 'casstorage')
+		self.assertEqual(snap.type, 'eph')
+		self.assertTrue('manifest.ini' in snap.path)		
+		self.assertEqual(snap.vg, 'casstorage')
+
 
 		# Destroy original storage
 		self.vols[0].destroy()
