@@ -6,8 +6,8 @@ Created on Nov 19, 2010
 import unittest
 
 from scalarizr.storage import mkloop
-from scalarizr.storage.lvm2 import Lvm2
-from scalarizr.util import system2
+from scalarizr.storage.lvm2 import Lvm2, system
+from scalarizr.util import firstmatched
 
 from random import randint
 
@@ -39,13 +39,13 @@ class Test(unittest.TestCase):
 
 	def tearDown(self):
 		if self.lvs:
-			system2('/sbin/lvremove -f %s' % self.lvs, shell=True)
+			system(('/sbin/lvremove', '-f', self.lvs))
 		if self.lv0:
-			system2('/sbin/lvremove -f %s' % self.lv0, shell=True)
+			system(('/sbin/lvremove', '-f', self.lv0))
 		if self.vg0:
-			system2('/sbin/vgremove -f %s' % self.vg0, shell=True)
-		system2('/sbin/pvremove -f %s' % self.ph_device, shell=True)
-		system2('/sbin/losetup -d %s' % self.ph_device, shell=True)		
+			system(('/sbin/vgremove', '-f', self.vg0))
+		system(('/sbin/pvremove', '-f', self.ph_device))
+		system(('/sbin/losetup', '-d', self.ph_device))		
 		pass
 
 	def _test_parse_table(self):
@@ -77,10 +77,10 @@ class Test(unittest.TestCase):
 		self.lv0 = self.lvm.create_lv(self.vg0_name, self.lv0_name, extents='45%VG')
 		lv0i = self.lvm.lv_info(self.lv0)
 		
-		self.assertEqual(lv0i.lv, self.lv0_name)
-		self.assertEqual(lv0i.vg, self.vg0_name)
+		self.assertEqual(lv0i.lv_name, self.lv0_name)
+		self.assertEqual(lv0i.vg_name, self.vg0_name)
 		self.assertFalse(lv0i.origin)
-		self.assertFalse(lv0i.snap_pc)
+		self.assertFalse(lv0i.snap_percent)
 
 
 		# Create LV-Snapshot
@@ -88,7 +88,7 @@ class Test(unittest.TestCase):
 		lvsi = self.lvm.lv_info(self.lvs)
 
 		self.assertEqual(lvsi.origin, self.lv0_name)
-		self.assertEqual(lvsi.size, '%s.00m' % 12)
+		self.assertEqual(lvsi.lv_size, '%s.00m' % 12)
 
 		
 		# Remove snapshot
@@ -102,6 +102,19 @@ class Test(unittest.TestCase):
 		self.assertRaises(LookupError, self.lvm.vg_info, *(self.vg0_name,))
 		
 		self.lvm.remove_pv(self.ph_device)
+	
+	def test_pv_add_remove_vg(self):
+		self.vg0 = self.lvm.create_vg('test', [self.ph_device])
+		pvi = self.lvm.pv_info(self.ph_device)
+		self.assertEqual(pvi.vg, 'test')
+		
+		pvi = firstmatched(lambda pvi: 'test' in pvi.vg, self.lvm.pv_status())
+		self.assertEqual(pvi.pv, self.ph_device)
+		
+		self.lvm.remove_vg(self.vg0)
+		self.vg0 = None
+		pvi = self.lvm.pv_info(self.ph_device)
+		self.assertEqual(pvi.vg, '')
 		
 
 if __name__ == "__main__":

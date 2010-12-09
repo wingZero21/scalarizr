@@ -240,19 +240,16 @@ class Messages:
 	
 	BLOCK_DEVICE_ATTACHED = "BlockDeviceAttached"
 	"""
-	@broadcast
 	Fires when block device was attached
 	"""
 	
 	BLOCK_DEVICE_DETACHED = "BlockDeviceDetached"
 	"""
-	@broadcast
 	Fires when block device was detached
 	"""
 
 	BLOCK_DEVICE_MOUNTED = "BlockDeviceMounted"
 	"""
-	@broadcast
 	Fires when block device was mounted
 	"""
 	

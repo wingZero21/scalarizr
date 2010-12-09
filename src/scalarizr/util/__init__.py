@@ -320,7 +320,6 @@ def backup_file(filename):
 	raise UtilError("Max backups limit %d exceed for file %s" % (max_backups, filename))
 
 
-"""
 def timethis(what):
 	try:
 		import time
@@ -341,7 +340,7 @@ def timethis(what):
 		return timed
 	else:
 		return benchmark()
-"""
+
 
 def split_ex(value, separator=",", allow_empty=False, ct=list):
 	return ct(v.strip() 

@@ -2,8 +2,10 @@
 from .lvm2 import Lvm2, lvpath
 from .raid import Mdadm
 from .fs import MOUNT_EXEC, UMOUNT_EXEC, SYNC_EXEC
+from .transfer import Transfer
 
-from scalarizr.util import system2, PopenError, firstmatched, wait_until
+from scalarizr.util import system2, PopenError, firstmatched, wait_until,\
+	timethis
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr.libs.metaconf import Configuration
 
@@ -17,9 +19,8 @@ import re
 import time
 import glob
 import signal
-import base64
-from binascii import hexlify
 import binascii
+import uuid
 import shutil
 from scalarizr.storage.lvm2 import Lvm2Error
 
@@ -467,7 +468,7 @@ class Storage:
 		return Storage.create(snapshot=snapshot.id)
 '''	
 	@staticmethod
-	def destroy(self, vol):
+	def destroy(vol):
 
 		@raise StorageError: General error for all cases		
 
@@ -490,9 +491,11 @@ class Volume(object):
 	_logger = None
 	_fs = None
 
-	def __init__(self, devname, mpoint=None, fstype=None, type=None, *args, **kwargs):
+	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
 		self._logger = logging.getLogger(__name__)
-		self.devname = devname
+		if not device:
+			raise ValueError('device name should be non-empty')
+		self.devname = device
 		self.mpoint = mpoint
 		if fstype:
 			self.fstype = fstype
@@ -509,14 +512,7 @@ class Volume(object):
 		return self._fs.name if self._fs else None
 
 	fstype = property(_fstype_getter, _fstype_setter)
-	
-	def _check_devname(f):
-		def g(self, *args, **kwargs):
-			if self.devname:
-				return f(self, *args, **kwargs)
-		return g
 
-	@_check_devname
 	def mkfs(self, fstype=None):
 		fstype = fstype or self.fstype
 		if not fstype:
@@ -526,47 +522,39 @@ class Volume(object):
 		self.fstype = fstype
 		self._fs = fs
 	
-	@_check_devname
 	@_fs_should_be_set
 	def resize(self, size=None, **fsargs):
 		fsargs = fsargs or dict()
 		return self._fs.resize(self.devname, **fsargs)
 	
-	@_check_devname
 	@_fs_should_be_set
 	def _get_label(self):
 		return self._fs.get_label(self.devname)
 	
-	@_check_devname
 	@_fs_should_be_set
 	def _set_label(self, lbl):
 		self._fs.set_label(self.devname, lbl)
 		
 	label = property(_get_label, _set_label)
 	
-	@_check_devname
 	@_fs_should_be_set
 	def freeze(self):
 		return self._fs.freeze(self.devname)
 	
-	@_check_devname
 	@_fs_should_be_set
 	def unfreeze(self):
 		return self._fs.unfreeze(self.devname)
 	
-	@_check_devname
 	def mounted(self):
 		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % self.devname, system(MOUNT_EXEC)[0])
 		return bool(res)
 	
-	@_check_devname
 	def mount(self, mpoint=None):
 		mpoint = mpoint or self.mpoint
 		cmd = (MOUNT_EXEC, self.devname, mpoint)
 		system(cmd, error_text='Cannot mount device %s' % self.devname)
 		self.mpoint = mpoint
 	
-	@_check_devname
 	def umount(self, lazy=False):
 		cmd = (UMOUNT_EXEC, '-l' if lazy else '-f' , self.devname)
 		try:
@@ -575,7 +563,6 @@ class Volume(object):
 			if not 'not mounted' in str(e):
 				raise
 	
-	@_check_devname
 	def snapshot(self, description=None):
 		# Freeze filesystem
 		if self._fs:
@@ -594,7 +581,6 @@ class Volume(object):
 		# Save snapshot
 		return pvd.save_snapshot(self, snap)
 	
-	@_check_devname
 	def destroy(self, force=False, **kwargs):
 		pvd = Storage.providers[self.type]
 		pvd.destroy(self, force, **kwargs)
@@ -602,20 +588,20 @@ class Volume(object):
 
 
 class Snapshot(object):
+	type = None
 	description = None
 	id = None
-	def __init__(self, id=None, description=None):
-		self.id = id
+	
+	def __init__(self, id=None, description=None, type=None, **kwargs):
+		self.type = type
 		self.description = description
+		self.id = id
 	
 	def __str__(self):
-		if self.id is None:
-			return ''
-		elif isinstance(self.id, basestring):
-			return self.id
-		else:
-			return json.dumps(self.id)
+		return '[snapshot:%s] %s' % (self.type, self.description)
 
+	def as_dict(self):
+		return dict(type=self.type, description=self.description)
 
 
 class VolumeProvider(object):
@@ -638,10 +624,10 @@ class VolumeProvider(object):
 	def save_snapshot(self, vol, snap):
 		return snap
 
-	def destroy(self, vol, force=False):
+	def destroy(self, vol, force=False, **kwargs):
 		try:
 			vol.umount()
-		except (Exception, BaseException), e:
+		except:
 			if force:
 				vol.umount(lazy=True)
 			else:
@@ -678,9 +664,9 @@ class LoopVolumeProvider(VolumeProvider):
 		kwargs['device'] = mkloop(kwargs['file'], kwargs.get('size'), not kwargs.get('zerofill'))
 		return super(LoopVolumeProvider, self).create(**kwargs)
 	
-	def destroy(self, vol, force=False):		
-		super(LoopVolumeProvider, self).destroy(vol, force)
-		rmloop(vol.devname)		
+	def destroy(self, vol, force=False, **kwargs):		
+		super(LoopVolumeProvider, self).destroy(vol, force, **kwargs)
+		rmloop(vol.devname)
 		
 	def create_from_snapshot(self, **kwargs):
 		return self.create(**kwargs)
@@ -776,7 +762,7 @@ class RaidVolumeProvider(VolumeProvider):
 		raid_vg = kwargs['raid_vg']
 		raw_vg = os.path.basename(raid_vg)
 		raid_pv = self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
-		lvm_raw_backup = base64.b64decode(kwargs['lvm_group_cfg'])
+		lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
 		lvm_backup_filename = '/tmp/lvm_backup'
 		write_file(lvm_backup_filename, lvm_raw_backup, logger=logger)
 		try:
@@ -787,16 +773,14 @@ class RaidVolumeProvider(VolumeProvider):
 		
 		cmd = (('vgchange', '-ay', raw_vg))
 					
-		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg == raw_vg, self._lvm.lv_status())
+		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg_name == raw_vg, self._lvm.lv_status())
 		if not lvinfo:
 			raise StorageError('Volume group %s does not contain any logical volume.' % raw_vg)
 		
 		system(cmd, error_text='Cannot activate volume group %s' % raw_vg)
 		
-		raid_lv = lvpath(raw_vg, lvinfo.lv)
-		
 		# TODO : Where is snap_pv here? 
-		return RaidVolume(raid_lv, raid_pv=raid_pv, raid_vg=raid_vg, disks=kwargs['disks'], level=kwargs['level'])
+		return RaidVolume(lvinfo.lv_path, raid_pv=raid_pv, raid_vg=raid_vg, disks=kwargs['disks'], level=kwargs['level'])
 	
 	def create_snapshot(self, vol, snap):
 		if not vol.snap_pv:
@@ -855,8 +839,10 @@ class RaidVolumeProvider(VolumeProvider):
 		del snap.id['tmp_snaps']
 		return snap
 	
-	def destroy(self, vol, force=False, remove_disks=False):
-		vol.umount()
+	def destroy(self, vol, force=False, **kwargs):
+		super(RaidVolumeProvider, self).destroy(vol, force, **kwargs)
+		
+		remove_disks=kwargs.get('remove_disks', False) 
 		try:
 			self._lvm.remove_lv(vol.devname)
 		except Lvm2Error, e:
@@ -879,25 +865,19 @@ Storage.explore_provider(RaidVolumeProvider)
 
 
 class EphVolume(Volume):
-	snap_backend = None
-	disk = None
 	vg = None
+	disk = None		
 	tranzit_vol = None
+	snap_backend = None	
 	
-	def __init__(self, devname, mpoint=None, fstype=None, type=None, vg=None, tranzit_lv=None, snap_pvd=None, snap_backend=None, **kwargs):
-		
-		kwargs.update({			'vg' : vg,
-					   	'tranzit_lv' : tranzit_lv,
-					   	  'snap_pvd' : snap_pvd,
-					  'snap_backend' : snap_backend})
-		
-		Volume.__init__(self, devname, mpoint, fstype, **kwargs)
-		self.snap_pvd = snap_pvd
-		if isinstance(snap_backend, IEphSnapshotBackend):
-			self.snap_backend = snap_backend
-		elif snap_backend:
-			self.snap_backend = ResourceMgr.lookup_snapshot_backend(snap_backend)
+
+	def __init__(self, devname, mpoint=None, fstype=None, type=None, vg=None, 
+				disk=None, tranzit_vol=None, snap_backend=None, **kwargs):
+		Volume.__init__(self, devname, mpoint, fstype, type, **kwargs)
 		self.vg = vg
+		self.disk = disk		
+		self.tranzit_vol = tranzit_vol
+		self.snap_backend = snap_backend
 
 
 class EphVolumeProvider(VolumeProvider):
@@ -911,12 +891,44 @@ class EphVolumeProvider(VolumeProvider):
 		self._lvm = Lvm2()
 		self._snap_pvd = EphSnapshotProvider()
 	
+	def _create_layout(self, pv, vg, size):
+		''' 
+		Creates LV layout
+		      [Disk]
+		        |
+		       [VG]
+		      /   \ 
+		  [Data] [Tranzit]
+		'''
+
+		# Create PV
+		self._lvm.create_pv(pv)		
+
+		# Create VG
+		if not isinstance(vg, dict):
+			vg = dict(name=vg)
+		vg_name = vg['name']
+		del vg['name']
+		vg = self._lvm.create_vg(vg_name, [pv], **vg)
+		
+		# Create data volume
+		lv_extents = size or '40%VG'
+		data_lv = self._lvm.create_lv(vg, 'data', extents=lv_extents)
+
+		# Create tranzit volume (should be 5% bigger then data vol)
+		lvi = self._lvm.lv_info(data_lv)
+		size_in_KB = int(read_file('/sys/block/dm-%s/size' % lvi.lv_kernel_minor)) / 2
+		tranzit_lv = self._lvm.create_lv(vg, 'tranzit', size='%dK' % (size_in_KB*1.05,))
+
+		return (vg, data_lv, tranzit_lv)		
+
+	
 	def create(self, **kwargs):
 		'''
 		@param disk: Physical volume
 		@param vg: Uniting volume group
 		@param size: Useful storage size (in % of physican volume or MB)
-		@param backend: Snapshot backend
+		@param snap_backend: Snapshot backend
 		
 		Example: 
 		Storage.create({
@@ -927,62 +939,44 @@ class EphVolumeProvider(VolumeProvider):
 				'name': 'mysql_data',
 				'ph_extent_size': 10
 			},
-			'backend': {
-				'type': 'cf',
-				'container': 'mysql_backups'
-				'key': 'cloudsound/production'
-			}
+			'snap_backend': 'cf://mysql_backups/cloudsound/production'
 		})
 		'''
-
-		# Create PV
-		self._lvm.create_pv(kwargs['disk'].devname)		
-
-		# Create VG
-		if not isinstance(kwargs['vg'], dict):
-			kwargs['vg'] = dict(name=kwargs['vg'])
-		vg_name = kwargs['vg']['name']
-		del kwargs['vg']['name']
-		vg_options = kwargs['vg']
-		vg = self._lvm.create_vg(vg_name, [kwargs['device']], **vg_options)
+		# Create LV layout
+		kwargs['vg'], kwargs['device'], tranzit_lv = self._create_layout(
+				kwargs['disk'].devname, vg=kwargs.get('vg'), size=kwargs.get('size'))
 		
-		# Create data volume
-		lv_extents = kwargs.get('size', '40%VG')
-		data_lv = self._lvm.create_lv(vg, 'data', extents=lv_extents)
+		# Initialize tranzit volume
+		kwargs['tranzit_vol'] = Volume(tranzit_lv, '/tmp/sntz' + str(randint(100, 999)), 'ext3', 'base')
 
-		# Create tranzit volume (should be 5% bigger then data vol)
-		size_in_KB = int(read_file('/sys/block/%s/size' % os.path.basename(os.readlink(data_lv)))) / 2
-		tranzit_lv = self._lvm.create_lv(vg, 'tranzit', size='%dK' % (size_in_KB*1.05,))
+		# Accept snapshot backend
+		if not isinstance(kwargs['snap_backend'], dict):
+			kwargs['snap_backend'] = dict(path=kwargs['snap_backend'])
 		
-		kwargs['device'] = data_lv
-		kwargs['tranzit_vol'] = Volume(tranzit_lv, '/tmp/sntz' + str(randint(100, 999)), 'ext3', 'base') 
-		kwargs['vg'] = vg
-		
-		return super(EphSnapshotProvider, self).create(**kwargs)
+		return super(EphVolumeProvider, self).create(**kwargs)
 
 	def create_from_snapshot(self, **kwargs):
 		'''
-		# Lookup snapshot backend
-		u = urlparse.urlparse(snapshot.id)
-		try:
-			snap_backend = ResourceMgr.lookup_snapshot_backend(u.scheme)
-		except LookupError, e:
-			raise StorageError(e)
-
-		self._prepare()
-		try:
-			# Download and restore snapshot			
-			snap_backend.download(snapshot.id, self.tranzit_vol.mpoint)
-			self.snap_pvd.restore(self, self.tranzit_vol.mpoint)
-		finally:
-			self._cleanup()		
+		...
+		@param path: Path to snapshot manifest on remote storage
 		'''
-		pass
+		kwargs['snap_backend'] = os.path.dirname(kwargs['path'])
+		vol = self.create(**kwargs)
+
+		snap = Snapshot(id=dict(path=kwargs['path'])) # %) Ugly		
+		try:
+			self._prepare_tranzit_vol(vol.tranzit_vol)
+			self._snap_pvd.download(vol, snap, vol.tranzit_vol.mpoint)
+			self._snap_pvd.restore(vol, snap, vol.tranzit_vol.mpoint)			
+		finally:
+			self._cleanup_tranzit_vol(vol.tranzit_vol)
+	
+		return vol
 
 	def create_snapshot(self, vol, snap):
 		try:
 			self._prepare_tranzit_vol(vol.tranzit_vol)
-			self._snap_pvd.create(snap, vol, vol.tranzit_vol.mpoint)
+			self._snap_pvd.create(vol, snap, vol.tranzit_vol.mpoint)
 			return snap
 		except:
 			self._cleanup_tranzit_vol(vol.tranzit_vol)
@@ -990,7 +984,7 @@ class EphVolumeProvider(VolumeProvider):
 	
 	def save_snapshot(self, vol, snap):
 		try:
-			vol.snap_backend.upload(snap, vol.tranzit_vol.mpoint)
+			self._snap_pvd.upload(vol, snap, vol.tranzit_vol.mpoint)
 			return snap
 		finally:
 			self._cleanup_tranzit_vol(vol.tranzit_vol)
@@ -1003,70 +997,82 @@ class EphVolumeProvider(VolumeProvider):
 		
 	def _cleanup_tranzit_vol(self, vol):
 		vol.umount()
-		os.rmdir(vol.mpoint)
+		if os.path.exists(vol.mpoint):
+			os.rmdir(vol.mpoint)
 
 
-class IEphSnapshotBackend:
-	scheme = None
-	
-	def upload(self, snapshot, tranzit_path):
-		# Save snapshot from `tranzit_path` to cloud storage and updates it `id`
-		pass
-	def download(self, id, tranzit_path):
-		# Load snapshot from cloud storage to `tranzit_path`
-		pass
+	def destroy(self, vol, force=False, **kwargs):
+		super(EphVolumeProvider, self).destroy(vol, force, **kwargs)
 
-class IEphSnapshotProvider:
-	
-	def create(self, snapshot, volume, tranzit_path):
-		# Creates snapshot of `volume` under `tranzit_path`
-		pass
-	
-	def restore(self, volume, tranzit_path):
-		# Restores snapshot from `tranzit_path`
-		pass
-	
-	
-class EphSnapshotProvider(IEphSnapshotProvider):
+		# Umount tranzit volume
+		self._cleanup_tranzit_vol(vol.tranzit_vol)
+		
+		# Find PV 
+		pv = None
+		pvi = firstmatched(lambda pvi: vol.vg in pvi.vg, self._lvm.pv_status())
+		if pvi:
+			pv = pvi.pv
+			
+		# Remove storage VG
+		self._lvm.change_lv(vol.devname, available=False)
+		self._lvm.change_lv(vol.tranzit_vol.devname, available=False)
+		self._lvm.remove_vg(vol.vg)
+		
+		if pv:
+			# Remove PV if it doesn't belongs to any other VG
+			pvi = self._lvm.pv_info(pv)
+			if not pvi.vg:
+				self._lvm.remove_pv(pv)		
+
+Storage.explore_provider(EphVolumeProvider)
+
+
+class EphSnapshotProvider(object):
 
 	MANIFEST_NAME 		= 'manifest.ini'
 	SNAPSHOT_LV_NAME 	= 'snap'	
-	CHUNK_PREFIX 		= 'data'
 	
 	chunk_size = None
 	'''	Data chunk size in Mb '''
-	
-	_logger = None
+
+	_logger = None	
+	_transfer = None
+	_lvm = None
 	
 	def __init__(self, chunk_size=10):
 		self.chunk_size = chunk_size		
 		self._logger = logging.getLogger(__name__)
+		self._transfer = Transfer()
 		self._lvm = Lvm2()
 	
-	def create(self, snapshot, volume, tranzit_path):
+	@timethis
+	def create(self, volume, snapshot, tranzit_path):
 		# Create LVM snapshot
 		snap_lv = None
+		snap_id = 'snap-%s' % uuid.uuid4().hex[0:8]
+		chunk_prefix = '%s.data' % snap_id
 		try:
 			snap_lv = self._lvm.create_lv_snapshot(volume.devname, self.SNAPSHOT_LV_NAME, extents='100%FREE')
 			
-			# Copy|gzip|split snapshot into tranzit volume directory
-			self._logger.info('Packing volume %s -> %s', volume.devname, tranzit_path) 
-			cmd1 = ['dd', 'if=%s' % snap_lv]
-			cmd2 = ['gzip']
-			cmd3 = ['split', '-a','3', '-d', '-b', '%sM' % self.chunk_size, '-', '%s/%s.gz.' % 
-					(tranzit_path, self.CHUNK_PREFIX)]
-			p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			out, err = p3.communicate()
-
-			if p3.returncode:
-				p1.stdout.close()
-				p2.stdout.close()				
-				p1.wait()
-				p2.wait()
-				raise StorageError('Error during coping LVM snapshot device (code: %d) <out>: %s <err>: %s' % 
-						(p3.returncode, out, err))
+			with timethis("dd | gzip | split"):
+				# Copy|gzip|split snapshot into tranzit volume directory
+				self._logger.info('Packing volume %s -> %s', volume.devname, tranzit_path) 
+				cmd1 = ['dd', 'if=%s' % snap_lv]
+				cmd2 = ['gzip', '-1']
+				cmd3 = ['split', '-a','3', '-d', '-b', '%sM' % self.chunk_size, '-', '%s/%s.gz.' % 
+						(tranzit_path, chunk_prefix)]
+				p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+				p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+				p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+				out, err = p3.communicate()
+	
+				if p3.returncode:
+					p1.stdout.close()
+					p2.stdout.close()				
+					p1.wait()
+					p2.wait()
+					raise StorageError('Error during coping LVM snapshot device (code: %d) <out>: %s <err>: %s' % 
+							(p3.returncode, out, err))
 		finally:
 			# Remove LVM snapshot			
 			if snap_lv:
@@ -1077,44 +1083,75 @@ class EphSnapshotProvider(IEphSnapshotProvider):
 		config.add('snapshot/description', snapshot.description, force=True)
 		config.add('snapshot/created_at', time.strftime("%Y-%m-%d %H:%M:%S"))
 		config.add('snapshot/pack_method', 'gzip') # Not used yet
-		for chunk in glob.glob(os.path.join(tranzit_path, self.CHUNK_PREFIX + '*')):
+		for chunk in glob.glob(os.path.join(tranzit_path, chunk_prefix + '*')):
 			config.add('chunks/%s' % os.path.basename(chunk), self._md5sum(chunk), force=True)
 		
-		manifest_path = os.path.join(tranzit_path, self.MANIFEST_NAME)
+		manifest_path = os.path.join(tranzit_path, '%s.%s' % (snap_id, self.MANIFEST_NAME))
 		config.write(manifest_path)
 
-		snapshot.id = manifest_path
+		snapshot.id = dict(
+			type=EphVolumeProvider.type, 
+			path=manifest_path, 
+			vg=os.path.basename(volume.vg)
+		) 
 		return snapshot
 	
-	def restore(self, volume, tranzit_path):
+	@timethis
+	def restore(self, volume, snapshot, tranzit_path):
 		# Load manifest
 		mnf = Configuration('ini')
-		mnf.read(os.path.join(tranzit_path, self.MANIFEST))
+		mnf.read(os.path.join(tranzit_path, os.path.basename(snapshot.id['path'])))
 		
-		# Checksum
-		for chunk, md5sum_o in mnf.items('chunks'):
-			chunkpath = os.path.join(tranzit_path, chunk)
-			md5sum_a = self._md5sum(chunkpath)
-			if md5sum_a != md5sum_o:
-				raise StorageError(
-						'Chunk file %s checksum mismatch. Actual md5sum %s != %s defined in snapshot manifest', 
-						chunkpath, md5sum_a, md5sum_o)
-		
-		# Restore chunks 
-		self._logger.info('Unpacking snapshot from %s -> %s', tranzit_path, volume.devname)
-		cat = ['cat']
-		cat.extend(os.path.join(tranzit_path, chunk) for chunk in mnf.get_dict('chunks'))
-		gunzip = ['gunzip']
-		dest = open(volume.devname, 'w')
-		#Todo: find out where to extract file
-		p1 = subprocess.Popen(cat, stdout=subprocess.PIPE)
-		p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest)
-		out, err = p2.communicate()
-		dest.close()		
-		if p2.returncode:
-			raise StorageError('Error during snapshot restoring (code: %d) <out>: %s <err>: %s' % 
-					(p2.returncode, out, err))
+		with timethis("checksum"):
+			# Checksum
+			for chunk, md5sum_o in mnf.items('chunks'):
+				chunkpath = os.path.join(tranzit_path, chunk)
+				md5sum_a = self._md5sum(chunkpath)
+				if md5sum_a != md5sum_o:
+					raise StorageError(
+							'Chunk file %s checksum mismatch. Actual md5sum %s != %s defined in snapshot manifest', 
+							chunkpath, md5sum_a, md5sum_o)
 
+		with timethis("cat | gunzip > %s" % volume.devname):		
+			# Restore chunks 
+			self._logger.info('Unpacking snapshot from %s -> %s', tranzit_path, volume.devname)
+			cat = ['cat']
+			catargs = list(os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks'))
+			catargs.sort()
+			cat.extend(catargs)
+			gunzip = ['gunzip']
+			dest = open(volume.devname, 'w')
+			#Todo: find out where to extract file
+			p1 = subprocess.Popen(cat, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest, stderr=subprocess.PIPE)
+			out, err = p2.communicate()
+			dest.close()
+			if p2.returncode:
+				p1.stdout.close()
+				p1.wait()
+				raise StorageError('Error during snapshot restoring (code: %d) <out>: %s <err>: %s' % 
+						(p2.returncode, out, err))
+
+	def upload(self, volume, snapshot, tranzit_path):
+		mnf = Configuration('ini')
+		mnf.read(snapshot.id['path'])
+		
+		files = [snapshot.id['path']]
+		files += [os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks')]
+		
+		snapshot.id['path'] = self._transfer.upload(files, volume.snap_backend['path'])[0]
+		return snapshot
+
+	def download(self, volume, snapshot, tranzit_path):
+		# Load manifest
+		mnf_path = self._transfer.download(snapshot.id['path'], tranzit_path)[0]
+		mnf = Configuration('ini')
+		mnf.read(mnf_path)
+		
+		# Load files
+		remote_path = os.path.dirname(snapshot.id['path'])
+		files = tuple(os.path.join(remote_path, chunk) for chunk in mnf.options('chunks'))
+		self._transfer.download(files, tranzit_path)
 
 	def _md5sum(self, file, block_size=4096):
 		fp = open(file, 'rb')
@@ -1125,29 +1162,7 @@ class EphSnapshotProvider(IEphSnapshotProvider):
 				if not data:
 					break
 				md5.update(data)
-			return hexlify(md5.digest())
+			return binascii.hexlify(md5.digest())
 		finally:
 			fp.close()
 
-
-class EphSnapshotBackend(IEphSnapshotBackend):
-	transfer = None
-	def __init__(self, scheme, *transfer_args):
-		'''
-		self.scheme = scheme
-		self.transfer = transfer
-		self.upload_dest = upload_dest
-		'''
-	def upload(self, snapshot, tranzit_path):
-		mnf = Configuration('ini')
-		mnf.read(os.path.join(tranzit_path, snapshot.id))
-		files = [os.path.join(tranzit_path, chunk) for chunk in mnf.get_dict('chunks')]
-		
-		self.transfer.upload(files, self.upload_dest)
-		snapshot.id = self.scheme + '://' + self.upload_dest.get_prefix()
-	
-	def download(self, id, tranzit_path):
-		# Load snapshot from cloud storage to `tranzit_vol` (it should be mounted)
-		self.transfer.download(tranzit_path, self.upload_dest)
-	
-	

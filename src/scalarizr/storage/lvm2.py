@@ -28,17 +28,28 @@ class Lvm2Error(PopenError):
 	pass
 
 class PVInfo(namedtuple('PVInfo', 'pv vg format attr size free')):
+	COMMAND = ('/sbin/pvs',)
 	pass
 
 class VGInfo(namedtuple('VGInfo', 'vg num_pv num_lv num_sn attr size free')):
+	COMMAND = ('/sbin/vgs',)
 	@property
 	def path(self):
 		return '/dev/%s' % (self[0],)
-	
-class LVInfo(namedtuple('LVInfo', 'lv vg attr size origin snap_pc move log copy_pc convert')):
+
+_columns = ('vg_name','lv_uuid','lv_name','lv_attr',
+			'lv_major','lv_minor','lv_read_ahead',
+			'lv_kernel_major','lv_kernel_minor','lv_kernel_read_ahead',
+			'lv_size','seg_count','origin','origin_size','snap_percent','copy_percent',
+			'move_pv','convert_lv','lv_tags','mirror_log','modules') 	
+class LVInfo(namedtuple('LVInfo', ' '.join(_columns))):
+	COMMAND = ('/sbin/lvs', '-o', ','.join(_columns))
 	@property
-	def path(self):
-		return lvpath(self[1], self[0])
+	def lv_path(self):
+		return lvpath(self.vg_name, self.lv_name)
+del _columns
+
+
 
 def lvpath(group, lvol):
 	return '/dev/mapper/%s-%s' % (group.replace('-', '--'), lvol.replace('-', '--'))
@@ -79,31 +90,30 @@ class Lvm2:
 			system(['/sbin/modprobe', 'dm_mod', 'dm_snapshot'], 
 					error_text='Cannot load device mapper kernel module')
 		
-	def _parse_status_table(self, name, ResultClass):
-		if not name in ('lvs','vgs', 'pvs'):
-			raise ValueError('Unexpected value: %s' % name)
+	def _parse_status_table(self, cmd, ResultClass):
 		if isinstance(ResultClass, tuple):
 			raise ValueError('ResultClass should be a namedtuple subclass. %s taken' % type(ResultClass))
-		
-		out = system(['/sbin/%s' % name, '--separator', '|'])[0].strip()
+		args = list(cmd)
+		args += ('--separator', '|')		
+		out = system(args)[0].strip()
 		if out:
 			return tuple(ResultClass(*line.strip().split('|')) for line in out.split('\n')[1:])
 		return ()
 
-	def _status(self, name, ResultClass, column=None):
-		rows = self._parse_status_table(name, ResultClass)
+	def _status(self, cmd, ResultClass, column=None):
+		rows = self._parse_status_table(cmd, ResultClass)
 		if column:
 			return tuple(getattr(o, column) for o in rows)
 		return rows
 		
 	def pv_status(self, column=None):
-		return self._status('pvs', PVInfo, column)
+		return self._status(PVInfo.COMMAND, PVInfo, column)
 	
 	def vg_status(self, column=None):
-		return self._status('vgs', VGInfo, column)				
+		return self._status(VGInfo.COMMAND, VGInfo, column)				
 	
 	def lv_status(self, column=None):
-		return self._status('lvs', LVInfo, column)		
+		return self._status(LVInfo.COMMAND, LVInfo, column)		
 
 	def pv_info(self, ph_volume):
 		info = firstmatched(lambda inf: inf.pv == ph_volume, self.pv_status())
@@ -118,8 +128,8 @@ class Lvm2:
 		raise LookupError('Volume group %s not found' % group)
 	
 	def lv_info(self, lvolume=None, group=None, name=None):
-		lvolume = lvolume if lvolume else '/dev/%s/%s' % (group, name)
-		info = firstmatched(lambda inf: inf.path == lvolume, self.lv_status())
+		lvolume = lvolume if lvolume else lvpath(group, name)
+		info = firstmatched(lambda inf: inf.lv_path == lvolume, self.lv_status())
 		if info:
 			return info
 		raise LookupError('Logical volume %s not found' % lvolume)
@@ -188,6 +198,8 @@ class Lvm2:
 		system(('/sbin/vgreduce', '--removemissing', group))
 		system(('/sbin/vgchange', '-a', 'y', group))
 
+	def deviceno(self, lvolume):
+		out = system(('/sbin/dmsetup'))
 
 	# Untested ---> 
 

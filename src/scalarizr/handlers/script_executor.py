@@ -185,7 +185,7 @@ class ScriptExecutor(Handler):
 			else:
 				# Start process
 				try:
-					proc = subprocess.Popen(script_path, stdout=stdout, stderr=stderr)
+					proc = subprocess.Popen(script_path, stdout=stdout, stderr=stderr, close_fds=True)
 				except OSError, e:
 					self._logger.error("Cannot execute script '%s' (script path: %s). %s", 
 							script.name, script_path, str(e))
