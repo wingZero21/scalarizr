@@ -1,5 +1,5 @@
 
-from .lvm2 import Lvm2, lvpath
+from .lvm2 import Lvm2, lvpath, VGCHANGE
 from .raid import Mdadm
 from .fs import MOUNT_EXEC, UMOUNT_EXEC, SYNC_EXEC
 from .transfer import Transfer
@@ -23,14 +23,14 @@ import binascii
 import uuid
 import shutil
 from scalarizr.storage.lvm2 import Lvm2Error
+from scalarizr.util.software import whereis
 
 try:
 	import json
 except ImportError:
 	import simplejson as json
 
-
-
+VGCFGRESTORE = whereis('vgcfgrestore')[0]
 
 # ebs-raid0-lvm-ext3
 # ebs-raid0-xfs
@@ -625,6 +625,9 @@ class VolumeProvider(object):
 		return snap
 
 	def destroy(self, vol, force=False, **kwargs):
+		if not vol.devname:
+			raise StorageError("Can't destroy volume: device name is empty.")
+		
 		try:
 			vol.umount()
 		except:
@@ -743,7 +746,9 @@ class RaidVolumeProvider(VolumeProvider):
 		vg_name = kwargs['vg']['name']
 		del kwargs['vg']['name']
 		vg_options = kwargs['vg']
-
+		
+		self._lvm.create_pv(raid_pv)
+		
 		kwargs['raid_vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
 		kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
 		kwargs['raid_pv'] = raid_pv
@@ -766,12 +771,12 @@ class RaidVolumeProvider(VolumeProvider):
 		lvm_backup_filename = '/tmp/lvm_backup'
 		write_file(lvm_backup_filename, lvm_raw_backup, logger=logger)
 		try:
-			cmd = (('/sbin/vgcfgrestore', '-f', lvm_backup_filename, raid_vg))
+			cmd = ((VGCFGRESTORE, '-f', lvm_backup_filename, raid_vg))
 			system(cmd, error_text='Cannot restore lvm volume group %s from backup file.')
 		finally:
 			os.unlink(lvm_backup_filename)
 		
-		cmd = (('vgchange', '-ay', raw_vg))
+		cmd = ((VGCHANGE, '-ay', raw_vg))
 					
 		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg_name == raw_vg, self._lvm.lv_status())
 		if not lvinfo:

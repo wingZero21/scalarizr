@@ -18,7 +18,7 @@ class Test(unittest.TestCase):
 		self.snap_vol = self.vols.pop()
 
 	def tearDown(self):
-		if hasattr(self, 'array') and self.array:
+		if hasattr(self, 'array') and self.array.devname:
 			self.array.destroy(remove_disks=True)
 			
 		system('rm -f /tmp/device%s' % self.snap_vol.devname[-1])

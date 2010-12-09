@@ -8,10 +8,28 @@ from scalarizr.util import system2, disttool, firstmatched, PopenError
 
 import re
 from collections import namedtuple
+from scalarizr.util.software import whereis
 import logging
 import os
 
 logger = logging.getLogger(__name__)
+
+PVS = whereis('pvs')[0]
+VGS = whereis('vgs')[0]
+LVS = whereis('lvs')[0]
+
+PVCREATE = whereis('pvcreate')[0]
+VGCREATE = whereis('vgcreate')[0]
+LVCREATE = whereis('lvcreate')[0]
+
+LVCHANGE = whereis('lvchange')[0]
+VGCHANGE = whereis('vgchange')[0]
+VGEXTEND = whereis('vgextend')[0]
+VGREDUCE = whereis('vgreduce')[0]
+
+PVREMOVE = whereis('pvremove')[0]
+VGREMOVE = whereis('vgremove')[0]
+LVREMOVE = whereis('lvremove')[0]
 
 def system(*args, **kwargs):
 	kwargs['logger'] = logger
@@ -28,11 +46,11 @@ class Lvm2Error(PopenError):
 	pass
 
 class PVInfo(namedtuple('PVInfo', 'pv vg format attr size free')):
-	COMMAND = ('/sbin/pvs',)
+	COMMAND = (PVS,)
 	pass
 
 class VGInfo(namedtuple('VGInfo', 'vg num_pv num_lv num_sn attr size free')):
-	COMMAND = ('/sbin/vgs',)
+	COMMAND = (VGS,)
 	@property
 	def path(self):
 		return '/dev/%s' % (self[0],)
@@ -43,7 +61,7 @@ _columns = ('vg_name','lv_uuid','lv_name','lv_attr',
 			'lv_size','seg_count','origin','origin_size','snap_percent','copy_percent',
 			'move_pv','convert_lv','lv_tags','mirror_log','modules') 	
 class LVInfo(namedtuple('LVInfo', ' '.join(_columns))):
-	COMMAND = ('/sbin/lvs', '-o', ','.join(_columns))
+	COMMAND = (LVS, '-o', ','.join(_columns))
 	@property
 	def lv_path(self):
 		return lvpath(self.vg_name, self.lv_name)
@@ -135,16 +153,17 @@ class Lvm2:
 		raise LookupError('Logical volume %s not found' % lvolume)
 	
 	def create_pv(self, *devices):
-		system(['/sbin/pvcreate'] + list(devices), 
+		device_list = list(devices)
+		system([PVCREATE] + device_list,
 				error_text='Cannot initiate a disk for use by LVM')
 		
 	def create_vg(self, group, ph_volumes, ph_extent_size=4):
-		system(['/sbin/vgcreate', '-s', ph_extent_size, group] + list(ph_volumes), 
+		system([VGCREATE, '-s', ph_extent_size, group] + list(ph_volumes), 
 				error_text='Cannot create a volume group %s' % group)
 		return '/dev/%s' % group
 	
 	def create_lv(self, group=None, name=None, extents=None, size=None, segment_type=None, ph_volumes=None):
-		args = ['/sbin/lvcreate']
+		args = [LVCREATE]
 		if name:
 			args += ('-n', name)
 		if extents:
@@ -167,7 +186,7 @@ class Lvm2:
 		return self.create_lv(vg, name, extents, size, segment_type='snapshot', ph_volumes=(normalize_lvname(lvolume),))
 	
 	def change_lv(self, lvolume, available=None):
-		cmd = ['/sbin/lvchange']
+		cmd = [LVCHANGE]
 		if available is not None:
 			cmd.append('-ay' if available else '-an')
 		cmd.append(normalize_lvname(lvolume))
@@ -176,27 +195,27 @@ class Lvm2:
 	def remove_pv(self, ph_volume):
 		vg_of_ph_volume = self.pv_info(ph_volume).vg
 		if vg_of_ph_volume:
-			system(('/sbin/vgreduce', '-f', vg_of_ph_volume, ph_volume), error_text='Cannot reduce volume group')
-		system(('/sbin/pvremove', '-ff', ph_volume), error_text='Cannot remove a physical volume')
+			system((VGREDUCE, '-f', vg_of_ph_volume, ph_volume), error_text='Cannot reduce volume group')
+		system((PVREMOVE, '-ff', ph_volume), error_text='Cannot remove a physical volume')
 	
 	def remove_vg(self, group):
-		system(('/sbin/vgremove', '-ff', group), error_text='Cannot remove volume group')
+		system((VGREMOVE, '-ff', group), error_text='Cannot remove volume group')
 	
 	def remove_lv(self, lvolume):
-		system(('/sbin/lvremove', '-f', '%s/%s' % extract_vg_lvol(lvolume)), error_text='Cannot remove logical volume')
+		system((LVREMOVE, '-f', '%s/%s' % extract_vg_lvol(lvolume)), error_text='Cannot remove logical volume')
 		'''
 		lvi = self.lv_info(lvolume)
 		if 'a' in lvi.attr and not 's' in lvi.attr:
 			self.change_lv(lvolume, available=False)
-		system(('/sbin/lvremove', '-f', normalize_lvname(lvolume)), error_text='Cannot remove logical volume')
+		system((LVREMOVE, '-f', normalize_lvname(lvolume)), error_text='Cannot remove logical volume')
 		'''	
 
 	def extend_vg(self, group, *ph_volumes):
-		system(['/sbin/vgextend', group] + list(ph_volumes), error_text='Cannot extend volume group')
+		system([VGEXTEND, group] + list(ph_volumes), error_text='Cannot extend volume group')
 	
 	def repair_vg(self, group):
-		system(('/sbin/vgreduce', '--removemissing', group))
-		system(('/sbin/vgchange', '-a', 'y', group))
+		system((VGREDUCE, '--removemissing', group))
+		system((VGCHANGE, '-a', 'y', group))
 
 	def deviceno(self, lvolume):
 		out = system(('/sbin/dmsetup'))
