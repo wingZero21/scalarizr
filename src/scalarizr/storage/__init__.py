@@ -31,78 +31,15 @@ except ImportError:
 
 VGCFGRESTORE = whereis('vgcfgrestore')[0]
 
-# ebs-raid0-lvm-ext3
-# ebs-raid0-xfs
-# eph-lvm-ext3
-# eph-xfs
-
 
 '''
-# ebs-raid0-lvm-ext3
 
-vol = mgr.create_raid(devices=('/dev/ebs1', '/dev/ebs2'), level='striping')
-vol = mgr.lvm_wrapper(vol, buffer_device='/dev/loop0')
-vol.mkfs('ext3')
-snap = vol.snapshot()
-
-# ebs-raid0-xfs
-vol = mgr.create_raid(devices=('/dev/ebs1', '/dev/ebs2'), level='striping')
-vol.mkfs('xfs')
-snap = vol.snapshot()
-
-
-# eph-lvm-ext3
-1. Create and snapshot
-vol = Storage.create_ephs('/dev/sdb', 'dbstorage', 
-		snap_backend=EphSnapshotBackend('cf', *('container', 'path/to/snap')))
-vol.mkfs('ext3')
-vol.mount('/mnt/mysql-storage')
-...
-snap = vol.snapshot('mysql backup 2010-12-02 15:10')
-print snap
-(id: 'cf://container/path/to/snap/snap-23aef662/manifest.ini', description: 'mysql backup 2010-12-02 15:10')
-
-
-2. Restore
-vol = Storage.create_ephs('/dev/sdb', 'dbstorage', 
-		snap_backend=CloudfilesSnapshotBackend('container', 'path/to/snap'))
-
-vol.restore(snap)
-vol.mount('/mnt/mysql-storage')
-
-
-
-# ebs-raid0-ext3
-1. Create and snapshot
-ec2_vol1 = ec2.create_volume('us-east-1a', 20)
-ec2.attach_volume(ec2_vol1.id, '/dev/sdh')
-ebs1 = EbsVolume('/dev/sdh', ec2_volume_id=ec2_vol1.id)
-
-ec2_vol2 = ec2.create_volume('us-east-1a', 20)
-ec2.attach_volume(ec2_vol2.id, '/dev/sdg')
-ebs2 = EbsVolume('/dev/sdh', ec2_volume_id=ec2_vol2.id)
-
-def create_snap_pv():
-	vol = ec2.create_volume('us-east-1a', 1)
-	return EbsVolume('/dev/sdj', ec2_volume_id=vol.id)
-
-raid = Storage.create_raid((ebs1, ebs2), level=0, snap_pv=create_snap_pv)
-raid.mkfs('ext3')
-raid.mount('/mnt/mysql-storage')
-
-snap = raid.snapshot('mysql data bundle 2010-12-02')
-
-
-2. Restore from snapshot
-
-vol = Storage.restore(snapshot)
-
-snapshot.id : snap-013fb66b  == {
+snapshot = snap-013fb66b  = {
 	type: ebs,
 	id: snap-013fb66b
 }
 
-snapshot.id : {
+snapshot = {
 	type: raid,
 	level: 0
 	lvm_group_cfg: base64 encoded string,
@@ -112,7 +49,6 @@ snapshot.id : {
 		id: snap-013fb66b
 	}]
 }
-
 
 Storage.create({
 	type: raid,
@@ -148,8 +84,8 @@ Storage.create({
 
 vol = Storage.create({
 	type: ebs,
-	zone: us-east-1a,
-	size: 20G
+	avail_zone: us-east-1a,
+	size: 20
 })
 vol.snapshot()
 
@@ -186,8 +122,6 @@ raid = Storage.create({
 })
 
 Storage.destroy(raid)
-
-
 '''
 
 logger = logging.getLogger(__name__)
@@ -342,14 +276,6 @@ class Storage:
 		pvd = self.lookup_provider(kwargs.get('type'), from_snap)
 		return getattr(pvd, 'create_from_snapshot' if from_snap else 'create').__call__(**kwargs)
 	
-	@staticmethod
-	def create_from_snapshot(*args, **kwargs):
-		'''
-		@raise LookupError: When volume provider cannot be resolved
-		@raise StorageError: General error for all cases		
-		'''
-		snapshot = args[0] if args else kwargs
-		return Storage.create(snapshot=snapshot)
 '''	
 	@staticmethod
 	def destroy(vol):
@@ -474,6 +400,7 @@ class Volume(object):
 
 
 class Snapshot(object):
+	version = '0.7'
 	type = None
 	description = None
 	
@@ -619,7 +546,7 @@ class RaidVolume(Volume):
 	
 class RaidSnapshot(Snapshot):
 	level = None
-	raid_vg = None
+	vg = None
 	lvm_group_cfg = None
 	snap_pv = None
 	disks = None
@@ -674,12 +601,12 @@ class RaidVolumeProvider(VolumeProvider):
 	def create_from_snapshot(self, **kwargs):
 		'''
 		@param level: Raid level 0, 1, 5 - are valid values
-		@param raid_vg: Volume group name to restore
+		@param vg: Volume group name to restore
 		@param lvm_group_cfg: Base64 encoded RAID volume group configuration
 		@param disks: Volumes
 		@param snap_pv: Physical volume for future LVM snapshot creation
 		'''
-		raid_vg = kwargs['raid_vg']
+		raid_vg = kwargs['vg']
 		raw_vg = os.path.basename(raid_vg)
 		raid_pv = self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
 		lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
@@ -722,7 +649,7 @@ class RaidVolumeProvider(VolumeProvider):
 		try:
 			# Creating RAID members snapshots
 			snap.level = vol.level
-			snap.raid_vg = vol.raid_vg
+			snap.vg = vol.raid_vg
 			snap.disks = []
 
 			snap.tmp_snaps = []
@@ -786,16 +713,18 @@ Storage.explore_provider(RaidVolumeProvider)
 
 class EphVolume(Volume):
 	vg = None
-	disk = None		
+	disk = None
+	size = None		
 	tranzit_vol = None
 	snap_backend = None	
 	
 
 	def __init__(self, devname, mpoint=None, fstype=None, type=None, vg=None, 
-				disk=None, tranzit_vol=None, snap_backend=None, **kwargs):
+				disk=None, size=None, tranzit_vol=None, snap_backend=None, **kwargs):
 		Volume.__init__(self, devname, mpoint, fstype, type, **kwargs)
 		self.vg = vg
-		self.disk = disk		
+		self.disk = disk
+		self.size = size		
 		self.tranzit_vol = tranzit_vol
 		self.snap_backend = snap_backend
 
@@ -838,15 +767,23 @@ class EphVolumeProvider(VolumeProvider):
 		vg = self._lvm.create_vg(vg_name, [pv], **vg)
 		
 		# Create data volume
-		lv_extents = size or '40%VG'
-		data_lv = self._lvm.create_lv(vg, 'data', extents=lv_extents)
+		lv_kwargs = dict()
+		
+		size = size or '40%'
+		size = str(size)
+		if size[-1] == '%':
+			lv_kwargs['extents'] = '%sVG' % size
+		else:
+			lv_kwargs['size'] = int(size)
+
+		data_lv = self._lvm.create_lv(vg, 'data', **lv_kwargs)
 
 		# Create tranzit volume (should be 5% bigger then data vol)
 		lvi = self._lvm.lv_info(data_lv)
 		size_in_KB = int(read_file('/sys/block/dm-%s/size' % lvi.lv_kernel_minor)) / 2
 		tranzit_lv = self._lvm.create_lv(vg, 'tranzit', size='%dK' % (size_in_KB*1.05,))
 
-		return (vg, data_lv, tranzit_lv)		
+		return (vg, data_lv, tranzit_lv, size)
 
 	
 	def create(self, **kwargs):
@@ -860,7 +797,7 @@ class EphVolumeProvider(VolumeProvider):
 		Storage.create({
 			'type': 'eph',
 			'disk': '/dev/sdb',
-			'size': '40%FREE',
+			'size': '40%',
 			'vg': {
 				'name': 'mysql_data',
 				'ph_extent_size': 10
@@ -869,7 +806,7 @@ class EphVolumeProvider(VolumeProvider):
 		})
 		'''
 		# Create LV layout
-		kwargs['vg'], kwargs['device'], tranzit_lv = self._create_layout(
+		kwargs['vg'], kwargs['device'], tranzit_lv, kwargs['size'] = self._create_layout(
 				kwargs['disk'].devname, vg=kwargs.get('vg'), size=kwargs.get('size'))
 		
 		# Initialize tranzit volume
@@ -897,11 +834,8 @@ class EphVolumeProvider(VolumeProvider):
 				'type': 'eph',
 				'description': 'Last winter mysql backup',
 				'path': 'cf://mysql_backups/cloudsound/production/snap-14a356de.manifest.ini'
-				'size': '40%FREE',
-				'vg': {
-					'name': 'mysql_data',
-					'ph_extent_size': 10
-				}
+				'size': '40%',
+				'vg': 'mysql_data'
 			}
 		})
 		
@@ -913,7 +847,6 @@ class EphVolumeProvider(VolumeProvider):
 		vol = self.create(**_kwargs)
 
 		snap = self.snapshot_factory(**kwargs)
-		print snap
 		try:
 			self._prepare_tranzit_vol(vol.tranzit_vol)
 			self._snap_pvd.download(vol, snap, vol.tranzit_vol.mpoint)
@@ -1041,6 +974,7 @@ class EphSnapshotProvider(object):
 
 		snapshot.path = manifest_path
 		snapshot.vg = os.path.basename(volume.vg)
+		snapshot.size = volume.size			
 		
 		return snapshot
 	
@@ -1086,7 +1020,6 @@ class EphSnapshotProvider(object):
 		
 		files = [snapshot.path]
 		files += [os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks')]
-		print files
 		
 		snapshot.path = self._transfer.upload(files, volume.snap_backend['path'])[0]
 		return snapshot
