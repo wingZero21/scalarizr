@@ -123,13 +123,13 @@ class CnfController(object):
 				continue
 			
 			elif not this.settings.has_key(variable.name):
-				if variable.default_value and this.settings[variable.name] == variable.default_value:
+				if variable.default_value and that.settings[variable.name] == variable.default_value:
 					continue
 				else:
 					return False
 					
 			elif not that.settings.has_key(variable.name):
-				if variable.default_value and that.settings[variable.name] == variable.default_value:
+				if variable.default_value and this.settings[variable.name] == variable.default_value:
 					continue
 				else:
 					return False
