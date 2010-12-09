@@ -7,21 +7,23 @@ Created on Nov 24, 2010
 
 from scalarizr.bus import bus
 from scalarizr.storage import Storage, Volume, VolumeProvider
+from scalarizr.storage.transfer import TransferProvider, TransferError
+from scalarizr.platform.ec2 import ebstool
 
 import os
 import logging
+from urlparse import urlparse
 
 from boto import connect_ec2
 from boto.s3.key import Key
 from boto.exception import BotoServerError
-from scalarizr.platform.ec2 import ebstool
 
 class EbsVolume(Volume):
 	volume_id = None
 	def __init__(self,  devname, mpoint=None, fstype=None, type=None, volume_id=None, **kwargs):
 		Volume.__init__(self, devname, mpoint, fstype, type)
 		self.volume_id = volume_id
-
+		
 
 class EbsVolumeProvider(VolumeProvider):
 	type = 'ebs'
@@ -77,29 +79,44 @@ class EbsVolumeProvider(VolumeProvider):
 
 Storage.explore_provider(EbsVolumeProvider, default_for_snap=True)
 
-'''
-class S3UploadDest(uploader.UploadDest):
+
+class S3TransferProvider(TransferProvider):
 	
-	def __init__(self, bucket, prefix=None, acl=None, logger=None):
+	schema = 's3'
+	
+	def __init__(self):
+		'''
 		self.bucket = bucket
 		self.prefix = prefix
 		self.acl = acl 
 		self._logger = logger or logging.getLogger(__name__)
+		'''
+		pass
 	
-	def put(self, filename):
-		self._logger.info("Uploading '%s' to S3 bucket '%s'", filename, self.bucket.name)
+	
+	def configure(self, remote_path, bucket=None, force=False):
+		o = urlparse(remote_path)
+		print 'remote_path', remote_path, 'url scheme:', o.scheme, 'class scheme:', self.schema
+		if o.scheme != self.schema:
+			raise TransferError('Wrong schema')		
+		self.bucket = connect_ec2().get_bucket(o.hostname) if not bucket else bucket
+		self.prefix = o.path
+
+	
+	def put(self, local_path, remote_path):
+		self._logger.info("Uploading '%s' to S3 bucket '%s'", local_path, self.bucket.name)
 		file = None
-		base_name = os.path.basename(filename)
+		base_name = os.path.basename(local_path)
 		obj_path = os.path.join(self.prefix, base_name) if self.prefix else base_name
 		try:
 			key = Key(self.bucket)
 			key.name = obj_path
-			file = open(filename, "rb")
+			file = open(local_path, "rb")
 			
 			key.set_contents_from_file(file, policy=self.acl)
 			
 		except (BotoServerError, OSError), e:
-			raise uploader.TransferError, e
+			raise TransferError, e
 		finally:
 			if file:
 				file.close()
@@ -113,13 +130,10 @@ class S3UploadDest(uploader.UploadDest):
 			key = self.bucket.get_key(filename)
 			key.get_contents_to_filename(dest_path)
 		except (BotoServerError, OSError), e:
-			raise uploader.TransferError, e
+			raise TransferError, e
 		return os.path.join(self.bucket.name, dest_path)
 	
-	def get_prefix(self):
-		return self.prefix
-	
-	def get_list_files(self):
+	def list(self):
 		files = [key.name for key in self.bucket.get_all_keys(prefix=self.prefix)] \
 			if self.prefix else [key.name for key in self.bucket.get_all_keys()]
 		return files
@@ -131,4 +145,3 @@ def location_from_region(region):
 		return 'EU'
 	else: 
 		return region
-'''

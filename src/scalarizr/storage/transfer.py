@@ -8,15 +8,26 @@ Created on Aug 25, 2010
 import logging
 from Queue import Queue, Empty
 from threading import Thread, Lock
+from urlparse import urlparse
 
 '''
 Example:
+
+scalarizr.platform.ec2.storage:
+
+from scalarizr.storage.transfer import Transfer, TransferProvider
+
+class S3TransferProvider(TransferProvider):
+	schema = 's3'
+	pass
+
+Transfer.explore_provider(S3TransferProvider)
 
 trn = Transfer(pool=5, max_attempts=3)
 trn.upload(files, 'cf://container/path/to/candy')
 trn.download('s3://scalr-files/path/to/some-shit/', dst, recursive=True)
 
-Create separate envirounment for each operation
+Create separate environment for each operation
 
 trn.upload(files, 'cf://container/path/to/candy', pvd_options=None)
   -> pvd = self._resolve_path(path, pvd_options=None)
@@ -28,6 +39,7 @@ trn.upload(files, 'cf://container/path/to/candy', pvd_options=None)
   
   
 trn.download('s3://scalr-files/path/to/some-shit/', dst, recursive=True)
+	-> ('s3://scalr-files/path/to/data.1', 's3://scalr-files/path/to/data.2' ...)
 	-> pvd = self._resolve_path()
 	-> if recursive:
 	->     files = pvd.list(path)
@@ -38,100 +50,116 @@ trn.download('s3://scalr-files/path/to/some-shit/', dst, recursive=True)
 	-> start pool
 	-> pvd.get(remote_path, os.path.join(dst, os.path.basename(remote_path)))
 	-> return tuple of local path
+	
 '''
 
 class TransferError(BaseException):
 	pass
 
 class Transfer(object):
-	_queue = None
-	state = None
-	
-	@staticmethod
-	def explore_provider(pvd):
-		pass
-	
-	@staticmethod
-	def lookup_provider(schema):
-		pass
-
-	@staticmethod
-	def create(*args, **kwargs):
-		pass
-
-	def _resolve_path(self, path):
+	providers = {}
 		
-		pass
+	@staticmethod
+	def explore_provider(PvdClass):
+		self = Transfer
+		schema = PvdClass.schema
+		self.providers[schema] = PvdClass
+		print 'Explored providers:', self.providers
+				
+	@staticmethod
+	def lookup_provider(remote_path, **kwargs):
+		o = urlparse(remote_path)
+		schema = o.scheme
+		self = Transfer
+			
+		try:
+			print 'Available providers:', self.providers
+			pvd = self.providers[schema]
+		except KeyError:
+			raise LookupError('Unknown provider "%s"' % (schema,))
+		obj = pvd()
+		obj.configure(remote_path, **kwargs)
+		return obj
 	
 	def __init__(self, pool=2, max_attempts=3, logger=None):
 		self._logger = logger or logging.getLogger(__name__) 
-		self._queue = Queue()
 		self._pool = pool
 		self._max_attempts = max_attempts
 
-	def upload(self, files, pvd, progress_cb=None):
-		action = UploadDest.run('put')	
-		return self._transfer(files, UploadDest, action)
+	def upload(self, files, remote_path, **pvd_options):
+		pvd = self.lookup_provider(remote_path, **pvd_options)
+		action = self._put_action(pvd, remote_path)
+		return self._transfer(files, action)
 		
-	def download(self, place, DownloadSrc):
-		files = DownloadSrc.get_list_files()
-
-		action = DownloadSrc.run('get', place)
-		self._transfer(files, DownloadSrc, action)	
-	
-	
-	def _transfer(self, files, UploadDest, action, progress_cb=None):
-		# Enqueue 
-		for file in files:
-			self._queue.put((file, 0)) 
+	def download(self, remote_path, dst, recursive=True, **pvd_options):
+		pvd = self.lookup_provider(remote_path, **pvd_options)
+		if recursive:
+			files = pvd.list(remote_path)
+		else:
+			files = (remote_path,)
+		action = self._get_action(pvd, dst)
+		print "schema of the new provider for download:", pvd.schema
+		return self._transfer(files, action)	
 			
-		self.state = "starting"
-		self._workers = []
-		self._failed_files = []
-		self._result = []
+	def _put_action(self, pvd, dst):
+		def g(filename):
+			return pvd.put(filename, dst)
+		return g
+	
+	def _get_action(self, pvd, local_dst):
+		def g(filename):
+			return pvd.get(filename,local_dst)
+		return g
+	
+	def _transfer(self, files, action):
+		# Enqueue 
+		queue = Queue()
+		for file in files:
+			queue.put((file, 0)) 
+
+		workers = []
+		failed_files = []
+		result = []
+		
 		self._failed_files_lock = Lock()
 		
 		#Starting threads
-		for n in range(self._pool):
+		for n in range(min(self._pool, len(files))):
 			worker = Thread(name="Worker-%s" % n, target=self._worker, 
-					args=(UploadDest, action))
+					args=(action, queue, result, failed_files))
 			self._logger.debug("Starting worker '%s'", worker.getName())
 			worker.start()
-			self._workers.append(worker)
+			workers.append(worker)
 		
 		# Join workers
-		self.state = "in-progress"
-		for worker in self._workers:
+		for worker in workers:
 			worker.join()
 			self._logger.debug("Worker '%s' finished", worker.getName())
-		self.state = "done"
 	
-		if self._failed_files:
-			raise TransferError("Cannot process several files. %s" % [", ".join(self._failed_files)])
+		if failed_files:
+			raise TransferError("Cannot process several files. %s" % [", ".join(failed_files)])
 		
 		self._logger.info("Transfer complete!")
 
 		# Return tuple of all files	def set_access_data(self, access_data):
-		return tuple(self._result)
+		return tuple(result)
 
-	def _worker(self, upload_dest, action):
-		self._logger.debug("queue: %s", self._queue)
+	def _worker(self, action, queue, result, failed_files):
 		try:
 			while 1:
-				filename, attempts = self._queue.get(False)
+				filename, attempts = queue.get(False)
 				try:
-					result = action(filename)
-					self._result.append(result)
+					result.append(action(filename))
 				except TransferError, e:
 					self._logger.error("Cannot transfer '%s'. %s", filename, e)
 					if attempts < self._max_attempts:
 						self._logger.debug("File '%s' will be transfered within the next attempt", filename)
 						attempts += 1
-						self._queue.put((filename, attempts))
+						queue.put((filename, attempts))
 					else:
 						try:
 							self._failed_files_lock.acquire()
-							self._failed_files.append(filename)
+							failed_files.append(filename)
 						finally:
 							self._failed_files_lock.release()
 		except Empty:
@@ -140,41 +168,19 @@ class Transfer(object):
 
 class TransferProvider:
 	schema = None
+	prefix = None
 	
-	def __init__(self, path=None, **kwargs):
+	def __init__(self):
 		pass
 	
-	def cd(self, remote_path):
+	def configure(self, remote_path, **kwargs):
 		pass
 	
 	def put(self, local_path, remote_path):
 		pass
 	
-	def get(self, remote_path, local_path, recursive=False):
+	def get(self, remote_path, local_path):
 		pass
-	
+		
 	def list(self, remote_path):
 		pass
-
-
-class UploadDest:
-	def put(self, filename):
-		pass
-	
-	def get(self, filename, dest):
-		pass
-	
-	def get_list_files(self):
-		pass
-	
-	def get_prefix(self):
-		pass
-	
-	def run(self, action, dest=None):
-		def _action(filename=None):
-			if action == 'put':
-				return self.put(filename)
-			if action == 'get':
-				return self.get(filename, dest)
-		return _action
-	
