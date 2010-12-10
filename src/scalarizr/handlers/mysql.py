@@ -8,7 +8,7 @@ Created on 14.06.2010
 # Core
 from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr.config import BuiltinBehaviours, Configurator
+from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
@@ -30,7 +30,7 @@ import time, signal, pwd, random, shutil
 # Extra
 from boto.exception import BotoServerError
 import pexpect
-
+import hashlib
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 CNF_SECTION = BEHAVIOUR
@@ -436,13 +436,55 @@ class MysqlHandler(ServiceCtlHanler):
 	def on_init(self):		
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
-		
+		bus.on("start", self.on_start)
 		"""
 		@xxx: Storage unplug failed because scalarizr has no EC2 access keys
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 		"""
-
+		
+	def on_start(self):
+		if self._cnf.state == ScalarizrState.RUNNING:
+			
+			def check_mysql_pass(mysql_pexp, user, password):
+							
+				def hash_mysql_password(str):
+					pass1 = hashlib.sha1(str).digest()
+					pass2 = hashlib.sha1(pass1).hexdigest()
+					return pass2.upper()
+				
+				hashed_pass = hash_mysql_password(password)
+				
+				mysql_pexp.sendline("SELECT password FROM mysql.user WHERE User = '%s' \G" % user)
+				mysql_pexp.expect('mysql>', timeout=10)
+				out = mysql_pexp.before
+				passwords = re.findall('password:\s+\*(\w+)', out)
+				
+				if not passwords or not all(map(lambda x: x == hashed_pass, passwords)):
+					raise Exception("Password for user %s doesn't match." % user)
+					
+			self._logger.debug("Checking Scalr's MySQL system users presence.")
+			root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
+			repl_password = self._cnf.rawini.get(CNF_SECTION, OPT_REPL_PASSWORD)
+			stat_password = self._cnf.rawini.get(CNF_SECTION, OPT_STAT_PASSWORD)
+			
+			try:
+				mysql = pexpect.spawn('/usr/bin/mysql -u ' + ROOT_USER + ' -p')
+				mysql.expect('Enter password:', timeout=10)
+				mysql.sendline(root_password)
+				mysql.expect('mysql>', timeout=10)
+				check_mysql_pass(mysql, REPL_USER, repl_password)
+				check_mysql_pass(mysql, STAT_USER, stat_password)
+				self._logger.debug("Scalr's MySQL system users are present. Passwords are correct.")				
+			except:
+				self._logger.warning("Scalr's MySQL system users were changed. Recreating.")
+				self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER,
+									  root_password, repl_password, stat_password)
+			finally:
+				mysql.close()
+				
+				
+				
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
 					message.name == MysqlMessages.NEW_MASTER_UP
@@ -1172,7 +1214,7 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.error("Cannot create MySQL data EBS snapshot. %s", e.message)
 			raise
 	
-	def _add_mysql_users(self, root_user, repl_user, stat_user):
+	def _add_mysql_users(self, root_user, repl_user, stat_user, root_pass=None, repl_pass=None, stat_pass=None):
 		self._stop_service()
 		self._logger.info("Adding mysql system users")
 
@@ -1189,9 +1231,16 @@ class MysqlHandler(ServiceCtlHanler):
 		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
 		
 		# Define users and passwords
-		root_password, repl_password, stat_password = map(lambda x: re.sub('[^\w]','', cryptotool.keygen(20)), range(3))
+		root_password = root_pass if root_pass else re.sub('[^\w]','', cryptotool.keygen(20))
+		repl_password = repl_pass if repl_pass else re.sub('[^\w]','', cryptotool.keygen(20))
+		stat_password = stat_pass if stat_pass else re.sub('[^\w]','', cryptotool.keygen(20))
+		
+		#root_password, repl_password, stat_password = map(lambda x: re.sub('[^\w]','', cryptotool.keygen(20)), range(3))
+		# Delete old users
+		sql = "DELETE FROM mysql.user WHERE User in ('%s', '%s', '%s');" % (root_user, repl_user, stat_user)
 		# Add users
-		sql = "INSERT INTO mysql.user VALUES('%','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
+		
+		sql += " INSERT INTO mysql.user VALUES('%','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
 		sql += " INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
 		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_slave_priv) VALUES ('%','"+repl_user+"',PASSWORD('"+repl_password+"'),'Y');"
 		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');"
