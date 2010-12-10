@@ -171,5 +171,8 @@ class Ec2Platform(Platform):
 
 	def  clear_access_data(self):
 		Platform.clear_access_data(self)
-		del os.environ['AWS_ACCESS_KEY_ID']
-		del os.environ['AWS_SECRET_ACCESS_KEY']
+		try:
+			del os.environ['AWS_ACCESS_KEY_ID']
+			del os.environ['AWS_SECRET_ACCESS_KEY']
+		except KeyError:
+			pass
