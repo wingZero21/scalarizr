@@ -516,6 +516,9 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Generating password for pma user
 			pma_password = re.sub('[^\w]','', cryptotool.keygen(20))
+			sql = "DELETE FROM mysql.user WHERE User = "+PMA_USER+";"
+			myclient.sendline(sql)
+			myclient.expect("mysql>")
 			# Generating sql statement, which depends on mysql server version 
 			sql = "INSERT INTO mysql.user VALUES('"+pma_server_ip+"','"+PMA_USER+"',PASSWORD('"+pma_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
 			# Pass statement to mysql client
@@ -524,7 +527,7 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Check for errors
 			if re.search('error', myclient.before, re.M | re.I):
-				raise HandlerError("Cannot add pma user '%s': '%s'" % (PMA_USER, myclient.before))
+				raise HandlerError("Cannot add PhpMyAdmin system user '%s': '%s'" % (PMA_USER, myclient.before))
 			
 			myclient.sendline('FLUSH PRIVILEGES;')
 			myclient.terminate()
@@ -540,9 +543,10 @@ class MysqlHandler(ServiceCtlHanler):
 			))
 			
 		except (Exception, BaseException), e:
+			self._logger.exception(e)
 			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
 				status		= 'error',
-				last_error	=  str(e),
+				last_error	=  str(e).strip(),
 				farm_role_id = farm_role_id
 			))
 	

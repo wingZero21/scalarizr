@@ -106,7 +106,8 @@ class IpListBuilder(Handler):
 			self._remove_file(os.path.join(self._base_path, 'mysql-slave', ip))
 
 			master_path = os.path.join(self._base_path, 'mysql-master')
-			shutil.rmtree(master_path)
+			if os.path.exists(master_path):
+				shutil.rmtree(master_path)
 			self._create_dir(master_path)
 			self._create_file(os.path.join(master_path, ip))
 
