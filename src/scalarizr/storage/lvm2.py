@@ -14,22 +14,28 @@ import os
 
 logger = logging.getLogger(__name__)
 
-PVS = whereis('pvs')[0]
-VGS = whereis('vgs')[0]
-LVS = whereis('lvs')[0]
+class Lvm2Error(PopenError):
+	pass
 
-PVCREATE = whereis('pvcreate')[0]
-VGCREATE = whereis('vgcreate')[0]
-LVCREATE = whereis('lvcreate')[0]
-
-LVCHANGE = whereis('lvchange')[0]
-VGCHANGE = whereis('vgchange')[0]
-VGEXTEND = whereis('vgextend')[0]
-VGREDUCE = whereis('vgreduce')[0]
-
-PVREMOVE = whereis('pvremove')[0]
-VGREMOVE = whereis('vgremove')[0]
-LVREMOVE = whereis('lvremove')[0]
+try:
+	PVS = whereis('pvs')[0]
+	VGS = whereis('vgs')[0]
+	LVS = whereis('lvs')[0]
+	
+	PVCREATE = whereis('pvcreate')[0]
+	VGCREATE = whereis('vgcreate')[0]
+	LVCREATE = whereis('lvcreate')[0]
+	
+	LVCHANGE = whereis('lvchange')[0]
+	VGCHANGE = whereis('vgchange')[0]
+	VGEXTEND = whereis('vgextend')[0]
+	VGREDUCE = whereis('vgreduce')[0]
+	
+	PVREMOVE = whereis('pvremove')[0]
+	VGREMOVE = whereis('vgremove')[0]
+	LVREMOVE = whereis('lvremove')[0]
+except IndexError:
+	raise Lvm2Error('Some of lvm2 executables were not found.')
 
 def system(*args, **kwargs):
 	kwargs['logger'] = logger
@@ -41,9 +47,6 @@ def system(*args, **kwargs):
 	'''
 	kwargs['exc_class'] = Lvm2Error
 	return system2(*args, **kwargs)
-
-class Lvm2Error(PopenError):
-	pass
 
 class PVInfo(namedtuple('PVInfo', 'pv vg format attr size free')):
 	COMMAND = (PVS,)
@@ -153,8 +156,7 @@ class Lvm2:
 		raise LookupError('Logical volume %s not found' % lvolume)
 	
 	def create_pv(self, *devices):
-		device_list = list(devices)
-		system([PVCREATE] + device_list,
+		system([PVCREATE] + list(devices),
 				error_text='Cannot initiate a disk for use by LVM')
 		
 	def create_vg(self, group, ph_volumes, ph_extent_size=4):

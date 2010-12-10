@@ -37,6 +37,48 @@ def whereis(name):
 	places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
 	return tuple([os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))])
 
+def system_info():
+		
+	def check_module(module):
+		return not system((modprobe, '-n', module), False)[-1]
+	
+	ret = {}
+	ret['software'] = []			
+	installed_list = all_installed()
+	for software_info in installed_list:
+		ret['software'].append(dict(name 	 = software_info.name,
+							      version = '.'.join([str(x) for x in software_info.version]),
+							      string_version = software_info.string_version
+							      ))
+	
+	ret['os'] = {}	
+	ret['os']['version'] 		= ' '.join(disttool.linux_dist())
+	ret['os']['string_version'] = ' '.join(disttool.uname()).strip()
+	
+	modprobe = whereis('modprobe')[0]
+	ret['storage'] = {}
+	ret['storage']['fstypes'] = []
+	
+	for fstype in ['jfs', 'xfs', 'ext3', 'ext4']:
+		retcode = system((modprobe, '-n', fstype), False)[-1]
+		exe = whereis('mkfs.%s' % fstype)
+		if not retcode and exe:
+			ret['storage']['fstypes'].append(fstype)
+
+	# Raid levels support detection
+	if whereis('mdadm'):
+		for module in  ('raid0', 'raid1', 'raid456'):
+			ret['storage'][module] = 1 if check_module(module) else 0
+
+	# Lvm2 support detection
+	if whereis('dmsetup') and all(map(check_module, ('dm_mod', 'dm_snapshot'))):
+		ret['storage']['lvm'] = 1
+	else:
+		ret['storage']['lvm'] = 0
+						
+	return ret
+
+
 class SoftwareError(BaseException):
 	pass
 

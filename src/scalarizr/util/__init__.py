@@ -11,7 +11,6 @@ from collections import namedtuple
 
 from scalarizr.bus import bus
 
-
 class UtilError(BaseException):
 	pass
 
@@ -443,4 +442,3 @@ class PeriodicalExecutor:
 					break
 			if not self._shutdown:
 				time.sleep(1)
-

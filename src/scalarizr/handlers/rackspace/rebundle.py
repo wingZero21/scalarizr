@@ -54,17 +54,6 @@ class RackspaceRebundleHandler(Handler):
 				cnf.state = old_state
 			
 			# Todo: move software list creation and os info collection 
-			software_list = []			
-			installed_list = software.all_installed()
-			for software_info in installed_list:
-				software_list.append(dict(name 	 = software_info.name,
-									      version = '.'.join([str(x) for x in software_info.version]),
-									      string_version = software_info.string_version
-									      ))
-			
-			os_info = {}
-			os_info['version'] = ' '.join(disttool.linux_dist())
-			os_info['string_version'] = ' '.join(disttool.uname()).strip()
 			
 			self.send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "ok",

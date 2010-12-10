@@ -12,4 +12,7 @@
 <path>/scalarizr-branch-0.6/test/unit/testcases</path>
 <path>/scalarizr-branch-0.6/test/unit/libs</path>
 </pydev_pathproperty>
+<pydev_pathproperty name="org.python.pydev.PROJECT_EXTERNAL_SOURCE_PATH">
+<path>/home/spike/selenium-remote-control-1.0.3/selenium-python-client-driver-1.0.1</path>
+</pydev_pathproperty>
 </pydev_project>
