@@ -184,27 +184,16 @@ class Ec2RebundleHandler(Handler):
 			# Run rebundle
 			ami_id = strategy.run()
 			
-			# Software list creation
-			software_list = []			
-			installed_list = software.all_installed()
-			for software_info in installed_list:
-				software_list.append(dict(name 	 = software_info.name,
-									      version = '.'.join([str(x) for x in software_info.version]),
-									      string_version = software_info.string_version
-									      ))
+			# Creating message
+			ret_message = dict(	status = "ok",
+								snapshot_id = ami_id,
+								bundle_task_id = message.bundle_task_id )
 			
-			os_info = {}
-			os_info['version'] = ' '.join(disttool.linux_dist())
-			os_info['string_version'] = ' '.join(disttool.uname()).strip()
+			# Updating message with OS, software and modules info
+			ret_message.update(software.system_info())
 			
 			# Notify Scalr
-			self.send_message(Messages.REBUNDLE_RESULT, dict(
-				status = "ok",
-				snapshot_id = ami_id,
-				bundle_task_id = message.bundle_task_id,
-				software = software_list,
-				os = os_info
-			))
+			self.send_message(Messages.REBUNDLE_RESULT, ret_message)
 			
 			# Fire 'rebundle'diss
 			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)

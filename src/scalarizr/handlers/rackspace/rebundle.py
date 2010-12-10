@@ -52,16 +52,15 @@ class RackspaceRebundleHandler(Handler):
 				wait_until(lambda: image_manager.get(image_id).progress == 100, sleep=30, logger=self._logger)
 			finally:
 				cnf.state = old_state
+			# Creating message
+			ret_message = dict(	status = "ok",
+								snapshot_id = image_id,
+								bundle_task_id = message.bundle_task_id )
 			
-			# Todo: move software list creation and os info collection 
+			# Updating message with OS, software and modules info
+			ret_message.update(software.system_info())
 			
-			self.send_message(Messages.REBUNDLE_RESULT, dict(
-				status = "ok",
-				snapshot_id = image_id,
-				bundle_task_id = message.bundle_task_id,
-				software = software_list,
-				os = os_info
-			))
+			self.send_message(Messages.REBUNDLE_RESULT, ret_message)
 			
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
