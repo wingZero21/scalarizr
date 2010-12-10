@@ -516,7 +516,7 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Generating password for pma user
 			pma_password = re.sub('[^\w]','', cryptotool.keygen(20))
-			sql = "DELETE FROM mysql.user WHERE User = "+PMA_USER+";"
+			sql = "DELETE FROM mysql.user WHERE User = '"+PMA_USER+"';"
 			myclient.sendline(sql)
 			myclient.expect("mysql>")
 			# Generating sql statement, which depends on mysql server version 
