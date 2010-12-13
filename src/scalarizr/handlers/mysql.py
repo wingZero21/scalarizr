@@ -165,6 +165,9 @@ STORAGE_DATA_DIR = "mysql-data"
 STORAGE_BINLOG_PATH = "mysql-misc/binlog.log"
 BACKUP_CHUNK_SIZE = 200*1024*1024
 
+STORAGE_NAME = 'mysql.json'
+SNAPSHOT_NAME = 'mysql-snap.json'
+
 
 def get_handlers ():
 	return [MysqlHandler()]
@@ -204,6 +207,7 @@ class MysqlMessages:
 	@ivar repl_password: 'scalr_repl' user password
 	@ivar stat_password: 'scalr_stat' user password
 	@ivar volume_id: Master EBS volume id
+	@ivar volume: Master storage configuration
 	"""
 	
 	PROMOTE_TO_MASTER_RESULT = "Mysql_PromoteToMasterResult"
@@ -228,8 +232,10 @@ class MysqlMessages:
 	= HOST_INIT_RESPONSE =
 	@ivar mysql=dict(
 		replication_master: 	1|0
-		volume_id				EBS volume id					(on master)
-		snapshot_id: 			Master EBS snapshot id			(on slave)
+		volume					Master storage configuration	(on master)
+		# --- volume_id				EBS volume id					(on master)
+		snapshot				Master storage snapshot 		(on slave)
+		# --- snapshot_id: 			Master EBS snapshot id			(on slave)
 		root_password:			'scalr' user password  			(on slave)
 		repl_password:			'scalr_repl' user password		(on slave)
 		stat_password: 			'scalr_stat' user password		(on slave)
@@ -242,10 +248,12 @@ class MysqlMessages:
 		root_password: 	'scalr' user password  					(on master)
 		repl_password: 	'scalr_repl' user password				(on master)
 		stat_password: 	'scalr_stat' user password				(on master)
-		snapshot_id: 	Data volume EBS snapshot				(on master)		 
+		# --- snapshot_id: 	Data volume EBS snapshot				(on master)
+		snapshot:		Master storage snapshot					(on master)		 
 		log_file: 		Binary log file							(on master) 
 		log_pos: 		Binary log file position				(on master)
-		volume_id:		EBS volume created from master snapshot (on slave)
+		volume:			Current storage configuration			(both) 
+		# --- volume_id:		EBS volume created from master snapshot (on slave)
 		) 
 	"""
 
@@ -381,7 +389,16 @@ def _spawn_mysql(user, password):
 		raise HandlerError('Cannot start mysql client tool: %s' % (e,))
 	finally:
 		return mysql
-	
+
+def _reload_mycnf(f):
+	def g(self, *args):
+		self._mysql_config = Configuration('mysql')
+		try:
+			self._mysql_config.read(self._mycnf_path)
+		except (OSError, MetaconfError, ParseError), e:
+			raise HandlerError('Cannot read mysql config %s : %s' % (self._mycnf_path, str(e)))
+		f(self, *args)
+	return g	
 
 class MysqlHandler(ServiceCtlHanler):
 	_logger = None
@@ -422,16 +439,6 @@ class MysqlHandler(ServiceCtlHanler):
 		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
 			
 		bus.on("init", self.on_init)
-
-	def _reload_mycnf(f):
-		def g(self, *args):
-			self._mysql_config = Configuration('mysql')
-			try:
-				self._mysql_config.read(self._mycnf_path)
-			except (OSError, MetaconfError, ParseError), e:
-				raise HandlerError('Cannot read mysql config %s : %s' % (self._mycnf_path, str(e)))
-			f(self, *args)
-		return g
 
 	def on_init(self):		
 		bus.on("host_init_response", self.on_host_init_response)
@@ -901,11 +908,17 @@ class MysqlHandler(ServiceCtlHanler):
 				# Get binary logfile, logpos and create data snapshot if needed
 				snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
 	
+				
+				snap = vol.snapshot()
+				Storage.backup_config(vol.config)
+				
 				msg_data = dict(
 					root_password=root_password,
 					repl_password=repl_password,
 					stat_password=stat_password,
-					snapshot_id=snap_id,
+					#snapshot_id=snap_id,
+					snapshot=snap.config(),
+					volume=vol.config(),
 					log_file=log_file,
 					log_pos=log_pos			
 				)
@@ -1009,6 +1022,10 @@ class MysqlHandler(ServiceCtlHanler):
 		)
 		
 	def _plug_storage(self, vol_id, mnt_point, vol=None, master=True):
+		vol = Storage.create(vol_config)
+		vol.mount(mnt_point)
+		return vol
+		
 		# Getting free letter for device
 		devname = get_free_devname()
 		if not master:

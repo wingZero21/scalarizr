@@ -1,11 +1,10 @@
 
-from .lvm2 import Lvm2, lvpath, VGCHANGE, Lvm2Error
+from .lvm2 import Lvm2, Lvm2Error
 from .raid import Mdadm
 from .fs import MOUNT_EXEC, UMOUNT_EXEC, SYNC_EXEC
 from .transfer import Transfer
 
-from scalarizr.util import system2, PopenError, firstmatched, wait_until,\
-	timethis
+from scalarizr.util import system2, PopenError, firstmatched, wait_until
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr.libs.metaconf import Configuration
 
@@ -22,14 +21,7 @@ import signal
 import binascii
 import uuid
 import shutil
-from scalarizr.util.software import whereis
-
-try:
-	import json
-except ImportError:
-	import simplejson as json
-
-VGCFGRESTORE = whereis('vgcfgrestore')[0]
+import json
 
 
 '''
@@ -245,7 +237,7 @@ class Storage:
 			orig_kwargs = kwargs.copy()
 			
 			# Set kwargs to snapshot kwargs
-			kwargs = kwargs['snapshot'].config if isinstance(kwargs['snapshot'], Snapshot) else kwargs['snapshot']
+			kwargs = kwargs['snapshot'].config() if isinstance(kwargs['snapshot'], Snapshot) else kwargs['snapshot']
 			if not isinstance(kwargs, dict):
 				args = None
 				kwargs = dict(device=kwargs)
@@ -276,6 +268,20 @@ class Storage:
 		pvd = self.lookup_provider(kwargs.get('type'), from_snap)
 		return getattr(pvd, 'create_from_snapshot' if from_snap else 'create').__call__(**kwargs)
 	
+	def backup_config(self, cnf, filename):
+		fp = open(filename, 'w')
+		try:
+			fp.write(json.dumps(cnf))
+		finally:
+			fp.close()
+	
+	def restore_config(self, filename):
+		fp = open(filename, 'r')
+		try:
+			return json.load(fp)
+		finally:
+			fp.close()
+	
 '''	
 	@staticmethod
 	def destroy(vol):
@@ -293,11 +299,11 @@ def _fs_should_be_set(f):
 	return d
 
 class Volume(object):
-	type = 'base'
+	type = 'base'	
 	devname = None
 	mpoint = None
-	config = None
-
+	id = None	
+	
 	_logger = None
 	_fs = None
 
@@ -311,11 +317,10 @@ class Volume(object):
 			self.fstype = fstype
 		if type:
 			self.type = type
-		
-		self.config = dict(mpoint = mpoint,
-						   fstype = fstype,
-						   type   = type)
-		self.config.update(kwargs)		
+		for k, v in kwargs.items():
+			if hasattr(self, k):
+				setattr(self, k, v)
+
 
 	def _fstype_setter(self, fstype):
 		self._fs = Storage.lookup_filesystem(fstype)
@@ -398,12 +403,31 @@ class Volume(object):
 		pvd.destroy(self, force, **kwargs)
 		self.devname = None
 
+	def __str__(self):
+		fmt = '[volume:%s] %s\n' + '%-10s : %s\n'*3
+		return fmt % (
+			self.type, self.devname,
+			'id', self.id or ''
+			'mpoint', self.mpoint or '',
+			'fstype', self.fstype or ''
+		)
+		
+	def config(self):
+		return {
+			'type' 	: self.type,
+			'device': self.devname,
+			'mpoint': self.mpoint,
+			'fstype': self.fstype,
+			'id'	: self.id
+		}
 
 class Snapshot(object):
 	version = '0.7'
 	type = None
 	description = None
-	
+
+	_id = None
+		
 	def __init__(self, type=None, description=None, **kwargs):
 		self.type = type
 		self.description = description
@@ -411,10 +435,20 @@ class Snapshot(object):
 			if hasattr(self, k):
 				setattr(self, k, v)
 	
-	def __str__(self):
-		return '[snapshot:%s] %s' % (self.type, self.description)
+	def _id_setter(self, id):
+		self._id = id
+		
+	def _id_getter(self):
+		if not self._id:
+			self._id = '%s-snap-%s' % (self.type, uuid.uuid4().hex[0:8])
+		return self._id
 	
-	@property
+	id = property(_id_getter, _id_setter)
+	
+	def __str__(self):
+		fmt = '[snapshot(v%s):%s] %s\n%s'
+		return str(fmt % (self.version, self.type, self.id, self.description or '')).strip()
+	
 	def config(self):
 		attrs = tuple(attr for attr in dir(self) if not attr.startswith('_'))
 		ret = dict()
@@ -422,7 +456,7 @@ class Snapshot(object):
 			if attr == 'config':
 				continue
 			if attr == 'disks':
-				ret['disks'] = tuple({'snapshot' : snap.config} for snap in self.disks)
+				ret['disks'] = tuple({'snapshot' : snap.config()} for snap in self.disks)
 			else:
 				ret[attr] = getattr(self, attr)
 		return ret
@@ -528,21 +562,17 @@ class RaidVolume(Volume):
 	raid_vg = None
 	disks = None
 	
-	def __init__(self, devname, mpoint=None, fstype=None, type=None, 
-				level=None, disks=None, raid_vg=None, raid_pv=None, snap_pv=None, **kwargs):
-		
-		kwargs.update({'level' : level,
-					   'raid_vg': raid_vg,
-					   'raid_pv': raid_pv,
-					   'snap_pv' :snap_pv})
-		
-		Volume.__init__(self, devname, mpoint, fstype, type, **kwargs)
-		self.level = level
-		self.disks = disks		
-		self.raid_vg = raid_vg
-		self.raid_pv = raid_pv		
-		self.snap_pv = snap_pv
-		self.type = 'raid'
+	def config(self):
+		ret = Volume.config(self)
+		ret.update({
+			'level': 	self.level,
+			'vg': 		self.raid_vg,
+			'raid_pv': 	self.raid_pv.config(),
+			'snap_pv':	self.snap_pv.config() if isinstance(self.snap_pv, Volume) else self.snap_pv,
+			'disks':	tuple(vol.config() for vol in self.disks)
+		})
+		return ret
+
 	
 class RaidSnapshot(Snapshot):
 	level = None
@@ -595,7 +625,6 @@ class RaidVolumeProvider(VolumeProvider):
 		kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
 		kwargs['raid_pv'] = raid_pv
 		volume = super(RaidVolumeProvider, self).create(**kwargs)
-		volume.config['disks'] = [vol.config for vol in kwargs['disks']]
 		return volume		
 	
 	def create_from_snapshot(self, **kwargs):
@@ -613,18 +642,14 @@ class RaidVolumeProvider(VolumeProvider):
 		lvm_backup_filename = '/tmp/lvm_backup'
 		write_file(lvm_backup_filename, lvm_raw_backup, logger=logger)
 		try:
-			cmd = ((VGCFGRESTORE, '-f', lvm_backup_filename, raid_vg))
-			system(cmd, error_text='Cannot restore lvm volume group %s from backup file.')
+			self._lvm.restore_vg(raid_vg, lvm_backup_filename)
 		finally:
 			os.unlink(lvm_backup_filename)
 		
-		cmd = ((VGCHANGE, '-ay', raw_vg))
-					
 		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg_name == raw_vg, self._lvm.lv_status())
 		if not lvinfo:
 			raise StorageError('Volume group %s does not contain any logical volume.' % raw_vg)
-		
-		system(cmd, error_text='Cannot activate volume group %s' % raw_vg)
+		self._lvm.change_vg(raw_vg, available=True)
 		
 		# TODO : Where is snap_pv here? 
 		return RaidVolume(lvinfo.lv_path, raid_pv=raid_pv, raid_vg=raid_vg, disks=kwargs['disks'], level=kwargs['level'])
@@ -718,15 +743,15 @@ class EphVolume(Volume):
 	tranzit_vol = None
 	snap_backend = None	
 	
-
-	def __init__(self, devname, mpoint=None, fstype=None, type=None, vg=None, 
-				disk=None, size=None, tranzit_vol=None, snap_backend=None, **kwargs):
-		Volume.__init__(self, devname, mpoint, fstype, type, **kwargs)
-		self.vg = vg
-		self.disk = disk
-		self.size = size		
-		self.tranzit_vol = tranzit_vol
-		self.snap_backend = snap_backend
+	def config(self):
+		ret = Volume.config(self)
+		ret.update({
+			'vg' : self.vg,
+			'size' : self.size,
+			'snap_backend' : self.snap_backend['path'] if self.snap_backend else '',
+			'disk' : self.disk.config() if self.disk else None
+		})
+		return ret
 
 class EphSnapshot(Snapshot):
 	path = None
@@ -928,34 +953,31 @@ class EphSnapshotProvider(object):
 		self._transfer = Transfer()
 		self._lvm = Lvm2()
 	
-	@timethis
 	def create(self, volume, snapshot, tranzit_path):
 		# Create LVM snapshot
 		snap_lv = None
-		snap_id = 'snap-%s' % uuid.uuid4().hex[0:8]
-		chunk_prefix = '%s.data' % snap_id
+		chunk_prefix = '%s.data' % snapshot.id
 		try:
 			snap_lv = self._lvm.create_lv_snapshot(volume.devname, self.SNAPSHOT_LV_NAME, extents='100%FREE')
 			
-			with timethis("dd | gzip | split"):
-				# Copy|gzip|split snapshot into tranzit volume directory
-				self._logger.info('Packing volume %s -> %s', volume.devname, tranzit_path) 
-				cmd1 = ['dd', 'if=%s' % snap_lv]
-				cmd2 = ['gzip', '-1']
-				cmd3 = ['split', '-a','3', '-d', '-b', '%sM' % self.chunk_size, '-', '%s/%s.gz.' % 
-						(tranzit_path, chunk_prefix)]
-				p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-				p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-				p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-				out, err = p3.communicate()
-	
-				if p3.returncode:
-					p1.stdout.close()
-					p2.stdout.close()				
-					p1.wait()
-					p2.wait()
-					raise StorageError('Error during coping LVM snapshot device (code: %d) <out>: %s <err>: %s' % 
-							(p3.returncode, out, err))
+			# Copy|gzip|split snapshot into tranzit volume directory
+			self._logger.info('Packing volume %s -> %s', volume.devname, tranzit_path) 
+			cmd1 = ['dd', 'if=%s' % snap_lv]
+			cmd2 = ['gzip', '-1']
+			cmd3 = ['split', '-a','3', '-d', '-b', '%sM' % self.chunk_size, '-', '%s/%s.gz.' % 
+					(tranzit_path, chunk_prefix)]
+			p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			out, err = p3.communicate()
+
+			if p3.returncode:
+				p1.stdout.close()
+				p2.stdout.close()				
+				p1.wait()
+				p2.wait()
+				raise StorageError('Error during coping LVM snapshot device (code: %d) <out>: %s <err>: %s' % 
+						(p3.returncode, out, err))
 		finally:
 			# Remove LVM snapshot			
 			if snap_lv:
@@ -969,7 +991,7 @@ class EphSnapshotProvider(object):
 		for chunk in glob.glob(os.path.join(tranzit_path, chunk_prefix + '*')):
 			config.add('chunks/%s' % os.path.basename(chunk), self._md5sum(chunk), force=True)
 		
-		manifest_path = os.path.join(tranzit_path, '%s.%s' % (snap_id, self.MANIFEST_NAME))
+		manifest_path = os.path.join(tranzit_path, '%s.%s' % (snapshot.id, self.MANIFEST_NAME))
 		config.write(manifest_path)
 
 		snapshot.path = manifest_path
@@ -977,42 +999,40 @@ class EphSnapshotProvider(object):
 		snapshot.size = volume.size			
 		
 		return snapshot
+
 	
-	@timethis
 	def restore(self, volume, snapshot, tranzit_path):
 		# Load manifest
 		mnf = Configuration('ini')
 		mnf.read(os.path.join(tranzit_path, os.path.basename(snapshot.path)))
 		
-		with timethis("checksum"):
-			# Checksum
-			for chunk, md5sum_o in mnf.items('chunks'):
-				chunkpath = os.path.join(tranzit_path, chunk)
-				md5sum_a = self._md5sum(chunkpath)
-				if md5sum_a != md5sum_o:
-					raise StorageError(
-							'Chunk file %s checksum mismatch. Actual md5sum %s != %s defined in snapshot manifest', 
-							chunkpath, md5sum_a, md5sum_o)
+		# Checksum
+		for chunk, md5sum_o in mnf.items('chunks'):
+			chunkpath = os.path.join(tranzit_path, chunk)
+			md5sum_a = self._md5sum(chunkpath)
+			if md5sum_a != md5sum_o:
+				raise StorageError(
+						'Chunk file %s checksum mismatch. Actual md5sum %s != %s defined in snapshot manifest', 
+						chunkpath, md5sum_a, md5sum_o)
 
-		with timethis("cat | gunzip > %s" % volume.devname):		
-			# Restore chunks 
-			self._logger.info('Unpacking snapshot from %s -> %s', tranzit_path, volume.devname)
-			cat = ['cat']
-			catargs = list(os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks'))
-			catargs.sort()
-			cat.extend(catargs)
-			gunzip = ['gunzip']
-			dest = open(volume.devname, 'w')
-			#Todo: find out where to extract file
-			p1 = subprocess.Popen(cat, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest, stderr=subprocess.PIPE)
-			out, err = p2.communicate()
-			dest.close()
-			if p2.returncode:
-				p1.stdout.close()
-				p1.wait()
-				raise StorageError('Error during snapshot restoring (code: %d) <out>: %s <err>: %s' % 
-						(p2.returncode, out, err))
+		# Restore chunks 
+		self._logger.info('Unpacking snapshot from %s -> %s', tranzit_path, volume.devname)
+		cat = ['cat']
+		catargs = list(os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks'))
+		catargs.sort()
+		cat.extend(catargs)
+		gunzip = ['gunzip']
+		dest = open(volume.devname, 'w')
+		#Todo: find out where to extract file
+		p1 = subprocess.Popen(cat, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest, stderr=subprocess.PIPE)
+		out, err = p2.communicate()
+		dest.close()
+		if p2.returncode:
+			p1.stdout.close()
+			p1.wait()
+			raise StorageError('Error during snapshot restoring (code: %d) <out>: %s <err>: %s' % 
+					(p2.returncode, out, err))
 
 	def upload(self, volume, snapshot, tranzit_path):
 		mnf = Configuration('ini')

@@ -887,6 +887,10 @@ class ScalarizrCnf(Observable):
 		return name and os.path.join(self._pub_path, name) or self._pub_path
 	
 	@property
+	def storage_path(self):
+		return self.private_path('storage')
+	
+	@property
 	def home_path(self):
 		if not self._home_path:
 			self._home_path = os.path.expanduser('~/.scalr')

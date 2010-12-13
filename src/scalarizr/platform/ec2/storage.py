@@ -36,6 +36,7 @@ class EbsVolumeProvider(VolumeProvider):
 	
 	def _create(self, **kwargs):
 		'''
+		@param id: EBS volume id
 		@param size: Size in GB
 		@param avail_zone: Availability zone
 		@param snapshot_id: Snapshot id

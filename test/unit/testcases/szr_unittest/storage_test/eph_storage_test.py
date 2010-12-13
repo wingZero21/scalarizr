@@ -41,7 +41,6 @@ class TestEphStorageCreate(unittest.TestCase):
 			disk = self.device,
 			vg = 'dbstorage',
 			fstype = 'ext3',
-			
 			snap_backend='my://secretphase/backups'
 		)
 		
@@ -49,7 +48,12 @@ class TestEphStorageCreate(unittest.TestCase):
 		self.assertTrue(os.path.exists(vol.devname))
 		self.assertEqual(vol.disk.devname, self.device)
 		self.assertTrue(os.path.exists(vol.tranzit_vol.devname))
-
+		
+		config = self.vol.config()
+		self.assertEqual(config['type'], 'eph')
+		self.assertTrue(config['size'] is not None)
+		self.assertTrue(config['snap_backend'] is not None)
+		self.assertTrue(isinstance(config['disk'], dict))
 
 
 class TestEphStorageSnapshot(unittest.TestCase):
@@ -61,7 +65,7 @@ class TestEphStorageSnapshot(unittest.TestCase):
 		self.vols = [None, None, None]		
 		for i in range(3):
 			self.filenames.append('/tmp/pv%s' % randint(11, 99))
-			self.devices.append(mkloop(self.filenames[i], size=100, quick=False))
+			self.devices.append(mkloop(self.filenames[i], size=50, quick=False))
 			if not os.path.exists(self.mpoints[i]):
 				os.makedirs(self.mpoints[i])
 

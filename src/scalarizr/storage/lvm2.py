@@ -30,10 +30,12 @@ try:
 	VGCHANGE = whereis('vgchange')[0]
 	VGEXTEND = whereis('vgextend')[0]
 	VGREDUCE = whereis('vgreduce')[0]
+	VGCFGRESTORE = whereis('vgcfgrestore')[0]	
 	
 	PVREMOVE = whereis('pvremove')[0]
 	VGREMOVE = whereis('vgremove')[0]
 	LVREMOVE = whereis('lvremove')[0]
+	
 except IndexError:
 	raise Lvm2Error('Some of lvm2 executables were not found.')
 
@@ -219,11 +221,20 @@ class Lvm2:
 		system((VGREDUCE, '--removemissing', group))
 		system((VGCHANGE, '-a', 'y', group))
 
-	def deviceno(self, lvolume):
-		out = system(('/sbin/dmsetup'))
+	def restore_vg(self, group, backup_file):
+		cmd = ((VGCFGRESTORE, '-f', backup_file, group))
+		system(cmd, error_text='Cannot restore volume group %s from backup file %s' % (group, backup_file))
 
-	# Untested ---> 
+	def change_vg(self, group, available=None):
+		cmd = [VGCHANGE]
+		if available is not None:
+			cmd.append('-ay' if available else '-an')
+		cmd.append(group)
+		system(cmd, error_text='Cannot volume group attributes')
 
+
+	# Untested --->
+	
 	def get_lv_size(self, lv_name):
 		lv_info = self.get_logic_volumes_info()
 		if lv_info:
