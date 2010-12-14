@@ -724,7 +724,7 @@ class RaidVolumeProvider(VolumeProvider):
 			# TODO: store snap_pv configuration?
 
 		
-		finally:
+		finally: 
 			self._lvm.remove_lv(snap_lv)
 			self._lvm.remove_pv(snap_pv.devname)
 			if not isinstance(vol.snap_pv, Volume):
