@@ -37,10 +37,22 @@ snapshot = {
 	lvm_group_cfg: base64 encoded string,
 	raid_vg: vg_name
 	disks: [{
-		type: ebs,
-		id: snap-013fb66b
+		device : '/dev/sdh'
+		snapshot: {
+			type: ebs,
+			id: snap-013fb66b
 	}]
 }
+
+vol.dettach() - config
+
+[Vol] --> [Snap] - config -> Storage.create()
+
+
+[Vol] -detach-> [Config]
+
+Confgi -> Storage.create
+
 
 Storage.create({
 	type: raid,
@@ -114,6 +126,7 @@ raid = Storage.create({
 })
 
 Storage.destroy(raid)
+
 '''
 
 logger = logging.getLogger(__name__)
@@ -420,7 +433,11 @@ class Volume(object):
 			'fstype': self.fstype,
 			'id'	: self.id
 		}
-
+		
+	def detach(self, force=False):
+		pvd = Storage.providers[self.type]
+		pvd.destroy(self, force)
+		
 class Snapshot(object):
 	version = '0.7'
 	type = None
@@ -490,8 +507,7 @@ class VolumeProvider(object):
 
 	def destroy(self, vol, force=False, **kwargs):
 		if not vol.devname:
-			raise StorageError("Can't destroy volume: device name is empty.")
-		
+			raise StorageError("Can't destroy volume: device name is empty.")		
 		try:
 			vol.umount()
 		except:
@@ -499,6 +515,16 @@ class VolumeProvider(object):
 				vol.umount(lazy=True)
 			else:
 				raise
+	
+	def detach(self, vol, force=False):
+		if vol.mounted():
+			try:
+				vol.umount()
+			except:
+				if force:
+					vol.umount(lazy=True)
+				else:
+					raise
 		
 		
 Storage.explore_provider(VolumeProvider, default_for_vol=True, default_for_snap=True)
@@ -551,6 +577,11 @@ class LoopVolumeProvider(VolumeProvider):
 	def save_snapshot(self, vol, snap):
 		return snap
 
+	def detach(self, vol, force=False):
+		super(LoopVolumeProvider, self).detach(vol, force)
+		rmloop(vol.devname)
+		vol.devname = None
+		return vol.config()
 		
 Storage.explore_provider(LoopVolumeProvider)
 
@@ -581,7 +612,13 @@ class RaidSnapshot(Snapshot):
 	snap_pv = None
 	disks = None
 
-	
+def _check_devname_presence(f):
+	def d(*args, **kwargs):
+		if not args[0].devname:
+			raise StorageError('Device name is empty.')
+		return f(*args, **kwargs)
+	return d
+
 class RaidVolumeProvider(VolumeProvider):
 	type = 'raid'
 	vol_class = RaidVolume
@@ -654,6 +691,7 @@ class RaidVolumeProvider(VolumeProvider):
 		# TODO : Where is snap_pv here? 
 		return RaidVolume(lvinfo.lv_path, raid_pv=raid_pv, raid_vg=raid_vg, disks=kwargs['disks'], level=kwargs['level'])
 	
+	@_check_devname_presence
 	def create_snapshot(self, vol, snap):
 		if not vol.snap_pv:
 			raise ValueError('Volume should have non-empty snap_pv attribute')
@@ -696,6 +734,7 @@ class RaidVolumeProvider(VolumeProvider):
 		
 		return snap
 	
+	@_check_devname_presence
 	def save_snapshot(self, vol, snap):
 		raw_vg = os.path.basename(vol.raid_vg)
 		lvmgroupcfg = read_file('/etc/lvm/backup/%s' % raw_vg)
@@ -710,11 +749,30 @@ class RaidVolumeProvider(VolumeProvider):
 		del snap.tmp_snaps
 		
 		return snap
-	
+
 	def destroy(self, vol, force=False, **kwargs):
 		super(RaidVolumeProvider, self).destroy(vol, force, **kwargs)
 		
 		remove_disks=kwargs.get('remove_disks', False) 
+		
+		self._remove_lvm(vol, force)
+		
+		self._mdadm.delete(vol.raid_pv)
+		if remove_disks and getattr(vol.disks, '__iter__', False):
+			for disk in vol.disks:
+				disk.destroy()
+
+	@_check_devname_presence			
+	def detach(self, vol, force=False):
+		self._logger.debug('Detaching volume %s' % vol.devname)
+		super(RaidVolumeProvider, self).detach(vol, force)
+		self._remove_lvm(vol)
+		self._mdadm.delete(vol.raid_pv)
+		for disk in vol.disks:
+			disk.detach(force)			
+		return vol.config()
+
+	def _remove_lvm(self, vol, force=False):
 		try:
 			self._lvm.remove_lv(vol.devname)
 		except Lvm2Error, e:
@@ -727,10 +785,7 @@ class RaidVolumeProvider(VolumeProvider):
 							
 		self._lvm.remove_vg(vol.raid_vg)
 		self._lvm.remove_pv(vol.raid_pv)
-		self._mdadm.delete(vol.raid_pv)
-		if remove_disks and getattr(vol.disks, '__iter__', False):
-			for disk in vol.disks:
-				disk.destroy()
+		vol.devname = None
 	
 Storage.explore_provider(RaidVolumeProvider)
 
