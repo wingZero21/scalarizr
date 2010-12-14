@@ -29,7 +29,6 @@ class CFTransferProvider(TransferProvider):
 		self._logger.info('Uploading %s in CloudFiles container %s' % (local_path, self.container_name))
 		base_name = os.path.basename(local_path)
 		obj_path = os.path.join(self.prefix, base_name)
-		print 'put:', obj_path
 		try:		
 			
 			connection = self._get_connection(remote_path)
@@ -77,7 +76,6 @@ class CFTransferProvider(TransferProvider):
 	
 	def configure(self, remote_path, username=None, api_key=None, force=False):
 		o = urlparse(remote_path)
-		print 'remote_path', remote_path, 'url scheme:', o.scheme, 'class scheme:', self.schema
 		if o.scheme != self.schema:
 			raise TransferError('Wrong schema')
 		self.container_name = o.hostname
@@ -86,7 +84,6 @@ class CFTransferProvider(TransferProvider):
 			self.username = username if username else os.environ["username"]
 		if not self.api_key or force:
 			self.api_key = api_key if api_key else os.environ["api_key"]
-		print (self.username, self.api_key)
 		
 	def list(self, remote_path):
 		connection = self._get_connection(remote_path)

@@ -64,7 +64,6 @@ class Transfer(object):
 		self = Transfer
 		schema = PvdClass.schema
 		self.providers[schema] = PvdClass
-		print 'Explored providers:', self.providers
 				
 	@staticmethod
 	def lookup_provider(remote_path, **kwargs):
@@ -73,7 +72,6 @@ class Transfer(object):
 		self = Transfer
 			
 		try:
-			print 'Available providers:', self.providers
 			pvd = self.providers[schema]
 		except KeyError:
 			raise LookupError('Unknown provider "%s"' % (schema,))
@@ -98,7 +96,6 @@ class Transfer(object):
 		else:
 			files = (remote_path,)
 		action = self._get_action(pvd, dst)
-		print "schema of the new provider for download:", pvd.schema
 		return self._transfer(files, action)	
 			
 	def _put_action(self, pvd, dst):

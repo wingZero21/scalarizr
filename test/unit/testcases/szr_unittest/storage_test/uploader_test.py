@@ -4,6 +4,7 @@ __author__ = 'shaitanich'
 Created on Nov 18, 2010
 
 @author: shaitanich
+from boto import connect_ec2
 '''
 import os 
 import logging
@@ -16,7 +17,7 @@ from scalarizr.platform.rackspace.storage import CFTransferProvider
 from szr_unittest import main
 
 import cloudfiles
-from boto.s3.connection import S3Connection
+from boto import connect_s3, connect_ec2
 
 
 '''
@@ -30,12 +31,8 @@ trn.download('s3://scalr-files/path/to/some-shit/', dst, recursive=True)
 class UploaderTest(unittest.TestCase):
 
 	def setUp(self):
-		
-		os.environ["username"]='rackcloud05'
-		os.environ["api_key"]='27630d6e96e72fa43233a185a0518f0e'
-		
 		self.fname = str(randint(1000000, 9999999)) + '.file'
-		self.cont = 'container' + str(randint(1000000, 9999999))
+		self.container = 'container' + str(randint(1000000, 9999999))
 		self.prefix = 'remotedir' + str(randint(1000000, 9999999))
 		self.content = 'random_content' + str(randint(1000000, 9999999))
 		self.target_file = str(randint(1000000, 9999999))
@@ -57,28 +54,52 @@ class UploaderTest(unittest.TestCase):
 			os.removedirs(self.new_dir)
 		#delete file and entry in cloud
 		os.remove(self.fname)
-		
-	def _test_S3(self):
-		conn = S3Connection()
-		if not self.cont in [b.name for b in conn.get_all_buckets()]:
-			bucket = conn.create_bucket(self.cont)
+		if 'S3' in self.id():
+			try:
+				s3_con = connect_s3()
+				bucket = s3_con.get_bucket(self.container)
+				bucket.delete()			
+			except:
+				pass
 		else:
-			bucket = conn.get_bucket(self.cont)
+			try:
+				username	= os.environ['username']
+				api_key		= os.environ['api_key']
+				conn = cloudfiles.get_connection(username=username, api_key=api_key)
+				conn.delete_bucket(self.container)
+			except:
+				pass 
+				
+		
+	def test_S3(self):
+		try:
+			aws_key_id = os.environ["AWS_ACCESS_KEY_ID"]
+			aws_secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
+		except:
+			raise Exception('Cannot get aws credentials from os environment.')
+		
+		conn = connect_s3(aws_key_id, aws_secret_key)
+		
+		transfer.Transfer.explore_provider(S3TransferProvider)
 		
 		U = transfer.Transfer(pool=2, logger=self._logger)
-		s3ud = S3TransferProvider(bucket, self.prefix)
-		U.upload(self.files, s3ud)
+		url = 's3://%s/%s/' % (self.container, self.prefix)
+		U.upload(self.files, url, force=True)
 		
 		#check container exists
+		
 		buckets = [b.name for b in conn.get_all_buckets()]
-		self.assertTrue(self.cont in buckets)
+		self.assertTrue(self.container in buckets)
+		bucket = conn.get_bucket(self.container)
+		
 		
 		#check file uploaded and prefix is ok
-		objects = [key.name for key in bucket.get_all_keys()]
-		self.assertTrue(self.obj_name in objects)
+		
+		objects = [os.path.basename(key.name) for key in bucket.list(self.prefix)]
+		self.assertTrue(self.fname in objects)
 		
 		#check file contains appropriate data
-		U.download(self.new_dir, s3ud)
+		U.download(url, self.new_dir)
 		t_content = open(os.path.join(self.new_dir, os.path.basename(self.fname)), 'r').read()
 		self.assertEquals(self.content, t_content)
 		
@@ -86,15 +107,14 @@ class UploaderTest(unittest.TestCase):
 		for key in bucket.get_all_keys():
 			key.delete()
 		#delete bucket
-		conn.delete_bucket(self.cont)
+		conn.delete_bucket(self.container)
 	
 	def test_cloud_files(self):		
 		transfer.Transfer.explore_provider(CFTransferProvider)
 		U = transfer.Transfer(pool=2, logger=self._logger)
 		#cfud = CFTransferProvider(self.cont, self.prefix)
 		#U.upload(self.files, cfud)
-		url = 'cf://%s/%s/' % (self.cont, self.prefix)
-		print url
+		url = 'cf://%s/%s/' % (self.container, self.prefix)
 		
 		U.upload(self.files, url)
 		
@@ -103,24 +123,21 @@ class UploaderTest(unittest.TestCase):
 		#check container exists
 		containers = [c.name for c in connection.get_all_containers()]
 		
-		self.assertTrue(self.cont in containers)
+		self.assertTrue(self.container in containers)
 		
 		#check file uploaded and prefix is ok
-		container = connection.get_container(self.cont)
+		container = connection.get_container(self.container)
 		objects = [c.name for c in container.get_objects()]
-		print "obj_name", self.obj_name, 'objects', objects
 		self.assertTrue(self.obj_name in objects)
 		
-		print "Downloading the file back"
 		#check file contains appropriate data
-		print url
 		U.download(url, self.new_dir)
 		t_content = open(os.path.join(self.new_dir, os.path.basename(self.fname)), 'r').read()
 		self.assertEquals(self.content, t_content)
 			
 		container.delete_object(self.obj_name)
 		#delete container
-		connection.delete_container(self.cont)
+		connection.delete_container(self.container)
 		
 		
 if __name__ == "__main__":

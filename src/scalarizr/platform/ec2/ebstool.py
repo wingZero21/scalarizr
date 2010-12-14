@@ -50,6 +50,10 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout
 		avail_zone
 	)
 	logger.debug(msg)
+	
+	if snap_id:
+		wait_snapshot(ec2_conn, snap_id, logger)
+	
 	vol = ec2_conn.create_volume(size, avail_zone, snap_id)
 	logger.debug('EBS volume %s created%s', vol.id, snap_id and ' from snapshot %s' % snap_id or '')
 	
