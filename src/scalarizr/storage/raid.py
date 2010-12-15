@@ -58,13 +58,14 @@ class Mdadm:
 		return devname
 
 		
-	def delete(self, array):
+	def delete(self, array, zero_superblock=True):
 		if not os.path.exists(array):
 			raise MdadmError('Device %s does not exist' % array)
 		
 		# Stop raid
 		devices = self.get_array_devices(array)
-		wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
+		system2((MDADM_PATH, '-W', array), raise_error=False)
+		#wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
 		cmd = (MDADM_PATH, '-S', '-f', array)
 		system(cmd, error_text='Error occured during array stopping')
 
@@ -77,9 +78,10 @@ class Mdadm:
 				raise
 
 		system(('rm', '-f', array))
-
-		for device in devices:
-			self._zero_superblock(device)
+		
+		if zero_superblock:
+			for device in devices: 
+				self._zero_superblock(device)
 			
 	def assemble(self, devices):
 		md_devname = self._get_free_md_devname()

@@ -16,15 +16,16 @@ class Test(unittest.TestCase):
 			system('dd if=/dev/zero of=/tmp/device%s bs=1M count=10' % i)
 			self.vols.append(Storage.create(type='loop', file='/tmp/device%s' % i))
 		self.snap_vol = self.vols.pop()
+		
+		
 
 	def tearDown(self):
 		if hasattr(self, 'array') and self.array.devname:
 			self.array.destroy(remove_disks=True)
-			
-		system('rm -f /tmp/device%s' % self.snap_vol.devname[-1])
-		self.snap_vol.destroy()		
+		if self.snap_vol.devname:
+			self.snap_vol.destroy()
 
-	def _testCreateDestroyRaid(self):
+	def testCreateDestroyRaid(self):
 		self.array = Storage.create(type='raid', disks=self.vols, level=1, vg='dbstorage')
 		self.assertTrue(os.path.exists(self.array.raid_pv))
 		self.array.destroy(remove_disks=True)
@@ -35,6 +36,7 @@ class Test(unittest.TestCase):
 			os.makedirs(mpoint)
 		
 		self.array = Storage.create(type='raid', disks=self.vols, level=1, vg='dbstorage', snap_pv=self.snap_vol, fstype='ext3')
+
 		self.array.mkfs()
 		self.array.mount(mpoint)
 		# Create big file
@@ -56,8 +58,28 @@ class Test(unittest.TestCase):
 		md5sum2 = system(('/usr/bin/md5sum %s' % bigfile_path2))[0].strip().split(' ')[0]
 		self.assertEqual(md5sum, md5sum2)
 		self.array.destroy(remove_disks=True)
-
-
+		
+	def testDetachAttachRaid(self):
+		mpoint = '/tmp/mpoint'
+		if not os.path.isdir(mpoint):
+			os.makedirs(mpoint)
+		self.array = Storage.create(type='raid', disks=self.vols, level=1, vg='dbstorage', snap_pv=self.snap_vol, fstype='ext3')
+		self.array.mkfs()
+		self.array.mount(mpoint)
+		
+		bigfile_path = os.path.join(mpoint, 'bigfile')
+		system('dd if=/dev/random of=%s bs=1M count=5' % bigfile_path)
+		md5sum = system(('/usr/bin/md5sum %s' % bigfile_path))[0].strip().split(' ')[0]
+		self.assertTrue(os.path.ismount(mpoint))
+		config = self.array.detach(force=True)
+		self.assertFalse(os.path.ismount(mpoint))
+		self.assertEqual(self.array.devname, None)
+		
+		self.array = Storage.create(**config)
+		self.array.mount(mpoint)
+		md5sum2 = system(('/usr/bin/md5sum %s' % bigfile_path))[0].strip().split(' ')[0]
+		self.assertEqual(md5sum, md5sum2)	
+		
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
 	unittest.main()

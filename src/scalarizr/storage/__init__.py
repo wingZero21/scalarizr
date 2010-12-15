@@ -22,8 +22,8 @@ import binascii
 import uuid
 import shutil
 import json
-from block import kwargs
 import cStringIO
+
 
 
 logger = logging.getLogger(__name__)
@@ -185,8 +185,9 @@ class Storage:
 	@staticmethod	
 	def detach(vol, force=False):
 		pvd = Storage.lookup_provider(vol.type)
-		pvd.detach(vol, force)
+		ret = pvd.detach(vol, force)
 		vol.detached = True
+		return ret
 	
 	@staticmethod
 	def destroy(vol, force=False, **kwargs):
@@ -224,11 +225,11 @@ class VolumeConfig(object):
 		for attr in attrs:
 			if attr == 'config':
 				continue
-			if attr == 'disks':
+			elif attr == 'disks':
 				ret['disks'] = tuple(disk.config() for disk in self.disks)
 				if as_snapshot:
 					ret['disks'] = tuple(dict(snapshot=disk) for disk in ret['disks'])
-			if attr == 'disk':
+			elif attr == 'disk':
 				ret['disk'] = self.disk.config() if self.disk else self.disk
 			else:
 				ret[attr] = getattr(self, attr)
@@ -347,7 +348,7 @@ class Volume(VolumeConfig):
 		return pvd.save_snapshot(self, snap)
 
 	def detach(self, force=False):
-		Storage.detach(self, force)
+		return Storage.detach(self, force)
 	
 	def destroy(self, force=False, **kwargs):
 		Storage.destroy(self, force, **kwargs)
@@ -492,25 +493,25 @@ class LoopVolumeProvider(VolumeProvider):
 	def detach(self, vol, force=False):
 		super(LoopVolumeProvider, self).detach(vol, force)
 		rmloop(vol.devname)
-		vol.devname = None
+		vol.device = None
 		return vol.config()
 
 	def destroy(self, vol, force=False, **kwargs):		
 		super(LoopVolumeProvider, self).destroy(vol, force, **kwargs)
 		rmloop(vol.devname)
-
+		vol.device = None
 		
 Storage.explore_provider(LoopVolumeProvider)
 
 
 class RaidConfig(VolumeConfig):
-	type = 'raid'
-	level = None
+	type	= 'raid'
+	level	= None
 	raid_pv = None
 	snap_pv = None
-	vg = None
+	vg		= None
 	lvm_group_cfg = None
-	disks = None
+	disks	= None
 	
 	def config(self, as_snapshot=False):
 		cnf = VolumeConfig.config(self, as_snapshot)
@@ -528,7 +529,7 @@ class RaidSnapshot(Snapshot, RaidConfig):
 
 def _devname_not_empty(f):
 	def d(*args, **kwargs):
-		if not args[0].devname:
+		if not args[1].devname:
 			raise StorageError('Device name is empty.')
 		return f(*args, **kwargs)
 	return d
@@ -546,6 +547,7 @@ class RaidVolumeProvider(VolumeProvider):
 		self._mdadm = Mdadm()
 		self._lvm = Lvm2()
 		self._logger = logging.getLogger(__name__)
+		self._lvm_backup_filename = '/tmp/lvm_backup'
 		
 	
 	def create(self, **kwargs):
@@ -562,21 +564,21 @@ class RaidVolumeProvider(VolumeProvider):
 		@param snap_pv: Physical volume for LVM snapshot
 		@type snap_pv: str|dict|Volume
 		'''
-		raid_pv = self._mdadm.create(list(vol.devname for vol in kwargs['disks']), kwargs['level'])
-
-		if not isinstance(kwargs['vg'], dict):
-			kwargs['vg'] = dict(name=kwargs['vg'])
-		vg_name = kwargs['vg']['name']
-		del kwargs['vg']['name']
-		vg_options = kwargs['vg']
-		
-		self._lvm.create_pv(raid_pv)
-		
-		kwargs['vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
-		kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
-		kwargs['raid_pv'] = raid_pv
-		volume = super(RaidVolumeProvider, self).create(**kwargs)
-		return volume		
+		if kwargs.get('lvm_group_cfg'):
+			volume = self.create_from_snapshot(**kwargs)
+		else:
+			raid_pv = self._mdadm.create(list(vol.devname for vol in kwargs['disks']), kwargs['level'])
+			if not isinstance(kwargs['vg'], dict):
+				kwargs['vg'] = dict(name=kwargs['vg'])
+			vg_name = kwargs['vg']['name']
+			del kwargs['vg']['name']
+			vg_options = kwargs['vg']
+			self._lvm.create_pv(raid_pv)		
+			kwargs['vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
+			kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
+			kwargs['raid_pv'] = raid_pv
+			volume = super(RaidVolumeProvider, self).create(**kwargs)
+		return volume
 	
 	def create_from_snapshot(self, **kwargs):
 		'''
@@ -586,24 +588,34 @@ class RaidVolumeProvider(VolumeProvider):
 		@param disks: Volumes
 		@param snap_pv: Physical volume for future LVM snapshot creation
 		'''
-		vg = kwargs['vg']
-		raw_vg = os.path.basename(vg)
-		raid_pv = self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
-		lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
-		lvm_backup_filename = '/tmp/lvm_backup'
-		write_file(lvm_backup_filename, lvm_raw_backup, logger=logger)
+
+		vg				= kwargs['vg']
+		raw_vg			= os.path.basename(vg)
+		raid_pv			= self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
+		lvm_raw_backup	= binascii.a2b_base64(kwargs['lvm_group_cfg'])
+		
+		write_file(self._lvm_backup_filename, lvm_raw_backup, logger=logger)
+		
+		if 'pv_uuid' in kwargs:
+			system(('pvcreate', '--uuid', kwargs['pv_uuid'], raid_pv))
+					
 		try:
-			self._lvm.restore_vg(vg, lvm_backup_filename)
+			self._lvm.restore_vg(vg, self._lvm_backup_filename)
 		finally:
-			os.unlink(lvm_backup_filename)
+			os.unlink(self._lvm_backup_filename)
 		
 		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg_name == raw_vg, self._lvm.lv_status())
 		if not lvinfo:
 			raise StorageError('Volume group %s does not contain any logical volume.' % raw_vg)
 		self._lvm.change_vg(raw_vg, available=True)
 		
-		# TODO : Where is snap_pv here? 
-		return RaidVolume(lvinfo.lv_path, raid_pv=raid_pv, vg=vg, disks=kwargs['disks'], level=kwargs['level'])
+		return RaidVolume(	lvinfo.lv_path,
+							raid_pv	= raid_pv,
+						 	vg		= vg,
+							disks	= kwargs['disks'],
+							level	= kwargs['level'],
+							snap_pv	= kwargs['snap_pv'])
+
 	
 	@_devname_not_empty
 	def create_snapshot(self, vol, snap):
@@ -625,26 +637,22 @@ class RaidVolumeProvider(VolumeProvider):
 		snap_lv = self._lvm.create_lv_snapshot(vol.devname, 'snap', '100%FREE')
 		try:
 			# Creating RAID members snapshots
-			snap.level = vol.level
-			snap.vg = vol.vg
-			snap.disks = []
+			snap.level		= vol.level
+			snap.vg			= vol.vg
+			snap.tmp_snaps	= []
+			snap.disks		= []
+			snap.snap_pv	= vol.snap_pv.config() if isinstance(vol.snap_pv, Volume) else vol.snap_pv
 
-			snap.tmp_snaps = []
 			for _vol, i in zip(vol.disks, range(0, len(vol.disks))):
 				pvd = Storage.lookup_provider(_vol.type)
 				_snap = pvd.snapshot_factory('RAID%s disk #%d - %s' % (vol.level, i, snap.description))
 				snap.tmp_snaps.append((_vol, pvd.create_snapshot(_vol, _snap)))
 			
-			# TODO: store snap_pv configuration?
-
-		
 		finally: 
 			self._lvm.remove_lv(snap_lv)
 			self._lvm.remove_pv(snap_pv.devname)
-			if not isinstance(vol.snap_pv, Volume):
-				# Destroy run-time created snap volume
-				self._lvm.remove_pv(snap_pv)
-				snap_pv.destroy()
+			# Destroy or detach Snap PV.
+			snap_pv.detach() if isinstance(vol.snap_pv, Volume) else snap_pv.destroy()
 		
 		return snap
 	
@@ -667,7 +675,7 @@ class RaidVolumeProvider(VolumeProvider):
 	def destroy(self, vol, force=False, **kwargs):
 		super(RaidVolumeProvider, self).destroy(vol, force, **kwargs)
 		
-		remove_disks=kwargs.get('remove_disks', False) 
+		remove_disks=kwargs.get('remove_disks') 
 		
 		self._remove_lvm(vol, force)
 		
@@ -675,31 +683,26 @@ class RaidVolumeProvider(VolumeProvider):
 		if remove_disks and getattr(vol.disks, '__iter__', False):
 			for disk in vol.disks:
 				disk.destroy()
+		# TODO: remove snap_pv ?
 
 	@_devname_not_empty			
 	def detach(self, vol, force=False):
 		self._logger.debug('Detaching volume %s' % vol.devname)
 		super(RaidVolumeProvider, self).detach(vol, force)
+		pv_uuid = system(('pvs', '-o', 'pv_uuid', vol.raid_pv))[0].splitlines()[1].strip()
+		vol.lvm_group_cfg = _lvm_group_b64(vol.vg)
 		self._remove_lvm(vol)
-		self._mdadm.delete(vol.raid_pv)
+		self._mdadm.delete(vol.raid_pv, zero_superblock=False)
 		for disk in vol.disks:
-			disk.detach(force)			
-		return vol.config()
+			disk.detach(force)
+		ret = vol.config()
+		ret['pv_uuid'] = pv_uuid
+		return ret
 
 	def _remove_lvm(self, vol, force=False):
-		try:
-			self._lvm.remove_lv(vol.devname)
-		except Lvm2Error, e:
-			if "Can't remove open logical volume" in str(e) and force:
-				self._logger.debug("Can't remove logical volume right now (still mounted?). Trying lazy umount.")
-				vol.umount(lazy=True)
-				self._lvm.remove_lv(vol.devname)
-			else:
-				raise
-							
 		self._lvm.remove_vg(vol.vg)
 		self._lvm.remove_pv(vol.raid_pv)
-		vol.devname = None
+		vol.device = None
 	
 Storage.explore_provider(RaidVolumeProvider)
 
