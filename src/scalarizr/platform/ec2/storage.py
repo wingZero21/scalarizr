@@ -6,18 +6,20 @@ Created on Nov 24, 2010
 '''
 
 from scalarizr.bus import bus
-from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, _check_devname_presence
+from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, _devname_not_empty
 from scalarizr.storage.transfer import TransferProvider, TransferError
 from scalarizr.platform.ec2 import ebstool
 
 import os
 import logging
+import string
 from urlparse import urlparse
 
 from boto import connect_ec2, connect_s3
 from boto.s3.key import Key
-from boto.exception import BotoServerError, S3ResponseError
+from boto.exception import BotoServerError, S3ResponseError, EC2ResponseError
 from scalarizr.util import get_free_devname, wait_until
+
 
 class EbsVolume(Volume):
 	volume_id = None
@@ -29,6 +31,7 @@ class EbsVolume(Volume):
 class EbsVolumeProvider(VolumeProvider):
 	type = 'ebs'
 	vol_class = EbsVolume
+	unused_letters = list(string.ascii_lowercase[14:])
 	
 	_logger = None
 	
@@ -43,11 +46,18 @@ class EbsVolumeProvider(VolumeProvider):
 		@param snapshot_id: Snapshot id
 		'''
 		ebs_vol = None
-		# TODO: check credentials
 		conn = connect_ec2()
 		pl = bus.platform
 		device = kwargs.get('device')
-		device = device if (device and not os.path.exists(device)) else get_free_devname()
+		if not device or not (device[-1] in EbsVolumeProvider.unused_letters) or os.path.exists(device):
+			if not EbsVolumeProvider.unused_letters:
+				EbsVolumeProvider.unused_letters = list(string.ascii_lowercase[14:])
+			for letter in EbsVolumeProvider.unused_letters:
+				if not os.path.exists('/dev/sd%s' % letter):
+					device = '/dev/sd%s' % letter
+					break
+		
+		EbsVolumeProvider.unused_letters.remove(device[-1])
 		attached = False
 		
 		volume_id = kwargs.get('id')
@@ -92,17 +102,25 @@ class EbsVolumeProvider(VolumeProvider):
 			self._logger.debug("Checking that device %s is available", device)
 			wait_until(lambda: os.access(device, os.F_OK | os.R_OK), logger=self._logger)
 			self._logger.debug("Device %s is available", device)
+			
 		except (Exception, BaseException), e:
+			print e
 			if ebs_vol:
 				# detach volume
-				if (ebs_vol.update() and ebs_vol.attachment_state() != 'attached'):
-					ebs_vol.detach(force=True)
-					wait_until(lambda: ebs_vol.update() and ebs_vol.attachment_state() == 'available',
-							   logger = self._logger)				
+				if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
+					try:	
+						ebs_vol.detach(force=True)
+						wait_until(lambda: ebs_vol.update() and ebs_vol.attachment_state() == 'available',
+							   logger = self._logger)
+					except EC2ResponseError, e:
+						if not "is in the 'available' state" in str(e):
+							raise
+						
 				if not volume_id:
 					ebs_vol.delete()
 					
-			raise StorageError('Volume creating failed: %s' % e)		
+			raise StorageError('Volume creating failed: %s' % e)
+		kwargs['device']	= device
 		kwargs['volume_id'] = ebs_vol.id
 		return super(EbsVolumeProvider, self).create(**kwargs)
 
@@ -123,15 +141,17 @@ class EbsVolumeProvider(VolumeProvider):
 		snap.id = dict(type=self.type, id=ebs_snap.id)
 		return snap
 
-	def destroy(self, vol):
+	def destroy(self, vol, force=False):
 		'''
 		@type vol: EbsVolume
 		'''
 		super(EbsVolumeProvider, self).destroy(vol)
 		conn = connect_ec2()
+		if not vol.detached:
+			conn.detach_volume(vol.volume_id, force=force)
 		conn.delete_volume(vol.volume_id)
 	
-	@_check_devname_presence		
+	@_devname_not_empty		
 	def detach(self, vol, force=False):
 		super(EbsVolumeProvider, self).detach(vol)
 		try:
@@ -151,6 +171,7 @@ class EbsVolumeProvider(VolumeProvider):
 			else:
 				raise
 		vol.devname = None
+		vol.detached = True
 
 
 Storage.explore_provider(EbsVolumeProvider, default_for_snap=True)

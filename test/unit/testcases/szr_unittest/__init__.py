@@ -1,4 +1,4 @@
-
+from scalarizr.platform import PlatformFactory
 from scalarizr.bus import bus
 from scalarizr import _db_connect, _create_db
 from scalarizr.util import SqliteLocalObject
@@ -30,6 +30,11 @@ def reset_db(db_file=None):
 	if os.path.exists(db_file):
 		os.remove(db_file)
 	create_db(db_file)
+
+def init_platform(name):
+	if not name:
+		raise Exception("Platform name can't be empty.")
+	bus.platform = PlatformFactory().new_platform(name)
 
 
 def main():

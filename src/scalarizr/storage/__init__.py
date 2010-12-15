@@ -424,12 +424,14 @@ class VolumeProvider(object):
 		return snap
 
 	def destroy(self, vol, force=False, **kwargs):
-		if not vol.devname:
+		if not vol.devname and not vol.detached:
 			raise StorageError("Can't destroy volume: device name is empty.")
-		self._umount(vol, force)		
+		if not vol.detached:
+			self._umount(vol, force)		
 	
 	def detach(self, vol, force=False):
-		self._umount(vol, force)
+		if not vol.detached:
+			self._umount(vol, force)
 		
 	def _umount(self, vol, force=False):
 		try:
@@ -494,6 +496,7 @@ class LoopVolumeProvider(VolumeProvider):
 		super(LoopVolumeProvider, self).detach(vol, force)
 		rmloop(vol.devname)
 		vol.device = None
+		vol.detached = True
 		return vol.config()
 
 	def destroy(self, vol, force=False, **kwargs):		
@@ -676,14 +679,12 @@ class RaidVolumeProvider(VolumeProvider):
 		super(RaidVolumeProvider, self).destroy(vol, force, **kwargs)
 		
 		remove_disks=kwargs.get('remove_disks') 
-		
-		self._remove_lvm(vol, force)
-		
-		self._mdadm.delete(vol.raid_pv)
+		if not vol.detached:
+			self._remove_lvm(vol, force)
+			self._mdadm.delete(vol.raid_pv)
 		if remove_disks and getattr(vol.disks, '__iter__', False):
 			for disk in vol.disks:
 				disk.destroy()
-		# TODO: remove snap_pv ?
 
 	@_devname_not_empty			
 	def detach(self, vol, force=False):
@@ -697,6 +698,7 @@ class RaidVolumeProvider(VolumeProvider):
 			disk.detach(force)
 		ret = vol.config()
 		ret['pv_uuid'] = pv_uuid
+		vol.detached = True
 		return ret
 
 	def _remove_lvm(self, vol, force=False):

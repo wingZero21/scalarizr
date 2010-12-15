@@ -6,31 +6,33 @@ Created on Dec 2, 2010
 import os
 import unittest
 from scalarizr.util import system
+from scalarizr.bus import bus
+from szr_unittest import init_platform
 from scalarizr.storage import Storage, RaidVolumeProvider
+from scalarizr.platform.ec2.storage import EbsVolumeProvider
 
 class Test(unittest.TestCase):
 
 	def setUp(self):
 		self.vols = []
 		for i in range(3):
-			system('dd if=/dev/zero of=/tmp/device%s bs=1M count=10' % i)
-			self.vols.append(Storage.create(type='loop', file='/tmp/device%s' % i))
+			#system('dd if=/dev/zero of=/tmp/device%s bs=1M count=10' % i)
+			#self.vols.append(Storage.create(type='loop', file='/tmp/device%s' % i))
+			self.vols.append(Storage.create(type='ebs', size=1, zone='us-east-1a'))
 		self.snap_vol = self.vols.pop()
 		
-		
-
 	def tearDown(self):
 		if hasattr(self, 'array') and self.array.devname:
 			self.array.destroy(remove_disks=True)
 		if self.snap_vol.devname:
 			self.snap_vol.destroy()
 
-	def testCreateDestroyRaid(self):
+	def _testCreateDestroyRaid(self):
 		self.array = Storage.create(type='raid', disks=self.vols, level=1, vg='dbstorage')
 		self.assertTrue(os.path.exists(self.array.raid_pv))
 		self.array.destroy(remove_disks=True)
 		
-	def testBackupRestoreRaid(self):
+	def _testBackupRestoreRaid(self):
 		mpoint = '/tmp/mpoint'
 		if not os.path.isdir(mpoint):
 			os.makedirs(mpoint)
@@ -59,10 +61,11 @@ class Test(unittest.TestCase):
 		self.assertEqual(md5sum, md5sum2)
 		self.array.destroy(remove_disks=True)
 		
-	def testDetachAttachRaid(self):
+	def _testDetachAttachRaid(self):
 		mpoint = '/tmp/mpoint'
 		if not os.path.isdir(mpoint):
 			os.makedirs(mpoint)
+			
 		self.array = Storage.create(type='raid', disks=self.vols, level=1, vg='dbstorage', snap_pv=self.snap_vol, fstype='ext3')
 		self.array.mkfs()
 		self.array.mount(mpoint)
@@ -81,5 +84,6 @@ class Test(unittest.TestCase):
 		self.assertEqual(md5sum, md5sum2)	
 		
 if __name__ == "__main__":
+	init_platform('ec2')
 	#import sys;sys.argv = ['', 'Test.testName']
 	unittest.main()
