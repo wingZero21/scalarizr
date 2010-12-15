@@ -65,7 +65,7 @@ class TestEphStorageSnapshot(unittest.TestCase):
 		self.vols = [None, None, None]		
 		for i in range(3):
 			self.filenames.append('/tmp/pv%s' % randint(11, 99))
-			self.devices.append(mkloop(self.filenames[i], size=50, quick=False))
+			self.devices.append(mkloop(self.filenames[i], size=100, quick=False))
 			if not os.path.exists(self.mpoints[i]):
 				os.makedirs(self.mpoints[i])
 
@@ -147,7 +147,8 @@ class TestEphStorageSnapshot(unittest.TestCase):
 		self.assertEqual(snap.type, 'eph')
 		self.assertTrue('manifest.ini' in snap.path)		
 		self.assertEqual(snap.vg, 'casstorage')
-
+		
+		print snap.config()
 
 		# Destroy original storage
 		self.vols[0].destroy()
@@ -162,6 +163,7 @@ class TestEphStorageSnapshot(unittest.TestCase):
 
 		md5sum2 = system(('/usr/bin/md5sum', bigfile2))[0].strip().split(' ')[0]
 		self.assertEqual(md5sum, md5sum2)
+
 
 
 if __name__ == "__main__":

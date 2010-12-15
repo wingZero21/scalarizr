@@ -116,6 +116,19 @@ class TestVolume(unittest.TestCase):
 		self.assertTrue(isinstance(snap, Snapshot))
 		self.assertEqual(snap.description, 'test snap')
 
+	def test_config(self):
+		vol = Volume('/dev/smd0', '/mnt/trace', 'xfs')
+		cnf = vol.config()
+		self.assertTrue(isinstance(cnf, dict))
+		self.assertTrue('device' in cnf)
+		self.assertEqual(cnf['device'], '/dev/smd0')
+		self.assertTrue('type' in cnf)
+		self.assertEqual(cnf['type'], 'base')
+		
+		snapcnf = vol.config(as_snapshot=True)
+		self.assertTrue('snapshot' in snapcnf)
+		self.assertEqual(snapcnf['snapshot'], cnf)
+
 class TestStorageProviders(unittest.TestCase):
 	_save_snap_pvd = None
 	_save_vol_pvd = None

@@ -11,6 +11,8 @@ from collections import namedtuple
 from scalarizr.util.software import whereis
 import logging
 import os
+from random import randint
+from scalarizr.util.filetool import write_file
 
 logger = logging.getLogger(__name__)
 
@@ -222,8 +224,24 @@ class Lvm2:
 		system((VGCHANGE, '-a', 'y', group))
 
 	def restore_vg(self, group, backup_file):
-		cmd = ((VGCFGRESTORE, '-f', backup_file, group))
-		system(cmd, error_text='Cannot restore volume group %s from backup file %s' % (group, backup_file))
+		rmfile = False
+		if hasattr(backup_file, 'read'):
+			# File-like object			
+			fpi = backup_file
+			backup_file = '/tmp/lvmvg-%s' % randint(100, 999)
+			fpo = open(backup_file, 'w+')
+			try:
+				fpo.write(fpi.read())
+			finally:
+				fpo.close()
+			rmfile = True			
+			
+		try:
+			cmd = ((VGCFGRESTORE, '-f', backup_file, group))
+			system(cmd, error_text='Cannot restore volume group %s from backup file %s' % (group, backup_file))
+		finally:
+			if rmfile:
+				os.remove(backup_file)
 
 	def change_vg(self, group, available=None):
 		cmd = [VGCHANGE]
