@@ -650,7 +650,9 @@ class RaidVolumeProvider(VolumeProvider):
 				pvd = Storage.lookup_provider(_vol.type)
 				_snap = pvd.snapshot_factory('RAID%s disk #%d - %s' % (vol.level, i, snap.description))
 				snap.tmp_snaps.append((_vol, pvd.create_snapshot(_vol, _snap)))
-			
+		except (Exception, BaseException), e:
+			raise StorageError("Error occured during snapshot creation: '%s'" % e)
+					
 		finally: 
 			self._lvm.remove_lv(snap_lv)
 			self._lvm.remove_pv(snap_pv.devname)
@@ -681,10 +683,17 @@ class RaidVolumeProvider(VolumeProvider):
 		remove_disks=kwargs.get('remove_disks') 
 		if not vol.detached:
 			self._remove_lvm(vol, force)
+			# Check if sleeping is necessary
+			time.sleep(1)
 			self._mdadm.delete(vol.raid_pv)
-		if remove_disks and getattr(vol.disks, '__iter__', False):
-			for disk in vol.disks:
-				disk.destroy()
+		if remove_disks:
+			if getattr(vol.disks, '__iter__', False):
+				for disk in vol.disks:
+					disk.destroy(force=force)
+			if vol.snap_pv and isinstance(vol.snap_pv, Volume):
+				vol.snap_pv.destroy(force=force)
+				
+
 
 	@_devname_not_empty			
 	def detach(self, vol, force=False):

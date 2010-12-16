@@ -5,20 +5,25 @@ Created on Dec 2, 2010
 '''
 import os
 import unittest
+import time
+import logging
 from scalarizr.util import system
 from scalarizr.bus import bus
-from szr_unittest import init_platform
+import szr_unittest
 from scalarizr.storage import Storage, RaidVolumeProvider
 from scalarizr.platform.ec2.storage import EbsVolumeProvider
 
 class Test(unittest.TestCase):
+	
+	_logger = logging.getLogger(__name__)
 
 	def setUp(self):
 		self.vols = []
 		for i in range(3):
 			#system('dd if=/dev/zero of=/tmp/device%s bs=1M count=10' % i)
 			#self.vols.append(Storage.create(type='loop', file='/tmp/device%s' % i))
-			self.vols.append(Storage.create(type='ebs', size=1, zone='us-east-1a'))
+			self.vols.append(Storage.create(type='ebs', size=1, avail_zone='us-east-1a'))
+			self._logger.debug("Volume with id '%s' created." % self.vols[-1].id)
 		self.snap_vol = self.vols.pop()
 		
 	def tearDown(self):
@@ -26,13 +31,21 @@ class Test(unittest.TestCase):
 			self.array.destroy(remove_disks=True)
 		if self.snap_vol.devname:
 			self.snap_vol.destroy()
+		for vol in self.vols:
+			try:
+				vol.destroy()
+			except:
+				pass
 
 	def _testCreateDestroyRaid(self):
+		self._logger.info('>>>>>>> Starting Create-Destroy test for raid.')
 		self.array = Storage.create(type='raid', disks=self.vols, level=1, vg='dbstorage')
 		self.assertTrue(os.path.exists(self.array.raid_pv))
-		self.array.destroy(remove_disks=True)
-		
-	def _testBackupRestoreRaid(self):
+		time.sleep(2)
+		self.array.destroy(force=True, remove_disks=True)
+		self._logger.info('>>>>>>> Create-Destroy test successfully finished.')
+
+	def testBackupRestoreRaid(self):
 		mpoint = '/tmp/mpoint'
 		if not os.path.isdir(mpoint):
 			os.makedirs(mpoint)
@@ -84,6 +97,6 @@ class Test(unittest.TestCase):
 		self.assertEqual(md5sum, md5sum2)	
 		
 if __name__ == "__main__":
-	init_platform('ec2')
+	szr_unittest.init_platform('ec2')
 	#import sys;sys.argv = ['', 'Test.testName']
 	unittest.main()

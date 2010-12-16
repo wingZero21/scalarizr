@@ -29,7 +29,8 @@ class EbsConfig(VolumeConfig):
 	size = None
 
 class EbsVolume(Volume, EbsConfig):
-	pass
+	avail_zone	= None
+	size		= None
 
 class EbsSnapshot(Snapshot, EbsConfig):
 	pass
@@ -92,6 +93,7 @@ class EbsVolumeProvider(VolumeProvider):
 						device = ebs_vol.attach_data.device
 			else:
 				''' Create new EBS '''
+				kwargs['avail_zone'] = kwargs.get('avail_zone') or pl.get_avail_zone()
 				ebs_vol = ebstool.create_volume(conn, kwargs['size'], kwargs['avail_zone'], 
 					kwargs.get('snapshot_id'), logger=self._logger)
 			
@@ -100,10 +102,11 @@ class EbsVolumeProvider(VolumeProvider):
 					to_me=True, logger=self._logger)
 			
 		except (Exception, BaseException), e:
+			self._logger.error("Ebs creation failed. Error: %s" % e)
 			if ebs_vol:
 				# detach volume
 				if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
-					ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
+					ebstool.detach_volume(conn, ebs_vol, logger=self._logger)
 					'''
 					try:	
 						ebs_vol.detach(force=True)
@@ -132,12 +135,13 @@ class EbsVolumeProvider(VolumeProvider):
 		@param id: Snapshot id
 		'''
 		kwargs['snapshot_id'] = kwargs['id']
+		del kwargs['id']
 		return self._create(**kwargs)
 
 	def create_snapshot(self, vol, snap):
 		conn = connect_ec2()
-		ebs_snap = conn.create_snapshot(vol.volume_id, snap.description)
-		snap.id = dict(type=self.type, id=ebs_snap.id)
+		ebs_snap = conn.create_snapshot(vol.id, snap.description)
+		snap.id = ebs_snap.id
 		return snap
 
 	def destroy(self, vol, force=False):
@@ -146,9 +150,9 @@ class EbsVolumeProvider(VolumeProvider):
 		'''
 		super(EbsVolumeProvider, self).destroy(vol)
 		conn = connect_ec2()
-		if not vol.detached:
-			conn.detach_volume(vol.volume_id, force=force)
-		conn.delete_volume(vol.volume_id)
+		ebstool.detach_volume(conn, vol.id, self._logger)
+		ebstool.delete_volume(conn, vol.id, self._logger)
+		vol.device = None
 	
 	@_devname_not_empty		
 	def detach(self, vol, force=False):
@@ -159,17 +163,9 @@ class EbsVolumeProvider(VolumeProvider):
 		except KeyError:
 			raise Exception("Can't get AWS credentials from OS environment variables.")
 		
-		con = connect_ec2(key_id, secret_key)
-		try:
-			result = con.detach_volume(vol.volume_id)
-			if not result:
-				raise Exception("Can't detach volume %s." % vol.volume_id)
-		except:
-			if force:
-				con.detach_volume(vol.volume_id, force=True)
-			else:
-				raise
-		vol.devname = None
+		conn = connect_ec2(key_id, secret_key)
+		ebstool.detach_volume(conn, vol.id, self._logger)
+		vol.device = None
 		vol.detached = True
 
 

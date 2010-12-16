@@ -6,10 +6,12 @@ Created on Nov 11, 2010
 
 from scalarizr.util import system2, wait_until, firstmatched, filetool
 from scalarizr.util import PopenError
+from scalarizr.util.filetool import read_file, write_file
 
 import logging
 import os
 import re
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,15 @@ class Mdadm:
 	def __init__(self):
 		if not os.path.exists(MDADM_PATH):
 			raise MdadmError("Make sure you have mdadm package installed.")
+		for location in ['/etc ', '/lib']:
+			path = os.path.join(location, 'udev/rules.d/85-mdadm.rules')
+			if os.path.exists(path):
+				
+				rule = read_file(path)
+				if rule:
+					rule = re.sub(re.compile('^([^#])', re.M), '#\\1', rule)
+					write_file(path, rule)
+					
 		self._raid_devices_re  	= re.compile('Raid\s+Devices\s+:\s+(?P<count>\d+)')
 		self._total_devices_re 	= re.compile('Total\s+Devices\s+:\s+(?P<count>\d+)')
 		self._state_re         	= re.compile('State\s+:\s+(?P<state>.+)')
@@ -54,6 +65,7 @@ class Mdadm:
 		cmd = [MDADM_PATH, '--create', devname, '--level=%d' % level, '-f', '-e', 'default', '-n', len(devices)]
 		cmd.extend(devices)
 		system(cmd, error_text='Error occured during raid device creation')
+		system2((MDADM_PATH, '-W', devname), raise_error=False)
 		
 		return devname
 
@@ -67,7 +79,13 @@ class Mdadm:
 		system2((MDADM_PATH, '-W', array), raise_error=False)
 		#wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
 		cmd = (MDADM_PATH, '-S', '-f', array)
-		system(cmd, error_text='Error occured during array stopping')
+		try:
+			system(cmd, error_text='Error occured during array stopping')
+		except (Exception, BaseException), e:
+			if not 'Device or resource busy' in str(e):
+				raise 
+			time.sleep(5)
+			system(cmd, error_text='Error occured during array stopping')
 
 		# Delete raid
 		try:
@@ -87,6 +105,7 @@ class Mdadm:
 		md_devname = self._get_free_md_devname()
 		cmd = (MDADM_PATH, '--assemble', md_devname) + tuple(devices)
 		system(cmd, error_text="Error occured during array assembling")
+		system2((MDADM_PATH, '-W', md_devname), raise_error=False)
 		return md_devname
 
 	def add_disk(self, array, device, grow=True):
@@ -107,6 +126,8 @@ class Mdadm:
 				cmd = (MDADM_PATH, '--grow', array, '--raid-devices=%d' % total_devs)
 				system(cmd, error_text='Error occured during array "%s" growth')
 
+		system2((MDADM_PATH, '-W', array), raise_error=False)
+
 	def remove_disk(self, device):
 		array = self._get_array_by_device(device)
 		wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
@@ -123,6 +144,7 @@ class Mdadm:
 			raise MdadmError("Can't replace disk in raid level 0.")
 		self.add_disk(array, new, False)
 		self.remove_disk(old)
+		system2((MDADM_PATH, '-W', array), raise_error=False)
 
 
 	def get_array_info(self, array):
