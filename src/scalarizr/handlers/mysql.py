@@ -556,25 +556,30 @@ class MysqlHandler(ServiceCtlHanler):
 		# Retrieve password for scalr mysql user
 		tmpdir = backup_path = None
 		try:
-			# Do backup only if slave
+			# Do backup only on slave
 			if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
-				raise HandlerError('Cannot create databases backup on mysql master')
+				raise HandlerError('Create backup is not allowed on Master')
 			
+			# Load root password
 			try:
 				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
-			# Creating temp dir 
-			tmpdir = tempfile.mkdtemp()
 			
-			# Reading mysql config file
-			try:
-				datadir = self._mysql_config.get('mysqld/datadir')
-			except NoPathError:
-				raise HandlerError('Cannot get mysql data directory from mysql config file')
+			# Get databases list
+			mysql = _spawn_mysql(ROOT_USER, root_password)
+			mysql.sendline('SHOW DATABASES;')
+			mysql.expect('mysql>')
+			
+			databases = list(line.split('|')[1].strip() for line in mysql.before.splitlines()[4:-3])
+			if 'information_schema' in databases:
+				databases.remove('information_schema')
+			
+			mysql.close()
+			
 			
 			# Defining archive name and path
-			backup_filename = 'mysql-backup-'+time.strftime('%Y-%m-%d')+'.tar.gz'
+			backup_filename = 'mysql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
 			backup_path = os.path.join('/tmp', backup_filename)
 			
 			# Creating archive 
@@ -582,13 +587,8 @@ class MysqlHandler(ServiceCtlHanler):
 
 			# Dump all databases
 			self._logger.info("Dumping all databases")
-			data_list = os.listdir(datadir)					
-			for file in data_list:
-				
-				if not os.path.isdir(os.path.join(datadir, file)):
-					continue
-					
-				db_name = os.path.basename(file)
+			tmpdir = tempfile.mkdtemp()			
+			for db_name in databases:
 				dump_path = tmpdir + os.sep + db_name + '.sql'
 				mysql = pexpect.spawn('/bin/sh -c "/usr/bin/mysqldump -u ' + ROOT_USER + ' -p --create-options' + 
 									  ' --add-drop-database -q -Q --flush-privileges --databases ' + 
@@ -598,7 +598,7 @@ class MysqlHandler(ServiceCtlHanler):
 				
 				status = mysql.read()
 				if re.search(re.compile('error', re.M | re.I), status):
-					raise HandlerError('Error while dumping database %s: %s' % (file, status))
+					raise HandlerError('Error while dumping database %s: %s' % (db_name, status))
 				
 				backup.add(dump_path, os.path.basename(dump_path))
 				
@@ -620,7 +620,7 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			uploader = s3tool.S3Uploader()
 			result = uploader.upload(parts, bucket, s3_conn)
-			self._logger.debug("Backup files(s) uploaded to S3 (%s)", ", ".join(result))
+			self._logger.info("Mysql backup uploaded to S3 under s3://%s/%s", bucket_name, backup_filename)
 			
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
 				status		= 'ok',
@@ -628,6 +628,7 @@ class MysqlHandler(ServiceCtlHanler):
 			))
 						
 		except (Exception, BaseException), e:
+			self._logger.exception(e)
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
 				status		= 'error',
 				last_error	=  str(e)
@@ -676,7 +677,8 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			ec2_conn = self._platform.new_ec2_conn()
 			slave_vol_id = 	self._cnf.rawini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID)
-			master_vol_id = self._queryenv.list_role_params(self._role_name)[PARAM_MASTER_EBS_VOLUME_ID]
+			#master_vol_id = self._queryenv.list_role_params(self._role_name)[PARAM_MASTER_EBS_VOLUME_ID]
+			master_vol_id = message.volume_id
 			master_vol = None
 			tx_complete = False
 			
