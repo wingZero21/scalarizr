@@ -96,7 +96,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		
 	return vol
 
-def detach_volume(ec2_conn, volume_id, logger=None, timeout=DEFAULT_TIMEOUT):
+def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIMEOUT):
 	time_until = time.time() + timeout
 	logger = logger or logging.getLogger(__name__)
 	if isinstance(volume_id, basestring):
@@ -107,7 +107,7 @@ def detach_volume(ec2_conn, volume_id, logger=None, timeout=DEFAULT_TIMEOUT):
 		
 	logger.debug('Detaching volume %s', vol.id)
 	try:
-		vol.detach()
+		vol.detach(force)
 	except BotoServerError, e:
 		if e.code != 'IncorrectState':
 			raise

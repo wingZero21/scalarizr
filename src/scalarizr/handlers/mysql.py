@@ -588,7 +588,7 @@ class MysqlHandler(ServiceCtlHanler):
 				raise HandlerError('Cannot get mysql data directory from mysql config file')
 			
 			# Defining archive name and path
-			backup_filename = 'mysql-backup-'+time.strftime('%Y-%m-%d')+'.tar.gz'
+			backup_filename = 'mysql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
 			backup_path = os.path.join('/tmp', backup_filename)
 			
 			# Creating archive 
