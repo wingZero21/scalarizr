@@ -7,15 +7,36 @@ from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.bus import bus
 from scalarizr.util.filetool import read_file
+from scalarizr.util.software import system_info, whereis
 from scalarizr import init_script
+from scalarizr.util import system
 
+import smtplib
+from email.Utils import formatdate
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEBase import MIMEBase
+from email.MIMEText import MIMEText
+from email import Encoders
 from optparse import OptionParser
+import ConfigParser
+import tarfile
 import sys
 import os
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
 
 def _init():
 	init_script()
+	
+def get_mx_records(email):
+	out = system('%s -t mx %s' % (whereis('host')[0], email.split('@')[-1]))[0]
+	mxs = [mx.split()[-1][:-1] if mx.endswith('.') else mx for mx in out.split('\n')]
+	if '' in mxs: mxs.remove('')
+	from sets import Set
+	return list(Set(mxs))
 
 def main():
 	
@@ -29,10 +50,11 @@ def main():
 	parser.add_option("-f", "--msgfile", dest="msgfile", default=None, help="File")
 	parser.add_option("-e", "--endpoint", dest="endpoint", default=None, help="Endpoint")
 	parser.add_option("-o", "--queue", dest="queue", default=None, help="Queue")
+	parser.add_option("-s", "--qa-report", dest="report", action="store_true", default=None, help="Build report with logs and system info")
 	
 	(options, raw_args) = parser.parse_args()
 	
-	if not options.queryenv and not options.msgsend and not options.repair:
+	if not options.queryenv and not options.msgsend and not options.repair and not options.report:
 		print parser.format_help()
 		sys.exit()
 	
@@ -91,6 +113,81 @@ def main():
 	
 		print "Done"		
 	
+	
+	
+	if options.report:
+		hostname = system(whereis('hostname'))[0]
+		print hostname
+		tar_file = os.path.join(os.getcwd(), 'report-%s.tar.gz' % hostname.split('.')[0])
+		json_file = os.path.join(os.getcwd(), 'sysinfo-%s.json' % hostname)
+		
+		#config = ConfigParser.ConfigParser()
+		#cfg_path = os.path.join(bus.etc_path, 'logging.ini')
+		cnf = bus.cnf
+		cnf.bootstrap()
+		ini = cnf.rawini
+		try:
+			#config.read(cfg_path)
+			#log_params = config.get('handler_file', 'args')
+			log_params = ini.get('handler_file', 'args')
+			try:
+				log_file = log_params(0)
+			except IndexError, TypeError:
+				raise
+		except Exception, BaseException:		
+			log_file = '/var/log/scalarizr.log'
+		print '\n', log_file, '\n'
+		
+		sysinfo = system_info()
+		print json.dumps(sysinfo, sort_keys=True, indent=4)
+		
+		file = open(json_file, 'w')
+		file.write(json.dumps(sysinfo))
+		file.close()
+		
+		tar = tarfile.open(tar_file, "w:gz")
+		tar.add(json_file)
+		tar.close()
+		
+		if os.path.exists(log_file):
+			tar = tarfile.open(tar_file, "w:gz")
+			tar.add(log_file, arcname='scalarizr.%s.log' % hostname)
+			tar.close()
+
+		fromaddr='root@%s' % hostname
+		#option report_mail in config.ini
+		#szr-report@scalr.com
+		email = ini.get('general', 'report_mail') 
+		toaddrs=[email]
+		subject = 'scalarizr report from %s' % hostname
+		
+		msg = MIMEMultipart()
+		msg['From'] = fromaddr
+		msg['To'] = email
+		msg['Date'] = formatdate(localtime=True)
+		msg['Subject'] = subject
+
+		part = MIMEBase('application', "octet-stream")
+		part.set_payload( open(tar_file,"rb").read() )
+		Encoders.encode_base64(part)
+		part.add_header('Content-Disposition', 'attachment; filename="%s"' % os.path.basename(tar_file))
+		msg.attach(part)
+		
+		for server in get_mx_records(email):
+			try:
+				smtp = smtplib.SMTP(server)
+				smtp.sendmail(fromaddr, toaddrs, msg.as_string())
+				break
+			except Exception, BaseException:
+				pass
+			finally:
+				smtp.close()
+				
+		if os.path.exists(json_file):
+			os.remove(json_file)
+			
+		print "Done."
+		
 		
 if __name__ == '__main__':
 	main()
