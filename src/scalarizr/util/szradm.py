@@ -115,18 +115,15 @@ def main():
 	
 	
 	if options.report:
+		#collecting
 		hostname = system(whereis('hostname'))[0]
-		tar_file = os.path.join(os.getcwd(), 'report-%s.tar.gz' % hostname.split('.')[0])
+		tar_file = os.path.join(os.getcwd(), 'report-%s.tar.gz' % hostname)
 		json_file = os.path.join(os.getcwd(), 'sysinfo-%s.json' % hostname)
-		
-		#config = ConfigParser.ConfigParser()
-		#cfg_path = os.path.join(bus.etc_path, 'logging.ini')
+
 		cnf = bus.cnf
 		cnf.bootstrap()
 		ini = cnf.rawini
 		try:
-			#config.read(cfg_path)
-			#log_params = config.get('handler_file', 'args')
 			log_params = ini.get('handler_file', 'args')
 			try:
 				log_file = log_params(0)
@@ -135,28 +132,27 @@ def main():
 		except Exception, BaseException:		
 			log_file = '/var/log/scalarizr.log'
 		
-		sysinfo = system_info()
-		print json.dumps(sysinfo, sort_keys=True, indent=4)
-		
 		file = open(json_file, 'w')
-		json.dump(sysinfo, file, sort_keys=True, indent=4)
+		json.dump(system_info(), file, sort_keys=True, indent=4)
 		file.close()
 		
 		tar = tarfile.open(tar_file, "w:gz")
 		tar.add(json_file)
+		if os.path.exists(log_file):
+			tar.add(log_file)
 		tar.close()
 		
-		if os.path.exists(log_file):
-			tar = tarfile.open(tar_file, "w:gz")
-			tar.add(log_file, arcname='scalarizr.%s.log' % hostname)
-			tar.close()
-
+		#cleaning		
+		if os.path.exists(json_file):
+			os.remove(json_file)
+			
+		#sending	
 		fromaddr='root@%s' % hostname
-		#option report_mail in config.ini
-		#szr-report@scalr.com
-		email = ini.get('general', 'report_mail') 
-		if not email:
-			print "Email not found in config file. Exit."
+		try:
+			email = ini.get('general', 'report_mail') 
+		except ConfigParser.NoOptionError:
+			print "Unable to send email: section 'report_mail' not found in config file."
+			print "Although you can send %s to support manually." % tar_file
 			sys.exit(1)
 			
 		toaddrs=[email]
@@ -179,14 +175,11 @@ def main():
 				smtp = smtplib.SMTP(server)
 				smtp.sendmail(fromaddr, toaddrs, msg.as_string())
 				break
-			except Exception, BaseException:
-				pass
+			except (Exception, BaseException), e:
+				print e, '\nTrying next SMTP server'
 			finally:
 				smtp.close()
-				
-		if os.path.exists(json_file):
-			os.remove(json_file)
-			
+
 		print "Done."
 		
 		
