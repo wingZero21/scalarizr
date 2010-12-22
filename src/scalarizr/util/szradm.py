@@ -114,10 +114,8 @@ def main():
 		print "Done"		
 	
 	
-	
 	if options.report:
 		hostname = system(whereis('hostname'))[0]
-		print hostname
 		tar_file = os.path.join(os.getcwd(), 'report-%s.tar.gz' % hostname.split('.')[0])
 		json_file = os.path.join(os.getcwd(), 'sysinfo-%s.json' % hostname)
 		
@@ -136,13 +134,12 @@ def main():
 				raise
 		except Exception, BaseException:		
 			log_file = '/var/log/scalarizr.log'
-		print '\n', log_file, '\n'
 		
 		sysinfo = system_info()
 		print json.dumps(sysinfo, sort_keys=True, indent=4)
 		
 		file = open(json_file, 'w')
-		file.write(json.dumps(sysinfo))
+		json.dump(sysinfo, file, sort_keys=True, indent=4)
 		file.close()
 		
 		tar = tarfile.open(tar_file, "w:gz")
@@ -158,6 +155,10 @@ def main():
 		#option report_mail in config.ini
 		#szr-report@scalr.com
 		email = ini.get('general', 'report_mail') 
+		if not email:
+			print "Email not found in config file. Exit."
+			sys.exit(1)
+			
 		toaddrs=[email]
 		subject = 'scalarizr report from %s' % hostname
 		
