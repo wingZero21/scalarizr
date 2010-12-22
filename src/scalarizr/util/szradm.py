@@ -176,7 +176,7 @@ def main():
 				smtp.sendmail(fromaddr, toaddrs, msg.as_string())
 				break
 			except (Exception, BaseException), e:
-				print e, '\nTrying next SMTP server'
+				print e, '\nTrying next mx entry'
 			finally:
 				smtp.close()
 
