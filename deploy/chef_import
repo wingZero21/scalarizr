@@ -1,21 +1,23 @@
 #!/bin/bash
 
-log=/var/log/role-builder.log
+LOG=/var/log/role-builder.log
+SCALR_IMPORT_STRING=%s
+CHEF_RUNLIST="{ \"scalarizr\": { \"behaviour\": [\"mysql\", \"app\"]}, \"run_list\": [ \"recipe[nginx]\", \"recipe[mysql::server]\", \"recipe[scalarizr]\" ] }"
 
 do_log () {
 	_col=$(stty -a | grep columns | awk '{print $7}' | sed 's/;//')
 	echo -ne $2
 	len=${#2}
-	eval $1 >> $log 2>&1
+	eval $1 >> $LOG 2>&1
 	
 	if [ "$?" -ne 0 ]; then
-		printf "%$[_col-20-len]s [ \e[1;31mFailed\e[0m ]\r\nSee $log fore more info.\r\n"
+		printf "%$[_col-20-len]s [ \e[1;31mFailed\e[0m ]\r\nSee $LOG fore more info.\r\n"
 		exit 1
 	else
 		printf "%$[_col-20-len]s [ \e[1;32mOK\e[0m ]\r\n"
 	fi
 	
-	echo -e '\r\n\r\n' >> $log
+	echo -e '\r\n\r\n' >> $LOG
 }
 
 rhel=$(python -c "import platform; d = platform.dist(); print int(d[0].lower() in ['centos', 'rhel', 'redhat'] and d[1].split('.')[0])")
@@ -42,8 +44,13 @@ do_log 'echo -e "file_cache_path \"/tmp/chef-solo\"\r\ncookbook_path \"/tmp/chef
 cd /tmp/chef-solo
 do_log "wget http://ge.tt/67CQ4JJ/recipes.tar.gz" "Downloading essential cookbooks"
 do_log "tar zxvf recipes.tar.gz && rm -f recipes.tar.gz" "Unpacking cookbooks"
-do_log 'echo -e "{ \"scalarizr\": { \"behaviour\": [\"mysql\", \"app\"]}, \"run_list\": [ \"recipe[nginx]\", \"recipe[mysql::server]\", \"recipe[scalarizr]\"
- ] }" | tee /tmp/soft.json' "Creating runlist"
+do_log 'echo -e $CHEF_RUNLIST | tee /tmp/soft.json' "Creating runlist"
 do_log "chef-solo -c /etc/solo.rb -j /tmp/soft.json" "Installing software. It can take a while"
+do_log "$SCALR_IMPORT_STRING &" "Starting importing to Scalr in background"
+echo "Scalarizr's log:"
+tail -f /var/log/scalarizr.log | while read LINE; do
+        [[ "${LINE}" =~ 'Rebundle complete!' ]] && break
+        echo $LINE
+done
 echo "Done!"
 exit 0
