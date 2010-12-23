@@ -5,7 +5,7 @@ Created on Mar 2, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.util import system, filetool, disttool
+from scalarizr.util import system2, filetool, disttool
 import logging
 import os, re
 
@@ -35,7 +35,7 @@ class Ec2LifeCycleHandler(Handler):
 		producer.on("before_send", self.on_before_message_send)
 		
 		# Set the hostname to this instance's public hostname
-		system("hostname " + self._platform.get_public_hostname())
+		system2("hostname " + self._platform.get_public_hostname())
 		
 		if disttool.is_ubuntu():
 			# Ubuntu cloud-init scripts may disable root ssh login
