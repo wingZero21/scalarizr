@@ -5,7 +5,8 @@ Created on May 10, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.util import disttool, system
+from scalarizr.util import disttool, system2
+import subprocess
 import re
 import os
 
@@ -187,16 +188,16 @@ def mount (device, mpoint = '/mnt', options=None, make_fs=False, fstype='ext3', 
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
 	
-	options = " ".join(options or ("-t auto",)) 
+	options = options or ("-t auto",)
 	
 	if make_fs:
 		mkfs(device,fstype)
 			
-	out = system("mount %(options)s %(device)s %(mpoint)s 2>&1" % vars())[0]
+	out = system2(['mount'] + list(options) + [device, mpoint], stderr=subprocess.STDOUT)[0]
 	if out.find("you must specify the filesystem type") != -1:
 		raise FstoolError("No filesystem found on device '%s'" % (device), FstoolError.NO_FS)
 	
-	if options.find("loop") == -1:
+	if " ".join(options).find("loop") == -1:
 		mtab = Mtab()		
 		if not mtab.contains(device):
 			raise FstoolError("Cannot mount device '%s'. %s" % (device, out), FstoolError.CANNOT_MOUNT)
@@ -211,9 +212,9 @@ def umount(device=None, mpoint=None, options=None, clean_fstab = False):
 	if not os.path.exists(dev):
 		raise FstoolError("Path doesn't exists %s" % (dev), FstoolError.CANNOT_UMOUNT)
 	
-	options = " ".join(options or ())
+	options = options or ()
 	
-	out, returncode = system("umount %(options)s %(dev)s 2>&1" % vars())[0::2]
+	out, returncode = system2(['umount']+options+[dev],stderr=subprocess.STDOUT)[0::2]
 	if returncode:
 		raise FstoolError("Cannot unmount %s. %s" % (dev, out), FstoolError.CANNOT_UMOUNT)
 	
@@ -223,7 +224,7 @@ def umount(device=None, mpoint=None, options=None, clean_fstab = False):
 	
 	
 def mkfs(device, fstype = 'ext3'):
-	out, retcode = system("/sbin/mkfs -t %(fstype)s -F %(device)s 2>&1" % vars())[0::2]
+	out, retcode = system2(['/sbin/mkfs', '-t', fstype, '-F', device],stderr=subprocess.STDOUT)[0::2]
 	if retcode:
 		raise FstoolError("Cannot create file system on device '%s'. %s" % (device, out), 
 				FstoolError.CANNOT_CREATE_FS)
