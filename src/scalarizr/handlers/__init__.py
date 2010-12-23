@@ -303,7 +303,7 @@ class ServiceCtlHanler(Handler):
 		self._stop_service()
 	
 	def sc_on_configured(self, service_name, **kwargs):
-		if self._cnf_ctl:
+		if self._cnf_ctl and self._service_name == service_name:
 			# Stop service if it's already running
 			self._stop_service()		
 			

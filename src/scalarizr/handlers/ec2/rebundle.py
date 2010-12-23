@@ -976,12 +976,12 @@ if disttool.is_linux():
 			
 		def _create_image(self):
 			self._logger.debug('Creating image file %s', self.path)
-			system("dd if=/dev/zero of=%s bs=1M count=1 seek=%s" % (self.path, self._size - 1))
+			system("dd if=/dev/zero of='%s' bs=1M count=1 seek=%s" % (self.path, self._size - 1))
 			self._logger.debug('Image file %s created', self.path)			
 			
 			self._logger.debug('Associate loop device with a %s', self.path)
 			devname = system('/sbin/losetup -f')[0].strip()
-			out, err, retcode = system('/sbin/losetup %s %s' % (devname, self.path))
+			out, err, retcode = system('/sbin/losetup %s "%s"' % (devname, self.path))
 			if retcode > 0:
 				raise HandlerError('Cannot setup loop device. Code: %d %s' % (retcode, err))
 			self._logger.debug('Associated %s with a file %s', devname, self.path)
