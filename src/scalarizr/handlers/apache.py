@@ -17,7 +17,7 @@ from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 	NoPathError, strip_quotes
 from scalarizr.util import disttool, cached, firstmatched, validators, software,\
 	wait_until
-from scalarizr.util import initdv2, system
+from scalarizr.util import initdv2, system2
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
@@ -65,7 +65,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		
 	def reload(self):
 		if self.pid_file and os.path.exists(self.pid_file):
-			out, err, retcode = system(self._apachectl + ' graceful')
+			out, err, retcode = system2(self._apachectl + ' graceful')
 			if retcode > 0:
 				raise initdv2.InitdError('Cannot reload apache: %s' % err)
 		else:
@@ -84,7 +84,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		return status
 	
 	def configtest(self):
-		out = system(self._apachectl +' configtest')[1]
+		out = system2(self._apachectl +' configtest')[1]
 		if 'error' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 		
