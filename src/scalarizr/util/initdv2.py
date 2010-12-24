@@ -7,7 +7,7 @@ Created on Aug 29, 2010
 import socket
 import os
 import time
-from subprocess import Popen, PIPE
+from scalarizr.util import system2
 from scalarizr.util.filetool import read_file
 import re
 
@@ -110,14 +110,12 @@ class ParametrizedInitScript(InitScript):
 		
 	def _start_stop_reload(self, action):
 		try:
-			cmd = [self.initd_script, action]
-			proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
-			out, err = proc.communicate()
+			out, err, returncode = system2([self.initd_script, action], close_fds=True)
 		except OSError, e:
 			raise InitdError("Popen failed with error %s" % (e.strerror,))
 		
-		if proc.returncode:
-			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), proc.returncode)
+		if returncode:
+			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), returncode)
 
 		if self.socks and (action != "stop" and not (action == 'reload' and not self.running)):
 			for sock in self.socks:
