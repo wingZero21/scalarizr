@@ -65,7 +65,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		
 	def reload(self):
 		if self.pid_file and os.path.exists(self.pid_file):
-			out, err, retcode = system2(self._apachectl + ' graceful', shell=False)
+			out, err, retcode = system2(self._apachectl + ' graceful', shell=True)
 			if retcode > 0:
 				raise initdv2.InitdError('Cannot reload apache: %s' % err)
 		else:
@@ -84,7 +84,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		return status
 	
 	def configtest(self):
-		out = system2(self._apachectl +' configtest', shell=False)[1]
+		out = system2(self._apachectl +' configtest', shell=True)[1]
 		if 'error' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 		
