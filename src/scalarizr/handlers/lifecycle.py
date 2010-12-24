@@ -17,8 +17,7 @@ from scalarizr.util import system2
 from scalarizr.util import cryptotool
 
 # Stdlibs
-import logging, os, sys, binascii, threading
-from subprocess import Popen, PIPE
+import logging, os, sys, threading
 
 
 
