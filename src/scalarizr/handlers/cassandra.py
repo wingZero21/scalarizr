@@ -388,7 +388,7 @@ class CassandraScalingHandler(ServiceCtlHanler):
 			self._logger.debug('Copying snapshot')
 			rsync = filetool.Rsync().archive()
 			rsync.source(TMP_EBS_MNTPOINT+os.sep).dest(cassandra.data_file_directory)
-			out = system2(str(rsync), shell=False)
+			out = system2(str(rsync), shell=True)
 	
 			if out[2]:
 				raise HandlerError('Error while copying snapshot content from temp ebs to permanent: %s', out[1])
@@ -453,7 +453,7 @@ class CassandraScalingHandler(ServiceCtlHanler):
 			
 	def on_BeforeHostTerminate(self, *args):
 		cassandra.start_service()
-		err = system2('nodetool -h localhost decommission', shell=False)[2]
+		err = system2('nodetool -h localhost decommission', shell=True)[2]
 		if err:
 			raise HandlerError('Cannot decommission node: %s' % err)
 		wait_until(self._is_decommissioned)
@@ -880,7 +880,7 @@ class _CassandraCdbRunnable(OnEachRunnable):
 		self.device_name = cassandra.ini.get(CNF_SECTION, OPT_STORAGE_DEVICE_NAME)
 
 		cassandra.stop_service()
-		system2('sync', shell=False)			
+		system2('sync', shell=True)			
 					
 		fstool.umount(self.device_name)
 		self.umounted = True
@@ -921,12 +921,12 @@ class _CassandraCrfRunnable(OnEachRunnable):
 	def handle_request(self, req_message, resp_message):
 
 		def cleanup():
-			err = system2('nodetool -h localhost cleanup', shell=False)[2]
+			err = system2('nodetool -h localhost cleanup', shell=True)[2]
 			if err: 
 				raise HandlerError('Cannot do cleanup: %s' % err)
 
 		def repair(keyspace):
-			err = system2('nodetool -h localhost repair %s' % keyspace, shell=False)[2]
+			err = system2('nodetool -h localhost repair %s' % keyspace, shell=True)[2]
 			if err: 
 				raise HandlerError('Cannot do cleanup: %s' % err)
 
