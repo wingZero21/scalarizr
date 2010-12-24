@@ -3,7 +3,7 @@ Created on Jun 17, 2010
 
 @author: marat
 '''
-from scalarizr.util import UtilError, system, disttool
+from scalarizr.util import UtilError, system2, disttool
 import time
 import os
 import socket
@@ -83,7 +83,7 @@ def is_running(name):
 	if not _services.has_key(name):
 		raise InitdError("Unknown service '%s'" % (name,))
 	cmd = [_services[name]["initd_script"], "status"]
-	out, err = system(cmd, shell=False)[0:2]
+	out, err = system2(cmd)[0:2]
 	out += err
 	if name == "mysql" and disttool.is_ubuntu() and disttool.linux_dist()[1] == '8.04':
 		return out.lower().find("Uptime:") != -1
