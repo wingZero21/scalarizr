@@ -11,6 +11,7 @@ from scalarizr import config
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
+from scalarizr.util import system2
 
 # Libs
 from scalarizr.util import cryptotool
@@ -263,9 +264,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	def _update_package(self):
 		up_script = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_SCRIPTS_PATH) + '/update'
-		cmd = [sys.executable, up_script]
-		p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
-		p.communicate()
+		#cmd = [sys.executable, up_script]
+		#p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
+		#p.communicate()
+		system2([sys.executable, up_script], close_fds=True)
 		self._set_flag('update')
 
 	def on_before_message_send(self, queue, message):
