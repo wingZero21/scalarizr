@@ -12,7 +12,7 @@ from scalarizr.queryenv import QueryEnvService
 
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
-from scalarizr.util import SqliteLocalObject, daemonize, system, disttool, firstmatched, format_size
+from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
 
 # Stdlibs
 import logging
@@ -192,7 +192,7 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 	mnt_opts = ('-t auto', '-o loop,rw')	
 	if not os.path.exists(privated_image):	
 		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count-1)
-		retcode = system(build_image_cmd)[2]
+		retcode = system2(build_image_cmd, shell=True)[2]
 		if retcode:
 			logger.error('Cannot create image device')
 		os.chmod(privated_image, 0600)
@@ -209,7 +209,7 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 			logger.debug("Mounting %s to %s", privated_image, tmp_mpoint)
 			fstool.mount(privated_image, tmp_mpoint, mnt_opts)
 			logger.debug("Copy data from %s to %s", mpoint, tmp_mpoint)
-			system(str(filetool.Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)))
+			system2(str(filetool.Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)), shell=True)
 			private_list = os.listdir(mpoint)
 			for file in private_list:
 				path = os.path.join(mpoint, file)
