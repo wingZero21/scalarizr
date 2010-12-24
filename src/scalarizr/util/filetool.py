@@ -4,6 +4,7 @@ Created on Jun 22, 2010
 @author: marat
 '''
 
+from scalarizr.util import system2
 from scalarizr.util import disttool
 import os
 import math
@@ -203,16 +204,14 @@ class Rsync(object):
 		return self
 	
 	def _sync(self):
-		Popen(['sync'], stdout=PIPE, stderr=PIPE).communicate()
+		system2(['sync'], stdout=PIPE, stderr=PIPE)
 	
 	def execute(self):
 		self._sync()
 		rsync_cmd = [self._executable] + self._options + [self._src, self._dst]
-		rsync = Popen(rsync_cmd, stdout=PIPE, stderr=PIPE)
-		out, err = rsync.communicate()
-		self._sync()
-		return out, err, rsync.returncode		
-	
+		self._sync()	
+		return system2(rsync_cmd, stdout=PIPE, stderr=PIPE)
+		
 	def __str__(self):
 		ret = "sync && %(executable)s %(options)s %(src)s %(dst)s %(quiet)s" % dict(
 			executable=self._executable,
