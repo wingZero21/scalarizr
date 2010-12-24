@@ -10,10 +10,17 @@ import sys
 import paramiko
 import logging
 import re
+import json
 from threading import Thread, Lock, Event
 from Queue import Queue, Empty
 from szr_integtest_libs import exec_command, SshManager
-
+from scalarizr.util.filetool import read_file
+import unittest
+from szr_integtest_libs.scalrctl import ScalrCtl, FarmUI
+import atexit
+from libcloud.types import Provider 
+from libcloud.providers import get_driver 
+from libcloud.base import NodeSize
 
 BASE_PATH = os.path.join(os.path.dirname(__file__), '..' + os.path.sep + '..')
 RESOURCE_PATH = os.path.join(BASE_PATH, 'resources')
@@ -39,36 +46,6 @@ else:
 	if not os.path.isdir(basepath):
 		os.makedirs(basepath)
 	user_config.add('./selenium')
-
-
-opts = OptionParser()
-opts.add_option('-v', '--verbose', action='store_true', default=False, help='Verbose output')
-
-_g0 = opts.add_option_group('Dist coverage options')
-_g0.add_option('--centos5', action='store_true', help='CentOS 5')
-_g0.add_option('--ubuntu8-04', action='store_true', help='Ubuntu 8.04')
-_g0.add_option('--ubuntu10-04', action='store_true', help='Ubuntu 10.04')
-
-_g1 = opts.add_option_group('Cloud coverage options')
-_g1.add_option('--ec2', action='store_true', help='Amazon EC2')
-_g1.add_option('--euca', action='store_true', help='Eucalyptus')
-
-
-def main():
-	opts.parse_args()
-	vals = opts.values
-	
-	if not any(getattr(vals, opt.dest) for opt in opts.option_groups[0].option_list):
-		print 'error: Dist coverage option required'
-		opts.print_help()
-		sys.exit(1)
-		
-	if not any(getattr(vals, opt.dest) for opt in opts.option_groups[1].option_list):
-		print 'error: Cloud coverage option required'
-		opts.print_help()
-		sys.exit(1)
-
-	sys.argv = sys.argv[0:1]
 	
 _sel_started = False
 
@@ -299,7 +276,8 @@ class MutableLogFile:
 		if queue in self._queues:
 			self._queues.remove(queue)
 
-			
+
+'''			
 class Ec2TestAmis:
 	UBUNTU_1004_EBS = 'ami-714ba518'
 	UBUNTU_1004_IS  = 'ami-2d4aa444'
@@ -310,5 +288,223 @@ class Ec2TestAmis:
 	
 	UNUBTU_1010_EBS = ''
 	UBUNTU_1010_IS  = ''
+
+
+class ResourceManagerFactory:
+	managers={}
+	
+	@staticmethod
+	def get_resource_manager():
+		self = ResourceManagerFactory
+		try:
+			platform	= os.environ['platform']
+			dist		= os.environ['dist']
+		except:
+			raise Exception("Can't get platform name from OS environment variables.")
+		
+		if not platform in self.managers:
+			raise Exception('Unknown platform: %s' % platform)
+		
+		config_path = os.path.join(RESOURCE_PATH, platform + '.json')
+		
+		if not os.path.exists(config_path):
+			raise Exception('Config file for platform "%s" does not exist.' % platform)
+		
+		raw_config = read_file(config_path)
+		
+		try:
+			config = json.loads(raw_config)
+		except:
+			raise Exception('Config file for platform "%s" does not contain valid json configuration.')
+		
+		return self.managers['platform'](config)
+	
+	@staticmethod		
+	def register_manager(pl_name, manager):
+		self = ResourceManagerFactory
+		self.managers[pl_name] = manager
+
+class ResourceManager:
+	platform = None
+	
+	def __init__(self, config):
+		self._config = config
+	def get_role_name(self, behaviour):
+		pass	
+	def get_image_id(self):
+		pass
+	def start_instance(self):
+		pass
+	def terminate_instance(self, inst_id):
+		pass
+	def get_ssh_manager(self, inst_id):
+		pass
 	
 	
+class Ec2ResourceManager(ResourceManager):
+	platform = 'ec2'
+	
+ResourceManagerFactory.register_manager('ec2', Ec2ResourceManager)
+'''
+
+platform = os.environ['PLATFORM']
+platform_config_path = os.path.join(RESOURCE_PATH, platform + '.json')
+if not os.path.exists(platform_config_path):
+	raise Exception('Config file for platform "%s" does not exist.' % platform)
+raw_config = read_file(platform_config_path)
+try:
+	platform_config = json.loads(raw_config)
+except:
+	raise Exception('Config file for platform "%s" does not contain valid json configuration.')
+
+class DataProvider(object):
+	_instances  = {}
+	_server		= None
+	def __new__(cls, *args, **kwargs):
+		key = tuple(kwargs.items())
+		if not key in DataProvider._instances:
+			DataProvider._instances[key] = super(DataProvider, cls).__new__(cls, *args, **kwargs)
+		return DataProvider._instances[key]
+	
+	def __init__(self, behaviour='raw', **kwargs):
+		
+		try:
+			self.platform	= os.environ['PLATFORM']
+			self.dist		= os.environ['DIST']
+		except:
+			raise Exception("Can't get platform and dist from os environment.")
+		
+		if self.platform == 'ec2':
+			self.driver = get_driver(Provider.EC2)
+			self.__credentials = (config.get('./boto-ec2/ec2_key_id'), config.get('./boto-ec2/ec2_key'))
+			self.default_size = config.get('./boto-ec2/default_size')
+		elif self.platform == 'rs':
+			self.driver = get_driver(Provider.RACKSPACE)
+			self.__credentials = (config.get('./rs/username'), config.get('./rs/key'))
+			self.default_size = config.get('./rs/default_size')
+		elif self.platform == 'euca':
+			self.driver = get_driver(Provider.EUCALYPTUS)
+			self.__credentials = (config.get('./euca/user_id'), config.get('./euca/key'))
+			self.default_size = config.get('./euca/default_size')
+
+		self.behaviour	= behaviour
+		
+		for configuration in platform_config[self.dist][self.behaviour]:
+			if set(kwargs) <= set(configuration):
+				if self.behaviour == 'raw':
+					self.image_id 	= configuration['image_id']
+					self.key_name	= config.get('./boto-ec2/key_name')
+					self.key_path	= config.get('./boto-ec2/key_path')
+					self.ssh_key_password = config.get('./boto-ec2/ssh_key_password')
+				else:
+					self.role_name = configuration['role_name']
+					self.farm_id   = config.get('./test-farm/farm_id')
+					self.farm_key  = config.get('./test-farm/farm_key')
+					self.farmui = FarmUI(get_selenium())
+					self.scalrctl = ScalrCtl(self.farm_id)
+					self.server_id_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)'
+													% (self.farm_id, self.role_name), re.M)
+				break
+		else:
+			raise Exception('No suitable configuration found. Params: %s' % kwargs)				
+			
+	def server(self):
+		if self._server:
+			return self._server
+		
+		conn = self.driver(*self.__credentials)
+		
+		if self.behaviour == 'raw':
+			if not isinstance(self.default_size, NodeSize):
+				sizes  = conn.list_sizes()
+				for size in sizes:
+					if self.default_size == size.id:
+						self.default_size = size
+						
+			# TODO
+					
+		else:
+			self.farmui.use(self.farm_id)
+			try:
+				self.farmui.launch()
+			except (Exception, BaseException), e:
+				if not 'has been already launched' in str(e):
+					raise
+			
+			out = self.scalrctl.exec_cronjob('Scaling')
+			result = re.search(self.server_id_re, out)
+			if not result:
+				raise Exception("Can't create server - farm '%s' hasn't been scaled up." % self.farm_id)
+			server_id = result.group('server_id')
+			public_ip = self.farmui.get_public_ip(server_id)
+			# TODO
+			
+			
+			
+			
+	@atexit.register
+	def clear(self):
+		pass
+	
+	def sync(self):
+		pass
+
+
+class Server(object):
+	
+	def __init__(self, cloud_conn, image_id=None, role_name=None):
+		self.cloud_conn = cloud_conn
+		self.image_id = image_id
+		self.role_name = role_name
+		pass
+	
+	def ssh(self):
+		pass
+	def run(self):
+		pass
+	def terminate(self):
+		pass
+	@property
+	def public_ip(self):
+		pass
+	@property
+	def log(self):
+		pass
+
+class MysqlDataProvider(DataProvider):
+	def slave(self, index=0):
+		'''
+		@rtype: Server
+		'''
+		pass
+	def master(self):
+		pass
+
+	server = master
+
+'''
+	
+class StartupTest(unittest.TestCase):
+	target = None
+	
+	def test(self):
+		server = self.target() if callable(self.target) else self.target
+		reader = server.log.head()
+		
+		reader.expect("Message 'HostInit' delivered")
+		server.scalr.exec_cronjob('ScalarizrMessaging')
+		reader.expect("Message 'HostUp' delivered")
+
+class BaseRoleSuite(unittest.TestSuite):
+	def __init__(self):
+		dp = DataProvider(behaviour='base') 
+
+		t = StartupTest()
+		t.target = dp.server
+		self.addTest(t)
+		
+		# Reboot
+		# Exec scripts
+		# ...
+		# ...
+'''
