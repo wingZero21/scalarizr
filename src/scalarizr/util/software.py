@@ -3,7 +3,7 @@ Created on Sep 10, 2010
 
 @author: marat
 '''
-from scalarizr.util import disttool, system
+from scalarizr.util import disttool, system2
 import os, re, zipfile
 
 __all__ = ('all_installed', 'software_info', 'explore', 'whereis')
@@ -40,7 +40,7 @@ def whereis(name):
 def system_info():
 		
 	def check_module(module):
-		return not system((modprobe, '-n', module), False)[-1]
+		return not system2((modprobe, '-n', module))[-1]
 	
 	ret = {}
 	ret['software'] = []			
@@ -60,7 +60,7 @@ def system_info():
 	ret['storage']['fstypes'] = []
 	
 	for fstype in ['jfs', 'xfs', 'ext3', 'ext4']:
-		retcode = system((modprobe, '-n', fstype), False)[-1]
+		retcode = system2((modprobe, '-n', fstype))[-1]
 		exe = whereis('mkfs.%s' % fstype)
 		if not retcode and exe:
 			ret['storage']['fstypes'].append(fstype)
@@ -107,7 +107,7 @@ def mysql_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for MySQL server")
 
-	version_string = system((binaries[0], '-V'), False)[0].strip()
+	version_string = system2((binaries[0], '-V'))[0].strip()
 	if not version_string:
 		raise SoftwareError
 
@@ -125,7 +125,7 @@ def nginx_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for Nginx server")
 	
-	out = system((binaries[0], '-V'), False)[1]
+	out = system2((binaries[0], '-V'))[1]
 	if not out:
 		raise SoftwareError
 	
@@ -144,7 +144,7 @@ def memcached_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for Memcached")
 	
-	out = system((binaries[0], '-h'), False)[0]
+	out = system2((binaries[0], '-h'))[0]
 	if not out:
 		raise SoftwareError
 	
@@ -163,7 +163,7 @@ def php_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for php interpreter")
 	
-	out = system((binaries[0], '-v'), False)[0]
+	out = system2((binaries[0], '-v'))[0]
 	if not out:
 		raise SoftwareError
 	
@@ -183,7 +183,7 @@ def python_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for python interpreter")
 
-	version_string = system((binaries[0], '-V'), False)[1].strip()
+	version_string = system2((binaries[0], '-V'))[1].strip()
 	if not version_string:
 		raise SoftwareError
 	
@@ -206,7 +206,7 @@ def apache_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for apache http server")
 		
-	out = system((binaries[0], '-V'), False)[0]
+	out = system2((binaries[0], '-V'))[0]
 	if not out:
 		raise SoftwareError
 	
@@ -256,7 +256,7 @@ def varnish_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for varnish HTTP accelerator")
 
-	out = system((binaries[0], '-V'), False)[1].strip()
+	out = system2((binaries[0], '-V'))[1].strip()
 	if not out:
 		raise SoftwareError
 	
@@ -278,7 +278,7 @@ def rails_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for ruby gem packet manager")
 
-	out = system((binaries[0], 'list', 'rails'), False)[0].strip()
+	out = system2((binaries[0], 'list', 'rails'))[0].strip()
 	
 	if not out:
 		raise SoftwareError	
