@@ -15,7 +15,7 @@ from scalarizr.messaging import Messages
 
 # Libs
 from scalarizr.libs.metaconf import Configuration
-from scalarizr.util import system, cached, firstmatched,\
+from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2
 from scalarizr.util.filetool import read_file, write_file
 
@@ -46,7 +46,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		try:
 			nginx = software.whereis('nginx')
 			if nginx:
-				out = system('%s -V' % nginx[0])[1]
+				out = system2('%s -V' % nginx[0], shell=True)[1]
 				m = re.search("--pid-path=(.*?)\s", out)
 				if m:
 						pid_file = m.group(1)
@@ -73,7 +73,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		return status
 
 	def configtest(self):
-		out = system('%s -t' % self._nginx_binary)[1]
+		out = system('%s -t' % self._nginx_binary, shell=True)[1]
 		if 'failed' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 		
