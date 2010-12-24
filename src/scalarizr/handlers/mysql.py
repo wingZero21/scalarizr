@@ -12,12 +12,13 @@ from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
-from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME, ebstool
+from scalarizr.platform.ec2 import UD_OPT_S3_BUCKET_NAME, ebstool
+from scalarizr.storage import uploader
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError,\
 	ParseError
-from scalarizr.util import fstool, system, cryptotool, disttool,\
+from scalarizr.util import fstool, system2, cryptotool, disttool,\
 		 filetool, firstmatched, cached, validators, initdv2, software, get_free_devname
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
@@ -45,7 +46,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		
 		pid_file = None
 		try:
-			out = system("my_print_defaults mysqld")
+			out = system2("my_print_defaults mysqld", shell=True)
 			m = re.search("--pid[-_]file=(.*)", out[0], re.MULTILINE)
 			if m:
 				pid_file = m.group(1)
@@ -273,7 +274,7 @@ class MysqlCnfController(CnfController):
 	def _start_service(self):
 		if not hasattr(self, '_mysql_cnf_err_re'):
 			self._mysql_cnf_err_re = re.compile('Unknown option|ERROR')
-		stderr = system('%s --help' % self._mysqld_path)[1]
+		stderr = system2('%s --help' % self._mysqld_path, shell=True)[1]
 		if re.search(self._mysql_cnf_err_re, stderr):
 			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
 		
@@ -632,7 +633,7 @@ class MysqlHandler(ServiceCtlHanler):
 			bucket_name = self._platform.get_user_data(UD_OPT_S3_BUCKET_NAME)
 			bucket = s3_conn.get_bucket(bucket_name)
 			
-			uploader = s3tool.S3Uploader()
+			uploader = uploader.Uploader()
 			result = uploader.upload(parts, bucket, s3_conn)
 			self._logger.debug("Backup files(s) uploaded to S3 (%s)", ", ".join(result))
 			
@@ -848,7 +849,7 @@ class MysqlHandler(ServiceCtlHanler):
 		#role_params = self._queryenv.list_role_params(self._role_name)
 		#if role_params[PARAM_DATA_STORAGE_ENGINE]:
 		try:
-			out = system("my_print_defaults mysqld")
+			out = system2("my_print_defaults mysqld", shell=True)
 			result = re.search("--datadir=(.*)", out[0], re.MULTILINE)
 			if result:
 				datadir = result.group(1)
@@ -946,7 +947,7 @@ class MysqlHandler(ServiceCtlHanler):
 		except (BaseException, Exception):
 			if not storage_valid and self._storage_path:
 				# Perform cleanup
-				system('rm -rf %s' % os.path.join(self._storage_path, '*'))
+				system2('rm -rf %s' % os.path.join(self._storage_path, '*'), shell=True)
 			raise
 			
 		if msg_data:
@@ -1182,7 +1183,7 @@ class MysqlHandler(ServiceCtlHanler):
 			sql = self._spawn_mysql(root_user, root_password)
 			sql.sendline('FLUSH TABLES WITH READ LOCK;')
 			sql.expect('mysql>')
-			system('sync')
+			system2('sync', shell=True)
 			if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 				sql.sendline('SHOW MASTER STATUS;')
 				sql.expect('mysql>')
@@ -1401,7 +1402,7 @@ class MysqlHandler(ServiceCtlHanler):
 					self._logger.debug('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
-					system(str(rsync))
+					system2(str(rsync), shell=True)
 					self._mysql_config.set(directive, dirname)
 				else:
 					self._logger.debug('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
