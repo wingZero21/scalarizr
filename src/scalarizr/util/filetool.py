@@ -9,7 +9,6 @@ from scalarizr.util import disttool
 import os
 import math
 import logging
-from subprocess import Popen, PIPE, STDOUT
 
 
 BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
@@ -204,13 +203,14 @@ class Rsync(object):
 		return self
 	
 	def _sync(self):
-		system2(['sync'], stdout=PIPE, stderr=PIPE)
+		system2(['sync'])
 	
 	def execute(self):
 		self._sync()
 		rsync_cmd = [self._executable] + self._options + [self._src, self._dst]
-		self._sync()	
-		return system2(rsync_cmd, stdout=PIPE, stderr=PIPE)
+		out, err, returncode = system2(rsync_cmd)
+		self._sync()
+		return out, err, returncode
 		
 	def __str__(self):
 		ret = "sync && %(executable)s %(options)s %(src)s %(dst)s %(quiet)s" % dict(
