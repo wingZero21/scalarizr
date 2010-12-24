@@ -1,5 +1,5 @@
 from scalarizr.platform import Platform, PlatformError
-from scalarizr.util import system
+from scalarizr.util import system2
 from scalarizr.config import BuiltinPlatforms
 
 import logging
@@ -51,7 +51,7 @@ class RackspacePlatform(Platform):
 		if not hasattr(self, '_ip_re'):
 			self._ip_re = re.compile('inet\s*addr:(?P<ip>[\d\.]+)', re.M)
 			
-		out = system('/sbin/ifconfig ' + iface)[0]
+		out = system2('/sbin/ifconfig ' + iface, shell=True)[0]
 		result = re.search(self._ip_re, out)
 		if not result:
 			return None		
