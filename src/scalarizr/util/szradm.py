@@ -9,7 +9,7 @@ from scalarizr.bus import bus
 from scalarizr.util.filetool import read_file
 from scalarizr.util.software import system_info, whereis
 from scalarizr import init_script
-from scalarizr.util import system
+from scalarizr.util import system2
 
 import smtplib
 from email.Utils import formatdate
@@ -32,7 +32,7 @@ def _init():
 	init_script()
 	
 def get_mx_records(email):
-	out = system('%s -t mx %s' % (whereis('host')[0], email.split('@')[-1]))[0]
+	out = system2('%s -t mx %s' % (whereis('host')[0], email.split('@')[-1]), shell=True)[0]
 	mxs = [mx.split()[-1][:-1] if mx.endswith('.') else mx for mx in out.split('\n')]
 	if '' in mxs: mxs.remove('')
 	from sets import Set
@@ -116,7 +116,7 @@ def main():
 	
 	if options.report:
 		#collecting
-		hostname = system(whereis('hostname'))[0]
+		hostname = system2(whereis('hostname'), shell=True)[0]
 		tar_file = os.path.join(os.getcwd(), 'report-%s.tar.gz' % hostname)
 		json_file = os.path.join(os.getcwd(), 'sysinfo-%s.json' % hostname)
 
