@@ -1,0 +1,14 @@
+config = {
+
+	'ec2': {
+
+	}, 
+	'rackspace': {
+		ssh: {
+			pass: ''
+		}
+	},
+	'euca': {
+		
+	}
+}

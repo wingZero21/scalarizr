@@ -1,27 +1,38 @@
-{
-	'ubuntu804' : {
-		'raw' : [{
-			image_id: 			'ami-232323',
-			arch:				'x86_64',
-			root_device_type: 	'ebs'
-		},
-		{
-			image_id: 			'ami-123123',
-			arch:				'x86_64',
-			root_device_type: 	'instance-store'		
-		}
-		]
-		'base' : [{
-			role_name: 			'base-ubuntu804-64',
-			arch: 				'x86_64',
-			root_device_type: 	'ebs',
-		}],
-		'app' : [
-		
-		]
+{	
+	"ssh" : {
+		"key"		: "",
+		"key_pass"	: "",
+		"keypair"	: ""
 	},
-	'el5' : {
-		
 	
+	"platrform_credentials" : {
+		"ec2_key_id": "",
+		"ec2_key"	: ""	
+	},
+	
+	"default_size" : "t1.micro",
+	
+	"images" : {
+		"ubuntu804" : {
+			"raw" : [{
+				"image_id": 			"ami-232323",
+				"arch":				"x86_64",
+				"root_device_type": 	"ebs"
+			}, {
+				"image_id": 			"ami-123123",
+				"arch":				"x86_64",
+				"root_device_type": 	"instance-store"		
+			}],
+			"base" : [{
+				"role_name": 			"base-ubuntu804-64",
+				"arch": 				"x86_64",
+				"root_device_type": 	"ebs"
+			}],
+			"app" : [
+			
+			]
+		},
+		"el5" : {		
+		}
 	}
 }

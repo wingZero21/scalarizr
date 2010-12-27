@@ -148,6 +148,11 @@ class FarmUI:
 
 		if text != 'Farm saved':
 			raise FarmUIError('Something wrong with saving farm %s : %s' % (self.farm_id, text))
+	
+	@property
+	def state(self):
+		pass
+		# Todo: return 'running' or 'terminated'
 			
 	def launch(self):
 		if not hasattr(self, 'farm_id'):
@@ -245,7 +250,11 @@ class FarmUI:
 		if not self.sel.is_text_present('Replication status'):
 			raise FarmUIError("Error while opening MySQL status page for farm ID=%s. Make sure your farm has MySQL role enabled." % self.farm_id)
 
-
+	def get_mysql_servers(self, role_name):
+		self.sel.open('/farm_roles_view.php?farmid=%s' % self.farm_id )
+		self.sel.click('//a[text()=%s]/../../dt[@dataindex="servers"]/em/a' % role_name)
+		# TODO: collect and return info about mysql servers
+		
 		
 def import_server(sel, platform_name, behaviour, host, role_name):
 	'''
@@ -289,7 +298,8 @@ def login(sel):
 
 	sel.delete_all_visible_cookies()
 	sel.open('/')
-	sel.click('//div[@class="login-trigger"]/a')
+	sel.click('//div[@class="login-trigger-header"]/a')
+	sel.wait_for_page_to_load(15000)
 	sel.type('login', login)
 	sel.type('pass', password)
 	sel.check('keep_session')

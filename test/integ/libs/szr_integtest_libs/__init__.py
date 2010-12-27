@@ -41,15 +41,23 @@ class SshManager:
 	transport = None
 	connected = False
 	channels  = []
+	key = None
+	password = None
 
-	def __init__(self, host, key, timeout = 90, key_pass = None):
+	def __init__(self, host, key=None, key_pass = None, password=None, timeout = 90):
 		self.host = host
 		self.ip   = socket.gethostbyname(host)
-		key_file = os.path.expanduser(key)
-		if not os.path.exists(key_file):
-			raise Exception("Key file '%s' doesn't exist", key_file)
-		self.key = paramiko.RSAKey.from_private_key_file(key_file, password = key_pass if key_pass else None)
-
+		
+		if key:
+			key_file = os.path.expanduser(key)
+			if not os.path.exists(key_file):
+				raise Exception("Key file '%s' doesn't exist", key_file)
+			self.key = paramiko.RSAKey.from_private_key_file(key_file, password = key_pass if key_pass else None)
+		elif password:
+			self.password = password
+		else:
+			raise Exception("Not enough data to authenticate.")
+		
 		self.timeout = timeout
 		self.user = 'root'
 		self.ssh = paramiko.SSHClient()
@@ -63,7 +71,7 @@ class SshManager:
 		start_time = time.time()
 		while time.time() - start_time < self.timeout:
 			try:
-				self.ssh.connect(self.host, pkey = self.key, username=self.user)
+				self.ssh.connect(self.host, pkey = self.key, username=self.user, password=self.password)
 				break
 			except:
 				continue
