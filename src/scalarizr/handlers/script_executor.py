@@ -89,9 +89,9 @@ class ScriptExecutor(Handler):
 		self._logs_truncate_over = parse_size(self._config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
 
 
-	def exec_scripts_on_event (self, event_name, event_id=None):
+	def exec_scripts_on_event (self, event_name=None, event_id=None, target_ip=None, local_ip=None):
 		self._logger.debug("Fetching scripts for event %s", event_name)	
-		scripts = self._queryenv.list_scripts(event_name, event_id)
+		scripts = self._queryenv.list_scripts(event_name, event_id, target_ip=target_ip, local_ip=local_ip)
 		self._logger.debug("Fetched %d scripts", len(scripts))
 		
 		if scripts:
@@ -267,7 +267,11 @@ class ScriptExecutor(Handler):
 			self._logger.debug('Scripting is OFF when state: %s', ScalarizrState.IMPORTING)
 			return
 		
+		pl = bus.platform
+		kwargs = dict(event_name=self._event_name)
 		if message.name == Messages.EXEC_SCRIPT:
-			self.exec_scripts_on_event(self._event_name, message.meta["event_id"])
-		else:
-			self.exec_scripts_on_event(self._event_name)
+			kwargs['event_id'] = message.meta['event_id']
+		kwargs['target_ip'] = message.body.get('local_ip')
+		kwargs['local_ip'] = pl.get_private_ip()
+			
+		self.exec_scripts_on_event(**kwargs)

@@ -6,7 +6,6 @@ import time
 import sys
 import socket
 import signal
-from collections import namedtuple
 
 from scalarizr.bus import bus
 

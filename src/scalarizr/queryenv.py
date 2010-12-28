@@ -52,7 +52,8 @@ class QueryEnvService(object):
 			parameters["role"] = role_name
 		return self._request("list-role-params",parameters, self._read_list_role_params_response)
 	
-	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None):
+	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None, 
+					target_ip=None, local_ip=None):
 		"""
 		@return Script[]
 		"""
@@ -65,6 +66,10 @@ class QueryEnvService(object):
 			parameters["asynchronous"] = asynchronous
 		if None != name :
 			parameters["name"] = name
+		if None != target_ip:
+			parameters['target_ip'] = target_ip
+		if None != local_ip:
+			parameters['local_ip'] = local_ip
 		return self._request("list-scripts",parameters, self._read_list_scripts_response)
 	
 	def list_virtual_hosts (self, name=None, https=None):
