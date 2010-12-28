@@ -6,13 +6,14 @@ Created on Dec 27, 2010
 from szr_integtest_libs.providers import DataProvider, Server
 from szr_integtest_libs.scalrctl import SshManager
 import re
+import socket
 
 class MysqlDataProvider(DataProvider):
 	_master = None
 	_slaves = []
 	
 	def __init__(self, behaviour=None, **kwargs):
-		super(DataProvider, self).__init__(self, 'mysql', **kwargs)
+		super(MysqlDataProvider, self).__init__('mysql', **kwargs)
 	
 	def slave(self, index=0):
 		'''
@@ -36,7 +37,7 @@ class MysqlDataProvider(DataProvider):
 	def _scale_up(self):
 		if not self._master and self.farmui.state == 'terminated':
 			self.farmui.remove_all_roles()
-			# FIXME: Откуда получать настройки фермы?
+			# FIXME: Where can i get farm settings?
 			self.farmui.add_role(self.role_name)
 			self.farmui.launch()
 		out = self.scalr_ctl.exec_cronjob('Scaling')
@@ -53,10 +54,21 @@ class MysqlDataProvider(DataProvider):
 				raise Exception("Can't find node with public ip '%s'" % host)
 		key  = self.ssh_config.get('key')
 		ssh = SshManager(host, key)
-		return Server(node, role_name=self.role_name, ssh=ssh)
+		return Server(node, ssh, role_name=self.role_name)
 
 	server = master
 	
 	def sync(self):
-		# TODO: 
-		pass
+		self._master = None
+		self._slaves = []
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')
+		servers = self.farmui.get_mysql_servers(self.role_name)
+		all_nodes = self.conn.list_nodes()
+		for node in all_nodes:
+			public_ip = socket.gethostbyname(node.public_ip[0])
+			if (servers['master'] and public_ip == servers['master']) or public_ip in servers['slaves']:
+				ssh = SshManager(public_ip, self.ssh_config.get('key'))
+				if public_ip == servers['master']:
+					self._master = Server(node, ssh, role_name = self.role_name)
+				else:
+					self._slaves.append(Server(node, ssh, role_name = self.role_name))

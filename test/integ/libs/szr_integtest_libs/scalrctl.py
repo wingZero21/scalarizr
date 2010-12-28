@@ -151,8 +151,13 @@ class FarmUI:
 	
 	@property
 	def state(self):
-		pass
-		# Todo: return 'running' or 'terminated'
+		if not hasattr(self, 'farm_id'):
+			raise FarmUIError("Can't launch farm without farm_id: use the farm first")
+		
+		self.sel.open('/farms_view.php?farmid=%s' % self.farm_id)
+		self.sel.wait_for_page_to_load(30000)
+		time.sleep(1)
+		return self.sel.get_text('//dt[@dataindex="status"]/em/span').lower()
 			
 	def launch(self):
 		if not hasattr(self, 'farm_id'):
@@ -251,9 +256,25 @@ class FarmUI:
 			raise FarmUIError("Error while opening MySQL status page for farm ID=%s. Make sure your farm has MySQL role enabled." % self.farm_id)
 
 	def get_mysql_servers(self, role_name):
+		ret = {'master' : None, 'slaves' : []}
 		self.sel.open('/farm_roles_view.php?farmid=%s' % self.farm_id )
-		self.sel.click('//a[text()=%s]/../../dt[@dataindex="servers"]/em/a' % role_name)
+		self.sel.wait_for_page_to_load(15000)
+		time.sleep(1)
+		self.sel.click('//a[text()="%s"]/../../../dt[@dataindex="servers"]/em/a' % role_name)
+		time.sleep(3)
+		server_count = int(self.sel.get_xpath_count('//div[@class="x-list-body-inner"]/descendant::em[text()="Running "]'))
+		if not server_count:
+			return None
+		for i in range(1, server_count+1):
+			ip = self.sel.get_text('//div[@class="x-list-body-inner"]/descendant::em[text()="Running "][%d]/../../dt[@dataindex="remote_ip"]/em' % i).strip()
+			if ip:
+				if self.sel.get_text('//div[@class="x-list-body-inner"]/descendant::em[text()="Running "][%d]/../../dt[@dataindex="farm_id"]/em/' % i).strip().endswith('(Master)'):
+					ret['master'] = ip
+				else:
+					ret['slaves'].append(ip)
+		return ret
 		# TODO: collect and return info about mysql servers
+		
 		
 		
 def import_server(sel, platform_name, behaviour, host, role_name):
@@ -299,7 +320,7 @@ def login(sel):
 	sel.delete_all_visible_cookies()
 	sel.open('/')
 	sel.click('//div[@class="login-trigger-header"]/a')
-	sel.wait_for_page_to_load(15000)
+	sel.wait_for_page_to_load(30000)
 	sel.type('login', login)
 	sel.type('pass', password)
 	sel.check('keep_session')

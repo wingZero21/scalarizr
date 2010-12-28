@@ -14,6 +14,17 @@ import os
 import re
 import time
 import atexit
+import socket
+
+def convert_dict_from_unicode(data):
+	if isinstance(data, unicode):
+		return str(data)
+	elif isinstance(data, dict):
+		return dict(map(convert_dict_from_unicode, data.iteritems()))
+	elif isinstance(data, (list, tuple, set, frozenset)):
+		return type(data)(map(convert_dict_from_unicode, data))
+	else:
+		return data
 
 platform = os.environ['PLATFORM']
 platform_config_path = os.path.join(RESOURCE_PATH, platform + '.json')
@@ -22,8 +33,9 @@ if not os.path.exists(platform_config_path):
 	raise Exception('Config file for platform "%s" does not exist.' % platform)
 
 raw_config = read_file(platform_config_path)
+
 try:
-	platform_config = json.loads(raw_config)
+	platform_config = convert_dict_from_unicode(json.loads(raw_config, encoding='latin-1'))
 except:
 	raise Exception('Config file for platform "%s" does not contain valid json configuration.')
 
@@ -41,6 +53,10 @@ class DataProvider(object):
 	
 	def __init__(self, behaviour='raw', **kwargs):
 		
+		def cleanup():
+			self.clear()
+		atexit.register(cleanup)
+		
 		try:
 			self.platform	= os.environ['PLATFORM']
 			self.dist		= os.environ['DIST']
@@ -49,6 +65,7 @@ class DataProvider(object):
 		
 		self.driver = get_driver(getattr(Provider, self.platform.upper()))
 		self.__credentials = platform_config['platrform_credentials']
+		self.conn = self.driver(**self.__credentials)
 		self.default_size  = platform_config['default_size']
 
 		self.behaviour	= behaviour
@@ -83,9 +100,6 @@ class DataProvider(object):
 	def server(self):
 		if self._server:
 			return self._server
-		
-		if not self.conn:
-			self.conn = self.driver(*self.__credentials)
 
 		if self.behaviour == 'raw':
 			if not isinstance(self.default_size, NodeSize):
@@ -93,14 +107,15 @@ class DataProvider(object):
 											 ram=None, disk=None, bandwidth=None, price=None, driver="")										
 			if not isinstance(self.image_id, NodeImage):
 				self.image_id = NodeImage(self.image_id, name="", driver="")
-						
-			if self.ssh_config.get('keypair'):
-				node = self.conn.create_node(name='Integtest-' + time.strftime('%Y_%m_%d-%H_%M') , \
-										image=self.image_id, size=self.default_size, ex_keyname=self.ssh_config.get('keypair'))
-				
-			else:
-				node = self.conn.create_node(name='Integtest-' + time.strftime('%Y_%m_%d-%H_%M') , image=self.image_id, size=self.default_size)
 			
+			kwargs = {'name' : 'Integtest-' + time.strftime('%Y_%m_%d-%H_%M') , 'image' : self.image_id, 'size' : self.default_size}
+			if self.ssh_config.get('keypair'):
+				kwargs['ex_keyname'] = self.ssh_config.get('keypair')
+			if self.ssh_config.get('security_group'):
+				kwargs['ex_securitygroup'] = self.ssh_config.get('security_group')
+			
+			node = self.conn.create_node(**kwargs)
+
 			ip_retrieved = False
 			while not ip_retrieved:
 				for instance in self.conn.list_nodes():
@@ -116,12 +131,11 @@ class DataProvider(object):
 			key_pass = self.ssh_config.get('key_pass')
 			password = node.__dict__.get('password')
 			ssh = SshManager(host, key, key_pass, password)
-			ssh.connect()
-			self._server = Server(node, self.image_id.id, ssh = ssh)
+			self._server = Server(node, ssh, image_id=self.image_id.id)
 		else:
 			if self.farmui.state == 'terminated':
 				self.farmui.remove_all_roles()
-				# FIXME: Откуда получать настройки фермы?
+				# FIXME: Where farm settings are?
 				self.farmui.add_role(self.role_name)
 				self.farmui.launch()
 				
@@ -140,11 +154,9 @@ class DataProvider(object):
 					
 			key  = self.ssh_config.get('key')
 			ssh = SshManager(host, key)
-			ssh.connect()
-			self._server = Server(node, role_name = self.role_name, ssh = ssh)
+			self._server = Server(node, ssh, role_name = self.role_name)
 		return self._server
 			
-	@atexit.register
 	def clear(self):
 		if hasattr(self, 'farmui'):
 			try:
@@ -153,7 +165,7 @@ class DataProvider(object):
 				if not 'has been already terminated' in str(e):
 					raise				
 		if self._server:
-			self._server.destroy()
+			self._server.terminate()
 			
 	def sync(self):
 		pass
@@ -162,13 +174,15 @@ class DataProvider(object):
 class Server(object):
 	_log_channel = None
 	
-	def __init__(self, node, image_id=None, role_name=None, ssh):
+	def __init__(self, node, ssh, image_id=None, role_name=None):
 		self.image_id = image_id
 		self.role_name = role_name
 		self.ssh_manager = ssh
 		self.node = node
 	
 	def ssh(self):
+		if not self.ssh_manager.connected:
+			self.ssh_manager.connect()
 		return self.ssh_manager.get_root_ssh_channel()
 	
 	'''
@@ -182,7 +196,7 @@ class Server(object):
 		
 	@property
 	def public_ip(self):
-		return self.node.public_ip[0]
+		return socket.gethostbyname(self.node.public_ip[0])
 	
 	@property
 	def log(self):

@@ -2,12 +2,13 @@
 	"ssh" : {
 		"key"		: "",
 		"key_pass"	: "",
-		"keypair"	: ""
+		"keypair"	: "",
+		"security_group" : "webta.scalarizr"
 	},
 	
 	"platrform_credentials" : {
-		"ec2_key_id": "",
-		"ec2_key"	: ""	
+		"key" : "",
+		"secret" : ""	
 	},
 	
 	"default_size" : "t1.micro",
@@ -15,12 +16,20 @@
 	"images" : {
 		"ubuntu804" : {
 			"raw" : [{
-				"image_id": 			"ami-232323",
-				"arch":				"x86_64",
+				"image_id": 			"ami-cf8d61a6",
+				"arch":					"x86_64",
 				"root_device_type": 	"ebs"
 			}, {
-				"image_id": 			"ami-123123",
-				"arch":				"x86_64",
+				"image_id": 			"ami-cb8d61a2",
+				"arch":					"i386",
+				"root_device_type": 	"ebs"		
+			}, {
+				"image_id": 			"ami-0c36dc65",
+				"arch":					"x86_64",
+				"root_device_type": 	"instance-store"
+			}, {
+				"image_id": 			"ami-6836dc01",
+				"arch":					"i386",
 				"root_device_type": 	"instance-store"		
 			}],
 			"base" : [{
@@ -30,7 +39,13 @@
 			}],
 			"app" : [
 			
-			]
+			],
+			"mysql" : [{
+				"role_name": 			"Test_mysql_2010_10_20_1348",
+				"arch":					"x86_64",
+				"root_device_type": 	"ebs"
+				
+			}]
 		},
 		"el5" : {		
 		}
