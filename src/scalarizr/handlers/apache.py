@@ -291,7 +291,7 @@ class ApacheHandler(ServiceCtlHanler):
 				if not vhosts_path:
 					self._logger.error('Property vhosts_path is empty.')
 				else:
-					self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
+					self._logger.warning("Virtual hosts dir %s doesn't exist. Creating", vhosts_path)
 					try:
 						os.makedirs(vhosts_path)
 						self._logger.debug("Virtual hosts dir %s created", vhosts_path)

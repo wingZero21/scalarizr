@@ -66,12 +66,12 @@ description = "Scalarizr converts any server to Scalr-manageable node"
 data_files = make_data_files('/etc/scalr', 'etc')
 data_files.extend(make_data_files('/usr/share/scalr', 'share'))
 data_files.extend(make_data_files('/usr/local/scalarizr/scripts', 'scripts'))
-data_files.append(["/usr/local/bin", ["bin/scalarizr"]])
+data_files.append(["/usr/local/bin", ["bin/scalarizr", 'bin/szradm']])
 
 
 cfg = dict(
 	name = "scalarizr",
-	version = "0.7",	 
+	version = "0.7.0",	 
 	description = description,
 	long_description = description,
 	author = "Scalr Inc.",
