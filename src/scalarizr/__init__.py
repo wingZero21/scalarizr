@@ -151,10 +151,9 @@ DB_SCRIPT = 'db.sql'
 
 def _db_connect(file=None):
 	logger = logging.getLogger(__name__)
-	cnf = bus.cnf
+	logger.debug("Open SQLite database (file: %s)" % (file))
 
-	logger.debug("Open SQLite database (file: %s)" % (file))	
-	file = file or cnf.private_path(DB_NAME)
+	file = file or os.path.join(bus.share_path, DB_NAME)
 	conn = sqlite.connect(file, 5.0)
 	conn.row_factory = sqlite.Row
 	return conn

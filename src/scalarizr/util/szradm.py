@@ -149,7 +149,7 @@ def main():
 		#sending	
 		fromaddr='root@%s' % hostname
 		try:
-			email = ini.get('general', 'report_mail') 
+			email = ini.get('general', 'report_email') 
 		except ConfigParser.NoOptionError:
 			print "Unable to send email: section 'report_mail' not found in config file."
 			print "Although you can send %s to support manually." % tar_file
