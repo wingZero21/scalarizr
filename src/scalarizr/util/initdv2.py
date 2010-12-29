@@ -111,7 +111,8 @@ class ParametrizedInitScript(InitScript):
 	def _start_stop_reload(self, action):
 		try:
 			cmd = [self.initd_script, action]
-			proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
+			proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, 
+						shell=False, close_fds=True, preexec_fn=os.setsid)
 			out, err = proc.communicate()
 		except OSError, e:
 			raise InitdError("Popen failed with error %s" % (e.strerror,))

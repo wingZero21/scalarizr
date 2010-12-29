@@ -47,7 +47,7 @@ hrSWRunStatus = MibTableColumn((1, 3, 6, 1, 2, 1, 25, 4, 2, 1, 7), Integer().sub
 hrSWRunPerf = MibIdentifier((1, 3, 6, 1, 2, 1, 25, 5))
 hrSWRunPerfTable = NewMibTable((1, 3, 6, 1, 2, 1, 25, 5, 1))
 hrSWRunPerfEntry = MibTableRow((1, 3, 6, 1, 2, 1, 25, 5, 1, 1))
-hrSWRunPerfCPU = MibTableColumn((1, 3, 6, 1, 2, 1, 25, 5, 1, 1, 1), Integer32().subtype(subtypeSpec=constraint.ValueRangeConstraint(0, 2147483647L))).setMaxAccess("readonly")
+hrSWRunPerfCPU = MibTableColumn((1, 3, 6, 1, 2, 1, 25, 5, 1, 1, 1), Integer32().subtype(subtypeSpec=constraint.ValueRangeConstraint(-2, 2147483647L))).setMaxAccess("readonly")
 hrSWRunPerfMem = MibTableColumn((1, 3, 6, 1, 2, 1, 25, 5, 1, 1, 2), KBytes()).setMaxAccess("readonly")
 
 
@@ -90,6 +90,8 @@ def hrSWRunvalues():
 			proc_name = status[1][1:-1]
 			proc_state = status[2]
 			proc_perfcpu = int(status[13]) + int(status[14])
+			if proc_perfcpu > 2147483647:
+				proc_perfcpu = -2
 			try:
 				fp = open('/proc/'+pid+'/status')
 			except:
