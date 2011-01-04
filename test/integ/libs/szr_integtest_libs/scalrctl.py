@@ -3,15 +3,13 @@ Created on Sep 23, 2010
 
 @author: marat
 '''
+
+from szr_integtest import config
+from szr_integtest_libs.ssh_tool import execute, SshManager
+
+import logging
 import time
 import os
-from ConfigParser import ConfigParser
-from szr_integtest import config
-from scalarizr.libs.metaconf import NoPathError
-import paramiko
-from szr_integtest_libs import exec_command, clean_output, SshManager
-from selenium import selenium
-import logging
 
 log_path = os.path.expanduser('~/.scalr-dev/logs')
 
@@ -50,7 +48,7 @@ class FarmUI:
 	def use(self, farm_id):
 		self.servers = []
 		self.farm_id = farm_id
-		login(self.sel)
+		ui_login(self.sel)
 		self.sel.open('farms_builder.php?id=%s' % self.farm_id)
 		self.sel.wait_for_page_to_load(30000)
 		time.sleep(1)
@@ -277,11 +275,11 @@ class FarmUI:
 		
 		
 		
-def import_server(sel, platform_name, behaviour, host, role_name):
+def ui_import_server(sel, platform_name, behaviour, host, role_name):
 	'''
 	@return: import shell command
 	'''
-	login(sel)
+	ui_login(sel)
 	sel.open('szr_server_import.php')
 	
 	platforms = sel.get_select_options('//td[@class="Inner_Gray"]/table/tbody/tr[2]/td[2]/select')
@@ -309,7 +307,7 @@ def import_server(sel, platform_name, behaviour, host, role_name):
 		
 	return sel.get_text('//td[@class="Inner_Gray"]/table/tbody/tr[3]/td[1]/textarea')
 	
-def login(sel):
+def ui_login(sel):
 
 	try:
 		login = config.get('./scalr/admin_login')
@@ -370,11 +368,11 @@ class ScalrCtl:
 		#clean_output(self.channel, 5)
 		
 		self._logger.info('cd %s' % home_path)
-		exec_command(self.channel, 'cd ' + home_path)
+		execute(self.channel, 'cd ' + home_path)
 		farm_str = ('--farm-id=%s' % self.farmid) if (self.farmid and name == 'ScalarizrMessaging') else ''
 		job_cmd = 'php -q ' + cron_php_path + ' --%s %s' % (name, farm_str)
 		self._logger.info('Starting cronjob: %s' % job_cmd)
-		out = exec_command(self.channel, job_cmd)
+		out = execute(self.channel, job_cmd)
 		log_filename = name + time.strftime('_%d_%b_%H-%M') + '.log'
 		try:
 			fp = open(os.path.join(log_path, log_filename), 'w')
@@ -388,7 +386,7 @@ class ScalrCtl:
 		if self.channel.closed:
 			self.channel = self.ssh.get_root_ssh_channel()
 			
-		out = exec_command(self.channel, 'svn2allow %s' % ip)
+		out = execute(self.channel, 'svn2allow %s' % ip)
 		
 		if not 'Successfully enabled SVN access' in out:
 			raise Exception("Can't enable SVN access to %s. Output: \n%s" % (ip, out))

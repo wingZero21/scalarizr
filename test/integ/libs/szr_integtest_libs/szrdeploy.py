@@ -3,9 +3,11 @@ Created on Sep 23, 2010
 
 @author: marat
 '''
-from scalarizr.libs.metaconf import Configuration, NoPathError
-from szr_integtest import config
-from szr_integtest_libs import exec_command
+from szr_integtest					import config
+from szr_integtest_libs.ssh_tool	import execute
+
+from scalarizr.libs.metaconf import NoPathError
+
 import os
 import re
 import tarfile 
@@ -23,7 +25,7 @@ class RepoType:
 	RELEASE = 'release'
 
 class ScalarizrDeploy:
-	distr = None
+	dist = None
 	
 	def __init__(self, sshmanager):
 		self.ssh = sshmanager
@@ -31,21 +33,21 @@ class ScalarizrDeploy:
 			self.ssh.connect()
 		self.config = config
 		self.channel = sshmanager.get_root_ssh_channel()
-		self.detect_distr()
+		self.detect_dist()
 		
 	def add_repos(self, repo_type):
 
 		if self.channel.closed:
 			raise Exception("SSH Channel closed")
 		
-		if self.distr in ('rhel', 'fedora'):
+		if self.dist in ('rhel', 'fedora'):
 			
-			if 'rhel' == self.distr:
+			if 'rhel' == self.dist:
 
 				python_ver = self.get_python_version()
 				if python_ver < 6:
-					exec_command(self.channel, 'rpm -Uvh ' + EPEL_PACKAGE)
-					out = exec_command(self.channel, 'yum -y install python26', 120)
+					execute(self.channel, 'rpm -Uvh ' + EPEL_PACKAGE)
+					out = execute(self.channel, 'yum -y install python26', 120)
 					if not re.search('Complete!|Nothing to do', out):
 						raise Exception("Can't install python 2.6")
 				
@@ -55,16 +57,16 @@ class ScalarizrDeploy:
 			except NoPathError:
 				raise Exception("Configuration file doesn't contain %s repository url" % repo_type)
 			# Add repo
-			baseurl = os.path.join(repo_url, '%s/$releasever/$basearch' % self.distr)
-			exec_command(self.channel, "echo -e '[scalarizr]\nname=scalarizr\nbaseurl=%s\nenabled=1\ngpgcheck=0' > /etc/yum.repos.d/scalarizr.repo" % baseurl)		
+			baseurl = os.path.join(repo_url, '%s/$releasever/$basearch' % self.dist)
+			execute(self.channel, "echo -e '[scalarizr]\nname=scalarizr\nbaseurl=%s\nenabled=1\ngpgcheck=0' > /etc/yum.repos.d/scalarizr.repo" % baseurl)		
 
 		else:
 			# Debian based
-			out = exec_command(self.channel, 'wget http://apt.scalr.net/scalr-repository_0.2_all.deb')
+			out = execute(self.channel, 'wget http://apt.scalr.net/scalr-repository_0.2_all.deb')
 			if not 'saved' in out:
 				raise Exception("Cannot download scalarizr's repo package")
 			
-			out = exec_command(self.channel, 'dpkg -i scalr-repository_0.2_all.deb')
+			out = execute(self.channel, 'dpkg -i scalr-repository_0.2_all.deb')
 			if not 'Adding Intridea keyring to local trust store... OK' in out:
 				raise Exception("Cannot install scalarizr's repo package")
 			
@@ -73,8 +75,8 @@ class ScalarizrDeploy:
 			except NoPathError:
 				raise Exception("Configuration file doesn't contain %s repository url" % repo_type)
 			
-			exec_command(self.channel, "echo %s > /etc/apt/sources.list.d/scalr.list" % repo_url)
-			out = exec_command(self.channel, "apt-get update", 120)
+			execute(self.channel, "echo %s > /etc/apt/sources.list.d/scalr.list" % repo_url)
+			out = execute(self.channel, "apt-get update", 120)
 			if not "Reading package lists... Done" in out:
 				raise Exception("Something wrong with updating package list")					
 	
@@ -83,14 +85,14 @@ class ScalarizrDeploy:
 		if self.channel.closed:
 			raise Exception("SSH Channel closed")
 
-		if self.distr in ('rhel', 'fedora'):
+		if self.dist in ('rhel', 'fedora'):
 			# Install scalarizr
-			out = exec_command(self.channel, 'yum -y install scalarizr', 120)
+			out = execute(self.channel, 'yum -y install scalarizr', 120)
 			if not re.search('Complete!|Nothing to do', out):
 				raise Exception('Cannot install scalarizr %s' % out)
 		else:
 			# Debian based
-			out = exec_command(self.channel, 'apt-get -y install scalarizr')
+			out = execute(self.channel, 'apt-get -y install scalarizr')
 
 			error = re.search('^E:\s*(?P<err_text>.+?)$', out, re.M)
 			if error:
@@ -99,10 +101,10 @@ class ScalarizrDeploy:
 	def update_package(self):
 
 		self.check_scalarizr_installed()
-		if self.distr in ('rhel', 'fedora'):
-			exec_command(self.channel, 'yum -y update scalarizr')
+		if self.dist in ('rhel', 'fedora'):
+			execute(self.channel, 'yum -y update scalarizr')
 		else:
-			exec_command(self.channel, 'apt-get -y install scalarizr')
+			execute(self.channel, 'apt-get -y install scalarizr')
 	
 	def apply_changes_from_svn(self):
 		self.check_scalarizr_installed()		
@@ -116,38 +118,38 @@ class ScalarizrDeploy:
 		if not svn_repo:
 			raise Exception("Svn repository url is empty!")
 		
-		svn_installed = exec_command(self.channel, 'ls -la /usr/bin/svn 2>/dev/null')
+		svn_installed = execute(self.channel, 'ls -la /usr/bin/svn 2>/dev/null')
 		if not svn_installed:
 			
-			if self.distr in ('rhel', 'fedora'):
-				out = exec_command(self.channel, 'yum -y install subversion')
+			if self.dist in ('rhel', 'fedora'):
+				out = execute(self.channel, 'yum -y install subversion')
 				if not re.search('Complete!|Nothing to do', out):
 					raise Exception("Cannot install subversion")
 			else:
-				out = exec_command(self.channel, 'apt-get update; apt-get -y install subversion')
+				out = execute(self.channel, 'apt-get update; apt-get -y install subversion')
 				error = re.search('^E:\s*(?P<err_text>.+?)$', out, re.M)
 				if error:
 					raise Exception("Can't install subversion package: '%s'" % error.group('err_text'))
 		
 		scalarizr_path = self.get_scalarizr_path()
 		
-		exec_command(self.channel, 'rm -rf ' + scalarizr_path)
+		execute(self.channel, 'rm -rf ' + scalarizr_path)
 		cmd = 'echo yes | '
 		cmd += 'svn export %s %s' % (os.path.join(svn_repo, 'src/scalarizr'), scalarizr_path)
 		cmd += (' --username "%s" ' % svn_user) if svn_user else ''
 		cmd += (' --password "%s" ' % svn_password) if svn_password else ''
-		out = exec_command(self.channel, cmd)
+		out = execute(self.channel, cmd)
 		if not 'Exported revision' in out:
 			raise Exception('Svn export failed')
 		
 		# Export share
 		share_path = '/usr/share/scalr'
-		exec_command(self.channel, 'rm -rf ' + share_path)
+		execute(self.channel, 'rm -rf ' + share_path)
 		cmd = 'echo yes | '
 		cmd += 'svn export %s %s' % (os.path.join(svn_repo, 'share'), share_path)
 		cmd += (' --username "%s" ' % svn_user) if svn_user else ''
 		cmd += (' --password "%s" ' % svn_password) if svn_password else ''
-		out = exec_command(self.channel, cmd)
+		out = execute(self.channel, cmd)
 		if not 'Exported revision' in out:
 			raise Exception('Svn export failed')
 		
@@ -169,32 +171,32 @@ class ScalarizrDeploy:
 			raise BaseException('Error while uploading file %s: %s' % (file, e))
 
 		scalarizr_path = self.get_scalarizr_path()
-		exec_command(self.channel, 'rm -rf ' + scalarizr_path)
-		exec_command(self.channel, 'tar -xzf ' + file_path + ' -C '+ os.path.dirname(scalarizr_path))
-		exec_command(self.channel, 'mv ' + os.path.dirname(scalarizr_path) + '/share /usr/share/scalr')
+		execute(self.channel, 'rm -rf ' + scalarizr_path)
+		execute(self.channel, 'tar -xzf ' + file_path + ' -C '+ os.path.dirname(scalarizr_path))
+		execute(self.channel, 'mv ' + os.path.dirname(scalarizr_path) + '/share /usr/share/scalr')
 				
 		
-	def detect_distr(self):
-		if not self.distr:
-			ret = exec_command(self.channel, DISTR_DETECTION_STRING)
+	def detect_dist(self):
+		if not self.dist:
+			ret = execute(self.channel, DISTR_DETECTION_STRING)
 			rh_based_result = re.findall('^(\d)\s*$', ret, re.M)
 			if len(rh_based_result) != 2:
-				raise Exception("Cannot detect distr")
+				raise Exception("Cannot detect dist")
 			rhel, fedora = [int(i) for i in rh_based_result]
 			if rhel:
-				self.distr = 'rhel'
+				self.dist = 'rhel'
 			elif fedora:
-				self.distr = 'fedora'
+				self.dist = 'fedora'
 			else:
-				self.distr = 'debian'
+				self.dist = 'debian'
 				
 	def get_python_version(self):
 		for i in range(7, 4, -1):
-			out = exec_command(self.channel, 'ls -la /usr/bin/python2.%s 2>/dev/null' % i)
+			out = execute(self.channel, 'ls -la /usr/bin/python2.%s 2>/dev/null' % i)
 			if out:
 				return i
 			
-		out = exec_command(self.channel, "python -c 'import platform; print platform.python_version()[2]'")
+		out = execute(self.channel, "python -c 'import platform; print platform.python_version()[2]'")
 
 		try:
 			python_ver = int(out)
@@ -203,13 +205,13 @@ class ScalarizrDeploy:
 		return python_ver
 	
 	def check_scalarizr_installed(self):
-		scalarizr_installed = exec_command(self.channel, 'ls -la /etc/init.d/scalarizr 2>/dev/null')
+		scalarizr_installed = execute(self.channel, 'ls -la /etc/init.d/scalarizr 2>/dev/null')
 		if not scalarizr_installed:
 			raise Exception('Install scalarizr package first!')
 				
 	def get_scalarizr_path(self):
 		
-		if self.distr in ('rhel', 'fedora'):
+		if self.dist in ('rhel', 'fedora'):
 			py_version = self.get_python_version()
 			scalarizr_path = "/usr/lib/python2.%s/site-packages/scalarizr"  % py_version
 		else:

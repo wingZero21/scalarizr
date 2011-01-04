@@ -3,7 +3,7 @@ Created on Dec 27, 2010
 
 @author: spike
 '''
-from szr_integtest_libs.providers import DataProvider, Server
+from szr_integtest_libs.datapvd import DataProvider, Server
 from szr_integtest_libs.scalrctl import SshManager
 import re
 import socket

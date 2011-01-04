@@ -3,12 +3,16 @@ Created on Dec 27, 2010
 
 @author: spike
 '''
-from szr_integtest import RESOURCE_PATH, config, get_selenium, MutableLogFile
-from scalarizr.util.filetool import read_file
+from szr_integtest import RESOURCE_PATH, config, get_selenium
+from szr_integtest_libs.scalrctl import ScalrCtl, FarmUI, SshManager
+from szr_integtest_libs.ssh_tool import MutableLogFile
+
 from libcloud.types import Provider 
 from libcloud.providers import get_driver 
 from libcloud.base import NodeSize, NodeImage
-from szr_integtest_libs.scalrctl import ScalrCtl, FarmUI, SshManager
+from scalarizr.util.filetool import read_file
+from itertools import chain
+
 import json
 import os
 import re
@@ -16,29 +20,41 @@ import time
 import atexit
 import socket
 
-def convert_dict_from_unicode(data):
-	if isinstance(data, unicode):
-		return str(data)
-	elif isinstance(data, dict):
-		return dict(map(convert_dict_from_unicode, data.iteritems()))
-	elif isinstance(data, (list, tuple, set, frozenset)):
-		return type(data)(map(convert_dict_from_unicode, data))
-	else:
-		return data
+
 
 platform = os.environ['PLATFORM']
 platform_config_path = os.path.join(RESOURCE_PATH, platform + '.json')
+_user_platform_cnf_path = os.path.expanduser('~/.scalr-dev/' + platform + '.json' )	
 
 if not os.path.exists(platform_config_path):
 	raise Exception('Config file for platform "%s" does not exist.' % platform)
 
-raw_config = read_file(platform_config_path)
+def read_json_config(cnf_path):
+	
+	def convert_dict_from_unicode(data):
+		if isinstance(data, unicode):
+			return str(data)
+		elif isinstance(data, dict):
+			return dict(map(convert_dict_from_unicode, data.iteritems()))
+		elif isinstance(data, (list, tuple, set, frozenset)):
+			return type(data)(map(convert_dict_from_unicode, data))
+		else:
+			return data
+		
+	raw_config = read_file(cnf_path)
 
-try:
-	platform_config = convert_dict_from_unicode(json.loads(raw_config, encoding='latin-1'))
-except:
-	raise Exception('Config file for platform "%s" does not contain valid json configuration.')
+	try:
+		config = convert_dict_from_unicode(json.loads(raw_config))
+	except:
+		raise Exception('Config file "%s" does not contain valid json configuration.' % cnf_path)
 
+	return config
+
+platform_config = read_json_config(platform_config_path)
+# TODO: Temporary solution. Find a way to merge configurations properly (metaconf?)
+if os.path.exists(_user_platform_cnf_path):
+	user_platform_cnf = read_json_config(_user_platform_cnf_path)
+	platform_config.update(user_platform_cnf)
 
 class DataProvider(object):
 	_instances  = {}
@@ -55,7 +71,7 @@ class DataProvider(object):
 		
 		def cleanup():
 			self.clear()
-		atexit.register(cleanup)
+		#atexit.register(cleanup)
 		
 		try:
 			self.platform	= os.environ['PLATFORM']
