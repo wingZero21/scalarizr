@@ -35,7 +35,9 @@ class Ec2LifeCycleHandler(Handler):
 		producer.on("before_send", self.on_before_message_send)
 		
 		# Set the hostname to this instance's public hostname
-		system2("hostname " + self._platform.get_public_hostname(), shell=True)
+		cnf = bus.cnf
+		if cnf.rawini.get('ec2', 'hostname_as_pubdns') == '1':
+			system2("hostname " + self._platform.get_public_hostname(), shell=True)
 		
 		if disttool.is_ubuntu():
 			# Ubuntu cloud-init scripts may disable root ssh login

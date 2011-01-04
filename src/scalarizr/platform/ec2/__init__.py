@@ -169,10 +169,15 @@ class Ec2Platform(Platform):
 		os.environ['AWS_ACCESS_KEY_ID'] = access_data.get('key_id', None)
 		os.environ['AWS_SECRET_ACCESS_KEY'] = access_data.get('key', None)
 
-	def  clear_access_data(self):
+	def clear_access_data(self):
 		Platform.clear_access_data(self)
 		try:
 			del os.environ['AWS_ACCESS_KEY_ID']
 			del os.environ['AWS_SECRET_ACCESS_KEY']
 		except KeyError:
 			pass
+		
+	@property
+	def cloud_storage_path(self):
+		return 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
+	

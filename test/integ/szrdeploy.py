@@ -20,7 +20,7 @@ except ImportError:
 	import szr_integtest_libs, szr_integtest
 
 from scalarizr.util import system
-from szr_integtest_libs import SshManager
+from szr_integtest_libs.ssh_tool import SshManager
 from szr_integtest_libs.szrdeploy import RepoType, ScalarizrDeploy
 
 

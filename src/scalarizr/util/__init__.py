@@ -215,7 +215,7 @@ def system2(*popenargs, **kwargs):
 	if err:
 		logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
 	if p.returncode and raise_error:
-		raise ExcClass(error_text, out.strip(), err.strip(), p.returncode, popenargs[0])
+		raise ExcClass(error_text, out.strip(), err and err.strip() or '', p.returncode, popenargs[0])
 
 	return out, err, p.returncode
 

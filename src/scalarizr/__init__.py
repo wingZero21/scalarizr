@@ -151,9 +151,9 @@ DB_SCRIPT = 'db.sql'
 
 def _db_connect(file=None):
 	logger = logging.getLogger(__name__)
-	logger.debug("Open SQLite database (file: %s)" % (file))
-
 	file = file or os.path.join(bus.share_path, DB_NAME)
+	logger.debug("Open SQLite database (file: %s)" % (file))	
+	
 	conn = sqlite.connect(file, 5.0)
 	conn.row_factory = sqlite.Row
 	return conn
@@ -188,7 +188,7 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
 		
-	mnt_opts = ('-t auto', '-o loop,rw')	
+	mnt_opts = ('-t', 'auto', '-o', 'loop,rw')	
 	if not os.path.exists(privated_image):	
 		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count-1)
 		retcode = system2(build_image_cmd, shell=True)[2]
@@ -477,6 +477,10 @@ def main():
 				help='Validate configuration')
 		optparser.add_option('-m', '--import', dest="import_server", action="store_true", default=False, 
 				help='Import service into Scalr')
+		optparser.add_option('-a', '--activate', dest='activate',
+				help='Activate behaviour')
+		optparser.add_option('-d', '--deactivate', dest='deactivate',
+				help='Deactivate behaviour')
 		optparser.add_option('-y', dest="yesall", action="store_true", default=False,
 				help='Answer "yes" to all questions')
 		optparser.add_option('-o', dest='cnf', action='append',

@@ -33,6 +33,7 @@ BIN_PATH = 'binary_path'
 APP_PORT = 'app_port'
 HTTPS_INC_PATH = 'https_include_path'
 APP_INC_PATH = 'app_include_path'
+UPSTREAM_APP_ROLE = 'upstream_app_role'
 
 class NginxInitScript(initdv2.ParametrizedInitScript):
 	_nginx_binary = None
@@ -181,6 +182,7 @@ class NginxHandler(ServiceCtlHanler):
 		self._https_inc_path = ini.get(CNF_SECTION, HTTPS_INC_PATH)
 		self._app_inc_path = ini.get(CNF_SECTION, APP_INC_PATH)		
 		self._app_port = ini.get(CNF_SECTION, APP_PORT)
+		self._upstream_app_role = ini.get(CNF_SECTION, UPSTREAM_APP_ROLE)
 		
 		bus.define_events("nginx_upstream_reload")
 		bus.on("init", self.on_init)
@@ -255,7 +257,7 @@ class NginxHandler(ServiceCtlHanler):
 		backend_include.read(os.path.join(bus.share_path, 'nginx/app-servers.tpl'))
 
 		# Create upstream hosts configuration
-		for app_serv in self._queryenv.list_roles(behaviour = BuiltinBehaviours.APP):
+		for app_serv in self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP, role_name=self._upstream_app_role):
 			for app_host in app_serv.hosts :
 				server_str = '%s:%s' % (app_host.internal_ip, self._app_port)
 				backend_include.add('upstream/server', server_str)

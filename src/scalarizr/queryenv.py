@@ -92,7 +92,7 @@ class QueryEnvService(object):
 		if None != behaviour:
 			parameters["behaviour"] = behaviour
 			
-		return self._request("list-roles",parameters, self._read_list_roles_response)
+		return self._request("list-roles", parameters, self._read_list_roles_response)
 	
 	def list_role_params(self, role_name=None):
 		"""

@@ -10,6 +10,7 @@ import subprocess
 import re
 import os
 
+
 class FstoolError(BaseException):
 	NO_FS = -100
 	CANNOT_MOUNT = -101
@@ -188,14 +189,16 @@ def mount (device, mpoint = '/mnt', options=None, make_fs=False, fstype='ext3', 
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
 	
-	options = options or ("-t auto",)
+	options = options or ('-t', 'auto')
 	
 	if make_fs:
 		mkfs(device,fstype)
 			
-	out = system2(['mount'] + list(options) + [device, mpoint], stderr=subprocess.STDOUT)[0]
-	if out.find("you must specify the filesystem type") != -1:
-		raise FstoolError("No filesystem found on device '%s'" % (device), FstoolError.NO_FS)
+	out, code = system2(['mount'] + list(options) + [device, mpoint], stderr=subprocess.STDOUT, raise_error=False)[0::2]
+	if code:
+		if out.find("you must specify the filesystem type") != -1:
+			raise FstoolError("No filesystem found on device '%s'" % (device), FstoolError.NO_FS)
+		raise FstoolError(out)
 	
 	if " ".join(options).find("loop") == -1:
 		mtab = Mtab()		
@@ -214,8 +217,8 @@ def umount(device=None, mpoint=None, options=None, clean_fstab = False):
 	
 	options = options or ()
 	
-	out, returncode = system2(['umount']+options+[dev],stderr=subprocess.STDOUT)[0::2]
-	if returncode:
+	out, returncode = system2(['umount']+list(options)+[dev], stderr=subprocess.STDOUT, raise_error=False)[0::2]
+	if returncode and not 'not mounted' in out:
 		raise FstoolError("Cannot unmount %s. %s" % (dev, out), FstoolError.CANNOT_UMOUNT)
 	
 	if clean_fstab:
@@ -224,7 +227,7 @@ def umount(device=None, mpoint=None, options=None, clean_fstab = False):
 	
 	
 def mkfs(device, fstype = 'ext3'):
-	out, retcode = system2(['/sbin/mkfs', '-t', fstype, '-F', device],stderr=subprocess.STDOUT)[0::2]
+	out, retcode = system2(['/sbin/mkfs', '-t', fstype, '-F', device], stderr=subprocess.STDOUT, raise_error=False)[0::2]
 	if retcode:
 		raise FstoolError("Cannot create file system on device '%s'. %s" % (device, out), 
 				FstoolError.CANNOT_CREATE_FS)

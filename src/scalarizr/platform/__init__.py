@@ -86,6 +86,10 @@ class Platform():
 			else:
 				self._arch = Architectures.UNKNOWN
 		return self._arch
+	
+	@property
+	def cloud_storage_path(self):
+		pass
 
 
 class Architectures:

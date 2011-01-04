@@ -14,7 +14,7 @@ from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.platform.ec2 import UD_OPT_S3_BUCKET_NAME, ebstool
-from scalarizr.storage import uploader
+from scalarizr.storage import transfer
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError,\
@@ -639,24 +639,20 @@ class MysqlHandler(ServiceCtlHanler):
 			else:
 				parts = [backup_path]
 					
-			self._logger.info("Uploading backup to S3")
-			s3_conn = self._platform.new_s3_conn()
-			bucket_name = self._platform.get_user_data(UD_OPT_S3_BUCKET_NAME)
-			bucket = s3_conn.get_bucket(bucket_name)
-			
-			uploader = uploader.Uploader()
-			result = uploader.upload(parts, bucket, s3_conn)
+			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+			trn = transfer.Transfer()
+			result = trn.upload(parts, self._platform.cloud_storage_path)
 			self._logger.debug("Backup files(s) uploaded to S3 (%s)", ", ".join(result))
 			
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
-				status		= 'ok',
-				backup_urls	=  result
+				status = 'ok',
+				backup_parts = result
 			))
 						
 		except (Exception, BaseException), e:
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
-				status		= 'error',
-				last_error	=  str(e)
+				status = 'error',
+				last_error = str(e)
 			))
 		finally:
 			if tmpdir:
