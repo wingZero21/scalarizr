@@ -151,6 +151,9 @@ class MysqlOptions(Configurator.Container):
 		
 		value = property(Configurator.Option._get_value, _set_value)
 
+class MysqlServiceConfigurator:
+	pass
+
 # Configuration options
 OPT_ROOT_USER   		= "root_user"
 OPT_ROOT_PASSWORD   	= "root_password"
@@ -592,7 +595,7 @@ class MysqlHandler(ServiceCtlHanler):
 				dump_path = tmpdir + os.sep + db_name + '.sql'
 				mysql = pexpect.spawn('/bin/sh -c "/usr/bin/mysqldump -u ' + ROOT_USER + ' -p --create-options' + 
 									  ' --add-drop-database -q -Q --flush-privileges --databases ' + 
-									  db_name + '>' + dump_path +'"')
+									  db_name + '>' + dump_path +'"', timeout=900)
 				mysql.expect('Enter password:')
 				mysql.sendline(root_password)
 				
