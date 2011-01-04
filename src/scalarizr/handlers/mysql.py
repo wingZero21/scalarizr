@@ -671,7 +671,7 @@ class MysqlHandler(ServiceCtlHanler):
 			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
 			# Sending snapshot data to scalr
 			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
-				snapshot=snap.config(),
+				snapshot_config=snap.config(),
 				log_file=log_file,
 				log_pos=log_pos,
 				status='ok'
@@ -736,7 +736,7 @@ class MysqlHandler(ServiceCtlHanler):
 					# Send message to Scalr
 					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 						status="ok",
-						volume = new_storage_vol.config()																			
+						volume_config = new_storage_vol.config()     
 					))
 				else:
 					raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
@@ -925,8 +925,8 @@ class MysqlHandler(ServiceCtlHanler):
 					repl_password=repl_password,
 					stat_password=stat_password,
 					#snapshot_id=snap_id,
-					snapshot=snap.config(),
-					volume=self.storage_vol.config(),
+					snapshot_config=snap.config(),
+					volume_config=self.storage_vol.config(),
 					log_file=log_file,
 					log_pos=log_pos
 				)
