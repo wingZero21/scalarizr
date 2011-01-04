@@ -3,16 +3,18 @@ Created on Dec 24, 2010
 
 @author: spike
 '''
+from szr_integtest 		import get_selenium
 
-import unittest
-import time
-import re
-from szr_integtest_libs.providers import DataProvider 
-from szr_integtest_libs.scalrctl import import_server, ScalrConsts
-from szr_integtest_libs import exec_command
-from szr_integtest import get_selenium
-from szr_integtest_libs.szrdeploy import ScalarizrDeploy
+from szr_integtest_libs.ssh_tool import execute
+from szr_integtest_libs.datapvd	import DataProvider
+from szr_integtest_libs.scalrctl	import ui_import_server, ScalrConsts, ScalrCtl
+from szr_integtest_libs.szrdeploy	import ScalarizrDeploy
+
 import logging
+import os
+import re
+import time
+import unittest
 
 class ImportEc2Test(unittest.TestCase):
 	tags = ['ec2', 'import']
@@ -24,50 +26,62 @@ class ImportEc2Test(unittest.TestCase):
 	def _init_server(self, root_device_type):
 		# Init import with params
 		dp = DataProvider(behaviour='raw', root_device_type=root_device_type)
+		self._logger.info('Starting new server.')
 		server = dp.server()
 		
 		deployer = ScalarizrDeploy(server.ssh_manager)
-		deployer.add_repos('release')
+		self._logger.debug('Adding repository on the instance.')
+		try:
+			repo_name = os.environ['SZR_REPO_TYPE']
+			deployer.add_repos(repo_name)
+		except:
+			deployer.add_repos('stable')
+			
+		self._logger.info('Installing "scalarizr" package.')
 		deployer.install_package()
 		
 		channel = server.ssh()
-		self._install_software(channel, deployer.distr)
-				
+		# Enable debug logging
+		execute(channel, 'cp -pr /etc/scalr/logging-debug.ini /etc/scalr/logging.ini')
+		self._install_software(channel, deployer.dist)
+		
 		try:
 			platform = getattr(ScalrConsts.Platforms, 'PLATFORM_' + dp.platform.upper())
 		except:
 			raise Exception('Unknown platform: %s' % dp.platform)
-		 
+		
 		role_name = 'Import-test-%s' % time.strftime('%Y-%m-%d-%H-%M')
-		import_string = import_server(get_selenium(), platform, ScalrConsts.Behaviours.BEHAVIOUR_BASE, server.public_ip, role_name)
-		
-		exec_command(channel, 'screen -md %s' % import_string)
-		
+		self._logger.info("Importing instance as '%s' in scalr's interface"  % role_name)
+		import_string = ui_import_server(get_selenium(), platform, ScalrConsts.Behaviours.BEHAVIOUR_BASE, server.public_ip, role_name)
+		self._logger.info('Running import string on the instance.')
+		execute(channel, 'screen -md %s' % import_string)
+								
 		return server
 		
-	def _install_software(self, channel, distr):
-		if distr == 'debian':
-			out = exec_command(channel, 'apt-get -y install screen', 240)
+	def _install_software(self, channel, dist):
+		if dist == 'debian':
+			out = execute(channel, 'apt-get -y install screen', 240)
 			error = re.search('^E:\s*(?P<err_text>.+?)$', out, re.M)
 			if error:
 				raise Exception("Can't install screen package: '%s'" % error.group('err_text'))		
-
 		else:
-			out = exec_command(channel, 'yum -y install screen', 240)
+			out = execute(channel, 'yum -y install screen', 240)
 			if not re.search('Complete!|Nothing to do', out):
 				raise Exception('Cannot install screen %s' % out)
-			exec_command(channel, 'chmod 777 /var/run/screen')
+			execute(channel, 'chmod 777 /var/run/screen')
 
 	def _test_instance_store(self):
-		server = self._init_server('instance_store')
-		reader = server.log
 		pass
 	
 	def test_ebs(self):
-		print 'ololo'
 		server = self._init_server('ebs')
 		reader = server.log
+		reader.expect( "Message 'Hello' delivered",				 					240)
+		self._logger.info("Message 'Hello' delivered")
 		
+		scalrctl = ScalrCtl()
+		scalrctl.exec_cronjob('ScalarizrMessaging')		
+				
 		reader.expect( "Creating snapshot of root device image", 					240)
 		self._logger.info("Creating snapshot of root device image")
 		
@@ -88,12 +102,11 @@ class ImportEc2Test(unittest.TestCase):
 	
 		reader.expect( "Image registered and available for use", 					240)
 			
-		reader.expect( "Rebundle complete!", 											240)
+		reader.expect( "Rebundle complete!", 										240)
 		self._logger.info("Rebundle complete!")
 
-		self.scalr_ctl.exec_cronjob('ScalarizrMessaging')
-		self.scalr_ctl.exec_cronjob('BundleTasksManager')
+		scalrctl.exec_cronjob('ScalarizrMessaging')
+		scalrctl.exec_cronjob('BundleTasksManager')
 
-			
 if __name__ == "__main__":
 	unittest.main()
