@@ -37,7 +37,6 @@ class P2pMessageConsumer(MessageConsumer):
 		
 		self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
 		self._not_empty = threading.Event()
-		self.RequestHandler.consumer = self
 	
 	def starttest(self):
 		self._logger.debug('Create test socket to validate endpoint')
@@ -108,7 +107,9 @@ class P2pMessageConsumer(MessageConsumer):
 					self.send_response(400, err)
 					return
 				
-				logger.info("Received ingoing message '%s' in queue %s", message.name, queue)
+				
+				logger.info("Received message '%s' (message_id: %s)", message.name, message.id)
+				#logger.info("Received ingoing message '%s' in queue %s", message.name, queue)
 				
 				try:
 					store = P2pMessageStore()

@@ -8,7 +8,7 @@ Created on 14.06.2010
 # Core
 from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr.storage import Storage, StorageError
+from scalarizr.storage import Storage, StorageError, Volume
 from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
@@ -762,8 +762,7 @@ class MysqlHandler(ServiceCtlHanler):
 				old_conf = self.storage_vol.detach(force=True) # ??????
 				#master_vol = self._take_master_volume(master_vol_id)
 				#self._plug_storage(master_vol.id, self._storage_path)
-				new_storage_vol = self._plug_storage(mnt_point	= self._storage_path,
-													 vol_config	= master_storage_conf)				
+				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)				
 				# Continue if master storage is a valid MySQL storage 
 				if self._storage_valid():
 					# Patch configuration files 
@@ -793,7 +792,7 @@ class MysqlHandler(ServiceCtlHanler):
 					new_storage_vol.detach()
 				# Get back slave storage
 				if old_conf:
-					self._plug_storage(mnt_point=self._storage_path, vol_config=old_conf)
+					self._plug_storage(self._storage_path, old_conf)
 
 				self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 					status="error",
@@ -890,11 +889,17 @@ class MysqlHandler(ServiceCtlHanler):
 		"""
 		if not message.body.has_key("mysql"):
 			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
-		storage_conf = message.mysql['storage']
-		del message.mysql['storage']
+		
+		storage_conf = message.mysql['volume_config']
+		dir = os.path.dirname(self._storage_name)
+		if not os.path.exists(dir):
+			os.makedirs(dir)
+		Storage.backup_config(storage_conf, self._storage_name)
+		del message.mysql['volume_config']
+		
 		self._logger.debug("Update mysql config with %s", message.mysql)
 		self._update_config(message.mysql)
-		Storage.backup_config(storage_conf, self._storage_name)
+
 		
 	@_reload_mycnf
 	def on_before_host_up(self, message):
@@ -935,7 +940,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		# Mount EBS
 		storage_conf = Storage.restore_config(self._storage_name)
-		self.storage_vol = self._plug_storage(mnt_point=self._storage_path, vol_config=storage_conf)
+		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=storage_conf)
 		
 		# Stop MySQL server
 		self._stop_service()
@@ -1029,7 +1034,7 @@ class MysqlHandler(ServiceCtlHanler):
 		if not self._storage_valid():
 			self._logger.debug("Initialize slave storage")
 			snapshot = Storage.restore_config(self._snapshot_name)
-			self.storage_vol = self._plug_storage(mpoint=self._storage_path, snapshot=snapshot)			
+			self.storage_vol = self._plug_storage(self._storage_path, dict(snapshot=snapshot))			
 			message.mysql = dict(volume = self.storage_vol.config())
 			Storage.backup_config(self, self.storage_vol.config(), self._storage_name)
 			
@@ -1076,9 +1081,10 @@ class MysqlHandler(ServiceCtlHanler):
 			mysql_password=self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 		)
 		
-	def _plug_storage(self, mnt_point, vol_config=None, vol=None, snapshot=None):					
-		vol = Storage.create(snapshot=snapshot) if snapshot else (vol or Storage.create(vol_config))
-		vol.mount(mnt_point)
+	def _plug_storage(self, mpoint, vol):
+		if not isinstance(vol, Volume):
+			vol = Storage.create(vol)
+		vol.mount(mpoint)
 		return vol
 	
 	def _storage_valid(self, path=None):

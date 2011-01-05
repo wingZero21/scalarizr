@@ -7,10 +7,11 @@ import scalarizr
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler, async, HandlerError
 from scalarizr.messaging import Messages, Queues
-from scalarizr.util import system, disttool, cryptotool, fstool, filetool,\
+from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, get_free_devname
 from scalarizr.util import software
 from scalarizr.platform.ec2 import s3tool, ebstool
+from scalarizr.storage import Storage, mkloop, rmloop
 
 from subprocess import Popen
 from M2Crypto import X509, EVP, Rand, RSA
@@ -248,7 +249,7 @@ class RebundleStratery:
 		self._logger = logging.getLogger(__name__)
 	
 	def _is_super_user(self):
-		return system('id -u')[0].strip() == '0'
+		return system2('id -u', shell=True)[0].strip() == '0'
 	
 	def _bundle_vol(self, image):
 		try:
@@ -446,14 +447,14 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			digest_file = os.path.join('/tmp', 'ec2-bundle-image-digest.sha1')
 			
 			self._logger.info("Encrypting image")
-			system(" | ".join([
+			system2(" | ".join([
 				"%(openssl)s %(digest_algo)s -out %(digest_file)s < %(digest_pipe)s & %(tar)s", 
 				"tee %(digest_pipe)s",  
 				"gzip", 
 				"%(openssl)s enc -e -%(crypto_algo)s -K %(key)s -iv %(iv)s > %(bundled_file_path)s"]) % dict(
 					openssl=openssl, digest_algo=DIGEST_ALGO, digest_file=digest_file, digest_pipe=digest_pipe, 
 					tar=str(tar), crypto_algo=CRYPTO_ALGO, key=key, iv=iv, bundled_file_path=bundled_file_path
-			))
+			), shell=True)
 			
 			try:
 				# openssl produce different outputs:
@@ -781,11 +782,11 @@ if disttool.is_linux():
 		def make(self):
 			self.devname = self._create_image()
 			self._format_image()
-			system("sync")  # Flush so newly formatted filesystem is ready to mount.
+			system2("sync", shell=True)  # Flush so newly formatted filesystem is ready to mount.
 			self._mount_image()
 			self._make_special_dirs()
 			self._copy_rec(self._volume, self.mpoint)
-			system("sync")  # Flush buffers
+			system2("sync", shell=True)  # Flush buffers
 			return self.mpoint
 		
 		
@@ -796,23 +797,26 @@ if disttool.is_linux():
 		
 		def umount(self):
 			if self._mtab.contains(mpoint=self.mpoint, reload=True):
-				self._logger.debug("Unmounting '%s'", self.mpoint)				
-				system("umount -d " + self.mpoint)
+				self._logger.debug("Unmounting '%s'", self.mpoint)
+				system2("umount -d " + self.mpoint, shell=True, raise_exc=False)
 		
 		def _format_image(self):
 			self._logger.info("Formatting image")
-			vol_entry = self._mtab.find(mpoint=self._volume)[0]
-			system('/sbin/mkfs.%s -F %s 2>&1' % (vol_entry.fstype, self.devname))
-			system('/sbin/tune2fs -i 0 %s' % self.devname)
-			self._logger.debug('Image %s formatted', self.devname)
 			
-			# Set volume label
-			if vol_entry.fstype in ('ext2', 'ext3', 'ext4'):
-				label = system('/sbin/e2label %s' % vol_entry.devname)[0].strip()
-				if label:
-					self._logger.debug('Set volume label: %s', label)
-					system('/sbin/e2label %s %s' % (self.devname, label))
+			vol_entry = self._mtab.find(mpoint=self._volume)[0]
+			fs = Storage.lookup_filesystem(vol_entry.fstype)
+						
+			# create filesystem
+			fs.mkfs(self.devname)
+			# set EXT3/4 options
+			if fs.type.startswith('ext'): 
+				system2(('/sbin/tune2fs', '-i', '0', self.devname))
+			# set label
+			label = fs.get_label(vol_entry.devname)
+			if label:
+				fs.set_label(self.devname, label)
 
+			self._logger.debug('Image %s formatted', self.devname)
 
 		def _create_image(self):
 			pass
@@ -844,20 +848,26 @@ if disttool.is_linux():
 					os.makedirs(self.mpoint + dir)
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
-			dev_dir = self.mpoint + "/dev"
-			system("mknod " + dev_dir + "/console c 5 1")
-			system("mknod " + dev_dir + "/full c 1 7")									
-			system("mknod " + dev_dir + "/null c 1 3")
-			#system("ln -s null " + dev_dir +"/X0R")		
-			system("mknod " + dev_dir + "/zero c 1 5")
-			system("mknod " + dev_dir + "/tty c 5 0")
-			system("mknod " + dev_dir + "/tty0 c 4 0")
-			system("mknod " + dev_dir + "/tty1 c 4 1")
-			system("mknod " + dev_dir + "/tty2 c 4 2")
-			system("mknod " + dev_dir + "/tty3 c 4 3")
-			system("mknod " + dev_dir + "/tty4 c 4 4")
-			system("mknod " + dev_dir + "/tty5 c 4 5")
-			system("mknod " + dev_dir + "/xvc0 c 204 191")
+			devdir = os.path.join(self.mpoint, 'dev')
+			mknod = '/bin/mknod'
+			nods = (
+				'console c 5 1',
+				'full c 1 7',
+				'null c 1 3',
+				'zero c 1 5',
+				'tty c 5 0',
+				'tty0 c 4 0',
+				'tty1 c 4 1',
+				'tty2 c 4 2',
+				'tty3 c 4 3',
+				'tty4 c 4 4',
+				'tty5 c 4 5',
+				'xvc0 c 204 191'
+			)
+			for nod in nods:
+				nod = nod.split(' ')
+				nod[0] = devdir + nod[0]
+				system2([mknod] + nod)
 			
 			self._logger.debug("Special directories maked")			
 		
@@ -965,12 +975,14 @@ if disttool.is_linux():
 			
 		def _create_image(self):
 			self._logger.debug('Creating image file %s', self.path)
-			system("dd if=/dev/zero of='%s' bs=1M count=1 seek=%s" % (self.path, self._size - 1))
+
+			mkloop(self.path, self._size, quick=True)
+			#system("dd if=/dev/zero of='%s' bs=1M count=1 seek=%s" % (self.path, self._size - 1))
 			self._logger.debug('Image file %s created', self.path)			
 			
 			self._logger.debug('Associate loop device with a %s', self.path)
-			devname = system('/sbin/losetup -f')[0].strip()
-			out, err, retcode = system('/sbin/losetup %s "%s"' % (devname, self.path))
+			devname = system2(('/sbin/losetup', '-f'))[0].strip()
+			out, err, retcode = system2(('/sbin/losetup', devname, self.path))
 			if retcode > 0:
 				raise HandlerError('Cannot setup loop device. Code: %d %s' % (retcode, err))
 			self._logger.debug('Associated %s with a file %s', devname, self.path)
@@ -980,7 +992,7 @@ if disttool.is_linux():
 		def cleanup(self):
 			LinuxImage.cleanup(self)
 			if self.devname:
-				system('/sbin/losetup -d %s' % self.devname)
+				rmloop(self.devname)
 				
 	LoopbackImage = LinuxLoopbackImage
 	EbsImage = LinuxEbsImage

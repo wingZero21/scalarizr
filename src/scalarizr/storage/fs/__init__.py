@@ -24,6 +24,7 @@ class FileSystemError(PopenError):
 def system(*args, **kwargs):
 	kwargs['logger'] = logger
 	kwargs['exc_class'] = FileSystemError
+	kwargs['warn_stderr'] = False
 	return system2(*args, **kwargs)
 	
 def device_should_exists(f):

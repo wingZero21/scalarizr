@@ -166,7 +166,7 @@ def system2(*popenargs, **kwargs):
 	
 	logger 		= kwargs.get('logger', logging.getLogger(__name__))
 	warn_stderr = kwargs.get('warn_stderr')
-	raise_error = kwargs.get('raise_error', True)
+	raise_exc   = kwargs.get('raise_exc', kwargs.get('raise_error',  True))
 	ExcClass 	= kwargs.get('exc_class', PopenError)
 	error_text 	= kwargs.get('error_text')
 	input 		= None
@@ -199,7 +199,7 @@ def system2(*popenargs, **kwargs):
 			kwargs['env'] = {}
 		kwargs['env']['LANG'] = 'en_US'
 		
-	for k in ('logger', 'err2out', 'warn_stderr', 'raise_error', 'exc_class', 'error_text'):
+	for k in ('logger', 'err2out', 'warn_stderr', 'raise_exc', 'raise_error', 'exc_class', 'error_text'):
 		try:
 			del kwargs[k]
 		except KeyError:
@@ -213,7 +213,7 @@ def system2(*popenargs, **kwargs):
 		logger.debug('stdout: ' + out)
 	if err:
 		logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
-	if p.returncode and raise_error:
+	if p.returncode and raise_exc:
 		raise ExcClass(error_text, out.strip(), err and err.strip() or '', p.returncode, popenargs[0])
 
 	return out, err, p.returncode

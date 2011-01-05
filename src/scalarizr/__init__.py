@@ -153,7 +153,8 @@ DB_SCRIPT = 'db.sql'
 
 def _db_connect(file=None):
 	logger = logging.getLogger(__name__)
-	file = file or os.path.join(bus.share_path, DB_NAME)
+	cnf = bus.cnf
+	file = file or cnf.private_path(DB_NAME)
 	logger.debug("Open SQLite database (file: %s)" % (file))	
 	
 	conn = sqlite.connect(file, 5.0)
@@ -171,9 +172,8 @@ def _init_db(file=None):
 		_create_db(file)
 	
 def _create_db(db_file=None, script_file=None):
-	cnf = bus.cnf
 	conn = _db_connect(db_file)
-	conn.executescript(open(script_file or cnf.public_path(DB_SCRIPT)).read())
+	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
 	conn.commit()	
 	
 

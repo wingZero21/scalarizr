@@ -196,7 +196,7 @@ class Storage:
 		
 	@staticmethod
 	def backup_config(cnf, filename):
-		fp = open(filename, 'w')
+		fp = open(filename, 'w+')
 		try:
 			fp.write(json.dumps(cnf))
 		finally:
