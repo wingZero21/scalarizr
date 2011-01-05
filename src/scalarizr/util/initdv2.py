@@ -7,7 +7,7 @@ Created on Aug 29, 2010
 import socket
 import os
 import time
-from scalarizr.util import system2
+from scalarizr.util import system2, PopenError
 from scalarizr.util.filetool import read_file
 import re
 
@@ -110,8 +110,8 @@ class ParametrizedInitScript(InitScript):
 		
 	def _start_stop_reload(self, action):
 		try:
-			out, err, returncode = system2([self.initd_script, action], close_fds=True)
-		except OSError, e:
+			out, err, returncode = system2([self.initd_script, action], close_fds=True, preexec_fn=os.setsid)
+		except PopenError, e:
 			raise InitdError("Popen failed with error %s" % (e.strerror,))
 		
 		if returncode:
@@ -161,16 +161,17 @@ class ParametrizedInitScript(InitScript):
 					pid_state = re.search('State:\s+(?P<state>\w)', status).group('state')
 					if pid_state in ('T', 'Z'):
 						return Status.NOT_RUNNING
-		try:
-			for sock in self.socks:
-				timeout = sock.timeout
-				sock.timeout = 1
-				try:
-					wait_sock(sock)
-				finally:
-					sock.timeout = timeout
-		except InitdError:
-			return Status.NOT_RUNNING
+		if self.socks:
+			try:
+				for sock in self.socks:
+					timeout = sock.timeout
+					sock.timeout = 1
+					try:
+						wait_sock(sock)
+					finally:
+						sock.timeout = timeout
+			except InitdError:
+				return Status.NOT_RUNNING
 		
 		return Status.RUNNING
 	

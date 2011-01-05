@@ -7,7 +7,6 @@ import sys
 import socket
 import signal
 import string
-from collections import namedtuple
 
 from scalarizr.bus import bus
 

@@ -8,7 +8,7 @@ Created on Jan 6, 2010
 
 # Core components
 from scalarizr.bus import bus
-from scalarizr.config import Configurator, BuiltinBehaviours
+from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.messaging import Messages
@@ -16,7 +16,7 @@ from scalarizr.messaging import Messages
 # Libs
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import system2, cached, firstmatched,\
-	validators, software, initdv2
+	validators, software, initdv2, disttool
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
@@ -74,7 +74,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		return status
 
 	def configtest(self):
-		out = system('%s -t' % self._nginx_binary, shell=True)[1]
+		out = system2('%s -t' % self._nginx_binary, shell=True)[1]
 		if 'failed' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 		
@@ -185,13 +185,15 @@ class NginxHandler(ServiceCtlHanler):
 		self._upstream_app_role = ini.get(CNF_SECTION, UPSTREAM_APP_ROLE)
 		
 		bus.define_events("nginx_upstream_reload")
-		bus.on("init", self.on_init)
+		bus.on(init=self.on_init)
 		
 		
 	def on_init(self):
-		bus.on('before_host_up', self.on_before_host_up)
-		
-		
+		bus.on(
+			start = self.on_start, 
+			before_host_up = self.on_before_host_up
+		)
+	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
 			(message.name == Messages.HOST_UP or \
@@ -199,6 +201,11 @@ class NginxHandler(ServiceCtlHanler):
 			message.name == Messages.BEFORE_HOST_TERMINATE or \
 			message.name == Messages.VHOST_RECONFIGURE or \
 			message.name == Messages.UPDATE_SERVICE_CONFIGURATION)		
+
+	def on_start(self):
+		if self._cnf.state == ScalarizrState.RUNNING:
+			self._update_vhosts()		
+			self._reload_upstream()
 		
 		
 	def on_before_host_up(self, message):
@@ -262,8 +269,9 @@ class NginxHandler(ServiceCtlHanler):
 				server_str = '%s:%s' % (app_host.internal_ip, self._app_port)
 				backend_include.add('upstream/server', server_str)
 		if not backend_include.get_list('upstream/server'):
-			self._logger.debug("Scalr returned empty app hosts list. Adding localhost only.")
+			self._logger.debug("Scalr returned empty app hosts list. Adding localhost only")
 			backend_include.add('upstream/server', '127.0.0.1:80')
+		self._logger.info('Upstream servers: %s', ' '.join(backend_include.get_list('upstream/server')))
 		
 		# Https configuration
 		# openssl req -new -x509 -days 9999 -nodes -out cert.pem -keyout cert.key
@@ -293,7 +301,7 @@ class NginxHandler(ServiceCtlHanler):
 			self._logger.debug('Write new %s', self._app_inc_path)
 			backend_include.write(self._app_inc_path)
 			
-			#Patching main config file
+			# Patch nginx.conf 
 			self._logger.debug('Update main configuration file')
 			if 'http://backend' in self._config.get_list('http/server/location/proxy_pass') and \
 					self._app_inc_path in self._config.get_list('http/include'):
@@ -301,17 +309,33 @@ class NginxHandler(ServiceCtlHanler):
 				self._logger.debug('File %s already included into nginx main config %s', 
 								self._app_inc_path, nginx_conf_path)
 			else:
+				# Comment http/server
+				self._logger.debug('comment http/server section')
 				self._config.comment('http/server')
 				self._config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
 				self._config.add('http/include', self._app_inc_path)
+				
+				if disttool.is_debian_based():
+					# Comment /etc/nginx/sites-enabled/*
+					try:
+						i = self._config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
+						self._config.comment('http/include[%d]' % (i+1,))
+						self._logger.debug('comment site-enabled include')
+					except IndexError:
+						self._logger.debug('site-enabled include already commented')
+				
+				# Write new nginx.conf 
+				if not os.path.exists(nginx_conf_path + '.save'):
+					shutil.copy(nginx_conf_path, nginx_conf_path + '.save')
 				self._config.write(nginx_conf_path)
+
 			
-			self._logger.info("Testing new configuration.")
-		
+			self._logger.debug("Testing new configuration")
 			try:
 				self._init_script.configtest()
 			except initdv2.InitdError, e:
 				self._logger.error("Configuration error detected: %s Reverting configuration." % str(e))
+
 				if os.path.isfile(self._app_inc_path):
 					shutil.move(self._app_inc_path, self._app_inc_path+".junk")
 				else:
@@ -354,6 +378,11 @@ class NginxHandler(ServiceCtlHanler):
 			else:
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
+			
+			if https_certificate[2]:
+				msg = 'Appending CA cert to cert file'
+				cert = https_certificate[2]
+				write_file(cert_path, https_certificate[2], mode='a', msg=msg, logger=self._logger)
 
 			for vhost in received_vhosts:
 				if vhost.hostname and vhost.type == 'nginx': #and vhost.https

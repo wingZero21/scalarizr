@@ -13,8 +13,15 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
 import threading
 import logging
-import sys, os
+import socket
+import sys
+import os
 
+try:
+	import time
+except ImportError:
+	import timemodule as time
+import os.path
 
 class P2pMessageConsumer(MessageConsumer):
 	endpoint = None
@@ -25,11 +32,24 @@ class P2pMessageConsumer(MessageConsumer):
 	
 	def __init__(self, endpoint=None):
 		MessageConsumer.__init__(self)
+		self._logger = logging.getLogger(__name__)		
 		self.endpoint = endpoint
-		self._logger = logging.getLogger(__name__)
+		
 		self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
 		self._not_empty = threading.Event()
-		
+		self.RequestHandler.consumer = self
+	
+	def starttest(self):
+		self._logger.debug('Create test socket to validate endpoint')
+		r = urlparse(self.endpoint)
+		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		try:
+			sock.bind((r.hostname, r.port))
+		except socket.error, e:
+			raise MessagingError('Cannot start message server. socket.error: %s' % e)
+		finally:
+			sock.close()
+			
 	def start(self):
 		if self.running:
 			raise MessagingError('Message consumer is already running')

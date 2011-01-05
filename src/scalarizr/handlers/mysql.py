@@ -28,6 +28,7 @@ from distutils import version
 from subprocess import Popen, PIPE, STDOUT
 import logging, os, re,  tarfile, tempfile
 import time, signal, pwd, random, shutil
+import glob
 
 # Extra
 from boto.exception import BotoServerError
@@ -55,7 +56,24 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			pass
 		
 		initdv2.ParametrizedInitScript.__init__(self, SERVICE_NAME, 
-				initd_script, pid_file, socks=[initdv2.SockParam(3306)])
+				initd_script, pid_file, socks=[initdv2.SockParam(3306, timeout=60)])
+		'''
+		timeout=60 is no chance
+		when server starts after rebundle, mysql takes too long to start on the attached EBS storage.
+		
+		Scalarizr:
+		2010-12-02 10:31:12,086 - INFO - scalarizr.handlers - Starting mysql
+		
+		MySQL:
+		Version: '5.1.41-3ubuntu12.7-log'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  (Ubuntu)
+		101202 10:31:30 [Note] Plugin 'FEDERATED' is disabled.
+		101202 10:31:31  InnoDB: Started; log sequence number 0 44556
+		101202 10:31:31 [Note] Event Scheduler: Loaded 0 events
+		
+		Over 15 seconds! OMFG!!
+		XXX: Requires investigation
+		'''
+		
 		
 	def stop(self):
 		if not self.running:
@@ -135,6 +153,9 @@ class MysqlOptions(Configurator.Container):
 		
 		value = property(Configurator.Option._get_value, _set_value)
 
+class MysqlServiceConfigurator:
+	pass
+
 # Configuration options
 OPT_ROOT_USER   		= "root_user"
 OPT_ROOT_PASSWORD   	= "root_password"
@@ -165,7 +186,7 @@ PMA_USER = "pma"
 STORAGE_DEVNAME = "/dev/sdo"
 STORAGE_PATH = "/mnt/dbstorage"
 STORAGE_DATA_DIR = "mysql-data"
-STORAGE_BINLOG_PATH = "mysql-misc/binlog.log"
+STORAGE_BINLOG = "mysql-misc/binlog"
 BACKUP_CHUNK_SIZE = 200*1024*1024
 
 STORAGE_NAME = 'mysql.json'
@@ -438,7 +459,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
-		self._binlog_path = os.path.join(self._storage_path, STORAGE_BINLOG_PATH)
+		self._binlog_base = os.path.join(self._storage_path, STORAGE_BINLOG)
 
 		initd = initdv2.lookup(SERVICE_NAME)
 		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
@@ -447,6 +468,19 @@ class MysqlHandler(ServiceCtlHanler):
 		self._snapshot_name = self._cnf.private_path(os.path.join('storage', SNAPSHOT_NAME))
 			
 		bus.on("init", self.on_init)
+		bus.define_events(
+			'before_mysql_data_bundle',
+			
+			'mysql_data_bundle',
+			
+			# @param host: New master hostname 
+			'before_mysql_change_master',
+			
+			# @param host: New master hostname 
+			# @param log_file: log file to start from 
+			# @param log_pos: log pos to start from 
+			'mysql_change_master'
+		)
 
 	def on_init(self):		
 		bus.on("host_init_response", self.on_host_init_response)
@@ -546,6 +580,9 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Generating password for pma user
 			pma_password = re.sub('[^\w]','', cryptotool.keygen(20))
+			sql = "DELETE FROM mysql.user WHERE User = '"+PMA_USER+"';"
+			myclient.sendline(sql)
+			myclient.expect("mysql>")
 			# Generating sql statement, which depends on mysql server version 
 			sql = "INSERT INTO mysql.user VALUES('"+pma_server_ip+"','"+PMA_USER+"',PASSWORD('"+pma_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
 			# Pass statement to mysql client
@@ -554,7 +591,7 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Check for errors
 			if re.search('error', myclient.before, re.M | re.I):
-				raise HandlerError("Cannot add pma user '%s': '%s'" % (PMA_USER, myclient.before))
+				raise HandlerError("Cannot add PhpMyAdmin system user '%s': '%s'" % (PMA_USER, myclient.before))
 			
 			myclient.sendline('FLUSH PRIVILEGES;')
 			myclient.terminate()
@@ -570,9 +607,10 @@ class MysqlHandler(ServiceCtlHanler):
 			))
 			
 		except (Exception, BaseException), e:
+			self._logger.exception(e)
 			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
 				status		= 'error',
-				last_error	=  str(e),
+				last_error	=  str(e).strip(),
 				farm_role_id = farm_role_id
 			))
 	
@@ -582,22 +620,27 @@ class MysqlHandler(ServiceCtlHanler):
 		# Retrieve password for scalr mysql user
 		tmpdir = backup_path = None
 		try:
-			# Do backup only if slave
+			# Do backup only on slave
 			if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
-				raise HandlerError('Cannot create databases backup on mysql master')
+				raise HandlerError('Create backup is not allowed on Master')
 			
+			# Load root password
 			try:
 				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
-			# Creating temp dir 
-			tmpdir = tempfile.mkdtemp()
 			
-			# Reading mysql config file
-			try:
-				datadir = self._mysql_config.get('mysqld/datadir')
-			except NoPathError:
-				raise HandlerError('Cannot get mysql data directory from mysql config file')
+			# Get databases list
+			mysql = _spawn_mysql(ROOT_USER, root_password)
+			mysql.sendline('SHOW DATABASES;')
+			mysql.expect('mysql>')
+			
+			databases = list(line.split('|')[1].strip() for line in mysql.before.splitlines()[4:-3])
+			if 'information_schema' in databases:
+				databases.remove('information_schema')
+			
+			mysql.close()
+			
 			
 			# Defining archive name and path
 			backup_filename = 'mysql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
@@ -608,23 +651,18 @@ class MysqlHandler(ServiceCtlHanler):
 
 			# Dump all databases
 			self._logger.info("Dumping all databases")
-			data_list = os.listdir(datadir)					
-			for file in data_list:
-				
-				if not os.path.isdir(os.path.join(datadir, file)):
-					continue
-					
-				db_name = os.path.basename(file)
+			tmpdir = tempfile.mkdtemp()			
+			for db_name in databases:
 				dump_path = tmpdir + os.sep + db_name + '.sql'
 				mysql = pexpect.spawn('/bin/sh -c "/usr/bin/mysqldump -u ' + ROOT_USER + ' -p --create-options' + 
 									  ' --add-drop-database -q -Q --flush-privileges --databases ' + 
-									  db_name + '>' + dump_path +'"')
+									  db_name + '>' + dump_path +'"', timeout=900)
 				mysql.expect('Enter password:')
 				mysql.sendline(root_password)
 				
 				status = mysql.read()
 				if re.search(re.compile('error', re.M | re.I), status):
-					raise HandlerError('Error while dumping database %s: %s' % (file, status))
+					raise HandlerError('Error while dumping database %s: %s' % (db_name, status))
 				
 				backup.add(dump_path, os.path.basename(dump_path))
 				
@@ -642,7 +680,8 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
 			trn = transfer.Transfer()
 			result = trn.upload(parts, self._platform.cloud_storage_path)
-			self._logger.debug("Backup files(s) uploaded to S3 (%s)", ", ".join(result))
+			self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
+							self._platform.cloud_storage_path, backup_filename)
 			
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
 				status = 'ok',
@@ -650,6 +689,7 @@ class MysqlHandler(ServiceCtlHanler):
 			))
 						
 		except (Exception, BaseException), e:
+			self._logger.exception(e)
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
 				status = 'error',
 				last_error = str(e)
@@ -663,12 +703,16 @@ class MysqlHandler(ServiceCtlHanler):
 	def on_Mysql_CreateDataBundle(self, message):
 		# Retrieve password for scalr mysql user
 		try:
+			bus.fire('before_mysql_data_bundle')
 			try:
 				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 			# Creating snapshot
 			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+			
+			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
+			
 			# Sending snapshot data to scalr
 			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
 				snapshot_config=snap.config(),
@@ -676,6 +720,7 @@ class MysqlHandler(ServiceCtlHanler):
 				log_pos=log_pos,
 				status='ok'
 			))
+
 		except (Exception, BaseException), e:
 			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
 				status		='error',
@@ -722,7 +767,7 @@ class MysqlHandler(ServiceCtlHanler):
 				# Continue if master storage is a valid MySQL storage 
 				if self._storage_valid():
 					# Patch configuration files 
-					self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
+					self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 					self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
 					self._replication_init()
 					# Update behaviour configuration
@@ -776,6 +821,8 @@ class MysqlHandler(ServiceCtlHanler):
 		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 			host = message.local_ip or message.remote_ip
 			self._logger.info("Switching replication to a new MySQL master %s", host)
+			bus.fire('before_mysql_change_master', host=host)			
+			
 			mysql = self._spawn_mysql(ROOT_USER, message.root_password)
 						
 			self._logger.debug("Stopping slave i/o thread")
@@ -805,6 +852,7 @@ class MysqlHandler(ServiceCtlHanler):
 				mysql_password=message.root_password
 			)			
 			self._logger.debug("Replication switched")
+			bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
 		else:
 			self._logger.debug('Skip NewMasterUp. My replication role is master')		
 
@@ -867,12 +915,15 @@ class MysqlHandler(ServiceCtlHanler):
 		except:
 			pass
 
-		if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
+		repl = 'master' if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else 'slave'
+		if repl == 'master':
+			bus.fire('before_mysql_configure', replication=repl)
 			self._init_master(message)									  
 		else:
-			self._init_slave(message)
+			bus.fire('before_mysql_configure', replication=repl)
+			self._init_slave(message)		
 		
-		bus.fire('service_configured', service_name=SERVICE_NAME)
+		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 	
 	def _init_master(self, message):
 		"""
@@ -895,14 +946,18 @@ class MysqlHandler(ServiceCtlHanler):
 
 
 		try:
+			if not storage_valid and self._mysql_config.get('mysqld/datadir').find(self._data_dir) == 0:
+				# When role was created from another mysql role it contains modified my.cnf settings 
+				self._repair_original_mycnf()
+			
 			# Patch configuration
 			self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
-			self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
+			self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 	
 					
 			self._replication_init(master=True)
 			
-			# If It's 1st init of mysql master
+			# If It's 1st init of mysql master storage
 			if not storage_valid:
 				
 				if os.path.exists('/etc/mysql/debian.cnf'):
@@ -983,7 +1038,7 @@ class MysqlHandler(ServiceCtlHanler):
 		# Change configuration files
 		self._logger.info("Changing configuration files")
 		self._move_mysql_dir('mysqld/datadir', self._data_dir)
-		self._move_mysql_dir('mysqld/log_bin', self._binlog_path)
+		self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 		self._replication_init(master=False)
 		if disttool._is_debian_based and os.path.exists(STORAGE_PATH + os.sep +'debian.cnf') :
 			try:
@@ -1028,8 +1083,8 @@ class MysqlHandler(ServiceCtlHanler):
 	
 	def _storage_valid(self, path=None):
 		data_dir = os.path.join(path, STORAGE_DATA_DIR) if path else self._data_dir
-		binlog_path = os.path.join(path, STORAGE_BINLOG_PATH) if path else os.path.dirname(self._binlog_path)
-		return os.path.exists(data_dir) and os.path.exists(binlog_path)
+		binlog_base = os.path.join(path, STORAGE_BINLOG) if path else self._binlog_base
+		return os.path.exists(data_dir) and glob.glob(binlog_base + '*')
 
 
 	def _wait_until(self, target, args=None, sleep=5):
@@ -1092,6 +1147,10 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.error("Cannot create MySQL data snapshot. %s", e)
 			raise
 	
+	def _repair_original_mycnf(self):
+		self._mysql_config.set('mysqld/datadir', '/var/lib/mysql')
+		self._mysql_config.remove('mysqld/log_bin')
+	
 	def _add_mysql_users(self, root_user, repl_user, stat_user, root_pass=None, repl_pass=None, stat_pass=None):
 		self._stop_service()
 		self._logger.info("Adding mysql system users")
@@ -1108,7 +1167,7 @@ class MysqlHandler(ServiceCtlHanler):
 	
 		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
 		
-		# Define users and passwords
+		# Generate passwords
 		root_password = root_pass if root_pass else re.sub('[^\w]','', cryptotool.keygen(20))
 		repl_password = repl_pass if repl_pass else re.sub('[^\w]','', cryptotool.keygen(20))
 		stat_password = stat_pass if stat_pass else re.sub('[^\w]','', cryptotool.keygen(20))
@@ -1116,12 +1175,15 @@ class MysqlHandler(ServiceCtlHanler):
 		#root_password, repl_password, stat_password = map(lambda x: re.sub('[^\w]','', cryptotool.keygen(20)), range(3))
 		# Delete old users
 		sql = "DELETE FROM mysql.user WHERE User in ('%s', '%s', '%s');" % (root_user, repl_user, stat_user)
-		# Add users
 		
-		sql += " INSERT INTO mysql.user VALUES('%','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
-		sql += " INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
+		# Add users
+		# scalr@localhost allow all
+		sql += "INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
+		# scalr_repl@% allow Repl_slave_priv
 		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_slave_priv) VALUES ('%','"+repl_user+"',PASSWORD('"+repl_password+"'),'Y');"
+		# scalr_stat@% allow Repl_client_priv
 		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');"
+		
 		sql += " FLUSH PRIVILEGES;"
 		out,err = myclient.communicate(sql)
 		if err:

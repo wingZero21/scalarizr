@@ -60,6 +60,7 @@ _snmp_scheduled_start_time = None
 Next time when SNMP process should be forked
 '''
 
+_logging_configured = False
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -125,6 +126,7 @@ def _init():
 	
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
 	logger = logging.getLogger(__name__)
+	globals()['_logging_configured'] = True
 	
 	# During server import user must see all scalarizr activity in his terminal
 	# Add console handler if it doesn't configured in logging.ini	
@@ -419,6 +421,9 @@ def _shutdown(*args):
 		if int_msg_service:
 			int_msg_service.get_consumer().shutdown()
 		
+		ex = bus.periodical_executor
+		ex.shutdown()
+		
 		# Fire terminate
 		bus.fire("terminate")
 	except:
@@ -575,8 +580,13 @@ def main():
 
 		# Start message server
 		logger.info('[pid: %d] Starting scalarizr', os.getpid())
+		consumer.starttest()		
 		msg_thread.start()
-
+		
+		# Start periodical executor
+		ex = bus.periodical_executor
+		ex.start()
+		
 		# Fire start
 		globals()["_running"] = True
 		globals()['_pid'] = os.getpid()
@@ -599,6 +609,8 @@ def main():
 		elif isinstance(e, KeyboardInterrupt):
 			pass
 		else:
-			traceback.print_exc(file=sys.stderr)
-			logger.exception(e)
+			if _logging_configured:
+				logger.exception(e)
+			else:
+				print >> sys.stderr, 'error: %s' % e
 			sys.exit(1)

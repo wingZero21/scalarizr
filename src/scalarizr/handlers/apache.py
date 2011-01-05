@@ -191,17 +191,22 @@ class ApacheHandler(ServiceCtlHanler):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
 		self._cnf = bus.cnf
+
 		ini = self._cnf.rawini
 		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)
-				
+		self._config = Configuration('apache')
+		self._config.read(self._httpd_conf_path)
 		
-		bus.define_events('apache_reload')
-		bus.define_events('service_configured')
 		bus.on("init", self.on_init)
+		bus.define_events(
+			'apache_rpaf_reload'
+		)
 
 	def on_init(self):
-		bus.on('start', self.on_start)
-		bus.on('before_host_up', self.on_before_host_up)
+		bus.on(
+			start = self.on_start, 
+			before_host_up = self.on_before_host_up
+		)		
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -217,6 +222,7 @@ class ApacheHandler(ServiceCtlHanler):
 			self._rpaf_reload()
 
 	def on_before_host_up(self, message):
+		self._update_vhosts()
 		self._rpaf_reload()
 		bus.fire('service_configured', service_name=SERVICE_NAME)
 
@@ -257,7 +263,7 @@ class ApacheHandler(ServiceCtlHanler):
 			if not proxy_ips:
 				proxy_ips.add('127.0.0.1')
 				
-			self._logger.info('Updating RPAFproxy_ips: %s', ' '.join(proxy_ips))
+			self._logger.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
 			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
 			rpaf.write(file)
 			
@@ -272,13 +278,26 @@ class ApacheHandler(ServiceCtlHanler):
 			for host in role.hosts:
 				lb_hosts.append(host.internal_ip)
 		self._rpaf_modify_proxy_ips(lb_hosts, operation='update')
+		bus.fire('apache_rpaf_reload')
 		
 		
 	def _update_vhosts(self):
 		
 		config = bus.config
-		vhosts_path = os.path.join(bus.etc_path, config.get(CNF_SECTION,'vhosts_path'))
-		cert_path = os.path.join(bus.etc_path, 'private.d/keys')	
+		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION, 'vhosts_path'))
+		if not os.path.exists(vhosts_path):
+			if not vhosts_path:
+				self._logger.error('Property vhosts_path is empty.')
+			else:
+				self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
+				try:
+					os.makedirs(vhosts_path)
+					self._logger.debug("Virtual hosts dir %s created", vhosts_path)
+				except OSError, e:
+					self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
+					raise
+		
+		cert_path = bus.etc_path + '/private.d/keys'	
 		
 		self.server_root = self._get_server_root()
 			
@@ -287,18 +306,6 @@ class ApacheHandler(ServiceCtlHanler):
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
 		
 		if [] != received_vhosts:
-			if not os.path.exists(vhosts_path):
-				if not vhosts_path:
-					self._logger.error('Property vhosts_path is empty.')
-				else:
-					self._logger.warning("Virtual hosts dir %s doesn't exist. Creating", vhosts_path)
-					try:
-						os.makedirs(vhosts_path)
-						self._logger.debug("Virtual hosts dir %s created", vhosts_path)
-					except OSError, e:
-						self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
-						raise
-			
 			list_vhosts = os.listdir(vhosts_path)
 			if [] != list_vhosts:
 				self._logger.debug("Deleting old vhosts configuration files")
@@ -345,18 +352,26 @@ class ApacheHandler(ServiceCtlHanler):
 							
 							key_error_message = 'Cannot write SSL key files to %s.' % cert_path
 							cert_error_message = 'Cannot write SSL certificate files to %s.' % cert_path
+							ca_cert_error_message = 'Cannot write CA certificate to %s.' % cert_path
 							
 							for key_file in ['https.key', vhost.hostname + '.key']:
 								write_file(os.path.join(cert_path,key_file), https_certificate[1], error_msg=key_error_message, logger=self._logger)
+								os.chmod(cert_path + '/' + key_file, 0644)
 														
 							for cert_file in ['https.crt', vhost.hostname + '.crt']:
 								write_file(os.path.join(cert_path,cert_file), https_certificate[0], error_msg=cert_error_message, logger=self._logger)
+								os.chmod(cert_path + '/' + cert_file, 0644)
+								
+							if https_certificate[2]:
+								for filename in ('https-ca.crt', vhost.hostname + '-ca.crt'):
+									write_file(os.path.join(cert_path, filename), https_certificate[2], error_msg=ca_cert_error_message, logger=self._logger)
+									os.chmod(os.path.join(cert_path, filename), 0644)
 					
 					self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
 					
 					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + '-ssl.vhost.conf') 
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
-					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl',cert_path), error_msg=vhost_error_message, logger = self._logger)
+					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl', cert_path), error_msg=vhost_error_message, logger = self._logger)
 					
 					self._create_vhost_paths(vhost_fullpath) 	
 
@@ -388,6 +403,7 @@ class ApacheHandler(ServiceCtlHanler):
 	def _patch_ssl_conf(self, cert_path):
 		key_path = os.path.join(cert_path, 'https.key')
 		crt_path = os.path.join(cert_path, 'https.crt')
+		ca_crt_path = cert_path + '/https-ca.crt'
 
 		ssl_conf_path = os.path.join(self.server_root, 'conf.d/ssl.conf' if disttool.is_redhat_based() else 'sites-available/default-ssl')
 		if os.path.exists(ssl_conf_path):			
@@ -395,6 +411,17 @@ class ApacheHandler(ServiceCtlHanler):
 			ssl_conf.read(ssl_conf_path)
 			ssl_conf.set(".//SSLCertificateFile", crt_path)
 			ssl_conf.set(".//SSLCertificateKeyFile", key_path)
+			if os.path.exists(ca_crt_path):
+				try:
+					ssl_conf.set('.//SSLCACertificateFile', ca_crt_path)
+				except NoPathError:
+					# XXX: ugly hack
+					parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
+					before_el = ssl_conf.etree.find('.//SSLCertificateFile')
+					ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCACertificateFile', ca_crt_path)
+					ch.text = ca_crt_path
+					parent.insert(list(parent).index(before_el), ch)
+					
 			ssl_conf.write(ssl_conf_path)
 		else:
 			raise HandlerError("Apache's ssl configuration file %s doesn't exist" % ssl_conf_path)
@@ -446,7 +473,7 @@ class ApacheHandler(ServiceCtlHanler):
 	def _check_mod_ssl_redhat(self):
 		mod_ssl_file = os.path.join(self.server_root, 'modules', 'mod_ssl.so')
 		
-		if not os.path.isfile(mod_ssl_file) and not os.path.islink(mod_ssl_file):
+		if not os.path.exists(mod_ssl_file):
 			self._logger.error('%s does not exist. Try "sudo yum install mod_ssl" ',
 						mod_ssl_file)
 		else:			
@@ -494,6 +521,7 @@ class ApacheHandler(ServiceCtlHanler):
 			
 			try:
 				server_root = strip_quotes(self._config.get('ServerRoot'))
+				server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
 			except NoPathError:
 				self._logger.warning("ServerRoot not found in apache config file %s", self._httpd_conf_path)
 				server_root = os.path.dirname(self._httpd_conf_path)

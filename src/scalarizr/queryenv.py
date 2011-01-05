@@ -103,7 +103,8 @@ class QueryEnvService(object):
 			parameters["role"] = role_name
 		return self._request("list-role-params",parameters, self._read_list_role_params_response)
 	
-	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None):
+	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None, 
+					target_ip=None, local_ip=None):
 		"""
 		@return Script[]
 		"""
@@ -116,6 +117,10 @@ class QueryEnvService(object):
 			parameters["asynchronous"] = asynchronous
 		if None != name :
 			parameters["name"] = name
+		if None != target_ip:
+			parameters['target_ip'] = target_ip
+		if None != local_ip:
+			parameters['local_ip'] = local_ip
 		return self._request("list-scripts",parameters, self._read_list_scripts_response)
 	
 	def list_virtual_hosts (self, name=None, https=None):
@@ -131,7 +136,7 @@ class QueryEnvService(object):
 	
 	def get_https_certificate (self):
 		"""
-		@return (cert, pkey)
+		@return (cert, pkey, cacert)
 		"""
 		return self._request("get-https-certificate",{}, self._read_get_https_certificate_response)
 	
@@ -242,18 +247,21 @@ class QueryEnvService(object):
 		response = xml.documentElement
 		if len(response.childNodes):
 			virtualhost = response.firstChild
+			ca_cert = None
 			for ssl_data in virtualhost.childNodes:
-				if ssl_data.nodeName=="cert":
-					cert = ssl_data.firstChild.nodeValue
-				elif ssl_data.nodeName=="pkey":
-					pkey = ssl_data.firstChild.nodeValue
+				if ssl_data.nodeName == "cert":
+					cert = ssl_data.firstChild.nodeValue if ssl_data.firstChild else None
+				elif ssl_data.nodeName == "pkey":
+					pkey = ssl_data.firstChild.nodeValue if ssl_data.firstChild else None
+				elif ssl_data.nodeName == "ca_cert":
+					ca_cert = ssl_data.firstChild.nodeValue if ssl_data.firstChild else None
 			if not cert:
 				self._logger.error("Queryenv didn`t return SSL cert")
 			if not pkey:
 				self._logger.error("Queryenv didn`t return SSL keys")
-			return (cert, pkey)
+			return (cert, pkey, ca_cert)
 		self._logger.error("Queryenv return empty SSL cert & keys")
-		return (None, None)	
+		return (None, None, None)	
 
 	def _read_list_virtualhosts_response(self, xml):
 		ret = []

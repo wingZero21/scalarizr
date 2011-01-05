@@ -222,7 +222,6 @@ class Messages:
 
 	REBOOT_START = "RebootStart"
 	"""
-	@broadcast
 	Fires when scalarizr is going to reboot
 	"""
 	

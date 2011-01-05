@@ -92,7 +92,7 @@ class EbsHandler(handlers.Handler):
 			if not mtab.contains(devname, reload=True):
 				self._logger.debug("Mounting device %s to %s", devname, ebs_mpoint.dir)
 				try:
-					fstool.mount(devname, ebs_mpoint.dir, make_fs=ebs_mpoint.create_fs, auto_mount=True)
+					fstool.mount(devname, ebs_mpoint.dir, auto_mount=True)
 				except fstool.FstoolError, e:
 					if e.code == fstool.FstoolError.NO_FS:
 						self._logger.debug('Creating filesystem and mount device %s to %s', devname, ebs_mpoint.dir)
