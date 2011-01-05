@@ -2,17 +2,20 @@
 Created on Nov 11, 2010
 
 @author: Dmytro Korsakov
+@author: marat
 '''
 
 from scalarizr.util import system2, disttool, firstmatched, PopenError
+from scalarizr.util.software import whereis
 
 import re
-from collections import namedtuple
-from scalarizr.util.software import whereis
+try:
+	from collections import namedtuple
+except ImportError:
+	from scalarizr.externals.collections import namedtuple
 import logging
 import os
 from random import randint
-from scalarizr.util.filetool import write_file
 
 logger = logging.getLogger(__name__)
 

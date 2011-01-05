@@ -1,6 +1,7 @@
 '''
 Created on Nov 11, 2010
 
+@author: spike
 @author: marat
 '''
 
