@@ -7,8 +7,10 @@ Created on Nov 11, 2010
 
 from scalarizr.util import system2, disttool, firstmatched, PopenError
 from scalarizr.util.software import whereis
+from scalarizr.util.filetool import read_file
 
 import re
+import binascii
 try:
 	from collections import namedtuple
 except ImportError:
@@ -106,6 +108,11 @@ def normalize_lvname(lvolume):
 	else:
 		return lvolume
 
+
+def lvm_group_b64(vg):
+	vgfile = '/etc/lvm/backup/%s' % os.path.basename(vg)
+	if os.path.exists(vgfile):
+		return binascii.b2a_base64(read_file(vgfile))
 
 
 class Lvm2:

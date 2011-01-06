@@ -392,6 +392,8 @@ class ApacheHandler(ServiceCtlHanler):
 			
 			if disttool.is_debian_based():
 				self._patch_default_conf_deb()
+			elif not self._config.get_list('NameVirtualHost'):
+				self._config.add('NameVirtualHost', '*:80')
 			
 			self._logger.debug("Checking that vhosts directory included in main apache config")
 			

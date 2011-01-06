@@ -5,13 +5,14 @@ Created on Mar 11, 2010
 
 import scalarizr
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler, async, HandlerError
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, get_free_devname
 from scalarizr.util import software
 from scalarizr.platform.ec2 import s3tool, ebstool
-from scalarizr.storage import Storage, mkloop, rmloop
+from scalarizr.storage import Storage 
+from scalarizr.storage.util.loop import mkloop, rmloop
 
 from subprocess import Popen
 from M2Crypto import X509, EVP, Rand, RSA

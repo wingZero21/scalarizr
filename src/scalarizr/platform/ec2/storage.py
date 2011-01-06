@@ -6,7 +6,7 @@ Created on Nov 24, 2010
 '''
 
 from scalarizr.bus import bus
-from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, _devname_not_empty,\
+from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, devname_not_empty, \
 	VolumeConfig, Snapshot
 from scalarizr.storage.transfer import TransferProvider, TransferError
 from scalarizr.platform.ec2 import ebstool
@@ -18,8 +18,8 @@ from urlparse import urlparse
 
 from boto import connect_ec2, connect_s3
 from boto.s3.key import Key
-from boto.exception import BotoServerError, S3ResponseError, EC2ResponseError
-from scalarizr.util import wait_until, firstmatched
+from boto.exception import BotoServerError, S3ResponseError
+from scalarizr.util import firstmatched
 
 
 class EbsConfig(VolumeConfig):
@@ -154,7 +154,7 @@ class EbsVolumeProvider(VolumeProvider):
 		ebstool.delete_volume(conn, vol.id, self._logger)
 		vol.device = None
 	
-	@_devname_not_empty		
+	@devname_not_empty		
 	def detach(self, vol, force=False):
 		super(EbsVolumeProvider, self).detach(vol)
 		try:

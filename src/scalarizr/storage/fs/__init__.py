@@ -5,6 +5,8 @@ Created on Nov 11, 2010
 @author: marat
 '''
 
+from .. import MKFS_EXEC, MOUNT_EXEC
+
 from scalarizr.util import system2, PopenError
 
 import os
@@ -12,11 +14,6 @@ import re
 import logging
 
 logger = logging.getLogger(__name__)
-
-MKFS_EXEC		= '/sbin/mkfs'
-MOUNT_EXEC		= '/bin/mount'
-UMOUNT_EXEC 	= '/bin/umount'
-SYNC_EXEC 		= '/bin/sync'
 
 class FileSystemError(PopenError):
 	pass	

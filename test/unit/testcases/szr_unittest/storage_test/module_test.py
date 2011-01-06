@@ -6,8 +6,9 @@ Created on Nov 25, 2010
 import unittest
 
 from scalarizr.util import system2 as system
-from scalarizr.storage import mkloop, Volume, Snapshot, Storage, StorageError, VolumeProvider,\
-	EphSnapshot
+from scalarizr.storage import Volume, Snapshot, Storage, StorageError, VolumeProvider
+from scalarizr.storage.util.loop import mkloop
+from scalarizr.storage.eph import EphSnapshot
 from scalarizr.storage.fs import FileSystem
 
 import os

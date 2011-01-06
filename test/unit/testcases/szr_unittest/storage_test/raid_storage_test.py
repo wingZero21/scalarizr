@@ -8,10 +8,8 @@ import unittest
 import time
 import logging
 from scalarizr.util import system
-from scalarizr.bus import bus
 import szr_unittest
-from scalarizr.storage import Storage, RaidVolumeProvider
-from scalarizr.platform.ec2.storage import EbsVolumeProvider
+from scalarizr.storage import Storage
 
 class Test(unittest.TestCase):
 	

@@ -6,7 +6,8 @@ Created on Dec 3, 2010
 import unittest
 
 from scalarizr.util import system2 as system
-from scalarizr.storage import mkloop, Storage
+from scalarizr.storage import Storage
+from scalarizr.storage.util.loop import mkloop
 
 import os
 from random import randint

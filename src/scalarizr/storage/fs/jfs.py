@@ -4,7 +4,7 @@ Created on Nov 11, 2010
 @author: spike
 @author: marat
 '''
-from . import MOUNT_EXEC, MKFS_EXEC
+from . import MOUNT_EXEC
 from . import FileSystem, device_should_exists, system 
 
 from scalarizr.util import disttool
@@ -13,7 +13,7 @@ import re
 import os
 
 
-JFS_TUNE_PATH	= '/sbin/jfs_tune'
+JFS_TUNE_EXEC	= '/sbin/jfs_tune'
 
 class JfsFileSystem(FileSystem):
 	name = 'jfs'
@@ -23,7 +23,7 @@ class JfsFileSystem(FileSystem):
 	
 	def __init__(self):
 		self._label_re  = re.compile("volume\s+label:\s+'(?P<label>.*)'", re.IGNORECASE)
-		if not os.path.exists(JFS_TUNE_PATH):
+		if not os.path.exists(JFS_TUNE_EXEC):
 			system(('/sbin/modprobe', 'jfs'), error_text="Cannot load 'jfs' kernel module")
 			if disttool.is_redhat_based():
 				system(('/usr/bin/yum', '-y', 'install', 'jfsutils'))
@@ -35,12 +35,12 @@ class JfsFileSystem(FileSystem):
 		
 	@device_should_exists		
 	def set_label(self, device, label):
-		cmd = (JFS_TUNE_PATH, '-L', label, device)
+		cmd = (JFS_TUNE_EXEC, '-L', label, device)
 		system(cmd, error_text=self.E_SET_LABEL % device)
 	
 	@device_should_exists
 	def get_label(self, device):
-		cmd = (JFS_TUNE_PATH, '-l', device)
+		cmd = (JFS_TUNE_EXEC, '-l', device)
 		error_text = 'Error while listing contents of the JFS file system on device %s' % device
 		out = system(cmd, error_text=error_text)[0]
 		

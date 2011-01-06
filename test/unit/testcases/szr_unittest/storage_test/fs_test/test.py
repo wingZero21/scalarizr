@@ -11,7 +11,7 @@ from scalarizr.storage.fs.xfs import XfsFileSystem
 import os
 import re
 import logging
-from scalarizr.storage import mkloop
+from scalarizr.storage.util.loop import mkloop
 
 
 class FileSystemTest(unittest.TestCase):

@@ -5,8 +5,9 @@ Created on Nov 19, 2010
 '''
 import unittest
 
-from scalarizr.storage import mkloop
-from scalarizr.storage.lvm2 import Lvm2, system
+from scalarizr.storage.util.loop import mkloop
+from scalarizr.storage.util.lvm2 import Lvm2
+from scalarizr.storage import system
 from scalarizr.util import firstmatched
 
 from random import randint
