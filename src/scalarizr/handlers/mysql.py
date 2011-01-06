@@ -8,19 +8,17 @@ Created on 14.06.2010
 # Core
 from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr.storage import Storage, StorageError, Volume
+from scalarizr.storage import Storage, StorageError, Volume, transfer
 from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
-from scalarizr.platform.ec2 import UD_OPT_S3_BUCKET_NAME, ebstool
-from scalarizr.storage import transfer
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError,\
 	ParseError
-from scalarizr.util import fstool, system2, cryptotool, disttool,\
-		 filetool, firstmatched, cached, validators, initdv2, software, get_free_devname
+from scalarizr.util import system2, cryptotool, disttool,\
+		 filetool, firstmatched, cached, validators, initdv2, software
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
@@ -29,15 +27,16 @@ from subprocess import Popen, PIPE, STDOUT
 import logging, os, re,  tarfile, tempfile
 import time, signal, pwd, random, shutil
 import glob
+import hashlib
 
 # Extra
-from boto.exception import BotoServerError
 import pexpect
-import hashlib
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR
+
+_logger = logging.getLogger(__name__)
 
 class MysqlInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -256,27 +255,27 @@ class MysqlMessages:
 	= HOST_INIT_RESPONSE =
 	@ivar mysql=dict(
 		replication_master: 	1|0
-		volume					Master storage configuration	(on master)
-		# --- volume_id				EBS volume id					(on master)
-		snapshot				Master storage snapshot 		(on slave)
-		# --- snapshot_id: 			Master EBS snapshot id			(on slave)
-		root_password:			'scalr' user password  			(on slave)
-		repl_password:			'scalr_repl' user password		(on slave)
-		stat_password: 			'scalr_stat' user password		(on slave)
-		log_file:				Binary log file					(on slave)
-		log_pos:				Binary log file position		(on slave)
+		volume_config			Master storage configuration			(on master)
+		# --- volume_id				EBS volume id						(on master)
+		snapshot_config			Master storage snapshot 				(both)
+		# --- snapshot_id: 			Master EBS snapshot id				(on slave)
+		root_password:			'scalr' user password  					(on slave)
+		repl_password:			'scalr_repl' user password				(on slave)
+		stat_password: 			'scalr_stat' user password				(on slave)
+		log_file:				Binary log file							(on slave)
+		log_pos:				Binary log file position				(on slave)
 	)
 	
 	= HOST_UP =
 	@ivar mysql=dict(
-		root_password: 	'scalr' user password  					(on master)
-		repl_password: 	'scalr_repl' user password				(on master)
-		stat_password: 	'scalr_stat' user password				(on master)
-		# --- snapshot_id: 	Data volume EBS snapshot				(on master)
-		snapshot:		Master storage snapshot					(on master)		 
-		log_file: 		Binary log file							(on master) 
-		log_pos: 		Binary log file position				(on master)
-		volume:			Current storage configuration			(both) 
+		root_password: 			'scalr' user password  					(on master)
+		repl_password: 			'scalr_repl' user password				(on master)
+		stat_password: 			'scalr_stat' user password				(on master)
+		# --- snapshot_id: 		Data volume EBS snapshot				(on master)
+		snapshot_config:		Master storage snapshot					(on master)		 
+		log_file: 				Binary log file							(on master) 
+		log_pos: 				Binary log file position				(on master)
+		volume_config:			Current storage configuration			(both) 
 		# --- volume_id:		EBS volume created from master snapshot (on slave)
 		) 
 	"""
@@ -400,19 +399,9 @@ class MysqlCnfController(CnfController):
 	def _get_connection(self):
 		szr_cnf = bus.cnf
 		root_password = szr_cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
-		return _spawn_mysql(ROOT_USER, root_password)
+		return spawn_mysql(ROOT_USER, root_password)
 
 
-def _spawn_mysql(user, password):
-	try:
-		mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
-		mysql.expect('Enter password:')
-		mysql.sendline(password)
-		mysql.expect('mysql>')
-	except Exception, e:
-		raise HandlerError('Cannot start mysql client tool: %s' % (e,))
-	finally:
-		return mysql
 
 def _reload_mycnf(f):
 	def g(self, *args):
@@ -561,41 +550,36 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.info("Adding phpMyAdmin system user")
 			
 			# Connecting to mysql 
-			myclient = pexpect.spawn('/usr/bin/mysql -u'+ROOT_USER+' -p')
-			myclient.expect('Enter password:')
-			myclient.sendline(root_password)
-			
-			# Retrieveing line with version info				
-			myclient.expect('mysql>')
-			myclient.sendline('SELECT VERSION();')
-			myclient.expect('mysql>')
-			mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), myclient.before)
+			mysql = spawn_mysql(ROOT_USER, root_password)
+			mysql.sendline('SELECT VERSION();')
+			mysql.expect('mysql>')
+			mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), mysql.before)
 
 			# Determine mysql server version 
 			if mysql_ver_str:
 				mysql_ver = version.StrictVersion(mysql_ver_str.group(0))
 				priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 			else:
-				raise HandlerError("Cannot extract mysql version from string '%s'" % myclient.before)
+				raise HandlerError("Cannot extract mysql version from string '%s'" % mysql.before)
 			
 			# Generating password for pma user
 			pma_password = re.sub('[^\w]','', cryptotool.keygen(20))
 			sql = "DELETE FROM mysql.user WHERE User = '"+PMA_USER+"';"
-			myclient.sendline(sql)
-			myclient.expect("mysql>")
+			mysql.sendline(sql)
+			mysql.expect("mysql>")
 			# Generating sql statement, which depends on mysql server version 
 			sql = "INSERT INTO mysql.user VALUES('"+pma_server_ip+"','"+PMA_USER+"',PASSWORD('"+pma_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
 			# Pass statement to mysql client
-			myclient.sendline(sql)
-			myclient.expect('mysql>')
+			mysql.sendline(sql)
+			mysql.expect('mysql>')
 			
 			# Check for errors
-			if re.search('error', myclient.before, re.M | re.I):
-				raise HandlerError("Cannot add PhpMyAdmin system user '%s': '%s'" % (PMA_USER, myclient.before))
+			if re.search('error', mysql.before, re.M | re.I):
+				raise HandlerError("Cannot add PhpMyAdmin system user '%s': '%s'" % (PMA_USER, mysql.before))
 			
-			myclient.sendline('FLUSH PRIVILEGES;')
-			myclient.terminate()
-			del(myclient)
+			mysql.sendline('FLUSH PRIVILEGES;')
+			mysql.close()
+			del(mysql)
 			
 			self._logger.info('PhpMyAdmin system user successfully added')
 			
@@ -631,7 +615,7 @@ class MysqlHandler(ServiceCtlHanler):
 				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
 			
 			# Get databases list
-			mysql = _spawn_mysql(ROOT_USER, root_password)
+			mysql = spawn_mysql(ROOT_USER, root_password)
 			mysql.sendline('SHOW DATABASES;')
 			mysql.expect('mysql>')
 			
@@ -745,7 +729,7 @@ class MysqlHandler(ServiceCtlHanler):
 			try:
 				# Stop mysql
 				if self._init_script.running:
-					mysql = self._spawn_mysql(ROOT_USER, message.root_password)
+					mysql = spawn_mysql(ROOT_USER, message.root_password)
 					timeout = 180
 					try:
 						mysql.sendline("STOP SLAVE;")
@@ -822,7 +806,7 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.info("Switching replication to a new MySQL master %s", host)
 			bus.fire('before_mysql_change_master', host=host)			
 			
-			mysql = self._spawn_mysql(ROOT_USER, message.root_password)
+			mysql = spawn_mysql(ROOT_USER, message.root_password)
 						
 			self._logger.debug("Stopping slave i/o thread")
 			mysql.sendline("STOP SLAVE IO_THREAD;")
@@ -938,8 +922,11 @@ class MysqlHandler(ServiceCtlHanler):
 		"""
 		self._logger.info("Initializing MySQL master")
 		
-		# Mount EBS
+		# Plug storage
 		storage_conf = Storage.restore_config(self._storage_name)
+		snap_conf = Storage.restore_config(self._snapshot_name)
+		if snap_conf:
+			storage_conf['snapshot'] = snap_conf
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=storage_conf)
 		
 		# Stop MySQL server
@@ -979,6 +966,7 @@ class MysqlHandler(ServiceCtlHanler):
 				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
 				
 				Storage.backup_config(self.storage_vol.config(), self._storage_name)
+				Storage.backup_config(snap.config(), self._snapshot_name)
 				
 				msg_data = dict(
 					root_password=root_password,
@@ -1008,6 +996,7 @@ class MysqlHandler(ServiceCtlHanler):
 				
 				# Updating snapshot
 				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+				Storage.backup_config(snap.config(), self._snapshot_name)
 				
 				# Send updated metadata to Scalr
 				msg_data = dict(snapshot=snap.config(), log_file=log_file, log_pos=log_pos)
@@ -1084,7 +1073,14 @@ class MysqlHandler(ServiceCtlHanler):
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
 			vol = Storage.create(vol)
-		vol.mount(mpoint)
+		try:
+			vol.mount(mpoint)
+		except StorageError, e:
+			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
+			if 'you must specify the filesystem type' in str(e):
+				vol.mkfs()
+			else:
+				raise
 		return vol
 	
 	def _storage_valid(self, path=None):
@@ -1106,7 +1102,7 @@ class MysqlHandler(ServiceCtlHanler):
 				self._start_service()
 			
 			# Lock tables
-			sql = self._spawn_mysql(root_user, root_password)
+			sql = spawn_mysql(root_user, root_password)
 			sql.sendline('FLUSH TABLES WITH READ LOCK;')
 			sql.expect('mysql>')
 			system2('sync', shell=True)
@@ -1247,22 +1243,13 @@ class MysqlHandler(ServiceCtlHanler):
 				pass
 		self.write_config()
 
-
 		if disttool.is_debian_based():
-			self._add_apparmor_rules(repl_conf_path)	
+			_add_apparmor_rules(repl_conf_path)	
 
-	def _spawn_mysql(self, user, password):
-		#mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p' + password)
-		mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
-		mysql.expect('Enter password:')
-		mysql.sendline(password)
-		
-		mysql.expect('mysql>')
-		return mysql
 
 	def _change_master(self, host, user, password, log_file, log_pos, 
 					spawn=None, mysql_user=None, mysql_password=None):
-		spawn = spawn or self._spawn_mysql(mysql_user, mysql_password)
+		spawn = spawn or self.spawn_mysql(mysql_user, mysql_password)
 		self._logger.info("Changing replication master to host %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
 		# Changing replication master
 		spawn.sendline('STOP SLAVE;')
@@ -1358,39 +1345,7 @@ class MysqlHandler(ServiceCtlHanler):
 			
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
-			self._add_apparmor_rules(directory)
-			
-	def _add_apparmor_rules(self, directory):
-		try:
-			file = open('/etc/apparmor.d/usr.sbin.mysqld', 'r')
-		except IOError, e:
-			pass
-		else:
-			app_rules = file.read()
-			file.close()
-			if not re.search (directory, app_rules):
-				file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
-				if os.path.isdir(directory):
-					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+'/ r,\n'+'\\2', app_rules)
-					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1'+directory+'/** rwk,\n'+'\\2', app_rules)
-				else:
-					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+' r,\n'+'\\2', app_rules)
-				file.write(app_rules)
-				file.close()
-				apparmor_initd = ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
-				try:
-					apparmor_initd.reload()
-				except InitdError, e:
-					self._logger.error('Cannot restart apparmor. %s', e)	
-
-	def _get_ec2_conn(self):
-		"""
-		Maintains single EC2 connection
-		@rtype: boto.ec2.connection.EC2Connection
-		"""
-		if not hasattr(self, "_ec2_conn"):
-			self._ec2_conn = self._platform.new_ec2_conn()
-		return self._ec2_conn
+			_add_apparmor_rules(directory)
 	
 	def _flush_logs(self):
 		if not os.path.exists(self._data_dir):
@@ -1405,3 +1360,85 @@ class MysqlHandler(ServiceCtlHanler):
 				
 	def write_config(self):
 		self._mysql_config.write(self._mycnf_path)
+
+
+_mycnf = None
+
+
+def _spawn_mysqldump(args, user, password=None):
+	try:
+		pass
+	except:
+		pass
+
+def spawn_mysql(user, password=None):
+	try:
+		exp = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
+		exp.expect('Enter password:')
+		exp.sendline(password or '')
+		exp.expect('mysql>')
+	except Exception, e:
+		raise HandlerError('Cannot start mysql client tool: %s' % (e,))
+	finally:
+		return exp
+
+def _add_apparmor_rules(directory):
+	try:
+		file = open('/etc/apparmor.d/usr.sbin.mysqld', 'r')
+	except IOError, e:
+		pass
+	else:
+		app_rules = file.read()
+		file.close()
+		if not re.search (directory, app_rules):
+			file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
+			if os.path.isdir(directory):
+				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+'/ r,\n'+'\\2', app_rules)
+				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1'+directory+'/** rwk,\n'+'\\2', app_rules)
+			else:
+				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+' r,\n'+'\\2', app_rules)
+			file.write(app_rules)
+			file.close()
+			apparmor_initd = ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
+			try:
+				apparmor_initd.reload()
+			except InitdError, e:
+				_logger.error('Cannot restart apparmor. %s', e)	
+
+
+'''
+class MysqlReplication(object):
+	def __init__(self, mycnf):
+		pass
+	
+	def setup(self, master):
+		pass
+	
+	def change_master(self):
+		pass
+	
+	def repair_defaults(self, writefile=True):
+		pass
+
+class MysqlStorage(object):
+	SNAPSHOT_NAME = 'mysql-snap.json'
+	VOLUME_NAME = 'mysql.json'
+	
+	def __init__(self, mycnf, volume, snapshot):
+		pass
+	
+	def repair_defaults(self, writefile=True):
+		pass
+	
+	def valid(self):
+		pass
+	
+	def flush_logs(self):
+		pass
+	
+	def plug(self):
+		pass
+	
+	def unplug(self):
+		pass
+'''

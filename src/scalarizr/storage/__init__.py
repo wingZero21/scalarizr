@@ -140,6 +140,12 @@ class Storage:
 		args = args or list()
 		kwargs = kwargs or dict()
 		from_snap = False
+
+		if args:
+			if isinstance(args[0], dict):
+				kwargs = args[0]
+			else:
+				kwargs['device'] = args[0]
 		
 		if 'snapshot' in kwargs:
 			# Save original kwargs
@@ -171,8 +177,6 @@ class Storage:
 			if not isinstance(disk, Volume):
 				kwargs['disk'] = self.create(**disk) if isinstance(disk, dict) else self.create(disk)
 		
-		if args:
-			kwargs['device'] = args[0]
 			
 		# Find provider	
 		pvd = self.lookup_provider(kwargs.get('type'), from_snap)
@@ -198,7 +202,7 @@ class Storage:
 	def backup_config(cnf, filename):
 		fp = open(filename, 'w+')
 		try:
-			fp.write(json.dumps(cnf))
+			fp.write(json.dumps(cnf, indent=4))
 		finally:
 			fp.close()
 	
@@ -280,7 +284,7 @@ class Volume(VolumeConfig):
 	fstype = property(_fstype_getter, _fstype_setter)
 
 	def mkfs(self, fstype=None):
-		fstype = fstype or self.fstype
+		fstype = fstype or self.fstype or 'ext3'
 		if not fstype:
 			raise ValueError('Filesystem cannot be None')
 		fs = Storage.lookup_filesystem(fstype) 

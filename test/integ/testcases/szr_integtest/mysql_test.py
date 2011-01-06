@@ -22,7 +22,7 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 		opts.update({'system.timeouts.launch' : '60'})
 		dp = MysqlDataProvider(farm_settings=opts)
 		master = dp.master()
-		reader = master.log
+		reader = master.log.head()
 		reader.expect("Message 'HostInit' delivered", 60)
 		ssh = master.ssh()
 		execute(ssh, '/etc/init.d/scalarizr stop', 15)
@@ -36,7 +36,7 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 			time.sleep(5)
 		new_master = dp.slave()
 		scalrctl.exec_cronjob('ScalarizrMessaging')
-		reader = new_master.log
+		reader = new_master.log.head()
 		reader.expect("Message 'HostInit' delivered", 60)
 		
 		ssh = new_master.ssh()

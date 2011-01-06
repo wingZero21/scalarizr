@@ -16,6 +16,9 @@ MAX_LABEL_LENGTH = 16
 class ExtFileSystem(FileSystem):
 	umount_on_resize 	= True	
 
+	def mkfs(self, device, options=None):
+		FileSystem.mkfs(self, device, ('-F',))
+
 	@device_should_exists
 	def resize(self, device, size=None, **options):
 		cmd = (E2FSCK_PATH, '-fy', device)

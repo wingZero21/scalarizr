@@ -47,7 +47,16 @@
 				
 			}]
 		},
-		"el5" : {		
+		"el5" : {
+			"app" : [{
+				"role_name":			"szr-app-apache-centos55",
+				"arch":					"i386",
+				"root_device_type": 	"ebs"
+			}, {
+				"role_name":			"szr-app-apache-centos55-64",
+				"arch":					"x86_64",
+				"root_device_type": 	"ebs"
+			}]		
 		},
 		"ubuntu1004"  : {
 			"raw" : [{
@@ -55,6 +64,15 @@
 				"arch":					"i386",
 				"root_device_type": 	"ebs"
 			}],
+			"app" : [{
+				"role_name":			"szr-app-apache-ubuntu1004",
+				"arch":					"i386",
+				"root_device_type": 	"ebs"
+			}, {
+				"role_name":			"szr-app-apache-ubuntu1004-64",
+				"arch":					"x86_64",
+				"root_device_type": 	"ebs"
+			}],		
 			"mysql"	: [{
 				"role_name" : 			"Test_mysql_2010_10_20_1348",
 				"arch"		:			"i386",

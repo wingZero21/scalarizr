@@ -1,13 +1,11 @@
 
 from scalarizr.platform import Platform, PlatformError
+from scalarizr.platform.ec2 import storage
 from scalarizr.bus import bus
 
 from boto import connect_ec2, connect_s3
 from boto.ec2.regioninfo import RegionInfo
 import logging, urllib2, re, os
-
-
-
 
 
 
@@ -166,8 +164,9 @@ class Ec2Platform(Platform):
 	
 	def set_access_data(self, access_data):
 		Platform.set_access_data(self, access_data)
-		os.environ['AWS_ACCESS_KEY_ID'] = access_data.get('key_id', None)
-		os.environ['AWS_SECRET_ACCESS_KEY'] = access_data.get('key', None)
+		key_id, key = self.get_access_keys()
+		os.environ['AWS_ACCESS_KEY_ID'] = key_id
+		os.environ['AWS_SECRET_ACCESS_KEY'] = key
 
 	def clear_access_data(self):
 		Platform.clear_access_data(self)
@@ -181,3 +180,4 @@ class Ec2Platform(Platform):
 	def cloud_storage_path(self):
 		return 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
 	
+

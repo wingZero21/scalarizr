@@ -885,8 +885,13 @@ if disttool.is_linux():
 			self._logger.debug('rsync stdout: %s', out)
 			self._logger.debug('rsync stderr: %s', err)
 			
+			if exitcode == 24 and filetool.Rsync.usable():
+				self._logger.warn(
+					"rsync exited with error code 24. This means a partial transfer due to vanished " + 
+					"source files. In most cases files are copied normally"
+				)
 			if exitcode == 23 and filetool.Rsync.usable():
-				self._logger.warning(
+				self._logger.warn(
 					"rsync seemed successful but exited with error code 23. This probably means " +
 	           		"that your version of rsync was built against a kernel with HAVE_LUTIMES defined, " +
 	             	"although the current kernel was not built with this option enabled. The bundling " +
@@ -894,7 +899,7 @@ if disttool.is_linux():
 	           		"successfully, your image should be perfectly usable. We, however, recommend that " +
 			   		"you install a version of rsync that handles this situation more elegantly.")
 			elif exitcode == 1 and xattr:
-				self._logger.warning(
+				self._logger.warn(
 					"rsync with preservation of extended file attributes failed. Retrying rsync " +
 	           		"without attempting to preserve extended file attributes...")
 				self._copy_rec(source, dest, xattr=False)

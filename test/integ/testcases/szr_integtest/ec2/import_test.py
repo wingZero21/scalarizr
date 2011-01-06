@@ -29,7 +29,7 @@ class ImportEc2Test(unittest.TestCase):
 	def _test_instance_store(self):
 		dp = self._get_dp('instance-store')
 		server = _init_server(dp, self._logger)
-		reader = server.log
+		reader = server.log.head()
 		reader.expect( "Message 'Hello' delivered",				 					240)
 		self._logger.info("Message 'Hello' delivered")
 		
@@ -56,7 +56,7 @@ class ImportEc2Test(unittest.TestCase):
 	def _test_ebs(self):
 		dp = self._get_dp('ebs')
 		server = _init_server(dp, self._logger)
-		reader = server.log
+		reader = server.log.head()
 		reader.expect( "Message 'Hello' delivered",				 					240)
 		self._logger.info("Message 'Hello' delivered")
 		

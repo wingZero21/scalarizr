@@ -212,11 +212,6 @@ class Server(object):
 			self.ssh_manager.connect()
 		return self.ssh_manager.get_root_ssh_channel()
 	
-	'''
-	def run(self):
-		pass
-	'''
-	
 	def terminate(self):
 		if not self.node.destroy():
 			raise Exception("Failed to terminate instance.")
@@ -230,7 +225,7 @@ class Server(object):
 		if not hasattr(self, '_log'):
 			self._log_channel = self.ssh()
 			self._log = MutableLogFile(self._log_channel)
-		return self._log.head()
+		return self._log
 		
 	@property
 	def cloud_id(self):

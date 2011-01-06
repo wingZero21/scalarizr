@@ -161,7 +161,7 @@ class LogReader:
 		self.traceback_re = re.compile('Traceback.+')
 		self.queue = queue 
 
-	def expect(self, regexp, timeframe):
+	def expect(self, regexp, timeframe=30):
 		self._error = ''
 		self.ret = None
 		break_tail = Event()

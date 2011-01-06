@@ -30,10 +30,8 @@ class JfsFileSystem(FileSystem):
 			else:
 				system(('/usr/bin/apt-get', '-y', 'install', 'jfsutils'))			
 		
-	@device_should_exists
-	def mkfs(self, device, **options):
-		cmd = (MKFS_EXEC, '-t', self.name, '-q', device)
-		system(cmd, error_text=self.E_MKFS % device)
+	def mkfs(self, device, options=None):
+		FileSystem.mkfs(self, device, ('-q',))
 		
 	@device_should_exists		
 	def set_label(self, device, label):

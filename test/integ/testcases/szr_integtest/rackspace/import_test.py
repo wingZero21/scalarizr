@@ -26,7 +26,7 @@ class ImportRackspaceTest(unittest.TestCase):
 	def test_import(self):
 		dp = self._get_dp()
 		server = _init_server(dp, self._logger)
-		reader = server.log
+		reader = server.log.head()
 		reader.expect( "Message 'Hello' delivered",				 					240)
 		
 		scalrctl = ScalrCtl()

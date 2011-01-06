@@ -49,8 +49,11 @@ class FileSystem:
 	E_NOT_MOUNTED = 'Device %s should be mounted'
 
 	@device_should_exists
-	def mkfs(self, device, **options):
-		cmd = (MKFS_EXEC, '-t', self.name, device)
+	def mkfs(self, device, options=None):
+		cmd = [MKFS_EXEC, '-t', self.name]
+		if options:
+			cmd.extend(options)
+		cmd.append(device)
 		system(cmd, error_text=self.E_MKFS % device)
 	
 	def resize(self, device, size=None, **options):
