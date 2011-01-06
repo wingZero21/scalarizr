@@ -33,31 +33,37 @@ class RackspaceRebundleHandler(Handler):
 			servers = con.servers.list()
 			
 			public_ip = platform.get_public_ip()
-			
+			self._logger.debug('Searching our instance in server list.')
 			for server in servers:
 				if server.public_ip == public_ip:
 					server_id = server.id
 					break
 			else:
 				raise HandlerError("Server is not in server list. Server's public ip: %s" % public_ip)
+			
+			self._logger.debug('Instance has been successfully found. ID=%s' % server_id)
 			cnf = bus.cnf
 			old_state = cnf.state
 			cnf.state = ScalarizrState.REBUNDLING
 			
 			try:
 				image_manager = ImageManager(con)
+				self._logger.debug("Creating instance's image")
 				image = image_manager.create(image_name, server_id)
 				image_id = image.id
+				self._logger.debug("Waiting for image completion. Image id - %s" % image_id)
 				wait_until(hasattr, args=(image, 'progress'), sleep=5, logger=self._logger)
 				wait_until(lambda: image_manager.get(image_id).progress == 100, sleep=30, logger=self._logger)
 			finally:
 				cnf.state = old_state
+			self._logger.debug("Image has been successfully created.")
 			# Creating message
 			ret_message = dict(	status = "ok",
 								snapshot_id = image_id,
 								bundle_task_id = message.bundle_task_id )
 			
 			# Updating message with OS, software and modules info
+			self._logger.debug("Updating message with os and software info.")
 			ret_message.update(software.system_info())
 			
 			self.send_message(Messages.REBUNDLE_RESULT, ret_message)

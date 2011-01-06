@@ -10,6 +10,7 @@ from szr_integtest_libs.ssh_tool import execute, SshManager
 import logging
 import time
 import os
+from scalarizr.util import wait_until
 
 log_path = os.path.expanduser('~/.scalr-dev/logs')
 
@@ -28,7 +29,7 @@ EC2_MYSQL_ROLE_DEFAULT_SETTINGS = {
 class ScalrConsts:
 	class Platforms:
 		PLATFORM_EC2 	= 'Amazon EC2'
-		PLATFORM_RS  	= 'Rackspace'
+		PLATFORM_RACKSPACE 	= 'Rackspace'
 	class Behaviours:
 		BEHAVIOUR_BASE  = 'Base'
 		BEHAVIOUR_APP   = 'Apache'
@@ -82,18 +83,22 @@ class FarmUI:
 		except:
 			raise Exception("Role '%s' doesn't exist" % role_name)
 		
+		
+		self.edit_role(role_name, settings)
+		
+	def edit_role(self, role_name, settings=None):
 		try:
 			# uncutted 
 			self.sel.click('//span[@class="short" and text()="%s"]' % role_name)
 		except:
-			self.sel.click('//div[@class="full" and text()="%s"]' % role_name)
-		
+			self.sel.click('//div[@class="full" and text()="%s"]' % role_name)		
 				
 		i = 1
 		while True:
 			try:
-				self.sel.click('//div[@class="viewers-farmrolesedit-tab" and position()=%s]' % i)		
-				time.sleep(0.5)
+				self.sel.click('//div[@class="viewers-farmrolesedit-tab" and position()=%s]' % i)
+				wait_until(lambda: self.sel.is_element_present('//div[@id="viewers-farmrolesedit-content"]/div[@class=" x-panel x-panel-noborder"]/div/div/fieldset'), timeout=10)
+					
 				for option, value in settings.iteritems():
 					try:
 						id = self.sel.get_attribute('//div[@class=" x-panel x-panel-noborder"]//*[@name="%s"]/@id' % option)
@@ -324,7 +329,8 @@ def ui_login(sel):
 	sel.check('keep_session')
 	sel.click('//form/button')
 	sel.wait_for_page_to_load(30000)
-	if sel.get_location().find('/client_dashboard.php') == -1:
+	#if sel.get_location().find('/client_dashboard.php') == -1:
+	if not sel.is_element_present('//div[@id="navmenu"]'):
 		raise Exception('Login failed.')
 
 def reset_farm(ssh, farm_id):

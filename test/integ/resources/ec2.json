@@ -54,8 +54,12 @@
 				"image_id": 			"ami-a2f405cb",
 				"arch":					"i386",
 				"root_device_type": 	"ebs"
-			}
-			]
+			}],
+			"mysql"	: [{
+				"role_name" : 			"Test_mysql_2010_10_20_1348",
+				"arch"		:			"i386",
+				"root_device_type": 	"ebs"		
+			}]
 		}
 	}
 }

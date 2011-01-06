@@ -5,7 +5,8 @@ Created on Dec 27, 2010
 '''
 from szr_integtest import RESOURCE_PATH, config, get_selenium
 from szr_integtest_libs.scalrctl import ScalrCtl, FarmUI, SshManager
-from szr_integtest_libs.ssh_tool import MutableLogFile
+from szr_integtest_libs.szrdeploy import ScalarizrDeploy
+from szr_integtest_libs.ssh_tool import MutableLogFile, execute
 
 from libcloud.types import Provider 
 from libcloud.providers import get_driver 
@@ -62,12 +63,13 @@ class DataProvider(object):
 	conn		= None
 	
 	def __new__(cls, *args, **kwargs):
-		key = tuple(kwargs.items())
+		key = tuple(zip(kwargs.iterkeys(), tuple([x if type(x) != dict else tuple(x.items()) for x in kwargs.itervalues()])))
+		print key		
 		if not key in DataProvider._instances:
 			DataProvider._instances[key] = super(DataProvider, cls).__new__(cls, *args, **kwargs)
 		return DataProvider._instances[key]
 	
-	def __init__(self, behaviour='raw', **kwargs):
+	def __init__(self, behaviour='raw', farm_settings=None, **kwargs):
 		
 		def cleanup():
 			self.clear()
@@ -85,6 +87,7 @@ class DataProvider(object):
 		self.default_size  = platform_config['default_size']
 
 		self.behaviour	= behaviour
+		self.farm_settings = farm_settings
 		
 		for configuration in platform_config['images'][self.dist][self.behaviour]:
 			if set(kwargs) <= set(configuration):
@@ -125,10 +128,17 @@ class DataProvider(object):
 				self.image_id = NodeImage(self.image_id, name="", driver="")
 			
 			kwargs = {'name' : 'Integtest-' + time.strftime('%Y_%m_%d-%H_%M') , 'image' : self.image_id, 'size' : self.default_size}
+			# Set keypair for Amazon AWS
 			if self.ssh_config.get('keypair'):
 				kwargs['ex_keyname'] = self.ssh_config.get('keypair')
+			# Set security group
 			if self.ssh_config.get('security_group'):
 				kwargs['ex_securitygroup'] = self.ssh_config.get('security_group')
+			# Set authorized_keys for rackspace
+			if self.ssh_config.get('ssh_pub_key') and self.ssh_config.get('ssh_private_key'):
+				pub_key_path = self.ssh_config.get('ssh_pub_key')
+				pub_key = read_file(pub_key_path)
+				kwargs['ex_files'] = {'/root/.ssh/authorized_keys' : pub_key, '/root/authorized_keys' : pub_key}
 			
 			node = self.conn.create_node(**kwargs)
 
@@ -143,7 +153,7 @@ class DataProvider(object):
 					time.sleep(5)					
 			
 			host = node.public_ip[0]
-			key  = self.ssh_config.get('key')
+			key  = self.ssh_config.get('key') or self.ssh_config.get('ssh_private_key')
 			key_pass = self.ssh_config.get('key_pass')
 			password = node.__dict__.get('password')
 			ssh = SshManager(host, key, key_pass, password)
@@ -152,7 +162,7 @@ class DataProvider(object):
 			if self.farmui.state == 'terminated':
 				self.farmui.remove_all_roles()
 				# FIXME: Where farm settings are?
-				self.farmui.add_role(self.role_name)
+				self.farmui.add_role(self.role_name, self.farm_settings)
 				self.farmui.launch()
 				
 			out = self.scalrctl.exec_cronjob('Scaling')
@@ -170,7 +180,7 @@ class DataProvider(object):
 					
 			key  = self.ssh_config.get('key')
 			ssh = SshManager(host, key)
-			self._server = Server(node, ssh, role_name = self.role_name)
+			self._server = Server(node, ssh, role_name = self.role_name, scalr_id=server_id)
 		return self._server
 			
 	def clear(self):
@@ -190,11 +200,12 @@ class DataProvider(object):
 class Server(object):
 	_log_channel = None
 	
-	def __init__(self, node, ssh, image_id=None, role_name=None):
+	def __init__(self, node, ssh, image_id=None, role_name=None, scalr_id=None):
 		self.image_id = image_id
 		self.role_name = role_name
 		self.ssh_manager = ssh
 		self.node = node
+		self.scalr_id = scalr_id
 	
 	def ssh(self):
 		if not self.ssh_manager.connected:
@@ -220,4 +231,31 @@ class Server(object):
 			self._log_channel = self.ssh()
 			self._log = MutableLogFile(self._log_channel)
 		return self._log.head()
+		
+	@property
+	def cloud_id(self):
+		return self.node.id
+	
+	def get_message(self, message_id):
+		if not hasattr(self, '_control_ssh'):
+			self._control_ssh = self.ssh()
+		sqlite3_installed = execute(self._control_ssh, 'which sqlite3', 15)
+		if not sqlite3_installed:
+			self._install_sqlite()
+		cmd = 'select message from p2p_message where message_id="%s"' % message_id
+		return execute(self._control_ssh, 'sqlite3 /etc/scalr/private.d/db.sqlite ' + cmd, 10)		
+	
+	def _install_sqlite(self):
+		szrdeploy = ScalarizrDeploy(self.ssh_manager)
+		dist = szrdeploy.dist
+		del(szrdeploy)
+		if dist == 'debian':
+			out = execute(self._control_ssh, 'apt-get -y install sqlite3', 240)
+			error = re.search('^E:\s*(?P<err_text>.+?)$', out, re.M)
+			if error:
+				raise Exception("Can't install sqlite3 package: '%s'" % error.group('err_text'))		
+		else:
+			out = execute(self._control_ssh, 'yum -y install sqlite3', 240)
+			if not re.search('Complete!|Nothing to do', out):
+				raise Exception('Cannot install sqlite3 %s' % out)
 		

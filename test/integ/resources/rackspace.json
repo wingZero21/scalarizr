@@ -1,0 +1,28 @@
+{	
+	"ssh" : {
+			"ssh_pub_key" : "",
+			"ssh_private_key" : ""
+	},
+	
+	"platrform_credentials" : {
+		"key" 	 : "",
+		"secret" : ""	
+	},
+	
+	"default_size" : "1",
+	
+	"images" : {
+		"ubuntu804" : {
+			"raw" : [{
+				"image_id": 			"10",
+				"arch":					"x86_64"
+			}]
+		},
+		"ubuntu1004"  : {
+			"raw" : [{
+				"image_id": 			"69",
+				"arch":					"x86_64"
+			}]
+		}
+	}
+}

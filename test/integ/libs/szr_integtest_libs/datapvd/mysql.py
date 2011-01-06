@@ -12,8 +12,8 @@ class MysqlDataProvider(DataProvider):
 	_master = None
 	_slaves = []
 	
-	def __init__(self, behaviour=None, **kwargs):
-		super(MysqlDataProvider, self).__init__('mysql', **kwargs)
+	def __init__(self, behaviour=None, farm_settings=None, **kwargs):
+		super(MysqlDataProvider, self).__init__('mysql', farm_settings, **kwargs)
 	
 	def slave(self, index=0):
 		'''
@@ -38,7 +38,7 @@ class MysqlDataProvider(DataProvider):
 		if not self._master and self.farmui.state == 'terminated':
 			self.farmui.remove_all_roles()
 			# FIXME: Where can i get farm settings?
-			self.farmui.add_role(self.role_name)
+			self.farmui.add_role(self.role_name, settings=self.farm_settings)
 			self.farmui.launch()
 		out = self.scalr_ctl.exec_cronjob('Scaling')
 		result = re.search(self.server_id_re, out)
@@ -54,7 +54,7 @@ class MysqlDataProvider(DataProvider):
 				raise Exception("Can't find node with public ip '%s'" % host)
 		key  = self.ssh_config.get('key')
 		ssh = SshManager(host, key)
-		return Server(node, ssh, role_name=self.role_name)
+		return Server(node, ssh, role_name=self.role_name, scalr_id=server_id)
 
 	server = master
 	
