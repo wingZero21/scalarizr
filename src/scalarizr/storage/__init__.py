@@ -173,10 +173,11 @@ class VolumeConfig(object):
 	mpoint = None
 	fstype = None
 	id = None
+	_ignores = ()
 	
 	def config(self, as_snapshot=False):
 		base = tuple(base for base in self.__class__.__bases__ if base.__name__.endswith('Config'))[0]
-		attrs = tuple(attr for attr in dir(base) if not attr.startswith('_'))
+		attrs = tuple(attr for attr in dir(base) if not (attr.startswith('_') or attr in self._ignores))
 		ret = dict()
 		for attr in attrs:
 			if attr == 'config':
@@ -295,7 +296,7 @@ class Volume(VolumeConfig):
 
 		# Create snapshot
 		pvd = Storage.lookup_provider(self.type)
-		snap = pvd.snapshot_factory(description)		
+		snap = pvd.snapshot_factory(description, **self.config())		
 		pvd.create_snapshot(self, snap)
 		
 		# Unfreeze filesystem

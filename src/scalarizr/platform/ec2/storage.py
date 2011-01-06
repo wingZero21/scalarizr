@@ -33,7 +33,7 @@ class EbsVolume(Volume, EbsConfig):
 	size		= None
 
 class EbsSnapshot(Snapshot, EbsConfig):
-	pass
+	_ignores = ('snapshot_id',)	
 		
 
 class EbsVolumeProvider(VolumeProvider):

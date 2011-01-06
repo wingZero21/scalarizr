@@ -6,7 +6,8 @@ Created on Nov 25, 2010
 import unittest
 
 from scalarizr.util import system2 as system
-from scalarizr.storage import Volume, Snapshot, Storage, StorageError, VolumeProvider
+from scalarizr.storage import Volume, Snapshot, Storage, StorageError, VolumeProvider,\
+	VolumeConfig
 from scalarizr.storage.util.loop import mkloop
 from scalarizr.storage.eph import EphSnapshot
 from scalarizr.storage.fs import FileSystem
@@ -125,10 +126,6 @@ class TestVolume(unittest.TestCase):
 		self.assertEqual(cnf['device'], '/dev/smd0')
 		self.assertTrue('type' in cnf)
 		self.assertEqual(cnf['type'], 'base')
-		
-		snapcnf = vol.config(as_snapshot=True)
-		self.assertTrue('snapshot' in snapcnf)
-		self.assertEqual(snapcnf['snapshot'], cnf)
 
 class TestStorageProviders(unittest.TestCase):
 	_save_snap_pvd = None
@@ -253,6 +250,60 @@ class TestStorageCreate(unittest.TestCase):
 		self.assertEqual(vol.devname, '/dev/sdd')
 		self.assertEqual(vol.type, 'myvol')
 		self.assertEqual(vol.param1, 'value1')
+
+class SnapshotFieldsTest(unittest.TestCase):
+	def test_base_volume(self):
+		device = '/dev/sdo'
+		mpoint = '/mnt/media-server-flvs'
+		fstype = 'ext4'
+		
+		vol = Storage.create(device=device, mpoint=mpoint, fstype=fstype)
+		snap = vol.snapshot('snap #00')
+		
+		snap_cnf = snap.config()
+		vol_cnf = vol.config()
+		self.assertEqual(snap_cnf['type'], vol.type)
+		self.assertEqual(snap_cnf['mpoint'], vol.mpoint)
+		self.assertEqual(snap_cnf['device'], vol.device)
+
+
+	def test_with_ignores(self):
+		class VolConfig(VolumeConfig):
+			vg = None
+			base64_whatever = None
+			only_in_volume_config = None
+			only_in_snapshot_config = None
+			
+		class Vol(VolConfig, Volume):
+			_ignores = ('only_in_snapshot_config')
+
+		class Snap(VolConfig, Snapshot):
+			_ignores = ('only_in_volume_config',)
+		
+		class VolPvd(VolumeProvider):
+			type = 'mimimi'
+			vol_class = Vol
+			snap_class = Snap
+		Storage.explore_provider(VolPvd)	
+		
+		
+		vol = Storage.create(
+			type='mimimi', 
+			device='/dev/sdo', 
+			vg='vg0', 
+			only_in_volume_config='4u', 
+			only_in_snapshot_config='4s'
+		)
+		snap = vol.snapshot()
+		snap_cnf = snap.config()
+		vol_cnf = vol.config()
+
+		self.assertFalse('only_in_volume_config' in snap_cnf)
+		self.assertEqual(snap_cnf['vg'], 'vg0')
+		
+		self.assertFalse('only_in_snapshot_config' in vol_cnf)
+		self.assertTrue(vol_cnf['base64_whatever'] is None)
+		
 
 		
 if __name__ == "__main__":
