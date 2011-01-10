@@ -208,7 +208,7 @@ class Rsync(object):
 	def execute(self):
 		self._sync()
 		rsync_cmd = [self._executable] + self._options + [self._src, self._dst]
-		out, err, returncode = system2(rsync_cmd)
+		out, err, returncode = system2(rsync_cmd, raise_exc=False)
 		self._sync()
 		return out, err, returncode
 		
