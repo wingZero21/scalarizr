@@ -26,8 +26,7 @@ from telnetlib import Telnet
 from scalarizr.util.initdv2 import InitdError
 import time
 
-SERVICE_NAME = 'apache'
-BEHAVIOUR = BuiltinBehaviours.APP
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.APP
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR + '.ini'
 APP_CONF_PATH = 'apache_conf_path'
@@ -186,7 +185,7 @@ class ApacheHandler(ServiceCtlHanler):
 	'''
 
 	def __init__(self):
-		ServiceCtlHanler.__init__(self, BEHAVIOUR, initdv2.lookup('apache'), ApacheCnfController())		
+		ServiceCtlHanler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())		
 		
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
