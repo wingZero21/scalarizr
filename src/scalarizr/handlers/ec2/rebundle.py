@@ -10,7 +10,8 @@ from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, get_free_devname
 from scalarizr.util import software
-from scalarizr.platform.ec2 import s3tool, ebstool
+from scalarizr.platform.ec2 import ebstool
+from scalarizr.platform.ec2 import s3tool
 from scalarizr.storage import Storage 
 from scalarizr.storage.util.loop import mkloop, rmloop
 
@@ -810,7 +811,7 @@ if disttool.is_linux():
 			# create filesystem
 			fs.mkfs(self.devname)
 			# set EXT3/4 options
-			if fs.type.startswith('ext'): 
+			if fs.name.startswith('ext'): 
 				system2(('/sbin/tune2fs', '-i', '0', self.devname))
 			# set label
 			label = fs.get_label(vol_entry.devname)
