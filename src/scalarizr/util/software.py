@@ -60,7 +60,7 @@ def system_info():
 	ret['storage']['fstypes'] = []
 	
 	for fstype in ['jfs', 'xfs', 'ext3', 'ext4']:
-		retcode = system2((modprobe, '-n', fstype))[-1]
+		retcode = system2((modprobe, '-n', fstype), raise_exc=False)[-1]
 		exe = whereis('mkfs.%s' % fstype)
 		if not retcode and exe:
 			ret['storage']['fstypes'].append(fstype)
