@@ -22,7 +22,6 @@ import atexit
 import socket
 
 
-
 platform = os.environ['PLATFORM']
 platform_config_path = os.path.join(RESOURCE_PATH, platform + '.json')
 _user_platform_cnf_path = os.path.expanduser('~/.scalr-dev/' + platform + '.json' )	
@@ -102,8 +101,7 @@ class DataProvider(object):
 				else:
 					self.role_name = configuration['role_name']
 					self.farm_id   = config.get('./test-farm/farm_id')
-					self.ssh_config = {}
-					self.ssh_config['key'] = config.get('./test-farm/farm_key')
+					self.ssh_config = dict(key=config.get('./test-farm/farm_key'))
 					'''
 					self.key_path  = config.get('./test-farm/farm_key')
 					'''
