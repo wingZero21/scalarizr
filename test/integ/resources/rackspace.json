@@ -23,6 +23,16 @@
 				"image_id": 			"69",
 				"arch":					"x86_64"
 			}]
+		},
+		"centos5": {
+			"raw": [{
+				"image_id":				"51",
+				"arch":					"x86_64"
+			}],
+			"mysql": [{
+				"role_name":			"szr-mysql-unstable-centos55-64"
+				"arch":					"x86_64"
+			}]
 		}
 	}
 }

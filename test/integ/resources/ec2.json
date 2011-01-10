@@ -47,37 +47,73 @@
 				
 			}]
 		},
-		"el5" : {
-			"app" : [{
-				"role_name":			"szr-app-apache-centos55",
-				"arch":					"i386",
-				"root_device_type": 	"ebs"
-			}, {
-				"role_name":			"szr-app-apache-centos55-64",
-				"arch":					"x86_64",
-				"root_device_type": 	"ebs"
-			}]		
-		},
 		"ubuntu1004"  : {
 			"raw" : [{
 				"image_id": 			"ami-a2f405cb",
 				"arch":					"i386",
 				"root_device_type": 	"ebs"
+			}, {
+				"image_id":				"ami-b8f405d1",
+				"arch":					"x86_64",
+				"root_device_type":		"ebs"
+			}, {
+				"image_id": 			"ami-88f504e1",
+				"arch":					"i386",
+				"root_device_type": 	"instance-store"
+			}, {
+				"image_id": 			"ami-f8f40591",
+				"arch":					"x86_64",
+				"root_device_type": 	"instance-store"
+			}],
+			"www": [{
+				"role_name":			"szr-nginx-unstable-ubuntu1004-64",
+				"arch":					"x86_64",
+				"root_device_type": 	"ebs"
 			}],
 			"app" : [{
-				"role_name":			"szr-app-apache-ubuntu1004",
-				"arch":					"i386",
-				"root_device_type": 	"ebs"
-			}, {
-				"role_name":			"szr-app-apache-ubuntu1004-64",
+				"role_name":			"szr-apache-unstable-ubuntu1004-64",
 				"arch":					"x86_64",
 				"root_device_type": 	"ebs"
 			}],		
 			"mysql"	: [{
-				"role_name" : 			"Test_mysql_2010_10_20_1348",
-				"arch"		:			"i386",
-				"root_device_type": 	"ebs"		
+				"role_name":			"szr-mysql-unstable-ubuntu1004-64",
+				"arch"		:			"x86_64",
+				"root_device_type": 	"ebs"
 			}]
-		}
+		},
+		"centos5" : {
+			"raw": [{
+				"image_id":				"ami-8ef607e7",
+				"arch":					"i386",
+				"root_device_type": 	"ebs"
+			}, {
+				"image_id":				"ami-a2f607cb",
+				"arch":					"x86_64",
+				"root_device_type": 	"ebs"
+			}, {
+				"image_id":				"ami-90f607f9",
+				"arch":					"i386",
+				"root_device_type": 	"instance-store"
+			}, {
+				"image_id":				"ami-9ae312f3",
+				"arch":					"x86_64",
+				"root_device_type": 	"instance-store"
+			}],
+			"www": [{
+				"role_name":			"szr-nginx-unstable-centos55-64",
+				"arch":					"x86_64",
+				"root_device_type": 	"ebs"
+			}],
+			"app": [{
+				"role_name":			"szr-apache-unstable-centos55-6",
+				"arch":					"x86_64",
+				"root_device_type": 	"ebs"
+			}],
+			"mysql": [{
+				"role_name":			"szr-mysql-unstable-centos55-64",
+				"arch":					"x86_64",
+				"root_device_type": 	"ebs"
+			}]
+		}		
 	}
 }
