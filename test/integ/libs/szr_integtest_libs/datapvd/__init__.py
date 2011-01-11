@@ -211,7 +211,10 @@ class DataProvider(object):
 	
 	def _get_node(self, ip):
 		for instance in self.conn.list_nodes():
-			if socket.gethostbyname(instance.public_ip[0]) == ip:
+			public_ip = instance.public_ip
+			inst_ip = socket.gethostbyname(public_ip if type(public_ip) == str else public_ip[0])
+			print inst_ip
+			if inst_ip == ip:
 				return instance
 		else:
 			raise Exception("Can't find node with public ip '%s'" % ip)
