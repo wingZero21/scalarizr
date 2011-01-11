@@ -52,7 +52,7 @@ class FarmUI:
 		ui_login(self.sel)
 		self.sel.open('farms_builder.php?id=%s' % self.farm_id)
 		self.sel.wait_for_page_to_load(30000)
-		time.sleep(1)
+		wait_until(lambda: not self.sel.is_element_present('//html/body/div[@class="ext-el-mask-msg x-mask-loading"]/div'), timeout=10, sleep=0.5)
 
 		
 	def add_role(self, role_name, min_servers=1, max_servers=2, settings=None):
@@ -96,9 +96,10 @@ class FarmUI:
 		i = 1
 		while True:
 			try:
-				self.sel.click('//div[@class="viewers-farmrolesedit-tab" and position()=%s]' % i)
-				wait_until(lambda: self.sel.is_element_present('//div[@id="viewers-farmrolesedit-content"]/div[@class=" x-panel x-panel-noborder"]/div/div/fieldset'), timeout=10)
-					
+				self.sel.click('//div[@class="viewers-farmrolesedit-tabs"]/div[not(@style)][%s]' % i)
+				time.sleep(0.5)
+				wait_until(lambda: not self.sel.is_element_present('//html/body/div[@class="ext-el-mask-msg x-mask-loading"]/div'), timeout=10, sleep=0.5)
+				time.sleep(0.5)
 				for option, value in settings.iteritems():
 					try:
 						id = self.sel.get_attribute('//div[@class=" x-panel x-panel-noborder"]//*[@name="%s"]/@id' % option)
@@ -128,7 +129,7 @@ class FarmUI:
 	def remove_all_roles(self):
 		if not 'farms_builder.php?id=' in self.sel.get_location():
 			raise Exception("Farm's settings page hasn't been opened. Use farm first")
-		
+
 		self.sel.click('//span[text()="Roles"]')
 		while True:
 			try:
@@ -149,7 +150,7 @@ class FarmUI:
 			except:
 				continue
 
-		if text != 'Farm saved':
+		if text != 'Farm successfully saved':
 			raise FarmUIError('Something wrong with saving farm %s : %s' % (self.farm_id, text))
 	
 	@property
@@ -207,16 +208,18 @@ class FarmUI:
 			raise Exception('Farm %s has been already terminated' % self.farm_id)
 		
 	def get_public_ip(self, server_id, timeout = 45):
-		search_str = '//table[@id="Webta_InnerTable_Platform specific details"]/tbody/tr[8]/td[2]'
+		#search_str = '//table[@id="Webta_InnerTable_Platform specific details"]/tbody/tr[8]/td[2]'
+		search_str	= '//label[text()="Public IP address:"]/../div[1]/div'
 		try:
 			public_ip = self._get_server_info(server_id, search_str, timeout)
-		except:
-			raise FarmUIError("Can't retrieve instance's public ip from user interface")
+		except (Exception, BaseException), e:
+			raise FarmUIError("Can't retrieve instance's public ip from user interface %s" % e)
 		self.servers.append(public_ip)
 		return public_ip
 	
 	def get_instance_id(self, server_id, timeout = 45):
-		search_str = '//table[@id="Webta_InnerTable_Platform specific details"]/tbody/tr[2]/td[2]'
+		#search_str = '//table[@id="Webta_InnerTable_Platform specific details"]/tbody/tr[2]/td[2]'
+		search_str	= '//label[text()="Instance ID:"]/../div[1]/div'
 		try:
 			inst_id = self._get_server_info(server_id, search_str, timeout)
 		except:
@@ -225,17 +228,30 @@ class FarmUI:
 		
 	def _get_server_info(self, server_id, search_str ,timeout):
 		start_time = time.time()
+		first_time = True
 		while time.time() - start_time < timeout:
-			self.sel.open('server_view_extended_info.php?server_id=%s' % server_id)
-			self.sel.wait_for_page_to_load(15000)
+			#self.sel.open('server_view_extended_info.php?server_id=%s' % server_id)
+			if not first_time:
+				self.sel.refresh()
+			else:
+				first_time = False
+				
+			self.sel.open('#/servers/%s/extendedInfo' % server_id)
+			
+			self._wait_for_page_to_load()
+			#self.sel.wait_for_page_to_load(15000)
 			try:
 				server_info = self.sel.get_text(search_str).strip()
 			except:
 				raise FarmUIError('Server %s doesn\'t exist')
 			if server_info:
 				break
+			self.sel.mouse_over('//div[@class="x-tool x-tool-close"]')
+			self.sel.click('//div[@class="x-tool x-tool-close"]')
 		else:
 			raise FarmUIError("Cannot retrieve server's information. Server id: %s " % server_id)
+		self.sel.mouse_over('//div[@class="x-tool x-tool-close"]')
+		self.sel.click('//div[@class="x-tool x-tool-close"]')
 		return server_info
 	
 	def create_mysql_backup(self):
@@ -278,7 +294,20 @@ class FarmUI:
 		return ret
 		# TODO: collect and return info about mysql servers
 		
+	def get_role_name(self, scalr_srv_id):
+		self.use(self.farm_id)
+		self.sel.open('#/servers/view')  
+		#self._wait_for_page_to_load()
+		wait_until(lambda: self.sel.is_element_present('//div[@class="x-list-body-inner"]'), sleep=1)
+		time.sleep(0.5)
+		try:
+			return self.sel.get_text('//a[contains(@href, "%s")]/../../../dt[@dataindex="farm_id"]/em/a[2]' % scalr_srv_id)
+		except:
+			raise Exception("Server with id '%s' doesn't exist." % scalr_srv_id)
 		
+	def _wait_for_page_to_load(self):
+		path = '//span[text()="Please wait ..."]'
+		wait_until(lambda: self.sel.is_element_present(path) and not self.sel.is_visible(path), sleep=0.5)	
 		
 def ui_import_server(sel, platform_name, behaviour, host, role_name):
 	'''
@@ -323,6 +352,7 @@ def ui_login(sel):
 	sel.delete_all_visible_cookies()
 	sel.open('/')
 	sel.click('//div[@class="login-trigger-header"]/a')
+	wait_until(lambda: sel.is_element_present('//div[@id="login-panel"]'), sleep=0.1, timeout=15)
 	sel.wait_for_page_to_load(30000)
 	sel.type('login', login)
 	sel.type('pass', password)
@@ -361,8 +391,8 @@ class ScalrCtl:
 			print "channel was closed. getting new one."
 			self.channel = self.ssh.get_root_ssh_channel()
 			
-		cron_keys = ['BundleTasksManager', 'Scaling', 'Poller']
-		cron_ng_keys = ['ScalarizrMessaging', 'MessagingQueue']
+		cron_keys = ['BundleTasksManager']
+		cron_ng_keys = ['ScalarizrMessaging', 'MessagingQueue', 'Scaling', 'Poller']
 		
 		if not name in cron_keys and not name in cron_ng_keys:
 			raise Exception('Unknown cronjob %s' % name)

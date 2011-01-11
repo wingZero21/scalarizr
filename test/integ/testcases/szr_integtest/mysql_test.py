@@ -12,13 +12,16 @@ import logging
 import re
 import time
 from szr_integtest_libs.ssh_tool import execute
+from szr_integtest_libs.datapvd import DataProvider
 
 
 class StartupMasterHostUpFailed(unittest.TestCase):
 
 	def test_master_hostup_failed(self):
+		logger = logging.getLogger(__name__)
+		logger.info('Logger test')
 		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
-		opts.update(EC2_MYSQL_ROLE_DEFAULT_SETTINGS)
+		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
 		opts.update({'system.timeouts.launch' : '60'})
 		dp = MysqlDataProvider(farm_settings=opts)
 		master = dp.master()
@@ -34,10 +37,27 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 			if res:
 				break
 			time.sleep(5)
-		new_master = dp.slave()
+		#new_master = dp.slave()
+		new_server_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)' \
+								 % (dp.farm_id, dp.role_name), re.M)
+		out = scalrctl.exec_cronjob('Scaling')
 		scalrctl.exec_cronjob('ScalarizrMessaging')
+		
+		res = re.search(new_server_re, out)
+		if not res:
+			raise Exception("Farm hasn't been scaled up")
+		
+		server_id = res.group('server_id')
+		logger.info("New master's scalr id: %s" % server_id)
+		dp2 = DataProvider(scalr_srv_id = server_id)
+		new_master = dp2.server()
+		logger.info('Start Messaging')
+		scalrctl.exec_cronjob('ScalarizrMessaging')
+		logger.info('Messaging Done')
 		reader = new_master.log.head()
+		logger.info('Head log retrieved')
 		reader.expect("Message 'HostInit' delivered", 60)
+		logger.info('Host Init delivered')
 		
 		ssh = new_master.ssh()
 		execute(ssh, '/etc/init.d/scalarizr stop', 15)
@@ -46,7 +66,7 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 		
 		scalrctl.exec_cronjob('ScalarizrMessaging')
 		reader.expect("Received ingoing message 'HostInitResponse' in queue control", 30)
-		msg_id = reader.expect("\(message_id: (?P<msg_id>[\d-]+)\)", 10).group('msg_id')
+		msg_id = reader.expect("message_id: (?P<msg_id>[\d-]+)", 20).group('msg_id')
 		message = new_master.get_message(msg_id)
 		res = re.search('<replication_master>(?P<repl_master>\d)>', message)
 		if not res:
@@ -54,6 +74,8 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 		repl_master = res.group('repl_master')
 		self.assertEqual('1', repl_master)
 		
-		dp.farmui.terminate()									
+		dp.farmui.terminate()			
+		
+								
 if __name__ == "__main__":
 	unittest.main()

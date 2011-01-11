@@ -48,7 +48,7 @@ class SshManager:
 		self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 		
 	def _check_connection(self):
-		if not self.connected or (self.connected and not self.ssh._transport.is_alive()):
+		if not self.connected or not self.ssh._transport.is_alive():
 			self.connect()
 		
 	def connect(self):

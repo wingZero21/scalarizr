@@ -4,7 +4,7 @@ Created on Dec 27, 2010
 @author: spike
 '''
 from szr_integtest import RESOURCE_PATH, config, get_selenium
-from szr_integtest_libs.scalrctl import ScalrCtl, FarmUI, SshManager
+from szr_integtest_libs.scalrctl import ScalrCtl, FarmUI, SshManager, ui_login
 from szr_integtest_libs.szrdeploy import ScalarizrDeploy
 from szr_integtest_libs.ssh_tool import MutableLogFile, execute
 
@@ -28,6 +28,8 @@ _user_platform_cnf_path = os.path.expanduser('~/.scalr-dev/' + platform + '.json
 
 if not os.path.exists(platform_config_path):
 	raise Exception('Config file for platform "%s" does not exist.' % platform)
+
+keys_path = os.path.expanduser('~/.scalr-dev/farm_keys/')
 
 def read_json_config(cnf_path):
 	
@@ -63,12 +65,11 @@ class DataProvider(object):
 	
 	def __new__(cls, *args, **kwargs):
 		key = tuple(zip(kwargs.iterkeys(), tuple([x if type(x) != dict else tuple(x.items()) for x in kwargs.itervalues()])))
-		print key		
 		if not key in DataProvider._instances:
 			DataProvider._instances[key] = super(DataProvider, cls).__new__(cls, *args, **kwargs)
 		return DataProvider._instances[key]
 	
-	def __init__(self, behaviour='raw', farm_settings=None, **kwargs):
+	def __init__(self, behaviour='raw', farm_settings=None, scalr_srv_id=None, **kwargs):
 		
 		def cleanup():
 			self.clear()
@@ -83,6 +84,19 @@ class DataProvider(object):
 		self.driver = get_driver(getattr(Provider, self.platform.upper()))
 		self.__credentials = platform_config['platrform_credentials']
 		self.conn = self.driver(**self.__credentials)
+		
+		if scalr_srv_id:
+			self.farm_id   = config.get('./test-farm/farm_id')
+			self.farmui = FarmUI(get_selenium())
+			self.farmui.use(self.farm_id)
+			host = self.farmui.get_public_ip(scalr_srv_id, 60)
+			self.role_name = self.farmui.get_role_name(scalr_srv_id)
+			node = self._get_node(host)
+			key = os.path.join(keys_path, self.role_name) + '.pem'
+			ssh = SshManager(host, key)
+			self._server = Server(node, ssh, role_name=self.role_name, scalr_id=scalr_srv_id)
+			return
+			
 		self.default_size  = platform_config['default_size']
 
 		self.behaviour	= behaviour
@@ -106,6 +120,7 @@ class DataProvider(object):
 					self.key_path  = config.get('./test-farm/farm_key')
 					'''
 					self.farmui = FarmUI(get_selenium())
+					ui_login(self.farmui.sel)
 					self.farmui.use(self.farm_id)
 					self.scalrctl = ScalrCtl(self.farm_id)
 					self.server_id_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)'
@@ -161,6 +176,7 @@ class DataProvider(object):
 				self.farmui.remove_all_roles()
 				# FIXME: Where farm settings are?
 				self.farmui.add_role(self.role_name, self.farm_settings)
+				self.farmui.save()
 				self.farmui.launch()
 				
 			out = self.scalrctl.exec_cronjob('Scaling')
@@ -169,14 +185,9 @@ class DataProvider(object):
 				raise Exception("Can't create server - farm '%s' hasn't been scaled up." % self.farm_id)
 			server_id = result.group('server_id')
 			host = self.farmui.get_public_ip(server_id)
-			for instance in self.conn.list_nodes():
-				if instance.public_ip[0] == host:
-					node = instance
-					break
-			else:
-				raise Exception("Can't find node with public ip '%s'" % host)
+			node = self._get_node(host)
 					
-			key  = self.ssh_config.get('key')
+			key = os.path.join(keys_path, self.role_name) + '.pem'
 			ssh = SshManager(host, key)
 			self._server = Server(node, ssh, role_name = self.role_name, scalr_id=server_id)
 		return self._server
@@ -193,7 +204,13 @@ class DataProvider(object):
 			
 	def sync(self):
 		pass
-
+	
+	def _get_node(self, ip):
+		for instance in self.conn.list_nodes():
+			if socket.gethostbyname(instance.public_ip[0]) == ip:
+				return instance
+		else:
+			raise Exception("Can't find node with public ip '%s'" % ip)
 
 class Server(object):
 	_log_channel = None
