@@ -353,7 +353,6 @@ def ui_login(sel):
 	sel.open('/')
 	sel.click('//div[@class="login-trigger-header"]/a')
 	wait_until(lambda: sel.is_element_present('//div[@id="login-panel"]'), sleep=0.1, timeout=15)
-	sel.wait_for_page_to_load(30000)
 	sel.type('login', login)
 	sel.type('pass', password)
 	sel.check('keep_session')
