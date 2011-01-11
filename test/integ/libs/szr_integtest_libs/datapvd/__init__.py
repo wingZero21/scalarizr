@@ -101,9 +101,12 @@ class DataProvider(object):
 
 		self.behaviour	= behaviour
 		self.farm_settings = farm_settings
+		print farm_settings
 		
 		for configuration in platform_config['images'][self.dist][self.behaviour]:
-			if set(kwargs) <= set(configuration):
+			print 'Kwargs %s' % kwargs
+			if set(kwargs.items()) <= set(configuration.items()):
+				print configuration
 				if self.behaviour == 'raw':
 					self.image_id 	= configuration['image_id']
 					self.ssh_config = platform_config['ssh']
@@ -173,9 +176,10 @@ class DataProvider(object):
 			self._server = Server(node, ssh, image_id=self.image_id.id)
 		else:
 			if self.farmui.state == 'terminated':
+				self.farmui.use(self.farm_id)
 				self.farmui.remove_all_roles()
 				# FIXME: Where farm settings are?
-				self.farmui.add_role(self.role_name, self.farm_settings)
+				self.farmui.add_role(self.role_name, settings=self.farm_settings)
 				self.farmui.save()
 				self.farmui.launch()
 				

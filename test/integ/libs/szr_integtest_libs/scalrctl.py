@@ -62,7 +62,6 @@ class FarmUI:
 			settings['aws.instance_type'] = 't1.micro'
 		settings['scaling.min_instances'] = min_servers
 		settings['scaling.max_instances'] = max_servers
-			
 		if not 'farms_builder.php?id=' in self.sel.get_location():
 			raise FarmUIError("Farm's settings page hasn't been opened. Use farm first")
 	
