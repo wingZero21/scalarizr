@@ -13,7 +13,7 @@ from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 
 # Libs
-from scalarizr.util import cryptotool
+from scalarizr.util import cryptotool, system
 
 # Stdlibs
 import logging, os, sys, binascii, threading
@@ -135,7 +135,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		except AttributeError:
 			pass
 
-
+		# Mount all filesystems
+		system('mount -a 2>&1')
 
 	def on_start(self):
 		optparser = bus.optparser
