@@ -59,6 +59,7 @@ def is_debian(): return _is_debian
 
 def uname(): return _uname
 def linux_dist(): return _linux_dist
+def version_info(): return tuple(map(int, linux_dist()[1].split('.')))
 
 
 def arch():

@@ -135,6 +135,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		except AttributeError:
 			pass
 
+		# Mount all filesystems
+		system2(('mount', '-a'), raise_exc=False)
 
 
 	def on_start(self):

@@ -208,7 +208,10 @@ def mount (device, mpoint = '/mnt', options=None, make_fs=False, fstype='ext3', 
 	if auto_mount:
 		fstab = Fstab()
 		if not fstab.contains(device, mpoint=mpoint, reload=True):
-			fstab.append(device, mpoint)
+			opts = "defaults"
+			if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+				opts += ',comment=cloudconfig,nobootwait'
+			fstab.append(device, mpoint, options=opts)
 
 def umount(device=None, mpoint=None, options=None, clean_fstab = False):
 	dev = device or mpoint
