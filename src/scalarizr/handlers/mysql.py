@@ -823,20 +823,17 @@ class MysqlHandler(ServiceCtlHanler):
 					log_pos = pair[1]
 			self._logger.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
 
-			wait_until(
-				self._change_master,
-				kwargs=dict(
-					host=host, 
-					user=REPL_USER, 
-					password=message.repl_password,
-					log_file=log_file, 
-					log_pos=log_pos, 
-					mysql_user=ROOT_USER,
-					mysql_password=message.root_password
-				),
-				logger=self._logger,
+			self._change_master(
+				host=host, 
+				user=REPL_USER, 
+				password=message.repl_password,
+				log_file=log_file, 
+				log_pos=log_pos, 
+				mysql_user=ROOT_USER,
+				mysql_password=message.root_password,
 				timeout=self._change_master_timeout
 			)
+				
 			self._logger.debug("Replication switched")
 			bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
 		else:
@@ -1061,18 +1058,14 @@ class MysqlHandler(ServiceCtlHanler):
 				master_host.internal_ip, master_host.external_ip)
 		
 		host = master_host.internal_ip or master_host.external_ip
-		wait_until(
-			self._change_master, 
-			kwargs=dict(
-				host=host, 
-				user=REPL_USER, 
-				password=repl_pass,
-				log_file=log_file, 
-				log_pos=log_pos, 
-				mysql_user=ROOT_USER,
-				mysql_password=root_pass
-			), 
-			logger=self._logger,
+		self._change_master( 
+			host=host, 
+			user=REPL_USER, 
+			password=repl_pass,
+			log_file=log_file, 
+			log_pos=log_pos, 
+			mysql_user=ROOT_USER,
+			mysql_password=root_pass,
 			timeout=self._change_master_timeout
 		)
 		
@@ -1273,9 +1266,10 @@ class MysqlHandler(ServiceCtlHanler):
 
 
 	def _change_master(self, host, user, password, log_file, log_pos, 
-					spawn=None, mysql_user=None, mysql_password=None):
+					spawn=None, mysql_user=None, mysql_password=None, timeout=None):
 		spawn = spawn or self.spawn_mysql(mysql_user, mysql_password)
 		self._logger.info("Changing replication master to host %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
+		
 		# Changing replication master
 		spawn.sendline('STOP SLAVE;')
 		spawn.expect('mysql>')
@@ -1293,23 +1287,42 @@ class MysqlHandler(ServiceCtlHanler):
 		if re.search(re.compile('ERROR', re.MULTILINE), status):
 			raise HandlerError('Cannot start mysql slave: %s' % status)
 		
-		# Sleeping for a while
-		time.sleep(3)
-		spawn.sendline('SHOW SLAVE STATUS;')
-		spawn.expect('mysql>')
-		
-		# Retrieveing slave status row vith values
-		status = spawn.before.split('\r\n')[4].split('|')
-		spawn.close()
-		io_status = status[11].strip()
-		sql_status = status[12].strip()
-		
-		# Check for errors
-		if 'Yes' != io_status:
-			raise HandlerError ('IO Error while starting mysql slave: %s %s' %  (status[17], status[18]))
-		if 'Yes' != sql_status:
-			raise HandlerError('SQL Error while starting mysql slave: %s %s' %  (status[17], status[18]))
-		
+		def slave_status():
+			spawn.sendline('SHOW SLAVE STATUS;')
+			spawn.expect('mysql>')
+			status = spawn.before.split('\r\n')[4].split('|')
+			return (
+				# io status
+				status[11].strip(),
+				# sql status
+				status[12].strip(),
+				# error 1
+				status[17].strip(),
+				# error 2
+				status[18].strip()
+			)
+
+		try:
+			time_until = time.time() + timeout
+			status = None
+			while time.time() >= time_until:
+				status = slave_status()
+				if status[0:2] == ('Yes', 'Yes'):
+					break
+				time.sleep(5)
+			else:
+				if status:
+					if status[0] != 'Yes':
+						err = 'IO Error while starting mysql slave'
+					else:
+						err = 'SQL Error while starting mysql slave' 
+					err = str(err+': %s %s') % status[-2:]
+					raise HandlerError(err)
+				else:
+					raise HandlerError('Cannot change replication master to %s' % (host))
+		finally:
+			spawn.close()
+				
 		self._logger.debug('Replication master is changed to host %s', host)		
 
 	def _ping_mysql(self):
