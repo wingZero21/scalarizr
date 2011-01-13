@@ -18,7 +18,7 @@ from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError,\
 	ParseError
 from scalarizr.util import system2, cryptotool, disttool,\
-		 filetool, firstmatched, cached, validators, initdv2, software
+		 filetool, firstmatched, cached, validators, initdv2, software, wait_until
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
@@ -28,9 +28,11 @@ import logging, os, re,  tarfile, tempfile
 import time, signal, pwd, random, shutil
 import glob
 import hashlib
+import ConfigParser
 
 # Extra
 import pexpect
+
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 CNF_SECTION = BEHAVIOUR
@@ -156,40 +158,37 @@ class MysqlServiceConfigurator:
 	pass
 
 # Configuration options
-OPT_ROOT_USER   		= "root_user"
-OPT_ROOT_PASSWORD   	= "root_password"
-OPT_REPL_USER   		= "repl_user"
-OPT_REPL_PASSWORD   	= "repl_password"
-OPT_STAT_USER   		= "stat_user"
+# Private
+OPT_ROOT_PASSWORD 		= "root_password"
+OPT_REPL_PASSWORD 		= "repl_password"
 OPT_STAT_PASSWORD   	= "stat_password"
 OPT_REPLICATION_MASTER  = "replication_master"
-OPT_SNAPSHOT_ID			= "snapshot_id"
-OPT_STORAGE_VOLUME_ID	= "volume_id"
-OPT_STORAGE_VOLUME		= "volume"
 OPT_LOG_FILE 			= "log_file"
 OPT_LOG_POS				= "log_pos"
-
+OPT_VOLUME_CNF			= 'volume_config'
+OPT_SNAPSHOT_CNF		= 'snapshot_config'
+# Public
 OPT_MYSQLD_PATH 		= 'mysqld_path'
+OPT_MYSQL_PATH			= 'mysql_path'
+OPT_MYSQLDUMP_PATH		= 'mysqldump_path'
 OPT_MYCNF_PATH 			= 'mycnf_path'
+OPT_CHANGE_MASTER_TIMEOUT = 'change_master_timeout'
 
-# Role params
-PARAM_MASTER_EBS_VOLUME_ID 	= "mysql_master_ebs_volume_id"
-PARAM_DATA_STORAGE_ENGINE 	= "mysql_data_storage_engine"
+# System users
+ROOT_USER 				= "scalr"
+REPL_USER 				= "scalr_repl"
+STAT_USER 				= "scalr_stat"
+PMA_USER 				= "pma"
 
+# Mysql storage constants
+STORAGE_DEVNAME 		= "/dev/sdo"
+STORAGE_PATH 			= "/mnt/dbstorage"
+STORAGE_DATA_DIR 		= "mysql-data"
+STORAGE_BINLOG 			= "mysql-misc/binlog"
+STORAGE_VOLUME_CNF 		= 'mysql.json'
+STORAGE_SNAPSHOT_CNF 	= 'mysql-snap.json'
 
-ROOT_USER = "scalr"
-REPL_USER = "scalr_repl"
-STAT_USER = "scalr_stat"
-PMA_USER = "pma"
-
-STORAGE_DEVNAME = "/dev/sdo"
-STORAGE_PATH = "/mnt/dbstorage"
-STORAGE_DATA_DIR = "mysql-data"
-STORAGE_BINLOG = "mysql-misc/binlog"
 BACKUP_CHUNK_SIZE = 200*1024*1024
-
-STORAGE_NAME = 'mysql.json'
-SNAPSHOT_NAME = 'mysql-snap.json'
 
 
 def get_handlers ():
@@ -255,15 +254,13 @@ class MysqlMessages:
 	= HOST_INIT_RESPONSE =
 	@ivar mysql=dict(
 		replication_master: 	1|0
-		volume_config			Master storage configuration			(on master)
-		# --- volume_id				EBS volume id						(on master)
-		snapshot_config			Master storage snapshot 				(both)
-		# --- snapshot_id: 			Master EBS snapshot id				(on slave)
 		root_password:			'scalr' user password  					(on slave)
 		repl_password:			'scalr_repl' user password				(on slave)
 		stat_password: 			'scalr_stat' user password				(on slave)
 		log_file:				Binary log file							(on slave)
 		log_pos:				Binary log file position				(on slave)
+		volume_config			Master storage configuration			(on master)
+		snapshot_config			Master storage snapshot 				(both)
 	)
 	
 	= HOST_UP =
@@ -271,13 +268,11 @@ class MysqlMessages:
 		root_password: 			'scalr' user password  					(on master)
 		repl_password: 			'scalr_repl' user password				(on master)
 		stat_password: 			'scalr_stat' user password				(on master)
-		# --- snapshot_id: 		Data volume EBS snapshot				(on master)
-		snapshot_config:		Master storage snapshot					(on master)		 
 		log_file: 				Binary log file							(on master) 
 		log_pos: 				Binary log file position				(on master)
-		volume_config:			Current storage configuration			(both) 
-		# --- volume_id:		EBS volume created from master snapshot (on slave)
-		) 
+		volume_config:			Current storage configuration			(both)
+		snapshot_config:		Master storage snapshot					(on master)		 
+	) 
 	"""
 
 
@@ -444,6 +439,7 @@ class MysqlHandler(ServiceCtlHanler):
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
 		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
+		self._change_master_timeout = ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT)
 
 		
 		self._storage_path = STORAGE_PATH
@@ -453,8 +449,8 @@ class MysqlHandler(ServiceCtlHanler):
 		initd = initdv2.lookup(SERVICE_NAME)
 		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
 		
-		self._storage_name  = self._cnf.private_path(os.path.join('storage', STORAGE_NAME))
-		self._snapshot_name = self._cnf.private_path(os.path.join('storage', SNAPSHOT_NAME))
+		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
+		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 			
 		bus.on("init", self.on_init)
 		bus.define_events(
@@ -523,7 +519,7 @@ class MysqlHandler(ServiceCtlHanler):
 				
 			if not self.storage_vol:
 				# Creating self.storage_vol object from configuration
-				storage_conf = Storage.restore_config(self._storage_name)
+				storage_conf = Storage.restore_config(self._volume_config_path)
 				self.storage_vol = Storage.create(storage_conf)
 				
 				
@@ -801,7 +797,9 @@ class MysqlHandler(ServiceCtlHanler):
 		@type message: scalarizr.messaging.Message
 		@param message:  Mysql_NewMasterUp
 		"""
-		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
+		is_repl_master, = self._get_ini_options(OPT_REPLICATION_MASTER)
+		
+		if not int(is_repl_master):
 			host = message.local_ip or message.remote_ip
 			self._logger.info("Switching replication to a new MySQL master %s", host)
 			bus.fire('before_mysql_change_master', host=host)			
@@ -825,15 +823,20 @@ class MysqlHandler(ServiceCtlHanler):
 					log_pos = pair[1]
 			self._logger.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
 
-			self._change_master(
-				host=host, 
-				user=REPL_USER, 
-				password=message.repl_password,
-				log_file=log_file, 
-				log_pos=log_pos, 
-				mysql_user=ROOT_USER,
-				mysql_password=message.root_password
-			)			
+			wait_until(
+				self._change_master,
+				kwargs=dict(
+					host=host, 
+					user=REPL_USER, 
+					password=message.repl_password,
+					log_file=log_file, 
+					log_pos=log_pos, 
+					mysql_user=ROOT_USER,
+					mysql_password=message.root_password
+				),
+				logger=self._logger,
+				timeout=self._change_master_timeout
+			)
 			self._logger.debug("Replication switched")
 			bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
 		else:
@@ -873,13 +876,18 @@ class MysqlHandler(ServiceCtlHanler):
 		"""
 		if not message.body.has_key("mysql"):
 			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
-		
-		storage_conf = message.mysql['volume_config']
-		dir = os.path.dirname(self._storage_name)
+
+		dir = os.path.dirname(self._volume_config_path)
 		if not os.path.exists(dir):
 			os.makedirs(dir)
-		Storage.backup_config(storage_conf, self._storage_name)
-		del message.mysql['volume_config']
+		
+		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
+						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
+			if os.path.exists(file):
+				os.remove(file)
+			if key in message.mysql:
+				Storage.backup_config(message.mysql[key], file)
+			del message.mysql[key]
 		
 		self._logger.debug("Update mysql config with %s", message.mysql)
 		self._update_config(message.mysql)
@@ -923,11 +931,14 @@ class MysqlHandler(ServiceCtlHanler):
 		self._logger.info("Initializing MySQL master")
 		
 		# Plug storage
-		storage_conf = Storage.restore_config(self._storage_name)
-		snap_conf = Storage.restore_config(self._snapshot_name)
-		if snap_conf:
-			storage_conf['snapshot'] = snap_conf
-		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=storage_conf)
+		volume_cnf = Storage.restore_config(self._volume_config_path)
+		try:
+			snap_cnf = Storage.restore_config(self._snapshot_config_path)
+			volume_cnf['snapshot'] = snap_cnf
+		except IOError:
+			pass
+		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
+		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 		
 		# Stop MySQL server
 		self._stop_service()
@@ -935,7 +946,6 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		msg_data = None
 		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
-
 
 		try:
 			if not storage_valid and self._mysql_config.get('mysqld/datadir').find(self._data_dir) == 0:
@@ -945,72 +955,61 @@ class MysqlHandler(ServiceCtlHanler):
 			# Patch configuration
 			self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
 			self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-	
-					
+			
+			# Init replication
 			self._replication_init(master=True)
 			
 			# If It's 1st init of mysql master storage
 			if not storage_valid:
-				
-				if os.path.exists('/etc/mysql/debian.cnf'):
-					try:
-						self._logger.debug("Copying debian.cnf file to storage")
-						shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
-					except BaseException, e:
-						self._logger.error("Cannot copy debian.cnf file to storage: ", e)
-						
+				self._copy_debian_cnf()
+					
+				# Add system users	
 				root_password, repl_password, stat_password = \
 						self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER)
 				
-				# Get binary logfile, logpos and create data snapshot if needed
+				# Get binary logfile, logpos and create storage snapshot
 				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				
-				Storage.backup_config(self.storage_vol.config(), self._storage_name)
-				Storage.backup_config(snap.config(), self._snapshot_name)
-				
+				# Update HostUp message 
 				msg_data = dict(
 					root_password=root_password,
 					repl_password=repl_password,
 					stat_password=stat_password,
-					#snapshot_id=snap_id,
 					snapshot_config=snap.config(),
 					volume_config=self.storage_vol.config(),
 					log_file=log_file,
 					log_pos=log_pos
 				)
 				
-			# If EBS volume had mysql dirs (N-th init)
+			# If volume has mysql storage directory structure (N-th init)
 			else:
-				# Retrieve scalr's mysql username and password
-				try:
-					root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
-				except Exception, e:
-					raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
+				# Get required configuration options
+				root_password, = self._get_ini_options(OPT_REPL_PASSWORD)
 				
-				if disttool._is_debian_based and os.path.exists(os.path.join(STORAGE_PATH, 'debian.cnf')):
-					try:
-						self._logger.debug("Copying debian.cnf file from storage")
-						shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
-					except BaseException, e:
-						self._logger.error("Cannot copy debian.cnf file from storage: ", e)
+				self._copy_debian_cnf_back()
 				
-				# Updating snapshot
+				# Create snapshot
 				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-				Storage.backup_config(snap.config(), self._snapshot_name)
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				
-				# Send updated metadata to Scalr
-				msg_data = dict(snapshot=snap.config(), log_file=log_file, log_pos=log_pos)
+				# Update HostUp message 
+				msg_data = dict(
+					snapshot_config=snap.config(),
+					volume_config=self.storage_vol.config(),
+					log_file=log_file, 
+					log_pos=log_pos
+				)
 		except (BaseException, Exception):
 			if not storage_valid and self._storage_path:
 				# Perform cleanup
-				system2('rm -rf %s' % os.path.join(self._storage_path, '*'), shell=True)
+				system2('rm -rf %s' % os.path.join(self._storage_path, '*'), shell=True, raise_exc=False)
 			raise
 			
 		if msg_data:
 			message.mysql = msg_data
+			del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF] 
 			self._update_config(msg_data)
-			
-		#self._start_service()	
 			
 
 	def _init_slave(self, message):
@@ -1020,27 +1019,29 @@ class MysqlHandler(ServiceCtlHanler):
 		@param message: HostUp message
 		"""
 		self._logger.info("Initializing MySQL slave")
+		
+		# Read required configuration options
+		root_pass, repl_pass, log_file, log_pos = self._get_ini_options(
+				OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_LOG_FILE, OPT_LOG_POS)
+		
 		if not self._storage_valid():
 			self._logger.debug("Initialize slave storage")
-			snapshot = Storage.restore_config(self._snapshot_name)
-			self.storage_vol = self._plug_storage(self._storage_path, dict(snapshot=snapshot))			
-			message.mysql = dict(volume = self.storage_vol.config())
-			Storage.backup_config(self, self.storage_vol.config(), self._storage_name)
+			self.storage_vol = self._plug_storage(self._storage_path, 
+					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+			Storage.backup_config(self, self.storage_vol.config(), self._volume_config_path)
+		
 			
+		# Stop MySQL
 		self._stop_service()			
 		self._flush_logs()
+		
 		# Change configuration files
 		self._logger.info("Changing configuration files")
 		self._move_mysql_dir('mysqld/datadir', self._data_dir)
 		self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 		self._replication_init(master=False)
-		if disttool._is_debian_based and os.path.exists(STORAGE_PATH + os.sep +'debian.cnf') :
-			try:
-				self._logger.debug("Copying debian.cnf from storage to mysql configuration directory")
-				shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
-			except BaseException, e:
-				self._logger.error("Cannot copy debian.cnf file from storage: ", e)			
-					
+		
+		self._copy_debian_cnf_back()
 		self._start_service()
 		
 		# Change replication master 
@@ -1060,15 +1061,25 @@ class MysqlHandler(ServiceCtlHanler):
 				master_host.internal_ip, master_host.external_ip)
 		
 		host = master_host.internal_ip or master_host.external_ip
-		self._change_master(
-			host=host, 
-			user=REPL_USER, 
-			password=self._cnf.rawini.get(CNF_SECTION, OPT_REPL_PASSWORD),
-			log_file=self._cnf.rawini.get(CNF_SECTION, OPT_LOG_FILE), 
-			log_pos=self._cnf.rawini.get(CNF_SECTION, OPT_LOG_POS), 
-			mysql_user=ROOT_USER,
-			mysql_password=self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
+		wait_until(
+			self._change_master, 
+			kwargs=dict(
+				host=host, 
+				user=REPL_USER, 
+				password=repl_pass,
+				log_file=log_file, 
+				log_pos=log_pos, 
+				mysql_user=ROOT_USER,
+				mysql_password=root_pass
+			), 
+			logger=self._logger,
+			timeout=self._change_master_timeout
 		)
+		
+		# Update HostUp message
+		message.mysql = dict(
+			volume_config = self.storage_vol.config()
+		)		
 		
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
@@ -1083,19 +1094,37 @@ class MysqlHandler(ServiceCtlHanler):
 				raise
 		return vol
 	
+	def _get_ini_options(self, *args):
+		ret = []
+		for opt in args:
+			try:
+				ret.append(self._cnf.rawini.get(CNF_SECTION, opt))
+			except ConfigParser.Error:
+				err = 'Required configuration option is missed in mysql.ini: %s' % opt
+				raise HandlerError(err)
+		return tuple(ret)
+	
+	def _copy_debian_cnf_back(self):
+		debian_cnf = os.path.join(self._storage_path, 'debian.cnf')
+		if disttool.is_debian_based() and os.path.exists(debian_cnf):
+			self._logger.debug("Copying debian.cnf from storage to mysql configuration directory")
+			shutil.copy(debian_cnf, '/etc/mysql/')
+		
+				
+	def _copy_debian_cnf(self):
+		if os.path.exists('/etc/mysql/debian.cnf'):
+			self._logger.debug("Copying debian.cnf file to mysql storage")
+			shutil.copy('/etc/mysql/debian.cnf', self._storage_path)		
+	
+	
 	def _storage_valid(self, path=None):
 		data_dir = os.path.join(path, STORAGE_DATA_DIR) if path else self._data_dir
 		binlog_base = os.path.join(path, STORAGE_BINLOG) if path else self._binlog_base
 		return os.path.exists(data_dir) and glob.glob(binlog_base + '*')
 
 
-	def _wait_until(self, target, args=None, sleep=5):
-		args = args or ()
-		while not target(*args):
-			self._logger.debug("Wait %d seconds before the next attempt", sleep)
-			time.sleep(sleep)
-
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
+		is_repl_master, = self._get_ini_options(OPT_REPLICATION_MASTER)
 		was_running = self._init_script.running
 		try:
 			if not was_running:
@@ -1106,7 +1135,7 @@ class MysqlHandler(ServiceCtlHanler):
 			sql.sendline('FLUSH TABLES WITH READ LOCK;')
 			sql.expect('mysql>')
 			system2('sync', shell=True)
-			if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
+			if int(is_repl_master):
 				sql.sendline('SHOW MASTER STATUS;')
 				sql.expect('mysql>')
 				
@@ -1129,7 +1158,7 @@ class MysqlHandler(ServiceCtlHanler):
 				else:
 					log_file = log_pos = None
 
-			# Creating EBS snapshot
+			# Creating storage snapshot
 			snap = None if dry_run else self._create_storage_snapshot()
 	
 			sql.sendline('UNLOCK TABLES;\n')
@@ -1194,11 +1223,7 @@ class MysqlHandler(ServiceCtlHanler):
 		os.kill(myd.pid, signal.SIGTERM)
 		time.sleep(3)
 		self._start_service()
-		"""
-		self._logger.debug("Checking that mysqld is terminated")
-		self._wait_until(lambda: not initd.is_running("mysql"))
-		self._logger.debug("Mysqld terminated")
-		"""
+
 		self._update_config(dict(
 			root_password=root_password,
 			repl_password=repl_password,

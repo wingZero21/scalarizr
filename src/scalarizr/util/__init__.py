@@ -220,11 +220,12 @@ def system2(*popenargs, **kwargs):
 	return out, err, p.returncode
 
 
-def wait_until(target, args=None, sleep=5, logger=None, time_until=None, timeout=None):
+def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, time_until=None, timeout=None):
 	args = args or ()
+	kwargs = kwargs or {}
 	if timeout:
 		time_until = time.time() + timeout
-	while not target(*args):
+	while not target(*args, **kwargs):
 		if time_until and time.time() >= time_until:
 			raise BaseException('Time until: %d reached' % time_until)
 		if logger:
