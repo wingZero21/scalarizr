@@ -5,21 +5,31 @@ Created on Jan 5, 2011
 '''
 from szr_integtest_libs.scalrctl		import	ScalrCtl, EC2_ROLE_DEFAULT_SETTINGS, EC2_MYSQL_ROLE_DEFAULT_SETTINGS
 from szr_integtest_libs.datapvd.mysql	import	MysqlDataProvider
-from szr_integtest.ec2.import_test		import	_init_server
+from szr_integtest_libs.ssh_tool import execute
+from szr_integtest_libs.datapvd import DataProvider
+
+from szr_integtest import RESOURCE_PATH
+
+from scalarizr.libs.metaconf import Configuration
+from scalarizr.handlers.mysql import ROOT_USER, REPL_USER, STAT_USER, \
+									OPT_REPL_PASSWORD, OPT_STAT_PASSWORD, OPT_ROOT_PASSWORD, CNF_SECTION
 
 import unittest
 import logging
 import re
 import time
-from szr_integtest_libs.ssh_tool import execute
-from szr_integtest_libs.datapvd import DataProvider
+import _mysql
+import os
+
+from socket import socket
+from StringIO import StringIO
+from _mysql_exceptions import OperationalError
 
 
 class StartupMasterHostUpFailed(unittest.TestCase):
 
-	def test_master_hostup_failed(self):
+	def _test_master_hostup_failed(self):
 		logger = logging.getLogger(__name__)
-		logger.info('Logger test')
 		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
 		opts.update({'system.timeouts.launch' : '60'})
@@ -66,16 +76,219 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 		
 		scalrctl.exec_cronjob('ScalarizrMessaging')
 		reader.expect("Received ingoing message 'HostInitResponse' in queue control", 30)
-		msg_id = reader.expect("message_id: (?P<msg_id>[\d-]+)", 20).group('msg_id')
+		msg_id = reader.expect("message_id: (?P<msg_id>[\w-]+)", 20).group('msg_id')
 		message = new_master.get_message(msg_id)
-		res = re.search('<replication_master>(?P<repl_master>\d)>', message)
+		res = re.search('<replication_master>(?P<repl_master>\d)', message)
 		if not res:
 			raise Exception("HostInitResponse doesn't contain replication master option.")
 		repl_master = res.group('repl_master')
 		self.assertEqual('1', repl_master)
 		
-		dp.farmui.terminate()			
+		dp.farmui.terminate()
 		
-								
+class StartupMaster(unittest.TestCase):
+	def _test_startup_master(self):
+		logger = logging.getLogger(__name__)
+		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
+		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
+		#opts.update({'scaling.max_instances' : '1'})
+		dp = MysqlDataProvider(farm_settings=opts)
+		scalrctl = ScalrCtl(dp.farm_id)
+		
+		master = dp.master()
+		reader = master.log.head()
+		reader.expect("Message 'HostInit' delivered", 60)
+		logger.info('HostInit delivered')
+		scalrctl.exec_cronjob('ScalarizrMessaging')
+		reader.expect("Message 'HostUp' delivered", 120)
+		logger.info('HostUp Delivered')
+		# Check if mysql running
+		s = socket()
+		try:
+			s.connect((master.public_ip, 3306))
+		except:
+			raise Exception('Mysql is not running on master.')
+		logger.info('Mysql is running on master instance')
+				
+		ssh = master.ssh()
+		
+		root_pass, repl_pass, stat_pass = get_mysql_passwords(ssh)
+		
+		logger.info('Mysql passwords successfully retrieved')
+		
+		master_status = execute(ssh, 'mysql -u%s -p%s -e "show master status"' % (ROOT_USER, root_pass))
+		# Check if replication started
+		self.assertFalse('Empty set' in master_status)
+		self.assertFalse('Access denied for user' in master_status)
+		logger.info('Replication master is running.')
+		
+		hostup = master.get_message(message_name='HostUp')
+		#self.assertTrue(re.search('<volume_config>.+</volume_config>', hostup))
+		#self.assertTrue(re.search('<snapshot_config>.+</snapshot_config>', hostup))
+		self.assertTrue(re.search('<log_pos>\d+</log_pos>', hostup))
+		self.assertTrue(re.search('<log_file>.+</log_file>', hostup))
+		try:
+			self.assertEqual(re.search('<root_password>(?P<root_pass>.+)</root_password>', hostup).group('root_pass'), root_pass)
+			self.assertEqual(re.search('<repl_password>(?P<repl_pass>.+)</repl_password>', hostup).group('repl_pass'), repl_pass)
+			self.assertEqual(re.search('<stat_password>(?P<stat_pass>.+)</stat_password>', hostup).group('stat_pass'), stat_pass)
+		except AttributeError:
+			raise Exception("Some of password were not found in HostUp message.")
+		logger.info('HostUp contains all essential data')
+		
+		_mysql.connect(master.public_ip, STAT_USER, stat_pass)
+		_mysql.connect(master.public_ip, REPL_USER, repl_pass)
+		self.assertRaises(OperationalError, _mysql.connect, master.public_ip, ROOT_USER, root_pass)
+		
+		logger.info('Mysql users and permissions are set properly.')
+		
+class StartupSlave(unittest.TestCase):
+	def _test_startup_slave(self):
+		logger = logging.getLogger(__name__)
+		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
+		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
+		opts.update({'scaling.min_instances' : '2'})
+		dp = MysqlDataProvider(farm_settings=opts)
+		slave = dp.slave(0)
+		reader = slave.log.head()
+		scalrctl = ScalrCtl(dp.farm_id)
+		reader.expect("Message 'HostInit' delivered", 60)
+		logger.info('HostInit delivered')
+		scalrctl.exec_cronjob('ScalarizrMessaging')
+		reader.expect("Message 'HostUp' delivered", 120)
+		logger.info('HostUp Delivered')
+		
+		s = socket()
+		try:
+			s.connect((slave.public_ip, 3306))
+		except:
+			raise Exception('Mysql is not running on slave.')
+		logger.info('Mysql is running on slave')
+		
+		# Getting mysql credentials
+		master = dp.master()
+		master_ssh = master.ssh()
+		root_pass, repl_pass, stat_pass = get_mysql_passwords(master_ssh)
+		
+		# Check for slave status
+		ssh = slave.ssh()
+		slave_status = execute(ssh, 'mysql -u%s -p%s -e "show slave status"' % (ROOT_USER, root_pass))
+		self.assertFalse('Empty set' in slave_status)
+		self.assertFalse('Access denied for user' in slave_status)
+		logger.info('Slave is running.')
+		
+		master_private_ip = dp.farmui.get_private_ip(master.scalr_id, 60)
+		self.assertTrue(master_private_ip in slave_status)
+		
+		logger.info("Master host has been set properly.")
+		
+		hostup = slave.get_message(message_name='HostUp')
+		# TODO: check hostup
+		
+class SlaveToMaster(unittest.TestCase):
+	def _test_slave_to_master(self):
+		logger = logging.getLogger(__name__)
+		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
+		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
+		opts.update({'scaling.min_instances' : '2'})
+		dp = MysqlDataProvider(farm_settings=opts)
+		scalrctl = ScalrCtl(dp.farm_id)
+		master = dp.master()
+		dp.wait_for_hostup(master)
+		slave = dp.slave()
+		dp.wait_for_hostup(slave)
+		slave_reader = slave.log.head()
+		logger.info('Terminating master')
+		master_reader = master.log.tail()
+		master.terminate()
+		master_reader.expect("Message 'HostDown' delivered", 120)
+		logger.info('Master successfully terminated.')
+			
+		scalrctl.exec_cronjob('ScalarizrMessaging')
+		
+		slave_reader.expect('PromoteToMaster', 60)
+		logger.info('Promote to master message received by scalarizr')
+		slave_reader.expect("Message 'Mysql_PromoteToMasterResult' delivered", 120)
+		logger.info('Promote to master result delivered')
+		ssh = slave.ssh()
+		root_pass = get_mysql_passwords(ssh)[0]
+		master_status_on_slave = execute(ssh, 'mysql -u%s -p%s -e "show master status"' % (ROOT_USER, root_pass))
+		self.assertFalse('Empty set' in master_status_on_slave)
+		self.assertFalse('Access denied for user' in master_status_on_slave)
+		promo_to_master_res = slave.get_message(message_name = "Mysql_PromoteToMasterResult")
+		self.assertTrue('<status>ok</status>' in promo_to_master_res)
+		#TODO: Check volume_config in promote to master result
+		#self.assertTrue(re.search("<volume_config>.+</volume_config>", promo_to_master_res))
+		dp.sync()
+		slave = dp.slave()
+		dp.wait_for_hostup(slave)
+		
+		
+class CreateBackup(unittest.TestCase):
+	def _test_create_backup(self):
+		logger = logging.getLogger(__name__)
+		opts = {'mysql.ebs_volume_size' : '4'}
+		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
+		opts.update({'scaling.min_instances' : '2'})
+		dp = MysqlDataProvider(farm_settings=opts)
+		
+		slave = dp.slave()
+		dp.wait_for_hostup(slave)
+		master = dp.master()
+		master_ssh = master.ssh()
+		root_pass = get_mysql_passwords(master_ssh)[0]
+		execute(master_ssh, 'mysql -u%s -p%s -e "create database test1; create database test2"'
+																	 % (ROOT_USER, root_pass))
+		shitgen_path = os.path.join(RESOURCE_PATH, 'shitgen.php')
+		sftp = master.sftp()
+		sftp.put(shitgen_path, '/tmp/shitgen.php')
+		soft = 'php5-mysql php5-cli' if 'debian' == master.dist else 'php php-mysql'
+		master.install_software(soft)
+		execute(master_ssh, 'php /tmp/shitgen.php -u %s -p %s -d test1 -s 1Gb' % (ROOT_USER, root_pass))
+		execute(master_ssh, 'php /tmp/shitgen.php -u %s -p %s -d test2 -s 10Mb' % (ROOT_USER, root_pass) )		
+		slave_reader = slave.log.tail() 
+		dp.farmui.create_mysql_backup()
+		slave_reader.expect('Mysql_CreateBackup')
+		logger.info('Create backup message received by scalarizr.')
+		slave_reader.expect("Message 'Mysql_CreateBackupResult' delivered", 240)
+		cbr = slave.get_message(message_name="Mysql_CreateBackupResult")
+		self.assertTrue('<status>ok</status>' in cbr)
+		chunks = re.findall('<item>(.+)</item>', cbr)
+		self.assertTrue(len(chunks) >= 2)
+		
+class CreateDataBundle(unittest.TestCase):
+	def test_create_databundle(self):
+		logger = logging.getLogger(__name__)
+		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
+		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
+		dp = MysqlDataProvider(farm_settings=opts)
+		
+		master = dp.master()
+		dp.wait_for_hostup(master)
+		reader = master.log.tail()
+		logger.info('Sending rebundle message to master.')
+		dp.farmui.create_databundle()
+		reader.expect('Mysql_CreateDataBundle', 60)
+		logger.info('Message "CreateDataBundle" received.')
+		reader.expect('Mysql_CreateDataBundleResult', 180)
+		logger.info('Message "CreateDataBundleResult" sended.')
+		cdbr = master.get_message(message_name="Mysql_CreateDataBundleResult")
+		self.assertTrue('<status>ok</status>' in cdbr)
+		self.assertTrue(re.search('<log_pos>\d+</log_pos>', cdbr))
+		self.assertTrue(re.search('<log_file>\d+</log_file>', cdbr))
+		#self.assertTrue(re.search('<snapshot_config>\d+</snapshot_config>', cdbr))
+
+
+def get_mysql_passwords(ssh):
+	private_cnf = StringIO(execute(ssh, 'cat /etc/scalr/private.d/mysql.ini'))
+	cnf = Configuration('ini')
+	cnf.readfp(private_cnf)
+	try:
+		root_pass = cnf.get('./%s/%s' % (CNF_SECTION, OPT_ROOT_PASSWORD))
+		repl_pass = cnf.get('./%s/%s' % (CNF_SECTION, OPT_REPL_PASSWORD))
+		stat_pass = cnf.get('./%s/%s' % (CNF_SECTION, OPT_STAT_PASSWORD))
+	except:
+		raise Exception("Mysql config doesn't contain essentiall passwords")
+	return (root_pass, repl_pass, stat_pass)
+							
 if __name__ == "__main__":
 	unittest.main()

@@ -27,7 +27,9 @@ class MysqlDataProvider(DataProvider):
 		if len(self._slaves) >= (index + 1):
 			return self._slaves[index]
 		if not self._master:			
-			self.master()
+			self.master()			
+			self.wait_for_hostup(self._master)
+			self.scalrctl.exec_cronjob('ScalarizrMessaging')
 		while not len(self._slaves) >= (index + 1):
 			server = self._scale_up()
 			self._slaves.append(server)			
@@ -40,19 +42,18 @@ class MysqlDataProvider(DataProvider):
 		return self._master
 		
 	def _scale_up(self):
-		def check_szr_port(host):
-			try:
-				socket.socket().connect((host, 8013))
-				return True
-			except:
-				return False
-			
+		
 		if not self._master and self.farmui.state == 'terminated':
 			self.farmui.use(self.farm_id)
 			self.farmui.remove_all_roles()
+			self.farmui.save()
 			self.farmui.add_role(self.role_name, settings=self.farm_settings)
 			self.farmui.save()
 			self.farmui.launch()
+		elif self.farm_settings:
+			self.farmui.edit_role(self.role_name, settings=self.farm_settings)
+			self.farmui.save()
+			
 		out = self.scalrctl.exec_cronjob('Scaling')
 		result = re.search(self.server_id_re, out)
 		if not result:
@@ -68,7 +69,7 @@ class MysqlDataProvider(DataProvider):
 			raise Exception("Can't find node with public ip '%s'" % host)
 		
 		key = os.path.join(keys_path, self.role_name) + '.pem'
-		wait_until(check_szr_port, [host], 5, timeout=60)
+		self.wait_for_szr_port(host)
 		time.sleep(5)
 		ssh = SshManager(host, key)
 		return Server(node, ssh, role_name=self.role_name, scalr_id=server_id)
@@ -89,3 +90,23 @@ class MysqlDataProvider(DataProvider):
 					self._master = Server(node, ssh, role_name = self.role_name)
 				else:
 					self._slaves.append(Server(node, ssh, role_name = self.role_name))
+	
+	
+	def wait_for_szr_port(self, host):
+		def _check_szr_port(host):
+			try:
+				socket.socket().connect((host, 8013))
+				return True
+			except:
+				return False				
+		wait_until(_check_szr_port, [host], 5, timeout=120)
+	
+	
+	def wait_for_hostup(self, server):
+		self.wait_for_szr_port(server.public_ip)
+		log_reader = server.log.head()
+		log_reader.expect("Message 'HostInit' delivered", 60)						
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')
+		log_reader.expect("Message 'HostUp' delivered", 120)
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')			
+	

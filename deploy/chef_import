@@ -8,9 +8,12 @@ exec 2>$LOG
 
 do_log () {
 	_col=$(stty -a | grep columns | awk '{print $7}' | sed 's/;//')
-	echo -ne $2
-	len=${#2}
-	eval $1 >> $LOG 2>&1
+	MSG=$1
+	echo -ne "$MSG"
+	shift
+	echo "$*"
+	len=${#@}
+	"$@" >> $LOG 2>&1
 	
 	if [ "$?" -ne 0 ]; then
 		printf "%$[_col-20-len]s [ \e[1;31mFailed\e[0m ]\r\nSee $LOG fore more info.\r\n"
@@ -23,53 +26,35 @@ do_log () {
 }
 
 
-doing () {
-	_col=$(stty -a | grep columns | awk '{print $7}' | sed 's/;//')
-	echo -ne $1
-}
-
-ok () {
-	printf "%$[_col-20-len]s [ \e[1;32mOK\e[0m ]\r\n"
-}
-
-fail () {
-	printf "%$[_col-20-len]s [ \e[1;31mFailed\e[0m ]\r\nSee $LOG fore more info.\r\n"
-	exit 1
-}
-
-
 rhel=$(python -c "import platform; d = platform.dist(); print int(d[0].lower() in ['centos', 'rhel', 'redhat'] and d[1].split('.')[0])")
-fedora=$(python -c "import platform; d = platform.dist(); print int((d[0].lower() == 'fedora' or (d[0].lower() == 'redhat' and d[2].lower() == 'werewolf')) a
-nd d[1].split('.')[0])")
+fedora=$(python -c "import platform; d = platform.dist(); print int((d[0].lower() == 'fedora' or (d[0].lower() == 'redhat' and d[2].lower() == 'werewolf')) and d[1].split('.')[0])")
 
 if [ "$rhel" -eq 0 ] && [ "$fedora" -eq 0 ]; then
-	
-	do_log "sudo apt-get update && sudo apt-get -y install ruby ruby1.8-dev libopenssl-ruby rdoc ri irb build-essential wget tar ssl-cert" \
-			"Installing essential packages"
+	sudo apt-get update >> $LOG 2>$1
+	do_log "TEST" echo -e "123123123" | echo
+	do_log "Installing essential packages" sudo apt-get -y install ruby ruby1.8-dev libopenssl-ruby rdoc ri irb build-essential wget tar ssl-cert			
 else
-	do_log "sudo rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm" "Installing EPEL repository"
-	do_log "sudo rpm -Uvh http://download.elff.bravenet.com/5/i386/elff-release-5-3.noarch.rpm" "Installing ELFF repository"
-	do_log "sudo yum -y install ruby ruby-shadow ruby-ri ruby-rdoc gcc gcc-c++ ruby-devel ruby-static wget tar" "Installing essential packages"
+	do_log "Installing EPEL repository" sudo rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm
+	do_log "Installing ELFF repository" sudo rpm -Uvh http://download.elff.bravenet.com/5/i386/elff-release-5-3.noarch.rpm
+	do_log "Installing essential packages" sudo yum -y install ruby ruby-shadow ruby-ri ruby-rdoc gcc gcc-c++ ruby-devel ruby-static wget tar
 fi
 
 
 cd /tmp
-doing 'Downloading rubygems'
-wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz 1>&2 && ok || fail
 
-do_log "wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz" "Downloading rubygems"
-do_log "tar zxf rubygems-1.3.7.tgz" "Unpacking rubygems"
+do_log 'Downloading rubygems' wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz
+do_log 'Unpacking rubygems' tar zxf rubygems-1.3.7.tgz
 cd rubygems-1.3.7
-do_log "ruby setup.rb --no-format-executable" "Installing rubygems"
-do_log "gem install chef --no-ri --no-rdoc" "Installing chef"
+do_log "Installing rubygems" ruby setup.rb --no-format-executable
+do_log "Installing chef" gem install chef --no-ri --no-rdoc
 mkdir -p /tmp/chef-solo
-do_log 'echo -e "file_cache_path \"/tmp/chef-solo\"\r\ncookbook_path \"/tmp/chef-solo\"" | tee /etc/solo.rb' "Creating chef configuration file"
+do_log "Creating chef configuration file" echo -e 'file_cache_path "/tmp/chef-solo"\r\ncookbook_path "/tmp/chef-solo"' | tee /etc/solo.rb
 cd /tmp/chef-solo
-do_log "wget http://ge.tt/67CQ4JJ/recipes.tar.gz" "Downloading essential cookbooks"
-do_log "tar zxvf recipes.tar.gz && rm -f recipes.tar.gz" "Unpacking cookbooks"
-do_log 'echo -e $CHEF_RUNLIST | tee /tmp/soft.json' "Creating runlist"
-do_log "chef-solo -c /etc/solo.rb -j /tmp/soft.json" "Installing software. It can take a while"
-do_log "$SCALR_IMPORT_STRING &" "Starting importing to Scalr in background"
+do_log "Downloading essential cookbooks" wget http://ge.tt/67CQ4JJ/recipes.tar.gz
+do_log "Unpacking cookbooks" tar zxvf recipes.tar.gz && rm -f recipes.tar.gz
+do_log "Creating runlist" echo -e $CHEF_RUNLIST | tee /tmp/soft.json
+do_log "Installing software. It can take a while" chef-solo -c /etc/solo.rb -j /tmp/soft.json
+do_log "Starting importing to Scalr in background" $SCALR_IMPORT_STRING &
 echo "Scalarizr's log:"
 tail -f /var/log/scalarizr.log | while read LINE; do
         [[ "${LINE}" =~ 'Rebundle complete!' ]] && break

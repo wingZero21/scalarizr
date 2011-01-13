@@ -178,11 +178,14 @@ class DataProvider(object):
 			if self.farmui.state == 'terminated':
 				self.farmui.use(self.farm_id)
 				self.farmui.remove_all_roles()
-				# FIXME: Where farm settings are?
+				self.farmui.save()
 				self.farmui.add_role(self.role_name, settings=self.farm_settings)
 				self.farmui.save()
 				self.farmui.launch()
-				
+			elif self.farm_settings:
+				self.farmui.edit_role(self.role_name, settings=self.farm_settings)
+				self.farmui.save()
+					
 			out = self.scalrctl.exec_cronjob('Scaling')
 			result = re.search(self.server_id_re, out)
 			if not result:
@@ -221,6 +224,7 @@ class DataProvider(object):
 
 class Server(object):
 	_log_channel = None
+	_dist 		 = None
 	
 	def __init__(self, node, ssh, image_id=None, role_name=None, scalr_id=None):
 		self.image_id = image_id
@@ -234,13 +238,24 @@ class Server(object):
 			self.ssh_manager.connect()
 		return self.ssh_manager.get_root_ssh_channel()
 	
+	def sftp(self):
+		if not self.ssh_manager.connected:
+			self.ssh_manager.connect()
+		return self.ssh_manager.get_sftp_client()
+	
 	def terminate(self):
 		if not self.node.destroy():
 			raise Exception("Failed to terminate instance.")
 		
 	@property
 	def public_ip(self):
-		return socket.gethostbyname(self.node.public_ip[0])
+		hostname = self.node.public_ip
+		return socket.gethostbyname(hostname[0] if type(hostname) == list else hostname)
+	
+	@property
+	def private_ip(self):
+		hostname = self.node.private_ip
+		return hostname[0] if type(hostname) == list else hostname
 	
 	@property
 	def log(self):
@@ -253,26 +268,36 @@ class Server(object):
 	def cloud_id(self):
 		return self.node.id
 	
-	def get_message(self, message_id):
+	def get_message(self, message_id=None, message_name=None):
 		if not hasattr(self, '_control_ssh'):
 			self._control_ssh = self.ssh()
 		sqlite3_installed = execute(self._control_ssh, 'which sqlite3', 15)
 		if not sqlite3_installed:
-			self._install_sqlite()
-		cmd = 'select message from p2p_message where message_id="%s"' % message_id
+			self.install_software('sqlite3')
+		if message_id:
+			cmd = '\'select message from p2p_message where message_id="%s" limit 1\'' % message_id
+		elif message_name:
+			cmd = '\'select message from p2p_message where message_name="%s" limit 1\'' % message_name
 		return execute(self._control_ssh, 'sqlite3 /etc/scalr/private.d/db.sqlite ' + cmd, 10)		
 	
-	def _install_sqlite(self):
-		szrdeploy = ScalarizrDeploy(self.ssh_manager)
-		dist = szrdeploy.dist
-		del(szrdeploy)
-		if dist == 'debian':
-			out = execute(self._control_ssh, 'apt-get -y install sqlite3', 240)
+	def install_software(self, software):
+		if not hasattr(self, '_control_ssh'):
+			self._control_ssh = self.ssh()
+		if self.dist == 'debian':
+			out = execute(self._control_ssh, 'apt-get -y install %s' % software, 240)
 			error = re.search('^E:\s*(?P<err_text>.+?)$', out, re.M)
 			if error:
-				raise Exception("Can't install sqlite3 package: '%s'" % error.group('err_text'))		
+				raise Exception("Can't install %s: '%s'" % (software, error.group('err_text')))		
 		else:
-			out = execute(self._control_ssh, 'yum -y install sqlite3', 240)
+			out = execute(self._control_ssh, 'yum -y install %s' % software, 240)
 			if not re.search('Complete!|Nothing to do', out):
-				raise Exception('Cannot install sqlite3 %s' % out)
+				raise Exception('Cannot install %s: %s' % (software, out))
+			
+	@property	
+	def dist(self):
+		if not self._dist:
+			szrdeploy = ScalarizrDeploy(self.ssh_manager)
+			self._dist = szrdeploy.dist
+			del(szrdeploy)
+		return self._dist
 		

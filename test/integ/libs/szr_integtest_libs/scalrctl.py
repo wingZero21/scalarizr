@@ -11,8 +11,12 @@ import logging
 import time
 import os
 from scalarizr.util import wait_until
+import urllib
+import httplib2
+import simplejson
 
 log_path = os.path.expanduser('~/.scalr-dev/logs')
+server_info_url = 'http://scalr-dev.local.webta.net/servers/extendedInfo'
 
 class FarmUIError(Exception):
 	pass
@@ -51,20 +55,21 @@ class FarmUI:
 		self.farm_id = farm_id
 		ui_login(self.sel)
 		self.sel.open('farms_builder.php?id=%s' % self.farm_id)
-		self.sel.wait_for_page_to_load(30000)
-		wait_until(lambda: not self.sel.is_element_present('//html/body/div[@class="ext-el-mask-msg x-mask-loading"]/div'), timeout=10, sleep=0.5)
-
+		#wait_until(lambda: not self.sel.is_element_present('//html/body/div[@class="ext-el-mask-msg x-mask-loading"]/div'), timeout=10, sleep=0.5)
+		wait_until(lambda: self.sel.is_element_present('//span[text()="Roles"]'), sleep=0.1, timeout=10)
+	
 		
 	def add_role(self, role_name, min_servers=1, max_servers=2, settings=None):
 
 		settings = settings or dict()
 		if not 'aws.instance_type' in settings:
 			settings['aws.instance_type'] = 't1.micro'
-		settings['scaling.min_instances'] = min_servers
-		settings['scaling.max_instances'] = max_servers
+		settings['scaling.min_instances'] = settings.get('scaling.min_instances', min_servers)
+		settings['scaling.max_instances'] = settings.get('scaling.max_instances', max_servers)
 		if not 'farms_builder.php?id=' in self.sel.get_location():
-			raise FarmUIError("Farm's settings page hasn't been opened. Use farm first")
-	
+			self.sel.open("farms_builder.php?id=%s" % self.farm_id)
+			#raise FarmUIError("Farm's settings page hasn't been opened. Use farm first")
+		wait_until(lambda: self.sel.is_element_present('//span[text()="Roles"]'), sleep=0.1, timeout=10)
 		self.sel.click('//span[text()="Roles"]')
 		self.sel.click('//div[@class="viewers-selrolesviewer-blocks viewers-selrolesviewer-add"]')
 		self.sel.wait_for_condition(
@@ -86,6 +91,11 @@ class FarmUI:
 		self.edit_role(role_name, settings)
 		
 	def edit_role(self, role_name, settings=None):
+		if not 'farms_builder.php?id=' in self.sel.get_location():
+			self.sel.open("farms_builder.php?id=%s" % self.farm_id)
+		
+		wait_until(lambda: self.sel.is_element_present('//span[text()="Roles"]'), sleep=0.1, timeout=10)
+		self.sel.click('//span[text()="Roles"]')
 		try:
 			# uncutted 
 			self.sel.click('//span[@class="short" and text()="%s"]' % role_name)
@@ -158,8 +168,10 @@ class FarmUI:
 			raise FarmUIError("Can't launch farm without farm_id: use the farm first")
 		
 		self.sel.open('/farms_view.php?farmid=%s' % self.farm_id)
-		self.sel.wait_for_page_to_load(30000)
-		time.sleep(1)
+		#self.sel.wait_for_page_to_load(30000)
+		#wait_until(lambda: self.sel.is_element_present('//html/body/div[@class="ext-el-mask-msg x-mask-loading"]/div'), timeout=10, sleep=0.5)
+		wait_until(lambda: self.sel.is_element_present('//dt[@dataindex="status"]/em/span'), timeout=10, sleep=0.5)
+		time.sleep(0.5)
 		return self.sel.get_text('//dt[@dataindex="status"]/em/span').lower()
 			
 	def launch(self):
@@ -168,6 +180,7 @@ class FarmUI:
 		
 		self.sel.open('/farms_control.php?farmid=%s' % self.farm_id)
 		self.sel.wait_for_page_to_load(30000)
+		#self._wait_for_page_to_load()
 
 		if self.sel.is_text_present("Would you like to launch"):
 			self.sel.click('cbtn_2')
@@ -207,25 +220,16 @@ class FarmUI:
 			raise Exception('Farm %s has been already terminated' % self.farm_id)
 		
 	def get_public_ip(self, server_id, timeout = 45):
-		#search_str = '//table[@id="Webta_InnerTable_Platform specific details"]/tbody/tr[8]/td[2]'
-		search_str	= '//label[text()="Public IP address:"]/../div[1]/div'
-		try:
-			public_ip = self._get_server_info(server_id, search_str, timeout)
-		except (Exception, BaseException), e:
-			raise FarmUIError("Can't retrieve instance's public ip from user interface %s" % e)
-		self.servers.append(public_ip)
-		return public_ip
+		return self._get_server_info(server_id, ('Public IP',), timeout)
+	
+	def get_private_ip(self, server_id, timeout = 45):
+		return self._get_server_info(server_id, ('Private IP',), timeout)
 	
 	def get_instance_id(self, server_id, timeout = 45):
-		#search_str = '//table[@id="Webta_InnerTable_Platform specific details"]/tbody/tr[2]/td[2]'
-		search_str	= '//label[text()="Instance ID:"]/../div[1]/div'
-		try:
-			inst_id = self._get_server_info(server_id, search_str, timeout)
-		except:
-			raise FarmUIError("Can't retrieve instance id from user interface")
-		return inst_id		
-		
-	def _get_server_info(self, server_id, search_str ,timeout):
+		return self._get_server_info(server_id, ('Instance ID', 'Server ID'), timeout)
+	
+	def _get_server_info(self, server_id, field_labels, timeout):
+		"""
 		start_time = time.time()
 		first_time = True
 		while time.time() - start_time < timeout:
@@ -239,6 +243,10 @@ class FarmUI:
 			
 			self._wait_for_page_to_load()
 			#self.sel.wait_for_page_to_load(15000)
+			if self.sel.is_text_present('not available for'):
+				self.sel.mouse_over('//div[@class="x-tool x-tool-close"]')
+				self.sel.click('//div[@class="x-tool x-tool-close"]')
+				continue
 			try:
 				server_info = self.sel.get_text(search_str).strip()
 			except:
@@ -251,7 +259,32 @@ class FarmUI:
 			raise FarmUIError("Cannot retrieve server's information. Server id: %s " % server_id)
 		self.sel.mouse_over('//div[@class="x-tool x-tool-close"]')
 		self.sel.click('//div[@class="x-tool x-tool-close"]')
-		return server_info
+		"""
+		try:
+			http = httplib2.Http()
+			headers = {'Content-type': 'application/x-www-form-urlencoded',
+					   'Cookie' : self.sel.get_cookie()}
+			body = urllib.urlencode({'id' : server_id})
+			start_time = time.time()
+			while time.time() - start_time <= timeout:
+				content = http.request(server_info_url, 'POST', body=body, headers=headers)[1]
+				content = simplejson.loads(content)
+				if not content['success']:
+					continue
+				for block in content['moduleParams']:
+					for param_set in block['items']:
+						if not 'fieldLabel' in param_set:
+							continue
+						if not any(map(lambda x: x in param_set['fieldLabel'], field_labels)):
+						#if not field_label in param_set['fieldLabel']:
+							continue
+						if param_set['value']:
+							return param_set['value']
+						
+			else:
+				raise Exception('Timeout after %s sec.' % timeout)
+		except (Exception, BaseException), e:
+			raise FarmUIError("Can't get %s from scalr's interface. %s" % (field_labels[0].lower(), e))
 	
 	def create_mysql_backup(self):
 		self._open_mysql_status_page()
@@ -263,6 +296,13 @@ class FarmUI:
 			self.sel.click('//input[@name="pma_request_credentials"]')
 		except:
 			raise FarmUIError('PhpMyAdmin user creation request has been already sent.')
+		
+	def create_databundle(self):
+		self._open_mysql_status_page()
+		try:
+			self.sel.click('//input[@name="run_bundle"]')
+		except:
+			raise FarmUIError("Can't send databundle request")
 		
 	def _open_mysql_status_page(self):
 		if not hasattr(self, 'farm_id'):
@@ -341,13 +381,15 @@ def ui_import_server(sel, platform_name, behaviour, host, role_name):
 	return sel.get_text('//td[@class="Inner_Gray"]/table/tbody/tr[3]/td[1]/textarea')
 	
 def ui_login(sel):
-
+	
+	if hasattr(sel, '_logged_in') and sel._logged_in:
+		return
 	try:
 		login = config.get('./scalr/admin_login')
 		password = config.get('./scalr/admin_password')
 	except:
 		raise Exception("User's ini file doesn't contain username or password")
-
+	
 	sel.delete_all_visible_cookies()
 	sel.open('/')
 	sel.click('//div[@class="login-trigger-header"]/a')
@@ -360,6 +402,7 @@ def ui_login(sel):
 	#if sel.get_location().find('/client_dashboard.php') == -1:
 	if not sel.is_element_present('//div[@id="navmenu"]'):
 		raise Exception('Login failed.')
+	sel._logged_in = True
 
 def reset_farm(ssh, farm_id):
 	pass
