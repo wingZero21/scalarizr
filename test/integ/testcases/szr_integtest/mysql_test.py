@@ -10,6 +10,7 @@ from szr_integtest_libs.datapvd import DataProvider
 
 from szr_integtest import RESOURCE_PATH
 
+from scalarizr.util import ping_socket
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.handlers.mysql import ROOT_USER, REPL_USER, STAT_USER, \
 									OPT_REPL_PASSWORD, OPT_STAT_PASSWORD, OPT_ROOT_PASSWORD, CNF_SECTION
@@ -103,11 +104,12 @@ class StartupMaster(unittest.TestCase):
 		reader.expect("Message 'HostUp' delivered", 120)
 		logger.info('HostUp Delivered')
 		# Check if mysql running
-		s = socket()
-		try:
-			s.connect((master.public_ip, 3306))
-		except:
-			raise Exception('Mysql is not running on master.')
+		ping_socket(master.public_ip, 3306, exc_str='Mysql is not running on master.')
+		#s = socket()
+		#try:
+		#	s.connect((master.public_ip, 3306))
+		#except:
+		#	raise Exception('Mysql is not running on master.')
 		logger.info('Mysql is running on master instance')
 				
 		ssh = master.ssh()
