@@ -378,6 +378,14 @@ def kill_childs(pid):
 			except:
 				pass
 		
+
+def ping_socket(host, port, exc_str=None):
+	s = socket()
+	try:
+		s.connect((host, port))
+	except:
+		raise Exception(exc_str or 'Service is not running: Port %s on %s closed.' % (port, host))
+
 		
 class PeriodicalExecutor:
 	_logger = None
