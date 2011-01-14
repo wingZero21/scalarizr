@@ -1,2 +1,2 @@
 default[:scalarizr][:behaviour] = [ "base" ]
-default[:scalarizr][:serverid]  = None
+default[:scalarizr][:platform]  = ec2

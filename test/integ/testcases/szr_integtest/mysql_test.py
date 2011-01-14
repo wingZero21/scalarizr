@@ -24,7 +24,7 @@ import os
 
 from StringIO import StringIO
 from _mysql_exceptions import OperationalError
-
+from socket import socket
 
 class StartupMasterHostUpFailed(unittest.TestCase):
 
@@ -164,7 +164,7 @@ class StartupSlave(unittest.TestCase):
 		except:
 			raise Exception('Mysql is not running on slave.')
 		logger.info('Mysql is running on slave')
-		
+
 		# Getting mysql credentials
 		master = dp.master()
 		master_ssh = master.ssh()
@@ -225,7 +225,7 @@ class SlaveToMaster(unittest.TestCase):
 		
 		
 class CreateBackup(unittest.TestCase):
-	def _test_create_backup(self):
+	def test_create_backup(self):
 		logger = logging.getLogger(__name__)
 		opts = {'mysql.ebs_volume_size' : '4'}
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
@@ -246,11 +246,12 @@ class CreateBackup(unittest.TestCase):
 		master.install_software(soft)
 		execute(master_ssh, 'php /tmp/shitgen.php -u %s -p %s -d test1 -s 1Gb' % (ROOT_USER, root_pass))
 		execute(master_ssh, 'php /tmp/shitgen.php -u %s -p %s -d test2 -s 10Mb' % (ROOT_USER, root_pass) )		
-		slave_reader = slave.log.tail() 
+		slave_reader = slave.log.tail()
 		dp.farmui.create_mysql_backup()
 		slave_reader.expect('Mysql_CreateBackup')
 		logger.info('Create backup message received by scalarizr.')
-		slave_reader.expect("Message 'Mysql_CreateBackupResult' delivered", 240)
+		slave_reader.expect("Dumping all databases", 60)
+		slave_reader.expect("Message 'Mysql_CreateBackupResult' delivered", 60*20)
 		cbr = slave.get_message(message_name="Mysql_CreateBackupResult")
 		self.assertTrue('<status>ok</status>' in cbr)
 		chunks = re.findall('<item>(.+)</item>', cbr)
@@ -275,7 +276,7 @@ class CreateDataBundle(unittest.TestCase):
 		cdbr = master.get_message(message_name="Mysql_CreateDataBundleResult")
 		self.assertTrue('<status>ok</status>' in cdbr)
 		self.assertTrue(re.search('<log_pos>\d+</log_pos>', cdbr))
-		self.assertTrue(re.search('<log_file>\d+</log_file>', cdbr))
+		self.assertTrue(re.search('<log_file>[\w.]+</log_file>', cdbr))
 		#self.assertTrue(re.search('<snapshot_config>\d+</snapshot_config>', cdbr))
 
 
