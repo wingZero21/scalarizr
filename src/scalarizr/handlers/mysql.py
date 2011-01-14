@@ -18,7 +18,7 @@ from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError,\
 	ParseError
 from scalarizr.util import system2, cryptotool, disttool,\
-		 filetool, firstmatched, cached, validators, initdv2, software, wait_until
+		 filetool, firstmatched, cached, validators, initdv2, software
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
@@ -884,7 +884,7 @@ class MysqlHandler(ServiceCtlHanler):
 				os.remove(file)
 			if key in message.mysql:
 				Storage.backup_config(message.mysql[key], file)
-			del message.mysql[key]
+				del message.mysql[key]
 		
 		self._logger.debug("Update mysql config with %s", message.mysql)
 		self._update_config(message.mysql)
