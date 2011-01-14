@@ -1,11 +1,11 @@
 from __future__ import with_statement
+from socket import socket
 import os, re
 import logging
 import threading
 import weakref
 import time
 import sys
-import socket
 import signal
 import string
 
