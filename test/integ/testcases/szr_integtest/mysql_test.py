@@ -22,7 +22,6 @@ import time
 import _mysql
 import os
 
-from socket import socket
 from StringIO import StringIO
 from _mysql_exceptions import OperationalError
 
