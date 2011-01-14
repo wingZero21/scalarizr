@@ -64,7 +64,7 @@ class Configurator(object):
 		@see value.getter value.setter
 		'''
 		
-		default = None
+		default = ''
 		'''
 		Default value
 		'''
@@ -190,6 +190,7 @@ class ScalarizrOptions(Configurator.Container):
 		Unique server identificator in Scalr envirounment.
 		'''
 		name = 'general/server_id'
+		default = '00000000-0000-0000-0000-000000000000'
 		private = True
 		
 		@validators.validate(validators.uuid4)
@@ -203,7 +204,7 @@ class ScalarizrOptions(Configurator.Container):
 		'''
 		name = 'general/role_name'
 		private = True
-		required = True
+		#required = True
 		
 	class queryenv_url(Configurator.Option):
 		'''
@@ -232,7 +233,7 @@ class ScalarizrOptions(Configurator.Container):
 		name = 'general/crypto_key'
 		type = 'password'
 		default = ''
-		required = True
+		#required = True
 		
 		def _get_value(self):
 			if self._value is None:

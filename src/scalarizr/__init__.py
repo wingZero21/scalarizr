@@ -482,10 +482,6 @@ def main():
 				help='Validate configuration')
 		optparser.add_option('-m', '--import', dest="import_server", action="store_true", default=False, 
 				help='Import service into Scalr')
-		optparser.add_option('-a', '--activate', dest='activate',
-				help='Activate behaviour')
-		optparser.add_option('-d', '--deactivate', dest='deactivate',
-				help='Deactivate behaviour')
 		optparser.add_option('-y', dest="yesall", action="store_true", default=False,
 				help='Answer "yes" to all questions')
 		optparser.add_option('-o', dest='cnf', action='append',
