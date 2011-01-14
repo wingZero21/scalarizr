@@ -693,7 +693,15 @@ class RebundleEbsStrategy(RebundleStratery):
 				root_device_name=root_dev_name, block_device_map=bdmap)
 			
 		self._logger.info('Checking that %s is available', ami_id)
-		wait_until(lambda: self._ec2_conn.get_all_images([ami_id])[0].state == 'available', logger=self._logger)
+		def check_image():
+			try:
+				return self._ec2_conn.get_all_images([ami_id])[0].state == 'available'
+			except BotoServerError, e:
+				if e.error_code == 'InvalidAMIID.NotFound':
+					# Sometimes it takes few seconds for EC2 to propagate new AMI
+					return False
+				raise
+		wait_until(check_image, logger=self._logger)
 		self._logger.debug('Image %s available', ami_id)
 		
 		self._logger.info('Image registered and available for use!')

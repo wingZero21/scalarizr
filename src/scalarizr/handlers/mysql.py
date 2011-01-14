@@ -1078,6 +1078,8 @@ class MysqlHandler(ServiceCtlHanler):
 		if not isinstance(vol, Volume):
 			vol = Storage.create(vol)
 		try:
+			if not os.path.exists(mpoint):
+				os.makedirs(mpoint)
 			vol.mount(mpoint)
 		except StorageError, e:
 			''' XXX: Crapy. We need to introduce error codes from fstool ''' 

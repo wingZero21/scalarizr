@@ -320,7 +320,7 @@ def init_script():
 	adapter = ini.get(config.SECT_MESSAGING, config.OPT_ADAPTER)	
 	kwargs = dict(ini.items("messaging_" + adapter))
 	kwargs[P2pConfigOptions.SERVER_ID] = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = ini.get(config.SECT_GENERAL, config.OPT_CRYPTO_KEY_PATH)
+	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.key_path(cnf.DEFAULT_KEY)
 	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
 	
 	factory = MessageServiceFactory()		
