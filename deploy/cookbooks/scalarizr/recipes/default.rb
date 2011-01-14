@@ -24,7 +24,6 @@ when "fedora"
     execute "yum -y install scalarizr-" + node[:scalarizr][:platform]
 end
 
-node[:scalarizr][:behaviour].each do |behaviour|
-   execute "scalarizr -ay #{behaviour}"
-end
+behaviours=node[:scalarizr][:behaviour].join(",")
+execute "scalarizr -y --configure -o behaviour=#{behaviour} -o platform=" + node[:scalarizr][:platform] 
 
