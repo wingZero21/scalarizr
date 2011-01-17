@@ -76,7 +76,11 @@ class Storage:
 		try:
 			pvd = self.providers[pvd_type]
 		except KeyError:
-			raise LookupError('Unknown volume provider "%s"' % (pvd_type,))
+			try:
+				__import__('scalarizr.storage.' + pvd_type, globals=globals(), locals=locals())
+				pvd = self.providers[pvd_type]
+			except (ImportError, KeyError):
+				raise LookupError('Unknown volume provider "%s"' % (pvd_type,))
 		if hasattr(pvd, '__bases__'):
 			pvd = pvd()
 			self.providers[pvd_type] = pvd
