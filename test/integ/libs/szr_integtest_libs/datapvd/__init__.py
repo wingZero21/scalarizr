@@ -12,6 +12,7 @@ from libcloud.types import Provider
 from libcloud.providers import get_driver 
 from libcloud.base import NodeSize, NodeImage
 from scalarizr.util.filetool import read_file
+from scalarizr.util import wait_until
 from itertools import chain
 
 import json
@@ -20,6 +21,7 @@ import re
 import time
 import atexit
 import socket
+
 
 
 platform = os.environ['PLATFORM']
@@ -101,12 +103,9 @@ class DataProvider(object):
 
 		self.behaviour	= behaviour
 		self.farm_settings = farm_settings
-		print farm_settings
 		
 		for configuration in platform_config['images'][self.dist][self.behaviour]:
-			print 'Kwargs %s' % kwargs
 			if set(kwargs.items()) <= set(configuration.items()):
-				print configuration
 				if self.behaviour == 'raw':
 					self.image_id 	= configuration['image_id']
 					self.ssh_config = platform_config['ssh']
@@ -172,7 +171,7 @@ class DataProvider(object):
 			key  = self.ssh_config.get('key') or self.ssh_config.get('ssh_private_key')
 			key_pass = self.ssh_config.get('key_pass')
 			password = node.__dict__.get('password')
-			ssh = SshManager(host, key, key_pass, password)
+			ssh = SshManager(host, key, key_pass, password, timeout=240)
 			self._server = Server(node, ssh, image_id=self.image_id.id)
 		else:
 			if self.farmui.state == 'terminated':
@@ -182,9 +181,15 @@ class DataProvider(object):
 				self.farmui.add_role(self.role_name, settings=self.farm_settings)
 				self.farmui.save()
 				self.farmui.launch()
+			else:
+				self.farmui.use(self.farm_id)
+				self.farmui.add_role(self.role_name, settings=self.farm_settings)
+				self.farmui.save()
+			"""
 			elif self.farm_settings:
 				self.farmui.edit_role(self.role_name, settings=self.farm_settings)
 				self.farmui.save()
+			"""
 					
 			out = self.scalrctl.exec_cronjob('Scaling')
 			result = re.search(self.server_id_re, out)
@@ -195,7 +200,7 @@ class DataProvider(object):
 			node = self._get_node(host)
 					
 			key = os.path.join(keys_path, self.role_name) + '.pem'
-			ssh = SshManager(host, key)
+			ssh = SshManager(host, key, timeout=240)
 			self._server = Server(node, ssh, role_name = self.role_name, scalr_id=server_id)
 		return self._server
 			
@@ -216,11 +221,28 @@ class DataProvider(object):
 		for instance in self.conn.list_nodes():
 			public_ip = instance.public_ip
 			inst_ip = socket.gethostbyname(public_ip if type(public_ip) == str else public_ip[0])
-			print inst_ip
 			if inst_ip == ip:
 				return instance
 		else:
 			raise Exception("Can't find node with public ip '%s'" % ip)
+	
+	def wait_for_szr_port(self, host):
+		def _check_szr_port(host):
+			try:
+				socket.socket().connect((host, 8013))
+				return True
+			except:
+				return False				
+		wait_until(_check_szr_port, [host], sleep=5, timeout=120)
+	
+	
+	def wait_for_hostup(self, server):
+		self.wait_for_szr_port(server.public_ip)
+		log_reader = server.log.head()
+		log_reader.expect("Message 'HostInit' delivered", 60)						
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')
+		log_reader.expect("Message 'HostUp' delivered", 120)
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')			
 
 class Server(object):
 	_log_channel = None
