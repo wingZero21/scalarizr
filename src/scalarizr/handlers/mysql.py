@@ -1086,6 +1086,7 @@ class MysqlHandler(ServiceCtlHanler):
 			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
 			if 'you must specify the filesystem type' in str(e):
 				vol.mkfs()
+				vol.mount(mpoint)
 			else:
 				raise
 		return vol
