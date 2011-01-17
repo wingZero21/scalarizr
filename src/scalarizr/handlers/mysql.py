@@ -1309,7 +1309,7 @@ class MysqlHandler(ServiceCtlHanler):
 		try:
 			time_until = time.time() + timeout
 			status = None
-			while time.time() >= time_until:
+			while time.time() <= time_until:
 				status = slave_status()
 				if status[0:2] == ('Yes', 'Yes'):
 					break
