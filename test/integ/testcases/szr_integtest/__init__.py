@@ -72,7 +72,7 @@ def get_selenium():
 			else:
 				os.kill(t.pid, signal.SIGKILL)
 				raise BaseException('timeout')
-			_sel.delete_all_visible_cookies()
+			#_sel.delete_all_visible_cookies()
 			globals()['_sel_started'] = True
 		except:
 			_sel.stop()
