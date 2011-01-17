@@ -56,74 +56,79 @@ class EbsVolumeProvider(VolumeProvider):
 		@param snapshot_id: Snapshot id
 		'''
 		ebs_vol = None
-		attached = False		
-		conn = connect_ec2()
+		attached = False
+		try:	
+			conn = connect_ec2()
+		except AttributeError:
+			conn = None
 		pl = bus.platform
 		
-		# Find free devname
-		device = kwargs.get('device')
-		if not device or not (device[-1] in EbsVolumeProvider.unused_letters) or os.path.exists(device):
-			if not EbsVolumeProvider.unused_letters:
-				EbsVolumeProvider.unused_letters = list(string.ascii_lowercase[14:])
-			letter = firstmatched(lambda l: not os.path.exists('/dev/sd%s' % l), EbsVolumeProvider.unused_letters)
-			if letter:
-				device = '/dev/sd%s' % letter
-				EbsVolumeProvider.unused_letters.remove(device[-1])				
-			else:
-				raise StorageError('No free letters for block device name remains')
-		
-		volume_id = kwargs.get('id')
-		try:
-			if volume_id:
-				''' EBS volume has been already created '''
-
-				try:
-					ebs_vol = conn.get_all_volumes([volume_id])[0]
-				except IndexError:
-					raise StorageError("Volume '%s' doesn't exist." % volume_id)
-				
-				if 'available' != ebs_vol.volume_state():
-					self._logger.warning("Volume %s is not available.", ebs_vol.id)
-					if ebs_vol.attach_data.instance_id != pl.get_instance_id():
-						''' Volume attached to another instance '''
-						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
-					else:
-						'''Volume attached to this instance'''
-						attached = True
-						device = ebs_vol.attach_data.device
-			else:
-				''' Create new EBS '''
-				kwargs['avail_zone'] = kwargs.get('avail_zone') or pl.get_avail_zone()
-				ebs_vol = ebstool.create_volume(conn, kwargs['size'], kwargs['avail_zone'], 
-					kwargs.get('snapshot_id'), logger=self._logger)
+		if conn:
+			# Find free devname			
+			device = kwargs.get('device')
+			if not device or not (device[-1] in EbsVolumeProvider.unused_letters) or os.path.exists(device):
+				if not EbsVolumeProvider.unused_letters:
+					EbsVolumeProvider.unused_letters = list(string.ascii_lowercase[14:])
+				letter = firstmatched(lambda l: not os.path.exists('/dev/sd%s' % l), EbsVolumeProvider.unused_letters)
+				if letter:
+					device = '/dev/sd%s' % letter
+					EbsVolumeProvider.unused_letters.remove(device[-1])				
+				else:
+					raise StorageError('No free letters for block device name remains')
 			
-			if not attached:
-				ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device, 
-					to_me=True, logger=self._logger)
-			
-		except (Exception, BaseException), e:
-			self._logger.error("Ebs creation failed. Error: %s" % e)
-			if ebs_vol:
-				# detach volume
-				if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
-					ebstool.detach_volume(conn, ebs_vol, logger=self._logger)
-					'''
-					try:	
-						ebs_vol.detach(force=True)
-						wait_until(lambda: ebs_vol.update() and ebs_vol.attachment_state() == 'available',
-							   logger = self._logger)
-					except EC2ResponseError, e:
-						if not "is in the 'available' state" in str(e):
-							raise
-					'''
-						
-				if not volume_id:
-					ebs_vol.delete()
+			volume_id = kwargs.get('id')
+			try:
+				if volume_id:
+					''' EBS volume has been already created '''
+	
+					try:
+						ebs_vol = conn.get_all_volumes([volume_id])[0]
+					except IndexError:
+						raise StorageError("Volume '%s' doesn't exist." % volume_id)
 					
-			raise StorageError('Volume creating failed: %s' % e)
-		
-		kwargs['device'] = device
-		kwargs['id'] = ebs_vol.id
+					if 'available' != ebs_vol.volume_state():
+						self._logger.warning("Volume %s is not available.", ebs_vol.id)
+						if ebs_vol.attach_data.instance_id != pl.get_instance_id():
+							''' Volume attached to another instance '''
+							ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
+						else:
+							'''Volume attached to this instance'''
+							attached = True
+							device = ebs_vol.attach_data.device
+				else:
+					''' Create new EBS '''
+					kwargs['avail_zone'] = kwargs.get('avail_zone') or pl.get_avail_zone()
+					ebs_vol = ebstool.create_volume(conn, kwargs['size'], kwargs['avail_zone'], 
+						kwargs.get('snapshot_id'), logger=self._logger)
+				
+				if not attached:
+					ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device, 
+						to_me=True, logger=self._logger)
+				
+			except (Exception, BaseException), e:
+				self._logger.error("Ebs creation failed. Error: %s" % e)
+				if ebs_vol:
+					# detach volume
+					if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
+						ebstool.detach_volume(conn, ebs_vol, logger=self._logger)
+						'''
+						try:	
+							ebs_vol.detach(force=True)
+							wait_until(lambda: ebs_vol.update() and ebs_vol.attachment_state() == 'available',
+								   logger = self._logger)
+						except EC2ResponseError, e:
+							if not "is in the 'available' state" in str(e):
+								raise
+						'''
+							
+					if not volume_id:
+						ebs_vol.delete()
+						
+				raise StorageError('Volume creating failed: %s' % e)
+			
+			kwargs['device'] = device
+			kwargs['id'] = ebs_vol.id
+			
 		return super(EbsVolumeProvider, self).create(**kwargs)
 
 	create = _create
