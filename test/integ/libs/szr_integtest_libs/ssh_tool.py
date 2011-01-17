@@ -57,7 +57,8 @@ class SshManager:
 			try:
 				self.ssh.connect(self.host, pkey = self.key, username=self.user, password=self.password)
 				break
-			except:
+			except (Exception, BaseException), e:
+				print e
 				continue
 		else:
 			raise Exception("Cannot connect to server %s" % self.host)
