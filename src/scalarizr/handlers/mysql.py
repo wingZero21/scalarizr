@@ -439,7 +439,7 @@ class MysqlHandler(ServiceCtlHanler):
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
 		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
-		self._change_master_timeout = ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT)
+		self._change_master_timeout = int(ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT) or '30')
 
 		
 		self._storage_path = STORAGE_PATH
