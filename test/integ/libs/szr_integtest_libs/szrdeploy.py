@@ -215,7 +215,7 @@ class ScalarizrDeploy:
 			py_version = self.get_python_version()
 			scalarizr_path = "/usr/lib/python2.%s/site-packages/scalarizr"  % py_version
 		else:
-			scalarizr_path = "/usr/share/python-support/scalarizr/scalarizr"
+			scalarizr_path = "/usr/share/python-support/scalarizr-base/scalarizr"
 
 		return scalarizr_path
 			

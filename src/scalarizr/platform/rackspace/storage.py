@@ -5,7 +5,7 @@ Created on Nov 24, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.storage.transfer import TransferProvider, TransferError
+from scalarizr.storage.transfer import Transfer, TransferProvider, TransferError
 
 from urlparse import urlparse
 import logging
@@ -97,3 +97,4 @@ class CFTransferProvider(TransferProvider):
 			raise TransferError('Couldn`t initialize connection to Cloud Files: Credentials not found.')
 		return cloudfiles.get_connection(username=self.username, api_key=self.api_key, serviceNet=True)
 	
+Transfer.explore_provider(CFTransferProvider)

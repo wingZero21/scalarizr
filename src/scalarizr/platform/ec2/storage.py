@@ -8,7 +8,7 @@ Created on Nov 24, 2010
 from scalarizr.bus import bus
 from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, devname_not_empty, \
 	VolumeConfig, Snapshot
-from scalarizr.storage.transfer import TransferProvider, TransferError
+from scalarizr.storage.transfer import Transfer, TransferProvider, TransferError
 from scalarizr.platform.ec2 import ebstool
 
 import os
@@ -245,6 +245,8 @@ class S3TransferProvider(TransferProvider):
 		files = [key.name for key in self.bucket.list(prefix=prefix)] 
 		return files
 	
+Transfer.explore_provider(S3TransferProvider)
+
 def location_from_region(region):
 	if region == 'us-east-1' or not region:
 		return ''
