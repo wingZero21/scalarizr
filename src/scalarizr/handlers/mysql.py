@@ -1271,7 +1271,7 @@ class MysqlHandler(ServiceCtlHanler):
 
 	def _change_master(self, host, user, password, log_file, log_pos, 
 					spawn=None, mysql_user=None, mysql_password=None, timeout=None):
-		spawn = spawn or self.spawn_mysql(mysql_user, mysql_password)
+		spawn = spawn or spawn_mysql(mysql_user, mysql_password)
 		self._logger.info("Changing replication master to host %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
 		
 		# Changing replication master
