@@ -91,22 +91,3 @@ class MysqlDataProvider(DataProvider):
 				else:
 					self._slaves.append(Server(node, ssh, role_name = self.role_name))
 	
-	
-	def wait_for_szr_port(self, host):
-		def _check_szr_port(host):
-			try:
-				socket.socket().connect((host, 8013))
-				return True
-			except:
-				return False				
-		wait_until(_check_szr_port, [host], 5, timeout=120)
-	
-	
-	def wait_for_hostup(self, server):
-		self.wait_for_szr_port(server.public_ip)
-		log_reader = server.log.head()
-		log_reader.expect("Message 'HostInit' delivered", 60)						
-		self.scalrctl.exec_cronjob('ScalarizrMessaging')
-		log_reader.expect("Message 'HostUp' delivered", 120)
-		self.scalrctl.exec_cronjob('ScalarizrMessaging')			
-	
