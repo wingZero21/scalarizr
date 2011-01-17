@@ -878,16 +878,17 @@ class MysqlHandler(ServiceCtlHanler):
 		if not os.path.exists(dir):
 			os.makedirs(dir)
 		
+		mysql_data = message.mysql.copy()
 		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 			if os.path.exists(file):
 				os.remove(file)
-			if key in message.mysql:
-				Storage.backup_config(message.mysql[key], file)
-				del message.mysql[key]
+			if key in mysql_data:
+				Storage.backup_config(mysql_data[key], file)
+				del mysql_data[key]
 		
-		self._logger.debug("Update mysql config with %s", message.mysql)
-		self._update_config(message.mysql)
+		self._logger.debug("Update mysql config with %s", mysql_data)
+		self._update_config(mysql_data)
 
 		
 	@_reload_mycnf
@@ -1004,7 +1005,7 @@ class MysqlHandler(ServiceCtlHanler):
 			raise
 			
 		if msg_data:
-			message.mysql = msg_data
+			message.mysql = msg_data.copy()
 			del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF] 
 			self._update_config(msg_data)
 			
