@@ -52,10 +52,10 @@ class LoopVolumeProvider(VolumeProvider):
 		try:
 			size = int(size)
 		except ValueError:
-			if type(size) == str and '%free' in size.lower():
+			if type(size) == str and '%root' in size.lower():
 				# Getting size in percents
 				try:
-					size_pct = int(size.lower().replace('%free', ''))
+					size_pct = int(size.lower().replace('%root', ''))
 				except:
 					raise StorageError('Incorrect size format: %s' % size)
 				# Retrieveing root device size and usage 
