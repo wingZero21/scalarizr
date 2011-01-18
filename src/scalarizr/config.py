@@ -192,6 +192,7 @@ class ScalarizrOptions(Configurator.Container):
 		name = 'general/server_id'
 		default = '00000000-0000-0000-0000-000000000000'
 		private = True
+		required = True
 		
 		@validators.validate(validators.uuid4)
 		def _set_value(self, v):
