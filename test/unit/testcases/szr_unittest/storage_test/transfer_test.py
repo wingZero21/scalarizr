@@ -1,5 +1,5 @@
 __author__ = 'shaitanich'
-  
+
 '''
 Created on Nov 18, 2010
 
@@ -17,7 +17,7 @@ from scalarizr.platform.rackspace.storage import CFTransferProvider
 from szr_unittest import main
 
 import cloudfiles
-from boto import connect_s3, connect_ec2
+from boto import connect_s3
 
 
 '''
@@ -26,7 +26,6 @@ trn = Transfer(pool=5, max_attempts=3)
 trn.upload(files, 'cf://container/path/to/candy')
 trn.download('s3://scalr-files/path/to/some-shit/', dst, recursive=True)
 '''
-
 
 class UploaderTest(unittest.TestCase):
 
@@ -63,8 +62,12 @@ class UploaderTest(unittest.TestCase):
 				pass
 		else:
 			try:
-				username	= os.environ['username']
-				api_key		= os.environ['api_key']
+				username	= os.environ['CLOUD_SERVERS_USERNAME']
+				api_key		= os.environ['CLOUD_SERVERS_API_KEY']
+			except KeyError:
+				self._logger.error("Define environ variables 'username' and "
+						"'api_key' to run tests operating Rackspace")
+			try:
 				conn = cloudfiles.get_connection(username=username, api_key=api_key)
 				conn.delete_bucket(self.container)
 			except:

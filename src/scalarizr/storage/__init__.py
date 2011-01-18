@@ -191,7 +191,7 @@ class VolumeConfig(object):
 				if as_snapshot:
 					ret['disks'] = tuple(dict(snapshot=disk) for disk in ret['disks'])
 			elif attr == 'disk':
-				ret['disk'] = self.disk.config() if self.disk else self.disk
+				ret['disk'] = self.disk.config() if hasattr(self.disk, 'config') else self.disk
 			else:
 				ret[attr] = getattr(self, attr)
 		return ret
