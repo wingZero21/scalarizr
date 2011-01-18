@@ -126,7 +126,7 @@ class EphVolumeProvider(VolumeProvider):
 			'snap_backend': 'cf://mysql_backups/cloudsound/production'
 		})
 		'''
-		if kwargs['lvm_group_cfg']:
+		if kwargs.get('lvm_group_cfg'):
 			self._lvm.restore_vg(kwargs['vg'], cStringIO.StringIO(kwargs['lvm_group_cfg']))
 		else:
 			# Create LV layout
@@ -274,7 +274,7 @@ class EphSnapshotProvider(object):
 			self._logger.info('Packing volume %s -> %s', volume.devname, tranzit_path) 
 			cmd1 = ['dd', 'if=%s' % snap_lv]
 			cmd2 = ['gzip', '-1']
-			cmd3 = ['split', '-a','3', '-d', '-b', '%sM' % self.chunk_size, '-', '%s/%s.gz.' % 
+			cmd3 = ['split', '-a','3', '-d', '-b', '%sm' % self.chunk_size, '-', '%s/%s.gz.' % 
 					(tranzit_path, chunk_prefix)]
 			p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

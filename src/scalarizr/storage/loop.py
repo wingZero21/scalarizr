@@ -52,7 +52,7 @@ class LoopVolumeProvider(VolumeProvider):
 		try:
 			size = int(size)
 		except ValueError:
-			if type(size) == str and '%root' in size.lower():
+			if isinstance(size, basestring) and '%root' in size.lower():
 				# Getting size in percents
 				try:
 					size_pct = int(size.lower().replace('%root', ''))
