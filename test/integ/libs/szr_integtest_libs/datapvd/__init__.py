@@ -239,7 +239,7 @@ class DataProvider(object):
 	def wait_for_hostup(self, server):
 		self.wait_for_szr_port(server.public_ip)
 		log_reader = server.log.head()
-		log_reader.expect("Message 'HostInit' delivered", 60)						
+		log_reader.expect("Message 'HostInit' delivered", 120)						
 		self.scalrctl.exec_cronjob('ScalarizrMessaging')
 		log_reader.expect("Message 'HostUp' delivered", 120)
 		self.scalrctl.exec_cronjob('ScalarizrMessaging')			
