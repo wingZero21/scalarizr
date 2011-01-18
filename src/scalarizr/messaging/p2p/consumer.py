@@ -40,6 +40,8 @@ class P2pMessageConsumer(MessageConsumer):
 	
 	def starttest(self):
 		self._logger.debug('Create test socket to validate endpoint')
+		self._logger.warn("Socket test temporary disabled due to strange [Errno 98] Address already in use error")
+		'''
 		r = urlparse(self.endpoint)
 		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		try:
@@ -48,6 +50,7 @@ class P2pMessageConsumer(MessageConsumer):
 			raise MessagingError('Cannot start message server. socket.error: %s' % e)
 		finally:
 			sock.close()
+		'''
 			
 	def start(self):
 		if self.running:
