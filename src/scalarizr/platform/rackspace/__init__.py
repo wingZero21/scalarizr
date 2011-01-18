@@ -1,13 +1,16 @@
 
 from scalarizr.config import BuiltinPlatforms
 from scalarizr.platform import Platform, PlatformError
+from scalarizr.platform.rackspace import storage
 
 from scalarizr.util import system2
 
 import logging
 import re
+import os
 
 from cloudservers import CloudServers 
+import cloudfiles
 
 
 def get_platform():
@@ -62,9 +65,20 @@ class RackspacePlatform(Platform):
 	def get_access_keys(self):
 		return (self.get_access_data("username").encode("ascii"), self.get_access_data("api_key").encode("ascii"))
 	
-	def new_rackspace_conn(self):
+	def set_access_data(self, access_data):
+		Platform.set_access_data(self, access_data)
+		username, api_key = self.get_access_keys()
+		os.environ['CLOUD_SERVERS_USERNAME'] = username
+		os.environ['CLOUD_SERVERS_API_KEY'] = api_key
+	
+	
+	def new_cloudservers_conn(self):
 		username, apikey = self.get_access_keys()
 		return CloudServers(username, apikey)
+	
+	def new_cloudfiles_conn(self):
+		username, apikey = self.get_access_keys()
+		return cloudfiles.Connection(username, apikey)
 	
 	@property
 	def cloud_storage_path(self):

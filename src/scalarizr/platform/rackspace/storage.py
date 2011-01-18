@@ -11,7 +11,6 @@ from urlparse import urlparse
 import logging
 import socket
 import os
-import sys
 
 import cloudfiles
 
@@ -81,9 +80,9 @@ class CFTransferProvider(TransferProvider):
 		self.container_name = o.hostname
 		self.prefix = o.path
 		if not self.username or force:
-			self.username = username if username else os.environ["username"]
+			self.username = username if username else os.environ["CLOUD_SERVERS_USERNAME"]
 		if not self.api_key or force:
-			self.api_key = api_key if api_key else os.environ["api_key"]
+			self.api_key = api_key if api_key else os.environ["CLOUD_SERVERS_API_KEY"]
 		
 	def list(self, remote_path):
 		connection = self._get_connection(remote_path)

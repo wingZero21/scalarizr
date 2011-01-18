@@ -3,12 +3,12 @@ Created on Nov 22, 2010
 
 @author: spike
 '''
-from cloudservers import CloudServers, ImageManager
+from cloudservers import ImageManager
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
-from scalarizr.util import wait_until, software, disttool
+from scalarizr.util import wait_until, software
 import logging
 import time
 
@@ -29,7 +29,7 @@ class RackspaceRebundleHandler(Handler):
 			role_name = message.role_name.encode("ascii")
 			image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 			platform = bus.platform
-			con = platform.new_rackspace_conn()
+			con = platform.new_cloudservers_conn()
 			servers = con.servers.list()
 			
 			public_ip = platform.get_public_ip()

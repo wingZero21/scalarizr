@@ -162,13 +162,8 @@ class EbsVolumeProvider(VolumeProvider):
 	@devname_not_empty		
 	def detach(self, vol, force=False):
 		super(EbsVolumeProvider, self).detach(vol)
-		try:
-			key_id 	   = os.environ['AWS_ACCESS_KEY_ID']
-			secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
-		except KeyError:
-			raise Exception("Can't get AWS credentials from OS environment variables.")
 		
-		conn = connect_ec2(key_id, secret_key)
+		conn = connect_ec2()
 		ebstool.detach_volume(conn, vol.id, self._logger)
 		vol.device = None
 		vol.detached = True
@@ -191,13 +186,7 @@ class S3TransferProvider(TransferProvider):
 
 		if o.scheme != self.schema:
 			raise TransferError('Wrong schema.')		
-		try:
-			s3_key_id = os.environ["AWS_ACCESS_KEY_ID"]
-			s3_secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
-		except KeyError:
-			raise TransferError("Can't get S3 credentials from environment variables.")
-		
-		s3_con = connect_s3(s3_key_id, s3_secret_key)
+		s3_con = connect_s3()
 		try:
 			self.bucket = s3_con.get_bucket(o.hostname)
 		except S3ResponseError, e:
