@@ -24,6 +24,9 @@ when "redhat","centos"
   package "httpd-devel" do
         action :install
   end
+  package "rpm-build" do
+	action :install
+  end
   execute "rpmbuild --rebuild http://yum.cocoiti.com/CentOS/5/RPMS/SRPMS/mod_rpaf-0.6-2.src.rpm"
   execute "mod_rpaf" do
         if node[:kernel][:machine] == "x86_64"

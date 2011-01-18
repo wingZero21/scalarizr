@@ -62,7 +62,7 @@ if os.path.exists(_user_platform_cnf_path):
 
 class DataProvider(object):
 	_instances  = {}
-	_server		= None
+	_servers	= []
 	conn		= None
 	
 	def __new__(cls, *args, **kwargs):
@@ -96,7 +96,7 @@ class DataProvider(object):
 			node = self._get_node(host)
 			key = os.path.join(keys_path, self.role_name) + '.pem'
 			ssh = SshManager(host, key)
-			self._server = Server(node, ssh, role_name=self.role_name, scalr_id=scalr_srv_id)
+			self._servers.append(Server(node, ssh, role_name=self.role_name, scalr_id=scalr_srv_id))
 			return
 			
 		self.default_size  = platform_config['default_size']
@@ -131,10 +131,13 @@ class DataProvider(object):
 		else:
 			raise Exception('No suitable configuration found. Params: %s' % kwargs)				
 			
-	def server(self):
-		if self._server:
-			return self._server
-
+	def server(self, index=0):
+		while len(self._servers) < (index + 1):
+			self._scale_up()
+		return self._servers[index]
+		
+	def _scale_up(self):
+		
 		if self.behaviour == 'raw':
 			if not isinstance(self.default_size, NodeSize):
 				self.default_size = NodeSize(id=self.default_size, name="", \
@@ -172,7 +175,7 @@ class DataProvider(object):
 			key_pass = self.ssh_config.get('key_pass')
 			password = node.__dict__.get('password')
 			ssh = SshManager(host, key, key_pass, password, timeout=240)
-			self._server = Server(node, ssh, image_id=self.image_id.id)
+			self._servers.append(Server(node, ssh, image_id=self.image_id.id))
 		else:
 			if self.farmui.state == 'terminated':
 				self.farmui.use(self.farm_id)
@@ -198,11 +201,12 @@ class DataProvider(object):
 			server_id = result.group('server_id')
 			host = self.farmui.get_public_ip(server_id)
 			node = self._get_node(host)
-					
 			key = os.path.join(keys_path, self.role_name) + '.pem'
+			self.wait_for_szr_port(host)
+			time.sleep(5)
 			ssh = SshManager(host, key, timeout=240)
-			self._server = Server(node, ssh, role_name = self.role_name, scalr_id=server_id)
-		return self._server
+			self._servers.append(Server(node, ssh, role_name = self.role_name, scalr_id=server_id))
+		return self._servers[-1]
 			
 	def clear(self):
 		if hasattr(self, 'farmui'):
@@ -211,8 +215,9 @@ class DataProvider(object):
 			except (Exception, BaseException),e:
 				if not 'has been already terminated' in str(e):
 					raise				
-		if self._server:
-			self._server.terminate()
+		if self._servers:
+			for srv in self._servers:
+				srv.terminate()
 			
 	def sync(self):
 		pass
@@ -233,7 +238,7 @@ class DataProvider(object):
 				return True
 			except:
 				return False				
-		wait_until(_check_szr_port, [host], sleep=5, timeout=120)
+		wait_until(_check_szr_port, [host], sleep=5, timeout=240)
 	
 	
 	def wait_for_hostup(self, server):
@@ -242,7 +247,17 @@ class DataProvider(object):
 		log_reader.expect("Message 'HostInit' delivered", 120)						
 		self.scalrctl.exec_cronjob('ScalarizrMessaging')
 		log_reader.expect("Message 'HostUp' delivered", 120)
-		self.scalrctl.exec_cronjob('ScalarizrMessaging')			
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')
+		
+	def edit_role(self, new_settings):
+		self.farmui.use(self.farm_id)
+		try:
+			self.farmui.edit_role(self.role_name, new_settings)
+		except (Exception, BaseException), e:
+			if not "doesn't have role" in str(e):
+				raise
+			self.farmui.add_role(self.role_name, settings = new_settings)
+		self.farmui.save()				
 
 class Server(object):
 	_log_channel = None

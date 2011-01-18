@@ -51,6 +51,8 @@ class FarmUI:
 		self.servers = []
 	
 	def use(self, farm_id):
+		if 'farms_builder.php?id=%s' % self.farm_id in self.sel.get_location():
+			return
 		self.servers = []
 		self.farm_id = farm_id
 		ui_login(self.sel)
@@ -96,11 +98,15 @@ class FarmUI:
 		
 		wait_until(lambda: self.sel.is_element_present('//span[text()="Roles"]'), sleep=0.1, timeout=10)
 		self.sel.click('//span[text()="Roles"]')
+		
 		try:
-			# uncutted 
-			self.sel.click('//span[@class="short" and text()="%s"]' % role_name)
+			try:
+				# uncutted 
+				self.sel.click('//span[@class="short" and text()="%s"]' % role_name)
+			except:
+				self.sel.click('//div[@class="full" and text()="%s"]' % role_name)
 		except:
-			self.sel.click('//div[@class="full" and text()="%s"]' % role_name)		
+			raise Exception("Farm '%s' doesn't have role '%s'" % (self.farm_id, role_name))	
 				
 		i = 1
 		while True:
@@ -219,13 +225,13 @@ class FarmUI:
 			self.sel.open('/')
 			raise Exception('Farm %s has been already terminated' % self.farm_id)
 		
-	def get_public_ip(self, server_id, timeout = 45):
+	def get_public_ip(self, server_id, timeout = 120):
 		return self._get_server_info(server_id, ('Public IP',), timeout)
 	
-	def get_private_ip(self, server_id, timeout = 45):
+	def get_private_ip(self, server_id, timeout = 120):
 		return self._get_server_info(server_id, ('Private IP',), timeout)
 	
-	def get_instance_id(self, server_id, timeout = 45):
+	def get_instance_id(self, server_id, timeout = 120):
 		return self._get_server_info(server_id, ('Instance ID', 'Server ID'), timeout)
 	
 	def _get_server_info(self, server_id, field_labels, timeout):
@@ -418,7 +424,6 @@ class ScalrCtl:
 		if not os.path.exists(ssh_key_path):
 			raise Exception("Key file %s doesn't exist" % ssh_key_path)
 		ssh_key_password = config.get('./scalr/ssh_key_password')
-		
 		self.ssh = SshManager(scalr_host, ssh_key_path, key_pass = ssh_key_password)
 		self.ssh.connect()
 		

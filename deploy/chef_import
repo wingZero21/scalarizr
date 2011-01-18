@@ -57,9 +57,7 @@ action "Installing rubygems" "ruby setup.rb --no-format-executable --no-ri --no-
 action "Installing chef" "gem install chef --no-ri --no-rdoc"
 mkdir -p /tmp/chef-solo
 action "Creating chef configuration file" "sudo echo -e 'file_cache_path \"/tmp/chef-solo\"\r\ncookbook_path \"/tmp/chef-solo\"' > /etc/solo.rb"
-cd /tmp/chef-solo
-action "Downloading essential cookbooks" "wget -O recipes.tar.gz http://ge.tt/5kxzjw1/recipes.tar.gz"
-action "Unpacking cookbooks"	"tar zxvf recipes.tar.gz && rm -f recipes.tar.gz"
+action "Unpacking cookbooks"	"tar zxf /tmp/recipes.tar.gz -C /tmp/chef-solo && rm -f recipes.tar.gz"
 action "Creating runlist" 		'echo $CHEF_RUNLIST | tee /tmp/soft.json'
 action "Installing software. It can take a while" "chef-solo -c /etc/solo.rb -j /tmp/soft.json"
 action "Starting importing to Scalr in background" "$SCALR_IMPORT_STRING &"

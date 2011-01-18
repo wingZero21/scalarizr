@@ -14,8 +14,8 @@ from scalarizr.util.filetool import read_file
 from scalarizr.util import wait_until
 
 class MysqlDataProvider(DataProvider):
-	_master = None
-	_slaves = []
+	
+	_servers = []	
 	
 	def __init__(self, behaviour=None, farm_settings=None, scalr_srv_id=None, **kwargs):
 		super(MysqlDataProvider, self).__init__('mysql', farm_settings, **kwargs)
@@ -24,58 +24,14 @@ class MysqlDataProvider(DataProvider):
 		'''
 		@rtype: Server
 		'''
-		if len(self._slaves) >= (index + 1):
-			return self._slaves[index]
-		if not self._master:			
-			self.master()			
-			self.wait_for_hostup(self._master)
-			self.scalrctl.exec_cronjob('ScalarizrMessaging')
-		while not len(self._slaves) >= (index + 1):
-			server = self._scale_up()
-			self._slaves.append(server)			
-		return self._slaves[index]
-	
+		return self.server(index+1)
+		
 	def master(self):
-		if self._master:
-			return self._master
-		self._master = self._scale_up()
-		return self._master
+		'''
+		@rtype: Server
+		'''
+		return self.server(0)
 		
-	def _scale_up(self):
-		
-		if not self._master and self.farmui.state == 'terminated':
-			self.farmui.use(self.farm_id)
-			self.farmui.remove_all_roles()
-			self.farmui.save()
-			self.farmui.add_role(self.role_name, settings=self.farm_settings)
-			self.farmui.save()
-			self.farmui.launch()
-		elif self.farm_settings:
-			self.farmui.edit_role(self.role_name, settings=self.farm_settings)
-			self.farmui.save()
-			
-		out = self.scalrctl.exec_cronjob('Scaling')
-		result = re.search(self.server_id_re, out)
-		if not result:
-			raise Exception("Can't create server - farm '%s' hasn't been scaled up." % self.farm_id)
-		server_id = result.group('server_id')
-		print server_id
-		host = self.farmui.get_public_ip(server_id)
-		for instance in self.conn.list_nodes():
-			if socket.gethostbyname(instance.public_ip[0]) == host:
-				node = instance
-				break
-		else:
-			raise Exception("Can't find node with public ip '%s'" % host)
-		
-		key = os.path.join(keys_path, self.role_name) + '.pem'
-		self.wait_for_szr_port(host)
-		time.sleep(5)
-		ssh = SshManager(host, key)
-		return Server(node, ssh, role_name=self.role_name, scalr_id=server_id)
-
-	server = master
-	
 	def sync(self):
 		self._master = None
 		self._slaves = []
@@ -90,4 +46,10 @@ class MysqlDataProvider(DataProvider):
 					self._master = Server(node, ssh, role_name = self.role_name)
 				else:
 					self._slaves.append(Server(node, ssh, role_name = self.role_name))
-	
+					
+	def terminate_farm(self):
+		self.farmui.terminate()
+		time.sleep(5)
+		self.scalrctl.exec_cronjob('Poller')
+		self._master = None
+		self._slaves = []

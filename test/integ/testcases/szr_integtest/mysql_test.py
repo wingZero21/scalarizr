@@ -21,25 +21,49 @@ import re
 import time
 import _mysql
 import os
+import copy
 
 from StringIO import StringIO
 from _mysql_exceptions import OperationalError
 from socket import socket
 
-class StartupMasterHostUpFailed(unittest.TestCase):
 
+
+
+def get_mysql_passwords(ssh):
+	private_cnf = StringIO(execute(ssh, 'cat /etc/scalr/private.d/mysql.ini'))
+	cnf = Configuration('ini')
+	cnf.readfp(private_cnf)
+	try:
+		root_pass = cnf.get('./%s/%s' % (CNF_SECTION, OPT_ROOT_PASSWORD))
+		repl_pass = cnf.get('./%s/%s' % (CNF_SECTION, OPT_REPL_PASSWORD))
+		stat_pass = cnf.get('./%s/%s' % (CNF_SECTION, OPT_STAT_PASSWORD))
+	except:
+		raise Exception("Mysql config doesn't contain essentiall passwords")
+	return (root_pass, repl_pass, stat_pass)
+
+logging.basicConfig()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
+opts.update(EC2_ROLE_DEFAULT_SETTINGS)
+logger.info('1')
+dp = MysqlDataProvider(farm_settings=opts)
+logger.info('2')
+scalrctl = ScalrCtl(dp.farm_id)
+logger.info('3')
+
+class StartupMasterHostUpFailed(unittest.TestCase):
 	def _test_master_hostup_failed(self):
-		logger = logging.getLogger(__name__)
-		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
-		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-		opts.update({'system.timeouts.launch' : '60'})
-		dp = MysqlDataProvider(farm_settings=opts)
+		local_opts = copy.copy(opts)
+		local_opts.update({'system.timeouts.launch' : '60'})
+		dp.edit_role(local_opts)
 		master = dp.master()
 		reader = master.log.head()
 		reader.expect("Message 'HostInit' delivered", 60)
 		ssh = master.ssh()
 		execute(ssh, '/etc/init.d/scalarizr stop', 15)
-		scalrctl = ScalrCtl(dp.farm_id)
 		searcher = re.compile("Server \\\\'%s\\\\' did not send.+Terminating instance" % master.scalr_id)
 		while True:
 			poll = scalrctl.exec_cronjob('Poller')
@@ -82,19 +106,14 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 		if not res:
 			raise Exception("HostInitResponse doesn't contain replication master option.")
 		repl_master = res.group('repl_master')
-		self.assertEqual('1', repl_master)
-		
-		dp.farmui.terminate()
+		self.assertEqual('1', repl_master)		
+		dp.terminate_farm()
 		
 class StartupMaster(unittest.TestCase):
-	def _test_startup_master(self):
-		logger = logging.getLogger(__name__)
-		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
-		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-		#opts.update({'scaling.max_instances' : '1'})
-		dp = MysqlDataProvider(farm_settings=opts)
-		scalrctl = ScalrCtl(dp.farm_id)
-		
+	def test_startup_master(self):
+		local_opts = copy.copy(opts)
+		local_opts.update({'system.timeouts.launch' : '2400'})
+		dp.edit_role(local_opts)
 		master = dp.master()
 		reader = master.log.head()
 		reader.expect("Message 'HostInit' delivered", 60)
@@ -104,11 +123,7 @@ class StartupMaster(unittest.TestCase):
 		logger.info('HostUp Delivered')
 		# Check if mysql running
 		ping_socket(master.public_ip, 3306, exc_str='Mysql is not running on master.')
-		#s = socket()
-		#try:
-		#	s.connect((master.public_ip, 3306))
-		#except:
-		#	raise Exception('Mysql is not running on master.')
+
 		logger.info('Mysql is running on master instance')
 				
 		ssh = master.ssh()
@@ -143,12 +158,10 @@ class StartupMaster(unittest.TestCase):
 		logger.info('Mysql users and permissions are set properly.')
 		
 class StartupSlave(unittest.TestCase):
-	def _test_startup_slave(self):
-		logger = logging.getLogger(__name__)
-		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
-		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-		opts.update({'scaling.min_instances' : '2'})
-		dp = MysqlDataProvider(farm_settings=opts)
+	def test_startup_slave(self):
+		local_opts = copy.copy(opts)
+		local_opts.update({'scaling.min_instances' : '2'})
+		dp.edit_role(local_opts)
 		slave = dp.slave(0)
 		reader = slave.log.head()
 		scalrctl = ScalrCtl(dp.farm_id)
@@ -157,12 +170,8 @@ class StartupSlave(unittest.TestCase):
 		scalrctl.exec_cronjob('ScalarizrMessaging')
 		reader.expect("Message 'HostUp' delivered", 120)
 		logger.info('HostUp Delivered')
-		
-		s = socket()
-		try:
-			s.connect((slave.public_ip, 3306))
-		except:
-			raise Exception('Mysql is not running on slave.')
+	
+		ping_socket(slave.public_ip, 3306, exc_str='Mysql is not running on slave.')
 		logger.info('Mysql is running on slave')
 
 		# Getting mysql credentials
@@ -187,7 +196,6 @@ class StartupSlave(unittest.TestCase):
 		
 class SlaveToMaster(unittest.TestCase):
 	def _test_slave_to_master(self):
-		logger = logging.getLogger(__name__)
 		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
 		opts.update({'scaling.min_instances' : '2'})
@@ -225,8 +233,7 @@ class SlaveToMaster(unittest.TestCase):
 		
 		
 class CreateBackup(unittest.TestCase):
-	def test_create_backup(self):
-		logger = logging.getLogger(__name__)
+	def _test_create_backup(self):
 		opts = {'mysql.ebs_volume_size' : '4'}
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
 		opts.update({'scaling.min_instances' : '2'})
@@ -258,8 +265,7 @@ class CreateBackup(unittest.TestCase):
 		self.assertTrue(len(chunks) >= 2)
 		
 class CreateDataBundle(unittest.TestCase):
-	def test_create_databundle(self):
-		logger = logging.getLogger(__name__)
+	def _test_create_databundle(self):
 		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
 		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
 		dp = MysqlDataProvider(farm_settings=opts)
@@ -279,18 +285,5 @@ class CreateDataBundle(unittest.TestCase):
 		self.assertTrue(re.search('<log_file>[\w.]+</log_file>', cdbr))
 		#self.assertTrue(re.search('<snapshot_config>\d+</snapshot_config>', cdbr))
 
-
-def get_mysql_passwords(ssh):
-	private_cnf = StringIO(execute(ssh, 'cat /etc/scalr/private.d/mysql.ini'))
-	cnf = Configuration('ini')
-	cnf.readfp(private_cnf)
-	try:
-		root_pass = cnf.get('./%s/%s' % (CNF_SECTION, OPT_ROOT_PASSWORD))
-		repl_pass = cnf.get('./%s/%s' % (CNF_SECTION, OPT_REPL_PASSWORD))
-		stat_pass = cnf.get('./%s/%s' % (CNF_SECTION, OPT_STAT_PASSWORD))
-	except:
-		raise Exception("Mysql config doesn't contain essentiall passwords")
-	return (root_pass, repl_pass, stat_pass)
-							
 if __name__ == "__main__":
 	unittest.main()
