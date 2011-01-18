@@ -71,7 +71,7 @@ class DataProvider(object):
 			DataProvider._instances[key] = super(DataProvider, cls).__new__(cls, *args, **kwargs)
 		return DataProvider._instances[key]
 	
-	def __init__(self, behaviour='raw', farm_settings=None, scalr_srv_id=None, **kwargs):
+	def __init__(self, behaviour='raw', farm_settings=None, scalr_srv_id=None, dist=None, **kwargs):
 		
 		def cleanup():
 			self.clear()
@@ -79,7 +79,7 @@ class DataProvider(object):
 		
 		try:
 			self.platform	= os.environ['PLATFORM']
-			self.dist		= os.environ['DIST']
+			self.dist		= dist or os.environ['DIST']
 		except:
 			raise Exception("Can't get platform and dist from os environment.")
 		
