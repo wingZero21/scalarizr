@@ -156,7 +156,8 @@ class FarmUI:
 	def save(self):
 		if not 'farms_builder.php?id=' in self.sel.get_location():
 			raise Exception("Farm's settings page hasn't been opened. Use farm first")
-
+		
+		wait_until(lambda: self.sel.is_element_present('//button[text() = "Save"]'), sleep=0.1, timeout=20)
 		self.sel.click('//button[text() = "Save"]')
 		while True:
 			try:
