@@ -54,11 +54,29 @@ def read_json_config(cnf_path):
 
 	return config
 
+def merge_dicts(a,b):
+	res = {}
+	for key in a.keys():
+		if not key in b:
+			res[key] = a[key]
+			continue
+		
+		if type(a[key]) != type(b[key]):
+			res[key] = b[key]
+		elif dict == type(a[key]):
+			res[key] = merge_dicts(a[key], b[key])
+		else:
+			res[key] = b[key]
+		del(b[key])
+	
+	res.update(b)
+	return res
+
 platform_config = read_json_config(platform_config_path)
 # TODO: Temporary solution. Find a way to merge configurations properly (metaconf?)
 if os.path.exists(_user_platform_cnf_path):
 	user_platform_cnf = read_json_config(_user_platform_cnf_path)
-	platform_config.update(user_platform_cnf)
+	platform_config = merge_dicts(platform_config, user_platform_cnf)
 
 class DataProvider(object):
 	_instances  = {}
@@ -94,7 +112,9 @@ class DataProvider(object):
 			host = self.farmui.get_public_ip(scalr_srv_id, 60)
 			self.role_name = self.farmui.get_role_name(scalr_srv_id)
 			node = self._get_node(host)
-			key = os.path.join(keys_path, self.role_name) + '.pem'
+			key = os.path.join(keys_path, '%s.pem' % self.role_name)
+			if not os.path.exists(key):
+				key = os.path.join(keys_path, 'farm-%s.pem' % self.farm_id) + '.pem'
 			ssh = SshManager(host, key)
 			self._servers.append(Server(node, ssh, role_name=self.role_name, scalr_id=scalr_srv_id))
 			return
@@ -184,10 +204,12 @@ class DataProvider(object):
 				self.farmui.add_role(self.role_name, settings=self.farm_settings)
 				self.farmui.save()
 				self.farmui.launch()
+			"""
 			else:
 				self.farmui.use(self.farm_id)
-				self.farmui.add_role(self.role_name, settings=self.farm_settings)
+				self.edit_role(self.farm_settings)
 				self.farmui.save()
+			"""
 			"""
 			elif self.farm_settings:
 				self.farmui.edit_role(self.role_name, settings=self.farm_settings)
