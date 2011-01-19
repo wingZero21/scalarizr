@@ -81,21 +81,21 @@ if os.path.exists(_user_platform_cnf_path):
 
 class DataProvider(object):
 	_instances  = {}
-	_servers	= []
+	_servers	= None
 	conn		= None
 	
 	def __new__(cls, *args, **kwargs):
-		key = tuple(zip(kwargs.iterkeys(), tuple([x if type(x) != dict else tuple(x.items()) for x in kwargs.itervalues()])))
+		key = tuple(args) + tuple(zip(kwargs.iterkeys(), tuple([x if type(x) != dict else tuple(x.items()) for x in kwargs.itervalues()])))
 		if not key in DataProvider._instances:
+			print 'Creating new dataprovider. Key = ', key
 			DataProvider._instances[key] = super(DataProvider, cls).__new__(cls, *args, **kwargs)
 		return DataProvider._instances[key]
 	
 	def __init__(self, behaviour='raw', farm_settings=None, scalr_srv_id=None, dist=None, **kwargs):
-		
 		def cleanup():
 			self.clear()
 		#atexit.register(cleanup)
-		
+		self._servers = []
 		try:
 			self.platform	= os.environ['PLATFORM']
 			self.dist		= dist or os.environ['DIST']
@@ -220,7 +220,9 @@ class DataProvider(object):
 			if not result:
 				raise Exception("Can't create server - farm '%s' hasn't been scaled up." % self.farm_id)
 			server_id = result.group('server_id')
+			print server_id,
 			host = self.farmui.get_public_ip(server_id)
+			print host
 			node = self._get_node(host)
 			key = os.path.join(keys_path, self.role_name) + '.pem'
 			self.wait_for_szr_port(host)
