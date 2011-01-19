@@ -205,12 +205,10 @@ class DataProvider(object):
 				self.farmui.add_role(self.role_name, settings=self.farm_settings)
 				self.farmui.save()
 				self.farmui.launch()
-			"""
 			else:
 				self.farmui.use(self.farm_id)
 				self.edit_role(self.farm_settings)
 				self.farmui.save()
-			"""
 			"""
 			elif self.farm_settings:
 				self.farmui.edit_role(self.role_name, settings=self.farm_settings)
