@@ -21,6 +21,7 @@ import re
 import time
 import atexit
 import socket
+import logging
 
 
 
@@ -264,12 +265,24 @@ class DataProvider(object):
 	
 	
 	def wait_for_hostup(self, server):
+		logger = logging.getLogger(__name__)
+		
+		logger.info("Waiting for scalarizr daemon")
 		self.wait_for_szr_port(server.public_ip)
+		
+		logger.info("Getting log")
 		log_reader = server.log.head()
-		log_reader.expect("Message 'HostInit' delivered", 120)						
+		logger.info("Got log from server %s" % server.public_ip)
+			
+		log_reader.expect("Message 'HostInit' delivered", 120)
+		logger.info("Got HostInit")
+								
 		self.scalrctl.exec_cronjob('ScalarizrMessaging')
 		log_reader.expect("Message 'HostUp' delivered", 120)
+		logger.info("Got HostUp")
+		
 		self.scalrctl.exec_cronjob('ScalarizrMessaging')
+		logger.info("Now instance state must be 'Running'")
 		
 	def edit_role(self, new_settings):
 		self.farmui.use(self.farm_id)
