@@ -79,7 +79,7 @@ class Transfer(object):
 		obj.configure(remote_path, **kwargs)
 		return obj
 	
-	def __init__(self, pool=2, max_attempts=3, logger=None):
+	def __init__(self, pool=3, max_attempts=3, logger=None):
 		self._logger = logger or logging.getLogger(__name__) 
 		self._pool = pool
 		self._max_attempts = max_attempts
@@ -89,14 +89,14 @@ class Transfer(object):
 		action = self._put_action(pvd, remote_path)
 		return self._transfer(files, action)
 		
-	def download(self, remote_path, dst, recursive=True, **pvd_options):
-		pvd = self.lookup_provider(remote_path, **pvd_options)
+	def download(self, rfiles, dst, recursive=False, **pvd_options):
+		if isinstance(rfiles, basestring):
+			rfiles = (rfiles,)
+		pvd = self.lookup_provider(rfiles[0], **pvd_options)
 		if recursive:
-			files = pvd.list(remote_path)
-		else:
-			files = (remote_path,)
+			rfiles = pvd.list(rfiles[0])
 		action = self._get_action(pvd, dst)
-		return self._transfer(files, action)	
+		return self._transfer(rfiles, action)	
 			
 	def _put_action(self, pvd, dst):
 		def g(filename):
@@ -139,6 +139,7 @@ class Transfer(object):
 		self._logger.info("Transfer complete!")
 
 		# Return tuple of all files	def set_access_data(self, access_data):
+		self._logger.debug('Transfer result: %s', (result,))
 		return tuple(result)
 
 	def _worker(self, action, queue, result, failed_files):

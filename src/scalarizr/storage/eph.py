@@ -305,8 +305,8 @@ class EphSnapshotProvider(object):
 		config.write(manifest_path)
 
 		snapshot.path = manifest_path
-		snapshot.vg = os.path.basename(volume.vg)
-		snapshot.size = volume.size			
+		#snapshot.vg = os.path.basename(volume.vg)
+		#snapshot.size = volume.size			
 		
 		return snapshot
 

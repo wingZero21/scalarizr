@@ -1,12 +1,15 @@
 
-from scalarizr.platform import Platform, PlatformError
-from scalarizr.platform.ec2 import storage
 from scalarizr.bus import bus
+from scalarizr.platform import Platform, PlatformError
+from scalarizr.storage.transfer import Transfer
+from .storage import S3TransferProvider
 
 from boto import connect_ec2, connect_s3
 from boto.ec2.regioninfo import RegionInfo
 import logging, urllib2, re, os
 
+
+Transfer.explore_provider(S3TransferProvider)
 
 
 """
@@ -42,7 +45,7 @@ class Ec2Platform(Platform):
 	_s3_endpoints = {
 		'us-east-1' 		: 's3.amazonaws.com',
 		'us-west-1' 		: 's3-us-west-1.amazonaws.com',
-		'eu-west-1' 		: 's3.amazonaws.com',
+		'eu-west-1' 		: 's3-eu-west-1.amazonaws.com',
 		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com'
 	}	
 	_properties = {}

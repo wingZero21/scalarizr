@@ -5,95 +5,108 @@ Created on Nov 24, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.storage.transfer import Transfer, TransferProvider, TransferError
+from scalarizr.storage.transfer import TransferProvider, TransferError
 
-from urlparse import urlparse
+import urlparse
 import logging
 import socket
 import os
 
 import cloudfiles
 
-
 class CFTransferProvider(TransferProvider):
-	
 	schema = 'cf'
-	username = None
-	api_key = None
+	urlparse.uses_netloc.append(schema)
+	
+	_username = None
+	_api_key = None
+	
+	_logger = None
+	_container = None
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)		
 
 	def put(self, local_path, remote_path):
-		self._logger.info('Uploading %s in CloudFiles container %s' % (local_path, self.container_name))
-		base_name = os.path.basename(local_path)
-		obj_path = os.path.join(self.prefix, base_name)
-		try:		
+		self._logger.info('Uploading %s to CloudFiles under %s' % (local_path, remote_path))
+		container, obj = self._parse_path(remote_path)
+		obj = os.path.join(obj, os.path.basename(local_path))
+		
+		try:
+			connection = self._get_connection()
 			
-			connection = self._get_connection(remote_path)
-			
-			try:
-				container = connection.get_container(self.container_name)
-			except cloudfiles.errors.NoSuchContainer:
-				self._logger.debug('Container %s not found. Trying to create.' % self.container_name)
-				container = connection.create_container(self.container_name)
+			if not self._container_check_cache(container):
+				try:
+					ct = connection.get_container(container)
+				except cloudfiles.errors.NoSuchContainer:
+					self._logger.debug('Container %s not found. Trying to create.', container)
+					ct = connection.create_container(container)
+				# Cache container object
+				self._container = ct
 				
-			o = container.create_object(obj_path)
+			o = self._container.create_object(obj)
 			o.load_from_filename(local_path)
+			return self._format_path(container, obj)			
 			
 		except (cloudfiles.errors.ResponseError, OSError, Exception, socket.timeout), e:
 			raise TransferError, e
-
-		return os.path.join(self.container_name, obj_path)
 	
 	def get(self, remote_path, local_path):
-		self._logger.info('Getting %s from CloudFiles container %s' % (remote_path, self.container_name))
+		self._logger.info('Downloading %s from CloudFiles to %s' % (remote_path, local_path))
+		container, obj = self._parse_path(remote_path)
 		dest_path = os.path.join(local_path, os.path.basename(remote_path))
-		try:		
-			obj = None
-			container = None
-			connection = self._get_connection(remote_path)
+		
+		try:
+			connection = self._get_connection()
+			
+			if not self._container_check_cache(container):
+				try:
+					ct = connection.get_container(container)
+				except cloudfiles.errors.NoSuchContainer:
+					raise TransferError("Container '%s' not found" % container)
+				# Cache container object
+				self._container = ct				
 			
 			try:
-				container = connection.get_container(self.container_name)
-			except cloudfiles.errors.NoSuchContainer:
-				raise TransferError('Container %s not found.' % self.container_name)
-			
-			try:
-				o = urlparse(remote_path)
-				basename = o.path
-				obj = container.get_object(basename)
+				o = ct.get_object(obj)
 			except cloudfiles.errors.NoSuchObject, e:
-				raise TransferError('Object %s not found in %s container.' 
-						% (remote_path, self.container_name))
-				
-			obj.save_to_filename(dest_path)
+				raise TransferError("Object '%s' not found in container '%s'" 
+						% (obj, container))
+			
+			o.save_to_filename(dest_path)
+			return dest_path			
 			
 		except (cloudfiles.errors.ResponseError, OSError, Exception), e:
 			raise TransferError, e
-		return os.path.join(self.container_name, dest_path)
+
 	
-	def configure(self, remote_path, username=None, api_key=None, force=False):
-		o = urlparse(remote_path)
+	def configure(self, remote_path, username=None, api_key=None):
+		if username:
+			self._username = username
+			self._api_key = api_key
+		
+	
+	def list(self, remote_path):
+		container, obj = self._parse_path(remote_path)
+		connection = self._get_connection()
+		ct = connection.get_container(container)
+		objects = container.get_objects(path=obj)
+		return tuple([self._format_path(ct, obj.name) for obj in objects]) if objects else ()	
+
+	def _get_connection(self):
+		from . import new_cloudfiles_conn
+		return new_cloudfiles_conn(self._username, self._api_key)
+
+	def _container_check_cache(self, container):
+		if self._container and self._container.name != container:
+			self._container = None
+		return self._container
+
+	def _format_path(self, container, obj):
+		return '%s://%s/%s' % (self.schema, container, obj)
+	
+	def _parse_path(self, path):
+		o = urlparse.urlparse(path)
 		if o.scheme != self.schema:
 			raise TransferError('Wrong schema')
-		self.container_name = o.hostname
-		self.prefix = o.path
-		if not self.username or force:
-			self.username = username if username else os.environ["CLOUD_SERVERS_USERNAME"]
-		if not self.api_key or force:
-			self.api_key = api_key if api_key else os.environ["CLOUD_SERVERS_API_KEY"]
-		
-	def list(self, remote_path):
-		connection = self._get_connection(remote_path)
-		container = connection.get_container(self.container_name)
-		objects = container.get_objects(path=self.prefix)
-		return [self.schema+'://'+self.container_name+obj.name for obj in objects] if objects else []	
-
-	def _get_connection(self, remote_path):
-		self.configure(remote_path)
-		if not self.username or not self.api_key:
-			raise TransferError('Couldn`t initialize connection to Cloud Files: Credentials not found.')
-		return cloudfiles.get_connection(username=self.username, api_key=self.api_key, serviceNet=True)
-	
-Transfer.explore_provider(CFTransferProvider)
+		return o.hostname, o.path[1:]

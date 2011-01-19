@@ -373,18 +373,20 @@ def onSIGTERM(*args):
 
 def onSIGCHILD(*args):
 	logger = logging.getLogger(__name__)
-	logger.debug("Received SIGCHILD")
+	#logger.debug("Received SIGCHILD")
 	
 	if globals()["_running"] and _snmp_pid:
 		try:
 			# Restart SNMP process if it terminates unexpectedly
 			pid, sts = os.waitpid(_snmp_pid, os.WNOHANG)
+			'''
 			logger.debug(
 				'Child terminated (pid: %d, status: %s, WIFEXITED: %s, '
 				'WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)', 
 				pid, sts, os.WIFEXITED(sts), 
 				os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts)
 			)
+			'''
 			if pid == _snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
 				logger.warning(
 					'SNMP process [pid: %d] died unexpectedly. '

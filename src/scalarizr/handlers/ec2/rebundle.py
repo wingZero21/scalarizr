@@ -11,7 +11,6 @@ from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, get_free_devname
 from scalarizr.util import software
 from scalarizr.platform.ec2 import ebstool
-from scalarizr.platform.ec2 import s3tool
 from scalarizr.storage import Storage 
 from scalarizr.storage.util.loop import mkloop, rmloop
 
@@ -28,6 +27,7 @@ from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
 from scalarizr.util.filetool import read_file
+from scalarizr.storage.transfer import Transfer
 
 if boto.Version == '1.9b':
 	# Workaround for http://code.google.com/p/boto/issues/detail?id=310
@@ -553,39 +553,19 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 	def _upload_image(self, bucket_name, manifest_path, manifest, region=None, acl="aws-exec-read"):
 		try:
 			self._logger.info("Uploading bundle")
-			s3_conn = self._platform.new_s3_conn()
 			
-			# Create bucket
-			bucket = None
-			try:
-				self._logger.info("Lookup bucket '%s'", bucket_name)
-				try:
-					# Lockup bucket
-					bucket = s3_conn.get_bucket(bucket_name)
-					self._logger.debug("Bucket '%s' already exists", bucket_name)
-				except:
-					# It's important to lockup bucket before creating it because if bucket exists
-					# and account has reached buckets limit S3 returns error.
-					self._logger.info("Creating bucket '%s'", bucket_name)					
-					bucket = s3_conn.create_bucket(bucket_name, location=s3tool.location_from_region(region), policy=acl)
-					#bucket = s3_conn.create_bucket(bucket_name, policy=acl)
-					
-			except BotoServerError, e:
-				raise BaseException("Cannot lookup bucket '%s'. %s" % (bucket_name, e.error_message))
-			
-			# Create files queue
+			# Files to upload
 			self._logger.debug("Enqueue files to upload")
-			manifest_dir = os.path.dirname(manifest_path)
+			manifest_dir = os.path.dirname(manifest_path)			
 			upload_files = [manifest_path]
 			for part in manifest.parts:
 				upload_files.append(os.path.join(manifest_dir, part[0]))
-							
-			# Start uploaders
-			self._logger.info("Uploading files")
-			uploader = s3tool.S3Uploader(pool=4, max_attempts=5)
-			uploader.upload(upload_files, bucket, s3_conn, acl)
+			
+			trn = Transfer(pool=4, max_attempts=5, logger=self._logger)
+			trn.upload(upload_files, 's3://%s/' % bucket_name)
 			
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
+		
 			
 		except (Exception, BaseException):
 			self._logger.error("Cannot upload image")

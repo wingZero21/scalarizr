@@ -8,13 +8,14 @@ Created on Nov 24, 2010
 from scalarizr.bus import bus
 from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, devname_not_empty, \
 	VolumeConfig, Snapshot
-from scalarizr.storage.transfer import Transfer, TransferProvider, TransferError
-from scalarizr.platform.ec2 import ebstool
+from scalarizr.storage.transfer import TransferProvider, TransferError
+from . import ebstool
 
 import os
+import re
 import logging
 import string
-from urlparse import urlparse
+import urlparse
 
 from boto import connect_ec2, connect_s3
 from boto.s3.key import Key
@@ -171,70 +172,112 @@ class EbsVolumeProvider(VolumeProvider):
 
 Storage.explore_provider(EbsVolumeProvider, default_for_snap=True)
 
-
 class S3TransferProvider(TransferProvider):
-	
 	schema	= 's3'
-	acl		= None
+	urlparse.uses_netloc.append(schema)
+	
+	acl	= None
+	
+	_logger = None
+	_bucket = None
 	
 	def __init__(self, acl=None):
 		self._logger = logging.getLogger(__name__)
 		self.acl = acl
 
-	def configure(self, remote_path, force=False):
-		o = urlparse(remote_path)
-
-		if o.scheme != self.schema:
-			raise TransferError('Wrong schema.')		
-		s3_con = connect_s3()
-		try:
-			self.bucket = s3_con.get_bucket(o.hostname)
-		except S3ResponseError, e:
-			if 'NoSuchBucket' in str(e) and force:
-				self.bucket = s3_con.create_bucket(o.hostname)
-			else:
-				raise
-			
-		self.prefix = o.path
-
+	def configure(self, remote_path):
+		self._parse_path(remote_path)
 	
 	def put(self, local_path, remote_path):
-		self._logger.info("Uploading '%s' to S3 bucket '%s'", local_path, self.bucket.name)
-		file = None
-		base_name = os.path.basename(local_path)
-		obj_path = os.path.join(self.prefix, base_name) if self.prefix else base_name
+		self._logger.info("Uploading '%s' to S3 under '%s'", local_path, remote_path)
+		bucket_name, key_name = self._parse_path(remote_path)
+		key_name = os.path.join(key_name, os.path.basename(local_path))
+		
 		try:
-			key = Key(self.bucket)
-			key.name = obj_path
-			file = open(local_path, "rb")			
-			key.set_contents_from_file(file, policy=self.acl)
+			connection = self._get_connection()
+			
+			if not self._bucket_check_cache(bucket_name):
+				try:
+					bck = connection.get_bucket(bucket_name)
+				except S3ResponseError, e:
+					if e.code == 'NoSuchBucket':
+						region = re.sub(r's3-?', '', connection.host.split('.')[0])
+						bck = connection.create_bucket(
+							bucket_name, 
+							location=location_from_region(region), 
+							policy=self.acl
+						)
+					else:
+						raise
+				# Cache bucket
+				self._bucket = bck				
+			
+			file = None
+			try:
+				key = Key(self._bucket)
+				key.name = key_name
+				file = open(local_path, "rb")			
+				key.set_contents_from_file(file, policy=self.acl)
+				return self._format_path(bucket_name, key_name)
+			finally:
+				if file:
+					file.close()
 			
 		except (BotoServerError, OSError), e:
 			raise TransferError, e
-		finally:
-			if file:
-				file.close()
-		
-		return os.path.join(self.bucket.name, key.name)
 
 	
-	def get(self, filename, dest):
-		dest_path = os.path.join(dest, os.path.basename(filename))
+	def get(self, remote_path, local_path):
+		self._logger.info('Downloading %s from S3 to %s' % (remote_path, local_path))
+		bucket_name, key_name = self._parse_path(remote_path)
+		dest_path = os.path.join(local_path, os.path.basename(remote_path))
+		
 		try:
-			key = self.bucket.get_key(filename)
-			key.get_contents_to_filename(dest_path)
+			connection = self._get_connection()
+			
+			if not self._bucket_check_cache(bucket_name):
+				try:
+					bkt = connection.get_bucket(bucket_name, validate=False)
+					key = bkt.get_key(key_name)
+				except S3ResponseError, e:
+					if e.code in ('NoSuchBucket', 'NoSuchKey'):
+						raise TransferError("S3 path '%s' not found" % remote_path)
+					raise
+				# Cache container object
+				self._bucket = bkt				
+			
+			key.get_contents_to_filename(dest_path)			
+			return dest_path			
+			
 		except (BotoServerError, OSError), e:
 			raise TransferError, e
-		return os.path.join(self.bucket.name, dest_path)
 	
-	def list(self, url=None):
-		prefix = urlparse(url).path[1:] if url else self.prefix
-		if not prefix:
-			prefix = ''
-		files = [key.name for key in self.bucket.list(prefix=prefix)] 
-		return files
+	def list(self, remote_path):
+		bucket_name, key_name = self._parse_path(remote_path)
+		connection = self._get_connection()
+		bkt = connection.get_bucket(bucket_name, validate=False)
+		files = [self._format_path(self.bucket.name, key.name) for key in bkt.list(prefix=key_name)] 
+		return tuple(files)
 	
-Transfer.explore_provider(S3TransferProvider)
+	def _bucket_check_cache(self, bucket):
+		if self._bucket and self._bucket.name != bucket:
+			self._bucket = None
+		return self._bucket
+	
+	def _get_connection(self):
+		return connect_s3()
+	
+	def _format_path(self, bucket, key):
+		return '%s://%s/%s' % (self.schema, bucket, key)
+
+	def _parse_path(self, path):
+		o = urlparse.urlparse(path)
+		if o.scheme != self.schema:
+			raise TransferError('Wrong schema')
+		return o.hostname, o.path[1:]
+
+
+
 
 def location_from_region(region):
 	if region == 'us-east-1' or not region:

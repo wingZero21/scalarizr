@@ -1,32 +1,85 @@
-__author__ = 'shaitanich'
-
 '''
 Created on Nov 18, 2010
 
 @author: shaitanich
-from boto import connect_ec2
 '''
+
+from scalarizr.storage.transfer import Transfer
+from scalarizr.util import system2
+from szr_unittest import main
+
 import os 
 import logging
 import unittest
 from random import randint
 
-from scalarizr.storage import transfer
-from scalarizr.platform.ec2.storage import S3TransferProvider
-from scalarizr.platform.rackspace.storage import CFTransferProvider
-from szr_unittest import main
 
-import cloudfiles
-from boto import connect_s3
+
+
+def assert_transfer(tc, src_files, dst_files, dst_path=None):
+	# same quantity 
+	tc.assertEqual(len(src_files), len(dst_files))
+	
+	# same base names
+	src_names = sorted(list(os.path.basename(f) for f in src_files))
+	dst_names = sorted(list(os.path.basename(f) for f in dst_files))
+	tc.assertEqual(src_names, dst_names)
+	
+	if dst_path:
+		# all remote files starts with 'dst_path'
+		tc.assertTrue(all(f.startswith(dst_path) for f in dst_files))
+
+
+
+class TransferTestMixin(object):
+	trn = None
+	rdst = None
+	dst = '/tmp/transfer-sandbox'
+	
+	def setUp(self):
+		self.trn = Transfer(pool=2, max_attempts=1)
+		if not os.path.exists(self.dst):
+			os.makedirs(self.dst)
+	
+	def tearDown(self):
+		self.remove_local_files()
+	
+	def make_local_files(self, suffix=None):
+		# Create some 1Mb files		
+		files = []
+		#for file in ('chocolate', 'caramel', 'fluids'):
+		for file in ('chocolate', 'caramel'):
+			file = '%s/%s%s' % (self.dst, file, suffix or '')
+			system2('dd if=/dev/urandom of=%s bs=100K count=1' % file, shell=True)
+			files.append(file)
+		return files
+	
+	def remove_local_files(self):
+		system2('rm -rf %s/*' % self.dst, shell=True)
+	
+	def test_upload(self):
+		files = self.make_local_files('.upload')
+		rfiles = self.trn.upload(files, self.rdst)
+		assert_transfer(self, files, rfiles, self.rdst)
+
+	def test_download(self):
+		files = self.make_local_files('.download')
+		try:
+			rfiles = self.native_upload(files)
+		finally:
+			self.remove_local_files()
+		
+		files = self.trn.download(rfiles, self.dst)
+		assert_transfer(self, rfiles, files, self.dst)
+
+	def native_upload(self, files):
+		pass
+
+
+
 
 
 '''
-Transfer.explore_provider(S3TransferProvider)
-trn = Transfer(pool=5, max_attempts=3)
-trn.upload(files, 'cf://container/path/to/candy')
-trn.download('s3://scalr-files/path/to/some-shit/', dst, recursive=True)
-'''
-
 class UploaderTest(unittest.TestCase):
 
 	def setUp(self):
@@ -141,7 +194,7 @@ class UploaderTest(unittest.TestCase):
 		container.delete_object(self.obj_name)
 		#delete container
 		connection.delete_container(self.container)
-		
+'''		
 		
 if __name__ == "__main__":
 	main()
