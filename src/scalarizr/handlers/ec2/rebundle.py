@@ -877,7 +877,7 @@ if disttool.is_linux():
 			self._logger.info("Copying %s into the image %s", source, dest)
 			rsync = filetool.Rsync()
 			#rsync.archive().times().sparse().links().quietly()
-			rsync.archive().sparse().xattributes()
+			rsync.archive().sparse()
 			if xattr:
 				rsync.xattributes()
 			rsync.exclude(self.excludes)
