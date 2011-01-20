@@ -334,15 +334,17 @@ class EphSnapshotProvider(object):
 		gunzip = ['gunzip']
 		dest = open(volume.devname, 'w')
 		#Todo: find out where to extract file
-		p1 = subprocess.Popen(cat, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest, stderr=subprocess.PIPE)
-		out, err = p2.communicate()
-		dest.close()
-		if p2.returncode:
-			p1.stdout.close()
-			p1.wait()
-			raise StorageError('Error during snapshot restoring (code: %d) <out>: %s <err>: %s' % 
-					(p2.returncode, out, err))
+		try:
+			p1 = subprocess.Popen(cat, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest, stderr=subprocess.PIPE)
+			out, err = p2.communicate()
+			if p2.returncode:
+				p1.stdout.close()
+				p1.wait()
+				raise StorageError('Error during snapshot restoring (code: %d) <out>: %s <err>: %s' % 
+						(p2.returncode, out, err))
+		finally:
+			dest.close()			
 
 	def upload(self, volume, snapshot, tranzit_path):
 		mnf = Configuration('ini')

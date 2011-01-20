@@ -17,6 +17,7 @@ from scalarizr.messaging import Messages
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2, disttool
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
@@ -193,6 +194,10 @@ class NginxHandler(ServiceCtlHanler):
 			start = self.on_start, 
 			before_host_up = self.on_before_host_up
 		)
+		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			iptables = IpTables()
+			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \

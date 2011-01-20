@@ -18,6 +18,7 @@ from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 from scalarizr.util import disttool, cached, firstmatched, validators, software,\
 	wait_until
 from scalarizr.util import initdv2, system2
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
@@ -205,7 +206,12 @@ class ApacheHandler(ServiceCtlHanler):
 		bus.on(
 			start = self.on_start, 
 			before_host_up = self.on_before_host_up
-		)		
+		)
+		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			iptables = IpTables()
+			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))
+
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \

@@ -176,6 +176,7 @@ class Lvm2:
 				error_text='Cannot initiate a disk for use by LVM')
 		
 	def create_vg(self, group, ph_volumes, ph_extent_size=4):
+		group = os.path.basename(group)
 		system([VGCREATE, '-s', ph_extent_size, group] + list(ph_volumes), 
 				error_text='Cannot create a volume group %s' % group)
 		return '/dev/%s' % group

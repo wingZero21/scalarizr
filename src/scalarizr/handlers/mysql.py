@@ -15,10 +15,11 @@ from scalarizr.messaging import Messages
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 
 # Libs
-from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError,\
+from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
-from scalarizr.util import system2, cryptotool, disttool,\
-		 filetool, firstmatched, cached, validators, initdv2, software
+from scalarizr.util import system2, cryptotool, disttool, filetool, \
+	firstmatched, cached, validators, initdv2, software
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
@@ -471,11 +472,12 @@ class MysqlHandler(ServiceCtlHanler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("start", self.on_start)
-		"""
-		@xxx: Storage unplug failed because scalarizr has no EC2 access keys
 		bus.on("before_reboot_start", self.on_before_reboot_start)
-		bus.on("before_reboot_finish", self.on_before_reboot_finish)
-		"""
+		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			iptables = IpTables()
+			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
+		
 		
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
@@ -845,25 +847,7 @@ class MysqlHandler(ServiceCtlHanler):
 		Stop MySQL and unplug storage
 		"""
 		self._stop_service()
-		'''
-		no need to plug/unplug storage since Scalarizr do EBS-root instances bundle 
-		try:
-			self._unplug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
-		except ConfigParser.NoOptionError:
-			self._logger.debug("Skip storage unplug. There is no configured storage.")
-		'''
 
-	def on_before_reboot_finish(self, *args, **kwargs):
-		"""
-		Start MySQL and plug storage
-		"""
-		'''
-		try:
-			self._plug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
-		except ConfigParser.NoOptionError:
-			self._logger.debug("Skip storage plug. There is no configured storage.")
-		'''
-		self._start_service()
 
 	def on_host_init_response(self, message):
 		"""
@@ -1078,6 +1062,7 @@ class MysqlHandler(ServiceCtlHanler):
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
 			vol = Storage.create(vol)
+
 		try:
 			if not os.path.exists(mpoint):
 				os.makedirs(mpoint)

@@ -1,3 +1,4 @@
+
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.config import ScalarizrState
@@ -25,7 +26,10 @@ class RackspaceLifeCycleHandler(Handler):
 			self._logger.debug('Adding iptables rules for scalarizr ports')
 			
 			rules = []
+			
+			# Scalarizr ports
 			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
 			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
+			
 			for rule in rules:
 				iptables.insert_rule(None, rule_spec = rule)
