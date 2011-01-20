@@ -229,15 +229,14 @@ class MysqlMessages:
 	@ivar root_password: 'scalr' user password 
 	@ivar repl_password: 'scalr_repl' user password
 	@ivar stat_password: 'scalr_stat' user password
-	@ivar volume_id: Master EBS volume id
-	@ivar volume: Master storage configuration
+	@ivar volume_config: Master storage configuration
 	"""
 	
 	PROMOTE_TO_MASTER_RESULT = "Mysql_PromoteToMasterResult"
 	"""
 	@ivar status: ok|error
 	@ivar last_error: Last error message in case of status = 'error'
-	@ivar volume_id: Master EBS volume id
+	@ivar volume_config: Master storage configuration
 	"""
 	
 	NEW_MASTER_UP = "Mysql_NewMasterUp"
@@ -721,7 +720,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 			#ec2_conn = self._platform.new_ec2_conn()
-			master_storage_conf = message.config
+			master_storage_conf = message.volume_config
 			tx_complete = False
 			
 			try:
