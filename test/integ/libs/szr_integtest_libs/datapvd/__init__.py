@@ -226,6 +226,8 @@ class DataProvider(object):
 			print host
 			node = self._get_node(host)
 			key = os.path.join(keys_path, self.role_name) + '.pem'
+			if not os.path.exists(key):
+				key = os.path.join(keys_path, 'farm-%s.pem' % self.farm_id) + '.pem'
 			self.wait_for_szr_port(host)
 			time.sleep(5)
 			ssh = SshManager(host, key, timeout=240)
