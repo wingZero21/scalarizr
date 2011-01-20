@@ -176,8 +176,19 @@ class VolumeConfig(object):
 	device = None
 	mpoint = None
 	fstype = None
-	id = None
+	_id_format = '%s-%s'
+	_id = None	
 	_ignores = ()
+	
+	def _id_setter(self, id):
+		self._id = id
+		
+	def _id_getter(self):
+		if not self._id:
+			self._id = self._id_format % (self.type, uuid.uuid4().hex[0:8])
+		return self._id
+	
+	id = property(_id_getter, _id_setter)
 	
 	def config(self, as_snapshot=False):
 		base = tuple(base for base in self.__class__.__bases__ if base.__name__.endswith('Config'))[0]
@@ -215,6 +226,7 @@ class Volume(VolumeConfig):
 	
 	_logger = None
 	_fs = None
+	_id_format = '%s-vol-%s'
 
 	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
 		self._logger = logging.getLogger(__name__)
@@ -330,8 +342,8 @@ class Snapshot(VolumeConfig):
 	version = '0.7'
 	type = None
 	description = None
+	_id_format = '%s-snap-%s'
 
-	_id = None
 		
 	def __init__(self, type=None, description=None, **kwargs):
 		self.type = type
@@ -339,16 +351,6 @@ class Snapshot(VolumeConfig):
 		for k, v in kwargs.items():
 			if hasattr(self, k):
 				setattr(self, k, v)
-	
-	def _id_setter(self, id):
-		self._id = id
-		
-	def _id_getter(self):
-		if not self._id:
-			self._id = '%s-snap-%s' % (self.type, uuid.uuid4().hex[0:8])
-		return self._id
-	
-	id = property(_id_getter, _id_setter)
 	
 	def __str__(self):
 		fmt = '[snapshot(v%s):%s] %s\n%s'
@@ -373,6 +375,8 @@ class VolumeProvider(object):
 		return self.vol_class(device, **kwargs)
 	
 	def create_from_snapshot(self, **kwargs):
+		if 'id' in kwargs:
+			del kwargs['id']
 		return self.create(**kwargs)
 	
 	def snapshot_factory(self, description=None, **kwargs):

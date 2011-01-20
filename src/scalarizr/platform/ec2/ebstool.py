@@ -16,6 +16,16 @@ from boto.ec2.snapshot import Snapshot
 DEFAULT_TIMEOUT = 300 	# 5 min
 SNAPSHOT_TIMEOUT = 2700	# 45 min
 
+def create_snapshot(ec2_conn, volume_id, description=None, logger=None, timeout=SNAPSHOT_TIMEOUT):
+	if isinstance(volume_id, Volume):
+		volume_id = volume_id.id
+	logger = logger or logging.getLogger(__name__)
+	logger.debug('Creating snapshot of EBS volume %s', volume_id)
+	snap = ec2_conn.create_snapshot(volume_id, description)
+	logger.debug('Snapshot %s created for EBS volume %s', snap.id, volume_id)
+	wait_snapshot(ec2_conn, snap, logger=logger, timeout)
+	return snap
+
 def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 	'''
 	Waits until snapshot becomes 'completed' or 'error'

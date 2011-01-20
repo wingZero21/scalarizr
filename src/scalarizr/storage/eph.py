@@ -162,10 +162,11 @@ class EphVolumeProvider(VolumeProvider):
 				'vg': 'mysql_data'
 			}
 		})
-		
-		
 		'''
 		_kwargs = kwargs.copy()
+		if 'id' in _kwargs:
+			del _kwargs['id']
+		
 		if not 'snap_backend' in _kwargs:
 			_kwargs['snap_backend'] = os.path.dirname(_kwargs['path'])
 		vol = self.create(**_kwargs)

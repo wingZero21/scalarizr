@@ -70,14 +70,9 @@ class LoopVolumeProvider(VolumeProvider):
 			else:
 				raise StorageError('Incorrect size format: %s' % size)
 		
-		kwargs['size']	= size
 		kwargs['file']	= file
 		kwargs['device'] = mkloop(file, size, not kwargs.get('zerofill'))
 		return super(LoopVolumeProvider, self).create(**kwargs)
-	
-
-	def create_from_snapshot(self, **kwargs):
-		return self.create(**kwargs)
 	
 	def create_snapshot(self, vol, snap):
 		backup_filename = vol.file + '.%s.bak' % time.strftime('%d-%m-%Y_%H:%M')
