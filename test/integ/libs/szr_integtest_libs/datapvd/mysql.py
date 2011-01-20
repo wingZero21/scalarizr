@@ -17,8 +17,8 @@ class MysqlDataProvider(DataProvider):
 	
 	_servers = []	
 	
-	def __init__(self, behaviour=None, farm_settings=None, scalr_srv_id=None, **kwargs):
-		super(MysqlDataProvider, self).__init__('mysql', farm_settings, **kwargs)
+	def __init__(self, behaviour=None, role_settings=None, scalr_srv_id=None, dist=None, **kwargs):
+		super(MysqlDataProvider, self).__init__('mysql', role_settings, **kwargs)
 	
 	def slave(self, index=0):
 		'''

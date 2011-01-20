@@ -14,6 +14,7 @@ from scalarizr.util import wait_until
 import urllib
 import httplib2
 import simplejson
+import copy
 
 log_path = os.path.expanduser('~/.scalr-dev/logs')
 server_info_url = 'http://scalr-dev.local.webta.net/servers/extendedInfo'
@@ -92,7 +93,7 @@ class FarmUI:
 		
 		self.edit_role(role_name, settings)
 		
-	def edit_role(self, role_name, settings=None):
+	def _role_in_farm(self, role_name):
 		if not 'farms_builder.php?id=' in self.sel.get_location():
 			self.sel.open("farms_builder.php?id=%s" % self.farm_id)
 		
@@ -101,29 +102,44 @@ class FarmUI:
 		
 		try:
 			try:
-				# uncutted 
 				self.sel.click('//span[@class="short" and text()="%s"]' % role_name)
-			except:
+			except:				
 				self.sel.click('//div[@class="full" and text()="%s"]' % role_name)
 		except:
-			raise Exception("Farm '%s' doesn't have role '%s'" % (self.farm_id, role_name))	
-				
+			return False
+		return True
+	
+	def edit_role(self, role_name, settings=None):
+		if not 'farms_builder.php?id=' in self.sel.get_location():
+			self.sel.open("farms_builder.php?id=%s" % self.farm_id)
+		
+		role_opts = copy.copy(settings)
+		
+		wait_until(lambda: self.sel.is_element_present('//span[text()="Roles"]'), sleep=0.1, timeout=10)
+		self.sel.click('//span[text()="Roles"]')
+
+		if not self._role_in_farm(role_name):
+			raise Exception("Farm '%s' doesn't have role '%s'" % (self.farm_id, role_name))
+		
 		i = 1
-		while True:
+		while role_opts:
 			try:
 				self.sel.click('//div[@class="viewers-farmrolesedit-tabs"]/div[not(@style)][%s]' % i)
 				time.sleep(0.5)
 				wait_until(lambda: not self.sel.is_element_present('//html/body/div[@class="ext-el-mask-msg x-mask-loading"]/div'), timeout=10, sleep=0.5)
 				time.sleep(0.5)
 				for option, value in settings.iteritems():
-					try:
-						id = self.sel.get_attribute('//div[@class=" x-panel x-panel-noborder"]//*[@name="%s"]/@id' % option)
-						self.sel.run_script("with (Ext.getCmp('%s')) { setValue('%s'); fireEvent('select'); }" % (id, value))
-					except:
-						pass
+					el_xpath = '//input[@name = "%s"]' % option
+					if self.sel.is_element_present(el_xpath) and self.sel.is_visible(el_xpath):
+						try:
+							id = self.sel.get_attribute('//div[@class=" x-panel x-panel-noborder"]//*[@name="%s"]/@id' % option)
+							self.sel.run_script("with (Ext.getCmp('%s')) { setValue('%s'); fireEvent('select'); }" % (id, value))
+							del(role_opts[option])
+						except:
+							pass
 				time.sleep(0.5)
 				i += 1
-			except:
+			except (Exception, BaseException), e:
 				break
 				
 		self.sel.click('//div[@class="viewers-selrolesviewer-blocks viewers-selrolesviewer-add"]')
@@ -159,6 +175,7 @@ class FarmUI:
 		
 		wait_until(lambda: self.sel.is_element_present('//button[text() = "Save"]'), sleep=0.1, timeout=20)
 		self.sel.click('//button[text() = "Save"]')
+		wait_until(lambda: not self.sel.is_element_present('//div[text() = "Please wait while saving..."]'), sleep=0.2, timeout=20)
 		while True:
 			try:
 				text = self.sel.get_text('//div[@id="top-messages"]/div[last()]')

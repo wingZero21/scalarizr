@@ -91,7 +91,7 @@ class DataProvider(object):
 			DataProvider._instances[key] = super(DataProvider, cls).__new__(cls, *args, **kwargs)
 		return DataProvider._instances[key]
 	
-	def __init__(self, behaviour='raw', farm_settings=None, scalr_srv_id=None, dist=None, **kwargs):
+	def __init__(self, behaviour='raw', role_settings=None, scalr_srv_id=None, dist=None, **kwargs):
 		def cleanup():
 			self.clear()
 		#atexit.register(cleanup)
@@ -123,7 +123,7 @@ class DataProvider(object):
 		self.default_size  = platform_config['default_size']
 
 		self.behaviour	= behaviour
-		self.farm_settings = farm_settings
+		self._role_settings = role_settings
 		
 		for configuration in platform_config['images'][self.dist][self.behaviour]:
 			if set(kwargs.items()) <= set(configuration.items()):
@@ -202,13 +202,14 @@ class DataProvider(object):
 				self.farmui.use(self.farm_id)
 				self.farmui.remove_all_roles()
 				self.farmui.save()
-				self.farmui.add_role(self.role_name, settings=self.farm_settings)
+				self.farmui.add_role(self.role_name, settings=self._role_settings)
 				self.farmui.save()
 				self.farmui.launch()
 			else:
 				self.farmui.use(self.farm_id)
-				self.edit_role(self.farm_settings)
-				self.farmui.save()
+				if not self.farmui._role_in_farm(self.role_name):
+					self.farmui.add_role(self.role_name, settings=self._role_settings)
+					self.farmui.save()
 			"""
 			elif self.farm_settings:
 				self.farmui.edit_role(self.role_name, settings=self.farm_settings)
@@ -265,6 +266,9 @@ class DataProvider(object):
 	
 	
 	def wait_for_hostup(self, server):
+		if server._running:
+			return
+		
 		logger = logging.getLogger(__name__)
 		
 		logger.info("Waiting for scalarizr daemon")
@@ -283,6 +287,7 @@ class DataProvider(object):
 		
 		self.scalrctl.exec_cronjob('ScalarizrMessaging')
 		logger.info("Now instance state must be 'Running'")
+		server._running = True
 		
 	def edit_role(self, new_settings):
 		self.farmui.use(self.farm_id)
@@ -292,11 +297,24 @@ class DataProvider(object):
 			if not "doesn't have role" in str(e):
 				raise
 			self.farmui.add_role(self.role_name, settings = new_settings)
-		self.farmui.save()				
+		self.farmui.save()
 
+	def get_role_opts(self):
+		return self._role_settings
+
+	def set_role_opts(self, value):
+		self._role_settings = value
+		if 'terminated' != self.farmui.state:
+			self.edit_role(self._role_settings)
+			
+		
+	role_opts = property(get_role_opts, set_role_opts)
+
+	
 class Server(object):
 	_log_channel = None
 	_dist 		 = None
+	_running	 = None
 	
 	def __init__(self, node, ssh, image_id=None, role_name=None, scalr_id=None):
 		self.image_id = image_id
@@ -304,6 +322,7 @@ class Server(object):
 		self.ssh_manager = ssh
 		self.node = node
 		self.scalr_id = scalr_id
+		self._running = False
 	
 	def ssh(self):
 		if not self.ssh_manager.connected:

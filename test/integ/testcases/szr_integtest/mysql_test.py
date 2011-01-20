@@ -25,10 +25,6 @@ import copy
 
 from StringIO import StringIO
 from _mysql_exceptions import OperationalError
-from socket import socket
-
-
-
 
 def get_mysql_passwords(ssh):
 	private_cnf = StringIO(execute(ssh, 'cat /etc/scalr/private.d/mysql.ini'))
@@ -48,17 +44,27 @@ logger.setLevel(logging.DEBUG)
 
 opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
 opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-logger.info('1')
 dp = MysqlDataProvider(farm_settings=opts)
-logger.info('2')
 scalrctl = ScalrCtl(dp.farm_id)
-logger.info('3')
+
+
+
+
+
+
+
+
+
+
+
 
 class StartupMasterHostUpFailed(unittest.TestCase):
-	def _test_master_hostup_failed(self):
+	def test_master_hostup_failed(self):
+		logger.info('>>>>>>>>>>>> Starting test "test_master_hostup_failed"')
 		local_opts = copy.copy(opts)
 		local_opts.update({'system.timeouts.launch' : '60'})
-		dp.edit_role(local_opts)
+		dp.role_opts = local_opts
+		#dp.edit_role(local_opts)
 		master = dp.master()
 		reader = master.log.head()
 		reader.expect("Message 'HostInit' delivered", 60)
@@ -72,6 +78,7 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 				break
 			time.sleep(5)
 		#new_master = dp.slave()
+		"""
 		new_server_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)' \
 								 % (dp.farm_id, dp.role_name), re.M)
 		out = scalrctl.exec_cronjob('Scaling')
@@ -84,7 +91,9 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 		server_id = res.group('server_id')
 		logger.info("New master's scalr id: %s" % server_id)
 		dp2 = DataProvider(scalr_srv_id = server_id)
-		new_master = dp2.server()
+		new_master = dp.server()
+		"""
+		new_master = dp.slave(0)
 		logger.info('Start Messaging')
 		scalrctl.exec_cronjob('ScalarizrMessaging')
 		logger.info('Messaging Done')
@@ -97,10 +106,11 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 		execute(ssh, '/etc/init.d/scalarizr stop', 15)
 		execute(ssh, 'sed -i "s/^behaviour.*$/behaviour = /g\" /etc/scalr/public.d/config.ini', 10)
 		execute(ssh, '/etc/init.d/scalarizr start', 15)
-		
+		time.sleep(4)		
 		scalrctl.exec_cronjob('ScalarizrMessaging')
-		reader.expect("Received ingoing message 'HostInitResponse' in queue control", 30)
-		msg_id = reader.expect("message_id: (?P<msg_id>[\w-]+)", 20).group('msg_id')
+		msg_id = reader.expect("Received message 'HostInitResponse' \(message_id: (?P<msg_id>[\w-]+)\)", 30).group('msg_id')
+		#reader.expect("Received ingoing message 'HostInitResponse' in queue control", 30)
+		#msg_id = reader.expect("message_id: (?P<msg_id>[\w-]+)", 20).group('msg_id')
 		message = new_master.get_message(msg_id)
 		res = re.search('<replication_master>(?P<repl_master>\d)', message)
 		if not res:
@@ -108,19 +118,19 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 		repl_master = res.group('repl_master')
 		self.assertEqual('1', repl_master)		
 		dp.terminate_farm()
+		scalrctl.exec_cronjob('ScalarizrMessaging')
+		logger.info('>>>>>>>>>>>> Test "test_master_hostup_failed" finished')
 		
 class StartupMaster(unittest.TestCase):
+
 	def test_startup_master(self):
+		logger.info('>>>>>>>>>>>> Starting test "test_startup_master"')
 		local_opts = copy.copy(opts)
 		local_opts.update({'system.timeouts.launch' : '2400'})
-		dp.edit_role(local_opts)
+		dp.farm_settings = local_opts
+		#dp.edit_role(local_opts)
 		master = dp.master()
-		reader = master.log.head()
-		reader.expect("Message 'HostInit' delivered", 60)
-		logger.info('HostInit delivered')
-		scalrctl.exec_cronjob('ScalarizrMessaging')
-		reader.expect("Message 'HostUp' delivered", 120)
-		logger.info('HostUp Delivered')
+		dp.wait_for_hostup(master)
 		# Check if mysql running
 		ping_socket(master.public_ip, 3306, exc_str='Mysql is not running on master.')
 
@@ -139,8 +149,8 @@ class StartupMaster(unittest.TestCase):
 		logger.info('Replication master is running.')
 		
 		hostup = master.get_message(message_name='HostUp')
-		#self.assertTrue(re.search('<volume_config>.+</volume_config>', hostup))
-		#self.assertTrue(re.search('<snapshot_config>.+</snapshot_config>', hostup))
+		self.assertTrue(re.search('<volume_config>.+</volume_config>', hostup))
+		self.assertTrue(re.search('<snapshot_config>.+</snapshot_config>', hostup))
 		self.assertTrue(re.search('<log_pos>\d+</log_pos>', hostup))
 		self.assertTrue(re.search('<log_file>.+</log_file>', hostup))
 		try:
@@ -156,28 +166,25 @@ class StartupMaster(unittest.TestCase):
 		self.assertRaises(OperationalError, _mysql.connect, master.public_ip, ROOT_USER, root_pass)
 		
 		logger.info('Mysql users and permissions are set properly.')
+		logger.info('>>>>>>>>>>>> Test "test_startup_master" finished')
 		
 class StartupSlave(unittest.TestCase):
+
 	def test_startup_slave(self):
+		logger.info('>>>>>>>>>>>> Starting test "test_startup_slave"')
 		local_opts = copy.copy(opts)
 		local_opts.update({'scaling.min_instances' : '2'})
-		dp.edit_role(local_opts)
+		dp.farm_settings = local_opts
+		#dp.edit_role(local_opts)
 		slave = dp.slave(0)
-		reader = slave.log.head()
-		scalrctl = ScalrCtl(dp.farm_id)
-		reader.expect("Message 'HostInit' delivered", 60)
-		logger.info('HostInit delivered')
-		scalrctl.exec_cronjob('ScalarizrMessaging')
-		reader.expect("Message 'HostUp' delivered", 120)
-		logger.info('HostUp Delivered')
-	
+		dp.wait_for_hostup(slave)
 		ping_socket(slave.public_ip, 3306, exc_str='Mysql is not running on slave.')
 		logger.info('Mysql is running on slave')
 
 		# Getting mysql credentials
 		master = dp.master()
 		master_ssh = master.ssh()
-		root_pass, repl_pass, stat_pass = get_mysql_passwords(master_ssh)
+		root_pass = get_mysql_passwords(master_ssh)[0]
 		
 		# Check for slave status
 		ssh = slave.ssh()
@@ -192,15 +199,15 @@ class StartupSlave(unittest.TestCase):
 		logger.info("Master host has been set properly.")
 		
 		hostup = slave.get_message(message_name='HostUp')
-		# TODO: check hostup
+		self.assertTrue(re.search("<volume_config>.+</volume_config>", hostup))
+		logger.info('>>>>>>>>>>>> Test "test_startup_slave" finished')
 		
 class SlaveToMaster(unittest.TestCase):
-	def _test_slave_to_master(self):
-		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
-		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-		opts.update({'scaling.min_instances' : '2'})
-		dp = MysqlDataProvider(farm_settings=opts)
-		scalrctl = ScalrCtl(dp.farm_id)
+	def test_slave_to_master(self):
+		logger.info('>>>>>>>>>>>> Starting test "test_slave_to_master"')
+		local_opts = copy.copy(opts)
+		local_opts.update({'scaling.min_instances' : '2'})
+		dp.farm_settings = local_opts
 		master = dp.master()
 		dp.wait_for_hostup(master)
 		slave = dp.slave()
@@ -225,20 +232,22 @@ class SlaveToMaster(unittest.TestCase):
 		self.assertFalse('Access denied for user' in master_status_on_slave)
 		promo_to_master_res = slave.get_message(message_name = "Mysql_PromoteToMasterResult")
 		self.assertTrue('<status>ok</status>' in promo_to_master_res)
-		#TODO: Check volume_config in promote to master result
-		#self.assertTrue(re.search("<volume_config>.+</volume_config>", promo_to_master_res))
+		self.assertTrue(re.search("<volume_config>.+</volume_config>", promo_to_master_res))
 		dp.sync()
 		slave = dp.slave()
 		dp.wait_for_hostup(slave)
+		logger.info('>>>>>>>>>>>> Test "test_slave_to_master" finished')
 		
 		
 class CreateBackup(unittest.TestCase):
-	def _test_create_backup(self):
-		opts = {'mysql.ebs_volume_size' : '4'}
-		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-		opts.update({'scaling.min_instances' : '2'})
-		dp = MysqlDataProvider(farm_settings=opts)
+	def test_create_backup(self):
+		logger.info('>>>>>>>>>>>> Starting test "test_create_backup"')
+		local_opts = copy.copy(opts)
+		local_opts.update({'mysql.ebs_volume_size' : '4', 
+						   'scaling.min_instances' : '2'})
 		
+		dp.farm_settings = local_opts
+
 		slave = dp.slave()
 		dp.wait_for_hostup(slave)
 		master = dp.master()
@@ -263,13 +272,12 @@ class CreateBackup(unittest.TestCase):
 		self.assertTrue('<status>ok</status>' in cbr)
 		chunks = re.findall('<item>(.+)</item>', cbr)
 		self.assertTrue(len(chunks) >= 2)
-		
+		logger.info('>>>>>>>>>>>> Test "test_create_backup" finished')
+			
 class CreateDataBundle(unittest.TestCase):
-	def _test_create_databundle(self):
-		opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
-		opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-		dp = MysqlDataProvider(farm_settings=opts)
-		
+	def test_create_databundle(self):
+		logger.info('>>>>>>>>>>>> Starting test "test_create_databundle"')
+		dp.farm_settings = opts		
 		master = dp.master()
 		dp.wait_for_hostup(master)
 		reader = master.log.tail()
@@ -283,7 +291,20 @@ class CreateDataBundle(unittest.TestCase):
 		self.assertTrue('<status>ok</status>' in cdbr)
 		self.assertTrue(re.search('<log_pos>\d+</log_pos>', cdbr))
 		self.assertTrue(re.search('<log_file>[\w.]+</log_file>', cdbr))
-		#self.assertTrue(re.search('<snapshot_config>\d+</snapshot_config>', cdbr))
-
+		self.assertTrue(re.search('<snapshot_config>.+</snapshot_config>', cdbr))
+		logger.info('>>>>>>>>>>>> Test "test_create_databundle" finished')
+		
+class MysqlSuite(unittest.TestSuite):
+	def __init__(self, tests=()):
+		self._tests = []
+		self.addTest(StartupMasterHostUpFailed('test_master_hostup_failed'))
+		"""
+		self.addTest(StartupMaster('test_startup_master'))
+		self.addTest(StartupSlave('test_startup_slave'))
+		self.addTest(SlaveToMaster('test_slave_to_master'))
+		self.addTest(CreateBackup('test_create_backup'))
+		self.addTest(CreateDataBundle('test_create_databundle'))
+		"""
+		
 if __name__ == "__main__":
 	unittest.main()
