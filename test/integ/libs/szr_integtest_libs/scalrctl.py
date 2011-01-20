@@ -337,8 +337,8 @@ class FarmUI:
 		if not self.sel.is_text_present('Replication status'):
 			raise FarmUIError("Error while opening MySQL status page for farm ID=%s. Make sure your farm has MySQL role enabled." % self.farm_id)
 
-	def get_mysql_servers(self, role_name):
-		ret = {'master' : None, 'slaves' : []}
+	def get_server_list(self, role_name):
+		ret = []
 		self.sel.open('/farm_roles_view.php?farmid=%s' % self.farm_id )
 		self.sel.wait_for_page_to_load(15000)
 		time.sleep(1)
@@ -346,16 +346,16 @@ class FarmUI:
 		time.sleep(3)
 		server_count = int(self.sel.get_xpath_count('//div[@class="x-list-body-inner"]/descendant::em[text()="Running "]'))
 		if not server_count:
-			return None
+			return []
 		for i in range(1, server_count+1):
 			ip = self.sel.get_text('//div[@class="x-list-body-inner"]/descendant::em[text()="Running "][%d]/../../dt[@dataindex="remote_ip"]/em' % i).strip()
 			if ip:
 				if self.sel.get_text('//div[@class="x-list-body-inner"]/descendant::em[text()="Running "][%d]/../../dt[@dataindex="farm_id"]/em/' % i).strip().endswith('(Master)'):
-					ret['master'] = ip
+					ret.insert(0, ip)
 				else:
-					ret['slaves'].append(ip)
+					ret.append(ip)
 		return ret
-		# TODO: collect and return info about mysql servers
+		# TODO: Handle situation when there is no master in role
 		
 	def get_role_name(self, scalr_srv_id):
 		self.use(self.farm_id)
@@ -469,7 +469,7 @@ class ScalrCtl:
 		
 		self._logger.info('cd %s' % home_path)
 		execute(self.channel, 'cd ' + home_path)
-		farm_str = ('--farm-id=%s' % self.farmid) if (self.farmid and name == 'ScalarizrMessaging') else ''
+		farm_str = ('--farm-id=%s' % self.farmid) if (self.farmid and name in ('ScalarizrMessaging', 'Scaling')) else ''
 		job_cmd = 'php -q ' + cron_php_path + ' --%s %s' % (name, farm_str)
 		self._logger.info('Starting cronjob: %s' % job_cmd)
 		out = execute(self.channel, job_cmd)
