@@ -115,7 +115,7 @@ class DataProvider(object):
 			node = self._get_node(host)
 			key = os.path.join(keys_path, '%s.pem' % self.role_name)
 			if not os.path.exists(key):
-				key = os.path.join(keys_path, 'farm-%s.pem' % self.farm_id) + '.pem'
+				key = os.path.join(keys_path, 'farm-%s.pem' % self.farm_id)
 			ssh = SshManager(host, key)
 			self._servers.append(Server(node, ssh, role_name=self.role_name, scalr_id=scalr_srv_id))
 			return
@@ -225,9 +225,9 @@ class DataProvider(object):
 			host = self.farmui.get_public_ip(server_id)
 			print host
 			node = self._get_node(host)
-			key = os.path.join(keys_path, self.role_name) + '.pem'
+			key = os.path.join(keys_path, '%s.pem' % self.role_name)
 			if not os.path.exists(key):
-				key = os.path.join(keys_path, 'farm-%s.pem' % self.farm_id) + '.pem'
+				key = os.path.join(keys_path, 'farm-%s.pem' % self.farm_id)
 			self.wait_for_szr_port(host)
 			time.sleep(5)
 			ssh = SshManager(host, key, timeout=240)
@@ -245,9 +245,6 @@ class DataProvider(object):
 			for srv in self._servers:
 				srv.terminate()
 			
-	def sync(self):
-		pass
-	
 	def _get_node(self, ip):
 		for instance in self.conn.list_nodes():
 			public_ip = instance.public_ip
@@ -307,10 +304,32 @@ class DataProvider(object):
 	def set_role_opts(self, value):
 		self._role_settings = value
 		if 'terminated' != self.farmui.state:
-			self.edit_role(self._role_settings)
-			
+			self.edit_role(self._role_settings)			
 		
 	role_opts = property(get_role_opts, set_role_opts)
+	
+	def sync(self):
+		self._servers = []
+		if 'terminated' == self.farmui.state:
+			return		
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')
+		self.scalrctl.exec_cronjob('Poller')
+		servers = self.farmui.get_server_list(self.role_name)
+		if not servers:
+			return
+		all_nodes = self.conn.list_nodes()
+		for node in all_nodes:
+			public_ip = socket.gethostbyname(node.public_ip[0])
+			if public_ip in servers:
+				ssh = SshManager(public_ip, self.ssh_config.get('key'))
+				server = Server(node, ssh, role_name = self.role_name)
+				self._servers.insert(0, server) if public_ip == servers[0] else self._servers.append(server)
+				
+	def terminate_farm(self):
+		self.farmui.terminate()
+		time.sleep(5)
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')
+		self._servers = []
 
 	
 class Server(object):

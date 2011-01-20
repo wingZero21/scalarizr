@@ -6,7 +6,6 @@ Created on Jan 5, 2011
 from szr_integtest_libs.scalrctl		import	ScalrCtl, EC2_ROLE_DEFAULT_SETTINGS, EC2_MYSQL_ROLE_DEFAULT_SETTINGS
 from szr_integtest_libs.datapvd.mysql	import	MysqlDataProvider
 from szr_integtest_libs.ssh_tool import execute
-from szr_integtest_libs.datapvd import DataProvider
 
 from szr_integtest import RESOURCE_PATH
 
@@ -44,7 +43,7 @@ logger.setLevel(logging.DEBUG)
 
 opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
 opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-dp = MysqlDataProvider(farm_settings=opts)
+dp = MysqlDataProvider(role_settings=opts)
 scalrctl = ScalrCtl(dp.farm_id)
 
 
@@ -118,7 +117,6 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 		repl_master = res.group('repl_master')
 		self.assertEqual('1', repl_master)		
 		dp.terminate_farm()
-		scalrctl.exec_cronjob('ScalarizrMessaging')
 		logger.info('>>>>>>>>>>>> Test "test_master_hostup_failed" finished')
 		
 class StartupMaster(unittest.TestCase):
@@ -127,7 +125,8 @@ class StartupMaster(unittest.TestCase):
 		logger.info('>>>>>>>>>>>> Starting test "test_startup_master"')
 		local_opts = copy.copy(opts)
 		local_opts.update({'system.timeouts.launch' : '2400'})
-		dp.farm_settings = local_opts
+		dp.role_opts = local_opts
+		dp.sync()
 		#dp.edit_role(local_opts)
 		master = dp.master()
 		dp.wait_for_hostup(master)
@@ -174,7 +173,7 @@ class StartupSlave(unittest.TestCase):
 		logger.info('>>>>>>>>>>>> Starting test "test_startup_slave"')
 		local_opts = copy.copy(opts)
 		local_opts.update({'scaling.min_instances' : '2'})
-		dp.farm_settings = local_opts
+		dp.role_opts = local_opts
 		#dp.edit_role(local_opts)
 		slave = dp.slave(0)
 		dp.wait_for_hostup(slave)
@@ -207,7 +206,7 @@ class SlaveToMaster(unittest.TestCase):
 		logger.info('>>>>>>>>>>>> Starting test "test_slave_to_master"')
 		local_opts = copy.copy(opts)
 		local_opts.update({'scaling.min_instances' : '2'})
-		dp.farm_settings = local_opts
+		dp.role_opts = local_opts
 		master = dp.master()
 		dp.wait_for_hostup(master)
 		slave = dp.slave()
@@ -246,7 +245,8 @@ class CreateBackup(unittest.TestCase):
 		local_opts.update({'mysql.ebs_volume_size' : '4', 
 						   'scaling.min_instances' : '2'})
 		
-		dp.farm_settings = local_opts
+		dp.role_opts = local_opts
+		dp.sync()
 
 		slave = dp.slave()
 		dp.wait_for_hostup(slave)
@@ -277,7 +277,7 @@ class CreateBackup(unittest.TestCase):
 class CreateDataBundle(unittest.TestCase):
 	def test_create_databundle(self):
 		logger.info('>>>>>>>>>>>> Starting test "test_create_databundle"')
-		dp.farm_settings = opts		
+		dp.role_opts = opts		
 		master = dp.master()
 		dp.wait_for_hostup(master)
 		reader = master.log.tail()
@@ -297,14 +297,12 @@ class CreateDataBundle(unittest.TestCase):
 class MysqlSuite(unittest.TestSuite):
 	def __init__(self, tests=()):
 		self._tests = []
-		self.addTest(StartupMasterHostUpFailed('test_master_hostup_failed'))
-		"""
+		#self.addTest(StartupMasterHostUpFailed('test_master_hostup_failed'))
 		self.addTest(StartupMaster('test_startup_master'))
 		self.addTest(StartupSlave('test_startup_slave'))
 		self.addTest(SlaveToMaster('test_slave_to_master'))
 		self.addTest(CreateBackup('test_create_backup'))
 		self.addTest(CreateDataBundle('test_create_databundle'))
-		"""
 		
 if __name__ == "__main__":
 	unittest.main()
