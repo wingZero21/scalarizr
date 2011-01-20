@@ -23,7 +23,7 @@ def create_snapshot(ec2_conn, volume_id, description=None, logger=None, timeout=
 	logger.debug('Creating snapshot of EBS volume %s', volume_id)
 	snap = ec2_conn.create_snapshot(volume_id, description)
 	logger.debug('Snapshot %s created for EBS volume %s', snap.id, volume_id)
-	wait_snapshot(ec2_conn, snap, logger=logger, timeout)
+	wait_snapshot(ec2_conn, snap, logger, timeout)
 	return snap
 
 def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
