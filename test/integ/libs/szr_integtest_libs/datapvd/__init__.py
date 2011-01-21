@@ -257,7 +257,7 @@ class DataProvider(object):
 				return True
 			except:
 				return False				
-		wait_until(_check_szr_port, [host], sleep=5, timeout=240)
+		wait_until(_check_szr_port, [host], sleep=5, timeout=320)
 	
 	
 	def wait_for_hostup(self, server):
