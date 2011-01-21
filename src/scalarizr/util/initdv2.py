@@ -95,7 +95,7 @@ class ParametrizedInitScript(InitScript):
 	
 	def __init__(self, name, initd_script, pid_file=None, lock_file=None, socks=None):
 		if not os.access(initd_script, os.F_OK | os.X_OK):
-			err = 'Cannot find %s init script at %s. Make sure that %s is installed' % (name, initd_script)
+			err = 'Cannot find %s init script at %s. Make sure that %s is installed' % (name, initd_script, name)
 			raise InitdError(err)
 		
 		self.name = name		

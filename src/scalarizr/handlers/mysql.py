@@ -1415,6 +1415,8 @@ def spawn_mysql(user, password=None):
 		return exp
 
 def _add_apparmor_rules(directory):
+	if not os.path.exists('/etc/init.d/apparmor'):
+		return
 	try:
 		file = open('/etc/apparmor.d/usr.sbin.mysqld', 'r')
 	except IOError, e:
