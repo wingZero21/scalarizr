@@ -15,4 +15,12 @@ CREATE TABLE p2p_message (
     "in_is_handled" INTEGER,
     "in_consumer_id" TEXT
 );
+
+DROP TABLE IF EXISTS storage;
+CREATE TABLE storage (
+	"volume_id" TEXT,
+	"type" TEXT,
+	"device" TEXT,
+	"state" TEXT
+);
 COMMIT;

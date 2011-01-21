@@ -5,12 +5,13 @@ Created on Nov 25, 2010
 '''
 import unittest
 
-from scalarizr.util import system2 as system
+from scalarizr.util import system2 as system, firstmatched
 from scalarizr.storage import Volume, Snapshot, Storage, StorageError, VolumeProvider,\
 	VolumeConfig
 from scalarizr.storage.util.loop import mkloop
 from scalarizr.storage.eph import EphSnapshot
 from scalarizr.storage.fs import FileSystem
+from szr_unittest import switch_reset_db
 
 import os
 import time
@@ -304,6 +305,31 @@ class SnapshotFieldsTest(unittest.TestCase):
 		self.assertFalse('only_in_snapshot_config' in vol_cnf)
 		self.assertTrue(vol_cnf['base64_whatever'] is None)
 		
+class VolumeTableTest(unittest.TestCase):
+	def setUp(self):
+		Storage.maintain_volume_table = True
+		switch_reset_db()
+		
+	def tearDown(self):
+		pass
+	
+	def test_1(self):
+		v1 = Storage.create(device='/dev/sdo')
+		v2 = Storage.create(device='/dev/sdm')
+		table = Storage.volume_table()
+		self.assertEqual(len(table), 2)
+		v1row = firstmatched(lambda row: row['device'] == '/dev/sdo', table)
+		self.assertTrue(v1row)
+		self.assertEqual(v1row['volume_id'], v1.id)
+		self.assertEqual(v1row['device'], v1.device)
+		self.assertEqual(v1row['type'], v1.type)
+		self.assertEqual(v1row['state'], 'attached')
+		
+		v2.detach()
+		table = Storage.volume_table()
+		self.assertEqual(len(table), 2)
+		v2row = firstmatched(lambda row: row['device'] == '/dev/sdm', table)
+		self.assertEqual(v2row['state'], 'detached')
 
 		
 if __name__ == "__main__":

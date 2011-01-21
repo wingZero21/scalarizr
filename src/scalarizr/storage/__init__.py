@@ -10,6 +10,8 @@ import logging
 import os
 import re
 import uuid
+from scalarizr.libs.pubsub import Observable
+from functools import partial
 try:
 	import json
 except ImportError:
@@ -19,6 +21,9 @@ MKFS_EXEC 		= '/sbin/mkfs'
 MOUNT_EXEC 		= '/bin/mount'
 UMOUNT_EXEC		= '/bin/umount'
 SYNC_EXEC 		= '/bin/sync'
+
+VOL_STATE_ATTACHED = 'attached'
+VOL_STATE_DETACHED = 'detached'
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +36,34 @@ def system(*popenargs, **kwargs):
 	return system2(*popenargs, **kwargs)
 
 class Storage:
+	maintain_volume_table = False
 	providers = {}
 	default_vol_provider = None
 	default_snap_provider = None
 	
 	_fs_drivers = {}
+	
+	_obs = Observable()
+	_obs.define_events(
+		'attach', 
+		'detach',
+		'destroy'
+	)
+	on, un, fire = _obs.on, _obs.un, _obs.fire
+	
+	@staticmethod
+	def volume_table():
+		if Storage.maintain_volume_table:
+			from scalarizr.bus import bus
+			db = bus.db
+			conn = db.get().get_connection()
+			cur = conn.cursor()
+			try:
+				return cur.execute('SELECT * FROM storage').fetchall()
+			finally:
+				cur.close()
+		else:
+			return ()
 	
 	@staticmethod
 	def lookup_filesystem(fstype):
@@ -136,7 +164,12 @@ class Storage:
 			
 		# Find provider	
 		pvd = self.lookup_provider(kwargs.get('type'), from_snap)
-		return getattr(pvd, 'create_from_snapshot' if from_snap else 'create').__call__(**kwargs)
+		attaching = 'device' in kwargs and not os.path.exists(kwargs['device'])
+		vol = getattr(pvd, 'create_from_snapshot' if from_snap else 'create').__call__(**kwargs)
+		if attaching:
+			Storage.fire('attach', vol)
+		return vol
+
 	
 	@staticmethod
 	def snapshot(vol, description):
@@ -147,12 +180,14 @@ class Storage:
 		pvd = Storage.lookup_provider(vol.type)
 		ret = pvd.detach(vol, force)
 		vol.detached = True
+		Storage.fire('detach', vol)
 		return ret
 	
 	@staticmethod
 	def destroy(vol, force=False, **kwargs):
 		pvd = Storage.lookup_provider(vol.type)
 		pvd.destroy(vol, force, **kwargs)
+		Storage.fire('destroy', vol)
 		
 	@staticmethod
 	def backup_config(cnf, filename):
@@ -170,6 +205,23 @@ class Storage:
 		finally:
 			fp.close()
 	
+def _update_volume_tablerow(vol, state=None):
+	if Storage.maintain_volume_table:
+		from scalarizr.bus import bus
+		db = bus.db
+		conn = db.get().get_connection()
+		cur = conn.cursor()
+		cur.execute('UPDATE storage SET state = ? WHERE volume_id = ?', (state, vol.id))
+		if not cur.rowcount:
+			cur.execute('INSERT INTO storage VALUES (?, ?, ?, ?)', 
+					(vol.id, vol.type, vol.device, state))
+		conn.commit()
+	
+Storage.on(
+	attach=partial(_update_volume_tablerow, state=VOL_STATE_ATTACHED),
+	detach=partial(_update_volume_tablerow, state=VOL_STATE_DETACHED)
+)
+
 	
 class VolumeConfig(object):
 	type = 'base'
@@ -399,7 +451,7 @@ class VolumeProvider(object):
 			self._umount(vol, force)		
 	
 	def detach(self, vol, force=False):
-		if not vol.detached:
+		if not vol.detached and vol.mounted():
 			self._umount(vol, force)
 		
 	def _umount(self, vol, force=False):

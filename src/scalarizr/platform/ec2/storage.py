@@ -41,7 +41,7 @@ class EbsVolumeProvider(VolumeProvider):
 	type = 'ebs'
 	vol_class = EbsVolume
 	snap_class = EbsSnapshot
-	unused_letters = list(string.ascii_lowercase[14:])
+	all_letters = tuple(string.ascii_lowercase[14:])
 	
 	_logger = None
 	
@@ -66,13 +66,12 @@ class EbsVolumeProvider(VolumeProvider):
 		if conn:
 			# Find free devname			
 			device = kwargs.get('device')
-			if not device or not (device[-1] in EbsVolumeProvider.unused_letters) or os.path.exists(device):
-				if not EbsVolumeProvider.unused_letters:
-					EbsVolumeProvider.unused_letters = list(string.ascii_lowercase[14:])
-				letter = firstmatched(lambda l: not os.path.exists('/dev/sd%s' % l), EbsVolumeProvider.unused_letters)
+			used_letters = set(row['device'][-1] for row in Storage.volume_table() if row['type'] == 'ebs')
+			avail_letters = tuple(set(self.all_letters) - used_letters)
+			if not device or not (device[-1] in avail_letters) or os.path.exists(device):
+				letter = firstmatched(lambda l: not os.path.exists('/dev/sd%s' % l), avail_letters)
 				if letter:
 					device = '/dev/sd%s' % letter
-					EbsVolumeProvider.unused_letters.remove(device[-1])				
 				else:
 					raise StorageError('No free letters for block device name remains')
 			
