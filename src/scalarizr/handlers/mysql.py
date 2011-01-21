@@ -43,7 +43,12 @@ _logger = logging.getLogger(__name__)
 
 class MysqlInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
-		initd_script = disttool.is_redhat_based() and "/etc/init.d/mysqld" or "/etc/init.d/mysql"
+		if disttool.is_redhat_based():
+			initd_script = '/etc/init.d/mysqld'
+		elif disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+			initd_script = ('/usr/sbin/service', 'mysql')
+		else:
+			initd_script = '/etc/init.d/mysql'
 		
 		if not os.path.exists(initd_script):
 			raise HandlerError("Cannot find MySQL init script at %s. Make sure that MySQL is installed" % initd_script)
@@ -997,7 +1002,7 @@ class MysqlHandler(ServiceCtlHanler):
 			# If volume has mysql storage directory structure (N-th init)
 			else:
 				# Get required configuration options
-				root_password, = self._get_ini_options(OPT_REPL_PASSWORD)
+				root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
 				
 				self._copy_debian_cnf_back()
 				
@@ -1443,10 +1448,9 @@ def spawn_mysql(user, password=None):
 		exp.expect('Enter password:')
 		exp.sendline(password or '')
 		exp.expect('mysql>')
-	except Exception, e:
-		raise HandlerError('Cannot start mysql client tool: %s' % (e,))
-	finally:
 		return exp
+	except Exception, e:
+		raise HandlerError('Cannot start mysql client tool: %s' % e.value.before)
 
 def _add_apparmor_rules(directory):
 	if not os.path.exists('/etc/init.d/apparmor'):

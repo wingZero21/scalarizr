@@ -94,8 +94,10 @@ class ParametrizedInitScript(InitScript):
 	name = None
 	
 	def __init__(self, name, initd_script, pid_file=None, lock_file=None, socks=None):
-		if not os.access(initd_script, os.F_OK | os.X_OK):
-			err = 'Cannot find %s init script at %s. Make sure that %s is installed' % (name, initd_script, name)
+		if isinstance(initd_script, basestring) \
+			and not os.access(initd_script, os.F_OK | os.X_OK):
+			err = 'Cannot find %s init script at %s. Make sure that %s is installed' % (
+					name, initd_script, name)
 			raise InitdError(err)
 		
 		self.name = name		
@@ -110,7 +112,11 @@ class ParametrizedInitScript(InitScript):
 		
 	def _start_stop_reload(self, action):
 		try:
-			out, err, returncode = system2([self.initd_script, action], close_fds=True, preexec_fn=os.setsid)
+			args = [self.initd_script] \
+					if isinstance(self.initd_script, basestring) \
+					else list(self.initd_script)
+			args += action
+			out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
 		except PopenError, e:
 			raise InitdError("Popen failed with error %s" % (e.strerror,))
 		
