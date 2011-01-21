@@ -720,53 +720,84 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 			#ec2_conn = self._platform.new_ec2_conn()
-			master_storage_conf = message.volume_config
+			master_storage_conf = message.get('volume_config')
 			tx_complete = False
 			
 			try:
 				# Stop mysql
-				if self._init_script.running:
+				if master_storage_conf:
+					if self._init_script.running:
+						mysql = spawn_mysql(ROOT_USER, message.root_password)
+						timeout = 180
+						try:
+							mysql.sendline("STOP SLAVE;")
+							mysql.expect("mysql>", timeout=timeout)
+						except pexpect.TIMEOUT:
+							raise HandlerError("Timeout (%d seconds) reached " + 
+									"while waiting for slave stop" % (timeout,))
+						finally:
+							mysql.close()
+						self._stop_service()
+					
+					# Unplug slave storage and plug master one
+					#self._unplug_storage(slave_vol_id, self._storage_path)
+					old_conf = self.storage_vol.detach(force=True) # ??????
+					#master_vol = self._take_master_volume(master_vol_id)
+					#self._plug_storage(master_vol.id, self._storage_path)
+					new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)				
+					# Continue if master storage is a valid MySQL storage 
+					if self._storage_valid():
+						# Patch configuration files 
+						self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
+						self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
+						self._replication_init()
+						# Update behaviour configuration
+						updates = {
+							OPT_ROOT_PASSWORD : message.root_password,
+							OPT_REPL_PASSWORD : message.repl_password,
+							OPT_STAT_PASSWORD : message.stat_password,
+							OPT_REPLICATION_MASTER 	: "1"
+						}
+						self._update_config(updates)
+						# Send message to Scalr
+						self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
+							status="ok",
+							volume_config = new_storage_vol.config()     
+						))
+					else:
+						raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
+					self._start_service()
+				else:
+					if not self._init_script.running:
+						self._init_script.start()
 					mysql = spawn_mysql(ROOT_USER, message.root_password)
 					timeout = 180
 					try:
 						mysql.sendline("STOP SLAVE;")
 						mysql.expect("mysql>", timeout=timeout)
+						mysql.sendline("RESET MASTER;")
+						mysql.expect("mysql>", 20)
 					except pexpect.TIMEOUT:
 						raise HandlerError("Timeout (%d seconds) reached " + 
-								"while waiting for slave stop" % (timeout,))
+									"while waiting for slave stop and master reset." % (timeout,))
 					finally:
 						mysql.close()
-					self._stop_service()
 					
-				# Unplug slave storage and plug master one
-				#self._unplug_storage(slave_vol_id, self._storage_path)
-				old_conf = self.storage_vol.detach(force=True) # ??????
-				#master_vol = self._take_master_volume(master_vol_id)
-				#self._plug_storage(master_vol.id, self._storage_path)
-				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)				
-				# Continue if master storage is a valid MySQL storage 
-				if self._storage_valid():
-					# Patch configuration files 
-					self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-					self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
-					self._replication_init()
-					# Update behaviour configuration
 					updates = {
-						OPT_ROOT_PASSWORD : message.root_password,
-						OPT_REPL_PASSWORD : message.repl_password,
-						OPT_STAT_PASSWORD : message.stat_password,
-						OPT_REPLICATION_MASTER 	: "1"
-					}
+							OPT_ROOT_PASSWORD : message.root_password,
+							OPT_REPL_PASSWORD : message.repl_password,
+							OPT_STAT_PASSWORD : message.stat_password,
+							OPT_REPLICATION_MASTER 	: "1"
+						}
 					self._update_config(updates)
 					# Send message to Scalr
 					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 						status="ok",
-						volume_config = new_storage_vol.config()     
-					))
-				else:
-					raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
-				self._start_service()
+						volume_config = self.storage_vol.config()
+					))							
+					
 				tx_complete = True
+				
 			except (Exception, BaseException), e:
 				self._logger.error("Promote to master failed. %s", e)
 				if new_storage_vol:
@@ -783,7 +814,7 @@ class MysqlHandler(ServiceCtlHanler):
 				# Start MySQL
 				self._start_service()
 			
-			if tx_complete:
+			if tx_complete and master_storage_conf:
 				# Delete slave EBS
 				self.storage_vol.destroy(remove_disks=True)
 				self.storage_vol = new_storage_vol
@@ -1216,7 +1247,8 @@ class MysqlHandler(ServiceCtlHanler):
 	
 	def _update_config(self, data): 
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
-		
+	
+	@_reload_mycnf
 	def _replication_init(self, master=True):
 		# Create replication config
 		'''
@@ -1242,7 +1274,9 @@ class MysqlHandler(ServiceCtlHanler):
 			# Include farm-replication.cnf in my.cnf
 			self._mysql_config.add('!include', repl_conf_path)
 		'''
-			
+		server_id = 1 if master else int(random.random() * 100000)+1
+		self._mysql_config.remove('mysqld/server-id')
+		self._mysql_config.add('mysqld/server-id', server_id)
 		# Patch networking
 		for option in ['bind-address','skip-networking']:
 			try:

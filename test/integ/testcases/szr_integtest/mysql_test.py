@@ -222,7 +222,10 @@ class SlaveToMaster(unittest.TestCase):
 		
 		slave_reader.expect('PromoteToMaster', 60)
 		logger.info('Promote to master message received by scalarizr')
-		slave_reader.expect("Message 'Mysql_PromoteToMasterResult' delivered", 120)
+		msg_id = slave_reader.expect("Message 'Mysql_PromoteToMasterResult' delivered \(message_id: (?P<msg_id>[\w-]+)\)", 120).group('msg_id')
+		message = slave.get_message(msg_id)
+		if not re.search('<status>ok</status>', message):
+			raise Exception("Promote to master status is not 'OK'.")
 		logger.info('Promote to master result delivered')
 		ssh = slave.ssh()
 		root_pass = get_mysql_passwords(ssh)[0]
@@ -298,9 +301,9 @@ class MysqlSuite(unittest.TestSuite):
 	def __init__(self, tests=()):
 		self._tests = []
 		#self.addTest(StartupMasterHostUpFailed('test_master_hostup_failed'))
-		self.addTest(StartupMaster('test_startup_master'))
-		self.addTest(StartupSlave('test_startup_slave'))
-		self.addTest(SlaveToMaster('test_slave_to_master'))
+		#self.addTest(StartupMaster('test_startup_master'))
+		#self.addTest(StartupSlave('test_startup_slave'))
+		#self.addTest(SlaveToMaster('test_slave_to_master'))
 		self.addTest(CreateBackup('test_create_backup'))
 		self.addTest(CreateDataBundle('test_create_databundle'))
 		

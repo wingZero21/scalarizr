@@ -83,11 +83,11 @@ class DataProvider(object):
 	_instances  = {}
 	_servers	= None
 	conn		= None
+	_farm_key   = None
 	
 	def __new__(cls, *args, **kwargs):
 		key = tuple(args) + tuple(zip(kwargs.iterkeys(), tuple([x if type(x) != dict else tuple(x.items()) for x in kwargs.itervalues()])))
 		if not key in DataProvider._instances:
-			print 'Creating new dataprovider. Key = ', key
 			DataProvider._instances[key] = super(DataProvider, cls).__new__(cls, *args, **kwargs)
 		return DataProvider._instances[key]
 	
@@ -113,10 +113,7 @@ class DataProvider(object):
 			host = self.farmui.get_public_ip(scalr_srv_id, 60)
 			self.role_name = self.farmui.get_role_name(scalr_srv_id)
 			node = self._get_node(host)
-			key = os.path.join(keys_path, '%s.pem' % self.role_name)
-			if not os.path.exists(key):
-				key = os.path.join(keys_path, 'farm-%s.pem' % self.farm_id)
-			ssh = SshManager(host, key)
+			ssh = SshManager(host, self.farm_key)
 			self._servers.append(Server(node, ssh, role_name=self.role_name, scalr_id=scalr_srv_id))
 			return
 			
@@ -155,6 +152,8 @@ class DataProvider(object):
 	def server(self, index=0):
 		while len(self._servers) < (index + 1):
 			self._scale_up()
+			if len(self._servers) <= index:
+				self.wait_for_hostup(self._servers[-1])
 		return self._servers[index]
 		
 	def _scale_up(self):
@@ -225,12 +224,9 @@ class DataProvider(object):
 			host = self.farmui.get_public_ip(server_id)
 			print host
 			node = self._get_node(host)
-			key = os.path.join(keys_path, '%s.pem' % self.role_name)
-			if not os.path.exists(key):
-				key = os.path.join(keys_path, 'farm-%s.pem' % self.farm_id)
 			self.wait_for_szr_port(host)
 			time.sleep(5)
-			ssh = SshManager(host, key, timeout=240)
+			ssh = SshManager(host, self.farm_key, timeout=240)
 			self._servers.append(Server(node, ssh, role_name = self.role_name, scalr_id=server_id))
 		return self._servers[-1]
 			
@@ -321,7 +317,7 @@ class DataProvider(object):
 		for node in all_nodes:
 			public_ip = socket.gethostbyname(node.public_ip[0])
 			if public_ip in servers:
-				ssh = SshManager(public_ip, self.ssh_config.get('key'))
+				ssh = SshManager(public_ip, self.farm_key)
 				server = Server(node, ssh, role_name = self.role_name)
 				self._servers.insert(0, server) if public_ip == servers[0] else self._servers.append(server)
 				
@@ -330,6 +326,14 @@ class DataProvider(object):
 		time.sleep(5)
 		self.scalrctl.exec_cronjob('ScalarizrMessaging')
 		self._servers = []
+		
+	@property	
+	def farm_key(self):
+		if not self._farm_key:
+			self._farm_key = os.path.join(keys_path, '%s.pem' % self.role_name)
+			if not os.path.exists(self._farm_key):
+				self._farm_key = os.path.join(keys_path, 'farm-%s.pem' % self.farm_id)
+		return self._farm_key
 
 	
 class Server(object):
