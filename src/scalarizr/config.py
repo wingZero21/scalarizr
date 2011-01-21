@@ -894,9 +894,11 @@ class ScalarizrCnf(Observable):
 	
 	@property
 	def home_path(self):
-		if not self._home_path:
-			self._home_path = os.path.expanduser('~/.scalr')
-		return self._home_path
+		#expanduser ocasionaly got us an error related to $HOME and daemon process
+		#if not self._home_path:
+			#self._home_path = os.path.expanduser('~/.scalr')
+		#return self._home_path
+		return '/root/.scalr'
 	
 	def key_path(self, name, private=True):
 		return os.path.join(self._priv_path if private else self._pub_path, 'keys', name)
