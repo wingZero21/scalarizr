@@ -1,6 +1,6 @@
 
-# Core 
-from scalarizr import config
+# Core
+from scalarizr import config 
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions
 from scalarizr.handlers import MessageListener
@@ -8,6 +8,7 @@ from scalarizr.messaging import MessageServiceFactory, MessageService, MessageCo
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
+from scalarizr.storage import Storage
 
 
 # Utils
@@ -278,6 +279,8 @@ def _init_services():
 	
 	logger.debug('Schedule SNMP process')
 	globals()['_snmp_scheduled_start_time'] = time.time()		
+
+	Storage.maintain_volume_table = True
 
 	bus.fire("init")
 

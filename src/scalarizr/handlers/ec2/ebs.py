@@ -12,8 +12,7 @@ from scalarizr.util import fstool
 
 import os
 import logging
-from scalarizr.storage import Storage
-from scalarizr.platform.ec2.storage import EbsVolume
+from scalarizr.storage import Storage, Volume
 
 
 
@@ -128,7 +127,7 @@ class EbsHandler(handlers.Handler):
 			)
 			
 			bus.fire("block_device_attached", device=message.devname)
-			Storage.fire('attach', EbsVolume(device=message.devname))
+			Storage.fire('attach', Volume(device=message.devname))
 			
 		elif message.action == "remove":
 			self._logger.debug("udev notified me that block device %s was detached", message.device)
@@ -142,5 +141,5 @@ class EbsHandler(handlers.Handler):
 			)
 			
 			bus.fire("block_device_detached", device=message.devname)
-			Storage.fire('detach', EbsVolume(device=message.devname))
+			Storage.fire('detach', Volume(device=message.devname))
 

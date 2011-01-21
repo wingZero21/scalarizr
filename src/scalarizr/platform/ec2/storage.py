@@ -14,8 +14,8 @@ from . import ebstool
 import os
 import re
 import logging
-import string
 import urlparse
+import string
 
 from boto import connect_ec2, connect_s3
 from boto.s3.key import Key
@@ -66,7 +66,10 @@ class EbsVolumeProvider(VolumeProvider):
 		if conn:
 			# Find free devname			
 			device = kwargs.get('device')
-			used_letters = set(row['device'][-1] for row in Storage.volume_table() if row['type'] == 'ebs')
+			used_letters = set(row['device'][-1] 
+						for row in Storage.volume_table() 
+						if row['type'] == 'ebs' or string \
+							or row['device'].startswith('/dev/sd'))
 			avail_letters = tuple(set(self.all_letters) - used_letters)
 			if not device or not (device[-1] in avail_letters) or os.path.exists(device):
 				letter = firstmatched(lambda l: not os.path.exists('/dev/sd%s' % l), avail_letters)
