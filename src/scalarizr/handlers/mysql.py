@@ -399,13 +399,13 @@ class MysqlCnfController(CnfController):
 
 
 def _reload_mycnf(f):
-	def g(self, *args):
+	def g(self, *args, **kwargs):
 		self._mysql_config = Configuration('mysql')
 		try:
 			self._mysql_config.read(self._mycnf_path)
 		except (OSError, MetaconfError, ParseError), e:
 			raise HandlerError('Cannot read mysql config %s : %s' % (self._mycnf_path, str(e)))
-		f(self, *args)
+		f(self, *args, **kwargs)
 	return g	
 
 class MysqlHandler(ServiceCtlHanler):
