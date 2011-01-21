@@ -312,7 +312,9 @@ class Volume(VolumeConfig):
 
 		# Create snapshot
 		pvd = Storage.lookup_provider(self.type)
-		snap = pvd.snapshot_factory(description, **self.config())		
+		conf = self.config()
+		del conf['id']
+		snap = pvd.snapshot_factory(description, **conf)		
 		pvd.create_snapshot(self, snap)
 		
 		# Unfreeze filesystem

@@ -77,6 +77,7 @@ class LVInfo(namedtuple('LVInfo', ' '.join(_columns))):
 	@property
 	def lv_path(self):
 		return lvpath(self.vg_name, self.lv_name)
+	path = lv_path
 del _columns
 
 
@@ -159,6 +160,7 @@ class Lvm2:
 		raise LookupError('Physical volume %s not found' % ph_volume)
 
 	def vg_info(self, group):
+		group = os.path.basename(group)
 		info = firstmatched(lambda inf: inf.vg == group, self.vg_status())
 		if info:
 			return info

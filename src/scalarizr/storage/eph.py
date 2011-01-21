@@ -33,6 +33,7 @@ class EphConfig(VolumeConfig):
 	snap_backend = None
 
 class EphVolume(Volume, EphConfig):
+	_ignores = ('path',)	
 	tranzit_vol = None
 
 class EphSnapshot(Snapshot, EphConfig):
@@ -69,6 +70,7 @@ class EphVolumeProvider(VolumeProvider):
 		vg_name = vg['name']
 		del vg['name']
 		vg = self._lvm.create_vg(vg_name, [pv], **vg)
+		vg = os.path.basename(vg)
 		
 		# Create data volume
 		lv_kwargs = dict()
@@ -126,19 +128,29 @@ class EphVolumeProvider(VolumeProvider):
 			'snap_backend': 'cf://mysql_backups/cloudsound/production'
 		})
 		'''
-		if kwargs.get('lvm_group_cfg'):
-			self._lvm.restore_vg(kwargs['vg'], cStringIO.StringIO(kwargs['lvm_group_cfg']))
-		else:
-			# Create LV layout
-			kwargs['vg'], kwargs['device'], tranzit_lv, kwargs['size'] = self._create_layout(
-					kwargs['disk'].devname, vg=kwargs.get('vg'), size=kwargs.get('size'))
+		initialized = False
+		if 'device' in kwargs:
+			try:
+				lvi = self._lvm.lv_info(kwargs['device'])
+				gvi = self._lvm.vg_info(kwargs['vg'])
+				initialized = lvi.path == kwargs['device'] and gvi.vg == kwargs['vg']
+			except LookupError:
+				pass
 		
-		# Initialize tranzit volume
-		kwargs['tranzit_vol'] = Volume(tranzit_lv, '/tmp/sntz' + str(randint(100, 999)), 'ext3', 'base')
-
-		# Accept snapshot backend
-		if not isinstance(kwargs['snap_backend'], dict):
-			kwargs['snap_backend'] = dict(path=kwargs['snap_backend'])
+		if not initialized:
+			if kwargs.get('lvm_group_cfg'):
+				self._lvm.restore_vg(kwargs['vg'], cStringIO.StringIO(kwargs['lvm_group_cfg']))
+			else:
+				# Create LV layout
+				kwargs['vg'], kwargs['device'], tranzit_lv, kwargs['size'] = self._create_layout(
+						kwargs['disk'].devname, vg=kwargs.get('vg'), size=kwargs.get('size'))
+			
+			# Initialize tranzit volume
+			kwargs['tranzit_vol'] = Volume(tranzit_lv, '/tmp/sntz' + str(randint(100, 999)), 'ext3', 'base')
+	
+			# Accept snapshot backend
+			if not isinstance(kwargs['snap_backend'], dict):
+				kwargs['snap_backend'] = dict(path=kwargs['snap_backend'])
 		
 		return super(EphVolumeProvider, self).create(**kwargs)
 

@@ -1218,11 +1218,11 @@ class MysqlHandler(ServiceCtlHanler):
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
 		
 	def _replication_init(self, master=True):
-		if not os.path.exists('/etc/mysql'):
-			os.makedirs('/etc/mysql')
-			
 		# Create replication config
 		'''
+		if not os.path.exists('/etc/mysql'):
+			os.makedirs('/etc/mysql')		
+		
 		self._logger.info("Creating farm-replication config")
 		repl_conf_path = '/etc/mysql/farm-replication.cnf'
 		try:

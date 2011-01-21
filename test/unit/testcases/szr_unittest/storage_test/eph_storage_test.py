@@ -55,6 +55,10 @@ class TestEphStorageCreate(unittest.TestCase):
 		self.assertTrue(config['size'] is not None)
 		self.assertTrue(config['snap_backend'] is not None)
 		self.assertTrue(isinstance(config['disk'], dict))
+		
+		# Reinitialize storage from config
+		eph = Storage.create(config)
+		self.assertEqual(eph.device, self.vol.device)
 
 
 class TestEphStorageSnapshot(unittest.TestCase):
@@ -164,7 +168,6 @@ class TestEphStorageSnapshot(unittest.TestCase):
 
 		md5sum2 = system(('/usr/bin/md5sum', bigfile2))[0].strip().split(' ')[0]
 		self.assertEqual(md5sum, md5sum2)
-
 
 
 if __name__ == "__main__":
