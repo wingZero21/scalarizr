@@ -1222,6 +1222,7 @@ class MysqlHandler(ServiceCtlHanler):
 			os.makedirs('/etc/mysql')
 			
 		# Create replication config
+		'''
 		self._logger.info("Creating farm-replication config")
 		repl_conf_path = '/etc/mysql/farm-replication.cnf'
 		try:
@@ -1240,6 +1241,7 @@ class MysqlHandler(ServiceCtlHanler):
 		if not repl_conf_path in self._mysql_config.get_list('*/!include'):
 			# Include farm-replication.cnf in my.cnf
 			self._mysql_config.add('!include', repl_conf_path)
+		'''
 			
 		# Patch networking
 		for option in ['bind-address','skip-networking']:
@@ -1248,13 +1250,16 @@ class MysqlHandler(ServiceCtlHanler):
 			except:
 				pass
 		self.write_config()
-
+		
+		'''
 		if disttool.is_debian_based():
-			_add_apparmor_rules(repl_conf_path)	
+			_add_apparmor_rules(repl_conf_path)
+		'''	
 
 
 	def _change_master(self, host, user, password, log_file, log_pos, 
-					spawn=None, mysql_user=None, mysql_password=None, timeout=None):
+					spawn=None, mysql_user=None, mysql_password=None, 
+					connect_retry=15, timeout=None):
 		spawn = spawn or spawn_mysql(mysql_user, mysql_password)
 		self._logger.info("Changing replication master to host %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
 		
@@ -1265,7 +1270,8 @@ class MysqlHandler(ServiceCtlHanler):
 						MASTER_USER="%(user)s", \
 						MASTER_PASSWORD="%(password)s", \
 						MASTER_LOG_FILE="%(log_file)s", \
-						MASTER_LOG_POS=%(log_pos)s;' % vars())
+						MASTER_LOG_POS=%(log_pos)s, \
+						MASTER_CONNECT_RETRY=%(connect_retry)s;' % vars())
 		spawn.expect('mysql>')
 		
 		# Starting slave
