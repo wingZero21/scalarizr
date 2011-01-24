@@ -54,26 +54,31 @@ class FarmUI:
 				ui_login(self.sel)
 			return f(self, *args, **kwargs)
 		return g	
-	
-	
+
+	def _open_farm_builder(f):				
+		def g(self, *args, **kwargs):
+			if not 'farms_builder.php?id=' in self.sel.get_location():
+				self.use(self.farm_id)
+			return f(self, *args, **kwargs)
+		return g	
 	
 	def __init__(self, sel):
 		self.sel = sel
 		self.servers = []
 		self.farm_id = config.get('test-farm/farm_id')
 	
-	def use(self, farm_id):
+	def use(self, farm_id=None):
 		if 'farms_builder.php?id=%s' % self.farm_id in self.sel.get_location():
 			return
 		self.servers = []
 		ui_login(self.sel)
 		self.sel.open('farms_builder.php?id=%s' % self.farm_id)
-		#wait_until(lambda: not self.sel.is_element_present('//html/body/div[@class="ext-el-mask-msg x-mask-loading"]/div'), timeout=10, sleep=0.5)
 		wait_until(lambda: self.sel.is_element_present('//span[text()="Roles"]'), sleep=0.1, timeout=10)
 	
 	@_login
+	@_open_farm_builder
 	def add_role(self, role_name, min_servers=1, max_servers=2, settings=None):
-		# TODO: Check location for role edit page presence
+			
 		settings = settings or dict()
 		if not 'aws.instance_type' in settings:
 			settings['aws.instance_type'] = 't1.micro'
@@ -102,10 +107,10 @@ class FarmUI:
 		
 		
 		self.edit_role(role_name, settings)
-		
+	
+	@_login
+	@_open_farm_builder
 	def _role_in_farm(self, role_name):
-		if not 'farms_builder.php?id=' in self.sel.get_location():
-			self.sel.open("farms_builder.php?id=%s" % self.farm_id)
 		
 		wait_until(lambda: self.sel.is_element_present('//span[text()="Roles"]'), sleep=0.1, timeout=10)
 		self.sel.click('//span[text()="Roles"]')
@@ -120,9 +125,8 @@ class FarmUI:
 		return True
 	
 	@_login
+	@_open_farm_builder
 	def edit_role(self, role_name, settings=None):
-		if not 'farms_builder.php?id=' in self.sel.get_location():
-			self.sel.open("farms_builder.php?id=%s" % self.farm_id)
 		
 		role_opts = copy.copy(settings)
 		
@@ -154,12 +158,11 @@ class FarmUI:
 				break
 				
 		self.sel.click('//div[@class="viewers-selrolesviewer-blocks viewers-selrolesviewer-add"]')
+
 	@_login
+	@_open_farm_builder
 	def remove_role(self, role_name):
-		if not 'farms_builder.php?id=' in self.sel.get_location():
-			#raise Exception("Farm's settings page hasn't been opened. Use farm first")
-			self.use(self.farm_id)
-		
+			
 		self.sel.click('//span[text()="Roles"]')
 		
 		try:
@@ -168,11 +171,9 @@ class FarmUI:
 		except:
 			raise Exception("Role '%s' doesn't exist" % role_name)
 
-	@_login		
+	@_login
+	@_open_farm_builder	
 	def remove_all_roles(self):
-		if not 'farms_builder.php?id=' in self.sel.get_location():
-			raise Exception("Farm's settings page hasn't been opened. Use farm first")
-
 		self.sel.click('//span[text()="Roles"]')
 		while True:
 			try:
@@ -180,11 +181,10 @@ class FarmUI:
 				self.sel.click('//button[text()="Yes"]')
 			except:
 				break
-	@_login	
+	@_login
+	@_open_farm_builder
 	def save(self):
-		if not 'farms_builder.php?id=' in self.sel.get_location():
-			raise Exception("Farm's settings page hasn't been opened. Use farm first")
-		
+	
 		wait_until(lambda: self.sel.is_element_present('//button[text() = "Save"]'), sleep=0.1, timeout=20)
 		self.sel.click('//button[text() = "Save"]')
 		wait_until(lambda: not self.sel.is_element_present('//div[text() = "Please wait while saving..."]'), sleep=0.2, timeout=20)
@@ -201,9 +201,7 @@ class FarmUI:
 	@property		
 	@_login
 	def state(self):
-		if not hasattr(self, 'farm_id'):
-			raise FarmUIError("Can't launch farm without farm_id: use the farm first")
-		
+	
 		self.sel.open('/farms_view.php?farmid=%s' % self.farm_id)
 		#self.sel.wait_for_page_to_load(30000)
 		#wait_until(lambda: self.sel.is_element_present('//html/body/div[@class="ext-el-mask-msg x-mask-loading"]/div'), timeout=10, sleep=0.5)
@@ -213,9 +211,7 @@ class FarmUI:
 	
 	@_login
 	def launch(self):
-		if not hasattr(self, 'farm_id'):
-			raise FarmUIError("Can't launch farm without farm_id: use the farm first")
-		
+	
 		self.sel.open('/farms_control.php?farmid=%s' % self.farm_id)
 		self.sel.wait_for_page_to_load(30000)
 		#self._wait_for_page_to_load()
@@ -228,11 +224,8 @@ class FarmUI:
 			raise Exception('Farm %s has been already launched' % self.farm_id)
 	
 	@_login
-	def terminate(self, keep_ebs=False, remove_from_dns=True):
-		if not hasattr(self, 'farm_id'):
-			raise FarmUIError("Can't launch farm without farm_id: use the farm first")
+	def terminate(self, remove_from_dns=True):
 
-		#TODO: use 'keep_ebs' argument
 		self.sel.open('/farms_control.php?farmid=%s' % self.farm_id)
 		if self.sel.is_text_present("You haven't saved your servers"):
 			self.sel.click('cbtn_3')
@@ -258,47 +251,17 @@ class FarmUI:
 			self.sel.open('/')
 			raise Exception('Farm %s has been already terminated' % self.farm_id)
 	
-	def get_public_ip(self, server_id, timeout = 120):
+	def get_public_ip(self, server_id, timeout = 180):
 		return self._get_server_info(server_id, ('Public IP',), timeout)
 	
-	def get_private_ip(self, server_id, timeout = 120):
+	def get_private_ip(self, server_id, timeout = 180):
 		return self._get_server_info(server_id, ('Private IP',), timeout)
 	
 	def get_instance_id(self, server_id, timeout = 120):
 		return self._get_server_info(server_id, ('Instance ID', 'Server ID'), timeout)
 	@_login
 	def _get_server_info(self, server_id, field_labels, timeout):
-		"""
-		start_time = time.time()
-		first_time = True
-		while time.time() - start_time < timeout:
-			#self.sel.open('server_view_extended_info.php?server_id=%s' % server_id)
-			if not first_time:
-				self.sel.refresh()
-			else:
-				first_time = False
-				
-			self.sel.open('#/servers/%s/extendedInfo' % server_id)
-			
-			self._wait_for_page_to_load()
-			#self.sel.wait_for_page_to_load(15000)
-			if self.sel.is_text_present('not available for'):
-				self.sel.mouse_over('//div[@class="x-tool x-tool-close"]')
-				self.sel.click('//div[@class="x-tool x-tool-close"]')
-				continue
-			try:
-				server_info = self.sel.get_text(search_str).strip()
-			except:
-				raise FarmUIError('Server %s doesn\'t exist')
-			if server_info:
-				break
-			self.sel.mouse_over('//div[@class="x-tool x-tool-close"]')
-			self.sel.click('//div[@class="x-tool x-tool-close"]')
-		else:
-			raise FarmUIError("Cannot retrieve server's information. Server id: %s " % server_id)
-		self.sel.mouse_over('//div[@class="x-tool x-tool-close"]')
-		self.sel.click('//div[@class="x-tool x-tool-close"]')
-		"""
+
 		try:
 			http = httplib2.Http()
 			headers = {'Content-type': 'application/x-www-form-urlencoded',
@@ -345,15 +308,15 @@ class FarmUI:
 		
 	@_login	
 	def _open_mysql_status_page(self):
-		if not hasattr(self, 'farm_id'):
-			raise FarmUIError("Can't launch farm without farm_id: use the farm first")
 		
 		self.sel.open('/farm_mysql_info.php?farmid=%s' % self.farm_id)
 		self.sel.wait_for_page_to_load(30000)
 		if not self.sel.is_text_present('Replication status'):
 			raise FarmUIError("Error while opening MySQL status page for farm ID=%s. Make sure your farm has MySQL role enabled." % self.farm_id)
+		
 	@_login
 	def get_server_list(self, role_name):
+		#TODO: Use ajax request here
 		ret = []
 		self.sel.open('/farm_roles_view.php?farmid=%s' % self.farm_id )
 		self.sel.wait_for_page_to_load(15000)
@@ -383,6 +346,7 @@ class FarmUI:
 			return self.sel.get_text('//a[contains(@href, "%s")]/../../../dt[@dataindex="farm_id"]/em/a[2]' % scalr_srv_id)
 		except:
 			raise Exception("Server with id '%s' doesn't exist." % scalr_srv_id)
+		
 	@_login
 	def get_role_id(self, role_name, platform):
 		server_info_url = 'http://scalr-dev.local.webta.net/roles/xListViewRoles/'
@@ -404,6 +368,7 @@ class FarmUI:
 				return role['id']
 		else:
 			raise Exception('Cannot determine role_id of %s' % role_name)
+		
 	@_login	
 	def get_farm_role_id(self, role_name, platform):
 		server_info_url = 'http://scalr-dev.local.webta.net/server/grids/farm_roles_list.php?a=1&farmid=%s' % self.farm_id
@@ -417,8 +382,6 @@ class FarmUI:
 		
 		for farm_role in data['data']:
 			if farm_role['platform'] == platform and farm_role['name'] == role_name:
-				print 'Bingo!', farm_role
-				print 'ID: %s' % farm_role['id']
 				return farm_role['id']
 		else:
 			raise Exception('Cannot determine farm role id of %s' % role_name)		
@@ -426,6 +389,7 @@ class FarmUI:
 	def _wait_for_page_to_load(self):
 		path = '//span[text()="Please wait ..."]'
 		wait_until(lambda: self.sel.is_element_present(path) and not self.sel.is_visible(path), sleep=0.5)
+		
 	@_login	
 	def configure_vhost(self, domain, role_name, platform):
 		role_id = self.get_farm_role_id(role_name, platform)
@@ -439,6 +403,7 @@ class FarmUI:
 		self.sel.type('document_root_dir', document_root)
 		self.sel.type('server_admin', 'admin@%s' % domain)		
 		self.sel.click('button_js')	
+
 	@_login	
 	def configure_vhost_ssl(self, domain, role_name, platform):
 		document_root = '/var/www/ssl.dima2.com/'

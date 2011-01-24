@@ -74,7 +74,6 @@ def merge_dicts(a,b):
 	return res
 
 platform_config = read_json_config(platform_config_path)
-# TODO: Temporary solution. Find a way to merge configurations properly (metaconf?)
 if os.path.exists(_user_platform_cnf_path):
 	user_platform_cnf = read_json_config(_user_platform_cnf_path)
 	platform_config = merge_dicts(platform_config, user_platform_cnf)
@@ -197,6 +196,7 @@ class DataProvider(object):
 			ssh = SshManager(host, key, key_pass, password, timeout=240)
 			self._servers.append(Server(node, ssh, image_id=self.image_id.id))
 		else:
+			
 			if self.farmui.state == 'terminated':
 				self.farmui.use(self.farm_id)
 				self.farmui.remove_all_roles()

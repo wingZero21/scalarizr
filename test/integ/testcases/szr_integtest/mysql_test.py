@@ -46,17 +46,6 @@ opts.update(EC2_ROLE_DEFAULT_SETTINGS)
 dp = MysqlDataProvider(role_settings=opts)
 scalrctl = ScalrCtl(dp.farm_id)
 
-
-
-
-
-
-
-
-
-
-
-
 class StartupMasterHostUpFailed(unittest.TestCase):
 	def test_master_hostup_failed(self):
 		logger.info('>>>>>>>>>>>> Starting test "test_master_hostup_failed"')
@@ -273,7 +262,7 @@ class CreateBackup(unittest.TestCase):
 		slave_reader.expect("Message 'Mysql_CreateBackupResult' delivered", 60*20)
 		cbr = slave.get_message(message_name="Mysql_CreateBackupResult")
 		self.assertTrue('<status>ok</status>' in cbr)
-		chunks = re.findall('<item>(.+)</item>', cbr)
+		chunks = re.findall('<item>(.+?)</item>', cbr)
 		self.assertTrue(len(chunks) >= 2)
 		logger.info('>>>>>>>>>>>> Test "test_create_backup" finished')
 			
@@ -300,10 +289,10 @@ class CreateDataBundle(unittest.TestCase):
 class MysqlSuite(unittest.TestSuite):
 	def __init__(self, tests=()):
 		self._tests = []
-		#self.addTest(StartupMasterHostUpFailed('test_master_hostup_failed'))
-		#self.addTest(StartupMaster('test_startup_master'))
-		#self.addTest(StartupSlave('test_startup_slave'))
-		#self.addTest(SlaveToMaster('test_slave_to_master'))
+		self.addTest(StartupMasterHostUpFailed('test_master_hostup_failed'))
+		self.addTest(StartupMaster('test_startup_master'))
+		self.addTest(StartupSlave('test_startup_slave'))
+		self.addTest(SlaveToMaster('test_slave_to_master'))
 		self.addTest(CreateBackup('test_create_backup'))
 		self.addTest(CreateDataBundle('test_create_databundle'))
 		

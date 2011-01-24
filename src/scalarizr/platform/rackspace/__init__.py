@@ -90,7 +90,7 @@ class RackspacePlatform(Platform):
 			pass
 	
 	def new_cloudservers_conn(self):
-		return new_cloudfiles_conn()
+		return new_cloudserver_conn()
 	
 	def new_cloudfiles_conn(self):
 		return new_cloudfiles_conn()
