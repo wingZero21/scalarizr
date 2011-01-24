@@ -4,7 +4,7 @@
 			"ssh_private_key" : ""
 	},
 	
-	"platrform_credentials" : {
+	"platform_credentials" : {
 		"key" 	 : "",
 		"secret" : ""	
 	},
@@ -22,6 +22,22 @@
 			"raw" : [{
 				"image_id": 			"69",
 				"arch":					"x86_64"
+			}],
+			"base": [{
+				"role_name":			"szr-base-unstable-ubuntu1004-64",
+				"arch":					"x86_64"
+			}],
+			"www": [{
+				"role_name":			"szr-nginx-unstable-ubuntu1004-64",
+				"arch":					"x86_64"
+			}],
+			"app": [{
+				"role_name":			"szr-apache-unstable-ubuntu1004-64",
+				"arch":					"x86_64"
+			}],
+			"mysql": [{
+				"role_name":			"szr-mysql-unstable-ubuntu1004-64",
+				"arch":					"x86_64"
 			}]
 		},
 		"centos5": {
@@ -30,7 +46,7 @@
 				"arch":					"x86_64"
 			}],
 			"mysql": [{
-				"role_name":			"szr-mysql-unstable-centos55-64"
+				"role_name":			"szr-mysql-unstable-centos55-64",
 				"arch":					"x86_64"
 			}]
 		}

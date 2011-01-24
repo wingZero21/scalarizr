@@ -6,7 +6,7 @@
 		"security_group" : "webta.scalarizr"
 	},
 	
-	"platrform_credentials" : {
+	"platform_credentials" : {
 		"key" 	 : "",
 		"secret" : ""	
 	},

@@ -102,7 +102,7 @@ class DataProvider(object):
 			raise Exception("Can't get platform and dist from os environment.")
 		
 		self.driver = get_driver(getattr(Provider, self.platform.upper()))
-		self.__credentials = platform_config['platrform_credentials']
+		self.__credentials = platform_config['platform_credentials']
 		self.conn = self.driver(**self.__credentials)
 		
 		if scalr_srv_id:
