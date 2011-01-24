@@ -199,7 +199,16 @@ def get_handlers ():
 
 class MysqlMessages:
 	CREATE_DATA_BUNDLE = "Mysql_CreateDataBundle"
+	
 	CREATE_DATA_BUNDLE_RESULT = "Mysql_CreateDataBundleResult"
+	'''
+	@ivar status: ok|error
+	@ivar last_error
+	@ivar snapshot_config
+	@ivar log_file
+	@ivar log_pos
+	@ivar used_size
+	'''
 	
 	CREATE_BACKUP = "Mysql_CreateBackup"
 	
@@ -479,9 +488,8 @@ class MysqlHandler(ServiceCtlHanler):
 			iptables = IpTables()
 			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
 		
-		
-	def on_start(self):
-		if self._cnf.state == ScalarizrState.RUNNING:
+		elif self._cnf.state == ScalarizrState.RUNNING \
+			and int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
 			
 			def check_mysql_pass(mysql_pexp, user, password):
 							
@@ -501,10 +509,9 @@ class MysqlHandler(ServiceCtlHanler):
 					raise Exception("Password for user %s doesn't match." % user)
 					
 			self._logger.debug("Checking Scalr's MySQL system users presence.")
-			root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
-			repl_password = self._cnf.rawini.get(CNF_SECTION, OPT_REPL_PASSWORD)
-			stat_password = self._cnf.rawini.get(CNF_SECTION, OPT_STAT_PASSWORD)
 			
+			root_password, repl_password, stat_password = self._get_ini_options(
+					OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD) 
 			try:
 				mysql = pexpect.spawn('/usr/bin/mysql -u ' + ROOT_USER + ' -p')
 				mysql.expect('Enter password:', timeout=10)
@@ -519,12 +526,15 @@ class MysqlHandler(ServiceCtlHanler):
 									  root_password, repl_password, stat_password)
 			finally:
 				mysql.close()
-				
+		
+		
+	def on_start(self):
+		if self._cnf.state == ScalarizrState.RUNNING:
 			if not self.storage_vol:
 				# Creating self.storage_vol object from configuration
 				storage_conf = Storage.restore_config(self._volume_config_path)
 				self.storage_vol = Storage.create(storage_conf)
-				
+		
 				
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
@@ -693,7 +703,7 @@ class MysqlHandler(ServiceCtlHanler):
 				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 			# Creating snapshot
 			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-			
+			used_size = int(system2(('df', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
 			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 			
 			# Sending snapshot data to scalr
@@ -701,6 +711,7 @@ class MysqlHandler(ServiceCtlHanler):
 				snapshot_config=snap.config(),
 				log_file=log_file,
 				log_pos=log_pos,
+				used_size='%.3f' % (float(used_size) / 1000,),
 				status='ok'
 			))
 
