@@ -722,9 +722,9 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
 			#ec2_conn = self._platform.new_ec2_conn()
-			master_storage_conf = message.get('volume_config')
+			master_storage_conf = message.volume_config if hasattr(message, 'volume_config') else None
 			tx_complete = False
-			
+						
 			try:
 				# Stop mysql
 				if master_storage_conf:
