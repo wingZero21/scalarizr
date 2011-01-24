@@ -115,10 +115,10 @@ class ParametrizedInitScript(InitScript):
 			args = [self.initd_script] \
 					if isinstance(self.initd_script, basestring) \
 					else list(self.initd_script)
-			args += action
+			args.append(action) 
 			out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
 		except PopenError, e:
-			raise InitdError("Popen failed with error %s" % (e.strerror,))
+			raise InitdError("Popen failed with error %s" % (e,))
 		
 		if returncode:
 			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), returncode)

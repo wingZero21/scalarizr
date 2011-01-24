@@ -50,9 +50,6 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		else:
 			initd_script = '/etc/init.d/mysql'
 		
-		if not os.path.exists(initd_script):
-			raise HandlerError("Cannot find MySQL init script at %s. Make sure that MySQL is installed" % initd_script)
-		
 		pid_file = None
 		try:
 			out = system2("my_print_defaults mysqld", shell=True)
@@ -1449,8 +1446,8 @@ def spawn_mysql(user, password=None):
 		exp.sendline(password or '')
 		exp.expect('mysql>')
 		return exp
-	except Exception, e:
-		raise HandlerError('Cannot start mysql client tool: %s' % e.value.before)
+	except pexpect.ExceptionPexpect, e:
+		raise HandlerError('Cannot start mysql client tool: %s' % e)
 
 def _add_apparmor_rules(directory):
 	if not os.path.exists('/etc/init.d/apparmor'):
