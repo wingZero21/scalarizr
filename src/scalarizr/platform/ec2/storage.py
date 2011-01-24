@@ -101,7 +101,7 @@ class EbsVolumeProvider(VolumeProvider):
 				if snap_id:
 					''' Create new EBS '''
 					kwargs['avail_zone'] = kwargs.get('avail_zone') or pl.get_avail_zone()
-					ebs_vol = ebstool.create_volume(conn, kwargs['size'], kwargs['avail_zone'], 
+					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), kwargs['avail_zone'], 
 						snap_id, logger=self._logger)
 			
 				if 'available' != ebs_vol.volume_state():
