@@ -63,6 +63,7 @@ Next time when SNMP process should be forked
 
 _logging_configured = False
 
+
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
 		initdv2.ParametrizedInitScript.__init__(self, 
@@ -104,19 +105,6 @@ def _init():
 		bus.share_path = firstmatched(lambda p: os.access(p, os.F_OK), share_places)
 		if not bus.share_path:
 			raise ScalarizrError('Cannot find scalarizr share dir. Search path: %s' % ':'.join(share_places))
-
-	# Define scalarizr events
-	bus.define_events(
-		# Fires before scalarizr start 
-		# (can be used by handers to subscribe events, published by other handlers)
-		"init",
-		
-		# Fires when scalarizr is starting
-		"start",
-		
-		# Fires when scalarizr is terminating
-		"terminate"
-	)	
 
 	
 	# Configure logging

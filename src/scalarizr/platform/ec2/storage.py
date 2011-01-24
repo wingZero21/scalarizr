@@ -286,8 +286,6 @@ class S3TransferProvider(TransferProvider):
 		return o.hostname, o.path[1:]
 
 
-
-
 def location_from_region(region):
 	if region == 'us-east-1' or not region:
 		return ''
@@ -295,3 +293,16 @@ def location_from_region(region):
 		return 'EU'
 	else: 
 		return region
+	
+	
+# Workaround over bug when EBS volumes cannot be reattached on the same letter,
+# and instance need to be rebooted to fix this issue.
+
+def _cleanup_volume_table(*args, **kwargs):
+	db = bus.db
+	conn = db.get().get_connection()
+	cur = conn.cursor()
+	cur.execute("DELETE FROM storage where (device LIKE '/dev/sd%' or type = 'ebs') and state = 'detached'")
+	conn.commit()
+
+bus.on(init=lambda *args, **kwargs: bus.on(before_reboot_finish=_cleanup_volume_table))
