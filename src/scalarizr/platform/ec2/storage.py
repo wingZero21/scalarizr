@@ -159,24 +159,35 @@ class EbsVolumeProvider(VolumeProvider):
 		snap.id = ebs_snap.id
 		return snap
 
-	def destroy(self, vol, force=False):
+	def destroy(self, vol, force=False, **kwargs):
 		'''
 		@type vol: EbsVolume
 		'''
 		super(EbsVolumeProvider, self).destroy(vol)
-		conn = connect_ec2()
-		ebstool.detach_volume(conn, vol.id, self._logger)
-		ebstool.delete_volume(conn, vol.id, self._logger)
-		vol.device = None
+		try:
+			conn = connect_ec2()
+		except AttributeError:
+			pass
+		else:
+			ebstool.detach_volume(conn, vol.id, self._logger)
+			ebstool.delete_volume(conn, vol.id, self._logger)
+		finally:
+			vol.device = None							
 	
 	@devname_not_empty		
 	def detach(self, vol, force=False):
 		super(EbsVolumeProvider, self).detach(vol)
 		
-		conn = connect_ec2()
-		ebstool.detach_volume(conn, vol.id, self._logger)
-		vol.device = None
-		vol.detached = True
+		try:
+			conn = connect_ec2()
+			vol.detached = True			
+		except AttributeError:
+			pass
+		else:
+			ebstool.detach_volume(conn, vol.id, self._logger)
+		finally:
+			vol.device = None
+
 
 
 Storage.explore_provider(EbsVolumeProvider, default_for_snap=True)
