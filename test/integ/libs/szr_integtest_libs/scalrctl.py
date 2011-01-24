@@ -197,9 +197,9 @@ class FarmUI:
 
 		if text != 'Farm successfully saved':
 			raise FarmUIError('Something wrong with saving farm %s : %s' % (self.farm_id, text))
-		
+
+	@property		
 	@_login
-	@property
 	def state(self):
 		if not hasattr(self, 'farm_id'):
 			raise FarmUIError("Can't launch farm without farm_id: use the farm first")
@@ -428,7 +428,7 @@ class FarmUI:
 		wait_until(lambda: self.sel.is_element_present(path) and not self.sel.is_visible(path), sleep=0.5)
 	@_login	
 	def configure_vhost(self, domain, role_name, platform):
-		role_id = self.get_role_id(role_name, platform)
+		role_id = self.get_farm_role_id(role_name, platform)
 		document_root = os.path.join('/var/www/', domain)
 
 		self.sel.open('/apache_vhost_add.php')		
@@ -446,7 +446,7 @@ class FarmUI:
 		ssl_key = '~/.scalr/apache/server.key'
 		ca_cert = '~/.scalr/apache/ca.crt'
 		
-		role_id = self.get_role_id(role_name, platform)
+		role_id = self.get_farm_role_id(role_name, platform)
 
 		self.sel.open('/apache_vhost_add.php')
 		self.sel.type('domain_name', domain)
