@@ -41,7 +41,9 @@ class ScalrConsts:
 		BEHAVIOUR_MYSQL = 'MySQL' 
 		BEHAVIOUR_WWW = 'Nginx'
 		BEHAVIOUR_MEMCACHED = 'Memcached'
-
+		
+platforms = {'ec2':'Amazon EC2', 
+			'rackspace':'Rackspace'}	
 
 class FarmUI:
 	sel = None
@@ -78,27 +80,31 @@ class FarmUI:
 	@_login
 	@_open_farm_builder
 	def add_role(self, role_name, min_servers=1, max_servers=2, settings=None):
+		try:
+			platform  = os.environ['PLATFORM']
+		except:
+			platform = 'ec2'
 			
+		role_id = self.get_role_id(role_name, platform)
+		
 		settings = settings or dict()
 		if not 'aws.instance_type' in settings:
 			settings['aws.instance_type'] = 't1.micro'
 		settings['scaling.min_instances'] = settings.get('scaling.min_instances', min_servers)
 		settings['scaling.max_instances'] = settings.get('scaling.max_instances', max_servers)
-		if not 'farms_builder.php?id=' in self.sel.get_location():
-			self.sel.open("farms_builder.php?id=%s" % self.farm_id)
-			#raise FarmUIError("Farm's settings page hasn't been opened. Use farm first")
+
 		wait_until(lambda: self.sel.is_element_present('//span[text()="Roles"]'), sleep=0.1, timeout=10)
 		self.sel.click('//span[text()="Roles"]')
 		self.sel.click('//div[@class="viewers-selrolesviewer-blocks viewers-selrolesviewer-add"]')
 		self.sel.wait_for_condition(
 				"selenium.browserbot.getCurrentWindow().document.getElementById('viewers-addrolesviewer')", 5000)
 		try:
-			self.sel.click('//li[@itemname="%s"]' % role_name)
+			self.sel.click('//li[@itemid="%s"]' % role_id)
 			time.sleep(0.5)
-			self.sel.click('//li[@itemname="%s"]/div[@class="info"]/img[1]' % role_name)
+			self.sel.click('//li[@itemid="%s"]/div[@class="info"]/img[1]' % role_id)
 			if self.sel.is_element_present('//label[text()="Location:"]'):
 				self.sel.click('//label[text()="Platform:"]')
-				self.sel.click('//div[text()="Amazon EC2"]')
+				self.sel.click('//div[text()="%s"]' % platforms[platform])
 				self.sel.click('//label[text()="Location:"]')
 				self.sel.click('//div[@class="x-combo-list-inner"]/div[text()="AWS / US East 1"]')
 				self.sel.click('//button[text()="Add"]')
@@ -350,13 +356,11 @@ class FarmUI:
 	@_login
 	def get_role_id(self, role_name, platform):
 		server_info_url = 'http://scalr-dev.local.webta.net/roles/xListViewRoles/'
-		platforms = {'ec2':'Amazon EC2', 
-					'rackspace':'Rackspace'}	
-		
+	
 		self.use(self.farm_id)
 		http = httplib2.Http()
 
-		body = urllib.urlencode({'query' : 'szr-apache-unstable-ubuntu1004-64', 'limit' : '10'})
+		body = urllib.urlencode({'query' : role_name, 'limit' : '10'})
 		headers = {'Content-type': 'application/x-www-form-urlencoded',
                         'Cookie' : self.sel.get_cookie()}
 		
