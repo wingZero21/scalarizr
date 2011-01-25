@@ -68,7 +68,7 @@ class CFTransferProvider(TransferProvider):
 				self._container = ct				
 			
 			try:
-				o = ct.get_object(obj)
+				o = self._container.get_object(obj)
 			except cloudfiles.errors.NoSuchObject, e:
 				raise TransferError("Object '%s' not found in container '%s'" 
 						% (obj, container))

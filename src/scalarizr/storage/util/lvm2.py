@@ -11,6 +11,7 @@ from scalarizr.util.filetool import read_file
 
 import re
 import binascii
+from scalarizr.storage import StorageError
 try:
 	from collections import namedtuple
 except ImportError:
@@ -121,12 +122,20 @@ class Lvm2:
 	Object-oriented interface to lvm2
 	'''
 	
-	def __init__(self):
-		if disttool.is_debian_based():
+	_usable = None
+	
+	@staticmethod
+	def usable():
+		if Lvm2._usable is None:
 			err_text = 'Cannot load device mapper kernel module'
 			system(['/sbin/modprobe', 'dm_snapshot'], error_text=err_text)
 			system(['/sbin/modprobe', 'dm_mod'], error_text=err_text)
-			
+			Lvm2._usable = True
+		return Lvm2._usable
+	
+	def __init__(self):
+		if not Lvm2.usable():
+			raise StorageError('LVM2 is not usable. Please check that kernel compiled with dm_mod, dm_snapshot')
 		
 	def _parse_status_table(self, cmd, ResultClass):
 		if isinstance(ResultClass, tuple):
