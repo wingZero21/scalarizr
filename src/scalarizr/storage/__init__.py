@@ -361,20 +361,18 @@ class Volume(VolumeConfig):
 		if self._fs:
 			system(SYNC_EXEC)
 			self.freeze()
-
-		# Create snapshot
-		pvd = Storage.lookup_provider(self.type)
-		conf = self.config()
-		del conf['id']
-		snap = pvd.snapshot_factory(description, **conf)		
-		pvd.create_snapshot(self, snap)
-		
-		# Unfreeze filesystem
-		if self._fs:
-			self.unfreeze()
 			
-		# Save snapshot
-		return pvd.save_snapshot(self, snap)
+		try:
+			# Create snapshot
+			pvd = Storage.lookup_provider(self.type)
+			conf = self.config()
+			del conf['id']
+			snap = pvd.snapshot_factory(description, **conf)		
+			return pvd.create_snapshot(self, snap)
+		finally:
+			# Unfreeze filesystem
+			if self._fs:
+				self.unfreeze()
 
 	def detach(self, force=False):
 		return Storage.detach(self, force)
@@ -393,11 +391,15 @@ class Volume(VolumeConfig):
 		
 		
 class Snapshot(VolumeConfig):
+	CREATING = 'creating'
+	CREATED = 'created'	
+	COMPLETED = 'completed'
+	FAILED = 'failed'
+	
 	version = '0.7'
 	type = None
 	description = None
 	_id_format = '%s-snap-%s'
-
 		
 	def __init__(self, type=None, description=None, **kwargs):
 		self.type = type
@@ -415,6 +417,11 @@ class Snapshot(VolumeConfig):
 		cnf['description'] = self.description
 		return cnf
 	
+	@property
+	def state(self):
+		pvd = Storage.lookup_provider(self.type, True)
+		return pvd.get_snapshot_state(self)
+
 
 class VolumeProvider(object):
 	type = 'base'
@@ -441,8 +448,8 @@ class VolumeProvider(object):
 	def create_snapshot(self, vol, snap):
 		return snap
 	
-	def save_snapshot(self, vol, snap):
-		return snap
+	def get_snapshot_state(self, snap):
+		return Snapshot.COMPLETED
 
 	def destroy(self, vol, force=False, **kwargs):
 		if not vol.devname and not vol.detached:
@@ -464,5 +471,3 @@ class VolumeProvider(object):
 				raise
 		
 Storage.explore_provider(VolumeProvider, default_for_vol=True, default_for_snap=True)
-
-

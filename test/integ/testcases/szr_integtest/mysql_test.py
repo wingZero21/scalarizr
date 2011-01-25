@@ -48,6 +48,7 @@ scalrctl = ScalrCtl(dp.farm_id)
 
 class StartupMasterHostUpFailed(unittest.TestCase):
 	def test_master_hostup_failed(self):
+		dp.terminate_farm()
 		logger.info('>>>>>>>>>>>> Starting test "test_master_hostup_failed"')
 		local_opts = copy.copy(opts)
 		local_opts.update({'system.timeouts.launch' : '60'})

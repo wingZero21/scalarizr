@@ -85,9 +85,6 @@ class LoopVolumeProvider(VolumeProvider):
 		snap.file = backup_filename
 		return snap
 	
-	def save_snapshot(self, vol, snap):
-		return snap
-
 	def detach(self, vol, force=False):
 		super(LoopVolumeProvider, self).detach(vol, force)
 		rmloop(vol.devname)

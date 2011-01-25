@@ -21,6 +21,7 @@ import time
 import glob
 import binascii
 import cStringIO
+import threading
 
 
 class EphConfig(VolumeConfig):
@@ -185,40 +186,24 @@ class EphVolumeProvider(VolumeProvider):
 
 		snap = self.snapshot_factory(**kwargs)
 		try:
-			self._prepare_tranzit_vol(vol.tranzit_vol)
+			self._snap_pvd.prepare_tranzit_vol(vol.tranzit_vol)
 			self._snap_pvd.download(vol, snap, vol.tranzit_vol.mpoint)
 			self._snap_pvd.restore(vol, snap, vol.tranzit_vol.mpoint)			
 		finally:
-			self._cleanup_tranzit_vol(vol.tranzit_vol)
+			self._snap_pvd.cleanup_tranzit_vol(vol.tranzit_vol)
 	
 		return vol
 
 	def create_snapshot(self, vol, snap):
 		try:
-			self._prepare_tranzit_vol(vol.tranzit_vol)
-			self._snap_pvd.create(vol, snap, vol.tranzit_vol.mpoint)
-			return snap
+			return self._snap_pvd.create(vol, snap)
 		except:
-			self._cleanup_tranzit_vol(vol.tranzit_vol)
+			self._snap_pvd.cleanup_tranzit_vol(vol.tranzit_vol)
 			raise
-	
-	def save_snapshot(self, vol, snap):
-		try:
-			self._snap_pvd.upload(vol, snap, vol.tranzit_vol.mpoint)
-			return snap
-		finally:
-			self._cleanup_tranzit_vol(vol.tranzit_vol)
 
+	def get_snapshot_state(self, snap):
+		return self._snap_pvd.get_snapshot_state(snap)
 
-	def _prepare_tranzit_vol(self, vol):
-		os.makedirs(vol.mpoint)
-		vol.mkfs()
-		vol.mount()
-		
-	def _cleanup_tranzit_vol(self, vol):
-		vol.umount()
-		if os.path.exists(vol.mpoint):
-			os.rmdir(vol.mpoint)
 
 	def detach(self, vol, force=False):
 		'''
@@ -236,7 +221,7 @@ class EphVolumeProvider(VolumeProvider):
 		super(EphVolumeProvider, self).destroy(vol, force, **kwargs)
 
 		# Umount tranzit volume
-		self._cleanup_tranzit_vol(vol.tranzit_vol)
+		self._snap_pvd.cleanup_tranzit_vol(vol.tranzit_vol)
 		
 		# Find PV 
 		pv = None
@@ -257,7 +242,6 @@ class EphVolumeProvider(VolumeProvider):
 
 Storage.explore_provider(EphVolumeProvider)
 
-
 class EphSnapshotProvider(object):
 
 	MANIFEST_NAME 		= 'manifest.ini'
@@ -269,44 +253,80 @@ class EphSnapshotProvider(object):
 	_logger = None	
 	_transfer = None
 	_lvm = None
+	_state_map = None
 	
 	def __init__(self, chunk_size=10):
 		self.chunk_size = chunk_size		
 		self._logger = logging.getLogger(__name__)
 		self._transfer = Transfer()
 		self._lvm = Lvm2()
+		self._state_map = dict()
 	
-	def create(self, volume, snapshot, tranzit_path):
-		# Create LVM snapshot
-		snap_lv = None
-		chunk_prefix = '%s.data' % snapshot.id
-		try:
-			snap_lv = self._lvm.create_lv_snapshot(volume.devname, self.SNAPSHOT_LV_NAME, extents='100%FREE')
-			
-			# Copy|gzip|split snapshot into tranzit volume directory
-			self._logger.info('Packing volume %s -> %s', volume.devname, tranzit_path) 
-			cmd1 = ['dd', 'if=%s' % snap_lv]
-			cmd2 = ['gzip', '-1']
-			cmd3 = ['split', '-a','3', '-d', '-b', '%sm' % self.chunk_size, '-', '%s/%s.gz.' % 
-					(tranzit_path, chunk_prefix)]
-			p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			out, err = p3.communicate()
+	def create(self, volume, snapshot):
+		if snapshot.id in self._state_map:
+			raise StorageError('Snapshot %s is already %s. Cannot create it again' % (
+					snapshot.id, self._state_map[snapshot.id]))
+		self._state_map[snapshot.id] = Snapshot.CREATING
+		self.prepare_tranzit_vol(volume.tranzit_vol)
+		snap_lv = self._lvm.create_lv_snapshot(volume.devname, self.SNAPSHOT_LV_NAME, extents='100%FREE')
+		self._logger.info('Created LVM snapshot %s for volume %s', snap_lv, volume.device)
+		t = threading.Thread(name='%s creator' % snapshot.id, target=self._create, 
+							args=(volume, snapshot, snap_lv))
+		t.start()
+		return snapshot
 
-			if p3.returncode:
-				p1.stdout.close()
-				p2.stdout.close()				
-				p1.wait()
-				p2.wait()
-				raise StorageError('Error during coping LVM snapshot device (code: %d) <out>: %s <err>: %s' % 
-						(p3.returncode, out, err))
+	def prepare_tranzit_vol(self, vol):
+		os.makedirs(vol.mpoint)
+		vol.mkfs()
+		vol.mount()
+		
+	def cleanup_tranzit_vol(self, vol):
+		vol.umount()
+		if os.path.exists(vol.mpoint):
+			os.rmdir(vol.mpoint)
+
+	def _create(self, volume, snapshot, snap_lv):
+		try:
+			tranzit_path = volume.tranzit_vol.mpoint
+			chunk_prefix = '%s.data' % snapshot.id			
+			try:
+				self._copy_gzip_split(snap_lv, tranzit_path, chunk_prefix)
+			finally:
+				self._lvm.remove_lv(snap_lv)
+			#snapshot.lvm_group_cfg = lvm_group_b64(snapshot.vg)			
+			snapshot.path = self._write_manifest(snapshot, tranzit_path, chunk_prefix)
+			snapshot.path = self._upload(volume, snapshot, tranzit_path)
+			self._state_map[snapshot.id] = Snapshot.COMPLETED
+		except:
+			self._state_map[snapshot.id] = Snapshot.FAILED
+			self._logger.exception('Snapshot creation failed')
 		finally:
-			# Remove LVM snapshot			
-			if snap_lv:
-				self._lvm.remove_lv(snap_lv)			
-					
-		# Make snapshot manifest
+			self.cleanup_tranzit_vol(volume.tranzit_vol)
+
+	def _copy_gzip_split(self, device, tranzit_path, chunk_prefix):
+		''' Copy | gzip | split snapshot into tranzit volume directory '''
+		self._logger.info('Packing %s -> %s', device, tranzit_path)		
+		cmd1 = ['dd', 'if=%s' % device]
+		cmd2 = ['gzip', '-1']
+		cmd3 = ['split', '-a','3', '-d', '-b', '%sm' % self.chunk_size, '-', '%s/%s.gz.' % 
+				(tranzit_path, chunk_prefix)]
+		p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		out, err = p3.communicate()
+
+		if p3.returncode:
+			p1.stdout.close()
+			p2.stdout.close()				
+			p1.wait()
+			p2.wait()
+			raise StorageError('Error during coping LVM snapshot device (code: %d) <out>: %s <err>: %s' % 
+					(p3.returncode, out, err))
+
+	def _write_manifest(self, snapshot, tranzit_path, chunk_prefix):
+		''' Make snapshot manifest '''
+		manifest_path = os.path.join(tranzit_path, '%s.%s' % (snapshot.id, self.MANIFEST_NAME))		
+		self._logger.info('Writing snapshot manifest file in %s', manifest_path)
 		config = Configuration('ini')
 		config.add('snapshot/description', snapshot.description, force=True)
 		config.add('snapshot/created_at', time.strftime("%Y-%m-%d %H:%M:%S"))
@@ -314,12 +334,22 @@ class EphSnapshotProvider(object):
 		for chunk in glob.glob(os.path.join(tranzit_path, chunk_prefix + '*')):
 			config.add('chunks/%s' % os.path.basename(chunk), self._md5sum(chunk), force=True)
 		
-		manifest_path = os.path.join(tranzit_path, '%s.%s' % (snapshot.id, self.MANIFEST_NAME))
 		config.write(manifest_path)
-
-		snapshot.path = manifest_path
-		return snapshot
-
+		
+		return manifest_path
+	
+	def _upload(self, volume, snapshot, tranzit_path):
+		''' Upload manifest and chunks to cloud storage '''
+		mnf = Configuration('ini')
+		mnf.read(snapshot.path)
+		num_chunks = len(mnf.options('chunks'))
+		self._logger.info('Uploading %d chunks into cloud storage (total transfer: %dMb)', 
+						num_chunks, self.chunk_size*num_chunks)		
+		
+		files = [snapshot.path]
+		files += [os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks')]
+		
+		return self._transfer.upload(files, volume.snap_backend['path'])[0]	
 	
 	def restore(self, volume, snapshot, tranzit_path):
 		# Load manifest
@@ -356,15 +386,8 @@ class EphSnapshotProvider(object):
 		finally:
 			dest.close()			
 
-	def upload(self, volume, snapshot, tranzit_path):
-		mnf = Configuration('ini')
-		mnf.read(snapshot.path)
-		
-		files = [snapshot.path]
-		files += [os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks')]
-		
-		snapshot.path = self._transfer.upload(files, volume.snap_backend['path'])[0]
-		return snapshot
+	def get_snapshot_state(self, snapshot):
+		return self._state_map[snapshot.id]
 
 	def download(self, volume, snapshot, tranzit_path):
 		# Load manifest

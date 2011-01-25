@@ -159,6 +159,13 @@ class EbsVolumeProvider(VolumeProvider):
 		snap.id = ebs_snap.id
 		return snap
 
+	def get_snapshot_state(self, snap):
+		conn = connect_ec2()
+		state = conn.get_all_snapshots((snap.id,))[0].status
+		if state == 'creating':
+			state = Snapshot.CREATED
+		return state
+
 	def destroy(self, vol, force=False, **kwargs):
 		'''
 		@type vol: EbsVolume

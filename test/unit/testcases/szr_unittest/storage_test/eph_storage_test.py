@@ -5,8 +5,8 @@ Created on Dec 3, 2010
 '''
 import unittest
 
-from scalarizr.util import system2 as system
-from scalarizr.storage import Storage
+from scalarizr.util import system2 as system, wait_until
+from scalarizr.storage import Storage, Snapshot
 from scalarizr.storage.util.loop import mkloop
 
 import os
@@ -150,10 +150,13 @@ class TestEphStorageSnapshot(unittest.TestCase):
 		# Snapshot storage
 		snap = self.vols[0].snapshot(description='Bigfile with us forever')
 		self.assertEqual(snap.type, 'eph')
-		self.assertTrue('manifest.ini' in snap.path)		
 		self.assertEqual(snap.vg, 'casstorage')
+		self.assertEqual(snap.state, Snapshot.CREATING)
 		
+		wait_until(lambda: snap.state in (Snapshot.COMPLETED, Snapshot.FAILED))
 		print snap.config()
+		if snap.state == Snapshot.FAILED:
+			raise Exception('Snapshot creation failed. See log for more details')
 
 		# Destroy original storage
 		self.vols[0].destroy()

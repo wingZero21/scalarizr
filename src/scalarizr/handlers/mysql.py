@@ -8,7 +8,7 @@ Created on 14.06.2010
 # Core
 from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr.storage import Storage, StorageError, Volume, transfer
+from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer 
 from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
@@ -18,7 +18,7 @@ from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 from scalarizr.util import system2, cryptotool, disttool, filetool, \
-	firstmatched, cached, validators, initdv2, software
+	firstmatched, cached, validators, initdv2, software, wait_until
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
@@ -1188,6 +1188,11 @@ class MysqlHandler(ServiceCtlHanler):
 	
 			sql.sendline('UNLOCK TABLES;\n')
 			sql.close()
+			
+			wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
+			if snap.state == Snapshot.FAILED:
+				raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
+			
 			return snap, log_file, log_pos
 		
 		finally:
