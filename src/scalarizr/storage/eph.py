@@ -22,7 +22,7 @@ import glob
 import binascii
 import cStringIO
 import threading
-
+import zlib
 
 class EphConfig(VolumeConfig):
 	type = 'eph'
@@ -367,12 +367,17 @@ class EphSnapshotProvider(object):
 
 		# Restore chunks 
 		self._logger.info('Unpacking snapshot from %s -> %s', tranzit_path, volume.devname)
+		chunks = list(os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks'))
+		chunks.sort()
+		#self._gunzip_subprocess(chunks, volume.devname)
+		self._gunzip_native(chunks, volume.devname)
+
+	def _gunzip_subprocess(self, chunks, device):
+		self._logger.debug('Decompress chunks with `cat | gunzip`')
 		cat = ['cat']
-		catargs = list(os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks'))
-		catargs.sort()
-		cat.extend(catargs)
+		cat.extend(chunks)
 		gunzip = ['gunzip']
-		dest = open(volume.devname, 'w')
+		dest = open(device, 'w')
 		#Todo: find out where to extract file
 		try:
 			p1 = subprocess.Popen(cat, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -385,6 +390,26 @@ class EphSnapshotProvider(object):
 						(p2.returncode, out, err))
 		finally:
 			dest.close()			
+
+	def _gunzip_native(self, chunks, device):
+		self._logger.debug('Decompress chunks with zlib')
+		dest = open(device, 'w')
+		try:
+			dec = zlib.decompressobj(16 + zlib.MAX_WBITS)
+			for chunk in chunks:
+				fp = None
+				try:
+					fp = open(chunk, 'r')
+					while True:
+						data = fp.read(8192)
+						if not data:
+							break
+						dest.write(dec.decompress(data))
+				finally:
+					if fp:
+						fp.close()
+		finally:
+			dest.close()
 
 	def get_snapshot_state(self, snapshot):
 		return self._state_map[snapshot.id]
