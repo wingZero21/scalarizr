@@ -13,8 +13,12 @@ import os
 from scalarizr.util import wait_until
 import urllib
 import httplib2
-import simplejson
 import copy
+
+try:
+	import json
+except:
+	import simplejson as json
 
 log_path = os.path.expanduser('~/.scalr-dev/logs')
 server_info_url = 'http://scalr-dev.local.webta.net/servers/extendedInfo'
@@ -80,12 +84,8 @@ class FarmUI:
 	@_login
 	@_open_farm_builder
 	def add_role(self, role_name, min_servers=1, max_servers=2, settings=None):
-		try:
-			platform  = os.environ['PLATFORM']
-		except:
-			platform = 'ec2'
 			
-		role_id = self.get_role_id(role_name, platform)
+		role_id = self.get_role_id(role_name)
 		
 		settings = settings or dict()
 		if not 'aws.instance_type' in settings:
@@ -96,15 +96,14 @@ class FarmUI:
 		wait_until(lambda: self.sel.is_element_present('//span[text()="Roles"]'), sleep=0.1, timeout=10)
 		self.sel.click('//span[text()="Roles"]')
 		self.sel.click('//div[@class="viewers-selrolesviewer-blocks viewers-selrolesviewer-add"]')
-		self.sel.wait_for_condition(
-				"selenium.browserbot.getCurrentWindow().document.getElementById('viewers-addrolesviewer')", 5000)
+		self.sel.wait_for_condition("selenium.browserbot.getCurrentWindow().document.getElementById('viewers-addrolesviewer')", 10000)
 		try:
 			self.sel.click('//li[@itemid="%s"]' % role_id)
 			time.sleep(0.5)
 			self.sel.click('//li[@itemid="%s"]/div[@class="info"]/img[1]' % role_id)
 			if self.sel.is_element_present('//label[text()="Location:"]'):
 				self.sel.click('//label[text()="Platform:"]')
-				self.sel.click('//div[text()="%s"]' % platforms[platform])
+				self.sel.click('//div[text()="%s"]' % platforms[self.platform])
 				self.sel.click('//label[text()="Location:"]')
 				self.sel.click('//div[@class="x-combo-list-inner"]/div[text()="AWS / US East 1"]')
 				self.sel.click('//button[text()="Add"]')
@@ -276,7 +275,7 @@ class FarmUI:
 			start_time = time.time()
 			while time.time() - start_time <= timeout:
 				content = http.request(server_info_url, 'POST', body=body, headers=headers)[1]
-				content = simplejson.loads(content)
+				content = json.loads(content)
 				if not content['success']:
 					continue
 				for block in content['moduleParams']:
@@ -322,24 +321,27 @@ class FarmUI:
 		
 	@_login
 	def get_server_list(self, role_name):
-		#TODO: Use ajax request here
 		ret = []
-		self.sel.open('/farm_roles_view.php?farmid=%s' % self.farm_id )
-		self.sel.wait_for_page_to_load(15000)
-		time.sleep(1)
-		self.sel.click('//a[text()="%s"]/../../../dt[@dataindex="servers"]/em/a' % role_name)
-		time.sleep(3)
-		server_count = int(self.sel.get_xpath_count('//div[@class="x-list-body-inner"]/descendant::em[text()="Running "]'))
-		if not server_count:
-			return []
-		for i in range(1, server_count+1):
-			ip = self.sel.get_text('//div[@class="x-list-body-inner"]/descendant::em[text()="Running "][%d]/../../dt[@dataindex="remote_ip"]/em' % i).strip()
-			if ip:
-				if self.sel.get_text('//div[@class="x-list-body-inner"]/descendant::em[text()="Running "][%d]/../../dt[@dataindex="farm_id"]/em/' % i).strip().endswith('(Master)'):
-					ret.insert(0, ip)
-				else:
-					ret.append(ip)
+		farm_role_id = self.get_farm_role_id(role_name)
+		url = urllib.basejoin(self.sel.browserURL, 'servers/xListViewServers/')
+		http = httplib2.Http()
+		body = urllib.urlencode({'farmId' : self.farm_id, 'farmRoleId' : farm_role_id, 'start' : '0', 'limit' : '15'})
+		headers = {'Content-type': 'application/x-www-form-urlencoded',
+                        'Cookie' : self.sel.get_cookie()}
+		
+		content = http.request(url, 'POST', body=body, headers=headers)
+		data = json.loads(content[1])
+		print data
+		
+		for server in data['data']:
+			print server['status']
+			if not 'Running' == server['status']:
+				continue
+			ip = server['remote_ip']
+			ret.insert(0, ip) if '1' == server['ismaster'] else ret.append(ip)
+		
 		return ret
+
 		# TODO: Handle situation when there is no master in role
 	@_login	
 	def get_role_name(self, scalr_srv_id):
@@ -354,10 +356,9 @@ class FarmUI:
 			raise Exception("Server with id '%s' doesn't exist." % scalr_srv_id)
 		
 	@_login
-	def get_role_id(self, role_name, platform):
-		server_info_url = 'http://scalr-dev.local.webta.net/roles/xListViewRoles/'
+	def get_role_id(self, role_name):
+		server_info_url = urllib.basejoin(self.sel.browserURL, '/roles/xListViewRoles/')
 	
-		self.use(self.farm_id)
 		http = httplib2.Http()
 
 		body = urllib.urlencode({'query' : role_name, 'limit' : '10'})
@@ -365,27 +366,27 @@ class FarmUI:
                         'Cookie' : self.sel.get_cookie()}
 		
 		content = http.request(server_info_url, 'POST', body=body, headers=headers)
-		data = simplejson.loads(content[1])
+		data = json.loads(content[1])
 		
 		for role in data['data']:
-			if role['platforms'] == platforms[platform]:
+			if role['platforms'] == platforms[self.platform]:
 				return role['id']
 		else:
 			raise Exception('Cannot determine role_id of %s' % role_name)
 		
 	@_login	
-	def get_farm_role_id(self, role_name, platform):
-		server_info_url = 'http://scalr-dev.local.webta.net/server/grids/farm_roles_list.php?a=1&farmid=%s' % self.farm_id
+	def get_farm_role_id(self, role_name):
+		server_info_url = urllib.basejoin(self.sel.browserURL, 'server/grids/farm_roles_list.php?a=1&farmid=%s' % self.farm_id)
 		http = httplib2.Http()
 
 		headers = {'Content-type': 'application/x-www-form-urlencoded',
                         'Cookie' : self.sel.get_cookie()}
 		
 		content = http.request(server_info_url, 'POST', body={}, headers=headers)
-		data = simplejson.loads(content[1])
+		data = json.loads(content[1])
 		
 		for farm_role in data['data']:
-			if farm_role['platform'] == platform and farm_role['name'] == role_name:
+			if farm_role['platform'] == self.platform and farm_role['name'] == role_name:
 				return farm_role['id']
 		else:
 			raise Exception('Cannot determine farm role id of %s' % role_name)		
@@ -429,7 +430,17 @@ class FarmUI:
 		
 		self.sel.type('document_root_dir', document_root)
 		self.sel.type('server_admin', 'admin@%s' % domain)	
-		self.sel.click('button_js')	
+		self.sel.click('button_js')
+		
+	@property
+	def platform(self):
+		if not hasattr(self, '_platform'):
+			try:
+				self._platform  = os.environ['PLATFORM']
+			except:
+				self._platform = 'ec2'
+		return self._platform
+	
 		
 def ui_import_server(sel, platform_name, behaviour, host, role_name):
 	'''
