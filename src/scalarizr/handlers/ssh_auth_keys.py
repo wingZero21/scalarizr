@@ -1,7 +1,9 @@
 from scalarizr.handlers import Handler
-import logging
 from scalarizr.messaging import Messages
 from scalarizr.util.filetool import read_file, write_file
+
+import os
+import logging
 
 class UpdateSshAuthorizedKeysError(BaseException):
 	pass
@@ -46,6 +48,9 @@ class SSHKeys(Handler):
 		return content
 	
 	def _write_ssh_keys_file(self, content):
+		ssh_dir = os.path.basename(self.PATH)
+		if not os.path.exists(ssh_dir):
+			os.makedirs(ssh_dir)
 		ret = write_file(self.PATH, content, msg='Writing authorized keys', logger=self._logger)
 		if not ret:
 			raise UpdateSshAuthorizedKeysError('Unable to write ssh keys to %s' % self.PATH)

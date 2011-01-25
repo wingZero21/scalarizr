@@ -772,6 +772,8 @@ class MysqlHandler(ServiceCtlHanler):
 							OPT_REPLICATION_MASTER 	: "1"
 						}
 						self._update_config(updates)
+						Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
+						
 						# Send message to Scalr
 						self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 							status="ok",
@@ -796,17 +798,23 @@ class MysqlHandler(ServiceCtlHanler):
 					finally:
 						mysql.close()
 					
+					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
+					Storage.backup_config(snap.config(), self._snapshot_config_path)
 					updates = {
-							OPT_ROOT_PASSWORD : message.root_password,
-							OPT_REPL_PASSWORD : message.repl_password,
-							OPT_STAT_PASSWORD : message.stat_password,
-							OPT_REPLICATION_MASTER 	: "1"
-						}
+						OPT_ROOT_PASSWORD : message.root_password,
+						OPT_REPL_PASSWORD : message.repl_password,
+						OPT_STAT_PASSWORD : message.stat_password,
+						OPT_REPLICATION_MASTER 	: "1"
+					}
 					self._update_config(updates)
+					
 					# Send message to Scalr
 					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 						status="ok",
-						volume_config = self.storage_vol.config()
+						volume_config = self.storage_vol.config(),
+						snapshot_config = snap.config(),
+						log_file = log_file,
+						log_pos = log_pos
 					))							
 					
 				tx_complete = True
