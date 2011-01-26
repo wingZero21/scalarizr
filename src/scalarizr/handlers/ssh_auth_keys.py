@@ -8,6 +8,8 @@ import logging
 class UpdateSshAuthorizedKeysError(BaseException):
 	pass
 
+def get_handlers ():
+	return [SSHKeys()]
 
 class SSHKeys(Handler):
 	
