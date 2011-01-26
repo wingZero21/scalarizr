@@ -410,7 +410,7 @@ class ApacheHandler(ServiceCtlHanler):
 	def _patch_ssl_conf(self, cert_path):
 		key_path = os.path.join(cert_path, 'https.key')
 		crt_path = os.path.join(cert_path, 'https.crt')
-		ca_crt_path = cert_path + '/https-ca.crt'
+		ca_crt_path = os.path.join(cert_path, 'https-ca.crt')
 
 		ssl_conf_path = os.path.join(self.server_root, 'conf.d/ssl.conf' if disttool.is_redhat_based() else 'sites-available/default-ssl')
 		if os.path.exists(ssl_conf_path):			
