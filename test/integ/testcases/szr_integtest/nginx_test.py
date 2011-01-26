@@ -2,6 +2,7 @@
 Created on Jan 5, 2011
 
 @author: marat
+@author: Dmitry Korsakov
 '''
 
 import unittest
@@ -15,7 +16,7 @@ from szr_integtest_libs.scalrctl import FarmUI
 from szr_integtest_libs.ssh_tool import execute
 from szr_integtest_libs.scalrctl import	ScalrCtl
 
-from scalarizr.util import ping_socket
+from scalarizr.util import ping_socket, wait_until
 from scalarizr.util import system2
 
 
@@ -46,13 +47,12 @@ class StartupTest(VirtualTest):
 	def test_startup(self):
 		self.logger.info("Startup Test")
 		
-		self.nginx_pvd.wait_for_hostup(self.server)		
+		self.app_pvd.wait_for_hostup(self.server)		
 		
 		ping_socket(self.server.public_ip, 80, exc_str='Nginx is not running on load balancer')
 		self.logger.info("Nginx running on 80 port")
 		
 		self.logger.info("Logging on balancer %s through ssh" % self.server.public_ip)
-		ssh = self.server.ssh()
 		self.logger.info("Getting default page from nginx")
 		out = system2("curl %s:80" % self.server.public_ip , shell=True)[0]
 		print out
@@ -64,12 +64,12 @@ class StartupTest(VirtualTest):
 		
 
 class RestartTest(VirtualTest):
-	nginx_pvd = None
+	app_pvd = None
 	
 	def test_restart(self):
 		self.logger.info("Restart Test")
 		
-		self.nginx_pvd.wait_for_hostup(self.server)
+		self.app_pvd.wait_for_hostup(self.server)
 		
 		self.logger.info("Logging on balancer through ssh")
 		ssh = self.server.ssh()
@@ -171,26 +171,25 @@ class HttpsTest(VirtualTest):
 		if -1 == string.find(out, '1 s:/'):
 			raise Exception('CA file probably ignored or simply does not exist')
 		self.logger.info('cert OK.')
-		#TODO: delete vhost
 		self.logger.info("HTTPS test is finished.")
 
 		
 class RebundleTest(VirtualTest):
 	server = None
-	nginx_pvd = None
+	app_pvd = None
 	
 	def test_rebundle(self):
 		self.logger.info("Rebundle Test")
-		self.logger.debug("Waiting for HostUp on balancer")
-		self.nginx_pvd.wait_for_hostup(self.server)
+		self.logger.debug("Waiting for HostUp")
+		self.pvd.wait_for_hostup(self.server)
 		
-		self.logger.debug("getting log from balancer")
+		self.logger.debug("getting log from server")
 		reader = self.server.log.tail()
-		farmui = self.nginx_pvd.farmui
+		farmui = self.pvd.farmui
 		self.logger.debug("Starting bundle process")
 		new_role_name = farmui.run_bundle(self.server.scalr_id)
 		
-		scalrctl = ScalrCtl(self.nginx_pvd.farm_id)
+		scalrctl = ScalrCtl(self.pvd.farm_id)
 		scalrctl.exec_cronjob('BundleTasksManager')
 		
 		self.logger.debug("Waiting for message 'Rebundle'")
@@ -207,13 +206,22 @@ class RebundleTest(VirtualTest):
 		scalrctl.exec_cronjob('BundleTasksManager')
 		scalrctl.exec_cronjob('BundleTasksManager')
 		
-		self.nginx_pvd.terminate()
+		self.pvd.terminate()
 		
 		self.logger.debug("Running all tests agaen")
 		self.suite._tests.remove(self)
 		self.suite.run_tests(new_role_name)
 		
 
+class TerminateTest:
+	def _hostup_received(self):
+			out = self.nginx_pvd.scalrctl.exec_cronjob('ScalarizrMessaging')
+			return False if -1 == string.find(out, 'HostTerminate') else True
+				
+	def test_terminate(self):
+		self.pvd.terminate()
+		wait_until(self._hostup_received, None, sleep=5, timeout=60)
+		
 
 class NginxSuite(unittest.TestSuite):
 	def __init__(self, tests=(), role_name=None):
@@ -245,12 +253,15 @@ class NginxSuite(unittest.TestSuite):
 		restart = RestartTest('test_restart', nginx_pvd=nginx_pvd, server=server)
 		upstream = UpstreamTest('test_upstream', app1_pvd=app1_pvd, app2_pvd=app2_pvd, server=server)
 		https = HttpsTest('test_https', app1_pvd=app1_pvd, nginx_pvd=nginx_pvd, server=server)
-		rebundle = RebundleTest('test_rebundle', nginx_pvd=nginx_pvd, server=server, suite = self)
+		rebundle = RebundleTest('test_rebundle', pvd=nginx_pvd, server=server, suite = self)
+		terminate = TerminateTest('test_terminate', pvd=nginx_pvd)
+
 		self.addTest(startup)
 		self.addTest(restart)
 		self.addTest(upstream)
 		self.addTest(https)
 		self.addTest(rebundle)
+		self.addTest(terminate)
 		
 		self.logger.info("Number of testes: %s. Starting tests." % self.countTestCases())
 		
