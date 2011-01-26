@@ -14,8 +14,7 @@ from szr_integtest_libs.datapvd  import DataProvider
 from szr_integtest_libs.scalrctl import FarmUI
 from szr_integtest_libs.ssh_tool import execute
 from szr_integtest_libs.scalrctl import	ScalrCtl
-from szr_integtest.nginx_test	 import VirtualTest
-from szr_integtest.nginx_test	 import TerminateTest
+from szr_integtest.nginx_test	 import VirtualTest, TerminateTest, RebundleTest
 
 from scalarizr.util import ping_socket
 from scalarizr.util import system2
@@ -125,45 +124,6 @@ class HttpsTest(VirtualTest):
 		self.logger.info('cert OK.')
 		
 		self.logger.info("HTTPS test is finished.")
-
-
-class RebundleTest(VirtualTest):
-	server = None
-	app_pvd = None
-	
-	def test_rebundle(self):
-		self.logger.info("Rebundle Test")
-		self.logger.debug("Waiting for HostUp on balancer")
-		self.app_pvd.wait_for_hostup(self.server)
-		
-		self.logger.debug("getting log from balancer")
-		reader = self.server.log.tail()
-		farmui = self.app_pvd.farmui
-		self.logger.debug("Starting bundle process")
-		new_role_name = farmui.run_bundle(self.server.scalr_id)
-		
-		scalrctl = ScalrCtl(self.app_pvd.farm_id)
-		scalrctl.exec_cronjob('BundleTasksManager')
-		
-		self.logger.debug("Waiting for message 'Rebundle'")
-		reader.expect("Received message 'Rebundle'", 60)
-		self.logger.debug("Received message 'Rebundle'")
-		
-		reader.expect("Message 'RebundleResult' delivered", 240)
-		self.logger.debug("Received message 'RebundleResult'")
-		
-		rebundle_res = self.server.get_message(message_name='RebundleResult')
-		self.assertTrue('<status>ok' in rebundle_res)
-		
-		scalrctl.exec_cronjob('ScalarizrMessaging')
-		scalrctl.exec_cronjob('BundleTasksManager')
-		scalrctl.exec_cronjob('BundleTasksManager')
-		
-		self.app_pvd.terminate()
-		
-		self.logger.debug("Running all tests agaen")
-		self.suite._tests.remove(self)
-		self.suite.run_tests(new_role_name)
 		
 		
 class ApacheSuite(unittest.TestSuite):
