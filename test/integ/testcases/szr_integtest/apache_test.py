@@ -99,7 +99,7 @@ class HttpTest(VirtualTest):
 		#patch /etc/hosts, use domain instead of ip
 		hosts_path = '/etc/hosts'
 		hosts_orig = read_file(hosts_path)
-		write_file(hosts_path, '%s %s' % (self.server.public_ip, domain), mode='a')
+		write_file(hosts_path, '\n%s %s\n' % (self.server.public_ip, domain), mode='a')
 		
 		out = system2("curl %s:80" % domain , shell=True)[0]
 		print out
