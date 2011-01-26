@@ -1081,6 +1081,7 @@ class MysqlHandler(ServiceCtlHanler):
 				self._repair_original_mycnf()
 			
 			# Patch configuration
+			
 			self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
 			self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 			
@@ -1501,18 +1502,18 @@ class MysqlHandler(ServiceCtlHanler):
 				os.makedirs(directory)
 				src_dir = os.path.dirname(raw_value + "/") + "/"
 				if os.path.isdir(src_dir):
-					self._logger.debug('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
+					self._logger.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
 					system2(str(rsync), shell=True)
 					self._mysql_config.set(directive, dirname)
 				else:
-					self._logger.debug('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
+					self._logger.info('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
 			else:
 				self._mysql_config.set(directive, dirname)
 				
 		except NoPathError:
-			self._logger.debug('There is no such option "%s" in mysql config.' % directive)
+			self._logger.info('There is no such option "%s" in mysql config.' % directive)
 			if not os.path.isdir(directory):
 				os.makedirs(directory)
 			
@@ -1520,6 +1521,7 @@ class MysqlHandler(ServiceCtlHanler):
 
 		self.write_config()
 		# Recursively setting new directory permissions
+		
 		os.chown(directory, mysql_user.pw_uid, mysql_user.pw_gid)		
 		try:
 			for root, dirs, files in os.walk(directory):
@@ -1529,7 +1531,9 @@ class MysqlHandler(ServiceCtlHanler):
 					os.chown(os.path.join(root, file), mysql_user.pw_uid, mysql_user.pw_gid)
 		except OSError, e:
 			self._logger.error('Cannot chown Mysql directory %s', directory)
-			
+		
+		self._logger.info('New permissions for mysql directory "%s" were successfully set.')
+		
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
 			_add_apparmor_rules(directory)
