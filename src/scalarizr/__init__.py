@@ -190,6 +190,7 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 		logger.debug("Creating file system on image device")
 		fstool.mkfs(privated_image)
 		
+	'''
 	if os.listdir(mpoint):
 		logger.debug("%s contains data. Need to copy it ot image before mounting", mpoint)
 		# If mpoint not empty copy all data to the image
@@ -216,6 +217,7 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 				os.removedirs(tmp_mpoint)
 			except OSError:
 				pass
+	'''
 		
 	logger.debug("Mounting %s to %s", privated_image, mpoint)
 	fstool.mount(privated_image, mpoint, mnt_opts)	
