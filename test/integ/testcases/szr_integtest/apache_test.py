@@ -18,6 +18,7 @@ from szr_integtest.nginx_test	 import VirtualTest, TerminateTest, RebundleTest
 
 from scalarizr.util import ping_socket
 from scalarizr.util import system2
+from scalarizr.util.filetool import read_file, write_file 
 
 
 class StartupTest(VirtualTest):
@@ -95,8 +96,17 @@ class HttpTest(VirtualTest):
 		upstream_log.expect("VhostReconfigure")
 		self.logger.info('got VhostReconfigure')
 		
-		out = system2("curl %s:80" % self.server.public_ip , shell=True)[0]
+		#patch /etc/hosts, use domain instead of ip
+		hosts_path = '/etc/hosts'
+		hosts_orig = read_file(hosts_path)
+		write_file(hosts_path, '%s %s' % (self.server.public_ip, domain), mode='a')
+		
+		out = system2("curl %s:80" % domain , shell=True)[0]
 		print out
+		
+		#repair /etc/hosts
+		write_file(hosts_path, hosts_orig)
+
 		if -1 == string.find(out, 'test_http'):
 			raise Exception('Apache is not serving index.html')
 		self.logger.info('Apache is serving proper index.html')
