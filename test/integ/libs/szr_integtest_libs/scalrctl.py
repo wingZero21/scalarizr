@@ -396,8 +396,8 @@ class FarmUI:
 		wait_until(lambda: self.sel.is_element_present(path) and not self.sel.is_visible(path), sleep=0.5)
 		
 	@_login	
-	def configure_vhost(self, domain, role_name, platform):
-		role_id = self.get_farm_role_id(role_name, platform)
+	def configure_vhost(self, domain, role_name):
+		role_id = self.get_farm_role_id(role_name)
 		document_root = os.path.join('/var/www/', domain)
 
 		self.sel.open('/apache_vhost_add.php')		
@@ -410,19 +410,20 @@ class FarmUI:
 		self.sel.click('button_js')	
 
 	@_login	
-	def configure_vhost_ssl(self, domain, role_name, platform):
-		document_root = '/var/www/ssl.dima2.com/'
-		ssl_cert = '~/.scalr/apache/server.crt'
-		ssl_key = '~/.scalr/apache/server.key'
-		ca_cert = '~/.scalr/apache/ca.crt'
+	def configure_vhost_ssl(self, domain, role_name):
+		document_root = os.path.join('/var/www/', domain)
+		ssl_cert = '~/.scalr-dev/apache/https.crt'
+		ssl_key = '~/.scalr-dev/apache/https.key'
+		ca_cert = '~/.scalr-dev/apache/https-ca.crt'
 		
-		role_id = self.get_farm_role_id(role_name, platform)
+		role_id = self.get_farm_role_id(role_name)
 
 		self.sel.open('/apache_vhost_add.php')
 		self.sel.type('domain_name', domain)
 		self.sel.type('farm_target', self.farm_id)
 		self.sel.type('role_target', role_id)
-		self.sel.check('isSslEnabled')
+		self.sel.mouse_over('isSslEnabled')
+		self.sel.click('isSslEnabled')
 		
 		self.sel.type('ssl_cert', ssl_cert)
 		self.sel.type('ssl_key', ssl_key)
@@ -431,6 +432,18 @@ class FarmUI:
 		self.sel.type('document_root_dir', document_root)
 		self.sel.type('server_admin', 'admin@%s' % domain)	
 		self.sel.click('button_js')
+		
+	@_login
+	def run_bundle(self, server_id):
+		self.use()
+		self.sel.open('#/servers/%s/createSnapshot' % server_id)
+		wait_until(lambda: self.sel.is_element_present('//span[text()="Create new role"]'), sleep=0.1, timeout=10)
+		self.sel.check('//input[@name="replaceType" and @value="replace_farm"]')
+		role_name = self.sel.get_text('//label[text()="Role name:"]/../div[1]/div')
+		role_name += time.strftime('-%m-%d-%H-%M')
+		self.sel.type('//input[@name="roleName"]', role_name)
+		self.sel.click('//button[text()="Create role"]')
+		return role_name
 		
 	@property
 	def platform(self):
@@ -520,29 +533,34 @@ class ScalrCtl:
 		if not os.path.isdir(log_path):
 			os.makedirs(log_path)		
 
-	def exec_cronjob(self, name):
+	def exec_cronjob(self, name, server_id=None):
 		if self.channel.closed:
 			print "channel was closed. getting new one."
 			self.channel = self.ssh.get_root_ssh_channel()
 			
-		cron_keys = ['BundleTasksManager']
-		cron_ng_keys = ['ScalarizrMessaging', 'MessagingQueue', 'Scaling', 'Poller']
+		cron_ng_keys = ['ScalarizrMessaging', 'MessagingQueue', 'Scaling', 'Poller', 'BundleTasksManager']
 		
-		if not name in cron_keys and not name in cron_ng_keys:
+		if not name in cron_ng_keys:
 			raise Exception('Unknown cronjob %s' % name)
 	
-		cron_php_path = ('cron-ng/' if name in cron_ng_keys else 'cron/') +'cron.php'	
+		cron_php_path = 'cron-ng/cron.php'
 		
 		home_path = config.get('./scalr/home_path')
 		self._logger.info('channel: %s' % type(self.channel))
-		#clean_output(self.channel, 5)
 		
 		self._logger.info('cd %s' % home_path)
 		execute(self.channel, 'cd ' + home_path)
-		farm_str = ('--farm-id=%s' % self.farmid) if (self.farmid and name in ('ScalarizrMessaging', 'Scaling')) else ''
+
+		farm_str = ''
+		if (self.farmid and name in ('ScalarizrMessaging', 'Scaling')):
+			farm_str = ('--farm-id=%s' % self.farmid)
+			
+		elif server_id and name == 'BundleTasksManager':
+			farm_str = ('--server-id=%s' % server_id)
+			
 		job_cmd = 'php -q ' + cron_php_path + ' --%s %s' % (name, farm_str)
 		self._logger.info('Starting cronjob: %s' % job_cmd)
-		out = execute(self.channel, job_cmd)
+		out = execute(self.channel, job_cmd, 195)
 		log_filename = name + time.strftime('_%d_%b_%H-%M') + '.log'
 		try:
 			fp = open(os.path.join(log_path, log_filename), 'w')
