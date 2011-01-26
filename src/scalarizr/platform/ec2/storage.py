@@ -80,6 +80,7 @@ class EbsVolumeProvider(VolumeProvider):
 			
 			volume_id = kwargs.get('id')
 			snap_id = kwargs.get('snapshot_id')
+			ebs_vol = None
 			delete_snap = False
 			volume_attached = False			
 			try:
@@ -98,11 +99,12 @@ class EbsVolumeProvider(VolumeProvider):
 						delete_snap = True
 						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger).id
 					
-				if snap_id:
+				if snap_id or not volume_id:
 					''' Create new EBS '''
 					kwargs['avail_zone'] = kwargs.get('avail_zone') or pl.get_avail_zone()
 					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), kwargs['avail_zone'], 
 						snap_id, logger=self._logger)
+
 			
 				if 'available' != ebs_vol.volume_state():
 					if ebs_vol.attach_data.instance_id != pl.get_instance_id():
