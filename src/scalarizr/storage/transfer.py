@@ -116,7 +116,7 @@ class Transfer(object):
 
 		workers = []
 		failed_files = []
-		result = []
+		result = dict()
 		
 		self._failed_files_lock = Lock()
 		
@@ -140,14 +140,14 @@ class Transfer(object):
 
 		# Return tuple of all files	def set_access_data(self, access_data):
 		self._logger.debug('Transfer result: %s', (result,))
-		return tuple(result)
+		return tuple(result[file] for file in files)
 
 	def _worker(self, action, queue, result, failed_files):
 		try:
 			while 1:
 				filename, attempts = queue.get(False)
 				try:
-					result.append(action(filename))
+					result[filename] = action(filename)
 				except TransferError, e:
 					self._logger.error("Cannot transfer '%s'. %s", filename, e)
 					if attempts < self._max_attempts:
