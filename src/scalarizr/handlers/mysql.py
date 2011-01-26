@@ -197,6 +197,73 @@ BACKUP_CHUNK_SIZE = 200*1024*1024
 def get_handlers ():
 	return [MysqlHandler()]
 
+'''
+Failover scenario:
+
+1. Cloud support pluggable disks (ex: EBS)
++-------+              +------------------+                     +--------+
+| Scalr |              | Slave1 -> Master |                     | Slave2 |
++-------+              +------------------+                     +--------+
+
+     Mysql_PromoteToMaster
+       - root_password
+       - repl_password
+       - stat_password
+       - volume_config
+     -------------------------->
+
+     						 STOP SLAVE
+                             vol = Storage(volume_config)
+     						 vol.detach() from Master
+     						 vol.attach() to Slave1
+     						 start mysql
+
+     Mysql_PromoteToMasterResult
+       - volume_config
+     <--------------------------						 
+
+     Mysql_NewMasterUp
+       - local_ip
+       - repl_password
+     ---------------------------------------------------------------->
+      														 get current log_file, log_pos
+      														 CHANGE MASTER TO
+      														 
+      														 
+2. Cloud has no pluggable disks (ex: Rackspace)
++-------+              +------------------+                     +--------+
+| Scalr |              | Slave1 -> Master |                     | Slave2 |
++-------+              +------------------+                     +--------+
+
+	 Mysql_PromoteToMaster
+	   - root_password
+	   - repl_password
+	   - stat_password
+     --------------------------->
+     
+                             STOP SLAVE
+                             RESET MASTER
+                             start mysql
+                             create snapshot
+                             
+     Mysql_PromoteToMasterResult
+       - snapshot_config
+       - log_file
+       - log_pos
+    <----------------------------
+  
+	 Mysql_NewMasterUp
+	   - local_ip
+	   - repl_password
+	   - snapshot_config
+	   - log_file
+	   - log_pos
+	----------------------------------------------------------------->	   
+                                                               vol = Storage(snapshot)
+                                                               CHANGE MASTER TO	   
+    
+'''
+
 class MysqlMessages:
 	CREATE_DATA_BUNDLE = "Mysql_CreateDataBundle"
 	
@@ -240,7 +307,7 @@ class MysqlMessages:
 	@ivar root_password: 'scalr' user password 
 	@ivar repl_password: 'scalr_repl' user password
 	@ivar stat_password: 'scalr_stat' user password
-	@ivar volume_config: Master storage configuration
+	@ivar volume_config?: Master storage configuration
 	"""
 	
 	PROMOTE_TO_MASTER_RESULT = "Mysql_PromoteToMasterResult"
@@ -248,6 +315,9 @@ class MysqlMessages:
 	@ivar status: ok|error
 	@ivar last_error: Last error message in case of status = 'error'
 	@ivar volume_config: Master storage configuration
+	@ivar snapshot_config?
+	@ivar log_file?
+	@ivar log_pos?
 	"""
 	
 	NEW_MASTER_UP = "Mysql_NewMasterUp"
@@ -257,6 +327,9 @@ class MysqlMessages:
 	@ivar remote_ip
 	@ivar role_name		
 	@ivar repl_password
+	@ivar snapshot_config?
+	@ivar log_file?
+	@ivar log_pos?
 	"""
 	
 	"""
@@ -857,24 +930,47 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.info("Switching replication to a new MySQL master %s", host)
 			bus.fire('before_mysql_change_master', host=host)			
 			
-			mysql = spawn_mysql(ROOT_USER, message.root_password)
-						
-			self._logger.debug("Stopping slave i/o thread")
-			mysql.sendline("STOP SLAVE IO_THREAD;")
-			mysql.expect("mysql>")
-			self._logger.debug("Slave i/o thread stopped")
+			if 'snapshot_config' in message.body:
+				self._logger.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
+						message.snapshot_config['id'], message.log_file, message.log_pos)
+				self._stop_service()
+				
+				self._logger.debug('Destroing old storage')
+				self.storage_vol.destroy()
+				self._logger.debug('Storage destoyed')
+				
+				self._logger.debug('Plugging new storage')
+				vol = Storage.create(snapshot=message.snapshot_config)
+				self._plug_storage(self._storage_path, vol)
+				self._logger.debug('Storage plugged')
+				
+				Storage.backup_config(vol.config(), self._volume_config_path)
+				Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
+				self.storage_vol = vol
+				log_file = message.log_file
+				log_pos = message.log_pos
+				
+				self._start_service()				
 			
-			self._logger.debug("Retrieving current log_file and log_pos")
-			mysql.sendline("SHOW SLAVE STATUS\\G");
-			mysql.expect("mysql>")
-			log_file = log_pos = None
-			for line in mysql.before.split("\n"):
-				pair = map(str.strip, line.split(": ", 1))
-				if pair[0] == "Master_Log_File":
-					log_file = pair[1]
-				elif pair[0] == "Read_Master_Log_Pos":
-					log_pos = pair[1]
-			self._logger.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+			mysql = spawn_mysql(ROOT_USER, message.root_password)
+			
+			if not 'snapshot_config' in message.body:
+				self._logger.debug("Stopping slave i/o thread")
+				mysql.sendline("STOP SLAVE IO_THREAD;")
+				mysql.expect("mysql>")
+				self._logger.debug("Slave i/o thread stopped")
+				
+				self._logger.debug("Retrieving current log_file and log_pos")
+				mysql.sendline("SHOW SLAVE STATUS\\G");
+				mysql.expect("mysql>")
+				log_file = log_pos = None
+				for line in mysql.before.split("\n"):
+					pair = map(str.strip, line.split(": ", 1))
+					if pair[0] == "Master_Log_File":
+						log_file = pair[1]
+					elif pair[0] == "Read_Master_Log_Pos":
+						log_pos = pair[1]
+				self._logger.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
 
 			self._change_master(
 				host=host, 
@@ -882,9 +978,8 @@ class MysqlHandler(ServiceCtlHanler):
 				password=message.repl_password,
 				log_file=log_file, 
 				log_pos=log_pos, 
-				mysql_user=ROOT_USER,
-				mysql_password=message.root_password,
-				timeout=self._change_master_timeout
+				timeout=self._change_master_timeout,
+				spawn=mysql
 			)
 				
 			self._logger.debug("Replication switched")
