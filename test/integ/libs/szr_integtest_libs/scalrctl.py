@@ -397,10 +397,11 @@ class FarmUI:
 		
 	@_login	
 	def configure_vhost(self, domain, role_name):
+		self.remove_vhost(domain)
+		
 		role_id = self.get_farm_role_id(role_name)
 		document_root = os.path.join('/var/www/', domain)
-
-		self.sel.open('/apache_vhost_add.php')		
+		self.sel.open('/apache_vhost_add.php')
 		self.sel.type('domain_name', domain)
 		self.sel.type('farm_target', self.farm_id)
 		self.sel.type('role_target', role_id)
@@ -408,9 +409,36 @@ class FarmUI:
 		self.sel.type('document_root_dir', document_root)
 		self.sel.type('server_admin', 'admin@%s' % domain)		
 		self.sel.click('button_js')	
+	
+	@_login
+	def remove_vhost(self, domain):
+		vhosts_list_url = urllib.basejoin(self.sel.browserURL, "server/grids/apache_vhosts_list.php")
+		http = httplib2.Http()
+		headers = {'Content-type': 'application/x-www-form-urlencoded',
+                        'Cookie' : self.sel.get_cookie()}
+		content = http.request(vhosts_list_url, 'POST', body={}, headers=headers)
+		data = json.loads(content[1])
+		
+		for vhost in data['data']:
+			if domain == vhost['domain_name']:
+				break
+		else:
+			return				
+		
+		self.sel.open('apache_vhosts_view.php')
+		wait_until(lambda: self.sel.is_element_present('//dl[contains(@class, "viewers-listview-row")]'), sleep=0.1, timeout=30)
+
+		self.sel.mouse_over('//em[text()="%s"]/../../dt[last()]/em/input' % domain)
+		self.sel.click('//em[text()="%s"]/../../dt[last()]/em/input' % domain)
+		self.sel.click('//button[text()="With selected"]')
+		self.sel.click('//span[text()="Delete"]')
+		time.sleep(0.5)
+		self.sel.click('//button[text()="Yes"]')	
 
 	@_login	
 	def configure_vhost_ssl(self, domain, role_name):
+		self.remove_vhost(domain)
+		
 		document_root = os.path.join('/var/www/', domain)
 		ssl_cert = '~/.scalr-dev/apache/https.crt'
 		ssl_key = '~/.scalr-dev/apache/https.key'
