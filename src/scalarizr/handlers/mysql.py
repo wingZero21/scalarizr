@@ -28,6 +28,7 @@ from subprocess import Popen, PIPE, STDOUT
 import logging, os, re,  tarfile, tempfile
 import time, signal, pwd, random, shutil
 import glob
+import string
 import hashlib
 import ConfigParser
 
@@ -478,7 +479,7 @@ class MysqlCnfController(CnfController):
 	def _get_connection(self):
 		szr_cnf = bus.cnf
 		root_password = szr_cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
-		return spawn_mysql(ROOT_USER, root_password)
+		return spawn_mysql_cli(ROOT_USER, root_password)
 
 
 
@@ -632,36 +633,36 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.info("Adding phpMyAdmin system user")
 			
 			# Connecting to mysql 
-			mysql = spawn_mysql(ROOT_USER, root_password)
-			mysql.sendline('SELECT VERSION();')
-			mysql.expect('mysql>')
-			mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), mysql.before)
+			my_cli = spawn_mysql_cli(ROOT_USER, root_password)
+			my_cli.sendline('SELECT VERSION();')
+			my_cli.expect('mysql>')
+			mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), my_cli.before)
 
 			# Determine mysql server version 
 			if mysql_ver_str:
 				mysql_ver = version.StrictVersion(mysql_ver_str.group(0))
 				priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 			else:
-				raise HandlerError("Cannot extract mysql version from string '%s'" % mysql.before)
+				raise HandlerError("Cannot extract mysql version from string '%s'" % my_cli.before)
 			
 			# Generating password for pma user
 			pma_password = re.sub('[^\w]','', cryptotool.keygen(20))
 			sql = "DELETE FROM mysql.user WHERE User = '"+PMA_USER+"';"
-			mysql.sendline(sql)
-			mysql.expect("mysql>")
+			my_cli.sendline(sql)
+			my_cli.expect("mysql>")
 			# Generating sql statement, which depends on mysql server version 
 			sql = "INSERT INTO mysql.user VALUES('"+pma_server_ip+"','"+PMA_USER+"',PASSWORD('"+pma_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
 			# Pass statement to mysql client
-			mysql.sendline(sql)
-			mysql.expect('mysql>')
+			my_cli.sendline(sql)
+			my_cli.expect('mysql>')
 			
 			# Check for errors
-			if re.search('error', mysql.before, re.M | re.I):
-				raise HandlerError("Cannot add PhpMyAdmin system user '%s': '%s'" % (PMA_USER, mysql.before))
+			if re.search('error', my_cli.before, re.M | re.I):
+				raise HandlerError("Cannot add PhpMyAdmin system user '%s': '%s'" % (PMA_USER, my_cli.before))
 			
-			mysql.sendline('FLUSH PRIVILEGES;')
-			mysql.close()
-			del(mysql)
+			my_cli.sendline('FLUSH PRIVILEGES;')
+			my_cli.close()
+			del(my_cli)
 			
 			self._logger.info('PhpMyAdmin system user successfully added')
 			
@@ -697,7 +698,7 @@ class MysqlHandler(ServiceCtlHanler):
 				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
 			
 			# Get databases list
-			mysql = spawn_mysql(ROOT_USER, root_password)
+			mysql = spawn_mysql_cli(ROOT_USER, root_password)
 			mysql.sendline('SHOW DATABASES;')
 			mysql.expect('mysql>')
 			
@@ -813,7 +814,7 @@ class MysqlHandler(ServiceCtlHanler):
 				# Stop mysql
 				if master_storage_conf:
 					if self._init_script.running:
-						mysql = spawn_mysql(ROOT_USER, message.root_password)
+						mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
 						timeout = 180
 						try:
 							mysql.sendline("STOP SLAVE;")
@@ -858,7 +859,7 @@ class MysqlHandler(ServiceCtlHanler):
 				else:
 					if not self._init_script.running:
 						self._init_script.start()
-					mysql = spawn_mysql(ROOT_USER, message.root_password)
+					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
 					timeout = 180
 					try:
 						mysql.sendline("STOP SLAVE;")
@@ -952,19 +953,19 @@ class MysqlHandler(ServiceCtlHanler):
 				
 				self._start_service()				
 			
-			mysql = spawn_mysql(ROOT_USER, message.root_password)
+			my_cli = spawn_mysql_cli(ROOT_USER, message.root_password)
 			
 			if not 'snapshot_config' in message.body:
 				self._logger.debug("Stopping slave i/o thread")
-				mysql.sendline("STOP SLAVE IO_THREAD;")
-				mysql.expect("mysql>")
+				my_cli.sendline("STOP SLAVE IO_THREAD;")
+				my_cli.expect("mysql>")
 				self._logger.debug("Slave i/o thread stopped")
 				
 				self._logger.debug("Retrieving current log_file and log_pos")
-				mysql.sendline("SHOW SLAVE STATUS\\G");
-				mysql.expect("mysql>")
+				my_cli.sendline("SHOW SLAVE STATUS\\G");
+				my_cli.expect("mysql>")
 				log_file = log_pos = None
-				for line in mysql.before.split("\n"):
+				for line in my_cli.before.split("\n"):
 					pair = map(str.strip, line.split(": ", 1))
 					if pair[0] == "Master_Log_File":
 						log_file = pair[1]
@@ -979,7 +980,7 @@ class MysqlHandler(ServiceCtlHanler):
 				log_file=log_file, 
 				log_pos=log_pos, 
 				timeout=self._change_master_timeout,
-				spawn=mysql
+				my_cli=my_cli
 			)
 				
 			self._logger.debug("Replication switched")
@@ -1260,7 +1261,7 @@ class MysqlHandler(ServiceCtlHanler):
 				self._start_service()
 			
 			# Lock tables
-			sql = spawn_mysql(root_user, root_password)
+			sql = spawn_mysql_cli(root_user, root_password)
 			sql.sendline('FLUSH TABLES WITH READ LOCK;')
 			sql.expect('mysql>')
 			system2('sync', shell=True)
@@ -1414,64 +1415,72 @@ class MysqlHandler(ServiceCtlHanler):
 
 
 	def _change_master(self, host, user, password, log_file, log_pos, 
-					spawn=None, mysql_user=None, mysql_password=None, 
+					my_cli=None, mysql_user=None, mysql_password=None, 
 					connect_retry=15, timeout=None):
-		spawn = spawn or spawn_mysql(mysql_user, mysql_password)
-		self._logger.info("Changing replication master to host %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
+		my_cli = my_cli or spawn_mysql_cli(mysql_user, mysql_password)
+		self._logger.info("Changing replication Master to server %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
 		
 		# Changing replication master
-		spawn.sendline('STOP SLAVE;')
-		spawn.expect('mysql>')
-		spawn.sendline('CHANGE MASTER TO MASTER_HOST="%(host)s", \
+		my_cli.sendline('STOP SLAVE;')
+		my_cli.expect('mysql>')
+		my_cli.sendline('CHANGE MASTER TO MASTER_HOST="%(host)s", \
 						MASTER_USER="%(user)s", \
 						MASTER_PASSWORD="%(password)s", \
 						MASTER_LOG_FILE="%(log_file)s", \
 						MASTER_LOG_POS=%(log_pos)s, \
 						MASTER_CONNECT_RETRY=%(connect_retry)s;' % vars())
-		spawn.expect('mysql>')
+		my_cli.expect('mysql>')
 		
 		# Starting slave
-		spawn.sendline('START SLAVE;')
-		spawn.expect('mysql>')
-		status = spawn.before
+		my_cli.sendline('START SLAVE;')
+		my_cli.expect('mysql>')
+		status = my_cli.before
 		if re.search(re.compile('ERROR', re.MULTILINE), status):
 			raise HandlerError('Cannot start mysql slave: %s' % status)
 		
 		def slave_status():
-			spawn.sendline('SHOW SLAVE STATUS;')
-			spawn.expect('mysql>')
-			status = spawn.before.split('\r\n')[4].split('|')
-			return (
-				# io status
-				status[11].strip(),
-				# sql status
-				status[12].strip(),
-				# error 1
-				status[17].strip(),
-				# error 2
-				status[18].strip()
-			)
+			my_cli.sendline('SHOW SLAVE STATUS\G')
+			my_cli.expect('mysql>')
+			out = my_cli.before
+			lines = map(string.strip, out.strip().split('\r\n')[2:-1])
+			return dict(map(string.strip, line.split(':', 1)) for line in lines)
+
 
 		try:
 			time_until = time.time() + timeout
 			status = None
 			while time.time() <= time_until:
 				status = slave_status()
-				if status[0:2] == ('Yes', 'Yes'):
+				if status['Slave_IO_Running'] == 'Yes' and \
+					status['Slave_SQL_Running'] == 'Yes':
 					break
 				time.sleep(5)
 			else:
 				if status:
-					if status[0] != 'Yes':
-						err = 'IO Error while starting mysql slave'
-					else:
-						err = 'SQL Error while starting mysql slave' 
-					err = str(err+': %s %s') % status[-2:]
-					raise HandlerError(err)
+					if not status['Last_Error']:
+						logfile = firstmatched(lambda p: os.path.exists(p), 
+											('/var/log/mysqld.log', '/var/log/mysql.log'))
+						if logfile:
+							gotcha = '[ERROR] Slave I/O thread: '
+							size = os.path.getsize(logfile)
+							fp = open(logfile, 'r')
+							try:
+								fp.seek(max((0, size - 8192)))
+								lines = fp.read().split('\n')
+								for line in lines:
+									if gotcha in line:
+										status['Last_Error'] = line.split(gotcha)[-1]
+							finally:
+								fp.close()
+					
+					raise HandlerError("Cannot change replication Master server to '%s'. " 
+									+ "Slave_IO_Running: %s, Slave_SQL_Running: %s, Last_Errno: %d, Last_Error: '%s'",
+									host, status['Slave_IO_Running'], status['Slave_SQL_Running'],
+									status['Last_Errno'], status['Last_Error'])
 				else:
 					raise HandlerError('Cannot change replication master to %s' % (host))
 		finally:
-			spawn.close()
+			my_cli.close()
 				
 		self._logger.debug('Replication master is changed to host %s', host)		
 
@@ -1556,13 +1565,7 @@ class MysqlHandler(ServiceCtlHanler):
 _mycnf = None
 
 
-def _spawn_mysqldump(args, user, password=None):
-	try:
-		pass
-	except:
-		pass
-
-def spawn_mysql(user, password=None):
+def spawn_mysql_cli(user, password=None):
 	try:
 		exp = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
 		exp.expect('Enter password:')
