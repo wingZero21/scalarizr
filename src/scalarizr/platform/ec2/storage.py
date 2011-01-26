@@ -17,7 +17,6 @@ import logging
 import urlparse
 import string
 
-from boto import connect_ec2, connect_s3
 from boto.s3.key import Key
 from boto.exception import BotoServerError, S3ResponseError
 from scalarizr.util import firstmatched
@@ -57,11 +56,12 @@ class EbsVolumeProvider(VolumeProvider):
 		@param snapshot_id: Snapshot id
 		'''
 		ebs_vol = None
+		pl = bus.platform		
 		try:	
-			conn = connect_ec2()
+			conn = pl.new_ec2_conn()
 		except AttributeError:
 			conn = None
-		pl = bus.platform
+
 		
 		if conn:
 			# Find free devname			
@@ -156,13 +156,15 @@ class EbsVolumeProvider(VolumeProvider):
 		return self._create(**kwargs)
 
 	def create_snapshot(self, vol, snap):
-		conn = connect_ec2()
+		pl = bus.platform
+		conn = pl.new_ec2_conn()
 		ebs_snap = conn.create_snapshot(vol.id, snap.description)
 		snap.id = ebs_snap.id
 		return snap
 
 	def get_snapshot_state(self, snap):
-		conn = connect_ec2()
+		pl = bus.platform
+		conn = pl.new_ec2_conn()
 		state = conn.get_all_snapshots((snap.id,))[0].status
 		if state == 'creating':
 			state = Snapshot.CREATED
@@ -174,7 +176,8 @@ class EbsVolumeProvider(VolumeProvider):
 		'''
 		super(EbsVolumeProvider, self).destroy(vol)
 		try:
-			conn = connect_ec2()
+			pl = bus.platform
+			conn = pl.new_ec2_conn()
 		except AttributeError:
 			pass
 		else:
@@ -188,7 +191,8 @@ class EbsVolumeProvider(VolumeProvider):
 		super(EbsVolumeProvider, self).detach(vol)
 		
 		try:
-			conn = connect_ec2()
+			pl = bus.platform
+			conn = pl.new_ec2_conn()
 			vol.detached = True			
 		except AttributeError:
 			pass
@@ -294,7 +298,8 @@ class S3TransferProvider(TransferProvider):
 		return self._bucket
 	
 	def _get_connection(self):
-		return connect_s3()
+		pl = bus.platform
+		return pl.connect_s3()
 	
 	def _format_path(self, bucket, key):
 		return '%s://%s/%s' % (self.schema, bucket, key)
