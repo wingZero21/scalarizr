@@ -6,11 +6,13 @@ Created on Jan 6, 2011
 
 from .. import system
 
+import os
+
 LOSETUP_EXEC = '/sbin/losetup'
 
 def mkloop(filename, device=None, size=None, quick=False):
 	''' Create loop device '''
-	if size:
+	if size and not os.path.exists(filename):
 		cmd = ['dd', 'if=/dev/zero', 'of=%s' % filename, 'bs=1M']
 		if quick:
 			cmd.extend(['seek=%d' % (size - 1,), 'count=1'])

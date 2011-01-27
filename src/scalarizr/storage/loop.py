@@ -52,27 +52,28 @@ class LoopVolumeProvider(VolumeProvider):
 				raise StorageError('You must specify size of new loop device or existing file.')
 			
 			if not file:
-				file = '/mnt/loopdev' + time.strftime('%Y%m%d%H%M%S')			
-			try:
-				size = int(size)
-			except ValueError:
-				if isinstance(size, basestring) and '%root' in size.lower():
-					# Getting size in percents
-					try:
-						size_pct = int(size.lower().replace('%root', ''))
-					except:
+				file = '/mnt/loopdev' + time.strftime('%Y%m%d%H%M%S')
+			if not os.path.exists(file):			
+				try:
+					size = int(size)
+				except ValueError:
+					if isinstance(size, basestring) and '%root' in size.lower():
+						# Getting size in percents
+						try:
+							size_pct = int(size.lower().replace('%root', ''))
+						except:
+							raise StorageError('Incorrect size format: %s' % size)
+						# Retrieveing root device size and usage 
+						root_size, used_pct = (system(('df', '-B', '1024', '/'))[0].splitlines()[1].split()[x] for x in (1,4))
+						root_size = int(root_size) / 1024
+						used_pct = int(used_pct[:-1])
+						
+						if size_pct > (100 - used_pct):
+							raise StorageError('No enough free space left on device.')
+						# Calculating loop device size in Mb
+						size = (root_size / 100) * size_pct
+					else:
 						raise StorageError('Incorrect size format: %s' % size)
-					# Retrieveing root device size and usage 
-					root_size, used_pct = (system(('df', '-B', '1024', '/'))[0].splitlines()[1].split()[x] for x in (1,4))
-					root_size = int(root_size) / 1024
-					used_pct = int(used_pct[:-1])
-					
-					if size_pct > (100 - used_pct):
-						raise StorageError('No enough free space left on device.')
-					# Calculating loop device size in Mb
-					size = (root_size / 100) * size_pct
-				else:
-					raise StorageError('Incorrect size format: %s' % size)
 			
 			kwargs['file']	= file
 			kwargs['device'] = mkloop(file, device=device, size=size, quick=not kwargs.get('zerofill'))
