@@ -25,6 +25,7 @@ import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
+from scalarizr.storage.util.loop import listloop
 
 
 class ScalarizrError(BaseException):
@@ -174,6 +175,13 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 	mtab = fstool.Mtab()
 	if mtab.contains(mpoint=mpoint): # if privated_image exists
 		logger.debug("private.d already mounted to %s", mpoint)
+		return
+	loopdevs = listloop()
+	if privated_image in loopdevs.values():
+		loopdevs = dict(zip(loopdevs.values(), loopdevs.keys()))
+		loop = loopdevs[privated_image]
+		logger.debug('%s already associated with %s. mounting', privated_image, loop)		
+		fstool.mount(loop, mpoint)
 		return
 	
 	if not os.path.exists(mpoint):
