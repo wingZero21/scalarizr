@@ -206,14 +206,24 @@ class FarmUI:
 	@property		
 	@_login
 	def state(self):
+		server_info_url = urllib.basejoin(self.sel.browserURL, 'farms/xListViewFarms/')	
+		http = httplib2.Http()
+		body = urllib.urlencode({'id' : self.farm_id, 'limit' : '10'})
+		headers = {'Content-type': 'application/x-www-form-urlencoded',
+                        'Cookie' : self.sel.get_cookie()}
+		
+		content = http.request(server_info_url, 'POST', body=body, headers=headers)
+		data = json.loads(content[1])
+		return data['data'][0]['status_txt'].lower()
 	
-		self.sel.open('/farms_view.php?farmid=%s' % self.farm_id)
+		"""
+		self.sel.open('#/farms/view?id=%s' % self.farm_id)
 		#self.sel.wait_for_page_to_load(30000)
 		#wait_until(lambda: self.sel.is_element_present('//html/body/div[@class="ext-el-mask-msg x-mask-loading"]/div'), timeout=10, sleep=0.5)
 		wait_until(lambda: self.sel.is_element_present('//dt[@dataindex="status"]/em/span'), timeout=10, sleep=0.5)
 		time.sleep(0.5)
 		return self.sel.get_text('//dt[@dataindex="status"]/em/span').lower()
-	
+		"""
 	@_login
 	def launch(self):
 	
