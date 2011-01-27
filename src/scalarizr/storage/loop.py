@@ -75,7 +75,7 @@ class LoopVolumeProvider(VolumeProvider):
 					raise StorageError('Incorrect size format: %s' % size)
 			
 			kwargs['file']	= file
-			kwargs['device'] = mkloop(file, device=device, size=size, not kwargs.get('zerofill'))
+			kwargs['device'] = mkloop(file, device=device, size=size, quick=not kwargs.get('zerofill'))
 			
 		return super(LoopVolumeProvider, self).create(**kwargs)
 	
