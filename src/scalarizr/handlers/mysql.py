@@ -562,54 +562,49 @@ class MysqlHandler(ServiceCtlHanler):
 			iptables = IpTables()
 			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
 		
-		elif self._cnf.state == ScalarizrState.RUNNING \
-			and int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
+		elif self._cnf.state == ScalarizrState.RUNNING:
+			# Creating self.storage_vol object from configuration
+			storage_conf = Storage.restore_config(self._volume_config_path)
+			self.storage_vol = Storage.create(storage_conf)
 			
-			def check_mysql_pass(mysql_pexp, user, password):
-							
-				def hash_mysql_password(str):
-					pass1 = hashlib.sha1(str).digest()
-					pass2 = hashlib.sha1(pass1).hexdigest()
-					return pass2.upper()
-				
-				hashed_pass = hash_mysql_password(password)
-				
-				mysql_pexp.sendline("SELECT password FROM mysql.user WHERE User = '%s' \G" % user)
-				mysql_pexp.expect('mysql>', timeout=10)
-				out = mysql_pexp.before
-				passwords = re.findall('password:\s+\*(\w+)', out)
-				
-				if not passwords or not all(map(lambda x: x == hashed_pass, passwords)):
-					raise Exception("Password for user %s doesn't match." % user)
+			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
+				def check_mysql_pass(mysql_pexp, user, password):
+								
+					def hash_mysql_password(str):
+						pass1 = hashlib.sha1(str).digest()
+						pass2 = hashlib.sha1(pass1).hexdigest()
+						return pass2.upper()
 					
-			self._logger.debug("Checking Scalr's MySQL system users presence.")
-			
-			root_password, repl_password, stat_password = self._get_ini_options(
-					OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD) 
-			try:
-				mysql = pexpect.spawn('/usr/bin/mysql -u ' + ROOT_USER + ' -p')
-				mysql.expect('Enter password:', timeout=10)
-				mysql.sendline(root_password)
-				mysql.expect('mysql>', timeout=10)
-				check_mysql_pass(mysql, REPL_USER, repl_password)
-				check_mysql_pass(mysql, STAT_USER, stat_password)
-				self._logger.debug("Scalr's MySQL system users are present. Passwords are correct.")				
-			except:
-				self._logger.warning("Scalr's MySQL system users were changed. Recreating.")
-				self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER,
-									  root_password, repl_password, stat_password)
-			finally:
-				mysql.close()
-		
-		
-	def on_start(self):
-		if self._cnf.state == ScalarizrState.RUNNING:
-			if not self.storage_vol:
-				# Creating self.storage_vol object from configuration
-				storage_conf = Storage.restore_config(self._volume_config_path)
-				self.storage_vol = Storage.create(storage_conf)
-		
+					hashed_pass = hash_mysql_password(password)
+					
+					mysql_pexp.sendline("SELECT password FROM mysql.user WHERE User = '%s' \G" % user)
+					mysql_pexp.expect('mysql>', timeout=10)
+					out = mysql_pexp.before
+					passwords = re.findall('password:\s+\*(\w+)', out)
+					
+					if not passwords or not all(map(lambda x: x == hashed_pass, passwords)):
+						raise Exception("Password for user %s doesn't match." % user)
+						
+				self._logger.debug("Checking Scalr's MySQL system users presence.")
 				
+				root_password, repl_password, stat_password = self._get_ini_options(
+						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD) 
+				try:
+					mysql = pexpect.spawn('/usr/bin/mysql -u ' + ROOT_USER + ' -p')
+					mysql.expect('Enter password:', timeout=10)
+					mysql.sendline(root_password)
+					mysql.expect('mysql>', timeout=10)
+					check_mysql_pass(mysql, REPL_USER, repl_password)
+					check_mysql_pass(mysql, STAT_USER, stat_password)
+					self._logger.debug("Scalr's MySQL system users are present. Passwords are correct.")				
+				except:
+					self._logger.warning("Scalr's MySQL system users were changed. Recreating.")
+					self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER,
+										  root_password, repl_password, stat_password)
+				finally:
+					mysql.close()
+		
+			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
 					message.name == MysqlMessages.NEW_MASTER_UP

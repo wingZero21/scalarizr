@@ -972,7 +972,7 @@ if disttool.is_linux():
 		def _create_image(self):
 			self._logger.debug('Creating image file %s', self.path)
 
-			mkloop(self.path, self._size, quick=True)
+			mkloop(self.path, size=self._size, quick=True)
 			#system("dd if=/dev/zero of='%s' bs=1M count=1 seek=%s" % (self.path, self._size - 1))
 			self._logger.debug('Image file %s created', self.path)			
 			

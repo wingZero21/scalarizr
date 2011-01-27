@@ -8,7 +8,7 @@ from .. import system
 
 LOSETUP_EXEC = '/sbin/losetup'
 
-def mkloop(filename, size=None, quick=False):
+def mkloop(filename, device=None, size=None, quick=False):
 	''' Create loop device '''
 	if size:
 		cmd = ['dd', 'if=/dev/zero', 'of=%s' % filename, 'bs=1M']
@@ -17,9 +17,10 @@ def mkloop(filename, size=None, quick=False):
 		else:
 			cmd.extend(['count=%d' % size])
 		system(cmd)
-	devname = system(('/sbin/losetup', '-f'))[0].strip()
-	system((LOSETUP_EXEC, devname, filename))
-	return devname
+	if not device:
+		device = system(('/sbin/losetup', '-f'))[0].strip()
+	system((LOSETUP_EXEC, device, filename))
+	return device
 
 def listloop():
 	ret = {}
