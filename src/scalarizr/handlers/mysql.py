@@ -42,6 +42,13 @@ CNF_NAME = BEHAVIOUR
 
 _logger = logging.getLogger(__name__)
 
+# TODO: use these global settings anywhere. update them once from mysql.ini 
+mysqld_path = None
+mysql_path = None
+mysqldump_path = None
+mycnf_path = None
+change_master_timeout = 30
+
 class MysqlInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
 		if disttool.is_redhat_based():
@@ -522,9 +529,11 @@ class MysqlHandler(ServiceCtlHanler):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
-		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
-		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
-		self._change_master_timeout = int(ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT) or '30')
+		self._mycnf_path = globals()['mycnf_path'] = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
+		self._mysqld_path = globals()['mysqld_path'] = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
+		globals()['mysqldump_path'] = ini.get(CNF_SECTION, OPT_MYSQLDUMP_PATH)
+		globals()['mysql_path'] = ini.get(CNF_SECTION, OPT_MYSQL_PATH)
+		self._change_master_timeout = globals()['change_master_timeout'] = int(ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT) or '30')
 
 		
 		self._storage_path = STORAGE_PATH
@@ -584,26 +593,25 @@ class MysqlHandler(ServiceCtlHanler):
 					passwords = re.findall('password:\s+\*(\w+)', out)
 					
 					if not passwords or not all(map(lambda x: x == hashed_pass, passwords)):
-						raise Exception("Password for user %s doesn't match." % user)
+						raise ValueError("Password for user %s doesn't match." % user)
 						
 				self._logger.debug("Checking Scalr's MySQL system users presence.")
-				
 				root_password, repl_password, stat_password = self._get_ini_options(
 						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD) 
+				mysqld = spawn_mysqld()
+				self._ping_mysql()
 				try:
-					mysql = pexpect.spawn('/usr/bin/mysql -u ' + ROOT_USER + ' -p')
-					mysql.expect('Enter password:', timeout=10)
-					mysql.sendline(root_password)
-					mysql.expect('mysql>', timeout=10)
-					check_mysql_pass(mysql, REPL_USER, repl_password)
-					check_mysql_pass(mysql, STAT_USER, stat_password)
+					my_cli = spawn_mysql_cli()
+					check_mysql_pass(my_cli, ROOT_USER, root_password)
+					check_mysql_pass(my_cli, REPL_USER, repl_password)
+					check_mysql_pass(my_cli, STAT_USER, stat_password)
 					self._logger.debug("Scalr's MySQL system users are present. Passwords are correct.")				
-				except:
+				except ValueError:
 					self._logger.warning("Scalr's MySQL system users were changed. Recreating.")
 					self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER,
 										  root_password, repl_password, stat_password)
 				finally:
-					mysql.close()
+					term_mysqld(mysqld)
 		
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -618,11 +626,8 @@ class MysqlHandler(ServiceCtlHanler):
 	def on_Mysql_CreatePmaUser(self, message):
 		try:
 			if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
-				raise HandlerError('Cannot add pma user on slave')			
-			try:
-				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
-			except Exception, e:
-				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
+				raise HandlerError('Cannot add pma user on slave. It should be a Master server')
+			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
 			pma_server_ip = message.pma_server_ip
 			farm_role_id  = message.farm_role_id
 			
@@ -630,16 +635,9 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Connecting to mysql 
 			my_cli = spawn_mysql_cli(ROOT_USER, root_password)
-			my_cli.sendline('SELECT VERSION();')
-			my_cli.expect('mysql>')
-			mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), my_cli.before)
-
-			# Determine mysql server version 
-			if mysql_ver_str:
-				mysql_ver = version.StrictVersion(mysql_ver_str.group(0))
-				priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
-			else:
-				raise HandlerError("Cannot extract mysql version from string '%s'" % my_cli.before)
+			
+			mysql_ver = version.StrictVersion(get_mysql_version(my_cli))
+			priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 			
 			# Generating password for pma user
 			pma_password = re.sub('[^\w]','', cryptotool.keygen(20))
@@ -1319,46 +1317,49 @@ class MysqlHandler(ServiceCtlHanler):
 		self._mysql_config.set('mysqld/datadir', '/var/lib/mysql')
 		self._mysql_config.remove('mysqld/log_bin')
 	
-	def _add_mysql_users(self, root_user, repl_user, stat_user, root_pass=None, repl_pass=None, stat_pass=None):
-		self._stop_service()
+	def _add_mysql_users(self, root_user, repl_user, stat_user, root_pass=None, repl_pass=None, stat_pass=None, mysqld=None, my_cli=None):
 		self._logger.info("Adding mysql system users")
-
-		myd = self._start_mysql_skip_grant_tables()
-		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
-		out = myclient.communicate('SELECT VERSION();')[0]
-		mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), out)
-		if mysql_ver_str:
-			mysql_ver = version.StrictVersion(mysql_ver_str.group(0))
-			priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
-		else:
-			raise HandlerError("Cannot extract mysql version from string '%s'" % out)
-	
-		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+		should_term_mysqld = False
+		if not mysqld:
+			self._stop_service()
+			mysqld = spawn_mysqld()
+			self._ping_mysql()
+			should_term_mysqld = True			
+			
+		my_cli = my_cli or spawn_mysql_cli()
+		
+		mysql_ver = version.StrictVersion(get_mysql_version(my_cli))
+		priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 		
 		# Generate passwords
-		root_password = root_pass if root_pass else re.sub('[^\w]','', cryptotool.keygen(20))
-		repl_password = repl_pass if repl_pass else re.sub('[^\w]','', cryptotool.keygen(20))
-		stat_password = stat_pass if stat_pass else re.sub('[^\w]','', cryptotool.keygen(20))
+		root_password = root_pass if root_pass else re.sub('[^\w]', '', cryptotool.keygen(20))
+		repl_password = repl_pass if repl_pass else re.sub('[^\w]', '', cryptotool.keygen(20))
+		stat_password = stat_pass if stat_pass else re.sub('[^\w]', '', cryptotool.keygen(20))
 		
-		#root_password, repl_password, stat_password = map(lambda x: re.sub('[^\w]','', cryptotool.keygen(20)), range(3))
 		# Delete old users
-		sql = "DELETE FROM mysql.user WHERE User in ('%s', '%s', '%s');" % (root_user, repl_user, stat_user)
+		my_cli.sendline("DELETE FROM mysql.user WHERE User in ('%s', '%s', '%s');" % (root_user, repl_user, stat_user))
+		my_cli.expect('mysql>')
 		
 		# Add users
-		# scalr@localhost allow all
-		sql += "INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
-		# scalr_repl@% allow Repl_slave_priv
-		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_slave_priv) VALUES ('%','"+repl_user+"',PASSWORD('"+repl_password+"'),'Y');"
-		# scalr_stat@% allow Repl_client_priv
-		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');"
 		
-		sql += " FLUSH PRIVILEGES;"
-		out,err = myclient.communicate(sql)
-		if err:
-			raise HandlerError('Cannot add mysql users: %s', err)
+		# 'scalr'@'localhost' allow all
+		my_cli.sendline("INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");")
+		my_cli.expect('mysql>')
+
+		# 'scalr_repl'@'%' allow Repl_slave_priv
+		my_cli.sendline("INSERT INTO mysql.user (Host, User, Password, Repl_slave_priv) VALUES ('%','"+repl_user+"',PASSWORD('"+repl_password+"'),'Y');")
+		my_cli.expect('mysql>')
+
+		# 'scalr_stat'@'%' allow Repl_client_priv
+		my_cli.sendline("INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');")
+		my_cli.expect('mysql>')
 		
-		os.kill(myd.pid, signal.SIGTERM)
-		time.sleep(3)
+		my_cli.sendline("FLUSH PRIVILEGES;")
+		my_cli.expect('mysql>')
+		
+		if should_term_mysqld:
+			term_mysqld(mysqld)
+		
 		self._start_service()
 
 		self._update_config(dict(
@@ -1490,17 +1491,6 @@ class MysqlHandler(ServiceCtlHanler):
 		for sock in self._init_script.socks:
 			wait_sock(sock)
 	
-	def _start_mysql_skip_grant_tables(self):
-		if os.path.exists(self._mysqld_path) and os.access(self._mysqld_path, os.X_OK):
-			self._logger.debug("Starting mysql server with --skip-grant-tables")
-			myd = Popen([self._mysqld_path, '--skip-grant-tables'], stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds = True)
-		else:
-			self._logger.error("MySQL daemon '%s' doesn't exists", self._mysqld_path)
-			return False
-		self._ping_mysql()
-		
-		return myd
-			
 	def _move_mysql_dir(self, directive=None, dirname = None):
 
 		# Retrieveing mysql user from passwd		
@@ -1564,18 +1554,40 @@ class MysqlHandler(ServiceCtlHanler):
 		self._mysql_config.write(self._mycnf_path)
 
 
-_mycnf = None
-
-
-def spawn_mysql_cli(user, password=None):
+def spawn_mysqld():
 	try:
-		exp = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
-		exp.expect('Enter password:')
-		exp.sendline(password or '')
+		return pexpect.spawn(mysqld_path + ' --skip-grant-tables')
+	except pexpect.ExceptionPexpect, e:
+		raise HandlerError('Cannot start mysqld. Error: %s' % e)
+		pass
+
+def term_mysqld(mysqld):
+	mysqld.sendintr()
+	mysqld.close()
+	wait_until(lambda: not os.path.exists('/proc/' + mysqld.pid))
+
+def spawn_mysql_cli(user=None, password=None):
+	try:
+		cmd = mysql_path
+		if user:
+			cmd += ' -u ' + user
+		if password:
+			cmd += ' -p'
+		exp = pexpect.spawn(cmd)
+		
+		if password:
+			exp.expect('Enter password:')
+			exp.sendline(password or '')
+			
 		exp.expect('mysql>')
 		return exp
 	except pexpect.ExceptionPexpect, e:
-		raise HandlerError('Cannot start mysql client tool: %s' % e)
+		raise HandlerError('Cannot start mysql client tool. Error: %s' % e)
+
+def get_mysql_version(my_cli):
+	my_cli.sendline('SELECT VERSION();')
+	my_cli.expect('mysql>')
+	return my_cli.before.strip().split('\r\n')[4].split('|')[1].strip()
 
 def _add_apparmor_rules(directory):
 	if not os.path.exists('/etc/init.d/apparmor'):
