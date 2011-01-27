@@ -132,6 +132,8 @@ class EphVolumeProvider(VolumeProvider):
 		initialized = False
 		if 'device' in kwargs:
 			try:
+				self._lvm.pv_scan()
+				self._lvm.change_vg(kwargs['vg'], available=True)
 				lvi = self._lvm.lv_info(kwargs['device'])
 				gvi = self._lvm.vg_info(kwargs['vg'])
 				initialized = lvi.path == kwargs['device'] and gvi.vg == kwargs['vg']

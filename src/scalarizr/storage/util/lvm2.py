@@ -30,6 +30,7 @@ try:
 	VGS = whereis('vgs')[0]
 	LVS = whereis('lvs')[0]
 	
+	PVSCAN = whereis('pvscan')[0]
 	PVCREATE = whereis('pvcreate')[0]
 	VGCREATE = whereis('vgcreate')[0]
 	LVCREATE = whereis('lvcreate')[0]
@@ -167,6 +168,9 @@ class Lvm2:
 		if info:
 			return info
 		raise LookupError('Physical volume %s not found' % ph_volume)
+
+	def pv_scan(self):
+		system((PVSCAN,), error_text='Physical volumes scan failed')
 
 	def vg_info(self, group):
 		group = os.path.basename(group)

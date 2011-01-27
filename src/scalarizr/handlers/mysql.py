@@ -565,6 +565,7 @@ class MysqlHandler(ServiceCtlHanler):
 			# Creating self.storage_vol object from configuration
 			storage_conf = Storage.restore_config(self._volume_config_path)
 			self.storage_vol = Storage.create(storage_conf)
+			self.storage_vol.mount()
 			
 			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
 				def check_mysql_pass(mysql_pexp, user, password):
