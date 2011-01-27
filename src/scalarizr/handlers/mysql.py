@@ -1476,10 +1476,12 @@ class MysqlHandler(ServiceCtlHanler):
 							finally:
 								fp.close()
 					
-					raise HandlerError("Cannot change replication Master server to '%s'. " 
-									+ "Slave_IO_Running: %s, Slave_SQL_Running: %s, Last_Errno: %d, Last_Error: '%s'",
-									host, status['Slave_IO_Running'], status['Slave_SQL_Running'],
-									status['Last_Errno'], status['Last_Error'])
+					msg = "Cannot change replication Master server to '%s'. "  \
+							"Slave_IO_Running: %s, Slave_SQL_Running: %s, " \
+							"Last_Errno: %d, Last_Error: '%s'" % (
+							host, status['Slave_IO_Running'], status['Slave_SQL_Running'],
+							status['Last_Errno'], status['Last_Error'])
+					raise HandlerError(msg)
 				else:
 					raise HandlerError('Cannot change replication master to %s' % (host))
 		finally:
