@@ -35,12 +35,11 @@ class RackspaceRebundleHandler(Handler):
 			self._logger.info('Lookup server %s on CloudServers', pl.get_public_ip())
 			for server in servers:
 				if server.public_ip == pl.get_public_ip():
-					server_id = server.id
 					break
 			else:
 				raise HandlerError('Server %s not found in servers list' % pl.get_public_ip())
 			
-			self._logger.debug('Found server %s. server id: %s', pl.get_public_ip(), server_id)
+			self._logger.debug('Found server %s. server id: %s', pl.get_public_ip(), server.id)
 			cnf = bus.cnf
 			old_state = cnf.state
 			cnf.state = ScalarizrState.REBUNDLING
@@ -48,14 +47,14 @@ class RackspaceRebundleHandler(Handler):
 			try:
 				image_manager = ImageManager(con)
 				
-				self._logger.info("Creating server image. server id: %s, image name: '%s'")
-				image = image_manager.create(image_name, server_id)
+				self._logger.info("Creating server image. server id: %s, image name: '%s'", server.id, image_name)
+				image = image_manager.create(image_name, server.id)
 				self._logger.debug('Image %s created', image.id)
 				
 				self._logger.info('Checking that image %s is completed', image.id)
 				wait_until(hasattr, args=(image, 'progress'), sleep=5, logger=self._logger)
 				wait_until(lambda: image_manager.get(image.id).progress == 100, sleep=30, logger=self._logger)
-				self._logger.info('Image %s completed and available for use!')
+				self._logger.info('Image %s completed and available for use!', image.id)
 			finally:
 				cnf.state = old_state
 			
