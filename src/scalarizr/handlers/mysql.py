@@ -894,7 +894,7 @@ class MysqlHandler(ServiceCtlHanler):
 				tx_complete = True
 				
 			except (Exception, BaseException), e:
-				self._logger.error("Promote to master failed. %s", e)
+				self._logger.exception('Slave -> Master promotion failed', e)
 				if new_storage_vol:
 					new_storage_vol.detach()
 				# Get back slave storage
