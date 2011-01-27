@@ -23,6 +23,7 @@ import binascii
 import cStringIO
 import threading
 import zlib
+from scalarizr.storage.util.lvm2 import Lvm2Error
 
 class EphConfig(VolumeConfig):
 	type = 'eph'
@@ -137,7 +138,7 @@ class EphVolumeProvider(VolumeProvider):
 				lvi = self._lvm.lv_info(kwargs['device'])
 				gvi = self._lvm.vg_info(kwargs['vg'])
 				initialized = lvi.path == kwargs['device'] and gvi.vg == kwargs['vg']
-			except LookupError:
+			except (LookupError, Lvm2Error):
 				pass
 		
 		if not initialized:
