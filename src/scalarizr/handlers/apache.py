@@ -205,13 +205,12 @@ class ApacheHandler(ServiceCtlHanler):
 	def on_init(self):
 		bus.on(
 			start = self.on_start, 
-			before_host_up = self.on_before_host_up
+			before_host_up = self.on_before_host_up,
+			before_reboot_finish = self.on_before_reboot_finish
 		)
 		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
-			iptables = IpTables()
-			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))
-
+			self._insert_iptables_rules()
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -231,6 +230,9 @@ class ApacheHandler(ServiceCtlHanler):
 		self._rpaf_reload()
 		bus.fire('service_configured', service_name=SERVICE_NAME)
 
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
+
 	def on_HostUp(self, message):
 		if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
 			self._rpaf_modify_proxy_ips([message.local_ip], operation='add')
@@ -246,6 +248,10 @@ class ApacheHandler(ServiceCtlHanler):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
 		self._reload_service()
+		
+	def _insert_iptables_rules(self):
+		iptables = IpTables()
+		iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
 		
 	def _rpaf_modify_proxy_ips(self, ips, operation=None):
 		self._logger.debug('Modify RPAFproxy_ips (operation: %s, ips: %s)', operation, ','.join(ips))

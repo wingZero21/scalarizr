@@ -556,16 +556,17 @@ class MysqlHandler(ServiceCtlHanler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
+		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
-			iptables = IpTables()
-			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
+			self._insert_iptables_rules()
 		
 		elif self._cnf.state == ScalarizrState.RUNNING:
 			# Creating self.storage_vol object from configuration
 			storage_conf = Storage.restore_config(self._volume_config_path)
 			self.storage_vol = Storage.create(storage_conf)
-			self.storage_vol.mount()
+			if not self.storage_vol.mounted():
+				self.storage_vol.mount()
 			
 			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
 				def check_mysql_pass(mysql_pexp, user, password):
@@ -990,6 +991,8 @@ class MysqlHandler(ServiceCtlHanler):
 		"""
 		self._stop_service()
 
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
 
 	def on_host_init_response(self, message):
 		"""
@@ -1218,6 +1221,10 @@ class MysqlHandler(ServiceCtlHanler):
 			else:
 				raise
 		return vol
+	
+	def _insert_iptables_rules(self):
+		iptables = IpTables()
+		iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
 	
 	def _get_ini_options(self, *args):
 		ret = []

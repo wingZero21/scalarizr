@@ -192,12 +192,12 @@ class NginxHandler(ServiceCtlHanler):
 	def on_init(self):
 		bus.on(
 			start = self.on_start, 
-			before_host_up = self.on_before_host_up
+			before_host_up = self.on_before_host_up,
+			before_reboot_finish = self.on_before_reboot_finish
 		)
 		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
-			iptables = IpTables()
-			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
+			self._insert_iptables_rules()
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -212,12 +212,13 @@ class NginxHandler(ServiceCtlHanler):
 			self._update_vhosts()		
 			self._reload_upstream()
 		
-		
 	def on_before_host_up(self, message):
 		self._update_vhosts()		
 		self._reload_upstream()
 		bus.fire('service_configured', service_name=SERVICE_NAME)
-	
+		
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
 	
 	def on_HostUp(self, message):
 		self._reload_upstream()
@@ -354,12 +355,15 @@ class NginxHandler(ServiceCtlHanler):
 
 		bus.fire("nginx_upstream_reload")	
 
+	def _insert_iptables_rules(self, *args, **kwargs):
+		iptables = IpTables()
+		iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
 
 	def _update_vhosts(self):
 		self._logger.debug("Requesting virtual hosts list")
 		received_vhosts = self._queryenv.list_virtual_hosts()
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
-		
+	
 		https_config = ''
 		
 		if received_vhosts:
