@@ -24,7 +24,7 @@ def _credentials(username=None, api_key=None):
 		raise PlatformError('Rackspace API credentials not defined')
 
 def new_cloudserver_conn(username=None, api_key=None):
-	CloudServers(*_credentials(username, api_key))
+	return CloudServers(*_credentials(username, api_key))
 
 def new_cloudfiles_conn(username=None, api_key=None, **kwargs):
 	kwargs = kwargs or dict()
