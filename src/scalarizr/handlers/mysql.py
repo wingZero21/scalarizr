@@ -555,7 +555,6 @@ class MysqlHandler(ServiceCtlHanler):
 	def on_init(self):		
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
-		bus.on("start", self.on_start)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
