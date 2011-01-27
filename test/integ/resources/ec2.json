@@ -105,7 +105,7 @@
 				"root_device_type": 	"ebs"
 			}],
 			"app": [{
-				"role_name":			"szr-apache-unstable-centos55-6",
+				"role_name":			"szr-apache-unstable-centos55-64",
 				"arch":					"x86_64",
 				"root_device_type": 	"ebs"
 			}],
@@ -113,6 +113,15 @@
 				"role_name":			"szr-mysql-unstable-centos55-64",
 				"arch":					"x86_64",
 				"root_device_type": 	"ebs"
+			}],
+			"www"	: [{
+				"role_name" : 			"ROLE_NAME_HERE",
+				"arch"		:			"i386",
+				"root_device_type": 	"ebs"		
+			},	{
+				"role_name" : 			"ROLE_NAME_HERE",
+				"arch"		:			"i386",
+				"root_device_type": 	"instance-store"		
 			}]
 		}		
 	}
