@@ -291,7 +291,7 @@ class FarmUI:
 			else:
 				raise Exception('Timeout after %s sec.' % timeout)
 		except (Exception, BaseException), e:
-			raise FarmUIError("Can't get %s from scalr's interface. %s" % (field_labels[0].lower(), e))
+			raise FarmUIError("Can't get %s from scalr. %s" % (field_labels[0].lower(), e))
 
 	def create_mysql_backup(self):
 		self._open_mysql_status_page()
@@ -331,10 +331,8 @@ class FarmUI:
 		
 		content = http.request(url, 'POST', body=body, headers=headers)
 		data = json.loads(content[1])
-		print data
 		
 		for server in data['data']:
-			print server['status']
 			if not 'Running' == server['status']:
 				continue
 			ip = server['remote_ip']
@@ -571,7 +569,7 @@ class ScalrCtl:
 		if not name in cron_ng_keys:
 			raise Exception('Unknown cronjob %s' % name)
 	
-		cron_php_path = 'cron-ng/cron.php'
+		cron_php_path = 'cron/cron.php' if 'BundleTasksManager' == name else 'cron-ng/cron.php'
 		
 		home_path = config.get('./scalr/home_path')
 		self._logger.info('channel: %s' % type(self.channel))
@@ -588,7 +586,9 @@ class ScalrCtl:
 			
 		job_cmd = 'php -q ' + cron_php_path + ' --%s %s' % (name, farm_str)
 		self._logger.info('Starting cronjob: %s' % job_cmd)
-		out = execute(self.channel, job_cmd, 195)
+
+		out = execute(self.channel, job_cmd, 200)
+
 		log_filename = name + time.strftime('_%d_%b_%H-%M') + '.log'
 		try:
 			fp = open(os.path.join(log_path, log_filename), 'w')

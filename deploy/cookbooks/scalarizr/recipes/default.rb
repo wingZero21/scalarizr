@@ -9,18 +9,28 @@
 case node[:platform]
 when "debian","ubuntu"
 	execute "cd /tmp && wget http://apt.scalr.net/scalr-repository_0.2_all.deb && dpkg -i /tmp/scalr-repository_0.2_all.deb && rm -f /tmp/scalr-repository_0.2_all.deb"
-	execute "echo 'deb http://local.webta.net/apt/dev scalr/' > /etc/apt/sources.list.d/scalr.list"
+	if node[:scalarizr][:dev] == "1"
+		execute "echo 'deb http://local.webta.net/apt/dev scalr/' > /etc/apt/sources.list.d/scalr.list"
+	end
 	execute "apt-get update && apt-get -y install scalarizr-" + node[:scalarizr][:platform]
 when "redhat","centos"
-    cookbook_file "/etc/yum.repos.d/scalr.repo" do
-		source "scalr-rh.repo"
+	cookbook_file "/etc/yum.repos.d/scalr.repo" do
+		if node[:scalarizr][:dev] == "0"
+			source "scalr-rh.repo"
+		else
+			source "scalr-rh-dev.repo"
+		end
 	end		
 	execute "yum -y install scalarizr-" + node[:scalarizr][:platform]
 when "fedora"
-	cookbook_file "/etc/yum.repos.d/scalr.repo" do
+    cookbook_file "/etc/yum.repos.d/scalr.repo" do
         source "scalr-fedora.repo"
     end
     execute "yum -y install scalarizr-" + node[:scalarizr][:platform]
+end
+
+if node[:scalarizr][:dev] == "1"
+	execute "cp /etc/scalr/logging-debug.ini /etc/scalr/logging.ini"
 end
 
 behaviours=node[:scalarizr][:behaviour].join(",")

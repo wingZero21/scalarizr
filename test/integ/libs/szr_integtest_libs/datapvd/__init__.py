@@ -66,6 +66,8 @@ def merge_dicts(a,b):
 			res[key] = b[key]
 		elif dict == type(a[key]):
 			res[key] = merge_dicts(a[key], b[key])
+		elif list == type(a[key]):
+			res[key] = a[key] + b[key]
 		else:
 			res[key] = b[key]
 		del(b[key])

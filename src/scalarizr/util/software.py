@@ -40,7 +40,7 @@ def whereis(name):
 def system_info():
 		
 	def check_module(module):
-		return not system2((modprobe, '-n', module))[-1]
+		return not system2((modprobe, '-n', module), raise_exc=False)[-1]
 	
 	ret = {}
 	ret['software'] = []			

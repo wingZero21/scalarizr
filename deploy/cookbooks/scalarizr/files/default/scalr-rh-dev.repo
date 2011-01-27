@@ -1,0 +1,6 @@
+[scalr] 
+name=scalr
+baseurl=http://local.webta.net/rpm-unstable/rhel/$releasever/$basearch
+enabled=1 
+gpgcheck=0 
+
