@@ -47,7 +47,7 @@ class StartupTest(VirtualTest):
 	def test_startup(self):
 		self.logger.info("Startup Test")
 		
-		self.app_pvd.wait_for_hostup(self.server)		
+		self.nginx_pvd.wait_for_hostup(self.server)		
 		
 		ping_socket(self.server.public_ip, 80, exc_str='Nginx is not running on load balancer')
 		self.logger.info("Nginx running on 80 port")
@@ -64,12 +64,12 @@ class StartupTest(VirtualTest):
 		
 
 class RestartTest(VirtualTest):
-	app_pvd = None
+	nginx_pvd = None
 	
 	def test_restart(self):
 		self.logger.info("Restart Test")
 		
-		self.app_pvd.wait_for_hostup(self.server)
+		self.nginx_pvd.wait_for_hostup(self.server)
 		
 		self.logger.info("Logging on balancer through ssh")
 		ssh = self.server.ssh()
@@ -167,7 +167,7 @@ class HttpsTest(VirtualTest):
 		upstream_log = self.server.log.head()
 		upstream_log.expect("VhostReconfigure")
 		self.logger.info('got VhostReconfigure')
-		out = system2('/usr/bin/openssl s_client -connect %s:443' % self.server.public_ip)
+		out = system2('/usr/bin/openssl s_client -connect %s:443' % self.server.public_ip, shell=True)
 		if -1 == string.find(out, '1 s:/'):
 			raise Exception('CA file probably ignored or simply does not exist')
 		self.logger.info('cert OK.')
@@ -178,48 +178,58 @@ class RebundleTest(VirtualTest):
 	server = None
 	app_pvd = None
 	
+	def _is_bundle_process_complete(self):
+		self.scalrctl.exec_cronjob('BundleTasksManager', server_id=self.server.scalr_id)
+		status = self.pvd.farmui.get_bundle_status(self.server.scalr_id)
+		if status == 'failed':
+			raise BaseException('Bundle task failed')
+		return  status == 'success'
+	
 	def test_rebundle(self):
 		self.logger.info("Rebundle Test")
-		self.logger.debug("Waiting for HostUp")
+		self.logger.info("Waiting for HostUp")
 		self.pvd.wait_for_hostup(self.server)
 		
-		self.logger.debug("getting log from server")
+		self.logger.info("getting log from server")
 		reader = self.server.log.tail()
 		farmui = self.pvd.farmui
-		self.logger.debug("Starting bundle process")
+		self.logger.info("Starting bundle process")
 		new_role_name = farmui.run_bundle(self.server.scalr_id)
 		
-		scalrctl = ScalrCtl(self.pvd.farm_id)
-		scalrctl.exec_cronjob('BundleTasksManager')
+		self.scalrctl.exec_cronjob('BundleTasksManager', server_id=self.server.scalr_id)
 		
-		self.logger.debug("Waiting for message 'Rebundle'")
+		self.logger.info("Waiting for message 'Rebundle'")
 		reader.expect("Received message 'Rebundle'", 60)
-		self.logger.debug("Received message 'Rebundle'")
+		self.logger.info("Received message 'Rebundle'")
 		
-		reader.expect("Message 'RebundleResult' delivered", 240)
-		self.logger.debug("Received message 'RebundleResult'")
+		reader.expect("Message 'RebundleResult' delivered", 360)
+		self.logger.info("Received message 'RebundleResult'")
 		
 		rebundle_res = self.server.get_message(message_name='RebundleResult')
 		self.assertTrue('<status>ok' in rebundle_res)
 		
-		scalrctl.exec_cronjob('ScalarizrMessaging')
-		scalrctl.exec_cronjob('BundleTasksManager')
-		scalrctl.exec_cronjob('BundleTasksManager')
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')
+		self.scalrctl.exec_cronjob('BundleTasksManager', server_id=self.server.scalr_id)
+		wait_until(self._is_bundle_process_complete, None, sleep=15, timeout=180)
 		
-		self.pvd.terminate()
+		'''
+		self.server.terminate()
 		
-		self.logger.debug("Running all tests agaen")
+		self.logger.info("Running all tests agaen")
 		self.suite._tests.remove(self)
 		self.suite.run_tests(new_role_name)
+		'''
 		
+		self.logger.info("Rebundle test is finished.")
 
-class TerminateTest:
+
+class TerminateTest(VirtualTest):
 	def _hostup_received(self):
-			out = self.nginx_pvd.scalrctl.exec_cronjob('ScalarizrMessaging')
+			out = self.pvd.scalrctl.exec_cronjob('ScalarizrMessaging')
 			return False if -1 == string.find(out, 'HostTerminate') else True
 				
 	def test_terminate(self):
-		self.pvd.terminate()
+		self.server.terminate()
 		wait_until(self._hostup_received, None, sleep=5, timeout=60)
 		
 
@@ -235,6 +245,7 @@ class NginxSuite(unittest.TestSuite):
 		if role_name:
 			kwargs.update({'role_name': role_name})
 		nginx_pvd = DataProvider(**kwargs)
+		self.logger.info("Balancer role name: %s" % nginx_pvd.role_name)
 		self.logger.info("Farm configured")
 		
 		self.logger.info("Starting load balancer")
@@ -242,19 +253,21 @@ class NginxSuite(unittest.TestSuite):
 		self.logger.info("Load balancer started")
 		
 		self.logger.info("Adding app role to farm")
-		app1_pvd = DataProvider('app', arch='x86_64')
+		app1_pvd = DataProvider('app', arch='x86_64', dist='centos5')
 		self.logger.info("App role added")
 		
 		self.logger.info("Adding second role to farm")
 		app2_pvd = DataProvider('app', arch='x86_64', dist='ubuntu1004')
 		self.logger.info("Second app role added")
 		
+		appctl=ScalrCtl(nginx_pvd.farm_id)
+		
 		startup = StartupTest('test_startup', nginx_pvd=nginx_pvd, server=server)
 		restart = RestartTest('test_restart', nginx_pvd=nginx_pvd, server=server)
 		upstream = UpstreamTest('test_upstream', app1_pvd=app1_pvd, app2_pvd=app2_pvd, server=server)
 		https = HttpsTest('test_https', app1_pvd=app1_pvd, nginx_pvd=nginx_pvd, server=server)
-		rebundle = RebundleTest('test_rebundle', pvd=nginx_pvd, server=server, suite = self)
-		terminate = TerminateTest('test_terminate', pvd=nginx_pvd)
+		rebundle = RebundleTest('test_rebundle', pvd=nginx_pvd, server=server, scalrctl=appctl, suite = self)
+		terminate = TerminateTest('test_terminate', pvd=nginx_pvd, server=server)
 
 		self.addTest(startup)
 		self.addTest(restart)
