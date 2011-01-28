@@ -459,6 +459,12 @@ class ApacheHandler(ServiceCtlHanler):
 		
 		if not os.path.exists(conf_enabled) and \
 				not os.path.exists(load_enabled):
+			
+			enable_cmd = '/usr/sbin/a2enmod ssl'
+			self._logger.info('%s and %s does not exist. Trying "%s" ' % 
+							(mods_available, mods_enabled, enable_cmd))
+			system2(enable_cmd, shell=True)
+			
 			if os.path.exists(mods_available) and \
 				 os.path.exists(conf_available) and \
 				 os.path.exists(load_available):
@@ -487,8 +493,11 @@ class ApacheHandler(ServiceCtlHanler):
 		mod_ssl_file = os.path.join(self.server_root, 'modules', 'mod_ssl.so')
 		
 		if not os.path.exists(mod_ssl_file):
-			self._logger.error('%s does not exist. Try "sudo yum install mod_ssl" ',
-						mod_ssl_file)
+			
+			inst_cmd = '/usr/bin/yum -y install mod_ssl'
+			self._logger.info('%s does not exist. Trying "%s" ' % (mod_ssl_file, inst_cmd))
+			system2(inst_cmd, shell=True)
+			
 		else:			
 			#ssl.conf part
 			ssl_conf_path = os.path.join(self.server_root, 'conf.d', 'ssl.conf')
