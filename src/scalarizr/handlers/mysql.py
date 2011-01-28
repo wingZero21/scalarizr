@@ -1566,7 +1566,7 @@ def spawn_mysqld():
 def term_mysqld(mysqld):
 	mysqld.sendintr()
 	mysqld.close()
-	wait_until(lambda: not os.path.exists('/proc/' + mysqld.pid))
+	wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
 
 def spawn_mysql_cli(user=None, password=None):
 	try:
