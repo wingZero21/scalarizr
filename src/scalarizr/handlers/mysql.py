@@ -1582,9 +1582,12 @@ def check_mysql_password(my_cli, user, password):
 	my_cli.sendline("SELECT PASSWORD('%s') AS hash, Password AS valid_hash FROM mysql.user WHERE mysql.user.User = '%s';" % 
 				(password, user));
 	my_cli.expect('mysql>')
-	hash, valid_hash = filter(None, map(string.strip, my_cli.before.strip().split('\r\n')[4].split('|')))
-	if hash != valid_hash:
-		raise ValueError("Password for user %s doesn't match." % user)
+	if not 'Empty set' in my_cli.before:
+		hash, valid_hash = filter(None, map(string.strip, my_cli.before.strip().split('\r\n')[4].split('|')))
+		if hash != valid_hash:
+			raise ValueError("Password for user %s doesn't match." % user)
+	else:
+		raise ValueError("User %s doesn't exists" % (user))
 
 
 def _add_apparmor_rules(directory):
