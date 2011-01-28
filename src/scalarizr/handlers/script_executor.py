@@ -122,9 +122,6 @@ class ScriptExecutor(Handler):
 				if script.asynchronous:
 					self._lock.acquire()
 					self._num_pending_async += 1
-					if not self._cleaner_running:
-						c.start()
-						self._cleaner_running = True
 					self._lock.release()
 					
 					# Start new thread
@@ -135,14 +132,18 @@ class ScriptExecutor(Handler):
 				else:
 					self._execute_script(script)
 
+			if not self._cleaner_running:
+				c.start()
+			
 			# Wait
 			if self._wait_async:
 				for t in async_threads:
 					t.join()
-			
-					
+							
+								
 	def _cleanup(self):
 		try:
+			self._cleaner_running = True
 			self._logger.debug("[cleanup] Starting")		
 			while self._num_pending_async > 0:
 				time.sleep(0.5)
