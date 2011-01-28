@@ -223,8 +223,8 @@ class RebundleTest(VirtualTest):
 		
 		self.logger.info("Running all tests again")
 		self.suite._tests.remove(self)
-		self.suite.run_tests(new_role_name)
-		
+		self.suite.prepare_tests(new_role_name)
+		self.suite.debug()
 		self.logger.info("Rebundle test is finished.")
 
 
@@ -242,9 +242,9 @@ class NginxSuite(unittest.TestSuite):
 	def __init__(self, tests=(), role_name=None):
 		unittest.TestSuite.__init__(self, tests)
 		self.logger = logging.getLogger(__name__)
-		self.run_tests(role_name)
+		self.prepare_tests(role_name)
 		
-	def run_tests(self, role_name=None):
+	def prepare_tests(self, role_name=None):
 		self.logger.info("Getting servers, configuring farm")
 		kwargs = {'behaviour' : 'www', 'arch' : 'x86_64'}
 		if role_name:
