@@ -204,14 +204,15 @@ def wait_sock(sock = None):
 	if not isinstance(sock, SockParam):
 		raise InitdError('Socks parameter must be instance of SockParam class')
 	
-	s = socket.socket(sock.family, sock.type)
 	time_start = time.time()
 	while time.time() - time_start < sock.timeout:
 		try:
+			s = socket.socket(sock.family, sock.type)			
 			s.connect(sock.conn_address)
 			s.shutdown(2)
+			del s
 			return
 		except:
-			time.sleep(0.1)
+			time.sleep(1)
 			pass
 	raise InitdError ("Service unavailable after %d seconds of waiting" % sock.timeout)
