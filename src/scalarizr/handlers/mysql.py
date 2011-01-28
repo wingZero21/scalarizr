@@ -1341,6 +1341,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		if should_term_mysqld:
 			term_mysqld(mysqld)
+			time.sleep(5)
 		
 		self._start_service()
 
