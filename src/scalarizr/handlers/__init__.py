@@ -135,7 +135,6 @@ class MessageListener:
 						try:
 							handler(message)
 						except (BaseException, Exception), e:
-							self._logger.error("Exception in message handler %s", hnd_name)
 							self._logger.exception(e)
 				except (BaseException, Exception), e:
 					self._logger.error("%s accept() method failed with exception", hnd_name)
@@ -285,7 +284,7 @@ class ServiceCtlHanler(Handler):
 				
 				# Obtain current configuration preset
 				cur_preset = self._obtain_current_preset()
-					 
+
 				# Apply current preset
 				my_preset = self._cnf_ctl.current_preset()
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):

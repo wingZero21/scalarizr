@@ -578,23 +578,6 @@ class MysqlHandler(ServiceCtlHanler):
 				self.storage_vol.mount()
 			
 			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
-				def check_mysql_pass(mysql_pexp, user, password):
-								
-					def hash_mysql_password(str):
-						pass1 = hashlib.sha1(str).digest()
-						pass2 = hashlib.sha1(pass1).hexdigest()
-						return pass2.upper()
-					
-					hashed_pass = hash_mysql_password(password)
-					
-					mysql_pexp.sendline("SELECT password FROM mysql.user WHERE User = '%s' \G" % user)
-					mysql_pexp.expect('mysql>', timeout=10)
-					out = mysql_pexp.before
-					passwords = re.findall('password:\s+\*(\w+)', out)
-					
-					if not passwords or not all(map(lambda x: x == hashed_pass, passwords)):
-						raise ValueError("Password for user %s doesn't match." % user)
-						
 				self._logger.debug("Checking Scalr's MySQL system users presence.")
 				root_password, repl_password, stat_password = self._get_ini_options(
 						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD) 
@@ -602,9 +585,9 @@ class MysqlHandler(ServiceCtlHanler):
 				self._ping_mysql()
 				try:
 					my_cli = spawn_mysql_cli()
-					check_mysql_pass(my_cli, ROOT_USER, root_password)
-					check_mysql_pass(my_cli, REPL_USER, repl_password)
-					check_mysql_pass(my_cli, STAT_USER, stat_password)
+					check_mysql_password(my_cli, ROOT_USER, root_password)
+					check_mysql_password(my_cli, REPL_USER, repl_password)
+					check_mysql_password(my_cli, STAT_USER, stat_password)
 					self._logger.debug("Scalr's MySQL system users are present. Passwords are correct.")				
 				except ValueError:
 					self._logger.warning("Scalr's MySQL system users were changed. Recreating.")
@@ -622,6 +605,7 @@ class MysqlHandler(ServiceCtlHanler):
 				or 	message.name == MysqlMessages.CREATE_BACKUP
 				or 	message.name == MysqlMessages.CREATE_PMA_USER
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
+
 		
 	def on_Mysql_CreatePmaUser(self, message):
 		try:
@@ -1568,6 +1552,7 @@ def term_mysqld(mysqld):
 	mysqld.close()
 	wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
 
+
 def spawn_mysql_cli(user=None, password=None):
 	try:
 		cmd = mysql_path
@@ -1594,6 +1579,14 @@ def get_mysql_version(my_cli):
 	if not version:
 		raise Exception("Can't obtain MySQL version.")
 	return version.group(0)
+
+def check_mysql_password(my_cli, user, password):
+	my_cli.sendline("SELECT PASSWORD('%s') AS hash, Password AS valid_hash FROM mysql.user WHERE mysql.user.User = '%s';");
+	my_cli.expect('mysql>')
+	hash, valid_hash = filter(None, map(string.strip, my_cli.before.strip().split('\r\n')[4].split('|')))
+	if hash != valid_hash:
+		raise ValueError("Password for user %s doesn't match." % user)
+
 
 def _add_apparmor_rules(directory):
 	if not os.path.exists('/etc/init.d/apparmor'):
