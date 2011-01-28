@@ -24,12 +24,10 @@ from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
 from distutils import version
-from subprocess import Popen, PIPE, STDOUT
 import logging, os, re,  tarfile, tempfile
-import time, signal, pwd, random, shutil
+import time, pwd, random, shutil
 import glob
 import string
-import hashlib
 import ConfigParser
 
 # Extra
@@ -1581,7 +1579,8 @@ def get_mysql_version(my_cli):
 	return version.group(0)
 
 def check_mysql_password(my_cli, user, password):
-	my_cli.sendline("SELECT PASSWORD('%s') AS hash, Password AS valid_hash FROM mysql.user WHERE mysql.user.User = '%s';");
+	my_cli.sendline("SELECT PASSWORD('%s') AS hash, Password AS valid_hash FROM mysql.user WHERE mysql.user.User = '%s';" % 
+				(password, user));
 	my_cli.expect('mysql>')
 	hash, valid_hash = filter(None, map(string.strip, my_cli.before.strip().split('\r\n')[4].split('|')))
 	if hash != valid_hash:
