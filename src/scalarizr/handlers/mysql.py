@@ -1535,7 +1535,7 @@ class MysqlHandler(ServiceCtlHanler):
 		except OSError, e:
 			self._logger.error('Cannot chown Mysql directory %s', directory)
 		
-		self._logger.info('New permissions for mysql directory "%s" were successfully set.')
+		self._logger.info('New permissions for mysql directory "%s" were successfully set.' % directory)
 		
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
@@ -1589,7 +1589,11 @@ def spawn_mysql_cli(user=None, password=None):
 def get_mysql_version(my_cli):
 	my_cli.sendline('SELECT VERSION();')
 	my_cli.expect('mysql>')
-	return my_cli.before.strip().split('\r\n')[4].split('|')[1].strip()
+	version_string = my_cli.before.strip().split('\r\n')[4].split('|')[1].strip()
+	version = re.search('[\d\.]+', version_string)
+	if not version:
+		raise Exception("Can't obtain MySQL version.")
+	return version.group(0)
 
 def _add_apparmor_rules(directory):
 	if not os.path.exists('/etc/init.d/apparmor'):
