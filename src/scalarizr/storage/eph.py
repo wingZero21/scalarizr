@@ -148,13 +148,15 @@ class EphVolumeProvider(VolumeProvider):
 				# Create LV layout
 				kwargs['vg'], kwargs['device'], tranzit_lv, kwargs['size'] = self._create_layout(
 						kwargs['disk'].devname, vg=kwargs.get('vg'), size=kwargs.get('size'))
+		else:
+			tranzit_lv = '/dev/mapper/%s-tranzit' % kwargs['vg']
 			
-			# Initialize tranzit volume
-			kwargs['tranzit_vol'] = Volume(tranzit_lv, '/tmp/sntz' + str(randint(100, 999)), 'ext3', 'base')
-	
-			# Accept snapshot backend
-			if not isinstance(kwargs['snap_backend'], dict):
-				kwargs['snap_backend'] = dict(path=kwargs['snap_backend'])
+		# Initialize tranzit volume
+		kwargs['tranzit_vol'] = Volume(tranzit_lv, '/tmp/sntz' + str(randint(100, 999)), 'ext3', 'base')
+
+		# Accept snapshot backend
+		if not isinstance(kwargs['snap_backend'], dict):
+			kwargs['snap_backend'] = dict(path=kwargs['snap_backend'])
 		
 		return super(EphVolumeProvider, self).create(**kwargs)
 

@@ -782,8 +782,7 @@ class MysqlHandler(ServiceCtlHanler):
 		new_storage_vol	= None
 		
 		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
-			#ec2_conn = self._platform.new_ec2_conn()
-			master_storage_conf = message.volume_config if hasattr(message, 'volume_config') else None
+			master_storage_conf = message.body.get('volume_config')
 			tx_complete = False
 						
 			try:
@@ -833,8 +832,7 @@ class MysqlHandler(ServiceCtlHanler):
 						raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
 					self._start_service()
 				else:
-					if not self._init_script.running:
-						self._init_script.start()
+					self._start_service()
 					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
 					timeout = 180
 					try:
@@ -870,13 +868,13 @@ class MysqlHandler(ServiceCtlHanler):
 				tx_complete = True
 				
 			except (Exception, BaseException), e:
-				self._logger.exception('Slave -> Master promotion failed', e)
+				self._logger.exception(e)
 				if new_storage_vol:
 					new_storage_vol.detach()
 				# Get back slave storage
 				if old_conf:
 					self._plug_storage(self._storage_path, old_conf)
-
+				
 				self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 					status="error",
 					last_error=str(e)
@@ -1568,7 +1566,7 @@ def spawn_mysql_cli(user=None, password=None):
 		exp.expect('mysql>')
 		return exp
 	except pexpect.ExceptionPexpect, e:
-		raise HandlerError('Cannot start mysql client tool. Error: %s' % e)
+		raise HandlerError('Cannot start mysql client tool. Error: %s' % e.value.before)
 
 def get_mysql_version(my_cli):
 	my_cli.sendline('SELECT VERSION();')
