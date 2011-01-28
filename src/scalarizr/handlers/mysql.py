@@ -845,9 +845,7 @@ class MysqlHandler(ServiceCtlHanler):
 									"while waiting for slave stop and master reset." % (timeout,))
 					finally:
 						mysql.close()
-					
-					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
-					Storage.backup_config(snap.config(), self._snapshot_config_path)
+
 					updates = {
 						OPT_ROOT_PASSWORD : message.root_password,
 						OPT_REPL_PASSWORD : message.repl_password,
@@ -855,6 +853,9 @@ class MysqlHandler(ServiceCtlHanler):
 						OPT_REPLICATION_MASTER 	: "1"
 					}
 					self._update_config(updates)
+										
+					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
+					Storage.backup_config(snap.config(), self._snapshot_config_path)
 					
 					# Send message to Scalr
 					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
@@ -1459,7 +1460,7 @@ class MysqlHandler(ServiceCtlHanler):
 					
 					msg = "Cannot change replication Master server to '%s'. "  \
 							"Slave_IO_Running: %s, Slave_SQL_Running: %s, " \
-							"Last_Errno: %d, Last_Error: '%s'" % (
+							"Last_Errno: %s, Last_Error: '%s'" % (
 							host, status['Slave_IO_Running'], status['Slave_SQL_Running'],
 							status['Last_Errno'], status['Last_Error'])
 					raise HandlerError(msg)
@@ -1486,7 +1487,7 @@ class MysqlHandler(ServiceCtlHanler):
 				os.makedirs(directory)
 				src_dir = os.path.dirname(raw_value + "/") + "/"
 				if os.path.isdir(src_dir):
-					self._logger.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
+					self._logger.debug('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
 					system2(str(rsync), shell=True)
@@ -1497,7 +1498,7 @@ class MysqlHandler(ServiceCtlHanler):
 				self._mysql_config.set(directive, dirname)
 				
 		except NoPathError:
-			self._logger.info('There is no such option "%s" in mysql config.' % directive)
+			self._logger.debug('There is no such option "%s" in mysql config.' % directive)
 			if not os.path.isdir(directory):
 				os.makedirs(directory)
 			
@@ -1516,7 +1517,7 @@ class MysqlHandler(ServiceCtlHanler):
 		except OSError, e:
 			self._logger.error('Cannot chown Mysql directory %s', directory)
 		
-		self._logger.info('New permissions for mysql directory "%s" were successfully set.' % directory)
+		self._logger.debug('New permissions for mysql directory "%s" were successfully set.' % directory)
 		
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
