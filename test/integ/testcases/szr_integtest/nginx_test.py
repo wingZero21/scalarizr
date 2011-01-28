@@ -195,14 +195,18 @@ class RebundleTest(VirtualTest):
 		farmui = self.pvd.farmui
 		self.logger.info("Starting bundle process")
 		new_role_name = farmui.run_bundle(self.server.scalr_id)
-		
+		time.sleep(10)
+		self.scalrctl.exec_cronjob('ScalarizrMessaging')
+		self.scalrctl.exec_cronjob('BundleTasksManager', server_id=self.server.scalr_id)
 		self.scalrctl.exec_cronjob('BundleTasksManager', server_id=self.server.scalr_id)
 		
 		self.logger.info("Waiting for message 'Rebundle'")
-		reader.expect("Received message 'Rebundle'", 60)
+		reader.expect("Received message 'Rebundle'", 120)
 		self.logger.info("Received message 'Rebundle'")
 		
-		reader.expect("Message 'RebundleResult' delivered", 360)
+		reader.expect("system: ('rsync'", 240)
+		
+		reader.expect("Message 'RebundleResult' delivered", 900)
 		self.logger.info("Received message 'RebundleResult'")
 		
 		rebundle_res = self.server.get_message(message_name='RebundleResult')
@@ -212,13 +216,14 @@ class RebundleTest(VirtualTest):
 		self.scalrctl.exec_cronjob('BundleTasksManager', server_id=self.server.scalr_id)
 		wait_until(self._is_bundle_process_complete, None, sleep=15, timeout=180)
 		
-		'''
-		self.server.terminate()
+		self.logger.info("Role %s successfully rebundled." % self.pvd.role_name)
+		self.logger.info("New role name is %s" % new_role_name)
+		self.logger.info("Terminating the farm")
+		self.pvd.terminate_farm()
 		
-		self.logger.info("Running all tests agaen")
+		self.logger.info("Running all tests again")
 		self.suite._tests.remove(self)
 		self.suite.run_tests(new_role_name)
-		'''
 		
 		self.logger.info("Rebundle test is finished.")
 
@@ -226,11 +231,11 @@ class RebundleTest(VirtualTest):
 class TerminateTest(VirtualTest):
 	def _hostup_received(self):
 			out = self.pvd.scalrctl.exec_cronjob('ScalarizrMessaging')
-			return False if -1 == string.find(out, 'HostTerminate') else True
+			return False if -1 == string.find(out, 'Event OnHostDown') else True
 				
 	def test_terminate(self):
 		self.server.terminate()
-		wait_until(self._hostup_received, None, sleep=5, timeout=60)
+		wait_until(self._hostup_received, None, sleep=5, timeout=120)
 		
 
 class NginxSuite(unittest.TestSuite):
@@ -270,14 +275,15 @@ class NginxSuite(unittest.TestSuite):
 		terminate = TerminateTest('test_terminate', pvd=nginx_pvd, server=server)
 
 		self.addTest(startup)
-		self.addTest(restart)
-		self.addTest(upstream)
-		self.addTest(https)
+		#self.addTest(restart)
+		#self.addTest(upstream)
+		#self.addTest(https)
 		self.addTest(rebundle)
-		self.addTest(terminate)
+		#self.addTest(terminate)
 		
 		self.logger.info("Number of testes: %s. Starting tests." % self.countTestCases())
 		
 		
 if __name__ == "__main__":
 	unittest.main()
+	
