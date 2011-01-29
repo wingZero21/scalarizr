@@ -106,7 +106,10 @@ class DataProvider(object):
 		self.driver = get_driver(getattr(Provider, self.platform.upper()))
 		self.__credentials = platform_config['platform_credentials']
 		self.conn = self.driver(**self.__credentials)
+		self._role_settings = role_settings
+		self.default_size  = platform_config['default_size']
 		
+
 		if scalr_srv_id:
 			self.farm_id   = config.get('./test-farm/farm_id')
 			self.farmui = FarmUI(get_selenium())
@@ -114,34 +117,34 @@ class DataProvider(object):
 			host = self.farmui.get_public_ip(scalr_srv_id, 60)
 			self.role_name = self.farmui.get_role_name(scalr_srv_id)
 			node = self._get_node(host)
+			self.scalrctl = ScalrCtl(self.farm_id)
 			ssh = SshManager(host, self.farm_key)
 			self._servers.append(Server(node, ssh, role_name=self.role_name, scalr_id=scalr_srv_id))
 			return
-			
-		self.default_size  = platform_config['default_size']
-
+		
+		if kwargs.get('role_name'):
+			self.role_name = kwargs.get('role_name')
+			self.farm_id   = config.get('./test-farm/farm_id')
+			self.farmui = FarmUI(get_selenium())
+			self.farmui.use(self.farm_id)
+			self.ssh_config = dict(key=config.get('./test-farm/farm_key'))
+			self.scalrctl = ScalrCtl(self.farm_id)
+			self.server_id_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)'
+													% (self.farm_id, self.role_name), re.M)
+			return 
+		
 		self.behaviour	= behaviour
-		self._role_settings = role_settings
 		
 		for configuration in platform_config['images'][self.dist][self.behaviour]:
 			if set(kwargs.items()) <= set(configuration.items()):
 				if self.behaviour == 'raw':
 					self.image_id 	= configuration['image_id']
 					self.ssh_config = platform_config['ssh']
-					'''
-					self.key_name	= config.get('./boto-ec2/key_name')
-					self.key_path	= config.get('./boto-ec2/key_path')
-					self.ssh_key_password = config.get('./boto-ec2/ssh_key_password')
-					'''
 				else:
 					self.role_name = configuration['role_name']
 					self.farm_id   = config.get('./test-farm/farm_id')
 					self.ssh_config = dict(key=config.get('./test-farm/farm_key'))
-					'''
-					self.key_path  = config.get('./test-farm/farm_key')
-					'''
 					self.farmui = FarmUI(get_selenium())
-					ui_login(self.farmui.sel)
 					self.farmui.use(self.farm_id)
 					self.scalrctl = ScalrCtl(self.farm_id)
 					self.server_id_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)'
@@ -151,6 +154,8 @@ class DataProvider(object):
 			raise Exception('No suitable configuration found. Params: %s' % kwargs)				
 			
 	def server(self, index=0):
+		if self._servers and len(self._servers) < (index + 1):
+			self.wait_for_hostup(self._servers[-1])
 		while len(self._servers) < (index + 1):
 			self._scale_up()
 			if len(self._servers) <= index:
@@ -211,12 +216,7 @@ class DataProvider(object):
 				if not self.farmui._role_in_farm(self.role_name):
 					self.farmui.add_role(self.role_name, settings=self._role_settings)
 					self.farmui.save()
-			"""
-			elif self.farm_settings:
-				self.farmui.edit_role(self.role_name, settings=self.farm_settings)
-				self.farmui.save()
-			"""
-					
+
 			out = self.scalrctl.exec_cronjob('Scaling')
 			result = re.search(self.server_id_re, out)
 			if not result:
