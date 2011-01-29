@@ -19,7 +19,6 @@ try:
 	import json
 except:
 	import simplejson as json
-
 log_path = os.path.expanduser('~/.scalr-dev/logs')
 server_info_url = 'http://scalr-dev.local.webta.net/servers/extendedInfo'
 
@@ -193,6 +192,7 @@ class FarmUI:
 		wait_until(lambda: self.sel.is_element_present('//button[text() = "Save"]'), sleep=0.1, timeout=20)
 		self.sel.click('//button[text() = "Save"]')
 		wait_until(lambda: not self.sel.is_element_present('//div[text() = "Please wait while saving..."]'), sleep=0.2, timeout=20)
+		
 		while True:
 			try:
 				text = self.sel.get_text('//div[@id="top-messages"]/div[last()]')
@@ -202,6 +202,7 @@ class FarmUI:
 
 		if text != 'Farm successfully saved':
 			raise FarmUIError('Something wrong with saving farm %s : %s' % (self.farm_id, text))
+
 
 	@property		
 	@_login
@@ -364,7 +365,7 @@ class FarmUI:
 			raise Exception("Server with id '%s' doesn't exist." % scalr_srv_id)
 		
 	@_login
-	def get_role_id(self, role_name):
+	def _get_role_setting(self, role_name, setting):
 		server_info_url = urllib.basejoin(self.sel.browserURL, '/roles/xListViewRoles/')
 	
 		http = httplib2.Http()
@@ -378,10 +379,16 @@ class FarmUI:
 		
 		for role in data['data']:
 			if role['platforms'] == platforms[self.platform]:
-				return role['id']
+				return role[setting]
 		else:
 			raise Exception('Cannot determine role_id of %s' % role_name)
 		
+	def get_role_id(self, role_name):
+		return self._get_role_setting(role_name, 'id')
+	
+	def get_role_behaviour(self, role_name):
+		return self._get_role_setting(role_name, 'behaviors')
+			
 	@_login	
 	def get_farm_role_id(self, role_name):
 		server_info_url = urllib.basejoin(self.sel.browserURL, 'server/grids/farm_roles_list.php?a=1&farmid=%s' % self.farm_id)
