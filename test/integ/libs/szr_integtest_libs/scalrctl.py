@@ -468,6 +468,19 @@ class FarmUI:
 		self.sel.type('document_root_dir', document_root)
 		self.sel.type('server_admin', 'admin@%s' % domain)	
 		self.sel.click('button_js')
+	
+	@_login		
+	def get_bundle_status(self, server_id):
+		#bundle_url = "http://scalr-dev.local.webta.net/server/grids/bundle_tasks.php"
+		bundle_url = "http://scalr-dev.local.webta.net/bundletasks/xListViewTasks/"
+		headers = {'Content-type': 'application/x-www-form-urlencoded',
+                        'Cookie' : self.sel.get_cookie()}
+		body = urllib.urlencode({'query' : server_id, 'limit' : '24'})
+		http = httplib2.Http()
+		content = http.request(bundle_url, 'POST', body=body, headers=headers)
+		result = json.loads(content[1])
+		return result['data'][0]['status']
+		
 		
 	@_login
 	def run_bundle(self, server_id):
