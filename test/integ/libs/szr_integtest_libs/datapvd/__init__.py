@@ -127,6 +127,7 @@ class DataProvider(object):
 			self.farm_id   = config.get('./test-farm/farm_id')
 			self.farmui = FarmUI(get_selenium())
 			self.farmui.use(self.farm_id)
+			self.behaviour = self.farmui.get_role_behaviour(self.role_name)
 			self.ssh_config = dict(key=config.get('./test-farm/farm_key'))
 			self.scalrctl = ScalrCtl(self.farm_id)
 			self.server_id_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)'
