@@ -148,18 +148,21 @@ class Transfer(object):
 				filename, attempts = queue.get(False)
 				try:
 					result[filename] = action(filename)
-				except TransferError, e:
+				except (Exception, BaseException), e:
 					self._logger.error("Cannot transfer '%s'. %s", filename, e)
-					if attempts < self._max_attempts:
-						self._logger.debug("File '%s' will be transfered within the next attempt", filename)
-						attempts += 1
-						queue.put((filename, attempts))
-					else:
-						try:
-							self._failed_files_lock.acquire()
-							failed_files.append(filename)
-						finally:
-							self._failed_files_lock.release()
+					# For all transfer errors give a second chance					
+					if isinstance(e, TransferError):
+						if attempts < self._max_attempts:
+							self._logger.debug("File '%s' will be transfered within the next attempt", filename)
+							attempts += 1
+							queue.put((filename, attempts))
+							continue
+					# Append file to failed list
+					try:
+						self._failed_files_lock.acquire()
+						failed_files.append(filename)
+					finally:
+						self._failed_files_lock.release()
 		except Empty:
 			return	
 
