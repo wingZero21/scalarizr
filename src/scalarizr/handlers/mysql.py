@@ -89,15 +89,18 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		'''
 		
 	def status(self):
-		if self.socket_file and os.path.exists(self.socket_file):
-			return initdv2.Status.RUNNING
-		elif mysql_path:
-			try:
-				spawn_mysql_cli('root').close()
-				return initdv2.Status.RUNNING
-			except HandlerError, e:
-				if 'Access denied' in str(e):
-					return initdv2.Status.RUNNING
+		if self.socket_file:
+			if os.path.exists(self.socket_file):
+				if mysql_path:
+					try:
+						spawn_mysql_cli('root').close()
+						return initdv2.Status.RUNNING
+					except HandlerError, e:
+						if 'Access denied' in str(e):
+							return initdv2.Status.RUNNING
+			else:
+				return initdv2.Status.NOT_RUNNING
+					
 		return initdv2.ParametrizedInitScript.status(self)
 		
 	'''
