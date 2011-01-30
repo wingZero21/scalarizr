@@ -121,8 +121,8 @@ class Storage:
 		@raise StorageError: General error for all cases		
 		'''
 		self = Storage
-		args = args or list()
-		kwargs = kwargs or dict()
+		args = list(args) if args else list()
+		kwargs = kwargs.copy() if kwargs else dict()
 		from_snap = False
 
 		if args:
