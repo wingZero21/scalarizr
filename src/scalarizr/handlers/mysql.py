@@ -916,7 +916,7 @@ class MysqlHandler(ServiceCtlHanler):
 				self._logger.debug('Storage destoyed')
 				
 				self._logger.debug('Plugging new storage')
-				vol = Storage.create(snapshot=message.snapshot_config)
+				vol = Storage.create(snapshot=message.snapshot_config.copy())
 				self._plug_storage(self._storage_path, vol)
 				self._logger.debug('Storage plugged')
 				
