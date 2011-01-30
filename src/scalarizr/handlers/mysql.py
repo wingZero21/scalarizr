@@ -18,7 +18,7 @@ from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 from scalarizr.util import system2, cryptotool, disttool, filetool, \
-	firstmatched, cached, validators, initdv2, software, wait_until
+	firstmatched, cached, validators, initdv2, software, wait_until, PopenError
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
@@ -48,6 +48,7 @@ mycnf_path = None
 change_master_timeout = 30
 
 class MysqlInitScript(initdv2.ParametrizedInitScript):
+	socket_file = None
 	def __init__(self):
 		if disttool.is_redhat_based():
 			initd_script = '/etc/init.d/mysqld'
@@ -62,6 +63,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			m = re.search("--pid[-_]file=(.*)", out[0], re.MULTILINE)
 			if m:
 				pid_file = m.group(1)
+			m = re.search("--socket=(.*)", out[0], re.MULTILINE)
+			if m:
+				self.socket_file = m.group(1)
 		except:
 			pass
 		
@@ -84,11 +88,24 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		XXX: Requires investigation
 		'''
 		
+	def status(self):
+		if self.socket_file and os.path.exists(self.socket_file):
+			return initdv2.Status.RUNNING
+		elif mysql_path:
+			try:
+				spawn_mysql_cli('root').close()
+				return initdv2.Status.RUNNING
+			except HandlerError, e:
+				if 'Access denied' in str(e):
+					return initdv2.Status.RUNNING
+		return initdv2.ParametrizedInitScript.status(self)
 		
+	'''
 	def stop(self):
 		if not self.running:
 			return True
 		initdv2.ParametrizedInitScript.stop(self)
+	'''
 
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
 
@@ -1566,8 +1583,8 @@ def spawn_mysql_cli(user=None, password=None):
 			
 		exp.expect('mysql>')
 		return exp
-	except pexpect.ExceptionPexpect, e:
-		raise HandlerError('Cannot start mysql client tool. Error: %s' % e.value.before)
+	except pexpect.ExceptionPexpect:
+		raise HandlerError('Cannot start mysql client tool. Error: %s' % exp.before)
 
 def get_mysql_version(my_cli):
 	my_cli.sendline('SELECT VERSION();')
