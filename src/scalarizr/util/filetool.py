@@ -80,6 +80,9 @@ def truncate(filename):
 	f.truncate(0)
 	f.close()
 
+def remove(filename):
+	if os.path.exists(filename):
+		os.remove(filename)
 
 def read_file(filename, msg = None, error_msg="Cannot read from ", logger = None):
 	if not logger:

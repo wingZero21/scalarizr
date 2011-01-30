@@ -860,6 +860,8 @@ class MysqlHandler(ServiceCtlHanler):
 						mysql.expect("mysql>", timeout=timeout)
 						mysql.sendline("RESET MASTER;")
 						mysql.expect("mysql>", 20)
+						filetool.remove(os.path.join(self._data_dir, 'relay-log.info'))
+						filetool.remove(os.path.join(self._data_dir, 'master.info'))
 					except pexpect.TIMEOUT:
 						raise HandlerError("Timeout (%d seconds) reached " + 
 									"while waiting for slave stop and master reset." % (timeout,))
