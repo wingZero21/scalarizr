@@ -1,0 +1,2 @@
+#!/bin/sh
+touch test/resources/hooks/test_5_done

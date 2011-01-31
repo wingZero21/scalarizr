@@ -1,0 +1,4 @@
+#!/bin/sh
+
+echo -n "Application error taken from stderr" >&2
+exit 1

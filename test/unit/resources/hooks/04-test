@@ -1,0 +1,4 @@
+#!/bin/sh
+echo "__SCRIPT 4__touched file named as server_id param:"
+echo $server_id
+touch test/resources/hooks/$server_id

@@ -1,0 +1,54 @@
+{	
+	"ssh" : {
+			"ssh_pub_key" : "",
+			"ssh_private_key" : ""
+	},
+	
+	"platform_credentials" : {
+		"key" 	 : "",
+		"secret" : ""	
+	},
+	
+	"default_size" : "1",
+	
+	"images" : {
+		"ubuntu804" : {
+			"raw" : [{
+				"image_id": 			"10",
+				"arch":					"x86_64"
+			}]
+		},
+		"ubuntu1004"  : {
+			"raw" : [{
+				"image_id": 			"69",
+				"arch":					"x86_64"
+			}],
+			"base": [{
+				"role_name":			"szr-base-unstable-ubuntu1004-64",
+				"arch":					"x86_64"
+			}],
+			"www": [{
+				"role_name":			"szr-nginx-unstable-ubuntu1004-64",
+				"arch":					"x86_64"
+			}],
+			"app": [{
+				"role_name":			"szr-apache-unstable-ubuntu1004-64",
+				"arch":					"x86_64"
+			}],
+			"mysql": [{
+				"role_name":			"szr-mysql-unstable-ubuntu1004-64",
+				"arch":					"x86_64"
+			}]
+		},
+		"centos5": {
+			"raw": [{
+				"image_id":				"51",
+				"arch":					"x86_64"
+			}],
+			"mysql": [{
+				"role_name":			"szr-mysql-unstable-centos55-64",
+				"arch":					"x86_64"
+			}]
+		}
+	}
+}

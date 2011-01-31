@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+        <scripts>
+                <script asynchronous="1" exec-timeout="100" name="script_name">
+                        <body>
+                                <![CDATA[
+                
+                                ]]>
+                        </body>
+                </script>
+        </scripts>
+</response>
