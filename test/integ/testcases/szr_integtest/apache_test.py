@@ -14,63 +14,38 @@ from szr_integtest_libs.datapvd  import DataProvider
 from szr_integtest_libs.scalrctl import FarmUI
 from szr_integtest_libs.ssh_tool import execute
 from szr_integtest_libs.scalrctl import	ScalrCtl
-from szr_integtest.nginx_test	 import VirtualTest, TerminateTest, RebundleTest
+from szr_integtest.nginx_test	 import VirtualTest, NginxStartupTest, NginxRestartTest, TerminateTest, RebundleTest
 
-from scalarizr.util import ping_socket
 from scalarizr.util import system2
 from scalarizr.util.filetool import read_file, write_file 
 
 
-class StartupTest(VirtualTest):
+
+class StartupTest(NginxStartupTest):
+	pvd = None
+	server = None
 
 	def test_startup(self):
 		self.logger.info("Startup Test")
 		
-		self.app_pvd.wait_for_hostup(self.server)		
+		self.check_startup()
+		out = self.curl(self.server.public_ip)
 		
-		ping_socket(self.server.public_ip, 80, exc_str='Apache is not running')
-		self.logger.info("Nginx is running on 80 port")
-		
-		self.logger.info("Getting default page from app instance")
-		out = system2("curl %s:80" % self.server.public_ip , shell=True)[0]
-		print out
 		if -1 == string.find(out, 'Scalr farm configured succesfully'):
-			raise Exception('Nginx is not serving dummy page')
-		self.logger.info('Nginx is serving proper dummy page')
+			raise Exception('Apache is not serving dummy page')
+		self.logger.info('Apache is serving proper dummy page')
 		
 		self.logger.info("Startup test is finished.")
+			
 
-
-class RestartTest(VirtualTest):
+class RestartTest(NginxRestartTest):
 	app_pvd = None
+	server = None
 	
 	def test_restart(self):
 		self.logger.info("Restart Test")
 		
-		self.app_pvd.wait_for_hostup(self.server)
-		
-		self.logger.info("Logging on app through ssh")
-		ssh = self.server.ssh()
-		
-		self.logger.info("Enabling debug log")
-		execute(ssh, 'cp /etc/scalr/logging-debug.ini /etc/scalr/logging.ini', 15)
-		
-		#temporary solution `cause restart triggers "address already in use" error
-		self.logger.info("Restarting scalarizr")
-		execute(ssh, '/etc/init.d/scalarizr stop', 15)
-		time.sleep(10)
-		self.logger.info(execute(ssh, 'lsof -i TCP:8013', 15))
-		execute(ssh, '/etc/init.d/scalarizr start', 15)
-		
-		# Check that upstream was reloaded
-		self.logger.info("getting log from server")
-		log = self.server.log.tail()
-		
-		log.expect('Scalarizr terminated')
-		self.logger.info('Scalarizr terminated')
-		
-		log.expect('Starting scalarizr')
-		self.logger.info('Scalarizr started')
+		log = self.check_restart()
 
 		log.expect('Requesting virtual hosts list')
 		log.expect('Virtual hosts list obtained')
@@ -80,7 +55,9 @@ class RestartTest(VirtualTest):
 
 
 class HttpTest(VirtualTest):
-	
+	app_pvd = None
+	server = None
+		
 	def test_http(self):
 		self.logger.info("HTTP Test")
 		domain = 'dima4test.com'
@@ -115,6 +92,8 @@ class HttpTest(VirtualTest):
 	
 	
 class HttpsTest(VirtualTest):
+	app_pvd = None
+	server = None
 	
 	def test_https(self):
 		self.logger.info("HTTPS Test")
@@ -155,10 +134,11 @@ class ApacheSuite(unittest.TestSuite):
 		server = app_pvd.server()
 		self.logger.info("Load balancer started")
 		
-		startup = StartupTest('test_startup', app_pvd=app_pvd, server=server)
+		startup = StartupTest('test_startup', pvd=app_pvd, server=server)
 		restart = RestartTest('test_restart', app_pvd=app_pvd, server=server)
 		http = HttpTest('test_http', app_pvd=app_pvd, server=server)
 		https = HttpsTest('test_https', app_pvd=app_pvd, server=server)
+		# and test from nginx suite
 		rebundle = RebundleTest('test_rebundle', app_pvd=app_pvd, server=server, suite = self)
 		terminate = TerminateTest('test_terminate', pvd=app_pvd)
 		
