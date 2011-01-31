@@ -223,9 +223,7 @@ class DataProvider(object):
 			if not result:
 				raise Exception("Can't create server - farm '%s' hasn't been scaled up." % self.farm_id)
 			server_id = result.group('server_id')
-			print server_id,
 			host = self.farmui.get_public_ip(server_id)
-			print host
 			node = self._get_node(host)
 			self.wait_for_szr_port(host)
 			time.sleep(5)
