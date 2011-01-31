@@ -3,7 +3,7 @@ Created on Sep 10, 2010
 
 @author: marat
 '''
-from scalarizr.util import disttool, system
+from scalarizr.util import disttool, system2
 import os, re, zipfile
 
 __all__ = ('all_installed', 'software_info', 'explore', 'whereis')
@@ -37,6 +37,48 @@ def whereis(name):
 	places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
 	return tuple([os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))])
 
+def system_info():
+		
+	def check_module(module):
+		return not system2((modprobe, '-n', module), raise_exc=False)[-1]
+	
+	ret = {}
+	ret['software'] = []			
+	installed_list = all_installed()
+	for software_info in installed_list:
+		ret['software'].append(dict(name 	 = software_info.name,
+							      version = '.'.join([str(x) for x in software_info.version]),
+							      string_version = software_info.string_version
+							      ))
+	
+	ret['os'] = {}	
+	ret['os']['version'] 		= ' '.join(disttool.linux_dist())
+	ret['os']['string_version'] = ' '.join(disttool.uname()).strip()
+	
+	modprobe = whereis('modprobe')[0]
+	ret['storage'] = {}
+	ret['storage']['fstypes'] = []
+	
+	for fstype in ['jfs', 'xfs', 'ext3', 'ext4']:
+		retcode = system2((modprobe, '-n', fstype), raise_exc=False)[-1]
+		exe = whereis('mkfs.%s' % fstype)
+		if not retcode and exe:
+			ret['storage']['fstypes'].append(fstype)
+
+	# Raid levels support detection
+	if whereis('mdadm'):
+		for module in  ('raid0', 'raid1', 'raid456'):
+			ret['storage'][module] = 1 if check_module(module) else 0
+
+	# Lvm2 support detection
+	if whereis('dmsetup') and all(map(check_module, ('dm_mod', 'dm_snapshot'))):
+		ret['storage']['lvm'] = 1
+	else:
+		ret['storage']['lvm'] = 0
+						
+	return ret
+
+
 class SoftwareError(BaseException):
 	pass
 
@@ -65,7 +107,7 @@ def mysql_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for MySQL server")
 
-	version_string = system((binaries[0], '-V'), False)[0].strip()
+	version_string = system2((binaries[0], '-V'))[0].strip()
 	if not version_string:
 		raise SoftwareError
 
@@ -83,7 +125,7 @@ def nginx_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for Nginx server")
 	
-	out = system((binaries[0], '-V'), False)[1]
+	out = system2((binaries[0], '-V'))[1]
 	if not out:
 		raise SoftwareError
 	
@@ -102,7 +144,7 @@ def memcached_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for Memcached")
 	
-	out = system((binaries[0], '-h'), False)[0]
+	out = system2((binaries[0], '-h'))[0]
 	if not out:
 		raise SoftwareError
 	
@@ -121,7 +163,7 @@ def php_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for php interpreter")
 	
-	out = system((binaries[0], '-v'), False)[0]
+	out = system2((binaries[0], '-v'))[0]
 	if not out:
 		raise SoftwareError
 	
@@ -141,7 +183,7 @@ def python_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for python interpreter")
 
-	version_string = system((binaries[0], '-V'), False)[1].strip()
+	version_string = system2((binaries[0], '-V'))[1].strip()
 	if not version_string:
 		raise SoftwareError
 	
@@ -164,7 +206,7 @@ def apache_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for apache http server")
 		
-	out = system((binaries[0], '-V'), False)[0]
+	out = system2((binaries[0], '-V'))[0]
 	if not out:
 		raise SoftwareError
 	
@@ -214,7 +256,7 @@ def varnish_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for varnish HTTP accelerator")
 
-	out = system((binaries[0], '-V'), False)[1].strip()
+	out = system2((binaries[0], '-V'))[1].strip()
 	if not out:
 		raise SoftwareError
 	
@@ -236,7 +278,7 @@ def rails_software_info():
 	if not binaries:
 		raise SoftwareError("Can't find executable for ruby gem packet manager")
 
-	out = system((binaries[0], 'list', 'rails'), False)[0].strip()
+	out = system2((binaries[0], 'list', 'rails'))[0].strip()
 	
 	if not out:
 		raise SoftwareError	

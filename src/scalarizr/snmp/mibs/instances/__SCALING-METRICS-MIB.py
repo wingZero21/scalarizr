@@ -17,9 +17,9 @@ from Queue import Queue, Empty
 from pysnmp.smi.builder import MibBuilder
 from scalarizr.config import ScalarizrState
 
-(scalr, mtxTable, mtxEntry, mtxIndex, mtxId, mtxName, mtxValue, mtxError) = mibBuilder.importSymbols(
+(scalr, mtxTable, mtxEntry, mtxIndex, mtxId, mtxName, mtxValue, mtxError, authShutdown) = mibBuilder.importSymbols(
 		'SCALING-METRICS-MIB', 
-		'scalr', 'mtxTable', 'mtxEntry', 'mtxIndex', 'mtxId', 'mtxName', 'mtxValue', 'mtxError')
+		'scalr', 'mtxTable', 'mtxEntry', 'mtxIndex', 'mtxId', 'mtxName', 'mtxValue', 'mtxError', 'authShutdown')
 
 (MibTable, MibScalarInstance) = mibBuilder.importSymbols('SNMPv2-SMI','MibTable', 'MibScalarInstance')
 
@@ -104,7 +104,7 @@ def values():
 				
 	return ret
 
-def _get_execute( metric):
+def _get_execute(metric):
 	if not os.access(metric.path, os.X_OK):
 		raise BaseException("File is not executable: '%s'" % metric.path)
 	
@@ -197,5 +197,22 @@ def update_metric(queue, index, ret):
 		))
 	})
 	
+class GetAuthShutdown():
+	def __init__(self, i=None):
+		self.i = i
+	def clone(self):
+		script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
+		ret = 1
+		if os.access(script_path, os.X_OK):
+			try:
+				logger.debug('Executing %s', metric.path)
+				proc = Popen(metric.path, stdout=PIPE, stderr=PIPE, close_fds=True)
+				ret = int(proc.communicate()[0])
+			except:
+				pass
+		return authShutdown.getSyntax().clone(ret)
 
 mibBuilder.mibSymbols["__SCALING-METRICS-MIB"] = values()
+
+__authShutdown = MibScalarInstance(authShutdown.name, (0,), GetAuthShutdown(0))
+mibBuilder.mibSymbols["__SCALING-METRICS-MIB"]['authShutdown'] = __authShutdown

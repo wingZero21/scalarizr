@@ -82,3 +82,16 @@ class _Bus(Observable):
 	'''
 
 bus = _Bus()
+
+# Define scalarizr events
+bus.define_events(
+	# Fires before scalarizr start 
+	# (can be used by handers to subscribe events, published by other handlers)
+	"init",
+	
+	# Fires when scalarizr is starting
+	"start",
+	
+	# Fires when scalarizr is terminating
+	"terminate"
+)

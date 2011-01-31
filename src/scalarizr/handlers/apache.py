@@ -14,10 +14,11 @@ from scalarizr.messaging import Messages
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
-	NoPathError
+	NoPathError, strip_quotes
 from scalarizr.util import disttool, cached, firstmatched, validators, software,\
 	wait_until
-from scalarizr.util import initdv2, system
+from scalarizr.util import initdv2, system2
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
@@ -64,7 +65,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		
 	def reload(self):
 		if self.pid_file and os.path.exists(self.pid_file):
-			out, err, retcode = system(self._apachectl + ' graceful')
+			out, err, retcode = system2(self._apachectl + ' graceful', shell=True)
 			if retcode > 0:
 				raise initdv2.InitdError('Cannot reload apache: %s' % err)
 		else:
@@ -83,18 +84,12 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		return status
 	
 	def configtest(self):
-		out = system(self._apachectl +' configtest')[1]
+		out = system2(self._apachectl +' configtest', shell=True)[1]
 		if 'error' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 		
 	def start(self):
 		ret = initdv2.ParametrizedInitScript.start(self)
-		#out = system(self._apachectl +' start')[1]
-		#if 'error' in out.lower():
-		#	raise initdv2.InitdError("Error while starting apache: %s" % out)
-
-		#if disttool.is_redhat_based():
-		#	time.sleep(1)
 		if self.pid_file:
 			try:
 				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=5)
@@ -105,10 +100,6 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 	
 	def restart(self):
 		ret = initdv2.ParametrizedInitScript.restart(self)
-		#out = system(self._apachectl +' restart')[1]
-		#if 'error' in out.lower():
-		#	raise initdv2.InitdError("Error while restarting apache: %s" % out)
-		#time.sleep(0.5)
 		
 		if self.pid_file:
 			try:
@@ -214,8 +205,12 @@ class ApacheHandler(ServiceCtlHanler):
 	def on_init(self):
 		bus.on(
 			start = self.on_start, 
-			before_host_up = self.on_before_host_up
-		)		
+			before_host_up = self.on_before_host_up,
+			before_reboot_finish = self.on_before_reboot_finish
+		)
+		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			self._insert_iptables_rules()
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -235,6 +230,9 @@ class ApacheHandler(ServiceCtlHanler):
 		self._rpaf_reload()
 		bus.fire('service_configured', service_name=SERVICE_NAME)
 
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
+
 	def on_HostUp(self, message):
 		if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
 			self._rpaf_modify_proxy_ips([message.local_ip], operation='add')
@@ -250,6 +248,10 @@ class ApacheHandler(ServiceCtlHanler):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
 		self._reload_service()
+		
+	def _insert_iptables_rules(self):
+		iptables = IpTables()
+		iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
 		
 	def _rpaf_modify_proxy_ips(self, ips, operation=None):
 		self._logger.debug('Modify RPAFproxy_ips (operation: %s, ips: %s)', operation, ','.join(ips))
@@ -321,7 +323,7 @@ class ApacheHandler(ServiceCtlHanler):
 				for fname in list_vhosts:
 					if '000-default' == fname:
 						continue
-					vhost_file = vhosts_path + '/' + fname
+					vhost_file = os.path.join(vhosts_path, fname)
 					if os.path.isfile(vhost_file):
 						try:
 							os.remove(vhost_file)
@@ -364,11 +366,11 @@ class ApacheHandler(ServiceCtlHanler):
 							ca_cert_error_message = 'Cannot write CA certificate to %s.' % cert_path
 							
 							for key_file in ['https.key', vhost.hostname + '.key']:
-								write_file(cert_path + '/' + key_file, https_certificate[1], error_msg=key_error_message, logger=self._logger)
+								write_file(os.path.join(cert_path,key_file), https_certificate[1], error_msg=key_error_message, logger=self._logger)
 								os.chmod(cert_path + '/' + key_file, 0644)
 														
 							for cert_file in ['https.crt', vhost.hostname + '.crt']:
-								write_file(cert_path + '/' + cert_file, https_certificate[0], error_msg=cert_error_message, logger=self._logger)
+								write_file(os.path.join(cert_path,cert_file), https_certificate[0], error_msg=cert_error_message, logger=self._logger)
 								os.chmod(cert_path + '/' + cert_file, 0644)
 								
 							if https_certificate[2]:
@@ -378,7 +380,7 @@ class ApacheHandler(ServiceCtlHanler):
 					
 					self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
 					
-					vhost_fullpath = vhosts_path + '/' + vhost.hostname + '-ssl.vhost.conf'
+					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + '-ssl.vhost.conf') 
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
 					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl', cert_path), error_msg=vhost_error_message, logger = self._logger)
 					
@@ -392,7 +394,7 @@ class ApacheHandler(ServiceCtlHanler):
 					
 				else:
 					self._logger.debug('Enabling virtual host %s', vhost.hostname)
-					vhost_fullpath = vhosts_path + '/' + vhost.hostname + '.vhost.conf'
+					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + '.vhost.conf')
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
 					write_file(vhost_fullpath, vhost.raw, error_msg=vhost_error_message, logger=self._logger)
 					
@@ -401,6 +403,8 @@ class ApacheHandler(ServiceCtlHanler):
 			
 			if disttool.is_debian_based():
 				self._patch_default_conf_deb()
+			elif not self._config.get_list('NameVirtualHost'):
+				self._config.add('NameVirtualHost', '*:80')
 			
 			self._logger.debug("Checking that vhosts directory included in main apache config")
 			
@@ -410,11 +414,11 @@ class ApacheHandler(ServiceCtlHanler):
 				self._config.write(self._httpd_conf_path)			
 
 	def _patch_ssl_conf(self, cert_path):
-		key_path = cert_path + '/https.key'
-		crt_path = cert_path + '/https.crt'
-		ca_crt_path = cert_path + '/https-ca.crt'
+		key_path = os.path.join(cert_path, 'https.key')
+		crt_path = os.path.join(cert_path, 'https.crt')
+		ca_crt_path = os.path.join(cert_path, 'https-ca.crt')
 
-		ssl_conf_path = self.server_root + ('/conf.d/ssl.conf' if disttool.is_redhat_based() else '/sites-available/default-ssl')
+		ssl_conf_path = os.path.join(self.server_root, 'conf.d/ssl.conf' if disttool.is_redhat_based() else 'sites-available/default-ssl')
 		if os.path.exists(ssl_conf_path):			
 			ssl_conf = Configuration('apache')
 			ssl_conf.read(ssl_conf_path)
@@ -444,13 +448,26 @@ class ApacheHandler(ServiceCtlHanler):
 
 
 	def _check_mod_ssl_deb(self):
-		mods_available = os.path.dirname(self._httpd_conf_path) + '/mods-available'
-		mods_enabled = os.path.dirname(self._httpd_conf_path) + '/mods-enabled'
-		if not os.path.exists(mods_enabled + '/ssl.conf') and \
-				not os.path.exists(mods_enabled + '/ssl.load'):
+		mods_available = os.path.join(os.path.dirname(self._httpd_conf_path), 'mods-available')
+		mods_enabled = os.path.join(os.path.dirname(self._httpd_conf_path), 'mods-enabled')
+		
+		conf_available = os.path.join(mods_available, 'ssl.conf')
+		load_available = os.path.join(mods_available, 'ssl.load')
+		
+		conf_enabled = os.path.join(mods_enabled, 'ssl.conf')
+		load_enabled = os.path.join(mods_enabled, 'ssl.load')
+		
+		if not os.path.exists(conf_enabled) and \
+				not os.path.exists(load_enabled):
+			
+			enable_cmd = '/usr/sbin/a2enmod ssl'
+			self._logger.info('%s and %s does not exist. Trying "%s" ' % 
+							(mods_available, mods_enabled, enable_cmd))
+			system2(enable_cmd, shell=True)
+			
 			if os.path.exists(mods_available) and \
-				 os.path.exists(mods_available+'/ssl.conf') and \
-				 os.path.exists(mods_available+'/ssl.load'):
+				 os.path.exists(conf_available) and \
+				 os.path.exists(load_available):
 				if not os.path.exists(mods_enabled):
 					try:
 						self._logger.debug("Creating directory %s.",  
@@ -461,8 +478,8 @@ class ApacheHandler(ServiceCtlHanler):
 								mods_enabled, e.strerror)
 				try:
 					self._logger.debug("Creating symlinks for mod_ssl files.", mods_enabled)
-					os.symlink(mods_available+'/ssl.conf', mods_enabled+'/ssl.conf')
-					os.symlink(mods_available+'/ssl.load', mods_enabled+'/ssl.load')
+					os.symlink(conf_available, conf_enabled)
+					os.symlink(load_available, load_enabled)
 					self._logger.debug('SSL module has been enabled')
 				except OSError, e:
 					self._logger.error('Cannot create symlinks for ssl.conf and ssl.load in %s. %s', 
@@ -473,29 +490,23 @@ class ApacheHandler(ServiceCtlHanler):
 			
 				
 	def _check_mod_ssl_redhat(self):
-		mod_ssl_file = self.server_root + '/modules/mod_ssl.so'
+		mod_ssl_file = os.path.join(self.server_root, 'modules', 'mod_ssl.so')
 		
 		if not os.path.exists(mod_ssl_file):
-			self._logger.error('%s does not exist. Try "sudo yum install mod_ssl" ',
-						mod_ssl_file)
+			
+			inst_cmd = '/usr/bin/yum -y install mod_ssl'
+			self._logger.info('%s does not exist. Trying "%s" ' % (mod_ssl_file, inst_cmd))
+			system2(inst_cmd, shell=True)
+			
 		else:			
 			#ssl.conf part
-			ssl_conf_path = self.server_root + '/conf.d/ssl.conf'
+			ssl_conf_path = os.path.join(self.server_root, 'conf.d', 'ssl.conf')
 			
 			if not os.path.exists(ssl_conf_path):
 				self._logger.error("SSL config %s doesn`t exist", ssl_conf_path)
 			else:
 				ssl_conf = Configuration('apache')
 				ssl_conf.read(ssl_conf_path)
-							
-				"""
-				error_message = 'Cannot read SSL config file %s' % ssl_conf_path
-				ssl_conf_str = read_file(ssl_conf_path, error_msg=error_message, logger=self._logger)
-				
-				if not ssl_conf_str:
-					self._logger.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
-					ssl_conf_str_updated = ssl_conf_minimal
-				"""
 				
 				if ssl_conf.empty:
 					self._logger.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
@@ -522,26 +533,6 @@ class ApacheHandler(ServiceCtlHanler):
 					if not loaded_in_ssl:
 						self._config.add('LoadModule', 'ssl_module modules/mod_ssl.so')
 						self._config.write(self._httpd_conf_path)
-						
-				
-				"""
-				error_message = 'Cannot read mod_ssl config %s' % httpd_conf_path
-				ssl_conf_str = read_file(mod_ssl_file, error_msg=error_message, logger=self._logger)
-				index = ssl_conf_str.find('mod_ssl.so')
-
-				if ssl_conf_str and index == -1:
-					backup_file(httpd_conf_path)
-					self._logger.debug('%s does not contain mod_ssl include. Patching httpd conf.',
-								httpd_conf_path)
-
-					pos = self.load_module_regexp.search(conf_str)
-					conf_str_updated = conf_str[:pos.start()] + '\n' + include_mod_ssl  + '\n' + conf_str[pos.start():] if pos else \
-							conf_str + '\n' + include_mod_ssl + '\n'
-
-					self._logger.debug("Writing changes to httpd config file %s.", httpd_conf_path)
-					error_message = 'Cannot save httpd config file %s' % httpd_conf_path
-					write_file(httpd_conf_path, conf_str_updated, error_msg=error_message, logger=self._logger)
-				"""
 	
 	def _get_server_root(self):
 		if disttool.is_debian_based():
@@ -551,7 +542,7 @@ class ApacheHandler(ServiceCtlHanler):
 			self._logger.debug("Searching in apache config file %s to find server root", self._httpd_conf_path)
 			
 			try:
-				server_root = self._config.get('ServerRoot')
+				server_root = strip_quotes(self._config.get('ServerRoot'))
 				server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
 			except NoPathError:
 				self._logger.warning("ServerRoot not found in apache config file %s", self._httpd_conf_path)
@@ -561,7 +552,10 @@ class ApacheHandler(ServiceCtlHanler):
 	
 	def _patch_default_conf_deb(self):
 		self._logger.debug("Replacing NameVirtualhost and Virtualhost ports especially for debian-based linux")
-		default_vhost_path = os.path.dirname(self._httpd_conf_path) + '/sites-enabled' + '/' + '000-default'
+		default_vhost_path = os.path.join(
+					os.path.dirname(self._httpd_conf_path),
+					'sites-enabled',
+					'000-default')
 		if os.path.exists(default_vhost_path):
 			default_vhost = Configuration('apache')
 			default_vhost.read(default_vhost_path)

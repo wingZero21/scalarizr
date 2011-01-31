@@ -38,7 +38,7 @@ class Handler(object):
 						include_pad=False, queue=Queues.CONTROL):
 		srv = bus.int_messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
-					self.new_message(msg_name, msg_body, msg_meta, broadcast, include_pad, srv.msg_service)
+					self.new_message(msg_name, msg_body, msg_meta, broadcast, include_pad, srv)
 		srv.new_producer(host).send(queue, msg)
 
 	def _broadcast_message(self, msg):
@@ -135,7 +135,6 @@ class MessageListener:
 						try:
 							handler(message)
 						except (BaseException, Exception), e:
-							self._logger.error("Exception in message handler %s", hnd_name)
 							self._logger.exception(e)
 				except (BaseException, Exception), e:
 					self._logger.error("%s accept() method failed with exception", hnd_name)
@@ -285,7 +284,7 @@ class ServiceCtlHanler(Handler):
 				
 				# Obtain current configuration preset
 				cur_preset = self._obtain_current_preset()
-					 
+
 				# Apply current preset
 				my_preset = self._cnf_ctl.current_preset()
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
@@ -340,4 +339,17 @@ class ServiceCtlHanler(Handler):
 			self._start_service()
 			
 		bus.fire(self._service_name + '_configure', **kwargs)		
+
+
+class RebundleLogHandler(logging.Handler):
+	def __init__(self, bundle_task_id=None):
+		logging.Handler.__init__(self)
+		self.bundle_task_id = bundle_task_id
+		self._msg_service = bus.messaging_service
 		
+	def emit(self, record):
+		msg = self._msg_service.new_message(Messages.REBUNDLE_LOG, body=dict(
+			bundle_task_id = self.bundle_task_id,
+			message = str(record.msg) % record.args if record.args else str(record.msg)
+		))
+		self._msg_service.get_producer().send(Queues.LOG, msg)

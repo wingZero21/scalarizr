@@ -5,13 +5,13 @@ Created on Aug 11, 2010
 '''
 
 from scalarizr.bus import bus
+from scalarizr.libs.pubsub import Observable
 from scalarizr.util import validators, filetool
-from scalarizr.messaging.p2p import P2pConfigOptions
 
 from ConfigParser import ConfigParser, RawConfigParser, NoOptionError, NoSectionError
 from getpass import getpass
 import os, sys, logging
-from scalarizr.libs.pubsub import Observable
+
 
 SECT_GENERAL = "general"
 OPT_SERVER_ID = "server_id"
@@ -64,7 +64,7 @@ class Configurator(object):
 		@see value.getter value.setter
 		'''
 		
-		default = None
+		default = ''
 		'''
 		Default value
 		'''
@@ -190,7 +190,9 @@ class ScalarizrOptions(Configurator.Container):
 		Unique server identificator in Scalr envirounment.
 		'''
 		name = 'general/server_id'
+		default = '00000000-0000-0000-0000-000000000000'
 		private = True
+		required = True
 		
 		@validators.validate(validators.uuid4)
 		def _set_value(self, v):
@@ -203,7 +205,7 @@ class ScalarizrOptions(Configurator.Container):
 		'''
 		name = 'general/role_name'
 		private = True
-		required = True
+		#required = True
 		
 	class queryenv_url(Configurator.Option):
 		'''
@@ -220,7 +222,7 @@ class ScalarizrOptions(Configurator.Container):
 		Message server URL.
 		URL to Scalr message server. Use https://scalr.net/messaging for Scalr.net SaaS
 		'''
-		name = 'messaging_p2p/' + P2pConfigOptions.PRODUCER_URL
+		name = 'messaging_p2p/producer_url'
 		default = 'https://scalr.net/messaging'
 		private = True
 		required = True
@@ -232,12 +234,13 @@ class ScalarizrOptions(Configurator.Container):
 		name = 'general/crypto_key'
 		type = 'password'
 		default = ''
-		required = True
+		#required = True
 		
 		def _get_value(self):
 			if self._value is None:
 				try:
-					self._value = bus.cnf.read_key('default')
+					cnf = bus.cnf
+					self._value = cnf.read_key('default')
 				except:
 					self._value = ''
 
@@ -250,7 +253,8 @@ class ScalarizrOptions(Configurator.Container):
 		value = property(_get_value, _set_value)
 			
 		def store(self):
-			bus.cnf.write_key('default', self.value, 'Scalarizr crypto key')
+			cnf = bus.cnf
+			cnf.write_key('default', self.value, 'Scalarizr crypto key')
 			
 	class behaviour(Configurator.Option):
 		'''
@@ -824,8 +828,12 @@ class ScalarizrCnf(Observable):
 		'''
 		Read keys from $etc/.private.d/keys, $etc/public.d/keys
 		'''
-		filename = self.key_path(name, private)
-		title = self._explored_keys.get((name, private), title)
+		if os.path.isabs(name):
+			filename = name
+		else:
+			filename = self.key_path(name, private)
+			title = self._explored_keys.get((name, private), title)
+			
 		file = None
 		try:
 			file = open(filename, "r")
@@ -841,8 +849,12 @@ class ScalarizrCnf(Observable):
 		'''
 		Write keys into $etc/.private.d/keys, $etc/public.d/keys
 		'''
-		filename = self.key_path(name, private)
-		title = self._explored_keys.get((name, private), title)
+		if os.path.isabs(name):
+			filename = name
+		else:
+			filename = self.key_path(name, private)
+			title = self._explored_keys.get((name, private), title)
+			
 		file = None
 		try:
 			keys_dir = os.path.dirname(filename)
@@ -877,13 +889,22 @@ class ScalarizrCnf(Observable):
 		return name and os.path.join(self._pub_path, name) or self._pub_path
 	
 	@property
+	def storage_path(self):
+		return self.private_path('storage')
+	
+	@property
 	def home_path(self):
-		if not self._home_path:
-			self._home_path = os.path.expanduser('~/.scalr')
-		return self._home_path
+		#expanduser ocasionaly got us an error related to $HOME and daemon process
+		#if not self._home_path:
+			#self._home_path = os.path.expanduser('~/.scalr')
+		#return self._home_path
+		return '/root/.scalr'
 	
 	def key_path(self, name, private=True):
 		return os.path.join(self._priv_path if private else self._pub_path, 'keys', name)
+	
+	def key_exists(self, name, private=True):
+		return os.path.exists(self.key_path(name, private))
 	
 	def explore_key(self, name, title, private=True):
 		self._explored_keys[(name, private)] = title
@@ -968,4 +989,5 @@ class ScalarizrState:
 	IMPORTING = "importing"	
 	INITIALIZING = "initializing"
 	RUNNING = "running"
-	UNKNOWN = "unknown"		
+	UNKNOWN = "unknown"
+	REBUNDLING = "rebundling"

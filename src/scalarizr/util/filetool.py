@@ -4,11 +4,11 @@ Created on Jun 22, 2010
 @author: marat
 '''
 
+from scalarizr.util import system2
 from scalarizr.util import disttool
 import os
 import math
 import logging
-from subprocess import Popen, PIPE, STDOUT
 
 
 BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
@@ -20,7 +20,7 @@ def split(filename, part_name_prefix, chunk_size, dest_dir):
 	try:
 		try:
 			f = open(filename, "rb")
-		except OSError:
+		except (OSError,IOError):
 			logger.error("Cannot open file to split '%s'", filename)
 			raise
 		
@@ -80,6 +80,9 @@ def truncate(filename):
 	f.truncate(0)
 	f.close()
 
+def remove(filename):
+	if os.path.exists(filename):
+		os.remove(filename)
 
 def read_file(filename, msg = None, error_msg="Cannot read from ", logger = None):
 	if not logger:
@@ -203,16 +206,15 @@ class Rsync(object):
 		return self
 	
 	def _sync(self):
-		Popen(['sync'], stdout=PIPE, stderr=PIPE).communicate()
+		system2(['sync'])
 	
 	def execute(self):
 		self._sync()
 		rsync_cmd = [self._executable] + self._options + [self._src, self._dst]
-		rsync = Popen(rsync_cmd, stdout=PIPE, stderr=PIPE)
-		out, err = rsync.communicate()
+		out, err, returncode = system2(rsync_cmd, raise_exc=False)
 		self._sync()
-		return out, err, rsync.returncode		
-	
+		return out, err, returncode
+		
 	def __str__(self):
 		ret = "sync && %(executable)s %(options)s %(src)s %(dst)s %(quiet)s" % dict(
 			executable=self._executable,

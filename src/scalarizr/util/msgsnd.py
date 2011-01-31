@@ -49,3 +49,25 @@ def main():
 	producer.send(options.queue, msg)
 
 	print "Done"
+
+	
+"""
+<?xml version="1.0" ?>
+<message id="037b1864-4539-4201-ac0b-5b1609686c80" name="Rebundle">
+    <meta>
+        <server_id>ab4d8acc-f001-4666-8f87-0748af52f700</server_id>
+    </meta>
+    <body>
+        <platform_access_data>
+            <account_id>*account_id*</account_id>
+            <key_id>*key_id*</key_id>
+            <key>*key*</key>
+            <cert>*cert*</cert>
+            <pk>*pk*</pk>
+        </platform_access_data>
+        <role_name>euca-base-1</role_name>
+        <bundle_task_id>567</bundle_task_id>
+        <excludes><excludes>
+    </body>
+</message>
+"""

@@ -23,12 +23,16 @@ mtxName = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 3), DisplayString()).se
 mtxValue = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 4), DisplayString()).setMaxAccess("readonly")
 mtxError = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 5), DisplayString()).setMaxAccess("readonly")
 
+uglyFeatures = MibIdentifier((1, 3, 6, 1, 4, 1, 36632, 6))
+authShutdown = MibScalar((1, 3, 6, 1, 4, 1, 36632, 6, 1), Integer32()).setMaxAccess("readonly")
+
+
 mibBuilder.exportSymbols("SCALING-METRICS-MIB", PYSNMP_MODULE_ID=scalr)
 
 # Types
 #mibBuilder.exportSymbols("SCALING-METRICS-MIB", Float=Float)
 
-mibBuilder.exportSymbols("SCALING-METRICS-MIB", scalr=scalr, mtxTable=mtxTable, mtxEntry=mtxEntry, mtxIndex=mtxIndex, mtxId=mtxId, mtxName=mtxName, mtxValue=mtxValue, mtxError=mtxError)
+mibBuilder.exportSymbols("SCALING-METRICS-MIB", scalr=scalr, mtxTable=mtxTable, mtxEntry=mtxEntry, mtxIndex=mtxIndex, mtxId=mtxId, mtxName=mtxName, mtxValue=mtxValue, mtxError=mtxError, uglyFeatures=uglyFeatures, authShutdown=authShutdown)
 
 
 

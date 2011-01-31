@@ -3,11 +3,10 @@ Created on Jun 17, 2010
 
 @author: marat
 '''
-from scalarizr.util import UtilError, system, disttool
+from scalarizr.util import UtilError, system2, disttool
 import time
 import os
 import socket
-from subprocess import Popen, PIPE
 
 class InitdError(UtilError):
 	output = None
@@ -42,24 +41,18 @@ def _start_stop_reload(name, action):
 	if not _services.has_key(name):
 		raise InitdError("Unknown service '%s'" % (name,))
 	try:
-		cmd = [_services[name]["initd_script"], action]
-		proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
-		out, err = proc.communicate()
+		out, err, returncode = system2([_services[name]["initd_script"], action], close_fds=True)
 	except OSError, e:
 		raise InitdError("Popen failed with error %s" % (e.strerror,))
 	
-	if proc.returncode:
+	if returncode:
 		raise InitdError("Cannot %s %s" % (action, name), output=out + " " + err)
-	
-	#if action != "restart" and retcode or (out and out.find("FAILED") != -1):
-	#	raise InitdError("Cannot %s %s" % (action, name), output=out + " " + err)
-	
+
 	pid_file = _services[name]["pid_file"]
 	
 	# 1. on start init.d scripts often returns control right after daemon is forked 
 	# but pid-file is not touched
 	# 2. when doing apache reload
-	
 	
 	if action != "stop":
 		so_timeout = _services[name]["so_timeout"]
@@ -83,7 +76,7 @@ def is_running(name):
 	if not _services.has_key(name):
 		raise InitdError("Unknown service '%s'" % (name,))
 	cmd = [_services[name]["initd_script"], "status"]
-	out, err = system(cmd, shell=False)[0:2]
+	out, err = system2(cmd)[0:2]
 	out += err
 	if name == "mysql" and disttool.is_ubuntu() and disttool.linux_dist()[1] == '8.04':
 		return out.lower().find("Uptime:") != -1

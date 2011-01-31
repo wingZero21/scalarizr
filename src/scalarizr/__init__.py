@@ -1,6 +1,6 @@
 
-# Core 
-from scalarizr import config
+# Core
+from scalarizr import config 
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions
 from scalarizr.handlers import MessageListener
@@ -8,11 +8,12 @@ from scalarizr.messaging import MessageServiceFactory, MessageService, MessageCo
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
+from scalarizr.storage import Storage
 
 
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
-from scalarizr.util import SqliteLocalObject, daemonize, system, disttool, firstmatched, format_size
+from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
 
 # Stdlibs
 import logging
@@ -24,6 +25,7 @@ import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
+from scalarizr.storage.util.loop import listloop
 
 
 class ScalarizrError(BaseException):
@@ -33,7 +35,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.6"	
+__version__ = "0.7.0"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -61,6 +63,7 @@ Next time when SNMP process should be forked
 '''
 
 _logging_configured = False
+
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -133,49 +136,34 @@ def _init():
 
 	# Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
 	bus.periodical_executor = PeriodicalExecutor()
-	
-	# Define scalarizr events
-	bus.define_events(
-		# Fires before scalarizr start 
-		# (can be used by handers to subscribe events, published by other handlers)
-		"init",
-		
-		# Fires when scalarizr is starting
-		"start",
-		
-		# Fires when scalarizr is terminating
-		"terminate"
-	)	
 
 
 DB_NAME = 'db.sqlite'
 DB_SCRIPT = 'db.sql'
 
-def _db_connect():
-	logger = logging.getLogger(__name__)	
+def _db_connect(file=None):
+	logger = logging.getLogger(__name__)
 	cnf = bus.cnf
-	file = cnf.private_path(DB_NAME)
-
-	logger.debug("Open SQLite database (file: %s)" % (file))
+	file = file or cnf.private_path(DB_NAME)
+	logger.debug("Open SQLite database (file: %s)" % (file))	
 	
 	conn = sqlite.connect(file, 5.0)
 	conn.row_factory = sqlite.Row
 	return conn
 
-def _init_db():
+def _init_db(file=None):
 	logger = logging.getLogger(__name__)	
 	cnf = bus.cnf
 
 	# Check that database exists (after rebundle for example)	
-	db_file = cnf.private_path(DB_NAME)
+	db_file = file or cnf.private_path(DB_NAME)
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
 		logger.debug("Database doesn't exists, create new one from script")
-		_create_db()
+		_create_db(file)
 	
-def _create_db():
-	cnf = bus.cnf
-	conn = _db_connect()
-	conn.executescript(open(cnf.public_path(DB_SCRIPT)).read())
+def _create_db(db_file=None, script_file=None):
+	conn = _db_connect(db_file)
+	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
 	conn.commit()	
 	
 
@@ -188,14 +176,21 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 	if mtab.contains(mpoint=mpoint): # if privated_image exists
 		logger.debug("private.d already mounted to %s", mpoint)
 		return
+	loopdevs = listloop()
+	if privated_image in loopdevs.values():
+		loopdevs = dict(zip(loopdevs.values(), loopdevs.keys()))
+		loop = loopdevs[privated_image]
+		logger.debug('%s already associated with %s. mounting', privated_image, loop)		
+		fstool.mount(loop, mpoint)
+		return
 	
 	if not os.path.exists(mpoint):
 		os.makedirs(mpoint)
 		
-	mnt_opts = ('-t auto', '-o loop,rw')	
+	mnt_opts = ('-t', 'auto', '-o', 'loop,rw')	
 	if not os.path.exists(privated_image):	
 		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count-1)
-		retcode = system(build_image_cmd)[2]
+		retcode = system2(build_image_cmd, shell=True)[2]
 		if retcode:
 			logger.error('Cannot create image device')
 		os.chmod(privated_image, 0600)
@@ -212,7 +207,7 @@ def _mount_private_d(mpoint, privated_image, blocks_count):
 			logger.debug("Mounting %s to %s", privated_image, tmp_mpoint)
 			fstool.mount(privated_image, tmp_mpoint, mnt_opts)
 			logger.debug("Copy data from %s to %s", mpoint, tmp_mpoint)
-			system(str(filetool.Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)))
+			system2(str(filetool.Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)), shell=True)
 			private_list = os.listdir(mpoint)
 			for file in private_list:
 				path = os.path.join(mpoint, file)
@@ -281,6 +276,8 @@ def _init_services():
 	logger.debug('Schedule SNMP process')
 	globals()['_snmp_scheduled_start_time'] = time.time()		
 
+	Storage.maintain_volume_table = True
+
 	bus.fire("init")
 
 
@@ -322,7 +319,7 @@ def init_script():
 	adapter = ini.get(config.SECT_MESSAGING, config.OPT_ADAPTER)	
 	kwargs = dict(ini.items("messaging_" + adapter))
 	kwargs[P2pConfigOptions.SERVER_ID] = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = ini.get(config.SECT_GENERAL, config.OPT_CRYPTO_KEY_PATH)
+	kwargs[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.key_path(cnf.DEFAULT_KEY)
 	kwargs[P2pConfigOptions.PRODUCER_URL] = kwargs[P2pConfigOptions.CONSUMER_URL]
 	
 	factory = MessageServiceFactory()		
@@ -375,18 +372,20 @@ def onSIGTERM(*args):
 
 def onSIGCHILD(*args):
 	logger = logging.getLogger(__name__)
-	logger.debug("Received SIGCHILD")
+	#logger.debug("Received SIGCHILD")
 	
 	if globals()["_running"] and _snmp_pid:
 		try:
 			# Restart SNMP process if it terminates unexpectedly
 			pid, sts = os.waitpid(_snmp_pid, os.WNOHANG)
+			'''
 			logger.debug(
 				'Child terminated (pid: %d, status: %s, WIFEXITED: %s, '
 				'WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)', 
 				pid, sts, os.WIFEXITED(sts), 
 				os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts)
 			)
+			'''
 			if pid == _snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
 				logger.warning(
 					'SNMP process [pid: %d] died unexpectedly. '
@@ -408,21 +407,20 @@ def _shutdown(*args):
 		
 		if _snmp_pid:
 			logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
-			os.kill(_snmp_pid, signal.SIGTERM)
+			try:
+				os.kill(_snmp_pid, signal.SIGTERM)
+			except (Exception, BaseException), e:
+				logger.debug("Can't kill SNMP process: %s" % e)
 				
+		# Shutdown messaging
 		msg_service = bus.messaging_service
-		consumer = msg_service.get_consumer()
-		consumer.stop()
-		consumer.shutdown()
+		msg_service.get_consumer().shutdown()
+		msg_service.get_producer().shutdown()
 		
-		producer = msg_service.get_producer()
-		producer.shutdown()
-		
-		# Kill Cross-scalarizr message consumer
+		# Shutdown internal messaging
 		int_msg_service = bus.int_messaging_service
-		if int_msg_service and int_msg_service.consumer:
-			int_msg_service.consumer.stop()
-			int_msg_service.consumer.shutdown()
+		if int_msg_service:
+			int_msg_service.get_consumer().shutdown()
 		
 		ex = bus.periodical_executor
 		ex.shutdown()
@@ -433,6 +431,7 @@ def _shutdown(*args):
 		pass
 	
 	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
+
 
 
 def do_validate_cnf():
@@ -531,14 +530,28 @@ def main():
 		# Load INI files configuration
 		cnf.bootstrap(force_reload=True)
 		
+		# At first startup cleanup private configuration
+		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
+			cnf.state = ScalarizrState.BOOTSTRAPPING
+			priv_path = cnf.private_path()
+			for file in os.listdir(priv_path):
+				if file == '.user-data':
+					continue
+				path = os.path.join(priv_path, file)
+				os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+		
 		# Initialize local database
 		_init_db()
 		
 		# Initialize platform module
 		_init_platform()
 		
+		# At first startup platform user-data should be applied
+		if cnf.state == ScalarizrState.BOOTSTRAPPING:
+			cnf.fire('apply_user_data', cnf)			
+		
 		# At first scalarizr startup platform user-data should be applied
-		if cnf.state == ScalarizrState.UNKNOWN:
+		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			cnf.fire('apply_user_data', cnf)
 			

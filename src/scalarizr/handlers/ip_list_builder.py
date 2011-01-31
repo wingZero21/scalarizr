@@ -32,9 +32,9 @@ class IpListBuilder(Handler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
-		
-		config = bus.config
-		self._base_path = config.get(self.name, "base_path")
+		#print bus.cnf
+		cnf = bus.cnf; ini = cnf.rawini
+		self._base_path = ini.get(self.name, "base_path")
 		self._base_path = self._base_path.replace('$etc_path', bus.etc_path)
 		self._base_path = os.path.normpath(self._base_path)
 		bus.on("init", self.on_init)

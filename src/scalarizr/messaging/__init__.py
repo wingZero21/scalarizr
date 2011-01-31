@@ -165,6 +165,7 @@ class MessageConsumer(object):
 	"""
 	
 	listeners = None
+	running = False
 	
 	def __init__(self):
 		self.listeners = []
@@ -174,9 +175,6 @@ class MessageConsumer(object):
 		}
 	
 	def start(self):
-		pass
-	
-	def stop(self):
 		pass
 	
 	def shutdown(self):
@@ -194,6 +192,10 @@ class Messages:
 	HELLO = "Hello"
 	"""
 	Fires when Scalarizr wants to remind Scalr of himself
+	@ivar behaviour
+	@ivar local_ip
+	@ivar remote_ip
+	@ivar role_name 
 	"""
 	
 	HOST_INIT = "HostInit"
@@ -312,3 +314,5 @@ class Messages:
 	"""
 	Fired by scripts/halt.py when server is going to halt
 	"""
+	
+	UPDATE_SSH_AUTHORIZED_KEYS = "UpdateSshAuthorizedKeys"

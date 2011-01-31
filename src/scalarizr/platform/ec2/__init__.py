@@ -1,14 +1,15 @@
 
-from scalarizr.platform import Platform, PlatformError
 from scalarizr.bus import bus
+from scalarizr.platform import Platform, PlatformError
+from scalarizr.storage.transfer import Transfer
+from .storage import S3TransferProvider
 
 from boto import connect_ec2, connect_s3
 from boto.ec2.regioninfo import RegionInfo
 import logging, urllib2, re, os
 
 
-
-
+Transfer.explore_provider(S3TransferProvider)
 
 
 """
@@ -44,7 +45,7 @@ class Ec2Platform(Platform):
 	_s3_endpoints = {
 		'us-east-1' 		: 's3.amazonaws.com',
 		'us-west-1' 		: 's3-us-west-1.amazonaws.com',
-		'eu-west-1' 		: 's3.amazonaws.com',
+		'eu-west-1' 		: 's3-eu-west-1.amazonaws.com',
 		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com'
 	}	
 	_properties = {}
@@ -163,3 +164,23 @@ class Ec2Platform(Platform):
 		key_id, key = self.get_access_keys()
 		self._logger.debug("Return s3 connection (endpoint: %s)", self._s3_endpoints[self.get_region()])
 		return connect_s3(key_id, key, host=self._s3_endpoints[self.get_region()])
+	
+	def set_access_data(self, access_data):
+		Platform.set_access_data(self, access_data)
+		key_id, key = self.get_access_keys()
+		os.environ['AWS_ACCESS_KEY_ID'] = key_id
+		os.environ['AWS_SECRET_ACCESS_KEY'] = key
+
+	def clear_access_data(self):
+		Platform.clear_access_data(self)
+		try:
+			del os.environ['AWS_ACCESS_KEY_ID']
+			del os.environ['AWS_SECRET_ACCESS_KEY']
+		except KeyError:
+			pass
+		
+	@property
+	def cloud_storage_path(self):
+		return 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
+	
+

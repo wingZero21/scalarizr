@@ -1,10 +1,10 @@
 '''
 Created on Jul 21, 2010
 
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 
-from scalarizr.util import system
+from scalarizr.util import system2
 
 
 P_TCP = "tcp"
@@ -85,20 +85,20 @@ class IpTables(object):
 		
 	def append_rule(self, rule_spec, chain='INPUT'):
 		rule = "%s -A %s%s" % (self.executable, chain, str(rule_spec))
-		system(rule)
+		system2(rule, shell=True)
 
 	def insert_rule(self, rule_num, rule_spec, chain='INPUT'):
 		if not rule_num:
 			rule_num = ''
 		rule = "%s -I %s %s%s" % (self.executable, chain, str(rule_num), str(rule_spec))
-		system(rule)
+		system2(rule, shell=True)
 	
 	def delete_rule(self, rule_spec, chain='INPUT'):
 		rule = "%s -D %s%s" % (self.executable, chain, str(rule_spec))
-		system(rule)
+		system2(rule, shell=True)
 
 	def list_rules(self, chain='INPUT'):
-		table = system('%s --line-numbers -nvL %s' % (self.executable, chain))[0]
+		table = system2('%s --line-numbers -nvL %s' % (self.executable, chain), shell=True)[0]
 
 		list = table.splitlines()
 		rules = []
@@ -140,4 +140,4 @@ class IpTables(object):
 	
 	def flush(self, chain='INPUT'):
 		rule = '%s -F %s' % (self.executable, chain)
-		system(rule)
+		system2(rule, shell=True)

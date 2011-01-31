@@ -2,7 +2,7 @@
 Created on Jul 23, 2010
 
 @author: marat
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 
 # Core
@@ -138,13 +138,36 @@ class MemcachedHandler(ServiceCtlHanler):
 		bus.on("init", self.on_init)
 
 	def on_init(self):
-		bus.on("before_host_up", self.on_before_host_up)
+		bus.on(
+			before_host_up=self.on_before_host_up,
+			before_reboot_finish=self.on_before_reboot_finish
+		)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name in (Messages.HOST_UP, Messages.HOST_DOWN, Messages.UPDATE_SERVICE_CONFIGURATION) \
 				and BEHAVIOUR in behaviour
 	
 	def on_before_host_up(self, message):
+		self._insert_iptables_rules()
+		# Service configured
+		bus.fire('service_configured', service_name=SERVICE_NAME)
+	
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
+	
+	def on_HostUp(self, message):
+		# Append new server to allowed list
+		ip = message.local_ip or message.remote_ip
+		rule = RuleSpec(source=ip, protocol=P_TCP, dport=self._port, jump='ACCEPT')
+		self._ip_tables.insert_rule(None, rule)
+		
+	def on_HostDown(self, message):
+		# Remove terminated server from allowed list
+		ip = message.local_ip or message.remote_ip
+		rule = RuleSpec(source=ip, protocol=P_TCP, dport=self._port, jump='ACCEPT')
+		self._ip_tables.delete_rule(rule)
+
+	def _insert_iptables_rules(self):
 		# Collect farm servers IP-s					
 		ips = []
 		for role in self._queryenv.list_roles():
@@ -164,20 +187,4 @@ class MemcachedHandler(ServiceCtlHanler):
 		# Apply iptables rules
 		for rule in rules:
 			self._ip_tables.append_rule(rule)
-			
-		# Service configured
-		bus.fire('service_configured', service_name=SERVICE_NAME)
-	
-	def on_HostUp(self, message):
-		# Append new server to allowed list
-		ip = message.local_ip or message.remote_ip
-		rule = RuleSpec(source=ip, protocol=P_TCP, dport=self._port, jump='ACCEPT')
-		self._ip_tables.insert_rule(None, rule)
 		
-		
-	def on_HostDown(self, message):
-		# Remove terminated server from allowed list
-		ip = message.local_ip or message.remote_ip
-		rule = RuleSpec(source=ip, protocol=P_TCP, dport=self._port, jump='ACCEPT')
-		self._ip_tables.delete_rule(rule)
-

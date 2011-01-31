@@ -1,14 +1,15 @@
+from __future__ import with_statement
+from socket import socket
 import os, re
 import logging
 import threading
 import weakref
 import time
 import sys
-import socket
 import signal
+import string
 
 from scalarizr.bus import bus
-
 
 class UtilError(BaseException):
 	pass
@@ -128,12 +129,103 @@ def system(args, shell=True):
 		logger.debug("stderr: " + err)
 	return out, err, p.returncode
 
+class PopenError(BaseException):
+	
+	def __str__(self):
+		if len(self.args) >= 5:
+			args = [self.error_text or '']
+			args += [self.proc_args[0] if hasattr(self.proc_args, '__iter__') else self.proc_args.split(' ')[0]]
+			args += [self.returncode, self.out, self.err, self.proc_args]
 
-def wait_until(target, args=None, sleep=5, logger=None, time_until=None, timeout=None):
+			ret = '%s %s (code: %s) <out>: %s <err>: %s <args>: %s' % tuple(args)
+			return ret.strip()
+		else:
+			return self.error_text
+	
+	@property
+	def error_text(self):
+		return self.args[0]
+	
+	@property
+	def out(self):
+		return self.args[1]
+	
+	@property
+	def err(self):
+		return self.args[2]
+
+	@property
+	def returncode(self):
+		return self.args[3]
+	
+	@property
+	def proc_args(self):
+		return self.args[4]
+
+def system2(*popenargs, **kwargs):
+	import subprocess, cStringIO
+	
+	logger 		= kwargs.get('logger', logging.getLogger(__name__))
+	warn_stderr = kwargs.get('warn_stderr')
+	raise_exc   = kwargs.get('raise_exc', kwargs.get('raise_error',  True))
+	ExcClass 	= kwargs.get('exc_class', PopenError)
+	error_text 	= kwargs.get('error_text')
+	input 		= None
+	
+	if kwargs.get('err2out'):
+		# Redirect stderr -> stdout
+		kwargs['stderr'] = subprocess.STDOUT
+		
+	if not 'stdout' in kwargs:
+		# Capture stdout
+		kwargs['stdout'] = subprocess.PIPE
+		
+	if not 'stderr' in kwargs:
+		# Capture stderr
+		kwargs['stderr'] = subprocess.PIPE
+		
+	if isinstance(kwargs.get('stdin'),  basestring):
+		# Pass string into stdin
+		input = kwargs['stdin']
+		kwargs['stdin'] = subprocess.PIPE
+		
+	if len(popenargs) > 0 and hasattr(popenargs[0], '__iter__'):
+		# Cast arguments to str
+		popenargs = list(popenargs)
+		popenargs[0] = tuple('%s' % arg for arg in popenargs[0])
+		
+	if kwargs.get('shell'):
+		# Set en_US locale
+		if not 'env' in kwargs:
+			kwargs['env'] = {}
+		kwargs['env']['LANG'] = 'en_US'
+		
+	for k in ('logger', 'err2out', 'warn_stderr', 'raise_exc', 'raise_error', 'exc_class', 'error_text'):
+		try:
+			del kwargs[k]
+		except KeyError:
+			pass
+		
+	logger.debug('system: %s' % (popenargs[0],))
+	p = subprocess.Popen(*popenargs, **kwargs)
+	out, err = p.communicate(input=input)
+	
+	if out:
+		logger.debug('stdout: ' + out)
+	if err:
+		logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
+	if p.returncode and raise_exc:
+		raise ExcClass(error_text, out.strip(), err and err.strip() or '', p.returncode, popenargs[0])
+
+	return out, err, p.returncode
+
+
+def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, time_until=None, timeout=None):
 	args = args or ()
+	kwargs = kwargs or {}
 	if timeout:
 		time_until = time.time() + timeout
-	while not target(*args):
+	while not target(*args, **kwargs):
 		if time_until and time.time() >= time_until:
 			raise BaseException('Time until: %d reached' % time_until)
 		if logger:
@@ -177,7 +269,7 @@ def read_shebang(path=None, script=None):
 	else:
 		raise ValueError('one of arguments `path` or `script` should be passed')
 
-	shebang = re.search(re.compile('^#!(\S+)\s*'), first_line)
+	shebang = re.search(re.compile('^#!(\S+.+)'), first_line)
 	if shebang:
 		return shebang.group(1)
 	return None
@@ -228,7 +320,6 @@ def backup_file(filename):
 	raise UtilError("Max backups limit %d exceed for file %s" % (max_backups, filename))
 
 
-"""
 def timethis(what):
 	try:
 		import time
@@ -249,22 +340,18 @@ def timethis(what):
 		return timed
 	else:
 		return benchmark()
-"""
 
-def init_tests():
-	logging.basicConfig(
-			format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", 
-			stream=sys.stdout, 
-			level=logging.DEBUG)
-	import scalarizr as szr
-	from scalarizr.bus import bus
-	bus.etc_path = os.path.realpath(os.path.dirname(__file__) + "/../../../etc")
-	szr._init()
-	bus.cnf.bootstrap()
+
+def split_ex(value, separator=",", allow_empty=False, ct=list):
+	return ct(v.strip() 
+			for v in value.split(separator) 
+			if allow_empty or (not allow_empty and v)) if value else ct()
+
 
 def get_free_devname():
+	#[o..z]
 	dev_list = os.listdir('/dev')
-	for letter in map(chr, range(111, 123)):
+	for letter in string.ascii_lowercase[14:]:
 		device = 'sd'+letter
 		if not device in dev_list:
 			return '/dev/'+device
@@ -291,6 +378,13 @@ def kill_childs(pid):
 			except:
 				pass
 		
+
+def ping_socket(host, port, exc_str=None):
+	s = socket()
+	try:
+		s.connect((host, port))
+	except:
+		raise Exception(exc_str or 'Service is not running: Port %s on %s closed.' % (port, host))
 		
 class PeriodicalExecutor:
 	_logger = None
@@ -356,4 +450,3 @@ class PeriodicalExecutor:
 					break
 			if not self._shutdown:
 				time.sleep(1)
-

@@ -6,7 +6,10 @@ Created on Jun 4, 2010
 '''
 
 import os, logging
-import select
+try:
+	import select
+except ImportError:
+	import selectmodule as select
 
 from pysnmp.entity import engine, config
 from pysnmp.entity.rfc3413 import cmdrsp, context

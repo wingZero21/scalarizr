@@ -7,10 +7,8 @@ Created on Dec 5, 2009
 from scalarizr.bus import bus
 from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingError
 from scalarizr.messaging.p2p.security import P2pMessageSecurity
-from scalarizr.util import configtool
 import logging
 import threading
-
 
 
 """
@@ -99,15 +97,15 @@ class _P2pMessageStore:
 			cur.execute('DELETE FROM p2p_message WHERE id <= ?', (row['id'],))
 		conn.commit()
 		
-	def put_ingoing(self, message, queue):
+	def put_ingoing(self, message, queue, consumer_id):
 		conn = self._conn()
 		cur = conn.cursor()
 		try:
 			sql = """INSERT INTO p2p_message (id, message, message_id, 
-						message_name, queue, is_ingoing, in_is_handled)
+						message_name, queue, is_ingoing, in_is_handled, in_consumer_id)
 					VALUES 
-						(NULL, ?, ?, ?, ?, ?, ?)"""
-			cur.execute(sql, [str(message), message.id, message.name, queue, 1, 0])
+						(NULL, ?, ?, ?, ?, ?, ?, ?)"""
+			cur.execute(sql, [str(message), message.id, message.name, queue, 1, 0, consumer_id])
 			
 			if message.meta.has_key(MetaOptions.REQUEST_ID):
 				cur.execute("""UPDATE p2p_message 
@@ -120,15 +118,17 @@ class _P2pMessageStore:
 		finally:
 			cur.close()
 			
-	def get_unhandled(self):
+	def get_unhandled(self, consumer_id):
 		"""
 		Return list of unhandled messages in obtaining order
 		@return: [(queue, message), ...]   
 		"""
 		cur = self._conn().cursor()
 		try:
-			cur.execute("""SELECT queue, message_id FROM p2p_message
-					WHERE is_ingoing = 1 AND in_is_handled = 0 ORDER BY id""")
+			sql = """SELECT queue, message_id FROM p2p_message
+					WHERE is_ingoing = ? AND in_is_handled = ? AND in_consumer_id = ? 
+					ORDER BY id"""
+			cur.execute(sql, [1, 0, consumer_id])
 			ret = []
 			for r in cur.fetchall():
 				ret.append((r["queue"], self.load(r["message_id"], True)))
@@ -284,8 +284,9 @@ class P2pMessage(Message):
 	def __init__(self, name=None, meta=None, body=None):
 		Message.__init__(self, name, meta, body)
 		self.__dict__["_store"] = P2pMessageStore()
-		config = bus.config
-		self.meta[MetaOptions.SERVER_ID] = config.get(configtool.SECT_GENERAL, configtool.OPT_SERVER_ID)
+		if bus.cnf:
+			cnf = bus.cnf; ini = cnf.rawini
+			self.meta[MetaOptions.SERVER_ID] = ini.get('general', 'server_id')
 	
 	def is_handled(self):
 		return self._store.is_handled(self.id)

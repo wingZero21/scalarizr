@@ -5,7 +5,7 @@ Created on Jul 20, 2010
 '''
 
 from scalarizr import init_script
-from scalarizr.util import disttool, system
+from scalarizr.util import disttool, system2
 import logging
 
 def main():
@@ -15,9 +15,9 @@ def main():
 	
 	if disttool.is_debian_based():
 		logger.info("Updating scalarizr with Apt")
-		system("apt-get -y install scalarizr")
+		system2("apt-get -y install scalarizr", shell=True)
 	elif disttool.is_redhat_based():
 		logger.info("Updating scalarizr with Yum")
-		system("yum -y update scalarizr")
+		system2("yum -y update scalarizr", shell=True)
 	else:
 		logger.error("Don't know how to update scalarizr on %s", " ".join(disttool.linux_dist()))

@@ -7,7 +7,7 @@ Created on Aug 29, 2010
 import socket
 import os
 import time
-from subprocess import Popen, PIPE
+from scalarizr.util import system2, PopenError
 from scalarizr.util.filetool import read_file
 import re
 
@@ -94,8 +94,10 @@ class ParametrizedInitScript(InitScript):
 	name = None
 	
 	def __init__(self, name, initd_script, pid_file=None, lock_file=None, socks=None):
-		if not os.access(initd_script, os.F_OK | os.X_OK):
-			err = 'Cannot find %s init script at %s. Make sure that %s is installed' % (name, initd_script)
+		if isinstance(initd_script, basestring) \
+			and not os.access(initd_script, os.F_OK | os.X_OK):
+			err = 'Cannot find %s init script at %s. Make sure that %s is installed' % (
+					name, initd_script, name)
 			raise InitdError(err)
 		
 		self.name = name		
@@ -110,15 +112,16 @@ class ParametrizedInitScript(InitScript):
 		
 	def _start_stop_reload(self, action):
 		try:
-			cmd = [self.initd_script, action]
-			proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, 
-						shell=False, close_fds=True, preexec_fn=os.setsid)
-			out, err = proc.communicate()
-		except OSError, e:
-			raise InitdError("Popen failed with error %s" % (e.strerror,))
+			args = [self.initd_script] \
+					if isinstance(self.initd_script, basestring) \
+					else list(self.initd_script)
+			args.append(action) 
+			out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
+		except PopenError, e:
+			raise InitdError("Popen failed with error %s" % (e,))
 		
-		if proc.returncode:
-			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), proc.returncode)
+		if returncode:
+			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), returncode)
 
 		if self.socks and (action != "stop" and not (action == 'reload' and not self.running)):
 			for sock in self.socks:
@@ -201,14 +204,15 @@ def wait_sock(sock = None):
 	if not isinstance(sock, SockParam):
 		raise InitdError('Socks parameter must be instance of SockParam class')
 	
-	s = socket.socket(sock.family, sock.type)
 	time_start = time.time()
 	while time.time() - time_start < sock.timeout:
 		try:
+			s = socket.socket(sock.family, sock.type)			
 			s.connect(sock.conn_address)
 			s.shutdown(2)
+			del s
 			return
 		except:
-			time.sleep(0.1)
+			time.sleep(1)
 			pass
 	raise InitdError ("Service unavailable after %d seconds of waiting" % sock.timeout)

@@ -5,12 +5,14 @@ Created on Mar 11, 2010
 
 import scalarizr
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler, async, HandlerError
+from scalarizr.handlers import Handler, HandlerError, RebundleLogHandler
 from scalarizr.messaging import Messages, Queues
-from scalarizr.util import system, disttool, cryptotool, fstool, filetool,\
+from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, get_free_devname
 from scalarizr.util import software
-from scalarizr.platform.ec2 import s3tool, ebstool
+from scalarizr.platform.ec2 import ebstool
+from scalarizr.storage import Storage 
+from scalarizr.storage.util.loop import mkloop, rmloop
 
 from subprocess import Popen
 from M2Crypto import X509, EVP, Rand, RSA
@@ -25,6 +27,7 @@ from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
 from scalarizr.util.filetool import read_file
+from scalarizr.storage.transfer import Transfer
 
 if boto.Version == '1.9b':
 	# Workaround for http://code.google.com/p/boto/issues/detail?id=310
@@ -165,7 +168,7 @@ class Ec2RebundleHandler(Handler):
 				# Old-style instance-store
 				sda1_kobject = filter(
 					lambda x: os.path.exists(x), 
-					('/sys/block/sda1', '/sys/block/sda/sda1')
+					('/sys/block/sda1', '/sys/block/sda/sda1', '/sys/block/xvda1')
 				)
 				if not sda1_kobject:
 					raise HandlerError('Cannot find sda1 kobject in sysfs')
@@ -184,27 +187,16 @@ class Ec2RebundleHandler(Handler):
 			# Run rebundle
 			ami_id = strategy.run()
 			
-			# Software list creation
-			software_list = []			
-			installed_list = software.all_installed()
-			for software_info in installed_list:
-				software_list.append(dict(name 	 = software_info.name,
-									      version = '.'.join([str(x) for x in software_info.version]),
-									      string_version = software_info.string_version
-									      ))
+			# Creating message
+			ret_message = dict(	status = "ok",
+								snapshot_id = ami_id,
+								bundle_task_id = message.bundle_task_id )
 			
-			os_info = {}
-			os_info['version'] = ' '.join(disttool.linux_dist())
-			os_info['string_version'] = ' '.join(disttool.uname()).strip()
+			# Updating message with OS, software and modules info
+			ret_message.update(software.system_info())
 			
 			# Notify Scalr
-			self.send_message(Messages.REBUNDLE_RESULT, dict(
-				status = "ok",
-				snapshot_id = ami_id,
-				bundle_task_id = message.bundle_task_id,
-				software = software_list,
-				os = os_info
-			))
+			self.send_message(Messages.REBUNDLE_RESULT, ret_message)
 			
 			# Fire 'rebundle'diss
 			bus.fire("rebundle", role_name=role_name, snapshot_id=ami_id)
@@ -259,7 +251,7 @@ class RebundleStratery:
 		self._logger = logging.getLogger(__name__)
 	
 	def _is_super_user(self):
-		return system('id -u')[0].strip() == '0'
+		return system2('id -u', shell=True)[0].strip() == '0'
 	
 	def _bundle_vol(self, image):
 		try:
@@ -457,14 +449,14 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			digest_file = os.path.join('/tmp', 'ec2-bundle-image-digest.sha1')
 			
 			self._logger.info("Encrypting image")
-			system(" | ".join([
+			system2(" | ".join([
 				"%(openssl)s %(digest_algo)s -out %(digest_file)s < %(digest_pipe)s & %(tar)s", 
 				"tee %(digest_pipe)s",  
 				"gzip", 
 				"%(openssl)s enc -e -%(crypto_algo)s -K %(key)s -iv %(iv)s > %(bundled_file_path)s"]) % dict(
 					openssl=openssl, digest_algo=DIGEST_ALGO, digest_file=digest_file, digest_pipe=digest_pipe, 
 					tar=str(tar), crypto_algo=CRYPTO_ALGO, key=key, iv=iv, bundled_file_path=bundled_file_path
-			))
+			), shell=True)
 			
 			try:
 				# openssl produce different outputs:
@@ -561,39 +553,19 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 	def _upload_image(self, bucket_name, manifest_path, manifest, region=None, acl="aws-exec-read"):
 		try:
 			self._logger.info("Uploading bundle")
-			s3_conn = self._platform.new_s3_conn()
 			
-			# Create bucket
-			bucket = None
-			try:
-				self._logger.info("Lookup bucket '%s'", bucket_name)
-				try:
-					# Lockup bucket
-					bucket = s3_conn.get_bucket(bucket_name)
-					self._logger.debug("Bucket '%s' already exists", bucket_name)
-				except:
-					# It's important to lockup bucket before creating it because if bucket exists
-					# and account has reached buckets limit S3 returns error.
-					self._logger.info("Creating bucket '%s'", bucket_name)					
-					bucket = s3_conn.create_bucket(bucket_name, location=s3tool.location_from_region(region), policy=acl)
-					#bucket = s3_conn.create_bucket(bucket_name, policy=acl)
-					
-			except BotoServerError, e:
-				raise BaseException("Cannot lookup bucket '%s'. %s" % (bucket_name, e.error_message))
-			
-			# Create files queue
+			# Files to upload
 			self._logger.debug("Enqueue files to upload")
-			manifest_dir = os.path.dirname(manifest_path)
+			manifest_dir = os.path.dirname(manifest_path)			
 			upload_files = [manifest_path]
 			for part in manifest.parts:
 				upload_files.append(os.path.join(manifest_dir, part[0]))
-							
-			# Start uploaders
-			self._logger.info("Uploading files")
-			uploader = s3tool.S3Uploader(pool=4, max_attempts=5)
-			uploader.upload(upload_files, bucket, s3_conn, acl)
+			
+			trn = Transfer(pool=4, max_attempts=5, logger=self._logger)
+			trn.upload(upload_files, 's3://%s/' % bucket_name)
 			
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
+		
 			
 		except (Exception, BaseException):
 			self._logger.error("Cannot upload image")
@@ -709,7 +681,6 @@ class RebundleEbsStrategy(RebundleStratery):
 					# Sometimes it takes few seconds for EC2 to propagate new AMI
 					return False
 				raise
-			
 		wait_until(check_image, logger=self._logger)
 		self._logger.debug('Image %s available', ami_id)
 		
@@ -801,11 +772,11 @@ if disttool.is_linux():
 		def make(self):
 			self.devname = self._create_image()
 			self._format_image()
-			system("sync")  # Flush so newly formatted filesystem is ready to mount.
+			system2("sync", shell=True)  # Flush so newly formatted filesystem is ready to mount.
 			self._mount_image()
 			self._make_special_dirs()
 			self._copy_rec(self._volume, self.mpoint)
-			system("sync")  # Flush buffers
+			system2("sync", shell=True)  # Flush buffers
 			return self.mpoint
 		
 		
@@ -816,23 +787,26 @@ if disttool.is_linux():
 		
 		def umount(self):
 			if self._mtab.contains(mpoint=self.mpoint, reload=True):
-				self._logger.debug("Unmounting '%s'", self.mpoint)				
-				system("umount -d " + self.mpoint)
+				self._logger.debug("Unmounting '%s'", self.mpoint)
+				system2("umount -d " + self.mpoint, shell=True, raise_exc=False)
 		
 		def _format_image(self):
 			self._logger.info("Formatting image")
-			vol_entry = self._mtab.find(mpoint=self._volume)[0]
-			system('/sbin/mkfs.%s -F %s 2>&1' % (vol_entry.fstype, self.devname))
-			system('/sbin/tune2fs -i 0 %s' % self.devname)
-			self._logger.debug('Image %s formatted', self.devname)
 			
-			# Set volume label
-			if vol_entry.fstype in ('ext2', 'ext3', 'ext4'):
-				label = system('/sbin/e2label %s' % vol_entry.devname)[0].strip()
-				if label:
-					self._logger.debug('Set volume label: %s', label)
-					system('/sbin/e2label %s %s' % (self.devname, label))
+			vol_entry = self._mtab.find(mpoint=self._volume)[0]
+			fs = Storage.lookup_filesystem(vol_entry.fstype)
+						
+			# create filesystem
+			fs.mkfs(self.devname)
+			# set EXT3/4 options
+			if fs.name.startswith('ext'): 
+				system2(('/sbin/tune2fs', '-i', '0', self.devname))
+			# set label
+			label = fs.get_label(vol_entry.devname)
+			if label:
+				fs.set_label(self.devname, label)
 
+			self._logger.debug('Image %s formatted', self.devname)
 
 		def _create_image(self):
 			pass
@@ -864,20 +838,26 @@ if disttool.is_linux():
 					os.makedirs(self.mpoint + dir)
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
-			dev_dir = self.mpoint + "/dev"
-			system("mknod " + dev_dir + "/console c 5 1")
-			system("mknod " + dev_dir + "/full c 1 7")									
-			system("mknod " + dev_dir + "/null c 1 3")
-			#system("ln -s null " + dev_dir +"/X0R")		
-			system("mknod " + dev_dir + "/zero c 1 5")
-			system("mknod " + dev_dir + "/tty c 5 0")
-			system("mknod " + dev_dir + "/tty0 c 4 0")
-			system("mknod " + dev_dir + "/tty1 c 4 1")
-			system("mknod " + dev_dir + "/tty2 c 4 2")
-			system("mknod " + dev_dir + "/tty3 c 4 3")
-			system("mknod " + dev_dir + "/tty4 c 4 4")
-			system("mknod " + dev_dir + "/tty5 c 4 5")
-			system("mknod " + dev_dir + "/xvc0 c 204 191")
+			devdir = os.path.join(self.mpoint, 'dev')
+			mknod = '/bin/mknod'
+			nods = (
+				'console c 5 1',
+				'full c 1 7',
+				'null c 1 3',
+				'zero c 1 5',
+				'tty c 5 0',
+				'tty0 c 4 0',
+				'tty1 c 4 1',
+				'tty2 c 4 2',
+				'tty3 c 4 3',
+				'tty4 c 4 4',
+				'tty5 c 4 5',
+				'xvc0 c 204 191'
+			)
+			for nod in nods:
+				nod = nod.split(' ')
+				nod[0] = devdir + nod[0]
+				system2([mknod] + nod)
 			
 			self._logger.debug("Special directories maked")			
 		
@@ -886,6 +866,7 @@ if disttool.is_linux():
 			self._logger.info("Copying %s into the image %s", source, dest)
 			rsync = filetool.Rsync()
 			#rsync.archive().times().sparse().links().quietly()
+			#rsync.archive().sparse().xattributes()
 			rsync.archive().sparse()
 			if xattr:
 				rsync.xattributes()
@@ -895,8 +876,13 @@ if disttool.is_linux():
 			self._logger.debug('rsync stdout: %s', out)
 			self._logger.debug('rsync stderr: %s', err)
 			
+			if exitcode == 24 and filetool.Rsync.usable():
+				self._logger.warn(
+					"rsync exited with error code 24. This means a partial transfer due to vanished " + 
+					"source files. In most cases files are copied normally"
+				)
 			if exitcode == 23 and filetool.Rsync.usable():
-				self._logger.warning(
+				self._logger.warn(
 					"rsync seemed successful but exited with error code 23. This probably means " +
 	           		"that your version of rsync was built against a kernel with HAVE_LUTIMES defined, " +
 	             	"although the current kernel was not built with this option enabled. The bundling " +
@@ -904,7 +890,7 @@ if disttool.is_linux():
 	           		"successfully, your image should be perfectly usable. We, however, recommend that " +
 			   		"you install a version of rsync that handles this situation more elegantly.")
 			elif exitcode == 1 and xattr:
-				self._logger.warning(
+				self._logger.warn(
 					"rsync with preservation of extended file attributes failed. Retrying rsync " +
 	           		"without attempting to preserve extended file attributes...")
 				self._copy_rec(source, dest, xattr=False)
@@ -985,12 +971,14 @@ if disttool.is_linux():
 			
 		def _create_image(self):
 			self._logger.debug('Creating image file %s', self.path)
-			system("dd if=/dev/zero of='%s' bs=1M count=1 seek=%s" % (self.path, self._size - 1))
+
+			mkloop(self.path, size=self._size, quick=True)
+			#system("dd if=/dev/zero of='%s' bs=1M count=1 seek=%s" % (self.path, self._size - 1))
 			self._logger.debug('Image file %s created', self.path)			
 			
 			self._logger.debug('Associate loop device with a %s', self.path)
-			devname = system('/sbin/losetup -f')[0].strip()
-			out, err, retcode = system('/sbin/losetup %s "%s"' % (devname, self.path))
+			devname = system2(('/sbin/losetup', '-f'))[0].strip()
+			out, err, retcode = system2(('/sbin/losetup', devname, self.path))
 			if retcode > 0:
 				raise HandlerError('Cannot setup loop device. Code: %d %s' % (retcode, err))
 			self._logger.debug('Associated %s with a file %s', devname, self.path)
@@ -1000,7 +988,7 @@ if disttool.is_linux():
 		def cleanup(self):
 			LinuxImage.cleanup(self)
 			if self.devname:
-				system('/sbin/losetup -d %s' % self.devname)
+				rmloop(self.devname)
 				
 	LoopbackImage = LinuxLoopbackImage
 	EbsImage = LinuxEbsImage
@@ -1302,17 +1290,3 @@ class AmiManifest:
 	
 	def endElement(self, name):
 		pass
-
-
-class RebundleLogHandler(logging.Handler):
-	def __init__(self, bundle_task_id=None):
-		logging.Handler.__init__(self)
-		self.bundle_task_id = bundle_task_id
-		self._msg_service = bus.messaging_service
-		
-	def emit(self, record):
-		msg = self._msg_service.new_message(Messages.REBUNDLE_LOG, body=dict(
-			bundle_task_id = self.bundle_task_id,
-			message = str(record.msg) % record.args if record.args else str(record.msg)
-		))
-		self._msg_service.get_producer().send(Queues.LOG, msg)

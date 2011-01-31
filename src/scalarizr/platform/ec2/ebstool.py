@@ -16,6 +16,16 @@ from boto.ec2.snapshot import Snapshot
 DEFAULT_TIMEOUT = 300 	# 5 min
 SNAPSHOT_TIMEOUT = 2700	# 45 min
 
+def create_snapshot(ec2_conn, volume_id, description=None, logger=None, timeout=SNAPSHOT_TIMEOUT):
+	if isinstance(volume_id, Volume):
+		volume_id = volume_id.id
+	logger = logger or logging.getLogger(__name__)
+	logger.debug('Creating snapshot of EBS volume %s', volume_id)
+	snap = ec2_conn.create_snapshot(volume_id, description)
+	logger.debug('Snapshot %s created for EBS volume %s', snap.id, volume_id)
+	wait_snapshot(ec2_conn, snap, logger, timeout)
+	return snap
+
 def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 	'''
 	Waits until snapshot becomes 'completed' or 'error'
@@ -50,6 +60,10 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout
 		avail_zone
 	)
 	logger.debug(msg)
+	
+	if snap_id:
+		wait_snapshot(ec2_conn, snap_id, logger)
+	
 	vol = ec2_conn.create_volume(size, avail_zone, snap_id)
 	logger.debug('EBS volume %s created%s', vol.id, snap_id and ' from snapshot %s' % snap_id or '')
 	
@@ -92,7 +106,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		
 	return vol
 
-def detach_volume(ec2_conn, volume_id, logger=None, timeout=DEFAULT_TIMEOUT):
+def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIMEOUT):
 	time_until = time.time() + timeout
 	logger = logger or logging.getLogger(__name__)
 	if isinstance(volume_id, basestring):
@@ -103,7 +117,7 @@ def detach_volume(ec2_conn, volume_id, logger=None, timeout=DEFAULT_TIMEOUT):
 		
 	logger.debug('Detaching volume %s', vol.id)
 	try:
-		vol.detach()
+		vol.detach(force)
 	except BotoServerError, e:
 		if e.code != 'IncorrectState':
 			raise

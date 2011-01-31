@@ -11,13 +11,13 @@ from scalarizr import config
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
+from scalarizr.util import system2
 
 # Libs
-from scalarizr.util import cryptotool, system
+from scalarizr.util import cryptotool
 
 # Stdlibs
-import logging, os, sys, binascii, threading
-from subprocess import Popen, PIPE
+import logging, os, sys, threading
 
 
 
@@ -136,7 +136,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			pass
 
 		# Mount all filesystems
-		system('mount -a 2>&1')
+		system2(('mount', '-a'), raise_exc=False)
+
 
 	def on_start(self):
 		optparser = bus.optparser
@@ -144,9 +145,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		# Start internal messaging
 		if self._cnf.state == ScalarizrState.RUNNING:
 			# when farm key exists
-			if os.path.exists(self._cnf.key_path(self._cnf.FARM_KEY)):
-				#self._start_int_messaging()
-				pass
+			if self._cnf.key_exists(self._cnf.FARM_KEY):
+				self._start_int_messaging()
 		
 		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")
@@ -207,8 +207,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	
 	def _start_import(self):
-		# Send Hello
-		msg = self.new_message(Messages.HELLO, {"architecture" : self._platform.get_architecture()})		
+		# Send Hello 
+		msg = self.new_message(Messages.HELLO, 
+			{"architecture" : self._platform.get_architecture()}, 
+			broadcast=True # It's not really broadcast but need to contain broadcast message data 
+		)		
 		bus.fire("before_hello", msg)
 		self.send_message(msg)
 		bus.fire("hello")
@@ -218,17 +221,16 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		farm_crypto_key = message.body.get('farm_crypto_key', '')
 		if farm_crypto_key:
 			self._cnf.write_key(self._cnf.FARM_KEY, farm_crypto_key)
-			# FIXME: Starting internal messaging corrupts public one,
-			# don't uncomment this line until messaging will be gracefully refactored O-HO-HO !!!
-			#self._start_int_messaging()
+			self._start_int_messaging()
 		else:
 			self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
 					+ "Cross-scalarizr messaging not initialized")
 
 	def _start_int_messaging(self):
 		srv = IntMessagingService()
-		srv.start_consumer()
 		bus.int_messaging_service = srv
+		t = threading.Thread(name='IntMessageConsumer', target=srv.get_consumer().start)
+		t.start()
 
 
 	def on_IntServerReboot(self, message):
@@ -263,9 +265,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	def _update_package(self):
 		up_script = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_SCRIPTS_PATH) + '/update'
-		cmd = [sys.executable, up_script]
-		p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
-		p.communicate()
+		#cmd = [sys.executable, up_script]
+		#p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
+		#p.communicate()
+		system2([sys.executable, up_script], close_fds=True)
 		self._set_flag('update')
 
 	def on_before_message_send(self, queue, message):
@@ -298,21 +301,24 @@ class IntMessagingService(object):
 	Usage:
 	s = bus.int_messaging_service
 	p = s.new_producer('10.152.12.38')
-	m = s.msg_service.new_message('Cassandra_IntCreateDataBundle')
+	m = s.new_message('Cassandra_IntCreateDataBundle')
 	p.send(Queues.CONTROL, m)
 	'''
-	msg_service = None
-	consumer = None
+	_msg_service = None
 	
 	def __init__(self):
 		cnf = bus.cnf
 		f = MessageServiceFactory()
-		self.msg_service = f.new_service("p2p", **{
+		self._msg_service = f.new_service("p2p", **{
 			P2pConfigOptions.SERVER_ID : cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID),
 			P2pConfigOptions.CRYPTO_KEY_PATH : cnf.key_path(cnf.FARM_KEY),
-			P2pConfigOptions.CONSUMER_URL : "http://0.0.0.0:8012"
+			P2pConfigOptions.CONSUMER_URL : 'http://0.0.0.0:8012'
 		})
 	
+	def get_consumer(self):
+		return self._msg_service.get_consumer()
+	
+	'''
 	def start_consumer(self):
 		if not self.consumer:
 			self.consumer = self.msg_service.get_consumer()
@@ -321,6 +327,10 @@ class IntMessagingService(object):
 			# Start consumer thread
 			t = threading.Thread(name="IntMessagingConsumer", target=self.consumer.start)
 			t.start()
+	'''
 	
 	def new_producer(self, host):
-		return self.msg_service.new_producer(endpoint="http://%s:8012" % host)
+		return self._msg_service.new_producer(endpoint="http://%s:8012" % host)
+	
+	def new_message(self, *args, **kwargs):
+		return self._msg_service.new_message(*args, **kwargs)

@@ -25,7 +25,7 @@ except ImportError:
 
 format_providers = dict()
 default_format = "ini"
-	
+
 class MetaconfError(Exception):
 	pass
 
@@ -63,7 +63,7 @@ class Configuration:
 	
 	_provider = None
 
-	def __init__(self, format=default_format, root_path="", etree=None):
+	def __init__(self, format=default_format, root_path="", etree=None, filename=None):
 		
 		if etree and not isinstance(etree, ET.ElementTree):
 			raise MetaconfError("etree param must be instance of ElementTree. %s passed" % (etree,))
@@ -75,6 +75,8 @@ class Configuration:
 		self._format = format
 		self.etree = etree
 		self._config_count = 0
+		if filename:
+			self._read0(filename)
 	
 	def _init(self):
 		if not self._provider or self._config_count > 0:
@@ -394,9 +396,10 @@ class Configuration:
 			for key in value:
 				el.attrib.update({key: value[key]})
 		else:
-			el.text = value
+			if value and value != 'None':
+				el.text = value
 	
-	def add(self, path, value=None, before_path=None):
+	def add(self, path, value=None, before_path=None, force=False):
 		"""
 		Add value at path <path> 
 		if before_path specified, new option will be added right after it.
@@ -412,19 +415,39 @@ class Configuration:
 		if path.endswith('/'):
 			path = path[:-1]
 		
-		parent_path = os.path.dirname(path) or '.'
-		
-		parent		= self._find(parent_path)
-		el = self._provider.create_element(self.etree, os.path.join(self._root_path, path), value)
-				
 		if before_path:
-			path_list = self._find_all(parent_path +'/'+ before_path)
+			if '/' in path and '/' in before_path:
+				raise Exception('Use absolute path in path or before_path arguments')
+			if '/' in before_path:
+				# Search by before_path
+				try:
+					before_element = self._find(before_path)
+					parent = self._find(os.path.join(before_path, '..'))
+				except:
+					raise MetaconfError('Cannot find %s' % before_path)
+			else:
+				parent_path 	= os.path.dirname(path) or '.'
+				parent	= self._find(parent_path)
+				path_list = self._find_all(parent_path +'/'+ before_path)
+				if len(path_list):
+					before_element = path_list[0]
+		else:
+			parent_path = os.path.dirname(path) or '.'
+			try:
+				parent	= self._find(parent_path)
+			except:
+				if force:
+					if re.search('\*|\.\.|\[|\]|//', parent_path):
+						raise MetaconfError("Can't use predicates with force argument")
+					self.add(parent_path, force=True)
+					parent	= self._find(parent_path)
+				else:
+					raise
+			path_list = self._find_all(path)
 			if len(path_list):
-				before_element = path_list[0]
-				
-		path_list = self._find_all(path)
-		if len(path_list):
-			after_element = path_list[-1]
+				after_element = path_list[-1]
+		
+		el = self._provider.create_element(self.etree, os.path.join(self._root_path, path), value)
 		
 		if after_element != None:
 			parent.insert(list(parent).index(after_element) + 1, el)
@@ -704,17 +727,16 @@ class NginxFormatProvider(IniFormatProvider):
 		self._writers += (self.write_statement,)
 		self._nesting  = 0
 		self._pad = '	'
-	
+
 	def create_element(self, etree, path, value):
 		el = FormatProvider.create_element(self, etree, path, value)
-		
 		parent_path = os.path.dirname(path)
 		if parent_path not in  ('.', ''):
 			parent = etree.find(parent_path)
 			# We are sure that parent element exists, because Configuration calls private method '_find' first
-			if parent.attrib.has_key('mc_type') and parent.attrib.has_key('mc_type') != 'section':
+			if parent.attrib.has_key('mc_type') and parent.attrib['mc_type'] != 'section':
 				parent.attrib['mc_type'] = 'section'
-				if parent.text.strip():
+				if parent.text and parent.text.strip():
 					parent.attrib['value'] = parent.text.strip()
 					parent.text = ''				
 		
@@ -895,7 +917,7 @@ class ApacheFormatProvider(IniFormatProvider):
 		if parent_path not in  ('.', ''):
 			parent = etree.find(parent_path)
 			# We are sure that parent element exists, because Configuration calls private method '_find' first
-			if parent.attrib.has_key('mc_type') and parent.attrib.has_key('mc_type') != 'section':
+			if parent.attrib.has_key('mc_type') and parent.attrib['mc_type'] != 'section':
 				parent.attrib['mc_type'] = 'section'
 				if parent.text.strip():
 					parent.attrib['value'] = parent.text.strip()
@@ -1303,3 +1325,7 @@ format_providers["xml"] = XmlFormatProvider
 
 
 """
+
+
+def strip_quotes(s):
+	return re.sub(r'^["\'](.+)["\']$', r'\1', s)

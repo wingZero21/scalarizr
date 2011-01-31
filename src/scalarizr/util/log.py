@@ -51,6 +51,7 @@ class MessagingHandler(logging.Handler):
 		self.send_interval = (int(m.group('seconds') or 0) + 60*int(m.group('minutes') or 0)) or 1
 		self.num_entries = num_entries
 		self._logger = logging.getLogger(__name__)
+		bus.on("terminate", self.on_terminate)
 		
 	def __del__(self):
 		if self._send_event:
@@ -144,6 +145,11 @@ class MessagingHandler(logging.Handler):
 		
 	def _time_has_come(self):
 		return len(self.entries) >= self.num_entries
+	
+	def on_terminate(self):
+		self._stop_event.set()
+		self._send_message()
+		self._sender_thread.join()
 			
 	def _send_message(self):
 		if not bus.messaging_service:
@@ -173,7 +179,10 @@ class MessagingHandler(logging.Handler):
 	def _sender(self):
 		while not self._stop_event.isSet():
 			try:
-				self._send_event.wait(self.send_interval)
+				for i in range(self.send_interval * 10):
+					self._send_event.wait(0.1)
+					if self._stop_event.isSet():
+						return
 				if self._messaging_enabled and self.entries:
 					self._send_message()
 			finally:

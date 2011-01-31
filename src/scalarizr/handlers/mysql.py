@@ -8,28 +8,29 @@ Created on 14.06.2010
 # Core
 from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr.config import BuiltinBehaviours, Configurator
+from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer 
+from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
-from scalarizr.platform.ec2 import s3tool, UD_OPT_S3_BUCKET_NAME, ebstool
 
 # Libs
-from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError,\
+from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
-from scalarizr.util import fstool, system, cryptotool, disttool,\
-		 filetool, firstmatched, cached, validators, initdv2, software, get_free_devname
+from scalarizr.util import system2, cryptotool, disttool, filetool, \
+	firstmatched, cached, validators, initdv2, software, wait_until, PopenError
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
 from distutils import version
-from subprocess import Popen, PIPE, STDOUT
 import logging, os, re,  tarfile, tempfile
-import time, signal, pwd, random, shutil
+import time, pwd, random, shutil
 import glob
+import string
+import ConfigParser
 
 # Extra
-from boto.exception import BotoServerError
 import pexpect
 
 
@@ -37,19 +38,34 @@ BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR
 
+_logger = logging.getLogger(__name__)
+
+# TODO: use these global settings anywhere. update them once from mysql.ini 
+mysqld_path = None
+mysql_path = None
+mysqldump_path = None
+mycnf_path = None
+change_master_timeout = 30
+
 class MysqlInitScript(initdv2.ParametrizedInitScript):
+	socket_file = None
 	def __init__(self):
-		initd_script = disttool.is_redhat_based() and "/etc/init.d/mysqld" or "/etc/init.d/mysql"
-		
-		if not os.path.exists(initd_script):
-			raise HandlerError("Cannot find MySQL init script at %s. Make sure that MySQL is installed" % initd_script)
+		if disttool.is_redhat_based():
+			initd_script = '/etc/init.d/mysqld'
+		elif disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+			initd_script = ('/usr/sbin/service', 'mysql')
+		else:
+			initd_script = '/etc/init.d/mysql'
 		
 		pid_file = None
 		try:
-			out = system("my_print_defaults mysqld")
+			out = system2("my_print_defaults mysqld", shell=True)
 			m = re.search("--pid[-_]file=(.*)", out[0], re.MULTILINE)
 			if m:
 				pid_file = m.group(1)
+			m = re.search("--socket=(.*)", out[0], re.MULTILINE)
+			if m:
+				self.socket_file = m.group(1)
 		except:
 			pass
 		
@@ -72,11 +88,27 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		XXX: Requires investigation
 		'''
 		
+	def status(self):
+		if self.socket_file:
+			if os.path.exists(self.socket_file):
+				if mysql_path:
+					try:
+						spawn_mysql_cli('root').close()
+						return initdv2.Status.RUNNING
+					except HandlerError, e:
+						if 'Access denied' in str(e):
+							return initdv2.Status.RUNNING
+			else:
+				return initdv2.Status.NOT_RUNNING
+					
+		return initdv2.ParametrizedInitScript.status(self)
 		
+	'''
 	def stop(self):
 		if not self.running:
 			return True
 		initdv2.ParametrizedInitScript.stop(self)
+	'''
 
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
 
@@ -155,44 +187,121 @@ class MysqlServiceConfigurator:
 	pass
 
 # Configuration options
-OPT_ROOT_USER   		= "root_user"
-OPT_ROOT_PASSWORD   	= "root_password"
-OPT_REPL_USER   		= "repl_user"
-OPT_REPL_PASSWORD   	= "repl_password"
-OPT_STAT_USER   		= "stat_user"
+# Private
+OPT_ROOT_PASSWORD 		= "root_password"
+OPT_REPL_PASSWORD 		= "repl_password"
 OPT_STAT_PASSWORD   	= "stat_password"
 OPT_REPLICATION_MASTER  = "replication_master"
-OPT_SNAPSHOT_ID			= "snapshot_id"
-OPT_STORAGE_VOLUME_ID	= "volume_id" 
 OPT_LOG_FILE 			= "log_file"
 OPT_LOG_POS				= "log_pos"
-
+OPT_VOLUME_CNF			= 'volume_config'
+OPT_SNAPSHOT_CNF		= 'snapshot_config'
+# Public
 OPT_MYSQLD_PATH 		= 'mysqld_path'
+OPT_MYSQL_PATH			= 'mysql_path'
+OPT_MYSQLDUMP_PATH		= 'mysqldump_path'
 OPT_MYCNF_PATH 			= 'mycnf_path'
+OPT_CHANGE_MASTER_TIMEOUT = 'change_master_timeout'
 
-# Role params
-PARAM_MASTER_EBS_VOLUME_ID 	= "mysql_master_ebs_volume_id"
-PARAM_DATA_STORAGE_ENGINE 	= "mysql_data_storage_engine"
+# System users
+ROOT_USER 				= "scalr"
+REPL_USER 				= "scalr_repl"
+STAT_USER 				= "scalr_stat"
+PMA_USER 				= "pma"
 
+# Mysql storage constants
+STORAGE_DEVNAME 		= "/dev/sdo"
+STORAGE_PATH 			= "/mnt/dbstorage"
+STORAGE_DATA_DIR 		= "mysql-data"
+STORAGE_BINLOG 			= "mysql-misc/binlog"
+STORAGE_VOLUME_CNF 		= 'mysql.json'
+STORAGE_SNAPSHOT_CNF 	= 'mysql-snap.json'
 
-ROOT_USER = "scalr"
-REPL_USER = "scalr_repl"
-STAT_USER = "scalr_stat"
-PMA_USER = "pma"
-
-STORAGE_DEVNAME = "/dev/sdo"
-STORAGE_PATH = "/mnt/dbstorage"
-STORAGE_DATA_DIR = "mysql-data"
-STORAGE_BINLOG = "mysql-misc/binlog"
 BACKUP_CHUNK_SIZE = 200*1024*1024
 
 
 def get_handlers ():
 	return [MysqlHandler()]
 
+'''
+Failover scenario:
+
+1. Cloud support pluggable disks (ex: EBS)
++-------+              +------------------+                     +--------+
+| Scalr |              | Slave1 -> Master |                     | Slave2 |
++-------+              +------------------+                     +--------+
+
+     Mysql_PromoteToMaster
+       - root_password
+       - repl_password
+       - stat_password
+       - volume_config
+     -------------------------->
+
+     						 STOP SLAVE
+                             vol = Storage(volume_config)
+     						 vol.detach() from Master
+     						 vol.attach() to Slave1
+     						 start mysql
+
+     Mysql_PromoteToMasterResult
+       - volume_config
+     <--------------------------						 
+
+     Mysql_NewMasterUp
+       - local_ip
+       - repl_password
+     ---------------------------------------------------------------->
+      														 get current log_file, log_pos
+      														 CHANGE MASTER TO
+      														 
+      														 
+2. Cloud has no pluggable disks (ex: Rackspace)
++-------+              +------------------+                     +--------+
+| Scalr |              | Slave1 -> Master |                     | Slave2 |
++-------+              +------------------+                     +--------+
+
+	 Mysql_PromoteToMaster
+	   - root_password
+	   - repl_password
+	   - stat_password
+     --------------------------->
+     
+                             STOP SLAVE
+                             RESET MASTER
+                             start mysql
+                             create snapshot
+                             
+     Mysql_PromoteToMasterResult
+       - snapshot_config
+       - log_file
+       - log_pos
+    <----------------------------
+  
+	 Mysql_NewMasterUp
+	   - local_ip
+	   - repl_password
+	   - snapshot_config
+	   - log_file
+	   - log_pos
+	----------------------------------------------------------------->	   
+                                                               vol = Storage(snapshot)
+                                                               CHANGE MASTER TO	   
+    
+'''
+
 class MysqlMessages:
 	CREATE_DATA_BUNDLE = "Mysql_CreateDataBundle"
+	
 	CREATE_DATA_BUNDLE_RESULT = "Mysql_CreateDataBundleResult"
+	'''
+	@ivar status: ok|error
+	@ivar last_error
+	@ivar snapshot_config
+	@ivar log_file
+	@ivar log_pos
+	@ivar used_size
+	'''
 	
 	CREATE_BACKUP = "Mysql_CreateBackup"
 	
@@ -224,14 +333,17 @@ class MysqlMessages:
 	@ivar root_password: 'scalr' user password 
 	@ivar repl_password: 'scalr_repl' user password
 	@ivar stat_password: 'scalr_stat' user password
-	@ivar volume_id: Master EBS volume id
+	@ivar volume_config?: Master storage configuration
 	"""
 	
 	PROMOTE_TO_MASTER_RESULT = "Mysql_PromoteToMasterResult"
 	"""
 	@ivar status: ok|error
 	@ivar last_error: Last error message in case of status = 'error'
-	@ivar volume_id: Master EBS volume id
+	@ivar volume_config: Master storage configuration
+	@ivar snapshot_config?
+	@ivar log_file?
+	@ivar log_pos?
 	"""
 	
 	NEW_MASTER_UP = "Mysql_NewMasterUp"
@@ -241,6 +353,9 @@ class MysqlMessages:
 	@ivar remote_ip
 	@ivar role_name		
 	@ivar repl_password
+	@ivar snapshot_config?
+	@ivar log_file?
+	@ivar log_pos?
 	"""
 	
 	"""
@@ -249,25 +364,25 @@ class MysqlMessages:
 	= HOST_INIT_RESPONSE =
 	@ivar mysql=dict(
 		replication_master: 	1|0
-		volume_id				EBS volume id					(on master)
-		snapshot_id: 			Master EBS snapshot id			(on slave)
-		root_password:			'scalr' user password  			(on slave)
-		repl_password:			'scalr_repl' user password		(on slave)
-		stat_password: 			'scalr_stat' user password		(on slave)
-		log_file:				Binary log file					(on slave)
-		log_pos:				Binary log file position		(on slave)
+		root_password:			'scalr' user password  					(on slave)
+		repl_password:			'scalr_repl' user password				(on slave)
+		stat_password: 			'scalr_stat' user password				(on slave)
+		log_file:				Binary log file							(on slave)
+		log_pos:				Binary log file position				(on slave)
+		volume_config			Master storage configuration			(on master)
+		snapshot_config			Master storage snapshot 				(both)
 	)
 	
 	= HOST_UP =
 	@ivar mysql=dict(
-		root_password: 	'scalr' user password  					(on master)
-		repl_password: 	'scalr_repl' user password				(on master)
-		stat_password: 	'scalr_stat' user password				(on master)
-		snapshot_id: 	Data volume EBS snapshot				(on master)		 
-		log_file: 		Binary log file							(on master) 
-		log_pos: 		Binary log file position				(on master)
-		volume_id:		EBS volume created from master snapshot (on slave)
-		) 
+		root_password: 			'scalr' user password  					(on master)
+		repl_password: 			'scalr_repl' user password				(on master)
+		stat_password: 			'scalr_stat' user password				(on master)
+		log_file: 				Binary log file							(on master) 
+		log_pos: 				Binary log file position				(on master)
+		volume_config:			Current storage configuration			(both)
+		snapshot_config:		Master storage snapshot					(on master)		 
+	) 
 	"""
 
 
@@ -286,7 +401,7 @@ class MysqlCnfController(CnfController):
 	def _start_service(self):
 		if not hasattr(self, '_mysql_cnf_err_re'):
 			self._mysql_cnf_err_re = re.compile('Unknown option|ERROR')
-		stderr = system('%s --help' % self._mysqld_path)[1]
+		stderr = system2('%s --help' % self._mysqld_path, shell=True)[1]
 		if re.search(self._mysql_cnf_err_re, stderr):
 			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
 		
@@ -389,20 +504,19 @@ class MysqlCnfController(CnfController):
 	def _get_connection(self):
 		szr_cnf = bus.cnf
 		root_password = szr_cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
-		return _spawn_mysql(ROOT_USER, root_password)
+		return spawn_mysql_cli(ROOT_USER, root_password)
 
 
-def _spawn_mysql(user, password):
-	try:
-		mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
-		mysql.expect('Enter password:')
-		mysql.sendline(password)
-		mysql.expect('mysql>')
-	except Exception, e:
-		raise HandlerError('Cannot start mysql client tool: %s' % (e,))
-	finally:
-		return mysql
-	
+
+def _reload_mycnf(f):
+	def g(self, *args, **kwargs):
+		self._mysql_config = Configuration('mysql')
+		try:
+			self._mysql_config.read(self._mycnf_path)
+		except (OSError, MetaconfError, ParseError), e:
+			raise HandlerError('Cannot read mysql config %s : %s' % (self._mycnf_path, str(e)))
+		f(self, *args, **kwargs)
+	return g	
 
 class MysqlHandler(ServiceCtlHanler):
 	_logger = None
@@ -424,6 +538,8 @@ class MysqlHandler(ServiceCtlHanler):
 	_mycnf_path = None
 	_mysqld_path = None
 	
+	storage_vol = None
+	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
@@ -431,8 +547,11 @@ class MysqlHandler(ServiceCtlHanler):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
-		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
-		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
+		self._mycnf_path = globals()['mycnf_path'] = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
+		self._mysqld_path = globals()['mysqld_path'] = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
+		globals()['mysqldump_path'] = ini.get(CNF_SECTION, OPT_MYSQLDUMP_PATH)
+		globals()['mysql_path'] = ini.get(CNF_SECTION, OPT_MYSQL_PATH)
+		self._change_master_timeout = globals()['change_master_timeout'] = int(ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT) or '30')
 
 		
 		self._storage_path = STORAGE_PATH
@@ -441,6 +560,9 @@ class MysqlHandler(ServiceCtlHanler):
 
 		initd = initdv2.lookup(SERVICE_NAME)
 		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
+		
+		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
+		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 			
 		bus.on("init", self.on_init)
 		bus.define_events(
@@ -457,26 +579,42 @@ class MysqlHandler(ServiceCtlHanler):
 			'mysql_change_master'
 		)
 
-	def _reload_mycnf(f):
-		def g(self, *args):
-			self._mysql_config = Configuration('mysql')
-			try:
-				self._mysql_config.read(self._mycnf_path)
-			except (OSError, MetaconfError, ParseError), e:
-				raise HandlerError('Cannot read mysql config %s : %s' % (self._mycnf_path, str(e)))
-			f(self, *args)
-		return g
-
 	def on_init(self):		
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
-		
-		"""
-		@xxx: Storage unplug failed because scalarizr has no EC2 access keys
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
-		"""
-
+		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			self._insert_iptables_rules()
+		
+		elif self._cnf.state == ScalarizrState.RUNNING:
+			# Creating self.storage_vol object from configuration
+			storage_conf = Storage.restore_config(self._volume_config_path)
+			self.storage_vol = Storage.create(storage_conf)
+			if not self.storage_vol.mounted():
+				self.storage_vol.mount()
+			
+			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
+				self._logger.debug("Checking Scalr's MySQL system users presence.")
+				root_password, repl_password, stat_password = self._get_ini_options(
+						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD) 
+				mysqld = spawn_mysqld()
+				self._ping_mysql()
+				try:
+					my_cli = spawn_mysql_cli()
+					check_mysql_password(my_cli, ROOT_USER, root_password)
+					check_mysql_password(my_cli, REPL_USER, repl_password)
+					check_mysql_password(my_cli, STAT_USER, stat_password)
+					self._logger.debug("Scalr's MySQL system users are present. Passwords are correct.")				
+				except ValueError:
+					self._logger.warning("Scalr's MySQL system users were changed. Recreating.")
+					self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER,
+										  root_password, repl_password, stat_password)
+				finally:
+					term_mysqld(mysqld)
+		
+			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
 					message.name == MysqlMessages.NEW_MASTER_UP
@@ -485,56 +623,42 @@ class MysqlHandler(ServiceCtlHanler):
 				or 	message.name == MysqlMessages.CREATE_BACKUP
 				or 	message.name == MysqlMessages.CREATE_PMA_USER
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
+
 		
 	def on_Mysql_CreatePmaUser(self, message):
 		try:
 			if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
-				raise HandlerError('Cannot add pma user on slave')			
-			try:
-				root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
-			except Exception, e:
-				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
+				raise HandlerError('Cannot add pma user on slave. It should be a Master server')
+			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
 			pma_server_ip = message.pma_server_ip
 			farm_role_id  = message.farm_role_id
 			
 			self._logger.info("Adding phpMyAdmin system user")
 			
 			# Connecting to mysql 
-			myclient = pexpect.spawn('/usr/bin/mysql -u'+ROOT_USER+' -p')
-			myclient.expect('Enter password:')
-			myclient.sendline(root_password)
+			my_cli = spawn_mysql_cli(ROOT_USER, root_password)
 			
-			# Retrieveing line with version info				
-			myclient.expect('mysql>')
-			myclient.sendline('SELECT VERSION();')
-			myclient.expect('mysql>')
-			mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), myclient.before)
-
-			# Determine mysql server version 
-			if mysql_ver_str:
-				mysql_ver = version.StrictVersion(mysql_ver_str.group(0))
-				priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
-			else:
-				raise HandlerError("Cannot extract mysql version from string '%s'" % myclient.before)
+			mysql_ver = version.StrictVersion(get_mysql_version(my_cli))
+			priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 			
 			# Generating password for pma user
 			pma_password = re.sub('[^\w]','', cryptotool.keygen(20))
 			sql = "DELETE FROM mysql.user WHERE User = '"+PMA_USER+"';"
-			myclient.sendline(sql)
-			myclient.expect("mysql>")
+			my_cli.sendline(sql)
+			my_cli.expect("mysql>")
 			# Generating sql statement, which depends on mysql server version 
 			sql = "INSERT INTO mysql.user VALUES('"+pma_server_ip+"','"+PMA_USER+"',PASSWORD('"+pma_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
 			# Pass statement to mysql client
-			myclient.sendline(sql)
-			myclient.expect('mysql>')
+			my_cli.sendline(sql)
+			my_cli.expect('mysql>')
 			
 			# Check for errors
-			if re.search('error', myclient.before, re.M | re.I):
-				raise HandlerError("Cannot add PhpMyAdmin system user '%s': '%s'" % (PMA_USER, myclient.before))
+			if re.search('error', my_cli.before, re.M | re.I):
+				raise HandlerError("Cannot add PhpMyAdmin system user '%s': '%s'" % (PMA_USER, my_cli.before))
 			
-			myclient.sendline('FLUSH PRIVILEGES;')
-			myclient.terminate()
-			del(myclient)
+			my_cli.sendline('FLUSH PRIVILEGES;')
+			my_cli.close()
+			del(my_cli)
 			
 			self._logger.info('PhpMyAdmin system user successfully added')
 			
@@ -570,7 +694,7 @@ class MysqlHandler(ServiceCtlHanler):
 				raise HandlerError('Cannot retrieve mysql password from config: %s' % (e,))
 			
 			# Get databases list
-			mysql = _spawn_mysql(ROOT_USER, root_password)
+			mysql = spawn_mysql_cli(ROOT_USER, root_password)
 			mysql.sendline('SHOW DATABASES;')
 			mysql.expect('mysql>')
 			
@@ -616,25 +740,22 @@ class MysqlHandler(ServiceCtlHanler):
 			else:
 				parts = [backup_path]
 					
-			self._logger.info("Uploading backup to S3")
-			s3_conn = self._platform.new_s3_conn()
-			bucket_name = self._platform.get_user_data(UD_OPT_S3_BUCKET_NAME)
-			bucket = s3_conn.get_bucket(bucket_name)
-			
-			uploader = s3tool.S3Uploader()
-			result = uploader.upload(parts, bucket, s3_conn)
-			self._logger.info("Mysql backup uploaded to S3 under s3://%s/%s", bucket_name, backup_filename)
+			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+			trn = transfer.Transfer()
+			result = trn.upload(parts, self._platform.cloud_storage_path)
+			self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
+							self._platform.cloud_storage_path, backup_filename)
 			
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
-				status		= 'ok',
-				backup_urls	=  result
+				status = 'ok',
+				backup_parts = result
 			))
 						
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
-				status		= 'error',
-				last_error	=  str(e)
+				status = 'error',
+				last_error = str(e)
 			))
 		finally:
 			if tmpdir:
@@ -651,16 +772,17 @@ class MysqlHandler(ServiceCtlHanler):
 			except Exception, e:
 				raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
 			# Creating snapshot
-			(snap_id, log_file, log_pos) = self._create_snapshot(ROOT_USER, root_password)
-			
-			bus.fire('mysql_data_bundle', snapshot_id=snap_id)			
+			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+			used_size = int(system2(('df', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 			
 			# Sending snapshot data to scalr
 			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
-				snapshot_id=snap_id,
+				snapshot_config=snap.config(),
 				log_file=log_file,
 				log_pos=log_pos,
-				status='ok'			
+				used_size='%.3f' % (float(used_size) / 1000,),
+				status='ok'
 			))
 
 		except (Exception, BaseException), e:
@@ -676,81 +798,119 @@ class MysqlHandler(ServiceCtlHanler):
 		@type message: scalarizr.messaging.Message
 		@param message: Mysql_PromoteToMaster
 		"""
+		old_conf 		= None
+		new_storage_vol	= None
+		
 		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
-			
-			ec2_conn = self._platform.new_ec2_conn()
-			slave_vol_id = 	self._cnf.rawini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID)
-			#master_vol_id = self._queryenv.list_role_params(self._role_name)[PARAM_MASTER_EBS_VOLUME_ID]
-			master_vol_id = message.volume_id
-			master_vol = None
+			master_storage_conf = message.body.get('volume_config')
 			tx_complete = False
-			
+						
 			try:
 				# Stop mysql
-				if self._init_script.running:
-					mysql = self._spawn_mysql(ROOT_USER, message.root_password)
+				if master_storage_conf:
+					if self._init_script.running:
+						mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
+						timeout = 180
+						try:
+							mysql.sendline("STOP SLAVE;")
+							mysql.expect("mysql>", timeout=timeout)
+						except pexpect.TIMEOUT:
+							raise HandlerError("Timeout (%d seconds) reached " + 
+									"while waiting for slave stop" % (timeout,))
+						finally:
+							mysql.close()
+						self._stop_service()
+					
+					# Unplug slave storage and plug master one
+					#self._unplug_storage(slave_vol_id, self._storage_path)
+					old_conf = self.storage_vol.detach(force=True) # ??????
+					#master_vol = self._take_master_volume(master_vol_id)
+					#self._plug_storage(master_vol.id, self._storage_path)
+					new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)				
+					# Continue if master storage is a valid MySQL storage 
+					if self._storage_valid():
+						# Patch configuration files 
+						self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
+						self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
+						self._replication_init()
+						# Update behaviour configuration
+						updates = {
+							OPT_ROOT_PASSWORD : message.root_password,
+							OPT_REPL_PASSWORD : message.repl_password,
+							OPT_STAT_PASSWORD : message.stat_password,
+							OPT_REPLICATION_MASTER 	: "1"
+						}
+						self._update_config(updates)
+						Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
+						
+						# Send message to Scalr
+						self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
+							status="ok",
+							volume_config = new_storage_vol.config()     
+						))
+					else:
+						raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
+					self._start_service()
+				else:
+					self._start_service()
+					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
 					timeout = 180
 					try:
 						mysql.sendline("STOP SLAVE;")
 						mysql.expect("mysql>", timeout=timeout)
+						mysql.sendline("RESET MASTER;")
+						mysql.expect("mysql>", 20)
+						filetool.remove(os.path.join(self._data_dir, 'relay-log.info'))
+						filetool.remove(os.path.join(self._data_dir, 'master.info'))
 					except pexpect.TIMEOUT:
 						raise HandlerError("Timeout (%d seconds) reached " + 
-								"while waiting for slave stop" % (timeout,))
+									"while waiting for slave stop and master reset." % (timeout,))
 					finally:
 						mysql.close()
-					self._stop_service()
-					
-				# Unplug slave storage and plug master one
-				self._unplug_storage(slave_vol_id, self._storage_path)
-				master_vol = self._take_master_volume(master_vol_id)
-				self._plug_storage(master_vol.id, self._storage_path)
-				
-				# Continue if master storage is a valid MySQL storage 
-				if self._storage_valid():
-					# Patch configuration files 
-					self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-					self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
-					self._replication_init()
-					# Update behaviour configuration
+
 					updates = {
 						OPT_ROOT_PASSWORD : message.root_password,
 						OPT_REPL_PASSWORD : message.repl_password,
 						OPT_STAT_PASSWORD : message.stat_password,
-						OPT_STORAGE_VOLUME_ID : master_vol.id,
 						OPT_REPLICATION_MASTER 	: "1"
 					}
 					self._update_config(updates)
+										
+					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
+					Storage.backup_config(snap.config(), self._snapshot_config_path)
+					
 					# Send message to Scalr
 					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 						status="ok",
-						volume_id=master_vol.id																				
-					))
-				else:
-					raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
+						volume_config = self.storage_vol.config(),
+						snapshot_config = snap.config(),
+						log_file = log_file,
+						log_pos = log_pos
+					))							
+					
 				tx_complete = True
-			except (Exception, BaseException), e:
-				self._logger.error("Promote to master failed. %s", e)
-
-				# Get back slave storage
-				self._plug_storage(slave_vol_id, self._storage_path, master = False)
 				
-				# Delete unborn master volume
-				if master_vol and master_vol.id != master_vol_id:
-					ec2_conn.delete_volume(master_vol.id)
+			except (Exception, BaseException), e:
+				self._logger.exception(e)
+				if new_storage_vol:
+					new_storage_vol.detach()
+				# Get back slave storage
+				if old_conf:
+					self._plug_storage(self._storage_path, old_conf)
 				
 				self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
 					status="error",
 					last_error=str(e)
 				))
 
+				# Start MySQL
+				self._start_service()
 			
-			# Start MySQL
-			self._start_service()				
-			
-			if tx_complete:
+			if tx_complete and master_storage_conf:
 				# Delete slave EBS
-				ec2_conn.delete_volume(slave_vol_id)
-			
+				self.storage_vol.destroy(remove_disks=True)
+				self.storage_vol = new_storage_vol
+				Storage.backup_config(self.storage_vol.config(), self._storage_path)
 		else:
 			self._logger.warning('Cannot promote to master. Already master')
 
@@ -761,29 +921,54 @@ class MysqlHandler(ServiceCtlHanler):
 		@type message: scalarizr.messaging.Message
 		@param message:  Mysql_NewMasterUp
 		"""
-		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
+		is_repl_master, = self._get_ini_options(OPT_REPLICATION_MASTER)
+		
+		if not int(is_repl_master):
 			host = message.local_ip or message.remote_ip
 			self._logger.info("Switching replication to a new MySQL master %s", host)
 			bus.fire('before_mysql_change_master', host=host)			
 			
-			mysql = self._spawn_mysql(ROOT_USER, message.root_password)
-						
-			self._logger.debug("Stopping slave i/o thread")
-			mysql.sendline("STOP SLAVE IO_THREAD;")
-			mysql.expect("mysql>")
-			self._logger.debug("Slave i/o thread stopped")
+			if 'snapshot_config' in message.body:
+				self._logger.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
+						message.snapshot_config['id'], message.log_file, message.log_pos)
+				self._stop_service()
+				
+				self._logger.debug('Destroing old storage')
+				self.storage_vol.destroy()
+				self._logger.debug('Storage destoyed')
+				
+				self._logger.debug('Plugging new storage')
+				vol = Storage.create(snapshot=message.snapshot_config.copy())
+				self._plug_storage(self._storage_path, vol)
+				self._logger.debug('Storage plugged')
+				
+				Storage.backup_config(vol.config(), self._volume_config_path)
+				Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
+				self.storage_vol = vol
+				log_file = message.log_file
+				log_pos = message.log_pos
+				
+				self._start_service()				
 			
-			self._logger.debug("Retrieving current log_file and log_pos")
-			mysql.sendline("SHOW SLAVE STATUS\\G");
-			mysql.expect("mysql>")
-			log_file = log_pos = None
-			for line in mysql.before.split("\n"):
-				pair = map(str.strip, line.split(": ", 1))
-				if pair[0] == "Master_Log_File":
-					log_file = pair[1]
-				elif pair[0] == "Read_Master_Log_Pos":
-					log_pos = pair[1]
-			self._logger.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+			my_cli = spawn_mysql_cli(ROOT_USER, message.root_password)
+			
+			if not 'snapshot_config' in message.body:
+				self._logger.debug("Stopping slave i/o thread")
+				my_cli.sendline("STOP SLAVE IO_THREAD;")
+				my_cli.expect("mysql>")
+				self._logger.debug("Slave i/o thread stopped")
+				
+				self._logger.debug("Retrieving current log_file and log_pos")
+				my_cli.sendline("SHOW SLAVE STATUS\\G");
+				my_cli.expect("mysql>")
+				log_file = log_pos = None
+				for line in my_cli.before.split("\n"):
+					pair = map(str.strip, line.split(": ", 1))
+					if pair[0] == "Master_Log_File":
+						log_file = pair[1]
+					elif pair[0] == "Read_Master_Log_Pos":
+						log_pos = pair[1]
+				self._logger.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
 
 			self._change_master(
 				host=host, 
@@ -791,9 +976,10 @@ class MysqlHandler(ServiceCtlHanler):
 				password=message.repl_password,
 				log_file=log_file, 
 				log_pos=log_pos, 
-				mysql_user=ROOT_USER,
-				mysql_password=message.root_password
-			)			
+				timeout=self._change_master_timeout,
+				my_cli=my_cli
+			)
+				
 			self._logger.debug("Replication switched")
 			bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
 		else:
@@ -805,25 +991,9 @@ class MysqlHandler(ServiceCtlHanler):
 		Stop MySQL and unplug storage
 		"""
 		self._stop_service()
-		'''
-		no need to plug/unplug storage since Scalarizr do EBS-root instances bundle 
-		try:
-			self._unplug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
-		except ConfigParser.NoOptionError:
-			self._logger.debug("Skip storage unplug. There is no configured storage.")
-		'''
 
 	def on_before_reboot_finish(self, *args, **kwargs):
-		"""
-		Start MySQL and plug storage
-		"""
-		'''
-		try:
-			self._plug_storage(self._sect.get(OPT_STORAGE_VOLUME_ID), self._storage_path)
-		except ConfigParser.NoOptionError:
-			self._logger.debug("Skip storage plug. There is no configured storage.")
-		'''
-		self._start_service()
+		self._insert_iptables_rules()
 
 	def on_host_init_response(self, message):
 		"""
@@ -833,8 +1003,23 @@ class MysqlHandler(ServiceCtlHanler):
 		"""
 		if not message.body.has_key("mysql"):
 			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
-		self._logger.debug("Update mysql config with %s", message.mysql)
-		self._update_config(message.mysql)
+
+		dir = os.path.dirname(self._volume_config_path)
+		if not os.path.exists(dir):
+			os.makedirs(dir)
+		
+		mysql_data = message.mysql.copy()
+		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
+						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
+			if os.path.exists(file):
+				os.remove(file)
+			if key in mysql_data:
+				Storage.backup_config(mysql_data[key], file)
+				del mysql_data[key]
+		
+		self._logger.debug("Update mysql config with %s", mysql_data)
+		self._update_config(mysql_data)
+
 		
 	@_reload_mycnf
 	def on_before_host_up(self, message):
@@ -844,10 +1029,8 @@ class MysqlHandler(ServiceCtlHanler):
 		@param message: HostUp message
 		"""
 		
-		#role_params = self._queryenv.list_role_params(self._role_name)
-		#if role_params[PARAM_DATA_STORAGE_ENGINE]:
 		try:
-			out = system("my_print_defaults mysqld")
+			out = system2("my_print_defaults mysqld", shell=True)
 			result = re.search("--datadir=(.*)", out[0], re.MULTILINE)
 			if result:
 				datadir = result.group(1)
@@ -875,8 +1058,15 @@ class MysqlHandler(ServiceCtlHanler):
 		"""
 		self._logger.info("Initializing MySQL master")
 		
-		# Mount EBS
-		self._plug_storage(self._cnf.rawini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID), self._storage_path)
+		# Plug storage
+		volume_cnf = Storage.restore_config(self._volume_config_path)
+		try:
+			snap_cnf = Storage.restore_config(self._snapshot_config_path)
+			volume_cnf['snapshot'] = snap_cnf
+		except IOError:
+			pass
+		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
+		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 		
 		# Stop MySQL server
 		self._stop_service()
@@ -885,78 +1075,72 @@ class MysqlHandler(ServiceCtlHanler):
 		msg_data = None
 		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
 
-
 		try:
 			if not storage_valid and self._mysql_config.get('mysqld/datadir').find(self._data_dir) == 0:
 				# When role was created from another mysql role it contains modified my.cnf settings 
 				self._repair_original_mycnf()
 			
 			# Patch configuration
+			
 			self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
 			self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-	
-					
+			
+			# Init replication
 			self._replication_init(master=True)
 			
 			# If It's 1st init of mysql master storage
 			if not storage_valid:
-				
-				if os.path.exists('/etc/mysql/debian.cnf'):
-					try:
-						self._logger.debug("Copying debian.cnf file to storage")
-						shutil.copy('/etc/mysql/debian.cnf', STORAGE_PATH)
-					except BaseException, e:
-						self._logger.error("Cannot copy debian.cnf file to storage: ", e)
-						
+				self._copy_debian_cnf()
+					
+				# Add system users	
 				root_password, repl_password, stat_password = \
 						self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER)
 				
-				# Get binary logfile, logpos and create data snapshot if needed
-				snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-	
+				# Get binary logfile, logpos and create storage snapshot
+				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
+				
+				# Update HostUp message 
 				msg_data = dict(
 					root_password=root_password,
 					repl_password=repl_password,
 					stat_password=stat_password,
-					snapshot_id=snap_id,
+					snapshot_config=snap.config(),
+					volume_config=self.storage_vol.config(),
 					log_file=log_file,
-					log_pos=log_pos			
+					log_pos=log_pos
 				)
 				
-			# If EBS volume had mysql dirs (N-th init)
+			# If volume has mysql storage directory structure (N-th init)
 			else:
-				# Retrieve scalr's mysql username and password
-				try:
-					root_password = self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
-				except Exception, e:
-					raise HandlerError('Cannot retrieve mysql login and password from config: %s' % (e,))
+				# Get required configuration options
+				root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
 				
-				if disttool._is_debian_based and os.path.exists(os.path.join(STORAGE_PATH, 'debian.cnf')):
-					try:
-						self._logger.debug("Copying debian.cnf file from storage")
-						shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
-					except BaseException, e:
-						self._logger.error("Cannot copy debian.cnf file from storage: ", e)
+				self._copy_debian_cnf_back()
 				
-				# Updating snapshot
-				snap_id, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+				# Create snapshot
+				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				
-				# Send updated metadata to Scalr
-				msg_data = dict(snapshot_id=snap_id, log_file=log_file, log_pos=log_pos)
+				# Update HostUp message 
+				msg_data = dict(
+					snapshot_config=snap.config(),
+					volume_config=self.storage_vol.config(),
+					log_file=log_file, 
+					log_pos=log_pos
+				)
 		except (BaseException, Exception):
 			if not storage_valid and self._storage_path:
 				# Perform cleanup
-				system('rm -rf %s' % os.path.join(self._storage_path, '*'))
+				system2('rm -rf %s' % os.path.join(self._storage_path, '*'), shell=True, raise_exc=False)
 			raise
 			
 		if msg_data:
-			message.mysql = msg_data
+			message.mysql = msg_data.copy()
+			del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF] 
 			self._update_config(msg_data)
 			
-		#self._start_service()	
-			
-			
-	
+
 	def _init_slave(self, message):
 		"""
 		Initialize MySQL slave
@@ -964,35 +1148,29 @@ class MysqlHandler(ServiceCtlHanler):
 		@param message: HostUp message
 		"""
 		self._logger.info("Initializing MySQL slave")
+		
+		# Read required configuration options
+		root_pass, repl_pass, log_file, log_pos = self._get_ini_options(
+				OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_LOG_FILE, OPT_LOG_POS)
+		
 		if not self._storage_valid():
 			self._logger.debug("Initialize slave storage")
-
-			self._logger.info('Checking that master data bundle snapshot completed')
-			snap_id = self._cnf.rawini.get(CNF_SECTION, OPT_SNAPSHOT_ID)
-			ebstool.wait_snapshot(self._platform.new_ec2_conn(), snap_id, self._logger)
-			ebs_volume = self._create_volume_from_snapshot(snap_id)
+			self.storage_vol = self._plug_storage(self._storage_path, 
+					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		
 			
-			message.mysql = dict(volume_id = ebs_volume.id)
-			self._update_config({OPT_STORAGE_VOLUME_ID : ebs_volume.id})
-			
-			self._plug_storage(None, self._storage_path, vol=ebs_volume, master=False)
-
-			
+		# Stop MySQL
 		self._stop_service()			
 		self._flush_logs()
+		
 		# Change configuration files
 		self._logger.info("Changing configuration files")
 		self._move_mysql_dir('mysqld/datadir', self._data_dir)
 		self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 		self._replication_init(master=False)
-		if disttool._is_debian_based and os.path.exists(STORAGE_PATH + os.sep +'debian.cnf') :
-			try:
-				self._logger.debug("Copying debian.cnf from storage to mysql configuration directory")
-				shutil.copy(os.path.join(STORAGE_PATH, 'debian.cnf'), '/etc/mysql/')
-			except BaseException, e:
-				self._logger.error("Cannot copy debian.cnf file from storage: ", e)
-				
-					
+		
+		self._copy_debian_cnf_back()
 		self._start_service()
 		
 		# Change replication master 
@@ -1007,179 +1185,90 @@ class MysqlHandler(ServiceCtlHanler):
 				self._logger.debug("QueryEnv respond with no mysql master. " + 
 						"Waiting %d seconds before the next attempt", 5)
 				time.sleep(5)
+				
 		self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
 				master_host.internal_ip, master_host.external_ip)
 		
 		host = master_host.internal_ip or master_host.external_ip
-		self._change_master(
+		self._change_master( 
 			host=host, 
 			user=REPL_USER, 
-			password=self._cnf.rawini.get(CNF_SECTION, OPT_REPL_PASSWORD),
-			log_file=self._cnf.rawini.get(CNF_SECTION, OPT_LOG_FILE), 
-			log_pos=self._cnf.rawini.get(CNF_SECTION, OPT_LOG_POS), 
+			password=repl_pass,
+			log_file=log_file, 
+			log_pos=log_pos, 
 			mysql_user=ROOT_USER,
-			mysql_password=self._cnf.rawini.get(CNF_SECTION, OPT_ROOT_PASSWORD)
+			mysql_password=root_pass,
+			timeout=self._change_master_timeout
 		)
 		
-	def _plug_storage(self, vol_id, mnt_point, vol=None, master=True):
-		# Getting free letter for device
-		devname = get_free_devname()
-		if not master:
-			while True:
-				devname = devname[:-1]+ chr(ord(devname[-1:])+1)
-				if not os.path.exists(devname):
-					break
+		# Update HostUp message
+		message.mysql = dict(
+			volume_config = self.storage_vol.config()
+		)		
 		
-		self._logger.info("Create EBS storage (volume: %s, devname: %s) and mount to %s", 
-				vol.id if vol else vol_id, devname, mnt_point)
+	def _plug_storage(self, mpoint, vol):
+		if not isinstance(vol, Volume):
+			vol = Storage.create(vol)
 
-		ec2_conn = self._get_ec2_conn()
-		if not vol:
-			try:
-				vol = ec2_conn.get_all_volumes([vol_id])[0]
-			except IndexError:
-				raise HandlerError("Volume %s not found" % vol_id)
-
-		if 'available' != vol.volume_state():
-			self._logger.warning("Volume %s is not available. Force detach it from instance", vol.id)
-			vol.detach(force=True)
-			self._logger.debug('Checking that volume %s is available', vol.id)
-			self._wait_until(lambda: vol.update() == "available")
-			self._logger.debug("Volume %s available", vol.id)
-
-		# Attach ebs
-		self._logger.debug("Attaching volume %s as device %s", vol.id, devname)
 		try:
-			vol.attach(self._platform.get_instance_id(), devname)
-		except BotoServerError, e:
-			if e.code == "VolumeInUse":
-				# Sometimes this happens when plugging storage from crashed master server.
-				self._logger.warning("Volume status is 'available' " + 
-						"but attach operation failed with 'VolumeInUse' error. " +
-						"Sometimes this happens when plugging storage from crashed MySQL master server.")
-				try:
-					self._logger.debug("Force detaching volume %s", vol.id)
-					vol.detach(True)
-					self._logger.debug("Volume %s detached", vol.id)
-				except BotoServerError, e:
-					pass
-				time.sleep(5)
-				self._logger("Attaching volume %s as device %s", vol.id, devname)
-				vol.attach(self._platform.get_instance_id(), devname)
+			if not os.path.exists(mpoint):
+				os.makedirs(mpoint)
+			vol.mount(mpoint)
+		except StorageError, e:
+			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
+			if 'you must specify the filesystem type' in str(e):
+				vol.mkfs()
+				vol.mount(mpoint)
 			else:
 				raise
-		self._logger.debug("Checking that volume %s is attached", vol.id)
-		self._wait_until(lambda: vol.update() and vol.attachment_state() == "attached")
-		self._logger.debug("Volume %s attached",  vol.id)
-			
-		# Wait when device will be added
-		self._logger.debug("Checking that device %s is available", devname)
-		self._wait_until(lambda: os.access(devname, os.F_OK | os.R_OK))
-		self._logger.debug("Device %s is available", devname)
-		
-		# Mount EBS
-		self._mount_device(devname, mnt_point)
-
-
-	def _unplug_storage(self, vol_id, mnt_point, vol=None):
-		self._logger.info("Unplug EBS storage (volume: %s) from mpoint %s", 
-				vol.id if vol else vol_id, mnt_point)
-		
-		ec2_conn = self._get_ec2_conn()
-		if not vol:
+		return vol
+	
+	def _insert_iptables_rules(self):
+		iptables = IpTables()
+		iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
+	
+	def _get_ini_options(self, *args):
+		ret = []
+		for opt in args:
 			try:
-				vol = ec2_conn.get_all_volumes([vol_id])[0]
-			except IndexError:
-				raise HandlerError("Volume %s not found" % vol_id)		
+				ret.append(self._cnf.rawini.get(CNF_SECTION, opt))
+			except ConfigParser.Error:
+				err = 'Required configuration option is missed in mysql.ini: %s' % opt
+				raise HandlerError(err)
+		return tuple(ret)
+	
+	def _copy_debian_cnf_back(self):
+		debian_cnf = os.path.join(self._storage_path, 'debian.cnf')
+		if disttool.is_debian_based() and os.path.exists(debian_cnf):
+			self._logger.debug("Copying debian.cnf from storage to mysql configuration directory")
+			shutil.copy(debian_cnf, '/etc/mysql/')
 		
-		# Unmount volume
-		if os.path.ismount(self._storage_path):
-			self._logger.debug("Unmounting storage %s", self._storage_path)
-			fstool.umount(self._storage_path, clean_fstab=True)
-			self._logger.debug("Storage %s unmounted", self._storage_path)
-		
-		# Detach volume
-		self._logger.debug("Detaching storage volume %s", vol.id)
-		vol.detach()
-		self._wait_until(lambda: vol.update() == "available")
-		self._logger.debug("Volume %s detached", vol.id)
-
+				
+	def _copy_debian_cnf(self):
+		if os.path.exists('/etc/mysql/debian.cnf'):
+			self._logger.debug("Copying debian.cnf file to mysql storage")
+			shutil.copy('/etc/mysql/debian.cnf', self._storage_path)		
+	
 	
 	def _storage_valid(self, path=None):
 		data_dir = os.path.join(path, STORAGE_DATA_DIR) if path else self._data_dir
 		binlog_base = os.path.join(path, STORAGE_BINLOG) if path else self._binlog_base
 		return os.path.exists(data_dir) and glob.glob(binlog_base + '*')
-	
-	def _create_volume_from_snapshot(self, snap_id, avail_zone=None):
-		ec2_conn = self._get_ec2_conn()
-		avail_zone = avail_zone or self._platform.get_avail_zone()
-		
-		self._logger.debug("Creating EBS volume from snapshot %s in avail zone %s", snap_id, avail_zone)
-		ebs_volume = ec2_conn.create_volume(None, avail_zone, snap_id)
-		self._logger.debug("Volume %s created from snapshot %s", ebs_volume.id, snap_id)
-		
-		self._logger.debug('Checking that EBS volume %s is available', ebs_volume.id)
-		self._wait_until(lambda: ebs_volume.update() == "available")
-		self._logger.debug("Volume %s available", ebs_volume.id)
-		
-		return ebs_volume
-	
-	def _wait_until(self, target, args=None, sleep=5):
-		args = args or ()
-		while not target(*args):
-			self._logger.debug("Wait %d seconds before the next attempt", sleep)
-			time.sleep(sleep)
-	
-	def _detach_delete_volume(self, volume):
-		if volume.detach():
-			if not volume.delete():
-				raise HandlerError("Cannot delete volume ID=%s", (volume.id,))
-		else:
-			raise HandlerError("Cannot detach volume ID=%s" % (volume.id,))
 
-	def _take_master_volume(self, volume_id):
-		# Lookup master volume
-		self._logger.debug("Taking master EBS volume %s", volume_id)
-		ec2_conn = self._get_ec2_conn()
-		zone = self._platform.get_avail_zone()						
-		try:
-			master_vol = ec2_conn.get_all_volumes([volume_id])[0]
-		except IndexError:
-			raise HandlerError("Cannot find volume %s in EBS volumes list" % volume_id)
-
-		# For EBS in another avail zone we need to snapshot it
-		# and create EBS in our avail zone
-		self._logger.debug("Taked master volume %s (zone: %s)", master_vol.id, master_vol.zone)
-		if master_vol.zone != zone:
-			self._logger.debug("Master volume is in another zone (volume zone: %s, server zone: %s) " + 
-					"Creating volume in %s zone", 
-					master_vol.id, zone, zone)
-			self._logger.debug("Creating snapshot from volume %s", master_vol.id)
-			master_snap = ec2_conn.create_snapshot(master_vol.id)
-			self._logger.debug("Snapshot %s created from volume %s", master_snap.id, master_vol.id)
-			try:
-				master_vol = self._create_volume_from_snapshot(master_snap.id, zone)
-			finally:
-				self._logger.debug("Deleting snapshot %s", master_snap.id)
-				master_snap.delete()
-				self._logger.debug("Snapshot %s deleted", master_snap.id)
-				
-			self._logger.debug("Use %s as master data volume", master_vol.id)
-		
-		return master_vol
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
+		is_repl_master, = self._get_ini_options(OPT_REPLICATION_MASTER)
 		was_running = self._init_script.running
 		try:
 			if not was_running:
 				self._start_service()
 			
 			# Lock tables
-			sql = self._spawn_mysql(root_user, root_password)
+			sql = spawn_mysql_cli(root_user, root_password)
 			sql.sendline('FLUSH TABLES WITH READ LOCK;')
 			sql.expect('mysql>')
-			system('sync')
-			if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
+			system2('sync', shell=True)
+			if int(is_repl_master):
 				sql.sendline('SHOW MASTER STATUS;')
 				sql.expect('mysql>')
 				
@@ -1202,78 +1291,81 @@ class MysqlHandler(ServiceCtlHanler):
 				else:
 					log_file = log_pos = None
 
-			# Creating EBS snapshot
-			snap_id = None if dry_run else self._create_ebs_snapshot()
+			# Creating storage snapshot
+			snap = None if dry_run else self._create_storage_snapshot()
 	
 			sql.sendline('UNLOCK TABLES;\n')
 			sql.close()
-			return snap_id, log_file, log_pos
+			
+			wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
+			if snap.state == Snapshot.FAILED:
+				raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
+			
+			return snap, log_file, log_pos
 		
 		finally:
 			if not was_running:
 				self._stop_service()
 
 			
-	def _create_ebs_snapshot(self):
-		self._logger.info("Creating storage EBS snapshot")
+	def _create_storage_snapshot(self):
+		self._logger.info("Creating storage snapshot")
 		try:
-			ec2_conn = self._get_ec2_conn()
-			""" @type ec2_conn: boto.ec2.connection.EC2Connection """
-			
-			snapshot = ec2_conn.create_snapshot(self._cnf.rawini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID))
-			self._logger.debug("Storage EBS snapshot %s created", snapshot.id)
-			return snapshot.id			
-		except BotoServerError, e:
-			self._logger.error("Cannot create MySQL data EBS snapshot. %s", e.message)
+			return self.storage_vol.snapshot()
+		except StorageError, e:
+			self._logger.error("Cannot create MySQL data snapshot. %s", e)
 			raise
 	
 	def _repair_original_mycnf(self):
 		self._mysql_config.set('mysqld/datadir', '/var/lib/mysql')
 		self._mysql_config.remove('mysqld/log_bin')
-
 	
-	def _add_mysql_users(self, root_user, repl_user, stat_user):
-		self._stop_service()
+	def _add_mysql_users(self, root_user, repl_user, stat_user, root_pass=None, repl_pass=None, stat_pass=None, mysqld=None, my_cli=None):
 		self._logger.info("Adding mysql system users")
-
-		myd = self._start_mysql_skip_grant_tables()
-		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
-		out = myclient.communicate('SELECT VERSION();')[0]
-		mysql_ver_str = re.search(re.compile('\d*\.\d*\.\d*', re.MULTILINE), out)
-		if mysql_ver_str:
-			mysql_ver = version.StrictVersion(mysql_ver_str.group(0))
-			priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
-		else:
-			raise HandlerError("Cannot extract mysql version from string '%s'" % out)
-	
-		myclient = Popen(["/usr/bin/mysql"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+		should_term_mysqld = False
+		if not mysqld:
+			self._stop_service()
+			mysqld = spawn_mysqld()
+			self._ping_mysql()
+			should_term_mysqld = True			
+			
+		my_cli = my_cli or spawn_mysql_cli()
+		
+		mysql_ver = version.StrictVersion(get_mysql_version(my_cli))
+		priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 		
 		# Generate passwords
-		root_password, repl_password, stat_password = map(lambda x: re.sub('[^\w]','', cryptotool.keygen(20)), range(3))
+		root_password = root_pass if root_pass else re.sub('[^\w]', '', cryptotool.keygen(20))
+		repl_password = repl_pass if repl_pass else re.sub('[^\w]', '', cryptotool.keygen(20))
+		stat_password = stat_pass if stat_pass else re.sub('[^\w]', '', cryptotool.keygen(20))
+		
+		# Delete old users
+		my_cli.sendline("DELETE FROM mysql.user WHERE User in ('%s', '%s', '%s');" % (root_user, repl_user, stat_user))
+		my_cli.expect('mysql>')
 		
 		# Add users
-		#sql = "INSERT INTO mysql.user VALUES('%','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
 		
-		# scalr@localhost allow all
-		sql = "INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");"
-		# scalr_repl@% allow Repl_slave_priv
-		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_slave_priv) VALUES ('%','"+repl_user+"',PASSWORD('"+repl_password+"'),'Y');"
-		# scalr_stat@% allow Repl_client_priv
-		sql += " INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');"
+		# 'scalr'@'localhost' allow all
+		my_cli.sendline("INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");")
+		my_cli.expect('mysql>')
+
+		# 'scalr_repl'@'%' allow Repl_slave_priv
+		my_cli.sendline("INSERT INTO mysql.user (Host, User, Password, Repl_slave_priv) VALUES ('%','"+repl_user+"',PASSWORD('"+repl_password+"'),'Y');")
+		my_cli.expect('mysql>')
+
+		# 'scalr_stat'@'%' allow Repl_client_priv
+		my_cli.sendline("INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');")
+		my_cli.expect('mysql>')
 		
-		sql += " FLUSH PRIVILEGES;"
-		out,err = myclient.communicate(sql)
-		if err:
-			raise HandlerError('Cannot add mysql users: %s', err)
+		my_cli.sendline("FLUSH PRIVILEGES;")
+		my_cli.expect('mysql>')
 		
-		os.kill(myd.pid, signal.SIGTERM)
-		time.sleep(3)
+		if should_term_mysqld:
+			term_mysqld(mysqld)
+			time.sleep(5)
+		
 		self._start_service()
-		"""
-		self._logger.debug("Checking that mysqld is terminated")
-		self._wait_until(lambda: not initd.is_running("mysql"))
-		self._logger.debug("Mysqld terminated")
-		"""
+
 		self._update_config(dict(
 			root_password=root_password,
 			repl_password=repl_password,
@@ -1285,12 +1377,14 @@ class MysqlHandler(ServiceCtlHanler):
 	
 	def _update_config(self, data): 
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
-		
+	
+	@_reload_mycnf
 	def _replication_init(self, master=True):
-		if not os.path.exists('/etc/mysql'):
-			os.makedirs('/etc/mysql')
-			
 		# Create replication config
+		'''
+		if not os.path.exists('/etc/mysql'):
+			os.makedirs('/etc/mysql')		
+		
 		self._logger.info("Creating farm-replication config")
 		repl_conf_path = '/etc/mysql/farm-replication.cnf'
 		try:
@@ -1309,7 +1403,10 @@ class MysqlHandler(ServiceCtlHanler):
 		if not repl_conf_path in self._mysql_config.get_list('*/!include'):
 			# Include farm-replication.cnf in my.cnf
 			self._mysql_config.add('!include', repl_conf_path)
-			
+		'''
+		server_id = 1 if master else int(random.random() * 100000)+1
+		self._mysql_config.remove('mysqld/server-id')
+		self._mysql_config.add('mysqld/server-id', server_id)
 		# Patch networking
 		for option in ['bind-address','skip-networking']:
 			try:
@@ -1317,75 +1414,89 @@ class MysqlHandler(ServiceCtlHanler):
 			except:
 				pass
 		self.write_config()
-
-
-		if disttool.is_debian_based():
-			self._add_apparmor_rules(repl_conf_path)	
-
-	def _spawn_mysql(self, user, password):
-		#mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p' + password)
-		mysql = pexpect.spawn('/usr/bin/mysql -u ' + user + ' -p')
-		mysql.expect('Enter password:')
-		mysql.sendline(password)
 		
-		mysql.expect('mysql>')
-		return mysql
+		'''
+		if disttool.is_debian_based():
+			_add_apparmor_rules(repl_conf_path)
+		'''	
+
 
 	def _change_master(self, host, user, password, log_file, log_pos, 
-					spawn=None, mysql_user=None, mysql_password=None):
-		spawn = spawn or self._spawn_mysql(mysql_user, mysql_password)
-		self._logger.info("Changing replication master to host %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
+					my_cli=None, mysql_user=None, mysql_password=None, 
+					connect_retry=15, timeout=None):
+		my_cli = my_cli or spawn_mysql_cli(mysql_user, mysql_password)
+		self._logger.info("Changing replication Master to server %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
+		
 		# Changing replication master
-		spawn.sendline('STOP SLAVE;')
-		spawn.expect('mysql>')
-		spawn.sendline('CHANGE MASTER TO MASTER_HOST="%(host)s", \
+		my_cli.sendline('STOP SLAVE;')
+		my_cli.expect('mysql>')
+		my_cli.sendline('CHANGE MASTER TO MASTER_HOST="%(host)s", \
 						MASTER_USER="%(user)s", \
 						MASTER_PASSWORD="%(password)s", \
 						MASTER_LOG_FILE="%(log_file)s", \
-						MASTER_LOG_POS=%(log_pos)s;' % vars())
-		spawn.expect('mysql>')
+						MASTER_LOG_POS=%(log_pos)s, \
+						MASTER_CONNECT_RETRY=%(connect_retry)s;' % vars())
+		my_cli.expect('mysql>')
 		
 		# Starting slave
-		spawn.sendline('START SLAVE;')
-		spawn.expect('mysql>')
-		status = spawn.before
+		my_cli.sendline('START SLAVE;')
+		my_cli.expect('mysql>')
+		status = my_cli.before
 		if re.search(re.compile('ERROR', re.MULTILINE), status):
 			raise HandlerError('Cannot start mysql slave: %s' % status)
 		
-		# Sleeping for a while
-		time.sleep(3)
-		spawn.sendline('SHOW SLAVE STATUS;')
-		spawn.expect('mysql>')
-		
-		# Retrieveing slave status row vith values
-		status = spawn.before.split('\r\n')[4].split('|')
-		spawn.close()
-		io_status = status[11].strip()
-		sql_status = status[12].strip()
-		
-		# Check for errors
-		if 'Yes' != io_status:
-			raise HandlerError ('IO Error while starting mysql slave: %s %s' %  (status[17], status[18]))
-		if 'Yes' != sql_status:
-			raise HandlerError('SQL Error while starting mysql slave: %s %s' %  (status[17], status[18]))
-		
+		def slave_status():
+			my_cli.sendline('SHOW SLAVE STATUS\G')
+			my_cli.expect('mysql>')
+			out = my_cli.before
+			lines = map(string.strip, out.strip().split('\r\n')[2:-1])
+			return dict(map(string.strip, line.split(':', 1)) for line in lines)
+
+
+		try:
+			time_until = time.time() + timeout
+			status = None
+			while time.time() <= time_until:
+				status = slave_status()
+				if status['Slave_IO_Running'] == 'Yes' and \
+					status['Slave_SQL_Running'] == 'Yes':
+					break
+				time.sleep(5)
+			else:
+				if status:
+					if not status['Last_Error']:
+						logfile = firstmatched(lambda p: os.path.exists(p), 
+											('/var/log/mysqld.log', '/var/log/mysql.log'))
+						if logfile:
+							gotcha = '[ERROR] Slave I/O thread: '
+							size = os.path.getsize(logfile)
+							fp = open(logfile, 'r')
+							try:
+								fp.seek(max((0, size - 8192)))
+								lines = fp.read().split('\n')
+								for line in lines:
+									if gotcha in line:
+										status['Last_Error'] = line.split(gotcha)[-1]
+							finally:
+								fp.close()
+					
+					msg = "Cannot change replication Master server to '%s'. "  \
+							"Slave_IO_Running: %s, Slave_SQL_Running: %s, " \
+							"Last_Errno: %s, Last_Error: '%s'" % (
+							host, status['Slave_IO_Running'], status['Slave_SQL_Running'],
+							status['Last_Errno'], status['Last_Error'])
+					raise HandlerError(msg)
+				else:
+					raise HandlerError('Cannot change replication master to %s' % (host))
+		finally:
+			my_cli.close()
+				
 		self._logger.debug('Replication master is changed to host %s', host)		
 
 	def _ping_mysql(self):
 		for sock in self._init_script.socks:
 			wait_sock(sock)
 	
-	def _start_mysql_skip_grant_tables(self):
-		if os.path.exists(self._mysqld_path) and os.access(self._mysqld_path, os.X_OK):
-			self._logger.debug("Starting mysql server with --skip-grant-tables")
-			myd = Popen([self._mysqld_path, '--skip-grant-tables'], stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds = True)
-		else:
-			self._logger.error("MySQL daemon '%s' doesn't exists", self._mysqld_path)
-			return False
-		self._ping_mysql()
-		
-		return myd
-			
 	def _move_mysql_dir(self, directive=None, dirname = None):
 
 		# Retrieveing mysql user from passwd		
@@ -1401,10 +1512,10 @@ class MysqlHandler(ServiceCtlHanler):
 					self._logger.debug('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
-					system(str(rsync))
+					system2(str(rsync), shell=True)
 					self._mysql_config.set(directive, dirname)
 				else:
-					self._logger.debug('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
+					self._logger.info('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
 			else:
 				self._mysql_config.set(directive, dirname)
 				
@@ -1417,6 +1528,7 @@ class MysqlHandler(ServiceCtlHanler):
 
 		self.write_config()
 		# Recursively setting new directory permissions
+		
 		os.chown(directory, mysql_user.pw_uid, mysql_user.pw_gid)		
 		try:
 			for root, dirs, files in os.walk(directory):
@@ -1426,56 +1538,12 @@ class MysqlHandler(ServiceCtlHanler):
 					os.chown(os.path.join(root, file), mysql_user.pw_uid, mysql_user.pw_gid)
 		except OSError, e:
 			self._logger.error('Cannot chown Mysql directory %s', directory)
-			
+		
+		self._logger.debug('New permissions for mysql directory "%s" were successfully set.' % directory)
+		
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
-			self._add_apparmor_rules(directory)
-			
-	def _add_apparmor_rules(self, directory):
-		try:
-			file = open('/etc/apparmor.d/usr.sbin.mysqld', 'r')
-		except IOError, e:
-			pass
-		else:
-			app_rules = file.read()
-			file.close()
-			if not re.search (directory, app_rules):
-				file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
-				if os.path.isdir(directory):
-					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+'/ r,\n'+'\\2', app_rules)
-					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1'+directory+'/** rwk,\n'+'\\2', app_rules)
-				else:
-					app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+' r,\n'+'\\2', app_rules)
-				file.write(app_rules)
-				file.close()
-				apparmor_initd = ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
-				try:
-					apparmor_initd.reload()
-				except InitdError, e:
-					self._logger.error('Cannot restart apparmor. %s', e)	
-
-	
-	def _mount_device(self, devname, mpoint):
-		try:
-			self._logger.debug("Mounting device %s to %s", devname, mpoint)
-			fstool.mount(devname, mpoint, auto_mount=True)
-			self._logger.debug("Device %s is mounted to %s", devname, mpoint)
-		except fstool.FstoolError, e:
-			if fstool.FstoolError.NO_FS == e.code:
-				self._logger.debug("Mount failed with NO_FS error. " 
-						+ "Creating file system on device %s and mount it again", devname)
-				fstool.mount(devname, mpoint, make_fs=True, auto_mount=True)
-			else:
-				raise
-			
-	def _get_ec2_conn(self):
-		"""
-		Maintains single EC2 connection
-		@rtype: boto.ec2.connection.EC2Connection
-		"""
-		if not hasattr(self, "_ec2_conn"):
-			self._ec2_conn = self._platform.new_ec2_conn()
-		return self._ec2_conn
+			_add_apparmor_rules(directory)
 	
 	def _flush_logs(self):
 		if not os.path.exists(self._data_dir):
@@ -1490,3 +1558,119 @@ class MysqlHandler(ServiceCtlHanler):
 				
 	def write_config(self):
 		self._mysql_config.write(self._mycnf_path)
+
+
+def spawn_mysqld():
+	try:
+		return pexpect.spawn(mysqld_path + ' --skip-grant-tables')
+	except pexpect.ExceptionPexpect, e:
+		raise HandlerError('Cannot start mysqld. Error: %s' % e)
+		pass
+
+def term_mysqld(mysqld):
+	mysqld.sendintr()
+	mysqld.close()
+	wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
+
+
+def spawn_mysql_cli(user=None, password=None):
+	try:
+		cmd = mysql_path
+		if user:
+			cmd += ' -u ' + user
+		if password:
+			cmd += ' -p'
+		exp = pexpect.spawn(cmd)
+		
+		if password:
+			exp.expect('Enter password:')
+			exp.sendline(password or '')
+			
+		exp.expect('mysql>')
+		return exp
+	except pexpect.ExceptionPexpect:
+		raise HandlerError('Cannot start mysql client tool. Error: %s' % exp.before)
+
+def get_mysql_version(my_cli):
+	my_cli.sendline('SELECT VERSION();')
+	my_cli.expect('mysql>')
+	version_string = my_cli.before.strip().split('\r\n')[4].split('|')[1].strip()
+	version = re.search('[\d\.]+', version_string)
+	if not version:
+		raise Exception("Can't obtain MySQL version.")
+	return version.group(0)
+
+def check_mysql_password(my_cli, user, password):
+	my_cli.sendline("SELECT PASSWORD('%s') AS hash, Password AS valid_hash FROM mysql.user WHERE mysql.user.User = '%s';" % 
+				(password, user));
+	my_cli.expect('mysql>')
+	if not 'Empty set' in my_cli.before:
+		hash, valid_hash = filter(None, map(string.strip, my_cli.before.strip().split('\r\n')[4].split('|')))
+		if hash != valid_hash:
+			raise ValueError("Password for user %s doesn't match." % user)
+	else:
+		raise ValueError("User %s doesn't exists" % (user))
+
+
+def _add_apparmor_rules(directory):
+	if not os.path.exists('/etc/init.d/apparmor'):
+		return
+	try:
+		file = open('/etc/apparmor.d/usr.sbin.mysqld', 'r')
+	except IOError, e:
+		pass
+	else:
+		app_rules = file.read()
+		file.close()
+		if not re.search (directory, app_rules):
+			file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
+			if os.path.isdir(directory):
+				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+'/ r,\n'+'\\2', app_rules)
+				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1'+directory+'/** rwk,\n'+'\\2', app_rules)
+			else:
+				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+' r,\n'+'\\2', app_rules)
+			file.write(app_rules)
+			file.close()
+			apparmor_initd = ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
+			try:
+				apparmor_initd.reload()
+			except InitdError, e:
+				_logger.error('Cannot restart apparmor. %s', e)	
+
+
+'''
+class MysqlReplication(object):
+	def __init__(self, mycnf):
+		pass
+	
+	def setup(self, master):
+		pass
+	
+	def change_master(self):
+		pass
+	
+	def repair_defaults(self, writefile=True):
+		pass
+
+class MysqlStorage(object):
+	SNAPSHOT_NAME = 'mysql-snap.json'
+	VOLUME_NAME = 'mysql.json'
+	
+	def __init__(self, mycnf, volume, snapshot):
+		pass
+	
+	def repair_defaults(self, writefile=True):
+		pass
+	
+	def valid(self):
+		pass
+	
+	def flush_logs(self):
+		pass
+	
+	def plug(self):
+		pass
+	
+	def unplug(self):
+		pass
+'''

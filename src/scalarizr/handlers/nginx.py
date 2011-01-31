@@ -15,8 +15,9 @@ from scalarizr.messaging import Messages
 
 # Libs
 from scalarizr.libs.metaconf import Configuration
-from scalarizr.util import system, cached, firstmatched,\
+from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2, disttool
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
@@ -33,6 +34,7 @@ BIN_PATH = 'binary_path'
 APP_PORT = 'app_port'
 HTTPS_INC_PATH = 'https_include_path'
 APP_INC_PATH = 'app_include_path'
+UPSTREAM_APP_ROLE = 'upstream_app_role'
 
 class NginxInitScript(initdv2.ParametrizedInitScript):
 	_nginx_binary = None
@@ -46,7 +48,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		try:
 			nginx = software.whereis('nginx')
 			if nginx:
-				out = system('%s -V' % nginx[0])[1]
+				out = system2('%s -V' % nginx[0], shell=True)[1]
 				m = re.search("--pid-path=(.*?)\s", out)
 				if m:
 						pid_file = m.group(1)
@@ -73,7 +75,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		return status
 
 	def configtest(self):
-		out = system('%s -t' % self._nginx_binary)[1]
+		out = system2('%s -t' % self._nginx_binary, shell=True)[1]
 		if 'failed' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 		
@@ -159,7 +161,7 @@ def get_handlers():
 class NginxCnfController(CnfController):
 	def __init__(self):
 		cnf = bus.cnf; ini = cnf.rawini
-		nginx_conf_path = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)) + '/nginx.conf'
+		nginx_conf_path = os.path.join(os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)), 'nginx.conf')
 		CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx', {'1':'on','0':'off'})
 		
 	@property
@@ -181,16 +183,21 @@ class NginxHandler(ServiceCtlHanler):
 		self._https_inc_path = ini.get(CNF_SECTION, HTTPS_INC_PATH)
 		self._app_inc_path = ini.get(CNF_SECTION, APP_INC_PATH)		
 		self._app_port = ini.get(CNF_SECTION, APP_PORT)
+		self._upstream_app_role = ini.get(CNF_SECTION, UPSTREAM_APP_ROLE)
 		
 		bus.define_events("nginx_upstream_reload")
 		bus.on(init=self.on_init)
-
+		
 		
 	def on_init(self):
 		bus.on(
 			start = self.on_start, 
-			before_host_up = self.on_before_host_up
+			before_host_up = self.on_before_host_up,
+			before_reboot_finish = self.on_before_reboot_finish
 		)
+		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			self._insert_iptables_rules()
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -209,7 +216,9 @@ class NginxHandler(ServiceCtlHanler):
 		self._update_vhosts()		
 		self._reload_upstream()
 		bus.fire('service_configured', service_name=SERVICE_NAME)
-	
+		
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
 	
 	def on_HostUp(self, message):
 		self._reload_upstream()
@@ -248,7 +257,7 @@ class NginxHandler(ServiceCtlHanler):
 	def _reload_upstream(self, force_reload=False):
 
 		config_dir = os.path.dirname(self._app_inc_path)
-		nginx_conf_path = config_dir + '/nginx.conf'
+		nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
 		
 		if not hasattr(self, '_config'):
 			try:
@@ -261,7 +270,7 @@ class NginxHandler(ServiceCtlHanler):
 		backend_include.read(os.path.join(bus.share_path, 'nginx/app-servers.tpl'))
 
 		# Create upstream hosts configuration
-		for app_serv in self._queryenv.list_roles(behaviour = BuiltinBehaviours.APP):
+		for app_serv in self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP, role_name=self._upstream_app_role):
 			for app_host in app_serv.hosts :
 				server_str = '%s:%s' % (app_host.internal_ip, self._app_port)
 				backend_include.add('upstream/server', server_str)
@@ -331,7 +340,8 @@ class NginxHandler(ServiceCtlHanler):
 			try:
 				self._init_script.configtest()
 			except initdv2.InitdError, e:
-				self._logger.error('Configuration error detected: %s. Reverting configuration' % e)
+				self._logger.error("Configuration error detected: %s Reverting configuration." % str(e))
+
 				if os.path.isfile(self._app_inc_path):
 					shutil.move(self._app_inc_path, self._app_inc_path+".junk")
 				else:
@@ -345,12 +355,15 @@ class NginxHandler(ServiceCtlHanler):
 
 		bus.fire("nginx_upstream_reload")	
 
+	def _insert_iptables_rules(self, *args, **kwargs):
+		iptables = IpTables()
+		iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
 
 	def _update_vhosts(self):
 		self._logger.debug("Requesting virtual hosts list")
 		received_vhosts = self._queryenv.list_virtual_hosts()
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
-		
+	
 		https_config = ''
 		
 		if received_vhosts:

@@ -14,6 +14,25 @@ import unittest
 import time
 from boto.ec2.connection import EC2Connection
 
+
+
+
+class MysqlTest(unittest.TestCase):
+	def setUp(self):
+		pass
+	def tearDown(self):
+		pass
+	
+	def _test_init(self, role_name, storage_test_fn):
+		rh = MysqlRoleHandler('role name')
+		rh.test_init()
+		storage_test_fn()
+		pass
+	
+	def test_with_raid_storage(self):
+		pass
+	
+
 class MysqlRoleHandler(RoleHandler):
 	slaves_ssh = []
 	

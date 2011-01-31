@@ -38,7 +38,5 @@ if not (vals.release or vals.nightly):
 if vals.release and not vals.tag:
 	print 'tag required'
 	sys.exit(1)
-	
-
 
 

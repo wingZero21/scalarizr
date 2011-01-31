@@ -2,6 +2,7 @@
 Created on Sep 7, 2010
 
 @author: marat
+@author: Dmytro Korsakov
 '''
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
