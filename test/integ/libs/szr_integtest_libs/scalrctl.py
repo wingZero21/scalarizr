@@ -275,6 +275,10 @@ class FarmUI:
 	
 	def get_instance_id(self, server_id, timeout = 120):
 		return self._get_server_info(server_id, ('Instance ID', 'Server ID'), timeout)
+	
+	def get_rs_password(self, server_id, timeout = 120):
+		return self._get_server_info(server_id, ('rs.admin-pass',), timeout)
+
 	@_login
 	def _get_server_info(self, server_id, field_labels, timeout):
 
@@ -510,6 +514,22 @@ class FarmUI:
 				self._platform = 'ec2'
 		return self._platform
 	
+	def get_server_id(self, public_ip):
+		url = urllib.basejoin(self.sel.browserURL, 'servers/xListViewServers/')
+		http = httplib2.Http()
+		body = urllib.urlencode({'farmId' : self.farm_id, 'start' : '0', 'limit' : '15'})
+		headers = {'Content-type': 'application/x-www-form-urlencoded',
+                        'Cookie' : self.sel.get_cookie()}
+		
+		content = http.request(url, 'POST', body=body, headers=headers)
+		data = json.loads(content[1])
+		
+		for server in data['data']:
+			if public_ip == server["remote_ip"]:
+				return server["server_id"]
+				break
+		else:
+			raise FarmUIError("Can't find server with IP='%s' in %s farm " % (public_ip, self.farm_id))
 		
 def ui_import_server(sel, platform_name, behaviour, host, role_name):
 	'''

@@ -36,6 +36,7 @@ class SshManager:
 			key_file = os.path.expanduser(key)
 			if not os.path.exists(key_file):
 				raise Exception("Key file '%s' doesn't exist", key_file)
+			print 'Private key: %s' % key_file
 			self.key = paramiko.RSAKey.from_private_key_file(key_file, password = key_pass if key_pass else None)
 		elif password:
 			self.password = password
