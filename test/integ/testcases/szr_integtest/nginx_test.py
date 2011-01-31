@@ -10,6 +10,8 @@ import string
 import logging
 import time
 
+from subprocess import Popen, PIPE
+
 from szr_integtest 				 import get_selenium
 from szr_integtest_libs.datapvd  import DataProvider
 from szr_integtest_libs.scalrctl import FarmUI
@@ -167,7 +169,15 @@ class HttpsTest(VirtualTest):
 		upstream_log = self.server.log.head()
 		upstream_log.expect("VhostReconfigure")
 		self.logger.info('got VhostReconfigure')
-		out = system2('/usr/bin/openssl s_client -connect %s:443' % self.server.public_ip, shell=True)
+		#out = system2('/usr/bin/openssl s_client -connect %s:443' % self.server.public_ip, shell=True)
+		time.sleep(10)
+		openssl_cmd = 'openssl s_client -connect %s:443' % self.server.public_ip
+		self.logger.info(openssl_cmd)
+		openssl = Popen(openssl_cmd, shell=True, stdout=PIPE, stderr=PIPE, stdin=PIPE)
+		out, err = openssl.communicate('GET /')
+		if err:
+			self.logger.info(err)
+			
 		if -1 == string.find(out, '1 s:/'):
 			raise Exception('CA file probably ignored or simply does not exist')
 		self.logger.info('cert OK.')
@@ -204,7 +214,8 @@ class RebundleTest(VirtualTest):
 		reader.expect("Received message 'Rebundle'", 120)
 		self.logger.info("Received message 'Rebundle'")
 		
-		reader.expect("system: ('rsync'", 240)
+		reader.expect("system: \('rsync'", 240)
+		self.logger.info("Rsync started")
 		
 		reader.expect("Message 'RebundleResult' delivered", 900)
 		self.logger.info("Received message 'RebundleResult'")
@@ -219,14 +230,17 @@ class RebundleTest(VirtualTest):
 		self.logger.info("Role %s successfully rebundled." % self.pvd.role_name)
 		self.logger.info("New role name is %s" % new_role_name)
 		self.logger.info("Terminating the farm")
-		self.pvd.terminate_farm()
 		
+		'''
+		self.pvd.terminate_farm()		
 		self.logger.info("Running all tests again")
 		self.suite._tests.remove(self)
 		self.suite.prepare_tests(new_role_name)
 		self.suite.debug()
+		'''
+		
 		self.logger.info("Rebundle test is finished.")
-
+		
 
 class TerminateTest(VirtualTest):
 	def _hostup_received(self):
@@ -259,11 +273,11 @@ class NginxSuite(unittest.TestSuite):
 		
 		self.logger.info("Adding app role to farm")
 		app1_pvd = DataProvider('app', arch='x86_64', dist='centos5')
-		self.logger.info("App role added")
+		self.logger.info("App role %s added" % nginx_pvd.role_name)
 		
 		self.logger.info("Adding second role to farm")
 		app2_pvd = DataProvider('app', arch='x86_64', dist='ubuntu1004')
-		self.logger.info("Second app role added")
+		self.logger.info("Second app role %s added" % nginx_pvd.role_name)
 		
 		appctl=ScalrCtl(nginx_pvd.farm_id)
 		
@@ -275,11 +289,11 @@ class NginxSuite(unittest.TestSuite):
 		terminate = TerminateTest('test_terminate', pvd=nginx_pvd, server=server)
 
 		self.addTest(startup)
-		#self.addTest(restart)
-		#self.addTest(upstream)
-		#self.addTest(https)
+		self.addTest(restart)
+		self.addTest(upstream)
+		self.addTest(https)
 		self.addTest(rebundle)
-		#self.addTest(terminate)
+		self.addTest(terminate)
 		
 		self.logger.info("Number of testes: %s. Starting tests." % self.countTestCases())
 		
