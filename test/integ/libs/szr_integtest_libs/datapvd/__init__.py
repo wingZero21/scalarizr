@@ -34,6 +34,8 @@ if not os.path.exists(platform_config_path):
 
 keys_path = os.path.expanduser('~/.scalr-dev/farm_keys/')
 
+logger = logging.getLogger(__name__)
+
 def read_json_config(cnf_path):
 	
 	def convert_dict_from_unicode(data):
@@ -118,7 +120,13 @@ class DataProvider(object):
 			self.role_name = self.farmui.get_role_name(scalr_srv_id)
 			node = self._get_node(host)
 			self.scalrctl = ScalrCtl(self.farm_id)
-			ssh = SshManager(host, self.farm_key)
+			
+			if 'rackspace' == platform:
+				password = self.farmui.get_rs_password(scalr_srv_id)
+				ssh = SshManager(host, password=password, timeout=240) 
+			else:
+				ssh = SshManager(host, self.farm_key, timeout=240)
+				
 			self._servers.append(Server(node, ssh, role_name=self.role_name, scalr_id=scalr_srv_id))
 			return
 		
@@ -128,7 +136,6 @@ class DataProvider(object):
 			self.farmui = FarmUI(get_selenium())
 			self.farmui.use(self.farm_id)
 			self.behaviour = self.farmui.get_role_behaviour(self.role_name)
-			self.ssh_config = dict(key=config.get('./test-farm/farm_key'))
 			self.scalrctl = ScalrCtl(self.farm_id)
 			self.server_id_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)'
 													% (self.farm_id, self.role_name), re.M)
@@ -144,7 +151,6 @@ class DataProvider(object):
 				else:
 					self.role_name = configuration['role_name']
 					self.farm_id   = config.get('./test-farm/farm_id')
-					self.ssh_config = dict(key=config.get('./test-farm/farm_key'))
 					self.farmui = FarmUI(get_selenium())
 					self.farmui.use(self.farm_id)
 					self.scalrctl = ScalrCtl(self.farm_id)
@@ -227,7 +233,11 @@ class DataProvider(object):
 			node = self._get_node(host)
 			self.wait_for_szr_port(host)
 			time.sleep(5)
-			ssh = SshManager(host, self.farm_key, timeout=240)
+			if 'rackspace' == platform:
+				password = self.farmui.get_rs_password(server_id)
+				ssh = SshManager(host, password=password, timeout=240) 
+			else:
+				ssh = SshManager(host, self.farm_key, timeout=240) 
 			self._servers.append(Server(node, ssh, role_name = self.role_name, scalr_id=server_id))
 		return self._servers[-1]
 			
@@ -264,9 +274,7 @@ class DataProvider(object):
 	def wait_for_hostup(self, server):
 		if server._running:
 			return
-		
-		logger = logging.getLogger(__name__)
-		
+				
 		logger.info("Waiting for scalarizr daemon")
 		self.wait_for_szr_port(server.public_ip)
 		
@@ -274,11 +282,11 @@ class DataProvider(object):
 		log_reader = server.log.head()
 		logger.info("Got log from server %s" % server.public_ip)
 			
-		log_reader.expect("Message 'HostInit' delivered", 120)
+		log_reader.expect("Message 'HostInit' delivered", 300)
 		logger.info("Got HostInit")
 								
 		self.scalrctl.exec_cronjob('ScalarizrMessaging')
-		log_reader.expect("Message 'HostUp' delivered", 120)
+		log_reader.expect("Message 'HostUp' delivered", 300)
 		logger.info("Got HostUp")
 		
 		self.scalrctl.exec_cronjob('ScalarizrMessaging')
@@ -318,7 +326,12 @@ class DataProvider(object):
 		for node in all_nodes:
 			public_ip = socket.gethostbyname(node.public_ip[0])
 			if public_ip in servers:
-				ssh = SshManager(public_ip, self.farm_key)
+				if 'rackspace' == platform:
+					server_id= self.farmui.get_server_id(public_ip)
+					password = self.farmui.get_rs_password(server_id)
+					ssh = SshManager(public_ip, password=password, timeout=240) 
+				else:
+					ssh = SshManager(public_ip, self.farm_key, timeout=240) 
 				server = Server(node, ssh, role_name = self.role_name)
 				self._servers.insert(0, server) if public_ip == servers[0] else self._servers.append(server)
 				
