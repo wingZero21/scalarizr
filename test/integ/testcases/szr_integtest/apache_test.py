@@ -60,6 +60,10 @@ class HttpTest(VirtualTest):
 		
 	def test_http(self):
 		self.logger.info("HTTP Test")
+		
+		self.logger.info("Waiting for HostUp")
+		self.pvd.wait_for_hostup(self.server)
+		
 		domain = 'dima4test.com'
 		role_name = self.pvd.role_name
 		
@@ -74,22 +78,13 @@ class HttpTest(VirtualTest):
 		self.logger.info('got VhostReconfigure')
 		
 		#patch /etc/hosts, use domain instead of ip
+		self.logger.info("Getting log from server")
+		ssh = self.server.ssh()		
 		
-		self.logger.info(self.server.public_ip)
-		self.logger.info(domain)
-		
-		out = ''
-		hosts_entry = '\n%s %s\n' % (self.server.public_ip, domain)
-		hosts_path = '/etc/hosts'
-		hosts_orig = read_file(hosts_path)
-		try:
-			write_file(hosts_path, hosts_entry, mode='a')
-			
-			out = system2("curl %s:80" % domain , shell=True)[0]
-			print out
-		finally:
-			#repair /etc/hosts
-			write_file(hosts_path, hosts_orig)
+		execute(ssh, "echo '\n127.0.0.1 %s\n' >> /etc/hosts" % domain , 15)
+		hosts = execute(ssh, 'cat /etc/hosts')
+		self.logger.info(hosts)
+		out = execute(ssh, "curl %s:80" % domain)
 
 		if -1 == string.find(out, 'test_http'):
 			raise Exception('Apache is not serving index.html')
