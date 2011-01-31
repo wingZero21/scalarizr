@@ -218,6 +218,7 @@ class RebundleTest(VirtualTest):
 	def _is_bundle_process_complete(self):
 		self.scalrctl.exec_cronjob('BundleTasksManager', server_id=self.server.scalr_id)
 		status = self.pvd.farmui.get_bundle_status(self.server.scalr_id)
+		self.logger.debug(status)
 		if status == 'failed':
 			raise BaseException('Bundle task failed')
 		return  status == 'success'
