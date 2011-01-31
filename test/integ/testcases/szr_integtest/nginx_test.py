@@ -177,20 +177,22 @@ class UpstreamTest(VirtualTest):
 
 
 class HttpsTest(VirtualTest):
-	app1_pvd = None
-	nginx_pvd = None
+	app_pvd = None
 	server = None
 		
 	def test_https(self):
 		self.logger.info("HTTPS Test")
+		
 		domain = 'dima4test.com'
-		role_name = self.app1_pvd.role_name
+		role_name = self.app_pvd.role_name
+		
 		farmui = FarmUI(get_selenium())
 		farmui.configure_vhost_ssl(domain, role_name)
+		
 		upstream_log = self.server.log.head()
 		upstream_log.expect("VhostReconfigure")
 		self.logger.info('got VhostReconfigure')
-		#out = system2('/usr/bin/openssl s_client -connect %s:443' % self.server.public_ip, shell=True)
+		
 		time.sleep(10)
 		openssl_cmd = 'openssl s_client -connect %s:443' % self.server.public_ip
 		self.logger.info(openssl_cmd)
@@ -202,6 +204,7 @@ class HttpsTest(VirtualTest):
 		if -1 == string.find(out, '1 s:/'):
 			raise Exception('CA file probably ignored or simply does not exist')
 		self.logger.info('cert OK.')
+		
 		self.logger.info("HTTPS test is finished.")
 
 		
@@ -312,7 +315,7 @@ class NginxSuite(unittest.TestSuite):
 		startup = NginxStartupTest('test_startup', pvd=nginx_pvd, server=server)
 		restart = NginxRestartTest('test_restart', pvd=nginx_pvd, server=server)
 		upstream = UpstreamTest('test_upstream', app1_pvd=app1_pvd, app2_pvd=app2_pvd, server=server)
-		https = HttpsTest('test_https', app1_pvd=app1_pvd, nginx_pvd=nginx_pvd, server=server)
+		https = HttpsTest('test_https', app_pvd=app1_pvd, server=server)
 		rebundle = RebundleTest('test_rebundle', pvd=nginx_pvd, server=server, scalrctl=appctl, suite = self)
 		terminate = TerminateTest('test_terminate', pvd=nginx_pvd, server=server)
 
