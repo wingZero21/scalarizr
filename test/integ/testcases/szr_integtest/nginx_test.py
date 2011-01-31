@@ -27,6 +27,7 @@ class VirtualTest(unittest.TestCase):
 	
 	def __init__(self, methodName='runTest', **kwargs):
 		self.logger = logging.getLogger(__name__)
+		self.logger.setLevel(logging.DEBUG)
 		unittest.TestCase.__init__(self, methodName)
 		if kwargs:
 			for k, v in kwargs.items():
