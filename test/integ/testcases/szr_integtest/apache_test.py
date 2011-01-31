@@ -124,7 +124,7 @@ class ApacheSuite(unittest.TestSuite):
 		startup = StartupTest('test_startup', pvd=app_pvd, server=server)
 		restart = RestartTest('test_restart', pvd=app_pvd, server=server)
 		http = HttpTest('test_http', pvd=app_pvd, server=server)
-		https = HttpsTest('test_https', pvd=app_pvd, server=server)
+		https = HttpsTest('test_https', app_pvd=app_pvd, server=server)
 		rebundle = RebundleTest('test_rebundle', pvd=app_pvd, server=server, scalrctl=appctl, suite = self)
 		terminate = TerminateTest('test_terminate', pvd=app_pvd, server=server)
 		
