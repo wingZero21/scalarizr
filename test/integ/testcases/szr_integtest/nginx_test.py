@@ -45,22 +45,27 @@ class VirtualTest(unittest.TestCase):
 			self.logger.info("%s found in upstream list" % ip)
 			
 
-class StartupTest(VirtualTest):
-	nginx_pvd = None
+class NginxStartupTest(VirtualTest):
+	pvd = None
 	server = None
+	
+	def check_startup(self):
+		self.pvd.wait_for_hostup(self.server)		
+		ping_socket(self.server.public_ip, 80, exc_str='service is not running')
+		self.logger.info("service is running on 80 port")
+		
+	def curl(self, ip, port='80'):
+		self.logger.info("Getting default page from server")
+		out = system2("curl %s:%s" % (ip,port) , shell=True)[0]
+		print out
+		return out
 	
 	def test_startup(self):
 		self.logger.info("Startup Test")
 		
-		self.nginx_pvd.wait_for_hostup(self.server)		
+		self.check_startup()
+		out = self.curl(self.server.public_ip)
 		
-		ping_socket(self.server.public_ip, 80, exc_str='Nginx is not running on load balancer')
-		self.logger.info("Nginx running on 80 port")
-		
-		self.logger.info("Logging on balancer %s through ssh" % self.server.public_ip)
-		self.logger.info("Getting default page from nginx")
-		out = system2("curl %s:80" % self.server.public_ip , shell=True)[0]
-		print out
 		if -1 == string.find(out, 'No running app instances found'):
 			raise Exception('Nginx is not serving dummy page')
 		self.logger.info('Nginx is serving proper dummy page')
@@ -68,38 +73,46 @@ class StartupTest(VirtualTest):
 		self.logger.info("Startup test is finished.")
 		
 
-class RestartTest(VirtualTest):
-	nginx_pvd = None
+class NginxRestartTest(VirtualTest):
+	pvd = None
 	server = None
 	
-	def test_restart(self):
-		self.logger.info("Restart Test")
+	def check_restart(self):
+		self.pvd.wait_for_hostup(self.server)
 		
-		self.nginx_pvd.wait_for_hostup(self.server)
-		
-		self.logger.info("Logging on balancer through ssh")
+		self.logger.info("Logging on server through ssh")
 		ssh = self.server.ssh()
 		
 		self.logger.info("Enabling debug log")
 		execute(ssh, 'cp /etc/scalr/logging-debug.ini /etc/scalr/logging.ini', 15)
 		
-		#temporary solution `cause restart triggers "address already in use" error
 		self.logger.info("Restarting scalarizr")
 		execute(ssh, '/etc/init.d/scalarizr stop', 15)
-		time.sleep(10)
-		self.logger.info(execute(ssh, 'lsof -i TCP:8013', 15))
-		execute(ssh, '/etc/init.d/scalarizr start', 15)
 		
-		# Check that upstream was reloaded
+		self.logger.info("Waiting a few seconds")
+		time.sleep(10)
+
 		self.logger.info("getting log from server")
+		
 		log = self.server.log.tail()
 		
 		log.expect('Scalarizr terminated')
-		self.logger.info('Scalarizr terminated')
+		self.logger.info('Scalarizr was successfully terminated')
+				
+		self.logger.info(execute(ssh, 'lsof -i TCP:8013', 15))
+		execute(ssh, '/etc/init.d/scalarizr start', 15)
 		
 		log.expect('Starting scalarizr')
-		self.logger.info('Scalarizr started')
+		self.logger.info('Scalarizr was successfully started')
 		
+		return log
+	
+	def test_restart(self):
+		self.logger.info("Restart Test")
+		
+		log = self.check_restart()
+		
+		# Check that upstream was reloaded		
 		log.expect('Upstream servers:') 
 		self.logger.info('upstream reloaded')
 		self.logger.info("Restart test is finished.")
@@ -296,8 +309,8 @@ class NginxSuite(unittest.TestSuite):
 		
 		appctl=ScalrCtl(nginx_pvd.farm_id)
 		
-		startup = StartupTest('test_startup', nginx_pvd=nginx_pvd, server=server)
-		restart = RestartTest('test_restart', nginx_pvd=nginx_pvd, server=server)
+		startup = NginxStartupTest('test_startup', pvd=nginx_pvd, server=server)
+		restart = NginxRestartTest('test_restart', pvd=nginx_pvd, server=server)
 		upstream = UpstreamTest('test_upstream', app1_pvd=app1_pvd, app2_pvd=app2_pvd, server=server)
 		https = HttpsTest('test_https', app1_pvd=app1_pvd, nginx_pvd=nginx_pvd, server=server)
 		rebundle = RebundleTest('test_rebundle', pvd=nginx_pvd, server=server, scalrctl=appctl, suite = self)
