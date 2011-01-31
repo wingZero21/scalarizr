@@ -44,10 +44,12 @@ class SSHKeys(Handler):
 			self._write_ssh_keys_file(content)
 	
 	def _read_ssh_keys_file(self):
-		content = read_file(self.PATH, msg='Reading autorized keys from %s'%self.PATH, logger=self._logger)
-		if content == None:
-			raise UpdateSshAuthorizedKeysError('Unable to read ssh keys from %s' % self.PATH)
-		return content
+		if os.path.exists(self.PATH):
+			content = read_file(self.PATH, msg='Reading autorized keys from %s'%self.PATH, logger=self._logger)
+			if content == None:
+				raise UpdateSshAuthorizedKeysError('Unable to read ssh keys from %s' % self.PATH)
+			return content
+		return ''
 	
 	def _write_ssh_keys_file(self, content):
 		ssh_dir = os.path.basename(self.PATH)
