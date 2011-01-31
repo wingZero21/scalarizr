@@ -23,6 +23,7 @@ from scalarizr.util import system2
 
 
 class VirtualTest(unittest.TestCase):
+	logger = None 
 	
 	def __init__(self, methodName='runTest', **kwargs):
 		self.logger = logging.getLogger(__name__)
@@ -45,7 +46,9 @@ class VirtualTest(unittest.TestCase):
 			
 
 class StartupTest(VirtualTest):
-
+	nginx_pvd = None
+	server = None
+	
 	def test_startup(self):
 		self.logger.info("Startup Test")
 		
@@ -67,6 +70,7 @@ class StartupTest(VirtualTest):
 
 class RestartTest(VirtualTest):
 	nginx_pvd = None
+	server = None
 	
 	def test_restart(self):
 		self.logger.info("Restart Test")
@@ -160,6 +164,10 @@ class UpstreamTest(VirtualTest):
 
 
 class HttpsTest(VirtualTest):
+	app1_pvd = None
+	nginx_pvd = None
+	server = None
+		
 	def test_https(self):
 		self.logger.info("HTTPS Test")
 		domain = 'dima4test.com'
@@ -186,7 +194,9 @@ class HttpsTest(VirtualTest):
 		
 class RebundleTest(VirtualTest):
 	server = None
-	app_pvd = None
+	pvd = None
+	scalrctl = None
+	suite = None
 	
 	def _is_bundle_process_complete(self):
 		self.scalrctl.exec_cronjob('BundleTasksManager', server_id=self.server.scalr_id)
@@ -243,6 +253,9 @@ class RebundleTest(VirtualTest):
 		
 
 class TerminateTest(VirtualTest):
+	pvd = None
+	server = None	
+
 	def _hostup_received(self):
 			out = self.pvd.scalrctl.exec_cronjob('ScalarizrMessaging')
 			return False if -1 == string.find(out, 'Event OnHostDown') else True
@@ -253,6 +266,8 @@ class TerminateTest(VirtualTest):
 		
 
 class NginxSuite(unittest.TestSuite):
+	logger = None
+	
 	def __init__(self, tests=(), role_name=None):
 		unittest.TestSuite.__init__(self, tests)
 		self.logger = logging.getLogger(__name__)
