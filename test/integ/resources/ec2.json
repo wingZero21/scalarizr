@@ -79,6 +79,10 @@
 				"role_name":			"szr-mysql-unstable-ubuntu1004-64",
 				"arch"		:			"x86_64",
 				"root_device_type": 	"ebs"
+			}, {
+				"role_name":			"szr-mysql-ubuntu1004",
+				"arch"		:			"i386",
+				"root_device_type": 	"ebs"
 			}]
 		},
 		"centos5" : {

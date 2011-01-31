@@ -5,7 +5,7 @@ Created on Mar 11, 2010
 
 import scalarizr
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler, HandlerError
+from scalarizr.handlers import Handler, HandlerError, RebundleLogHandler
 from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, get_free_devname
@@ -1290,17 +1290,3 @@ class AmiManifest:
 	
 	def endElement(self, name):
 		pass
-
-
-class RebundleLogHandler(logging.Handler):
-	def __init__(self, bundle_task_id=None):
-		logging.Handler.__init__(self)
-		self.bundle_task_id = bundle_task_id
-		self._msg_service = bus.messaging_service
-		
-	def emit(self, record):
-		msg = self._msg_service.new_message(Messages.REBUNDLE_LOG, body=dict(
-			bundle_task_id = self.bundle_task_id,
-			message = str(record.msg) % record.args if record.args else str(record.msg)
-		))
-		self._msg_service.get_producer().send(Queues.LOG, msg)

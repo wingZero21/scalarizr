@@ -43,12 +43,25 @@ logger.setLevel(logging.DEBUG)
 
 opts = EC2_MYSQL_ROLE_DEFAULT_SETTINGS
 opts.update(EC2_ROLE_DEFAULT_SETTINGS)
-dp = MysqlDataProvider(role_settings=opts)
+
+
+#dp = MysqlDataProvider(role_settings=opts, role_name = "szr-mysql-unstable-centos55-64")
+dp = MysqlDataProvider(role_settings=opts, role_name = "szr-mysql-u1004-temp")
+#dp = MysqlDataProvider(role_settings=opts, role_name = "szr-mysql-u1004-rbuilder-rs")
+
+
+
+
 scalrctl = ScalrCtl(dp.farm_id)
 
 class StartupMasterHostUpFailed(unittest.TestCase):
 	def test_master_hostup_failed(self):
-		dp.terminate_farm()
+		try:
+			dp.terminate_farm()
+		except (Exception, BaseException), e:
+			if not 'already terminated' in str(e):
+				raise
+			
 		logger.info('>>>>>>>>>>>> Starting test "test_master_hostup_failed"')
 		local_opts = copy.copy(opts)
 		local_opts.update({'system.timeouts.launch' : '60'})
@@ -66,6 +79,8 @@ class StartupMasterHostUpFailed(unittest.TestCase):
 			if res:
 				break
 			time.sleep(5)
+			
+		dp.sync()
 		#new_master = dp.slave()
 		"""
 		new_server_re = re.compile('\[FarmID:\s+%s\].*?%s\s+scaling\s+\up.*?ServerID\s+=\s+(?P<server_id>[\w-]+)' \
@@ -182,7 +197,7 @@ class StartupSlave(unittest.TestCase):
 		self.assertFalse('Access denied for user' in slave_status)
 		logger.info('Slave is running.')
 		
-		master_private_ip = dp.farmui.get_private_ip(master.scalr_id, 60)
+		master_private_ip = dp.farmui.get_private_ip(master.scalr_id)
 		self.assertTrue(master_private_ip in slave_status)
 		
 		logger.info("Master host has been set properly.")
@@ -253,8 +268,8 @@ class CreateBackup(unittest.TestCase):
 		sftp.put(shitgen_path, '/tmp/shitgen.php')
 		soft = 'php5-mysql php5-cli' if 'debian' == master.dist else 'php php-mysql'
 		master.install_software(soft)
-		execute(master_ssh, 'php /tmp/shitgen.php -u %s -p %s -d test1 -s 1Gb' % (ROOT_USER, root_pass))
-		execute(master_ssh, 'php /tmp/shitgen.php -u %s -p %s -d test2 -s 10Mb' % (ROOT_USER, root_pass) )		
+		execute(master_ssh, 'php /tmp/shitgen.php -u %s -p %s -d test1 -s 1Gb' % (ROOT_USER, root_pass), 180)
+		execute(master_ssh, 'php /tmp/shitgen.php -u %s -p %s -d test2 -s 10Mb' % (ROOT_USER, root_pass), )		
 		slave_reader = slave.log.tail()
 		dp.farmui.create_mysql_backup()
 		slave_reader.expect('Mysql_CreateBackup')
@@ -291,11 +306,11 @@ class MysqlSuite(unittest.TestSuite):
 	def __init__(self, tests=()):
 		self._tests = []
 		self.addTest(StartupMasterHostUpFailed('test_master_hostup_failed'))
-		self.addTest(StartupMaster('test_startup_master'))
-		self.addTest(StartupSlave('test_startup_slave'))
-		self.addTest(SlaveToMaster('test_slave_to_master'))
-		self.addTest(CreateBackup('test_create_backup'))
-		self.addTest(CreateDataBundle('test_create_databundle'))
+		#self.addTest(StartupMaster('test_startup_master'))
+		#self.addTest(StartupSlave('test_startup_slave'))
+		#self.addTest(SlaveToMaster('test_slave_to_master'))
+		#self.addTest(CreateBackup('test_create_backup'))
+		#self.addTest(CreateDataBundle('test_create_databundle'))
 		
 if __name__ == "__main__":
 	unittest.main()
