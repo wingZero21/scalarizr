@@ -13,14 +13,7 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from urlparse import urlparse
 import threading
 import logging
-import socket
 import sys
-import os
-
-try:
-	import time
-except ImportError:
-	import timemodule as time
 import os.path
 
 class P2pMessageConsumer(MessageConsumer):
@@ -40,7 +33,7 @@ class P2pMessageConsumer(MessageConsumer):
 	
 	def starttest(self):
 		self._logger.debug('Create test socket to validate endpoint')
-		self._logger.warn("Socket test temporary disabled due to strange [Errno 98] Address already in use error")
+		self._logger.debug("Socket test temporary disabled due to strange [Errno 98] Address already in use error")
 		'''
 		r = urlparse(self.endpoint)
 		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
