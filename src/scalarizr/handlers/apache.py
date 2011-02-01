@@ -415,6 +415,7 @@ class ApacheHandler(ServiceCtlHanler):
 				self._config.write(self._httpd_conf_path)			
 
 	def _patch_ssl_conf(self, cert_path):
+		
 		key_path = os.path.join(cert_path, 'https.key')
 		crt_path = os.path.join(cert_path, 'https.crt')
 		ca_crt_path = os.path.join(cert_path, 'https-ca.crt')
@@ -424,11 +425,17 @@ class ApacheHandler(ServiceCtlHanler):
 			ssl_conf = Configuration('apache')
 			ssl_conf.read(ssl_conf_path)
 			
-			if not os.path.exists(key_path) or not os.path.exists(crt_path):
-				ssl_conf.comment(".//SSLCertificateFile")
-				ssl_conf.comment(".//SSLCertificateKeyFile")
-				ssl_conf.comment(".//SSLCACertificateFile")
-				return
+			#removing old paths
+			try:
+				old_key_path = ssl_conf.get(".//SSLCertificateFile")
+				old_crt_path = ssl_conf.get(".//SSLCertificateKeyFile")
+				if not os.path.exists(old_key_path) or not os.path.exists(old_crt_path):
+					ssl_conf.comment(".//SSLCertificateFile")
+					ssl_conf.comment(".//SSLCertificateKeyFile")
+					ssl_conf.comment(".//SSLCACertificateFile")
+					return
+			except NoPathError, e:
+				pass
 			
 			ssl_conf.set(".//SSLCertificateFile", crt_path)
 			ssl_conf.set(".//SSLCertificateKeyFile", key_path)
