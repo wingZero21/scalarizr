@@ -132,7 +132,7 @@ class MessageListener:
 				except:
 					pass
 				else:
-					write_file(cnf.private_path('.scalr-version'), '.'.join(ver))
+					write_file(cnf.private_path('.scalr-version'), '.'.join(map(str, ver)))
 					bus.scalr_version = ver					
 			
 			accepted = False

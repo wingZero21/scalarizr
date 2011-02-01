@@ -152,7 +152,7 @@ class Ec2RebundleHandler(Handler):
 			instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
 			if instance.root_device_name:
 				# EBS-root device instance
-				if 'volume_size' in message.body:
+				if message.body.get('volume_size'):
 					volume_size = message.volume_size
 				else:
 					root_bdt = instance.block_device_mapping[instance.root_device_name]

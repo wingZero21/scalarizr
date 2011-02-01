@@ -303,14 +303,12 @@ def _apply_user_data(cnf):
 		}
 	))
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
-	
-	logger.debug('Detect Scalr version')
-	try:
-		g('cloud_storage_path')
-		bus.scalr_version = (2, 2)
-	except KeyError:
-		bus.scalr_version = (2, 1)
-	write_file(cnf.private_path('.scalr-version'), '.'.join(bus.scalr_version))
+
+def _detect_scalr_version():
+	pl = bus.platform
+	if pl:
+		return (2, 2) if pl.get_user_data('cloud_storage_path') else (2, 1)
+	return (2, 0)	
 
 	
 def init_script():
@@ -564,8 +562,14 @@ def main():
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			cnf.fire('apply_user_data', cnf)
 		
-		if not bus.scalr_version and os.path.exists(cnf.private_path('.scalr-version')):
-			bus.scalr_version = tuple(read_file(cnf.private_path('.scalr-version')).strip().split('.'))
+		# Check Scalr version
+		if not bus.scalr_version:
+			version_file = cnf.private_path('.scalr-version')
+			if os.path.exists(version_file):
+				bus.scalr_version = tuple(read_file(version_file).strip().split('.'))
+			else:
+				bus.scalr_version = _detect_scalr_version()
+				write_file(version_file, '.'.join(map(str, bus.scalr_version)))
 			
 		# Apply Command-line passed configuration options
 		cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))
