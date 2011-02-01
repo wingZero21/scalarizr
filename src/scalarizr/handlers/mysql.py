@@ -637,7 +637,9 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Connecting to mysql 
 			my_cli = spawn_mysql_cli(ROOT_USER, root_password)
-			
+			pma_password = re.sub('[^\w]','', cryptotool.keygen(20))
+			self._add_mysql_user(my_cli, PMA_USER, pma_password, pma_server_ip)
+			"""
 			mysql_ver = version.StrictVersion(get_mysql_version(my_cli))
 			priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 			
@@ -655,8 +657,7 @@ class MysqlHandler(ServiceCtlHanler):
 			# Check for errors
 			if re.search('error', my_cli.before, re.M | re.I):
 				raise HandlerError("Cannot add PhpMyAdmin system user '%s': '%s'" % (PMA_USER, my_cli.before))
-			
-			my_cli.sendline('FLUSH PRIVILEGES;')
+			"""
 			my_cli.close()
 			del(my_cli)
 			
@@ -1331,14 +1332,14 @@ class MysqlHandler(ServiceCtlHanler):
 			
 		my_cli = my_cli or spawn_mysql_cli()
 		
-		mysql_ver = version.StrictVersion(get_mysql_version(my_cli))
-		priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
+		#mysql_ver = version.StrictVersion(get_mysql_version(my_cli))
+		#priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 		
 		# Generate passwords
 		root_password = root_pass if root_pass else re.sub('[^\w]', '', cryptotool.keygen(20))
 		repl_password = repl_pass if repl_pass else re.sub('[^\w]', '', cryptotool.keygen(20))
 		stat_password = stat_pass if stat_pass else re.sub('[^\w]', '', cryptotool.keygen(20))
-		
+		"""
 		# Delete old users
 		my_cli.sendline("DELETE FROM mysql.user WHERE User in ('%s', '%s', '%s');" % (root_user, repl_user, stat_user))
 		my_cli.expect('mysql>')
@@ -1359,6 +1360,11 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		my_cli.sendline("FLUSH PRIVILEGES;")
 		my_cli.expect('mysql>')
+		"""
+		self._add_mysql_user(my_cli, root_user, root_password, 'localhost')
+		self._add_mysql_user(my_cli, repl_user, repl_pass, '%', ('Repl_slave_priv',))
+		self._add_mysql_user(my_cli, stat_user, stat_pass, '%', ('Repl_client_priv',))
+		
 		
 		if should_term_mysqld:
 			term_mysqld(mysqld)
@@ -1375,6 +1381,34 @@ class MysqlHandler(ServiceCtlHanler):
 		self._logger.debug("MySQL system users added")
 		return (root_password, repl_password, stat_password)
 	
+	def _add_mysql_user(self, my_cli, login, password, host, privileges=None):
+			
+		my_cli.sendline('select count(*) from information_schema.COLUMNS where TABLE_SCHEMA="mysql" and TABLE_NAME="user"\G')
+		my_cli.expect('mysql>')
+		res = my_cli.before
+		if 'ERROR' in res:
+			raise HandlerError("Can't get privileges columns count.")
+		
+		# Retrieveing privileges column count from mysql output
+		count = int(res.strip().split('\r\n')[2].split()[-1])
+		
+		if not privileges:
+			cmd = "INSERT INTO mysql.user VALUES('%s','%s',PASSWORD('%s')" % (host, login, password) + ",'Y'"*(count-11) + ",''"*4 +',0'*4+");" 
+		else:
+			cmd = "INSERT INTO mysql.user (Host, User, Password, %s) VALUES ('%s','%s',PASSWORD('%s'), %s);" \
+					% (', '.join(privileges), host, login,password, ', '.join(["'Y'"]*len(privileges)))
+		
+		my_cli.sendline("DELETE FROM mysql.user WHERE User='%s' and Host='%s';" % (login, host))
+		my_cli.expect('mysql>')
+		my_cli.sendline(cmd)
+		my_cli.expect('mysql>')
+		res = my_cli.before
+		if 'ERROR' in res:
+			raise HandlerError("Error occured while adding user '%s' to MySQL user table.\n%s" % (login, res))
+		my_cli.sendline("FLUSH PRIVILEGES;")
+		my_cli.expect('mysql>')
+		
+
 	def _update_config(self, data): 
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
 	
