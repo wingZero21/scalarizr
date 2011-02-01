@@ -254,8 +254,25 @@ class NginxHandler(ServiceCtlHanler):
 		self._reload_upstream(True)
 
 
-	def _reload_upstream(self, force_reload=False):
+	def _test_config(self):
+		self._logger.debug("Testing new configuration")
+		try:
+			self._init_script.configtest()
+		except initdv2.InitdError, e:
+			self._logger.error("Configuration error detected: %s Reverting configuration." % str(e))
 
+			if os.path.isfile(self._app_inc_path):
+				shutil.move(self._app_inc_path, self._app_inc_path+".junk")
+			else:
+				self._logger.debug('%s does not exist', self._app_inc_path)
+			if os.path.isfile(self._app_inc_path+".save"):
+				shutil.move(self._app_inc_path+".save", self._app_inc_path)
+			else:
+				self._logger.debug('%s does not exist', self._app_inc_path+".save")
+		else:
+			self._reload_service()
+
+	def _update_main_config(self):
 		config_dir = os.path.dirname(self._app_inc_path)
 		nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
 		
@@ -265,15 +282,65 @@ class NginxHandler(ServiceCtlHanler):
 				self._config.read(nginx_conf_path)
 			except (Exception, BaseException), e:
 				raise HandlerError('Cannot read/parse nginx main configuration file: %s' % str(e))
+			
+		# Patch nginx.conf 
+		self._logger.debug('Update main configuration file')
+		if 'http://backend' in self._config.get_list('http/server/location/proxy_pass') and \
+				self._app_inc_path in self._config.get_list('http/include'):
+			
+			self._logger.debug('File %s already included into nginx main config %s', 
+							self._app_inc_path, nginx_conf_path)
+		else:
+			# Comment http/server
+			self._logger.debug('comment http/server section')
+			self._config.comment('http/server')
+			self._config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
+			self._config.add('http/include', self._app_inc_path)
+			
+			if disttool.is_debian_based():
+				# Comment /etc/nginx/sites-enabled/*
+				try:
+					i = self._config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
+					self._config.comment('http/include[%d]' % (i+1,))
+					self._logger.debug('comment site-enabled include')
+				except IndexError:
+					self._logger.debug('site-enabled include already commented')
+			
+			# Write new nginx.conf 
+			if not os.path.exists(nginx_conf_path + '.save'):
+				shutil.copy(nginx_conf_path, nginx_conf_path + '.save')
+			self._config.write(nginx_conf_path)		
+	
+	
+	def _reload_upstream(self, force_reload=False):
 
 		backend_include = Configuration('nginx')
-		backend_include.read(os.path.join(bus.share_path, 'nginx/app-servers.tpl'))
+		if os.path.exists(self._app_inc_path):
+			backend_include.read(self._app_inc_path)
+		else:
+			backend_include.read(os.path.join(bus.share_path, 'nginx/app-servers.tpl'))
 
 		# Create upstream hosts configuration
-		for app_serv in self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP, role_name=self._upstream_app_role):
+		list_roles = self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP, role_name=self._upstream_app_role)
+		
+		servers = []
+		
+		for app_serv in list_roles:
 			for app_host in app_serv.hosts :
 				server_str = '%s:%s' % (app_host.internal_ip, self._app_port)
-				backend_include.add('upstream/server', server_str)
+				servers.append(server_str)
+
+		for entry in backend_include.get_list('upstream/server'):
+			for server in servers:
+				if entry.startswith(server):
+					servers.remove(server)
+					break
+			else:
+				backend_include.remove('upstream/server', entry)
+		
+		for server in servers:
+			backend_include.add('upstream/server', server)
+			
 		if not backend_include.get_list('upstream/server'):
 			self._logger.debug("Scalr returned empty app hosts list. Adding localhost only")
 			backend_include.add('upstream/server', '127.0.0.1:80')
@@ -307,51 +374,9 @@ class NginxHandler(ServiceCtlHanler):
 			self._logger.debug('Write new %s', self._app_inc_path)
 			backend_include.write(self._app_inc_path)
 			
-			# Patch nginx.conf 
-			self._logger.debug('Update main configuration file')
-			if 'http://backend' in self._config.get_list('http/server/location/proxy_pass') and \
-					self._app_inc_path in self._config.get_list('http/include'):
-				
-				self._logger.debug('File %s already included into nginx main config %s', 
-								self._app_inc_path, nginx_conf_path)
-			else:
-				# Comment http/server
-				self._logger.debug('comment http/server section')
-				self._config.comment('http/server')
-				self._config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
-				self._config.add('http/include', self._app_inc_path)
-				
-				if disttool.is_debian_based():
-					# Comment /etc/nginx/sites-enabled/*
-					try:
-						i = self._config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
-						self._config.comment('http/include[%d]' % (i+1,))
-						self._logger.debug('comment site-enabled include')
-					except IndexError:
-						self._logger.debug('site-enabled include already commented')
-				
-				# Write new nginx.conf 
-				if not os.path.exists(nginx_conf_path + '.save'):
-					shutil.copy(nginx_conf_path, nginx_conf_path + '.save')
-				self._config.write(nginx_conf_path)
-
+			self._update_main_config()
 			
-			self._logger.debug("Testing new configuration")
-			try:
-				self._init_script.configtest()
-			except initdv2.InitdError, e:
-				self._logger.error("Configuration error detected: %s Reverting configuration." % str(e))
-
-				if os.path.isfile(self._app_inc_path):
-					shutil.move(self._app_inc_path, self._app_inc_path+".junk")
-				else:
-					self._logger.debug('%s does not exist', self._app_inc_path)
-				if os.path.isfile(self._app_inc_path+".save"):
-					shutil.move(self._app_inc_path+".save", self._app_inc_path)
-				else:
-					self._logger.debug('%s does not exist', self._app_inc_path+".save")
-			else:
-				self._reload_service()
+			self._test_config()
 
 		bus.fire("nginx_upstream_reload")	
 
