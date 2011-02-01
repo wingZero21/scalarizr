@@ -307,11 +307,12 @@ class ApacheHandler(ServiceCtlHanler):
 				except OSError, e:
 					self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
 					raise
-		
-		cert_path = bus.etc_path + '/private.d/keys'	
-		
-		self.server_root = self._get_server_root()
 			
+		self.server_root = self._get_server_root()
+		
+		cert_path = bus.etc_path + '/private.d/keys'
+		self._patch_ssl_conf(cert_path)	
+		
 		self._logger.debug("Requesting virtual hosts list")
 		received_vhosts = self._queryenv.list_virtual_hosts()
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
@@ -417,16 +418,24 @@ class ApacheHandler(ServiceCtlHanler):
 		key_path = os.path.join(cert_path, 'https.key')
 		crt_path = os.path.join(cert_path, 'https.crt')
 		ca_crt_path = os.path.join(cert_path, 'https-ca.crt')
-
+		
 		ssl_conf_path = os.path.join(self.server_root, 'conf.d/ssl.conf' if disttool.is_redhat_based() else 'sites-available/default-ssl')
 		if os.path.exists(ssl_conf_path):			
 			ssl_conf = Configuration('apache')
 			ssl_conf.read(ssl_conf_path)
+			
+			if not os.path.exists(key_path) or not os.path.exists(crt_path):
+				ssl_conf.comment(".//SSLCertificateFile")
+				ssl_conf.comment(".//SSLCertificateKeyFile")
+				ssl_conf.comment(".//SSLCACertificateFile")
+				return
+			
 			ssl_conf.set(".//SSLCertificateFile", crt_path)
 			ssl_conf.set(".//SSLCertificateKeyFile", key_path)
+			
 			if os.path.exists(ca_crt_path):
 				try:
-					ssl_conf.set('.//SSLCACertificateFile', ca_crt_path)
+					ssl_conf.set(".//SSLCACertificateFile", ca_crt_path)
 				except NoPathError:
 					# XXX: ugly hack
 					parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
