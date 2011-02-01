@@ -322,23 +322,26 @@ class NginxHandler(ServiceCtlHanler):
 
 		# Create upstream hosts configuration
 		list_roles = self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP, role_name=self._upstream_app_role)
-		
 		servers = []
 		
 		for app_serv in list_roles:
 			for app_host in app_serv.hosts :
 				server_str = '%s:%s' % (app_host.internal_ip, self._app_port)
 				servers.append(server_str)
+		self._logger.debug("QueryEnv returned list of app servers: %s" % servers)
 
 		for entry in backend_include.get_list('upstream/server'):
 			for server in servers:
 				if entry.startswith(server):
+					self._logger.debug("Server %s already in upstream list" % server)
 					servers.remove(server)
 					break
 			else:
+				self._logger.debug("Removing old entry %s from upstream list" % entry) 
 				backend_include.remove('upstream/server', entry)
 		
 		for server in servers:
+			self._logger.debug("Adding new server %s to upstream list" % server)
 			backend_include.add('upstream/server', server)
 			
 		if not backend_include.get_list('upstream/server'):
@@ -352,7 +355,7 @@ class NginxHandler(ServiceCtlHanler):
 				and os.access(self._cnf.key_path("https.crt"), os.F_OK) \
 				and os.access(self._cnf.key_path("https.key"), os.F_OK):
 			self._logger.debug('Add https include %s', self._https_inc_path)
-			backend_include.add('include', self._https_inc_path)
+			backend_include.set('include', self._https_inc_path, force=True)
 		
 		old_include = None
 		if os.path.isfile(self._app_inc_path):
