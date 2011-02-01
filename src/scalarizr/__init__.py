@@ -26,6 +26,7 @@ from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 from scalarizr.storage.util.loop import listloop
+from scalarizr.util.filetool import write_file, read_file
 
 
 class ScalarizrError(BaseException):
@@ -302,6 +303,14 @@ def _apply_user_data(cnf):
 		}
 	))
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
+	
+	logger.debug('Detect Scalr version')
+	try:
+		g('cloud_storage_path')
+		bus.scalr_version = (2, 2)
+	except KeyError:
+		bus.scalr_version = (2, 1)
+	write_file(cnf.private_path('.scalr-version'), '.'.join(bus.scalr_version))
 
 	
 def init_script():
@@ -554,6 +563,9 @@ def main():
 		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			cnf.fire('apply_user_data', cnf)
+		
+		if not bus.scalr_version and os.path.exists(cnf.private_path('.scalr-version')):
+			bus.scalr_version = tuple(read_file(cnf.private_path('.scalr-version')).strip().split('.'))
 			
 		# Apply Command-line passed configuration options
 		cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))

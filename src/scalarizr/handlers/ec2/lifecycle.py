@@ -8,6 +8,7 @@ from scalarizr.handlers import Handler
 from scalarizr.util import system2, filetool, disttool
 import logging
 import os, re
+import ConfigParser
 
 
 def get_handlers ():
@@ -36,8 +37,12 @@ class Ec2LifeCycleHandler(Handler):
 		
 		# Set the hostname to this instance's public hostname
 		cnf = bus.cnf
-		if cnf.rawini.get('ec2', 'hostname_as_pubdns') == '1':
-			system2("hostname " + self._platform.get_public_hostname(), shell=True)
+		try:
+			hostname_as_pubdns = int(cnf.rawini.get('ec2', 'hostname_as_pubdns'))
+		except ConfigParser.Error:
+			hostname_as_pubdns = True
+		if hostname_as_pubdns:
+			system2("hostname " + self._platform.get_public_hostname(), shell=True)		
 		
 		if disttool.is_ubuntu():
 			# Ubuntu cloud-init scripts may disable root ssh login

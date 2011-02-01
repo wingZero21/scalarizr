@@ -20,6 +20,7 @@ import string
 from boto.s3.key import Key
 from boto.exception import BotoServerError, S3ResponseError
 from scalarizr.util import firstmatched
+import sys
 
 
 class EbsConfig(VolumeConfig):
@@ -61,7 +62,6 @@ class EbsVolumeProvider(VolumeProvider):
 			conn = pl.new_ec2_conn()
 		except AttributeError:
 			conn = None
-
 		
 		if conn:
 			# Find free devname			
@@ -151,8 +151,6 @@ class EbsVolumeProvider(VolumeProvider):
 		@param avail_zone: Availability zone
 		@param id: Snapshot id
 		'''
-		kwargs['snapshot_id'] = kwargs['id']
-		del kwargs['id']
 		return self._create(**kwargs)
 
 	def create_snapshot(self, vol, snap):

@@ -14,8 +14,9 @@ import scalarizr.platform.ec2
 from boto import connect_s3
 from boto.s3.key import Key
 from boto.exception import S3ResponseError
+from scalarizr.storage import Storage
 
-
+'''
 class S3Test(unittest.TestCase, TransferTestMixin):
 	conn = None
 
@@ -46,7 +47,22 @@ class S3Test(unittest.TestCase, TransferTestMixin):
 			key.set_contents_from_filename(file)
 			rfiles.append(os.path.join(self.rdst, name))
 		return rfiles
-	
+'''
+
+class TestEbsVolume(unittest.TestCase):
+	def test_1(self):
+		vol = Storage.create(
+			type='ebs', 
+			id='vol-12345678', 
+			snapshot=dict(
+				id='snap-87654321', 
+				type='ebs'
+			)
+		)
+
+		pass	
+
+
 if __name__ == "__main__":
 	main()
 	unittest.main()	

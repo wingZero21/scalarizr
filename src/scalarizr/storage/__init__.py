@@ -141,7 +141,8 @@ class Storage:
 			if not isinstance(kwargs, dict):
 				args = None
 				kwargs = dict(device=kwargs)
-				
+			if kwargs['id']:
+				kwargs['snapshot_id'] = kwargs['id']
 			# Update kwargs with original one
 			del orig_kwargs['snapshot']
 			kwargs.update(orig_kwargs)

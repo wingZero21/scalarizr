@@ -27,6 +27,11 @@ class _Bus(Observable):
 	@ivar string: Base URL to Scalr service
 	"""
 	
+	scalr_version = None
+	"""
+	@ivar tuple: Scalr version info. Ex: (1, 2)
+	"""
+	
 	cnf = None
 	'''
 	@ivar cnf: Scalarizr configuration facade. Access ini settings, read/write keys

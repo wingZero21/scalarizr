@@ -24,6 +24,7 @@ from scalarizr.util.filetool import read_file, write_file
 import os, logging, shutil, re, time
 from telnetlib import Telnet
 from datetime import datetime
+import ConfigParser
 
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.WWW
@@ -183,7 +184,10 @@ class NginxHandler(ServiceCtlHanler):
 		self._https_inc_path = ini.get(CNF_SECTION, HTTPS_INC_PATH)
 		self._app_inc_path = ini.get(CNF_SECTION, APP_INC_PATH)		
 		self._app_port = ini.get(CNF_SECTION, APP_PORT)
-		self._upstream_app_role = ini.get(CNF_SECTION, UPSTREAM_APP_ROLE)
+		try:
+			self._upstream_app_role = ini.get(CNF_SECTION, UPSTREAM_APP_ROLE)
+		except ConfigParser.Error:
+			self._upstream_app_role = None
 		
 		bus.define_events("nginx_upstream_reload")
 		bus.on(init=self.on_init)

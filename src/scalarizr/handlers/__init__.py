@@ -12,6 +12,7 @@ import os
 import platform
 import logging
 import threading
+from distutils.file_util import write_file
 
 
 class Handler(object):
@@ -122,8 +123,17 @@ class MessageListener:
 			# Each message can contains secret data to access platform services.
 			# Scalarizr assign access data to platform object and clears it when handlers processing finished 
 			pl = bus.platform
+			cnf = bus.cnf
 			if message.body.has_key("platform_access_data"):
 				pl.set_access_data(message.platform_access_data)
+			if 'scalr_version' in message.meta:
+				try:
+					ver = tuple(message.meta['scalr_version'].strip().split('.'))
+				except:
+					pass
+				else:
+					write_file(cnf.private_path('.scalr-version'), '.'.join(ver))
+					bus.scalr_version = ver					
 			
 			accepted = False
 			for handler in self._get_handlers_chain():
