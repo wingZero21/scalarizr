@@ -426,30 +426,47 @@ class ApacheHandler(ServiceCtlHanler):
 			ssl_conf.read(ssl_conf_path)
 			
 			#removing old paths
+			old_crt_path = None
+			old_key_path = None
+			old_ca_crt_path = None
+			
 			try:
-				old_key_path = ssl_conf.get(".//SSLCertificateFile")
-				old_crt_path = ssl_conf.get(".//SSLCertificateKeyFile")
-				if not os.path.exists(old_key_path) or not os.path.exists(old_crt_path):
-					ssl_conf.comment(".//SSLCertificateFile")
-					ssl_conf.comment(".//SSLCertificateKeyFile")
-					ssl_conf.comment(".//SSLCACertificateFile")
-					return
+				old_crt_path = ssl_conf.get(".//SSLCertificateFile")
 			except NoPathError, e:
 				pass
-			
-			ssl_conf.set(".//SSLCertificateFile", crt_path)
-			ssl_conf.set(".//SSLCertificateKeyFile", key_path)
-			
-			if os.path.exists(ca_crt_path):
-				try:
-					ssl_conf.set(".//SSLCACertificateFile", ca_crt_path)
-				except NoPathError:
-					# XXX: ugly hack
-					parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
-					before_el = ssl_conf.etree.find('.//SSLCertificateFile')
-					ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCACertificateFile', ca_crt_path)
-					ch.text = ca_crt_path
-					parent.insert(list(parent).index(before_el), ch)
+			finally:
+				if os.path.exists(crt_path):
+					ssl_conf.set(".//SSLCertificateFile", crt_path, force=True)
+				elif old_crt_path and not os.path.exists(old_crt_path):
+					ssl_conf.comment(".//SSLCertificateFile")
+	
+			try:
+				old_key_path = ssl_conf.get(".//SSLCertificateKeyFile")
+			except NoPathError, e:
+				pass
+			finally:	
+				if os.path.exists(key_path):
+					ssl_conf.set(".//SSLCertificateKeyFile", key_path, force=True)
+				elif old_key_path and not os.path.exists(old_key_path):
+					ssl_conf.comment(".//SSLCertificateKeyFile")	
+					
+			try:
+				old_ca_crt_path = ssl_conf.get(".//SSLCACertificateFile")
+			except NoPathError, e:
+				pass	
+			finally:
+				if os.path.exists(ca_crt_path):
+					try:
+						ssl_conf.set(".//SSLCACertificateFile", ca_crt_path)
+					except NoPathError:
+						# XXX: ugly hack
+						parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
+						before_el = ssl_conf.etree.find('.//SSLCertificateFile')
+						ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCACertificateFile', ca_crt_path)
+						ch.text = ca_crt_path
+						parent.insert(list(parent).index(before_el), ch)
+				elif old_ca_crt_path and not os.path.exists(old_ca_crt_path):
+					ssl_conf.comment(".//SSLCACertificateFile")	
 					
 			ssl_conf.write(ssl_conf_path)
 		else:
