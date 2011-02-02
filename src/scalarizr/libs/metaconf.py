@@ -919,7 +919,7 @@ class ApacheFormatProvider(IniFormatProvider):
 			# We are sure that parent element exists, because Configuration calls private method '_find' first
 			if parent.attrib.has_key('mc_type') and parent.attrib['mc_type'] != 'section':
 				parent.attrib['mc_type'] = 'section'
-				if parent.text.strip():
+				if parent.text and parent.text.strip():
 					parent.attrib['value'] = parent.text.strip()
 					parent.text = ''
 		

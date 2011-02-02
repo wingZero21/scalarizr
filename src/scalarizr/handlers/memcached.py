@@ -134,7 +134,7 @@ class MemcachedHandler(ServiceCtlHanler):
 		self._queryenv = bus.queryenv_service
 		self._ip_tables = IpTables()
 		self._port = 11211
-
+		
 		bus.on("init", self.on_init)
 
 	def on_init(self):
@@ -176,9 +176,12 @@ class MemcachedHandler(ServiceCtlHanler):
 		
 		# Allow access from all these IP-s
 		rules = []
+		local_rule = RuleSpec(source='127.0.0.1', protocol=P_TCP, dport=self._port, jump='ACCEPT')
+		rules.append(local_rule)
 		for ip in ips:
 			allow_rule = RuleSpec(source=ip, protocol=P_TCP, dport=self._port, jump='ACCEPT')
 			rules.append(allow_rule)
+	
 		
 		# Deny from all
 		drop_rule = RuleSpec(protocol=P_TCP, dport=self._port, jump='DROP')
