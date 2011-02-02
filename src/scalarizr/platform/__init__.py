@@ -89,7 +89,7 @@ class Platform():
 	
 	@property
 	def cloud_storage_path(self):
-		pass
+		return self.get_user_data('cloud_storage_path')
 
 
 class Architectures:

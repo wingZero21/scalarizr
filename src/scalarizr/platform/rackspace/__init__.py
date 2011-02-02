@@ -94,8 +94,4 @@ class RackspacePlatform(Platform):
 	
 	def new_cloudfiles_conn(self):
 		return new_cloudfiles_conn()
-	
-	@property
-	def cloud_storage_path(self):
-		return 'cf://%s' % self.get_user_data('cf_container')
 		

@@ -179,6 +179,8 @@ class Ec2Platform(Platform):
 		
 	@property
 	def cloud_storage_path(self):
-		return 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
-	
+		if bus.scalr_version >= (2, 2):
+			return self.get_user_data('cloud_storage_path')
+		else:
+			return 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
 
