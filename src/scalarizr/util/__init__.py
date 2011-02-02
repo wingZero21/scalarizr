@@ -1,5 +1,5 @@
 from __future__ import with_statement
-from socket import socket
+import socket
 import os, re
 import logging
 import threading
@@ -380,11 +380,23 @@ def kill_childs(pid):
 		
 
 def ping_socket(host, port, exc_str=None):
-	s = socket()
+	s = socket.socket()
 	try:
 		s.connect((host, port))
 	except:
 		raise Exception(exc_str or 'Service is not running: Port %s on %s closed.' % (port, host))
+	
+def port_in_use(port):
+	s = socket.socket()
+	try:
+		s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)		
+		s.bind(('0.0.0.0', port))
+		return False
+	except socket.error:
+		return True
+	finally:
+		s.close()
+
 		
 class PeriodicalExecutor:
 	_logger = None

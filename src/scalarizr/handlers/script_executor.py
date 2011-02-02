@@ -16,7 +16,6 @@ try:
 except ImportError:
 	import timemodule as time
 import subprocess
-import re
 import os
 import shutil
 import stat
@@ -205,7 +204,7 @@ class ScriptExecutor(Handler):
 							break
 					else:
 						# Process timeouted
-						self._logger.warn("Script '%s' execution timeout (%d seconds). Kill process", 
+						self._logger.warn("Script '%s' execution timeout (%d seconds). Killing process", 
 								script.name, script.exec_timeout)
 						if hasattr(proc, "kill"):
 							# python >= 2.6

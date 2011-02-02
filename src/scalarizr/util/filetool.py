@@ -126,7 +126,7 @@ def write_file(filename, data, mode = 'w', msg = None, error_msg="Cannot write t
 		file.write(data)
 		return True
 	except IOError, e:
-		logger.error(error_msg, filename, " : ", str(e))
+		logger.error('%s %s : %s', error_msg, filename, e)
 	finally:
 		if file and not file.closed:
 			file.close()

@@ -43,6 +43,8 @@ NET_SNMPD = False
 
 SNMP_RESTART_DELAY = 5 # Seconds
 
+PID_FILE = '/var/run/scalarizr.pid' 
+
 _running = False
 '''
 True when scalarizr daemon should be running
@@ -395,9 +397,8 @@ def onSIGCHILD(*args):
 			'''
 			if pid == _snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
 				logger.warning(
-					'SNMP process [pid: %d] died unexpectedly. '
-					'Restart it after %d seconds', 
-					_snmp_pid, SNMP_RESTART_DELAY
+					'SNMP process [pid: %d] died unexpectedly. Restarting it', 
+					_snmp_pid
 				)
 				globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY
 				globals()['_snmp_pid'] = None
@@ -434,8 +435,12 @@ def _shutdown(*args):
 		
 		# Fire terminate
 		bus.fire("terminate")
+		
 	except:
 		pass
+	finally:
+		if os.path.exists(PID_FILE):
+			os.remove(PID_FILE)
 	
 	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
 
@@ -501,7 +506,7 @@ def main():
 		if optparser.values.daemonize:
 			daemonize()
 	
-		logger.info("Initialize Scalarizr...")
+		logger.debug("Initialize scalarizr...")
 		_init()
 	
 		if optparser.values.version:
@@ -515,6 +520,23 @@ def main():
 			sys.exit()
 
 		# Starting scalarizr daemon initialization
+		globals()['_pid'] = pid = os.getpid()		
+		logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
+		
+		# Check for another running scalarzir 
+		if os.path.exists(PID_FILE):
+			try:
+				another_pid = int(read_file(PID_FILE).strip())
+			except ValueError:
+				pass
+			else:
+				if pid != another_pid and os.path.exists('/proc/%s/status' % (another_pid,)):
+					logger.error('Cannot start scalarizr: Another process (pid: %s) already running', another_pid)
+					sys.exit(1)
+					
+		# Write PID
+		write_file(PID_FILE, str(pid))
+					
 		cnf = bus.cnf
 		cnf.on('apply_user_data', _apply_user_data)
 		
@@ -592,8 +614,6 @@ def main():
 		msg_thread = threading.Thread(target=consumer.start, name="Message server")
 
 		# Start message server
-		logger.info('[pid: %d] Starting scalarizr', os.getpid())
-		consumer.starttest()		
 		msg_thread.start()
 		
 		# Start periodical executor
@@ -602,7 +622,6 @@ def main():
 		
 		# Fire start
 		globals()["_running"] = True
-		globals()['_pid'] = os.getpid()
 		bus.fire("start")
 	
 		try:

@@ -44,8 +44,9 @@ def main():
 	
 	parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
 	parser.add_option("-q", "--queryenv", dest="queryenv", action="store_true", default=False, help="QueryEnv CLI")
-	parser.add_option("-m", "--msgsend", dest="msgsend", action="store_true", default=False, help="Message sender CLI")
+	parser.add_option("-m", "--msgsnd", dest="msgsnd", action="store_true", default=False, help="Message sender CLI")
 	parser.add_option("-r", "--repair", dest="repair", action="store_true", default=False, help="Repair database")
+	parser.add_option('--reinit', dest='reinit', action='store_true', default=False, help='Reinitialize Scalarizr')
 	parser.add_option("-n", "--name", dest="name", default=None, help="Name")
 	parser.add_option("-f", "--msgfile", dest="msgfile", default=None, help="File")
 	parser.add_option("-e", "--endpoint", dest="endpoint", default=None, help="Endpoint")
@@ -54,7 +55,8 @@ def main():
 	
 	(options, raw_args) = parser.parse_args()
 	
-	if not options.queryenv and not options.msgsend and not options.repair and not options.report:
+	if not options.queryenv and not options.msgsnd and not options.repair \
+		and not options.report and not options.reinit:
 		print parser.format_help()
 		sys.exit()
 	
@@ -86,7 +88,7 @@ def main():
 		xml = qe.fetch(*args, **kv)
 		print xml.toprettyxml()
 		
-	if options.msgsend:
+	if options.msgsnd:
 
 		if not options.queue or (not options.msgfile and not options.name):
 			print parser.format_help()
@@ -113,6 +115,19 @@ def main():
 	
 		print "Done"		
 	
+	if options.reinit:
+		print 'Call scalarizr to reinitialize role (see /var/log/scalarizr.log for results)'
+		db = bus.db
+		conn = db.get().get_connection()
+		cur = conn.cursor()
+		try:
+			cur.execute(
+				'UPDATE p2p_message SET in_is_handled = ? WHERE message_name = ?', 
+				(0, 'HostInitResponse')
+			)
+			conn.commit()			
+		finally:
+			cur.close()	
 	
 	if options.report:
 		#collecting

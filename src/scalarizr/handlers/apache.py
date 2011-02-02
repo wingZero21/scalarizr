@@ -43,13 +43,11 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		elif disttool.is_debian_based():
 			self._apachectl = '/usr/sbin/apache2ctl'			
 			initd_script 	= '/etc/init.d/apache2'
-
-			env_vars = read_file("/etc/apache2/envvars")
-			m = re.search("export\sAPACHE_PID_FILE=(.*)", env_vars)
-			if m:
-				pid_file 	= m.group(1)
-			else:
-				pid_file	= '/var/run/apache2.pid'
+			pid_file = None
+			if os.path.exists('/etc/apache2/envvars'):
+				pid_file = system2('/bin/sh', stdin='. /etc/apache2/envvars; echo -n $APACHE_PID_FILE')[0]
+			if not pid_file:
+				pid_file = '/var/run/apache2.pid'
 		else:
 			self._apachectl = '/usr/sbin/apachectl'			
 			initd_script 	= '/etc/init.d/apache2'
@@ -94,18 +92,17 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			try:
 				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=5)
 			except:
-				raise initdv2.InitdError('Cannot start Apache: pid file hasn\'t been created')
+				raise initdv2.InitdError("Cannot start Apache: pid file %s hasn't been created" % self.pid_file)
 		time.sleep(0.5)
 		return True
 	
 	def restart(self):
 		ret = initdv2.ParametrizedInitScript.restart(self)
-		
 		if self.pid_file:
 			try:
 				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=5)
 			except:
-				raise initdv2.InitdError('Cannot restart Apache: pid file hasn\'t been created')
+				raise initdv2.InitdError("Cannot start Apache: pid file %s hasn't been created" % self.pid_file)
 		time.sleep(0.5)
 		return ret
 
@@ -300,7 +297,7 @@ class ApacheHandler(ServiceCtlHanler):
 			if not vhosts_path:
 				self._logger.error('Property vhosts_path is empty.')
 			else:
-				self._logger.warning("Virtual hosts dir %s doesn't exist. Create it", vhosts_path)
+				self._logger.info("Virtual hosts dir %s doesn't exist. Creating", vhosts_path)
 				try:
 					os.makedirs(vhosts_path)
 					self._logger.debug("Virtual hosts dir %s created", vhosts_path)

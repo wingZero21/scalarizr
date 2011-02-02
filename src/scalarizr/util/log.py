@@ -75,10 +75,13 @@ class MessagingHandler(logging.Handler):
 		self._logger.debug('Enabling log messaging')
 		self._messaging_enabled = True
 		# Stop listening messaging events
-		m = bus.messaging_service; producer = m.get_producer(); consumer = m.get_consumer()
-		producer.un('send', self.on_out_message_send)
-		if self.on_in_message_received in consumer.listeners:
-			consumer.listeners.remove(self.on_in_message_received)
+		m = bus.messaging_service; 
+		if m:
+			producer = m.get_producer() 
+			consumer = m.get_consumer()
+			producer.un('send', self.on_out_message_send)
+			if self.on_in_message_received in consumer.listeners:
+				consumer.listeners.remove(self.on_in_message_received)
 
 	def _subscribe_msgsrv(self):
 		self._msgsrv_subscribed = True

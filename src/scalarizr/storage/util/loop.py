@@ -4,9 +4,10 @@ Created on Jan 6, 2011
 @author: marat
 '''
 
-from .. import system
+from .. import system, StorageError
 
 import os
+
 
 LOSETUP_EXEC = '/sbin/losetup'
 
@@ -34,4 +35,11 @@ def listloop():
 	
 
 def rmloop(device):
-	system((LOSETUP_EXEC, '-d', device))
+	try:
+		system((LOSETUP_EXEC, '-d', device))
+	except StorageError, e:
+		if 'No such device or address' in e.err:
+			''' Silently pass non-existed loop removal '''
+			pass
+		else:
+			raise

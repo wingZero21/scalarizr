@@ -212,7 +212,7 @@ class S3TransferProvider(TransferProvider):
 	_logger = None
 	_bucket = None
 	
-	def __init__(self, acl=None):
+	def __init__(self, acl='aws-exec-read'):
 		self._logger = logging.getLogger(__name__)
 		self.acl = acl
 
@@ -297,7 +297,7 @@ class S3TransferProvider(TransferProvider):
 	
 	def _get_connection(self):
 		pl = bus.platform
-		return pl.connect_s3()
+		return pl.new_s3_conn()
 	
 	def _format_path(self, bucket, key):
 		return '%s://%s/%s' % (self.schema, bucket, key)

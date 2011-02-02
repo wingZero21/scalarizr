@@ -11,7 +11,7 @@ from scalarizr import config
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
-from scalarizr.util import system2
+from scalarizr.util import system2, port_in_use
 
 # Libs
 from scalarizr.util import cryptotool
@@ -221,7 +221,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		farm_crypto_key = message.body.get('farm_crypto_key', '')
 		if farm_crypto_key:
 			self._cnf.write_key(self._cnf.FARM_KEY, farm_crypto_key)
-			self._start_int_messaging()
+			if not port_in_use(8012):
+				''' This cond was added to avoid 'Address already in use' 
+				when scalarizr reinitialized with `szradm --reinit` '''
+				self._start_int_messaging()
 		else:
 			self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
 					+ "Cross-scalarizr messaging not initialized")

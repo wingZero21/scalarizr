@@ -600,7 +600,8 @@ class MysqlHandler(ServiceCtlHanler):
 			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
 				self._logger.debug("Checking Scalr's MySQL system users presence.")
 				root_password, repl_password, stat_password = self._get_ini_options(
-						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD) 
+						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD)
+				self._stop_service() 
 				mysqld = spawn_mysqld()
 				self._ping_mysql()
 				try:

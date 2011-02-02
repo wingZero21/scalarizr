@@ -14,14 +14,15 @@ from urlparse import urlparse
 import threading
 import logging
 import sys
-import os.path
+import os
+import time 
 
 class P2pMessageConsumer(MessageConsumer):
 	endpoint = None
 	_logger = None	
 	_server = None
 	_handler_thread = None
-	_not_empty = None
+	#_not_empty = None
 	
 	def __init__(self, endpoint=None):
 		MessageConsumer.__init__(self)
@@ -29,21 +30,7 @@ class P2pMessageConsumer(MessageConsumer):
 		self.endpoint = endpoint
 		
 		self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
-		self._not_empty = threading.Event()
-	
-	def starttest(self):
-		self._logger.debug('Create test socket to validate endpoint')
-		self._logger.debug("Socket test temporary disabled due to strange [Errno 98] Address already in use error")
-		'''
-		r = urlparse(self.endpoint)
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		try:
-			sock.bind((r.hostname, r.port))
-		except socket.error, e:
-			raise MessagingError('Cannot start message server. socket.error: %s' % e)
-		finally:
-			sock.close()
-		'''
+		#self._not_empty = threading.Event()
 			
 	def start(self):
 		if self.running:
@@ -110,7 +97,7 @@ class P2pMessageConsumer(MessageConsumer):
 				try:
 					store = P2pMessageStore()
 					store.put_ingoing(message, queue, self.consumer.endpoint)
-					self.consumer._not_empty.set()					
+					#self.consumer._not_empty.set()					
 				except (BaseException, Exception), e: 
 					logger.exception(e) 
 					self.send_response(500, str(e))
@@ -148,26 +135,27 @@ class P2pMessageConsumer(MessageConsumer):
 
 	def message_handler (self):
 		store = P2pMessageStore()
-		if store.get_unhandled(self.endpoint):
-			self._not_empty.set()
+		#if store.get_unhandled(self.endpoint):
+		#	self._not_empty.set()
 		
 		while self.running:
-			self._not_empty.wait(0.1)
-			if self._not_empty.isSet():
-				self._not_empty.clear()
-				try:
-					for queue, message in store.get_unhandled(self.endpoint):
-						try:
-							self._logger.debug('Notify message listeners (message_id: %s)', message.id)
-							for ln in self.listeners:
-								ln(message, queue)
-						except (BaseException, Exception), e:
-							self._logger.exception(e)
-						finally:
-							self._logger.debug('Mark message (message_id: %s) as handled', message.id)
-							store.mark_as_handled(message.id)
-				except (BaseException, Exception), e:
-					self._logger.exception(e)
+			#self._not_empty.wait(0.1)
+			#if self._not_empty.isSet():
+			#	self._not_empty.clear()
+			try:
+				for queue, message in store.get_unhandled(self.endpoint):
+					try:
+						self._logger.debug('Notify message listeners (message_id: %s)', message.id)
+						for ln in self.listeners:
+							ln(message, queue)
+					except (BaseException, Exception), e:
+						self._logger.exception(e)
+					finally:
+						self._logger.debug('Mark message (message_id: %s) as handled', message.id)
+						store.mark_as_handled(message.id)
+			except (BaseException, Exception), e:
+				self._logger.exception(e)
+			time.sleep(0.1)
 	
 		
 
