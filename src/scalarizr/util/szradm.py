@@ -28,8 +28,6 @@ except ImportError:
 	import simplejson as json
 
 
-def _init():
-	init_script()
 	
 def get_mx_records(email):
 	out = system2('%s -t mx %s' % (whereis('host')[0], email.split('@')[-1]), shell=True)[0]
@@ -38,9 +36,15 @@ def get_mx_records(email):
 	from sets import Set
 	return list(Set(mxs))
 
-def main():
+ini = None
+def init_cnf():
+	cnf = ScalarizrCnf(bus.etc_path)
+	cnf.bootstrap()
+	globals()['ini'] = cnf.rawini
 	
-	_init()
+def main():
+	global ini
+	init_script()
 	
 	parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
 	parser.add_option("-q", "--queryenv", dest="queryenv", action="store_true", default=False, help="QueryEnv CLI")
@@ -69,17 +73,15 @@ def main():
 			v = raw[1]
 			kv[k] = v
 		elif len(raw)==1: 
-			args.append(pair)
+			args.append(pair)	
 	
 	if options.queryenv:
 		
 		if not args:
 			print parser.format_help()
 			sys.exit()
+		init_cnf()
 		
-		cnf = ScalarizrCnf(bus.etc_path)
-		cnf.bootstrap()
-		ini = cnf.rawini
 		key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
 		server_id = ini.get('general', 'server_id')
 		url = ini.get('general','queryenv_url')
@@ -96,9 +98,10 @@ def main():
 	
 		msg_service = bus.messaging_service
 		producer = msg_service.get_producer()
-		if options.endpoint:
-			producer.endpoint = options.endpoint
-	
+		
+		init_cnf()
+		
+		producer.endpoint = options.endpoint or ini.get('messaging_p2p', 'producer_url')	
 		msg = msg_service.new_message()
 	
 		if options.msgfile:
@@ -106,7 +109,7 @@ def main():
 			if str:
 				msg.fromxml(str)
 			
-		if msg.name:
+		if options.name:
 			msg.name = options.name
 			
 		msg.body = kv
