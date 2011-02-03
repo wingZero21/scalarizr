@@ -765,7 +765,7 @@ class MysqlHandler(ServiceCtlHanler):
 			# Creating snapshot
 			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)			
 			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-			used_size = int(system2(('df', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
 			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 			
 			# Notify scalr

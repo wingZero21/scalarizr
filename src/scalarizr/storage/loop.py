@@ -64,7 +64,7 @@ class LoopVolumeProvider(VolumeProvider):
 						except:
 							raise StorageError('Incorrect size format: %s' % size)
 						# Retrieveing root device size and usage 
-						root_size, used_pct = (system(('df', '-B', '1024', '/'))[0].splitlines()[1].split()[x] for x in (1,4))
+						root_size, used_pct = (system(('df', '-P', '-B', '1024', '/'))[0].splitlines()[1].split()[x] for x in (1,4))
 						root_size = int(root_size) / 1024
 						used_pct = int(used_pct[:-1])
 						
