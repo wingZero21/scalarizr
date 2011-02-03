@@ -188,6 +188,6 @@ class MemcachedHandler(ServiceCtlHanler):
 		rules.append(drop_rule)
 			
 		# Apply iptables rules
+		rules.reverse()
 		for rule in rules:
-			self._ip_tables.append_rule(rule)
-		
+			self._ip_tables.insert_rule(1, rule)
