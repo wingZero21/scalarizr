@@ -108,13 +108,18 @@ class ScriptExecutor(Handler):
 
 			if self._wait_async:
 				async_threads = []
-				
-
+	
+			'''	
+			c = None
 			if any(script.asynchronous for script in scripts) and not self._cleaner_running:
 				self._num_pending_async = 0				
 				c = threading.Thread(target=self._cleanup)
 				c.setDaemon(True)
-
+			'''
+			
+			c = threading.Thread(target=self._cleanup)
+			c.setDaemon(True)
+				
 			for script in scripts:
 				self._logger.debug("Execute script '%s' in %s mode; exec timeout: %d", 
 								script.name, "async" if script.asynchronous else "sync", script.exec_timeout)
@@ -130,15 +135,15 @@ class ScriptExecutor(Handler):
 						async_threads.append(t)
 				else:
 					self._execute_script(script)
-
-			if not self._cleaner_running:
-				c.start()
 			
 			# Wait
 			if self._wait_async:
 				for t in async_threads:
 					t.join()
-							
+			
+			# Cleaning
+			if not self._cleaner_running:
+				c.start()							
 								
 	def _cleanup(self):
 		try:
@@ -242,7 +247,8 @@ class ScriptExecutor(Handler):
 			os.remove(stderr_path)
 			os.remove(stdout_path)
 			self._lock.acquire()
-			self._num_pending_async -= 1
+			if script.asynchronous:
+				self._num_pending_async -= 1
 			self._lock.release()
 
 	
