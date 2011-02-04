@@ -36,16 +36,16 @@ class Ec2Platform(Platform):
 	name = "ec2"
 	
 	_meta_url = "http://169.254.169.254/"
-	_ec2_endpoints = {
+	ec2_endpoints = {
 		"us-east-1" 		: "ec2.amazonaws.com",
 		"us-west-1" 		: "ec2.us-west-1.amazonaws.com",
 		"eu-west-1" 		: "ec2.eu-west-1.amazonaws.com",
 		"ap-southeast-1" 	: "ec2.ap-southeast-1.amazonaws.com"
 	}
-	_s3_endpoints = {
+	s3_endpoints = {
 		'us-east-1' 		: 's3.amazonaws.com',
 		'us-west-1' 		: 's3-us-west-1.amazonaws.com',
-		'eu-west-1' 		: 's3-eu-west-1.amazonaws.com',
+		'eu-west-1' 		: 's3.amazonaws.com',
 		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com'
 	}	
 	_properties = {}
@@ -156,12 +156,12 @@ class Ec2Platform(Platform):
 	def new_ec2_conn(self):
 		""" @rtype: boto.ec2.connection.EC2Connection """
 		region = self.get_region()
-		self._logger.debug("Return ec2 connection (endpoint: %s)", self._ec2_endpoints[region])
-		return connect_ec2(region=RegionInfo(name=region, endpoint=self._ec2_endpoints[region]))
+		self._logger.debug("Return ec2 connection (endpoint: %s)", self.ec2_endpoints[region])
+		return connect_ec2(region=RegionInfo(name=region, endpoint=self.ec2_endpoints[region]))
 
 	def new_s3_conn(self):
-		self._logger.debug("Return s3 connection (endpoint: %s)", self._s3_endpoints[self.get_region()])
-		return connect_s3(host=self._s3_endpoints[self.get_region()])
+		self._logger.debug("Return s3 connection (endpoint: %s)", self.s3_endpoints[self.get_region()])
+		return connect_s3(host=self.s3_endpoints[self.get_region()])
 	
 	def set_access_data(self, access_data):
 		Platform.set_access_data(self, access_data)

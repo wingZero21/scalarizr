@@ -12,7 +12,6 @@ from scalarizr.storage.transfer import TransferProvider, TransferError
 from . import ebstool
 
 import os
-import re
 import logging
 import urlparse
 import string
@@ -20,7 +19,6 @@ import string
 from boto.s3.key import Key
 from boto.exception import BotoServerError, S3ResponseError
 from scalarizr.util import firstmatched
-import sys
 
 
 class EbsConfig(VolumeConfig):
@@ -232,10 +230,15 @@ class S3TransferProvider(TransferProvider):
 					bck = connection.get_bucket(bucket_name)
 				except S3ResponseError, e:
 					if e.code == 'NoSuchBucket':
-						region = re.sub(r's3-?', '', connection.host.split('.')[0])
+						pl = bus.platform
+						try:  
+							region = pl.s3_endpoints.keys()[pl.s3_endpoints.values().index(connection.host)]
+							location = location_from_region(region)
+						except IndexError:
+							location = ''
 						bck = connection.create_bucket(
 							bucket_name, 
-							location=location_from_region(region), 
+							location=location, 
 							policy=self.acl
 						)
 					else:
