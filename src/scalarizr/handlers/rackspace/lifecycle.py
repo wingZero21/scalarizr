@@ -22,7 +22,7 @@ class RackspaceLifeCycleHandler(Handler):
 	
 	def on_init(self, *args, **kwargs):
 		bus.on(before_reboot_finish=self.on_before_reboot_finish)	
-		if ScalarizrState.BOOTSTRAPPING == self._cnf.state:
+		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
 			self._insert_iptables_rules()
 			
 	def on_before_reboot_finish(self, *args, **kwargs):
