@@ -44,15 +44,15 @@ class Platform():
 	
 	def get_user_data(self, key=None):
 		cnf = bus.cnf
-		path = cnf.private_path('.user-data')
-		if self._metadata is None and os.path.exists(path):
-			rawmeta = read_file(path)
-			if not rawmeta:
-				raise PlatformError("Empty user-data")
-			
+		if self._metadata is None:
 			self._metadata = {}
-			for k, v in re.findall("([^=]+)=([^;]*);?", rawmeta):
-				self._metadata[k] = v			
+			path = cnf.private_path('.user-data')			
+			if os.path.exists(path):
+				rawmeta = read_file(path)
+				if not rawmeta:
+					raise PlatformError("Empty user-data")
+				for k, v in re.findall("([^=]+)=([^;]*);?", rawmeta):
+					self._metadata[k] = v
 		if key:
 			return self._metadata[key] if key in self._metadata else None
 		else:

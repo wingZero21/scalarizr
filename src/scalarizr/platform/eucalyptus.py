@@ -9,7 +9,6 @@ from scalarizr.platform.ec2 import Ec2Platform
 
 import logging, os
 from urlparse import urlparse
-import urllib2
 
 import boto
 from boto.ec2.regioninfo import RegionInfo
