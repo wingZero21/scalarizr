@@ -14,6 +14,7 @@ from szr_unittest 				import RESOURCE_PATH
 from scalarizr.config 			import ScalarizrCnf
 from szr_unittest_libs.mock 	import QueryEnvService
 from scalarizr.queryenv 		import Role, RoleHost, VirtualHost
+import shutil
 
 
 class Message:
@@ -71,7 +72,7 @@ class TestNginx(unittest.TestCase):
 		self.assertEquals(_queryenv.get_https_certificate()[1], pk)
 		
 		
-	def test_creating_upstream_list(self):
+	def _test_creating_upstream_list(self):
 		config = bus.config
 		sect_name = nginx.CNF_SECTION
 		nginx_incl = "/etc/nginx/app-servers.include"
@@ -84,26 +85,58 @@ class TestNginx(unittest.TestCase):
 		
 		self.assertTrue(os.path.exists(nginx_incl))
 	
-	def test_changing_upstream_list(self):
+	def _test_changing_upstream_list(self):
+		_queryenv = bus.queryenv_service = qe
 		config = bus.config
 		sect_name = nginx.CNF_SECTION
 		nginx_incl = "/etc/nginx/app-servers.include"
 		config.set(sect_name, "app_include_path",nginx_incl)
 		
-		custom_include = 'upstream backend {\n\n	server	8.8.8.8:80;\tweight=5;\n\n	server	7.7.7.7:80;\n}'
+		custom_include = 'upstream backend {\n\n	server	8.8.8.8:80\tweight=5;\n\n	server	7.7.7.7:80\tdebug;\n}'
 		print custom_include
 		write_file(nginx_incl, custom_include)
 		
 		n = nginx.NginxHandler()
 		n._reload_upstream()
+		n._reload_upstream()
 		
 		new_incl = read_file(nginx_incl)
 		print new_incl
 		
-		self.assertEquals(string.find(new_incl, '7.7.7.7;'), -1)
-		
-		self.assertEquals(string.find(new_incl, 'ip_hash;'), -1)
+		#queryenv has only 8.8.8.8 in list_roles, so 7.7.7.7 supposed not to exist
+		self.assertRaises(ValueError, string.index,*(new_incl, '7.7.7.7;'))
+		#ip_hash wasn`t in original file, so after reconfigure it supposed not to exist either
+		self.assertRaises(ValueError, string.index,*(new_incl, 'ip_hash;'))
+		#8.8.8.8 had 'weight' option, so it not supposed to be vanished
 		self.assertNotEquals(string.find(new_incl, 'weight=5;'), -1)
+		#check that there is only one include
+		include_str = 'include	/etc/nginx/https.include;'
+		self.assertNotEquals(string.find(new_incl, include_str), '-1')
+		self.assertEquals(string.find(new_incl, include_str), string.rfind(new_incl, include_str))
+	
+	def test_main_config(self):
+		_queryenv = bus.queryenv_service = qe
+		config = bus.config
+		sect_name = nginx.CNF_SECTION
+		nginx_incl = "/etc/nginx/app-servers.include"
+		config.set(sect_name, "app_include_path",nginx_incl)
+		
+		#moving nginx_incl 
+		if os.path.exists(nginx_incl):
+			shutil.move(nginx_incl, nginx_incl+'.temp')
+			pass
+		
+		n = nginx.NginxHandler()
+		#n._reload_upstream()
+		n._update_main_config()
+		
+		main_cfg = read_file('/etc/nginx/nginx.conf')
+		include = 'include	/etc/nginx/app-servers.include;'
+		self.assertRaises(ValueError, string.index,*(main_cfg, include))
+		#moving back
+		if os.path.exists(nginx_incl + '.temp'):
+			shutil.move(nginx_incl + '.temp', nginx_incl)
+		
 
 	def _test_on_BeforeHostTerminate(self):
 		config = bus.config

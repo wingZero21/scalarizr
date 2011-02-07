@@ -25,6 +25,7 @@ import os, logging, shutil, re, time
 from telnetlib import Telnet
 from datetime import datetime
 import ConfigParser
+import cStringIO
 
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.WWW
@@ -276,6 +277,11 @@ class NginxHandler(ServiceCtlHanler):
 		else:
 			self._reload_service()
 
+	def _dump_config(self, obj):
+		output = cStringIO.StringIO()
+		obj.write_fp(output, close = False)
+		return output.getvalue()
+
 	def _update_main_config(self):
 		config_dir = os.path.dirname(self._app_inc_path)
 		nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
@@ -289,17 +295,26 @@ class NginxHandler(ServiceCtlHanler):
 			
 		# Patch nginx.conf 
 		self._logger.debug('Update main configuration file')
-		if 'http://backend' in self._config.get_list('http/server/location/proxy_pass') and \
-				self._app_inc_path in self._config.get_list('http/include'):
+		dump = self._dump_config(self._config)
 			
-			self._logger.debug('File %s already included into nginx main config %s', 
-							self._app_inc_path, nginx_conf_path)
-		else:
+		if self._app_inc_path in self._config.get_list('http/include'):
+			self._logger.debug('File %s already included into nginx main config %s'% 
+					(self._app_inc_path, nginx_conf_path))
+
+			#preventing nginx from crashing if user removed upstream file
+			if not os.path.exists(self._app_inc_path):
+				self._config.remove('http/include', self._app_inc_path)
+				self._logger.debug('include %s removed as file does not exist.' % self._app_inc_path)
+				
+		elif os.path.exists(self._app_inc_path):
+				self._logger.debug("including path to upstream list into nginx main config")
+				self._config.add('http/include', self._app_inc_path)
+							
+		if not 'http://backend' in self._config.get_list('http/server/location/proxy_pass') :
 			# Comment http/server
 			self._logger.debug('comment http/server section')
 			self._config.comment('http/server')
 			self._config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
-			self._config.add('http/include', self._app_inc_path)
 			
 			if disttool.is_debian_based():
 				# Comment /etc/nginx/sites-enabled/*
@@ -307,9 +322,12 @@ class NginxHandler(ServiceCtlHanler):
 					i = self._config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
 					self._config.comment('http/include[%d]' % (i+1,))
 					self._logger.debug('comment site-enabled include')
-				except IndexError:
+				except ValueError, IndexError:
 					self._logger.debug('site-enabled include already commented')
-			
+
+		if dump == self._dump_config(self._config):	
+			self._logger.debug("Main nginx config wasn`t changed")
+		else:
 			# Write new nginx.conf 
 			if not os.path.exists(nginx_conf_path + '.save'):
 				shutil.copy(nginx_conf_path, nginx_conf_path + '.save')
