@@ -417,6 +417,9 @@ class ApacheHandler(ServiceCtlHanler):
 		crt_path = os.path.join(cert_path, 'https.crt')
 		ca_crt_path = os.path.join(cert_path, 'https-ca.crt')
 		
+		key_path_default = '/etc/pki/tls/private/localhost.key' if disttool.is_redhat_based() else '/etc/ssl/private/ssl-cert-snakeoil.key'
+		crt_path_default = '/etc/pki/tls/certs/localhost.crt' if disttool.is_redhat_based() else '/etc/ssl/certs/ssl-cert-snakeoil.pem'
+		
 		ssl_conf_path = os.path.join(self.server_root, 'conf.d/ssl.conf' if disttool.is_redhat_based() else 'sites-available/default-ssl')
 		if os.path.exists(ssl_conf_path):			
 			ssl_conf = Configuration('apache')
@@ -435,8 +438,10 @@ class ApacheHandler(ServiceCtlHanler):
 				if os.path.exists(crt_path):
 					ssl_conf.set(".//SSLCertificateFile", crt_path, force=True)
 				elif old_crt_path and not os.path.exists(old_crt_path):
-					ssl_conf.comment(".//SSLCertificateFile")
-	
+					self._logger.debug("Certificate file not found. Setting to default %s" % crt_path_default)
+					ssl_conf.set(".//SSLCertificateFile", crt_path_default, force=True)
+					#ssl_conf.comment(".//SSLCertificateFile")
+					
 			try:
 				old_key_path = ssl_conf.get(".//SSLCertificateKeyFile")
 			except NoPathError, e:
@@ -445,7 +450,9 @@ class ApacheHandler(ServiceCtlHanler):
 				if os.path.exists(key_path):
 					ssl_conf.set(".//SSLCertificateKeyFile", key_path, force=True)
 				elif old_key_path and not os.path.exists(old_key_path):
-					ssl_conf.comment(".//SSLCertificateKeyFile")	
+					self._logger.debug("Certificate key file not found. Setting to default %s" % key_path_default)
+					ssl_conf.set(".//SSLCertificateKeyFile", key_path_default, force=True)	
+					#ssl_conf.comment(".//SSLCertificateKeyFile")
 					
 			try:
 				old_ca_crt_path = ssl_conf.get(".//SSLCACertificateFile")
