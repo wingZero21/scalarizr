@@ -864,12 +864,13 @@ class ScalarizrCnf(Observable):
 				os.chmod(filename, 0600)
 			file = open(filename, "w+")
 			file.write(key)
-			os.chmod(filename, 0400)
 		except (IOError, OSError), e:
 			raise ConfigError("Cannot write %s in file '%s'. %s" % (title or "key", filename, str(e)))
 		finally:
 			if file:
-				file.close()		
+				file.close()
+			if os.path.exists(filename):
+				os.chmod(filename, 0400)					
 
 	def _get_state(self):
 		filename = self.private_path('.state')

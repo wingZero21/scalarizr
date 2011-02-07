@@ -234,7 +234,7 @@ class S3TransferProvider(TransferProvider):
 						try:  
 							region = pl.s3_endpoints.keys()[pl.s3_endpoints.values().index(connection.host)]
 							location = location_from_region(region)
-						except IndexError:
+						except:
 							location = ''
 						bck = connection.create_bucket(
 							bucket_name, 

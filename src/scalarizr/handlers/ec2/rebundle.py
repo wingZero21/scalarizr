@@ -856,7 +856,7 @@ if disttool.is_linux():
 			)
 			for nod in nods:
 				nod = nod.split(' ')
-				nod[0] = devdir + nod[0]
+				nod[0] = devdir + '/' + nod[0]
 				system2([mknod] + nod)
 			
 			self._logger.debug("Special directories maked")			
