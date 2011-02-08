@@ -167,8 +167,6 @@ class CnfController(object):
 		return preset
 
 	def apply_preset(self, preset):
-		self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined',))
-		
 		conf = Configuration(self._config_format)
 		conf.read(self._config_path)
 		

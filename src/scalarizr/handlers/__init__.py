@@ -204,6 +204,9 @@ class ServiceCtlHanler(Handler):
 		
 		# Apply current preset
 		try:
+			self._logger.info("Applying preset '%s' to %s %s service restart", 
+							new_preset.name, self._service_name, 
+							'with' if message.restart_service == '1' else 'without')
 			self._cnf_ctl.apply_preset(new_preset)
 			if message.restart_service == '1':
 				self._start_service_with_preset(new_preset)
