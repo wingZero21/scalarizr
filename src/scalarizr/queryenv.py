@@ -220,13 +220,14 @@ class QueryEnvService(object):
 		ret = []
 		
 		response = xml.documentElement
-		for script_el in response.firstChild.childNodes:
-			script = Script()
-			script.asynchronous = bool(int(script_el.getAttribute("asynchronous")))
-			script.exec_timeout = int(script_el.getAttribute("exec-timeout"))
-			script.name = script_el.getAttribute("name")
-			script.body = script_el.firstChild.firstChild.nodeValue
-			ret.append(script)		
+		if response.firstChild:
+			for script_el in response.firstChild.childNodes:
+				script = Script()
+				script.asynchronous = bool(int(script_el.getAttribute("asynchronous")))
+				script.exec_timeout = int(script_el.getAttribute("exec-timeout"))
+				script.name = script_el.getAttribute("name")
+				script.body = script_el.firstChild.firstChild.nodeValue
+				ret.append(script)		
 		return ret
 	
 	def _read_list_role_params_response(self, xml):
@@ -380,7 +381,7 @@ class Volume(object):
 	volume_id  = None
 	device = None
 	
-	def __init__(self, volume_id, device):
+	def __init__(self, volume_id=None, device=None):
 		self.volume_id = volume_id
 		self.device = device
 	
