@@ -36,7 +36,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.8"	
+__version__ = "0.7.9"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False

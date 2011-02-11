@@ -24,10 +24,12 @@ case "$1" in
                         echo 'Updating scalarizr...'
                         apt-get update
 						export DEBIAN_FRONTEND=noninteractive
-						export DEBIAN_PRIORITY=critical  
-						apt-get dselect-upgrade -y
-						touch $update_flag                        
+						export DEBIAN_PRIORITY=critical
+						platform=$(cat /etc/scalr/public.d/config.ini | grep 'platform\s*=' | cut -d '=' -f 2 | sed -e 's/^\s*//' | sed -e 's/\s*$//')
+						apt-get install -y scalarizr scalarizr-${platform}  
+						#apt-get dselect-upgrade -y
                         #apt-get install -q -y scalarizr/scalr && touch $update_flag
+						touch $update_flag                        
                 fi
                 ;;
                 

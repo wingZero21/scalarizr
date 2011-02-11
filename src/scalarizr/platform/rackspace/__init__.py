@@ -10,7 +10,8 @@ import logging
 import re
 import os
 
-from cloudservers import CloudServers 
+from cloudservers import CloudServers
+from cloudservers.client import CloudServersClient 
 import cloudfiles
 
 Transfer.explore_provider(CFTransferProvider)
@@ -81,11 +82,18 @@ class RackspacePlatform(Platform):
 		Platform.set_access_data(self, access_data)
 		os.environ['CLOUD_SERVERS_USERNAME'] = self.get_access_data("username").encode("ascii")
 		os.environ['CLOUD_SERVERS_API_KEY'] = self.get_access_data("api_key").encode("ascii")
+		auth_host = self.get_access_data("auth_host")
+		if auth_host:
+			setattr(CloudServersClient, '__DEFAULT_AUTH_URL', CloudServersClient.AUTH_URL)
+			CloudServersClient.AUTH_URL = 'https://%s/v1.0' % auth_host
 	
 	def clear_access_data(self):
 		try:
 			del os.environ['CLOUD_SERVERS_USERNAME']
 			del os.environ['CLOUD_SERVERS_API_KEY']
+			if hasattr(CloudServersClient, '__DEFAULT_AUTH_URL'):
+				CloudServersClient.AUTH_URL = getattr(CloudServersClient, '__DEFAULT_AUTH_URL')
+				delattr(CloudServersClient, '__DEFAULT_AUTH_URL')
 		except KeyError:
 			pass
 	
