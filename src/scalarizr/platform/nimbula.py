@@ -3,7 +3,6 @@ Created on Feb 14, 2011
 
 @author: spike
 '''
-from scalarizr.bus import bus
 from scalarizr.util import wait_until, filetool
 from . import Ec2LikePlatform, PlatformError
 
@@ -25,8 +24,11 @@ class NimbulaPlatform(Ec2LikePlatform):
 		""" 
 		if self._userdata is None:
 			path = self._cnf.private_path('.user-data')
-			userdata_wait_timeout = self._cnf.rawini.get(self.name, OPT_USERDATA_TIMEOUT)
-			wait_until(os.path.exists, (path, ), logger=self._logger, timeout=int(userdata_wait_timeout))
+			try:
+				timeout = int(self._cnf.rawini.get(self.name, OPT_USERDATA_TIMEOUT))
+			except:
+				timeout = 180
+			wait_until(os.path.exists, (path, ), logger=self._logger, timeout=timeout, sleep=1)
 			rawmeta = filetool.read_file(path)
 			if not rawmeta:
 				raise PlatformError("Empty user-data")
