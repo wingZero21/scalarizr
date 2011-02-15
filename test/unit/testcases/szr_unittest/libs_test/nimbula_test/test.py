@@ -26,7 +26,7 @@ class NimbulaConnectionTest(unittest.TestCase):
 		self.login = 'test'
 		self.conn = NimbulaConnection(self.url,self.login)
 		
-	def test_authenticate(self):
+	def _test_authenticate(self):
 		cookie = authenticate()
 		print "GOT COOKIES:", cookie
 
@@ -55,7 +55,6 @@ class NimbulaConnectionTest(unittest.TestCase):
 
 	def test_discover_machine_image(self):
 		pass
-
 
 
 

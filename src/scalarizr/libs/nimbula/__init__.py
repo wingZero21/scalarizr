@@ -76,14 +76,21 @@ class NimbulaConnection:
 		
 		uri = self._get_image_URI(name)
 		
-	def get_machine_image(self, name):
+	def get_machine_image(self, name, force=True):
 		'''
 		 '{"attributes": {"nimbula_compressed_size": 97120551, "nimbula_decompressed_size": 5905612288}, 
 		 "account": null, "uri": "https://serverbeach.demo.nimbula.com:443/machineimage/nimbula/public/default", 
 		 "file": null, "name": "/nimbula/public/default"}'
 		'''
 		uri = self._get_image_URI(name)
-		f = urllib2.urlopen(uri)
+		try:
+			f = urllib2.urlopen(uri)
+		except urllib2.HTTPError, e:
+			if e.code==401 and force:
+				authenticate()
+				return self.get_machine_image(name, force=False)
+				
+				
 		response = f.read()
 		return response
 
