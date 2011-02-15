@@ -52,11 +52,14 @@ class NimbulaConnectionTest(unittest.TestCase):
 
 	def test_delete_machine_image(self):
 		image_name = '/nimbula/public/default'
-		info = self.conn.delete_machine_image(image_name)
-		print info
+		self.assertRaises(NimbulaError, self.conn.delete_machine_image, (image_name))
+		#info = self.conn.delete_machine_image(image_name)
+		#print info
 
 	def test_discover_machine_image(self):
-		pass
+		container = '/nimbula/public/'
+		info = self.conn.discover_machine_image(container)
+		self.assertTrue(container in str(info))
 
 
 

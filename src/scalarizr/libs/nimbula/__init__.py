@@ -130,6 +130,10 @@ class NimbulaConnection:
 
 	
 	def delete_machine_image(self, name, force=True):
+		'''
+		for image_name = '/nimbula/public/default'
+		NimbulaError: HTTP Error 401: Unauthorized
+		'''
 		uri = self._get_object_URI(name)
 		f = self._request(uri, query_method='DELETE')
 		response = f.read()
@@ -137,7 +141,10 @@ class NimbulaConnection:
 		
 		
 	def discover_machine_image(self, container=None):
-		pass
+		uri = self._get_object_URI(container)
+		f = self._request(uri)
+		response = f.read()
+		return response
 
 	
 class NimbulaError(BaseException):
