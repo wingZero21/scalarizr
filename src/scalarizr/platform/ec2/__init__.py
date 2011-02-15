@@ -1,12 +1,12 @@
 
 from scalarizr.bus import bus
-from scalarizr.platform import Platform, PlatformError
+from scalarizr.platform import Ec2LikePlatform, PlatformError
 from scalarizr.storage.transfer import Transfer
 from .storage import S3TransferProvider
 
 from boto import connect_ec2, connect_s3
 from boto.ec2.regioninfo import RegionInfo
-import logging, urllib2, re, os
+import urllib2, re, os
 
 
 Transfer.explore_provider(S3TransferProvider)
@@ -32,10 +32,11 @@ UD_OPT_S3_BUCKET_NAME = "s3bucket"
 def get_platform():
 	return Ec2Platform()
 
-class Ec2Platform(Platform):
+class Ec2Platform(Ec2LikePlatform):
 	name = "ec2"
-	
-	_meta_url = "http://169.254.169.254/"
+
+	_userdata_key = "latest/user-data"
+
 	ec2_endpoints = {
 		"us-east-1" 		: "ec2.amazonaws.com",
 		"us-west-1" 		: "ec2.us-west-1.amazonaws.com",
@@ -48,95 +49,11 @@ class Ec2Platform(Platform):
 		'eu-west-1' 		: 's3.amazonaws.com',
 		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com'
 	}	
-	_properties = {}
-	_metadata = None
-	_logger = None
-	
+
+	_logger = None	
 	_ec2_cert = None
 	_cnf = None
 	
-	def __init__(self):
-		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
-	
-	def get_private_ip(self):
-		return self._get_property("latest/meta-data/local-ipv4")
-	
-	def get_public_ip(self):
-		return self._get_property("latest/meta-data/public-ipv4")
-	
-	def get_public_hostname(self):
-		return self._get_property("latest/meta-data/public-hostname")
-	
-	def _get_property(self, name):
-		if not self._properties.has_key(name):
-			self._properties[name] = self._fetch_ec2_meta(name)
-		return self._properties[name]
-	
-	def _fetch_ec2_meta(self, key):
-		url = self._meta_url + key
-		try:
-			r = urllib2.urlopen(url)
-			return r.read().strip()
-		except IOError, e:
-			if isinstance(e, urllib2.HTTPError):
-				if e.code == 404:
-					return ""
-			raise PlatformError("Cannot fetch ec2 metadata url '%s'. Error: %s" % (url, e))
-		
-	def get_user_data(self, key=None):
-		if self._metadata is None:
-			rawmeta = self._fetch_ec2_meta("latest/user-data")
-			self._metadata = {}
-			for k, v in re.findall("([^=]+)=([^;]*);?", rawmeta):
-				self._metadata[k] = v
-			
-		if key:
-			return self._metadata[key] if key in self._metadata else None
-		else:
-			return self._metadata 
-
-	def get_instance_id(self):
-		return self._get_property("latest/meta-data/instance-id")
-	
-	def get_instance_type(self):
-		return self._get_property("latest/meta-data/instance-type")
-	
-	def get_ami_id(self):
-		return self._get_property("latest/meta-data/ami-id")
-
-	def get_ancestor_ami_ids(self):
-		return self._get_property("latest/meta-data/ancestor-ami-ids").split("\n")
-	
-	def get_kernel_id(self):
-		return self._get_property("latest/meta-data/kernel-id")
-	
-	def get_ramdisk_id(self):
-		return self._get_property("latest/meta-data/ramdisk-id")
-	
-	def get_avail_zone(self):
-		return self._get_property("latest/meta-data/placement/availability-zone")
-	
-	def get_region(self):
-		return self.get_avail_zone()[0:-1]
-	
-	def get_block_device_mapping(self):
-		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")
-		ret = {}
-		for key in keys:
-			ret[key] = self._get_property("latest/meta-data/block-device-mapping/" + key)
-		return ret
-	
-	def block_devs_mapping(self):
-		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")
-		ret = list()
-		for key in keys:
-			ret.append((key, self._get_property("latest/meta-data/block-device-mapping/" + key)))
-		return ret
-		
-	def get_ssh_pub_key(self):
-		return self._get_property("latest/meta-data/public-keys/0/openssh-key")
-			
 	def get_account_id(self):
 		return self.get_access_data("account_id").encode("ascii")
 			
@@ -164,13 +81,13 @@ class Ec2Platform(Platform):
 		return connect_s3(host=self.s3_endpoints[self.get_region()])
 	
 	def set_access_data(self, access_data):
-		Platform.set_access_data(self, access_data)
+		Ec2LikePlatform.set_access_data(self, access_data)
 		key_id, key = self.get_access_keys()
 		os.environ['AWS_ACCESS_KEY_ID'] = key_id
 		os.environ['AWS_SECRET_ACCESS_KEY'] = key
 
 	def clear_access_data(self):
-		Platform.clear_access_data(self)
+		Ec2LikePlatform.clear_access_data(self)
 		try:
 			del os.environ['AWS_ACCESS_KEY_ID']
 			del os.environ['AWS_SECRET_ACCESS_KEY']

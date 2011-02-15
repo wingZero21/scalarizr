@@ -68,11 +68,11 @@ class EucaPlatform(Ec2Platform):
 		return 'Eucalyptus'		
 		
 	def get_block_device_mapping(self):
-		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")
+		keys = self._get_property("block-device-mapping").split("\n")
 		ret = {}
 		for key in keys:
 			try:
-				ret[key] = self._get_property('latest/meta-data/block-device-mapping/' + key)
+				ret[key] = self._get_property('block-device-mapping/' + key)
 			except PlatformError, e:
 				# Workaround 
 				if key == 'ephemeral0' and str(e).find('HTTP Error 500') >= 0:
@@ -82,11 +82,11 @@ class EucaPlatform(Ec2Platform):
 		return ret
 	
 	def block_devs_mapping(self):
-		keys = self._get_property("latest/meta-data/block-device-mapping").split("\n")
+		keys = self._get_property("block-device-mapping").split("\n")
 		ret = list()
 		for key in keys:
 			try:
-				ret.append((key, self._get_property("latest/meta-data/block-device-mapping/" + key)))
+				ret.append((key, self._get_property("block-device-mapping/" + key)))
 			except PlatformError, e:
 				if key == 'ephemeral0' and str(e).find('HTTP Error 500') >= 0:
 					ret.append((key, firstmatched(lambda x: os.path.exists(x), ('/dev/sda2', '/dev/sdb'))))
