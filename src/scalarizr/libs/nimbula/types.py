@@ -8,10 +8,15 @@ class MachineImage(object):
 	'''
 	classdocs
 	'''
-
-	def __init__(self):
-		'''
-		Constructor
-		'''
-		pass
+	name = None
+	file = None
+	attributes = None
+	account = None
+	
+	
+	def __init__(self, name=None, file=None, attributes=None, account = None):
+		self.name = name
+		self.file = file
+		self.attributes = attributes or {}
+		self.account = account
 		
