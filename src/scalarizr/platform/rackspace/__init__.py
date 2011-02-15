@@ -82,10 +82,9 @@ class RackspacePlatform(Platform):
 		Platform.set_access_data(self, access_data)
 		os.environ['CLOUD_SERVERS_USERNAME'] = self.get_access_data("username").encode("ascii")
 		os.environ['CLOUD_SERVERS_API_KEY'] = self.get_access_data("api_key").encode("ascii")
-		auth_host = self.get_access_data("auth_host")
-		if auth_host:
+		if 'auth_host' in self._access_data:
 			setattr(CloudServersClient, '__DEFAULT_AUTH_URL', CloudServersClient.AUTH_URL)
-			CloudServersClient.AUTH_URL = 'https://%s/v1.0' % auth_host
+			CloudServersClient.AUTH_URL = 'https://%s/v1.0' % self._access_data['auth_host']
 	
 	def clear_access_data(self):
 		try:
