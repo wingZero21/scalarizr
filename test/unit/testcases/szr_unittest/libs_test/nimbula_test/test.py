@@ -26,19 +26,24 @@ class NimbulaConnectionTest(unittest.TestCase):
 		self.login = os.environ[nimbula_username]
 		self.conn = NimbulaConnection(self.url,self.login)
 		
-	def test_authenticate(self):
+	def _test_authenticate(self):
 		cookie = authenticate()
 		self.assertTrue(self.login in str(cookie))
-		#print "GOT COOKIES:", cookie
+		print "GOT COOKIES:", cookie[-1]
 
 	def tearDown(self):
 		pass
 	
-	def test_get_URI(self):
+	def _test_get_URI(self):
 		self.assertEquals(self.conn._get_object_URI('/scalr/administrator/imagename'), self.url+'/machineimage/scalr/administrator/imagename')
 		self.assertEquals(self.conn._get_object_URI('imagename2'), '%s/machineimage%s/imagename2'%(self.url,self.login))
+		
+	def test_add_machine_image(self):
+		image_path = '/root/pico_test.tar.gz'
+		result = self.conn.add_machine_image('test_image', image_path)
+		print result
 
-	def test_get_machine_image(self):
+	def _test_get_machine_image(self):
 		image_name = '/nimbula/public/default'
 		info = self.conn.get_machine_image(image_name)
 		#print "GOT SERVER INFO:", info
@@ -46,21 +51,17 @@ class NimbulaConnectionTest(unittest.TestCase):
 		
 		info2 = self.conn.get_machine_image(image_name)
 		#print "GOT SERVER INFO2:", info2
-		
-	def test_add_machine_image(self):
-		pass
 
-	def test_delete_machine_image(self):
-		image_name = '/nimbula/public/default'
-		self.assertRaises(NimbulaError, self.conn.delete_machine_image, (image_name))
-		#info = self.conn.delete_machine_image(image_name)
+	def _test_delete_machine_image(self):
+		protected_image_name = '/nimbula/public/default'
+		self.assertRaises(NimbulaError, self.conn.delete_machine_image, (protected_image_name))
+		#info = self.conn.delete_machine_image('/scalr/administrator/test_cli_1')
 		#print info
 
-	def test_discover_machine_image(self):
+	def _test_discover_machine_image(self):
 		container = '/nimbula/public/'
 		info = self.conn.discover_machine_image(container)
 		self.assertTrue(container in str(info))
-
 
 
 if __name__ == "__main__":
