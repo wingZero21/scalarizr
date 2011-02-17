@@ -13,7 +13,6 @@ import string
 import random
 import cookielib
 import socket
-#import urllib2_file
 
 nimbula_url = 'NIMBULA_URL'
 nimbula_username = 'NIMBULA_USERNAME'
@@ -175,8 +174,6 @@ class NimbulaConnection:
 		
 		request = urllib2.Request(uri)
 		
-		#headers = headers or [('Accept', 'application/json'), ('Content-Type', 'application/json')]
-		
 		headers = headers or {'Accept':'application/json', 'Content-Type':'application/json'}
 		
 		for k,v in headers.items():
@@ -228,12 +225,10 @@ class NimbulaConnection:
 		@param fp: file-like object. One of `file` or `fp` should be provided
 		'''
 		
-		host = 'serverbeach.demo.nimbula.com'
-		
+		#host = 'serverbeach.demo.nimbula.com'
+		host = urlparse.urlparse(self.api_url)[1]
 		
 		def _post(pairs, boundary):		
-			#for name, data in pairs.items():
-			print 'PAIRS:', pairs
 			for name, data in pairs:
 				yield '--%s%s' % (boundary, EOL)
 				content = 'Content-Type: application/json%s' % EOL if name=='attributes' else ''
@@ -263,19 +258,19 @@ class NimbulaConnection:
 		for entry in _post(pairs, boundary): full_length += len(entry)
 		
 		headers = []
+		headers.append(('Content-Length',full_length))
 		headers.append(('AcceptEncoding', 'gzip;q=1.0, identity; q=0.5'))
 		headers.append(('Accept', 'application/json'))
 		headers.append(('Host', host))
 		headers.append(('Content-Type', 'multipart/form-data; boundary=%s' % boundary))
-		headers.append(('Cookie', last_cookies))		 
-		headers.append(('Content-Length',full_length))
+		headers.append(('Cookie', last_cookies))	
 		
 		connection  = httplib.HTTPSConnection(host, timeout=300)
 		
 		try:
 			if connection.sock is None:
 				connection.connect()
-			connection.set_debuglevel(10)	
+			#connection.set_debuglevel(10)	
 			connection.putrequest('POST', '/machineimage/', skip_host=True)
 			
 			for (k, v) in headers:

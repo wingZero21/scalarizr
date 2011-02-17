@@ -22,6 +22,7 @@ class NimbulaConnectionTest(unittest.TestCase):
 	conn = None
 
 	def setUp(self):
+		self.img_name = 'test_cli'
 		self.url = os.environ[nimbula_url]
 		self.login = os.environ[nimbula_username]
 		self.conn = NimbulaConnection(self.url,self.login)
@@ -39,8 +40,8 @@ class NimbulaConnectionTest(unittest.TestCase):
 		self.assertEquals(self.conn._get_object_URI('imagename2'), '%s/machineimage%s/imagename2'%(self.url,self.login))
 		
 	def test_add_machine_image(self):
-		image_path = '/root/pico_test.tar.gz'
-		result = self.conn.add_machine_image('test_image', image_path)
+		image_path = '/root/test.tar.gz'
+		result = self.conn.add_machine_image(self.img_name, image_path)
 		print result
 
 	def _test_get_machine_image(self):
@@ -49,19 +50,19 @@ class NimbulaConnectionTest(unittest.TestCase):
 		#print "GOT SERVER INFO:", info
 		self.assertTrue(image_name in str(info))
 		
-		info2 = self.conn.get_machine_image(image_name)
+		#info2 = self.conn.get_machine_image(self.img_name)
 		#print "GOT SERVER INFO2:", info2
 
 	def _test_delete_machine_image(self):
 		protected_image_name = '/nimbula/public/default'
 		self.assertRaises(NimbulaError, self.conn.delete_machine_image, (protected_image_name))
-		#info = self.conn.delete_machine_image('/scalr/administrator/test_cli_1')
-		#print info
+		info = self.conn.delete_machine_image(self.login + '/' + self.img_name)
+		print info
 
 	def _test_discover_machine_image(self):
-		container = '/nimbula/public/'
-		info = self.conn.discover_machine_image(container)
-		self.assertTrue(container in str(info))
+		for container in ('/nimbula/public/', self.login):
+			info = self.conn.discover_machine_image(container)
+			self.assertTrue(container in str(info))
 
 
 if __name__ == "__main__":
