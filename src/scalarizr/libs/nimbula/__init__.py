@@ -232,8 +232,10 @@ class NimbulaConnection:
 		
 		
 		def _post(pairs, boundary):		
-			for name, data in pairs.items():
-				yield '--%s' % boundary
+			#for name, data in pairs.items():
+			print 'PAIRS:', pairs
+			for name, data in pairs:
+				yield '--%s%s' % (boundary, EOL)
 				content = 'Content-Type: application/json%s' % EOL if name=='attributes' else ''
 				content +='Content-Disposition: form-data; name="%s"%s' % (name, EOL)
 				yield content
@@ -248,7 +250,12 @@ class NimbulaConnection:
 		if not authenticated:
 			authenticate()
 								
-		pairs = dict(uri='', account=self.username, name=self.username+'/'+name, attributes={})
+		pairs = []
+		pairs.append(('uri', ''))
+		pairs.append(('name',  self.username+'/'+name))
+		pairs.append(('attributes', '{}'))
+		pairs.append(('account', self.username))
+		
 		boundary = "".join([random.choice(string.ascii_lowercase+string.digits) for x in xrange(31)])
 		
 		file_length = os.path.getsize(file) if file else os.fstat(fp.fileno())[6]
@@ -278,7 +285,7 @@ class NimbulaConnection:
 			for content in _post(pairs, boundary):
 				self._send_data(content, connection)
 			
-			self._send_data('--%s' % boundary, connection)
+			self._send_data('--%s' % boundary+EOL, connection)
 			
 			cl_entry = 'Content-Length: %s' % file_length
 			cl_entry += '%sContent-Disposition: form-data' % EOL
@@ -292,7 +299,7 @@ class NimbulaConnection:
 				self._send_data(data, connection)
 			
 			self._send_data(EOL, connection)	
-			self._send_data('--%s--' % boundary, connection)
+			self._send_data('--%s--' % boundary+EOL, connection)
 			
 			response = connection.getresponse()
 			return response.read()
