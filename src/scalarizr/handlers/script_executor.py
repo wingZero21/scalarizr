@@ -182,9 +182,9 @@ class ScriptExecutor(Handler):
 			self._logger.debug("Finding interpreter path in the scripts first line")
 			
 			shebang = read_shebang(script=script.body)
+			elapsed_time = 0
 			if not shebang:
 				stderr.write('Script execution failed: Shebang not found.')
-				elapsed_time = 0
 			elif not os.path.exists(shebang):
 				stderr.write('Script execution failed: Interpreter %s not found.' % shebang)				
 			else:
@@ -195,7 +195,6 @@ class ScriptExecutor(Handler):
 					self._logger.error("Cannot execute script '%s' (script path: %s). %s", 
 							script.name, script_path, str(e))
 					stderr.write("Script execution failed: %s." % str(e))
-					elapsed_time = 0
 				else:
 					# Communicate with process
 					self._logger.debug("Communicate with '%s'", script.name)
