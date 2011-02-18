@@ -29,11 +29,11 @@ class NimbulaConnectionTest(unittest.TestCase):
 		pass
 	
 	
-	def _test_get_URI(self):
+	def test_get_URI(self):
 		self.assertEquals(self.conn._get_object_URI('/scalr/administrator/imagename'), self.url+'/machineimage/scalr/administrator/imagename')
 		self.assertEquals(self.conn._get_object_URI('imagename2'), '%s/machineimage%s/imagename2'%(self.url,self.login))
 		
-	def _test_authenticate(self):
+	def test_authenticate(self):
 		cookie = authenticate()
 		self.assertTrue(self.login in str(cookie))
 		#print "GOT COOKIES:", cookie[-1]
@@ -58,6 +58,13 @@ class NimbulaConnectionTest(unittest.TestCase):
 		
 		cleaned_image_list = self.conn.discover_machine_image(container)
 		self.assertTrue(image not in cleaned_image_list)
+		
+	def test_errors(self):
+		protected_image_name = '/nimbula/public/default'
+		
+		self.assertRaises(NimbulaError, self.conn.delete_machine_image, (protected_image_name))
+		
+		self.assertRaises(NimbulaError, self.conn.add_machine_image, (protected_image_name, self.image_path))
 
 
 if __name__ == "__main__":

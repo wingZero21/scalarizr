@@ -106,8 +106,8 @@ class NimbulaConnection:
 		try:
 			f = self._request(uri, query_method='DELETE')
 		except NimbulaError, e:
-			if 'Unauthorized' in e:
-				raise NimbulaError('Not enough privelegies to delete image')
+			err_msg='Not enough privelegies to delete image'	
+			raise NimbulaError(err_msg if 'Unauthorized' in str(e) else e)
 		response = f.read()
 		return response		
 		
@@ -124,8 +124,8 @@ class NimbulaConnection:
 		try:
 			f = self._request(uri, query_method='DELETE')
 		except NimbulaError, e:
-			if 'Unauthorized' in e:
-				raise NimbulaError('Not enough privelegies to delete instance')
+			err_msg='Not enough privelegies to delete instance'	
+			raise NimbulaError(err_msg if 'Unauthorized' in str(e) else e)
 		response = f.read()
 		return response		
 
@@ -267,8 +267,6 @@ class NimbulaConnection:
 				
 				if msg == 'Conflict':
 					raise NimbulaError('Image already exists')  
-				elif msg == 'Unauthorized':
-					raise NimbulaError('No permissoins to upload image')
 				else: 
 					raise NimbulaError(msg)
 				
