@@ -170,7 +170,7 @@ class NimbulaConnection:
 		elif hasattr(data, 'read'):
 			# Is it a file?
 			while 1:
-				part = data.read(100)
+				part = data.read(100000)
 				if part == '': break
 				
 				try:
