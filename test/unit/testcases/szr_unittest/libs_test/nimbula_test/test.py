@@ -20,7 +20,7 @@ class NimbulaConnectionTest(unittest.TestCase):
 
 	def setUp(self):
 		self.img_name = 'test_cli'
-		self.image_path = '/root/test.tar.gz'
+		self.image_path = '/root/pico_test.tar.gz'
 		self.url = os.environ[nimbula_url]
 		self.login = os.environ[nimbula_username]
 		self.conn = NimbulaConnection(self.url,self.login)

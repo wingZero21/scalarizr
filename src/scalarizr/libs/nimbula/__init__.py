@@ -170,7 +170,7 @@ class NimbulaConnection:
 		elif hasattr(data, 'read'):
 			# Is it a file?
 			while 1:
-				part = data.read(100000)
+				part = data.read(100)
 				if part == '': break
 				
 				try:
@@ -220,6 +220,15 @@ class NimbulaConnection:
 		full_length = file_length
 		for entry in _post(pairs, boundary): full_length += len(entry)
 		
+		
+		cl_entry = 'Content-Length: %s' % file_length
+		cl_entry += '%sContent-Disposition: form-data' % EOL
+		cl_entry += '; name="file"; filename="%s"%s' % (file or fp.name, EOL)
+		
+		#ugly hack 
+		add = len(cl_entry)+len('--%s' % boundary+EOL)+ 2*len(EOL)+len('--%s--' % boundary+EOL)
+		full_length += add
+		
 		headers = []
 		headers.append(('Content-Length',full_length))
 		headers.append(('AcceptEncoding', 'gzip;q=1.0, identity; q=0.5'))
@@ -243,21 +252,16 @@ class NimbulaConnection:
 			for content in _post(pairs, boundary):
 				self._send_data(content, connection)
 			
-			self._send_data('--%s' % boundary+EOL, connection)
-			
-			cl_entry = 'Content-Length: %s' % file_length
-			cl_entry += '%sContent-Disposition: form-data' % EOL
-			cl_entry += '; name="file"; filename="%s"%s' % (file or fp.name, EOL)
-			
-			self._send_data(cl_entry, connection)	
-			self._send_data(EOL, connection)	
+			self._send_data('--%s' % boundary+EOL, connection)	#		
+			self._send_data(cl_entry, connection)	#
+			self._send_data(EOL, connection)	#
 				
 			data = fp or open(file, 'rb')
 			if data:
 				self._send_data(data, connection)
 			
-			self._send_data(EOL, connection)	
-			self._send_data('--%s--' % boundary+EOL, connection)
+			self._send_data(EOL, connection)	#
+			self._send_data('--%s--' % boundary+EOL, connection)#
 			
 			response = connection.getresponse().read()
 			entry = json.loads(response)
