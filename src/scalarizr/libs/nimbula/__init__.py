@@ -75,7 +75,7 @@ class NimbulaConnection:
 	
 	
 	def __init__(self, api_url, username=None, password=None):
-		self.api_url = api_url
+		self.api_url = api_url or os.environ[nimbula_url]
 		self.username = username or os.environ[nimbula_username]
 		self.password = password or os.environ[nimbula_password]
 		
