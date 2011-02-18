@@ -32,7 +32,6 @@ class MachineImage(object):
 		self.attributes = entry['attributes']
 		self.account = entry['account']
 		
-		
 	def __eq__(self, other):
 		return self.name == other.name
 		

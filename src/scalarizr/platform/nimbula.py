@@ -3,9 +3,9 @@ Created on Feb 14, 2011
 
 @author: spike
 '''
+from scalarizr.libs.nimbula import nimbula_password, nimbula_url, nimbula_username, NimbulaConnection
 from scalarizr.util import wait_until, filetool
 from . import Ec2LikePlatform, PlatformError
-
 import os
 
 def get_platform():
@@ -38,3 +38,21 @@ class NimbulaPlatform(Ec2LikePlatform):
 			return self._userdata[key] if key in self._userdata else None
 		else:
 			return self._userdata
+		
+	def set_access_data(self, access_data):
+		Ec2LikePlatform.set_access_data(self, access_data)
+		os.environ[nimbula_password]	= self.get_access_data('password')
+		os.environ[nimbula_url] 		= self.get_access_data('api_url')
+		os.environ[nimbula_username]	= self.get_access_data('username')
+
+	def clear_access_data(self):
+		Ec2LikePlatform.clear_access_data(self)
+		try:
+			del os.environ[nimbula_password]
+			del os.environ[nimbula_url]
+			del os.environ[nimbula_username]
+		except KeyError:
+			pass
+	
+	def new_nimbula_connection(self):
+		return NimbulaConnection()

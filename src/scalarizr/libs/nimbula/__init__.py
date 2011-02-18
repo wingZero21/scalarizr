@@ -16,9 +16,9 @@ import socket
 
 from types import MachineImage
 
-nimbula_url = 'NIMBULA_URL'
-nimbula_username = 'NIMBULA_USERNAME'
-nimbula_password = 'NIMBULA_PASSWORD'
+nimbula_url			= 'NIMBULA_URL'
+nimbula_username	= 'NIMBULA_USERNAME'
+nimbula_password	= 'NIMBULA_PASSWORD'
 
 cj = cookielib.CookieJar()
 last_cookies = None
@@ -74,7 +74,7 @@ class NimbulaConnection:
 	api_url = None
 	
 	
-	def __init__(self, api_url, username=None, password=None):
+	def __init__(self, api_url=None, username=None, password=None):
 		self.api_url = api_url or os.environ[nimbula_url]
 		self.username = username or os.environ[nimbula_username]
 		self.password = password or os.environ[nimbula_password]

@@ -3,22 +3,25 @@ Created on Feb 15, 2011
 
 @author: spike
 '''
-
+from scalarizr.bus import bus
 from scalarizr.handlers import Handler, HandlerError, RebundleLogHandler
 from scalarizr.messaging import Messages
+from scalarizr.util import system2, software, cryptotool, disttool
+from scalarizr.util.software import whereis
 from scalarizr.util.filetool import df, Rsync, Tar, read_file, write_file
 from scalarizr.util.fstool import mount, umount
-from scalarizr.util import system2, software, cryptotool
 from tempfile import mkdtemp
 import logging
 import os
 import re
-from scalarizr.util.software import whereis
+
 import pexpect
 import shutil
 
 def get_handlers():
 	return [NimbulaRebundleHandler()]
+
+root_uuid = "97e128e3-a209-4a34-81f7-c35fb9053e25"
 
 class NimbulaRebundleHandler(Handler):	
 	
@@ -29,10 +32,9 @@ class NimbulaRebundleHandler(Handler):
 	_logger			= None
 	
 	def __init__(self):
-		self._logger = logging.getLogger(__name__)
-		self._log_hdlr = RebundleLogHandler()
-		self.nimbula_pass_hash = "$6$rAi9LwiA$/1n3fk2TUU5iLykyxgzHMUPHjOZgkIz4g2dGJpaohmyqPWb5xRj.JqxKfELd.brBivQBh8f5cJL7XEiBRD1ED."
-
+		self._logger	= logging.getLogger(__name__)
+		self._log_hdlr	= RebundleLogHandler()
+		self.platform	= bus.platform
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.REBUNDLE
@@ -41,82 +43,63 @@ class NimbulaRebundleHandler(Handler):
 		self._log_hdlr.bundle_task_id = message.bundle_task_id
 		self._logger.addHandler(self._log_hdlr)	
 		try:
-			excludes = ('/dev', '/media', '/mnt', '/proc', '/sys', '/cdrom', '/tmp')
-			root_uuid = "97e128e3-a209-4a34-81f7-c35fb9053e25"
-			root_size = swap_size = 0
-			fs_list = df()
-			# Getting root device size 
+			excludes 				= ('/dev', '/media', '/mnt', '/proc', '/sys', '/cdrom', '/tmp')
+			root_size = swap_size	= 0
+			self.rebundle_dir		= mkdtemp()
+			self.tmp_root_dir 		= mkdtemp()
+			targz_name 				= message.role_name + '.tar.gz'
+			targz_path				= os.path.join(self.rebundle_dir, targz_name)
+			image_name				= message.role_name + '.img'
+			image_path				= os.path.join(self.rebundle_dir, image_name)
+			
+			""" Getting root device size """
+			fs_list = df() 
 			for fs in fs_list:
 				if fs.mpoint == '/':
 					root_size = fs.size
-			# Getting swap size
+					
+			""" Getting swap size """
 			raw_swap_list = system2('swapon -s', shell = True)[0].splitlines()
 			if len(raw_swap_list) > 1:
 				swap_size = int(raw_swap_list[1].split()[2])
 			
-			self.rebundle_dir	= mkdtemp()
-			self.tmp_root_dir 	= mkdtemp()
-			targz_name 		= message.role_name + '.tar.gz'
-			image_name		= message.role_name + '.img'
-			image_path		= os.path.join(self.rebundle_dir, image_name)
-			
+			""" Copying root to temp directory """
+			self._logger.info("Copying / to temporary dir %s" % self.tmp_root_dir)
 			self._rsync('/', self.tmp_root_dir, excludes=excludes)
 			self._make_spec_dirs(self.tmp_root_dir, excludes)
 			
-			mount('/dev', self.tmp_root_dir + '/dev', options=('--bind',))
-			shell = pexpect.spawn('/bin/sh')
-			try:
-				shell.expect('#')
-				shell.sendline('chroot %s' % self.tmp_root_dir)
-				shell.expect('#')
-				shell.sendline('update-grub -y')
-				shell.expect('#')
-				shell.sendline('sed -i s/^# kopt=.*$/# kopt=root=UUID=97e128e3-a209-4a34-81f7-c35fb9053e25 ro console=tty1 console=ttyS0/ /boot/grub/menu.lst')
-				shell.expect('#')
-				shell.sendline('sed -i s/^# defoptions=.*$/# defoptions=/ /boot/grub/menu.lst')
-				shell.expect('#')
-				shell.sendline('sed -i s/^# groot=.*$/# groot=(hd0,0)/ /boot/grub/menu.lst')
-				shell.expect('#')
-				shell.sendline('update-grub')
-				shell.expect('#')
-			finally:
-				shell.close()
-				
-			umount(mpoint=self.tmp_root_dir + '/dev')				
+			""" Distro-based adaptation"""
+			self.adapter.adapt(self)
 			
+			""" Image creation """
 			self._logger.debug('Creating image file: %s' % image_path)
 			f = open(image_path, 'w')
 			f.seek((root_size + swap_size) * 1024 + 63*512 - 1)
 			f.write('\0')
 			f.close()
 			
+			""" Partitioning """
+			self._logger.debug('Partitioning image.')
 			start = 62
 			part_string = '%s,%s,L,*\n' % (start+1, root_size*2)
 			if swap_size:
 				start += root_size*2
 				part_string += '%s,%s,S\n' % (start+1, swap_size*2)
-				
-				
-			self._logger.debug('Partitioning image.')
-			
 			out, err, ret_code = system2('sfdisk -uS --force %s' % image_path, stdin=part_string, shell=True, raise_exc=False)
 			if ret_code:
 				raise HandlerError('Error occured while partitioning image.\n%s' % err)
 			
-			
+			""" Mapping partitions """
 			self._logger.debug('Creating device map on image.')		
 			out, err, ret_code = system2('kpartx -av %s' % image_path, shell=True, raise_exc=False)
 			if ret_code:
-				raise HandlerError('Error occured while creating device map.\n%s' % err)
-			
+				raise HandlerError('Error occured while creating device map.\n%s' % err)			
 			self.loop = re.search('(/dev/loop\d+)', out).group(1)
 			root_dev_name = '/dev/mapper/%sp1' % self.loop.split('/')[-1]
 			
-			
-			self._logger.debug('Creating filesystem on root partition.')
-			
-			out, err, ret_code = system2('mkfs -t ext3 -L root -m 0 -I 128 %s' % root_dev_name, shell=True)
-			
+			""" Create file systems on the partitions """
+			self._logger.debug('Creating filesystem on root partition.')			
+			out, err, ret_code = system2('mkfs -t ext3 -L root -m 0 -I 128 %s' % root_dev_name, shell=True)			
 			if ret_code:
 				raise HandlerError("Can't create filesystem on device %s:\n%s" % (root_dev_name, err))
 			if swap_size:
@@ -125,55 +108,55 @@ class NimbulaRebundleHandler(Handler):
 				out, err, ret_code = system2('mkswap -L swap %s' % swap_dev_name, shell=True)
 				if ret_code:		
 					raise HandlerError("Can't create filesystem on device %s:\n%s" % (root_dev_name, err))
-			
-			
+
+			""" Setting UUID for root device """			
 			self._logger.debug('Setting predefined UUID to root device.')
-			# Set UUID for root device
-			system2('tune2fs -i 0 -U %s %s' % (root_uuid, root_dev_name), shell=True, raise_exc=False)
+			system2('tune2fs -i 0 -U %s %s' % (root_uuid, root_dev_name), shell=True, raise_exc=False)			
 			
+			""" Root device mount """
+			self._logger.debug('Mounting root device to %s.' % self.root_mpoint)
 			self.root_mpoint = os.path.join(self.rebundle_dir, 'mnt')
 			if not os.path.isdir(self.root_mpoint):
-				os.mkdir(self.root_mpoint)
-			
-			self._logger.debug('Mounting root device to %s.' % self.root_mpoint)			
+				os.mkdir(self.root_mpoint)	
 			mount(root_dev_name, self.root_mpoint)
-			self.mounted = True
-			
-			self._logger.info('Copying / to image.')
-			self._rsync(self.tmp_root_dir + os.sep, self.root_mpoint, excludes=excludes)
-			self._make_spec_dirs(self.root_mpoint, excludes)
-						
-			self._logger.info('Creating "scalr" user.')
-			shell = pexpect.spawn('/bin/sh')
 			try:
-				shell.expect('#')
-				shell.sendline('chroot %s' % self.root_mpoint)
-				shell.expect('#')
-				c_count = shell.sendline('useradd scalr -g0')
-				shell.expect('#')
-				out = shell.before[c_count].strip()
-				if out and not "already exists" in out:
-					raise HandlerError("Cannot add 'scalr' user: %s" % out)
+				""" Snapshot copy from temp dir to image """
+				self._logger.info('Copying snapshot to image.')
+				self._rsync(self.tmp_root_dir + os.sep, self.root_mpoint, excludes=excludes)
+				self._make_spec_dirs(self.root_mpoint, excludes)
 				
-				self._logger.info('Updating password of "scalr" user.')
-				scalr_password = cryptotool.keygen(10).strip()
-				shell.sendline('passwd scalr')		
-				shell.expect('Enter new UNIX password:')
-				shell.sendline(scalr_password)
-				shell.expect('Retype new UNIX password:')
-				shell.sendline(scalr_password)
-				shell.expect('passwd: password updated successfully')
-			finally:
-				shell.close()
-				
-			self._logger.debug('Unmounting root device.')
-						
-			umount(root_dev_name)
-			self.mounted = False
+				""" Scalr user creation """
+				self._logger.info('Creating "scalr" user.')
+				shell = pexpect.spawn('/bin/sh')
+				try:
+					shell.expect('#')
+					shell.sendline('chroot %s' % self.root_mpoint)
+					shell.expect('#')
+					c_count = shell.sendline('useradd scalr -g0')
+					shell.expect('#')
+					out = shell.before[c_count].strip()
+					if out and not "already exists" in out:
+						raise HandlerError("Cannot add 'scalr' user: %s" % out)
+					
+					self._logger.info('Updating password of "scalr" user.')
+					scalr_password = cryptotool.keygen(10).strip()
+					shell.sendline('passwd scalr')		
+					shell.expect('Enter new UNIX password:')
+					shell.sendline(scalr_password)
+					shell.expect('Retype new UNIX password:')
+					shell.sendline(scalr_password)
+					shell.expect('passwd: password updated successfully')
+				finally:
+					shell.close()
+			finally:				
+				self._logger.debug('Unmounting root device.')
+				umount(root_dev_name)
 			
+			""" Unmap image partitions """
 			system2('kpartx -d %s' % image_path, shell=True)
 			self.loop = self.root_mpoint = None
 			
+			""" Grub installation """
 			grub_path = whereis('grub')
 			if not grub_path:
 				raise HandlerError("Grub executable was not found.")
@@ -181,31 +164,36 @@ class NimbulaRebundleHandler(Handler):
 			stdin = 'device (hd0) %s\nroot (hd0,0)\nsetup (hd0)\n' % image_path
 			self._logger.info('Installing grub to the image %s' % image_name)			
 			system2('%s --batch --no-floppy --device-map=/dev/null' % grub_path, stdin = stdin, shell=True)
-
+			
+			""" Image compression """
+			self._logger.debug('Compressing image')
 			tar = Tar()
 			tar.create().gzip().sparse()
-			tar.archive(targz_name)
+			tar.archive(targz_path)
 			tar.add(image_name, self.rebundle_dir)
-
-			self._logger.debug('Compressing image')
 			system2(str(tar), shell=True)
-
-			msg_data = dict(
-				status = "ok",
-				#snapshot_id = image.id,
-				bundle_task_id = message.bundle_task_id
-			)
-		
-			self._logger.debug("Updating message with OS and software info")
-			msg_data.update(software.system_info())
 			
+			""" Uploading image """
+			nimbula_conn = self.platform.new_nimbula_connection() 
+			image = nimbula_conn.add_machine_image(message.role_name, file=targz_path)
+
+			""" Creating and sending message """ 
+			msg_data = dict(
+				status 			= "ok",
+				bundle_task_id 	= message.bundle_task_id,
+				ssh_user 		= 'scalr',
+				ssh_password 	= scalr_password,
+				snapshot_id		= image.name		
+			)
+			self._logger.debug("Updating message with OS and software info")
+			msg_data.update(software.system_info())			
 			self.send_message(Messages.REBUNDLE_RESULT, msg_data)
 			
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
 			last_error = str(e)
 			
-			# Send message to Scalr
+			""" Send sad message """ 
 			self.send_message(Messages.REBUNDLE_RESULT, dict(
 				status = "error",
 				last_error = last_error,
@@ -213,20 +201,21 @@ class NimbulaRebundleHandler(Handler):
 			))
 			
 		finally:
+			""" Perform cleanup """ 
 			self._log_hdlr.bundle_task_id = None
 			self._logger.removeHandler(self._log_hdlr)
-			
-			if self.mounted:
-				umount(mpoint=self.root_mpoint)
-				self.root_mpoint 	= None
-				self.mounted		= False
 			if self.loop:
 				system2('kpartx -d %s' % image_path, shell=True)
 				self.loop = None
-			if self.rebundle_dir:
-				shutil.rmtree(self.rebundle_dir)
-				self.rebundle_dir = None
-				
+			shutil.rmtree(self.rebundle_dir)
+			shutil.rmtree(self.tmp_root_dir)
+			
+	
+	@property
+	def adapter(self):
+		if not hasattr(self, '_adapter'):
+			self._adapter = RedhatAdapter() if disttool._is_redhat_based else DebianAdapter()
+		return self._adapter
 				
 	def _make_spec_dirs(self, root_path, excludes):
 		for dir in excludes:
@@ -270,3 +259,76 @@ class NimbulaRebundleHandler(Handler):
 			self._rsync(src, dst, excludes, xattr=False)
 		elif ret_code > 0:
 			raise HandlerError('rsync failed with exit code %s' % (ret_code,))
+
+class RedHatAdapter:
+	def adapt(self, handler):
+		""" Grub configuration """
+		kernels = [file for file in os.listdir(os.path.join(handler.tmp_root_dir, 'boot')) if file.startswith('vmlinuz-')]
+		grubdir = os.path.join(handler.tmp_root_dir, 'usr', 'share', 'grub', '%s-redhat' % disttool.arch())
+		boot_grub_path = os.path.join(handler.tmp_root_dir, 'boot', 'grub')
+		for file in os.listdir(grubdir):
+			shutil.copy(os.path.join(grubdir, file), boot_grub_path)
+			
+		grub_conf_path = os.path.join(handler.tmp_root_dir, 'boot', 'grub', 'grub.conf')
+		grub_conf = 'default 0\ntimeout 5\nroot (hd0,0)\n'
+		for kernel in kernels:
+			grub_conf += 'title %s\n' % kernel
+			grub_conf += 'kernel /boot/%s root=UUID=%s ro console=tty1 console=ttyS0\n' % (kernel, root_uuid)
+			grub_conf += 'initrd /boot/%s\n' % (kernel.replace('vmlinuz-', 'initrd-') + '.img')
+			grub_conf += 'boot\n'
+		write_file(grub_conf_path, grub_conf, logger=handler._logger)
+		
+		""" Enable login on serial console """
+		inittab_path 	= os.path.join(handler.tmp_root_dir, 'etc', 'inittab')
+		inittab			= read_file(inittab_path, logger=handler._logger) or ''
+		inittab 		+= 'T0:12345:respawn:/sbin/agetty -L ttyS0 38400\n'
+		write_file(inittab_path, inittab, logger=handler._logger)
+		
+		securetty_path	= os.path.join(handler.tmp_root_dir, 'etc', 'securetty')
+		secure_tty		= read_file(securetty_path, logger=handler._logger) or ''
+		secure_tty		+= 'ttyS0\n'
+		write_file(securetty_path, secure_tty, logger=handler._logger)
+		
+	
+class DebianAdapter:
+	def adapt(self, handler):		
+		""" Grub configuration """
+		boot_grub_path = os.path.join(handler.tmp_root_dir, 'boot', 'grub')
+		if not os.path.exists(boot_grub_path):
+			os.mkdir(boot_grub_path)
+						
+		grub_dir = os.path.join(handler.tmp_root_dir, 'usr', 'lib', 'grub', '%s-pc' % disttool.arch())
+		for filename in os.listdir(grub_dir):
+			shutil.copy(os.path.join(grub_dir, filename), boot_grub_path)
+
+		device_map_path = os.path.join(handler.tmp_root_dir, 'boot', 'grub', 'device.map')
+		device_map = '(hd0)  /dev/sda\n'
+		write_file(device_map_path, device_map, logger=handler._logger)
+				
+		mount('/dev', handler.tmp_root_dir + '/dev', options=('--bind',))
+		try:
+			shell = pexpect.spawn('/bin/sh')
+			try:
+				shell.expect('#')
+				shell.sendline('chroot %s' % handler.tmp_root_dir)
+				shell.expect('#')
+				shell.sendline('update-grub -y')
+				shell.expect('#')
+				shell.sendline('sed -i s/^# kopt=.*$/# kopt=root=UUID=97e128e3-a209-4a34-81f7-c35fb9053e25 ro console=tty1 console=ttyS0/ /boot/grub/menu.lst')
+				shell.expect('#')
+				shell.sendline('sed -i s/^# defoptions=.*$/# defoptions=/ /boot/grub/menu.lst')
+				shell.expect('#')
+				shell.sendline('sed -i s/^# groot=.*$/# groot=(hd0,0)/ /boot/grub/menu.lst')
+				shell.expect('#')
+				shell.sendline('update-grub')
+				shell.expect('#')
+			finally:
+				shell.close()
+		finally:
+			umount(mpoint=handler.tmp_root_dir + '/dev')
+			
+		""" Enable login on serial console """
+		inittab_path 	= os.path.join(handler.tmp_root_dir, 'etc', 'inittab')
+		inittab			= read_file(inittab_path, logger=handler._logger) or ''
+		inittab 		+= 'T0:23:respawn:/sbin/getty -L ttyS0 38400 vt100\n'
+		write_file(inittab_path, inittab, logger=handler._logger)
