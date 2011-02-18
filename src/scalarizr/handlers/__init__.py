@@ -273,7 +273,7 @@ class ServiceCtlHanler(Handler):
 			self._start_service()
 		except:
 			self._logger.error('Cannot start %s with current configuration preset. ' 
-					+ 'Rollback to the last successful preset',	self._service_name)
+					+ 'Rolling back to the last successful preset',	self._service_name)
 			preset = self._preset_store.load(PresetType.LAST_SUCCESSFUL)
 			self._cnf_ctl.apply_preset(preset)
 			self._start_service()

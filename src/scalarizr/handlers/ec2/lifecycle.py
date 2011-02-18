@@ -9,6 +9,7 @@ from scalarizr.util import system2, filetool, disttool
 import logging
 import os, re
 import ConfigParser
+from scalarizr.util.fstool import Mtab, Fstab, mount
 
 
 def get_handlers ():
@@ -61,6 +62,17 @@ class Ec2LifeCycleHandler(Handler):
 				c += ssh_key + "\n"
 				self._logger.debug("Add server ssh public key to authorized_keys")
 				filetool.write_file(authorized_keys_path, c)
+				
+		# Mount ephemeral devices
+		# Seen on eucalyptus: 
+		# 	- fstab contains invalid fstype and `mount -a` fails  
+		mtab = Mtab()
+		fstab = Fstab()
+		for device in ('/dev/sda2', '/dev/sdb'):
+			if os.path.exists(device) and fstab.contains(device) and not mtab.contains(device):
+				entry = fstab.find(device)[0]
+				mount(device, entry.mpoint, ('-o', entry.options))
+		
 
 	
 	def on_before_hello(self, message):
