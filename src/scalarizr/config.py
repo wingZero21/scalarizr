@@ -929,6 +929,7 @@ class BuiltinPlatforms:
 	EC2 		= 'ec2'
 	EUCA 		= 'eucalyptus'	
 	RACKSPACE 	= 'rackspace'
+	NIMBULA		= 'nimbula'
 
 	@staticmethod
 	def values():

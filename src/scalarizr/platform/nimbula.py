@@ -8,7 +8,8 @@ from . import Ec2LikePlatform, PlatformError
 
 import os
 
-
+def get_platform():
+	return NimbulaPlatform()
 OPT_USERDATA_TIMEOUT = "wait_user_data_timeout"
 
 class NimbulaPlatform(Ec2LikePlatform):
@@ -33,7 +34,6 @@ class NimbulaPlatform(Ec2LikePlatform):
 			if not rawmeta:
 				raise PlatformError("Empty user-data")
 			self._userdata = self._parse_user_data(rawmeta)
-			
 		if key:
 			return self._userdata[key] if key in self._userdata else None
 		else:
