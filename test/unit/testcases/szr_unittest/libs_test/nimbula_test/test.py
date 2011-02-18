@@ -13,9 +13,6 @@ nimbula_url = 'NIMBULA_URL'
 nimbula_username = 'NIMBULA_USERNAME'
 nimbula_password = 'NIMBULA_PASSWORD'
 
-os.environ[nimbula_username] = '/scalr/administrator'
-os.environ[nimbula_password] = 'vfJFort4'
-os.environ[nimbula_url] = 'https://serverbeach.demo.nimbula.com:443'
 
 class NimbulaConnectionTest(unittest.TestCase):
 
