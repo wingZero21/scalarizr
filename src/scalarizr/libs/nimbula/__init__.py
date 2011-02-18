@@ -94,7 +94,7 @@ class NimbulaConnection:
 		uri = self._get_object_URI(name)
 		f = self._request(uri)
 		response = f.read()
-		return MachineImage(from_json=response)
+		return MachineImage(from_response=json.loads(response))
 
 	
 	def delete_machine_image(self, name):
@@ -103,7 +103,11 @@ class NimbulaConnection:
 		NimbulaError: HTTP Error 401: Unauthorized
 		'''
 		uri = self._get_object_URI(name)
-		f = self._request(uri, query_method='DELETE')
+		try:
+			f = self._request(uri, query_method='DELETE')
+		except NimbulaError, e:
+			if 'Unauthorized' in e:
+				raise NimbulaError('Not enough privelegies to delete image')
 		response = f.read()
 		return response		
 		
@@ -112,13 +116,16 @@ class NimbulaConnection:
 		uri = self._get_object_URI(container or self.username)
 		f = self._request(uri)
 		response = f.read()
-		s = [json.dumps(img) for img in json.loads(response)['result']]
-		return [MachineImage(from_json=obj) for obj in s]#response
+		return [MachineImage(from_response=img) for img in json.loads(response)['result']]
 
 
 	def delete_instance(self, name):
 		uri = self._get_object_URI(name, 'instance')
-		f = self._request(uri, query_method='DELETE')
+		try:
+			f = self._request(uri, query_method='DELETE')
+		except NimbulaError, e:
+			if 'Unauthorized' in e:
+				raise NimbulaError('Not enough privelegies to delete instance')
 		response = f.read()
 		return response		
 
@@ -253,12 +260,20 @@ class NimbulaConnection:
 			self._send_data('--%s--' % boundary+EOL, connection)
 			
 			response = connection.getresponse().read()
+			entry = json.loads(response)
 			
-			message = json.loads(response)
-			if message.has_key('message') and message['message'] == 'Conflict':
-				raise NimbulaError('Image already exists')
-			
-			return MachineImage(from_json=response)
+			if entry.has_key('message'):
+				msg = entry['message']
+				
+				if msg == 'Conflict':
+					raise NimbulaError('Image already exists')  
+				elif msg == 'Unauthorized':
+					raise NimbulaError('No permissoins to upload image')
+				else: 
+					raise NimbulaError(msg)
+				
+			return MachineImage(from_response=entry)
+
 		except KeyboardInterrupt:		
 			raise
 		

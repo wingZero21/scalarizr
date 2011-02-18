@@ -3,7 +3,6 @@ Created on Feb 14th, 2011
 
 @author: Dmytro Korsakov
 '''
-import json 
 
 class MachineImage(object):
 	'''
@@ -15,9 +14,9 @@ class MachineImage(object):
 	account = None
 	
 	
-	def __init__(self, name=None, file=None, attributes=None, account = None, from_json=None):
-		if from_json:
-			self._deserialize(from_json)
+	def __init__(self, name=None, file=None, attributes=None, account = None, from_response=None):
+		if from_response:
+			self._deserialize(from_response)
 		if name:
 			self.name = name
 		if file:
@@ -27,8 +26,7 @@ class MachineImage(object):
 		if account:
 			self.account = account
 		
-	def _deserialize(self, entry):
-		entry = json.loads(entry)
+	def _deserialize(self, entry):							
 		self.name = entry['name']
 		self.file = entry['file']
 		self.attributes = entry['attributes']
