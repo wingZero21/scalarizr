@@ -23,46 +23,44 @@ class NimbulaConnectionTest(unittest.TestCase):
 
 	def setUp(self):
 		self.img_name = 'test_cli'
+		self.image_path = '/root/test.tar.gz'
 		self.url = os.environ[nimbula_url]
 		self.login = os.environ[nimbula_username]
 		self.conn = NimbulaConnection(self.url,self.login)
-		
-	def _test_authenticate(self):
-		cookie = authenticate()
-		self.assertTrue(self.login in str(cookie))
-		print "GOT COOKIES:", cookie[-1]
 
 	def tearDown(self):
 		pass
+	
 	
 	def _test_get_URI(self):
 		self.assertEquals(self.conn._get_object_URI('/scalr/administrator/imagename'), self.url+'/machineimage/scalr/administrator/imagename')
 		self.assertEquals(self.conn._get_object_URI('imagename2'), '%s/machineimage%s/imagename2'%(self.url,self.login))
 		
-	def test_add_machine_image(self):
-		image_path = '/root/test.tar.gz'
-		result = self.conn.add_machine_image(self.img_name, image_path)
-		print result
-
-	def _test_get_machine_image(self):
-		image_name = '/nimbula/public/default'
-		info = self.conn.get_machine_image(image_name)
-		#print "GOT SERVER INFO:", info
-		self.assertTrue(image_name in str(info))
+	def _test_authenticate(self):
+		cookie = authenticate()
+		self.assertTrue(self.login in str(cookie))
+		#print "GOT COOKIES:", cookie[-1]
 		
-		#info2 = self.conn.get_machine_image(self.img_name)
-		#print "GOT SERVER INFO2:", info2
-
-	def _test_delete_machine_image(self):
-		protected_image_name = '/nimbula/public/default'
-		self.assertRaises(NimbulaError, self.conn.delete_machine_image, (protected_image_name))
-		info = self.conn.delete_machine_image(self.login + '/' + self.img_name)
-		print info
-
-	def _test_discover_machine_image(self):
-		for container in ('/nimbula/public/', self.login):
-			info = self.conn.discover_machine_image(container)
-			self.assertTrue(container in str(info))
+	def test_all(self):
+		container = self.login+'/'
+		list_images = self.conn.discover_machine_image(container)
+		
+		for img in list_images:
+			if img.name.endswith(self.img_name):
+				self.conn.delete_machine_image(img.name)
+		
+		result = self.conn.add_machine_image(self.img_name, self.image_path)
+		
+		image = self.conn.get_machine_image(self.img_name)
+		self.assertTrue(image == result)
+		
+		new_image_list = self.conn.discover_machine_image(container)
+		self.assertTrue(image in new_image_list)	
+		
+		self.conn.delete_machine_image(self.img_name)	
+		
+		cleaned_image_list = self.conn.discover_machine_image(container)
+		self.assertTrue(image not in cleaned_image_list)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,8 @@ import random
 import cookielib
 import socket
 
+from types import MachineImage
+
 nimbula_url = 'NIMBULA_URL'
 nimbula_username = 'NIMBULA_USERNAME'
 nimbula_password = 'NIMBULA_PASSWORD'
@@ -22,24 +24,10 @@ cj = cookielib.CookieJar()
 last_cookies = None
 authenticated = False
 
+EOL = '\r\n'
 
 def authenticate():
-	'''
-	['Server: nginx/0.6.32\r\n', 'Date: Tue, 15 Feb 2011 07:37:29 GMT\r\n', 
-	'Content-Type: application/json\r\n', 'Connection: close\r\n', 
-	'Expires: Tue, 15 Feb 2011 07:37:29 GMT\r\n', 
-	'Set-Cookie: nimbula={"realm": "beach", "value": 
-	"{\\"customer\\": \\"scalr\\", \\"expires\\": 1297759049.3628099, 
-	\\"realm\\": \\"beach\\", \\"user\\": \\"/scalr/administrator\\", 
-	\\"entity_type\\": \\"user\\"}", "signature": 
-	"AFZNnE0e0SVkEYFIFM5jnDdfvKztL3g8YaBvkm9HHPh+Q/9aDNPR0VpP9iqs530wl
-	fRKIGWXXJVQnL9xlxJQqsbUkxzAbarGzvwfg5+Zf3/BozyjwhhaYSljlAuHTBVueBz
-	NTi8FyLhHIOWii9T0rJV+zOKaHPRr02D92sdAtt2cS8Xdb31Ax6e5UcQMij3WD0gIz
-	TxZVawaI6veQZXrsarDXGBr1rQZzg+s8KH2A+O3D56DE+1jBvZEMN6+/BLO7m9OZsf
-	s7XqPkc5N5UEYMSZVrI3rUDNlHf2j9Um99wibUdL5oDhQ2n0SOmzm1bC1HEbEGaDT5
-	Jj0eabxTEhi3Gm9kKck"}; Expires=Tue, 15-Feb-2011 08:37:29 GMT; Path=/\r\n']
-	'''
-	
+
 	login = os.environ[nimbula_username]
 	pwd = os.environ[nimbula_password]
 	auth_basename = '/authenticate/'
@@ -68,47 +56,15 @@ def authenticate():
 	info = response.info()
 	headers = info.headers
 	
-	authenticated = True
-	global last_cookies
+	global last_cookies, authenticated
 	last_cookies = ''.join(headers[-1][12:].split(';')[0])
+	authenticated = True	
 	
 	return headers
 
 	
 class NimbulaError(BaseException):
 	pass
-
-
-EOL = '\r\n'
-
-from urlparse import parse_qsl
-
-class URL(object):
-	def __init__(self, url):
-		self.protocol, self.host, self.port, self.path, self.params = \
-        None,          None,      None,      None,      None
-
-		parts = urlparse.urlparse(url)
-		if parts[0]:
-			self.protocol = parts[0]
-		if parts[1]:
-			host_parts = parts[1].split(':')
-			if host_parts[0]:
-				self.host = host_parts[0]
-			if len(host_parts) > 1:   
-				self.port = host_parts[1]
-		if parts[2]:
-			self.path = parts[2]
-		if parts[3]:
-			self.path = self.path + ';' + parts[3]
-		if parts[4]:
-			self.params = parse_qsl(parts[4])
-
-	def request_uri(self):
-		if self.params:
-			return '%s?%s' % (self.path, '&'.join(['%s=%s' % (k,v) for k,v in self.params]))
-		else:
-			return self.path
 		
 		
 class NimbulaConnection:
@@ -131,15 +87,10 @@ class NimbulaConnection:
 	
 	
 	def get_machine_image(self, name):
-		'''
-		 '{"attributes": {"nimbula_compressed_size": 97120551, "nimbula_decompressed_size": 5905612288}, 
-		 "account": null, "uri": "https://serverbeach.demo.nimbula.com:443/machineimage/nimbula/public/default", 
-		 "file": null, "name": "/nimbula/public/default"}'
-		'''
 		uri = self._get_object_URI(name)
 		f = self._request(uri)
 		response = f.read()
-		return response
+		return MachineImage(from_json=response)
 
 	
 	def delete_machine_image(self, name):
@@ -157,7 +108,8 @@ class NimbulaConnection:
 		uri = self._get_object_URI(container or self.username)
 		f = self._request(uri)
 		response = f.read()
-		return response
+		s = [json.dumps(img) for img in json.loads(response)['result']]
+		return [MachineImage(from_json=obj) for obj in s]#response
 
 
 	def delete_instance(self, name):
@@ -200,8 +152,8 @@ class NimbulaConnection:
 			try:
 				connection.send(data)
 			except socket.error, v:
-				if v[0] == 104: # Connection reset by peer
-					return # Perhaps we got a result...
+				if v[0] == 104: 
+					return 
 				raise
 		
 		elif hasattr(data, 'read'):
@@ -213,8 +165,8 @@ class NimbulaConnection:
 				try:
 					connection.send(part)
 				except socket.error, v:
-					if v[0] == 104: # Connection reset by peer
-						return # Perhaps we got a result...
+					if v[0] == 104: 
+						return 
 					raise
 
 						
@@ -296,8 +248,16 @@ class NimbulaConnection:
 			self._send_data(EOL, connection)	
 			self._send_data('--%s--' % boundary+EOL, connection)
 			
-			response = connection.getresponse()
-			return response.read()
+			response = connection.getresponse().read()
+			
+			message = json.loads(response)
+			if message.has_key('message') and message['message'] == 'Conflict':
+				raise NimbulaError('Image already exists')
+			
+			return MachineImage(from_json=response)
 		except KeyboardInterrupt:		
 			raise
+		
+		except BaseException, e:
+			raise NimbulaError(e)
 				
