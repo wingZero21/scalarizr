@@ -26,14 +26,15 @@ authenticated = False
 
 EOL = '\r\n'
 
-def authenticate():
+def authenticate(login=None, pwd=None):
 
-	login = os.environ[nimbula_username]
-	pwd = os.environ[nimbula_password]
-	auth_basename = '/authenticate/'
+	login = login or os.environ[nimbula_username]
+	pwd = pwd or os.environ[nimbula_password]
 	
 	if not (login or pwd):
 		raise NimbulaError('No login inforation found')
+	
+	auth_basename = '/authenticate/'
 	
 	opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
 	uri = urlparse.urljoin(os.environ[nimbula_url], auth_basename)
@@ -73,10 +74,13 @@ class NimbulaConnection:
 	api_url = None
 	
 	
-	def __init__(self, api_url, username, password=None):
+	def __init__(self, api_url, username=None, password=None):
 		self.api_url = api_url
-		self.username = username
-		self.password = password
+		self.username = username or os.environ[nimbula_username]
+		self.password = password or os.environ[nimbula_password]
+		
+		if not (self.username or self.password):
+			raise NimbulaError('No login inforation found')
 		
 		
 	def _get_object_URI(self, objname, basename=None):
@@ -122,7 +126,7 @@ class NimbulaConnection:
 	def _request(self, uri, headers=None, query_method=None, force=True):
 		
 		if not authenticated:
-			authenticate()
+			authenticate(self.username, self.password)
 		
 		request = urllib2.Request(uri)
 		
@@ -138,7 +142,7 @@ class NimbulaConnection:
 			f = urllib2.urlopen(request)
 		except urllib2.HTTPError, e:
 			if e.code==401 and force==True:
-				authenticate()
+				authenticate(self.username, self.password)
 				return self._request(uri, headers, query_method, force=False)
 			else:
 				raise NimbulaError(e)
@@ -195,7 +199,7 @@ class NimbulaConnection:
 			raise NimbulaError
 		
 		if not authenticated:
-			authenticate()
+			authenticate(self.username, self.password)
 								
 		pairs = []
 		pairs.append(('uri', ''))
