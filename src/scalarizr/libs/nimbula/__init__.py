@@ -191,8 +191,12 @@ class NimbulaConnection:
 		#host = 'serverbeach.demo.nimbula.com'
 		host = urlparse.urlparse(self.api_url)[1]
 		
-		def _post(pairs, boundary):		
-			for name, data in pairs:
+		def _post(form_data, boundary):
+			'''
+			generates additional form data entries all in one
+			for calculating Content-Length and sending through httplib
+			'''		
+			for name, data in form_data:
 				yield '--%s%s' % (boundary, EOL)
 				content = 'Content-Type: application/json%s' % EOL if name=='attributes' else ''
 				content +='Content-Disposition: form-data; name="%s"%s' % (name, EOL)
@@ -207,28 +211,31 @@ class NimbulaConnection:
 		
 		if not authenticated:
 			authenticate(self.username, self.password)
-								
-		pairs = []
-		pairs.append(('uri', ''))
-		pairs.append(('name',  self.username+'/'+name))
-		pairs.append(('attributes', '{}'))
-		pairs.append(('account', self.username))
+		
+		#preparing additional form data						
+		form_data = []
+		form_data.append(('uri', ''))
+		form_data.append(('name',  self.username+'/'+name))
+		form_data.append(('attributes', '{}'))
+		form_data.append(('account', self.username))
 		
 		boundary = "".join([random.choice(string.ascii_lowercase+string.digits) for x in xrange(31)])
 		
+		#calculating Content-length:
 		file_length = os.path.getsize(file) if file else os.fstat(fp.fileno())[6]
 		full_length = file_length
-		for entry in _post(pairs, boundary): full_length += len(entry)
-		
+		for entry in _post(form_data, boundary): full_length += len(entry)
 		
 		cl_entry = 'Content-Length: %s' % file_length
 		cl_entry += '%sContent-Disposition: form-data' % EOL
 		cl_entry += '; name="file"; filename="%s"%s' % (file or fp.name, EOL)
 		
-		#ugly hack 
-		add = len(cl_entry)+len('--%s' % boundary+EOL)+ 2*len(EOL)+len('--%s--' % boundary+EOL)
+		closing_boundary = '--%s--' % boundary+EOL
+		
+		add = len(cl_entry)+len('--%s' % boundary+EOL)+ 2*len(EOL)+len(closing_boundary)
 		full_length += add
 		
+		#preparing headers
 		headers = []
 		headers.append(('Content-Length',full_length))
 		headers.append(('AcceptEncoding', 'gzip;q=1.0, identity; q=0.5'))
@@ -249,7 +256,7 @@ class NimbulaConnection:
 				connection.putheader(k, v)
 			connection.endheaders()
 			
-			for content in _post(pairs, boundary):
+			for content in _post(form_data, boundary):
 				self._send_data(content, connection)
 			
 			self._send_data('--%s' % boundary+EOL, connection)	#		
@@ -261,7 +268,7 @@ class NimbulaConnection:
 				self._send_data(data, connection)
 			
 			self._send_data(EOL, connection)	#
-			self._send_data('--%s--' % boundary+EOL, connection)#
+			self._send_data(closing_boundary, connection)#
 			
 			response = connection.getresponse().read()
 			entry = json.loads(response)
