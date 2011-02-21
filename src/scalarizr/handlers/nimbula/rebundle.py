@@ -6,10 +6,12 @@ Created on Feb 15, 2011
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler, HandlerError, RebundleLogHandler
 from scalarizr.messaging import Messages
+from scalarizr.config import ScalarizrState
 from scalarizr.util import system2, software, cryptotool, disttool
 from scalarizr.util.software import whereis
-from scalarizr.util.filetool import df, Rsync, Tar, read_file, write_file
+from scalarizr.util.filetool import df, Rsync, Tar, read_file, write_file, truncate
 from scalarizr.util.fstool import mount, umount
+from datetime import datetime
 from tempfile import mkdtemp
 import logging
 import os
@@ -23,6 +25,12 @@ def get_handlers():
 
 root_uuid = "97e128e3-a209-4a34-81f7-c35fb9053e25"
 
+MOTD = '''Scalr image 
+%(dist_name)s %(dist_version)s %(bits)d-bit
+Role: %(role_name)s
+Bundled: %(bundle_date)s
+'''
+
 class NimbulaRebundleHandler(Handler):	
 	
 	loop			= None
@@ -35,6 +43,22 @@ class NimbulaRebundleHandler(Handler):
 		self._logger	= logging.getLogger(__name__)
 		self._log_hdlr	= RebundleLogHandler()
 		self.platform	= bus.platform
+		bus.define_events(
+			# Fires before rebundle starts
+			"before_rebundle", 
+			
+			# Fires after rebundle complete
+			# @param param: 
+			"rebundle", 
+			
+			# Fires on rebundle error
+			# @param role_name
+			"rebundle_error",
+			
+			# Fires on bundled volume cleanup. Usefull to remove password files, user activity, logs
+			# @param image_mpoint 
+			"rebundle_cleanup_image"
+		)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.REBUNDLE
@@ -72,7 +96,7 @@ class NimbulaRebundleHandler(Handler):
 			self._rsync('/', self.tmp_root_dir, excludes=excludes)
 			self._logger.info('Making special dirs')
 			self._make_spec_dirs(self.tmp_root_dir, excludes)
-			
+
 			""" Distro-based adaptation"""
 			self.adapter.adapt(self)
 			
@@ -126,9 +150,16 @@ class NimbulaRebundleHandler(Handler):
 			mount(root_dev_name, self.root_mpoint)
 			try:
 				""" Snapshot copy from temp dir to image """
-				self._logger.info('Copying snapshot %s to image %s', self.tmp_root_dir, self.root_mpoint)
-				self._rsync(self.tmp_root_dir + os.sep, self.root_mpoint, excludes=excludes)
-				self._make_spec_dirs(self.root_mpoint, excludes)
+				cnf = bus.cnf
+				old_state = cnf.state
+				cnf.state = ScalarizrState.REBUNDLING
+				try:
+					self._logger.info('Copying snapshot %s to image %s', self.tmp_root_dir, self.root_mpoint)
+					self._rsync(self.tmp_root_dir + os.sep, self.root_mpoint, excludes=excludes)
+					self._make_spec_dirs(self.root_mpoint, excludes)
+					self._cleanup_image(self.root_mpoint, message.role_name)
+				finally:
+					cnf.state = old_state
 				
 				""" Scalr user creation """
 				self._logger.debug('Creating "scalr" user')
@@ -144,7 +175,7 @@ class NimbulaRebundleHandler(Handler):
 						raise HandlerError("Cannot add 'scalr' user: %s" % out)
 					
 					self._logger.info('Updating password of "scalr" user.')
-					scalr_password = cryptotool.keygen(10).strip()
+					scalr_password = cryptotool.pwgen(10)
 					shell.sendline('passwd scalr')		
 					shell.expect('Enter new UNIX password:')
 					shell.sendline(scalr_password)
@@ -215,7 +246,6 @@ class NimbulaRebundleHandler(Handler):
 				self.loop = None
 			shutil.rmtree(self.rebundle_dir)
 			shutil.rmtree(self.tmp_root_dir)
-			
 	
 	@property
 	def adapter(self):
@@ -231,6 +261,51 @@ class NimbulaRebundleHandler(Handler):
 				os.makedirs(spec_dir)
 				if dir == '/tmp':
 					os.chmod(spec_dir, 01777)
+					
+	def _cleanup_image(self, image_mpoint, role_name=None):
+		# Create message of the day
+		self._create_motd(image_mpoint, role_name)
+		
+		# Truncate logs
+		logs_path = os.path.join(image_mpoint, "var/log")
+		for basename in os.listdir(logs_path):
+			filename = os.path.join(logs_path, basename)
+			if os.path.isfile(filename):
+				try:
+					truncate(filename)
+				except OSError, e:
+					self._logger.error("Cannot truncate file '%s'. %s", filename, e)
+		
+		# Cleanup user activity
+		for filename in ("root/.bash_history", "root/.lesshst", "root/.viminfo", 
+						"root/.mysql_history", "root/.history", "root/.sqlite_history"):
+			filename = os.path.join(image_mpoint, filename)
+			if os.path.exists(filename):
+				os.remove(filename)
+		
+		# Cleanup scalarizr private data
+		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
+		privated = os.path.join(etc_path, "private.d")
+		if os.path.exists(privated):
+			shutil.rmtree(privated)
+			os.mkdir(privated)
+		
+		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
+	
+	def _create_motd(self, image_mpoint, role_name=None):
+		# Create message of the day
+		for name in ("etc/motd", "etc/motd.tail"):
+			motd_filename = os.path.join(image_mpoint, name)
+			if os.path.exists(motd_filename):
+				dist = disttool.linux_dist()
+				motd = MOTD % dict(
+					dist_name = dist[0],
+					dist_version = dist[1],
+					bits = 64 if disttool.uname()[4] == "x86_64" else 32,
+					role_name = role_name,
+					bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
+				)
+				write_file(motd_filename, motd, error_msg="Cannot patch motd file '%s' %s %s")
 	
 	def _rsync(self, src, dst, excludes=None, xattr=True):
 		rsync = Rsync()

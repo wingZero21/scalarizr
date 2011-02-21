@@ -29,6 +29,7 @@ class NimbulaPlatform(Ec2LikePlatform):
 				timeout = int(self._cnf.rawini.get(self.name, OPT_USERDATA_TIMEOUT))
 			except:
 				timeout = 180
+			self._logger.info('Waiting for user data.')
 			wait_until(os.path.exists, (path, ), logger=self._logger, timeout=timeout, sleep=1)
 			rawmeta = filetool.read_file(path)
 			if not rawmeta:

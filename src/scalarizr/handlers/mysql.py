@@ -18,7 +18,7 @@ from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 from scalarizr.util import system2, cryptotool, disttool, filetool, \
-	firstmatched, cached, validators, initdv2, software, wait_until
+	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
@@ -645,7 +645,7 @@ class MysqlHandler(ServiceCtlHanler):
 			my_cli = spawn_mysql_cli(ROOT_USER, root_password)
 			try:
 				# Add user
-				pma_password = self._pwgen()
+				pma_password = cryptotool.pwgen(20)
 				self._add_mysql_user(my_cli, PMA_USER, pma_password, pma_server_ip)
 			finally:
 				# Close connection
@@ -1362,9 +1362,9 @@ class MysqlHandler(ServiceCtlHanler):
 		#priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
 		
 		# Generate passwords
-		root_password = root_pass if root_pass else self._pwgen()
-		repl_password = repl_pass if repl_pass else self._pwgen()
-		stat_password = stat_pass if stat_pass else self._pwgen()
+		root_password = root_pass if root_pass else cryptotool.pwgen(20)
+		repl_password = repl_pass if repl_pass else cryptotool.pwgen(20)
+		stat_password = stat_pass if stat_pass else cryptotool.pwgen(20)
 		"""
 		# Delete old users
 		my_cli.sendline("DELETE FROM mysql.user WHERE User in ('%s', '%s', '%s');" % (root_user, repl_user, stat_user))
@@ -1434,9 +1434,6 @@ class MysqlHandler(ServiceCtlHanler):
 		my_cli.sendline("FLUSH PRIVILEGES;")
 		my_cli.expect('mysql>')
 		
-	def _pwgen(self):
-		return re.sub('[^\w]', '', cryptotool.keygen(20))
-
 	def _update_config(self, data): 
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
 	

@@ -9,10 +9,12 @@ from M2Crypto.Rand import rand_bytes
 import binascii
 import hmac
 import hashlib
+import re
 try:
 	import timemodule as time
 except ImportError:
 	import time
+
 
 crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
 
@@ -73,3 +75,6 @@ def sign_http_request(data, key, timestamp=None):
 	if sign.endswith('\n'):
 		sign = sign[:-1]
 	return sign, date
+
+def pwgen(size):
+	return re.sub('[^\w]', '', keygen(size*2))[:size]
