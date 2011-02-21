@@ -53,33 +53,38 @@ class NimbulaRebundleHandler(Handler):
 			image_path				= os.path.join(self.rebundle_dir, image_name)
 			
 			""" Getting root device size """
+			self._logger.debug('Getting root device size')
 			fs_list = df() 
 			for fs in fs_list:
 				if fs.mpoint == '/':
 					root_size = fs.size
+			self._logger.debug('Root device size: %s', root_size)
 					
 			""" Getting swap size """
+			self._logger.debug('Getting swap size')
 			raw_swap_list = system2('swapon -s', shell = True)[0].splitlines()
 			if len(raw_swap_list) > 1:
 				swap_size = int(raw_swap_list[1].split()[2])
+			self._logger.debug('Swap device size: %s', swap_size)
 			
 			""" Copying root to temp directory """
 			self._logger.info("Copying / to temporary dir %s" % self.tmp_root_dir)
 			self._rsync('/', self.tmp_root_dir, excludes=excludes)
+			self._logger.info('Making special dirs')
 			self._make_spec_dirs(self.tmp_root_dir, excludes)
 			
 			""" Distro-based adaptation"""
 			self.adapter.adapt(self)
 			
 			""" Image creation """
-			self._logger.debug('Creating image file: %s' % image_path)
+			self._logger.info('Creating image file: %s' % image_path)
 			f = open(image_path, 'w')
 			f.seek((root_size + swap_size) * 1024 + 63*512 - 1)
 			f.write('\0')
 			f.close()
 			
 			""" Partitioning """
-			self._logger.debug('Partitioning image.')
+			self._logger.info('Partitioning image.')
 			start = 62
 			part_string = '%s,%s,L,*\n' % (start+1, root_size*2)
 			if swap_size:
@@ -90,7 +95,7 @@ class NimbulaRebundleHandler(Handler):
 				raise HandlerError('Error occured while partitioning image.\n%s' % err)
 			
 			""" Mapping partitions """
-			self._logger.debug('Creating device map on image.')		
+			self._logger.info('Creating device map on image.')		
 			out, err, ret_code = system2('kpartx -av %s' % image_path, shell=True, raise_exc=False)
 			if ret_code:
 				raise HandlerError('Error occured while creating device map.\n%s' % err)			
@@ -98,7 +103,7 @@ class NimbulaRebundleHandler(Handler):
 			root_dev_name = '/dev/mapper/%sp1' % self.loop.split('/')[-1]
 			
 			""" Create file systems on the partitions """
-			self._logger.debug('Creating filesystem on root partition.')			
+			self._logger.info('Creating filesystem on root partition.')			
 			out, err, ret_code = system2('mkfs -t ext3 -L root -m 0 -I 128 %s' % root_dev_name, shell=True)			
 			if ret_code:
 				raise HandlerError("Can't create filesystem on device %s:\n%s" % (root_dev_name, err))
@@ -121,12 +126,12 @@ class NimbulaRebundleHandler(Handler):
 			mount(root_dev_name, self.root_mpoint)
 			try:
 				""" Snapshot copy from temp dir to image """
-				self._logger.info('Copying snapshot to image.')
+				self._logger.info('Copying snapshot %s to image %s', self.tmp_root_dir, self.root_mpoint)
 				self._rsync(self.tmp_root_dir + os.sep, self.root_mpoint, excludes=excludes)
 				self._make_spec_dirs(self.root_mpoint, excludes)
 				
 				""" Scalr user creation """
-				self._logger.info('Creating "scalr" user.')
+				self._logger.debug('Creating "scalr" user')
 				shell = pexpect.spawn('/bin/sh')
 				try:
 					shell.expect('#')
@@ -157,16 +162,16 @@ class NimbulaRebundleHandler(Handler):
 			self.loop = self.root_mpoint = None
 			
 			""" Grub installation """
+			self._logger.info('Installing grub to the image %s' % image_name)			
 			grub_path = whereis('grub')
 			if not grub_path:
 				raise HandlerError("Grub executable was not found.")
 			grub_path = self.tmp_root_dir + grub_path[0]
 			stdin = 'device (hd0) %s\nroot (hd0,0)\nsetup (hd0)\n' % image_path
-			self._logger.info('Installing grub to the image %s' % image_name)			
 			system2('%s --batch --no-floppy --device-map=/dev/null' % grub_path, stdin = stdin, shell=True)
 			
 			""" Image compression """
-			self._logger.debug('Compressing image')
+			self._logger.info('Tarring image %s into %s', image_name, targz_path)
 			tar = Tar()
 			tar.create().gzip().sparse()
 			tar.archive(targz_path)
@@ -174,6 +179,7 @@ class NimbulaRebundleHandler(Handler):
 			system2(str(tar), shell=True)
 			
 			""" Uploading image """
+			self._logger.info('Uploading image %s', targz_path)
 			nimbula_conn = self.platform.new_nimbula_connection() 
 			image = nimbula_conn.add_machine_image(message.role_name, file=targz_path)
 
@@ -214,7 +220,7 @@ class NimbulaRebundleHandler(Handler):
 	@property
 	def adapter(self):
 		if not hasattr(self, '_adapter'):
-			self._adapter = RedhatAdapter() if disttool._is_redhat_based else DebianAdapter()
+			self._adapter = RedHatAdapter() if disttool._is_redhat_based else DebianAdapter()
 		return self._adapter
 				
 	def _make_spec_dirs(self, root_path, excludes):
@@ -263,6 +269,7 @@ class NimbulaRebundleHandler(Handler):
 class RedHatAdapter:
 	def adapt(self, handler):
 		""" Grub configuration """
+		handler._logger.info('Configuring Grub')
 		kernels = [file for file in os.listdir(os.path.join(handler.tmp_root_dir, 'boot')) if file.startswith('vmlinuz-')]
 		grubdir = os.path.join(handler.tmp_root_dir, 'usr', 'share', 'grub', '%s-redhat' % disttool.arch())
 		boot_grub_path = os.path.join(handler.tmp_root_dir, 'boot', 'grub')
@@ -279,6 +286,7 @@ class RedHatAdapter:
 		write_file(grub_conf_path, grub_conf, logger=handler._logger)
 		
 		""" Enable login on serial console """
+		handler._logger.info('Enabling login to serial console')
 		inittab_path 	= os.path.join(handler.tmp_root_dir, 'etc', 'inittab')
 		inittab			= read_file(inittab_path, logger=handler._logger) or ''
 		inittab 		+= 'T0:12345:respawn:/sbin/agetty -L ttyS0 38400\n'
@@ -293,6 +301,8 @@ class RedHatAdapter:
 class DebianAdapter:
 	def adapt(self, handler):		
 		""" Grub configuration """
+		handler._logger.info('Configuring Grub')
+		
 		boot_grub_path = os.path.join(handler.tmp_root_dir, 'boot', 'grub')
 		if not os.path.exists(boot_grub_path):
 			os.mkdir(boot_grub_path)
@@ -328,6 +338,7 @@ class DebianAdapter:
 			umount(mpoint=handler.tmp_root_dir + '/dev')
 			
 		""" Enable login on serial console """
+		handler._logger.info('Enabling login to serial console')
 		inittab_path 	= os.path.join(handler.tmp_root_dir, 'etc', 'inittab')
 		inittab			= read_file(inittab_path, logger=handler._logger) or ''
 		inittab 		+= 'T0:23:respawn:/sbin/getty -L ttyS0 38400 vt100\n'
