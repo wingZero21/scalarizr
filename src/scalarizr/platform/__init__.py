@@ -8,6 +8,8 @@ from scalarizr.util.filetool import read_file
 import os
 import re
 import socket
+import urllib2
+import logging
 
 class PlatformError(BaseException):
 	pass
@@ -34,7 +36,7 @@ class Platform():
 	name = None
 	_arch = None
 	_access_data = None
-	_metadata = None
+	_userdata = None
 	
 	def get_private_ip(self):
 		return self.get_public_ip()
@@ -44,19 +46,18 @@ class Platform():
 	
 	def get_user_data(self, key=None):
 		cnf = bus.cnf
-		if self._metadata is None:
-			self._metadata = {}
+		if self._userdata is None:
+			self._userdata = {}
 			path = cnf.private_path('.user-data')			
 			if os.path.exists(path):
 				rawmeta = read_file(path)
 				if not rawmeta:
 					raise PlatformError("Empty user-data")
-				for k, v in re.findall("([^=]+)=([^;]*);?", rawmeta):
-					self._metadata[k] = v
+				self._userdata = self._parse_user_data(rawmeta)
 		if key:
-			return self._metadata[key] if key in self._metadata else None
+			return self._userdata[key] if key in self._userdata else None
 		else:
-			return self._metadata 
+			return self._userdata
 
 	def set_access_data(self, access_data):
 		self._access_data = access_data
@@ -90,7 +91,100 @@ class Platform():
 	@property
 	def cloud_storage_path(self):
 		return self.get_user_data('cloud_storage_path')
+	
+	def _parse_user_data(self, raw_userdata):
+		userdata = {}
+		for k, v in re.findall("([^=]+)=([^;]*);?", raw_userdata):
+			userdata[k] = v
+		return userdata
 
+class Ec2LikePlatform(Platform):
+	
+	_meta_url = "http://169.254.169.254/"
+	_userdata_key = 'latest/user-data'
+	_metadata_key = 'latest/meta-data'
+	_metadata = {}
+	_userdata = None
+	
+	def __init__(self):
+		self._logger = logging.getLogger(__name__)
+		self._cnf = bus.cnf
+	
+	def _get_property(self, name):
+		if not self._metadata.has_key(name):
+			full_name = os.path.join(self._metadata_key, name)
+			self._metadata[name] = self._fetch_metadata(full_name)
+		return self._metadata[name]
+	
+	def get_user_data(self, key=None):
+		if self._userdata is None:
+			raw_userdata = self._fetch_metadata(self._userdata_key)
+			self._userdata = self._parse_user_data(raw_userdata)			
+		if key:
+			return self._userdata[key] if key in self._userdata else None
+		else:
+			return self._userdata
+
+	def _fetch_metadata(self, key):
+		url = self._meta_url + key
+		try:
+			r = urllib2.urlopen(url)
+			return r.read().strip()
+		except IOError, e:
+			if isinstance(e, urllib2.HTTPError):
+				if e.code == 404:
+					return ""
+			raise PlatformError("Cannot fetch %s metadata url '%s'. Error: %s" % (self.name, url, e))
+		
+	def get_private_ip(self):
+		return self._get_property("local-ipv4")
+	
+	def get_public_ip(self):
+		return self._get_property("public-ipv4")
+	
+	def get_public_hostname(self):
+		return self._get_property("public-hostname")
+	
+	def get_instance_id(self):
+		return self._get_property("instance-id")
+	
+	def get_instance_type(self):
+		return self._get_property("instance-type")
+	
+	def get_ami_id(self):
+		return self._get_property("ami-id")
+
+	def get_ancestor_ami_ids(self):
+		return self._get_property("ancestor-ami-ids").split("\n")
+	
+	def get_kernel_id(self):
+		return self._get_property("kernel-id")
+	
+	def get_ramdisk_id(self):
+		return self._get_property("ramdisk-id")
+	
+	def get_avail_zone(self):
+		return self._get_property("placement/availability-zone")
+	
+	def get_region(self):
+		return self.get_avail_zone()[0:-1]
+	
+	def get_block_device_mapping(self):
+		keys = self._get_property("block-device-mapping").split("\n")
+		ret = {}
+		for key in keys:
+			ret[key] = self._get_property("block-device-mapping/" + key)
+		return ret
+	
+	def block_devs_mapping(self):
+		keys = self._get_property("block-device-mapping").split("\n")
+		ret = list()
+		for key in keys:
+			ret.append((key, self._get_property("block-device-mapping/" + key)))
+		return ret
+		
+	def get_ssh_pub_key(self):
+		return self._get_property("public-keys/0/openssh-key")
 
 class Architectures:
 	I386 = "i386"

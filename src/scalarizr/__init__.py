@@ -36,7 +36,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.12"	
+__version__ = "0.7.13"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -308,7 +308,8 @@ def _apply_user_data(cnf):
 
 def _detect_scalr_version():
 	pl = bus.platform
-	if pl:
+	cnf = bus.cnf
+	if pl and cnf.state != ScalarizrState.IMPORTING:
 		return (2, 2) if pl.get_user_data('cloud_storage_path') else (2, 1)
 	return (2, 0)	
 

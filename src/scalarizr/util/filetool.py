@@ -10,6 +10,10 @@ import os
 import math
 import logging
 
+try:
+	from collections import namedtuple
+except ImportError:
+	from scalarizr.externals.collections import namedtuple
 
 BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
 PART_SUFFIX = '.part.'	
@@ -305,3 +309,9 @@ class Tar:
 			files=" ".join(self._files)
 		)
 		return ret.strip()
+	
+__dftuple = namedtuple('df', 'device, size, free, mpoint')
+
+def df():
+	out = system2(('df', '-Pk'))[0]
+	return [__dftuple(line[0], int(line[1]), int(line[2]), line[-1]) for line in map(str.split, out.splitlines()[1:])]
