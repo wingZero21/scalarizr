@@ -30,14 +30,15 @@ class RackspaceLifeCycleHandler(Handler):
 				
 	def _insert_iptables_rules(self):
 		self._logger.debug('Adding iptables rules for scalarizr ports')		
-		iptables = IpTables()		
-		rules = []
-		
-		# Scalarizr ports
-		rules.append(RuleSpec(dport=8012, jump='ACCEPT', protocol=P_TCP))
-		rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
-		rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
-		
-		for rule in rules:
-			iptables.insert_rule(None, rule_spec = rule)
+		iptables = IpTables()
+		if iptables.usable():		
+			rules = []
+			
+			# Scalarizr ports
+			rules.append(RuleSpec(dport=8012, jump='ACCEPT', protocol=P_TCP))
+			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
+			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
+			
+			for rule in rules:
+				iptables.insert_rule(None, rule_spec = rule)
 		

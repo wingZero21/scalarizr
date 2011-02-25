@@ -207,6 +207,9 @@ class CassandraScalingHandler(ServiceCtlHanler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._iptables = IpTables()
+		if not self._ip_tables.usable():
+			raise HandlerError('iptables is not installed. iptables is required for cassandra behaviour')
+		
 
 		bus.on("init", self.on_init)
 

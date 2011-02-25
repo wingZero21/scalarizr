@@ -202,7 +202,8 @@ class Storage:
 	def restore_config(filename):
 		fp = open(filename, 'r')
 		try:
-			return json.load(fp)
+			ret = json.load(fp)
+			return dict(zip(list(key.encode("ascii") for key in ret.keys()), ret.values()))
 		finally:
 			fp.close()
 	

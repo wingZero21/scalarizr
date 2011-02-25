@@ -248,7 +248,8 @@ class ApacheHandler(ServiceCtlHanler):
 		
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
-		iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
+		if iptables.usable():
+			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
 		
 	def _rpaf_modify_proxy_ips(self, ips, operation=None):
 		self._logger.debug('Modify RPAFproxy_ips (operation: %s, ips: %s)', operation, ','.join(ips))
@@ -473,8 +474,8 @@ class ApacheHandler(ServiceCtlHanler):
 					ssl_conf.comment(".//SSLCACertificateFile")	
 					
 			ssl_conf.write(ssl_conf_path)
-		else:
-			raise HandlerError("Apache's ssl configuration file %s doesn't exist" % ssl_conf_path)
+		#else:
+		#	raise HandlerError("Apache's ssl configuration file %s doesn't exist" % ssl_conf_path)
 
 	
 	def _check_mod_ssl(self):

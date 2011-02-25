@@ -108,11 +108,11 @@ def main():
 			str = read_file(options.msgfile, error_msg='Cannot open message file %s' % options.msgfile)
 			if str:
 				msg.fromxml(str)
+		else:
+			msg.body = kv			
 			
 		if options.name:
 			msg.name = options.name
-			
-		msg.body = kv
 			
 		producer.send(options.queue, msg)
 	

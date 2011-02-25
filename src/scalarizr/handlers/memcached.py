@@ -133,6 +133,8 @@ class MemcachedHandler(ServiceCtlHanler):
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
 		self._ip_tables = IpTables()
+		if not self._ip_tables.usable():
+			raise HandlerError('iptables is not installed. iptables is required for memcached behaviour')
 		self._port = 11211
 		
 		bus.on("init", self.on_init)

@@ -407,7 +407,8 @@ class NginxHandler(ServiceCtlHanler):
 
 	def _insert_iptables_rules(self, *args, **kwargs):
 		iptables = IpTables()
-		iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
+		if iptables.usable():
+			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
 
 	def _update_vhosts(self):
 		self._logger.debug("Requesting virtual hosts list")

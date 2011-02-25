@@ -6,6 +6,8 @@ Created on Jul 21, 2010
 
 from scalarizr.util import system2
 
+import os
+
 
 P_TCP = "tcp"
 P_UDP = "udp"
@@ -141,3 +143,6 @@ class IpTables(object):
 	def flush(self, chain='INPUT'):
 		rule = '%s -F %s' % (self.executable, chain)
 		system2(rule, shell=True)
+		
+	def usable(self):
+		return os.access(self.executable, os.X_OK)

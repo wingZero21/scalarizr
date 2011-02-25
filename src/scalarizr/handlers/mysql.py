@@ -28,9 +28,11 @@ import time, pwd, random, shutil
 import glob
 import string
 import ConfigParser
+import signal
 
 # Extra
 import pexpect
+
 
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
@@ -1252,7 +1254,8 @@ class MysqlHandler(ServiceCtlHanler):
 	
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
-		iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
+		if iptables.usable():
+			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
 	
 	def _get_ini_options(self, *args):
 		ret = []
@@ -1346,7 +1349,7 @@ class MysqlHandler(ServiceCtlHanler):
 	def _repair_original_mycnf(self):
 		self._mysql_config.set('mysqld/datadir', '/var/lib/mysql')
 		self._mysql_config.remove('mysqld/log_bin')
-	
+
 	def _add_mysql_users(self, root_user, repl_user, stat_user, root_pass=None, repl_pass=None, stat_pass=None, mysqld=None, my_cli=None):
 		self._logger.info("Adding mysql system users")
 		should_term_mysqld = False
@@ -1358,39 +1361,13 @@ class MysqlHandler(ServiceCtlHanler):
 			
 		my_cli = my_cli or spawn_mysql_cli()
 		
-		#mysql_ver = version.StrictVersion(get_mysql_version(my_cli))
-		#priv_count = 28 if mysql_ver >= version.StrictVersion('5.1.6') else 26
-		
 		# Generate passwords
 		root_password = root_pass if root_pass else self._pwgen()
 		repl_password = repl_pass if repl_pass else self._pwgen()
 		stat_password = stat_pass if stat_pass else self._pwgen()
-		"""
-		# Delete old users
-		my_cli.sendline("DELETE FROM mysql.user WHERE User in ('%s', '%s', '%s');" % (root_user, repl_user, stat_user))
-		my_cli.expect('mysql>')
-		
-		# Add users
-		
-		# 'scalr'@'localhost' allow all
-		my_cli.sendline("INSERT INTO mysql.user VALUES('localhost','"+root_user+"',PASSWORD('"+root_password+"')" + ",'Y'"*priv_count + ",''"*4 +',0'*4+");")
-		my_cli.expect('mysql>')
-
-		# 'scalr_repl'@'%' allow Repl_slave_priv
-		my_cli.sendline("INSERT INTO mysql.user (Host, User, Password, Repl_slave_priv) VALUES ('%','"+repl_user+"',PASSWORD('"+repl_password+"'),'Y');")
-		my_cli.expect('mysql>')
-
-		# 'scalr_stat'@'%' allow Repl_client_priv
-		my_cli.sendline("INSERT INTO mysql.user (Host, User, Password, Repl_client_priv) VALUES ('%','"+stat_user+"',PASSWORD('"+stat_password+"'),'Y');")
-		my_cli.expect('mysql>')
-		
-		my_cli.sendline("FLUSH PRIVILEGES;")
-		my_cli.expect('mysql>')
-		"""
 		self._add_mysql_user(my_cli, root_user, root_password, 'localhost')
 		self._add_mysql_user(my_cli, repl_user, repl_password, '%', ('Repl_slave_priv',))
 		self._add_mysql_user(my_cli, stat_user, stat_password, '%', ('Repl_client_priv',))
-		
 		
 		if should_term_mysqld:
 			term_mysqld(mysqld)
@@ -1571,7 +1548,7 @@ class MysqlHandler(ServiceCtlHanler):
 				os.makedirs(directory)
 				src_dir = os.path.dirname(raw_value + "/") + "/"
 				if os.path.isdir(src_dir):
-					self._logger.debug('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
+					self._logger.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
 					system2(str(rsync), shell=True)
@@ -1630,9 +1607,8 @@ def spawn_mysqld():
 		pass
 
 def term_mysqld(mysqld):
-	mysqld.sendintr()
-	mysqld.close()
-	wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
+	mysqld.terminate(force=True)
+	#wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
 
 
 def spawn_mysql_cli(user=None, password=None):
