@@ -45,14 +45,17 @@ class NimbulaRebundleHandler(Handler):
 		self.platform	= bus.platform
 		bus.define_events(
 			# Fires before rebundle starts
+			# @param role_name
 			"before_rebundle", 
 			
 			# Fires after rebundle complete
-			# @param param: 
+			# @param role_name
+			# @param snapshot_id 
 			"rebundle", 
 			
 			# Fires on rebundle error
 			# @param role_name
+			# @param last_error
 			"rebundle_error",
 			
 			# Fires on bundled volume cleanup. Usefull to remove password files, user activity, logs
@@ -82,14 +85,24 @@ class NimbulaRebundleHandler(Handler):
 			for fs in fs_list:
 				if fs.mpoint == '/':
 					root_size = fs.size
+					root_free = fs.free
 			self._logger.debug('Root device size: %s', root_size)
-					
+			
+			used_space = root_size - root_free
+			required_space = used_space * 2.5
+			if required_space < root_free:
+				raise HandlerError("Not enough free disk space for rebundle." + 
+									"Free space on device: %sMb, Required at least: %sMb" %
+									(root_free/1024, required_space/1024))
+			
 			""" Getting swap size """
 			self._logger.debug('Getting swap size')
 			raw_swap_list = system2('swapon -s', shell = True)[0].splitlines()
 			if len(raw_swap_list) > 1:
 				swap_size = int(raw_swap_list[1].split()[2])
 			self._logger.debug('Swap device size: %s', swap_size)
+			
+			bus.fire("before_rebundle", role_name=message.role_name)
 			
 			""" Copying root to temp directory """
 			self._logger.info("Copying / to temporary dir %s" % self.tmp_root_dir)
@@ -182,6 +195,8 @@ class NimbulaRebundleHandler(Handler):
 					shell.expect('Retype new UNIX password:')
 					shell.sendline(scalr_password)
 					shell.expect('passwd: password updated successfully')
+				except pexpect.TIMEOUT:
+					raise HandlerError('Error occured while creating scalr user. Out: %s' % shell.before)
 				finally:
 					shell.close()
 			finally:				
@@ -225,6 +240,7 @@ class NimbulaRebundleHandler(Handler):
 			self._logger.debug("Updating message with OS and software info")
 			msg_data.update(software.system_info())			
 			self.send_message(Messages.REBUNDLE_RESULT, msg_data)
+			bus.fire("rebundle", role_name=message.role_name, snapshot_id=image.name)
 			
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
@@ -236,6 +252,7 @@ class NimbulaRebundleHandler(Handler):
 				last_error = last_error,
 				bundle_task_id = message.bundle_task_id
 			))
+			bus.fire("rebundle_error", role_name=message.role_name, last_error=last_error)
 			
 		finally:
 			""" Perform cleanup """ 
@@ -289,6 +306,7 @@ class NimbulaRebundleHandler(Handler):
 		if os.path.exists(privated):
 			shutil.rmtree(privated)
 			os.mkdir(privated)
+			os.chmod(privated, 0775)
 		
 		bus.fire("rebundle_cleanup_image", image_mpoint=image_mpoint)
 	
@@ -407,6 +425,8 @@ class DebianAdapter:
 				shell.expect('#')
 				shell.sendline('update-grub')
 				shell.expect('#')
+			except pexpect.TIMEOUT:
+				raise HandlerError('Error occured while updating grub. Out: %s' % shell.before)
 			finally:
 				shell.close()
 		finally:
