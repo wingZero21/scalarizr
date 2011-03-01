@@ -260,7 +260,7 @@ class EphSnapshotProvider(object):
 	_lvm = None
 	_state_map = None
 	
-	def __init__(self, chunk_size=10):
+	def __init__(self, chunk_size=100):
 		self.chunk_size = chunk_size		
 		self._logger = logging.getLogger(__name__)
 		self._transfer = Transfer()

@@ -156,8 +156,8 @@ class NimbulaRebundleHandler(Handler):
 			system2('tune2fs -i 0 -U %s %s' % (root_uuid, root_dev_name), shell=True, raise_exc=False)			
 			
 			""" Root device mount """
-			self._logger.debug('Mounting root device to %s.' % self.root_mpoint)
 			self.root_mpoint = os.path.join(self.rebundle_dir, 'mnt')
+			self._logger.debug('Mounting root device to %s.' % self.root_mpoint)			
 			if not os.path.isdir(self.root_mpoint):
 				os.mkdir(self.root_mpoint)	
 			mount(root_dev_name, self.root_mpoint)

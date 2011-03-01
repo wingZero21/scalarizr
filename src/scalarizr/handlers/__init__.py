@@ -128,7 +128,7 @@ class MessageListener:
 				pl.set_access_data(message.platform_access_data)
 			if 'scalr_version' in message.meta:
 				try:
-					ver = tuple(message.meta['scalr_version'].strip().split('.'))
+					ver = tuple(map(int, message.meta['scalr_version'].strip().split('.')))
 				except:
 					pass
 				else:
@@ -248,7 +248,7 @@ class ServiceCtlHanler(Handler):
 			bus.fire(self._service_name + '_reload')
 		except initdv2.InitdError, e:
 			if e.code == initdv2.InitdError.NOT_RUNNING:
-				self._logger.debug('%s not running')
+				self._logger.debug('%s not running', self._service_name)
 			else:
 				raise
 		self._logger.debug("%s reloaded", self._service_name)

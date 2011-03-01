@@ -36,7 +36,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.13"	
+__version__ = "0.7.14"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -542,8 +542,8 @@ def main():
 		cnf.on('apply_user_data', _apply_user_data)
 		
 		# Move private configuration to loop device
-		privated_img_path = '/mnt/privated.img'
-		_mount_private_d(cnf.private_path(), privated_img_path, 10000)
+		#privated_img_path = '/mnt/privated.img'
+		#_mount_private_d(cnf.private_path(), privated_img_path, 10000)
 		
 
 		if optparser.values.configure:
@@ -565,7 +565,7 @@ def main():
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			priv_path = cnf.private_path()
 			for file in os.listdir(priv_path):
-				if file == '.user-data':
+				if file in ('.user-data', '.update'):
 					continue
 				path = os.path.join(priv_path, file)
 				os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
