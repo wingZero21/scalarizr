@@ -41,13 +41,15 @@ class Ec2Platform(Ec2LikePlatform):
 		"us-east-1" 		: "ec2.amazonaws.com",
 		"us-west-1" 		: "ec2.us-west-1.amazonaws.com",
 		"eu-west-1" 		: "ec2.eu-west-1.amazonaws.com",
-		"ap-southeast-1" 	: "ec2.ap-southeast-1.amazonaws.com"
+		"ap-southeast-1" 	: "ec2.ap-southeast-1.amazonaws.com",
+		"ap-northeast-1" 	: "ec2.ap-northeast-1.amazonaws.com"
 	}
 	s3_endpoints = {
 		'us-east-1' 		: 's3.amazonaws.com',
 		'us-west-1' 		: 's3-us-west-1.amazonaws.com',
 		'eu-west-1' 		: 's3.amazonaws.com',
-		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com'
+		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com',
+		'ap-northeast-1' 	: 's3-ap-northeast-1.amazonaws.com'
 	}	
 
 	_logger = None	
