@@ -79,7 +79,8 @@ def main():
 		sys.exit()
 
 	
-
+	if os.path.exists('/etc/init.d/scalarizr'):
+		system2(('/etc/init.d/scalarizr', 'stop'))
 	system2(('/etc/init.d/snmpd', 'stop'))
 	try:
 		''' Install and configure scalarizr '''		

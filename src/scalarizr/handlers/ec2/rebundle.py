@@ -305,7 +305,7 @@ class RebundleStratery:
 		# Ubuntu 10.04 mountall workaround
 		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
 		# @see http://alestic.com/2010/09/ec2-bug-mountall
-		if disttool.is_ubuntu():
+		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			try:
 				mnt = fstab.find(mpoint='/mnt')[0]
 				if mnt.options.find('nobootwait') >= 0:			

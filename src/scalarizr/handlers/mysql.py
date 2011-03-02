@@ -1598,12 +1598,14 @@ class MysqlHandler(ServiceCtlHanler):
 
 def spawn_mysqld():
 	try:
+		_logger.debug('Spawning mysqld')
 		return pexpect.spawn(mysqld_path + ' --skip-grant-tables')
 	except pexpect.ExceptionPexpect, e:
 		raise HandlerError('Cannot start mysqld. Error: %s' % e)
 		pass
 
 def term_mysqld(mysqld):
+	_logger.debug('Terminating mysqld')
 	mysqld.terminate(force=True)
 	#wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
 
@@ -1615,6 +1617,7 @@ def spawn_mysql_cli(user=None, password=None):
 			cmd += ' -u ' + user
 		if password:
 			cmd += ' -p'
+		_logger.debug('Spawning mysql client')
 		exp = pexpect.spawn(cmd)
 		
 		if password:
@@ -1624,7 +1627,7 @@ def spawn_mysql_cli(user=None, password=None):
 		exp.expect('mysql>')
 		return exp
 	except pexpect.ExceptionPexpect:
-		raise HandlerError('Cannot start mysql client tool. Error: %s' % exp.before)
+		raise HandlerError('Cannot start mysql client. Error: %s' % exp.before)
 
 def get_mysql_version(my_cli):
 	my_cli.sendline('SELECT VERSION();')
