@@ -1600,7 +1600,7 @@ def spawn_mysqld():
 	if not os.path.isdir('/var/run/mysqld'):
 		os.makedirs('/var/run/mysqld', mode=0755)
 		mysql_user	= pwd.getpwnam("mysql")
-		os.chown('/var/run/mysqld', -1, mysql_user.pw_gid)
+		os.chown('/var/run/mysqld', mysql_user.pw_uid, -1)
 	try:
 		_logger.debug('Spawning mysqld')
 		return pexpect.spawn(mysqld_path + ' --skip-grant-tables')
