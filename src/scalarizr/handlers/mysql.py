@@ -51,13 +51,12 @@ change_master_timeout = 30
 class MysqlInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
 	def __init__(self):
-		if disttool.is_redhat_based():
-			initd_script = '/etc/init.d/mysqld'
-		elif disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+
+		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			initd_script = ('/usr/sbin/service', 'mysql')
 		else:
-			initd_script = '/etc/init.d/mysql'
-		
+			initd_script = firstmatched(os.path.exists, ('/etc/init.d/mysqld', '/etc/init.d/mysql'))
+			
 		pid_file = None
 		try:
 			out = system2("my_print_defaults mysqld", shell=True)
@@ -218,7 +217,9 @@ STORAGE_BINLOG 			= "mysql-misc/binlog"
 STORAGE_VOLUME_CNF 		= 'mysql.json'
 STORAGE_SNAPSHOT_CNF 	= 'mysql-snap.json'
 
-BACKUP_CHUNK_SIZE = 200*1024*1024
+BACKUP_CHUNK_SIZE 		= 200*1024*1024
+
+DEFAULT_DATADIR			= "/var/lib/mysql"
 
 
 def get_handlers ():
@@ -402,7 +403,7 @@ class MysqlCnfController(CnfController):
 	def _start_service(self):
 		if not hasattr(self, '_mysql_cnf_err_re'):
 			self._mysql_cnf_err_re = re.compile('Unknown option|ERROR')
-		stderr = system2('%s --help' % self._mysqld_path, shell=True)[1]
+		stderr = system2('%s --user=mysql --help' % self._mysqld_path, shell=True)[1]
 		if re.search(self._mysql_cnf_err_re, stderr):
 			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
 		
@@ -1091,7 +1092,13 @@ class MysqlHandler(ServiceCtlHanler):
 		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
 
 		try:
-			if not storage_valid and self._mysql_config.get('mysqld/datadir').find(self._data_dir) == 0:
+			try:
+				datadir = self._mysql_config.get('mysqld/datadir')
+			except NoPathError:
+				""" There is no datadir in config """
+				datadir = DEFAULT_DATADIR
+				self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
+			if not storage_valid and datadir.find(self._data_dir) == 0:
 				# When role was created from another mysql role it contains modified my.cnf settings 
 				self._repair_original_mycnf()
 			
@@ -1197,6 +1204,11 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		# Change configuration files
 		self._logger.info("Changing configuration files")
+
+		if not 'datadir' in self._mysql_config.options('mysqld'):
+			""" Set default value for datadir """
+			self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
+
 		self._move_mysql_dir('mysqld/datadir', self._data_dir)
 		self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 		self._replication_init(master=False)
@@ -1603,7 +1615,7 @@ def spawn_mysqld():
 		os.chown('/var/run/mysqld', mysql_user.pw_uid, -1)
 	try:
 		_logger.debug('Spawning mysqld')
-		return pexpect.spawn(mysqld_path + ' --skip-grant-tables')
+		return pexpect.spawn(mysqld_path + ' --user=mysql --skip-grant-tables')
 	except pexpect.ExceptionPexpect, e:
 		raise HandlerError('Cannot start mysqld. Error: %s' % e)
 		pass
