@@ -15,7 +15,7 @@ _is_debian = _is_ubuntu = False
 _is_rhel = _is_centos = _is_fedora = False
 
 _debian_based_dists = ['debian', 'ubuntu']
-_redhat_based_dists = ['centos', 'rhel', 'redhat', 'fedora']
+_redhat_based_dists = ['centos', 'rhel', 'redhat', 'fedora', 'enterprise linux enterprise linux server']
 
 
 _uname = platform.uname()

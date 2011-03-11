@@ -1,6 +1,7 @@
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
+from scalarizr.util import firstmatched
 from scalarizr.util.filetool import read_file, write_file
 
 import re
@@ -30,7 +31,7 @@ class SSHKeys(Handler):
 		elif disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			init_script = ('/usr/sbin/service', 'ssh')
 		else:
-			init_script = '/etc/init.d/ssh'
+			init_script = firstmatched(os.path.exists, ('/etc/init.d/ssh', '/etc/init.d/sshd'))
 		self._sshd_init = ParametrizedInitScript('sshd', init_script)
 		
 		bus.on(init=self.on_init)
