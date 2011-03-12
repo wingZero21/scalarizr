@@ -931,8 +931,8 @@ if disttool.is_linux():
 			return self.devname
 			
 		def make(self):
-			self._logger.info("Make EBS volume %s from volume %s (excludes: %s)", 
-					self.devname, self._volume, ":".join(self.excludes))
+			self._logger.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)", 
+					self.devname, self._volume_size, self._volume, ":".join(self.excludes))
 			LinuxImage.make(self)
 			
 		def cleanup(self):
