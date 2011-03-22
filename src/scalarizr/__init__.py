@@ -559,22 +559,30 @@ def main():
 		
 		# Load INI files configuration
 		cnf.bootstrap(force_reload=True)
-		
-		# At first startup cleanup private configuration
-		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
-			cnf.state = ScalarizrState.BOOTSTRAPPING
-			priv_path = cnf.private_path()
-			for file in os.listdir(priv_path):
-				if file in ('.user-data', '.update'):
-					continue
-				path = os.path.join(priv_path, file)
-				os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+		ini = cnf.rawini
+
+		# Initialize platform module
+		_init_platform()
+		pl = bus.platform
+
+		# Check that service started after dirty bundle
+		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
+			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
+			if server_id and ud_server_id and server_id != ud_server_id:
+				# Reset private configuration
+				priv_path = cnf.private_path()
+				for file in os.listdir(priv_path):
+					if file in ('.user-data', '.update'):
+						continue
+					path = os.path.join(priv_path, file)
+					os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+				cnf.state = ScalarizrState.BOOTSTRAPPING						
+
 		
 		# Initialize local database
 		_init_db()
 		
-		# Initialize platform module
-		_init_platform()
 		
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
