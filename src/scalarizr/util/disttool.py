@@ -4,6 +4,7 @@
 import platform
 import re
 import os
+import string
 
 _uname = None
 _linux_dist = None
@@ -15,7 +16,14 @@ _is_debian = _is_ubuntu = False
 _is_rhel = _is_centos = _is_fedora = False
 
 _debian_based_dists = ['debian', 'ubuntu']
-_redhat_based_dists = ['centos', 'rhel', 'redhat', 'fedora', 'enterprise linux enterprise linux server']
+_redhat_based_dists = map(string.lower, (
+	'centos', 
+	'rhel', 
+	'redhat', 
+	'fedora',
+	'Red Hat Enterprise Linux Server release', # RHEL5, OEL 5.3 - 5.6 
+	'Enterprise Linux Enterprise Linux Server' # OEL 5.0 - 5.2 
+))
 
 
 _uname = platform.uname()
