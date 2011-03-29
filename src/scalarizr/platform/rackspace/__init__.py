@@ -16,6 +16,8 @@ import cloudfiles
 
 Transfer.explore_provider(CFTransferProvider)
 
+auth_url = 'https://auth.api.rackspacecloud.com/v1.0'
+
 def _credentials(username=None, api_key=None):
 	try:
 		username = username or os.environ["CLOUD_SERVERS_USERNAME"]
@@ -31,6 +33,8 @@ def new_cloudfiles_conn(username=None, api_key=None, **kwargs):
 	kwargs = kwargs or dict()
 	if not 'servicenet' in kwargs:
 		kwargs['servicenet'] = True
+	if not 'authurl' in kwargs:
+		kwargs['authurl'] = auth_url
 	return cloudfiles.Connection(*_credentials(username, api_key), **kwargs)
 
 def get_platform():
@@ -83,16 +87,13 @@ class RackspacePlatform(Platform):
 		os.environ['CLOUD_SERVERS_USERNAME'] = self.get_access_data("username").encode("ascii")
 		os.environ['CLOUD_SERVERS_API_KEY'] = self.get_access_data("api_key").encode("ascii")
 		if 'auth_host' in self._access_data:
-			setattr(CloudServersClient, '__DEFAULT_AUTH_URL', CloudServersClient.AUTH_URL)
-			CloudServersClient.AUTH_URL = 'https://%s/v1.0' % self._access_data['auth_host']
+			globals()['auth_url'] = 'https://%s/v1.0' % self._access_data['auth_host']
+			CloudServersClient.AUTH_URL = auth_url
 	
 	def clear_access_data(self):
 		try:
 			del os.environ['CLOUD_SERVERS_USERNAME']
 			del os.environ['CLOUD_SERVERS_API_KEY']
-			if hasattr(CloudServersClient, '__DEFAULT_AUTH_URL'):
-				CloudServersClient.AUTH_URL = getattr(CloudServersClient, '__DEFAULT_AUTH_URL')
-				delattr(CloudServersClient, '__DEFAULT_AUTH_URL')
 		except KeyError:
 			pass
 	
