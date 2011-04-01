@@ -242,12 +242,12 @@ class NginxHandler(ServiceCtlHanler):
 		include.read(self._app_inc_path)
 		
 		server_ip = '%s:%s' % (message.local_ip or message.remote_ip, self._app_port)
-		backends = include.get_list('upstream/server')
+		backends = include.get_list("upstream[@value='backend']/server")
 		if server_ip in backends:
-			include.remove('upstream/server', server_ip)
+			include.remove("upstream[@value='backend']/server", server_ip)
 			# Add 127.0.0.1 If it was the last backend
 			if len(backends) == 1:
-				include.add('upstream/server', '127.0.0.1:80')
+				include.add("upstream[@value='backend']/server", '127.0.0.1:80')
 
 		include.write(self._app_inc_path)
 		self._restart_service()
@@ -352,7 +352,7 @@ class NginxHandler(ServiceCtlHanler):
 				servers.append(server_str)
 		self._logger.debug("QueryEnv returned list of app servers: %s" % servers)
 
-		for entry in backend_include.get_list('upstream/server'):
+		for entry in backend_include.get_list("upstream[@value='backend']/server"):
 			for server in servers:
 				if entry.startswith(server):
 					self._logger.debug("Server %s already in upstream list" % server)
@@ -360,16 +360,16 @@ class NginxHandler(ServiceCtlHanler):
 					break
 			else:
 				self._logger.debug("Removing old entry %s from upstream list" % entry) 
-				backend_include.remove('upstream/server', entry)
+				backend_include.remove("upstream[@value='backend']/server", entry)
 		
 		for server in servers:
 			self._logger.debug("Adding new server %s to upstream list" % server)
-			backend_include.add('upstream/server', server)
+			backend_include.add("upstream[@value='backend']/server", server)
 			
-		if not backend_include.get_list('upstream/server'):
+		if not backend_include.get_list("upstream[@value='backend']/server"):
 			self._logger.debug("Scalr returned empty app hosts list. Adding localhost only")
-			backend_include.add('upstream/server', '127.0.0.1:80')
-		self._logger.info('Upstream servers: %s', ' '.join(backend_include.get_list('upstream/server')))
+			backend_include.add("upstream[@value='backend']/server", '127.0.0.1:80')
+		self._logger.info('Upstream servers: %s', ' '.join(backend_include.get_list("upstream[@value='backend']/server")))
 		
 		# Https configuration
 		# openssl req -new -x509 -days 9999 -nodes -out cert.pem -keyout cert.key
@@ -387,7 +387,7 @@ class NginxHandler(ServiceCtlHanler):
 			
 		if old_include \
 				and not force_reload \
-				and	backend_include.get_list('upstream/server') == old_include.get_list('upstream/server') :
+				and	backend_include.get_list("upstream[@value='backend']/server") == old_include.get_list("upstream[@value='backend']/server") :
 			self._logger.debug("nginx upstream configuration unchanged")
 		else:
 			self._logger.debug("nginx upstream configuration was changed")
