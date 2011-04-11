@@ -12,6 +12,7 @@ from scalarizr.storage.transfer import TransferProvider, TransferError
 from . import ebstool
 
 import os
+import sys
 import logging
 import urlparse
 import string
@@ -257,8 +258,9 @@ class S3TransferProvider(TransferProvider):
 				if file:
 					file.close()
 			
-		except (BotoServerError, OSError), e:
-			raise TransferError, e
+		except:
+			exc = sys.exc_info()
+			raise TransferError, exc[1], exc[2]
 
 	
 	def get(self, remote_path, local_path):
@@ -283,8 +285,9 @@ class S3TransferProvider(TransferProvider):
 			key.get_contents_to_filename(dest_path)			
 			return dest_path			
 			
-		except (BotoServerError, OSError), e:
-			raise TransferError, e
+		except:
+			exc = sys.exc_info()
+			raise TransferError, exc[1], exc[2]
 	
 	def list(self, remote_path):
 		bucket_name, key_name = self._parse_path(remote_path)

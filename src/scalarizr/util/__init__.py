@@ -71,6 +71,50 @@ class _SqliteConnection(object):
 			self._conn = self._creator()
 		return self._conn
 	
+class dicts:
+	
+	@staticmethod
+	def merge(a, b):
+		res = {}
+		for key in a.keys():
+			if not key in b:
+				res[key] = a[key]
+				continue
+			
+			if type(a[key]) != type(b[key]):
+				res[key] = b[key]
+			elif dict == type(a[key]):
+				res[key] = dicts.merge(a[key], b[key])
+			elif list == type(a[key]):
+				res[key] = a[key] + b[key]
+			else:
+				res[key] = b[key]
+			del(b[key])
+		
+		res.update(b)
+		return res
+
+	@staticmethod
+	def encode(a, encoding='ascii'):
+		if not isinstance(a, dict):
+			raise ValueError('dict type expected, but %s passed' % type(a))
+		ret = {}
+		for key, value in a.items():
+			ret[key.encode(encoding)] = dicts.encode(value, encoding) \
+					if isinstance(value, dict) else value.encode(encoding) \
+					if isinstance(value, basestring) else value 
+		return ret
+	
+	@staticmethod
+	def keys2ascii(a):
+		if not isinstance(a, dict):
+			raise ValueError('dict type expected, but %s passed' % type(a))
+		ret = {}
+		for key, value in a.items():
+			ret[key.encode('ascii')] = dicts.keys2ascii(value) if isinstance(value, dict) else value
+		return ret
+
+	
 def cached(f, cache={}):
 	'''
 	Decorator

@@ -36,6 +36,7 @@ class ScriptExecutor(Handler):
 	name = "script_executor"
 	
 	OPT_EXEC_DIR_PREFIX = "exec_dir_prefix"
+	OPT_LOGS_DIR = 'logs_dir'
 	OPT_LOGS_DIR_PREFIX = "logs_dir_prefix"
 	OPT_LOGS_TRUNCATE_OVER = "logs_truncate_over"	
 	
@@ -52,7 +53,6 @@ class ScriptExecutor(Handler):
 	
 	_exec_dir_prefix = None
 	_exec_dir = None
-	_logs_dir_prefix = None
 	_logs_dir = None
 	_logs_truncate_over = None
 	
@@ -80,32 +80,34 @@ class ScriptExecutor(Handler):
 			self._exec_dir_prefix = bus.base_path + os.sep + self._exec_dir_prefix
 			
 		# read logs_dir_prefix
-		self._logs_dir_prefix = self._config.get(sect_name, self.OPT_LOGS_DIR_PREFIX)
-		if not os.path.isabs(self._logs_dir_prefix):
-			self._logs_dir_prefix = bus.base_path + os.sep + self._logs_dir_prefix
+		self._logs_dir = self._config.get(sect_name, self.OPT_LOGS_DIR)
+		if not os.path.exists(self._logs_dir):
+			os.makedirs(self._logs_dir)
 		
 		# logs_truncate_over
 		self._logs_truncate_over = parse_size(self._config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
+	
 
-
-	def exec_scripts_on_event (self, event_name=None, event_id=None, target_ip=None, local_ip=None):
-		self._logger.debug("Fetching scripts for event %s", event_name)	
-		scripts = self._queryenv.list_scripts(event_name, event_id, target_ip=target_ip, local_ip=local_ip)
-		self._logger.debug("Fetched %d scripts", len(scripts))
+	def exec_scripts_on_event (self, event_name=None, event_id=None, target_ip=None, local_ip=None, 
+							scripts=None):
+		assert event_name or scripts
+		
+		if event_name:
+			self._logger.debug("Fetching scripts for event %s", event_name)	
+			scripts = self._queryenv.list_scripts(event_name, event_id, target_ip=target_ip, local_ip=local_ip)
+			self._logger.debug("Fetched %d scripts", len(scripts))
 		
 		if scripts:
-			self._logger.info("Executing %d script(s) on event %s", len(scripts), event_name)
+			if event_name:
+				self._logger.info("Executing %d script(s) on event %s", len(scripts), event_name)
+			else:
+				self._logger.info('Executing %d script(s)', len(scripts))
 			
 			self._exec_dir = self._exec_dir_prefix + str(time.time())
 			if not os.path.isdir(self._exec_dir):
 				self._logger.debug("Create temp exec dir %s", self._exec_dir)
 				os.makedirs(self._exec_dir)
 			
-			self._logs_dir = self._logs_dir_prefix + str(time.time())
-			if not os.path.isdir(self._logs_dir):
-				self._logger.debug("Create temp logs dir %s", self._logs_dir)
-				os.makedirs(self._logs_dir) 
-
 			if self._wait_async:
 				async_threads = []
 	
@@ -153,7 +155,6 @@ class ScriptExecutor(Handler):
 				time.sleep(0.5)
 			self._logger.debug("[cleanup] Doing cleanup")
 			shutil.rmtree(self._exec_dir)
-			shutil.rmtree(self._logs_dir)
 			self._logger.debug("[cleanup] Done")
 		finally:
 			self._cleaner_running = False
@@ -161,9 +162,11 @@ class ScriptExecutor(Handler):
 			
 	def _execute_script(self, script):
 		# Create script file in local fs
+		now = int(time.time())		
 		script_path = os.path.join(self._exec_dir, script.name)
-		stdout_path = os.path.join(self._logs_dir, script.name + "-out")
-		stderr_path = os.path.join(self._logs_dir, script.name + "-err")
+		stdout_path = os.path.join(self._logs_dir, '%s.%s-out.log' % (now, script.name))
+		stderr_path = os.path.join(self._logs_dir, '%s.%s-err.log' % (now, script.name))
+		
 		try:
 			self._logger.debug("Put script contents into file %s", script_path)
 			
@@ -174,8 +177,8 @@ class ScriptExecutor(Handler):
 			self._logger.debug("Executing script '%s'", script.name)
 			
 			# Create stdout and stderr log files
-			stdout = open(stdout_path, "w")
-			stderr = open(stderr_path, "w")
+			stdout = open(stdout_path, 'w+')
+			stderr = open(stderr_path, 'w+')
 			self._logger.debug("Redirect stdout > %s stderr > %s", stdout.name, stderr.name)		
 	
 	
@@ -234,7 +237,7 @@ class ScriptExecutor(Handler):
 				time_elapsed=elapsed_time,
 				script_name=script.name,
 				script_path=script_path,
-				event_name=self._event_name
+				event_name=self._event_name or ''
 			), queue=Queues.LOG)
 			
 		except (Exception, BaseException), e:
@@ -243,8 +246,6 @@ class ScriptExecutor(Handler):
 			
 		finally:
 			os.remove(script_path)
-			os.remove(stderr_path)
-			os.remove(stdout_path)
 			self._lock.acquire()
 			if script.asynchronous:
 				self._num_pending_async -= 1

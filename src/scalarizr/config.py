@@ -870,7 +870,8 @@ class ScalarizrCnf(Observable):
 			if file:
 				file.close()
 			if os.path.exists(filename):
-				os.chmod(filename, 0400)					
+				os.chmod(filename, 0400)
+		return filename					
 
 	def _get_state(self):
 		filename = self.private_path('.state')

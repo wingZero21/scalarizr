@@ -11,6 +11,7 @@ import urlparse
 import logging
 import socket
 import os
+import sys
 
 import cloudfiles
 
@@ -48,8 +49,9 @@ class CFTransferProvider(TransferProvider):
 			o.load_from_filename(local_path)
 			return self._format_path(container, obj)			
 			
-		except (cloudfiles.errors.ResponseError, OSError, Exception, socket.timeout), e:
-			raise TransferError, e
+		except (cloudfiles.errors.ResponseError, OSError, Exception, socket.timeout):
+			exc = sys.exc_info()
+			raise TransferError, exc[1], exc[2]
 	
 	def get(self, remote_path, local_path):
 		self._logger.info('Downloading %s from CloudFiles to %s' % (remote_path, local_path))
@@ -69,15 +71,16 @@ class CFTransferProvider(TransferProvider):
 			
 			try:
 				o = self._container.get_object(obj)
-			except cloudfiles.errors.NoSuchObject, e:
+			except cloudfiles.errors.NoSuchObject:
 				raise TransferError("Object '%s' not found in container '%s'" 
 						% (obj, container))
 			
 			o.save_to_filename(dest_path)
 			return dest_path			
 			
-		except (cloudfiles.errors.ResponseError, OSError, Exception), e:
-			raise TransferError, e
+		except (cloudfiles.errors.ResponseError, OSError, Exception):
+			exc = sys.exc_info()
+			raise TransferError, exc[1], exc[2]
 
 	
 	def configure(self, remote_path, username=None, api_key=None):

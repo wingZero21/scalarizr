@@ -9,6 +9,7 @@ import logging
 from Queue import Queue, Empty
 from threading import Thread, Lock
 from urlparse import urlparse
+import sys
 
 '''
 Example:
@@ -149,7 +150,7 @@ class Transfer(object):
 				try:
 					result[filename] = action(filename)
 				except (Exception, BaseException), e:
-					self._logger.error("Cannot transfer '%s'. %s", filename, e)
+					self._logger.warn("Cannot transfer '%s'. %s", filename, e, exc_info=sys.exc_info())
 					# For all transfer errors give a second chance					
 					if isinstance(e, TransferError):
 						if attempts < self._max_attempts:

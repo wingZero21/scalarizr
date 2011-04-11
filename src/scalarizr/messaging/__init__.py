@@ -262,7 +262,14 @@ class Messages:
 	Fires after rebundle task finished
 	"""
 	
+	DEPLOY_RESULT = 'DeployResult'
+	'''
+	Fires after deployment finished
+	'''
+	
 	REBUNDLE_LOG = "RebundleLog"
+	
+	DEPLOY_LOG = "DeployLog"
 	
 	LOG = "Log"
 	
@@ -277,6 +284,8 @@ class Messages:
 	HOST_INIT_RESPONSE = "HostInitResponse"
 	
 	REBUNDLE = "Rebundle"
+	
+	DEPLOY = 'Deploy'
 	
 	SCALARIZR_UPDATE_AVAILABLE = "ScalarizrUpdateAvailable"
 	
