@@ -215,14 +215,14 @@ class NginxHandler(ServiceCtlHanler):
 			message.name == Messages.VHOST_RECONFIGURE or \
 			message.name == Messages.UPDATE_SERVICE_CONFIGURATION)		
 
-	def on_start(self):
+	def on_start(self): 
 		if self._cnf.state == ScalarizrState.RUNNING:
-			self._reload_upstream()
-			self._update_vhosts()			
+			self._update_vhosts()
+			self._reload_upstream()						
 		
 	def on_before_host_up(self, message):
+		self._update_vhosts()
 		self._reload_upstream()
-		self._update_vhosts()		
 		bus.fire('service_configured', service_name=SERVICE_NAME)
 		
 	def on_before_reboot_finish(self, *args, **kwargs):
