@@ -445,7 +445,7 @@ class NginxHandler(ServiceCtlHanler):
 			if https_certificate[2]:
 				msg = 'Appending CA cert to cert file'
 				cert = https_certificate[2]
-				write_file(cert_path, https_certificate[2], mode='a', msg=msg, logger=self._logger)
+				write_file(cert_path, '\n' + https_certificate[2], mode='a', msg=msg, logger=self._logger)
 
 			for vhost in received_vhosts:
 				if vhost.hostname and vhost.type == 'nginx': #and vhost.https
