@@ -217,12 +217,12 @@ class NginxHandler(ServiceCtlHanler):
 
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
-			self._update_vhosts()		
 			self._reload_upstream()
+			self._update_vhosts()			
 		
 	def on_before_host_up(self, message):
-		self._update_vhosts()		
 		self._reload_upstream()
+		self._update_vhosts()		
 		bus.fire('service_configured', service_name=SERVICE_NAME)
 		
 	def on_before_reboot_finish(self, *args, **kwargs):
