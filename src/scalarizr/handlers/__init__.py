@@ -222,9 +222,10 @@ class ServiceCtlHanler(Handler):
 		self._logger.info("Starting %s" % self._service_name)
 		try:
 			self._init_script.start()
-		except:
+		except BaseException, e:
 			if not self._init_script.running:
 				raise
+			self._logger.warning(str(e))
 		self._logger.debug("%s started" % self._service_name)
 
 	def _stop_service(self):
@@ -271,9 +272,10 @@ class ServiceCtlHanler(Handler):
 	def _start_service_with_preset(self, preset):
 		try:
 			self._start_service()
-		except:
-			self._logger.error('Cannot start %s with current configuration preset. ' 
-					+ 'Rolling back to the last successful preset',	self._service_name)
+		except BaseException, e:
+			self._logger.error('Cannot start %s with current configuration preset. ' % self._service_name
+					+ '[Reason: %s] ' % str(e)
+					+ 'Rolling back to the last successful preset')
 			preset = self._preset_store.load(PresetType.LAST_SUCCESSFUL)
 			self._cnf_ctl.apply_preset(preset)
 			self._start_service()
