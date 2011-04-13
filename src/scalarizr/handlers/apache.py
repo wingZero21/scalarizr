@@ -74,10 +74,14 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		# If 'running' and socks were passed
 		if not status and self.socks:
 			ip, port = self.socks[0].conn_address
-			telnet = Telnet(ip, port)
-			telnet.write('HEAD / HTTP/1.0\n\n')
-			if 'server: apache' in telnet.read_all().lower():
-				return initdv2.Status.RUNNING
+			try:
+				expected = 'server: apache'
+				telnet = Telnet(ip, port)
+				telnet.write('HEAD / HTTP/1.0\n\n')
+				if expected in telnet.read_until(expected, 5).lower():
+					return initdv2.Status.RUNNING
+			except EOFError:
+				pass
 			return initdv2.Status.NOT_RUNNING
 		return status
 	
