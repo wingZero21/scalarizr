@@ -40,8 +40,8 @@ def authenticate(login=None, pwd=None):
 	uri = urlparse.urljoin(os.environ[ENV_NIMBULA_URL], auth_basename)
 	request = urllib2.Request(uri)
 	
-	request.add_header('Accept', 'application/json')
-	request.add_header('Content-Type', 'application/json')
+	request.add_header('Accept', 'application/nimbula-v1+json')
+	request.add_header('Content-Type', 'application/nimbula-v1+json')
 	
 	raw_data = dict(user=login, password=pwd)
 	data = json.dumps(raw_data)
@@ -137,7 +137,7 @@ class NimbulaConnection:
 		
 		request = urllib2.Request(uri)
 		
-		headers = headers or {'Accept':'application/json', 'Content-Type':'application/json'}
+		headers = headers or {'Accept':'application/nimbula-v1+json', 'Content-Type':'application/nimbula-v1+json'}
 		
 		for k,v in headers.items():
 			request.add_header(k, v)
@@ -198,7 +198,7 @@ class NimbulaConnection:
 			'''		
 			for name, data in form_data:
 				yield '--%s%s' % (boundary, EOL)
-				content = 'Content-Type: application/json%s' % EOL if name=='attributes' else ''
+				content = 'Content-Type: application/nimbula-v1+json%s' % EOL if name=='attributes' else ''
 				content +='Content-Disposition: form-data; name="%s"%s' % (name, EOL)
 				yield content
 				yield EOL
@@ -239,9 +239,9 @@ class NimbulaConnection:
 		headers = []
 		headers.append(('Content-Length',full_length))
 		headers.append(('AcceptEncoding', 'gzip;q=1.0, identity; q=0.5'))
-		headers.append(('Accept', 'application/json'))
+		headers.append(('Accept', 'application/nimbula-v1+json'))
 		headers.append(('Host', host))
-		headers.append(('Content-Type', 'multipart/form-data; boundary=%s' % boundary))
+		headers.append(('Content-Type', 'multipart/nimbula-v1+form-data; boundary=%s' % boundary))
 		headers.append(('Cookie', last_cookies))	
 		
 		connection  = httplib.HTTPSConnection(host, timeout=300)
