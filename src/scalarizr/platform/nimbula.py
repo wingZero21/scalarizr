@@ -16,8 +16,8 @@ class NimbulaPlatform(Ec2LikePlatform):
 	
 	name = "nimbula"
 	
-	_userdata_key = 'latest/userdata'
-	_metadata_key = 'latest/metadata'
+	_userdata_key = 'latest/user-data'
+	_metadata_key = 'latest/meta-data'
 	
 	def get_user_data(self, key=None):
 		"""
