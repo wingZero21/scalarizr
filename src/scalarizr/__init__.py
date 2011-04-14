@@ -36,7 +36,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.23"	
+__version__ = "0.7.24"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -412,7 +412,7 @@ def _shutdown(*args):
 	globals()["_running"] = False
 		
 	try:
-		logger.info("[pid: %d] Stopping scalarizr", os.getpid())
+		logger.info("[pid: %d] Stopping scalarizr %s", os.getpid(), __version__)
 		
 		if _snmp_pid:
 			logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
@@ -566,7 +566,8 @@ def main():
 		pl = bus.platform
 
 		# Check that service started after dirty bundle
-		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
+		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
+				and cnf.state != ScalarizrState.IMPORTING:
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
 			if server_id and ud_server_id and server_id != ud_server_id:
