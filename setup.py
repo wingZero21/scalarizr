@@ -71,7 +71,7 @@ data_files.append(["/usr/local/bin", ["bin/scalarizr", 'bin/szradm']])
 
 cfg = dict(
 	name = "scalarizr",
-	version = "0.7.24",	 
+	version = "0.7.25",	 
 	description = description,
 	long_description = description,
 	author = "Scalr Inc.",
