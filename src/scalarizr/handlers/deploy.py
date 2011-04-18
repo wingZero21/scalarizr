@@ -54,18 +54,18 @@ class DeploymentHandler(Handler):
 			assert 'source' in msg_body, 'source is undefined'
 			assert 'type' in msg_body['source'], 'source type is undefined'
 			assert 'remote_path' in msg_body, 'remote path is undefined'
-			assert 'body' in msg_body['pre_deploy'] if 'pre_deploy' in msg_body else True
-			assert 'body' in msg_body['post_deploy'] if 'post_deploy' in msg_body else True
+			assert 'body' in msg_body['pre_deploy_routines'] if 'pre_deploy_routines' in msg_body else True
+			assert 'body' in msg_body['post_deploy_routines'] if 'post_deploy_routines' in msg_body else True
 
 			self._log_hdlr.deploy_task_id = msg_body['deploy_task_id']
 			self._logger.addHandler(self._log_hdlr)
 
 			src = Source.from_type(msg_body['source']['type'])
-			if 'pre_deploy' in msg_body:
-				self._exec_script(name='PreDeploy', **msg_body['pre_deploy'])
+			if 'pre_deploy_routines' in msg_body:
+				self._exec_script(name='PreDeploy', **msg_body['pre_deploy_routines'])
 			src.update(msg_body['remote_path'])
-			if 'post_deploy' in msg_body:
-				self._exec_script(name='PostDeploy', **msg_body['post_deploy'])
+			if 'post_deploy_routines' in msg_body:
+				self._exec_script(name='PostDeploy', **msg_body['post_deploy_routines'])
 			
 			self.send_message(
 				Messages.DEPLOY_RESULT, 
@@ -103,11 +103,11 @@ class Source(object):
 class SvnSource(Source):
 	EXECUTABLE = '/usr/bin/svn'
 	
-	def __init__(self, url=None, user=None, passwd=None, executable=None):
+	def __init__(self, url=None, user=None, password=None, executable=None):
 		self._logger = logging.getLogger(__name__)
 		self.url = url
 		self.user = user
-		self.passwd = passwd
+		self.password = password
 		self.executable = self.EXECUTABLE
 		
 	def update(self, workdir):
@@ -136,10 +136,10 @@ class SvnSource(Source):
 			'svn' , 
 			'update' if do_update else 'co'
 		]
-		if self.user and self.passwd:
+		if self.user and self.password:
 			args += [
 				'--username', self.user,
-				'--password', self.passwd,
+				'--password', self.password,
 			]
 		if args[1] == 'co':
 			args += [self.url]
@@ -263,14 +263,14 @@ class HttpSource(Source):
 			
 			
 class DeployLogHandler(logging.Handler):
-	def __init__(self, bundle_task_id=None):
+	def __init__(self, deploy_task_id=None):
 		logging.Handler.__init__(self)
-		self.bundle_task_id = bundle_task_id
+		self.deploy_task_id = deploy_task_id
 		self._msg_service = bus.messaging_service
 		
 	def emit(self, record):
 		msg = self._msg_service.new_message(Messages.DEPLOY_LOG, body=dict(
-			bundle_task_id = self.bundle_task_id,
+			deploy_task_id = self.deploy_task_id,
 			message = str(record.msg) % record.args if record.args else str(record.msg)
 		))
 		self._msg_service.get_producer().send(Queues.LOG, msg)
