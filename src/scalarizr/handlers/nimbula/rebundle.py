@@ -7,7 +7,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler, HandlerError, RebundleLogHandler
 from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrState
-from scalarizr.util import system2, software, cryptotool, disttool
+from scalarizr.util import system2, software, cryptotool, disttool, wait_until
 from scalarizr.util.software import whereis
 from scalarizr.util.filetool import df, Rsync, Tar, read_file, write_file, truncate
 from scalarizr.util.fstool import mount, umount
@@ -16,12 +16,95 @@ from tempfile import mkdtemp
 import logging
 import os
 import re
-
-import pexpect
+import time
 import shutil
+import pexpect
+import sys
+
 
 def get_handlers():
-	return [NimbulaRebundleHandler()]
+	#return [NimbulaRebundleHandler()]
+	return [NimbulaSnapshotRebundleHandler()]
+
+
+class NimbulaSnapshotRebundleHandler(Handler):
+	def __init__(self):
+		self._logger	= logging.getLogger(__name__)
+		self._log_hdlr	= RebundleLogHandler()
+		bus.define_events(
+			# Fires before rebundle starts
+			# @param role_name
+			"before_rebundle", 
+			
+			# Fires after rebundle complete
+			# @param role_name
+			# @param snapshot_id 
+			"rebundle", 
+			
+			# Fires on rebundle error
+			# @param role_name
+			# @param last_error
+			"rebundle_error",
+			
+			# Fires on bundled volume cleanup. Usefull to remove password files, user activity, logs
+			# @param image_mpoint 
+			"rebundle_cleanup_image"
+		)
+
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return message.name == Messages.REBUNDLE
+	
+	def on_Rebundle(self, message):
+		pl = bus.platform
+		cnf = bus.cnf			
+		self._log_hdlr.bundle_task_id = message.bundle_task_id
+		self._logger.addHandler(self._log_hdlr)	
+		
+		try:
+			role_name = message.role_name.encode("ascii")
+			image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+			conn = pl.new_nimbula_connection()
+
+			bus.fire("before_rebundle", role_name=role_name)
+
+			old_state = cnf.state
+			cnf.state = ScalarizrState.REBUNDLING
+			try:
+				self._logger.info('Creating snapshot (instance: %s)', pl.get_instance_id())
+				snap = conn.add_snapshot(pl.get_instance_id(), image_name)
+				self._logger.info('Checking that snapshot %s is completed', snap.name)
+				wait_until(lambda: snap.update().state in ('complete', 'error'), timeout=600, logger=self._logger)
+				if snap.state == 'error':
+					raise HandlerError("Snapshot creation failed: snapshot status becomes 'error'")
+				self._logger.info('Image %s completed and available for use!', snap.machineimage)
+			finally:
+				cnf.state = old_state			
+			
+			msg_data = dict(
+				status='ok',
+				snapshot_id = snap.machineimage,
+				bundle_task_id = message.bundle_task_id				
+			)
+			self._logger.debug("Updating message with OS and software info")
+			msg_data.update(software.system_info())
+			
+			self.send_message(Messages.REBUNDLE_RESULT, msg_data)
+			
+			bus.fire("rebundle", role_name=role_name, snapshot_id=snap.machineimage)			
+			
+		except:
+			exc = sys.exc_info()
+			self._logger.error(exc[1], exc_info=exc)
+			self.send_message(Messages.REBUNDLE_RESULT, dict(
+				status = "error",
+				last_error = exc[1],
+				bundle_task_id = message.bundle_task_id
+			))
+			
+		finally:
+			self._log_hdlr.bundle_task_id = None			
+			self._logger.removeHandler(self._log_hdlr)	
+
 
 root_uuid = "97e128e3-a209-4a34-81f7-c35fb9053e25"
 

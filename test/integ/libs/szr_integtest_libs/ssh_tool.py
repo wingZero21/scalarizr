@@ -13,6 +13,7 @@ import paramiko
 import re
 import socket
 import time
+from scalarizr.util.filetool import read_file
 
 regexps = ['root@.*#',
 		   'local2:.*#',
@@ -37,7 +38,14 @@ class SshManager:
 			if not os.path.exists(key_file):
 				raise Exception("Key file '%s' doesn't exist", key_file)
 			print 'Private key: %s' % key_file
-			self.key = paramiko.RSAKey.from_private_key_file(key_file, password = key_pass if key_pass else None)
+			key_str = read_file(key_file)
+			if 'BEGIN RSA' in key_str:
+				self.key = paramiko.RSAKey.from_private_key_file(key_file, password = key_pass if key_pass else None)
+			elif 'BEGIN DSA' in key_str:
+				self.key = paramiko.DSSKey.from_private_key_file(key_file, password = key_pass if key_pass else None)
+			else:
+				raise Exception('Unknown key format')
+
 		elif password:
 			self.password = password
 		else:

@@ -36,6 +36,33 @@ class MachineImage(object):
 		return self.name == other.name
 		
 	def __repr__(self):
-		return 'name: %s, file: %s, attrs: %s, account %s' % \
-				(self.name, self.file, self.attributes, self.account)
+		return '<nimbula:MachineImage name=%s, file=%s, attributes=%s>' % \
+				(self.name, self.file, self.attributes)
+				
+				
+class Snapshot(object):
+	conn = None
+	instance = None
+	name = None
+	machineimage = None
+	state = None
+	account = None
+	site = None
+	
+	def __init__(self, conn, **kwargs):
+		self.conn = conn
+		self.set_data(**kwargs)
+
+	def set_data(self, **kwargs):
+		for k, v in kwargs.items():
+			if hasattr(self, k):
+				setattr(self, k, v)
+		return self
+
+	def update(self):
+		return self.conn.get_snapshot(snap=self)
+
+	def __repr__(self):
+		return '<nimbula:Snapshot name=%s instance=%s machineimage=%s state=%s>' % \
+				(self.name, self.instance, self.machineimage, self.state)
 				

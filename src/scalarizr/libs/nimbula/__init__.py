@@ -15,6 +15,9 @@ import cookielib
 import socket
 
 from types import MachineImage
+import sys
+from scalarizr.libs.nimbula.types import Snapshot
+from scalarizr.util import dicts
 
 ENV_NIMBULA_URL			= 'NIMBULA_URL'
 ENV_NIMBULA_USERNAME	= 'NIMBULA_USERNAME'
@@ -129,18 +132,45 @@ class NimbulaConnection:
 		response = f.read()
 		return response		
 
+	def add_snapshot(self, instance, machineimage=None):
+		if machineimage:
+			machineimage = os.path.join(self.username, machineimage)
+		try:
+			f = self._request(os.path.join(self.api_url, 'snapshot/'), 
+						data=json.dumps(dict(instance=instance, machineimage=machineimage)), 
+						query_method='POST')
+		except:
+			err_msg='Not enough privelegies to add snapshot'
+			exc_info = sys.exc_info()
+			raise NimbulaError, err_msg if 'Unauthorized' in exc_info[1] else exc_info[1], exc_info[2]	
+
+		return Snapshot(self, **dicts.encode(json.load(f), 'ascii'))
 		
-	def _request(self, uri, headers=None, query_method=None, force=True):
+	def get_snapshot(self, name=None, snap=None):
+		assert name or snap
+		name = name or snap.name
+		uri = self._get_object_URI(name, 'snapshot')
+		try:
+			f = self._request(uri, query_method='GET')
+		except:
+			err_msg='Not enough privelegies to get snapshot'
+			exc_info = sys.exc_info()
+			raise NimbulaError, err_msg if 'Unauthorized' in exc_info[1] else exc_info[1], exc_info[2]
+		data = dicts.encode(json.load(f), 'ascii')
+		if snap:
+			return snap.set_data(**data)
+		return Snapshot(self, **data)
+		
+	def _request(self, uri, data=None, headers=None, query_method=None, force=True):
 		
 		if not authenticated:
 			authenticate(self.username, self.password)
 		
-		request = urllib2.Request(uri)
-		
-		headers = headers or {'Accept':'application/nimbula-v1+json', 'Content-Type':'application/nimbula-v1+json'}
-		
-		for k,v in headers.items():
-			request.add_header(k, v)
+		headers = headers or {
+			'Accept':'application/nimbula-v1+json', 
+			'Content-Type':'application/nimbula-v1+json'
+		}
+		request = urllib2.Request(uri, data, headers)		
 			
 		if query_method:
 			request.get_method = lambda: query_method
@@ -152,7 +182,8 @@ class NimbulaConnection:
 				authenticate(self.username, self.password)
 				return self._request(uri, headers, query_method, force=False)
 			else:
-				raise NimbulaError(e)
+				exc = sys.exc_info()
+				raise NimbulaError, exc[1], exc[2]
 			
 		return f
 		
