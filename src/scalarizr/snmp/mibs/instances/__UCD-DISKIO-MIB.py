@@ -87,14 +87,15 @@ def values():
 	
 	for index in range(len(diskstats)):
 		values = diskstats[index].split()
+		is_partition = len(values) == 7
 
 		devicelist['diskIOIndex' + str(index)]		= MibScalarInstance(diskIOIndex.getName(), (int(index)+1 ,), diskIOIndex.getSyntax().clone(int(index)+1))
 		devicelist['diskIODevice' + str(index)]     = MibScalarInstance(diskIODevice.getName(), (int(index)+1,), diskIODevice.getSyntax().clone(values[2]))
 		
 		devicelist['diskIONRead' + str(index)]      = MibScalarInstance(diskIONRead.getName(), (int(index)+1,), validate(Counter32(), int(values[5])*512))
-		devicelist['diskIONWritten' + str(index)]   = MibScalarInstance(diskIONWritten.getName(), (int(index)+1,), validate(Counter32(), int(values[9])*512))
+		devicelist['diskIONWritten' + str(index)]   = MibScalarInstance(diskIONWritten.getName(), (int(index)+1,), validate(Counter32(), int(values[9])*512 if not is_partition else 0))
 		devicelist['diskIOReads' + str(index)]		= MibScalarInstance(diskIOReads.getName(), (int(index)+1,), validate(Counter32(), values[3]))
-		devicelist['diskIOWrites' + str(index)]	    = MibScalarInstance(diskIOWrites.getName(), (int(index)+1,), validate(Counter32(), values[7]))
+		devicelist['diskIOWrites' + str(index)]	    = MibScalarInstance(diskIOWrites.getName(), (int(index)+1,), validate(Counter32(), values[7] if not is_partition else 0))
 		#devicelist['diskIONReadX' + str(index)]  	= MibScalarInstance(diskIONReadX.getName(), (int(index)+1,), validate(Counter64(), int(values[5])*512))
 		#devicelist['diskIONWrittenX' + str(index)]	= MibScalarInstance(diskIONWrittenX.getName(), (int(index)+1,), validate(Counter64(), int(values[9])*512)) 
 	

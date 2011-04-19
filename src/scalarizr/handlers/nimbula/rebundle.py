@@ -23,8 +23,8 @@ import sys
 
 
 def get_handlers():
-	#return [NimbulaRebundleHandler()]
-	return [NimbulaSnapshotRebundleHandler()]
+	return [NimbulaRebundleHandler()]
+	#return [NimbulaSnapshotRebundleHandler()]
 
 
 class NimbulaSnapshotRebundleHandler(Handler):
