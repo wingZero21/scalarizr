@@ -228,8 +228,8 @@ class ServiceCtlHanler(Handler):
 			self._logger.warning(str(e))
 		self._logger.debug("%s started" % self._service_name)
 
-	def _stop_service(self):
-		self._logger.info("Stopping %s", self._service_name)
+	def _stop_service(self, reason=None):
+		self._logger.info("Stopping %s%s", self._service_name, '. (%s)' % reason if reason else '')
 		try:
 			self._init_script.stop()
 		except:
@@ -237,13 +237,13 @@ class ServiceCtlHanler(Handler):
 				raise
 		self._logger.debug("%s stopped", self._service_name)
 	
-	def _restart_service(self):
-		self._logger.info("Restarting %s", self._service_name)
+	def _restart_service(self, reason=None):
+		self._logger.info("Restarting %s%s", self._service_name, '. (%s)' % reason if reason else '')
 		self._init_script.restart()
 		self._logger.debug("%s restarted", self._service_name)
 
-	def _reload_service(self):
-		self._logger.info("Reloading %s", self._service_name)
+	def _reload_service(self, reason=None):
+		self._logger.info("Reloading %s%s", self._service_name, '. (%s)' % reason if reason else '')
 		try:
 			self._init_script.reload()
 			bus.fire(self._service_name + '_reload')
@@ -322,7 +322,7 @@ class ServiceCtlHanler(Handler):
 		
 		if self._cnf_ctl:
 			# Stop service if it's already running
-			self._stop_service()		
+			self._stop_service('Applying configuration preset')		
 			
 			# Backup default configuration
 			my_preset = self._cnf_ctl.current_preset()

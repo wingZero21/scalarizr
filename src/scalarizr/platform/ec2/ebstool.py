@@ -96,6 +96,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 	)
 	logger.debug('Volume %s attached',  vol.id)
 	
+	devname = real_devname(devname)
 	if to_me:
 		logger.debug('Checking that device %s is available', devname)
 		wait_until(
@@ -104,7 +105,10 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		)
 		logger.debug('Device %s is available', devname)
 		
-	return vol
+	return vol, devname
+
+def real_devname(devname):
+	return devname.replace('/sd', '/xvd') if os.path.exists('/dev/xvda1') else devname
 
 def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIMEOUT):
 	time_until = time.time() + timeout

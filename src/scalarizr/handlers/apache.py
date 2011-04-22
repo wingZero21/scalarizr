@@ -57,7 +57,6 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			self, 
 			'apache', 
 			initd_script,
-			pid_file = pid_file,
 			socks=[initdv2.SockParam(80)]
 		)
 		
@@ -280,7 +279,7 @@ class ApacheHandler(ServiceCtlHanler):
 			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
 			rpaf.write(file)
 			
-			self._reload_service()
+			self._reload_service('Applying new RPAF proxy IPs list')
 		else:
 			self._logger.debug('Nothing to do with rpaf: mod_rpaf configuration file not found')
 

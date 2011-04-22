@@ -6,21 +6,17 @@ Created on Apr 6, 2011
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages, Queues
 from scalarizr.handlers import Handler, script_executor
+from scalarizr.util import system2, disttool, dicts
 from scalarizr.queryenv import Script
+import shutil
+import sys
 
-'''
-Created on Apr 5, 2011
-
-@author: marat
-'''
 
 import os
-from scalarizr.util import system2, disttool, dicts
 import logging
-import httplib
+import urllib2
 from urlparse import urlparse
 import mimetypes
-import socket
 
 
 class SourceError(BaseException):
@@ -46,6 +42,9 @@ class DeploymentHandler(Handler):
 		kwargs = dict(name=name, body=body, exec_timeout=exec_timeout or 3600)
 		self._script_executor.exec_scripts_on_event(scripts=(Script(**kwargs), ))
 	
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return message.name == Messages.DEPLOY
+	
 	def on_Deploy(self, message):
 		try:
 			msg_body = dicts.encode(message.body, encoding='ascii')
@@ -60,11 +59,12 @@ class DeploymentHandler(Handler):
 			self._log_hdlr.deploy_task_id = msg_body['deploy_task_id']
 			self._logger.addHandler(self._log_hdlr)
 
-			src = Source.from_type(msg_body['source']['type'])
-			if 'pre_deploy_routines' in msg_body:
+			src_type = msg_body['source'].pop('type')
+			src = Source.from_type(src_type, **msg_body['source'])
+			if msg_body.get('pre_deploy_routines') and msg_body['pre_deploy_routines'].get('body'):
 				self._exec_script(name='PreDeploy', **msg_body['pre_deploy_routines'])
 			src.update(msg_body['remote_path'])
-			if 'post_deploy_routines' in msg_body:
+			if msg_body.get('post_deploy_routines') and msg_body['post_deploy_routines'].get('body'):
 				self._exec_script(name='PostDeploy', **msg_body['post_deploy_routines'])
 			
 			self.send_message(
@@ -96,7 +96,7 @@ class Source(object):
 	
 	@staticmethod
 	def from_type(srctype, **init_kwargs):
-		clsname = srctype[0].upper() +srctype.lower()[1:]
+		clsname = srctype[0].upper() + srctype.lower()[1:] + 'Source'
 		assert clsname in globals(), 'implementation class %s of source type %s is undefined' % (clsname, srctype)
 		return globals()[clsname](**init_kwargs)
 
@@ -114,9 +114,9 @@ class SvnSource(Source):
 		if not os.access(self.executable, os.X_OK):
 			self._logger.info('Installing Subversion SCM...')
 			if disttool.is_debian_based():
-				system2('apt-get', '-y', 'install', 'subversion')
+				system2(('apt-get', '-y', 'install', 'subversion'))
 			elif disttool.is_redhat_based():
-				system2('yum', '-y', 'install', 'subversion')
+				system2(('yum', '-y', 'install', 'subversion'))
 			else:
 				raise SourceError('Cannot install Subversion. Unknown distribution %s' % 
 								str(disttool.linux_dist()))
@@ -166,9 +166,9 @@ class GitSource(Source):
 		if not os.access(self.executable, os.X_OK):
 			self._logger.info('Installing Git SCM...')
 			if disttool.is_debian_based():
-				system2('apt-get', '-y', 'install', 'git-core')
+				system2(('apt-get', '-y', 'install', 'git-core'))
 			elif disttool.is_redhat_based():
-				system2('yum', '-y', 'install', 'git')
+				system2(('yum', '-y', 'install', 'git'))
 			else:
 				raise SourceError('Cannot install Git. Unknown distribution %s' % 
 								str(disttool.linux_dist()))
@@ -208,16 +208,13 @@ class HttpSource(Source):
 		
 		self._logger.info('Downloading %s', self.url)
 		try:
-			Connection = httplib.HTTPSConnection if purl.scheme == 'https' else httplib.HTTPConnection
-			conn = Connection(purl.hostname, 443 if purl.scheme == 'https' else 80)
-			conn.request('GET', purl.path)
-			resp = conn.getresponse()
-		except socket.error, e:
-			raise SourceError('Downloading %s failed. socket error: %s' % (self.url, e))
-		
-		if resp.status != 200:
-			raise SourceError('Downloading %s failed. HTTP error: %s %s' % 
-							(self.url, resp.status, httplib.responses[resp.status]))
+			hdlrs = [urllib2.HTTPRedirectHandler()]
+			if purl.scheme == 'https':
+				hdlrs.append(urllib2.HTTPSHandler())
+			opener = urllib2.build_opener(*hdlrs)
+			resp = opener.open(self.url)
+		except urllib2.URLError, e:
+			raise SourceError('Downloading %s failed. %s' % (self.url, e))
 		
 		tmpdst = os.path.join('/tmp', os.path.basename(purl.path))
 		fp = open(tmpdst, 'w+')
@@ -233,33 +230,40 @@ class HttpSource(Source):
 		self._logger.info('File saved as %s', tmpdst)
 
 		try:
-			unar = None
 			mime = mimetypes.guess_type(tmpdst)
 									
-			if mime[0] == 'application/x-tar':
-				unar = ['tar']
-				if mime[1] == 'gzip':
-					unar += ['-xzf']
-				elif mime[2] in ('bzip', 'bzip2'):
-					unar += ['-xjf']
-				else:
-					raise UndefinedSourceError()
-				unar += [tmpdst, '-C', workdir]
+			if mime[0] in ('application/x-tar', 'application/zip'):
+				unar = None					
+				if mime[0] == 'application/x-tar':
+					unar = ['tar']
+					if mime[1] == 'gzip':
+						unar += ['-xzf']
+					elif mime[2] in ('bzip', 'bzip2'):
+						unar += ['-xjf']
+					else:
+						raise UndefinedSourceError()
+					unar += [tmpdst, '-C', workdir]
 				
-			elif mime[0] == 'application/zip':
-				unar = ['unzip', tmpdst, '-d', workdir]
-			
-			else:
-				raise UndefinedSourceError()
+				elif mime[0] == 'application/zip':
+					unar = ['unzip', tmpdst, '-d', workdir]
+				else:
+					raise UndefinedSourceError('Unexpected archive format %s' % str(mime))						
 
-			self._logger.info('Extracting source from %s into %s', tmpdst, workdir)
-			out = system2(unar)[0]
-			self._logger.info(out)
+				self._logger.info('Extracting source from %s into %s', tmpdst, workdir)
+				out = system2(unar)[0]
+				self._logger.info(out)
+			else:
+				self._logger.info('Moving source from %s to %s', tmpdst, workdir)
+				shutil.move(tmpdst, workdir)
 			
-		except UndefinedSourceError:
-			raise UndefinedSourceError('Unexpected archive format %s' % str(mime))
+		except:
+			exc = sys.exc_info()
+			if isinstance(exc[0], SourceError):
+				raise
+			raise SourceError, exc[1], exc[2]
 		finally:
-			os.remove(tmpdst)
+			if os.path.exists(tmpdst):
+				os.remove(tmpdst)
 			
 			
 class DeployLogHandler(logging.Handler):

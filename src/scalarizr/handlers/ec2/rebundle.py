@@ -926,9 +926,8 @@ if disttool.is_linux():
 			if not self.ebs_volume:
 				self.ebs_volume = ebstool.create_volume(self._ec2_conn, self._volume_size, 
 						self._avail_zone, logger=self._logger)
-			ebstool.attach_volume(self._ec2_conn, self.ebs_volume, 
-					self._instance_id, self.devname, to_me=True, logger=self._logger)
-			return self.devname
+			return ebstool.attach_volume(self._ec2_conn, self.ebs_volume, 
+					self._instance_id, self.devname, to_me=True, logger=self._logger)[1]
 			
 		def make(self):
 			self._logger.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)", 

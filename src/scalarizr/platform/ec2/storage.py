@@ -118,8 +118,8 @@ class EbsVolumeProvider(VolumeProvider):
 				
 				if not volume_attached:
 					''' Attach EBS to this instance '''
-					ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device, 
-						to_me=True, logger=self._logger)
+					device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device, 
+						to_me=True, logger=self._logger)[1]
 				
 			except (Exception, BaseException), e:
 				if ebs_vol:

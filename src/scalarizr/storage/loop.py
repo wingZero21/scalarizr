@@ -96,6 +96,8 @@ class LoopVolumeProvider(VolumeProvider):
 	def destroy(self, vol, force=False, **kwargs):		
 		super(LoopVolumeProvider, self).destroy(vol, force, **kwargs)
 		rmloop(vol.devname)
+		if force:
+			os.remove(vol.file)
 		vol.device = None
 		
 Storage.explore_provider(LoopVolumeProvider)

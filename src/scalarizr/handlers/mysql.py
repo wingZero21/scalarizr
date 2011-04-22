@@ -210,7 +210,6 @@ STAT_USER 				= "scalr_stat"
 PMA_USER 				= "pma"
 
 # Mysql storage constants
-STORAGE_DEVNAME 		= "/dev/sdo"
 STORAGE_PATH 			= "/mnt/dbstorage"
 STORAGE_DATA_DIR 		= "mysql-data"
 STORAGE_BINLOG 			= "mysql-misc/binlog"

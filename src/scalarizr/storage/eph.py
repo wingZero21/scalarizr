@@ -235,26 +235,8 @@ class EphVolumeProvider(VolumeProvider):
 
 	def destroy(self, vol, force=False, **kwargs):
 		super(EphVolumeProvider, self).destroy(vol, force, **kwargs)
-
-		# Umount tranzit volume
-		#self._snap_pvd.cleanup_tranzit_vol(vol.tranzit_vol)
-		
-		# Find PV 
-		pv = None
-		pvi = firstmatched(lambda pvi: vol.vg in pvi.vg, self._lvm.pv_status())
-		if pvi:
-			pv = pvi.pv
-			
-		# Remove storage VG
-		self._lvm.change_lv(vol.devname, available=False)
-		#self._lvm.change_lv(vol.tranzit_vol.devname, available=False)
-		self._lvm.remove_vg(vol.vg)
-		
-		if pv:
-			# Remove PV if it doesn't belongs to any other VG
-			pvi = self._lvm.pv_info(pv)
-			if not pvi.vg:
-				self._lvm.remove_pv(pv)		
+		self._destroy_layout(vol.vg, vol.device)
+		vol.disk.destroy(force=force)
 
 Storage.explore_provider(EphVolumeProvider)
 

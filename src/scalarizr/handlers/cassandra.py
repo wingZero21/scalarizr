@@ -531,7 +531,9 @@ class CassandraScalingHandler(ServiceCtlHanler):
 		
 		# Attach 
 		devname = get_free_devname()
-		ebstool.attach_volume(ec2_conn, vol, pl.get_instance_id(), devname, to_me=True, logger=self._logger)
+		devname = ebstool.attach_volume(ec2_conn, 
+									vol, pl.get_instance_id(), devname, 
+									to_me=True, logger=self._logger)[1]
 		
 		# Mount
 		fstool.mount(devname, mpoint, make_fs=mkfs, auto_mount=auto_mount)		

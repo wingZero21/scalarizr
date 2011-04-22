@@ -10,7 +10,6 @@ from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
 
-
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
@@ -36,7 +35,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.28"	
+__version__ = "0.7.29"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -446,6 +445,22 @@ def _shutdown(*args):
 	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
 
 
+def _cleanup_after_rebundle():
+	cnf = bus.cnf
+	logger = logging.getLogger(__name__)
+	# Destory mysql storages
+	if os.path.exists(cnf.private_path('storage/mysql.json')):
+		logger.info('Cleanuping old MySQL storage')
+		vol = Storage.create(Storage.restore_config(cnf.private_path('storage/mysql.json')))
+		vol.destroy(force=True)				
+	
+	# Reset private configuration
+	priv_path = cnf.private_path()
+	for file in os.listdir(priv_path):
+		if file in ('.user-data', '.update'):
+			continue
+		path = os.path.join(priv_path, file)
+		os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
 
 def do_validate_cnf():
 	errors = list()
@@ -571,13 +586,8 @@ def main():
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
 			if server_id and ud_server_id and server_id != ud_server_id:
-				# Reset private configuration
-				priv_path = cnf.private_path()
-				for file in os.listdir(priv_path):
-					if file in ('.user-data', '.update'):
-						continue
-					path = os.path.join(priv_path, file)
-					os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+				logger.info('Server was started after rebundle. Performing some cleanups')
+				_cleanup_after_rebundle()
 				cnf.state = ScalarizrState.BOOTSTRAPPING						
 
 		
