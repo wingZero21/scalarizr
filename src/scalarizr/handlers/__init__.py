@@ -295,7 +295,7 @@ class ServiceCtlHanler(Handler):
 		if szr_cnf.state == ScalarizrState.RUNNING:
 			if self._cnf_ctl:
 				# Stop servive if it's already running
-				self._stop_service()
+				self._stop_service('comparing presets')
 				
 				# Obtain current configuration preset
 				cur_preset = self._obtain_current_preset()
@@ -315,7 +315,7 @@ class ServiceCtlHanler(Handler):
 
 
 	def sc_on_before_host_down(self, msg): 
-		self._stop_service()
+		self._stop_service('instance goes down')
 	
 	def sc_on_configured(self, service_name, **kwargs):
 		if self._service_name != service_name:
