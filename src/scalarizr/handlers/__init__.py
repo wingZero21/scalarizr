@@ -303,6 +303,7 @@ class ServiceCtlHanler(Handler):
 				# Apply current preset
 				my_preset = self._cnf_ctl.current_preset()
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
+					self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
 					self._cnf_ctl.apply_preset(cur_preset)
 				else:
 					self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
@@ -346,6 +347,7 @@ class ServiceCtlHanler(Handler):
 				return
 			
 			else:
+				self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
 				self._cnf_ctl.apply_preset(cur_preset)
 				
 			# Start service with updated configuration
