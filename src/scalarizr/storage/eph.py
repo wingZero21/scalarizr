@@ -3,7 +3,7 @@ Created on Jan 6, 2011
 
 @author: marat
 '''
-
+from __future__ import with_statement
 from . import VolumeConfig, Volume, Snapshot, VolumeProvider, Storage, StorageError
 from .transfer import Transfer
 from .util.lvm2 import Lvm2, lvm_group_b64, Lvm2Error

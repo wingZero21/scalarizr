@@ -13,6 +13,9 @@ from scalarizr.util import software
 from scalarizr.platform.ec2 import ebstool
 from scalarizr.storage import Storage 
 from scalarizr.storage.util.loop import mkloop, rmloop
+from scalarizr.util.filetool import read_file
+from scalarizr.storage.transfer import Transfer
+
 
 from subprocess import Popen
 from M2Crypto import X509, EVP, Rand, RSA
@@ -23,13 +26,12 @@ import logging, time, os, re, shutil, glob
 
 import boto
 from boto.resultset import ResultSet
-from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
-from scalarizr.util.filetool import read_file
-from scalarizr.storage.transfer import Transfer
+from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
 
-if boto.Version == '1.9b':
+if boto.Version.startswith('1.9'):
+	
 	# Workaround for http://code.google.com/p/boto/issues/detail?id=310
 	# `VirtualName` support in block device mapping
 	def build_list_params(self, params, prefix=''):
@@ -657,20 +659,28 @@ class RebundleEbsStrategy(RebundleStratery):
 		return self._snap
 	
 	def _register_image(self):
-		root_dev_name = '/dev/sda1'
+		instance = self._ec2_conn.get_all_instances((self._platform.get_instance_id(), ))[0].instances[0]
+		
 		root_dev_type = EBSBlockDeviceType()
 		root_dev_type.snapshot_id = self._snap.id
 		root_dev_type.delete_on_termination = True
+
 		bdmap = BlockDeviceMapping(self._ec2_conn)
-		bdmap[root_dev_name] = root_dev_type
+		bdmap[instance.root_device_name] = root_dev_type
+		
 		for virtual_name, dev_name in self._platform.get_block_device_mapping().items():
 			if virtual_name.startswith('ephemeral'):
-				bdmap[dev_name] = virtual_name
+				if boto.Version.startswith('1.9'):
+					bdmap[dev_name] = virtual_name
+				else:
+					dev_type = EBSBlockDeviceType(self._ec2_conn)
+					dev_type.ephemeral_name = virtual_name
+					bdmap[dev_name] = dev_type
 
 		self._logger.info('Registering image')		
 		ami_id = self._ec2_conn.register_image(self._image_name, architecture=disttool.arch(), 
 				kernel_id=self._platform.get_kernel_id(), ramdisk_id=self._platform.get_ramdisk_id(),
-				root_device_name=root_dev_name, block_device_map=bdmap)
+				root_device_name=instance.root_device_name, block_device_map=bdmap)
 			
 		self._logger.info('Checking that %s is available', ami_id)
 		def check_image():

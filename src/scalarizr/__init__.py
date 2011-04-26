@@ -35,7 +35,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.29"	
+__version__ = "0.7.30"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -582,7 +582,9 @@ def main():
 
 		# Check that service started after dirty bundle
 		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
-				and cnf.state != ScalarizrState.IMPORTING:
+				and (pl.name != 'nimbula' or cnf.state != ScalarizrState.IMPORTING):
+			# XXX: nimbula's user-data uploaded via ssh, 
+			# and pl.get_user_data() permanently blocked when scalarizr is in `importing` state
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
 			if server_id and ud_server_id and server_id != ud_server_id:
@@ -633,6 +635,9 @@ def main():
 		consumer = msg_service.get_consumer()
 		msg_thread = threading.Thread(target=consumer.start, name="Message server")
 
+		# Start SNMP
+		_start_snmp_server()
+
 		# Start message server
 		msg_thread.start()
 		
@@ -640,13 +645,18 @@ def main():
 		ex = bus.periodical_executor
 		ex.start()
 		
+		
 		# Fire start
 		globals()["_running"] = True
-		bus.fire("start")
+		try:
+			bus.fire("start")
+		except (BaseException, Exception), e:
+			logger.exception(e)
 	
 		try:
 			while _running:
 				msg_thread.join(0.2)
+				# Recover SNMP 
 				if not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
 					_start_snmp_server()
 		except KeyboardInterrupt:
