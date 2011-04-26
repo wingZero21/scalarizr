@@ -35,7 +35,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.30"	
+__version__ = "0.7.31"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -96,7 +96,11 @@ def _init():
 		bus.etc_path = firstmatched(lambda p: os.access(p, os.F_OK), etc_places)
 		if not bus.etc_path:
 			raise ScalarizrError('Cannot find scalarizr configuration dir. Search path: %s' % ':'.join(etc_places))
-	bus.cnf = ScalarizrCnf(bus.etc_path)
+	cnf = ScalarizrCnf(bus.etc_path)
+	if not os.path.exists(cnf.private_path()):
+		os.makedirs(cnf.private_path())
+	bus.cnf = cnf
+	
 	
 	# Find shared resources dir
 	if not bus.share_path:
