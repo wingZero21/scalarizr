@@ -603,7 +603,7 @@ class MysqlHandler(ServiceCtlHanler):
 				self._logger.debug("Checking Scalr's MySQL system users presence.")
 				root_password, repl_password, stat_password = self._get_ini_options(
 						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD)
-				self._stop_service() 
+				self._stop_service('Checking mysql users') 
 				mysqld = spawn_mysqld()
 				self._ping_mysql()
 				try:
@@ -825,7 +825,7 @@ class MysqlHandler(ServiceCtlHanler):
 									"while waiting for slave stop" % (timeout,))
 						finally:
 							mysql.close()
-						self._stop_service()
+						self._stop_service('Swapping storages to promote slave to master')
 					
 					# Unplug slave storage and plug master one
 					#self._unplug_storage(slave_vol_id, self._storage_path)
@@ -936,7 +936,7 @@ class MysqlHandler(ServiceCtlHanler):
 			if 'snapshot_config' in message.body:
 				self._logger.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
 						message.snapshot_config['id'], message.log_file, message.log_pos)
-				self._stop_service()
+				self._stop_service('Swapping storages to reinitialize slave')
 				
 				self._logger.debug('Destroing old storage')
 				self.storage_vol.destroy()
@@ -995,7 +995,7 @@ class MysqlHandler(ServiceCtlHanler):
 		"""
 		Stop MySQL and unplug storage
 		"""
-		self._stop_service()
+		self._stop_service('Instance is going to reboot')
 
 	def on_before_reboot_finish(self, *args, **kwargs):
 		self._insert_iptables_rules()
@@ -1051,7 +1051,7 @@ class MysqlHandler(ServiceCtlHanler):
 				datadir = result.group(1)
 				if os.path.isdir(datadir) and not os.path.isdir(os.path.join(datadir, 'mysql')):
 					self._start_service()	
-					self._stop_service()				
+					self._stop_service('Autogenerating datadir')				
 		except:
 			pass
 
@@ -1084,7 +1084,7 @@ class MysqlHandler(ServiceCtlHanler):
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 		
 		# Stop MySQL server
-		self._stop_service()
+		self._stop_service('Preparing to flush logs')
 		self._flush_logs()
 		
 		msg_data = None
@@ -1198,7 +1198,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 			
 		# Stop MySQL
-		self._stop_service()			
+		self._stop_service('Preparing to flush logs')			
 		self._flush_logs()
 		
 		# Change configuration files
@@ -1346,7 +1346,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		finally:
 			if not was_running:
-				self._stop_service()
+				self._stop_service('Restoring service`s state after making snapshot')
 
 			
 	def _create_storage_snapshot(self):
@@ -1365,7 +1365,7 @@ class MysqlHandler(ServiceCtlHanler):
 		self._logger.info("Adding mysql system users")
 		should_term_mysqld = False
 		if not mysqld:
-			self._stop_service()
+			self._stop_service('Changing access mode')
 			mysqld = spawn_mysqld()
 			self._ping_mysql()
 			should_term_mysqld = True			
