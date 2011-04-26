@@ -247,7 +247,7 @@ class ApacheHandler(ServiceCtlHanler):
 	def on_VhostReconfigure(self, message):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
-		self._reload_service()
+		self._reload_service('virtual hosts have been updated')
 		
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
