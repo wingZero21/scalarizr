@@ -12,7 +12,7 @@ from scalarizr.util.filetool import read_file, write_file
 
 #__all__ = ['get_handlers', 'cluster_dir', 'config_dir', 'postmaster_conf']
 
-su = '/bin/su'
+SU_EXEC = '/bin/su'
 usermod = '/usr/sbin/usermod'
 useradd = '/usr/sbin/useradd'
 
@@ -81,7 +81,7 @@ class PostgreSql(object):
 		self._objects = {}
 		#configure all objects and put them into __object
 		
-	def make_snapshot(self):
+	def create_snapshot(self):
 		pass
 	
 	def init_master(self):
@@ -318,7 +318,7 @@ class PgHbaConf(Configuration):
 	def add_record(self, record):
 		text = read_file(self.path) or ''
 		for line in text.splitlines():
-			if not line.strip().startswith('#') and PgHbaRecord.fromstring(line) == record:
+			if not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
 				#already in file
 				return
 		write_file(self.path, str(record), 'a')	
@@ -327,7 +327,7 @@ class PgHbaConf(Configuration):
 		lines = []
 		text = read_file(self.path)
 		for line in text.splitlines():
-			if line.strip().startswith('#') or PgHbaRecord.fromstring(line) == record:
+			if line.strip().startswith('#') or PgHbaRecord.from_string(line) == record:
 				lines.append(file)
 		write_file(self.path, lines)
 	
