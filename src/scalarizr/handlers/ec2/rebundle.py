@@ -8,7 +8,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler, HandlerError, RebundleLogHandler
 from scalarizr.messaging import Messages, Queues
 from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
-	wait_until, get_free_devname
+	wait_until, get_free_devname, firstmatched
 from scalarizr.util import software
 from scalarizr.platform.ec2 import ebstool
 from scalarizr.storage import Storage 
@@ -152,33 +152,31 @@ class Ec2RebundleHandler(Handler):
 			pl = bus.platform 
 			ec2_conn = pl.new_ec2_conn()
 			instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
+			
+			# Find root device
+			root_device_name = self._get_root_device_name(instance)
+			root_disk = firstmatched(lambda x: x.device == root_device_name, filetool.df())
+			if not root_disk:
+				raise HandlerError("Can't find %s in file system disk space usage" % root_device_name)
+			
 			if instance.root_device_name:
 				# EBS-root device instance
 				if message.body.get('volume_size'):
 					volume_size = message.volume_size
 				else:
-					root_bdt = instance.block_device_mapping[instance.root_device_name]
-					volume_size = ec2_conn.get_all_volumes([root_bdt.volume_id])[0].size
+					volume_size = int(root_disk.size / 1000 / 1000)
 				
 				strategy = self._ebs_strategy_cls(
 					role_name, image_name, excludes,
 					devname=get_free_devname(), 
-					volume_size=volume_size, 
+					volume_size=volume_size,  # in Gb
 					volume_id=message.body.get('volume_id')
 				)
 			else:
-				# Old-style instance-store
-				sda1_kobject = filter(
-					lambda x: os.path.exists(x), 
-					('/sys/block/sda1', '/sys/block/sda/sda1', '/sys/block/xvda1')
-				)
-				if not sda1_kobject:
-					raise HandlerError('Cannot find sda1 kobject in sysfs')
-				root_device_size = int(read_file(sda1_kobject[0] + '/size')) * 512 # Size in bytes
-				
+				# Instance store
 				strategy = self._instance_store_strategy_cls(
 					role_name, image_name, excludes,
-					image_size = root_device_size / 1024 / 1024,
+					image_size = root_disk.size / 1000,  # in Mb
 					s3_bucket_name = self._s3_bucket_name
 				)
 
@@ -235,6 +233,16 @@ class Ec2RebundleHandler(Handler):
 		except OSError, e:
 			self._logger.warning(e)
 
+	def _get_root_device_name(self, instance):
+		root_device_name = instance.root_device_name or '/dev/sda1'
+		if not os.path.exists(root_device_name):
+			xen_device_name = root_device_name.replace('sd', 'xvd')
+			if os.path.exists(xen_device_name):
+				root_device_name = xen_device_name
+			else:
+				raise HandlerError("Root device not exists: neither %s nor %s doesn't exists" % 
+								(root_device_name, xen_device_name))
+		return root_device_name
 
 class RebundleStratery:
 	_logger = None
@@ -660,14 +668,14 @@ class RebundleEbsStrategy(RebundleStratery):
 	
 	def _register_image(self):
 		instance = self._ec2_conn.get_all_instances((self._platform.get_instance_id(), ))[0].instances[0]
-		
-		root_dev_type = EBSBlockDeviceType()
-		root_dev_type.snapshot_id = self._snap.id
-		root_dev_type.delete_on_termination = True
+
+		root_device_type = EBSBlockDeviceType()
+		root_device_type.snapshot_id = self._snap.id
+		root_device_type.delete_on_termination = True
 
 		bdmap = BlockDeviceMapping(self._ec2_conn)
-		bdmap[instance.root_device_name] = root_dev_type
-		
+
+		# Add ephemeral devices
 		for virtual_name, dev_name in self._platform.get_block_device_mapping().items():
 			if virtual_name.startswith('ephemeral'):
 				if boto.Version.startswith('1.9'):
@@ -676,7 +684,14 @@ class RebundleEbsStrategy(RebundleStratery):
 					dev_type = EBSBlockDeviceType(self._ec2_conn)
 					dev_type.ephemeral_name = virtual_name
 					bdmap[dev_name] = dev_type
-
+					
+		# Add root device snapshot
+		root_partition = instance.root_device_name[:-1]
+		if root_partition in self._platform.get_block_device_mapping().values():
+			bdmap[root_partition] = root_device_type
+		else:
+			bdmap[instance.root_device_name] = root_device_type
+		
 		self._logger.info('Registering image')		
 		ami_id = self._ec2_conn.register_image(self._image_name, architecture=disttool.arch(), 
 				kernel_id=self._platform.get_kernel_id(), ramdisk_id=self._platform.get_ramdisk_id(),

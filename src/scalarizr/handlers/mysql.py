@@ -1084,7 +1084,7 @@ class MysqlHandler(ServiceCtlHanler):
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 		
 		# Stop MySQL server
-		self._stop_service('Preparing to flush logs')
+		self._stop_service('Required by Master initialization process')
 		self._flush_logs()
 		
 		msg_data = None
@@ -1198,7 +1198,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 			
 		# Stop MySQL
-		self._stop_service('Preparing to flush logs')			
+		self._stop_service('Required by Slave initialization process')			
 		self._flush_logs()
 		
 		# Change configuration files
