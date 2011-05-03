@@ -13,6 +13,7 @@ from scalarizr.util import fstool
 import os
 import logging
 from scalarizr.storage import Storage, Volume
+from scalarizr.platform.ec2 import ebstool
 
 
 
@@ -87,7 +88,7 @@ class EbsHandler(handlers.Handler):
 			if not ebs_volume.volume_id or not ebs_volume.device:
 				self._logger.error("Invalid volume info %s. volume_id and device should be non-empty", ebs_volume)
 				continue
-			devname = ebs_volume.device
+			devname = ebstool.real_devname(ebs_volume.device)
 			
 			mtab = fstool.Mtab()			
 			if not mtab.contains(devname, reload=True):
