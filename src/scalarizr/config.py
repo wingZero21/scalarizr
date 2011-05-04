@@ -918,6 +918,7 @@ class BuiltinBehaviours:
 	MYSQL = 'mysql'
 	CASSANDRA = 'cassandra'
 	MEMCACHED = 'memcached'
+	POSTGRESQL = 'postgresql'
 	
 	@staticmethod
 	def values():

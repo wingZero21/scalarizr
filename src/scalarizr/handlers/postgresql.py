@@ -13,15 +13,19 @@ from scalarizr.libs.metaconf import Configuration
 from scalarizr.handlers import ServiceCtlHanler
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr.util import initdv2, system2, PopenError
-from scalarizr.util import disttool, fstool, cryptotool
+from scalarizr.util import disttool, cryptotool
+from scalarizr.config import BuiltinBehaviours
+from scalarizr.bus import bus
+from scalarizr.storage import Storage
 
 
 
 SU_EXEC = '/bin/su'
 USERMOD = '/usr/sbin/usermod'
 USERADD = '/usr/sbin/useradd'
+OPENSSL = '/usr/bin/openssl'
 
-PSQL = '/usr/bin/psql'
+PSQL_PATH = '/usr/bin/psql'
 CREATEUSER = '/usr/bin/createuser'
 CREATEDB = '/usr/bin/createdb'
 
@@ -41,57 +45,94 @@ STORAGE_SNAPSHOT_CNF 	= 'mysql-snap.json'
 
 BACKUP_CHUNK_SIZE 		= 200*1024*1024
 
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.POSTGRESQL
+CNF_SECTION = BEHAVIOUR
+CNF_NAME = BEHAVIOUR
+
 
 
 class PostgreSql(object):
-	behaviour = 'postgresql'
 	sysconfig_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
 	_objects = None
 	_instance = None
 	
-	def _get_config_dir(self):
-		pass
+	def _set(self, key, obj):
+		self._objects[key] = obj
 		
-	def _set_config_dir(self, path):
-		pass
+	def _get(self, key, callback, *args, **kwargs):
+		if not self._objects.has_key(key):
+			self._set(callback(*args, **kwargs))
+		return self._objects[key]
+		
+	def _get_config_dir(self):
+		return self._get('config_dir', ConfigDir)
+		
+	def _set_config_dir(self, obj):
+		self._set('config_dir', obj)
+		
+	def _get_postgresql_conf(self):
+		return self._get('postgresql_conf', PostgresqlConf.find, self.config_dir)
+	
+	def _set_postgresql_conf(self, obj):
+		self._set('postgresql_conf', obj)
 	
 	def _get_cluster_dir(self):
-		pass
+		return self._get('cluster_dir', ClusterDir.find, self.postgresql_conf)
 		
-	def _set_cluster_dir(self):
-		pass
-		
-	def _get_postmaster_conf(self):
-		pass
-	
-	def _set_postmaster_conf(self):
-		pass
-		
+	def _set_cluster_dir(self, obj):
+		self._set('cluster_dir', obj)
+			
 	def _get_pg_hba_conf(self):
-		pass
+		return self._get('pg_hba_conf', PgHbaConf.find, self.config_dir)
 		
-	def _set_pg_hba_conf(self):
-		pass
+	def _set_pg_hba_conf(self, obj):
+		self._set('pg_hba_conf', obj)
 		
 	def _get_recovery_conf(self):
-		pass
+		return self._get('recovery_conf', RecoveryConf.find, self.config_dir)
 	
-	def _set_recovery_conf(self):
-		pass
+	def _set_recovery_conf(self, obj):
+		self._set('recovery_conf', obj)
 	
-	def _get_pid_file_path(self):
-		pass
+	def _get_pid_file(self):
+		return self._get('pid_file', PidFile.find, self.postgresql_conf)
 	
-	def _set_pid_file_path(self):
-		pass
+	def _set_pid_file(self, obj):
+		self._set('recovery_conf', obj)
+	
+	def _get_root_user(self):
+		key = 'root_user'
+		if not self._objects.has_key(key):
+			self._objects[key] = PgUser(ROOT_USER)
+		return self._objects[key]
+	
+	def _set_root_user(self, user):
+		self._set('root_user', user)
 
+	@property
+	def ec2_conn(self):
+		# TODO: write _get 
+		return None 
+	
+	@property
+	def psql(self):
+		#TODO: write _get
+		return None
+	
+	@property
+	def service(self): 
+		#TODO: write initdv2
+		#TODO: write _get
+		return None
+	
+	root_user = property(_get_root_user, _set_root_user)
 	config_dir = property(_get_config_dir, _set_config_dir)
 	cluster_dir = property(_get_cluster_dir, _set_cluster_dir)
-	postmaster_conf = property(_get_postmaster_conf, _set_postmaster_conf)
+	postgresql_conf = property(_get_postgresql_conf, _set_postgresql_conf)
 	pg_hba_conf = property(_get_pg_hba_conf, _set_pg_hba_conf)
 	recovery_conf = property(_get_recovery_conf, _set_recovery_conf)
-	pid_file_path = property(_get_pid_file_path, _set_pid_file_path)					
+	pid_file = property(_get_pid_file, _set_pid_file)
 		
 	def __new__(cls, *args, **kwargs):
 		if not cls._instance:
@@ -101,14 +142,17 @@ class PostgreSql(object):
 	
 	def __init__(self):
 		self._objects = {}
-		#configure all objects and put them into __object
+		self._logger = logging.getLogger(__name__)
+	
 		
 	def create_snapshot(self):
-		pass
-	
-	def init_master(self):
-		pass
-	
+		snap = None
+		return snap.id
+
+	def init_master(self, volume_id, devname, mpoint):
+		self._init_service(volume_id, devname, mpoint)
+		self.create_snapshot(volume_id)
+			
 	def init_slave(self):
 		pass
 	
@@ -133,6 +177,46 @@ class PostgreSql(object):
 		restart
 		'''
 		pass
+
+	def _init_service(self, volume_id, devname, mpoint):
+		
+		if not self.root_user.exists():
+			password = self.root_user.generate_password(20)
+			self.root_user.create(password, super=True)
+			
+		vol = self._init_storage(volume_id, devname, mpoint)
+		
+		self.service.stop()
+		self.cluster_dir.move(mpoint)
+		
+		if disttool.is_centos():
+			self.config_dir.move(self.config_dir.default_ubuntu_path)
+			
+		self.postmaster_conf.wal_level = 'hot_standby'
+		self.postmaster_conf.max_wal_senders = '5'
+		self.postmaster_conf.wal_keep_segments = '32'
+				
+	def _init_storage(self, volume_id, devname, mpoint):
+		self._logger.debug('checking mountpoint %s ' % mpoint)
+		if not os.path.exists(mpoint):
+			self._logger.debug('creating %s' % mpoint)
+			os.makedirs(mpoint)
+			
+		self._logger.debug("creating device %s from volume %s" % (devname, volume_id))
+		vol = Storage.create(type='ebs', id=volume_id, fstype='ext3', mpoint=mpoint, device=devname)
+		
+		self._logger.debug('volume file system is : "%s"' % vol.fstype)
+		if vol.fstype != 'ext3':
+			self._logger.debug('running mkfs')
+			vol.mkfs()
+	
+		if vol.mounted():
+			self._logger.debug('device is already mounted.')
+		else:
+			self._logger.debug("mounting EBS")
+			vol.mount()
+		return vol		
+	
 	
 postgresql = PostgreSql()
 
@@ -146,10 +230,12 @@ class PgUser(object):
 	def __init__(self, name, group='postgres'):
 		self.name = name
 		self.group = group
+		self._logger = logging.getLogger(__name__)
 		self.psql = PSQL()
+		self._cnf = bus.cnf
 	
-	def create(self, super=True):	
-		self._create_system_user()
+	def create(self, password, super=True):	
+		self._create_system_user(password)
 		self._create_pg_database()
 		self._create_pg_user(super)
 	
@@ -162,41 +248,39 @@ class PgUser(object):
 		
 	def _create_role(self, super=True):
 		if self._is_role_exist:
-			#log 
-			pass
+			self._logger.debug('Cannot create role: role %s already exists' % self.name)
 		else:
-			#log "Creating role %s" % self.name
+			self._logger.debug('Creating role %s' % self.name)
 			try:
 				out = system2([SU_EXEC, '-', self.group, '-c', '%s -s %s' % (CREATEUSER, self.name)])[0]
-				#log out or 'Role %s has been successfully created.' % self.name
+				self._logger.debug(out or 'Role %s has been successfully created.' % self.name)
 			except PopenError, e:
-				#log 'Unable to create role %s: %s' % (self.name, e)
-				pass 
+				self._logger.error('Unable to create role %s: %s' % (self.name, e))
+				raise
 		
 	def _create_pg_database(self):
 		if self._is_pg_database_exist:
-			#log 
-			pass
+			self._logger.debug('Cannot create db: database %s already exists' % self.name)
 		else:
-			#log "Creating database %s" % user
+			self._logger.debug('Creating db %s' % self.name)
 			try:
 				out = system2([SU_EXEC, '-', self.group, '-c', '%s %s' % (CREATEDB,self.name)])[0]
-				#log out or 'DB %s has been successfully created.' % user
+				self._logger.debug(out or 'DB %s has been successfully created.' % self.name)
 			except PopenError, e:
-				#log 'Unable to create db %s: %s' % (user, e)
-				pass
+				self._logger.error('Unable to create db %s: %s' % (self.name, e))
+				raise
 	
 	def _create_system_user(self, password):
 		if self._is_system_user_exist:
-			#log 
-			pass
+			self._logger.debug('Cannot create system user: user %s already exists' % self.name)
 		else:
 			try:
 				out = system2([USERADD, '-g', self.group, '-p', password, self.name])[0]
-				#log out	
+				if out: self._logger.debug(out)
+				self._logger.debug('Creating system user %s' % self.name)	
 			except PopenError, e:
-				#log 'Unable to create db %s: %s' % (user, e)
-				pass
+				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
+				raise
 
 	@property
 	def _is_role_exist(self):
@@ -214,6 +298,7 @@ class PgUser(object):
 		return -1 != file.read().find(self.name)
 	
 	def delete(self, delete_db=True, delete_role=True, delete_system_user=True):
+		#TODO: implement delete methods
 		pass
 		
 	def _delete_role(self):
@@ -227,88 +312,75 @@ class PgUser(object):
 
 	def change_password(self, new_pass=None):
 		new_pass = new_pass or self.generate_password()
-		#change system password
+		self._logger.debug('Changing password of system user %s to %s' % (self.name, new_pass)) 
+		out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
+		shadow_password = out.strip()
+		if retcode != 0:
+			self._logger.error('Error creating hash for ' + self.name)
+		if err:
+			self._logger.error(err)
 		
-		'''
-		import subprocess
-		
-		login = 'username'
-		password = 'somepassword'
-		
-		p = subprocess.Popen(('openssl', 'passwd', '-1', password), stdout=subprocess.PIPE)
-		shadow_password = p.communicate()[0].strip()
-		if p.returncode != 0:
-		    print 'Error creating hash for ' + login
-		    
-		r = subprocess.call(('usermod', '-p', shadow_password, login))
+		r = system2([USERMOD, '-p', '-1', shadow_password, self.name])[2]
 		if r != 0:
-		    print 'Error changing password for ' + login
-		'''
-		
-		#or 
-		
-		'''
-		import pexpect
-		import time
-		
-		def ChangePassword(user, pass):
-		    passwd = pexpect.spawn("/usr/bin/passwd %s" % user)
-		
-		    for x in xrange(2):
-		        # wait for password: to come out of passwd's stdout
-		        passwd.expect("password: ")
-		        # send pass to passwd's stdin
-		        passwd.sendline(pass)
-		        time.sleep(0.1)
-		
-		ChangePassword('foo', 'bar') # changes user "foo"'s password to "bar"
-		'''
+			self._logger.error('Error changing password for ' + self.name)	
 		
 		#change password in privated/pgsql.ini
-		pass
-
-	def get_password(self):
-		#get password from privated/pgsql.ini
-		pass
+		self._cnf.rawini.set(CNF_SECTION, self.opt_user_password, new_pass)
+		
+		return new_pass
+	
+	@property
+	def opt_user_password(self): 
+		return '%s_password' % self.username
+	
+	@property
+	def password(self):
+		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
 		
 
 class PSQL(object):
-	path = '/usr/bin/psql'
+	path = PSQL_PATH
 	user = None
 	
 	def __init__(self, user='postgres'):	
 		self.user = user
+		self._logger = logging.getLogger(__name__)
 		
 	def test_connection(self):
+		#TODO: implement connection testing and integrate with initdv2 and pgsql
 		pass
 		
 	def execute(self, query):
 		try:
 			out = system2([SU_EXEC, '-', self.user, '-c', '%s -c "%s"' % (self.path, query)])[0]
-			#log out	
+			self._logger.debug(out)	
 		except PopenError, e:
-			#log 'Unable to create db %s: %s' % (user, e)
-			pass		
+			self._logger.error('Unable to execute query %s from user %s: %s' % (query, self.user, e))
+			raise		
 	
 	
 class ClusterDir(object):
 	def __init__(self, path=None, user = "postgres"):
-		self.path = path or 'find path'
+		self.path = path
 		self.user = user
+		self._logger = logging.getLogger(__name__)
+		
+	@classmethod
+	def find(cls, postgresql_conf):
+		return cls(postgresql_conf.data_directory)
 
 	def move_to(self, dst):
 		new_cluster_dir = os.path.join(dst, 'data')
 		if os.path.exists(new_cluster_dir) and os.listdir(new_cluster_dir):
-			#log 'cluster seems to be already moved to %s' % dst
-			pass
+			self._logger.error('cluster seems to be already moved to %s' % dst)
 		elif os.path.exists(self.path):
-			#log "copying cluster files from %s into %s" % (self.path, new_cluster_dir)
+			self._logger.debug("copying cluster files from %s into %s" % (self.path, new_cluster_dir))
 			shutil.copytree(self.path, new_cluster_dir)
 		
-		#log "changing directory owner to %s" % self.user	
+		self._logger.debug("changing directory owner to %s" % self.user)	
 		rchown(self.user, dst)
 		
-		#log "Changing postgres user`s home directory"
+		self._logger.debug("Changing postgres user`s home directory")
 		system2([USERMOD, '-d', new_cluster_dir, self.user]) 
 	
 		return new_cluster_dir
@@ -318,64 +390,87 @@ class ConfigDir(object):
 	
 	path = None
 	user = None
+	default_ubuntu_path = '/etc/postgresql/9.0/main'
+	default_centos_path = '/var/lib/pgsql/9.0/main'
+	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
 	def __init__(self, path=None, user = "postgres"):
-		self.path = path
+		self._logger = logging.getLogger(__name__)
+		self.path = path or self.find_path()
 		self.user = user
 	
-	def move_to(self, dst, sysconfig):
+	def find_path(self):
+		path = self.get_sysconfig_pgdata()
+		if path:
+			return path
+		return self.default_ubuntu_path if disttool.is_ubuntu() else self.default_centos_path
+	
+	def move_to(self, dst):
 		if not os.path.exists(dst):
-			#log "creating %s" % dst
+			self._logger.debug("creating %s" % dst)
 			os.makedirs(dst)
 		
 		for config in ['postgresql.conf', 'pg_ident.conf', 'pg_hba.conf']:
 			old_config = os.path.join(self.path, config)
 			new_config = os.path.join(dst, config)
 			if os.path.exists(old_config):
-				#log 'Moving %s' % config
+				self._logger.debug('Moving %s' % config)
 				shutil.move(old_config, new_config)
 			elif os.path.exists(new_config):
-				#log '%s is already in place. Skipping.' % config
-				pass
+				self._logger.debug('%s is already in place. Skipping.' % config)
 			else:
 				raise BaseException('Postgresql config file not found: %s' % old_config)
 			rchown(self.user, new_config)
 		
-		#log "configuring pid and cluster dir"
+		self._logger.debug("configuring pid and cluster dir")
 		conf = PostgresqlConf(dst, autosave=False)
 		conf.data_directory = self.path
 		conf.pid_file = os.path.join(dst, 'postmaster.pid')
 		conf.save()
 		self._make_symlinks(dst)
-		self._patch_sysconfig(sysconfig, dst)
+		self._patch_sysconfig(dst)
 		self.path = dst
 		
 	def _make_symlinks(self, dst_dir):
-		#log "creating symlinks required by initscript"
+		self._logger.debug("creating symlinks required by initscript")
 		for obj in ['base', 'PG_VERSION', 'postmaster.pid']:
 			src = os.path.join(self.path, obj)
 			dst = os.path.join(dst_dir, obj) 
 			if os.path.islink(dst):
-				#log "%s exists and it is probably old. Unlinking." % dst
+				self._logger.debug("%s exists and it is probably old. Unlinking." % dst)
 				os.unlink(dst)
 			elif os.path.exists(dst):
-				#log 'Something wrong: %s is not a symlink. Removing.' % dst
+				self._logger.warning('Something wrong: %s is not a symlink. Removing.' % dst)
 				shutil.rmtree(dst)
 				
-			#log "Creating symlink %s -> %s" % (src, dst)
+			self._logger.debug("Creating symlink %s -> %s" % (src, dst))
 			os.symlink(src, dst)
 			if os.path.exists(src):
 				rchown(self.user, dst)
 			else:
-				#log 'Warning: %s is a dead link' % dst
-				pass
+				self._logger.debug('Warning: %s is a dead link' % dst)
 			
-	def _patch_sysconfig(self, sysconfig, config_dir):
-		if config_dir == get_sysconfig_pgdata():
-			#log 'sysconfig file already rewrites PGDATA. Skipping.'
-			pass
+	def _patch_sysconfig(self, config_dir):
+		if config_dir == self.get_sysconfig_pgdata():
+			self._logger.debug('sysconfig file already rewrites PGDATA. Skipping.')
 		else:
-			set_sysconfig_pgdata(config_dir)
+			self.set_sysconfig_pgdata(config_dir)
+	
+	def set_sysconfig_pgdata(self, pgdata):
+		self._logger.debug("rewriting PGDATA path in sysconfig")
+		file = open(self.sysconf_path, 'w')
+		file.write('PGDATA=%s' % pgdata)
+		file.close()
+		
+	def get_sysconfig_pgdata(self):
+		pgdata = None
+		if os.path.exists(self.sysconf_path):
+			s = open(self.sysconf_path, 'r').readline().strip()
+			if s and len(s)>7:
+				pgdata = s[7:]
+			else: 
+				self._logger.debug('sysconfig has no PGDATA')
+		return pgdata
 
 
 class PidFile(object):
@@ -383,6 +478,10 @@ class PidFile(object):
 	
 	def __init__(self, path):
 		self.path = path
+		
+	@classmethod
+	def find(cls, postgresql_conf):
+		return cls(postgresql_conf.pid_file)	
 	
 	@property	
 	def proc_id(self):
@@ -397,10 +496,15 @@ class BasePGConfig(object):
 	autosave = None
 	path = None
 	data = None
+	config_name = None
 	
 	def __init(self, path, autosave=True):
 		self.autosave = autosave
 		self.path = path
+		
+	@classmethod
+	def find(cls, config_dir):
+		return cls(os.path.join(config_dir.path, cls.config_name))
 		
 	def set(self, option, value):
 		if not self.data:
@@ -435,10 +539,12 @@ class BasePGConfig(object):
 	def save(self):
 		if self.data:
 			self.data.write(self.path)
-
+			
 
 class PostgresqlConf(BasePGConfig):
 
+	config_name = 'postgresql.conf'
+	
 	def _get_pid_file_path(self):
 		return self.get('external_pid_file')
 	
@@ -481,7 +587,7 @@ class PostgresqlConf(BasePGConfig):
 		self.get('hot_standby')
 	
 	def _set_hot_standby(self, mode):
-		#must bee boolean? default off
+		#must bee boolean and default is 'off'
 		self.set('hot_standby', mode)
 		
 	pid_file = property(_get_pid_file_path, _set_pid_file_path)
@@ -491,7 +597,7 @@ class PostgresqlConf(BasePGConfig):
 	wal_keep_segments = property(_get_wal_keep_segments, _set_wal_keep_segments)
 	listen_addresses = property(_get_listen_addresses, _set_listen_addresses)
 	hot_standby = property(_get_hot_standby, _set_hot_standby)
-	
+
 	
 class RecoveryConf(BasePGConfig):
 	
@@ -499,20 +605,22 @@ class RecoveryConf(BasePGConfig):
 		self.get('standby_mode')
 	
 	def _set_standby_mode(self, mode):
-		self.set('standby_mode')
+		self.set('standby_mode', mode)
 	
 	def _get_primary_conninfo(self):
-		self.get('primary_conninfo')
+		info = self.get('primary_conninfo')
+		return tuple([raw.split('=')[1].strip() if len(raw.split('=')) == 2 else '' for raw in info.split()])
 		
-	def _set_primary_conninfo(self, info):
-		#check first
-		self.set('primary_conninfo')
-	
+	def _set_primary_conninfo(self, info_tuple):
+		#need to check first
+		host, port, user = info_tuple
+		self.set('primary_conninfo', "host=%s port=%s user=%s" % (host,port,user))
+		
 	def _get_trigger_file(self):
 		self.get('trigger_file')
 	
 	def _set_trigger_file(self, path):
-		self.set('trigger_file')	
+		self.set('trigger_file', path)	
 	
 	standby_mode = property(_get_standby_mode, _set_standby_mode)
 	primary_conninfo = property(_get_primary_conninfo, _set_primary_conninfo)
@@ -531,18 +639,12 @@ class PgHbaRecord(object):
 	hostssl    database  user  IP-address  IP-mask  auth-method  [auth-options]
 	hostnossl  database  user  IP-address  IP-mask  auth-method  [auth-options]
 	'''
-	
 	host_types = ['local', 'host', 'hostssl','hostnossl']
 	auth_methods = ['trust','reject','md5','password', 'gss',
 				'sspi', 'krb5', 'ident', 'peer', 'ldap',
 				'radius', 'cert', 'pam']
 	
-	def __init__(self, host='local', database='all', user='all', auth_method='trust', address=None, ip=None, mask=None, auth_options=None):
-		
-		'host  replication  postgres  %s/22  trust'
-		'local all postgres trust'
-		'local all postgres password'		
-		
+	def __init__(self, host='local', database='all', user='all', auth_method='trust', address=None, ip=None, mask=None, auth_options=None):		
 		self.host = host
 		self.database = database
 		self.user = user
@@ -601,7 +703,6 @@ class PgHbaRecord(object):
 		self.auth_options == other.auth_options	
 			
 	def __repr__(self):
-		#TODO: write unit test on this class
 		line = '%s\t%s\t%s' % (self.host, self.database, self.user)
 		
 		if self.address: line += '\t%s' % self.address
@@ -617,15 +718,19 @@ class PgHbaRecord(object):
 		
 class PgHbaConf(Configuration):
 	
-	fname = 'pg_hba.conf'
+	config_name = 'pg_hba.conf'
 	path = None
 	trusted_mode = PgHbaRecord('local', 'all', 'postgres', auth_method = 'trust')
 	password_mode = PgHbaRecord('local', 'all', 'postgres', auth_method = 'password')
 	
 	def __init__(self, config_dir_path):
 		self.config_dir_path = config_dir_path
-		self.path = os.path.join(self.fname, config_dir_path)
+		self.path = os.path.join(self.config_name, config_dir_path)
 		self._logger = logging.getLogger(__name__)
+
+	@classmethod
+	def find(cls, config_dir):
+		return cls(os.path.join(config_dir.path, cls.config_name))
 	
 	def add_record(self, record):
 		text = read_file(self.path) or ''
@@ -772,7 +877,7 @@ def get_handlers():
 	
 
 def rchown(user, path):
-	print "chown -r %s %s" % (user, path)
+	#log "chown -r %s %s" % (user, path)
 	user = pwd.getpwnam(user)	
 	os.chown(path, user.pw_uid, user.pw_gid)
 	try:
@@ -783,26 +888,7 @@ def rchown(user, path):
 				if os.path.exists(os.path.join(root, file)): #skipping dead links
 					os.chown(os.path.join(root, file), user.pw_uid, user.pw_gid)
 	except OSError, e:
-		print 'Cannot chown directory %s : %s' % (path, e)	
-
-def set_sysconfig_pgdata(pgdata):
-	print "filling sysconfig"
-	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
-	file = open(sysconf_path, 'w')
-	file.write('PGDATA=%s' % pgdata)
-	file.close()
+		#log 'Cannot chown directory %s : %s' % (path, e)	
+		pass
 	
-	
-def get_sysconfig_pgdata():
-	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
-	pgdata = None
-	
-	if os.path.exists(sysconf_path):
-		s = open(sysconf_path, 'r').readline().strip()
-		if s and len(s)>7:
-			pgdata = s[7:]
-		else: 
-			print 'sysconfig has no PGDATA'
-	return pgdata
-
 # module init	
