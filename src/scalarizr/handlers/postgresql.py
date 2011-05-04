@@ -285,10 +285,12 @@ class PgUser(object):
 		pass
 		
 	def _delete_role(self):
-		pass
+		out = self.psql.execute('DROP ROLE IF EXISTS %s;' % self.name)
+		return self.name in out	
 
 	def _delete_pg_database(self):
-		pass
+		out = self.psql.execute('DROP DATABASE IF EXISTS %s;' % self.name)
+		return self.name in out	
 	
 	def _delete_system_user(self):
 		pass	
