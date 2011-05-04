@@ -19,7 +19,6 @@ from scalarizr.bus import bus
 from scalarizr.storage import Storage
 
 
-
 SU_EXEC = '/bin/su'
 USERMOD = '/usr/sbin/usermod'
 USERADD = '/usr/sbin/useradd'
@@ -99,7 +98,13 @@ class PostgreSql(object):
 		return self._get('pid_file', PidFile.find, self.postgresql_conf)
 	
 	def _set_pid_file(self, obj):
-		self._set('recovery_conf', obj)
+		self._set('pid_file', obj)
+		
+	def _get_trigger_file(self):
+		return self._get('trigger_file', Trigger.find, self.recovery_conf)
+	
+	def _set_trigger_file(self, obj):
+		self._set('trigger_file', obj)
 	
 	def _get_root_user(self):
 		key = 'root_user'
@@ -109,16 +114,6 @@ class PostgreSql(object):
 	
 	def _set_root_user(self, user):
 		self._set('root_user', user)
-
-	@property
-	def ec2_conn(self):
-		# TODO: write _get 
-		return None 
-	
-	@property
-	def psql(self):
-		#TODO: write _get
-		return None
 	
 	@property
 	def service(self): 
@@ -133,6 +128,7 @@ class PostgreSql(object):
 	pg_hba_conf = property(_get_pg_hba_conf, _set_pg_hba_conf)
 	recovery_conf = property(_get_recovery_conf, _set_recovery_conf)
 	pid_file = property(_get_pid_file, _set_pid_file)
+	trigger_file = property(_get_trigger_file, _set_trigger_file)
 		
 	def __new__(cls, *args, **kwargs):
 		if not cls._instance:
@@ -144,83 +140,70 @@ class PostgreSql(object):
 		self._objects = {}
 		self._logger = logging.getLogger(__name__)
 	
+	def init_master(self, mpoint):
+		self._init_service(mpoint)
+		#snap = self.create_snapshot(volume_id) ; return snap.id 
+		#TODO: create volume outside pgsql class
 		
-	def create_snapshot(self):
-		snap = None
-		return snap.id
+	def init_slave(self, mpoint, primary_ip, primary_port):
+		#vol = ebstool.create_volume(ec2_conn, snap_id)
+		self._init_service(mpoint)
+		self.trigger_file = Trigger(os.path.join(self.config_dir.path, 'trigger'))
+		self.recovery_conf.trigger_file = self.trigger_file.path
+		self.recovery_conf.standby_mode = 'on'
+		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, self.root_user.name)
+		self.postgresql_conf.hot_standby = 'on'
+		
+	def register_slave(self, slave_ip):
+		self.postgresql_conf.listen_addresses = '*'
+		self.pg_hba_conf.add_standby_host(slave_ip)
+		self.service.restart(force=True)
+		
+	def unregister_slave(self, slave_ip):
+		self.pg_hba_conf.delete_standby_host(slave_ip)
+		self.service.restart(force=True)
 
-	def init_master(self, volume_id, devname, mpoint):
-		self._init_service(volume_id, devname, mpoint)
-		self.create_snapshot(volume_id)
-			
-	def init_slave(self):
-		pass
+	def stop_replication(self):
+		self.trigger_file.create()
+		
+	def start_replication(self):
+		self.trigger_file.destroy()
 	
-	def register_slave(self):
-		pass
-	
-	def create_user(self):	
-		pass	
+	def create_user(self, name):
+		self.service.start()
+		user = PgUser(name)	
+		self.set_trusted_mode()
+		password = user.generate_password(20)
+		user.create(password, super=True)
+		self.set_password_mode()
+		return user	
 
-	def set_trust_mode(self):
-		'''
-		pg_hba:
-		local all postgres trust
-		restart
-		'''
-		pass
+	def set_trusted_mode(self):
+		self.pg_hba_conf.set_trusted_access_mode()
+		self.service.restart()
 	
 	def set_password_mode(self):
-		'''
-		pg_hba:
-		local all postgres password
-		restart
-		'''
-		pass
+		self.pg_hba_conf.set_password_access_mode()
+		self.service.restart()
 
-	def _init_service(self, volume_id, devname, mpoint):
-		
-		if not self.root_user.exists():
-			password = self.root_user.generate_password(20)
-			self.root_user.create(password, super=True)
-			
-		vol = self._init_storage(volume_id, devname, mpoint)
-		
+	def _init_service(self, mpoint):
+		#vol = self._init_storage(volume_id, devname, mpoint)
+		#TODO: initialize volume outside of pgsql class
+		self.root_user = self.create_user(ROOT_USER)
 		self.service.stop()
-		self.cluster_dir.move(mpoint)
+		self.cluster_dir.move_to(mpoint)
 		
 		if disttool.is_centos():
-			self.config_dir.move(self.config_dir.default_ubuntu_path)
+			self.config_dir.move_to(self.config_dir.default_ubuntu_path)
 			
-		self.postmaster_conf.wal_level = 'hot_standby'
-		self.postmaster_conf.max_wal_senders = '5'
-		self.postmaster_conf.wal_keep_segments = '32'
+		self.postgresql_conf.wal_level = 'hot_standby'
+		self.postgresql_conf.max_wal_senders = '5'
+		self.postgresql_conf.wal_keep_segments = '32'
 				
-	def _init_storage(self, volume_id, devname, mpoint):
-		self._logger.debug('checking mountpoint %s ' % mpoint)
-		if not os.path.exists(mpoint):
-			self._logger.debug('creating %s' % mpoint)
-			os.makedirs(mpoint)
-			
-		self._logger.debug("creating device %s from volume %s" % (devname, volume_id))
-		vol = Storage.create(type='ebs', id=volume_id, fstype='ext3', mpoint=mpoint, device=devname)
-		
-		self._logger.debug('volume file system is : "%s"' % vol.fstype)
-		if vol.fstype != 'ext3':
-			self._logger.debug('running mkfs')
-			vol.mkfs()
-	
-		if vol.mounted():
-			self._logger.debug('device is already mounted.')
-		else:
-			self._logger.debug("mounting EBS")
-			vol.mount()
-		return vol		
-	
 	
 postgresql = PostgreSql()
 
-
+	
 class PgUser(object):
 	
 	name = None
@@ -487,6 +470,30 @@ class PidFile(object):
 	def proc_id(self):
 		return open(self.path, 'r').readline().strip() if os.path.exists(self.path) else None
 
+
+class Trigger(object):
+	
+	path = None
+	
+	def __init__(self, path):
+		self.path = path
+		self._logger = logging.getLogger(__name__)
+		
+	@classmethod
+	def find(cls, recovery_conf):
+		return cls(recovery_conf.trigger_file)
+	
+	def create(self):
+		if not self.exists():
+			write_file(self.path, '', 'w', logger=self._logger)
+		
+	def destroy(self):
+		if self.exists():
+			os.remove(self.path)
+		
+	def exists(self):
+		return os.path.exists(self.path)
+	
 
 class BasePGConfig(object):
 	'''
@@ -890,5 +897,32 @@ def rchown(user, path):
 	except OSError, e:
 		#log 'Cannot chown directory %s : %s' % (path, e)	
 		pass
+
+def init_storage(volume_id, devname, mpoint):
+	#self._logger.debug('checking mountpoint %s ' % mpoint)
+	if not os.path.exists(mpoint):
+		#self._logger.debug('creating %s' % mpoint)
+		os.makedirs(mpoint)
+		
+	#self._logger.debug("creating device %s from volume %s" % (devname, volume_id))
+	vol = Storage.create(type='ebs', id=volume_id, fstype='ext3', mpoint=mpoint, device=devname)
+	
+	#self._logger.debug('volume file system is : "%s"' % vol.fstype)
+	if vol.fstype != 'ext3':
+		#self._logger.debug('running mkfs')
+		vol.mkfs()
+
+	if vol.mounted():
+		#self._logger.debug('device is already mounted.')
+		pass
+	else:
+		#self._logger.debug("mounting EBS")
+		vol.mount()
+	return vol	
+
+def create_snapshot():
+	#TODO: implement snapshot creating
+	snap = None
+	return snap
 	
 # module init	
