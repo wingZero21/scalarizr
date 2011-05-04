@@ -68,7 +68,7 @@ class Ec2LifeCycleHandler(Handler):
 		# 	- fstab contains invalid fstype and `mount -a` fails  
 		mtab = Mtab()
 		fstab = Fstab()
-		for device in ('/dev/sda2', '/dev/sdb'):
+		for device in self._platform.instance_store_devices:
 			if os.path.exists(device) and fstab.contains(device) and not mtab.contains(device):
 				entry = fstab.find(device)[0]
 				mount(device, entry.mpoint, ('-o', entry.options))

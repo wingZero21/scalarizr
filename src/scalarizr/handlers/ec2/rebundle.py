@@ -316,15 +316,13 @@ class RebundleStratery:
 		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
 		# @see http://alestic.com/2010/09/ec2-bug-mountall
 		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
-			try:
-				mnt = fstab.find(mpoint='/mnt')[0]
-				if mnt.options.find('nobootwait') >= 0:			
-					mnt.options = re.sub(r'(nobootwait),(\S+)', r'\2,\1', mnt.options)
-				else:
-					mnt.options += ',nobootwait'
-			except IndexError:
-				pass
-			
+			for entry in fstab.list_entries():
+				if entry.devname in pl.instance_store_devices:
+					if entry.options.find('nobootwait') >= 0:			
+						entry.options = re.sub(r'(nobootwait),(\S+)', r'\2,\1', entry.options)
+					else:
+						entry.options += ',nobootwait'
+						
 		fstab.save()
 
 	

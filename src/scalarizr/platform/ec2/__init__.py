@@ -50,7 +50,14 @@ class Ec2Platform(Ec2LikePlatform):
 		'eu-west-1' 		: 's3.amazonaws.com',
 		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com',
 		'ap-northeast-1' 	: 's3-ap-northeast-1.amazonaws.com'
-	}	
+	}
+	
+	instance_store_devices = (
+		'/dev/sda2', '/dev/sdb', '/dev/xvdb', 
+		'/dev/sdc', '/dev/xvdc', 
+		'/dev/sdd', '/dev/xvdd', 
+		'/dev/sde', '/dev/xvde'
+	)	
 
 	_logger = None	
 	_ec2_cert = None
