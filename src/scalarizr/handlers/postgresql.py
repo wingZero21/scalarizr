@@ -13,7 +13,7 @@ from scalarizr.libs.metaconf import Configuration
 from scalarizr.handlers import ServiceCtlHanler
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr.util import initdv2, system2, PopenError
-from scalarizr.util import disttool, cryptotool
+from scalarizr.util import disttool, cryptotool, firstmatched
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.bus import bus
 from scalarizr.storage import Storage
@@ -50,11 +50,101 @@ CNF_NAME = BEHAVIOUR
 
 
 
+def lazy(init):
+	def wrapper(cls, *args, **kwargs):
+		obj = init(cls, *args, **kwargs)
+		return LazyInitScript(obj)
+	return wrapper
+
+
+class LazyInitScript(object):
+	
+	_script = None
+	reload_queue = None
+	restart_queue = None
+	
+	def __init__(self, script):
+		self._script = script
+		self.reload_queue = []
+		self.restart_queue = []
+
+	def start(self):
+		try:
+			if not self._script.running:
+				self._script.start()
+			elif self.restart_queue:
+				reasons = ' '.join([req+',' for req in self.restart_queue])[:-1]
+				self._script.restart(reasons)	
+			elif self.reload_queue:
+				reasons = ' '.join([req+',' for req in self.reload_queue])[:-1]
+				self._script.reload(reasons)		
+		finally:
+			self.restart_queue = []
+			self.reload_queue = []	
+		
+	def stop(self, reason=None):
+		if self._script.running:
+			try:
+				self._script.stop(reason)
+			finally:
+				self.restart_queue = []
+				self.reload_queue = []	
+
+	def restart(self, reason=None):
+		if self._script.running:
+			self.restart_queue.append(reason)
+		
+	def reload(self, reason=None):
+		if self._script.running:
+			self.reload_queue.append(reason)
+			
+				
+class PgSQLInitScript(initdv2.ParametrizedInitScript):
+	socket_file = None
+	
+	@lazy
+	def __new__(cls, *args, **kws):
+		obj = super(PgSQLInitScript, cls).__new__(cls, *args, **kws)
+		cls.__init__(obj)
+		return obj
+			
+	def __init__(self):
+		initd_script = None
+		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+			initd_script = ('/usr/sbin/service', 'postgresql')
+		else:
+			initd_script = firstmatched(os.path.exists, ('/etc/init.d/postgresql-9.0', '/etc/init.d/postgresql'))
+		initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
+				initd_script=initd_script)
+		
+	def status(self):
+		try:
+			system2(PSQL_PATH)
+		except PopenError, e:
+			if 'No such file or directory' in str(e):
+				return initdv2.Status.NOT_RUNNING
+		return initdv2.Status.RUNNING
+
+	
+	def stop(self, reason=None):
+		initdv2.ParametrizedInitScript.stop(self)
+	
+	def restart(self, reason=None):
+		initdv2.ParametrizedInitScript.restart(self)
+	
+	def reload(self, reason=None):
+		initdv2.ParametrizedInitScript.restart(self)
+	
+	
+initdv2.explore(SERVICE_NAME, PgSQLInitScript)
+
+
 class PostgreSql(object):
-	sysconfig_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
 	_objects = None
 	_instance = None
+	
+	service = None
 	
 	def _set(self, key, obj):
 		self._objects[key] = obj
@@ -115,12 +205,6 @@ class PostgreSql(object):
 	def _set_root_user(self, user):
 		self._set('root_user', user)
 	
-	@property
-	def service(self): 
-		#TODO: write initdv2
-		#TODO: write _get
-		return None
-	
 	root_user = property(_get_root_user, _set_root_user)
 	config_dir = property(_get_config_dir, _set_config_dir)
 	cluster_dir = property(_get_cluster_dir, _set_cluster_dir)
@@ -138,6 +222,7 @@ class PostgreSql(object):
 	
 	def __init__(self):
 		self._objects = {}
+		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
 	
 	def init_master(self, mpoint):
@@ -267,13 +352,11 @@ class PgUser(object):
 
 	@property
 	def _is_role_exist(self):
-		out = self.psql.execute('SELECT rolname FROM pg_roles;')
-		return self.name in out
+		return self.name in self.psql.list_pg_roles()
 	
 	@property
 	def _is_pg_database_exist(self):
-		out = self.psql.execute('SELECT datname FROM pg_database;')
-		return self.name in out	
+		return self.name in self.psql.list_pg_databases()
 	
 	@property
 	def _is_system_user_exist(self):
@@ -281,16 +364,8 @@ class PgUser(object):
 		return -1 != file.read().find(self.name)
 	
 	def delete(self, delete_db=True, delete_role=True, delete_system_user=True):
-		#TODO: implement delete methods
+		#TODO: implement delete method
 		pass
-		
-	def _delete_role(self):
-		out = self.psql.execute('DROP ROLE IF EXISTS %s;' % self.name)
-		return self.name in out	
-
-	def _delete_pg_database(self):
-		out = self.psql.execute('DROP DATABASE IF EXISTS %s;' % self.name)
-		return self.name in out	
 	
 	def _delete_system_user(self):
 		pass	
@@ -332,17 +407,39 @@ class PSQL(object):
 		self._logger = logging.getLogger(__name__)
 		
 	def test_connection(self):
-		#TODO: implement connection testing and integrate with initdv2 and pgsql
-		pass
+		try:
+			system2(self.path)
+		except PopenError, e:
+			if 'err' in str(e):
+				return False
+		return True
 		
 	def execute(self, query):
 		try:
 			out = system2([SU_EXEC, '-', self.user, '-c', '%s -c "%s"' % (self.path, query)])[0]
-			self._logger.debug(out)	
+			return out	
 		except PopenError, e:
 			self._logger.error('Unable to execute query %s from user %s: %s' % (query, self.user, e))
 			raise		
+
+	def list_pg_roles(self):
+		out = self.execute('SELECT rolname FROM pg_roles;')
+		roles = out.split()[2:-2]
+		return roles
 	
+	def list_pg_databases(self):
+		out = self.execute('SELECT datname FROM pg_database;')
+		roles = out.split()[2:-2]
+		return roles	
+	
+	def delete_pg_role(self, name):
+		out = self.execute('DROP ROLE IF EXISTS %s;' % name)
+		self._logger.debug(out)
+
+	def delete_pg_database(self, name):
+		out = self.psql.execute('DROP DATABASE IF EXISTS %s;' % name)
+		self._logger.debug(out)
+			
 	
 class ClusterDir(object):
 	def __init__(self, path=None, user = "postgres"):
@@ -864,7 +961,7 @@ class PostreSqlMessages:
 		snapshot_config:		Master storage snapshot					(on master)		 
 	) 
 	"""
-	
+
 
 class PostgreSqlHander(ServiceCtlHanler):
 	def __init__(self):

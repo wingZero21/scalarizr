@@ -5,6 +5,7 @@ Created on April 21th 2011
 '''
 import unittest
 from scalarizr.handlers 		import postgresql
+from scalarizr.util import initdv2
 
 class Test(unittest.TestCase):
 
@@ -17,7 +18,7 @@ class Test(unittest.TestCase):
 		pass
 
 
-	def testPgHbaRecord(self):
+	def _testPgHbaRecord(self):
 		record = postgresql.PgHbaRecord()
 		print "'%s'" % record
 		s = str(record)
@@ -30,6 +31,15 @@ class Test(unittest.TestCase):
 		print raw, '\n', s2
 		self.assertEquals(str(r2), str(postgresql.PgHbaRecord.from_string(s2)))
 		self.assertEquals(r2, postgresql.PgHbaRecord.from_string(s2))
+		
+	def test_psql(self):
+		self.psql = postgresql.PSQL()
+		print self.psql.list_pg_databases()
+		print self.psql.list_pg_roles()
+		#print self.psql.test_connection()
+		#initdv2.explore(postgresql.SERVICE_NAME, postgresql.PgSQLInitScript)
+		#pg = postgresql.PostgreSql()
+		#pg.service.start()
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
