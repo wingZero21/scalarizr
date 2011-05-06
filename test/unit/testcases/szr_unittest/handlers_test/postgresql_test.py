@@ -36,10 +36,9 @@ class Test(unittest.TestCase):
 		self.psql = postgresql.PSQL()
 		print self.psql.list_pg_databases()
 		print self.psql.list_pg_roles()
-		#print self.psql.test_connection()
-		#initdv2.explore(postgresql.SERVICE_NAME, postgresql.PgSQLInitScript)
-		#pg = postgresql.PostgreSql()
-		#pg.service.start()
+		print self.psql.test_connection()
+		pg = postgresql.PostgreSql()
+		pg.service.start()
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
