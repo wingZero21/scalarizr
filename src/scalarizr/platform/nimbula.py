@@ -30,7 +30,9 @@ class NimbulaPlatform(Ec2LikePlatform):
 			except:
 				timeout = 600
 			self._logger.info('Waiting for user data.')
-			wait_until(os.path.exists, (path, ), logger=self._logger, timeout=timeout, sleep=1)
+			wait_until(os.path.exists, (path, ), 
+					logger=self._logger, timeout=timeout, sleep=1, 
+					error_text="File %s not exists" % path)
 			rawmeta = filetool.read_file(path)
 			if not rawmeta:
 				raise PlatformError("Empty user-data")

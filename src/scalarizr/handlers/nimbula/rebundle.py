@@ -73,7 +73,9 @@ class NimbulaSnapshotRebundleHandler(Handler):
 				self._logger.info('Creating snapshot (instance: %s)', pl.get_instance_id())
 				snap = conn.add_snapshot(pl.get_instance_id(), image_name)
 				self._logger.info('Checking that snapshot %s is completed', snap.name)
-				wait_until(lambda: snap.update().state in ('complete', 'error'), timeout=600, logger=self._logger)
+				wait_until(lambda: snap.update().state in ('complete', 'error'), 
+						timeout=600, logger=self._logger,
+						error_text="Snapshot %s wasn't completed in a reasonable time" % snap.name)
 				if snap.state == 'error':
 					raise HandlerError("Snapshot creation failed: snapshot status becomes 'error'")
 				self._logger.info('Image %s completed and available for use!', snap.machineimage)

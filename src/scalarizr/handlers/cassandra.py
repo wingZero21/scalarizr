@@ -440,7 +440,7 @@ class CassandraScalingHandler(ServiceCtlHanler):
 		# http://wiki.apache.org/cassandra/Operations#line-57
 		time.sleep(120)
 		self._logger.debug('Waiting for bootstrap finish')
-		wait_until(self._bootstrap_finished, sleep = 10)
+		wait_until(self._bootstrap_finished, sleep = 10, "Bootstrap wasn't finished in a reasonable time")
 		message.cassandra.update(dict(volume_id = ebs_volume.id))
 
 	def on_HostUp(self, message):
@@ -459,7 +459,7 @@ class CassandraScalingHandler(ServiceCtlHanler):
 		err = system2('nodetool -h localhost decommission', shell=True)[2]
 		if err:
 			raise HandlerError('Cannot decommission node: %s' % err)
-		wait_until(self._is_decommissioned)
+		wait_until(self._is_decommissioned, timeout=300, error_text="Node wasn't decommissioned in a reasonable time")
 		cassandra.stop_service()
 		
 		

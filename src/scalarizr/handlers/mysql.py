@@ -18,7 +18,8 @@ from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 from scalarizr.util import system2, cryptotool, disttool, filetool, \
-	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool
+	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool,\
+	PopenError
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
@@ -223,6 +224,56 @@ DEFAULT_DATADIR			= "/var/lib/mysql"
 
 def get_handlers ():
 	return [MysqlHandler()]
+
+
+
+class MySQL(object):
+	
+	def __init__(self):
+		self.logger = logging.getLogger(__name__)
+		self._client = None
+
+	root_user = 'scalr'
+		
+	@property
+	def root_password(self):
+		return bus.cnf.rawini.get('mysql', 'root_password')
+	
+	@property
+	def client(self):
+		if not self._client:
+			self._client = MySQLClient(lambda: (self.root_user, self.root_password))
+		return self._client
+		
+	def dump_database(self, database, filename):
+		self.logger.info('Dumping database %s', database)
+		with open(filename, 'w') as fp: 
+			system2(('/usr/bin/mysqldump', '-u', self.root_user, '-p', 
+					'--create-options', '--add-drop-database', '-q', '-Q', '--flush-privileges', 
+					'--databases', database), stdin=self.root_password, stdout=fp)
+	
+	
+class MySQLClient(object):
+	def __init__(self, credentials_function):
+		self._credentials_function = credentials_function
+		
+	def _exec(self, query, vertical=False):
+		user, passwd  = self._credentials_function()
+		return system2(('/usr/bin/mysql', '-u', user, '-p', '--execute', query), stdin=passwd)[0]
+	
+	def fetchall(self, query):
+		lines = self._exec(query).splitlines()
+		headers = lines[0].split('\t')
+		return tuple(dict(zip(headers, line.split('\t'))) for line in lines[1:])
+		
+	def fetchdict(self, query):
+		pass
+	
+	
+	
+mysql = MySQL()
+
+
 
 '''
 Failover scenario:
@@ -681,22 +732,13 @@ class MysqlHandler(ServiceCtlHanler):
 		# Retrieve password for scalr mysql user
 		tmpdir = backup_path = None
 		try:
-			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
-			
 			# Get databases list
-			my_cli = spawn_mysql_cli(ROOT_USER, root_password)
-			try:
-				my_cli.sendline('SHOW DATABASES;')
-				my_cli.expect('mysql>')
-				
-				databases = list(line.split('|')[1].strip() for line in my_cli.before.splitlines()[4:-3])
-				if 'information_schema' in databases:
-					databases.remove('information_schema')
-			finally:
-				my_cli.close()
+			databases = list(row['Database'] for row in mysql.client.fetchall('SHOW DATABASES'))
+			if 'information_schema' in databases:
+				databases.remove('information_schema')
 			
 			# Defining archive name and path
-			backup_filename = 'mysql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+			backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
 			backup_path = os.path.join('/tmp', backup_filename)
 			
 			# Creating archive 
@@ -706,22 +748,12 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.info("Dumping all databases")
 			tmpdir = tempfile.mkdtemp()			
 			for db_name in databases:
-				dump_path = tmpdir + os.sep + db_name + '.sql'
-				mysqldump = pexpect.spawn('/bin/sh -c "/usr/bin/mysqldump -u ' + ROOT_USER + ' -p --create-options' + 
-									  ' --add-drop-database -q -Q --flush-privileges --databases ' + 
-									  db_name + '>' + dump_path +'"', timeout=900)
 				try:
-					mysqldump.expect('Enter password:')
-					mysqldump.sendline(root_password)
-					
-					status = mysqldump.read()
-					if re.search(re.compile('error', re.M | re.I), status):
-						raise HandlerError('Error while dumping database %s: %s' % (db_name, status))
-					
-					backup.add(dump_path, os.path.basename(dump_path))
-				finally:
-					mysqldump.close()
-					del(mysqldump)
+					dump_path = os.path.join(tmpdir, db_name + '.sql') 
+					mysql.dump_database(db_name, dump_path)
+					backup.add(dump_path, os.path.basename(dump_path))						
+				except PopenError:
+					self._logger.exception('Cannot dump database %s', db_name)
 			
 			backup.close()
 			

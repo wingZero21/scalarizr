@@ -259,19 +259,21 @@ def system2(*popenargs, **kwargs):
 	if err:
 		logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
 	if p.returncode and raise_exc:
-		raise ExcClass(error_text, out.strip(), err and err.strip() or '', p.returncode, popenargs[0])
+		raise ExcClass(error_text, out and out.strip() or '', err and err.strip() or '', p.returncode, popenargs[0])
 
 	return out, err, p.returncode
 
 
-def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, time_until=None, timeout=None):
+def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, time_until=None, timeout=None, error_text=None):
 	args = args or ()
 	kwargs = kwargs or {}
 	if timeout:
 		time_until = time.time() + timeout
 	while not target(*args, **kwargs):
 		if time_until and time.time() >= time_until:
-			raise BaseException('Time until: %d reached' % time_until)
+			msg = error_text + '. ' if error_text else ''
+			msg += 'Time until: %d reached' % time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time_until))
+			raise BaseException(msg)
 		if logger:
 			logger.debug("Wait %.2f seconds before the next attempt", sleep)
 		time.sleep(sleep)

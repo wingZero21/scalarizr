@@ -110,7 +110,7 @@ class Mdadm:
 		if info['level'] == 'raid0':
 			raise MdadmError("Can't add devices to raid level 0.")
 		
-		wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
+		wait_until(lambda: not self.get_array_info(array)['rebuild_status'], timeout=60)
 		cmd = (MDADM_EXEC, '--add', array, device)
 		system(cmd, error_text='Error occured during device addition')
 		
@@ -127,7 +127,7 @@ class Mdadm:
 
 	def remove_disk(self, device):
 		array = self._get_array_by_device(device)
-		wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
+		wait_until(lambda: not self.get_array_info(array)['rebuild_status'], timeout=60)
 
 		cmd = (MDADM_EXEC, array, '-f', '--fail', device)	
 		system(cmd, error_text='Error occured while markin device as failed')
