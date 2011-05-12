@@ -103,10 +103,10 @@ class Source(object):
 class SvnSource(Source):
 	EXECUTABLE = '/usr/bin/svn'
 	
-	def __init__(self, url=None, user=None, password=None, executable=None):
+	def __init__(self, url=None, login=None, password=None, executable=None):
 		self._logger = logging.getLogger(__name__)
 		self.url = url
-		self.user = user
+		self.login = login
 		self.password = password
 		self.executable = self.EXECUTABLE
 		
@@ -136,9 +136,9 @@ class SvnSource(Source):
 			'svn' , 
 			'update' if do_update else 'co'
 		]
-		if self.user and self.password:
+		if self.login and self.password:
 			args += [
-				'--username', self.user,
+				'--username', self.login,
 				'--password', self.password,
 			]
 		if args[1] == 'co':
@@ -153,11 +153,11 @@ class SvnSource(Source):
 class GitSource(Source):
 	EXECUTABLE = '/usr/bin/git'	
 	
-	def __init__(self, url=None, ssl_cert=None, ssl_pk=None, ssl_ca_info=None, ssl_no_verify=None, executable=None):
+	def __init__(self, url=None, ssl_certificate=None, ssl_private_key=None, ssl_ca_info=None, ssl_no_verify=None, executable=None):
 		self._logger = logging.getLogger(__name__)
 		self.url = url
-		self.ssl_cert = ssl_cert
-		self.ssl_pk = ssl_pk
+		self.ssl_certificate = ssl_certificate
+		self.ssl_private_key = ssl_private_key
 		self.ssl_ca_info = ssl_ca_info
 		self.ssl_no_verify = ssl_no_verify
 		self.executable = executable or self.EXECUTABLE
@@ -175,9 +175,9 @@ class GitSource(Source):
 		
 		env = {}
 		cnf = bus.cnf		
-		if self.ssl_cert and self.ssl_pk:
-			env['GIT_SSL_CERT'] = cnf.write_key('git-client.crt', self.ssl_cert)
-			env['GIT_SSL_KEY'] = cnf.write_key('git-client.key', self.ssl_pk)
+		if self.ssl_certificate and self.ssl_private_key:
+			env['GIT_SSL_CERT'] = cnf.write_key('git-client.crt', self.ssl_certificate)
+			env['GIT_SSL_KEY'] = cnf.write_key('git-client.key', self.ssl_private_key)
 		if self.ssl_ca_info:
 			env['GIT_SSL_CAINFO'] = cnf.write_key('git-client-ca.crt', self.ssl_ca_info)
 		if self.ssl_no_verify:
@@ -254,6 +254,10 @@ class HttpSource(Source):
 				self._logger.info(out)
 			else:
 				self._logger.info('Moving source from %s to %s', tmpdst, workdir)
+				dst = os.path.join(workdir, os.path.basename(tmpdst))
+				if os.path.isfile(dst):
+					self._logger.debug('Removing already existed file %s', dst)
+					os.remove(dst)
 				shutil.move(tmpdst, workdir)
 			
 		except:

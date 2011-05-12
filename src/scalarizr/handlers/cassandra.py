@@ -440,7 +440,7 @@ class CassandraScalingHandler(ServiceCtlHanler):
 		# http://wiki.apache.org/cassandra/Operations#line-57
 		time.sleep(120)
 		self._logger.debug('Waiting for bootstrap finish')
-		wait_until(self._bootstrap_finished, sleep = 10, "Bootstrap wasn't finished in a reasonable time")
+		wait_until(self._bootstrap_finished, sleep=10, error_text="Bootstrap wasn't finished in a reasonable time")
 		message.cassandra.update(dict(volume_id = ebs_volume.id))
 
 	def on_HostUp(self, message):
