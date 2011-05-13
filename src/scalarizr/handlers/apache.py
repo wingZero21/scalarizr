@@ -61,7 +61,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		)
 		
 	def reload(self):
-		if self.pid_file and os.path.exists(self.pid_file):
+		if self.running:
 			out, err, retcode = system2(self._apachectl + ' graceful', shell=True)
 			if retcode > 0:
 				raise initdv2.InitdError('Cannot reload apache: %s' % err)
