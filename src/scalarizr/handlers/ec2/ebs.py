@@ -7,13 +7,16 @@ Created on Mar 1, 2010
 from scalarizr.bus import bus
 from scalarizr import config, handlers
 from scalarizr.messaging import Messages
-from scalarizr.util import fstool
+from scalarizr.util import fstool, wait_until
 
 
 import os
 import logging
 from scalarizr.storage import Storage, Volume
 from scalarizr.platform.ec2 import ebstool
+from threading import Thread
+import threading
+from scalarizr.handlers import HandlerError
 
 
 
@@ -53,6 +56,7 @@ class EbsHandler(handlers.Handler):
 
 	def on_init(self):
 		bus.on("before_host_init", self.on_before_host_init)
+		bus.on("host_init_response", self.on_host_init_response)
 		try:
 			handlers.script_executor.skip_events.add(Messages.INT_BLOCK_DEVICE_UPDATED)
 		except AttributeError:
@@ -72,51 +76,72 @@ class EbsHandler(handlers.Handler):
 			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' Error: %s", str(e))
 			raise
 
-	def on_MountPointsReconfigure(self, message):
-		self._logger.info("Reconfiguring mountpoints")
+	def on_host_init_response(self, *args, **kwargs):
+		self._logger.info('Configuring EBS mountpoints')		
+		wait_until(self._plug_all_ebs, sleep=10, timeout=600, 
+				error_text='Cannot attach and mount EBS disks in a reasonable time')
+	
+	def _plug_all_ebs(self):
+		unplugged = 0
+		plugged_names = []
 		for ebs_mpoint in self._queryenv.list_ebs_mountpoints():
-			self._logger.debug("Processing %s", ebs_mpoint)
-			if ebs_mpoint.is_array:
-				# TODO: implement EBS arrays
-				self._logger.warning("EBS array %s skipped. EBS arrays not implemented yet", ebs_mpoint.name)
+			if ebs_mpoint.name in plugged_names:
 				continue
+			if ebs_mpoint.name == 'vol-creating':
+				unplugged += 1
+			else:
+				self._plug_ebs(ebs_mpoint)
+				plugged_names.append(ebs_mpoint.name)
+		return not unplugged
+	
+	def _plug_ebs(self, ebs_mpoint):
+		try:
+			if ebs_mpoint.is_array:
+				return self._logger.warning('EBS array %s skipped. EBS arrays not implemented in Scalarizr', 
+										ebs_mpoint.name)
 			try:
 				ebs_volume = ebs_mpoint.volumes[0]
 			except IndexError:
-				self._logger.error("Invalid mpoint info %s. Volumes list is empty", ebs_mpoint)
-				continue
+				return self._logger.error("Invalid mpoint info %s. Volumes list is empty", ebs_mpoint)
+
 			if not ebs_volume.volume_id or not ebs_volume.device:
-				self._logger.error("Invalid volume info %s. volume_id and device should be non-empty", ebs_volume)
-				continue
-			devname = ebstool.real_devname(ebs_volume.device)
-			
-			mtab = fstool.Mtab()			
-			if not mtab.contains(devname, reload=True):
-				self._logger.debug("Mounting device %s to %s", devname, ebs_mpoint.dir)
+				return self._logger.error("Invalid volume info %s. volume_id and device should be non-empty", ebs_volume)
+
+			device = ebstool.real_devname(ebs_volume.device)
+			if not os.path.exists(device):
+				Storage.create(type='ebs', id=ebs_volume.volume_id, device=ebs_volume.device)
+				
+			mtab = fstool.Mtab()	
+			if not mtab.contains(device, reload=True):
+				self._logger.debug("Mounting device %s to %s", device, ebs_mpoint.dir)
 				try:
-					fstool.mount(devname, ebs_mpoint.dir, auto_mount=True)
+					fstool.mount(device, ebs_mpoint.dir, auto_mount=True)
 				except fstool.FstoolError, e:
 					if e.code == fstool.FstoolError.NO_FS:
-						self._logger.debug('Creating filesystem and mount device %s to %s', devname, ebs_mpoint.dir)
-						fstool.mount(devname, ebs_mpoint.dir, make_fs=True, auto_mount=True)
+						self._logger.debug('Creating filesystem and mount device %s to %s', device, ebs_mpoint.dir)
+						fstool.mount(device, ebs_mpoint.dir, make_fs=True, auto_mount=True)
 					else:
 						raise
-				self._logger.debug("Device %s is mounted to %s", devname, ebs_mpoint.dir)
+				self._logger.info("Device %s is mounted to %s", device, ebs_mpoint.dir)
 				
 				self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
 					volume_id = ebs_volume.volume_id,
-					device_name = devname
+					device_name = device
 				), broadcast=True)
-				bus.fire("block_device_mounted", volume_id=ebs_volume.volume_id, device=devname)				
+				bus.fire("block_device_mounted", volume_id=ebs_volume.volume_id, device=device)				
 				
 			else:
-				entry = mtab.find(devname)[0]
-				self._logger.debug("Skip device %s already mounted to %s", devname, entry.mpoint)
-				
+				entry = mtab.find(device)[0]
+				self._logger.debug("Skip device %s already mounted to %s", device, entry.mpoint)
+		except:
+			self._logger.exception("Can't attach EBS")
+		
+	def on_MountPointsReconfigure(self, message):
+		self._logger.info("Reconfiguring EBS mountpoints")
+		for ebs_mpoint in self._queryenv.list_ebs_mountpoints():
+			self._plug_ebs(ebs_mpoint)
 		self._logger.debug("Mountpoints reconfigured")
 		
-
-				
 	def on_IntBlockDeviceUpdated(self, message):
 		if message.action == "add":
 			self._logger.debug("udev notified me that block device %s was attached", message.devname)
