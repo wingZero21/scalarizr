@@ -1075,7 +1075,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		if not os.path.exists(dir):
 			os.makedirs(dir)
 		
-		postgresql_data = message.mysql.copy()
+		postgresql_data = message.postgresql.copy()
 		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 			if os.path.exists(file):
@@ -1096,7 +1096,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		"""
 
 		repl = 'master' if self.postgresql.is_replication_master else 'slave'
-		bus.fire('before_mysql_configure', replication=repl)
+		bus.fire('before_postgresql_configure', replication=repl)
 		
 		if self.postgresql.is_replication_master:
 			self._init_master(message)									  
@@ -1108,7 +1108,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 	
 	def _init_master(self, message):
 		"""
-		Initialize MySQL master
+		Initialize postgresql master
 		@type message: scalarizr.messaging.Message 
 		@param message: HostUp message
 		"""
@@ -1129,10 +1129,10 @@ class PostgreSqlHander(ServiceCtlHanler):
 		self.postgresql.service.stop('Initializing Master')
 		
 		msg_data = None
-		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
+		storage_valid = self._storage_valid() # It's important to call it before _move_postgresql_dir
 		self.postgresql.cluster_dir.move(move_files=storage_valid)
 		
-		# If It's 1st init of mysql master storage
+		# If It's 1st init of postgresql master storage
 		if not storage_valid:
 				
 			# Add system users	
@@ -1147,7 +1147,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			msg_data = dict(root_password=root_password)
 			msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 			
-		# If volume has mysql storage directory structure (N-th init)
+		# If volume has postgresql storage directory structure (N-th init)
 		else:
 			# Get required configuration options
 			root_password = self._get_ini_options(OPT_ROOT_PASSWORD)
@@ -1164,7 +1164,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 			
 		if msg_data:
-			message.mysql = msg_data.copy()
+			message.postgresql = msg_data.copy()
 			try:
 				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
 			except KeyError:
@@ -1174,11 +1174,11 @@ class PostgreSqlHander(ServiceCtlHanler):
 	
 	def _init_slave(self, message):
 		"""
-		Initialize MySQL slave
+		Initialize postgresql slave
 		@type message: scalarizr.messaging.Message 
 		@param message: HostUp message
 		"""
-		self._logger.info("Initializing MySQL slave")
+		self._logger.info("Initializing postgresql slave")
 		
 		storage_valid = self._storage_valid()
 		
@@ -1199,7 +1199,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
 					if host.replication_master)[0]
 			except IndexError:
-				self._logger.debug("QueryEnv respond with no mysql master. " + 
+				self._logger.debug("QueryEnv respond with no postgresql master. " + 
 						"Waiting %d seconds before the next attempt", 5)
 				time.sleep(5)
 				
@@ -1275,7 +1275,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		
 		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
 		if snap.state == Snapshot.FAILED:
-			raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
+			raise HandlerError('postgresql storage snapshot creation failed. See log for more details')
 		
 		return snap
 
@@ -1315,7 +1315,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		"""
 		Promote slave to master
 		@type message: scalarizr.messaging.Message
-		@param message: Mysql_PromoteToMaster
+		@param message: postgresql_PromoteToMaster
 		"""
 		old_conf 		= None
 		new_storage_vol	= None
@@ -1326,7 +1326,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			
 						
 			try:
-				# Stop mysql
+				# Stop postgresql
 				if master_storage_conf:
 					self.postgresql.stop_replication()
 					self.postgresql.service.stop()
@@ -1334,7 +1334,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 					# Unplug slave storage and plug master one
 					old_conf = self.storage_vol.detach(force=True) # ??????
 					new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)				
-					# Continue if master storage is a valid MySQL storage 
+					# Continue if master storage is a valid postgresql storage 
 					storage_valid = self._storage_valid()
 					if storage_valid:
 						self.postgresql.cluster_dir.move(move_files=storage_valid)
@@ -1351,7 +1351,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 						msg_data.update(self._compat_storage_data(vol=new_storage_vol))
 						self.send_message(PostgreSqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
 					else:
-						raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
+						raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
 					self.postgresql.service.start()
 				else:
 					self.postgresql.stop_replication()
@@ -1404,7 +1404,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 					last_error=str(e)
 				))
 
-				# Start MySQL
+				# Start postgresql
 				self._start_service()
 			
 			if tx_complete and master_storage_conf:
@@ -1420,12 +1420,12 @@ class PostgreSqlHander(ServiceCtlHanler):
 		"""
 		Switch replication to a new master server
 		@type message: scalarizr.messaging.Message
-		@param message:  Mysql_NewMasterUp
+		@param message:  PostgreSQL_NewMasterUp
 		"""
 		
 		if not self.postgresql.is_replication_master:
 			host = message.local_ip or message.remote_ip
-			self._logger.info("Switching replication to a new MySQL master %s", host)
+			self._logger.info("Switching replication to a new postgresql master %s", host)
 			bus.fire('before_postgresql_change_master', host=host)			
 			
 			if 'snapshot_config' in message.body:
