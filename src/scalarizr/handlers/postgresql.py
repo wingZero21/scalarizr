@@ -8,15 +8,18 @@ import os
 import pwd
 import logging
 import shutil
+import time
+
+from scalarizr import config
 
 from scalarizr.libs.metaconf import Configuration
-from scalarizr.handlers import ServiceCtlHanler
+from scalarizr.handlers import ServiceCtlHanler, HandlerError
 from scalarizr.util.filetool import read_file, write_file
-from scalarizr.util import initdv2, system2, PopenError
+from scalarizr.util import initdv2, system2, wait_until, PopenError
 from scalarizr.util import disttool, cryptotool, firstmatched
-from scalarizr.config import BuiltinBehaviours
+from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.bus import bus
-from scalarizr.storage import Storage
+from scalarizr.storage import Storage, Snapshot, StorageError, Volume
 
 
 SU_EXEC = '/bin/su'
@@ -39,8 +42,8 @@ OPT_SNAPSHOT_CNF		= 'snapshot_config'
 STORAGE_PATH 			= "/mnt/pgstorage"
 STORAGE_DATA_DIR 		= "data"
 
-STORAGE_VOLUME_CNF 		= 'mysql.json'
-STORAGE_SNAPSHOT_CNF 	= 'mysql-snap.json'
+STORAGE_VOLUME_CNF 		= 'postgresql.json'
+STORAGE_SNAPSHOT_CNF 	= 'postgresql-snap.json'
 
 BACKUP_CHUNK_SIZE 		= 200*1024*1024
 
@@ -146,6 +149,10 @@ class PostgreSql(object):
 	
 	service = None
 	
+	@property
+	def is_replication_master(self):
+		return True if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else False
+	
 	def _set(self, key, obj):
 		self._objects[key] = obj
 		
@@ -224,6 +231,7 @@ class PostgreSql(object):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
+		self._cnf = bus.cnf
 	
 	def init_master(self, mpoint):
 		self._init_service(mpoint)
@@ -236,14 +244,18 @@ class PostgreSql(object):
 		self.trigger_file = Trigger(os.path.join(self.config_dir.path, 'trigger'))
 		self.recovery_conf.trigger_file = self.trigger_file.path
 		self.recovery_conf.standby_mode = 'on'
-		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, self.root_user.name)
 		self.postgresql_conf.hot_standby = 'on'
+		self.change_primary(self, primary_ip, primary_port, self.root_user.name)
 		
 	def register_slave(self, slave_ip):
 		self.postgresql_conf.listen_addresses = '*'
 		self.pg_hba_conf.add_standby_host(slave_ip)
 		self.service.restart(force=True)
 		
+	def change_primary(self, primary_ip, primary_port, username):
+		#TODO: make it work [see pg.repl documentation]
+		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, username)
+	
 	def unregister_slave(self, slave_ip):
 		self.pg_hba_conf.delete_standby_host(slave_ip)
 		self.service.restart(force=True)
@@ -254,11 +266,11 @@ class PostgreSql(object):
 	def start_replication(self):
 		self.trigger_file.destroy()
 	
-	def create_user(self, name):
+	def create_user(self, name, password=None):
 		self.service.start()
-		user = PgUser(name)	
 		self.set_trusted_mode()
-		password = user.generate_password(20)
+		user = PgUser(name)	
+		password = password or user.generate_password(20)
 		user.create(password, super=True)
 		self.set_password_mode()
 		return user	
@@ -290,29 +302,28 @@ postgresql = PostgreSql()
 
 	
 class PgUser(object):
-	
 	name = None
 	password = None
 	psql = None
 	
-	def __init__(self, name, group='postgres'):
+	def __init__(self, name, password=None, group='postgres'):
 		self.name = name
+		self.password = password
 		self.group = group
 		self._logger = logging.getLogger(__name__)
 		self.psql = PSQL()
 		self._cnf = bus.cnf
 	
-	def create(self, password, super=True):	
-		self._create_system_user(password)
+	def create(self, password=None, super=True):	
+		self._create_system_user(password or self.password)
 		self._create_pg_database()
-		self._create_pg_user(super)
+		self._create_role(super)
 	
 	def exists(self):
 		return self._is_system_user_exist and self._is_role_exist and self._is_pg_database_exist
 	
 	def generate_password(self, length=20):
 		return cryptotool.pwgen(length)
-		
 		
 	def _create_role(self, super=True):
 		if self._is_role_exist:
@@ -341,6 +352,7 @@ class PgUser(object):
 	def _create_system_user(self, password):
 		if self._is_system_user_exist:
 			self._logger.debug('Cannot create system user: user %s already exists' % self.name)
+			#TODO: check password
 		else:
 			try:
 				out = system2([USERADD, '-g', self.group, '-p', password, self.name])[0]
@@ -349,6 +361,8 @@ class PgUser(object):
 			except PopenError, e:
 				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
 				raise
+			#change password in privated/pgsql.ini
+		self.store_password(password)
 
 	@property
 	def _is_role_exist(self):
@@ -385,18 +399,22 @@ class PgUser(object):
 			self._logger.error('Error changing password for ' + self.name)	
 		
 		#change password in privated/pgsql.ini
-		self._cnf.rawini.set(CNF_SECTION, self.opt_user_password, new_pass)
+		self.store_password(new_pass)
 		
 		return new_pass
 	
-	@property
-	def opt_user_password(self): 
-		return '%s_password' % self.username
+	def check_password(self, password=None):
+		#TODO: check (password or self.password), raise ValueError
+		pass
 	
-	@property
-	def password(self):
+	def get_password(self):
 		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
-		
+
+	def store_password(self, password):
+		self._cnf.rawini.set(CNF_SECTION, self.opt_user_password, password)
+	
+	opt_user_password = lambda(self): '%s_password' % self.username
+			
 
 class PSQL(object):
 	path = PSQL_PATH
@@ -463,7 +481,9 @@ class ClusterDir(object):
 		rchown(self.user, dst)
 		
 		self._logger.debug("Changing postgres user`s home directory")
-		system2([USERMOD, '-d', new_cluster_dir, self.user]) 
+		if disttool.is_centos():
+			#looks like ubuntu doesn`t need this
+			system2([USERMOD, '-d', new_cluster_dir, self.user]) 
 	
 		return new_cluster_dir
 
@@ -871,13 +891,13 @@ class PgHbaConf(Configuration):
 		self.add_record(self.password_mode)
 	
 	def _make_standby_record(self,ip):
-		return PgHbaRecord('host','replication','postgres',address='%s/30'%ip, auth_method='trust')
+		return PgHbaRecord('host','replication','postgres',address='%s/32'%ip, auth_method='trust')
 	
 class ParseError(BaseException):
 	pass
 	
 		
-class PostreSqlMessages:
+class PostgreSqlMessages:
 	CREATE_DATA_BUNDLE = "Pgsql_CreateDataBundle"
 	
 	CREATE_DATA_BUNDLE_RESULT = "Pgsql_CreateDataBundleResult"
@@ -923,7 +943,7 @@ class PostreSqlMessages:
 	@ivar log_pos?
 	"""
 	
-	NEW_MASTER_UP = "Mysql_NewMasterUp"
+	NEW_MASTER_UP = "Postgresql_NewMasterUp"
 	"""
 	@ivar behaviour
 	@ivar local_ip
@@ -936,10 +956,10 @@ class PostreSqlMessages:
 	"""
 	
 	"""
-	Also MySQL behaviour adds params to common messages:
+	Also Postgresql behaviour adds params to common messages:
 	
 	= HOST_INIT_RESPONSE =
-	@ivar mysql=dict(
+	@ivar postgresql=dict(
 		replication_master: 	1|0
 		root_password:			'scalr' user password  					(on slave)
 		repl_password:			'scalr_repl' user password				(on slave)
@@ -951,7 +971,7 @@ class PostreSqlMessages:
 	)
 	
 	= HOST_UP =
-	@ivar mysql=dict(
+	@ivar postgresql=dict(
 		root_password: 			'scalr' user password  					(on master)
 		repl_password: 			'scalr_repl' user password				(on master)
 		stat_password: 			'scalr_stat' user password				(on master)
@@ -964,19 +984,513 @@ class PostreSqlMessages:
 
 
 class PostgreSqlHander(ServiceCtlHanler):
-	def __init__(self):
-		pass
+	_logger = None
+		
+	_queryenv = None
+	""" @type _queryenv: scalarizr.queryenv.QueryEnvService	"""
 	
+	_platform = None
+	""" @type _platform: scalarizr.platform.Ec2Platform """
+	
+	_cnf = None
+	''' @type _cnf: scalarizr.config.ScalarizrCnf '''
+	
+	storage_vol = None
+
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return postgresql.behaviour in behaviour and (
-					message.name == PostreSqlMessages.NEW_MASTER_UP
-				or 	message.name == PostreSqlMessages.PROMOTE_TO_MASTER
-				or 	message.name == PostreSqlMessages.CREATE_DATA_BUNDLE
-				or 	message.name == PostreSqlMessages.CREATE_BACKUP
-				or  message.name == PostreSqlMessages.UPDATE_SERVICE_CONFIGURATION)	
-	
+					message.name == PostgreSqlMessages.NEW_MASTER_UP
+				or 	message.name == PostgreSqlMessages.PROMOTE_TO_MASTER
+				or 	message.name == PostgreSqlMessages.CREATE_DATA_BUNDLE
+				or 	message.name == PostgreSqlMessages.CREATE_BACKUP
+				or  message.name == PostgreSqlMessages.UPDATE_SERVICE_CONFIGURATION)	
 
+	
+	def __init__(self):
+		self._logger = logging.getLogger(__name__)
+		self._queryenv = bus.queryenv_service
+		self._platform = bus.platform
+		self._cnf = bus.cnf
+		ini = self._cnf.rawini
+		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+
+		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
+		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
+			
+		bus.on("init", self.on_init)
+		bus.define_events(
+			'before_postgresql_data_bundle',
+			
+			'postgresql_data_bundle',
+			
+			# @param host: New master hostname 
+			'before_postgresql_change_master',
+			
+			# @param host: New master hostname 
+			'postgresql_change_master'
+		)	
+		
+		self.postgresql = PostgreSql()
+
+
+	def on_init(self):		
+		bus.on("host_init_response", self.on_host_init_response)
+		bus.on("before_host_up", self.on_before_host_up)
+		bus.on("before_reboot_start", self.on_before_reboot_start)
+		bus.on("before_reboot_finish", self.on_before_reboot_finish)
+		
+		if self._cnf.state == ScalarizrState.RUNNING:
+
+			storage_conf = Storage.restore_config(self._volume_config_path)
+			self.storage_vol = Storage.create(storage_conf)
+			if not self.storage_vol.mounted():
+				self.storage_vol.mount()
+			
+			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
+				self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
+				root_password = self.postgresql.root_user.get_password()
+				if not self.postgresql.root_user.exists():
+					self._logger.debug("Scalr's PostgreSQL root user does not exist. Recreating")
+					self.postgresql.root_user = self.postgresql.create_user(ROOT_USER, root_password)
+				else:
+					try:
+						self.postgresql.root_user.check_password(root_password)
+						self._logger.debug("Scalr's root PgSQL user is present. Password is correct.")				
+					except ValueError:
+						self._logger.warning("Scalr's root PgSQL user was changed. Recreating.")
+						self.postgresql.root_user.change_password(root_password)
+
+
+	def on_host_init_response(self, message):
+		"""
+		Check postgresql data in host init response
+		@type message: scalarizr.messaging.Message
+		@param message: HostInitResponse
+		"""
+		if not message.body.has_key("postgresql"):
+			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property")
+
+		dir = os.path.dirname(self._volume_config_path)
+		if not os.path.exists(dir):
+			os.makedirs(dir)
+		
+		postgresql_data = message.mysql.copy()
+		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
+						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
+			if os.path.exists(file):
+				os.remove(file)
+			if key in postgresql_data:
+				Storage.backup_config(postgresql_data[key], file)
+				del postgresql_data[key]
+						
+		self._logger.debug("Update postgresql config with %s", postgresql_data)
+		self._update_config(postgresql_data)
+
+
+	def on_before_host_up(self, message):
+		"""
+		Configure PostgreSQL behaviour
+		@type message: scalarizr.messaging.Message		
+		@param message: HostUp message
+		"""
+
+		repl = 'master' if self.postgresql.is_replication_master else 'slave'
+		bus.fire('before_mysql_configure', replication=repl)
+		
+		if self.postgresql.is_replication_master:
+			self._init_master(message)									  
+		else:
+			self._init_slave(message)		
+			
+		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+				
+	
+	def _init_master(self, message):
+		"""
+		Initialize MySQL master
+		@type message: scalarizr.messaging.Message 
+		@param message: HostUp message
+		"""
+		
+		self._logger.info("Initializing PostgreSQL master")
+		
+		# Plug storage
+		volume_cnf = Storage.restore_config(self._volume_config_path)
+		try:
+			snap_cnf = Storage.restore_config(self._snapshot_config_path)
+			volume_cnf['snapshot'] = snap_cnf
+		except IOError:
+			pass
+		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
+		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
+		
+		# Stop PostgreSQL server
+		self.postgresql.service.stop('Initializing Master')
+		
+		msg_data = None
+		storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
+		self.postgresql.cluster_dir.move(move_files=storage_valid)
+		
+		# If It's 1st init of mysql master storage
+		if not storage_valid:
+				
+			# Add system users	
+			self.postgresql.root_user = self.postgresql.create_user(ROOT_USER)
+			root_password = self.postgresql.root_user.get_password()
+			
+			# Get binary logfile, logpos and create storage snapshot
+			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+			Storage.backup_config(snap.config(), self._snapshot_config_path)
+			
+			# Update HostUp message 
+			msg_data = dict(root_password=root_password)
+			msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+			
+		# If volume has mysql storage directory structure (N-th init)
+		else:
+			# Get required configuration options
+			root_password = self._get_ini_options(OPT_ROOT_PASSWORD)
+			
+			# Create snapshot
+			snap = self._create_snapshot(ROOT_USER, root_password)
+			Storage.backup_config(snap.config(), self._snapshot_config_path)
+			
+			# Update HostUp message 
+			msg_data = dict(
+				log_file=log_file, 
+				log_pos=log_pos
+			)
+			msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+			
+		if msg_data:
+			message.mysql = msg_data.copy()
+			try:
+				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
+			except KeyError:
+				pass 
+			self._update_config(msg_data)
+	
+	
+	def _init_slave(self, message):
+		"""
+		Initialize MySQL slave
+		@type message: scalarizr.messaging.Message 
+		@param message: HostUp message
+		"""
+		self._logger.info("Initializing MySQL slave")
+		
+		storage_valid = self._storage_valid()
+		
+		if not storage_valid:
+			self._logger.debug("Initialize slave storage")
+			self.storage_vol = self._plug_storage(self._storage_path, 
+					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+			
+		self.postgresql.cluster_dir.move(move_files=storage_valid)
+		
+		# Change replication master 
+		master_host = None
+		self._logger.info("Requesting master server")
+		while not master_host:
+			try:
+				master_host = list(host 
+					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+					if host.replication_master)[0]
+			except IndexError:
+				self._logger.debug("QueryEnv respond with no mysql master. " + 
+						"Waiting %d seconds before the next attempt", 5)
+				time.sleep(5)
+				
+		self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
+				master_host.internal_ip, master_host.external_ip)
+		
+		host = master_host.internal_ip or master_host.external_ip
+		
+		self.postgresql.change_primary(host, username=ROOT_USER)
+		
+		'''
+		self._change_master( 
+			host=host, 
+			user=ROOT_USER, 
+			password=self.postgresql.root_user.get_password(),
+			timeout=self._change_master_timeout
+		)
+		'''
+		
+		# Update HostUp message
+		message.postgresql = self._compat_storage_data(self.storage_vol)
+
+
+	def on_Postgresql_CreateDataBundle(self, message):
+		
+		try:
+			bus.fire('before_postgresql_data_bundle')
+			# Retrieve password for scalr postgresql root user
+			root_password = self.postgresql.root_user.get_password()
+			# Creating snapshot		
+			snap = self._create_snapshot(ROOT_USER, root_password)
+			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+			bus.fire('before_postgresql_data_bundle', snapshot_id=snap.id)			
+			
+			# Notify scalr
+			msg_data = dict(
+				used_size='%.3f' % (float(used_size) / 1000,),
+				status='ok'
+			)
+			msg_data.update(self._compat_storage_data(snap=snap))
+			self.send_message(PostgreSqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
+
+		except (Exception, BaseException), e:
+			self._logger.exception(e)
+			
+			# Notify Scalr about error
+			self.send_message(PostgreSqlMessages.CREATE_DATA_BUNDLE_RESULT, dict(
+				status		='error',
+				last_error	= str(e)
+			))
+
+
+	def _create_storage_snapshot(self):
+		self._logger.info("Creating storage snapshot")
+		try:
+			return self.storage_vol.snapshot()
+		except StorageError, e:
+			self._logger.error("Cannot create PostgreSQL data snapshot. %s", e)
+			raise
+
+
+	def _create_snapshot(self, root_user, root_password, dry_run=False):
+		if self.postgresql.service.running:
+			# TODO: Lock tables
+			pass
+		
+		system2('sync', shell=True)
+		# Creating storage snapshot
+		snap = None if dry_run else self._create_storage_snapshot()
+		if not self.postgresql.service.running:
+			# TODO: Unlock tables
+			pass
+		
+		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
+		if snap.state == Snapshot.FAILED:
+			raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
+		
+		return snap
+
+
+	def _compat_storage_data(self, vol=None, snap=None):
+		ret = dict()
+		if vol:
+			ret['volume_config'] = vol.config()
+		if snap:
+			ret['snapshot_config'] = snap.config()
+		return ret
+
+
+	def _plug_storage(self, mpoint, vol):
+		if not isinstance(vol, Volume):
+			vol = Storage.create(vol)
+
+		try:
+			if not os.path.exists(mpoint):
+				os.makedirs(mpoint)
+			vol.mount(mpoint)
+		except StorageError, e:
+			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
+			if 'you must specify the filesystem type' in str(e):
+				vol.mkfs()
+				vol.mount(mpoint)
+			else:
+				raise
+		return vol
+	
+						
+	def _update_config(self, data): 
+		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
+		
+	
+	def on_Postgresql_PromoteToMaster(self, message):
+		"""
+		Promote slave to master
+		@type message: scalarizr.messaging.Message
+		@param message: Mysql_PromoteToMaster
+		"""
+		old_conf 		= None
+		new_storage_vol	= None
+		
+		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
+			master_storage_conf = message.body.get('volume_config')
+			tx_complete = False	
+			
+						
+			try:
+				# Stop mysql
+				if master_storage_conf:
+					self.postgresql.stop_replication()
+					self.postgresql.service.stop()
+					
+					# Unplug slave storage and plug master one
+					old_conf = self.storage_vol.detach(force=True) # ??????
+					new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)				
+					# Continue if master storage is a valid MySQL storage 
+					storage_valid = self._storage_valid()
+					if storage_valid:
+						self.postgresql.cluster_dir.move(move_files=storage_valid)
+						# Update behaviour configuration
+						updates = {
+							OPT_ROOT_PASSWORD : message.root_password,
+							OPT_REPLICATION_MASTER 	: "1"
+						}
+						self._update_config(updates)
+						Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
+						
+						# Send message to Scalr
+						msg_data = dict(status='ok')
+						msg_data.update(self._compat_storage_data(vol=new_storage_vol))
+						self.send_message(PostgreSqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
+					else:
+						raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
+					self.postgresql.service.start()
+				else:
+					self.postgresql.stop_replication()
+					#TODO: ask what to do in this situation
+					'''
+					self._start_service()
+					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
+					timeout = 180
+					try:
+						mysql.sendline("STOP SLAVE;")
+						mysql.expect("mysql>", timeout=timeout)
+						mysql.sendline("RESET MASTER;")
+						mysql.expect("mysql>", 20)
+						filetool.remove(os.path.join(self._data_dir, 'relay-log.info'))
+						filetool.remove(os.path.join(self._data_dir, 'master.info'))
+					except pexpect.TIMEOUT:
+						raise HandlerError("Timeout (%d seconds) reached " + 
+									"while waiting for slave stop and master reset." % (timeout,))
+					finally:
+						mysql.close()
+					'''
+					updates = {
+						OPT_ROOT_PASSWORD : message.root_password,
+						OPT_REPLICATION_MASTER 	: "1"
+					}
+					self._update_config(updates)
+										
+					snap = self._create_snapshot(ROOT_USER, message.root_password)
+					Storage.backup_config(snap.config(), self._snapshot_config_path)
+					
+					# Send message to Scalr
+					msg_data = dict(
+						status="ok",
+					)
+					msg_data.update(self._compat_storage_data(self.storage_vol.config(), snap))
+					self.send_message(PostgreSqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)							
+					
+				tx_complete = True
+				
+			except (Exception, BaseException), e:
+				self._logger.exception(e)
+				if new_storage_vol:
+					new_storage_vol.detach()
+				# Get back slave storage
+				if old_conf:
+					self._plug_storage(self._storage_path, old_conf)
+				
+				self.send_message(PostgreSqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
+					status="error",
+					last_error=str(e)
+				))
+
+				# Start MySQL
+				self._start_service()
+			
+			if tx_complete and master_storage_conf:
+				# Delete slave EBS
+				self.storage_vol.destroy(remove_disks=True)
+				self.storage_vol = new_storage_vol
+				Storage.backup_config(self.storage_vol.config(), self._storage_path)
+		else:
+			self._logger.warning('Cannot promote to master. Already master')
+	
+	
+	def on_Postgresql_NewMasterUp(self, message):
+		"""
+		Switch replication to a new master server
+		@type message: scalarizr.messaging.Message
+		@param message:  Mysql_NewMasterUp
+		"""
+		
+		if not self.postgresql.is_replication_master:
+			host = message.local_ip or message.remote_ip
+			self._logger.info("Switching replication to a new MySQL master %s", host)
+			bus.fire('before_postgresql_change_master', host=host)			
+			
+			if 'snapshot_config' in message.body:
+				self._logger.info('Reinitializing Slave from the new snapshot %s', 
+						message.snapshot_config['id'])
+				self.postgresql.service.stop()
+				
+				self._logger.debug('Destroing old storage')
+				self.storage_vol.destroy()
+				self._logger.debug('Storage destoyed')
+				
+				self._logger.debug('Plugging new storage')
+				vol = Storage.create(snapshot=message.snapshot_config.copy())
+				self._plug_storage(self._storage_path, vol)
+				self._logger.debug('Storage plugged')
+				
+				Storage.backup_config(vol.config(), self._volume_config_path)
+				Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
+				self.storage_vol = vol
+				
+				self.postgresql.service.start()		
+			#TODO: decide what to do here		
+			'''
+			my_cli = spawn_mysql_cli(ROOT_USER, message.root_password)
+			
+			if not 'snapshot_config' in message.body:
+				self._logger.debug("Stopping slave i/o thread")
+				my_cli.sendline("STOP SLAVE IO_THREAD;")
+				my_cli.expect("mysql>")
+				self._logger.debug("Slave i/o thread stopped")
+				
+				self._logger.debug("Retrieving current log_file and log_pos")
+				my_cli.sendline("SHOW SLAVE STATUS\\G");
+				my_cli.expect("mysql>")
+				log_file = log_pos = None
+				for line in my_cli.before.split("\n"):
+					pair = map(str.strip, line.split(": ", 1))
+					if pair[0] == "Master_Log_File":
+						log_file = pair[1]
+					elif pair[0] == "Read_Master_Log_Pos":
+						log_pos = pair[1]
+				self._logger.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+			'''
+			
+			self._change_master(
+				host=host, 
+				user=ROOT_USER, 
+				password=message.root_password,
+				timeout=self._change_master_timeout,
+			)
+				
+			self._logger.debug("Replication switched")
+			bus.fire('postgresql_change_master', host=host)
+		else:
+			self._logger.debug('Skip NewMasterUp. My replication role is master')	
+				
+	
+	def on_Postgresql_CreateBackup(self, message):
+		pass
+
+	
+	def on_Postgresql_CreatePmaUser(self, message):
+		pass
+
+		
 def get_handlers():
 	return (PostgreSqlHander(), )
 
@@ -996,32 +1510,3 @@ def rchown(user, path):
 	except OSError, e:
 		#log 'Cannot chown directory %s : %s' % (path, e)	
 		pass
-
-def init_storage(volume_id, devname, mpoint):
-	#self._logger.debug('checking mountpoint %s ' % mpoint)
-	if not os.path.exists(mpoint):
-		#self._logger.debug('creating %s' % mpoint)
-		os.makedirs(mpoint)
-		
-	#self._logger.debug("creating device %s from volume %s" % (devname, volume_id))
-	vol = Storage.create(type='ebs', id=volume_id, fstype='ext3', mpoint=mpoint, device=devname)
-	
-	#self._logger.debug('volume file system is : "%s"' % vol.fstype)
-	if vol.fstype != 'ext3':
-		#self._logger.debug('running mkfs')
-		vol.mkfs()
-
-	if vol.mounted():
-		#self._logger.debug('device is already mounted.')
-		pass
-	else:
-		#self._logger.debug("mounting EBS")
-		vol.mount()
-	return vol	
-
-def create_snapshot():
-	#TODO: implement snapshot creating
-	snap = None
-	return snap
-	
-# module init	
