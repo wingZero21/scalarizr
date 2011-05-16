@@ -116,7 +116,7 @@ def get_system_devname(devname):
 real_devname = get_system_devname
 
 def get_ebs_devname(devname):
-	return devname.replace('/sd', '/xvd')
+	return devname.replace('/xvd', '/sd')
 
 def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIMEOUT):
 	time_until = time.time() + timeout
