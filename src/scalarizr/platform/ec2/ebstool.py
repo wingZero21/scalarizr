@@ -111,8 +111,12 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		
 	return vol, devname
 
-def real_devname(devname):
+def get_system_devname(devname):
 	return devname.replace('/sd', '/xvd') if os.path.exists('/dev/xvda1') else devname
+real_devname = get_system_devname
+
+def get_ebs_devname(devname):
+	return devname.replace('/sd', '/xvd')
 
 def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIMEOUT):
 	time_until = time.time() + timeout

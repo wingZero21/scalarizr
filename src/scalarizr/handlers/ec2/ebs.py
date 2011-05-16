@@ -99,40 +99,40 @@ class EbsHandler(handlers.Handler):
 			if ebs_mpoint.is_array:
 				return self._logger.warning('EBS array %s skipped. EBS arrays not implemented in Scalarizr', 
 										ebs_mpoint.name)
-			try:
-				ebs_volume = ebs_mpoint.volumes[0]
-			except IndexError:
-				return self._logger.error("Invalid mpoint info %s. Volumes list is empty", ebs_mpoint)
 
-			if not ebs_volume.volume_id or not ebs_volume.device:
-				return self._logger.error("Invalid volume info %s. volume_id and device should be non-empty", ebs_volume)
-
-			device = ebstool.real_devname(ebs_volume.device)
-			if not os.path.exists(device):
-				Storage.create(type='ebs', id=ebs_volume.volume_id, device=ebs_volume.device)
+			assert len(ebs_mpoint.volumes), 'Invalid mpoint info %s. Volumes list is empty' % ebs_mpoint
+			ebs_volume = ebs_mpoint.volumes[0]
+			assert ebs_volume.volume_id, 'Invalid volume info %s. volume_id should be non-empty' % ebs_volume
+			
+			vol = Storage.create(
+				type='ebs', 
+				id=ebs_volume.volume_id, 
+				device=ebs_volume.device, 
+				mpoint=ebs_mpoint.dir
+			)
 				
 			mtab = fstool.Mtab()	
-			if not mtab.contains(device, reload=True):
-				self._logger.debug("Mounting device %s to %s", device, ebs_mpoint.dir)
+			if not mtab.contains(vol.device, reload=True):
+				self._logger.debug("Mounting device %s to %s", vol.device, vol.mpoint)
 				try:
-					fstool.mount(device, ebs_mpoint.dir, auto_mount=True)
+					fstool.mount(vol.device, vol.mpoint, auto_mount=True)
 				except fstool.FstoolError, e:
 					if e.code == fstool.FstoolError.NO_FS:
-						self._logger.debug('Creating filesystem and mount device %s to %s', device, ebs_mpoint.dir)
-						fstool.mount(device, ebs_mpoint.dir, make_fs=True, auto_mount=True)
+						vol.mkfs()
+						fstool.mount(vol.device, vol.mpoint, make_fs=True, auto_mount=True)
 					else:
 						raise
-				self._logger.info("Device %s is mounted to %s", device, ebs_mpoint.dir)
+				self._logger.info("Device %s is mounted to %s", vol.device, vol.mpoint)
 				
 				self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
-					volume_id = ebs_volume.volume_id,
-					device_name = device
+					volume_id = vol.id,
+					device_name = vol.ebs_device
 				), broadcast=True)
-				bus.fire("block_device_mounted", volume_id=ebs_volume.volume_id, device=device)				
+				bus.fire("block_device_mounted", volume_id=ebs_volume.volume_id, device=vol.device)				
 				
 			else:
-				entry = mtab.find(device)[0]
-				self._logger.debug("Skip device %s already mounted to %s", device, entry.mpoint)
+				entry = mtab.find(vol.device)[0]
+				self._logger.debug("Skip device %s already mounted to %s", vol.device, entry.mpoint)
 		except:
 			self._logger.exception("Can't attach EBS")
 		

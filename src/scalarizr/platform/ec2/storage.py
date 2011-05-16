@@ -19,7 +19,7 @@ import string
 
 from boto.s3.key import Key
 from boto.exception import BotoServerError, S3ResponseError
-from scalarizr.util import firstmatched
+from scalarizr.util import firstmatched, wait_until
 
 
 class EbsConfig(VolumeConfig):
@@ -29,8 +29,9 @@ class EbsConfig(VolumeConfig):
 	size = None
 
 class EbsVolume(Volume, EbsConfig):
-	avail_zone	= None
-	size		= None
+	@property
+	def ebs_device(self):
+		return ebstool.get_ebs_devname(self.device)
 
 class EbsSnapshot(Snapshot, EbsConfig):
 	_ignores = ('snapshot_id',)	
@@ -84,7 +85,7 @@ class EbsVolumeProvider(VolumeProvider):
 			volume_attached = False			
 			try:
 				if volume_id and not snap_id:
-					''' EBS has been already created '''
+					self._logger.debug('EBS has been already created')
 					try:
 						ebs_vol = conn.get_all_volumes([volume_id])[0]
 					except IndexError:
@@ -99,31 +100,40 @@ class EbsVolumeProvider(VolumeProvider):
 						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger).id
 					
 				if snap_id or not volume_id:
-					''' Create new EBS '''
+					self._logger.debug('Creating new EBS')
 					kwargs['avail_zone'] = pl.get_avail_zone()
 					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), kwargs.get('avail_zone'), 
 						snap_id, logger=self._logger)
 
 			
 				if 'available' != ebs_vol.volume_state():
+					if ebs_vol.attachment_state() == 'attaching':
+						wait_until(lambda: ebs_vol.update() and ebs_vol.attachment_state() != 'attaching', timeout=600, 
+								error_text='EBS volume %s hangs in attaching state' % ebs_vol.id)
+					
 					if ebs_vol.attach_data.instance_id != pl.get_instance_id():
-						''' EBS attached to another instance '''						
+						self._logger.debug('EBS is attached to another instance')
 						self._logger.warning("EBS volume %s is not available. Detaching it from %s", 
 											ebs_vol.id, ebs_vol.attach_data.instance_id)						
 						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
 					else:
-						''' EBS attached to this instance'''
+						self._logger.debug('EBS is attached to this instance')
+						device = ebstool.real_devname(ebs_vol.attach_data.device)
+						wait_until(lambda: os.path.exists(device), sleep=1, timeout=300, 
+								error_text="Device %s wasn't available in a reasonable time" % device)						
 						volume_attached = True
-						device = ebs_vol.attach_data.device
+
 				
 				if not volume_attached:
-					''' Attach EBS to this instance '''
+					self._logger.debug('Attaching EBS to this instance')
 					device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device, 
 						to_me=True, logger=self._logger)[1]
 				
 			except (Exception, BaseException), e:
+				self._logger.debug('Caught exception')
 				if ebs_vol:
-					''' Detach EBS '''
+					self._logger.debug('')
+					self._logger.debug('Detaching EBS')
 					if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
 						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
 							
@@ -139,6 +149,9 @@ class EbsVolumeProvider(VolumeProvider):
 			
 			kwargs['device'] = device
 			kwargs['id'] = ebs_vol.id
+			
+		elif kwargs.get('device'):
+			kwargs['device'] = ebstool.get_system_devname(kwargs['device'])
 			
 		return super(EbsVolumeProvider, self).create(**kwargs)
 

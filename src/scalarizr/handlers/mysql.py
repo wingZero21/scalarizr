@@ -30,6 +30,7 @@ import glob
 import string
 import ConfigParser
 import signal
+from __future__ import with_statement
 
 # Extra
 import pexpect
