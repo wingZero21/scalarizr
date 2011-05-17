@@ -148,7 +148,7 @@ class EbsHandler(handlers.Handler):
 			
 			self.send_message(
 				Messages.BLOCK_DEVICE_ATTACHED, 
-				{"device_name" : message.devname}, 
+				{"device_name" : ebstool.get_ebs_devname(message.devname)}, 
 				broadcast=True
 			)
 			
@@ -162,7 +162,7 @@ class EbsHandler(handlers.Handler):
 			
 			self.send_message(
 				Messages.BLOCK_DEVICE_DETACHED, 
-				{"device_name" : message.devname}, 
+				{"device_name" : ebstool.get_ebs_devname(message.devname)}, 
 				broadcast=True
 			)
 			

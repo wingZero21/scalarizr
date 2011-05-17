@@ -208,7 +208,8 @@ class ServiceCtlHanler(Handler):
 							new_preset.name, self._service_name, 
 							'with' if message.restart_service == '1' else 'without')
 			self._cnf_ctl.apply_preset(new_preset)
-			if message.restart_service == '1':
+			if message.restart_service == '1' or message.reset_to_defaults == '1':
+				self._stop_service(reason="Applying preset '%s'" % new_preset.name)
 				self._start_service_with_preset(new_preset)
 			result.status = 'ok'
 		except (BaseException, Exception), e:
