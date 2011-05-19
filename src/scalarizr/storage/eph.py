@@ -265,7 +265,6 @@ class EphSnapshotProviderLite(object):
 		self._upload_queue 		= Queue(2)
 		self._download_queue	= Queue()
 		self._writer_queue		= Queue(2)
-		self._chunks_md5		= {}
 		self._read_finished 	= threading.Event()
 		self._download_finished = threading.Event()
 		self._slot_available	= threading.Semaphore(2)
@@ -276,6 +275,7 @@ class EphSnapshotProviderLite(object):
 			if snapshot.id in self._state_map:
 				raise StorageError('Snapshot %s is already %s. Cannot create it again' % (
 						snapshot.id, self._state_map[snapshot.id]))
+			self._chunks_md5 = {}
 			self._state_map[snapshot.id] = Snapshot.CREATING
 			#self.prepare_tranzit_vol(volume.tranzit_vol)
 			snap_lv = self._lvm.create_lv_snapshot(volume.devname, self.SNAPSHOT_LV_NAME, extents='100%FREE')		

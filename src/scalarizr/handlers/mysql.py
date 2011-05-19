@@ -73,7 +73,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			pass
 		
 		initdv2.ParametrizedInitScript.__init__(self, SERVICE_NAME, 
-				initd_script, pid_file, socks=[initdv2.SockParam(3306, timeout=60)])
+				initd_script, pid_file, socks=[initdv2.SockParam(3306, timeout=3600)])
 		'''
 		timeout=60 is no chance
 		when server starts after rebundle, mysql takes too long to start on the attached EBS storage.

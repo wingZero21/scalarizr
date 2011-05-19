@@ -5,12 +5,12 @@ Created on Jan 6, 2011
 '''
 
 from . import VolumeConfig, Volume, Snapshot, VolumeProvider, Storage, StorageError, system
-from .util.loop import mkloop, rmloop
+from .util.loop import mkloop, rmloop, listloop
 
 import os
 import time
 import shutil 
-from scalarizr.storage.util.loop import listloop
+from scalarizr.util import wait_until
 
 class LoopConfig(VolumeConfig):
 	type = 'loop'
@@ -95,9 +95,19 @@ class LoopVolumeProvider(VolumeProvider):
 
 	def destroy(self, vol, force=False, **kwargs):		
 		super(LoopVolumeProvider, self).destroy(vol, force, **kwargs)
-		rmloop(vol.devname)
+		wait_until(self._rmloop, (vol.devname, ), 
+				sleep=1, timeout=60, error_text='Cannot detach loop device %s' % vol.devname)
 		if force:
 			os.remove(vol.file)
 		vol.device = None
+		
+	def _rmloop(self, device):
+		try:
+			rmloop(device)
+			return True
+		except StorageError, e:
+			if 'Device or resource busy' in str(e):
+				return False
+			raise
 		
 Storage.explore_provider(LoopVolumeProvider)
