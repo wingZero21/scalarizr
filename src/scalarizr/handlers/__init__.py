@@ -345,6 +345,7 @@ class ServiceCtlHanler(Handler):
 			
 			elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
 				self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+				self._start_service()
 				return
 			
 			else:
