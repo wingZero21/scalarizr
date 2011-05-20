@@ -36,6 +36,16 @@ class EbsVolume(Volume, EbsConfig):
 class EbsSnapshot(Snapshot, EbsConfig):
 	_ignores = ('snapshot_id',)	
 		
+	def destroy(self):
+		try:
+			pl = bus.platform
+			conn = pl.new_ec2_conn()
+		except AttributeError:
+			pass
+		else:
+			conn.delete_snapshot(self.id)
+		finally:
+			self.snapshot_id = None
 
 class EbsVolumeProvider(VolumeProvider):
 	type = 'ebs'

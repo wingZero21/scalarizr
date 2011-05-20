@@ -32,6 +32,7 @@ import glob
 import string
 import ConfigParser
 import signal
+import subprocess
 
 # Extra
 import pexpect
@@ -803,7 +804,47 @@ class MysqlHandler(ServiceCtlHanler):
 			# Creating snapshot
 			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)			
 			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+			
+			if self.storage_vol.type == 'ebs':
+				
+				tmp_mpoint = None 
+				temp_storage_volume = None
+				
+				try:
+					""" Create temporary volume from snapshot, recover innodb and make snap again """
+					tmp_mpoint = tempfile.mkdtemp()
+					temp_storage_volume = Storage.create(snapshot=snap)
+					
+					temp_storage_volume.mount(tmp_mpoint)
+					
+					pid 			= os.path.join(tmp_mpoint, 'mysql.pid')
+					sock 			= os.path.join(tmp_mpoint, 'mysql.sock')
+					mysqld_safe_bin = software.whereis('mysqld_safe')[0]
+					tmp_datadir 	= os.path.join(tmp_mpoint, STORAGE_DATA_DIR)
+					
+					echo = subprocess.Popen("echo 'select 1;'", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+					
+					mysqld_safe_cmd = '%s --socket="%s" --pid-file="%s" --datadir="%s" --skip-networking --skip-grant --bootstrap \
+						--skip-ndbcluster --skip-slave-start' % (mysqld_safe_bin, sock, pid, tmp_datadir)
+					
+					mysqld_safe = subprocess.Popen(mysqld_safe_cmd, stdin=echo.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+					mysqld_safe.communicate()
+					snap.destroy()
+					
+					snap = temp_storage_volume.snapshot()				
+					used_size = int(system2(('df', '-P', '--block-size=M', tmp_mpoint))[0].split('\n')[1].split()[2][:-1])
+				finally:
+					if temp_storage_volume:
+						if temp_storage_volume.mounted():
+							temp_storage_volume.umount()
+						temp_storage_volume.destroy()						
+					if tmp_mpoint:
+						os.rmdir(tmp_mpoint)
+					
+			else:
+				used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+				
+				
 			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 			
 			# Notify scalr

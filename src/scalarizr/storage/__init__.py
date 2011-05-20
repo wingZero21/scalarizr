@@ -423,6 +423,9 @@ class Snapshot(VolumeConfig):
 	def state(self):
 		pvd = Storage.lookup_provider(self.type, True)
 		return pvd.get_snapshot_state(self)
+	
+	def destroy(self):
+		pass
 
 
 class VolumeProvider(object):
