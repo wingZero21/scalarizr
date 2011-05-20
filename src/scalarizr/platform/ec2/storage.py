@@ -60,8 +60,11 @@ class EbsVolumeProvider(VolumeProvider):
 		pl = bus.platform		
 		try:	
 			conn = pl.new_ec2_conn()
-		except AttributeError:
+		except:
+			if sys.exc_type.__name__ not in ('AttributeError', 'NoAuthHandlerFound'):
+				raise
 			conn = None
+			
 		
 		if conn:
 			# Find free devname			

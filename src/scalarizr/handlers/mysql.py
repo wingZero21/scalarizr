@@ -215,6 +215,7 @@ PMA_USER 				= "pma"
 # Mysql storage constants
 STORAGE_PATH 			= "/mnt/dbstorage"
 STORAGE_DATA_DIR 		= "mysql-data"
+STORAGE_TMP_DIR 		= "tmp"
 STORAGE_BINLOG 			= "mysql-misc/binlog"
 STORAGE_VOLUME_CNF 		= 'mysql.json'
 STORAGE_SNAPSHOT_CNF 	= 'mysql-snap.json'
@@ -613,6 +614,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		self._storage_path = STORAGE_PATH
 		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
+		self._tmp_dir = os.path.join(self._storage_path, STORAGE_TMP_DIR)		
 		self._binlog_base = os.path.join(self._storage_path, STORAGE_BINLOG)
 
 		initd = initdv2.lookup(SERVICE_NAME)
@@ -741,14 +743,14 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Defining archive name and path
 			backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
-			backup_path = os.path.join('/tmp', backup_filename)
+			backup_path = os.path.join(self._tmp_dir, backup_filename)
 			
 			# Creating archive 
 			backup = tarfile.open(backup_path, 'w:gz')
 
 			# Dump all databases
 			self._logger.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp()			
+			tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)			
 			for db_name in databases:
 				try:
 					dump_path = os.path.join(tmpdir, db_name + '.sql') 
