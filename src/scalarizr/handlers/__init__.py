@@ -322,14 +322,14 @@ class ServiceCtlHanler(Handler):
 		if self._service_name != service_name:
 			return
 		
-		if self._cnf_ctl:
-			# Stop service if it's already running
-			self._stop_service('Applying configuration preset')		
+		if self._cnf_ctl:	
 			
 			# Backup default configuration
 			my_preset = self._cnf_ctl.current_preset()
 			self._preset_store.save(my_preset, PresetType.DEFAULT)
 			
+			# Stop service if it's already running 
+			self._stop_service('Applying configuration preset')	
 			
 			# Fetch current configuration preset
 			service_conf = self._queryenv.get_service_configuration(self._service_name)
