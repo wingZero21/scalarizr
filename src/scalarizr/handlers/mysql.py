@@ -521,17 +521,21 @@ class MysqlCnfController(CnfController):
 				% (option_spec, value, option_spec.need_restart))
 		
 		if value != option_spec.default_value and not option_spec.need_restart:
-			self._logger.debug('Setting variable %s to %s' % (option_spec.name, value))
+			self._logger.debug('Preparing to set run-time variable %s to %s' % (option_spec.name, value))
 			self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, value)
 			
 
 	def _after_remove_option(self, option_spec):
 		if option_spec.default_value and not option_spec.need_restart:
-			self._logger.debug('Setting run-time variable %s to default [%s]' 
+			self._logger.debug('Preparing to set run-time variable %s to default [%s]' 
 						% (option_spec.name,option_spec.default_value))
 			self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, option_spec.default_value)
 	
 	def _after_apply_preset(self):
+		if not self._init_script.running:
+			self._logger.info('MySQL isn`t running, skipping process of applying run-time variables')
+			return
+		
 		mysql = self._get_connection()
 		try:
 			if self.sendline and mysql:
