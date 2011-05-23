@@ -814,36 +814,51 @@ class MysqlHandler(ServiceCtlHanler):
 			if self.storage_vol.type == 'ebs':
 				
 				tmp_mpoint = None 
-				temp_storage_volume = None
+				tmp_storage_volume = None
 				
 				try:
 					""" Create temporary volume from snapshot, recover innodb and make snap again """
 					tmp_mpoint = tempfile.mkdtemp()
-					temp_storage_volume = Storage.create(snapshot=snap)
-					
-					temp_storage_volume.mount(tmp_mpoint)
+					tmp_storage_volume = Storage.create(snapshot=snap)
+					tmp_storage_volume.mount(tmp_mpoint)
+					snap.destroy()
 					
 					pid 			= os.path.join(tmp_mpoint, 'mysql.pid')
 					sock 			= os.path.join(tmp_mpoint, 'mysql.sock')
-					mysqld_safe_bin = software.whereis('mysqld_safe')[0]
 					tmp_datadir 	= os.path.join(tmp_mpoint, STORAGE_DATA_DIR)
+					mysqld_safe_bin = software.whereis('mysqld_safe')[0]
 					
-					echo = subprocess.Popen("echo 'select 1;'", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+					# Check ndbcluster support
+					ndb_support = True
+					mysql 	= spawn_mysql_cli(ROOT_USER, root_password)
+					try:
+						mysql.sendline('SHOW ENGINES;')
+						mysql.expect('mysql>')
+						engines = mysql.before
+					finally:
+						mysql.close()
 					
-					mysqld_safe_cmd = '%s --socket="%s" --pid-file="%s" --datadir="%s" --skip-networking --skip-grant --bootstrap \
-						--skip-ndbcluster --skip-slave-start' % (mysqld_safe_bin, sock, pid, tmp_datadir)
+					ndb_search_res = re.search('NDBCLUSTER\s*\|\s*(?P<support>\w+)', engines)
 					
-					mysqld_safe = subprocess.Popen(mysqld_safe_cmd, stdin=echo.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-					mysqld_safe.communicate()
-					snap.destroy()
+					if not ndb_search_res or ndb_search_res.group('support') == 'NO':
+						ndb_support = False						
+										
+					mysqld_safe_cmd = (mysqld_safe_bin, '--socket=%s' % sock, '--pid-file=%s' % pid, '--datadir=%s' % tmp_datadir,
+						'--skip-networking', '--skip-grant', '--bootstrap', '--skip-slave-start')
 					
-					snap = temp_storage_volume.snapshot()				
+					if ndb_support:
+						mysqld_safe_cmd += ('--skip-ndbcluster',)					
+					
+					system2(mysqld_safe_cmd, stdin="select 1;")
+					
+
+					snap = tmp_storage_volume.snapshot()
 					used_size = int(system2(('df', '-P', '--block-size=M', tmp_mpoint))[0].split('\n')[1].split()[2][:-1])
 				finally:
-					if temp_storage_volume:
-						if temp_storage_volume.mounted():
-							temp_storage_volume.umount()
-						temp_storage_volume.destroy()						
+					if tmp_storage_volume:
+						if tmp_storage_volume.mounted():
+							tmp_storage_volume.umount()
+						tmp_storage_volume.destroy()						
 					if tmp_mpoint:
 						os.rmdir(tmp_mpoint)
 					
