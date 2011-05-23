@@ -3,13 +3,17 @@ Created on Dec 23, 2009
 
 @author: Dmytro Korsakov
 '''
-from scalarizr.util import xml_strip
-from scalarizr.util.cryptotool import sign_http_request
-import logging
-from urllib2 import urlopen, Request, URLError, HTTPError
-from urllib import urlencode, splitnport
-from xml.dom.minidom import parseString
 import binascii
+import logging
+import sys
+import urllib
+import urllib2
+import xml.dom.minidom as dom
+
+from scalarizr import util
+from scalarizr.util import cryptotool
+from scalarizr.util import urltool
+
 
 
 class QueryEnvError(Exception):
@@ -47,9 +51,9 @@ class QueryEnvService(object):
 		key = binascii.a2b_base64(file.read())
 		file.close()
 
-		signature, timestamp = sign_http_request(request_body, key)		
+		signature, timestamp = cryptotool.sign_http_request(request_body, key)		
 		
-		post_data = urlencode(request_body)
+		post_data = urllib.urlencode(request_body)
 		headers = {
 			"Date": timestamp, 
 			"X-Signature": signature, 
@@ -58,16 +62,16 @@ class QueryEnvService(object):
 		response = None
 		try:
 			self._logger.debug("QueryEnv request: %s", post_data)
-			req = Request(url, post_data, headers)
-			response = urlopen(req)
-		except URLError, e:
-			if isinstance(e, HTTPError):
+			opener = urllib2.build_opener(urltool.HTTPRedirectHandler)
+			req = urllib2.Request(url, post_data, headers)
+			response = opener.open(req)
+		except urllib2.URLError, e:
+			if isinstance(e, urllib2.HTTPError):
 				resp_body = e.read() if e.fp is not None else ""
-				raise QueryEnvError("Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body))				
+				raise QueryEnvError, "Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body), sys.exc_traceback
 			else:
-				host, port = splitnport(req.host, req.port or 80)
-				raise QueryEnvError("Cannot connect to QueryEnv server on %s:%s. %s" 
-						% (host, port, str(e)))
+				host, port = urllib.splitnport(req.host, req.port or 80)
+				raise QueryEnvError, "Cannot connect to QueryEnv server on %s:%s. %s" % (host, port, str(e)), sys.exc_traceback 
 
 		resp_body = response.read()
 		self._logger.debug("QueryEnv response: %s", resp_body)
@@ -76,7 +80,7 @@ class QueryEnvService(object):
 		# Parse XML response
 		xml = None
 		try:
-			xml = xml_strip(parseString(resp_body))
+			xml = util.xml_strip(dom.parseString(resp_body))
 		except (Exception, BaseException), e:
 			raise QueryEnvError("Cannot parse XML. %s" % [str(e)])		
 		return xml

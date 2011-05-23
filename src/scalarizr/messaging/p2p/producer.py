@@ -3,23 +3,20 @@ Created on Dec 5, 2009
 
 @author: marat
 '''
-# Core
-from scalarizr.messaging import MessageProducer, Queues
-from scalarizr.messaging.p2p import P2pMessageStore
 
-# Utils
-from scalarizr.util import split_ex
-
-# Stdlibs
-from urllib import splitnport
-from urllib2 import urlopen, Request, URLError, HTTPError
 import logging
-import uuid
 import threading
 import time
+import uuid
+import urllib
+import urllib2
+
+from scalarizr import messaging, util
+from scalarizr.messaging import p2p
+from scalarizr.util import urltool
 
 
-class P2pMessageProducer(MessageProducer):
+class P2pMessageProducer(messaging.MessageProducer):
 	endpoint = None
 	retries_progression = None
 	no_retry = False
@@ -29,15 +26,15 @@ class P2pMessageProducer(MessageProducer):
 	_stop_delivery = None
 	
 	def __init__(self, endpoint=None, retries_progression=None):
-		MessageProducer.__init__(self)
+		messaging.MessageProducer.__init__(self)
 		self.endpoint = endpoint
 		if retries_progression:
-			self.retries_progression = split_ex(retries_progression, ",")
+			self.retries_progression = util.split_ex(retries_progression, ",")
 		else:
 			self.no_retry = True
 				
 		self._logger = logging.getLogger(__name__)
-		self._store = P2pMessageStore()
+		self._store = p2p.P2pMessageStore()
 		self._stop_delivery = threading.Event()
 		
 		self._local = threading.local()
@@ -107,14 +104,15 @@ class P2pMessageProducer(MessageProducer):
 				data = f(self, queue, xml, headers)
 			
 			url = self.endpoint + "/" + queue
-			req = Request(url, data, headers)
-			urlopen(req)
+			req = urllib2.Request(url, data, headers)
+			opener = urllib2.build_opener(urltool.HTTPRedirectHandler())
+			opener.open(req)
 			
 			self._message_delivered(queue, message, success_callback)
 		
 		except (Exception, BaseException), e:
 			# Python < 2.6 raise exception on 2xx > 200 http codes except
-			if isinstance(e, HTTPError):
+			if isinstance(e, urllib2.HTTPError):
 				if e.code == 201:
 					self._message_delivered(queue, message, success_callback)
 					return
@@ -122,7 +120,7 @@ class P2pMessageProducer(MessageProducer):
 			self._logger.warning("Message '%s' not delivered (message_id: %s)", message.name, message.id)
 			self.fire("send_error", e, queue, message)
 				
-			if isinstance(e, HTTPError):
+			if isinstance(e, urllib2.HTTPError):
 				if e.code == 401:
 					self._logger.error("Cannot authenticate on message server. %s", e.msg)
 				elif e.code == 400:
@@ -130,8 +128,8 @@ class P2pMessageProducer(MessageProducer):
 				else:
 					self._logger.error("Cannot post message to %s. %s", url, e)
 						
-			elif isinstance(e, URLError):
-				host, port = splitnport(req.host, req.port or 80)
+			elif isinstance(e, urllib2.URLError):
+				host, port = urllib.splitnport(req.host, req.port or 80)
 				self._logger.error("Cannot connect to message server on %s:%s. %s", host, port, e)
 				
 			else:
@@ -143,7 +141,7 @@ class P2pMessageProducer(MessageProducer):
 
 
 	def _message_delivered(self, queue, message, callback=None):
-		self._logger.log(queue == Queues.LOG and logging.DEBUG or logging.INFO, 
+		self._logger.log(queue == messaging.Queues.LOG and logging.DEBUG or logging.INFO, 
 				"Message '%s' delivered (message_id: %s)", message.name, message.id)
 		self._store.mark_as_delivered(message.id)
 		self.fire("send", queue, message)

@@ -743,6 +743,8 @@ class MysqlHandler(ServiceCtlHanler):
 				databases.remove('information_schema')
 			
 			# Defining archive name and path
+			if not os.path.exists(self._tmp_dir):
+				os.makedirs(self._tmp_dir)
 			backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
 			backup_path = os.path.join(self._tmp_dir, backup_filename)
 			

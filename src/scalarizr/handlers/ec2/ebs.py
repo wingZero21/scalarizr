@@ -143,6 +143,9 @@ class EbsHandler(handlers.Handler):
 		self._logger.debug("Mountpoints reconfigured")
 		
 	def on_IntBlockDeviceUpdated(self, message):
+		if not message.devname:
+			return
+		
 		if message.action == "add":
 			self._logger.debug("udev notified me that block device %s was attached", message.devname)
 			
