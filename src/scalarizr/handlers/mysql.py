@@ -683,13 +683,19 @@ class MysqlHandler(ServiceCtlHanler):
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
-					message.name == MysqlMessages.NEW_MASTER_UP
+					message.name == Messages.BEFORE_HOST_TERMINATE
+				or	message.name == MysqlMessages.NEW_MASTER_UP
 				or 	message.name == MysqlMessages.PROMOTE_TO_MASTER
 				or 	message.name == MysqlMessages.CREATE_DATA_BUNDLE
 				or 	message.name == MysqlMessages.CREATE_BACKUP
 				or 	message.name == MysqlMessages.CREATE_PMA_USER
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
 
+	def on_BeforeHostTerminate(self, message):
+		if message.local_ip == self._platform.get_private_ip():
+			self._stop_service(reason='Server will be terminated')
+			self._logger.info('Detaching MySQL storage')
+			self.storage_vol.detach()
 		
 	def on_Mysql_CreatePmaUser(self, message):
 		try:

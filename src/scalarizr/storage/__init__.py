@@ -377,7 +377,15 @@ class Volume(VolumeConfig):
 				self.unfreeze()
 
 	def detach(self, force=False):
-		return Storage.detach(self, force)
+		was_mounted = self.mounted()
+		if was_mounted:
+			self.umount()
+		try:
+			return Storage.detach(self, force)
+		except:
+			if was_mounted:
+				self.mount()
+			raise
 	
 	def destroy(self, force=False, **kwargs):
 		Storage.destroy(self, force, **kwargs)

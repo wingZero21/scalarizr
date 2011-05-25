@@ -13,8 +13,8 @@ from boto.ec2.volume import Volume
 from boto.exception import BotoServerError
 from boto.ec2.snapshot import Snapshot
 
-DEFAULT_TIMEOUT = 300 	# 5 min
-SNAPSHOT_TIMEOUT = 2700	# 45 min
+DEFAULT_TIMEOUT = 2400 		# 40 min
+SNAPSHOT_TIMEOUT = 3600		# 1 h
 
 def create_snapshot(ec2_conn, volume_id, description=None, logger=None, timeout=SNAPSHOT_TIMEOUT):
 	if isinstance(volume_id, Volume):
@@ -95,7 +95,9 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 	wait_until(
 		lambda: vol.update() and vol.attachment_state() == 'attached', 
 		logger=logger, time_until=time_until,
-		error_text="EBS volume %s wasn't attached in a reasonable time" % vol.id
+		error_text="EBS volume %s wasn't attached in a reasonable time"
+				" (status=%s attachment_state=%s)." % ( 
+				vol.id, vol.status, vol.attachment_state())
 	)
 	logger.debug('Volume %s attached',  vol.id)
 	
