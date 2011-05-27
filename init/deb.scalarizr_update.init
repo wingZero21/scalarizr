@@ -3,7 +3,7 @@
 # scalarizr - Scalarizr update tool
 #
 ### BEGIN INIT INFO
-# Provides:          scalarizr
+# Provides:          scalarizr_update
 # Required-Start:    $network $local_fs
 # Required-Stop:
 # Should-Start:      $named
