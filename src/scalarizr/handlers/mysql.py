@@ -34,8 +34,11 @@ import ConfigParser
 import signal
 import subprocess
 
+
 # Extra
 import pexpect
+from logging import thread
+
 
 
 
@@ -261,12 +264,12 @@ class MySQLClient(object):
 	def __init__(self, credentials_function):
 		self._credentials_function = credentials_function
 		
-	def _exec(self, query, vertical=False):
+	def execute(self, query, vertical=False):
 		user, passwd  = self._credentials_function()
 		return system2(('/usr/bin/mysql', '-u', user, '-p', '--execute', query), stdin=passwd)[0]
 	
 	def fetchall(self, query):
-		lines = self._exec(query).splitlines()
+		lines = self.execute(query).splitlines()
 		headers = lines[0].split('\t')
 		return tuple(dict(zip(headers, line.split('\t'))) for line in lines[1:])
 		
@@ -627,7 +630,7 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
-			
+		
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_mysql_data_bundle',
@@ -809,7 +812,6 @@ class MysqlHandler(ServiceCtlHanler):
 
 
 	def on_Mysql_CreateDataBundle(self, message):
-		# Retrieve password for scalr mysql user
 		try:
 			bus.fire('before_mysql_data_bundle')
 			
@@ -829,36 +831,48 @@ class MysqlHandler(ServiceCtlHanler):
 					tmp_storage_volume.mount(tmp_mpoint)
 					snap.destroy()
 					
-					pid 			= os.path.join(tmp_mpoint, 'mysql.pid')
-					sock 			= os.path.join(tmp_mpoint, 'mysql.sock')
-					tmp_datadir 	= os.path.join(tmp_mpoint, STORAGE_DATA_DIR)
-					mysqld_safe_bin = software.whereis('mysqld_safe')[0]
+					pid 				= os.path.join(tmp_mpoint, 'mysql.pid')
+					sock	 			= os.path.join(tmp_mpoint, 'mysql.sock')
+					tmp_datadir 		= os.path.join(tmp_mpoint, STORAGE_DATA_DIR)
+					binlog_path			= os.path.join(tmp_mpoint, STORAGE_BINLOG)
+					binlog_index_path	= binlog_path + '.index'
+					mysqld_safe_bin		= software.whereis('mysqld_safe')[0]
 					
+					binary_logs_basepath = os.path.dirname(binlog_path)
+					binary_logs = os.listdir(binary_logs_basepath)
+					binary_logs.remove('binlog.index')
+					binary_logs = [os.path.join(binary_logs_basepath, log) for log in binary_logs]
+										
+					with open(binlog_index_path, 'r+') as f:
+						binlog_index = f.read()
+						f.seek(0)
+						f.truncate()
+						f.write('\n'.join(binary_logs))
+												
 					# Check ndbcluster support
 					ndb_support = True
-					mysql 	= spawn_mysql_cli(ROOT_USER, root_password)
-					try:
-						mysql.sendline('SHOW ENGINES;')
-						mysql.expect('mysql>')
-						engines = mysql.before
-					finally:
-						mysql.close()
+					engines = mysql.client.execute('SHOW ENGINES \G')
 					
-					ndb_search_res = re.search('NDBCLUSTER\s*\|\s*(?P<support>\w+)', engines)
+					ndb_search_res = re.search('ndbcluster\s*$\s*Support:\s*(?P<support>\w+)', engines, re.M)
 					
 					if not ndb_search_res or ndb_search_res.group('support') == 'NO':
 						ndb_support = False						
 										
 					mysqld_safe_cmd = (mysqld_safe_bin, '--socket=%s' % sock, '--pid-file=%s' % pid, '--datadir=%s' % tmp_datadir,
-						'--skip-networking', '--skip-grant', '--bootstrap', '--skip-slave-start')
+						'--log-bin=%s' % binlog_path, '--skip-networking', '--skip-grant', '--bootstrap', '--skip-slave-start')
 					
 					if ndb_support:
 						mysqld_safe_cmd += ('--skip-ndbcluster',)					
 					
 					system2(mysqld_safe_cmd, stdin="select 1;")
 					
-
+					with open(binlog_index_path, 'w') as f:
+						f.write(binlog_index)
+						
 					snap = tmp_storage_volume.snapshot()
+					wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
+					if snap.state == Snapshot.FAILED:
+						raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
 					used_size = int(system2(('df', '-P', '--block-size=M', tmp_mpoint))[0].split('\n')[1].split()[2][:-1])
 				finally:
 					if tmp_storage_volume:
@@ -892,7 +906,6 @@ class MysqlHandler(ServiceCtlHanler):
 				status		='error',
 				last_error	= str(e)
 			))
-
 
 	@_reload_mycnf				
 	def on_Mysql_PromoteToMaster(self, message):
@@ -1409,26 +1422,21 @@ class MysqlHandler(ServiceCtlHanler):
 				self._start_service()
 			
 			# Lock tables
-			sql = spawn_mysql_cli(root_user, root_password)
-			sql.sendline('FLUSH TABLES WITH READ LOCK;')
-			sql.expect('mysql>')
+			mysql.client.execute('FLUSH TABLES WITH READ LOCK')
+
 			system2('sync', shell=True)
 			if int(is_repl_master):
-				sql.sendline('SHOW MASTER STATUS;')
-				sql.expect('mysql>')
 				
 				# Retrieve log file and log position
-				lines = sql.before		
-				log_row = re.search(re.compile('^\|\s*([\w-]*\.\d*)\s*\|\s*(\d*)', re.M), lines)
+				lines = mysql.client.execute('SHOW MASTER STATUS \G')		
+				log_row = re.search(re.compile('File:\s*(.*?)$\s*Position:\s*(\d*)', re.M | re.S), lines)
 				if log_row:
-					log_file = log_row.group(1)
-					log_pos = log_row.group(2)
+					log_file = log_row.group(1).strip()
+					log_pos = log_row.group(2).strip()
 				else:
 					log_file = log_pos = None
 			else:
-				sql.sendline('SHOW SLAVE STATUS \G')
-				sql.expect('mysql>')
-				lines = sql.before
+				lines = mysql.client.execute('SHOW SLAVE STATUS \G')
 				log_row = re.search(re.compile('Relay_Master_Log_File:\s*(.*?)$.*?Exec_Master_Log_Pos:\s*(.*?)$', re.M | re.S), lines)
 				if log_row:
 					log_file = log_row.group(1).strip()
@@ -1438,9 +1446,8 @@ class MysqlHandler(ServiceCtlHanler):
 
 			# Creating storage snapshot
 			snap = None if dry_run else self._create_storage_snapshot()
-	
-			sql.sendline('UNLOCK TABLES;\n')
-			sql.close()
+			
+			mysql.client.execute('UNLOCK TABLES')
 			
 			wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
 			if snap.state == Snapshot.FAILED:
