@@ -33,8 +33,11 @@ def get_mx_records(email):
 	out = system2('%s -t mx %s' % (whereis('host')[0], email.split('@')[-1]), shell=True)[0]
 	mxs = [mx.split()[-1][:-1] if mx.endswith('.') else mx for mx in out.split('\n')]
 	if '' in mxs: mxs.remove('')
-	from sets import Set
-	return list(Set(mxs))
+	#from sets import Set
+	#return list(Set(mxs))
+	temp = {}
+	for x in mxs: temp[x] = None
+	return list(temp.keys())
 
 ini = None
 def init_cnf():
@@ -173,8 +176,11 @@ def main():
 			print "Although you can send %s to support manually." % tar_file
 			sys.exit(1)
 			
+		role_name = ini.get('general', 'role_name')
+		server_id = ini.get('general', 'server_id')
+	
 		toaddrs=[email]
-		subject = 'scalarizr report from %s' % hostname
+		subject = 'scalarizr report from hostname %s (role: %s , serverid: %s)' % (hostname, role_name, server_id)
 		
 		msg = MIMEMultipart()
 		msg['From'] = fromaddr
@@ -182,6 +188,9 @@ def main():
 		msg['Date'] = formatdate(localtime=True)
 		msg['Subject'] = subject
 
+		text_msg = MIMEText(subject)
+		msg.attach(text_msg)
+		
 		part = MIMEBase('application', "octet-stream")
 		part.set_payload( open(tar_file,"rb").read() )
 		Encoders.encode_base64(part)
@@ -190,6 +199,7 @@ def main():
 		
 		for server in get_mx_records(email):
 			try:
+				print 'Sending message to %s through %s' % (email, server)
 				smtp = smtplib.SMTP(server)
 				smtp.sendmail(fromaddr, toaddrs, msg.as_string())
 				break
