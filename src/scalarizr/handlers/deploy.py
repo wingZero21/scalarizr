@@ -265,6 +265,7 @@ class HttpSource(Source):
 					self._logger.debug('Removing already existed file %s', dst)
 					os.remove(dst)
 				shutil.move(tmpdst, workdir)
+				self._logger.debug('Deploying %s to %s has been completed successfully.' % (self.url,dst))
 			
 		except:
 			exc = sys.exc_info()
