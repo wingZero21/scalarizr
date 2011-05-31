@@ -8,9 +8,9 @@ from scalarizr.messaging import Messages, Queues
 from scalarizr.handlers import Handler, script_executor
 from scalarizr.util import system2, disttool, dicts
 from scalarizr.queryenv import Script
+import tempfile
 import shutil
 import sys
-
 
 import os
 import logging
@@ -204,6 +204,10 @@ class HttpSource(Source):
 		self.url = url
 
 	def update(self, workdir):
+		
+		if not os.path.exists(workdir):
+			os.makedirs(workdir)
+		
 		purl = urlparse(self.url)
 		
 		self._logger.info('Downloading %s', self.url)
@@ -216,7 +220,9 @@ class HttpSource(Source):
 		except urllib2.URLError, e:
 			raise SourceError('Downloading %s failed. %s' % (self.url, e))
 		
-		tmpdst = os.path.join('/tmp', os.path.basename(purl.path))
+		tmpdir = tempfile.mkdtemp(dir='/tmp/')
+		
+		tmpdst = os.path.join(tmpdir, os.path.basename(purl.path))
 		fp = open(tmpdst, 'w+')
 		num_read = 0
 		while True:
@@ -268,7 +274,9 @@ class HttpSource(Source):
 		finally:
 			if os.path.exists(tmpdst):
 				os.remove(tmpdst)
-			
+			if os.path.exists(tmpdir):
+				shutil.rmtree(tmpdir)
+							
 			
 class DeployLogHandler(logging.Handler):
 	def __init__(self, deploy_task_id=None):
