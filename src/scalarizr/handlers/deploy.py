@@ -148,7 +148,7 @@ class SvnSource(Source):
 		self._logger.info('Updating source from %s into working dir %s', self.url, workdir)		
 		out = system2(args)[0]
 		self._logger.info(out)
-		self._logger.debug('Deploying %s to %s has been completed successfully.' % (self.url,workdir))
+		self._logger.info('Deploying %s to %s has been completed successfully.' % (self.url,workdir))
 		
 
 class GitSource(Source):
@@ -266,7 +266,7 @@ class HttpSource(Source):
 					self._logger.debug('Removing already existed file %s', dst)
 					os.remove(dst)
 				shutil.move(tmpdst, workdir)
-				self._logger.debug('Deploying %s to %s has been completed successfully.' % (self.url,dst))
+				self._logger.info('Deploying %s to %s has been completed successfully.' % (self.url,dst))
 			
 		except:
 			exc = sys.exc_info()
