@@ -148,7 +148,8 @@ class SvnSource(Source):
 		self._logger.info('Updating source from %s into working dir %s', self.url, workdir)		
 		out = system2(args)[0]
 		self._logger.info(out)
-
+		self._logger.debug('Deploying %s to %s has been completed successfully.' % (self.url,workdir))
+		
 
 class GitSource(Source):
 	EXECUTABLE = '/usr/bin/git'	
