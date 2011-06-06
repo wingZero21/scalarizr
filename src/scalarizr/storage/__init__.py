@@ -213,7 +213,7 @@ def _update_volume_tablerow(vol, state=None):
 		db = bus.db
 		conn = db.get().get_connection()
 		cur = conn.cursor()
-		cur.execute('UPDATE storage SET state = ? WHERE volume_id = ?', (state, vol.id))
+		cur.execute('UPDATE storage SET state = ? WHERE device = ?', (state, vol.device))
 		if not cur.rowcount:
 			cur.execute('INSERT INTO storage VALUES (?, ?, ?, ?)', 
 					(vol.id, vol.type, vol.device, state))
