@@ -286,6 +286,7 @@ class EphSnapshotProviderLite(object):
 		except:
 			if complete_cb:
 				complete_cb()
+			raise
 		snapshot.snap_strategy = 'data'
 		return snapshot
 
@@ -296,7 +297,6 @@ class EphSnapshotProviderLite(object):
 			snap_mpoint = mkdtemp()
 			mount(snap_lv, snap_mpoint)
 			try:
-				#cmd1 = ['dd', 'if=%s' % snap_lv]
 				tar_cmd = ['tar', 'cp', '-C', snap_mpoint, '.']
 				
 				pigz_bins = whereis('pigz')

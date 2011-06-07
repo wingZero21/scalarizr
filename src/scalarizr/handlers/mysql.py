@@ -870,7 +870,8 @@ class MysqlHandler(ServiceCtlHanler):
 						f.write(binlog_index)
 						
 					snap = tmp_storage_volume.snapshot()
-					wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
+					# Wait up to 6 hours for snapshot completion 
+					wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600) 
 					if snap.state == Snapshot.FAILED:
 						raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
 					used_size = int(system2(('df', '-P', '--block-size=M', tmp_mpoint))[0].split('\n')[1].split()[2][:-1])
@@ -1416,50 +1417,38 @@ class MysqlHandler(ServiceCtlHanler):
 
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
-		is_repl_master, = self._get_ini_options(OPT_REPLICATION_MASTER)
-		was_running = self._init_script.running
+		# Lock tables
+		mysql.client.execute('FLUSH TABLES WITH READ LOCK')
 		try:
-			if not was_running:
-				self._start_service()
-			
-			# Lock tables
-			mysql.client.execute('FLUSH TABLES WITH READ LOCK')
-
 			system2('sync', shell=True)
-			if int(is_repl_master):
-				
-				# Retrieve log file and log position
-				lines = mysql.client.execute('SHOW MASTER STATUS \G')		
-				log_row = re.search(re.compile('File:\s*(.*?)$\s*Position:\s*(\d*)', re.M | re.S), lines)
-				if log_row:
-					log_file = log_row.group(1).strip()
-					log_pos = log_row.group(2).strip()
-				else:
-					log_file = log_pos = None
+			
+			# Retrieve log file and log position
+			log_file = log_pos = None
+			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
+				try:
+					status = mysql.client.fetchall('SHOW MASTER STATUS')[0]
+				except IndexError:
+					raise HandlerError('SHOW MASTER STATUS returns empty set. Master is not started?')
+				else:		
+					log_file, log_pos = status['File'], status['Position']
 			else:
-				lines = mysql.client.execute('SHOW SLAVE STATUS \G')
-				log_row = re.search(re.compile('Relay_Master_Log_File:\s*(.*?)$.*?Exec_Master_Log_Pos:\s*(.*?)$', re.M | re.S), lines)
-				if log_row:
-					log_file = log_row.group(1).strip()
-					log_pos = log_row.group(2).strip()
+				try:
+					status = mysql.client.fetchall('SHOW SLAVE STATUS')[0]
+				except IndexError:
+					raise HandlerError('SHOW SLAVE STATUS returns empty set. Slave is not started?')
 				else:
-					log_file = log_pos = None
-
+					log_file, log_pos = status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos']
+	
 			# Creating storage snapshot
 			snap = None if dry_run else self._create_storage_snapshot()
-			
-			mysql.client.execute('UNLOCK TABLES')
-			
-			wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
-			if snap.state == Snapshot.FAILED:
-				raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
-			
-			return snap, log_file, log_pos
-		
 		finally:
-			if not was_running:
-				self._stop_service('Restoring service`s state after making snapshot')
-
+			mysql.client.execute('UNLOCK TABLES')
+		
+		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600)
+		if snap.state == Snapshot.FAILED:
+			raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
+		
+		return snap, log_file, log_pos
 			
 	def _create_storage_snapshot(self):
 		self._logger.info("Creating storage snapshot")

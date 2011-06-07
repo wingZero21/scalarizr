@@ -213,6 +213,8 @@ class Lvm2:
 		
 		out = system(args, error_text='Cannot create logical volume')[0].strip()
 		vol = re.match(r'Logical volume "([^\"]+)" created', out.split('\n')[-1].strip()).group(1)
+		if not vol:
+			raise Lvm2Error('Cannot create logical volume: %s' % out)
 		return lvpath(os.path.basename(group), vol)
 	
 	def create_lv_snapshot(self, lvolume, name=None, extents=None, size=None):

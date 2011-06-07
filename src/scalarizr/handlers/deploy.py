@@ -105,7 +105,7 @@ class SvnSource(Source):
 	
 	def __init__(self, url=None, login=None, password=None, executable=None):
 		self._logger = logging.getLogger(__name__)
-		self.url = url
+		self.url = url if not url.endswith('/') else url[:-1]
 		self.login = login
 		self.password = password
 		self.executable = self.EXECUTABLE
