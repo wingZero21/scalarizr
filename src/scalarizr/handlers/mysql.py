@@ -1417,7 +1417,11 @@ class MysqlHandler(ServiceCtlHanler):
 
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
-		# Lock tables
+		was_running = self._init_script.running
+		if not was_running:
+			self._start_service()
+
+		# Lock tables				
 		mysql.client.execute('FLUSH TABLES WITH READ LOCK')
 		try:
 			system2('sync', shell=True)
@@ -1443,6 +1447,8 @@ class MysqlHandler(ServiceCtlHanler):
 			snap = None if dry_run else self._create_storage_snapshot()
 		finally:
 			mysql.client.execute('UNLOCK TABLES')
+			if not was_running:
+				self._stop_service('Restoring service`s state after making snapshot')
 		
 		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600)
 		if snap.state == Snapshot.FAILED:

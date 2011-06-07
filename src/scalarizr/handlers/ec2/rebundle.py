@@ -327,6 +327,8 @@ class RebundleStratery:
 
 	
 	def _cleanup_image(self, image_mpoint, role_name=None):
+		pl = bus.platform
+		
 		# Create message of the day
 		self._create_motd(image_mpoint, role_name)
 		self._fix_fstab(image_mpoint)
@@ -347,6 +349,14 @@ class RebundleStratery:
 			filename = os.path.join(image_mpoint, filename)
 			if os.path.exists(filename):
 				os.remove(filename)
+				
+		# Cleanup ROLE-BUILDER ssh key
+		lines = []
+		for line in open(os.path.join(image_mpoint, 'root/.ssh/authorized_keys')):
+			if 'SCALR-ROLESBUILDER' in line:
+				continue
+			lines.append(line)
+		filetool.write_file(os.path.join(image_mpoint, 'root/.ssh/authorized_keys'), '\n'.join(lines))
 		
 		# Cleanup scalarizr private data
 		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
