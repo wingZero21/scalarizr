@@ -825,11 +825,11 @@ class MysqlHandler(ServiceCtlHanler):
 				tmp_storage_volume = None
 				
 				try:
+					temp_snap = snap
 					""" Create temporary volume from snapshot, recover innodb and make snap again """
 					tmp_mpoint = tempfile.mkdtemp()
-					tmp_storage_volume = Storage.create(snapshot=snap)
+					tmp_storage_volume = Storage.create(snapshot=temp_snap)
 					tmp_storage_volume.mount(tmp_mpoint)
-					snap.destroy()
 					
 					pid 				= os.path.join(tmp_mpoint, 'mysql.pid')
 					sock	 			= os.path.join(tmp_mpoint, 'mysql.sock')
@@ -875,6 +875,7 @@ class MysqlHandler(ServiceCtlHanler):
 						raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
 					used_size = int(system2(('df', '-P', '--block-size=M', tmp_mpoint))[0].split('\n')[1].split()[2][:-1])
 				finally:
+					temp_snap.destroy()
 					if tmp_storage_volume:
 						if tmp_storage_volume.mounted():
 							tmp_storage_volume.umount()
