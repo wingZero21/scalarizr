@@ -351,12 +351,16 @@ class RebundleStratery:
 				os.remove(filename)
 				
 		# Cleanup ROLE-BUILDER ssh key
-		lines = []
-		for line in open(os.path.join(image_mpoint, 'root/.ssh/authorized_keys')):
-			if 'SCALR-ROLESBUILDER' in line:
+		for filename in ('root/.ssh/authorized_keys', 'home/ubuntu/.ssh/authorized_keys'):
+			filename = os.path.join(image_mpoint, filename)
+			if not os.path.exists(filename):
 				continue
-			lines.append(line)
-		filetool.write_file(os.path.join(image_mpoint, 'root/.ssh/authorized_keys'), '\n'.join(lines))
+			lines = []
+			for line in open(filename):
+				if 'SCALR-ROLESBUILDER' in line:
+					continue
+				lines.append(line)
+			filetool.write_file(filename, '\n'.join(lines))
 		
 		# Cleanup scalarizr private data
 		etc_path = os.path.join(image_mpoint, bus.etc_path[1:])
