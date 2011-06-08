@@ -606,7 +606,7 @@ class ApacheHandler(ServiceCtlHanler):
 			default_vhost.set('VirtualHost', '*:80')
 			default_vhost.write(default_vhost_path)
 		else:
-			self._logger.warn('Cannot read default vhost config file %s' % default_vhost_path)
+			self._logger.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
 
 	def _create_vhost_paths(self, vhost_path):
 		if os.path.exists(vhost_path):

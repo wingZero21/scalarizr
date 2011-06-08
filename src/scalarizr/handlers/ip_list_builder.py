@@ -174,7 +174,5 @@ class IpListBuilder(Handler):
 			for host in role.hosts:
 				if ip == host.internal_ip:
 					return host.replication_master
-				
-		self._logger.warning("Cannot find ip '%s' in roles list", ip)
 		return False
 		
