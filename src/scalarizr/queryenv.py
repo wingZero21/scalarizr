@@ -9,6 +9,7 @@ import sys
 import urllib
 import urllib2
 import xml.dom.minidom as dom
+import time
 
 from scalarizr import util
 from scalarizr.util import cryptotool
@@ -60,18 +61,29 @@ class QueryEnvService(object):
 			"X-Server-Id": self.server_id
 		}
 		response = None
-		try:
-			self._logger.debug("QueryEnv request: %s", post_data)
-			opener = urllib2.build_opener(urltool.HTTPRedirectHandler)
-			req = urllib2.Request(url, post_data, headers)
-			response = opener.open(req)
-		except urllib2.URLError, e:
-			if isinstance(e, urllib2.HTTPError):
-				resp_body = e.read() if e.fp is not None else ""
-				raise QueryEnvError, "Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body), sys.exc_traceback
-			else:
-				host, port = urllib.splitnport(req.host, req.port or 80)
-				raise QueryEnvError, "Cannot connect to QueryEnv server on %s:%s. %s" % (host, port, str(e)), sys.exc_traceback 
+		max_attempts = 5
+		for i in range(1, max_attempts + 1):
+			try:
+				try:
+					self._logger.debug("QueryEnv request: %s", post_data)
+					opener = urllib2.build_opener(urltool.HTTPRedirectHandler)
+					req = urllib2.Request(url, post_data, headers)
+					response = opener.open(req)
+					break
+				except urllib2.URLError, e:
+					if isinstance(e, urllib2.HTTPError):
+						resp_body = e.read() if e.fp is not None else ""
+						raise QueryEnvError, "Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body), sys.exc_traceback
+					else:
+						host, port = urllib.splitnport(req.host, req.port or 80)
+						raise QueryEnvError, "Cannot connect to QueryEnv server on %s:%s. %s" % (host, port, str(e)), sys.exc_traceback
+			except:
+				self._logger.debug('QueryEnv failed. %s', sys.exc_info()[1])
+				if i < max_attempts:
+					self._logger.debug('Waiting %d seconds before the next try', 10)
+					time.sleep(10)
+				else:
+					raise
 
 		resp_body = response.read()
 		self._logger.debug("QueryEnv response: %s", resp_body)

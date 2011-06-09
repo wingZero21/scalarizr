@@ -4,6 +4,7 @@ Created on Dec 24, 2009
 @author: marat
 '''
 
+from scalarizr import queryenv
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Queues, Messages
@@ -92,7 +93,7 @@ class ScriptExecutor(Handler):
 							scripts=None):
 		assert event_name or scripts
 		
-		if event_name:
+		if not scripts:
 			self._logger.debug("Fetching scripts for event %s", event_name)	
 			scripts = self._queryenv.list_scripts(event_name, event_id, target_ip=target_ip, local_ip=local_ip)
 			self._logger.debug("Fetched %d scripts", len(scripts))
@@ -280,5 +281,17 @@ class ScriptExecutor(Handler):
 			kwargs['event_id'] = message.meta['event_id']
 		kwargs['target_ip'] = message.body.get('local_ip')
 		kwargs['local_ip'] = pl.get_private_ip()
+		
+		if 'scripts' in message.body:
+			if not message.body['scripts']:
+				self._logger.debug('Empty scripts list. Breaking')
+				return
+			
+			scripts = []
+			for item in message.body['scripts']:
+				scripts.append(queryenv.Script(int(item['asynchronous']), 
+								item['timeout'], item['name'], item['body']))
+			kwargs['scripts'] = scripts
+
 			
 		self.exec_scripts_on_event(**kwargs)

@@ -491,46 +491,34 @@ class ApacheHandler(ServiceCtlHanler):
 
 
 	def _check_mod_ssl_deb(self):
-		mods_available = os.path.join(os.path.dirname(self._httpd_conf_path), 'mods-available')
-		mods_enabled = os.path.join(os.path.dirname(self._httpd_conf_path), 'mods-enabled')
+		base = os.path.dirname(self._httpd_conf_path)
 		
-		conf_available = os.path.join(mods_available, 'ssl.conf')
-		load_available = os.path.join(mods_available, 'ssl.load')
+		path = {}
+		path['ports.conf'] = base + '/ports.conf'
+		path['mods-available'] = base + '/mods-available'
+		path['mods-enabled'] = base + '/mods-enabled'
+		path['mods-available/ssl.conf'] = path['mods-available'] + '/ssl.conf'
+		path['mods-available/ssl.load'] = path['mods-available'] + '/ssl.load'
+		path['mods-enabled/ssl.conf'] = path['mods-enabled'] + '/ssl.conf'
+		path['mods-enabled/ssl.load'] = path['mods-enabled'] + '/ssl.load'
 		
-		conf_enabled = os.path.join(mods_enabled, 'ssl.conf')
-		load_enabled = os.path.join(mods_enabled, 'ssl.load')
-		
-		if not os.path.exists(conf_enabled) and \
-				not os.path.exists(load_enabled):
-			
-			enable_cmd = '/usr/sbin/a2enmod ssl'
-			self._logger.info('%s and %s does not exist. Trying "%s" ' % 
-							(mods_available, mods_enabled, enable_cmd))
-			system2(enable_cmd, shell=True)
-			
-			if os.path.exists(mods_available) and \
-				 os.path.exists(conf_available) and \
-				 os.path.exists(load_available):
-				if not os.path.exists(mods_enabled):
-					try:
-						self._logger.debug("Creating directory %s.",  
-								mods_enabled)
-						os.makedirs(mods_enabled)
-					except OSError, e:
-						self._logger.error('Cannot create directory %s. %s',  
-								mods_enabled, e.strerror)
-				try:
-					self._logger.debug("Creating symlinks for mod_ssl files.", mods_enabled)
-					os.symlink(conf_available, conf_enabled)
-					os.symlink(load_available, load_enabled)
-					self._logger.debug('SSL module has been enabled')
-				except OSError, e:
-					self._logger.error('Cannot create symlinks for ssl.conf and ssl.load in %s. %s', 
-							mods_enabled, e.strerror)
-			else:
-				self._logger.error('%s directory doesn`t exist or doesn`t contain valid ssl.conf and ssl.load files', 
-						mods_available)
-			
+		self._logger.debug('Ensuring mod_ssl enabled')
+		if not os.path.exists(path['mods-enabled/ssl.load']):
+			self._logger.info('Enabling mod_ssl')
+			system2(('/usr/sbin/a2enmod', 'ssl'))
+
+		self._logger.debug('Ensuring NameVirtualHost *:443')
+		if os.path.exists(path['ports.conf']):
+			conf = Configuration('apache')
+			conf.read(path['ports.conf'])
+			i = 0
+			for section in conf.get_dict('IfModule'):
+				i += 1
+				if section['value'] in ('mod_ssl.c', 'mod_gnutls.c'):
+					conf.set('IfModule[%d]/Listen' % i, '443', True)					
+					conf.set('IfModule[%d]/NameVirtualHost' % i, '*:443', True)
+			conf.write(path['ports.conf'])
+
 				
 	def _check_mod_ssl_redhat(self):
 		mod_ssl_file = os.path.join(self.server_root, 'modules', 'mod_ssl.so')

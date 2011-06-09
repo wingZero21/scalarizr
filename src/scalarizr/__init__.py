@@ -35,7 +35,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.48"	
+__version__ = "0.7.49"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -120,7 +120,7 @@ def _init():
 		from scalarizr.util.log import fix_py25_handler_resolving		
 		fix_py25_handler_resolving()
 	
-	logging.config.fileConfig(os.path.join(bus.etc_path, "logging.ini"))
+	logging.config.fileConfig(os.path.join(bus.etc_path, "logging-debug.ini" if optparser.values.debug else 'logging.ini'))
 	logger = logging.getLogger(__name__)
 	globals()['_logging_configured'] = True
 	
@@ -506,6 +506,8 @@ def main():
 				help='Configuration directory path')
 		optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
 				help='Daemonize process')
+		optparser.add_option('-l', dest='debug', action='store_true', default=False,
+				help='Enable debug log')
 		optparser.add_option('-n', '--configure', dest='configure', action="store_true", default=False, 
 				help="Configure Scalarizr in the interactive mode by default. " 
 				+ "Use '-y -o' to configure Scalarizr non-interactively")
