@@ -666,11 +666,16 @@ class MysqlHandler(ServiceCtlHanler):
 				self._logger.debug("Checking Scalr's MySQL system users presence.")
 				root_password, repl_password, stat_password = self._get_ini_options(
 						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD)
-				self._stop_service('Checking mysql users') 
-				mysqld = spawn_mysqld()
-				self._ping_mysql()
 				try:
+					my_cli = spawn_mysql_cli(ROOT_USER, root_password, timeout=5)
+					mysqld=None
+				except:
+					self._stop_service('Checking mysql users') 
+					mysqld = spawn_mysqld()
+					self._ping_mysql()
 					my_cli = spawn_mysql_cli()
+										
+				try:					
 					check_mysql_password(my_cli, ROOT_USER, root_password)
 					check_mysql_password(my_cli, REPL_USER, repl_password)
 					check_mysql_password(my_cli, STAT_USER, stat_password)
@@ -681,7 +686,8 @@ class MysqlHandler(ServiceCtlHanler):
 										  root_password, repl_password, stat_password, 
 										  mysqld, my_cli)
 				finally:
-					term_mysqld(mysqld)
+					if mysqld:
+						term_mysqld(mysqld)
 		
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -1470,14 +1476,15 @@ class MysqlHandler(ServiceCtlHanler):
 
 	def _add_mysql_users(self, root_user, repl_user, stat_user, root_pass=None, repl_pass=None, stat_pass=None, mysqld=None, my_cli=None):
 		self._logger.info("Adding mysql system users")
-		should_term_mysqld = False
-		if not mysqld:
-			self._stop_service('Changing access mode')
-			mysqld = spawn_mysqld()
-			self._ping_mysql()
-			should_term_mysqld = True			
-			
-		my_cli = my_cli or spawn_mysql_cli()
+
+		should_term_mysqld = False		
+		if not my_cli:
+			if not mysqld:
+				self._stop_service('Changing access mode')
+				mysqld = spawn_mysqld()
+				self._ping_mysql()
+				should_term_mysqld = True			
+			my_cli = spawn_mysql_cli()
 		
 		# Generate passwords
 		root_password = root_pass if root_pass else cryptotool.pwgen(20)
@@ -1732,7 +1739,7 @@ def term_mysqld(mysqld):
 	#wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
 
 
-def spawn_mysql_cli(user=None, password=None):
+def spawn_mysql_cli(user=None, password=None, timeout=30):
 	try:
 		cmd = mysql_path
 		if user:
@@ -1740,7 +1747,7 @@ def spawn_mysql_cli(user=None, password=None):
 		if password:
 			cmd += ' -p'
 		_logger.debug('Spawning mysql client')
-		exp = pexpect.spawn(cmd)
+		exp = pexpect.spawn(cmd, timeout=timeout)
 		
 		if password:
 			exp.expect('Enter password:')
