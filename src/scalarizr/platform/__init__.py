@@ -15,6 +15,7 @@ class PlatformError(BaseException):
 	pass
 
 class UserDataOptions:
+	FARM_ID = "farmid"
 	SERVER_ID = "serverid"	
 	ROLE_NAME = "realrolename"
 	CRYPTO_KEY = "szr_key"

@@ -37,6 +37,7 @@ import subprocess
 
 # Extra
 import pexpect
+from scalarizr.platform import UserDataOptions
 
 
 
@@ -645,6 +646,10 @@ class MysqlHandler(ServiceCtlHanler):
 			# @param log_file: log file to start from 
 			# @param log_pos: log pos to start from 
 			'mysql_change_master'
+			
+			'before_slave_promote_to_master',
+			
+			'slave_promote_to_master'
 		)
 
 	def on_init(self):		
@@ -832,6 +837,8 @@ class MysqlHandler(ServiceCtlHanler):
 				tmp_storage_volume = None
 				
 				try:
+					self._logger.info('Performing InnoDB recovery')
+					
 					temp_snap = snap
 					""" Create temporary volume from snapshot, recover innodb and make snap again """
 					tmp_mpoint = tempfile.mkdtemp()
@@ -868,7 +875,7 @@ class MysqlHandler(ServiceCtlHanler):
 					filetool.write_file(binlog_index_path, binlog_index)
 					self._logger.debug('Original binlogs: %s', filetool.read_file(binlog_index_path))
 						
-					snap = tmp_storage_volume.snapshot()
+					snap = tmp_storage_volume.snapshot(self._data_bundle_description())
 					
 					# Wait up to 6 hours for snapshot completion 
 					wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600) 
@@ -914,6 +921,13 @@ class MysqlHandler(ServiceCtlHanler):
 		with open(index_file, 'w+') as f:
 			f.write('\n'.join(glob.glob(binlog_dir + '/binlog.[0-9]*')))
 
+	def _data_bundle_description(self):
+		pl = bus.platform
+		return 'MySQL data bundle (farm: %s role: %s)' % (
+					pl.get_user_data(UserDataOptions.FARM_ID), 
+					pl.get_user_data(UserDataOptions.ROLE_NAME))
+	
+
 	@_reload_mycnf				
 	def on_Mysql_PromoteToMaster(self, message):
 		"""
@@ -925,6 +939,9 @@ class MysqlHandler(ServiceCtlHanler):
 		new_storage_vol	= None
 		
 		if not int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)):
+			
+			bus.fire('before_slave_promote_to_master')
+			
 			if bus.scalr_version >= (2, 2):
 				master_storage_conf = message.body.get('volume_config')
 			else:
@@ -1018,6 +1035,7 @@ class MysqlHandler(ServiceCtlHanler):
 					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)							
 					
 				tx_complete = True
+				bus.fire('slave_promote_to_master')
 				
 			except (Exception, BaseException), e:
 				self._logger.exception(e)
@@ -1464,7 +1482,7 @@ class MysqlHandler(ServiceCtlHanler):
 	def _create_storage_snapshot(self):
 		self._logger.info("Creating storage snapshot")
 		try:
-			return self.storage_vol.snapshot()
+			return self.storage_vol.snapshot(self._data_bundle_description())
 		except StorageError, e:
 			self._logger.error("Cannot create MySQL data snapshot. %s", e)
 			raise
