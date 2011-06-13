@@ -433,7 +433,8 @@ class Snapshot(VolumeConfig):
 		return pvd.get_snapshot_state(self)
 	
 	def destroy(self):
-		pass
+		pvd = Storage.lookup_provider(self.type, True)
+		return pvd.destroy_snapshot(self)
 
 
 class VolumeProvider(object):
@@ -463,6 +464,9 @@ class VolumeProvider(object):
 	
 	def get_snapshot_state(self, snap):
 		return Snapshot.COMPLETED
+
+	def destroy_snapshot(self, snap):
+		pass
 
 	def destroy(self, vol, force=False, **kwargs):
 		if not vol.devname and not vol.detached:

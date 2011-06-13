@@ -37,7 +37,6 @@ import subprocess
 
 # Extra
 import pexpect
-from logging import thread
 
 
 
@@ -839,49 +838,43 @@ class MysqlHandler(ServiceCtlHanler):
 					tmp_storage_volume = Storage.create(snapshot=temp_snap)
 					tmp_storage_volume.mount(tmp_mpoint)
 					
-					pid 				= os.path.join(tmp_mpoint, 'mysql.pid')
-					sock	 			= os.path.join(tmp_mpoint, 'mysql.sock')
-					tmp_datadir 		= os.path.join(tmp_mpoint, STORAGE_DATA_DIR)
-					binlog_path			= os.path.join(tmp_mpoint, STORAGE_BINLOG)
-					binlog_index_path	= binlog_path + '.index'
-					mysqld_safe_bin		= software.whereis('mysqld_safe')[0]
+					binlog_path	= os.path.join(tmp_mpoint, STORAGE_BINLOG)
+					binlog_index_path = binlog_path + '.index'
+					mysqld_safe_bin	= software.whereis('mysqld_safe')[0]
+					ndb_support = any(row['Engine'] == 'ndbcluster' and row['Support'] == 'YES' 
+									for row in mysql.client.fetchall('SHOW ENGINES'))		
 					
-					binary_logs_basepath = os.path.dirname(binlog_path)
-					binary_logs = os.listdir(binary_logs_basepath)
-					binary_logs.remove('binlog.index')
-					binary_logs = [os.path.join(binary_logs_basepath, log) for log in binary_logs]
-										
-					with open(binlog_index_path, 'r+') as f:
-						binlog_index = f.read()
-						f.seek(0)
-						f.truncate()
-						f.write('\n'.join(binary_logs))
-												
-					# Check ndbcluster support
-					ndb_support = True
-					engines = mysql.client.execute('SHOW ENGINES \G')
-					
-					ndb_search_res = re.search('ndbcluster\s*$\s*Support:\s*(?P<support>\w+)', engines, re.M)
-					
-					if not ndb_search_res or ndb_search_res.group('support') == 'NO':
-						ndb_support = False						
-										
-					mysqld_safe_cmd = (mysqld_safe_bin, '--socket=%s' % sock, '--pid-file=%s' % pid, '--datadir=%s' % tmp_datadir,
-						'--log-bin=%s' % binlog_path, '--skip-networking', '--skip-grant', '--bootstrap', '--skip-slave-start')
-					
+					# Point binlog.index to tmp storage 
+					binlog_index = filetool.read_file(binlog_index_path)
+					self._recreate_binlog_index(binlog_index_path, os.path.dirname(binlog_index_path))
+					self._logger.debug('Tmp binlogs: %s', filetool.read_file(binlog_index_path))
+							
+					# Repair InnoDB			
+					mysqld_safe_cmd = (mysqld_safe_bin, 
+						'--socket=%s' % os.path.join(tmp_mpoint, 'mysql.sock'), 
+						'--pid-file=%s' % os.path.join(tmp_mpoint, 'mysql.pid'), 
+						'--datadir=%s' % os.path.join(tmp_mpoint, STORAGE_DATA_DIR),
+						'--log-bin=%s' % binlog_path, 
+						'--skip-networking', 
+						'--skip-grant', 
+						'--bootstrap', 
+						'--skip-slave-start')
 					if ndb_support:
 						mysqld_safe_cmd += ('--skip-ndbcluster',)					
 					
 					system2(mysqld_safe_cmd, stdin="select 1;")
 					
-					with open(binlog_index_path, 'w') as f:
-						f.write(binlog_index)
+					# Restore binlog.index
+					filetool.write_file(binlog_index_path, binlog_index)
+					self._logger.debug('Original binlogs: %s', filetool.read_file(binlog_index_path))
 						
 					snap = tmp_storage_volume.snapshot()
+					
 					# Wait up to 6 hours for snapshot completion 
 					wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600) 
 					if snap.state == Snapshot.FAILED:
 						raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
+					
 					used_size = int(system2(('df', '-P', '--block-size=M', tmp_mpoint))[0].split('\n')[1].split()[2][:-1])
 				finally:
 					temp_snap.destroy()
@@ -917,8 +910,9 @@ class MysqlHandler(ServiceCtlHanler):
 				last_error	= str(e)
 			))
 
-	def _recreate_binlog_index(self, index_file, binlog):
-		pass
+	def _recreate_binlog_index(self, index_file, binlog_dir):
+		with open(index_file, 'w+') as f:
+			f.write('\n'.join(glob.glob(binlog_dir + '/binlog.[0-9]*')))
 
 	@_reload_mycnf				
 	def on_Mysql_PromoteToMaster(self, message):

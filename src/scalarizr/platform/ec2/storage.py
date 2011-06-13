@@ -58,6 +58,15 @@ class EbsVolumeProvider(VolumeProvider):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 	
+	def _new_ec2_conn(self):
+		try:
+			pl = bus.platform	
+			return pl.new_ec2_conn()
+		except:
+			if sys.exc_type.__name__ not in ('AttributeError', 'NoAuthHandlerFound'):
+				raise
+		return None
+	
 	def _create(self, **kwargs):
 		'''
 		@param id: EBS volume id		
@@ -67,14 +76,8 @@ class EbsVolumeProvider(VolumeProvider):
 		@param snapshot_id: Snapshot id
 		'''
 		ebs_vol = None
-		pl = bus.platform		
-		try:	
-			conn = pl.new_ec2_conn()
-		except:
-			if sys.exc_type.__name__ not in ('AttributeError', 'NoAuthHandlerFound'):
-				raise
-			conn = None
-			
+		pl = bus.platform
+		conn = self._new_ec2_conn()
 		
 		if conn:
 			# Find free devname			
@@ -180,15 +183,13 @@ class EbsVolumeProvider(VolumeProvider):
 		return self._create(**kwargs)
 
 	def create_snapshot(self, vol, snap):
-		pl = bus.platform
-		conn = pl.new_ec2_conn()
+		conn = self._new_ec2_conn()
 		ebs_snap = conn.create_snapshot(vol.id, snap.description)
 		snap.id = ebs_snap.id
 		return snap
 
 	def get_snapshot_state(self, snap):
-		pl = bus.platform
-		conn = pl.new_ec2_conn()
+		conn = self._new_ec2_conn()
 		state = conn.get_all_snapshots((snap.id,))[0].status
 		if state == 'creating':
 			state = Snapshot.CREATED
@@ -199,16 +200,17 @@ class EbsVolumeProvider(VolumeProvider):
 		@type vol: EbsVolume
 		'''
 		super(EbsVolumeProvider, self).destroy(vol)
-		try:
-			pl = bus.platform
-			conn = pl.new_ec2_conn()
-		except AttributeError:
-			pass
-		else:
+		conn = self._new_ec2_conn()
+		if conn:
 			ebstool.detach_volume(conn, vol.id, self._logger)
 			ebstool.delete_volume(conn, vol.id, self._logger)
-		finally:
-			vol.device = None							
+		vol.device = None							
+	
+	def destroy_snapshot(self, snap):
+		conn = self._new_ec2_conn()
+		if conn:
+			self._logger.debug('Deleting EBS snapshot %s', snap.id)
+			conn.delete_snapshot(snap.id)
 	
 	@devname_not_empty		
 	def detach(self, vol, force=False):
