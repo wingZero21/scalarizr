@@ -35,7 +35,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.49"	
+__version__ = "0.7.50"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -120,7 +120,7 @@ def _init():
 		from scalarizr.util.log import fix_py25_handler_resolving		
 		fix_py25_handler_resolving()
 	
-	logging.config.fileConfig(os.path.join(bus.etc_path, "logging-debug.ini" if optparser.values.debug else 'logging.ini'))
+	logging.config.fileConfig(os.path.join(bus.etc_path, "logging-debug.ini" if optparser and optparser.values.debug else 'logging.ini'))
 	logger = logging.getLogger(__name__)
 	globals()['_logging_configured'] = True
 	

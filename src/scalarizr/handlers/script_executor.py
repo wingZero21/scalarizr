@@ -100,7 +100,7 @@ class ScriptExecutor(Handler):
 		
 		if scripts:
 			if event_name:
-				self._logger.info("Executing %d script(s) on event %s", len(scripts), event_name)
+				self._logger.info("Executing %d %s script(s)", len(scripts), event_name)
 			else:
 				self._logger.info('Executing %d script(s)', len(scripts))
 			

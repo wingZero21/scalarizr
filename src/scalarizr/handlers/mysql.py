@@ -266,7 +266,9 @@ class MySQLClient(object):
 		
 	def execute(self, query, vertical=False):
 		user, passwd  = self._credentials_function()
-		return system2(('/usr/bin/mysql', '-u', user, '-p', '--execute', query), stdin=passwd)[0]
+		# q: why not sending password in stdin?
+		# a: on Ubuntu 8.04 (5.0.51a-3ubuntu5.4-log) mysql cli doesn't accept passwords in stdin
+		return system2(('/usr/bin/mysql', '-u', user, '-p' + passwd, '--execute', query))[0]
 	
 	def fetchall(self, query):
 		lines = self.execute(query).splitlines()
@@ -914,6 +916,9 @@ class MysqlHandler(ServiceCtlHanler):
 				status		='error',
 				last_error	= str(e)
 			))
+
+	def _recreate_binlog_index(self, index_file, binlog):
+		pass
 
 	@_reload_mycnf				
 	def on_Mysql_PromoteToMaster(self, message):
