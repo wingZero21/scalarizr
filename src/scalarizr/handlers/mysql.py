@@ -694,6 +694,7 @@ class MysqlHandler(ServiceCtlHanler):
 				finally:
 					if mysqld:
 						term_mysqld(mysqld)
+					self._start_service()
 		
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):

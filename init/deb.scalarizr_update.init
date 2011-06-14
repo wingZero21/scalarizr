@@ -25,7 +25,7 @@ case "$1" in
                         apt-get update
 						export DEBIAN_FRONTEND=noninteractive
 						export DEBIAN_PRIORITY=critical
-						platform=$(cat /etc/scalr/public.d/config.ini | grep 'platform\s*=' | cut -d '=' -f 2 | sed -e 's/^\s*//' | sed -e 's/\s*$//')
+						platform=`echo -e "import re;\nwith open('/etc/scalr/public.d/config.ini') as f: print re.search('platform\s*=\s*(\w+)', f.read()).group(1)" | python`
 						apt-get install -y scalarizr scalarizr-${platform}  
 						#apt-get dselect-upgrade -y
                         #apt-get install -q -y scalarizr/scalr && touch $update_flag
