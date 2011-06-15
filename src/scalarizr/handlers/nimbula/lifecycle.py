@@ -5,10 +5,8 @@ def get_handlers ():
 	return [NimbulaLifeCycleHandler()]
 
 class NimbulaLifeCycleHandler(Handler):
-	_platform = None
-	
+
 	def __init__(self):
-		self._platform = bus.platform
 		bus.on("init", self.on_init)			
 	
 	def on_init(self, *args, **kwargs):
@@ -18,4 +16,5 @@ class NimbulaLifeCycleHandler(Handler):
 		"""
 		@param message: Hello message
 		"""
-		message.instance_id = self._platform.get_instance_id()
+		pl = bus.platform
+		message.instance_id = pl.get_instance_id()

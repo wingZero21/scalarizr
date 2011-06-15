@@ -30,7 +30,6 @@ def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 	'''
 	Waits until snapshot becomes 'completed' or 'error'
 	'''
-	time_until = time.time() + timeout	
 	logger = logger or logging.getLogger(__name__)
 	
 	if isinstance(snap_id, basestring):
@@ -42,7 +41,7 @@ def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 	logger.debug('Checking that snapshot %s is completed', snap.id)
 	wait_until(
 		lambda: snap.update() and snap.status != 'pending', 
-		logger=logger, time_until=time_until,
+		logger=logger, timeout=timeout,
 		error_text="EBS snapshot %s wasn't completed in a reasonable time" % snap.id
 	)
 	if snap.status == 'error':
@@ -52,7 +51,6 @@ def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 
 
 def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout=DEFAULT_TIMEOUT):
-	time_until = time.time() + timeout	
 	logger = logger or logging.getLogger(__name__)
 	
 	msg = 'Creating EBS volume%s%s in avail zone %s' % (
@@ -71,7 +69,7 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout
 	logger.debug('Checking that EBS volume %s is available', vol.id)
 	wait_until(
 		lambda: vol.update() == "available", 
-		logger=logger, time_until=time_until,
+		logger=logger, timeout=timeout,
 		error_text="EBS volume %s wasn't available in a reasonable time" % vol.id
 	)
 	logger.debug('EBS volume %s available', vol.id)		
@@ -79,7 +77,6 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout
 	return vol
 
 def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger=None, timeout=DEFAULT_TIMEOUT):
-	time_until = time.time() + timeout	
 	logger = logger or logging.getLogger(__name__)
 	if isinstance(volume_id, basestring):
 		vol = Volume(ec2_conn)
@@ -94,7 +91,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 	logger.debug('Checking that volume %s is attached', vol.id)
 	wait_until(
 		lambda: vol.update() and vol.attachment_state() == 'attached', 
-		logger=logger, time_until=time_until,
+		logger=logger, timeout=timeout,
 		error_text="EBS volume %s wasn't attached in a reasonable time"
 				" (status=%s attachment_state=%s)." % ( 
 				vol.id, vol.status, vol.attachment_state())
@@ -106,7 +103,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		logger.debug('Checking that device %s is available', devname)
 		wait_until(
 			lambda: os.access(devname, os.F_OK | os.R_OK), 
-			sleep=1, logger=logger, time_until=time_until,
+			sleep=1, logger=logger, timeout=timeout,
 			error_text="Device %s wasn't available in a reasonable time" % devname
 		)
 		logger.debug('Device %s is available', devname)
@@ -121,7 +118,6 @@ def get_ebs_devname(devname):
 	return devname.replace('/xvd', '/sd')
 
 def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIMEOUT):
-	time_until = time.time() + timeout
 	logger = logger or logging.getLogger(__name__)
 	if isinstance(volume_id, basestring):
 		vol = Volume(ec2_conn)
@@ -138,7 +134,7 @@ def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT
 	logger.debug('Checking that volume %s is available', vol.id)
 	wait_until(
 		lambda: vol.update() == 'available', 
-		logger=logger, time_until=time_until,
+		logger=logger, timeout=timeout,
 		error_text="EBS volume %s wasn't available in a reasonable time" % vol.id
 	)
 	logger.debug('Volume %s is available', vol.id)

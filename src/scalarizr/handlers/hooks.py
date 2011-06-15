@@ -23,13 +23,16 @@ class HooksHandler(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		config = bus.config
-		self._hooks_path = config.get(self.name, "hooks_path")
-		bus.on("init", self.on_init)
+		bus.on(init=self.on_init, reload=self.on_reload)
+		self.on_reload()
 		
 	def on_init(self):
 		for event in bus.list_events():
 			bus.on(event, self.create_hook(event))
+		
+	def on_reload(self):
+		cnf = bus.cnf
+		self._hooks_path = cnf.rawini.get(self.name, 'hooks_path')
 			
 	def create_hook(self, event):
 		def hook(*args, **kwargs):

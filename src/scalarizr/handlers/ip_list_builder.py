@@ -31,17 +31,19 @@ class IpListBuilder(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._queryenv = bus.queryenv_service
-		#print bus.cnf
-		cnf = bus.cnf; ini = cnf.rawini
-		self._base_path = ini.get(self.name, "base_path")
-		self._base_path = self._base_path.replace('$etc_path', bus.etc_path)
-		self._base_path = os.path.normpath(self._base_path)
-		bus.on("init", self.on_init)
+		bus.on(init=self.on_init, reload=self.on_reload)
+		self.on_reload()
 
 	def on_init(self, *args, **kwargs):
 		bus.on("start", self.on_start)
 		bus.on("before_host_up", self.on_before_host_up)
+	
+	def on_reload(self):
+		self._queryenv = bus.queryenv_service		
+		cnf = bus.cnf; ini = cnf.rawini
+		self._base_path = ini.get(self.name, "base_path")
+		self._base_path = self._base_path.replace('$etc_path', bus.etc_path)
+		self._base_path = os.path.normpath(self._base_path)
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.HOST_UP \

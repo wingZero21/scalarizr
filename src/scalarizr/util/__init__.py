@@ -264,15 +264,17 @@ def system2(*popenargs, **kwargs):
 	return out, err, p.returncode
 
 
-def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, time_until=None, timeout=None, error_text=None):
+def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, timeout=None, start_text=None, error_text=None):
 	args = args or ()
 	kwargs = kwargs or {}
 	if timeout:
 		time_until = time.time() + timeout
+	if start_text and logger:
+		logger.info('%s. Timeout: %d seconds', start_text, timeout)
 	while not target(*args, **kwargs):
 		if time_until and time.time() >= time_until:
 			msg = error_text + '. ' if error_text else ''
-			msg += 'Time until: %s reached' % time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time_until))
+			msg += 'Timeout: %d seconds reached' % (timeout, )
 			raise BaseException(msg)
 		if logger:
 			logger.debug("Wait %.2f seconds before the next attempt", sleep)

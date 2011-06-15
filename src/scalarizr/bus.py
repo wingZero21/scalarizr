@@ -97,6 +97,9 @@ bus.define_events(
 	# Fires when scalarizr is starting
 	"start",
 	
+	# Fires when scalarizr was reloaded with SIGHUP 
+	"reload",
+	
 	# Fires when scalarizr is terminating
-	"terminate"
+	"shutdown"
 )

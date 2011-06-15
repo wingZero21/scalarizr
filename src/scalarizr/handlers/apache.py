@@ -188,21 +188,14 @@ class ApacheHandler(ServiceCtlHanler):
 	'''
 
 	def __init__(self):
-		ServiceCtlHanler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())		
-		
-		self._logger = logging.getLogger(__name__)
-		self._queryenv = bus.queryenv_service
-		self._cnf = bus.cnf
-
-		ini = self._cnf.rawini
-		self._httpd_conf_path = ini.get(CNF_SECTION, APP_CONF_PATH)
-		self._config = Configuration('apache')
-		self._config.read(self._httpd_conf_path)
-		
-		bus.on("init", self.on_init)
+		self._logger = logging.getLogger(__name__)		
+		ServiceCtlHanler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())
+				
+		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
 			'apache_rpaf_reload'
 		)
+		self.on_reload()		
 
 	def on_init(self):
 		bus.on(
@@ -213,6 +206,13 @@ class ApacheHandler(ServiceCtlHanler):
 		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
+
+	def on_reload(self):
+		self._queryenv = bus.queryenv_service		
+		self._cnf = bus.cnf
+		self._httpd_conf_path = self._cnf.rawini.get(CNF_SECTION, APP_CONF_PATH)
+		self._config = Configuration('apache')
+		self._config.read(self._httpd_conf_path)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \

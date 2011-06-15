@@ -51,7 +51,7 @@ class MessagingHandler(logging.Handler):
 		self.send_interval = (int(m.group('seconds') or 0) + 60*int(m.group('minutes') or 0)) or 1
 		self.num_entries = num_entries
 		self._logger = logging.getLogger(__name__)
-		bus.on("terminate", self.on_terminate)
+		bus.on("shutdown", self.on_shutdown)
 		
 	def __del__(self):
 		if self._send_event:
@@ -149,7 +149,7 @@ class MessagingHandler(logging.Handler):
 	def _time_has_come(self):
 		return len(self.entries) >= self.num_entries
 	
-	def on_terminate(self):
+	def on_shutdown(self):
 		self._stop_event.set()
 		self._send_message()
 		self._sender_thread.join()

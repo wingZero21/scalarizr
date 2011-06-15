@@ -7,6 +7,7 @@ Created on Dec 5, 2009
 # Core
 from scalarizr.messaging import MessageConsumer, MessagingError
 from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage
+from scalarizr.util import wait_until, system2
 
 # Stdlibs
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
@@ -16,6 +17,7 @@ import logging
 import sys
 import os
 import time 
+import socket
 
 class P2pMessageConsumer(MessageConsumer):
 	endpoint = None
@@ -23,6 +25,8 @@ class P2pMessageConsumer(MessageConsumer):
 	_server = None
 	_handler_thread = None
 	#_not_empty = None
+	handler_locked = False
+	handler_status = 'stopped'
 	
 	def __init__(self, endpoint=None):
 		MessageConsumer.__init__(self)
@@ -39,9 +43,9 @@ class P2pMessageConsumer(MessageConsumer):
 		try:
 			if self._server is None:
 				r = urlparse(self.endpoint)
+				self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)				
 				server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
 				self._server = server_class((r.hostname, r.port), self._get_request_handler_class())
-				self._logger.info('Build message consumer server on %s:%s', r.hostname, r.port)
 		except (BaseException, Exception), e:
 			self._logger.error("Cannot build server. %s", e)
 			return
@@ -113,8 +117,9 @@ class P2pMessageConsumer(MessageConsumer):
 		RequestHandler.consumer = self
 		return RequestHandler
 			
-	def shutdown(self):
-		self.running = False
+	def shutdown(self, force=False):
+		self._logger.debug('entring shutdown _server: %s, running: %s', self._server, self.running)
+		self.running = False		
 		if not self._server:
 			return
 		
@@ -122,11 +127,20 @@ class P2pMessageConsumer(MessageConsumer):
 	
 		self._logger.debug("Shutdown HTTP server")
 		self._server.shutdown()
-		self._server.server_close()
+		self._server.socket.shutdown(socket.SHUT_RDWR)
+		self._server.socket.close()
+		#self._server.server_close()
 		self._server = None		
 		self._logger.debug("HTTP server terminated")
 
 		self._logger.debug("Shutdown message handler")
+		self.handler_locked = True
+		if not force:
+			t = 120
+			self._logger.debug('Waiting for message handler to complete it`s task. Timeout: %d seconds', t)
+			wait_until(lambda: self.handler_status in ('idle', 'stopped'), 
+					timeout=t, error_text='Message consumer is busy', logger=self._logger)
+	
 		self._handler_thread.join()
 		self._logger.debug("Message handler terminated")
 		
@@ -135,29 +149,32 @@ class P2pMessageConsumer(MessageConsumer):
 
 	def message_handler (self):
 		store = P2pMessageStore()
-		#if store.get_unhandled(self.endpoint):
-		#	self._not_empty.set()
+		self.handler_status = 'idle'
+		
+		self._logger.debug('Starting message handler')
 		
 		while self.running:
-			#self._not_empty.wait(0.1)
-			#if self._not_empty.isSet():
-			#	self._not_empty.clear()
-			try:
-				for queue, message in store.get_unhandled(self.endpoint):
-					try:
-						self._logger.debug('Notify message listeners (message_id: %s)', message.id)
-						for ln in self.listeners:
-							ln(message, queue)
-					except (BaseException, Exception), e:
-						self._logger.exception(e)
-					finally:
-						self._logger.debug('Mark message (message_id: %s) as handled', message.id)
-						store.mark_as_handled(message.id)
-			except (BaseException, Exception), e:
-				self._logger.exception(e)
+			if not self.handler_locked:
+				try:
+					for queue, message in store.get_unhandled(self.endpoint):
+						try:
+							self.handler_status = 'running'
+							self._logger.debug('Notify message listeners (message_id: %s)', message.id)
+							for ln in self.listeners:
+								ln(message, queue)
+						except (BaseException, Exception), e:
+							self._logger.exception(e)
+						finally:
+							self._logger.debug('Mark message (message_id: %s) as handled', message.id)
+							store.mark_as_handled(message.id)
+							self.handler_status = 'idle'
+				except (BaseException, Exception), e:
+					self._logger.exception(e)
 			time.sleep(0.1)
+			
+		self.handler_status = 'stopped'
+		self._logger.debug('Message handler stopped')		
 	
-		
 
 if sys.version_info < (2,6):
 	try:

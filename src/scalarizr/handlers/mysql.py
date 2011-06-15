@@ -607,33 +607,10 @@ class MysqlHandler(ServiceCtlHanler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._queryenv = bus.queryenv_service
-		self._platform = bus.platform
-		self._cnf = bus.cnf
-		ini = self._cnf.rawini
-		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
-		self._mycnf_path = globals()['mycnf_path'] = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
-		self._mysqld_path = globals()['mysqld_path'] = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
-		globals()['mysqldump_path'] = ini.get(CNF_SECTION, OPT_MYSQLDUMP_PATH)
-		globals()['mysql_path'] = ini.get(CNF_SECTION, OPT_MYSQL_PATH)
-		try:
-			self._change_master_timeout = globals()['change_master_timeout'] = int(
-					ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT) or '30')
-		except ConfigParser.Error:
-			self._change_master_timeout = globals()['change_master_timeout'] = 30
-		
-		self._storage_path = STORAGE_PATH
-		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
-		self._tmp_dir = os.path.join(self._storage_path, STORAGE_TMP_DIR)		
-		self._binlog_base = os.path.join(self._storage_path, STORAGE_BINLOG)
-
 		initd = initdv2.lookup(SERVICE_NAME)
 		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
 		
-		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
-		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
-		
-		bus.on("init", self.on_init)
+		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
 			'before_mysql_data_bundle',
 			
@@ -651,6 +628,7 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			'slave_promote_to_master'
 		)
+		self.on_reload()		
 
 	def on_init(self):		
 		bus.on("host_init_response", self.on_host_init_response)
@@ -695,7 +673,30 @@ class MysqlHandler(ServiceCtlHanler):
 					if mysqld:
 						term_mysqld(mysqld)
 					self._start_service()
+	
+	def on_reload(self):
+		self._queryenv = bus.queryenv_service
+		self._platform = bus.platform
+		self._cnf = bus.cnf
+		ini = self._cnf.rawini
+		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+		self._mycnf_path = globals()['mycnf_path'] = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
+		self._mysqld_path = globals()['mysqld_path'] = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
+		globals()['mysqldump_path'] = ini.get(CNF_SECTION, OPT_MYSQLDUMP_PATH)
+		globals()['mysql_path'] = ini.get(CNF_SECTION, OPT_MYSQL_PATH)
+		try:
+			self._change_master_timeout = globals()['change_master_timeout'] = int(
+					ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT) or '30')
+		except ConfigParser.Error:
+			self._change_master_timeout = globals()['change_master_timeout'] = 30
 		
+		self._storage_path = STORAGE_PATH
+		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
+		self._tmp_dir = os.path.join(self._storage_path, STORAGE_TMP_DIR)		
+		self._binlog_base = os.path.join(self._storage_path, STORAGE_BINLOG)
+	
+		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
+		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
@@ -1396,7 +1397,8 @@ class MysqlHandler(ServiceCtlHanler):
 		try:
 			if not os.path.exists(mpoint):
 				os.makedirs(mpoint)
-			vol.mount(mpoint)
+			if not vol.mounted():
+				vol.mount(mpoint)
 		except StorageError, e:
 			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
 			if 'you must specify the filesystem type' in str(e):

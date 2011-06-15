@@ -24,8 +24,8 @@ class Ec2LifeCycleHandler(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._platform = bus.platform
-		bus.on("init", self.on_init)		
+		bus.on(init=self.on_init, reload=self.on_reload)
+		self.on_reload()		
 	
 	def on_init(self, *args, **kwargs):
 		bus.on("before_hello", self.on_before_hello)		
@@ -73,7 +73,8 @@ class Ec2LifeCycleHandler(Handler):
 				entry = fstab.find(device)[0]
 				mount(device, entry.mpoint, ('-o', entry.options))
 		
-
+	def on_reload(self):
+		self._platform = bus.platform		
 	
 	def on_before_hello(self, message):
 		"""

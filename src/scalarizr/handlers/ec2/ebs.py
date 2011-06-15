@@ -32,11 +32,9 @@ class EbsHandler(handlers.Handler):
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._platform = bus.platform
-		self._queryenv = bus.queryenv_service
-		self._config = bus.config
+		self.on_reload()
 		
-		bus.on("init", self.on_init)
+		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
 			# Fires when EBS is attached to instance
 			# @param device: device name, ex: /dev/sdf
@@ -50,6 +48,10 @@ class EbsHandler(handlers.Handler):
 			# @param device: device name, ex: /dev/sdf
 			"block_device_mounted"
 		)
+		
+	def on_reload(self):
+		self._platform = bus.platform
+		self._queryenv = bus.queryenv_service
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, Messages.MOUNTPOINTS_RECONFIGURE)

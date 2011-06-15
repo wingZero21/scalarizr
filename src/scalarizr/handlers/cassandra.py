@@ -135,11 +135,17 @@ class Cassandra(object):
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		self._initd = initdv2.lookup(SERVICE_NAME)		
 		
+		bus.on(reload=self.on_reload)
+		self.on_reload()
+		
+	def on_reload(self):
 		self.queryenv = bus.queryenv_service
 		self.platform = bus.platform
 		self.private_ip = self.platform.get_private_ip()
 		self.zone = self.platform.get_avail_zone()
+		
 		cnf = bus.cnf 
 		self.ini = cnf.rawini
 		
@@ -156,8 +162,6 @@ class Cassandra(object):
 			self.cassandra_conf.read(self.storage_conf_path)
 		except (OSError, MetaconfError, ParseError), e:
 			self._logger.error('Cassandra storage-conf.xml is broken. %s' % e)
-		
-		self._initd = initdv2.lookup(SERVICE_NAME)
 		
 	def restart_service(self):
 		self.stop_service()

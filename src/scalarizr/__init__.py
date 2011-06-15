@@ -11,7 +11,8 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
 
 # Utils
-from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
+from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor,\
+	wait_until
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
 
 # Stdlibs
@@ -35,7 +36,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.52"	
+__version__ = "0.7.53"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
@@ -63,6 +64,8 @@ _snmp_scheduled_start_time = None
 '''
 Next time when SNMP process should be forked
 '''
+
+_msg_thread = None
 
 _logging_configured = False
 
@@ -139,9 +142,6 @@ def _init():
 
 	# Configure database connection pool
 	bus.db = SqliteLocalObject(_db_connect)
-
-	# Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
-	bus.periodical_executor = PeriodicalExecutor()
 
 
 DB_NAME = 'db.sqlite'
@@ -259,6 +259,9 @@ def _init_services():
 	bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
 	logger.debug("Got scalr url: '%s'" % bus.scalr_url)
 
+	# Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
+	bus.periodical_executor = PeriodicalExecutor()
+
 	logger.debug("Initialize QueryEnv client")
 	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY))
 	bus.queryenv_service = queryenv
@@ -284,8 +287,23 @@ def _init_services():
 
 	Storage.maintain_volume_table = True
 
-	bus.fire("init")
 
+def _start_services():
+	# Create message server thread
+	msg_service = bus.messaging_service
+	consumer = msg_service.get_consumer()
+	msg_thread = threading.Thread(target=consumer.start, name="Message server")
+
+	# Start SNMP
+	_start_snmp_server()
+
+	# Start message server
+	msg_thread.start()
+	globals()['_msg_thread'] = msg_thread
+	
+	# Start periodical executor
+	ex = bus.periodical_executor
+	ex.start()
 
 def _apply_user_data(cnf):
 	logger = logging.getLogger(__name__)
@@ -367,12 +385,33 @@ def _start_snmp_server():
 	else:
 		globals()["_snmp_pid"] = pid
 
+def onSIGHUP(*args):
+	pid = os.getpid()
+	logger = logging.getLogger(__name__)
+	logger.debug('Received SIGHUP (pid: %d)', pid)
+	if pid != _pid:
+		return
+	
+	logger.info('Reloading scalarizr')
+	signal.signal(signal.SIGCHLD, signal.SIG_IGN)
+	globals()["_running"] = False
+	_shutdown_services()
+	bus.fire('shutdown')
+	
+	globals()["_running"] = True
+	signal.signal(signal.SIGCHLD, onSIGCHILD)		
+	cnf = bus.cnf
+	cnf.bootstrap(force_reload=True)
+	_init_services()
+	_start_services()
+	bus.fire('reload')
+	
 
 def onSIGTERM(*args):
+	pid = os.getpid()	
 	logger = logging.getLogger(__name__)
-	logger.debug('Received SIGTERM')
+	logger.debug('Received SIGTERM (pid: %d)', pid)
 		
-	pid = os.getpid()
 	if pid == _pid:
 		# Main process
 		logger.debug('Shutdown main process (pid: %d)', pid)
@@ -416,30 +455,8 @@ def _shutdown(*args):
 		
 	try:
 		logger.info("[pid: %d] Stopping scalarizr %s", os.getpid(), __version__)
-		
-		if _snmp_pid:
-			logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
-			try:
-				os.kill(_snmp_pid, signal.SIGTERM)
-			except (Exception, BaseException), e:
-				logger.debug("Can't kill SNMP process: %s" % e)
-				
-		# Shutdown messaging
-		msg_service = bus.messaging_service
-		msg_service.get_consumer().shutdown()
-		msg_service.get_producer().shutdown()
-		
-		# Shutdown internal messaging
-		int_msg_service = bus.int_messaging_service
-		if int_msg_service:
-			int_msg_service.get_consumer().shutdown()
-		
-		ex = bus.periodical_executor
-		ex.shutdown()
-		
-		# Fire terminate
-		bus.fire("terminate")
-		
+		_shutdown_services()
+		bus.fire("shutdown")
 	except:
 		pass
 	finally:
@@ -447,6 +464,31 @@ def _shutdown(*args):
 			os.remove(PID_FILE)
 	
 	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
+
+def _shutdown_services(force=False):
+	logger = logging.getLogger(__name__)
+	
+	# Shutdown SNMP
+	if _snmp_pid:
+		logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
+		try:
+			os.kill(_snmp_pid, signal.SIGTERM)
+		except (Exception, BaseException), e:
+			logger.debug("Can't kill SNMP process: %s" % e)
+		globals()['_snmp_pid'] = None
+	
+	# Shutdown messaging
+	logger.debug('Shutdowning external messaging')	
+	msg_service = bus.messaging_service
+	msg_service.get_consumer().shutdown()
+	msg_service.get_producer().shutdown()
+	bus.messaging_service = None
+	
+	# Shutdown periodical executor
+	logger.debug('Shutdowning periodical executor')
+	ex = bus.periodical_executor
+	ex.shutdown()
+	bus.periodical_executor = None
 
 
 def _cleanup_after_rebundle():
@@ -631,26 +673,14 @@ def main():
 		
 		# Initialize scalarizr services
 		_init_services()
+		bus.fire('init')
 		
 		# Install signal handlers
 		signal.signal(signal.SIGCHLD, onSIGCHILD)	
 		signal.signal(signal.SIGTERM, onSIGTERM)
+		signal.signal(signal.SIGHUP, onSIGHUP)
 
-		# Create message server thread
-		msg_service = bus.messaging_service
-		consumer = msg_service.get_consumer()
-		msg_thread = threading.Thread(target=consumer.start, name="Message server")
-
-		# Start SNMP
-		_start_snmp_server()
-
-		# Start message server
-		msg_thread.start()
-		
-		# Start periodical executor
-		ex = bus.periodical_executor
-		ex.start()
-		
+		_start_services()
 		
 		# Fire start
 		globals()["_running"] = True
@@ -661,15 +691,18 @@ def main():
 	
 		try:
 			while _running:
-				msg_thread.join(0.2)
+				_msg_thread.join(0.2)
 				# Recover SNMP 
-				if not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
+				if _running and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
 					_start_snmp_server()
 		except KeyboardInterrupt:
+			logger.debug('Mainloop: KeyboardInterrupt')
 			pass
 		finally:
+			logger.debug('Mainloop: finally')
 			if _running and os.getpid() == _pid:
 				_shutdown()
+		logger.debug('Mainloop: leave')
 			
 	except (BaseException, Exception), e:
 		if isinstance(e, SystemExit):

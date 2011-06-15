@@ -16,14 +16,17 @@ class RackspaceLifeCycleHandler(Handler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
-		self._platform = bus.platform
-		bus.on("init", self.on_init)
+		bus.on(init=self.on_init, reload=self.on_reload)
+		self.on_reload()
 	
 	def on_init(self, *args, **kwargs):
 		bus.on(before_reboot_finish=self.on_before_reboot_finish)	
 		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
 			self._insert_iptables_rules()
+	
+	def on_reload(self):
+		self._cnf = bus.cnf
+		self._platform = bus.platform
 			
 	def on_before_reboot_finish(self, *args, **kwargs):
 		self._insert_iptables_rules()

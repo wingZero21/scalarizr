@@ -105,12 +105,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			# @param service_name: Service name. Ex: mysql
 			"service_configured"
 		)
-		bus.on("init", self.on_init)
-		
-		self._msg_service = bus.messaging_service
-		self._producer = self._msg_service.get_producer()
-		self._cnf = bus.cnf
-		self._platform = bus.platform
+		bus.on(
+			init=self.on_init, 
+			start=self.on_start, 
+			reload=self.on_reload, 
+			shutdown=self.on_shutdown
+		)
+		self.on_reload()
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -121,8 +122,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	
 	def on_init(self):
-		bus.on("start", self.on_start)
-		bus.on("host_init_response", self.on_host_init_response)		
+		bus.on("host_init_response", self.on_host_init_response)
 		self._producer.on("before_send", self.on_before_message_send)
 		
 		# Add internal messages to scripting skip list
@@ -141,12 +141,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	def on_start(self):
 		optparser = bus.optparser
-		
-		# Start internal messaging
-		if self._cnf.state == ScalarizrState.RUNNING:
-			# when farm key exists
-			if self._cnf.key_exists(self._cnf.FARM_KEY):
-				self._start_int_messaging()
 		
 		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")
@@ -216,6 +210,23 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		self.send_message(msg)
 		bus.fire("hello")
 
+	def on_reload(self):
+		self._msg_service = bus.messaging_service
+		self._producer = self._msg_service.get_producer()
+		self._cnf = bus.cnf
+		self._platform = bus.platform
+		
+		if self._cnf.state == ScalarizrState.RUNNING and self._cnf.key_exists(self._cnf.FARM_KEY):
+			self._start_int_messaging()
+
+	def on_shutdown(self):
+		self._logger.debug('Calling %s.on_shutdown', __name__)
+		# Shutdown internal messaging
+		int_msg_service = bus.int_messaging_service
+		if int_msg_service:
+			self._logger.debug('Shutdowning internal messaging')			
+			int_msg_service.get_consumer().shutdown()
+		bus.int_messaging_service = None
 
 	def on_host_init_response(self, message):
 		farm_crypto_key = message.body.get('farm_crypto_key', '')

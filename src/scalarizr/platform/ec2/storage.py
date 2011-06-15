@@ -95,13 +95,14 @@ class EbsVolumeProvider(VolumeProvider):
 				else:
 					raise StorageError('No free letters for block device name remains')
 			
+			self._logger.debug('storage._create kwds: %s', kwargs)
 			volume_id = kwargs.get('id')
 			snap_id = kwargs.get('snapshot_id')
 			ebs_vol = None
 			delete_snap = False
 			volume_attached = False			
 			try:
-				if volume_id and not snap_id:
+				if volume_id:
 					self._logger.debug('EBS has been already created')
 					try:
 						ebs_vol = conn.get_all_volumes([volume_id])[0]
@@ -115,8 +116,10 @@ class EbsVolumeProvider(VolumeProvider):
 						volume_id = None
 						delete_snap = True
 						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger).id
-					
-				if snap_id or not volume_id:
+					else:
+						snap_id = None
+						
+				if snap_id:
 					self._logger.debug('Creating new EBS')
 					kwargs['avail_zone'] = pl.get_avail_zone()
 					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), kwargs.get('avail_zone'), 
@@ -149,7 +152,6 @@ class EbsVolumeProvider(VolumeProvider):
 			except (Exception, BaseException), e:
 				self._logger.debug('Caught exception')
 				if ebs_vol:
-					self._logger.debug('')
 					self._logger.debug('Detaching EBS')
 					if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
 						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)

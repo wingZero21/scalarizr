@@ -62,13 +62,17 @@ class ScriptExecutor(Handler):
 	def __init__(self, wait_async=False):
 		self._logger = logging.getLogger(__name__)	
 		self._wait_async = wait_async
+		self._lock = threading.Lock()		
 		
+		bus.on(reload=self.on_reload)
+		self.on_reload()		
+	
+	def on_reload(self):
 		self._queryenv = bus.queryenv_service
 		self._msg_service = bus.messaging_service
 		self._platform = bus.platform
 		self._config = bus.config
 		self._cnf = bus.cnf
-		self._lock = threading.Lock()
 		
 		sect_name = self.name
 		if not self._config.has_section(sect_name):
@@ -87,7 +91,7 @@ class ScriptExecutor(Handler):
 		
 		# logs_truncate_over
 		self._logs_truncate_over = parse_size(self._config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
-	
+
 
 	def exec_scripts_on_event (self, event_name=None, event_id=None, target_ip=None, local_ip=None, 
 							scripts=None):

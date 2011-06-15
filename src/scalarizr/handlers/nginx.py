@@ -180,7 +180,23 @@ class NginxHandler(ServiceCtlHanler):
 		ServiceCtlHanler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
 				
 		self._logger = logging.getLogger(__name__)
-		self._queryenv = bus.queryenv_service	
+		
+		bus.define_events("nginx_upstream_reload")
+		bus.on(init=self.on_init, reload=self.on_reload)
+		self.on_reload()			
+		
+	def on_init(self):
+		bus.on(
+			start = self.on_start, 
+			before_host_up = self.on_before_host_up,
+			before_reboot_finish = self.on_before_reboot_finish
+		)
+		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			self._insert_iptables_rules()
+	
+	def on_reload(self):
+		self._queryenv = bus.queryenv_service		
 		self._cnf = bus.cnf
 		
 		ini = self._cnf.rawini
@@ -192,20 +208,6 @@ class NginxHandler(ServiceCtlHanler):
 			self._upstream_app_role = ini.get(CNF_SECTION, UPSTREAM_APP_ROLE)
 		except ConfigParser.Error:
 			self._upstream_app_role = None
-		
-		bus.define_events("nginx_upstream_reload")
-		bus.on(init=self.on_init)
-		
-		
-	def on_init(self):
-		bus.on(
-			start = self.on_start, 
-			before_host_up = self.on_before_host_up,
-			before_reboot_finish = self.on_before_reboot_finish
-		)
-		
-		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
-			self._insert_iptables_rules()
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
