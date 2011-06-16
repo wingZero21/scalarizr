@@ -97,6 +97,9 @@ class EbsVolumeProvider(VolumeProvider):
 			
 			self._logger.debug('storage._create kwds: %s', kwargs)
 			volume_id = kwargs.get('id')
+			# xxx: hotfix
+			if volume_id and volume_id.startswith('snap-'):
+				volume_id = None
 			snap_id = kwargs.get('snapshot_id')
 			ebs_vol = None
 			delete_snap = False
