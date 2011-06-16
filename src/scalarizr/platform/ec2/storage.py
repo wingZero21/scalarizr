@@ -51,7 +51,7 @@ class EbsVolumeProvider(VolumeProvider):
 	type = 'ebs'
 	vol_class = EbsVolume
 	snap_class = EbsSnapshot
-	all_letters = tuple(string.ascii_lowercase[14:])
+	all_letters = tuple(string.ascii_lowercase[5:16])
 	
 	_logger = None
 	
