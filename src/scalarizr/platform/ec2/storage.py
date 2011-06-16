@@ -156,8 +156,8 @@ class EbsVolumeProvider(VolumeProvider):
 					if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
 						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
 							
-					if not volume_id:
-						ebs_vol.delete()
+					#if not volume_id:
+					#	ebs_vol.delete()
 						
 				raise StorageError('EBS volume construction failed: %s' % str(e))
 			
