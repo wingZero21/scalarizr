@@ -457,7 +457,7 @@ class MysqlCnfController(CnfController):
 		ini = self._cnf.rawini
 		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
 		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
-		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql') #TRUE,FALSE
+		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql', {'ON':'1','OFF':'0'}) #TRUE,FALSE
 
 	def _start_service(self):
 		if not hasattr(self, '_mysql_cnf_err_re'):
@@ -466,15 +466,15 @@ class MysqlCnfController(CnfController):
 		if re.search(self._mysql_cnf_err_re, stderr):
 			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
 		
-		self._logger.info("Starting %s" % self.behaviour)
-		
 		if not self._init_script.running:
 			try:
+				self._logger.info("Starting %s" % self.behaviour)
 				self._init_script.start()
+				self._logger.debug("%s started" % self.behaviour)
 			except:
 				if not self._init_script.running:
 					raise
-			self._logger.debug("%s started" % self.behaviour)
+			
 	
 	def current_preset(self):
 		self._logger.debug('Getting current MySQL preset')

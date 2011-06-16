@@ -220,23 +220,25 @@ class ServiceCtlHanler(Handler):
 		self.send_message(result)
 			
 	def _start_service(self):
-		self._logger.info("Starting %s" % self._service_name)
-		try:
-			self._init_script.start()
-		except BaseException, e:
-			if not self._init_script.running:
-				raise
-			self._logger.warning(str(e))
-		self._logger.debug("%s started" % self._service_name)
+		if not self._init_script.running:
+			self._logger.info("Starting %s" % self._service_name)
+			try:
+				self._init_script.start()
+			except BaseException, e:
+				if not self._init_script.running:
+					raise
+				self._logger.warning(str(e))
+			self._logger.debug("%s started" % self._service_name)
 
 	def _stop_service(self, reason=None):
-		self._logger.info("Stopping %s%s", self._service_name, '. (%s)' % reason if reason else '')
-		try:
-			self._init_script.stop()
-		except:
-			if self._init_script.running:
-				raise
-		self._logger.debug("%s stopped", self._service_name)
+		if self._init_script.running:
+			self._logger.info("Stopping %s%s", self._service_name, '. (%s)' % reason if reason else '')
+			try:
+				self._init_script.stop()
+			except:
+				if self._init_script.running:
+					raise
+			self._logger.debug("%s stopped", self._service_name)
 	
 	def _restart_service(self, reason=None):
 		self._logger.info("Restarting %s%s", self._service_name, '. (%s)' % reason if reason else '')
@@ -271,8 +273,14 @@ class ServiceCtlHanler(Handler):
 		return cur_preset
 
 	def _start_service_with_preset(self, preset):
+		'''
+		TODO: Revise method carefully 
+		'''
 		try:
-			self._start_service()
+			if self._init_script.running:
+				self._restart_service('applying new service settings from conficuration preset')
+			else:
+				self._start_service()
 		except BaseException, e:
 			self._logger.error('Cannot start %s with current configuration preset. ' % self._service_name
 					+ '[Reason: %s] ' % str(e)
@@ -296,7 +304,7 @@ class ServiceCtlHanler(Handler):
 		if szr_cnf.state == ScalarizrState.RUNNING:
 			if self._cnf_ctl:
 				# Stop servive if it's already running
-				self._stop_service('comparing presets')
+				#self._stop_service('comparing presets')
 				
 				# Obtain current configuration preset
 				cur_preset = self._obtain_current_preset()
@@ -306,11 +314,12 @@ class ServiceCtlHanler(Handler):
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
 					self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
 					self._cnf_ctl.apply_preset(cur_preset)
+					# Start service with updated configuration
+					self._start_service_with_preset(cur_preset)
 				else:
 					self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
-					
-				# Start service with updated configuration
-				self._start_service_with_preset(cur_preset)
+					self._start_service()
+
 			else:
 				self._start_service()
 

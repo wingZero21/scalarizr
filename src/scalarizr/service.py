@@ -126,18 +126,36 @@ class CnfController(object):
 			elif not this.settings.has_key(variable.name):
 				if variable.default_value and that.settings[variable.name] == variable.default_value:
 					continue
-				else:
+				elif variable.default_value:
+					self._logger.debug('Variable %s has default value %s and variable in %s = %s' % (variable.name, variable.default_value,that.name,that.settings[variable.name]))
 					return False
+				else:
+					continue
+
 					
 			elif not that.settings.has_key(variable.name):
 				if variable.default_value and this.settings[variable.name] == variable.default_value:
 					continue
+				elif variable.default_value:
+					self._logger.debug('Variable %s has default value %s and variable in %s = %s' % (variable.name, variable.default_value,this.name,this.settings[variable.name]))
+					return False
 				else:
+					continue		
+					
+			else: 
+				that_value = that.settings[variable.name]
+				this_value = this.settings[variable.name]
+				
+				#mind aliases
+				if self.definitions:
+					if self.definitions.has_key(that_value):
+						that_value = self.definitions[that_value]
+					if self.definitions.has_key(this_value):
+						this_value = self.definitions[this_value]
+					
+				if that_value != this_value:
 					return False
 					
-			else:
-				if that.settings[variable.name] != this.settings[variable.name]:
-					return False
 			
 		return True
 
