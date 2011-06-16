@@ -56,10 +56,10 @@ class RackspaceRebundleHandler(Handler):
 				
 				self._logger.info('Checking that image %s is completed', image.id)
 				wait_until(hasattr, args=(image, 'progress'), 
-						sleep=5, logger=self._logger, 
+						sleep=5, logger=self._logger, timeout=3600,
 						error_text="Image %s has no attribute 'progress'" % image.id)
 				wait_until(lambda: image_manager.get(image.id).progress == 100, 
-						sleep=30, logger=self._logger,
+						sleep=30, logger=self._logger, timeout=3600,
 						error_text="Image %s wasn't completed in a reasonable time" % image.id)
 				self._logger.info('Image %s completed and available for use!', image.id)
 			finally:

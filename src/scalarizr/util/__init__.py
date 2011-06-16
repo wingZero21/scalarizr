@@ -267,6 +267,7 @@ def system2(*popenargs, **kwargs):
 def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, timeout=None, start_text=None, error_text=None):
 	args = args or ()
 	kwargs = kwargs or {}
+	time_until = None
 	if timeout:
 		time_until = time.time() + timeout
 	if start_text and logger:

@@ -673,7 +673,8 @@ class RebundleEbsStrategy(RebundleStratery):
 
 		self._logger.debug('Checking that snapshot %s is completed', self._snap.id)
 		wait_until(lambda: self._snap.update() and self._snap.status == 'completed', 
-				logger=self._logger, error_text="EBS snapshot wasn't completed in a reasonable time")
+				logger=self._logger, timeout=3600, 
+				error_text="EBS snapshot wasn't completed in a reasonable time")
 		self._logger.debug('Snapshot %s completed', self._snap.id)
 		
 		self._logger.info('Snapshot %s of root device image %s created', self._snap.id, vol.id)
@@ -719,7 +720,7 @@ class RebundleEbsStrategy(RebundleStratery):
 					# Sometimes it takes few seconds for EC2 to propagate new AMI
 					return False
 				raise
-		wait_until(check_image, logger=self._logger, 
+		wait_until(check_image, logger=self._logger, timeout=3600,
 				error_text="Image %s wasn't completed in a reasonable time" % ami_id)
 		self._logger.debug('Image %s available', ami_id)
 		

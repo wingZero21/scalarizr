@@ -11,8 +11,7 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
 
 # Utils
-from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor,\
-	wait_until
+from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
 
 # Stdlibs
@@ -36,7 +35,7 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = "0.7.53"	
+__version__ = "0.7.54"	
 
 EMBED_SNMPD = True
 NET_SNMPD = False
