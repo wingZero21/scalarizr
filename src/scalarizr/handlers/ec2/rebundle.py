@@ -921,7 +921,7 @@ if disttool.is_linux():
 					"rsync exited with error code 24. This means a partial transfer due to vanished " + 
 					"source files. In most cases files are copied normally"
 				)
-			if exitcode == 23 and filetool.Rsync.usable():
+			elif exitcode == 23 and filetool.Rsync.usable():
 				self._logger.warn(
 					"rsync seemed successful but exited with error code 23. This probably means " +
 	           		"that your version of rsync was built against a kernel with HAVE_LUTIMES defined, " +
