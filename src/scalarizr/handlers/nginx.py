@@ -164,7 +164,7 @@ class NginxCnfController(CnfController):
 	def __init__(self):
 		cnf = bus.cnf; ini = cnf.rawini
 		nginx_conf_path = os.path.join(os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)), 'nginx.conf')
-		CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx', {'1':'on','0':'off'})
+		CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx', {"on":'1',"'off'":'0','off':'0'})
 		
 	@property
 	def _software_version(self):
