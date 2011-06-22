@@ -118,7 +118,11 @@ class ParametrizedInitScript(InitScript):
 			args.append(action) 
 			out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
 		except PopenError, e:
-			raise InitdError("Popen failed with error %s" % (e,))
+			#temporary fix for broken status() method in mysql
+			if 'Job is already running' in e:
+				pass
+			else:
+				raise InitdError("Popen failed with error %s" % (e,))
 		
 		if returncode:
 			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), returncode)
