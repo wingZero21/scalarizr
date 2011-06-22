@@ -278,7 +278,7 @@ class ServiceCtlHanler(Handler):
 		'''
 		try:
 			if self._init_script.running:
-				self._restart_service('applying new service settings from conficuration preset')
+				self._restart_service('applying new service settings from configuration preset')
 			else:
 				self._start_service()
 		except BaseException, e:
