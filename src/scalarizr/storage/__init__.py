@@ -358,7 +358,7 @@ class Volume(VolumeConfig):
 			if not 'not mounted' in str(e):
 				raise
 	
-	def snapshot(self, description=None):
+	def snapshot(self, description=None, **kwargs):
 		# Freeze filesystem
 		if self._fs:
 			system(SYNC_EXEC)
@@ -370,7 +370,7 @@ class Volume(VolumeConfig):
 			conf = self.config()
 			del conf['id']
 			snap = pvd.snapshot_factory(description, **conf)		
-			return pvd.create_snapshot(self, snap)
+			return pvd.create_snapshot(self, snap, **kwargs)
 		finally:
 			# Unfreeze filesystem
 			if self._fs:
@@ -459,7 +459,7 @@ class VolumeProvider(object):
 		kwargs['type'] = self.type
 		return self.snap_class(**kwargs)
 	
-	def create_snapshot(self, vol, snap):
+	def create_snapshot(self, vol, snap, **kwargs):
 		return snap
 	
 	def get_snapshot_state(self, snap):

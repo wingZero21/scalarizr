@@ -30,6 +30,7 @@ from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
 from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
 
+'''
 if boto.Version.startswith('1.9'):
 	
 	# Workaround for http://code.google.com/p/boto/issues/detail?id=310
@@ -54,7 +55,7 @@ if boto.Version.startswith('1.9'):
 			i += 1		
 
 	BlockDeviceMapping.build_list_params = build_list_params
-
+'''
 
 # Workaround for python bug #5853
 # @see http://bugs.python.org/issue5853
@@ -668,7 +669,7 @@ class RebundleEbsStrategy(RebundleStratery):
 		self._image.umount() 
 		vol = self._image.ebs_volume
 		self._logger.info('Creating snapshot of root device image %s', vol.id)
-		self._snap = vol.create_snapshot("Role %s root device created from %s" 
+		self._snap = vol.create_snapshot("Root device snapshot created from role: %s instance: %s" 
 					% (self._role_name, self._platform.get_instance_id()))
 
 		self._logger.debug('Checking that snapshot %s is completed', self._snap.id)
@@ -965,7 +966,7 @@ if disttool.is_linux():
 		def _create_image(self):
 			if not self.ebs_volume:
 				self.ebs_volume = ebstool.create_volume(self._ec2_conn, self._volume_size, 
-						self._avail_zone, logger=self._logger)
+						self._avail_zone, logger=self._logger, tags={'tmp' : '1'})
 			return ebstool.attach_volume(self._ec2_conn, self.ebs_volume, 
 					self._instance_id, self.devname, to_me=True, logger=self._logger)[1]
 			
@@ -1009,19 +1010,9 @@ if disttool.is_linux():
 			LinuxImage.make(self)
 			
 		def _create_image(self):
-			self._logger.debug('Creating image file %s', self.path)
-
-			mkloop(self.path, size=self._size, quick=True)
-			#system("dd if=/dev/zero of='%s' bs=1M count=1 seek=%s" % (self.path, self._size - 1))
-			self._logger.debug('Image file %s created', self.path)			
-			
-			self._logger.debug('Associate loop device with a %s', self.path)
-			devname = system2(('/sbin/losetup', '-f'))[0].strip()
-			out, err, retcode = system2(('/sbin/losetup', devname, self.path))
-			if retcode > 0:
-				raise HandlerError('Cannot setup loop device. Code: %d %s' % (retcode, err))
-			self._logger.debug('Associated %s with a file %s', devname, self.path)
-			
+			self._logger.debug('Creating loop device (file: %s, size: %s)', self.path, self._size)
+			devname = mkloop(self.path, size=self._size, quick=True)
+			self._logger.debug('Created loop device %s associated with file %s', devname, self.path)
 			return devname
 			
 		def cleanup(self):

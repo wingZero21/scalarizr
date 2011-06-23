@@ -24,6 +24,7 @@ from scalarizr.util import firstmatched, wait_until
 
 class EbsConfig(VolumeConfig):
 	type = 'ebs'
+	tags = None
 	snapshot_id = None
 	avail_zone = None
 	size = None
@@ -52,6 +53,11 @@ class EbsVolumeProvider(VolumeProvider):
 	vol_class = EbsVolume
 	snap_class = EbsSnapshot
 	all_letters = tuple(string.ascii_lowercase[5:16])
+	snapshot_state_map = {
+		'pending' : Snapshot.CREATED,
+		'completed' : Snapshot.COMPLETED,
+		'error' : Snapshot.FAILED
+	}
 	
 	_logger = None
 	
@@ -118,7 +124,7 @@ class EbsVolumeProvider(VolumeProvider):
 										ebs_vol.id, ebs_vol.zone, pl.get_avail_zone())
 						volume_id = None
 						delete_snap = True
-						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger).id
+						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger, wait_completion=True).id
 					else:
 						snap_id = None
 						
@@ -126,7 +132,7 @@ class EbsVolumeProvider(VolumeProvider):
 					self._logger.debug('Creating new EBS')
 					kwargs['avail_zone'] = pl.get_avail_zone()
 					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), kwargs.get('avail_zone'), 
-						snap_id, logger=self._logger)
+						snap_id, logger=self._logger, tags=kwargs.get('tags'))
 
 			
 				if 'available' != ebs_vol.volume_state():
@@ -187,18 +193,16 @@ class EbsVolumeProvider(VolumeProvider):
 		'''
 		return self._create(**kwargs)
 
-	def create_snapshot(self, vol, snap):
+	def create_snapshot(self, vol, snap, **kwargs):
 		conn = self._new_ec2_conn()
-		ebs_snap = conn.create_snapshot(vol.id, snap.description)
+		ebs_snap = ebstool.create_snapshot(conn, vol.id, snap.description, tags=kwargs.get('tags'))
 		snap.id = ebs_snap.id
 		return snap
 
 	def get_snapshot_state(self, snap):
 		conn = self._new_ec2_conn()
 		state = conn.get_all_snapshots((snap.id,))[0].status
-		if state == 'creating':
-			state = Snapshot.CREATED
-		return state
+		return self.snapshot_state_map[state]
 
 	def destroy(self, vol, force=False, **kwargs):
 		'''

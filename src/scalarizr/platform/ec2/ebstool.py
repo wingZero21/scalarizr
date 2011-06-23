@@ -4,26 +4,43 @@ Created on Aug 25, 2010
 @author: marat
 '''
 
-from scalarizr.util import wait_until
-from scalarizr.platform import PlatformError
+from scalarizr.bus import bus
+from scalarizr.util import wait_until, system2
+from scalarizr.platform import PlatformError, UserDataOptions
 
 import logging, os, time
 
 from boto.ec2.volume import Volume
 from boto.exception import BotoServerError
 from boto.ec2.snapshot import Snapshot
+import sys
+
 
 DEFAULT_TIMEOUT = 2400 		# 40 min
 SNAPSHOT_TIMEOUT = 3600		# 1 h
 
-def create_snapshot(ec2_conn, volume_id, description=None, logger=None, timeout=SNAPSHOT_TIMEOUT):
+def create_snapshot(ec2_conn, volume_id, description=None, logger=None, timeout=SNAPSHOT_TIMEOUT, wait_completion=False, tags=None):
 	if isinstance(volume_id, Volume):
 		volume_id = volume_id.id
 	logger = logger or logging.getLogger(__name__)
+	
+	# Create snapshot
 	logger.debug('Creating snapshot of EBS volume %s', volume_id)
+	system2('sync', shell=True)
 	snap = ec2_conn.create_snapshot(volume_id, description)
 	logger.debug('Snapshot %s created for EBS volume %s', snap.id, volume_id)
-	wait_snapshot(ec2_conn, snap, logger, timeout)
+	
+	# Apply tags
+	tags = tags or dict()
+	tags.update(_std_tags())
+	try:
+		ec2_conn.create_tags((snap.id, ), tags)
+	except:
+		logger.warn('Cannot apply tags to EBS snapshot %s', snap.id)
+
+	if wait_completion:
+		wait_snapshot(ec2_conn, snap, logger, timeout)
+		
 	return snap
 
 def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
@@ -50,7 +67,7 @@ def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 		logger.debug('Snapshot %s completed', snap.id)
 
 
-def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout=DEFAULT_TIMEOUT):
+def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout=DEFAULT_TIMEOUT, tags=None):
 	logger = logger or logging.getLogger(__name__)
 	
 	msg = 'Creating EBS volume%s%s in avail zone %s' % (
@@ -73,6 +90,14 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout
 		error_text="EBS volume %s wasn't available in a reasonable time" % vol.id
 	)
 	logger.debug('EBS volume %s available', vol.id)		
+	
+	# Apply tags
+	tags = tags or dict()
+	tags.update(_std_tags())
+	try:
+		ec2_conn.create_tags((vol.id, ), tags)
+	except:
+		logger.warn('Cannot apply tags to EBS volume %s', vol.id)
 	
 	return vol
 
@@ -144,3 +169,22 @@ def delete_volume(ec2_conn, volume_id, logger=None):
 	logger = logger or logging.getLogger(__name__)
 	logger.debug('Deleting volume %s', volume_id)
 	ec2_conn.delete_volume(isinstance(volume_id, basestring) and volume_id or volume_id.id)
+
+def apply_tags(ec2_conn, resources, tags=None, logger=None):
+	logger = logger or logging.getLogger(__name__)
+	tags = tags or dict()
+	tags.update(_std_tags())
+	resources_str = ', '.join('%s %s' % item for item in resources.iteritems())	
+	try:
+		logger.debug('Applying tags to resource(s) %s', resources_str)
+		ec2_conn.create_tags(resources.keys(), tags)
+	except:
+		logger.warn('Cannot apply tags to resource(s) %s. %s: %s', resources_str, *sys.exc_info()[0:2])
+	
+
+def _std_tags():
+	pl = bus.platform
+	return {
+		'farm' : pl.get_user_data(UserDataOptions.FARM_ID),
+		'role' : pl.get_user_data(UserDataOptions.ROLE_NAME)
+	}	

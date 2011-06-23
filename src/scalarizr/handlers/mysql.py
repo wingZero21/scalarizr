@@ -15,11 +15,12 @@ from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
+from scalarizr.platform import UserDataOptions
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
-from scalarizr.util import system2, cryptotool, disttool, filetool, \
+from scalarizr.util import system2, disttool, filetool, \
 	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool,\
 	PopenError
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
@@ -31,13 +32,11 @@ import time, pwd, random, shutil
 import glob
 import string
 import ConfigParser
-import signal
-import subprocess
 
 
 # Extra
 import pexpect
-from scalarizr.platform import UserDataOptions
+
 
 
 
@@ -266,7 +265,7 @@ class MySQLClient(object):
 		
 	def execute(self, query, vertical=False):
 		user, passwd  = self._credentials_function()
-		# q: why not sending password in stdin?
+		# q: why not send password in stdin?
 		# a: on Ubuntu 8.04 (5.0.51a-3ubuntu5.4-log) mysql cli doesn't accept passwords in stdin
 		return system2(('/usr/bin/mysql', '-u', user, '-p' + passwd, '--execute', query))[0]
 	
@@ -830,8 +829,9 @@ class MysqlHandler(ServiceCtlHanler):
 			bus.fire('before_mysql_data_bundle')
 			
 			# Creating snapshot
-			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)			
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
+			tags = {'tmp': '1'}	if self.storage_vol.type == 'ebs' else None
+			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=tags)
 			
 			if self.storage_vol.type == 'ebs':
 				
@@ -839,12 +839,14 @@ class MysqlHandler(ServiceCtlHanler):
 				tmp_storage_volume = None
 				
 				try:
+					wait_until(lambda: snap.state == Snapshot.COMPLETED, timeout=21600)
+					
 					self._logger.info('Performing InnoDB recovery')
 					
 					temp_snap = snap
 					""" Create temporary volume from snapshot, recover innodb and make snap again """
 					tmp_mpoint = tempfile.mkdtemp()
-					tmp_storage_volume = Storage.create(snapshot=temp_snap)
+					tmp_storage_volume = Storage.create(snapshot=temp_snap, tags={'tmp': '1'})
 					tmp_storage_volume.mount(tmp_mpoint)
 					
 					binlog_path	= os.path.join(tmp_mpoint, STORAGE_BINLOG)
@@ -877,7 +879,8 @@ class MysqlHandler(ServiceCtlHanler):
 					filetool.write_file(binlog_index_path, binlog_index)
 					self._logger.debug('Original binlogs: %s', filetool.read_file(binlog_index_path))
 						
-					snap = tmp_storage_volume.snapshot(self._data_bundle_description())
+					snap = tmp_storage_volume.snapshot(self._data_bundle_description(), 
+													tags={'storage' : 'mysql'})
 					
 					# Wait up to 6 hours for snapshot completion 
 					wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600) 
@@ -1442,7 +1445,7 @@ class MysqlHandler(ServiceCtlHanler):
 		return os.path.exists(data_dir) and glob.glob(binlog_base + '*')
 
 
-	def _create_snapshot(self, root_user, root_password, dry_run=False):
+	def _create_snapshot(self, root_user, root_password, dry_run=False, tags=None):
 		was_running = self._init_script.running
 		if not was_running:
 			self._start_service()
@@ -1470,7 +1473,7 @@ class MysqlHandler(ServiceCtlHanler):
 					log_file, log_pos = status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos']
 	
 			# Creating storage snapshot
-			snap = None if dry_run else self._create_storage_snapshot()
+			snap = None if dry_run else self._create_storage_snapshot(tags)
 		finally:
 			mysql.client.execute('UNLOCK TABLES')
 			if not was_running:
@@ -1482,10 +1485,12 @@ class MysqlHandler(ServiceCtlHanler):
 		
 		return snap, log_file, log_pos
 			
-	def _create_storage_snapshot(self):
+	def _create_storage_snapshot(self, tags=None):
 		self._logger.info("Creating storage snapshot")
+		tags = tags or dict()
+		tags.update({'storage': 'mysql'})		
 		try:
-			return self.storage_vol.snapshot(self._data_bundle_description())
+			return self.storage_vol.snapshot(self._data_bundle_description(), tags=tags)
 		except StorageError, e:
 			self._logger.error("Cannot create MySQL data snapshot. %s", e)
 			raise

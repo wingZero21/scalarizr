@@ -4,7 +4,8 @@ from scalarizr.platform import Ec2LikePlatform, PlatformError
 from scalarizr.storage.transfer import Transfer
 from .storage import S3TransferProvider
 
-from boto import connect_ec2, connect_s3
+from boto import connect_s3
+from boto.ec2.connection import EC2Connection
 from boto.ec2.regioninfo import RegionInfo
 import urllib2, re, os
 
@@ -27,6 +28,7 @@ OPT_PK_PATH = "pk_path"
 User data options 
 """
 UD_OPT_S3_BUCKET_NAME = "s3bucket"
+
 
 
 def get_platform():
@@ -83,7 +85,7 @@ class Ec2Platform(Ec2LikePlatform):
 		""" @rtype: boto.ec2.connection.EC2Connection """
 		region = self.get_region()
 		self._logger.debug("Return ec2 connection (endpoint: %s)", self.ec2_endpoints[region])
-		return connect_ec2(region=RegionInfo(name=region, endpoint=self.ec2_endpoints[region]))
+		return EC2Connection(region=RegionInfo(name=region, endpoint=self.ec2_endpoints[region]))
 
 	def new_s3_conn(self):
 		self._logger.debug("Return s3 connection (endpoint: %s)", self.s3_endpoints[self.get_region()])
@@ -106,4 +108,6 @@ class Ec2Platform(Ec2LikePlatform):
 	@property
 	def cloud_storage_path(self):
 		return self.get_user_data('cloud_storage_path') or 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
+
+
 
