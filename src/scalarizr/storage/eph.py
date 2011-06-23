@@ -212,7 +212,7 @@ class EphVolumeProvider(VolumeProvider):
 		"""
 		return vol
 
-	def create_snapshot(self, vol, snap):
+	def create_snapshot(self, vol, snap, **kwargs):
 		ramdisk.create(TRANZIT_VOL_SIZE, TRANZIT_VOL_MPOINT)
 		cleanup = lambda: ramdisk.destroy(TRANZIT_VOL_MPOINT, force=True)
 		return self._snap_pvd.create(vol, snap, TRANZIT_VOL_MPOINT, cleanup)
