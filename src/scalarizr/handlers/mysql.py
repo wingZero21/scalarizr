@@ -868,9 +868,11 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Creating snapshot
 			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
-			tags = {'tmp': '1'}	if self.storage_vol.type == 'ebs' else None
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=tags)
+			#tags = {'tmp': '1'}	if self.storage_vol.type == 'ebs' else None
+			#snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=tags)
+			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
 			
+			'''
 			if self.storage_vol.type == 'ebs':
 				
 				tmp_mpoint = None 
@@ -937,7 +939,9 @@ class MysqlHandler(ServiceCtlHanler):
 					
 			else:
 				used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-				
+			'''	
+			used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
+										
 				
 			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 			
@@ -945,7 +949,7 @@ class MysqlHandler(ServiceCtlHanler):
 			msg_data = dict(
 				log_file=log_file,
 				log_pos=log_pos,
-				used_size='%.3f' % (float(used_size) / 1000,),
+				used_size='%.3f' % (float(used_size) / 1024 / 1024,),
 				status='ok'
 			)
 			msg_data.update(self._compat_storage_data(snap=snap))
@@ -959,6 +963,36 @@ class MysqlHandler(ServiceCtlHanler):
 				status		='error',
 				last_error	= str(e)
 			))
+
+	def _innodb_recovery(self, storage_path=None):
+		storage_path = storage_path or self._storage_path
+		binlog_path	= os.path.join(storage_path, STORAGE_BINLOG)		
+		data_dir = os.path.join(storage_path, STORAGE_DATA_DIR),
+		pid_file = os.path.join(storage_path, 'mysql.pid')
+		socket_file = os.path.join(storage_path, 'mysql.sock')
+		mysqld_safe_bin	= software.whereis('mysqld_safe')[0]
+		
+		'''
+		ndb_support = any(row['Engine'] == 'ndbcluster' and row['Support'] == 'YES' 
+						for row in mysql.client.fetchall('SHOW ENGINES'))
+		'''		
+		
+		self._logger.info('Performing InnoDB recovery')
+		mysqld_safe_cmd = (mysqld_safe_bin, 
+			'--socket=%s' % socket_file, 
+			'--pid-file=%s' % pid_file, 
+			'--datadir=%s' % data_dir,
+			'--log-bin=%s' % binlog_path, 
+			'--skip-networking', 
+			'--skip-grant', 
+			'--bootstrap', 
+			'--skip-slave-start')
+		'''
+		if ndb_support:
+			mysqld_safe_cmd += ('--skip-ndbcluster',)
+		'''
+		
+		system2(mysqld_safe_cmd, stdin="select 1;")
 
 	def _recreate_binlog_index(self, index_file, binlog_dir):
 		with open(index_file, 'w+') as f:
@@ -1322,6 +1356,7 @@ class MysqlHandler(ServiceCtlHanler):
 				root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
 				
 				self._copy_debian_cnf_back()
+				self._innodb_recovery()
 				
 				# Create snapshot
 				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
@@ -1379,7 +1414,7 @@ class MysqlHandler(ServiceCtlHanler):
 			self._logger.debug("Initialize slave storage")
 			self.storage_vol = self._plug_storage(self._storage_path, 
 					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
-			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
 			
 		# Stop MySQL
@@ -1396,8 +1431,8 @@ class MysqlHandler(ServiceCtlHanler):
 		self._move_mysql_dir('mysqld/datadir', self._data_dir)
 		self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
 		self._replication_init(master=False)
-		
 		self._copy_debian_cnf_back()
+		self._innodb_recovery()
 		self._start_service()
 		
 		# Change replication master 

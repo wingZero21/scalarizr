@@ -310,8 +310,8 @@ class Tar:
 		)
 		return ret.strip()
 	
-__dftuple = namedtuple('df', 'device, size, free, mpoint')
+__dftuple = namedtuple('df', 'device, size, used, free, mpoint')
 
 def df():
 	out = system2(('df', '-Pk'))[0]
-	return [__dftuple(line[0], int(line[1]), int(line[2]), line[-1]) for line in map(str.split, out.splitlines()[1:])]
+	return [__dftuple(line[0], int(line[1]), int(line[2]), int(line[3]), line[-1]) for line in map(str.split, out.splitlines()[1:])]
