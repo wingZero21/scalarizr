@@ -93,7 +93,45 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		Over 15 seconds! OMFG!!
 		XXX: Requires investigation
 		'''
+	
+	def _start_stop_reload(self, action):
+		''' XXX: Temporary ugly hack (Ubuntu 1004 upstart problem - Job is already running)'''
+		try:
+			args = [self.initd_script] \
+					if isinstance(self.initd_script, basestring) \
+					else list(self.initd_script)
+			args.append(action) 
+			out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
+		except PopenError, e:
+			#temporary fix for broken status() method in mysql
+			if 'Job is already running' in e:
+				pass
+			else:
+				raise InitdError("Popen failed with error %s" % (e,))
 		
+		if returncode:
+			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), returncode)
+		
+		if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+			try:
+				wait_until(lambda: mysqld_path in system2(('ps', 'ax'), close_fds=True, shell=True)[0], timeout=10, sleep=1)
+			except:
+				self._start_stop_reload('restart')
+				return True
+		
+		if self.socks and (action != "stop" and not (action == 'reload' and not self.running)):
+			for sock in self.socks:
+				wait_sock(sock)
+			
+#		if self.pid_file:
+#			if (action == "start" or action == "restart") and not os.path.exists(self.pid_file):
+#				raise InitdError("Cannot start %s. pid file %s doesn't exists" % (self.name, self.pid_file))
+#			if action == "stop" and os.path.exists(self.pid_file):
+#				raise InitdError("Cannot stop %s. pid file %s still exists" % (self.name, self.pid_file))	
+			
+		return True
+	
+			
 	def status(self):
 		if self.socket_file:
 			if os.path.exists(self.socket_file):
