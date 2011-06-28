@@ -114,7 +114,8 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		
 		if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			try:
-				wait_until(lambda: mysqld_path in system2(('ps', 'ax'), close_fds=False, shell=True)[0], timeout=10, sleep=1)
+				wait_until(lambda: mysqld_path in system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
+							, timeout=10, sleep=1)
 			except:
 				self._start_stop_reload('restart')
 				return True
