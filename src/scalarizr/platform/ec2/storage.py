@@ -87,7 +87,7 @@ class EbsVolumeProvider(VolumeProvider):
 		
 		if conn:
 			# Find free devname			
-			device = kwargs.get('device')
+			device = ebstool.get_ebs_devname(kwargs.get('device'))
 			used_letters = set(row['device'][-1] 
 						for row in Storage.volume_table() 
 						if row['state'] == 'attached' or ( \

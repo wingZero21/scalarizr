@@ -7,7 +7,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.util import system2, filetool, disttool
 import logging
-import os, re
+import os, re, sys
 import ConfigParser
 from scalarizr.util.fstool import Mtab, Fstab, mount
 
@@ -71,8 +71,11 @@ class Ec2LifeCycleHandler(Handler):
 		for device in self._platform.instance_store_devices:
 			if os.path.exists(device) and fstab.contains(device) and not mtab.contains(device):
 				entry = fstab.find(device)[0]
-				mount(device, entry.mpoint, ('-o', entry.options))
-		
+				try:
+					mount(device, entry.mpoint, ('-o', entry.options))
+				except:
+					self._logger.warn(sys.exc_info()[1])
+
 	def on_reload(self):
 		self._platform = bus.platform		
 	

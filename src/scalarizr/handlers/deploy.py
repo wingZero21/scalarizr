@@ -140,6 +140,8 @@ class SvnSource(Source):
 			args += [
 				'--username', self.login,
 				'--password', self.password,
+				'--non-interactive',
+				'--trust-server-cert'
 			]
 		if args[1] == 'co':
 			args += [self.url]
