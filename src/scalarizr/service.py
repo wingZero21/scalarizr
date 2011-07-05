@@ -7,8 +7,11 @@ Created on Sep 7, 2010
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.util.filetool import write_file
+
 import os, time, logging
 import shutil, urllib2
+
+from cStringIO import StringIO
 
 
 class CnfPreset:
@@ -159,29 +162,28 @@ class CnfController(object):
 			
 		return True
 
+	def get_system_variables(self):
+		#TESTING REQUIRED!
+		conf = Configuration(self._config_format)
+		conf.read(self._config_path)
+		vars = {}
+		for section in conf.sections('./'):
+			vars[section] = conf.get(section)
+		return vars
+	
 	def current_preset(self):
 		self._logger.debug('Getting %s current configuration preset', self.behaviour)
 		preset = CnfPreset(name='System', behaviour = self.behaviour)
 		
-		conf = Configuration(self._config_format)
-		conf.read(self._config_path)
+		preset.settings = {}
+		sys_vars = self.get_system_variables()
 		
-		vars = {}
 		for opt in self._manifest:
 			try:
-				vars[opt.name] = conf.get(opt.name)
-			except NoPathError:
-				#self._logger.debug('%s does not exist in %s. Using default value' 
-				#		%(option_spec.name, self._config))
-				pass
-
+				preset.settings[opt.name] = sys_vars[opt.name]
+			except KeyError:
 				if opt.default_value:
-					vars[opt.name] = opt.default_value
-				else:
-					#self._logger.debug("Option '%s' has no default value" % opt.name)
-					pass
-				
-		preset.settings = vars
+					preset.settings[opt.name] = opt.default_value
 		return preset
 
 	def apply_preset(self, preset):
@@ -277,8 +279,46 @@ class CnfController(object):
 			response = urllib2.urlopen(manifest_url)
 			data = response.read()
 			if data:
-				write_file(path, data, logger=self._logger)
-		
+				old_manifest = Configuration('ini')
+				if os.path.exists(path):
+					old_manifest.read(path)
+
+				new_manifest = Configuration('ini')
+				o = StringIO()
+				o.write(data)
+				o.seek(0)
+				new_manifest.readfp(o)
+				
+				new_sections = new_manifest.sections('./')  
+				old_sections = old_manifest.sections('./')
+
+				diff_path = os.path.join(manifests_dir, self.behaviour + '.incdiff')
+				diff = Configuration('ini')
+									
+				if new_sections != old_sections:
+					if os.path.exists(diff_path):
+						diff.read(diff_path)
+
+					sys_vars = self.get_system_variables()
+
+					for section in new_sections:
+						if section not in old_sections:
+							sys_var = sys_vars[section]
+							if self.definitions:
+								if self.definitions.has_key(sys_var):
+									sys_var = self.definitions[sys_var]
+							diff.add('./%s/default-value' % section, sys_var, force=True)
+							diff.write(diff_path)
+				
+				if os.path.exists(diff_path):
+					diff.read(diff_path)
+				
+				for variable in diff.sections('./'):
+					sys_value = diff.get('./%s/default-value' % variable)
+					new_manifest.set('./%s/default-value' % variable, sys_value)
+					
+				new_manifest.write(path)
+				#write_file(path, data, logger=self._logger)
 		return _CnfManifest(path)
 	
 	@property

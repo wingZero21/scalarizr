@@ -513,44 +513,27 @@ class MysqlCnfController(CnfController):
 				if not self._init_script.running:
 					raise
 			
-	
-	def current_preset(self):
-		self._logger.debug('Getting current MySQL preset')
-		mysql = None
-		preset = CnfPreset(name='System', behaviour=BEHAVIOUR)
-		self._start_service()
-		try:
-			mysql = self._get_connection()
-			mysql.sendline('SHOW GLOBAL VARIABLES;')
-			mysql.expect('mysql>')
-			out = mysql.before
-			raw_text = out.splitlines()
-			text = raw_text[4:-3]
-			vars = {}
-			
-			for line in text:
-				splitted_line = line.split('|')					
-				name = splitted_line[1].strip()
-				value = splitted_line[2].strip()
-				"""
-				print name, value 
-				try:
-					remove odd 
-					if hasattr(self._manifest, name):
-						vars[name] = value
-				except AttributeError:
-					self._logger.error('No spec for %s' % name)	
-					pass
-				"""
-				vars[name] = value
+	def get_system_variables(self):
+		vars = CnfController.get_system_variables(self)
+		if self._init_script.running:
+			try:
+				mysql = self._get_connection()
+				mysql.sendline('SHOW GLOBAL VARIABLES;')
+				mysql.expect('mysql>')
+				out = mysql.before
+				raw_text = out.splitlines()
+				text = raw_text[4:-3]
+				vars = {}
 				
-			for opt in self._manifest:
-				if opt.name in vars:
-					preset.settings[opt.name] = vars[opt.name]
-			return preset
-		finally:
-			if mysql:
-				mysql.close()
+				for line in text:
+					splitted_line = line.split('|')					
+					name = splitted_line[1].strip()
+					value = splitted_line[2].strip()
+					vars[name] = value
+			finally:
+				if mysql:
+					mysql.close()
+		return vars
 	
 	def apply_preset(self, preset):
 		
