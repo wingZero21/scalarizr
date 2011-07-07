@@ -270,8 +270,6 @@ class PostgreSql(object):
 		self.service.restart()
 
 	def _init_service(self, mpoint):
-		#vol = self._init_storage(volume_id, devname, mpoint)
-		#TODO: initialize volume outside of pgsql class
 		self.root_user = self.create_user(ROOT_USER)
 		self.service.stop()
 		self.cluster_dir.move_to(mpoint)
@@ -347,7 +345,6 @@ class PgUser(object):
 			except PopenError, e:
 				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
 				raise
-			#change password in privated/pgsql.ini
 		self.store_password(password)
 		
 	def generate_private_ssh_key_to(self, path, key_length=1024):
@@ -426,6 +423,7 @@ class PgUser(object):
 
 	def store_password(self, password):
 		self._cnf.rawini.set(CNF_SECTION, self.opt_user_password, password)
+		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})
 	
 	opt_user_password = lambda(self): '%s_password' % self.username
 			
