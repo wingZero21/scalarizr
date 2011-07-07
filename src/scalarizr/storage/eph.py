@@ -295,8 +295,8 @@ class EphSnapshotProviderLite(object):
 			chunk_prefix = '%s.data' % snapshot.id
 			snapshot.path = None
 			snap_mpoint = mkdtemp()
-			mount(snap_lv, snap_mpoint)
 			try:
+				mount(snap_lv, snap_mpoint)				
 				tar_cmd = ['tar', 'cp', '-C', snap_mpoint, '.']
 				
 				pigz_bins = whereis('pigz')

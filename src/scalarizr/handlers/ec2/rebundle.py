@@ -600,10 +600,10 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			self._logger.info("Registering image '%s'", s3_manifest_path)
 			ec2_conn = self._platform.new_ec2_conn()
 
+			ami_id = ec2_conn.register_image(image_location=s3_manifest_path)
 			# @see http://code.google.com/p/boto/issues/detail?id=323			
-			#ami_id = ec2_conn.register_image(None, None, image_location=s3_manifest_path)
-			rs = ec2_conn.get_object('RegisterImage', {"ImageLocation" : s3_manifest_path}, ResultSet)
-			ami_id = getattr(rs, 'imageId', None)
+			#rs = ec2_conn.get_object('RegisterImage', {"ImageLocation" : s3_manifest_path}, ResultSet)
+			#ami_id = getattr(rs, 'imageId', None)
 			
 			self._logger.info("Registration complete!")
 			self._logger.debug('Image %s available', ami_id)
