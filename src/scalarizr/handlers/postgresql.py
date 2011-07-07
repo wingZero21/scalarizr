@@ -23,18 +23,17 @@ from scalarizr.services.postgresqlservice import PostgreSql, PSQL, ROOT_USER, PG
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
 
+STORAGE_PATH 			= "/mnt/pgstorage"
 STORAGE_VOLUME_CNF 		= 'postgresql.json'
 STORAGE_SNAPSHOT_CNF 	= 'postgresql-snap.json'
 
 OPT_VOLUME_CNF			= 'volume_config'
 OPT_SNAPSHOT_CNF		= 'snapshot_config'
-
-STORAGE_PATH 			= "/mnt/pgstorage"
+OPT_ROOT_PASSWORD 		= "root_password"
+OPT_CHANGE_MASTER_TIMEOUT = 'change_master_timeout'
 
 BACKUP_CHUNK_SIZE 		= 200*1024*1024
 
-OPT_ROOT_PASSWORD 		= "root_password"
-		
 		
 def get_handlers():
 	return (PostgreSqlHander(), )
@@ -194,6 +193,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+		
+		self._change_master_timeout = int(ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT) or '30')
 		
 		self._storage_path = STORAGE_PATH
 		
@@ -705,7 +706,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		return ret
 	
 	
-	def _change_master(self, *args, **kwargs):
+	def _change_master(self, host, user, password, timeout):
 		#TODO: WRITE changing process but look in Postgresql class first!
 		'''
 		fire:
