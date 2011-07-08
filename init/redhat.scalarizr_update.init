@@ -13,7 +13,7 @@ case "$1" in
                 time_has_come=$(python -c "import os, sys, time; print int(not os.path.exists(sys.argv[1]) or time.time() - os.stat(sys.argv[1]).st_mtime > 86400)" $update_flag)
                 if [ "1" == "$time_has_come" ]; then
                         echo 'Updating scalarizr...'
-						platform=`echo -e "import re;\nwith open('/etc/scalr/public.d/config.ini') as f: print re.search('platform\s*=\s*(\w+)', f.read()).group(1)" | python`
+						platform=`echo -e "import re;\nf = open('/etc/scalr/public.d/config.ini');\nprint re.search('platform\s*=\s*(\w+)', f.read()).group(1)" | python`
 						yum -y update scalarizr-$platform  && touch $update_flag
                 fi
                 ;;
