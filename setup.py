@@ -62,7 +62,6 @@ def make_data_files(dst, src):
 
 description = "Scalarizr converts any server to Scalr-manageable node"
 
-
 data_files = make_data_files('/etc/scalr', 'etc')
 data_files.extend(make_data_files('/usr/share/scalr', 'share'))
 data_files.extend(make_data_files('/usr/local/scalarizr/scripts', 'scripts'))
@@ -81,6 +80,7 @@ cfg = dict(
 	platforms = "any",
 	package_dir = {"" : "src"},
 	packages = find_packages("src"),
+	include_package_data = True,
 	requires = ["m2crypto (>=0.20)", "boto"],
 	data_files = data_files,
 	cmdclass={"install_data" : my_install_data}
