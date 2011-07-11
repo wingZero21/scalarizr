@@ -294,7 +294,12 @@ class MySQL(object):
 		self.logger.info('Dumping database %s', database)
 		with open(filename, 'w') as fp: 
 			system2(('/usr/bin/mysqldump', '-u', self.root_user, '-p', 
-					'--create-options', '--add-drop-database', '-q', '-Q', '--flush-privileges', 
+					'--create-options', 
+					'--routines', 
+					'--add-drop-database', 
+					'--quick', 
+					'--quote-names', 
+					'--flush-privileges', 
 					'--databases', database), stdin=self.root_password, stdout=fp)
 	
 	

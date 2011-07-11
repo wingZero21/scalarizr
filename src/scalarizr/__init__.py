@@ -24,7 +24,6 @@ import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
-import pkgutil
 from scalarizr.storage.util.loop import listloop
 from scalarizr.util.filetool import write_file, read_file
 
@@ -36,7 +35,8 @@ class NotConfiguredError(BaseException):
 	pass
 
 
-__version__ = pkgutil.get_data('scalarizr', 'version')
+__version__ = open(os.path.join(os.path.dirname(__file__), 'version')).read()
+
 
 EMBED_SNMPD = True
 NET_SNMPD = False

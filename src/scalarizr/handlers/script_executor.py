@@ -22,6 +22,7 @@ import shutil
 import stat
 import logging
 import binascii
+import Queue
 
 
 
@@ -50,6 +51,7 @@ class ScriptExecutor(Handler):
 	_event_name = None
 	_num_pending_async = 0
 	_cleaner_running = False
+	_msg_sender_running = False
 	_lock = None
 	
 	_exec_dir_prefix = None
@@ -62,7 +64,8 @@ class ScriptExecutor(Handler):
 	def __init__(self, wait_async=False):
 		self._logger = logging.getLogger(__name__)	
 		self._wait_async = wait_async
-		self._lock = threading.Lock()		
+		self._lock = threading.Lock()
+		self._msg_queue = Queue.Queue()
 		
 		bus.on(reload=self.on_reload)
 		self.on_reload()		
@@ -124,8 +127,12 @@ class ScriptExecutor(Handler):
 				c.setDaemon(True)
 			'''
 			
-			c = threading.Thread(target=self._cleanup)
-			c.setDaemon(True)
+			cleaner_thread = threading.Thread(target=self._cleanup)
+			cleaner_thread.setDaemon(True)
+			
+			msg_sender_thread = threading.Thread(target=self._msg_sender)
+			msg_sender_thread.setDaemon(True)
+			
 				
 			for script in scripts:
 				self._logger.debug("Execute script '%s' in %s mode; exec timeout: %d", 
@@ -136,21 +143,26 @@ class ScriptExecutor(Handler):
 					self._lock.release()
 					
 					# Start new thread
-					t = threading.Thread(target=self._execute_script, args=[script])
+					t = threading.Thread(target=self._execute_script_runnable, args=[script])
 					t.start()
 					if self._wait_async:
 						async_threads.append(t)
 				else:
-					self._execute_script(script)
+					msg_data = self._execute_script(script)
+					if msg_data:
+						self.send_message(Messages.EXEC_SCRIPT_RESULT, msg_data, queue=Queues.LOG)						
+					
 			
 			# Wait
 			if self._wait_async:
 				for t in async_threads:
 					t.join()
 			
-			# Cleaning
 			if not self._cleaner_running:
-				c.start()							
+				cleaner_thread.start()
+				
+			if not self._msg_sender_running:
+				msg_sender_thread.start()
 								
 	def _cleanup(self):
 		try:
@@ -164,6 +176,29 @@ class ScriptExecutor(Handler):
 		finally:
 			self._cleaner_running = False
 
+	def _msg_sender(self):
+		try:
+			self._msg_sender_running = True
+			self._logger.debug("[msg_sender] Starting")
+			
+			# XXX: hack to avoid OperationalError: database is locked 
+			# on Ubuntu 8.04 and CentOS 5 	
+			time.sleep(5) 
+			
+			self._logger.debug('[msg_sender] slept ahead')
+			while self._num_pending_async > 0 or not self._msg_queue.empty():
+				msg_data = self._msg_queue.get()
+				self._logger.debug('[msg_sender] Sending message')
+				self.send_message(Messages.EXEC_SCRIPT_RESULT, msg_data, queue=Queues.LOG)
+			self._logger.debug("[msg_sender] Done")
+		finally:
+			self._msg_sender_running = False
+
+	def _execute_script_runnable(self, script):
+		msg_data  = self._execute_script(script)
+		self._logger.debug('')
+		if msg_data:
+			self._msg_queue.put(msg_data)
 			
 	def _execute_script(self, script):
 		# Create script file in local fs
@@ -235,15 +270,14 @@ class ScriptExecutor(Handler):
 					format_size(os.path.getsize(stdout.name)), 
 					format_size(os.path.getsize(stderr.name)))
 			
-			# Notify scalr
-			self.send_message(Messages.EXEC_SCRIPT_RESULT, dict(
+			return dict(
 				stdout=binascii.b2a_base64(self._get_truncated_log(stdout.name, self._logs_truncate_over)),
 				stderr=binascii.b2a_base64(self._get_truncated_log(stderr.name, self._logs_truncate_over)),
 				time_elapsed=elapsed_time,
 				script_name=script.name,
 				script_path=script_path,
 				event_name=self._event_name or ''
-			), queue=Queues.LOG)
+			)
 			
 		except (Exception, BaseException), e:
 			self._logger.error("Caught exception while execute script '%s'", script.name)
