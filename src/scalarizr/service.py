@@ -295,14 +295,15 @@ class CnfController(object):
 				diff_path = os.path.join(manifests_dir, self.behaviour + '.incdiff')
 				diff = Configuration('ini')
 									
-				if new_sections != old_sections:
+				if old_sections and old_sections != new_sections:
+					#skipping diff if no previous manifest found or it is equal to the new one
 					if os.path.exists(diff_path):
 						diff.read(diff_path)
 
 					sys_vars = self.get_system_variables()
 
 					for section in new_sections:
-						if section not in old_sections:
+						if section not in old_sections and sys_vars.has_key(section):
 							sys_var = sys_vars[section]
 							if self.definitions:
 								if self.definitions.has_key(sys_var):
