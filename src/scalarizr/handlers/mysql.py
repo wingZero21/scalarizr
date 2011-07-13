@@ -1123,7 +1123,7 @@ class MysqlHandler(ServiceCtlHanler):
 				# Delete slave EBS
 				self.storage_vol.destroy(remove_disks=True)
 				self.storage_vol = new_storage_vol
-				Storage.backup_config(self.storage_vol.config(), self._storage_path)
+				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		else:
 			self._logger.warning('Cannot promote to master. Already master')
 
