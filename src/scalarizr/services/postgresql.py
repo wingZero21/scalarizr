@@ -270,7 +270,8 @@ class PostgreSql(object):
 		self.service.restart()
 
 	def _init_service(self, mpoint):
-		self.root_user = self.create_user(ROOT_USER)
+		if self.cluster_dir.is_valid(mpoint):
+			self.root_user = self.create_user(ROOT_USER)
 		self.service.stop()
 		self.cluster_dir.move_to(mpoint)
 		
@@ -287,8 +288,20 @@ postgresql = PostgreSql()
 	
 class PgUser(object):
 	name = None
-	password = None
 	psql = None
+	
+	public_key_path = lambda (self) : '%s_public_key.pem' % self.name
+	private_key_path = lambda (self) : '%s_private_key.pem' % self.name
+	opt_user_password = lambda(self): '%s_password' % self.username
+		
+	def get_password(self):
+		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
+
+	def store_password(self, password):
+		self._cnf.rawini.set(CNF_SECTION, self.opt_user_password, password)
+		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})
+		
+	password = property(get_password, store_password)
 	
 	def __init__(self, name, password=None, group='postgres'):
 		self.name = name
@@ -345,28 +358,46 @@ class PgUser(object):
 			except PopenError, e:
 				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
 				raise
-		self.store_password(password)
+		self.password = password
 		
-	def generate_private_ssh_key_to(self, path, key_length=1024):
+	def generate_private_ssh_key(self, key_length=1024):
 		public_exponent = 65337
 		key = RSA.gen_key(key_length, public_exponent)
-		key.save_key(path, cipher=None)
-		os.chmod(path, 0400)
+		key.save_key(self.private_key_path, cipher=None)
+		os.chmod(self.private_key_path, 0400)
 		
-	def extract_public_ssh_key_from(self, path):
+	def extract_public_ssh_key(self):
+		if not os.path.exists(self.private_key_path):
+			raise Exception('Private key file %s does not exist.' % self.private_key_path)
 		args = shlex.split('%s -y -f' % SSH_KEYGEN)
-		args.append(path)
+		args.append(self.private_key_path)
 		out, err, retcode = system2(args)
+		if err:
+			self._logger.error('Failed to extract public key from %s : %s' % (self.private_key_path, err))
 		if retcode != 0:
 			raise Exception("Error handling would be nice, eh?")
 		return out.strip()		
 	
-	def store_public_ssh_key(self, key):
+	def apply_public_ssh_key(self, key):
 		path = os.path.join(self.homedir, 'authorized_keys')
 		keys = read_file(path,logger=self._logger)
 		if not key in keys:
 			write_file(path, data='%s %s' % (key, self.username), mode='a', logger=self._logger)
 	
+	@property
+	def private_key(self):
+		if not os.path.exists(self.private_key_path):
+			self.generate_private_ssh_key()
+		return read_file(self.private_key_path, logger=self._logger)
+	
+	@property
+	def public_key(self):
+		if not os.path.exists(self.public_key_path):
+			key = self.extract_public_ssh_key()
+			write_file(self.public_key_path, key, logger=self._logger)
+			self.apply_public_ssh_key(key)
+		return read_file(self.public_key_path, logger=self._logger)
+		
 	@property
 	def homedir(self):
 		for line in open('/etc/passwd'):
@@ -410,7 +441,7 @@ class PgUser(object):
 			self._logger.error('Error changing password for ' + self.name)	
 		
 		#change password in privated/pgsql.ini
-		self.store_password(new_pass)
+		self.password = new_pass
 		
 		return new_pass
 	
@@ -418,15 +449,6 @@ class PgUser(object):
 		#TODO: check (password or self.password), raise ValueError
 		pass
 	
-	def get_password(self):
-		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
-
-	def store_password(self, password):
-		self._cnf.rawini.set(CNF_SECTION, self.opt_user_password, password)
-		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})
-	
-	opt_user_password = lambda(self): '%s_password' % self.username
-			
 
 class PSQL(object):
 	path = PSQL_PATH
@@ -481,9 +503,9 @@ class ClusterDir(object):
 	def find(cls, postgresql_conf):
 		return cls(postgresql_conf.data_directory)
 
-	def move_to(self, dst, move_files=True):
+	def move_to(self, dst):
 		new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
-		if move_files and os.path.exists(self.path):
+		if not self.is_valid(new_cluster_dir) and os.path.exists(self.path):
 			self._logger.debug("copying cluster files from %s into %s" % (self.path, new_cluster_dir))
 			shutil.copytree(self.path, new_cluster_dir)	
 		self._logger.debug("changing directory owner to %s" % self.user)	
@@ -495,6 +517,10 @@ class ClusterDir(object):
 			system2([USERMOD, '-d', new_cluster_dir, self.user]) 
 	
 		return new_cluster_dir
+	
+	def is_valid(self, path):
+		
+		return os.listdir(path) != []
 
 
 class ConfigDir(object):

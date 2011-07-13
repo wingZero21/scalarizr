@@ -18,7 +18,7 @@ from scalarizr.handlers import ServiceCtlHanler, HandlerError
 from scalarizr.util.filetool import read_file, write_file, split
 from scalarizr.util import initdv2, system2, wait_until, PopenError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.services.postgresqlservice import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER
+from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -33,6 +33,8 @@ OPT_ROOT_PASSWORD 		= "root_password"
 OPT_CHANGE_MASTER_TIMEOUT = 'change_master_timeout'
 
 BACKUP_CHUNK_SIZE 		= 200*1024*1024
+
+POSTGRESQL_DEFAULT_PORT	= 5432
 
 		
 def get_handlers():
@@ -174,7 +176,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			
 			if self.postgresql.is_replication_master:
 				self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
-				root_password = self.postgresql.root_user.get_password()
+				root_password = self.postgresql.root_user.password
 				if not self.postgresql.root_user.exists():
 					self._logger.debug("Scalr's PostgreSQL root user does not exist. Recreating")
 					self.postgresql.root_user = self.postgresql.create_user(ROOT_USER, root_password)
@@ -208,8 +210,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 		@type message: scalarizr.messaging.Message
 		@param message: HostInitResponse
 		"""
-		if not message.body.has_key("postgresql"):
-			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property")
+		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
+			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
 
 		dir = os.path.dirname(self._volume_config_path)
 		if not os.path.exists(dir):
@@ -236,7 +238,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		"""
 
 		repl = 'master' if self.postgresql.is_replication_master else 'slave'
-		bus.fire('before_postgresql_configure', replication=repl)
+		#bus.fire('before_postgresql_configure', replication=repl)
 		
 		if self.postgresql.is_replication_master:
 			self._init_master(message)									  
@@ -263,7 +265,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		try:
 			bus.fire('before_postgresql_data_bundle')
 			# Retrieve password for scalr postgresql root user
-			root_password = self.postgresql.root_user.get_password()
+			root_password = self.postgresql.root_user.password
 			# Creating snapshot		
 			snap = self._create_snapshot(ROOT_USER, root_password)
 			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
@@ -383,11 +385,10 @@ class PostgreSqlHander(ServiceCtlHanler):
 				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
 							
 				# Continue if master storage is a valid postgresql storage 
-				storage_valid = self._storage_valid()
-				if not storage_valid:
+				if not self.postgresql.cluster_dir.is_valid(self._storage_path):
 					raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
 				
-				self.postgresql.cluster_dir.move_to(self._storage_path, move_files=storage_valid)
+				self.postgresql.cluster_dir.move_to(self._storage_path)
 				
 				# Update behaviour configuration
 				updates = {
@@ -548,26 +549,24 @@ class PostgreSqlHander(ServiceCtlHanler):
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 		
-		# Stop PostgreSQL server
-		self.postgresql.service.stop('Initializing Master')
 		
-		storage_valid = self._storage_valid() # It's important to call it before _move_postgresql_dir
-		self.postgresql.cluster_dir.move_to(self._storage_path, move_files=storage_valid)
+		self.postgresql.init_master(mpoint=self._storage_path)
+		root_password = self.postgresql.root_user.password
 		
 		msg_data = dict()
 		
 		# If It's 1st init of postgresql master storage
-		if not storage_valid:
-			# Add system users	
-			self.postgresql.root_user = self.postgresql.create_user(ROOT_USER)
-			root_password = self.postgresql.root_user.get_password()
+		if not self.postgresql.cluster_dir.is_valid(self._storage_path):
 			# Update HostUp message 
-			msg_data = dict(root_password=root_password)
-			
-		# If volume has postgresql storage directory structure (N-th init)
-		else:
-			# Get required configuration options
-			root_password = self.postgresql.root_user.get_password()
+			msg_data.update(dict(root_password=root_password,
+								))
+		
+		msg_data.update(dict(replication_master = int(self.postgresql.is_replication_master),
+							root_user = self.postgresql.root_user.name,
+							root_ssh_private_key = self.postgresql.root_user.private_key, 
+							root_ssh_public_key = self.postgresql.root_user.public_key, 
+							current_xlog_location = None))	
+		#TODO: add xlog
 			
 		# Create snapshot
 		snap = self._create_snapshot(ROOT_USER, root_password)
@@ -577,6 +576,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 			
 		if msg_data:
+			message.db_type = BEHAVIOUR
 			message.postgresql = msg_data.copy()
 			try:
 				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
@@ -593,16 +593,12 @@ class PostgreSqlHander(ServiceCtlHanler):
 		"""
 		self._logger.info("Initializing postgresql slave")
 		
-		storage_valid = self._storage_valid()
-		
-		if not storage_valid:
+		if not self.postgresql.cluster_dir.is_valid(self._storage_path):
 			self._logger.debug("Initialize slave storage")
 			self.storage_vol = self._plug_storage(self._storage_path, 
 					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
 			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 			
-		self.postgresql.cluster_dir.move_to(self._storage_path, move_files=storage_valid)
-		
 		# Change replication master 
 		master_host = None
 		self._logger.info("Requesting master server")
@@ -621,16 +617,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		
 		host = master_host.internal_ip or master_host.external_ip
 		
-		self.postgresql.change_primary(host, username=ROOT_USER)
-		
-		'''
-		self._change_master( 
-			host=host, 
-			user=ROOT_USER, 
-			password=self.postgresql.root_user.get_password(),
-			timeout=self._change_master_timeout
-		)
-		'''
+		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
 		
 		# Update HostUp message
 		message.postgresql = self._compat_storage_data(self.storage_vol)
@@ -658,16 +645,6 @@ class PostgreSqlHander(ServiceCtlHanler):
 				raise
 		return vol
 
-
-	def _storage_valid(self, path=None):
-		'''
-		data_dir = os.path.join(path, STORAGE_DATA_DIR) if path else self._data_dir
-		binlog_base = os.path.join(path, STORAGE_BINLOG) if path else self._binlog_base
-		return os.path.exists(data_dir) and glob.glob(binlog_base + '*')	
-		'''
-		#TODO: WRITE PROPER VALIDATION!
-		return True
-	
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
 		if self.postgresql.service.running:
