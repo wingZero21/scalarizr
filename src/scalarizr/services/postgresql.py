@@ -660,7 +660,7 @@ class BasePGConfig(object):
 	data = None
 	config_name = None
 	
-	def __init(self, path, autosave=True):
+	def __init__(self, path, autosave=True):
 		self.autosave = autosave
 		self.path = path
 		
