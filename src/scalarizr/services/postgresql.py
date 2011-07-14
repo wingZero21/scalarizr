@@ -147,7 +147,7 @@ class PostgreSql(object):
 		
 	def _get(self, key, callback, *args, **kwargs):
 		if not self._objects.has_key(key):
-			self._set(callback(*args, **kwargs))
+			self._set(key, callback(*args, **kwargs))
 		return self._objects[key]
 		
 	def _get_config_dir(self):
