@@ -13,6 +13,7 @@ import tempfile
 
 from scalarizr import config
 from scalarizr.bus import bus
+from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHanler, HandlerError
 from scalarizr.util.filetool import read_file, write_file, split
@@ -135,7 +136,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 				or 	message.name == PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER
 				or 	message.name == PostgreSqlMessages.DBMSR_CREATE_DATA_BUNDLE
 				or 	message.name == PostgreSqlMessages.DBMSR_CREATE_BACKUP
-				or  message.name == PostgreSqlMessages.UPDATE_SERVICE_CONFIGURATION)	
+				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)	
 
 	
 	def __init__(self):
