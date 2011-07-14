@@ -223,7 +223,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 			if os.path.exists(file):
 				os.remove(file)
-			if key in postgresql_data:
+			#omitting empty configs
+			if key in postgresql_data and postgresql_data[key]:
 				Storage.backup_config(postgresql_data[key], file)
 				del postgresql_data[key]
 						
