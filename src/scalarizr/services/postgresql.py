@@ -290,21 +290,26 @@ class PgUser(object):
 	name = None
 	psql = None
 	
-	public_key_path = property(lambda (self) : '%s_public_key.pem' % self.name)
-	private_key_path = property(lambda (self) : '%s_private_key.pem' % self.name)
-	opt_user_password = property(lambda(self): '%s_password' % self.name)
+	public_key_path = None
+	private_key_path = None
+	opt_user_password = None
+
 		
 	def get_password(self):
 		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
 
 	def store_password(self, password):
-		self._cnf.rawini.set(CNF_SECTION, self.opt_user_password, password)
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})
 		
 	password = property(get_password, store_password)
 		
 	def __init__(self, name, password=None, group='postgres'):
 		self._cnf = bus.cnf
+			
+		self.public_key_path = '%s_public_key.pem' % name
+		self.private_key_path = '%s_private_key.pem' % name
+		self.opt_user_password = '%s_password' % name
+		
 		self.name = name
 		self.password = password
 		self.group = group
