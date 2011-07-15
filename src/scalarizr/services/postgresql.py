@@ -257,6 +257,7 @@ class PostgreSql(object):
 		self.set_trusted_mode()
 		user = PgUser(name)	
 		password = password or user.generate_password(20)
+		self._logger.info('PASSWORD FOR USER %s IS %s' % (name, password))
 		user.create(password, super=True)
 		self.set_password_mode()
 		return user	
@@ -294,7 +295,6 @@ class PgUser(object):
 	private_key_path = None
 	opt_user_password = None
 
-		
 	def get_password(self):
 		self._logger.info('GETTING %s PASSWORD' % self.name)
 		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
@@ -309,13 +309,13 @@ class PgUser(object):
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
 			
-		self.public_key_path = '%s_public_key.pem' % name
-		self.private_key_path = '%s_private_key.pem' % name
+		self.public_key_path = self._cnf.key_path('%s_public_key.pem' % name)
+		self.private_key_path = self._cnf.key_path('%s_private_key.pem' % name)
 		self.opt_user_password = '%s_password' % name
 		
 		self.name = name
-		self.password = password
 		self.group = group
+		self.password = password
 		self.psql = PSQL()
 		
 	def create(self, password=None, super=True):	
