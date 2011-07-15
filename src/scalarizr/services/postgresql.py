@@ -296,9 +296,11 @@ class PgUser(object):
 
 		
 	def get_password(self):
+		self._logger.info('GETTING %s PASSWORD' % self.name)
 		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
 
 	def store_password(self, password):
+		self._logger.info('GETTING %s PASSWORD TO %s' % (self.name, password))
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})
 		
 	password = property(get_password, store_password)
