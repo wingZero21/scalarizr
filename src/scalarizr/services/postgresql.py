@@ -290,9 +290,9 @@ class PgUser(object):
 	name = None
 	psql = None
 	
-	public_key_path = lambda (self) : '%s_public_key.pem' % self.name
-	private_key_path = lambda (self) : '%s_private_key.pem' % self.name
-	opt_user_password = lambda(self): '%s_password' % self.name
+	public_key_path = property(lambda (self) : '%s_public_key.pem' % self.name)
+	private_key_path = property(lambda (self) : '%s_private_key.pem' % self.name)
+	opt_user_password = property(lambda(self): '%s_password' % self.name)
 		
 	def get_password(self):
 		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
