@@ -292,7 +292,7 @@ class PgUser(object):
 	
 	public_key_path = lambda (self) : '%s_public_key.pem' % self.name
 	private_key_path = lambda (self) : '%s_private_key.pem' % self.name
-	opt_user_password = lambda(self): '%s_password' % self.username
+	opt_user_password = lambda(self): '%s_password' % self.name
 		
 	def get_password(self):
 		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
@@ -302,15 +302,15 @@ class PgUser(object):
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})
 		
 	password = property(get_password, store_password)
-	
+		
 	def __init__(self, name, password=None, group='postgres'):
+		self._cnf = bus.cnf
 		self.name = name
 		self.password = password
 		self.group = group
 		self._logger = logging.getLogger(__name__)
 		self.psql = PSQL()
-		self._cnf = bus.cnf
-	
+		
 	def create(self, password=None, super=True):	
 		self._create_system_user(password or self.password)
 		self._create_pg_database()
@@ -382,7 +382,7 @@ class PgUser(object):
 		path = os.path.join(self.homedir, 'authorized_keys')
 		keys = read_file(path,logger=self._logger)
 		if not key in keys:
-			write_file(path, data='%s %s' % (key, self.username), mode='a', logger=self._logger)
+			write_file(path, data='%s %s' % (key, self.name), mode='a', logger=self._logger)
 	
 	@property
 	def private_key(self):
