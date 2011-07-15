@@ -904,12 +904,15 @@ class PgHbaConf(Configuration):
 			
 	def delete_record(self, record):
 		lines = []
+		changed = False
 		text = read_file(self.path)
 		for line in text.splitlines():
 			if line.strip() and not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
+				changed = True
 				continue
 			lines.append(line)
-		write_file(self.path, '\n'.join(lines))
+		if changed:
+			write_file(self.path, '\n'.join(lines))
 	
 	def add_standby_host(self, ip):
 		record = self._make_standby_record(ip)
