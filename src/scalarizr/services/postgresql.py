@@ -693,7 +693,7 @@ class BasePGConfig(object):
 		if not self.data:
 			self.data =  Configuration('pgsql')
 			self.data.read(self.path)	
-		value = self.data.read(option)	
+		value = self.data.get(option)	
 		if self.autosave:
 			self.data = None
 		return value
