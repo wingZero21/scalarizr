@@ -897,18 +897,19 @@ class PgHbaConf(Configuration):
 	def add_record(self, record):
 		text = read_file(self.path) or ''
 		for line in text.splitlines():
-			if not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
+			if  line.strip() and not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
 				#already in file
 				return
-		write_file(self.path, str(record), 'a')	
+		write_file(self.path, str(record) if text.endswith('\n') else '\n'+str(record), 'a')
 			
 	def delete_record(self, record):
 		lines = []
 		text = read_file(self.path)
 		for line in text.splitlines():
-			if line.strip().startswith('#') or PgHbaRecord.from_string(line) == record:
-				lines.append(file)
-		write_file(self.path, lines)
+			if line.strip() and PgHbaRecord.from_string(line) == record:
+				continue
+			lines.append(file)
+		write_file(self.path, '\n'.join(lines))
 	
 	def add_standby_host(self, ip):
 		record = self._make_standby_record(ip)
