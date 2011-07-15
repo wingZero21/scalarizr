@@ -906,9 +906,9 @@ class PgHbaConf(Configuration):
 		lines = []
 		text = read_file(self.path)
 		for line in text.splitlines():
-			if line.strip() and PgHbaRecord.from_string(line) == record:
+			if line.strip() and not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
 				continue
-			lines.append(file)
+			lines.append(line)
 		write_file(self.path, '\n'.join(lines))
 	
 	def add_standby_host(self, ip):
