@@ -515,12 +515,14 @@ class ClusterDir(object):
 		if disttool.is_centos():
 			#looks like ubuntu doesn`t need this
 			system2([USERMOD, '-d', new_cluster_dir, self.user]) 
+			
+		self.path = new_cluster_dir
 	
 		return new_cluster_dir
 	
 	def is_valid(self, path):
 		
-		return os.listdir(path) != []
+		return os.path.exists(path) and 'pg_xlog' in os.listdir(path)
 
 
 class ConfigDir(object):
