@@ -285,7 +285,7 @@ class PostgreSql(object):
 			self.create_pg_role(ROOT_USER, super=True)
 		
 		self.service.stop()
-		move_files=not self.cluster_dir.is_initialized(mpoint)
+		move_files = not self.cluster_dir.is_initialized(mpoint)
 		self.cluster_dir.move_to(mpoint, move_files)
 		
 		if disttool.is_centos():
@@ -525,9 +525,9 @@ class ClusterDir(object):
 	def move_to(self, dst, move_files=True):
 		new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
 		
-		if not os.path.exists(new_cluster_dir):
-			self._logger.debug('Creating directory for postgresql cluster: %s' % new_cluster_dir)
-			os.makedirs(new_cluster_dir)
+		if not os.path.exists(dst):
+			self._logger.debug('Creating directory structure for postgresql cluster: %s' % dst)
+			os.makedirs(dst)
 		
 		if move_files and os.path.exists(self.path):
 			self._logger.debug("copying cluster files from %s into %s" % (self.path, new_cluster_dir))
@@ -545,8 +545,8 @@ class ClusterDir(object):
 		return new_cluster_dir
 	
 	def is_initialized(self, path):
-		# are the pgsql files already here? 
-		return os.path.exists(path) and 'pg_xlog' in os.listdir(path)
+		# are the pgsql files already in place? 
+		return os.path.exists(path) and STORAGE_DATA_DIR in os.listdir(path)
 
 
 class ConfigDir(object):
