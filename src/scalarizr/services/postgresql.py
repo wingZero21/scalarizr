@@ -361,7 +361,7 @@ class PgUser(object):
 			#TODO: check password
 		else:
 			try:
-				out = system2([USERADD, '-g', self.group, '-p', password, self.name])[0]
+				out = system2([USERADD, '-m', '-g', self.group, '-p', password, self.name])[0]
 				if out: self._logger.debug(out)
 				self._logger.debug('Creating system user %s' % self.name)	
 			except PopenError, e:
@@ -388,9 +388,13 @@ class PgUser(object):
 		return out.strip()		
 	
 	def apply_public_ssh_key(self, key):
+		self._logger.debug('SCALR USER HOMEDIR IS: %S' % self.homedir)
+		ssh_dir = os.path.join(self.homedir, './ssh/')
+		if not os.path.exists(ssh_dir):
+			os.makedirs(ssh_dir)
 		path = os.path.join(self.homedir, 'authorized_keys')
 		keys = read_file(path,logger=self._logger)
-		if not key in keys:
+		if not (keys or key in keys):
 			write_file(path, data='%s %s' % (key, self.name), mode='a', logger=self._logger)
 	
 	@property
