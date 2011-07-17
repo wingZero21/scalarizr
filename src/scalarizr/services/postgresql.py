@@ -388,12 +388,12 @@ class PgUser(object):
 		return out.strip()		
 	
 	def apply_public_ssh_key(self, key):
-		ssh_dir = os.path.join(self.homedir, './ssh/')
+		ssh_dir = os.path.join(self.homedir, '/.ssh/')
 		if not os.path.exists(ssh_dir):
 			os.makedirs(ssh_dir)
 		path = os.path.join(self.homedir, 'authorized_keys')
 		keys = read_file(path,logger=self._logger)
-		if not (keys or key in keys):
+		if not keys or not key in keys:
 			write_file(path, data='%s %s' % (key, self.name), mode='a', logger=self._logger)
 	
 	@property
