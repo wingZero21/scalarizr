@@ -393,7 +393,7 @@ class PgUser(object):
 		return out.strip()		
 	
 	def apply_public_ssh_key(self, key):
-		ssh_dir = os.path.join(self.homedir, '/.ssh/')
+		ssh_dir = os.path.join(self.homedir, '.ssh')
 		if not os.path.exists(ssh_dir):
 			os.makedirs(ssh_dir)
 		path = os.path.join(ssh_dir, 'authorized_keys')
@@ -420,7 +420,6 @@ class PgUser(object):
 		for line in open('/etc/passwd'):
 			if line.startswith(self.name):
 				homedir = line.split(':')[-2]
-				self._logger.debug('found home directory of user %s : %s' % (self.name, homedir))
 				#return homedir if os.path.exists(homedir) else None
 				return homedir
 		return None
