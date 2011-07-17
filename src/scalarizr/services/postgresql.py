@@ -694,7 +694,7 @@ class BasePGConfig(object):
 		if not self.data:
 			self.data = Configuration('pgsql')
 			self.data.read(self.path)
-		self.data.add(option,value, force=True)
+		self.data.set(option,value, force=True)
 		if self.autosave:
 			self.save()
 			self.data = None
