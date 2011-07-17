@@ -410,7 +410,7 @@ class PgUser(object):
 	@property
 	def homedir(self):
 		for line in open('/etc/passwd'):
-			if line.startswith(self.user):
+			if line.startswith(self.name):
 				homedir = line.split(':')[-2]
 				return homedir if os.path.exists(homedir) else None
 		return None
