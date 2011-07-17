@@ -388,7 +388,6 @@ class PgUser(object):
 		return out.strip()		
 	
 	def apply_public_ssh_key(self, key):
-		self._logger.debug('SCALR USER HOMEDIR IS: %S' % self.homedir)
 		ssh_dir = os.path.join(self.homedir, './ssh/')
 		if not os.path.exists(ssh_dir):
 			os.makedirs(ssh_dir)
