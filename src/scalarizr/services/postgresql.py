@@ -111,12 +111,8 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 				initd_script=initd_script)
 		
 	def status(self):
-		try:
-			system2(PSQL_PATH)
-		except PopenError, e:
-			if 'No such file or directory' in str(e):
-				return initdv2.Status.NOT_RUNNING
-		return initdv2.Status.RUNNING
+		p = PSQL()
+		return initdv2.Status.RUNNING if p.test_connection() else initdv2.Status.NOT_RUNNING
 
 	
 	def stop(self, reason=None):
@@ -479,7 +475,7 @@ class PSQL(object):
 		
 	def test_connection(self):
 		try:
-			system2(self.path)
+			system2([SU_EXEC, '-', self.user, '-c', self.path])
 		except PopenError, e:
 			if 'err' in str(e):
 				return False
