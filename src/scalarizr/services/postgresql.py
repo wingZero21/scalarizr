@@ -285,11 +285,11 @@ class PostgreSql(object):
 		
 		self.service.stop()
 		move_files = not self.cluster_dir.is_initialized(mpoint)
-		self.cluster_dir.move_to(mpoint, move_files)
+		self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
 		
 		if disttool.is_centos():
 			self.config_dir.move_to(self.config_dir.default_ubuntu_path)
-			
+		
 		self.postgresql_conf.wal_level = 'hot_standby'
 		self.postgresql_conf.max_wal_senders = '5'
 		self.postgresql_conf.wal_keep_segments = '32'
