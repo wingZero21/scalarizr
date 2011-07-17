@@ -387,7 +387,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
 							
 				# Continue if master storage is a valid postgresql storage 
-				if not self.postgresql.cluster_dir.is_valid(self._storage_path):
+				if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
 					raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
 				
 				self.postgresql.cluster_dir.move_to(self._storage_path)
@@ -557,14 +557,9 @@ class PostgreSqlHander(ServiceCtlHanler):
 		
 		msg_data = dict()
 		
-		# If It's 1st init of postgresql master storage
-		if not self.postgresql.cluster_dir.is_valid(self._storage_path):
-			# Update HostUp message 
-			msg_data.update(dict(root_password=root_password,
-								))
-		
 		msg_data.update(dict(replication_master = int(self.postgresql.is_replication_master),
 							root_user = self.postgresql.root_user.name,
+							root_password=root_password,
 							root_ssh_private_key = self.postgresql.root_user.private_key, 
 							root_ssh_public_key = self.postgresql.root_user.public_key, 
 							current_xlog_location = None))	
@@ -595,7 +590,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		"""
 		self._logger.info("Initializing postgresql slave")
 		
-		if not self.postgresql.cluster_dir.is_valid(self._storage_path):
+		if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
 			self._logger.debug("Initialize slave storage")
 			self.storage_vol = self._plug_storage(self._storage_path, 
 					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
