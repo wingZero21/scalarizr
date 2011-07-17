@@ -253,7 +253,7 @@ class PostgreSql(object):
 		user = PgUser(name)	
 		password = password or user.generate_password(20)
 		self._logger.info('PASSWORD FOR USER %s IS %s' % (name, password))
-		user._create_system_user(password or user.password)
+		user._create_system_user(password)
 		return user	
 	
 	def create_pg_role(self, name, super=True):
@@ -303,7 +303,8 @@ class PgUser(object):
 	private_key_path = None
 	opt_user_password = None
 
-	def get_password(self):
+	@property
+	def password(self):
 		self._logger.info('GETTING %s PASSWORD' % self.name)
 		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
 
@@ -311,9 +312,7 @@ class PgUser(object):
 		self._logger.info('SETTING %s PASSWORD TO %s' % (self.name, password))
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})
 		
-	password = property(get_password, store_password)
-		
-	def __init__(self, name, password=None, group='postgres'):
+	def __init__(self, name, group='postgres'):
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
 			
@@ -323,13 +322,8 @@ class PgUser(object):
 		
 		self.name = name
 		self.group = group
-		self.password = password
 		self.psql = PSQL()
 		
-	def create(self, password=None, super=True):	
-		self._create_system_user(password or self.password)
-		self._create_pg_database()
-		self._create_role(super)
 	
 	def exists(self):
 		return self._is_system_user_exist and self._is_role_exist and self._is_pg_database_exist
@@ -373,7 +367,7 @@ class PgUser(object):
 			except PopenError, e:
 				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
 				raise
-		self.password = password
+		self.store_password(password)
 		
 	def generate_private_ssh_key(self, key_length=1024):
 		public_exponent = 65337
@@ -456,7 +450,7 @@ class PgUser(object):
 			self._logger.error('Error changing password for ' + self.name)	
 		
 		#change password in privated/pgsql.ini
-		self.password = new_pass
+		self.store_password(new_pass)
 		
 		return new_pass
 	
