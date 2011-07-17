@@ -293,6 +293,8 @@ class PostgreSql(object):
 		self.postgresql_conf.wal_level = 'hot_standby'
 		self.postgresql_conf.max_wal_senders = '5'
 		self.postgresql_conf.wal_keep_segments = '32'
+		
+		self.service.start()
 				
 	
 postgresql = PostgreSql()
