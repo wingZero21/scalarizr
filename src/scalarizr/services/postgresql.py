@@ -91,6 +91,9 @@ class LazyInitScript(object):
 		if self._script.running:
 			self.reload_queue.append(reason)
 			
+	def running(self):
+		return self._script.running
+			
 				
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
