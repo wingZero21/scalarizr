@@ -237,6 +237,7 @@ class PostgreSql(object):
 	def register_slave(self, slave_ip):
 		self.postgresql_conf.listen_addresses = '*'
 		self.pg_hba_conf.add_standby_host(slave_ip)
+		self.postgresql_conf.max_wal_senders = str(int(self.postgresql_conf.max_wal_senders) +1)
 		self.service.restart(force=True)
 		
 	def change_primary(self, primary_ip, primary_port, username):
@@ -252,15 +253,21 @@ class PostgreSql(object):
 	def start_replication(self):
 		self.trigger_file.destroy()
 	
-	def create_user(self, name, password=None):
-		self.service.start()
-		self.set_trusted_mode()
+	def create_user(self, name, password=None, sys_user_only=True):
 		user = PgUser(name)	
 		password = password or user.generate_password(20)
 		self._logger.info('PASSWORD FOR USER %s IS %s' % (name, password))
-		user.create(password, super=True)
-		self.set_password_mode()
+		user._create_system_user(password or user.password)
 		return user	
+	
+	def create_pg_role(self, name, super=True):
+		self.service.start()
+		self.set_trusted_mode()
+		user = PgUser(name)	
+		user._create_pg_database()
+		user._create_role(super)
+		self.set_password_mode()
+		return user			
 
 	def set_trusted_mode(self):
 		self.pg_hba_conf.set_trusted_access_mode()
@@ -271,10 +278,15 @@ class PostgreSql(object):
 		self.service.restart()
 
 	def _init_service(self, mpoint):
-		if self.cluster_dir.is_valid(mpoint):
-			self.root_user = self.create_user(ROOT_USER)
+		
+		self.root_user = self.create_user(ROOT_USER)
+	
+		if not self.cluster_dir.is_initialized(mpoint):
+			self.create_pg_role(ROOT_USER, super=True)
+		
 		self.service.stop()
-		self.cluster_dir.move_to(mpoint)
+		move_files=not self.cluster_dir.is_initialized(mpoint)
+		self.cluster_dir.move_to(mpoint, move_files)
 		
 		if disttool.is_centos():
 			self.config_dir.move_to(self.config_dir.default_ubuntu_path)
@@ -510,9 +522,14 @@ class ClusterDir(object):
 	def find(cls, postgresql_conf):
 		return cls(postgresql_conf.data_directory)
 
-	def move_to(self, dst):
+	def move_to(self, dst, move_files=True):
 		new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
-		if not self.is_valid(new_cluster_dir) and os.path.exists(self.path):
+		
+		if not os.path.exists(new_cluster_dir):
+			self._logger.debug('Creating directory for postgresql cluster: %s' % new_cluster_dir)
+			os.makedirs(new_cluster_dir)
+		
+		if move_files and os.path.exists(self.path):
 			self._logger.debug("copying cluster files from %s into %s" % (self.path, new_cluster_dir))
 			shutil.copytree(self.path, new_cluster_dir)	
 		self._logger.debug("changing directory owner to %s" % self.user)	
@@ -527,8 +544,8 @@ class ClusterDir(object):
 	
 		return new_cluster_dir
 	
-	def is_valid(self, path):
-		
+	def is_initialized(self, path):
+		# are the pgsql files already here? 
 		return os.path.exists(path) and 'pg_xlog' in os.listdir(path)
 
 
