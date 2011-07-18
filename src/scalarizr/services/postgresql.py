@@ -277,8 +277,13 @@ class PostgreSql(object):
 		self.service.restart()
 
 	def _init_service(self, mpoint):
+		password = None 
 		
-		self.root_user = self.create_user(ROOT_USER)
+		opt_pwd = '%s_password' % ROOT_USER
+		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
+			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
+		
+		self.root_user = self.create_user(ROOT_USER, password)
 	
 		if not self.cluster_dir.is_initialized(mpoint):
 			self.create_pg_role(ROOT_USER, super=True)
@@ -787,6 +792,8 @@ class PostgresqlConf(BasePGConfig):
 
 	
 class RecoveryConf(BasePGConfig):
+	
+	config_name = 'recovery.conf'
 	
 	def _get_standby_mode(self):
 		self.get('standby_mode')

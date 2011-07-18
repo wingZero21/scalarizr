@@ -613,7 +613,6 @@ class PostgreSqlHander(ServiceCtlHanler):
 				master_host.internal_ip, master_host.external_ip)
 		
 		host = master_host.internal_ip or master_host.external_ip
-		
 		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
 		
 		# Update HostUp message
