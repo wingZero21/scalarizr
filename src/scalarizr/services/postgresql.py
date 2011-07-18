@@ -175,7 +175,7 @@ class PostgreSql(object):
 		self._set('pg_hba_conf', obj)
 		
 	def _get_recovery_conf(self):
-		return self._get('recovery_conf', RecoveryConf.find, self.config_dir)
+		return self._get('recovery_conf', RecoveryConf.find, self.cluster_dir)
 	
 	def _set_recovery_conf(self, obj):
 		self._set('recovery_conf', obj)
@@ -820,6 +820,10 @@ class RecoveryConf(BasePGConfig):
 	standby_mode = property(_get_standby_mode, _set_standby_mode)
 	primary_conninfo = property(_get_primary_conninfo, _set_primary_conninfo)
 	trigger_file = property(_get_trigger_file, _set_trigger_file)
+	
+	@classmethod
+	def find(cls, cluster_dir):
+		return cls(os.path.join(cluster_dir.path, cls.config_name))
 
 	
 class PgHbaRecord(object):
