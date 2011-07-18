@@ -41,6 +41,7 @@ ROOT_USER 				= "scalr"
 OPT_REPLICATION_MASTER  = "replication_master"
 
 STORAGE_DATA_DIR 		= "data"
+TRIGGER_NAME 			= "trigger"
 
 
 def lazy(init):
@@ -228,8 +229,7 @@ class PostgreSql(object):
 	def init_slave(self, mpoint, primary_ip, primary_port):
 		self._init_service(mpoint)
 		self.postgresql_conf.hot_standby = 'on'
-		self.trigger_file = Trigger(os.path.join(self.config_dir.path, 'trigger'))
-		self.recovery_conf.trigger_file = self.trigger_file.path
+		self.recovery_conf.trigger_file = os.path.join(self.config_dir.path, TRIGGER_NAME)
 		self.recovery_conf.standby_mode = 'on'
 		self.change_primary(self, primary_ip, primary_port, self.root_user.name)
 		
