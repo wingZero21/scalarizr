@@ -237,7 +237,7 @@ class PostgreSql(object):
 		
 	def register_slave(self, slave_ip):
 		self.postgresql_conf.listen_addresses = '*'
-		self.pg_hba_conf.add_standby_host(slave_ip)
+		self.pg_hba_conf.add_standby_host(slave_ip, self.root_user.name)
 		self.postgresql_conf.max_wal_senders = str(int(self.postgresql_conf.max_wal_senders) +1)
 		self.service.restart(force=True)
 		
@@ -937,7 +937,7 @@ class PgHbaConf(Configuration):
 			if  line.strip() and not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
 				#already in file
 				return
-		write_file(self.path, str(record) if text.endswith('\n') else '\n'+str(record), 'a')
+		write_file(self.path, str(record)+'\n' if text.endswith('\n') else '\n'+str(record)+'\n', 'a')
 			
 	def delete_record(self, record):
 		lines = []
@@ -967,8 +967,8 @@ class PgHbaConf(Configuration):
 		self.delete_record(self.trusted_mode)
 		self.add_record(self.password_mode)
 	
-	def _make_standby_record(self,ip):
-		return PgHbaRecord('host','replication','postgres',address='%s/32'%ip, auth_method='trust')
+	def _make_standby_record(self,ip, user='postgres'):
+		return PgHbaRecord('host','replication', user=user,address='%s/32'%ip, auth_method='trust')
 	
 class ParseError(BaseException):
 	pass
