@@ -245,7 +245,7 @@ class PostgreSql(object):
 		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, username)
 	
 	def unregister_slave(self, slave_ip):
-		self.pg_hba_conf.delete_standby_host(slave_ip)
+		self.pg_hba_conf.delete_standby_host(slave_ip, self.root_user.name)
 		self.service.restart(force=True)
 
 	def stop_replication(self):
@@ -967,12 +967,12 @@ class PgHbaConf(Configuration):
 		if changed:
 			write_file(self.path, '\n'.join(lines))
 	
-	def add_standby_host(self, ip):
-		record = self._make_standby_record(ip)
+	def add_standby_host(self, ip, user='postgres'):
+		record = self._make_standby_record(ip, user)
 		self.add_record(record)
 
-	def delete_standby_host(self, ip):
-		record = self._make_standby_record(ip)
+	def delete_standby_host(self, ip, user='postgres'):
+		record = self._make_standby_record(ip, user)
 		self.delete_record(record)
 	
 	def set_trusted_access_mode(self):
