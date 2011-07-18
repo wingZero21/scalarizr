@@ -136,7 +136,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 				or 	message.name == PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER
 				or 	message.name == PostgreSqlMessages.DBMSR_CREATE_DATA_BUNDLE
 				or 	message.name == PostgreSqlMessages.DBMSR_CREATE_BACKUP
-				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)	
+				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
+				or  message.name == Messages.HOST_INIT)	
 
 	
 	def __init__(self):
@@ -163,7 +164,6 @@ class PostgreSqlHander(ServiceCtlHanler):
 
 
 	def on_init(self):		
-		bus.on("host_init", self.on_host_init)
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
@@ -206,7 +206,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		
 	
-	def on_host_init(self, message):
+	def on_HostInit(self, message):
 		if message.local_ip != self._platform.get_private_ip():
 			self._logger.debug('Got new slave IP: %s. Registering in pg_hba.conf' % message.local_ip)
 			self.postgresql.register_slave(message.local_ip)
@@ -269,7 +269,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		pass
 
 
-	def on_Postgresql_CreateDataBundle(self, message):
+	def on_DbMsr_CreateDataBundle(self, message):
 		
 		try:
 			bus.fire('before_postgresql_data_bundle')
@@ -298,7 +298,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			))
 
 	
-	def on_Postgresql_NewMasterUp(self, message):
+	def on_DbMsr_NewMasterUp(self, message):
 		"""
 		Switch replication to a new master server
 		@type message: scalarizr.messaging.Message
@@ -365,7 +365,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			self._logger.debug('Skip NewMasterUp. My replication role is master')	
 			
 
-	def on_Postgresql_PromoteToMaster(self, message):
+	def on_DbMsr_PromoteToMaster(self, message):
 		"""
 		Promote slave to master
 		@type message: scalarizr.messaging.Message
@@ -477,7 +477,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			Storage.backup_config(self.storage_vol.config(), self._storage_path)
 
 
-	def on_Postgresql_CreateBackup(self, message):
+	def on_DbMsr_CreateBackup(self, message):
 		#TODO: Think how to move the most part of it into Postgresql class 
 		# Retrieve password for scalr mysql user
 		tmpdir = backup_path = None
