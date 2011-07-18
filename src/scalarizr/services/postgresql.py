@@ -232,7 +232,7 @@ class PostgreSql(object):
 		self.postgresql_conf.hot_standby = 'on'
 		self.recovery_conf.trigger_file = os.path.join(self.config_dir.path, TRIGGER_NAME)
 		self.recovery_conf.standby_mode = 'on'
-		self.change_primary(self, primary_ip, primary_port, self.root_user.name)
+		self.change_primary(primary_ip, primary_port, self.root_user.name)
 		self.service.start()
 		
 	def register_slave(self, slave_ip):
