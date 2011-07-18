@@ -286,6 +286,8 @@ class PostgreSql(object):
 			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
 		
 		self.root_user = self.create_user(ROOT_USER, password)
+		
+		assert self.root_user.private_key and self.root_user.public_key
 	
 		if not self.cluster_dir.is_initialized(mpoint):
 			self.create_pg_role(ROOT_USER, super=True)
@@ -398,18 +400,28 @@ class PgUser(object):
 		return out.strip()		
 	
 	def apply_public_ssh_key(self, key):
-		ssh_dir = os.path.join(self.homedir, '.ssh')
-		if not os.path.exists(ssh_dir):
-			os.makedirs(ssh_dir)
-		path = os.path.join(ssh_dir, 'authorized_keys')
+		if not os.path.exists(self.ssh_dir):
+			os.makedirs(self.ssh_dir)
+		path = os.path.join(self.ssh_dir, 'authorized_keys')
 		keys = read_file(path,logger=self._logger)
 		if not keys or not key in keys:
 			write_file(path, data='\n%s %s\n' % (key, self.name), mode='a', logger=self._logger)
+			
+	def apply_private_ssh_key(self,source_path):
+		if not os.path.exists(source_path):
+			self._logger.error('Cannot apply private ssh key: source %s not found' % source_path)
+		else:
+			if not os.path.exists(self.ssh_dir):
+				os.makedirs(self.ssh_dir)
+			dst = os.path.join(self.ssh_dir, 'id_rsa')
+			shutil.copyfile(source_path, dst)
+			os.chmod(dst, mode=0400)
 	
 	@property
 	def private_key(self):
 		if not os.path.exists(self.private_key_path):
 			self.generate_private_ssh_key()
+			self.apply_private_ssh_key(self.private_key_path)
 		return read_file(self.private_key_path, logger=self._logger)
 	
 	@property
@@ -428,6 +440,10 @@ class PgUser(object):
 				#return homedir if os.path.exists(homedir) else None
 				return homedir
 		return None
+	
+	@property
+	def ssh_dir(self):
+		return os.path.join(self.homedir, '.ssh')
 
 	@property
 	def _is_role_exist(self):
