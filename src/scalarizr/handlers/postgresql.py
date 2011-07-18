@@ -163,6 +163,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 
 
 	def on_init(self):		
+		bus.on("host_init", self.on_host_init)
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
@@ -204,7 +205,13 @@ class PostgreSqlHander(ServiceCtlHanler):
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		
-
+	
+	def on_host_init(self, message):
+		if message.local_ip != self._platform.get_private_ip():
+			self._logger.debug('Got new slave IP: %s. Registering in pg_hba.conf' % message.local_ip)
+			self.postgresql.register_slave(message.local_ip)
+				
+	
 	def on_host_init_response(self, message):
 		"""
 		Check postgresql data in host init response
@@ -213,29 +220,23 @@ class PostgreSqlHander(ServiceCtlHanler):
 		"""
 		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
 			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
-		
-		if message.local_ip != self._platform.get_private_ip():
-			self._logger.debug('Got new slave IP: %s. Registering in pg_hba.' % message.local_ip)
-			self.postgresql.register_slave(message.local_ip)
-		
-		else:
 
-			dir = os.path.dirname(self._volume_config_path)
-			if not os.path.exists(dir):
-				os.makedirs(dir)
-			
-			postgresql_data = message.postgresql.copy()
-			for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
-							(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
-				if os.path.exists(file):
-					os.remove(file)
-				#omitting empty configs
-				if key in postgresql_data and postgresql_data[key]:
-					Storage.backup_config(postgresql_data[key], file)
-					del postgresql_data[key]
-							
-			self._logger.debug("Update postgresql config with %s", postgresql_data)
-			self._update_config(postgresql_data)
+		dir = os.path.dirname(self._volume_config_path)
+		if not os.path.exists(dir):
+			os.makedirs(dir)
+		
+		postgresql_data = message.postgresql.copy()
+		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
+						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
+			if os.path.exists(file):
+				os.remove(file)
+			#omitting empty configs
+			if key in postgresql_data and postgresql_data[key]:
+				Storage.backup_config(postgresql_data[key], file)
+				del postgresql_data[key]
+						
+		self._logger.debug("Update postgresql config with %s", postgresql_data)
+		self._update_config(postgresql_data)
 
 
 	def on_before_host_up(self, message):
