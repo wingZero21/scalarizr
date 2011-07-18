@@ -225,6 +225,7 @@ class PostgreSql(object):
 	def init_master(self, mpoint):
 		self._init_service(mpoint)
 		self.postgresql_conf.hot_standby = 'off'
+		self.service.start()
 		
 	def init_slave(self, mpoint, primary_ip, primary_port):
 		self._init_service(mpoint)
@@ -232,6 +233,7 @@ class PostgreSql(object):
 		self.recovery_conf.trigger_file = os.path.join(self.config_dir.path, TRIGGER_NAME)
 		self.recovery_conf.standby_mode = 'on'
 		self.change_primary(self, primary_ip, primary_port, self.root_user.name)
+		self.service.start()
 		
 	def register_slave(self, slave_ip):
 		self.postgresql_conf.listen_addresses = '*'
@@ -299,8 +301,6 @@ class PostgreSql(object):
 		self.postgresql_conf.max_wal_senders = '5'
 		self.postgresql_conf.wal_keep_segments = '32'
 		
-		self.service.start()
-				
 	
 postgresql = PostgreSql()
 
