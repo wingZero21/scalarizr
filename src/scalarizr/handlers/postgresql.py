@@ -617,6 +617,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		
 		# Update HostUp message
 		message.postgresql = self._compat_storage_data(self.storage_vol)
+		message.db_type = BEHAVIOUR
 
 
 	def _update_config(self, data): 
