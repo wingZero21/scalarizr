@@ -84,8 +84,10 @@ class LazyInitScript(object):
 				self.restart_queue = []
 				self.reload_queue = []	
 
-	def restart(self, reason=None):
-		if self._script.running:
+	def restart(self, reason=None, force=False):
+		if self._script.running and force:
+			self._script.restart(reason)
+		elif  self._script.running:
 			self.restart_queue.append(reason)
 		
 	def reload(self, reason=None):
