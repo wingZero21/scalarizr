@@ -495,6 +495,7 @@ class PSQL(object):
 		self._logger = logging.getLogger(__name__)
 		
 	def test_connection(self):
+		self._logger.debug('Checking PostgreSQL service status')
 		try:
 			system2([SU_EXEC, '-', self.user, '-c', self.path])
 		except PopenError, e:
