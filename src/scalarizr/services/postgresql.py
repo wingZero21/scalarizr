@@ -729,7 +729,7 @@ class BasePGConfig(object):
 	def set_numeric_option(self, option, number):
 		try:
 			assert not number or float(number)
-			self.set(option, number)
+			self.set(option, str(number))
 		except ValueError:
 			raise ValueError('%s must be a number (got %s instead)' % (option, number))
 					
