@@ -622,8 +622,9 @@ class PostgreSqlHander(ServiceCtlHanler):
 		
 		host = master_host.internal_ip or master_host.external_ip
 		port = POSTGRESQL_DEFAULT_PORT
-		private_key = message.postgresql.root_ssh_private_key
-		public_key = message.postgresql.root_ssh_public_key
+		ini = self._cnf.rawini
+		private_key = ini.get(CNF_SECTION, 'root_ssh_private_key')
+		public_key =  ini.get(CNF_SECTION, 'root_ssh_public_key')
 		
 		self.postgresql.init_slave(self._storage_path, host, port, private_key, public_key)
 		
