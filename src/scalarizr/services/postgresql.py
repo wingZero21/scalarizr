@@ -505,7 +505,7 @@ class PSQL(object):
 		try:
 			system2([SU_EXEC, '-', self.user, '-c', self.path])
 		except PopenError, e:
-			if 'err' in str(e):
+			if 'could not connect to server' in str(e):
 				return False
 		return True
 		
