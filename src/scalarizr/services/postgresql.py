@@ -241,14 +241,14 @@ class PostgreSql(object):
 		self.postgresql_conf.listen_addresses = '*'
 		self.pg_hba_conf.add_standby_host(slave_ip, self.root_user.name)
 		self.postgresql_conf.max_wal_senders += 1
-		self.service.restart(force=True)
+		self.service.restart(reason='Registering slave', force=True)
 		
 	def change_primary(self, primary_ip, primary_port, username):
 		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, username)
 	
 	def unregister_slave(self, slave_ip):
 		self.pg_hba_conf.delete_standby_host(slave_ip, self.root_user.name)
-		self.service.restart(force=True)
+		self.service.restart(reason='Unregistering slave', force=True)
 
 	def stop_replication(self):
 		self.trigger_file.create()
