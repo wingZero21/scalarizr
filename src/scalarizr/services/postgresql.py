@@ -229,8 +229,10 @@ class PostgreSql(object):
 		self.postgresql_conf.hot_standby = 'off'
 		self.service.start()
 		
-	def init_slave(self, mpoint, primary_ip, primary_port):
+	def init_slave(self, mpoint, primary_ip, primary_port, private_key, public_key):
 		self._init_service(mpoint)
+		self.root_user.store_key(public_key, private=False)
+		self.root_user.store_key(private_key, private=True)
 		self.postgresql_conf.hot_standby = 'on'
 		self.recovery_conf.trigger_file = os.path.join(self.config_dir.path, TRIGGER_NAME)
 		self.recovery_conf.standby_mode = 'on'

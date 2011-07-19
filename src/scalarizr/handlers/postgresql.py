@@ -621,9 +621,11 @@ class PostgreSqlHander(ServiceCtlHanler):
 				master_host.internal_ip, master_host.external_ip)
 		
 		host = master_host.internal_ip or master_host.external_ip
-		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
-		self.postgresql.root_user.store_key(message.postgresql.root_ssh_public_key, public=False)
-		self.postgresql.root_user.store_key(message.postgresql.root_ssh_private_key, public=True)
+		port = POSTGRESQL_DEFAULT_PORT
+		private_key = message.postgresql.root_ssh_private_key
+		public_key = message.postgresql.root_ssh_public_key
+		
+		self.postgresql.init_slave(self._storage_path, host, port, private_key, public_key)
 		
 		# Update HostUp message
 		message.postgresql = self._compat_storage_data(self.storage_vol)
