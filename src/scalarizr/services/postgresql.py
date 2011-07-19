@@ -13,7 +13,7 @@ import pwd
 
 from M2Crypto import RSA
 
-from scalarizr.libs.metaconf import Configuration
+from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.util import disttool, cryptotool, firstmatched
 from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
@@ -238,7 +238,7 @@ class PostgreSql(object):
 	def register_slave(self, slave_ip):
 		self.postgresql_conf.listen_addresses = '*'
 		self.pg_hba_conf.add_standby_host(slave_ip, self.root_user.name)
-		self.postgresql_conf.max_wal_senders = str(int(self.postgresql_conf.max_wal_senders) +1)
+		self.postgresql_conf.max_wal_senders += 1
 		self.service.restart(force=True)
 		
 	def change_primary(self, primary_ip, primary_port, username):
@@ -300,8 +300,8 @@ class PostgreSql(object):
 			self.config_dir.move_to(self.config_dir.default_ubuntu_path)
 		
 		self.postgresql_conf.wal_level = 'hot_standby'
-		self.postgresql_conf.max_wal_senders = '5'
-		self.postgresql_conf.wal_keep_segments = '32'
+		self.postgresql_conf.max_wal_senders = 5
+		self.postgresql_conf.wal_keep_segments = 32
 		
 	
 postgresql = PostgreSql()
@@ -739,11 +739,23 @@ class BasePGConfig(object):
 	def get(self, option):
 		if not self.data:
 			self.data =  Configuration('pgsql')
-			self.data.read(self.path)	
-		value = self.data.get(option)	
+			if os.path.exists(self.path):
+				self.data.read(self.path)	
+		try:
+			value = self.data.get(option)	
+		except NoPathError:
+			try:
+				value = getattr(self, option+'_default')
+			except AttributeError:
+				value = None
 		if self.autosave:
 			self.data = None
 		return value
+	
+	def get_numeric_option(self, option):
+		value = self.get(option)
+		assert not value or float(value)
+		return float(value) if value else 0
 	
 	def save(self):
 		if self.data:
@@ -753,7 +765,7 @@ class BasePGConfig(object):
 class PostgresqlConf(BasePGConfig):
 
 	config_name = 'postgresql.conf'
-	
+
 	def _get_pid_file_path(self):
 		return self.get('external_pid_file')
 	
@@ -775,25 +787,25 @@ class PostgresqlConf(BasePGConfig):
 		self.set('wal_level', level)
 	
 	def _get_max_wal_senders(self):
-		self.get('max_wal_senders')
+			return self.get_numeric_option('max_wal_senders')
 	
 	def _set_max_wal_senders(self, number):
 		self.set_numeric_option('max_wal_senders', number)
 	
 	def _get_wal_keep_segments(self):
-		self.get('wal_keep_segments')
+		return self.get_numeric_option('wal_keep_segments')
 	
 	def _set_wal_keep_segments(self, number):
 		self.set_numeric_option('wal_keep_segments', number)
 		
 	def _get_listen_addresses(self):
-		self.get('listen_addresses')
+		return self.get('listen_addresses')
 	
 	def _set_listen_addresses(self, addresses='*'):
 		self.set('listen_addresses', addresses)
 	
 	def _get_hot_standby(self):
-		self.get('hot_standby')
+		return self.get('hot_standby')
 	
 	def _set_hot_standby(self, mode):
 		#must bee boolean and default is 'off'
@@ -806,6 +818,10 @@ class PostgresqlConf(BasePGConfig):
 	wal_keep_segments = property(_get_wal_keep_segments, _set_wal_keep_segments)
 	listen_addresses = property(_get_listen_addresses, _set_listen_addresses)
 	hot_standby = property(_get_hot_standby, _set_hot_standby)
+	
+	max_wal_senders_default = 5
+	wal_keep_segments = 32
+
 
 	
 class RecoveryConf(BasePGConfig):
