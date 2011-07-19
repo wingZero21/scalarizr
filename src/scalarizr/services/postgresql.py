@@ -257,7 +257,6 @@ class PostgreSql(object):
 	def create_user(self, name, password=None, sys_user_only=True):
 		user = PgUser(name)	
 		password = password or user.generate_password(20)
-		self._logger.info('PASSWORD FOR USER %s IS %s' % (name, password))
 		user._create_system_user(password)
 		return user	
 	
@@ -317,11 +316,9 @@ class PgUser(object):
 
 	@property
 	def password(self):
-		self._logger.info('GETTING %s PASSWORD' % self.name)
 		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
 
 	def store_password(self, password):
-		self._logger.info('SETTING %s PASSWORD TO %s' % (self.name, password))
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})
 		
 	def __init__(self, name, group='postgres'):
