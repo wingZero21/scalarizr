@@ -19,7 +19,8 @@ from scalarizr.handlers import ServiceCtlHanler, HandlerError
 from scalarizr.util.filetool import read_file, write_file, split
 from scalarizr.util import initdv2, system2, wait_until, PopenError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER
+from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
+	PgUser
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -621,6 +622,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 		
 		host = master_host.internal_ip or master_host.external_ip
 		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
+		self.postgresql.root_user.store_key(message.postgresql.root_ssh_public_key, public=False)
+		self.postgresql.root_user.store_key(message.postgresql.root_ssh_private_key, public=True)
 		
 		# Update HostUp message
 		message.postgresql = self._compat_storage_data(self.storage_vol)

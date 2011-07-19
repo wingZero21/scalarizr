@@ -288,8 +288,6 @@ class PostgreSql(object):
 		
 		self.root_user = self.create_user(ROOT_USER, password)
 		
-		assert self.root_user.private_key and self.root_user.public_key
-	
 		if not self.cluster_dir.is_initialized(mpoint):
 			self.create_pg_role(ROOT_USER, super=True)
 		
@@ -316,13 +314,6 @@ class PgUser(object):
 	private_key_path = None
 	opt_user_password = None
 
-	@property
-	def password(self):
-		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
-
-	def store_password(self, password):
-		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})
-		
 	def __init__(self, name, group='postgres'):
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
@@ -335,50 +326,44 @@ class PgUser(object):
 		self.group = group
 		self.psql = PSQL()
 		
-	
 	def exists(self):
 		return self._is_system_user_exist and self._is_role_exist and self._is_pg_database_exist
-	
+		
+	@property
+	def password(self):
+		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
+		
 	def generate_password(self, length=20):
 		return cryptotool.pwgen(length)
+
+	def change_password(self, new_pass=None):
+		new_pass = new_pass or self.generate_password()
+		self._logger.debug('Changing password of system user %s to %s' % (self.name, new_pass)) 
+		out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
+		shadow_password = out.strip()
+		if retcode != 0:
+			self._logger.error('Error creating hash for ' + self.name)
+		if err:
+			self._logger.error(err)
 		
-	def _create_role(self, super=True):
-		if self._is_role_exist:
-			self._logger.debug('Cannot create role: role %s already exists' % self.name)
-		else:
-			self._logger.debug('Creating role %s' % self.name)
-			try:
-				out = system2([SU_EXEC, '-', self.group, '-c', '%s -s %s' % (CREATEUSER, self.name)])[0]
-				self._logger.debug(out or 'Role %s has been successfully created.' % self.name)
-			except PopenError, e:
-				self._logger.error('Unable to create role %s: %s' % (self.name, e))
-				raise
+		r = system2([USERMOD, '-p', '-1', shadow_password, self.name])[2]
+		if r != 0:
+			self._logger.error('Error changing password for ' + self.name)	
 		
-	def _create_pg_database(self):
-		if self._is_pg_database_exist:
-			self._logger.debug('Cannot create db: database %s already exists' % self.name)
-		else:
-			self._logger.debug('Creating db %s' % self.name)
-			try:
-				out = system2([SU_EXEC, '-', self.group, '-c', '%s %s' % (CREATEDB,self.name)])[0]
-				self._logger.debug(out or 'DB %s has been successfully created.' % self.name)
-			except PopenError, e:
-				self._logger.error('Unable to create db %s: %s' % (self.name, e))
-				raise
+		#change password in privated/pgsql.ini
+		self.store_password(new_pass)
+		
+		return new_pass
 	
-	def _create_system_user(self, password):
-		if self._is_system_user_exist:
-			self._logger.debug('Cannot create system user: user %s already exists' % self.name)
-			#TODO: check password
-		else:
-			try:
-				out = system2([USERADD, '-m', '-g', self.group, '-p', password, self.name])[0]
-				if out: self._logger.debug(out)
-				self._logger.debug('Creating system user %s' % self.name)	
-			except PopenError, e:
-				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
-				raise
-		self.store_password(password)
+	def check_password(self, password=None):
+		#TODO: check (password or self.password), raise ValueError
+		pass
+
+	def store_password(self, password):
+		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})	
+	
+	def store_key(self, key_str, private=True):
+		write_file(self.private_key_path if private else self.public_key_path, data=key_str, logger=self._logger)
 		
 	def generate_private_ssh_key(self, key_length=1024):
 		public_exponent = 65337
@@ -419,6 +404,7 @@ class PgUser(object):
 			shutil.copyfile(source_path, dst)
 			os.chmod(dst, 0400)
 			rchown(self.name, dst)
+			
 	
 	@property
 	def private_key(self):
@@ -439,9 +425,7 @@ class PgUser(object):
 	def homedir(self):
 		for line in open('/etc/passwd'):
 			if line.startswith(self.name):
-				homedir = line.split(':')[-2]
-				#return homedir if os.path.exists(homedir) else None
-				return homedir
+				return line.split(':')[-2]
 		return None
 	
 	@property
@@ -460,37 +444,45 @@ class PgUser(object):
 	def _is_system_user_exist(self):
 		file = open(PASSWD_FILE, 'r')
 		return -1 != file.read().find(self.name)
-	
-	def delete(self, delete_db=True, delete_role=True, delete_system_user=True):
-		#TODO: implement delete method
-		pass
-	
-	def _delete_system_user(self):
-		pass	
 
-	def change_password(self, new_pass=None):
-		new_pass = new_pass or self.generate_password()
-		self._logger.debug('Changing password of system user %s to %s' % (self.name, new_pass)) 
-		out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
-		shadow_password = out.strip()
-		if retcode != 0:
-			self._logger.error('Error creating hash for ' + self.name)
-		if err:
-			self._logger.error(err)
+	def _create_role(self, super=True):
+		if self._is_role_exist:
+			self._logger.debug('Cannot create role: role %s already exists' % self.name)
+		else:
+			self._logger.debug('Creating role %s' % self.name)
+			try:
+				out = system2([SU_EXEC, '-', self.group, '-c', '%s -s %s' % (CREATEUSER, self.name)])[0]
+				self._logger.debug(out or 'Role %s has been successfully created.' % self.name)
+			except PopenError, e:
+				self._logger.error('Unable to create role %s: %s' % (self.name, e))
+				raise
 		
-		r = system2([USERMOD, '-p', '-1', shadow_password, self.name])[2]
-		if r != 0:
-			self._logger.error('Error changing password for ' + self.name)	
-		
-		#change password in privated/pgsql.ini
-		self.store_password(new_pass)
-		
-		return new_pass
+	def _create_pg_database(self):
+		if self._is_pg_database_exist:
+			self._logger.debug('Cannot create db: database %s already exists' % self.name)
+		else:
+			self._logger.debug('Creating db %s' % self.name)
+			try:
+				out = system2([SU_EXEC, '-', self.group, '-c', '%s %s' % (CREATEDB,self.name)])[0]
+				self._logger.debug(out or 'DB %s has been successfully created.' % self.name)
+			except PopenError, e:
+				self._logger.error('Unable to create db %s: %s' % (self.name, e))
+				raise
 	
-	def check_password(self, password=None):
-		#TODO: check (password or self.password), raise ValueError
-		pass
-	
+	def _create_system_user(self, password):
+		if self._is_system_user_exist:
+			self._logger.debug('Cannot create system user: user %s already exists' % self.name)
+			#TODO: check password
+		else:
+			try:
+				out = system2([USERADD, '-m', '-g', self.group, '-p', password, self.name])[0]
+				if out: self._logger.debug(out)
+				self._logger.debug('Creating system user %s' % self.name)	
+			except PopenError, e:
+				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
+				raise
+		self.store_password(password)
+
 
 class PSQL(object):
 	path = PSQL_PATH
