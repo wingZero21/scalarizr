@@ -415,7 +415,7 @@ class PgUser(object):
 				os.makedirs(self.ssh_dir)
 			dst = os.path.join(self.ssh_dir, 'id_rsa')
 			shutil.copyfile(source_path, dst)
-			os.chmod(dst, mode=0400)
+			os.chmod(dst, 0400)
 	
 	@property
 	def private_key(self):
