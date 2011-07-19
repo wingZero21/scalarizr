@@ -401,10 +401,12 @@ class PgUser(object):
 	def apply_public_ssh_key(self, key):
 		if not os.path.exists(self.ssh_dir):
 			os.makedirs(self.ssh_dir)
+			rchown(self.name, self.ssh_dir)
 		path = os.path.join(self.ssh_dir, 'authorized_keys')
 		keys = read_file(path,logger=self._logger)
 		if not keys or not key in keys:
 			write_file(path, data='\n%s %s\n' % (key, self.name), mode='a', logger=self._logger)
+			rchown(self.name, path)
 			
 	def apply_private_ssh_key(self,source_path):
 		if not os.path.exists(source_path):
@@ -412,9 +414,11 @@ class PgUser(object):
 		else:
 			if not os.path.exists(self.ssh_dir):
 				os.makedirs(self.ssh_dir)
+				rchown(self.name, self.ssh_dir)
 			dst = os.path.join(self.ssh_dir, 'id_rsa')
 			shutil.copyfile(source_path, dst)
 			os.chmod(dst, 0400)
+			rchown(self.name, dst)
 	
 	@property
 	def private_key(self):
