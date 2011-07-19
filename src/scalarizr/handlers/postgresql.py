@@ -315,9 +315,9 @@ class PostgreSqlHander(ServiceCtlHanler):
 						message.snapshot_config['id'])
 				self.postgresql.service.stop()
 				
-				self._logger.debug('Destroing old storage')
+				self._logger.debug('Destroying old storage')
 				self.storage_vol.destroy()
-				self._logger.debug('Storage destoyed')
+				self._logger.debug('Storage destroyed')
 				
 				self._logger.debug('Plugging new storage')
 				vol = Storage.create(snapshot=message.snapshot_config.copy())
