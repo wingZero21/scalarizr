@@ -231,11 +231,16 @@ class PostgreSql(object):
 		
 	def init_slave(self, mpoint, primary_ip, primary_port, private_key, public_key):
 		self._init_service(mpoint)
+		
 		self.root_user.store_key(public_key, private=False)
 		self.root_user.store_key(private_key, private=True)
+		self.root_user.apply_public_ssh_key(public_key)
+		self.root_user.apply_private_ssh_key(self.root_user.private_key_path)
+		
 		self.postgresql_conf.hot_standby = 'on'
 		self.recovery_conf.trigger_file = os.path.join(self.config_dir.path, TRIGGER_NAME)
 		self.recovery_conf.standby_mode = 'on'
+		
 		self.change_primary(primary_ip, primary_port, self.root_user.name)
 		self.service.start()
 		
