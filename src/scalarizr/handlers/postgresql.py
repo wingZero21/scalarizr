@@ -291,10 +291,11 @@ class PostgreSqlHander(ServiceCtlHanler):
 			
 			# Notify scalr
 			msg_data = dict(
-				used_size='%.3f' % (float(used_size) / 1000,),
-				status='ok'
+				db_type 	= BEHAVIOUR,
+				used_size	= '%.3f' % (float(used_size) / 1000,),
+				status		= 'ok'
 			)
-			msg_data.update(self._compat_storage_data(snap=snap))
+			msg_data.postgresql = self._compat_storage_data(snap=snap)
 			self.send_message(PostgreSqlMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 		except (Exception, BaseException), e:
@@ -302,6 +303,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			
 			# Notify Scalr about error
 			self.send_message(PostgreSqlMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
+				db_type 	= BEHAVIOUR,
 				status		='error',
 				last_error	= str(e)
 			))
