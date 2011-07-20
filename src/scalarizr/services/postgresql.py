@@ -301,6 +301,7 @@ class PostgreSql(object):
 		self.service.stop()
 		move_files = not self.cluster_dir.is_initialized(mpoint)
 		self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
+		self.cluster_dir.clean()
 		
 		if disttool.is_centos():
 			self.config_dir.move_to(self.config_dir.default_ubuntu_path)
@@ -566,6 +567,14 @@ class ClusterDir(object):
 		self.path = new_cluster_dir
 	
 		return new_cluster_dir
+	
+	def clean(self):
+		fnames = ('recovery.conf','recovery.done','postmaster.pid')
+		for fname in fnames:
+			exclude = os.path.join(self.path, fname)
+			if os.path.exists(exclude):
+				self._logger.debug('Deliting file: %s' % exclude)
+				os.remove(exclude)
 	
 	def is_initialized(self, path):
 		# are the pgsql files already in place? 
