@@ -138,7 +138,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 				or 	message.name == PostgreSqlMessages.DBMSR_CREATE_DATA_BUNDLE
 				or 	message.name == PostgreSqlMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
-				or  message.name == Messages.HOST_INIT)	
+				or  message.name == Messages.HOST_INIT
+				or  message.name == Messages.BEFORE_HOST_TERMINATE)	
 
 	
 	def __init__(self):
@@ -269,6 +270,13 @@ class PostgreSqlHander(ServiceCtlHanler):
 		#TODO: find out what to do!
 		pass
 
+	def on_BeforeHostTerminate(self, message):
+		if message.local_ip == self._platform.get_private_ip():
+			self.postgresql.service.stop('Server will be terminated')
+			self._logger.info('Detaching PgSQL storage')
+			self.storage_vol.detach()
+		elif self.postgresql.is_replication_master:
+			self.postgresql.unregister_slave(message.local_ip)
 
 	def on_DbMsr_CreateDataBundle(self, message):
 		
