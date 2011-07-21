@@ -229,7 +229,6 @@ class PostgreSql(object):
 	def init_master(self, mpoint, slaves=None):
 		self._init_service(mpoint)
 		self.postgresql_conf.hot_standby = 'off'
-		self.recovery_conf.standby_mode = 'off'
 		
 		if slaves:
 			self._logger.debug('Registering slave hosts: %s' % ' '.join(slaves))
