@@ -36,6 +36,7 @@ OPT_ROOT_PASSWORD 			= "root_password"
 OPT_ROOT_SSH_PUBLIC_KEY 	= "root_ssh_public_key"
 OPT_ROOT_SSH_PRIVATE_KEY	= "root_ssh_private_key"
 OPT_CHANGE_MASTER_TIMEOUT 	= 'change_master_timeout'
+OPT_CURRENT_XLOG_LOCATION	= 'current_xlog_location'
 
 BACKUP_CHUNK_SIZE 		= 200*1024*1024
 
@@ -225,12 +226,21 @@ class PostgreSqlHander(ServiceCtlHanler):
 		"""
 		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
 			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
-
+		
+		if not message.body.has_key(OPT_ROOT_SSH_PUBLIC_KEY) or not message.body.has_key(OPT_ROOT_SSH_PRIVATE_KEY):
+			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must contain both public and private ssh keys")
+		
 		dir = os.path.dirname(self._volume_config_path)
 		if not os.path.exists(dir):
 			os.makedirs(dir)
 		
 		postgresql_data = message.postgresql.copy()
+
+		root = PgUser(ROOT_USER)
+		root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
+		del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
+		del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]		
+		
 		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 			if os.path.exists(file):
@@ -238,14 +248,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			
 			if key in postgresql_data and postgresql_data[key]:
 				Storage.backup_config(postgresql_data[key], file)
-				#excluding configs before writing to ini-file
 				del postgresql_data[key]
-		
-		#excluding keys
-		for option in (OPT_ROOT_SSH_PUBLIC_KEY, OPT_ROOT_SSH_PRIVATE_KEY):
-			if postgresql_data.has_key(option):
-				del postgresql_data[option]
-				
 		
 		self._logger.debug("Update postgresql config with %s", postgresql_data)
 		self._update_config(postgresql_data)
@@ -407,6 +410,10 @@ class PostgreSqlHander(ServiceCtlHanler):
 		@param message: postgresql_PromoteToMaster
 		"""
 		
+		if message.db_type != BEHAVIOUR:
+			self._logger.error('Wrong db_type in DbMsr_PromoteToMaster message: %s' % message.db_type)
+			return
+		
 		if self.postgresql.is_replication_master:
 			self._logger.warning('Cannot promote to master. Already master')
 			return
@@ -436,12 +443,11 @@ class PostgreSqlHander(ServiceCtlHanler):
 				self.postgresql.init_master(self._storage_path, slaves)
 				
 				# Update behaviour configuration
-					
 				self._update_config({OPT_REPLICATION_MASTER : "1"})
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				
 				# Send message to Scalr
-				msg_data = dict(status='ok')
+				msg_data = dict(db_type=BEHAVIOUR, status='ok')
 				msg_data.update(self._compat_storage_data(vol=new_storage_vol))
 				self.send_message(PostgreSqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
 					
@@ -602,7 +608,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 							OPT_ROOT_PASSWORD			:	root_password,
 							OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key, 
 							OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key, 
-							'current_xlog_location'		: 	None})	
+							OPT_CURRENT_XLOG_LOCATION	: 	None})	
 		#TODO: add xlog
 			
 		# Create snapshot
@@ -661,12 +667,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 				master_host.internal_ip, master_host.external_ip)
 		
 		host = master_host.internal_ip or master_host.external_ip
-		port = POSTGRESQL_DEFAULT_PORT
-		ini = self._cnf.rawini
-		private_key = ini.get(CNF_SECTION, OPT_ROOT_SSH_PRIVATE_KEY)
-		public_key =  ini.get(CNF_SECTION, OPT_ROOT_SSH_PUBLIC_KEY)
-		
-		self.postgresql.init_slave(self._storage_path, host, port, private_key, public_key)
+		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
 		
 		# Update HostUp message
 		message.postgresql = self._compat_storage_data(self.storage_vol)
