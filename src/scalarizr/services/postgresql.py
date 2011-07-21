@@ -142,7 +142,9 @@ class PostgreSql(object):
 	
 	@property
 	def is_replication_master(self):
-		return True if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else False
+		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
+		self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
+		return True if int(value) else False
 	
 	def _set(self, key, obj):
 		self._objects[key] = obj
