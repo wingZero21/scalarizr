@@ -423,7 +423,7 @@ class PgUser(object):
 			write_file(path, data='\n%s %s\n' % (pub_key, self.name), mode='a', logger=self._logger)
 			rchown(self.name, path)
 			
-	def apply_private_ssh_key(self,source_path):
+	def apply_private_ssh_key(self,source_path=None):
 		source_path = source_path or self.root_user.private_key_path
 		if not os.path.exists(source_path):
 			self._logger.error('Cannot apply private ssh key: source %s not found' % source_path)
