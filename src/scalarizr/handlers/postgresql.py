@@ -25,14 +25,17 @@ from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
 
-STORAGE_PATH 			= "/mnt/pgstorage"
-STORAGE_VOLUME_CNF 		= 'postgresql.json'
-STORAGE_SNAPSHOT_CNF 	= 'postgresql-snap.json'
+STORAGE_PATH 				= "/mnt/pgstorage"
+STORAGE_VOLUME_CNF 			= 'postgresql.json'
+STORAGE_SNAPSHOT_CNF 		= 'postgresql-snap.json'
 
-OPT_VOLUME_CNF			= 'volume_config'
-OPT_SNAPSHOT_CNF		= 'snapshot_config'
-OPT_ROOT_PASSWORD 		= "root_password"
-OPT_CHANGE_MASTER_TIMEOUT = 'change_master_timeout'
+OPT_VOLUME_CNF				= 'volume_config'
+OPT_SNAPSHOT_CNF			= 'snapshot_config'
+OPT_ROOT_USER				= 'root_user'
+OPT_ROOT_PASSWORD 			= "root_password"
+OPT_ROOT_SSH_PUBLIC_KEY 	= "root_ssh_public_key"
+OPT_ROOT_SSH_PRIVATE_KEY	= "root_ssh_private_key"
+OPT_CHANGE_MASTER_TIMEOUT 	= 'change_master_timeout'
 
 BACKUP_CHUNK_SIZE 		= 200*1024*1024
 
@@ -232,11 +235,18 @@ class PostgreSqlHander(ServiceCtlHanler):
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 			if os.path.exists(file):
 				os.remove(file)
-			#omitting empty configs
+			
 			if key in postgresql_data and postgresql_data[key]:
 				Storage.backup_config(postgresql_data[key], file)
+				#excluding configs before writing to ini-file
 				del postgresql_data[key]
-						
+		
+		#excluding keys
+		for option in (OPT_ROOT_SSH_PUBLIC_KEY, OPT_ROOT_SSH_PRIVATE_KEY):
+			if postgresql_data.has_key(option):
+				del postgresql_data[option]
+				
+		
 		self._logger.debug("Update postgresql config with %s", postgresql_data)
 		self._update_config(postgresql_data)
 
@@ -276,21 +286,21 @@ class PostgreSqlHander(ServiceCtlHanler):
 			self._logger.info('Detaching PgSQL storage')
 			self.storage_vol.detach()
 		
-		elif self.postgresql.is_replication_master:
-			self.postgresql.unregister_slave(message.local_ip)
+		#elif self.postgresql.is_replication_master:
+			#self.postgresql.unregister_slave(message.local_ip)
 		
-			#FIXIT: is_replication_master does not work only in this particular method
-		
-			'''
-			  File "/usr/lib/pymodules/python2.6/scalarizr/services/postgresql.py", line 145, in is_replication_master
-			    return True if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else False
-			  File "/usr/lib/python2.6/ConfigParser.py", line 545, in get
-			    return self._interpolate(section, option, value, d)
-			  File "/usr/lib/python2.6/ConfigParser.py", line 585, in _interpolate
-			    if "%(" in value:
-			TypeError: argument of type 'int' is not iterable
+		#FIXIT: is_replication_master does not work only in this particular method
 	
-			'''
+		'''
+		  File "/usr/lib/pymodules/python2.6/scalarizr/services/postgresql.py", line 145, in is_replication_master
+		    return True if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else False
+		  File "/usr/lib/python2.6/ConfigParser.py", line 545, in get
+		    return self._interpolate(section, option, value, d)
+		  File "/usr/lib/python2.6/ConfigParser.py", line 585, in _interpolate
+		    if "%(" in value:
+		TypeError: argument of type 'int' is not iterable
+
+		'''
 
 	def on_DbMsr_CreateDataBundle(self, message):
 		
@@ -587,12 +597,12 @@ class PostgreSqlHander(ServiceCtlHanler):
 		
 		msg_data = dict()
 		
-		msg_data.update(dict(replication_master = int(self.postgresql.is_replication_master),
-							root_user = self.postgresql.root_user.name,
-							root_password=root_password,
-							root_ssh_private_key = self.postgresql.root_user.private_key, 
-							root_ssh_public_key = self.postgresql.root_user.public_key, 
-							current_xlog_location = None))	
+		msg_data.update({OPT_REPLICATION_MASTER 		: 	int(self.postgresql.is_replication_master),
+							OPT_ROOT_USER				:	self.postgresql.root_user.name,
+							OPT_ROOT_PASSWORD			:	root_password,
+							OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key, 
+							OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key, 
+							'current_xlog_location'		: 	None})	
 		#TODO: add xlog
 			
 		# Create snapshot
@@ -653,8 +663,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 		host = master_host.internal_ip or master_host.external_ip
 		port = POSTGRESQL_DEFAULT_PORT
 		ini = self._cnf.rawini
-		private_key = ini.get(CNF_SECTION, 'root_ssh_private_key')
-		public_key =  ini.get(CNF_SECTION, 'root_ssh_public_key')
+		private_key = ini.get(CNF_SECTION, OPT_ROOT_SSH_PRIVATE_KEY)
+		public_key =  ini.get(CNF_SECTION, OPT_ROOT_SSH_PUBLIC_KEY)
 		
 		self.postgresql.init_slave(self._storage_path, host, port, private_key, public_key)
 		
