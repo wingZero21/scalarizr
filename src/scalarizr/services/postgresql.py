@@ -386,12 +386,10 @@ class PgUser(object):
 		'''
 		@String pub_key, pvt_key
 		'''
-		
-		
 		if pub_key:
-			self.root_user._store_key(pub_key, private=False)
+			self._store_key(pub_key, private=False)
 		if pvt_key:
-			self.root_user._store_key(pvt_key, private=True)
+			self._store_key(pvt_key, private=True)
 		
 	def generate_private_ssh_key(self, key_length=1024):
 		public_exponent = 65337
