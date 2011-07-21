@@ -250,8 +250,9 @@ class PostgreSqlHander(ServiceCtlHanler):
 			if os.path.exists(file):
 				os.remove(file)
 			
-			if key in postgresql_data and postgresql_data[key]:
-				Storage.backup_config(postgresql_data[key], file)
+			if key in postgresql_data:
+				if postgresql_data[key]:
+					Storage.backup_config(postgresql_data[key], file)
 				del postgresql_data[key]
 		
 		self._logger.debug("Update postgresql config with %s", postgresql_data)
