@@ -227,7 +227,9 @@ class PostgreSqlHander(ServiceCtlHanler):
 		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
 			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
 		
-		if not message.body.has_key(OPT_ROOT_SSH_PUBLIC_KEY) or not message.body.has_key(OPT_ROOT_SSH_PRIVATE_KEY):
+		if message.postgresql.replication_master != '1'  and \
+				(not message.body.has_key(OPT_ROOT_SSH_PUBLIC_KEY) or not 
+				message.body.has_key(OPT_ROOT_SSH_PRIVATE_KEY)):
 			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must contain both public and private ssh keys")
 		
 		dir = os.path.dirname(self._volume_config_path)
