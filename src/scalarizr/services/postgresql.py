@@ -224,9 +224,15 @@ class PostgreSql(object):
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
 	
-	def init_master(self, mpoint):
+	def init_master(self, mpoint, slaves=None):
 		self._init_service(mpoint)
 		self.postgresql_conf.hot_standby = 'off'
+		self.recovery_conf.standby_mode = 'off'
+		
+		if slaves:
+			self._logger.debug('Registering slave hosts: %s' % ' '.join(slaves))
+			for host in slaves:
+				self.register_slave(host, force_restart=False)
 		self.service.start()
 		
 	def init_slave(self, mpoint, primary_ip, primary_port, private_key, public_key):
@@ -244,11 +250,12 @@ class PostgreSql(object):
 		self.change_primary(primary_ip, primary_port, self.root_user.name)
 		self.service.start()
 		
-	def register_slave(self, slave_ip):
+	def register_slave(self, slave_ip, force_restart=True):
 		self.postgresql_conf.listen_addresses = '*'
 		self.pg_hba_conf.add_standby_host(slave_ip, self.root_user.name)
 		self.postgresql_conf.max_wal_senders += 1
-		self.service.restart(reason='Registering slave', force=True)
+		if force_restart:
+			self.service.restart(reason='Registering slave', force=True)
 		
 	def change_primary(self, primary_ip, primary_port, username):
 		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, username)
@@ -292,6 +299,11 @@ class PostgreSql(object):
 		opt_pwd = '%s_password' % ROOT_USER
 		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
 			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
+			
+		#this is highly temporary solution 
+		if not password and self._cnf.rawini.has_option(CNF_SECTION, "root_password"):
+			password = self._cnf.rawini.get(CNF_SECTION, "root_password")
+		
 		
 		self.root_user = self.create_user(ROOT_USER, password)
 		
