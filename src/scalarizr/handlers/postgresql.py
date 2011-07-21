@@ -334,6 +334,107 @@ class PostgreSqlHander(ServiceCtlHanler):
 				status		='error',
 				last_error	= str(e)
 			))
+			
+
+	def on_DbMsr_PromoteToMaster(self, message):
+		"""
+		Promote slave to master
+		@type message: scalarizr.messaging.Message
+		@param message: postgresql_PromoteToMaster
+		"""
+		
+		if message.db_type != BEHAVIOUR:
+			self._logger.error('Wrong db_type in DbMsr_PromoteToMaster message: %s' % message.db_type)
+			return
+		
+		if self.postgresql.is_replication_master:
+			self._logger.warning('Cannot promote to master. Already master')
+			return
+		
+		bus.fire('before_slave_promote_to_master')
+		
+		master_storage_conf = message.body.get('volume_config')
+		tx_complete = False	
+		old_conf 		= None
+		new_storage_vol	= None		
+					
+		try:
+			# Stop postgresql
+			if master_storage_conf:
+				self.postgresql.stop_replication()
+				
+
+				# Unplug slave storage and plug master one
+				old_conf = self.storage_vol.detach(force=True) # ??????
+				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
+							
+				# Continue if master storage is a valid postgresql storage 
+				if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
+					raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
+				
+				slaves = [host.internal_ip for host in self._get_slave_hosts()]
+				self.postgresql.init_master(self._storage_path, slaves)
+				
+				# Update behaviour configuration
+				self._update_config({OPT_REPLICATION_MASTER : "1"})
+				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
+				
+				# Send message to Scalr
+				msg_data = dict(
+							db_type=BEHAVIOUR, 
+							status='ok')
+				msg_data.postgresql = self._compat_storage_data(vol=new_storage_vol)
+				msg_data.postgresql.update({OPT_CURRENT_XLOG_LOCATION: None})
+				self.send_message(PostgreSqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
+					
+				self.postgresql.service.start()
+				
+				
+			else:
+				self.postgresql.stop_replication()
+				
+				slaves = [host.internal_ip for host in self._get_slave_hosts()]
+				self.postgresql.init_master(self._storage_path, slaves)
+				
+				self._update_config({OPT_REPLICATION_MASTER 	: "1"})
+									
+				snap = self._create_snapshot(ROOT_USER, message.root_password)
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
+				
+				# Send message to Scalr
+				msg_data = dict(
+						db_type=BEHAVIOUR, 
+						status="ok",
+				)
+				msg_data.postgresql = self._compat_storage_data(self.storage_vol.config(), snap)
+				msg_data.postgresql.update({OPT_CURRENT_XLOG_LOCATION: None})		
+				self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)			
+				
+			tx_complete = True
+			bus.fire('slave_promote_to_master')
+			
+		except (Exception, BaseException), e:
+			self._logger.exception(e)
+			if new_storage_vol:
+				new_storage_vol.detach()
+			# Get back slave storage
+			if old_conf:
+				self._plug_storage(self._storage_path, old_conf)
+			
+			self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, dict(
+				db_type=BEHAVIOUR, 															
+				status="error",
+				last_error=str(e)
+			))
+
+			# Start postgresql
+			self.postgresql.service.start()
+		
+		if tx_complete and master_storage_conf:
+			# Delete slave EBS
+			self.storage_vol.destroy(remove_disks=True)
+			self.storage_vol = new_storage_vol
+			Storage.backup_config(self.storage_vol.config(), self._storage_path)
 
 	
 	def on_DbMsr_NewMasterUp(self, message):
@@ -402,119 +503,6 @@ class PostgreSqlHander(ServiceCtlHanler):
 		else:
 			self._logger.debug('Skip NewMasterUp. My replication role is master')	
 			
-
-	def on_DbMsr_PromoteToMaster(self, message):
-		"""
-		Promote slave to master
-		@type message: scalarizr.messaging.Message
-		@param message: postgresql_PromoteToMaster
-		"""
-		
-		if message.db_type != BEHAVIOUR:
-			self._logger.error('Wrong db_type in DbMsr_PromoteToMaster message: %s' % message.db_type)
-			return
-		
-		if self.postgresql.is_replication_master:
-			self._logger.warning('Cannot promote to master. Already master')
-			return
-		
-		bus.fire('before_slave_promote_to_master')
-		
-		master_storage_conf = message.body.get('volume_config')
-		tx_complete = False	
-		old_conf 		= None
-		new_storage_vol	= None		
-					
-		try:
-			# Stop postgresql
-			if master_storage_conf:
-				self.postgresql.stop_replication()
-				
-
-				# Unplug slave storage and plug master one
-				old_conf = self.storage_vol.detach(force=True) # ??????
-				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
-							
-				# Continue if master storage is a valid postgresql storage 
-				if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
-					raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
-				
-				slaves = [host.internal_ip for host in self._get_slave_hosts()]
-				self.postgresql.init_master(self._storage_path, slaves)
-				
-				# Update behaviour configuration
-				self._update_config({OPT_REPLICATION_MASTER : "1"})
-				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
-				
-				# Send message to Scalr
-				msg_data = dict(db_type=BEHAVIOUR, status='ok')
-				msg_data.update(self._compat_storage_data(vol=new_storage_vol))
-				self.send_message(PostgreSqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
-					
-				self.postgresql.service.start()
-				
-				
-			else:
-				self.postgresql.stop_replication()
-				#TODO: ask what to do in this situation
-				'''
-				self._start_service()
-				mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
-				timeout = 180
-				try:
-					mysql.sendline("STOP SLAVE;")
-					mysql.expect("mysql>", timeout=timeout)
-					mysql.sendline("RESET MASTER;")
-					mysql.expect("mysql>", 20)
-					filetool.remove(os.path.join(self._data_dir, 'relay-log.info'))
-					filetool.remove(os.path.join(self._data_dir, 'master.info'))
-				except pexpect.TIMEOUT:
-					raise HandlerError("Timeout (%d seconds) reached " + 
-								"while waiting for slave stop and master reset." % (timeout,))
-				finally:
-					mysql.close()
-				'''
-				updates = {
-					OPT_ROOT_PASSWORD : message.root_password,
-					OPT_REPLICATION_MASTER 	: "1"
-				}
-				self._update_config(updates)
-									
-				snap = self._create_snapshot(ROOT_USER, message.root_password)
-				Storage.backup_config(snap.config(), self._snapshot_config_path)
-				
-				# Send message to Scalr
-				msg_data = dict(
-					status="ok",
-				)
-				msg_data.update(self._compat_storage_data(self.storage_vol.config(), snap))
-				self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)							
-				
-			tx_complete = True
-			bus.fire('slave_promote_to_master')
-			
-		except (Exception, BaseException), e:
-			self._logger.exception(e)
-			if new_storage_vol:
-				new_storage_vol.detach()
-			# Get back slave storage
-			if old_conf:
-				self._plug_storage(self._storage_path, old_conf)
-			
-			self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, dict(
-				status="error",
-				last_error=str(e)
-			))
-
-			# Start postgresql
-			self.postgresql.service.start()
-		
-		if tx_complete and master_storage_conf:
-			# Delete slave EBS
-			self.storage_vol.destroy(remove_disks=True)
-			self.storage_vol = new_storage_vol
-			Storage.backup_config(self.storage_vol.config(), self._storage_path)
-
 
 	def on_DbMsr_CreateBackup(self, message):
 		#TODO: Think how to move the most part of it into Postgresql class 
