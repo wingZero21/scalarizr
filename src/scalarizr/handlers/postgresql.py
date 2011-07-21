@@ -596,8 +596,6 @@ class PostgreSqlHander(ServiceCtlHanler):
 		msg_data.update({OPT_REPLICATION_MASTER 		: 	int(self.postgresql.is_replication_master),
 							OPT_ROOT_USER				:	self.postgresql.root_user.name,
 							OPT_ROOT_PASSWORD			:	root_password,
-							OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key, 
-							OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key, 
 							OPT_CURRENT_XLOG_LOCATION	: 	None})	
 		#TODO: add xlog
 			
@@ -611,6 +609,10 @@ class PostgreSqlHander(ServiceCtlHanler):
 		if msg_data:
 			message.db_type = BEHAVIOUR
 			message.postgresql = msg_data.copy()
+			message.postgresql.update({
+							OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key, 
+							OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key
+							})
 			try:
 				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
 			except KeyError:
