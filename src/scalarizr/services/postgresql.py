@@ -236,13 +236,11 @@ class PostgreSql(object):
 				self.register_slave(host, force_restart=False)
 		self.service.start()
 		
-	def init_slave(self, mpoint, primary_ip, primary_port, private_key, public_key):
+	def init_slave(self, mpoint, primary_ip, primary_port):
 		self._init_service(mpoint)
 		
-		self.root_user.store_key(public_key, private=False)
-		self.root_user.store_key(private_key, private=True)
-		self.root_user.apply_public_ssh_key(public_key)
-		self.root_user.apply_private_ssh_key(self.root_user.private_key_path)
+		self.root_user.apply_public_ssh_key() 
+		self.root_user.apply_private_ssh_key()
 		
 		self.postgresql_conf.hot_standby = 'on'
 		self.recovery_conf.trigger_file = os.path.join(self.config_dir.path, TRIGGER_NAME)
@@ -382,9 +380,18 @@ class PgUser(object):
 
 	def store_password(self, password):
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})	
-	
-	def store_key(self, key_str, private=True):
-		write_file(self.private_key_path if private else self.public_key_path, data=key_str, logger=self._logger)
+
+		
+	def store_keys(self, pub_key=None, pvt_key=None):
+		'''
+		@String pub_key, pvt_key
+		'''
+		
+		
+		if pub_key:
+			self.root_user._store_key(pub_key, private=False)
+		if pvt_key:
+			self.root_user._store_key(pvt_key, private=True)
 		
 	def generate_private_ssh_key(self, key_length=1024):
 		public_exponent = 65337
@@ -404,23 +411,29 @@ class PgUser(object):
 			raise Exception("Error handling would be nice, eh?")
 		return out.strip()		
 	
-	def apply_public_ssh_key(self, key):
+	def apply_public_ssh_key(self, source_path=None):
+		source_path = source_path or self.public_key_path 
 		if not os.path.exists(self.ssh_dir):
 			os.makedirs(self.ssh_dir)
 			rchown(self.name, self.ssh_dir)
+		
+		pub_key = read_file(source_path,logger=self._logger)
 		path = os.path.join(self.ssh_dir, 'authorized_keys')
 		keys = read_file(path,logger=self._logger)
-		if not keys or not key in keys:
-			write_file(path, data='\n%s %s\n' % (key, self.name), mode='a', logger=self._logger)
+		
+		if not keys or not pub_key in keys:
+			write_file(path, data='\n%s %s\n' % (pub_key, self.name), mode='a', logger=self._logger)
 			rchown(self.name, path)
 			
 	def apply_private_ssh_key(self,source_path):
+		source_path = source_path or self.root_user.private_key_path
 		if not os.path.exists(source_path):
 			self._logger.error('Cannot apply private ssh key: source %s not found' % source_path)
 		else:
 			if not os.path.exists(self.ssh_dir):
 				os.makedirs(self.ssh_dir)
 				rchown(self.name, self.ssh_dir)
+				
 			dst = os.path.join(self.ssh_dir, 'id_rsa')
 			shutil.copyfile(source_path, dst)
 			os.chmod(dst, 0400)
@@ -431,7 +444,7 @@ class PgUser(object):
 	def private_key(self):
 		if not os.path.exists(self.private_key_path):
 			self.generate_private_ssh_key()
-			self.apply_private_ssh_key(self.private_key_path)
+			self.apply_private_ssh_key()
 		return read_file(self.private_key_path, logger=self._logger)
 	
 	@property
@@ -439,7 +452,7 @@ class PgUser(object):
 		if not os.path.exists(self.public_key_path):
 			key = self.extract_public_ssh_key()
 			write_file(self.public_key_path, key, logger=self._logger)
-			self.apply_public_ssh_key(key)
+			self.apply_public_ssh_key()
 		return read_file(self.public_key_path, logger=self._logger)
 		
 	@property
@@ -503,8 +516,11 @@ class PgUser(object):
 				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
 				raise
 		self.store_password(password)
-
-
+	
+	def _store_key(self, key_str, private=True):
+		write_file(self.private_key_path if private else self.public_key_path, data=key_str, logger=self._logger)
+		
+		
 class PSQL(object):
 	path = PSQL_PATH
 	user = None
