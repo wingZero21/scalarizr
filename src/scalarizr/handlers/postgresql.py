@@ -275,8 +275,22 @@ class PostgreSqlHander(ServiceCtlHanler):
 			self.postgresql.service.stop('Server will be terminated')
 			self._logger.info('Detaching PgSQL storage')
 			self.storage_vol.detach()
+		
 		elif self.postgresql.is_replication_master:
 			self.postgresql.unregister_slave(message.local_ip)
+		
+			#FIXIT: is_replication_master does not work only in this particular method
+		
+			'''
+			  File "/usr/lib/pymodules/python2.6/scalarizr/services/postgresql.py", line 145, in is_replication_master
+			    return True if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else False
+			  File "/usr/lib/python2.6/ConfigParser.py", line 545, in get
+			    return self._interpolate(section, option, value, d)
+			  File "/usr/lib/python2.6/ConfigParser.py", line 585, in _interpolate
+			    if "%(" in value:
+			TypeError: argument of type 'int' is not iterable
+	
+			'''
 
 	def on_DbMsr_CreateDataBundle(self, message):
 		
@@ -398,7 +412,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			# Stop postgresql
 			if master_storage_conf:
 				self.postgresql.stop_replication()
-				self.postgresql.service.stop()
+				
 
 				# Unplug slave storage and plug master one
 				old_conf = self.storage_vol.detach(force=True) # ??????
@@ -408,14 +422,12 @@ class PostgreSqlHander(ServiceCtlHanler):
 				if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
 					raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
 				
-				self.postgresql.cluster_dir.move_to(self._storage_path)
+				slaves = [host.internal_ip for host in self._get_slave_hosts()]
+				self.postgresql.init_master(self._storage_path, slaves)
 				
 				# Update behaviour configuration
-				updates = {
-					OPT_ROOT_PASSWORD : message.root_password,
-					OPT_REPLICATION_MASTER 	: "1"
-				}
-				self._update_config(updates)
+					
+				self._update_config({OPT_REPLICATION_MASTER : "1"})
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				
 				# Send message to Scalr
@@ -599,7 +611,25 @@ class PostgreSqlHander(ServiceCtlHanler):
 				pass 
 			self._update_config(msg_data)
 	
+	def _get_master_host(self):
+		master_host = None
+		self._logger.info("Requesting master server")
+		while not master_host:
+			try:
+				master_host = list(host 
+					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+					if host.replication_master)[0]
+			except IndexError:
+				self._logger.debug("QueryEnv respond with no postgresql master. " + 
+						"Waiting %d seconds before the next attempt", 5)
+				time.sleep(5)
+		return master_host
 	
+	def _get_slave_hosts(self):
+		self._logger.info("Requesting standby servers")
+		return list(host for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+				if not host.replication_master)
+				
 	def _init_slave(self, message):
 		"""
 		Initialize postgresql slave
@@ -615,17 +645,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 			
 		# Change replication master 
-		master_host = None
-		self._logger.info("Requesting master server")
-		while not master_host:
-			try:
-				master_host = list(host 
-					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
-					if host.replication_master)[0]
-			except IndexError:
-				self._logger.debug("QueryEnv respond with no postgresql master. " + 
-						"Waiting %d seconds before the next attempt", 5)
-				time.sleep(5)
+		master_host = self._get_master_host()
 				
 		self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
 				master_host.internal_ip, master_host.external_ip)
