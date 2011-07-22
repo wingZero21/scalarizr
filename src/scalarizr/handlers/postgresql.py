@@ -493,6 +493,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			
 			# Notify Scalr
 			self.send_message(PostgreSqlMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+				db_type = BEHAVIOUR,
 				status = 'ok',
 				backup_parts = result
 			))
@@ -502,6 +503,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			
 			# Notify Scalr about error
 			self.send_message(PostgreSqlMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+				db_type = BEHAVIOUR,
 				status = 'error',
 				last_error = str(e)
 			))
