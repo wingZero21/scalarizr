@@ -294,7 +294,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 			self.postgresql.service.stop('Server will be terminated')
 			self._logger.info('Detaching PgSQL storage')
 			self.storage_vol.detach()
-			
+		elif self.postgresql.is_replication_master:
+			self.postgresql.unregister_slave(message.local_ip)	
 
 	def on_DbMsr_CreateDataBundle(self, message):
 		
