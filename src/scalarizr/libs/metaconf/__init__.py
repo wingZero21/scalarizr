@@ -13,7 +13,7 @@ import sys
 import re
 import os
 
-from utils import quote, unquote, indent
+from utils import quote, unquote, indent, strip_quotes
 
 if sys.version_info[0:2] >= (2, 7):
 	from xml.etree import ElementTree as ET 
