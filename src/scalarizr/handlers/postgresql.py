@@ -351,10 +351,11 @@ class PostgreSqlHander(ServiceCtlHanler):
 		new_storage_vol	= None		
 					
 		try:
-			# Stop postgresql
+			
+			self.postgresql.stop_replication()
+			slaves = [host.internal_ip for host in self._get_slave_hosts()]
+			
 			if master_storage_conf:
-				self.postgresql.stop_replication()
-				
 
 				# Unplug slave storage and plug master one
 				old_conf = self.storage_vol.detach(force=True) # ??????
@@ -364,44 +365,25 @@ class PostgreSqlHander(ServiceCtlHanler):
 				if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
 					raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
 				
-				slaves = [host.internal_ip for host in self._get_slave_hosts()]
-				self.postgresql.init_master(self._storage_path, slaves)
-				
-				# Update behaviour configuration
-				self._update_config({OPT_REPLICATION_MASTER : "1"})
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				
-				# Send message to Scalr
-				msg_data = dict(
-							db_type=BEHAVIOUR, 
-							status='ok')
-				msg_data.postgresql = self._compat_storage_data(vol=new_storage_vol)
-				msg_data.postgresql.update({OPT_CURRENT_XLOG_LOCATION: None})
-				self.send_message(PostgreSqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
-					
-				self.postgresql.service.start()
+			self.postgresql.init_master(self._storage_path, slaves)
+			self._update_config({OPT_REPLICATION_MASTER : "1"})	
 				
-				
-			else:
-				self.postgresql.stop_replication()
-				
-				slaves = [host.internal_ip for host in self._get_slave_hosts()]
-				self.postgresql.init_master(self._storage_path, slaves)
-				
-				self._update_config({OPT_REPLICATION_MASTER 	: "1"})
+			if not master_storage_conf:
 									
 				snap = self._create_snapshot(ROOT_USER, message.root_password)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				
-				# Send message to Scalr
-				msg_data = dict(
-						db_type=BEHAVIOUR, 
-						status="ok",
-				)
-				msg_data.postgresql = self._compat_storage_data(self.storage_vol.config(), snap)
-				msg_data.postgresql.update({OPT_CURRENT_XLOG_LOCATION: None})		
-				self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)			
-				
+			# Send message to Scalr
+			msg_data = dict(
+					db_type=BEHAVIOUR, 
+					status="ok",
+			)
+			msg_data.postgresql = self._compat_storage_data(self.storage_vol.config(), snap)
+			msg_data.postgresql.update({OPT_CURRENT_XLOG_LOCATION: None})		
+			self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
+								
 			tx_complete = True
 			bus.fire('slave_promote_to_master')
 			
