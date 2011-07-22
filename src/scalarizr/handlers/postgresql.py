@@ -288,27 +288,13 @@ class PostgreSqlHander(ServiceCtlHanler):
 		#TODO: find out what to do!
 		pass
 
+
 	def on_BeforeHostTerminate(self, message):
 		if message.local_ip == self._platform.get_private_ip():
 			self.postgresql.service.stop('Server will be terminated')
 			self._logger.info('Detaching PgSQL storage')
 			self.storage_vol.detach()
-		
-		#elif self.postgresql.is_replication_master:
-			#self.postgresql.unregister_slave(message.local_ip)
-		
-		#FIXIT: is_replication_master does not work only in this particular method
-	
-		'''
-		  File "/usr/lib/pymodules/python2.6/scalarizr/services/postgresql.py", line 145, in is_replication_master
-		    return True if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else False
-		  File "/usr/lib/python2.6/ConfigParser.py", line 545, in get
-		    return self._interpolate(section, option, value, d)
-		  File "/usr/lib/python2.6/ConfigParser.py", line 585, in _interpolate
-		    if "%(" in value:
-		TypeError: argument of type 'int' is not iterable
-
-		'''
+			
 
 	def on_DbMsr_CreateDataBundle(self, message):
 		
