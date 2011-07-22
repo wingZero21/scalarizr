@@ -674,7 +674,7 @@ class RebundleEbsStrategy(RebundleStratery):
 
 		self._logger.debug('Checking that snapshot %s is completed', self._snap.id)
 		wait_until(lambda: self._snap.update() and self._snap.status == 'completed', 
-				logger=self._logger, timeout=3600, 
+				logger=self._logger, timeout=10800, 
 				error_text="EBS snapshot wasn't completed in a reasonable time")
 		self._logger.debug('Snapshot %s completed', self._snap.id)
 		

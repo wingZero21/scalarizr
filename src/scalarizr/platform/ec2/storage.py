@@ -273,8 +273,7 @@ class S3TransferProvider(TransferProvider):
 					if e.code == 'NoSuchBucket':
 						pl = bus.platform
 						try:  
-							region = pl.s3_endpoints.keys()[pl.s3_endpoints.values().index(connection.host)]
-							location = location_from_region(region)
+							location = location_from_region(pl.get_region())
 						except:
 							location = ''
 						bck = connection.create_bucket(
