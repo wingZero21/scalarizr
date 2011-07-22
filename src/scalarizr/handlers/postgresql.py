@@ -351,6 +351,11 @@ class PostgreSqlHander(ServiceCtlHanler):
 		new_storage_vol	= None		
 					
 		try:
+						
+			msg_data = dict(
+					db_type=BEHAVIOUR, 
+					status="ok",
+			)
 			
 			self.postgresql.stop_replication()
 			slaves = [host.internal_ip for host in self._get_slave_hosts()]
@@ -366,6 +371,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 					raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
+				msg_data.postgresql = self._compat_storage_data(vol=new_storage_vol)
 				
 			self.postgresql.init_master(self._storage_path, slaves)
 			self._update_config({OPT_REPLICATION_MASTER : "1"})	
@@ -374,13 +380,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 									
 				snap = self._create_snapshot(ROOT_USER, message.root_password)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
+				msg_data.postgresql = self._compat_storage_data(self.storage_vol.config(), snap)
 				
-			# Send message to Scalr
-			msg_data = dict(
-					db_type=BEHAVIOUR, 
-					status="ok",
-			)
-			msg_data.postgresql = self._compat_storage_data(self.storage_vol.config(), snap)
 			msg_data.postgresql.update({OPT_CURRENT_XLOG_LOCATION: None})		
 			self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
 								
@@ -418,64 +419,36 @@ class PostgreSqlHander(ServiceCtlHanler):
 		@param message:  PostgreSQL_NewMasterUp
 		"""
 		
-		if not self.postgresql.is_replication_master:
-			host = message.local_ip or message.remote_ip
-			self._logger.info("Switching replication to a new postgresql master %s", host)
-			bus.fire('before_postgresql_change_master', host=host)			
-			
-			if 'snapshot_config' in message.body:
-				self._logger.info('Reinitializing Slave from the new snapshot %s', 
-						message.snapshot_config['id'])
-				self.postgresql.service.stop()
-				
-				self._logger.debug('Destroying old storage')
-				self.storage_vol.destroy()
-				self._logger.debug('Storage destroyed')
-				
-				self._logger.debug('Plugging new storage')
-				vol = Storage.create(snapshot=message.snapshot_config.copy())
-				self._plug_storage(self._storage_path, vol)
-				self._logger.debug('Storage plugged')
-				
-				Storage.backup_config(vol.config(), self._volume_config_path)
-				Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
-				self.storage_vol = vol
-				
-				self.postgresql.service.start()		
-			#TODO: decide what to do here		
-			'''
-			my_cli = spawn_mysql_cli(ROOT_USER, message.root_password)
-			
-			if not 'snapshot_config' in message.body:
-				self._logger.debug("Stopping slave i/o thread")
-				my_cli.sendline("STOP SLAVE IO_THREAD;")
-				my_cli.expect("mysql>")
-				self._logger.debug("Slave i/o thread stopped")
-				
-				self._logger.debug("Retrieving current log_file and log_pos")
-				my_cli.sendline("SHOW SLAVE STATUS\\G");
-				my_cli.expect("mysql>")
-				log_file = log_pos = None
-				for line in my_cli.before.split("\n"):
-					pair = map(str.strip, line.split(": ", 1))
-					if pair[0] == "Master_Log_File":
-						log_file = pair[1]
-					elif pair[0] == "Read_Master_Log_Pos":
-						log_pos = pair[1]
-				self._logger.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
-			'''
-			
-			self._change_master(
-				host=host, 
-				user=ROOT_USER, 
-				password=message.root_password,
-				timeout=self._change_master_timeout,
-			)
-				
-			self._logger.debug("Replication switched")
-			bus.fire('postgresql_change_master', host=host)
-		else:
+		if self.postgresql.is_replication_master:
 			self._logger.debug('Skip NewMasterUp. My replication role is master')	
+			return 
+		
+		host = message.local_ip or message.remote_ip
+		self._logger.info("Switching replication to a new postgresql master %s", host)
+		bus.fire('before_postgresql_change_master', host=host)			
+		
+		if 'snapshot_config' in message.body:
+			self._logger.info('Reinitializing Slave from the new snapshot %s', 
+					message.snapshot_config['id'])
+			self.postgresql.service.stop()
+			
+			self._logger.debug('Destroying old storage')
+			self.storage_vol.destroy()
+			self._logger.debug('Storage destroyed')
+			
+			self._logger.debug('Plugging new storage')
+			vol = Storage.create(snapshot=message.snapshot_config.copy())
+			self._plug_storage(self._storage_path, vol)
+			self._logger.debug('Storage plugged')
+			
+			Storage.backup_config(vol.config(), self._volume_config_path)
+			Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
+			self.storage_vol = vol
+			
+		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
+			
+		self._logger.debug("Replication switched")
+		bus.fire('postgresql_change_master', host=host)
 			
 
 	def on_DbMsr_CreateBackup(self, message):
