@@ -139,80 +139,6 @@ class PostgreSql(object):
 	_instance = None
 	
 	service = None
-	
-	@property
-	def is_replication_master(self):
-		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
-		self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
-		return True if int(value) else False
-	
-	def _set(self, key, obj):
-		self._objects[key] = obj
-		
-	def _get(self, key, callback, *args, **kwargs):
-		if not self._objects.has_key(key):
-			self._set(key, callback(*args, **kwargs))
-		return self._objects[key]
-		
-	def _get_config_dir(self):
-		return self._get('config_dir', ConfigDir)
-		
-	def _set_config_dir(self, obj):
-		self._set('config_dir', obj)
-		
-	def _get_postgresql_conf(self):
-		return self._get('postgresql_conf', PostgresqlConf.find, self.config_dir)
-	
-	def _set_postgresql_conf(self, obj):
-		self._set('postgresql_conf', obj)
-	
-	def _get_cluster_dir(self):
-		return self._get('cluster_dir', ClusterDir.find, self.postgresql_conf)
-		
-	def _set_cluster_dir(self, obj):
-		self._set('cluster_dir', obj)
-			
-	def _get_pg_hba_conf(self):
-		return self._get('pg_hba_conf', PgHbaConf.find, self.config_dir)
-		
-	def _set_pg_hba_conf(self, obj):
-		self._set('pg_hba_conf', obj)
-		
-	def _get_recovery_conf(self):
-		return self._get('recovery_conf', RecoveryConf.find, self.cluster_dir)
-	
-	def _set_recovery_conf(self, obj):
-		self._set('recovery_conf', obj)
-	
-	def _get_pid_file(self):
-		return self._get('pid_file', PidFile.find, self.postgresql_conf)
-	
-	def _set_pid_file(self, obj):
-		self._set('pid_file', obj)
-		
-	def _get_trigger_file(self):
-		return self._get('trigger_file', Trigger.find, self.recovery_conf)
-	
-	def _set_trigger_file(self, obj):
-		self._set('trigger_file', obj)
-	
-	def _get_root_user(self):
-		key = 'root_user'
-		if not self._objects.has_key(key):
-			self._objects[key] = PgUser(ROOT_USER)
-		return self._objects[key]
-	
-	def _set_root_user(self, user):
-		self._set('root_user', user)
-	
-	root_user = property(_get_root_user, _set_root_user)
-	config_dir = property(_get_config_dir, _set_config_dir)
-	cluster_dir = property(_get_cluster_dir, _set_cluster_dir)
-	postgresql_conf = property(_get_postgresql_conf, _set_postgresql_conf)
-	pg_hba_conf = property(_get_pg_hba_conf, _set_pg_hba_conf)
-	recovery_conf = property(_get_recovery_conf, _set_recovery_conf)
-	pid_file = property(_get_pid_file, _set_pid_file)
-	trigger_file = property(_get_trigger_file, _set_trigger_file)
 		
 	def __new__(cls, *args, **kwargs):
 		if not cls._instance:
@@ -225,6 +151,13 @@ class PostgreSql(object):
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
+					
+	@property
+	def is_replication_master(self):
+		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
+		self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
+		return True if int(value) else False
+
 	
 	def init_master(self, mpoint, slaves=None):
 		self._init_service(mpoint)
@@ -320,7 +253,75 @@ class PostgreSql(object):
 		self.postgresql_conf.wal_level = 'hot_standby'
 		self.postgresql_conf.max_wal_senders = 5
 		self.postgresql_conf.wal_keep_segments = 32
+
+	def _set(self, key, obj):
+		self._objects[key] = obj
 		
+	def _get(self, key, callback, *args, **kwargs):
+		if not self._objects.has_key(key):
+			self._set(key, callback(*args, **kwargs))
+		return self._objects[key]
+		
+	def _get_config_dir(self):
+		return self._get('config_dir', ConfigDir)
+		
+	def _set_config_dir(self, obj):
+		self._set('config_dir', obj)
+		
+	def _get_postgresql_conf(self):
+		return self._get('postgresql_conf', PostgresqlConf.find, self.config_dir)
+	
+	def _set_postgresql_conf(self, obj):
+		self._set('postgresql_conf', obj)
+	
+	def _get_cluster_dir(self):
+		return self._get('cluster_dir', ClusterDir.find, self.postgresql_conf)
+		
+	def _set_cluster_dir(self, obj):
+		self._set('cluster_dir', obj)
+			
+	def _get_pg_hba_conf(self):
+		return self._get('pg_hba_conf', PgHbaConf.find, self.config_dir)
+		
+	def _set_pg_hba_conf(self, obj):
+		self._set('pg_hba_conf', obj)
+		
+	def _get_recovery_conf(self):
+		return self._get('recovery_conf', RecoveryConf.find, self.cluster_dir)
+	
+	def _set_recovery_conf(self, obj):
+		self._set('recovery_conf', obj)
+	
+	def _get_pid_file(self):
+		return self._get('pid_file', PidFile.find, self.postgresql_conf)
+	
+	def _set_pid_file(self, obj):
+		self._set('pid_file', obj)
+		
+	def _get_trigger_file(self):
+		return self._get('trigger_file', Trigger.find, self.recovery_conf)
+	
+	def _set_trigger_file(self, obj):
+		self._set('trigger_file', obj)
+	
+	def _get_root_user(self):
+		key = 'root_user'
+		if not self._objects.has_key(key):
+			self._objects[key] = PgUser(ROOT_USER)
+		return self._objects[key]
+	
+	def _set_root_user(self, user):
+		self._set('root_user', user)
+	
+	root_user = property(_get_root_user, _set_root_user)
+	config_dir = property(_get_config_dir, _set_config_dir)
+	cluster_dir = property(_get_cluster_dir, _set_cluster_dir)
+	postgresql_conf = property(_get_postgresql_conf, _set_postgresql_conf)
+	pg_hba_conf = property(_get_pg_hba_conf, _set_pg_hba_conf)
+	recovery_conf = property(_get_recovery_conf, _set_recovery_conf)
+	pid_file = property(_get_pid_file, _set_pid_file)
+	trigger_file = property(_get_trigger_file, _set_trigger_file)
+
 	
 postgresql = PostgreSql()
 
