@@ -717,6 +717,7 @@ class Trigger(object):
 	def __init__(self, path):
 		self.path = path
 		self._logger = logging.getLogger(__name__)
+		self._logger.debug('Trigger path is: %s' % path)
 		
 	@classmethod
 	def find(cls, recovery_conf):
