@@ -120,7 +120,6 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 		p = PSQL()
 		return initdv2.Status.RUNNING if p.test_connection() else initdv2.Status.NOT_RUNNING
 
-	
 	def stop(self, reason=None):
 		initdv2.ParametrizedInitScript.stop(self)
 	
@@ -132,6 +131,7 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 	
 	
 initdv2.explore(SERVICE_NAME, PgSQLInitScript)
+
 
 class PostgreSql(object):
 	
@@ -718,7 +718,6 @@ class Trigger(object):
 	def __init__(self, path):
 		self.path = path
 		self._logger = logging.getLogger(__name__)
-		self._logger.debug('Trigger path is: %s' % path)
 		
 	@classmethod
 	def find(cls, recovery_conf):
@@ -870,7 +869,7 @@ class RecoveryConf(BasePGConfig):
 	config_name = 'recovery.conf'
 	
 	def _get_standby_mode(self):
-		self.get('standby_mode')
+		return self.get('standby_mode')
 	
 	def _set_standby_mode(self, mode):
 		self.set('standby_mode', mode)
@@ -885,7 +884,7 @@ class RecoveryConf(BasePGConfig):
 		self.set('primary_conninfo', "host=%s port=%s user=%s" % (host,port,user))
 		
 	def _get_trigger_file(self):
-		self.get('trigger_file')
+		return self.get('trigger_file')
 	
 	def _set_trigger_file(self, path):
 		self.set('trigger_file', path)	
