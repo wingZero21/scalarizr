@@ -362,7 +362,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 			
 			if master_storage_conf:
 
-				# Unplug slave storage and plug master one
+				self.postgresql.service.stop('Unplugging slave storage and then plugging master one')
+
 				old_conf = self.storage_vol.detach(force=True) # ??????
 				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
 							
