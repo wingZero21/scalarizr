@@ -33,24 +33,32 @@ class FormatProvider:
 			self._errors = []
 		self._fp = fp
 		root = ET.Element("configuration")
+		
+		toplevel = False
 		if not hasattr(self, '_cursect'):
+			toplevel = True
 			self._cursect = root
-		while True:
-			line = self._fp.readline()
-			if not line:
-				break
-			self._lineno += 1
-			for reader in self._readers:
-				if reader(line, root):
-					break
-			else:
-				self._errors.append((self._lineno, line.strip()))
 
-		indent(root)
-		if self._errors and not self._sections:
-			raise ParseError(self._errors)
-		else:
-			return list(root)
+		try:
+			while True:
+				line = self._fp.readline()
+				if not line:
+					break
+				self._lineno += 1
+				for reader in self._readers:
+					if reader(line, root):
+						break
+				else:
+					self._errors.append((self._lineno, line.strip()))
+	
+			indent(root)
+			if self._errors and not self._sections:
+				raise ParseError(self._errors)
+			else:
+				return list(root)
+		finally:
+			if toplevel:
+				del(self._cursect)
 		
 	def write(self, fp, etree, close = True):
 		"""
