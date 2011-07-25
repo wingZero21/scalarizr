@@ -382,7 +382,8 @@ class Volume(VolumeConfig):
 			self.umount()
 		try:
 			return Storage.detach(self, force)
-		except:
+		except BaseException, e:
+			self._logger.error('Storage detach failed with error %s' % e)
 			if was_mounted:
 				self.mount()
 			raise
