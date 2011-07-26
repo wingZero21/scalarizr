@@ -314,7 +314,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 				used_size	= '%.3f' % (float(used_size) / 1000,),
 				status		= 'ok'
 			)
-			msg_data.postgresql = self._compat_storage_data(snap=snap)
+			msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
 			self.send_message(PostgreSqlMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 		except (Exception, BaseException), e:
@@ -372,7 +372,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 					raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
-				msg_data.postgresql = self._compat_storage_data(vol=new_storage_vol)
+				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
 				
 			self.postgresql.init_master(self._storage_path, slaves)
 			self._update_config({OPT_REPLICATION_MASTER : "1"})	
@@ -381,9 +381,9 @@ class PostgreSqlHander(ServiceCtlHanler):
 									
 				snap = self._create_snapshot(ROOT_USER, message.root_password)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
-				msg_data.postgresql = self._compat_storage_data(self.storage_vol.config(), snap)
+				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol.config(), snap)
 				
-			msg_data.postgresql.update({OPT_CURRENT_XLOG_LOCATION: None})		
+			msg_data[BEHAVIOUR].update({OPT_CURRENT_XLOG_LOCATION: None})		
 			self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
 								
 			tx_complete = True
