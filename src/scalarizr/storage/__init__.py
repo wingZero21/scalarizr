@@ -178,17 +178,17 @@ class Storage:
 
 	@staticmethod	
 	def detach(vol, force=False):
+		Storage.fire('detach', vol)
 		pvd = Storage.lookup_provider(vol.type)
 		ret = pvd.detach(vol, force)
 		vol.detached = True
-		Storage.fire('detach', vol)
 		return ret
 	
 	@staticmethod
 	def destroy(vol, force=False, **kwargs):
+		Storage.fire('destroy', vol)		
 		pvd = Storage.lookup_provider(vol.type)
 		pvd.destroy(vol, force, **kwargs)
-		Storage.fire('destroy', vol)
 		
 	@staticmethod
 	def backup_config(cnf, filename):
@@ -215,6 +215,10 @@ def _update_volume_tablerow(vol, state=None):
 		cur = conn.cursor()
 		cur.execute('UPDATE storage SET state = ? WHERE device = ?', (state, vol.device))
 		if not cur.rowcount:
+			
+			_logger = logging.getLogger(__name__)
+			_logger.debug('INSERT INTO storage VALUES (%s, %s, %s, %s)' % (vol.id, vol.type, vol.device, state))
+			
 			cur.execute('INSERT INTO storage VALUES (?, ?, ?, ?)', 
 					(vol.id, vol.type, vol.device, state))
 		conn.commit()
