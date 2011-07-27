@@ -228,6 +228,8 @@ class PostgreSql(object):
 	def _init_service(self, mpoint):
 		password = None 
 		
+		self._logger.debug('Available postgresql options: %s' % str(self._cnf.rawini.items(CNF_SECTION)))
+		
 		opt_pwd = '%s_password' % ROOT_USER
 		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
 			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
