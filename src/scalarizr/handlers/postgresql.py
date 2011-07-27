@@ -419,18 +419,23 @@ class PostgreSqlHander(ServiceCtlHanler):
 		@type message: scalarizr.messaging.Message
 		@param message:  PostgreSQL_NewMasterUp
 		"""
+		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
+			raise HandlerError("DbMsr_NewMasterUp message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
+		
+		postgresql_data = message.postgresql.copy()
 		
 		if self.postgresql.is_replication_master:
-			self._logger.debug('Skip NewMasterUp. My replication role is master')	
+			self._logger.debug('Skipping NewMasterUp. My replication role is master')	
 			return 
 		
 		host = message.local_ip or message.remote_ip
 		self._logger.info("Switching replication to a new postgresql master %s", host)
 		bus.fire('before_postgresql_change_master', host=host)			
 		
-		if 'snapshot_config' in message.body:
+		if OPT_SNAPSHOT_CNF in postgresql_data:
+			snap_data = postgresql_data[OPT_SNAPSHOT_CNF]
 			self._logger.info('Reinitializing Slave from the new snapshot %s', 
-					message.snapshot_config['id'])
+					snap_data['id'])
 			self.postgresql.service.stop()
 			
 			self._logger.debug('Destroying old storage')
@@ -438,12 +443,12 @@ class PostgreSqlHander(ServiceCtlHanler):
 			self._logger.debug('Storage destroyed')
 			
 			self._logger.debug('Plugging new storage')
-			vol = Storage.create(snapshot=message.snapshot_config.copy())
+			vol = Storage.create(snapshot=snap_data.copy())
 			self._plug_storage(self._storage_path, vol)
 			self._logger.debug('Storage plugged')
 			
 			Storage.backup_config(vol.config(), self._volume_config_path)
-			Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
+			Storage.backup_config(snap_data, self._snapshot_config_path)
 			self.storage_vol = vol
 			
 		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
