@@ -156,7 +156,6 @@ class PostgreSql(object):
 	def is_replication_master(self):
 		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
 		self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
-		self._logger.debug('PG Section has: %s' % str(self._cnf.rawini.items(CNF_SECTION)))
 		return True if int(value) else False
 
 	
@@ -229,15 +228,13 @@ class PostgreSql(object):
 	def _init_service(self, mpoint):
 		password = None 
 		
-		#self._logger.debug('Available postgresql options: %s' % str(self._cnf.rawini.items(CNF_SECTION)))
-		
 		opt_pwd = '%s_password' % ROOT_USER
 		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
 			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
 			
 		#this is highly temporary solution 
-		##if not password and self._cnf.rawini.has_option(CNF_SECTION, "root_password"):
-			##password = self._cnf.rawini.get(CNF_SECTION, "root_password")
+		if not password and self._cnf.rawini.has_option(CNF_SECTION, "root_password"):
+			password = self._cnf.rawini.get(CNF_SECTION, "root_password")
 		
 		
 		self.root_user = self.create_user(ROOT_USER, password)
