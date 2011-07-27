@@ -660,11 +660,11 @@ class ConfigDir(object):
 			rchown(self.user, new_config)
 		
 		self._logger.debug("configuring pid and cluster dir")
-		conf = PostgresqlConf(dst, autosave=False)
+		conf = PostgresqlConf.find(dst)
+		conf.pid_file = os.path.join(dst, 'postmaster.pid')
 		#need to decide if changing data_directory is actually necessary there 
 		#conf.data_directory = self.path
-		conf.pid_file = os.path.join(dst, 'postmaster.pid')
-		conf.save()
+		#conf.save()
 		self._make_symlinks(dst)
 		self._patch_sysconfig(dst)
 		self.path = dst
