@@ -93,9 +93,13 @@ class LazyInitScript(object):
 	def reload(self, reason=None):
 		if self._script.running:
 			self.reload_queue.append(reason)
-			
+	
+	@property		
 	def running(self):
 		return self._script.running
+	
+	def status(self):
+		return self._script.status()
 			
 				
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
