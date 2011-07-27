@@ -257,14 +257,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 				del postgresql_data[key]
 		
 		self._logger.debug("Update postgresql config with %s", postgresql_data)
-		
-		#ditching empty data
-		updates = dict()
-		for k,v in postgresql_data.items():
-			if v: 
-				updates[k] = v
-				
-		self._update_config(updates)
+		self._update_config(postgresql_data)
 
 
 	def on_before_host_up(self, message):
@@ -636,7 +629,13 @@ class PostgreSqlHander(ServiceCtlHanler):
 
 	def _update_config(self, data): 
 		#XXX: I just don't like it
-		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
+		#ditching empty data
+		updates = dict()
+		for k,v in data.items():
+			if v: 
+				updates[k] = v
+		
+		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: updates})
 
 
 	def _plug_storage(self, mpoint, vol):
