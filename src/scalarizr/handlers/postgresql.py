@@ -478,14 +478,18 @@ class PostgreSqlHander(ServiceCtlHanler):
 			self._logger.info("Dumping all databases")
 			tmpdir = tempfile.mkdtemp()		
 			rchown(self.postgresql.root_user.name, tmpdir)	
+			
 			for db_name in databases:
+				if db_name == 'template0':
+					continue
+				
 				dump_path = tmpdir + os.sep + db_name + '.sql'
 				pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path)
 				su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
-				self._logger.debug(str(su_args))
 				err = system2(su_args)[1]
 				if err:
 					raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
+				
 				backup.add(dump_path, os.path.basename(dump_path))
 			backup.close()
 			
