@@ -255,6 +255,7 @@ class PostgreSql(object):
 		
 		if disttool.is_centos():
 			self.config_dir.move_to(self.config_dir.default_ubuntu_path)
+			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.config_dir.default_ubuntu_path)
 		
 		self.postgresql_conf.wal_level = 'hot_standby'
 		self.postgresql_conf.max_wal_senders = 5
@@ -661,7 +662,7 @@ class ConfigDir(object):
 
 		#the following block needs revision
 		
-		self._make_symlinks(dst)
+		#self._make_symlinks(dst)
 		self._patch_sysconfig(dst)
 		
 		self.path = dst
@@ -670,27 +671,6 @@ class ConfigDir(object):
 		conf = PostgresqlConf.find(self)
 		conf.pid_file = os.path.join(dst, 'postmaster.pid')
 
-		
-		
-	def _make_symlinks(self, dst_dir):
-		self._logger.debug("creating symlinks required by initscript")
-		for obj in ['base', 'PG_VERSION', 'postmaster.pid']:
-			src = os.path.join(self.path, obj)
-			dst = os.path.join(dst_dir, obj) 
-			if os.path.islink(dst):
-				self._logger.debug("%s exists and it is probably old. Unlinking." % dst)
-				os.unlink(dst)
-			elif os.path.exists(dst):
-				self._logger.warning('Something wrong: %s is not a symlink. Removing.' % dst)
-				shutil.rmtree(dst)
-				
-			self._logger.debug("Creating symlink %s -> %s" % (src, dst))
-			os.symlink(src, dst)
-			if os.path.exists(src):
-				rchown(self.user, dst)
-			else:
-				self._logger.debug('Warning: %s is a dead link' % dst)
-			
 	def _patch_sysconfig(self, config_dir):
 		if config_dir == self.get_sysconfig_pgdata():
 			self._logger.debug('sysconfig file already rewrites PGDATA. Skipping.')
@@ -1061,6 +1041,7 @@ class PgHbaConf(Configuration):
 	def _make_standby_record(self,ip, user='postgres'):
 		return PgHbaRecord('host','replication', user=user,address='%s/32'%ip, auth_method='trust')
 	
+	
 class ParseError(BaseException):
 	pass
 
@@ -1079,4 +1060,23 @@ def rchown(user, path):
 	except OSError, e:
 		#log 'Cannot chown directory %s : %s' % (path, e)	
 		pass
-	
+		
+		
+	def make_symlinks(self, source_dir, dst_dir, username='postgres'):
+		#Vital hack for getting CentOS init script to work
+		for obj in ['base', 'PG_VERSION', 'postmaster.pid']:
+			
+			src = os.path.join(source_dir, obj)
+			dst = os.path.join(dst_dir, obj) 
+			
+			if os.path.islink(dst):
+				os.unlink(dst)
+			elif os.path.exists(dst):
+				shutil.rmtree(dst)
+				
+			os.symlink(src, dst)
+			
+			if os.path.exists(src):
+				rchown(username, dst)	
+				
+								
