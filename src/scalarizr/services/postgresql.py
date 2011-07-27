@@ -762,6 +762,7 @@ class BasePGConfig(object):
 	config_name = None
 	
 	def __init__(self, path, autosave=True):
+		self._logger = logging.getLogger(__name__)
 		self.autosave = autosave
 		self.path = path
 		
