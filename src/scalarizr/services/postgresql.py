@@ -1062,21 +1062,21 @@ def rchown(user, path):
 		pass
 		
 		
-	def make_symlinks(self, source_dir, dst_dir, username='postgres'):
-		#Vital hack for getting CentOS init script to work
-		for obj in ['base', 'PG_VERSION', 'postmaster.pid']:
+def make_symlinks(self, source_dir, dst_dir, username='postgres'):
+	#Vital hack for getting CentOS init script to work
+	for obj in ['base', 'PG_VERSION', 'postmaster.pid']:
+		
+		src = os.path.join(source_dir, obj)
+		dst = os.path.join(dst_dir, obj) 
+		
+		if os.path.islink(dst):
+			os.unlink(dst)
+		elif os.path.exists(dst):
+			shutil.rmtree(dst)
 			
-			src = os.path.join(source_dir, obj)
-			dst = os.path.join(dst_dir, obj) 
-			
-			if os.path.islink(dst):
-				os.unlink(dst)
-			elif os.path.exists(dst):
-				shutil.rmtree(dst)
-				
-			os.symlink(src, dst)
-			
-			if os.path.exists(src):
-				rchown(username, dst)	
+		os.symlink(src, dst)
+		
+		if os.path.exists(src):
+			rchown(username, dst)	
 				
 								
