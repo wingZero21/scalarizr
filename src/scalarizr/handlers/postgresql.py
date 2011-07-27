@@ -182,6 +182,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 			
+			self.postgresql.service.start()
+			
 			if self.postgresql.is_replication_master:
 				self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
 				root_password = self.postgresql.root_user.password
@@ -196,8 +198,6 @@ class PostgreSqlHander(ServiceCtlHanler):
 						self._logger.warning("Scalr's root PgSQL user was changed. Recreating.")
 						self.postgresql.root_user.change_password(root_password)
 			
-			self.postgresql.service.start()
-
 
 	def on_reload(self):
 		self._queryenv = bus.queryenv_service
