@@ -551,7 +551,7 @@ class PSQL(object):
 		return roles
 	
 	def list_pg_databases(self):
-		out = self.execute('SELECT datname FROM pg_database;')
+		out = self.execute('SELECT datname FROM pg_database where not datistemplate;')
 		roles = out.split()[2:-2]
 		return roles	
 	
