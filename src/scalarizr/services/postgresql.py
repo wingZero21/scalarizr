@@ -209,9 +209,9 @@ class PostgreSql(object):
 		return user	
 	
 	def create_pg_role(self, name, super=True):
-		self.service.start()
 		self.set_trusted_mode()
 		user = PgUser(name)	
+		self.service.start()
 		user._create_pg_database()
 		user._create_role(super)
 		self.set_password_mode()
