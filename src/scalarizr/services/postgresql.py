@@ -219,7 +219,8 @@ class PostgreSql(object):
 
 	def set_trusted_mode(self):
 		self.pg_hba_conf.set_trusted_access_mode()
-		self.service.restart()
+		#Temporary we need to force restart the service 
+		self.service.restart(reason='Applying trusted mode', force=True)
 	
 	def set_password_mode(self):
 		self.pg_hba_conf.set_password_access_mode()
