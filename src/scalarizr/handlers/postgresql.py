@@ -195,6 +195,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 					except ValueError:
 						self._logger.warning("Scalr's root PgSQL user was changed. Recreating.")
 						self.postgresql.root_user.change_password(root_password)
+		else:
+			self.postgresql.service.start()
 
 
 	def on_reload(self):
