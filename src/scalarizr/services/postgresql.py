@@ -661,7 +661,8 @@ class ConfigDir(object):
 		
 		self._logger.debug("configuring pid and cluster dir")
 		conf = PostgresqlConf(dst, autosave=False)
-		conf.data_directory = self.path
+		#need to decide if changing data_directory is actually necessary there 
+		#conf.data_directory = self.path
 		conf.pid_file = os.path.join(dst, 'postmaster.pid')
 		conf.save()
 		self._make_symlinks(dst)
