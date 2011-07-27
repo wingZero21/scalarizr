@@ -614,7 +614,7 @@ class ConfigDir(object):
 	path = None
 	user = None
 	default_ubuntu_path = '/etc/postgresql/9.0/main'
-	default_centos_path = '/var/lib/pgsql/9.0/main'
+	default_centos_path = '/var/lib/pgsql/9.0/data'
 	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
 	def __init__(self, path=None, user = "postgres"):
