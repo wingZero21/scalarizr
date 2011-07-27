@@ -19,7 +19,7 @@ from scalarizr.util.filetool import read_file, write_file, split
 from scalarizr.util import initdv2, system2, wait_until, PopenError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
-	PgUser, SU_EXEC
+	PgUser, SU_EXEC, rchown
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -476,7 +476,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 
 			# Dump all databases
 			self._logger.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp()			
+			tmpdir = tempfile.mkdtemp()		
+			rchown(self.postgresql.root_user.name, tmpdir)	
 			for db_name in databases:
 				dump_path = tmpdir + os.sep + db_name + '.sql'
 				pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path)
