@@ -310,8 +310,17 @@ class Tar:
 		)
 		return ret.strip()
 	
-__dftuple = namedtuple('df', 'device, size, used, free, mpoint')
+_dfrow = namedtuple('df', 'device, size, used, free, mpoint')
+
+def _parse_int(value):
+	try:
+		return int(value)
+	except ValueError:
+		return None
 
 def df():
 	out = system2(('df', '-Pk'))[0]
-	return [__dftuple(line[0], int(line[1]), int(line[2]), int(line[3]), line[-1]) for line in map(str.split, out.splitlines()[1:])]
+	return [_dfrow(
+				line[0], _parse_int(line[1]), _parse_int(line[2]), 
+				_parse_int(line[3]), line[-1]) 
+				for line in map(str.split, out.splitlines()[1:])]
