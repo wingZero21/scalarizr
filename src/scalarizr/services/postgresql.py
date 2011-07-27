@@ -572,6 +572,10 @@ class PSQL(object):
 			
 	
 class ClusterDir(object):
+	
+	default_centos_path = '/var/lib/pgsql/9.0/data'
+	default_ubuntu_path = '/var/lib/pgsql/9.0/main'
+	
 	def __init__(self, path=None, user = "postgres"):
 		self.path = path
 		self.user = user
@@ -579,7 +583,10 @@ class ClusterDir(object):
 		
 	@classmethod
 	def find(cls, postgresql_conf):
-		return cls(postgresql_conf.data_directory)
+		path = postgresql_conf.data_directory
+		if not path:
+			path = cls.default_ubuntu_path if disttool.is_ubuntu() else cls.default_centos_path
+		return cls(path)
 
 	def move_to(self, dst, move_files=True):
 		new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
