@@ -465,7 +465,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		tmpdir = backup_path = None
 		try:
 			# Get databases list
-			psql = PSQL(user=self.postgresql.root_user)
+			psql = PSQL(user=self.postgresql.root_user.name)
 			databases = psql.list_pg_databases()
 			
 			# Defining archive name and path
