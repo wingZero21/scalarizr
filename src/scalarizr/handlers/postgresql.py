@@ -5,7 +5,6 @@ Created on April 18th, 2011
 '''
 import os
 import time
-import shlex
 import shutil
 import tarfile
 import logging
@@ -20,7 +19,7 @@ from scalarizr.util.filetool import read_file, write_file, split
 from scalarizr.util import initdv2, system2, wait_until, PopenError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
-	PgUser
+	PgUser, SU_EXEC
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -480,8 +479,10 @@ class PostgreSqlHander(ServiceCtlHanler):
 			tmpdir = tempfile.mkdtemp()			
 			for db_name in databases:
 				dump_path = tmpdir + os.sep + db_name + '.sql'
-				args = shlex.split('%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path))
-				err = system2(args)[1]
+				pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path)
+				su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
+				self._logger.debug(str(su_args))
+				err = system2(su_args)[1]
 				if err:
 					raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
 				backup.add(dump_path, os.path.basename(dump_path))
