@@ -659,15 +659,15 @@ class ConfigDir(object):
 				raise BaseException('Postgresql config file not found: %s' % old_config)
 			rchown(self.user, new_config)
 		
-		self._logger.debug("configuring pid and cluster dir")
-		conf = PostgresqlConf.find(dst)
+		self.path = dst
+		
+		self._logger.debug("configuring pid")
+		conf = PostgresqlConf.find(self)
 		conf.pid_file = os.path.join(dst, 'postmaster.pid')
-		#need to decide if changing data_directory is actually necessary there 
-		#conf.data_directory = self.path
-		#conf.save()
+		
 		self._make_symlinks(dst)
 		self._patch_sysconfig(dst)
-		self.path = dst
+		
 		
 	def _make_symlinks(self, dst_dir):
 		self._logger.debug("creating symlinks required by initscript")
