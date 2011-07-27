@@ -85,7 +85,7 @@ class LazyInitScript(object):
 				self.reload_queue = []	
 
 	def restart(self, reason=None, force=False):
-		if self._script.running and force:
+		if force:
 			self._script.restart(reason)
 		elif  self._script.running:
 			self.restart_queue.append(reason)
@@ -224,7 +224,8 @@ class PostgreSql(object):
 	
 	def set_password_mode(self):
 		self.pg_hba_conf.set_password_access_mode()
-		self.service.restart()
+		#Temporary we need to force restart the service 
+		self.service.restart(reason='Applying password mode', force=True)
 
 	def _init_service(self, mpoint):
 		password = None 
