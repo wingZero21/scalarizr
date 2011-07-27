@@ -537,7 +537,8 @@ class PSQL(object):
 	def test_connection(self):
 		self._logger.debug('Checking PostgreSQL service status')
 		try:
-			system2([SU_EXEC, '-', self.user, '-c', self.path])
+			#better do something simpler
+			self.list_pg_roles()
 		except PopenError, e:
 			if 'could not connect to server' in str(e):
 				return False
