@@ -1062,7 +1062,7 @@ def rchown(user, path):
 		pass
 		
 		
-def make_symlinks(self, source_dir, dst_dir, username='postgres'):
+def make_symlinks(source_dir, dst_dir, username='postgres'):
 	#Vital hack for getting CentOS init script to work
 	for obj in ['base', 'PG_VERSION', 'postmaster.pid']:
 		
