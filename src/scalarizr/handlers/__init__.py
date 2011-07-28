@@ -16,6 +16,7 @@ from distutils.file_util import write_file
 
 
 class Handler(object):
+	_logger = logging.getLogger(__name__)
 	
 	def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
 		srv = srv or bus.messaging_service
@@ -29,11 +30,22 @@ class Handler(object):
 		return msg
 	
 	def send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
-					queue=Queues.CONTROL):
+					queue=Queues.CONTROL, wait_ack=False):
 		srv = bus.messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
 				self.new_message(msg_name, msg_body, msg_meta, broadcast)
 		srv.get_producer().send(queue, msg)
+		if wait_ack:
+			cons = srv.get_consumer()
+			cons.message_to_ack = msg
+			self._logger.debug('Creating BeforeHostUp acknowledgement handler')
+			waiter = threading.Thread(name='%sMessageHandler' % msg.name, target=cons.message_handler)
+			waiter.start()
+			self._logger.debug('Joining BeforeHostUp acknowledgement handler')
+			waiter.join()
+			self._logger.debug('BeforeHostUp acknowledgement handler joined!')
+			cons.message_to_ack = None
+		
 		
 	def send_int_message(self, host, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
 						include_pad=False, queue=Queues.CONTROL):

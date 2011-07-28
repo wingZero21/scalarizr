@@ -21,7 +21,7 @@ import socket
 
 class P2pMessageConsumer(MessageConsumer):
 	endpoint = None
-	_logger = None	
+	_logger = None
 	_server = None
 	_handler_thread = None
 	#_not_empty = None
@@ -34,6 +34,7 @@ class P2pMessageConsumer(MessageConsumer):
 		self.endpoint = endpoint
 		
 		self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
+		self.message_to_ack = None
 		#self._not_empty = threading.Event()
 			
 	def start(self):
@@ -146,6 +147,18 @@ class P2pMessageConsumer(MessageConsumer):
 		
 		self._logger.debug('Message consumer %s terminated', self.endpoint)
 		
+	def _handle_one_message(self, message, queue, store):
+		try:
+			self.handler_status = 'running'					
+			self._logger.debug('Notify message listeners (message_id: %s)', message.id)
+			for ln in self.listeners:
+				ln(message, queue)
+		except (BaseException, Exception), e:
+			self._logger.exception(e)
+		finally:
+			self._logger.debug('Mark message (message_id: %s) as handled', message.id)
+			store.mark_as_handled(message.id)
+			self.handler_status = 'idle'			
 
 	def message_handler (self):
 		store = P2pMessageStore()
@@ -156,18 +169,19 @@ class P2pMessageConsumer(MessageConsumer):
 		while self.running:
 			if not self.handler_locked:
 				try:
+					if self.message_to_ack:
+						for queue, message in store.get_unhandled(self.endpoint):
+							self._logger.debug('Got: %s', message.name)
+							if message.name == self.message_to_ack.name and \
+									message.meta['server_id'] == self.message_to_ack.meta['server_id']:
+								self._handle_one_message(message, queue, store)
+								return
+						time.sleep(0.1)
+						continue
+					
 					for queue, message in store.get_unhandled(self.endpoint):
-						try:
-							self.handler_status = 'running'
-							self._logger.debug('Notify message listeners (message_id: %s)', message.id)
-							for ln in self.listeners:
-								ln(message, queue)
-						except (BaseException, Exception), e:
-							self._logger.exception(e)
-						finally:
-							self._logger.debug('Mark message (message_id: %s) as handled', message.id)
-							store.mark_as_handled(message.id)
-							self.handler_status = 'idle'
+						self._handle_one_message(message, queue, store)
+												
 				except (BaseException, Exception), e:
 					self._logger.exception(e)
 			time.sleep(0.1)

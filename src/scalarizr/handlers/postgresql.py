@@ -15,8 +15,8 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHanler, HandlerError
-from scalarizr.util.filetool import read_file, write_file, split
-from scalarizr.util import initdv2, system2, wait_until, PopenError
+from scalarizr.util.filetool import split
+from scalarizr.util import system2, wait_until
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
 	PgUser, SU_EXEC, rchown
@@ -554,7 +554,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		
 		msg_data = dict()
 		
-		msg_data.update({OPT_REPLICATION_MASTER 		: 	int(self.postgresql.is_replication_master),
+		msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.postgresql.is_replication_master)),
 							OPT_ROOT_USER				:	self.postgresql.root_user.name,
 							OPT_ROOT_PASSWORD			:	root_password,
 							OPT_CURRENT_XLOG_LOCATION	: 	None})	
@@ -645,7 +645,8 @@ class PostgreSqlHander(ServiceCtlHanler):
 		try:
 			if not os.path.exists(mpoint):
 				os.makedirs(mpoint)
-			vol.mount(mpoint)
+			if not vol.mounted():
+				vol.mount(mpoint)
 		except StorageError, e:
 			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
 			if 'you must specify the filesystem type' in str(e):
@@ -700,5 +701,5 @@ class PostgreSqlHander(ServiceCtlHanler):
 		'before_postgresql_change_master'
 		'postgresql_change_master'
 		'''
-		raise NotImplementedError
+		raise NotImplementedError()
 

@@ -208,6 +208,17 @@ class Messages:
 	@ivar role_name 
 	"""
 
+	BEFORE_HOST_UP = "BeforeHostUp"
+	"""
+	@broadcast
+	@blocking
+	Fires before HostUp
+	@ivar behaviour
+	@ivar local_ip
+	@ivar remote_ip
+	@ivar role_name 
+	"""
+
 	HOST_UP = "HostUp"
 	"""
 	@broadcast
