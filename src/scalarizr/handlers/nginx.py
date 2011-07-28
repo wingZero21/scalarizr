@@ -348,7 +348,11 @@ class NginxHandler(ServiceCtlHanler):
 			backend_include.read(os.path.join(bus.share_path, 'nginx/app-servers.tpl'))
 
 		# Create upstream hosts configuration
-		list_roles = self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP, role_name=self._upstream_app_role)
+		if not self._upstream_app_role:
+			kwds = dict(behaviour=BuiltinBehaviours.APP)
+		else:
+			kwds = dict(role_name=self._upstream_app_role)
+		list_roles = self._queryenv.list_roles(**kwds)
 		servers = []
 		
 		for app_serv in list_roles:
