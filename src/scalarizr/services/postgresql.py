@@ -427,7 +427,7 @@ class PgUser(object):
 		
 		pub_key = read_file(source_path,logger=self._logger)
 		path = os.path.join(self.ssh_dir, 'authorized_keys')
-		keys = read_file(path,logger=self._logger)
+		keys = read_file(path,logger=self._logger) if os.path.exists(path) else ''
 		
 		if not keys or not pub_key in keys:
 			write_file(path, data='\n%s %s\n' % (pub_key, self.name), mode='a', logger=self._logger)
@@ -549,7 +549,7 @@ class PSQL(object):
 		
 	def execute(self, query):
 		try:
-			out = system2([SU_EXEC, '-', self.user, '-c', '%s -c "%s"' % (self.path, query)])[0]
+			out = system2([SU_EXEC, '-', self.user, '-c', '%s -c "%s"' % (self.path, query)], silent=True)[0]
 			return out	
 		except PopenError, e:
 			self._logger.error('Unable to execute query %s from user %s: %s' % (query, self.user, e))
@@ -813,7 +813,7 @@ class PostgresqlConf(BasePGConfig):
 	def _set_pid_file_path(self, path):
 		self.set('external_pid_file', path)
 		if not os.path.exists(path):
-			self._logger.warning('pid file does not exist')
+			self._logger.debug('pid file does not exist')
 	
 	def _get_data_directory(self):
 		return self.get('data_directory')
