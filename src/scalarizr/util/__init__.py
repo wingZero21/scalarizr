@@ -209,6 +209,7 @@ class PopenError(BaseException):
 def system2(*popenargs, **kwargs):
 	import subprocess, cStringIO
 	
+	silent 		= kwargs.get('silent', False)
 	logger 		= kwargs.get('logger', logging.getLogger(__name__))
 	warn_stderr = kwargs.get('warn_stderr')
 	raise_exc   = kwargs.get('raise_exc', kwargs.get('raise_error',  True))
@@ -250,9 +251,14 @@ def system2(*popenargs, **kwargs):
 		except KeyError:
 			pass
 		
-	logger.debug('system: %s' % (popenargs[0],))
+	if not silent:
+		logger.debug('system: %s' % (popenargs[0],))
+		
 	p = subprocess.Popen(*popenargs, **kwargs)
 	out, err = p.communicate(input=input)
+	
+	if silent:
+		return out, err, p.returncode
 	
 	if out:
 		logger.debug('stdout: ' + out)
