@@ -251,9 +251,7 @@ def system2(*popenargs, **kwargs):
 		except KeyError:
 			pass
 		
-	if not silent:
-		logger.debug('system: %s' % (popenargs[0],))
-		
+	logger.debug('system: %s' % (popenargs[0],))
 	p = subprocess.Popen(*popenargs, **kwargs)
 	out, err = p.communicate(input=input)
 	
