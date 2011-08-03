@@ -812,8 +812,8 @@ class MysqlHandler(ServiceCtlHanler):
 					dump_path = os.path.join(tmpdir, db_name + '.sql') 
 					mysql.dump_database(db_name, dump_path)
 					backup.add(dump_path, os.path.basename(dump_path))						
-				except PopenError:
-					self._logger.exception('Cannot dump database %s', db_name)
+				except PopenError, e:
+					self._logger.exception('Cannot dump database %s. %s', db_name, e)
 			
 			backup.close()
 			

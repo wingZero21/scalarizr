@@ -40,7 +40,7 @@ class Handler(object):
 			cons = srv.get_consumer()
 			cons.message_to_ack = msg
 			self._logger.debug('Creating BeforeHostUp acknowledgement handler')
-			saved_access_data = pl.get_access_data()
+			saved_access_data = pl._access_data
 			if saved_access_data:
 				saved_access_data = dict(saved_access_data)
 			waiter = threading.Thread(name='%sMessageHandler' % msg.name, target=cons.message_handler)
@@ -49,7 +49,8 @@ class Handler(object):
 			waiter.join()
 			self._logger.debug('BeforeHostUp acknowledgement handler joined!')
 			cons.message_to_ack = None
-			pl.set_access_data(saved_access_data)
+			if saved_access_data:
+				pl.set_access_data(saved_access_data)
 		
 		
 	def send_int_message(self, host, msg_name, msg_body=None, msg_meta=None, broadcast=False, 

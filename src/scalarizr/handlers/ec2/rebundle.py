@@ -352,7 +352,9 @@ class RebundleStratery:
 				os.remove(filename)
 				
 		# Cleanup ROLE-BUILDER ssh key
-		for filename in ('root/.ssh/authorized_keys', 'home/ubuntu/.ssh/authorized_keys'):
+		for filename in ('root/.ssh/authorized_keys', 
+						'home/ubuntu/.ssh/authorized_keys',
+						'home/scalr/.ssh/authorized_keys'):
 			filename = os.path.join(image_mpoint, filename)
 			if not os.path.exists(filename):
 				continue
