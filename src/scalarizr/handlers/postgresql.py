@@ -24,6 +24,7 @@ from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
 
+PG_SOCKET_DIR 				= '/var/run/postgresql/'
 STORAGE_PATH 				= "/mnt/pgstorage"
 STORAGE_VOLUME_CNF 			= 'postgresql.json'
 STORAGE_SNAPSHOT_CNF 		= 'postgresql-snap.json'
@@ -169,6 +170,11 @@ class PostgreSqlHander(ServiceCtlHanler):
 
 
 	def on_init(self):		
+		#temporary fix for starting-after-rebundle issue
+		if not os.path.exists(PG_SOCKET_DIR):
+			os.makedirs(PG_SOCKET_DIR)
+			rchown(user='postgres', path=PG_SOCKET_DIR)
+			
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)

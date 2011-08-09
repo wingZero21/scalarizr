@@ -35,7 +35,6 @@ PSQL_PATH = '/usr/bin/psql'
 CREATEUSER = '/usr/bin/createuser'
 CREATEDB = '/usr/bin/createdb'
 PG_DUMP = '/usr/bin/pg_dump'
-PG_SOCKET_DIR = '/var/run/postgresql/'
 
 ROOT_USER 				= "scalr"
 
@@ -135,10 +134,6 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.restart(self)
 		
 	def start(self):
-		#temporary fix for starting-after-rebundle issue
-		if not os.path.exists(PG_SOCKET_DIR):
-			os.makedirs(PG_SOCKET_DIR)
-			rchown(user='postgres', path=PG_SOCKET_DIR)
 		initdv2.ParametrizedInitScript.start(self)
 	
 	
