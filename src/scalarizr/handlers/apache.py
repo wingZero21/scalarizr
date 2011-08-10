@@ -31,6 +31,7 @@ BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.APP
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR + '.ini'
 APP_CONF_PATH = 'apache_conf_path'
+VHOST_EXTENSION = '.vhost.conf'
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
 	_apachectl = None
@@ -384,7 +385,7 @@ class ApacheHandler(ServiceCtlHanler):
 					
 					self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
 					
-					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + '-ssl.vhost.conf') 
+					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + '-ssl' + VHOST_EXTENSION) 
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
 					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl', cert_path), error_msg=vhost_error_message, logger = self._logger)
 					
@@ -398,7 +399,7 @@ class ApacheHandler(ServiceCtlHanler):
 					
 				else:
 					self._logger.debug('Enabling virtual host %s', vhost.hostname)
-					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + '.vhost.conf')
+					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + VHOST_EXTENSION)
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
 					write_file(vhost_fullpath, vhost.raw, error_msg=vhost_error_message, logger=self._logger)
 					
@@ -414,7 +415,7 @@ class ApacheHandler(ServiceCtlHanler):
 			
 			includes = self._config.get_list('Include')
 			if not vhosts_path + '/*' in includes:
-				self._config.add('Include', vhosts_path + '/*')
+				self._config.add('Include', vhosts_path + '/*' + VHOST_EXTENSION)
 				self._config.write(self._httpd_conf_path)			
 
 	def _patch_ssl_conf(self, cert_path):
