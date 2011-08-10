@@ -245,7 +245,7 @@ def system2(*popenargs, **kwargs):
 			kwargs['env'] = {}
 		kwargs['env']['LANG'] = 'en_US'
 		
-	for k in ('logger', 'err2out', 'warn_stderr', 'raise_exc', 'raise_error', 'exc_class', 'error_text'):
+	for k in ('logger', 'err2out', 'warn_stderr', 'raise_exc', 'raise_error', 'exc_class', 'error_text', 'silent'):
 		try:
 			del kwargs[k]
 		except KeyError:
