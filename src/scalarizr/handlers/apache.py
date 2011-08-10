@@ -414,8 +414,9 @@ class ApacheHandler(ServiceCtlHanler):
 			self._logger.debug("Checking that vhosts directory included in main apache config")
 			
 			includes = self._config.get_list('Include')
-			if not vhosts_path + '/*' in includes:
-				self._config.add('Include', vhosts_path + '/*' + VHOST_EXTENSION)
+			inc_mask = vhosts_path + '/*' + VHOST_EXTENSION
+			if not inc_mask in includes:
+				self._config.add('Include', inc_mask)
 				self._config.write(self._httpd_conf_path)			
 
 	def _patch_ssl_conf(self, cert_path):
