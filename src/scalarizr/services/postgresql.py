@@ -575,7 +575,15 @@ class PSQL(object):
 	def delete_pg_database(self, name):
 		out = self.psql.execute('DROP DATABASE IF EXISTS %s;' % name)
 		self._logger.debug(out)
-			
+		
+	def start_backup(self):
+		out = self.psql.execute("SELECT pg_start_backup('label', true)")
+		self._logger.debug(out)
+
+	def stop_backup(self):
+		out = self.psql.execute("SELECT pg_stop_backup()")
+		self._logger.debug(out)
+					
 	
 class ClusterDir(object):
 	
