@@ -919,6 +919,7 @@ class BuiltinBehaviours:
 	CASSANDRA = 'cassandra'
 	MEMCACHED = 'memcached'
 	POSTGRESQL = 'postgresql'
+	REDIS = 'redis'
 	
 	@staticmethod
 	def values():
