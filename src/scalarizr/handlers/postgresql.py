@@ -14,12 +14,13 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import ServiceCtlHanler, HandlerError
-from scalarizr.util.filetool import split
+from scalarizr.handlers import ServiceCtlHanler, HandlerError, DbMsrMessages
+from scalarizr.util.filetool import split, rchown
 from scalarizr.util import system2, wait_until
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
-	PgUser, SU_EXEC, rchown
+	PgUser, SU_EXEC
+
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -35,7 +36,6 @@ OPT_ROOT_USER				= 'root_user'
 OPT_ROOT_PASSWORD 			= "root_password"
 OPT_ROOT_SSH_PUBLIC_KEY 	= "root_ssh_public_key"
 OPT_ROOT_SSH_PRIVATE_KEY	= "root_ssh_private_key"
-OPT_CHANGE_MASTER_TIMEOUT 	= 'change_master_timeout'
 OPT_CURRENT_XLOG_LOCATION	= 'current_xlog_location'
 
 BACKUP_CHUNK_SIZE 		= 200*1024*1024
@@ -47,79 +47,6 @@ def get_handlers():
 	return (PostgreSqlHander(), )
 
 
-class PostgreSqlMessages:
-	DBMSR_CREATE_DATA_BUNDLE = "DbMsr_CreateDataBundle"
-	
-	DBMSR_CREATE_DATA_BUNDLE_RESULT = "DbMsr_CreateDataBundleResult"
-	'''
-	@ivar: db_type: postgresql|mysql
-	@ivar: status: Operation status [ ok | error ]
-	@ivar: last_error: errmsg if status = error
-	@ivar: snapshot_config: snapshot configuration
-	@ivar: current_xlog_location:  pg_current_xlog_location() on master after snap was created
-	'''
-	
-	DBMSR_CREATE_BACKUP = "DbMsr_CreateBackup"
-	
-	DBMSR_CREATE_BACKUP_RESULT = "DbMsr_CreateBackupResult"
-	'''
-	@ivar: db_type: postgresql|mysql
-	@ivar: status: Operation status [ ok | error ]
-	@ivar: last_error:  errmsg if status = error
-	@ivar: backup_parts: URL List (s3, cloudfiles)
-	'''
-	
-	DBMSR_PROMOTE_TO_MASTER = "DbMsr_PromoteToMaster"
-	
-	DBMSR_PROMOTE_TO_MASTER_RESULT = "DbMsr_PromoteToMasterResult"
-	'''
-	@ivar: db_type: postgresql|mysql
-	@ivar: status: ok|error
-	@ivar: last_error: errmsg if status=error
-	@ivar: volume_config: volume configuration
-	@ivar: snapshot_config?: snapshot configuration
-	@ivar: current_xlog_location_?:  pg_current_xlog_location() on master after snap was created
-	'''
-	
-	DBMSR_NEW_MASTER_UP = "DbMsr_NewMasterUp"
-	'''
-	@ivar: db_type:  postgresql|mysql
-	@ivar: local_ip
-	@ivar: remote_ip
-	@ivar: snapshot_config
-	@ivar: current_xlog_location:  pg_current_xlog_location() on master after snap was created
-	'''
-	
-	"""
-	Also Postgresql behaviour adds params to common messages:
-	
-	= HOST_INIT_RESPONSE =
-	@ivar db_type: postgresql|mysql
-	@ivar postgresql=dict(
-		replication_master:  	 1|0 
-		root_user 
-		root_password:			 'scalr' user password  					(on slave)
-		root_ssh_private_key
-		root_ssh_public_key 
-		current_xlog_location 
-		volume_config:			Master storage configuration			(on master)
-		snapshot_config:		Master storage snapshot 				(both)
-	)
-	
-	= HOST_UP =
-	@ivar db_type: postgresql|mysql
-	@ivar postgresql=dict(
-	@ivar replication_master: 1|0 
-	@ivar root_user 
-	@ivar root_password: 			'scalr' user password  					(on master)
-	@ivar root_ssh_private_key
-	@ivar root_ssh_public_key
-	@ivar current_xlog_location
-	@ivar volume_config:			Current storage configuration			(both)
-	@ivar snapshot_config:		Master storage snapshot					(on master)	
-	) 
-	"""	
-	
 class PostgreSqlHander(ServiceCtlHanler):	
 	_logger = None
 		
@@ -137,10 +64,10 @@ class PostgreSqlHander(ServiceCtlHanler):
 		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
-					message.name == PostgreSqlMessages.DBMSR_NEW_MASTER_UP
-				or 	message.name == PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER
-				or 	message.name == PostgreSqlMessages.DBMSR_CREATE_DATA_BUNDLE
-				or 	message.name == PostgreSqlMessages.DBMSR_CREATE_BACKUP
+					message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
+				or 	message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
+				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
+				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
 				or  message.name == Messages.HOST_INIT
 				or  message.name == Messages.BEFORE_HOST_TERMINATE)	
@@ -210,9 +137,6 @@ class PostgreSqlHander(ServiceCtlHanler):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
-		
-		self._change_master_timeout = int(ini.get(CNF_SECTION, OPT_CHANGE_MASTER_TIMEOUT) or '30')
-		
 		self._storage_path = STORAGE_PATH
 		
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
@@ -322,13 +246,13 @@ class PostgreSqlHander(ServiceCtlHanler):
 				status		= 'ok'
 			)
 			msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
-			self.send_message(PostgreSqlMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
+			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
 			
 			# Notify Scalr about error
-			self.send_message(PostgreSqlMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
+			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
 				db_type 	= BEHAVIOUR,
 				status		='error',
 				last_error	= str(e)
@@ -391,7 +315,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol.config(), snap)
 				
 			msg_data[BEHAVIOUR].update({OPT_CURRENT_XLOG_LOCATION: None})		
-			self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
+			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
 								
 			tx_complete = True
 			bus.fire('slave_promote_to_master')
@@ -404,7 +328,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			if old_conf:
 				self._plug_storage(self._storage_path, old_conf)
 			
-			self.send_message(PostgreSqlMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, dict(
+			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, dict(
 				db_type=BEHAVIOUR, 															
 				status="error",
 				last_error=str(e)
@@ -424,7 +348,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 		"""
 		Switch replication to a new master server
 		@type message: scalarizr.messaging.Message
-		@param message:  PostgreSQL_NewMasterUp
+		@param message:  DbMsr_NewMasterUp
 		"""
 		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
 			raise HandlerError("DbMsr_NewMasterUp message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
@@ -512,7 +436,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 							self._platform.cloud_storage_path, backup_filename)
 			
 			# Notify Scalr
-			self.send_message(PostgreSqlMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
 				db_type = BEHAVIOUR,
 				status = 'ok',
 				backup_parts = result
@@ -522,7 +446,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			self._logger.exception(e)
 			
 			# Notify Scalr about error
-			self.send_message(PostgreSqlMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
 				db_type = BEHAVIOUR,
 				status = 'error',
 				last_error = str(e)
@@ -698,14 +622,3 @@ class PostgreSqlHander(ServiceCtlHanler):
 		if snap:
 			ret['snapshot_config'] = snap.config()
 		return ret
-	
-	
-	def _change_master(self, host, user, password, timeout):
-		#TODO: WRITE changing process but look in Postgresql class first!
-		'''
-		fire:
-		'before_postgresql_change_master'
-		'postgresql_change_master'
-		'''
-		raise NotImplementedError()
-
