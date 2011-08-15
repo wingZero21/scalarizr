@@ -568,6 +568,7 @@ class PostgreSqlHander(ServiceCtlHanler):
 			
 		# Create snapshot
 		snap = self._create_snapshot(ROOT_USER, root_password)
+		
 		Storage.backup_config(snap.config(), self._snapshot_config_path)
 	
 		# Update HostUp message 
@@ -665,15 +666,13 @@ class PostgreSqlHander(ServiceCtlHanler):
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
 		if self.postgresql.service.running:
-			# TODO: Lock tables
-			pass
+			self.postgresql.psql.start_backup()
 		
 		system2('sync', shell=True)
 		# Creating storage snapshot
 		snap = None if dry_run else self._create_storage_snapshot()
-		if not self.postgresql.service.running:
-			# TODO: Unlock tables
-			pass
+		if self.postgresql.service.running:
+			self.postgresql.psql.stop_backup()
 		
 		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
 		if snap.state == Snapshot.FAILED:
