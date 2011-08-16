@@ -135,7 +135,7 @@ class IpListBuilder(Handler):
 		if not os.path.exists(d):
 			try:
 				self._logger.debug("Create dir %s", d)
-				os.makedirs(d, 0644)
+				os.makedirs(d, 0755)
 			except OSError, x:
 				self._logger.exception(x)
 	
