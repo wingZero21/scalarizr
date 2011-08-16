@@ -665,14 +665,15 @@ class PostgreSqlHander(ServiceCtlHanler):
 
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False):
+		psql = PSQL()
 		if self.postgresql.service.running:
-			self.postgresql.psql.start_backup()
+			psql.start_backup()
 		
 		system2('sync', shell=True)
 		# Creating storage snapshot
 		snap = None if dry_run else self._create_storage_snapshot()
 		if self.postgresql.service.running:
-			self.postgresql.psql.stop_backup()
+			psql.stop_backup()
 		
 		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
 		if snap.state == Snapshot.FAILED:
