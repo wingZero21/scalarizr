@@ -577,12 +577,18 @@ class PSQL(object):
 		self._logger.debug(out)
 		
 	def start_backup(self):
-		out = self.execute("SELECT pg_start_backup('label', true);")
-		self._logger.debug(out)
+		try:
+			out = self.execute("SELECT pg_start_backup('label', true);")
+			self._logger.debug(out)
+		except PopenError, e:
+			self._logger.warning('Cannot start backup: %s' % e)
 
 	def stop_backup(self):
-		out = self.execute("SELECT pg_stop_backup();")
-		self._logger.debug(out)
+		try:
+			out = self.execute("SELECT pg_stop_backup();")
+			self._logger.debug(out)
+		except PopenError, e:
+			self._logger.warning('Cannot stop backup: %s' % e)
 					
 	
 class ClusterDir(object):
