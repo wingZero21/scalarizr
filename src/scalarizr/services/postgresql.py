@@ -577,11 +577,11 @@ class PSQL(object):
 		self._logger.debug(out)
 		
 	def start_backup(self):
-		out = self.execute("SELECT pg_start_backup('label', true)")
+		out = self.execute("SELECT pg_start_backup('label', true);")
 		self._logger.debug(out)
 
 	def stop_backup(self):
-		out = self.execute("SELECT pg_stop_backup()")
+		out = self.execute("SELECT pg_stop_backup();")
 		self._logger.debug(out)
 					
 	
