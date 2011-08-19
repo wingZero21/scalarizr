@@ -76,9 +76,8 @@ class Redis(BaseService):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
 		self.is_replication_master = master
-						
+								
 	def __new__(cls, *args, **kwargs):
 		if not cls._instance:
 			cls._instance = super(Redis, cls).__new__(
