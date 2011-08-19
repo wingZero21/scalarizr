@@ -115,7 +115,7 @@ class Redis(BaseService):
 		return cryptotool.pwgen(length)	
 	
 	def _get_redis_conf(self):
-		return self._get('redis_conf', RedisConf.find, self.config_dir)
+		return self._get('redis_conf', RedisConf.find)
 	
 	def _set_redis_conf(self, obj):
 		self._set('redis_conf', obj)
@@ -187,7 +187,11 @@ class BaseRedisConfig(BaseConfig):
 class RedisConf(BaseRedisConfig):
 	
 	config_name = 'redis.conf'
-
+	
+	@classmethod
+	def find(cls, config_dir=None):
+		return cls(os.path.join(config_dir, cls.config_name) if config_dir else CONFIG_PATH)
+		
 	def set(self, option, value):
 		if not self.data:
 			self.data = Configuration(self.config_type)
@@ -214,7 +218,8 @@ class RedisConf(BaseRedisConfig):
 		self.set_path_type_option('bind', ' '.join(list_ips))
 				
 	def _get_slaveof(self):
-		return self.get('slaveof').split()
+		raw = self.get('slaveof')
+		return raw.split() if raw else ()
 	
 	def _set_slaveof(self, conn_data):
 		'''
