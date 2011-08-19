@@ -225,7 +225,7 @@ class RedisConf(BaseRedisConfig):
 		'''
 		@tuple conndata: (ip,) or (ip, port)
 		'''
-		self.set_path_type_option('slaveof', ' '.join(conn_data))		
+		self.set('slaveof', ' '.join(conn_data))		
 	
 	def _get_masterauth(self):
 		return self.get('masterauth')
