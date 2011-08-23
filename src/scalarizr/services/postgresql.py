@@ -550,7 +550,9 @@ class PSQL(object):
 			except PopenError, e:
 				if 'could not connect to server' in str(e):
 					return False
-				elif 'the database system is starting up ' in str(e) and attempt:
+				elif 'the database system is starting up' in str(e):
+					if not attempt:
+						raise BaseException('Postgresql service stuck on starting up database system')
 					time.sleep(5)
 					return test_recursive(attempt-1)
 			return True
