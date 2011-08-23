@@ -86,6 +86,8 @@ class Redis(BaseService):
 
 	def init_master(self, mpoint, password=None):
 		self.init_service(mpoint)
+		self.redis_conf.masterauth = None
+		self.redis_conf.slaveof = None
 		self.redis_conf.requirepass = password or self.generate_password()
 		self.service.start()
 		self.is_replication_master = True
@@ -212,7 +214,8 @@ class RedisConf(BaseRedisConfig):
 		self.set_path_type_option('dir', path)
 	
 	def _get_bind(self):
-		return self.get('bind').split()
+		raw = self.get('bind')
+		return raw.split() if raw else None
 	
 	def _set_bind(self, list_ips):
 		self.set_path_type_option('bind', ' '.join(list_ips))
