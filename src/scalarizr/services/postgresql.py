@@ -5,6 +5,7 @@ Created on Jul 7, 2011
 '''
 
 import os
+import time
 import shlex
 import shutil
 import logging
@@ -542,13 +543,18 @@ class PSQL(object):
 		
 	def test_connection(self):
 		self._logger.debug('Checking PostgreSQL service status')
-		try:
-			#better do something simpler
-			self.list_pg_roles()
-		except PopenError, e:
-			if 'could not connect to server' in str(e):
-				return False
-		return True
+		
+		def test_recursive(attempt):
+			try:
+				self.list_pg_roles() #better do something simpler
+			except PopenError, e:
+				if 'could not connect to server' in str(e):
+					return False
+				elif 'the database system is starting up ' in str(e) and attempt:
+					time.sleep(5)
+					return test_recursive(attempt-1)
+			return True
+		return test_recursive(6)
 		
 	def execute(self, query):
 		try:
