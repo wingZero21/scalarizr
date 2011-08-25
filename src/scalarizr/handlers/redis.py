@@ -366,7 +366,7 @@ class RedisHander(ServiceCtlHanler):
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)	
 			
 		password = self._get_password()
-		self.redis.init_master(mpoint=self._storage_path, password)
+		self.redis.init_master(mpoint=self._storage_path, password=password)
 		
 		msg_data = dict()
 		msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
