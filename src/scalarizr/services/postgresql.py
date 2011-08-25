@@ -547,7 +547,7 @@ class PSQL(object):
 		
 		def test_recursive(attempt):
 			try:
-				self.list_pg_roles() #better do something simpler
+				self.execute('SELECT 1;')
 			except PopenError, e:
 				if 'could not connect to server' in str(e):
 					return False
