@@ -136,6 +136,7 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 		
 	def start(self):
 		initdv2.ParametrizedInitScript.start(self)
+		assert self.status() == initdv2.Status.RUNNING
 	
 	
 initdv2.explore(SERVICE_NAME, PgSQLInitScript)
