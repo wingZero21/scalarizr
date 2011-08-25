@@ -190,7 +190,6 @@ class RedisHander(ServiceCtlHanler):
 			self._logger.info('Detaching PgSQL storage')
 			self.storage_vol.detach()
 	
-			
 	
 	def on_DbMsr_CreateDataBundle(self, message):
 		
