@@ -18,7 +18,7 @@ from scalarizr.util import system2, wait_until
 from scalarizr.util.filetool import split, rchown
 from scalarizr.services.redis import Redis, REDIS_DEFAULT_PORT, REDIS_DB_FILENAME
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import ServiceCtlHanler, HandlerError, DbMsrMessages
+from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 
 
@@ -38,10 +38,10 @@ BACKUP_CHUNK_SIZE 			= 200*1024*1024
 
 
 def get_handlers():
-	return (RedisHander(), )
+	return (RedisHandler(), )
 
 
-class RedisHander(ServiceCtlHanler):	
+class RedisHandler(ServiceCtlHandler):	
 	_logger = None
 		
 	_queryenv = None
@@ -137,12 +137,12 @@ class RedisHander(ServiceCtlHanler):
 			raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property and db_type '%s'" 
 							% (BEHAVIOUR, BEHAVIOUR, BEHAVIOUR))
 		
-		
 		dir = os.path.dirname(self._volume_config_path)
 		if not os.path.exists(dir):
 			os.makedirs(dir)
 		
 		redis_data = message.redis.copy()	
+		self._logger.info('GOT REDIS PART OF HOST_INIT_RESPONSE:%s' % redis_data)
 		
 		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):

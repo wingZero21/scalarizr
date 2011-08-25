@@ -14,7 +14,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import ServiceCtlHanler, HandlerError, DbMsrMessages
+from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.util.filetool import split, rchown
 from scalarizr.util import system2, wait_until
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
@@ -47,7 +47,7 @@ def get_handlers():
 	return (PostgreSqlHander(), )
 
 
-class PostgreSqlHander(ServiceCtlHanler):	
+class PostgreSqlHander(ServiceCtlHandler):	
 	_logger = None
 		
 	_queryenv = None

@@ -181,7 +181,7 @@ def async(fn):
 	return decorated
 
 
-class ServiceCtlHanler(Handler):
+class ServiceCtlHandler(Handler):
 	_logger = None 	
 	
 	_service_name = None

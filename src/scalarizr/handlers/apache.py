@@ -9,7 +9,7 @@ Created on Dec 25, 2009
 from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
-from scalarizr.handlers import HandlerError, ServiceCtlHanler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 
 # Libs
@@ -178,7 +178,7 @@ def reload_apache_conf(f):
 	return g
 
 
-class ApacheHandler(ServiceCtlHanler):
+class ApacheHandler(ServiceCtlHandler):
 	
 	_config = None
 	_logger = None
@@ -190,7 +190,7 @@ class ApacheHandler(ServiceCtlHanler):
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)		
-		ServiceCtlHanler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())
 				
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
