@@ -23,7 +23,7 @@ CONFIG_PATH = '/etc/redis/redis.conf'
 				
 REDIS_DEFAULT_PORT	= 6379	
 REDIS_DB_FILENAME = 'dump.rdb'			
-			
+REDIS_CLI_PATH = '/usr/bin/redis-cli'			
 				
 class RedisInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
@@ -247,4 +247,24 @@ class RedisConf(BaseRedisConfig):
 	slaveof = property(_get_slaveof, _set_slaveof)
 	masterauth = property(_get_masterauth, _set_masterauth)
 	requirepass	 = property(_get_requirepass, _set_requirepass)
+		
+		
+class RedisCLI(object):
+	path = REDIS_CLI_PATH
+	
+	def __init__(self):
+		if not os.path.exists(self.path):
+			raise OSError('redis-cli not found')
+	
+	@property
+	def info(self):
+		out = system2([self.path, 'info'], silent=True)
+		d = {}
+		if not out:
+			raw = out.strip().split('\n')
+			for i in raw:
+				key, val = i.split(':')
+				if key:
+					d[key] = val
+		return d
 		
