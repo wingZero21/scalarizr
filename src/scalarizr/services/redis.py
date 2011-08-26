@@ -240,7 +240,7 @@ class RedisConf(BaseRedisConfig):
 		return self.get('requirepass')
 	
 	def _set_requirepass(self, passwd):
-		self.set_path_type_option('requirepass', passwd)	
+		self.set('requirepass', passwd)	
 				
 	dir = property(_get_dir, _set_dir)
 	bind = property(_get_bind, _set_bind)
