@@ -21,7 +21,8 @@ _redhat_based_dists = map(string.lower, (
 	'rhel', 
 	'redhat', 
 	'fedora',
-	'Red Hat Enterprise Linux Server release', # RHEL5, OEL 5.3 - 5.6 
+	'Red Hat Enterprise Linux Server release',
+	'Red Hat Enterprise Linux Server',
 	'Enterprise Linux Enterprise Linux Server' # OEL 5.0 - 5.2 
 ))
 
