@@ -157,6 +157,8 @@ class RedisHandler(ServiceCtlHandler):
 		
 		self._logger.debug("Update redis config with %s", redis_data)
 		self._update_config(redis_data)
+		
+		self.redis.is_replication_master = self.is_replication_master()
 
 
 	def on_before_host_up(self, message):
