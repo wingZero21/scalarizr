@@ -70,7 +70,6 @@ class RedisHandler(ServiceCtlHandler):
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
-				or  message.name == Messages.HOST_INIT
 				or  message.name == Messages.BEFORE_HOST_TERMINATE)	
 
 	
