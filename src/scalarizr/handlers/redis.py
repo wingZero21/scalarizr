@@ -58,7 +58,7 @@ class RedisHandler(ServiceCtlHandler):
 	@property
 	def is_replication_master(self):
 		value = 0
-		if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(OPT_REPLICATION_MASTER):
+		if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, OPT_REPLICATION_MASTER):
 			value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
 			self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
 		return True if int(value) else False
