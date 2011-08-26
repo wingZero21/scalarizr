@@ -877,8 +877,9 @@ if disttool.is_linux():
 			# Create excluded mpoints dirs (not under special dirs)
 			for dir in self._excluded_mpoints:
 				if not list(dir for spec_dir in self.SPECIAL_DIRS if dir.startswith(spec_dir)):
-					self._logger.debug('Create mpoint dir %s', dir)
-					os.makedirs(self.mpoint + dir)
+					if not os.path.exists(self.mpoint + dir):
+						self._logger.debug('Create mpoint dir %s', dir)
+						os.makedirs(self.mpoint + dir)
 			
 			# MAKEDEV is incredibly variable across distros, so use mknod directly.
 			devdir = os.path.join(self.mpoint, 'dev')
