@@ -51,7 +51,7 @@ if _is_linux:
 	_is_ubuntu = dist_name == "ubuntu"
 	_is_fedora = dist_name == "fedora" or (dist_name == 'redhat' and _linux_dist[2].lower() == 'werewolf')
 	_is_centos = dist_name == "centos"
-	_is_rhel = dist_name in ["rhel", "redhat"]
+
 
 def is_linux(): return _is_linux
 def is_win(): return _is_win
@@ -62,7 +62,6 @@ def is_redhat_based(): return _is_redhat_based
 
 def is_fedora(): return _is_fedora
 def is_centos(): return _is_centos
-def is_rhel(): return _is_rhel
 def is_ubuntu(): return _is_ubuntu
 def is_debian(): return _is_debian
 
