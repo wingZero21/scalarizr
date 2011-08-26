@@ -336,13 +336,14 @@ class RebundleStratery:
 		
 		# Truncate logs
 		logs_path = os.path.join(image_mpoint, "var/log")
-		for basename in os.listdir(logs_path):
-			filename = os.path.join(logs_path, basename)
-			if os.path.isfile(filename):
-				try:
-					filetool.truncate(filename)
-				except OSError, e:
-					self._logger.error("Cannot truncate file '%s'. %s", filename, e)
+		if os.path.exists(logs_path):
+			for basename in os.listdir(logs_path):
+				filename = os.path.join(logs_path, basename)
+				if os.path.isfile(filename):
+					try:
+						filetool.truncate(filename)
+					except OSError, e:
+						self._logger.error("Cannot truncate file '%s'. %s", filename, e)
 		
 		# Cleanup user activity
 		for filename in ("root/.bash_history", "root/.lesshst", "root/.viminfo", 
