@@ -218,7 +218,7 @@ class RedisConf(BaseRedisConfig):
 		return raw.split() if raw else None
 	
 	def _set_bind(self, list_ips):
-		self.set_path_type_option('bind', ' '.join(list_ips))
+		self.set('bind', ' '.join(list_ips) if list_ips and type(list_ips)==tuple else None)
 				
 	def _get_slaveof(self):
 		raw = self.get('slaveof')
@@ -234,7 +234,7 @@ class RedisConf(BaseRedisConfig):
 		return self.get('masterauth')
 	
 	def _set_masterauth(self, passwd):
-		self.set_path_type_option('masterauth', passwd)		
+		self.set('masterauth', passwd)		
 	
 	def _get_requirepass(self):
 		return self.get('requirepass')
