@@ -1,7 +1,7 @@
 '''
 Created on Aug 10, 2011
 
-@author: shaitanich
+@author: Dmytro Korsakov
 '''
 
 import os
