@@ -53,6 +53,6 @@ class RedisFormatProvider(IniFormatProvider):
 	def write_option(self, fp, node):
 		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
 			value = node.text
-			fp.write(unquote(node.tag)+"\t"+value+'\n')
+			fp.write(unquote(node.tag)+" "+value+'\n')
 			return True
 		return False
