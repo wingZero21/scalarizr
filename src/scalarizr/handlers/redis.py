@@ -280,8 +280,9 @@ class RedisHandler(ServiceCtlHandler):
 		host = message.local_ip or message.remote_ip
 		self._logger.info("Switching replication to a new %s master %s"% (BEHAVIOUR, host))
 		bus.fire('before_%s_change_master' % BEHAVIOUR, host=host)			
-			
-		self.redis.init_slave(self._storage_path, host, REDIS_DEFAULT_PORT)
+		
+		password = self._get_password()	
+		self.redis.init_slave(self._storage_path, host, REDIS_DEFAULT_PORT, password)
 			
 		self._logger.debug("Replication switched")
 		bus.fire('%s_change_master' % BEHAVIOUR, host=host)
