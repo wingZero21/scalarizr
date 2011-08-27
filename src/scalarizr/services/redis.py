@@ -42,7 +42,7 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 	def _processes(self):
 		args = ('ps', '-G', BIN_PATH, '-o', 'command', '--no-headers')	
 		try:	
-			p = [x for x in system2(args)[0].split('\n') if x and BIN_PATH + ' ' + CONFIG_PATH in x]
+			p = [x for x in system2(args, silent=True)[0].split('\n') if x and BIN_PATH + ' ' + CONFIG_PATH in x]
 		except PopenError,e:
 			p = []
 		return p
