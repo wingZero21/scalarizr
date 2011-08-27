@@ -372,7 +372,7 @@ class RedisHandler(ServiceCtlHandler):
 		
 		msg_data = dict()
 		msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
-							OPT_MASTER_PASSWORD			:	password})	
+							OPT_MASTER_PASSWORD			:	self.redis.password})	
 			
 		# Create snapshot
 		snap = self._create_snapshot(REDIS_USER, password)
