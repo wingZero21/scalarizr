@@ -185,8 +185,19 @@ class WorkingDirectory(object):
 	
 class BaseRedisConfig(BaseConfig):
 	config_type = 'redis'
+	
+	def set_sequential_option(self, option, seq):
+		try:
+			assert not seq or type(seq)==tuple
+			self.set(option, ' '.join(map(str,seq)) if seq else None)
+		except ValueError:
+			raise ValueError('%s must be a sequence (got %s instead)' % (option, seq))	
 
-
+	def get_sequential_option(self, option):
+		raw = self.get(option)
+		return raw.split() if raw else ()
+	
+	
 class RedisConf(BaseRedisConfig):
 	
 	config_name = 'redis.conf'
@@ -215,21 +226,19 @@ class RedisConf(BaseRedisConfig):
 		self.set_path_type_option('dir', path)
 	
 	def _get_bind(self):
-		raw = self.get('bind')
-		return raw.split() if raw else None
+		return self.get_sequential_option('bind')
 	
 	def _set_bind(self, list_ips):
-		self.set('bind', ' '.join(list_ips) if list_ips and type(list_ips)==tuple else None)
+		self.set_sequential_option('bind', list_ips)
 				
 	def _get_slaveof(self):
-		raw = self.get('slaveof')
-		return raw.split() if raw else ()
+		return self.get_sequential_option('slaveof')
 	
 	def _set_slaveof(self, conn_data):
 		'''
 		@tuple conndata: (ip,) or (ip, port)
 		'''
-		self.set('slaveof', ' '.join(map(str,conn_data)) if conn_data and type(conn_data)==tuple else None)		
+		self.set_sequential_option('slaveof', conn_data)		
 	
 	def _get_masterauth(self):
 		return self.get('masterauth')
