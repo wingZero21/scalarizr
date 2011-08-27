@@ -104,6 +104,7 @@ class Redis(BaseService):
 		self.redis_conf.slaveof = (primary_ip, primary_port)
 		
 	def init_service(self, mpoint):
+		self.service.stop()
 		move_files = not self.working_directory.is_initialized(mpoint)
 		self.working_directory.move_to(mpoint, move_files)
 		self.redis_conf.bind = None
