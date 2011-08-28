@@ -21,8 +21,6 @@ BIN_PATH 	 = '/usr/bin/redis-server'
 OPT_REPLICATION_MASTER  = "replication_master"
 CONFIG_PATH = '/etc/redis/redis.conf'
 				
-REDIS_DEFAULT_PORT	= 6379	
-REDIS_DB_FILENAME = 'dump.rdb'			
 REDIS_CLI_PATH = '/usr/bin/redis-cli'			
 				
 class RedisInitScript(initdv2.ParametrizedInitScript):
@@ -165,7 +163,10 @@ class WorkingDirectory(object):
 
 	def is_initialized(self, path):
 		# are the redis db files already in place? 
-		return os.path.exists(path) and REDIS_DB_FILENAME in os.listdir(path)
+		if os.path.exists(path):
+			fnames = os.listdir(path)
+			return 'dump.rdb' in fnames or 'appendonly.log' in fnames
+		return False
 	
 	def empty(self):
 		self._logger.info('Emptying redis database dir %s' % self.path)
