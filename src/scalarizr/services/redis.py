@@ -94,6 +94,7 @@ class Redis(BaseService):
 		
 	def init_slave(self, mpoint, primary_ip, primary_port, password):
 		self.init_service(mpoint)
+		self.redis_conf.requirepass = None
 		self.change_primary(primary_ip, primary_port, password)
 		self.service.start()
 		self.is_replication_master = False
