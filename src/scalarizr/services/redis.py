@@ -48,7 +48,7 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 		return p
 	
 	def status(self):
-		return initdv2.Status.RUNNING if BIN_PATH in self._processes else initdv2.Status.NOT_RUNNING
+		return initdv2.Status.RUNNING if self._processes else initdv2.Status.NOT_RUNNING
 
 	def stop(self, reason=None):
 		initdv2.ParametrizedInitScript.stop(self)
