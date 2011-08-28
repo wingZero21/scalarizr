@@ -16,7 +16,7 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until
 from scalarizr.util.filetool import split, rchown
-from scalarizr.services.redis import Redis, REDIS_DEFAULT_PORT, REDIS_DB_FILENAME
+from scalarizr.services.redis import Redis
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
@@ -35,7 +35,8 @@ OPT_SNAPSHOT_CNF			= 'snapshot_config'
 
 REDIS_USER 					= 'redis'
 BACKUP_CHUNK_SIZE 			= 200*1024*1024
-
+DEFAULT_PORT	= 6379
+DB_FILENAME = 'dump.rdb'
 
 def get_handlers():
 	return (RedisHandler(), )
@@ -282,7 +283,7 @@ class RedisHandler(ServiceCtlHandler):
 		bus.fire('before_%s_change_master' % BEHAVIOUR, host=host)			
 		
 		password = self._get_password()	
-		self.redis.init_slave(self._storage_path, host, REDIS_DEFAULT_PORT, password)
+		self.redis.init_slave(self._storage_path, host, DEFAULT_PORT, password)
 			
 		self._logger.debug("Replication switched")
 		bus.fire('%s_change_master' % BEHAVIOUR, host=host)
@@ -294,8 +295,8 @@ class RedisHandler(ServiceCtlHandler):
 			# Dump all databases
 			self._logger.info("Dumping all databases")			
 			tmpdir = tempfile.mkdtemp()		
-			src_path = os.path.join(self.redis.redis_conf.dir, REDIS_DB_FILENAME)
-			dump_path = os.path.join(tmpdir, REDIS_DB_FILENAME)
+			src_path = os.path.join(self.redis.redis_conf.dir, DB_FILENAME)
+			dump_path = os.path.join(tmpdir, DB_FILENAME)
 			
 			if not os.path.exists(src_path):
 				raise BaseException('Redis DB file %s does not exists. Skipping Backup process')
@@ -309,7 +310,7 @@ class RedisHandler(ServiceCtlHandler):
 			
 			# Creating archive 
 			backup = tarfile.open(backup_path, 'w:gz')
-			backup.add(dump_path, REDIS_DB_FILENAME)
+			backup.add(dump_path, DB_FILENAME)
 			backup.close()
 			
 			# Creating list of full paths to archive chunks
@@ -427,7 +428,7 @@ class RedisHandler(ServiceCtlHandler):
 				master_host.internal_ip, master_host.external_ip)
 		
 		host = master_host.internal_ip or master_host.external_ip
-		self.redis.init_slave(self._storage_path, host, REDIS_DEFAULT_PORT, self._get_password())
+		self.redis.init_slave(self._storage_path, host, DEFAULT_PORT, self._get_password())
 		
 		# Update HostUp message
 		message.redis = self._compat_storage_data(self.storage_vol)
