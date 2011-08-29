@@ -20,7 +20,6 @@ SERVICE_NAME = CNF_SECTION = 'redis'
 BIN_PATH 	 = '/usr/bin/redis-server'	
 OPT_REPLICATION_MASTER  = "replication_master"
 CONFIG_PATH = '/etc/redis/redis.conf'
-				
 REDIS_CLI_PATH = '/usr/bin/redis-cli'			
 				
 class RedisInitScript(initdv2.ParametrizedInitScript):

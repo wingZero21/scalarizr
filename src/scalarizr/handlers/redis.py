@@ -393,9 +393,8 @@ class RedisHandler(ServiceCtlHandler):
 
 	def _get_password(self):
 		password = None 
-		opt_pwd = '%s_password' % BEHAVIOUR
-		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
-			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)	
+		if self._cnf.rawini.has_option(CNF_SECTION, OPT_MASTER_PASSWORD):
+			password = self._cnf.rawini.get(CNF_SECTION, OPT_MASTER_PASSWORD)	
 		return password		
 	
 	def _get_master_host(self):
