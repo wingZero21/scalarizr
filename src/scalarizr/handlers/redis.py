@@ -460,8 +460,9 @@ class RedisHandler(ServiceCtlHandler):
 		self._logger.info("Initializing %s slave" % BEHAVIOUR)
 		
 		# Plug storage
-		self.storage_vol = self._plug_storage(self._storage_path, 
-					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+		volume_cfg = Storage.restore_config(self._volume_config_path)
+		volume = Storage.create(Storage.blank_config(volume_cfg))	
+		self.storage_vol = 	self._plug_storage(self._storage_path, volume)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
 		#cleaning volume
