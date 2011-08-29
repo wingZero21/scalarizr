@@ -221,6 +221,9 @@ class EphVolumeProvider(VolumeProvider):
 	def get_snapshot_state(self, snap):
 		return self._snap_pvd.get_snapshot_state(snap)
 
+	def blank_config(self, cnf):
+		cnf.pop('lvm_group_cfg', None)
+		cnf['disk'] = Storage.blank_config(cnf['disk'])
 
 	def detach(self, vol, force=False):
 		'''
