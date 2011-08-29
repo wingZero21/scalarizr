@@ -190,7 +190,7 @@ class RedisHandler(ServiceCtlHandler):
 	def on_BeforeHostTerminate(self, message):
 		if message.local_ip == self._platform.get_private_ip():
 			self.redis.service.stop('Server will be terminated')
-			self._logger.info('Detaching PgSQL storage')
+			self._logger.info('Detaching Redis storage')
 			self.storage_vol.detach()
 	
 	
@@ -238,30 +238,69 @@ class RedisHandler(ServiceCtlHandler):
 			self._logger.warning('Cannot promote to master. Already master')
 			return
 		bus.fire('before_slave_promote_to_master')
+		
+		master_storage_conf = message.body.get('volume_config')
+		tx_complete = False	
+		old_conf 		= None
+		new_storage_vol	= None	
+		
 		try:
 			msg_data = dict(
 					db_type=BEHAVIOUR, 
 					status="ok",
 			)
+			
+			if master_storage_conf:
+
+				self.redis.service.stop('Unplugging slave storage and then plugging master one')
+
+				old_conf = self.storage_vol.detach(force=True) # ??????
+				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
+							
+				# Continue if master storage is a valid redis storage 
+				if not self.redis.working_directory.is_initialized(self._storage_path):
+					raise HandlerError("%s is not a valid %s storage" % (self._storage_path, BEHAVIOUR))
+				
+				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
+				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
+				
 			self.redis.init_master(self._storage_path)
-			self._update_config({OPT_REPLICATION_MASTER : "1"})	
+			self._update_config({OPT_REPLICATION_MASTER : "1"})
+				
+			if not master_storage_conf:
 									
-			snap = self._create_snapshot(REDIS_USER, message.root_password)
-			Storage.backup_config(snap.config(), self._snapshot_config_path)
-			msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol.config(), snap)
+				snap = self._create_snapshot(REDIS_USER, message.master_password)
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
+				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol.config(), snap)
 				
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
 								
+			tx_complete = True
 			bus.fire('slave_promote_to_master')
 			
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
+			if new_storage_vol:
+				new_storage_vol.detach()
+			# Get back slave storage
+			if old_conf:
+				self._plug_storage(self._storage_path, old_conf)
 			
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, dict(
 				db_type=BEHAVIOUR, 															
 				status="error",
 				last_error=str(e)
 			))
+
+			# Start redis
+			self.redis.service.start()
+		
+		if tx_complete and master_storage_conf:
+			# Delete slave EBS
+			self.storage_vol.destroy(remove_disks=True)
+			self.storage_vol = new_storage_vol
+			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+
 
 
 	def on_DbMsr_NewMasterUp(self, message):
