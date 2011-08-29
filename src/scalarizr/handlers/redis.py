@@ -264,7 +264,7 @@ class RedisHandler(ServiceCtlHandler):
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
 				
-			self.redis.init_master(self._storage_path)
+			self.redis.init_master(self._storage_path, password=self.redis.password)
 			self._update_config({OPT_REPLICATION_MASTER : "1"})
 				
 			if not master_storage_conf:
