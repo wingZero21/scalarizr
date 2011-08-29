@@ -15,7 +15,7 @@ import pwd
 from M2Crypto import RSA
 
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.util import disttool, cryptotool, firstmatched
+from scalarizr.util import disttool, cryptotool, firstmatched, wait_until
 from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.bus import bus
@@ -136,7 +136,9 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 		
 	def start(self):
 		initdv2.ParametrizedInitScript.start(self)
-		assert self.status() == initdv2.Status.RUNNING
+		timeout = 60
+		wait_until(lambda: self.status() == initdv2.Status.RUNNING, sleep=1, timeout=timeout, 
+				error_text="In %s seconds after start Redis state still isn't 'Running'" % timeout)
 	
 	
 initdv2.explore(SERVICE_NAME, PgSQLInitScript)
