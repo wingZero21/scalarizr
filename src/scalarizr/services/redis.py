@@ -82,6 +82,9 @@ class Redis(BaseService):
 		return cls._instance				
 
 	def init_master(self, mpoint, password=None):
+		self.service.stop('Configuring master. Moving Redis db files')
+		move_files = not self.working_directory.is_initialized(mpoint)
+		self.working_directory.move_to(mpoint, move_files)		
 		self.init_service(mpoint)
 		self.redis_conf.masterauth = None
 		self.redis_conf.slaveof = None
@@ -90,6 +93,7 @@ class Redis(BaseService):
 		self.is_replication_master = True
 		
 	def init_slave(self, mpoint, primary_ip, primary_port, password):
+		self.service.stop('Configuring slave')
 		self.init_service(mpoint)
 		self.redis_conf.requirepass = None
 		self.change_primary(primary_ip, primary_port, password)
@@ -102,9 +106,7 @@ class Redis(BaseService):
 		self.redis_conf.slaveof = (primary_ip, primary_port)
 		
 	def init_service(self, mpoint):
-		self.service.stop('Moving Redis db files')
-		move_files = not self.working_directory.is_initialized(mpoint)
-		self.working_directory.move_to(mpoint, move_files)
+		
 		self.redis_conf.bind = None
 		self.redis_conf.dir = mpoint
 		
@@ -154,7 +156,10 @@ class WorkingDirectory(object):
 		
 		if move_files and os.path.exists(self.path) and os.listdir(self.path):
 			self._logger.debug("copying db files from %s into %s" % (self.path, dst))
-			shutil.copytree(self.path, dst)	
+			data = os.listdir(self.path)
+			for fname in data:
+				if fname in ('dump.rdb','appendonly.log'):
+					shutil.copyfile(os.path.join(self.path, fname), os.path.join(dst, fname))
 		self._logger.debug("changing directory owner to %s" % self.user)	
 		rchown(self.user, dst)			
 		self.path = dst
