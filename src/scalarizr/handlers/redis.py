@@ -419,6 +419,11 @@ class RedisHandler(ServiceCtlHandler):
 		@param message: HostUp message
 		"""
 		self._logger.info("Initializing %s slave" % BEHAVIOUR)
+		
+		# Plug storage
+		self.storage_vol = self._plug_storage(self._storage_path, 
+					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 			
 		# Change replication master 
 		master_host = self._get_master_host()
