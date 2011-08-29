@@ -463,6 +463,10 @@ class RedisHandler(ServiceCtlHandler):
 		self.storage_vol = self._plug_storage(self._storage_path, 
 					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		
+		#cleaning volume
+		if self.redis.working_directory.is_initialized(self._storage_path):
+			self.redis.working_directory.empty()
 			
 		# Change replication master 
 		master_host = self._get_master_host()
