@@ -124,7 +124,8 @@ class Storage:
 		self = Storage
 		args = list(args) if args else list()
 		kwargs = kwargs.copy() if kwargs else dict()
-
+		from_snap = False
+		
 		if args:
 			if isinstance(args[0], dict):
 				kwargs = args[0]
