@@ -46,6 +46,7 @@ class RackspaceRebundleHandler(Handler):
 			cnf = bus.cnf
 			old_state = cnf.state
 			cnf.state = ScalarizrState.REBUNDLING
+			image = None
 			
 			try:
 				image_manager = ImageManager(con)
@@ -62,6 +63,9 @@ class RackspaceRebundleHandler(Handler):
 						sleep=30, logger=self._logger, timeout=3600,
 						error_text="Image %s wasn't completed in a reasonable time" % image.id)
 				self._logger.info('Image %s completed and available for use!', image.id)
+			except:
+				if image:
+					image_manager.delete(image)
 			finally:
 				cnf.state = old_state
 			
