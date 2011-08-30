@@ -16,7 +16,7 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until
 from scalarizr.util.filetool import split, rchown
-from scalarizr.services.redis import Redis
+from scalarizr.services.redis import Redis, REDIS_USER
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
@@ -33,7 +33,6 @@ OPT_MASTER_PASSWORD			= "master_password"
 OPT_VOLUME_CNF				= 'volume_config'
 OPT_SNAPSHOT_CNF			= 'snapshot_config'
 
-REDIS_USER 					= 'redis'
 BACKUP_CHUNK_SIZE 			= 200*1024*1024
 DEFAULT_PORT	= 6379
 DB_FILENAME = 'dump.rdb'
