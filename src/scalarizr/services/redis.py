@@ -20,7 +20,8 @@ SERVICE_NAME = CNF_SECTION = 'redis'
 BIN_PATH 	 = '/usr/bin/redis-server'	
 OPT_REPLICATION_MASTER  = "replication_master"
 CONFIG_PATH = '/etc/redis/redis.conf'
-REDIS_CLI_PATH = '/usr/bin/redis-cli'			
+REDIS_CLI_PATH = '/usr/bin/redis-cli'	
+REDIS_USER = 'redis'		
 				
 class RedisInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
@@ -93,6 +94,7 @@ class Redis(BaseService):
 		self.is_replication_master = True
 		
 	def init_slave(self, mpoint, primary_ip, primary_port, password):
+		rchown(REDIS_USER, mpoint)
 		self.service.stop('Configuring slave')
 		self.init_service(mpoint)
 		self.redis_conf.requirepass = None
