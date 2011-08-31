@@ -16,7 +16,7 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until
 from scalarizr.util.filetool import split, rchown
-from scalarizr.services.redis import Redis, REDIS_USER
+from scalarizr.services.redis import Redis
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
@@ -35,7 +35,7 @@ OPT_SNAPSHOT_CNF			= 'snapshot_config'
 
 BACKUP_CHUNK_SIZE 			= 200*1024*1024
 DEFAULT_PORT	= 6379
-DB_FILENAME = 'dump.rdb'
+
 
 def get_handlers():
 	return (RedisHandler(), )
@@ -198,7 +198,7 @@ class RedisHandler(ServiceCtlHandler):
 		try:
 			bus.fire('before_%s_data_bundle' % BEHAVIOUR)
 			# Creating snapshot		
-			snap = self._create_snapshot(REDIS_USER, self.redis.password)
+			snap = self._create_snapshot()
 			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
 			bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)			
 			
@@ -268,7 +268,7 @@ class RedisHandler(ServiceCtlHandler):
 				
 			if not master_storage_conf:
 									
-				snap = self._create_snapshot(REDIS_USER, message.master_password)
+				snap = self._create_snapshot()
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol.config(), snap)
 				
@@ -333,8 +333,8 @@ class RedisHandler(ServiceCtlHandler):
 			# Dump all databases
 			self._logger.info("Dumping all databases")			
 			tmpdir = tempfile.mkdtemp()		
-			src_path = os.path.join(self.redis.redis_conf.dir, DB_FILENAME)
-			dump_path = os.path.join(tmpdir, DB_FILENAME)
+			src_path = self.redis.db_path
+			dump_path = os.path.join(tmpdir, os.path.basename(self.redis.db_path))
 			
 			if not os.path.exists(src_path):
 				raise BaseException('Redis DB file %s does not exists. Skipping Backup process')
@@ -348,7 +348,7 @@ class RedisHandler(ServiceCtlHandler):
 			
 			# Creating archive 
 			backup = tarfile.open(backup_path, 'w:gz')
-			backup.add(dump_path, DB_FILENAME)
+			backup.add(dump_path, os.path.basename(self.redis.db_path))
 			backup.close()
 			
 			# Creating list of full paths to archive chunks
@@ -414,7 +414,7 @@ class RedisHandler(ServiceCtlHandler):
 							OPT_MASTER_PASSWORD			:	self.redis.password})	
 			
 		# Create snapshot
-		snap = self._create_snapshot(REDIS_USER, password)
+		snap = self._create_snapshot()
 		Storage.backup_config(snap.config(), self._snapshot_config_path)
 	
 		# Update HostUp message 
@@ -511,11 +511,11 @@ class RedisHandler(ServiceCtlHandler):
 		return vol
 
 
-	def _create_snapshot(self, root_user, root_password, dry_run=False):
+	def _create_snapshot(self):
 		
 		system2('sync', shell=True)
 		# Creating storage snapshot
-		snap = None if dry_run else self._create_storage_snapshot()
+		snap = self._create_storage_snapshot()
 			
 		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
 		if snap.state == Snapshot.FAILED:
