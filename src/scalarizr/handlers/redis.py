@@ -361,7 +361,7 @@ class RedisHandler(ServiceCtlHandler):
 			trn = transfer.Transfer()
 			result = trn.upload(parts, self._platform.cloud_storage_path)
 			self._logger.info("%s backup uploaded to cloud storage under %s/%s" % 
-						BEHAVIOUR, self._platform.cloud_storage_path, backup_filename)
+						(BEHAVIOUR, self._platform.cloud_storage_path, backup_filename))
 			
 			# Notify Scalr
 			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
