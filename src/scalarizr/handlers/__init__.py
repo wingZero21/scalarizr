@@ -3,7 +3,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool
+from scalarizr.util import initdv2, disttool, iptables
 from scalarizr.util.initdv2 import Status
 from scalarizr.service import CnfPresetStore, CnfPreset, CnfController,\
 	PresetType
@@ -399,3 +399,69 @@ class RebundleLogHandler(logging.Handler):
 			message = str(record.msg) % record.args if record.args else str(record.msg)
 		))
 		self._msg_service.get_producer().send(Queues.LOG, msg)
+
+
+
+class FarmSecurityMixin(object):
+	def __init__(self, ports):
+		self._ports = ports
+		self._iptables = iptables.IpTables()
+		if not self._iptables.usable():
+			raise HandlerError('iptables is not installed. iptables is required to run me correctly')
+		
+		bus.on('init', self.__on_init)
+		self.__on_reload()
+		
+	def __on_init(self):
+		bus.on(
+			before_host_up=self.__insert_iptables_rules,
+			before_reboot_finish=self.__insert_iptables_rules,
+			reload=self.__on_reload
+		)
+	
+	def __on_reload(self):
+		self._queryenv = bus.queryenv_service
+	
+	
+	def on_HostInit(self, message):
+		# Append new server to allowed list
+		ip = message.local_ip or message.remote_ip
+		for port in self._ports:
+			rule = iptables.RuleSpec(source=ip, protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
+			self._iptables.insert_rule(None, rule)
+		
+
+	def on_HostDown(self, message):
+		# Remove terminated server from allowed list
+		ip = message.local_ip or message.remote_ip
+		for port in self._ports:
+			rule = iptables.RuleSpec(source=ip, protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
+			self._iptables.delete_rule(rule)
+
+
+	def __insert_iptables_rules(self):
+		# Collect farm servers IP-s					
+		ips = []
+		for role in self._queryenv.list_roles():
+			for host in role.hosts:
+				ips.append(host.internal_ip or host.external_ip)
+		
+		rules = []
+		for port in self._ports:
+			# Allow from localhost
+			local_rule = iptables.RuleSpec(source='127.0.0.1', protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
+			rules.append(local_rule)
+			# Allow from farm IP-s
+			for ip in ips:
+				allow_rule = iptables.RuleSpec(source=ip, protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
+				rules.append(allow_rule)
+		
+			# Deny from all
+			drop_rule = iptables.RuleSpec(protocol=iptables.P_TCP, dport=self._port, jump='DROP')
+			rules.append(drop_rule)
+			
+		# Apply iptables rules
+		rules.reverse()
+		for rule in rules:
+			self._iptables.insert_rule(1, rule)	
+			

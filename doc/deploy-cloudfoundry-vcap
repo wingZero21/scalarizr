@@ -1,0 +1,116 @@
+#!/bin/bash
+
+VCAP_REPO=${VCAP_REPO:-https://github.com/cloudfoundry/vcap.git}
+RUBY19_VERSION='1.9.2-p290'
+
+OS=`uname -s`
+if [[ $OS == 'Linux' ]]; then
+	PLATFORM='Linux'
+elif [[ $OS == 'Darwin' ]]; then
+	PLATFORM='MacOSX'
+else
+	echo "Unknown System, cancelling setup"
+    exit 1
+fi
+
+
+INIT_FILE=""
+if [ -f ~/.bashrc ]; then
+	INIT_FILE="$HOME/.bashrc"
+elif [ -f ~/.bash_profile ]; then
+	INIT_FILE="$HOME/.bash_profile"
+elif [ -f ~/.zshrc ]; then
+	INIT_FILE="$HOME/.zshrc"
+fi
+
+
+echo ""
+echo '-----------------------------------------------------------'
+echo "($PLATFORM) One Click Installer for VMware's Cloud Application Platform!"
+echo '-----------------------------------------------------------'
+echo ""
+
+echo "Installing dependencies"
+if [[ $PLATFORM == 'Linux' ]]; then
+	apt-get update
+	apt-get -yqq install coreutils autoconf curl git-core ruby bison build-essential zlib1g-dev libssl-dev libreadline5-dev
+else
+	echo "Sorry, we can't install dependencies for your system yet."
+fi
+
+
+if [ "$(ruby -v | awk '{print $2}')" != "$(echo $RUBY19_VERSION | sed 's/-//1')" ]
+then 
+	echo "Installing Ruby $RUBY19_VERSION"
+	pushd .
+	cd /tmp
+	wget http://ftp.ruby-lang.org/pub/ruby/1.9/ruby-$RUBY19_VERSION.tar.gz
+	tar -xzf ruby-$RUBY19_VERSION.tar.gz && cd ruby-$RUBY19_VERSION
+	./configure --prefix=/usr/local/ruby-$RUBY19_VERSION
+	make && make install
+	cd ..
+	rm -rf $RUBY19_VERSION*
+	popd
+fi
+
+echo "Setup Ruby $RUBY19_VERSION as default Ruby interpreter"
+update-alternatives \
+	--install /usr/local/ruby RUBY_HOME /usr/local/$RUBY19_VERSION
+
+pushd .
+cd /usr/local/ruby/share/man/man1
+for name in $(ls .)
+do
+	gzip -c $name >> "$name.gz"
+done
+popd
+
+update-alternatives 
+	--install /usr/bin/ruby ruby /usr/local/ruby/bin/ruby 500 \
+	--slave /usr/bin/erb erb /usr/local/ruby/bin/erb \
+	--slave /usr/bin/irb irb /usr/local/ruby/bin/irb \
+	--slave /usr/bin/rake rake /usr/local/ruby/bin/rake \
+	--slave /usr/bin/ri ri /usr/local/ruby/bin/ri \
+	--slave /usr/share/man/man1/ruby.1.gz ruby.1.gz /usr/local/ruby/share/man/man1/ruby.1.gz \
+	--slave /usr/share/man/man1/erb.1.gz erb.1.gz /usr/local/ruby/share/man/man1/erb.1.gz \
+	--slave /usr/share/man/man1/irb.1.gz irb.1.gz /usr/local/ruby/share/man/man1/irb.1.gz \ 
+	--slave /usr/share/man/man1/rake.1.gz rake.1.gz /usr/local/ruby/share/man/man1/rake.1.gz \
+	--slave /usr/share/man/man1/ri.1.gz ri.1.gz /usr/local/ruby/share/man/man1/ri.1.gz
+
+RUBY_PATH='/usr/local/ruby/bin'
+if ! grep $RUBY_PATH ~/.bashrc 2>&1 1>/dev/null 
+then 
+	echo 'PATH="$PATH:'$RUBY_PATH'"' >> ~/.bashrc
+	export PATH="$PATH:$RUBY_PATH"
+fi
+
+gem install rubygems-update
+update_rubygems --version=1.6.2
+
+
+echo "Getting vcap"
+[ -d ~/cloudfoundry ] || mkdir ~/cloudfoundry
+cd ~/cloudfoundry
+
+[ -d vcap ] || git clone $VCAP_REPO
+cd vcap
+git submodule update --init
+gem install vmc --no-rdoc --no-ri
+
+echo "Setting up vcap."
+cd ~/cloudfoundry/vcap
+
+
+./setup/vcap_setup
+
+
+echo "Restarting nginx"
+cd ~/cloudfoundry/vcap
+cp setup/simple.nginx.conf /etc/nginx/nginx.conf
+/etc/init.d/nginx restart
+
+echo "Installing bundler"
+gem install bundler --no-rdoc --no-ri
+rake bundler:install
+
+echo "Success!"
