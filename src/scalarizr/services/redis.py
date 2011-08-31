@@ -22,7 +22,8 @@ OPT_REPLICATION_MASTER  = "replication_master"
 CONFIG_PATH = '/etc/redis/redis.conf'
 REDIS_CLI_PATH = '/usr/bin/redis-cli'	
 REDIS_USER = 'redis'	
-AOF_FNAME = 'appendonly.log'
+DB_FILENAME = 'dump.rdb'
+AOF_FILENAME = 'appendonly.log'
 
 AOF_TYPE = 'aof'
 SNAP_TYPE = 'snapshotting'
@@ -128,7 +129,7 @@ class Redis(BaseService):
 	
 	@property
 	def db_path(self):
-		fname = self.redis_conf.dbfilename if not self.redis_conf.appendonly else AOF_FNAME
+		fname = self.redis_conf.dbfilename if not self.redis_conf.appendonly else AOF_FILENAME
 		return os.path.join(self.redis_conf.dir, fname)
 	
 	def generate_password(self, length=20):
@@ -160,7 +161,7 @@ class Redis(BaseService):
 class WorkingDirectory(object):
 
 	default_centos_dir = default_ubuntu_dir = '/var/lib/redis'
-	default_db_fname = 'dump.rdb'
+	default_db_fname = DB_FILENAME
 	
 	def __init__(self, db_path=None, user = "redis"):
 		self.db_path = db_path
@@ -173,7 +174,7 @@ class WorkingDirectory(object):
 		if not dir:
 			dir = cls.default_ubuntu_path if disttool.is_ubuntu() else cls.default_centos_path
 			
-		db_fname = AOF_FNAME if redis_conf.appendonly else redis_conf.dbfilename
+		db_fname = AOF_FILENAME if redis_conf.appendonly else redis_conf.dbfilename
 		if not db_fname:
 			db_fname = cls.default_db_fname
 		return cls(os.path.join(dir,db_fname))	
@@ -206,7 +207,7 @@ class WorkingDirectory(object):
 		self._logger.info('Emptying redis database dir %s' % self.path)
 		try:
 			for fname in os.listdir(self.path):
-				if fname.endswith('.rdb') or fname == AOF_FNAME:
+				if fname.endswith('.rdb') or fname == AOF_FILENAME:
 					path = os.path.join(self.path, fname)
 					if os.path.isfile(path):
 						self._logger.debug('Deleting redis db file %s' % path)
