@@ -22,9 +22,12 @@ OPT_REPLICATION_MASTER  = "replication_master"
 CONFIG_PATH = '/etc/redis/redis.conf'
 REDIS_CLI_PATH = '/usr/bin/redis-cli'	
 REDIS_USER = 'redis'	
-	
-SNAP_TYPE = 'snapshotting'
+AOF_FNAME = 'appendonly.log'
+
 AOF_TYPE = 'aof'
+SNAP_TYPE = 'snapshotting'
+
+
 				
 class RedisInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
@@ -123,6 +126,11 @@ class Redis(BaseService):
 	def password(self):
 		return self.redis_conf.requirepass if self.is_replication_master else self.redis_conf.masterauth
 	
+	@property
+	def db_path(self):
+		fname = self.redis_conf.dbfilename if not self.redis_conf.appendonly else AOF_FNAME
+		return os.path.join(self.redis_conf.dir, fname)
+	
 	def generate_password(self, length=20):
 		return cryptotool.pwgen(length)	
 	
@@ -150,49 +158,55 @@ class Redis(BaseService):
 	
 	
 class WorkingDirectory(object):
+
+	default_centos_dir = default_ubuntu_dir = '/var/lib/redis'
+	default_db_fname = 'dump.rdb'
 	
-	default_centos_path = default_ubuntu_path = '/var/lib/redis'
-	
-	def __init__(self, path=None, user = "redis"):
-		self.path = path
+	def __init__(self, db_path=None, user = "redis"):
+		self.db_path = db_path
 		self.user = user
 		self._logger = logging.getLogger(__name__)
 		
 	@classmethod
 	def find(cls, redis_conf):
-		path = redis_conf.dir
-		if not path:
-			path = cls.default_ubuntu_path if disttool.is_ubuntu() else cls.default_centos_path
-		return cls(path)
+		dir = redis_conf.dir
+		if not dir:
+			dir = cls.default_ubuntu_path if disttool.is_ubuntu() else cls.default_centos_path
+			
+		db_fname = AOF_FNAME if redis_conf.appendonly else redis_conf.dbfilename
+		if not db_fname:
+			db_fname = cls.default_db_fname
+		return cls(os.path.join(dir,db_fname))	
+	
 
 	def move_to(self, dst, move_files=True):
+		new_db_path = os.path.join(dst, os.path.basename(self.db_path))
+		
 		if not os.path.exists(dst):
 			self._logger.debug('Creating directory structure for redis db files: %s' % dst)
 			os.makedirs(dst)
 		
-		if move_files and os.path.exists(self.path) and os.listdir(self.path):
-			self._logger.debug("copying db files from %s into %s" % (self.path, dst))
-			data = os.listdir(self.path)
-			for fname in data:
-				if fname in ('dump.rdb','appendonly.log'):
-					shutil.copyfile(os.path.join(self.path, fname), os.path.join(dst, fname))
+		if move_files and os.path.exists(self.path) and os.path.isfile(self.db_path):
+			self._logger.debug("copying db file %s into %s" % (self.path, dst))
+			shutil.copyfile(self.db_path, new_db_path)
+			
 		self._logger.debug("changing directory owner to %s" % self.user)	
 		rchown(self.user, dst)			
-		self.path = dst
-		return dst
+		self.db_path = new_db_path
+		return new_db_path
 
 	def is_initialized(self, path):
 		# are the redis db files already in place? 
 		if os.path.exists(path):
 			fnames = os.listdir(path)
-			return 'dump.rdb' in fnames or 'appendonly.log' in fnames
+			return os.path.basename(self.db_path) in fnames
 		return False
 	
 	def empty(self):
 		self._logger.info('Emptying redis database dir %s' % self.path)
 		try:
 			for fname in os.listdir(self.path):
-				if fname.endswith('.rdb'):
+				if fname.endswith('.rdb') or fname == AOF_FNAME:
 					path = os.path.join(self.path, fname)
 					if os.path.isfile(path):
 						self._logger.debug('Deleting redis db file %s' % path)
@@ -202,7 +216,7 @@ class WorkingDirectory(object):
 						os.unlink(path)						
 		except OSError, e:
 			self._logger.error('Cannot empty %s: %s' % (self.path, e))
-				
+			
 	
 	
 class BaseRedisConfig(BaseConfig):
