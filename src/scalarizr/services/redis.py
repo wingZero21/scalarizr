@@ -21,7 +21,10 @@ BIN_PATH 	 = '/usr/bin/redis-server'
 OPT_REPLICATION_MASTER  = "replication_master"
 CONFIG_PATH = '/etc/redis/redis.conf'
 REDIS_CLI_PATH = '/usr/bin/redis-cli'	
-REDIS_USER = 'redis'		
+REDIS_USER = 'redis'	
+	
+SNAP_TYPE = 'snapshotting'
+AOF_TYPE = 'aof'
 				
 class RedisInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
@@ -70,11 +73,12 @@ class Redis(BaseService):
 	_instance = None
 	service = None
 
-	def __init__(self, master=False):
+	def __init__(self, master=False, persistence_type=SNAP_TYPE):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
 		self.is_replication_master = master
+		self.persistence_type = persistence_type
 								
 	def __new__(cls, *args, **kwargs):
 		if not cls._instance:
@@ -108,9 +112,12 @@ class Redis(BaseService):
 		self.redis_conf.slaveof = (primary_ip, primary_port)
 		
 	def init_service(self, mpoint):
-		
 		self.redis_conf.bind = None
 		self.redis_conf.dir = mpoint
+		if self.persistence_type == SNAP_TYPE:
+			pass
+		elif self.persistence_type == AOF_TYPE:
+			pass
 		
 	@property	
 	def password(self):
@@ -270,19 +277,101 @@ class RedisConf(BaseRedisConfig):
 class RedisCLI(object):
 	path = REDIS_CLI_PATH
 	
-	def __init__(self):
+	def __init__(self, password=None):
 		if not os.path.exists(self.path):
 			raise OSError('redis-cli not found')
+		
+	def execute(self, query):
+		if self.password:
+				query = 'AUTH %s\n%s' % (self.passwword, query)
+		try:
+			out = system2([self.path], stdin=query,silent=True)[0]
+			if out.startswith('ERR'):
+				raise PopenError(out)
+			elif out.startswith('OK\n'):
+				out = out[3:]
+			if out.endswith('\n'):
+				out = out[:-1]
+			return out	
+		except PopenError, e:
+			self._logger.error('Unable to execute query %s with redis-cli: %s' % (query, e))
+			raise	
 	
 	@property
 	def info(self):
-		out = system2([self.path, 'info'], silent=True)
+		info = self.execute('info')
 		d = {}
-		if not out:
-			raw = out.strip().split('\n')
-			for i in raw:
-				key, val = i.split(':')
+		if info:
+			for i in info.strip().split('\n'):
+				key, val = i[:-1].split(':')
 				if key:
 					d[key] = val
 		return d
+	
+	@property
+	def aof_enabled(self):
+		return True if self.info['aof_enabled']=='1' else False	
+	
+	@property
+	def bgrewriteaof_in_progress(self):
+		return True if self.info['bgrewriteaof_in_progress']=='1' else False	
+	
+	@property
+	def bgsave_in_progress(self):
+		return True if self.info['bgsave_in_progress']=='1' else False
+	
+	@property
+	def changes_since_last_save(self):
+		return int(self.info['changes_since_last_save'])
+		
+	@property
+	def connected_slaves(self):
+		return int(self.info['connected_slaves'])
+		
+	@property
+	def last_save_time(self):
+		return int(self.info['last_save_time'])
+		
+	@property
+	def redis_version(self):
+		return self.info['redis_version']
+			
+	@property
+	def role(self):
+		return self.info['role']
+
+	@property
+	def master_host(self):
+		info = self.info
+		if info['role']=='slave':
+			return info['master_host']
+		return None
+		
+	@property
+	def master_port(self):
+		info = self.info
+		if info['role']=='slave':
+			return int(info['master_port'])
+		return None
+		
+	@property
+	def master_link_status(self):
+		info = self.info
+		if info['role']=='slave':
+			return info['master_link_status']
+		return None
+		
+	@property
+	def master_last_io_seconds_ago(self):
+		info = self.info
+		if info['role']=='slave':
+			return int(info['master_last_io_seconds_ago'])
+		return None
+		
+	@property
+	def master_sync_in_progress(self):
+		info = self.info
+		if info['role']=='slave':
+			return True if info['master_sync_in_progress']=='1' else False
+		return False
 		
