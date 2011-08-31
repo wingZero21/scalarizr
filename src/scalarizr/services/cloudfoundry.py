@@ -15,7 +15,8 @@ class CloudFoundry(object):
 	
 	def __init__(self, vcap_home):
 		self.vcap_home = vcap_home
-		self._mbus_url = None
+		self._mbus = None
+		self._cloud_controller = None
 		
 	
 	def start(self, svs=None):
@@ -51,7 +52,7 @@ class CloudFoundry(object):
 		return util.system2(cmd)
 	
 	
-	def _set_mbus_url(self, url):
+	def _set_mbus(self, url):
 		find = subprocess.Popen(('find', self.vcap_home, '-name', '*.yml'), stdout=subprocess.PIPE)
 		grep = subprocess.Popen(('xargs', 'grep', '--files-with-matches', 'mbus'), stdin=find.stdout, stdout=subprocess.PIPE)
 		sed = subprocess.Popen(('xargs', 'sed', '--in-place', 's/mbus.*/mbus: %s/1' % url.replace('/', '\/')), stdin=grep.stdout)
@@ -61,8 +62,19 @@ class CloudFoundry(object):
 		self._mbus_url = url
 	
 	
-	def _get_mbus_url(self, mbus):
+	def _get_mbus(self, mbus):
 		return self._mbus_url
 	
+	mbus = property(_get_mbus, _set_mbus)
 	
-	mbus_url = property(_get_mbus_url, _set_mbus_url)
+	
+	def _set_cloud_controller(self, host):
+		self._cloud_controller = host
+		self.mbus = 'mbus://%s:4222/' % host
+	
+		
+	def _get_cloud_controller(self):
+		return self._cloud_controller
+	
+	
+	cloud_controller = property(_get_cloud_controller, _set_cloud_controller)
