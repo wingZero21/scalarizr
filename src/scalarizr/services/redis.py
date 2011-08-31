@@ -119,9 +119,10 @@ class Redis(BaseService):
 		self.redis_conf.bind = None
 		self.redis_conf.dir = mpoint
 		if self.persistence_type == SNAP_TYPE:
-			pass
+			self.redis_conf.appendonly = False
 		elif self.persistence_type == AOF_TYPE:
-			pass
+			self.redis_conf.appendonly = True
+			self.redis_conf.save = {}
 		
 	@property	
 	def password(self):
