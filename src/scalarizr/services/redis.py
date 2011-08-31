@@ -130,7 +130,13 @@ class Redis(BaseService):
 		return self._get('redis_conf', RedisConf.find)
 	
 	def _set_redis_conf(self, obj):
-		self._set('redis_conf', obj)
+		self._set('redis_conf', obj)	
+	
+	def _get_redis_cli(self):
+		return self._get('redis_cli', RedisCLI.find, self.redis_conf)
+	
+	def _set_redis_cli(self, obj):
+		self._set('redis_cli', obj)
 	
 	def _get_working_directory(self):
 		return self._get('working_directory', WorkingDirectory.find, self.redis_conf)
@@ -140,6 +146,7 @@ class Redis(BaseService):
 		
 	working_directory = property(_get_working_directory, _set_working_directory)
 	redis_conf = property(_get_redis_conf, _set_redis_conf)
+	redis_cli = property(_get_redis_cli, _set_redis_cli)
 	
 	
 class WorkingDirectory(object):
@@ -280,6 +287,10 @@ class RedisCLI(object):
 	def __init__(self, password=None):
 		if not os.path.exists(self.path):
 			raise OSError('redis-cli not found')
+	
+	@classmethod	
+	def find(cls, redis_conf):
+		return cls(redis_conf.requirepass or redis_conf.masterauth)
 		
 	def execute(self, query):
 		if self.password:
@@ -360,6 +371,21 @@ class RedisCLI(object):
 		if info['role']=='slave':
 			return info['master_link_status']
 		return None
+	
+	def bgsave(self, wait_until_complete=True):
+		if self.changes_since_last_save and not self.bgsave_in_progress:
+			self.execute('bgsave')
+		if wait_until_complete:
+			wait_until(lambda: self.bgsave_in_progress, sleep=5, timeout=900)
+			
+	def bgrewriteaof(self, wait_until_complete=True):
+		if self.changes_since_last_save and not self.bgrewriteaof_in_progress:
+			self.execute('bgrewriteaof')
+		if wait_until_complete:
+			wait_until(lambda: self.bgrewriteaof_in_progress, sleep=5, timeout=900)
+					
+	def save(self):
+		self.bgsave() if self.aof_enabled else self.bgrewriteaof()
 		
 	@property
 	def master_last_io_seconds_ago(self):
