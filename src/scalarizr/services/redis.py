@@ -13,7 +13,7 @@ from scalarizr.util import initdv2, system2, PopenError, wait_until
 from scalarizr.services import lazy, BaseConfig, BaseService
 from scalarizr.util import disttool, cryptotool
 from scalarizr.util.filetool import rchown
-from scalarizr.libs.metaconf import Configuration
+from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
 SERVICE_NAME = CNF_SECTION = 'redis'
@@ -222,6 +222,22 @@ class WorkingDirectory(object):
 	
 class BaseRedisConfig(BaseConfig):
 	config_type = 'redis'
+		
+	def set(self, option, value, append=False):
+		if not self.data:
+			self.data = Configuration(self.config_type)
+			if os.path.exists(self.path):
+				self.data.read(self.path)
+		if value:
+			if append:
+				self.data.add(option, value)
+			else:
+				self.data.set(option,value, force=True)
+		else: 
+			self.data.comment(option)
+		if self.autosave:
+			self.save()
+			self.data = None
 	
 	def set_sequential_option(self, option, seq):
 		try:
@@ -233,6 +249,47 @@ class BaseRedisConfig(BaseConfig):
 	def get_sequential_option(self, option):
 		raw = self.get(option)
 		return raw.split() if raw else ()
+				
+	def get_list(self, option):
+		if not self.data:
+			self.data =  Configuration(self.config_type)
+			if os.path.exists(self.path):
+				self.data.read(self.path)	
+		try:
+			value = self.data.get_list(option)	
+		except NoPathError:
+			try:
+				value = getattr(self, option+'_default')
+			except AttributeError:
+				value = ()
+		if self.autosave:
+			self.data = None
+		return value
+	
+	def get_dict_option(self, option):
+		raw = self.get_list(option)
+		d = {}
+		for raw_value in raw:
+			k,v = raw_value.split()
+			if k and v:
+				d[k] = v
+		return d
+		
+	def set_dict_option(self, option, d):
+		try:
+			assert not d or type(d)==dict
+			
+			#cleaning up
+			#TODO: make clean process smarter using indexes
+			for i in self.get_list(option):
+				self.set(option+[0], None)
+				
+			#adding multiple entries
+			for k,v in d.items():
+				val = ' '.join(map(str,'%s %s'%(k,v)))
+				self.set(option, val, append=True)
+		except ValueError:
+			raise ValueError('%s must be a sequence (got %s instead)' % (option, d))			
 	
 	
 class RedisConf(BaseRedisConfig):
@@ -242,20 +299,7 @@ class RedisConf(BaseRedisConfig):
 	@classmethod
 	def find(cls, config_dir=None):
 		return cls(os.path.join(config_dir, cls.config_name) if config_dir else CONFIG_PATH)
-		
-	def set(self, option, value):
-		if not self.data:
-			self.data = Configuration(self.config_type)
-			if os.path.exists(self.path):
-				self.data.read(self.path)
-		if value:
-			self.data.set(option,value, force=True)
-		else: 
-			self.data.comment(option)
-		if self.autosave:
-			self.save()
-			self.data = None
-				
+	
 	def _get_dir(self):
 		return self.get('dir')
 	
@@ -301,8 +345,15 @@ class RedisConf(BaseRedisConfig):
 	
 	def _set_dbfilename(self, fname):
 		self.set('dbfilename', fname)	
-									
+	
+	def _get_save(self):
+		return self.get_dict_option('save')
+	
+	def _set_save(self, save_dict):
+		self.set_dict_option('save', save_dict)
+											
 	dir = property(_get_dir, _set_dir)
+	save = property(_get_save, _set_save)
 	bind = property(_get_bind, _set_bind)
 	slaveof = property(_get_slaveof, _set_slaveof)
 	masterauth = property(_get_masterauth, _set_masterauth)
