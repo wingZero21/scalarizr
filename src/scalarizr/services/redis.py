@@ -273,12 +273,27 @@ class RedisConf(BaseRedisConfig):
 	
 	def _set_requirepass(self, passwd):
 		self.set('requirepass', passwd)	
-				
+					
+	def _get_appendonly(self):
+		return True if self.get('appendonly') == 'yes' else False
+	
+	def _set_appendonly(self, on):
+		assert on == True or on == False
+		self.set('appendonly', on)	
+	
+	def _get_dbfilename(self):
+		return self.get('dbfilename')
+	
+	def _set_dbfilename(self, fname):
+		self.set('dbfilename', fname)	
+									
 	dir = property(_get_dir, _set_dir)
 	bind = property(_get_bind, _set_bind)
 	slaveof = property(_get_slaveof, _set_slaveof)
 	masterauth = property(_get_masterauth, _set_masterauth)
 	requirepass	 = property(_get_requirepass, _set_requirepass)
+	appendonly	 = property(_get_appendonly, _set_appendonly)
+	dbfilename	 = property(_get_dbfilename, _set_dbfilename)
 		
 		
 class RedisCLI(object):
