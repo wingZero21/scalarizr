@@ -23,7 +23,7 @@ CONFIG_PATH = '/etc/redis/redis.conf'
 REDIS_CLI_PATH = '/usr/bin/redis-cli'	
 REDIS_USER = 'redis'	
 DB_FILENAME = 'dump.rdb'
-AOF_FILENAME = 'appendonly.log'
+AOF_FILENAME = 'appendonly.aof'
 
 AOF_TYPE = 'aof'
 SNAP_TYPE = 'snapshotting'
