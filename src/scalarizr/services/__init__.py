@@ -108,7 +108,7 @@ class BaseConfig(object):
 				self.data.read(self.path)
 		self.data.set(option,value, force=True)
 		if self.autosave:
-			self.save()
+			self.save_data()
 			self.data = None
 			
 	def set_path_type_option(self, option, path):
@@ -144,7 +144,7 @@ class BaseConfig(object):
 		assert not value or int(value)
 		return int(value) if value else 0
 	
-	def save(self):
+	def save_data(self):
 		if self.data:
 			self.data.write(self.path)			
 

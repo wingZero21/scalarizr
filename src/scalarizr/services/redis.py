@@ -237,7 +237,7 @@ class BaseRedisConfig(BaseConfig):
 		else: 
 			self.data.comment(option)
 		if self.autosave:
-			self.save()
+			self.save_data()
 			self.data = None
 	
 	def set_sequential_option(self, option, seq):
