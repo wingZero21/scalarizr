@@ -439,7 +439,7 @@ class FarmSecurityMixin(object):
 			self._iptables.delete_rule(rule)
 
 
-	def __insert_iptables_rules(self):
+	def __insert_iptables_rules(self, *args, **kwds):
 		# Collect farm servers IP-s					
 		ips = []
 		for role in self._queryenv.list_roles():

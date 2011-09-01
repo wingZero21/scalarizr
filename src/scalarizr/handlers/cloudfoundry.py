@@ -83,6 +83,8 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	def on_before_host_up(self, msg):
 		hostup = dict()
 		self._locate_cloud_controller()
+		if 'router' in self.components:
+			self._configure_router()
 		self._start_services()		
 			
 		self.ini.update_ini(SERVICE_NAME, hostup)
@@ -117,3 +119,9 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		if cchost:
 			self.cloudfoundry.cloud_controller = cchost
 		return bool(cchost)
+
+
+	def _configure_router(self):
+		roles = self.queryenv.list_roles(behaviour=config.BuiltinBehaviours.WWW)
+		if roles:
+			pass
