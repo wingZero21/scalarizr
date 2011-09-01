@@ -188,8 +188,8 @@ class WorkingDirectory(object):
 			self._logger.debug('Creating directory structure for redis db files: %s' % dst)
 			os.makedirs(dst)
 		
-		if move_files and os.path.exists(self.path) and os.path.isfile(self.db_path):
-			self._logger.debug("copying db file %s into %s" % (self.path, dst))
+		if move_files and os.path.exists(os.path.dirname(self.db_path)) and os.path.isfile(self.db_path):
+			self._logger.debug("copying db file %s into %s" % (os.path.dirname(self.db_path), dst))
 			shutil.copyfile(self.db_path, new_db_path)
 			
 		self._logger.debug("changing directory owner to %s" % self.user)	
@@ -205,11 +205,11 @@ class WorkingDirectory(object):
 		return False
 	
 	def empty(self):
-		self._logger.info('Emptying redis database dir %s' % self.path)
+		self._logger.info('Emptying redis database dir %s' % os.path.dirname(self.db_path))
 		try:
-			for fname in os.listdir(self.path):
+			for fname in os.listdir(os.path.dirname(self.db_path)):
 				if fname.endswith('.rdb') or fname == AOF_FILENAME:
-					path = os.path.join(self.path, fname)
+					path = os.path.join(os.path.dirname(self.db_path), fname)
 					if os.path.isfile(path):
 						self._logger.debug('Deleting redis db file %s' % path)
 						os.remove(path)
@@ -217,7 +217,7 @@ class WorkingDirectory(object):
 						self._logger.debug('Deleting link to redis db file %s' % path)
 						os.unlink(path)						
 		except OSError, e:
-			self._logger.error('Cannot empty %s: %s' % (self.path, e))
+			self._logger.error('Cannot empty %s: %s' % (os.path.dirname(self.db_path), e))
 			
 	
 	
