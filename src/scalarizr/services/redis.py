@@ -339,7 +339,7 @@ class RedisConf(BaseRedisConfig):
 	
 	def _set_appendonly(self, on):
 		assert on == True or on == False
-		self.set('appendonly', 'on' if on else 'off')	
+		self.set('appendonly', 'yes' if on else 'no')	
 	
 	def _get_dbfilename(self):
 		return self.get('dbfilename')
