@@ -283,7 +283,7 @@ class BaseRedisConfig(BaseConfig):
 			#cleaning up
 			#TODO: make clean process smarter using indexes
 			for i in self.get_list(option):
-				self.set(option+[0], None)
+				self.set(option+'[0]', None)
 				
 			#adding multiple entries
 			for k,v in d.items():
