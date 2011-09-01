@@ -29,6 +29,7 @@ STORAGE_VOLUME_CNF 			= 'redis.json'
 STORAGE_SNAPSHOT_CNF 		= 'redis-snap.json'
 
 OPT_REPLICATION_MASTER  	= 'replication_master'
+OPT_PERSISTENCE_TYPE		= 'persistence_type'
 OPT_MASTER_PASSWORD			= "master_password"
 OPT_VOLUME_CNF				= 'volume_config'
 OPT_SNAPSHOT_CNF			= 'snapshot_config'
@@ -62,6 +63,14 @@ class RedisHandler(ServiceCtlHandler):
 			value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
 			self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
 		return True if int(value) else False
+
+	@property
+	def persistence_type(self):
+		value = 'snapshotting'
+		if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, OPT_PERSISTENCE_TYPE):
+			value = self._cnf.rawini.get(CNF_SECTION, OPT_PERSISTENCE_TYPE)
+			self._logger.debug('Got %s : %s' % (OPT_PERSISTENCE_TYPE, value))
+		return value
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
@@ -124,7 +133,7 @@ class RedisHandler(ServiceCtlHandler):
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		
-		self.redis = Redis(self.is_replication_master)
+		self.redis = Redis(self.is_replication_master, self.persistence_type)
 		
 				
 
@@ -159,6 +168,7 @@ class RedisHandler(ServiceCtlHandler):
 		self._update_config(redis_data)
 		
 		self.redis.is_replication_master = self.is_replication_master
+		self.redis.persistence_type = self.persistence_type 
 
 	def on_before_host_up(self, message):
 		"""
