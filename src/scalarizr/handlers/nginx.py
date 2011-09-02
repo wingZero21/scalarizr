@@ -360,6 +360,11 @@ class NginxHandler(ServiceCtlHanler):
 				server_str = '%s:%s' % (app_host.internal_ip, self._app_port)
 				servers.append(server_str)
 		self._logger.debug("QueryEnv returned list of app servers: %s" % servers)
+		
+		# Add cloudfoundry routers
+		for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.CF_ROUTER):
+			for host in role.hosts:
+				servers.append('%s:%s' % (host, 2222))
 
 		for entry in backend_include.get_list(self.backends_xpath):
 			for server in servers:
@@ -413,6 +418,8 @@ class NginxHandler(ServiceCtlHanler):
 			self._test_config()
 
 		bus.fire("nginx_upstream_reload")	
+
+	
 
 	def _insert_iptables_rules(self, *args, **kwargs):
 		iptables = IpTables()

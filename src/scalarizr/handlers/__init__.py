@@ -456,8 +456,9 @@ class FarmSecurityMixin(object):
 				allow_rule = iptables.RuleSpec(source=ip, protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
 				rules.append(allow_rule)
 		
-			# Deny from all
-			drop_rule = iptables.RuleSpec(protocol=iptables.P_TCP, dport=self._port, jump='DROP')
+		# Deny from all
+		for port in self._ports:
+			drop_rule = iptables.RuleSpec(protocol=iptables.P_TCP, dport=port, jump='DROP')
 			rules.append(drop_rule)
 			
 		# Apply iptables rules

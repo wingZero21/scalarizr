@@ -49,7 +49,7 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 
 	def on_HostUp(self, msg):
-		if msg.remote_ip != self.platform.get_remote_ip() \
+		if msg.remote_ip != self.platform.get_public_ip() \
 				and config.BuiltinBehaviours.CF_CLOUD_CONTROLLER in msg.behaviour:
 			cchost = msg.local_ip or msg.remote_ip
 			self.cloudfoundry.cloud_controller = cchost
@@ -93,12 +93,14 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		
 	def _start_services(self):
 		for cmp in self.components + self.services:
+			LOG.info('Starting %s', cmp)
 			self.cloudfoundry.start(cmp)
 		# @todo check that all of them finally running
 
 	
 	def _stop_services(self):
 		for cmp in self.components + self.services:
+			LOG.info('Stopping %s', cmp)
 			self.cloudfoundry.stop(cmp)
 
 
