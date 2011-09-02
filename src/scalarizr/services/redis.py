@@ -21,7 +21,7 @@ SERVICE_NAME = CNF_SECTION = 'redis'
 UBUNTU_BIN_PATH 	 = '/usr/bin/redis-server'	
 CENTOS_BIN_PATH 	 = '/usr/sbin/redis-server'	
 UBUNTU_CONFIG_PATH = '/etc/redis/redis.conf'
-CENTOS_CONFIG_PATH = '/etc/redis/redis.conf'
+CENTOS_CONFIG_PATH = '/etc/redis.conf'
 
 OPT_REPLICATION_MASTER  = "replication_master"
 
