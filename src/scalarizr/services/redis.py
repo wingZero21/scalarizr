@@ -380,11 +380,11 @@ class RedisCLI(object):
 	
 	@classmethod	
 	def find(cls, redis_conf):
-		return cls(redis_conf.requirepass or redis_conf.masterauth)
+		return cls(redis_conf.masterauth or redis_conf.requirepass)
 		
 	def execute(self, query):
 		if self.password:
-				query = 'AUTH %s\n%s' % (self.passwword, query)
+				query = 'AUTH %s\n%s' % (self.password, query)
 		try:
 			out = system2([self.path], stdin=query,silent=True)[0]
 			if out.startswith('ERR'):
