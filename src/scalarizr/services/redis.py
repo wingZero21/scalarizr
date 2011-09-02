@@ -110,6 +110,12 @@ class Redis(BaseService):
 		self.service.start()
 		self.is_replication_master = False
 		
+		self._logger.info('Waiting for link with master')
+		wait_until(lambda: self.redis_cli.master_link_status == 'up', sleep=3, timeout=600)
+		self._logger.info('Waiting for sync with master to complete')
+		wait_until(lambda: not self.redis_cli.master_sync_in_progress, sleep=10, timeout=3200)
+		self._logger.info('Sync with master completed')
+		
 	def change_primary(self, primary_ip, primary_port, password):
 		self.working_directory.empty()
 		self.redis_conf.masterauth = password
