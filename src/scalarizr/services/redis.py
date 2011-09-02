@@ -181,7 +181,6 @@ class Redis(BaseService):
 	
 class WorkingDirectory(object):
 
-	default_centos_dir = default_ubuntu_dir = DEFAULT_DIR_PATH
 	default_db_fname = DB_FILENAME
 	
 	def __init__(self, db_path=None, user = "redis"):
@@ -193,7 +192,7 @@ class WorkingDirectory(object):
 	def find(cls, redis_conf):
 		dir = redis_conf.dir
 		if not dir:
-			dir = cls.default_ubuntu_path if disttool.is_ubuntu() else cls.default_centos_dir
+			dir = DEFAULT_DIR_PATH
 			
 		db_fname = AOF_FILENAME if redis_conf.appendonly else redis_conf.dbfilename
 		if not db_fname:
