@@ -11,7 +11,7 @@ import shutil
 from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, PopenError, wait_until
 from scalarizr.services import lazy, BaseConfig, BaseService
-from scalarizr.util import disttool, cryptotool
+from scalarizr.util import disttool, cryptotool, firstmatched
 from scalarizr.util.filetool import rchown
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
@@ -40,8 +40,13 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 		return obj
 			
 	def __init__(self):
+		initd_script = None
+		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+			initd_script = ('/usr/sbin/service', 'redis-server')
+		else:
+			initd_script = firstmatched(os.path.exists, ('/etc/init.d/redis', '/etc/init.d/redis-server'))
 		initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
-				initd_script='/etc/init.d/redis-server')
+				initd_script=initd_script)
 	
 	@property
 	def _processes(self):
