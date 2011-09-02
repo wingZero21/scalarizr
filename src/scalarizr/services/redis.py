@@ -17,10 +17,16 @@ from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
 SERVICE_NAME = CNF_SECTION = 'redis'
-BIN_PATH 	 = '/usr/bin/redis-server'	
+
+UBUNTU_BIN_PATH 	 = '/usr/bin/redis-server'	
+CENTOS_BIN_PATH 	 = '/usr/sbin/redis-server'	
+UBUNTU_CONFIG_PATH = '/etc/redis/redis.conf'
+CENTOS_CONFIG_PATH = '/etc/redis/redis.conf'
+
 OPT_REPLICATION_MASTER  = "replication_master"
-CONFIG_PATH = '/etc/redis/redis.conf'
+
 REDIS_CLI_PATH = '/usr/bin/redis-cli'	
+DEFAULT_DIR_PATH = '/var/lib/redis'
 REDIS_USER = 'redis'	
 DB_FILENAME = 'dump.rdb'
 AOF_FILENAME = 'appendonly.aof'
@@ -50,9 +56,11 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 	
 	@property
 	def _processes(self):
-		args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')	
+		args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
+		bin_path = UBUNTU_BIN_PATH if disttool.is_ubuntu() else CENTOS_BIN_PATH	
+		conf_path = UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
 		try:	
-			p = [x for x in system2(args, silent=True)[0].split('\n') if x and BIN_PATH + ' ' + CONFIG_PATH in x]
+			p = [x for x in system2(args, silent=True)[0].split('\n') if x and bin_path + ' ' + conf_path in x]
 		except PopenError,e:
 			p = []
 		return p
@@ -173,7 +181,7 @@ class Redis(BaseService):
 	
 class WorkingDirectory(object):
 
-	default_centos_dir = default_ubuntu_dir = '/var/lib/redis'
+	default_centos_dir = default_ubuntu_dir = DEFAULT_DIR_PATH
 	default_db_fname = DB_FILENAME
 	
 	def __init__(self, db_path=None, user = "redis"):
@@ -311,7 +319,8 @@ class RedisConf(BaseRedisConfig):
 	
 	@classmethod
 	def find(cls, config_dir=None):
-		return cls(os.path.join(config_dir, cls.config_name) if config_dir else CONFIG_PATH)
+		conf_path = UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
+		return cls(os.path.join(config_dir, cls.config_name) if config_dir else conf_path)
 	
 	def _get_dir(self):
 		return self.get('dir')
