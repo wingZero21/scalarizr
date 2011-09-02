@@ -109,11 +109,12 @@ class Redis(BaseService):
 		self.change_primary(primary_ip, primary_port, password)
 		self.service.start()
 		self.is_replication_master = False
-		
+	
+	def wait_for_sync(self,link_timeout=600,sync_timeout=3200):	
 		self._logger.info('Waiting for link with master')
-		wait_until(lambda: self.redis_cli.master_link_status == 'up', sleep=3, timeout=600)
+		wait_until(lambda: self.redis_cli.master_link_status == 'up', sleep=3, timeout=link_timeout)
 		self._logger.info('Waiting for sync with master to complete')
-		wait_until(lambda: not self.redis_cli.master_sync_in_progress, sleep=10, timeout=3200)
+		wait_until(lambda: not self.redis_cli.master_sync_in_progress, sleep=10, timeout=sync_timeout)
 		self._logger.info('Sync with master completed')
 		
 	def change_primary(self, primary_ip, primary_port, password):
