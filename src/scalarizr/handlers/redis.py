@@ -332,6 +332,7 @@ class RedisHandler(ServiceCtlHandler):
 		
 		password = self._get_password()	
 		self.redis.init_slave(self._storage_path, host, DEFAULT_PORT, password)
+		self.redis.wait_for_sync()
 			
 		self._logger.debug("Replication switched")
 		bus.fire('%s_change_master' % BEHAVIOUR, host=host)
@@ -486,6 +487,7 @@ class RedisHandler(ServiceCtlHandler):
 		
 		host = master_host.internal_ip or master_host.external_ip
 		self.redis.init_slave(self._storage_path, host, DEFAULT_PORT, self._get_password())
+		self.redis.wait_for_sync()
 		
 		# Update HostUp message
 		message.redis = self._compat_storage_data(self.storage_vol)
