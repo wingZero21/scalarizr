@@ -414,12 +414,15 @@ class RedisCLI(object):
 	@property
 	def info(self):
 		info = self.execute('info')
+		self._logger.debug('Redis INFO: %s' % info)
 		d = {}
 		if info:
 			for i in info.strip().split('\n'):
-				key, val = i[:-1].split(':')
-				if key:
-					d[key] = val
+				raw = i[:-1] if i.endswith('\r') else i
+				if raw:
+					key, val = raw.split(':')
+					if key:
+						d[key] = val
 		return d
 	
 	@property
