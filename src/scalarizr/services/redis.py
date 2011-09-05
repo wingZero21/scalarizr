@@ -388,6 +388,8 @@ class RedisCLI(object):
 	
 	def __init__(self, password=None):
 		self.password = password
+		self._logger = logging.getLogger(__name__)
+		
 		if not os.path.exists(self.path):
 			raise OSError('redis-cli not found')
 	
