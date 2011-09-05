@@ -488,7 +488,7 @@ class RedisCLI(object):
 			wait_until(lambda: not self.bgrewriteaof_in_progress, sleep=5, timeout=900)
 					
 	def save(self):
-		self.bgsave() if self.aof_enabled else self.bgrewriteaof()
+		self.bgrewriteaof() if self.aof_enabled else self.bgsave()
 		
 	@property
 	def master_last_io_seconds_ago(self):
