@@ -10,7 +10,7 @@ Created on Jan 6, 2010
 from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
-from scalarizr.handlers import HandlerError, ServiceCtlHanler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 
 # Libs
@@ -171,13 +171,13 @@ class NginxCnfController(CnfController):
 		return software.software_info('nginx').version
 
 		
-class NginxHandler(ServiceCtlHanler):
+class NginxHandler(ServiceCtlHandler):
 	
 	backends_xpath = "upstream[@value='backend']/server"
 	localhost = '127.0.0.1:80'
 	
 	def __init__(self):
-		ServiceCtlHanler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
+		ServiceCtlHandler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
 				
 		self._logger = logging.getLogger(__name__)
 		

@@ -19,8 +19,8 @@ class IniFormatProvider(FormatProvider):
 	
 	_readers = None
 	_writers = None
-	_comment_re_string = None
-	_opt_re_string = None
+	_comment_re_string = '\s*[#;](.*)$'
+	_opt_re_string		= r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*?)\s*(?P<comment>[#;](.*))?$'
 	
 	def __init__(self):
 		FormatProvider.__init__(self)
@@ -35,10 +35,8 @@ class IniFormatProvider(FormatProvider):
 			self.write_comment,
 			self.write_section,
 			self.write_option
-		)		
-		self._comment_re_string = '\s*[#;](.*)$'
-		self._opt_re_string		= r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*?)\s*(?P<comment>[#;](.*))?$'
-		
+		)
+
 	def create_element(self, etree, path, value):
 		el = FormatProvider.create_element(self, etree, path, value)
 		parent_path = os.path.dirname(path)

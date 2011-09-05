@@ -14,7 +14,7 @@ from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
 from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Messages
-from scalarizr.handlers import HandlerError, ServiceCtlHanler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.platform import UserDataOptions
 
 # Libs
@@ -609,7 +609,7 @@ def _reload_mycnf(f):
 		f(self, *args, **kwargs)
 	return g	
 
-class MysqlHandler(ServiceCtlHanler):
+class MysqlHandler(ServiceCtlHandler):
 	_logger = None
 	
 	_mysql_config = None
@@ -634,7 +634,7 @@ class MysqlHandler(ServiceCtlHanler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		initd = initdv2.lookup(SERVICE_NAME)
-		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
 		
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(

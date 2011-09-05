@@ -10,7 +10,7 @@ Created on Jun 23, 2010
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.service import CnfController
-from scalarizr.handlers import Handler, HandlerError, ServiceCtlHanler
+from scalarizr.handlers import Handler, HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 from scalarizr.platform.ec2 import ebstool
 
@@ -204,7 +204,7 @@ class Cassandra(object):
 	def write_config(self):
 		self.cassandra_conf.write(self.storage_conf_path)
 
-class CassandraScalingHandler(ServiceCtlHanler):
+class CassandraScalingHandler(ServiceCtlHandler):
 	
 	_port = None
 

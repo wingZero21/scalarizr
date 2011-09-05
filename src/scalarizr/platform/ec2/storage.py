@@ -206,6 +206,9 @@ class EbsVolumeProvider(VolumeProvider):
 		state = conn.get_all_snapshots((snap.id,))[0].status
 		return self.snapshot_state_map[state]
 
+	def blank_config(self, cnf):
+		cnf.pop('snapshot_id', None)
+
 	def destroy(self, vol, force=False, **kwargs):
 		'''
 		@type vol: EbsVolume

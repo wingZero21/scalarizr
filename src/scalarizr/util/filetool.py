@@ -7,6 +7,7 @@ Created on Jun 22, 2010
 from scalarizr.util import system2
 from scalarizr.util import disttool
 import os
+import pwd
 import math
 import logging
 
@@ -324,3 +325,20 @@ def df():
 				line[0], _parse_int(line[1]), _parse_int(line[2]), 
 				_parse_int(line[3]), line[-1]) 
 				for line in map(str.split, out.splitlines()[1:])]
+
+
+
+def rchown(user, path):
+	#log "chown -r %s %s" % (user, path)
+	user = pwd.getpwnam(user)	
+	os.chown(path, user.pw_uid, user.pw_gid)
+	try:
+		for root, dirs, files in os.walk(path):
+			for dir in dirs:
+				os.chown(os.path.join(root , dir), user.pw_uid, user.pw_gid)
+			for file in files:
+				if os.path.exists(os.path.join(root, file)): #skipping dead links
+					os.chown(os.path.join(root, file), user.pw_uid, user.pw_gid)
+	except OSError, e:
+		#log 'Cannot chown directory %s : %s' % (path, e)	
+		pass

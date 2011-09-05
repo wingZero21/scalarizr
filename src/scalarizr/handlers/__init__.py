@@ -181,7 +181,7 @@ def async(fn):
 	return decorated
 
 
-class ServiceCtlHanler(Handler):
+class ServiceCtlHandler(Handler):
 	_logger = None 	
 	
 	_service_name = None
@@ -399,3 +399,77 @@ class RebundleLogHandler(logging.Handler):
 			message = str(record.msg) % record.args if record.args else str(record.msg)
 		))
 		self._msg_service.get_producer().send(Queues.LOG, msg)
+		
+
+class DbMsrMessages:
+	DBMSR_CREATE_DATA_BUNDLE = "DbMsr_CreateDataBundle"
+	
+	DBMSR_CREATE_DATA_BUNDLE_RESULT = "DbMsr_CreateDataBundleResult"
+	'''
+	@ivar: db_type: postgresql|mysql
+	@ivar: status: Operation status [ ok | error ]
+	@ivar: last_error: errmsg if status = error
+	@ivar: snapshot_config: snapshot configuration
+	@ivar: current_xlog_location:  pg_current_xlog_location() on master after snap was created
+	'''
+	
+	DBMSR_CREATE_BACKUP = "DbMsr_CreateBackup"
+	
+	DBMSR_CREATE_BACKUP_RESULT = "DbMsr_CreateBackupResult"
+	'''
+	@ivar: db_type: postgresql|mysql
+	@ivar: status: Operation status [ ok | error ]
+	@ivar: last_error:  errmsg if status = error
+	@ivar: backup_parts: URL List (s3, cloudfiles)
+	'''
+	
+	DBMSR_PROMOTE_TO_MASTER = "DbMsr_PromoteToMaster"
+	
+	DBMSR_PROMOTE_TO_MASTER_RESULT = "DbMsr_PromoteToMasterResult"
+	'''
+	@ivar: db_type: postgresql|mysql
+	@ivar: status: ok|error
+	@ivar: last_error: errmsg if status=error
+	@ivar: volume_config: volume configuration
+	@ivar: snapshot_config?: snapshot configuration
+	@ivar: current_xlog_location_?:  pg_current_xlog_location() on master after snap was created
+	'''
+	
+	DBMSR_NEW_MASTER_UP = "DbMsr_NewMasterUp"
+	'''
+	@ivar: db_type:  postgresql|mysql
+	@ivar: local_ip
+	@ivar: remote_ip
+	@ivar: snapshot_config
+	@ivar: current_xlog_location:  pg_current_xlog_location() on master after snap was created
+	'''
+	
+	"""
+	Also Postgresql behaviour adds params to common messages:
+	
+	= HOST_INIT_RESPONSE =
+	@ivar db_type: postgresql|mysql
+	@ivar postgresql=dict(
+		replication_master:  	 1|0 
+		root_user 
+		root_password:			 'scalr' user password  					(on slave)
+		root_ssh_private_key
+		root_ssh_public_key 
+		current_xlog_location 
+		volume_config:			Master storage configuration			(on master)
+		snapshot_config:		Master storage snapshot 				(both)
+	)
+	
+	= HOST_UP =
+	@ivar db_type: postgresql|mysql
+	@ivar postgresql=dict(
+		replication_master: 1|0 
+		root_user 
+		root_password: 			'scalr' user password  					(on master)
+		root_ssh_private_key
+		root_ssh_public_key
+		current_xlog_location
+		volume_config:			Current storage configuration			(both)
+		snapshot_config:		Master storage snapshot					(on master)	
+	) 
+	"""	

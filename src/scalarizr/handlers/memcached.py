@@ -9,7 +9,7 @@ Created on Jul 23, 2010
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.service import CnfController, CnfPreset, Options
-from scalarizr.handlers import ServiceCtlHanler, HandlerError
+from scalarizr.handlers import ServiceCtlHandler, HandlerError
 from scalarizr.messaging import Messages
 
 # Libs
@@ -121,14 +121,14 @@ class MemcachedCnfController(CnfController):
 def get_handlers():
 	return [MemcachedHandler()]
 
-class MemcachedHandler(ServiceCtlHanler):
+class MemcachedHandler(ServiceCtlHandler):
 	_logger = None
 	_queryenv = None
 	_ip_tables = None
 	_port = None
 	
 	def __init__(self):
-		ServiceCtlHanler.__init__(self, SERVICE_NAME, initdv2.lookup('memcached'), MemcachedCnfController())
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup('memcached'), MemcachedCnfController())
 		
 		self._logger = logging.getLogger(__name__)
 		self._queryenv = bus.queryenv_service
