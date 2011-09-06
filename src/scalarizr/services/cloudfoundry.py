@@ -4,11 +4,14 @@ Created on Aug 29, 2011
 @author: marat
 '''
 
+import logging
 import os
 import subprocess
 import string
 
 from scalarizr import util
+
+LOG = logging.getLogger(__name__)
 
 
 class CloudFoundry(object):
@@ -47,8 +50,9 @@ class CloudFoundry(object):
 	
 	def exec_vcap(self, *args):
 		cmd = [os.path.join(self.vcap_home, 'bin/vcap')]
-		cmd.append(args)
-		cmd.append('--no-color')		
+		cmd += args
+		cmd.append('--no-color')
+		LOG.debug('Executing %s', cmd)		
 		return util.system2(cmd)
 	
 	

@@ -29,10 +29,11 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	
 	def __init__(self):
 		handlers.FarmSecurityMixin.__init__(self, [4222, 12345])
+		bus.on(init=self.on_init)
 		self.on_reload()
 
-
 	def on_init(self, *args, **kwds):
+		LOG.debug('Called on_init')
 		bus.on(
 			reload=self.on_reload,
 			start=self.on_start,
@@ -49,6 +50,7 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 
 	def on_HostUp(self, msg):
+		LOG.debug('Called on_HostUp')
 		if msg.remote_ip != self.platform.get_public_ip() \
 				and config.BuiltinBehaviours.CF_CLOUD_CONTROLLER in msg.behaviour:
 			cchost = msg.local_ip or msg.remote_ip
@@ -56,6 +58,7 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		
 
 	def on_reload(self):
+		LOG.debug('Called on_reload')
 		self.queryenv = bus.queryenv_service
 		self.platform = bus.platform
 		self.cnf = bus.cnf
@@ -67,24 +70,25 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 
 	def on_start(self):
+		LOG.debug('Called on_start')
 		if self.cnf.state == config.ScalarizrState.RUNNING:
 			self._start_services()
 
 
 	def on_host_init_response(self, msg):
+		LOG.debug('Called on_host_init_response')
 		if SERVICE_NAME in msg.body:
 			ini = msg.body[SERVICE_NAME].copy()
 			self.cnf.update_ini(SERVICE_NAME, ini)
-		else:
-			raise handlers.HandlerError("Property '%s' in 'HostInitResponse' message is undefined", 
-									SERVICE_NAME)
+		#else:
+		#	raise handlers.HandlerError("Property '%s' in 'HostInitResponse' message is undefined", 
+		#							SERVICE_NAME)
 	
 	
 	def on_before_host_up(self, msg):
+		LOG.debug('Called on_before_host_up')
 		hostup = dict()
 		self._locate_cloud_controller()
-		if 'router' in self.components:
-			self._configure_router()
 		self._start_services()		
 			
 		self.ini.update_ini(SERVICE_NAME, hostup)
@@ -122,8 +126,3 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 			self.cloudfoundry.cloud_controller = cchost
 		return bool(cchost)
 
-
-	def _configure_router(self):
-		roles = self.queryenv.list_roles(behaviour=config.BuiltinBehaviours.WWW)
-		if roles:
-			pass
