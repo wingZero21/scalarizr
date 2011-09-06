@@ -766,7 +766,7 @@ class PostgresqlConf(BasePGConfig):
 	hot_standby = property(_get_hot_standby, _set_hot_standby)
 	
 	max_wal_senders_default = 5
-	wal_keep_segments = 32
+	wal_keep_segments_default = 32
 
 
 	
