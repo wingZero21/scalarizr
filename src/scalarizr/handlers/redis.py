@@ -537,7 +537,7 @@ class RedisHandler(ServiceCtlHandler):
 
 
 	def _create_storage_snapshot(self):
-		if self.redis.service.running and os.path.exists(self.redis.db_path):
+		if self.redis.service.running:
 			self._logger.info("Dumping Redis data on disk")
 			self.redis.redis_cli.save()
 		self._logger.info("Creating storage snapshot")
