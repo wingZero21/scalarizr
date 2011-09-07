@@ -24,7 +24,7 @@ from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
 
-STORAGE_PATH 				= '/mnt/redis'
+STORAGE_PATH 				= '/mnt/redisstorage'
 STORAGE_VOLUME_CNF 			= 'redis.json'
 STORAGE_SNAPSHOT_CNF 		= 'redis-snap.json'
 
@@ -152,7 +152,7 @@ class RedisHandler(ServiceCtlHandler):
 			os.makedirs(dir)
 		
 		redis_data = message.redis.copy()	
-		self._logger.info('GOT REDIS PART OF HOST_INIT_RESPONSE:%s' % redis_data)
+		self._logger.info('Got Redis part of HostInitResponse: %s' % redis_data)
 		
 		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
