@@ -59,7 +59,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		self._instance_store_strategy_cls = instance_store_strategy_cls or RebundleInstanceStoreStrategy
 		
 		
-	def before_rebundle(self, role_name, excludes):
+	def before_rebundle(self):
 		'''
 		@param message.volume_size:  
 			New size for EBS-root device. 
@@ -68,7 +68,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 			EBS volume for root device copy.
 		'''
 	
-		image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+		image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 
 		# Take rebundle strategy
 		pl = bus.platform 
@@ -88,7 +88,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 				volume_size = int(root_disk.size / 1000 / 1000)
 			
 			self._strategy = self._ebs_strategy_cls(
-				self, role_name, image_name, excludes,
+				self, self._role_name, image_name, self._excludes,
 				devname=get_free_devname(), 
 				volume_size=volume_size,  # in Gb
 				volume_id=self._rebundle_message.body.get('volume_id')
@@ -96,13 +96,13 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		else:
 			# Instance store
 			self._strategy = self._instance_store_strategy_cls(
-				self, role_name, image_name, excludes,
+				self, self._role_name, image_name, self._excludes,
 				image_size = root_disk.size / 1000,  # in Mb
 				s3_bucket_name = self._s3_bucket_name
 			)
 		
 		
-	def rebundle(self):
+	def rebundle(self, role_name, excludes):
 		return self._strategy.run()
 		
 			

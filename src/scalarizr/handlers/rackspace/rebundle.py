@@ -22,8 +22,8 @@ def get_handlers ():
 
 class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 
-	def rebundle(self, role_name, excludes):
-		image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+	def rebundle(self):
+		image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 		
 		pl = bus.platform
 		con = pl.new_cloudservers_conn()

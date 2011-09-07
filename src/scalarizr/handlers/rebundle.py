@@ -82,7 +82,7 @@ class PrepHandler(Handler):
 class RebundleHandler(Handler):
 
 	def __init__(self):
-		self._rebundle_message = None
+		self._rebundle_message = self._role_name = self._excludes = None
 		bus.define_events(
 			# Fires before rebundle starts
 			"before_rebundle", 
@@ -108,14 +108,14 @@ class RebundleHandler(Handler):
 	@plug_rebundle_log
 	def on_Rebundle(self, message):
 		try:
-			role_name = message.role_name.encode("ascii")
-			excludes = message.excludes.encode("ascii").split(":") \
+			self._role_name = message.role_name.encode("ascii")
+			self._excludes = message.excludes.encode("ascii").split(":") \
 					if message.body.has_key("excludes") and message.excludes else []
 			self._rebundle_message = message			
 			
 			# Preparing...
-			self.before_rebundle(role_name, excludes)			
-			bus.fire("before_rebundle", role_name=role_name)
+			self.before_rebundle()			
+			bus.fire("before_rebundle", role_name=self._role_name)
 			
 			# Send wall message before rebundling. So console users can run away
 			if not system2(('which', 'wall'), raise_exc=False)[2]:
@@ -144,7 +144,7 @@ class RebundleHandler(Handler):
 			self.send_message(Messages.REBUNDLE_RESULT, result)
 			
 			# Fire 'rebundle'diss
-			bus.fire("rebundle", role_name=role_name, snapshot_id=image_id)
+			bus.fire("rebundle", role_name=self._role_name, snapshot_id=image_id)
 			LOG.info('Rebundle complete! If you imported this server to Scalr, you can terminate Scalarizr now.')
 			
 		except (Exception, BaseException), e:
@@ -159,11 +159,11 @@ class RebundleHandler(Handler):
 			))		
 			
 			# Fire 'rebundle_error'
-			bus.fire("rebundle_error", role_name=role_name, last_error=last_error)
+			bus.fire("rebundle_error", role_name=self._role_name, last_error=last_error)
 			
 		finally:
 			self.after_rebundle()
-			self._rebundle_message = None
+			self._rebundle_message = self._role_name = self._excludes = None
 		
 		
 	def cleanup_image(self, rootdir):
@@ -216,9 +216,8 @@ class RebundleHandler(Handler):
 			filetool.write_file(filename, '\n'.join(lines))
 
 
-	def before_rebundle(self, role_name, excludes):
+	def before_rebundle(self):
 		LOG.debug('Called before_rebundle')
-
 
 	
 	def rebundle(self):
