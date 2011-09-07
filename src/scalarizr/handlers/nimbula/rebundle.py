@@ -4,7 +4,8 @@ Created on Feb 15, 2011
 @author: spike
 '''
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler, HandlerError, RebundleLogHandler
+from scalarizr.handlers import Handler, HandlerError 
+from scalarizr.handlers.rebundle import RebundleLogHandler
 from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrState
 from scalarizr.util import system2, software, cryptotool, disttool, wait_until
@@ -21,6 +22,7 @@ import shutil
 import pexpect
 import sys
 
+# TODO: unrefactored
 
 def get_handlers():
 	return [NimbulaRebundleHandler()]

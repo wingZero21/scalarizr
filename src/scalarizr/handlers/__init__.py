@@ -386,19 +386,6 @@ class ServiceCtlHandler(Handler):
 			
 		bus.fire(self._service_name + '_configure', **kwargs)		
 
-
-class RebundleLogHandler(logging.Handler):
-	def __init__(self, bundle_task_id=None):
-		logging.Handler.__init__(self)
-		self.bundle_task_id = bundle_task_id
-		self._msg_service = bus.messaging_service
-		
-	def emit(self, record):
-		msg = self._msg_service.new_message(Messages.REBUNDLE_LOG, body=dict(
-			bundle_task_id = self.bundle_task_id,
-			message = str(record.msg) % record.args if record.args else str(record.msg)
-		))
-		self._msg_service.get_producer().send(Queues.LOG, msg)
 		
 
 class DbMsrMessages:
