@@ -422,9 +422,11 @@ class RedisCLI(object):
 			for i in info.strip().split('\n'):
 				raw = i[:-1] if i.endswith('\r') else i
 				if raw:
-					key, val = raw.split(':')
-					if key:
-						d[key] = val
+					kv = raw.split(':')
+					if len(kv)==2:
+						key, val = kv
+						if key:
+							d[key] = val
 		return d
 	
 	@property
