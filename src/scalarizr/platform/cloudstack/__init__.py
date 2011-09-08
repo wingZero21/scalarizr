@@ -32,23 +32,29 @@ class CloudStackPlatform(Platform):
 	
 	
 	def get_private_ip(self):
-		return self.get_meta_data('public-ipv4')
-	
-	
-	def get_public_ip(self):
 		return self.get_meta_data('local-ipv4')
 	
 	
+	def get_public_ip(self):
+		return self.get_meta_data('public-ipv4')
+	
+	
 	def get_user_data(self, key=None):
-		if not self._userdata:
-			self._userdata = self._parse_user_data(self.get_meta_data('user-data'))
+		if not self._userdata is None:
+			try:
+				self._userdata = self._parse_user_data(self.get_meta_data('user-data'))
+			except PlatformError, e:
+				if 'HTTP Error 404' in e:
+					self._userdata = {}
+				else:
+					raise
 		return Platform.get_user_data(self, key)
 	
 	
 	def get_meta_data(self, key):
 		if not key in self._metadata:
 			try:
-				url = 'http://%s/%s' % (self._router, key)
+				url = 'http://%s/latest/%s' % (self._router, key)
 				self._metadata[key] = urllib2.urlopen(url).read().strip()
 			except IOError:
 				exc_info = sys.exc_info()
@@ -58,7 +64,7 @@ class CloudStackPlatform(Platform):
 	
 	
 	def get_instance_id(self):
-		return self.get_meta_data('instance-id')
+		return self.get_meta_data('instance-id').split('-')[2]
 	
 	
 	def get_avail_zone(self):
