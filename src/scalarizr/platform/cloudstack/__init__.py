@@ -1,0 +1,73 @@
+
+import os
+import urllib2
+import sys
+
+from scalarizr.bus import bus
+from scalarizr.platform import Platform, PlatformError
+
+import cloudstack
+
+
+def get_platform():
+	return CloudStackPlatform()
+
+
+class CloudStackPlatform(Platform):
+	name = 'cloudstack'
+	
+	def __init__(self):
+		# Find the virtual router.
+		eth0leases = '/var/lib/dhclient/dhclient-eth0.leases'
+		if not os.path.exists(eth0leases):
+			raise PlatformError("Can't find virtual router. file %s not exists" % eth0leases)
+		
+		router = None
+		for line in open(eth0leases):
+			if 'dhcp-server-identifier' in line:
+				router = filter(None, line.split(';')[0].split(' '))[2]
+		self._router = router
+	
+		self._metadata = {}
+	
+	
+	def get_private_ip(self):
+		return self.get_meta_data('public-ipv4')
+	
+	
+	def get_public_ip(self):
+		return self.get_meta_data('local-ipv4')
+	
+	
+	def get_user_data(self, key=None):
+		if not self._userdata:
+			self._userdata = self._parse_user_data(self.get_meta_data('user-data'))
+		return Platform.get_user_data(self, key)
+	
+	
+	def get_meta_data(self, key):
+		if not key in self._metadata:
+			try:
+				url = 'http://%s/%s' % (self._router, key)
+				self._metadata[key] = urllib2.urlopen(url).read().strip()
+			except IOError:
+				exc_info = sys.exc_info()
+				raise PlatformError, "Can't fetch meta-data from '%s'." \
+						" error: %s" % (url, exc_info[1]), exc_info[2]
+		return self._metadata[key]
+	
+	
+	def get_instance_id(self):
+		return self.get_meta_data('instance-id')
+	
+	
+	def get_avail_zone(self):
+		return self.get_meta_data('availability-zone')
+	
+		
+	def new_cloudstack_conn(self):
+		return cloudstack.Client(
+					self._access_data.get('api_url'), 
+					apiKey=self._access_data.get('api_key'), 
+					secretKey=self._access_data.get('secret_key'))
+		
