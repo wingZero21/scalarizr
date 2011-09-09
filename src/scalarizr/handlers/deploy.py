@@ -105,6 +105,7 @@ class SvnSource(Source):
 	
 	def __init__(self, url=None, login=None, password=None, executable=None):
 		self._logger = logging.getLogger(__name__)
+		self._client_version = None
 		self.url = url if not url.endswith('/') else url[:-1]
 		self.login = login
 		self.password = password
@@ -140,9 +141,11 @@ class SvnSource(Source):
 			args += [
 				'--username', self.login,
 				'--password', self.password,
-				'--non-interactive',
-				'--trust-server-cert'
+				'--non-interactive'
 			]
+			if self.client_version >= (1, 5, 0):
+				args += ['--trust-server-cert']
+			
 		if args[1] == 'co':
 			args += [self.url]
 		args += [workdir]
@@ -152,6 +155,13 @@ class SvnSource(Source):
 		self._logger.info(out)
 		self._logger.info('Deploying %s to %s has been completed successfully.' % (self.url,workdir))
 		
+	@property
+	def client_version(self):
+		if not self._client_version:
+			version_str = system2(('svn', '--version', '--quiet'))[0]
+			self._client_version = tuple(map(int, version_str.strip().split('.')))
+		return self._client_version
+	
 
 class GitSource(Source):
 	EXECUTABLE = '/usr/bin/git'	
