@@ -102,7 +102,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 			)
 		
 		
-	def rebundle(self, role_name, excludes):
+	def rebundle(self):
 		return self._strategy.run()
 		
 			
