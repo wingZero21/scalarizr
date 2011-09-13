@@ -113,4 +113,7 @@ echo "Installing bundler"
 gem install bundler --no-rdoc --no-ri
 rake bundler:install
 
+cd ~/cloudfoundry/vcap
+grep '/usr/bin/env ruby' -lR ./* | xargs sed -i 's/\/usr\/bin\/env ruby/\/usr\/bin\/ruby/1'
+
 echo "Success!"

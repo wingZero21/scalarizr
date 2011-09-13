@@ -20,6 +20,10 @@ class CloudFoundry(object):
 		self.vcap_home = vcap_home
 		self._mbus = None
 		self._cloud_controller = None
+		self._env = dict(os.environ)
+		if os.path.exists('/root/.bashrc'):
+			self._env['PATH'] = util.system2(('/bin/bash', '-c', '. /root/.bashrc && echo $PATH'))[0]
+		LOG.debug('environ: %s', self._env)
 		
 	
 	def start(self, svs=None):
@@ -53,7 +57,8 @@ class CloudFoundry(object):
 		cmd += args
 		cmd.append('--no-color')
 		LOG.debug('Executing %s', cmd)		
-		return util.system2(cmd)
+		return util.system2(cmd, env=self._env, close_fds=True, warn_stderr=True)
+		#return util.system2(' '.join(cmd), shell=True, close_fds=True, warn_stderr=True)
 	
 	
 	def _set_mbus(self, url):

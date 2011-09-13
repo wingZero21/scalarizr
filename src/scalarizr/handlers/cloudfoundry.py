@@ -88,10 +88,11 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	def on_before_host_up(self, msg):
 		LOG.debug('Called on_before_host_up')
 		hostup = dict()
+		
 		self._locate_cloud_controller()
 		self._start_services()		
 			
-		self.ini.update_ini(SERVICE_NAME, hostup)
+		self.cnf.update_ini(SERVICE_NAME, hostup)
 		msg.body[SERVICE_NAME] = hostup
 		
 		
