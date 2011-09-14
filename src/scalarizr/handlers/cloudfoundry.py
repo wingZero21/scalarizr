@@ -11,6 +11,7 @@ from scalarizr import util
 from scalarizr.bus import bus
 from scalarizr.services import cloudfoundry
 
+
 import logging
 
 
@@ -90,25 +91,16 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		hostup = dict()
 		
 		self._locate_cloud_controller()
-		self._start_services()		
+		self._start_services()
 			
 		self.cnf.update_ini(SERVICE_NAME, hostup)
 		msg.body[SERVICE_NAME] = hostup
 		
 		
 	def _start_services(self):
-		for cmp in self.components + self.services:
-			LOG.info('Starting %s', cmp)
-			self.cloudfoundry.components[cmp].start()
-		# @todo check that all of them finally running
-
-	
-	def _stop_services(self):
-		for cmp in self.components + self.services:
-			LOG.info('Stopping %s', cmp)
-			self.cloudfoundry.components[cmp].stop()
-
-
+		self.cloudfoundry.start(self.components + self.services)
+		
+		
 	def _locate_cloud_controller(self):
 		util.wait_until(self.__locate_cloud_controller, logger=LOG, 
 					start_text='Locating cloud_controller server', 

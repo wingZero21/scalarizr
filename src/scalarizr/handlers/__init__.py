@@ -428,7 +428,7 @@ class FarmSecurityMixin(object):
 		ip = message.local_ip or message.remote_ip
 		for port in self._ports:
 			rule = iptables.RuleSpec(source=ip, protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
-			self._iptables.insert_rule(None, rule)
+			self._iptables.insert_rule(1, rule)
 		
 
 	def on_HostDown(self, message):

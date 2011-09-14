@@ -14,6 +14,10 @@ from scalarizr import util
 LOG = logging.getLogger(__name__)
 
 
+class CloudFoundryError(Exception):
+	pass
+
+
 class VCAPExec(object):
 	def __init__(self, cf):
 		self.cf = cf
@@ -39,15 +43,15 @@ class Component(object):
 	
 	
 	def start(self):
-		self.cf.vcap_exec(self.name, 'start')
+		self.cf.vcap_exec('start', self.name)
 	
 	
 	def stop(self):
-		self.cf.vcap_exec(self.name, 'stop')
+		self.cf.vcap_exec('stop', self.name)
 	
 	
 	def restart(self):
-		self.cf.vcap_exec(self.name, 'restart')		
+		self.cf.vcap_exec('restart', self.name)		
 
 
 	@property
@@ -56,7 +60,10 @@ class Component(object):
 			stat_file = '/proc/%s/stat' % self.pid
 			if os.path.exists(stat_file):
 				stat = open(stat_file).read()
+				LOG.debug('Contents of %s:\n%s', stat_file, stat)
 				return stat.split(' ')[2] != 'Z'
+			else:
+				LOG.debug('Component %s not running File %s ')
 		return False
 	
 	
@@ -67,12 +74,19 @@ class Component(object):
 				matcher = re.match(r'pid:\s+(.*)', line)
 				if matcher:
 					self._pid_file = matcher.group(1)
+					LOG.debug('Found %s pid file: %s', self.name, self._pid_file)
 		return self._pid_file
 
 
 	@property
 	def pid(self):
-		open(self.pidfile).read().strip()
+		return open(self.pid_file).read().strip()
+		
+		
+	@property
+	def log_file(self):
+		return '/tmp/vcap-run/%s.log' % self.name
+
 
 
 class CloudFoundry(object):
@@ -81,7 +95,7 @@ class CloudFoundry(object):
 		self.vcap_home = vcap_home
 		self.vcap_exec = VCAPExec(self)
 		self.components = {}
-		for name in ('router', 'cloud_controller', 'health_manager', 'dea'):
+		for name in ('cloud_controller', 'router', 'health_manager', 'dea'):
 			self.components[name] = Component(self, name)
 		
 		self._mbus_url = None
@@ -124,6 +138,32 @@ class CloudFoundry(object):
 		
 	def _get_vcap_home(self):
 		return self._vcap_home
+
 	
+	def start(self, *cmps):
+		started = []
+		for name in cmps:
+			cmp = self.components[cmp]
+			LOG.info('Starting %s', name)
+			cmp.start()
+			started.append(cmp)				
+		
+		failed = []
+		for cmp in started:
+			if not cmp.running:
+				failed.append(cmp.name)
+				if os.path.exists(cmp.log_file):
+					LOG.error('%s failed to start', cmp.name)
+					LOG.warn('Contents of %s:\n%s', cmp.log_file, open(cmp.log_file).read())
+				else:
+					LOG.error('%s failed to start and dies without any logs', cmp.name)
+		if failed:
+			raise CloudFoundryError('%d component(s) failed to start (%s)' % ( 
+									len(failed), ', '.join(failed)))
+
 	
-	
+	def stop(self, *cmps):
+		for name in cmps:
+			cmp = self.components[cmp]
+			LOG.info('Stopping %s', name)
+			cmp.stop()
