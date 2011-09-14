@@ -76,10 +76,9 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
 		
 		# Find root device
-		root_device_name = self._get_root_device_name(instance)
-		root_disk = firstmatched(lambda x: x.device == root_device_name, filetool.df())
+		root_disk = firstmatched(lambda x: x.mpoint == '/', filetool.df())
 		if not root_disk:
-			raise HandlerError("Can't find %s in file system disk space usage" % root_device_name)
+			raise HandlerError("Can't find root device")
 		
 		if instance.root_device_name:
 			# EBS-root device instance
@@ -109,18 +108,6 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 	def after_rebundle(self):
 		if self._strategy:
 			self._strategy.cleanup()
-
-	
-	def _get_root_device_name(self, instance):
-		root_device_name = instance.root_device_name or '/dev/sda1'
-		if not os.path.exists(root_device_name):
-			xen_device_name = root_device_name.replace('sd', 'xvd')
-			if os.path.exists(xen_device_name):
-				root_device_name = xen_device_name
-			else:
-				raise HandlerError("Root device not exists: neither %s nor %s doesn't exists" % 
-								(root_device_name, xen_device_name))
-		return root_device_name
 
 
 	@property
