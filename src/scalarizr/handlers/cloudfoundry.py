@@ -99,14 +99,14 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	def _start_services(self):
 		for cmp in self.components + self.services:
 			LOG.info('Starting %s', cmp)
-			self.cloudfoundry.start(cmp)
+			self.cloudfoundry.components[cmp].start()
 		# @todo check that all of them finally running
 
 	
 	def _stop_services(self):
 		for cmp in self.components + self.services:
 			LOG.info('Stopping %s', cmp)
-			self.cloudfoundry.stop(cmp)
+			self.cloudfoundry.components[cmp].stop()
 
 
 	def _locate_cloud_controller(self):
