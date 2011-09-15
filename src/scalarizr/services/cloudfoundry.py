@@ -39,7 +39,7 @@ class Component(object):
 		self.name = name
 		self.config_file = config_file or os.path.join(self.cf.vcap_home, 
 													name, 'config', name + '.yml')
-		self._pid_file = None 
+		self._pid_file = self._local_route = None 
 	
 	
 	def start(self):
@@ -53,7 +53,7 @@ class Component(object):
 	def restart(self):
 		self.cf.vcap_exec('restart', self.name)		
 
-
+		
 	@property
 	def running(self):
 		if os.path.exists(self.pid_file):
@@ -65,16 +65,19 @@ class Component(object):
 			else:
 				LOG.debug('Component %s not running File %s ')
 		return False
-	
+
+
+	def get_config(self, key_re):
+		for line in open(self.config_file):
+			matcher = re.match(key_re + r':\s+(.*)', line)
+			if matcher:
+				return matcher.group(1)
 	
 	@property
 	def pid_file(self):
 		if not self._pid_file:
-			for line in open(self.config_file):
-				matcher = re.match(r'pid:\s+(.*)', line)
-				if matcher:
-					self._pid_file = matcher.group(1)
-					LOG.debug('Found %s pid file: %s', self.name, self._pid_file)
+			self._pid_file = self.get_config(r'pid')
+			LOG.debug('Found %s pid file: %s', self.name, self._pid_file)
 		return self._pid_file
 
 
@@ -86,6 +89,22 @@ class Component(object):
 	@property
 	def log_file(self):
 		return '/tmp/vcap-run/%s.log' % self.name
+
+
+	def _get_local_route(self):
+		if not self._local_route:
+			self._local_route = self.get_config(r'local_route')
+			LOG.debug('Found %s local_route: %s', self.name, self._local_route)
+		return self._local_route
+	
+	
+	def _set_local_route(self, ip):
+		LOG.debug('Setting %s local route: %s', self.name, ip)
+		util.system2(('sed', '--in-place', 's/local_route.*/local_route: %s/1' % ip, self.config_file))
+		self._local_route = ip
+
+	
+	local_route = property(_get_local_route, _set_local_route)
 
 
 

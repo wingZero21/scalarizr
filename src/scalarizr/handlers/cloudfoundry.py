@@ -29,7 +29,7 @@ BEHAVIOURS = [getattr(config.BuiltinBehaviours, bh)
 class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	
 	def __init__(self):
-		handlers.FarmSecurityMixin.__init__(self, [4222, 12345])
+		handlers.FarmSecurityMixin.__init__(self, [4222, 9022, 12345])
 		bus.on(init=self.on_init)
 		self.on_reload()
 
@@ -92,6 +92,8 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		hostup = dict()
 		
 		self._locate_cloud_controller()
+		with self.cloudfoundry.components as cmps:
+			cmps['dea'].local_route = cmps['cloud_controller'] = self._platform.get_private_ip()
 		self._start_services()
 			
 		self.cnf.update_ini(SERVICE_NAME, hostup)
