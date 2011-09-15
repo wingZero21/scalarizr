@@ -421,6 +421,7 @@ class FarmSecurityMixin(object):
 	
 	def __on_reload(self):
 		self._queryenv = bus.queryenv_service
+		self._platform = bus.platform
 	
 	
 	def on_HostInit(self, message):
@@ -449,8 +450,13 @@ class FarmSecurityMixin(object):
 		rules = []
 		for port in self._ports:
 			# Allow from localhost
-			local_rule = iptables.RuleSpec(source='127.0.0.1', protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
+			local_rule = iptables.RuleSpec(source='127.0.0.1', 
+										protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
 			rules.append(local_rule)
+			local_rule2 = iptables.RuleSpec(source=self._platform.get_private_ip(), 
+										protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
+			rules.append(local_rule2)
+
 			# Allow from farm IP-s
 			for ip in ips:
 				allow_rule = iptables.RuleSpec(source=ip, protocol=iptables.P_TCP, dport=port, jump='ACCEPT')

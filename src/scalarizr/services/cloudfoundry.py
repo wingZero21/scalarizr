@@ -121,7 +121,7 @@ class CloudFoundry(object):
 
 	
 	def _set_cloud_controller(self, host):
-		LOG.debug('Setting cloud controller: %s', host)
+		LOG.debug('Setting cloud controller host: %s', host)
 		self._cloud_controller = host
 		self.mbus = 'mbus://%s:4222/' % host
 	
@@ -150,15 +150,21 @@ class CloudFoundry(object):
 			cmp.start()
 			started.append(cmp)				
 		
-		failed = []
-		for cmp in started:
-			if not cmp.running:
-				failed.append(cmp.name)
-				if os.path.exists(cmp.log_file):
-					LOG.error('%s failed to start', cmp.name)
-					LOG.warn('Contents of %s:\n%s', cmp.log_file, open(cmp.log_file).read())
-				else:
-					LOG.error('%s failed to start and dies without any logs', cmp.name)
+		# Check 3 times that all requred services were started
+		i = 0
+		while i < 3:
+			failed = []
+			for cmp in started:
+				if not cmp.running:
+					failed.append(cmp.name)
+					if os.path.exists(cmp.log_file):
+						LOG.error('%s failed to start', cmp.name)
+						LOG.warn('Contents of %s:\n%s', cmp.log_file, open(cmp.log_file).read())
+					else:
+						LOG.error('%s failed to start and dies without any logs', cmp.name)
+			if not failed:
+				break
+			i += 1
 		if failed:
 			raise CloudFoundryError('%d component(s) failed to start (%s)' % ( 
 									len(failed), ', '.join(failed)))

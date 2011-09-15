@@ -39,7 +39,8 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 			reload=self.on_reload,
 			start=self.on_start,
 			host_init_response=self.on_host_init_response,
-			before_host_up=self.on_before_host_up
+			before_host_up=self.on_before_host_up,
+			before_reboot_start=self.on_before_reboot_start
 		)
 
 
@@ -97,8 +98,19 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		msg.body[SERVICE_NAME] = hostup
 		
 		
+	def on_before_reboot_start(self, msg):
+		LOG.debug('Called on_before_reboot_start')
+		self._stop_services()
+		
+		
 	def _start_services(self):
-		self.cloudfoundry.start(self.components + self.services)
+		svss = self.components + self.services
+		self.cloudfoundry.start(*svss)
+		
+		
+	def _stop_services(self):
+		svss = self.components + self.services
+		self.cloudfoundry.stop(*svss)
 		
 		
 	def _locate_cloud_controller(self):
