@@ -113,8 +113,8 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 			cchost = self.platform.get_private_ip()
 		else:
 			roles = self.queryenv.list_roles(behaviour=config.BuiltinBehaviours.CF_CLOUD_CONTROLLER)
-			if roles.hosts:
-				cchost = roles.hosts[0].internal_ip
+			if roles:
+				cchost = roles[0].hosts[0].internal_ip
 		if cchost:
 			self.cloudfoundry.cloud_controller = cchost
 		return bool(cchost)

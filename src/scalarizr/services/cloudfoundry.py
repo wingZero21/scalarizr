@@ -103,6 +103,7 @@ class CloudFoundry(object):
 		
 			
 	def _set_mbus(self, url):
+		LOG.debug('Changing mbus server: %s', url)
 		find = subprocess.Popen(('find', self.vcap_home, '-name', '*.yml'), stdout=subprocess.PIPE)
 		grep = subprocess.Popen(('xargs', 'grep', '--files-with-matches', 'mbus'), stdin=find.stdout, stdout=subprocess.PIPE)
 		sed = subprocess.Popen(('xargs', 'sed', '--in-place', 's/mbus.*/mbus: %s/1' % url.replace('/', '\/')), stdin=grep.stdout)
@@ -120,6 +121,7 @@ class CloudFoundry(object):
 
 	
 	def _set_cloud_controller(self, host):
+		LOG.debug('Setting cloud controller: %s', host)
 		self._cloud_controller = host
 		self.mbus = 'mbus://%s:4222/' % host
 	
@@ -143,7 +145,7 @@ class CloudFoundry(object):
 	def start(self, *cmps):
 		started = []
 		for name in cmps:
-			cmp = self.components[cmp]
+			cmp = self.components[name]
 			LOG.info('Starting %s', name)
 			cmp.start()
 			started.append(cmp)				
