@@ -225,8 +225,6 @@ class CnfController(object):
 					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 					pass
 				else:
-					if self.definitions and new_value in self.definitions:
-						new_value = self.definitions[new_value]
 					self._logger.debug("Set option '%s' = '%s'" % (opt.name, new_value))
 					self._logger.debug('Set path %s = %s', path, new_value)
 					conf.set(path, new_value, force=True)
