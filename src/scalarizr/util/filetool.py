@@ -196,6 +196,10 @@ class Rsync(object):
 	def version(self):
 		self._options.append("--version")
 		return self
+	
+	def delete(self):
+		self._options.append("--delete")
+		return self
 		
 	def source(self, path):
 		self._src = path

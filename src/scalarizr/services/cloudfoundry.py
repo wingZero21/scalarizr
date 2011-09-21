@@ -8,8 +8,13 @@ import logging
 import os
 import subprocess
 import re
+import time
 
 from scalarizr import util
+
+
+import yaml
+
 
 LOG = logging.getLogger(__name__)
 
@@ -23,13 +28,14 @@ class VCAPExec(object):
 		self.cf = cf
 		
 	def __call__(self, *args):
-		cmd = [self.cf.vcap_home + '/bin/vcap']
+		cmd = [self.cf.home + '/bin/vcap']
 		cmd += args
 		cmd.append('--no-color')
 		LOG.debug('Executing %s', cmd)
-		cmd = ' '.join(cmd)
-		return util.system2(('/bin/bash', '-c', 'source /root/.bashrc; ' + cmd), 
-						close_fds=True, warn_stderr=True)		
+		return system(cmd, close_fds=True, warn_stderr=True)
+		#cmd = ' '.join(cmd)
+		#return util.system2(('/bin/bash', '-c', 'source /root/.bashrc; ' + cmd), 
+		#				close_fds=True, warn_stderr=True)		
 		
 
 class Component(object):
@@ -37,9 +43,9 @@ class Component(object):
 	def __init__(self, cf, name, config_file=None):
 		self.cf = cf
 		self.name = name
-		self.config_file = config_file or os.path.join(self.cf.vcap_home, 
+		self.config_file = config_file or os.path.join(self.cf.home, 
 													name, 'config', name + '.yml')
-		self._pid_file = self._local_route = None 
+		self.config = yaml.load(open(self.config_file))
 	
 	
 	def start(self):
@@ -66,19 +72,10 @@ class Component(object):
 				LOG.debug('Component %s not running File %s ')
 		return False
 
-
-	def get_config(self, key_re):
-		for line in open(self.config_file):
-			matcher = re.match(key_re + r':\s+(.*)', line)
-			if matcher:
-				return matcher.group(1)
 	
 	@property
 	def pid_file(self):
-		if not self._pid_file:
-			self._pid_file = self.get_config(r'pid')
-			LOG.debug('Found %s pid file: %s', self.name, self._pid_file)
-		return self._pid_file
+		return self.config['pid']
 
 
 	@property
@@ -106,12 +103,14 @@ class Component(object):
 	
 	local_route = property(_get_local_route, _set_local_route)
 
-
+	@property
+	def home(self):
+		return os.path.join(self.cf.home, self.name)
 
 class CloudFoundry(object):
 	
-	def __init__(self, vcap_home):
-		self.vcap_home = vcap_home
+	def __init__(self, home):
+		self.home = home
 		self.vcap_exec = VCAPExec(self)
 		self.components = {}
 		for name in ('cloud_controller', 'router', 'health_manager', 'dea'):
@@ -119,11 +118,12 @@ class CloudFoundry(object):
 		
 		self._mbus_url = None
 		self._cloud_controller = None
+		self._db_file = None
 		
 			
 	def _set_mbus(self, url):
 		LOG.debug('Changing mbus server: %s', url)
-		find = subprocess.Popen(('find', self.vcap_home, '-name', '*.yml'), stdout=subprocess.PIPE)
+		find = subprocess.Popen(('find', self.home, '-name', '*.yml'), stdout=subprocess.PIPE)
 		grep = subprocess.Popen(('xargs', 'grep', '--files-with-matches', 'mbus'), stdin=find.stdout, stdout=subprocess.PIPE)
 		sed = subprocess.Popen(('xargs', 'sed', '--in-place', 's/mbus.*/mbus: %s/1' % url.replace('/', '\/')), stdin=grep.stdout)
 		out, err = sed.communicate()
@@ -152,13 +152,13 @@ class CloudFoundry(object):
 	cloud_controller = property(_get_cloud_controller, _set_cloud_controller)
 	
 	
-	def _set_vcap_home(self, path):
-		self._vcap_home = path
-		self.vcap_exec = VCAPExec(self.vcap_home + '/bin/vcap')
+	def _set_home(self, path):
+		self._home = path
+		self.vcap_exec = VCAPExec(self.home + '/bin/vcap')
 	
 		
-	def _get_vcap_home(self):
-		return self._vcap_home
+	def _get_home(self):
+		return self._home
 
 	
 	def start(self, *cmps):
@@ -175,7 +175,7 @@ class CloudFoundry(object):
 			failed = []
 			for cmp in started:
 				if not cmp.running:
-					failed.append(cmp.name)
+					failed.append(cmp)
 					if os.path.exists(cmp.log_file):
 						LOG.error('%s failed to start', cmp.name)
 						LOG.warn('Contents of %s:\n%s', cmp.log_file, open(cmp.log_file).read())
@@ -183,10 +183,14 @@ class CloudFoundry(object):
 						LOG.error('%s failed to start and dies without any logs', cmp.name)
 			if not failed:
 				break
+			started = failed
 			i += 1
+			if i < 3:
+				time.sleep(5)
+			
 		if failed:
 			raise CloudFoundryError('%d component(s) failed to start (%s)' % ( 
-									len(failed), ', '.join(failed)))
+									len(failed), ', '.join(cmp.name for cmp in failed)))
 
 	
 	def stop(self, *cmps):
@@ -194,3 +198,31 @@ class CloudFoundry(object):
 			cmp = self.components[cmp]
 			LOG.info('Stopping %s', name)
 			cmp.stop()
+			
+			
+	def init_db(self):
+		cmp = self.components['cloud_controller']
+		dbenv = cmp.config['databases'][cmp.config['rails_environment']]
+		if dbenv['adapter'] == 'sqlite3':
+			if not os.path.exists(dbenv['database']):
+				LOG.debug("Database doesn't exists. Creating")
+				system('rake db:migrate', cwd=cmp.home)
+
+
+	def valid_datadir(self, datadir):
+		return os.path.exists(os.path.join(datadir, 'cloud_controller'))
+			
+			
+	def init_datadir(self, datadir):
+		for name in ('dea', 'cloud_controller/db', 'cloud_controller/tmp'):
+			dir = os.path.join(datadir, name)
+			if not os.path.exists(dir):
+				os.makedirs(dir)
+
+
+
+def system(*args, **kwds):
+	cmd = args[0]
+	if not isinstance(cmd, basestring):
+		cmd = ' '.join(cmd)
+	return util.system2(('/bin/bash', '-c', 'source /root/.bashrc; ' + cmd), **kwds)	
