@@ -23,20 +23,6 @@ class CloudFoundryError(Exception):
 	pass
 
 
-class VCAPExec(object):
-	def __init__(self, cf):
-		self.cf = cf
-		
-	def __call__(self, *args):
-		cmd = [self.cf.home + '/bin/vcap']
-		cmd += args
-		cmd.append('--no-color')
-		LOG.debug('Executing %s', cmd)
-		return system(cmd, close_fds=True, warn_stderr=True)
-		#cmd = ' '.join(cmd)
-		#return util.system2(('/bin/bash', '-c', 'source /root/.bashrc; ' + cmd), 
-		#				close_fds=True, warn_stderr=True)		
-		
 
 class Component(object):
 	
@@ -49,16 +35,29 @@ class Component(object):
 	
 	
 	def start(self):
-		self.cf.vcap_exec('start', self.name)
+		self.exec_vcap('start')
 	
 	
 	def stop(self):
-		self.cf.vcap_exec('stop', self.name)
+		self.exec_vcap('stop')
 	
 	
 	def restart(self):
-		self.cf.vcap_exec('restart', self.name)		
+		self.exec_vcap('restart')
+				
 
+	def exec_vcap(self, action):
+		cmd = ' '.join((self.cf.home + '/bin/vcap', action, self.name, '--no-color'))
+		LOG.debug('Executing %s', cmd)
+		proc = subprocess.Popen(('/bin/bash', '-c', 'source /root/.bashrc; ' + cmd), 
+							close_fds=True, 
+							stdout=open('/dev/null', 'w'),
+							stderr=subprocess.STDOUT)
+		if proc.wait():
+			LOG.warn('%s %s failed. returncode: %s', action, self.name, proc.returncode)
+		else:
+			LOG.debug('Finished')
+		
 		
 	@property
 	def running(self):
@@ -111,7 +110,6 @@ class CloudFoundry(object):
 	
 	def __init__(self, home):
 		self.home = home
-		self.vcap_exec = VCAPExec(self)
 		self.components = {}
 		for name in ('cloud_controller', 'router', 'health_manager', 'dea'):
 			self.components[name] = Component(self, name)
@@ -150,15 +148,6 @@ class CloudFoundry(object):
 	
 
 	cloud_controller = property(_get_cloud_controller, _set_cloud_controller)
-	
-	
-	def _set_home(self, path):
-		self._home = path
-		self.vcap_exec = VCAPExec(self.home + '/bin/vcap')
-	
-		
-	def _get_home(self):
-		return self._home
 
 	
 	def start(self, *cmps):
@@ -202,7 +191,7 @@ class CloudFoundry(object):
 			
 	def init_db(self):
 		cmp = self.components['cloud_controller']
-		dbenv = cmp.config['databases'][cmp.config['rails_environment']]
+		dbenv = cmp.config['database_environment'][cmp.config['rails_environment']]
 		if dbenv['adapter'] == 'sqlite3':
 			if not os.path.exists(dbenv['database']):
 				LOG.debug("Database doesn't exists. Creating")

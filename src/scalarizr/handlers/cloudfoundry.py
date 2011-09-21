@@ -24,12 +24,8 @@ def get_handlers():
 
 LOG = logging.getLogger(__name__)
 SERVICE_NAME = 'cloudfoundry'
-BEHAVIOURS = [getattr(config.BuiltinBehaviours, bh) 
-			for bh in dir(config.BuiltinBehaviours) 
-			if bh.startswith('CF_')] 
-
 DEFAULTS = {
-	'home': '/root/cloudfoundry',
+	'home': '/root/cloudfoundry/vcap',
 	'datadir': '/var/vcap/data'
 }
 
@@ -38,7 +34,12 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	def __init__(self):
 		handlers.FarmSecurityMixin.__init__(self, [4222, 9022, 12345])
 		bus.on(init=self.on_init)
-		self.on_reload()
+		self.bhs = []
+		for prop in dir(config.BuiltinBehaviours): 
+			if prop.startswith('CF_'):
+				val = getattr(config.BuiltinBehaviours, prop)
+				self.bhs.append(val)
+				setattr(self.bhs, val[3:], val)
 
 	def on_init(self, *args, **kwds):
 		LOG.debug('Called on_init')
@@ -49,29 +50,15 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 			before_host_up=self.on_before_host_up,
 			before_reboot_start=self.on_before_reboot_start
 		)
+		self.on_reload()		
 
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return set(BEHAVIOURS).intersection(set(behaviour)) and (
+		return set(self.bhs).intersection(set(behaviour)) and (
 					message.name == messaging.Messages.HOST_INIT
 				or	message.name == messaging.Messages.HOST_DOWN
 				or  message.name == messaging.Messages.HOST_UP
 				or	message.name == messaging.Messages.BEFORE_HOST_TERMINATE)
-
-
-	def on_HostUp(self, msg):
-		LOG.debug('Called on_HostUp')
-		if msg.remote_ip != self._platform.get_public_ip() \
-				and config.BuiltinBehaviours.CF_CLOUD_CONTROLLER in msg.behaviour:
-			cchost = msg.local_ip or msg.remote_ip
-			self.cf.cloud_controller = cchost
-		
-
-	def on_BeforeHostTerminate(self, msg):
-		LOG.debug('Called on_BeforeHostTerminate')
-		# Apply configuration defaults:
-		if msg.remote_ip == self._platform.get_public_ip():
-			self._stop_services()
 
 
 	def on_reload(self):
@@ -82,7 +69,7 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		self._ini = self._cnf.rawini
 		self._volume_config = None
 		self.volume_path = self._cnf.private_path('storage/cloudfoundry.json')
-		if self.szr_running:
+		if self.is_scalarizr_running:
 			self._init_volume()
 
 		# Apply configuration
@@ -98,6 +85,9 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		
 
 	def _set_volume_config(self, cnf):
+		volume_dir = os.path.dirname(self.volume_path)
+		if not os.path.exists(volume_dir):
+			os.makedirs(volume_dir)
 		storage.Storage.backup_config(cnf, self.volume_path)
 
 	
@@ -111,82 +101,33 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 
 	@property
-	def szr_running(self):
+	def is_scalarizr_running(self):
 		return self._cnf.state == config.ScalarizrState.RUNNING
 
 
-	###
-	### Event & message handlers
-	###
+	@property
+	def local_ip(self):
+		return self._platform.get_private_ip()
 
 
-	def on_start(self):
-		LOG.debug('Called on_start')
-		if self.szr_running:
-			self._plug_storage()
-			self._start_services()
+	def from_cloud_controller(self, msg):
+		return self.bhs.cloud_controller in msg.behaviour
 	
 
-	def on_host_init_response(self, msg):
-		LOG.debug('Called on_host_init_response')
-		if SERVICE_NAME in msg.body:
-			ini = msg.body[SERVICE_NAME].copy()
-			self.volume_config = ini.pop('volume_config', 
-								dict(type='loop', 
-									file='/mnt/cfdata.loop', 
-									size=50))
-			self._cnf.update_ini(SERVICE_NAME, ini)
-		#else:
-		#	raise handlers.HandlerError("Property '%s' in 'HostInitResponse' message is undefined", 
-		#							SERVICE_NAME)
-	
-	
-	def on_before_host_up(self, msg):
-		LOG.debug('Called on_before_host_up')
-		hostup = dict()
-		
-		# Initialize storage
-		LOG.info('Initializing vcap data storage')
-		tmp_mpoint = '/mnt/tmp.vcap.data'
-		self.volume = self._plug_storage()
-		if not self.cf.valid_datadir(tmp_mpoint):
-			LOG.debug('Syncing data from %s to storage', self.datadir)
-			rsync = filetool.Rsync().archive().delete().\
-						source(self.datadir, tmp_mpoint)
-			rsync.execute()
-			
-		LOG.debug('Mount storage to %s', self.datadir)
-		self.volume.umount()
-		self.volume.mount(self.datadir)
-		
-		self._locate_cloud_controller()
+	def its_me(self, msg):
+		return msg.remote_ip == self._platform.get_public_ip()
 
-		LOG.debug('Setting local route')
-		cmps = self.cf.components
-		cmps['dea'].local_route = \
-		cmps['cloud_controller'].local_route = \
-		cmps['health_manager'].local_route = self._platform.get_private_ip()
+	@property
+	def svss(self):
+		return self.components + self.services
 
-		self.cf.init_db()
-		self._start_services()
-			
-		self._cnf.update_ini(SERVICE_NAME, hostup)
-		msg.body[SERVICE_NAME] = hostup
-		
-		
-	def on_before_reboot_start(self, msg):
-		LOG.debug('Called on_before_reboot_start')
-		self._stop_services()
-		
 		
 	def _start_services(self):
-		svss = self.components + self.services
-		self.cf.start(*svss)
+		self.cf.start(*self.svss)
 		
 		
 	def _stop_services(self):
-		svss = self.components + self.services
-		self.cf.stop(*svss)
+		self.cf.stop(*self.svss)
 		
 		
 	def _plug_storage(self, vol=None, mpoint=None):
@@ -211,20 +152,97 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 		
 	def _locate_cloud_controller(self):
-		util.wait_until(self.__locate_cloud_controller, timeout=600, logger=LOG, 
+		util.wait_until(self._do_locate_cloud_controller, timeout=600, logger=LOG, 
 					start_text='Locating cloud_controller server', 
 					error_text='Cannot locate cloud_controller server')
 
 		
-	def __locate_cloud_controller(self):
-		cchost = None
+	def _do_locate_cloud_controller(self):
+		host = None
 		if 'cloud_controller' in self.components:
-			cchost = self._platform.get_private_ip()
+			host = self.local_ip
 		else:
-			roles = self._queryenv.list_roles(behaviour=config.BuiltinBehaviours.CF_CLOUD_CONTROLLER)
+			roles = self._queryenv.list_roles(behaviour=self.bhs.cloud_controller)
 			if roles:
-				cchost = roles[0].hosts[0].internal_ip
-		if cchost:
-			self.cf.cloud_controller = cchost
-		return bool(cchost)
+				host = roles[0].hosts[0].internal_ip
+		if host:
+			self.cf.cloud_controller = host
+		return bool(host)
+
+	###
+	### Event & message handlers
+	###
+
+
+	def on_start(self):
+		LOG.debug('Called on_start')
+		if self.is_scalarizr_running:
+			self._plug_storage()
+			self._start_services()
+	
+
+	def on_host_init_response(self, msg):
+		LOG.debug('Called on_host_init_response')
+		ini = msg.body.get(SERVICE_NAME, {}).copy()
+		self.volume_config = ini.pop('volume_config', 
+									dict(type='loop',file='/mnt/cfdata.loop',size=50))
+		self._cnf.update_ini(SERVICE_NAME, ini)
+	
+	
+	def on_before_host_up(self, msg):
+		LOG.debug('Called on_before_host_up')
+		hostup = dict()
+		
+		# Initialize storage
+		LOG.info('Initializing vcap data storage')
+		tmp_mpoint = '/mnt/tmp.vcap.data'
+		try:
+			self.volume = self._plug_storage(mpoint=tmp_mpoint)
+			if not self.cf.valid_datadir(tmp_mpoint):
+				LOG.debug('Syncing data from %s to storage', self.datadir)
+				rsync = filetool.Rsync().archive().delete().\
+							source(self.datadir + '/').dest(tmp_mpoint)
+				rsync.execute()
+				
+			LOG.debug('Mounting storage to %s', self.datadir)
+			self.volume.umount()
+			self.volume.mount(self.datadir)
+		finally:
+			if os.path.exists(tmp_mpoint):
+				os.removedirs(tmp_mpoint)		
+		self.volume_config = self.volume.config()
+		
+		
+		self._locate_cloud_controller()
+
+		LOG.debug('Setting local route')
+		cmps = self.cf.components
+		cmps['dea'].local_route = \
+		cmps['cloud_controller'].local_route = \
+		cmps['health_manager'].local_route = self.local_ip
+
+		self.cf.init_db()
+		self._start_services()
+			
+		self._cnf.update_ini(SERVICE_NAME, hostup)
+		msg.body[SERVICE_NAME] = hostup
+
+		
+	def on_HostUp(self, msg):
+		LOG.debug('Called on_HostUp')
+		if self.from_cloud_controller(msg) and not self.its_me(msg):
+			self.cf.cloud_controller = msg.local_ip
+		
+		
+	def on_before_reboot_start(self, msg):
+		LOG.debug('Called on_before_reboot_start')
+		self._stop_services()
+		
+
+	def on_BeforeHostTerminate(self, msg):
+		LOG.debug('Called on_BeforeHostTerminate')
+		if self.its_me(msg):
+			self._stop_services()
+		
+
 

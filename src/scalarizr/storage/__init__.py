@@ -192,6 +192,8 @@ class Storage:
 		
 	@staticmethod
 	def backup_config(cnf, filename):
+		logger.debug('Backuping volume config {id: %s, type: %s ...} into %s', 
+					cnf.get('id'), cnf.get('type'), filename)
 		fp = open(filename, 'w+')
 		try:
 			fp.write(json.dumps(cnf, indent=4))

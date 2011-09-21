@@ -171,7 +171,7 @@ class P2pMessageConsumer(MessageConsumer):
 				try:
 					if self.message_to_ack:
 						for queue, message in store.get_unhandled(self.endpoint):
-							self._logger.debug('Got: %s', message.name)
+							#self._logger.debug('Got: %s', message.name)
 							if message.name == self.message_to_ack.name and \
 									message.meta['server_id'] == self.message_to_ack.meta['server_id']:
 								self._handle_one_message(message, queue, store)

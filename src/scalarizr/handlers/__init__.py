@@ -84,14 +84,14 @@ class HandlerError(BaseException):
 	pass
 
 class MessageListener:
-	_logger = None 
-	_handlers_chain = None
 	_accept_kwargs = {}
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		self._handlers_chain = None		
 		cnf = bus.cnf
 		platform = bus.platform
+
 
 		self._logger.debug("Initialize message listener");
 		self._accept_kwargs = dict(
@@ -410,7 +410,6 @@ class FarmSecurityMixin(object):
 			raise HandlerError('iptables is not installed. iptables is required to run me correctly')
 		
 		bus.on('init', self.__on_init)
-		self.__on_reload()
 		
 	def __on_init(self):
 		bus.on(
@@ -418,6 +417,7 @@ class FarmSecurityMixin(object):
 			before_reboot_finish=self.__insert_iptables_rules,
 			reload=self.__on_reload
 		)
+		self.__on_reload()		
 	
 	def __on_reload(self):
 		self._queryenv = bus.queryenv_service
