@@ -7,7 +7,6 @@ Created on Aug 29, 2011
 import logging
 import os
 import subprocess
-import re
 import time
 
 from scalarizr import util
@@ -68,7 +67,7 @@ class Component(object):
 				LOG.debug('Contents of %s:\n%s', stat_file, stat)
 				return stat.split(' ')[2] != 'Z'
 			else:
-				LOG.debug('Component %s not running File %s ')
+				LOG.debug('Component %s not running. File %s', self.name, stat_file)
 		return False
 
 	
@@ -84,7 +83,10 @@ class Component(object):
 		
 	@property
 	def log_file(self):
-		return '/tmp/vcap-run/%s.log' % self.name
+		try:
+			return self.config['log_file'] 
+		except KeyError:
+			return '/tmp/vcap-run/%s.log' % self.name
 
 
 	def _get_local_route(self):
@@ -158,9 +160,9 @@ class CloudFoundry(object):
 			cmp.start()
 			started.append(cmp)				
 		
-		# Check 3 times that all requred services were started
-		i = 0
-		while i < 3:
+		# Check 6 times that all requred services were started
+		i, ntimes, sleep = 0, 6, 5
+		while i < ntimes:
 			failed = []
 			for cmp in started:
 				if not cmp.running:
@@ -170,16 +172,16 @@ class CloudFoundry(object):
 						LOG.warn('Contents of %s:\n%s', cmp.log_file, open(cmp.log_file).read())
 					else:
 						LOG.error('%s failed to start and dies without any logs', cmp.name)
-			if not failed:
-				break
-			started = failed
+			#if not failed:
+			#	break
 			i += 1
-			if i < 3:
-				time.sleep(5)
+			if i < ntimes:
+				time.sleep(sleep)
 			
 		if failed:
 			raise CloudFoundryError('%d component(s) failed to start (%s)' % ( 
 									len(failed), ', '.join(cmp.name for cmp in failed)))
+		LOG.debug('Started %d component(s)', len(started))
 
 	
 	def stop(self, *cmps):

@@ -34,12 +34,7 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	def __init__(self):
 		handlers.FarmSecurityMixin.__init__(self, [4222, 9022, 12345])
 		bus.on(init=self.on_init)
-		self.bhs = []
-		for prop in dir(config.BuiltinBehaviours): 
-			if prop.startswith('CF_'):
-				val = getattr(config.BuiltinBehaviours, prop)
-				self.bhs.append(val)
-				setattr(self.bhs, val[3:], val)
+
 
 	def on_init(self, *args, **kwds):
 		LOG.debug('Called on_init')
@@ -54,11 +49,11 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return set(self.bhs).intersection(set(behaviour)) and (
-					message.name == messaging.Messages.HOST_INIT
-				or	message.name == messaging.Messages.HOST_DOWN
-				or  message.name == messaging.Messages.HOST_UP
-				or	message.name == messaging.Messages.BEFORE_HOST_TERMINATE)
+		return 	message.name in	(
+				messaging.Messages.HOST_INIT, 
+				messaging.Messages.HOST_DOWN,  
+				messaging.Messages.HOST_UP,
+				messaging.Messages.BEFORE_HOST_TERMINATE)
 
 
 	def on_reload(self):
@@ -67,10 +62,11 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		self._platform = bus.platform
 		self._cnf = bus.cnf
 		self._ini = self._cnf.rawini
-		self._volume_config = None
-		self.volume_path = self._cnf.private_path('storage/cloudfoundry.json')
-		if self.is_scalarizr_running:
-			self._init_volume()
+		
+		if self.is_scalarizr_running and self.is_cloud_controller:
+			self._volume_config = None
+			self.volume_path = self._cnf.private_path('storage/cloudfoundry.json')
+			self._volume = storage.Storage.create(self.volume_config)
 
 		# Apply configuration
 		for key, value in DEFAULTS.iteritems():
@@ -79,9 +75,22 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 			setattr(self, key, value)
 		
 		self.cf = cloudfoundry.CloudFoundry(self.home)
-		self.components = [bh[3:] for bh in config.split(self._ini.get('general', 'behaviour')) 
-						if bh.startswith('cf_')]
-		self.services = []
+		
+		class list_ex(list):
+			def __setattr__(self, key, value):
+				self.__dict__[key] = value
+		
+		self.components, self.services, self.bhs = [], [], list_ex()
+
+		behaviour_str = self._ini.get('general', 'behaviour')
+		for prop in dir(config.BuiltinBehaviours):
+			if prop.startswith('CF'):
+				bh = getattr(config.BuiltinBehaviours, prop)
+				cmp = bh[3:]
+				setattr(self.bhs, cmp, bh)
+				if bh in behaviour_str:
+					self.bhs.append(bh)
+					self.components.append(cmp)
 		
 
 	def _set_volume_config(self, cnf):
@@ -98,6 +107,11 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 
 	volume_config = property(_get_volume_config, _set_volume_config)
+
+
+	@property
+	def is_cloud_controller(self):
+		return self.bhs.cloud_controller in self.bhs
 
 
 	@property
@@ -159,7 +173,7 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		
 	def _do_locate_cloud_controller(self):
 		host = None
-		if 'cloud_controller' in self.components:
+		if self.is_cloud_controller:
 			host = self.local_ip
 		else:
 			roles = self._queryenv.list_roles(behaviour=self.bhs.cloud_controller)
@@ -183,9 +197,10 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 	def on_host_init_response(self, msg):
 		LOG.debug('Called on_host_init_response')
-		ini = msg.body.get(SERVICE_NAME, {}).copy()
-		self.volume_config = ini.pop('volume_config', 
-									dict(type='loop',file='/mnt/cfdata.loop',size=50))
+		ini = msg.body.get(SERVICE_NAME, {}).copy()		
+		if self.is_cloud_controller:
+			self.volume_config = ini.pop('volume_config', 
+										dict(type='loop',file='/mnt/cfdata.loop',size=50))
 		self._cnf.update_ini(SERVICE_NAME, ini)
 	
 	
@@ -193,24 +208,25 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		LOG.debug('Called on_before_host_up')
 		hostup = dict()
 		
-		# Initialize storage
-		LOG.info('Initializing vcap data storage')
-		tmp_mpoint = '/mnt/tmp.vcap.data'
-		try:
-			self.volume = self._plug_storage(mpoint=tmp_mpoint)
-			if not self.cf.valid_datadir(tmp_mpoint):
-				LOG.debug('Syncing data from %s to storage', self.datadir)
-				rsync = filetool.Rsync().archive().delete().\
-							source(self.datadir + '/').dest(tmp_mpoint)
-				rsync.execute()
-				
-			LOG.debug('Mounting storage to %s', self.datadir)
-			self.volume.umount()
-			self.volume.mount(self.datadir)
-		finally:
-			if os.path.exists(tmp_mpoint):
-				os.removedirs(tmp_mpoint)		
-		self.volume_config = self.volume.config()
+		if self.is_cloud_controller:
+			# Initialize storage			
+			LOG.info('Initializing vcap data storage')
+			tmp_mpoint = '/mnt/tmp.vcap.data'
+			try:
+				self.volume = self._plug_storage(mpoint=tmp_mpoint)
+				if not self.cf.valid_datadir(tmp_mpoint):
+					LOG.debug('Syncing data from %s to storage', self.datadir)
+					rsync = filetool.Rsync().archive().delete().\
+								source(self.datadir + '/').dest(tmp_mpoint)
+					rsync.execute()
+					
+				LOG.debug('Mounting storage to %s', self.datadir)
+				self.volume.umount()
+				self.volume.mount(self.datadir)
+			finally:
+				if os.path.exists(tmp_mpoint):
+					os.removedirs(tmp_mpoint)		
+			self.volume_config = self.volume.config()
 		
 		
 		self._locate_cloud_controller()
@@ -221,7 +237,9 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		cmps['cloud_controller'].local_route = \
 		cmps['health_manager'].local_route = self.local_ip
 
-		self.cf.init_db()
+		if self.is_cloud_controller:
+			self.cf.init_db()
+			
 		self._start_services()
 			
 		self._cnf.update_ini(SERVICE_NAME, hostup)
