@@ -645,14 +645,19 @@ def main():
 		_init_db()
 		
 		
+		if cnf.state == ScalarizrState.UNKNOWN:
+			cnf.state = ScalarizrState.BOOTSTRAPPING
+			
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
 			cnf.fire('apply_user_data', cnf)			
-		
+
+		'''		
 		# At first scalarizr startup platform user-data should be applied
 		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			cnf.fire('apply_user_data', cnf)
+		'''
 		
 		# Check Scalr version
 		if not bus.scalr_version:
