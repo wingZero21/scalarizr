@@ -49,11 +49,14 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return 	message.name in	(
+		LOG.debug('Accept %s [y/n]?')
+		result = message.name in	(
 				messaging.Messages.HOST_INIT, 
 				messaging.Messages.HOST_DOWN,  
 				messaging.Messages.HOST_UP,
 				messaging.Messages.BEFORE_HOST_TERMINATE)
+		LOG.debug('Yes of corsa!' if result else 'Nonono!')
+		return result
 
 
 	def on_reload(self):
@@ -62,20 +65,14 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		self._platform = bus.platform
 		self._cnf = bus.cnf
 		self._ini = self._cnf.rawini
-		
-		if self.is_scalarizr_running and self.is_cloud_controller:
-			self._volume_config = None
-			self.volume_path = self._cnf.private_path('storage/cloudfoundry.json')
-			self._volume = storage.Storage.create(self.volume_config)
 
 		# Apply configuration
 		for key, value in DEFAULTS.iteritems():
 			if self._ini.has_option(SERVICE_NAME, key):
 				value = self._ini.get(SERVICE_NAME, key)
 			setattr(self, key, value)
-		
-		self.cf = cloudfoundry.CloudFoundry(self.home)
-		
+
+		# Read components, services and behaviours 
 		class list_ex(list):
 			def __setattr__(self, key, value):
 				self.__dict__[key] = value
@@ -91,6 +88,15 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 				if bh in behaviour_str:
 					self.bhs.append(bh)
 					self.components.append(cmp)
+
+		# Init storage for cloud_controller
+		if self.is_scalarizr_running and self.is_cloud_controller:
+			self._volume_config = None
+			self.volume_path = self._cnf.private_path('storage/cloudfoundry.json')
+			self._volume = storage.Storage.create(self.volume_config)
+
+		# Init CloudFoundry manager
+		self.cf = cloudfoundry.CloudFoundry(self.home)
 		
 
 	def _set_volume_config(self, cnf):
