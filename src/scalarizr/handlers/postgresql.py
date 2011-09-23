@@ -138,6 +138,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		ini = self._cnf.rawini
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 		self._storage_path = STORAGE_PATH
+		self._tmp_path = os.path.join(self._storage_path, 'tmp')
 		
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
@@ -397,16 +398,19 @@ class PostgreSqlHander(ServiceCtlHandler):
 			psql = PSQL(user=self.postgresql.root_user.name)
 			databases = psql.list_pg_databases()
 			
+			if not os.path.exists(self._tmp_path):
+				os.makedirs(self._tmp_path)
+				
 			# Defining archive name and path
 			backup_filename = 'pgsql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-			backup_path = os.path.join('/tmp', backup_filename)
+			backup_path = os.path.join(self._tmp_path, backup_filename)
 			
 			# Creating archive 
 			backup = tarfile.open(backup_path, 'w:gz')
 
 			# Dump all databases
 			self._logger.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp()		
+			tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
 			rchown(self.postgresql.root_user.name, tmpdir)	
 			
 			for db_name in databases:
