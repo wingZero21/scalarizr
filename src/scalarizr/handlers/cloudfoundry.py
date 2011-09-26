@@ -49,7 +49,7 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		LOG.debug('Accept %s [y/n]?')
+		LOG.debug('Accept %s [y/n]?', message.name)
 		result = message.name in	(
 				messaging.Messages.HOST_INIT, 
 				messaging.Messages.HOST_DOWN,  
@@ -90,9 +90,9 @@ class CloudFoundryHandler(handlers.Handler, handlers.FarmSecurityMixin):
 					self.components.append(cmp)
 
 		# Init storage for cloud_controller
+		self.volume_path = self._cnf.private_path('storage/cloudfoundry.json')
+		self._volume_config = None				
 		if self.is_scalarizr_running and self.is_cloud_controller:
-			self._volume_config = None
-			self.volume_path = self._cnf.private_path('storage/cloudfoundry.json')
 			self._volume = storage.Storage.create(self.volume_config)
 
 		# Init CloudFoundry manager
