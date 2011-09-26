@@ -57,8 +57,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.__init__(
 			self, 
 			'apache', 
-			initd_script,
-			socks=[initdv2.SockParam(80)]
+			initd_script
 		)
 		
 	def reload(self):
@@ -281,6 +280,9 @@ class ApacheHandler(ServiceCtlHandler):
 			self._logger.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
 			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
 			rpaf.write(file)
+			st = os.stat(self._httpd_conf_path)
+			os.chown(file, st.st_uid, st.st_gid)
+			
 			
 			self._reload_service('Applying new RPAF proxy IPs list')
 		else:

@@ -4,6 +4,7 @@ from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool
+from scalarizr.util.filetool import write_file
 from scalarizr.util.initdv2 import Status
 from scalarizr.service import CnfPresetStore, CnfPreset, CnfController,\
 	PresetType
@@ -12,7 +13,7 @@ import os
 import platform
 import logging
 import threading
-from distutils.file_util import write_file
+
 
 
 class Handler(object):
