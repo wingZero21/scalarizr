@@ -316,6 +316,7 @@ def _apply_user_data(cnf):
 			'server_id' : g(UserDataOptions.SERVER_ID),
 			'role_name' : g(UserDataOptions.ROLE_NAME),
 			'queryenv_url' : g(UserDataOptions.QUERYENV_URL),
+			'cloud_storage_path': g(UserDataOptions.CLOUD_STORAGE_PATH)
 		},
 		messaging_p2p={
 			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
