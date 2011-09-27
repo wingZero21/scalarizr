@@ -31,12 +31,14 @@ try:
 except ImportError:
 	import simplejson as json
 
-from prettytable import PrettyTable as PTable
+try:
+	from prettytable import PrettyTable as PTable
+except:
+	print('prettytable modul not found')
 
-
+#23.09.11----------------------------------------------------------------------------------------------
 class ScalrError(BaseException):
 	pass
-
 
 class IndHelpFormatter(HelpFormatter):
 	"""Format help with indented section bodies.
@@ -54,6 +56,12 @@ class IndHelpFormatter(HelpFormatter):
 
 	def format_heading(self, heading):
 		return "%*s%s:\n" % (self.current_indent, "", heading)
+	
+	def format_description(self, description):
+		if description:
+			return "\n\t%s\n" % self._format_text(description)
+		else:
+			return ""
 
 class Command(object):
 	name = None
@@ -80,9 +88,9 @@ class Command(object):
 
 	def __init__(self, argv=None):
 		if argv:
-			self.kwds = self.parser.parse_args(argv)[0].__dict__
+			self.kwds =self.parser.parse_args(argv)[0].__dict__
 		else:
-			self.kwds = None
+			self.kwds=None
 
 
 	def run(self):
@@ -99,10 +107,8 @@ class Command(object):
 			result = getattr(self.queryenv(), self.method)()
 		self.output(result)
 
-	def _dict_append_in2_lines(self, _dict, lines=None):
+	def _dict_2_list(self, _dict, lines=None):
 		_list=[]
-		if not lines:
-			lines=[]
 		if self.fields:
 			for _param in self.fields:
 				_list.append(_dict.get(_param))
@@ -111,30 +117,37 @@ class Command(object):
 			for _key in _dict.keys():
 				_list.append(_dict.get(_key))
 				self.fields.append(_key)
-		if _list:
-			lines.append(_list)
-		return lines
+		return _list
 
-	def output(self, result):
-		_lines = []
+	def iter_result(self, result):
+		_row = []
 		if result and isinstance(result, list):
 				for dict_line in result:
 					_dict=self.get_dict_param(dict_line)
 					#if we need show some of fields we must set field
-					_lines=self._dict_append_in2_lines(_dict, _lines)
-		else:
+					_row=self._dict_2_list(_dict)
+					yield _row
+		elif result:
 			_dict=self.get_dict_param(result)
-			_lines=self._dict_append_in2_lines(_dict)
-		_list = []
+			_row=self._dict_2_list(_dict)
+			yield _row
+		
+		elif not result:
+			_row=[]
+			if self.fields:
+				for i in self.fields:
+					_row.append('-')
+				yield _row
+
+	def output(self, result):
 		out = None
 		if self.fields:
-			if not _lines:
-				for i in self.fields:
-					_list.append('-')
-				_lines.append(_list)
 			out=PTable(self.fields)
-			for _list in _lines:
-				out.add_row(_list)
+		for row in self.iter_result(result):
+			if not out and self.fields:
+				out=PTable(self.fields)
+			elif out:
+				out.add_row(row)
 		print(out)
 
 
@@ -143,8 +156,8 @@ class GetlatestVersionCommand(Command):
 	method="get_latest_version"
 	fields =['version']
 
-	parser = OptionParser(usage='get-latest-version [-h --help]'
-		'\n\t Display latest versioin\n', formatter= IndHelpFormatter())
+	parser = OptionParser(usage='get-latest-version [-h --help]',
+		description='Display latest versioin', formatter= IndHelpFormatter())
 
 	def get_dict_param(self, d):
 		'''return: 
@@ -157,8 +170,8 @@ class ListEbsMountpointsCommand(Command):
 	method = "list_ebs_mountpoints"
 	fields =['name', 'dir', 'createfs', 'isarray', 'volume-id', 'device']
 
-	parser = OptionParser(usage='list-ebs-mountpoints [-h --help]'
-		'\n\t Display ebs mountpoints\n', formatter=IndHelpFormatter())
+	parser = OptionParser(usage='list-ebs-mountpoints [-h --help]',
+		description='Display ebs mountpoints', formatter=IndHelpFormatter())
 
 	'''
 	def run(self):
@@ -172,7 +185,7 @@ class ListEbsMountpointsCommand(Command):
 	'''
 
 	def get_dict_param(self, d):
-		#Mountpoint[] 
+		#Mountpoint[]
 		vols=[]
 		devs=[]
 		for _vol in d.volumes:
@@ -191,7 +204,7 @@ class ListRolesCommand(Command):
 		'external-ip', 'replication-master']
 
 	parser = OptionParser(usage='list-roles [-b --behaviour] '
-		'[-r --role] [-h --help]\n\t Display roles list\n',
+		'[-r --role] [-h --help]', description='Display roles list',
 		 formatter= IndHelpFormatter())
 	parser.add_option('-b', '--behaviour', dest='behaviour', help='Role behaviour')
 	parser.add_option('-r', '--role-name', dest='role_name', help='Role name')
@@ -207,8 +220,9 @@ class GetHttpsCertificateCommand(Command):
 	method = "get_https_certificate" 
 	fields = ['cert', 'pkey', 'cacert']
 
-	parser = OptionParser(usage='get-https-certificate [-h --help]\n\t Display cert,'
-		' pkey https certificate\n', formatter=IndHelpFormatter())
+	parser = OptionParser(usage='get-https-certificate [-h --help]',
+		description='Display cert, pkey https certificate\n',
+		formatter=IndHelpFormatter())
 	
 	def get_dict_param(self, d):
 		'''return:
@@ -222,8 +236,8 @@ class ListRoleParamsCommand(Command):
 	name = "list-role-params"
 	method = "list_role_params"
 	
-	parser = OptionParser(usage='list-role-params [-n --name][-h --help]'
-		'\n\t Display list role param by name\n', formatter=IndHelpFormatter())
+	parser = OptionParser(usage='list-role-params [-n --name][-h --help]',
+		description='Display list role param by name', formatter=IndHelpFormatter())
 	parser.add_option('-n', '--name', dest='name', help='Show params by role name ')
 	
 	'''
@@ -244,8 +258,8 @@ class ListVirtualhostsCommand(Command):
 	fields = ['hostname', 'https', 'type', 'raw']
 
 	parser = OptionParser(usage='list-virtualhosts'
-		' [-n --name] [-s --https] [-h --help]'
-		'\n\t Display list of virtual hosts\n', formatter=IndHelpFormatter())
+		' [-n --name] [-s --https] [-h --help]',
+		description='Display list of virtual hosts', formatter=IndHelpFormatter())
 	parser.add_option('-n', '--name', dest='name', help='Show virtual host by name')
 	parser.add_option('-s', '--https', dest='https', help='Show virtual hosts by https')
 	
@@ -271,8 +285,8 @@ class ListScriptsCommand(Command):
 	fields = ['asynchronous', 'exec-timeout', 'name', 'body']
 	
 	parser = OptionParser(usage='list-scripts [-e --event]'
-		' [-a --asynchronous] [-n --name] [-h --help]'
-		'\n\t Display list of scripts\n', formatter=IndHelpFormatter())
+		' [-a --asynchronous] [-n --name] [-h --help]',
+		description='Display list of scripts', formatter=IndHelpFormatter())
 	parser.add_option('-e', '--event', dest='event', help='Show scripts host on event')
 	parser.add_option('-a', '--asynchronous', dest='asynchronous', 
 		help='Show scripts host by asynchronous')
@@ -313,13 +327,12 @@ class Help(Command):
 			for com_name in self.com_dict.keys():
 				try: 
 					com_obj=self.com_dict.get(com_name)()
-					
+
 					if not isinstance(com_obj, Help):
 						print(com_obj.usage)
 				except Exception, e:
 					print('Cant show usage of command: %s;'
 						' Error in szradm.Help.run() function: %s' % (com_name, e))		
-
 #-------------------------------------------------------------------------------------------------
 
 
@@ -374,6 +387,7 @@ def main():
 					com.run(com_dict)
 				else:
 					com.run()
+		
 		except Exception, e:
 			com=Help(com_dict)
 			com.run()
