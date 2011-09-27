@@ -83,7 +83,6 @@ class Command(object):
 	def __init__(self, argv=None):
 		if argv:
 			self.kwds =self.parser.parse_args(argv)[0].__dict__
-			#print(self.kwds)
 		else:
 			self.kwds=None
 
@@ -102,26 +101,32 @@ class Command(object):
 			result = getattr(self.queryenv(), self.method)()
 		self.output(result)
 
+	def _dict_append_in2_lines(self, _dict, lines=None):
+		_list=[]
+		if not lines:
+			lines=[]
+		if self.fields:
+			for _param in self.fields:
+				_list.append(_dict.get(_param))
+		else:
+			self.fields=[]
+			for _key in _dict.keys():
+				_list.append(_dict.get(_key))
+				self.fields.append(_key)
+		if _list:
+			lines.append(_list)
+		return lines
+
 	def output(self, result):
 		_lines = []
-		try:
-			if result:
+		if result and isinstance(result, list):
 				for dict_line in result:
 					_dict=self.get_dict_param(dict_line)
 					#if we need show some of fields we must set field
-					_list=[]
-					if self.fields:
-						for _param in self.fields:
-							_list.append(_dict.get(_param))
-					else:
-						self.fields=[]
-						for _key in _dict.keys():
-							_list.append(_dict.get(_key))
-							self.fields.append(_key)
-					if _list:
-						_lines.append(_list)
-		except:
-			print('Command return None object')
+					_lines=self._dict_append_in2_lines(_dict, _lines)
+		else:
+			_dict=self.get_dict_param(result)
+			_lines=self._dict_append_in2_lines(_dict)
 		_list = []
 		out = None
 		if self.fields:
@@ -161,7 +166,7 @@ class ListEbsMountpointsCommand(Command):
 	def run(self):
 		m1=queryenv.Mountpoint(name='Mountpoint 1', dir='dir1', create_fs=False, is_array=True,
 			volumes=[queryenv.Volume(device='dev 1',volume_id='21'),queryenv.Volume(device='dev 2', volume_id='22')])
-		
+
 		m2=queryenv.Mountpoint(name='Mountpoint 2', dir='dir2', create_fs=False, is_array=True,
 			volumes=[queryenv.Volume(device='dev 3',volume_id='23'),queryenv.Volume(device='dev 4', volume_id='24')])
 
@@ -208,7 +213,7 @@ class GetHttpsCertificateCommand(Command):
 		' pkey https certificate\n', formatter=IndHelpFormatter())
 	
 	def get_dict_param(self, d):
-		'''return
+		'''return:
 		(cert, pkey, cacert)
 		'''
 		(cert, pkey, cacert)=d
@@ -229,8 +234,9 @@ class ListRoleParamsCommand(Command):
 	'''
 	
 	def get_dict_param(self, d):
-		'''dictionary'''
-		print(d)
+		'''dictionary
+		#ERROR:'NoneType' object has no attribute 'nodeValue'
+		'''
 		return d
 
 
@@ -314,7 +320,7 @@ class Help(Command):
 						print(com_obj.usage)
 				except Exception, e:
 					print('Cant show usage of command: %s;'
-						' Error in szradm.Help.run() function: %s' % (com_name, e))				
+						' Error in szradm.Help.run() function: %s' % (com_name, e))		
 
 #-------------------------------------------------------------------------------------------------
 

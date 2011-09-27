@@ -88,7 +88,6 @@ class QueryEnvService(object):
 		resp_body = response.read()
 		self._logger.debug("QueryEnv response: %s", resp_body)
 
-
 		# Parse XML response
 		xml = None
 		try:
@@ -248,13 +247,14 @@ class QueryEnvService(object):
 	
 	def _read_list_role_params_response(self, xml):
 		ret = {}
-	
+
 		response = xml.documentElement
-		for param_el in response.firstChild.childNodes:
-			ret[param_el.getAttribute("name")] = param_el.firstChild.firstChild.nodeValue
-				
+		if response:
+			for param_el in response.firstChild.childNodes:
+				if param_el:
+					ret[param_el.getAttribute("name")] = param_el.firstChild.nodeValue
 		return ret
-	
+
 	def _read_get_latest_version_response(self, xml):
 		response = xml.documentElement
 		version = response.firstChild.firstChild.nodeValue
