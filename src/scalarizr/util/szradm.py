@@ -31,14 +31,12 @@ try:
 except ImportError:
 	import simplejson as json
 
-try:
-	from prettytable import PrettyTable as PTable
-except:
-	print('prettytable modul not found')
+from prettytable import PrettyTable as PTable
 
-#23.09.11----------------------------------------------------------------------------------------------
+
 class ScalrError(BaseException):
 	pass
+
 
 class IndHelpFormatter(HelpFormatter):
 	"""Format help with indented section bodies.
@@ -82,9 +80,9 @@ class Command(object):
 
 	def __init__(self, argv=None):
 		if argv:
-			self.kwds =self.parser.parse_args(argv)[0].__dict__
+			self.kwds = self.parser.parse_args(argv)[0].__dict__
 		else:
-			self.kwds=None
+			self.kwds = None
 
 
 	def run(self):
