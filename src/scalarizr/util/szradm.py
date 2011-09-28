@@ -40,6 +40,7 @@ except:
 class ScalrError(BaseException):
 	pass
 
+
 class IndHelpFormatter(HelpFormatter):
 	"""Format help with indented section bodies.
     """
@@ -62,6 +63,7 @@ class IndHelpFormatter(HelpFormatter):
 			return "\n\t%s\n" % self._format_text(description)
 		else:
 			return ""
+
 
 class Command(object):
 	name = None
@@ -107,38 +109,7 @@ class Command(object):
 			result = getattr(self.queryenv(), self.method)()
 		self.output(result)
 
-	def _dict_2_list(self, _dict, lines=None):
-		_list=[]
-		if self.fields:
-			for _param in self.fields:
-				_list.append(_dict.get(_param))
-		else:
-			self.fields=[]
-			for _key in _dict.keys():
-				_list.append(_dict.get(_key))
-				self.fields.append(_key)
-		return _list
-
-	def iter_result(self, result):
-		_row = []
-		if result and isinstance(result, list):
-				for dict_line in result:
-					_dict=self.get_dict_param(dict_line)
-					#if we need show some of fields we must set field
-					_row=self._dict_2_list(_dict)
-					yield _row
-		elif result:
-			_dict=self.get_dict_param(result)
-			_row=self._dict_2_list(_dict)
-			yield _row
-		
-		elif not result:
-			_row=[]
-			if self.fields:
-				for i in self.fields:
-					_row.append('-')
-				yield _row
-
+	
 	def output(self, result):
 		out = None
 		if self.fields:
@@ -155,46 +126,41 @@ class GetlatestVersionCommand(Command):
 	name="get-latest-version"
 	method="get_latest_version"
 	fields =['version']
-
 	parser = OptionParser(usage='get-latest-version [-h --help]',
 		description='Display latest versioin', formatter= IndHelpFormatter())
 
-	def get_dict_param(self, d):
+	def iter_result(self, result):
 		'''return: 
 		{version: string}'''
-		return {'version':d}
+		yield [result]
 
 
 class ListEbsMountpointsCommand(Command):
 	name = "list-ebs-mountpoints"
 	method = "list_ebs_mountpoints"
 	fields =['name', 'dir', 'createfs', 'isarray', 'volume-id', 'device']
-
 	parser = OptionParser(usage='list-ebs-mountpoints [-h --help]',
 		description='Display ebs mountpoints', formatter=IndHelpFormatter())
 
-	'''
-	def run(self):
+	def iter_result(self, result):
+		#Mountpoint[]
+		for d in result:
+			vols=[]
+			devs=[]
+			for _vol in d.volumes:
+				vols.append(_vol.volume_id)
+				devs.append(_vol.device)
+			vols=', '.join(vols)
+			devs=', '.join(devs)
+			yield [d.name, d.dir, d.create_fs, d.is_array, vols, devs]
+	
+	'''def run(self):
 		m1=queryenv.Mountpoint(name='Mountpoint 1', dir='dir1', create_fs=False, is_array=True,
 			volumes=[queryenv.Volume(device='dev 1',volume_id='21'),queryenv.Volume(device='dev 2', volume_id='22')])
 
 		m2=queryenv.Mountpoint(name='Mountpoint 2', dir='dir2', create_fs=False, is_array=True,
 			volumes=[queryenv.Volume(device='dev 3',volume_id='23'),queryenv.Volume(device='dev 4', volume_id='24')])
-
-		self.output([m1,m2])
-	'''
-
-	def get_dict_param(self, d):
-		#Mountpoint[]
-		vols=[]
-		devs=[]
-		for _vol in d.volumes:
-			vols.append(_vol.volume_id)
-			devs.append(_vol.device)
-		vols=', '.join(vols)
-		devs=', '.join(devs)
-		return {'name':d.name, 'dir':d.dir, 'createfs':d.create_fs, 'isarray':d.is_array, 
-			'volume-id':vols, 'device':devs}
+		self.output([m1,m2])'''
 
 
 class ListRolesCommand(Command):
@@ -202,54 +168,49 @@ class ListRolesCommand(Command):
 	method = "list_roles"
 	fields = ['behaviour','name', 'index', 'internal-ip',
 		'external-ip', 'replication-master']
-
 	parser = OptionParser(usage='list-roles [-b --behaviour] '
 		'[-r --role] [-h --help]', description='Display roles list',
 		 formatter= IndHelpFormatter())
 	parser.add_option('-b', '--behaviour', dest='behaviour', help='Role behaviour')
 	parser.add_option('-r', '--role-name', dest='role_name', help='Role name')
 
-	def get_dict_param(self, d):
-		return {'behaviour':', '.join(d.behaviour), 'name':d.name,
-			'index':d.hosts[0].index, 'replication-master':d.hosts[0].replication_master,
-			'internal-ip':d.hosts[0].internal_ip, 'external-ip':d.hosts[0].external_ip}
+	def iter_result(self, result):
+		'''Return array of result'''
+		for d in result:
+			yield [', '.join(d.behaviour), d.name, d.hosts[0].index,
+				d.hosts[0].internal_ip, d.hosts[0].external_ip,
+				d.hosts[0].replication_master]
 
 
 class GetHttpsCertificateCommand(Command):
 	name = "get-https-certificate"
-	method = "get_https_certificate" 
+	method = "get_https_certificate"
 	fields = ['cert', 'pkey', 'cacert']
-
 	parser = OptionParser(usage='get-https-certificate [-h --help]',
 		description='Display cert, pkey https certificate\n',
 		formatter=IndHelpFormatter())
-	
-	def get_dict_param(self, d):
-		'''return:
-		(cert, pkey, cacert)
-		'''
-		(cert, pkey, cacert)=d
-		return {'cert':cert, 'pkey':pkey, 'cacert':cacert}
+
+	def iter_result(self, result):
+		'''return: (cert, pkey, cacert)'''
+		(cert, pkey, cacert)=result
+		yield [cert, pkey, cacert]
 
 
 class ListRoleParamsCommand(Command):
 	name = "list-role-params"
 	method = "list_role_params"
-	
+	fields = ['Keys', 'Values']
 	parser = OptionParser(usage='list-role-params [-n --name][-h --help]',
 		description='Display list role param by name', formatter=IndHelpFormatter())
 	parser.add_option('-n', '--name', dest='name', help='Show params by role name ')
-	
-	'''
-	def run(self):
-		self.output([{'key1':'val1','key2':'val2','key3':'val3','key4':'val4'}])
-	'''
-	
-	def get_dict_param(self, d):
-		'''dictionary
-		#ERROR:'NoneType' object has no attribute 'nodeValue'
-		'''
-		return d
+
+	'''def run(self):
+		self.output({'key1':'val1','key2':'val2','key3':'val3','key4':'val4'})'''
+
+	def iter_result(self, result):
+		'''dictionary'''
+		for key in result.keys():
+			yield [key, result[key]]
 
 
 class ListVirtualhostsCommand(Command):
@@ -262,28 +223,23 @@ class ListVirtualhostsCommand(Command):
 		description='Display list of virtual hosts', formatter=IndHelpFormatter())
 	parser.add_option('-n', '--name', dest='name', help='Show virtual host by name')
 	parser.add_option('-s', '--https', dest='https', help='Show virtual hosts by https')
-	
-	'''
-	def run(self):
+
+	def iter_result(self, result):
+		'''return: [hostname=string,type=string,raw=string, https=0|1]'''
+		for d in result:
+			yield [d.hostname, d.https, d.type, d.raw]
+
+	'''def run(self):
 		res=[queryenv.VirtualHost(hostname='194.162.85.4', type='virHost', raw='<![CDATA[ ]]>', https=False),
 			queryenv.VirtualHost(hostname='201.1.85.4', type='virHost2', raw='<![CDATA[ ]]>', https=True)]
 		self.output(res)'''
-	
-	def get_dict_param(self, d):
-		'''return:
-		{hostname : string
-		type : string
-		raw : string
-		https : 0|1}
-		'''
-		return {'hostname':d.hostname, 'https':d.https, 'type':d.type, 'raw':d.raw}
-
+		
 
 class ListScriptsCommand(Command):
 	name = "list-scripts"
 	method = "list_scripts"
 	fields = ['asynchronous', 'exec-timeout', 'name', 'body']
-	
+
 	parser = OptionParser(usage='list-scripts [-e --event]'
 		' [-a --asynchronous] [-n --name] [-h --help]',
 		description='Display list of scripts', formatter=IndHelpFormatter())
@@ -291,23 +247,16 @@ class ListScriptsCommand(Command):
 	parser.add_option('-a', '--asynchronous', dest='asynchronous', 
 		help='Show scripts host by asynchronous')
 	parser.add_option('-n', '--name', dest='name', help='Show script(s) with name')
-	
-	'''
-	def run(self):
+
+	def iter_result(self, result):
+		'''return:	[asynchronous=1|0, exec_timeout=string, name=string,body=string]'''
+		for d in result:
+			yield [d.asynchronous, d.exec_timeout, d.name, d.body]
+
+	'''def run(self):
 		self.output([queryenv.Script(asynchronous=False, exec_timeout=126, name='Script1',
 			body='<script> ... </script>'), queryenv.Script(asynchronous=True,
-			exec_timeout=12006, name='Script2', body='<script> ... </script>')])
-	'''
-	
-	def get_dict_param(self, d):
-		'''return:
-		asynchronous : 1|0
-		exec_timeout : string 
-		name : string
-		body : string
-		'''
-		return {'asynchronous':d.asynchronous, 'exec-timeout':d.exec_timeout,
-			'name':d.name, 'body':d.body}
+			exec_timeout=12006, name='Script2', body='<script> ... </script>')])'''
 
 
 class Help(Command):
