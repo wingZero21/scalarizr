@@ -27,7 +27,8 @@ LOG = logging.getLogger(__name__)
 SERVICE_NAME = 'cloudfoundry'
 DEFAULTS = {
 	'home': '/root/cloudfoundry/vcap',
-	'datadir': '/var/vcap/data'
+	'datadir': '/var/vcap/data',
+	'services': ''
 }
 
 '''
@@ -315,28 +316,32 @@ _cf = _components = _services = None
 _home = _datadir = None
 
 
-def is_cloud_controller(self):
+def is_cloud_controller():
 	return _bhs.cloud_controller in _bhs
 
-def is_service(self):
+def is_service():
 	return _bhs.service in _bhs
 
-def is_scalarizr_running(self):
+def is_scalarizr_running():
 	return _cnf.state == config.ScalarizrState.RUNNING
 
-def local_ip(self):
+def local_ip():
 	return _platform.get_private_ip()
 
-def from_cloud_controller(self, msg):
+def from_cloud_controller(msg):
 	return _bhs.cloud_controller in msg.behaviour
 
-def its_me(self, msg):
+def its_me(msg):
 	return msg.remote_ip == _platform.get_public_ip()
 
-def svss(self):
+def svss():
 	return _components + _services
 
-class MainHandler(handlers.Handler):
+class list_ex(list):
+	def __setattr__(self, key, value):
+		self.__dict__[key] = value
+
+class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	
 	def __init__(self):
 		handlers.FarmSecurityMixin.__init__(self, [4222, 9022, 12345])
@@ -348,7 +353,6 @@ class MainHandler(handlers.Handler):
 		
 		_queryenv = bus.queryenv_service
 		_platform = bus.platform 
-		_cf = cloudfoundry.CloudFoundry()
 
 		# Apply configuration
 		_cnf = bus.cnf		
@@ -357,11 +361,11 @@ class MainHandler(handlers.Handler):
 			if _ini.has_option(SERVICE_NAME, key):
 				value = _ini.get(SERVICE_NAME, key)
 			globals()['_' + key] = value
+	
 
-		_components, _bhs = [], list_ex()				
-		class list_ex(list):
-			def __setattr__(self, key, value):
-				self.__dict__[key] = value
+		_services = filter(None, _services.split(','))			
+		_components, _bhs = [], list_ex()
+		_cf = cloudfoundry.CloudFoundry(_home)				
 				
 		behaviour_str = _ini.get('general', 'behaviour')
 		for prop in dir(config.BuiltinBehaviours):
@@ -373,7 +377,7 @@ class MainHandler(handlers.Handler):
 					_bhs.append(bh)
 					_components.append(cmp)
 	
-		_services = _ini.get('cloudfoundry', 'services').split(',')
+
 
 		
 	def _start_services(self):
@@ -419,7 +423,6 @@ class MainHandler(handlers.Handler):
 		bus.on(
 			reload=self.on_reload,
 			start=self.on_start,
-			host_init_response=self.on_host_init_response,
 			before_host_up=self.on_before_host_up,
 			before_reboot_start=self.on_before_reboot_start
 		)
@@ -429,6 +432,11 @@ class MainHandler(handlers.Handler):
 	def on_reload(self, *args, **kwds):
 		LOG.debug('Called on_reload')
 		self._init_globals()
+
+	def on_start(self):
+		LOG.debug('Called on_start')
+		if is_scalarizr_running():
+			self._start_services()
 
 	
 	def on_before_host_up(self, msg):
@@ -474,6 +482,7 @@ class CloudControllerHandler(handlers.Handler):
 			os.makedirs(volume_dir)
 		if cnf:
 			storage.Storage.backup_config(cnf, self.volume_path)
+		self._volume_config = cnf			
 	
 	def _get_volume_config(self):
 		if not self._volume_config:
@@ -548,6 +557,7 @@ class CloudControllerHandler(handlers.Handler):
 	def on_init(self):
 		if is_cloud_controller():
 			bus.on(
+				start=self.on_start,
 				host_init_response=self.on_host_init_response,
 				reload=self.on_reload
 			)
@@ -557,15 +567,21 @@ class CloudControllerHandler(handlers.Handler):
 	def on_reload(self):
 		self._init_objects()
 
+
+	def on_start(self):
+		if is_scalarizr_running():
+			self._setup_external_uri()
+			self._plug_storage()
+			
 	
 	def on_host_init_response(self, msg):
 		self.LOG.debug('Called on_host_init_response')
-		ini = msg.body.get(self.bhs.cloud_controller, {})
+		ini = msg.body.get(_bhs.cloud_controller, {})
 		self.volume_config = ini.pop('volume_config', 
 									dict(type='loop',file='/mnt/cfdata.loop',size=50))
 
 	
-	def on_BeforeHostUp(self):
+	def on_BeforeHostUp(self, msg):
 		# Initialize storage			
 		LOG.info('Initializing vcap data storage')
 		tmp_mpoint = '/mnt/tmp.vcap.data'
@@ -590,6 +606,6 @@ class CloudControllerHandler(handlers.Handler):
 
 
 class MysqlHandler(handlers.Handler):
-	def on_BeforeHostUp(self):
+	def on_BeforeHostUp(self, msg):
 		# patch configs
 		pass
