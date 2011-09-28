@@ -126,7 +126,7 @@ class GetlatestVersionCommand(Command):
 	name="get-latest-version"
 	method="get_latest_version"
 	fields =['version']
-	parser = OptionParser(usage='get-latest-version [-h --help]',
+	parser = OptionParser(usage='get-latest-version ',
 		description='Display latest versioin', formatter= IndHelpFormatter())
 
 	def iter_result(self, result):
@@ -139,7 +139,7 @@ class ListEbsMountpointsCommand(Command):
 	name = "list-ebs-mountpoints"
 	method = "list_ebs_mountpoints"
 	fields =['name', 'dir', 'createfs', 'isarray', 'volume-id', 'device']
-	parser = OptionParser(usage='list-ebs-mountpoints [-h --help]',
+	parser = OptionParser(usage='list-ebs-mountpoints ',
 		description='Display ebs mountpoints', formatter=IndHelpFormatter())
 
 	def iter_result(self, result):
@@ -169,7 +169,7 @@ class ListRolesCommand(Command):
 	fields = ['behaviour','name', 'index', 'internal-ip',
 		'external-ip', 'replication-master']
 	parser = OptionParser(usage='list-roles [-b --behaviour] '
-		'[-r --role] [-h --help]', description='Display roles list',
+		'[-r --role] ', description='Display roles list',
 		 formatter= IndHelpFormatter())
 	parser.add_option('-b', '--behaviour', dest='behaviour', help='Role behaviour')
 	parser.add_option('-r', '--role-name', dest='role_name', help='Role name')
@@ -186,7 +186,7 @@ class GetHttpsCertificateCommand(Command):
 	name = "get-https-certificate"
 	method = "get_https_certificate"
 	fields = ['cert', 'pkey', 'cacert']
-	parser = OptionParser(usage='get-https-certificate [-h --help]',
+	parser = OptionParser(usage='get-https-certificate ',
 		description='Display cert, pkey https certificate\n',
 		formatter=IndHelpFormatter())
 
@@ -200,7 +200,7 @@ class ListRoleParamsCommand(Command):
 	name = "list-role-params"
 	method = "list_role_params"
 	fields = ['Keys', 'Values']
-	parser = OptionParser(usage='list-role-params [-n --name][-h --help]',
+	parser = OptionParser(usage='list-role-params [-n --name]',
 		description='Display list role param by name', formatter=IndHelpFormatter())
 	parser.add_option('-n', '--name', dest='name', help='Show params by role name ')
 
@@ -219,7 +219,7 @@ class ListVirtualhostsCommand(Command):
 	fields = ['hostname', 'https', 'type', 'raw']
 
 	parser = OptionParser(usage='list-virtualhosts'
-		' [-n --name] [-s --https] [-h --help]',
+		' [-n --name] [-s --https] ',
 		description='Display list of virtual hosts', formatter=IndHelpFormatter())
 	parser.add_option('-n', '--name', dest='name', help='Show virtual host by name')
 	parser.add_option('-s', '--https', dest='https', help='Show virtual hosts by https')
@@ -241,7 +241,7 @@ class ListScriptsCommand(Command):
 	fields = ['asynchronous', 'exec-timeout', 'name', 'body']
 
 	parser = OptionParser(usage='list-scripts [-e --event]'
-		' [-a --asynchronous] [-n --name] [-h --help]',
+		' [-a --asynchronous] [-n --name] ',
 		description='Display list of scripts', formatter=IndHelpFormatter())
 	parser.add_option('-e', '--event', dest='event', help='Show scripts host on event')
 	parser.add_option('-a', '--asynchronous', dest='asynchronous', 
@@ -269,21 +269,21 @@ class Help(Command):
 		if com_d:
 			self.com_dict=com_d
 
-	def run(self, com_d=None):
+	def run(self, com_d=None, parser_misc=None):
 		if com_d:
 			self.com_dict=com_d
 		if self.com_dict:
 			str='Scalarizr administration utility'
+			if not parser_misc:
+				parser_misc=help_misc()
+			print '%s\n\n%s' % (str, parser_misc.format_help())
+			
 			str2='QueryEnv commands:'
-			print('\n%s\n\n%s\n'%(str,str2))
-
+			print('%s'%str2)
 			for com_name in self.com_dict.keys():
 				com_obj=self.com_dict.get(com_name)()
 				if not isinstance(com_obj, Help):
 					print('%s'%com_obj.usage)
-			parser_misc=help_misc()
-			str='Misc commands:'
-			print '\n%s\n\n%s' % (str, parser_misc.format_help())
 
 def help_misc():
 	parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
@@ -303,7 +303,6 @@ def help_misc():
 		default=None, help="Build report with logs and system info")
 	return parser
 #-------------------------------------------------------------------------------------------------
-
 
 def get_mx_records(email):
 	out = system2('%s -t mx %s' % (whereis('host')[0], email.split('@')[-1]), shell=True)[0]
@@ -326,7 +325,6 @@ def main():
 	init_script()
 
 #23.09.11-------------------------------------------------------------------------------------------------
-
 	com_dict={'list-roles':ListRolesCommand,
 			'get-latest-version':GetlatestVersionCommand,
 			'list-ebs-mountpoints':ListEbsMountpointsCommand,
@@ -338,7 +336,6 @@ def main():
 			'--help':Help,
 			'-h':Help
 		}
-
 	str=None
 	com=None
 	com_find=None
@@ -356,25 +353,20 @@ def main():
 					com.run(com_dict)
 				else:
 					com.run()
-		
 		except Exception, e:
 			com=Help(com_dict)
-			
-			parser_misc=help_misc()
-			str='Misc commands:'
-			print '\n%s\n\n%s' % (str, parser_misc.format_help())
 			com.run()
 			print('Cant execute command or option. Error:%s' % e)
 	else:
-
-
 		parser=help_misc()
-#-------------------------------------------------------------------------------------------------	
+#------------------------------------------------------------------------------------------------
 		(options, raw_args) = parser.parse_args()
 
 		if not options.queryenv and not options.msgsnd and not options.repair \
 			and not options.report and not options.reinit:
-			print '%s' % parser.format_help()
+			#print full help
+			com=Help(com_dict)
+			com.run()
 			sys.exit()
 
 		args = []
@@ -391,9 +383,9 @@ def main():
 		if options.queryenv:
 
 			if not args:
-				#next line print help QueryEnv commands
+				#print full help
 				com=Help(com_dict)
-				print parser.format_help()
+				com.run()
 				sys.exit()
 			init_cnf()
 
@@ -408,7 +400,8 @@ def main():
 		if options.msgsnd:
 
 			if not options.queue or (not options.msgfile and not options.name):
-				print parser.format_help()
+				com=Help(com_dict)
+				com.run()
 				sys.exit()
 
 			msg_service = bus.messaging_service
