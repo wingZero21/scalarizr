@@ -21,8 +21,6 @@ LOG = logging.getLogger(__name__)
 class CloudFoundryError(Exception):
 	pass
 
-
-
 class Component(object):
 	
 	def __init__(self, cf, name, config_file=None):
