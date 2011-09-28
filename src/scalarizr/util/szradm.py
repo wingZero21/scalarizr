@@ -19,7 +19,7 @@ from email.MIMEBase import MIMEBase
 from email.MIMEText import MIMEText
 from email import Encoders
 
-from optparse import OptionParser, _, HelpFormatter
+from optparse import OptionParser, _, HelpFormatter, OptionGroup
 #import optparse
 
 import ConfigParser
@@ -53,7 +53,7 @@ class IndHelpFormatter(HelpFormatter):
             self, indent_increment, max_help_position, width, short_first)
 
 	def format_usage(self, usage):
-		return _("[+] %s") % usage
+		return _("    %s") % usage
 
 	def format_heading(self, heading):
 		return "%*s%s:\n" % (self.current_indent, "", heading)
@@ -273,15 +273,35 @@ class Help(Command):
 		if com_d:
 			self.com_dict=com_d
 		if self.com_dict:
-			for com_name in self.com_dict.keys():
-				try: 
-					com_obj=self.com_dict.get(com_name)()
+			str='Scalarizr administration utility'
+			str2='QueryEnv commands:'
+			print('\n%s\n\n%s\n'%(str,str2))
 
-					if not isinstance(com_obj, Help):
-						print(com_obj.usage)
-				except Exception, e:
-					print('Cant show usage of command: %s;'
-						' Error in szradm.Help.run() function: %s' % (com_name, e))		
+			for com_name in self.com_dict.keys():
+				com_obj=self.com_dict.get(com_name)()
+				if not isinstance(com_obj, Help):
+					print('%s'%com_obj.usage)
+			parser_misc=help_misc()
+			str='Misc commands:'
+			print '\n%s\n\n%s' % (str, parser_misc.format_help())
+
+def help_misc():
+	parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
+	parser.add_option("-q", "--queryenv", dest="queryenv", action="store_true",
+		default=False, help="QueryEnv CLI")
+	parser.add_option("-m", "--msgsnd", dest="msgsnd", action="store_true",
+		default=False, help="Message sender CLI")
+	parser.add_option("-r", "--repair", dest="repair", action="store_true",
+		default=False,	help="Repair database")
+	parser.add_option('--reinit', dest='reinit', action='store_true', default=False,
+		help='Reinitialize Scalarizr')
+	parser.add_option("-n", "--name", dest="name", default=None, help="Name")
+	parser.add_option("-f", "--msgfile", dest="msgfile", default=None, help="File")
+	parser.add_option("-e", "--endpoint", dest="endpoint", default=None, help="Endpoint")
+	parser.add_option("-o", "--queue", dest="queue", default=None, help="Queue")
+	parser.add_option("-s", "--qa-report", dest="report", action="store_true",
+		default=None, help="Build report with logs and system info")
+	return parser
 #-------------------------------------------------------------------------------------------------
 
 
@@ -339,32 +359,22 @@ def main():
 		
 		except Exception, e:
 			com=Help(com_dict)
+			
+			parser_misc=help_misc()
+			str='Misc commands:'
+			print '\n%s\n\n%s' % (str, parser_misc.format_help())
 			com.run()
 			print('Cant execute command or option. Error:%s' % e)
 	else:
+
+
+		parser=help_misc()
 #-------------------------------------------------------------------------------------------------	
-
-		parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
-		parser.add_option("-q", "--queryenv", dest="queryenv", action="store_true",
-			default=False, help="QueryEnv CLI")
-		parser.add_option("-m", "--msgsnd", dest="msgsnd", action="store_true",
-			default=False, help="Message sender CLI")
-		parser.add_option("-r", "--repair", dest="repair", action="store_true",
-			default=False,	help="Repair database")
-		parser.add_option('--reinit', dest='reinit', action='store_true', default=False,
-			help='Reinitialize Scalarizr')
-		parser.add_option("-n", "--name", dest="name", default=None, help="Name")
-		parser.add_option("-f", "--msgfile", dest="msgfile", default=None, help="File")
-		parser.add_option("-e", "--endpoint", dest="endpoint", default=None, help="Endpoint")
-		parser.add_option("-o", "--queue", dest="queue", default=None, help="Queue")
-		parser.add_option("-s", "--qa-report", dest="report", action="store_true",
-			default=None, help="Build report with logs and system info")
-
 		(options, raw_args) = parser.parse_args()
 
 		if not options.queryenv and not options.msgsnd and not options.repair \
 			and not options.report and not options.reinit:
-			print parser.format_help()
+			print '%s' % parser.format_help()
 			sys.exit()
 
 		args = []
@@ -381,6 +391,8 @@ def main():
 		if options.queryenv:
 
 			if not args:
+				#next line print help QueryEnv commands
+				com=Help(com_dict)
 				print parser.format_help()
 				sys.exit()
 			init_cnf()
