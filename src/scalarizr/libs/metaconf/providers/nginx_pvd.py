@@ -123,16 +123,17 @@ class NginxFormatProvider(IniFormatProvider):
 				if not new_line:
 					return False
 				line += new_line
-				if not hasattr(self, "_block_re"):
-					self._block_re = re.compile('[^#]*([{}]).*$')
-				result = self._block_re.match(new_line)
-				if result:
-					opened += 1 if result.group(1) == '{' else -1
-			
+
+				line_wo_comment = new_line.split('#')[0]
+				if '{' in line_wo_comment:
+					opened += 1
+				if '}' in line_wo_comment:
+					opened -= 1
+
 			self._sections.append(self._cursect)
 			self._cursect = new_section
 			old_fp = self._fp
-			content = re.search(re.compile('{.*?\n(.*)}',re.S), line).group(1).strip()
+			content = re.search(re.compile('{(.*)}',re.S), line).group(1).strip()
 			self.read(StringIO(content), self._lineno)
 			self._fp = old_fp
 			self._cursect = self._sections.pop()
