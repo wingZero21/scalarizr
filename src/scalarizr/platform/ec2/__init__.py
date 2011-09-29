@@ -107,7 +107,7 @@ class Ec2Platform(Ec2LikePlatform):
 		
 	@property
 	def cloud_storage_path(self):
-		return self.get_user_data('cloud_storage_path') or 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
+		return Ec2LikePlatform.cloud_storage_path.fget(self) or 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
 
 
 
