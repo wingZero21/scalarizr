@@ -114,8 +114,8 @@ class Service(Base):
 	def __init__(self, cf, name, config_dir=None):
 		Base.__init__(self, cf, name)
 		self.config_dir = config_dir or os.path.join(self.cf.home, 'services', name, 'config')
-		self.node_config_file = os.path.join(config_dir, '%s_node.yml' % name)
-		self.gateway_config_file = os.path.join(config_dir, '%s_gateway.yml' % name)
+		self.node_config_file = os.path.join(self.config_dir, '%s_node.yml' % name)
+		self.gateway_config_file = os.path.join(self.config_dir, '%s_gateway.yml' % name)
 		
 		self.node_config = yaml.load(open(self.node_config_file))
 		self.gateway_config = yaml.load(open(self.gateway_config_file))

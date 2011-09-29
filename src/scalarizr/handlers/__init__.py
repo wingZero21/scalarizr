@@ -426,46 +426,67 @@ class FarmSecurityMixin(object):
 	
 	def on_HostInit(self, message):
 		# Append new server to allowed list
-		ip = message.local_ip or message.remote_ip
+		rules = []
 		for port in self._ports:
-			rule = iptables.RuleSpec(source=ip, protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
+			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
+		for rule in rules:
 			self._iptables.insert_rule(1, rule)
 		
 
 	def on_HostDown(self, message):
 		# Remove terminated server from allowed list
-		ip = message.local_ip or message.remote_ip
+		rules = []
 		for port in self._ports:
-			rule = iptables.RuleSpec(source=ip, protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
+			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
+		for rule in rules:
 			self._iptables.delete_rule(rule)
 
 
+	def __create_rule(self, source, dport, jump):
+		return iptables.RuleSpec(
+					source=source, 
+					protocol=iptables.P_TCP, 
+					dport=dport, 
+					jump=jump)
+		
+		
+	def __create_accept_rule(self, source, dport):
+		return self.__create_rule(source, dport, 'ACCEPT')
+	
+	
+	def __create_drop_rule(self, dport):
+		return self.__create_rule(None, dport, 'DROP')
+	
+
+	def __accept_host(self, local_ip, public_ip, dport):
+		ret = []
+		if local_ip == self._platform.get_private_ip():
+			ret.append(self.__create_accept_rule('127.0.0.1', dport))
+		if local_ip:
+			ret.append(self.__create_accept_rule(local_ip, dport))
+		ret.append(self.__create_accept_rule(public_ip, dport))
+		return ret
+
+
 	def __insert_iptables_rules(self, *args, **kwds):
-		# Collect farm servers IP-s					
-		ips = []
+		# Collect farm servers IP-s
+		hosts = []					
 		for role in self._queryenv.list_roles():
 			for host in role.hosts:
-				ips.append(host.internal_ip or host.external_ip)
+				hosts.append((host.internal_ip, host.external_ip))
 		
 		rules = []
 		for port in self._ports:
-			# Allow from localhost
-			local_rule = iptables.RuleSpec(source='127.0.0.1', 
-										protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
-			rules.append(local_rule)
-			local_rule2 = iptables.RuleSpec(source=self._platform.get_private_ip(), 
-										protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
-			rules.append(local_rule2)
+			# Allow for me
+			rules += self.__accept_host(self._platform.get_private_ip(), self._platform.get_public_ip(), port)
 
 			# Allow from farm IP-s
-			for ip in ips:
-				allow_rule = iptables.RuleSpec(source=ip, protocol=iptables.P_TCP, dport=port, jump='ACCEPT')
-				rules.append(allow_rule)
+			for local_ip, public_ip in hosts:
+				rules += self.__accept_host(local_ip, public_ip, port)
 		
 		# Deny from all
 		for port in self._ports:
-			drop_rule = iptables.RuleSpec(protocol=iptables.P_TCP, dport=port, jump='DROP')
-			rules.append(drop_rule)
+			rules.append(self.__create_drop_rule(port))
 			
 		# Apply iptables rules
 		rules.reverse()
