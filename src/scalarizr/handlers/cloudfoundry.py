@@ -163,10 +163,10 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		self._locate_cloud_controller()
 
 		LOG.debug('Setting ip route')
-		cmps = _cf.components
-		cmps['dea'].ip_route = \
-		cmps['cloud_controller'].ip_route = \
-		cmps['health_manager'].ip_route = public_ip()
+		for name in _components:
+			_cf.components[name].ip_route = public_ip()
+		for name in _services:
+			_cf.services[name].ip_route = public_ip()
 			
 		self._start_services()
 
@@ -275,6 +275,7 @@ class CloudControllerHandler(handlers.Handler):
 			bus.on(
 				start=self.on_start,
 				host_init_response=self.on_host_init_response,
+				before_host_up=self.on_before_host_up,
 				reload=self.on_reload
 			)
 			self._init_objects()
@@ -321,6 +322,11 @@ class CloudControllerHandler(handlers.Handler):
 
 		self._setup_external_uri()		
 		_cf.init_db()
+
+
+	def on_before_host_up(self, msg):
+		msg.body[_bhs.cloud_controller] = dict(volume_config=self.volume_config)
+
 
 
 class SvssHandler(handlers.Handler):
