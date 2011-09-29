@@ -20,15 +20,14 @@ import shutil
 
 
 def get_handlers():
-	return (MainHandler(), CloudControllerHandler(), MysqlHandler())
+	return (MainHandler(), CloudControllerHandler(), SvssHandler(), MysqlHandler())
 
 
 LOG = logging.getLogger(__name__)
 SERVICE_NAME = 'cloudfoundry'
 DEFAULTS = {
 	'home': '/root/cloudfoundry/vcap',
-	'datadir': '/var/vcap/data',
-	'services': ''
+	'datadir': '/var/vcap'
 }
 
 
@@ -46,8 +45,8 @@ def is_service():
 def is_scalarizr_running():
 	return _cnf.state == config.ScalarizrState.RUNNING
 
-def local_ip():
-	return _platform.get_private_ip()
+def public_ip():
+	return _platform.get_public_ip()
 
 def from_cloud_controller(msg):
 	return _bhs.cloud_controller in msg.behaviour
@@ -84,7 +83,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 			globals()['_' + key] = value
 	
 
-		_services = filter(None, _services.split(','))			
+		_services = []			
 		_components, _bhs = [], list_ex()
 		_cf = cloudfoundry.CloudFoundry(_home)				
 				
@@ -118,7 +117,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	def _do_locate_cloud_controller(self):
 		host = None
 		if is_cloud_controller():
-			host = local_ip()
+			host = public_ip()
 		else:
 			roles = _queryenv.list_roles(behaviour=_bhs.cloud_controller)
 			if roles:
@@ -157,17 +156,17 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		if is_scalarizr_running():
 			self._start_services()
 
-	
+
 	def on_before_host_up(self, msg):
 		LOG.debug('Called on_before_host_up')
 		
 		self._locate_cloud_controller()
 
-		LOG.debug('Setting local route')
+		LOG.debug('Setting ip route')
 		cmps = _cf.components
-		cmps['dea'].local_route = \
-		cmps['cloud_controller'].local_route = \
-		cmps['health_manager'].local_route = local_ip()
+		cmps['dea'].ip_route = \
+		cmps['cloud_controller'].ip_route = \
+		cmps['health_manager'].ip_route = public_ip()
 			
 		self._start_services()
 
@@ -175,7 +174,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	def on_HostUp(self, msg):
 		LOG.debug('Called on_HostUp')
 		if from_cloud_controller(msg) and not its_me(msg):
-			_cf.cloud_controller = msg.local_ip
+			_cf.cloud_controller = msg.remote_ip
 
 
 	def on_before_reboot_start(self, msg):
@@ -295,13 +294,13 @@ class CloudControllerHandler(handlers.Handler):
 		self.LOG.debug('Called on_host_init_response')
 		ini = msg.body.get(_bhs.cloud_controller, {})
 		self.volume_config = ini.pop('volume_config', 
-									dict(type='loop',file='/mnt/cfdata.loop',size=50))
+									dict(type='loop',file='/mnt/cfdata.loop',size=500))
 
 	
 	def on_BeforeHostUp(self, msg):
 		# Initialize storage			
 		LOG.info('Initializing vcap data storage')
-		tmp_mpoint = '/mnt/tmp.vcap.data'
+		tmp_mpoint = '/mnt/tmp.vcap'
 		try:
 			self.volume = self._plug_storage(mpoint=tmp_mpoint)
 			if not _cf.valid_datadir(tmp_mpoint):
@@ -324,15 +323,24 @@ class CloudControllerHandler(handlers.Handler):
 		_cf.init_db()
 
 
+class SvssHandler(handlers.Handler):
+
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return is_service() and message.name in (messaging.Messages.HOST_INIT_RESPONSE, ) 
+
+	def on_HostInitResponse(self, msg):
+		globals()['_services'] = msg.body.get(_bhs.service, {}).keys()
+
+
 class MysqlHandler(handlers.Handler):
 	def __init__(self):
 		self.enabled = False
+		self.svs_conf = None
 		bus.on(init=self.on_init)
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		result = message.name in (messaging.Messages.BEFORE_HOST_UP, ) 
-		return result
+		return self.enabled and message.name in (messaging.Messages.BEFORE_HOST_UP, ) 
 	
 	
 	def on_init(self):
@@ -341,9 +349,15 @@ class MysqlHandler(handlers.Handler):
 	
 	def on_host_init_response(self, msg):
 		ini = msg.body.get(_bhs.service, {})
-		ini = ini.get('mysql', {})
+		self.enabled = 'mysql' in ini
+		if self.enabled:
+			self.svs_conf = ini['mysql'].copy()
 	
 	
 	def on_BeforeHostUp(self, msg):
-		# patch configs
-		pass
+		svs = _cf.services['mysql']
+		svs.node_config['mysql']['host'] = self.svs_conf['hostname']
+		svs.node_config['mysql']['user'] = self.svs_conf['user']
+		svs.node_config['mysql']['password'] = self.svs_conf['password']
+		svs.flush_node_config()
+

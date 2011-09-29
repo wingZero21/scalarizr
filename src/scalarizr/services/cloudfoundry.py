@@ -21,16 +21,12 @@ LOG = logging.getLogger(__name__)
 class CloudFoundryError(Exception):
 	pass
 
-class Component(object):
-	
-	def __init__(self, cf, name, config_file=None):
+class Base(object):
+	def __init__(self, cf, name):
 		self.cf = cf
 		self.name = name
-		self.config_file = config_file or os.path.join(self.cf.home, 
-													name, 'config', name + '.yml')
-		self.config = yaml.load(open(self.config_file))
-	
-	
+		self._ip_route = None
+
 	def start(self):
 		self.exec_vcap('start')
 	
@@ -87,24 +83,65 @@ class Component(object):
 			return '/tmp/vcap-run/%s.log' % self.name
 
 
-	def _get_local_route(self):
-		if not self._local_route:
-			self._local_route = self.get_config(r'local_route')
-			LOG.debug('Found %s local_route: %s', self.name, self._local_route)
-		return self._local_route
+class Component(Base):
+	
+	def __init__(self, cf, name, config_file=None):
+		Base.__init__(self, cf, name)
+		self.config_file = config_file or os.path.join(self.cf.home, 
+													name, 'config', name + '.yml')
+		self.config = yaml.load(open(self.config_file))
+	
+
+	def _get_ip_route(self):
+		return self._ip_route
 	
 	
-	def _set_local_route(self, ip):
-		LOG.debug('Setting %s local route: %s', self.name, ip)
-		util.system2(('sed', '--in-place', 's/local_route.*/local_route: %s/1' % ip, self.config_file))
-		self._local_route = ip
+	def _set_ip_route(self, ip):
+		LOG.debug('Setting %s ip route: %s', self.name, ip)
+		sed('local_route.*', 'local_route: ' + ip, self.config_file)
+		self._ip_route = ip
 
 	
-	local_route = property(_get_local_route, _set_local_route)
+	ip_route = property(_get_ip_route, _set_ip_route)
+
 
 	@property
 	def home(self):
 		return os.path.join(self.cf.home, self.name)
+
+
+class Service(Base):
+	def __init__(self, cf, name, config_dir=None):
+		Base.__init__(self, cf, name)
+		self.config_dir = config_dir or os.path.join(self.cf.home, 'services', name, 'config')
+		self.node_config_file = os.path.join(config_dir, '%s_node.yml' % name)
+		self.gateway_config_file = os.path.join(config_dir, '%s_gateway.yml' % name)
+		
+		self.node_config = yaml.load(open(self.node_config_file))
+		self.gateway_config = yaml.load(open(self.gateway_config_file))
+		self.config_files = [self.node_config_file, self.gateway_config_file]		
+
+
+	def _get_ip_route(self):
+		return self._ip_route
+	
+	
+	def _set_ip_route(self, ip):
+		LOG.debug('Setting %s ip route: %s', self.name, ip)
+		for file in self.config_files:
+			sed('ip_route.*', 'ip_route: ' + ip, file)
+		self._ip_route = ip
+	
+		
+	ip_route = property(_get_ip_route, _set_ip_route)
+	
+
+	def flush_node_config(self):
+		fp = open(self.node_config_file)
+		yaml.serialize(self.node_config, fp)
+		fp.close()
+		
+
 
 class CloudFoundry(object):
 	
@@ -113,6 +150,9 @@ class CloudFoundry(object):
 		self.components = {}
 		for name in ('cloud_controller', 'router', 'health_manager', 'dea'):
 			self.components[name] = Component(self, name)
+		self.services = {}
+		for name in ('mysql', 'postgresql', 'mongodb', 'redis', 'rabbit', 'neo4j'):
+			self.services[name] = Service(self, name)
 		
 		self._mbus_url = None
 		self._cloud_controller = None
@@ -209,9 +249,15 @@ class CloudFoundry(object):
 				os.makedirs(dir)
 
 
+def sed(search, replace, filename):
+	util.system2(('sed', '--in-place', 
+				's/%s/%s/1' % (search.replace('/', '\\/'), replace.replace('/', '\\/')), 
+				filename))	
+
 
 def system(*args, **kwds):
 	cmd = args[0]
 	if not isinstance(cmd, basestring):
 		cmd = ' '.join(cmd)
 	return util.system2(('/bin/bash', '-c', 'source /root/.bashrc; ' + cmd), **kwds)	
+
