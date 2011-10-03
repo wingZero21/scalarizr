@@ -92,15 +92,19 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 				
 		behaviour_str = _ini.get('general', 'behaviour')
 		for prop in dir(config.BuiltinBehaviours):
-			bh = getattr(config.BuiltinBehaviours, prop)			
-			if bh in behaviour_str:
-				_bhs.append(bh)
-			if prop.startswith('CF'):
-				cmp = bh[3:]
-				setattr(_bhs, cmp, bh)
+			if prop.startswith('CF') or prop == 'WWW':
+				bh = getattr(config.BuiltinBehaviours, prop)
+				if prop.startswith('CF'):
+					cmp = bh[3:]
+					setattr(_bhs, cmp, bh)
+				else:
+					setattr(_bhs, 'www', bh)
 				if bh in behaviour_str:
-					_components.append(cmp)
-
+					_bhs.append(bh)
+					if bh not in ('cf_service', 'www'):
+						_components.append(cmp)
+		LOG.debug('Behaviors: %s', _bhs)
+		LOG.debug('Components %s:', _components)
 
 		
 	def _start_services(self):
