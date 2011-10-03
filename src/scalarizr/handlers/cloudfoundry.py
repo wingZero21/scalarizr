@@ -48,6 +48,9 @@ def is_scalarizr_running():
 def public_ip():
 	return _platform.get_public_ip()
 
+def local_ip():
+	return _platform.get_private_ip()
+
 def from_cloud_controller(msg):
 	return _bhs.cloud_controller in msg.behaviour
 
@@ -117,7 +120,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	def _do_locate_cloud_controller(self):
 		host = None
 		if is_cloud_controller():
-			host = public_ip()
+			host = local_ip()
 		else:
 			roles = _queryenv.list_roles(behaviour=_bhs.cloud_controller)
 			if roles:
@@ -164,9 +167,9 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 		LOG.debug('Setting ip route')
 		for name in _components:
-			_cf.components[name].ip_route = public_ip()
+			_cf.components[name].ip_route = local_ip()
 		for name in _services:
-			_cf.services[name].ip_route = public_ip()
+			_cf.services[name].ip_route = local_ip()
 			
 		self._start_services()
 
