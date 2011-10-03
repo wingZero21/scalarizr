@@ -92,14 +92,14 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 				
 		behaviour_str = _ini.get('general', 'behaviour')
 		for prop in dir(config.BuiltinBehaviours):
+			bh = getattr(config.BuiltinBehaviours, prop)			
+			if bh in behaviour_str:
+				_bhs.append(bh)
 			if prop.startswith('CF'):
-				bh = getattr(config.BuiltinBehaviours, prop)
 				cmp = bh[3:]
 				setattr(_bhs, cmp, bh)
 				if bh in behaviour_str:
-					_bhs.append(bh)
 					_components.append(cmp)
-	
 
 
 		
@@ -123,7 +123,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 			host = local_ip()
 		else:
 			roles = _queryenv.list_roles(behaviour=_bhs.cloud_controller)
-			if roles:
+			if roles and roles[0].hosts:
 				host = roles[0].hosts[0].internal_ip
 		if host:
 			_cf.cloud_controller = host
@@ -238,14 +238,26 @@ class CloudControllerHandler(handlers.Handler):
 		if not updated:
 			fp.write(newline)
 		fp.close()
+
 	
-	def _setup_external_uri(self):
-		roles = _queryenv.list_roles(behaviour='www')
-		if roles:
-			self._os_hosts(
-				roles[0].hosts[0].internal_ip, 
-				_cf.components['cloud_controller'].config['external_uri']
-			)
+	def _locate_nginx(self):
+		util.wait_until(self._do_locate_nginx, timeout=600, logger=LOG, 
+					start_text='Locating nginx frontend server', 
+					error_text='Cannot locate nginx frontend server')
+	
+	
+	def _do_locate_nginx(self):
+		host = None
+		if 'www' in _bhs:
+			host = local_ip()
+		else:
+			roles = _queryenv.list_roles(behaviour='www')
+			if roles and roles[0].hosts:
+				host = roles[0].hosts[0].internal_ip
+		if host:
+			self._os_hosts(host, _cf.components['cloud_controller'].config['external_uri'])
+		return bool(host)
+	
 	
 	def _plug_storage(self, vol=None, mpoint=None):
 		vol = vol or self.volume_config
@@ -290,7 +302,7 @@ class CloudControllerHandler(handlers.Handler):
 
 	def on_start(self):
 		if is_scalarizr_running():
-			self._setup_external_uri()
+			self._locate_nginx()
 			self._plug_storage()
 			
 	
@@ -323,7 +335,7 @@ class CloudControllerHandler(handlers.Handler):
 				os.removedirs(tmp_mpoint)		
 		self.volume_config = self.volume.config()
 
-		self._setup_external_uri()		
+		self._locate_nginx()		
 		_cf.init_db()
 
 
