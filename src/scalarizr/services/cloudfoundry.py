@@ -239,7 +239,7 @@ class CloudFoundry(object):
 
 
 	def valid_datadir(self, datadir):
-		return os.path.exists(os.path.join(datadir, 'cloud_controller'))
+		return os.path.exists(os.path.join(datadir, 'data')) 
 			
 			
 	def init_datadir(self, datadir):
