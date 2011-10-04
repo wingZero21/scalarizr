@@ -191,7 +191,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
 	def on_BeforeHostTerminate(self, msg):
 		LOG.debug('Called on_BeforeHostTerminate')
-		if self.its_me(msg):
+		if its_me(msg):
 			self._stop_services()
 
 

@@ -138,7 +138,7 @@ class Service(Base):
 
 	def flush_node_config(self):
 		fp = open(self.node_config_file)
-		yaml.serialize(self.node_config, fp)
+		yaml.safe_dump(self.node_config, fp, default_flow_style=False)
 		fp.close()
 		
 
