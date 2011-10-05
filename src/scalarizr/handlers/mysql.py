@@ -1399,61 +1399,71 @@ class MysqlHandler(ServiceCtlHandler):
 		root_pass, repl_pass, log_file, log_pos = self._get_ini_options(
 				OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_LOG_FILE, OPT_LOG_POS)
 		
+		ive_created_storage = False
 		if not self._storage_valid():
 			self._logger.debug("Initialize slave storage")
 			self.storage_vol = self._plug_storage(self._storage_path, 
-					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))
+			ive_created_storage = True			
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
 			
-		# Stop MySQL
-		self._stop_service('Required by Slave initialization process')			
-		self._flush_logs()
-		
-		# Change configuration files
-		self._logger.info("Changing configuration files")
-
-		if not 'datadir' in self._mysql_config.options('mysqld'):
-			""" Set default value for datadir """
-			self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
-
-		self._move_mysql_dir('mysqld/datadir', self._data_dir)
-		self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-		self._replication_init(master=False)
-		self._copy_debian_cnf_back()
-		self._innodb_recovery()
-		self._start_service()
-		
-		# Change replication master 
-		master_host = None
-		self._logger.info("Requesting master server")
-		while not master_host:
-			try:
-				master_host = list(host 
-					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
-					if host.replication_master)[0]
-			except IndexError:
-				self._logger.debug("QueryEnv respond with no mysql master. " + 
-						"Waiting %d seconds before the next attempt", 5)
-				time.sleep(5)
-				
-		self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
-				master_host.internal_ip, master_host.external_ip)
-		
-		host = master_host.internal_ip or master_host.external_ip
-		self._change_master( 
-			host=host, 
-			user=REPL_USER, 
-			password=repl_pass,
-			log_file=log_file, 
-			log_pos=log_pos, 
-			mysql_user=ROOT_USER,
-			mysql_password=root_pass,
-			timeout=self._change_master_timeout
-		)
-		
-		# Update HostUp message
-		message.mysql = self._compat_storage_data(self.storage_vol) 
+		try:
+			# Stop MySQL
+			self._stop_service('Required by Slave initialization process')			
+			self._flush_logs()
+			
+			# Change configuration files
+			self._logger.info("Changing configuration files")
+	
+			if not 'datadir' in self._mysql_config.options('mysqld'):
+				""" Set default value for datadir """
+				self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
+	
+			self._move_mysql_dir('mysqld/datadir', self._data_dir)
+			self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
+			self._replication_init(master=False)
+			self._copy_debian_cnf_back()
+			self._innodb_recovery()
+			self._start_service()
+			
+			# Change replication master 
+			master_host = None
+			self._logger.info("Requesting master server")
+			while not master_host:
+				try:
+					master_host = list(host 
+						for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+						if host.replication_master)[0]
+				except IndexError:
+					self._logger.debug("QueryEnv respond with no mysql master. " + 
+							"Waiting %d seconds before the next attempt", 5)
+					time.sleep(5)
+					
+			self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
+					master_host.internal_ip, master_host.external_ip)
+			
+			host = master_host.internal_ip or master_host.external_ip
+			self._change_master( 
+				host=host, 
+				user=REPL_USER, 
+				password=repl_pass,
+				log_file=log_file, 
+				log_pos=log_pos, 
+				mysql_user=ROOT_USER,
+				mysql_password=root_pass,
+				timeout=self._change_master_timeout
+			)
+			
+			# Update HostUp message
+			message.mysql = self._compat_storage_data(self.storage_vol)
+		except:
+			if ive_created_storage:
+				try:
+					self.storage_vol.delete()
+				except:
+					pass
+			raise 
 		
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
