@@ -1459,10 +1459,7 @@ class MysqlHandler(ServiceCtlHandler):
 			message.mysql = self._compat_storage_data(self.storage_vol)
 		except:
 			if ive_created_storage:
-				try:
-					self.storage_vol.delete()
-				except:
-					pass
+				self.storage_vol.destroy()
 			raise 
 		
 	def _plug_storage(self, mpoint, vol):
