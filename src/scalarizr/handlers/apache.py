@@ -57,8 +57,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.__init__(
 			self, 
 			'apache', 
-			initd_script,
-			socks=[initdv2.SockParam(80)]
+			initd_script
 		)
 		
 	def reload(self):
