@@ -225,6 +225,15 @@ class CnfController(object):
 					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 					pass
 				else:
+					if self.definitions and new_value in self.definitions:
+						manifest = Configuration('ini')
+						if os.path.exists(self._manifest_path):
+							manifest.read(self._manifest_path)
+						try:
+							if manifest.get('%s/type' % opt.name) == 'boolean':
+								new_value = self.definitions[new_value]
+						except NoPathError, e:
+							pass
 					self._logger.debug("Set option '%s' = '%s'" % (opt.name, new_value))
 					self._logger.debug('Set path %s = %s', path, new_value)
 					conf.set(path, new_value, force=True)
@@ -251,20 +260,27 @@ class CnfController(object):
 		pass
 	
 	@property
+	def _manifest_path(self):
+		cnf = bus.cnf
+		presets_path = os.path.join(cnf.home_path, 'presets')	
+		manifests_dir = presets_path + "/manifests"
+		
+		if not os.path.exists(manifests_dir):
+			os.makedirs(manifests_dir)
+			
+		path = os.path.join(manifests_dir, self.behaviour + '.ini')
+		return path
+	
+	@property
 	def _manifest(self):		
 		
 		class HeadRequest(urllib2.Request):
 			def get_method(self):
 				return "HEAD"
 		
-		cnf = bus.cnf
-		presets_path = os.path.join(cnf.home_path, 'presets')	
-		manifests_dir = presets_path + "/manifests"
 		manifest_url = bus.scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour	
-		path = os.path.join(manifests_dir, self.behaviour + '.ini')
-		
-		if not os.path.exists(manifests_dir):
-			os.makedirs(manifests_dir)
+		path = self._manifest_path
+
 			
 		url_handle = urllib2.urlopen(HeadRequest(manifest_url))
 		headers = url_handle.info()
@@ -290,7 +306,7 @@ class CnfController(object):
 				new_sections = new_manifest.sections('./')  
 				old_sections = old_manifest.sections('./')
 
-				diff_path = os.path.join(manifests_dir, self.behaviour + '.incdiff')
+				diff_path = os.path.join(os.path.dirname(path), self.behaviour + '.incdiff')
 				diff = Configuration('ini')
 									
 				if old_sections and old_sections != new_sections:
