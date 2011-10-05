@@ -57,7 +57,8 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.__init__(
 			self, 
 			'apache', 
-			initd_script
+			initd_script,
+			pid_file = pid_file
 		)
 		
 	def reload(self):
@@ -68,7 +69,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		else:
 			raise InitdError('Service "%s" is not running' % self.name, InitdError.NOT_RUNNING)
 		
-	def status(self):		
+	def status(self):
 		status = initdv2.ParametrizedInitScript.status(self)
 		# If 'running' and socks were passed
 		if not status and self.socks:
