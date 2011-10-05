@@ -42,7 +42,7 @@ class Base(object):
 	def exec_vcap(self, action):
 		cmd = ' '.join((self.cf.home + '/bin/vcap', action, self.name, '--no-color'))
 		LOG.debug('Executing %s', cmd)
-		proc = subprocess.Popen(('/bin/bash', '-c', 'source /root/.bashrc; ' + cmd), 
+		proc = subprocess.Popen(('/bin/bash', '-c', 'source /usr/local/rvm/scripts/rvm; ' + cmd), 
 							close_fds=True, 
 							stdout=open('/dev/null', 'w'),
 							stderr=subprocess.STDOUT)
