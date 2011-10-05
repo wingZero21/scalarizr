@@ -3,7 +3,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool
+from scalarizr.util import initdv2, disttool, iptables
 from scalarizr.util.filetool import write_file
 from scalarizr.util.initdv2 import Status
 from scalarizr.service import CnfPresetStore, CnfPreset, CnfController,\
@@ -85,14 +85,14 @@ class HandlerError(BaseException):
 	pass
 
 class MessageListener:
-	_logger = None 
-	_handlers_chain = None
 	_accept_kwargs = {}
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		self._handlers_chain = None		
 		cnf = bus.cnf
 		platform = bus.platform
+
 
 		self._logger.debug("Initialize message listener");
 		self._accept_kwargs = dict(
@@ -388,7 +388,6 @@ class ServiceCtlHandler(Handler):
 		bus.fire(self._service_name + '_configure', **kwargs)		
 
 		
-
 class DbMsrMessages:
 	DBMSR_CREATE_DATA_BUNDLE = "DbMsr_CreateDataBundle"
 	
@@ -461,3 +460,96 @@ class DbMsrMessages:
 		snapshot_config:		Master storage snapshot					(on master)	
 	) 
 	"""	
+
+
+class FarmSecurityMixin(object):
+	def __init__(self, ports):
+		self._ports = ports
+		self._iptables = iptables.IpTables()
+		if not self._iptables.usable():
+			raise HandlerError('iptables is not installed. iptables is required to run me correctly')
+		
+		bus.on('init', self.__on_init)
+		
+	def __on_init(self):
+		bus.on(
+			before_host_up=self.__insert_iptables_rules,
+			before_reboot_finish=self.__insert_iptables_rules,
+			reload=self.__on_reload
+		)
+		self.__on_reload()		
+	
+	def __on_reload(self):
+		self._queryenv = bus.queryenv_service
+		self._platform = bus.platform
+	
+	
+	def on_HostInit(self, message):
+		# Append new server to allowed list
+		rules = []
+		for port in self._ports:
+			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
+		for rule in rules:
+			self._iptables.insert_rule(1, rule)
+		
+
+	def on_HostDown(self, message):
+		# Remove terminated server from allowed list
+		rules = []
+		for port in self._ports:
+			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
+		for rule in rules:
+			self._iptables.delete_rule(rule)
+
+
+	def __create_rule(self, source, dport, jump):
+		return iptables.RuleSpec(
+					source=source, 
+					protocol=iptables.P_TCP, 
+					dport=dport, 
+					jump=jump)
+		
+		
+	def __create_accept_rule(self, source, dport):
+		return self.__create_rule(source, dport, 'ACCEPT')
+	
+	
+	def __create_drop_rule(self, dport):
+		return self.__create_rule(None, dport, 'DROP')
+	
+
+	def __accept_host(self, local_ip, public_ip, dport):
+		ret = []
+		if local_ip == self._platform.get_private_ip():
+			ret.append(self.__create_accept_rule('127.0.0.1', dport))
+		if local_ip:
+			ret.append(self.__create_accept_rule(local_ip, dport))
+		ret.append(self.__create_accept_rule(public_ip, dport))
+		return ret
+
+
+	def __insert_iptables_rules(self, *args, **kwds):
+		# Collect farm servers IP-s
+		hosts = []					
+		for role in self._queryenv.list_roles():
+			for host in role.hosts:
+				hosts.append((host.internal_ip, host.external_ip))
+		
+		rules = []
+		for port in self._ports:
+			# Allow for me
+			rules += self.__accept_host(self._platform.get_private_ip(), self._platform.get_public_ip(), port)
+
+			# Allow from farm IP-s
+			for local_ip, public_ip in hosts:
+				rules += self.__accept_host(local_ip, public_ip, port)
+		
+		# Deny from all
+		for port in self._ports:
+			rules.append(self.__create_drop_rule(port))
+			
+		# Apply iptables rules
+		rules.reverse()
+		for rule in rules:
+			self._iptables.insert_rule(1, rule)	
+			

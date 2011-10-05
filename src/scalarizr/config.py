@@ -890,6 +890,12 @@ class ScalarizrCnf(Observable):
 	def public_path(self, name=None):
 		return name and os.path.join(self._pub_path, name) or self._pub_path
 	
+	def private_exists(self, name=None):
+		return os.path.exists(self.private_path(name))
+	
+	def public_exists(self, name=None):
+		return os.path.exists(self.public_path(name))
+	
 	@property
 	def storage_path(self):
 		return self.private_path('storage')
@@ -920,6 +926,13 @@ class BuiltinBehaviours:
 	MEMCACHED = 'memcached'
 	POSTGRESQL = 'postgresql'
 	REDIS = 'redis'
+
+	CF_ROUTER = 'cf_router'
+	CF_CLOUD_CONTROLLER = 'cf_cloud_controller'
+	CF_HEALTH_MANAGER = 'cf_health_manager'
+	CF_DEA = 'cf_dea'
+	CF_SERVICE = 'cf_service'
+
 	
 	@staticmethod
 	def values():

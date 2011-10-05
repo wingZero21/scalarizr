@@ -1,0 +1,11 @@
+Хандлеры
+
+Если в одном из хандлеров вылетело исключение, об этом не может узнать другой хандлер и выполнить действия
+Smaple:
+	CloudController.on_host_init_response
+		создается EBS
+	CloudFoundry.on_before_host_up
+		запускаются сервисы
+		raise Exception()
+	
+	В CloudController нет возможности среагировать и удалить EBS
