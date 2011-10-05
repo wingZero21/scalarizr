@@ -311,6 +311,9 @@ class CloudControllerHandler(handlers.Handler):
 			
 	
 	def on_host_init_response(self, msg):
+		'''
+		Store volume configuration from HIR message
+		'''
 		self.LOG.debug('Called on_host_init_response')
 		ini = msg.body.get(_bhs.cloud_controller, {})
 		self.volume_config = ini.pop('volume_config', 
@@ -318,6 +321,10 @@ class CloudControllerHandler(handlers.Handler):
 
 	
 	def on_BeforeHostUp(self, msg):
+		'''
+		Plug storage, initialize database
+		'''
+		
 		# Initialize storage			
 		LOG.info('Initializing vcap data storage')
 		tmp_mpoint = '/mnt/tmp.vcap'
@@ -339,7 +346,7 @@ class CloudControllerHandler(handlers.Handler):
 				os.removedirs(tmp_mpoint)		
 		self.volume_config = self.volume.config()
 
-		self._locate_nginx()		
+		self._locate_nginx()
 		_cf.init_db()
 
 

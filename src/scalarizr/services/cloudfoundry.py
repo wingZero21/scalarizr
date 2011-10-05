@@ -180,7 +180,7 @@ class CloudFoundry(object):
 	def _set_cloud_controller(self, host):
 		LOG.debug('Setting cloud controller host: %s', host)
 		self._cloud_controller = host
-		self.mbus = 'mbus://%s:4222/' % host
+		self.mbus = 'nats://%s:4222/' % host
 	
 		
 	def _get_cloud_controller(self):
@@ -200,23 +200,21 @@ class CloudFoundry(object):
 		
 		# Check 6 times that all requred services were started
 		i, ntimes, sleep = 0, 6, 5
+		logs = {}
 		while i < ntimes:
 			failed = []
 			for cmp in started:
 				if not cmp.running:
 					failed.append(cmp)
 					if os.path.exists(cmp.log_file):
-						LOG.error('%s failed to start', cmp.name)
-						LOG.warn('Contents of %s:\n%s', cmp.log_file, open(cmp.log_file).read())
-					else:
-						LOG.error('%s failed to start and dies without any logs', cmp.name)
-			#if not failed:
-			#	break
+						logs[cmp] = open(cmp.log_file).read()
 			i += 1
 			if i < ntimes:
 				time.sleep(sleep)
 			
 		if failed:
+			for cmp in logs:
+				LOG.warn('%s:\n%s', cmp.log_file, logs[cmp])
 			raise CloudFoundryError('%d component(s) failed to start (%s)' % ( 
 									len(failed), ', '.join(cmp.name for cmp in failed)))
 		LOG.debug('Started %d component(s)', len(started))
@@ -234,8 +232,8 @@ class CloudFoundry(object):
 		dbenv = cmp.config['database_environment'][cmp.config['rails_environment']]
 		if dbenv['adapter'] == 'sqlite3':
 			if not os.path.exists(dbenv['database']):
-				LOG.debug("Database doesn't exists. Creating")
-				system('rake db:migrate', cwd=cmp.home)
+				LOG.info("Cloud controller database doesn't exists. Creating")
+				system('cd %s; rake db:migrate' % cmp.home)
 
 
 	def valid_datadir(self, datadir):
@@ -259,5 +257,5 @@ def system(*args, **kwds):
 	cmd = args[0]
 	if not isinstance(cmd, basestring):
 		cmd = ' '.join(cmd)
-	return util.system2(('/bin/bash', '-c', 'source /root/.bashrc; ' + cmd), **kwds)	
+	return util.system2(('/bin/bash', '-c', 'source /usr/local/rvm/scripts/rvm; ' + cmd), **kwds)	
 
