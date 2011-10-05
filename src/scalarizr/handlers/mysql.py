@@ -27,7 +27,7 @@ from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
-import logging, os, re,  tarfile, tempfile
+import logging, os, re, sys, tarfile, tempfile
 import time, pwd, random, shutil
 import glob
 import string
@@ -1458,9 +1458,17 @@ class MysqlHandler(ServiceCtlHandler):
 			# Update HostUp message
 			message.mysql = self._compat_storage_data(self.storage_vol)
 		except:
+			exc_type, exc_value, exc_trace = sys.exc_info()
 			if ive_created_storage:
-				self.storage_vol.destroy()
-			raise 
+				try:
+					self._stop_service(reason='Cleaning up')
+				except:
+					pass
+				try:
+					self.storage_vol.destroy()
+				except:
+					pass
+			raise exc_type, exc_value, exc_trace
 		
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
