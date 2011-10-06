@@ -9,7 +9,7 @@ Created on Jul 23, 2010
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.service import CnfController, CnfPreset, Options
-from scalarizr.handlers import ServiceCtlHanler, HandlerError, FarmSecurityMixin
+from scalarizr.handlers import ServiceCtlHandler, HandlerError, FarmSecurityMixin
 from scalarizr.messaging import Messages
 
 # Libs
@@ -121,7 +121,7 @@ class MemcachedCnfController(CnfController):
 def get_handlers():
 	return [MemcachedHandler()]
 
-class MemcachedHandler(ServiceCtlHanler, FarmSecurityMixin):
+class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 
 	_logger = None
 	_queryenv = None
