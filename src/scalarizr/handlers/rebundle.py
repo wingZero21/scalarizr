@@ -167,6 +167,7 @@ class RebundleHandler(Handler):
 		
 		
 	def cleanup_image(self, rootdir):
+		LOG.info('Perforing image cleanup')
 		# Truncate logs
 		logs_path = os.path.join(rootdir, 'var/log')
 		if os.path.exists(logs_path):
