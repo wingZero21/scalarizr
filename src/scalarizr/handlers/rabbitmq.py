@@ -133,8 +133,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 		if not BuiltinBehaviours.RABBITMQ in message.behaviour:
 			return
 		
-
 		if message.local_ip == self.platform.get_private_ip():
+			self.rabbitmq.service.stop()
 			updates = dict(hostname='rabbit-%s' % message.server_index)
 			self._update_config(updates)
 			Hosts.set('127.0.0.1', 'rabbit-%s' % message.server_index)
@@ -178,7 +178,6 @@ class RabbitMQHandler(ServiceCtlHanler):
 
 
 	def on_before_host_up(self, message):
-		self.rabbitmq.service.stop()
 		volume_cnf = storage.Storage.restore_config(self._volume_config_path)
 		self.storage_vol = self._plug_storage(DEFAULT_STORAGE_PATH, volume_cnf)
 		rabbitmq_user = pwd.getpwnam("rabbitmq")
