@@ -176,11 +176,84 @@ class ListRolesCommand(Command):
 
 	def iter_result(self, result):
 		'''Return array of result'''
-		for d in result:
-			yield [', '.join(d.behaviour), d.name, d.hosts[0].index,
-				d.hosts[0].internal_ip, d.hosts[0].external_ip,
-				d.hosts[0].replication_master]
-
+		if isinstance(result, list):
+		
+			for d in result:
+				
+				if isinstance(d.behaviour, list):
+					behaviour=', '.join(d.behaviour)
+				else:
+					behaviour=d.behaviour
+				
+				(index, internal_ip, external_ip, replication_master)=([],[],[],[])
+				#TODO: sdg
+				if isinstance(d.hosts, list):
+					for host in d.hosts:
+						if host.index:index.append(host.index)
+						else: index.append('')
+						if host.internal_ip:internal_ip.append(host.internal_ip)
+						else: internal_ip.append('')
+						if host.external_ip:external_ip.append(host.external_ip)
+						else: external_ip.append('')
+						if host.replication_master:replication_master.append(host.replication_master)
+						else: replication_master.append('')
+				else:
+					
+					if d.hosts.index:index=d.hosts.index
+					else: index=''
+					
+					if d.hosts.internal_ip:internal_ip=d.hosts.internal_ip
+					else: internal_ip=''
+					
+					if d.hosts.external_ip:external_ip=d.hosts.external_ip
+					else: external_ip=''
+					
+					if d.hosts.replication_master:
+						replication_master=d.hosts.replication_master
+					else: replication_master=''
+				
+				yield [behaviour, d.name,
+					', '.join(index) if isinstance(index, list) else index,
+					', '.join(internal_ip) if isinstance(internal_ip, list) else internal_ip,
+					 ', '.join(external_ip) if isinstance(external_ip, list) else external_ip,
+					', '.join(replication_master)
+					if isinstance(replication_master, list) else replication_master]
+		elif isinstance(result, queryenv.Role):
+			behaviour, name, index, internal_ip, external_ip, replication_master=(
+				'','','','','','')
+			if result.name: name=result.name
+			if result.behaviour: behaviour=result.behaviour
+			if result.hosts.index:index=result.hosts.index
+			if result.hosts.internal_ip:
+				internal_ip=result.hosts.internal_ip
+			if result.hosts.external_ip:
+				external_ip=result.hosts.external_ip
+			if result.hosts.replication_master:
+				replication_master=result.hosts.replication_master
+			
+			yield [behaviour, name, index, internal_ip, external_ip,
+				replication_master]
+	"""
+	def run(self):
+		'''
+		res=queryenv.Role(behaviour='mysql', name='mysql-ubuntu1004-trunk',
+					hosts=queryenv.RoleHost(index='1', replication_master='1',
+					internal_ip="10.242.75.80", external_ip='50.17.99.58'))
+		'''
+		
+		res=[queryenv.Role(behaviour='mysql', name='mysql-ubuntu1004-trunk',
+					hosts=queryenv.RoleHost(index='1', replication_master='1',
+					internal_ip="10.242.75.80", external_ip='50.17.99.58')),
+				queryenv.Role(behaviour='cf_router', name='cf-router64-ubuntu1004',
+					hosts=queryenv.RoleHost(index='1', replication_master='1')),
+				queryenv.Role(behaviour='www,cf_router,cf_cloud_coller,cfanager,cf_dea,cf_service',
+					name='cf-all64-ubuntu1004',
+					hosts=[queryenv.RoleHost(index='1', replication_master='1',
+					internal_ip="10.242.75.80", 	 external_ip='50.17.99.58'),
+					queryenv.RoleHost(index='1', replication_master='1',
+					internal_ip="10.242.75.80", 	 external_ip='50.17.99.58')]),
+				]
+		self.output(res)"""
 
 class GetHttpsCertificateCommand(Command):
 	name = "get-https-certificate"
@@ -356,7 +429,7 @@ def main():
 		except Exception, e:
 			com=Help(com_dict)
 			com.run()
-			print('Cant execute command or option. Error:%s' % e)
+			raise LookupError("Cant execute command or option. Error: %s" % (e))
 	else:
 		parser=help_misc()
 #------------------------------------------------------------------------------------------------
