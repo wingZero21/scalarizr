@@ -255,7 +255,7 @@ class NginxHandler(ServiceCtlHandler):
 				include.add(self.backends_xpath, self.localhost)
 
 		include.write(self._app_inc_path)
-		self._restart_service('%s is to be terminated' % server_ip)
+		self._reload_service('%s is to be terminated' % server_ip)
 
 
 	def on_VhostReconfigure(self, message):

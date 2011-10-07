@@ -495,11 +495,13 @@ class FarmSecurityMixin(object):
 
 	def on_HostDown(self, message):
 		# Remove terminated server from allowed list
+		current_roles = self._iptables.list_rules('INPUT')
 		rules = []
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
 		for rule in rules:
-			self._iptables.delete_rule(rule)
+			if rule in current_roles:
+				self._iptables.delete_rule(rule)
 
 
 	def __create_rule(self, source, dport, jump):
@@ -537,10 +539,6 @@ class FarmSecurityMixin(object):
 		
 		rules = []
 		for port in self._ports:
-			# Allow for me
-			rules += self.__accept_host(self._platform.get_private_ip(), self._platform.get_public_ip(), port)
-
-			# Allow from farm IP-s
 			for local_ip, public_ip in hosts:
 				rules += self.__accept_host(local_ip, public_ip, port)
 		

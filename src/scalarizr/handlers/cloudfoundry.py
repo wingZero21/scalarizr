@@ -285,7 +285,7 @@ class CloudControllerHandler(handlers.Handler):
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		result = is_cloud_controller() and message.name in (messaging.Messages.BEFORE_HOST_UP, ) 
+		result = is_cloud_controller() and message.name == messaging.Messages.BEFORE_HOST_UP and its_me(message) 
 		return result
 		
 	
@@ -324,14 +324,13 @@ class CloudControllerHandler(handlers.Handler):
 		'''
 		Plug storage, initialize database
 		'''
-		
 		# Initialize storage			
 		LOG.info('Initializing vcap data storage')
 		tmp_mpoint = '/mnt/tmp.vcap'
 		try:
 			self.volume = self._plug_storage(mpoint=tmp_mpoint)
 			if not _cf.valid_datadir(tmp_mpoint):
-				LOG.debug('Syncing data from %s to storage', _datadir)
+				LOG.info('Copying data from %s to storage', _datadir)
 				rsync = filetool.Rsync().archive().delete().\
 							source(_datadir + '/').dest(tmp_mpoint)
 				rsync.execute()

@@ -194,9 +194,10 @@ class CloudFoundry(object):
 		started = []
 		for name in cmps:
 			cmp = self.components[name]
-			LOG.info('Starting %s', name)
-			cmp.start()
-			started.append(cmp)				
+			if not cmp.running:
+				LOG.info('Starting %s', name)
+				cmp.start()
+				started.append(cmp)				
 		
 		# Check 6 times that all requred services were started
 		i, ntimes, sleep = 0, 6, 5
@@ -222,7 +223,7 @@ class CloudFoundry(object):
 	
 	def stop(self, *cmps):
 		for name in cmps:
-			cmp = self.components[cmp]
+			cmp = self.components[name]
 			LOG.info('Stopping %s', name)
 			cmp.stop()
 			
