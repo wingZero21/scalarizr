@@ -84,13 +84,26 @@ class RabbitMQHandler(ServiceCtlHanler):
 	def __init__(self):
 		bus.on("init", self.on_init)
 		self._logger = logging.getLogger(__name__)
-		self.rabbitmq = rabbitmq.rabbitmq
+		self.rabbitmq = rabbitmq.rabbitmq		
 		self.on_reload()
+			
+	
 
 
 	def on_init(self):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
+		
+				
+		if self.cnf.state == ScalarizrState.BOOTSTRAPPING:
+			if not os.path.exists('/etc/hosts.safe'):
+				shutil.copy2('/etc/hosts', '/etc/hosts.safe')
+				
+			self.rabbitmq.service.start()
+			self.rabbitmq.stop_app()
+			self.rabbitmq.reset()
+			self.rabbitmq.stop()
+			self.rabbitmq.service.stop()
 
 
 	def on_reload(self):
@@ -134,7 +147,6 @@ class RabbitMQHandler(ServiceCtlHanler):
 			return
 		
 		if message.local_ip == self.platform.get_private_ip():
-			self.rabbitmq.service.stop()
 			updates = dict(hostname='rabbit-%s' % message.server_index)
 			self._update_config(updates)
 			Hosts.set('127.0.0.1', 'rabbit-%s' % message.server_index)
@@ -157,9 +169,6 @@ class RabbitMQHandler(ServiceCtlHanler):
 		if not message.body.has_key("rabbitmq"):
 			raise HandlerError("HostInitResponse message for RabbitMQ behaviour must have 'rabbitmq' property")
 		
-		if not os.path.exists('/etc/hosts.safe'):
-			shutil.copy2('/etc/hosts', '/etc/hosts.safe')
-
 		dir = os.path.dirname(self._volume_config_path)
 		if not os.path.exists(dir):
 			os.makedirs(dir)

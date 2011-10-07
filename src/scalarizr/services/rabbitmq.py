@@ -119,6 +119,14 @@ class RabbitMQ(object):
 		pass
 	
 	
+	def stop(self):
+		system2(('rabbitmqctl', 'stop'), logger=self._logger)
+		
+		
+	def reset(self):
+		system2(('rabbitmqctl', 'reset'), logger=self._logger)
+	
+	
 	def stop_app(self):
 		system2(('rabbitmqctl', 'stop_app'), logger=self._logger)
 	
