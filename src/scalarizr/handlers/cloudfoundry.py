@@ -182,6 +182,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		LOG.debug('Called on_HostUp')
 		if from_cloud_controller(msg) and not its_me(msg):
 			_cf.cloud_controller = msg.remote_ip
+			self._start_services()
 
 
 	def on_before_reboot_start(self, msg):
