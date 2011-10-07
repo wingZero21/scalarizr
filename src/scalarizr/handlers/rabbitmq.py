@@ -4,6 +4,9 @@ Created on Sep 7, 2011
 @author: Spike
 '''
 import os
+import sys
+import pwd
+import shutil
 import logging
 
 from scalarizr.bus import bus
@@ -13,7 +16,8 @@ from scalarizr import storage
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.util import fstool
-import sys
+from scalarizr.storage import StorageError
+
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
@@ -21,7 +25,7 @@ OPT_VOLUME_CNF = 'volume_config'
 OPT_SNAPSHOT_CNF = 'snapshot_config'
 DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq'
 STORAGE_PATH = '/mnt/rabbitstorage'
-
+STORAGE_VOLUME_CNF = 'rabbitmq.json'
 
 
 
@@ -40,17 +44,21 @@ class Hosts:
 	@classmethod
 	def set(cls, addr, hostname):
 		hosts = cls.hosts()
-		hosts[addr] = hostname
-		cls._write(hosts)	
+		hosts[hostname] = addr
+		cls._write(hosts)
 		
 	@classmethod
 	def delete(cls, addr=None, hostname=None):
 		hosts = cls.hosts()
-		if hosts.has_key(addr):
-			del hosts[addr]
+		if hostname:
+			if hosts.has_key(hostname):
+				del hosts[hostname]
+		if addr:
+			for host, ip  in hosts.iteritems():
+				if ip == addr:
+					del hosts[host]
 		cls._write(hosts)		
 	
-	@property
 	@classmethod
 	def hosts(cls):
 		ret = {}
@@ -61,14 +69,14 @@ class Hosts:
 				if not host_line or host_line.startswith('#'):
 					continue
 				addr, hostname = host.split(None, 1)
-				ret[addr] = hostname				
+				ret[hostname.strip()] = addr
 		return ret
 	
 	@classmethod
 	def _write(cls, hosts):
 		with open('/etc/hosts', 'w') as f:
-			for addr, hostname in hosts.iteritems():
-				f.write('%s\t%s' % (addr, hostname))
+			for hostname, addr in hosts.iteritems():
+				f.write('%s\t%s\n' % (addr, hostname))
 				
 		
 class RabbitMQHandler(ServiceCtlHanler):	
@@ -77,20 +85,19 @@ class RabbitMQHandler(ServiceCtlHanler):
 		bus.on("init", self.on_init)
 		self._logger = logging.getLogger(__name__)
 		self.rabbitmq = rabbitmq.rabbitmq
-		# TODO: bus.define_events()
 		self.on_reload()
 
 
-	def on_init(self):		
+	def on_init(self):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
-		bus.on("host_init", self.on_host_init)
 
 
 	def on_reload(self):
 		self.cnf = bus.cnf
 		self.queryenv = bus.queryenv_service
-		self.platform = bus.platform	
+		self.platform = bus.platform
+		self._volume_config_path  = self.cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and message.name in (
@@ -125,16 +132,18 @@ class RabbitMQHandler(ServiceCtlHanler):
 	def on_HostInit(self, message):
 		if not BuiltinBehaviours.RABBITMQ in message.behaviour:
 			return
-
-		Hosts.add(message.local_ip, 'rabbit.%s' % message.server_index)
+		
 
 		if message.local_ip == self.platform.get_private_ip():
 			updates = dict(hostname='rabbit.%s' % message.server_index)
 			self._update_config(updates)
-			return
-
-		if BuiltinBehaviours.RABBITMQ in message.behaviour:			
+			Hosts.set('127.0.0.1', 'rabbit.%s' % message.server_index)
+			with open('/etc/hostname', 'w') as f:
+				f.write('rabbit.%s' % message.server_index)
+		else:
+			Hosts.set(message.local_ip, 'rabbit.%s' % message.server_index)		
 			self.rabbitmq.add_node(message.local_ip)
+			
 			
 			
 	def on_HostDown(self, message):
@@ -146,7 +155,14 @@ class RabbitMQHandler(ServiceCtlHanler):
 	def on_host_init_response(self, message):
 		if not message.body.has_key("rabbitmq"):
 			raise HandlerError("HostInitResponse message for RabbitMQ behaviour must have 'rabbitmq' property")
+		
+		if not os.path.exists('/etc/hosts.safe'):
+			shutil.copy2('/etc/hosts', '/etc/hosts.safe')
 
+		dir = os.path.dirname(self._volume_config_path)
+		if not os.path.exists(dir):
+			os.makedirs(dir)
+			
 		rabbitmq_data = message.rabbitmq.copy()
 
 		if os.path.exists(self._volume_config_path):
@@ -163,9 +179,11 @@ class RabbitMQHandler(ServiceCtlHanler):
 	def on_before_host_up(self, message):
 		self.rabbitmq.service.stop()
 		volume_cnf = storage.Storage.restore_config(self._volume_config_path)
-		self.storage_vol = self._plug_storage(volume_cnf)
+		self.storage_vol = self._plug_storage(DEFAULT_STORAGE_PATH, volume_cnf)
+		rabbitmq_user = pwd.getpwnam("rabbitmq")
+		os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 		storage.Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
-		fstool.mount(STORAGE_PATH, DEFAULT_STORAGE_PATH, ['--bind'])
+		#fstool.mount(STORAGE_PATH, DEFAULT_STORAGE_PATH, ['--bind'])
 
 		for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
 			for host in role.hosts:
@@ -175,8 +193,16 @@ class RabbitMQHandler(ServiceCtlHanler):
 			hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
 			self.rabbitmq.add(hostname)
 
-		self.rabbitmq.set_cookie()
+		ini = self.cnf.rawini
+		cookie = ini.get(CNF_SECTION, 'cookie')	
+		self.rabbitmq.set_cookie(cookie)
 		self.rabbitmq.service.start()
+		
+		# Update message
+		msg_data = {}
+		msg_data['volume_config'] = self.storage_vol.config()
+		msg_data['node_type'] = self.rabbitmq.node_type
+		message.rabbitmq = msg_data
 
 
 	def _plug_storage(self, mpoint, vol):
@@ -188,8 +214,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 		if not vol.mounted():
 			try:
 				vol.mount(mpoint)
-			except fstool.FstoolError,e:
-				if e.code == fstool.FstoolError.NO_FS:
+			except StorageError, e:
+				if 'you must specify the filesystem type' in str(e):
 					vol.mkfs()
 					vol.mount(mpoint)
 				else:
