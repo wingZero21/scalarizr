@@ -186,53 +186,26 @@ class ListRolesCommand(Command):
 					behaviour=d.behaviour
 				
 				(index, internal_ip, external_ip, replication_master)=([],[],[],[])
-				#TODO: sdg
 				if isinstance(d.hosts, list):
 					for host in d.hosts:
-						if host.index:index.append(host.index)
-						else: index.append('')
-						if host.internal_ip:internal_ip.append(host.internal_ip)
-						else: internal_ip.append('')
-						if host.external_ip:external_ip.append(host.external_ip)
-						else: external_ip.append('')
-						if host.replication_master:replication_master.append(host.replication_master)
-						else: replication_master.append('')
-				else:
-					
-					if d.hosts.index:index=d.hosts.index
-					else: index=''
-					
-					if d.hosts.internal_ip:internal_ip=d.hosts.internal_ip
-					else: internal_ip=''
-					
-					if d.hosts.external_ip:external_ip=d.hosts.external_ip
-					else: external_ip=''
-					
-					if d.hosts.replication_master:
-						replication_master=d.hosts.replication_master
-					else: replication_master=''
+						index.append(str(host.index))
+						internal_ip.append(str(host.internal_ip))
+						external_ip.append(str(host.external_ip))
+						replication_master.append(str(host.replication_master))
+
+					yield [behaviour, d.name, ', '.join(index), ', '.join(internal_ip),
+						', '.join(external_ip),	', '.join(replication_master)]
 				
-				yield [behaviour, d.name,
-					', '.join(index) if isinstance(index, list) else index,
-					', '.join(internal_ip) if isinstance(internal_ip, list) else internal_ip,
-					 ', '.join(external_ip) if isinstance(external_ip, list) else external_ip,
-					', '.join(replication_master)
-					if isinstance(replication_master, list) else replication_master]
-		elif isinstance(result, queryenv.Role):
-			behaviour, name, index, internal_ip, external_ip, replication_master=(
-				'','','','','','')
-			if result.name: name=result.name
-			if result.behaviour: behaviour=result.behaviour
-			if result.hosts.index:index=result.hosts.index
-			if result.hosts.internal_ip:
-				internal_ip=result.hosts.internal_ip
-			if result.hosts.external_ip:
-				external_ip=result.hosts.external_ip
-			if result.hosts.replication_master:
-				replication_master=result.hosts.replication_master
+				else:
+					yield [behaviour, d.name, d.hosts.index, d.hosts.internal_ip,
+						d.hosts.external_ip, d.hosts.replication_master]
 			
-			yield [behaviour, name, index, internal_ip, external_ip,
-				replication_master]
+		elif isinstance(result, queryenv.Role):
+			print('3')
+			yield [result.behaviour, result.name, result.hosts.index,
+				result.hosts.internal_ip, result.hosts.external_ip,
+				result.hosts.replication_master]
+
 	"""
 	def run(self):
 		'''
