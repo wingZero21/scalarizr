@@ -15,7 +15,7 @@ from scalarizr.services import rabbitmq
 from scalarizr import storage
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.util import fstool
+from scalarizr.util import fstool, system2
 from scalarizr.storage import StorageError
 
 
@@ -135,13 +135,14 @@ class RabbitMQHandler(ServiceCtlHanler):
 		
 
 		if message.local_ip == self.platform.get_private_ip():
-			updates = dict(hostname='rabbit.%s' % message.server_index)
+			updates = dict(hostname='rabbit-%s' % message.server_index)
 			self._update_config(updates)
-			Hosts.set('127.0.0.1', 'rabbit.%s' % message.server_index)
+			Hosts.set('127.0.0.1', 'rabbit-%s' % message.server_index)
 			with open('/etc/hostname', 'w') as f:
-				f.write('rabbit.%s' % message.server_index)
+				f.write('rabbit-%s' % message.server_index)
+			system2(('hostname', '-F', '/etc/hostname'))			
 		else:
-			Hosts.set(message.local_ip, 'rabbit.%s' % message.server_index)		
+			Hosts.set(message.local_ip, 'rabbit-%s' % message.server_index)		
 			self.rabbitmq.add_node(message.local_ip)
 			
 			
@@ -187,7 +188,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 
 		for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
 			for host in role.hosts:
-				self.rabbitmq.add_node('rabbit.%s' % host.index)
+				self.rabbitmq.add_node('rabbit-%s' % host.index)
 
 		if self.rabbitmq.node_type == rabbitmq.NodeTypes.DISK:
 			hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
