@@ -86,6 +86,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 		self._logger = logging.getLogger(__name__)
 		self.rabbitmq = rabbitmq.rabbitmq
 		
+		self.on_reload()
+		
 		if self.cnf.state == ScalarizrState.BOOTSTRAPPING:
 			if not os.path.exists('/etc/hosts.safe'):
 				shutil.copy2('/etc/hosts', '/etc/hosts.safe')
@@ -96,8 +98,6 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.stop()
 			self.rabbitmq.service.stop()
 
-				
-		self.on_reload()
 
 
 	def on_init(self):
