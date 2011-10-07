@@ -202,7 +202,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.add(hostname)
 
 		ini = self.cnf.rawini
-		cookie = ini.get(CNF_SECTION, 'cookie')	
+		cookie = ini.get(CNF_SECTION, 'cookie')
+		self._logger.debug('Setting erlang cookie: %s' % cookie)
 		self.rabbitmq.set_cookie(cookie)
 		self.rabbitmq.service.start()
 		
@@ -210,6 +211,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		msg_data = {}
 		msg_data['volume_config'] = self.storage_vol.config()
 		msg_data['node_type'] = self.rabbitmq.node_type
+		self._logger.debug('Updating HostUp message with %s' % msg_data)
 		message.rabbitmq = msg_data
 
 
