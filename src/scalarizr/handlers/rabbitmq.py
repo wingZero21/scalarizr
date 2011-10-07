@@ -84,17 +84,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 	def __init__(self):
 		bus.on("init", self.on_init)
 		self._logger = logging.getLogger(__name__)
-		self.rabbitmq = rabbitmq.rabbitmq		
-		self.on_reload()
-			
-	
-
-
-	def on_init(self):
-		bus.on("host_init_response", self.on_host_init_response)
-		bus.on("before_host_up", self.on_before_host_up)
+		self.rabbitmq = rabbitmq.rabbitmq
 		
-				
 		if self.cnf.state == ScalarizrState.BOOTSTRAPPING:
 			if not os.path.exists('/etc/hosts.safe'):
 				shutil.copy2('/etc/hosts', '/etc/hosts.safe')
@@ -105,7 +96,15 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.stop()
 			self.rabbitmq.service.stop()
 
+				
+		self.on_reload()
 
+
+	def on_init(self):
+		bus.on("host_init_response", self.on_host_init_response)
+		bus.on("before_host_up", self.on_before_host_up)
+		
+			
 	def on_reload(self):
 		self.cnf = bus.cnf
 		self.queryenv = bus.queryenv_service
