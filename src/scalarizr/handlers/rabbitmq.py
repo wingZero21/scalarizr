@@ -15,7 +15,7 @@ from scalarizr.services import rabbitmq
 from scalarizr import storage
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.util import fstool, system2
+from scalarizr.util import fstool, system2, initdv2
 from scalarizr.storage import StorageError
 
 
@@ -85,6 +85,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		bus.on("init", self.on_init)
 		self._logger = logging.getLogger(__name__)
 		self.rabbitmq = rabbitmq.rabbitmq
+		self.service = initdv2.lookup(BuiltinBehaviours.RABBITMQ)
 		
 		self.on_reload()
 		
@@ -92,10 +93,10 @@ class RabbitMQHandler(ServiceCtlHanler):
 			if not os.path.exists('/etc/hosts.safe'):
 				shutil.copy2('/etc/hosts', '/etc/hosts.safe')
 			
-			self.rabbitmq.service.start()
+			self.service.start()
 			self.rabbitmq.stop_app()
 			self.rabbitmq.reset()
-			self.rabbitmq.service.stop()
+			self.service.stop()
 			system2(('ps', 'ax'), logger=self._logger)
 	
 	
@@ -205,7 +206,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		self._logger.debug('Setting erlang cookie: %s' % cookie)
 		self.rabbitmq.set_cookie(cookie)
 		system2(('ls', '/var/lib/rabbitmq/mnesia'), logger=self._logger)
-		self.rabbitmq.service.start()
+		self.service.start()
 		
 		# Update message
 		msg_data = {}
