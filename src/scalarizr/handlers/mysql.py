@@ -1589,6 +1589,7 @@ class MysqlHandler(ServiceCtlHandler):
 		repl_password = repl_pass if repl_pass else cryptotool.pwgen(20)
 		stat_password = stat_pass if stat_pass else cryptotool.pwgen(20)
 		self._add_mysql_user(my_cli, root_user, root_password, '%')
+		self._add_mysql_user(my_cli, root_user, root_password, 'localhost')
 		self._add_mysql_user(my_cli, repl_user, repl_password, '%', ('Repl_slave_priv',))
 		self._add_mysql_user(my_cli, stat_user, stat_password, '%', ('Repl_client_priv',))
 		
