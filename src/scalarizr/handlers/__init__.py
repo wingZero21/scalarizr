@@ -537,6 +537,8 @@ class FarmSecurityMixin(object):
 		
 		rules = []
 		for port in self._ports:
+			rules += self.__accept_host(self._platform.get_private_ip(), 
+									self._platform.get_public_ip(), port)
 			for local_ip, public_ip in hosts:
 				rules += self.__accept_host(local_ip, public_ip, port)
 		
@@ -544,8 +546,6 @@ class FarmSecurityMixin(object):
 		for port in self._ports:
 			rules.append(self.__create_drop_rule(port))
 			
-		# Apply iptables rules
 		rules.reverse()
 		for rule in rules:
-			self._iptables.insert_rule(1, rule)	
-			
+			self._iptables.insert_rule(1, rule)
