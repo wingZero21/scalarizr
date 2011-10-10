@@ -95,6 +95,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.service.start()
 			self.rabbitmq.stop_app()
 			self.rabbitmq.reset()
+			system2(('hostname'), logger=self._logger)
 			self.rabbitmq.service.stop()
 			system2(('ps', 'ax'), logger=self._logger)
 	
