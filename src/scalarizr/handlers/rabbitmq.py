@@ -95,10 +95,10 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.service.start()
 			self.rabbitmq.stop_app()
 			self.rabbitmq.reset()
-			self.rabbitmq.stop()
 			self.rabbitmq.service.stop()
 			system2(('ps', 'ax'), logger=self._logger)
-				
+	
+	
 	def on_init(self):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
@@ -109,6 +109,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		self.queryenv = bus.queryenv_service
 		self.platform = bus.platform
 		self._volume_config_path  = self.cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
+
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and message.name in (
@@ -154,7 +155,6 @@ class RabbitMQHandler(ServiceCtlHanler):
 		else:
 			Hosts.set(message.local_ip, 'rabbit-%s' % message.server_index)		
 			self.rabbitmq.add_node(message.local_ip)
-			
 			
 			
 	def on_HostDown(self, message):
