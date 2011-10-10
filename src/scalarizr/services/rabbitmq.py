@@ -38,8 +38,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 				self,
 				'rabbitmq',
 				'/etc/init.d/rabbitmq-server',
-				'/var/run/rabbitmq/pid',
-				socks=[initdv2.SockParam(5672)])
+				'/var/run/rabbitmq/pid')
 		
 	def stop(self, reason=None):
 		initdv2.ParametrizedInitScript.stop(self)
