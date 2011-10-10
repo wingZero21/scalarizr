@@ -501,9 +501,21 @@ class RebundleEbsStrategy(RebundleStratery):
 					% (self._role_name, self._platform.get_instance_id()))
 
 		LOG.debug('Checking that snapshot %s is completed', self._snap.id)
+		while True:
+			self._snap.update()
+			if self._snap.status == 'completed':
+				break
+			elif self._snap.status == 'failed':
+				raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))
+			LOG.debug('Progress: %s', self._snap.progress)
+			time.sleep(5)
+			
+			
+		'''	
 		wait_until(lambda: self._snap.update() and self._snap.status == 'completed', 
 				logger=LOG, timeout=10800, 
 				error_text="EBS snapshot wasn't completed in a reasonable time")
+		'''
 		LOG.debug('Snapshot %s completed', self._snap.id)
 		
 		LOG.info('Snapshot %s of root device image %s created', self._snap.id, vol.id)
