@@ -54,7 +54,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 		args = [self.initd_script] 	if isinstance(self.initd_script, basestring) \
 					else list(self.initd_script)
 		args.append('start')
-		p = subprocess.Popen(args, close_fds=True)
+		p = subprocess.Popen(args, close_fds=True, shell=True)
 		rcode = p.wait()
 		if rcode:
 			raise Exception('Error occured while starting Rabbitmq. Code: %s' % rcode)
