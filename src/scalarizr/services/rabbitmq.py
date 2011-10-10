@@ -143,7 +143,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 	reload = restart
 		
 	def start(self):
-		system2('rabbitmq-server', '-detached')	
+		system2(('rabbitmq-server', '-detached'))	
 
 		
 initdv2.explore(SERVICE_NAME, RabbitMQInitScript)
