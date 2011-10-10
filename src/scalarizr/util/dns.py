@@ -3,84 +3,67 @@ Created on Sep 28, 2011
 '''
 
 from collections import namedtuple
-
-import logging
-
+import string
+import re
 
 HostLine=namedtuple('host', ['ipaddr', 'hostname', 'aliases'])
 
-class HostsFile(object):
-	FILENAME ='/etc/hosts'
+class Items(list):
 
-	hosts = []
+	def __getitem__(self, index):
+		if isinstance(index, str):
+			for item in self:
+				if isinstance(item, dict) and item['hostname'] == index:
+					return item
+			raise KeyError(index)
+		else:
+			return super(Items, self).__getitem__(index)
+
+
+class HostsFile(object):
+	FILENAME = '/etc/hosts'
+
+	_hosts = Items()
 
 	def __init__(self, filename=None):
-		self.filename = filename or self.FILENAME
-	
-	def _read(self, hostname=None):
-		self.hosts = []
-		res=None
-		ip=None
-		
-		f=open(self.filename,'r')
-		
-		for line in f:
-			if not '#' in line:
-				line=line.replace('\t',' ')
-				while '  ' in line:
-					line=line.replace('  ',' ')
-				isreadable=False
-				#check on elements in line
-				try:
-					host=line.split()
-					leng=len(list(host))
-					if leng==2:
-						alias=''
-						(ip, domain)=host
-						isreadable=True
-					elif leng==3:
-						(ip, domain, alias)=host
-						isreadable=True
-				except:
-					#TODO: if it can't to split line, logging?
-					pass
-				#add to hosts list
-				if isreadable:
-					flag=True
-					for host in self.hosts:
-						if domain==host.hostname:
-							if not host.aliases:
-								list_alias=['',]
-							else:
-								list_alias=host.aliases
-							self.hosts.remove(host)
-							host._replace(aliases=list_alias.append(alias))
-							self.hosts.append(host)
-							flag=False
-							break
-					if flag:
-						self.hosts.append(HostLine(ip, domain, [alias,]))
-		f.close()
-		#return result
-		for host in self.hosts:
-			if hostname==host.hostname:
-				flag=True
-				return host
-		return False
-	
-	@property
-	def _save(self):
+		self.filename = filename if filename else self.FILENAME
+
+	def _reload(self):
+		self._hosts = Items()
+
+		fp = open(self.filename, 'r')
 		try:
-			f=open(self.filename, 'w')
-			for host in self.hosts: 
-				for alias in host.aliases:
-					line=' '.join([host.ipaddr, host.hostname, alias])
-					f.write("%s\r\n"%line)
-			f.close()
-			return True
-		except Exception, e:
-			logging.warn('Error write hosts in file, method _save():%s'%e)
-			return False
+			for line in fp:
+				if line.strip() and not line.startswith('#'):
+					line = filter(None, map(string.strip, re.split(r'[\t\s]+', line)))
+					ip, hostname, aliases = line[0], line[1], line[2:]
+					try:
+						self._hosts[hostname]['aliases'].update(set(aliases))
+					except KeyError:
+						self._hosts.append({
+							'ipaddr': ip, 
+							'hostname': hostname, 
+							'aliases': set(aliases)
+						})
+				else:
+					self._hosts.append(line)
+		finally:
+			fp.close()
+	
+
+	def _flush(self):
+		fp = open(self.filename, 'w+')
+		for line in self._hosts:
+			if isinstance(line, dict):
+				line='%s %s %s\n' % (line['ipaddr'], line['hostname'], ' '.join(line['aliases']))
+			fp.write(line)
+		fp.close()
+
+
+	def __getitem__(self, hostname):
+		self._reload()
+		return HostLine(**self._hosts[hostname])
+		
 
 	def map(self, ipaddr, hostname, *aliases):
 		'''
@@ -88,38 +71,33 @@ class HostsFile(object):
 		@type hostname: str
 		@type ipaddr: str
 		'''
+		assert ipaddr
+		assert hostname
+		
+		self._reload()
+		try:
+			host = self._hosts[hostname]
+			host['ipaddr'] = ipaddr
+			host['aliases'] = set(aliases)
+		except KeyError:
+			self._hosts.append({
+				'ipaddr': ipaddr, 
+				'hostname': hostname,
+				'aliases': set(aliases)
+			})
+		finally:
+			return self._flush()
 
-		if hostname:
-			host=self._read(hostname=hostname)
-
-			if host:
-				if not ipaddr:
-					ipaddr=host.ipaddr
-				temp=host.aliases+list(aliases)
-				temp=list(set(temp))
-				self.hosts.remove(host)
-				self.hosts.append(HostLine(ipaddr, host.hostname, temp))
-				return self._save
-			else:
-				if ipaddr:
-					temp=list(set(aliases))
-					self.hosts.append(HostLine(ipaddr, hostname, temp))
-					return self._save
-		else:
-			return False
 
 	def remove(self, hostname):
 		'''
 		Removes hostname mapping and aliases
 		@type hostname:str
 		'''
-		host=self._read(hostname=hostname)
+		self._reload()
+		self._hosts.remove(self._hosts[hostname])
+		self._flush()
 
-		if host:
-				self.hosts.remove(host)
-				return self._save
-		else:
-			return False
 
 	def alias(self, hostname, *aliases):
 		'''
@@ -127,22 +105,10 @@ class HostsFile(object):
 		@type hostname: str
 		@type *aliases: str or tuple, list
 		'''
-		if hostname and aliases:
-		
-			host=self._read(hostname=hostname)
+		self._reload()
+		self._hosts[hostname]['aliases'].update(set(aliases))
+		self._flush()
 
-			if host:
-				temp=host.aliases+list(aliases)
-				temp=list(set(temp))
-				self.hosts.remove(host)
-				self.hosts.append(HostLine(host.ipaddr, host.hostname, temp))
-				return self._save
-			else:
-				logging.warn('host with that hostname not found')
-				return False
-		else:
-			logging.warn('params not correct')
-			return False
 
 	def unalias(self, hostname, *aliases):
 		'''
@@ -150,47 +116,32 @@ class HostsFile(object):
 		@type hostname:str
 		@type *aliases: str or tuple, list
 		'''
-		if hostname and aliases != None:
-		
-			host=self._read(hostname=hostname)
-
-			if host:
-				temp=host.aliases
-				delete_list=list(aliases)
-				for del_alias in delete_list:
-					if del_alias in temp:
-						temp.remove(del_alias)
-				if not temp:
-					temp=['',]
-				
-				self.hosts.remove(host)
-				self.hosts.append(HostLine(host.ipaddr, host.hostname, temp))
-				return self._save
-			else:
-				logging.warn('host with that hostname not found')
-				return False
-		else:
-			logging.warn('params not correct')
-			return False
+		self._reload()
+		for alias in aliases:
+			try:
+				self._hosts[hostname]['aliases'].remove(alias)
+			except KeyError:
+				pass
+		return self._flush()
 
 	def resolve(self, hostname):
 		'''
 		Returns ip address
 		@type hostname: str
 		'''
-		res=self._read(hostname=hostname)
-		if res:
-			return res.ipaddr
-		else:
-			return self.hosts
+		self._reload()
+		try:
+			return self._hosts[hostname]['ipaddr']
+		except KeyError:
+			pass
 
-	def get(self, hostname=None):
+	def get(self, hostname):
 		'''
 		Returns namedtuple(ipaddr, hostname, aliases)
 		@type hostname:str
 		'''
-		res=self._read(hostname=hostname)
-		if res:
-			return res
-		else:
-			return self.hosts
+		try:
+			return self[hostname]
+		except KeyError:
+			pass
+
