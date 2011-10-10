@@ -25,34 +25,6 @@ class NodeTypes:
 	DISK = 'disk'
 
 
-class RabbitMQInitScript(initdv2.ParametrizedInitScript):
-	
-	@lazy
-	def __new__(cls, *args, **kws):
-		obj = super(RabbitMQInitScript, cls).__new__(cls, *args, **kws)
-		cls.__init__(obj)
-		return obj
-	
-	def __init__(self):
-		initdv2.ParametrizedInitScript.__init__(
-				self,
-				'rabbitmq',
-				'/etc/init.d/rabbitmq-server',
-				'/var/run/rabbitmq/pid')
-		
-	def stop(self, reason=None):
-		initdv2.ParametrizedInitScript.stop(self)
-	
-	def restart(self, reason=None):
-		initdv2.ParametrizedInitScript.restart(self)
-	
-	def reload(self, reason=None):
-		initdv2.ParametrizedInitScript.restart(self)		
-
-		
-initdv2.explore(SERVICE_NAME, RabbitMQInitScript)
-
-
 class RabbitMQ(object):
 	service = None
 	_instance = None
@@ -146,4 +118,37 @@ class RabbitMQ(object):
 
 	
 rabbitmq = RabbitMQ()
+
+class RabbitMQInitScript(initdv2.ParametrizedInitScript):
+	
+	@lazy
+	def __new__(cls, *args, **kws):
+		obj = super(RabbitMQInitScript, cls).__new__(cls, *args, **kws)
+		cls.__init__(obj)
+		return obj
+	
+	def __init__(self):
+		initdv2.ParametrizedInitScript.__init__(
+				self,
+				'rabbitmq',
+				'/etc/init.d/rabbitmq-server',
+				'/var/run/rabbitmq/pid')
+		
+		self.rabbitmq = RabbitMQ()
+		
+	def stop(self, reason=None):
+		#initdv2.ParametrizedInitScript.stop(self)
+		self.rabbitmq.stop()
+	
+	def restart(self, reason=None):
+		self.stop()
+		self.start()
+
+	reload = restart
+		
+	def start(self):
+		system2('rabbitmq-server', '-detached')	
+
+		
+initdv2.explore(SERVICE_NAME, RabbitMQInitScript)
 		
