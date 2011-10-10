@@ -171,6 +171,8 @@ class ParametrizedInitScript(InitScript):
 					pid_state = re.search('State:\s+(?P<state>\w)', status).group('state')
 					if pid_state in ('T', 'Z'):
 						return Status.NOT_RUNNING
+			else:
+				return Status.NOT_RUNNING
 		if self.socks:
 			try:
 				for sock in self.socks:
