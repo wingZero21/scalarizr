@@ -920,6 +920,7 @@ class BuiltinBehaviours:
 	MEMCACHED = 'memcached'
 	POSTGRESQL = 'postgresql'
 	REDIS = 'redis'
+	MONGODB = 'mongodb'
 	
 	@staticmethod
 	def values():
