@@ -92,14 +92,6 @@ class RabbitMQHandler(ServiceCtlHanler):
 			if not os.path.exists('/etc/hosts.safe'):
 				shutil.copy2('/etc/hosts', '/etc/hosts.safe')
 				
-			self.rabbitmq.service.start()
-			self.rabbitmq.stop_app()
-			self.rabbitmq.reset()
-			self.rabbitmq.stop()
-			self.rabbitmq.service.stop()
-
-
-
 	def on_init(self):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
@@ -181,8 +173,15 @@ class RabbitMQHandler(ServiceCtlHanler):
 			if rabbitmq_data[OPT_VOLUME_CNF]:
 				storage.Storage.backup_config(rabbitmq_data[OPT_VOLUME_CNF], self._volume_config_path)
 			del rabbitmq_data[OPT_VOLUME_CNF]
-		
+
 		self._update_config(rabbitmq_data)
+
+		self.rabbitmq.service.start()
+		self.rabbitmq.stop_app()
+		self.rabbitmq.reset()
+		self.rabbitmq.stop()
+		self.rabbitmq.service.stop()
+		system2(('ps', 'ax'), logger=self._logger)
 
 
 	def on_before_host_up(self, message):
