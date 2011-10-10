@@ -26,7 +26,7 @@ class HostsFile(object):
 	_hosts = Items()
 
 	def __init__(self, filename=None):
-		self.filename = filename if filename else self.FILENAME
+		self.filename = filename or self.FILENAME
 
 	def _reload(self):
 		self._hosts = Items()
