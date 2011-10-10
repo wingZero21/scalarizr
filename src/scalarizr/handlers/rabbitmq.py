@@ -97,7 +97,6 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.stop_app()
 			self.rabbitmq.reset()
 			self.service.stop()
-			system2(('ps', 'ax'), logger=self._logger)
 	
 	
 	def on_init(self):
@@ -205,7 +204,6 @@ class RabbitMQHandler(ServiceCtlHanler):
 		cookie = ini.get(CNF_SECTION, 'cookie')
 		self._logger.debug('Setting erlang cookie: %s' % cookie)
 		self.rabbitmq.set_cookie(cookie)
-		system2(('ls', '/var/lib/rabbitmq/mnesia'), logger=self._logger)
 		self.service.start()
 		
 		# Update message
