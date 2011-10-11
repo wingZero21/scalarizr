@@ -99,7 +99,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.service.stop()
 			
 		if 'ec2' == self.platform.name:
-			updates = dict(hostname_as_pubdns = 0)
+			updates = dict(hostname_as_pubdns = '0')
 			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
 	
 	
