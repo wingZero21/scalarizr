@@ -12,7 +12,7 @@ import subprocess
 from .postgresql import lazy
 from scalarizr.bus import bus
 from scalarizr.libs import metaconf
-from scalarizr.util import initdv2, system2
+from scalarizr.util import initdv2, system2, run_detached
 from scalarizr.config import BuiltinBehaviours
 
 
@@ -143,8 +143,8 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 	reload = restart
 		
 	def start(self):
-		system2(('rabbitmq-server', '-detached'))	
-
+		env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid'}
+		run_detached('rabbitmq-server', args=['-detached'], env=env)
 		
 initdv2.explore(SERVICE_NAME, RabbitMQInitScript)
 

@@ -15,7 +15,7 @@ from scalarizr.services import rabbitmq
 from scalarizr import storage
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.util import fstool, system2, initdv2
+from scalarizr.util import system2, initdv2
 from scalarizr.storage import StorageError
 
 
@@ -97,6 +97,10 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.stop_app()
 			self.rabbitmq.reset()
 			self.service.stop()
+			
+		if 'ec2' == self.platform.name:
+			updates = dict(hostname_as_pubdns = 0)
+			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
 	
 	
 	def on_init(self):
