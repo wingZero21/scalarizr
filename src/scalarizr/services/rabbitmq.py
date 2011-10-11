@@ -131,7 +131,6 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 				'rabbitmq',
 				'/etc/init.d/rabbitmq-server',
 				'/var/run/rabbitmq/pid',
-				socks=[initdv2.SockParam(5672), initdv2.SockParam(4369)]
 				)
 		self.rabbitmq = RabbitMQ()
 		
@@ -147,6 +146,13 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 	def start(self):
 		env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid'}
 		run_detached('rabbitmq-server', args=['-detached'], env=env)
+		
+	def status(self):
+		rcode = system2(('rabbitmqctl', 'status'), raise_exc=False)[2]
+		if rcode:
+			return initdv2.Status.NOT_RUNNING
+		else:
+			return initdv2.Status.RUNNING
 		
 initdv2.explore(SERVICE_NAME, RabbitMQInitScript)
 
