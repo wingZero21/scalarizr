@@ -880,7 +880,8 @@ class ScalarizrCnf(Observable):
 		return str.strip(filetool.read_file(filename, logger=self._logger))
 
 	def _set_state(self, v):
-		filetool.write_file(self.private_path('.state'), v, logger=self._logger)		
+		filetool.write_file(self.private_path('.state'), v, logger=self._logger)
+		self._logger.info('State: %s', v)
 
 	state = property(_get_state, _set_state)
 

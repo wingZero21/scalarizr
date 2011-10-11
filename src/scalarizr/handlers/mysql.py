@@ -853,80 +853,8 @@ class MysqlHandler(ServiceCtlHandler):
 			
 			# Creating snapshot
 			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
-			#tags = {'tmp': '1'}	if self.storage_vol.type == 'ebs' else None
-			#snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=tags)
 			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-			
-			'''
-			if self.storage_vol.type == 'ebs':
-				
-				tmp_mpoint = None 
-				tmp_storage_volume = None
-				
-				try:
-					wait_until(lambda: snap.state == Snapshot.COMPLETED, timeout=21600)
-					
-					self._logger.info('Performing InnoDB recovery')
-					
-					temp_snap = snap
-					""" Create temporary volume from snapshot, recover innodb and make snap again """
-					tmp_mpoint = tempfile.mkdtemp()
-					tmp_storage_volume = Storage.create(snapshot=temp_snap, tags={'tmp': '1'})
-					tmp_storage_volume.mount(tmp_mpoint)
-					
-					binlog_path	= os.path.join(tmp_mpoint, STORAGE_BINLOG)
-					binlog_index_path = binlog_path + '.index'
-					mysqld_safe_bin	= software.whereis('mysqld_safe')[0]
-					ndb_support = any(row['Engine'] == 'ndbcluster' and row['Support'] == 'YES' 
-									for row in mysql.client.fetchall('SHOW ENGINES'))		
-					
-					# Point binlog.index to tmp storage 
-					binlog_index = filetool.read_file(binlog_index_path)
-					self._recreate_binlog_index(binlog_index_path, os.path.dirname(binlog_index_path))
-					self._logger.debug('Tmp binlogs: %s', filetool.read_file(binlog_index_path))
-							
-					# Repair InnoDB			
-					mysqld_safe_cmd = (mysqld_safe_bin, 
-						'--socket=%s' % os.path.join(tmp_mpoint, 'mysql.sock'), 
-						'--pid-file=%s' % os.path.join(tmp_mpoint, 'mysql.pid'), 
-						'--datadir=%s' % os.path.join(tmp_mpoint, STORAGE_DATA_DIR),
-						'--log-bin=%s' % binlog_path, 
-						'--skip-networking', 
-						'--skip-grant', 
-						'--bootstrap', 
-						'--skip-slave-start')
-					if ndb_support:
-						mysqld_safe_cmd += ('--skip-ndbcluster',)					
-					
-					system2(mysqld_safe_cmd, stdin="select 1;")
-					
-					# Restore binlog.index
-					filetool.write_file(binlog_index_path, binlog_index)
-					self._logger.debug('Original binlogs: %s', filetool.read_file(binlog_index_path))
-						
-					snap = tmp_storage_volume.snapshot(self._data_bundle_description(), 
-													tags={'storage' : 'mysql'})
-					
-					# Wait up to 6 hours for snapshot completion 
-					wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600) 
-					if snap.state == Snapshot.FAILED:
-						raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
-					
-					used_size = int(system2(('df', '-P', '--block-size=M', tmp_mpoint))[0].split('\n')[1].split()[2][:-1])
-				finally:
-					temp_snap.destroy()
-					if tmp_storage_volume:
-						if tmp_storage_volume.mounted():
-							tmp_storage_volume.umount()
-						tmp_storage_volume.destroy()						
-					if tmp_mpoint:
-						os.rmdir(tmp_mpoint)
-					
-			else:
-				used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-			'''	
 			used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
-										
 				
 			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 			
@@ -1903,40 +1831,3 @@ def _add_apparmor_rules(directory):
 			except InitdError, e:
 				_logger.error('Cannot restart apparmor. %s', e)	
 
-
-'''
-class MysqlReplication(object):
-	def __init__(self, mycnf):
-		pass
-	
-	def setup(self, master):
-		pass
-	
-	def change_master(self):
-		pass
-	
-	def repair_defaults(self, writefile=True):
-		pass
-
-class MysqlStorage(object):
-	SNAPSHOT_NAME = 'mysql-snap.json'
-	VOLUME_NAME = 'mysql.json'
-	
-	def __init__(self, mycnf, volume, snapshot):
-		pass
-	
-	def repair_defaults(self, writefile=True):
-		pass
-	
-	def valid(self):
-		pass
-	
-	def flush_logs(self):
-		pass
-	
-	def plug(self):
-		pass
-	
-	def unplug(self):
-		pass
-'''

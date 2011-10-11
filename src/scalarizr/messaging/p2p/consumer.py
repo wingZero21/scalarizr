@@ -96,7 +96,7 @@ class P2pMessageConsumer(MessageConsumer):
 					return
 				
 				
-				logger.info("Received message '%s' (message_id: %s)", message.name, message.id)
+				logger.debug("Received message '%s' (message_id: %s)", message.name, message.id)
 				#logger.info("Received ingoing message '%s' in queue %s", message.name, queue)
 				
 				try:

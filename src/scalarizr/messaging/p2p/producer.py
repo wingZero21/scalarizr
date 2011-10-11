@@ -141,8 +141,7 @@ class P2pMessageProducer(messaging.MessageProducer):
 
 
 	def _message_delivered(self, queue, message, callback=None):
-		self._logger.log(queue == messaging.Queues.LOG and logging.DEBUG or logging.INFO, 
-				"Message '%s' delivered (message_id: %s)", message.name, message.id)
+		self._logger.debug("Message '%s' delivered (message_id: %s)", message.name, message.id)
 		self._store.mark_as_delivered(message.id)
 		self.fire("send", queue, message)
 		if callback:
