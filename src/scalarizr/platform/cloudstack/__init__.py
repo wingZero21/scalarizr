@@ -76,4 +76,3 @@ class CloudStackPlatform(Platform):
 					self._access_data.get('api_url'), 
 					apiKey=self._access_data.get('api_key'), 
 					secretKey=self._access_data.get('secret_key'))
-		
