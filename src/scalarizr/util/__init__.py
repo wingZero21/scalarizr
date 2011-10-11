@@ -557,7 +557,8 @@ def run_detached(binary, args=[], env=None):
 		
 		try:
 			if env:
-				os.execle(binary, binary, *args, env=env)
+				args.append(env)
+				os.execle(binary, binary, *args)
 			else:
 				os.execl(binary, binary, *args)
 		except Exception:
