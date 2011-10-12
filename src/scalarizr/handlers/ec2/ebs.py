@@ -121,7 +121,7 @@ class EbsHandler(handlers.Handler):
 				except fstool.FstoolError, e:
 					if e.code == fstool.FstoolError.NO_FS:
 						vol.mkfs()
-						fstool.mount(vol.device, vol.mpoint, make_fs=True, auto_mount=True)
+						fstool.mount(vol.device, vol.mpoint, auto_mount=True)
 					else:
 						raise
 				self._logger.info("Device %s is mounted to %s", vol.device, vol.mpoint)
@@ -129,7 +129,7 @@ class EbsHandler(handlers.Handler):
 				self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
 					volume_id = vol.id,
 					device_name = vol.ebs_device
-				), broadcast=True)
+				), broadcast=True, wait_ack=True)
 				bus.fire("block_device_mounted", volume_id=ebs_volume.volume_id, device=vol.device)				
 				
 			else:

@@ -40,7 +40,7 @@ class P2pMessageConsumer(MessageConsumer):
 	def start(self):
 		if self.running:
 			raise MessagingError('Message consumer is already running')
-		
+
 		try:
 			if self._server is None:
 				r = urlparse(self.endpoint)

@@ -103,17 +103,12 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			args.append(action) 
 			out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
 		except PopenError, e:
-			#temporary fix for broken status() method in mysql
-			if 'Job is already running' in e:
-				pass
-			else:
+			if 'Job is already running' not in str(e):
 				raise InitdError("Popen failed with error %s" % (e,))
-		
-		if returncode:
-			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), returncode)
 		
 		if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			try:
+				_logger.debug('waiting for mysql process')
 				wait_until(lambda: mysqld_path in system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
 							, timeout=10, sleep=1)
 			except:
