@@ -72,18 +72,30 @@ class RabbitMQ(object):
 			self.add_node(hostname)
 				
 	
-	def add_node(self, hostname):
-		self.stop_app()
-		self.rabbitmq_cnf.add('./rabbit/cluster_nodes/%s' % hostname)
+	def add_nodes(self, hostnames):
+		if isinstance(hostnames, str):
+			hostnames = [hostnames]
+		was_running = self.running
+		if was_running:
+			self.stop_app()
+		for hostname in hostnames:
+			self.rabbitmq_cnf.add('./rabbit/cluster_nodes/%s' % hostname)
 		self._write_cfg()
-		self.start_app()
+		if was_running:
+			self.start_app()
 
 
-	def delete_node(self, hostname):
-		self.stop_app()
-		self.rabbitmq_cnf.remove('./rabbit/cluster_nodes/%s' % hostname)
+	def delete_nodes(self, hostnames):
+		if isinstance(hostnames, str):
+			hostnames = [hostnames]
+		was_running = self.running
+		if was_running:
+			self.stop_app()
+		for hostname in hostnames:
+			self.rabbitmq_cnf.remove('./rabbit/cluster_nodes/%s' % hostname)
 		self._write_cfg()
-		self.start_app()		
+		if was_running:		
+			self.start_app()		
 
 
 	def install_plugin(self, link):
@@ -99,6 +111,7 @@ class RabbitMQ(object):
 	
 	
 	def stop_app(self):
+		
 		system2(('rabbitmqctl', 'stop_app'), logger=self._logger)
 	
 	
@@ -110,6 +123,10 @@ class RabbitMQ(object):
 	def node_type(self):
 		return self._cnf.rawini.get(CNF_SECTION, 'node_type')
 	
+	@property
+	def running(self):
+		rcode = system2(('rabbitmqctl', 'status'), raise_exc=False)[2]
+		return False if rcode else True 	
 	
 	def _write_cfg(self):
 		self.rabbitmq_cnf.write(RABBIT_CFG_PATH) 
@@ -142,17 +159,17 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 		self.start()
 
 	reload = restart
-		
+
 	def start(self):
 		env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid'}
 		run_detached('rabbitmq-server', args=['-detached'], env=env)
 		
 	def status(self):
-		rcode = system2(('rabbitmqctl', 'status'), raise_exc=False)[2]
-		if rcode:
-			return initdv2.Status.NOT_RUNNING
-		else:
+		if self.rabbitmq.running:
 			return initdv2.Status.RUNNING
+		else:
+			return initdv2.Status.NOT_RUNNING
+			
 		
 initdv2.explore(SERVICE_NAME, RabbitMQInitScript)
 

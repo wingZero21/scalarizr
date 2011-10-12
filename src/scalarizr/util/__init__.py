@@ -527,7 +527,7 @@ def run_detached(binary, args=[], env=None):
 		res = software.whereis(binary_base)
 		if not res:
 			raise Exception('Cannot find %s executable' % binary_base)
-		binary = res[0]	
+		binary = res[0]
 	
 	pid = os.fork()
 	if pid == 0:
