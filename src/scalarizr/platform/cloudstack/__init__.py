@@ -40,7 +40,7 @@ class CloudStackPlatform(Platform):
 	
 	
 	def get_user_data(self, key=None):
-		if not self._userdata is None:
+		if self._userdata is None:
 			try:
 				self._userdata = self._parse_user_data(self.get_meta_data('user-data'))
 			except PlatformError, e:
