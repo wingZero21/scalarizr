@@ -21,6 +21,7 @@ def get_handlers():
 
 class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 	IMAGE_MPOINT = '/mnt/img-mnt'
+	IMAGE_NAME_MAXLEN = 32
 	
 	def detect_os_type_id(self, conn):
 		default_desc = 'Other Ubuntu (%d-bit)' % disttool.arch_bits()
@@ -36,12 +37,17 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 		return default
 	
 	def rebundle(self):
-		image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+		now = time.strftime('%Y%m%d%H%M%S')
+		if len(self._role_name) > self.IMAGE_NAME_MAXLEN - len(now):
+			image_name = self._role_name[0:16] + '--' + now
+		else:
+			image_name = self._role_name + "-" + now
+
 		dirty_snap = vol = snap = device = mounted = bundled = None
 		
 		pl = bus.platform
 		conn = pl.new_cloudstack_conn()
-		
+
 		try:
 			root_vol = conn.listVolumes(virtualMachineId=pl.get_instance_id())[0]
 		except IndexError:
@@ -55,6 +61,7 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 												wait_completion=True, logger=LOG)
 			LOG.info('ROOT volume snapshot created (snapshot: %s)', dirty_snap.id)
 			
+			'''
 			# Created temporary volume to perform cleanups
 			LOG.info('Creating volume from ROOT snapshot')
 			vol = voltool.create_volume(conn, name=image_name + '-tmp', 
@@ -73,15 +80,18 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 			snap = voltool.create_snapshot(conn, vol.id, 
 										wait_completion=True, logger=LOG)
 			LOG.info('Snapshot created (snapshot: %s)', snap.id)
-				
+			'''
+
 			LOG.info('Creating image')
 			image = conn.createTemplate(image_name, image_name, 
 							self.detect_os_type_id(conn), 
-							snapshotId=snap.id)
+							snapshotId=dirty_snap.id)
 			LOG.info('Image created (template: %s)', image.id)
 			
 			return image.id	
 		finally:
+			pass
+			'''
 			if dirty_snap:
 				try:
 					conn.deleteSnapshot(dirty_snap.id)
@@ -104,5 +114,6 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 					conn.deleteSnapshot(snap.id)
 				except:
 					pass
+			'''
 				
 				

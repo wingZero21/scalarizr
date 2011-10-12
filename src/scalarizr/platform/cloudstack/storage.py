@@ -35,106 +35,89 @@ class CSVolumeProvider(VolumeProvider):
 		'error' : Snapshot.FAILED
 	}
 
+	def _new_conn(self):
+		try:
+			return bus.platform.new_cloudstack_conn()
+		except:
+			pass
 
 	def _create(self, **kwargs):
 		'''
-		@param id: EBS volume id		
+		@param id: volume id		
 		@param device: Device name
 		@param size: Size in GB
 		@param zone_id: Availability zone
 		@param disk_offering_id: Disk offering ID
 		@param snapshot_id: Snapshot id
 		'''
-		ebs_vol = None
+		native_vol = None
 		pl = bus.platform
-		conn = self._new_ec2_conn()
-		
+		conn = self._new_conn()
+	
 		if conn:
+			self._logger.debug('storage._create kwds: %s', kwargs)
+
 			# Find free devname			
 			device = kwargs.get('device')
-			if device:
-				device = ebstool.get_ebs_devname(device)
-			used_letters = set(row['device'][-1] 
-						for row in Storage.volume_table() 
-						if row['state'] == 'attached' or ( \
-							pl.get_instance_type() == 't1.micro' and row['state'] == 'detached'
-						))
-			avail_letters = tuple(set(self.all_letters) - used_letters)
-			if not device or not (device[-1] in avail_letters) or os.path.exists(device):
-				letter = firstmatched(lambda l: not os.path.exists('/dev/sd%s' % l), avail_letters)
-				if letter:
-					device = '/dev/sd%s' % letter
-				else:
-					raise StorageError('No free letters for block device name remains')
-			
-			self._logger.debug('storage._create kwds: %s', kwargs)
+			if device and not os.path.exists(device):
+				device_id = voltool.get_deviceid(device)
+			else:
+				device_id = voltool.get_free_deviceid(pl.get_instance_id())
+
+			# Take volume and snapshot ids
 			volume_id = kwargs.get('id')
-			# xxx: hotfix
-			if volume_id and volume_id.startswith('snap-'):
-				volume_id = None
 			snap_id = kwargs.get('snapshot_id')
-			ebs_vol = None
-			delete_snap = False
-			volume_attached = False			
+			if snap_id:
+				volume_id = None
+			attached = False			
+
 			try:
 				if volume_id:
-					self._logger.debug('EBS has been already created')
+					self._logger.debug('Volume %s has been already created', volume_id)
 					try:
-						ebs_vol = conn.get_all_volumes([volume_id])[0]
+						native_vol = conn.listVolumes(id=volume_id)[0]
 					except IndexError:
-						raise StorageError("EBS volume '%s' doesn't exist." % volume_id)
-					
-					if ebs_vol.zone != pl.get_avail_zone():
-						self._logger.warn('EBS volume %s is in the different availability zone (%s). ' + 
-										'Snapshoting it and create a new EBS volume in %s', 
-										ebs_vol.id, ebs_vol.zone, pl.get_avail_zone())
-						volume_id = None
-						delete_snap = True
-						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger, wait_completion=True).id
+						raise StorageError("Volume %s doesn't exist" % volume_id)
 					else:
 						snap_id = None
 						
 				if snap_id or not volume_id:
-					self._logger.debug('Creating new EBS')
-					kwargs['avail_zone'] = pl.get_avail_zone()
-					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), kwargs.get('avail_zone'), 
-						snap_id, logger=self._logger, tags=kwargs.get('tags'))
-
+					self._logger.debug('Creating new volume')
+					native_vol = voltool.create_volume(conn,
+						name='%s-%02d' % (pl.get_instance_id(), device_id),
+						size=kwargs.get('size'), 
+						disk_offering_id=kwargs.get('disk_offering_id'),
+						snap_id=snap_id,
+						logger=self._logger
+					)
 			
-				if 'available' != ebs_vol.volume_state():
-					if ebs_vol.attachment_state() == 'attaching':
-						wait_until(lambda: ebs_vol.update() and ebs_vol.attachment_state() != 'attaching', timeout=600, 
-								error_text='EBS volume %s hangs in attaching state' % ebs_vol.id)
-					
-					if ebs_vol.attach_data.instance_id != pl.get_instance_id():
-						self._logger.debug('EBS is attached to another instance')
-						self._logger.warning("EBS volume %s is not available. Detaching it from %s", 
-											ebs_vol.id, ebs_vol.attach_data.instance_id)						
-						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
+				if hasattr(native_vol, 'virtualmachineid'):
+					if native_vol.virtualmachineid == pl.get_instance_id():
+						self._logger.debug('Volume %s is attached to this instance', volume_id)
+						attached = True
 					else:
-						self._logger.debug('EBS is attached to this instance')
-						device = ebstool.real_devname(ebs_vol.attach_data.device)
-						wait_until(lambda: os.path.exists(device), sleep=1, timeout=300, 
-								error_text="Device %s wasn't available in a reasonable time" % device)						
-						volume_attached = True
+						self._logger.warning('Volume %s is not available. '
+											'It is attached to different instance %s. '
+											'Now scalarizr will detach it', 
+											volume_id, native_vol.virtualmachineid)
+						voltool.detach_volume(conn, volume_id)
+						self._logger.debug('Volume %s detached', volume_id)
+				
+				if not attached:
+					self._logger.debug('Attaching volume %s to this instance', volume_id)
+					voltool.attach_volume(conn, native_vol, pl.get_instance_id(), device_id,
+						to_me=True, logger=self._logger)
+				
+			except:
+				exc_type, exc_value, exc_trace = sys.exc_info()
+				if native_vol:
+					self._logger.debug('Detaching volume')
+					try:
+						conn.detachVolume(id=volume_id)
+					except:
+						pass
 
-				
-				if not volume_attached:
-					self._logger.debug('Attaching EBS to this instance')
-					device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device, 
-						to_me=True, logger=self._logger)[1]
-				
-			except (Exception, BaseException), e:
-				self._logger.debug('Caught exception')
-				if ebs_vol:
-					self._logger.debug('Detaching EBS')
-					if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
-						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
-							
-					#if not volume_id:
-					#	ebs_vol.delete()
-						
-				raise StorageError('EBS volume construction failed: %s' % str(e))
+				raise StorageError, 'Volume construction failed: %s' % exc_value, exc_trace
 			
 			finally:
 				if delete_snap and snap_id:
@@ -142,32 +125,28 @@ class CSVolumeProvider(VolumeProvider):
 					
 			
 			kwargs['device'] = device
-			kwargs['id'] = ebs_vol.id
+			kwargs['id'] = native_vol.id
+			kwargs['zone_id'] = native_vol.zoneid
+			kwargs['disk_offering_id'] = getattr(native_vol, 'diskofferingid', None)
 			
-		elif kwargs.get('device'):
-			kwargs['device'] = ebstool.get_system_devname(kwargs['device'])
-			
-		return super(EbsVolumeProvider, self).create(**kwargs)
+		return super(CSVolumeProvider, self).create(**kwargs)
 
 	create = _create
 	
 	def create_from_snapshot(self, **kwargs):
 		'''
-		@param size: Size in GB
-		@param avail_zone: Availability zone
+		@param zone_id: Availability zone
 		@param id: Snapshot id
 		'''
 		return self._create(**kwargs)
 
 	def create_snapshot(self, vol, snap, **kwargs):
-		conn = self._new_ec2_conn()
-		ebs_snap = ebstool.create_snapshot(conn, vol.id, snap.description, tags=kwargs.get('tags'))
-		snap.id = ebs_snap.id
+		native_snap = voltool.create_snapshot(self._new_conn(), vol.id, snap.description)
+		snap.id = native_snap.id
 		return snap
 
 	def get_snapshot_state(self, snap):
-		conn = self._new_ec2_conn()
-		state = conn.get_all_snapshots((snap.id,))[0].status
+		state = self._new_conn().listSnapshots(id=snap.id)[0].state
 		return self.snapshot_state_map[state]
 
 	def blank_config(self, cnf):
@@ -175,36 +154,28 @@ class CSVolumeProvider(VolumeProvider):
 
 	def destroy(self, vol, force=False, **kwargs):
 		'''
-		@type vol: EbsVolume
+		@type vol: CSVolume
 		'''
-		super(EbsVolumeProvider, self).destroy(vol)
-		conn = self._new_ec2_conn()
+		super(CSVolumeProvider, self).destroy(vol)
+		conn = self._new_conn()
 		if conn:
-			ebstool.detach_volume(conn, vol.id, self._logger)
-			ebstool.delete_volume(conn, vol.id, self._logger)
+			voltool.detach_volume(conn, vol.id, self._logger)
+			voltool.delete_volume(conn, vol.id, self._logger)
 		vol.device = None							
 	
 	def destroy_snapshot(self, snap):
-		conn = self._new_ec2_conn()
+		conn = self._new_conn()
 		if conn:
 			self._logger.debug('Deleting EBS snapshot %s', snap.id)
-			conn.delete_snapshot(snap.id)
+			conn.deleteSnapshot(id=snap.id)
 	
 	@devname_not_empty		
 	def detach(self, vol, force=False):
-		super(EbsVolumeProvider, self).detach(vol)
-		
-		try:
-			pl = bus.platform
-			conn = pl.new_ec2_conn()
-			vol.detached = True			
-		except AttributeError:
-			pass
-		else:
-			ebstool.detach_volume(conn, vol.id, self._logger)
-		finally:
-			vol.device = None
-
+		super(CSVolumeProvider, self).detach(vol)
+		conn = self._new_conn()
+		if conn:
+			voltool.detach_volume(conn, vol.id, self._logger)
+		vol.device = None
 
 
 Storage.explore_provider(CSVolumeProvider)

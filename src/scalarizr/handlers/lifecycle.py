@@ -240,7 +240,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
 			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
 			
-			for rule in rules.reverse():
+			for rule in rules:
 				iptables.insert_rule(1, rule_spec = rule)
 
 

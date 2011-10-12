@@ -6,12 +6,15 @@ Created on Aug 25, 2010
 
 from scalarizr.util import wait_until, system2
 
-import logging, os
+import logging
+import os
+import string
 
 
 DEFAULT_TIMEOUT = 2400 		# 40 min
 SNAPSHOT_TIMEOUT = 3600		# 1 h
 LOG = logging.getLogger(__name__)
+
 
 
 def create_snapshot(conn, volume_id, logger=None, timeout=SNAPSHOT_TIMEOUT, wait_completion=False):
@@ -79,22 +82,22 @@ def create_volume(conn, name, size=None, disk_offering_id=None, snap_id=None,
 	return vol
 
 
-def attach_volume(conn, volume_id, instance_id, devname=None, 
+def attach_volume(conn, volume_id, instance_id, device_id=None, 
 				to_me=False, logger=None, timeout=DEFAULT_TIMEOUT):
 	logger = logger or LOG
 	if hasattr(volume_id, 'id'):
 		volume_id = volume_id.id
 		
 	msg = 'Attaching volume %s%s%s' % (volume_id, 
-				devname and ' as device %s' % devname or '', 
+				device_id and ' as device %s' % get_system_devname(device_id) or '', 
 				not to_me and ' instance %s' % instance_id or '')
 	logger.debug(msg)
-	conn.attachVolume(volume_id, instance_id, devname)
+	conn.attachVolume(volume_id, instance_id, device_id)
 	
 	
 	logger.debug('Checking that volume %s is attached', volume_id)
 	wait_until(
-		lambda: conn.listVolumes(volume_id)[0].state == 'Ready', 
+		lambda: conn.listVolumes(id=volume_id)[0].state == 'Ready', 
 		logger=logger, timeout=timeout,
 		error_text="Volume %s wasn't attached in a reasonable time"
 				" (vm_id: %s)." % ( 
@@ -102,9 +105,9 @@ def attach_volume(conn, volume_id, instance_id, devname=None,
 	)
 	logger.debug('Volume %s attached',  volume_id)
 	
-	if not devname:
-		devname = conn.listVolumes(volume_id)[0].deviceid
-	devname = real_devname(devname)
+	vol = conn.listVolumes(id=volume_id)[0]
+	devname = get_system_devname(vol.deviceid)
+
 	if to_me:
 		logger.debug('Checking that device %s is available', devname)
 		wait_until(
@@ -114,16 +117,28 @@ def attach_volume(conn, volume_id, instance_id, devname=None,
 		)
 		logger.debug('Device %s is available', devname)
 		
-	return conn.listVolumes(volume_id)[0], devname
+	return vol, devname
 
 
-def get_system_devname(devname):
-	return devname.replace('/sd', '/xvd') if os.path.exists('/dev/xvda1') else devname
-real_devname = get_system_devname
+def get_system_devname(deviceid):
+	if isinstance(deviceid, int):
+		return '/dev/xvd%s' % string.ascii_letters[deviceid]
+	return deviceid
 
 
-def get_ebs_devname(devname):
-	return devname.replace('/xvd', '/sd')
+def get_deviceid(devname):
+	if isinstance(devname, basestring):
+		return string.ascii_letters.index(devname[-1])
+	return devname
+
+
+def get_free_deviceid(conn, instance_id):
+	busy = set([vol.deviceid for vol in conn.listVolumes(virtualMachineId=instance_id)])
+	avail = set(range(0, 10))
+	avail.difference_update(busy)
+	if len(avail):
+		return avail.pop()
+	raise Exception('No free devices available (instance: %s)' % instance_id)
 
 
 def detach_volume(conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIMEOUT):
@@ -132,7 +147,11 @@ def detach_volume(conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIM
 		volume_id = volume_id.id
 		
 	logger.debug('Detaching volume %s', volume_id)
-	conn.detachVolume(volume_id)
+	try:
+		conn.detachVolume(volume_id)
+	except Exception, e:
+		if 'not attached' not in str(e):
+			raise
 
 	logger.debug('Checking that volume %s is available', volume_id)
 	wait_until(
