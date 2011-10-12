@@ -67,14 +67,14 @@ def create_volume(conn, name, size=None, disk_offering_id=None, snap_id=None,
 	vol = conn.createVolume(name, size=size, diskOfferingId=disk_offering_id, snapshotId=snap_id)
 	logger.debug('Volume %s created%s', vol.id, snap_id and ' from snapshot %s' % snap_id or '')
 	
-	if vol.state != 'Allocated':
-		logger.debug('Checking that EBS volume %s is available', vol.id)
+	if vol.state != 'Ready':
+		logger.debug('Checking that volume %s is available', vol.id)
 		wait_until(
-			lambda: conn.listVolumes(id=vol.id)[0].state == 'Allocated', 
+			lambda: conn.listVolumes(id=vol.id)[0].state == 'Ready', 
 			logger=logger, timeout=timeout,
-			error_text="EBS volume %s wasn't available in a reasonable time" % vol.id
+			error_text="Volume %s wasn't available in a reasonable time" % vol.id
 		)
-		logger.debug('EBS volume %s available', vol.id)		
+		logger.debug('Volume %s available', vol.id)		
 	
 	return vol
 

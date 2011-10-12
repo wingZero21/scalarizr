@@ -15,6 +15,7 @@ from scalarizr.util import system2, port_in_use
 
 # Libs
 from scalarizr.util import cryptotool
+from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 
 # Stdlibs
 import logging, os, sys, threading
@@ -109,6 +110,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			init=self.on_init, 
 			start=self.on_start, 
 			reload=self.on_reload, 
+			before_reboot_finish=self.on_before_reboot_finish,
 			shutdown=self.on_shutdown
 		)
 		self.on_reload()
@@ -137,6 +139,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 		# Mount all filesystems
 		system2(('mount', '-a'), raise_exc=False)
+
+		# Add firewall rules
+		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
+			self._insert_iptables_rules()
 
 
 	def on_start(self):
@@ -198,7 +204,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		bus.cnf.state = ScalarizrState.INITIALIZING
 		bus.fire("host_init")		
 		
-
 	
 	def _start_import(self):
 		# Send Hello 
@@ -219,6 +224,26 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if self._cnf.state == ScalarizrState.RUNNING and self._cnf.key_exists(self._cnf.FARM_KEY):
 			self._start_int_messaging()
 
+
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
+
+
+	def _insert_iptables_rules(self):
+		self._logger.debug('Adding iptables rules for scalarizr ports')		
+		iptables = IpTables()
+		if iptables.usable():		
+			rules = []
+			
+			# Scalarizr ports
+			rules.append(RuleSpec(dport=8012, jump='ACCEPT', protocol=P_TCP))
+			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
+			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
+			
+			for rule in rules.reverse():
+				iptables.insert_rule(1, rule_spec = rule)
+
+
 	def on_shutdown(self):
 		self._logger.debug('Calling %s.on_shutdown', __name__)
 		# Shutdown internal messaging
@@ -227,6 +252,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			self._logger.debug('Shutdowning internal messaging')			
 			int_msg_service.get_consumer().shutdown()
 		bus.int_messaging_service = None
+
 
 	def on_host_init_response(self, message):
 		farm_crypto_key = message.body.get('farm_crypto_key', '')

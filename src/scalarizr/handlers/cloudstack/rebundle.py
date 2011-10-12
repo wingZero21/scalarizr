@@ -45,22 +45,23 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 		try:
 			root_vol = conn.listVolumes(virtualMachineId=pl.get_instance_id())[0]
 		except IndexError:
-			raise HandlerError("Can't find root volume for virtual machine %s" % pl.get_instance_id())
+			raise HandlerError(
+					"Can't find root volume for virtual machine %s" % pl.get_instance_id())
 		
 		try:
 			# Create snapshot
-			LOG.info('Creating root volume (id: %s) snapshot...', root_vol.id)
-			dirty_snap = voltool.create_snapshot(conn, root_vol.id,  
+			LOG.info('Creating ROOT volume snapshot (volume: %s)', root_vol.id)
+			dirty_snap = voltool.create_snapshot(conn, root_vol.id, 
 												wait_completion=True, logger=LOG)
-			LOG.info('Snapshot (id: %s) created', dirty_snap.id)
+			LOG.info('ROOT volume snapshot created (snapshot: %s)', dirty_snap.id)
 			
 			# Created temporary volume to perform cleanups
-			LOG.info('Creating volume for image cleanups')
+			LOG.info('Creating volume from ROOT snapshot')
 			vol = voltool.create_volume(conn, name=image_name + '-tmp', 
 											snap_id=dirty_snap.id, logger=LOG)
 			device = voltool.attach_volume(conn, vol.id, pl.get_instance_id(), 
 												to_me=True, logger=LOG)[1]
-			LOG.info('Volume (id: %s) created', vol.id)
+			LOG.info('Volume created (volume: %s)', vol.id)
 			
 			# Mount image
 			fstool.mount(device, self.IMAGE_MPOINT)
@@ -68,16 +69,16 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 				
 			self.cleanup_image(self.IMAGE_MPOINT)
 				
-			LOG.info('Creating snapshot for template creation...')
+			LOG.info('Creating volume snapshot (volume: %s)', vol.id)
 			snap = voltool.create_snapshot(conn, vol.id, 
 										wait_completion=True, logger=LOG)
-			LOG.info('Snapshot (id: %s) created', snap.id)
+			LOG.info('Snapshot created (snapshot: %s)', snap.id)
 				
-			LOG.info('Creating image...')
+			LOG.info('Creating image')
 			image = conn.createTemplate(image_name, image_name, 
 							self.detect_os_type_id(conn), 
 							snapshotId=snap.id)
-			LOG.info('Image (id: %s) created', image.id)
+			LOG.info('Image created (template: %s)', image.id)
 			
 			return image.id	
 		finally:
