@@ -79,7 +79,7 @@ class RabbitMQ(object):
 		if was_running:
 			self.stop_app()
 		for hostname in hostnames:
-			self.rabbitmq_cnf.add('./rabbit/cluster_nodes/%s' % hostname)
+			self.rabbitmq_cnf.add('./rabbit/cluster_nodes/rabbit@%s' % hostname)
 		self._write_cfg()
 		if was_running:
 			self.start_app()
@@ -92,7 +92,7 @@ class RabbitMQ(object):
 		if was_running:
 			self.stop_app()
 		for hostname in hostnames:
-			self.rabbitmq_cnf.remove('./rabbit/cluster_nodes/%s' % hostname)
+			self.rabbitmq_cnf.remove('./rabbit/cluster_nodes/rabbit@%s' % hostname)
 		self._write_cfg()
 		if was_running:		
 			self.start_app()		
