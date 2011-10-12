@@ -348,7 +348,7 @@ class RedisHandler(ServiceCtlHandler):
 			dump_path = os.path.join(tmpdir, os.path.basename(self.redis.db_path))
 			
 			if not os.path.exists(src_path):
-				raise BaseException('Redis DB file %s does not exists. Skipping Backup process')
+				raise BaseException('%s DB file %s does not exist. Skipping Backup process' % (BEHAVIOUR, src_path))
 			
 			# Defining archive name and path
 			backup_filename = 'redis-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
