@@ -158,7 +158,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 			system2(('hostname', '-F', '/etc/hostname'))			
 		else:
 			Hosts.set(message.local_ip, 'rabbit-%s' % message.server_index)		
-			self.rabbitmq.add_node(message.local_ip)
+			self.rabbitmq.add_nodes([message.local_ip])
+			
 			
 			
 	def on_HostDown(self, message):
