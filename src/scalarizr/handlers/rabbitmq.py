@@ -195,14 +195,21 @@ class RabbitMQHandler(ServiceCtlHanler):
 		os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 		storage.Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		#fstool.mount(STORAGE_PATH, DEFAULT_STORAGE_PATH, ['--bind'])
-
+		
+		
+		nodes = []
 		for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
 			for host in role.hosts:
-				self.rabbitmq.add_node('rabbit-%s' % host.index)
+				ip = host.internal_ip
+				hostname = 'rabbit-%s' % host.index
+				Hosts.set(ip, hostname)
+				nodes.append(hostname)
 
 		if self.rabbitmq.node_type == rabbitmq.NodeTypes.DISK:
 			hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
-			self.rabbitmq.add(hostname)
+			nodes.append(hostname)
+		
+		self.rabbitmq.add_nodes(nodes)
 
 		ini = self.cnf.rawini
 		cookie = ini.get(CNF_SECTION, 'cookie')
