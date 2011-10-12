@@ -210,7 +210,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 			hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
 			nodes.append(hostname)
 		
-		self.rabbitmq.add_nodes(nodes)
+		if nodes:
+			self.rabbitmq.add_nodes(nodes)
 
 		ini = self.cnf.rawini
 		cookie = ini.get(CNF_SECTION, 'cookie')
