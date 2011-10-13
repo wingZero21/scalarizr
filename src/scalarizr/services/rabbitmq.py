@@ -113,8 +113,7 @@ class RabbitMQ(object):
 		system2(('rabbitmqctl', 'reset'), logger=self._logger)
 	
 	
-	def stop_app(self):
-		
+	def stop_app(self):		
 		system2(('rabbitmqctl', 'stop_app'), logger=self._logger)
 	
 	
