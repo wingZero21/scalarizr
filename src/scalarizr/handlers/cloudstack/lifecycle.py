@@ -40,5 +40,3 @@ class CloudStackLifeCycleHandler(Handler):
 			'instance_id': pl.get_instance_id(), 
 			'avail_zone': pl.get_avail_zone()
 		}
-
-

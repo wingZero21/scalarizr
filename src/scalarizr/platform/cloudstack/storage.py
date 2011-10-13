@@ -10,7 +10,7 @@ from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, dev
 
 
 class CSConfig(VolumeConfig):
-	type = 'cloudstack'
+	type = 'csvol'
 	snapshot_id = None
 	zone_id = None
 	disk_offering_id = None
