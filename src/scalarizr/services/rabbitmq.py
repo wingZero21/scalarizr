@@ -150,7 +150,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 				'rabbitmq',
 				'/etc/init.d/rabbitmq-server',
 				'/var/run/rabbitmq/pid',
-				socks=[initdv2.SockParam(5672)]
+				socks=[initdv2.SockParam(5672, timeout=20)]
 				)
 		self.rabbitmq = RabbitMQ()
 		
