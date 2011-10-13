@@ -90,11 +90,15 @@ class EbsVolumeProvider(VolumeProvider):
 			device = kwargs.get('device')
 			if device:
 				device = ebstool.get_ebs_devname(device)
+			# Get current block device mapping
+			bdm = conn.get_all_instances([pl.get_instance_id()])[0].instances[0].block_device_mapping
+
 			used_letters = set(row['device'][-1] 
 						for row in Storage.volume_table() 
 						if row['state'] == 'attached' or ( \
 							pl.get_instance_type() == 't1.micro' and row['state'] == 'detached'
 						))
+			
 			avail_letters = tuple(set(self.all_letters) - used_letters)
 			if not device or not (device[-1] in avail_letters) or os.path.exists(device):
 				letter = firstmatched(lambda l: not os.path.exists('/dev/sd%s' % l), avail_letters)
