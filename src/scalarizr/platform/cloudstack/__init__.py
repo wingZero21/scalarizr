@@ -5,6 +5,7 @@ import sys
 
 from scalarizr.bus import bus
 from scalarizr.platform import Platform, PlatformError
+from . import storage
 
 import cloudstack
 
@@ -67,6 +68,10 @@ class CloudStackPlatform(Platform):
 		return self.get_meta_data('instance-id').split('-')[2]
 	
 	
+	def get_avail_zone_id(self):
+		conn = self.new_cloudstack_conn()
+		return dict((zone.name, zone.id) for zone in conn.listZones())[self.get_avail_zone()]
+
 	def get_avail_zone(self):
 		return self.get_meta_data('availability-zone')
 	

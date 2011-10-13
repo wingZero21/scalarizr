@@ -9,6 +9,7 @@ from scalarizr.util import wait_until, system2
 import logging
 import os
 import string
+import operator
 
 
 DEFAULT_TIMEOUT = 2400 		# 40 min
@@ -52,12 +53,16 @@ def wait_snapshot(conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 	logger.debug('Snapshot %s completed', snap_id)
 
 
-def create_volume(conn, name, size=None, disk_offering_id=None, snap_id=None, 
+def create_volume(conn, name, zone_id, size=None, disk_offering_id=None, snap_id=None, 
 				logger=None, timeout=DEFAULT_TIMEOUT):
 	logger = logger or LOG
 	
-	msg = "Creating volume '%s'%s%s%s" % (
-		name,
+	if size and not disk_offering_id:
+		disk_offering_id = get_disk_offering_id(conn, size)
+		size = None
+
+	msg = "Creating volume '%s' in zone %s%s%s%s" % (
+		name, zone_id,
 		size and ' (size: %sG)' % size or '', 
 		snap_id and ' from snapshot %s' % snap_id or '',
 		disk_offering_id and ' with disk offering %s' % disk_offering_id or ''
@@ -67,13 +72,13 @@ def create_volume(conn, name, size=None, disk_offering_id=None, snap_id=None,
 	if snap_id:
 		wait_snapshot(conn, snap_id, logger)
 	
-	vol = conn.createVolume(name, size=size, diskOfferingId=disk_offering_id, snapshotId=snap_id)
+	vol = conn.createVolume(name, size=size, diskOfferingId=disk_offering_id, snapshotId=snap_id, zoneId=zone_id)
 	logger.debug('Volume %s created%s', vol.id, snap_id and ' from snapshot %s' % snap_id or '')
 	
-	if vol.state != 'Ready':
+	if vol.state not in ('Allocated', 'Ready'):
 		logger.debug('Checking that volume %s is available', vol.id)
 		wait_until(
-			lambda: conn.listVolumes(id=vol.id)[0].state == 'Ready', 
+			lambda: conn.listVolumes(id=vol.id)[0].state in ('Allocated', 'Ready'), 
 			logger=logger, timeout=timeout,
 			error_text="Volume %s wasn't available in a reasonable time" % vol.id
 		)
@@ -118,6 +123,17 @@ def attach_volume(conn, volume_id, instance_id, device_id=None,
 		logger.debug('Device %s is available', devname)
 		
 	return vol, devname
+
+
+def get_disk_offering_id(conn, size):
+	sizes = [(item.id, item.disksize) for item in conn.listDiskOfferings()]
+	sizes = sorted(sizes, key=operator.itemgetter(1))
+	LOG.debug('sizes: %s', sizes)
+
+	for id, sz in sizes:
+		if sz >= size:
+			return id
+	return sizes[-1][0]
 
 
 def get_system_devname(deviceid):

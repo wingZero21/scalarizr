@@ -4,9 +4,16 @@ Created on Sep 12, 2011
 @author: marat
 '''
 
+import logging
+import sys
+
 from scalarizr.bus import bus
 from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, devname_not_empty, \
 	VolumeConfig, Snapshot
+from . import voltool
+
+
+LOG = logging.getLogger(__name__)
 
 
 class CSConfig(VolumeConfig):
@@ -27,7 +34,7 @@ class CSSnapshot(Snapshot, CSConfig):
 class CSVolumeProvider(VolumeProvider):
 	type = CSConfig.type
 	vol_class = CSVolume
-	snap_class = CSConfig
+	snap_class = CSSnapshot
 	snapshot_state_map = {
 		'Creating' : Snapshot.CREATING,
 		'BackingUp' : Snapshot.CREATED,
@@ -55,14 +62,14 @@ class CSVolumeProvider(VolumeProvider):
 		conn = self._new_conn()
 	
 		if conn:
-			self._logger.debug('storage._create kwds: %s', kwargs)
+			LOG.debug('storage._create kwds: %s', kwargs)
 
 			# Find free devname			
 			device = kwargs.get('device')
 			if device and not os.path.exists(device):
 				device_id = voltool.get_deviceid(device)
 			else:
-				device_id = voltool.get_free_deviceid(pl.get_instance_id())
+				device_id = voltool.get_free_deviceid(conn, pl.get_instance_id())
 
 			# Take volume and snapshot ids
 			volume_id = kwargs.get('id')
@@ -73,7 +80,7 @@ class CSVolumeProvider(VolumeProvider):
 
 			try:
 				if volume_id:
-					self._logger.debug('Volume %s has been already created', volume_id)
+					LOG.debug('Volume %s has been already created', volume_id)
 					try:
 						native_vol = conn.listVolumes(id=volume_id)[0]
 					except IndexError:
@@ -82,36 +89,38 @@ class CSVolumeProvider(VolumeProvider):
 						snap_id = None
 						
 				if snap_id or not volume_id:
-					self._logger.debug('Creating new volume')
+					LOG.debug('Creating new volume')
 					native_vol = voltool.create_volume(conn,
 						name='%s-%02d' % (pl.get_instance_id(), device_id),
+						zone_id=pl.get_avail_zone_id(),
 						size=kwargs.get('size'), 
 						disk_offering_id=kwargs.get('disk_offering_id'),
 						snap_id=snap_id,
-						logger=self._logger
+						logger=LOG
 					)
 			
 				if hasattr(native_vol, 'virtualmachineid'):
 					if native_vol.virtualmachineid == pl.get_instance_id():
-						self._logger.debug('Volume %s is attached to this instance', volume_id)
+						LOG.debug('Volume %s is attached to this instance', volume_id)
+						device = voltool.get_system_devname(native_vol.deviceid)
 						attached = True
 					else:
-						self._logger.warning('Volume %s is not available. '
+						LOG.warning('Volume %s is not available. '
 											'It is attached to different instance %s. '
 											'Now scalarizr will detach it', 
 											volume_id, native_vol.virtualmachineid)
 						voltool.detach_volume(conn, volume_id)
-						self._logger.debug('Volume %s detached', volume_id)
+						LOG.debug('Volume %s detached', volume_id)
 				
 				if not attached:
-					self._logger.debug('Attaching volume %s to this instance', volume_id)
-					voltool.attach_volume(conn, native_vol, pl.get_instance_id(), device_id,
-						to_me=True, logger=self._logger)
+					LOG.debug('Attaching volume %s to this instance', volume_id)
+					device = voltool.attach_volume(conn, native_vol, pl.get_instance_id(), device_id,
+						to_me=True, logger=LOG)[1]
 				
 			except:
 				exc_type, exc_value, exc_trace = sys.exc_info()
 				if native_vol:
-					self._logger.debug('Detaching volume')
+					LOG.debug('Detaching volume')
 					try:
 						conn.detachVolume(id=volume_id)
 					except:
@@ -119,9 +128,6 @@ class CSVolumeProvider(VolumeProvider):
 
 				raise StorageError, 'Volume construction failed: %s' % exc_value, exc_trace
 			
-			finally:
-				if delete_snap and snap_id:
-					conn.delete_snapshot(snap_id)
 					
 			
 			kwargs['device'] = device
@@ -159,14 +165,14 @@ class CSVolumeProvider(VolumeProvider):
 		super(CSVolumeProvider, self).destroy(vol)
 		conn = self._new_conn()
 		if conn:
-			voltool.detach_volume(conn, vol.id, self._logger)
-			voltool.delete_volume(conn, vol.id, self._logger)
+			voltool.detach_volume(conn, vol.id, LOG)
+			voltool.delete_volume(conn, vol.id, LOG)
 		vol.device = None							
 	
 	def destroy_snapshot(self, snap):
 		conn = self._new_conn()
 		if conn:
-			self._logger.debug('Deleting EBS snapshot %s', snap.id)
+			LOG.debug('Deleting EBS snapshot %s', snap.id)
 			conn.deleteSnapshot(id=snap.id)
 	
 	@devname_not_empty		
@@ -174,7 +180,7 @@ class CSVolumeProvider(VolumeProvider):
 		super(CSVolumeProvider, self).detach(vol)
 		conn = self._new_conn()
 		if conn:
-			voltool.detach_volume(conn, vol.id, self._logger)
+			voltool.detach_volume(conn, vol.id, LOG)
 		vol.device = None
 
 
