@@ -5,6 +5,7 @@ Created on Sep 12, 2011
 '''
 
 import logging
+import os
 import sys
 
 from scalarizr.bus import bus
