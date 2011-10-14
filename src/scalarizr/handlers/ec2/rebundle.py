@@ -153,6 +153,7 @@ class RebundleStratery:
 			raise
 	
 	def _create_motd(self, image_mpoint, role_name=None):
+		LOG.debug('Creating motd file')
 		# Create message of the day
 		for name in ("etc/motd", "etc/motd.tail"):
 			motd_filename = os.path.join(image_mpoint, name)
@@ -168,6 +169,7 @@ class RebundleStratery:
 				filetool.write_file(motd_filename, motd, error_msg="Cannot patch motd file '%s' %s %s")
 
 	def _fix_fstab(self, image_mpoint):
+		LOG.debug('Fixing fstab')
 		pl = bus.platform	
 		fstab = fstool.Fstab(os.path.join(image_mpoint, 'etc/fstab'), True)		
 		

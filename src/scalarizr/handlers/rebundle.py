@@ -168,6 +168,9 @@ class RebundleHandler(Handler):
 		
 	def cleanup_image(self, rootdir):
 		# Truncate logs
+		LOG.debug('Cleanuping image')
+
+		LOG.debug('Truncating log files')
 		logs_path = os.path.join(rootdir, 'var/log')
 		if os.path.exists(logs_path):
 			for basename in os.listdir(logs_path):
@@ -179,12 +182,14 @@ class RebundleHandler(Handler):
 						self._logger.error("Cannot truncate file '%s'. %s", filename, e)
 
 		# Cleanup users homes
+		LOG.debug('Removing users activity')
 		for homedir in ('root', 'home/ubuntu', 'home/scalr'):
 			homedir = os.path.join(rootdir, homedir)
 			self._cleanup_user_activity(homedir)
 			self._cleanup_ssh_keys(homedir)
 		
 		# Cleanup scalarizr private data
+		LOG.debug('Removing scalarizr private data')
 		etc_path = os.path.join(rootdir, bus.etc_path[1:])
 		privated = os.path.join(etc_path, "private.d")
 		if os.path.exists(privated):
@@ -195,6 +200,8 @@ class RebundleHandler(Handler):
 		
 		# Sync filesystem buffers
 		system2('sync')
+
+		LOG.debug('Cleanup completed')
 
 
 	def _cleanup_user_activity(self, homedir):
@@ -208,12 +215,14 @@ class RebundleHandler(Handler):
 	def _cleanup_ssh_keys(self, homedir):
 		filename = os.path.join(homedir, '.ssh/authorized_keys')
 		if os.path.exists(filename):
-			lines = []
+			LOG.debug('Removing Scalr SSH keys from %s', filename)
+			fp = open(filename + '.tmp', 'w+')
 			for line in open(filename):
 				if 'SCALR-ROLESBUILDER' in line:
 					continue
-				lines.append(line)
-			filetool.write_file(filename, '\n'.join(lines))
+				fp.write(line)
+			fp.close()
+			os.rename(filename + '.tmp', filename)
 
 
 	def before_rebundle(self):
