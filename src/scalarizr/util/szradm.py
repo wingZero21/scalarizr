@@ -26,17 +26,52 @@ import ConfigParser
 import tarfile
 import sys
 import os
+import logging
 try:
 	import json
 except ImportError:
 	import simplejson as json
 
+#23.09.11----------------------------------------------------------------------------------------------
 try:
 	from prettytable import PrettyTable as PTable
 except:
-	print('prettytable modul not found')
+	print('Error: prettytable modul not found!')
 
-#23.09.11----------------------------------------------------------------------------------------------
+from yaml import dump
+
+from scalarizr.messaging import Message
+
+
+LOG = logging.getLogger('szradm')
+
+
+def encode(a, encoding='ascii'):
+	'used for recursive ecnode in class MarkAsUnhandledCommand'
+	if isinstance(a, dict):
+		ret = {}
+		for key, value in a.items():
+			if not isinstance(value, list):
+				ret[key.encode(encoding)] = encode(value, encoding) \
+					if isinstance(value, dict) else value.encode(encoding) \
+					if isinstance(value, basestring) else value
+			elif isinstance(a, list):
+				temp_list=[]
+				for item in value:
+					temp_list.append(encode(item, encoding))
+				ret[key.encode(encoding)]=temp_list
+		return ret
+	elif isinstance(a, list):
+		temp_list=[]
+		for item in value:
+			temp_list.append(encode(item, encoding))
+			ret[key.encode(encoding)]=temp_list
+		return ret
+	elif isinstance(a, str):
+		return a.encode(encoding)
+	else: raise LookupError('Not suspectived input param type in encode method')
+
+
 class ScalrError(BaseException):
 	pass
 
@@ -57,10 +92,16 @@ class IndHelpFormatter(HelpFormatter):
 
 	def format_heading(self, heading):
 		return "%*s%s:\n" % (self.current_indent, "", heading)
-	
+
 	def format_description(self, description):
 		if description:
-			return "\n\t%s\n" % self._format_text(description)
+			return "\n\t%s" % self._format_text(description)
+		else:
+			return ""
+
+	def format_epilog(self, epilog):
+		if epilog:
+			return "\n" + self._format_text(epilog) + ""
 		else:
 			return ""
 
@@ -70,9 +111,9 @@ class Command(object):
 	method = None
 	parser = None
 	fields = None
-
+	group = None
 	kwds = {}
-	
+
 	@property
 	def usage(self):
 		return self.parser.get_usage()
@@ -94,22 +135,13 @@ class Command(object):
 		else:
 			self.kwds=None
 
-
 	def run(self):
-		try:
-			ishelp = self.kwds['help']
-		except:
-			ishelp = None
-		
-		if self.kwds and not ishelp:
+		if self.kwds:
 			result = getattr(self.queryenv(), self.method)(**self.kwds)
-		elif ishelp:
-			self.parser.format_help()
 		else:
 			result = getattr(self.queryenv(), self.method)()
 		self.output(result)
 
-	
 	def output(self, result):
 		out = None
 		if self.fields:
@@ -119,12 +151,22 @@ class Command(object):
 				out=PTable(self.fields)
 			elif out:
 				out.add_row(row)
-		print(out)
 
+		if len(self.fields)==5:
+			alignment=(len(self.fields)-1)*'c'
+			alignment+='r'
+			out.aligns=alignment
+
+		print (out)
+
+	def get_db_conn(self):
+		db = bus.db
+		return db.get().get_connection()
 
 class GetlatestVersionCommand(Command):
 	name="get-latest-version"
 	method="get_latest_version"
+	group = "QueryEnv"
 	fields =['version']
 	parser = OptionParser(usage='get-latest-version ',
 		description='Display latest versioin', formatter= IndHelpFormatter())
@@ -138,6 +180,7 @@ class GetlatestVersionCommand(Command):
 class ListEbsMountpointsCommand(Command):
 	name = "list-ebs-mountpoints"
 	method = "list_ebs_mountpoints"
+	group = "QueryEnv"
 	fields =['name', 'dir', 'createfs', 'isarray', 'volume-id', 'device']
 	parser = OptionParser(usage='list-ebs-mountpoints ',
 		description='Display ebs mountpoints', formatter=IndHelpFormatter())
@@ -153,7 +196,7 @@ class ListEbsMountpointsCommand(Command):
 			vols=', '.join(vols)
 			devs=', '.join(devs)
 			yield [d.name, d.dir, d.create_fs, d.is_array, vols, devs]
-	
+
 	'''def run(self):
 		m1=queryenv.Mountpoint(name='Mountpoint 1', dir='dir1', create_fs=False, is_array=True,
 			volumes=[queryenv.Volume(device='dev 1',volume_id='21'),queryenv.Volume(device='dev 2', volume_id='22')])
@@ -166,6 +209,7 @@ class ListEbsMountpointsCommand(Command):
 class ListRolesCommand(Command):
 	name = "list-roles"
 	method = "list_roles"
+	group = "QueryEnv"
 	fields = ['behaviour','name', 'index', 'internal-ip',
 		'external-ip', 'replication-master']
 	parser = OptionParser(usage='list-roles [-b --behaviour] '
@@ -176,16 +220,60 @@ class ListRolesCommand(Command):
 
 	def iter_result(self, result):
 		'''Return array of result'''
-		for d in result:
-			yield [', '.join(d.behaviour), d.name, d.hosts[0].index,
-				d.hosts[0].internal_ip, d.hosts[0].external_ip,
-				d.hosts[0].replication_master]
+		if isinstance(result, list):
 
+			for d in result:
+
+				if isinstance(d.behaviour, list):
+					behaviour=', '.join(d.behaviour)
+				else:
+					behaviour=d.behaviour
+				(index, internal_ip, external_ip, replication_master)=([],[],[],[])
+				if isinstance(d.hosts, list):
+					for host in d.hosts:
+						index.append(str(host.index))
+						internal_ip.append(str(host.internal_ip))
+						external_ip.append(str(host.external_ip))
+						replication_master.append(str(host.replication_master))
+
+					yield [behaviour, d.name, ', '.join(index), ', '.join(internal_ip),
+						', '.join(external_ip),	', '.join(replication_master)]
+				else:
+					yield [behaviour, d.name, d.hosts.index, d.hosts.internal_ip,
+						d.hosts.external_ip, d.hosts.replication_master]
+
+		elif isinstance(result, queryenv.Role):
+			yield [result.behaviour, result.name, result.hosts.index,
+				result.hosts.internal_ip, result.hosts.external_ip,
+				result.hosts.replication_master]
+
+	"""
+	def run(self):
+		'''
+		res=queryenv.Role(behaviour='mysql', name='mysql-ubuntu1004-trunk',
+					hosts=queryenv.RoleHost(index='1', replication_master='1',
+					internal_ip="10.242.75.80", external_ip='50.17.99.58'))
+		'''
+
+		res=[queryenv.Role(behaviour='mysql', name='mysql-ubuntu1004-trunk',
+					hosts=queryenv.RoleHost(index='1', replication_master='1',
+					internal_ip="10.242.75.80", external_ip='50.17.99.58')),
+				queryenv.Role(behaviour='cf_router', name='cf-router64-ubuntu1004',
+					hosts=queryenv.RoleHost(index='1', replication_master='1')),
+				queryenv.Role(behaviour='www,cf_router,cf_cloud_coller,cfanager,cf_dea,cf_service',
+					name='cf-all64-ubuntu1004',
+					hosts=[queryenv.RoleHost(index='1', replication_master='1',
+					internal_ip="10.242.75.80", 	 external_ip='50.17.99.58'),
+					queryenv.RoleHost(index='1', replication_master='1',
+					internal_ip="10.242.75.80", 	 external_ip='50.17.99.58')]),
+				]
+		self.output(res)"""
 
 class GetHttpsCertificateCommand(Command):
 	name = "get-https-certificate"
 	method = "get_https_certificate"
 	fields = ['cert', 'pkey', 'cacert']
+	group = "QueryEnv"
 	parser = OptionParser(usage='get-https-certificate ',
 		description='Display cert, pkey https certificate\n',
 		formatter=IndHelpFormatter())
@@ -200,6 +288,7 @@ class ListRoleParamsCommand(Command):
 	name = "list-role-params"
 	method = "list_role_params"
 	fields = ['Keys', 'Values']
+	group = "QueryEnv"
 	parser = OptionParser(usage='list-role-params [-n --name]',
 		description='Display list role param by name', formatter=IndHelpFormatter())
 	parser.add_option('-n', '--name', dest='name', help='Show params by role name ')
@@ -217,7 +306,7 @@ class ListVirtualhostsCommand(Command):
 	name = "list-virtualhosts"
 	method = "list_virtual_hosts"
 	fields = ['hostname', 'https', 'type', 'raw']
-
+	group = "QueryEnv"
 	parser = OptionParser(usage='list-virtualhosts'
 		' [-n --name] [-s --https] ',
 		description='Display list of virtual hosts', formatter=IndHelpFormatter())
@@ -233,13 +322,13 @@ class ListVirtualhostsCommand(Command):
 		res=[queryenv.VirtualHost(hostname='194.162.85.4', type='virHost', raw='<![CDATA[ ]]>', https=False),
 			queryenv.VirtualHost(hostname='201.1.85.4', type='virHost2', raw='<![CDATA[ ]]>', https=True)]
 		self.output(res)'''
-		
+
 
 class ListScriptsCommand(Command):
 	name = "list-scripts"
 	method = "list_scripts"
 	fields = ['asynchronous', 'exec-timeout', 'name', 'body']
-
+	group = "QueryEnv"
 	parser = OptionParser(usage='list-scripts [-e --event]'
 		' [-a --asynchronous] [-n --name] ',
 		description='Display list of scripts', formatter=IndHelpFormatter())
@@ -259,15 +348,166 @@ class ListScriptsCommand(Command):
 			exec_timeout=12006, name='Script2', body='<script> ... </script>')])'''
 
 
+class ListMessagesCommand(Command):
+	name = "list-messages"
+	method = "list_messages"
+	group = "Messages"
+	fields = ['id', 'name', 'date', 'direction', 'handled?']
+	parser = OptionParser(usage='list-messages [-n --name]',
+		description='Display list of messages', formatter=IndHelpFormatter())
+
+	parser.add_option('-n', '--name', dest='name', help='Show message(s) with name')
+
+	def iter_result(self, result):
+		'''return:	[asynchronous=1|0, exec_timeout=string, name=string,body=string]'''
+		for d in result:
+			yield [d[0], d[1], d[2], d[3], d[4]]
+
+	def run(self):
+		try:
+			conn=self.get_db_conn()
+			cur = conn.cursor()
+			if self.kwds and self.kwds['name']:
+				cur.execute("SELECT `message_id`,`message_name`,\
+					`out_last_attempt_time`,`is_ingoing`,`in_is_handled` FROM\
+					p2p_message WHERE `message_name`='%s'"% self.kwds['name'])
+			else:
+				cur.execute("SELECT `message_id`,`message_name`,\
+					`out_last_attempt_time`,`is_ingoing`,`in_is_handled`\
+					FROM p2p_message")
+			res=[]
+
+			for row in cur:
+				res.append([row[0],row[1], row[2], row[3],
+					'yes' if row[4] #'\033[92myes\033[0m'
+					else 'no'])  #'\033[91mno\033[0m'
+			self.output(res)
+		except Exception,e:
+			LOG.warn('Error connecting to db or not correct request look '
+				'at in sradm>ListMessagesCommand>method `run`. Details: %s'% e)
+		finally:
+			cur.close()
+
+
+class MessageDetailsCommand(Command):
+	name = "message-details"
+	method = "message_details"
+	group = "Messages"
+	fields=['message']
+	parser = OptionParser(usage='message-details MESSAGE_ID',
+		description='Display messages with message id', formatter=IndHelpFormatter())
+
+	def __init__(self,argv=None):
+		if argv:
+			if isinstance(argv, list):
+				if '-h'in argv or '--help'in argv:
+					self.kwds = self.parser.parse_args(argv)[0].__dict__
+				else:
+					self.kwds={'message_id':argv[0]}
+			else:
+				if argv != '-h' or argv != '--help':
+					self.kwds={'message_id':argv}
+				else: self.kwds = self.parser.parse_args(argv)[0].__dict__
+
+	def iter_result(self, result):
+		return [result]
+
+	def run(self):
+		try: 
+			conn=self.get_db_conn()
+			cur = conn.cursor()
+
+			assert self.kwds['message_id'], 'message_id must be defined'
+			query="SELECT `message` FROM p2p_message WHERE `message_id`='%s'"\
+				%self.kwds['message_id']
+			cur.execute(query)
+			res=[]
+			for row in cur:
+				res.append(row[0])
+			if res[0]:
+				msg=Message()
+				msg.fromxml(res[0])
+				try:
+					mdict=encode({u'id':msg.id, u'name':msg.name,
+						u'meta':msg.meta, u'body':msg.body})
+					yaml=dump(mdict, default_flow_style=False)
+					print yaml
+				except Exception, e:
+					raise LookupError('error in recursive encode. Details: %s'%e)
+			else: print('not found with that name')
+			#self.output(res)
+		except Exception, e:
+			print('id=%s, name=%s, meta=%s, body=%s\n'%(msg.id, msg.name, msg.meta,
+				msg.body))
+			print('trubles in szradm>MessageDetailsCommand>method run. Details: %s'% e)
+		finally:
+			cur.close()
+
+
+class MarkAsUnhandledCommand(Command):
+	name = "mark-as-unhandled"
+	method = "mark-as-unhandled"
+	group = "Messages"
+	parser = OptionParser(usage='mark-as-unhandled MESSAGE_ID',
+		description='mark as unhandled message_id', formatter=IndHelpFormatter())
+	fields = ['id', 'name', 'date', 'direction', 'handled?']
+
+	def __init__(self,argv=None):
+		if argv:
+			if isinstance(argv, list):
+				if '-h'in argv or '--help'in argv:
+					self.kwds = self.parser.parse_args(argv)[0].__dict__
+				else:
+					self.kwds={'message_id':argv[0]}
+			else:
+				if argv != '-h' or argv != '--help':
+					self.kwds={'message_id':argv}
+				else: self.kwds = self.parser.parse_args(argv)[0].__dict__
+
+	def iter_result(self, result):
+		for d in result:
+			yield [d[0], d[1], d[2], d[3], d[4]]
+
+	def run(self):
+		try:
+			conn=self.get_db_conn()
+			cur = conn.cursor()
+			LOG.warn('mark-us-unhandled message with id: %s'%self.kwds['message_id'])
+			assert self.kwds['message_id'], 'message_id must be defined'
+			cur.execute("UPDATE p2p_message SET in_is_handled = ? WHERE message_id = '%s'"
+					%self.kwds['message_id'], (0,))
+			conn.commit()
+			cur.close()
+
+			cur = conn.cursor()
+			cur.execute("""SELECT `message_id`,`message_name`,\
+					`out_last_attempt_time`,`is_ingoing`,`in_is_handled` FROM\
+					p2p_message WHERE `message_id`='%s'"""% self.kwds['message_id'])
+			cur.close()
+			res=[]
+			for row in cur:
+				res.append([row[0],row[1], row[2], row[3], 'yes' if row[4] else 'no'])
+			self.output(res)
+		except Exception, e:
+			LOG.warn('Problems find in szradm -> MarkAsUnhandledCommand -> method run.'
+				 'Details: %s'%e)
+		finally:
+			#cur.close()
+			pass
+
+
 class Help(Command):
 	name='help'
 	com_dict=None
-	
+	print_groups=['QueryEnv', 'Messages']
 	parser = None
-	
-	def __init__(self,com_d=None):
+	group='help'
+
+	def __init__(self,com_d=None, groups=None):
 		if com_d:
 			self.com_dict=com_d
+			if groups:
+				self.print_groups=list(groups)
 
 	def run(self, com_d=None, parser_misc=None):
 		if com_d:
@@ -277,14 +517,17 @@ class Help(Command):
 			if not parser_misc:
 				parser_misc=help_misc()
 			print '%s\n\n%s' % (str, parser_misc.format_help())
-			
-			str2='QueryEnv commands:'
-			print('%s'%str2)
-			for com_name in self.com_dict.keys():
-				com_obj=self.com_dict.get(com_name)()
-				if not isinstance(com_obj, Help):
-					print('%s'%com_obj.usage)
 
+			for gr in self.print_groups:
+				st= '\n'+gr if gr != 'QueryEnv' else gr
+				print('\n%s  commands:\n'%st)
+				for com_name in self.com_dict.keys():
+					com_obj=self.com_dict.get(com_name)()
+					if not isinstance(com_obj, Help) and gr==com_obj.group:
+						print('%s'%com_obj.usage)
+
+
+#default options list:
 def help_misc():
 	parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
 	parser.add_option("-q", "--queryenv", dest="queryenv", action="store_true",
@@ -319,7 +562,7 @@ def init_cnf():
 	cnf = ScalarizrCnf(bus.etc_path)
 	cnf.bootstrap()
 	globals()['ini'] = cnf.rawini
-	
+
 def main():
 	global ini
 	init_script()
@@ -332,6 +575,10 @@ def main():
 			'list-role-params':ListRoleParamsCommand,
 			'list-virtualhosts':ListVirtualhostsCommand,
 			'list-scripts':ListScriptsCommand,
+			'list-messages':ListMessagesCommand,
+			'message-details':MessageDetailsCommand,
+			'mark-as-unhandled':MarkAsUnhandledCommand,
+
 			'help':Help,
 			'--help':Help,
 			'-h':Help
@@ -356,7 +603,7 @@ def main():
 		except Exception, e:
 			com=Help(com_dict)
 			com.run()
-			print('Cant execute command or option. Error:%s' % e)
+			raise LookupError("Cant execute command or option. Error: %s" % (e))
 	else:
 		parser=help_misc()
 #------------------------------------------------------------------------------------------------
@@ -520,13 +767,74 @@ if __name__ == '__main__':
 	main()
 
 '''
+class dicts:
+	
+	@staticmethod
+	def merge(a, b):
+		res = {}
+		for key in a.keys():
+			if not key in b:
+				res[key] = a[key]
+				continue
+			
+			if type(a[key]) != type(b[key]):
+				res[key] = b[key]
+			elif dict == type(a[key]):
+				res[key] = dicts.merge(a[key], b[key])
+			elif list == type(a[key]):
+				res[key] = a[key] + b[key]
+			else:
+				res[key] = b[key]
+			del(b[key])
+		
+		res.update(b)
+		return res
+
+	@staticmethod
+	def encode(a, encoding='ascii'):
+		#if not isinstance(a, dict):
+		#	raise ValueError('dict type expected, but %s passed' % type(a))
+		if isinstance(a, dict):
+			ret = {}
+			for key, value in a.items():
+				if not isinstance(value, list):
+					ret[key.encode(encoding)] = dicts.encode(value, encoding) \
+						if isinstance(value, dict) else value.encode(encoding) \
+						if isinstance(value, basestring) else value
+				elif isinstance(a, list):
+					temp_list=[]
+					for item in value:
+						temp_list.append(dicts.encode(item, encoding))
+					ret[key.encode(encoding)]=temp_list
+			return ret
+		elif isinstance(a, list):
+			temp_list=[]
+			for item in value:
+				temp_list.append(dicts.encode(item, encoding))
+				ret[key.encode(encoding)]=temp_list
+			return ret
+		elif isinstance(a, str):
+			return a.encode(encoding)
+		else: raise LookupError('not suspectived input param type in encode method')
+			
+	
+	@staticmethod
+	def keys2ascii(a):
+		if not isinstance(a, dict):
+			raise ValueError('dict type expected, but %s passed' % type(a))
+		ret = {}
+		for key, value in a.items():
+			ret[key.encode('ascii')] = dicts.keys2ascii(value) if isinstance(value, dict) else value
+		return ret
+'''
+
+'''
 * szadm --queryenv list-roles behaviour=app
 * szadm --msgsnd -n BlockDeviceAttached devname=/dev/sdo
 * szadm --msgsnd --lo -n IntServerReboot
 * szadm --msgsnd --lo -f rebundle.xml
 * szadm --repair host-up
 '''
-
 """
 <?xml version="1.0" ?>
 <message id="037b1864-4539-4201-ac0b-5b1609686c80" name="Rebundle">
