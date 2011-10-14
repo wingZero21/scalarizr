@@ -54,8 +54,9 @@ class Hosts:
 			if hosts.has_key(hostname):
 				del hosts[hostname]
 		if addr:
-			for host, ip  in hosts.iteritems():
-				if ip == addr:
+			hostnames = hosts.keys()
+			for host in hostnames:
+				if addr == hosts[host]: 
 					del hosts[host]
 		cls._write(hosts)		
 	
@@ -159,13 +160,15 @@ class RabbitMQHandler(ServiceCtlHanler):
 		else:
 			hostname = 'rabbit-%s' % message.server_index
 			Hosts.set(message.local_ip, hostname)		
-			self.rabbitmq.add_nodes([hostname])			
+			self.rabbitmq.add_nodes([hostname])
 			
 			
 	def on_HostDown(self, message):
 		if not BuiltinBehaviours.RABBITMQ in message.behaviour:
 			return
 		Hosts.delete(message.local_ip)
+		hostname = 'rabbit-%s' % message.server_index
+		self.rabbitmq.delete_nodes([hostname])	
 		
 
 	def on_host_init_response(self, message):
