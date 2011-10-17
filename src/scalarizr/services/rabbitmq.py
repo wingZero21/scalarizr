@@ -42,7 +42,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 				socks=[initdv2.SockParam(5672, timeout=20)]
 				)
 		
-	def stop(self):
+	def stop(self, reason=None):
 		system2(('rabbitmqctl', 'stop'), logger=self._logger)
 	
 	def restart(self, reason=None):
