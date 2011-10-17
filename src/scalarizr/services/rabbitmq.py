@@ -43,7 +43,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 				)
 		
 	def stop(self, reason=None):
-		system2(('rabbitmqctl', 'stop'), logger=self._logger)
+		system2(('rabbitmqctl', 'stop'))
 	
 	def restart(self, reason=None):
 		self.stop()
