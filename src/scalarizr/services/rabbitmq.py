@@ -24,6 +24,9 @@ class NodeTypes:
 	RAM = 'ram'
 	DISK = 'disk'
 	
+MGMT_AGENT_URL = 'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management_agent-2.6.1.ez'
+
+	
 
 class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 	
@@ -124,7 +127,7 @@ class RabbitMQ(object):
 	def add_nodes(self, hostnames):
 		if isinstance(hostnames, str):
 			hostnames = [hostnames]
-		was_running = self.running
+		was_running = not bool(self.service.running)
 		if not was_running:
 			self.service.start()
 		self.stop_app()
@@ -142,7 +145,7 @@ class RabbitMQ(object):
 	def delete_nodes(self, hostnames):
 		if isinstance(hostnames, str):
 			hostnames = [hostnames]
-		was_running = self.running
+		was_running = not bool(self.service.running)
 		if not was_running:
 			self.service.start()
 		self.stop_app()
