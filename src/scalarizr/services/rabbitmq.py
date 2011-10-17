@@ -127,7 +127,7 @@ class RabbitMQ(object):
 	def add_nodes(self, hostnames):
 		if isinstance(hostnames, str):
 			hostnames = [hostnames]
-		was_running = not bool(self.service.running)
+		was_running = self.service.running
 		if not was_running:
 			self.service.start()
 		self.stop_app()
@@ -145,7 +145,7 @@ class RabbitMQ(object):
 	def delete_nodes(self, hostnames):
 		if isinstance(hostnames, str):
 			hostnames = [hostnames]
-		was_running = not bool(self.service.running)
+		was_running = self.service.running
 		if not was_running:
 			self.service.start()
 		self.stop_app()
