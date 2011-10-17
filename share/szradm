@@ -9,8 +9,8 @@ _szradm()
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="--queryenv --msgsnd --repair --reinit --name --msgfile --endpoint --queue --help --qa-report"
-    opts2="list-virtualhosts list-role-params list-roles get-https-certificate get-latest-version list-ebs-mountpoints list-scripts mark-as-unhandled list-messages message-details --queryenv --msgsnd --repair --reinit --name --msgfile --endpoint --queue --help --qa-report"
+    opts="-q -h -m -r -n -f -e -o -s --queryenv --msgsnd --repair --reinit --name --msgfile --endpoint --queue --help --qa-report"
+    opts2="list-virtualhosts list-role-params list-roles get-https-certificate get-latest-version list-ebs-mountpoints list-scripts mark-as-unhandled list-messages message-details"
 
     if [[ ${cur} == -* ]] ; then
         COMPREPLY=( $(compgen -W "${opts}" --  ${cur}) )
