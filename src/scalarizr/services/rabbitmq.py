@@ -128,10 +128,8 @@ class RabbitMQ(object):
 		if isinstance(hostnames, str):
 			hostnames = [hostnames]
 		was_running = self.service.running
-		if not was_running:
-			self.service.start()
-		self.stop_app()
-		self.reset()
+		if was_running:
+			self.stop_app()
 		for hostname in hostnames:
 			try:
 				self.rabbitmq_cnf.get("./rabbit/cluster_nodes/'rabbit@%s'" % hostname)
@@ -146,10 +144,8 @@ class RabbitMQ(object):
 		if isinstance(hostnames, str):
 			hostnames = [hostnames]
 		was_running = self.service.running
-		if not was_running:
-			self.service.start()
-		self.stop_app()
-		self.reset()
+		if was_running:
+			self.stop_app()
 		for hostname in hostnames:
 			self.rabbitmq_cnf.remove("./rabbit/cluster_nodes/'rabbit@%s'" % hostname)
 		self._write_cfg()
@@ -176,6 +172,7 @@ class RabbitMQ(object):
 	@property
 	def node_type(self):
 		return self._cnf.rawini.get(CNF_SECTION, 'node_type')
+	
 	
 	def _write_cfg(self):
 		self.rabbitmq_cnf.write(RABBIT_CFG_PATH) 
