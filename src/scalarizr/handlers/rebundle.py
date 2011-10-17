@@ -180,6 +180,7 @@ class RebundleHandler(Handler):
 						filetool.truncate(filename)
 					except OSError, e:
 						self._logger.error("Cannot truncate file '%s'. %s", filename, e)
+			shutil.rmtree(os.path.join(logs_path, 'scalarizr/scripting'))
 
 		# Cleanup users homes
 		LOG.debug('Removing users activity')
