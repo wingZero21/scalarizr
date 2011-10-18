@@ -1814,10 +1814,10 @@ def _add_apparmor_rules(directory):
 		if not re.search (directory, app_rules):
 			file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
 			if os.path.isdir(directory):
-				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+'/ r,\n'+'\\2', app_rules)
-				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1'+directory+'/** rwk,\n'+'\\2', app_rules)
+				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1\n'+directory+'/ r,\n'+'\\2\\3', app_rules)
+				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1'+directory+'/** rwk,\n'+'\\2\\3', app_rules)
 			else:
-				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+' r,\n'+'\\2', app_rules)
+				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1\n'+directory+' r,\n'+'\\2\\3', app_rules)
 			file.write(app_rules)
 			file.close()
 			apparmor_initd = ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
