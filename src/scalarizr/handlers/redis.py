@@ -533,6 +533,7 @@ class RedisHandler(ServiceCtlHandler):
 		if snap.state == Snapshot.FAILED:
 			raise HandlerError('%s storage snapshot creation failed. See log for more details' % BEHAVIOUR)
 		
+		self._logger.info('Redis data bundle created\n  snapshot: %s', snap.id)
 		return snap
 
 

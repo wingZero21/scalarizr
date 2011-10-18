@@ -1475,10 +1475,12 @@ class MysqlHandler(ServiceCtlHandler):
 			if not was_running:
 				self._stop_service('Restoring service`s state after making snapshot')
 		
-		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600)
+		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
 		if snap.state == Snapshot.FAILED:
 			raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
 		
+		self._logger.info('MySQL data bundle created\n  snapshot: %s\n  log_file: %s\n  log_pos: %s', 
+						snap.id, log_file, log_pos)
 		return snap, log_file, log_pos
 			
 	def _create_storage_snapshot(self, tags=None):
