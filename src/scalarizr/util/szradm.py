@@ -11,7 +11,6 @@ from scalarizr.util.filetool import read_file
 from scalarizr.util.software import system_info, whereis
 from scalarizr import init_script
 from scalarizr.util import system2
-
 import smtplib
 from email.Utils import formatdate
 from email.MIMEMultipart import MIMEMultipart
@@ -88,7 +87,7 @@ class IndHelpFormatter(HelpFormatter):
             self, indent_increment, max_help_position, width, short_first)
 
 	def format_usage(self, usage):
-		return _("    %s") % usage
+		return "    %s" % usage
 
 	def format_heading(self, heading):
 		return "%*s%s:\n" % (self.current_indent, "", heading)
