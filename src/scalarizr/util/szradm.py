@@ -220,32 +220,13 @@ class ListRolesCommand(Command):
 
 	def iter_result(self, result):
 		'''Return array of result'''
-		if isinstance(result, list):
-			for d in result:
-				if isinstance(d.behaviour, list):
-					behaviour=', '.join(d.behaviour)
-				else:
-					behaviour=d.behaviour
-				(index, internal_ip, external_ip, replication_master)=([],[],[],[])
-				if isinstance(d.hosts, list):
-					for host in d.hosts:
-						index.append(str(host.index))
-						internal_ip.append(str(host.internal_ip))
-						external_ip.append(str(host.external_ip))
-						replication_master.append(str(host.replication_master))
+		for d in result:
+			behaviour=', '.join(d.behaviour)
+			for host in d.hosts:
+				yield [behaviour, d.name, str(host.index), 
+					host.internal_ip, host.external_ip, 
+					str(host.replication_master)]
 
-					yield [behaviour, d.name, ', '.join(index), ', '.join(internal_ip),
-						', '.join(external_ip),	', '.join(replication_master)]
-				
-				else:
-					yield [behaviour, d.name, d.hosts.index, d.hosts.internal_ip,
-						d.hosts.external_ip, d.hosts.replication_master]
-			
-		elif isinstance(result, queryenv.Role):
-			print('3')
-			yield [result.behaviour, result.name, result.hosts.index,
-				result.hosts.internal_ip, result.hosts.external_ip,
-				result.hosts.replication_master]
 
 	"""
 	def run(self):
