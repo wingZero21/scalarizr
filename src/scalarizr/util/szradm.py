@@ -19,7 +19,7 @@ from email.MIMEBase import MIMEBase
 from email.MIMEText import MIMEText
 from email import Encoders
 
-from optparse import OptionParser, _, HelpFormatter, OptionGroup
+from optparse import OptionParser, HelpFormatter
 #import optparse
 
 import ConfigParser
