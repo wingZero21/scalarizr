@@ -25,7 +25,11 @@ class NodeTypes:
 	DISK = 'disk'
 	
 MGMT_AGENT_URL = 'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management_agent-2.6.1.ez'
-
+MGMT_PLUGIN_WITH_DEPS_URLS = (	'http://www.rabbitmq.com/releases/plugins/v2.6.1/mochiweb-1.3-rmq2.6.1-git9a53dbd.ez',
+								'http://www.rabbitmq.com/releases/plugins/v2.6.1/webmachine-1.7.0-rmq2.6.1-hg0c4b60a.ez',
+								'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_mochiweb-2.6.1.ez',
+								'http://www.rabbitmq.com/releases/plugins/v2.6.1/amqp_client-2.6.1.ez',
+								'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management-2.6.1.ez'  )
 	
 
 class RabbitMQInitScript(initdv2.ParametrizedInitScript):
@@ -123,7 +127,7 @@ class RabbitMQ(object):
 		else:
 			self.add_node(hostname)
 				
-	
+	"""
 	def add_nodes(self, hostnames):
 		if isinstance(hostnames, str):
 			hostnames = [hostnames]
@@ -151,7 +155,7 @@ class RabbitMQ(object):
 		self._write_cfg()
 		if was_running:		
 			self.start_app()		
-
+	"""
 
 	def install_plugin(self, link):
 		pass
@@ -172,6 +176,14 @@ class RabbitMQ(object):
 	@property
 	def node_type(self):
 		return self._cnf.rawini.get(CNF_SECTION, 'node_type')
+	
+	
+	def cluster_with(self, hostnames):
+		nodes = ['rabbit@%s' % host for host in hostnames]
+		cmd = ['rabbitmqctl', 'cluster'] + nodes
+		self.stop_app()
+		system2(cmd, logger=self._logger)
+		self.start_app()
 	
 	
 	def _write_cfg(self):

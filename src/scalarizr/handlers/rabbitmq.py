@@ -156,19 +156,19 @@ class RabbitMQHandler(ServiceCtlHanler):
 			Hosts.set('127.0.0.1', 'rabbit-%s' % message.server_index)
 			with open('/etc/hostname', 'w') as f:
 				f.write('rabbit-%s' % message.server_index)
-			system2(('hostname', '-F', '/etc/hostname'))			
+			system2(('hostname', '-F', '/etc/hostname'))
 		else:
 			hostname = 'rabbit-%s' % message.server_index
 			Hosts.set(message.local_ip, hostname)
-			self.rabbitmq.add_nodes([hostname])
+			#self.rabbitmq.add_nodes([hostname])
 			
 			
 	def on_HostDown(self, message):
 		if not BuiltinBehaviours.RABBITMQ in message.behaviour:
 			return
 		Hosts.delete(message.local_ip)
-		hostname = 'rabbit-%s' % message.server_index
-		self.rabbitmq.delete_nodes([hostname])	
+		#hostname = 'rabbit-%s' % message.server_index
+		#self.rabbitmq.delete_nodes([hostname])	
 		
 
 	def on_host_init_response(self, message):
@@ -208,19 +208,20 @@ class RabbitMQHandler(ServiceCtlHanler):
 				hostname = 'rabbit-%s' % host.index
 				Hosts.set(ip, hostname)
 				nodes.append(hostname)
+		
+		do_cluster = True if nodes else False
 
 		if self.rabbitmq.node_type == rabbitmq.NodeTypes.DISK:
 			hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
 			nodes.append(hostname)
-		
-		if nodes:
-			self.rabbitmq.add_nodes(nodes)
 
 		ini = self.cnf.rawini
 		cookie = ini.get(CNF_SECTION, 'cookie')
 		self._logger.debug('Setting erlang cookie: %s' % cookie)
 		self.rabbitmq.set_cookie(cookie)
 		self.service.start()
+		if do_cluster:
+			self.rabbitmq.cluster_with(nodes)
 		
 		# Update message
 		msg_data = {}
