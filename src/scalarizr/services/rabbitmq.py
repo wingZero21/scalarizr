@@ -182,6 +182,7 @@ class RabbitMQ(object):
 		nodes = ['rabbit@%s' % host for host in hostnames]
 		cmd = ['rabbitmqctl', 'cluster'] + nodes
 		self.stop_app()
+		self.reset()
 		system2(cmd, logger=self._logger)
 		self.start_app()
 	
