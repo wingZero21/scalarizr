@@ -210,8 +210,9 @@ class RabbitMQHandler(ServiceCtlHanler):
 				nodes.append(hostname)
 		
 		do_cluster = True if nodes else False
-
-		if self.rabbitmq.node_type == rabbitmq.NodeTypes.DISK:
+		is_disk_node = self.rabbitmq.node_type == rabbitmq.NodeTypes.DISK
+		
+		if is_disk_node:
 			hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
 			nodes.append(hostname)
 
@@ -220,7 +221,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		self._logger.debug('Setting erlang cookie: %s' % cookie)
 		self.rabbitmq.set_cookie(cookie)
 		self.service.start()
-		if do_cluster:
+		if do_cluster and not is_disk_node:
 			self.rabbitmq.cluster_with(nodes)
 		
 		# Update message
