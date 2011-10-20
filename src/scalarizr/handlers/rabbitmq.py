@@ -221,7 +221,9 @@ class RabbitMQHandler(ServiceCtlHanler):
 		self._logger.debug('Setting erlang cookie: %s' % cookie)
 		self.rabbitmq.set_cookie(cookie)
 		self.service.start()
-		if do_cluster and not is_disk_node:
+		
+		init_run = 'volume_id' not in volume_cnf.keys()
+		if do_cluster and (not is_disk_node or init_run):
 			self.rabbitmq.cluster_with(nodes)
 		
 		# Update message
