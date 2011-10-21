@@ -306,7 +306,6 @@ class ListRoleParamsCommand(Command):
 	def run(self):
 		if self.kwds:
 			result = getattr(self.queryenv(), self.method)(**self.kwds)
-			print self.kwds
 		else:
 			result = getattr(self.queryenv(), self.method)()
 		logging.warn('\n before encode: %s\n'%result)
@@ -637,7 +636,7 @@ def main():
 				k = raw[0]
 				v = raw[1]
 				kv[k] = v
-			elif len(raw)==1: 
+			elif len(raw)==1:
 				args.append(pair)
 
 		if options.queryenv:
