@@ -9,13 +9,14 @@ import pwd
 import shutil
 import logging
 
+
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.services import rabbitmq
 from scalarizr import storage
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.util import system2, initdv2
+from scalarizr.util import system2, initdv2, cryptotool, software 
 from scalarizr.storage import StorageError
 
 
@@ -28,6 +29,12 @@ STORAGE_PATH = '/mnt/rabbitstorage'
 STORAGE_VOLUME_CNF = 'rabbitmq.json'
 
 
+MGMT_AGENT_URL = 'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management_agent-2.6.1.ez'
+MGMT_PLUGIN_WITH_DEPS_URLS = (	'http://www.rabbitmq.com/releases/plugins/v2.6.1/mochiweb-1.3-rmq2.6.1-git9a53dbd.ez',
+								'http://www.rabbitmq.com/releases/plugins/v2.6.1/webmachine-1.7.0-rmq2.6.1-hg0c4b60a.ez',
+								'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_mochiweb-2.6.1.ez',
+								'http://www.rabbitmq.com/releases/plugins/v2.6.1/amqp_client-2.6.1.ez',
+								'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management-2.6.1.ez'  )
 
 class RabbitMQMessages:
 	RABBITMQ_RECONFIGURE = 'RabbitMQ_Reconfigure'
@@ -83,6 +90,8 @@ class Hosts:
 class RabbitMQHandler(ServiceCtlHanler):	
 
 	def __init__(self):
+		if not software.whereis('rabbitmqctl'):
+			raise HandlerError("Rabbitmqctl binary was not found. Check your installation.")
 		bus.on("init", self.on_init)
 		self._logger = logging.getLogger(__name__)
 		self.rabbitmq = rabbitmq.rabbitmq
@@ -94,10 +103,15 @@ class RabbitMQHandler(ServiceCtlHanler):
 			if not os.path.exists('/etc/hosts.safe'):
 				shutil.copy2('/etc/hosts', '/etc/hosts.safe')
 			
+			self._logger.info('Performing initial cluster reset')
 			self.service.start()
 			self.rabbitmq.stop_app()
 			self.rabbitmq.reset()
 			self.service.stop()
+			
+			self._logger.info('Installing management agent plugin')
+			self.rabbitmq.install_plugin(MGMT_AGENT_URL)
+		
 			
 		if 'ec2' == self.platform.name:
 			updates = dict(hostname_as_pubdns = '0')
@@ -126,17 +140,48 @@ class RabbitMQHandler(ServiceCtlHanler):
 
 
 	def on_RabbitMQ_SetupControlPanel(self, message):
-		pass
+		try:
+			if not self.cnf.state == ScalarizrState.RUNNING:
+				raise HandlerError('Server is not in RUNNING state yet')
+			try:
+				self.service.stop()
+				for plugin_url in MGMT_PLUGIN_WITH_DEPS_URLS:
+					self.rabbitmq.install_plugin(plugin_url)
+			finally:
+				self.service.start()
+			
+			username = message.username or '_scalr_'
+			password = message.password or cryptotool.pwgen(10)
+			self.rabbitmq.add_user(username, password, True)
+			
+			panel_url = 'http://%s:55672/mgmt/' % self.platform.get_public_ip()
+			msg_body = dict(status='ok', cpanel_url=panel_url, username=username, password=password)
+		except:
+			error = str(sys.exc_info()[1])
+			msg_body = dict(status='error', last_error=error)
+		finally:
+			self.send_message(RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL_RESULT, msg_body)
 
 
 	def on_RabbitMQ_Reconfigure(self, message):
 		try:
 			if not self.cnf.state == ScalarizrState.RUNNING:
-				raise HandlerError()
+				raise HandlerError('Server is not in RUNNING state yet')
 			
 			ini = self.cnf.rawini
-			if message.node_type != ini.get(CNF_SECTION, 'node_type'):	
-				self.rabbitmq.change_type(message.node_type)
+			if message.node_type != ini.get(CNF_SECTION, 'node_type'):
+				self._logger.info('Changing node type to %s' % message.node_type)
+				nodes = self._get_cluster_nodes()
+				if nodes:
+					if message.node_type == rabbitmq.NodeTypes.DISK:
+						hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
+						nodes.append(hostname)
+						
+					self.rabbitmq.cluster_with(nodes, do_reset=False)
+																
+				self._update_config(dict(node_type=message.node_type))
+			else:
+				raise HandlerError('Node type is already %s' % message.node_type)
 				
 			msg_body = dict(status='ok', node_type=message.node_type)
 		except:
@@ -201,13 +246,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		#fstool.mount(STORAGE_PATH, DEFAULT_STORAGE_PATH, ['--bind'])
 		
 		
-		nodes = []
-		for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
-			for host in role.hosts:
-				ip = host.internal_ip
-				hostname = 'rabbit-%s' % host.index
-				Hosts.set(ip, hostname)
-				nodes.append(hostname)
+		nodes = self._get_cluster_nodes()
 		
 		do_cluster = True if nodes else False
 		is_disk_node = self.rabbitmq.node_type == rabbitmq.NodeTypes.DISK
@@ -258,3 +297,14 @@ class RabbitMQHandler(ServiceCtlHanler):
 			if v: 
 				updates[k] = v		
 		self.cnf.update_ini(BEHAVIOUR, {CNF_SECTION: updates})
+		
+		
+	def _get_cluster_nodes(self):
+		nodes = []
+		for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
+			for host in role.hosts:
+				ip = host.internal_ip
+				hostname = 'rabbit-%s' % host.index
+				Hosts.set(ip, hostname)
+				nodes.append(hostname)
+		return nodes

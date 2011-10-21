@@ -6,6 +6,8 @@ Created on Sep 8, 2011
 
 import os
 import pwd
+import urllib
+import shutil
 import logging
 import subprocess
 
@@ -23,13 +25,6 @@ COOKIE_PATH = '/var/lib/rabbitmq/.erlang.cookie'
 class NodeTypes:
 	RAM = 'ram'
 	DISK = 'disk'
-	
-MGMT_AGENT_URL = 'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management_agent-2.6.1.ez'
-MGMT_PLUGIN_WITH_DEPS_URLS = (	'http://www.rabbitmq.com/releases/plugins/v2.6.1/mochiweb-1.3-rmq2.6.1-git9a53dbd.ez',
-								'http://www.rabbitmq.com/releases/plugins/v2.6.1/webmachine-1.7.0-rmq2.6.1-hg0c4b60a.ez',
-								'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_mochiweb-2.6.1.ez',
-								'http://www.rabbitmq.com/releases/plugins/v2.6.1/amqp_client-2.6.1.ez',
-								'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management-2.6.1.ez'  )
 	
 
 class RabbitMQInitScript(initdv2.ParametrizedInitScript):
@@ -100,7 +95,7 @@ class RabbitMQ(object):
 				self.plugin_dir = os.path.join('/usr/lib/rabbitmq/lib/', dir)
 				break
 		else:
-			raise Exception('RabbitMQ plugin directory not found')		
+			raise Exception('RabbitMQ plugin directory not found')
 		
 		if os.path.exists(RABBIT_CFG_PATH):
 			self.rabbitmq_cnf.read(RABBIT_CFG_PATH)
@@ -118,47 +113,14 @@ class RabbitMQ(object):
 		rabbitmq_user = pwd.getpwnam("rabbitmq")
 		os.chmod(COOKIE_PATH, 0600)
 		os.chown(COOKIE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
-	
-	
-	def change_type(self, type):
-		hostname = self._cnf.rawini.get(CNF_SECTION, 'hostname')
-		if type == NodeTypes.RAM:
-			self.delete_node(hostname)
-		else:
-			self.add_node(hostname)
-				
-	"""
-	def add_nodes(self, hostnames):
-		if isinstance(hostnames, str):
-			hostnames = [hostnames]
-		was_running = self.service.running
-		if was_running:
-			self.stop_app()
-		for hostname in hostnames:
-			try:
-				self.rabbitmq_cnf.get("./rabbit/cluster_nodes/'rabbit@%s'" % hostname)
-			except:
-				self.rabbitmq_cnf.add("./rabbit/cluster_nodes/'rabbit@%s'" % hostname)
-		self._write_cfg()
-		if was_running:
-			self.start_app()
 
 
-	def delete_nodes(self, hostnames):
-		if isinstance(hostnames, str):
-			hostnames = [hostnames]
-		was_running = self.service.running
-		if was_running:
-			self.stop_app()
-		for hostname in hostnames:
-			self.rabbitmq_cnf.remove("./rabbit/cluster_nodes/'rabbit@%s'" % hostname)
-		self._write_cfg()
-		if was_running:		
-			self.start_app()		
-	"""
-
-	def install_plugin(self, link):
-		pass
+	def install_plugin(self, url):
+		filename = os.path.basename(url)
+		filepath = os.path.join(self.plugin_dir, filename)
+		tmp_path = urllib.urlretrieve(url)[0]
+		shutil.copy(tmp_path, filepath)
+		os.remove(tmp_path)		
 	
 	
 	def reset(self):
@@ -171,6 +133,12 @@ class RabbitMQ(object):
 	
 	def start_app(self):
 		system2(('rabbitmqctl', 'start_app'), logger=self._logger)
+		
+		
+	def add_user(self, username, password, is_admin=False):
+		system2(('rabbitmqctl', 'add_user', username, password), logger=self._logger)
+		if is_admin:
+			system2(('rabbitmqctl', 'set_user_tags', username, 'administrator'), logger=self._logger)
 	
 	
 	@property
@@ -178,11 +146,12 @@ class RabbitMQ(object):
 		return self._cnf.rawini.get(CNF_SECTION, 'node_type')
 	
 	
-	def cluster_with(self, hostnames):
+	def cluster_with(self, hostnames, do_reset=True):
 		nodes = ['rabbit@%s' % host for host in hostnames]
 		cmd = ['rabbitmqctl', 'cluster'] + nodes
 		self.stop_app()
-		self.reset()
+		if do_reset:
+			self.reset()
 		system2(cmd, logger=self._logger)
 		self.start_app()
 	
