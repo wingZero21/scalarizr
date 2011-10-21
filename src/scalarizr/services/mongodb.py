@@ -91,7 +91,7 @@ class MongoDB(BaseService):
 			self._logger.error('Could not add replica %s to set: %s' % (ip, ret['errmsg']))
 			
 	def register_arbiter(self,ip,port=None):
-		ret = self.cli.add_arbiter(ip, port)
+		ret = self.cli.add_arbiter(ip, port or ARBITER_DEFAULT_PORT)
 		if ret['ok'] == '0':
 			self._logger.error('Could not add arbiter %s to set: %s' % (ip, ret['errmsg']))
 			
