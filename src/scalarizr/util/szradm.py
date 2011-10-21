@@ -4,7 +4,6 @@ Created on Nov 26, 2010
 @author: Dmytro Korsakov
 '''
 from scalarizr.config import ScalarizrCnf
-from scalarizr import queryenv
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.bus import bus
 from scalarizr.util.filetool import read_file
