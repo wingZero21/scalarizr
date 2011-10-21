@@ -298,11 +298,23 @@ class ListRoleParamsCommand(Command):
 		description='Display list role param by name', formatter=IndHelpFormatter())
 	parser.add_option('-n', '--name', dest='name', help='Show params by role name ')
 
-
 	def iter_result(self, result):
 		'''dictionary'''
 		for key in result.keys():
 			yield [key, result[key]]
+
+	def run(self):
+		if self.kwds:
+			result = getattr(self.queryenv(), self.method)(**self.kwds)
+			print self.kwds
+		else:
+			result = getattr(self.queryenv(), self.method)()
+		logging.warn('\n before encode: %s\n'%result)
+		result=encode(result)
+		logging.warn('\n after encode: %s\n'%result)
+
+		yaml=dump(result, Dumper=SzradmDumper, default_flow_style=False)
+		print yaml
 
 
 class ListVirtualhostsCommand(Command):
@@ -422,13 +434,13 @@ class MessageDetailsCommand(Command):
 				try:
 					logging.warn('\nbefor encode: %s\n'% {u'id':msg.id, u'name':msg.name,
 						u'meta':msg.meta, u'body':msg.body})
-					
+
 					mdict=encode({u'id':msg.id, u'name':msg.name,
 						u'meta':msg.meta, u'body':msg.body})
 
 					logging.warn('\nafter encode: %s\n'%mdict)
 
-					yaml=dump(mdict, Dumper=SzradmDumper, default_flow_style=False)#, default_style='|', line_break=None)
+					yaml=dump(mdict, Dumper=SzradmDumper, default_flow_style=False)
 
 					print yaml
 
@@ -439,7 +451,8 @@ class MessageDetailsCommand(Command):
 		except Exception, e:
 			print('id=%s, name=%s, meta=%s, body=%s\n'%(msg.id, msg.name, msg.meta,
 				msg.body))
-			print('trubles in szradm>MessageDetailsCommand>method run. Details: %s'% e)
+			print('sorry, some troubles in szradm>MessageDetailsCommand>method '
+				'run. Details: %s'% e)
 		finally:
 			cur.close()
 
@@ -611,7 +624,7 @@ def main():
 
 		if not options.queryenv and not options.msgsnd and not options.repair \
 			and not options.report and not options.reinit:
-			#print full help
+			#printing full help
 			com=Help(com_dict)
 			com.run()
 			sys.exit()
@@ -630,7 +643,7 @@ def main():
 		if options.queryenv:
 
 			if not args:
-				#print full help
+				#printing full help
 				com=Help(com_dict)
 				com.run()
 				sys.exit()
@@ -666,10 +679,10 @@ def main():
 					msg.fromxml(str)
 			else:
 				msg.body = kv
-	
+
 			if options.name:
 				msg.name = options.name
-	
+
 			producer.send(options.queue, msg)
 
 			print "Done"		

@@ -115,9 +115,9 @@ class QueryEnvService(object):
 		"""
 		parameters = {}
 		if name:
-			parameters["role"] = name
+			parameters["name"] = name
 			self._logger.warn('\n\nrole_name=%s\n'%name)
-		return self._request("list-role-params", parameters, self._read_list_role_params_response)
+		return {'params':self._request("list-role-params", parameters, self._read_list_role_params_response)}
 
 
 	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None, 
@@ -188,7 +188,7 @@ class QueryEnvService(object):
 		response_reader_args = response_reader_args or ()
 		return response_reader(xml, *response_reader_args)
 
-	
+
 	def _read_list_roles_response(self, xml):
 		ret = []
 		
