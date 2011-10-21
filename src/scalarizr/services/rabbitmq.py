@@ -92,7 +92,7 @@ class RabbitMQ(object):
 		
 		for dir in os.listdir('/usr/lib/rabbitmq/lib/'):
 			if dir.startswith('rabbitmq_server'):
-				self.plugin_dir = os.path.join('/usr/lib/rabbitmq/lib/', dir)
+				self.plugin_dir = os.path.join('/usr/lib/rabbitmq/lib/', dir, 'plugins')
 				break
 		else:
 			raise Exception('RabbitMQ plugin directory not found')
