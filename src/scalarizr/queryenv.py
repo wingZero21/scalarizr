@@ -109,22 +109,24 @@ class QueryEnvService(object):
 			
 		return self._request("list-roles", parameters, self._read_list_roles_response)
 	
-	def list_role_params(self, role_name=None):
+	def list_role_params(self, name=None):
 		"""
 		@return dict
 		"""
 		parameters = {}
-		if None != role_name :
-			parameters["role"] = role_name
-		return self._request("list-role-params",parameters, self._read_list_role_params_response)
-	
+		if name:
+			parameters["role"] = name
+			self._logger.warn('\n\nrole_name=%s\n'%name)
+		return self._request("list-role-params", parameters, self._read_list_role_params_response)
+
+
 	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None, 
-					target_ip=None, local_ip=None):
+		target_ip=None, local_ip=None):
 		"""
 		@return Script[]
 		"""
 		parameters = {}
-		if None != event :
+		if None != event:
 			parameters["event"] = event
 		if None != event_id:
 			parameters["event_id"] = event_id
@@ -247,14 +249,10 @@ class QueryEnvService(object):
 	
 	def _read_list_role_params_response(self, xml):
 		ret = {}
-
 		response = xml.documentElement
 		if response:
 			for param_el in response.firstChild.childNodes:
-				if param_el.firstChild:
-					ret[param_el.getAttribute("name")] = param_el.firstChild.nodeValue
-				else:
-					ret[param_el.getAttribute("name")] = ''
+				ret[param_el.getAttribute("name")] = param_el.firstChild.firstChild.nodeValue
 		return ret
 
 	def _read_get_latest_version_response(self, xml):
