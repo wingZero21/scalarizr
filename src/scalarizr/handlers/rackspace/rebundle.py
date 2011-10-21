@@ -10,6 +10,7 @@ from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr.util import wait_until, system2
 
 import time
+import sys
 
 from cloudservers import ImageManager
 
@@ -50,15 +51,24 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			wait_until(hasattr, args=(image, 'progress'), 
 					sleep=5, logger=LOG, timeout=3600,
 					error_text="Image %s has no attribute 'progress'" % image.id)
-			wait_until(lambda: image_manager.get(image.id).progress == 100, 
-					sleep=30, logger=LOG, timeout=3600,
+			def completed():
+				try:
+					return image_manager.get(image.id).progress == 100
+				except:
+					pass
+			wait_until(completed, sleep=30, logger=LOG, timeout=3600,
 					error_text="Image %s wasn't completed in a reasonable time" % image.id)
 			LOG.info('Image %s completed and available for use!', image.id)
 		except:
+			exc_type, exc_value, exc_trace = sys.exc_info()
 			if image:
-				image_manager.delete(image)
-			raise
+				try:
+					image_manager.delete(image)
+				except:
+					pass
+			raise exc_type, exc_value, exc_trace
 		
 		return image.id
+
 
 			
