@@ -18,8 +18,7 @@ from email.MIMEBase import MIMEBase
 from email.MIMEText import MIMEText
 from email import Encoders
 
-from optparse import OptionParser, HelpFormatter
-#import optparse
+from optparse import OptionParser, _, HelpFormatter, OptionGroup
 
 import ConfigParser
 import tarfile
@@ -38,6 +37,10 @@ except:
 	print('Error: prettytable modul not found!')
 
 from yaml import dump
+from yaml.representer import Representer
+from yaml.emitter import Emitter
+from yaml.serializer import Serializer
+from yaml.resolver import Resolver
 
 from scalarizr.messaging import Message
 
@@ -52,13 +55,15 @@ def encode(a, encoding='ascii'):
 		for key, value in a.items():
 			if not isinstance(value, list):
 				ret[key.encode(encoding)] = encode(value, encoding) \
-					if isinstance(value, dict) else value.encode(encoding) \
+					if isinstance(value, dict) else value.encode(encoding)\
 					if isinstance(value, basestring) else value
-			elif isinstance(a, list):
+
+			elif isinstance(value, list):
 				temp_list=[]
 				for item in value:
 					temp_list.append(encode(item, encoding))
 				ret[key.encode(encoding)]=temp_list
+
 		return ret
 	elif isinstance(a, list):
 		temp_list=[]
@@ -68,7 +73,57 @@ def encode(a, encoding='ascii'):
 		return ret
 	elif isinstance(a, str):
 		return a.encode(encoding)
-	else: raise LookupError('Not suspectived input param type in encode method')
+	else:
+		try:
+			return a.encode(encoding)
+		except:
+			raise LookupError('Not suspectived input param type in encode method.'
+				' Type of input param: %s'%type(a))
+
+
+class SzradmRepresenter(Representer):
+
+	def represent_str(self, data):
+		tag = None
+		style = None
+		try:
+			data = unicode(data, 'ascii')
+			tag = u'tag:yaml.org,2002:str'
+			if '\n' in data or len(data)>=128:#long string or multiline
+				style="|"
+		except UnicodeDecodeError:
+			try:
+				data = unicode(data, 'utf-8')
+				tag = u'tag:yaml.org,2002:python/str'
+				if '\n' in data or len(data)>=128: #long string or multiline
+					style="|"
+			except UnicodeDecodeError:
+				data = data.encode('base64')
+				tag = u'tag:yaml.org,2002:binary'
+				style = '|'
+		return self.represent_scalar(tag, data, style=style)
+
+SzradmRepresenter.add_representer(str, SzradmRepresenter.represent_str)
+
+
+class SzradmDumper(Emitter, Serializer, SzradmRepresenter, Resolver):
+
+	def __init__(self, stream,
+			default_style=None, default_flow_style=None,
+			canonical=None, indent=None, width=None,
+			allow_unicode=None, line_break=None,
+			encoding=None, explicit_start=None, explicit_end=None,
+			version=None, tags=None):
+
+		Emitter.__init__(self, stream, canonical=canonical,
+				indent=indent, width=width,
+				allow_unicode=allow_unicode, line_break=line_break)
+		Serializer.__init__(self, encoding=encoding,
+				explicit_start=explicit_start, explicit_end=explicit_end,
+				version=version, tags=tags)
+		SzradmRepresenter.__init__(self, default_style=default_style,
+				default_flow_style=default_flow_style)
+		Resolver.__init__(self)
 
 
 class ScalrError(BaseException):
@@ -87,7 +142,7 @@ class IndHelpFormatter(HelpFormatter):
             self, indent_increment, max_help_position, width, short_first)
 
 	def format_usage(self, usage):
-		return "    %s" % usage
+		return _("    %s") % usage
 
 	def format_heading(self, heading):
 		return "%*s%s:\n" % (self.current_indent, "", heading)
@@ -152,8 +207,9 @@ class Command(object):
 				out.add_row(row)
 
 		if len(self.fields)==5:
-			alignment=(len(self.fields)-1)*'c'
-			alignment+='r'
+			alignment=len(self.fields)*'l'
+			#alignment=(len(self.fields)-1)*'c'
+			#alignment+='r'
 			out.aligns=alignment
 
 		print (out)
@@ -196,14 +252,6 @@ class ListEbsMountpointsCommand(Command):
 			devs=', '.join(devs)
 			yield [d.name, d.dir, d.create_fs, d.is_array, vols, devs]
 
-	'''def run(self):
-		m1=queryenv.Mountpoint(name='Mountpoint 1', dir='dir1', create_fs=False, is_array=True,
-			volumes=[queryenv.Volume(device='dev 1',volume_id='21'),queryenv.Volume(device='dev 2', volume_id='22')])
-
-		m2=queryenv.Mountpoint(name='Mountpoint 2', dir='dir2', create_fs=False, is_array=True,
-			volumes=[queryenv.Volume(device='dev 3',volume_id='23'),queryenv.Volume(device='dev 4', volume_id='24')])
-		self.output([m1,m2])'''
-
 
 class ListRolesCommand(Command):
 	name = "list-roles"
@@ -226,28 +274,6 @@ class ListRolesCommand(Command):
 					host.internal_ip, host.external_ip, 
 					str(host.replication_master)]
 
-
-	"""
-	def run(self):
-		'''
-		res=queryenv.Role(behaviour='mysql', name='mysql-ubuntu1004-trunk',
-					hosts=queryenv.RoleHost(index='1', replication_master='1',
-					internal_ip="10.242.75.80", external_ip='50.17.99.58'))
-		'''
-
-		res=[queryenv.Role(behaviour='mysql', name='mysql-ubuntu1004-trunk',
-					hosts=queryenv.RoleHost(index='1', replication_master='1',
-					internal_ip="10.242.75.80", external_ip='50.17.99.58')),
-				queryenv.Role(behaviour='cf_router', name='cf-router64-ubuntu1004',
-					hosts=queryenv.RoleHost(index='1', replication_master='1')),
-				queryenv.Role(behaviour='www,cf_router,cf_cloud_coller,cfanager,cf_dea,cf_service',
-					name='cf-all64-ubuntu1004',
-					hosts=[queryenv.RoleHost(index='1', replication_master='1',
-					internal_ip="10.242.75.80", 	 external_ip='50.17.99.58'),
-					queryenv.RoleHost(index='1', replication_master='1',
-					internal_ip="10.242.75.80", 	 external_ip='50.17.99.58')]),
-				]
-		self.output(res)"""
 
 class GetHttpsCertificateCommand(Command):
 	name = "get-https-certificate"
@@ -273,8 +299,6 @@ class ListRoleParamsCommand(Command):
 		description='Display list role param by name', formatter=IndHelpFormatter())
 	parser.add_option('-n', '--name', dest='name', help='Show params by role name ')
 
-	'''def run(self):
-		self.output({'key1':'val1','key2':'val2','key3':'val3','key4':'val4'})'''
 
 	def iter_result(self, result):
 		'''dictionary'''
@@ -298,11 +322,6 @@ class ListVirtualhostsCommand(Command):
 		for d in result:
 			yield [d.hostname, d.https, d.type, d.raw]
 
-	'''def run(self):
-		res=[queryenv.VirtualHost(hostname='194.162.85.4', type='virHost', raw='<![CDATA[ ]]>', https=False),
-			queryenv.VirtualHost(hostname='201.1.85.4', type='virHost2', raw='<![CDATA[ ]]>', https=True)]
-		self.output(res)'''
-
 
 class ListScriptsCommand(Command):
 	name = "list-scripts"
@@ -310,7 +329,7 @@ class ListScriptsCommand(Command):
 	fields = ['asynchronous', 'exec-timeout', 'name', 'body']
 	group = "QueryEnv"
 	parser = OptionParser(usage='list-scripts [-e --event]'
-		' [-a --asynchronous] [-n --name] ',
+		' [-a --asynchronous] [-n --name]',
 		description='Display list of scripts', formatter=IndHelpFormatter())
 	parser.add_option('-e', '--event', dest='event', help='Show scripts host on event')
 	parser.add_option('-a', '--asynchronous', dest='asynchronous', 
@@ -321,11 +340,6 @@ class ListScriptsCommand(Command):
 		'''return:	[asynchronous=1|0, exec_timeout=string, name=string,body=string]'''
 		for d in result:
 			yield [d.asynchronous, d.exec_timeout, d.name, d.body]
-
-	'''def run(self):
-		self.output([queryenv.Script(asynchronous=False, exec_timeout=126, name='Script1',
-			body='<script> ... </script>'), queryenv.Script(asynchronous=True,
-			exec_timeout=12006, name='Script2', body='<script> ... </script>')])'''
 
 
 class ListMessagesCommand(Command):
@@ -358,9 +372,8 @@ class ListMessagesCommand(Command):
 			res=[]
 
 			for row in cur:
-				res.append([row[0],row[1], row[2], row[3],
-					'yes' if row[4] #'\033[92myes\033[0m'
-					else 'no'])  #'\033[91mno\033[0m'
+				res.append([row[0],row[1], row[2],'in' if row[3] else 'out',
+					'yes' if row[4]	else 'no'])
 			self.output(res)
 		except Exception,e:
 			LOG.warn('Error connecting to db or not correct request look '
@@ -408,10 +421,18 @@ class MessageDetailsCommand(Command):
 				msg=Message()
 				msg.fromxml(res[0])
 				try:
+					logging.warn('\nbefor encode: %s\n'% {u'id':msg.id, u'name':msg.name,
+						u'meta':msg.meta, u'body':msg.body})
+					
 					mdict=encode({u'id':msg.id, u'name':msg.name,
 						u'meta':msg.meta, u'body':msg.body})
-					yaml=dump(mdict, default_flow_style=False)
+
+					logging.warn('\nafter encode: %s\n'%mdict)
+
+					yaml=dump(mdict, Dumper=SzradmDumper, default_flow_style=False)#, default_style='|', line_break=None)
+
 					print yaml
+
 				except Exception, e:
 					raise LookupError('error in recursive encode. Details: %s'%e)
 			else: print('not found with that name')
@@ -466,7 +487,7 @@ class MarkAsUnhandledCommand(Command):
 			cur.close()
 			res=[]
 			for row in cur:
-				res.append([row[0],row[1], row[2], row[3], 'yes' if row[4] else 'no'])
+				res.append([row[0],row[1], row[2],'in' if row[3] else 'out', 'yes' if row[4] else 'no'])
 			self.output(res)
 		except Exception, e:
 			LOG.warn('Problems find in szradm -> MarkAsUnhandledCommand -> method run.'
@@ -746,92 +767,4 @@ def main():
 if __name__ == '__main__':
 	main()
 
-'''
-class dicts:
-	
-	@staticmethod
-	def merge(a, b):
-		res = {}
-		for key in a.keys():
-			if not key in b:
-				res[key] = a[key]
-				continue
-			
-			if type(a[key]) != type(b[key]):
-				res[key] = b[key]
-			elif dict == type(a[key]):
-				res[key] = dicts.merge(a[key], b[key])
-			elif list == type(a[key]):
-				res[key] = a[key] + b[key]
-			else:
-				res[key] = b[key]
-			del(b[key])
-		
-		res.update(b)
-		return res
-
-	@staticmethod
-	def encode(a, encoding='ascii'):
-		#if not isinstance(a, dict):
-		#	raise ValueError('dict type expected, but %s passed' % type(a))
-		if isinstance(a, dict):
-			ret = {}
-			for key, value in a.items():
-				if not isinstance(value, list):
-					ret[key.encode(encoding)] = dicts.encode(value, encoding) \
-						if isinstance(value, dict) else value.encode(encoding) \
-						if isinstance(value, basestring) else value
-				elif isinstance(a, list):
-					temp_list=[]
-					for item in value:
-						temp_list.append(dicts.encode(item, encoding))
-					ret[key.encode(encoding)]=temp_list
-			return ret
-		elif isinstance(a, list):
-			temp_list=[]
-			for item in value:
-				temp_list.append(dicts.encode(item, encoding))
-				ret[key.encode(encoding)]=temp_list
-			return ret
-		elif isinstance(a, str):
-			return a.encode(encoding)
-		else: raise LookupError('not suspectived input param type in encode method')
-			
-	
-	@staticmethod
-	def keys2ascii(a):
-		if not isinstance(a, dict):
-			raise ValueError('dict type expected, but %s passed' % type(a))
-		ret = {}
-		for key, value in a.items():
-			ret[key.encode('ascii')] = dicts.keys2ascii(value) if isinstance(value, dict) else value
-		return ret
-'''
-
-'''
-* szadm --queryenv list-roles behaviour=app
-* szadm --msgsnd -n BlockDeviceAttached devname=/dev/sdo
-* szadm --msgsnd --lo -n IntServerReboot
-* szadm --msgsnd --lo -f rebundle.xml
-* szadm --repair host-up
-'''
-"""
-<?xml version="1.0" ?>
-<message id="037b1864-4539-4201-ac0b-5b1609686c80" name="Rebundle">
-    <meta>
-        <server_id>ab4d8acc-f001-4666-8f87-0748af52f700</server_id>
-    </meta>
-    <body>
-        <platform_access_data>
-            <account_id>*account_id*</account_id>
-            <key_id>*key_id*</key_id>
-            <key>*key*</key>
-            <cert>*cert*</cert>
-            <pk>*pk*</pk>
-        </platform_access_data>
-        <role_name>euca-base-1</role_name>
-        <bundle_task_id>567</bundle_task_id>
-        <excludes><excludes>
-    </body>
-</message>
-"""
+#look in /test/unit/testcases/szradm_test.py
