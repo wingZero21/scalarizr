@@ -317,3 +317,22 @@ def cassandra_software_info():
 	finally:
 		cassandra.close()
 explore('cassandra', cassandra_software_info)
+
+
+def chef_software_info():	
+	binaries = whereis('chef-client')
+	if not binaries:
+		raise SoftwareError("Can't find executable for chef client")
+
+	version_string = system2((binaries[0], '-v'))[0].strip()
+	if not version_string:
+		raise SoftwareError
+	
+	res = re.search('Chef:\s+([\d\.]+)', version_string)
+	
+	if res:
+		version = res.group(1)
+		return SoftwareInfo('chef', version, version_string)
+	
+	raise SoftwareError
+explore('chef', chef_software_info)
