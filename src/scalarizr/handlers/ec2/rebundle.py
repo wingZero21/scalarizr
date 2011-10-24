@@ -17,7 +17,7 @@ from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
-import logging, time, os, re, shutil, glob
+import time, os, re, shutil, glob
 
 import boto
 from boto.exception import BotoServerError
@@ -178,7 +178,7 @@ class RebundleStratery:
 		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
 		
 		ebs_devs = list(vol.attach_data.device 
-					for vol in ec2_conn.get_all_volumes() 
+					for vol in ec2_conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()}) 
 					if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id() 
 						and instance.root_device_name != vol.attach_data.device)
 		
@@ -486,6 +486,17 @@ class RebundleEbsStrategy(RebundleStratery):
 	
 	_succeed = None
 	
+	eph_storage = {
+		'i386': {
+			'ephemeral0': '/dev/sda2',
+		},
+		'x86_64': {
+			'ephemeral0': '/dev/sdb',
+			'ephemeral1': '/dev/sdc',
+			'ephemeral2': '/dev/sdd'
+		}
+	}
+	
 	def __init__(self, handler, role_name, image_name, excludes, volume='/', 
 				volume_id=None, volume_size=None, devname='/dev/sdr'):
 		RebundleStratery.__init__(self, handler, role_name, image_name, excludes, volume)
@@ -526,15 +537,11 @@ class RebundleEbsStrategy(RebundleStratery):
 		bdmap = BlockDeviceMapping(self._ec2_conn)
 
 		# Add ephemeral devices
-		for virtual_name, dev_name in self._platform.get_block_device_mapping().items():
-			if virtual_name.startswith('ephemeral'):
-				if boto.Version.startswith('1.9'):
-					bdmap[dev_name] = virtual_name
-				else:
-					dev_type = EBSBlockDeviceType(self._ec2_conn)
-					dev_type.ephemeral_name = virtual_name
-					bdmap[dev_name] = dev_type
-					
+		for eph, device in self.eph_storage[disttool.arch()].items():
+			bdt = EBSBlockDeviceType(self._ec2_conn)
+			bdt.ephemeral_name = eph
+			bdmap[device] = bdt
+			
 		# Add root device snapshot
 		root_partition = instance.root_device_name[:-1]
 		if root_partition in self._platform.get_block_device_mapping().values():
