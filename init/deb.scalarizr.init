@@ -34,7 +34,7 @@ test -x $DAEMON || exit 0
 CONFIG_PATH="/etc/scalr"
 DAEMON_OPTS="-c $CONFIG_PATH"     # Additional options given to the server
 
-DIETIME=10               # Time to wait for the server to die, in seconds
+DIETIME=0               # Time to wait for the server to die, in seconds
                         # If this value is set too low you might not
                         # let some servers to die gracefully and
                         # 'restart' will not work
