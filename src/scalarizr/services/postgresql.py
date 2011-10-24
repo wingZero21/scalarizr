@@ -1,4 +1,4 @@
-'''
+u'''
 Created on Jul 7, 2011
 
 @author: shaitanich
@@ -6,6 +6,7 @@ Created on Jul 7, 2011
 
 import os
 import time
+import glob
 import shlex
 import shutil
 import logging
@@ -544,9 +545,9 @@ class PSQL(object):
 					
 	
 class ClusterDir(object):
-	
-	default_centos_path = '/var/lib/pgsql/9.0/data'
-	default_ubuntu_path = '/var/lib/pgsql/9.0/main'
+	base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
+	default_centos_path = os.path.join(base_path, 'data')
+	default_ubuntu_path = os.path.join(base_path, 'main')
 	
 	def __init__(self, path=None, user = "postgres"):
 		self.path = path
@@ -599,8 +600,8 @@ class ConfigDir(object):
 	
 	path = None
 	user = None
-	default_ubuntu_path = '/etc/postgresql/9.0/main'
-	default_centos_path = '/var/lib/pgsql/9.0/data'
+	default_ubuntu_path = glob.glob('/etc/postgresql/9.*/main')[0]
+	default_centos_path = glob.glob('/var/lib/p*sql/9.*/data')[0]
 	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
 	def __init__(self, path=None, user = "postgres"):
@@ -650,6 +651,10 @@ class ConfigDir(object):
 	
 	def set_sysconfig_pgdata(self, pgdata):
 		self._logger.debug("rewriting PGDATA path in sysconfig")
+		dir = os.path.dirname(self.sysconf_path)
+		if not os.path.exists(dir):
+			#ubuntu 11.10 has no sysconfig dir in etc
+			os.makedirs(dir)
 		file = open(self.sysconf_path, 'w')
 		file.write('PGDATA=%s' % pgdata)
 		file.close()
