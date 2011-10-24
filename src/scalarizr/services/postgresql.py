@@ -600,9 +600,18 @@ class ConfigDir(object):
 	
 	path = None
 	user = None
-	default_ubuntu_path = glob.glob('/etc/postgresql/9.*/main')[0]
-	default_centos_path = glob.glob('/var/lib/p*sql/9.*/data')[0]
 	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
+	
+	@classmethod 
+	def default_ubuntu_path(cls):
+		l = glob.glob('/etc/postgresql/9.*/main')
+		return l[0] if l else None
+	
+	@classmethod
+	def default_centos_path(cls):
+		l = glob.glob('/var/lib/p*sql/9.*/data')
+		return l[0] if l else None
+	
 	
 	def __init__(self, path=None, user = "postgres"):
 		self._logger = logging.getLogger(__name__)
