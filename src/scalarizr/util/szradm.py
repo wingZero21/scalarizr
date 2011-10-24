@@ -217,6 +217,7 @@ class Command(object):
 		db = bus.db
 		return db.get().get_connection()
 
+
 class GetlatestVersionCommand(Command):
 	name="get-latest-version"
 	method="get_latest_version"
@@ -308,10 +309,9 @@ class ListRoleParamsCommand(Command):
 			result = getattr(self.queryenv(), self.method)(**self.kwds)
 		else:
 			result = getattr(self.queryenv(), self.method)()
-		logging.warn('\n before encode: %s\n'%result)
+		#LOG.debug('\n before encode: %s\n'%result)
 		result=encode(result)
-		logging.warn('\n after encode: %s\n'%result)
-
+		#LOG.debug('\n after encode: %s\n'%result)
 		yaml=dump(result, Dumper=SzradmDumper, default_flow_style=False)
 		print yaml
 
@@ -431,26 +431,23 @@ class MessageDetailsCommand(Command):
 				msg=Message()
 				msg.fromxml(res[0])
 				try:
-					logging.warn('\nbefor encode: %s\n'% {u'id':msg.id, u'name':msg.name,
-						u'meta':msg.meta, u'body':msg.body})
-
+					#LOG.debug('\nbefor encode: %s\n'% {u'id':msg.id, u'name':msg.name,
+					#	u'meta':msg.meta, u'body':msg.body})
 					mdict=encode({u'id':msg.id, u'name':msg.name,
 						u'meta':msg.meta, u'body':msg.body})
-
-					logging.warn('\nafter encode: %s\n'%mdict)
-
+					#LOG.debug('\nafter encode: %s\n'%mdict)
 					yaml=dump(mdict, Dumper=SzradmDumper, default_flow_style=False)
-
 					print yaml
-
 				except Exception, e:
-					raise LookupError('error in recursive encode. Details: %s'%e)
-			else: print('not found with that name')
+					raise LookupError('Error in recursive encode '
+						'(szradm->MessageDetailsCommand: l442) Details: %s'%e)
+			else:
+				print('not found with that name')
 			#self.output(res)
 		except Exception, e:
-			print('id=%s, name=%s, meta=%s, body=%s\n'%(msg.id, msg.name, msg.meta,
-				msg.body))
-			print('sorry, some troubles in szradm>MessageDetailsCommand>method '
+			#LOG.debug('id=%s, name=%s, meta=%s, body=%s\n'%(msg.id, msg.name, msg.meta,
+			#	msg.body))
+			LOG.warn('Exception in szradm>MessageDetailsCommand>method '
 				'run. Details: %s'% e)
 		finally:
 			cur.close()
@@ -484,27 +481,25 @@ class MarkAsUnhandledCommand(Command):
 		try:
 			conn=self.get_db_conn()
 			cur = conn.cursor()
-			LOG.warn('mark-us-unhandled message with id: %s'%self.kwds['message_id'])
+			LOG.debug('mark-us-unhandled message with id: %s'%self.kwds['message_id'])
 			assert self.kwds['message_id'], 'message_id must be defined'
 			cur.execute("UPDATE p2p_message SET in_is_handled = ? WHERE message_id = '%s'"
 					%self.kwds['message_id'], (0,))
 			conn.commit()
 			cur.close()
-
 			cur = conn.cursor()
 			cur.execute("""SELECT `message_id`,`message_name`,\
 					`out_last_attempt_time`,`is_ingoing`,`in_is_handled` FROM\
 					p2p_message WHERE `message_id`='%s'"""% self.kwds['message_id'])
-			cur.close()
 			res=[]
 			for row in cur:
 				res.append([row[0],row[1], row[2],'in' if row[3] else 'out', 'yes' if row[4] else 'no'])
 			self.output(res)
 		except Exception, e:
-			LOG.warn('Problems find in szradm -> MarkAsUnhandledCommand -> method run.'
-				 'Details: %s'%e)
+			LOG.warn('Exceptioin in szradm -> MarkAsUnhandledCommand -> method run.'
+				 ' Details: %s'%e)
 		finally:
-			#cur.close()
+			cur.close()
 			pass
 
 
