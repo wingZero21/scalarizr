@@ -295,9 +295,8 @@ class ListRoleParamsCommand(Command):
 	method = "list_role_params"
 	fields = ['Keys', 'Values']
 	group = "QueryEnv"
-	parser = OptionParser(usage='list-role-params [-n --name]',
-		description='Display list role param by name', formatter=IndHelpFormatter())
-	parser.add_option('-n', '--name', dest='name', help='Show params by role name ')
+	parser = OptionParser(usage='list-role-params',
+		description='Display list role params', formatter=IndHelpFormatter())
 
 	def iter_result(self, result):
 		'''dictionary'''
