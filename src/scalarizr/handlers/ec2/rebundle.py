@@ -46,6 +46,18 @@ BUNDLER_RELEASE = "672"
 DIGEST_ALGO = "sha1"
 CRYPTO_ALGO = "aes-128-cbc"
 
+EPH_STORAGE_MAPPING = {
+	'i386': {
+		'ephemeral0': '/dev/sda2',
+	},
+	'x86_64': {
+		'ephemeral0': '/dev/sdb',
+		'ephemeral1': '/dev/sdc',
+		'ephemeral2': '/dev/sdd',
+		'ephemeral3': '/dev/sde',
+	}
+} 
+
 
 
 class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
@@ -357,6 +369,10 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			parts = self._digest_parts(part_names, destination)
 			
 			# Create bundle manifest
+			bdm = list((name, device) for name, device in self._platform.block_devs_mapping() 
+					if not name.startswith('ephemeral'))
+			bdm += EPH_STORAGE_MAPPING[disttool.arch()].items()
+			
 			manifest = AmiManifest(
 				name=name,
 				user=user, 
@@ -373,7 +389,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 				kernel_id=self._platform.get_kernel_id(), 
 				ramdisk_id=self._platform.get_ramdisk_id(), 
 				ancestor_ami_ids=self._platform.get_ancestor_ami_ids(), 
-				block_device_mapping=self._platform.block_devs_mapping()
+				block_device_mapping=bdm
 			)
 			manifest.save(manifest_file)
 			
@@ -486,17 +502,6 @@ class RebundleEbsStrategy(RebundleStratery):
 	
 	_succeed = None
 	
-	eph_storage = {
-		'i386': {
-			'ephemeral0': '/dev/sda2',
-		},
-		'x86_64': {
-			'ephemeral0': '/dev/sdb',
-			'ephemeral1': '/dev/sdc',
-			'ephemeral2': '/dev/sdd'
-		}
-	}
-	
 	def __init__(self, handler, role_name, image_name, excludes, volume='/', 
 				volume_id=None, volume_size=None, devname='/dev/sdr'):
 		RebundleStratery.__init__(self, handler, role_name, image_name, excludes, volume)
@@ -537,7 +542,7 @@ class RebundleEbsStrategy(RebundleStratery):
 		bdmap = BlockDeviceMapping(self._ec2_conn)
 
 		# Add ephemeral devices
-		for eph, device in self.eph_storage[disttool.arch()].items():
+		for eph, device in EPH_STORAGE_MAPPING[disttool.arch()].items():
 			bdt = EBSBlockDeviceType(self._ec2_conn)
 			bdt.ephemeral_name = eph
 			bdmap[device] = bdt
