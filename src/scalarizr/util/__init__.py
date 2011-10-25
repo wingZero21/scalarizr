@@ -412,7 +412,7 @@ def get_free_devname():
 		for volume in volumes:
 			try:
 				avail_letters.remove(volume.attach_data.device[-1])
-			except KeyError:
+			except ValueError:
 				pass
 	except:
 		pass
