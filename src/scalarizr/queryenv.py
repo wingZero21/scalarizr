@@ -252,7 +252,11 @@ class QueryEnvService(object):
 		response = xml.documentElement
 		if response:
 			for param_el in response.firstChild.childNodes:
-				ret[param_el.getAttribute("name")] = param_el.firstChild.firstChild.nodeValue
+				if param_el.firstChild.firstChild:
+					value = param_el.firstChild.firstChild.nodeValue
+				else:
+					value = None
+				ret[param_el.getAttribute("name")] = value
 		return ret
 
 	def _read_get_latest_version_response(self, xml):
