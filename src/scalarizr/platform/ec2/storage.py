@@ -102,7 +102,7 @@ class EbsVolumeProvider(VolumeProvider):
 			for volume in volumes:
 				try:
 					avail_letters.remove(volume.attach_data.device[-1])
-				except KeyError:
+				except ValueError:
 					pass
 			
 			if not device or not (device[-1] in avail_letters) or os.path.exists(device):
