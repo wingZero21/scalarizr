@@ -96,7 +96,7 @@ class EbsVolumeProvider(VolumeProvider):
 						if row['state'] == 'attached' or ( \
 							pl.get_instance_type() == 't1.micro' and row['state'] == 'detached'
 						))
-			avail_letters = tuple(set(self.all_letters) - used_letters)			
+			avail_letters = list(set(self.all_letters) - used_letters)			
 			
 			volumes = conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
 			for volume in volumes:
