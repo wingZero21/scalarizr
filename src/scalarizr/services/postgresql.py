@@ -104,6 +104,15 @@ class PostgreSql(BaseService):
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
+	
+	@property
+	def version(self):
+		path = glob.glob('/var/lib/p*sql/9.*')[0]
+		return path.split('postgresql/')[-1]
+
+	@property	
+	def unified_etc_path(self):
+		return '/etc/postgresql/%s/main' % self.version
 					
 	@property
 	def is_replication_master(self):
@@ -207,8 +216,8 @@ class PostgreSql(BaseService):
 		self.cluster_dir.clean()
 		
 		if disttool.is_centos():
-			self.config_dir.move_to(self.config_dir.default_ubuntu_path)
-			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.config_dir.default_ubuntu_path)
+			self.config_dir.move_to(self.unified_etc_path)
+			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
 			self.postgresql_conf = PostgresqlConf.find(self.config_dir)
 		
 
@@ -602,17 +611,6 @@ class ConfigDir(object):
 	user = None
 	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
-	@classmethod 
-	def default_ubuntu_path(cls):
-		l = glob.glob('/etc/postgresql/9.*/main')
-		return l[0] if l else None
-	
-	@classmethod
-	def default_centos_path(cls):
-		l = glob.glob('/var/lib/p*sql/9.*/data')
-		return l[0] if l else None
-	
-	
 	def __init__(self, path=None, user = "postgres"):
 		self._logger = logging.getLogger(__name__)
 		self.path = path or self.find_path()
@@ -622,7 +620,8 @@ class ConfigDir(object):
 		path = self.get_sysconfig_pgdata()
 		if path:
 			return path
-		return self.default_ubuntu_path if disttool.is_ubuntu() else self.default_centos_path
+		l = glob.glob('/etc/postgresql/9.*/main') if disttool.is_ubuntu() else glob.glob('/var/lib/p*sql/9.*/data')
+		return l[0] if l else None
 	
 	def move_to(self, dst):
 		if not os.path.exists(dst):
