@@ -14,7 +14,7 @@ import os
 from scalarizr.util import system2
 from scalarizr.util.software import whereis
 
-from scalarizr.handlers import HandlerError #Handler, ServiceCtlHanler
+from scalarizr.handlers import HandlerError
 
 import sqlite3
 
@@ -54,20 +54,20 @@ class ChefHandler(Handler):
 			#start chef-client:
 			path2chef = whereis("chef-client")
 			if not path2chef:
-				raise HandlerError('Error: Not found chef-client')
+				raise HandlerError('Error: chef-client not found')
 				#TODO: HandlerError ?
 
 			(out, err, returncode)=system2(path2chef, raise_exc = False)
-			
+
 			LOG.debug('\nerr: \n%s\nout: \n%s\nreturncode: \n%s' %
 				(err, out, returncode))
-			
+
 			if returncode != 0:
 				raise HandlerError("Error in chef-client, on HostInitResponse can't" 
 					" start or connect to chef.")
-		
+
 		except Exception,e:
-			
+
 			if os.path.exists('/var/chef/cache/chef-stacktrace.out'):
 					with open('/var/chef/cache/chef-stacktrace.out','r') as f:
 						LOG.debug('\nChef-stacktrace :%s' % f.read())
@@ -111,9 +111,6 @@ class ChefHandler(Handler):
 
 		except Exception, e:
 			LOG.warn("\n Can't create configures files. Details: %s\n"%e)
-
-	def on_host_up(self, msg):
-		pass
 
 '''
 1 select * from db where =='HostInitResp'
