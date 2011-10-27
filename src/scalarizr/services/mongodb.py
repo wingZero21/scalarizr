@@ -357,12 +357,11 @@ class ArbiterConf(MongoDBConfig):
 	
 class Mongod(object):
 	
-	def __init__(self, configpath=None, keyfile=None, dbpath=None, use_local_data=True):
+	def __init__(self, configpath=None, keyfile=None, dbpath=None):
 		self._logger = logging.getLogger(__name__)
 		self.configpath = configpath
 		self.dbpath = dbpath
 		self.keyfile = keyfile
-		self.use_local_data = use_local_data
 		self.cli = MongoCLI()
 		
 	@classmethod
@@ -380,8 +379,6 @@ class Mongod(object):
 			s.append('--dbpath=%s' % self.dbpath)
 		if self.keyfile:
 			s.append('--keyFile=%s' % self.keyfile)
-		if self.use_local_data:
-			s += ['--fastsync', '--autoresync']
 		return s
 	
 	def start(self):
