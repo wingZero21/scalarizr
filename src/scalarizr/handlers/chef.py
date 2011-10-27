@@ -67,14 +67,14 @@ class ChefHandler(Handler):
 					" start or connect to chef.")
 
 		except Exception,e:
-
+			'''
 			if os.path.exists('/var/chef/cache/chef-stacktrace.out'):
 					with open('/var/chef/cache/chef-stacktrace.out','r') as f:
-						LOG.debug('\nChef-stacktrace :%s' % f.read())
+						LOG.debug('\nChef-stacktrace :%s' % f.read())'''
 
 			if os.path.exists('/var/chef/cache/failed-run-data.json'):
 				with open('/var/chef/cache/failed-run-data.json','r') as f:
-					LOG.debug('Error %s' % f.read())
+					LOG.debug('Error run-list: %s' % f.read())
 
 			if os.path.exists('/etc/chef/client.pem'):
 				os.remove('/etc/chef/client.pem')
