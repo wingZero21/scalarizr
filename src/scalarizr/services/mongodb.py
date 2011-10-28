@@ -9,14 +9,16 @@ import shutil
 import logging
 
 from scalarizr.services import BaseConfig, BaseService
-from scalarizr.util import system2, PopenError, wait_until
 from scalarizr.libs.metaconf import Configuration
-from scalarizr.util import disttool, cryptotool
+from scalarizr.util import disttool, cryptotool, system2, \
+				PopenError, wait_until, initdv2, software
 from scalarizr.util.filetool import rchown
 
 
+
+
 MONGOD = '/usr/bin/mongod'
-MONGO_CLI = '/usr/bin/mongo'
+MONGO_CLI = software.whereis('mongo')[0]
 MONGO_DUMP = '/usr/bin/mongodump'
 
 REPLICA_DEFAULT_PORT = 27017
@@ -25,7 +27,7 @@ SHARD_DEFAULT_PORT = 27018
 CONFIG_SERVER_DEFAULT_PORT = 27019
 
 LOG_PATH_DEFAULT = '/var/log/mongodb/mongodb.log'
-DB_PATH_DEFAULT = '/var/lib/mongodb/'
+DB_PATH_DEFAULT = '/var/lib/mongodb'
 STORAGE_DATA_DIR = 'data'
 ARBITER_DATA_DIR = 'arbiter'
 ARBITER_LOG_PATH = '/var/log/mongodb/mongodb.arbiter.log'
@@ -35,8 +37,10 @@ LOCK_FILE = 'mongod.lock'
 
 
 class MongoDB(BaseService):
+	_arbiter = None
 	_instance = None
 	keyfile = None
+
 	
 	def __init__(self, keyfile):
 		self.keyfile = keyfile
@@ -47,7 +51,7 @@ class MongoDB(BaseService):
 		if not cls._instance:
 			cls._instance = super(MongoDB, cls).__new__(
 								cls, *args, **kwargs)
-		return cls._instance		
+		return cls._instance
 	
 	@property
 	def is_replication_master(self):
@@ -58,14 +62,13 @@ class MongoDB(BaseService):
 		self.config.rs_name = rs_name
 		self.config.db_path = self.working_dir.create(os.path.join(mpoint,STORAGE_DATA_DIR))
 		self.config.rest = enable_rest
-		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logpath = LOG_PATH_DEFAULT
 		self.config.logappend = True
 		self.config.nojournal = False	
 		self.config.nohttpinterface = False
 		self.working_dir.unlock()
 			
-	def prepare_arbiter(self, rs_name, mpoint):
+	def _prepare_arbiter(self, rs_name, mpoint):
 		arb_dir = os.path.join(mpoint, ARBITER_DATA_DIR)
 		if not os.path.exists(arb_dir):
 			os.makedirs(arb_dir)
@@ -73,7 +76,6 @@ class MongoDB(BaseService):
 			
 		self.arbiter_conf.db_path = arb_dir
 		self.arbiter_conf.rs_name = rs_name
-		self.arbiter_conf.port = ARBITER_DEFAULT_PORT 
 		self.arbiter_conf.logpath = ARBITER_LOG_PATH
 		
 	def initiate_rs(self):
@@ -84,6 +86,14 @@ class MongoDB(BaseService):
 		if ret['ok'] == '0':
 			self._logger.error('Could not initialize replica set: %s' % ret['errmsg'])
 		return ret['me'].split(':')
+	
+	def start_arbiter(self):
+		mpoint = os.path.dirname(self.config.db_path)
+		self._prepare_arbiter(self.config.rs_name, mpoint)
+		self.arbiter_daemon.start()
+	
+	def stop_arbiter(self):
+		self.arbiter_daemon.stop(reason='Stopping arbiter')	
 	
 	def register_slave(self, ip, port=None):
 		ret = self.cli.add_replica(ip, port)
@@ -136,6 +146,11 @@ class MongoDB(BaseService):
 		return ret['arbiters'] if 'arbiters' in ret else []
 	
 	@property
+	def primary_host(self):
+		ret = self.cli.is_master()
+		return ret['primary'] if 'primary' in ret else None
+	
+	@property
 	def db_path(self):
 		return self.config.dbpath
 
@@ -145,12 +160,6 @@ class MongoDB(BaseService):
 	def _set_mongod(self, obj):
 		self._set('mongod', obj)
 
-	def _get_arbiter(self):
-		return self._get('arbiter', Mongod.find, self.arbiter_conf, self.keyfile)
-	
-	def _set_arbiter(self, obj):
-		self._set('arbiter', obj)
-		
 	def _get_cli(self):
 		return self._get('cli', MongoCLI.find)
 	
@@ -170,15 +179,20 @@ class MongoDB(BaseService):
 		self._set('redis_conf', obj)
 
 	def _get_arbiter_conf(self):
-		return self._get('config', ArbiterConf.find)
+		return self._get('arbiter_config', ArbiterConf.find)
 	
 	def _set_arbiter_conf(self, obj):
-		self._set('config', obj)
+		self._set('arbiter_config', obj)
+		
+	def arbiter_daemon(self):
+		if not self._arbiter:
+			self._arbiter = Mongod(ARBITER_CONF_PATH_DEFAULT, self.keyfile, ARBITER_DATA_DIR, ARBITER_DEFAULT_PORT)
+		return self._arbiter
+	
 									
 	cli = property(_get_cli, _set_cli)
 	mongod = property(_get_mongod, _set_mongod)
 	working_dir = property(_get_working_directory, _set_working_directory)	
-	arbiter = property(_get_arbiter, _set_arbiter)
 	config = property(_get_config, _set_config)
 	arbiter_conf = property(_get_arbiter_conf, _set_arbiter_conf)
 	
@@ -339,7 +353,7 @@ class MongoDBConfig(BaseConfig):
 		return self.get_bool_option('rest')
 	
 	def _set_rest(self, on=False):
-		self.set_bool_option('rest', on)            
+		self.set_bool_option('rest', on)  
 
 	rest = property(_get_rest, _set_rest)
 	nohttpinterface = property(_get_nohttpinterface, _set_nohttpinterface)
@@ -355,14 +369,15 @@ class ArbiterConf(MongoDBConfig):
 	config_name = 'mongodb.arbiter.conf'
 	
 	
-class Mongod(object):
-	
-	def __init__(self, configpath=None, keyfile=None, dbpath=None):
+class Mongod(object):	
+	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=REPLICA_DEFAULT_PORT):
 		self._logger = logging.getLogger(__name__)
 		self.configpath = configpath
 		self.dbpath = dbpath
 		self.keyfile = keyfile
-		self.cli = MongoCLI()
+		self.cli = MongoCLI(port=port)
+		self.port = port
+		self.sock = initdv2.SockParam(self.port)
 		
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None):
@@ -379,6 +394,8 @@ class Mongod(object):
 			s.append('--dbpath=%s' % self.dbpath)
 		if self.keyfile:
 			s.append('--keyFile=%s' % self.keyfile)
+		if self.port:
+			s.append('--port=%s' % self.port)
 		return s
 	
 	def start(self):
@@ -391,32 +408,35 @@ class Mongod(object):
 	def stop(self, reason=None):
 		if self.is_running:
 			self.cli.shutdown_server()
+			wait_until(lambda: not self.is_running, timeout=65)
 	
 	def restart(self, reason=None):
 		if not self.is_running:
 			self.stop(reason)
-			self.start()
-	
+			self.start()	
 	
 	@property
 	def is_running(self):
-		return self.cli.test_connection() 
-	
+		try:
+			initdv2.wait_sock(self.sock)
+			return True
+		except:
+			return False
+
 
 class MongoCLI(object):
 	
-	def __init__(self, cli_path):
-		self.cli_path = cli_path
+	def __init__(self, port=REPLICA_DEFAULT_PORT):
+		self.port = str(port)
 		self._logger = logging.getLogger(__name__)
 
 	@classmethod
-	def find(cls, cli_path=None):
-		cli_path = cli_path or MONGO_CLI
-		return cls(cli_path)	
+	def find(cls, port=REPLICA_DEFAULT_PORT):
+		return cls(port)	
 		
 	def _execute(self, expression):
 		try:
-			a = system2([self.cli_path,'--quiet'],stdin='\n%s;' % expression)[0]
+			a = system2([MONGO_CLI,'--quiet', '--port', self.port],stdin='\n%s;' % expression)[0]
 		except PopenError, e:
 			self._logger.error('Unable to execute %s with %s: %s' % (MONGO_CLI, expression, e))
 			raise
@@ -473,23 +493,30 @@ class MongoCLI(object):
 		exp = 'printjson(rs.config())' 
 		return self._execute(exp)
 	
+	def rs_reconfig(self, config, force=False):
+		if type(config) == dict:
+			config = json.dumps(config)
+		exp = 'printjson(rs.reconfig(%s %s))' % (config, ', {force : true}' if force else '')  
+		return self._execute(exp)
+	
 	def add_arbiter(self,ip, port=None):
 		port = port or ARBITER_DEFAULT_PORT
 		exp = 'printjson(rs.addArb("%s:%s"))' % (ip, port)
 		return self._execute(exp)
-	
+
 	def remove_slave(self, ip, port=None):
 		port = port or REPLICA_DEFAULT_PORT
 		exp = 'printjson(rs.remove("%s:%s"))' % (ip, port)
 		return self._execute(exp)
-	
+
 	def shutdown_server(self):
-		exp = 'printjson(db.shutdownServer())' 
+		exp = 'printjson(db.adminCommand({shutdown : 1}))' 
 		return self._execute(exp)
 	
 	def sync(self):
 		exp = 'printjson(db.runCommand({fsync:1}))' 
 		return self._execute(exp)
+	
 
 
 '''

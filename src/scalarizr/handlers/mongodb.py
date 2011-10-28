@@ -101,12 +101,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return BEHAVIOUR in behaviour and (
-				message.name == MongoDBMessages.CREATE_DATA_BUNDLE
-				or  message.name == MongoDBMessages.CREATE_BACKUP
-				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
-				or  message.name == Messages.HOST_INIT
-				or  message.name == Messages.BEFORE_HOST_TERMINATE)	
+		return BEHAVIOUR in behaviour and message.name in (
+				MongoDBMessages.CREATE_DATA_BUNDLE,
+				MongoDBMessages.CREATE_BACKUP,
+				Messages.UPDATE_SERVICE_CONFIGURATION,
+				Messages.HOST_INIT,
+				Messages.BEFORE_HOST_TERMINATE,
+				Messages.HOST_DOWN)	
 	
 	
 	def __init__(self):
@@ -191,6 +192,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
 		self._update_config(mongodb_data)
 		
+
+	def on_before_host_up(self, message):
+		"""
+		Check that replication is up in both master and slave cases
+		@type message: scalarizr.messaging.Message		
+		@param message: HostUp message
+		"""
 		is_master = len(self._queryenv.list_roles(self._role_name)[0].hosts) > 0
 		repl = 'master' if is_master else 'slave'
 		
@@ -199,16 +207,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		else:
 			self._init_slave(message)
 			
-		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)  
-	
-	def on_before_host_up(self, message):
-		"""
-		Check that replication is up in both master and slave cases
-		@type message: scalarizr.messaging.Message		
-		@param message: HostUp message
-		"""
-	
-		self.mongodb.check_replication_status()	  
+		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+		
+		#self.mongodb.check_replication_status()	  
 			
 
 	def on_HostInit(self, message):
@@ -217,16 +218,21 @@ class MongoDBHandler(ServiceCtlHandler):
 				self.mongodb.register_slave(message.local_ip)
 
 	def on_HostUp(self, message):
-		if message.local_ip != self._platform.get_private_ip():
+		private_ip = self._platform.get_private_ip()
+		if message.local_ip != private_ip:
 			if self.mongodb.is_replication_master:			   
 				r = len(self.mongodb.replicas) 
 				a = len(self.mongodb.arbiters)
 				if r % 2 == 0 and not a:
-					self.mongodb.register_arbiter('127.0.0.1')
+					self.mongodb.start_arbiter()
+					self.mongodb.register_arbiter(private_ip)
 				elif r % 2 != 0 and a:
 					for arbiter in self.mongodb.arbiters:
 						self.mongodb.unregister_slave(arbiter)
-					
+					self.mongodb.stop_arbiter()
+			else:
+				if len(self.mongodb.replicas) % 2 != 0:
+					self.mongodb.stop_arbiter()					
 					
 	def on_before_reboot_start(self, *args, **kwargs):
 		self.mongodb.mongod.stop('Rebooting instance')
@@ -461,5 +467,20 @@ class MongoDBHandler(ServiceCtlHandler):
 			ret['snapshot_config'] = snap.config()
 		return ret
 
-	
-		
+
+	def on_HostDown(self, message):
+		if self.mongodb.is_replication_master():
+			if message.local_ip in self.mongodb.replicas():
+				self.mongodb.unregister_slave(message.local_ip)
+				if len(self.mongodb.replicas) % 2 == 0:
+					self.mongodb.start_arbiter()
+				else:
+					self.mongodb.stop_arbiter()
+						
+		elif len(self.mongodb.replicas()) == 2 and not self.mongodb.primary_host:
+			# Become primary and only member of rs 
+			local_ip = self._platform.get_private_ip()
+			rs_cfg = self.mongodb.cli.get_rs_config()
+			rs_cfg['members'] = [m for m in rs_cfg['members'] if m['host'] == local_ip]
+			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
+			wait_until(lambda: self.mongodb.is_replication_master, timeout=120)
