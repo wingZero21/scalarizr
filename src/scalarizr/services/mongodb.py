@@ -21,9 +21,9 @@ MONGOD = '/usr/bin/mongod'
 MONGO_CLI = software.whereis('mongo')[0]
 MONGO_DUMP = '/usr/bin/mongodump'
 
-REPLICA_DEFAULT_PORT = 27017
+ROUTER_DEFAULT_PORT = 27017
 ARBITER_DEFAULT_PORT = 27020
-SHARD_DEFAULT_PORT = 27018
+REPLICA_DEFAULT_PORT = 27018
 CONFIG_SERVER_DEFAULT_PORT = 27019
 
 LOG_PATH_DEFAULT = '/var/log/mongodb/mongodb.log'
@@ -36,11 +36,11 @@ ARBITER_CONF_PATH_DEFAULT = '/etc/mongodb.arbiter.conf'
 LOCK_FILE = 'mongod.lock'
 
 
+
 class MongoDB(BaseService):
 	_arbiter = None
 	_instance = None
 	keyfile = None
-
 	
 	def __init__(self, keyfile):
 		self.keyfile = keyfile
@@ -62,10 +62,12 @@ class MongoDB(BaseService):
 		self.config.rs_name = rs_name
 		self.config.db_path = self.working_dir.create(os.path.join(mpoint,STORAGE_DATA_DIR))
 		self.config.rest = enable_rest
+		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logpath = LOG_PATH_DEFAULT
 		self.config.logappend = True
 		self.config.nojournal = False	
 		self.config.nohttpinterface = False
+		self.config.shardsvr = True
 		self.working_dir.unlock()
 			
 	def _prepare_arbiter(self, rs_name, mpoint):
@@ -76,6 +78,8 @@ class MongoDB(BaseService):
 			
 		self.arbiter_conf.db_path = arb_dir
 		self.arbiter_conf.rs_name = rs_name
+		self.arbiter_conf.shardsvr = True
+		self.arbiter_conf.port = ARBITER_DEFAULT_PORT
 		self.arbiter_conf.logpath = ARBITER_LOG_PATH
 		
 	def initiate_rs(self):
@@ -173,10 +177,10 @@ class MongoDB(BaseService):
 		self._set('working_directory', obj)
 		
 	def _get_config(self):
-		return self._get('config', MongoDBConfig.find)
+		return self._get('mongodb_conf', MongoDBConfig.find)
 	
 	def _set_config(self, obj):
-		self._set('redis_conf', obj)
+		self._set('mongodb_conf', obj)
 
 	def _get_arbiter_conf(self):
 		return self._get('arbiter_config', ArbiterConf.find)
@@ -188,14 +192,14 @@ class MongoDB(BaseService):
 		if not self._arbiter:
 			self._arbiter = Mongod(ARBITER_CONF_PATH_DEFAULT, self.keyfile, ARBITER_DATA_DIR, ARBITER_DEFAULT_PORT)
 		return self._arbiter
-	
 									
 	cli = property(_get_cli, _set_cli)
 	mongod = property(_get_mongod, _set_mongod)
 	working_dir = property(_get_working_directory, _set_working_directory)	
 	config = property(_get_config, _set_config)
 	arbiter_conf = property(_get_arbiter_conf, _set_arbiter_conf)
-	
+
+
 	
 class MongoDump(object):
 	
@@ -205,7 +209,8 @@ class MongoDump(object):
 	def create(self, dbname, dst):
 		self._logger.debug('Dumping database %s to %s' % (dbname, dst))
 		return system2([MONGO_DUMP, '-d', dbname, '-o', dst])
-	
+
+
 		
 class KeyFile(object):
 	
@@ -229,7 +234,9 @@ class KeyFile(object):
 		file = open(self.path,'w')
 		file.write(raw)
 		file.close()
-	
+
+
+
 class WorkingDirectory(object):
 	
 	path = None
@@ -273,6 +280,7 @@ class WorkingDirectory(object):
 	@property
 	def lock_path(self):
 		return os.path.join(self.path, LOCK_FILE)
+
 
 
 class MongoDBConfig(BaseConfig):
@@ -353,8 +361,16 @@ class MongoDBConfig(BaseConfig):
 		return self.get_bool_option('rest')
 	
 	def _set_rest(self, on=False):
-		self.set_bool_option('rest', on)  
+		self.set_bool_option('rest', on)
+		
+	def _set_shardsvr(self, value):
+		value = bool(value)
+		self.set_bool_option('shardsvr', value)
 
+	def _get_shardsvr(self):
+		return self.get_bool_option('shardsvr')
+	
+	shardsvr = property(_get_shardsvr, _set_shardsvr)
 	rest = property(_get_rest, _set_rest)
 	nohttpinterface = property(_get_nohttpinterface, _set_nohttpinterface)
 	nojournal = property(_get_nojournal, _set_nojournal)
@@ -364,13 +380,15 @@ class MongoDBConfig(BaseConfig):
 	rs_name = property(_get_rs_name, _set_rs_name)
 	logpath = property(_get_logpath, _set_logpath)
 	
+
 	
 class ArbiterConf(MongoDBConfig):
 	config_name = 'mongodb.arbiter.conf'
-	
+
+
 	
 class Mongod(object):	
-	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=REPLICA_DEFAULT_PORT):
+	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None):
 		self._logger = logging.getLogger(__name__)
 		self.configpath = configpath
 		self.dbpath = dbpath
@@ -383,7 +401,7 @@ class Mongod(object):
 	def find(cls, mongo_conf=None, keyfile=None):
 		config_path = mongo_conf.path or CONFIG_PATH_DEFAULT
 		key_path = keyfile.path if keyfile else None 
-		return cls(config_path, key_path)	
+		return cls(config_path, key_path)
 
 	@property
 	def args(self):
@@ -422,6 +440,7 @@ class Mongod(object):
 			return True
 		except:
 			return False
+
 
 
 class MongoCLI(object):
@@ -516,7 +535,8 @@ class MongoCLI(object):
 	def sync(self):
 		exp = 'printjson(db.runCommand({fsync:1}))' 
 		return self._execute(exp)
-	
+
+
 
 
 '''

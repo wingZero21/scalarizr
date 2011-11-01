@@ -30,6 +30,8 @@ STORAGE_SNAPSHOT_CNF		= 'mongodb-snap.json'
 OPT_VOLUME_CNF			  = 'volume_config'
 OPT_SNAPSHOT_CNF			= 'snapshot_config'
 OPT_KEYFILE			= "mongodb_keyfile"
+OPT_SHARD_INDEX		= "shard_index"
+OPT_WEB_CONSOLE		= "web_console"
 
 BACKUP_CHUNK_SIZE		 = 200*1024*1024
 
@@ -188,7 +190,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				if mongodb_data[key]:
 					Storage.backup_config(mongodb_data[key], file)
 				del mongodb_data[key]
-				
+
 		self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
 		self._update_config(mongodb_data)
 		
@@ -199,13 +201,20 @@ class MongoDBHandler(ServiceCtlHandler):
 		@type message: scalarizr.messaging.Message		
 		@param message: HostUp message
 		"""
-		is_master = len(self._queryenv.list_roles(self._role_name)[0].hosts) > 0
-		repl = 'master' if is_master else 'slave'
+		# TODO: Update this with new query env method
+		# Fill hosts file using queryenv data
+		is_master = len(self._queryenv.list_roles(self._role_name)[0].hosts) == 0
+		repl = 'master' if is_master else 'slave'	
+		
+		szr_cnf = bus.cnf
+		shard_index = szr_cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX)
+		web_console = bool(szr_cnf.rawini.get(CNF_SECTION, OPT_WEB_CONSOLE))
+		rs_name = 'rs-%s' % shard_index
 		
 		if is_master:
-			self._init_master(message)									  
+			self._init_master(message, rs_name, web_console)									  
 		else:
-			self._init_slave(message)
+			self._init_slave(message, rs_name, web_console)
 			
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 		
@@ -216,6 +225,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		if message.local_ip != self._platform.get_private_ip():
 			if self.mongodb.is_replication_master:
 				self.mongodb.register_slave(message.local_ip)
+			
 
 	def on_HostUp(self, message):
 		private_ip = self._platform.get_private_ip()
@@ -232,23 +242,43 @@ class MongoDBHandler(ServiceCtlHandler):
 					self.mongodb.stop_arbiter()
 			else:
 				if len(self.mongodb.replicas) % 2 != 0:
-					self.mongodb.stop_arbiter()					
+					self.mongodb.stop_arbiter()
+					
+					
+	def on_HostDown(self, message):
+		if self.mongodb.is_replication_master():
+			if message.local_ip in self.mongodb.replicas():
+				self.mongodb.unregister_slave(message.local_ip)
+				if len(self.mongodb.replicas) % 2 == 0:
+					self.mongodb.start_arbiter()
+				else:
+					self.mongodb.stop_arbiter()
+						
+		elif len(self.mongodb.replicas()) == 2 and not self.mongodb.primary_host:
+			# Become primary and only member of rs 
+			local_ip = self._platform.get_private_ip()
+			rs_cfg = self.mongodb.cli.get_rs_config()
+			rs_cfg['members'] = [m for m in rs_cfg['members'] if m['host'] == local_ip]
+			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
+			wait_until(lambda: self.mongodb.is_replication_master, timeout=120)	
+					
 					
 	def on_before_reboot_start(self, *args, **kwargs):
 		self.mongodb.mongod.stop('Rebooting instance')
 		pass
+	
 
 	def on_before_reboot_finish(self, *args, **kwargs):
 		#self.mongodb.working_dir.unlock()
 		pass
-
+	
 
 	def on_BeforeHostTerminate(self, message):
 		if message.local_ip == self._platform.get_private_ip():
 			self.mongodb.mongod.stop('Server will be terminated')
 			self._logger.info('Detaching %s storage' % BEHAVIOUR)
 			self.storage_vol.detach()
-	
+			
 	
 	def on_MongoDB_CreateDataBundle(self, message):
 		
@@ -275,8 +305,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				status		='error',
 				last_error	= str(e)
 			))
-	
 			
+	
 	def on_MongoDB_CreateBackup(self, message):
 		tmpdir = backup_path = None
 		try:
@@ -337,14 +367,14 @@ class MongoDBHandler(ServiceCtlHandler):
 			if tmpdir:
 				shutil.rmtree(tmpdir, ignore_errors=True)
 			if backup_path and os.path.exists(backup_path):
-				os.remove(backup_path)				
-			
-							
-	def _init_master(self, message):
+				os.remove(backup_path)
+				
+				
+	def _init_master(self, message, rs_name, web_console):
 		"""
 		Initialize mongodb master
 		@type message: scalarizr.messaging.Message 
-		@param message: HostInitResponse message
+		@param message: HostUp message
 		"""
 		
 		self._logger.info("Initializing %s master" % BEHAVIOUR)
@@ -357,9 +387,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		except IOError:
 			pass
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
-		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)	
-		
-		self.mongodb.prepare(message.mongodb.replica_set_name, self._storage_path, message.mongodb.http_interface)
+		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+				
+		self.mongodb.prepare(rs_name, self._storage_path, web_console)
 		self.mongodb.mongod.start()  
 		self.mongodb.cli.initiate_rs()
 		
@@ -378,16 +408,10 @@ class MongoDBHandler(ServiceCtlHandler):
 				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
 			except KeyError:
 				pass 
-			self._update_config(msg_data)		
-
-	def _get_keyfile(self):
-		password = None 
-		if self._cnf.rawini.has_option(CNF_SECTION, OPT_KEYFILE):
-			password = self._cnf.rawini.get(CNF_SECTION, OPT_KEYFILE)	
-		return password		
-	
+			self._update_config(msg_data)
+			
 				
-	def _init_slave(self, message):
+	def _init_slave(self, message, rs_name, web_console):
 		"""
 		Initialize mongodb slave
 		@type message: scalarizr.messaging.Message 
@@ -400,12 +424,20 @@ class MongoDBHandler(ServiceCtlHandler):
 		volume = Storage.create(Storage.blank_config(volume_cfg))	
 		self.storage_vol =	 self._plug_storage(self._storage_path, volume)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		# TODO: update hosts from queryenv
 		
-		self.mongodb.prepare(message.mongodb.replica_set_name, self._storage_path, message.mongodb.http_interface)
-		self.mongodb.mongod.start()  
+		self.mongodb.prepare(rs_name, self._storage_path, web_console)
+		self.mongodb.mongod.start()
 		
 		# Update HostInitResponse message
 		message.mongodb = self._compat_storage_data(self.storage_vol)
+
+
+	def _get_keyfile(self):
+		password = None 
+		if self._cnf.rawini.has_option(CNF_SECTION, OPT_KEYFILE):
+			password = self._cnf.rawini.get(CNF_SECTION, OPT_KEYFILE)	
+		return password		
 
 
 	def _update_config(self, data): 
@@ -466,21 +498,3 @@ class MongoDBHandler(ServiceCtlHandler):
 		if snap:
 			ret['snapshot_config'] = snap.config()
 		return ret
-
-
-	def on_HostDown(self, message):
-		if self.mongodb.is_replication_master():
-			if message.local_ip in self.mongodb.replicas():
-				self.mongodb.unregister_slave(message.local_ip)
-				if len(self.mongodb.replicas) % 2 == 0:
-					self.mongodb.start_arbiter()
-				else:
-					self.mongodb.stop_arbiter()
-						
-		elif len(self.mongodb.replicas()) == 2 and not self.mongodb.primary_host:
-			# Become primary and only member of rs 
-			local_ip = self._platform.get_private_ip()
-			rs_cfg = self.mongodb.cli.get_rs_config()
-			rs_cfg['members'] = [m for m in rs_cfg['members'] if m['host'] == local_ip]
-			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
-			wait_until(lambda: self.mongodb.is_replication_master, timeout=120)
