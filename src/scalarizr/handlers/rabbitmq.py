@@ -194,15 +194,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 	def on_HostInit(self, message):
 		if not BuiltinBehaviours.RABBITMQ in message.behaviour:
 			return
-		
-		if message.local_ip == self.platform.get_private_ip():
-			updates = dict(hostname='rabbit-%s' % message.server_index)
-			self._update_config(updates)
-			Hosts.set('127.0.0.1', 'rabbit-%s' % message.server_index)
-			with open('/etc/hostname', 'w') as f:
-				f.write('rabbit-%s' % message.server_index)
-			system2(('hostname', '-F', '/etc/hostname'))
-		else:
+				
+		if message.local_ip != self.platform.get_private_ip():
 			hostname = 'rabbit-%s' % message.server_index
 			Hosts.set(message.local_ip, hostname)
 			#self.rabbitmq.add_nodes([hostname])
@@ -228,12 +221,20 @@ class RabbitMQHandler(ServiceCtlHanler):
 
 		if os.path.exists(self._volume_config_path):
 			os.remove(self._volume_config_path)
+		
+		hostname = 'rabbit-%s' % message.server_index
+		
+		Hosts.set('127.0.0.1', hostname)
+		with open('/etc/hostname', 'w') as f:
+			f.write('rabbit-%s' % message.server_index)
+		system2(('hostname', '-F', '/etc/hostname'))
 
 		if OPT_VOLUME_CNF in rabbitmq_data:
 			if rabbitmq_data[OPT_VOLUME_CNF]:
 				storage.Storage.backup_config(rabbitmq_data[OPT_VOLUME_CNF], self._volume_config_path)
 			del rabbitmq_data[OPT_VOLUME_CNF]
 
+		rabbitmq_data.update(dict(hostname=hostname))
 		self._update_config(rabbitmq_data)
 
 
