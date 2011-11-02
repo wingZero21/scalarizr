@@ -222,7 +222,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		if os.path.exists(self._volume_config_path):
 			os.remove(self._volume_config_path)
 		
-		hostname = 'rabbit-%s' % message.server_index
+		hostname = 'rabbit-%s' % int(message.server_index)
 		
 		Hosts.set('127.0.0.1', hostname)
 		with open('/etc/hostname', 'w') as f:
