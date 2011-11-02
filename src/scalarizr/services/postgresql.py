@@ -1,4 +1,4 @@
-'''
+u'''
 Created on Jul 7, 2011
 
 @author: shaitanich
@@ -6,6 +6,7 @@ Created on Jul 7, 2011
 
 import os
 import time
+import glob
 import shlex
 import shutil
 import logging
@@ -103,6 +104,15 @@ class PostgreSql(BaseService):
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
+	
+	@property
+	def version(self):
+		path = glob.glob('/var/lib/p*sql/9.*')[0]
+		return path.split('postgresql/')[-1]
+
+	@property	
+	def unified_etc_path(self):
+		return '/etc/postgresql/%s/main' % self.version
 					
 	@property
 	def is_replication_master(self):
@@ -206,8 +216,8 @@ class PostgreSql(BaseService):
 		self.cluster_dir.clean()
 		
 		if disttool.is_centos():
-			self.config_dir.move_to(self.config_dir.default_ubuntu_path)
-			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.config_dir.default_ubuntu_path)
+			self.config_dir.move_to(self.unified_etc_path)
+			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
 			self.postgresql_conf = PostgresqlConf.find(self.config_dir)
 		
 
@@ -544,9 +554,9 @@ class PSQL(object):
 					
 	
 class ClusterDir(object):
-	
-	default_centos_path = '/var/lib/pgsql/9.0/data'
-	default_ubuntu_path = '/var/lib/pgsql/9.0/main'
+	base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
+	default_centos_path = os.path.join(base_path, 'data')
+	default_ubuntu_path = os.path.join(base_path, 'main')
 	
 	def __init__(self, path=None, user = "postgres"):
 		self.path = path
@@ -599,8 +609,6 @@ class ConfigDir(object):
 	
 	path = None
 	user = None
-	default_ubuntu_path = '/etc/postgresql/9.0/main'
-	default_centos_path = '/var/lib/pgsql/9.0/data'
 	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
 	def __init__(self, path=None, user = "postgres"):
@@ -612,7 +620,8 @@ class ConfigDir(object):
 		path = self.get_sysconfig_pgdata()
 		if path:
 			return path
-		return self.default_ubuntu_path if disttool.is_ubuntu() else self.default_centos_path
+		l = glob.glob('/etc/postgresql/9.*/main') if disttool.is_ubuntu() else glob.glob('/var/lib/p*sql/9.*/data')
+		return l[0] if l else None
 	
 	def move_to(self, dst):
 		if not os.path.exists(dst):
@@ -650,6 +659,10 @@ class ConfigDir(object):
 	
 	def set_sysconfig_pgdata(self, pgdata):
 		self._logger.debug("rewriting PGDATA path in sysconfig")
+		dir = os.path.dirname(self.sysconf_path)
+		if not os.path.exists(dir):
+			#ubuntu 11.10 has no sysconfig dir in etc
+			os.makedirs(dir)
 		file = open(self.sysconf_path, 'w')
 		file.write('PGDATA=%s' % pgdata)
 		file.close()

@@ -603,6 +603,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if snap.state == Snapshot.FAILED:
 			raise HandlerError('postgresql storage snapshot creation failed. See log for more details')
 		
+		self._logger.info('PostgreSQL data bundle created\n  snapshot: %s', snap.id)
 		return snap
 
 

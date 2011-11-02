@@ -17,7 +17,7 @@ from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
-import logging, time, os, re, shutil, glob
+import time, os, re, shutil, glob
 
 import boto
 from boto.exception import BotoServerError
@@ -45,6 +45,18 @@ BUNDLER_RELEASE = "672"
 
 DIGEST_ALGO = "sha1"
 CRYPTO_ALGO = "aes-128-cbc"
+
+EPH_STORAGE_MAPPING = {
+	'i386': {
+		'ephemeral0': '/dev/sda2',
+	},
+	'x86_64': {
+		'ephemeral0': '/dev/sdb',
+		'ephemeral1': '/dev/sdc',
+		'ephemeral2': '/dev/sdd',
+		'ephemeral3': '/dev/sde',
+	}
+} 
 
 
 
@@ -166,6 +178,7 @@ class RebundleStratery:
 			raise
 	
 	def _create_motd(self, image_mpoint, role_name=None):
+		LOG.debug('Creating motd file')
 		# Create message of the day
 		for name in ("etc/motd", "etc/motd.tail"):
 			motd_filename = os.path.join(image_mpoint, name)
@@ -181,6 +194,7 @@ class RebundleStratery:
 				filetool.write_file(motd_filename, motd, error_msg="Cannot patch motd file '%s' %s %s")
 
 	def _fix_fstab(self, image_mpoint):
+		LOG.debug('Fixing fstab')
 		pl = bus.platform	
 		fstab = fstool.Fstab(os.path.join(image_mpoint, 'etc/fstab'), True)		
 		
@@ -189,7 +203,7 @@ class RebundleStratery:
 		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
 		
 		ebs_devs = list(vol.attach_data.device 
-					for vol in ec2_conn.get_all_volumes() 
+					for vol in ec2_conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()}) 
 					if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id() 
 						and instance.root_device_name != vol.attach_data.device)
 		
@@ -368,6 +382,10 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			parts = self._digest_parts(part_names, destination)
 			
 			# Create bundle manifest
+			bdm = list((name, device) for name, device in self._platform.block_devs_mapping() 
+					if not name.startswith('ephemeral'))
+			bdm += EPH_STORAGE_MAPPING[disttool.arch()].items()
+			
 			manifest = AmiManifest(
 				name=name,
 				user=user, 
@@ -384,7 +402,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 				kernel_id=self._platform.get_kernel_id(), 
 				ramdisk_id=self._platform.get_ramdisk_id(), 
 				ancestor_ami_ids=self._platform.get_ancestor_ami_ids(), 
-				block_device_mapping=self._platform.block_devs_mapping()
+				block_device_mapping=bdm
 			)
 			manifest.save(manifest_file)
 			
@@ -532,15 +550,11 @@ class RebundleEbsStrategy(RebundleStratery):
 		bdmap = BlockDeviceMapping(self._ec2_conn)
 
 		# Add ephemeral devices
-		for virtual_name, dev_name in self._platform.get_block_device_mapping().items():
-			if virtual_name.startswith('ephemeral'):
-				if boto.Version.startswith('1.9'):
-					bdmap[dev_name] = virtual_name
-				else:
-					dev_type = EBSBlockDeviceType(self._ec2_conn)
-					dev_type.ephemeral_name = virtual_name
-					bdmap[dev_name] = dev_type
-					
+		for eph, device in EPH_STORAGE_MAPPING[disttool.arch()].items():
+			bdt = EBSBlockDeviceType(self._ec2_conn)
+			bdt.ephemeral_name = eph
+			bdmap[device] = bdt
+			
 		# Add root device snapshot
 		root_partition = instance.root_device_name[:-1]
 		if root_partition in self._platform.get_block_device_mapping().values():

@@ -404,9 +404,21 @@ def split_ex(value, separator=",", allow_empty=False, ct=list):
 
 
 def get_free_devname():
-	#[o..z]
+	avail_letters = set(string.ascii_lowercase[5:16])
+	try:
+		pl = bus.platform
+		conn = pl.new_ec2_conn()
+		volumes = conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
+		for volume in volumes:
+			try:
+				avail_letters.remove(volume.attach_data.device[-1])
+			except ValueError:
+				pass
+	except:
+		pass
+		
 	dev_list = os.listdir('/dev')
-	for letter in string.ascii_lowercase[14:]:
+	for letter in avail_letters:
 		device = 'sd'+letter
 		if not device in dev_list:
 			return '/dev/'+device

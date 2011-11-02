@@ -88,7 +88,6 @@ class QueryEnvService(object):
 		resp_body = response.read()
 		self._logger.debug("QueryEnv response: %s", resp_body)
 
-
 		# Parse XML response
 		xml = None
 		try:
@@ -110,22 +109,24 @@ class QueryEnvService(object):
 			
 		return self._request("list-roles", parameters, self._read_list_roles_response)
 	
-	def list_role_params(self, role_name=None):
+	def list_role_params(self, name=None):
 		"""
 		@return dict
 		"""
 		parameters = {}
-		if None != role_name :
-			parameters["role"] = role_name
-		return self._request("list-role-params",parameters, self._read_list_role_params_response)
-	
+		if name:
+			parameters["name"] = name
+			self._logger.warn('\n\nrole_name=%s\n'%name)
+		return {'params':self._request("list-role-params", parameters, self._read_list_role_params_response)}
+
+
 	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None, 
-					target_ip=None, local_ip=None):
+		target_ip=None, local_ip=None):
 		"""
 		@return Script[]
 		"""
 		parameters = {}
-		if None != event :
+		if None != event:
 			parameters["event"] = event
 		if None != event_id:
 			parameters["event_id"] = event_id
@@ -187,7 +188,7 @@ class QueryEnvService(object):
 		response_reader_args = response_reader_args or ()
 		return response_reader(xml, *response_reader_args)
 
-	
+
 	def _read_list_roles_response(self, xml):
 		ret = []
 		
@@ -248,13 +249,16 @@ class QueryEnvService(object):
 	
 	def _read_list_role_params_response(self, xml):
 		ret = {}
-	
 		response = xml.documentElement
-		for param_el in response.firstChild.childNodes:
-			ret[param_el.getAttribute("name")] = param_el.firstChild.firstChild.nodeValue
-				
+		if response:
+			for param_el in response.firstChild.childNodes:
+				if param_el.firstChild.firstChild:
+					value = param_el.firstChild.firstChild.nodeValue
+				else:
+					value = None
+				ret[param_el.getAttribute("name")] = value
 		return ret
-	
+
 	def _read_get_latest_version_response(self, xml):
 		response = xml.documentElement
 		version = response.firstChild.firstChild.nodeValue
