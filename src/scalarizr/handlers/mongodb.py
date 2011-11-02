@@ -18,24 +18,23 @@ from scalarizr.util.filetool import split, rchown
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.services.mongodb import MongoDB, MongoCLI, MongoDump
+from scalarizr.services.mongodb import MongoDB, MongoCLI, MongoDump, \
+					ARBITER_DEFAULT_PORT, STORAGE_PATH
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
 
-STORAGE_PATH				= "/mnt/mongodb-storage"
-STORAGE_VOLUME_CNF		  = 'mongodb.json'
-STORAGE_SNAPSHOT_CNF		= 'mongodb-snap.json'
+STORAGE_VOLUME_CNF		= 'mongodb.json'
+STORAGE_SNAPSHOT_CNF	= 'mongodb-snap.json'
 
-OPT_VOLUME_CNF			  = 'volume_config'
-OPT_SNAPSHOT_CNF			= 'snapshot_config'
-OPT_KEYFILE			= "mongodb_keyfile"
-OPT_SHARD_INDEX		= "shard_index"
-OPT_WEB_CONSOLE		= "web_console"
+OPT_VOLUME_CNF			= 'volume_config'
+OPT_SNAPSHOT_CNF		= 'snapshot_config'
+OPT_KEYFILE				= "mongodb_keyfile"
+OPT_SHARD_INDEX			= "shard_index"
+OPT_WEB_CONSOLE			= "web_console"
 
-BACKUP_CHUNK_SIZE		 = 200*1024*1024
+BACKUP_CHUNK_SIZE		= 200*1024*1024
 
-MONGODB_DEFAULT_PORT	= 27017
 
 		
 def get_handlers():
@@ -208,7 +207,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		szr_cnf = bus.cnf
 		shard_index = szr_cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX)
-		web_console = bool(szr_cnf.rawini.get(CNF_SECTION, OPT_WEB_CONSOLE))
+		web_console = bool(int(szr_cnf.rawini.get(CNF_SECTION, OPT_WEB_CONSOLE)))
 		rs_name = 'rs-%s' % shard_index
 		
 		if is_master:
@@ -223,14 +222,17 @@ class MongoDBHandler(ServiceCtlHandler):
 
 	def on_HostInit(self, message):
 		if message.local_ip != self._platform.get_private_ip():
-			if self.mongodb.is_replication_master:
+			if self.mongodb.is_replication_master and \
+											self._shard_index == message.shard_index:
 				self.mongodb.register_slave(message.local_ip)
-			
+	
+
 
 	def on_HostUp(self, message):
 		private_ip = self._platform.get_private_ip()
 		if message.local_ip != private_ip:
-			if self.mongodb.is_replication_master:			   
+			if self.mongodb.is_replication_master and \
+											self._shard_index == message.shard_index:			   
 				r = len(self.mongodb.replicas) 
 				a = len(self.mongodb.arbiters)
 				if r % 2 == 0 and not a:
@@ -248,7 +250,13 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_HostDown(self, message):
 		if self.mongodb.is_replication_master():
 			if message.local_ip in self.mongodb.replicas():
+				""" Remove host from replica set"""
 				self.mongodb.unregister_slave(message.local_ip)
+				""" If arbiter was running on the node - unregister it """
+				possible_arbiter = "%s:%s" % (message.local_ip, ARBITER_DEFAULT_PORT)
+				if possible_arbiter in self.mongodb.arbiters:
+					self.mongodb.unregister_slave(message.local_ip, ARBITER_DEFAULT_PORT)
+				""" Start arbiter if necessary """					
 				if len(self.mongodb.replicas) % 2 == 0:
 					self.mongodb.start_arbiter()
 				else:
@@ -389,7 +397,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 				
-		self.mongodb.prepare(rs_name, self._storage_path, web_console)
+		self.mongodb.prepare(rs_name, web_console)
 		self.mongodb.mongod.start()  
 		self.mongodb.cli.initiate_rs()
 		
@@ -498,3 +506,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		if snap:
 			ret['snapshot_config'] = snap.config()
 		return ret
+	
+	
+	@property
+	def _shard_index(self):
+		szr_cnf = bus.cnf
+		return int(szr_cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX))

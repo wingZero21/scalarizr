@@ -5,7 +5,6 @@ Created on Sep 30, 2011
 '''
 import os
 import json
-import shutil
 import logging
 
 from scalarizr.services import BaseConfig, BaseService
@@ -14,12 +13,16 @@ from scalarizr.util import disttool, cryptotool, system2, \
 				PopenError, wait_until, initdv2, software
 from scalarizr.util.filetool import rchown
 
+STORAGE_PATH = "/mnt/mongodb-storage"
 
+try:
+	MONGOD = software.whereis('mongod')[0]
+	MONGO_CLI = software.whereis('mongo')[0]
+	MONGO_DUMP = software.whereis('mongodump')[0]
+	MONGOS = software.whereis('mongos')[0]	
+except IndexError:
+	raise Exception('Cannot locate mongo executables.')
 
-
-MONGOD = '/usr/bin/mongod'
-MONGO_CLI = software.whereis('mongo')[0]
-MONGO_DUMP = '/usr/bin/mongodump'
 
 ROUTER_DEFAULT_PORT = 27017
 ARBITER_DEFAULT_PORT = 27020
@@ -28,8 +31,9 @@ CONFIG_SERVER_DEFAULT_PORT = 27019
 
 LOG_PATH_DEFAULT = '/var/log/mongodb/mongodb.log'
 DB_PATH_DEFAULT = '/var/lib/mongodb'
-STORAGE_DATA_DIR = 'data'
-ARBITER_DATA_DIR = 'arbiter'
+STORAGE_DATA_DIR = os.path.join(STORAGE_PATH, 'data')
+ARBITER_DATA_DIR = '/tmp/arbiter'
+CONFIG_SERVER_DATA_DIR = os.path.join(STORAGE_PATH, 'config_server')
 ARBITER_LOG_PATH = '/var/log/mongodb/mongodb.arbiter.log'
 CONFIG_PATH_DEFAULT = UBUNTU_CONFIG_PATH = CENTOS_CONFIG_PATH = '/etc/mongodb.conf'
 ARBITER_CONF_PATH_DEFAULT = '/etc/mongodb.arbiter.conf'
@@ -58,11 +62,10 @@ class MongoDB(BaseService):
 		ret = self.cli.is_master()['ismaster']
 		return True if ret == 'true' else False
 	
-	def prepare(self, rs_name, mpoint, enable_rest = False):
+	def prepare(self, rs_name, enable_rest = False):
 		self.config.rs_name = rs_name
-		self.config.db_path = self.working_dir.create(os.path.join(mpoint,STORAGE_DATA_DIR))
+		self.config.db_path = self.working_dir.create(STORAGE_DATA_DIR)
 		self.config.rest = enable_rest
-		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logpath = LOG_PATH_DEFAULT
 		self.config.logappend = True
 		self.config.nojournal = False	
@@ -70,18 +73,23 @@ class MongoDB(BaseService):
 		self.config.shardsvr = True
 		self.working_dir.unlock()
 			
-	def _prepare_arbiter(self, rs_name, mpoint):
-		arb_dir = os.path.join(mpoint, ARBITER_DATA_DIR)
-		if not os.path.exists(arb_dir):
-			os.makedirs(arb_dir)
-		rchown('mongodb', arb_dir)	
+	def _prepare_arbiter(self, rs_name):
+		if not os.path.exists(ARBITER_DATA_DIR):
+			os.makedirs(ARBITER_DATA_DIR)
+		rchown('mongodb', ARBITER_DATA_DIR)	
 			
-		self.arbiter_conf.db_path = arb_dir
+		self.arbiter_conf.db_path = ARBITER_DATA_DIR
 		self.arbiter_conf.rs_name = rs_name
 		self.arbiter_conf.shardsvr = True
 		self.arbiter_conf.port = ARBITER_DEFAULT_PORT
 		self.arbiter_conf.logpath = ARBITER_LOG_PATH
 		
+	def _prepare_config_server(self):
+		if not os.path.exists(CONFIG_SERVER_DATA_DIR):
+			os.makedirs(CONFIG_SERVER_DATA_DIR)
+		rchown('mongodb', CONFIG_SERVER_DATA_DIR)	
+		
+
 	def initiate_rs(self):
 		'''
 		@return (host:port)
@@ -92,8 +100,7 @@ class MongoDB(BaseService):
 		return ret['me'].split(':')
 	
 	def start_arbiter(self):
-		mpoint = os.path.dirname(self.config.db_path)
-		self._prepare_arbiter(self.config.rs_name, mpoint)
+		self._prepare_arbiter(self.config.rs_name)
 		self.arbiter_daemon.start()
 	
 	def stop_arbiter(self):
@@ -187,7 +194,8 @@ class MongoDB(BaseService):
 	
 	def _set_arbiter_conf(self, obj):
 		self._set('arbiter_config', obj)
-		
+	
+	@property
 	def arbiter_daemon(self):
 		if not self._arbiter:
 			self._arbiter = Mongod(ARBITER_CONF_PATH_DEFAULT, self.keyfile, ARBITER_DATA_DIR, ARBITER_DEFAULT_PORT)
