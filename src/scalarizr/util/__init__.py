@@ -517,3 +517,43 @@ class PeriodicalExecutor:
 					break
 			if not self._shutdown:
 				time.sleep(1)
+				
+
+class Hosts:	
+	@classmethod
+	def set(cls, addr, hostname):
+		hosts = cls.hosts()
+		hosts[hostname] = addr
+		cls._write(hosts)
+		
+	@classmethod
+	def delete(cls, addr=None, hostname=None):
+		hosts = cls.hosts()
+		if hostname:
+			if hosts.has_key(hostname):
+				del hosts[hostname]
+		if addr:
+			hostnames = hosts.keys()
+			for host in hostnames:
+				if addr == hosts[host]: 
+					del hosts[host]
+		cls._write(hosts)		
+	
+	@classmethod
+	def hosts(cls):
+		ret = {}
+		with open('/etc/hosts') as f:
+			hosts = f.readlines()
+			for host in hosts:
+				host_line = host.strip()
+				if not host_line or host_line.startswith('#'):
+					continue
+				addr, hostname = host.split(None, 1)
+				ret[hostname.strip()] = addr
+		return ret
+	
+	@classmethod
+	def _write(cls, hosts):
+		with open('/etc/hosts', 'w') as f:
+			for hostname, addr in hosts.iteritems():
+				f.write('%s\t%s\n' % (addr, hostname))

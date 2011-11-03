@@ -32,11 +32,19 @@ CONFIG_SERVER_DEFAULT_PORT = 27019
 LOG_PATH_DEFAULT = '/var/log/mongodb/mongodb.log'
 DB_PATH_DEFAULT = '/var/lib/mongodb'
 STORAGE_DATA_DIR = os.path.join(STORAGE_PATH, 'data')
-ARBITER_DATA_DIR = '/tmp/arbiter'
-CONFIG_SERVER_DATA_DIR = os.path.join(STORAGE_PATH, 'config_server')
-ARBITER_LOG_PATH = '/var/log/mongodb/mongodb.arbiter.log'
+
 CONFIG_PATH_DEFAULT = UBUNTU_CONFIG_PATH = CENTOS_CONFIG_PATH = '/etc/mongodb.conf'
-ARBITER_CONF_PATH_DEFAULT = '/etc/mongodb.arbiter.conf'
+
+ARBITER_DATA_DIR = '/tmp/arbiter'
+ARBITER_LOG_PATH = '/var/log/mongodb/mongodb.arbiter.log'
+ARBITER_CONF_PATH = '/etc/mongodb.arbiter.conf'
+
+CONFIG_SERVER_DATA_DIR = os.path.join(STORAGE_PATH, 'config_server')
+CONFIG_SERVER_CONF_PATH = '/etc/mongodb.configsrv.conf'
+CONFIG_SERVER_LOG_PATH = '/var/log/mongodb/mongodb.configsrv.log'
+
+ROUTER_LOG_PATH = '/var/log/mongodb/mongodb.router.log'
+
 LOCK_FILE = 'mongod.lock'
 
 
@@ -45,22 +53,26 @@ class MongoDB(BaseService):
 	_arbiter = None
 	_instance = None
 	keyfile = None
+
 	
 	def __init__(self, keyfile):
 		self.keyfile = keyfile
 		self._objects = {}
 		self._logger = logging.getLogger(__name__)
+
 								
 	def __new__(cls, *args, **kwargs):
 		if not cls._instance:
 			cls._instance = super(MongoDB, cls).__new__(
 								cls, *args, **kwargs)
 		return cls._instance
+
 	
 	@property
 	def is_replication_master(self):
 		ret = self.cli.is_master()['ismaster']
 		return True if ret == 'true' else False
+
 	
 	def prepare(self, rs_name, enable_rest = False):
 		self.config.rs_name = rs_name
@@ -73,6 +85,7 @@ class MongoDB(BaseService):
 		self.config.shardsvr = True
 		self.working_dir.unlock()
 			
+
 	def _prepare_arbiter(self, rs_name):
 		if not os.path.exists(ARBITER_DATA_DIR):
 			os.makedirs(ARBITER_DATA_DIR)
@@ -83,12 +96,16 @@ class MongoDB(BaseService):
 		self.arbiter_conf.shardsvr = True
 		self.arbiter_conf.port = ARBITER_DEFAULT_PORT
 		self.arbiter_conf.logpath = ARBITER_LOG_PATH
-		
+
+
 	def _prepare_config_server(self):
 		if not os.path.exists(CONFIG_SERVER_DATA_DIR):
 			os.makedirs(CONFIG_SERVER_DATA_DIR)
-		rchown('mongodb', CONFIG_SERVER_DATA_DIR)	
-		
+		rchown('mongodb', CONFIG_SERVER_DATA_DIR)
+		self.config_server_conf.configsvr = True
+		self.config_server_conf.port = CONFIG_SERVER_DEFAULT_PORT
+		self.config_server_conf.logpath = CONFIG_SERVER_LOG_PATH
+
 
 	def initiate_rs(self):
 		'''
@@ -97,32 +114,60 @@ class MongoDB(BaseService):
 		ret = self.cli.initiate_rs()
 		if ret['ok'] == '0':
 			self._logger.error('Could not initialize replica set: %s' % ret['errmsg'])
+		
+		wait_until(lambda: self.is_replication_master, sleep=5, logger=self._logger,
+					timeout=120, start_text='Wait until node becomes replication primary')		
+		
 		return ret['me'].split(':')
+	
 	
 	def start_arbiter(self):
 		self._prepare_arbiter(self.config.rs_name)
-		self.arbiter_daemon.start()
+		self.arbiter.start()
+	
 	
 	def stop_arbiter(self):
-		self.arbiter_daemon.stop(reason='Stopping arbiter')	
+		self.arbiter.stop(reason='Stopping arbiter')
+		
+	
+	def start_config_server(self):
+		self._prepare_config_server()
+		self.config_server.start()
+		
+		
+	def stop_config_server(self):
+		self.config_server.stop()
+		
+		
+	def start_router(self):
+		Mongos.start()
+		
+	
+	def stop_router(self):
+		Mongos.stop()
+	
 	
 	def register_slave(self, ip, port=None):
 		ret = self.cli.add_replica(ip, port)
 		if ret['ok'] == '0':
 			self._logger.error('Could not add replica %s to set: %s' % (ip, ret['errmsg']))
+		
 			
 	def register_arbiter(self,ip,port=None):
 		ret = self.cli.add_arbiter(ip, port or ARBITER_DEFAULT_PORT)
 		if ret['ok'] == '0':
 			self._logger.error('Could not add arbiter %s to set: %s' % (ip, ret['errmsg']))
 			
+			
 	def unregister_slave(self,ip,port=None):
 		ret = self.cli.remove_slave(ip, port=None)
 		if ret['ok'] == '0':
 			self._logger.error('Could not remove replica %s from set: %s' % (ip, ret['errmsg']))
 	
+	
 	def wait_for_sync(self):
 		wait_until(lambda: self.status == 1 or self.status == 2, timeout=3600, sleep=2)
+	
 	
 	@property
 	def status(self):
@@ -146,24 +191,44 @@ class MongoDB(BaseService):
 		else:
 			return int(ret['myState']) if 'myState' in ret else None
 				
+				
 	@property
 	def replicas(self):
 		ret = self.cli.is_master()
 		return ret['hosts'] if 'hosts' in ret else []
+	
 	
 	@property
 	def arbiters(self):
 		ret = self.cli.is_master()
 		return ret['arbiters'] if 'arbiters' in ret else []
 	
+	
 	@property
 	def primary_host(self):
 		ret = self.cli.is_master()
 		return ret['primary'] if 'primary' in ret else None
 	
+	
 	@property
 	def db_path(self):
 		return self.config.dbpath
+	
+	
+	@property
+	def arbiter(self):
+		if not self._arbiter:
+			self._arbiter = Mongod(ARBITER_CONF_PATH, self.keyfile, ARBITER_DATA_DIR, ARBITER_DEFAULT_PORT)
+		return self._arbiter
+	
+	
+	@property
+	def config_server(self):
+		if not self._config_server:
+			self._config_server = Mongod(CONFIG_SERVER_CONF_PATH, CONFIG_SERVER_DATA_DIR, \
+										 CONFIG_SERVER_DEFAULT_PORT)
+		return self._config_server
+
 
 	def _get_mongod(self):
 		return self._get('mongod', Mongod.find, self.config, self.keyfile)
@@ -171,42 +236,49 @@ class MongoDB(BaseService):
 	def _set_mongod(self, obj):
 		self._set('mongod', obj)
 
+
 	def _get_cli(self):
 		return self._get('cli', MongoCLI.find)
 	
 	def _set_cli(self, obj):
 		self._set('cli', obj)
 
+
 	def _get_working_directory(self):
 		return self._get('working_directory', WorkingDirectory.find, self.config)
 		
 	def _set_working_directory(self, obj):
 		self._set('working_directory', obj)
-		
+	
+	
 	def _get_config(self):
 		return self._get('mongodb_conf', MongoDBConfig.find)
 	
 	def _set_config(self, obj):
 		self._set('mongodb_conf', obj)
-
+		
+		
 	def _get_arbiter_conf(self):
-		return self._get('arbiter_config', ArbiterConf.find)
+		return self._get('arbiter_config', ArbiterConf.find, '/etc')
 	
 	def _set_arbiter_conf(self, obj):
 		self._set('arbiter_config', obj)
+		
+		
+	def _get_cfg_srv_conf(self):
+		return self._get('cfg_srv_config', ConfigServerConf.find, '/etc')
 	
-	@property
-	def arbiter_daemon(self):
-		if not self._arbiter:
-			self._arbiter = Mongod(ARBITER_CONF_PATH_DEFAULT, self.keyfile, ARBITER_DATA_DIR, ARBITER_DEFAULT_PORT)
-		return self._arbiter
+	def _set_cfg_srv_conf(self, obj):
+		self._set('cfg_srv_config', obj)
+	
 									
 	cli = property(_get_cli, _set_cli)
 	mongod = property(_get_mongod, _set_mongod)
 	working_dir = property(_get_working_directory, _set_working_directory)	
 	config = property(_get_config, _set_config)
 	arbiter_conf = property(_get_arbiter_conf, _set_arbiter_conf)
-
+	config_server_conf = property(_get_cfg_srv_conf, _set_cfg_srv_conf)
+	
 
 	
 class MongoDump(object):
@@ -393,6 +465,18 @@ class MongoDBConfig(BaseConfig):
 class ArbiterConf(MongoDBConfig):
 	config_name = 'mongodb.arbiter.conf'
 
+	
+class ConfigServerConf(MongoDBConfig):
+	config_name = 'mongodb.arbiter.conf'
+	
+	def _set_configsvr(self, value):
+		value = bool(value)
+		self.set_bool_option('configsvr', value)
+
+	def _get_configsvr(self):
+		return self.get_bool_option('configsvr')
+	
+	configsvr = property(_get_configsvr, _set_configsvr)
 
 	
 class Mongod(object):	
@@ -450,6 +534,31 @@ class Mongod(object):
 			return False
 
 
+
+class Mongos(object):
+	sock = initdv2.SockParam(ROUTER_DEFAULT_PORT)
+
+	@classmethod
+	def start(cls):
+		if not cls.is_running():
+			system2((MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
+									'--configdb', 'mongo-0-0:%s' % ROUTER_DEFAULT_PORT))
+			
+	@classmethod
+	def stop(cls):
+		if cls.is_running():
+			cli = MongoCLI(ROUTER_DEFAULT_PORT)
+			cli.shutdown_server()
+	
+	@classmethod
+	def is_running(cls):
+		try:
+			initdv2.wait_sock(cls.sock)
+			return True
+		except:
+			return False
+	
+	
 
 class MongoCLI(object):
 	
