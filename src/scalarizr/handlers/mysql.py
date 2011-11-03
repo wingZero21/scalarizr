@@ -538,7 +538,7 @@ class MysqlCnfController(CnfController):
 								self._logger.debug('Replacing %s default value %s with precompiled value %s' % (name, old_value, new_value))
 								m_config.set(path=dv_path, value=new_value, force=True)
 				except NoPathError, e:
-					self._logger.error(e)
+					pass
 			m_config.write(path)
 					
 		self._merged_manifest = _CnfManifest(path)
