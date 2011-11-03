@@ -12,7 +12,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer 
 from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
-from scalarizr.service import CnfController, CnfPreset
+from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.messaging import Messages
 from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.platform import UserDataOptions
@@ -482,7 +482,8 @@ class MysqlMessages:
 
 
 class MysqlCnfController(CnfController):
-	_mysql_version = None	
+	_mysql_version = None
+	_merged_manifest = None	
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -491,7 +492,57 @@ class MysqlCnfController(CnfController):
 		ini = self._cnf.rawini
 		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
 		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
-		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql', {'ON':'1','OFF':'0'}) #TRUE,FALSE
+		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql', {'ON':'1', 'TRUE':'1','OFF':'0','FALSE':'0'}) #TRUE,FALSE
+
+	@property
+	def _manifest(self):
+		f_manifest = CnfController._manifest
+		base_manifest = f_manifest.fget(self)		
+		path = self._manifest_path
+
+		s = {}
+		out = None
+		
+		if not self._merged_manifest:
+			out = system2(['mysqld', '--no-defaults', '--verbose', '--help'],raise_exc=False,silent=True)[0]
+			
+		if out:
+			raw = out.split('--------------------------------- -----------------------------')
+			if raw:
+				a = raw[-1].split('\n')
+				if len(a) > 7:
+					b = a[1:-7]
+					for item in b:
+						c = item.split()
+						if len(c) > 1:
+							s[c[0].strip()] = ' '.join(c[1:]).strip()
+		
+		if s:	
+			m_config = Configuration('ini')
+			if os.path.exists(path):
+				m_config.read(path)		
+				
+			for variable in base_manifest:
+				name = variable.name
+				dv_path = './%s/default-value' % name
+				
+				try:
+					old_value =  m_config.get(dv_path)
+					if name in s:
+						new_value = s[name] 
+					else:
+						name = name.replace('_','-')
+						if name in s:
+							new_value = self.definitions[s[name]] if s[name] in self.definitions else s[name]
+							if old_value != new_value and new_value != '(No default value)':
+								self._logger.debug('Replacing %s default value %s with precompiled value %s' % (name, old_value, new_value))
+								m_config.set(path=dv_path, value=new_value, force=True)
+				except NoPathError, e:
+					self._logger.error(e)
+			m_config.write(path)
+					
+		self._merged_manifest = _CnfManifest(path)
+		return self._merged_manifest
 
 	def _start_service(self):
 		if not hasattr(self, '_mysql_cnf_err_re'):
@@ -551,7 +602,11 @@ class MysqlCnfController(CnfController):
 		if option_spec.default_value and not option_spec.need_restart:
 			self._logger.debug('Preparing to set run-time variable %s to default [%s]' 
 						% (option_spec.name,option_spec.default_value))
+			'''
+			when removing mysql options DEFAULT keyword must be used instead of
 			self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, option_spec.default_value)
+			'''
+			self.sendline += 'SET GLOBAL %s = DEFAULT; ' % (option_spec.name)
 	
 	def _after_apply_preset(self):
 		if not self._init_script.running:
