@@ -13,11 +13,6 @@ from scalarizr.util import fstool, wait_until
 import os
 import logging
 from scalarizr.storage import Storage, Volume
-from scalarizr.platform.ec2 import ebstool
-from threading import Thread
-import threading
-from scalarizr.handlers import HandlerError
-
 
 
 
