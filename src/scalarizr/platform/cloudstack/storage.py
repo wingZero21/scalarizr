@@ -13,7 +13,6 @@ from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, dev
 	VolumeConfig, Snapshot
 from . import voltool
 from scalarizr.util import wait_until
-from scalarizr.platform.cloudstack.voltool import update_volume
 
 
 LOG = logging.getLogger(__name__)
@@ -109,7 +108,7 @@ class CSVolumeProvider(VolumeProvider):
 						logger=LOG
 					)
 			
-				if hasattr(native_vol, 'virtualmachineid'):
+				if voltool.volume_attached(native_vol):
 					if native_vol.virtualmachineid == pl.get_instance_id():
 						LOG.debug('Volume %s is attached to this instance', volume_id)
 						device = voltool.get_system_devname(native_vol.deviceid)
@@ -123,11 +122,11 @@ class CSVolumeProvider(VolumeProvider):
 							# We should wait for state chage
 							def vm_state_changed():
 								native_vol = conn.listVolumes(id=volume_id)[0]
-								return not hasattr(native_vol, 'virtualmachineid') or \
+								return voltool.volume_detached(native_vol) or \
 										native_vol.vmstate != 'Stopping'
 							wait_until(vm_state_changed)
 						
-						if hasattr(native_vol, 'virtualmachineid'):
+						if voltool.volume_attached(native_vol):
 							# If stil attached, detaching 
 							voltool.detach_volume(conn, volume_id)
 							LOG.debug('Volume %s detached', volume_id)

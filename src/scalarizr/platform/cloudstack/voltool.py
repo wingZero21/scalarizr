@@ -99,7 +99,7 @@ def attach_volume(conn, volume_id, instance_id, device_id=None,
 	
 	logger.debug('Checking that volume %s is attached', volume_id)
 	wait_until(
-		lambda: conn.listVolumes(id=volume_id)[0].state == 'Ready', 
+		lambda: volume_attached(conn.listVolumes(id=volume_id)[0]), 
 		logger=logger, timeout=timeout,
 		error_text="Volume %s wasn't attached in a reasonable time"
 				" (vm_id: %s)." % ( 
@@ -168,7 +168,7 @@ def detach_volume(conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIM
 
 	logger.debug('Checking that volume %s is available', volume_id)
 	wait_until(
-		lambda: conn.listVolumes(id=volume_id)[0].state in AVAIL_STATES,
+		lambda: volume_detached(conn.listVolumes(id=volume_id)[0]),
 		logger=logger, timeout=timeout,
 		error_text="Volume %s wasn't available in a reasonable time" % volume_id
 	)
@@ -183,4 +183,8 @@ def delete_volume(conn, volume_id, logger=None):
 	conn.deleteVolume(volume_id)
 
 
+def volume_attached(vol):
+	return hasattr(vol, 'virtualmachineid')
 
+def volume_detached(vol):
+	return not volume_attached(vol)
