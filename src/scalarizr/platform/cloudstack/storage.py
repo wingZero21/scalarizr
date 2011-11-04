@@ -91,11 +91,18 @@ class CSVolumeProvider(VolumeProvider):
 						
 				if snap_id or not volume_id:
 					LOG.debug('Creating new volume')
+					disk_offering_id = kwargs.get('disk_offering_id')
+					if not disk_offering_id:
+						# Any size you want
+						disk_offering_id = [dskoffer for dskoffer in conn.listDiskOfferings() 
+								if not dskoffer.disksize and dskoffer.iscustomized][0].id
+
+					
 					native_vol = voltool.create_volume(conn,
 						name='%s-%02d' % (pl.get_instance_id(), device_id),
 						zone_id=pl.get_avail_zone_id(),
 						size=kwargs.get('size'), 
-						disk_offering_id=kwargs.get('disk_offering_id'),
+						disk_offering_id=disk_offering_id,
 						snap_id=snap_id,
 						logger=LOG
 					)

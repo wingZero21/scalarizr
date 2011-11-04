@@ -57,10 +57,6 @@ def create_volume(conn, name, zone_id, size=None, disk_offering_id=None, snap_id
 				logger=None, timeout=DEFAULT_TIMEOUT):
 	logger = logger or LOG
 	
-	if size and not disk_offering_id:
-		disk_offering_id = get_disk_offering_id(conn, int(size))
-		size = None
-
 	msg = "Creating volume '%s' in zone %s%s%s%s" % (
 		name, zone_id,
 		size and ' (size: %sG)' % size or '', 
