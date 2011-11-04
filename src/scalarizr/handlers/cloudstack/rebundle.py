@@ -23,7 +23,7 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 	IMAGE_MPOINT = '/mnt/img-mnt'
 	IMAGE_NAME_MAXLEN = 32
 	
-	def detect_os_type_id(self, conn):
+	def get_os_type_id(self, conn):
 		default_desc = 'Other Ubuntu (%d-bit)' % disttool.arch_bits()
 		desc = '%s %s (%d-bit)' % (disttool.linux_dist()[0], 
 								disttool.linux_dist()[1], 
@@ -42,8 +42,6 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 			image_name = self._role_name[0:16] + '--' + now
 		else:
 			image_name = self._role_name + "-" + now
-
-		dirty_snap = vol = snap = device = mounted = bundled = None
 		
 		pl = bus.platform
 		conn = pl.new_cloudstack_conn()
@@ -57,63 +55,19 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 		try:
 			# Create snapshot
 			LOG.info('Creating ROOT volume snapshot (volume: %s)', root_vol.id)
-			dirty_snap = voltool.create_snapshot(conn, root_vol.id, 
+			snap = voltool.create_snapshot(conn, root_vol.id, 
 												wait_completion=True, logger=LOG)
-			LOG.info('ROOT volume snapshot created (snapshot: %s)', dirty_snap.id)
+			LOG.info('ROOT volume snapshot created (snapshot: %s)', snap.id)
 			
-			'''
-			# Created temporary volume to perform cleanups
-			LOG.info('Creating volume from ROOT snapshot')
-			vol = voltool.create_volume(conn, name=image_name + '-tmp', 
-											snap_id=dirty_snap.id, logger=LOG)
-			device = voltool.attach_volume(conn, vol.id, pl.get_instance_id(), 
-												to_me=True, logger=LOG)[1]
-			LOG.info('Volume created (volume: %s)', vol.id)
-			
-			# Mount image
-			fstool.mount(device, self.IMAGE_MPOINT)
-			mounted = True
-				
-			self.cleanup_image(self.IMAGE_MPOINT)
-				
-			LOG.info('Creating volume snapshot (volume: %s)', vol.id)
-			snap = voltool.create_snapshot(conn, vol.id, 
-										wait_completion=True, logger=LOG)
-			LOG.info('Snapshot created (snapshot: %s)', snap.id)
-			'''
-
 			LOG.info('Creating image')
 			image = conn.createTemplate(image_name, image_name, 
-							self.detect_os_type_id(conn), 
-							snapshotId=dirty_snap.id)
+							self.get_os_type_id(conn), 
+							snapshotId=snap.id)
 			LOG.info('Image created (template: %s)', image.id)
 			
 			return image.id	
 		finally:
 			pass
-			'''
-			if dirty_snap:
-				try:
-					conn.deleteSnapshot(dirty_snap.id)
-				except:
-					pass
-			if vol:
-				if mounted:
-					try:
-						fstool.umount(device)
-					except:
-						pass
-				if os.path.exists(self.IMAGE_MPOINT):
-					os.removedirs(self.IMAGE_MPOINT)
-				try:
-					conn.deleteVolume(vol.id)
-				except:
-					pass
-			if snap and not bundled:
-				try:
-					conn.deleteSnapshot(snap.id)
-				except:
-					pass
-			'''
+
 				
 				
