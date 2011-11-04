@@ -282,7 +282,7 @@ class RedisHandler(ServiceCtlHandler):
 									
 				snap = self._create_snapshot()
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
-				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol.config(), snap)
+				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol, snap)
 				
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
 								

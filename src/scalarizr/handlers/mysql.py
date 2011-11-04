@@ -1097,7 +1097,7 @@ class MysqlHandler(ServiceCtlHandler):
 						log_file = log_file,
 						log_pos = log_pos
 					)
-					msg_data.update(self._compat_storage_data(self.storage_vol.config(), snap))
+					msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)							
 					
 				tx_complete = True

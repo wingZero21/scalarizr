@@ -314,7 +314,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 									
 				snap = self._create_snapshot(ROOT_USER, message.root_password)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
-				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol.config(), snap)
+				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol, snap)
 				
 			msg_data[BEHAVIOUR].update({OPT_CURRENT_XLOG_LOCATION: None})		
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
