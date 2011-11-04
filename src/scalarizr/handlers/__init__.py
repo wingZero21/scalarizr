@@ -12,6 +12,7 @@ import os
 import platform
 import logging
 import threading
+import pprint
 from distutils.file_util import write_file
 
 
@@ -130,7 +131,7 @@ class MessageListener:
 					self._logger.error('Unhandled exception in notification loop')
 					self._logger.exception(e)
 						
-			self._logger.debug("Collected handlers chain: %s" % self._handlers_chain)
+			self._logger.debug("Handlers chain:\n%s", pprint.pformat(self._handlers_chain))
 						
 		return self._handlers_chain
 	
