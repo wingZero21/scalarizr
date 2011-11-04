@@ -16,6 +16,7 @@ DEFAULT_TIMEOUT = 2400 		# 40 min
 SNAPSHOT_TIMEOUT = 3600		# 1 h
 LOG = logging.getLogger(__name__)
 
+AVAIL_STATES = ('Allocated', 'Ready')
 
 
 def create_snapshot(conn, volume_id, logger=None, timeout=SNAPSHOT_TIMEOUT, wait_completion=False):
@@ -71,10 +72,10 @@ def create_volume(conn, name, zone_id, size=None, disk_offering_id=None, snap_id
 	vol = conn.createVolume(name, size=size, diskOfferingId=disk_offering_id, snapshotId=snap_id, zoneId=zone_id)
 	logger.debug('Volume %s created%s', vol.id, snap_id and ' from snapshot %s' % snap_id or '')
 	
-	if vol.state not in ('Allocated', 'Ready'):
+	if vol.state not in AVAIL_STATES:
 		logger.debug('Checking that volume %s is available', vol.id)
 		wait_until(
-			lambda: conn.listVolumes(id=vol.id)[0].state in ('Allocated', 'Ready'), 
+			lambda: conn.listVolumes(id=vol.id)[0].state in AVAIL_STATES, 
 			logger=logger, timeout=timeout,
 			error_text="Volume %s wasn't available in a reasonable time" % vol.id
 		)
@@ -167,7 +168,7 @@ def detach_volume(conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIM
 
 	logger.debug('Checking that volume %s is available', volume_id)
 	wait_until(
-		lambda: conn.listVolumes(id=volume_id)[0].state == 'Allocated',
+		lambda: conn.listVolumes(id=volume_id)[0].state in AVAIL_STATES,
 		logger=logger, timeout=timeout,
 		error_text="Volume %s wasn't available in a reasonable time" % volume_id
 	)

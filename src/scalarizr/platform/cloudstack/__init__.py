@@ -3,7 +3,6 @@ import os
 import urllib2
 import sys
 import logging
-import pprint
 
 from scalarizr.bus import bus
 from scalarizr.platform import Platform, PlatformError
@@ -48,7 +47,6 @@ class CloudStackPlatform(Platform):
 		if self._userdata is None:
 			try:
 				self._userdata = self._parse_user_data(self.get_meta_data('user-data'))
-				LOG.debug('User-data:\n%s', pprint.pformat(self._userdata))				
 			except PlatformError, e:
 				if 'HTTP Error 404' in e:
 					self._userdata = {}
