@@ -20,7 +20,7 @@ from scalarizr.util import system2, wait_until
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
 	PgUser, SU_EXEC
-
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -106,6 +106,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
+		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			self._insert_iptables_rules()
 		
 		if self._cnf.state == ScalarizrState.RUNNING:
 
@@ -216,8 +219,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
-		#TODO: find out what to do!
-		pass
+		self._insert_iptables_rules()
 
 
 	def on_BeforeHostTerminate(self, message):
@@ -623,3 +625,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if snap:
 			ret['snapshot_config'] = snap.config()
 		return ret
+
+
+	def _insert_iptables_rules(self):
+		iptables = IpTables()
+		if iptables.usable():
+			iptables.insert_rule(None, RuleSpec(dport=POSTGRESQL_DEFAULT_PORT, 
+											jump='ACCEPT', protocol=P_TCP))		

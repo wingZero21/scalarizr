@@ -20,6 +20,7 @@ from scalarizr.services.redis import Redis
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
@@ -111,6 +112,9 @@ class RedisHandler(ServiceCtlHandler):
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			self._insert_iptables_rules()
+		
 		if self._cnf.state == ScalarizrState.RUNNING:
 
 			storage_conf = Storage.restore_config(self._volume_config_path)
@@ -135,8 +139,7 @@ class RedisHandler(ServiceCtlHandler):
 		
 		self.redis = Redis(self.is_replication_master, self.persistence_type)
 		
-				
-
+		
 	def on_host_init_response(self, message):
 		"""
 		Check redis data in host init response
@@ -192,8 +195,7 @@ class RedisHandler(ServiceCtlHandler):
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
-		#TODO: find out what to do!
-		pass
+		self._insert_iptables_rules()		
 
 
 	def on_BeforeHostTerminate(self, message):
@@ -556,6 +558,12 @@ class RedisHandler(ServiceCtlHandler):
 		if snap:
 			ret['snapshot_config'] = snap.config()
 		return ret
+	
+	def _insert_iptables_rules(self):
+		iptables = IpTables()
+		if iptables.usable():
+			iptables.insert_rule(None, RuleSpec(dport=DEFAULT_PORT, jump='ACCEPT', protocol=P_TCP))		
+	
 
 	
 	
