@@ -1759,6 +1759,10 @@ class MysqlHandler(ServiceCtlHandler):
 				os.makedirs(directory)
 				src_dir = os.path.dirname(raw_value + "/") + "/"
 				if os.path.isdir(src_dir):
+					set_se_path = software.whereis('setsebool')
+					if set_se_path:
+						self._logger.debug('Make SELinux rule for rsync')
+						system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
 					self._logger.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
