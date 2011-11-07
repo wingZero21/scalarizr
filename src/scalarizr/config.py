@@ -210,20 +210,20 @@ class ScalarizrOptions(Configurator.Container):
 	class queryenv_url(Configurator.Option):
 		'''
 		QueryEnv URL.
-		URL to QueryEnv service. Use https://scalr.net/query-env for Scalr.net SaaS
+		URL to QueryEnv service. Use https://my.scalr.net/query-env for Scalr.net SaaS
 		'''
 		name = 'general/queryenv_url'
-		default = 'https://scalr.net/query-env'
+		default = 'https://my.scalr.net/query-env'
 		private = True
 		required = True
 
 	class message_producer_url(Configurator.Option):
 		'''
 		Message server URL.
-		URL to Scalr message server. Use https://scalr.net/messaging for Scalr.net SaaS
+		URL to Scalr message server. Use https://my.scalr.net/messaging for Scalr.net SaaS
 		'''
 		name = 'messaging_p2p/producer_url'
-		default = 'https://scalr.net/messaging'
+		default = 'https://my.scalr.net/messaging'
 		private = True
 		required = True
 		
