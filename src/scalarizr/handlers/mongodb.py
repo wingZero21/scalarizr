@@ -207,10 +207,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.shard_index = szr_cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX)
 		self.rs_id = szr_cnf.rawini.get(CNF_SECTION, OPT_RS_ID)
 		web_console = bool(int(szr_cnf.rawini.get(CNF_SECTION, OPT_WEB_CONSOLE)))
-				
-		# TODO: Update this with new query env method
-		# Fill hosts file using queryenv data
-		
+
 		first_in_rs = True	
 		hosts = self._queryenv.list_roles(self._role_name)[0].hosts
 		for host in hosts:
@@ -219,33 +216,35 @@ class MongoDBHandler(ServiceCtlHandler):
 			if host.shard_index == self.shard_index:
 				first_in_rs = False
 
-		is_master = len(self._queryenv.list_roles(self._role_name)[0].hosts) == 0
-		repl = 'master' if is_master else 'slave'
-
 		""" Set hostname"""
 		self.hostname = HOSTNAME_TPL % (self.shard_index, self.rs_id)
 		local_ip = self._platform.get_private_ip()
 		Hosts.set(local_ip, self.hostname)
 		with open('/etc/hostname', 'w') as f:
 			f.write(self.hostname)
-		system2(('hostname', '-F', '/etc/hostname'))		
+		system2(('hostname', '-F', '/etc/hostname'))
 		
 		rs_name = 'rs-%s' % self.shard_index
-				
+		
 		if first_in_rs:
-			self._init_master(message, rs_name, web_console)									  
+			make_shard = self._init_master(message, rs_name, web_console)									  
 		else:
 			self._init_slave(message, rs_name, web_console)
 		
 		if self.shard_index == 0 and self.rs_id == 0:
 			self.mongodb.start_config_server()
-			
+
 		if self.rs_id in [0,1]:
 			self.mongodb.start_router()
-			
-		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 		
-		#self.mongodb.check_replication_status()			
+		if make_shard:
+			self.create_shard()
+
+		repl = 'primary' if first_in_rs else 'secondary'
+
+		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+
+		#self.mongodb.check_replication_status()
 			
 
 	def on_HostInit(self, message):
@@ -283,13 +282,13 @@ class MongoDBHandler(ServiceCtlHandler):
 				possible_arbiter = "%s:%s" % (message.local_ip, mongo_svc.ARBITER_DEFAULT_PORT)
 				if possible_arbiter in self.mongodb.arbiters:
 					self.mongodb.unregister_slave(message.local_ip, mongo_svc.ARBITER_DEFAULT_PORT)
-				""" Start arbiter if necessary """					
+				""" Start arbiter if necessary """
 				if len(self.mongodb.replicas) % 2 == 0:
 					self.mongodb.start_arbiter()
 				else:
 					self.mongodb.stop_arbiter()
 						
-		elif len(self.mongodb.replicas()) == 2 and not self.mongodb.primary_host:
+		elif len(self.mongodb.replicas()) == 2:
 			# Become primary and only member of rs 
 			local_ip = self._platform.get_private_ip()
 			rs_cfg = self.mongodb.cli.get_rs_config()
@@ -457,6 +456,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			except KeyError:
 				pass
 			self._update_config(msg_data)
+			
+		return init_start
 
 
 	def _init_slave(self, message, rs_name, web_console):
@@ -472,10 +473,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		volume = Storage.create(Storage.blank_config(volume_cfg))	
 		self.storage_vol =	 self._plug_storage(self._storage_path, volume)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
-		# TODO: update hosts from queryenv
 
 		self.mongodb.prepare(rs_name, self._storage_path, web_console)
 		self.mongodb.mongod.start()
+		
+				
+		
 
 		# Update HostInitResponse message
 		message.mongodb = self._compat_storage_data(self.storage_vol)

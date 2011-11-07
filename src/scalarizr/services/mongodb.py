@@ -512,6 +512,7 @@ class Mongod(object):
 		try:
 			if not self.is_running:
 				system2(['sudo', '-u', 'mongodb', MONGOD,] + self.args)
+				initdv2.wait_sock(self.sock)
 		except PopenError, e:
 			self._logger.error('Unable to start mongod process: %s' % e)
 
@@ -542,7 +543,8 @@ class Mongos(object):
 	def start(cls):
 		if not cls.is_running():
 			system2((MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
-									'--configdb', 'mongo-0-0:%s' % ROUTER_DEFAULT_PORT))
+									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT))
+			initdv2.wait_sock(cls.sock)
 			
 	@classmethod
 	def stop(cls):
