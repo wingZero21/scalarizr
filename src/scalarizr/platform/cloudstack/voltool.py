@@ -147,7 +147,7 @@ def get_deviceid(devname):
 
 def get_free_deviceid(conn, instance_id):
 	busy = set([vol.deviceid for vol in conn.listVolumes(virtualMachineId=instance_id)])
-	avail = set(range(0, 10))
+	avail = set(range(0, 3) + range(4, 16))
 	avail.difference_update(busy)
 	if len(avail):
 		return avail.pop()
