@@ -504,7 +504,7 @@ class MysqlCnfController(CnfController):
 		out = None
 		
 		if not self._merged_manifest:
-			out = system2(['mysqld', '--no-defaults', '--verbose', '--help'],raise_exc=False,silent=True)[0]
+			out = system2([self._mysqld_path, '--no-defaults', '--verbose', '--help'],raise_exc=False,silent=True)[0]
 			
 		if out:
 			raw = out.split('--------------------------------- -----------------------------')
