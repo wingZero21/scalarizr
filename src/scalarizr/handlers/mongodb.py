@@ -25,6 +25,7 @@ BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
 
 STORAGE_VOLUME_CNF		= 'mongodb.json'
 STORAGE_SNAPSHOT_CNF	= 'mongodb-snap.json'
+STORAGE_TMP_DIR 		= "tmp"
 
 OPT_VOLUME_CNF			= 'volume_config'
 OPT_SNAPSHOT_CNF		= 'snapshot_config'
@@ -160,6 +161,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		ini = self._cnf.rawini
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 		self._storage_path = mongo_svc.STORAGE_PATH
+		self._tmp_dir = os.path.join(self._storage_path, STORAGE_TMP_DIR)
 		
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
@@ -359,22 +361,45 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		tmpdir = backup_path = None
 		try:
+			#turn balancer off
+			self.mongodb.router_cli.stop_balancer()
+			
+			#perform fsync
+			self.mongodb.cli.sync()
+			
+			#create temporary dir for dumps
+			if not os.path.exists(self._tmp_dir):
+				os.makedirs(self._tmp_dir)
+			tmpdir = tempfile.mkdtemp(self._tmp_dir)		
+			rchown('mongodb', tmpdir) 
+			 
+			#dump config db on router
+			r_dbs = self.mongodb.router_cli.list_databases()
+			rdb_name = 'config'
+			if rdb_name  in r_dbs:
+				private_ip = self._platform.get_private_ip()
+				router_port = mongo_svc.ROUTER_DEFAULT_PORT
+				router_dump = mongo_svc.MongoDump(private_ip, router_port)
+				router_dump_path = tmpdir + os.sep + 'router_' + rdb_name + '.bson'
+				err = router_dump.create(rdb_name, router_dump_path)
+				if err:
+					raise HandlerError('Error while dumping database %s: %s' % (rdb_name, err))
+			else:
+				self._logger.warning('config db not found. Nothing to dump on router.')
+			
 			# Get databases list
-			cli = mongo_svc.MongoCLI()
-			dbs = cli.list_databases()
+			dbs = self.mongodb.cli.list_databases()
 			
 			# Defining archive name and path
-			backup_filename = '%s-backup-'%BEHAVIOUR + time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-			backup_path = os.path.join('/tmp', backup_filename)
+			rs_name = RS_NAME_TPL % self.shard_index
+			backup_filename = '%s-%s-backup-'%(BEHAVIOUR,rs_name) + time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+			backup_path = os.path.join(self._tmp_dir, backup_filename)
 			
 			# Creating archive 
 			backup = tarfile.open(backup_path, 'w:gz')
-
+			
 			# Dump all databases
 			self._logger.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp()		
-			rchown('mongodb', tmpdir)  
-			self.mongodb.cli.sync()
 			md = mongo_svc.MongoDump()  
 			
 			for db_name in dbs:
