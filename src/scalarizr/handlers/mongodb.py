@@ -36,6 +36,7 @@ OPT_RS_ID				= "replica_set_index"
 BACKUP_CHUNK_SIZE		= 200*1024*1024
 
 HOSTNAME_TPL			= "mongo-%s-%s"
+RS_NAME_TPL				= "rs-%s"
 
 
 		
@@ -100,7 +101,7 @@ class MongoDBHandler(ServiceCtlHandler):
 	_cnf = None
 	''' @type _cnf: scalarizr.config.ScalarizrCnf '''
 	
-	storage_vol = None	
+	storage_vol = None
 		
 		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -135,7 +136,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.on_reload()   
 		
 	
-	def on_init(self):		
+	def on_init(self):
 			
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
@@ -224,8 +225,9 @@ class MongoDBHandler(ServiceCtlHandler):
 			f.write(self.hostname)
 		system2(('hostname', '-F', '/etc/hostname'))
 		
-		rs_name = 'rs-%s' % self.shard_index
+		rs_name = RS_NAME_TPL % self.shard_index
 		
+		make_shard = None
 		if first_in_rs:
 			make_shard = self._init_master(message, rs_name, web_console)									  
 		else:
@@ -245,13 +247,18 @@ class MongoDBHandler(ServiceCtlHandler):
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 
 		#self.mongodb.check_replication_status()
-			
+
 
 	def on_HostInit(self, message):
 		if message.local_ip != self._platform.get_private_ip():
 			if self.mongodb.is_replication_master and \
 											self._shard_index == message.shard_index:
 				self.mongodb.register_slave(message.local_ip)
+				
+				# TODO: START THREAD AND CHECK UNTIL IT RECOVERY
+				while True:
+					status = self.mongodb.cli
+					
 
 
 	def on_HostUp(self, message):

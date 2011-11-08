@@ -4,14 +4,17 @@ Created on Sep 30, 2011
 @author: Dmytro Korsakov
 '''
 import os
+import re
 import json
 import logging
+import datetime
 
 from scalarizr.services import BaseConfig, BaseService
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, cryptotool, system2, \
 				PopenError, wait_until, initdv2, software
 from scalarizr.util.filetool import rchown
+import pymongo
 
 STORAGE_PATH = "/mnt/mongodb-storage"
 
@@ -559,32 +562,28 @@ class Mongos(object):
 			return True
 		except:
 			return False
-	
-	
+
+
 
 class MongoCLI(object):
 	
 	def __init__(self, port=REPLICA_DEFAULT_PORT):
-		self.port = str(port)
+		self.port = port
 		self._logger = logging.getLogger(__name__)
+
 
 	@classmethod
 	def find(cls, port=REPLICA_DEFAULT_PORT):
-		return cls(port)	
-		
-	def _execute(self, expression):
-		try:
-			a = system2([MONGO_CLI,'--quiet', '--port', self.port],stdin='\n%s;' % expression)[0]
-		except PopenError, e:
-			self._logger.error('Unable to execute %s with %s: %s' % (MONGO_CLI, expression, e))
-			raise
-		a = a[:-5] if a.endswith('\nbye\n') else a
-		try:
-			j =json.loads(a)
-		except ValueError, e:
-			return a
-		return j    
+		return cls(port)
 	
+		
+	@property
+	def connection(self):
+		if not hasattr(self, '_con'):
+			self._con = pymongo.Connection('localhost', self.port)
+		return self._con
+
+		
 	def test_connection(self):
 		'''
 		MongoDB shell version: 2.0.0
@@ -598,62 +597,75 @@ class MongoCLI(object):
 			if "couldn't connect to server" in str(e):
 				return False
 		return True
+
 	
 	def list_databases(self):
-		exp = 'print(db.getMongo().getDBNames())'
-		return self._execute(exp)
+		return self.connection.database_names()
+
 	
 	def initiate_rs(self):
 		'''
 	    initializes replica set
 	    '''
-		exp = 'printjson(db.getMongo().rs.initiate())'
-		return self._execute(exp)
+		return self.connection.admin.command('replSetInitiate')
+
 	
-	def add_replica(self, ip, port=None):
+	def add_replica(self, ip, port=None, arbiter=False):
 		port = port or REPLICA_DEFAULT_PORT
-		exp = 'printjson(rs.add("%s:%s"))' % (ip, port)
-		return self._execute(exp)
+		new_member = {}
+		new_member['host'] = "%s:%s" % (ip, port)
+		cfg = self.get_rs_config()
+		cfg['version'] = cfg['version'] + 1
+		new_member['_id'] = max([m['_id'] for m  in cfg['members']]) + 1
+		cfg['members'].append(new_member)
+		if arbiter:
+			cfg['arbiterOnly'] = True
+		return self.rs_reconfig(cfg)
+		
 	
 	def is_master(self):
-		exp = 'printjson(db.isMaster())' 
-		return self._execute(exp)
+		return self.connection.admin.command('replSetInitiate')
+
 	
 	def get_rs_status(self):
-		exp = 'printjson(rs.status())' 
-		return self._execute(exp)
-	
-	def get_rs_info(self):
-		exp = 'printjson(rs.info())' 
-		return self._execute(exp)
+		return self.connection.admin.command('replSetGetStatus')
+
 	
 	def get_rs_config(self):
-		exp = 'printjson(rs.config())' 
-		return self._execute(exp)
-	
+		rs_count = self.connection.local.system.replset.count()
+		assert(rs_count, "No replica set found")
+		return self.connection.local.system.replset.find_one()
+
+
 	def rs_reconfig(self, config, force=False):
-		if type(config) == dict:
-			config = json.dumps(config)
-		exp = 'printjson(rs.reconfig(%s %s))' % (config, ', {force : true}' if force else '')  
-		return self._execute(exp)
-	
+		return self.connection.admin.command("replSetReconfig", cfg, force=force)		
+
+
 	def add_arbiter(self,ip, port=None):
-		port = port or ARBITER_DEFAULT_PORT
-		exp = 'printjson(rs.addArb("%s:%s"))' % (ip, port)
-		return self._execute(exp)
+		return self.add_replica(ip, port, arbiter=True)
+
 
 	def remove_slave(self, ip, port=None):
 		port = port or REPLICA_DEFAULT_PORT
-		exp = 'printjson(rs.remove("%s:%s"))' % (ip, port)
-		return self._execute(exp)
+		host_to_del = "%s:%s" % (ip, port)
+		cfg = self.get_rs_config()
+		cfg['version'] = cfg['version'] + 1
+		for member in cfg['members']:
+			if member['host'] == host_to_del:
+				cfg['members'].remove(member)
+				self.rs_reconfig(cfg)
+				break
+		else:
+			raise Exception("Host %s not found in replica set")
+
 
 	def shutdown_server(self):
-		exp = 'printjson(db.adminCommand({shutdown : 1}))' 
-		return self._execute(exp)
+		return self.connection.admin.command('shutdown')
+
 	
 	def sync(self):
-		exp = 'printjson(db.runCommand({fsync:1}))' 
-		return self._execute(exp)
+		return self.connection.admin.command('fsync')
+
 
 
 
