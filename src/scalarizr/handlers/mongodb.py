@@ -328,9 +328,14 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 	
 	def on_MongoDB_CreateDataBundle(self, message):
-		
+		if not self.mongodb.is_replication_master:
+			self._logger.debug('Not a master. Skipping data bundle')
+			return 
 		try:
 			bus.fire('before_%s_data_bundle' % BEHAVIOUR)
+			self.mongodb.router_cli.stop_balancer()
+			self.mongodb.cli.sync()
+			
 			# Creating snapshot		
 			snap = self._create_snapshot()
 			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
@@ -352,6 +357,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				status		='error',
 				last_error	= str(e)
 			))
+		finally:
+			self.mongodb.router_cli.start_balancer()
 			
 	
 	def on_MongoDB_CreateBackup(self, message):
