@@ -66,7 +66,7 @@ class MongoDBMessages:
 	"""
 
 	"""
-	Also MySQL behaviour adds params to common messages:
+	Also MongoDB behaviour adds params to common messages:
 	
 	= HOST_INIT_RESPONSE =
 	@ivar MongoDB=dict(
@@ -227,12 +227,16 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		rs_name = RS_NAME_TPL % self.shard_index
 		
+		#TODO: use keyfile for all mongod instances e.g. self.mongodb.keyfile = KeyFile(self._get_keyfile)
+
 		make_shard = None
+
 		if first_in_rs:
 			make_shard = self._init_master(message, rs_name, web_console)									  
 		else:
 			self._init_slave(message, rs_name, web_console)
-		
+			#TODO: wait for full catch up with master before sending hostUp
+			  
 		if self.shard_index == 0 and self.rs_id == 0:
 			self.mongodb.start_config_server()
 
@@ -349,6 +353,10 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 	
 	def on_MongoDB_CreateBackup(self, message):
+		if not self.mongodb.is_replication_master:
+			self._logger.debug('Not a master. Skipping backup process')
+			return 
+		
 		tmpdir = backup_path = None
 		try:
 			# Get databases list
@@ -366,7 +374,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.info("Dumping all databases")
 			tmpdir = tempfile.mkdtemp()		
 			rchown('mongodb', tmpdir)  
-			
+			self.mongodb.cli.sync()
 			md = mongo_svc.MongoDump()  
 			
 			for db_name in dbs:

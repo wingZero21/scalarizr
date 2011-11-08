@@ -286,12 +286,20 @@ class MongoDB(BaseService):
 	
 class MongoDump(object):
 	
-	def __init__(self):
+	host = None
+	port = None
+	
+	def __init__(self, host=None, port=None):
 		self._logger = logging.getLogger(__name__)
+		self.host = host
+		self.port = port
 	
 	def create(self, dbname, dst):
 		self._logger.debug('Dumping database %s to %s' % (dbname, dst))
-		return system2([MONGO_DUMP, '-d', dbname, '-o', dst])
+		args = [MONGO_DUMP, '-d', dbname, '-o', dst]
+		if self.host:
+			args += ('-h', self.host if not self.port else "%s:%s" % (self.host, self.port))
+		return system2(args)
 
 
 		
@@ -666,9 +674,31 @@ class MongoCLI(object):
 	def sync(self):
 		return self.connection.admin.command('fsync')
 
-
-
-
+	
+	def stop_balacer(self):
+		'''
+		// connect to mongos (not a config server!)
+		
+		> use config
+		> db.settings.update( { _id: "balancer" }, { $set : { stopped: true } } , true ); 
+		>
+		> // wait for any migrations that were in progress to finish
+		> // "state" field is zero if no migrations in progress
+		> while( db.locks.findOne({_id: "balancer"}).state ) { print("waiting..."); sleep(1000); }
+		
+		http://www.mongodb.org/display/DOCS/Backing+Up+Sharded+Cluster
+		'''
+		#TODO: use pyMongo
+		pass
+	
+	
+	def start_balancer(self):
+		'''
+		>use config
+		>db.settings.update( { _id: "balancer" }, { $set : { stopped: false } } , true );
+		'''
+		pass
+		
 
 '''
 > rs.initiate()
