@@ -226,7 +226,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		
 		Hosts.set('127.0.0.1', hostname)
 		with open('/etc/hostname', 'w') as f:
-			f.write('rabbit-%s' % message.server_index)
+			f.write(hostname)
 		system2(('hostname', '-F', '/etc/hostname'))
 
 		if OPT_VOLUME_CNF in rabbitmq_data:
