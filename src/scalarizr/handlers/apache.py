@@ -596,7 +596,7 @@ class ApacheHandler(ServiceCtlHandler):
 			default_vhost = Configuration('apache')
 			default_vhost.read(default_vhost_path)
 			default_vhost.set('NameVirtualHost', '*:80', force=True)
-			default_vhost.set('VirtualHost', '*:80')
+			default_vhost.set('VirtualHost', '*:80', force=True)
 			default_vhost.write(default_vhost_path)
 		else:
 			self._logger.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
