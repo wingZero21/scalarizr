@@ -167,10 +167,10 @@ class MongoDB(BaseService):
 		if ret['ok'] == '0':
 			self._logger.error('Could not remove replica %s from set: %s' % (ip, ret['errmsg']))
 	
-	
+	"""
 	def wait_for_sync(self):
 		wait_until(lambda: self.status == 1 or self.status == 2, timeout=3600, sleep=2)
-	
+	"""
 	
 	@property
 	def status(self):
@@ -273,9 +273,17 @@ class MongoDB(BaseService):
 	
 	def _set_cfg_srv_conf(self, obj):
 		self._set('cfg_srv_config', obj)
+		
+		
+	def _get_router_cli(self):
+		return self._get('router_cli', MongoCLI.find, ROUTER_DEFAULT_PORT)
+	
+	def _set_router_cli(self, obj):
+		self._set('router_cli', obj)
 	
 									
 	cli = property(_get_cli, _set_cli)
+	router_cli = property(_get_router_cli, _set_router_cli)
 	mongod = property(_get_mongod, _set_mongod)
 	working_dir = property(_get_working_directory, _set_working_directory)	
 	config = property(_get_config, _set_config)
@@ -307,24 +315,16 @@ class KeyFile(object):
 	
 	def __init__(self, path):
 		self.path = path
-		if not self.exists():
-			self.generate()
 			
 	@classmethod
 	def find(cls, path):
-		return cls(path)		
-			
+		return cls(path)
+
 	def exists(self):
 		return os.path.exists(self.path)
-	
+
 	def __repr__(self):
 		return open(self.path).read().strip() if os.path.exists(self.path) else None
-	
-	def generate(self, length=20):
-		raw = cryptotool.pwgen(length)
-		file = open(self.path,'w')
-		file.write(raw)
-		file.close()
 
 
 
@@ -616,6 +616,11 @@ class MongoCLI(object):
 	    initializes replica set
 	    '''
 		return self.connection.admin.command('replSetInitiate')
+	
+	
+	def add_shard(self, rs_name, rs_members):
+		host_str = '%s/%s' % (rs_name, ','.join(rs_members))
+		return self.connection.admin.command('addshard', host_str)
 
 	
 	def add_replica(self, ip, port=None, arbiter=False):
@@ -632,7 +637,7 @@ class MongoCLI(object):
 		
 	
 	def is_master(self):
-		return self.connection.admin.command('replSetInitiate')
+		return self.connection.admin.command('isMaster')
 
 	
 	def get_rs_status(self):
@@ -646,7 +651,7 @@ class MongoCLI(object):
 
 
 	def rs_reconfig(self, config, force=False):
-		return self.connection.admin.command("replSetReconfig", cfg, force=force)		
+		return self.connection.admin.command("replSetReconfig", config, force=force)		
 
 
 	def add_arbiter(self,ip, port=None):
