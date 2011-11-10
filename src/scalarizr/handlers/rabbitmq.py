@@ -37,10 +37,10 @@ MGMT_PLUGIN_WITH_DEPS_URLS = (	'http://www.rabbitmq.com/releases/plugins/v2.6.1/
 								'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management-2.6.1.ez'  )
 
 class RabbitMQMessages:
-	RABBITMQ_RECONFIGURE = 'RabbitMQ_Reconfigure'
-	RABBITMQ_SETUP_CONTROL_PANEL = 'RabbitMQ_SetupControlPanel'
-	RABBITMQ_RECONFIGURE_RESULT = 'RabbitMQ_ReconfigureResult'
-	RABBITMQ_SETUP_CONTROL_PANEL_RESULT = 'RabbitMQ_SetupControlPanelResult'
+	RABBITMQ_RECONFIGURE = 'RabbitMq_Reconfigure'
+	RABBITMQ_SETUP_CONTROL_PANEL = 'RabbitMq_SetupControlPanel'
+	RABBITMQ_RECONFIGURE_RESULT = 'RabbitMq_ReconfigureResult'
+	RABBITMQ_SETUP_CONTROL_PANEL_RESULT = 'RabbitMq_SetupControlPanelResult'
 
 
 def get_handlers():
