@@ -86,7 +86,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 	def __init__(self):
 		if not software.whereis('rabbitmqctl'):
 			raise HandlerError("Rabbitmqctl binary was not found. Check your installation.")
-		bus.on(init=self.on_init, before_hello=self.on_before_hello)
+		bus.on("init", self.on_init)
 		
 		self._logger = logging.getLogger(__name__)
 		self.rabbitmq = rabbitmq.rabbitmq
@@ -113,6 +113,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 	def on_init(self):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
+		bus.on("before_hello", self.on_before_hello)
 		
 			
 	def on_reload(self):
