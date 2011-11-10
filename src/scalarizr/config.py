@@ -933,6 +933,8 @@ class BuiltinBehaviours:
 	CF_HEALTH_MANAGER = 'cf_health_manager'
 	CF_DEA = 'cf_dea'
 	CF_SERVICE = 'cf_service'
+	
+	CUSTOM = 'custom'
 
 	
 	@staticmethod
