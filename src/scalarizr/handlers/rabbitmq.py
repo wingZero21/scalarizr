@@ -27,14 +27,8 @@ OPT_SNAPSHOT_CNF = 'snapshot_config'
 DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq'
 STORAGE_PATH = '/mnt/rabbitstorage'
 STORAGE_VOLUME_CNF = 'rabbitmq.json'
+RABBITMQ_MGMT_PLUGIN_NAME= 'rabbitmq_management'
 
-
-MGMT_AGENT_URL = 'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management_agent-2.6.1.ez'
-MGMT_PLUGIN_WITH_DEPS_URLS = (	'http://www.rabbitmq.com/releases/plugins/v2.6.1/mochiweb-1.3-rmq2.6.1-git9a53dbd.ez',
-								'http://www.rabbitmq.com/releases/plugins/v2.6.1/webmachine-1.7.0-rmq2.6.1-hg0c4b60a.ez',
-								'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_mochiweb-2.6.1.ez',
-								'http://www.rabbitmq.com/releases/plugins/v2.6.1/amqp_client-2.6.1.ez',
-								'http://www.rabbitmq.com/releases/plugins/v2.6.1/rabbitmq_management-2.6.1.ez'  )
 
 class RabbitMQMessages:
 	RABBITMQ_RECONFIGURE = 'RabbitMq_Reconfigure'
@@ -108,10 +102,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.stop_app()
 			self.rabbitmq.reset()
 			self.service.stop()
-			
-			self._logger.info('Installing management agent plugin')
-			self.rabbitmq.install_plugin(MGMT_AGENT_URL)
-		
+
 			
 		if 'ec2' == self.platform.name:
 			updates = dict(hostname_as_pubdns = '0')
@@ -145,8 +136,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 				raise HandlerError('Server is not in RUNNING state yet')
 			try:
 				self.service.stop()
-				for plugin_url in MGMT_PLUGIN_WITH_DEPS_URLS:
-					self.rabbitmq.install_plugin(plugin_url)
+				self.service.enable_plugin(RABBITMQ_MGMT_PLUGIN_NAME)
 			finally:
 				self.service.start()
 			

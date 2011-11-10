@@ -115,12 +115,8 @@ class RabbitMQ(object):
 		os.chown(COOKIE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 
 
-	def install_plugin(self, url):
-		filename = os.path.basename(url)
-		filepath = os.path.join(self.plugin_dir, filename)
-		tmp_path = urllib.urlretrieve(url)[0]
-		shutil.copy(tmp_path, filepath)
-		os.remove(tmp_path)		
+	def enable_plugin(self, plugin_name):
+		system2(('rabbitmq-plugins', 'enable', plugin_name), logger=self._logger)	
 	
 	
 	def reset(self):
