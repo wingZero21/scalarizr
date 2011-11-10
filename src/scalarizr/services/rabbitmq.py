@@ -141,6 +141,16 @@ class RabbitMQ(object):
 			system2(('rabbitmqctl', 'set_user_tags', username, 'administrator'), logger=self._logger)
 	
 	
+	def delete_user(self, username):
+		if username in self.list_users():
+			system2(('rabbitmqctl', 'delete_user', username), logger=self._logger)
+
+	
+	def list_users(self):
+		out = system2(('rabbitmqctl', 'list_users'), logger=self._logger)[0]
+		users_strings = out.splitlines()[1:-1]
+		return [user_str.split()[0] for user_str in users_strings]
+	
 	@property
 	def node_type(self):
 		return self._cnf.rawini.get(CNF_SECTION, 'node_type')

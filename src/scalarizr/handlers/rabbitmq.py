@@ -152,6 +152,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 			
 			username = message.username or '_scalr_'
 			password = message.password or cryptotool.pwgen(10)
+			self.rabbitmq.delete_user(username)
 			self.rabbitmq.add_user(username, password, True)
 			
 			panel_url = 'http://%s:55672/mgmt/' % self.platform.get_public_ip()
