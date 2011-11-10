@@ -139,7 +139,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 												RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL)
 
 
-	def on_RabbitMQ_SetupControlPanel(self, message):
+	def on_RabbitMq_SetupControlPanel(self, message):
 		try:
 			if not self.cnf.state == ScalarizrState.RUNNING:
 				raise HandlerError('Server is not in RUNNING state yet')
@@ -163,7 +163,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.send_message(RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL_RESULT, msg_body)
 
 
-	def on_RabbitMQ_Reconfigure(self, message):
+	def on_RabbitMq_Reconfigure(self, message):
 		try:
 			if not self.cnf.state == ScalarizrState.RUNNING:
 				raise HandlerError('Server is not in RUNNING state yet')
