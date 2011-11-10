@@ -24,7 +24,8 @@ try:
 	MONGO_DUMP = software.whereis('mongodump')[0]
 	MONGOS = software.whereis('mongos')[0]	
 except IndexError:
-	raise Exception('Cannot locate mongo executables.')
+	#raise Exception('Cannot locate mongo executables.')
+	pass
 
 
 ROUTER_DEFAULT_PORT = 27017
@@ -646,7 +647,7 @@ class MongoCLI(object):
 	
 	def get_rs_config(self):
 		rs_count = self.connection.local.system.replset.count()
-		assert(rs_count, "No replica set found")
+		assert rs_count, "No replica set found" 
 		return self.connection.local.system.replset.find_one()
 
 
