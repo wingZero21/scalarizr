@@ -147,7 +147,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 				raise HandlerError('Server is not in RUNNING state yet')
 			try:
 				self.service.stop()
-				self.service.enable_plugin(RABBITMQ_MGMT_PLUGIN_NAME)
+				self.rabbitmq.enable_plugin(RABBITMQ_MGMT_PLUGIN_NAME)
 			finally:
 				self.service.start()
 			
