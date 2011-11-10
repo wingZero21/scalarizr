@@ -86,7 +86,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 	def __init__(self):
 		if not software.whereis('rabbitmqctl'):
 			raise HandlerError("Rabbitmqctl binary was not found. Check your installation.")
-		bus.on("init", self.on_init)
+		bus.on(init=self.on_init, before_hello=self.on_before_hello)
+		
 		self._logger = logging.getLogger(__name__)
 		self.rabbitmq = rabbitmq.rabbitmq
 		self.service = initdv2.lookup(BuiltinBehaviours.RABBITMQ)
@@ -128,6 +129,16 @@ class RabbitMQHandler(ServiceCtlHanler):
 												Messages.UPDATE_SERVICE_CONFIGURATION,
 												RabbitMQMessages.RABBITMQ_RECONFIGURE,
 												RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL)
+		
+	
+	def on_before_hello(self, message):
+		try:
+			rabbit_version = software.rabbitmq_software_info()
+		except:
+			raise HandlerError("Can't find rabbitmq on this server.")
+		
+		if rabbit_version.version < (2,7,0):
+			raise HandlerError("Rabbitmq versions less than 2.7.0 aren't supported")		
 
 
 	def on_RabbitMq_SetupControlPanel(self, message):
