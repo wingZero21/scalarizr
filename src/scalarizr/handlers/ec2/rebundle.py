@@ -651,7 +651,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			self.ebs_volume = None
 
 
-
 class AmiManifest:
 	
 	VERSION = "2007-10-10"
