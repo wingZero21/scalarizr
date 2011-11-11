@@ -40,6 +40,7 @@ class RabbitMQMessages:
 def get_handlers():
 	return (RabbitMQHandler(), )
 
+
 class Hosts:
 	
 	@classmethod
@@ -79,7 +80,7 @@ class Hosts:
 		with open('/etc/hosts', 'w') as f:
 			for hostname, addr in hosts.iteritems():
 				f.write('%s\t%s\n' % (addr, hostname))
-				
+
 		
 class RabbitMQHandler(ServiceCtlHanler):	
 
@@ -103,6 +104,15 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.stop_app()
 			self.rabbitmq.reset()
 			self.service.stop()
+
+		elif self._cnf.state == ScalarizrState.RUNNING:
+			
+			storage_conf = storage.Storage.restore_config(self._volume_config_path)
+			self.storage_vol = storage.Storage.create(storage_conf)
+			if not self.storage_vol.mounted():
+				self.service.stop()
+				self.storage_vol.mount()
+				self.service.start()
 
 			
 		if 'ec2' == self.platform.name:
@@ -201,24 +211,21 @@ class RabbitMQHandler(ServiceCtlHanler):
 		if message.local_ip != self.platform.get_private_ip():
 			hostname = 'rabbit-%s' % message.server_index
 			Hosts.set(message.local_ip, hostname)
-			#self.rabbitmq.add_nodes([hostname])
 			
 			
 	def on_HostDown(self, message):
 		if not BuiltinBehaviours.RABBITMQ in message.behaviour:
 			return
 		Hosts.delete(message.local_ip)
-		#hostname = 'rabbit-%s' % message.server_index
-		#self.rabbitmq.delete_nodes([hostname])	
 		
 
 	def on_host_init_response(self, message):
 		if not message.body.has_key("rabbitmq"):
 			raise HandlerError("HostInitResponse message for RabbitMQ behaviour must have 'rabbitmq' property")
 		
-		dir = os.path.dirname(self._volume_config_path)
-		if not os.path.exists(dir):
-			os.makedirs(dir)
+		path = os.path.dirname(self._volume_config_path)
+		if not os.path.exists(path):
+			os.makedirs(path)
 			
 		rabbitmq_data = message.rabbitmq.copy()
 
@@ -247,7 +254,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		rabbitmq_user = pwd.getpwnam("rabbitmq")
 		os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 		storage.Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
-		#fstool.mount(STORAGE_PATH, DEFAULT_STORAGE_PATH, ['--bind'])
+
 		
 		
 		nodes = self._get_cluster_nodes()
@@ -312,3 +319,5 @@ class RabbitMQHandler(ServiceCtlHanler):
 				Hosts.set(ip, hostname)
 				nodes.append(hostname)
 		return nodes
+
+		

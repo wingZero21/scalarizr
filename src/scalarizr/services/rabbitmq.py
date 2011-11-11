@@ -6,10 +6,7 @@ Created on Sep 8, 2011
 
 import os
 import pwd
-import urllib
-import shutil
 import logging
-import subprocess
 
 from .postgresql import lazy
 from scalarizr.bus import bus
@@ -21,6 +18,7 @@ from scalarizr.config import BuiltinBehaviours
 SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
 RABBIT_CFG_PATH = '/etc/rabbitmq/rabbitmq.config'
 COOKIE_PATH = '/var/lib/rabbitmq/.erlang.cookie'
+RABBITMQ_ENV_CNF_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
 
 class NodeTypes:
 	RAM = 'ram'
@@ -54,7 +52,9 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 	reload = restart
 
 	def start(self):
-		env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid'}
+		env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid',
+				'RABBITMQ_MNESIA_BASE': '/var/lib/rabbitmq/mnesia'}
+		
 		run_detached('rabbitmq-server', args=['-detached'], env=env)
 		initdv2.wait_sock(self.socks[0])
 				
@@ -88,8 +88,7 @@ class RabbitMQ(object):
 	def __init__(self):
 		self._cnf = bus.cnf
 		self._logger = logging.getLogger(__name__)
-		self.rabbitmq_cnf = metaconf.Configuration('erlang')
-		
+
 		for dir in os.listdir('/usr/lib/rabbitmq/lib/'):
 			if dir.startswith('rabbitmq_server'):
 				self.plugin_dir = os.path.join('/usr/lib/rabbitmq/lib/', dir, 'plugins')
@@ -97,13 +96,6 @@ class RabbitMQ(object):
 		else:
 			raise Exception('RabbitMQ plugin directory not found')
 		
-		if os.path.exists(RABBIT_CFG_PATH):
-			self.rabbitmq_cnf.read(RABBIT_CFG_PATH)
-		try:
-			self.rabbitmq_cnf.get('./rabbit/cluster_nodes')
-		except metaconf.NoPathError:
-			self.rabbitmq_cnf.add('./rabbit/cluster_nodes', force=True)
-			
 		self.service = initdv2.lookup(SERVICE_NAME)
 
 	def set_cookie(self, cookie):
@@ -160,10 +152,7 @@ class RabbitMQ(object):
 			self.reset()
 		system2(cmd, logger=self._logger)
 		self.start_app()
-	
-	
-	def _write_cfg(self):
-		self.rabbitmq_cnf.write(RABBIT_CFG_PATH) 
+
 
 rabbitmq = RabbitMQ()
 
