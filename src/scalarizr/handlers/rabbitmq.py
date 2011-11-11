@@ -27,7 +27,7 @@ OPT_SNAPSHOT_CNF = 'snapshot_config'
 DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq'
 STORAGE_PATH = '/mnt/rabbitstorage'
 STORAGE_VOLUME_CNF = 'rabbitmq.json'
-RABBITMQ_MGMT_PLUGIN_NAME= 'rabbitmq_management'
+RABBITMQ_MGMT_PLUGIN_NAME= 'rabbitmq_management' 
 
 
 class RabbitMQMessages:
