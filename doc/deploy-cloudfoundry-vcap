@@ -22,6 +22,10 @@ git checkout 8f37ade2bdb799b561a4409eef518667fce69b00
 pushd .
 cd cloud_controller/config
 cat <<EOF > cloud_controller.yml.patch
+26c26
+<   allow_external: false
+---
+>   allow_external: true
 42,43c42,43
 <   level: debug
 < # file:

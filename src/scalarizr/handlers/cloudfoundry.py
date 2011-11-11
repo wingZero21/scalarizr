@@ -20,7 +20,7 @@ import shutil
 
 
 def get_handlers():
-	return (MainHandler(), CloudControllerHandler(), SvssHandler(), MysqlHandler())
+	return (CloudControllerHandler(), SvssHandler(), MysqlHandler(), MainHandler())
 
 
 LOG = logging.getLogger(__name__)
@@ -64,11 +64,13 @@ class list_ex(list):
 	def __setattr__(self, key, value):
 		self.__dict__[key] = value
 
+
 class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	
 	def __init__(self):
 		handlers.FarmSecurityMixin.__init__(self, [4222, 9022, 12345])
 		bus.on(init=self.on_init)
+		self._init_globals()		
 	
 	def _init_globals(self):
 		global _cnf, _ini, _bhs, _queryenv, _platform
@@ -151,7 +153,6 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 			before_host_up=self.on_before_host_up,
 			before_reboot_start=self.on_before_reboot_start
 		)
-		self._init_globals()
 
 	
 	def on_reload(self, *args, **kwds):
@@ -346,6 +347,7 @@ class CloudControllerHandler(handlers.Handler):
 				os.removedirs(tmp_mpoint)		
 		self.volume_config = self.volume.config()
 
+		_cf.components['cloud_controller'].allow_external_app_uris = True
 		self._locate_nginx()
 		_cf.init_db()
 

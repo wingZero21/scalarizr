@@ -97,15 +97,18 @@ class QueryEnvService(object):
 		return xml
 	
 	
-	def list_roles (self, role_name=None, behaviour=None):
+	def list_roles (self, role_name=None, behaviour=None, with_init=None):
 		"""
 		@return Role[]
 		"""
 		parameters = {}
-		if None != role_name :
+		if None != role_name:
 			parameters["role"] = role_name
 		if None != behaviour:
 			parameters["behaviour"] = behaviour
+		if None != with_init:
+			parameters["showInitServers"] = "1"
+			
 			
 		return self._request("list-roles", parameters, self._read_list_roles_response)
 	

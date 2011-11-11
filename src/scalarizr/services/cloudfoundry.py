@@ -105,6 +105,17 @@ class Component(Base):
 	ip_route = property(_get_ip_route, _set_ip_route)
 
 
+	def _get_allow_external_app_uris(self):
+		return self.config['app_uris']['allow_external']
+	
+	def _set_allow_external_app_uris(self, b):
+		LOG.debug('Setting %s app_uris/allow_external: %s', self.name, b)
+		sed('  allow_external.*', '  allow_external: ' + str(b).lower(), self.config_file)
+
+	
+	allow_external_app_uris = property(_get_allow_external_app_uris, _set_allow_external_app_uris)
+	
+
 	@property
 	def home(self):
 		return os.path.join(self.cf.home, self.name)

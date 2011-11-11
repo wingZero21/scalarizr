@@ -531,7 +531,7 @@ class FarmSecurityMixin(object):
 	def __insert_iptables_rules(self, *args, **kwds):
 		# Collect farm servers IP-s
 		hosts = []					
-		for role in self._queryenv.list_roles():
+		for role in self._queryenv.list_roles(with_init=True):
 			for host in role.hosts:
 				hosts.append((host.internal_ip, host.external_ip))
 		
