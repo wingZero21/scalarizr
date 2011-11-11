@@ -19,7 +19,6 @@ from xml.dom.minidom import Document
 from datetime import datetime
 import time, os, re, shutil, glob
 
-import boto
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
 from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
