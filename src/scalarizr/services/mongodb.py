@@ -79,7 +79,7 @@ class MongoDB(BaseService):
 
 	
 	def prepare(self, rs_name, enable_rest = False):
-		self.config.rs_name = rs_name
+		self.config.replSet = rs_name
 		self.config.db_path = self.working_dir.create(STORAGE_DATA_DIR)
 		self.config.rest = enable_rest
 		self.config.logpath = LOG_PATH_DEFAULT
@@ -96,7 +96,7 @@ class MongoDB(BaseService):
 		rchown('mongodb', ARBITER_DATA_DIR)	
 			
 		self.arbiter_conf.db_path = ARBITER_DATA_DIR
-		self.arbiter_conf.rs_name = rs_name
+		self.arbiter_conf.replSet = rs_name
 		self.arbiter_conf.shardsvr = True
 		self.arbiter_conf.port = ARBITER_DEFAULT_PORT
 		self.arbiter_conf.logpath = ARBITER_LOG_PATH
@@ -126,7 +126,7 @@ class MongoDB(BaseService):
 	
 	
 	def start_arbiter(self):
-		self._prepare_arbiter(self.config.rs_name)
+		self._prepare_arbiter(self.config.replSet)
 		self.arbiter.start()
 	
 	
@@ -390,10 +390,10 @@ class MongoDBConfig(BaseConfig):
 			self.data = Configuration(self.config_type)
 			if os.path.exists(self.path):
 				self.data.read(self.path)
-		if value:
+		if value :
 			self.data.set(option,value, force=True)
-		else: 
-			self.data.comment(option)
+		else:
+			self.data.remove(option)
 		if self.autosave:
 			self.save_data()
 			self.data = None
@@ -420,10 +420,10 @@ class MongoDBConfig(BaseConfig):
 	def _set_logpath(self, path):
 		self.set('logpath', path)    
 	
-	def _get_rs_name(self):
+	def _get_replSet(self):
 		return self.get('replSet')
 	
-	def _set_rs_name(self, name):
+	def _set_replSet(self, name):
 		self.set('replSet', name)    
 	
 	def _get_port(self):
@@ -475,7 +475,7 @@ class MongoDBConfig(BaseConfig):
 	dbpath = property(_get_dbpath, _set_dbpath)
 	logappend = property(_get_logappend, _set_logappend)
 	port = property(_get_port, _set_port)
-	rs_name = property(_get_rs_name, _set_rs_name)
+	replSet = property(_get_replSet, _set_replSet)
 	logpath = property(_get_logpath, _set_logpath)
 	
 
@@ -488,7 +488,6 @@ class ConfigServerConf(MongoDBConfig):
 	config_name = 'mongodb.arbiter.conf'
 	
 	def _set_configsvr(self, value):
-		value = bool(value)
 		self.set_bool_option('configsvr', value)
 
 	def _get_configsvr(self):
