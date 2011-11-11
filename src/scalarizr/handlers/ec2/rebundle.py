@@ -117,7 +117,6 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		if self._strategy:
 			self._strategy.cleanup()
 
-
 	@property
 	def _s3_bucket_name(self):
 		pl = bus.platform
