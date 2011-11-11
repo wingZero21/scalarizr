@@ -24,7 +24,6 @@ from boto.ec2.volume import Volume
 from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
 
 
-
 # Workaround for python bug #5853
 # @see http://bugs.python.org/issue5853
 # @see http://groups.google.com/group/smug-dev/browse_thread/thread/47e7833edb9efbf9?pli=1
