@@ -24,10 +24,11 @@ from scalarizr.storage import StorageError
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
 OPT_VOLUME_CNF = 'volume_config'
 OPT_SNAPSHOT_CNF = 'snapshot_config'
-DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq'
+DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq/mnesia'
 STORAGE_PATH = '/mnt/rabbitstorage'
 STORAGE_VOLUME_CNF = 'rabbitmq.json'
 RABBITMQ_MGMT_PLUGIN_NAME= 'rabbitmq_management' 
+RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
 
 
 class RabbitMQMessages:
@@ -105,7 +106,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 			self.rabbitmq.reset()
 			self.service.stop()
 
-		elif self._cnf.state == ScalarizrState.RUNNING:
+
+		elif self.cnf.state == ScalarizrState.RUNNING:
 			
 			storage_conf = storage.Storage.restore_config(self._volume_config_path)
 			self.storage_vol = storage.Storage.create(storage_conf)
@@ -265,11 +267,15 @@ class RabbitMQHandler(ServiceCtlHanler):
 		if is_disk_node:
 			hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
 			nodes.append(hostname)
-
+	
+		self._logger.debug('Enabling management agent plugin')
+		self.rabbitmq.enable_plugin(RABBITMQ_MGMT_AGENT_PLUGIN_NAME)
+		
 		ini = self.cnf.rawini
-		cookie = ini.get(CNF_SECTION, 'cookie')
+		cookie = ini.get(CNF_SECTION, 'cookie')		
 		self._logger.debug('Setting erlang cookie: %s' % cookie)
 		self.rabbitmq.set_cookie(cookie)
+		
 		self.service.start()
 		
 		init_run = 'volume_id' not in volume_cnf.keys()
