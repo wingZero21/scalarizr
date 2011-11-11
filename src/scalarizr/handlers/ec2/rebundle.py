@@ -32,7 +32,6 @@ import mimetypes
 mimetypes.init()
 
 
-
 def get_handlers ():
 	return [Ec2RebundleHandler()]
 
