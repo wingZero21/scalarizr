@@ -118,10 +118,13 @@ class BaseConfig(object):
 		
 	def set_numeric_option(self, option, number):
 		try:
-			assert not number or int(number)
-			self.set(option, str(number))
-		except ValueError:
+			assert number is None or type(number) is int
+		except AssertionError:
 			raise ValueError('%s must be a number (got %s instead)' % (option, number))
+		
+		is_numeric = type(number) is int
+		self.set(option, str(number) if is_numeric else None)
+
 					
 	def get(self, option):
 		if not self.data:
@@ -141,8 +144,11 @@ class BaseConfig(object):
 	
 	def get_numeric_option(self, option):
 		value = self.get(option)
-		assert not value or int(value)
-		return int(value) if value else 0
+		try:
+			assert value is None or int(value)
+		except AssertionError:
+			raise ValueError('%s must be a number (got %s instead)' % (option, type(value)))
+		return value if value is None else int(value)
 	
 	def save_data(self):
 		if self.data:

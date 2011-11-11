@@ -399,19 +399,26 @@ class MongoDBConfig(BaseConfig):
 			self.data = None
 
 	def set_bool_option(self, option, value):
-		assert value is True or value is False
-		self.set(option, 'true' if value else None)
+		try:
+			assert value in (None, True, False)
+		except AssertionError:
+			raise ValueError('%s must be a boolean (got %s instead)' % (option, type(value)))
+		value_to_set = None if value is None else str(value).lower()
+		self.set(option, value_to_set)
 
 	def get_bool_option(self, option):
 		value = self.get(option)
-		assert not value or value == 'true' or value == 'false'
+		try:
+			assert not value or value == 'true' or value == 'false'
+		except AssertionError:
+			raise ValueError('%s must be true or false (got %s instead)' % (option,  type(value)))
 		return True if value == 'true' else False
 
 	def _get_logpath(self):
 		return self.get('logpath')
 	
 	def _set_logpath(self, path):
-		set('logpath', path)    
+		self.set('logpath', path)    
 	
 	def _get_rs_name(self):
 		return self.get('replSet')
@@ -432,7 +439,7 @@ class MongoDBConfig(BaseConfig):
 		self.set_bool_option('logappend', on)    
 
 	def _get_dbpath(self):
-		return self.set_path_type_option('dbpath')
+		return self.get('dbpath')
 	
 	def _set_dbpath(self, path):
 		self.set_path_type_option('dbpath', path)
@@ -456,7 +463,6 @@ class MongoDBConfig(BaseConfig):
 		self.set_bool_option('rest', on)
 		
 	def _set_shardsvr(self, value):
-		value = bool(value)
 		self.set_bool_option('shardsvr', value)
 
 	def _get_shardsvr(self):
