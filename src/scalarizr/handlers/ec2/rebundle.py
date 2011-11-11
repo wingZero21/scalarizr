@@ -918,7 +918,6 @@ class AmiManifest:
 
 		out_file.write(doc.toxml())
 		out_file.close()
-
 	
 	def load(self, filename):
 		# TODO: implement
