@@ -260,11 +260,12 @@ class BaseRedisConfig(BaseConfig):
 			self.data = None
 	
 	def set_sequential_option(self, option, seq):
+		is_typle = type(seq) is tuple
 		try:
-			assert not seq or type(seq)==tuple
-			self.set(option, ' '.join(map(str,seq)) if seq else None)
-		except ValueError:
+			assert seq is None or is_typle
+		except AssertionError:
 			raise ValueError('%s must be a sequence (got %s instead)' % (option, seq))	
+		self.set(option, ' '.join(map(str,seq)) if is_typle else None)
 
 	def get_sequential_option(self, option):
 		raw = self.get(option)
@@ -297,8 +298,7 @@ class BaseRedisConfig(BaseConfig):
 		
 	def set_dict_option(self, option, d):
 		try:
-			assert not d or type(d)==dict
-			
+			assert d is None or type(d)==dict
 			#cleaning up
 			#TODO: make clean process smarter using indexes
 			for i in self.get_list(option):
