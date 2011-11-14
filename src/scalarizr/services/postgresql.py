@@ -933,7 +933,7 @@ class PgHbaConf(Configuration):
 	def delete_record(self, record):
 		lines = []
 		changed = False
-		text = read_file(self.path)
+		text = read_file(self.path) or ''
 		for line in text.splitlines():
 			if line.strip() and not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
 				changed = True
