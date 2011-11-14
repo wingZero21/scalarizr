@@ -710,6 +710,7 @@ class MysqlHandler(ServiceCtlHandler):
 		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
+			self._stop_service('Configuring')
 		
 		elif self._cnf.state == ScalarizrState.RUNNING:
 			# Creating self.storage_vol object from configuration
