@@ -8,7 +8,7 @@ import os
 import pwd
 import logging
 
-from .postgresql import lazy
+from . import lazy
 from scalarizr.bus import bus
 from scalarizr.libs import metaconf
 from scalarizr.util import initdv2, system2, run_detached
