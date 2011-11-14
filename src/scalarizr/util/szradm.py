@@ -260,12 +260,12 @@ class ListRolesCommand(Command):
 	fields = ['behaviour','name', 'index', 'internal-ip',
 		'external-ip', 'replication-master']
 	parser = OptionParser(usage='list-roles [-b --behaviour] '
-		'[-r --role] [--with-initialized]', description='Display roles list',
+		'[-r --role] [--with-initializing]', description='Display roles list',
 		 formatter= IndHelpFormatter())
 	parser.add_option('-b', '--behaviour', dest='behaviour', help='Role behaviour')
 	parser.add_option('-r', '--role-name', dest='role_name', help='Role name')
-	parser.add_option('--with-initialized', dest='with_init', 
-					action='store_true', default=None, help='Show Initialized servers')
+	parser.add_option('--with-initializing', dest='with_init', 
+					action='store_true', default=None, help='Show initializing servers')
 
 	def iter_result(self, result):
 		'''Return array of result'''
