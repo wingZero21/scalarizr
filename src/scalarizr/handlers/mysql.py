@@ -36,6 +36,7 @@ import ConfigParser
 
 # Extra
 import pexpect
+import signal
 
 
 
@@ -664,6 +665,12 @@ class MysqlHandler(ServiceCtlHandler):
 		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
+			
+			# Add SELinux rule
+			set_se_path = software.whereis('setsebool')
+			if set_se_path:
+				system2((set_se_path[0], '-P', 'mysqld_disable_trans', '1'))
+			
 		
 		elif self._cnf.state == ScalarizrState.RUNNING:
 			# Creating self.storage_vol object from configuration
@@ -1829,6 +1836,7 @@ def spawn_mysqld():
 def term_mysqld(mysqld):
 	_logger.debug('Terminating mysqld')
 	mysqld.terminate(force=True)
+	os.kill(mysqld.pid, signal.SIGKILL)
 	#wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
 
 
