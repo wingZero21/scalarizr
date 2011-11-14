@@ -14,7 +14,7 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.services import rabbitmq
 from scalarizr import storage
-from scalarizr.handlers import HandlerError, ServiceCtlHanler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.util import system2, initdv2, cryptotool, software, dns
 from scalarizr.storage import StorageError
@@ -42,7 +42,7 @@ def get_handlers():
 	return (RabbitMQHandler(), )
 
 		
-class RabbitMQHandler(ServiceCtlHanler):	
+class RabbitMQHandler(ServiceCtlHandler):	
 
 	def __init__(self):
 		if not software.whereis('rabbitmqctl'):
