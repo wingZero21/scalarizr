@@ -100,6 +100,9 @@ class LoopVolumeProvider(VolumeProvider):
 		if force:
 			os.remove(vol.file)
 		vol.device = None
+	
+	def blank_config(self, cnf):
+		cnf.pop('file', None)
 		
 	def _rmloop(self, device):
 		try:

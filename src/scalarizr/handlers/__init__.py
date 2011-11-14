@@ -3,7 +3,8 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool
+from scalarizr.util import initdv2, disttool, iptables
+from scalarizr.util.filetool import write_file
 from scalarizr.util.initdv2 import Status
 from scalarizr.service import CnfPresetStore, CnfPreset, CnfController,\
 	PresetType
@@ -12,7 +13,7 @@ import os
 import platform
 import logging
 import threading
-from distutils.file_util import write_file
+
 
 
 class Handler(object):
@@ -39,15 +40,15 @@ class Handler(object):
 			pl = bus.platform
 			cons = srv.get_consumer()
 			cons.message_to_ack = msg
-			self._logger.debug('Creating BeforeHostUp acknowledgement handler')
+			self._logger.debug('Creating %s acknowledgement handler', msg.name)
 			saved_access_data = pl._access_data
 			if saved_access_data:
 				saved_access_data = dict(saved_access_data)
 			waiter = threading.Thread(name='%sMessageHandler' % msg.name, target=cons.message_handler)
 			waiter.start()
-			self._logger.debug('Joining BeforeHostUp acknowledgement handler')
+			self._logger.debug('Joining %a acknowledgement handler', msg.name)
 			waiter.join()
-			self._logger.debug('BeforeHostUp acknowledgement handler joined!')
+			self._logger.debug('%s acknowledgement handler joined!', msg.name)
 			cons.message_to_ack = None
 			if saved_access_data:
 				pl.set_access_data(saved_access_data)
@@ -84,14 +85,14 @@ class HandlerError(BaseException):
 	pass
 
 class MessageListener:
-	_logger = None 
-	_handlers_chain = None
 	_accept_kwargs = {}
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		self._handlers_chain = None		
 		cnf = bus.cnf
 		platform = bus.platform
+
 
 		self._logger.debug("Initialize message listener");
 		self._accept_kwargs = dict(
@@ -181,7 +182,7 @@ def async(fn):
 	return decorated
 
 
-class ServiceCtlHanler(Handler):
+class ServiceCtlHandler(Handler):
 	_logger = None 	
 	
 	_service_name = None
@@ -386,16 +387,165 @@ class ServiceCtlHanler(Handler):
 			
 		bus.fire(self._service_name + '_configure', **kwargs)		
 
-
-class RebundleLogHandler(logging.Handler):
-	def __init__(self, bundle_task_id=None):
-		logging.Handler.__init__(self)
-		self.bundle_task_id = bundle_task_id
-		self._msg_service = bus.messaging_service
 		
-	def emit(self, record):
-		msg = self._msg_service.new_message(Messages.REBUNDLE_LOG, body=dict(
-			bundle_task_id = self.bundle_task_id,
-			message = str(record.msg) % record.args if record.args else str(record.msg)
-		))
-		self._msg_service.get_producer().send(Queues.LOG, msg)
+class DbMsrMessages:
+	DBMSR_CREATE_DATA_BUNDLE = "DbMsr_CreateDataBundle"
+	
+	DBMSR_CREATE_DATA_BUNDLE_RESULT = "DbMsr_CreateDataBundleResult"
+	'''
+	@ivar: db_type: postgresql|mysql
+	@ivar: status: Operation status [ ok | error ]
+	@ivar: last_error: errmsg if status = error
+	@ivar: snapshot_config: snapshot configuration
+	@ivar: current_xlog_location:  pg_current_xlog_location() on master after snap was created
+	'''
+	
+	DBMSR_CREATE_BACKUP = "DbMsr_CreateBackup"
+	
+	DBMSR_CREATE_BACKUP_RESULT = "DbMsr_CreateBackupResult"
+	'''
+	@ivar: db_type: postgresql|mysql
+	@ivar: status: Operation status [ ok | error ]
+	@ivar: last_error:  errmsg if status = error
+	@ivar: backup_parts: URL List (s3, cloudfiles)
+	'''
+	
+	DBMSR_PROMOTE_TO_MASTER = "DbMsr_PromoteToMaster"
+	
+	DBMSR_PROMOTE_TO_MASTER_RESULT = "DbMsr_PromoteToMasterResult"
+	'''
+	@ivar: db_type: postgresql|mysql
+	@ivar: status: ok|error
+	@ivar: last_error: errmsg if status=error
+	@ivar: volume_config: volume configuration
+	@ivar: snapshot_config?: snapshot configuration
+	@ivar: current_xlog_location_?:  pg_current_xlog_location() on master after snap was created
+	'''
+	
+	DBMSR_NEW_MASTER_UP = "DbMsr_NewMasterUp"
+	'''
+	@ivar: db_type:  postgresql|mysql
+	@ivar: local_ip
+	@ivar: remote_ip
+	@ivar: snapshot_config
+	@ivar: current_xlog_location:  pg_current_xlog_location() on master after snap was created
+	'''
+	
+	"""
+	Also Postgresql behaviour adds params to common messages:
+	
+	= HOST_INIT_RESPONSE =
+	@ivar db_type: postgresql|mysql
+	@ivar postgresql=dict(
+		replication_master:  	 1|0 
+		root_user 
+		root_password:			 'scalr' user password  					(on slave)
+		root_ssh_private_key
+		root_ssh_public_key 
+		current_xlog_location 
+		volume_config:			Master storage configuration			(on master)
+		snapshot_config:		Master storage snapshot 				(both)
+	)
+	
+	= HOST_UP =
+	@ivar db_type: postgresql|mysql
+	@ivar postgresql=dict(
+		replication_master: 1|0 
+		root_user 
+		root_password: 			'scalr' user password  					(on master)
+		root_ssh_private_key
+		root_ssh_public_key
+		current_xlog_location
+		volume_config:			Current storage configuration			(both)
+		snapshot_config:		Master storage snapshot					(on master)	
+	) 
+	"""	
+
+
+class FarmSecurityMixin(object):
+	def __init__(self, ports):
+		self._ports = ports
+		self._iptables = iptables.IpTables()
+		if not self._iptables.usable():
+			raise HandlerError('iptables is not installed. iptables is required to run me correctly')
+		
+		bus.on('init', self.__on_init)
+		
+	def __on_init(self):
+		bus.on(
+			before_host_up=self.__insert_iptables_rules,
+			before_reboot_finish=self.__insert_iptables_rules,
+			reload=self.__on_reload
+		)
+		self.__on_reload()		
+	
+	def __on_reload(self):
+		self._queryenv = bus.queryenv_service
+		self._platform = bus.platform
+	
+	
+	def on_HostInit(self, message):
+		# Append new server to allowed list
+		rules = []
+		for port in self._ports:
+			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
+		for rule in rules:
+			self._iptables.insert_rule(1, rule)
+		
+
+	def on_HostDown(self, message):
+		# Remove terminated server from allowed list
+		rules = []
+		for port in self._ports:
+			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
+		for rule in rules:
+			self._iptables.delete_rule(rule)
+
+
+	def __create_rule(self, source, dport, jump):
+		return iptables.RuleSpec(
+					source=source, 
+					protocol=iptables.P_TCP, 
+					dport=dport, 
+					jump=jump)
+		
+		
+	def __create_accept_rule(self, source, dport):
+		return self.__create_rule(source, dport, 'ACCEPT')
+	
+	
+	def __create_drop_rule(self, dport):
+		return self.__create_rule(None, dport, 'DROP')
+	
+
+	def __accept_host(self, local_ip, public_ip, dport):
+		ret = []
+		if local_ip == self._platform.get_private_ip():
+			ret.append(self.__create_accept_rule('127.0.0.1', dport))
+		if local_ip:
+			ret.append(self.__create_accept_rule(local_ip, dport))
+		ret.append(self.__create_accept_rule(public_ip, dport))
+		return ret
+
+
+	def __insert_iptables_rules(self, *args, **kwds):
+		# Collect farm servers IP-s
+		hosts = []					
+		for role in self._queryenv.list_roles(with_init=True):
+			for host in role.hosts:
+				hosts.append((host.internal_ip, host.external_ip))
+		
+		rules = []
+		for port in self._ports:
+			rules += self.__accept_host(self._platform.get_private_ip(), 
+									self._platform.get_public_ip(), port)
+			for local_ip, public_ip in hosts:
+				rules += self.__accept_host(local_ip, public_ip, port)
+		
+		# Deny from all
+		for port in self._ports:
+			rules.append(self.__create_drop_rule(port))
+			
+		rules.reverse()
+		for rule in rules:
+			self._iptables.insert_rule(1, rule)

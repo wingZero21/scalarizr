@@ -10,7 +10,7 @@ Created on Jan 6, 2010
 from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
-from scalarizr.handlers import HandlerError, ServiceCtlHanler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 
 # Libs
@@ -171,13 +171,13 @@ class NginxCnfController(CnfController):
 		return software.software_info('nginx').version
 
 		
-class NginxHandler(ServiceCtlHanler):
+class NginxHandler(ServiceCtlHandler):
 	
 	backends_xpath = "upstream[@value='backend']/server"
 	localhost = '127.0.0.1:80'
 	
 	def __init__(self):
-		ServiceCtlHanler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
+		ServiceCtlHandler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
 				
 		self._logger = logging.getLogger(__name__)
 		
@@ -255,7 +255,7 @@ class NginxHandler(ServiceCtlHanler):
 				include.add(self.backends_xpath, self.localhost)
 
 		include.write(self._app_inc_path)
-		self._restart_service('%s is to be terminated' % server_ip)
+		self._reload_service('%s is to be terminated' % server_ip)
 
 
 	def on_VhostReconfigure(self, message):
@@ -357,9 +357,14 @@ class NginxHandler(ServiceCtlHanler):
 		
 		for app_serv in list_roles:
 			for app_host in app_serv.hosts :
-				server_str = '%s:%s' % (app_host.internal_ip, self._app_port)
+				server_str = '%s:%s' % (app_host.internal_ip or app_host.external_ip, self._app_port)
 				servers.append(server_str)
 		self._logger.debug("QueryEnv returned list of app servers: %s" % servers)
+		
+		# Add cloudfoundry routers
+		for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.CF_ROUTER):
+			for host in role.hosts:
+				servers.append('%s:%s' % (host.internal_ip or host.external_ip, 2222))
 
 		for entry in backend_include.get_list(self.backends_xpath):
 			for server in servers:
@@ -413,6 +418,8 @@ class NginxHandler(ServiceCtlHanler):
 			self._test_config()
 
 		bus.fire("nginx_upstream_reload")	
+
+	
 
 	def _insert_iptables_rules(self, *args, **kwargs):
 		iptables = IpTables()

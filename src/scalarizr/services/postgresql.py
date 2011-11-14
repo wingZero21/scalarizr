@@ -1,4 +1,4 @@
-'''
+u'''
 Created on Jul 7, 2011
 
 @author: shaitanich
@@ -6,21 +6,21 @@ Created on Jul 7, 2011
 
 import os
 import time
+import glob
 import shlex
 import shutil
 import logging
 
-import pwd
-
 from M2Crypto import RSA
 
-from scalarizr.libs.metaconf import Configuration, NoPathError
+from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, cryptotool, firstmatched, wait_until
 from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, PopenError
-from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util.filetool import read_file, write_file, rchown
+from scalarizr.services import BaseService, BaseConfig, lazy
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL #TODO: remove extra
@@ -44,64 +44,6 @@ OPT_REPLICATION_MASTER  = "replication_master"
 STORAGE_DATA_DIR 		= "data"
 TRIGGER_NAME 			= "trigger"
 
-
-def lazy(init):
-	def wrapper(cls, *args, **kwargs):
-		obj = init(cls, *args, **kwargs)
-		return LazyInitScript(obj)
-	return wrapper
-
-
-class LazyInitScript(object):
-	
-	_script = None
-	reload_queue = None
-	restart_queue = None
-	
-	def __init__(self, script):
-		self._script = script
-		self.reload_queue = []
-		self.restart_queue = []
-
-	def start(self):
-		try:
-			if not self._script.running:
-				self._script.start()
-			elif self.restart_queue:
-				reasons = ' '.join([req+',' for req in self.restart_queue])[:-1]
-				self._script.restart(reasons)	
-			elif self.reload_queue:
-				reasons = ' '.join([req+',' for req in self.reload_queue])[:-1]
-				self._script.reload(reasons)		
-		finally:
-			self.restart_queue = []
-			self.reload_queue = []	
-		
-	def stop(self, reason=None):
-		if self._script.running:
-			try:
-				self._script.stop(reason)
-			finally:
-				self.restart_queue = []
-				self.reload_queue = []	
-
-	def restart(self, reason=None, force=False):
-		if force:
-			self._script.restart(reason)
-		elif  self._script.running:
-			self.restart_queue.append(reason)
-		
-	def reload(self, reason=None):
-		if self._script.running:
-			self.reload_queue.append(reason)
-	
-	@property		
-	def running(self):
-		return self._script.running
-	
-	def status(self):
-		return self._script.status()
-			
 				
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
@@ -144,7 +86,7 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 initdv2.explore(SERVICE_NAME, PgSQLInitScript)
 
 
-class PostgreSql(object):
+class PostgreSql(BaseService):
 	
 	_objects = None
 	_instance = None
@@ -162,6 +104,15 @@ class PostgreSql(object):
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
+	
+	@property
+	def version(self):
+		path = glob.glob('/var/lib/p*sql/9.*')[0]
+		return path.split('postgresql/')[-1]
+
+	@property	
+	def unified_etc_path(self):
+		return '/etc/postgresql/%s/main' % self.version
 					
 	@property
 	def is_replication_master(self):
@@ -265,8 +216,8 @@ class PostgreSql(object):
 		self.cluster_dir.clean()
 		
 		if disttool.is_centos():
-			self.config_dir.move_to(self.config_dir.default_ubuntu_path)
-			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.config_dir.default_ubuntu_path)
+			self.config_dir.move_to(self.unified_etc_path)
+			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
 			self.postgresql_conf = PostgresqlConf.find(self.config_dir)
 		
 
@@ -603,9 +554,9 @@ class PSQL(object):
 					
 	
 class ClusterDir(object):
-	
-	default_centos_path = '/var/lib/pgsql/9.0/data'
-	default_ubuntu_path = '/var/lib/pgsql/9.0/main'
+	base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
+	default_centos_path = os.path.join(base_path, 'data')
+	default_ubuntu_path = os.path.join(base_path, 'main')
 	
 	def __init__(self, path=None, user = "postgres"):
 		self.path = path
@@ -658,8 +609,6 @@ class ConfigDir(object):
 	
 	path = None
 	user = None
-	default_ubuntu_path = '/etc/postgresql/9.0/main'
-	default_centos_path = '/var/lib/pgsql/9.0/data'
 	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
 	def __init__(self, path=None, user = "postgres"):
@@ -671,7 +620,8 @@ class ConfigDir(object):
 		path = self.get_sysconfig_pgdata()
 		if path:
 			return path
-		return self.default_ubuntu_path if disttool.is_ubuntu() else self.default_centos_path
+		l = glob.glob('/etc/postgresql/9.*/main') if disttool.is_ubuntu() else glob.glob('/var/lib/p*sql/9.*/data')
+		return l[0] if l else None
 	
 	def move_to(self, dst):
 		if not os.path.exists(dst):
@@ -709,6 +659,10 @@ class ConfigDir(object):
 	
 	def set_sysconfig_pgdata(self, pgdata):
 		self._logger.debug("rewriting PGDATA path in sysconfig")
+		dir = os.path.dirname(self.sysconf_path)
+		if not os.path.exists(dir):
+			#ubuntu 11.10 has no sysconfig dir in etc
+			os.makedirs(dir)
 		file = open(self.sysconf_path, 'w')
 		file.write('PGDATA=%s' % pgdata)
 		file.close()
@@ -763,73 +717,9 @@ class Trigger(object):
 	def exists(self):
 		return os.path.exists(self.path)
 	
-
-class BasePGConfig(object):
-	'''
-	Parent class for object representations of postgresql.conf and recovery.conf which fortunately both have similar syntax
-	'''
-	
-	autosave = None
-	path = None
-	data = None
-	config_name = None
-	
-	def __init__(self, path, autosave=True):
-		self._logger = logging.getLogger(__name__)
-		self.autosave = autosave
-		self.path = path
-		
-	@classmethod
-	def find(cls, config_dir):
-		return cls(os.path.join(config_dir.path, cls.config_name))
-		
-	def set(self, option, value):
-		if not self.data:
-			self.data = Configuration('pgsql')
-			if os.path.exists(self.path):
-				self.data.read(self.path)
-		self.data.set(option,value, force=True)
-		if self.autosave:
-			self.save()
-			self.data = None
 			
-	def set_path_type_option(self, option, path):
-		if not os.path.exists(path):
-			raise ValueError('%s %s does not exist' % (option, path))
-		self.set(option, path)		
-		
-	def set_numeric_option(self, option, number):
-		try:
-			assert not number or int(number)
-			self.set(option, str(number))
-		except ValueError:
-			raise ValueError('%s must be a number (got %s instead)' % (option, number))
-					
-	def get(self, option):
-		if not self.data:
-			self.data =  Configuration('pgsql')
-			if os.path.exists(self.path):
-				self.data.read(self.path)	
-		try:
-			value = self.data.get(option)	
-		except NoPathError:
-			try:
-				value = getattr(self, option+'_default')
-			except AttributeError:
-				value = None
-		if self.autosave:
-			self.data = None
-		return value
-	
-	def get_numeric_option(self, option):
-		value = self.get(option)
-		assert not value or int(value)
-		return int(value) if value else 0
-	
-	def save(self):
-		if self.data:
-			self.data.write(self.path)
-			
+class BasePGConfig(BaseConfig):
+	config_type = 'pgsql'
 
 class PostgresqlConf(BasePGConfig):
 
@@ -889,7 +779,7 @@ class PostgresqlConf(BasePGConfig):
 	hot_standby = property(_get_hot_standby, _set_hot_standby)
 	
 	max_wal_senders_default = 5
-	wal_keep_segments = 32
+	wal_keep_segments_default = 32
 
 
 	
@@ -1075,22 +965,6 @@ class PgHbaConf(Configuration):
 class ParseError(BaseException):
 	pass
 
-
-def rchown(user, path):
-	#log "chown -r %s %s" % (user, path)
-	user = pwd.getpwnam(user)	
-	os.chown(path, user.pw_uid, user.pw_gid)
-	try:
-		for root, dirs, files in os.walk(path):
-			for dir in dirs:
-				os.chown(os.path.join(root , dir), user.pw_uid, user.pw_gid)
-			for file in files:
-				if os.path.exists(os.path.join(root, file)): #skipping dead links
-					os.chown(os.path.join(root, file), user.pw_uid, user.pw_gid)
-	except OSError, e:
-		#log 'Cannot chown directory %s : %s' % (path, e)	
-		pass
-		
 		
 def make_symlinks(source_dir, dst_dir, username='postgres'):
 	#Vital hack for getting CentOS init script to work

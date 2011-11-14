@@ -316,6 +316,7 @@ def _apply_user_data(cnf):
 			'server_id' : g(UserDataOptions.SERVER_ID),
 			'role_name' : g(UserDataOptions.ROLE_NAME),
 			'queryenv_url' : g(UserDataOptions.QUERYENV_URL),
+			'cloud_storage_path': g(UserDataOptions.CLOUD_STORAGE_PATH)
 		},
 		messaging_p2p={
 			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
@@ -645,14 +646,19 @@ def main():
 		_init_db()
 		
 		
+		if cnf.state == ScalarizrState.UNKNOWN:
+			cnf.state = ScalarizrState.BOOTSTRAPPING
+			
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
 			cnf.fire('apply_user_data', cnf)			
-		
+
+		'''		
 		# At first scalarizr startup platform user-data should be applied
 		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			cnf.fire('apply_user_data', cnf)
+		'''
 		
 		# Check Scalr version
 		if not bus.scalr_version:

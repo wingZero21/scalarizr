@@ -9,7 +9,7 @@ Created on Dec 25, 2009
 from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
-from scalarizr.handlers import HandlerError, ServiceCtlHanler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 
 # Libs
@@ -58,7 +58,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			self, 
 			'apache', 
 			initd_script,
-			socks=[initdv2.SockParam(80)]
+			pid_file = pid_file
 		)
 		
 	def reload(self):
@@ -69,7 +69,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		else:
 			raise InitdError('Service "%s" is not running' % self.name, InitdError.NOT_RUNNING)
 		
-	def status(self):		
+	def status(self):
 		status = initdv2.ParametrizedInitScript.status(self)
 		# If 'running' and socks were passed
 		if not status and self.socks:
@@ -178,7 +178,7 @@ def reload_apache_conf(f):
 	return g
 
 
-class ApacheHandler(ServiceCtlHanler):
+class ApacheHandler(ServiceCtlHandler):
 	
 	_config = None
 	_logger = None
@@ -190,7 +190,7 @@ class ApacheHandler(ServiceCtlHanler):
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)		
-		ServiceCtlHanler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())
 				
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
@@ -281,6 +281,9 @@ class ApacheHandler(ServiceCtlHanler):
 			self._logger.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
 			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
 			rpaf.write(file)
+			st = os.stat(self._httpd_conf_path)
+			os.chown(file, st.st_uid, st.st_gid)
+			
 			
 			self._reload_service('Applying new RPAF proxy IPs list')
 		else:
@@ -593,8 +596,16 @@ class ApacheHandler(ServiceCtlHanler):
 			default_vhost = Configuration('apache')
 			default_vhost.read(default_vhost_path)
 			default_vhost.set('NameVirtualHost', '*:80', force=True)
-			default_vhost.set('VirtualHost', '*:80')
+			#default_vhost.set('VirtualHost', '*:80', force=True)
 			default_vhost.write(default_vhost_path)
+			
+			error_message = 'Cannot read default vhost config file %s' % default_vhost_path
+			dv = read_file(default_vhost_path, error_msg=error_message, logger=self._logger)
+			vhost_regexp = re.compile('<VirtualHost\s+\*>')
+			dv = vhost_regexp.sub( '<VirtualHost *:80>', dv)
+			error_message = 'Cannot write to default vhost config file %s' % default_vhost_path
+			write_file(default_vhost_path, dv, error_msg=error_message, logger=self._logger)
+			
 		else:
 			self._logger.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
 

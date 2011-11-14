@@ -1,53 +1,48 @@
 '''
-Created on April 18th, 2011
+Created on Aug 12, 2011
 
 @author: Dmytro Korsakov
 '''
+
 import os
 import time
 import shutil
 import tarfile
-import logging
 import tempfile
+import logging
 
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
+from scalarizr.util import system2, wait_until
+from scalarizr.util.filetool import split, rchown
+from scalarizr.services.redis import Redis
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
-from scalarizr.util.filetool import split, rchown
-from scalarizr.util import system2, wait_until
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
-	PgUser, SU_EXEC
 
 
+BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
+STORAGE_PATH 				= '/mnt/redisstorage'
+STORAGE_VOLUME_CNF 			= 'redis.json'
+STORAGE_SNAPSHOT_CNF 		= 'redis-snap.json'
 
-PG_SOCKET_DIR 				= '/var/run/postgresql/'
-STORAGE_PATH 				= "/mnt/pgstorage"
-STORAGE_VOLUME_CNF 			= 'postgresql.json'
-STORAGE_SNAPSHOT_CNF 		= 'postgresql-snap.json'
-
+OPT_REPLICATION_MASTER  	= 'replication_master'
+OPT_PERSISTENCE_TYPE		= 'persistence_type'
+OPT_MASTER_PASSWORD			= "master_password"
 OPT_VOLUME_CNF				= 'volume_config'
 OPT_SNAPSHOT_CNF			= 'snapshot_config'
-OPT_ROOT_USER				= 'root_user'
-OPT_ROOT_PASSWORD 			= "root_password"
-OPT_ROOT_SSH_PUBLIC_KEY 	= "root_ssh_public_key"
-OPT_ROOT_SSH_PRIVATE_KEY	= "root_ssh_private_key"
-OPT_CURRENT_XLOG_LOCATION	= 'current_xlog_location'
 
-BACKUP_CHUNK_SIZE 		= 200*1024*1024
+BACKUP_CHUNK_SIZE 			= 200*1024*1024
+DEFAULT_PORT	= 6379
 
-POSTGRESQL_DEFAULT_PORT	= 5432
 
-		
 def get_handlers():
-	return (PostgreSqlHander(), )
+	return (RedisHandler(), )
 
 
-class PostgreSqlHander(ServiceCtlHandler):	
+class RedisHandler(ServiceCtlHandler):	
 	_logger = None
 		
 	_queryenv = None
@@ -61,7 +56,22 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	storage_vol = None	
 		
-		
+	@property
+	def is_replication_master(self):
+		value = 0
+		if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, OPT_REPLICATION_MASTER):
+			value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
+			self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
+		return True if int(value) else False
+
+	@property
+	def persistence_type(self):
+		value = 'snapshotting'
+		if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, OPT_PERSISTENCE_TYPE):
+			value = self._cnf.rawini.get(CNF_SECTION, OPT_PERSISTENCE_TYPE)
+			self._logger.debug('Got %s : %s' % (OPT_PERSISTENCE_TYPE, value))
+		return value
+			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
 					message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
@@ -69,7 +79,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
-				or  message.name == Messages.HOST_INIT
 				or  message.name == Messages.BEFORE_HOST_TERMINATE)	
 
 	
@@ -77,30 +86,25 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._logger = logging.getLogger(__name__)
 		bus.on("init", self.on_init)
 		bus.define_events(
-			'before_postgresql_data_bundle',
+			'before_%s_data_bundle' % BEHAVIOUR,
 			
-			'postgresql_data_bundle',
-			
-			# @param host: New master hostname 
-			'before_postgresql_change_master',
+			'%s_data_bundle' % BEHAVIOUR,
 			
 			# @param host: New master hostname 
-			'postgresql_change_master',
+			'before_%s_change_master' % BEHAVIOUR,
+			
+			# @param host: New master hostname 
+			'%s_change_master' % BEHAVIOUR,
 			
 			'before_slave_promote_to_master',
 			
 			'slave_promote_to_master'
 		)	
 		
-		self.postgresql = PostgreSql()
 		self.on_reload()		
 
-
+	
 	def on_init(self):		
-		#temporary fix for starting-after-rebundle issue
-		if not os.path.exists(PG_SOCKET_DIR):
-			os.makedirs(PG_SOCKET_DIR)
-			rchown(user='postgres', path=PG_SOCKET_DIR)
 			
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
@@ -114,21 +118,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 			
-			self.postgresql.service.start()
-			
-			if self.postgresql.is_replication_master:
-				self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
-				root_password = self.postgresql.root_user.password
-				if not self.postgresql.root_user.exists():
-					self._logger.debug("Scalr's PostgreSQL root user does not exist. Recreating")
-					self.postgresql.root_user = self.postgresql.create_user(ROOT_USER, root_password)
-				else:
-					try:
-						self.postgresql.root_user.check_password(root_password)
-						self._logger.debug("Scalr's root PgSQL user is present. Password is correct.")				
-					except ValueError:
-						self._logger.warning("Scalr's root PgSQL user was changed. Recreating.")
-						self.postgresql.root_user.change_password(root_password)
+			self.redis.service.start()
 			
 
 	def on_reload(self):
@@ -137,83 +127,68 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+		
 		self._storage_path = STORAGE_PATH
-		self._tmp_path = os.path.join(self._storage_path, 'tmp')
 		
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		
-	
-	def on_HostInit(self, message):
-		if message.local_ip != self._platform.get_private_ip():
-			self._logger.debug('Got new slave IP: %s. Registering in pg_hba.conf' % message.local_ip)
-			self.postgresql.register_slave(message.local_ip)
+		self.redis = Redis(self.is_replication_master, self.persistence_type)
+		
 				
-	
+
 	def on_host_init_response(self, message):
 		"""
-		Check postgresql data in host init response
+		Check redis data in host init response
 		@type message: scalarizr.messaging.Message
 		@param message: HostInitResponse
 		"""
 		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
-			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
-		
-		'''
-		if message.postgresql[OPT_REPLICATION_MASTER] != '1'  and \
-				(not message.body.has_key(OPT_ROOT_SSH_PUBLIC_KEY) or not 
-				message.body.has_key(OPT_ROOT_SSH_PRIVATE_KEY)):
-			raise HandlerError("HostInitResponse message for PostgreSQL slave must contain both public and private ssh keys")
-		'''
+			raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property and db_type '%s'" 
+							% (BEHAVIOUR, BEHAVIOUR, BEHAVIOUR))
 		
 		dir = os.path.dirname(self._volume_config_path)
 		if not os.path.exists(dir):
 			os.makedirs(dir)
 		
-		postgresql_data = message.postgresql.copy()
-
-		root = PgUser(ROOT_USER)
-		root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
-		del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
-		del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]		
+		redis_data = message.redis.copy()	
+		self._logger.info('Got Redis part of HostInitResponse: %s' % redis_data)
 		
 		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 			if os.path.exists(file):
 				os.remove(file)
 			
-			if key in postgresql_data:
-				if postgresql_data[key]:
-					Storage.backup_config(postgresql_data[key], file)
-				del postgresql_data[key]
+			if key in redis_data:
+				if redis_data[key]:
+					Storage.backup_config(redis_data[key], file)
+				del redis_data[key]
 		
-		self._logger.debug("Update postgresql config with %s", postgresql_data)
-		self._update_config(postgresql_data)
-
+		self._logger.debug("Update redis config with %s", redis_data)
+		self._update_config(redis_data)
+		
+		self.redis.is_replication_master = self.is_replication_master
+		self.redis.persistence_type = self.persistence_type 
 
 	def on_before_host_up(self, message):
 		"""
-		Configure PostgreSQL behaviour
+		Configure redis behaviour
 		@type message: scalarizr.messaging.Message		
 		@param message: HostUp message
 		"""
 
-		repl = 'master' if self.postgresql.is_replication_master else 'slave'
-		#bus.fire('before_postgresql_configure', replication=repl)
+		repl = 'master' if self.redis.is_replication_master else 'slave'
 		
-		if self.postgresql.is_replication_master:
+		if self.redis.is_replication_master:
 			self._init_master(message)									  
 		else:
 			self._init_slave(message)		
 			
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 					
-				
+					
 	def on_before_reboot_start(self, *args, **kwargs):
-		"""
-		Stop MySQL and unplug storage
-		"""
-		self.postgresql.service.stop('rebooting')
+		self.redis.service.stop('rebooting')
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
@@ -223,22 +198,19 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def on_BeforeHostTerminate(self, message):
 		if message.local_ip == self._platform.get_private_ip():
-			self.postgresql.service.stop('Server will be terminated')
-			self._logger.info('Detaching PgSQL storage')
+			self.redis.service.stop('Server will be terminated')
+			self._logger.info('Detaching Redis storage')
 			self.storage_vol.detach()
-		elif self.postgresql.is_replication_master:
-			self.postgresql.unregister_slave(message.local_ip)	
-
+	
+	
 	def on_DbMsr_CreateDataBundle(self, message):
 		
 		try:
-			bus.fire('before_postgresql_data_bundle')
-			# Retrieve password for scalr postgresql root user
-			root_password = self.postgresql.root_user.password
+			bus.fire('before_%s_data_bundle' % BEHAVIOUR)
 			# Creating snapshot		
-			snap = self._create_snapshot(ROOT_USER, root_password)
+			snap = self._create_snapshot()
 			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-			bus.fire('postgresql_data_bundle', snapshot_id=snap.id)			
+			bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)			
 			
 			# Notify scalr
 			msg_data = dict(
@@ -259,63 +231,57 @@ class PostgreSqlHander(ServiceCtlHandler):
 				last_error	= str(e)
 			))
 			
-
+	
 	def on_DbMsr_PromoteToMaster(self, message):
 		"""
 		Promote slave to master
 		@type message: scalarizr.messaging.Message
-		@param message: postgresql_PromoteToMaster
+		@param message: redis_PromoteToMaster
 		"""
 		
 		if message.db_type != BEHAVIOUR:
 			self._logger.error('Wrong db_type in DbMsr_PromoteToMaster message: %s' % message.db_type)
 			return
 		
-		if self.postgresql.is_replication_master:
+		if self.redis.is_replication_master:
 			self._logger.warning('Cannot promote to master. Already master')
 			return
-		
 		bus.fire('before_slave_promote_to_master')
 		
 		master_storage_conf = message.body.get('volume_config')
 		tx_complete = False	
 		old_conf 		= None
-		new_storage_vol	= None		
-					
+		new_storage_vol	= None	
+		
 		try:
-						
 			msg_data = dict(
 					db_type=BEHAVIOUR, 
 					status="ok",
 			)
 			
-			self.postgresql.stop_replication()
-			slaves = [host.internal_ip for host in self._get_slave_hosts()]
-			
 			if master_storage_conf:
 
-				self.postgresql.service.stop('Unplugging slave storage and then plugging master one')
+				self.redis.service.stop('Unplugging slave storage and then plugging master one')
 
 				old_conf = self.storage_vol.detach(force=True) # ??????
 				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
 							
-				# Continue if master storage is a valid postgresql storage 
-				if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
-					raise HandlerError("%s is not a valid postgresql storage" % self._storage_path)
+				# Continue if master storage is a valid redis storage 
+				if not self.redis.working_directory.is_initialized(self._storage_path):
+					raise HandlerError("%s is not a valid %s storage" % (self._storage_path, BEHAVIOUR))
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
 				
-			self.postgresql.init_master(self._storage_path, slaves)
-			self._update_config({OPT_REPLICATION_MASTER : "1"})	
+			self.redis.init_master(self._storage_path, password=self.redis.password)
+			self._update_config({OPT_REPLICATION_MASTER : "1"})
 				
 			if not master_storage_conf:
 									
-				snap = self._create_snapshot(ROOT_USER, message.root_password)
+				snap = self._create_snapshot()
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol.config(), snap)
 				
-			msg_data[BEHAVIOUR].update({OPT_CURRENT_XLOG_LOCATION: None})		
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
 								
 			tx_complete = True
@@ -335,8 +301,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 				last_error=str(e)
 			))
 
-			# Start postgresql
-			self.postgresql.service.start()
+			# Start redis
+			self.redis.service.start()
 		
 		if tx_complete and master_storage_conf:
 			# Delete slave EBS
@@ -344,87 +310,56 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self.storage_vol = new_storage_vol
 			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
-	
+
+
 	def on_DbMsr_NewMasterUp(self, message):
 		"""
 		Switch replication to a new master server
 		@type message: scalarizr.messaging.Message
-		@param message:  DbMsr_NewMasterUp
+		@param message:  DbMsr__NewMasterUp
 		"""
 		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
-			raise HandlerError("DbMsr_NewMasterUp message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
+			raise HandlerError("DbMsr_NewMasterUp message for %s behaviour must have '%s' property and db_type '%s'" % 
+							BEHAVIOUR, BEHAVIOUR, BEHAVIOUR)
 		
-		postgresql_data = message.postgresql.copy()
-		
-		if self.postgresql.is_replication_master:
+		if self.redis.is_replication_master:
 			self._logger.debug('Skipping NewMasterUp. My replication role is master')	
 			return 
-		
+
 		host = message.local_ip or message.remote_ip
-		self._logger.info("Switching replication to a new postgresql master %s", host)
-		bus.fire('before_postgresql_change_master', host=host)			
+		self._logger.info("Switching replication to a new %s master %s"% (BEHAVIOUR, host))
+		bus.fire('before_%s_change_master' % BEHAVIOUR, host=host)			
 		
-		if OPT_SNAPSHOT_CNF in postgresql_data:
-			snap_data = postgresql_data[OPT_SNAPSHOT_CNF]
-			self._logger.info('Reinitializing Slave from the new snapshot %s', 
-					snap_data['id'])
-			self.postgresql.service.stop()
-			
-			self._logger.debug('Destroying old storage')
-			self.storage_vol.destroy()
-			self._logger.debug('Storage destroyed')
-			
-			self._logger.debug('Plugging new storage')
-			vol = Storage.create(snapshot=snap_data.copy())
-			self._plug_storage(self._storage_path, vol)
-			self._logger.debug('Storage plugged')
-			
-			Storage.backup_config(vol.config(), self._volume_config_path)
-			Storage.backup_config(snap_data, self._snapshot_config_path)
-			self.storage_vol = vol
-			
-		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
+		password = self._get_password()	
+		self.redis.init_slave(self._storage_path, host, DEFAULT_PORT, password)
+		self.redis.wait_for_sync()
 			
 		self._logger.debug("Replication switched")
-		bus.fire('postgresql_change_master', host=host)
+		bus.fire('%s_change_master' % BEHAVIOUR, host=host)
 			
-
+	
 	def on_DbMsr_CreateBackup(self, message):
-		#TODO: Think how to move the most part of it into Postgresql class 
-		# Retrieve password for scalr mysql user
 		tmpdir = backup_path = None
 		try:
-			# Get databases list
-			psql = PSQL(user=self.postgresql.root_user.name)
-			databases = psql.list_pg_databases()
+			# Dump all databases
+			self._logger.info("Dumping all databases")			
+			tmpdir = tempfile.mkdtemp()		
+			src_path = self.redis.db_path
+			dump_path = os.path.join(tmpdir, os.path.basename(self.redis.db_path))
 			
-			if not os.path.exists(self._tmp_path):
-				os.makedirs(self._tmp_path)
-				
+			if not os.path.exists(src_path):
+				raise BaseException('%s DB file %s does not exist. Skipping Backup process' % (BEHAVIOUR, src_path))
+			
 			# Defining archive name and path
-			backup_filename = 'pgsql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-			backup_path = os.path.join(self._tmp_path, backup_filename)
+			backup_filename = 'redis-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+			backup_path = os.path.join('/tmp', backup_filename)
+
+			shutil.copyfile(src_path, dump_path)
+			rchown('redis', tmpdir)
 			
 			# Creating archive 
 			backup = tarfile.open(backup_path, 'w:gz')
-
-			# Dump all databases
-			self._logger.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
-			rchown(self.postgresql.root_user.name, tmpdir)	
-			
-			for db_name in databases:
-				if db_name == 'template0':
-					continue
-				
-				dump_path = tmpdir + os.sep + db_name + '.sql'
-				pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path)
-				su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
-				err = system2(su_args)[1]
-				if err:
-					raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
-				
-				backup.add(dump_path, os.path.basename(dump_path))
+			backup.add(dump_path, os.path.basename(self.redis.db_path))
 			backup.close()
 			
 			# Creating list of full paths to archive chunks
@@ -436,8 +371,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
 			trn = transfer.Transfer()
 			result = trn.upload(parts, self._platform.cloud_storage_path)
-			self._logger.info("Postgresql backup uploaded to cloud storage under %s/%s", 
-							self._platform.cloud_storage_path, backup_filename)
+			self._logger.info("%s backup uploaded to cloud storage under %s/%s" % 
+						(BEHAVIOUR, self._platform.cloud_storage_path, backup_filename))
 			
 			# Notify Scalr
 			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
@@ -462,15 +397,15 @@ class PostgreSqlHander(ServiceCtlHandler):
 			if backup_path and os.path.exists(backup_path):
 				os.remove(backup_path)				
 		
-								
+							
 	def _init_master(self, message):
 		"""
-		Initialize postgresql master
+		Initialize redis master
 		@type message: scalarizr.messaging.Message 
 		@param message: HostUp message
 		"""
 		
-		self._logger.info("Initializing PostgreSQL master")
+		self._logger.info("Initializing %s master" % BEHAVIOUR)
 		
 		# Plug storage
 		volume_cnf = Storage.restore_config(self._volume_config_path)
@@ -480,23 +415,17 @@ class PostgreSqlHander(ServiceCtlHandler):
 		except IOError:
 			pass
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
-		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
-		
-		
-		self.postgresql.init_master(mpoint=self._storage_path)
-		root_password = self.postgresql.root_user.password
+		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)	
+			
+		password = self._get_password()
+		self.redis.init_master(mpoint=self._storage_path, password=password)
 		
 		msg_data = dict()
-		
-		msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.postgresql.is_replication_master)),
-							OPT_ROOT_USER				:	self.postgresql.root_user.name,
-							OPT_ROOT_PASSWORD			:	root_password,
-							OPT_CURRENT_XLOG_LOCATION	: 	None})	
-		#TODO: add xlog
+		msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
+							OPT_MASTER_PASSWORD			:	self.redis.password})	
 			
 		# Create snapshot
-		snap = self._create_snapshot(ROOT_USER, root_password)
-		
+		snap = self._create_snapshot()
 		Storage.backup_config(snap.config(), self._snapshot_config_path)
 	
 		# Update HostUp message 
@@ -504,16 +433,18 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 		if msg_data:
 			message.db_type = BEHAVIOUR
-			message.postgresql = msg_data.copy()
-			message.postgresql.update({
-							OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key, 
-							OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key
-							})
+			message.redis = msg_data.copy()
 			try:
 				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
 			except KeyError:
 				pass 
-			self._update_config(msg_data)
+			self._update_config(msg_data)		
+
+	def _get_password(self):
+		password = None 
+		if self._cnf.rawini.has_option(CNF_SECTION, OPT_MASTER_PASSWORD):
+			password = self._cnf.rawini.get(CNF_SECTION, OPT_MASTER_PASSWORD)	
+		return password		
 	
 	def _get_master_host(self):
 		master_host = None
@@ -524,29 +455,29 @@ class PostgreSqlHander(ServiceCtlHandler):
 					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
 					if host.replication_master)[0]
 			except IndexError:
-				self._logger.debug("QueryEnv respond with no postgresql master. " + 
-						"Waiting %d seconds before the next attempt", 5)
+				self._logger.debug("QueryEnv respond with no %s master. " % BEHAVIOUR + 
+						"Waiting %d seconds before the next attempt" % 5)
 				time.sleep(5)
 		return master_host
-	
-	def _get_slave_hosts(self):
-		self._logger.info("Requesting standby servers")
-		return list(host for host in self._queryenv.list_roles(self._role_name)[0].hosts 
-				if not host.replication_master)
+
 				
 	def _init_slave(self, message):
 		"""
-		Initialize postgresql slave
+		Initialize redis slave
 		@type message: scalarizr.messaging.Message 
 		@param message: HostUp message
 		"""
-		self._logger.info("Initializing postgresql slave")
+		self._logger.info("Initializing %s slave" % BEHAVIOUR)
 		
-		if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
-			self._logger.debug("Initialize slave storage")
-			self.storage_vol = self._plug_storage(self._storage_path, 
-					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
-			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		# Plug storage
+		volume_cfg = Storage.restore_config(self._volume_config_path)
+		volume = Storage.create(Storage.blank_config(volume_cfg))	
+		self.storage_vol = 	self._plug_storage(self._storage_path, volume)
+		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		
+		#cleaning volume
+		if self.redis.working_directory.is_initialized(self._storage_path):
+			self.redis.working_directory.empty()
 			
 		# Change replication master 
 		master_host = self._get_master_host()
@@ -555,10 +486,11 @@ class PostgreSqlHander(ServiceCtlHandler):
 				master_host.internal_ip, master_host.external_ip)
 		
 		host = master_host.internal_ip or master_host.external_ip
-		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
+		self.redis.init_slave(self._storage_path, host, DEFAULT_PORT, self._get_password())
+		self.redis.wait_for_sync()
 		
 		# Update HostUp message
-		message.postgresql = self._compat_storage_data(self.storage_vol)
+		message.redis = self._compat_storage_data(self.storage_vol)
 		message.db_type = BEHAVIOUR
 
 
@@ -583,7 +515,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 			if not vol.mounted():
 				vol.mount(mpoint)
 		except StorageError, e:
-			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
 			if 'you must specify the filesystem type' in str(e):
 				vol.mkfs()
 				vol.mount(mpoint)
@@ -592,31 +523,29 @@ class PostgreSqlHander(ServiceCtlHandler):
 		return vol
 
 
-	def _create_snapshot(self, root_user, root_password, dry_run=False):
-		psql = PSQL()
-		if self.postgresql.service.running:
-			psql.start_backup()
+	def _create_snapshot(self):
 		
 		system2('sync', shell=True)
 		# Creating storage snapshot
-		snap = None if dry_run else self._create_storage_snapshot()
-		if self.postgresql.service.running:
-			psql.stop_backup()
-		
+		snap = self._create_storage_snapshot()
+			
 		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
 		if snap.state == Snapshot.FAILED:
-			raise HandlerError('postgresql storage snapshot creation failed. See log for more details')
+			raise HandlerError('%s storage snapshot creation failed. See log for more details' % BEHAVIOUR)
 		
-		self._logger.info('PostgreSQL data bundle created\n  snapshot: %s', snap.id)
+		self._logger.info('Redis data bundle created\n  snapshot: %s', snap.id)
 		return snap
 
 
 	def _create_storage_snapshot(self):
+		if self.redis.service.running:
+			self._logger.info("Dumping Redis data on disk")
+			self.redis.redis_cli.save()
 		self._logger.info("Creating storage snapshot")
 		try:
 			return self.storage_vol.snapshot()
 		except StorageError, e:
-			self._logger.error("Cannot create PostgreSQL data snapshot. %s", e)
+			self._logger.error("Cannot create %s data snapshot. %s", (BEHAVIOUR, e))
 			raise
 		
 
@@ -627,3 +556,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if snap:
 			ret['snapshot_config'] = snap.config()
 		return ret
+
+	
+	

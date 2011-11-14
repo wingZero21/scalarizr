@@ -40,7 +40,7 @@ class P2pMessageConsumer(MessageConsumer):
 	def start(self):
 		if self.running:
 			raise MessagingError('Message consumer is already running')
-		
+
 		try:
 			if self._server is None:
 				r = urlparse(self.endpoint)
@@ -96,7 +96,7 @@ class P2pMessageConsumer(MessageConsumer):
 					return
 				
 				
-				logger.info("Received message '%s' (message_id: %s)", message.name, message.id)
+				logger.debug("Received message '%s' (message_id: %s)", message.name, message.id)
 				#logger.info("Received ingoing message '%s' in queue %s", message.name, queue)
 				
 				try:
@@ -171,7 +171,7 @@ class P2pMessageConsumer(MessageConsumer):
 				try:
 					if self.message_to_ack:
 						for queue, message in store.get_unhandled(self.endpoint):
-							self._logger.debug('Got: %s', message.name)
+							#self._logger.debug('Got: %s', message.name)
 							if message.name == self.message_to_ack.name and \
 									message.meta['server_id'] == self.message_to_ack.meta['server_id']:
 								self._handle_one_message(message, queue, store)

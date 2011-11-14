@@ -10,6 +10,7 @@ import re
 import socket
 import urllib2
 import logging
+import ConfigParser
 
 class PlatformError(BaseException):
 	pass
@@ -22,6 +23,7 @@ class UserDataOptions:
 	QUERYENV_URL = "queryenv_url"
 	MESSAGE_SERVER_URL = "p2p_producer_endpoint"
 	FARM_HASH = "hash"
+	CLOUD_STORAGE_PATH = 'cloud_storage_path'
 
 class PlatformFactory(object):
 	_platforms = {}
@@ -91,7 +93,10 @@ class Platform():
 	
 	@property
 	def cloud_storage_path(self):
-		return self.get_user_data('cloud_storage_path')
+		try:
+			return bus.cnf.rawini.get('general', 'cloud_storage_path')
+		except ConfigParser.NoOptionError:
+			return ''
 	
 	def _parse_user_data(self, raw_userdata):
 		userdata = {}

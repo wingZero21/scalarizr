@@ -210,20 +210,20 @@ class ScalarizrOptions(Configurator.Container):
 	class queryenv_url(Configurator.Option):
 		'''
 		QueryEnv URL.
-		URL to QueryEnv service. Use https://scalr.net/query-env for Scalr.net SaaS
+		URL to QueryEnv service. Use https://my.scalr.net/query-env for Scalr.net SaaS
 		'''
 		name = 'general/queryenv_url'
-		default = 'https://scalr.net/query-env'
+		default = 'https://my.scalr.net/query-env'
 		private = True
 		required = True
 
 	class message_producer_url(Configurator.Option):
 		'''
 		Message server URL.
-		URL to Scalr message server. Use https://scalr.net/messaging for Scalr.net SaaS
+		URL to Scalr message server. Use https://my.scalr.net/messaging for Scalr.net SaaS
 		'''
 		name = 'messaging_p2p/producer_url'
-		default = 'https://scalr.net/messaging'
+		default = 'https://my.scalr.net/messaging'
 		private = True
 		required = True
 		
@@ -880,7 +880,8 @@ class ScalarizrCnf(Observable):
 		return str.strip(filetool.read_file(filename, logger=self._logger))
 
 	def _set_state(self, v):
-		filetool.write_file(self.private_path('.state'), v, logger=self._logger)		
+		filetool.write_file(self.private_path('.state'), v, logger=self._logger)
+		self._logger.info('State: %s', v)
 
 	state = property(_get_state, _set_state)
 
@@ -889,6 +890,12 @@ class ScalarizrCnf(Observable):
 	
 	def public_path(self, name=None):
 		return name and os.path.join(self._pub_path, name) or self._pub_path
+	
+	def private_exists(self, name=None):
+		return os.path.exists(self.private_path(name))
+	
+	def public_exists(self, name=None):
+		return os.path.exists(self.public_path(name))
 	
 	@property
 	def storage_path(self):
@@ -920,6 +927,16 @@ class BuiltinBehaviours:
 	MEMCACHED = 'memcached'
 	POSTGRESQL = 'postgresql'
 	RABBITMQ = 'rabbitmq'
+	REDIS = 'redis'
+
+	CF_ROUTER = 'cf_router'
+	CF_CLOUD_CONTROLLER = 'cf_cloud_controller'
+	CF_HEALTH_MANAGER = 'cf_health_manager'
+	CF_DEA = 'cf_dea'
+	CF_SERVICE = 'cf_service'
+	
+	CUSTOM = 'custom'
+
 	
 	@staticmethod
 	def values():

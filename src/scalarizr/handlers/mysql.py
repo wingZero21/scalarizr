@@ -12,9 +12,9 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer 
 from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
-from scalarizr.service import CnfController, CnfPreset
+from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.messaging import Messages
-from scalarizr.handlers import HandlerError, ServiceCtlHanler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.platform import UserDataOptions
 
 # Libs
@@ -27,7 +27,7 @@ from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
-import logging, os, re,  tarfile, tempfile
+import logging, os, re, sys, tarfile, tempfile
 import time, pwd, random, shutil
 import glob
 import string
@@ -103,17 +103,12 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			args.append(action) 
 			out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
 		except PopenError, e:
-			#temporary fix for broken status() method in mysql
-			if 'Job is already running' in e:
-				pass
-			else:
+			if 'Job is already running' not in str(e):
 				raise InitdError("Popen failed with error %s" % (e,))
-		
-		if returncode:
-			raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), returncode)
 		
 		if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			try:
+				_logger.debug('waiting for mysql process')
 				wait_until(lambda: mysqld_path in system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
 							, timeout=10, sleep=1)
 			except:
@@ -292,15 +287,10 @@ class MySQL(object):
 		
 	def dump_database(self, database, filename):
 		self.logger.info('Dumping database %s', database)
+		opts = config.split(bus.cnf.rawini.get('mysql', 'mysqldump_options'), ' ')
+		opts = ['/usr/bin/mysqldump', '-u', self.root_user, '-p'] + opts + ['--databases']
 		with open(filename, 'w') as fp: 
-			system2(('/usr/bin/mysqldump', '-u', self.root_user, '-p', 
-					'--create-options', 
-					'--routines', 
-					'--add-drop-database', 
-					'--quick', 
-					'--quote-names', 
-					'--flush-privileges', 
-					'--databases', database), stdin=self.root_password, stdout=fp)
+			system2(opts + [database], stdin=self.root_password, stdout=fp)
 	
 	
 class MySQLClient(object):
@@ -353,8 +343,9 @@ Failover scenario:
      <--------------------------						 
 
      Mysql_NewMasterUp
-       - local_ip
+       - root_password
        - repl_password
+       - stat_password
      ---------------------------------------------------------------->
       														 get current log_file, log_pos
       														 CHANGE MASTER TO
@@ -491,7 +482,8 @@ class MysqlMessages:
 
 
 class MysqlCnfController(CnfController):
-	_mysql_version = None	
+	_mysql_version = None
+	_merged_manifest = None	
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -500,7 +492,57 @@ class MysqlCnfController(CnfController):
 		ini = self._cnf.rawini
 		self._mycnf_path = ini.get(CNF_SECTION, OPT_MYCNF_PATH)
 		self._mysqld_path = ini.get(CNF_SECTION, OPT_MYSQLD_PATH)
-		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql', {'ON':'1','OFF':'0'}) #TRUE,FALSE
+		CnfController.__init__(self, BEHAVIOUR, self._mycnf_path, 'mysql', {'ON':'1', 'TRUE':'1','OFF':'0','FALSE':'0'}) #TRUE,FALSE
+
+	@property
+	def _manifest(self):
+		f_manifest = CnfController._manifest
+		base_manifest = f_manifest.fget(self)		
+		path = self._manifest_path
+
+		s = {}
+		out = None
+		
+		if not self._merged_manifest:
+			out = system2([self._mysqld_path, '--no-defaults', '--verbose', '--help'],raise_exc=False,silent=True)[0]
+			
+		if out:
+			raw = out.split('--------------------------------- -----------------------------')
+			if raw:
+				a = raw[-1].split('\n')
+				if len(a) > 7:
+					b = a[1:-7]
+					for item in b:
+						c = item.split()
+						if len(c) > 1:
+							s[c[0].strip()] = ' '.join(c[1:]).strip()
+		
+		if s:	
+			m_config = Configuration('ini')
+			if os.path.exists(path):
+				m_config.read(path)		
+				
+			for variable in base_manifest:
+				name = variable.name
+				dv_path = './%s/default-value' % name
+				
+				try:
+					old_value =  m_config.get(dv_path)
+					if name in s:
+						new_value = s[name] 
+					else:
+						name = name.replace('_','-')
+						if name in s:
+							new_value = self.definitions[s[name]] if s[name] in self.definitions else s[name]
+							if old_value != new_value and new_value != '(No default value)':
+								self._logger.debug('Replacing %s default value %s with precompiled value %s' % (name, old_value, new_value))
+								m_config.set(path=dv_path, value=new_value, force=True)
+				except NoPathError, e:
+					pass
+			m_config.write(path)
+					
+		self._merged_manifest = _CnfManifest(path)
+		return self._merged_manifest
 
 	def _start_service(self):
 		if not hasattr(self, '_mysql_cnf_err_re'):
@@ -560,7 +602,11 @@ class MysqlCnfController(CnfController):
 		if option_spec.default_value and not option_spec.need_restart:
 			self._logger.debug('Preparing to set run-time variable %s to default [%s]' 
 						% (option_spec.name,option_spec.default_value))
+			'''
+			when removing mysql options DEFAULT keyword must be used instead of
 			self.sendline += 'SET GLOBAL %s = %s; ' % (option_spec.name, option_spec.default_value)
+			'''
+			self.sendline += 'SET GLOBAL %s = DEFAULT; ' % (option_spec.name)
 	
 	def _after_apply_preset(self):
 		if not self._init_script.running:
@@ -609,7 +655,7 @@ def _reload_mycnf(f):
 		f(self, *args, **kwargs)
 	return g	
 
-class MysqlHandler(ServiceCtlHanler):
+class MysqlHandler(ServiceCtlHandler):
 	_logger = None
 	
 	_mysql_config = None
@@ -634,7 +680,7 @@ class MysqlHandler(ServiceCtlHanler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		initd = initdv2.lookup(SERVICE_NAME)
-		ServiceCtlHanler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
 		
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
@@ -857,80 +903,8 @@ class MysqlHandler(ServiceCtlHanler):
 			
 			# Creating snapshot
 			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
-			#tags = {'tmp': '1'}	if self.storage_vol.type == 'ebs' else None
-			#snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=tags)
 			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-			
-			'''
-			if self.storage_vol.type == 'ebs':
-				
-				tmp_mpoint = None 
-				tmp_storage_volume = None
-				
-				try:
-					wait_until(lambda: snap.state == Snapshot.COMPLETED, timeout=21600)
-					
-					self._logger.info('Performing InnoDB recovery')
-					
-					temp_snap = snap
-					""" Create temporary volume from snapshot, recover innodb and make snap again """
-					tmp_mpoint = tempfile.mkdtemp()
-					tmp_storage_volume = Storage.create(snapshot=temp_snap, tags={'tmp': '1'})
-					tmp_storage_volume.mount(tmp_mpoint)
-					
-					binlog_path	= os.path.join(tmp_mpoint, STORAGE_BINLOG)
-					binlog_index_path = binlog_path + '.index'
-					mysqld_safe_bin	= software.whereis('mysqld_safe')[0]
-					ndb_support = any(row['Engine'] == 'ndbcluster' and row['Support'] == 'YES' 
-									for row in mysql.client.fetchall('SHOW ENGINES'))		
-					
-					# Point binlog.index to tmp storage 
-					binlog_index = filetool.read_file(binlog_index_path)
-					self._recreate_binlog_index(binlog_index_path, os.path.dirname(binlog_index_path))
-					self._logger.debug('Tmp binlogs: %s', filetool.read_file(binlog_index_path))
-							
-					# Repair InnoDB			
-					mysqld_safe_cmd = (mysqld_safe_bin, 
-						'--socket=%s' % os.path.join(tmp_mpoint, 'mysql.sock'), 
-						'--pid-file=%s' % os.path.join(tmp_mpoint, 'mysql.pid'), 
-						'--datadir=%s' % os.path.join(tmp_mpoint, STORAGE_DATA_DIR),
-						'--log-bin=%s' % binlog_path, 
-						'--skip-networking', 
-						'--skip-grant', 
-						'--bootstrap', 
-						'--skip-slave-start')
-					if ndb_support:
-						mysqld_safe_cmd += ('--skip-ndbcluster',)					
-					
-					system2(mysqld_safe_cmd, stdin="select 1;")
-					
-					# Restore binlog.index
-					filetool.write_file(binlog_index_path, binlog_index)
-					self._logger.debug('Original binlogs: %s', filetool.read_file(binlog_index_path))
-						
-					snap = tmp_storage_volume.snapshot(self._data_bundle_description(), 
-													tags={'storage' : 'mysql'})
-					
-					# Wait up to 6 hours for snapshot completion 
-					wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600) 
-					if snap.state == Snapshot.FAILED:
-						raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
-					
-					used_size = int(system2(('df', '-P', '--block-size=M', tmp_mpoint))[0].split('\n')[1].split()[2][:-1])
-				finally:
-					temp_snap.destroy()
-					if tmp_storage_volume:
-						if tmp_storage_volume.mounted():
-							tmp_storage_volume.umount()
-						tmp_storage_volume.destroy()						
-					if tmp_mpoint:
-						os.rmdir(tmp_mpoint)
-					
-			else:
-				used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-			'''	
 			used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
-										
 				
 			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 			
@@ -1399,61 +1373,76 @@ class MysqlHandler(ServiceCtlHanler):
 		root_pass, repl_pass, log_file, log_pos = self._get_ini_options(
 				OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_LOG_FILE, OPT_LOG_POS)
 		
+		ive_created_storage = False
 		if not self._storage_valid():
 			self._logger.debug("Initialize slave storage")
 			self.storage_vol = self._plug_storage(self._storage_path, 
-					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))
+			ive_created_storage = True			
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
 			
-		# Stop MySQL
-		self._stop_service('Required by Slave initialization process')			
-		self._flush_logs()
-		
-		# Change configuration files
-		self._logger.info("Changing configuration files")
-
-		if not 'datadir' in self._mysql_config.options('mysqld'):
-			""" Set default value for datadir """
-			self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
-
-		self._move_mysql_dir('mysqld/datadir', self._data_dir)
-		self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-		self._replication_init(master=False)
-		self._copy_debian_cnf_back()
-		self._innodb_recovery()
-		self._start_service()
-		
-		# Change replication master 
-		master_host = None
-		self._logger.info("Requesting master server")
-		while not master_host:
-			try:
-				master_host = list(host 
-					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
-					if host.replication_master)[0]
-			except IndexError:
-				self._logger.debug("QueryEnv respond with no mysql master. " + 
-						"Waiting %d seconds before the next attempt", 5)
-				time.sleep(5)
-				
-		self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
-				master_host.internal_ip, master_host.external_ip)
-		
-		host = master_host.internal_ip or master_host.external_ip
-		self._change_master( 
-			host=host, 
-			user=REPL_USER, 
-			password=repl_pass,
-			log_file=log_file, 
-			log_pos=log_pos, 
-			mysql_user=ROOT_USER,
-			mysql_password=root_pass,
-			timeout=self._change_master_timeout
-		)
-		
-		# Update HostUp message
-		message.mysql = self._compat_storage_data(self.storage_vol) 
+		try:
+			# Stop MySQL
+			self._stop_service('Required by Slave initialization process')			
+			self._flush_logs()
+			
+			# Change configuration files
+			self._logger.info("Changing configuration files")
+	
+			if not 'datadir' in self._mysql_config.options('mysqld'):
+				""" Set default value for datadir """
+				self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
+	
+			self._move_mysql_dir('mysqld/datadir', self._data_dir)
+			self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
+			self._replication_init(master=False)
+			self._copy_debian_cnf_back()
+			self._innodb_recovery()
+			self._start_service()
+			
+			# Change replication master 
+			master_host = None
+			self._logger.info("Requesting master server")
+			while not master_host:
+				try:
+					master_host = list(host 
+						for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+						if host.replication_master)[0]
+				except IndexError:
+					self._logger.debug("QueryEnv respond with no mysql master. " + 
+							"Waiting %d seconds before the next attempt", 5)
+					time.sleep(5)
+					
+			self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
+					master_host.internal_ip, master_host.external_ip)
+			
+			host = master_host.internal_ip or master_host.external_ip
+			self._change_master( 
+				host=host, 
+				user=REPL_USER, 
+				password=repl_pass,
+				log_file=log_file, 
+				log_pos=log_pos, 
+				mysql_user=ROOT_USER,
+				mysql_password=root_pass,
+				timeout=self._change_master_timeout
+			)
+			
+			# Update HostUp message
+			message.mysql = self._compat_storage_data(self.storage_vol)
+		except:
+			exc_type, exc_value, exc_trace = sys.exc_info()
+			if ive_created_storage:
+				try:
+					self._stop_service(reason='Cleaning up')
+				except:
+					pass
+				try:
+					self.storage_vol.destroy()
+				except:
+					pass
+			raise exc_type, exc_value, exc_trace
 		
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
@@ -1541,10 +1530,12 @@ class MysqlHandler(ServiceCtlHanler):
 			if not was_running:
 				self._stop_service('Restoring service`s state after making snapshot')
 		
-		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED), timeout=21600)
+		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
 		if snap.state == Snapshot.FAILED:
 			raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
 		
+		self._logger.info('MySQL data bundle created\n  snapshot: %s\n  log_file: %s\n  log_pos: %s', 
+						snap.id, log_file, log_pos)
 		return snap, log_file, log_pos
 			
 	def _create_storage_snapshot(self, tags=None):
@@ -1577,6 +1568,7 @@ class MysqlHandler(ServiceCtlHanler):
 		root_password = root_pass if root_pass else cryptotool.pwgen(20)
 		repl_password = repl_pass if repl_pass else cryptotool.pwgen(20)
 		stat_password = stat_pass if stat_pass else cryptotool.pwgen(20)
+		self._add_mysql_user(my_cli, root_user, root_password, '%')
 		self._add_mysql_user(my_cli, root_user, root_password, 'localhost')
 		self._add_mysql_user(my_cli, repl_user, repl_password, '%', ('Repl_slave_priv',))
 		self._add_mysql_user(my_cli, stat_user, stat_password, '%', ('Repl_client_priv',))
@@ -1879,10 +1871,10 @@ def _add_apparmor_rules(directory):
 		if not re.search (directory, app_rules):
 			file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
 			if os.path.isdir(directory):
-				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+'/ r,\n'+'\\2', app_rules)
-				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1'+directory+'/** rwk,\n'+'\\2', app_rules)
+				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1\n'+directory+'/ r,\n'+'\\2\\3', app_rules)
+				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1'+directory+'/** rwk,\n'+'\\2\\3', app_rules)
 			else:
-				app_rules = re.sub(re.compile('(\.*)(\})', re.S), '\\1\n'+directory+' r,\n'+'\\2', app_rules)
+				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1\n'+directory+' r,\n'+'\\2\\3', app_rules)
 			file.write(app_rules)
 			file.close()
 			apparmor_initd = ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
@@ -1891,40 +1883,3 @@ def _add_apparmor_rules(directory):
 			except InitdError, e:
 				_logger.error('Cannot restart apparmor. %s', e)	
 
-
-'''
-class MysqlReplication(object):
-	def __init__(self, mycnf):
-		pass
-	
-	def setup(self, master):
-		pass
-	
-	def change_master(self):
-		pass
-	
-	def repair_defaults(self, writefile=True):
-		pass
-
-class MysqlStorage(object):
-	SNAPSHOT_NAME = 'mysql-snap.json'
-	VOLUME_NAME = 'mysql.json'
-	
-	def __init__(self, mycnf, volume, snapshot):
-		pass
-	
-	def repair_defaults(self, writefile=True):
-		pass
-	
-	def valid(self):
-		pass
-	
-	def flush_logs(self):
-		pass
-	
-	def plug(self):
-		pass
-	
-	def unplug(self):
-		pass
-'''

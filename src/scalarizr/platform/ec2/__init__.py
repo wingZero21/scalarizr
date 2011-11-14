@@ -42,6 +42,7 @@ class Ec2Platform(Ec2LikePlatform):
 	ec2_endpoints = {
 		"us-east-1" 		: "ec2.amazonaws.com",
 		"us-west-1" 		: "ec2.us-west-1.amazonaws.com",
+		"us-west-2" 		: "ec2.us-west-2.amazonaws.com",
 		"eu-west-1" 		: "ec2.eu-west-1.amazonaws.com",
 		"ap-southeast-1" 	: "ec2.ap-southeast-1.amazonaws.com",
 		"ap-northeast-1" 	: "ec2.ap-northeast-1.amazonaws.com"
@@ -49,6 +50,7 @@ class Ec2Platform(Ec2LikePlatform):
 	s3_endpoints = {
 		'us-east-1' 		: 's3.amazonaws.com',
 		'us-west-1' 		: 's3-us-west-1.amazonaws.com',
+		'us-west-2' 		: 's3-us-west-2.amazonaws.com',
 		'eu-west-1' 		: 's3.amazonaws.com',
 		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com',
 		'ap-northeast-1' 	: 's3-ap-northeast-1.amazonaws.com'
@@ -107,7 +109,7 @@ class Ec2Platform(Ec2LikePlatform):
 		
 	@property
 	def cloud_storage_path(self):
-		return self.get_user_data('cloud_storage_path') or 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
+		return Ec2LikePlatform.cloud_storage_path.fget(self) or 's3://' + self.get_user_data(UD_OPT_S3_BUCKET_NAME)
 
 
 

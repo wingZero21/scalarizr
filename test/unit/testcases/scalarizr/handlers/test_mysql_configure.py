@@ -7,7 +7,7 @@ import unittest
 from scalarizr.handlers.mysql import MysqlCnfController
 from scalarizr.handlers.mysql import _spawn_mysql
 from scalarizr.util import init_tests, initdv2
-from scalarizr.handlers import ServiceCtlHanler
+from scalarizr.handlers import ServiceCtlHandler
 from scalarizr.service import CnfController, CnfPreset
 from scalarizr.messaging import Queues, Message
 from scalarizr.bus import bus
@@ -34,7 +34,7 @@ class _QueryEnv:
 			settings = {'1':'new one', '2':'new two'}
 				)
 			
-class _ServiceCtlHanler(ServiceCtlHanler):
+class _ServiceCtlHandler(ServiceCtlHandler):
 	
 	def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
 		msg = Message(name = msg_name, meta = msg_meta, body = msg_body)
@@ -61,14 +61,14 @@ class MockCnfController(CnfController):
 		self.preset = preset
 		print "Applying preset:", self.preset
 
-class MockHandler(_ServiceCtlHanler):
+class MockHandler(_ServiceCtlHandler):
 	
 	SERVICE_NAME = 'Mock'
 	initd = None
 	
 	def __init__(self):
 		self._initd = initdv2.lookup('mysql')
-		#_ServiceCtlHanler.__init__(self,self.SERVICE_NAME, self._initd, MockCnfController())
+		#_ServiceCtlHandler.__init__(self,self.SERVICE_NAME, self._initd, MockCnfController())
 		super(MockHandler, self).__init__(self.SERVICE_NAME, self._initd, MockCnfController())
 
 class MockMessage():
@@ -106,11 +106,11 @@ class TestMysqlCnfController(unittest.TestCase):
 		self.assertEqual(new_preset.settings['log_warnings'],preset.settings['log_warnings'])
 	
 	def test_comparator(self):
-		ctl = ServiceCtlHanler(None, None)
+		ctl = ServiceCtlHandler(None, None)
 		self.assertFalse(ctl.preset_changed({'1':'one', '2':'two'}, {'1':'one', '2':'two', '3':'three'}))
 		self.assertFalse(ctl.preset_changed({'1':'one', '2':'two', 'key_cache_age_threshold':''}, {'1':'one', '2':'two', 'join_buffer_size':''}))
 
-	def test_ServiceCtlHanler(self):		
+	def test_ServiceCtlHandler(self):		
 		bus.queryenv_service = _QueryEnv()
 		handler = MockHandler()
 		handler.sc_on_configured(MockHandler.SERVICE_NAME)

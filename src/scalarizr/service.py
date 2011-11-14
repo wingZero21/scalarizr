@@ -123,10 +123,10 @@ class CnfController(object):
 			if variable.inaccurate:
 				continue
 			
-			if not this.settings.has_key(variable.name) and not that.settings.has_key(variable.name):
+			if not variable.name in this.settings and not variable.name in that.settings:
 				continue
 			
-			elif not this.settings.has_key(variable.name):
+			elif not variable.name in this.settings:
 				if variable.default_value and that.settings[variable.name] == variable.default_value:
 					continue
 				elif variable.default_value:
@@ -136,7 +136,7 @@ class CnfController(object):
 					continue
 
 					
-			elif not that.settings.has_key(variable.name):
+			elif not variable.name in that.settings:
 				if variable.default_value and this.settings[variable.name] == variable.default_value:
 					continue
 				elif variable.default_value:
@@ -151,12 +151,13 @@ class CnfController(object):
 				
 				#mind aliases
 				if self.definitions:
-					if self.definitions.has_key(that_value):
+					if that_value in self.definitions:
 						that_value = self.definitions[that_value]
-					if self.definitions.has_key(this_value):
+					if this_value in self.definitions:
 						this_value = self.definitions[this_value]
 					
 				if that_value != this_value:
+					self._logger.debug('Variable %s changed: %s != %s' % (variable.name, this_value, that_value))
 					return False
 					
 			
@@ -180,7 +181,9 @@ class CnfController(object):
 		
 		for opt in self._manifest:
 			try:
-				preset.settings[opt.name] = sys_vars[opt.name]
+				val = sys_vars[opt.name]
+				if val: 
+					preset.settings[opt.name] = val
 			except KeyError:
 				if opt.default_value:
 					preset.settings[opt.name] = opt.default_value
@@ -220,13 +223,22 @@ class CnfController(object):
 					self._after_remove_option(opt)				
 					continue	
 				
+				if self.definitions and new_value in self.definitions:
+					manifest = Configuration('ini')
+					if os.path.exists(self._manifest_path):
+						manifest.read(self._manifest_path)
+					try:
+						if manifest.get('%s/type' % opt.name) == 'boolean':
+							new_value = self.definitions[new_value]
+					except NoPathError, e:
+						pass
+				
 				self._logger.debug("Check that '%s' value changed:'%s'='%s'"%(opt.name, value, new_value))
+					
 				if new_value == value:
 					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
 					pass
 				else:
-					if self.definitions and new_value in self.definitions:
-						new_value = self.definitions[new_value]
 					self._logger.debug("Set option '%s' = '%s'" % (opt.name, new_value))
 					self._logger.debug('Set path %s = %s', path, new_value)
 					conf.set(path, new_value, force=True)
@@ -253,20 +265,27 @@ class CnfController(object):
 		pass
 	
 	@property
+	def _manifest_path(self):
+		cnf = bus.cnf
+		presets_path = os.path.join(cnf.home_path, 'presets')	
+		manifests_dir = presets_path + "/manifests"
+		
+		if not os.path.exists(manifests_dir):
+			os.makedirs(manifests_dir)
+			
+		path = os.path.join(manifests_dir, self.behaviour + '.ini')
+		return path
+	
+	@property
 	def _manifest(self):		
 		
 		class HeadRequest(urllib2.Request):
 			def get_method(self):
 				return "HEAD"
 		
-		cnf = bus.cnf
-		presets_path = os.path.join(cnf.home_path, 'presets')	
-		manifests_dir = presets_path + "/manifests"
 		manifest_url = bus.scalr_url + '/storage/service-configuration-manifests/%s.ini' % self.behaviour	
-		path = os.path.join(manifests_dir, self.behaviour + '.ini')
-		
-		if not os.path.exists(manifests_dir):
-			os.makedirs(manifests_dir)
+		path = self._manifest_path
+
 			
 		url_handle = urllib2.urlopen(HeadRequest(manifest_url))
 		headers = url_handle.info()
@@ -292,7 +311,7 @@ class CnfController(object):
 				new_sections = new_manifest.sections('./')  
 				old_sections = old_manifest.sections('./')
 
-				diff_path = os.path.join(manifests_dir, self.behaviour + '.incdiff')
+				diff_path = os.path.join(os.path.dirname(path), self.behaviour + '.incdiff')
 				diff = Configuration('ini')
 									
 				if old_sections and old_sections != new_sections:

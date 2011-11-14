@@ -50,6 +50,7 @@ class Storage:
 		'destroy'
 	)
 	on, un, fire = _obs.on, _obs.un, _obs.fire
+
 	
 	@staticmethod
 	def volume_table():
@@ -124,13 +125,13 @@ class Storage:
 		args = list(args) if args else list()
 		kwargs = kwargs.copy() if kwargs else dict()
 		from_snap = False
-
+		
 		if args:
 			if isinstance(args[0], dict):
 				kwargs = args[0]
 			else:
 				kwargs['device'] = args[0]
-		
+				
 		if 'snapshot' in kwargs:
 			# Save original kwargs
 			from_snap = True			
@@ -171,10 +172,6 @@ class Storage:
 			Storage.fire('attach', vol)
 		return vol
 
-	
-	@staticmethod
-	def snapshot(vol, description):
-		pass
 
 	@staticmethod	
 	def detach(vol, force=False):
@@ -192,6 +189,8 @@ class Storage:
 		
 	@staticmethod
 	def backup_config(cnf, filename):
+		logger.debug('Backuping volume config {id: %s, type: %s ...} into %s', 
+					cnf.get('id'), cnf.get('type'), filename)
 		fp = open(filename, 'w+')
 		try:
 			fp.write(json.dumps(cnf, indent=4))
@@ -206,6 +205,16 @@ class Storage:
 			return dict(zip(list(key.encode("ascii") for key in ret.keys()), ret.values()))
 		finally:
 			fp.close()
+
+
+	@staticmethod	
+	def blank_config(cnf):
+		cnf = cnf.copy()
+		cnf.pop('id', None)
+		pvd = Storage.lookup_provider(cnf['type'])
+		pvd.blank_config(cnf)
+		return cnf
+
 	
 def _update_volume_tablerow(vol, state=None):
 	if Storage.maintain_volume_table:
@@ -483,6 +492,9 @@ class VolumeProvider(object):
 		if not vol.detached and vol.mounted():
 			self._umount(vol, force)
 		
+	def blank_config(self, cnf):
+		raise NotImplemented()
+	
 	def _umount(self, vol, force=False):
 		try:
 			vol.umount()
