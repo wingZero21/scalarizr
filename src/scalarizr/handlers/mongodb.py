@@ -49,9 +49,9 @@ def get_handlers():
 
 class MongoDBMessages:
 
-	CREATE_DATA_BUNDLE = "MongoDB_CreateDataBundle"
+	CREATE_DATA_BUNDLE = "MongoDb_CreateDataBundle"
 	
-	CREATE_DATA_BUNDLE_RESULT = "MongoDB_CreateDataBundleResult"
+	CREATE_DATA_BUNDLE_RESULT = "MongoDb_CreateDataBundleResult"
 	'''
 	@ivar status: ok|error
 	@ivar last_error
@@ -59,9 +59,9 @@ class MongoDBMessages:
 	@ivar used_size
 	'''
 	
-	CREATE_BACKUP = "MongoDB_CreateBackup"
+	CREATE_BACKUP = "MongoDb_CreateBackup"
 	
-	CREATE_BACKUP_RESULT = "MongoDB_CreateBackupResult"
+	CREATE_BACKUP_RESULT = "MongoDb_CreateBackupResult"
 	"""
 	@ivar status: ok|error
 	@ivar last_error
@@ -89,11 +89,11 @@ class MongoDBMessages:
 		snapshot_config:		Master storage snapshot					(on master)		 
 	) 
 	"""
-	INT_STATE = "MongoDB_IntState"
+	INT_STATE = "MongoDb_IntState"
 	
-	INT_CREATE_DATA_BUNDLE = "MongoDB_IntCreateDataBundle"
+	INT_CREATE_DATA_BUNDLE = "MongoDb_IntCreateDataBundle"
 	
-	INT_CREATE_DATA_BUNDLE_RESULT = "MongoDB_IntCreateDataBundle"
+	INT_CREATE_DATA_BUNDLE_RESULT = "MongoDb_IntCreateDataBundle"
 
 class ReplicationState:
 	INITIALIZED = 'initialized'
@@ -356,7 +356,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.storage_vol.detach()
 			
 			
-	def on_MongoDB_IntCreateDataBundle(self, message):
+	def on_MongoDb_IntCreateDataBundle(self, message):
 		msg_data = self._create_data_bundle()
 		if msg_data:
 			self.send_int_message(message.local_ip, 
@@ -364,7 +364,7 @@ class MongoDBHandler(ServiceCtlHandler):
 								msg_data)
 			
 	
-	def on_MongoDB_CreateDataBundle(self, message):
+	def on_MongoDb_CreateDataBundle(self, message):
 		msg_data = self._create_data_bundle()
 		if msg_data:
 			self.send_message(MongoDBMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)		
@@ -403,7 +403,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 			
 	
-	def on_MongoDB_CreateBackup(self, message):
+	def on_MongoDb_CreateBackup(self, message):
 		if not self.mongodb.is_replication_master:
 			self._logger.debug('Not a master. Skipping backup process')
 			return 

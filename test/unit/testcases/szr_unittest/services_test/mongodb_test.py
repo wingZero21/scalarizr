@@ -131,8 +131,6 @@ class TestMongoDBConfig(ConfigTest):
 		
 	def test_logappend(self):
 		self._test_bool_option('logappend')
-	
-
 		
 		
 class TestConfigServerConf(ConfigTest):
@@ -140,6 +138,9 @@ class TestConfigServerConf(ConfigTest):
 	
 	def test_configsvr(self):
 		self._test_bool_option('configsvr')
+		
+		
+
 		
 
 if __name__ == "__main__":
