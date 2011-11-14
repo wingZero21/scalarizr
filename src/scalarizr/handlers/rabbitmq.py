@@ -104,9 +104,9 @@ class RabbitMQHandler(ServiceCtlHandler):
 												RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL)
 		
 	
-	def cleanup_hosts_file(self, root_dir):
+	def cleanup_hosts_file(self, rootdir):
 		""" Clean /etc/hosts file """
-		hosts_path = os.path.join(root_dir, 'etc', 'hosts')
+		hosts_path = os.path.join(rootdir, 'etc', 'hosts')
 		if os.path.isfile(hosts_path):
 			try:
 				dns.ScalrHosts.HOSTS_FILE_PATH = hosts_path
