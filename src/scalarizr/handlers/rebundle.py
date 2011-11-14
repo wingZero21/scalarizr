@@ -271,7 +271,6 @@ class LinuxImage:
 	
 	def __init__(self, volume, path, excludes=None):
 		self._mtab = fstool.Mtab()
-		self._fstab = fstool.Fstab()
 		self._volume = volume
 		self.mpoint = '/mnt/img-mnt'
 		self.path = path
@@ -312,7 +311,7 @@ class LinuxImage:
 	def _format_image(self):
 		LOG.info("Formatting image")
 		
-		vol_entry = self._fstab.find(mpoint=self._volume)[0]
+		vol_entry = self._mtab.find(mpoint=self._volume)[0]
 		fs = Storage.lookup_filesystem(vol_entry.fstype)
 					
 		# create filesystem
