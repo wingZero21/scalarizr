@@ -1836,8 +1836,6 @@ def spawn_mysqld():
 def term_mysqld(mysqld):
 	_logger.debug('Terminating mysqld')
 	mysqld.terminate(force=True)
-	os.kill(mysqld.pid, signal.SIGKILL)
-	#wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
 
 
 def spawn_mysql_cli(user=None, password=None, timeout=30):

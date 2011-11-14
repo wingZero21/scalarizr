@@ -166,7 +166,7 @@ class CSVolumeProvider(VolumeProvider):
 		return self._create(**kwargs)
 
 	def create_snapshot(self, vol, snap, **kwargs):
-		native_snap = voltool.create_snapshot(self._new_conn(), vol.id, snap.description)
+		native_snap = voltool.create_snapshot(self._new_conn(), vol.id)
 		snap.id = native_snap.id
 		return snap
 
