@@ -16,7 +16,7 @@ from scalarizr.services import rabbitmq
 from scalarizr import storage
 from scalarizr.handlers import HandlerError, ServiceCtlHanler
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.util import system2, initdv2, cryptotool, software 
+from scalarizr.util import system2, initdv2, cryptotool, software, dns
 from scalarizr.storage import StorageError
 
 
@@ -41,53 +41,13 @@ class RabbitMQMessages:
 def get_handlers():
 	return (RabbitMQHandler(), )
 
-
-class Hosts:
-	
-	@classmethod
-	def set(cls, addr, hostname):
-		hosts = cls.hosts()
-		hosts[hostname] = addr
-		cls._write(hosts)
-		
-	@classmethod
-	def delete(cls, addr=None, hostname=None):
-		hosts = cls.hosts()
-		if hostname:
-			if hosts.has_key(hostname):
-				del hosts[hostname]
-		if addr:
-			hostnames = hosts.keys()
-			for host in hostnames:
-				if addr == hosts[host]: 
-					del hosts[host]
-		cls._write(hosts)		
-	
-	@classmethod
-	def hosts(cls):
-		ret = {}
-		with open('/etc/hosts') as f:
-			hosts = f.readlines()
-			for host in hosts:
-				host_line = host.strip()
-				if not host_line or host_line.startswith('#'):
-					continue
-				addr, hostname = host.split(None, 1)
-				ret[hostname.strip()] = addr
-		return ret
-	
-	@classmethod
-	def _write(cls, hosts):
-		with open('/etc/hosts', 'w') as f:
-			for hostname, addr in hosts.iteritems():
-				f.write('%s\t%s\n' % (addr, hostname))
-
 		
 class RabbitMQHandler(ServiceCtlHanler):	
 
 	def __init__(self):
 		if not software.whereis('rabbitmqctl'):
 			raise HandlerError("Rabbitmqctl binary was not found. Check your installation.")
+		
 		bus.on("init", self.on_init)
 		
 		self._logger = logging.getLogger(__name__)
@@ -97,9 +57,8 @@ class RabbitMQHandler(ServiceCtlHanler):
 		self.on_reload()
 		
 		if self.cnf.state == ScalarizrState.BOOTSTRAPPING:
-			if not os.path.exists('/etc/hosts.safe'):
-				shutil.copy2('/etc/hosts', '/etc/hosts.safe')
 			
+			self.cleanup_hosts_file('/')			
 			self._logger.info('Performing initial cluster reset')
 			self.service.start()
 			self.rabbitmq.stop_app()
@@ -126,6 +85,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_hello", self.on_before_hello)
+		bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
 		
 			
 	def on_reload(self):
@@ -143,6 +103,20 @@ class RabbitMQHandler(ServiceCtlHanler):
 												RabbitMQMessages.RABBITMQ_RECONFIGURE,
 												RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL)
 		
+	
+	def cleanup_hosts_file(self, root_dir):
+		""" Clean /etc/hosts file """
+		hosts_path = os.path.join(root_dir, 'etc', 'hosts')
+		if os.path.isfile(hosts_path):
+			try:
+				dns.ScalrHosts.HOSTS_FILE_PATH = hosts_path
+				for hostname in dns.ScalrHosts.hosts().keys():
+					dns.ScalrHosts.delete(hostname=hostname)
+			finally:
+				dns.ScalrHosts.HOSTS_FILE_PATH = '/etc/hosts'
+					
+	
+			
 	
 	def on_before_hello(self, message):
 		try:
@@ -212,13 +186,13 @@ class RabbitMQHandler(ServiceCtlHanler):
 				
 		if message.local_ip != self.platform.get_private_ip():
 			hostname = 'rabbit-%s' % message.server_index
-			Hosts.set(message.local_ip, hostname)
+			dns.ScalrHosts.set(message.local_ip, hostname)
 			
 			
 	def on_HostDown(self, message):
 		if not BuiltinBehaviours.RABBITMQ in message.behaviour:
 			return
-		Hosts.delete(message.local_ip)
+		dns.ScalrHosts.delete(message.local_ip)
 		
 
 	def on_host_init_response(self, message):
@@ -236,7 +210,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 		
 		hostname = 'rabbit-%s' % int(message.server_index)
 		
-		Hosts.set('127.0.0.1', hostname)
+		dns.ScalrHosts.set('127.0.0.1', hostname)
 		with open('/etc/hostname', 'w') as f:
 			f.write(hostname)
 		system2(('hostname', '-F', '/etc/hostname'))
@@ -322,7 +296,7 @@ class RabbitMQHandler(ServiceCtlHanler):
 			for host in role.hosts:
 				ip = host.internal_ip
 				hostname = 'rabbit-%s' % host.index
-				Hosts.set(ip, hostname)
+				dns.ScalrHosts.set(ip, hostname)
 				nodes.append(hostname)
 		return nodes
 
