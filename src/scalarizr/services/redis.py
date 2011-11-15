@@ -104,9 +104,7 @@ class Redis(BaseService):
 		return cls._instance				
 
 	def init_master(self, mpoint, password=None):
-		self.service.stop('Configuring master. Moving Redis db files')
-		move_files = not self.working_directory.is_initialized(mpoint)
-		self.working_directory.move_to(mpoint, move_files)		
+		self.service.stop('Configuring master. Moving Redis db files')	
 		self.init_service(mpoint)
 		self.redis_conf.masterauth = None
 		self.redis_conf.slaveof = None
@@ -115,7 +113,6 @@ class Redis(BaseService):
 		self.is_replication_master = True
 		
 	def init_slave(self, mpoint, primary_ip, primary_port, password):
-		rchown(REDIS_USER, mpoint)
 		self.service.stop('Configuring slave')
 		self.init_service(mpoint)
 		self.redis_conf.requirepass = None
@@ -131,13 +128,23 @@ class Redis(BaseService):
 		self._logger.info('Sync with master completed')
 		
 	def change_primary(self, primary_ip, primary_port, password):
+		'''
+		Currently redis slaves cannot use existing data to catch master
+		Instead they create another db file while performing full sync
+		Wchich may potentially cause free space problem on redis storage
+		And broke whole initializing process.
+		So scalarizr removing all existing data on initializing slave 
+		to free as much storage space as possible.
+		'''
 		self.working_directory.empty()
 		self.redis_conf.masterauth = password
 		self.redis_conf.slaveof = (primary_ip, primary_port)
 		
 	def init_service(self, mpoint):
-		self.redis_conf.bind = None
+		move_files = not self.working_directory.is_initialized(mpoint)
+		self.working_directory.move_to(mpoint, move_files)	
 		self.redis_conf.dir = mpoint
+		self.redis_conf.bind = None
 		if self.persistence_type == SNAP_TYPE:
 			self.redis_conf.appendonly = False
 		elif self.persistence_type == AOF_TYPE:
