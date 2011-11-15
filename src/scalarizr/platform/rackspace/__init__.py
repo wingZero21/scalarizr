@@ -54,6 +54,8 @@ class RackspacePlatform(Platform):
 	_private_ip = None
 	_public_ip = None
 	
+	features = []
+	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 
