@@ -145,3 +145,79 @@ class HostsFile(object):
 		except KeyError:
 			pass
 
+
+class ScalrHosts:
+	BEGIN_SCALR_HOSTS	= '# begin Scalr hosts'
+	END_SCALR_HOSTS		= '# end Scalr hosts'
+	HOSTS_FILE_PATH		= '/etc/hosts'
+	
+	@classmethod
+	def set(cls, addr, hostname):
+		hosts = cls.hosts()
+		hosts[hostname] = addr
+		cls._write(hosts)
+		
+	@classmethod
+	def delete(cls, addr=None, hostname=None):
+		hosts = cls.hosts()
+		if hostname:
+			if hosts.has_key(hostname):
+				del hosts[hostname]
+		if addr:
+			hostnames = hosts.keys()
+			for host in hostnames:
+				if addr == hosts[host]: 
+					del hosts[host]
+		cls._write(hosts)
+	
+	@classmethod
+	def hosts(cls):
+		ret = {}
+		with open(cls.HOSTS_FILE_PATH) as f:
+			hosts = f.readlines()
+			
+			for i in range(len(hosts)):
+				host_line = hosts[i].strip()
+				if host_line == cls.BEGIN_SCALR_HOSTS:
+					while True:
+						i += 1
+						try:
+							host_line = hosts[i].strip()
+							if host_line == cls.END_SCALR_HOSTS:
+								return ret
+							addr, hostname = host_line.split(None, 1)
+							ret[hostname.strip()] = addr
+						except IndexError:
+							return ret
+
+		return ret
+	
+	@classmethod
+	def _write(cls, scalr_hosts):
+		
+		with open(cls.HOSTS_FILE_PATH) as f:
+			host_lines = f.readlines()
+		
+		hosts = (x.strip() for x in host_lines)
+		old_hosts = []
+
+		for host in hosts:
+			if host == cls.BEGIN_SCALR_HOSTS:
+				while True:
+					try:
+						hostline = hosts.next()
+						if hostline == cls.END_SCALR_HOSTS:
+							break
+					except StopIteration:
+						break
+			elif host != cls.END_SCALR_HOSTS:
+				old_hosts.append(host)
+		
+		with open(cls.HOSTS_FILE_PATH, 'w') as f:
+			for old_host in old_hosts:
+				f.write('%s\n' % old_host)
+			
+			f.write('%s\n' % cls.BEGIN_SCALR_HOSTS)
+			for hostname, addr in scalr_hosts.iteritems():
+				f.write('%s\t%s\n' % (addr, hostname))
+			f.write('%s\n' % cls.END_SCALR_HOSTS)
