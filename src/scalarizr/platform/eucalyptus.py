@@ -29,6 +29,8 @@ OPT_CLOUD_CERT_PATH = 'cloud_cert_path'
 
 class EucaPlatform(Ec2Platform):
 	name = 'eucalyptus'
+	
+	features = []
 
 	def __init__(self):
 		Ec2Platform.__init__(self)

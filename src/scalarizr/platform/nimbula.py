@@ -16,6 +16,8 @@ class NimbulaPlatform(Ec2LikePlatform):
 	
 	name = "nimbula"
 	
+	features = []
+	
 	_userdata_key = 'latest/user-data'
 	_metadata_key = 'latest/meta-data'
 	

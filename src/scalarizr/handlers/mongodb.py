@@ -13,6 +13,7 @@ import threading
 
 from scalarizr import config
 from scalarizr.bus import bus
+from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, Hosts, cryptotool
 from scalarizr.util.filetool import split, rchown
@@ -215,7 +216,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._update_config(mongodb_data)
 		
 
-	def on_before_host_up(self, message):
+	def on_before_host_up(self, hostup_msg):
 		"""
 		Check that replication is up in both master and slave cases
 		@type message: scalarizr.messaging.Message		
@@ -248,20 +249,26 @@ class MongoDBHandler(ServiceCtlHandler):
 		make_shard = False
 		
 		if first_in_rs:
-			make_shard = self._init_master(message, rs_name, web_console)	
+			make_shard = self._init_master(hostup_msg, rs_name, web_console)	
 
 		else:
-			self._init_slave(message, rs_name, web_console)
+			self._init_slave(hostup_msg, rs_name, web_console)
 						
 
 		if self.shard_index == 0 and self.rs_id == 0:
 			self.mongodb.start_config_server()
+			hostup_msg.mongodb['config_server'] = 1
+		else:
+			hostup_msg.mongodb['config_server'] = 0
 
 		if self.rs_id in (0,1):
 			self.mongodb.start_router()
+			hostup_msg.mongodb['router'] = 1
 		
 			if make_shard:
 				self.create_shard()
+		else:
+			hostup_msg.mongodb['router'] = 0
 			
 
 		repl = 'primary' if first_in_rs else 'secondary'
@@ -538,14 +545,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		# Update HostInitResponse message 
 		msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 					
-		if msg_data:
-			message.mongodb = msg_data.copy()
-			try:
-				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
-			except KeyError:
-				pass
-			self._update_config(msg_data)
-			
+		message.mongodb = msg_data.copy()
+		try:
+			del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
+		except KeyError:
+			pass
+		self._update_config(msg_data)
+		
 		return init_start
 
 
@@ -572,26 +578,26 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		while not initialized and not stale:
 			messages = msg_store.get_unhandled('http://0.0.0.0:8012')
-			for message in messages:
+			for msg in messages:
 				
-				if not message.name == MongoDBMessages.INT_STATE:
+				if not msg.name == MongoDBMessages.INT_STATE:
 					continue										
 				try:
-					if message.status == ReplicationState.INITIALIZED:
+					if msg.status == ReplicationState.INITIALIZED:
 						initialized = True
 						break
-					elif message.status == ReplicationState.STALE:
+					elif msg.status == ReplicationState.STALE:
 						stale = True
 						break							
 					else:
-						raise HandlerError('Unknown state for replication state: %s' % message.status)													
+						raise HandlerError('Unknown state for replication state: %s' % msg.status)													
 				finally:
-					msg_store.mark_as_handled(message.id)
+					msg_store.mark_as_handled(msg.id)
 			time.sleep(1)
 	
 		if stale:
 			# TODO: patch platform
-			if 'datechable_storage' in self._platform.supports:
+			if PlatformFeatures.VOLUMES in self._platform.features:
 				self._logger.info('Too stale to synchronize. Trying to get snapshot from primary')
 				self.send_int_message(message.local_ip,
 						MongoDBMessages.INT_CREATE_DATA_BUNDLE,
@@ -600,24 +606,24 @@ class MongoDBHandler(ServiceCtlHandler):
 				cdb_result_received = False
 				while not cdb_result_received:
 					messages = msg_store.get_unhandled('http://0.0.0.0:8012')
-					for message in messages:
-						if not message.name == MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT:
+					for msg in messages:
+						if not msg.name == MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT:
 							continue
 						
 						cdb_result_received = True
 						try:
-							if message.status == 'ok':
-								self._logger.info('Received data ')
+							if msg.status == 'ok':
+								self._logger.info('Received data')
 								self.mongodb.mongod.stop()
 								self.storage_vol.destroy()
-								snap_cnf = message.mongodb.snapshot_config.copy()
+								snap_cnf = msg.mongodb.snapshot_config.copy()
 								self.storage_vol = self._plug_storage(self._storage_path,
 																	 {'snapshot': snap_cnf})
 								self.mongodb.mongod.start()
 							else:
 								self._init_clean_sync()
 						finally:
-							msg_store.mark_as_handled(message.id)
+							msg_store.mark_as_handled(msg.id)
 					time.sleep(1)
 			else:
 				self._init_clean_sync()				
