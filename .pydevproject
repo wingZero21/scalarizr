@@ -5,11 +5,11 @@
 <pydev_property name="org.python.pydev.PYTHON_PROJECT_INTERPRETER">Default</pydev_property>
 <pydev_property name="org.python.pydev.PYTHON_PROJECT_VERSION">python 2.6</pydev_property>
 <pydev_pathproperty name="org.python.pydev.PROJECT_SOURCE_PATH">
-<path>/scalarizr-trunk/src</path>
-<path>/scalarizr-trunk/externals</path>
-<path>/scalarizr-trunk/test/integ/testcases</path>
-<path>/scalarizr-trunk/test/integ/libs</path>
-<path>/scalarizr-trunk/test/unit/testcases</path>
-<path>/scalarizr-trunk/test/unit/libs</path>
+<path>/scalarizr-dbmsr/src</path>
+<path>/scalarizr-dbmsr/externals</path>
+<path>/scalarizr-dbmsr/test/integ/testcases</path>
+<path>/scalarizr-dbmsr/test/integ/libs</path>
+<path>/scalarizr-dbmsr/test/unit/testcases</path>
+<path>/scalarizr-dbmsr/test/unit/libs</path>
 </pydev_pathproperty>
 </pydev_project>
