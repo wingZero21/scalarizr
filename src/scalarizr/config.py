@@ -926,6 +926,7 @@ class BuiltinBehaviours:
 	CASSANDRA = 'cassandra'
 	MEMCACHED = 'memcached'
 	POSTGRESQL = 'postgresql'
+	RABBITMQ = 'rabbitmq'
 	REDIS = 'redis'
 
 	CF_ROUTER = 'cf_router'

@@ -529,3 +529,49 @@ class PeriodicalExecutor:
 					break
 			if not self._shutdown:
 				time.sleep(1)
+				
+				
+				
+def run_detached(binary, args=[], env=None):
+	if not os.path.exists(binary):
+		from . import software
+		binary_base = os.path.basename(binary)
+		res = software.whereis(binary_base)
+		if not res:
+			raise Exception('Cannot find %s executable' % binary_base)
+		binary = res[0]
+	
+	pid = os.fork()
+	if pid == 0:
+		os.setsid()
+		pid = os.fork()
+		if pid != 0:
+			os._exit(0)
+
+		os.chdir('/')
+		os.umask(0)
+		
+		import resource		# Resource usage information.
+		maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+		if (maxfd == resource.RLIM_INFINITY):
+			maxfd = 1024
+			
+		for fd in range(0, maxfd):
+			try:
+				os.close(fd)
+			except OSError:
+				pass
+		
+		os.open('/dev/null', os.O_RDWR)
+
+		os.dup2(0, 1)
+		os.dup2(0, 2)	
+		
+		try:
+			if env:
+				args.append(env)
+				os.execle(binary, binary, *args)
+			else:
+				os.execl(binary, binary, *args)
+		except Exception:
+			os._exit(255)
