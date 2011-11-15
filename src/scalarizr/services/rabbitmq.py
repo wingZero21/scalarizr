@@ -19,7 +19,7 @@ SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
 RABBIT_CFG_PATH = '/etc/rabbitmq/rabbitmq.config'
 COOKIE_PATH = '/var/lib/rabbitmq/.erlang.cookie'
 RABBITMQ_ENV_CNF_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
-SCALR_USERNAME = '_scalr_'
+SCALR_USERNAME = 'scalr'
 
 
 class NodeTypes:
