@@ -199,7 +199,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 		rabbitmq_data = message.rabbitmq.copy()
 		
 		if not rabbitmq_data['password']:
-			rabbitmq_data['password'] = cryptotool.keygen(10)
+			rabbitmq_data['password'] = cryptotool.pwgen(10)
 
 		if os.path.exists(self._volume_config_path):
 			os.remove(self._volume_config_path)
