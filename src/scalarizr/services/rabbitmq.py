@@ -19,6 +19,8 @@ SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
 RABBIT_CFG_PATH = '/etc/rabbitmq/rabbitmq.config'
 COOKIE_PATH = '/var/lib/rabbitmq/.erlang.cookie'
 RABBITMQ_ENV_CNF_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
+SCALR_USERNAME = '_scalr_'
+
 
 class NodeTypes:
 	RAM = 'ram'
@@ -89,8 +91,8 @@ class RabbitMQ(object):
 		self._cnf = bus.cnf
 		self._logger = logging.getLogger(__name__)
 
-		for dir in os.listdir('/usr/lib/rabbitmq/lib/'):
-			if dir.startswith('rabbitmq_server'):
+		for dirname in os.listdir('/usr/lib/rabbitmq/lib/'):
+			if dirname.startswith('rabbitmq_server'):
 				self.plugin_dir = os.path.join('/usr/lib/rabbitmq/lib/', dir, 'plugins')
 				break
 		else:
@@ -123,17 +125,43 @@ class RabbitMQ(object):
 		system2(('rabbitmqctl', 'start_app'), logger=self._logger)
 		
 		
+	def check_scalr_user(self, password):
+		if SCALR_USERNAME in self.list_users():
+			self.set_user_password(SCALR_USERNAME, password)
+			self.set_user_tags(SCALR_USERNAME, 'administrator')
+		else:
+			self.add_user(SCALR_USERNAME, password, True)
+			
+		self.set_full_permissions(SCALR_USERNAME)
+					
+		
 	def add_user(self, username, password, is_admin=False):
 		system2(('rabbitmqctl', 'add_user', username, password), logger=self._logger)
 		if is_admin:
-			system2(('rabbitmqctl', 'set_user_tags', username, 'administrator'), logger=self._logger)
+			self.set_user_tags(username, 'administrator')			
 	
 	
 	def delete_user(self, username):
 		if username in self.list_users():
 			system2(('rabbitmqctl', 'delete_user', username), logger=self._logger)
+			
+			
+	def set_user_tags(self, username, tags):
+		if type(tags) == str:
+			tags = (tags,)
+		system2(('rabbitmqctl', 'set_user_tags', username) + tags , logger=self._logger)
+		
+		
+	def set_user_password(self, username, password):
+		system2(('rabbitmqctl', 'change_password', username, password), logger=self._logger)
+		
+		
+	def set_full_permissions(self, username):
+		""" Set full permissions on '/' virtual host """ 
+		permissions = ('".*"', ) * 3
+		system2(('rabbitmqctl', 'set_permissions', username) + permissions, logger=self._logger)
+			
 
-	
 	def list_users(self):
 		out = system2(('rabbitmqctl', 'list_users'), logger=self._logger)[0]
 		users_strings = out.splitlines()[1:-1]

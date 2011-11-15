@@ -6,19 +6,17 @@ Created on Sep 7, 2011
 import os
 import sys
 import pwd
-import shutil
 import logging
 
 
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
-from scalarizr.services import rabbitmq
 from scalarizr import storage
 from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.util import system2, initdv2, cryptotool, software, dns
+from scalarizr.util import system2, initdv2, software, dns, cryptotool
 from scalarizr.storage import StorageError
-
+import scalarizr.services.rabbitmq as rabbitmq_svc
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
@@ -51,14 +49,14 @@ class RabbitMQHandler(ServiceCtlHandler):
 		bus.on("init", self.on_init)
 		
 		self._logger = logging.getLogger(__name__)
-		self.rabbitmq = rabbitmq.rabbitmq
+		self.rabbitmq = rabbitmq_svc.rabbitmq
 		self.service = initdv2.lookup(BuiltinBehaviours.RABBITMQ)
 		
 		self.on_reload()
 		
 		if self.cnf.state == ScalarizrState.BOOTSTRAPPING:
 			
-			self.cleanup_hosts_file('/')			
+			self.cleanup_hosts_file('/')
 			self._logger.info('Performing initial cluster reset')
 			self.service.start()
 			self.rabbitmq.stop_app()
@@ -138,13 +136,8 @@ class RabbitMQHandler(ServiceCtlHandler):
 			finally:
 				self.service.start()
 			
-			username = message.username or '_scalr_'
-			password = message.password or cryptotool.pwgen(10)
-			self.rabbitmq.delete_user(username)
-			self.rabbitmq.add_user(username, password, True)
-			
 			panel_url = 'http://%s:55672/mgmt/' % self.platform.get_public_ip()
-			msg_body = dict(status='ok', cpanel_url=panel_url, username=username, password=password)
+			msg_body = dict(status='ok', cpanel_url=panel_url)
 		except:
 			error = str(sys.exc_info()[1])
 			msg_body = dict(status='error', last_error=error)
@@ -162,7 +155,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 				self._logger.info('Changing node type to %s' % message.node_type)
 				nodes = self._get_cluster_nodes()
 				if nodes:
-					if message.node_type == rabbitmq.NodeTypes.DISK:
+					if message.node_type == rabbitmq_svc.NodeTypes.DISK:
 						hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
 						nodes.append(hostname)
 						
@@ -202,14 +195,17 @@ class RabbitMQHandler(ServiceCtlHandler):
 		path = os.path.dirname(self._volume_config_path)
 		if not os.path.exists(path):
 			os.makedirs(path)
-			
+
 		rabbitmq_data = message.rabbitmq.copy()
+		
+		if not rabbitmq_data['password']:
+			rabbitmq_data['password'] = cryptotool.keygen(10)
 
 		if os.path.exists(self._volume_config_path):
 			os.remove(self._volume_config_path)
-		
+
 		hostname = 'rabbit-%s' % int(message.server_index)
-		
+
 		dns.ScalrHosts.set('127.0.0.1', hostname)
 		with open('/etc/hostname', 'w') as f:
 			f.write(hostname)
@@ -231,12 +227,10 @@ class RabbitMQHandler(ServiceCtlHandler):
 		os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 		storage.Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
-		
-		
 		nodes = self._get_cluster_nodes()
 		
 		do_cluster = True if nodes else False
-		is_disk_node = self.rabbitmq.node_type == rabbitmq.NodeTypes.DISK
+		is_disk_node = self.rabbitmq.node_type == rabbitmq_svc.NodeTypes.DISK
 		
 		if is_disk_node:
 			hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
@@ -255,11 +249,16 @@ class RabbitMQHandler(ServiceCtlHandler):
 		init_run = 'volume_id' not in volume_cnf.keys()
 		if do_cluster and (not is_disk_node or init_run):
 			self.rabbitmq.cluster_with(nodes)
+
+		self.rabbitmq.delete_user('guest')
+		password = self.cnf.rawini.get(CNF_SECTION, 'password')
+		self.rabbitmq.check_scalr_user(password)
 		
 		# Update message
 		msg_data = {}
 		msg_data['volume_config'] = self.storage_vol.config()
 		msg_data['node_type'] = self.rabbitmq.node_type
+		msg_data['password'] = password
 		self._logger.debug('Updating HostUp message with %s' % msg_data)
 		message.rabbitmq = msg_data
 

@@ -327,7 +327,7 @@ def rabbitmq_software_info():
 	
 	# Start rabbitmq server with broken parameters
 	# in order to receive version
-	env = dict(RABBITMQ_NODE_IP_ADDRESS='256.0.0.0', RABBITMQ_LOG_BASE='/tmp')
+	env = dict(RABBITMQ_NODE_IP_ADDRESS='256.0.0.0', RABBITMQ_LOG_BASE='/tmp', RABBITMQ_NODENAME='version_test')
 	out = system2((binaries[0]), env=env, raise_exc=False)[0]
 	if not out:
 		raise SoftwareError
