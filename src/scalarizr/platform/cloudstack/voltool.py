@@ -57,6 +57,8 @@ def wait_snapshot(conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 def create_volume(conn, name, zone_id, size=None, disk_offering_id=None, snap_id=None, 
 				logger=None, timeout=DEFAULT_TIMEOUT):
 	logger = logger or LOG
+	if snap_id:
+		disk_offering_id = None	
 	
 	msg = "Creating volume '%s' in zone %s%s%s%s" % (
 		name, zone_id,
