@@ -110,7 +110,16 @@ class MongoDB(BaseService):
 		if not os.path.exists(CONFIG_SERVER_DATA_DIR):
 			os.makedirs(CONFIG_SERVER_DATA_DIR)
 		rchown('mongodb', CONFIG_SERVER_DATA_DIR)
-		self.config_server_conf.configsvr = True
+		'''
+		configsvr changes the default port and turns on the diaglog, 
+		a log that keeps every action the config database performs 
+		in a replayable format, just in case.
+		For mongo 1.8+ use --port 27019 and --journal (instead of --diaglog). 
+		Journaling gives mostly the same effect as the diaglog with better performance.
+		P.S. Assume that mongodb roles Scalr will be build on x64 platform only
+		Wchich means journal option by default will be on.
+		'''
+		#self.config_server_conf.configsvr = True
 		self.config_server_conf.port = CONFIG_SERVER_DEFAULT_PORT
 		self.config_server_conf.logpath = CONFIG_SERVER_LOG_PATH
 
