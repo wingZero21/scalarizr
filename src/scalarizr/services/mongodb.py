@@ -82,6 +82,7 @@ class MongoDB(BaseService):
 		self.config.replSet = rs_name
 		self.config.db_path = self.working_dir.create(STORAGE_DATA_DIR)
 		self.config.logpath = LOG_PATH_DEFAULT
+		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logappend = True
 		self.config.nojournal = False	
 		self.config.shardsvr = True
