@@ -29,14 +29,10 @@ def indent(elem, level=0):
 			
 def quote(line):
 	line = re.sub(' ', '%20', line)
-	line = re.sub('@', '%40', line)
-	line = re.sub("'", '%27', line)
 	return re.sub('"', '%22', line)
 
 def unquote(line):
 	line = re.sub('%20', ' ', line)
-	line = re.sub('%40', '@', line)
-	line = re.sub('%27', "'", line)
 	return re.sub('%22', '"', line)
 
 			
