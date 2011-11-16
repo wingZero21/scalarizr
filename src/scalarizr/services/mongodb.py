@@ -379,7 +379,8 @@ class WorkingDirectory(object):
 			
 		self._logger.debug("changing directory owner to %s" % self.user)	
 		rchown(self.user, dst)			
-		self.db_path = dst
+		self.path = dst
+
 		return dst
 
 	@property
