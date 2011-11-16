@@ -211,7 +211,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		'''
 		mongodb allows only base64 characters in keyfile, and '=' isn't one of them
 		'''
-		mongodb_key = mongodb_key or cryptotool.keygen(22)[:-2]
+		mongodb_key = mongodb_key or cryptotool.keygen(22)[:-1].replace('=','')
 		self._cnf.write_key(BEHAVIOUR, mongodb_key)
 		
 		self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
