@@ -78,14 +78,12 @@ class MongoDB(BaseService):
 		return True if ret == 'true' else False
 
 	
-	def prepare(self, rs_name, enable_rest = False):
+	def prepare(self, rs_name):
 		self.config.replSet = rs_name
 		self.config.db_path = self.working_dir.create(STORAGE_DATA_DIR)
-		self.config.rest = enable_rest
 		self.config.logpath = LOG_PATH_DEFAULT
 		self.config.logappend = True
 		self.config.nojournal = False	
-		self.config.nohttpinterface = False
 		self.config.shardsvr = True
 		self.working_dir.unlock()
 			

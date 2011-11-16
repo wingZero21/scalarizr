@@ -34,7 +34,6 @@ OPT_VOLUME_CNF			= 'volume_config'
 OPT_SNAPSHOT_CNF		= 'snapshot_config'
 OPT_KEYFILE				= "keyfile"
 OPT_SHARD_INDEX			= "shard_index"
-OPT_WEB_CONSOLE			= "web_console"
 OPT_RS_ID				= "replica_set_index"
 
 BACKUP_CHUNK_SIZE		= 200*1024*1024
@@ -226,7 +225,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		szr_cnf = bus.cnf
 		self.shard_index = szr_cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX)
 		self.rs_id = szr_cnf.rawini.get(CNF_SECTION, OPT_RS_ID)
-		web_console = bool(int(szr_cnf.rawini.get(CNF_SECTION, OPT_WEB_CONSOLE)))
 
 		first_in_rs = True	
 		hosts = self._queryenv.list_roles(self._role_name)[0].hosts
@@ -249,10 +247,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		make_shard = False
 		
 		if first_in_rs:
-			make_shard = self._init_master(hostup_msg, rs_name, web_console)	
+			make_shard = self._init_master(hostup_msg, rs_name)	
 
 		else:
-			self._init_slave(hostup_msg, rs_name, web_console)
+			self._init_slave(hostup_msg, rs_name)
 						
 
 		if self.shard_index == 0 and self.rs_id == 0:
@@ -500,7 +498,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				os.remove(backup_path)
 				
 				
-	def _init_master(self, message, rs_name, web_console):
+	def _init_master(self, message, rs_name):
 		"""
 		Initialize mongodb master
 		@type message: scalarizr.messaging.Message 
@@ -521,7 +519,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		init_start = not self._storage_valid()					
 				
-		self.mongodb.prepare(rs_name, web_console)
+		self.mongodb.prepare(rs_name)
 		self.mongodb.mongod.start()
 		
 		""" Start replication set where this node is the only member """
@@ -555,7 +553,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		return init_start
 
 
-	def _init_slave(self, message, rs_name, web_console):
+	def _init_slave(self, message, rs_name):
 		"""
 		Initialize mongodb slave
 		@type message: scalarizr.messaging.Message 
@@ -569,7 +567,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.storage_vol = self._plug_storage(self._storage_path, volume)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
-		self.mongodb.prepare(rs_name, self._storage_path, web_console)
+		self.mongodb.prepare(rs_name, self._storage_path)
 		self.mongodb.mongod.start()		
 		
 		self._logger.info('Waiting for status message from primary node')
