@@ -158,7 +158,7 @@ class RabbitMQ(object):
 		
 	def set_full_permissions(self, username):
 		""" Set full permissions on '/' virtual host """ 
-		permissions = ("'.*'", ) * 3
+		permissions = ('.*', ) * 3
 		system2(('rabbitmqctl', 'set_permissions', username) + permissions, logger=self._logger)
 			
 
