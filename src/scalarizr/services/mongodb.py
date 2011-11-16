@@ -52,7 +52,7 @@ ROUTER_LOG_PATH = '/var/log/mongodb/mongodb.router.log'
 LOCK_FILE = 'mongod.lock'
 
 DEFAULT_USER = 'mongodb'
-MAX_START_TIMEOUT = 60
+MAX_START_TIMEOUT = 180
 
 class MongoDB(BaseService):
 	_arbiter = None
