@@ -59,7 +59,7 @@ class MongoDB(BaseService):
 	keyfile = None
 
 	
-	def __init__(self, keyfile):
+	def __init__(self, keyfile=None):
 		self.keyfile = keyfile
 		self._objects = {}
 		self._logger = logging.getLogger(__name__)
