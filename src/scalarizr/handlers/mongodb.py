@@ -208,7 +208,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		mongodb_key = mongodb_data[OPT_KEYFILE]
 		del mongodb_data[OPT_KEYFILE]
 		
-		mongodb_key = mongodb_key or cryptotool.keygen(20)
+		'''
+		mongodb allows only base64 characters in keyfile, and '=' isn't one of them
+		'''
+		mongodb_key = mongodb_key or cryptotool.keygen(22)[:-2]
 		self._cnf.write_key(BEHAVIOUR, mongodb_key)
 		
 		self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
