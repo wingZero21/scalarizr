@@ -517,7 +517,7 @@ class Mongod(object):
 		self.keyfile = keyfile
 		self.cli = MongoCLI(port=port)
 		self.port = port
-		self.sock = initdv2.SockParam(self.port or ROUTER_DEFAULT_PORT)
+		self.sock = initdv2.SockParam(self.port or REPLICA_DEFAULT_PORT)
 		
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None):
