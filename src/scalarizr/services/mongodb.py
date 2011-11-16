@@ -51,7 +51,7 @@ ROUTER_LOG_PATH = '/var/log/mongodb/mongodb.router.log'
 
 LOCK_FILE = 'mongod.lock'
 
-
+DEFAULT_USER = 'mongodb'
 
 class MongoDB(BaseService):
 	_arbiter = None
@@ -97,7 +97,7 @@ class MongoDB(BaseService):
 	def _prepare_arbiter(self, rs_name):
 		if not os.path.exists(ARBITER_DATA_DIR):
 			os.makedirs(ARBITER_DATA_DIR)
-		rchown('mongodb', ARBITER_DATA_DIR)	
+		rchown(DEFAULT_USER, ARBITER_DATA_DIR)	
 			
 		self.arbiter_conf.db_path = ARBITER_DATA_DIR
 		self.arbiter_conf.replSet = rs_name
@@ -109,7 +109,7 @@ class MongoDB(BaseService):
 	def _prepare_config_server(self):
 		if not os.path.exists(CONFIG_SERVER_DATA_DIR):
 			os.makedirs(CONFIG_SERVER_DATA_DIR)
-		rchown('mongodb', CONFIG_SERVER_DATA_DIR)
+		rchown(DEFAULT_USER, CONFIG_SERVER_DATA_DIR)
 		'''
 		configsvr changes the default port and turns on the diaglog, 
 		a log that keeps every action the config database performs 
@@ -345,7 +345,7 @@ class KeyFile(object):
 class WorkingDirectory(object):
 	
 	path = None
-	user = 'mongodb'
+	user = DEFAULT_USER
 	
 	def __init__(self, path=None):
 		self._logger = logging.getLogger(__name__)  
@@ -532,16 +532,17 @@ class Mongod(object):
 			s.append('--config=%s' % self.configpath)
 		if self.dbpath:
 			s.append('--dbpath=%s' % self.dbpath)
-		if self.keyfile:
-			s.append('--keyFile=%s' % self.keyfile)
 		if self.port:
 			s.append('--port=%s' % self.port)
+		if self.keyfile and os.path.exists(self.keyfile):
+			rchown(DEFAULT_USER, self.keyfile)	
+			s.append('--keyFile=%s' % self.keyfile)
 		return s
 	
 	def start(self):
 		try:
 			if not self.is_running:
-				system2(['sudo', '-u', 'mongodb', MONGOD,] + self.args)
+				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args)
 				initdv2.wait_sock(self.sock)
 		except PopenError, e:
 			self._logger.error('Unable to start mongod process: %s' % e)
