@@ -85,7 +85,7 @@ class MongoDB(BaseService):
 		'''
 		#self.config.shardsvr = True
 		self.config.replSet = rs_name
-		self.config.db_path = self.working_dir.create(STORAGE_DATA_DIR)
+		self.config.dbpath = self.working_dir.create(STORAGE_DATA_DIR)
 		self.config.logpath = LOG_PATH_DEFAULT
 		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logappend = True
@@ -99,7 +99,7 @@ class MongoDB(BaseService):
 			os.makedirs(ARBITER_DATA_DIR)
 		rchown(DEFAULT_USER, ARBITER_DATA_DIR)	
 			
-		self.arbiter_conf.db_path = ARBITER_DATA_DIR
+		self.arbiter_conf.dbpath = ARBITER_DATA_DIR
 		self.arbiter_conf.replSet = rs_name
 		self.arbiter_conf.shardsvr = True
 		self.arbiter_conf.port = ARBITER_DEFAULT_PORT
@@ -228,7 +228,7 @@ class MongoDB(BaseService):
 	
 	
 	@property
-	def db_path(self):
+	def dbpath(self):
 		return self.config.dbpath
 	
 	
