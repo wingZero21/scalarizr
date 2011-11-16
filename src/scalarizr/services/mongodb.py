@@ -519,7 +519,7 @@ class Mongod(object):
 		self.keyfile = keyfile
 		self.cli = MongoCLI(port=port)
 		self.port = port
-		self.sock = initdv2.SockParam(self.port or REPLICA_DEFAULT_PORT, timeout=MAX_START_TIMEOUT)
+		self.sock = initdv2.SockParam(self.port or REPLICA_DEFAULT_PORT)
 		
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None):
@@ -545,7 +545,7 @@ class Mongod(object):
 		try:
 			if not self.is_running:
 				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args)
-				initdv2.wait_sock(self.sock)
+				wait_until(lambda: not self.is_running, timeout=MAX_START_TIMEOUT)
 		except PopenError, e:
 			self._logger.error('Unable to start mongod process: %s' % e)
 
@@ -570,21 +570,22 @@ class Mongod(object):
 
 
 class Mongos(object):
-	sock = initdv2.SockParam(ROUTER_DEFAULT_PORT, timeout=MAX_START_TIMEOUT)
+	sock = initdv2.SockParam(ROUTER_DEFAULT_PORT)
 
 	@classmethod
 	def start(cls):
 		if not cls.is_running():
 			system2((MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
 									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT))
-			initdv2.wait_sock(cls.sock)
+			wait_until(lambda: not self.is_running, timeout=MAX_START_TIMEOUT)
 			
 	@classmethod
 	def stop(cls):
 		if cls.is_running():
 			cli = MongoCLI(ROUTER_DEFAULT_PORT)
 			cli.shutdown_server()
-	
+			wait_until(lambda: not self.is_running, timeout=65)
+			
 	@classmethod
 	def is_running(cls):
 		try:
