@@ -52,6 +52,7 @@ ROUTER_LOG_PATH = '/var/log/mongodb/mongodb.router.log'
 LOCK_FILE = 'mongod.lock'
 
 DEFAULT_USER = 'mongodb'
+MAX_START_TIMEOUT = 60
 
 class MongoDB(BaseService):
 	_arbiter = None
@@ -518,7 +519,7 @@ class Mongod(object):
 		self.keyfile = keyfile
 		self.cli = MongoCLI(port=port)
 		self.port = port
-		self.sock = initdv2.SockParam(self.port or REPLICA_DEFAULT_PORT)
+		self.sock = initdv2.SockParam(self.port or REPLICA_DEFAULT_PORT, timeout=MAX_START_TIMEOUT)
 		
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None):
@@ -569,7 +570,7 @@ class Mongod(object):
 
 
 class Mongos(object):
-	sock = initdv2.SockParam(ROUTER_DEFAULT_PORT)
+	sock = initdv2.SockParam(ROUTER_DEFAULT_PORT, timeout=MAX_START_TIMEOUT)
 
 	@classmethod
 	def start(cls):
@@ -734,6 +735,26 @@ class MongoCLI(object):
     "info" : "Config now saved locally.  Should come online in about a minute.",
     "ok" : 1
 }
+
+
+> rs.initiate()
+{
+	"info2" : "no configuration explicitly specified -- making one",
+	"me" : "mongo-0-0:27018",
+	"errmsg" : "couldn't initiate : new file allocation failure",
+	"ok" : 0
+}
+
+
+> rs.initiate()
+{
+	"assertion" : "Can't take a write lock while out of disk space",
+	"assertionCode" : 14031,
+	"errmsg" : "db assertion failure",
+	"ok" : 0
+}
+
+
 
 > rs.config()
 {
