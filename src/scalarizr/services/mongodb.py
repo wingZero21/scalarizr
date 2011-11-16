@@ -79,14 +79,19 @@ class MongoDB(BaseService):
 
 	
 	def prepare(self, rs_name):
+		'''
+		Somehow shardsvr in Mongo 2.01 messes with our port option
+		And since it is not required we decided to skip it for good.
+		'''
+		#self.config.shardsvr = True
 		self.config.replSet = rs_name
 		self.config.db_path = self.working_dir.create(STORAGE_DATA_DIR)
 		self.config.logpath = LOG_PATH_DEFAULT
 		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logappend = True
 		self.config.nojournal = False	
-		self.config.shardsvr = True
 		self.working_dir.unlock()
+
 			
 
 	def _prepare_arbiter(self, rs_name):
