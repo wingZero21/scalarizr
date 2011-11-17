@@ -546,6 +546,8 @@ class Mongod(object):
 			if not self.is_running:
 				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args)
 				wait_until(lambda: not self.is_running, timeout=MAX_START_TIMEOUT)
+				wait_until(lambda: not self.cli.has_connection, timeout=MAX_START_TIMEOUT)
+				
 		except PopenError, e:
 			self._logger.error('Unable to start mongod process: %s' % e)
 
@@ -614,8 +616,8 @@ class MongoCLI(object):
 			self._con = pymongo.Connection('localhost', self.port)
 		return self._con
 
-		
-	def test_connection(self):
+	@property	
+	def has_connection(self):
 		'''
 		MongoDB shell version: 2.0.0
 		connecting to: test
@@ -623,10 +625,12 @@ class MongoCLI(object):
 		exception: connect failed
 		'''
 		try:
-			self._execute('select 1;')
-		except PopenError, e:
-			if "couldn't connect to server" in str(e):
+			self.connection.db.test.find_one()
+		except pymongo.errors.AutoReconnect, e:
+			if "Connection refused" in str(e):
 				return False
+		except BaseException, e:
+			self._logger.debug(e)
 		return True
 
 	
