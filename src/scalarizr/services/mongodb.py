@@ -546,7 +546,7 @@ class Mongod(object):
 			if not self.is_running:
 				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args)
 				wait_until(lambda: self.is_running, timeout=MAX_START_TIMEOUT)
-				wait_until(lambda: not self.cli.has_connection, timeout=MAX_START_TIMEOUT)
+				wait_until(lambda: self.cli.has_connection, timeout=MAX_START_TIMEOUT)
 				
 		except PopenError, e:
 			self._logger.error('Unable to start mongod process: %s' % e)
