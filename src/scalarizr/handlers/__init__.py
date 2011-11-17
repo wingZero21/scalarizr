@@ -46,7 +46,7 @@ class Handler(object):
 				saved_access_data = dict(saved_access_data)
 			waiter = threading.Thread(name='%sMessageHandler' % msg.name, target=cons.message_handler)
 			waiter.start()
-			self._logger.debug('Joining %a acknowledgement handler', msg.name)
+			self._logger.debug('Joining %s acknowledgement handler', msg.name)
 			waiter.join()
 			self._logger.debug('%s acknowledgement handler joined!', msg.name)
 			cons.message_to_ack = None
