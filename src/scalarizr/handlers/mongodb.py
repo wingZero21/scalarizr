@@ -225,10 +225,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		@param message: HostUp message
 		"""
 
-		szr_cnf = bus.cnf
-		self.shard_index = szr_cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX)
-		self.rs_id = szr_cnf.rawini.get(CNF_SECTION, OPT_RS_ID)
-
 		first_in_rs = True	
 		hosts = self._queryenv.list_roles(self._role_name)[0].hosts
 		for host in hosts:
@@ -286,7 +282,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		if message.local_ip != self._platform.get_private_ip():
 			is_master = self.mongodb.is_replication_master
-			if is_master and self._shard_index == message.shard_index:
+			if is_master and self.shard_index == message.shard_index:
 	
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				self.mongodb.register_slave(nodename)
@@ -303,7 +299,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		private_ip = self._platform.get_private_ip()
 		if message.local_ip != private_ip:
 			if self.mongodb.is_replication_master and \
-											self._shard_index == message.shard_index:			   
+											self.shard_index == message.shard_index:			   
 				r = len(self.mongodb.replicas) 
 				a = len(self.mongodb.arbiters)
 				if r % 2 == 0 and not a:
@@ -725,9 +721,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.mongod.start()
 			
 	@property
-	def _shard_index(self):
-		szr_cnf = bus.cnf
-		return int(szr_cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX))
+	def shard_index(self):
+		return int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX))
+	
+	@property
+	def rs_id(self):
+		return int(self._cnf.rawini.get(CNF_SECTION, OPT_RS_ID))
 
 
 class StatusWatcher(threading.Thread):
