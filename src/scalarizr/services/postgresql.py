@@ -107,12 +107,16 @@ class PostgreSql(BaseService):
 	
 	@property
 	def version(self):
-		path = glob.glob('/var/lib/p*sql/9.*')[0]
-		return path.split('postgresql/')[-1]
+		try:
+			path = glob.glob('/var/lib/p*sql/9.*')[0]
+			ver = os.path.basename(path)
+		except IndexError:
+			ver = None
+		return ver
 
 	@property	
 	def unified_etc_path(self):
-		return '/etc/postgresql/%s/main' % self.version
+		return '/etc/postgresql/%s/main' % self.version if float(self.version) else '9.0'
 					
 	@property
 	def is_replication_master(self):
