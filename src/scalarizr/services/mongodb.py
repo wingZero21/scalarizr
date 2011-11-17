@@ -545,7 +545,7 @@ class Mongod(object):
 		try:
 			if not self.is_running:
 				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args)
-				wait_until(lambda: not self.is_running, timeout=MAX_START_TIMEOUT)
+				wait_until(lambda: self.is_running, timeout=MAX_START_TIMEOUT)
 				wait_until(lambda: not self.cli.has_connection, timeout=MAX_START_TIMEOUT)
 				
 		except PopenError, e:
@@ -579,7 +579,7 @@ class Mongos(object):
 		if not cls.is_running():
 			system2((MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
 									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT))
-			wait_until(lambda: not self.is_running, timeout=MAX_START_TIMEOUT)
+			wait_until(lambda: self.is_running, timeout=MAX_START_TIMEOUT)
 			
 	@classmethod
 	def stop(cls):
