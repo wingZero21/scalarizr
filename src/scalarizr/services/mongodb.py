@@ -57,6 +57,7 @@ MAX_START_TIMEOUT = 180
 class MongoDB(BaseService):
 	_arbiter = None
 	_instance = None
+	_config_server = None
 	keyfile = None
 
 	
