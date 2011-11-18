@@ -253,6 +253,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 		self._logger.debug('shard_index=%s, type(shard_index)=%s' % (self.shard_index, type(self.shard_index)))
 		self._logger.debug('rs_id=%s, type(rs_id)=%s' % (self.rs_id, type(self.rs_id)))
+		
 		if self.shard_index == 0 and self.rs_id == 0:
 			self.mongodb.start_config_server()
 			hostup_msg.mongodb['config_server'] = 1
