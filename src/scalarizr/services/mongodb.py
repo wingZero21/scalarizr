@@ -10,7 +10,7 @@ import logging
 import datetime
 
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.services import BaseConfig, BaseService
+from scalarizr.services import BaseConfig, BaseService, lazy
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, cryptotool, system2, \
 				PopenError, wait_until, initdv2, software
@@ -78,16 +78,15 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
 		
 	def status(self):
 		'''
-		By default Ubuntu automaticly starts mongodb process on 27017 
+		By default Ubuntu automatically starts mongodb process on 27017 
 		which is exactly the port number used by our router process.
 		'''
 		p = MongoCLI(port=ROUTER_DEFAULT_PORT)
 		return initdv2.Status.RUNNING if p.test_connection() else initdv2.Status.NOT_RUNNING
 
 	def stop(self, reason=None):
-		if self.is_running:
-			initdv2.ParametrizedInitScript.stop(self)
-			wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
+		initdv2.ParametrizedInitScript.stop(self)
+		wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
 	
 	def restart(self, reason=None):
 		initdv2.ParametrizedInitScript.restart(self)
@@ -608,7 +607,7 @@ class Mongod(object):
 	def stop(self, reason=None):
 		if self.is_running:
 			self.cli.shutdown_server()
-			wait_until(lambda: not self.is_running, timeout=65)
+			wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
 	
 	def restart(self, reason=None):
 		if not self.is_running:
@@ -639,7 +638,7 @@ class Mongos(object):
 		if cls.is_running():
 			cli = MongoCLI(ROUTER_DEFAULT_PORT)
 			cli.shutdown_server()
-			wait_until(lambda: not self.is_running, timeout=65)
+			wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
 			
 	@classmethod
 	def is_running(cls):
