@@ -632,14 +632,14 @@ class Mongos(object):
 			system2((MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
 									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT))
 			wait_until(lambda: self.is_running, timeout=MAX_START_TIMEOUT)
-			
+
 	@classmethod
 	def stop(cls):
 		if cls.is_running():
 			cli = MongoCLI(ROUTER_DEFAULT_PORT)
 			cli.shutdown_server()
 			wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
-			
+
 	@classmethod
 	def is_running(cls):
 		try:
@@ -758,7 +758,7 @@ class MongoCLI(object):
 		return self.connection.admin.command('fsync')
 
 	
-	def stop_balacer(self):
+	def stop_balancer(self):
 		'''
 		// connect to mongos (not a config server!)
 		

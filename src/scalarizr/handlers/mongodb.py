@@ -250,7 +250,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 		else:
 			self._init_slave(hostup_msg, rs_name)
-						
+
 
 		if self.shard_index == 0 and self.rs_id == 0:
 			self.mongodb.start_config_server()
@@ -495,6 +495,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				shutil.rmtree(tmpdir, ignore_errors=True)
 			if backup_path and os.path.exists(backup_path):
 				os.remove(backup_path)
+			self.mongodb.router_cli.start_balancer()
 				
 				
 	def _init_master(self, message, rs_name):
@@ -593,7 +594,6 @@ class MongoDBHandler(ServiceCtlHandler):
 			time.sleep(1)
 	
 		if stale:
-			# TODO: patch platform
 			if PlatformFeatures.VOLUMES in self._platform.features:
 				self._logger.info('Too stale to synchronize. Trying to get snapshot from primary')
 				self.send_int_message(message.local_ip,
