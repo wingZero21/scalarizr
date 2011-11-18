@@ -160,6 +160,7 @@ class MongoDB(BaseService):
 
 
 	def _prepare_config_server(self):
+		self._logger.debug('Preparing config server')
 		if not os.path.exists(CONFIG_SERVER_DATA_DIR):
 			os.makedirs(CONFIG_SERVER_DATA_DIR)
 		rchown(DEFAULT_USER, CONFIG_SERVER_DATA_DIR)
@@ -202,6 +203,7 @@ class MongoDB(BaseService):
 	
 	def start_config_server(self):
 		self._prepare_config_server()
+		self._logger.debug('Starting config server')
 		self.config_server.start()
 		
 		
