@@ -631,7 +631,7 @@ class Mongos(object):
 		if not cls.is_running():
 			system2((MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
 									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT))
-			wait_until(lambda: self.is_running, timeout=MAX_START_TIMEOUT)
+			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 
 	@classmethod
 	def stop(cls):
