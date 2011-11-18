@@ -4,10 +4,9 @@ Created on Sep 30, 2011
 @author: Dmytro Korsakov
 '''
 import os
-import re
-import json
+import time
 import logging
-import datetime
+
 
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.services import BaseConfig, BaseService, lazy
@@ -97,7 +96,7 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
 	def start(self):
 		initdv2.ParametrizedInitScript.start(self)
 		wait_until(lambda: self.status() == initdv2.Status.RUNNING, sleep=1, timeout=MAX_START_TIMEOUT, 
-				error_text="In %s seconds after start Redis state still isn't 'Running'" % timeout)
+				error_text="In %s seconds after start Redis state still isn't 'Running'" % MAX_START_TIMEOUT)
 
 		
 initdv2.explore(SERVICE_NAME, MongoDBDefaultInitScript)
@@ -638,7 +637,7 @@ class Mongos(object):
 		if cls.is_running():
 			cli = MongoCLI(ROUTER_DEFAULT_PORT)
 			cli.shutdown_server()
-			wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
+			wait_until(lambda: not cls.is_running, timeout=MAX_STOP_TIMEOUT)
 
 	@classmethod
 	def is_running(cls):
@@ -771,8 +770,11 @@ class MongoCLI(object):
 		
 		http://www.mongodb.org/display/DOCS/Backing+Up+Sharded+Cluster
 		'''
-		#TODO: use pyMongo
-		pass
+		self._logger.info('Stopping balancer')
+		self.connection.config.settings.update({'_id': 'balancer'}, {'stopped' : True}, True)
+		self._logger.info("Waiting balancer finishes it's round")
+		while self.connection.locks.find_one({'_id': "balancer"})['state']:
+			time.sleep(1)
 	
 	
 	def start_balancer(self):
