@@ -548,10 +548,18 @@ class MongoDBConfig(BaseConfig):
 class ArbiterConf(MongoDBConfig):
 	config_name = 'mongodb.arbiter.conf'
 
+	@classmethod
+	def find(cls, config_dir='/etc'):
+		return cls(os.path.join(config_dir, cls.config_name))
+	
 	
 class ConfigServerConf(MongoDBConfig):
-	config_name = 'mongodb.arbiter.conf'
-	
+	config_name = 'mongodb.configsrv.conf'
+
+	@classmethod
+	def find(cls, config_dir='/etc'):
+		return cls(os.path.join(config_dir, cls.config_name))
+					
 	def _set_configsvr(self, value):
 		self.set_bool_option('configsvr', value)
 
