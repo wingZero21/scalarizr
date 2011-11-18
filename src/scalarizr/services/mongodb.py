@@ -86,7 +86,7 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
 
 	def stop(self, reason=None):
 		initdv2.ParametrizedInitScript.stop(self)
-		wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
+		wait_until(lambda: self.status() == initdv2.Status.NOT_RUNNING, timeout=MAX_STOP_TIMEOUT)
 	
 	def restart(self, reason=None):
 		initdv2.ParametrizedInitScript.restart(self)
