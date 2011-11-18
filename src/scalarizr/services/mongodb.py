@@ -82,7 +82,7 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
 		which is exactly the port number used by our router process.
 		'''
 		p = MongoCLI(port=ROUTER_DEFAULT_PORT)
-		return initdv2.Status.RUNNING if p.test_connection() else initdv2.Status.NOT_RUNNING
+		return initdv2.Status.RUNNING if p.has_connection() else initdv2.Status.NOT_RUNNING
 
 	def stop(self, reason=None):
 		initdv2.ParametrizedInitScript.stop(self)
