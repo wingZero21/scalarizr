@@ -119,17 +119,14 @@ class MessageListener:
 						module = __import__(module_name, globals(), locals(), ["get_handlers"], -1)
 						try:
 							self._handlers_chain.extend(module.get_handlers())
-						except Exception, e:
-							self._logger.error("Cannot get module handlers (module: %s)", module_name)
-							self._logger.exception(e)
+						except:
+							self._logger.exception("Can't get module handlers (module: %s)", module_name)
 						
-					except Exception, e:
-						self._logger.error("Cannot import module %s", module_name)
-						self._logger.exception(e)
+					except:
+						self._logger.exception("Can't import module '%s'", module_name)
 							
-				except (BaseException, Exception), e:
-					self._logger.error('Unhandled exception in notification loop')
-					self._logger.exception(e)
+				except:
+					self._logger.exception('Unhandled exception in notification loop')
 						
 			self._logger.debug("Collected handlers chain: %s" % self._handlers_chain)
 						
