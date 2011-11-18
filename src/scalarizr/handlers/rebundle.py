@@ -311,7 +311,8 @@ class LinuxImage:
 	def _format_image(self):
 		LOG.info("Formatting image")
 		
-		vol_entry = self._mtab.find(mpoint=self._volume)[0]
+		vol_entry = list(v for v in self._mtab.find(mpoint=self._volume) 
+						if v.devname.startswith('/dev'))[0]
 		fs = Storage.lookup_filesystem(vol_entry.fstype)
 					
 		# create filesystem

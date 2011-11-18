@@ -53,6 +53,18 @@ class RabbitMQHandler(ServiceCtlHandler):
 		self.service = initdv2.lookup(BuiltinBehaviours.RABBITMQ)
 		
 		self.on_reload()
+			
+		if 'ec2' == self.platform.name:
+			updates = dict(hostname_as_pubdns = '0')
+			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
+	
+	
+	def on_init(self):
+		bus.on("host_init_response", self.on_host_init_response)
+		bus.on("before_host_up", self.on_before_host_up)
+		bus.on("before_hello", self.on_before_hello)
+		bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
+
 		
 		if self.cnf.state == ScalarizrState.BOOTSTRAPPING:
 			
@@ -72,18 +84,6 @@ class RabbitMQHandler(ServiceCtlHandler):
 				self.service.stop()
 				self.storage_vol.mount()
 				self.service.start()
-
-			
-		if 'ec2' == self.platform.name:
-			updates = dict(hostname_as_pubdns = '0')
-			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
-	
-	
-	def on_init(self):
-		bus.on("host_init_response", self.on_host_init_response)
-		bus.on("before_host_up", self.on_before_host_up)
-		bus.on("before_hello", self.on_before_hello)
-		bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
 		
 			
 	def on_reload(self):
@@ -122,8 +122,10 @@ class RabbitMQHandler(ServiceCtlHandler):
 		except:
 			raise HandlerError("Can't find rabbitmq on this server.")
 		
-		if rabbit_version.version < (2,7,0):
-			raise HandlerError("Rabbitmq versions less than 2.7.0 aren't supported")		
+		if rabbit_version.version < (2, 7, 0):
+			self._logger.error("Unsupported RabbitMQ version. Assertion failed: %s >= 2.7.0", 
+							'.'.join(rabbit_version.version))
+			sys.exit(1)
 
 
 	def on_RabbitMq_SetupControlPanel(self, message):
