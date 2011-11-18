@@ -9,6 +9,7 @@ import json
 import logging
 import datetime
 
+from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.services import BaseConfig, BaseService
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, cryptotool, system2, \
@@ -16,7 +17,6 @@ from scalarizr.util import disttool, cryptotool, system2, \
 from scalarizr.util.filetool import rchown
 import pymongo
 
-STORAGE_PATH = "/mnt/mongodb-storage"
 
 try:
 	MONGOD = software.whereis('mongod')[0]
@@ -27,14 +27,18 @@ except IndexError:
 	#raise Exception('Cannot locate mongo executables.')
 	pass
 
-
 ROUTER_DEFAULT_PORT = 27017
 ARBITER_DEFAULT_PORT = 27020
 REPLICA_DEFAULT_PORT = 27018
 CONFIG_SERVER_DEFAULT_PORT = 27019
 
+SERVICE_NAME = BuiltinBehaviours.MONGODB
+STORAGE_PATH = "/mnt/mongodb-storage"
+
 LOG_PATH_DEFAULT = '/var/log/mongodb/mongodb.log'
 DB_PATH_DEFAULT = '/var/lib/mongodb'
+LOCK_FILE = 'mongod.lock'
+DEFAULT_USER = 'mongodb'
 STORAGE_DATA_DIR = os.path.join(STORAGE_PATH, 'data')
 
 CONFIG_PATH_DEFAULT = UBUNTU_CONFIG_PATH = CENTOS_CONFIG_PATH = '/etc/mongodb.conf'
@@ -49,11 +53,57 @@ CONFIG_SERVER_LOG_PATH = '/var/log/mongodb/mongodb.configsrv.log'
 
 ROUTER_LOG_PATH = '/var/log/mongodb/mongodb.router.log'
 
-LOCK_FILE = 'mongod.lock'
-
-DEFAULT_USER = 'mongodb'
 MAX_START_TIMEOUT = 180
+MAX_STOP_TIMEOUT = 65
 
+
+				
+class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
+	socket_file = None
+	
+	@lazy
+	def __new__(cls, *args, **kws):
+		obj = super(MongoDBDefaultInitScript, cls).__new__(cls, *args, **kws)
+		cls.__init__(obj)
+		return obj
+			
+	def __init__(self):
+		initd_script = None
+		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+			initd_script = ('/usr/sbin/service', 'mongodb')
+		else:
+			initd_script = '/etc/init.d/mongodb'
+		initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
+				initd_script=initd_script)
+		
+	def status(self):
+		'''
+		By default Ubuntu automaticly starts mongodb process on 27017 
+		which is exactly the port number used by our router process.
+		'''
+		p = MongoCLI(port=ROUTER_DEFAULT_PORT)
+		return initdv2.Status.RUNNING if p.test_connection() else initdv2.Status.NOT_RUNNING
+
+	def stop(self, reason=None):
+		if self.is_running:
+			initdv2.ParametrizedInitScript.stop(self)
+			wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
+	
+	def restart(self, reason=None):
+		initdv2.ParametrizedInitScript.restart(self)
+	
+	def reload(self, reason=None):
+		initdv2.ParametrizedInitScript.restart(self)
+		
+	def start(self):
+		initdv2.ParametrizedInitScript.start(self)
+		wait_until(lambda: self.status() == initdv2.Status.RUNNING, sleep=1, timeout=MAX_START_TIMEOUT, 
+				error_text="In %s seconds after start Redis state still isn't 'Running'" % timeout)
+
+		
+initdv2.explore(SERVICE_NAME, MongoDBDefaultInitScript)
+	
+		
 class MongoDB(BaseService):
 	_arbiter = None
 	_instance = None
@@ -65,6 +115,7 @@ class MongoDB(BaseService):
 		self.keyfile = keyfile
 		self._objects = {}
 		self._logger = logging.getLogger(__name__)
+		self.default_init_script = initdv2.lookup(SERVICE_NAME)
 
 								
 	def __new__(cls, *args, **kwargs):
@@ -86,15 +137,17 @@ class MongoDB(BaseService):
 		And since it is not required we decided to skip it for good.
 		'''
 		#self.config.shardsvr = True
+		'''
+		option nojournal is True on all 64bit platforms by default
+		'''
+		#self.config.nojournal = False
 		self.config.replSet = rs_name
 		self.config.dbpath = self.working_dir.create(STORAGE_DATA_DIR)
 		self.config.logpath = LOG_PATH_DEFAULT
 		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logappend = True
-		self.config.nojournal = False	
 		self.working_dir.unlock()
-
-			
+		
 
 	def _prepare_arbiter(self, rs_name):
 		if not os.path.exists(ARBITER_DATA_DIR):
@@ -159,6 +212,7 @@ class MongoDB(BaseService):
 		
 		
 	def start_router(self):
+		self.default_init_script.stop('Stopping default mongod service')
 		Mongos.start()
 		
 	
@@ -305,7 +359,6 @@ class MongoDB(BaseService):
 	config = property(_get_config, _set_config)
 	arbiter_conf = property(_get_arbiter_conf, _set_arbiter_conf)
 	config_server_conf = property(_get_cfg_srv_conf, _set_cfg_srv_conf)
-	
 
 	
 class MongoDump(object):
@@ -325,7 +378,6 @@ class MongoDump(object):
 			args += ('-h', self.host if not self.port else "%s:%s" % (self.host, self.port))
 		return system2(args)
 
-
 		
 class KeyFile(object):
 	
@@ -341,7 +393,6 @@ class KeyFile(object):
 
 	def __repr__(self):
 		return open(self.path).read().strip() if os.path.exists(self.path) else None
-
 
 
 class WorkingDirectory(object):
@@ -388,7 +439,6 @@ class WorkingDirectory(object):
 	@property
 	def lock_path(self):
 		return os.path.join(self.path, LOCK_FILE)
-
 
 
 class MongoDBConfig(BaseConfig):
@@ -494,7 +544,6 @@ class MongoDBConfig(BaseConfig):
 	replSet = property(_get_replSet, _set_replSet)
 	logpath = property(_get_logpath, _set_logpath)
 	
-
 	
 class ArbiterConf(MongoDBConfig):
 	config_name = 'mongodb.arbiter.conf'
@@ -546,6 +595,10 @@ class Mongod(object):
 		try:
 			if not self.is_running:
 				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args)
+				'''
+				mongod process takes some time before it actualy starts accepting connections
+				it can easily be as long as 160 seconds on a Large instance
+				'''
 				wait_until(lambda: self.is_running, timeout=MAX_START_TIMEOUT)
 				wait_until(lambda: self.cli.has_connection, timeout=MAX_START_TIMEOUT)
 				
@@ -569,7 +622,6 @@ class Mongod(object):
 			return True
 		except:
 			return False
-
 
 
 class Mongos(object):
@@ -596,7 +648,6 @@ class Mongos(object):
 			return True
 		except:
 			return False
-
 
 
 class MongoCLI(object):
