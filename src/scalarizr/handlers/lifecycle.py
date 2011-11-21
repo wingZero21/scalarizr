@@ -12,6 +12,7 @@ from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
+from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 
 # Libs
 from scalarizr.util import cryptotool
@@ -124,6 +125,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	def on_init(self):
 		bus.on("host_init_response", self.on_host_init_response)
 		self._producer.on("before_send", self.on_before_message_send)
+		bus.on(before_reboot_finish=self._insert_iptables_rules)	
+		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
+			self._insert_iptables_rules()
 		
 		# Add internal messages to scripting skip list
 		try:
@@ -246,6 +250,21 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		bus.int_messaging_service = srv
 		t = threading.Thread(name='IntMessageConsumer', target=srv.get_consumer().start)
 		t.start()
+
+
+	def _insert_iptables_rules(self, *args, **kwds):
+		self._logger.debug('Adding iptables rules for scalarizr ports')		
+		iptables = IpTables()
+		if iptables.usable():		
+			rules = []
+			
+			# Scalarizr ports
+			rules.append(RuleSpec(dport=8012, jump='ACCEPT', protocol=P_TCP))
+			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
+			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
+			
+			for rule in rules:
+				iptables.insert_rule(None, rule_spec = rule)
 
 
 	def on_IntServerReboot(self, message):
