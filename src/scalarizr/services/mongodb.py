@@ -782,7 +782,7 @@ class MongoCLI(object):
 		'''
 		self._logger.info('Stopping balancer')
 		self.connection.config.settings.update({'_id': 'balancer'}, {'stopped' : True}, True)
-		self._logger.info("Waiting balancer finishes it's round")
+		self._logger.debug("Waiting until balancer finishes it's round")
 		while self.connection.locks.find_one({'_id': "balancer"})['state']:
 			time.sleep(1)
 	
@@ -792,7 +792,8 @@ class MongoCLI(object):
 		>use config
 		>db.settings.update( { _id: "balancer" }, { $set : { stopped: false } } , true );
 		'''
-		pass
+		self._logger.info('Starting balancer')
+		self.connection.config.settings.update({'_id': 'balancer'}, {'stopped' : False}, True)
 		
 
 '''
