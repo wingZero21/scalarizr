@@ -125,8 +125,7 @@ class MongoDB(BaseService):
 	
 	@property
 	def is_replication_master(self):
-		ret = self.cli.is_master()['ismaster']
-		return True if ret == 'true' else False
+		return self.cli.is_master()['ismaster']
 
 	
 	def prepare(self, rs_name):
