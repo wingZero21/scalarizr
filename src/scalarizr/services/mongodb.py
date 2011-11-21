@@ -173,7 +173,7 @@ class MongoDB(BaseService):
 		P.S. Assume that mongodb roles Scalr will be build on x64 platform only
 		Wchich means journal option by default will be on.
 		'''
-		#self.config_server_conf.configsvr = True
+		self.config_server_conf.configsvr = True
 		self.config_server_conf.port = CONFIG_SERVER_DEFAULT_PORT
 		self.config_server_conf.logpath = CONFIG_SERVER_LOG_PATH
 
@@ -213,6 +213,7 @@ class MongoDB(BaseService):
 		
 	def start_router(self):
 		self.default_init_script.stop('Stopping default mongod service')
+		Mongos.set_keyfile(self.keyfile.path)
 		Mongos.start()
 		
 	
@@ -583,7 +584,7 @@ class Mongod(object):
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None):
 		config_path = mongo_conf.path or CONFIG_PATH_DEFAULT
-		return cls(config_path, key_file)
+		return cls(config_path, keyfile)
 
 	@property
 	def args(self):
@@ -634,12 +635,21 @@ class Mongod(object):
 
 class Mongos(object):
 	sock = initdv2.SockParam(ROUTER_DEFAULT_PORT)
-
+	keyfile = None
+	
+	@classmethod
+	def set_keyfile(cls, keyfile = None):
+		cls.keyfile = keyfile
+	
 	@classmethod
 	def start(cls):
 		if not cls.is_running():
-			system2((MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
-									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT))
+			args = (MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
+									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT)
+			if cls.keyfile and os.path.exists(cls.keyfile):
+				rchown(DEFAULT_USER, cls.keyfile)	
+				args.append('--keyFile=%s' % self.keyfile)
+			system2(args)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 
 	@classmethod
