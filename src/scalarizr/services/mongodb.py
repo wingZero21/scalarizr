@@ -594,7 +594,7 @@ class Mongod(object):
 			s.append('--dbpath=%s' % self.dbpath)
 		if self.port:
 			s.append('--port=%s' % self.port)
-		if self.keyfile and os.path.exists(self.keyfile):
+		if self.keyfile and os.path.exists(self.keyfile.path):
 			rchown(DEFAULT_USER, self.keyfile)	
 			s.append('--keyFile=%s' % self.keyfile)
 		return s
