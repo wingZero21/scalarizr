@@ -647,7 +647,7 @@ class Mongos(object):
 									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
 			if cls.keyfile and os.path.exists(cls.keyfile):
 				rchown(DEFAULT_USER, cls.keyfile)	
-				args.append('--keyFile=%s' % self.keyfile)
+				args.append('--keyFile=%s' % cls.keyfile)
 			system2(args)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 
