@@ -298,7 +298,7 @@ class MongoDB(BaseService):
 	@property
 	def config_server(self):
 		if not self._config_server:
-			self._config_server = Mongod(CONFIG_SERVER_CONF_PATH, CONFIG_SERVER_DATA_DIR, \
+			self._config_server = Mongod(CONFIG_SERVER_CONF_PATH, self.keyfile, CONFIG_SERVER_DATA_DIR, \
 										 CONFIG_SERVER_DEFAULT_PORT)
 		return self._config_server
 
