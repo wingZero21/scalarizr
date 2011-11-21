@@ -711,8 +711,12 @@ class MongoCLI(object):
 		'''
 	    initializes replica set
 	    '''
-		return self.connection.admin.command('replSetInitiate')
-	
+		try:
+			res = self.connection.admin.command('replSetInitiate')
+		except pymongo.errors.OperationFailure, e:
+			self._logger.warning(e)
+			res = None
+		return res	
 	
 	def add_shard(self, rs_name, rs_members):
 		host_str = '%s/%s' % (rs_name, ','.join(rs_members))
