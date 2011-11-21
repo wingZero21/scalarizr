@@ -182,13 +182,13 @@ class MongoDB(BaseService):
 		@return (host:port)
 		'''
 		ret = self.cli.initiate_rs()
-		if ret['ok'] == '0':
-			self._logger.error('Could not initialize replica set: %s' % ret['errmsg'])
+		if ret and ret['ok'] == '0':
+			raise BaseException('Could not initialize replica set: %s' % ret['errmsg'])
 		
 		wait_until(lambda: self.is_replication_master, sleep=5, logger=self._logger,
 					timeout=120, start_text='Wait until node becomes replication primary')		
 		
-		return ret['me'].split(':')
+		return ret['me'].split(':') if ret else None
 	
 	
 	def start_arbiter(self):
@@ -649,7 +649,9 @@ class Mongos(object):
 				rchown(DEFAULT_USER, cls.keyfile)	
 				args.append('--keyFile=%s' % cls.keyfile)
 			system2(args)
+			cli = MongoCLI(ROUTER_DEFAULT_PORT)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
+			wait_until(lambda: cli.has_connection, timeout=MAX_START_TIMEOUT)
 
 	@classmethod
 	def stop(cls):
