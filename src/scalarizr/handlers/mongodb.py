@@ -35,6 +35,7 @@ OPT_SNAPSHOT_CNF		= 'snapshot_config'
 OPT_KEYFILE				= "keyfile"
 OPT_SHARD_INDEX			= "shard_index"
 OPT_RS_ID				= "replica_set_index"
+OPT_PASSWORD			= "password"
 
 BACKUP_CHUNK_SIZE		= 200*1024*1024
 
@@ -210,10 +211,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		mongodb_key = mongodb_data[OPT_KEYFILE]
 		del mongodb_data[OPT_KEYFILE]
 		
-		'''
-		mongodb allows only base64 characters in keyfile, and '=' isn't one of them
-		'''
-		mongodb_key = mongodb_key or cryptotool.keygen(22)[:-1].replace('=','')
+		mongodb_key = mongodb_key or cryptotool.pwgen(22)
 		self._cnf.write_key(BEHAVIOUR, mongodb_key)
 		
 		self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
@@ -257,13 +255,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.debug('rs_id=%s, type(rs_id)=%s' % (self.rs_id, type(self.rs_id)))
 		
 		if self.shard_index == 0 and self.rs_id == 0:
-			password = cryptotool.pwgen(10)
+			password = self._cnf.rawini.get(CNF_SECTION, OPT_PASSWORD)
+			password = password or cryptotool.pwgen(10)
 			self.mongodb.cli.create_or_update_admin_user(ADMIN_USERNAME, password)
-			hostup_msg.mongodb['password'] = password
+			hostup_msg.mongodb['password'] = 1
 			
 			self.mongodb.start_config_server()
 			hostup_msg.mongodb['config_server'] = 1
-			
 		else:
 			hostup_msg.mongodb['config_server'] = 0
 
@@ -274,8 +272,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			if make_shard:
 				self.create_shard()
 		else:
-			hostup_msg.mongodb['router'] = 0
-			
+			hostup_msg.mongodb['router'] = 0		
+		
 
 		repl = 'primary' if first_in_rs else 'secondary'
 
@@ -533,7 +531,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		""" Start replication set where this node is the only member """
 		if init_start:
-			self.mongodb.cli.initiate_rs()
+			self.mongodb.initiate_rs()
 		else:
 			rs_cfg = self.mongodb.cli.get_rs_config()
 			rs_cfg['members'] = [{'_id': self.rs_id, 
