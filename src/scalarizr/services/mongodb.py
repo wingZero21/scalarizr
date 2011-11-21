@@ -291,20 +291,20 @@ class MongoDB(BaseService):
 	@property
 	def arbiter(self):
 		if not self._arbiter:
-			self._arbiter = Mongod(ARBITER_CONF_PATH, self.keyfile, ARBITER_DATA_DIR, ARBITER_DEFAULT_PORT)
+			self._arbiter = Mongod(ARBITER_CONF_PATH, self.keyfile.path, ARBITER_DATA_DIR, ARBITER_DEFAULT_PORT)
 		return self._arbiter
 	
 	
 	@property
 	def config_server(self):
 		if not self._config_server:
-			self._config_server = Mongod(CONFIG_SERVER_CONF_PATH, self.keyfile, CONFIG_SERVER_DATA_DIR, \
+			self._config_server = Mongod(CONFIG_SERVER_CONF_PATH, self.keyfile.path, CONFIG_SERVER_DATA_DIR, \
 										 CONFIG_SERVER_DEFAULT_PORT)
 		return self._config_server
 
 
 	def _get_mongod(self):
-		return self._get('mongod', Mongod.find, self.config, self.keyfile)
+		return self._get('mongod', Mongod.find, self.config, self.keyfile.path)
 	
 	def _set_mongod(self, obj):
 		self._set('mongod', obj)
@@ -582,8 +582,7 @@ class Mongod(object):
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None):
 		config_path = mongo_conf.path or CONFIG_PATH_DEFAULT
-		key_path = keyfile.path if keyfile else None 
-		return cls(config_path, key_path)
+		return cls(config_path, key_file)
 
 	@property
 	def args(self):
@@ -594,7 +593,7 @@ class Mongod(object):
 			s.append('--dbpath=%s' % self.dbpath)
 		if self.port:
 			s.append('--port=%s' % self.port)
-		if self.keyfile and os.path.exists(self.keyfile.path):
+		if self.keyfile and os.path.exists(self.keyfile):
 			rchown(DEFAULT_USER, self.keyfile)	
 			s.append('--keyFile=%s' % self.keyfile)
 		return s
