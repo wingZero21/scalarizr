@@ -41,6 +41,8 @@ BACKUP_CHUNK_SIZE		= 200*1024*1024
 HOSTNAME_TPL			= "mongo-%s-%s"
 RS_NAME_TPL				= "rs-%s"
 
+ADMIN_USERNAME			= "scalr"
+
 
 		
 def get_handlers():
@@ -255,8 +257,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.debug('rs_id=%s, type(rs_id)=%s' % (self.rs_id, type(self.rs_id)))
 		
 		if self.shard_index == 0 and self.rs_id == 0:
+			password = cryptotool.pwgen(10)
+			self.mongodb.cli.create_or_update_admin_user(ADMIN_USERNAME, password)
+			hostup_msg.mongodb['password'] = password
+			
 			self.mongodb.start_config_server()
 			hostup_msg.mongodb['config_server'] = 1
+			
 		else:
 			hostup_msg.mongodb['config_server'] = 0
 

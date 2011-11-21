@@ -242,6 +242,7 @@ class MongoDB(BaseService):
 		wait_until(lambda: self.status == 1 or self.status == 2, timeout=3600, sleep=2)
 	"""
 	
+	
 	@property
 	def status(self):
 		'''
@@ -784,7 +785,7 @@ class MongoCLI(object):
 		self._logger.debug("Waiting until balancer finishes it's round")
 		while self.connection.locks.find_one({'_id': "balancer"})['state']:
 			time.sleep(1)
-	
+
 	
 	def start_balancer(self):
 		'''
@@ -795,6 +796,11 @@ class MongoCLI(object):
 		self.connection.config.settings.update({'_id': 'balancer'}, {'stopped' : False}, True)
 		
 
+	def create_or_update_admin_user(self, username, password):
+		self.connection.admin.add_user(username, password)
+
+
+		
 '''
 > rs.initiate()
 {
