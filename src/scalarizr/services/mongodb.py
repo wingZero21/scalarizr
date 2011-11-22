@@ -695,9 +695,6 @@ class MongoCLI(object):
 	
 	
 	def auth(self,login,password):
-		if self.is_port_listening:
-			self.connection.admin.authenticate(login, password)
-			self.authenticated = True
 		self.login = login
 		self.password = password
 		
@@ -706,9 +703,11 @@ class MongoCLI(object):
 	def connection(self):
 		if not hasattr(self, '_con'):
 			self._con = pymongo.Connection('localhost', self.port)
-		if not self.authenticated and self.login and self.password:
-			self.auth(self.login, self.password)
+		if not self.authenticated and self.login and self.password and self.is_port_listening:
+			self._con.admin.authenticate(login, password)
+			self.authenticated = True
 		return self._con
+
 
 	@property	
 	def has_connection(self):
@@ -727,6 +726,7 @@ class MongoCLI(object):
 			self._logger.debug(e)
 		return True
 
+
 	@property
 	def is_port_listening(self):
 		try:
@@ -734,6 +734,7 @@ class MongoCLI(object):
 			return True
 		except:
 			return False
+	
 	
 	def list_databases(self):
 		return self.connection.database_names()
