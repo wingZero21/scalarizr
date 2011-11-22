@@ -271,8 +271,10 @@ class MongoDBHandler(ServiceCtlHandler):
 			if make_shard:
 				self.create_shard()
 		else:
-			hostup_msg.mongodb['router'] = 0		
-		
+			hostup_msg.mongodb['router'] = 0
+			
+		hostup_msg.mongodb['keyfile'] = self._cnf.read_key(BEHAVIOUR)
+	
 
 		repl = 'primary' if first_in_rs else 'secondary'
 
