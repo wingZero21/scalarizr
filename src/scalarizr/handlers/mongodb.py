@@ -4,6 +4,7 @@ Created on Sep 30, 2011
 @author: Dmytro Korsakov
 '''
 import os
+import sys
 import time
 import shutil
 import logging
@@ -48,6 +49,7 @@ def get_handlers():
 	return (MongoDBHandler(), )
 
 
+
 class MongoDBMessages:
 
 	CREATE_DATA_BUNDLE = "MongoDb_CreateDataBundle"
@@ -90,15 +92,22 @@ class MongoDBMessages:
 		snapshot_config:		Master storage snapshot					(on master)		 
 	) 
 	"""
-	INT_STATE = "MongoDb_IntState"
-	
+
 	INT_CREATE_DATA_BUNDLE = "MongoDb_IntCreateDataBundle"
 	
 	INT_CREATE_DATA_BUNDLE_RESULT = "MongoDb_IntCreateDataBundle"
+	
+	INT_CREATE_BOOTSTRAP_WATCHER = "MongoDb_IntCreateBootstrapWatcher"
+	
+	INT_BOOTSTRAP_WATCHER_RESULT = "MongoDb_IntBootstrapWatcherResult"
+	
+		
 
 class ReplicationState:
 	INITIALIZED = 'initialized'
 	STALE		= 'stale' 
+	
+	
 
 class MongoDBHandler(ServiceCtlHandler):
 	_logger = None
@@ -119,10 +128,14 @@ class MongoDBHandler(ServiceCtlHandler):
 		return BEHAVIOUR in behaviour and message.name in (
 				MongoDBMessages.CREATE_DATA_BUNDLE,
 				MongoDBMessages.CREATE_BACKUP,
+				MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER,
+				MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT,
+				MongoDBMessages.INT_CREATE_DATA_BUNDLE,
+				MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
 				Messages.UPDATE_SERVICE_CONFIGURATION,
 				Messages.HOST_INIT,
 				Messages.BEFORE_HOST_TERMINATE,
-				Messages.HOST_DOWN)	
+				Messages.HOST_DOWN)
 	
 	
 	def __init__(self):
@@ -145,6 +158,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		)	
 		self.on_reload()   
 		self._status_trackers = dict()
+	
 	
 	def on_init(self):
 			
@@ -298,10 +312,19 @@ class MongoDBHandler(ServiceCtlHandler):
 	
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				self.mongodb.register_slave(nodename)
+
+
+
+	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
+		self._stop_watcher(message.local_ip)
+		if message.local_ip != self._platform.get_private_ip():
+			is_master = self.mongodb.is_replication_master
+			if is_master and self.shard_index == message.shard_index:
+				hostname = HOSTNAME_TPL % (message.shard_index, message.replica_set_index)
 				watcher = StatusWatcher()
-				watcher.watch(hostname, self)
-				self._status_trackers[message.local_ip] = watcher	
-			
+				watcher.watch(hostname, self, message.local_ip)
+				self._status_trackers[message.local_ip] = watcher
+
 				
 	def create_shard(self):
 		rs_name = RS_NAME_TPL % self.shard_index
@@ -571,6 +594,39 @@ class MongoDBHandler(ServiceCtlHandler):
 		@type message: scalarizr.messaging.Message 
 		@param message: HostUp message
 		"""
+		
+		msg_store = P2pMessageStore()
+		
+		def request_and_wait_replication_status():
+			
+			self._logger.info('Notify primary node we are joining replica set')
+			self.send_int_message(message.local_ip,
+							MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER,
+							broadcast=True)
+			
+			self._logger.info('Waiting for status message from primary node')
+			initialized = stale = False	
+			
+			while not initialized and not stale:
+				messages = msg_store.get_unhandled('http://0.0.0.0:8012')
+				for msg in messages:
+					
+					if not msg.name == MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT:
+						continue										
+					try:
+						if msg.status == ReplicationState.INITIALIZED:
+							initialized = True
+							break
+						elif msg.status == ReplicationState.STALE:
+							stale = True
+							break							
+						else:
+							raise HandlerError('Unknown state for replication state: %s' % msg.status)													
+					finally:
+						msg_store.mark_as_handled(msg.id)
+				time.sleep(1)
+			return stale
+		
 		self._logger.info("Initializing %s slave" % BEHAVIOUR)
 
 		# Plug storage
@@ -581,72 +637,70 @@ class MongoDBHandler(ServiceCtlHandler):
 
 		self.mongodb.prepare(rs_name, self._storage_path)
 		self.mongodb.mongod.start()		
-		
-		self._logger.info('Waiting for status message from primary node')
-		initialized = stale = False
-		msg_store = P2pMessageStore()
-		
-		while not initialized and not stale:
-			messages = msg_store.get_unhandled('http://0.0.0.0:8012')
-			for msg in messages:
-				
-				if not msg.name == MongoDBMessages.INT_STATE:
-					continue										
-				try:
-					if msg.status == ReplicationState.INITIALIZED:
-						initialized = True
-						break
-					elif msg.status == ReplicationState.STALE:
-						stale = True
-						break							
-					else:
-						raise HandlerError('Unknown state for replication state: %s' % msg.status)													
-				finally:
-					msg_store.mark_as_handled(msg.id)
-			time.sleep(1)
-	
-		if stale:
-			if PlatformFeatures.VOLUMES in self._platform.features:
+
+		stale = request_and_wait_replication_status()
+
+		if stale:			
+			new_volume = None
+
+			try:
+				if PlatformFeatures.VOLUMES not in self._platform.features:
+					raise HandlerError('Platform does not support pluggable volumes')
+
 				self._logger.info('Too stale to synchronize. Trying to get snapshot from primary')
 				self.send_int_message(message.local_ip,
 						MongoDBMessages.INT_CREATE_DATA_BUNDLE,
-						include_pad=True)
-				
+						include_pad=True, broadcast=True)
+
 				cdb_result_received = False
 				while not cdb_result_received:
 					messages = msg_store.get_unhandled('http://0.0.0.0:8012')
 					for msg in messages:
 						if not msg.name == MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT:
 							continue
-						
+
 						cdb_result_received = True
 						try:
 							if msg.status == 'ok':
-								self._logger.info('Received data')
+								self._logger.info('Received data bundle from master node.')
 								self.mongodb.mongod.stop()
-								self.storage_vol.destroy()
+								
+								self.storage_vol.detach()
+								
 								snap_cnf = msg.mongodb.snapshot_config.copy()
-								self.storage_vol = self._plug_storage(self._storage_path,
+								new_volume = self._plug_storage(self._storage_path,
 																	 {'snapshot': snap_cnf})
 								self.mongodb.mongod.start()
+								stale = request_and_wait_replication_status()
+								
+								if stale:
+									raise HandlerError('Got stale even when standing from snapshot.')
+								else:
+									self.storage_vol.destroy()
+									self.storage_vol = new_volume
 							else:
-								self._init_clean_sync()
+								raise HandlerError('Data bundle failed.')
+								
 						finally:
 							msg_store.mark_as_handled(msg.id)
+														
 					time.sleep(1)
-			else:
-				self._init_clean_sync()				
+			except:
+				self._logger.info('%s. Trying to perform clean sync' % sys.exc_info()[1] )
+				if new_volume:
+					new_volume.destroy()
 					
-			while True:
-				""" Wait for full sync with other members """
-				if self.mongodb.status in (1,2):
-					break
-				time.sleep(5)
+				# TODO: new storage
+				self._init_clean_sync()
+				stale = request_and_wait_replication_status()
+				if stale:
+					# TODO: raise distinct exception
+					raise HandlerError("Replication status is stale")
+
 		
 		# Update HostUp message
 		message.mongodb = self._compat_storage_data(self.storage_vol)
 		
-
 
 	def _get_keyfile(self):
 		password = None 
@@ -730,7 +784,14 @@ class MongoDBHandler(ServiceCtlHandler):
 				os.unlink(os.path.join(root, f))
 			for d in dirs:
 				shutil.rmtree(os.path.join(root, d))
-		self.mongodb.mongod.start()
+		self.mongodb.mongod.start()	
+				
+	
+	def _stop_watcher(self, ip):
+		if ip in self._status_trackers:
+			t = self._status_trackers[ip]
+			t.stop()
+			del self._status_trackers[ip]
 		
 			
 	@property
@@ -757,10 +818,10 @@ class StatusWatcher(threading.Thread):
 	def stop(self):
 		self._stop.set()
 		
-	def watch(self, hostname, handler):
+	def watch(self, hostname, handler, local_ip):
 		nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 		initialized = stale = False
-		while not initialized:
+		while not (initialized or stale or self._stop.is_set()):
 			rs_status = handler.mongodb.cli.get_rs_status()
 			
 			for member in rs_status['members']:
@@ -779,3 +840,6 @@ class StatusWatcher(threading.Thread):
 					if 'errmsg' in member and 'RS102' in member['errmsg']:
 						msg = {'status' : ReplicationState.STALE}
 						handler.send_int_message(hostname, MongoDBMessages.INT_STATE, msg)
+						stale = True
+						
+		handler._status_trackers.pop(local_ip)
