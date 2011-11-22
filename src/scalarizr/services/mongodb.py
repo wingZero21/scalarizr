@@ -704,7 +704,7 @@ class MongoCLI(object):
 		if not hasattr(self, '_con'):
 			self._con = pymongo.Connection('localhost', self.port)
 		if not self.authenticated and self.login and self.password and self.is_port_listening:
-			self._con.admin.authenticate(login, password)
+			self._con.admin.authenticate(self.login, self.password)
 			self.authenticated = True
 		return self._con
 
