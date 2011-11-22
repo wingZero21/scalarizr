@@ -109,7 +109,7 @@ class MongoDB(BaseService):
 	_config_server = None
 	keyfile = None
 	login = None
-	self.password = None
+	password = None
 
 	
 	def __init__(self, keyfile=None):
