@@ -108,7 +108,7 @@ class MongoDB(BaseService):
 	_instance = None
 	_config_server = None
 	keyfile = None
-	self.login = None
+	login = None
 	self.password = None
 
 	
