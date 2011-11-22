@@ -42,8 +42,6 @@ BACKUP_CHUNK_SIZE		= 200*1024*1024
 HOSTNAME_TPL			= "mongo-%s-%s"
 RS_NAME_TPL				= "rs-%s"
 
-ADMIN_USERNAME			= "scalr"
-
 
 		
 def get_handlers():
@@ -161,7 +159,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.storage_vol = Storage.create(storage_conf)
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
-			
+				
+			self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
 			self.mongodb.mongod.start()
 			
 	
@@ -213,7 +212,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		mongodb_key = mongodb_key or cryptotool.pwgen(22)
 		self._cnf.write_key(BEHAVIOUR, mongodb_key)
-		mongodb_data['password'] = mongodb_data.get('password') or cryptotool.pwgen(10)
+		
+		if mongodb_data.get('password'):
+			mongodb_data['password'] = mongodb_data.get('password')
+			self.mongodb.authenticate(mongo_svc.SCALR_USER, mongodb_data['password'])
+		else:
+			 mongodb_data['password'] =  cryptotool.pwgen(10)
+		
 		self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
 		self._update_config(mongodb_data)
 		
@@ -255,8 +260,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.debug('rs_id=%s, type(rs_id)=%s' % (self.rs_id, type(self.rs_id)))
 		
 		if self.shard_index == 0 and self.rs_id == 0:
-			password = self._cnf.rawini.get(CNF_SECTION, OPT_PASSWORD)
-			self.mongodb.cli.create_or_update_admin_user(ADMIN_USERNAME, password)
+			password = self.scalr_password
+			self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
+			self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
 			hostup_msg.mongodb['password'] = password
 			
 			self.mongodb.start_config_server()
@@ -275,9 +281,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 		hostup_msg.mongodb['keyfile'] = self._cnf.read_key(BEHAVIOUR)
 	
-
 		repl = 'primary' if first_in_rs else 'secondary'
-
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 		
 
@@ -727,16 +731,23 @@ class MongoDBHandler(ServiceCtlHandler):
 			for d in dirs:
 				shutil.rmtree(os.path.join(root, d))
 		self.mongodb.mongod.start()
+		
 			
 	@property
 	def shard_index(self):
 		return int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX))
+
 	
 	@property
 	def rs_id(self):
 		return int(self._cnf.rawini.get(CNF_SECTION, OPT_RS_ID))
 
-
+	
+	@property
+	def scalr_password(self):
+		return self._cnf.rawini.get(CNF_SECTION, OPT_PASSWORD)
+	
+	
 class StatusWatcher(threading.Thread):
 	
 	def __init__(self):

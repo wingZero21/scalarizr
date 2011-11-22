@@ -38,6 +38,7 @@ LOG_PATH_DEFAULT = '/var/log/mongodb/mongodb.log'
 DB_PATH_DEFAULT = '/var/lib/mongodb'
 LOCK_FILE = 'mongod.lock'
 DEFAULT_USER = 'mongodb'
+SCALR_USER = 'scalr'
 STORAGE_DATA_DIR = os.path.join(STORAGE_PATH, 'data')
 
 CONFIG_PATH_DEFAULT = UBUNTU_CONFIG_PATH = CENTOS_CONFIG_PATH = '/etc/mongodb.conf'
@@ -107,6 +108,8 @@ class MongoDB(BaseService):
 	_instance = None
 	_config_server = None
 	keyfile = None
+	self.login = None
+	self.password = None
 
 	
 	def __init__(self, keyfile=None):
@@ -122,7 +125,13 @@ class MongoDB(BaseService):
 								cls, *args, **kwargs)
 		return cls._instance
 
-	
+
+	def authenticate(self, login=SCALR_USER, password=None):
+		self.login = login
+		self.password = password
+		self.cli.auth(login, password)
+		
+		
 	@property
 	def is_replication_master(self):
 		return self.cli.is_master()['ismaster']
@@ -305,14 +314,14 @@ class MongoDB(BaseService):
 
 
 	def _get_mongod(self):
-		return self._get('mongod', Mongod.find, self.config, self.keyfile.path)
+		return self._get('mongod', Mongod.find, self.config, self.keyfile.path, self.cli)
 	
 	def _set_mongod(self, obj):
 		self._set('mongod', obj)
 
 
 	def _get_cli(self):
-		return self._get('cli', MongoCLI.find)
+		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT, self.login, self.password)
 	
 	def _set_cli(self, obj):
 		self._set('cli', obj)
@@ -571,19 +580,19 @@ class ConfigServerConf(MongoDBConfig):
 
 	
 class Mongod(object):	
-	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None):
+	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None):
 		self._logger = logging.getLogger(__name__)
 		self.configpath = configpath
 		self.dbpath = dbpath
 		self.keyfile = keyfile
-		self.cli = MongoCLI(port=port)
+		self.cli = cli or MongoCLI(port=port)
 		self.port = port
 		self.sock = initdv2.SockParam(self.port or REPLICA_DEFAULT_PORT)
 		
 	@classmethod
-	def find(cls, mongo_conf=None, keyfile=None):
+	def find(cls, mongo_conf=None, keyfile=None, cli=None):
 		config_path = mongo_conf.path or CONFIG_PATH_DEFAULT
-		return cls(config_path, keyfile)
+		return cls(configpath=config_path, keyfile=keyfile, cli=cli)
 
 	@property
 	def args(self):
@@ -649,14 +658,14 @@ class Mongos(object):
 				rchown(DEFAULT_USER, cls.keyfile)	
 				args.append('--keyFile=%s' % cls.keyfile)
 			system2(args)
-			cli = MongoCLI(ROUTER_DEFAULT_PORT)
+			cli = MongoCLI(port=ROUTER_DEFAULT_PORT)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 			wait_until(lambda: cli.has_connection, timeout=MAX_START_TIMEOUT)
 
 	@classmethod
 	def stop(cls):
 		if cls.is_running():
-			cli = MongoCLI(ROUTER_DEFAULT_PORT)
+			cli = MongoCLI(port=ROUTER_DEFAULT_PORT)
 			cli.shutdown_server()
 			wait_until(lambda: not cls.is_running, timeout=MAX_STOP_TIMEOUT)
 
@@ -671,20 +680,34 @@ class Mongos(object):
 
 class MongoCLI(object):
 	
-	def __init__(self, port=REPLICA_DEFAULT_PORT):
+	authenticated = False
+	
+	def __init__(self, port=REPLICA_DEFAULT_PORT, login=SCALR_USER, password=None):
 		self.port = port
 		self._logger = logging.getLogger(__name__)
-
+		self.login = None
+		self.password = None
+		self.sock = initdv2.SockParam(port)
 
 	@classmethod
-	def find(cls, port=REPLICA_DEFAULT_PORT):
-		return cls(port)
+	def find(cls, port=REPLICA_DEFAULT_PORT, login=SCALR_USER, password=None):
+		return cls(port=port, login=login, password=password)
 	
+	
+	def auth(self,login,password):
+		if self.is_port_listening:
+			self.connection.admin.authenticate(login, password)
+			self.authenticated = True
+		self.login = login
+		self.password = password
+		
 		
 	@property
 	def connection(self):
 		if not hasattr(self, '_con'):
 			self._con = pymongo.Connection('localhost', self.port)
+		if not self.authenticated and self.login and self.password:
+			self.auth(self.login, self.password)
 		return self._con
 
 	@property	
@@ -704,6 +727,13 @@ class MongoCLI(object):
 			self._logger.debug(e)
 		return True
 
+	@property
+	def is_port_listening(self):
+		try:
+			initdv2.wait_sock(self.sock)
+			return True
+		except:
+			return False
 	
 	def list_databases(self):
 		return self.connection.database_names()
