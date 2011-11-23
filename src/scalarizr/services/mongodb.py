@@ -12,7 +12,8 @@ from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.services import BaseConfig, BaseService, lazy
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, cryptotool, system2, \
-				PopenError, wait_until, initdv2, software
+				PopenError, wait_until, initdv2, software, \
+				firstmatched
 from scalarizr.util.filetool import rchown
 import pymongo
 
@@ -35,13 +36,15 @@ SERVICE_NAME = BuiltinBehaviours.MONGODB
 STORAGE_PATH = "/mnt/mongodb-storage"
 
 LOG_PATH_DEFAULT = '/var/log/mongodb/mongodb.log'
-DB_PATH_DEFAULT = '/var/lib/mongodb'
+DEFAULT_UBUNTU_DB_PATH = '/var/lib/mongodb'
+DEFAULT_CENTOS_DB_PATH = '/var/lib/mongo'
 LOCK_FILE = 'mongod.lock'
 DEFAULT_USER = 'mongodb'
 SCALR_USER = 'scalr'
 STORAGE_DATA_DIR = os.path.join(STORAGE_PATH, 'data')
 
-CONFIG_PATH_DEFAULT = UBUNTU_CONFIG_PATH = CENTOS_CONFIG_PATH = '/etc/mongodb.conf'
+CONFIG_PATH_DEFAULT = UBUNTU_CONFIG_PATH = '/etc/mongodb.conf'
+CENTOS_CONFIG_PATH = '/etc/mongod.conf'
 
 ARBITER_DATA_DIR = '/tmp/arbiter'
 ARBITER_LOG_PATH = '/var/log/mongodb/mongodb.arbiter.log'
@@ -72,7 +75,7 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
 		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			initd_script = ('/usr/sbin/service', 'mongodb')
 		else:
-			initd_script = '/etc/init.d/mongodb'
+			initd_script = firstmatched(os.path.exists, ('/etc/init.d/mongodb', '/etc/init.d/mongod'))
 		initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
 				initd_script=initd_script)
 		
@@ -418,7 +421,7 @@ class WorkingDirectory(object):
 	def find(cls, mongo_conf):
 		dir = mongo_conf.dbpath
 		if not dir:
-			dir = DB_PATH_DEFAULT
+			dir = DEFAULT_UBUNTU_DB_PATH if disttool.is_ubuntu() else DEFAULT_CENTOS_DB_PATH
 		return cls(dir)	
 
 	def is_initialized(self, path): 
@@ -591,7 +594,7 @@ class Mongod(object):
 		
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None, cli=None):
-		config_path = mongo_conf.path or CONFIG_PATH_DEFAULT
+		config_path = mongo_conf.path or UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
 		return cls(configpath=config_path, keyfile=keyfile, cli=cli)
 
 	@property
