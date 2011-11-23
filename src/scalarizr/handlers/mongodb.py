@@ -177,6 +177,13 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
 			self.mongodb.mongod.start()
 			
+			if self.shard_index == 0 and self.rs_id == 0:
+				self.mongodb.start_config_server()
+
+			if self.rs_id in (0,1):
+				self.mongodb.start_router()
+				
+			
 	
 	def on_reload(self):
 		self._queryenv = bus.queryenv_service
@@ -460,7 +467,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				os.makedirs(self._tmp_dir)
 			tmpdir = tempfile.mkdtemp(self._tmp_dir)		
 			rchown('mongodb', tmpdir) 
-			 
+
 			#dump config db on router
 			r_dbs = self.mongodb.router_cli.list_databases()
 			rdb_name = 'config'
@@ -559,6 +566,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		""" Start replication set where this node is the only member """
 		if init_start:
+			self._logger.info("Initializing replication set")
 			self.mongodb.initiate_rs()
 		else:
 			rs_cfg = self.mongodb.cli.get_rs_config()
@@ -686,7 +694,7 @@ class MongoDBHandler(ServiceCtlHandler):
 														
 					time.sleep(1)
 			except:
-				self._logger.info('%s. Trying to perform clean sync' % sys.exc_info()[1] )
+				self._logger.warning('%s. Trying to perform clean sync' % sys.exc_info()[1] )
 				if new_volume:
 					new_volume.destroy()
 					
