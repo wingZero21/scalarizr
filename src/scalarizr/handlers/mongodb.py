@@ -238,7 +238,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			mongodb_data['password'] = mongodb_data.get('password')
 			self.mongodb.authenticate(mongo_svc.SCALR_USER, mongodb_data['password'])
 		else:
-			 mongodb_data['password'] =  cryptotool.pwgen(10)
+			mongodb_data['password'] =  cryptotool.pwgen(10)
 		
 		self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
 		self._update_config(mongodb_data)
@@ -616,7 +616,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			initialized = stale = False	
 			
 			while not initialized and not stale:
-				messages = msg_store.get_unhandled('http://0.0.0.0:8012')
+				msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
+				messages = [pair[1] for pair in msg_queue_pairs]
 				for msg in messages:
 					
 					if not msg.name == MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT:
@@ -662,7 +663,8 @@ class MongoDBHandler(ServiceCtlHandler):
 
 				cdb_result_received = False
 				while not cdb_result_received:
-					messages = msg_store.get_unhandled('http://0.0.0.0:8012')
+					msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
+					messages = [pair[1] for pair in msg_queue_pairs]
 					for msg in messages:
 						if not msg.name == MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT:
 							continue
