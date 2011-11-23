@@ -635,7 +635,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.storage_vol = self._plug_storage(self._storage_path, volume)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
-		self.mongodb.prepare(rs_name, self._storage_path)
+		self.mongodb.prepare(rs_name)
 		self.mongodb.mongod.start()		
 
 		stale = request_and_wait_replication_status()
