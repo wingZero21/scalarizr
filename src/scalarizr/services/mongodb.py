@@ -806,8 +806,12 @@ class MongoCLI(object):
 
 
 	def shutdown_server(self):
-		return self.connection.admin.command('shutdown')
-
+		try:
+			out = self.connection.admin.command('shutdown')
+		except pymongo.errors.AutoReconnect, e:
+			self._logger.warning('Could not shutdown server from the inside:',e)
+			out = None
+		return out
 	
 	def sync(self):
 		return self.connection.admin.command('fsync')
