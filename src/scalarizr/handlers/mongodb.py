@@ -362,7 +362,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			t.stop()
 			del self._status_trackers[message.local_ip]
 
-		if self.mongodb.is_replication_master():
+		if self.mongodb.is_replication_master:
 			if message.local_ip in self.mongodb.replicas():
 				""" Remove host from replica set"""
 				self.mongodb.unregister_slave(message.local_ip)
