@@ -272,16 +272,20 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		self._set_flag(self.FLAG_REBOOT)
 		# Send message 
 		msg = self.new_message(Messages.REBOOT_START, broadcast=True)
-		bus.fire("before_reboot_start", msg)
-		self.send_message(msg)
+		try:
+			bus.fire("before_reboot_start", msg)
+		finally:
+			self.send_message(msg)
 		bus.fire("reboot_start")
 		
 	
 	def on_IntServerHalt(self, message):
 		self._set_flag(self.FLAG_HALT)
 		msg = self.new_message(Messages.HOST_DOWN, broadcast=True)
-		bus.fire("before_host_down", msg)
-		self.send_message(msg)		
+		try:
+			bus.fire("before_host_down", msg)
+		finally:
+			self.send_message(msg)		
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
