@@ -101,6 +101,8 @@ class MongoDBMessages:
 	
 	INT_BOOTSTRAP_WATCHER_RESULT = "MongoDb_IntBootstrapWatcherResult"
 	
+	INT_HOST_INIT = "MongoDb_IntHostInit"
+	
 		
 
 class ReplicationState:
@@ -132,6 +134,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT,
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE,
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
+				MongoDBMessages.INT_HOST_INIT,
 				Messages.UPDATE_SERVICE_CONFIGURATION,
 				Messages.HOST_INIT,
 				Messages.BEFORE_HOST_TERMINATE,
@@ -253,11 +256,24 @@ class MongoDBHandler(ServiceCtlHandler):
 
 		first_in_rs = True	
 		hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+		msg_body = dict(replica_set_index=self.rs_id, shard_index=self.shard_index)
+		
 		for host in hosts:
 			hostname = HOSTNAME_TPL % (host.shard_index, host.replica_set_index)
 			Hosts.set(host.internal_ip, hostname)
 			if host.shard_index == self.shard_index:
 				first_in_rs = False
+				
+			try:
+				self.send_int_message(host.internal_ip, 
+										MongoDBMessages.INT_HOST_INIT,
+										msg_body, broadcast=True)
+			except:
+				self._logger.warning(
+					"Can't deliver internal message '%s' to server %s",
+					MongoDBMessages.INT_HOST_INIT, host.internal_ip)
+
+			
 
 		""" Set hostname"""
 		self.hostname = HOSTNAME_TPL % (self.shard_index, self.rs_id)
@@ -315,10 +331,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		if message.local_ip != self._platform.get_private_ip():
 			is_master = self.mongodb.is_replication_master
-			if is_master and self.shard_index == message.shard_index:
-	
+			if is_master and self.shard_index == message.shard_index:	
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				self.mongodb.register_slave(nodename)
+				
+	
+	on_MongoDb_IntHostInit = on_HostInit
 
 
 	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
@@ -326,6 +344,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		if message.local_ip != self._platform.get_private_ip():
 			is_master = self.mongodb.is_replication_master
 			if is_master and self.shard_index == message.shard_index:
+				self._logger.debug('Creating watcher for server %s', message.local_ip)
 				hostname = HOSTNAME_TPL % (message.shard_index, message.replica_set_index)
 				watcher = StatusWatcher()
 				watcher.watch(hostname, self, message.local_ip)
@@ -335,6 +354,7 @@ class MongoDBHandler(ServiceCtlHandler):
 	def create_shard(self):
 		rs_name = RS_NAME_TPL % self.shard_index
 		return self.mongodb.router_cli.add_shard(rs_name, self.mongodb.replicas)
+
 
 	def on_HostUp(self, message):
 		private_ip = self._platform.get_private_ip()
@@ -444,8 +464,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			msg_data = dict(status = 'error', last_error = str(e))
 			return msg_data
 		finally:
-			self.mongodb.router_cli.start_balancer()
-		
+			self.mongodb.router_cli.start_balancer()		
 			
 	
 	def on_MongoDb_CreateBackup(self, message):
@@ -593,6 +612,23 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._update_config(msg_data)
 		
 		return init_start
+	
+	
+	def _get_role_hosts(self):
+		nodes = []
+		for role in self._queryenv.list_roles(behaviour=BEHAVIOUR):
+			for host in role.hosts:
+				nodes.append(host.internal_ip)
+		return nodes
+	
+	
+	def _send_broadcast_message(self, msg_name, msg_body):
+		for host_ip in self._get_role_hosts():
+			try:
+				self.send_int_message(host_ip, msg_name, msg_body)
+			except:
+				self._logger.warning(
+					"Can't deliver internal message '%s' to server %s", msg_name, host_ip)
 
 
 	def _init_slave(self, message, rs_name):
@@ -607,9 +643,11 @@ class MongoDBHandler(ServiceCtlHandler):
 		def request_and_wait_replication_status():
 
 			self._logger.info('Notify primary node we are joining replica set')
-			self.send_int_message(message.local_ip,
-							MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER,
-							broadcast=True)
+			msg_body = dict(local_ip=self._platform.get_private_ip(),
+							shard_index=self.shard_index, replica_set_index=self.rs_id)
+			
+			self._send_broadcast_message(MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER, 
+										msg_body)
 
 			self._logger.info('Waiting for status message from primary node')
 			initialized = stale = False	
@@ -618,7 +656,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
 				messages = [pair[1] for pair in msg_queue_pairs]
 				for msg in messages:
-
 					if not msg.name == MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT:
 						continue										
 					try:
@@ -656,9 +693,8 @@ class MongoDBHandler(ServiceCtlHandler):
 					raise HandlerError('Platform does not support pluggable volumes')
 
 				self._logger.info('Too stale to synchronize. Trying to get snapshot from primary')
-				self.send_int_message(message.local_ip,
-						MongoDBMessages.INT_CREATE_DATA_BUNDLE,
-						include_pad=True, broadcast=True)
+				msg_body = dict(local_ip=self._platform.get_private_ip())
+				self._send_broadcast_message(MongoDBMessages.INT_CREATE_DATA_BUNDLE, msg_body)
 
 				cdb_result_received = False
 				while not cdb_result_received:
@@ -798,6 +834,7 @@ class MongoDBHandler(ServiceCtlHandler):
 	
 	def _stop_watcher(self, ip):
 		if ip in self._status_trackers:
+			self._logger.debug('Stopping watcher for server %s', ip)
 			t = self._status_trackers[ip]
 			t.stop()
 			del self._status_trackers[ip]
@@ -841,14 +878,17 @@ class StatusWatcher(threading.Thread):
 				
 				if status in (1,2):
 					msg = {'status' : ReplicationState.INITIALIZED}
-					handler.send_int_message(hostname, MongoDBMessages.INT_STATE, msg)
+					handler.send_int_message(local_ip, MongoDBMessages.INT_STATE, msg)
 					initialized = True
 					break
 				
 				if status == 3:
 					if 'errmsg' in member and 'RS102' in member['errmsg']:
 						msg = {'status' : ReplicationState.STALE}
-						handler.send_int_message(hostname, MongoDBMessages.INT_STATE, msg)
+						handler.send_int_message(local_ip, MongoDBMessages.INT_STATE, msg)
 						stale = True
+						break
+						
+				time.sleep(1)
 						
 		handler._status_trackers.pop(local_ip)

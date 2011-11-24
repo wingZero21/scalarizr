@@ -760,10 +760,14 @@ class MongoCLI(object):
 
 	
 	def add_replica(self, ip, port=None, arbiter=False):
+		cfg = self.get_rs_config()
+		host = "%s:%s" % (ip, port)
+		if host in [member['host'] for member in cfg['members']]:
+			self._logger.debug('Host %s is already in replica set.' % host)
+			return
 		port = port or REPLICA_DEFAULT_PORT
 		new_member = {}
-		new_member['host'] = "%s:%s" % (ip, port)
-		cfg = self.get_rs_config()
+		new_member['host'] = host
 		cfg['version'] = cfg['version'] + 1
 		new_member['_id'] = max([m['_id'] for m  in cfg['members']]) + 1
 		cfg['members'].append(new_member)
