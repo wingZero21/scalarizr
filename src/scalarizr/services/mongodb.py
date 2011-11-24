@@ -43,9 +43,9 @@ DEFAULT_USER = 'mongodb' if disttool.is_ubuntu() else 'mongod'
 SCALR_USER = 'scalr'
 STORAGE_DATA_DIR = os.path.join(STORAGE_PATH, 'data')
 
-CONFIG_PATH_DEFAULT = UBUNTU_CONFIG_PATH = '/etc/mongodb.conf'
+UBUNTU_CONFIG_PATH = '/etc/mongodb.conf'
 CENTOS_CONFIG_PATH = '/etc/mongod.conf'
-
+CONFIG_PATH_DEFAULT = '/etc/mongodb.shardsrv.conf'
 ARBITER_DATA_DIR = '/tmp/arbiter'
 ARBITER_LOG_PATH = '/var/log/mongodb/mongodb.arbiter.log'
 ARBITER_CONF_PATH = '/etc/mongodb.arbiter.conf'
@@ -457,12 +457,12 @@ class WorkingDirectory(object):
 class MongoDBConfig(BaseConfig):
 	
 	config_type = 'mongodb'
-	config_name = 'mongodb.conf'
+	config_name = os.path.basename(CONFIG_PATH_DEFAULT)
 	
 	@classmethod
 	def find(cls, config_dir=None):
-		conf_path = UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
-		return cls(os.path.join(config_dir, cls.config_name) if config_dir else conf_path)
+		#conf_path = UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
+		return cls(os.path.join(config_dir, cls.config_name) if config_dir else CONFIG_PATH_DEFAULT)
 	
 	def set(self, option, value):
 		if not self.data:
@@ -594,8 +594,8 @@ class Mongod(object):
 		
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None, cli=None):
-		config_path = mongo_conf.path or UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
-		return cls(configpath=config_path, keyfile=keyfile, cli=cli)
+		#config_path = mongo_conf.path or UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
+		return cls(configpath=CONFIG_PATH_DEFAULT, keyfile=keyfile, cli=cli)
 
 	@property
 	def args(self):
