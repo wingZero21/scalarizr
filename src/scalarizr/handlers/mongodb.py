@@ -321,7 +321,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				self.mongodb.register_slave(nodename)
 
 
-
 	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
 		self._stop_watcher(message.local_ip)
 		if message.local_ip != self._platform.get_private_ip():
@@ -602,24 +601,24 @@ class MongoDBHandler(ServiceCtlHandler):
 		@type message: scalarizr.messaging.Message 
 		@param message: HostUp message
 		"""
-		
+
 		msg_store = P2pMessageStore()
-		
+
 		def request_and_wait_replication_status():
-			
+
 			self._logger.info('Notify primary node we are joining replica set')
 			self.send_int_message(message.local_ip,
 							MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER,
 							broadcast=True)
-			
+
 			self._logger.info('Waiting for status message from primary node')
 			initialized = stale = False	
-			
+
 			while not initialized and not stale:
 				msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
 				messages = [pair[1] for pair in msg_queue_pairs]
 				for msg in messages:
-					
+
 					if not msg.name == MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT:
 						continue										
 					try:
