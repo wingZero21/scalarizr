@@ -35,7 +35,8 @@ CONFIG_SERVER_DEFAULT_PORT = 27019
 SERVICE_NAME = BuiltinBehaviours.MONGODB
 STORAGE_PATH = "/mnt/mongodb-storage"
 
-LOG_PATH_DEFAULT = '/var/log/mongodb/mongodb.log'
+LOG_DIR = glob.glob('/var/log/mongo*')[0]
+LOG_PATH_DEFAULT = os.path.join(LOG_DIR, 'mongodb.log') 
 DEFAULT_UBUNTU_DB_PATH = '/var/lib/mongodb'
 DEFAULT_CENTOS_DB_PATH = '/var/lib/mongo'
 LOCK_FILE = 'mongod.lock'
@@ -47,14 +48,14 @@ UBUNTU_CONFIG_PATH = '/etc/mongodb.conf'
 CENTOS_CONFIG_PATH = '/etc/mongod.conf'
 CONFIG_PATH_DEFAULT = '/etc/mongodb.shardsrv.conf'
 ARBITER_DATA_DIR = '/tmp/arbiter'
-ARBITER_LOG_PATH = '/var/log/mongodb/mongodb.arbiter.log'
+ARBITER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.arbiter.log') 
 ARBITER_CONF_PATH = '/etc/mongodb.arbiter.conf'
 
 CONFIG_SERVER_DATA_DIR = os.path.join(STORAGE_PATH, 'config_server')
 CONFIG_SERVER_CONF_PATH = '/etc/mongodb.configsrv.conf'
-CONFIG_SERVER_LOG_PATH = '/var/log/mongodb/mongodb.configsrv.log'
+CONFIG_SERVER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.configsrv.log') 
 
-ROUTER_LOG_PATH = '/var/log/mongodb/mongodb.router.log'
+ROUTER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.router.log')
 
 MAX_START_TIMEOUT = 180
 MAX_STOP_TIMEOUT = 65
