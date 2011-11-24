@@ -125,10 +125,17 @@ class _P2pMessageStore:
 		"""
 		cur = self._conn().cursor()
 		try:
+			'''
 			sql = """SELECT queue, message_id FROM p2p_message
 					WHERE is_ingoing = ? AND in_is_handled = ? AND in_consumer_id = ? 
 					ORDER BY id"""
 			cur.execute(sql, [1, 0, consumer_id])
+			'''
+			sql = """SELECT queue, message_id FROM p2p_message
+					WHERE is_ingoing = ? AND in_is_handled = ? 
+					ORDER BY id"""
+			cur.execute(sql, [1, 0])
+			
 			ret = []
 			for r in cur.fetchall():
 				ret.append((r["queue"], self.load(r["message_id"], True)))
