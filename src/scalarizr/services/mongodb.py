@@ -15,7 +15,7 @@ from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, cryptotool, system2, \
 				PopenError, wait_until, initdv2, software, \
 				firstmatched
-from scalarizr.util.filetool import rchown
+from scalarizr.util.filetool import rchown, read_file, write_file
 import pymongo
 
 
@@ -316,6 +316,19 @@ class MongoDB(BaseService):
 			self._config_server = Mongod(CONFIG_SERVER_CONF_PATH, self.keyfile.path, CONFIG_SERVER_DATA_DIR, \
 										 CONFIG_SERVER_DEFAULT_PORT)
 		return self._config_server
+
+
+	def disable_requiretty(self):
+		'''
+		requiretty      If set, sudo will only run when the user is logged in to a real tty.  
+		When this flag is set, sudo can only be  run from a login session and not via other means 
+		such  as cron(8) or cgi-bin scripts.  This flag is off by default.
+		'''
+		if not disttool.is_ubuntu():
+			path = '/etc/sudoers'
+			entry = 'Defaults:%s !requiretty' % DEFAULT_USER
+			if not entry in read_file(path):
+				write_file(path, entry, mode='a')
 
 
 	def _get_mongod(self):

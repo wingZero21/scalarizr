@@ -196,6 +196,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		self.mongodb = mongo_svc.MongoDB()
+		self.mongodb.disable_requiretty()
 		key_path = self._cnf.key_path(BEHAVIOUR)
 		self.mongodb.keyfile = mongo_svc.KeyFile(key_path)
 		
