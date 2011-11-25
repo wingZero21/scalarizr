@@ -322,13 +322,14 @@ class MongoDB(BaseService):
 		'''
 		requiretty      If set, sudo will only run when the user is logged in to a real tty.  
 		When this flag is set, sudo can only be  run from a login session and not via other means 
-		such  as cron(8) or cgi-bin scripts.  This flag is off by default.
+		such  as cron(8) or cgi-bin scripts.  This flag is off by default on all systems but CentOS5.
 		'''
 		if not disttool.is_ubuntu():
 			path = '/etc/sudoers'
-			entry = 'Defaults:%s !requiretty' % DEFAULT_USER
-			if not entry in read_file(path):
-				write_file(path, entry, mode='a')
+			entry = 'Defaults\trequiretty' 
+			out = read_file(path)
+			if entry in out:
+				write_file(path, out.replace(entry,'\n'))
 
 
 	def _get_mongod(self):
