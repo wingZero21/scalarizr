@@ -328,7 +328,8 @@ class IntMessagingService(object):
 		self._msg_service = f.new_service("p2p", **{
 			P2pConfigOptions.SERVER_ID : cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID),
 			P2pConfigOptions.CRYPTO_KEY_PATH : cnf.key_path(cnf.FARM_KEY),
-			P2pConfigOptions.CONSUMER_URL : 'http://0.0.0.0:8012'
+			P2pConfigOptions.CONSUMER_URL : 'http://0.0.0.0:8012',
+			P2pConfigOptions.MSG_HANDLER_ENABLED : False
 		})
 	
 	def get_consumer(self):

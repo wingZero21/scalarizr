@@ -23,6 +23,7 @@ class P2pConfigOptions:
 	PRODUCER_RETRIES_PROGRESSION 	= "producer_retries_progression"
 	PRODUCER_SENDER					= "producer_sender"	
 	CONSUMER_URL 					= "consumer_url"
+	MSG_HANDLER_ENABLED				= 'msg_handler_enabled'
 
 
 class P2pMessageService(MessageService):
@@ -43,7 +44,8 @@ class P2pMessageService(MessageService):
 	def get_consumer(self):
 		if not self._default_consumer:
 			self._default_consumer = self.new_consumer(
-				endpoint=self._params[P2pConfigOptions.CONSUMER_URL]
+				endpoint=self._params[P2pConfigOptions.CONSUMER_URL],
+				msg_handler_enabled=self._params.get(P2pConfigOptions.MSG_HANDLER_ENABLED, True)
 			)
 		return self._default_consumer
 	
