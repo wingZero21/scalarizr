@@ -13,7 +13,7 @@ from gevent_zeromq import zmq
 
 class ZmqServiceProxy(rpc.ServiceProxy):
 	
-	def __init__(self, endpoint):
+	def __init__(self, endpoint, crypto_key=None):
 		self.context = zmq.Context()
 		super(ZmqServiceProxy, self).__init__(endpoint)
 	

@@ -5,4 +5,5 @@ Public Scalarizr API
 
 - Simple to Learn
 - Simple to Use
+- Stable 
 '''

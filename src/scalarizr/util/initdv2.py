@@ -11,6 +11,12 @@ from scalarizr.util import system2, PopenError
 from scalarizr.util.filetool import read_file
 import re
 
+try:
+	from gevent.local import local
+except ImportError:
+	from threading import local
+
+
 _services  = dict()
 _instances = dict()
 
@@ -105,6 +111,7 @@ class ParametrizedInitScript(InitScript):
 		self.pid_file = pid_file
 		self.lock_file = lock_file
 		self.socks = socks
+		self.local = local()
 		
 		'''
 		@param socks: list(SockParam)
@@ -190,6 +197,40 @@ class ParametrizedInitScript(InitScript):
 	@property
 	def running(self):
 		return self.status() == Status.RUNNING
+	
+	def running_on_exit(self):
+		self.local.on_exit = Status.RUNNING
+		return self
+	
+	def running_on_enter(self):
+		self.local.on_enter = Status.RUNNING
+		return self
+	
+	def __enter__(self):
+		self._ctxmgr_ensure_status('on_enter')
+		return self
+
+	def __exit__(self, *args):
+		self._ctxmgr_ensure_status('on_exit')
+
+	def _ctxmgr_ensure_status(self, status_attr, reason_attr=None):
+		if hasattr(self.local, status_attr):
+			cur_status = self.status()
+			status = getattr(self.local, status_attr)
+			if status != cur_status:
+				if status == Status.RUNNING:
+					if cur_status == Status.NOT_RUNNING:
+						self.start()
+					else:
+						self.restart()
+				else:
+					self.stop(getattr(self.local, reason_attr))
+		
+			delattr(self.local, status_attr)
+			if reason_attr:
+				delattr(self.local, reason_attr)
+		
+		
 
 def explore(name, init_script_cls):
 	_services[name] = init_script_cls

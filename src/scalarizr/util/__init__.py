@@ -10,6 +10,7 @@ import signal
 import string
 
 from scalarizr.bus import bus
+import subprocess
 
 class UtilError(BaseException):
 	pass
@@ -575,3 +576,7 @@ def run_detached(binary, args=[], env=None):
 				os.execl(binary, binary, *args)
 		except Exception:
 			os._exit(255)
+			
+			
+def which(arg):
+	return system2(['/bin/which', arg], raise_exc=False)[0].strip()
