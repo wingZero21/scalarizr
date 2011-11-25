@@ -329,10 +329,10 @@ class MongoDB(BaseService):
 		'''
 		if not disttool.is_ubuntu():
 			path = '/etc/sudoers'
-			entry = 'Defaults\trequiretty' 
-			out = read_file(path)
-			if entry in out:
-				write_file(path, out.replace(entry,'\n'))
+			orig = read_file(path)
+			new = re.sub('Defaults\s+requiretty', '\n', orig)
+			if new != orig:
+				write_file(path, new)
 
 
 	def _get_mongod(self):
