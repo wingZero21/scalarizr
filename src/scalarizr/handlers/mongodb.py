@@ -310,13 +310,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		if not BuiltinBehaviours.MONGODB in message.behaviour:
 			return
 		
-		hostname = HOSTNAME_TPL % (message.shard_index, message.replica_set_index)
-		Hosts.set(message.local_ip, hostname)
-		
 		if message.local_ip != self._platform.get_private_ip():
+			hostname = HOSTNAME_TPL % (message.shard_index, message.replica_set_index)
+			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
+			Hosts.set(message.local_ip, hostname)
+
 			is_master = self.mongodb.is_replication_master
-			if is_master and self.shard_index == message.shard_index:
-	
+			if is_master and self.shard_index == message.shard_index:	
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				self.mongodb.register_slave(nodename)
 
@@ -594,7 +594,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._update_config(msg_data)
 		
 		return init_start
-
+	
+	
+	def _get_shard_hosts(self):
+		hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+		shard_index = self.shard_index
+		return [host for host in hosts if host.shard_index == shard_index]
 
 	def _init_slave(self, message, rs_name):
 		"""
@@ -608,9 +613,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		def request_and_wait_replication_status():
 			
 			self._logger.info('Notify primary node we are joining replica set')
-			self.send_int_message(message.local_ip,
-							MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER,
-							broadcast=True)
+
+			msg_body = dict(shard_index=self.shard_index,
+							replica_set_index=self.rs_id)
+			for host in self._get_shard_hosts():
+				self.send_int_message(host.internal_ip,
+								MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER,
+								msg_body, broadcast=True)
 			
 			self._logger.info('Waiting for status message from primary node')
 			initialized = stale = False	
@@ -657,9 +666,10 @@ class MongoDBHandler(ServiceCtlHandler):
 					raise HandlerError('Platform does not support pluggable volumes')
 
 				self._logger.info('Too stale to synchronize. Trying to get snapshot from primary')
-				self.send_int_message(message.local_ip,
-						MongoDBMessages.INT_CREATE_DATA_BUNDLE,
-						include_pad=True, broadcast=True)
+				for host in self._get_shard_hosts():
+					self.send_int_message(host.internal_ip,
+							MongoDBMessages.INT_CREATE_DATA_BUNDLE,
+							include_pad=True, broadcast=True)
 
 				cdb_result_received = False
 				while not cdb_result_received:
@@ -706,6 +716,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				if stale:
 					# TODO: raise distinct exception
 					raise HandlerError("Replication status is stale")
+		else:
+			self._logger.info('Successfully joined replica set')
 
 		
 		# Update HostUp message
