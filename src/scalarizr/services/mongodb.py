@@ -3,6 +3,7 @@ Created on Sep 30, 2011
 
 @author: Dmytro Korsakov
 '''
+import re
 import os
 import time
 import glob
