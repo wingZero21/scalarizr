@@ -296,6 +296,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			hostup_msg.mongodb['router'] = 1
 		
 			if make_shard:
+				self._logger.info('Initializing shard')
 				self.create_shard()
 		else:
 			hostup_msg.mongodb['router'] = 0
@@ -328,8 +329,9 @@ class MongoDBHandler(ServiceCtlHandler):
 			is_master = self.mongodb.is_replication_master
 			if is_master and self.shard_index == message.shard_index:
 				hostname = HOSTNAME_TPL % (message.shard_index, message.replica_set_index)
-				watcher = StatusWatcher()
-				watcher.watch(hostname, self, message.local_ip)
+				watcher = StatusWatcher(hostname, self, message.local_ip)
+				self._logger.info('Starting bootstrap watcher for node ip=%s', message.local_ip)
+				watcher.start()
 				self._status_trackers[message.local_ip] = watcher
 
 				
@@ -811,6 +813,7 @@ class MongoDBHandler(ServiceCtlHandler):
 	
 	def _stop_watcher(self, ip):
 		if ip in self._status_trackers:
+			self._logger.debug('Stopping bootstrap watcher for ip %s', ip)
 			t = self._status_trackers[ip]
 			t.stop()
 			del self._status_trackers[ip]
@@ -833,18 +836,21 @@ class MongoDBHandler(ServiceCtlHandler):
 	
 class StatusWatcher(threading.Thread):
 	
-	def __init__(self):
+	def __init__(self, hostname, handler, local_ip):
 		super(StatusWatcher, self).__init__()
+		self.hostname = hostname
+		self.handler=handler
+		self.local_ip = local_ip
 		self._stop = threading.Event()
 		
 	def stop(self):
 		self._stop.set()
 		
-	def watch(self, hostname, handler, local_ip):
-		nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+	def run(self):
+		nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 		initialized = stale = False
 		while not (initialized or stale or self._stop.is_set()):
-			rs_status = handler.mongodb.cli.get_rs_status()
+			rs_status = self.handler.mongodb.cli.get_rs_status()
 			
 			for member in rs_status['members']:
 				if not member['name'] == nodename:
@@ -854,14 +860,14 @@ class StatusWatcher(threading.Thread):
 				
 				if status in (1,2):
 					msg = {'status' : ReplicationState.INITIALIZED}
-					handler.send_int_message(hostname, MongoDBMessages.INT_STATE, msg)
+					self.handler.send_int_message(self.local_ip, MongoDBMessages.INT_STATE, msg)
 					initialized = True
 					break
 				
 				if status == 3:
 					if 'errmsg' in member and 'RS102' in member['errmsg']:
 						msg = {'status' : ReplicationState.STALE}
-						handler.send_int_message(hostname, MongoDBMessages.INT_STATE, msg)
+						self.handler.send_int_message(self.local_ip, MongoDBMessages.INT_STATE, msg)
 						stale = True
 						
-		handler._status_trackers.pop(local_ip)
+		self.handler._status_trackers.pop(self.local_ip)

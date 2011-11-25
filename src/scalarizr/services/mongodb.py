@@ -235,18 +235,21 @@ class MongoDB(BaseService):
 	
 	
 	def register_slave(self, ip, port=None):
+		self._logger.debug('Registering new replica %s' % ip)
 		ret = self.cli.add_replica(ip, port)
 		if ret['ok'] == '0':
 			self._logger.error('Could not add replica %s to set: %s' % (ip, ret['errmsg']))
 		
 			
 	def register_arbiter(self,ip,port=None):
+		self._logger.debug('Registering new arbiter %s' % ip)
 		ret = self.cli.add_arbiter(ip, port or ARBITER_DEFAULT_PORT)
 		if ret['ok'] == '0':
 			self._logger.error('Could not add arbiter %s to set: %s' % (ip, ret['errmsg']))
 			
 			
 	def unregister_slave(self,ip,port=None):
+		self._logger.debug('Removing replica %s' % ip)
 		ret = self.cli.remove_slave(ip, port=None)
 		if ret['ok'] == '0':
 			self._logger.error('Could not remove replica %s from set: %s' % (ip, ret['errmsg']))
