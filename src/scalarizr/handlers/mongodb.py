@@ -167,9 +167,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 		
-		if 'ec2' == self.platform.name:
+		if 'ec2' == self._platform.name:
 			updates = dict(hostname_as_pubdns = '0')
-			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
+			self._cnf.update_ini('ec2', {'ec2': updates}, private=False)
 		
 		if self._cnf.state == ScalarizrState.RUNNING:
 	
