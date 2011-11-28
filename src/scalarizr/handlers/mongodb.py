@@ -326,9 +326,11 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
 		self._stop_watcher(message.local_ip)
 		if message.local_ip != self._platform.get_private_ip():
+			shard_idx = message.mongodb.shard_index
+			rs_idx = message.mongodb.replica_set_index
 			is_master = self.mongodb.is_replication_master
-			if is_master and self.shard_index == message.shard_index:
-				hostname = HOSTNAME_TPL % (message.shard_index, message.replica_set_index)
+			if is_master and self.shard_index == shard_idx:
+				hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
 				watcher = StatusWatcher(hostname, self, message.local_ip)
 				self._logger.info('Starting bootstrap watcher for node ip=%s', message.local_ip)
 				watcher.start()
