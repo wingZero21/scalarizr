@@ -26,6 +26,7 @@ import logging, os, re
 from telnetlib import Telnet
 from scalarizr.util.initdv2 import InitdError
 import time
+import shutil, pwd
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.APP
 CNF_SECTION = BEHAVIOUR
@@ -35,14 +36,14 @@ VHOST_EXTENSION = '.vhost.conf'
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
 	_apachectl = None
-	
+
 	def __init__(self):
 		if disttool.is_redhat_based():
 			self._apachectl = '/usr/sbin/apachectl'
-			initd_script 	= '/etc/init.d/httpd'			
+			initd_script 	= '/etc/init.d/httpd'
 			pid_file 		= '/var/run/httpd.pid'
 		elif disttool.is_debian_based():
-			self._apachectl = '/usr/sbin/apache2ctl'			
+			self._apachectl = '/usr/sbin/apache2ctl'		
 			initd_script 	= '/etc/init.d/apache2'
 			pid_file = None
 			if os.path.exists('/etc/apache2/envvars'):
@@ -50,17 +51,17 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			if not pid_file:
 				pid_file = '/var/run/apache2.pid'
 		else:
-			self._apachectl = '/usr/sbin/apachectl'			
+			self._apachectl = '/usr/sbin/apachectl'
 			initd_script 	= '/etc/init.d/apache2'
 			pid_file 		= '/var/run/apache2.pid'
 		
 		initdv2.ParametrizedInitScript.__init__(
-			self, 
-			'apache', 
+			self,
+			'apache',
 			initd_script,
 			pid_file = pid_file
 		)
-		
+
 	def reload(self):
 		if self.running:
 			out, err, retcode = system2(self._apachectl + ' graceful', shell=True)
@@ -68,7 +69,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 				raise initdv2.InitdError('Cannot reload apache: %s' % err)
 		else:
 			raise InitdError('Service "%s" is not running' % self.name, InitdError.NOT_RUNNING)
-		
+
 	def status(self):
 		status = initdv2.ParametrizedInitScript.status(self)
 		# If 'running' and socks were passed
@@ -84,12 +85,12 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 				pass
 			return initdv2.Status.NOT_RUNNING
 		return status
-	
+
 	def configtest(self):
 		out = system2(self._apachectl +' configtest', shell=True)[1]
 		if 'error' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
-		
+
 	def start(self):
 		ret = initdv2.ParametrizedInitScript.start(self)
 		if self.pid_file:
@@ -100,7 +101,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 				raise initdv2.InitdError("Cannot start Apache: pid file %s hasn't been created" % self.pid_file)
 		time.sleep(0.5)
 		return True
-	
+
 	def restart(self):
 		ret = initdv2.ParametrizedInitScript.restart(self)
 		if self.pid_file:
@@ -115,34 +116,33 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 initdv2.explore('apache', ApacheInitScript)
 
 
-
 # Export behavior configuration
 class ApacheOptions(Configurator.Container):
 	'''
 	app behavior
 	'''
 	cnf_name = CNF_NAME
-	
+
 	class apache_conf_path(Configurator.Option):
 		'''
 		Apache configuration file location.
 		'''
 		name = CNF_SECTION + '/apache_conf_path'
 		required = True
-		
-		@property 
+
+		@property
 		@cached
 		def default(self):
 			return firstmatched(lambda p: os.path.exists(p),
 					('/etc/apache2/apache2.conf', '/etc/httpd/conf/httpd.conf'), '')
-		
-		@validators.validate(validators.file_exists)		
+
+		@validators.validate(validators.file_exists)
 		def _set_value(self, v):
 			Configurator.Option._set_value(self, v)
-		
+
 		value = property(Configurator.Option._get_value, _set_value)
 
-	
+
 	class vhosts_path(Configurator.Option):
 		'''
 		Directory to create virtual hosts configuration in.
@@ -158,12 +158,12 @@ class ApacheCnfController(CnfController):
 	def __init__(self):
 		cnf = bus.cnf; ini = cnf.rawini
 		CnfController.__init__(self, BEHAVIOUR, ini.get(CNF_SECTION, APP_CONF_PATH), 'apache', {'1':'on','0':'off'})
-		
+
 	@property
 	def _software_version(self):
 		return software.software_info('apache').version
-		
-		
+
+
 def get_handlers ():
 	return [ApacheHandler()]
 
@@ -189,14 +189,17 @@ class ApacheHandler(ServiceCtlHandler):
 	'''
 
 	def __init__(self):
+		
+		
 		self._logger = logging.getLogger(__name__)		
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())
-				
+		
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
 			'apache_rpaf_reload'
 		)
-		self.on_reload()		
+		self.on_reload()
+
 
 	def on_init(self):
 		bus.on(
@@ -204,7 +207,7 @@ class ApacheHandler(ServiceCtlHandler):
 			before_host_up = self.on_before_host_up,
 			before_reboot_finish = self.on_before_reboot_finish
 		)
-		
+
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
 
@@ -214,6 +217,7 @@ class ApacheHandler(ServiceCtlHandler):
 		self._httpd_conf_path = self._cnf.rawini.get(CNF_SECTION, APP_CONF_PATH)
 		self._config = Configuration('apache')
 		self._config.read(self._httpd_conf_path)
+
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -229,6 +233,7 @@ class ApacheHandler(ServiceCtlHandler):
 			self._rpaf_reload()
 
 	def on_before_host_up(self, message):
+		
 		self._update_vhosts()
 		self._rpaf_reload()
 		bus.fire('service_configured', service_name=SERVICE_NAME)
@@ -239,7 +244,7 @@ class ApacheHandler(ServiceCtlHandler):
 	def on_HostUp(self, message):
 		if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
 			self._rpaf_modify_proxy_ips([message.local_ip], operation='add')
-	
+
 	def on_HostDown(self, message):
 		if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
 			self._rpaf_modify_proxy_ips([message.local_ip], operation='remove')
@@ -251,16 +256,16 @@ class ApacheHandler(ServiceCtlHandler):
 		self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
 		self._update_vhosts()
 		self._reload_service('virtual hosts have been updated')
-		
+
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
 		if iptables.usable():
 			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
-		
+
 	def _rpaf_modify_proxy_ips(self, ips, operation=None):
 		self._logger.debug('Modify RPAFproxy_ips (operation: %s, ips: %s)', operation, ','.join(ips))
 		file = firstmatched(
-			lambda x: os.access(x, os.F_OK), 
+			lambda x: os.access(x, os.F_OK),
 			('/etc/httpd/conf.d/mod_rpaf.conf', '/etc/apache2/mods-available/rpaf.conf')
 		)
 		if file:
@@ -289,18 +294,49 @@ class ApacheHandler(ServiceCtlHandler):
 		else:
 			self._logger.debug('Nothing to do with rpaf: mod_rpaf configuration file not found')
 
-		
+
 	def _rpaf_reload(self):
+		
 		lb_hosts = []
 		for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
 			for host in role.hosts:
 				lb_hosts.append(host.internal_ip)
 		self._rpaf_modify_proxy_ips(lb_hosts, operation='update')
 		bus.fire('apache_rpaf_reload')
-		
-		
+
+
 	def _update_vhosts(self):
-		
+
+		src_dir = bus.share_path
+		src_dir = os.path.join(src_dir, 'apache/html')
+		try:
+			app_user = pwd.getpwnam('apache')
+		except:
+			app_user = pwd.getpwnam('httpd')
+		doc_root = self._config.get('DocumentRoot')
+		if '"' in doc_root: doc_root = doc_root.replace('"','')
+		names = os.listdir(src_dir)
+		if not os.path.exists(doc_root):
+			try:
+				os.mkdir(doc_root, 0755)
+				#if disttool.is_ubuntu(): os.mkdir(doc_root, 0775)
+				os.chown(doc_root, app_user.pw_uid, app_user.pw_gid)
+				for file in names:
+					shutil.copy(os.path.join(src_dir, file), doc_root)
+					os.chown(os.path.join(doc_root, file), app_user.pw_uid, app_user.pw_gid)
+				os.chown(doc_root, app_user.pw_uid, app_user.pw_gid)		
+				try:
+					for root, dirs, files in os.walk(doc_root):
+						for dir in dirs:
+							os.chown(os.path.join(root , dir), app_user.pw_uid, app_user.pw_gid)
+						for file in files:
+							os.chown(os.path.join(root, file), app_user.pw_uid, app_user.pw_gid)
+				except OSError, e:
+					self._logger.error('Cannot chown Apache DocumentRoot directory %s', doc_root)
+			except Exception, e:
+				self._logger.debug('\nError create default index file in DocumentRoot %s folder\n\Error: %s \n'
+					%(doc_root, e))
+
 		config = bus.config
 		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION, 'vhosts_path'))
 		if not os.path.exists(vhosts_path):
@@ -314,11 +350,11 @@ class ApacheHandler(ServiceCtlHandler):
 				except OSError, e:
 					self._logger.error("Cannot create dir %s. %s", vhosts_path, e.strerror)
 					raise
-			
+
 		self.server_root = self._get_server_root()
 		
 		cert_path = bus.etc_path + '/private.d/keys'
-		self._patch_ssl_conf(cert_path)	
+		self._patch_ssl_conf(cert_path)
 		
 		self._logger.debug("Requesting virtual hosts list")
 		received_vhosts = self._queryenv.list_virtual_hosts()
@@ -343,8 +379,8 @@ class ApacheHandler(ServiceCtlHandler):
 							os.unlink(vhost_file)
 						except OSError, e:
 							self._logger.error('Cannot delete vhost link %s. %s', vhost_file, e.strerror)
-					
-				
+
+
 				self._logger.debug("Old vhosts configuration files deleted")
 
 			self._logger.debug("Creating new vhosts configuration files")
@@ -361,7 +397,7 @@ class ApacheHandler(ServiceCtlHandler):
 					except:
 						self._logger.error('Cannot retrieve ssl cert and private key from Scalr.')
 						raise
-					else: 
+					else:
 						if not https_certificate[0]:
 							self._logger.error("Scalr returned empty SSL cert")
 						elif not https_certificate[1]:
@@ -417,6 +453,7 @@ class ApacheHandler(ServiceCtlHandler):
 			self._logger.debug("Checking that vhosts directory included in main apache config")
 			
 			includes = self._config.get_list('Include')
+			
 			inc_mask = vhosts_path + '/*' + VHOST_EXTENSION
 			if not inc_mask in includes:
 				self._config.add('Include', inc_mask)
@@ -487,7 +524,7 @@ class ApacheHandler(ServiceCtlHandler):
 		#else:
 		#	raise HandlerError("Apache's ssl configuration file %s doesn't exist" % ssl_conf_path)
 
-	
+
 	def _check_mod_ssl(self):
 		if disttool.is_debian_based():
 			self._check_mod_ssl_deb()
@@ -506,7 +543,7 @@ class ApacheHandler(ServiceCtlHandler):
 		path['mods-available/ssl.load'] = path['mods-available'] + '/ssl.load'
 		path['mods-enabled/ssl.conf'] = path['mods-enabled'] + '/ssl.conf'
 		path['mods-enabled/ssl.load'] = path['mods-enabled'] + '/ssl.load'
-		
+
 		self._logger.debug('Ensuring mod_ssl enabled')
 		if not os.path.exists(path['mods-enabled/ssl.load']):
 			self._logger.info('Enabling mod_ssl')
@@ -524,7 +561,7 @@ class ApacheHandler(ServiceCtlHandler):
 					conf.set('IfModule[%d]/NameVirtualHost' % i, '*:443', True)
 			conf.write(path['ports.conf'])
 
-				
+
 	def _check_mod_ssl_redhat(self):
 		mod_ssl_file = os.path.join(self.server_root, 'modules', 'mod_ssl.so')
 		
@@ -569,7 +606,7 @@ class ApacheHandler(ServiceCtlHandler):
 					if not loaded_in_ssl:
 						self._config.add('LoadModule', 'ssl_module modules/mod_ssl.so')
 						self._config.write(self._httpd_conf_path)
-	
+
 	def _get_server_root(self):
 		if disttool.is_debian_based():
 			server_root = '/etc/apache2'
@@ -585,7 +622,7 @@ class ApacheHandler(ServiceCtlHandler):
 				server_root = os.path.dirname(self._httpd_conf_path)
 				self._logger.debug("Use %s as ServerRoot", server_root)
 		return server_root
-	
+
 	def _patch_default_conf_deb(self):
 		self._logger.debug("Replacing NameVirtualhost and Virtualhost ports especially for debian-based linux")
 		default_vhost_path = os.path.join(
@@ -598,7 +635,7 @@ class ApacheHandler(ServiceCtlHandler):
 			default_vhost.set('NameVirtualHost', '*:80', force=True)
 			#default_vhost.set('VirtualHost', '*:80', force=True)
 			default_vhost.write(default_vhost_path)
-			
+						
 			error_message = 'Cannot read default vhost config file %s' % default_vhost_path
 			dv = read_file(default_vhost_path, error_msg=error_message, logger=self._logger)
 			vhost_regexp = re.compile('<VirtualHost\s+\*>')
@@ -609,14 +646,14 @@ class ApacheHandler(ServiceCtlHandler):
 		else:
 			self._logger.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
 
-	def _create_vhost_paths(self, vhost_path):
+	def _create_vhost_paths(self, vhost_path):		
 		if os.path.exists(vhost_path):
 			vhost = Configuration('apache')
 			vhost.read(vhost_path)
 			list_logs = vhost.get_list('.//ErrorLog') + vhost.get_list('.//CustomLog')
 
 			dir_list = []
-			for log_file in list_logs: 
+			for log_file in list_logs:
 				log_dir = os.path.dirname(log_file)
 				if (log_dir not in dir_list) and (not os.path.exists(log_dir)): 
 					dir_list.append(log_dir)
@@ -628,4 +665,3 @@ class ApacheHandler(ServiceCtlHandler):
 				except OSError, e:
 					self._logger.error('Couldn`t create directory %s. %s', 
 							log_dir, e.strerror)
-		

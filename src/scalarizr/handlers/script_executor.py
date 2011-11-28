@@ -151,8 +151,8 @@ class ScriptExecutor(Handler):
 					msg_data = self._execute_script(script)
 					if msg_data:
 						self.send_message(Messages.EXEC_SCRIPT_RESULT, msg_data, queue=Queues.LOG)						
-					
-			
+
+
 			# Wait
 			if self._wait_async:
 				for t in async_threads:
@@ -209,21 +209,21 @@ class ScriptExecutor(Handler):
 		
 		try:
 			self._logger.debug("Put script contents into file %s", script_path)
-			
-			write_file(script_path, script.body, logger=self._logger)
+			#.encode('ascii', 'replace')
+			write_file(script_path, script.body.encode('utf-8'), logger=self._logger)
+
 			os.chmod(script_path, stat.S_IREAD | stat.S_IEXEC)
 			self._logger.debug("%s exists: %s", script_path, os.path.exists(script_path))
-	
+
 			self._logger.debug("Executing script '%s'", script.name)
-			
+
 			# Create stdout and stderr log files
 			stdout = open(stdout_path, 'w+')
 			stderr = open(stderr_path, 'w+')
-			self._logger.debug("Redirect stdout > %s stderr > %s", stdout.name, stderr.name)		
-	
-	
+			self._logger.debug("Redirect stdout > %s stderr > %s", stdout.name, stderr.name)
+
 			self._logger.debug("Finding interpreter path in the scripts first line")
-			
+
 			shebang = read_shebang(script=script.body)
 			elapsed_time = 0
 			if not shebang:
@@ -241,48 +241,56 @@ class ScriptExecutor(Handler):
 				else:
 					# Communicate with process
 					self._logger.debug("Communicate with '%s'", script.name)
-					start_time = time.time()		
+					start_time = time.time()
 					while time.time() - start_time < script.exec_timeout:
 						if proc.poll() is None:
 							time.sleep(0.5)
+							returncode = proc.returncode
 						else:
 							# Process terminated
 							self._logger.debug("Script '%s' terminated", script.name)
+							returncode = proc.returncode
 							break
 					else:
+
 						# Process timeouted
-						self._logger.warn("Script '%s' execution timeout (%d seconds). Killing process", 
-								script.name, script.exec_timeout)
+						self._logger.warn("Script '%s' execution timeout (%d seconds). Returncode: '%s'. Killing process", 
+								script.name, script.exec_timeout, returncode)
+
 						if hasattr(proc, "kill"):
 							# python >= 2.6
 							proc.kill()
 						else:
 							import signal
 							os.kill(proc.pid, signal.SIGKILL)
-									
+
 					elapsed_time = time.time() - start_time
-			
+
 			stdout.close()
 			stderr.close()
-			
-			self._logger.debug("Script '%s' execution finished. Elapsed time: %.2f seconds, stdout: %s, stderr: %s", 
-					script.name, elapsed_time, 
+
+			self._logger.debug("Script '%s' execution finished. Returncode: '%s'. Elapsed time: %.2f seconds, stdout: %s, stderr: %s", 
+					script.name, returncode, elapsed_time, 
 					format_size(os.path.getsize(stdout.name)), 
 					format_size(os.path.getsize(stderr.name)))
-			
-			return dict(
-				stdout=binascii.b2a_base64(self._get_truncated_log(stdout.name, self._logs_truncate_over)),
-				stderr=binascii.b2a_base64(self._get_truncated_log(stderr.name, self._logs_truncate_over)),
-				time_elapsed=elapsed_time,
-				script_name=script.name,
-				script_path=script_path,
-				event_name=self._event_name or ''
-			)
-			
+
+			d = dict(
+					stdout=binascii.b2a_base64(self._get_truncated_log(stdout.name, self._logs_truncate_over)),
+					stderr=binascii.b2a_base64(self._get_truncated_log(stderr.name, self._logs_truncate_over)),
+					time_elapsed=elapsed_time,
+					script_name=script.name,
+					script_path=script_path,
+					event_name=self._event_name or '',
+					returncode=returncode
+				)
+			self._logger.debug("_execute_script returned dict: %s"%d)
+
+			return d
+
 		except (Exception, BaseException), e:
 			self._logger.error("Caught exception while execute script '%s'", script.name)
 			self._logger.exception(e)
-			
+
 		finally:
 			os.remove(script_path)
 			self._lock.acquire()
@@ -290,21 +298,21 @@ class ScriptExecutor(Handler):
 				self._num_pending_async -= 1
 			self._lock.release()
 
-	
+
 	def _get_truncated_log(self, logfile, maxsize):
 		f = open(logfile, "r")
 		try:
 			ret = f.read(int(maxsize))
 			if (os.path.getsize(logfile) > maxsize):
-				ret += "... Truncated. See the full log in " + logfile
+				ret += u"... Truncated. See the full log in " + logfile.encode('utf-8')
 			return ret
 		finally:
 			f.close()
-				
-	
+
+
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return not message.name in skip_events
-	
+
 	def __call__(self, message):
 		self._event_name = message.event_name if message.name == Messages.EXEC_SCRIPT else message.name
 		self._logger.debug("Scalr notified me that '%s' fired", self._event_name)		
@@ -312,24 +320,24 @@ class ScriptExecutor(Handler):
 		if self._cnf.state == ScalarizrState.IMPORTING:
 			self._logger.debug('Scripting is OFF when state: %s', ScalarizrState.IMPORTING)
 			return
-		
+
 		pl = bus.platform
 		kwargs = dict(event_name=self._event_name)
 		if message.name == Messages.EXEC_SCRIPT:
 			kwargs['event_id'] = message.meta['event_id']
 		kwargs['target_ip'] = message.body.get('local_ip')
 		kwargs['local_ip'] = pl.get_private_ip()
-		
+
 		if 'scripts' in message.body:
 			if not message.body['scripts']:
 				self._logger.debug('Empty scripts list. Breaking')
 				return
-			
+
 			scripts = []
 			for item in message.body['scripts']:
 				scripts.append(queryenv.Script(int(item['asynchronous']), 
 								item['timeout'], item['name'], item['body']))
 			kwargs['scripts'] = scripts
 
-			
+
 		self.exec_scripts_on_event(**kwargs)
