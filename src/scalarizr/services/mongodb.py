@@ -226,7 +226,9 @@ class MongoDB(BaseService):
 		
 		
 	def start_router(self):
-		self.default_init_script.stop('Stopping default mongod service')
+		if self.default_init_script.running:
+			if not self.router_cli.is_router_connection():
+				self.default_init_script.stop('Stopping default mongod service')
 		Mongos.set_keyfile(self.keyfile.path)
 		Mongos.start()
 		
@@ -875,3 +877,7 @@ class MongoCLI(object):
 
 	def create_or_update_admin_user(self, username, password):
 		self.connection.admin.add_user(username, password)
+		
+		
+	def is_router_connection(self):
+		return 'mongos' in self.connection.config.collection_names()
