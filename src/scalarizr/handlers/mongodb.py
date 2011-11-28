@@ -316,8 +316,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			return
 		
 		if message.local_ip != self._platform.get_private_ip():
-			shard_idx = message.mongodb['shard_index']
-			rs_idx = message.mongodb['replica_set_index']
+			shard_idx = int(message.mongodb['shard_index'])
+			rs_idx = int(message.mongodb['replica_set_index'])
 			
 			hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
 			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
@@ -333,8 +333,8 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
 		self._stop_watcher(message.local_ip)
 		if message.local_ip != self._platform.get_private_ip():
-			shard_idx = message.mongodb['shard_index']
-			rs_idx = message.mongodb['replica_set_index']
+			shard_idx = int(message.mongodb['shard_index'])
+			rs_idx = int(message.mongodb['replica_set_index'])
 			is_master = self.mongodb.is_replication_master
 			
 			if is_master and self.shard_index == shard_idx:
