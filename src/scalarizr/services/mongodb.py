@@ -38,7 +38,7 @@ SERVICE_NAME = BuiltinBehaviours.MONGODB
 STORAGE_PATH = "/mnt/mongodb-storage"
 
 LOG_DIR = glob.glob('/var/log/mongo*')[0]
-LOG_PATH_DEFAULT = os.path.join(LOG_DIR, 'mongodb.log') 
+LOG_PATH_DEFAULT = os.path.join(LOG_DIR, 'mongodb.shardsrv.log') 
 DEFAULT_UBUNTU_DB_PATH = '/var/lib/mongodb'
 DEFAULT_CENTOS_DB_PATH = '/var/lib/mongo'
 LOCK_FILE = 'mongod.lock'
@@ -158,7 +158,6 @@ class MongoDB(BaseService):
 		self.config.logpath = LOG_PATH_DEFAULT
 		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logappend = True
-		self.working_dir.unlock()
 		
 
 	def _prepare_arbiter(self, rs_name):
@@ -204,6 +203,10 @@ class MongoDB(BaseService):
 					timeout=120, start_text='Wait until node becomes replication primary')		
 		
 		return ret['me'].split(':') if ret else None
+	
+	def start_shardsvr(self):
+		self.working_dir.unlock()
+		self.mongod.start()
 	
 	
 	def start_arbiter(self):
@@ -710,8 +713,8 @@ class MongoCLI(object):
 	def __init__(self, port=REPLICA_DEFAULT_PORT, login=SCALR_USER, password=None):
 		self.port = port
 		self._logger = logging.getLogger(__name__)
-		self.login = None
-		self.password = None
+		self.login = login
+		self.password = password
 		self.sock = initdv2.SockParam(port)
 
 	@classmethod
@@ -782,12 +785,12 @@ class MongoCLI(object):
 
 	
 	def add_replica(self, ip, port=None, arbiter=False):
+		port = port or REPLICA_DEFAULT_PORT
 		cfg = self.get_rs_config()
 		host = "%s:%s" % (ip, port)
 		if host in [member['host'] for member in cfg['members']]:
 			self._logger.debug('Host %s is already in replica set.' % host)
 			return
-		port = port or REPLICA_DEFAULT_PORT
 		new_member = {}
 		new_member['host'] = host
 		cfg['version'] = cfg['version'] + 1

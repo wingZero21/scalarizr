@@ -179,7 +179,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				self.storage_vol.mount()
 				
 			self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
-			self.mongodb.mongod.start()
+			self.mongodb.start_shardsvr()
 			
 			if self.shard_index == 0 and self.rs_id == 0:
 				self.mongodb.start_config_server()
@@ -398,6 +398,9 @@ class MongoDBHandler(ServiceCtlHandler):
 					
 					
 	def on_before_reboot_start(self, *args, **kwargs):
+		self.mongodb.stop_arbiter()
+		self.mongodb.stop_router()
+		self.mongodb.stop_config_server()
 		self.mongodb.mongod.stop('Rebooting instance')
 		pass
 	
@@ -409,7 +412,12 @@ class MongoDBHandler(ServiceCtlHandler):
 
 	def on_BeforeHostTerminate(self, message):
 		if message.local_ip == self._platform.get_private_ip():
+			self.mongodb.stop_arbiter()
+			self.mongodb.stop_router()
+			self.mongodb.stop_config_server()
 			self.mongodb.mongod.stop('Server will be terminated')
+			
+			
 			self._logger.info('Detaching %s storage' % BEHAVIOUR)
 			self.storage_vol.detach()
 			
@@ -574,7 +582,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		init_start = not self._storage_valid()					
 				
 		self.mongodb.prepare(rs_name)
-		self.mongodb.mongod.start()
+		self.mongodb.start_shardsvr()
 		
 		""" Start replication set where this node is the only member """
 		if init_start:
@@ -666,7 +674,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
 		self.mongodb.prepare(rs_name)
-		self.mongodb.mongod.start()		
+		self.mongodb.start_shardsvr()		
 
 		stale = request_and_wait_replication_status()
 
@@ -702,7 +710,7 @@ class MongoDBHandler(ServiceCtlHandler):
 								snap_cnf = msg.mongodb.snapshot_config.copy()
 								new_volume = self._plug_storage(self._storage_path,
 																	 {'snapshot': snap_cnf})
-								self.mongodb.mongod.start()
+								self.mongodb.start_shardsvr()
 								stale = request_and_wait_replication_status()
 								
 								if stale:
@@ -818,7 +826,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				os.unlink(os.path.join(root, f))
 			for d in dirs:
 				shutil.rmtree(os.path.join(root, d))
-		self.mongodb.mongod.start()	
+		self.mongodb.start_shardsvr()	
 				
 	
 	def _stop_watcher(self, ip):
