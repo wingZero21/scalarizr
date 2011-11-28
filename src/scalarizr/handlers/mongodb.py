@@ -167,6 +167,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 		
+		if 'ec2' == self.platform.name:
+			updates = dict(hostname_as_pubdns = '0')
+			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
+		
 		if self._cnf.state == ScalarizrState.RUNNING:
 	
 			storage_conf = Storage.restore_config(self._volume_config_path)
@@ -181,7 +185,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				self.mongodb.start_config_server()
 
 			if self.rs_id in (0,1):
-				self.mongodb.start_router()			
+				self.mongodb.start_router()
 			
 	
 	def on_reload(self):
@@ -326,9 +330,10 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
 		self._stop_watcher(message.local_ip)
 		if message.local_ip != self._platform.get_private_ip():
-			shard_idx = message.mongodb.shard_index
-			rs_idx = message.mongodb.replica_set_index
+			shard_idx = int(message.mongodb.shard_index)
+			rs_idx = int(message.mongodb.replica_set_index)
 			is_master = self.mongodb.is_replication_master
+			
 			if is_master and self.shard_index == shard_idx:
 				hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
 				watcher = StatusWatcher(hostname, self, message.local_ip)
