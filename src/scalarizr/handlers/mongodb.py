@@ -316,12 +316,15 @@ class MongoDBHandler(ServiceCtlHandler):
 			return
 		
 		if message.local_ip != self._platform.get_private_ip():
-			hostname = HOSTNAME_TPL % (message.shard_index, message.replica_set_index)
+			shard_idx = message.mongodb.shard_index
+			rs_idx = message.mongodb.replica_set_index
+			
+			hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
 			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
 			Hosts.set(message.local_ip, hostname)
 
 			is_master = self.mongodb.is_replication_master
-			if is_master and self.shard_index == message.shard_index:	
+			if is_master and self.shard_index == shard_idx:	
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				self.mongodb.register_slave(nodename)
 
