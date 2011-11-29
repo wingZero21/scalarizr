@@ -229,17 +229,21 @@ class MongoDB(BaseService):
 		
 		
 	def start_router(self):
-		if self.default_init_script.running:
-			if not self.router_cli.is_router_connection():
-				self.default_init_script.stop('Stopping default mongod service')
+		self.stop_default_init_script()
 		Mongos.set_keyfile(self.keyfile.path)
 		Mongos.start()
 		
 	
 	def stop_router(self):
 		Mongos.stop()
-	
-	
+		
+
+	def stop_default_init_script(self):
+		if self.default_init_script.running:
+			if not self.router_cli.is_router_connection():
+				self.default_init_script.stop('Stopping default mongod service')
+				
+					
 	def register_slave(self, ip, port=None):
 		self._logger.debug('Registering new replica %s' % ip)
 		ret = self.cli.add_replica(ip, port)

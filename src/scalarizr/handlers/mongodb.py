@@ -672,6 +672,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.storage_vol = self._plug_storage(self._storage_path, volume)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
+		self.mongodb.stop_default_init_script()
 		self.mongodb.prepare(rs_name)
 		self.mongodb.start_shardsvr()
 		self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
