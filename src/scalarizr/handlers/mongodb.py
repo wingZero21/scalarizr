@@ -276,7 +276,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		if first_in_rs:
 			make_shard = self._init_master(hostup_msg, rs_name)	
-
 		else:
 			self._init_slave(hostup_msg, rs_name)
 
@@ -284,16 +283,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.debug('rs_id=%s, type(rs_id)=%s' % (self.rs_id, type(self.rs_id)))
 		
 		if self.shard_index == 0 and self.rs_id == 0:
-			password = self.scalr_password
-			self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
-			hostup_msg.mongodb['password'] = password
-			
 			self.mongodb.start_config_server()
 			hostup_msg.mongodb['config_server'] = 1
 		else:
 			hostup_msg.mongodb['config_server'] = 0
 			
-		self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
+		self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
 		
 		if self.rs_id in (0,1):
 			self.mongodb.start_router()
@@ -582,25 +577,28 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
-		init_start = not self._storage_valid()					
-				
+		init_start = not self._storage_valid()	
+		
 		self.mongodb.prepare(rs_name)
 		self.mongodb.start_shardsvr()
 		
 		""" Start replication set where this node is the only member """
+		password = self.scalr_password
+		self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
+		self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
+		
+		msg_data = dict()
+		msg_data['password'] = password
+				
 		if init_start:
 			self._logger.info("Initializing replication set")
-			self.mongodb.initiate_rs()
+			self.mongodb.initiate_rs()			
 		else:
 			rs_cfg = self.mongodb.cli.get_rs_config()
 			rs_cfg['members'] = [{'_id': self.rs_id, 
 								  'host': '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)}]
 			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=120)
-			
-		
-
-		msg_data = dict()
 
 		# Create snapshot
 		snap = self._create_snapshot()
@@ -677,7 +675,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
 		self.mongodb.prepare(rs_name)
-		self.mongodb.start_shardsvr()		
+		self.mongodb.start_shardsvr()
+		self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
+
 
 		stale = request_and_wait_replication_status()
 
