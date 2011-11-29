@@ -286,15 +286,15 @@ class MongoDBHandler(ServiceCtlHandler):
 		if self.shard_index == 0 and self.rs_id == 0:
 			password = self.scalr_password
 			self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
-			self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
 			hostup_msg.mongodb['password'] = password
 			
 			self.mongodb.start_config_server()
 			hostup_msg.mongodb['config_server'] = 1
 		else:
-			self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
 			hostup_msg.mongodb['config_server'] = 0
-
+			
+		self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
+		
 		if self.rs_id in (0,1):
 			self.mongodb.start_router()
 			hostup_msg.mongodb['router'] = 1
