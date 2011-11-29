@@ -20,6 +20,7 @@ from scalarizr.util import disttool, cached, firstmatched, validators, software,
 from scalarizr.util import initdv2, system2
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.filetool import read_file, write_file
+from scalarizr import filetool
 
 # Stdlibs
 import logging, os, re
@@ -307,34 +308,25 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def _update_vhosts(self):
 
-		src_dir = bus.share_path
-		src_dir = os.path.join(src_dir, 'apache/html')
+		src_dir = os.path.join(bus.share_path, 'apache/html')
 		try:
-			app_user = pwd.getpwnam('apache')
+			doc_root = self._config.get('DocumentRoot')
 		except:
-			app_user = pwd.getpwnam('httpd')
-		doc_root = self._config.get('DocumentRoot')
+			doc_root = '/var/www'
 		if '"' in doc_root: doc_root = doc_root.replace('"','')
 		names = os.listdir(src_dir)
+		try:
+			if pwd.getpwnam('apache'): uname = 'apache'
+		except:
+			uname = 'www-data'
 		if not os.path.exists(doc_root):
 			try:
 				os.mkdir(doc_root, 0755)
-				#if disttool.is_ubuntu(): os.mkdir(doc_root, 0775)
-				os.chown(doc_root, app_user.pw_uid, app_user.pw_gid)
 				for file in names:
 					shutil.copy(os.path.join(src_dir, file), doc_root)
-					os.chown(os.path.join(doc_root, file), app_user.pw_uid, app_user.pw_gid)
-				os.chown(doc_root, app_user.pw_uid, app_user.pw_gid)		
-				try:
-					for root, dirs, files in os.walk(doc_root):
-						for dir in dirs:
-							os.chown(os.path.join(root , dir), app_user.pw_uid, app_user.pw_gid)
-						for file in files:
-							os.chown(os.path.join(root, file), app_user.pw_uid, app_user.pw_gid)
-				except OSError, e:
-					self._logger.error('Cannot chown Apache DocumentRoot directory %s', doc_root)
+				filetool.rchown(uname, doc_root)
 			except Exception, e:
-				self._logger.debug('\nError create default index file in DocumentRoot %s folder\n\Error: %s \n'
+				self._logger.debug('\nError create default index file in DocumentRoot: %s\nError: %s\n'
 					%(doc_root, e))
 
 		config = bus.config
