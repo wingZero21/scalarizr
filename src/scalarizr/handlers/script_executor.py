@@ -283,8 +283,6 @@ class ScriptExecutor(Handler):
 					event_name=self._event_name or '',
 					returncode=returncode
 				)
-			self._logger.debug("_execute_script returned dict: %s"%d)
-
 			return d
 
 		except (Exception, BaseException), e:

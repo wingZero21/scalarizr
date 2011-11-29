@@ -17,7 +17,7 @@ from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
-import time, os, re, shutil, glob, threading
+import time, os, re, shutil, glob
 
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
@@ -522,10 +522,10 @@ class RebundleEbsStrategy(RebundleStratery):
 			self._snap.update()
 			if time.time() - start_time > 191:
 				start_time = time.time()
-				LOG.debug('\nProgress: %s\n' % self._snap.progress)
+				LOG.debug('Progress: %s' % self._snap.progress)
 
 			if self._snap.status == 'completed':
-				LOG.debug('\nProgress: %s\n' % self._snap.progress)
+				LOG.debug('Progress: %s' % self._snap.progress)
 				break
 			elif self._snap.status == 'failed':
 				raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))

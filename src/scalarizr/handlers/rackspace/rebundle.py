@@ -11,7 +11,6 @@ from scalarizr.util import wait_until, system2
 
 import time
 import sys
-import threading
 
 from cloudservers import ImageManager
 
@@ -52,16 +51,18 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			wait_until(hasattr, args=(image, 'progress'),
 					sleep=5, logger=LOG, timeout=3600,
 					error_text="Image %s has no attribute 'progress'" % image.id)
+			
+			start_time = time.time()
 			def completed():
 				try:
+					image = image_manager.get(image.id)
 					if time.time() - start_time > 191:
-						start_time =time.time()
-						LOG.debug('\nProgress: %s\n' %
-							image_manager.get(image.id).progress)
-					return image_manager.get(image.id).progress == 100
+						globals()['start_time'] = time.time()
+						LOG.debug('Progress: %s' % image.progress)
+					return image.progress == 100
 				except:
 					pass
-			start_time =time.time()
+			
 			wait_until(completed, sleep=30, logger=LOG, timeout=3600,
 					error_text="Image %s wasn't completed in a reasonable time" % image.id)
 			LOG.info('Image %s completed and available for use!', image.id)

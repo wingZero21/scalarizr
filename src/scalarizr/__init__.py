@@ -311,7 +311,7 @@ def _apply_user_data(cnf):
 	g = platform.get_user_data
 	
 	logger.debug('Apply scalarizr user-data to configuration')
-	cnf.update_ini('config.ini', dict(
+	updates = dict(
 		general={
 			'server_id' : g(UserDataOptions.SERVER_ID),
 			'role_name' : g(UserDataOptions.ROLE_NAME),
@@ -325,7 +325,14 @@ def _apply_user_data(cnf):
 			'security_name' : 'notConfigUser',			
 			'community_name' : g(UserDataOptions.FARM_HASH)
 		}
-	))
+	)
+	behaviour = g(UserDataOptions.BEHAVIOUR)
+	if behaviour:
+		if behaviour == 'base':
+			behaviour = ''
+		updates['behaviour'] = behaviour
+		
+	cnf.update_ini('config.ini', updates)
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
 
 def _detect_scalr_version():
