@@ -326,7 +326,10 @@ class MongoDBHandler(ServiceCtlHandler):
 			is_master = self.mongodb.is_replication_master
 			if is_master and self.shard_index == shard_idx:	
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
-				self.mongodb.register_slave(nodename)
+				if nodename not in self.mongodb.replicas:
+					self.mongodb.register_slave(hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+				else:
+					self._logger.warning('Host %s is already in replica set.' % nodename)
 
 
 
