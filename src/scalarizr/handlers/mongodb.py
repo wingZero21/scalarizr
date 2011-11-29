@@ -240,7 +240,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		if mongodb_data.get('password'):
 			mongodb_data['password'] = mongodb_data.get('password')
-			self.mongodb.authenticate(mongo_svc.SCALR_USER, mongodb_data['password'])
 		else:
 			mongodb_data['password'] =  cryptotool.pwgen(10)
 		
@@ -293,6 +292,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.mongodb.start_config_server()
 			hostup_msg.mongodb['config_server'] = 1
 		else:
+			self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
 			hostup_msg.mongodb['config_server'] = 0
 
 		if self.rs_id in (0,1):
@@ -890,5 +890,7 @@ class StatusWatcher(threading.Thread):
 						msg = {'status' : ReplicationState.STALE}
 						self.handler.send_int_message(self.local_ip, MongoDBMessages.INT_STATE, msg)
 						stale = True
+			
+			time.sleep(3)
 						
 		self.handler._status_trackers.pop(self.local_ip)
