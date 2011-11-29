@@ -287,9 +287,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			hostup_msg.mongodb['config_server'] = 1
 		else:
 			hostup_msg.mongodb['config_server'] = 0
-			
-		self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
-		
+
 		if self.rs_id in (0,1):
 			self.mongodb.start_router()
 			hostup_msg.mongodb['router'] = 1
