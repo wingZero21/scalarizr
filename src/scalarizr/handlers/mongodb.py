@@ -579,14 +579,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		self.mongodb.prepare(rs_name)
 		self.mongodb.start_shardsvr()
-		
-		""" Start replication set where this node is the only member """
-		password = self.scalr_password
-		self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
-		self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
-		
-		msg_data = dict()
-		msg_data['password'] = password
 				
 		if init_start:
 			self._logger.info("Initializing replication set")
@@ -597,6 +589,13 @@ class MongoDBHandler(ServiceCtlHandler):
 								  'host': '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)}]
 			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=120)
+			
+		password = self.scalr_password
+		self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
+		self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
+		
+		msg_data = dict()
+		msg_data['password'] = password
 
 		# Create snapshot
 		snap = self._create_snapshot()
