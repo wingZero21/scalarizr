@@ -159,6 +159,10 @@ class MongoDB(BaseService):
 		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logappend = True
 		
+		# Temporary: verbose mongodb log
+		self.config.set('verbose', 'true')
+		self.config.set('vvvv', 'true')
+
 
 	def _prepare_arbiter(self, rs_name):
 		if not os.path.exists(ARBITER_DATA_DIR):
