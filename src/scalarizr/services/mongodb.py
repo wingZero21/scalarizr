@@ -133,6 +133,7 @@ class MongoDB(BaseService):
 
 
 	def authenticate(self, login=SCALR_USER, password=None):
+		self._logger.debug('setting auth to mongo connection')
 		self.login = login
 		self.password = password
 		self.cli.auth(login, password)
@@ -152,6 +153,7 @@ class MongoDB(BaseService):
 		'''
 		option nojournal is True on all 64bit platforms by default
 		'''
+		self._logger.debug('Preparing main config file')
 		#self.config.nojournal = False
 		self.config.replSet = rs_name
 		self.config.dbpath = self.working_dir.create(STORAGE_DATA_DIR)
@@ -166,9 +168,10 @@ class MongoDB(BaseService):
 
 	def _prepare_arbiter(self, rs_name):
 		if not os.path.exists(ARBITER_DATA_DIR):
+			self._logger.debug('Creating datadir for arbiter: %s' % ARBITER_DATA_DIR)
 			os.makedirs(ARBITER_DATA_DIR)
 		rchown(DEFAULT_USER, ARBITER_DATA_DIR)	
-			
+		self._logger.debug("Preparing arbiter's config file")
 		self.arbiter_conf.dbpath = ARBITER_DATA_DIR
 		self.arbiter_conf.replSet = rs_name
 		self.arbiter_conf.shardsvr = True
@@ -199,22 +202,24 @@ class MongoDB(BaseService):
 		'''
 		@return (host:port)
 		'''
+		self._logger.debug('Initializing replica set')
 		ret = self.cli.initiate_rs()
 		if ret and ret['ok'] == '0':
 			raise BaseException('Could not initialize replica set: %s' % ret['errmsg'])
-		
 		wait_until(lambda: self.is_replication_master, sleep=5, logger=self._logger,
 					timeout=120, start_text='Wait until node becomes replication primary')		
-		
+		self._logger.debug('Server became replication master')
 		return ret['me'].split(':') if ret else None
 	
 	def start_shardsvr(self):
 		self.working_dir.unlock()
+		self._logger.debug('Starting main mongod process')
 		self.mongod.start()
 	
 	
 	def start_arbiter(self):
 		self._prepare_arbiter(self.config.replSet)
+		self._logger.debug('Starting arbiter process')
 		self.arbiter.start()
 	
 	
@@ -229,16 +234,18 @@ class MongoDB(BaseService):
 		
 		
 	def stop_config_server(self):
-		self.config_server.stop()
+		self.config_server.stop('Stopping config server')
 		
 		
 	def start_router(self):
 		self.stop_default_init_script()
 		Mongos.set_keyfile(self.keyfile.path)
+		self._logger.debug('Starting router process')
 		Mongos.start()
 		
 	
 	def stop_router(self):
+		self._logger.debug('Stopping router process')
 		Mongos.stop()
 		
 
@@ -249,21 +256,18 @@ class MongoDB(BaseService):
 				
 					
 	def register_slave(self, ip, port=None):
-		self._logger.debug('Registering new replica %s' % ip)
 		ret = self.cli.add_replica(ip, port)
 		if ret['ok'] == '0':
 			self._logger.error('Could not add replica %s to set: %s' % (ip, ret['errmsg']))
 		
 			
 	def register_arbiter(self,ip,port=None):
-		self._logger.debug('Registering new arbiter %s' % ip)
 		ret = self.cli.add_arbiter(ip, port or ARBITER_DEFAULT_PORT)
 		if ret['ok'] == '0':
 			self._logger.error('Could not add arbiter %s to set: %s' % (ip, ret['errmsg']))
 			
 			
 	def unregister_slave(self,ip,port=None):
-		self._logger.debug('Removing replica %s' % ip)
 		ret = self.cli.remove_slave(ip, port=None)
 		if ret['ok'] == '0':
 			self._logger.error('Could not remove replica %s from set: %s' % (ip, ret['errmsg']))
@@ -290,6 +294,7 @@ class MongoDB(BaseService):
 		8	 Down
 		9	 Rollback
 		'''
+		self._logger.debug('Getting rs status')
 		ret = self.cli.get_rs_status()
 		if 'errmsg' in ret:
 			self._logger.error('Could not get status of replica set' % (ret['errmsg']))
@@ -299,18 +304,21 @@ class MongoDB(BaseService):
 				
 	@property
 	def replicas(self):
+		self._logger.debug('Querying list of replicas')
 		ret = self.cli.is_master()
 		return ret['hosts'] if 'hosts' in ret else []
 	
 	
 	@property
 	def arbiters(self):
+		self._logger.debug('Querying list of arbiters')
 		ret = self.cli.is_master()
 		return ret['arbiters'] if 'arbiters' in ret else []
 	
 	
 	@property
 	def primary_host(self):
+		self._logger.debug('Getting current primary host')
 		ret = self.cli.is_master()
 		return ret['primary'] if 'primary' in ret else None
 	
@@ -341,8 +349,9 @@ class MongoDB(BaseService):
 		When this flag is set, sudo can only be  run from a login session and not via other means 
 		such  as cron(8) or cgi-bin scripts.  This flag is off by default on all systems but CentOS5.
 		'''
+		path = '/etc/sudoers'
+		self._logger.debug('Disabling requiretty in %s' % path)
 		if not disttool.is_ubuntu():
-			path = '/etc/sudoers'
 			orig = read_file(path)
 			new = re.sub('Defaults\s+requiretty', '\n', orig)
 			if new != orig:
@@ -647,6 +656,7 @@ class Mongod(object):
 	def start(self):
 		try:
 			if not self.is_running:
+				self._logger.debug('Starting %s: %s' % MONGOD)
 				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args)
 				'''
 				mongod process takes some time before it actualy starts accepting connections
@@ -654,6 +664,7 @@ class Mongod(object):
 				'''
 				wait_until(lambda: self.is_running, timeout=MAX_START_TIMEOUT)
 				wait_until(lambda: self.cli.has_connection, timeout=MAX_START_TIMEOUT)
+				self._logger.debug('%s process has been started.' % MONGOD)
 				
 		except PopenError, e:
 			self._logger.error('Unable to start mongod process: %s' % e)
@@ -661,7 +672,9 @@ class Mongod(object):
 	def stop(self, reason=None):
 		if self.is_running:
 			self.cli.shutdown_server()
+			self._logger.debug('Stopping %s: %s' % (MONGOD,reason))
 			wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
+			self._logger.debug('%s process has been stopped.' % MONGOD)
 	
 	def restart(self, reason=None):
 		if not self.is_running:
@@ -678,6 +691,7 @@ class Mongod(object):
 
 
 class Mongos(object):
+	_logger = logging.getLogger(__name__)
 	sock = initdv2.SockParam(ROUTER_DEFAULT_PORT)
 	keyfile = None
 	
@@ -688,6 +702,7 @@ class Mongos(object):
 	@classmethod
 	def start(cls):
 		if not cls.is_running():
+			cls._logger.debug('Starting %s process' % MONGOS)
 			args = [MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
 									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
 			if cls.keyfile and os.path.exists(cls.keyfile):
@@ -697,13 +712,16 @@ class Mongos(object):
 			cli = MongoCLI(port=ROUTER_DEFAULT_PORT)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 			wait_until(lambda: cli.has_connection, timeout=MAX_START_TIMEOUT)
+			cls._logger.debug('%s process has been started.' % MONGOS)
 
 	@classmethod
 	def stop(cls):
 		if cls.is_running():
+			cls._logger.debug('Stopping %s process' % MONGOS)
 			cli = MongoCLI(port=ROUTER_DEFAULT_PORT)
 			cli.shutdown_server()
 			wait_until(lambda: not cls.is_running, timeout=MAX_STOP_TIMEOUT)
+			cls._logger.debug('%s process has been stopped.' % MONGOS)
 
 	@classmethod
 	def is_running(cls):
@@ -717,6 +735,7 @@ class Mongos(object):
 class MongoCLI(object):
 	
 	authenticated = False
+	host = 'localhost'
 	
 	def __init__(self, port=REPLICA_DEFAULT_PORT, login=SCALR_USER, password=None):
 		self.port = port
@@ -738,8 +757,10 @@ class MongoCLI(object):
 	@property
 	def connection(self):
 		if not hasattr(self, '_con'):
-			self._con = pymongo.Connection('localhost', self.port)
+			self._logger.debug('creating pymongo connection to %s:%s' % (self.host,self.port))
+			self._con = pymongo.Connection(self.host, self.port)
 		if not self.authenticated and self.login and self.password and self.is_port_listening:
+			self._logger.debug('Authenticating as %s' % self.login)
 			self._con.admin.authenticate(self.login, self.password)
 			self.authenticated = True
 		return self._con
@@ -773,6 +794,7 @@ class MongoCLI(object):
 	
 	
 	def list_databases(self):
+		self._logger.debug('Getting list of databases')
 		return self.connection.database_names()
 
 	
@@ -780,6 +802,7 @@ class MongoCLI(object):
 		'''
 	    initializes replica set
 	    '''
+		self._logger.debug('Initializing replica set')
 		try:
 			res = self.connection.admin.command('replSetInitiate')
 		except pymongo.errors.OperationFailure, e:
@@ -788,11 +811,13 @@ class MongoCLI(object):
 		return res	
 	
 	def add_shard(self, rs_name, rs_members):
+		self._logger.debug('Adding shard %s with members %s' % (rs_name, rs_members))
 		host_str = '%s/%s' % (rs_name, ','.join(rs_members))
 		return self.connection.admin.command('addshard', host_str)
 
 	
 	def add_replica(self, ip, port=None, arbiter=False):
+		self._logger.debug('Registering new replica %s' % ip)
 		port = port or REPLICA_DEFAULT_PORT
 		cfg = self.get_rs_config()
 		host = "%s:%s" % (ip, port)
@@ -810,28 +835,34 @@ class MongoCLI(object):
 		
 	
 	def is_master(self):
+		self._logger.debug('Checking if node is master')
 		return self.connection.admin.command('isMaster')
 
 	
 	def get_rs_status(self):
+		self._logger.debug('Getting rs status')
 		return self.connection.admin.command('replSetGetStatus')
 
 	
 	def get_rs_config(self):
+		self._logger.debug('Getting rs config')
 		rs_count = self.connection.local.system.replset.count()
 		assert rs_count, "No replica set found" 
 		return self.connection.local.system.replset.find_one()
 
 
 	def rs_reconfig(self, config, force=False):
+		self._logger.debug('Reconfiguring replica set')
 		return self.connection.admin.command("replSetReconfig", config, force=force)		
 
 
 	def add_arbiter(self,ip, port=None):
+		self._logger.debug('Registering new arbiter %s' % ip)
 		return self.add_replica(ip, port, arbiter=True)
 
 
 	def remove_slave(self, ip, port=None):
+		self._logger.debug('Removing replica %s' % ip)
 		port = port or REPLICA_DEFAULT_PORT
 		host_to_del = "%s:%s" % (ip, port)
 		cfg = self.get_rs_config()
@@ -847,14 +878,21 @@ class MongoCLI(object):
 
 	def shutdown_server(self):
 		try:
+			self._logger.debug('Shutting down service %s:%s' % (self.host,self.port))
 			out = self.connection.admin.command('shutdown', force=True)
+
 		except (pymongo.errors.AutoReconnect, pymongo.errors.OperationFailure), e:
 			self._logger.warning('Could not shutdown server from the inside:',e)
 			out = None
 		return out
 	
 	def sync(self):
+		self._logger.debug('Performing fsync on server')
+		'''
+		By default the command returns after synchronizing.
+		'''
 		return self.connection.admin.command('fsync')
+		self._logger.debug('fsync is done.')
 
 	
 	def stop_balancer(self):
@@ -875,6 +913,7 @@ class MongoCLI(object):
 		self._logger.debug("Waiting until balancer finishes it's round")
 		while self.connection.locks.find_one({'_id': "balancer"})['state']:
 			time.sleep(1)
+		self._logger.debug('Balancer has been stopped.')	
 
 	
 	def start_balancer(self):
@@ -884,9 +923,11 @@ class MongoCLI(object):
 		'''
 		self._logger.info('Starting balancer')
 		self.connection.config.settings.update({'_id': 'balancer'}, {'stopped' : False}, True)
+		self._logger.debug('Balancer has been started.')
 		
 
 	def create_or_update_admin_user(self, username, password):
+		self._logger.debug('Adding mongodb user %s' % username)
 		self.connection.admin.add_user(username, password)
 		
 		
