@@ -317,6 +317,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			Hosts.set(message.local_ip, hostname)
 			
 			self.mongodb.mongod.stop('Temporary: updating /etc/hosts')
+			time.sleep(10)
 			self.mongodb.start_shardsvr()
 
 			is_master = self.mongodb.is_replication_master
