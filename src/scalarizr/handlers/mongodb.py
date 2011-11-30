@@ -889,14 +889,14 @@ class StatusWatcher(threading.Thread):
 				
 				if status in (1,2):
 					msg = {'status' : ReplicationState.INITIALIZED}
-					self.handler.send_int_message(self.local_ip, MongoDBMessages.INT_STATE, msg)
+					self.handler.send_int_message(self.local_ip, MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT, msg)
 					initialized = True
 					break
 				
 				if status == 3:
 					if 'errmsg' in member and 'RS102' in member['errmsg']:
 						msg = {'status' : ReplicationState.STALE}
-						self.handler.send_int_message(self.local_ip, MongoDBMessages.INT_STATE, msg)
+						self.handler.send_int_message(self.local_ip, MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT, msg)
 						stale = True
 			
 			time.sleep(3)
