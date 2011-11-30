@@ -59,7 +59,7 @@ CONFIG_SERVER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.configsrv.log')
 
 ROUTER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.router.log')
 
-MAX_START_TIMEOUT = 180
+MAX_START_TIMEOUT = 360
 MAX_STOP_TIMEOUT = 65
 
 
