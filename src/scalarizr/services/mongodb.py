@@ -656,7 +656,7 @@ class Mongod(object):
 	def start(self):
 		try:
 			if not self.is_running:
-				self._logger.debug('Starting %s: %s' % MONGOD)
+				self._logger.debug('Starting %s' % MONGOD)
 				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args)
 				'''
 				mongod process takes some time before it actualy starts accepting connections
