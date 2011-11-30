@@ -315,6 +315,9 @@ class MongoDBHandler(ServiceCtlHandler):
 			hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
 			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
 			Hosts.set(message.local_ip, hostname)
+			
+			self.mongodb.mongod.stop('Temporary: updating /etc/hosts')
+			self.mongodb.start_shardsvr()
 
 			is_master = self.mongodb.is_replication_master
 			if is_master and self.shard_index == shard_idx:	
