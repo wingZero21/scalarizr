@@ -843,7 +843,7 @@ class MongoCLI(object):
 
 	def shutdown_server(self):
 		try:
-			out = self.connection.admin.command('shutdown')
+			out = self.connection.admin.command('shutdown', force=True)
 		except (pymongo.errors.AutoReconnect, pymongo.errors.OperationFailure), e:
 			self._logger.warning('Could not shutdown server from the inside:',e)
 			out = None
