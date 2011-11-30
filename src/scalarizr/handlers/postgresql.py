@@ -16,7 +16,7 @@ from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.util.filetool import split, rchown
-from scalarizr.util import system2, wait_until
+from scalarizr.util import system2, wait_until, disttool, software, filetool
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
 	PgUser, SU_EXEC
@@ -45,6 +45,26 @@ POSTGRESQL_DEFAULT_PORT	= 5432
 		
 def get_handlers():
 	return (PostgreSqlHander(), )
+
+
+SSH_KEYGEN_SELINUX_MODULE = """
+module local 1.0;
+
+require {
+	type initrc_tmp_t;
+	type ssh_keygen_t;
+	type initrc_t;
+	type etc_runtime_t;
+	class tcp_socket { read write };
+	class file { read write getattr };
+}
+
+#============= ssh_keygen_t ==============
+allow ssh_keygen_t etc_runtime_t:file { read write getattr };
+allow ssh_keygen_t initrc_t:tcp_socket { read write };
+allow ssh_keygen_t initrc_tmp_t:file { read write };
+"""
+
 
 
 class PostgreSqlHander(ServiceCtlHandler):	
@@ -109,6 +129,29 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
+			
+			if disttool.is_redhat_based():		
+					
+				checkmodule_paths = software.whereis('checkmodule')
+				semodule_package_paths = software.whereis('semodule_package')
+				semodule_paths = software.whereis('semodule')
+			
+				if all(checkmodule_paths, semodule_package_paths, semodule_paths):
+					
+					filetool.write_file('/tmp/sshkeygen.te',
+								SSH_KEYGEN_SELINUX_MODULE, logger=self._logger)
+					
+					self._logger.debug('Compiling SELinux policy for ssh-keygen')
+					system2((checkmodule_paths[0], '-M', '-m', '-o',
+							 '/tmp/sshkeygen.mod', '/tmp/sshkeygen.te'), logger=self._logger)
+					
+					self._logger.debug('Building SELinux package for ssh-keygen')
+					system2((semodule_package_paths[0], '-o', '/tmp/sshkeygen.pp',
+							 '-m', '/tmp/sshkeygen.mod'), logger=self._logger)
+					
+					self._logger.debug('Loading ssh-keygen SELinux package')					
+					system2((semodule_paths[0], '-i', '/tmp/sshkeygen.pp'), logger=self._logger)
+				
 		
 		if self._cnf.state == ScalarizrState.RUNNING:
 
