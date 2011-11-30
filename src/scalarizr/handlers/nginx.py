@@ -50,7 +50,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		try:
 			nginx = software.whereis('nginx')
 			if nginx:
-				out = system2('%s -V' % nginx[0], shell=True)[1]
+				out = system2((nginx[0], '-V'))[1]
 				m = re.search("--pid-path=(.*?)\s", out)
 				if m:
 						pid_file = m.group(1)

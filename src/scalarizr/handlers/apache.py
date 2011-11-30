@@ -18,6 +18,7 @@ from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 from scalarizr.util import disttool, cached, firstmatched, validators, software,\
 	wait_until
 from scalarizr.util import initdv2, system2
+from scalarizr.util.initdv2 import InitdError
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr import filetool
@@ -25,7 +26,7 @@ from scalarizr import filetool
 # Stdlibs
 import logging, os, re
 from telnetlib import Telnet
-from scalarizr.util.initdv2 import InitdError
+import sys
 import time
 import shutil, pwd
 
@@ -307,27 +308,25 @@ class ApacheHandler(ServiceCtlHandler):
 
 
 	def _update_vhosts(self):
-
-		src_dir = os.path.join(bus.share_path, 'apache/html')
 		try:
-			doc_root = self._config.get('DocumentRoot')
+			doc_root = self._config.get('DocumentRoot').replace('"', '')
 		except:
-			doc_root = '/var/www'
-		if '"' in doc_root: doc_root = doc_root.replace('"','')
-		names = os.listdir(src_dir)
-		try:
-			if pwd.getpwnam('apache'): uname = 'apache'
-		except:
-			uname = 'www-data'
-		if not os.path.exists(doc_root):
-			try:
-				os.mkdir(doc_root, 0755)
-				for file in names:
-					shutil.copy(os.path.join(src_dir, file), doc_root)
-				filetool.rchown(uname, doc_root)
-			except Exception, e:
-				self._logger.debug('\nError create default index file in DocumentRoot: %s\nError: %s\n'
-					%(doc_root, e))
+			pass
+		else:
+			if not os.path.exists(doc_root):
+				try:
+					try:
+						pwd.getpwnam('apache')
+						uname = 'apache'
+					except KeyError:
+						uname = 'www-data'
+					else:
+						shutil.copytree(os.path.join(bus.share_path, 'apache/html'), doc_root)				
+						filetool.rchown(uname, doc_root)
+				except:
+					self._logger.warn('Failed to create DocumentRoot structure in %s. Error: %s', 
+									doc_root, sys.exc_value)
+				
 
 		config = bus.config
 		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION, 'vhosts_path'))
