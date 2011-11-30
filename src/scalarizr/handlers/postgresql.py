@@ -136,7 +136,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				semodule_package_paths = software.whereis('semodule_package')
 				semodule_paths = software.whereis('semodule')
 			
-				if all(checkmodule_paths, semodule_package_paths, semodule_paths):
+				if all((checkmodule_paths, semodule_package_paths, semodule_paths)):
 					
 					filetool.write_file('/tmp/sshkeygen.te',
 								SSH_KEYGEN_SELINUX_MODULE, logger=self._logger)
