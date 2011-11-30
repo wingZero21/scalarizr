@@ -840,7 +840,6 @@ class MongoCLI(object):
 
 	
 	def get_rs_status(self):
-		self._logger.debug('Getting rs status')
 		return self.connection.admin.command('replSetGetStatus')
 
 	

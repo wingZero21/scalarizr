@@ -320,17 +320,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				if nodename not in self.mongodb.replicas:
-					try:
-						self.mongodb.register_slave(hostname, mongo_svc.REPLICA_DEFAULT_PORT)
-					except:
-						if 'need most members up to reconfigure' in str(sys.exc_info()[1]):
-							self.mongodb.mongod.stop('Temporary: updating /etc/hosts')
-							time.sleep(10)
-							self.mongodb.start_shardsvr()
-							
-							self.mongodb.register_slave(hostname, mongo_svc.REPLICA_DEFAULT_PORT)
-						else:
-							raise
+					self.mongodb.register_slave(hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				else:
 					self._logger.warning('Host %s is already in replica set.' % nodename)
 				
@@ -371,7 +361,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			del self._status_trackers[message.local_ip]
 
 		if self.mongodb.is_replication_master:
-			if message.local_ip in self.mongodb.replicas():
+			if message.local_ip in self.mongodb.replicas:
 				""" Remove host from replica set"""
 				self.mongodb.unregister_slave(message.local_ip)
 				""" If arbiter was running on the node - unregister it """
