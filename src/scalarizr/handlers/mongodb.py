@@ -133,7 +133,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE,
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
 				Messages.UPDATE_SERVICE_CONFIGURATION,
-				Messages.HOST_INIT,
 				Messages.BEFORE_HOST_TERMINATE,
 				Messages.HOST_DOWN)
 	
@@ -304,20 +303,21 @@ class MongoDBHandler(ServiceCtlHandler):
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 		
 
-	def on_HostInit(self, message):
-		if not BuiltinBehaviours.MONGODB in message.behaviour:
-			return
-		
+	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
+		self._stop_watcher(message.local_ip)
 		if message.local_ip != self._platform.get_private_ip():
+		
 			shard_idx = int(message.mongodb['shard_index'])
 			rs_idx = int(message.mongodb['replica_set_index'])
-			
 			hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
+			
 			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
 			Hosts.set(message.local_ip, hostname)
 			
 			is_master = self.mongodb.is_replication_master
-			if is_master and self.shard_index == shard_idx:	
+			
+			if is_master and self.shard_index == shard_idx:
+				
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				if nodename not in self.mongodb.replicas:
 					try:
@@ -333,18 +333,8 @@ class MongoDBHandler(ServiceCtlHandler):
 							raise
 				else:
 					self._logger.warning('Host %s is already in replica set.' % nodename)
-
-
-
-	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
-		self._stop_watcher(message.local_ip)
-		if message.local_ip != self._platform.get_private_ip():
-			shard_idx = int(message.mongodb['shard_index'])
-			rs_idx = int(message.mongodb['replica_set_index'])
-			is_master = self.mongodb.is_replication_master
-			
-			if is_master and self.shard_index == shard_idx:
-				hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
+				
+				
 				watcher = StatusWatcher(hostname, self, message.local_ip)
 				self._logger.info('Starting bootstrap watcher for node ip=%s', message.local_ip)
 				watcher.start()
