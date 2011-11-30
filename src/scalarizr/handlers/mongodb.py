@@ -316,15 +316,21 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
 			Hosts.set(message.local_ip, hostname)
 			
-			self.mongodb.mongod.stop('Temporary: updating /etc/hosts')
-			time.sleep(10)
-			self.mongodb.start_shardsvr()
-
 			is_master = self.mongodb.is_replication_master
 			if is_master and self.shard_index == shard_idx:	
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				if nodename not in self.mongodb.replicas:
-					self.mongodb.register_slave(hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+					try:
+						self.mongodb.register_slave(hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+					except:
+						if 'need most members up to reconfigure' in str(sys.exc_info()[1]):
+							self.mongodb.mongod.stop('Temporary: updating /etc/hosts')
+							time.sleep(10)
+							self.mongodb.start_shardsvr()
+							
+							self.mongodb.register_slave(hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+						else:
+							raise
 				else:
 					self._logger.warning('Host %s is already in replica set.' % nodename)
 
