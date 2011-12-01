@@ -308,25 +308,6 @@ class ApacheHandler(ServiceCtlHandler):
 
 
 	def _update_vhosts(self):
-		try:
-			doc_root = self._config.get('DocumentRoot').replace('"', '')
-		except:
-			pass
-		else:
-			if not os.path.exists(doc_root):
-				try:
-					try:
-						pwd.getpwnam('apache')
-						uname = 'apache'
-					except KeyError:
-						uname = 'www-data'
-					else:
-						shutil.copytree(os.path.join(bus.share_path, 'apache/html'), doc_root)				
-						filetool.rchown(uname, doc_root)
-				except:
-					self._logger.warn('Failed to create DocumentRoot structure in %s. Error: %s', 
-									doc_root, sys.exc_value)
-				
 
 		config = bus.config
 		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION, 'vhosts_path'))
@@ -378,7 +359,6 @@ class ApacheHandler(ServiceCtlHandler):
 			for vhost in received_vhosts:
 				if (None == vhost.hostname) or (None == vhost.raw):
 					continue
-				
 				self._logger.debug("Processing %s", vhost.hostname)
 				if vhost.https:
 					try:
@@ -432,8 +412,8 @@ class ApacheHandler(ServiceCtlHandler):
 					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + VHOST_EXTENSION)
 					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
 					write_file(vhost_fullpath, vhost.raw, error_msg=vhost_error_message, logger=self._logger)
-					
-				self._logger.debug("Done %s processing", vhost.hostname)
+					self._logger.debug("Done %s processing", vhost.hostname)
+					self._create_vhost_paths(vhost_fullpath)
 			self._logger.debug("New vhosts configuration files created")
 			
 			if disttool.is_debian_based():
@@ -637,8 +617,7 @@ class ApacheHandler(ServiceCtlHandler):
 		else:
 			self._logger.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
 
-	def _create_vhost_paths(self, vhost_path):		
-		if os.path.exists(vhost_path):
+	def _create_vhost_paths(self, vhost_path):
 			vhost = Configuration('apache')
 			vhost.read(vhost_path)
 			list_logs = vhost.get_list('.//ErrorLog') + vhost.get_list('.//CustomLog')
@@ -656,3 +635,32 @@ class ApacheHandler(ServiceCtlHandler):
 				except OSError, e:
 					self._logger.error('Couldn`t create directory %s. %s', 
 							log_dir, e.strerror)
+			
+			if os.path.exists(vhost_path):
+				self._logger.debug('vhost configuratioin file path: %s' % vhost_path)
+				vh = Configuration('apache', filename=vhost_path)
+				for item in vh.items('VirtualHost'):
+					if item[0]=='DocumentRoot':
+						doc_root = item[1][:-1] if item[1][-1]=='/' else item[1]
+						if not os.path.exists(doc_root):
+							self._logger.debug('Try to create virtual host: %s' % doc_root)
+							try:
+								try:
+									pwd.getpwnam('apache')
+									uname = 'apache'
+								except:
+									uname = 'www-data'
+								finally:
+									self._logger.debug('User name: %s' % uname)
+									tmp = '/'.join(doc_root.split('/')[:-1])
+									self._logger.debug('Try creating directories: %s' % tmp)
+									if not os.path.exists(tmp):
+										os.makedirs(tmp, 0755)
+										self._logger.debug('Created parent directories: %s' % tmp)
+									shutil.copytree(os.path.join(bus.share_path, 'apache/html'), doc_root)
+									self._logger.debug('Copied documentroot files: %s' % ', '.join(os.listdir(doc_root)))
+									filetool.rchown(uname, doc_root)
+									self._logger.debug('Change owner to %s: %s' % (uname, ', '.join(os.listdir(doc_root))))
+							except:
+								self._logger.warn('Failed to create DocumentRoot structure in %s. Error: %s',
+												doc_root, sys.exc_value)
