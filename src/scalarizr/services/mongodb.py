@@ -160,10 +160,6 @@ class MongoDB(BaseService):
 		self.config.logpath = LOG_PATH_DEFAULT
 		self.config.port = REPLICA_DEFAULT_PORT
 		self.config.logappend = True
-		
-		# Temporary: verbose mongodb log
-		self.config.set('verbose', 'true')
-		self.config.set('vvvv', 'true')
 
 
 	def _prepare_arbiter(self, rs_name):

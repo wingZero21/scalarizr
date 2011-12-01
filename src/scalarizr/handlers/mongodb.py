@@ -101,12 +101,19 @@ class MongoDBMessages:
 	
 	INT_BOOTSTRAP_WATCHER_RESULT = "MongoDb_IntBootstrapWatcherResult"
 	
+	
+	BEFORE_CLUSTER_TERMINATE = "MongoDb_BeforeClusterTerminate"
+	
+	BEFORE_CLUSTER_TERMINATE_RESULT = "MongoDb_BeforeClusterTerminateResult"
+	
+	INT_BEFORE_CLUSTER_TERMINATE = "MongoDb_IntBeforeClusterTerminate"
+	
+	INT_BEFORE_CLUSTER_TERMINATE_RESULT = "MongoDb_IntBeforeClusterTerminateResult"
 		
 
 class ReplicationState:
 	INITIALIZED = 'initialized'
-	STALE		= 'stale' 
-	
+	STALE		= 'stale' 	
 	
 
 class MongoDBHandler(ServiceCtlHandler):
@@ -132,10 +139,12 @@ class MongoDBHandler(ServiceCtlHandler):
 				MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT,
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE,
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
+				MongoDBMessages.BEFORE_CLUSTER_TERMINATE,
+				MongoDBMessages.INT_BEFORE_CLUSTER_TERMINATE,				
 				Messages.UPDATE_SERVICE_CONFIGURATION,
 				Messages.BEFORE_HOST_TERMINATE,
 				Messages.HOST_DOWN)
-	
+		
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -164,7 +173,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
-		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 		
 		if 'ec2' == self._platform.name:
 			updates = dict(hostname_as_pubdns = '0')
@@ -374,13 +382,15 @@ class MongoDBHandler(ServiceCtlHandler):
 				else:
 					self.mongodb.stop_arbiter()
 						
-		elif len(self.mongodb.replicas()) == 2:
-			# Become primary and only member of rs 
-			local_ip = self._platform.get_private_ip()
+		elif len(self.mongodb.replicas) == 2:
+			# Become primary and only member of rs
+			hostname = HOSTNAME_TPL % (self.shard_index, self.rs_id)
+			nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+			
 			rs_cfg = self.mongodb.cli.get_rs_config()
-			rs_cfg['members'] = [m for m in rs_cfg['members'] if m['host'] == local_ip]
+			rs_cfg['members'] = [m for m in rs_cfg['members'] if m['host'] == nodename]
 			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
-			wait_until(lambda: self.mongodb.is_replication_master, timeout=120)	
+			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)	
 					
 					
 	def on_before_reboot_start(self, *args, **kwargs):
@@ -391,18 +401,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		pass
 	
 
-	def on_before_reboot_finish(self, *args, **kwargs):
-		#self.mongodb.working_dir.unlock()
-		pass
-	
-
 	def on_BeforeHostTerminate(self, message):
 		if message.local_ip == self._platform.get_private_ip():
-			self.mongodb.stop_arbiter()
-			self.mongodb.stop_router()
 			self.mongodb.stop_config_server()
-			self.mongodb.mongod.stop('Server will be terminated')
-			
+			self.mongodb.mongod.stop('Server will be terminated')	
 			
 			self._logger.info('Detaching %s storage' % BEHAVIOUR)
 			self.storage_vol.detach()
@@ -562,6 +564,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			volume_cnf['snapshot'] = snap_cnf
 		except IOError:
 			pass
+		
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
@@ -574,12 +577,16 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.info("Initializing replication set")
 			self.mongodb.initiate_rs()			
 		else:
-			rs_cfg = self.mongodb.cli.get_rs_config()
-			rs_cfg['members'] = [{'_id': self.rs_id, 
-								  'host': '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)}]
-			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
-			wait_until(lambda: self.mongodb.is_replication_master, timeout=120)
 			
+			hostname = HOSTNAME_TPL % (self.shard_index, self.rs_id)
+			nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+			
+			rs_cfg = self.mongodb.cli.get_rs_config()
+			rs_cfg['members'] = [{'_id' : 0, 'host': nodename}]
+			rs_cfg['version'] += 1
+			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
+			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
+						
 		password = self.scalr_password
 		self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
 		self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
@@ -665,7 +672,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.prepare(rs_name)
 		self.mongodb.start_shardsvr()
 		self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
-
+		
+		first_start = not self._storage_valid()
+		if not first_start:
+			self.mongodb.cli.connection.local.system.replset.remove()
+			self.mongodb.mongod.stop('Removing previous replication set info')
+			self.mongodb.start_shardsvr()
 
 		stale = request_and_wait_replication_status()
 
@@ -730,9 +742,37 @@ class MongoDBHandler(ServiceCtlHandler):
 		else:
 			self._logger.info('Successfully joined replica set')
 
-		
-		# Update HostUp message
 		message.mongodb = self._compat_storage_data(self.storage_vol)
+		
+		
+	def on_MongoDb_BeforeClusterTerminate(self, message):
+		shards = {}
+		role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+		for host in role_hosts:
+			shards[host.shard_index] = 1
+			self.send_int_message(host.host.internal_ip,
+								MongoDBMessages.INT_BEFORE_CLUSTER_TERMINATE,
+								broadcast=True)
+			
+		cluster_terminate_watcher = ClusterTerminateWatcher(len(shards), self)
+		cluster_terminate_watcher.start()
+		
+		
+	def on_MongoDb_IntBeforeClusterTerminate(self, message):
+		is_replication_master = self.mongodb.is_replication_master
+		self.mongodb.mongod.stop()
+		self.mongodb.stop_config_server()
+		
+		self._logger.info('Detaching %s storage' % BEHAVIOUR)
+		self.storage_vol.detach()
+		
+		if is_replication_master:			
+			msg_body = dict(mongodb=dict(shard_index=self.shard_index,
+										replica_set_index=self.rs_id))
+			
+			self.send_int_message(message.local_ip,
+								MongoDBMessages.INT_BEFORE_CLUSTER_TERMINATE_RESULT,
+								msg_body)
 		
 
 	def _get_keyfile(self):
@@ -882,3 +922,39 @@ class StatusWatcher(threading.Thread):
 			time.sleep(3)
 						
 		self.handler._status_trackers.pop(self.local_ip)
+		
+		
+class ClusterTerminateWatcher(threading.Thread):
+	
+	def __init__(self, shard_count, handler):
+		super(StatusWatcher, self).__init__()
+		self.shard_count = shard_count		
+		self.handler = handler
+		
+	def run(self):		
+		res = [None for x in range(self.shard_count)]		
+		msg_store = P2pMessageStore()
+		
+		while not all(res):
+			msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
+			messages = [pair[1] for pair in msg_queue_pairs]
+			
+			for msg in messages:
+				if not msg.name == MongoDBMessages.INT_BEFORE_CLUSTER_TERMINATE_RESULT:
+					continue
+			
+				shard_idx = int(msg.mongodb['shard_index'])
+				rs_idx = int(msg.mongodb['replica_set_index'])
+				
+				res[shard_idx] = str(rs_idx)
+		
+		mongodb_body = []
+		for i in range(len(res)):
+			mongodb_body.append(dict(shard_index=i, replica_set_index=res[i]))
+		msg_data = dict(mongodb=mongodb_body)
+		
+		self.handler.send_message(MongoDBMessages.BEFORE_CLUSTER_TERMINATE_RESULT,
+								msg_data)
+			
+		
+												
