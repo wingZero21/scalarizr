@@ -28,12 +28,15 @@ class P2pMessageConsumer(MessageConsumer):
 	handler_locked = False
 	handler_status = 'stopped'
 	
-	def __init__(self, endpoint=None):
+	def __init__(self, endpoint=None, msg_handler_enabled=True):
 		MessageConsumer.__init__(self)
 		self._logger = logging.getLogger(__name__)		
 		self.endpoint = endpoint
 		
-		self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
+		if msg_handler_enabled:
+			self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
+		else:
+			self._handler_thread = None
 		self.message_to_ack = None
 		#self._not_empty = threading.Event()
 			
@@ -54,7 +57,8 @@ class P2pMessageConsumer(MessageConsumer):
 		self._logger.debug('Starting message consumer %s', self.endpoint)
 		try:
 			self.running = True
-			self._handler_thread.start() 	# start message handler
+			if self._handler_thread:
+				self._handler_thread.start() 	# start message handler
 			self._server.serve_forever() 	# start http server
 		except (BaseException, Exception), e:
 			self._logger.exception(e)
@@ -142,8 +146,9 @@ class P2pMessageConsumer(MessageConsumer):
 			wait_until(lambda: self.handler_status in ('idle', 'stopped'), 
 					timeout=t, error_text='Message consumer is busy', logger=self._logger)
 	
-		self._handler_thread.join()
-		self._logger.debug("Message handler terminated")
+		if self._handler_thread:
+			self._handler_thread.join()
+			self._logger.debug("Message handler terminated")
 		
 		self._logger.debug('Message consumer %s terminated', self.endpoint)
 		

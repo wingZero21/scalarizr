@@ -23,6 +23,7 @@ class P2pConfigOptions:
 	PRODUCER_RETRIES_PROGRESSION 	= "producer_retries_progression"
 	PRODUCER_SENDER					= "producer_sender"	
 	CONSUMER_URL 					= "consumer_url"
+	MSG_HANDLER_ENABLED				= 'msg_handler_enabled'
 
 
 class P2pMessageService(MessageService):
@@ -43,7 +44,8 @@ class P2pMessageService(MessageService):
 	def get_consumer(self):
 		if not self._default_consumer:
 			self._default_consumer = self.new_consumer(
-				endpoint=self._params[P2pConfigOptions.CONSUMER_URL]
+				endpoint=self._params[P2pConfigOptions.CONSUMER_URL],
+				msg_handler_enabled=self._params.get(P2pConfigOptions.MSG_HANDLER_ENABLED, True)
 			)
 		return self._default_consumer
 	
@@ -125,10 +127,17 @@ class _P2pMessageStore:
 		"""
 		cur = self._conn().cursor()
 		try:
+			'''
 			sql = """SELECT queue, message_id FROM p2p_message
 					WHERE is_ingoing = ? AND in_is_handled = ? AND in_consumer_id = ? 
 					ORDER BY id"""
 			cur.execute(sql, [1, 0, consumer_id])
+			'''
+			sql = """SELECT queue, message_id FROM p2p_message
+					WHERE is_ingoing = ? AND in_is_handled = ? 
+					ORDER BY id"""
+			cur.execute(sql, [1, 0])			
+			
 			ret = []
 			for r in cur.fetchall():
 				ret.append((r["queue"], self.load(r["message_id"], True)))
