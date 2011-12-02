@@ -24,6 +24,12 @@ def service_method(fn):
 
 
 class ServiceError(Exception):
+	PARSE = -32700
+	INVALID_REQUEST = -32600
+	METHOD_NOT_FOUND = -32601
+	INVALID_PARAMS = -32602
+	INTERVAL = -32603
+	
 	def __init__(self, *args):
 		self.code, self.message = args[0:2]
 		try:
@@ -47,42 +53,49 @@ class ServiceHandler(object):
 			fn = self._find_method(method)
 			result = self._invoke_method(fn, params)
 		except ServiceError, e:
-			error = {'code': e.code, 'message': e.message, 'data': e.data}
+			error = {'code': e.code, 
+					'message': e.message, 
+					'data': e.data}
 		except:
-			error = {'code': -32603, 'message': 'Internal error', 'data': str(sys.exc_value)}
+			error = {'code': ServiceError.INTERVAL, 
+					'message': 'Internal error', 
+					'data': str(sys.exc_value)}
 		finally:
 			if result:
 				resp = {'result': result}
 			else:
 				resp = {'error': error}
 			resp['id'] = id
-			return resp
+		return resp
 
 	
 	def _parse_request(self, data):
 		try:
 			return json.loads(data)
 		except:
-			raise ServiceError(-32700, 'Parse error', str(sys.exc_value))
+			raise ServiceError(ServiceError.PARSE, 
+							'Parse error', 
+							str(sys.exc_value))
 	
 	def _translate_request(self, req):
 		try:
 			return req['id'], req['method'], req['params']
 		except:
-			raise ServiceError(-32600, 'Invalid Request', str(sys.exc_value))
+			raise ServiceError(ServiceError.INVALID_REQUEST, 
+							'Invalid Request',
+							 str(sys.exc_value))
 
 	def _find_method(self, name):
-		try:
-			meth = getattr(self.service, name)
-			if getattr(meth, 'jsonrpc'):
-				return meth
-			else:
-				raise ServiceError(-32601, 'Method not found', name)
-		except AttributeError:
-			raise ServiceError(-32601, 'Method not found', name)			
+		meth = getattr(self.service, name, None)
+		if meth and getattr(meth, 'jsonrpc', None):
+			return meth
+		else:
+			raise ServiceError(ServiceError.METHOD_NOT_FOUND, 
+							'Method not found', 
+							name)			
 		
 	def _invoke_method(self, method, params):
-		method(**params)
+		return method(**params)
 
 
 class ServiceProxy(object):
@@ -92,19 +105,25 @@ class ServiceProxy(object):
 		self.local = local()
 
 	def __getattr__(self, name):
-		self.local.method = name
+		try:
+			self.__dict__['local'].method.append(name)
+		except AttributeError:
+			self.__dict__['local'].method = [name]
 		return self
 	
 	def __call__(self, **kwds):
-		req = json.dumps({'method': self.local.method, 'params': kwds, 'id': time.time()})
-		resp = json.loads(self.exchange(req))
-		if 'error' in resp:
-			error = resp['error']
-			raise ServiceError(error.get('code'), error.get('message'), error.get('data'))
-		return resp['result']
+		try:
+			req = json.dumps({'method': self.local.method[-1], 'params': kwds, 'id': time.time()})
+			resp = json.loads(self.exchange(req))
+			if 'error' in resp:
+				error = resp['error']
+				raise ServiceError(error.get('code'), error.get('message'), error.get('data'))
+			return resp['result']
+		finally:
+			self.local.method = []
 		
 	def exchange(self, request):
-		pass
+		raise NotImplemented()
 	
 	
 class Server(object):
@@ -114,4 +133,5 @@ class Server(object):
 		self.handler = handler
 
 	def serve_forever(self):
-		pass
+		raise NotImplemented()
+	

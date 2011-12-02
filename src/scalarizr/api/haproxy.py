@@ -20,19 +20,31 @@ class HAProxyAPI(object):
 		}
 
 	@service_method
-	def create_listener(self, port, protocol, server_port, server_protocol=None, backend=None):
+	def create_listener(self, port=None, protocol=None, server_port=None, 
+					server_protocol=None, backend=None):
+		assert port
+		assert protocol
+		assert server_port
+		if not server_protocol:
+			server_protocol = protocol
+		
 		self.cfg.add_listener()
 		self.cfg.add_backend()
 
 		with self.svs.running_on_exit():
 			with self.cfg.save():
 				self.svs.reload()
-
 		
 	
 	@service_method
-	def configure_healthcheck(self, target, interval, timeout, fall_threshold, rise_threshold):
-		pass
+	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
+							fall_threshold=None, rise_threshold=None):
+		assert target
+		assert interval
+		assert timeout
+		assert fall_threshold
+		assert rise_threshold
+
 	
 	@service_method
 	def add_server(self, ipaddr, backend=None):
