@@ -18,6 +18,9 @@ from scalarizr.util import system2, initdv2, software, dns, cryptotool
 from scalarizr.storage import StorageError
 import scalarizr.services.rabbitmq as rabbitmq_svc
 
+if sys.version_info < (2,6,0):
+	from __future__ import with_statement
+
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
 OPT_VOLUME_CNF = 'volume_config'

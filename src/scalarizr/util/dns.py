@@ -5,6 +5,10 @@ Created on Sep 28, 2011
 from collections import namedtuple
 import string
 import re
+import sys
+
+if sys.version_info < (2,6,0):
+	from __future__ import with_statement
 
 HostLine=namedtuple('host', ['ipaddr', 'hostname', 'aliases'])
 
