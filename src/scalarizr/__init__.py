@@ -330,7 +330,7 @@ def _apply_user_data(cnf):
 	if behaviour:
 		if behaviour == 'base':
 			behaviour = ''
-		updates['behaviour'] = behaviour
+		updates['general']['behaviour'] = behaviour
 		
 	cnf.update_ini('config.ini', updates)
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
