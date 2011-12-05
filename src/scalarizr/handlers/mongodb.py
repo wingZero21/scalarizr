@@ -373,6 +373,11 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_HostUp(self, message):
 		private_ip = self._platform.get_private_ip()
 		if message.local_ip != private_ip:
+			
+			# If mongos runs on this instance
+			if self.rs_id in (0,1):
+				self.mongodb.router_cli.admin.command('flushRouterConfig')				
+			
 			if self.mongodb.is_replication_master and \
 											self.shard_index == message.shard_index:			   
 				r = len(self.mongodb.replicas) 
