@@ -637,14 +637,16 @@ class ApacheHandler(ServiceCtlHandler):
 							log_dir, e.strerror)
 			
 			if os.path.exists(vhost_path):
-				self._logger.debug('vhost configuratioin file path: %s' % vhost_path)
-				vh = Configuration('apache', filename=vhost_path)
-				for item in vh.items('VirtualHost'):
-					if item[0]=='DocumentRoot':
-						doc_root = item[1][:-1] if item[1][-1]=='/' else item[1]
-						if not os.path.exists(doc_root):
-							self._logger.debug('Try to create virtual host: %s' % doc_root)
-							try:
+				self._logger.debug('Vhost config file path: %s.'
+					'Trying to read vhost config file' % vhost_path)
+				try:
+					vh = Configuration('apache', filename=vhost_path)
+					for item in vh.items('VirtualHost'):
+						if item[0]=='DocumentRoot':
+							doc_root = item[1][:-1] if item[1][-1]=='/' else item[1]
+							if not os.path.exists(doc_root):
+								self._logger.debug('Trying to create virtual host: %s'
+									% doc_root)
 								try:
 									pwd.getpwnam('apache')
 									uname = 'apache'
@@ -653,14 +655,21 @@ class ApacheHandler(ServiceCtlHandler):
 								finally:
 									self._logger.debug('User name: %s' % uname)
 									tmp = '/'.join(doc_root.split('/')[:-1])
-									self._logger.debug('Try creating directories: %s' % tmp)
+									self._logger.debug('Trying to create directories:'
+										' %s' % tmp)
 									if not os.path.exists(tmp):
 										os.makedirs(tmp, 0755)
-										self._logger.debug('Created parent directories: %s' % tmp)
-									shutil.copytree(os.path.join(bus.share_path, 'apache/html'), doc_root)
-									self._logger.debug('Copied documentroot files: %s' % ', '.join(os.listdir(doc_root)))
+										self._logger.debug('Created parent directories:'
+											' %s' % tmp)
+									shutil.copytree(os.path.join(bus.share_path,
+										'apache/html'), doc_root)
+									self._logger.debug('Copied documentroot files: %s'
+										 % ', '.join(os.listdir(doc_root)))
 									filetool.rchown(uname, doc_root)
-									self._logger.debug('Change owner to %s: %s' % (uname, ', '.join(os.listdir(doc_root))))
-							except:
-								self._logger.warn('Failed to create DocumentRoot structure in %s. Error: %s',
-												doc_root, sys.exc_value)
+									self._logger.debug('Changed owner to %s: %s'
+										 % (uname, ', '.join(os.listdir(doc_root))))
+				except:
+					self._logger.warn('Failed to create DocumentRoot structure in %s.'
+						' Error: %s',	doc_root, sys.exc_value)
+			else:
+				self._logger.warn("Vhost config file `%s` not found.", vhost_path)
