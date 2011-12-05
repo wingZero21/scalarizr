@@ -157,7 +157,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				MongoDBMessages.INT_CLUSTER_TERMINATE,				
 				Messages.UPDATE_SERVICE_CONFIGURATION,
 				Messages.BEFORE_HOST_TERMINATE,
-				Messages.HOST_DOWN)
+				Messages.HOST_DOWN,
+				Messages.HOST_INIT)
 		
 	
 	def __init__(self):
@@ -356,6 +357,18 @@ class MongoDBHandler(ServiceCtlHandler):
 	def create_shard(self):
 		rs_name = RS_NAME_TPL % self.shard_index
 		return self.mongodb.router_cli.add_shard(rs_name, self.mongodb.replicas)
+
+
+	def on_HostInit(self, message):
+		if message.local_ip != self._platform.get_private_ip():
+		
+			shard_idx = int(message.mongodb['shard_index'])
+			rs_idx = int(message.mongodb['replica_set_index'])
+			hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
+			
+			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
+			Hosts.set(message.local_ip, hostname)
+
 
 	def on_HostUp(self, message):
 		private_ip = self._platform.get_private_ip()
@@ -588,7 +601,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.start_shardsvr()
 				
 		if init_start:
-			self._logger.info("Initializing replication set")
 			self.mongodb.initiate_rs()			
 		else:
 			
