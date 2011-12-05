@@ -771,7 +771,7 @@ class MongoCLI(object):
 		exception: connect failed
 		'''
 		try:
-			self.connection.db.test.find_one()
+			self.connection.database_names()
 		except pymongo.errors.AutoReconnect, e:
 			if "Connection refused" in str(e):
 				return False
