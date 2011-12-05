@@ -504,7 +504,7 @@ class PSQL(object):
 		
 		def test_recursive(attempt):
 			try:
-				self.execute('SELECT 1;')
+				self.execute('SELECT 1;', silent=True)
 			except PopenError, e:
 				if 'could not connect to server' in str(e):
 					return False
@@ -516,12 +516,13 @@ class PSQL(object):
 			return True
 		return test_recursive(6)
 		
-	def execute(self, query):
+	def execute(self, query, silent=False):
 		try:
 			out = system2([SU_EXEC, '-', self.user, '-c', '%s -c "%s"' % (self.path, query)], silent=True)[0]
 			return out	
 		except PopenError, e:
-			self._logger.error('Unable to execute query %s from user %s: %s' % (query, self.user, e))
+			if not silent:
+				self._logger.error('Unable to execute query %s from user %s: %s' % (query, self.user, e))
 			raise		
 
 	def list_pg_roles(self):
