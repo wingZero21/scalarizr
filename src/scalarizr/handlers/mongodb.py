@@ -276,17 +276,19 @@ class MongoDBHandler(ServiceCtlHandler):
 		@param message: HostUp message
 		"""
 
-		first_in_rs = True	
+		first_in_rs = True
+		local_ip = self._platform.get_private_ip()
 		hosts = self._queryenv.list_roles(self._role_name, with_init=True)[0].hosts
 		for host in hosts:
+			if host.internal_ip == local_ip:
+				continue
 			hostname = HOSTNAME_TPL % (host.shard_index, host.replica_set_index)
 			Hosts.set(host.internal_ip, hostname)
-			if host.shard_index == self.shard_index:
+			if host.shard_index == self.shard_index :
 				first_in_rs = False
 
 		""" Set hostname"""
 		self.hostname = HOSTNAME_TPL % (self.shard_index, self.rs_id)
-		local_ip = self._platform.get_private_ip()
 		Hosts.set(local_ip, self.hostname)
 		with open('/etc/hostname', 'w') as f:
 			f.write(self.hostname)
