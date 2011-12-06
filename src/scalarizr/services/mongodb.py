@@ -198,7 +198,6 @@ class MongoDB(BaseService):
 		'''
 		@return (host:port)
 		'''
-		self._logger.debug('Initializing replica set')
 		ret = self.cli.initiate_rs()
 		if ret and ret['ok'] == '0':
 			raise BaseException('Could not initialize replica set: %s' % ret['errmsg'])

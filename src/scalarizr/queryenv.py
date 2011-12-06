@@ -210,6 +210,8 @@ class QueryEnvService(object):
 					host.shard_index = int(host_el.getAttribute("shard-index"))
 				if host_el.hasAttribute("replica-set-index"):
 					host.replica_set_index = int(host_el.getAttribute("replica-set-index"))
+				if host_el.hasAttribute("status"):
+					host.status = host_el.getAttribute("status")
 				host.internal_ip = host_el.getAttribute("internal-ip")
 				host.external_ip = host_el.getAttribute("external-ip")
 				role.hosts.append(host)

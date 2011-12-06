@@ -277,7 +277,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		"""
 
 		first_in_rs = True	
-		hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+		hosts = self._queryenv.list_roles(self._role_name, with_init=True)[0].hosts
 		for host in hosts:
 			hostname = HOSTNAME_TPL % (host.shard_index, host.replica_set_index)
 			Hosts.set(host.internal_ip, hostname)
