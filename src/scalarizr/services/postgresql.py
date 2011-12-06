@@ -512,10 +512,10 @@ class PSQL(object):
 				elif 'the database system is starting up' in str(e):
 					if not attempt:
 						raise BaseException('Postgresql service stuck on starting up database system')
-					time.sleep(5)
+					time.sleep(10)
 					return test_recursive(attempt-1)
 			return True
-		return test_recursive(6)
+		return test_recursive(12)
 		
 	def execute(self, query, silent=False):
 		try:
