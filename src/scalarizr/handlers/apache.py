@@ -97,7 +97,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		ret = initdv2.ParametrizedInitScript.start(self)
 		if self.pid_file:
 			try:
-				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=5, 
+				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=10, 
 						error_text="Apache pid file %s doesn't exists" % self.pid_file)
 			except:
 				raise initdv2.InitdError("Cannot start Apache: pid file %s hasn't been created" % self.pid_file)
