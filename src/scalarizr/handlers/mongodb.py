@@ -378,6 +378,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 			# If mongos runs on this instance
 			if self.rs_id in (0,1):
+				self._logger.debug('Flushing router configuration')
 				self.mongodb.router_cli.admin.command('flushRouterConfig')				
 			
 			if self.mongodb.is_replication_master and \

@@ -198,13 +198,11 @@ class MongoDB(BaseService):
 		'''
 		@return (host:port)
 		'''
-		ret = self.cli.initiate_rs()
-		if ret and ret['ok'] == '0':
-			raise BaseException('Could not initialize replica set: %s' % ret['errmsg'])
+		self.cli.initiate_rs()
 		wait_until(lambda: self.is_replication_master, sleep=5, logger=self._logger,
 					timeout=120, start_text='Wait until node becomes replication primary')		
 		self._logger.debug('Server became replication master')
-		return ret['me'].split(':') if ret else None
+
 	
 	def start_shardsvr(self):
 		self.working_dir.unlock()
@@ -301,15 +299,18 @@ class MongoDB(BaseService):
 	def replicas(self):
 		self._logger.debug('Querying list of replicas')
 		ret = self.cli.is_master()
-		return ret['hosts'] if 'hosts' in ret else []
+		rep_list = ret['hosts'] if 'hosts' in ret else []
+		self._logger.debug('Current replicas are %s' % rep_list) 
+		return rep_list
 	
 	
 	@property
 	def arbiters(self):
 		self._logger.debug('Querying list of arbiters')
 		ret = self.cli.is_master()
-		return ret['arbiters'] if 'arbiters' in ret else []
-	
+		arbiter_list = ret['arbiters'] if 'arbiters' in ret else []
+		self._logger.debug('Current arbiters are %s' % arbiter_list) 
+		return arbiter_list
 	
 	@property
 	def primary_host(self):
@@ -798,12 +799,14 @@ class MongoCLI(object):
 	    initializes replica set
 	    '''
 		self._logger.debug('Initializing replica set')
-		try:
-			res = self.connection.admin.command('replSetInitiate')
-		except pymongo.errors.OperationFailure, e:
-			self._logger.warning(e)
-			res = None
-		return res	
+		if self.connection.local.system.replset.find_one():
+			self._logger.debug('Replica set already initialized. Nothing to do')
+			return
+		
+		res = self.connection.admin.command('replSetInitiate')
+		if int(res['ok']) == 0:
+			raise BaseException('Could not initialize replica set: %s' % res['errmsg'])
+
 	
 	def add_shard(self, rs_name, rs_members):
 		self._logger.debug('Adding shard %s with members %s' % (rs_name, rs_members))
