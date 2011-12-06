@@ -593,13 +593,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.info("Initializing %s master" % BEHAVIOUR)
 		
 		# Plug storage
-		volume_cnf = Storage.restore_config(self._volume_config_path)
-		try:
-			snap_cnf = Storage.restore_config(self._snapshot_config_path)
-			volume_cnf['snapshot'] = snap_cnf
-		except IOError:
-			pass
-		
+		volume_cnf = self._get_volume_cnf()		
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
@@ -697,9 +691,8 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.info("Initializing %s slave" % BEHAVIOUR)
 
 		# Plug storage
-		volume_cfg = Storage.restore_config(self._volume_config_path)
-		volume = Storage.create(Storage.blank_config(volume_cfg))	
-		self.storage_vol = self._plug_storage(self._storage_path, volume)
+		volume_cnf = self._get_volume_cnf()
+		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
 		self.mongodb.stop_default_init_script()
@@ -783,6 +776,17 @@ class MongoDBHandler(ServiceCtlHandler):
 		role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
 		cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self)
 		cluster_terminate_watcher.start()
+		
+		
+	def _get_volume_cnf(self):
+		volume_cnf = Storage.restore_config(self._volume_config_path)		
+		try:
+			snap_cnf = Storage.restore_config(self._snapshot_config_path)
+			volume_cnf['snapshot'] = snap_cnf
+		except IOError:
+			pass
+		
+		return volume_cnf
 
 		
 	def on_MongoDb_IntClusterTerminate(self, message):
