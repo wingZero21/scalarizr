@@ -169,17 +169,14 @@ class EbsVolumeProvider(VolumeProvider):
 					device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device, 
 						to_me=True, logger=self._logger)[1]
 				
-			except (Exception, BaseException), e:
+			except:
 				self._logger.debug('Caught exception')
 				if ebs_vol:
 					self._logger.debug('Detaching EBS')
 					if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
 						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
 							
-					#if not volume_id:
-					#	ebs_vol.delete()
-						
-				raise StorageError('EBS volume construction failed: %s' % str(e))
+				raise StorageError, 'EBS volume construction failed: %s' % str(sys.exc_value), sys.exc_traceback
 			
 			finally:
 				if delete_snap and snap_id:
