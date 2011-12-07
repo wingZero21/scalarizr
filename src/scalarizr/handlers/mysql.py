@@ -36,6 +36,7 @@ import ConfigParser
 
 # Extra
 import pexpect
+import signal
 
 
 
@@ -711,6 +712,12 @@ class MysqlHandler(ServiceCtlHandler):
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
 			self._stop_service('Configuring')
+			
+			# Add SELinux rule
+			set_se_path = software.whereis('setsebool')
+			if set_se_path:
+				system2((set_se_path[0], '-P', 'mysqld_disable_trans', '1'))
+
 		
 		elif self._cnf.state == ScalarizrState.RUNNING:
 			# Creating self.storage_vol object from configuration
@@ -1072,7 +1079,7 @@ class MysqlHandler(ServiceCtlHandler):
 						log_file = log_file,
 						log_pos = log_pos
 					)
-					msg_data.update(self._compat_storage_data(self.storage_vol.config(), snap))
+					msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)							
 					
 				tx_complete = True
@@ -1750,6 +1757,10 @@ class MysqlHandler(ServiceCtlHandler):
 				os.makedirs(directory)
 				src_dir = os.path.dirname(raw_value + "/") + "/"
 				if os.path.isdir(src_dir):
+					set_se_path = software.whereis('setsebool')
+					if set_se_path:
+						self._logger.debug('Make SELinux rule for rsync')
+						system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
 					self._logger.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 					rsync = filetool.Rsync().archive()
 					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
@@ -1816,7 +1827,6 @@ def spawn_mysqld():
 def term_mysqld(mysqld):
 	_logger.debug('Terminating mysqld')
 	mysqld.terminate(force=True)
-	#wait_until(lambda: not os.path.exists('/proc/%s' % mysqld.pid))
 
 
 def spawn_mysql_cli(user=None, password=None, timeout=30):

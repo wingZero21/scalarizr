@@ -9,10 +9,12 @@ from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
+from scalarizr.storage.util.loop import listloop
 
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
+from scalarizr.util.filetool import write_file, read_file
 
 # Stdlibs
 import logging
@@ -24,8 +26,8 @@ import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
-from scalarizr.storage.util.loop import listloop
-from scalarizr.util.filetool import write_file, read_file
+import pprint
+
 
 
 class ScalarizrError(BaseException):
@@ -310,7 +312,8 @@ def _apply_user_data(cnf):
 	platform = bus.platform
 	g = platform.get_user_data
 	
-	logger.debug('Apply scalarizr user-data to configuration')
+	logger.debug('Applying user-data to configuration')
+	logger.debug('User-data:\n%s', pprint.pformat(g()))
 	updates = dict(
 		general={
 			'server_id' : g(UserDataOptions.SERVER_ID),

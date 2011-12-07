@@ -51,6 +51,7 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			wait_until(hasattr, args=(image, 'progress'),
 					sleep=5, logger=LOG, timeout=3600,
 					error_text="Image %s has no attribute 'progress'" % image.id)
+
 			
 			start_time = time.time()
 			def completed():

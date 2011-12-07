@@ -117,6 +117,7 @@ class PostgreSql(BaseService):
 	@property	
 	def unified_etc_path(self):
 		return '/etc/postgresql/%s/main' % self.version if float(self.version) else '9.0'
+
 					
 	@property
 	def is_replication_master(self):

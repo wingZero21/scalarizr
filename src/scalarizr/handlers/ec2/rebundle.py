@@ -56,6 +56,7 @@ EPH_STORAGE_MAPPING = {
 } 
 
 
+
 class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 	_ebs_strategy_cls = None
 	_instance_store_strategy_cls = None

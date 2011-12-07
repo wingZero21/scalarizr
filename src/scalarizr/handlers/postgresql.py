@@ -16,11 +16,11 @@ from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.util.filetool import split, rchown
-from scalarizr.util import system2, wait_until
+from scalarizr.util import system2, wait_until, disttool, software, filetool
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
 	PgUser, SU_EXEC
-
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -45,6 +45,26 @@ POSTGRESQL_DEFAULT_PORT	= 5432
 		
 def get_handlers():
 	return (PostgreSqlHander(), )
+
+
+SSH_KEYGEN_SELINUX_MODULE = """
+module local 1.0;
+
+require {
+	type initrc_tmp_t;
+	type ssh_keygen_t;
+	type initrc_t;
+	type etc_runtime_t;
+	class tcp_socket { read write };
+	class file { read write getattr };
+}
+
+#============= ssh_keygen_t ==============
+allow ssh_keygen_t etc_runtime_t:file { read write getattr };
+allow ssh_keygen_t initrc_t:tcp_socket { read write };
+allow ssh_keygen_t initrc_tmp_t:file { read write };
+"""
+
 
 
 class PostgreSqlHander(ServiceCtlHandler):	
@@ -106,6 +126,32 @@ class PostgreSqlHander(ServiceCtlHandler):
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
+		
+		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			self._insert_iptables_rules()
+			
+			if disttool.is_redhat_based():		
+					
+				checkmodule_paths = software.whereis('checkmodule')
+				semodule_package_paths = software.whereis('semodule_package')
+				semodule_paths = software.whereis('semodule')
+			
+				if all((checkmodule_paths, semodule_package_paths, semodule_paths)):
+					
+					filetool.write_file('/tmp/sshkeygen.te',
+								SSH_KEYGEN_SELINUX_MODULE, logger=self._logger)
+					
+					self._logger.debug('Compiling SELinux policy for ssh-keygen')
+					system2((checkmodule_paths[0], '-M', '-m', '-o',
+							 '/tmp/sshkeygen.mod', '/tmp/sshkeygen.te'), logger=self._logger)
+					
+					self._logger.debug('Building SELinux package for ssh-keygen')
+					system2((semodule_package_paths[0], '-o', '/tmp/sshkeygen.pp',
+							 '-m', '/tmp/sshkeygen.mod'), logger=self._logger)
+					
+					self._logger.debug('Loading ssh-keygen SELinux package')					
+					system2((semodule_paths[0], '-i', '/tmp/sshkeygen.pp'), logger=self._logger)
+				
 		
 		if self._cnf.state == ScalarizrState.RUNNING:
 
@@ -217,8 +263,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
-		#TODO: find out what to do!
-		pass
+		self._insert_iptables_rules()
 
 
 	def on_BeforeHostTerminate(self, message):
@@ -313,7 +358,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 									
 				snap = self._create_snapshot(ROOT_USER, message.root_password)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
-				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol.config(), snap)
+				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol, snap)
 				
 			msg_data[BEHAVIOUR].update({OPT_CURRENT_XLOG_LOCATION: None})		
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)	
@@ -627,3 +672,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if snap:
 			ret['snapshot_config'] = snap.config()
 		return ret
+
+
+	def _insert_iptables_rules(self):
+		iptables = IpTables()
+		if iptables.usable():
+			iptables.insert_rule(None, RuleSpec(dport=POSTGRESQL_DEFAULT_PORT, 
+											jump='ACCEPT', protocol=P_TCP))		

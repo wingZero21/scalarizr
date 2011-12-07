@@ -13,6 +13,8 @@ import os
 import platform
 import logging
 import threading
+import pprint
+from distutils.file_util import write_file
 
 
 
@@ -94,14 +96,14 @@ class MessageListener:
 		platform = bus.platform
 
 
-		self._logger.debug("Initialize message listener");
+		self._logger.debug("Initializing message listener");
 		self._accept_kwargs = dict(
 			behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
 			platform = platform.name,
 			os = disttool.uname(),
 			dist = disttool.linux_dist()
 		)
-		self._logger.debug("Gathered _accept_kwargs: %s", self._accept_kwargs)
+		self._logger.debug("Keywords for each Handler::accept\n%s", pprint.pformat(self._accept_kwargs))
 		
 		self._get_handlers_chain()
 	
@@ -109,7 +111,7 @@ class MessageListener:
 	def _get_handlers_chain (self):
 		if self._handlers_chain is None:
 			self._handlers_chain = []
-			self._logger.debug("Collecting handlers chain");
+			self._logger.debug("Collecting message handlers...");
 			
 			cnf = bus.cnf 
 			for handler_name, module_name in cnf.rawini.items(config.SECT_HANDLERS):
@@ -128,7 +130,7 @@ class MessageListener:
 				except:
 					self._logger.exception('Unhandled exception in notification loop')
 						
-			self._logger.debug("Collected handlers chain: %s" % self._handlers_chain)
+			self._logger.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
 						
 		return self._handlers_chain
 	
