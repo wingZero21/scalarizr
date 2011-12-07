@@ -1028,14 +1028,14 @@ class DrainingWatcher(threading.Thread):
 				break
 				
 			elif ret['stage'] == 'ongoing':
-				chunks_remained = ret['remaining']['chunks']
-				progress = last_notification_chunks_count - chunks_remained
+				chunks_left = ret['remaining']['chunks']
+				progress = last_notification_chunks_count - chunks_left
 				if progress > trigger_step:
 					progress_in_pct = (progress / init_chunks) * 100
 					msg_body = dict(shard_index=self.shard_index, total_chunks=init_chunks,
-								chunks_remained=chunks_remained, progress=progress_in_pct)
+								chunks_left=chunks_left, progress=progress_in_pct)
 					self.handler.send_message(MongoDBMessages.REMOVE_SHARD_STATUS, msg_body)					
-					last_notification_chunks_count = chunks_remained	
+					last_notification_chunks_count = chunks_left	
 						
 			time.sleep(15)
 

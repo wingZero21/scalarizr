@@ -261,7 +261,7 @@ class MongoDB(BaseService):
 			
 			
 	def unregister_slave(self,ip,port=None):
-		ret = self.cli.remove_slave(ip, port=None)
+		ret = self.cli.remove_slave(ip, port)
 		if ret['ok'] == '0':
 			self._logger.error('Could not remove replica %s from set: %s' % (ip, ret['errmsg']))
 	
@@ -832,8 +832,8 @@ class MongoCLI(object):
 			
 		cfg['members'].append(new_member)
 		return self.rs_reconfig(cfg)
-		
-	
+
+
 	def is_master(self):
 		self._logger.debug('Checking if node is master')
 		return self.connection.admin.command('isMaster')
@@ -861,9 +861,11 @@ class MongoCLI(object):
 
 
 	def remove_slave(self, ip, port=None):
-		self._logger.debug('Removing replica %s' % ip)
 		port = port or REPLICA_DEFAULT_PORT
 		host_to_del = "%s:%s" % (ip, port)
+				
+		self._logger.debug('Removing replica %s' % host_to_del)		
+
 		cfg = self.get_rs_config()
 		cfg['version'] = cfg['version'] + 1
 		for member in cfg['members']:
