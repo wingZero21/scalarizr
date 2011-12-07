@@ -158,7 +158,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				Messages.UPDATE_SERVICE_CONFIGURATION,
 				Messages.BEFORE_HOST_TERMINATE,
 				Messages.HOST_DOWN,
-				Messages.HOST_INIT)
+				Messages.HOST_INIT,
+				Messages.HOST_UP)
 		
 	
 	def __init__(self):
