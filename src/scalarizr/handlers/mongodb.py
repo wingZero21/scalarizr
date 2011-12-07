@@ -261,11 +261,8 @@ class MongoDBHandler(ServiceCtlHandler):
 		mongodb_key = mongodb_key or cryptotool.pwgen(22)
 		self._cnf.write_key(BEHAVIOUR, mongodb_key)
 		
-		if mongodb_data.get('password'):
-			mongodb_data['password'] = mongodb_data.get('password')
-		else:
-			mongodb_data['password'] =  cryptotool.pwgen(10)
-		
+		mongodb_data['password'] = mongodb_data.get('password') or cryptotool.pwgen(10)
+			
 		self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
 		self._update_config(mongodb_data)
 		
@@ -812,7 +809,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.info('Successfully joined replica set')
 
 		message.mongodb = self._compat_storage_data(self.storage_vol)
-		
+		message.mongodb['password'] = self.scalr_password
 		
 	def on_MongoDb_ClusterTerminate(self, message):
 		role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
