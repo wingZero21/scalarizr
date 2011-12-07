@@ -362,8 +362,10 @@ class MongoDBHandler(ServiceCtlHandler):
 
 				
 	def create_shard(self):
-		shard_name = SHARD_NAME_TPL % self.shard_index
-		return self.mongodb.router_cli.add_shard(shard_name, self.mongodb.replicas)
+		shard_index = self.shard_index
+		shard_name = SHARD_NAME_TPL % shard_index
+		rs_name = RS_NAME_TPL % shard_index
+		return self.mongodb.router_cli.add_shard(shard_name, rs_name, self.mongodb.replicas)
 
 
 	def on_HostInit(self, message):

@@ -808,10 +808,10 @@ class MongoCLI(object):
 			raise BaseException('Could not initialize replica set: %s' % res['errmsg'])
 
 	
-	def add_shard(self, rs_name, rs_members):
-		self._logger.debug('Adding shard %s with members %s' % (rs_name, rs_members))
+	def add_shard(self, shard_name, rs_name, rs_members):
+		self._logger.debug('Adding shard %s with members %s' % (shard_name, rs_members))
 		host_str = '%s/%s' % (rs_name, ','.join(rs_members))
-		return self.connection.admin.command('addshard', host_str)
+		return self.connection.admin.command('addshard', host_str, name=shard_name)
 
 	
 	def add_replica(self, ip, port=None, arbiter=False):
