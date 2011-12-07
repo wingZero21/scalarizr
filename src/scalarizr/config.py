@@ -912,6 +912,48 @@ class ScalarizrCnf(Observable):
 		self._explored_keys[(name, private)] = title
 
 
+class State(object):
+	
+	def _conn(self):
+		db = bus.db
+		return db.get().get_connection()
+	
+	
+	def __getitem__(self, name):
+		conn = self._conn()
+		cur = conn.cursor()
+		try:
+			cur.execute("SELECT value FROM state WHERE name = ?", [name])
+			return cur.fetchone()
+		finally:
+			cur.close()
+
+	def __setitem__(self, name, value):
+		conn = self._conn()
+		cur = conn.cursor()
+		try:
+			cur.execute("INSERT INTO state VALUES (?, ?)", [name, value])
+		finally:
+			cur.close()
+		conn.commit()
+
+	
+	def get_all(self, name):
+		conn = self._conn()
+		cur = conn.cursor()
+		try:
+			cur.execute("SELECT * FROM state WHERE name LIKE '%s%%'" % name)
+			ret = {}
+			for row in cur.fetchall():
+				ret[row['name']] = row['value']
+			return ret
+		finally:
+			cur.close()
+
+
+STATE = State()
+
+
 class BuiltinBehaviours:
 	APP = 'app'
 	WWW = 'www'
