@@ -5,122 +5,113 @@ Created on Oct 24, 2011
 '''
 
 import logging
-
-from scalarizr.handlers import Handler
-from scalarizr.bus import bus
-
 import os
 
+from scalarizr.bus import bus
 from scalarizr.util import system2
 from scalarizr.util.software import whereis
+from scalarizr.handlers import Handler, HandlerError
+from scalarizr.externals.chef.api import ChefAPI
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
-from scalarizr.handlers import HandlerError
-
-import sqlite3
-
-import string
-import re
 
 LOG = logging.getLogger(__name__)
+CLIENT_CONF_TPL = '''
+log_level        :info
+log_location     STDOUT
+chef_server_url  '%(server_url)s'
+validation_client_name '%(client_name)s'
+'''
+
 
 def get_handlers():
 	return (ChefHandler(), )
 
 
+
 class ChefHandler(Handler):
 	def __init__(self):
 		bus.on(init=self.on_init)
+		self.on_reload()
 
 	def on_init(self, *args, **kwds):
-		bus.on(host_init_response=self.on_host_init_response)
+		bus.on(
+			host_init_response=self.on_host_init_response,
+			before_hostup=self.on_before_hostup,
+			reload=self.on_reload
+		)
+
+	def on_reload(self):
+		try:
+			self._chef_client_bin = whereis('chef-client')[0]
+		except IndexError:
+			raise HandlerError('chef-client not found')
+		try:
+			self._ohai_bin = whereis('ohai')
+		except IndexError:
+			raise HandlerError('ohai not found')
+		self._chef_data = None
+		self._client_conf_path = '/etc/chef/client.rb'
+		self._validator_key_path = '/etc/chef/validator.pem'
+		self._client_key_path = '/etc/chef/client.pem'
+
 
 	def on_host_init_response(self, message):
-		'''
-		input from scalr in message
-		chef.server_url
-		chef.node_name
-		chef.client_key
-		'''
+		if 'chef' in message.body:
+			self._chef_data = message.chef.copy()
 
-		if not message.body.has_key("chef"):
-			LOG.debug('\n\nchef tag in input message not found. Check input message\n\n')
-			raise HandlerError("Error: HHostInitResponse message for Chef behaviour must have 'chef'"
-				" propertyehaviour must have 'chef' property")
+
+	def on_before_hostup(self, msg):
+		if not self._chef_data:
+			return
+		
 		try:
-			chef_data = message.chef.copy()
-			self._logger.debug("Update chef configs with %s"% chef_data)
-			self._write_config(chef_data)
+			# Create client configuration
+			dir = os.path.dirname(self._client_conf_path)
+			if not os.path.exists(dir):
+				os.makedirs(dir)
+			with open(self._client_conf_path, 'w+') as fp:
+				fp.write(CLIENT_CONF_TPL % self._chef_data)
+			os.chmod(self._client_conf_path, 0644)
+				
+			# Write validation cert
+			with open(self._validator_key_path, 'w+') as fp:
+				fp.write(self._chef_data['client_key'])
+				
+			# Register node
+			LOG.info('Registering Chef node')
+			try:
+				self.run_chef_client()
+			finally:
+				os.remove(self._validator_key_path)
+				
+			LOG.debug('Initializing Chef API client')
+			node_name = self._chef_data['node_name'] = self.get_node_name()
+			chef = ChefAPI(self._chef_data['server_url'], self._client_key_path, node_name)
+			
+			LOG.debug('Loading node')
+			node = chef['/nodes/%s' % node_name]
+			
+			LOG.debug('Updating run_list')
+			node['run_list'] = [u'role[%s]' % self._chef_data['role']] 
+			chef.api_request('PUT', '/nodes/%s' % node_name, data=node)
+				
+			LOG.info('Applying run_list')
+			self.run_chef_client()
+			
+			msg.chef = self._chef_data
+			
+		finally:
+			self._chef_data = None
+		
+		
+	def run_chef_client(self):
+		system2([self._chef_client_bin])
 
-			#start chef-client:
-			path2chef = whereis("chef-client")
-			if not path2chef:
-				raise HandlerError('Error: chef-client not found')
-				#TODO: HandlerError ?
 
-			(out, err, returncode)=system2(path2chef, raise_exc = False)
+	def get_node_name(self):
+		return json.loads(system2([self._ohai_bin, 'fqdn'])[0])[0]
 
-			LOG.debug('\nerr: \n%s\nout: \n%s\nreturncode: \n%s' %
-				(err, out, returncode))
-
-			if returncode != 0:
-				raise HandlerError("Error in chef-client, on HostInitResponse can't" 
-					" start or connect to chef.")
-
-		except Exception,e:
-			'''
-			if os.path.exists('/var/chef/cache/chef-stacktrace.out'):
-					with open('/var/chef/cache/chef-stacktrace.out','r') as f:
-						LOG.debug('\nChef-stacktrace :%s' % f.read())'''
-
-			if os.path.exists('/var/chef/cache/failed-run-data.json'):
-				with open('/var/chef/cache/failed-run-data.json','r') as f:
-					LOG.debug('Error run-list: %s' % f.read())
-
-			if os.path.exists('/etc/chef/client.pem'):
-				os.remove('/etc/chef/client.pem')
-
-			LOG.debug("\n\nException on HostInitResponse."
-				". Details:%s\n" % e)
-
-			#TODO: HandlerError or other?
-			raise HandlerError("\nError on HostInitResponse Chef. Details:%s" % e)
-
-	def _write_config(self, chef_data):
-		'''input arg @chef_data: dict'''
-		PATH = "/etc/chef"
-		LOG.debug("\n\nserver_url: %s\nnod_name: %s\nclient_key: '%s'\n" %
-				(chef_data.get('server_url'), chef_data.get('node_name'),
-				chef_data.get('client_key')))
-		try:
-			if not os.path.exists(PATH):
-				try:
-					os.mkdir(PATH)
-				except Exception, e:
-					raise LookupError("Cant create folder, configs files not created."
-						" Details: %s" % e)
-
-			with open(PATH+"/client.rb", "w") as f:
-				f.writelines([
-					"log_level\t%s" % ':info\n',
-					"log_location\t%s" % 'STDOUT\n',
-					"chef_server_url\t'%s'\n" % chef_data['server_url'],
-					"node_name\t'%s'\n" % chef_data['node_name']])
-
-			with open(PATH+"/client.pem", "w") as f:
-				f.write(chef_data['client_key'])
-
-		except Exception, e:
-			LOG.warn("\n Can't create configures files. Details: %s\n"%e)
-
-'''
-1 select * from db where =='HostInitResp'
-2 recived and save in temp.xml
-3
-<body>
-	<chef>
-		<server_url>
-		<node_name>
-		<client_key>
-
-szradm --msgsnd -o control -n HostInitResponse -f hir.xml -e http://0.0.0.0:8013
-etc/scalr/private.d/db.sqlite '''	
