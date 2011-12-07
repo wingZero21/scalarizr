@@ -55,6 +55,7 @@ EPH_STORAGE_MAPPING = {
 	}
 } 
 
+NETWORK_FILESYSTEMS = ('nfs', 'glusterfs')
 
 
 class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
@@ -192,6 +193,11 @@ class RebundleStratery:
 
 		for devname in ebs_devs:
 			fstab.remove(devname, autosave=False)
+		
+		# Remove Non-local filesystems
+		for entry in fstab.list_entries():
+			if entry.fstype in NETWORK_FILESYSTEMS:
+				fstab.remove(entry.devname, autosave=False)
 		
 		# Ubuntu 10.04 mountall workaround
 		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
