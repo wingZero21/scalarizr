@@ -826,9 +826,11 @@ class MongoCLI(object):
 		new_member['host'] = host
 		cfg['version'] = cfg['version'] + 1
 		new_member['_id'] = max([m['_id'] for m  in cfg['members']]) + 1
-		cfg['members'].append(new_member)
+		
 		if arbiter:
-			cfg['arbiterOnly'] = True
+			new_member['arbiterOnly'] = True
+			
+		cfg['members'].append(new_member)
 		return self.rs_reconfig(cfg)
 		
 	
