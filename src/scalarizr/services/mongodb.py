@@ -789,7 +789,7 @@ class MongoCLI(object):
 			return False
 	
 	
-	def list_databases(self):
+	def list_database_names(self):
 		self._logger.debug('Getting list of databases')
 		return self.connection.database_names()
 
@@ -934,3 +934,15 @@ class MongoCLI(object):
 	
 	def flush_router_cfg(self):
 		self.connection.admin.command('flushRouterConfig')
+
+	
+	def list_cluster_databases(self):
+		""" list databases with shard status """
+		return list(self.connection.config.databases.find())
+	
+	
+	def remove_shard(self, shard_name):
+		return self.connection.admin.command('removeshard', shard_name)
+		
+		
+	

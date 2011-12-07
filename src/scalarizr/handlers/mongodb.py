@@ -43,6 +43,7 @@ BACKUP_CHUNK_SIZE		= 200*1024*1024
 
 HOSTNAME_TPL			= "mongo-%s-%s"
 RS_NAME_TPL				= "rs-%s"
+SHARD_NAME_TPL			= "shard-%s"
 
 HEARTBEAT_INTERVAL		= 60
 
@@ -115,6 +116,12 @@ class MongoDBMessages:
 	
 	INT_CLUSTER_TERMINATE_RESULT = "MongoDb_IntClusterTerminateResult"
 	
+	REMOVE_SHARD = "MongoDb_RemoveShard"
+	
+	REMOVE_SHARD_RESULT = "MongoDb_RemoveShardResult"
+	
+	REMOVE_SHARD_STATUS = "MongoDb_RemoveShardStatus"
+	
 	
 		
 
@@ -154,7 +161,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE,
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
 				MongoDBMessages.CLUSTER_TERMINATE,
-				MongoDBMessages.INT_CLUSTER_TERMINATE,				
+				MongoDBMessages.INT_CLUSTER_TERMINATE,
+				MongoDBMessages.REMOVE_SHARD,				
 				Messages.UPDATE_SERVICE_CONFIGURATION,
 				Messages.BEFORE_HOST_TERMINATE,
 				Messages.HOST_DOWN,
@@ -354,8 +362,8 @@ class MongoDBHandler(ServiceCtlHandler):
 
 				
 	def create_shard(self):
-		rs_name = RS_NAME_TPL % self.shard_index
-		return self.mongodb.router_cli.add_shard(rs_name, self.mongodb.replicas)
+		shard_name = SHARD_NAME_TPL % self.shard_index
+		return self.mongodb.router_cli.add_shard(shard_name, self.mongodb.replicas)
 
 
 	def on_HostInit(self, message):
@@ -552,7 +560,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			rchown(mongo_svc.DEFAULT_USER, tmpdir) 
 
 			#dump config db on router
-			r_dbs = self.mongodb.router_cli.list_databases()
+			r_dbs = self.mongodb.router_cli.list_database_names()
 			rdb_name = 'config'
 			if rdb_name  in r_dbs:
 				private_ip = self._platform.get_private_ip()
@@ -566,7 +574,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				self._logger.warning('config db not found. Nothing to dump on router.')
 			
 			# Get databases list
-			dbs = self.mongodb.cli.list_databases()
+			dbs = self.mongodb.cli.list_database_names()
 			
 			# Defining archive name and path
 			rs_name = RS_NAME_TPL % self.shard_index
@@ -813,7 +821,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 	def on_MongoDb_ClusterTerminate(self, message):
 		role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
-		cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self)
+		cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self, int(message.timeout))
 		cluster_terminate_watcher.start()
 		
 		
@@ -850,8 +858,26 @@ class MongoDBHandler(ServiceCtlHandler):
 		finally:
 			self.send_int_message(message.local_ip,
 					MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT, msg_body)
+			
+			
+	def on_MongoDb_RemoveShard(self, message):
+		if not self.rs_id in (0,1):
+			msg_body = dict(status='error', last_error='No router running on host')
+			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
 		
+		dbs = self.mongodb.router_cli.list_databases()
+		unsharded = [db['_id'] for db in dbs if db['partitioned'] == False]
 		
+		if unsharded:
+			""" Send Scalr sad message with unsharded database list """
+			err_msg = 'You have %s unsharded databases in %s shard (%s)' % \
+						(len(unsharded), self.shard_index, ', '.join(unsharded))
+			msg_body = dict(status='error',	last_error=err_msg)
+			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
+		else:
+			""" Start draining """
+			watcher = DrainingWatcher(self)
+			watcher.start()		
 		
 
 	def _get_keyfile(self):
@@ -964,7 +990,56 @@ class MongoDBHandler(ServiceCtlHandler):
 	@property
 	def hostname(self):
 		return HOSTNAME_TPL % (self.shard_index, self.rs_id)
+
+
 	
+class DrainingWatcher(threading.Thread):
+	
+	def __init__(self, handler):
+		self.handler = handler
+		self.shard_index = self.handler.shard_index
+		self.shard_name = SHARD_NAME_TPL % (self.shard_index)
+	
+	def run(self):
+		try:
+			ret = self.handler.mongodb.router_cli.remove_shard(self.shard_name)
+			if ret['ok'] != 1:
+				# TODO: find error message end send it ti scalr
+				raise Exception('Cannot remove shard %s' % self.shard_name)			
+		except:
+			msg_body = dict(status='error', last_error=sys.exc_info()[1])
+			self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT,msg_body)
+		
+		""" Get initial chunks count """	
+		ret = self.handler.mongodb.router_cli.remove_shard(self.shard_name)
+		
+		init_chunks = ret['remaining']['chunks']
+		last_notification_chunks_count = init_chunks
+		# Calculating 5% 
+		trigger_step = init_chunks / 20
+		
+		
+		while True:
+			ret = self.handler.mongodb.router_cli.remove_shard(self.shard_name)
+			if ret['stage'] == 'completed':
+				""" Draining completed. We can terminate shard instances now """
+				msg_body=dict(status='ok')
+				self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
+				break
+				
+			elif ret['stage'] == 'ongoing':
+				chunks_remained = ret['remaining']['chunks']
+				progress = last_notification_chunks_count - chunks_remained
+				if progress > trigger_step:
+					progress_in_pct = (progress / init_chunks) * 100
+					msg_body = dict(shard_index=self.shard_index, total_chunks=init_chunks,
+								chunks_remained=chunks_remained, progress=progress_in_pct)
+					self.handler.send_message(MongoDBMessages.REMOVE_SHARD_STATUS, msg_body)					
+					last_notification_chunks_count = chunks_remained	
+						
+			time.sleep(15)
+
+
 	
 class StatusWatcher(threading.Thread):
 	
@@ -1006,6 +1081,7 @@ class StatusWatcher(threading.Thread):
 						
 		self.handler._status_trackers.pop(self.local_ip)
 		
+
 
 class ClusterTerminateWatcher(threading.Thread):
 	
