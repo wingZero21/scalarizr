@@ -289,7 +289,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				first_in_rs = False
 
 		""" Set hostname"""
-		self.hostname = HOSTNAME_TPL % (self.shard_index, self.rs_id)
 		Hosts.set(local_ip, self.hostname)
 		with open('/etc/hostname', 'w') as f:
 			f.write(self.hostname)
@@ -377,21 +376,25 @@ class MongoDBHandler(ServiceCtlHandler):
 		private_ip = self._platform.get_private_ip()
 		if message.local_ip != private_ip:
 			
-			# If mongos runs on this instance
+			""" If mongos runs on this instance """
 			if self.rs_id in (0,1):
 				self._logger.debug('Flushing router configuration')
-				self.mongodb.router_cli.admin.command('flushRouterConfig')				
+				self.mongodb.router_cli.flush_router_cfg()
+				
+			new_host_shard_idx = int(message.mongodb['shard_index'])
 			
 			if self.mongodb.is_replication_master and \
-											self.shard_index == message.shard_index:			   
+											self.shard_index == new_host_shard_idx:			   
 				r = len(self.mongodb.replicas) 
 				a = len(self.mongodb.arbiters)
 				if r % 2 == 0 and not a:
 					self.mongodb.start_arbiter()
-					self.mongodb.register_arbiter(private_ip)
+					self.mongodb.register_arbiter(self.hostname)
 				elif r % 2 != 0 and a:
 					for arbiter in self.mongodb.arbiters:
-						self.mongodb.unregister_slave(arbiter)
+						arb_host, arb_port = arbiter.split(':')
+						arb_port = int(arb_port)
+						self.mongodb.unregister_slave(arb_host, arb_port)
 					self.mongodb.stop_arbiter()
 			else:
 				if len(self.mongodb.replicas) % 2 != 0:
@@ -403,30 +406,69 @@ class MongoDBHandler(ServiceCtlHandler):
 			t = self._status_trackers[message.local_ip]
 			t.stop()
 			del self._status_trackers[message.local_ip]
+		
+		shard_idx = int(message.mongodb['shard_index'])
+		rs_idx = int(message.mongodb['replica_set_index'])
+		
+		down_node_host = HOSTNAME_TPL % (shard_idx, rs_idx)
+		down_node_name = '%s:%s' % (down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
+		
+		if down_node_name not in self.mongodb.replicas:
+			return
+		
+		is_master = self.mongodb.is_replication_master
+		
+		if not is_master and len(self.mongodb.replicas) == 2:
+			local_ip = self._platform.get_private_ip()
+			possible_self_arbiter = "%s:%s" % (local_ip, mongo_svc.ARBITER_DEFAULT_PORT)
+			try:
+				if possible_self_arbiter in self.mongodb.arbiters:
+					""" Start arbiter if it's not running """
+					self.mongodb.arbiter.start()
+					""" Wait until we become master """
+					wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
+				else:
+					raise Exception('Arbiter not found')
+			except:
+				""" Become primary and only member of rs """
+				nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+				rs_cfg = self.mongodb.cli.get_rs_config()
+				rs_cfg['members'] = [m for m in rs_cfg['members'] if m['host'] == nodename]
+				self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
+				wait_until(lambda: self.mongodb.is_replication_master, timeout=180)	
+		else:
+			wait_until(lambda: self.mongodb.primary_host, timeout=180,
+					 start_text='Wait for primary node in replica set', logger=self._logger)
 
-		if self.mongodb.is_replication_master:
-			if message.local_ip in self.mongodb.replicas:
+			if	self.mongodb.is_replication_master:
+			
 				""" Remove host from replica set"""
-				self.mongodb.unregister_slave(message.local_ip)
+				self.mongodb.unregister_slave(down_node_name)
+				
 				""" If arbiter was running on the node - unregister it """
-				possible_arbiter = "%s:%s" % (message.local_ip, mongo_svc.ARBITER_DEFAULT_PORT)
+				possible_arbiter = "%s:%s" % (down_node_host, mongo_svc.ARBITER_DEFAULT_PORT)
 				if possible_arbiter in self.mongodb.arbiters:
-					self.mongodb.unregister_slave(message.local_ip, mongo_svc.ARBITER_DEFAULT_PORT)
+					self.mongodb.unregister_slave(down_node_host, mongo_svc.ARBITER_DEFAULT_PORT)
+					
 				""" Start arbiter if necessary """
 				if len(self.mongodb.replicas) % 2 == 0:
 					self.mongodb.start_arbiter()
+					self.mongodb.register_arbiter(self.hostname)
 				else:
+					for arbiter in self.mongodb.arbiters:
+						arb_host, arb_port = arbiter.split(':')
+						arb_port = int(arb_port)
+						self.mongodb.unregister_slave(arb_host, arb_port)
 					self.mongodb.stop_arbiter()
-						
-		elif len(self.mongodb.replicas) == 2:
-			# Become primary and only member of rs
-			hostname = HOSTNAME_TPL % (self.shard_index, self.rs_id)
-			nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
-			
-			rs_cfg = self.mongodb.cli.get_rs_config()
-			rs_cfg['members'] = [m for m in rs_cfg['members'] if m['host'] == nodename]
-			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
-			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)	
+					
+			else:
+				""" Get all replicas except down one, 
+					since we don't know if master already removed
+					node from replica set 
+				"""
+				replicas = [r for r in self.mongodb.replicas if r != down_node_name]
+				if len(replicas) % 2 != 0:
+					self.mongodb.stop_arbiter()		
 					
 					
 	def on_before_reboot_start(self, *args, **kwargs):
@@ -607,8 +649,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.mongodb.initiate_rs()			
 		else:
 			
-			hostname = HOSTNAME_TPL % (self.shard_index, self.rs_id)
-			nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+			nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 			
 			rs_cfg = self.mongodb.cli.get_rs_config()
 			rs_cfg['members'] = [{'_id' : 0, 'host': nodename}]
@@ -922,6 +963,10 @@ class MongoDBHandler(ServiceCtlHandler):
 	@property
 	def scalr_password(self):
 		return self._cnf.rawini.get(CNF_SECTION, OPT_PASSWORD)
+	
+	@property
+	def hostname(self):
+		return HOSTNAME_TPL % (self.shard_index, self.rs_id)
 	
 	
 class StatusWatcher(threading.Thread):
