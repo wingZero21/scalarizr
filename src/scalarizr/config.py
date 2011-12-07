@@ -268,9 +268,9 @@ class ScalarizrOptions(Configurator.Container):
 		
 		def _set_value(self, v):
 			v = split(v.strip())
-			bhvs = BuiltinBehaviours.values()
-			if any(vv not in bhvs for vv in v):
-				raise ValueError('unknown behaviour')
+			#bhvs = BuiltinBehaviours.values()
+			#if any(vv not in bhvs for vv in v):
+			#	raise ValueError('unknown behaviour')
 			self._value = ','.join(v)
 		
 		value = property(Configurator.Option._get_value, _set_value)
