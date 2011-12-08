@@ -48,24 +48,23 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			LOG.debug('Image %s created', image.id)
 
 			LOG.info('Checking that image %s is completed', image.id)
-			wait_until(hasattr, args=(image, 'progress'),
-					sleep=5, logger=LOG, timeout=3600,
-					error_text="Image %s has no attribute 'progress'" % image.id)
-
 			
 			start_time = time.time()
-			def completed():
+			def completed(image_id):
 				try:
-					image = image_manager.get(image.id)
+					image = image_manager.get(image_id)
 					if time.time() - start_time > 191:
 						globals()['start_time'] = time.time()
 						LOG.info('Progress: %s', image.progress)
-					return image.progress == 100
+					return image.status in ('ACTIVE', 'FAILED')
 				except:
-					LOG.debug('Caught: %s', sys.exc_value)
+					LOG.debug('Caught exception', exc_info=sys.exc_info())
 			
-			wait_until(completed, sleep=30, logger=LOG, timeout=3600,
+			wait_until(completed, args=(image.id, ), sleep=30, logger=LOG, timeout=3600,
 					error_text="Image %s wasn't completed in a reasonable time" % image.id)
+			image = image_manager.get(image.id)
+			if image.status == 'FAILED':
+				raise HandlerError('Image %s becomes failed' % image.id)
 			LOG.info('Image %s completed and available for use!', image.id)
 		except:
 			exc_type, exc_value, exc_trace = sys.exc_info()

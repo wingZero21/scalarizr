@@ -3,6 +3,8 @@ Created on Sep 7, 2011
 
 @author: Spike
 '''
+from __future__ import with_statement
+
 import os
 import sys
 import pwd
@@ -17,9 +19,7 @@ from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.util import system2, initdv2, software, dns, cryptotool
 from scalarizr.storage import StorageError
 import scalarizr.services.rabbitmq as rabbitmq_svc
-
-if sys.version_info < (2,6,0):
-	from __future__ import with_statement
+	
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
