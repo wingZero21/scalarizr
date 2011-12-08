@@ -77,5 +77,4 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 		
 		return image.id
 
-
 			
