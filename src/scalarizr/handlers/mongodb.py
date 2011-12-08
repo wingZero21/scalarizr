@@ -1003,6 +1003,7 @@ class DrainingWatcher(threading.Thread):
 		self.handler = handler
 		self.shard_index = self.handler.shard_index
 		self.shard_name = SHARD_NAME_TPL % (self.shard_index)
+		self._logger = self.handler._logger
 	
 	def run(self):
 		try:
@@ -1014,25 +1015,36 @@ class DrainingWatcher(threading.Thread):
 			msg_body = dict(status='error', last_error=sys.exc_info()[1])
 			self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT,msg_body)
 		
-		""" Get initial chunks count """	
+		self._logger.debug('Starting the process of removing shard %s' % self.shard_name)
+			
 		ret = self.handler.mongodb.router_cli.remove_shard(self.shard_name)
-		
+		""" Get initial chunks count """
 		init_chunks = ret['remaining']['chunks']
 		last_notification_chunks_count = init_chunks
+		
+		self._logger.debug('Total chunks to move: %s' % init_chunks)
+		
 		# Calculating 5% 
 		trigger_step = init_chunks / 20
 		
-		
 		while True:
 			ret = self.handler.mongodb.router_cli.remove_shard(self.shard_name)
+			
+			self._logger.debug('removeShard process returned stage "%s"' % ret['stage'])
+			
 			if ret['stage'] == 'completed':
-				""" Draining completed. We can terminate shard instances now """
+				self._logger.debug('Draining process completed.')
+				
+				""" We can terminate shard instances now """
 				msg_body=dict(status='ok')
 				self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
 				break
 				
 			elif ret['stage'] == 'ongoing':
 				chunks_left = ret['remaining']['chunks']
+				
+				self._logger.debug('Chunks left: %s', chunks_left)
+				
 				progress = last_notification_chunks_count - chunks_left
 				if progress > trigger_step:
 					progress_in_pct = (progress / init_chunks) * 100
@@ -1193,9 +1205,8 @@ class ClusterTerminateWatcher(threading.Thread):
 			self.handler.send_int_message(ip,
 										MongoDBMessages.INT_CLUSTER_TERMINATE,
 										broadcast=True)
-			self.full_status[shard_idx][rs_idx] = \
-									{'status' : TerminationState.PENDING}
 		except:
 			self.full_status[shard_idx][rs_idx] = \
 									{'status' : TerminationState.UNREACHABLE}
-					
+		self.full_status[shard_idx][rs_idx] = \
+								{'status' : TerminationState.PENDING}					
