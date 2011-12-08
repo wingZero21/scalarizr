@@ -702,7 +702,7 @@ class Mongos(object):
 			args = [MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
 									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
 			if cls.keyfile and os.path.exists(cls.keyfile):
-				rchown(DEFAULT_USER, cls.keyfile)	
+				rchown(DEFAULT_USER, cls.keyfile)
 				args.append('--keyFile=%s' % cls.keyfile)
 			system2(args)
 			cli = MongoCLI(port=ROUTER_DEFAULT_PORT)
@@ -815,10 +815,13 @@ class MongoCLI(object):
 
 	
 	def add_replica(self, ip, port=None, arbiter=False):
-		self._logger.debug('Registering new replica %s' % ip)
+
 		port = port or REPLICA_DEFAULT_PORT
-		cfg = self.get_rs_config()
 		host = "%s:%s" % (ip, port)
+		self._logger.debug('Registering new %s %s', 'arbiter' if arbiter else 'replica', host)
+
+		cfg = self.get_rs_config()
+
 		if host in [member['host'] for member in cfg['members']]:
 			self._logger.debug('Host %s is already in replica set.' % host)
 			return
@@ -871,10 +874,9 @@ class MongoCLI(object):
 		for member in cfg['members']:
 			if member['host'] == host_to_del:
 				cfg['members'].remove(member)
-				self.rs_reconfig(cfg)
-				break
+				return self.rs_reconfig(cfg)
 		else:
-			raise Exception("Host %s not found in replica set")
+			self._logger.warning("Host %s not found in replica set" % host_to_del)
 
 
 	def shutdown_server(self):
@@ -883,7 +885,7 @@ class MongoCLI(object):
 			out = self.connection.admin.command('shutdown', force=True)
 
 		except (pymongo.errors.AutoReconnect, pymongo.errors.OperationFailure), e:
-			self._logger.warning('Could not shutdown server from the inside:',e)
+			self._logger.warning('Could not shutdown server from the inside: %s',e)
 			out = None
 		return out
 	
@@ -892,8 +894,9 @@ class MongoCLI(object):
 		'''
 		By default the command returns after synchronizing.
 		'''
-		return self.connection.admin.command('fsync')
+		ret = self.connection.admin.command('fsync')
 		self._logger.debug('fsync is done.')
+		return ret
 
 	
 	def stop_balancer(self):

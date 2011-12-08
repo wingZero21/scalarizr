@@ -1197,7 +1197,3 @@ class ClusterTerminateWatcher(threading.Thread):
 			self.full_status[shard_idx][rs_idx] = \
 									{'status' : TerminationState.UNREACHABLE}
 					
-						
-			
-
-												
