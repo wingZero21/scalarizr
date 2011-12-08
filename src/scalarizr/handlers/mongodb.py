@@ -867,7 +867,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			msg_body = dict(status='error', last_error='No router running on host')
 			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
 		
-		dbs = self.mongodb.router_cli.list_databases()
+		dbs = self.mongodb.router_cli.list_cluster_databases()
 		unsharded = [db['_id'] for db in dbs if db['partitioned'] == False]
 		
 		if unsharded:
