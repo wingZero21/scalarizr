@@ -863,24 +863,26 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 			
 	def on_MongoDb_RemoveShard(self, message):
-		if not self.rs_id in (0,1):
-			msg_body = dict(status='error', last_error='No router running on host')
-			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
+		try:
+			if not self.rs_id in (0,1):
+				raise Exception('No router running on host')
 		
-		dbs = self.mongodb.router_cli.list_cluster_databases()
-		exclude_unsharded = ('test', 'admin')
-		unsharded = [db['_id'] for db in dbs if db['partitioned'] == False and db['_id'] not in exclude_unsharded]
+			dbs = self.mongodb.router_cli.list_cluster_databases()
+			exclude_unsharded = ('test', 'admin')
+			unsharded = [db['_id'] for db in dbs if db['partitioned'] == False and db['_id'] not in exclude_unsharded]
 
-		if unsharded:
-			""" Send Scalr sad message with unsharded database list """
-			err_msg = 'You have %s unsharded databases in %s shard (%s)' % \
-						(len(unsharded), self.shard_index, ', '.join(unsharded))
+			if unsharded:
+				""" Send Scalr sad message with unsharded database list """
+				raise Exception('You have %s unsharded databases in %s shard (%s)' % \
+							(len(unsharded), self.shard_index, ', '.join(unsharded)))
+			else:
+				""" Start draining """
+				watcher = DrainingWatcher(self)
+				watcher.start()
+		except:
+			err_msg = sys.exc_info()[1]
 			msg_body = dict(status='error',	last_error=err_msg)
 			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
-		else:
-			""" Start draining """
-			watcher = DrainingWatcher(self)
-			watcher.start()		
 		
 
 	def _get_keyfile(self):
@@ -1014,6 +1016,8 @@ class DrainingWatcher(threading.Thread):
 		except:
 			msg_body = dict(status='error', last_error=sys.exc_info()[1])
 			self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT,msg_body)
+
+		self.handler.mongodb.router_cli.start_balancer()
 		
 		self._logger.debug('Starting the process of removing shard %s' % self.shard_name)
 			
@@ -1042,9 +1046,11 @@ class DrainingWatcher(threading.Thread):
 				
 			elif ret['stage'] == 'ongoing':
 				chunks_left = ret['remaining']['chunks']
-				
 				self._logger.debug('Chunks left: %s', chunks_left)
 				
+				if chunks_left == 0:
+					pass
+							
 				progress = last_notification_chunks_count - chunks_left
 				if progress > trigger_step:
 					progress_in_pct = (progress / init_chunks) * 100
