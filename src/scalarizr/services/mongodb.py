@@ -937,7 +937,7 @@ class MongoCLI(object):
 		
 		
 	def is_router_connection(self):
-		return self.port == ROUTER_DEFAULT_PORT
+		return 'mongos' in self.connection.config.collection_names()
 		
 	
 	def flush_router_cfg(self):
