@@ -755,10 +755,11 @@ class MongoCLI(object):
 		if not hasattr(self, '_con'):
 			self._logger.debug('creating pymongo connection to %s:%s' % (self.host,self.port))
 			self._con = pymongo.Connection(self.host, self.port)
-		if not self.authenticated and self.login and self.password and self.is_port_listening:
-			self._logger.debug('Authenticating as %s' % self.login)
-			self._con.admin.authenticate(self.login, self.password)
-			self.authenticated = True
+		if not self.is_router_connection():
+			if not self.authenticated and self.login and self.password and self.is_port_listening:
+				self._logger.debug('Authenticating as %s' % self.login)
+				self._con.admin.authenticate(self.login, self.password)
+				self.authenticated = True
 		return self._con
 
 
@@ -936,8 +937,8 @@ class MongoCLI(object):
 		
 		
 	def is_router_connection(self):
-		return 'mongos' in self.connection.config.collection_names()
-	
+		return self.port == ROUTER_DEFAULT_PORT
+		
 	
 	def flush_router_cfg(self):
 		self.connection.admin.command('flushRouterConfig')

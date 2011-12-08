@@ -868,8 +868,9 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
 		
 		dbs = self.mongodb.router_cli.list_cluster_databases()
-		unsharded = [db['_id'] for db in dbs if db['partitioned'] == False]
-		
+		exclude_unsharded = ('test', 'admin')
+		unsharded = [db['_id'] for db in dbs if db['partitioned'] == False and db['_id'] not in exclude_unsharded]
+
 		if unsharded:
 			""" Send Scalr sad message with unsharded database list """
 			err_msg = 'You have %s unsharded databases in %s shard (%s)' % \
@@ -998,6 +999,7 @@ class MongoDBHandler(ServiceCtlHandler):
 class DrainingWatcher(threading.Thread):
 	
 	def __init__(self, handler):
+		super(DrainingWatcher, self).__init__()
 		self.handler = handler
 		self.shard_index = self.handler.shard_index
 		self.shard_name = SHARD_NAME_TPL % (self.shard_index)
