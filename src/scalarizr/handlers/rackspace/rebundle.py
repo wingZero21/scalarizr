@@ -59,10 +59,10 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 					image = image_manager.get(image.id)
 					if time.time() - start_time > 191:
 						globals()['start_time'] = time.time()
-						LOG.debug('Progress: %s' % image.progress)
+						LOG.info('Progress: %s', image.progress)
 					return image.progress == 100
 				except:
-					pass
+					LOG.debug('Caught: %s', sys.exc_value)
 			
 			wait_until(completed, sleep=30, logger=LOG, timeout=3600,
 					error_text="Image %s wasn't completed in a reasonable time" % image.id)

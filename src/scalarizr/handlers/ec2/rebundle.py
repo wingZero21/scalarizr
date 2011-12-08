@@ -529,10 +529,10 @@ class RebundleEbsStrategy(RebundleStratery):
 			self._snap.update()
 			if time.time() - start_time > 191:
 				start_time = time.time()
-				LOG.debug('Progress: %s' % self._snap.progress)
+				LOG.info('Progress: %s', self._snap.progress)
 
 			if self._snap.status == 'completed':
-				LOG.debug('Progress: %s' % self._snap.progress)
+				LOG.info('Progress: %s', self._snap.progress)
 				break
 			elif self._snap.status == 'failed':
 				raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))
