@@ -927,6 +927,7 @@ class BuiltinBehaviours:
 	MEMCACHED = 'memcached'
 	POSTGRESQL = 'postgresql'
 	REDIS = 'redis'
+	CHEF = 'chef'
 
 	CF_ROUTER = 'cf_router'
 	CF_CLOUD_CONTROLLER = 'cf_cloud_controller'
