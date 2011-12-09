@@ -646,7 +646,7 @@ def main():
 			# and pl.get_user_data() permanently blocked when scalarizr is in `importing` state
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
-			if server_id and ud_server_id and server_id != ud_server_id:
+			if server_id and server_id != ud_server_id:
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
 				cnf.state = ScalarizrState.BOOTSTRAPPING						
