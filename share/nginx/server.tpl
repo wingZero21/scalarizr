@@ -23,12 +23,12 @@ http {
         }
     
         location /500.html {
-        		expires 0
+        		expires 0;
                 root   /usr/share/scalr/nginx/html;
         }
     
         location /502.html {
-        		expires 0
+        		expires 0;
                 root   /usr/share/scalr/nginx/html;
         }
     }
