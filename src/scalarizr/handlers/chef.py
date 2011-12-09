@@ -40,7 +40,7 @@ class ChefHandler(Handler):
 	def on_init(self, *args, **kwds):
 		bus.on(
 			host_init_response=self.on_host_init_response,
-			before_hostup=self.on_before_host_up,
+			before_host_up=self.on_before_host_up,
 			reload=self.on_reload
 		)
 
