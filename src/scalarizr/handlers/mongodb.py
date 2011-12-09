@@ -869,7 +869,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 			dbs = self.mongodb.router_cli.list_cluster_databases()
 			exclude_unsharded = ('test', 'admin')
-			unsharded = [db['_id'] for db in dbs if db['partitioned'] == False and db['_id'] not in exclude_unsharded]
+			""" Get all unpartitioned db names where we are primary """
+			unsharded = self.get_unpartitioned_dbs(shard_name=self.shard_name)
+			""" Exclude 'admin' and 'test' databases """
+			unsharded = [db for db in unsharded if db not in exclude_unsharded]
 
 			if unsharded:
 				""" Send Scalr sad message with unsharded database list """
@@ -883,7 +886,15 @@ class MongoDBHandler(ServiceCtlHandler):
 			err_msg = sys.exc_info()[1]
 			msg_body = dict(status='error',	last_error=err_msg)
 			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
-		
+
+
+	def get_unpartitioned_dbs(self, shard_name=None):
+		dbs = self.mongodb.router_cli.list_cluster_databases()
+		dbs = filter(lambda db: db['partitioned'] == False, dbs)
+		if shard_name:
+			dbs = filter(lambda db: db['primary'] == shard_name, dbs)
+		return [db['_id'] for db in dbs]
+				
 
 	def _get_keyfile(self):
 		password = None 
@@ -980,14 +991,23 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 	@property
 	def shard_index(self):
-		return int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX))
+		if not hasattr(self, "_shard_index"):
+			self._shard_index = int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX))
+		return self._shard_index
 
 	
 	@property
 	def rs_id(self):
-		return int(self._cnf.rawini.get(CNF_SECTION, OPT_RS_ID))
+		if not hasattr(self, "_rs_index"):
+			self._rs_index = int(self._cnf.rawini.get(CNF_SECTION, OPT_RS_ID))
+		return self._rs_index
 
-	
+
+	@property
+	def shard_name(__self__):
+		return SHARD_NAME_TPL % self.shard_index
+
+			
 	@property
 	def scalr_password(self):
 		return self._cnf.rawini.get(CNF_SECTION, OPT_PASSWORD)
@@ -1007,26 +1027,43 @@ class DrainingWatcher(threading.Thread):
 		self.shard_name = SHARD_NAME_TPL % (self.shard_index)
 		self.router_cli = self.handler.mongodb.router_cli
 		self._logger = self.handler._logger
-	
+
+
+	def is_draining_complete(self, ret):
+		if ret['state'] == 'completed':
+			self._logger.debug('Draining process completed.')
+				
+			""" We can terminate shard instances now """
+
+			return True
+		return False
+
+
+	def send_ok_result(self):
+		msg_body=dict(status='ok', shard_index=self.shard_index)
+		self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
+
+
 	def run(self):
 		try:
 			ret = self.router_cli.remove_shard(self.shard_name)
 			if ret['ok'] != 1:
-				# TODO: find error message end send it ti scalr
+				# TODO: find error message end send it to scalr
 				raise Exception('Cannot remove shard %s' % self.shard_name)
+
+			if self.is_draining_complete(ret):
+				self.send_ok_result()
+				return
 
 			self.router_cli.start_balancer()
 		
 			self._logger.debug('Starting the process of removing shard %s' % self.shard_name)
 		
-			ret = self.router_cli.remove_shard(self.shard_name)
-			if ret['state'] == 'completed':
-				self._logger.debug('Draining process completed.')
-				
-				""" We can terminate shard instances now """
-				msg_body=dict(status='ok')
-				self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
+			ret = self.router_cli.remove_shard(self.shard_name)			
+			if self.is_draining_complete(ret):
+				self.send_ok_result()
 				return
+
 
 			""" Get initial chunks count """
 			init_chunks = ret['remaining']['chunks']
@@ -1042,31 +1079,32 @@ class DrainingWatcher(threading.Thread):
 			
 				self._logger.debug('removeShard process returned state "%s"' % ret['state'])
 			
-				if ret['state'] == 'completed':
-					self._logger.debug('Draining process completed.')
-				
-					""" We can terminate shard instances now """
-					msg_body=dict(status='ok')
-					self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
-					break
+				if self.is_draining_complete(ret):
+					self.send_ok_result()
+					return
 				
 				elif ret['state'] == 'ongoing':
 					chunks_left = ret['remaining']['chunks']
 					self._logger.debug('Chunks left: %s', chunks_left)
 				
 					if chunks_left == 0:
-						dbs = self.router_cli.list_cluster_databases()
-						unsharded = [db['_id'] for db in dbs if db['partitioned'] == False]
+						unsharded = self.handler.get_unpartitioned_dbs(shard_name=self.shard_name)
+
 						""" Handle test db move """
 						if 'test' in unsharded:
-							""" Send it to 0 shard """
+							""" Send it to shard-0 """
 							self.router_cli.move_primary('test', SHARD_NAME_TPL % 0)
-							
+							unsharded.remove('test')
 
+						if unsharded:
+							raise Exception("You have %s unsharded databases on shard %s (%s)" % \
+												len(unsharded), self.shard_index, ', '.join(unsharded))
 
 					progress = last_notification_chunks_count - chunks_left
+
 					if progress > trigger_step:
 						progress_in_pct = (progress / init_chunks) * 100
+
 						msg_body = dict(shard_index=self.shard_index, total_chunks=init_chunks,
 									chunks_left=chunks_left, progress=progress_in_pct)
 						self.handler.send_message(MongoDBMessages.REMOVE_SHARD_STATUS, msg_body)					
@@ -1075,7 +1113,7 @@ class DrainingWatcher(threading.Thread):
 				time.sleep(15)
 
 		except:
-			msg_body = dict(status='error', last_error=sys.exc_info()[1])
+			msg_body = dict(shard_index=self.shard_index, status='error', last_error=sys.exc_info()[1])
 			self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT,msg_body)
 
 
