@@ -1005,61 +1005,78 @@ class DrainingWatcher(threading.Thread):
 		self.handler = handler
 		self.shard_index = self.handler.shard_index
 		self.shard_name = SHARD_NAME_TPL % (self.shard_index)
+		self.router_cli = self.handler.mongodb.router_cli
 		self._logger = self.handler._logger
 	
 	def run(self):
 		try:
-			ret = self.handler.mongodb.router_cli.remove_shard(self.shard_name)
+			ret = self.router_cli.remove_shard(self.shard_name)
 			if ret['ok'] != 1:
 				# TODO: find error message end send it ti scalr
-				raise Exception('Cannot remove shard %s' % self.shard_name)			
-		except:
-			msg_body = dict(status='error', last_error=sys.exc_info()[1])
-			self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT,msg_body)
+				raise Exception('Cannot remove shard %s' % self.shard_name)
 
-		self.handler.mongodb.router_cli.start_balancer()
+			self.router_cli.start_balancer()
 		
-		self._logger.debug('Starting the process of removing shard %s' % self.shard_name)
-			
-		ret = self.handler.mongodb.router_cli.remove_shard(self.shard_name)
-		""" Get initial chunks count """
-		init_chunks = ret['remaining']['chunks']
-		last_notification_chunks_count = init_chunks
+			self._logger.debug('Starting the process of removing shard %s' % self.shard_name)
 		
-		self._logger.debug('Total chunks to move: %s' % init_chunks)
-		
-		# Calculating 5% 
-		trigger_step = init_chunks / 20
-		
-		while True:
-			ret = self.handler.mongodb.router_cli.remove_shard(self.shard_name)
-			
-			self._logger.debug('removeShard process returned stage "%s"' % ret['stage'])
-			
-			if ret['stage'] == 'completed':
+			ret = self.router_cli.remove_shard(self.shard_name)
+			if ret['state'] == 'completed':
 				self._logger.debug('Draining process completed.')
 				
 				""" We can terminate shard instances now """
 				msg_body=dict(status='ok')
 				self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
-				break
+				return
+
+			""" Get initial chunks count """
+			init_chunks = ret['remaining']['chunks']
+			last_notification_chunks_count = init_chunks
+		
+			self._logger.debug('Total chunks to move: %s' % init_chunks)
+		
+			# Calculating 5% 
+			trigger_step = init_chunks / 20
+		
+			while True:
+				ret = self.router_cli.remove_shard(self.shard_name)
+			
+				self._logger.debug('removeShard process returned state "%s"' % ret['state'])
+			
+				if ret['state'] == 'completed':
+					self._logger.debug('Draining process completed.')
 				
-			elif ret['stage'] == 'ongoing':
-				chunks_left = ret['remaining']['chunks']
-				self._logger.debug('Chunks left: %s', chunks_left)
+					""" We can terminate shard instances now """
+					msg_body=dict(status='ok')
+					self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
+					break
 				
-				if chunks_left == 0:
-					pass
+				elif ret['state'] == 'ongoing':
+					chunks_left = ret['remaining']['chunks']
+					self._logger.debug('Chunks left: %s', chunks_left)
+				
+					if chunks_left == 0:
+						dbs = self.router_cli.list_cluster_databases()
+						unsharded = [db['_id'] for db in dbs if db['partitioned'] == False]
+						""" Handle test db move """
+						if 'test' in unsharded:
+							""" Send it to 0 shard """
+							self.router_cli.move_primary('test', SHARD_NAME_TPL % 0)
 							
-				progress = last_notification_chunks_count - chunks_left
-				if progress > trigger_step:
-					progress_in_pct = (progress / init_chunks) * 100
-					msg_body = dict(shard_index=self.shard_index, total_chunks=init_chunks,
-								chunks_left=chunks_left, progress=progress_in_pct)
-					self.handler.send_message(MongoDBMessages.REMOVE_SHARD_STATUS, msg_body)					
-					last_notification_chunks_count = chunks_left	
+
+
+					progress = last_notification_chunks_count - chunks_left
+					if progress > trigger_step:
+						progress_in_pct = (progress / init_chunks) * 100
+						msg_body = dict(shard_index=self.shard_index, total_chunks=init_chunks,
+									chunks_left=chunks_left, progress=progress_in_pct)
+						self.handler.send_message(MongoDBMessages.REMOVE_SHARD_STATUS, msg_body)					
+						last_notification_chunks_count = chunks_left	
 						
-			time.sleep(15)
+				time.sleep(15)
+
+		except:
+			msg_body = dict(status='error', last_error=sys.exc_info()[1])
+			self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT,msg_body)
 
 
 	

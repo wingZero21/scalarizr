@@ -950,6 +950,10 @@ class MongoCLI(object):
 	
 	def remove_shard(self, shard_name):
 		return self.connection.admin.command('removeshard', shard_name)
+
+
+	def move_primary(self, db_name, dest_shard):
+		return self.connection.admin.command("moveprimary", db_name, to=dest_shard)
 		
 		
 	
