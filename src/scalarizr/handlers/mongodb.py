@@ -485,6 +485,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.mongod.stop('Rebooting instance')
 		pass
 	
+			
 
 	def on_BeforeHostTerminate(self, message):
 		if message.local_ip == self._platform.get_private_ip():
@@ -493,7 +494,6 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 			self._logger.info('Detaching %s storage' % BEHAVIOUR)
 			self.storage_vol.detach()
-			
 			
 	def on_MongoDb_IntCreateDataBundle(self, message):
 		msg_data = self._create_data_bundle()
@@ -884,7 +884,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				watcher.start()
 		except:
 			err_msg = sys.exc_info()[1]
-			msg_body = dict(status='error',	last_error=err_msg)
+			msg_body = dict(status='error',	last_error=err_msg, shard_index=self.shard_index)
 			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
 
 
@@ -1004,7 +1004,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	@property
-	def shard_name(__self__):
+	def shard_name(self):
 		return SHARD_NAME_TPL % self.shard_index
 
 			
@@ -1046,6 +1046,8 @@ class DrainingWatcher(threading.Thread):
 
 	def run(self):
 		try:
+			self.router_cli.start_balancer()
+
 			ret = self.router_cli.remove_shard(self.shard_name)
 			if ret['ok'] != 1:
 				# TODO: find error message end send it to scalr
@@ -1054,8 +1056,6 @@ class DrainingWatcher(threading.Thread):
 			if self.is_draining_complete(ret):
 				self.send_ok_result()
 				return
-
-			self.router_cli.start_balancer()
 		
 			self._logger.debug('Starting the process of removing shard %s' % self.shard_name)
 		
