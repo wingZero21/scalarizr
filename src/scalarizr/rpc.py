@@ -66,7 +66,7 @@ class ServiceHandler(object):
 			else:
 				resp = {'error': error}
 			resp['id'] = id
-		return resp
+		return json.dumps(resp)
 
 	
 	def _parse_request(self, data):

@@ -36,7 +36,7 @@ class MyService(object):
 class MyServiceClient(rpc.ServiceProxy):
 	
 	def exchange(self, request):
-		return json.dumps(self.endpoint.handle_request(request))
+		return self.endpoint.handle_request(request)
 
 
 class TestServiceHandler(unittest.TestCase):
@@ -63,11 +63,11 @@ class TestServiceHandler(unittest.TestCase):
 			assert e.code == rpc.ServiceError.METHOD_NOT_FOUND
 	
 	def test_parse_error(self):
-		resp = self.handler.handle_request('not a json string')
+		resp = json.loads(self.handler.handle_request('not a json string'))
 		assert resp['error']['code'] == rpc.ServiceError.PARSE
 
 	def test_invalid_request(self):
-		resp = self.handler.handle_request(json.dumps({'method': 'klunk'}))
+		resp = json.loads(self.handler.handle_request(json.dumps({'method': 'klunk'})))
 		assert resp['error']['code'] == rpc.ServiceError.INVALID_REQUEST
 
 	def test_internal_error(self):
