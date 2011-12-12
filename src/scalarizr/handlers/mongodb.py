@@ -209,7 +209,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 				
-			self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
+			#self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
 			self.mongodb.start_shardsvr()
 			
 			if self.shard_index == 0 and self.rs_id == 0:
@@ -675,8 +675,9 @@ class MongoDBHandler(ServiceCtlHandler):
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
 						
 		password = self.scalr_password
-		self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
-		self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
+
+        self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
+		#self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
 		
 		msg_data = dict()
 		msg_data['password'] = password
@@ -757,7 +758,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.stop_default_init_script()
 		self.mongodb.prepare(rs_name)
 		self.mongodb.start_shardsvr()
-		self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
+		#self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
 		
 		first_start = not self._storage_valid()
 		if not first_start:

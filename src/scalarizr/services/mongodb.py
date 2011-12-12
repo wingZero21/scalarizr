@@ -931,9 +931,10 @@ class MongoCLI(object):
 		
 
 	def create_or_update_admin_user(self, username, password):
-		self._logger.debug('Adding mongodb user %s' % username)
+
+		self._logger.debug('Adding mongodb user %s on %s:%s' % (username, self.host, self.port))
 		self.connection.admin.add_user(username, password)
-		
+
 		
 	def is_router_connection(self):
 		return 'mongos' in self.connection.config.collection_names()
