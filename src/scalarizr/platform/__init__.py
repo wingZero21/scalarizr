@@ -51,14 +51,13 @@ class Platform():
 	def get_user_data(self, key=None):
 		cnf = bus.cnf
 		if self._userdata is None:
-			self._userdata = {}
 			path = cnf.private_path('.user-data')			
 			if os.path.exists(path):
 				rawmeta = read_file(path)
 				if not rawmeta:
 					raise PlatformError("Empty user-data")
 				self._userdata = self._parse_user_data(rawmeta)
-		if key:
+		if key and self._userdata:
 			return self._userdata[key] if key in self._userdata else None
 		else:
 			return self._userdata
