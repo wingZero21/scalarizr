@@ -676,7 +676,7 @@ class MongoDBHandler(ServiceCtlHandler):
 						
 		password = self.scalr_password
 
-        self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
+		self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
 		#self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
 		
 		msg_data = dict()
