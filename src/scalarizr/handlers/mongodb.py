@@ -442,7 +442,17 @@ class MongoDBHandler(ServiceCtlHandler):
 				rs_cfg = self.mongodb.cli.get_rs_config()
 				rs_cfg['members'] = [m for m in rs_cfg['members'] if m['host'] == nodename]
 				self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
-				wait_until(lambda: self.mongodb.is_replication_master, timeout=180)	
+				try:
+					wait_until(lambda: self.mongodb.is_replication_master, timeout=30)
+				except:
+					""" Looks like mongo stuck in secondary state (syncingTo dead node)
+						Restart should fix this
+					"""
+					if "seconds reached" in str(sys.exc_info()[1]):
+						self.mongodb.mongod.restart(reason="Reconfiguring replica set")
+						wait_until(lambda: self.mongodb.is_replication_master, timeout=30)
+					else:
+						raise
 		else:
 			wait_until(lambda: self.mongodb.primary_host, timeout=180,
 					 start_text='Wait for primary node in replica set', logger=self._logger)
@@ -899,7 +909,7 @@ class MongoDBHandler(ServiceCtlHandler):
 	def _get_keyfile(self):
 		password = None 
 		if self._cnf.rawini.has_option(CNF_SECTION, OPT_KEYFILE):
-			password = self._cnf.rawini.get(CNF_SECTION, OPT_KEYFILE)	
+			password = self._cnf.rawini.get(CNF_SECTION, OPT_KEYFILE)
 		return password
 
 

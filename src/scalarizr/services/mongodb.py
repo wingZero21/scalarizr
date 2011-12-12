@@ -673,7 +673,7 @@ class Mongod(object):
 			self._logger.debug('%s process has been stopped.' % MONGOD)
 	
 	def restart(self, reason=None):
-		if not self.is_running:
+		if self.is_running:
 			self.stop(reason)
 			self.start()	
 	
