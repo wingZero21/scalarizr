@@ -464,7 +464,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			if	self.mongodb.is_replication_master:
 			
 				""" Remove host from replica set"""
-				self.mongodb.unregister_slave(down_node_name)
+				self.mongodb.unregister_slave(down_node_host)
 				
 				""" If arbiter was running on the node - unregister it """
 				possible_arbiter = "%s:%s" % (down_node_host, mongo_svc.ARBITER_DEFAULT_PORT)
@@ -875,13 +875,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		finally:
 			self.send_int_message(message.local_ip,
 					MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT, msg_body)
-			
-			
+
+
 	def on_MongoDb_RemoveShard(self, message):
 		try:
 			if not self.rs_id in (0,1):
 				raise Exception('No router running on host')
-		
+
 			dbs = self.mongodb.router_cli.list_cluster_databases()
 			exclude_unsharded = ('test', 'admin')
 			""" Get all unpartitioned db names where we are primary """
