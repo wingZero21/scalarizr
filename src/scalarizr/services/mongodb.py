@@ -240,8 +240,13 @@ class MongoDB(BaseService):
 	def stop_router(self):
 		self._logger.debug('Stopping router process')
 		Mongos.stop()
-		
 
+
+	def restart_router(self):
+		self._logger.debug('Restarting router process')
+		Mongos.restart()
+
+			
 	def stop_default_init_script(self):
 		if self.default_init_script.running:
 			if not self.router_cli.is_router_connection():
@@ -691,10 +696,12 @@ class Mongos(object):
 	sock = initdv2.SockParam(ROUTER_DEFAULT_PORT)
 	keyfile = None
 	
+
 	@classmethod
 	def set_keyfile(cls, keyfile = None):
 		cls.keyfile = keyfile
 	
+
 	@classmethod
 	def start(cls):
 		if not cls.is_running():
@@ -710,6 +717,7 @@ class Mongos(object):
 			wait_until(lambda: cli.has_connection, timeout=MAX_START_TIMEOUT)
 			cls._logger.debug('%s process has been started.' % MONGOS)
 
+
 	@classmethod
 	def stop(cls):
 		if cls.is_running():
@@ -719,6 +727,7 @@ class Mongos(object):
 			wait_until(lambda: not cls.is_running, timeout=MAX_STOP_TIMEOUT)
 			cls._logger.debug('%s process has been stopped.' % MONGOS)
 
+
 	@classmethod
 	def is_running(cls):
 		try:
@@ -726,6 +735,13 @@ class Mongos(object):
 			return True
 		except:
 			return False
+
+
+	@classmethod
+	def restart(cls):
+		if cls.is_running:
+			cls.stop()
+			cls.start()
 
 
 class MongoCLI(object):

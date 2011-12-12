@@ -383,12 +383,16 @@ class MongoDBHandler(ServiceCtlHandler):
 		private_ip = self._platform.get_private_ip()
 		if message.local_ip != private_ip:
 			
+			new_host_shard_idx = int(message.mongodb['shard_index'])
+			new_host_rs_id = int(message.mongodb['replica_set_index'])
+
 			""" If mongos runs on this instance """
 			if self.rs_id in (0,1):
+				""" Restart router if hostup sent from configserver node """
+				if new_host_shard_idx == 0 and new_host_rs_id == 0:
+					self.mongodb.restart_router()
 				self._logger.debug('Flushing router configuration')
 				self.mongodb.router_cli.flush_router_cfg()
-				
-			new_host_shard_idx = int(message.mongodb['shard_index'])
 			
 			if self.mongodb.is_replication_master and \
 											self.shard_index == new_host_shard_idx:			   
