@@ -22,7 +22,6 @@ from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 import logging, os, sys, threading
 
 
-
 _lifecycle = None
 def get_handlers():
 	if not _lifecycle:
