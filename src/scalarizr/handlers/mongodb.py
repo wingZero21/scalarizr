@@ -550,7 +550,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				self._logger.debug("Got %s from node %s but ip address doesn't match.", message.name, down_node_host)
 				return
 
-
 			def node_terminated(node_name):
 				for node in self.mongodb.cli.get_rs_status()['members']:
 					if node['name'] != node_name:
@@ -560,7 +559,7 @@ class MongoDBHandler(ServiceCtlHandler):
 					return False
 
 			self._logger.debug('Wait until node is down or removed from replica set')
-			wait_until(lambda n: n in self.mongodb.replicas or node_terminated(n),
+			wait_until(lambda n: n not in self.mongodb.replicas or node_terminated(n),
 								 args=(down_node_name,), logger=self._logger, timeout=180)
 			self.on_HostDown(message)
 
