@@ -559,8 +559,9 @@ class MongoDBHandler(ServiceCtlHandler):
 						return True
 					return False
 
-			self._logger.debug('Wait until node is down')
-			wait_until(node_terminated, args=(down_node_name,), logger=self._logger, timeout=180)
+			self._logger.debug('Wait until node is down or removed from replica set')
+			wait_until(lambda n: n in self.mongodb.replicas or node_terminated(n),
+								 args=(down_node_name,), logger=self._logger, timeout=180)
 			self.on_HostDown(message)
 
 			
