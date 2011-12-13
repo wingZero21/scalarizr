@@ -19,7 +19,7 @@ from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, Hosts, cryptotool
 from scalarizr.util.filetool import split, rchown
-from scalarizr.config import BuiltinBehaviours, ScalarizrState
+from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 import scalarizr.services.mongodb as mongo_svc
@@ -47,11 +47,19 @@ SHARD_NAME_TPL			= "shard-%s"
 
 HEARTBEAT_INTERVAL		= 60
 
+CLUSTER_STATE_KEY		= "mongodb.cluster_state"
+
+
 
 		
 def get_handlers():
 	return (MongoDBHandler(), )
 
+
+
+class MongoDBClusterStates:
+	TERMINATING = 'terminating'
+	RUNNING		= 'running'
 
 
 class MongoDBMessages:
@@ -326,9 +334,11 @@ class MongoDBHandler(ServiceCtlHandler):
 				self.create_shard()
 		else:
 			hostup_msg.mongodb['router'] = 0
-			
+		
+		STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.RUNNING
+
 		hostup_msg.mongodb['keyfile'] = self._cnf.read_key(BEHAVIOUR)
-	
+		
 		repl = 'primary' if first_in_rs else 'secondary'
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 		
@@ -339,6 +349,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 			shard_idx = int(message.mongodb['shard_index'])
 			rs_idx = int(message.mongodb['replica_set_index'])
+
 			hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
 			
 			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
@@ -417,14 +428,23 @@ class MongoDBHandler(ServiceCtlHandler):
 			t = self._status_trackers[message.local_ip]
 			t.stop()
 			del self._status_trackers[message.local_ip]
-		
+
+		if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
+			return
+
 		shard_idx = int(message.mongodb['shard_index'])
 		rs_idx = int(message.mongodb['replica_set_index'])
-		
+
 		down_node_host = HOSTNAME_TPL % (shard_idx, rs_idx)
 		down_node_name = '%s:%s' % (down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
 		
 		if down_node_name not in self.mongodb.replicas:
+			return
+		
+		replica_ip = Hosts.hosts().get(down_node_host)
+
+		if not replica_ip or replica_ip != message.local_ip:
+			self._logger.debug("Got %s from node %s but ip address doesn't match.", message.name, down_node_host)
 			return
 		
 		is_master = self.mongodb.is_replication_master
@@ -461,7 +481,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			wait_until(lambda: self.mongodb.primary_host, timeout=180,
 					 start_text='Wait for primary node in replica set', logger=self._logger)
 
-			if	self.mongodb.is_replication_master:
+			if self.mongodb.is_replication_master:
 			
 				""" Remove host from replica set"""
 				self.mongodb.unregister_slave(down_node_host)
@@ -489,7 +509,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				"""
 				replicas = [r for r in self.mongodb.replicas if r != down_node_name]
 				if len(replicas) % 2 != 0:
-					self.mongodb.stop_arbiter()		
+					self.mongodb.stop_arbiter()
 					
 					
 	def on_before_reboot_start(self, *args, **kwargs):
@@ -500,14 +520,49 @@ class MongoDBHandler(ServiceCtlHandler):
 		pass
 	
 			
-
 	def on_BeforeHostTerminate(self, message):
+
+		if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
+			return
+
 		if message.local_ip == self._platform.get_private_ip():
+			if self.mongodb.is_replication_master:
+				self.mongodb.cli.step_down(180, force=True)
+			self.mongodb.stop_arbiter()
 			self.mongodb.stop_config_server()
 			self.mongodb.mongod.stop('Server will be terminated')	
 			
 			self._logger.info('Detaching %s storage' % BEHAVIOUR)
 			self.storage_vol.detach()
+		else:
+			shard_idx = int(message.mongodb['shard_index'])
+			rs_idx = int(message.mongodb['replica_set_index'])
+
+			down_node_host = HOSTNAME_TPL % (shard_idx, rs_idx)
+			down_node_name = '%s:%s' % (down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
+
+			if down_node_name not in self.mongodb.replicas:
+				return
+
+			replica_ip = Hosts.hosts().get(down_node_host)
+
+			if not replica_ip or replica_ip != message.local_ip:
+				self._logger.debug("Got %s from node %s but ip address doesn't match.", message.name, down_node_host)
+				return
+
+
+			def node_terminated(node_name):
+				for node in self.mongodb.cli.get_rs_status()['members']:
+					if node['name'] != node_name:
+						continue
+					if int(node['health']) == 0:
+						return True
+					return False
+
+			self._logger.debug('Wait until node is down')
+			wait_until(node_terminated, args=(down_node_name,), logger=self._logger, timeout=180)
+			self.on_HostDown(message)
+
 			
 	def on_MongoDb_IntCreateDataBundle(self, message):
 		msg_data = self._create_data_bundle()
@@ -836,7 +891,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		message.mongodb = self._compat_storage_data(self.storage_vol)
 		message.mongodb['password'] = self.scalr_password
 		
+
 	def on_MongoDb_ClusterTerminate(self, message):
+		STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
 		role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
 		cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self, int(message.timeout))
 		cluster_terminate_watcher.start()
@@ -855,6 +912,8 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 	def on_MongoDb_IntClusterTerminate(self, message):
 		try:
+			STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
+
 			is_replication_master = self.mongodb.is_replication_master
 			self.mongodb.mongod.stop()
 			self.mongodb.stop_config_server()

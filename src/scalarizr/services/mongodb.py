@@ -963,14 +963,18 @@ class MongoCLI(object):
 	def list_cluster_databases(self):
 		""" list databases with shard status """
 		return list(self.connection.config.databases.find())
-	
-	
+
+
 	def remove_shard(self, shard_name):
 		return self.connection.admin.command('removeshard', shard_name)
 
 
 	def move_primary(self, db_name, dest_shard):
 		return self.connection.admin.command("moveprimary", db_name, to=dest_shard)
-		
-		
-	
+
+
+	def step_down(self, seconds=1, force=False):
+		c = {'replSetStepDown' : int(seconds)}
+		if force:
+			c.update({'force' : 'true'})
+		return self.connection.admin.command(c)
