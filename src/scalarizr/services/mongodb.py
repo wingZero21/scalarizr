@@ -974,7 +974,4 @@ class MongoCLI(object):
 
 
 	def step_down(self, seconds=1, force=False):
-		c = {'replSetStepDown' : int(seconds)}
-		if force:
-			c.update({'force' : 'true'})
-		return self.connection.admin.command(c)
+		return self.connection.admin.command('replSetStepDown', seconds, force=force)
