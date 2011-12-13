@@ -47,6 +47,10 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		
 
 		pid_file = None
+		'''
+		Saw on 8.04:
+		--pid-path=/var/run/nginx
+		but actual pid-file is /var/run/nginx.pid
 		try:
 			nginx = software.whereis('nginx')
 			if nginx:
@@ -56,6 +60,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 						pid_file = m.group(1)
 		except:
 			pass
+		'''
 						
 		initdv2.ParametrizedInitScript.__init__(
 			self, 
