@@ -39,14 +39,6 @@ class ConfigurationFile(object):
 		raise NotImplemented()
 
 	def __enter__(self):
-		return self
-
-	def __exit__(self, *args):
-		if args[0] and hasattr(self.local, 'last_trans_id'):
-			backup_path = os.path.join(self.backup_dir, self.local.last_trans_id)
-			shutil.copy(backup_path, self.path)
-
-	def save(self):
 		self.local.last_trans_id = str(time.time())
 		if not os.path.exists(self.backup_dir):
 			os.makedirs(self.backup_dir)
@@ -55,6 +47,17 @@ class ConfigurationFile(object):
 			fp.write(str(self))
 		return self
 
+	def __exit__(self, *args):
+		if args[0] and hasattr(self.local, 'last_trans_id'):
+			backup_path = os.path.join(self.backup_dir, self.local.last_trans_id)
+			shutil.copy(backup_path, self.path)
+
+	def trans(self, enter=None, exit=None):
+		raise NotImplemented()
+		return self
+
+	def reload(self):
+		raise NotImplemented()
 
 BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
 PART_SUFFIX = '.part.'	
