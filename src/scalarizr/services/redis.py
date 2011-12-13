@@ -388,8 +388,8 @@ class RedisConf(BaseRedisConfig):
 	requirepass	 = property(_get_requirepass, _set_requirepass)
 	appendonly	 = property(_get_appendonly, _set_appendonly)
 	dbfilename	 = property(_get_dbfilename, _set_dbfilename)
-		
-		
+	dbfilename_default = DB_FILENAME
+
 class RedisCLI(object):
 	path = REDIS_CLI_PATH
 	

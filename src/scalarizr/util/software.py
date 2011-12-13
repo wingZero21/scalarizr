@@ -220,6 +220,7 @@ def apache_software_info():
 
 
 explore('apache', apache_software_info)
+	
 
 def tomcat_software_info():
 	
@@ -340,3 +341,27 @@ def rabbitmq_software_info():
 	raise SoftwareError
 
 explore('rabbitmq', rabbitmq_software_info)
+
+
+def redis_software_info():
+
+	binary_name = "redis-server" # if disttool.is_redhat_based() else "redis-cli"
+	binaries = whereis(binary_name)
+	if not binaries:
+		raise SoftwareError("Can't find executable for redis server")
+		
+	out = system2((binaries[0], '-v'))[0]
+	if not out:
+		raise SoftwareError
+	
+	version_string = out.splitlines()[0]
+	res = re.search('[\d\.]+', version_string)
+	if res:
+		version = res.group(0)
+	
+		return SoftwareInfo('redis-server', version, out)
+	raise SoftwareError
+
+
+explore('redis', redis_software_info)
+

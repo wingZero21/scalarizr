@@ -14,9 +14,10 @@ import logging
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until
+from scalarizr.util import system2, wait_until, initdv2, disttool, software
 from scalarizr.util.filetool import split, rchown
 from scalarizr.services.redis import Redis
+from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
@@ -34,6 +35,10 @@ OPT_PERSISTENCE_TYPE		= 'persistence_type'
 OPT_MASTER_PASSWORD			= "master_password"
 OPT_VOLUME_CNF				= 'volume_config'
 OPT_SNAPSHOT_CNF			= 'snapshot_config'
+
+REDIS_CNF_PATH				= 'cnf_path'
+UBUNTU_CONFIG_PATH			= '/etc/redis/redis.conf'
+CENTOS_CONFIG_PATH			= '/etc/redis.conf'
 
 BACKUP_CHUNK_SIZE 			= 200*1024*1024
 DEFAULT_PORT	= 6379
@@ -85,6 +90,7 @@ class RedisHandler(ServiceCtlHandler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup('redis'), RedisCnfController())
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_%s_data_bundle' % BEHAVIOUR,
@@ -565,5 +571,77 @@ class RedisHandler(ServiceCtlHandler):
 			iptables.insert_rule(None, RuleSpec(dport=DEFAULT_PORT, jump='ACCEPT', protocol=P_TCP))		
 	
 
-	
-	
+class RedisCnfController(CnfController):
+
+	def __init__(self):
+		cnf_path = UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
+		CnfController.__init__(self, BEHAVIOUR, cnf_path, 'redis', {'1':'yes', '0':'no'})
+
+
+	@property
+	def _software_version(self):
+		return software.software_info('redis').version
+
+	'''
+	#If we don't need delete from current config file, scalr presets options  == default preset params 
+	def apply_preset(self, preset):
+		conf = Configuration(self._config_format)
+		conf.read(self._config_path)
+		
+		self._before_apply_preset()
+		
+		ver = self._software_version
+		for opt in self._manifest:
+			path = opt.name if not opt.section else '%s/%s' % (opt.section, opt.name)
+			
+			try:
+				value = conf.get(path)
+			except NoPathError:
+				value = ''
+			
+			if opt.name in preset.settings:
+				new_value = preset.settings[opt.name]
+				
+				# Skip unsupported
+				if ver and opt.supported_from and opt.supported_from > ver:
+					self._logger.debug("Skipping option '%s' supported from %s; installed %s" % 
+							(opt.name, opt.supported_from, ver))
+					continue
+								
+				if not opt.default_value:
+					self._logger.debug("Option '%s' has no default value" % opt.name)
+				elif new_value == opt.default_value and new_value != value: 
+					self._logger.debug("Option '%s' equal to default." % opt.name)
+				elif new_value == opt.default_value and new_value == value:
+					self._logger.debug("Skip option '%s' equal to default. Not changed" % opt.name)
+					continue
+				
+				if self.definitions and new_value in self.definitions:
+					manifest = Configuration('ini')
+					if os.path.exists(self._manifest_path):
+						manifest.read(self._manifest_path)
+					try:
+						if manifest.get('%s/type' % opt.name) == 'boolean':
+							new_value = self.definitions[new_value]
+					except NoPathError, e:
+						pass
+				
+				self._logger.debug("Check that '%s' value changed:'%s'='%s'"%(opt.name, value, new_value))
+					
+				if new_value == value:
+					self._logger.debug("Skip option '%s'. Not changed" % opt.name)
+					pass
+				else:
+					self._logger.debug("Set option '%s' = '%s'" % (opt.name, new_value))
+					self._logger.debug('Set path %s = %s', path, new_value)
+					conf.set(path, new_value, force=True)
+					self._after_set_option(opt, new_value)
+			else:
+				if value:
+					self._logger.debug("Removing option '%s'. Not found in preset" % opt.name)	
+					conf.remove(path)
+				self._after_remove_option(opt)
+		
+		self._after_apply_preset()
+		conf.write(self._config_path)
+		'''
