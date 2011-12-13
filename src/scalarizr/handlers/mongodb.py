@@ -330,6 +330,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			hostup_msg.mongodb['router'] = 1
 			try:
 				self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+			except:
+				pass
 			finally:
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 		
