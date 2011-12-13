@@ -328,8 +328,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		if self.rs_id in (0,1):
 			self.mongodb.start_router()
 			hostup_msg.mongodb['router'] = 1
-			self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
-			self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
+			try:
+				self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+			finally:
+				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 		
 			if make_shard:
 				self._logger.info('Initializing shard')
