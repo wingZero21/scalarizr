@@ -3,6 +3,7 @@ Created on Sep 8, 2011
 
 @author: Spike
 '''
+from __future__ import with_statement
 
 import os
 import re
@@ -17,8 +18,7 @@ from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, run_detached, software, wait_until
 from scalarizr.config import BuiltinBehaviours
 
-if sys.version_info < (2,6,0):
-	from __future__ import with_statement
+
 
 
 SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
