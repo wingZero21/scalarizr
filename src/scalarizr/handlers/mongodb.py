@@ -328,6 +328,8 @@ class MongoDBHandler(ServiceCtlHandler):
 		if self.rs_id in (0,1):
 			self.mongodb.start_router()
 			hostup_msg.mongodb['router'] = 1
+			self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+			self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 		
 			if make_shard:
 				self._logger.info('Initializing shard')
@@ -338,6 +340,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.RUNNING
 
 		hostup_msg.mongodb['keyfile'] = self._cnf.read_key(BEHAVIOUR)
+		hostup_msg.mongodb['password'] = self.scalr_password
 		
 		repl = 'primary' if first_in_rs else 'secondary'
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
@@ -733,20 +736,12 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
 						
-		password = self.scalr_password
-
-		self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, password)
-		#self.mongodb.authenticate(mongo_svc.SCALR_USER, password)
-		
-		msg_data = dict()
-		msg_data['password'] = password
-
 		# Create snapshot
 		snap = self._create_snapshot()
 		Storage.backup_config(snap.config(), self._snapshot_config_path)
 
 		# Update HostInitResponse message 
-		msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+		msg_data = self._compat_storage_data(self.storage_vol, snap)
 					
 		message.mongodb = msg_data.copy()
 		try:
@@ -889,7 +884,6 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.info('Successfully joined replica set')
 
 		message.mongodb = self._compat_storage_data(self.storage_vol)
-		message.mongodb['password'] = self.scalr_password
 		
 
 	def on_MongoDb_ClusterTerminate(self, message):
