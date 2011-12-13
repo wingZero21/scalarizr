@@ -160,14 +160,17 @@ class MysqlProxyHandler(ServiceCtlHandler):
 					slaves.append(ip)
 			
 		if master:
+			self._logger.debug('Adding mysql master %s to  mysql-proxy defaults file', master)
 			self.config.add('./mysql-proxy/proxy-backend-addresses', '%s:3306' % master)
 		if slaves:
+			self._logger.debug('Adding mysql slaves to  mysql-proxy defaults file: %s', ', '.join(slaves))
 			for slave in slaves:
 				self.config.add('./mysql-proxy/proxy-read-only-backend-addresses', '%s:3306' % slave)
 		
 		self.config.set('./mysql-proxy/pid-file', PID_FILE, force=True)
 		self.config.set('./mysql-proxy/daemon', 'true', force=True)
-
+		
+		self._logger.debug('Saving new mysql-proxy defaults file')
 		self.config.write(CONFIG_FILE_PATH)
 		os.chmod(CONFIG_FILE_PATH, 0660)
 
