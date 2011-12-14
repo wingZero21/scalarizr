@@ -975,3 +975,7 @@ class MongoCLI(object):
 
 	def step_down(self, seconds=1, force=False):
 		return self.connection.admin.command('replSetStepDown', seconds, force=force)
+
+
+	def list_shards(self):
+		return list(self.connection.config.shards.find())

@@ -382,8 +382,14 @@ class MongoDBHandler(ServiceCtlHandler):
 	def create_shard(self):
 		shard_index = self.shard_index
 		shard_name = SHARD_NAME_TPL % shard_index
+		shard_names = [s['_id'] for s in self.mongodb.router_cli.list_shards()]
+
+		if shard_name in shard_names:
+			self._logger.warning('Shard %s already exists.', shard_name)
+			return
+
 		rs_name = RS_NAME_TPL % shard_index
-		return self.mongodb.router_cli.add_shard(shard_name, rs_name, self.mongodb.replicas)
+		self.mongodb.router_cli.add_shard(shard_name, rs_name, self.mongodb.replicas)
 
 
 	def on_HostInit(self, message):
