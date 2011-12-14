@@ -582,13 +582,24 @@ class RedisCnfController(CnfController):
 	@property
 	def _software_version(self):
 		return software.software_info('redis').version
-
-
+	"""
+	def _get_password(self):
+		password = None 
+		cnf = bus.cnf
+		if cnf.rawini.has_option(CNF_SECTION, OPT_MASTER_PASSWORD):
+			password = cnf.rawini.get(CNF_SECTION, OPT_MASTER_PASSWORD)	
+		return password
+	
 	def _after_apply_preset(self):
-		redis = Redis()
+		'''redis = Redis()
+		self._logger.debug('is_replication_master: %s' % redis.is_replication_master)
 		password = redis.password
+		password = self._get_password()
+		self._logger.debug('Saving redis data with pass: %s' % password)
 		cli = RedisCLI(password)
-		cli.bgsave()
+		cli.bgsave()'''
+		pass"""
+
 
 	'''
 	#If we don't need delete from current config file
