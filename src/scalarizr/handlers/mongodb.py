@@ -353,26 +353,25 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
 		self._stop_watcher(message.local_ip)
 		if message.local_ip != self._platform.get_private_ip():
-		
+
 			shard_idx = int(message.mongodb['shard_index'])
 			rs_idx = int(message.mongodb['replica_set_index'])
 
 			hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
-			
+
 			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
 			Hosts.set(message.local_ip, hostname)
-			
+
 			is_master = self.mongodb.is_replication_master
-			
+
 			if is_master and self.shard_index == shard_idx:
-				
+
 				nodename = '%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				if nodename not in self.mongodb.replicas:
 					self.mongodb.register_slave(hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 				else:
 					self._logger.warning('Host %s is already in replica set.' % nodename)
-				
-				
+
 				watcher = StatusWatcher(hostname, self, message.local_ip)
 				self._logger.info('Starting bootstrap watcher for node ip=%s', message.local_ip)
 				watcher.start()
@@ -729,15 +728,14 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
-		init_start = not self._storage_valid()	
-		
+
 		self.mongodb.prepare(rs_name)
 		self.mongodb.start_shardsvr()
 				
-		if init_start:
-			self.mongodb.initiate_rs()			
+		""" Check if replset already exists """
+		if not list(self.mongodb.cli.connection.local.system.replset.find()):
+			self.mongodb.initiate_rs()
 		else:
-			
 			nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 			
 			rs_cfg = self.mongodb.cli.get_rs_config()
@@ -826,7 +824,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		first_start = not self._storage_valid()
 		if not first_start:
-			self.mongodb.cli.connection.local.system.replset.remove()
+			self.mongodb.remove_replset_info()
 			self.mongodb.mongod.stop('Removing previous replication set info')
 			self.mongodb.start_shardsvr()
 
