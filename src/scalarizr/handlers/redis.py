@@ -16,12 +16,13 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, initdv2, disttool, software
 from scalarizr.util.filetool import split, rchown
-from scalarizr.services.redis import Redis
+from scalarizr.services.redis import Redis, RedisCLI
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
@@ -582,8 +583,16 @@ class RedisCnfController(CnfController):
 	def _software_version(self):
 		return software.software_info('redis').version
 
+
+	def _after_apply_preset(self):
+		redis = Redis()
+		password = redis.password
+		cli = RedisCLI(password)
+		cli.bgsave()
+
 	'''
-	#If we don't need delete from current config file, scalr presets options  == default preset params 
+	#If we don't need delete from current config file
+	# scalr presets options  == default preset params 
 	def apply_preset(self, preset):
 		conf = Configuration(self._config_format)
 		conf.read(self._config_path)
