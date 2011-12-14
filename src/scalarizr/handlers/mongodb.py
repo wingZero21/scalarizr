@@ -225,7 +225,6 @@ class MongoDBHandler(ServiceCtlHandler):
 
 			if self.rs_id in (0,1):
 				self.mongodb.start_router()
-			
 	
 	def on_reload(self):
 		self._queryenv = bus.queryenv_service
@@ -540,9 +539,9 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.mongodb.stop_arbiter()
 			self.mongodb.stop_config_server()
 			self.mongodb.mongod.stop('Server will be terminated')	
-			
-			self._logger.info('Detaching %s storage' % BEHAVIOUR)
-			self.storage_vol.detach()
+			if self.storage_vol.device and  self.storage_vol.detached:
+				self._logger.info('Detaching %s storage' % BEHAVIOUR)
+				self.storage_vol.detach()
 		else:
 			shard_idx = int(message.mongodb['shard_index'])
 			rs_idx = int(message.mongodb['replica_set_index'])
@@ -957,6 +956,10 @@ class MongoDBHandler(ServiceCtlHandler):
 			err_msg = sys.exc_info()[1]
 			msg_body = dict(status='error',	last_error=err_msg, shard_index=self.shard_index)
 			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
+		finally:
+			self._logger.info("Destroying storage")
+			self.storage_vol.detach()
+			self.storage_vol.destroy()
 
 
 	def get_unpartitioned_dbs(self, shard_name=None):
