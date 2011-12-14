@@ -269,13 +269,19 @@ class MongoDB(BaseService):
 		ret = self.cli.remove_slave(ip, port)
 		if ret['ok'] == '0':
 			self._logger.error('Could not remove replica %s from set: %s' % (ip, ret['errmsg']))
-	
+
+
 	"""
 	def wait_for_sync(self):
 		wait_until(lambda: self.status == 1 or self.status == 2, timeout=3600, sleep=2)
 	"""
-	
-	
+
+
+	def remove_replset_info(self):
+		self._logger.info("Removing previous replication set info")
+		return self.cli.connection.local.system.replset.remove()
+
+
 	@property
 	def status(self):
 		'''
@@ -342,6 +348,8 @@ class MongoDB(BaseService):
 			self._config_server = Mongod(CONFIG_SERVER_CONF_PATH, self.keyfile.path, CONFIG_SERVER_DATA_DIR, \
 										 CONFIG_SERVER_DEFAULT_PORT)
 		return self._config_server
+
+
 
 
 	def disable_requiretty(self):
