@@ -309,10 +309,8 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		rs_name = RS_NAME_TPL % self.shard_index
 		
-		make_shard = False
-		
 		if first_in_rs:
-			make_shard = self._init_master(hostup_msg, rs_name)	
+			self._init_master(hostup_msg, rs_name)
 		else:
 			self._init_slave(hostup_msg, rs_name)
 
@@ -334,10 +332,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				pass
 			finally:
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-		
-			if make_shard:
-				self._logger.info('Initializing shard')
-				self.create_shard()
+
+			self.create_shard()
 		else:
 			hostup_msg.mongodb['router'] = 0
 		
@@ -387,6 +383,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.warning('Shard %s already exists.', shard_name)
 			return
 
+		self._logger.info('Initializing shard')
 		rs_name = RS_NAME_TPL % shard_index
 		self.mongodb.router_cli.add_shard(shard_name, rs_name, self.mongodb.replicas)
 
@@ -757,8 +754,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		except KeyError:
 			pass
 		self._update_config(msg_data)
-		
-		return init_start
 	
 	
 	def _get_shard_hosts(self):
