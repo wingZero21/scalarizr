@@ -956,10 +956,6 @@ class MongoDBHandler(ServiceCtlHandler):
 			err_msg = sys.exc_info()[1]
 			msg_body = dict(status='error',	last_error=err_msg, shard_index=self.shard_index)
 			self.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
-		finally:
-			self._logger.info("Destroying storage")
-			self.storage_vol.detach()
-			self.storage_vol.destroy()
 
 
 	def get_unpartitioned_dbs(self, shard_name=None):
@@ -1118,6 +1114,19 @@ class DrainingWatcher(threading.Thread):
 		self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
 
 
+	def remove_storage_volume(self):
+
+		self._logger.info("Stopping all services")
+		self.handler.mongodb.mongod.stop()
+		self.handler.mongodb.stop_router()
+		self.handler.mongodb.stop_config_server()
+		self.handler.mongodb.stop_arbiter()
+
+		self._logger.info("Destroying storage")
+		self.handler.storage_vol.detach()
+		self.handler.storage_vol.destroy()
+
+
 	def run(self):
 		try:
 			self.router_cli.start_balancer()
@@ -1128,14 +1137,20 @@ class DrainingWatcher(threading.Thread):
 				raise Exception('Cannot remove shard %s' % self.shard_name)
 
 			if self.is_draining_complete(ret):
-				self.send_ok_result()
+				try:
+					self.remove_storage_volume()
+				finally:
+					self.send_ok_result()
 				return
 		
 			self._logger.debug('Starting the process of removing shard %s' % self.shard_name)
 		
 			ret = self.router_cli.remove_shard(self.shard_name)			
 			if self.is_draining_complete(ret):
-				self.send_ok_result()
+				try:
+					self.remove_storage_volume()
+				finally:
+					self.send_ok_result()
 				return
 
 
@@ -1154,7 +1169,10 @@ class DrainingWatcher(threading.Thread):
 				self._logger.debug('removeShard process returned state "%s"' % ret['state'])
 			
 				if self.is_draining_complete(ret):
-					self.send_ok_result()
+					try:
+						self.remove_storage_volume()
+					finally:
+						self.send_ok_result()
 					return
 				
 				elif ret['state'] == 'ongoing':
