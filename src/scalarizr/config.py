@@ -924,7 +924,8 @@ class State(object):
 		cur = conn.cursor()
 		try:
 			cur.execute("SELECT value FROM state WHERE name = ?", [name])
-			return cur.fetchone()
+			ret = cur.fetchone()
+			return ret['value'] if ret else ret
 		finally:
 			cur.close()
 

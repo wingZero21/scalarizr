@@ -48,6 +48,7 @@ SHARD_NAME_TPL			= "shard-%s"
 HEARTBEAT_INTERVAL		= 60
 
 CLUSTER_STATE_KEY		= "mongodb.cluster_state"
+REMOVE_VOLUME_KEY		= "mongodb.remove_volume"
 
 
 
@@ -539,9 +540,11 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.mongodb.stop_arbiter()
 			self.mongodb.stop_config_server()
 			self.mongodb.mongod.stop('Server will be terminated')	
-			if self.storage_vol.device and  self.storage_vol.detached:
-				self._logger.info('Detaching %s storage' % BEHAVIOUR)
-				self.storage_vol.detach()
+			self._logger.info('Detaching %s storage' % BEHAVIOUR)
+			self.storage_vol.detach()
+			if STATE[REMOVE_VOLUME_KEY]:
+				self._logger.info("Destroying storage")
+				self.storage_vol.destroy()
 		else:
 			shard_idx = int(message.mongodb['shard_index'])
 			rs_idx = int(message.mongodb['replica_set_index'])
@@ -1114,19 +1117,6 @@ class DrainingWatcher(threading.Thread):
 		self.handler.send_message(MongoDBMessages.REMOVE_SHARD_RESULT, msg_body)
 
 
-	def remove_storage_volume(self):
-
-		self._logger.info("Stopping all services")
-		self.handler.mongodb.mongod.stop()
-		self.handler.mongodb.stop_router()
-		self.handler.mongodb.stop_config_server()
-		self.handler.mongodb.stop_arbiter()
-
-		self._logger.info("Destroying storage")
-		self.handler.storage_vol.detach()
-		self.handler.storage_vol.destroy()
-
-
 	def run(self):
 		try:
 			self.router_cli.start_balancer()
@@ -1137,20 +1127,16 @@ class DrainingWatcher(threading.Thread):
 				raise Exception('Cannot remove shard %s' % self.shard_name)
 
 			if self.is_draining_complete(ret):
-				try:
-					self.remove_storage_volume()
-				finally:
-					self.send_ok_result()
+				STATE[REMOVE_VOLUME_KEY] = 1
+				self.send_ok_result()
 				return
 		
 			self._logger.debug('Starting the process of removing shard %s' % self.shard_name)
 		
 			ret = self.router_cli.remove_shard(self.shard_name)			
 			if self.is_draining_complete(ret):
-				try:
-					self.remove_storage_volume()
-				finally:
-					self.send_ok_result()
+				STATE[REMOVE_VOLUME_KEY] = 1
+				self.send_ok_result()
 				return
 
 
@@ -1169,10 +1155,8 @@ class DrainingWatcher(threading.Thread):
 				self._logger.debug('removeShard process returned state "%s"' % ret['state'])
 			
 				if self.is_draining_complete(ret):
-					try:
-						self.remove_storage_volume()
-					finally:
-						self.send_ok_result()
+					STATE[REMOVE_VOLUME_KEY] = 1
+					self.send_ok_result()
 					return
 				
 				elif ret['state'] == 'ongoing':
@@ -1195,7 +1179,7 @@ class DrainingWatcher(threading.Thread):
 					progress = last_notification_chunks_count - chunks_left
 
 					if progress > trigger_step:
-						progress_in_pct = (progress / init_chunks) * 100
+						progress_in_pct = ((init_chunks - chunks_left) / init_chunks) * 100
 
 						msg_body = dict(shard_index=self.shard_index, total_chunks=init_chunks,
 									chunks_left=chunks_left, progress=progress_in_pct)
