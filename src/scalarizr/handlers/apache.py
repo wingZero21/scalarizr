@@ -211,6 +211,7 @@ class ApacheHandler(ServiceCtlHandler):
 		)
 
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			self._stop_service('Configuring')			
 			self._insert_iptables_rules()
 
 	def on_reload(self):
