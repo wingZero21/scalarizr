@@ -1,6 +1,6 @@
 
 import sys
-if sys.version_info < (2, 5):
+if sys.version_info < (2, 6):
 	import scalarizr.externals.logging as logging
 	import scalarizr.externals.logging.config as logging_config
 	import scalarizr.externals.logging.handlers as logging_handlers
