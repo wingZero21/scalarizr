@@ -210,7 +210,9 @@ class ApacheHandler(ServiceCtlHandler):
 			before_reboot_finish = self.on_before_reboot_finish
 		)
 
+		self._logger.debug('State: %s', self._cnf.state)
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+			self._logger.debug('Bootstrapping routines')
 			self._stop_service('Configuring')			
 			self._insert_iptables_rules()
 
