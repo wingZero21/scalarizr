@@ -1258,7 +1258,7 @@ class ClusterTerminateWatcher(threading.Thread):
 	
 	def __init__(self, role_hosts, handler, timeout):
 
-		super(StatusWatcher, self).__init__()
+		super(ClusterTerminateWatcher, self).__init__()
 		self.role_hosts = role_hosts
 		self.handler = handler
 		self.full_status = {}
