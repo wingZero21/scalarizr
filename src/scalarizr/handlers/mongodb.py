@@ -358,6 +358,9 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
 			Hosts.set(message.local_ip, hostname)
 
+			wait_until(lambda: self.mongodb.primary_host, timeout=180,
+				start_text='Wait for primary node in replica set', logger=self._logger)
+
 			is_master = self.mongodb.is_replication_master
 
 			if is_master and self.shard_index == shard_idx:
@@ -535,6 +538,9 @@ class MongoDBHandler(ServiceCtlHandler):
 			return
 
 		if message.local_ip == self._platform.get_private_ip():
+
+			STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
+
 			if self.mongodb.is_replication_master:
 				self.mongodb.cli.step_down(180, force=True)
 			self.mongodb.stop_arbiter()
@@ -545,6 +551,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			if STATE[REMOVE_VOLUME_KEY]:
 				self._logger.info("Destroying storage")
 				self.storage_vol.destroy()
+
 		else:
 			shard_idx = int(message.mongodb['shard_index'])
 			rs_idx = int(message.mongodb['replica_set_index'])
