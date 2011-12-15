@@ -224,6 +224,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				self.mongodb.start_config_server()
 
 			if self.rs_id in (0,1):
+				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 				mongo_svc.Mongos.auth(mongo_svc.SCALR_USER, self.scalr_password)
 				self.mongodb.start_router()
 
