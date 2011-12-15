@@ -940,17 +940,25 @@ class MongoDBHandler(ServiceCtlHandler):
 			if not self.rs_id in (0,1):
 				raise Exception('No router running on host')
 
-			dbs = self.mongodb.router_cli.list_cluster_databases()
+			cluster_dbs = self.mongodb.router_cli.list_cluster_databases()
 			exclude_unsharded = ('test', 'admin')
 			""" Get all unpartitioned db names where we are primary """
 			unsharded = self.get_unpartitioned_dbs(shard_name=self.shard_name)
 			""" Exclude 'admin' and 'test' databases """
 			unsharded = [db for db in unsharded if db not in exclude_unsharded]
 
+			exclude_local = exclude_unsharded + ('local',)
+			local_db_list = self.mongodb.cli.list_database_names()
+			local_db_list = filter(lambda db: db not in exclude_local, local_db_list)
+			local_db_list = filter(lambda db: db not in cluster_dbs, local_db_list)
+
 			if unsharded:
 				""" Send Scalr sad message with unsharded database list """
 				raise Exception('You have %s unsharded databases in %s shard (%s)' % \
 							(len(unsharded), self.shard_index, ', '.join(unsharded)))
+			elif local_db_list:
+				raise Exception('You have %s local databases in %s shard (%s)' %\
+								(len(local_db_list), self.shard_index, ', '.join(local_db_list)))
 			else:
 				""" Start draining """
 				watcher = DrainingWatcher(self)
