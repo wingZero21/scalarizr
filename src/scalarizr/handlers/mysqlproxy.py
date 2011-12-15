@@ -3,6 +3,9 @@ Created on Sep 20, 2011
 
 @author: Spike
 '''
+
+from __future__ import with_statement
+
 import os
 import time
 import logging
