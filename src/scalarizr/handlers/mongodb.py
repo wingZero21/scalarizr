@@ -927,9 +927,6 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.mongodb.mongod.stop()
 			self.mongodb.stop_config_server()
 			
-			self._logger.info('Detaching %s storage' % BEHAVIOUR)
-			self.storage_vol.detach()
-			
 			msg_body = dict(status='ok',
 							shard_index=self.shard_index,
 							replica_set_index=self.rs_id,
