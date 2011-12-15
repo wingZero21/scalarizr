@@ -218,15 +218,16 @@ class MongoDBHandler(ServiceCtlHandler):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 				
-			#self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
 			self.mongodb.start_shardsvr()
 			
 			if self.shard_index == 0 and self.rs_id == 0:
 				self.mongodb.start_config_server()
 
 			if self.rs_id in (0,1):
+				mongo_svc.Mongos.auth(mongo_svc.SCALR_USER, self.scalr_password)
 				self.mongodb.start_router()
-	
+
+
 	def on_reload(self):
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
@@ -331,6 +332,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			except:
 				pass
 			finally:
+				mongo_svc.Mongos.auth(mongo_svc.SCALR_USER, self.scalr_password)
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 
 			self.create_shard()

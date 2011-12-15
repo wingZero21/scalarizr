@@ -703,11 +703,30 @@ class Mongos(object):
 	_logger = logging.getLogger(__name__)
 	sock = initdv2.SockParam(ROUTER_DEFAULT_PORT)
 	keyfile = None
-	
+	authenticated = False
+	login = None
+	password = None
 
 	@classmethod
 	def set_keyfile(cls, keyfile = None):
 		cls.keyfile = keyfile
+
+
+	@classmethod
+	def auth(cls, login, password):
+		cls.login = login
+		cls.password = password
+
+
+
+	@classmethod
+	def get_cli(cls):
+		if not hasattr(cls, '_cli'):
+			cls._cli = MongoCLI(port=ROUTER_DEFAULT_PORT)
+		if cls.login and cls.password and not cls.authenticated:
+			cls._cli.auth(cls.login, cls.password)
+			cls.authenticated = True
+		return cls._cli
 	
 
 	@classmethod
@@ -720,9 +739,8 @@ class Mongos(object):
 				rchown(DEFAULT_USER, cls.keyfile)
 				args.append('--keyFile=%s' % cls.keyfile)
 			system2(args)
-			cli = MongoCLI(port=ROUTER_DEFAULT_PORT)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
-			wait_until(lambda: cli.has_connection, timeout=MAX_START_TIMEOUT)
+			#wait_until(lambda: cls.get_cli().has_connection, timeout=MAX_START_TIMEOUT)
 			cls._logger.debug('%s process has been started.' % MONGOS)
 
 
@@ -730,8 +748,7 @@ class Mongos(object):
 	def stop(cls):
 		if cls.is_running():
 			cls._logger.debug('Stopping %s process' % MONGOS)
-			cli = MongoCLI(port=ROUTER_DEFAULT_PORT)
-			cli.shutdown_server()
+			cls.get_cli().shutdown_server()
 			wait_until(lambda: not cls.is_running, timeout=MAX_STOP_TIMEOUT)
 			cls._logger.debug('%s process has been stopped.' % MONGOS)
 
