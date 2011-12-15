@@ -1,4 +1,14 @@
 
+import sys
+if sys.version_info < (2, 5):
+	import scalarizr.externals.logging as logging
+	import scalarizr.externals.logging.config as logging_config
+	import scalarizr.externals.logging.handlers as logging_handlers
+	sys.modules['logging'] = logging
+	sys.modules['logging.config'] = logging_config
+	sys.modules['logging.handlers'] = logging_handlers
+
+
 # Core
 from scalarizr import config 
 from scalarizr.bus import bus
