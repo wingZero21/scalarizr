@@ -773,6 +773,7 @@ class MongoCLI(object):
 	
 	authenticated = False
 	host = 'localhost'
+	_instances = dict()
 	
 	def __init__(self, port=REPLICA_DEFAULT_PORT, login=SCALR_USER, password=None):
 		self.port = port
@@ -780,6 +781,15 @@ class MongoCLI(object):
 		self.login = login
 		self.password = password
 		self.sock = initdv2.SockParam(port)
+
+
+	def __new__(cls, *args, **kwargs):
+		'MongoCLI gives only one connection per port'
+		port = args[0] if args else kwargs['port']
+		if port not in cls._instances:
+			cls._instances[port] = super(MongoCLI, cls).__new__(
+				cls, *args, **kwargs)
+		return cls._instances[port]
 
 	@classmethod
 	def find(cls, port=REPLICA_DEFAULT_PORT, login=SCALR_USER, password=None):
@@ -816,6 +826,9 @@ class MongoCLI(object):
 		except pymongo.errors.AutoReconnect, e:
 			if "Connection refused" in str(e):
 				return False
+		except pymongo.errors.OperationFailure, e:
+			if 'unauthorized' in str(e):
+				pass
 		except BaseException, e:
 			self._logger.debug(e)
 		return True
