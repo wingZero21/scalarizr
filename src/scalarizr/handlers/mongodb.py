@@ -1187,7 +1187,7 @@ class DrainingWatcher(threading.Thread):
 					progress = last_notification_chunks_count - chunks_left
 
 					if progress > trigger_step:
-						progress_in_pct = ((init_chunks - chunks_left) / init_chunks) * 100
+						progress_in_pct = int((float(init_chunks - chunks_left) / init_chunks) * 100)
 
 						msg_body = dict(shard_index=self.shard_index, total_chunks=init_chunks,
 									chunks_left=chunks_left, progress=progress_in_pct)
