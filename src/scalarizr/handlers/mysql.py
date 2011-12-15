@@ -714,9 +714,16 @@ class MysqlHandler(ServiceCtlHandler):
 			self._stop_service('Configuring')
 			
 			# Add SELinux rule
-			set_se_path = software.whereis('setsebool')
-			if set_se_path:
-				system2((set_se_path[0], '-P', 'mysqld_disable_trans', '1'))
+			selinux_enabled = False
+			selinuxenabled_path = software.whereis('selinuxenabled')
+			if selinuxenabled_path:
+				ret = system2((selinuxenabled_path[0],), raise_exc=False)[2]
+				selinux_enabled = True if not ret else False
+
+			if selinux_enabled:
+				set_se_path = software.whereis('setsebool')
+				if set_se_path:
+					system2((set_se_path[0], '-P', 'mysqld_disable_trans', '1'))
 
 		
 		elif self._cnf.state == ScalarizrState.RUNNING:
