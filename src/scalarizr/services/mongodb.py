@@ -891,7 +891,7 @@ class MongoCLI(object):
 			new_member['arbiterOnly'] = True
 			
 		cfg['members'].append(new_member)
-		return self.rs_reconfig(cfg)
+		return self.rs_reconfig(cfg, force=True)
 
 
 	def is_master(self):
@@ -931,7 +931,7 @@ class MongoCLI(object):
 		for member in cfg['members']:
 			if member['host'] == host_to_del:
 				cfg['members'].remove(member)
-				return self.rs_reconfig(cfg)
+				return self.rs_reconfig(cfg, force=True)
 		else:
 			self._logger.warning("Host %s not found in replica set" % host_to_del)
 
