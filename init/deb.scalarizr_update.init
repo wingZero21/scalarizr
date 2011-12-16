@@ -14,23 +14,18 @@
 # Description:       Scalarizr is a part of Scalr project
 ### END INIT INFO
 
-
-update_flag="/etc/scalr/private.d/.update"
+update_flag=/etc/scalr/private.d/.update
 
 case "$1" in
         start)
-                time_has_come=$(python -c "import os, sys, time; print int(not os.path.exists(sys.argv[1]) or time.time() - os.stat(sys.argv[1]).st_mtime > 86400)" $update_flag)
-                if [ "1" == "$time_has_come" ]; then
-                        echo 'Updating scalarizr...'
-                        apt-get update
-						export DEBIAN_FRONTEND=noninteractive
-						export DEBIAN_PRIORITY=critical
-						platform=`echo -e "import re;\nwith open('/etc/scalr/public.d/config.ini') as f: print re.search('platform\s*=\s*(\w+)', f.read()).group(1)" | python`
-						apt-get install -y scalarizr scalarizr-${platform}  
-						#apt-get dselect-upgrade -y
-                        #apt-get install -q -y scalarizr/scalr && touch $update_flag
-						touch $update_flag                        
-                fi
+				exec 2>&1
+				exec 1>/var/log/scalarizr_update.log
+                echo 'Updating scalarizr...'
+                apt-get update
+				export DEBIAN_FRONTEND=noninteractive
+				export DEBIAN_PRIORITY=critical
+				platform=`echo -e "import re;\nwith open('/etc/scalr/public.d/config.ini') as f: print re.search('platform\s*=\s*(\w+)', f.read()).group(1)" | python`
+				apt-get install -y scalarizr scalarizr-${platform} && touch $update_flag
                 ;;
                 
         stop)
