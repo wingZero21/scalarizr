@@ -12,7 +12,25 @@ case "$1" in
 		start)
 				exec 2>&1
 				exec 1>/var/log/scalarizr_update.log
+				
                 echo 'Updating scalarizr...'
+    
+    			echo 'Checking network'
+    			url=$(cat /etc/yum.repos.d/scalr.repo | grep 'baseurl' | cut -d '=' -f 2)            
+                python -c "
+import time
+import urlparse
+import socket
+host = urlparse.urlparse('$url')[1]
+while True:
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((host, 80))
+        break
+    except:
+        time.sleep(1)                
+"
+				echo 'Executing package manager'
 				platform=`echo -e "import re;\nf = open('/etc/scalr/public.d/config.ini');\nprint re.search('platform\s*=\s*(\w+)', f.read()).group(1)" | python`
 				yum -y update scalarizr-$platform && touch $update_flag
                 ;;

@@ -20,7 +20,26 @@ case "$1" in
         start)
 				exec 2>&1
 				exec 1>/var/log/scalarizr_update.log
+				
                 echo 'Updating scalarizr...'
+                
+                echo 'Checking network'
+                url=$(cat /etc/apt/sources.list.d/scalr.list | grep deb | head -1 | cut -d ' ' -f 2)
+                python -c "
+import time
+import urlparse
+import socket
+host = urlparse.urlparse('$url')[1]
+while True:
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((host, 80))
+        break
+    except:
+        time.sleep(1)                
+"
+                
+                echo 'Executing package manager'
                 apt-get update
 				export DEBIAN_FRONTEND=noninteractive
 				export DEBIAN_PRIORITY=critical
