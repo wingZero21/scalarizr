@@ -416,6 +416,12 @@ class MongoDBHandler(ServiceCtlHandler):
 			new_host_rs_id = int(message.mongodb['replica_set_index'])
 
 			""" If mongos runs on this instance """
+
+			if self.rs_id == 0 and self.shard_index == 0:
+				config = self.generate_cluster_config()
+				self._logger.debug('Replacing sharding config with %s' % config)
+				self.mongodb.router_cli.config.shards.update(config)
+
 			if self.rs_id in (0,1):
 				""" Restart router if hostup sent from configserver node """
 				if new_host_shard_idx == 0 and new_host_rs_id == 0:
@@ -439,8 +445,28 @@ class MongoDBHandler(ServiceCtlHandler):
 			else:
 				if len(self.mongodb.replicas) % 2 != 0:
 					self.mongodb.stop_arbiter()
-					
-					
+
+
+	def generate_cluster_config(self):
+		shards = {}
+		for host in self._get_cluster_hosts():
+			hostname = HOSTNAME_TPL % (host.shard_index, host.replica_set_index)
+			if host.shard_index in shards:
+				shards[host.shard_index].append(hostname)
+			else:
+				shards[host.shard_index] = [hostname]
+
+		info = []
+		for shard_index, hostnames in shards.items():
+			rset = RS_NAME_TPL % shard_index
+			rset += '/'
+			for hostname in hostnames:
+				rset += ',%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+			info.append({'id': SHARD_NAME_TPL % shard_index, 'host' : rset})
+
+		return info
+
+
 	def on_HostDown(self, message):
 		if message.local_ip in self._status_trackers:
 			t = self._status_trackers[message.local_ip]
@@ -772,9 +798,14 @@ class MongoDBHandler(ServiceCtlHandler):
 	
 	
 	def _get_shard_hosts(self):
-		hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+		hosts = self._get_cluster_hosts()
 		shard_index = self.shard_index
 		return [host for host in hosts if host.shard_index == shard_index]
+
+
+	def _get_cluster_hosts(self):
+		return self._queryenv.list_roles(self._role_name)[0].hosts
+
 
 	def _init_slave(self, message, rs_name):
 		"""
