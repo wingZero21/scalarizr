@@ -420,7 +420,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			if self.rs_id == 0 and self.shard_index == 0:
 				config = self.generate_cluster_config()
 				self._logger.debug('Replacing sharding config with %s' % config)
-				self.mongodb.router_cli.config.shards.update(config)
+				self.mongodb.router_cli.connection.config.shards.update(config)
 
 			if self.rs_id in (0,1):
 				""" Restart router if hostup sent from configserver node """
@@ -461,7 +461,9 @@ class MongoDBHandler(ServiceCtlHandler):
 			rset = RS_NAME_TPL % shard_index
 			rset += '/'
 			for hostname in hostnames:
-				rset += ',%s:%s' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+				rset += '%s:%s,' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+			if rset.endswith(','):
+				rset = rset[:-1]
 			info.append({'id': SHARD_NAME_TPL % shard_index, 'host' : rset})
 
 		return info
