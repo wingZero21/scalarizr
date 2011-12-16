@@ -368,6 +368,9 @@ class MongoDB(BaseService):
 
 
 	def _get_mongod(self):
+		"""
+		@rtype: Mongod
+		"""
 		return self._get('mongod', Mongod.find, self.config, self.keyfile.path, self.cli)
 	
 	def _set_mongod(self, obj):

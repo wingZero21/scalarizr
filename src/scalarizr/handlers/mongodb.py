@@ -225,7 +225,6 @@ class MongoDBHandler(ServiceCtlHandler):
 
 			if self.rs_id in (0,1):
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-				mongo_svc.Mongos.auth(mongo_svc.SCALR_USER, self.scalr_password)
 				self.mongodb.start_router()
 
 
@@ -288,8 +287,8 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_before_host_up(self, hostup_msg):
 		"""
 		Check that replication is up in both master and slave cases
-		@type message: scalarizr.messaging.Message		
-		@param message: HostUp message
+		@type hostup_msg: scalarizr.messaging.Message
+		@param hostup_msg: HostUp message
 		"""
 
 		first_in_rs = True
@@ -318,6 +317,10 @@ class MongoDBHandler(ServiceCtlHandler):
 
 		self._logger.debug('shard_index=%s, type(shard_index)=%s' % (self.shard_index, type(self.shard_index)))
 		self._logger.debug('rs_id=%s, type(rs_id)=%s' % (self.rs_id, type(self.rs_id)))
+
+		possible_self_arbiter = "%s:%s" % (self.hostname, mongo_svc.ARBITER_DEFAULT_PORT)
+		if possible_self_arbiter in self.mongodb.arbiters:
+			self.mongodb.start_arbiter()
 		
 		if self.shard_index == 0 and self.rs_id == 0:
 			self.mongodb.start_config_server()
@@ -333,7 +336,6 @@ class MongoDBHandler(ServiceCtlHandler):
 			except:
 				pass
 			finally:
-				mongo_svc.Mongos.auth(mongo_svc.SCALR_USER, self.scalr_password)
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 
 			self.create_shard()
@@ -351,6 +353,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
 		self._stop_watcher(message.local_ip)
+
 		if message.local_ip != self._platform.get_private_ip():
 
 			shard_idx = int(message.mongodb['shard_index'])
@@ -902,10 +905,14 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 
 	def on_MongoDb_ClusterTerminate(self, message):
-		STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
-		role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
-		cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self, int(message.timeout))
-		cluster_terminate_watcher.start()
+		try:
+			STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
+			role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+			cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self, int(message.timeout))
+			cluster_terminate_watcher.start()
+		except:
+			err_msg = sys.exc_info()[1]
+			self.send_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT,	dict(status='error', last_error=err_msg))
 		
 		
 	def _get_volume_cnf(self):
@@ -922,7 +929,8 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_MongoDb_IntClusterTerminate(self, message):
 		try:
 			STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
-
+			if not self.mongodb.mongod.is_running:
+				self.mongodb.start_shardsvr()
 			is_replication_master = self.mongodb.is_replication_master
 			self.mongodb.mongod.stop()
 			self.mongodb.stop_config_server()
@@ -1109,6 +1117,9 @@ class MongoDBHandler(ServiceCtlHandler):
 class DrainingWatcher(threading.Thread):
 	
 	def __init__(self, handler):
+		"""
+		@type handler: MongoDBHandler
+		"""
 		super(DrainingWatcher, self).__init__()
 		self.handler = handler
 		self.shard_index = self.handler.shard_index
@@ -1212,6 +1223,9 @@ class DrainingWatcher(threading.Thread):
 class StatusWatcher(threading.Thread):
 	
 	def __init__(self, hostname, handler, local_ip):
+		"""
+		@type handler: MongoDBHandler
+		"""
 		super(StatusWatcher, self).__init__()
 		self.hostname = hostname
 		self.handler=handler
@@ -1254,7 +1268,9 @@ class StatusWatcher(threading.Thread):
 class ClusterTerminateWatcher(threading.Thread):
 	
 	def __init__(self, role_hosts, handler, timeout):
-
+		"""
+		:type handler: MongoDBHandler
+		"""
 		super(ClusterTerminateWatcher, self).__init__()
 		self.role_hosts = role_hosts
 		self.handler = handler
@@ -1265,92 +1281,102 @@ class ClusterTerminateWatcher(threading.Thread):
 		self.next_heartbeat = None
 		self.node_ips = {}
 		self.total_nodes_count = len(self.role_hosts)
+		self.logger = self.handler._logger
 		
 	def run(self):
-		# Send cluster terminate notification to all role nodes
-		for host in self.role_hosts:
-			
-			shard_idx = host.shard_index
-			rs_idx = host.replica_set_index
-			
-			if not shard_idx in self.full_status:
-				self.full_status[shard_idx] = {}
-				
-			if not shard_idx in self.node_ips:
-				self.node_ips[shard_idx] = {}
-				
-			self.node_ips[shard_idx][rs_idx] = host.internal_ip
-			
-			self.send_int_cluster_terminate_to_node(host.internal_ip,
-												 		shard_idx, rs_idx)
+		try:
+			# Send cluster terminate notification to all role nodes
+			self.logger.debug("Notify all nodes about cluster termination.")
+			for host in self.role_hosts:
 
-		msg_store = P2pMessageStore()
-		cluster_terminated = False
-		self.next_heartbeat = datetime.datetime.utcnow() + datetime.timedelta(seconds=HEARTBEAT_INTERVAL)
-		
-		while not cluster_terminated:
-			# If timeout reached
-			if datetime.datetime.utcnow() > self.deadline:
-				self.handler.send_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT,
-										dict(status='error'))
-				break
-						
-			msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
-			messages = [pair[1] for pair in msg_queue_pairs]
-			
-			for msg in messages:
-				if not msg.name == MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT:
-					continue
-				
-				try:
-					shard_id = int(msg.shard_index)
-					rs_id = int(msg.replica_set_index)
-					
-					if msg.status == 'ok':
-						if 'last_error' in self.full_status[shard_id][rs_id]:
-							del self.full_status[shard_id][rs_id]['last_error']
-						self.full_status[shard_id][rs_id]['status'] = TerminationState.TERMINATED
-						self.full_status[shard_id][rs_id]['is_master'] = int(msg.is_master) 
+				shard_idx = host.shard_index
+				rs_idx = host.replica_set_index
+
+				if not shard_idx in self.full_status:
+					self.full_status[shard_idx] = {}
+
+				if not shard_idx in self.node_ips:
+					self.node_ips[shard_idx] = {}
+
+				self.node_ips[shard_idx][rs_idx] = host.internal_ip
+
+				self.send_int_cluster_terminate_to_node(host.internal_ip,
+															shard_idx, rs_idx)
+
+			msg_store = P2pMessageStore()
+			cluster_terminated = False
+			self.next_heartbeat = datetime.datetime.utcnow() + datetime.timedelta(seconds=HEARTBEAT_INTERVAL)
+
+			while not cluster_terminated:
+				# If timeout reached
+				if datetime.datetime.utcnow() > self.deadline:
+					raise Exception('Timeout reached.')
+
+				msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
+				messages = [pair[1] for pair in msg_queue_pairs]
+
+				for msg in messages:
+					if not msg.name == MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT:
+						continue
+
+					try:
+						shard_id = int(msg.shard_index)
+						rs_id = int(msg.replica_set_index)
+
+						self.logger.debug("Received ClusterTerminate status=%s from mongo-%s-%s",
+										msg.status, shard_id, rs_id)
+
+						if msg.status == 'ok':
+							if 'last_error' in self.full_status[shard_id][rs_id]:
+								del self.full_status[shard_id][rs_id]['last_error']
+							self.full_status[shard_id][rs_id]['status'] = TerminationState.TERMINATED
+							self.full_status[shard_id][rs_id]['is_master'] = int(msg.is_master)
+						else:
+							self.full_status[shard_id][rs_id]['status'] = TerminationState.FAILED
+							self.full_status[shard_id][rs_id]['last_error'] = msg.last_error
+					finally:
+						msg_store.mark_as_handled(msg.id)
+
+				if datetime.datetime.utcnow() > self.next_heartbeat:
+					self.logger.debug("Preparing ClusterTerminate status message")
+
+					# It's time to send message to scalr
+					msg_body = dict(nodes=[])
+
+					terminated_nodes_count = 0
+
+					for shard_id in range(len(self.full_status)):
+						for rs_id in range(len(self.full_status[shard_id])):
+							node_info = dict(shard_index=shard_id, replica_set_index=rs_id)
+							node_info.update(self.full_status[shard_id][rs_id])
+							msg_body['nodes'].append(node_info)
+							status = self.full_status[shard_id][rs_id]['status']
+
+							if status in (TerminationState.UNREACHABLE, TerminationState.FAILED):
+								ip = self.node_ips[shard_id][rs_id]
+								self.send_int_cluster_terminate_to_node(ip,	shard_id, rs_id)
+							elif status == TerminationState.TERMINATED:
+								terminated_nodes_count += 1
+
+					msg_body['progress'] = int(float(terminated_nodes_count) * 100 / self.total_nodes_count)
+					msg_body['start_date'] = self.start_date
+
+					self.logger.debug("Sending ClusterTerminate status to Scalr")
+					self.handler.send_message(MongoDBMessages.CLUSTER_TERMINATE_STATUS, msg_body)
+
+					if terminated_nodes_count == self.total_nodes_count:
+						cluster_terminated = True
+						break
 					else:
-						self.full_status[shard_id][rs_id]['status'] = TerminationState.FAILED
-						self.full_status[shard_id][rs_id]['last_error'] = msg.last_error
-				finally:
-					msg_store.mark_as_handled(msg.id)
+						self.next_heartbeat += datetime.timedelta(seconds=HEARTBEAT_INTERVAL)
 
-			if datetime.datetime.utcnow() > self.next_heartbeat:
-				# It's time to send message to scalr
-				msg_body = dict(nodes=[])
-			
-				terminated_nodes_count = 0
-				
-				for shard_id in range(len(self.full_status)):
-					for rs_id in range(len(self.full_status[shard_id])):
-						node_info = dict(shard_index=shard_id, replica_set_index=rs_id)
-						node_info.update(self.full_status[shard_id][rs_id])
-						msg_body['nodes'].append(node_info)
-						status = self.full_status[shard_id][rs_id]['status']
-						
-						if status in (TerminationState.UNREACHABLE, TerminationState.FAILED):
-							ip = self.node_ips[shard_id][rs_id]
-							self.send_int_cluster_terminate_to_node(ip,	shard_idx, rs_idx)
-						elif status == TerminationState.TERMINATED:
-							terminated_nodes_count += 1
-							
-				msg_body['progress'] = terminated_nodes_count * 100 / self.total_nodes_count
-				msg_body['start_date'] = self.start_date
-				
-				self.handler.send_message(MongoDBMessages.CLUSTER_TERMINATE_STATUS, msg_body)
-
-
-				if terminated_nodes_count == self.total_nodes_count:
-					cluster_terminated = True
-					break
-				else:
-					self.next_heartbeat += datetime.timedelta(seconds=HEARTBEAT_INTERVAL)
-				
-		if cluster_terminated:
+			self.logger.debug("Cluster successfully terminated. Notifying Scalr")
 			self.handler.send_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT,
 															dict(status='ok'))
+		except:
+			err_msg = sys.exc_info()[1]
+			self.handler.send_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT,
+				dict(status='error', last_error=err_msg))
 
 	def send_int_cluster_terminate_to_node(self, ip, shard_idx, rs_idx):
 		try:
