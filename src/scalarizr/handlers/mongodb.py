@@ -379,8 +379,9 @@ class MongoDBHandler(ServiceCtlHandler):
 						if host.shard_index > (shards_total - 1):
 							""" WTF? Artifact server from unknown shard. Just skip it """
 							continue
-						host_status = status_table[host.shard_index]
-						host_status.ip_addr = host.internal_ip
+
+						status_table[host.shard_index] = Status(False, False, host.internal_ip)
+
 
 				else:
 					wait_for_config_server = True
@@ -413,6 +414,9 @@ class MongoDBHandler(ServiceCtlHandler):
 							node_shard_id = int(message.mongodb['shard_index'])
 							node_rs_id = int(message.mongodb['replica_set_index'])
 
+							if node_shard_id == self.shard_index:
+								continue
+
 							if message.name == Messages.HOST_INIT:
 								""" Updating hostname in /etc/hosts """
 								self.on_HostInit(message)
@@ -433,7 +437,7 @@ class MongoDBHandler(ServiceCtlHandler):
 								try:
 									node_shard_id = int(message.shard_index)
 									node_status = status_table[node_shard_id]
-									node_status.is_ready = True
+									status_table[node_shard_id] = Status(True, True, node_status.ip_addr)
 
 								finally:
 									msg_store.mark_as_handled(message.id)
