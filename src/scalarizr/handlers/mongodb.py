@@ -344,6 +344,13 @@ class MongoDBHandler(ServiceCtlHandler):
 
 		if self.rs_id in (0,1):
 			if not cfg_server_running:
+
+				class Status:
+					def __init__(self, is_ready=False, is_notified=False, ip_addr=None):
+						self.is_ready = is_ready
+						self.is_notified = is_notified
+						self.ip_addr = ip_addr
+
 				wait_for_config_server = False
 
 				if self.rs_id == 0:
@@ -352,7 +359,6 @@ class MongoDBHandler(ServiceCtlHandler):
 
 					""" Status table = {server_id : {is_ready, is_notified, ip_addr}, ...} """
 					status_table = {}
-					Status = namedtuple('status', ('is_ready, is_notified, ip_addr'))
 
 					""" Fill status table """
 					for i in range(shards_total):
@@ -399,7 +405,8 @@ class MongoDBHandler(ServiceCtlHandler):
 									self.send_int_message(host_status.ip_addr,
 														MongoDBMessages.INT_BEFORE_HOST_UP,
 														int_before_hostup_msg_body)
-									host_status.is_notified = True
+
+									host_status.is_notified= True
 								except:
 									pass
 
