@@ -13,6 +13,8 @@ import tempfile
 import datetime
 import threading
 
+from collections import namedtuple
+
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
@@ -38,6 +40,7 @@ OPT_KEYFILE				= "keyfile"
 OPT_SHARD_INDEX			= "shard_index"
 OPT_RS_ID				= "replica_set_index"
 OPT_PASSWORD			= "password"
+OPT_SHARDS_TOTAL		= "shards_total"
 
 BACKUP_CHUNK_SIZE		= 200*1024*1024
 
@@ -130,6 +133,8 @@ class MongoDBMessages:
 	REMOVE_SHARD_RESULT = "MongoDb_RemoveShardResult"
 	
 	REMOVE_SHARD_STATUS = "MongoDb_RemoveShardStatus"
+
+	INT_BEFORE_HOST_UP = "MongoDB_IntBeforeHostUp"
 	
 	
 		
@@ -171,7 +176,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
 				MongoDBMessages.CLUSTER_TERMINATE,
 				MongoDBMessages.INT_CLUSTER_TERMINATE,
-				MongoDBMessages.REMOVE_SHARD,				
+				MongoDBMessages.REMOVE_SHARD,
 				Messages.UPDATE_SERVICE_CONFIGURATION,
 				Messages.BEFORE_HOST_TERMINATE,
 				Messages.HOST_DOWN,
@@ -292,15 +297,23 @@ class MongoDBHandler(ServiceCtlHandler):
 		"""
 
 		first_in_rs = True
+		cfg_server_running = False
+
 		local_ip = self._platform.get_private_ip()
-		hosts = self._queryenv.list_roles(self._role_name, with_init=True)[0].hosts
-		for host in hosts:
+		role_hosts = self._queryenv.list_roles(self._role_name, with_init=True)[0].hosts
+
+		for host in role_hosts:
 			if host.internal_ip == local_ip:
 				continue
 			hostname = HOSTNAME_TPL % (host.shard_index, host.replica_set_index)
 			Hosts.set(host.internal_ip, hostname)
 			if host.shard_index == self.shard_index :
 				first_in_rs = False
+
+			if host.shard_index == 0 and host.replica_set_index == 0:
+				# TODO: Move queryenv host statuses to separate class
+				if host.status == "Running":
+					cfg_server_running = True
 
 		""" Set hostname"""
 		Hosts.set(local_ip, self.hostname)
@@ -328,7 +341,124 @@ class MongoDBHandler(ServiceCtlHandler):
 		else:
 			hostup_msg.mongodb['config_server'] = 0
 
+
 		if self.rs_id in (0,1):
+			if not cfg_server_running:
+				wait_for_config_server = False
+
+				if self.rs_id == 0:
+					wait_for_int_hostups = True
+					shards_total = int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARDS_TOTAL))
+
+					""" Status table = {server_id : {is_ready, is_notified, ip_addr}, ...} """
+					status_table = {}
+					Status = namedtuple('status', ('is_ready, is_notified, ip_addr'))
+
+					""" Fill status table """
+					for i in range(shards_total):
+						if i == self.shard_index:
+							continue
+						status_table[i] = Status(False, False, None)
+
+					for host in role_hosts:
+
+						""" Skip ourself """
+						if host.shard_index == self.shard_index and \
+						   				host.replica_set_index == self.rs_id:
+							continue
+
+						""" Check if it's really cluster initialization,
+							or configserver just failed """
+						if host.replica_set_index != 0 or host.status == "Running":
+							""" Already have replicas """
+							wait_for_int_hostups = False
+							if self.shard_index != 0:
+								wait_for_config_server = True
+							break
+
+						if host.shard_index > (shards_total - 1):
+							""" WTF? Artifact server from unknown shard. Just skip it """
+							continue
+						host_status = status_table[host.shard_index]
+						host_status.ip_addr = host.internal_ip
+
+				else:
+					wait_for_config_server = True
+
+				if wait_for_int_hostups:
+					int_before_hostup_msg_body = dict(shard_index=self.shard_index,
+													replica_set_index=self.rs_id)
+					msg_store = P2pMessageStore()
+					while True:
+
+						""" Inform unnotified servers """
+						for host_status in filter(lambda h: not h.is_notified, status_table.values()):
+							if host_status.ip_addr:
+								try:
+									self.send_int_message(host_status.ip_addr,
+														MongoDBMessages.INT_BEFORE_HOST_UP,
+														int_before_hostup_msg_body)
+									host_status.is_notified = True
+								except:
+									pass
+
+						""" Handle all HostInits and HostDowns """
+						msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8013')
+						messages = [pair[1] for pair in msg_queue_pairs]
+						for message in messages:
+
+							if message.name not in (Messages.HOST_INIT, Messages.HOST_DOWN):
+								continue
+
+							node_shard_id = int(message.mongodb['shard_index'])
+							node_rs_id = int(message.mongodb['replica_set_index'])
+
+							if message.name == Messages.HOST_INIT:
+								""" Updating hostname in /etc/hosts """
+								self.on_HostInit(message)
+								if node_rs_id == 0:
+									status_table[node_shard_id] = Status(False, False, message.local_ip)
+
+							elif message.name == Messages.HOST_DOWN:
+								if node_rs_id == 0:
+									status_table[node_shard_id] = Status(False, False, None)
+
+
+						""" Handle all IntBeforeHostUp messages """
+						msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
+						messages = [pair[1] for pair in msg_queue_pairs]
+
+						for message in messages:
+							if message.name == MongoDBMessages.INT_BEFORE_HOST_UP:
+								try:
+									node_shard_id = int(message.shard_index)
+									node_status = status_table[node_shard_id]
+									node_status.is_ready = True
+
+								finally:
+									msg_store.mark_as_handled(message.id)
+
+						if all([status.is_ready for status in status_table.values()]):
+							""" Everybody is ready """
+							break
+
+						""" Sleep for a while """
+						time.sleep(10)
+
+
+				if wait_for_config_server:
+					while not cfg_server_running:
+						try:
+							time.sleep(20)
+							role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+							for host in role_hosts:
+								if host.shard_index == 0 and host.replica_set_index == 0:
+									cfg_server_running = True
+									break
+						except:
+							pass
+
+
 			self.mongodb.start_router()
 			hostup_msg.mongodb['router'] = 1
 			try:
@@ -349,7 +479,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		repl = 'primary' if first_in_rs else 'secondary'
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
-		
+
 
 	def on_MongoDb_IntCreateBootstrapWatcher(self, message):
 		self._stop_watcher(message.local_ip)

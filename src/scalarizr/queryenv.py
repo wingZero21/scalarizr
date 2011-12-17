@@ -214,6 +214,7 @@ class QueryEnvService(object):
 					host.status = host_el.getAttribute("status")
 				host.internal_ip = host_el.getAttribute("internal-ip")
 				host.external_ip = host_el.getAttribute("external-ip")
+				host.status = host_el.getAttribute("status")
 				role.hosts.append(host)
 				
 			ret.append(role)
