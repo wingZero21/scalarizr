@@ -552,10 +552,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			""" If mongos runs on this instance """
 
 			if self.rs_id == 0 and self.shard_index == 0:
-				config = self.generate_cluster_config()
-				self._logger.debug('Replacing sharding config with %s' % config)
-				self.mongodb.router_cli.connection.config.shards.remove()
-				self.mongodb.router_cli.connection.config.shards.save(config)
+				self.update_shard()
 
 			if self.rs_id in (0,1):
 				""" Restart router if hostup sent from configserver node """
@@ -580,6 +577,14 @@ class MongoDBHandler(ServiceCtlHandler):
 			else:
 				if len(self.mongodb.replicas) % 2 != 0:
 					self.mongodb.stop_arbiter()
+
+
+	def update_shard(self):
+		config = self.generate_cluster_config()
+		self._logger.debug('Replacing sharding config with %s' % config)
+		self.mongodb.router_cli.connection.config.shards.remove()
+		for shard in config:
+			self.mongodb.router_cli.connection.config.shards.save(shard)
 
 
 	def generate_cluster_config(self):
@@ -693,10 +698,7 @@ class MongoDBHandler(ServiceCtlHandler):
 					self.mongodb.stop_arbiter()
 
 		if self.rs_id == 0 and self.shard_index == 0:
-			config = self.generate_cluster_config()
-			self._logger.debug('Replacing sharding config with %s' % config)
-			self.mongodb.router_cli.connection.config.shards.remove()
-			self.mongodb.router_cli.connection.config.shards.save(config)
+			self.update_shard()
 
 					
 	def on_before_reboot_start(self, *args, **kwargs):
