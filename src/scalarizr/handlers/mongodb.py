@@ -550,7 +550,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			if self.rs_id == 0 and self.shard_index == 0:
 				config = self.generate_cluster_config()
 				self._logger.debug('Replacing sharding config with %s' % config)
-				self.mongodb.router_cli.connection.config.shards.update(config)
+				self.mongodb.router_cli.connection.config.shards.remove()
+				self.mongodb.router_cli.connection.config.shards.save(config)
 
 			if self.rs_id in (0,1):
 				""" Restart router if hostup sent from configserver node """
@@ -686,7 +687,13 @@ class MongoDBHandler(ServiceCtlHandler):
 				replicas = [r for r in self.mongodb.replicas if r != down_node_name]
 				if len(replicas) % 2 != 0:
 					self.mongodb.stop_arbiter()
-					
+
+		if self.rs_id == 0 and self.shard_index == 0:
+			config = self.generate_cluster_config()
+			self._logger.debug('Replacing sharding config with %s' % config)
+			self.mongodb.router_cli.connection.config.shards.remove()
+			self.mongodb.router_cli.connection.config.shards.save(config)
+
 					
 	def on_before_reboot_start(self, *args, **kwargs):
 		self.mongodb.stop_arbiter()
