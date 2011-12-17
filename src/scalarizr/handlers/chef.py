@@ -54,7 +54,7 @@ class ChefHandler(Handler):
 			raise HandlerError('ohai not found')
 		self._chef_data = None
 		self._client_conf_path = '/etc/chef/client.rb'
-		self._validator_key_path = '/etc/chef/validator.pem'
+		self._validator_key_path = '/etc/chef/validation.pem'
 		self._client_key_path = '/etc/chef/client.pem'
 
 
@@ -112,5 +112,5 @@ class ChefHandler(Handler):
 
 
 	def get_node_name(self):
-		return json.loads(system2([self._ohai_bin, 'fqdn'])[0])[0]
+		return json.loads(system2([self._ohai_bin, 'hostname'])[0])[0]
 
