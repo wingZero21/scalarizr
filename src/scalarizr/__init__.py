@@ -654,19 +654,19 @@ def main():
 		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
 				and cnf.state != ScalarizrState.IMPORTING:
 			# XXX: nimbula's user-data is uploaded by ssh
-
 			# XXX: rackspace injects files boots OS in a parallell. There were situations when
 			# .user-data file wasn't presented at scalarizr startup  
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+			if pl.name in ('nimbula', 'rackspace'):
+				udfile = cnf.private_path('.user-data')
+				wait_until(lambda: os.path.exists(udfile), 
+						timeout=60, error_text="User-data file %s doesn't exist" % udfile)					
+			
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
-			if server_id and server_id != ud_server_id:
+			if server_id and ud_server_id and server_id != ud_server_id:
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
 				cnf.state = ScalarizrState.BOOTSTRAPPING
-				if pl.name in ('nimbula', 'rackspace'):
-					udfile = cnf.private_path('.user-data')
-					wait_until(lambda: os.path.exists(udfile), 
-							timeout=60, error_text="User-data file %s doesn't exist" % udfile)					
 
 		
 		# Initialize local database
