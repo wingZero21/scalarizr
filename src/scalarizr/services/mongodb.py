@@ -788,8 +788,9 @@ class MongoCLI(object):
 
 	def __new__(cls, *args, **kwargs):
 		'MongoCLI gives only one connection per port'
-		port = args[0] if args else kwargs['port']
+		port = args[0] if args else kwargs['port'] or REPLICA_DEFAULT_PORT
 		if port not in cls._instances:
+			self._logger.debug('Initializing connection on port %s' % port)
 			cls._instances[port] = super(MongoCLI, cls).__new__(
 				cls, *args, **kwargs)
 		return cls._instances[port]
