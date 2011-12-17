@@ -31,7 +31,6 @@ def get_handlers():
 	return (ChefHandler(), )
 
 
-
 class ChefHandler(Handler):
 	def __init__(self):
 		bus.on(init=self.on_init)
