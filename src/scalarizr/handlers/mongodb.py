@@ -611,7 +611,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				rset += '%s:%s,' % (hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 			if rset.endswith(','):
 				rset = rset[:-1]
-			info.append({'id': SHARD_NAME_TPL % shard_index, 'host' : rset})
+			info.append({'_id': SHARD_NAME_TPL % shard_index, 'host' : rset})
 
 		return info
 
