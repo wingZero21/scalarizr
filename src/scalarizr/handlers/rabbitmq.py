@@ -250,6 +250,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 
 		hostname = RABBIT_HOSTNAME_TPL % int(message.server_index)
 		rabbitmq_data['server_index'] = message.server_index
+		rabbitmq_data['hostname'] = hostname
 
 		dns.ScalrHosts.set('127.0.0.1', hostname)
 		with open('/etc/hostname', 'w') as f:
