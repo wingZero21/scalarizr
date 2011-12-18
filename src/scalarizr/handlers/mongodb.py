@@ -472,14 +472,16 @@ class MongoDBHandler(ServiceCtlHandler):
 
 			self.mongodb.start_router()
 			hostup_msg.mongodb['router'] = 1
-			try:
-				self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
-			except:
-				pass
-			finally:
-				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 
-			self.create_shard()
+			if self.rs_id == 0 and self.shard_index == 0:
+				try:
+					self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+				except BaseException, e:
+					self._logger.error(e)
+
+				finally:
+					self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
+				self.create_shard()
 		else:
 			hostup_msg.mongodb['router'] = 0
 		
@@ -589,9 +591,11 @@ class MongoDBHandler(ServiceCtlHandler):
 	def update_shard(self):
 		config = self.generate_cluster_config()
 		self._logger.debug('Replacing sharding config with %s' % config)
-		self.mongodb.router_cli.connection.config.shards.remove()
+		#self.mongodb.router_cli.connection.config.shards.remove()
 		for shard in config:
-			self.mongodb.router_cli.connection.config.shards.save(shard)
+			#self.mongodb.router_cli.connection.config.shards.update(shard)
+			self.mongodb.router_cli.connection.config.shards.update(
+					{'_id' : shard['_id']}, {'host' :  shard['host']})
 
 
 	def generate_cluster_config(self):
