@@ -481,6 +481,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 			self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 			self.create_shard()
+
 		else:
 			hostup_msg.mongodb['router'] = 0
 		

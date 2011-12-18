@@ -743,7 +743,7 @@ class Mongos(object):
 				args.append('--keyFile=%s' % cls.keyfile)
 			system2(args)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
-			#wait_until(lambda: cls.get_cli().has_connection, timeout=MAX_START_TIMEOUT)
+			wait_until(lambda: cls.get_cli().has_connection, timeout=MAX_START_TIMEOUT)
 			cls._logger.debug('%s process has been started.' % MONGOS)
 
 
