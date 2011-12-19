@@ -245,17 +245,14 @@ class ScriptExecutor(Handler):
 					while time.time() - start_time < script.exec_timeout:
 						if proc.poll() is None:
 							time.sleep(0.5)
-							returncode = proc.returncode
 						else:
 							# Process terminated
 							self._logger.debug("Script '%s' terminated", script.name)
-							returncode = proc.returncode
 							break
 					else:
-
 						# Process timeouted
-						self._logger.warn("Script '%s' execution timeout (%d seconds). Returncode: '%s'. Killing process", 
-								script.name, script.exec_timeout, returncode)
+						self._logger.warn("Script '%s' execution timeout (%d seconds). Killing process", 
+								script.name, script.exec_timeout)
 
 						if hasattr(proc, "kill"):
 							# python >= 2.6
@@ -264,6 +261,7 @@ class ScriptExecutor(Handler):
 							import signal
 							os.kill(proc.pid, signal.SIGKILL)
 
+					returncode = proc.returncode
 					elapsed_time = time.time() - start_time
 
 			stdout.close()
