@@ -16,7 +16,8 @@ try:
 	from gevent.local import local
 except ImportError:
 	from threading import local
-
+import traceback
+from scalarizr import util
 
 def service_method(fn):
 	fn.jsonrpc = True
@@ -28,38 +29,82 @@ class ServiceError(Exception):
 	INVALID_REQUEST = -32600
 	METHOD_NOT_FOUND = -32601
 	INVALID_PARAMS = -32602
-	INTERVAL = -32603
+	INTERNAL = -32603
+	
+	NAMESPACE_NOT_FOUND = -32099
 	
 	def __init__(self, *args):
 		self.code, self.message = args[0:2]
-		try:
+		if len(args) > 2:
 			self.data = args[2]
-		except IndexError:
-			self.data = None
+		else:
+			self.data = str(sys.exc_info()[1])
 		Exception.__init__(self, *args)
 
 
-class ServiceHandler(object):
-	def __init__(self, service):
-		if not service:
-			import __main__ as service
-		self.service = service
+class NamespaceNotFoundError(ServiceError):
+	def __init__(self, *data):
+		ServiceError.__init__(self, self.NAMESPACE_NOT_FOUND, 'Namespace not found', *data)
+
+
+class MethodNotFoundError(ServiceError):
+	def __init__(self, *data):
+		ServiceError.__init__(self, self.METHOD_NOT_FOUND, 'Method not found', *data)
 		
-	def handle_request(self, data):
+		
+class ParseError(ServiceError):
+	def __init__(self, *data):
+		ServiceError.__init__(self, self.PARSE, 'Parse error', *data)
+		
+		
+class InvalidRequestError(ServiceError):
+	def __init__(self, *data):
+		ServiceError.__init__(self, self.INVALID_REQUEST, 'Invalid Request', *data)
+		
+		
+class InvalidParamsError(ServiceError):
+	def __init__(self, *data):
+		ServiceError.__init__(self, self.INVALID_PARAMS, 'Invalid params', *data)
+
+
+class InternalError(ServiceError):
+	def __init__(self, *data):
+		ServiceError.__init__(self, self.INTERNAL, 'Internal error', *data)
+	
+
+class RequestHandler(object):
+	def __init__(self, services):
+		svs = None
+		if not services:
+			import __main__ as svs
+		elif not hasattr(services, '__iter__'):
+			svs = services
+			
+		if svs:
+			self.services = {None: svs}
+		else:
+			self.services = services
+		
+	def handle_error(self):
+		traceback.print_exc()
+		
+	def handle_request(self, data, namespace=None):
 		id, result, error = '', None, None
 		try:
 			req = self._parse_request(data)
 			id, method, params = self._translate_request(req)
-			fn = self._find_method(method)
+			svs = self._find_service(namespace)
+			fn = self._find_method(svs, method)
 			result = self._invoke_method(fn, params)
 		except ServiceError, e:
 			error = {'code': e.code, 
 					'message': e.message, 
 					'data': e.data}
 		except:
-			error = {'code': ServiceError.INTERVAL, 
+			self.handle_error()
+			error = {'code': ServiceError.INTERNAL, 
 					'message': 'Internal error', 
-					'data': str(sys.exc_value)}
+					'data': str(sys.exc_info()[1])}
 		finally:
 			if result:
 				resp = {'result': result}
@@ -73,35 +118,42 @@ class ServiceHandler(object):
 		try:
 			return json.loads(data)
 		except:
-			raise ServiceError(ServiceError.PARSE, 
-							'Parse error', 
-							str(sys.exc_value))
+			raise ParseError()
 	
 	def _translate_request(self, req):
 		try:
 			return req['id'], req['method'], req['params']
 		except:
-			raise ServiceError(ServiceError.INVALID_REQUEST, 
-							'Invalid Request',
-							 str(sys.exc_value))
+			raise InvalidRequestError()
 
-	def _find_method(self, name):
-		meth = getattr(self.service, name, None)
+	def _find_service(self, namespace):
+		try:
+			svs = self.services[namespace]
+		except KeyError:
+			raise NamespaceNotFoundError(namespace)
+		else:
+			if isinstance(svs, basestring):
+				svs = self.services[namespace] = util.import_object(svs)
+			return svs
+
+	def _find_method(self, service, name):
+		meth = getattr(service, name, None)
 		if meth and getattr(meth, 'jsonrpc', None):
 			return meth
 		else:
-			raise ServiceError(ServiceError.METHOD_NOT_FOUND, 
-							'Method not found', 
-							name)			
+			raise MethodNotFoundError(name)
+		
 		
 	def _invoke_method(self, method, params):
-		return method(**params)
+		try:
+			return method(**params)
+		except:
+			raise InternalError()
 
 
 class ServiceProxy(object):
 
-	def __init__(self, endpoint):
-		self.endpoint = endpoint
+	def __init__(self):
 		self.local = local()
 
 	def __getattr__(self, name):
@@ -129,9 +181,11 @@ class ServiceProxy(object):
 class Server(object):
 
 	def __init__(self, endpoint, handler):
-		self.endpoint = endpoint
-		self.handler = handler
+		raise NotImplemented()
 
 	def serve_forever(self):
+		raise NotImplemented()
+	
+	def stop(self):
 		raise NotImplemented()
 	

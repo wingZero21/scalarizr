@@ -4,9 +4,10 @@ Created on Nov 25, 2011
 @author: marat
 '''
 
-from scalarizr.rpc import service_method
+from scalarizr import rpc, exceptions
+from scalarizr.libs import validate
 from scalarizr.services import haproxy
-from scalarizr import exceptions
+
 
 import logging
 
@@ -19,24 +20,34 @@ HEALTHCHECK_DEFAULTS = {
 	'rise_threshold': 10
 }
 
+__rule_protocol = validate.rule(choises=['tcp', 'http'])
+__rule_backend = validate.rule(re=r'^role:\d+$')
+
+
 class HAProxyAPI(object):
 	
 	def __init__(self):
 		self.cfg = haproxy.HAProxyCfg()
 		self.svs = haproxy.HAProxyInitScript()
 
-	@service_method
+	@rpc.service_method
+	@validate.param('port', 'server_port')
+	@validate.param('protocol', rule=__rule_protocol)
+	@validate.param('server_port', optional=__rule_protocol)
+	@validate.param('backend', optional=__rule_backend)
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
+		'''
 		assert port
-		assert protocol
+		assert protocol in ('tcp', 'http')
 		assert server_port
 		if not server_protocol:
 			server_protocol = protocol
-			
-		# check data:
-		# * protocol, server_protocol
-		# * backend 
+		else:
+			assert server_protocol in ('tcp', 'http')
+		if backend:
+			assert re.search(r'^role:\d+$', backend)
+		'''
 		
 		ln = haproxy.naming('listener', protocol, port)
 		bnd = haproxy.naming('backend', protocol, port, backend=backend)
@@ -53,6 +64,7 @@ class HAProxyAPI(object):
 			raise ValueError('Unexpected protocol: %s' % (protocol, ))
 		# apply defaults
 		listener.update({
+			'bind': '*:%s' % port,
 			'mode': protocol, 
 			'default_backend': bnd
 		})
@@ -77,14 +89,14 @@ class HAProxyAPI(object):
 		# Apply changes
 		with self.svs.trans(exit='running'):
 			with self.cfg.trans(enter='reload', exit='working'):
-				self.cfg.listener[ln] = listener
+				self.cfg['listen'][ln] = listener
 				if not bnd in self.cfg.backend:
-					self.cfg.backend[bnd] = backend
+					self.cfg['backend'][bnd] = backend
 				self.svs.reload()
 				
 		
 	
-	@service_method
+	@rpc.service_method
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							fall_threshold=None, rise_threshold=None):
 		assert target
@@ -94,7 +106,7 @@ class HAProxyAPI(object):
 		assert rise_threshold
 
 	
-	@service_method
+	@rpc.service_method
 	def add_server(self, ipaddr=None, backend=None):
 		assert ipaddr
 		
@@ -118,23 +130,23 @@ class HAProxyAPI(object):
 				self.svs.reload()
 					
 	
-	@service_method
+	@rpc.service_method
 	def get_servers_health(self, ipaddr=None):
 		pass
 	
-	@service_method
-	def delete_listener(self, port, protocol):
+	@rpc.service_method
+	def delete_listener(self, port=None, protocol=None):
 		pass
 	
-	@service_method
+	@rpc.service_method
 	def reset_healthcheck(self, target):
 		pass
 	
-	@service_method
+	@rpc.service_method
 	def remove_server(self, ipaddr, backend=None):
 		pass
 	
-	@service_method
+	@rpc.service_method
 	def list_listeners(self):
 		self.cfg.reload()
 		for ln in self.cfg.sections(haproxy.naming('listener')):
@@ -152,6 +164,6 @@ class HAProxyAPI(object):
 		raise StopIteration()
 
 	
-	@service_method
+	@rpc.service_method
 	def list_servers(self, backend=None):
 		pass

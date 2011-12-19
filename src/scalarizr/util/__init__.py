@@ -8,8 +8,10 @@ import time
 import sys
 import signal
 import string
+import pkgutil
 
 from scalarizr.bus import bus
+from scalarizr import exceptions
 import subprocess
 
 class UtilError(BaseException):
@@ -580,3 +582,32 @@ def run_detached(binary, args=[], env=None):
 			
 def which(arg):
 	return system2(['/bin/which', arg], raise_exc=False)[0].strip()
+
+
+def import_class(import_str):
+	"""Returns a class from a string including module and class"""
+	mod_str, _sep, class_str = import_str.rpartition('.')
+	try:
+		loader = pkgutil.find_loader(mod_str)
+		if not loader:
+			raise ImportError('No module named %s' % mod_str)
+	except ImportError:
+		pass
+	else:
+		loader.load_module('')
+		try:
+			return getattr(sys.modules[mod_str], class_str)
+		except (ValueError, AttributeError):
+			pass
+	raise exceptions.NotFound('Class %s cannot be found' % import_str)
+	
+
+def import_object(import_str, *args, **kwds):
+	"""Returns an object including a module or module and class"""
+	try:
+		__import__(import_str)
+		return sys.modules[import_str]
+	except ImportError:
+		cls = import_class(import_str)
+		return cls(*args, **kwds)
+

@@ -32,18 +32,28 @@ class MyService(object):
 	def unregistered_method(self):
 		pass
 
+class MyService2(object):
+	@rpc.service_method
+	def little_one(self):
+		return 'just a little baby'
+	
 
 class MyServiceClient(rpc.ServiceProxy):
 	
+	def __init__(self, handler):
+		self.handler = handler
+		rpc.ServiceProxy.__init__(self)
+		
 	def exchange(self, request):
-		return self.endpoint.handle_request(request)
+		method = self.__dict__['local'].method
+		return self.handler.handle_request(request, len(method) > 1 and method[0] or None)
 
 
-class TestServiceHandler(unittest.TestCase):
+class TestRequestHandler(unittest.TestCase):
 
 
 	def setUp(self):
-		self.handler = rpc.ServiceHandler(MyService())
+		self.handler = rpc.RequestHandler(MyService())
 		self.client = MyServiceClient(self.handler)
 
 	def test_get_foo(self):
@@ -76,6 +86,22 @@ class TestServiceHandler(unittest.TestCase):
 			self.fail()
 		except rpc.ServiceError, e:
 			assert e.data == "foo() got an unexpected keyword argument 'unknown'"
+
+class TestRequestHandlerWithNamespaces(unittest.TestCase):
+	def setUp(self):
+		self.handler = rpc.RequestHandler({
+			'foo': MyService(), 
+			'bar': 'szr_unittest.rpc_test.MyService2'
+		})
+		self.client = MyServiceClient(self.handler)
+
+	def test_foobar(self):
+		assert self.client.foo.foo() == FOO
+		assert self.client.bar.little_one() == 'just a little baby'
+		try:
+			self.client.unknown_ns.foo()
+		except rpc.ServiceError, e:
+			assert e.code == rpc.ServiceError.NAMESPACE_NOT_FOUND
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']

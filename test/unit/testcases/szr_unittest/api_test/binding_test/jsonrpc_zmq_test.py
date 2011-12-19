@@ -32,23 +32,28 @@ class Test(unittest.TestCase):
 
 	def setUp(self):
 		self.client = jsonrpc_zmq.ZmqServiceProxy(ENDPOINT)
-		self.server = jsonrpc_zmq.ZmqServer2(ENDPOINT, rpc.ServiceHandler(MyService()))
+		self.server = jsonrpc_zmq.ZmqServer(ENDPOINT, rpc.RequestHandler({'my/deeper': MyService()}))
 		gevent.spawn(self.server.serve_forever)
 	
 	def tearDown(self):
-		self.server.shutdown()
+		self.server.stop()
 	
 	def _call_method(self, method):
+		LOG = logging.getLogger('scalarizr.client.%s' % id(gevent.getcurrent()))
 		start = time.time()
-		LOG.info('Calling %s', method)
-		getattr(self.client, method)()
-		LOG.info('Call %s completed. [time: %s]', method, time.time() - start)
+		try:
+			LOG.info('Calling %s', method)
+			getattr(self.client.my.deeper, method)()
+			LOG.info('Call %s completed. [time: %s]', method, time.time() - start)
+		except:
+			LOG.error('Call %s failed', method)
+			raise
 
 	def test_req_sequence(self):
 		glets = []
-		for i in range(0, 5):
+		for _ in range(0, 5):
 			for method in ['foo', 'foo_longplay']:
-				glets.append(gevent.spawn(self._call_method, method))
+				glets.append(gevent.spawn_later(0, self._call_method, method))
 				
 		gevent.joinall(glets)
 
