@@ -59,11 +59,13 @@ class SSHKeys(Handler):
 			for key, regexp in regexps.items():
 				if regexp.search(line):
 					self._logger.debug('Found %s', regexp)
-					del variables[key]
+					if key in variables:
+						del variables[key]
 				elif line.startswith(key):
 					self._logger.debug('Update %s option %s: %s', self.sshd_config_path, key, variables[key])
 					line = '%s %s\n' % (key, variables[key])
-					del variables[key]
+					if key in variables:
+						del variables[key]
 			new_lines.append(line)
 		for key, value in variables.items():
 			self._logger.debug('Update %s option %s: %s', self.sshd_config_path, key, value)
