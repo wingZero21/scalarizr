@@ -410,17 +410,25 @@ class MongoDB(BaseService):
 	
 	def _set_cfg_srv_conf(self, obj):
 		self._set('cfg_srv_config', obj)
-		
-		
+
+
 	def _get_router_cli(self):
 		return self._get('router_cli', MongoCLI.find, ROUTER_DEFAULT_PORT)
-	
+
 	def _set_router_cli(self, obj):
 		self._set('router_cli', obj)
-	
-									
+
+	def _get_configsrv_cli(self):
+		return self._get('configsrv_cli', MongoCLI.find, CONFIG_SERVER_DEFAULT_PORT)
+
+	def _set_configsrv_cli(self, obj):
+		self._set('configsrv_cli', obj)
+
+
+
 	cli = property(_get_cli, _set_cli)
 	router_cli = property(_get_router_cli, _set_router_cli)
+	configsrv_cli = property(_get_configsrv_cli, _set_configsrv_cli)
 	mongod = property(_get_mongod, _set_mongod)
 	working_dir = property(_get_working_directory, _set_working_directory)	
 	config = property(_get_config, _set_config)
