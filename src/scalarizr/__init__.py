@@ -653,11 +653,17 @@ def main():
 		# Check that service started after dirty bundle
 		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
 				and cnf.state != ScalarizrState.IMPORTING:
+			
 			# XXX: nimbula's user-data is uploaded by ssh
-			# XXX: rackspace injects files boots OS in a parallell. There were situations when
-			# .user-data file wasn't presented at scalarizr startup  
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 			if pl.name in ('nimbula', 'rackspace'):
+				if cnf.state == ScalarizrState.REBUNDLING:
+					# XXX: temporary workaround
+					# XXX: rackspace injects files and boots OS in a parallell. There were situations when
+					# .user-data file was stale and new server started from rebundled image
+					# toughts that he's an old server and continue rebundling  
+					time.sleep(30)
+					
 				udfile = cnf.private_path('.user-data')
 				wait_until(lambda: os.path.exists(udfile), 
 						timeout=60, error_text="User-data file %s doesn't exist" % udfile)					
