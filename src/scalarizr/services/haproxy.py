@@ -3,11 +3,20 @@ Created on Nov 25, 2011
 
 @author: marat
 '''
+import os, sys
+import re
+import logging
+import signal
+import time
 
 from scalarizr.util import initdv2
 from scalarizr.util import disttool as dist
 from scalarizr.util import filetool
 from scalarizr.util import which
+from scalarizr.util import system2
+from scalarizr.util import wait_until
+
+from scalarizr.config import BuiltinBehaviours
 
 
 class HAProxyCfg(filetool.ConfigurationFile):
@@ -55,6 +64,8 @@ class HAProxyCfg(filetool.ConfigurationFile):
 	def sections(self, filter=None):
 		raise NotImplemented()
 
+	def __getitem__(self, key):
+		self.local.path = ('backend', 'scalr:backend:role:456:port:8080', 'server')
 
 class StatSocket(object):
 	'''
@@ -93,7 +104,9 @@ def naming(type_, *args, **kwds):
 	#bnd = 'scalr:backend:%s%s:%s' % (backend and backend + ':' or '', protocol, port)
 	raise NotImplemented()
 
-	
+
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.HAPROXY
+
 class HAProxyInitScript(initdv2.InitScript):
 	'''
 	haproxy init script
@@ -102,9 +115,79 @@ class HAProxyInitScript(initdv2.InitScript):
 	- restart
 	- reload
 	- status
-	
-	see MySQL, Apache init scripts
 	'''
-	
+
 	def __init__(self):
-		pass
+
+		self._logger = logging.getLogger(__name__)
+		self.pid_file = '/var/run/haproxy.pid'
+		self._config = '/etc/haproxy/haproxy.cfg'
+		self._haproxy = '/usr/sbin/haproxy'
+		self.socks = None
+		self.timeout = 30
+
+
+	def start(self):
+		if self.status() == 0:
+			raise initdv2.InitdError("Cannot start HAProxy. It already running.")
+
+		system2([self._haproxy, '-f', self._config, '-p', self.pid_file, '-D'],)
+		if self.pid_file:
+			try:
+				wait_until(lambda: os.path.exists(self.pid_file), timeout=self.timeout,
+					sleep=0.2, error_text="HAProxy pid file %s does'not exist"%
+					self.pid_file)
+			except Exception, e:
+				raise initdv2.InitdError("Cannot start HAProxy: pid file %s hasn't"
+					" been created. Details: %s" % (self.pid_file, e))
+
+
+	def stop(self):
+		if os.path.exists(self.pid_file):
+			try:
+				pid = get_pid(self.pid_file)
+				if pid:
+					os.kill(pid, signal.SIGTERM)
+					wait_until(lambda: not os.path.exists('/proc/%s' % pid), timeout=self.timeout,
+						sleep=0.2, error_text="Can't stop HAProxy service process.")
+					#os.kill(pid, signal.SIGKILL)
+			except Exception, e:
+				raise initdv2.InitdError("Error stopping service. Details: %s" % (e))
+			finally:
+					os.remove(self.pid_file)
+
+
+	def restart(self):
+		try:
+			self.stop()
+		except Exception, e:
+			self._logger.debug('Error stopping HAProxy. Details: %s'%e)
+		self.start()
+
+
+	def reload(self):
+		try:
+			if os.path.exists(self.pid_file):
+				pid = get_pid(self.pid_file)
+				if pid:
+					args = [self._haproxy, '-f', self._config, '-p', self.pid_file, '-D', '-sf', pid]
+					system2(args, close_fds=True, logger=self._logger, preexec_fn=os.setsid)
+					wait_until(lambda: get_pid(self.pid_file) and get_pid(self.pid_file) != pid,
+						timeout=self.timeout, sleep=0.5, error_text="Error reloading HAProxy service process.")
+					if self.status() != 0:
+						raise initdv2.InitdError("HAProxy service not running.")
+			else:
+				raise LookupError('File %s not exist'%self.pid_file)
+		except Exception, e:
+			raise initdv2.InitdError("HAProxy service not running can't reload it. Details: %s" % e)
+
+
+def get_pid(pid_file):
+	'''Read #pid of the process from pid_file'''
+	if os.path.isfile(pid_file):
+				with open(pid_file, 'r') as f:
+					pid = long(f.read())
+					if pid: 
+						return pid
+
+initdv2.explore(SERVICE_NAME, HAProxyInitScript)

@@ -80,7 +80,38 @@ class InitScript(object):
 		@return: Service status
 		@rtype: scalarizr.util.initdv2.Status
 		'''
-		pass
+		if self.pid_file:
+			if not os.path.exists(self.pid_file):
+				return Status.NOT_RUNNING
+			pid = read_file(self.pid_file).strip()
+			if os.path.isfile('/proc/%s/status' % pid):
+				try:
+					fp = open('/proc/%s/status' % pid)
+					status = fp.read()
+				except:
+					return Status.NOT_RUNNING
+				finally:
+					fp.close()
+					
+				if status:
+					pid_state = re.search('State:\s+(?P<state>\w)', status).group('state')
+					if pid_state in ('T', 'Z'):
+						return Status.NOT_RUNNING
+			else:
+				return Status.NOT_RUNNING
+		if self.socks:
+			try:
+				for sock in self.socks:
+					timeout = sock.timeout
+					sock.timeout = 1
+					try:
+						wait_sock(sock)
+					finally:
+						sock.timeout = timeout
+			except InitdError:
+				return Status.NOT_RUNNING
+		
+		return Status.RUNNING
 
 	def configtest(self):
 		"""
@@ -159,40 +190,6 @@ class ParametrizedInitScript(InitScript):
 		if not self.running:
 			raise InitdError('Service "%s" is not running' % self.name, InitdError.NOT_RUNNING)
 		return self._start_stop_reload('reload') 
-	
-	def status(self):
-		if self.pid_file:
-			if not os.path.exists(self.pid_file):
-				return Status.NOT_RUNNING
-			pid = read_file(self.pid_file).strip()
-			if os.path.isfile('/proc/%s/status' % pid):
-				try:
-					fp = open('/proc/%s/status' % pid)
-					status = fp.read()
-				except:
-					return Status.NOT_RUNNING
-				finally:
-					fp.close()
-					
-				if status:
-					pid_state = re.search('State:\s+(?P<state>\w)', status).group('state')
-					if pid_state in ('T', 'Z'):
-						return Status.NOT_RUNNING
-			else:
-				return Status.NOT_RUNNING
-		if self.socks:
-			try:
-				for sock in self.socks:
-					timeout = sock.timeout
-					sock.timeout = 1
-					try:
-						wait_sock(sock)
-					finally:
-						sock.timeout = timeout
-			except InitdError:
-				return Status.NOT_RUNNING
-		
-		return Status.RUNNING
 	
 	@property
 	def running(self):
