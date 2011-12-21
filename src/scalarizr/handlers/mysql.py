@@ -1351,7 +1351,9 @@ class MysqlHandler(ServiceCtlHandler):
 		except (BaseException, Exception):
 			if not storage_valid and self._storage_path:
 				# Perform cleanup
-				system2('rm -rf %s' % os.path.join(self._storage_path, '*'), shell=True, raise_exc=False)
+				# XXX: it's not safe. `storage_valid` can be calculated wrong and users data will totally lost.
+				# system2('rm -rf %s' % os.path.join(self._storage_path, '*'), shell=True, raise_exc=False)
+				pass
 			raise
 			
 		if msg_data:
