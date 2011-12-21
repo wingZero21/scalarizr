@@ -38,7 +38,7 @@ class HaproxyFormatProvider(IniFormatProvider):
 				self._cursect.append(comment)
 			self._cursect = ET.SubElement(root, quote(res.group('section_name')))
 			self._cursect.attrib['mc_type'] = 'section'
-			self._cursect.text = res.group('value')
+			self._cursect.attrib['value'] = quote(result.group('value').strip())
 			return True
 		return False
 
@@ -46,7 +46,7 @@ class HaproxyFormatProvider(IniFormatProvider):
 	def write_section(self, fp, node):
 		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'section':
 			fp.write(unquote(node.tag))
-			value = node.text.strip()
+			value = unquote(node.attrib['value']) if node.attrib.has_key('value') else ''
 			if value:
 				fp.write(' ' + value)
 			fp.write('\n')
@@ -70,7 +70,7 @@ class HaproxyFormatProvider(IniFormatProvider):
 			new_opt = ET.SubElement(self._cursect, quote(res.group('option').strip()))
 			value = res.group('value')
 			if value:
-				new_opt.text = value.strip()
+				new_opt.text = quote(value.strip())
 			new_opt.attrib['mc_type'] = 'option'
 			return True
 		return False
@@ -81,7 +81,7 @@ class HaproxyFormatProvider(IniFormatProvider):
 			fp.write("\t" + unquote(node.tag))
 			value = node.text if node.text else ''
 			if value:
-				fp.write('\t' + value)
+				fp.write('\t' + unquote(value))
 			fp.write('\n')
 			return True
 		return False
