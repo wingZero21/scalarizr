@@ -38,7 +38,9 @@ class HaproxyFormatProvider(IniFormatProvider):
 				self._cursect.append(comment)
 			self._cursect = ET.SubElement(root, quote(res.group('section_name')))
 			self._cursect.attrib['mc_type'] = 'section'
-			self._cursect.attrib['value'] = quote(result.group('value').strip())
+			value = res.group('value')
+			value = value or ''
+			self._cursect.attrib['value'] = quote(value.strip())
 			return True
 		return False
 
@@ -94,6 +96,3 @@ class HaproxyFormatProvider(IniFormatProvider):
 				fp.write(self._indent + '#'+line+'\n')
 			return True
 		return False
-
-
-
