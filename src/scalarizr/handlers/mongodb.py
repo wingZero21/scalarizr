@@ -394,10 +394,15 @@ class MongoDBHandler(ServiceCtlHandler):
 					wait_for_config_server = True
 
 				if wait_for_int_hostups:
+
 					int_before_hostup_msg_body = dict(shard_index=self.shard_index,
 													replica_set_index=self.rs_id)
 					msg_store = P2pMessageStore()
 					while True:
+						if not status_table:
+							if self.has_config_server():
+								self.mongodb.mongod.restart(reason="https://jira.mongodb.org/browse/SERVER-4238")
+							break
 
 						""" Inform unnotified servers """
 						for host_status in filter(lambda h: not h.is_notified, status_table.values()):
@@ -1286,6 +1291,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		if not hasattr(self, "_rs_index"):
 			self._rs_index = int(self._cnf.rawini.get(CNF_SECTION, OPT_RS_ID))
 		return self._rs_index
+
+
+	def has_config_server(self):
+		return self.shard_index == 0 and self.rs_id == 0
 
 
 	@property
