@@ -355,6 +355,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				wait_for_config_server = False
 
 				if self.rs_id == 0:
+					self.mongodb.mongod.restart(reason="https://jira.mongodb.org/browse/SERVER-4238")
+
 					wait_for_int_hostups = True
 					shards_total = int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARDS_TOTAL))
 
@@ -400,8 +402,6 @@ class MongoDBHandler(ServiceCtlHandler):
 					msg_store = P2pMessageStore()
 					while True:
 						if not status_table:
-							if self.has_config_server():
-								self.mongodb.mongod.restart(reason="https://jira.mongodb.org/browse/SERVER-4238")
 							break
 
 						""" Inform unnotified servers """
