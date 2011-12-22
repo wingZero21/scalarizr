@@ -250,8 +250,13 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if self.postgresql.is_replication_master:
 			self._init_master(message)									  
 		else:
-			self._init_slave(message)		
-			
+			try:
+				self._init_slave(message)	
+			except:
+				if self.storage_vol:
+					self.postgresql.service.stop('Cleaning up')	
+					self.storage_vol.destroy(remove_disks=True)
+				raise
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 					
 				

@@ -1456,7 +1456,7 @@ class MysqlHandler(ServiceCtlHandler):
 				except:
 					pass
 				try:
-					self.storage_vol.destroy()
+					self.storage_vol.destroy(remove_disks=True)
 				except:
 					pass
 			raise exc_type, exc_value, exc_trace
