@@ -20,7 +20,7 @@ import traceback
 from scalarizr import util
 
 def service_method(fn):
-	fn.jsonrpc = True
+	fn._jsonrpc = True
 	return fn
 
 
@@ -138,7 +138,7 @@ class RequestHandler(object):
 
 	def _find_method(self, service, name):
 		meth = getattr(service, name, None)
-		if meth and getattr(meth, 'jsonrpc', None):
+		if meth and getattr(meth, '_jsonrpc', None):
 			return meth
 		else:
 			raise MethodNotFoundError(name)
