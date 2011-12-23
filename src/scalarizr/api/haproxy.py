@@ -31,6 +31,7 @@ class HAProxyAPI(object):
 		self.cfg = haproxy.HAProxyCfg()
 		self.svs = haproxy.HAProxyInitScript()
 
+
 	@rpc.service_method
 	@validate.param('port', 'server_port', type=int)
 	@validate.param('protocol', required=__rule_protocol)
@@ -38,18 +39,7 @@ class HAProxyAPI(object):
 	@validate.param('backend', optional=__rule_backend)
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
-		'''
-		assert port
-		assert protocol in ('tcp', 'http')
-		assert server_port
-		if not server_protocol:
-			server_protocol = protocol
-		else:
-			assert server_protocol in ('tcp', 'http')
-		if backend:
-			assert re.search(r'^role:\d+$', backend)
-		'''
-		
+
 		ln = haproxy.naming('listener', protocol, port)
 		bnd = haproxy.naming('backend', protocol, port, backend=backend)
 		listener = backend = None
@@ -94,8 +84,7 @@ class HAProxyAPI(object):
 				if not bnd in self.cfg.backend:
 					self.cfg['backend'][bnd] = backend
 				self.svs.reload()
-				
-		
+	
 	
 	@rpc.service_method
 	@validate.param('target', required=__rule_hc_target)
@@ -103,18 +92,14 @@ class HAProxyAPI(object):
 	@validate.param('fall_threshold', 'rise_threshold', type=int)
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							fall_threshold=None, rise_threshold=None):
-		assert target
-		assert interval
-		assert timeout
-		assert fall_threshold
-		assert rise_threshold
+		
+		pass
 
 	
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
 	@validate.param('backend', optional=__rule_backend)
 	def add_server(self, ipaddr=None, backend=None):
-		assert ipaddr
 		
 		self.cfg.reload()
 		bnds = self.cfg.sections(haproxy.naming('backend', backend=backend))
@@ -141,22 +126,26 @@ class HAProxyAPI(object):
 	def get_servers_health(self, ipaddr=None):
 		pass
 	
+	
 	@rpc.service_method
 	@validate.param('port', type=int)
 	@validate.param('protocol', required=__rule_protocol)
 	def delete_listener(self, port=None, protocol=None):
 		pass
 	
+	
 	@rpc.service_method
 	@validate.param('target', required=__rule_hc_target)
 	def reset_healthcheck(self, target):
 		pass
+	
 	
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
 	@validate.param('backend', optional=__rule_backend)
 	def remove_server(self, ipaddr=None, backend=None):
 		pass
+	
 	
 	@rpc.service_method
 	def list_listeners(self):
@@ -180,3 +169,4 @@ class HAProxyAPI(object):
 	@validate.param('backend', optional=__rule_backend)
 	def list_servers(self, backend=None):
 		pass
+	
