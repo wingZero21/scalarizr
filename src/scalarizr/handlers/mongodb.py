@@ -400,6 +400,8 @@ class MongoDBHandler(ServiceCtlHandler):
 					int_before_hostup_msg_body = dict(shard_index=self.shard_index,
 													replica_set_index=self.rs_id)
 					msg_store = P2pMessageStore()
+					local_handled_msg_ids = []
+
 					while True:
 						if not status_table:
 							break
@@ -412,9 +414,9 @@ class MongoDBHandler(ServiceCtlHandler):
 														MongoDBMessages.INT_BEFORE_HOST_UP,
 														int_before_hostup_msg_body)
 
-									host_status.is_notified= True
+									host_status.is_notified = True
 								except:
-									pass
+									self._logger.warning('%s' % sys.exc_info()[1])
 
 						""" Handle all HostInits and HostDowns """
 						msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8013')
@@ -422,6 +424,9 @@ class MongoDBHandler(ServiceCtlHandler):
 						for message in messages:
 
 							if message.name not in (Messages.HOST_INIT, Messages.HOST_DOWN):
+								continue
+
+							if message.id in local_handled_msg_ids:
 								continue
 
 							node_shard_id = int(message.mongodb['shard_index'])
@@ -439,6 +444,8 @@ class MongoDBHandler(ServiceCtlHandler):
 							elif message.name == Messages.HOST_DOWN:
 								if node_rs_id == 0:
 									status_table[node_shard_id] = Status(False, False, None)
+
+							local_handled_msg_ids.append(message.id)
 
 
 						""" Handle all IntBeforeHostUp messages """
