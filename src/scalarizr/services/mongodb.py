@@ -7,6 +7,7 @@ import re
 import os
 import time
 import glob
+import shutil
 import logging
 
 
@@ -163,10 +164,11 @@ class MongoDB(BaseService):
 
 
 	def _prepare_arbiter(self, rs_name):
-		if not os.path.exists(ARBITER_DATA_DIR):
-			self._logger.debug('Creating datadir for arbiter: %s' % ARBITER_DATA_DIR)
-			os.makedirs(ARBITER_DATA_DIR)
-		rchown(DEFAULT_USER, ARBITER_DATA_DIR)	
+		if os.path.isdir(ARBITER_DATA_DIR):
+			shutil.rmtree(ARBITER_DATA_DIR)
+		self._logger.debug('Creating datadir for arbiter: %s' % ARBITER_DATA_DIR)
+		os.makedirs(ARBITER_DATA_DIR)
+		rchown(DEFAULT_USER, ARBITER_DATA_DIR)
 		self._logger.debug("Preparing arbiter's config file")
 		self.arbiter_conf.dbpath = ARBITER_DATA_DIR
 		self.arbiter_conf.replSet = rs_name
@@ -211,6 +213,8 @@ class MongoDB(BaseService):
 	
 	
 	def start_arbiter(self):
+		if self.arbiter.is_running:
+			self.arbiter.stop()
 		self._prepare_arbiter(self.config.replSet)
 		self._logger.debug('Starting arbiter process')
 		self.arbiter.start()
