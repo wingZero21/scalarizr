@@ -1,4 +1,3 @@
-
 import sys
 if sys.version_info < (2, 6):
 	import scalarizr.externals.logging as logging
