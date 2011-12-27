@@ -137,19 +137,18 @@ class MongoDBMessages:
 	INT_BEFORE_HOST_UP = "MongoDB_IntBeforeHostUp"
 	
 	
-		
 
 class ReplicationState:
 	INITIALIZED = 'initialized'
 	STALE		= 'stale'
-	
-	
+
+
 class TerminationState:
 	FAILED = 'failed'
 	UNREACHABLE = 'unreachable'
 	TERMINATED = 'terminated'
 	PENDING = 'pending_terminate'
-	
+
 
 class MongoDBHandler(ServiceCtlHandler):
 	_logger = None
@@ -215,6 +214,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		if 'ec2' == self._platform.name:
 			updates = dict(hostname_as_pubdns = '0')
 			self._cnf.update_ini('ec2', {'ec2': updates}, private=False)
+
+		if self._cnf.state == ScalarizrState.INITIALIZING:
+			self.mongodb.stop_default_init_script()
 		
 		if self._cnf.state == ScalarizrState.RUNNING:
 	
@@ -999,8 +1001,29 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 			self._logger.info('Waiting for status message from primary node')
 			initialized = stale = False	
-			
+
+			my_nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+
 			while not initialized and not stale:
+
+				""" Trying to check replication status from this node
+						If we're already primary or secondary - no need
+						to wait watcher result from primary """
+
+				try:
+					rs_status = self.handler.mongodb.cli.get_rs_status()
+
+					for member in rs_status['members']:
+						if member['name'] == my_nodename:
+							status = member['state']
+							if status in (1,2):
+								initialized = True
+								break
+				except:
+					pass
+
+				""" Check bootstrap result messages """
+
 				msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
 				messages = [pair[1] for pair in msg_queue_pairs]
 				for msg in messages:
@@ -1018,6 +1041,7 @@ class MongoDBHandler(ServiceCtlHandler):
 							raise HandlerError('Unknown state for replication state: %s' % msg.status)													
 					finally:
 						msg_store.mark_as_handled(msg.id)
+
 				time.sleep(1)
 			return stale
 		
