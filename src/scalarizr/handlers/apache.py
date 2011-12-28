@@ -43,7 +43,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		if disttool.is_redhat_based():
 			self._apachectl = '/usr/sbin/apachectl'
 			initd_script 	= '/etc/init.d/httpd'
-			pid_file 		= '/var/run/httpd.pid'
+			pid_file 		= '/var/run/httpd/httpd.pid' if disttool.version_info()[0] == 6 else '/var/run/httpd.pid' 
 		elif disttool.is_debian_based():
 			self._apachectl = '/usr/sbin/apache2ctl'		
 			initd_script 	= '/etc/init.d/apache2'
