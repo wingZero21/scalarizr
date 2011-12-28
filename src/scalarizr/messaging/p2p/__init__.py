@@ -107,7 +107,7 @@ class _P2pMessageStore:
 						message_name, queue, is_ingoing, in_is_handled, in_consumer_id)
 					VALUES 
 						(NULL, ?, ?, ?, ?, ?, ?, ?)"""
-			cur.execute(sql, [str(message), message.id, message.name, queue, 1, 0, consumer_id])
+			cur.execute(sql, [str(message).encode('utf-8'), message.id, message.name, queue, 1, 0, consumer_id])
 			
 			if message.meta.has_key(MetaOptions.REQUEST_ID):
 				cur.execute("""UPDATE p2p_message 
