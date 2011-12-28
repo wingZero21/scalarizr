@@ -61,7 +61,7 @@ CONFIG_SERVER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.configsrv.log')
 ROUTER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.router.log')
 
 MAX_START_TIMEOUT = 360
-MAX_STOP_TIMEOUT = 65
+MAX_STOP_TIMEOUT = 180
 
 
 				
@@ -142,7 +142,9 @@ class MongoDB(BaseService):
 		
 	@property
 	def is_replication_master(self):
-		return self.cli.is_master()['ismaster']
+		res = self.cli.is_master()['ismaster']
+		self._logger.debug("Replication master: %s", res)
+		return res
 
 	
 	def prepare(self, rs_name):
