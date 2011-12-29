@@ -949,7 +949,11 @@ class MongoDBHandler(ServiceCtlHandler):
 			nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 			
 			rs_cfg = self.mongodb.cli.get_rs_config()
-			rs_cfg['members'] = [{'_id' : 0, 'host': nodename}]
+			rs_cfg['members'] = filter(lambda n: n['host'] == nodename, rs_cfg['members'])
+
+			if not rs_cfg['members']:
+				rs_cfg['members'] = [{'_id' : 0, 'host': nodename}]
+
 			rs_cfg['version'] += 1
 			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
