@@ -766,7 +766,7 @@ class Mongos(object):
 		if cls.is_running():
 			cls._logger.debug('Stopping %s process' % MONGOS)
 			cls.get_cli().shutdown_server()
-			wait_until(lambda: not cls.is_running, timeout=MAX_STOP_TIMEOUT)
+			wait_until(lambda: not cls.is_running(), timeout=MAX_STOP_TIMEOUT)
 			cls._logger.debug('%s process has been stopped.' % MONGOS)
 
 
