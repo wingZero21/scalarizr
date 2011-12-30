@@ -763,6 +763,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 			down_node_host = HOSTNAME_TPL % (shard_idx, rs_idx)
 			down_node_name = '%s:%s' % (down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
+			down_possible_arbiter = '%s:%s' % (down_node_host, mongo_svc.ARBITER_DEFAULT_PORT)
 
 			if down_node_name not in self.mongodb.replicas:
 				return
@@ -782,8 +783,12 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.debug('Wait until node is down or removed from replica set')
 			wait_until(lambda n: n not in self.mongodb.replicas or node_terminated(n),
 								 args=(down_node_name,), logger=self._logger, timeout=180)
-			self._logger.debug('Wait for rs manage things (just sleep 10 sec)')
-			time.sleep(10)
+
+			if down_possible_arbiter in self.mongodb.arbiters:
+				self._logger.debug('Wait until arbiter is down or removed from replica set')
+				wait_until(lambda n: n not in self.mongodb.arbiters or node_terminated(n),
+					args=(down_possible_arbiter,), logger=self._logger, timeout=180)
+
 			self.on_HostDown(message)
 
 			
