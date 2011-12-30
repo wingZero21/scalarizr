@@ -694,6 +694,10 @@ class MongoDBHandler(ServiceCtlHandler):
 			wait_until(lambda: self.mongodb.primary_host, timeout=180,
 					 start_text='Wait for primary node in replica set', logger=self._logger)
 
+			self._logger.debug('%s' % self.mongodb.cli.is_master())
+			# TODO: TEMPORARY! Delete asap
+			time.sleep(5)
+
 			if self.mongodb.is_replication_master:
 			
 				""" Remove host from replica set"""
@@ -774,9 +778,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 			def node_terminated(node_name):
 				for node in self.mongodb.cli.get_rs_status()['members']:
-					if node['name'] != node_name:
-						continue
-					if int(node['health']) == 0:
+					if node['name'] == node_name and int(node['health']) == 0:
 						return True
 					return False
 
