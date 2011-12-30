@@ -694,9 +694,6 @@ class MongoDBHandler(ServiceCtlHandler):
 			wait_until(lambda: self.mongodb.primary_host, timeout=180,
 					 start_text='Wait for primary node in replica set', logger=self._logger)
 
-			self._logger.debug('%s' % self.mongodb.cli.is_master())
-			# TODO: TEMPORARY! Delete asap
-			time.sleep(5)
 
 			if self.mongodb.is_replication_master:
 			
@@ -785,6 +782,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.debug('Wait until node is down or removed from replica set')
 			wait_until(lambda n: n not in self.mongodb.replicas or node_terminated(n),
 								 args=(down_node_name,), logger=self._logger, timeout=180)
+			self._logger.debug('Wait for rs manage things (just sleep 10 sec)')
+			time.sleep(10)
 			self.on_HostDown(message)
 
 			
