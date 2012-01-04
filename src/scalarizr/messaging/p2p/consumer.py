@@ -18,6 +18,7 @@ import sys
 import os
 import time 
 import socket
+import HTMLParser
 
 class P2pMessageConsumer(MessageConsumer):
 	endpoint = None
@@ -81,6 +82,14 @@ class P2pMessageConsumer(MessageConsumer):
 				try:
 					for f in self.consumer.filters['protocol']:
 						rawmsg = f(self.consumer, queue, rawmsg)
+						try:
+							if isinstance(rawmsg, str):
+								logger.debug('Represented rawmsg: %s'%repr(rawmsg))
+								h = HTMLParser.HTMLParser()
+								rawmsg = h.unescape(rawmsg).encode('utf-8')
+						except:
+							logger.debug('%s', sys.exc_info()[1], sys.exc_info()[2])
+
 				except (BaseException, Exception), e:
 					err = 'Message consumer protocol filter raises exception: %s' % str(e)
 					logger.error(err)

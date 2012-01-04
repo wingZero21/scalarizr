@@ -9,7 +9,7 @@ from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingE
 from scalarizr.messaging.p2p.security import P2pMessageSecurity
 import logging
 import threading
-
+import sqlite3
 
 """
 InFilter
@@ -54,7 +54,7 @@ class P2pMessageService(MessageService):
 		c = consumer.P2pMessageConsumer(**params)
 		c.filters['protocol'].append(self._security.in_protocol_filter)
 		return c
-	
+
 	def get_producer(self):
 		if not self._default_producer:
 			self._default_producer = self.new_producer(
@@ -101,13 +101,20 @@ class _P2pMessageStore:
 		
 	def put_ingoing(self, message, queue, consumer_id):
 		conn = self._conn()
+		conn.text_factory = sqlite3.OptimizedUnicode
 		cur = conn.cursor()
 		try:
 			sql = """INSERT INTO p2p_message (id, message, message_id, 
 						message_name, queue, is_ingoing, in_is_handled, in_consumer_id)
 					VALUES 
 						(NULL, ?, ?, ?, ?, ?, ?, ?)"""
-			cur.execute(sql, [str(message).encode('utf-8'), message.id, message.name, queue, 1, 0, consumer_id])
+			
+				
+			#self._logger.debug('Representation mes: %s', repr(str(message)))
+			
+			cur.execute(sql, [str(message), message.id.decode('utf-8'),
+					message.name.decode('utf-8'), queue.encode('utf-8'), 1, 0,
+					consumer_id.encode('utf-8')])
 			
 			if message.meta.has_key(MetaOptions.REQUEST_ID):
 				cur.execute("""UPDATE p2p_message 
@@ -272,7 +279,15 @@ class _P2pMessageStore:
 			cur.close()
 		
 	def _unmarshall(self, message, row):
-		message.fromxml(row["message"])
+		try:
+			row_mes = row["message"].encode('utf-8')
+			self._logger.debug('Repr row after encode: %s', repr(row_mes))
+		except:
+			self._logger.debug("Can't decode row['message']). Repr input row['message']: %s",
+				repr(row["message"]))
+			row_mes = row['message']
+		
+		message.fromxml(row_mes)
 		
 	def _marshall(self, message, row={}):
 		row["message_id"] = message.id
