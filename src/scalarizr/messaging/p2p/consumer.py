@@ -84,7 +84,6 @@ class P2pMessageConsumer(MessageConsumer):
 						rawmsg = f(self.consumer, queue, rawmsg)
 						try:
 							if isinstance(rawmsg, str):
-								logger.debug('Represented rawmsg: %s'%repr(rawmsg))
 								h = HTMLParser.HTMLParser()
 								rawmsg = h.unescape(rawmsg).encode('utf-8')
 						except:

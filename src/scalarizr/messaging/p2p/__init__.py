@@ -280,14 +280,13 @@ class _P2pMessageStore:
 		
 	def _unmarshall(self, message, row):
 		try:
-			row_mes = row["message"].encode('utf-8')
-			self._logger.debug('Repr row after encode: %s', repr(row_mes))
+			rawmsg = row["message"].encode('utf-8')
 		except:
 			self._logger.debug("Can't decode row['message']). Repr input row['message']: %s",
 				repr(row["message"]))
-			row_mes = row['message']
+			rawmsg = row['message']
 		
-		message.fromxml(row_mes)
+		message.fromxml(rawmsg)
 		
 	def _marshall(self, message, row={}):
 		row["message_id"] = message.id
