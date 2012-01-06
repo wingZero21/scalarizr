@@ -23,4 +23,11 @@ CREATE TABLE storage (
 	"device" TEXT,
 	"state" TEXT
 );
+
+DROP TABLE IF EXISTS state;
+CREATE TABLE state (
+	"name" PRIMARY KEY ON CONFLICT REPLACE,
+	"value" TEXT
+);
+
 COMMIT;

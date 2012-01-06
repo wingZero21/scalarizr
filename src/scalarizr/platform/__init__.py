@@ -36,11 +36,19 @@ class PlatformFactory(object):
 
 		return self._platforms[name];
 
+
+class PlatformFeatures:
+	VOLUMES		= 'volumes'
+	SNAPSHOTS	= 'snapshots'
+
+
 class Platform():
 	name = None
 	_arch = None
 	_access_data = None
 	_userdata = None
+	
+	features = []					
 	
 	def get_private_ip(self):
 		return self.get_public_ip()
@@ -51,7 +59,7 @@ class Platform():
 	def get_user_data(self, key=None):
 		cnf = bus.cnf
 		if self._userdata is None:
-			path = cnf.private_path('.user-data')			
+			path = cnf.private_path('.user-data')
 			if os.path.exists(path):
 				rawmeta = read_file(path)
 				if not rawmeta:
