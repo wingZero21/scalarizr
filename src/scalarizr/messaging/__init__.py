@@ -72,7 +72,7 @@ class Message(object):
 		pass
 	
 	def fromxml (self, xml):
-		doc = dom.parseString(xml)
+		doc = dom.parseString(xml.encode('utf-8'))
 		xml_strip(doc)
 		
 		root = doc.documentElement
@@ -127,12 +127,13 @@ class Message(object):
 					el.appendChild(itemEl)
 					self._walk_encode(v, itemEl, doc)
 		else:
-			if isinstance(value, str):
+			if isinstance(value, basestring):
 				value = value.encode('utf-8')
-			elif value is None:
+			elif value:
+				value = str(value)
+			else:
 				value = ''
-			el_ = doc.createTextNode(value)
-			el.appendChild(el_)
+			el.appendChild(doc.createTextNode(value))
 
 
 class MessageProducer(Observable):
