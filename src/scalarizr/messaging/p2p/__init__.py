@@ -111,11 +111,12 @@ class _P2pMessageStore:
 			
 				
 			#self._logger.debug('Representation mes: %s', repr(str(message)))
-			
+			cur.execute(sql, [str(message), message.id, message.name, queue, 1, 0, consumer_id])
+			'''
 			cur.execute(sql, [str(message), message.id.decode('utf-8'),
 					message.name.decode('utf-8'), queue.encode('utf-8'), 1, 0,
 					consumer_id.encode('utf-8')])
-			
+			'''
 			if message.meta.has_key(MetaOptions.REQUEST_ID):
 				cur.execute("""UPDATE p2p_message 
 						SET response_uuid = ? WHERE message_id = ?""", 
@@ -174,6 +175,7 @@ class _P2pMessageStore:
 						is_ingoing, out_is_delivered, out_delivery_attempts, out_sender) 
 					VALUES 
 						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
+			
 			cur.execute(sql, [str(message), message.id, message.name, queue, 0, 0, 0, sender])
 			
 			self._logger.debug("Commiting put_outgoing")

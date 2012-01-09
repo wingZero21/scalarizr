@@ -127,7 +127,11 @@ class Message(object):
 					el.appendChild(itemEl)
 					self._walk_encode(v, itemEl, doc)
 		else:
-			el_ = doc.createTextNode((value.encode('utf-8') if value is not None else ''))
+			if isinstance(value, str):
+				value = value.encode('utf-8')
+			elif value is None:
+				value = ''
+			el_ = doc.createTextNode(value)
 			el.appendChild(el_)
 
 
