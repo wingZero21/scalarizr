@@ -127,11 +127,12 @@ class Message(object):
 					el.appendChild(itemEl)
 					self._walk_encode(v, itemEl, doc)
 		else:
-			if value is not None:
-				value = unicode(value, 'utf-8')
-			else:
-				value = ''
-			el.appendChild(doc.createTextNode(value))
+			el.appendChild(doc.createTextNode(str(value) if value is not None else ""))
+			#if value is not None:
+			#	value = unicode(value, 'utf-8')
+			#else:
+			#	value = ''
+			#el.appendChild(doc.createTextNode(value))
 
 
 class MessageProducer(Observable):
