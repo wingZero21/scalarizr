@@ -7,7 +7,7 @@ if sys.version_info < (2, 6):
 	sys.modules['logging.config'] = logging_config
 	sys.modules['logging.handlers'] = logging_handlers
 
-
+ 
 # Core
 from scalarizr import config 
 from scalarizr.bus import bus
