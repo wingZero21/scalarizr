@@ -69,8 +69,6 @@ class Server(BaseOption):
 class Option(BaseOption):
 	
 	def __getitem__(self, key):
-		res = []
-
 		options = self.haproxy_cfg.get_dict('%soption'% self.mpath['value'])
 		res = {}
 		
@@ -83,6 +81,30 @@ class Option(BaseOption):
 				res[list_par[0]] = True
 			
 		return res
+
+class Stats(BaseOption):
+	
+	def __getitem__(self, key):
+		stats = self.haproxy_cfg.get_dict('%sstats'% self.mpath['value'])
+
+		_pair = ['socket', 'timeout', 'maxconn', 'uid', 'user', 'gid', 'group', 'mode', 'level']
+		_single = ['enable']
+		res = []
+
+		for elem in stats:
+			temp = {}
+			list_par = elem['value'].split(' ')
+			
+			i = 0
+			while i < list_par.__len__():
+				if list_par[i] in _pair:
+					temp[list_par[i]] = list_par[i+1]
+					i+=2
+				else:
+					temp[list_par[i]] = True
+					i+=1
+			res.append(temp)
+		return res if res.__len__()>1 else res[0]
 
 
 class HAProxyCfg(filetool.ConfigurationFile):
@@ -132,7 +154,7 @@ class HAProxyCfg(filetool.ConfigurationFile):
 			raise initdv2.InitdError, 'Cannot read/parse HAProxy main configuration file.'\
 				' Details: %s' % sys.exc_info()[2]
 
-		self.options = {'server': Server, 'option': Option}
+		self.options = {'server': Server, 'option': Option, 'stats': Stats}
 
 		super(HAProxyCfg, self).__init__(path or HAPROXY_CFG_PATH)
 
