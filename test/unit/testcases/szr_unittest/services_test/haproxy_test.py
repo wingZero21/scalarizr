@@ -1,14 +1,39 @@
 '''
-Created on Dec 19, 2011
+Created on Jan 10, 2012
 
-@author: sam
+@author: marat
 '''
+
+import os
 import unittest
-import os, sys
 
 from scalarizr.services import haproxy
 
-class TestHAProxyInitScript(unittest.TestCase):
+
+class TestHAProxyCfg2(unittest.TestCase):
+	def setUp(self):
+		self.conf = haproxy.HAProxyCfg2(os.path.dirname(__file__) + '/../../../resources/etc/haproxy.cfg')
+	
+
+	def test_global(self):
+		self.assertTrue('daemon' in self.conf['global'])
+		self.assertEqual(self.conf['global']['chroot'], '/var/lib/haproxy')
+		self.assertEqual(self.conf['global']['log'], ['127.0.0.1', 'local2'])
+		
+	def test_defaults(self):
+		self.assertEqual(self.conf['defaults']['timeout']['http-keep-alive'], '10s')
+		self.assertTrue('server' in self.conf['defaults']['timeout'])
+		self.assertTrue(self.conf['defaults']['option']['httplog'])
+		
+	def test_frontend(self):
+		self.assertEqual(self.conf['frontend']['main']['bind'], '*:5000')
+		self.assertEqual(self.conf['frontend']['main']['default_backend'], 'app')
+		
+	def test_backend(self):
+		self.assertEqual(self.conf['backend']['app']['server']['app1'], ['127.0.0.1:5001', 'check'])
+		
+		
+class _TestHAProxyInitScript(unittest.TestCase):
 
 	def test_start(self):
 		hap_is = haproxy.HAProxyInitScript()
@@ -74,8 +99,3 @@ class TestHAProxyInitScript(unittest.TestCase):
 			pid = hap_is.pid()
 		finally:
 			return pid
-
-
-if __name__ == "__main__":
-	#import sys;sys.argv = ['', 'Test.testName']
-	unittest.main()

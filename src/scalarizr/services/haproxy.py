@@ -2,16 +2,160 @@
 import os, sys
 import logging
 import signal, csv, cStringIO, socket
+import string
+import re
 
 from scalarizr import util
 from scalarizr.util import initdv2
 from scalarizr.util import filetool
 from scalarizr.libs import metaconf
 
+
 BEHAVIOUR = SERVICE_NAME = 'haproxy'
 LOG = logging.getLogger(__name__)
 HAPROXY_EXEC = '/usr/sbin/haproxy'
 HAPROXY_CFG_PATH = '/etc/haproxy/haproxy.cfg'
+
+class HAProxyError(Exception):
+	pass
+
+
+class HAProxyCfg2(object):
+	class slice_(dict):
+		def __init__(self, conf, xpath):
+			dict.__init__(self)
+			self.conf = conf
+			self.xpath = xpath
+			self.name = os.path.basename(xpath)
+
+		def __contains__(self, name):
+			raise NotImplemented()
+			
+		def __len__(self):
+			raise NotImplemented()
+			
+		def __getitem__(self, name):
+			raise NotImplemented()
+		
+		def __setitem__(self, name, value):
+			raise NotImplemented()
+
+		def __iter__(self):
+			index = 1
+			try:
+				while True:
+					yield self.conf.get(self._child_xpath(index))
+					index += 1
+			except metaconf.NoPathError:
+				raise StopIteration()
+		
+		def _child_xpath(self, key):
+			if isinstance(key, int):
+				return '%s[%d]' % (self.xpath, key)
+			return '%s/%s' % (self.xpath, key) 
+
+	class option_group(slice_):
+		NAMES = ('server', 'option', 'timeout')
+		
+		def __getitem__(self, name):
+			index = 1
+			for val in self:
+				if val.startswith(name + ' ') or val == name:
+					return _serializers[name].unserialize(self.conf.get(self._child_xpath(index))[len(name):])
+				index += 1
+			raise KeyError(name)
+		
+		def __contains__(self, name):
+			name_ = name + ' '
+			for val in self:
+				if val.startswith(name_):
+					return True
+			return False
+
+	class section(slice_):
+		def __getitem__(self, name):
+			if name in HAProxyCfg2.option_group.NAMES:
+				return HAProxyCfg2.option_group(self.conf, self._child_xpath(name))
+			try:
+				return _serializers[name].unserialize(self.conf.get(self._child_xpath(name)))
+			except metaconf.NoPathError:
+				raise KeyError(name)
+		
+		def __contains__(self, name):
+			return name in self.conf.options(self.xpath)
+		
+		def __len__(self):
+			return len(self.conf.options(self.xpath))
+		
+	class sections(slice_):
+		def __len__(self):
+			return sum(int(t == self.name) for t in self.conf.sections('./'))
+		
+		def __contains__(self, name):
+			return name in self.conf.sections('./')
+		
+		def __getitem__(self, name):
+			for index in range(0, len(self)):
+				if self.conf.get(self._child_xpath(index)) == name:
+					return self.section(self.conf, self._child_xpath(index))
+			raise KeyError(self._child_xpath(name))
+		
+	
+	
+	def __init__(self, path=None):
+		self.conf = metaconf.Configuration('haproxy')
+		self.conf.read(path or HAPROXY_CFG_PATH)
+	
+	def __getitem__(self, name):
+		cls = self.sections
+		if name in ('global', 'defaults'):
+			cls = self.section
+		return cls(self.conf, './' + name) 
+	
+	def __setitem__(self, name):
+		raise NotImplemented()
+	
+	
+		
+	
+
+
+class OptionSerializer(object):
+	def unserialize(self, s):
+		value = filter(None, map(string.strip, s.split(' ')))
+		if len(value) == 0:
+			return True
+		elif len(value) == 1:
+			return value[0]
+		return value 
+	
+	def serialize(self, v):
+		return ' '.join(v)
+
+class ServerSerializer(OptionSerializer):
+	pass
+
+class StatsSerializer(OptionSerializer):
+	pass
+
+class Serializers(dict):
+	def __init__(self, **kwds):
+		dict.__init__(self, **kwds)
+		self.update({
+			'server': ServerSerializer(),
+			'stats': StatsSerializer()
+		})
+		self.__default =  OptionSerializer()
+		
+	def __getitem__(self, option):
+		return self.get(option, self.__default)
+
+_serializers = Serializers()
+
+
+
+
+
 
 
 class BaseOption():
@@ -66,6 +210,7 @@ class Server(BaseOption):
 		pass
 
 
+
 class Option(BaseOption):
 	
 	def __getitem__(self, key):
@@ -81,6 +226,7 @@ class Option(BaseOption):
 				res[list_par[0]] = True
 			
 		return res
+
 
 class Stats(BaseOption):
 	
@@ -151,8 +297,8 @@ class HAProxyCfg(filetool.ConfigurationFile):
 			self._config.read(path or HAPROXY_CFG_PATH) 
 			#TODO: copy from _config to dict config
 		except:
-			raise initdv2.InitdError, 'Cannot read/parse HAProxy main configuration file.'\
-				' Details: %s' % sys.exc_info()[2]
+			raise HAProxyError, 'Can\'t read HAProxy configuration file.' \
+				' Details: %s' % str(sys.exc_info()[1]), sys.exc_info()[2]
 
 		self.options = {'server': Server, 'option': Option, 'stats': Stats}
 
