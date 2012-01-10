@@ -9,6 +9,7 @@ import time
 import glob
 import shutil
 import logging
+import functools
 
 
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
@@ -786,6 +787,25 @@ class Mongos(object):
 			cls.start()
 
 
+class AutoReconnectConnection(pymongo.Connection):
+
+	def __getattribute__(self, item):
+		obj = super(AutoReconnectConnection, self).__getattribute__(item)
+
+		if callable(obj):
+
+			def handle_autoreconnect(*args, **kwargs):
+				try:
+					return obj(*args, **kwargs)
+				except pymongo.errors.AutoReconnect:
+					return obj(*args, **kwargs)
+
+			return handle_autoreconnect
+
+		return obj
+
+
+
 class MongoCLI(object):
 	
 	authenticated = False
@@ -808,6 +828,7 @@ class MongoCLI(object):
 				cls, *args, **kwargs)
 		return cls._instances[port]
 
+
 	@classmethod
 	def find(cls, port=REPLICA_DEFAULT_PORT, login=SCALR_USER, password=None):
 		return cls(port=port, login=login, password=password)
@@ -820,9 +841,10 @@ class MongoCLI(object):
 		
 	@property
 	def connection(self):
+
 		if not hasattr(self, '_con'):
 			self._logger.debug('creating pymongo connection to %s:%s' % (self.host,self.port))
-			self._con = pymongo.Connection(self.host, self.port)
+			self._con = AutoReconnectConnection(self.host, self.port)
 		if not self.authenticated and self.login and self.password and self.is_port_listening:
 			self._logger.debug('Authenticating as %s' % self.login)
 			self._con.admin.authenticate(self.login, self.password)
