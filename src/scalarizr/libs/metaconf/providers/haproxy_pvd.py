@@ -34,8 +34,9 @@ class HaproxyFormatProvider(IniFormatProvider):
 		if os.path.dirname(parent_path) not in ('.', ''):
 			raise MetaconfError('Maximum nesting level for haproxy format is 2')
 		elif parent_path in ('.', ''):
-			if etree.find(path) is not None:
-				raise MetaconfError("Ini file can't contain two identical sections")
+			existed = etree.find(path)
+			if existed is not None and existed.text == value:
+				raise MetaconfError("Haproxy file can't contain two sections with identical names and values")
 			el.attrib['mc_type'] = 'section'
 		else:
 			el.attrib['mc_type'] = 'option'
@@ -51,10 +52,17 @@ class HaproxyFormatProvider(IniFormatProvider):
 			if res.group('comment'):
 				comment = ET.Comment(res.group('comment')[1:])
 				self._cursect.append(comment)
-			self._cursect = ET.SubElement(root, quote(res.group('section_name')))
+			section_name = res.group('section_name')
+			self._cursect = ET.SubElement(root, quote(section_name))
 			self._cursect.attrib['mc_type'] = 'section'
 			value = res.group('value') or ''
-			self._cursect.attrib['value'] = value.strip()
+			if section_name in ('listen', 'frontend') and value:
+				values = value.split()
+				if len(values) >= 2:
+					value = values[0]
+					bind = ET.SubElement(self._cursect, 'bind')
+					bind.text = ' '.join(values[1:])
+			self._cursect.text = value.strip()
 			return True
 		return False
 
@@ -62,7 +70,7 @@ class HaproxyFormatProvider(IniFormatProvider):
 	def write_section(self, fp, node):
 		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'section':
 			fp.write(unquote(node.tag))
-			value = node.attrib['value']
+			value = node.text
 			fp.write(' ' + value)
 			fp.write('\n')
 			self._indent = '\t'
@@ -87,18 +95,18 @@ class HaproxyFormatProvider(IniFormatProvider):
 			new_opt.attrib['mc_type'] = 'option'
 
 			value = res.group('value') or ''
-			new_opt.attrib['value'] = value.strip()
+			new_opt.text = value.strip()
 
 			return True
 		return False
 
 
 	def write_option(self, fp, node):
-		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
+		if not callable(node.tag) and node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
 			fp.write("\t" + unquote(node.tag))
-			value = node.attrib['value']
+			value = node.text
 			if value:
-				fp.write('\t' + unquote(value))
+				fp.write('\t' + value)
 			fp.write('\n')
 			return True
 		return False
