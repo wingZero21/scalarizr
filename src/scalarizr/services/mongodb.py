@@ -788,16 +788,17 @@ class Mongos(object):
 
 
 class AutoReconnectConnection(pymongo.Connection):
+	_logger = logging.getLogger(__name__)
 
 	def __getattribute__(self, item):
 		obj = super(AutoReconnectConnection, self).__getattribute__(item)
 
 		if callable(obj):
-
 			def handle_autoreconnect(*args, **kwargs):
 				try:
 					return obj(*args, **kwargs)
 				except pymongo.errors.AutoReconnect:
+					self._logger.debug('Caught AutoReconnect exception. Retrying..')
 					return obj(*args, **kwargs)
 
 			return handle_autoreconnect
