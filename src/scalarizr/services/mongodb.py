@@ -787,29 +787,20 @@ class Mongos(object):
 			cls.start()
 
 
-class AutoReconnectConnection(pymongo.Connection):
-	_logger = logging.getLogger(__name__)
-
-	def __getattribute__(self, item):
-		obj = super(AutoReconnectConnection, self).__getattribute__(item)
-
-		if callable(obj):
-			@functools.wraps(obj)
-			def handle_autoreconnect(*args, **kwargs):
-				max_retry = 3
-				attempts = 0
-				while True:
-					try:
-						return obj(*args, **kwargs)
-					except pymongo.errors.AutoReconnect, e:
-						attempts += 1
-						self._logger.debug('Caught AutoReconnect exception. Failed attempts: %s', attempts)
-						if attempts >= max_retry:
-							raise e
-						time.sleep(0.3)
-
-			return handle_autoreconnect
-		return obj
+def autoreconnect(f):
+	@functools.wraps(f)
+	def wrapper(*args, **kwargs):
+		max_retry = 3
+		attempts = 0
+		while True:
+			try:
+				return f(*args, **kwargs)
+			except pymongo.errors.AutoReconnect, e:
+				attempts += 1
+				if attempts >= max_retry:
+					raise e
+				time.sleep(0.3)
+	return wrapper
 
 
 
@@ -848,10 +839,9 @@ class MongoCLI(object):
 		
 	@property
 	def connection(self):
-
 		if not hasattr(self, '_con'):
 			self._logger.debug('creating pymongo connection to %s:%s' % (self.host,self.port))
-			self._con = AutoReconnectConnection(self.host, self.port)
+			self._con = pymongo.Connection(self.host, self.port)
 		if not self.authenticated and self.login and self.password and self.is_port_listening:
 			self._logger.debug('Authenticating as %s' % self.login)
 			self._con.admin.authenticate(self.login, self.password)
@@ -859,7 +849,7 @@ class MongoCLI(object):
 		return self._con
 
 
-	@property	
+	@property
 	def has_connection(self):
 		'''
 		MongoDB shell version: 2.0.0
@@ -888,12 +878,12 @@ class MongoCLI(object):
 		except:
 			return False
 	
-	
+	@autoreconnect
 	def list_database_names(self):
 		self._logger.debug('Getting list of databases')
 		return self.connection.database_names()
 
-	
+	@autoreconnect
 	def initiate_rs(self):
 		'''
 	    initializes replica set
@@ -907,7 +897,8 @@ class MongoCLI(object):
 		if int(res['ok']) == 0:
 			raise BaseException('Could not initialize replica set: %s' % res['errmsg'])
 
-	
+
+	@autoreconnect
 	def add_shard(self, shard_name, rs_name, rs_members):
 		self._logger.debug('Adding shard %s with members %s' % (shard_name, rs_members))
 		host_str = '%s/%s' % (rs_name, ','.join(rs_members))
@@ -937,15 +928,18 @@ class MongoCLI(object):
 		return self.rs_reconfig(cfg, force=True)
 
 
+	@autoreconnect
 	def is_master(self):
 		self._logger.debug('Checking if node is master')
 		return self.connection.admin.command('isMaster')
 
-	
+
+	@autoreconnect
 	def get_rs_status(self):
 		return self.connection.admin.command('replSetGetStatus')
 
-	
+
+	@autoreconnect
 	def get_rs_config(self):
 		self._logger.debug('Getting rs config')
 		rs_count = self.connection.local.system.replset.count()
@@ -953,6 +947,7 @@ class MongoCLI(object):
 		return self.connection.local.system.replset.find_one()
 
 
+	@autoreconnect
 	def rs_reconfig(self, config, force=False):
 		self._logger.debug('Reconfiguring replica set')
 		return self.connection.admin.command("replSetReconfig", config, force=force)		
@@ -988,7 +983,9 @@ class MongoCLI(object):
 			self._logger.warning('Could not shutdown server from the inside: %s',e)
 			out = None
 		return out
-	
+
+
+	@autoreconnect
 	def sync(self):
 		self._logger.debug('Performing fsync on server')
 		'''
@@ -998,7 +995,8 @@ class MongoCLI(object):
 		self._logger.debug('fsync is done.')
 		return ret
 
-	
+
+	@autoreconnect
 	def stop_balancer(self):
 		'''
 		// connect to mongos (not a config server!)
@@ -1019,7 +1017,8 @@ class MongoCLI(object):
 			time.sleep(1)
 		self._logger.debug('Balancer has been stopped.')	
 
-	
+
+	@autoreconnect
 	def start_balancer(self):
 		'''
 		>use config
@@ -1028,38 +1027,45 @@ class MongoCLI(object):
 		self._logger.info('Starting balancer')
 		self.connection.config.settings.update({'_id': 'balancer'}, {'stopped' : False}, True)
 		self._logger.debug('Balancer has been started.')
-		
 
+
+	@autoreconnect
 	def create_or_update_admin_user(self, username, password):
-
 		self._logger.debug('Adding mongodb user %s on %s:%s' % (username, self.host, self.port))
 		self.connection.admin.add_user(username, password)
 
-		
+
+	@autoreconnect
 	def is_router_connection(self):
 		return 'mongos' in self.connection.config.collection_names()
-		
-	
+
+
+	@autoreconnect
 	def flush_router_cfg(self):
 		self.connection.admin.command('flushRouterConfig')
 
-	
+
+	@autoreconnect
 	def list_cluster_databases(self):
 		""" list databases with shard status """
 		return list(self.connection.config.databases.find())
 
 
+	@autoreconnect
 	def remove_shard(self, shard_name):
 		return self.connection.admin.command('removeshard', shard_name)
 
 
+	@autoreconnect
 	def move_primary(self, db_name, dest_shard):
 		return self.connection.admin.command("moveprimary", db_name, to=dest_shard)
 
 
+	@autoreconnect
 	def step_down(self, seconds=1, force=False):
 		return self.connection.admin.command('replSetStepDown', seconds, force=force)
 
 
+	@autoreconnect
 	def list_shards(self):
 		return list(self.connection.config.shards.find())
