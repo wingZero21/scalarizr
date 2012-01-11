@@ -112,5 +112,7 @@ class ChefHandler(Handler):
 
 
 	def get_node_name(self):
-		return json.loads(system2([self._ohai_bin, 'hostname'])[0])[0]
+		cloud = json.loads(system2([self._ohai_bin, 'cloud'])[0])
+		return cloud[0][1]
+
 
