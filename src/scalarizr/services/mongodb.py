@@ -786,7 +786,7 @@ class Mongos(object):
 			cls.stop()
 			cls.start()
 
-
+"""
 class AutoReconnectConnection(pymongo.Connection):
 	_logger = logging.getLogger(__name__)
 
@@ -804,7 +804,7 @@ class AutoReconnectConnection(pymongo.Connection):
 			return handle_autoreconnect
 
 		return obj
-
+"""
 
 
 class MongoCLI(object):
@@ -845,7 +845,7 @@ class MongoCLI(object):
 
 		if not hasattr(self, '_con'):
 			self._logger.debug('creating pymongo connection to %s:%s' % (self.host,self.port))
-			self._con = AutoReconnectConnection(self.host, self.port)
+			self._con = pymongo.Connection(self.host, self.port)
 		if not self.authenticated and self.login and self.password and self.is_port_listening:
 			self._logger.debug('Authenticating as %s' % self.login)
 			self._con.admin.authenticate(self.login, self.password)
