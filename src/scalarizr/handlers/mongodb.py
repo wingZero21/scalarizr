@@ -54,11 +54,9 @@ CLUSTER_STATE_KEY		= "mongodb.cluster_state"
 REMOVE_VOLUME_KEY		= "mongodb.remove_volume"
 
 
-
-		
+	
 def get_handlers():
 	return (MongoDBHandler(), )
-
 
 
 class MongoDBClusterStates:
@@ -137,7 +135,6 @@ class MongoDBMessages:
 	INT_BEFORE_HOST_UP = "MongoDB_IntBeforeHostUp"
 	
 	
-
 class ReplicationState:
 	INITIALIZED = 'initialized'
 	STALE		= 'stale'
