@@ -973,6 +973,14 @@ class BuiltinBehaviours:
 	REDIS = 'redis'
 	MONGODB = 'mongodb'
 	CHEF = 'chef'
+	
+	CF_ROUTER = 'cf_router'
+	CF_CLOUD_CONTROLLER = 'cf_cloud_controller'
+	CF_HEALTH_MANAGER = 'cf_health_manager'
+	CF_DEA = 'cf_dea'
+	CF_SERVICE = 'cf_service'
+	
+	
 	CUSTOM = 'custom'
 	
 	@staticmethod
