@@ -972,8 +972,8 @@ class BuiltinBehaviours:
 	RABBITMQ = 'rabbitmq'
 	REDIS = 'redis'
 	MONGODB = 'mongodb'
+	CHEF = 'chef'
 	CUSTOM = 'custom'
-
 	
 	@staticmethod
 	def values():
