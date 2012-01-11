@@ -1024,7 +1024,7 @@ class MongoDBHandler(ServiceCtlHandler):
 						to wait watcher result from primary """
 
 				try:
-					rs_status = self.handler.mongodb.cli.get_rs_status()
+					rs_status = self.mongodb.cli.get_rs_status()
 
 					for member in rs_status['members']:
 						if member['name'] == my_nodename:
