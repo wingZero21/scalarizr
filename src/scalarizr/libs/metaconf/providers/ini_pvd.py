@@ -109,7 +109,7 @@ class IniFormatProvider(FormatProvider):
 	def write_option(self, fp, node):
 		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
 			value = node.text if node.text else ''
-			if re.search('\s', value):
+			if re.search('\s', value) or value == '':
 				value = '"' + value + '"'
 			fp.write(unquote(node.tag)+"\t= "+value+'\n')
 			return True
