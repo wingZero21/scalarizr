@@ -64,19 +64,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 		if 'ec2' == self.platform.name:
 			updates = dict(hostname_as_pubdns = '0')
 			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
-	
-	
-	def on_init(self):
-		bus.on("host_init_response", self.on_host_init_response)
-		bus.on("before_host_up", self.on_before_host_up)
-		bus.on("before_hello", self.on_before_hello)
-		bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
 
-		
-		if 'ec2' == self.platform.name:
-			updates = dict(hostname_as_pubdns = '0')
-			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
-	
 	
 	def on_init(self):
 		bus.on("host_init_response", self.on_host_init_response)
@@ -84,6 +72,10 @@ class RabbitMQHandler(ServiceCtlHandler):
 		bus.on("before_hello", self.on_before_hello)
 		bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
 		bus.on("before_host_down", self.on_before_host_down)
+
+		if 'ec2' == self.platform.name:
+			updates = dict(hostname_as_pubdns = '0')
+			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
 		
 		if self.cnf.state == ScalarizrState.BOOTSTRAPPING:
 			
