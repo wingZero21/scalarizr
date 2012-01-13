@@ -73,10 +73,6 @@ class RabbitMQHandler(ServiceCtlHandler):
 		bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
 		bus.on("before_host_down", self.on_before_host_down)
 
-		if 'ec2' == self.platform.name:
-			updates = dict(hostname_as_pubdns = '0')
-			self.cnf.update_ini('ec2', {'ec2': updates}, private=False)
-		
 		if self.cnf.state == ScalarizrState.BOOTSTRAPPING:
 			
 			self.cleanup_hosts_file('/')
