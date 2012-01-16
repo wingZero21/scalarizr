@@ -1519,31 +1519,56 @@ class MysqlHandler(ServiceCtlHandler):
 			self._start_service()
 
 		# Lock tables				
-		mysql.client.execute('FLUSH TABLES WITH READ LOCK')
+		#mysql.client.execute('FLUSH TABLES WITH READ LOCK')
+		root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
+		my_cli = spawn_mysql_cli(ROOT_USER, root_password)
 		try:
+			my_cli.sendline('FLUSH TABLES WITH READ LOCK;')
+			my_cli.expect('mysql>')
+		
 			system2('sync', shell=True)
 			
 			# Retrieve log file and log position
 			log_file = log_pos = None
 			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
+				my_cli.sendline('SHOW MASTER STATUS;')
+				my_cli.expect('mysql>')
+				
+				
+				# Retrieve log file and log position
+				lines = my_cli.before		
+				log_row = re.search(re.compile('^\|\s*([\w-]*\.\d*)\s*\|\s*(\d*)', re.M), lines)
+				if log_row:
+					log_file = log_row.group(1)
+					log_pos = log_row.group(2)
+				else:
+					raise HandlerError('SHOW MASTER STATUS returns empty set. Master is not started?')
+		
+				'''
 				try:
 					status = mysql.client.fetchall('SHOW MASTER STATUS')[0]
 				except IndexError:
 					raise HandlerError('SHOW MASTER STATUS returns empty set. Master is not started?')
 				else:		
 					log_file, log_pos = status['File'], status['Position']
+				'''
 			else:
-				try:
-					status = mysql.client.fetchall('SHOW SLAVE STATUS')[0]
-				except IndexError:
-					raise HandlerError('SHOW SLAVE STATUS returns empty set. Slave is not started?')
+				my_cli.sendline('SHOW SLAVE STATUS \G')
+				my_cli.expect('mysql>')
+				lines = my_cli.before
+				log_row = re.search(re.compile('Relay_Master_Log_File:\s*(.*?)$.*?Exec_Master_Log_Pos:\s*(.*?)$', re.M | re.S), lines)
+				if log_row:
+					log_file = log_row.group(1).strip()
+					log_pos = log_row.group(2).strip()
 				else:
-					log_file, log_pos = status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos']
+					raise HandlerError('SHOW SLAVE STATUS returns empty set. Slave is not started?')
 	
 			# Creating storage snapshot
 			snap = None if dry_run else self._create_storage_snapshot(tags)
 		finally:
-			mysql.client.execute('UNLOCK TABLES')
+			my_cli.sendline('UNLOCK TABLES;')
+			my_cli.expect('mysql>')
+			my_cli.terminate()
 			if not was_running:
 				self._stop_service('Restoring service`s state after making snapshot')
 		
