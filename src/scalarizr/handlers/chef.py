@@ -23,7 +23,7 @@ CLIENT_CONF_TPL = '''
 log_level        :info
 log_location     STDOUT
 chef_server_url  '%(server_url)s'
-validation_client_name '%(client_name)s'
+validation_client_name '%(validator_name)s'
 '''
 
 
@@ -78,7 +78,7 @@ class ChefHandler(Handler):
 				
 			# Write validation cert
 			with open(self._validator_key_path, 'w+') as fp:
-				fp.write(self._chef_data['client_key'])
+				fp.write(self._chef_data['validator_key'])
 				
 			# Register node
 			LOG.info('Registering Chef node')
