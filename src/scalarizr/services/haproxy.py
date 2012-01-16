@@ -27,16 +27,19 @@ class HAProxyCfg2(object):
 			self.conf = conf
 			self.xpath = xpath
 			self.name = os.path.basename(xpath)
+			#self.section = getattr(HAProxyCfg2, 'section')#HAProxyCfg2.section
 
 		def __contains__(self, name):
 			raise NotImplemented()
-			
+		'''
 		def __len__(self):
-			raise NotImplemented()
-			
+			#raise NotImplemented()
+			#LOG.debug('__len__ xpath: %s; length: %s; self: %s', self.xpath, self.conf.get_dict(self.xpath).__len__(), type(self))
+			#return self.conf.get_dict(self.xpath).__len__()
+		'''
 		def __getitem__(self, name):
 			raise NotImplemented()
-		
+
 		def __setitem__(self, name, value):
 			raise NotImplemented()
 
@@ -44,99 +47,211 @@ class HAProxyCfg2(object):
 			index = 1
 			try:
 				while True:
+					#LOG.debug('in slice_.__iter__  %s; index: %s; self: %s', self.conf.get(self._child_xpath(index)), index, type(self))
 					yield self.conf.get(self._child_xpath(index))
 					index += 1
 			except metaconf.NoPathError:
 				raise StopIteration()
-		
+
 		def _child_xpath(self, key):
 			if isinstance(key, int):
 				return '%s[%d]' % (self.xpath, key)
-			return '%s/%s' % (self.xpath, key) 
+			return '%s/%s' % (self.xpath, key)
 
 	class option_group(slice_):
-		NAMES = ('server', 'option', 'timeout')
-		
+		NAMES = {'server':1, 'option':1, 'timeout':1, 'log':0, 'stats':1}
+
+		def __init__(self, conf, xpath):
+			HAProxyCfg2.slice_.__init__(self, conf, xpath)
+			self.current_section = ''
+			for elem in self.NAMES.keys():
+				if elem in self.xpath:
+					self.current_section = elem
+
 		def __getitem__(self, name):
 			index = 1
 			for val in self:
-				if val.startswith(name + ' ') or val == name:
-					return _serializers[name].unserialize(self.conf.get(self._child_xpath(index))[len(name):])
+				if isinstance(val, str):
+					if val.startswith(name + ' ')  or val == name:
+						#LOG.debug('str. self.conf.get(self._child_xpath(index): %s', self.conf.get(self._child_xpath(index)))
+						return _serializers[self.current_section or name].unserialize(self.conf.get(self._child_xpath(index))[len(name):])
+				elif isinstance(val, dict):
+					if val.get(name):
+						return val.get(name)
+					else:
+						continue
+				elif isinstance(val, list):
+					if val[0] == name:
+						return _serializers[self.current_section].unserialize(val[1:])
+				else: LOG.debug('Other type in option_group.__getitem__(%s) %s', name, type(val))
 				index += 1
 			raise KeyError(name)
-		
+
 		def __contains__(self, name):
 			name_ = name + ' '
 			for val in self:
 				if val.startswith(name_):
 					return True
 			return False
+		
+		def __iter__(self):
+			index = 1
+			try:
+				while True:
+					#LOG.debug('type %s', type(_serializers[self.current_section].unserialize(self.conf.get(self._child_xpath(index)))))
+					yield _serializers[self.current_section].unserialize(self.conf.get(self._child_xpath(index)))
+					index += 1
+			except metaconf.NoPathError:
+				raise StopIteration()
+
 
 	class section(slice_):
 		def __getitem__(self, name):
-			if name in HAProxyCfg2.option_group.NAMES:
+			if name in HAProxyCfg2.option_group.NAMES.keys():
 				return HAProxyCfg2.option_group(self.conf, self._child_xpath(name))
 			try:
 				return _serializers[name].unserialize(self.conf.get(self._child_xpath(name)))
 			except metaconf.NoPathError:
 				raise KeyError(name)
-		
+
 		def __contains__(self, name):
 			return name in self.conf.options(self.xpath)
-		
+
 		def __len__(self):
 			return len(self.conf.options(self.xpath))
-		
+
 	class sections(slice_):
 		def __len__(self):
 			return sum(int(t == self.name) for t in self.conf.sections('./'))
-		
+
 		def __contains__(self, name):
 			return name in self.conf.sections('./')
-		
+
 		def __getitem__(self, name):
 			for index in range(0, len(self)):
 				if self.conf.get(self._child_xpath(index)) == name:
-					return self.section(self.conf, self._child_xpath(index))
+					return HAProxyCfg2.section(self.conf, self._child_xpath(index))
 			raise KeyError(self._child_xpath(name))
-		
-	
-	
+
+
 	def __init__(self, path=None):
 		self.conf = metaconf.Configuration('haproxy')
 		self.conf.read(path or HAPROXY_CFG_PATH)
-	
+
 	def __getitem__(self, name):
 		cls = self.sections
 		if name in ('global', 'defaults'):
 			cls = self.section
-		return cls(self.conf, './' + name) 
-	
+		return cls(self.conf, './' + name)
+
 	def __setitem__(self, name):
 		raise NotImplemented()
-	
-	
-		
-	
+
+
 
 
 class OptionSerializer(object):
 	def unserialize(self, s):
-		value = filter(None, map(string.strip, s.split(' ')))
+		value = filter(None, map(string.strip, s.replace('\t', ' ').split(' '))) if isinstance(s, str) else s
 		if len(value) == 0:
 			return True
 		elif len(value) == 1:
 			return value[0]
-		return value 
-	
+		return value
+
 	def serialize(self, v):
 		return ' '.join(v)
+	
+	def _parse(self, list_par, input_str):
+		temp = {}
+		last_key = ''
+		count = 0
+		if not isinstance(list_par, list):
+			list_par = [list_par,]
+		for elem in list_par:
+			if not last_key:
+				el_in_list= False
+				for num_arg in self._number_args.keys():
+					if elem in self._number_args[num_arg]:
+						el_in_list =True
+						if num_arg > 0:
+							last_key = elem
+							count = num_arg					
+							temp[last_key] = []
+						else:
+							temp[elem] = True
+				if not el_in_list:
+					raise "Can't parse string in %s._parse input str = `%s`" %(type(self), input_str)
+
+			elif count > 0:
+				count -= 1
+				temp[last_key].append(elem)
+
+				if count == 0:
+					if temp[last_key].__len__() == 1:
+						temp[last_key] = temp[last_key][0]
+					elif temp[last_key].__len__() == 0:
+						temp[last_key] = True
+					last_key = ''
+		return temp
+
 
 class ServerSerializer(OptionSerializer):
-	pass
+
+	def __init__(self):
+		self._number_args = {
+			0:['backup', 'check', 'disabled'], 
+			1:['addr', 'cookie', 'error-limit', 'fall', 'id', 'inter',
+				'fastinter', 'downinter', 'maxconn', 'maxqueue', 'minconn',
+				'observe', 'on-error', 'port', 'redir', 'rise', 'slowstart',
+				'source', 'track', 'weight']}
+
+	def unserialize(self, s):
+		try:
+			list_par = OptionSerializer.unserialize(self, s)
+			temp = {}
+			name = list_par.pop(0)
+			temp['address'] = list_par.pop(0)
+			if ':' in temp['address']:
+				temp['address'], temp['port'] = temp['address'].split(':')
+			temp.update(self._parse(list_par, s))
+			return {name:temp} if isinstance(temp, dict) else s
+		except:
+			LOG.debug("Details: %s%s", sys.exc_info()[1], sys.exc_info()[2])
+			return OptionSerializer.unserialize(self, s)
+
 
 class StatsSerializer(OptionSerializer):
-	pass
+
+	def __init__(self):
+		self._number_args = {
+			0:['enable'],
+			1:['socket', 'timeout', 'maxconn', 'uid', 'user', 'gid', 'group', 'mode', 'level'], 
+			2:['admin']}
+	'''
+	def unserialize(self, s):
+		try:
+			LOG.debug('inp unserialize `%s`', s)
+			
+			list_par = OptionSerializer.unserialize(self, s)
+			
+			LOG.debug('list_par unserialize `%s`', list_par)
+			
+			temp = {}
+			
+			if not isinstance(list_par, list):
+				temp = list_par
+			else:
+				name = list_par.get(0)
+				temp.update(self._parse(list_par, s))
+			
+			if isinstance(temp, dict):
+				return {name : temp}
+			return temp
+		except:
+			LOG.debug("Details: %s%s", sys.exc_info()[1], sys.exc_info()[2])
+			return OptionSerializer.unserialize(self, s)
+	'''
 
 class Serializers(dict):
 	def __init__(self, **kwds):
@@ -145,12 +260,22 @@ class Serializers(dict):
 			'server': ServerSerializer(),
 			'stats': StatsSerializer()
 		})
-		self.__default =  OptionSerializer()
-		
+		self.__default = OptionSerializer()
+
 	def __getitem__(self, option):
 		return self.get(option, self.__default)
 
 _serializers = Serializers()
+
+
+'''
+for key in cfg2['global']['log']:
+   ....:     pass
+
+[[127.0.0.1, user], ['local0']]
+'''
+
+
 
 
 
@@ -183,8 +308,8 @@ class Server(BaseOption):
 			
 			_required = ['name', 'address']
 			_single = ['backup', 'check', 'disabled']
-			
-			'''most of the params have value as argument so we can checking only single parametrs
+			'''
+			most of the params have value as argument so we can checking only single parametrs
 			_pair = ['addr', 'cookie', 'error-limit', 'fall', 'id', 'inter',
 				'fastinter', 'downinter', 'maxconn', 'maxqueue', 'minconn',
 				'observe', 'on-error', 'port', 'redir', 'rise', 'slowstart',
@@ -212,7 +337,7 @@ class Server(BaseOption):
 
 
 class Option(BaseOption):
-	
+
 	def __getitem__(self, key):
 		options = self.haproxy_cfg.get_dict('%soption'% self.mpath['value'])
 		res = {}
@@ -224,12 +349,11 @@ class Option(BaseOption):
 				res[list_par[0]] = ' '.join(list_par[1:]) 
 			else:
 				res[list_par[0]] = True
-			
 		return res
 
 
 class Stats(BaseOption):
-	
+
 	def __getitem__(self, key):
 		stats = self.haproxy_cfg.get_dict('%sstats'% self.mpath['value'])
 
@@ -240,7 +364,7 @@ class Stats(BaseOption):
 		for elem in stats:
 			temp = {}
 			list_par = elem['value'].split(' ')
-			
+
 			i = 0
 			while i < list_par.__len__():
 				if list_par[i] in _pair:

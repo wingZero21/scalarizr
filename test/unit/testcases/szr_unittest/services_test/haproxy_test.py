@@ -16,23 +16,52 @@ class TestHAProxyCfg2(unittest.TestCase):
 	
 
 	def test_global(self):
-		self.assertTrue('daemon' in self.conf['global'])
-		self.assertEqual(self.conf['global']['chroot'], '/var/lib/haproxy')
-		self.assertEqual(self.conf['global']['log'], ['127.0.0.1', 'local2'])
 		
+		self.assertEqual(self.conf['global']['chroot'], '/var/lib/haproxy')
+		self.assertTrue('daemon' in self.conf['global'])
+		
+	def test_global_log(self):
+		res = []
+		for el in self.conf['global']['log']:
+			res.append(el)
+		self.assertTrue(['127.0.0.1', 'local2'] in res)
+
+	def test_global_stats(self):
+		self.assertEqual(self.conf['global']['stats']['socket'], '/var/lib/haproxy/stats')
+
 	def test_defaults(self):
-		self.assertEqual(self.conf['defaults']['timeout']['http-keep-alive'], '10s')
-		self.assertTrue('server' in self.conf['defaults']['timeout'])
 		self.assertTrue(self.conf['defaults']['option']['httplog'])
 		
-	def test_frontend(self):
+	
+	def test_defaults_timeout(self):
+		self.assertEqual(self.conf['defaults']['timeout']['http-keep-alive'], '10s')
+	
+		res = []
+		for elem in self.conf['defaults']['timeout']:
+			res.append(elem)
+		self.assertTrue('server' in res[4])
+
+
+	def test_frontend_main(self):
 		self.assertEqual(self.conf['frontend']['main']['bind'], '*:5000')
 		self.assertEqual(self.conf['frontend']['main']['default_backend'], 'app')
-		
-	def test_backend(self):
-		self.assertEqual(self.conf['backend']['app']['server']['app1'], ['127.0.0.1:5001', 'check'])
-		
-		
+
+
+	def test_backend_app_server(self):
+		self.assertEqual(self.conf['backend']['app']['server']['app1'], {'address': '127.0.0.1', 'check': True, 'port': '5001'})
+
+
+	def test_backend_server(self):
+		temp = {}
+		for el in self.conf['backend']['app']['server']:
+			temp.update(el)
+		res = {'app1': {'address': '127.0.0.1', 'check': True, 'port': '5001'},
+		'app2': {'address': '127.0.0.1', 'check': True, 'port': '5002'},
+		'app3': {'address': '127.0.0.1', 'check': True, 'port': '5003'},
+		'app4': {'address': '127.0.0.1', 'check': True, 'port': '5004'}}
+		self.assertEqual(temp, res)
+
+
 class _TestHAProxyInitScript(unittest.TestCase):
 
 	def test_start(self):
@@ -66,7 +95,8 @@ class _TestHAProxyInitScript(unittest.TestCase):
 		new_pid = hap_is.pid()
 
 		self.assertNotEqual(pid, new_pid, "old pid value equal current => service doesn't restarted")
-		self.assertEqual(os.path.exists('/proc/%s'%new_pid), True, 'Process /proc/%s after restart not created'%new_pid)
+		self.assertEqual(os.path.exists('/proc/%s'%new_pid), True,
+			'Process /proc/%s after restart not created'%new_pid)
 
 
 	def test_reload(self):
