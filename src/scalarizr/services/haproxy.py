@@ -97,6 +97,7 @@ class HAProxyCfg2(object):
 			for elem in self.NAMES.keys():
 				if elem in self.xpath:
 					self.current_section = elem
+	
 
 		def __getitem__(self, name):
 			index = 1
@@ -294,6 +295,7 @@ class OptionSerializer(object):
 			return v
 	
 	def _parse(self, list_par, input_str):
+		# dictify
 		temp = {}
 		last_key = ''
 		count = 0
