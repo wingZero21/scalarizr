@@ -41,14 +41,9 @@ class HAProxyCfg2(object):
 			raise NotImplemented()
 
 		def __setitem__(self, name, value):
-			LOG.debug('path: `%s/%s` xpath: `%s` var: `%s`' % (self.xpath, name, self.xpath, value))
+			LOG.debug('slice_.__setitem__ path: name: `%s`, value: `%s`' % (name, value))
+			
 			'''
-			try:
-				self.conf.get(self._child_xpath(name))
-			except:
-				self.conf.add(self.xpath, name)
-			'''
-						
 			if isinstance(value, str):
 				try:
 					self.conf.set(self._child_xpath(name), value)
@@ -76,7 +71,8 @@ class HAProxyCfg2(object):
 				except:
 					self.conf.add(self._child_xpath(name), var)
 				LOG.debug('var: `%s` added at path: `%s`' % (var, self._child_xpath(name)))
-
+			'''
+			
 		def __iter__(self):
 			index = 1
 			try:
@@ -137,6 +133,9 @@ class HAProxyCfg2(object):
 					index += 1
 			except metaconf.NoPathError:
 				raise StopIteration()
+		
+		def __setitem__(self, name, value):
+			LOG.debug('option_group.__setitem__ path: name: `%s`, value: `%s`' % (name, value))
 			
 
 	class section(slice_):
@@ -156,6 +155,9 @@ class HAProxyCfg2(object):
 		def __len__(self):
 			return len(self.conf.options(self.xpath))
 
+		def __setitem__(self, name, value):
+			
+			LOG.debug('section.__setitem__ path: name: `%s`, value: `%s`' % (name, value))
 
 	class sections(slice_):
 
@@ -173,7 +175,40 @@ class HAProxyCfg2(object):
 			raise KeyError(self._child_xpath(name))
 
 		def __setitem__(self, name, value):
-			LOG.debug('sections.__setitem__ path: `%s/%s` xpath: `%s` var: `%s`' % (self.xpath, name, self.xpath, value))
+			LOG.debug('sections.__setitem__ path: name: `%s`, value: `%s`' % (name, value))
+			
+			try: 
+				#self.conf.get('%s/%s'%(self.xpath, name))
+				index = None
+				sections_ = self.conf.get_list(self.xpath)
+				for el in range(0, len(sections_)):
+					if sections_[el] == name:
+						index = el
+						break
+			except:
+				self.conf.add(self.xpath, name)
+				LOG.debug('sections.__setitem__: path %s added into conf'%self._child_xpath(name))
+			
+			if index:
+				self.xpath = self._child_xpath(index)
+			else:
+				self.xpath = self._child_xpath(name)
+			
+			if isinstance(value, str):
+				if index:
+					self.conf.add(self.xpath, value)
+			elif isinstance(value, dict):
+				for key in value.keys():
+					if key in HAProxyCfg2.option_group.NAMES:
+						option_group_ = HAProxyCfg2.option_group(self.conf, self.xpath)
+						HAProxyCfg2.option_group.__setitem__(option_group_, key, value[key])
+					else:
+						HAProxyCfg2.slice_.__setitem__(self, key, value[key])
+			else:
+				var = _serializers[name].serialize(value)
+				self.conf.add('%s/%s' % (self.xpath, ), var)
+
+			'''
 			try: 
 				self.conf.get('%s/%s'%(self.xpath, name))
 			except:
@@ -197,7 +232,7 @@ class HAProxyCfg2(object):
 				var = _serializers[name].serialize(value)
 				LOG.debug('Try add at path: `%s/%s` option: `%s`; value: `%s`;' % (self._child_xpath(index), name, key, var))
 				self.conf.add('%s/%s' % (self._child_xpath(index), key), var)
-
+			'''
 
 
 	def __init__(self, path=None):
@@ -211,12 +246,14 @@ class HAProxyCfg2(object):
 		return cls(self.conf, './' + name)
 
 	def __setitem__(self, name, value):
-
-		if not self.conf.children('./'+name):
-			self.conf.add('./%s' % name)
-		
 		LOG.debug('HAProxyCfg.__setitem__ name = %s; value = %s.'%( name, value))
 		
+		'''
+		if not self.conf.children('./'+name):
+			self.conf.add('./%s' % name)
+
+		LOG.debug('HAProxyCfg.__setitem__ name = %s; value = %s.'%( name, value))
+
 		if isinstance(value, str):
 			LOG.debug('value: `%s`; name: `%s`' % (value, name))
 			try:
@@ -228,8 +265,7 @@ class HAProxyCfg2(object):
 				var = _serializers[key].serialize(value[key])
 				LOG.debug('key: `%s`; var: `%s`; name: `%s`' % (key, var, name))
 				self.conf.add('./%s/%s' % (name, key), var)
-
-
+		'''
 
 
 class OptionSerializer(object):
