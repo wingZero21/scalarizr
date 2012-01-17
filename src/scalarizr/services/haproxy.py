@@ -27,7 +27,7 @@ class HAProxyCfg2(object):
 			self.conf = conf
 			self.xpath = xpath
 			self.name = os.path.basename(xpath)
-			#self.section = getattr(HAProxyCfg2, 'section')#HAProxyCfg2.section
+			self.current_section = ''
 
 		def __contains__(self, name):
 			raise NotImplemented()
@@ -35,13 +35,47 @@ class HAProxyCfg2(object):
 		def __len__(self):
 			#raise NotImplemented()
 			#LOG.debug('__len__ xpath: %s; length: %s; self: %s', self.xpath, self.conf.get_dict(self.xpath).__len__(), type(self))
-			#return self.conf.get_dict(self.xpath).__len__()
-		'''
+			#return self.conf.get_dict(self.xpath).__len__()'''
+
 		def __getitem__(self, name):
 			raise NotImplemented()
 
 		def __setitem__(self, name, value):
-			raise NotImplemented()
+			LOG.debug('path: `%s/%s` xpath: `%s` var: `%s`' % (self.xpath, name, self.xpath, value))
+			'''
+			try:
+				self.conf.get(self._child_xpath(name))
+			except:
+				self.conf.add(self.xpath, name)
+			'''
+						
+			if isinstance(value, str):
+				try:
+					self.conf.set(self._child_xpath(name), value)
+				except:
+					self.conf.add(self._child_xpath(name), value)
+				LOG.debug('%s added in %s', value, self._child_xpath(name))
+			elif isinstance(value, dict):
+								
+				list_ = self.conf.get_list(self._child_xpath(name))
+				index = None
+				for index in range(0, len(list_)-1):
+					if name == list_[index]:
+						break
+
+				var = _serializers[self.current_section or name].serialize(value)
+				LOG.debug('var: %s; xpath: %s'%(' '.join([name, var]), self.xpath))
+				if not index:
+					self.conf.add(self.xpath, ' '.join([name, var]))
+				else:
+					self.conf.set(self._child_xpath(index), ' '.join([name, var]))
+			else:	
+				var = _serializers[self.current_section or name].serialize(value)
+				try:
+					self.conf.set(self._child_xpath(name), var)
+				except:
+					self.conf.add(self._child_xpath(name), var)
+				LOG.debug('var: `%s` added at path: `%s`' % (var, self._child_xpath(name)))
 
 		def __iter__(self):
 			index = 1
@@ -73,7 +107,7 @@ class HAProxyCfg2(object):
 			for val in self:
 				if isinstance(val, str):
 					if val.startswith(name + ' ')  or val == name:
-						#LOG.debug('str. self.conf.get(self._child_xpath(index): %s', self.conf.get(self._child_xpath(index)))
+						LOG.debug('str. self.conf.get(self._child_xpath(index): %s', self.conf.get(self._child_xpath(index)))
 						return _serializers[self.current_section or name].unserialize(self.conf.get(self._child_xpath(index))[len(name):])
 				elif isinstance(val, dict):
 					if val.get(name):
@@ -93,7 +127,7 @@ class HAProxyCfg2(object):
 				if val.startswith(name_):
 					return True
 			return False
-		
+
 		def __iter__(self):
 			index = 1
 			try:
@@ -103,13 +137,15 @@ class HAProxyCfg2(object):
 					index += 1
 			except metaconf.NoPathError:
 				raise StopIteration()
-
+			
 
 	class section(slice_):
 		def __getitem__(self, name):
+			#self.current_section = name
 			if name in HAProxyCfg2.option_group.NAMES.keys():
 				return HAProxyCfg2.option_group(self.conf, self._child_xpath(name))
 			try:
+				LOG.debug(self._child_xpath(name))
 				return _serializers[name].unserialize(self.conf.get(self._child_xpath(name)))
 			except metaconf.NoPathError:
 				raise KeyError(name)
@@ -120,7 +156,9 @@ class HAProxyCfg2(object):
 		def __len__(self):
 			return len(self.conf.options(self.xpath))
 
+
 	class sections(slice_):
+
 		def __len__(self):
 			return sum(int(t == self.name) for t in self.conf.sections('./'))
 
@@ -128,10 +166,38 @@ class HAProxyCfg2(object):
 			return name in self.conf.sections('./')
 
 		def __getitem__(self, name):
+			#self.current_section = name
 			for index in range(0, len(self)):
 				if self.conf.get(self._child_xpath(index)) == name:
 					return HAProxyCfg2.section(self.conf, self._child_xpath(index))
 			raise KeyError(self._child_xpath(name))
+
+		def __setitem__(self, name, value):
+			LOG.debug('sections.__setitem__ path: `%s/%s` xpath: `%s` var: `%s`' % (self.xpath, name, self.xpath, value))
+			try: 
+				self.conf.get('%s/%s'%(self.xpath, name))
+			except:
+				self.conf.add(self.xpath, name)
+				LOG.debug('sections.__setitem__: path %s added into conf'%self._child_xpath(name))
+				
+			sections_ = self.conf.get_list(self.xpath)
+			index = 0
+			for el in range(0, len(sections_)):
+				if sections_[el] == name:
+					index = el
+					break
+
+			if isinstance(value, str):
+				self.conf.add(self._child_xpath(name), value)
+			elif isinstance(value, dict):
+				for key in value.keys():
+					var = _serializers[key].serialize(value[key])
+					self.conf.add('%s/%s' % (self._child_xpath(index), key), var)
+			else:
+				var = _serializers[name].serialize(value)
+				LOG.debug('Try add at path: `%s/%s` option: `%s`; value: `%s`;' % (self._child_xpath(index), name, key, var))
+				self.conf.add('%s/%s' % (self._child_xpath(index), key), var)
+
 
 
 	def __init__(self, path=None):
@@ -144,8 +210,24 @@ class HAProxyCfg2(object):
 			cls = self.section
 		return cls(self.conf, './' + name)
 
-	def __setitem__(self, name):
-		raise NotImplemented()
+	def __setitem__(self, name, value):
+
+		if not self.conf.children('./'+name):
+			self.conf.add('./%s' % name)
+		
+		LOG.debug('HAProxyCfg.__setitem__ name = %s; value = %s.'%( name, value))
+		
+		if isinstance(value, str):
+			LOG.debug('value: `%s`; name: `%s`' % (value, name))
+			try:
+				self.conf.set('./%s'%(name), value)
+			except:
+				self.conf.add('./%s'%(name), value)
+		elif isinstance(value, dict):
+			for key in value.keys():
+				var = _serializers[key].serialize(value[key])
+				LOG.debug('key: `%s`; var: `%s`; name: `%s`' % (key, var, name))
+				self.conf.add('./%s/%s' % (name, key), var)
 
 
 
@@ -160,7 +242,20 @@ class OptionSerializer(object):
 		return value
 
 	def serialize(self, v):
-		return ' '.join(v)
+		if isinstance(v, list):
+			return ' '.join(v)
+		elif isinstance(v, dict):
+			res = ''
+			for key in v.keys():
+				if isinstance(v[key], str):
+					res += ' %s %s' % (key, v[key])
+				elif isinstance(v[key], bool):
+					res += ' ' + key
+				else:
+					res += ' %s %s' % (key, self.serialize(v[key]))
+			return res
+		else:
+			return v
 	
 	def _parse(self, list_par, input_str):
 		temp = {}
@@ -176,7 +271,7 @@ class OptionSerializer(object):
 						el_in_list =True
 						if num_arg > 0:
 							last_key = elem
-							count = num_arg					
+							count = num_arg
 							temp[last_key] = []
 						else:
 							temp[elem] = True
@@ -220,6 +315,28 @@ class ServerSerializer(OptionSerializer):
 			LOG.debug("Details: %s%s", sys.exc_info()[1], sys.exc_info()[2])
 			return OptionSerializer.unserialize(self, s)
 
+	def serialize(self, d):
+		LOG.debug('input `%s`', d)
+		res = []
+		if isinstance(d, dict):
+			if d.get('address'):
+				res.append('%s%s' % (d['address'], ':' + d.get('port') if d.get('port') else ''))
+				LOG.debug('ServerSerializer.serialize: dict =`%s`; res = `%s`', d, res)
+				del d['address']
+				if d.get('port'):
+					del d['port']
+
+			for key in d.keys():
+				if isinstance(d[key], bool):
+					res.append(key)
+				else:
+					res.append(' '.join([key, d[key]]))
+			LOG.debug('res: `%s`, res_str: `%s`'%(res, ' '.join(res)))
+			return ' '.join(res)
+		else:
+			#LOG.debug('res: `%s`, res_str: %s'%(res, ' '.join(res)))
+			return ' '.join(d)
+
 
 class StatsSerializer(OptionSerializer):
 
@@ -232,11 +349,8 @@ class StatsSerializer(OptionSerializer):
 	def unserialize(self, s):
 		try:
 			LOG.debug('inp unserialize `%s`', s)
-			
 			list_par = OptionSerializer.unserialize(self, s)
-			
 			LOG.debug('list_par unserialize `%s`', list_par)
-			
 			temp = {}
 			
 			if not isinstance(list_par, list):
@@ -250,8 +364,8 @@ class StatsSerializer(OptionSerializer):
 			return temp
 		except:
 			LOG.debug("Details: %s%s", sys.exc_info()[1], sys.exc_info()[2])
-			return OptionSerializer.unserialize(self, s)
-	'''
+			return OptionSerializer.unserialize(self, s)'''
+
 
 class Serializers(dict):
 	def __init__(self, **kwds):
@@ -266,14 +380,6 @@ class Serializers(dict):
 		return self.get(option, self.__default)
 
 _serializers = Serializers()
-
-
-'''
-for key in cfg2['global']['log']:
-   ....:     pass
-
-[[127.0.0.1, user], ['local0']]
-'''
 
 
 
@@ -400,9 +506,9 @@ class HAProxyCfg(filetool.ConfigurationFile):
 	Modify settings:
 	>> cfg['listen']['scalr:listener:tcp:12345'] = {
 	'bind': '*:12345', 
-	'mode': 'tcp', 
-	'balance': 'roundrobin', 
-	'option': {'tcplog': True}, 
+	'mode': 'tcp',
+	'balance': 'roundrobin',
+	'option': {'tcplog': True},
 	'default_backend': 'scalr:backend:port:1234'
 	}
 
@@ -431,7 +537,6 @@ class HAProxyCfg(filetool.ConfigurationFile):
 	def sections(self, filter=None):
 		self._config.get()
 		raise NotImplemented()
-
 
 	def __getitem__(self, key):
 		'''
