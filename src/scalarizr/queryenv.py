@@ -16,7 +16,6 @@ from scalarizr.util import cryptotool
 from scalarizr.util import urltool
 
 
-
 class QueryEnvError(Exception):
 	pass
 
