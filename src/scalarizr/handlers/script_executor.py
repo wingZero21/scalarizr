@@ -261,14 +261,14 @@ class ScriptExecutor(Handler):
 							import signal
 							os.kill(proc.pid, signal.SIGKILL)
 
-					returncode = proc.returncode
+					return_code = proc.returncode
 					elapsed_time = time.time() - start_time
 
 			stdout.close()
 			stderr.close()
 
 			self._logger.debug("Script '%s' execution finished. Returncode: '%s'. Elapsed time: %.2f seconds, stdout: %s, stderr: %s", 
-					script.name, returncode, elapsed_time, 
+					script.name, return_code, elapsed_time, 
 					format_size(os.path.getsize(stdout.name)), 
 					format_size(os.path.getsize(stderr.name)))
 
@@ -279,7 +279,7 @@ class ScriptExecutor(Handler):
 					script_name=script.name,
 					script_path=script_path,
 					event_name=self._event_name or '',
-					returncode=returncode
+					return_code=return_code
 				)
 			return d
 
