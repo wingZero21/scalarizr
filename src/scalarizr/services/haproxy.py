@@ -51,9 +51,7 @@ class HAProxyCfg2(object):
 				except:
 					self.conf.add('%s/%s'%(self.xpath, name), value)
 				LOG.debug('name: `%s`, value: `%s`, xpath: `%s`'% (name, value, self.xpath))
-			else:# isinstance(value, dict):
-				#if name not in HAProxyCfg2.option_group.NAMES.keys():
-				
+			else:
 				LOG.debug('slice.__setitem__: value dict %s', value)
 					
 				index = ''
@@ -220,15 +218,14 @@ class HAProxyCfg2(object):
 						slice_ = HAProxyCfg2.slice_(self.conf, self._child_xpath(name))
 						HAProxyCfg2.slice_.__setitem__(slice_, key, value[key])
 			else:
+				flag = True
 				if isinstance(value, dict):
 					for key in value.keys():
 						if isinstance(value[key], dict):
+							flag = False
 							slice_ = HAProxyCfg2.slice_(self.conf, self._child_xpath(name))
 							HAProxyCfg2.slice_.__setitem__(slice_, key, value[key])
-						
 						else:
-							#TODO: write 
-
 							LOG.debug('key %s value %s, path %s', key, value[key], self.xpath)
 							LOG.debug('key_list %s', self.conf.get_list(self.xpath))
 
@@ -238,12 +235,15 @@ class HAProxyCfg2(object):
 									ind = index
 									break
 								index += 1
-
 					if isinstance(ind, int):
 						LOG.debug('ind: %s', ind)
 						var = _serializers[_section].serialize(value)
 						LOG.debug('at path: `%s` set value: `%s`', self._child_xpath(ind), '%s %s' % (name, var))
-						self.conf.set(self.xpath, '%s %s' % (name, var))
+						self.conf.set(self._child_xpath(ind), '%s %s' % (name, var))
+					elif flag and self._len_xpath() > 1:
+						var = _serializers[_section].serialize(value)
+						LOG.debug('at path: `%s` add value: `%s`', self._child_xpath(ind), '%s %s' % (name, var))
+						self.conf.add(self.xpath, '%s %s' % (name, var))
 				else:
 					var = _serializers[_section].serialize(value)
 					index = ''
@@ -294,6 +294,7 @@ class HAProxyCfg2(object):
 			#self.current_section = name
 			for index in range(0, len(self)):
 				if self.conf.get(self._child_xpath(index)) == name:
+					#LOG.debug('%s %s'% self._child_xpath(name), )
 					return HAProxyCfg2.section(self.conf, self._child_xpath(index))
 			raise KeyError(self._child_xpath(name))
 
@@ -403,7 +404,6 @@ class HAProxyCfg2(object):
 				var = _serializers[key].serialize(value[key])
 				LOG.debug('key: `%s`; var: `%s`; name: `%s`' % (key, var, name))
 				self.conf.add('./%s/%s' % (name, key), var)
-		
 
 
 class OptionSerializer(object):
