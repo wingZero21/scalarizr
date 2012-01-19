@@ -27,6 +27,7 @@ class HAProxyCfg2(object):
 			self.conf = conf
 			self.xpath = xpath
 			self.name = os.path.basename(xpath)
+			#current_section for path ./listen/server/app app in server section
 			self.current_section = ''
 
 		def __contains__(self, name):
@@ -41,8 +42,73 @@ class HAProxyCfg2(object):
 			raise NotImplemented()
 
 		def __setitem__(self, name, value):
-			LOG.debug('slice_.__setitem__ path: name: `%s`, value: `%s`' % (name, value))
+			LOG.debug('slice_.__setitem__: path: name: `%s`, value: `%s`, xpath: `%s`' % (name, value, self.xpath))
 			
+			if isinstance(value, str):
+				try:
+					self.conf.get('%s/%s'%(self.xpath, name))
+					self.conf.set('%s/%s'%(self.xpath, name), value)
+				except:
+					self.conf.add('%s/%s'%(self.xpath, name), value)
+				LOG.debug('name: `%s`, value: `%s`, xpath: `%s`'% (name, value, self.xpath))
+			else:# isinstance(value, dict):
+				#if name not in HAProxyCfg2.option_group.NAMES.keys():
+				
+				LOG.debug('slice.__setitem__: value dict %s', value)
+					
+				index = ''
+				list_ = self.conf.get_list(self.xpath)
+				for el in range(1, len(list_)):
+					if list_[el-1] == name:
+						index = el
+						break
+				
+				#temp_ = self.xpath.split('/')
+				_section = None
+				for el in HAProxyCfg2.option_group.NAMES.keys():
+					if el in self.xpath:
+						_section = el
+						break
+				
+				LOG.debug('xpath: `%s`, section: `%s`', self.xpath, _section)
+				
+				var =  _serializers[_section].serialize(value)
+				
+				LOG.debug('var: `%s`', '%s %s' % (name, var))
+					
+				if isinstance(index, int):
+					LOG.debug('slice_.__setitem__: el set in: `%s`, var: %s', self._child_xpath(index), var)
+					self.conf.set(self._child_xpath(index), '%s %s'%(name, var))
+				else:
+					LOG.debug('slice_.__setitem__: el add in: `%s`, var: %s', self.xpath, var)
+					self.conf.add(self.xpath, '%s %s'%(name, var))
+				'''
+				else:
+					if isinstance(value, dict):
+						for key in value:
+							
+							index = ''
+							list_ = self.conf.get_list(self.xpath)
+							for el in range(1, len(list_)):
+								if list_[el] == name:
+									index = el
+									break
+							
+							LOG.debug('!!! xpath: `%s`, section: `%s`', self.xpath, _section)
+							
+							var =  _serializers[name].serialize(value)
+							
+							LOG.debug('!!!           var: `%s`', '%s %s' % (name, var))
+							
+							if isinstance(index, int):
+								LOG.debug('!option_group.__setitem__: el set in: `%s`, var: %s', self._child_xpath(index), _serializers[name].serialize(value))
+								self.conf.set(self._child_xpath(index), '%s %s'%(name, var))
+							else:
+								LOG.debug('!option_group.__setitem__: el set in: `%s`, var: %s', self.xpath, _serializers[name].serialize(value))
+								self.conf.add(self.xpath, '%s %s'%(name, var))		
+				'''
+				
+			#	LOG.debug('slice.__setitem__: %s value: %s', type(value), value)
 			'''
 			if isinstance(value, str):
 				try:
@@ -88,6 +154,9 @@ class HAProxyCfg2(object):
 				return '%s[%d]' % (self.xpath, key)
 			return '%s/%s' % (self.xpath, key)
 
+		def _len_xpath(self):
+			return len(filter(None, self.xpath.replace('.', '').split('/')))
+
 	class option_group(slice_):
 		NAMES = {'server':1, 'option':1, 'timeout':1, 'log':0, 'stats':1}
 
@@ -97,7 +166,6 @@ class HAProxyCfg2(object):
 			for elem in self.NAMES.keys():
 				if elem in self.xpath:
 					self.current_section = elem
-	
 
 		def __getitem__(self, name):
 			index = 1
@@ -114,7 +182,8 @@ class HAProxyCfg2(object):
 				elif isinstance(val, list):
 					if val[0] == name:
 						return _serializers[self.current_section].unserialize(val[1:])
-				else: LOG.debug('Other type in option_group.__getitem__(%s) %s', name, type(val))
+				else:
+					LOG.debug('Other type in option_group.__getitem__(%s) %s', name, type(val))
 				index += 1
 			raise KeyError(name)
 
@@ -129,15 +198,66 @@ class HAProxyCfg2(object):
 			index = 1
 			try:
 				while True:
-					#LOG.debug('type %s', type(_serializers[self.current_section].unserialize(self.conf.get(self._child_xpath(index)))))
+					#LOG.debug('type `%s`, self.xpath: `%s`, xpath[index]: `%s`', type(_serializers[self.current_section].unserialize(self.conf.get(self._child_xpath(index)))), self.xpath, self._child_xpath(index))
 					yield _serializers[self.current_section].unserialize(self.conf.get(self._child_xpath(index)))
 					index += 1
 			except metaconf.NoPathError:
 				raise StopIteration()
 		
 		def __setitem__(self, name, value):
-			LOG.debug('option_group.__setitem__ path: name: `%s`, value: `%s`' % (name, value))
+			LOG.debug('option_group.__setitem__ path: name: `%s`, value: `%s`, xpath: `%s`' % (name, value, self.xpath))
 			
+			_section = None
+			for el in self.NAMES.keys():
+				if el in self.xpath:
+					_section = el
+					break
+			
+			ind = ''	
+			if _section == name:
+				for key in value.keys():
+					if isinstance(value[key], dict):
+						slice_ = HAProxyCfg2.slice_(self.conf, self._child_xpath(name))
+						HAProxyCfg2.slice_.__setitem__(slice_, key, value[key])
+			else:
+				if isinstance(value, dict):
+					for key in value.keys():
+						if isinstance(value[key], dict):
+							slice_ = HAProxyCfg2.slice_(self.conf, self._child_xpath(name))
+							HAProxyCfg2.slice_.__setitem__(slice_, key, value[key])
+						
+						else:
+							#TODO: write 
+
+							LOG.debug('key %s value %s, path %s', key, value[key], self.xpath)
+							LOG.debug('key_list %s', self.conf.get_list(self.xpath))
+
+							index = 1
+							for el in self.conf.get_list(self.xpath):
+								if el.startswith(name):
+									ind = index
+									break
+								index += 1
+
+					if isinstance(ind, int):
+						LOG.debug('ind: %s', ind)
+						var = _serializers[_section].serialize(value)
+						LOG.debug('at path: `%s` set value: `%s`', self._child_xpath(ind), '%s %s' % (name, var))
+						self.conf.set(self.xpath, '%s %s' % (name, var))
+				else:
+					var = _serializers[_section].serialize(value)
+					index = ''
+					list_ = self.conf.get_list(self.xpath)
+					for el in range(1, len(list_)):
+						if list_[el-1] == name:
+							index = el
+							break
+					if isinstance(index, int):
+						LOG.debug('at path: `%s` set value: `%s`', self._child_xpath(index), '%s %s' % (name, var))
+						self.conf.set(self._child_xpath(index), '%s %s' % (name, var))
+					else:
+						LOG.debug('at path: `%s` add  value: `%s`', self.xpath, '%s %s' % (name, var))
+						self.conf.add(self.xpath, '%s %s' % (name, var))
 
 	class section(slice_):
 		def __getitem__(self, name):
@@ -157,8 +277,10 @@ class HAProxyCfg2(object):
 			return len(self.conf.options(self.xpath))
 
 		def __setitem__(self, name, value):
+			LOG.debug('section.__setitem__ path: name: `%s`, value: `%s`, xpath: `%s`' % (name, value, self.xpath))
+			sections_ = HAProxyCfg2.sections(self.conf, self.xpath)
+			HAProxyCfg2.sections.__setitem__(sections_, name, value)
 			
-			LOG.debug('section.__setitem__ path: name: `%s`, value: `%s`' % (name, value))
 
 	class sections(slice_):
 
@@ -176,39 +298,55 @@ class HAProxyCfg2(object):
 			raise KeyError(self._child_xpath(name))
 
 		def __setitem__(self, name, value):
-			LOG.debug('sections.__setitem__ path: name: `%s`, value: `%s`' % (name, value))
-			
-			try: 
-				#self.conf.get('%s/%s'%(self.xpath, name))
-				index = None
-				sections_ = self.conf.get_list(self.xpath)
-				for el in range(0, len(sections_)):
-					if sections_[el] == name:
+			LOG.debug('sections.__setitem__ path: name: `%s`, value: `%s`, xpath: `%s`' % (name, value, self.xpath))
+
+			index = ''
+			sections_ = self.conf.get_list(self.xpath)
+			LOG.debug('section_ `%s`, len %s', sections_, sections_.__len__())
+			if sections_.__len__() != 0:
+				for el in range(1, len(sections_)):
+					if self.conf.get(self._child_xpath(el)) == name:
 						index = el
 						break
-			except:
+				#TODO: need to fix index verification if it not define
+				if not isinstance(index, int):
+					self.conf.add(self.xpath, name)
+					sections_ = self.conf.get_list(self.xpath)
+					index = len(sections_)
+					LOG.debug('\n%s  path %s\n ', self.conf.get(self._child_xpath(index)), self._child_xpath(index))
+					if self.conf.get(self._child_xpath(index)) != name:
+						index = ''
+			else:
+				index = 1
 				self.conf.add(self.xpath, name)
 				LOG.debug('sections.__setitem__: path %s added into conf'%self._child_xpath(name))
-			
-			if index:
+
+			if isinstance(index, int):
 				self.xpath = self._child_xpath(index)
-			else:
-				self.xpath = self._child_xpath(name)
-			
+				
+			LOG.debug('-> xpath: %s name %s', self.xpath, name)
+
 			if isinstance(value, str):
-				if index:
-					self.conf.add(self.xpath, value)
+				LOG.debug('sections.__setitem__: name `%s`, xpath `%s`, value: `%s`', name, self.xpath, value)
+				self.conf.add(self._child_xpath(name), value)
 			elif isinstance(value, dict):
 				for key in value.keys():
-					if key in HAProxyCfg2.option_group.NAMES:
+					if key in HAProxyCfg2.option_group.NAMES.keys():
+						LOG.debug('!    sections.__setitem__ -> go to option_group')
+						#self.current_section = key
 						option_group_ = HAProxyCfg2.option_group(self.conf, self.xpath)
 						HAProxyCfg2.option_group.__setitem__(option_group_, key, value[key])
 					else:
-						HAProxyCfg2.slice_.__setitem__(self, key, value[key])
-			else:
-				var = _serializers[name].serialize(value)
-				self.conf.add('%s/%s' % (self.xpath, ), var)
+						LOG.debug('    sections.__setitem__ -> go to slice_ key `%s`, value[key] `%s`, xpath: `%s`, name: `%s`'%(key, value[key], self.xpath, name))
 
+						if name in HAProxyCfg2.option_group.NAMES.keys():
+							slice_ = HAProxyCfg2.slice_(self.conf, self._child_xpath(name))
+							HAProxyCfg2.slice_.__setitem__(slice_, key, value[key])
+						else:
+							HAProxyCfg2.slice_.__setitem__(self, key, value[key])
+			else:
+				LOG.debug('sections.__setitem__: value `%s`', value)
+				self.conf.add(self.xpath, _serializers[name].serialize(value))
 			'''
 			try: 
 				self.conf.get('%s/%s'%(self.xpath, name))
@@ -249,7 +387,6 @@ class HAProxyCfg2(object):
 	def __setitem__(self, name, value):
 		LOG.debug('HAProxyCfg.__setitem__ name = %s; value = %s.'%( name, value))
 		
-		'''
 		if not self.conf.children('./'+name):
 			self.conf.add('./%s' % name)
 
@@ -266,7 +403,7 @@ class HAProxyCfg2(object):
 				var = _serializers[key].serialize(value[key])
 				LOG.debug('key: `%s`; var: `%s`; name: `%s`' % (key, var, name))
 				self.conf.add('./%s/%s' % (name, key), var)
-		'''
+		
 
 
 class OptionSerializer(object):
@@ -291,11 +428,12 @@ class OptionSerializer(object):
 				else:
 					res += ' %s %s' % (key, self.serialize(v[key]))
 			return res
+		elif isinstance(v, bool):
+			return ''
 		else:
 			return v
-	
+
 	def _parse(self, list_par, input_str):
-		# dictify
 		temp = {}
 		last_key = ''
 		count = 0
@@ -354,12 +492,11 @@ class ServerSerializer(OptionSerializer):
 			return OptionSerializer.unserialize(self, s)
 
 	def serialize(self, d):
-		LOG.debug('input `%s`', d)
+		LOG.debug('ServerSerializer.serialize: input `%s`', d)
 		res = []
 		if isinstance(d, dict):
 			if d.get('address'):
 				res.append('%s%s' % (d['address'], ':' + d.get('port') if d.get('port') else ''))
-				LOG.debug('ServerSerializer.serialize: dict =`%s`; res = `%s`', d, res)
 				del d['address']
 				if d.get('port'):
 					del d['port']
@@ -368,6 +505,7 @@ class ServerSerializer(OptionSerializer):
 				if isinstance(d[key], bool):
 					res.append(key)
 				else:
+					LOG.debug('d[key]: `%s`', d[key])
 					res.append(' '.join([key, d[key]]))
 			LOG.debug('res: `%s`, res_str: `%s`'%(res, ' '.join(res)))
 			return ' '.join(res)
