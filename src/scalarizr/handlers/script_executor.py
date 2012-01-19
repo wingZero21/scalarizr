@@ -51,6 +51,7 @@ class ScriptExecutor(Handler):
 	_event_name = None
 	_num_pending_async = 0
 	_cleaner_running = False
+	_log_rotate_running = False
 	_msg_sender_running = False
 	_lock = None
 	
@@ -133,6 +134,9 @@ class ScriptExecutor(Handler):
 			msg_sender_thread = threading.Thread(target=self._msg_sender)
 			msg_sender_thread.setDaemon(True)
 			
+			log_rotate_thread = threading.Thread(target=self._log_rotate)
+			log_rotate_thread.setDaemon(True)
+			
 				
 			for script in scripts:
 				self._logger.debug("Execute script '%s' in %s mode; exec timeout: %d", 
@@ -163,6 +167,9 @@ class ScriptExecutor(Handler):
 				
 			if not self._msg_sender_running:
 				msg_sender_thread.start()
+				
+			if not self._log_rotate_running:
+				log_rotate_thread.start()
 								
 	def _cleanup(self):
 		try:
@@ -193,6 +200,16 @@ class ScriptExecutor(Handler):
 			self._logger.debug("[msg_sender] Done")
 		finally:
 			self._msg_sender_running = False
+
+	def _log_rotate(self):
+		try:
+			self._log_rotate_running = True
+			files = os.listdir(self._logs_dir)
+			files.sort()
+			for file in files[0:-100]:
+				os.remove(file)
+		finally:
+			self._log_rotate_running = False
 
 	def _execute_script_runnable(self, script):
 		msg_data  = self._execute_script(script)
