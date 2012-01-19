@@ -43,7 +43,7 @@ while True:
                 apt-get update
 				export DEBIAN_FRONTEND=noninteractive
 				export DEBIAN_PRIORITY=critical
-				platform=`echo -e "import re;\nwith open('/etc/scalr/public.d/config.ini') as f: print re.search('platform\s*=\s*(\w+)', f.read()).group(1)" | python`
+				platform=`echo -e "import re;\nf = open('/etc/scalr/public.d/config.ini');\nprint re.search('platform\s*=\s*(\w+)', f.read()).group(1)" | python`
 				apt-get install -y scalarizr scalarizr-${platform} && touch $update_flag
                 ;;
                 
