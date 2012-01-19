@@ -207,7 +207,7 @@ class ScriptExecutor(Handler):
 			files = os.listdir(self._logs_dir)
 			files.sort()
 			for file in files[0:-100]:
-				os.remove(file)
+				os.remove(os.path.join(self._logs_dir, file))
 		finally:
 			self._log_rotate_running = False
 
