@@ -123,12 +123,12 @@ class TestHAProxyCfg2(unittest.TestCase):
 			'balance': 'roundrobin',
 			'server': {'app_7':{'address': '127.0.0.1', 'check': True, 'port': '5007'}, 
 						'app_8':{'address': '127.0.0.1', 'check': True, 'port': '5008'}},
-			'option': {'tcplog': True},
+			'option': {'tcplog': True, 'same_option': 'some value'},
 			'default_backend': 'scalr:backend:port:1234'
 			}
-		self.conf['backend']['127.0.0.1:3486']['server']['app1'] = tmp	
-		self.assertEqual(self.conf['backend']['127.0.0.1:3486']['mode'], 'tcp')
-		self.assertEqual(self.conf['backend']['127.0.0.1:3486']['server']['app_7'],
+		self.conf['backend']['app'] = tmp	
+		self.assertEqual(self.conf['backend']['app']['mode'], 'tcp')
+		self.assertEqual(self.conf['backend']['app']['server']['app_7'],
 			{'address': '127.0.0.1', 'check': True, 'port': '5007'})
 	
 	def test_set_backend_server(self):

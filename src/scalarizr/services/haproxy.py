@@ -107,16 +107,17 @@ class HAProxyCfg2(object):
 			index = 1
 			name_index = self._indexof(name)
 			#TODO: need iter by self._iter_unserialize() but have trable
-			for val in self:#self._iter_unserialize():
+			for val in self: #self._iter_unserialize():
 				if val.startswith(name + ' ') or val == name:
-					LOG.debug('self.name = `%s`',self.name)
+					LOG.debug('	self.name = `%s`',self.name)
 					return _serializers[self.name].unserialize(self.conf.get(self._child_xpath(index))[len(name):])
 				index += 1
 			raise KeyError(name)
+			
 
 		def __contains__(self, name):
 			name_ = name + ' '
-			for val in self:
+			for val in self: #self._iter_unserialize():
 				if val.startswith(name_):
 					return True
 			return False
@@ -127,6 +128,9 @@ class HAProxyCfg2(object):
 			index = self._indexof(key)
 			
 			_section = self.name if self.name in self.NAMES else key  
+			
+			#if isinstance(value, dict):
+
 			var = _serializers[_section].serialize(value)
 			
 			if index != -1:
@@ -141,8 +145,7 @@ class HAProxyCfg2(object):
 		def __getitem__(self, name):
 			LOG.debug('section.__getitem__: name = `%s`, xpath: `%s`', name, self.xpath)
 			LOG.debug('self.name = %s', self.name)
-			#self.xpath.replace('./','').split('/')[1] in ('global', 'defaults'):
-			
+
 			if name in HAProxyCfg2.option_group.NAMES:
 				return HAProxyCfg2.option_group(self.conf, self._child_xpath(name))
 			try:
@@ -194,7 +197,7 @@ class HAProxyCfg2(object):
 				LOG.debug('	elem `%s` in xpath `%s`', self.conf.get(self._child_xpath(index)), self._child_xpath(index))
 				if self.conf.get(self._child_xpath(index)) == name:
 					return HAProxyCfg2.section(self.conf, self._child_xpath(index))
-			raise KeyError('Can`t find path `%s`' % self._child_xpath(index))
+			raise KeyError('Can`t find index in path `%s`' % self.xpath)
 
 		def __setitem__(self, key, value):
 			LOG.debug('section_group.__setitem__: key = `%s`, value = `%s`', key, value)
@@ -210,7 +213,7 @@ class HAProxyCfg2(object):
 				if ind != -1:
 					section_ = HAProxyCfg2.section(self.conf, self._child_xpath(ind))
 					for key_ in value.keys():
-						LOG.debug('	key `%s`, value `%s`', key_, value.keys())
+						LOG.debug('	key `%s`, value `%s`', key_, value[key_])
 						HAProxyCfg2.section.__setitem__(section_, key_, value[key_])
 				else:
 					raise 'section_group.__setitem__:	section `%s` was not added' % key 	
@@ -229,16 +232,14 @@ class HAProxyCfg2(object):
 
 	def __setitem__(self, key, value):
 		LOG.debug('HAProxyCfg2.__setitem__: key = `%s`, value = `%s`', key, value)
-
+		'''
 		if not self.conf.children('./'+key):
 			self.conf.add('./%s' % key)
-
-		'''if key not in ('global', 'defaults') and isinstance(value, str):
+		if key not in ('global', 'defaults') and isinstance(value, str):
 			slice = HAProxyCfg2.slice_(self.conf, './'+key)
 			if HAProxyCfg2.slice_._indexof(slice, value.split(' ')[0]) == -1:
 				LOG.debug('adding new path `./%s`' % key)
-				self.conf.add('./%s' % key, value)
-				#TODO: think about name as '127.0.0.0:846 *12345', what about *12345?'''
+				self.conf.add('./%s' % key, value)'''
 		if isinstance(value, dict):
 			section_group_ = HAProxyCfg2.section_group(self.conf, './%s' % key)
 			HAProxyCfg2.section_group.__setitem__(section_group_, key, value)
