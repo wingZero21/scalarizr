@@ -31,10 +31,11 @@ class HAProxyCfg2(object):
 
 		def __contains__(self, name):
 			raise NotImplemented()
-			
+		'''
 		def __len__(self):
 			raise NotImplemented()
-			
+		'''
+		
 		def __getitem__(self, name):
 			raise NotImplemented()
 
@@ -65,21 +66,48 @@ class HAProxyCfg2(object):
 					index += 1
 				return -1
 			except:
-				raise HAProxyError, 'HAProxyCfg.slice._indexof: details: %s' % sys.exc_info()[1], sys.exc_info()[2] 
-				#return -1
+				raise Exception, 'HAProxyCfg.slice._indexof: details: %s' % sys.exc_info()[1], sys.exc_info()[2] 
+
 
 		def _len_xpath(self):
 			return len(self.xpath.replace('./', '').split('/'))
+		
+		def _iter_serialize(self):
+			LOG.debug('slice_._iter_serialize')
+			index = 1
+			try:
+				if self._len_xpath() > 1:
+					LOG.debug('	self.name = `%s`', self.name)
+					section_ = self.name if self.name in HAProxyCfg2.option_group.NAMES else ''
+					while True:
+						yield _serializers[section_].serialize(self.conf.get(self._child_xpath(index)))
+						index += 1
+			except metaconf.NoPathError:
+				raise StopIteration()
+		
+		def _iter_unserialize(self):
+			LOG.debug('slice_._iter_unserialize')
+			index = 1
+			try:
+				if self._len_xpath() > 1:
+					LOG.debug('	self.name = `%s`', self.name)
+					section_ = self.name if self.name in HAProxyCfg2.option_group.NAMES else ''
+					while True:
+						yield _serializers[section_].unserialize(self.conf.get(self._child_xpath(index)))
+						index += 1
+			except metaconf.NoPathError:
+				raise StopIteration()
 
 
 	class option_group(slice_):
-		NAMES = ('server', 'option', 'timeout', 'log')
+		NAMES = ('server', 'option', 'timeout', 'log', 'stats')
 
 		def __getitem__(self, name):
 			LOG.debug('option_group.__getitem__: name = `%s`, xpath: `%s`', name, self.xpath)
 			index = 1
 			name_index = self._indexof(name)
-			for val in self:
+			#TODO: need iter by self._iter_unserialize() but have trable
+			for val in self:#self._iter_unserialize():
 				if val.startswith(name + ' ') or val == name:
 					LOG.debug('self.name = `%s`',self.name)
 					return _serializers[self.name].unserialize(self.conf.get(self._child_xpath(index))[len(name):])
@@ -107,7 +135,7 @@ class HAProxyCfg2(object):
 			else:
 				LOG.debug('	add value var = `%s`, index = `%s`, _child_xpath(key): `%s`', '%s %s' % (key, var), index, self._child_xpath(key))
 				self.conf.add(self.xpath, '%s %s' % (key, var))
-			
+
 
 	class section(slice_):
 		def __getitem__(self, name):
@@ -121,10 +149,10 @@ class HAProxyCfg2(object):
 				return _serializers[name].unserialize(self.conf.get(self._child_xpath(name)))
 			except metaconf.NoPathError:
 				raise KeyError(name)
-		
+
 		def __contains__(self, name):
 			return name in self.conf.options(self.xpath)
-		
+
 		def __len__(self):
 			return len(self.conf.get_list(self.xpath))
 
@@ -140,7 +168,7 @@ class HAProxyCfg2(object):
 				else:
 					raise '	value `%s` must be dict type' % (value)
 					LOG.debug('	value must be dict dict')	
-			else:	
+			else:
 				index = self._indexof(key)
 				var = _serializers[key].serialize(value)
 				if index != -1:
@@ -150,51 +178,74 @@ class HAProxyCfg2(object):
 				else:
 					LOG.debug('	add value var = `%s`, index = `%s`, _child_xpath(key): `%s`', var, index, self._child_xpath(key))
 					self.conf.add(self._child_xpath(key), var)
-			
-			
 
-	class sections(slice_):
+
+	class section_group(slice_):
 		def __len__(self):
 			return sum(int(t == self.name) for t in self.conf.sections('./'))
-	
+
 		def __contains__(self, name):
 			return name in self.conf.sections('./')
 
 		def __getitem__(self, name):
-			LOG.debug('sections.__getitem__: name = `%s`, xpath: `%s`', name, self.xpath)
-			for section_ in self:
-				pass
+			LOG.debug('section_group.__getitem__: name = `%s`', name)
+
 			for index in range(0, len(self)):
+				LOG.debug('	elem `%s` in xpath `%s`', self.conf.get(self._child_xpath(index)), self._child_xpath(index))
 				if self.conf.get(self._child_xpath(index)) == name:
 					return HAProxyCfg2.section(self.conf, self._child_xpath(index))
-					#HAProxyCfg2.section.__getitem__(section_, name)
-			raise KeyError(self._child_xpath(name))
-		
-		def __setitem__(self, key, value):
-			LOG.debug('sections.__setitem__: key = `%s`, value = `%s`, xpath: `%s`', key, value, self.xpath)
-			
+			raise KeyError('Can`t find path `%s`' % self._child_xpath(index))
 
-		'''
-		def __iter__(self):
-			for index in range(0, len(self)):
-				if self.conf.get(self._child_xpath(index)) == name:
-					yield HAProxyCfg2.section(self.conf, self._child_xpath(index))
-			raise KeyError(self._child_xpath(name))'''
+		def __setitem__(self, key, value):
+			LOG.debug('section_group.__setitem__: key = `%s`, value = `%s`', key, value)
+
+			if isinstance(value, dict):
+				ind = self._indexof(key)
+				LOG.debug('	ind %s', ind)
+				if ind == -1:
+					LOG.debug('	path %s added', self.xpath)
+					self.conf.add(self.xpath, key)
+					ind = self._indexof(key)
+				LOG.debug('	ind = %s', ind)
+				if ind != -1:
+					section_ = HAProxyCfg2.section(self.conf, self._child_xpath(ind))
+					for key_ in value.keys():
+						LOG.debug('	key `%s`, value `%s`', key_, value.keys())
+						HAProxyCfg2.section.__setitem__(section_, key_, value[key_])
+				else:
+					raise 'section_group.__setitem__:	section `%s` was not added' % key 	
+			else:
+				raise 'section_group.__setitem__:	value `%s` type must be dict' % value
 
 	def __init__(self, path=None):
 		self.conf = metaconf.Configuration('haproxy')
 		self.conf.read(path or HAPROXY_CFG_PATH)
 
 	def __getitem__(self, name):
-		cls = self.sections
+		cls = self.section_group
 		if name in ('global', 'defaults'):
 			cls = self.section
 		return cls(self.conf, './' + name) 
 
 	def __setitem__(self, key, value):
-		LOG.debug('HAProxyCfg2.__setitem__: key = `%s`, value = `%s`, xpath: `%s`', key, value, self.xpath)
+		LOG.debug('HAProxyCfg2.__setitem__: key = `%s`, value = `%s`', key, value)
 
-	
+		if not self.conf.children('./'+key):
+			self.conf.add('./%s' % key)
+
+		'''if key not in ('global', 'defaults') and isinstance(value, str):
+			slice = HAProxyCfg2.slice_(self.conf, './'+key)
+			if HAProxyCfg2.slice_._indexof(slice, value.split(' ')[0]) == -1:
+				LOG.debug('adding new path `./%s`' % key)
+				self.conf.add('./%s' % key, value)
+				#TODO: think about name as '127.0.0.0:846 *12345', what about *12345?'''
+		if isinstance(value, dict):
+			section_group_ = HAProxyCfg2.section_group(self.conf, './%s' % key)
+			HAProxyCfg2.section_group.__setitem__(section_group_, key, value)
+			#call sections __setitem__
+		else:
+			raise 'HAProxyCfg2.__setitem__: value type must be str or dict'
+
 
 
 class OptionSerializer(object):
