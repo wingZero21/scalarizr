@@ -284,6 +284,9 @@ class RabbitMQHandler(ServiceCtlHandler):
 		volume_cnf = storage.Storage.restore_config(self._volume_config_path)
 		self.storage_vol = self._plug_storage(DEFAULT_STORAGE_PATH, volume_cnf)
 		storage.Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+
+		rabbitmq_user = pwd.getpwnam("rabbitmq")
+		os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 		
 		init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
 		
