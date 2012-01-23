@@ -90,7 +90,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
 				or  message.name == Messages.HOST_INIT
-				or  message.name == Messages.BEFORE_HOST_TERMINATE)	
+				or  message.name == Messages.BEFORE_HOST_TERMINATE
+				or  message.name == Messages.HOST_UP
+				or  message.name == Messages.HOST_DOWN)	
 
 	
 	def __init__(self):
@@ -191,7 +193,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 	
 	def on_HostInit(self, message):
-		if message.local_ip != self._platform.get_private_ip():
+		if message.local_ip != self._platform.get_private_ip() and message.local_ip in self.pg_hosts:
 			self._logger.debug('Got new slave IP: %s. Registering in pg_hba.conf' % message.local_ip)
 			self.postgresql.register_slave(message.local_ip)
 			
@@ -214,6 +216,11 @@ class PostgreSqlHander(ServiceCtlHandler):
 				servers.append(app_host.internal_ip or app_host.external_ip)
 		self._logger.debug("QueryEnv returned list of app servers: %s" % servers)
 		return servers				
+		
+		
+	@property
+	def pg_hosts(self):
+		return list(host.internal_ip or host.external_ip for host in self._queryenv.list_roles(self._role_name)[0].hosts)
 		
 	def on_host_init_response(self, message):
 		"""
