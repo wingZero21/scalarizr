@@ -163,6 +163,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				self.storage_vol.mount()
 			
 			self.postgresql.service.start()
+			self.accept_app_hosts()
 			
 			if self.postgresql.is_replication_master:
 				self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
@@ -200,9 +201,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def on_HostUp(self, message):
 		if message.local_ip == self._platform.get_private_ip():
-			for ip in self.app_hosts:
-				self.postgresql.register_app_host(ip, force=False)
-				self.postgresql.service.reload('Granting access to all app servers.', force=True)
+			self.accept_app_hosts()
 		elif message.local_ip in self.app_hosts:
 			self.postgresql.register_app_host(message.local_ip)
 		
@@ -226,6 +225,13 @@ class PostgreSqlHander(ServiceCtlHandler):
 	@property
 	def pg_hosts(self):
 		return list(host.internal_ip or host.external_ip for host in self._queryenv.list_roles(self._role_name)[0].hosts)
+	
+	
+	def accept_app_hosts(self):
+		for ip in self.app_hosts:
+				self.postgresql.register_app_host(ip, force=False)
+				self.postgresql.service.reload('Granting access to all app servers.', force=True)
+				
 		
 	def on_host_init_response(self, message):
 		"""
