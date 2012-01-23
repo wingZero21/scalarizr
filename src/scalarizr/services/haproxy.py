@@ -105,8 +105,7 @@ class HAProxyCfg2(object):
 		def __getitem__(self, name):
 			LOG.debug('option_group.__getitem__: name = `%s`, xpath: `%s`', name, self.xpath)
 			index = 1
-			name_index = self._indexof(name)
-			#TODO: need iter by self._iter_unserialize() but have trable
+
 			for val in self: #self._iter_unserialize():
 				if val.startswith(name + ' ') or val == name:
 					LOG.debug('	self.name = `%s`',self.name)
@@ -167,7 +166,8 @@ class HAProxyCfg2(object):
 				if isinstance(value, dict):
 					for key_el in value:
 						LOG.debug('el in self = `%s`', key_el)
-						HAProxyCfg2.option_group.__setitem__(HAProxyCfg2.option_group(self.conf, self._child_xpath(key)), key_el, value[key_el])
+						og = HAProxyCfg2.option_group(self.conf, self._child_xpath(key))
+						og[key_el] = value[key_el]
 				else:
 					raise '	value `%s` must be dict type' % (value)
 					LOG.debug('	value must be dict dict')	
@@ -214,7 +214,7 @@ class HAProxyCfg2(object):
 					section_ = HAProxyCfg2.section(self.conf, self._child_xpath(ind))
 					for key_ in value.keys():
 						LOG.debug('	key `%s`, value `%s`', key_, value[key_])
-						HAProxyCfg2.section.__setitem__(section_, key_, value[key_])
+						section_[key_] = value[key_]
 				else:
 					raise 'section_group.__setitem__:	section `%s` was not added' % key 	
 			else:
@@ -240,12 +240,12 @@ class HAProxyCfg2(object):
 			if HAProxyCfg2.slice_._indexof(slice, value.split(' ')[0]) == -1:
 				LOG.debug('adding new path `./%s`' % key)
 				self.conf.add('./%s' % key, value)'''
+		
 		if isinstance(value, dict):
-			section_group_ = HAProxyCfg2.section_group(self.conf, './%s' % key)
-			HAProxyCfg2.section_group.__setitem__(section_group_, key, value)
-			#call sections __setitem__
+			sg = HAProxyCfg2.section_group(self.conf, './%s' % key)
+			sg[key] = value
 		else:
-			raise 'HAProxyCfg2.__setitem__: value type must be str or dict'
+			raise ValueError('Expected dict-like object: %s' % type(value))
 
 
 
