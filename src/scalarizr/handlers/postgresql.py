@@ -199,8 +199,13 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 
 	def on_HostUp(self, message):
-		if message.local_ip != self._platform.get_private_ip() and message.local_ip in self.app_hosts:
+		if message.local_ip == self._platform.get_private_ip():
+			for ip in self.app_hosts:
+				self.postgresql.register_app_host(ip, force=False)
+				self.postgresql.service.reload('Granting access to all app servers.', force=True)
+		elif message.local_ip in self.app_hosts:
 			self.postgresql.register_app_host(message.local_ip)
+		
 	
 	
 	def on_HostDown(self, message):
