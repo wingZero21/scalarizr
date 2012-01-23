@@ -130,6 +130,7 @@ class TestHAProxyCfg2(unittest.TestCase):
 		self.assertEqual(self.conf['backend']['app']['mode'], 'tcp')
 		self.assertEqual(self.conf['backend']['app']['server']['app_7'],
 			{'address': '127.0.0.1', 'check': True, 'port': '5007'})
+		self.assertTrue(self.conf['backend']['app']['option']['tcplog'])
 	
 	def test_set_backend_server(self):
 		tmp = {'app_7':{'address': '127.0.0.1', 'check': True, 'port': '5007'}, 
