@@ -194,8 +194,27 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if message.local_ip != self._platform.get_private_ip():
 			self._logger.debug('Got new slave IP: %s. Registering in pg_hba.conf' % message.local_ip)
 			self.postgresql.register_slave(message.local_ip)
-				
+			
+
+	def on_HostUp(self, message):
+		if message.local_ip != self._platform.get_private_ip() and message.local_ip in self.app_hosts:
+			self.postgresql.register_app_host(message.local_ip)
 	
+	
+	def on_HostDown(self, message):
+		if message.local_ip != self._platform.get_private_ip() and message.local_ip in self.app_hosts:
+			self.postgresql.unregister_app_host(message.local_ip)
+	
+	@property			
+	def app_hosts(self):
+		list_roles = self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
+		servers = []
+		for app_serv in list_roles:
+			for app_host in app_serv.hosts :
+				servers.append(app_host.internal_ip or app_host.external_ip)
+		self._logger.debug("QueryEnv returned list of app servers: %s" % servers)
+		return servers				
+		
 	def on_host_init_response(self, message):
 		"""
 		Check postgresql data in host init response

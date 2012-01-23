@@ -74,7 +74,7 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.restart(self)
 	
 	def reload(self, reason=None):
-		initdv2.ParametrizedInitScript.restart(self)
+		initdv2.ParametrizedInitScript.reload(self)
 		
 	def start(self):
 		initdv2.ParametrizedInitScript.start(self)
@@ -155,6 +155,10 @@ class PostgreSql(BaseService):
 		self.postgresql_conf.max_wal_senders += 1
 		if force_restart:
 			self.service.restart(reason='Registering slave', force=True)
+			
+	def register_app_host(self, ip):
+		self.pg_hba_conf.add_app_host(ip)
+		self.service.reload('Allowing access for new app instance: %s' % ip, force=True)
 		
 	def change_primary(self, primary_ip, primary_port, username):
 		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, username)
@@ -162,6 +166,10 @@ class PostgreSql(BaseService):
 	def unregister_slave(self, slave_ip):
 		self.pg_hba_conf.delete_standby_host(slave_ip, self.root_user.name)
 		self.service.restart(reason='Unregistering slave', force=True)
+		
+	def unregister_app_host(self, ip):
+		self.pg_hba_conf.delete_app_host(ip)
+		self.service.reload(reason='Unregistering terminated app instance: %s' % ip, force=True)
 
 	def stop_replication(self):
 		self.trigger_file.create()
@@ -956,6 +964,16 @@ class PgHbaConf(Configuration):
 	def delete_standby_host(self, ip, user='postgres'):
 		record = self._make_standby_record(ip, user)
 		self.delete_record(record)
+		
+	
+	def add_app_host(self, ip):
+		record = self._make_app_record(ip)
+		self.add_record(record)
+
+	def delete_app_host(self, ip):
+		record = self._make_app_record(ip)
+		self.delete_record(record)		
+	
 	
 	def set_trusted_access_mode(self):
 		self.delete_record(self.password_mode)
@@ -967,6 +985,9 @@ class PgHbaConf(Configuration):
 	
 	def _make_standby_record(self,ip, user='postgres'):
 		return PgHbaRecord('host','replication', user=user,address='%s/32'%ip, auth_method='trust')
+	
+	def _make_app_record(self,ip):
+		return PgHbaRecord(host='host', address='%s/32'%ip, auth_method='password')
 	
 	
 class ParseError(BaseException):
