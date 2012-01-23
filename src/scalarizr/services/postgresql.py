@@ -156,9 +156,9 @@ class PostgreSql(BaseService):
 		if force_restart:
 			self.service.restart(reason='Registering slave', force=True)
 			
-	def register_app_host(self, ip):
+	def register_app_host(self, ip, force=True):
 		self.pg_hba_conf.add_app_host(ip)
-		self.service.reload('Allowing access for new app instance: %s' % ip, force=True)
+		self.service.reload('Allowing access for new app instance: %s' % ip, force=force)
 		
 	def change_primary(self, primary_ip, primary_port, username):
 		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, username)
