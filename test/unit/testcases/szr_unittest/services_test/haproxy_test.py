@@ -138,6 +138,23 @@ class TestHAProxyCfg2(unittest.TestCase):
 		self.conf['backend']['app']['server'] = tmp
 		self.assertEqual(self.conf['backend']['app']['server']['app_7'],
 			{'address': '127.0.0.1', 'check': True, 'port': '5007'})
+
+
+	def test_set_getattr_globals(self):
+		temp = {
+			'bind': '*:12345', 
+			'mode': 'tcp',
+			'balance': 'roundrobin',
+			'option': {'tcplog': True, 'param': ['value1', 'value2']},
+			'default_backend': 'scalr:backend:port:1234'
+			}
+
+		self.conf.globals = temp 
+		self.assertEqual(self.conf.globals['bind'], '*:12345')
+
+
+		
+
 	
 
 class _TestHAProxyInitScript(unittest.TestCase):

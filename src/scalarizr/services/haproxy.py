@@ -116,13 +116,13 @@ class HAProxyCfg2(object):
 
 		def __setitem__(self, key, value):
 			LOG.debug('option_group.__setitem__: key = `%s`, value = `%s`, xpath: `%s`', key, value, self.xpath)
-			
+
 			index = self._indexof(key)
-			
+
 			_section = self.name if self.name in self.NAMES else key  
-			
+
 			var = _serializers[_section].serialize(value)
-			
+
 			if index != -1:
 				LOG.debug('	set value var = `%s`, index = `%s`, _child_xpath(index): `%s`', '%s %s' % (key, var), index, self._child_xpath(index))
 				self.conf.set(self._child_xpath(index), '%s %s' % (key, var))
@@ -214,13 +214,12 @@ class HAProxyCfg2(object):
 	def __init__(self, path=None):
 		self.conf = metaconf.Configuration('haproxy')
 		self.conf.read(path or HAPROXY_CFG_PATH)
-		self.globals = self.__getitem__('global')
 
 	def __getitem__(self, name):
 		cls = self.section_group
 		if name in ('global', 'defaults'):
 			cls = self.section
-		return cls(self.conf, './' + name) 
+		return cls(self.conf, './' + name)
 
 	def __setitem__(self, key, value):
 		LOG.debug('HAProxyCfg2.__setitem__: key = `%s`, value = `%s`', key, value)
@@ -231,6 +230,20 @@ class HAProxyCfg2(object):
 		else:
 			raise ValueError('Expected dict-like object: %s' % type(value))
 
+	def __getattr__(self, name):
+		if name in ('globals', 'defaults', 'backend', 'listen', 'frontend'):
+			name_ = 'global' if name == 'globals' else name
+			return self.__getitem__(name_)
+	
+	def __setattr__(self, name, value):
+		if name in ('globals', 'defaults', 'backend', 'listen', 'frontend'):
+			name_ = 'global' if name == 'globals' else name
+			self.__setitem__(name_, value)
+		else:
+			object.__setattr__(self, name, value)
+			
+	def sections(self):
+		pass
 
 
 class OptionSerializer(object):
