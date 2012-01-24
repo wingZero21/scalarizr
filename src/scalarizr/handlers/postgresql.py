@@ -224,7 +224,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 	@property
 	def pg_hosts(self):
-		list_roles = self._queryenv.list_roles(self._role_name)
+		'''
+		All pg instances including those in Initializing state
+		'''
+		list_roles = self._queryenv.list_roles(self._role_name, with_init=True)
 		servers = []
 		for pg_serv in list_roles:
 			for pg_host in pg_serv.hosts:
