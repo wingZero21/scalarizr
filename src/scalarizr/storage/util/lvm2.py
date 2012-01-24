@@ -4,6 +4,7 @@ Created on Nov 11, 2010
 @author: Dmytro Korsakov
 @author: marat
 '''
+from __future__ import with_statement
 
 from scalarizr.util import system2, disttool, firstmatched, PopenError
 from scalarizr.util.software import whereis
@@ -128,10 +129,35 @@ class Lvm2:
 	@staticmethod
 	def usable():
 		if Lvm2._usable is None:
+			Lvm2._usable = False
 			err_text = 'Cannot load device mapper kernel module'
-			system(['/sbin/modprobe', 'dm_snapshot'], error_text=err_text)
-			system(['/sbin/modprobe', 'dm_mod'], error_text=err_text)
-			Lvm2._usable = True
+			try:
+				system(['/sbin/modprobe', 'dm_snapshot'], error_text=err_text)
+				system(['/sbin/modprobe', 'dm_mod'], error_text=err_text)
+				Lvm2._usable = True
+			except:
+				try:
+					import platform
+					release = platform.release()
+					kernel_config_path = "/boot/config-" + release
+					if os.path.isfile(kernel_config_path):
+
+						with open(kernel_config_path) as f:
+							kernel_config = f.readlines()
+
+						drivers_compiled = dict(CONFIG_BLK_DEV_DM=False,
+												CONFIG_DM_SNAPSHOT=False)
+
+						for line in kernel_config:
+							for driver_name in drivers_compiled.keys():
+								if line.startswith(driver_name):
+									drivers_compiled[driver_name] = line.strip().split('=')[1] == 'y'
+
+						if all(drivers_compiled.values()):
+							Lvm2._usable = True
+				except:
+					pass
+
 		return Lvm2._usable
 	
 	def __init__(self):
