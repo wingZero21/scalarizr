@@ -230,16 +230,21 @@ class HAProxyCfg(object):
 			raise ValueError('Expected dict-like object: %s' % type(value))
 
 	def __getattr__(self, name):
-		if name in ('globals', 'defaults', 'backend', 'listen', 'frontend'):
-			name_ = 'global' if name == 'globals' else name
+		_sections = {'globals':'global', 'defaults':'defaults', 'backend': 'backend',
+					 'listener': 'listen', 'frontend':'frontend'}
+		if name in _sections.keys():
+			name_ = _sections[name]
 			return self.__getitem__(name_)
 
 	def __setattr__(self, name, value):
-		if name in ('globals', 'defaults', 'backend', 'listen', 'frontend'):
-			name_ = 'global' if name == 'globals' else name
+		_sections = {'globals':'global', 'defaults':'defaults', 'backend': 'backend',
+					 'listener': 'listen', 'frontend':'frontend'}
+		if name in _sections.keys():
+			name_ = _sections[name]
 			self.__setitem__(name_, value)
 		else:
 			object.__setattr__(self, name, value)
+
 	'''
 	def iter(self, path):
 		index = 1
@@ -253,9 +258,10 @@ class HAProxyCfg(object):
 	def sections(self, filter):
 		'''
 		filter example: 
-			scalr:backend:role:1234:tcp:2254
-		(protocol='tcp', port=1154, server_port=2254, backend='role:1234')
+			`scalr:backend:role:1234:tcp:2254`
+		where protocol='tcp', port=1154, server_port=2254, backend='role:1234'
 		'''
+		#TODO: it must return paths or objects?
 		params = filter.split(':')[1:]
 		path = './%s' % params.pop(0)
 
@@ -263,9 +269,9 @@ class HAProxyCfg(object):
 		for el in self.conf.get_list(path):
 			for param in params:
 				if param in el:
-					break
 					#found at path ./name[index]
-					yield _serializers.unserialize(self.conf.get('./%s[%s]'%(path, index)))
+					yield _serializers[''].unserialize(self.conf.get('./%s[%s]'%(path, index)))
+					break
 			#if not found in name of section look in the boody of section
 			for el in self.__find_at_path('%s[%s]' % (path ,index), params):
 				yield el
@@ -279,17 +285,17 @@ class HAProxyCfg(object):
 			if isinstance(obj, str):
 				for param in filters:
 					if param in obj:
-						break
 						#found at 'path/children'
 						yield _serializers[''].unserialize(self.conf.get('%s/%s' % (path, children)))
+						break
 			else:
 				index = 1
 				for line in self.conf.get('%s/%s[%s]' % (path, children, index)):
 					for param in filters:
 						if param in line:
-							break
 							#found at 'path/children[index]'
 							yield _serializers[''].unserialize(self.conf.get('./%s[%s]'%(path, index)))
+							break
 					index += 1
 
 
