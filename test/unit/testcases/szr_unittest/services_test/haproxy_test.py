@@ -10,9 +10,9 @@ import unittest
 from scalarizr.services import haproxy
 
 
-class TestHAProxyCfg2(unittest.TestCase):
+class TestHAProxyCfg(unittest.TestCase):
 	def setUp(self):
-		self.conf = haproxy.HAProxyCfg2(os.path.dirname(__file__) + '/../../../resources/etc/haproxy.cfg')
+		self.conf = haproxy.HAProxyCfg(os.path.dirname(__file__) + '/../../../resources/etc/haproxy.cfg')
 	
 
 	def test_global(self):
@@ -153,7 +153,8 @@ class TestHAProxyCfg2(unittest.TestCase):
 		self.assertEqual(self.conf.globals['bind'], '*:12345')
 
 
-		
+	def test_section(self):
+		pass
 
 	
 

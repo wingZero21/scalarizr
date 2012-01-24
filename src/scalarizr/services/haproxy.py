@@ -20,7 +20,7 @@ class HAProxyError(Exception):
 	pass
 
 
-class HAProxyCfg2(object):
+class HAProxyCfg(object):
 	class slice_(dict):
 		def __init__(self, conf, xpath):
 			LOG.debug('slice_.__init__: xpath: `%s`', xpath)
@@ -73,7 +73,7 @@ class HAProxyCfg2(object):
 			try:
 				if self._len_xpath() > 1:
 					LOG.debug('	self.name = `%s`', self.name)
-					section_ = self.name if self.name in HAProxyCfg2.option_group.NAMES else ''
+					section_ = self.name if self.name in HAProxyCfg.option_group.NAMES else ''
 					while True:
 						yield _serializers[section_].serialize(self.conf.get(self._child_xpath(index)))
 						index += 1
@@ -86,7 +86,7 @@ class HAProxyCfg2(object):
 			try:
 				if self._len_xpath() > 1:
 					LOG.debug('	self.name = `%s`', self.name)
-					section_ = self.name if self.name in HAProxyCfg2.option_group.NAMES else ''
+					section_ = self.name if self.name in HAProxyCfg.option_group.NAMES else ''
 					while True:
 						yield _serializers[section_].unserialize(self.conf.get(self._child_xpath(index)))
 						index += 1
@@ -135,8 +135,8 @@ class HAProxyCfg2(object):
 		def __getitem__(self, name):
 			LOG.debug('section.__getitem__: name = `%s`, xpath: `%s`', name, self.xpath)
 			LOG.debug('self.name = %s', self.name)
-			if name in HAProxyCfg2.option_group.NAMES:
-				return HAProxyCfg2.option_group(self.conf, self._child_xpath(name))
+			if name in HAProxyCfg.option_group.NAMES:
+				return HAProxyCfg.option_group(self.conf, self._child_xpath(name))
 			try:
 				return _serializers[name].unserialize(self.conf.get(self._child_xpath(name)))
 			except metaconf.NoPathError:
@@ -151,12 +151,12 @@ class HAProxyCfg2(object):
 		def __setitem__(self, key, value):
 			LOG.debug('section.__setitem__: key = `%s`, value = `%s`, xpath: `%s`', key, value, self.xpath)
 
-			if key in HAProxyCfg2.option_group.NAMES:
+			if key in HAProxyCfg.option_group.NAMES:
 				LOG.debug('	key `%s` in option_group.NAMES', key)
 				if isinstance(value, dict):
 					for key_el in value:
 						LOG.debug('el in self = `%s`', key_el)
-						og = HAProxyCfg2.option_group(self.conf, self._child_xpath(key))
+						og = HAProxyCfg.option_group(self.conf, self._child_xpath(key))
 						og[key_el] = value[key_el]
 				else:
 					raise '	value `%s` must be dict type' % (value)
@@ -186,7 +186,7 @@ class HAProxyCfg2(object):
 			for index in range(0, len(self)):
 				LOG.debug('	elem `%s` in xpath `%s`', self.conf.get(self._child_xpath(index)), self._child_xpath(index))
 				if self.conf.get(self._child_xpath(index)) == name:
-					return HAProxyCfg2.section(self.conf, self._child_xpath(index))
+					return HAProxyCfg.section(self.conf, self._child_xpath(index))
 			raise KeyError('Can`t find index in path `%s`' % self.xpath)
 
 		def __setitem__(self, key, value):
@@ -201,7 +201,7 @@ class HAProxyCfg2(object):
 					ind = self._indexof(key)
 				LOG.debug('	ind = %s', ind)
 				if ind != -1:
-					section_ = HAProxyCfg2.section(self.conf, self._child_xpath(ind))
+					section_ = HAProxyCfg.section(self.conf, self._child_xpath(ind))
 					for key_ in value.keys():
 						LOG.debug('	key `%s`, value `%s`', key_, value[key_])
 						section_[key_] = value[key_]
@@ -222,10 +222,9 @@ class HAProxyCfg2(object):
 		return cls(self.conf, './' + name)
 
 	def __setitem__(self, key, value):
-		LOG.debug('HAProxyCfg2.__setitem__: key = `%s`, value = `%s`', key, value)
-
+		LOG.debug('HAProxyCfg.__setitem__: key = `%s`, value = `%s`', key, value)
 		if isinstance(value, dict):
-			sg = HAProxyCfg2.section_group(self.conf, './%s' % key)
+			sg = HAProxyCfg.section_group(self.conf, './%s' % key)
 			sg[key] = value
 		else:
 			raise ValueError('Expected dict-like object: %s' % type(value))
@@ -234,16 +233,64 @@ class HAProxyCfg2(object):
 		if name in ('globals', 'defaults', 'backend', 'listen', 'frontend'):
 			name_ = 'global' if name == 'globals' else name
 			return self.__getitem__(name_)
-	
+
 	def __setattr__(self, name, value):
 		if name in ('globals', 'defaults', 'backend', 'listen', 'frontend'):
 			name_ = 'global' if name == 'globals' else name
 			self.__setitem__(name_, value)
 		else:
 			object.__setattr__(self, name, value)
-			
-	def sections(self):
-		pass
+	'''
+	def iter(self, path):
+		index = 1
+		try:
+			while True:
+				yield self.conf.get('%s[%s]' % path, index)
+				index += 1
+		except:
+			raise Exception, sys.exc_info()[1], sys.exc_info()[2]'''
+
+	def sections(self, filter):
+		'''
+		filter example: 
+			scalr:backend:role:1234:tcp:2254
+		(protocol='tcp', port=1154, server_port=2254, backend='role:1234')
+		'''
+		params = filter.split(':')[1:]
+		path = './%s' % params.pop(0)
+
+		index = 1
+		for el in self.conf.get_list(path):
+			for param in params:
+				if param in el:
+					break
+					#found at path ./name[index]
+					yield _serializers.unserialize(self.conf.get('./%s[%s]'%(path, index)))
+			#if not found in name of section look in the boody of section
+			for el in self.__find_at_path('%s[%s]' % (path ,index), params):
+				yield el
+			index += 1
+
+	def __find_at_path(self, path, filters):
+		childrens = list(set(self.conf.children(path))) # path as ./listen[0]
+
+		for children in childrens:
+			obj = self.conf.get('%s/%s' % (path, children))
+			if isinstance(obj, str):
+				for param in filters:
+					if param in obj:
+						break
+						#found at 'path/children'
+						yield _serializers[''].unserialize(self.conf.get('%s/%s' % (path, children)))
+			else:
+				index = 1
+				for line in self.conf.get('%s/%s[%s]' % (path, children, index)):
+					for param in filters:
+						if param in line:
+							break
+							#found at 'path/children[index]'
+							yield _serializers[''].unserialize(self.conf.get('./%s[%s]'%(path, index)))
+					index += 1
 
 
 class OptionSerializer(object):
@@ -371,33 +418,34 @@ class Serializers(dict):
 			'stats': StatsSerializer()
 		})
 		self.__default =  OptionSerializer()
-		
+
 	def __getitem__(self, option):
 		return self.get(option, self.__default)
 
 _serializers = Serializers()
 
 
+
 class StatSocket(object):
 	'''
-    haproxy unix socket API
-    - one-to-one naming
-    - connect -> request -> disconnect
+	haproxy unix socket API
+	- one-to-one naming
+	- connect -> request -> disconnect
 
-    Create object:
-    >> ss = StatSocket('/var/run/haproxy-stats.sock')
+	Create object:
+	>> ss = StatSocket('/var/run/haproxy-stats.sock')
 
-    Show stat:
-    >> ss.show_stat()
-    [{'status': 'UP', 'lastchg': '68', 'weight': '1', 'slim': '', 'pid': '1', 'rate_lim': '', 
-    'check_duration': '0', 'rate': '0', 'req_rate': '', 'check_status': 'L4OK', 'econ': '0', 
-    'wredis': '0', 'dresp': '0', 'ereq': '', None: [''], 'tracked': '', 'pxname': 'scalr:backend:port:1234', 
-    'dreq': '', 'hrsp_5xx': '', 'check_code': '', 'sid': '1', 'bout': '0', 'hrsp_1xx': '', 
-    'qlimit': '', 'hrsp_other': '', 'bin': '0', 'smax': '0', 'req_tot': '', 'lbtot': '0', 
-    'stot': '0', 'wretr': '0', 'req_rate_max': '', 'iid': '1', 'hrsp_4xx': '', 'chkfail': '0', 
-    'hanafail': '0', 'downtime': '0', 'qcur': '0', 'eresp': '0', 'cli_abrt': '0', 'srv_abrt': '0', 
-    'throttle': '', 'scur': '0', 'type': '2', 'bck': '0', 'qmax': '0', 'rate_max': '0', 'hrsp_2xx': '', 
-    'act': '1', 'chkdown': '0', 'svname': 'srv0', 'hrsp_3xx': ''}]
+	Show stat:
+	>> ss.show_stat()
+	[{'status': 'UP', 'lastchg': '68', 'weight': '1', 'slim': '', 'pid': '1', 'rate_lim': '', 
+	'check_duration': '0', 'rate': '0', 'req_rate': '', 'check_status': 'L4OK', 'econ': '0', 
+	'wredis': '0', 'dresp': '0', 'ereq': '', None: [''], 'tracked': '', 'pxname': 'scalr:backend:port:1234', 
+	'dreq': '', 'hrsp_5xx': '', 'check_code': '', 'sid': '1', 'bout': '0', 'hrsp_1xx': '', 
+	'qlimit': '', 'hrsp_other': '', 'bin': '0', 'smax': '0', 'req_tot': '', 'lbtot': '0', 
+	'stot': '0', 'wretr': '0', 'req_rate_max': '', 'iid': '1', 'hrsp_4xx': '', 'chkfail': '0', 
+	'hanafail': '0', 'downtime': '0', 'qcur': '0', 'eresp': '0', 'cli_abrt': '0', 'srv_abrt': '0', 
+	'throttle': '', 'scur': '0', 'type': '2', 'bck': '0', 'qmax': '0', 'rate_max': '0', 'hrsp_2xx': '', 
+	'act': '1', 'chkdown': '0', 'svname': 'srv0', 'hrsp_3xx': ''}]
 	'''
 
 	def __init__(self, address='/var/run/haproxy-stats.sock'):
@@ -411,7 +459,7 @@ class StatSocket(object):
 
 	def show_stat(self):
 		'''
-        @rtype: list[dict]
+		@rtype: list[dict]
 		'''
 		try:
 			self.sock.send('show stat\n')
@@ -441,12 +489,12 @@ def naming(type_, protocol=None, port=None, backend=None):
 
 class HAProxyInitScript(initdv2.InitScript):
 	'''
-    haproxy init script
-    - start
-    - stop
-    - restart
-    - reload
-    - status
+	haproxy init script
+	- start
+	- stop
+	- restart
+	- reload
+	- status
 	'''
 
 	def __init__(self):
