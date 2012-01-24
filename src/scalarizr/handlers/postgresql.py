@@ -224,13 +224,21 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 	@property
 	def pg_hosts(self):
-		return list(host.internal_ip or host.external_ip for host in self._queryenv.list_roles(self._role_name)[0].hosts)
+		list_roles = self._queryenv.list_roles(self._role_name)
+		servers = []
+		for pg_serv in list_roles:
+			for pg_host in pg_serv.hosts:
+				servers.append(pg_host.internal_ip or pg_host.external_ip)
+		self._logger.debug("QueryEnv returned list of %s servers: %s" % (BEHAVIOUR, servers))
+		return servers
 	
 	
 	def accept_app_hosts(self):
-		for ip in self.app_hosts:
+		app_hosts = self.app_hosts
+		for ip in app_hosts:
 				self.postgresql.register_app_host(ip, force=False)
-				self.postgresql.service.reload('Granting access to all app servers.', force=True)
+		if app_hosts:
+			self.postgresql.service.reload('Granting access to all app servers.', force=True)
 				
 		
 	def on_host_init_response(self, message):
