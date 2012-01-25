@@ -156,7 +156,7 @@ class TestHAProxyCfg(unittest.TestCase):
 	def test_sections(self):
 		list_found = self.conf.sections('scalr:backend:tcp:2254')
 		self.assertEqual(list_found[0], 'scalr:backend:role:1234:tcp:2254')
-		self.assertEqual(self.conf.backend[list_found[0]]['bind'], '*:2254')
+		self.assertEqual(self.conf.backends[list_found[0]]['bind'], '*:2254')
 
 
 class _TestHAProxyInitScript(unittest.TestCase):

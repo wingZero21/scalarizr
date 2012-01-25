@@ -212,9 +212,11 @@ class HAProxyCfg(object):
 
 
 	def __init__(self, path=None):
+		self._sections = {'globals':'global', 'defaults':'defaults', 'backends': 'backend',
+			 'listener': 'listen', 'frontends':'frontend'}
 		self.conf = metaconf.Configuration('haproxy')
 		self.conf.read(path or HAPROXY_CFG_PATH)
-
+	
 	def __getitem__(self, name):
 		cls = self.section_group
 		if name in ('global', 'defaults'):
@@ -230,34 +232,32 @@ class HAProxyCfg(object):
 			raise ValueError('Expected dict-like object: %s' % type(value))
 
 	def __getattr__(self, name):
-		_sections = {'globals':'global', 'defaults':'defaults', 'backend': 'backend',
-					 'listener': 'listen',  'listen': 'listen', 'frontend':'frontend'}
-		if name in _sections.keys():
-			name_ = _sections[name]
+		if name in self._sections.keys():
+			name_ = self._sections[name]
 			return self.__getitem__(name_)
 
 	def __setattr__(self, name, value):
-		_sections = {'globals':'global', 'defaults':'defaults', 'backend': 'backend',
-					 'listener': 'listen',  'listen': 'listen', 'frontend':'frontend'}
-		if name in _sections.keys():
-			name_ = _sections[name]
+		if name in self._sections.keys():
+			name_ = self._sections[name]
 			self.__setitem__(name_, value)
 		else:
 			object.__setattr__(self, name, value)
 
-
 	def sections(self, filter):
 		'''
-		filter example: 
+		filter example:
 			`scalr:backend:role:1234:tcp:2254`
 		where protocol='tcp', port=1154, server_port=2254, backend='role:1234'
 		'''
+		LOG.debug('HAProxyCfg.sections: input filter `%s`' % filter)
 		params = filter.split(':')[1:]
+		LOG.debug('	filter params `%s`' % params)
 		path = './%s' % params.pop(0)
 
 		result = []
 		index = 1
 		for section in self.conf.get_list(path):
+			LOG.debug('	section `%s`' % section)
 			flag = True
 			for param in params:
 				if not param in section:
@@ -267,6 +267,7 @@ class HAProxyCfg(object):
 				result.append(section)
 			index += 1
 		return result
+
 
 class OptionSerializer(object):
 	def unserialize(self, s):
@@ -317,7 +318,7 @@ class OptionSerializer(object):
 						if list_par:
 							temp[elem] = list_par.pop(0)
 						else:
-							temp[elem] = True
+							temp[elem] = ''
 					else:
 						temp[elem] = []
 						while num_args > 0 and list_par.__len__ > 0:
