@@ -53,11 +53,12 @@ class ConfigurationFile(object):
 			shutil.copy(backup_path, self.path)
 
 	def trans(self, enter=None, exit=None):
-		raise NotImplemented()
+		#raise NotImplemented()
 		return self
 
 	def reload(self):
-		raise NotImplemented()
+		#raise NotImplemented()
+		pass
 
 BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
 PART_SUFFIX = '.part.'	

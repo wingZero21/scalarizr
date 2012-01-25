@@ -119,6 +119,9 @@ class InitScript(object):
 		"""
 		pass
 
+	def trans(self, *args):
+		return self
+
 class SockParam:
 	def __init__(self, port=None, family=socket.AF_INET, type=socket.SOCK_STREAM, conn_address=None, timeout=5):
 		
