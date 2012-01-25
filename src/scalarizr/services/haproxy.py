@@ -212,8 +212,6 @@ class HAProxyCfg(object):
 
 
 	def __init__(self, path=None):
-		self._sections = {'globals':'global', 'defaults':'defaults', 'backends': 'backend',
-			 'listener': 'listen', 'frontends':'frontend'}
 		self.conf = metaconf.Configuration('haproxy')
 		self.conf.read(path or HAPROXY_CFG_PATH)
 	
@@ -232,13 +230,17 @@ class HAProxyCfg(object):
 			raise ValueError('Expected dict-like object: %s' % type(value))
 
 	def __getattr__(self, name):
-		if name in self._sections.keys():
-			name_ = self._sections[name]
+		_sections = {'globals':'global', 'defaults':'defaults', 'backends': 'backend',
+			 'listener': 'listen', 'frontends':'frontend'}
+		if name in _sections.keys():
+			name_ = _sections[name]
 			return self.__getitem__(name_)
 
 	def __setattr__(self, name, value):
-		if name in self._sections.keys():
-			name_ = self._sections[name]
+		_sections = {'globals':'global', 'defaults':'defaults', 'backends': 'backend',
+			 'listener': 'listen', 'frontends':'frontend'}
+		if name in _sections.keys():
+			name_ = _sections[name]
 			self.__setitem__(name_, value)
 		else:
 			object.__setattr__(self, name, value)
