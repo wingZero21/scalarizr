@@ -252,7 +252,6 @@ class HAProxyCfg(object):
 			`scalr:backend:role:1234:tcp:2254`
 		where protocol='tcp', port=1154, server_port=2254, backend='role:1234'
 		'''
-		#TODO: it must return paths?
 		params = filter.split(':')[1:]
 		path = './%s' % params.pop(0)
 
@@ -268,62 +267,6 @@ class HAProxyCfg(object):
 				result.append(section)
 			index += 1
 		return result
-
-		'''
-		index = 1
-		for el in self.conf.get_list(path):
-			for param in params:
-				if param in el:
-					#found at path ./name[index]
-					yield '%s[%s]' % (path, index)
-					#yield _serializers[''].unserialize(self.conf.get('./%s[%s]'%(path, index)))
-					break
-			#if not found in name of section look in the boody of section
-			for el in self.__find_at_path('%s[%s]' % (path ,index), params):
-				yield el
-			index += 1
-		'''
-
-	def __find_at_path(self, path, filters):
-		'''
-		look in the boody of section some path like `./section_name[index]`
-		'''
-		childrens = list(set(self.conf.children(path))) 
-		for children in childrens:
-			obj = self.conf.get('%s/%s' % (path, children))
-			if isinstance(obj, str):
-				for param in filters:
-					if param in obj:
-						return True
-			else:
-				index = 1
-				for line in self.conf.get('%s/%s[%s]' % (path, children, index)):
-					for param in filters:
-						if param in line:
-							return True
-					index += 1
-		'''		
-		childrens = list(set(self.conf.children(path))) 
-		for children in childrens:
-			obj = self.conf.get('%s/%s' % (path, children))
-			if isinstance(obj, str):
-				for param in filters:
-					if param in obj:
-						#found at 'path/children'
-						yield '%s/%s' % (path, children)
-						#yield _serializers[''].unserialize(self.conf.get('%s/%s' % (path, children)))
-						break
-			else:
-				index = 1
-				for line in self.conf.get('%s/%s[%s]' % (path, children, index)):
-					for param in filters:
-						if param in line:
-							#found at 'path/children[index]'
-							yield '%s/%s[%s]' % (path, children, index)
-							#yield _serializers[''].unserialize(self.conf.get('./%s[%s]'%(path, index)))
-							break
-					index += 1
-			'''
 
 class OptionSerializer(object):
 	def unserialize(self, s):
