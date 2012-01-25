@@ -235,6 +235,7 @@ class ScriptExecutor(Handler):
 			self._logger.debug("Executing script '%s'", script.name)
 
 			# Create stdout and stderr log files
+			return_code = 0
 			stdout = open(stdout_path, 'w+')
 			stderr = open(stderr_path, 'w+')
 			self._logger.debug("Redirect stdout > %s stderr > %s", stdout.name, stderr.name)
