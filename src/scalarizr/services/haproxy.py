@@ -303,34 +303,26 @@ class OptionSerializer(object):
 		argument in dict self._number_args.
 		'''
 		temp = {}
-		last_key = ''
-		count = 0
-		if not isinstance(list_par, list):
-			list_par = [list_par,]
-		for elem in list_par:
-			if not last_key:
-				el_in_list= False
-				for num_arg in self._number_args.keys():
-					if elem in self._number_args[num_arg]:
-						el_in_list =True
-						if num_arg > 0:
-							last_key = elem
-							count = num_arg
-							temp[last_key] = []
+		list_par = list(list_par)
+		while list_par.__len__ > 0:
+			if list_par:
+				elem = list_par.pop(0)
+			else:
+				break
+			for num_args in self._number_args.keys():
+				if elem in self._number_args[num_args]:
+					if num_args == 0:
+						temp[elem] = True
+					elif num_args == 1:
+						if list_par:
+							temp[elem] = list_par.pop(0)
 						else:
 							temp[elem] = True
-				if not el_in_list:
-					raise "Can't parse string in %s._parse input str" % type(self)
-			elif count > 0:
-				count -= 1
-				temp[last_key].append(elem)
-
-				if count == 0:
-					if temp[last_key].__len__() == 1:
-						temp[last_key] = temp[last_key][0]
-					elif temp[last_key].__len__() == 0:
-						temp[last_key] = True
-					last_key = ''
+					else:
+						temp[elem] = []
+						while num_args > 0 and list_par.__len__ > 0:
+							temp[elem] = temp[elem].append(list_par.pop(0))
+							num_args -= 1
 		return temp
 
 
@@ -382,7 +374,11 @@ class ServerSerializer(OptionSerializer):
 
 
 class StatsSerializer(OptionSerializer):
-	pass
+	def __init__(self):
+		self._number_args = {
+				0:['enable'],
+				1:['socket', 'timeout', 'maxconn', 'uid', 'user', 'gid', 'group', 'mode', 'level'], 
+				2:['admin']}
 
 class BindSerializer(OptionSerializer):
 	pass
