@@ -213,12 +213,13 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	@property			
 	def app_hosts(self):
-		list_roles = self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
+		app = BuiltinBehaviours.APP
+		list_roles = self._queryenv.list_roles(behaviour=app)
 		servers = []
 		for app_serv in list_roles:
 			for app_host in app_serv.hosts :
 				servers.append(app_host.internal_ip or app_host.external_ip)
-		self._logger.debug("QueryEnv returned list of app servers: %s" % servers)
+		self._logger.debug("QueryEnv returned list of %s servers: %s" % (app,servers))
 		return servers				
 		
 		
