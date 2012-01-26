@@ -81,7 +81,7 @@ class TestHAProxyCfg(unittest.TestCase):
 			'balance': 'roundrobin',
 			'option': {'tcplog': True, 'some_param': True},
 			'server' : {'app9': {'address': '127.0.0.1', 'check': True, 'port': '5009'},
-						'app10': {'address': '127.0.0.1', 'check': True, 'port': '5010'}},
+						'app10': {'address': '127.0.0.1', 'check': True, 'port': 5010}},
 			'default_backend': 'scalr:backend:port:1234'
 			}
 		#self.conf['backend'] = '192.168.0.1:8080'
@@ -111,6 +111,7 @@ class TestHAProxyCfg(unittest.TestCase):
 		self.conf['global'] = temp
 		self.assertEqual(self.conf['global']['bind'], '*:12345')
 
+
 	def test_set_option(self):
 		self.conf['global']['opt1'] = ['127.0.0.1', 'test', 'test', 'test']
 		self.assertEqual(self.conf['global']['opt1'], ['127.0.0.1', 'test', 'test', 'test'])
@@ -131,7 +132,8 @@ class TestHAProxyCfg(unittest.TestCase):
 		self.assertEqual(self.conf['backend']['app']['server']['app_7'],
 			{'address': '127.0.0.1', 'check': True, 'port': '5007'})
 		self.assertTrue(self.conf['backend']['app']['option']['tcplog'])
-	
+
+
 	def test_set_backend_server(self):
 		tmp = {'app_7':{'address': '127.0.0.1', 'check': True, 'port': '5007'}, 
 		 	'app_8':{'address': '127.0.0.1', 'check': True, 'port': '5008'}}
