@@ -130,13 +130,15 @@ class Message(object):
 					el.appendChild(itemEl)
 					self._walk_encode(v, itemEl, doc)
 		else:
-			LOG.debug('%s', [value])
+			'''
 			if not isinstance(value, unicode):
 				if value is not None:
 					value = str(value)
 				else:
 					value = ''
 			el.appendChild(doc.createTextNode(value))
+			'''
+			el.appendChild(doc.createTextNode(str(value) if value is not None else ""))
 
 
 class MessageProducer(Observable):

@@ -283,7 +283,8 @@ class _P2pMessageStore:
 			cur.close()
 		
 	def _unmarshall(self, message, row):
-		message.fromxml(row["message"].encode('utf-8'))
+		#message.fromxml(row["message"].encode('utf-8'))
+		message.fromxml(row["message"])
 		
 	def _marshall(self, message, row={}):
 		row["message_id"] = message.id
