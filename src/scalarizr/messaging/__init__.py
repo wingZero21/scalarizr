@@ -4,6 +4,9 @@ import xml.dom.minidom as dom
 import threading
 import logging
 
+
+LOG = logging.getLogger(__name__)
+
 class MessagingError(BaseException):
 	pass
 
@@ -72,7 +75,7 @@ class Message(object):
 		pass
 	
 	def fromxml (self, xml):
-		doc = dom.parseString(xml.encode('utf-8'))
+		doc = dom.parseString(xml)
 		xml_strip(doc)
 		
 		root = doc.documentElement
@@ -127,12 +130,13 @@ class Message(object):
 					el.appendChild(itemEl)
 					self._walk_encode(v, itemEl, doc)
 		else:
-			el.appendChild(doc.createTextNode(str(value) if value is not None else ""))
-			#if value is not None:
-			#	value = unicode(value, 'utf-8')
-			#else:
-			#	value = ''
-			#el.appendChild(doc.createTextNode(value))
+			LOG.debug('%s', [value])
+			if not isinstance(value, unicode):
+				if value is not None:
+					value = str(value)
+				else:
+					value = ''
+			el.appendChild(doc.createTextNode(value))
 
 
 class MessageProducer(Observable):

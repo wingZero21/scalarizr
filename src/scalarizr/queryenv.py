@@ -118,7 +118,6 @@ class QueryEnvService(object):
 		parameters = {}
 		if name:
 			parameters["name"] = name
-			self._logger.warn('\n\nrole_name=%s\n'%name)
 		return {'params':self._request("list-role-params", parameters, self._read_list_role_params_response)}
 
 

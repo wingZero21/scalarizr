@@ -16,6 +16,8 @@ InFilter
 OutFilter
 """
 
+LOG = logging.getLogger(__name__)
+
 class P2pConfigOptions:
 	SERVER_ID 						= "server_id"
 	CRYPTO_KEY_PATH 				= "crypto_key_path"
@@ -111,7 +113,7 @@ class _P2pMessageStore:
 			
 				
 			#self._logger.debug('Representation mes: %s', repr(str(message)))
-			cur.execute(sql, [str(message), message.id, message.name, queue, 1, 0, consumer_id])
+			cur.execute(sql, [message.toxml(), message.id, message.name, queue, 1, 0, consumer_id])
 			'''
 			cur.execute(sql, [str(message), message.id.decode('utf-8'),
 					message.name.decode('utf-8'), queue.encode('utf-8'), 1, 0,
@@ -176,7 +178,7 @@ class _P2pMessageStore:
 					VALUES 
 						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
 			
-			cur.execute(sql, [str(message), message.id, message.name, queue, 0, 0, 0, sender])
+			cur.execute(sql, [message.toxml(), message.id, message.name, queue, 0, 0, 0, sender])
 			
 			self._logger.debug("Commiting put_outgoing")
 			conn.commit()
@@ -281,12 +283,12 @@ class _P2pMessageStore:
 			cur.close()
 		
 	def _unmarshall(self, message, row):
-		message.fromxml(row["message"])
+		message.fromxml(row["message"].encode('utf-8'))
 		
 	def _marshall(self, message, row={}):
 		row["message_id"] = message.id
 		row["message_name"] = message.name
-		row["message"] = str(message)
+		row["message"] = message.toxml()
 		return row
 
 _message_store = None
