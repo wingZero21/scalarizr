@@ -78,6 +78,12 @@ def arch():
 		return Architectures.X86_64
 	return Architectures.UNKNOWN
 
+def arch_bits():
+	if arch() == Architectures.X86_64:
+		return 64
+	else:
+		return 32
+
 class Architectures:
 	I386 = "i386"
 	X86_64 = "x86_64"
