@@ -31,12 +31,12 @@ class HAProxyAPI(object):
 		self.cfg = haproxy.HAProxyCfg(path)
 		self.svs = haproxy.HAProxyInitScript(path)
 
-
-	#@rpc.service_method
-	#@validate.param('port', 'server_port', type=int)
-	#@validate.param('protocol', required=_rule_protocol)
-	#@validate.param('server_port', optional=True, type=int)
-	#@validate.param('backend', optional=_rule_backend)
+	'''
+	@rpc.service_method
+	@validate.param('port', 'server_port', type=int)
+	@validate.param('protocol', required=_rule_protocol)
+	@validate.param('server_port', optional=True, type=int)
+	@validate.param('backend', optional=_rule_backend)'''
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
 
@@ -81,11 +81,13 @@ class HAProxyAPI(object):
 		})
 		
 		# Apply changes
-		with self.svs.trans(exit='running'):
-			with self.cfg.trans(enter='reload', exit='working'):
+		#with self.svs.trans(exit='running'):
+		#	with self.cfg.trans(enter='reload', exit='working'):
+		if True:#TODO: del `if True` condition,  write with... enter, exit
 				self.cfg['listen'][ln] = listener
-				if not bnd in self.cfg.backend:
+				if not self.cfg.backend or not bnd in self.cfg.backend:
 					self.cfg['backend'][bnd] = backend
+				self.cfg.save()
 				self.svs.reload()
 	
 	
@@ -118,15 +120,17 @@ class HAProxyAPI(object):
 						('fall %s' % fall_threshold) if fall_threshold else '',
 						('rise %s' % rise_threshold) if rise_threshold else '',
 						('inter %s' % interval) if interval else '']	
+					self.cfg.save()
 					self.svs.reload()
 
-
+	'''
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
-	@validate.param('backend', optional=_rule_backend)
+	@validate.param('backend', optional=_rule_backend)'''
 	def add_server(self, ipaddr=None, backend=None):
-
 		self.cfg.reload()
+		LOG.debug('HAProxyAPI.add_server')
+		LOG.debug('	%s' % haproxy.naming('backend', backend=backend))
 		bnds = self.cfg.sections(haproxy.naming('backend', backend=backend))
 		if not bnds:
 			if backend:
@@ -134,8 +138,9 @@ class HAProxyAPI(object):
 			else:
 				raise exceptions.Empty('No listeners to add server to')
 
-		with self.svs.trans(exit='running'):
-			with self.cfg.trans(exit='working'):
+		#with self.svs.trans(exit='running'):
+			#with self.cfg.trans(exit='working'):
+		if True:
 				server = {
 					'name': ipaddr.replace('.', '-'),
 					'address': ipaddr,
@@ -143,6 +148,7 @@ class HAProxyAPI(object):
 				}
 				for bnd in bnds:
 					self.cfg.backend[bnd]['server'].add(server)
+				self.cfg.save()
 				self.svs.reload()
 
 
@@ -178,8 +184,8 @@ class HAProxyAPI(object):
 		server_paths = self.cfg.sections(haproxy.naming('backend', backend=backend))
 		for path in server_paths:
 			self.cfg.conf.remove(self.cfg.backend[path][ipaddr.replace('.', '-')].xpath)
-
-		#TODO: rewrite config
+			self.cfg.save()
+		#TODO: rewrite config and reload
 
 	@rpc.service_method
 	def list_listeners(self):

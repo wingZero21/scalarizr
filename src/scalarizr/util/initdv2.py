@@ -122,6 +122,9 @@ class InitScript(object):
 	def trans(self, enter=None, exit=None):
 		return self
 	
+	def __enter__(self):
+		return self
+	
 	def __exit__(self, *args):
 		return None
 

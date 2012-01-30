@@ -13,7 +13,6 @@ from scalarizr.services import haproxy
 class TestHAProxyCfg(unittest.TestCase):
 	def setUp(self):
 		self.conf = haproxy.HAProxyCfg(os.path.dirname(__file__) + '/../../../resources/etc/haproxy.cfg')
-	
 
 	def test_global(self):
 		
@@ -159,6 +158,29 @@ class TestHAProxyCfg(unittest.TestCase):
 		list_found = self.conf.sections('scalr:backend:tcp:2254')
 		self.assertEqual(list_found[0], 'scalr:backend:role:1234:tcp:2254')
 		self.assertEqual(self.conf.backends[list_found[0]]['bind'], '*:2254')
+
+	def test_save_config(self):
+		temp = {
+			'bind': '*:12345', 
+			'mode': 'tcp',
+			'balance': 'roundrobin',
+			'option': {'tcplog': True, 'some_param': True},
+			'server' : {'app9': {'address': '127.0.0.1', 'check': True, 'port': '5009'},
+						'app10': {'address': '127.0.0.1', 'check': True, 'port': 5010}},
+			'default_backend': 'scalr:backend:port:1234'
+			}
+		
+		self.conf['backend']['192.168.0.1:8080'] = temp	
+		
+		self.conf.save('/tmp/haproxy.cfg')
+		
+		conf2 = haproxy.HAProxyCfg('/tmp/haproxy.cfg') 
+		
+		
+		self.assertEqual(conf2['backend']['192.168.0.1:8080']['bind'], '*:12345')
+		self.assertEqual(conf2['backend']['192.168.0.1:8080']['balance'], 'roundrobin')
+		self.assertEqual(conf2['backend']['192.168.0.1:8080']['server']['app9'], {'address': '127.0.0.1', 'check': True, 'port': '5009'})
+		self.assertEqual(self.conf['backend']['192.168.0.1:8080']['option']['tcplog'], True)
 
 
 class _TestHAProxyInitScript(unittest.TestCase):

@@ -98,7 +98,7 @@ class HAProxyCfg(object):
 			return self.xpath'''
 
 	class option_group(slice_):
-		NAMES = ('server', 'option', 'timeout', 'log', 'stats')
+		NAMES = ('server', 'option', 'timeout', 'log', 'stats', 'default-server')
 
 		def __getitem__(self, name):
 			LOG.debug('option_group.__getitem__: name = `%s`, xpath: `%s`', name, self.xpath)
@@ -156,14 +156,19 @@ class HAProxyCfg(object):
 
 			if key in HAProxyCfg.option_group.NAMES:
 				LOG.debug('	key `%s` in option_group.NAMES', key)
-				if isinstance(value, dict):
-					for key_el in value:
-						LOG.debug('el in self = `%s`', key_el)
+				try:
+					if isinstance(value, dict):
+						for key_el in value:
+							LOG.debug('el in self = `%s`', key_el)
+							og = HAProxyCfg.option_group(self.conf, self._child_xpath(key))
+							og[key_el] = value[key_el]
+					else:
 						og = HAProxyCfg.option_group(self.conf, self._child_xpath(key))
-						og[key_el] = value[key_el]
-				else:
-					raise 'section.__setitem__: value `%s` must be dict type' % (value)
-					LOG.debug('	value must be dict dict')	
+						og[key] = value
+				except Exception, e:
+					raise ValueError('section.__setitem__: error set value `%s`. Details:'
+						' `%s`'% (value, e))
+					LOG.debug('	value must be dict dict')
 			else:
 				index = self._indexof(key)
 				var = _serializers[key].serialize(value)
@@ -215,7 +220,8 @@ class HAProxyCfg(object):
 
 	def __init__(self, path=None):
 		self.conf = metaconf.Configuration('haproxy')
-		self.conf.read(path or HAPROXY_CFG_PATH)
+		self.cnf_path = path or HAPROXY_CFG_PATH
+		self.conf.read(self.cnf_path)
 	
 	def __getitem__(self, name):
 		cls = self.section_group
@@ -258,7 +264,13 @@ class HAProxyCfg(object):
 		params = filter.split(':')[1:]
 		LOG.debug('	filter params `%s`' % params)
 		path = './%s' % params.pop(0)
-
+		
+		'''try:#for search `role:12345` instead of `role` and `12345`
+			ind = params.index('role')
+			params[ind] = '%s:%d'%(params[ind], params[ind+1])
+			id_role = params.pop(params[ind+1])
+		except:
+			pass'''
 		result = []
 		index = 1
 		for section in self.conf.get_list(path):
@@ -272,6 +284,17 @@ class HAProxyCfg(object):
 				result.append(section)
 			index += 1
 		return result
+
+	def save(self, path=None):
+		try:
+			self.conf.write(path or self.cnf_path)
+			LOG.debug('HAProxyCfg.save: cnf_path = `%s`' % path or self.cnf_path)
+		except Exception, e:
+			HAProxyError('HAProxyCfg.save: exception, details: `%s`' % e)
+
+	def reload(self):
+		LOG.debug('HAProxyCfg.reload')
+		self.conf.read(self.cnf_path)
 
 
 class OptionSerializer(object):
@@ -367,6 +390,40 @@ class ServerSerializer(OptionSerializer):
 				if d.get('port'):
 					del d['port']
 
+			for key in d.keys():
+				if isinstance(d[key], bool):
+					res.append(key)
+				else:
+					LOG.debug('d[key]: `%s`', d[key])
+					res.append(' '.join([key, d[key]]))
+			LOG.debug('res: `%s`, res_str: `%s`'%(res, ' '.join(res)))
+			return ' '.join(res)
+		else:
+			return ' '.join(str(d))
+
+
+class  DefaultServerSerializer(OptionSerializer):
+
+	def __init__(self):
+		self._number_args = {
+			1:['error-limit', 'fall', 'inter', 'fastinter', 'downinter', 'maxconn',
+				'maxqueue', 'minconn', 'on-error', 'port', 'rise', 'slowstart',	'weight']}
+
+	def unserialize(self, s):
+		LOG.debug('ServerSerializer.unserialize: input `%s`', s)
+		try:
+			list_par = OptionSerializer.unserialize(self, s)
+			temp = {}
+			temp.update(self._parse(list_par))
+			return temp if isinstance(temp, dict) else s
+		except:
+			LOG.debug("Details: %s%s", sys.exc_info()[1], sys.exc_info()[2])
+			return OptionSerializer.unserialize(self, s)
+
+	def serialize(self, d):
+		LOG.debug('ServerSerializer.serialize: input `%s`', d)
+		res = []
+		if isinstance(d, dict):
 			for key in d.keys():
 				if isinstance(d[key], bool):
 					res.append(key)

@@ -100,7 +100,7 @@ class _func_wrapper(object):
 		self.fn = fn
 		self.params = []
 		
-	def __call__(self, **kwds):
+	def __call__(self, *args, **kwds):
 		asp = inspect.getargspec(self.fn)
 		values = dict(zip(asp.args, asp.defaults))
 		values.update(kwds)
