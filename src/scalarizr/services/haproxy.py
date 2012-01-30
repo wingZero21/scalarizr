@@ -92,7 +92,10 @@ class HAProxyCfg(object):
 						index += 1
 			except metaconf.NoPathError:
 				raise StopIteration()
-
+		'''
+		@property		
+		def path(self):
+			return self.xpath'''
 
 	class option_group(slice_):
 		NAMES = ('server', 'option', 'timeout', 'log', 'stats')
@@ -182,7 +185,6 @@ class HAProxyCfg(object):
 
 		def __getitem__(self, name):
 			LOG.debug('section_group.__getitem__: name = `%s`', name)
-
 			for index in range(0, len(self)):
 				LOG.debug('	elem `%s` in xpath `%s`', self.conf.get(self._child_xpath(index)), self._child_xpath(index))
 				if self.conf.get(self._child_xpath(index)) == name:
@@ -206,7 +208,7 @@ class HAProxyCfg(object):
 						LOG.debug('	key `%s`, value `%s`', key_, value[key_])
 						section_[key_] = value[key_]
 				else:
-					raise 'section_group.__setitem__:	section `%s` was not added' % key 	
+					raise 'section_group.__setitem__:	section `%s` was not added' % key
 			else:
 				raise 'section_group.__setitem__:	value `%s` type must be dict' % value
 
@@ -247,9 +249,10 @@ class HAProxyCfg(object):
 
 	def sections(self, filter):
 		'''
-		filter example:
-			`scalr:backend:role:1234:tcp:2254`
+		return @type: list
+		Example: filter = `scalr:backend:role:1234:tcp:2254`
 		where protocol='tcp', port=1154, server_port=2254, backend='role:1234'
+		Look at services.haproxy.naming
 		'''
 		LOG.debug('HAProxyCfg.sections: input filter `%s`' % filter)
 		params = filter.split(':')[1:]
@@ -302,8 +305,8 @@ class OptionSerializer(object):
 
 	def _parse(self, list_par):
 		'''
-		Pars from input list to result dict object by tags by number of param
-		argument in dict self._number_args.
+		Pars from input list to result dict object by tags and by number of param
+		arguments in dict self._number_args.
 		'''
 		temp = {}
 		list_par = list(list_par)
@@ -359,7 +362,7 @@ class ServerSerializer(OptionSerializer):
 		res = []
 		if isinstance(d, dict):
 			if d.get('address'):
-				res.append('%s%s' % (d['address'], ':' + d.get('port') if d.get('port') else ''))
+				res.append('%s%s' % (str(d['address']), ':' + str(d.get('port')) if d.get('port') else ''))
 				del d['address']
 				if d.get('port'):
 					del d['port']
@@ -373,7 +376,7 @@ class ServerSerializer(OptionSerializer):
 			LOG.debug('res: `%s`, res_str: `%s`'%(res, ' '.join(res)))
 			return ' '.join(res)
 		else:
-			return ' '.join(d)
+			return ' '.join(str(d))
 
 
 class StatsSerializer(OptionSerializer):
@@ -415,14 +418,7 @@ class StatSocket(object):
 	>> ss.show_stat()
 	[{'status': 'UP', 'lastchg': '68', 'weight': '1', 'slim': '', 'pid': '1', 'rate_lim': '', 
 	'check_duration': '0', 'rate': '0', 'req_rate': '', 'check_status': 'L4OK', 'econ': '0', 
-	'wredis': '0', 'dresp': '0', 'ereq': '', None: [''], 'tracked': '', 'pxname': 'scalr:backend:port:1234', 
-	'dreq': '', 'hrsp_5xx': '', 'check_code': '', 'sid': '1', 'bout': '0', 'hrsp_1xx': '', 
-	'qlimit': '', 'hrsp_other': '', 'bin': '0', 'smax': '0', 'req_tot': '', 'lbtot': '0', 
-	'stot': '0', 'wretr': '0', 'req_rate_max': '', 'iid': '1', 'hrsp_4xx': '', 'chkfail': '0', 
-	'hanafail': '0', 'downtime': '0', 'qcur': '0', 'eresp': '0', 'cli_abrt': '0', 'srv_abrt': '0', 
-	'throttle': '', 'scur': '0', 'type': '2', 'bck': '0', 'qmax': '0', 'rate_max': '0', 'hrsp_2xx': '', 
-	'act': '1', 'chkdown': '0', 'svname': 'srv0', 'hrsp_3xx': ''}]
-	'''
+	...'''
 
 	def __init__(self, address='/var/run/haproxy-stats.sock'):
 		try:
@@ -473,9 +469,9 @@ class HAProxyInitScript(initdv2.InitScript):
 	- status
 	'''
 
-	def __init__(self):
+	def __init__(self, path=None):
 		self.pid_file = '/var/run/haproxy.pid'
-		self.config_path = HAPROXY_CFG_PATH
+		self.config_path = path or HAPROXY_CFG_PATH
 		self.haproxy_exec = '/usr/sbin/haproxy'
 		self.socks = None
 		self.timeout = 30

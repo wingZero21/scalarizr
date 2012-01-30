@@ -119,7 +119,7 @@ class InitScript(object):
 		"""
 		pass
 
-	def trans(self, *args):
+	def trans(self, enter=None, exit=None):
 		return self
 
 class SockParam:

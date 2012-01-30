@@ -20,9 +20,9 @@ HEALTHCHECK_DEFAULTS = {
 	'rise_threshold': 10
 }
 
-__rule_protocol = validate.rule(choises=['tcp', 'http'])
-__rule_backend = validate.rule(re=r'^role:\d+$')
-__rule_hc_target = validate.rule(re='^[tcp|http]:\d+$')
+_rule_protocol = validate.rule(choises=['tcp', 'http'])
+_rule_backend = validate.rule(re=r'^role:\d+$')
+_rule_hc_target = validate.rule(re='^[tcp|http]:\d+$')
 
 
 class HAProxyAPI(object):
@@ -32,11 +32,11 @@ class HAProxyAPI(object):
 		self.svs = haproxy.HAProxyInitScript(path)
 
 
-	@rpc.service_method
-	@validate.param('port', 'server_port', type=int)
-	@validate.param('protocol', required=__rule_protocol)
-	@validate.param('server_port', optional=__rule_protocol)
-	@validate.param('backend', optional=__rule_backend)
+	#@rpc.service_method
+	#@validate.param('port', 'server_port', type=int)
+	#@validate.param('protocol', required=_rule_protocol)
+	#@validate.param('server_port', optional=True, type=int)
+	#@validate.param('backend', optional=_rule_backend)
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
 
@@ -44,8 +44,11 @@ class HAProxyAPI(object):
 		bnd = haproxy.naming('backend', protocol, port, backend=backend)
 		listener = backend = None
 		LOG.debug('HAProxyAPI.create_listener: listener = `%s`, backend = `%s`', ln, bnd)
-		if ln in self.cfg.listeners:
+		
+		if self.cfg.listeners and ln in self.cfg.listeners:
 			raise exceptions.Duplicate('Listener %s:%s already exists' % (protocol, port))
+		#else:
+		#	raise ValueError('self.cfg.listeners is: `%s`, ' % (self.cfg.listeners, ))
 
 		if protocol == 'tcp':
 			listener = {'balance': 'roundrobin'}
@@ -87,7 +90,7 @@ class HAProxyAPI(object):
 	
 	
 	@rpc.service_method
-	@validate.param('target', required=__rule_hc_target)
+	@validate.param('target', required=_rule_hc_target)
 	@validate.param('interval', 'timeout', re=r'^\d+[sm]$')
 	@validate.param('fall_threshold', 'rise_threshold', type=int)
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
@@ -120,7 +123,7 @@ class HAProxyAPI(object):
 
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
-	@validate.param('backend', optional=__rule_backend)
+	@validate.param('backend', optional=_rule_backend)
 	def add_server(self, ipaddr=None, backend=None):
 
 		self.cfg.reload()
@@ -151,7 +154,7 @@ class HAProxyAPI(object):
 
 	@rpc.service_method
 	@validate.param('port', type=int)
-	@validate.param('protocol', required=__rule_protocol)
+	@validate.param('protocol', required=_rule_protocol)
 	def delete_listener(self, port=None, protocol=None):
 		try:
 			server_paths = self.cfg.sections(haproxy.naming('listener', protocol, port))
@@ -160,22 +163,23 @@ class HAProxyAPI(object):
 			return True
 		except:
 			LOG.debug('Exception in HAProxyAPI.delete_listener. Details: %s', sys.exc_info()[1])
-
+		#TODO: rewrite config
 
 	@rpc.service_method
-	@validate.param('target', required=__rule_hc_target)
+	@validate.param('target', required=_rule_hc_target)
 	def reset_healthcheck(self, target):		
 		pass
 
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
-	@validate.param('backend', optional=__rule_backend)
+	@validate.param('backend', optional=_rule_backend)
 	def remove_server(self, ipaddr=None, backend=None):
 
 		server_paths = self.cfg.sections(haproxy.naming('backend', backend=backend))
 		for path in server_paths:
 			self.cfg.conf.remove(self.cfg.backend[path][ipaddr.replace('.', '-')].xpath)
 
+		#TODO: rewrite config
 
 	@rpc.service_method
 	def list_listeners(self):
@@ -196,7 +200,7 @@ class HAProxyAPI(object):
 
 
 	@rpc.service_method
-	@validate.param('backend', optional=__rule_backend)
+	@validate.param('backend', optional=_rule_backend)
 	def list_servers(self, backend=None):
 		pass
 	
