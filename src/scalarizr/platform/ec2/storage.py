@@ -222,7 +222,8 @@ class EbsVolumeProvider(VolumeProvider):
 		super(EbsVolumeProvider, self).destroy(vol)
 		conn = self._new_ec2_conn()
 		if conn:
-			ebstool.detach_volume(conn, vol.id, self._logger)
+			if not vol.detached:
+				ebstool.detach_volume(conn, vol.id, self._logger)
 			ebstool.delete_volume(conn, vol.id, self._logger)
 		vol.device = None							
 	
