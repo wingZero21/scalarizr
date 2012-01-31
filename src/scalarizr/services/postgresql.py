@@ -183,24 +183,24 @@ class PostgreSql(BaseService):
 		user._create_system_user(password)
 		return user	
 	
-	def create_pg_role(self, name, super=True):
+	def create_pg_role(self, name, password=None, super=True):
 		self.set_trusted_mode()
 		user = PgUser(name)	
 		self.service.start()
 		user._create_pg_database()
-		user._create_role(super)
+		user._create_role(password, super)
 		self.set_password_mode()
 		return user			
 
 	def set_trusted_mode(self):
 		self.pg_hba_conf.set_trusted_access_mode()
 		#Temporary we need to force restart the service 
-		self.service.restart(reason='Applying trusted mode', force=True)
+		self.service.reload(reason='Applying trusted mode', force=True)
 	
 	def set_password_mode(self):
 		self.pg_hba_conf.set_password_access_mode()
 		#Temporary we need to force restart the service 
-		self.service.restart(reason='Applying password mode', force=True)
+		self.service.reload(reason='Applying password mode', force=True)
 
 	def _init_service(self, mpoint):
 		password = None 
@@ -459,7 +459,7 @@ class PgUser(object):
 		file = open(PASSWD_FILE, 'r')
 		return -1 != file.read().find(self.name)
 
-	def _create_role(self, super=True):
+	def _create_role(self, password=None, super=True):
 		if self._is_role_exist:
 			self._logger.debug('Cannot create role: role %s already exists' % self.name)
 		else:
@@ -470,6 +470,8 @@ class PgUser(object):
 			except PopenError, e:
 				self._logger.error('Unable to create role %s: %s' % (self.name, e))
 				raise
+		if password:
+			self.psql.execute("ALTER USER %s WITH PASSWORD '%s';" % (self.name, password))
 		
 	def _create_pg_database(self):
 		if self._is_pg_database_exist:
@@ -987,7 +989,7 @@ class PgHbaConf(Configuration):
 		return PgHbaRecord('host','replication', user=user,address='%s/32'%ip, auth_method='trust')
 	
 	def _make_app_record(self,ip):
-		return PgHbaRecord(host='host', address='%s/32'%ip, auth_method='password')
+		return PgHbaRecord(host='host', address='%s/32'%ip, auth_method='md5')
 	
 	
 class ParseError(BaseException):
