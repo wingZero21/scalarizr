@@ -63,6 +63,7 @@ class HaproxyFormatProvider(IniFormatProvider):
 					value = values[0]
 					bind = ET.SubElement(self._cursect, 'bind')
 					bind.text = ' '.join(values[1:])
+					bind.attrib['mc_type'] = 'option'
 			self._cursect.text = value.strip()
 			return True
 		return False
