@@ -320,10 +320,13 @@ def _start_services():
 def _apply_user_data(cnf):
 	logger = logging.getLogger(__name__)
 	platform = bus.platform
-	g = platform.get_user_data
+	
+	def g(key):
+		value = platform.get_user_data(key)
+		return value if value is not None else ''	
 	
 	logger.debug('Applying user-data to configuration')
-	logger.debug('User-data:\n%s', pprint.pformat(g()))
+	logger.debug('User-data:\n%s', pprint.pformat(platform.get_user_data()))
 	updates = dict(
 		general={
 			'server_id' : g(UserDataOptions.SERVER_ID),
