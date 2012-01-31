@@ -195,12 +195,14 @@ class PostgreSql(BaseService):
 	def set_trusted_mode(self):
 		self.pg_hba_conf.set_trusted_access_mode()
 		#Temporary we need to force restart the service 
-		self.service.reload(reason='Applying trusted mode', force=True)
+		if self.service.running:
+			self.service.reload(reason='Applying trusted mode', force=True)
 	
 	def set_password_mode(self):
 		self.pg_hba_conf.set_password_access_mode()
 		#Temporary we need to force restart the service 
-		self.service.reload(reason='Applying password mode', force=True)
+		if self.service.running:
+			self.service.reload(reason='Applying password mode', force=True)
 
 	def _init_service(self, mpoint):
 		password = None 
