@@ -14,9 +14,9 @@ import sys
 
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
-	'timeout': '3s',  
-	'interval': '30s', 
-	'fall_threshold': 2, 
+	'timeout': {'check':'3s'},  
+	'interval': '30s',
+	'fall_threshold': 2,
 	'rise_threshold': 10
 }
 
@@ -72,7 +72,7 @@ class HAProxyAPI(object):
 		# apply defaults 
 		backend.update({
 			'mode': protocol,
-			'timeout': HEALTHCHECK_DEFAULTS['timeout'],
+			'timeout': {'':HEALTHCHECK_DEFAULTS['timeout']},
 			'default-server': {
 				'fall': HEALTHCHECK_DEFAULTS['fall_threshold'],
 				'rise': HEALTHCHECK_DEFAULTS['rise_threshold'],
@@ -89,8 +89,8 @@ class HAProxyAPI(object):
 					self.cfg['backend'][bnd] = backend
 				self.cfg.save()
 				self.svs.reload()
-	
-	
+
+
 	@rpc.service_method
 	@validate.param('target', required=_rule_hc_target)
 	@validate.param('interval', 'timeout', re=r'^\d+[sm]$')
@@ -100,14 +100,12 @@ class HAProxyAPI(object):
 		'''
 		target='http:8080', 
         interval='5s', 
-        timeout='3s', 
+        timeout={'':'3s', 'check': '3s'}, 
         fall_threshold=2, 
         rise_threshold=10
-
-        timeout check 3s
         default-server fall 2 rise 10 inter 5s
 		'''
-		
+		'''
 		#TODO: uncompleted
 		for bnd in self.cfg.sections():
 
@@ -121,7 +119,8 @@ class HAProxyAPI(object):
 						('rise %s' % rise_threshold) if rise_threshold else '',
 						('inter %s' % interval) if interval else '']	
 					self.cfg.save()
-					self.svs.reload()
+					self.svs.reload()'''
+		pass
 
 	'''
 	@rpc.service_method
