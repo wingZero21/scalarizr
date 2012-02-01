@@ -333,9 +333,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 		try:
 			bus.fire('before_postgresql_data_bundle')
 			# Retrieve password for scalr postgresql root user
-			root_password = self.postgresql.root_user.password
 			# Creating snapshot		
-			snap = self._create_snapshot(ROOT_USER, root_password)
+			snap = self._create_snapshot()
 			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
 			bus.fire('postgresql_data_bundle', snapshot_id=snap.id)			
 			
@@ -410,7 +409,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				
 			if not master_storage_conf:
 									
-				snap = self._create_snapshot(ROOT_USER, message.root_password)
+				snap = self._create_snapshot()
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol, snap)
 				
@@ -594,7 +593,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		#TODO: add xlog
 			
 		# Create snapshot
-		snap = self._create_snapshot(ROOT_USER, root_password)
+		snap = self._create_snapshot()
 		
 		Storage.backup_config(snap.config(), self._snapshot_config_path)
 	
@@ -691,14 +690,14 @@ class PostgreSqlHander(ServiceCtlHandler):
 		return vol
 
 
-	def _create_snapshot(self, root_user, root_password, dry_run=False):
+	def _create_snapshot(self):
 		psql = PSQL()
 		if self.postgresql.service.running:
 			psql.start_backup()
 		
 		system2('sync', shell=True)
 		# Creating storage snapshot
-		snap = None if dry_run else self._create_storage_snapshot()
+		snap = self._create_storage_snapshot()
 		if self.postgresql.service.running:
 			psql.stop_backup()
 		
