@@ -203,7 +203,9 @@ class RedisHandler(ServiceCtlHandler):
 					
 					
 	def on_before_reboot_start(self, *args, **kwargs):
-		self.redis.service.stop('rebooting')
+		if self.redis.service.running:
+				self.redis.redis_cli.save()
+				self.redis.service.stop('rebooting')
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
