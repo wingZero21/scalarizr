@@ -14,7 +14,7 @@ import sys
 
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
-	'timeout': {'check':'3s'},  
+	'timeout': {'check':'22s'},  
 	'interval': '30s',
 	'fall_threshold': 2,
 	'rise_threshold': 10
@@ -39,6 +39,14 @@ class HAProxyAPI(object):
 	@validate.param('backend', optional=_rule_backend)'''
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
+
+		LOG.debug('----look at metaconf object Before UPDATE-------')
+		for el in self.cfg.sections('scalr:backend:role:1234:http:1154'):
+			LOG.debug('backend=`%s`', el)
+			path = self.cfg.backends[el].xpath
+			LOG.debug('!\n\n children=`%s`, path=`%s`\n\n',
+			self.cfg.conf.children(path), path)
+		LOG.debug('----looked out-------')
 
 		ln = haproxy.naming('listener', protocol, port)
 		bnd = haproxy.naming('backend', protocol, port, backend=backend)
@@ -72,13 +80,22 @@ class HAProxyAPI(object):
 		# apply defaults 
 		backend.update({
 			'mode': protocol,
-			'timeout': {'':HEALTHCHECK_DEFAULTS['timeout']},
+			'timeout': HEALTHCHECK_DEFAULTS['timeout'],
 			'default-server': {
 				'fall': HEALTHCHECK_DEFAULTS['fall_threshold'],
 				'rise': HEALTHCHECK_DEFAULTS['rise_threshold'],
 				'inter': HEALTHCHECK_DEFAULTS['interval']
 			}
 		})
+		
+		
+		LOG.debug('----look at metaconf object After UPDATE-------')
+		for el in self.cfg.sections('scalr:backend:role:1234:http:1154'):
+			LOG.debug('backend=`%s`', el)
+			path = self.cfg.backends[el].xpath
+			LOG.debug('!\n\n children=`%s`, path=`%s`\n\n',
+			self.cfg.conf.children(path), path)
+		LOG.debug('----looked out-------')
 		
 		# Apply changes
 		#with self.svs.trans(exit='running'):
@@ -100,7 +117,7 @@ class HAProxyAPI(object):
 		'''
 		target='http:8080', 
         interval='5s', 
-        timeout={'':'3s', 'check': '3s'}, 
+        timeout={'check': '3s'}, 
         fall_threshold=2, 
         rise_threshold=10
         default-server fall 2 rise 10 inter 5s

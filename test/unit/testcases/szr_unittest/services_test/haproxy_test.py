@@ -10,12 +10,13 @@ import logging
 
 from scalarizr.services import haproxy
 
+LOG = logging.getLogger(__name__)
+
 
 class TestHAProxyCfg(unittest.TestCase):
 	
 	def __init__(self, methodName='runTest'):
 		unittest.TestCase.__init__(self, methodName=methodName)
-		self.logger = logging.getLogger(__name__)
 	
 	def setUp(self):
 		self.conf = haproxy.HAProxyCfg(os.path.dirname(__file__) + '/../../../resources/etc/haproxy.cfg')
@@ -197,23 +198,23 @@ class TestHAProxyCfg(unittest.TestCase):
 
 
 	def test_set_timeout(self):
-		
+
 		temp = {
 			'server': {'app9': {'address': '127.0.0.1', 'check': True, 'port': '5009'}},
 			'timeout': {'':'2s','check': '22s', 'client': '5s'},
 			}
-		
+
 		self.conf['backend']['scalr:backend:12345'] = temp	
-		
+
 		self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout']['check'], '22s')
 		self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout'][''], '2s')
-		
+
 		self.conf['backend']['scalr:backend:12345']['timeout'][''] = '12s'
 		self.conf['backend']['scalr:backend:12345']['timeout']['check'] = '2s'
-		
+
 		self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout']['check'], '2s')
 		self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout'][''], '12s')
-			
+
 		#self.conf['backend']['scalr:backend:12345']['timeout'] = '8s'
 		#self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout'][''], '8s')
 

@@ -5,10 +5,12 @@ Created on 26.01.2012
 '''
 import unittest
 import os
+import logging
 
 from scalarizr.api import haproxy
 from scalarizr.services import haproxy as hap_serv
 
+LOG = logging.getLogger(__name__)
 
 class TestHAProxyAPI(unittest.TestCase):
 
@@ -24,9 +26,19 @@ class TestHAProxyAPI(unittest.TestCase):
 
 		self.api.create_listener(protocol=protocol, port=port, server_port=server_port, 
 			backend=backend)
+		
+		for el in self.api.cfg.sections('backend:role:1234:http:1154'):
+			LOG.debug('backend=`%s`', el)
+			path = self.api.cfg.backends[el].xpath
+			LOG.debug('!\n\n children=`%s`, path=`%s`\n\n',
+				self.api.cfg.conf.children(path), path)
+			
+		'''
 		ln = hap_serv.naming('listener', protocol, port)
 		bnd = hap_serv.naming('backend', protocol, port, backend=backend)
 
+		LOG.debug('listener=`%s`; backend=`%s`', ln, bnd)
+		
 		self.assertEqual(self.api.cfg.listener[ln]['balance'], 'roundrobin')
 		self.assertEqual(self.api.cfg.listener[ln]['mode'], protocol)
 		
@@ -34,7 +46,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		
 		self.assertEqual(self.api.cfg.listener[ln]['balance'], 'roundrobin')
 		
-		self.assertEqual(self.api.cfg.listener[ln]['mode'], protocol)
+		self.assertEqual(self.api.cfg.listener[ln]['mode'], protocol)'''
 
 	def test_configure_healthcheck(self):
 		pass
