@@ -212,7 +212,9 @@ class RedisHandler(ServiceCtlHandler):
 
 	def on_BeforeHostTerminate(self, message):
 		if message.local_ip == self._platform.get_private_ip():
-			self.redis.service.stop('Server will be terminated')
+			if self.redis.service.running:
+				self.redis.redis_cli.save()
+				self.redis.service.stop('Server will be terminated')
 			self._logger.info('Detaching Redis storage')
 			self.storage_vol.detach()
 	
