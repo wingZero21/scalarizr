@@ -285,9 +285,6 @@ class PostgreSql(BaseService):
 	trigger_file = property(_get_trigger_file, _set_trigger_file)
 
 	
-postgresql = PostgreSql()
-
-	
 class PgUser(object):
 	name = None
 	psql = None
