@@ -969,7 +969,7 @@ class PgHbaConf(Configuration):
 		self.add_record(self.password_mode)
 
 	def allow_local_connections(self):
-		record = PgHbaRecord('local', 'all', 'all', address='127.0.0.1/32', auth_method = 'md5')
+		record = PgHbaRecord('host', 'all', 'all', address='127.0.0.1/32', auth_method = 'md5')
 		self.add_record(record, replace_similar=True)
 			
 	def _make_standby_record(self,ip, user='postgres'):
