@@ -931,6 +931,7 @@ class PgHbaConf(Configuration):
 	def delete_record(self, record, delete_similar=False):
 		deleted = []
 		lines = []
+		changed = False
 		for old_record in self.records:
 			if (old_record == record) or (delete_similar and old_record.is_similar_to(record)):
 				deleted.append(str(old_record))
