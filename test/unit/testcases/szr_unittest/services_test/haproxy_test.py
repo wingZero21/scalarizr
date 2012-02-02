@@ -65,8 +65,8 @@ class TestHAProxyCfg(unittest.TestCase):
 		self.conf['backend']['app']['server']['app2'] = {'address': '127.0.0.1', 'check': True, 'port': '522'}	
 		self.assertEqual(self.conf['backend']['app']['server']['app2'],
 			{'address': '127.0.0.1', 'check': True, 'port': '522'})
-	
-	
+
+
 	'''
 	def test_set_newsection(self):
 		self.conf['backend'] = '192.168.0.1:8080'

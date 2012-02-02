@@ -287,7 +287,6 @@ class HAProxyCfg(filetool.ConfigurationFile):
 		params = filter.split(':')[1:]
 		LOG.debug('	filter params `%s`' % params)
 		path = './%s' % params.pop(0)
-
 		result = []
 		index = 1
 		for section in self.conf.get_list(path):
@@ -301,8 +300,27 @@ class HAProxyCfg(filetool.ConfigurationFile):
 				result.append(section)
 			index += 1
 		return result
+	
+	def el_in_path(self, path, key):
+		'''Find key in any of children in path. If key found return True'''
+		childrens = list(set(self.conf.children(path))) # path as ./listen[0]
+		for children in childrens:
+			obj = self.conf.get('%s/%s' % (path, children))
+			if isinstance(obj, str):
+				if key in obj:
+					LOG.debug('	key `%s` found at pat=`%s`', key, '%s/%s' % (path, children))
+					return True
+			else:
+				index = 1
+				for line in self.conf.get('%s/%s[%s]' % (path, children, index)):
+					if key in line:
+						LOG.debug('	key `%s` found at pat=`%s/%s[%s]`', key, (path, children, index))
+						return True
+					index += 1
+
 
 	def save(self, path=None):
+		'''Write cfg in path file. If path not define, it use HAProxyCfg path'''
 		LOG.debug('services.haproxy.HAProxyCfg.save')
 		try:
 			LOG.debug('	HAProxyCfg.save: cnf_path = `%s`' % (path or self.cnf_path))
@@ -312,6 +330,7 @@ class HAProxyCfg(filetool.ConfigurationFile):
 				' `%s`'%sys.exc_info()[1]
 
 	def reload(self):
+		'''Reload metaconf.Configuration object inside HAProxyCfg'''
 		LOG.debug('services.haproxy.HAProxyCfg.reload path=`%s`', self.cnf_path)
 		self.conf = metaconf.Configuration('haproxy')
 		self.conf.read(self.cnf_path)
@@ -322,7 +341,8 @@ class OptionSerializer(object):
 		LOG.debug('OptionSerializer.unserialize: input `%s`', s)
 		value = filter(None, map(string.strip, s.replace('\t', ' ').split(' ')))\
 						if isinstance(s, str) else s
-		if len(value) == 0:
+		
+		if not value or len(value) == 0:
 			return True
 		elif len(value) == 1:
 			return value[0]

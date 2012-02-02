@@ -41,16 +41,18 @@ class HAProxyAPI(object):
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
 
-		ln = haproxy.naming('listener', protocol, port)
+		ln = haproxy.naming('listen', protocol, port)
 		bnd = haproxy.naming('backend', protocol, port, backend=backend)
 		listener = backend = None
 		LOG.debug('HAProxyAPI.create_listener: listener = `%s`, backend = `%s`', ln, bnd)
 		
-		if self.cfg.listeners and ln in self.cfg.listeners:
-			raise exceptions.Duplicate('Listener %s:%s already exists' % (protocol, port))
-		#else:
-		#	raise ValueError('self.cfg.listeners is: `%s`, ' % (self.cfg.listeners, ))
-
+		try:
+			if self.cfg.listener[ln]:
+				raise 'Duplicate'
+		except Exception, e:
+			if 'Duplicate' in e:
+				raise exceptions.Duplicate('Listener %s:%s already exists' % (protocol, port))
+	
 		if protocol == 'tcp':
 			listener = {'balance': 'roundrobin'}
 		elif protocol == 'http':
@@ -80,7 +82,6 @@ class HAProxyAPI(object):
 				'inter': HEALTHCHECK_DEFAULTS['interval']
 			}
 		})
-
 		# Apply changes
 		#with self.svs.trans(exit='running'):
 		#	with self.cfg.trans(enter='reload', exit='working'):
@@ -88,41 +89,46 @@ class HAProxyAPI(object):
 				self.cfg['listen'][ln] = listener
 				if not self.cfg.backend or not bnd in self.cfg.backend:
 					self.cfg['backend'][bnd] = backend
-				
+
 				self.cfg.save()
 				self.svs.reload()
 
 
+	'''
 	@rpc.service_method
 	@validate.param('target', required=_rule_hc_target)
 	@validate.param('interval', 'timeout', re=r'^\d+[sm]$')
-	@validate.param('fall_threshold', 'rise_threshold', type=int)
+	@validate.param('fall_threshold', 'rise_threshold', type=int)'''
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							fall_threshold=None, rise_threshold=None):
-		'''
-		target='http:8080', 
-        interval='5s', 
-        timeout={'check': '3s'},
-        fall_threshold=2, 
-        rise_threshold=10
-        default-server fall 2 rise 10 inter 5s
-		'''
-		'''
-		#TODO: uncompleted
-		for bnd in self.cfg.sections():
+		'''Updating filds default-server, timeout, server in `tartget` backend sections'''
+		
+		bnds = haproxy.naming('backend', backend=target)  
+		if not self.cfg.sections(bnds):
+			raise exceptions.NotFound('Backend `%s` not found' % target)
+		
+		for bnd in self.cfg.sections(bnds):
+			if timeout:
+				self.cfg['backend'][bnd]['timeout'] = timeout
+					
+			default_server = {}
+			if fall_threshold: default_server.update({'fall': fall_threshold})
+			if rise_threshold: default_server.update({'rise': rise_threshold})
+			if interval: default_server.update({'inter': interval})
 
-			with self.svs.trans(exit='running'):
-				with self.cfg.trans(enter='reload', exit='working'):
-					#if not bnd in self.cfg.backend:
-					if timeout:
-						self.cfg['backend'][bnd]['timeout'] = ['check', timeout]
-					self.cfg['backend'][bnd]['default-server'] = [
-						('fall %s' % fall_threshold) if fall_threshold else '',
-						('rise %s' % rise_threshold) if rise_threshold else '',
-						('inter %s' % interval) if interval else '']	
-					self.cfg.save()
-					self.svs.reload()'''
-		pass
+			self.cfg['backend'][bnd]['default-server'] = default_server
+
+			for srv in self.cfg['backend'][bnd]['server']:
+				server = self.cfg['backend'][bnd]['server'][srv.split(' ')[0]]
+				server.update({'check' : True})
+				self.cfg['backend'][bnd]['server'][srv.split(' ')[0]] = server
+		
+		#with self.svs.trans(exit='running'):
+			#	with self.cfg.trans(enter='reload', exit='working'):
+			#TODO: with...
+		self.cfg.save()
+		self.svs.reload()
+
 
 	'''
 	@rpc.service_method
@@ -133,7 +139,7 @@ class HAProxyAPI(object):
 		LOG.debug('HAProxyAPI.add_server')
 		LOG.debug('	%s' % haproxy.naming('backend', backend=backend))
 		bnds = self.cfg.sections(haproxy.naming('backend', backend=backend))
-		
+
 		if not bnds:
 			if backend:
 				raise exceptions.NotFound('Backend not found: %s' % (backend, ))
@@ -149,6 +155,7 @@ class HAProxyAPI(object):
 							'port': bnd.split(':')[-1],
 							'check': True}
 					self.cfg.backends[bnd]['server'][ipaddr.replace('.', '-')] = server
+
 				self.cfg.save()
 				self.svs.reload()
 
@@ -163,27 +170,70 @@ class HAProxyAPI(object):
 	@validate.param('port', type=int)
 	@validate.param('protocol', required=_rule_protocol)'''
 	def delete_listener(self, port=None, protocol=None):
-		try:
-			server_paths = self.cfg.sections(haproxy.naming('listener', protocol, port))
-			for path in server_paths:
-				self.cfg.conf.remove(self.cfg.backend[path].xpath)
-			return True
-		except:
-			LOG.debug('Exception in HAProxyAPI.delete_listener. Details: %s', sys.exc_info()[1])
-		#TODO: rewrite config
+		''' Delete listen section(s) by port (and)or protocol '''
 
+		ln = haproxy.naming('listen', protocol, port)
+		if not self.cfg.sections(ln):
+			raise exceptions.NotFound('Listen `%s` not found can`t remove it' % ln)
+
+		try:
+			default_backend = self.cfg.listener[ln]['default_backend']
+		except:
+			default_backend = None
+
+		for path in self.cfg.sections(ln):
+			self.cfg.conf.remove(self.cfg.listener[path].xpath)
+			LOG.debug('HAProxyAPI.delete_listener: remove listener `%s`' % ln)
+		if default_backend:
+			flag = True
+			for lnr in self.cfg.listener:
+				if self.cfg.el_in_path(self.cfg.listener[lnr].xpath, default_backend):
+					flag = False
+					break
+			if flag:
+				#not used in other section, so it will be deleting
+				self.cfg.conf.remove(self.cfg.backends[default_backend].xpath)
+
+		self.cfg.save()
+		self.svs.reload()
+
+	'''
 	@rpc.service_method
-	@validate.param('target', required=_rule_hc_target)
+	@validate.param('target', required=_rule_hc_target)'''
 	def reset_healthcheck(self, target):		
-		pass
+		'''Return to defaults for `tartget` backend sections'''
+		
+		bnds = haproxy.naming('backend', backend=target)
+		if not self.cfg.sections(bnds):
+			raise exceptions.NotFound('Backend `%s` not found' % target)
+		
+		for bnd in self.cfg.sections(bnds):
+			#TODO: what fields we need to change? all? or only some as in configure_healthcheck
+
+			self.cfg['backend'][bnd]['default-server'] = {
+				'fall': HEALTHCHECK_DEFAULTS['fall_threshold'],
+				'rise': HEALTHCHECK_DEFAULTS['rise_threshold'],
+				'inter': HEALTHCHECK_DEFAULTS['interval']
+				}
+
+			self.cfg['backend'][bnd]['timeout'] = HEALTHCHECK_DEFAULTS['timeout'] 
+			
+			#TODO: need to delete check'ing in server's options?
+		
+		#with self.svs.trans(exit='running'):
+			#	with self.cfg.trans(enter='reload', exit='working'):
+			#TODO: with...
+		self.cfg.save()
+		self.svs.reload()
+
 
 	'''
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
 	@validate.param('backend', optional=_rule_backend)'''
 	def remove_server(self, ipaddr=None, backend=None):
+		'''Removing server from backend secection with ipaddr'''
 		server_paths = self.cfg.sections(haproxy.naming('backend', backend=backend))
-		
 		for path in server_paths:
 			try:
 				for el in self.cfg.backends[path]['server']:
@@ -197,13 +247,12 @@ class HAProxyAPI(object):
 					index += 1
 			except:
 				index = -1
-			
 			if index != -1:
 				self.cfg.conf.remove('%s[%s]' % (self.cfg.backends[path]['server'].xpath, index))
 
 			self.cfg.save()
-			self.cfg.reload()
-		
+			self.svs.reload()
+
 
 	@rpc.service_method
 	def list_listeners(self):
