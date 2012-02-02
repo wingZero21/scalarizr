@@ -117,7 +117,7 @@ class MongoDBMessages:
 	INT_CREATE_BOOTSTRAP_WATCHER = "MongoDb_IntCreateBootstrapWatcher"
 	
 	INT_BOOTSTRAP_WATCHER_RESULT = "MongoDb_IntBootstrapWatcherResult"
-	
+
 	
 	CLUSTER_TERMINATE = "MongoDb_ClusterTerminate"
 	
@@ -170,7 +170,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				MongoDBMessages.CREATE_DATA_BUNDLE,
 				MongoDBMessages.CREATE_BACKUP,
 				MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER,
-				MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT,
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE,
 				MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
 				MongoDBMessages.CLUSTER_TERMINATE,
