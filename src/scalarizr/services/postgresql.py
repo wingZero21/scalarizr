@@ -214,6 +214,8 @@ class PostgreSql(BaseService):
 			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
 			self.postgresql_conf = PostgresqlConf.find(self.config_dir)
 			self.pg_hba_conf = PgHbaConf.find(self.config_dir)
+			
+		self.pg_hba_conf.allow_local_connections()
 		
 
 	def _set(self, key, obj):
@@ -305,7 +307,7 @@ class PgUser(object):
 	def exists(self):
 		return self._is_system_user_exist and self._is_role_exist and self._is_pg_database_exist
 
-	def change_password(self, new_pass):
+	def change_system_password(self, new_pass):
 		self._logger.debug('Changing password of system user %s to %s' % (self.name, new_pass)) 
 		out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
 		shadow_password = out.strip()
@@ -434,10 +436,10 @@ class PgUser(object):
 			except PopenError, e:
 				self._logger.error('Unable to create role %s: %s' % (self.name, e))
 				raise
-		if password:
-			self.change_role_password(password)
+		self.change_role_password(password)
 			
 	def change_role_password(self, password):
+		self._logger.debug('Changing password to %s for role %s' %(self.name, password))
 		self.psql.execute("ALTER USER %s WITH PASSWORD '%s';" % (self.name, password))
 		
 	def _create_pg_database(self):
@@ -897,6 +899,7 @@ class PgHbaConf(Configuration):
 	trusted_mode = PgHbaRecord('local', 'all', 'postgres', auth_method = 'trust')
 	password_mode = PgHbaRecord('local', 'all', 'postgres', auth_method = 'password')
 	
+	
 	def __init__(self, config_dir_path):
 		self.config_dir_path = config_dir_path
 		self.path = os.path.join(self.config_name, config_dir_path)
@@ -906,24 +909,37 @@ class PgHbaConf(Configuration):
 	def find(cls, config_dir):
 		return cls(os.path.join(config_dir.path, cls.config_name))
 	
-	def add_record(self, record):
+	@property
+	def records(self):
+		l = []
 		text = read_file(self.path) or ''
 		for line in text.splitlines():
-			if  line.strip() and not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
-				#already in file
-				return
-		write_file(self.path, str(record)+'\n' if text.endswith('\n') else '\n'+str(record)+'\n', 'a')
+			if line.strip() and not line.strip().startswith('#'):
+				record = PgHbaRecord.from_string(line)
+				l.append(record)
+		return l
+	
+	def add_record(self, record, replace_similar=False):
+		if replace_similar:
+			for old_record in self.records:
+				if old_record.is_similar_to(record):
+					self.delete_record(old_record)
+		if record not in self.records:
+			self._logger.debug('Adding record "%s" to %s' % (str(record),self.path))
+			write_file(self.path, '\n'+str(record)+'\n', 'a')
 			
-	def delete_record(self, record):
+	def delete_record(self, record, delete_similar=False):
+		deleted = []
 		lines = []
-		changed = False
-		text = read_file(self.path) or ''
-		for line in text.splitlines():
-			if line.strip() and not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
+		for old_record in self.records:
+			if (old_record == record) or (delete_similar and old_record.is_similar_to(record)):
+				deleted.append(str(old_record))
 				changed = True
 				continue
-			lines.append(line)
+			else:
+				lines.append(str(old_record))
 		if changed:
+			self._logger.debug('Removing records "%s" from %s' % (deleted,self.path))
 			write_file(self.path, '\n'.join(lines))
 	
 	def add_standby_host(self, ip, user='postgres'):
@@ -951,7 +967,11 @@ class PgHbaConf(Configuration):
 	def set_password_access_mode(self):
 		self.delete_record(self.trusted_mode)
 		self.add_record(self.password_mode)
-	
+
+	def allow_local_connections(self):
+		record = PgHbaRecord('local', 'all', 'all', address='127.0.0.1/32', auth_method = 'md5')
+		self.add_record(record, replace_similar=True)
+			
 	def _make_standby_record(self,ip, user='postgres'):
 		return PgHbaRecord('host','replication', user=user,address='%s/32'%ip, auth_method='trust')
 	
