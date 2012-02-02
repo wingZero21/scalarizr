@@ -438,7 +438,10 @@ class PgUser(object):
 				self._logger.error('Unable to create role %s: %s' % (self.name, e))
 				raise
 		if password:
-			self.psql.execute("ALTER USER %s WITH PASSWORD '%s';" % (self.name, password))
+			self.change_role_password(password)
+			
+	def change_role_password(self, password):
+		self.psql.execute("ALTER USER %s WITH PASSWORD '%s';" % (self.name, password))
 		
 	def _create_pg_database(self):
 		if self._is_pg_database_exist:
