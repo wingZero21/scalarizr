@@ -607,7 +607,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 		
-		self.postgresql.init_master(mpoint=self._storage_path, self.root_password)
+		self.postgresql.init_master(mpoint=self._storage_path, password=self.root_password)
 		
 		msg_data = dict()
 		msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.is_replication_master)),
