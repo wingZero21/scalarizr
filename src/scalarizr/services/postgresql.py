@@ -14,16 +14,15 @@ import logging
 from M2Crypto import RSA
 
 from scalarizr.libs.metaconf import Configuration
-from scalarizr.util import disttool, cryptotool, firstmatched, wait_until
+from scalarizr.util import disttool, firstmatched, wait_until
 from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, PopenError
 from scalarizr.util.filetool import read_file, write_file, rchown
 from scalarizr.services import BaseService, BaseConfig, lazy
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL #TODO: remove extra
+SERVICE_NAME = BuiltinBehaviours.POSTGRESQL 
 
 SU_EXEC = '/bin/su'
 USERMOD = '/usr/sbin/usermod'
@@ -38,8 +37,6 @@ CREATEDB = '/usr/bin/createdb'
 PG_DUMP = '/usr/bin/pg_dump'
 
 ROOT_USER 				= "scalr"
-
-OPT_REPLICATION_MASTER  = "replication_master"
 
 STORAGE_DATA_DIR 		= "data"
 TRIGGER_NAME 			= "trigger"
@@ -99,11 +96,11 @@ class PostgreSql(BaseService):
 								cls, *args, **kwargs)
 		return cls._instance
 	
-	def __init__(self):
+	def __init__(self, pg_keys_dir):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
+		self.pg_keys_dir = pg_keys_dir
 	
 	@property
 	def version(self):
@@ -116,17 +113,10 @@ class PostgreSql(BaseService):
 
 	@property	
 	def unified_etc_path(self):
-		return '/etc/postgresql/%s/main' % self.version if float(self.version) else '9.0'
-
-					
-	@property
-	def is_replication_master(self):
-		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
-		self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
-		return True if int(value) else False
+		return '/etc/postgresql/%s/main' % self.version if float(self.version) else '9.0'					
 
 	
-	def init_master(self, mpoint, slaves=None):
+	def init_master(self, mpoint, password, slaves=None):
 		self._init_service(mpoint)
 		self.postgresql_conf.hot_standby = 'off'
 		
@@ -136,7 +126,7 @@ class PostgreSql(BaseService):
 				self.register_slave(host, force_restart=False)
 		self.service.start()
 		
-	def init_slave(self, mpoint, primary_ip, primary_port):
+	def init_slave(self, mpoint, primary_ip, primary_port, password):
 		self._init_service(mpoint)
 		
 		self.root_user.apply_public_ssh_key() 
@@ -177,15 +167,15 @@ class PostgreSql(BaseService):
 	def start_replication(self):
 		self.trigger_file.destroy()
 	
-	def create_user(self, name, password=None, sys_user_only=True):
-		user = PgUser(name)	
-		password = password or user.generate_password(20)
+	def create_user(self, name, password, sys_user_only=True):
+		user = PgUser(name, self.pg_keys_dir)	
+		#password = password or user.generate_password(20)
 		user._create_system_user(password)
 		return user	
 	
 	def create_pg_role(self, name, password=None, super=True):
 		self.set_trusted_mode()
-		user = PgUser(name)	
+		user = PgUser(name, self.pg_keys_dir)	
 		self.service.start()
 		user._create_pg_database()
 		user._create_role(password, super)
@@ -204,18 +194,7 @@ class PostgreSql(BaseService):
 		if self.service.running:
 			self.service.reload(reason='Applying password mode', force=True)
 
-	def _init_service(self, mpoint):
-		password = None 
-		
-		opt_pwd = '%s_password' % ROOT_USER
-		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
-			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
-			
-		#this is highly temporary solution 
-		if not password and self._cnf.rawini.has_option(CNF_SECTION, "root_password"):
-			password = self._cnf.rawini.get(CNF_SECTION, "root_password")
-		
-		
+	def _init_service(self, mpoint, password):
 		self.root_user = self.create_user(ROOT_USER, password)
 		
 		if not self.cluster_dir.is_initialized(mpoint):
@@ -290,7 +269,7 @@ class PostgreSql(BaseService):
 	def _get_root_user(self):
 		key = 'root_user'
 		if not self._objects.has_key(key):
-			self._objects[key] = PgUser(ROOT_USER)
+			self._objects[key] = PgUser(ROOT_USER, self.pg_keys_dir)
 		return self._objects[key]
 	
 	def _set_root_user(self, user):
@@ -312,18 +291,15 @@ postgresql = PostgreSql()
 class PgUser(object):
 	name = None
 	psql = None
-	
+	password = None
 	public_key_path = None
 	private_key_path = None
-	opt_user_password = None
 
-	def __init__(self, name, group='postgres'):
+	def __init__(self, name, pg_keys_dir, group='postgres'):
 		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
 			
-		self.public_key_path = self._cnf.key_path('%s_public_key.pem' % name)
-		self.private_key_path = self._cnf.key_path('%s_private_key.pem' % name)
-		self.opt_user_password = '%s_password' % name
+		self.public_key_path = os.path.join(pg_keys_dir, '%s_public_key.pem' % name)
+		self.private_key_path = os.path.join(pg_keys_dir, '%s_private_key.pem' % name)
 		
 		self.name = name
 		self.group = group
@@ -331,16 +307,8 @@ class PgUser(object):
 		
 	def exists(self):
 		return self._is_system_user_exist and self._is_role_exist and self._is_pg_database_exist
-		
-	@property
-	def password(self):
-		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
-		
-	def generate_password(self, length=20):
-		return cryptotool.pwgen(length)
 
-	def change_password(self, new_pass=None):
-		new_pass = new_pass or self.generate_password()
+	def change_password(self, new_pass):
 		self._logger.debug('Changing password of system user %s to %s' % (self.name, new_pass)) 
 		out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
 		shadow_password = out.strip()
@@ -354,16 +322,13 @@ class PgUser(object):
 			self._logger.error('Error changing password for ' + self.name)	
 		
 		#change password in privated/pgsql.ini
-		self.store_password(new_pass)
+		self.password = new_pass
 		
 		return new_pass
 	
 	def check_password(self, password=None):
 		#TODO: check (password or self.password), raise ValueError
 		pass
-
-	def store_password(self, password):
-		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})	
 
 		
 	def store_keys(self, pub_key=None, pvt_key=None):
@@ -499,7 +464,7 @@ class PgUser(object):
 			except PopenError, e:
 				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
 				raise
-		self.store_password(password)
+		self.password = password
 	
 	def _store_key(self, key_str, private=True):
 		write_file(self.private_key_path if private else self.public_key_path, data=key_str, logger=self._logger)

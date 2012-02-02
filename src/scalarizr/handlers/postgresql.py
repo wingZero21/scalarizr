@@ -16,10 +16,9 @@ from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.util.filetool import split, rchown
-from scalarizr.util import system2, wait_until, disttool, software, filetool
+from scalarizr.util import system2, wait_until, disttool, software, filetool, cryptotool
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, OPT_REPLICATION_MASTER,\
-	PgUser, SU_EXEC
+from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, PgUser, SU_EXEC
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 
 
@@ -37,6 +36,7 @@ OPT_ROOT_PASSWORD 			= "root_password"
 OPT_ROOT_SSH_PUBLIC_KEY 	= "root_ssh_public_key"
 OPT_ROOT_SSH_PRIVATE_KEY	= "root_ssh_private_key"
 OPT_CURRENT_XLOG_LOCATION	= 'current_xlog_location'
+OPT_REPLICATION_MASTER 		= "replication_master"
 
 BACKUP_CHUNK_SIZE 		= 200*1024*1024
 
@@ -114,7 +114,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 			'slave_promote_to_master'
 		)	
 		
-		self.postgresql = PostgreSql()
 		self.on_reload()		
 
 
@@ -165,9 +164,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self.postgresql.service.start()
 			self.accept_app_hosts()
 			
-			if self.postgresql.is_replication_master:
+			if self.is_replication_master:
 				self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
-				root_password = self.postgresql.root_user.password
+				root_password = self.root_password
 				if not self.postgresql.root_user.exists():
 					self._logger.debug("Scalr's PostgreSQL root user does not exist. Recreating")
 					self.postgresql.root_user = self.postgresql.create_user(ROOT_USER, root_password)
@@ -191,6 +190,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
+		
+		self.pg_keys_dir = self._cnf.private_path('keys')
+		self.postgresql = PostgreSql(self.pg_keys_dir)
 		
 	
 	def on_HostInit(self, message):
@@ -244,6 +246,27 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if app_hosts:
 			self.postgresql.service.reload('Granting access to all app servers.', force=True)
 				
+	
+	@property
+	def root_password(self):
+		password = None 
+		
+		opt_pwd = '%s_password' % ROOT_USER
+		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
+			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
+		return password
+			
+	def store_password(self, name, password):
+		opt_user_password = '%s_password' % name
+		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {opt_user_password:password}})
+			
+	@property
+	def is_replication_master(self):
+		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
+		self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
+		return True if int(value) else False
+	
+				
 		
 	def on_host_init_response(self, message):
 		"""
@@ -267,7 +290,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 		postgresql_data = message.postgresql.copy()
 
-		root = PgUser(ROOT_USER)
+		root = PgUser(ROOT_USER, self.pg_keys_dir)
 		root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
 		del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
 		del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]		
@@ -282,6 +305,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 					Storage.backup_config(postgresql_data[key], file)
 				del postgresql_data[key]
 		
+		root_user= postgresql_data[OPT_ROOT_USER]
+		postgresql_data['%s_password' % root_user] = postgresql_data.get(OPT_ROOT_PASSWORD) or cryptotool.pwgen(10)
+		del postgresql_data[OPT_ROOT_PASSWORD]
+		
 		self._logger.debug("Update postgresql config with %s", postgresql_data)
 		self._update_config(postgresql_data)
 
@@ -293,10 +320,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 		@param message: HostUp message
 		"""
 
-		repl = 'master' if self.postgresql.is_replication_master else 'slave'
+		repl = 'master' if self.is_replication_master else 'slave'
 		#bus.fire('before_postgresql_configure', replication=repl)
 		
-		if self.postgresql.is_replication_master:
+		if self.is_replication_master:
 			self._init_master(message)									  
 		else:
 			try:
@@ -325,7 +352,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self.postgresql.service.stop('Server will be terminated')
 			self._logger.info('Detaching PgSQL storage')
 			self.storage_vol.detach()
-		elif self.postgresql.is_replication_master:
+		elif self.is_replication_master:
 			self.postgresql.unregister_slave(message.local_ip)	
 
 	def on_DbMsr_CreateDataBundle(self, message):
@@ -369,7 +396,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self._logger.error('Wrong db_type in DbMsr_PromoteToMaster message: %s' % message.db_type)
 			return
 		
-		if self.postgresql.is_replication_master:
+		if self.is_replication_master:
 			self._logger.warning('Cannot promote to master. Already master')
 			return
 		
@@ -403,8 +430,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
-				
-			self.postgresql.init_master(self._storage_path, slaves)
+					
+			self.postgresql.init_master(self._storage_path, self.root_password, slaves)
 			self._update_config({OPT_REPLICATION_MASTER : "1"})	
 				
 			if not master_storage_conf:
@@ -454,7 +481,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 		postgresql_data = message.postgresql.copy()
 		
-		if self.postgresql.is_replication_master:
+		if self.is_replication_master:
 			self._logger.debug('Skipping NewMasterUp. My replication role is master')	
 			return 
 		
@@ -480,8 +507,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 			Storage.backup_config(vol.config(), self._volume_config_path)
 			Storage.backup_config(snap_data, self._snapshot_config_path)
 			self.storage_vol = vol
-			
-		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
+		
+		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT, self.root_password)
 			
 		self._logger.debug("Replication switched")
 		bus.fire('postgresql_change_master', host=host)
@@ -580,17 +607,13 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 		
-		
-		self.postgresql.init_master(mpoint=self._storage_path)
-		root_password = self.postgresql.root_user.password
+		self.postgresql.init_master(mpoint=self._storage_path, self.root_password)
 		
 		msg_data = dict()
-		
-		msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.postgresql.is_replication_master)),
+		msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.is_replication_master)),
 							OPT_ROOT_USER				:	self.postgresql.root_user.name,
-							OPT_ROOT_PASSWORD			:	root_password,
+							OPT_ROOT_PASSWORD			:	self.root_password,
 							OPT_CURRENT_XLOG_LOCATION	: 	None})	
-		#TODO: add xlog
 			
 		# Create snapshot
 		snap = self._create_snapshot()
@@ -653,7 +676,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				master_host.internal_ip, master_host.external_ip)
 		
 		host = master_host.internal_ip or master_host.external_ip
-		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT)
+		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT, self.root_password)
 		
 		# Update HostUp message
 		message.postgresql = self._compat_storage_data(self.storage_vol)
