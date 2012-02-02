@@ -922,7 +922,7 @@ class PgHbaConf(Configuration):
 	def add_record(self, record, replace_similar=False):
 		if replace_similar:
 			for old_record in self.records:
-				if old_record.is_similar_to(record):
+				if old_record != record and old_record.is_similar_to(record):
 					self.delete_record(old_record)
 		if record not in self.records:
 			self._logger.debug('Adding record "%s" to %s' % (str(record),self.path))
