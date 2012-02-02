@@ -439,7 +439,7 @@ class PgUser(object):
 		self.change_role_password(password)
 			
 	def change_role_password(self, password):
-		self._logger.debug('Changing password to %s for role %s' %(self.name, password))
+		self._logger.debug('Changing password for pg role %s' % self.name)
 		self.psql.execute("ALTER USER %s WITH PASSWORD '%s';" % (self.name, password))
 		
 	def _create_pg_database(self):
