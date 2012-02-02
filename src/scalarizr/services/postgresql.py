@@ -117,7 +117,7 @@ class PostgreSql(BaseService):
 
 	
 	def init_master(self, mpoint, password, slaves=None):
-		self._init_service(mpoint)
+		self._init_service(mpoint, password)
 		self.postgresql_conf.hot_standby = 'off'
 		
 		if slaves:
@@ -127,7 +127,7 @@ class PostgreSql(BaseService):
 		self.service.start()
 		
 	def init_slave(self, mpoint, primary_ip, primary_port, password):
-		self._init_service(mpoint)
+		self._init_service(mpoint, password)
 		
 		self.root_user.apply_public_ssh_key() 
 		self.root_user.apply_private_ssh_key()
