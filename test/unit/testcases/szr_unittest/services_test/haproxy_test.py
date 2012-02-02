@@ -7,25 +7,31 @@ Created on Jan 10, 2012
 import os
 import unittest
 import logging
+import shutil
 
 from scalarizr.services import haproxy
 
 LOG = logging.getLogger(__name__)
-
+TEMP_PATH = '/tmp/haproxy.cfg'
 
 class TestHAProxyCfg(unittest.TestCase):
 	
 	def __init__(self, methodName='runTest'):
 		unittest.TestCase.__init__(self, methodName=methodName)
-	
+		shutil.copy(os.path.dirname(__file__) + '/../../../resources/etc/haproxy.cfg',
+					TEMP_PATH)
 	def setUp(self):
-		self.conf = haproxy.HAProxyCfg(os.path.dirname(__file__) + '/../../../resources/etc/haproxy.cfg')
-
+		self.conf = haproxy.HAProxyCfg(TEMP_PATH)
+	
+	#def tearDown(self):
+	#TODO: remove temp file after all tests
+	#	os.remove(TEMP_PATH)
+	
 	def test_global(self):
 		
 		self.assertEqual(self.conf['global']['chroot'], '/var/lib/haproxy')
 		self.assertTrue('daemon' in self.conf['global'])
-		
+	
 	def test_global_log(self):
 		self.assertEqual(self.conf['global']['log']['127.0.0.1'], 'local2')
 
@@ -54,13 +60,13 @@ class TestHAProxyCfg(unittest.TestCase):
 				'app4': {'address': '127.0.0.1', 'check': True, 'port': '5004'}}
 		self.assertEqual(temp, res)
 		'''
-		
 	
 	def test_set_backend_app_server_appN(self):
 		self.conf['backend']['app']['server']['app2'] = {'address': '127.0.0.1', 'check': True, 'port': '522'}	
 		self.assertEqual(self.conf['backend']['app']['server']['app2'],
 			{'address': '127.0.0.1', 'check': True, 'port': '522'})
-		
+	
+	
 	'''
 	def test_set_newsection(self):
 		self.conf['backend'] = '192.168.0.1:8080'
@@ -69,6 +75,7 @@ class TestHAProxyCfg(unittest.TestCase):
 			res.append(el) 
 		self.assertTrue('192.168.0.1:8080' in res)
 	'''
+	
 	
 	def test_set_listen_name(self):
 		temp = {
@@ -80,7 +87,6 @@ class TestHAProxyCfg(unittest.TestCase):
 						'app10': {'address': '127.0.0.1', 'check': True, 'port': 5010}},
 			'default_backend': 'scalr:backend:port:1234'
 			}
-		#self.conf['backend'] = '192.168.0.1:8080'
 		
 		self.conf['backend']['192.168.0.1:8080'] = temp	
 		self.assertEqual(self.conf['backend']['192.168.0.1:8080']['bind'], '*:12345')
@@ -95,7 +101,7 @@ class TestHAProxyCfg(unittest.TestCase):
 		self.assertEqual(self.conf['backend']['app']['server']['app_7'], {'address': '127.0.0.1', 'check': True, 'port': '5007'})
 		self.assertEqual(self.conf['backend']['app']['server']['app_8'], {'address': '127.0.0.1', 'check': True, 'port': '5008'})
 
-		
+
 	def test_set_global(self):
 		temp = {
 			'bind': '*:12345', 
@@ -123,6 +129,7 @@ class TestHAProxyCfg(unittest.TestCase):
 			'option': {'tcplog': True, 'same_option': 'some value'},
 			'default_backend': 'scalr:backend:port:1234'
 			}
+
 		self.conf['backend']['app'] = tmp	
 		self.assertEqual(self.conf['backend']['app']['mode'], 'tcp')
 		self.assertEqual(self.conf['backend']['app']['server']['app_7'],
@@ -166,32 +173,26 @@ class TestHAProxyCfg(unittest.TestCase):
 						'app10': {'address': '127.0.0.1', 'check': True, 'port': 5010}},
 			'default_backend': 'scalr:backend:port:1234'
 			}
-		self.conf['backend']['192.168.0.1:8080'] = temp	
-		
-		self.logger.error(self.conf.conf.children('.'))
+		self.conf['backend']['192.168.0.1:8080'] = temp
 		
 		#LOG.debug("	cnf['backend']['192.168.0.1:8080']['bind']=`%s`",
 		#	self.conf['backend']['192.168.0.1:8080']['bind'])
 		#LOG.debug("	bind xpath=`%s`", self.conf['backend']['192.168.0.1:8080'].xpath)
 		
-		temp_path = '/tmp/haproxy.cfg'
-
-		self.conf.save(temp_path)
+		self.conf.save()
 		
-		self.conf = haproxy.HAProxyCfg(temp_path) 
-
+		self.conf.reload()
+		
 		self.assertEqual(self.conf['backend']['192.168.0.1:8080']['bind'], '*:12345')
 		self.assertEqual(self.conf['backend']['192.168.0.1:8080']['balance'], 'roundrobin')
 		self.assertEqual(self.conf['backend']['192.168.0.1:8080']['server']['app9'], {'address': '127.0.0.1', 'check': True, 'port': '5009'})
 		self.assertEqual(self.conf['backend']['192.168.0.1:8080']['option']['tcplog'], True)
 		
-		
+	
 	def test_defaults_timeout(self):
 		self.assertEqual(self.conf['defaults']['timeout']['http-keep-alive'], '10s')
 	
 		res = []
-		self.logger.debug('timout=`%s`', self.conf['defaults']['timeout'])
-		
 		for elem in self.conf['defaults']['timeout']:
 			res.append(elem)
 		self.assertTrue('server' in res[4])
@@ -217,7 +218,7 @@ class TestHAProxyCfg(unittest.TestCase):
 
 		#self.conf['backend']['scalr:backend:12345']['timeout'] = '8s'
 		#self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout'][''], '8s')
-
+		
 class _TestHAProxyInitScript(unittest.TestCase):
 
 	def test_start(self):
@@ -285,3 +286,7 @@ class _TestHAProxyInitScript(unittest.TestCase):
 			pid = hap_is.pid()
 		finally:
 			return pid
+
+if __name__ == "__main__":
+	#import sys;sys.argv = ['', 'Test.testName']
+	unittest.main()

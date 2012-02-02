@@ -93,10 +93,7 @@ class HAProxyCfg(filetool.ConfigurationFile):
 						index += 1
 			except metaconf.NoPathError:
 				raise StopIteration()
-		'''
-		@property		
-		def path(self):
-			return self.xpath'''
+
 
 	class option_group(slice_):
 		NAMES = ('server', 'option', 'log', 'stats', 'timeout')
@@ -138,13 +135,14 @@ class HAProxyCfg(filetool.ConfigurationFile):
 					self.conf.set(self.xpath(key), var)
 			else:
 				if self._len_xpath() >= 2:
-					self.conf.add(self.xpath, '%s %s' % (key, var))
+					if key.strip() or var.strip():
+						self.conf.add(self.xpath, '%s %s' % (key, var))
 					index = self._indexof(key)
 					LOG.debug('	add value var = `%s`, index = `%s`, _child_xpath(index):'\
 						' `%s`, key=`%s`', '%s %s' % (key, var), index, self._child_xpath(index), key)
 				else:
-					self.conf.add(self.xpath(key), var)
-					index = self._indexof(key)
+					if key.strip() or var.strip():
+						self.conf.add(self.xpath(key), var)
 
 
 	class section(slice_):
@@ -191,9 +189,17 @@ class HAProxyCfg(filetool.ConfigurationFile):
 							' `%s`', var, index, self._child_xpath(index))
 					self.conf.set(self._child_xpath(index), var)
 				else:
-					LOG.debug('	add value var = `%s`, index = `%s`, _child_xpath(key):'\
-							' `%s`', var, index, self._child_xpath(key))
-					self.conf.add(self._child_xpath(key), var)
+					try:
+						self.conf.get(self._child_xpath(key))
+						self.conf.set(self._child_xpath(key), var)
+						LOG.debug('	set value var = `%s`, key = `%s`, _child_xpath(key): `%s`',
+							var, key, self._child_xpath(key))
+					except:
+						LOG.debug('	section not exist, adding value var = `%s`,'\
+							' key = `%s`, _child_xpath(key): `%s`', var, key,
+							self._child_xpath(key))
+						if key.strip() or var.strip():
+							self.conf.add(self._child_xpath(key), var)
 
 
 	class section_group(slice_):
@@ -205,7 +211,7 @@ class HAProxyCfg(filetool.ConfigurationFile):
 
 		def __getitem__(self, name):
 			LOG.debug('section_group.__getitem__: name = `%s`', name)
-			for index in range(0, len(self)):
+			for index in range(1, len(self)+1):
 				LOG.debug('	elem `%s` in xpath `%s`', self.conf.get(
 							self._child_xpath(index)), self._child_xpath(index))
 				if self.conf.get(self._child_xpath(index)) == name:
@@ -220,7 +226,8 @@ class HAProxyCfg(filetool.ConfigurationFile):
 				LOG.debug('	ind %s', ind)
 				if ind == -1:
 					LOG.debug('	path %s added', self.xpath)
-					self.conf.add(self.xpath, key)
+					if key.strip:
+						self.conf.add(self.xpath, key)
 					ind = self._indexof(key)
 				LOG.debug('	ind = %s', ind)
 				if ind != -1:
@@ -238,7 +245,7 @@ class HAProxyCfg(filetool.ConfigurationFile):
 		self.conf = metaconf.Configuration('haproxy')
 		self.cnf_path = path or HAPROXY_CFG_PATH
 		self.conf.read(self.cnf_path)
-	
+
 	def __getitem__(self, name):
 		cls = self.section_group
 		if name in ('global', 'defaults'):
@@ -287,7 +294,7 @@ class HAProxyCfg(filetool.ConfigurationFile):
 			LOG.debug('	section `%s`' % section)
 			flag = True
 			for param in params:
-				if not param in section:
+				if not param in section.split(':'):
 					flag = False
 					break
 			if flag:
@@ -305,7 +312,8 @@ class HAProxyCfg(filetool.ConfigurationFile):
 				' `%s`'%sys.exc_info()[1]
 
 	def reload(self):
-		LOG.debug('services.haproxy.HAProxyCfg.reload')
+		LOG.debug('services.haproxy.HAProxyCfg.reload path=`%s`', self.cnf_path)
+		self.conf = metaconf.Configuration('haproxy')
 		self.conf.read(self.cnf_path)
 
 

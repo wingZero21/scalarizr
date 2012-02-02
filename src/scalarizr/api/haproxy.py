@@ -14,7 +14,7 @@ import sys
 
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
-	'timeout': {'check':'22s'},  
+	'timeout': {'check':'3s'},  
 	'interval': '30s',
 	'fall_threshold': 2,
 	'rise_threshold': 10
@@ -28,6 +28,7 @@ _rule_hc_target = validate.rule(re='^[tcp|http]:\d+$')
 class HAProxyAPI(object):
 
 	def __init__(self, path=None):
+		self.path_cfg = path
 		self.cfg = haproxy.HAProxyCfg(path)
 		self.svs = haproxy.HAProxyInitScript(path)
 
@@ -39,14 +40,6 @@ class HAProxyAPI(object):
 	@validate.param('backend', optional=_rule_backend)'''
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
-
-		LOG.debug('----look at metaconf object Before UPDATE-------')
-		for el in self.cfg.sections('scalr:backend:role:1234:http:1154'):
-			LOG.debug('backend=`%s`', el)
-			path = self.cfg.backends[el].xpath
-			LOG.debug('!\n\n children=`%s`, path=`%s`\n\n',
-			self.cfg.conf.children(path), path)
-		LOG.debug('----looked out-------')
 
 		ln = haproxy.naming('listener', protocol, port)
 		bnd = haproxy.naming('backend', protocol, port, backend=backend)
@@ -70,7 +63,7 @@ class HAProxyAPI(object):
 			'mode': protocol,
 			'default_backend': bnd
 		})
-			
+
 		if protocol == 'tcp':
 			backend = {}
 		elif protocol == 'http':
@@ -87,16 +80,7 @@ class HAProxyAPI(object):
 				'inter': HEALTHCHECK_DEFAULTS['interval']
 			}
 		})
-		
-		
-		LOG.debug('----look at metaconf object After UPDATE-------')
-		for el in self.cfg.sections('scalr:backend:role:1234:http:1154'):
-			LOG.debug('backend=`%s`', el)
-			path = self.cfg.backends[el].xpath
-			LOG.debug('!\n\n children=`%s`, path=`%s`\n\n',
-			self.cfg.conf.children(path), path)
-		LOG.debug('----looked out-------')
-		
+
 		# Apply changes
 		#with self.svs.trans(exit='running'):
 		#	with self.cfg.trans(enter='reload', exit='working'):
@@ -104,6 +88,7 @@ class HAProxyAPI(object):
 				self.cfg['listen'][ln] = listener
 				if not self.cfg.backend or not bnd in self.cfg.backend:
 					self.cfg['backend'][bnd] = backend
+				
 				self.cfg.save()
 				self.svs.reload()
 
@@ -117,7 +102,7 @@ class HAProxyAPI(object):
 		'''
 		target='http:8080', 
         interval='5s', 
-        timeout={'check': '3s'}, 
+        timeout={'check': '3s'},
         fall_threshold=2, 
         rise_threshold=10
         default-server fall 2 rise 10 inter 5s
@@ -148,6 +133,7 @@ class HAProxyAPI(object):
 		LOG.debug('HAProxyAPI.add_server')
 		LOG.debug('	%s' % haproxy.naming('backend', backend=backend))
 		bnds = self.cfg.sections(haproxy.naming('backend', backend=backend))
+		
 		if not bnds:
 			if backend:
 				raise exceptions.NotFound('Backend not found: %s' % (backend, ))
@@ -157,13 +143,12 @@ class HAProxyAPI(object):
 		#with self.svs.trans(exit='running'):
 			#with self.cfg.trans(exit='working'):
 		if True:
-				server = {
-					'name': ipaddr.replace('.', '-'),
-					'address': ipaddr,
-					'check': True
-				}
 				for bnd in bnds:
-					self.cfg.backend[bnd]['server'].add(server)
+					server={'address': ipaddr,
+							#TODO: change get port
+							'port': bnd.split(':')[-1],
+							'check': True}
+					self.cfg.backends[bnd]['server'][ipaddr.replace('.', '-')] = server
 				self.cfg.save()
 				self.svs.reload()
 
@@ -173,10 +158,10 @@ class HAProxyAPI(object):
 	def get_servers_health(self, ipaddr=None):
 		pass
 
-
+	'''
 	@rpc.service_method
 	@validate.param('port', type=int)
-	@validate.param('protocol', required=_rule_protocol)
+	@validate.param('protocol', required=_rule_protocol)'''
 	def delete_listener(self, port=None, protocol=None):
 		try:
 			server_paths = self.cfg.sections(haproxy.naming('listener', protocol, port))
@@ -192,21 +177,38 @@ class HAProxyAPI(object):
 	def reset_healthcheck(self, target):		
 		pass
 
+	'''
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
-	@validate.param('backend', optional=_rule_backend)
+	@validate.param('backend', optional=_rule_backend)'''
 	def remove_server(self, ipaddr=None, backend=None):
-
 		server_paths = self.cfg.sections(haproxy.naming('backend', backend=backend))
+		
 		for path in server_paths:
-			self.cfg.conf.remove(self.cfg.backend[path][ipaddr.replace('.', '-')].xpath)
+			try:
+				for el in self.cfg.backends[path]['server']:
+					if el:
+						index = 1
+					else:
+						raise
+				for el in self.cfg.backends[path]['server']:
+					if el.startswith(ipaddr.replace('.', '-')):
+						break
+					index += 1
+			except:
+				index = -1
+			
+			if index != -1:
+				self.cfg.conf.remove('%s[%s]' % (self.cfg.backends[path]['server'].xpath, index))
+
 			self.cfg.save()
-		#TODO: rewrite config and reload
+			self.cfg.reload()
+		
 
 	@rpc.service_method
 	def list_listeners(self):
 		self.cfg.reload()
-		for ln in self.cfg.sections(haproxy.naming('listener')):
+		for ln in self.cfg.sections(haproxy.naming('listen')):
 			try:
 				listener = self.cfg.listener[ln]
 				yield {
