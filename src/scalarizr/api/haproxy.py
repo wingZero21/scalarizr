@@ -103,7 +103,6 @@ class HAProxyAPI(object):
 	@validate.param('fall_threshold', 'rise_threshold', type=int)'''
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							fall_threshold=None, rise_threshold=None):
-		'''Updating filds default-server, timeout, server in `tartget` backend sections'''
 
 		bnds = haproxy.naming('backend', backend=target)  
 		if not self.cfg.sections(bnds):
@@ -113,14 +112,18 @@ class HAProxyAPI(object):
 			if timeout:
 				self.cfg['backend'][bnd]['timeout'] = timeout
 
-			default_server = {}
-			if fall_threshold: default_server.update({'fall': fall_threshold})
-			if rise_threshold: default_server.update({'rise': rise_threshold})
-			if interval: default_server.update({'inter': interval})
+			default_server = {
+				'inter': interval,
+				'fall': fall_threshold,
+				'rise': rise_threshold
+			}
 
 			self.cfg['backend'][bnd]['default-server'] = default_server
 
 			for srv in self.cfg['backend'][bnd]['server']:
+				# >>> print srv
+				# 248-64-125-158 248.64.125.158:1154 check
+				# @fixme: why the value is server string? key is expected: 248-64-125-158  
 				server = self.cfg['backend'][bnd]['server'][srv.split(' ')[0]]
 				server.update({'check' : True})
 				self.cfg['backend'][bnd]['server'][srv.split(' ')[0]] = server
@@ -153,10 +156,11 @@ class HAProxyAPI(object):
 			#with self.cfg.trans(exit='working'):
 		if True:
 				for bnd in bnds:
-					server={'address': ipaddr,
-							#TODO: Are we need a `check` server by default add?
-							'port': bnd.split(':')[-1],
-							'check': True}
+					server = {
+						'address': ipaddr,
+						'port': bnd.split(':')[-1],
+						'check': True
+					}
 					self.cfg.backends[bnd]['server'][ipaddr.replace('.', '-')] = server
 
 				self.cfg.save()
@@ -186,16 +190,29 @@ class HAProxyAPI(object):
 			default_backend = None
 
 		for path in self.cfg.sections(ln):
+			# @todo: implement __delitem__ and delete objects in ths manner:
+			# del self.cfg['listen'][ln]
 			self.cfg.conf.remove(self.cfg.listener[path].xpath)
 			LOG.debug('HAProxyAPI.delete_listener: remove listener `%s`' % ln)
+			
 		if default_backend:
-			flag = True
-			for lnr in self.cfg.listener:
+			has_ref = False
+			for ln in self.cfg.listener:
+				try:
+					if self.cfg.listener[ln]['default_backend'] == default_backend:
+						has_ref = True
+						break
+				except:
+					pass
+				
+				'''
 				if self.cfg.el_in_path(self.cfg.listener[lnr].xpath, default_backend):
 					flag = False
 					break
-			if flag:
+				'''
+			if not has_ref:
 				#not used in other section, so it will be deleting
+				# @todo: del self.cfg.backends[default_backend]
 				self.cfg.conf.remove(self.cfg.backends[default_backend].xpath)
 
 		self.cfg.save()
@@ -216,7 +233,7 @@ class HAProxyAPI(object):
 				'inter': HEALTHCHECK_DEFAULTS['interval']
 				}
 			self.cfg['backend'][bnd]['timeout'] = HEALTHCHECK_DEFAULTS['timeout'] 
-			#TODO: need to delete `check` param in servers?
+			
 		#with self.svs.trans(exit='running'):
 			#	with self.cfg.trans(enter='reload', exit='working'):
 			#TODO: with...
@@ -230,6 +247,14 @@ class HAProxyAPI(object):
 	@validate.param('backend', optional=_rule_backend)'''
 	def remove_server(self, ipaddr=None, backend=None):
 		'''Removing server from backend secection with ipaddr'''
+		'''
+		@fixme: why so messy?
+		srv_name = self.server_name(ipaddr)
+		for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
+			if srv_name in self.cfg.backends[bd]['server']:
+				del self.cfg.backends[bd]['server']
+		'''
+		
 		for path in self.cfg.sections(haproxy.naming('backend', backend=backend)):
 			try:
 				for el in self.cfg.backends[path]['server']:
@@ -252,8 +277,18 @@ class HAProxyAPI(object):
 
 	#@rpc.service_method
 	def list_listeners(self):
-		'''Yield all `listen` sections in configuration file
-			return @type: dict'''
+		'''
+		@fixme: follow return format
+		@return: Listeners list 
+		@rtype: [{
+			<port>, 
+			<protocol>, 
+			<server_port>, 
+			<server_protocol>, 
+			<backend>, 
+			<servers>: [<ipaddr>, ...] 
+		}, ...]
+		'''
 		self.cfg.reload()
 		for ln in self.cfg.sections(haproxy.naming('listen')):
 			listener = self.cfg.listener[ln]
@@ -264,7 +299,6 @@ class HAProxyAPI(object):
 					for opt_str in listener[option]:
 						opt_name = opt_str.strip().replace('\t',' ').split(' ')[0]
 						opt_elem = {opt_name: listener[option][opt_name] or True}
-						print opt_elem
 						tmp.update(opt_elem) 
 					res.update({option: tmp})
 				else:
@@ -276,15 +310,21 @@ class HAProxyAPI(object):
 	'''
 	@rpc.service_method
 	@validate.param('backend', optional=_rule_backend)'''
-	def list_servers(self, backend=None, listen=None):
+	def list_servers(self, backend=None):
+		'''
+		@fixme: follow descriptoin and return format		
+		
+		List all servers, or servers from particular backend
+		@rtype: [<ipaddr>, ...]
+		'''
+		
+		
 		'''yield all servers inside `backend` or `listen` sections 
 			@backend: str
 			@return type: dict
 		'''
 		if backend:
 			list_section = self.cfg.sections(haproxy.naming('backend', backend=backend))
-		elif listen:
-			list_section = self.cfg.sections(haproxy.naming('listen', backend=listen))
 		else:
 			list_section = self.cfg.sections(haproxy.naming('backend'))
 		for bnd in list_section:
