@@ -153,17 +153,55 @@ class TestHAProxyAPI(unittest.TestCase):
 		#self.assertTrue(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
 		#	self.protocol, self.port)]['server'][self.ipaddr.replace('.','-')]['check'])
 
-
-	'''
-	def test_get_servers_health(self):
-		pass
-
 	def test_list_servers(self):
-		pass
-	
+		self.api.create_listener(protocol=self.protocol, port=self.port, 
+			server_port=self.server_port, backend=self.backend)
+		self.api.add_server(ipaddr=self.ipaddr, backend=self.backend)
+		self.api.add_server(ipaddr='218.124.68.210', backend=self.backend)
+
+		servers = {}
+		for srv in self.api.list_servers('%s:%s' % (self.protocol, self.port)):
+			servers.update(srv)
+			
+		for srv_name in servers.keys():
+			if srv_name == self.ipaddr.replace('.','-'):
+				self.assertEqual(servers[self.ipaddr.replace('.','-')], 
+					{'check': True, 'port': '1154', 'address': '248.64.125.158'})
+			elif srv_name == '218-124-68-210':
+				self.assertEqual(servers['218-124-68-210'], 
+					{'check': True, 'port': '1154', 'address': '218.124.68.210'})
+			else:
+				raise
+
 	def test_list_listeners(self):
-		pass
-	'''
+		self.api.create_listener(protocol=self.protocol, port=self.port, 
+			server_port=self.server_port, backend=self.backend)
+		self.api.create_listener(protocol=self.protocol, port='1%s' % self.port, 
+			server_port=self.server_port, backend='%s5' % self.backend)
+
+		listens = {}
+		for listen in self.api.list_listeners():
+			listens.update(listen)
+
+		self.assertIsNotNone(listens.get(hap_serv.naming('listen', self.protocol, self.port)))
+		self.assertIsNotNone(listens.get(hap_serv.naming('listen', self.protocol, port='1%s' % self.port)))
+
+		self.assertEqual(listens['appli1-rewrite']['server']['app1_1'], 
+						{'address': '192.168.34.23',
+						'check': True,
+						'cookie': 'app1inst1',
+						'fall': '5',
+						'inter': '2000',
+						'port': '8080',
+						'rise': '2'})
+
+	def test_get_servers_health(self):
+		try:
+			self.api.get_servers_health(self.ipaddr)
+		except Exception, e:
+			import sys
+			raise AttributeError, 'Error recived servers health, details: %s' % e, sys.exc_info()[2] 
+
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']

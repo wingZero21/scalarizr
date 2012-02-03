@@ -219,7 +219,7 @@ class TestHAProxyCfg(unittest.TestCase):
 		#self.conf['backend']['scalr:backend:12345']['timeout'] = '8s'
 		#self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout'][''], '8s')
 		
-class _TestHAProxyInitScript(unittest.TestCase):
+class TestHAProxyInitScript(unittest.TestCase):
 
 	def test_start(self):
 		hap_is = haproxy.HAProxyInitScript()

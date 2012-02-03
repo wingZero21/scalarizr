@@ -11,6 +11,7 @@ from scalarizr.services import haproxy
 
 import logging
 import sys
+import string
 
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
@@ -45,14 +46,14 @@ class HAProxyAPI(object):
 		bnd = haproxy.naming('backend', protocol, port, backend=backend)
 		listener = backend = None
 		LOG.debug('HAProxyAPI.create_listener: listener = `%s`, backend = `%s`', ln, bnd)
-		
+
 		try:
 			if self.cfg.listener[ln]:
 				raise 'Duplicate'
 		except Exception, e:
 			if 'Duplicate' in e:
 				raise exceptions.Duplicate('Listener %s:%s already exists' % (protocol, port))
-	
+
 		if protocol == 'tcp':
 			listener = {'balance': 'roundrobin'}
 		elif protocol == 'http':
@@ -85,7 +86,8 @@ class HAProxyAPI(object):
 		# Apply changes
 		#with self.svs.trans(exit='running'):
 		#	with self.cfg.trans(enter='reload', exit='working'):
-		if True:#TODO: del `if True` condition,  write with... enter, exit
+		#TODO: change save() and reload(),`if True` condition to `with...` enter, exit
+		if True:
 				self.cfg['listen'][ln] = listener
 				if not self.cfg.backend or not bnd in self.cfg.backend:
 					self.cfg['backend'][bnd] = backend
@@ -102,15 +104,15 @@ class HAProxyAPI(object):
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							fall_threshold=None, rise_threshold=None):
 		'''Updating filds default-server, timeout, server in `tartget` backend sections'''
-		
+
 		bnds = haproxy.naming('backend', backend=target)  
 		if not self.cfg.sections(bnds):
 			raise exceptions.NotFound('Backend `%s` not found' % target)
-		
+
 		for bnd in self.cfg.sections(bnds):
 			if timeout:
 				self.cfg['backend'][bnd]['timeout'] = timeout
-					
+
 			default_server = {}
 			if fall_threshold: default_server.update({'fall': fall_threshold})
 			if rise_threshold: default_server.update({'rise': rise_threshold})
@@ -125,7 +127,7 @@ class HAProxyAPI(object):
 		
 		#with self.svs.trans(exit='running'):
 			#	with self.cfg.trans(enter='reload', exit='working'):
-			#TODO: with...
+
 		self.cfg.save()
 		self.svs.reload()
 
@@ -135,6 +137,7 @@ class HAProxyAPI(object):
 	@validate.param('ipaddr', type='ipv4')
 	@validate.param('backend', optional=_rule_backend)'''
 	def add_server(self, ipaddr=None, backend=None):
+		'''Add server with ipaddr in backend section''' 
 		self.cfg.reload()
 		LOG.debug('HAProxyAPI.add_server')
 		LOG.debug('	%s' % haproxy.naming('backend', backend=backend))
@@ -151,7 +154,7 @@ class HAProxyAPI(object):
 		if True:
 				for bnd in bnds:
 					server={'address': ipaddr,
-							#TODO: change get port
+							#TODO: Are we need a `check` server by default add?
 							'port': bnd.split(':')[-1],
 							'check': True}
 					self.cfg.backends[bnd]['server'][ipaddr.replace('.', '-')] = server
@@ -159,12 +162,13 @@ class HAProxyAPI(object):
 				self.cfg.save()
 				self.svs.reload()
 
-
+	'''
 	@rpc.service_method
-	@validate.param('ipaddr', type='ipv4', optional=True)
+	@validate.param('ipaddr', type='ipv4', optional=True)'''
 	def get_servers_health(self, ipaddr=None):
-		pass
-
+		#TODO: select parameters what we need with filter by ipaddr
+		stats = haproxy.StatSocket().show_stat()
+		return stats
 	'''
 	@rpc.service_method
 	@validate.param('port', type=int)
@@ -202,24 +206,17 @@ class HAProxyAPI(object):
 	@validate.param('target', required=_rule_hc_target)'''
 	def reset_healthcheck(self, target):		
 		'''Return to defaults for `tartget` backend sections'''
-		
 		bnds = haproxy.naming('backend', backend=target)
 		if not self.cfg.sections(bnds):
 			raise exceptions.NotFound('Backend `%s` not found' % target)
-		
 		for bnd in self.cfg.sections(bnds):
-			#TODO: what fields we need to change? all? or only some as in configure_healthcheck
-
 			self.cfg['backend'][bnd]['default-server'] = {
 				'fall': HEALTHCHECK_DEFAULTS['fall_threshold'],
 				'rise': HEALTHCHECK_DEFAULTS['rise_threshold'],
 				'inter': HEALTHCHECK_DEFAULTS['interval']
 				}
-
 			self.cfg['backend'][bnd]['timeout'] = HEALTHCHECK_DEFAULTS['timeout'] 
-			
-			#TODO: need to delete check'ing in server's options?
-		
+			#TODO: need to delete `check` param in servers?
 		#with self.svs.trans(exit='running'):
 			#	with self.cfg.trans(enter='reload', exit='working'):
 			#TODO: with...
@@ -233,8 +230,7 @@ class HAProxyAPI(object):
 	@validate.param('backend', optional=_rule_backend)'''
 	def remove_server(self, ipaddr=None, backend=None):
 		'''Removing server from backend secection with ipaddr'''
-		server_paths = self.cfg.sections(haproxy.naming('backend', backend=backend))
-		for path in server_paths:
+		for path in self.cfg.sections(haproxy.naming('backend', backend=backend)):
 			try:
 				for el in self.cfg.backends[path]['server']:
 					if el:
@@ -242,7 +238,7 @@ class HAProxyAPI(object):
 					else:
 						raise
 				for el in self.cfg.backends[path]['server']:
-					if el.startswith(ipaddr.replace('.', '-')):
+					if el.strip().startswith(ipaddr.replace('.', '-')):
 						break
 					index += 1
 			except:
@@ -254,26 +250,45 @@ class HAProxyAPI(object):
 			self.svs.reload()
 
 
-	@rpc.service_method
+	#@rpc.service_method
 	def list_listeners(self):
+		'''Yield all `listen` sections in configuration file
+			return @type: dict'''
 		self.cfg.reload()
 		for ln in self.cfg.sections(haproxy.naming('listen')):
-			try:
-				listener = self.cfg.listener[ln]
-				yield {
-					'port': None,
-					'protocol': listener['mode'],
-					'server_port': None,
-					'server_protocol': None,
-					'backend': None
-				}
-			except:
-				LOG.exception('Iteration failed')
+			listener = self.cfg.listener[ln]
+			res = {}
+			for option in list(set(self.cfg.conf.children(listener.xpath))):
+				if	isinstance(listener[option], dict):
+					tmp = {}
+					for opt_str in listener[option]:
+						opt_name = opt_str.strip().replace('\t',' ').split(' ')[0]
+						opt_elem = {opt_name: listener[option][opt_name] or True}
+						print opt_elem
+						tmp.update(opt_elem) 
+					res.update({option: tmp})
+				else:
+					res.update({option: listener[option]})
+			#TODO: or we need to select only some params of `listen` section?, now it return all
+			yield {ln: res}
 		raise StopIteration()
 
-
+	'''
 	@rpc.service_method
-	@validate.param('backend', optional=_rule_backend)
-	def list_servers(self, backend=None):
-		pass
-	
+	@validate.param('backend', optional=_rule_backend)'''
+	def list_servers(self, backend=None, listen=None):
+		'''yield all servers inside `backend` or `listen` sections 
+			@backend: str
+			@return type: dict
+		'''
+		if backend:
+			list_section = self.cfg.sections(haproxy.naming('backend', backend=backend))
+		elif listen:
+			list_section = self.cfg.sections(haproxy.naming('listen', backend=listen))
+		else:
+			list_section = self.cfg.sections(haproxy.naming('backend'))
+		for bnd in list_section:
+			for srvstr in self.cfg.backends[bnd]['server']:
+				srv_name = filter(None, map(string.strip, srvstr.replace('\t', ' ').split(' ')))[0]
+				yield {srv_name: self.cfg.backends[bnd]['server'][srv_name]}
+		raise StopIteration()

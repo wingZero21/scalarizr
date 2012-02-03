@@ -300,7 +300,7 @@ class HAProxyCfg(filetool.ConfigurationFile):
 				result.append(section)
 			index += 1
 		return result
-	
+
 	def el_in_path(self, path, key):
 		'''Find key in any of children in path. If key found return True'''
 		childrens = list(set(self.conf.children(path))) # path as ./listen[0]
@@ -317,7 +317,6 @@ class HAProxyCfg(filetool.ConfigurationFile):
 						LOG.debug('	key `%s` found at pat=`%s/%s[%s]`', key, (path, children, index))
 						return True
 					index += 1
-
 
 	def save(self, path=None):
 		'''Write cfg in path file. If path not define, it use HAProxyCfg path'''
@@ -524,7 +523,7 @@ class StatSocket(object):
 			self.sock.connect(address)
 			self.adress = address
 		except:
-			raise Exception, "Couldn't connect to socket on address: %s" % address, sys.exc_info()[2]
+			raise Exception, "Couldn't connect to socket on address: %s%s" % (address, sys.exc_info()[1]), sys.exc_info()[2]
 
 
 	def show_stat(self):

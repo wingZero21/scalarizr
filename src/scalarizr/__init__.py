@@ -1,6 +1,6 @@
 import gevent.monkey
 gevent.monkey.patch_all()
-
+#delattr(sys.modules['select'], 'poll')
 
 # Core
 from scalarizr import config 
@@ -30,7 +30,6 @@ from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 from scalarizr.storage.util.loop import listloop
 from scalarizr.util.filetool import write_file, read_file
-
 
 class ScalarizrError(BaseException):
 	pass
