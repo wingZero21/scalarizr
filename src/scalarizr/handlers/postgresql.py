@@ -307,7 +307,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				del postgresql_data[key]
 		
 		root_user= postgresql_data[OPT_ROOT_USER]
-		postgresql_data['%s_password' % root_user] = postgresql_data.get(OPT_ROOT_PASSWORD) or cryptotool.pwgen(10)
+		postgresql_data['%s_password' % root_user or ROOT_USER] = postgresql_data.get(OPT_ROOT_PASSWORD) or cryptotool.pwgen(10)
 		del postgresql_data[OPT_ROOT_PASSWORD]
 		
 		self._logger.debug("Update postgresql config with %s", postgresql_data)
