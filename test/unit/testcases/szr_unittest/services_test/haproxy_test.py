@@ -158,6 +158,10 @@ class TestHAProxyCfg(unittest.TestCase):
 		list_found = self.conf.sections('scalr:backend:tcp:2254')
 		self.assertEqual(list_found[0], 'scalr:backend:role:1234:tcp:2254')
 		self.assertEqual(self.conf.backends[list_found[0]]['bind'], '*:2254')
+		
+		list_found = self.conf.sections('scalr:backend')
+		self.assertEqual(list_found, ['scalr:backend:role:1234:tcp:2254'])
+
 	
 	def test_save_config(self):
 		temp = {

@@ -50,18 +50,18 @@ class TestHAProxyAPI(unittest.TestCase):
 
 		self.assertEqual(self.api.cfg.backends[bnd]['timeout']['check'], '3s')
 		self.assertEqual(self.api.cfg.listener[ln]['mode'], self.protocol)
-		
+
 		self.api.cfg.reload()
-		
+
 		self.assertEqual(self.api.cfg.backends[bnd]['timeout']['check'], '3s')
 		self.assertEqual(self.api.cfg.listener[ln]['mode'], self.protocol)
 		self.assertEqual(self.api.cfg.backends[bnd]['mode'], self.server_protocol)
 		#TODO: add some server with another default-server and wait for exception
-	
+
 	def test_delete_listener(self):
 		
 		self.api.create_listener(protocol=self.protocol, port=self.port, 
-				server_port=self.server_port, backend=self.backend)
+				server_protocol=self.server_protocol,server_port=self.server_port, backend=self.backend)
 		self.assertEqual(self.api.cfg.listener['scalr:listen:%s:%s' %\
 				(self.protocol, self.port)]['mode'], self.protocol)
 		self.assertEqual(self.api.cfg.sections('scalr:listen:%s:%s' % (self.protocol,
@@ -186,14 +186,14 @@ class TestHAProxyAPI(unittest.TestCase):
 		
 		
 
-	'''
+	
 	def test_get_servers_health(self):
 		try:
 			self.api.get_servers_health(self.ipaddr)
 		except Exception, e:
 			import sys
 			raise AttributeError, 'Error recived servers health, details: %s' % e, sys.exc_info()[2] 
-	'''
+
 	
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']

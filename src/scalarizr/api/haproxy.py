@@ -178,6 +178,7 @@ class HAProxyAPI(object):
 		#TODO: select parameters what we need with filter by ipaddr
 		stats = haproxy.StatSocket().show_stat()
 		return stats
+
 	'''
 	@rpc.service_method
 	@validate.param('port', type=int)
@@ -209,7 +210,6 @@ class HAProxyAPI(object):
 			if not has_ref:
 				#it not used in other section, so will be deleting
 				del self.cfg.backends[default_backend]
-
 		self.cfg.save()
 		self.svs.reload()
 
@@ -256,10 +256,10 @@ class HAProxyAPI(object):
 		'''
 		@return: Listeners list 
 		@rtype: [{
-			<port>, 
+			<port>,
 			<protocol>,
 			<server_port>,
-			<server_protocol>, 
+			<server_protocol>,
 			<backend>, 
 			<servers>: [<ipaddr>, ...]
 		}, ...]'''
