@@ -33,14 +33,6 @@ class HAProxyAPI(object):
 		self.cfg = haproxy.HAProxyCfg(path)
 		self.svs = haproxy.HAProxyInitScript(path)
 	
-	def __get(self, obj, key):
-		try:
-			return obj[key]
-		except KeyError:
-			return None
-		except Exception:
-			raise Exception, sys.exc_info()[1], sys.exc_info()[2]
-	
 	def _server_name(self, ipaddr):
 		'''@rtype: str'''
 		if ':' in ipaddr:
@@ -280,9 +272,9 @@ class HAProxyAPI(object):
 
 			tmp = {
 					'port': listener['bind'].replace('*:',''),
-					'protocol': self.__get(listener, 'mode'),
+					'protocol': listener['mode'],
 					'server_port': bnd_name.split(':')[-1],
-					'server_protocol': self.__get(bnd, 'mode'),
+					'server_protocol': bnd['mode'],
 					'backend': bnd_name,
 				}
 			res.append(tmp)

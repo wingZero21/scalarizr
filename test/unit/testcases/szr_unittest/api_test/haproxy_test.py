@@ -37,7 +37,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		if os.path.exists(TEMP_PATH):
 			self.api.svs.stop()
 			#os.remove(TEMP_PATH)
-
+	
 	def test_create_listener(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port,
 					server_protocol=self.server_protocol, server_port=self.server_port,
@@ -164,7 +164,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.api.add_server(ipaddr='218.124.68.210', backend=self.backend)
 		
 		
-		self.api.create_listener(protocol=self.protocol, port=self.port, backend='role:468513')
+		self.api.create_listener(protocol='tcp', port=46852, backend='role:468513')
 		self.api.add_server(ipaddr='18.24.6.10', backend='role:468513')
 		self.api.add_server(ipaddr='218.45.86.41', backend='role:468513')
 
@@ -194,7 +194,7 @@ class TestHAProxyAPI(unittest.TestCase):
 			import sys
 			raise AttributeError, 'Error recived servers health, details: %s' % e, sys.exc_info()[2] 
 	'''
-
+	
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
 	unittest.main()
