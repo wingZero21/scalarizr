@@ -15,6 +15,7 @@ import logging
 import threading
 import pprint
 from distutils.file_util import write_file
+import sys
 
 
 
@@ -498,7 +499,15 @@ class FarmSecurityMixin(object):
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
 		for rule in rules:
-			self._iptables.delete_rule(rule)
+			try:
+				self._iptables.delete_rule(rule)
+			except:
+				if 'does a matching rule exist in that chain' in str(sys.exc_info()[1]):
+					# When HostDown comes from a server that didn't send HostInit    
+					pass
+				else:
+					raise
+				
 
 
 	def __create_rule(self, source, dport, jump):
