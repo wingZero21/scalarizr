@@ -21,6 +21,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		unittest.TestCase.__init__(self, methodName=methodName)
 		
 		self.protocol='http'
+		self.server_protocol='http'
 		self.port=1154
 		self.server_port=2254
 		self.backend='role:1234'
@@ -36,15 +37,16 @@ class TestHAProxyAPI(unittest.TestCase):
 		if os.path.exists(TEMP_PATH):
 			self.api.svs.stop()
 			#os.remove(TEMP_PATH)
-	
+
 	def test_create_listener(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port,
-								 server_port=self.server_port, backend=self.backend)
+					server_protocol=self.server_protocol, server_port=self.server_port,
+					backend=self.backend)
 		
 		self.assertEqual(self.api.svs.status(), 0)
 		
 		ln = hap_serv.naming('listen', self.protocol, self.port)
-		bnd = hap_serv.naming('backend', self.protocol, self.port, backend=self.backend)
+		bnd = hap_serv.naming('backend', self.server_protocol, self.server_port, backend=self.backend)
 
 		self.assertEqual(self.api.cfg.backends[bnd]['timeout']['check'], '3s')
 		self.assertEqual(self.api.cfg.listener[ln]['mode'], self.protocol)
@@ -53,8 +55,9 @@ class TestHAProxyAPI(unittest.TestCase):
 		
 		self.assertEqual(self.api.cfg.backends[bnd]['timeout']['check'], '3s')
 		self.assertEqual(self.api.cfg.listener[ln]['mode'], self.protocol)
+		self.assertEqual(self.api.cfg.backends[bnd]['mode'], self.server_protocol)
 		#TODO: add some server with another default-server and wait for exception
-
+	
 	def test_delete_listener(self):
 		
 		self.api.create_listener(protocol=self.protocol, port=self.port, 
@@ -64,14 +67,15 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.assertEqual(self.api.cfg.sections('scalr:listen:%s:%s' % (self.protocol,
 				 self.port)), ['scalr:listen:%s:%s' % (self.protocol, self.port)])
 		self.assertEqual(self.api.cfg.listener['scalr:listen:%s:%s' % (self.protocol, self.port)]\
-				['default_backend'], 'scalr:backend:%s:%s:%s' % (self.backend, self.protocol, self.port))
+				['default_backend'], 'scalr:backend:%s:%s:%s' % \
+				(self.backend, self.server_protocol, self.server_port))
 
 		self.api.delete_listener(port=self.port, protocol=self.protocol)
 
 		self.assertEqual(self.api.cfg.sections('scalr:listen:%s:%s' % (self.protocol, self.port)), [])
 		self.assertEqual(self.api.cfg.sections('scalr:backend:%s:%s:%s' %\
-						(self.backend, self.protocol, self.port)), [])
-
+						(self.backend, self.server_protocol, self.server_port)), [])
+	
 	def test_add_server(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port, 
 			backend=self.backend)
@@ -80,17 +84,17 @@ class TestHAProxyAPI(unittest.TestCase):
 
 		self.api.cfg.reload()
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
-			self.protocol, self.port)]['server'][self.ipaddr.replace('.', '-')], 
-			{'address': self.ipaddr, 'port': str(self.port), 'check':True})
+			self.server_protocol, self.server_port)]['server'][self.ipaddr.replace('.', '-')], 
+			{'address': self.ipaddr, 'port': str(self.server_port), 'check':True})
 
 	def test_remove_server(self):
-		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port, 
-			backend=self.backend)
+		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port,
+			server_protocol=self.server_protocol, backend=self.backend)
 		self.api.add_server(ipaddr=self.ipaddr, backend=self.backend)
 
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
-			self.protocol, self.port)]['server'][self.ipaddr.replace('.', '-')], 
-			{'address': self.ipaddr, 'port': str(self.port), 'check':True})
+			self.server_protocol, self.server_port)]['server'][self.ipaddr.replace('.', '-')], 
+			{'address': self.ipaddr, 'port': str(self.server_port), 'check':True})
 
 		self.api.remove_server(ipaddr=self.ipaddr, backend=self.backend)
 
@@ -100,7 +104,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		except:
 			server = None
 		self.assertIsNone(server)
-
+	
 	def test_configure_healthcheck(self):
 		flag = True
 		try:
@@ -114,94 +118,82 @@ class TestHAProxyAPI(unittest.TestCase):
 			LOG.debug('Backend not exist. Details: %s', e)
 			self.assertTrue(flag)
 
-		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port, 
-			backend=self.backend)
+		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port,
+			server_protocol=self.server_protocol, backend=self.backend)
 		
 		self.api.add_server(ipaddr=self.ipaddr, backend=self.backend)
 		self.api.add_server(ipaddr='218.124.68.210', backend=self.backend)
 		
-		self.api.configure_healthcheck(target='%s:%s' % (self.protocol, self.port), 
+		self.api.configure_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port), 
 										interval='5s', 
 										timeout={'check': '5s'}, 
 										fall_threshold=20, 
         								rise_threshold=100)
 		
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
-			self.protocol, self.port)]['default-server'], {'inter': '5s', 'rise': '100', 'fall': '20'})
+			self.server_protocol, self.server_port)]['default-server'], {'inter': '5s', 'rise': '100', 'fall': '20'})
 		self.assertTrue(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
-			self.protocol, self.port)]['server'][self.ipaddr.replace('.','-')]['check'])
-
+			self.server_protocol, self.server_port)]['server'][self.ipaddr.replace('.','-')]['check'])
+	
 	def test_reset_healthcheck(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port, 
-			backend=self.backend)
+			server_protocol=self.server_protocol, backend=self.backend)
 		
 		self.api.add_server(ipaddr=self.ipaddr, backend=self.backend)
 		self.api.add_server(ipaddr='218.124.68.210', backend=self.backend)
 		
-		self.api.configure_healthcheck(target='%s:%s' % (self.protocol, self.port), 
+		self.api.configure_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port),
 										interval='5s', 
 										timeout={'check': '5s'}, 
 										fall_threshold=20, 
         								rise_threshold=100)
 		
-		self.api.reset_healthcheck(target='%s:%s' % (self.protocol, self.port))
+		self.api.reset_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port))
 		
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
-			self.protocol, self.port)]['default-server'], {'inter': '30s', 'rise': '10', 'fall': '2'})
+			self.server_protocol, self.server_port)]['default-server'], {'inter': '30s', 'rise': '10', 'fall': '2'})
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
-			self.protocol, self.port)]['timeout']['check'], '3s')
+			self.server_protocol, self.server_port)]['timeout']['check'], '3s')
 		#self.assertTrue(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
 		#	self.protocol, self.port)]['server'][self.ipaddr.replace('.','-')]['check'])
-
+	
 	def test_list_servers(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, 
-			server_port=self.server_port, backend=self.backend)
+			server_protocol=self.server_protocol, server_port=self.server_port, backend=self.backend)
 		self.api.add_server(ipaddr=self.ipaddr, backend=self.backend)
 		self.api.add_server(ipaddr='218.124.68.210', backend=self.backend)
+		
+		
+		self.api.create_listener(protocol=self.protocol, port=self.port, backend='role:468513')
+		self.api.add_server(ipaddr='18.24.6.10', backend='role:468513')
+		self.api.add_server(ipaddr='218.45.86.41', backend='role:468513')
 
-		servers = {}
-		for srv in self.api.list_servers('%s:%s' % (self.protocol, self.port)):
-			servers.update(srv)
-			
-		for srv_name in servers.keys():
-			if srv_name == self.ipaddr.replace('.','-'):
-				self.assertEqual(servers[self.ipaddr.replace('.','-')], 
-					{'check': True, 'port': '1154', 'address': '248.64.125.158'})
-			elif srv_name == '218-124-68-210':
-				self.assertEqual(servers['218-124-68-210'], 
-					{'check': True, 'port': '1154', 'address': '218.124.68.210'})
-			else:
-				raise
-
+		servers = self.api.list_servers()
+		self.assertEqual(servers, ['248.64.125.158', '218.124.68.210', '18.24.6.10', '218.45.86.41'])
+		servers = self.api.list_servers('role:468513')
+		self.assertEqual(servers, ['18.24.6.10', '218.45.86.41'])
+	
 	def test_list_listeners(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, 
 			server_port=self.server_port, backend=self.backend)
 		self.api.create_listener(protocol=self.protocol, port='1%s' % self.port, 
 			server_port=self.server_port, backend='%s5' % self.backend)
 
-		listens = {}
-		for listen in self.api.list_listeners():
-			listens.update(listen)
+		listens = self.api.list_listeners()
 
-		self.assertIsNotNone(listens.get(hap_serv.naming('listen', self.protocol, self.port)))
-		self.assertIsNotNone(listens.get(hap_serv.naming('listen', self.protocol, port='1%s' % self.port)))
+		self.assertIsNotNone(listens[0])
+		self.assertIsNotNone(listens[1])
+		
+		
 
-		self.assertEqual(listens['appli1-rewrite']['server']['app1_1'], 
-						{'address': '192.168.34.23',
-						'check': True,
-						'cookie': 'app1inst1',
-						'fall': '5',
-						'inter': '2000',
-						'port': '8080',
-						'rise': '2'})
-
+	'''
 	def test_get_servers_health(self):
 		try:
 			self.api.get_servers_health(self.ipaddr)
 		except Exception, e:
 			import sys
 			raise AttributeError, 'Error recived servers health, details: %s' % e, sys.exc_info()[2] 
-
+	'''
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']

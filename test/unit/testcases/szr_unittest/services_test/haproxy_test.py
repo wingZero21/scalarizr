@@ -48,18 +48,14 @@ class TestHAProxyCfg(unittest.TestCase):
 
 	def test_backend_app_server(self):
 		self.assertEqual(self.conf['backend']['app']['server']['app1'], {'address': '127.0.0.1', 'check': True, 'port': '5001'})
-
-	'''
+	
+	
 	def test_backend_server(self):
-		temp = {}
+		temp = []
 		for el in self.conf['backend']['app']['server']:
-			temp.update(el)
-		res = {'app1': {'address': '127.0.0.1', 'check': True, 'port': '5001'},
-				'app2': {'address': '127.0.0.1', 'check': True, 'port': '5002'},
-				'app3': {'address': '127.0.0.1', 'check': True, 'port': '5003'},
-				'app4': {'address': '127.0.0.1', 'check': True, 'port': '5004'}}
-		self.assertEqual(temp, res)
-		'''
+			temp.append(el)
+		self.assertEqual(temp, ['app1', 'app2', 'app3', 'app4'])
+		
 	
 	def test_set_backend_app_server_appN(self):
 		self.conf['backend']['app']['server']['app2'] = {'address': '127.0.0.1', 'check': True, 'port': '522'}	
@@ -207,7 +203,13 @@ class TestHAProxyCfg(unittest.TestCase):
 
 		self.conf['backend']['scalr:backend:12345'] = temp	
 
+		res = []
+		for el in self.conf['backend']['scalr:backend:12345']['timeout']:
+			res.append(el)
+		self.assertEqual(res, ['', 'client', 'check'])
+		#TODO: look at  option_group.__iter__
 		self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout']['check'], '22s')
+		
 		self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout'][''], '2s')
 
 		self.conf['backend']['scalr:backend:12345']['timeout'][''] = '12s'
@@ -219,7 +221,7 @@ class TestHAProxyCfg(unittest.TestCase):
 		#self.conf['backend']['scalr:backend:12345']['timeout'] = '8s'
 		#self.assertEqual(self.conf['backend']['scalr:backend:12345']['timeout'][''], '8s')
 		
-class TestHAProxyInitScript(unittest.TestCase):
+class _TestHAProxyInitScript(unittest.TestCase):
 
 	def test_start(self):
 		hap_is = haproxy.HAProxyInitScript()

@@ -47,7 +47,20 @@ class HAProxyCfg(filetool.ConfigurationFile):
 					index += 1
 			except metaconf.NoPathError:
 				raise StopIteration()
-
+		
+		def __delitem__(self, key):
+			try:
+				index = self._indexof(key)
+				if index != -1:
+					self.conf.remove(self._child_xpath(index))
+				else:
+					try:
+						self.conf.remove(self._child_xpath(key))
+					except:
+						raise Exception, 'Not found section `%s`' % key, sys.exc_info()[2]
+			except Exception, e:
+				raise Exception, 'Can`t be remove, because not found in path. Details: `%s`' % e
+		
 		def _child_xpath(self, key):
 			if isinstance(key, int):
 				return '%s[%d]' % (self.xpath, key)
@@ -111,7 +124,7 @@ class HAProxyCfg(filetool.ConfigurationFile):
 		def __contains__(self, name):
 			name_ = name + ' '
 			for val in self:
-				if val.startswith(name_):
+				if val == name:#val.startswith(name_):
 					return True
 			return False
 
@@ -121,9 +134,8 @@ class HAProxyCfg(filetool.ConfigurationFile):
 			index = self._indexof(key)
 		
 			_section = self.name if self.name in self.NAMES else key
-			LOG.debug('	_section = %s', _section) 
+			LOG.debug('	_section = %s', _section)
 			var = _serializers[_section].serialize(value)
-			
 
 			if index != -1:
 				LOG.debug('	set value var = `%s`, index = `%s`, _child_xpath(index): `%s`',
@@ -143,6 +155,20 @@ class HAProxyCfg(filetool.ConfigurationFile):
 				else:
 					if key.strip() or var.strip():
 						self.conf.add(self.xpath(key), var)
+		
+		def __iter__(self):
+			LOG.debug('option_group.__iter__')
+			index = 1
+			try:
+				while True:
+					yield self.conf.get(self._child_xpath(index)).replace('/t', ' ').split(' ')[0]
+					index += 1
+			except metaconf.NoPathError:
+				raise StopIteration()
+
+		def __delitem__(self, key):
+			LOG.debug('option_group.__delitem__: key = `%s`' % key)
+			super(HAProxyCfg.option_group, self).__delitem__(key)
 
 
 	class section(slice_):
@@ -200,7 +226,11 @@ class HAProxyCfg(filetool.ConfigurationFile):
 							self._child_xpath(key))
 						if key.strip() or var.strip():
 							self.conf.add(self._child_xpath(key), var)
+		
+		def __delitem__(self, key):
+			LOG.debug('section.__delitem__: key = `%s`' % key)
 
+			super(HAProxyCfg.section, self).__delitem__(key)
 
 	class section_group(slice_):
 		def __len__(self):
@@ -240,6 +270,10 @@ class HAProxyCfg(filetool.ConfigurationFile):
 			else:
 				raise 'section_group.__setitem__:	value `%s` type must be dict' % value
 
+		def __delitem__(self, key):
+			LOG.debug('section_group.__delitem__: key = `%s`' % key)
+			super(HAProxyCfg.section_group, self).__delitem__(key)
+
 
 	def __init__(self, path=None):
 		self.conf = metaconf.Configuration('haproxy')
@@ -275,18 +309,22 @@ class HAProxyCfg(filetool.ConfigurationFile):
 			self.__setitem__(name_, value)
 		else:
 			object.__setattr__(self, name, value)
+	
+	def __delitem__(self, key):
+		LOG.debug('HAProxyCfg.__delitem__: key `%s`', key)
+		return NotImplemented
 
 	def sections(self, filter):
 		'''
-		return @type: list
+		@rtype: list
 		Example: filter = `scalr:backend:role:1234:tcp:2254`
 		where protocol='tcp', port=1154, server_port=2254, backend='role:1234'
 		Look at services.haproxy.naming
 		'''
 		LOG.debug('HAProxyCfg.sections: input filter `%s`' % filter)
-		params = filter.split(':')[1:]
+		params = filter.split(':')
 		LOG.debug('	filter params `%s`' % params)
-		path = './%s' % params.pop(0)
+		path = './%s' % params[1]
 		result = []
 		index = 1
 		for section in self.conf.get_list(path):
@@ -300,6 +338,14 @@ class HAProxyCfg(filetool.ConfigurationFile):
 				result.append(section)
 			index += 1
 		return result
+
+	'''
+	def get(self, path, key): #or __get__(self, key):
+		try:
+			#TODO: need implement safe get, what can return `result` or None
+			pass
+		except:
+			return None'''
 
 	def el_in_path(self, path, key):
 		'''Find key in any of children in path. If key found return True'''

@@ -32,7 +32,21 @@ class HAProxyAPI(object):
 		self.path_cfg = path
 		self.cfg = haproxy.HAProxyCfg(path)
 		self.svs = haproxy.HAProxyInitScript(path)
-
+	
+	def __get(self, obj, key):
+		try:
+			return obj[key]
+		except KeyError:
+			return None
+		except Exception:
+			raise Exception, sys.exc_info()[1], sys.exc_info()[2]
+	
+	def _server_name(self, ipaddr):
+		'''@rtype: str'''
+		if ':' in ipaddr:
+			ipaddr = ipaddr.strip().split(':')[0]
+		return ipaddr.replace('.', '-')
+	
 	'''
 	@rpc.service_method
 	@validate.param('port', 'server_port', type=int)
@@ -43,7 +57,7 @@ class HAProxyAPI(object):
 					server_protocol=None, backend=None):
 
 		ln = haproxy.naming('listen', protocol, port)
-		bnd = haproxy.naming('backend', protocol, port, backend=backend)
+		bnd = haproxy.naming('backend', server_protocol or protocol, server_port or port, backend=backend)
 		listener = backend = None
 		LOG.debug('HAProxyAPI.create_listener: listener = `%s`, backend = `%s`', ln, bnd)
 
@@ -53,29 +67,31 @@ class HAProxyAPI(object):
 		except Exception, e:
 			if 'Duplicate' in e:
 				raise exceptions.Duplicate('Listener %s:%s already exists' % (protocol, port))
-
-		if protocol == 'tcp':
+		
+		if protocol == 'tcp': 
 			listener = {'balance': 'roundrobin'}
 		elif protocol == 'http':
 			listener = {'option': {'forwardfor': True}}
 		else:
 			raise ValueError('Unexpected protocol: %s' % (protocol, ))
+			#TODO: not correct for https or ssl...
 		# apply defaults
 		listener.update({
 			'bind': '*:%s' % port,
 			'mode': protocol,
 			'default_backend': bnd
 		})
-
-		if protocol == 'tcp':
+		
+		if (server_protocol or protocol) == 'tcp':
 			backend = {}
-		elif protocol == 'http':
+		elif (server_protocol or protocol) == 'http':
 			backend = {'option': {'httpchk': True}}
 		else:
 			raise ValueError('Unexpected protocol: %s' % (protocol, ))
-		# apply defaults 
+			#TODO: not correct for https or ssl...
+		# apply defaults
 		backend.update({
-			'mode': protocol,
+			'mode': server_protocol or protocol,
 			'timeout': HEALTHCHECK_DEFAULTS['timeout'],
 			'default-server': {
 				'fall': HEALTHCHECK_DEFAULTS['fall_threshold'],
@@ -121,13 +137,10 @@ class HAProxyAPI(object):
 			self.cfg['backend'][bnd]['default-server'] = default_server
 
 			for srv in self.cfg['backend'][bnd]['server']:
-				# >>> print srv
-				# 248-64-125-158 248.64.125.158:1154 check
-				# @fixme: why the value is server string? key is expected: 248-64-125-158  
-				server = self.cfg['backend'][bnd]['server'][srv.split(' ')[0]]
+				server = self.cfg['backend'][bnd]['server'][srv]
 				server.update({'check' : True})
-				self.cfg['backend'][bnd]['server'][srv.split(' ')[0]] = server
-		
+				self.cfg['backend'][bnd]['server'][srv] = server
+
 		#with self.svs.trans(exit='running'):
 			#	with self.cfg.trans(enter='reload', exit='working'):
 
@@ -183,17 +196,14 @@ class HAProxyAPI(object):
 		ln = haproxy.naming('listen', protocol, port)
 		if not self.cfg.sections(ln):
 			raise exceptions.NotFound('Listen `%s` not found can`t remove it' % ln)
-
 		try:
 			default_backend = self.cfg.listener[ln]['default_backend']
 		except:
 			default_backend = None
 
 		for path in self.cfg.sections(ln):
-			# @todo: implement __delitem__ and delete objects in ths manner:
-			# del self.cfg['listen'][ln]
-			self.cfg.conf.remove(self.cfg.listener[path].xpath)
-			LOG.debug('HAProxyAPI.delete_listener: remove listener `%s`' % ln)
+			del self.cfg['listen'][ln]
+			LOG.debug('HAProxyAPI.delete_listener: removed listener `%s`' % ln)
 			
 		if default_backend:
 			has_ref = False
@@ -204,16 +214,9 @@ class HAProxyAPI(object):
 						break
 				except:
 					pass
-				
-				'''
-				if self.cfg.el_in_path(self.cfg.listener[lnr].xpath, default_backend):
-					flag = False
-					break
-				'''
 			if not has_ref:
-				#not used in other section, so it will be deleting
-				# @todo: del self.cfg.backends[default_backend]
-				self.cfg.conf.remove(self.cfg.backends[default_backend].xpath)
+				#it not used in other section, so will be deleting
+				del self.cfg.backends[default_backend]
 
 		self.cfg.save()
 		self.svs.reload()
@@ -247,88 +250,57 @@ class HAProxyAPI(object):
 	@validate.param('backend', optional=_rule_backend)'''
 	def remove_server(self, ipaddr=None, backend=None):
 		'''Removing server from backend secection with ipaddr'''
-		'''
-		@fixme: why so messy?
-		srv_name = self.server_name(ipaddr)
+		srv_name = self._server_name(ipaddr)
 		for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
 			if srv_name in self.cfg.backends[bd]['server']:
-				del self.cfg.backends[bd]['server']
-		'''
-		
-		for path in self.cfg.sections(haproxy.naming('backend', backend=backend)):
-			try:
-				for el in self.cfg.backends[path]['server']:
-					if el:
-						index = 1
-					else:
-						raise
-				for el in self.cfg.backends[path]['server']:
-					if el.strip().startswith(ipaddr.replace('.', '-')):
-						break
-					index += 1
-			except:
-				index = -1
-			if index != -1:
-				self.cfg.conf.remove('%s[%s]' % (self.cfg.backends[path]['server'].xpath, index))
+				del self.cfg.backends[bd]['server'][srv_name]
 
-			self.cfg.save()
-			self.svs.reload()
+		self.cfg.save()
+		self.svs.reload()
 
 
 	#@rpc.service_method
 	def list_listeners(self):
 		'''
-		@fixme: follow return format
 		@return: Listeners list 
 		@rtype: [{
 			<port>, 
-			<protocol>, 
-			<server_port>, 
+			<protocol>,
+			<server_port>,
 			<server_protocol>, 
 			<backend>, 
-			<servers>: [<ipaddr>, ...] 
-		}, ...]
-		'''
+			<servers>: [<ipaddr>, ...]
+		}, ...]'''
 		self.cfg.reload()
+		res = []
 		for ln in self.cfg.sections(haproxy.naming('listen')):
 			listener = self.cfg.listener[ln]
-			res = {}
-			for option in list(set(self.cfg.conf.children(listener.xpath))):
-				if	isinstance(listener[option], dict):
-					tmp = {}
-					for opt_str in listener[option]:
-						opt_name = opt_str.strip().replace('\t',' ').split(' ')[0]
-						opt_elem = {opt_name: listener[option][opt_name] or True}
-						tmp.update(opt_elem) 
-					res.update({option: tmp})
-				else:
-					res.update({option: listener[option]})
-			#TODO: or we need to select only some params of `listen` section?, now it return all
-			yield {ln: res}
-		raise StopIteration()
+			bnd_name = listener['default_backend']
+			bnd = self.cfg.backends[bnd_name]
+
+			tmp = {
+					'port': listener['bind'].replace('*:',''),
+					'protocol': self.__get(listener, 'mode'),
+					'server_port': bnd_name.split(':')[-1],
+					'server_protocol': self.__get(bnd, 'mode'),
+					'backend': bnd_name,
+				}
+			res.append(tmp)
+		return res
+
 
 	'''
 	@rpc.service_method
 	@validate.param('backend', optional=_rule_backend)'''
 	def list_servers(self, backend=None):
 		'''
-		@fixme: follow descriptoin and return format		
-		
 		List all servers, or servers from particular backend
 		@rtype: [<ipaddr>, ...]
 		'''
-		
-		
-		'''yield all servers inside `backend` or `listen` sections 
-			@backend: str
-			@return type: dict
-		'''
-		if backend:
-			list_section = self.cfg.sections(haproxy.naming('backend', backend=backend))
-		else:
-			list_section = self.cfg.sections(haproxy.naming('backend'))
+		list_section = self.cfg.sections(haproxy.naming('backend', backend=backend))
+
+		res = []
 		for bnd in list_section:
-			for srvstr in self.cfg.backends[bnd]['server']:
-				srv_name = filter(None, map(string.strip, srvstr.replace('\t', ' ').split(' ')))[0]
-				yield {srv_name: self.cfg.backends[bnd]['server'][srv_name]}
-		raise StopIteration()
+			for srv_name in self.cfg.backends[bnd]['server']:
+				res.append(self.cfg.backends[bnd]['server'][srv_name]['address'])
+		return res
