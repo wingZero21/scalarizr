@@ -32,12 +32,12 @@ class TestHAProxyAPI(unittest.TestCase):
 			TEMP_PATH)
 		self.api = haproxy.HAProxyAPI(TEMP_PATH)
 		self.api.svs.start()
-	
+
 	def tearDown(self):
 		if os.path.exists(TEMP_PATH):
 			self.api.svs.stop()
 			#os.remove(TEMP_PATH)
-	
+
 	def test_create_listener(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port,
 					server_protocol=self.server_protocol, server_port=self.server_port,
@@ -184,15 +184,14 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.assertIsNotNone(listens[0])
 		self.assertIsNotNone(listens[1])
 		
-		
-
-	
 	def test_get_servers_health(self):
 		try:
-			self.api.get_servers_health(self.ipaddr)
+			stats = self.api.get_servers_health(self.ipaddr)
 		except Exception, e:
 			import sys
-			raise AttributeError, 'Error recived servers health, details: %s' % e, sys.exc_info()[2] 
+			raise AttributeError, 'Error recived servers health, details: %s' % e, sys.exc_info()[2]
+		LOG.debug('%s', stats)
+		self.assertIsNotNone(stats)
 
 	
 if __name__ == "__main__":

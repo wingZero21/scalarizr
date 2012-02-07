@@ -175,6 +175,15 @@ class HAProxyAPI(object):
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4', optional=True)'''
 	def get_servers_health(self, ipaddr=None):
+		try:
+			if self.cfg.defaults['stats'][''] =='enable' and self.cfg.globals['stats']['socket'] == '/var/run/haproxy-stats.sock':
+				pass
+		except:
+			self.cfg.globals['stats']['socket'] = '/var/run/haproxy-stats.sock'
+			self.cfg.defaults['stats'][''] = 'enable'
+			self.cfg.save()
+			self.svs.reload()
+
 		#TODO: select parameters what we need with filter by ipaddr
 		stats = haproxy.StatSocket().show_stat()
 		return stats
