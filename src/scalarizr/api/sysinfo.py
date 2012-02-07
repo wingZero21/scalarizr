@@ -7,17 +7,23 @@ Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(ch
 '''
 
 import os
+import logging
 
 from scalarizr import rpc
 
+LOG = logging.getLogger(__name__)
 
 class SysInfoAPI(object):
+	
+	def __init__(self, diskstats=None):
+		self.__diskstats = diskstats if diskstats else None
 
+	
 	def add_extension(self, extension):
 		# @todo: export each callable public attribute into self. 
 		# raise on duplicate 
 		raise NotImplemented()
-	
+
 	@rpc.service_method
 	def fqdn(self, fqdn=None):
 		# get or set hostname
@@ -26,8 +32,20 @@ class SysInfoAPI(object):
 
 	@rpc.service_method
 	def block_devices(self):
-		# __UCD-DISKIO-MIB.py
+		#TODO: __UCD-DISKIO-MIB.py
+		if not self.__diskstats:
+			with open('/proc/diskstats') as fp:
+				self.__diskstats = fp.readlines()
+
+		devicelist = []
+		for index in range(len(self.__diskstats)):
+			values = self.__diskstats[index].split()
+			is_partition = len(values) == 7
+			devicelist.append(values[2])
+		LOG.debug('%s', devicelist)
+		
 		raise NotImplemented()
+	
 		return ['sda1', 'loop0']
 	
 	@rpc.service_method
@@ -62,8 +80,8 @@ class SysInfoAPI(object):
 	def cpu_info(self):
 		raise NotImplemented()
 		# @see /proc/cpuinfo
-		
-	
+
+
 	@rpc.service_method
 	def load_average(self):
 		return os.getloadavg()
