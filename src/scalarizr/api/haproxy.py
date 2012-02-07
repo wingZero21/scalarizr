@@ -15,10 +15,8 @@ import string
 
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
-	'timeout': {'check':'3s'},  
-	'interval': '30s',
-	'fall_threshold': 2,
-	'rise_threshold': 10
+	'timeout': {'check':'3s'}, 
+	'default-server': {'inter': '30s', 'fall': 2, 'rise': 10}
 }
 
 _rule_protocol = validate.rule(choises=['tcp', 'http'])
@@ -67,31 +65,28 @@ class HAProxyAPI(object):
 		else:
 			raise ValueError('Unexpected protocol: %s' % (protocol, ))
 			#TODO: not correct for https or ssl...
-		# apply defaults
+			
+		# listen config:
 		listener.update({
 			'bind': '*:%s' % port,
 			'mode': protocol,
 			'default_backend': bnd
 		})
 		
-		if (server_protocol or protocol) == 'tcp':
+		backend_protocol = server_protocol or protocol
+		if backend_protocol == 'tcp':
 			backend = {}
-		elif (server_protocol or protocol) == 'http':
+		elif backend_protocol == 'http':
 			backend = {'option': {'httpchk': True}}
 		else:
-			raise ValueError('Unexpected protocol: %s' % (protocol, ))
+			raise ValueError('Unexpected protocol: %s' % (backend_protocol, ))
 			#TODO: not correct for https or ssl...
-		# apply defaults
-		backend.update({
-			'mode': server_protocol or protocol,
-			'timeout': HEALTHCHECK_DEFAULTS['timeout'],
-			'default-server': {
-				'fall': HEALTHCHECK_DEFAULTS['fall_threshold'],
-				'rise': HEALTHCHECK_DEFAULTS['rise_threshold'],
-				'inter': HEALTHCHECK_DEFAULTS['interval']
-			}
-		})
-		# Apply changes
+			
+		# backend config:
+		backend.update({'mode': backend_protocol})
+		backend.update(HEALTHCHECK_DEFAULTS)
+		
+		# apply changes
 		#with self.svs.trans(exit='running'):
 		#	with self.cfg.trans(enter='reload', exit='working'):
 		#TODO: change save() and reload(),`if True` condition to `with...` enter, exit
@@ -231,12 +226,9 @@ class HAProxyAPI(object):
 		if not self.cfg.sections(bnds):
 			raise exceptions.NotFound('Backend `%s` not found' % target)
 		for bnd in self.cfg.sections(bnds):
-			self.cfg['backend'][bnd]['default-server'] = {
-				'fall': HEALTHCHECK_DEFAULTS['fall_threshold'],
-				'rise': HEALTHCHECK_DEFAULTS['rise_threshold'],
-				'inter': HEALTHCHECK_DEFAULTS['interval']
-				}
-			self.cfg['backend'][bnd]['timeout'] = HEALTHCHECK_DEFAULTS['timeout'] 
+			backend = self.cfg['backend'][bnd]
+			backend.update(HEALTHCHECK_DEFAULTS)
+			self.cfg['backend'][bnd] = backend
 			
 		#with self.svs.trans(exit='running'):
 			#	with self.cfg.trans(enter='reload', exit='working'):
@@ -250,7 +242,7 @@ class HAProxyAPI(object):
 	@validate.param('ipaddr', type='ipv4')
 	@validate.param('backend', optional=_rule_backend)'''
 	def remove_server(self, ipaddr=None, backend=None):
-		'''Removing server from backend secection with ipaddr'''
+		'''Remove server from backend section with ipaddr'''
 		srv_name = self._server_name(ipaddr)
 		for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
 			if srv_name in self.cfg.backends[bd]['server']:
@@ -279,14 +271,14 @@ class HAProxyAPI(object):
 			bnd_name = listener['default_backend']
 			bnd = self.cfg.backends[bnd_name]
 
-			tmp = {
-					'port': listener['bind'].replace('*:',''),
-					'protocol': listener['mode'],
-					'server_port': bnd_name.split(':')[-1],
-					'server_protocol': bnd['mode'],
-					'backend': bnd_name,
-				}
-			res.append(tmp)
+			res.append({
+				'port': listener['bind'].replace('*:',''),
+				'protocol': listener['mode'],
+				'server_port': bnd_name.split(':')[-1],
+				'server_protocol': bnd['mode'],
+				'backend': bnd_name,
+			})
+			
 		return res
 
 
