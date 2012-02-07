@@ -4,15 +4,12 @@ Created on Nov 25, 2011
 @author: marat
 '''
 
-from scalarizr import rpc, exceptions
+from scalarizr import exceptions
 from scalarizr.libs import validate
 from scalarizr.services import haproxy
 
 
 import logging
-import sys
-import string
-
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
 	'timeout': {'check':'3s'}, 
@@ -171,7 +168,8 @@ class HAProxyAPI(object):
 	@validate.param('ipaddr', type='ipv4', optional=True)'''
 	def get_servers_health(self, ipaddr=None):
 		try:
-			if self.cfg.defaults['stats'][''] =='enable' and self.cfg.globals['stats']['socket'] == '/var/run/haproxy-stats.sock':
+			if self.cfg.defaults['stats'][''] == 'enable' and \
+					self.cfg.globals['stats']['socket'] == '/var/run/haproxy-stats.sock':
 				pass
 		except:
 			self.cfg.globals['stats']['socket'] = '/var/run/haproxy-stats.sock'
@@ -269,16 +267,17 @@ class HAProxyAPI(object):
 		for ln in self.cfg.sections(haproxy.naming('listen')):
 			listener = self.cfg.listener[ln]
 			bnd_name = listener['default_backend']
+			bnd_role = ':'.join(bnd_name.split(':')[2:4]) #example`role:1234`
 			bnd = self.cfg.backends[bnd_name]
 
 			res.append({
-				'port': listener['bind'].replace('*:',''),
-				'protocol': listener['mode'],
-				'server_port': bnd_name.split(':')[-1],
-				'server_protocol': bnd['mode'],
-				'backend': bnd_name,
-			})
-			
+					'port': listener['bind'].replace('*:',''),
+					'protocol': listener['mode'],
+					'server_port': bnd_name.split(':')[-1],
+					'server_protocol': bnd['mode'],
+					'backend': bnd_role,
+				})
+
 		return res
 
 
