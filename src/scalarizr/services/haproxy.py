@@ -254,17 +254,17 @@ class HAProxyCfg(filetool.ConfigurationFile):
 			if isinstance(value, dict):
 				ind = self._indexof(key)
 				LOG.debug('	ind %s', ind)
+				LOG.debug('	ind = %s', ind)
 				if ind == -1:
 					LOG.debug('	path %s added', self.xpath)
 					if key.strip:
 						self.conf.add(self.xpath, key)
 					ind = self._indexof(key)
-				LOG.debug('	ind = %s', ind)
 				if ind != -1:
 					section_ = HAProxyCfg.section(self.conf, self._child_xpath(ind))
 					for key_ in value.keys():
-						LOG.debug('	key `%s`, value `%s`', key_, value[key_])
-						section_[key_] = value[key_]
+						LOG.debug('	inside dict:	key_= `%s`, value `%s`', key_, value[key_])
+						section_[key_] = value.get(key_)#because value `section` class type
 				else:
 					raise 'section_group.__setitem__:	section `%s` was not added' % key
 			else:
