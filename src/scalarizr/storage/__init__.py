@@ -326,6 +326,7 @@ class Volume(VolumeConfig):
 		if not fstype:
 			raise ValueError('Filesystem cannot be None')
 		fs = Storage.lookup_filesystem(fstype) 
+		logger.info('Creating filesystem on %s', self.device)
 		fs.mkfs(self.devname)
 		self.fstype = fstype
 		self._fs = fs

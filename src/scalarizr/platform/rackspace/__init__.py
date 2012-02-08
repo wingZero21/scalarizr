@@ -9,10 +9,37 @@ from scalarizr.util import system2
 import logging
 import re
 import os
+import functools
+import time
 
 from cloudservers import CloudServers
-from cloudservers.client import CloudServersClient 
+from cloudservers.client import CloudServersClient
+from cloudservers.exceptions import CloudServersException 
 import cloudfiles
+
+
+LOG = logging.getLogger(__name__)
+
+
+def _patch_cloudservers():
+	C = CloudServersClient
+	
+	def request(*args, **kwds):
+		interval = 10
+		for _ in range(0, 5):
+			try:
+				C.request(*args, **kwds)
+			except CloudServersException, e:
+				if 'Unhandled exception occurred during processing' in str(e):
+					LOG.debug('Caught Rackspace API error: %s. sleeping %s seconds', str(e), interval)
+					time.sleep(interval)
+					continue
+				raise
+			
+	C.request = functools.wraps(C.request, request)
+	
+_patch_cloudservers()
+
 
 Transfer.explore_provider(CFTransferProvider)
 

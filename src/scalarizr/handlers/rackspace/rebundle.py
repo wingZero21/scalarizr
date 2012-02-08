@@ -13,6 +13,7 @@ import time
 import sys
 
 from cloudservers import ImageManager
+from cloudservers.exceptions import CloudServersException
 
 
 LOG = rebundle_hdlr.LOG
@@ -44,7 +45,14 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			image_manager = ImageManager(con)
 			system2("sync", shell=True)
 			LOG.info("Creating server image. server id: %s, image name: '%s'", server.id, image_name)
-			image = image_manager.create(image_name, server.id)
+			try:
+				image = image_manager.create(image_name, server.id)
+			except CloudServersException, e:
+				if 'Cannot create a new backup request while saving a prior backup or migrating' in str(e):
+					raise HandlerError('Another image is currently creating from this server. '
+							'Rackspace allows to create only ONE image per server at a time. '
+							'Try again later')
+				raise
 			LOG.debug('Image %s created', image.id)
 
 			LOG.info('Checking that image %s is completed', image.id)
