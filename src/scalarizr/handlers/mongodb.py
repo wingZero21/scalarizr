@@ -315,7 +315,7 @@ class MongoDBHandler(ServiceCtlHandler):
 					cfg_server_running = True
 
 		""" Set hostname"""
-		self._logger.info('Setting new hostname: %s' % hostname)
+		self._logger.info('Setting new hostname: %s' % self.hostname)
 		Hosts.set(local_ip, self.hostname)
 		with open('/etc/hostname', 'w') as f:
 			f.write(self.hostname)
@@ -543,7 +543,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		shard_names = [s['_id'] for s in self.mongodb.router_cli.list_shards()]
 
 		if shard_name in shard_names:
-			self._logger.warning('Shard %s already exists.', shard_name)
+			self._logger.debug('Shard %s already exists.', shard_name)
 			return
 
 		self._logger.info('Initializing shard %s' % shard_name)
