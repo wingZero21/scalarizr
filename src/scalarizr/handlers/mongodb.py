@@ -1576,8 +1576,8 @@ class ClusterTerminateWatcher(threading.Thread):
 
 					terminated_nodes_count = 0
 
-					for shard_id in range(len(self.full_status)):
-						for rs_id in range(len(self.full_status[shard_id])):
+					for shard_id in self.full_status.keys():
+						for rs_id in self.full_status[shard_id].keys():
 							node_info = dict(shard_index=shard_id, replica_set_index=rs_id)
 							node_info.update(self.full_status[shard_id][rs_id])
 							msg_body['nodes'].append(node_info)
