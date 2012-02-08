@@ -48,12 +48,8 @@ class Mysql(BaseService):
 	def init_slave(self):
 		pass
 	
-	def init_service(self):
+	def _init_service(self):
 		pass
-	
-	def add_user(self):
-		pass
-	
 	
 	@property
 	def version(self):
@@ -64,28 +60,27 @@ class Mysql(BaseService):
 	def is_replication_master(self):
 		pass
 	
-	def change_primary(self):
+	def change_master_to(self):
+		# client.change_master_to
+		# check_replication_health and wait 
 		pass
 	
-	def register_slave(self):
-		pass
-	
-	def unregister_slave(self):
-		pass
-	
-	def set_trusted_mode(self):
+	def check_replication_health(self):
+		# set slave status
+		# on fail get status from error.log
 		pass
 	
 	
 class MySQLClient(object):
 	_pool = None
 	
-	
 	def __init__(self, user=None, passwd=None, db=None):
 		self.db = None
 		self.user = user
 		self.passwd = passwd
-			
+		
+	def reconnect_as(self, user, passwd):
+		pass	
 	
 	def test_connection(self):
 		self._logger.debug('Checking MySQL service status')
@@ -145,7 +140,7 @@ class MySQLClient(object):
 		self.flush_privileges()
 	
 	
-	def delete_user(self, login, host):
+	def remove_user(self, login, host):
 		return self.fetchone("DELETE FROM mysql.user WHERE User='%s' and Host='%s'" % (login, host))
 	
 	
@@ -264,39 +259,34 @@ class MySQLUser(object):
 	host = None
 	privileges = None
 	
-	def __init__(self, login, password=None,host=None, privileges=None):
-		self.cli = MySQLClient(login,password)
+	def __init__(self, client, login, password=None, host=None, privileges=None):
+		self.cli = client
 		self.login = login
 		self.password = password
 		self.host = host
 		self.privileges = privileges
 	
 	
-	def create(self, login=None, password=None, host='%', privileges=None):
-		login = login or self.login
-		password = password or self.password
-		host = host or self.host
-		privileges = privileges or self.privileges
-		
-		if self.exists(login, host):
+	def create(self):
+		if self.exists(self.login, self.host):
 			raise ServiceError('Unable to create user %s@%s: already exists.')
 		
-		self.cli.create_user(login, host, password, privileges) 
-		return MySQLUser(login, password, host, privileges)
+		self.cli.create_user(self.login, self.host, self.password, self.privileges) 
+		return self
 	
 	
-	def check_password(self, login=None, password=None):
+	def check_password(self):
 		if not self.exists():
 			return False
-		return self.cli.check_password(login or self.login, password or self.password)
+		return self.cli.check_password(self.login, self.password)
 	
 	
-	def exists(self, login, host):
-		return self.cli.user_exists(login, host)
+	def exists(self):
+		return self.cli.user_exists(self.login, self.host)
 	
 	
-	def remove(self, login=None, host=None):
-		return self.cli.delete_user(login or self.login, host or self.host)
+	def remove(self):
+		return self.cli.remove_user(self.login, self.host)
 		
 
 	
@@ -371,12 +361,13 @@ class MySQLDump(object):
 	port = None
 	
 	def __init__(self, root_user=None, root_password=None):
-		self.root_user = root_user
-		self.root_password = root_password
+		self.root_user = root_user or 'root'
+		self.root_password = root_password or ''
 	
-	def create(self, dbname, filename, opts):
+	def create(self, dbname, filename, opts=None):
 		#TODO: move opts to handler
 		#opts = config.split(bus.cnf.rawini.get('mysql', 'mysqldump_options'), ' ')
+		opts = opts or []
 		LOG.debug('Dumping database %s to %s' % (dbname, filename))
 		opts = [MYSQLDUMP_PATH, '-u', self.root_user, '-p'] + opts + ['--databases']
 		with open(filename, 'w') as fp: 
@@ -469,5 +460,8 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		
 		return self._start_stop_reload('start')
 
+
+	def start_skip_grant_tables(self):
+		pass
 
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
