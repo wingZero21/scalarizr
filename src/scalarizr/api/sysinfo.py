@@ -8,17 +8,19 @@ Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(ch
 
 import os
 import logging
+import sys
 
 from scalarizr import rpc
+from scalarizr.util import system2
 
 LOG = logging.getLogger(__name__)
 
 class SysInfoAPI(object):
 	
-	def __init__(self, diskstats=None):
+	def __init__(self, diskstats=None, cpuinfo=None):
 		self.__diskstats = diskstats if diskstats else None
+		self.__cpuinfo = cpuinfo if cpuinfo else None
 
-	
 	def add_extension(self, extension):
 		# @todo: export each callable public attribute into self. 
 		# raise on duplicate 
@@ -32,45 +34,65 @@ class SysInfoAPI(object):
 
 	@rpc.service_method
 	def block_devices(self):
-		#TODO: __UCD-DISKIO-MIB.py
+		'''	@rtype: list
+			@return: ['sda1', 'ram1']'''
 		if not self.__diskstats:
 			with open('/proc/diskstats') as fp:
 				self.__diskstats = fp.readlines()
-
 		devicelist = []
-		for index in range(len(self.__diskstats)):
-			values = self.__diskstats[index].split()
-			is_partition = len(values) == 7
-			devicelist.append(values[2])
+		for value in self.__diskstats:
+			devicelist.append(value.split()[2])
 		LOG.debug('%s', devicelist)
-		
-		raise NotImplemented()
-	
-		return ['sda1', 'loop0']
+		return devicelist
 	
 	@rpc.service_method
 	def uname(self):
-		raise NotImplemented()
+		'''
+		@rtype: dict
+		@return: {	'kernel_name': 'Linux',
+					'kernel_release': '2.6.41.10-3.fc15.x86_64',
+					'kernel_version': '#1 SMP Mon Jan 23 15:46:37 UTC 2012',
+					'nodename': 'marat.office.webta',			
+					'machine': 'x86_64',
+					'processor': 'x86_64',
+					'hardware_platform': 'x86_64'}'''
+		#/usr/bin/pyversions
+		#/etc/issue
 		return {
-			'kernel_name': 'Linux',
-			'kernel_release': '2.6.41.10-3.fc15.x86_64',
-			'kernel_version': '#1 SMP Mon Jan 23 15:46:37 UTC 2012',
-			'nodename': 'marat.office.webta',			
-			'machine': 'x86_64',
-			'processor': 'x86_64',
-			'hardware_platform': 'x86_64'
+			'kernel_name': system2(('uname', '-s'))[0].strip(),
+			'kernel_release': system2(('uname', '-r'))[0].strip(),
+			'kernel_version': system2(('uname', '-v'))[0].strip(),
+			'nodename': system2(('uname', '-n'))[0].strip(),
+			'machine': system2(('uname', '-m'))[0].strip(),
+			'processor': system2(('uname', '-p'))[0].strip(),
+			'hardware_platform': system2(('uname', '-i'))[0].strip()
 		}
-	
+
 	@rpc.service_method
 	def dist(self):
-		raise NotImplemented()
-		return {
-			'id': 'Fedora', 
-			'release': '15', 
-			'codename': 'Lovelock', 
-			'description': 'Fedora release 15 (Lovelock)'
-		}
-	
+		'''
+		@rtype: dict
+		@return: {	'id': 'Fedora',
+					'release': '15',
+					'codename': 'Lovelock',
+					'description': 'Fedora release 15 (Lovelock)'}
+		#TODO: now return som as: 
+			{	'Codename': 'oneiric',
+				'Description': 'Ubuntu 11.10',
+				'Distributor ID': 'Ubuntu',
+				'Release': '11.10'}'''
+		out, err, rcode = system2(('lsb_release', '-a'))
+		if rcode == 0:
+			self.__dist = out.split('\n')
+		else:
+			raise Exception, err
+		res = {}
+		for ln in self.__dist:
+			if ':' in ln:
+				(key,value) = map(lambda x: x.strip(), ln.split(':'))
+				res.update({key: value})
+		return res
+
 	@rpc.service_method
 	def pythons(self):
 		raise NotImplemented()
@@ -78,7 +100,27 @@ class SysInfoAPI(object):
 
 	@rpc.service_method
 	def cpu_info(self):
-		raise NotImplemented()
+		''' @rtype: list
+			@return: [{processor:0, vendor_id:GenuineIntel,...}, ...]
+		'''
+		if not self.__cpuinfo:
+			with open('/proc/cpuinfo') as fp:
+				self.__cpuinfo = fp.readlines()
+		res = []
+		index = 0
+		while index < len(self.__cpuinfo):
+			core = {}
+			while index < len(self.__cpuinfo):
+				if ':' in self.__cpuinfo[index]:
+					tmp = map(lambda x: x.strip(), self.__cpuinfo[index].split(':'))
+					(key, value) = list(tmp) if len(list(tmp)) == 2 else (tmp, None)
+					if key not in core.keys():
+						core.update({key:value})
+					else:
+						break
+				index += 1
+			res.append(core)
+		return res
 		# @see /proc/cpuinfo
 
 

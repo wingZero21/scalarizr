@@ -39,21 +39,35 @@ DISKSTATS = ['   1       0 ram0 0 0 0 0 0 0 0 0 0 0 0\n',
 	'   8       6 sda6 9464 17189 213105 58520 16759 49837 533144 63332 0 48456 121876\n', 
 	' 253       0 dm-0 26316 0 210528 284168 66644 0 533144 9233892 0 50344 9518068\n']
 
+CPUINFO = ['processor\t: 0\n', 'vendor_id\t: GenuineIntel\n', 'cpu family\t: 6\n', 'model\t\t: 23\n', 'model name\t: Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz\n', 'stepping\t: 10\n', 'cpu MHz\t\t: 2600.000\n', 'cache size\t: 2048 KB\n', 'physical id\t: 0\n', 'siblings\t: 2\n', 'core id\t\t: 0\n', 'cpu cores\t: 2\n', 'apicid\t\t: 0\n', 'initial apicid\t: 0\n', 'fdiv_bug\t: no\n', 'hlt_bug\t\t: no\n', 'f00f_bug\t: no\n', 'coma_bug\t: no\n', 'fpu\t\t: yes\n', 'fpu_exception\t: yes\n', 'cpuid level\t: 13\n', 'wp\t\t: yes\n', 'flags\t\t: fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority\n', 'bogomips\t: 5200.26\n', 'clflush size\t: 64\n', 'cache_alignment\t: 64\n', 'address sizes\t: 36 bits physical, 48 bits virtual\n', 'power management:\n', '\n', 'processor\t: 1\n', 'vendor_id\t: GenuineIntel\n', 'cpu family\t: 6\n', 'model\t\t: 23\n', 'model name\t: Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz\n', 'stepping\t: 10\n', 'cpu MHz\t\t: 2600.000\n', 'cache size\t: 2048 KB\n', 'physical id\t: 0\n', 'siblings\t: 2\n', 'core id\t\t: 1\n', 'cpu cores\t: 2\n', 'apicid\t\t: 1\n', 'initial apicid\t: 1\n', 'fdiv_bug\t: no\n', 'hlt_bug\t\t: no\n', 'f00f_bug\t: no\n', 'coma_bug\t: no\n', 'fpu\t\t: yes\n', 'fpu_exception\t: yes\n', 'cpuid level\t: 13\n', 'wp\t\t: yes\n', 'flags\t\t: fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority\n', 'bogomips\t: 5199.83\n', 'clflush size\t: 64\n', 'cache_alignment\t: 64\n', 'address sizes\t: 36 bits physical, 48 bits virtual\n', 'power management:\n', '\n']
+
 
 class TestSysInfoAPI(unittest.TestCase):
 	
 	def __init__(self, methodName='runTest'):
 		unittest.TestCase.__init__(self, methodName=methodName)
-
-		self.info = sysinfo.SysInfoAPI(diskstats=DISKSTATS)
+		self.info = sysinfo.SysInfoAPI(diskstats=DISKSTATS, cpuinfo=CPUINFO)
 
 
 	def test_block_devices(self):
 
 		devs = self.info.block_devices()
-
 		self.assertEqual(devs, [])
 		
+	def test_uname(self):
+
+		inf = self.info.uname()
+		self.assertEqual(inf, {})
+
+	def test_cpu_info(self):
+
+		cpu = self.info.cpu_info()
+		self.assertEqual(cpu, [{'vendor_id': 'GenuineIntel', 'cpu family': '6', 'cache_alignment': '64', 'cpu cores': '2', 'bogomips': '5200.26', 'core id': '0', 'hlt_bug': 'no', 'apicid': '0', 'f00f_bug': 'no', 'fpu_exception': 'yes', 'stepping': '10', 'wp': 'yes', 'clflush size': '64', 'coma_bug': 'no', 'fdiv_bug': 'no', 'cache size': '2048 KB', 'power management': '', 'cpuid level': '13', 'physical id': '0', 'fpu': 'yes', 'flags': 'fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority', 'cpu MHz': '2600.000', 'model name': 'Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz', 'siblings': '2', 'model': '23', 'processor': '0', 'initial apicid': '0', 'address sizes': '36 bits physical, 48 bits virtual'}, {'vendor_id': 'GenuineIntel', 'cpu family': '6', 'cache_alignment': '64', 'cpu cores': '2', 'bogomips': '5199.83', 'core id': '1', 'hlt_bug': 'no', 'apicid': '1', 'f00f_bug': 'no', 'fpu_exception': 'yes', 'stepping': '10', 'wp': 'yes', 'clflush size': '64', 'coma_bug': 'no', 'fdiv_bug': 'no', 'cache size': '2048 KB', 'power management': '', 'cpuid level': '13', 'physical id': '0', 'fpu': 'yes', 'flags': 'fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority', 'cpu MHz': '2600.000', 'model name': 'Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz', 'siblings': '2', 'model': '23', 'processor': '1', 'initial apicid': '1', 'address sizes': '36 bits physical, 48 bits virtual'}])
+
+	def test_dist(self):
+		
+		self.assertIsNotNone(self.info.dist())
+
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
