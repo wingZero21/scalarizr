@@ -945,7 +945,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		if not list(self.mongodb.cli.connection.local.system.replset.find()):
 			self.mongodb.initiate_rs()
 		else:
-			self._logger.info("Previous replica set configuration found. Changing members configuration.")
+			self._logger.info("Previous replica set configuration found. Changing members list.")
 			nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 			
 			rs_cfg = self.mongodb.cli.get_rs_config()
@@ -1080,7 +1080,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				if PlatformFeatures.VOLUMES not in self._platform.features:
 					raise HandlerError('Platform does not support pluggable volumes')
 
-				self._logger.info('Too stale to synchronize. Trying to get snapshot from primary')
+				self._logger.info('Mongodb too stale to synchronize. Trying to get snapshot from primary')
 				for host in self._get_shard_hosts():
 					self.send_int_message(host.internal_ip,
 							MongoDBMessages.INT_CREATE_DATA_BUNDLE,
@@ -1121,7 +1121,7 @@ class MongoDBHandler(ServiceCtlHandler):
 														
 					time.sleep(1)
 			except:
-				self._logger.warning('%s. Trying to perform clean sync' % sys.exc_info()[1] )
+				self._logger.info('%s. Trying to perform clean sync' % sys.exc_info()[1] )
 				if new_volume:
 					new_volume.destroy()
 					

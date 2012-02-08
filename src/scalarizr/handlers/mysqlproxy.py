@@ -128,7 +128,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 	
 		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return mysql.BEHAVIOUR in behaviour and \
+		return mysql.BEHAVIOUR in message.behaviour and \
 					message.name in (Messages.HOST_UP,
 									 Messages.HOST_DOWN,
 									 mysql.MysqlMessages.NEW_MASTER_UP)

@@ -277,7 +277,7 @@ def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, timeout=Non
 	if timeout:
 		time_until = time.time() + timeout
 	if start_text and logger:
-		logger.info('%s. Timeout: %d seconds', start_text, timeout)
+		logger.info('%s. (timeout: %d seconds)', start_text, timeout)
 	while not target(*args, **kwargs):
 		if time_until and time.time() >= time_until:
 			msg = error_text + '. ' if error_text else ''

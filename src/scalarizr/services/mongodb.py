@@ -12,10 +12,10 @@ import logging
 import functools
 
 
-from scalarizr.config import BuiltinBehaviours, ScalarizrState
+from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import BaseConfig, BaseService, lazy
 from scalarizr.libs.metaconf import Configuration
-from scalarizr.util import disttool, cryptotool, system2, \
+from scalarizr.util import disttool, system2, \
 				PopenError, wait_until, initdv2, software, \
 				firstmatched
 from scalarizr.util.filetool import rchown, read_file, write_file
@@ -135,7 +135,7 @@ class MongoDB(BaseService):
 
 
 	def authenticate(self, login=SCALR_USER, password=None):
-		self._logger.debug('setting auth to mongo connection')
+		self._logger.debug('Setting auth to mongo connection')
 		self.login = login
 		self.password = password
 		self.cli.auth(login, password)
@@ -211,7 +211,7 @@ class MongoDB(BaseService):
 	
 	def start_shardsvr(self):
 		self.working_dir.unlock()
-		self._logger.debug('Starting main mongod process')
+		self._logger.info('Starting main mongod process')
 		self.mongod.start()
 	
 	
@@ -219,38 +219,35 @@ class MongoDB(BaseService):
 		if self.arbiter.is_running:
 			self.arbiter.stop()
 		self._prepare_arbiter(self.config.replSet)
-		self._logger.debug('Starting arbiter process')
+		self._logger.info('Starting mongo arbiter process')
 		self.arbiter.start()
 	
 	
 	def stop_arbiter(self):
-		self.arbiter.stop(reason='Stopping arbiter')
+		self.arbiter.stop(reason='Stopping mongo arbiter')
 		
 	
 	def start_config_server(self):
 		self._prepare_config_server()
-		self._logger.debug('Starting config server')
+		self._logger.info('Starting mongo config server')
 		self.config_server.start()
 		
 		
 	def stop_config_server(self):
-		self.config_server.stop('Stopping config server')
+		self.config_server.stop('Stopping mongo config server')
 		
 		
 	def start_router(self):
 		self.stop_default_init_script()
 		Mongos.set_keyfile(self.keyfile.path)
-		self._logger.debug('Starting router process')
 		Mongos.start()
 		
 	
 	def stop_router(self):
-		self._logger.debug('Stopping router process')
 		Mongos.stop()
 
 
 	def restart_router(self):
-		self._logger.debug('Restarting router process')
 		Mongos.restart()
 
 			
@@ -285,7 +282,7 @@ class MongoDB(BaseService):
 
 
 	def remove_replset_info(self):
-		self._logger.info("Removing previous replication set info")
+		self._logger.info("Removing previous replica set info")
 		return self.cli.connection.local.system.replset.remove()
 
 
@@ -504,7 +501,7 @@ class WorkingDirectory(object):
 	
 	def unlock(self):
 		if self.is_locked():
-			self._logger.warning('Lock was found in database directory %s. Last time Mongodb was not shut down properly.' % self.path)
+			self._logger.debug('Lock was found in database directory %s. Last time Mongodb was not shut down properly.' % self.path)
 			os.remove(self.lock_path)	
 			
 	def create(self, dst):
@@ -698,7 +695,7 @@ class Mongod(object):
 
 	def stop(self, reason=None):
 		if self.is_running:
-			self._logger.debug('Stopping %s: %s' % (MONGOD,reason))
+			self._logger.info('Stopping %s: %s' % (MONGOD,reason))
 			self.cli.shutdown_server()
 			wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
 			self._logger.debug('%s process has been stopped.' % MONGOD)
@@ -750,7 +747,7 @@ class Mongos(object):
 	@classmethod
 	def start(cls):
 		if not cls.is_running():
-			cls._logger.debug('Starting %s process' % MONGOS)
+			cls._logger.info('Starting %s process' % MONGOS)
 			args = [MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
 									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
 			if cls.keyfile and os.path.exists(cls.keyfile):
@@ -765,7 +762,7 @@ class Mongos(object):
 	@classmethod
 	def stop(cls):
 		if cls.is_running():
-			cls._logger.debug('Stopping %s process' % MONGOS)
+			cls._logger.info('Stopping %s process' % MONGOS)
 			cls.get_cli().shutdown_server()
 			wait_until(lambda: not cls.is_running(), timeout=MAX_STOP_TIMEOUT)
 			cls._logger.debug('%s process has been stopped.' % MONGOS)
@@ -888,7 +885,7 @@ class MongoCLI(object):
 		'''
 	    initializes replica set
 	    '''
-		self._logger.debug('Initializing replica set')
+		self._logger.info('Initializing replica set')
 		if self.connection.local.system.replset.find_one():
 			self._logger.debug('Replica set already initialized. Nothing to do')
 			return
@@ -1031,7 +1028,7 @@ class MongoCLI(object):
 
 	@autoreconnect
 	def create_or_update_admin_user(self, username, password):
-		self._logger.debug('Adding mongodb user %s on %s:%s' % (username, self.host, self.port))
+		self._logger.info('Updating mongodb user %s on %s:%s' % (username, self.host, self.port))
 		self.connection.admin.add_user(username, password)
 
 
