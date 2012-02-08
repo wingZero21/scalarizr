@@ -267,8 +267,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			os.makedirs(path)
 		
 		mongodb_data = message.mongodb.copy()
-		self._logger.info('Got %s part of HostInitResponse: %s' % (BEHAVIOUR, mongodb_data))
-		
+
 		for key, fpath in ((OPT_VOLUME_CNF, self._volume_config_path), 
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 			if os.path.exists(fpath):
@@ -318,6 +317,7 @@ class MongoDBHandler(ServiceCtlHandler):
 					cfg_server_running = True
 
 		""" Set hostname"""
+		self._logger.info('Setting new hostname: %s' % hostname)
 		Hosts.set(local_ip, self.hostname)
 		with open('/etc/hostname', 'w') as f:
 			f.write(self.hostname)
@@ -329,9 +329,6 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._init_master(hostup_msg, rs_name)
 		else:
 			self._init_slave(hostup_msg, rs_name)
-
-		self._logger.debug('shard_index=%s, type(shard_index)=%s' % (self.shard_index, type(self.shard_index)))
-		self._logger.debug('rs_id=%s, type(rs_id)=%s' % (self.rs_id, type(self.rs_id)))
 
 		possible_self_arbiter = "%s:%s" % (self.hostname, mongo_svc.ARBITER_DEFAULT_PORT)
 		if possible_self_arbiter in self.mongodb.arbiters:
@@ -356,7 +353,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				wait_for_config_server = False
 
 				if self.rs_id == 0:
-					self.mongodb.mongod.restart(reason="https://jira.mongodb.org/browse/SERVER-4238")
+					self.mongodb.mongod.restart(reason="Workaround, authentication bug in mongo"
+													"(see https://jira.mongodb.org/browse/SERVER-4238)")
 
 					wait_for_int_hostups = True
 					shards_total = int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARDS_TOTAL))
@@ -550,7 +548,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			self._logger.warning('Shard %s already exists.', shard_name)
 			return
 
-		self._logger.info('Initializing shard')
+		self._logger.info('Initializing shard %s' % shard_name)
 		rs_name = RS_NAME_TPL % shard_index
 		self.mongodb.router_cli.add_shard(shard_name, rs_name, self.mongodb.replicas)
 
@@ -939,13 +937,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		@param message: HostUp message
 		"""
 		
-		self._logger.info("Initializing %s master" % BEHAVIOUR)
+		self._logger.info("Initializing %s primary" % BEHAVIOUR)
 		
 		# Plug storage
 		volume_cnf = self._get_volume_cnf()		
 		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
-		
 
 		self.mongodb.prepare(rs_name)
 		self.mongodb.start_shardsvr()
@@ -954,6 +951,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		if not list(self.mongodb.cli.connection.local.system.replset.find()):
 			self.mongodb.initiate_rs()
 		else:
+			self._logger.info("Previous replica set configuration found. Changing members configuration.")
 			nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 			
 			rs_cfg = self.mongodb.cli.get_rs_config()
@@ -962,7 +960,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			if not rs_cfg['members']:
 				rs_cfg['members'] = [{'_id' : 0, 'host': nodename}]
 
-			rs_cfg['version'] += 1
+			rs_cfg['version'] += 10
 			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
 						
@@ -1002,7 +1000,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		def request_and_wait_replication_status():
 			
-			self._logger.info('Notify primary node we are joining replica set')
+			self._logger.info('Notifying primary node about joining replica set')
 
 			msg_body = dict(mongodb=dict(shard_index=self.shard_index,
 							replica_set_index=self.rs_id))
@@ -1055,9 +1053,13 @@ class MongoDBHandler(ServiceCtlHandler):
 						msg_store.mark_as_handled(msg.id)
 
 				time.sleep(1)
+
+			if initialized:
+				self._logger.info('Mongo successfully joined replica set')
+
 			return stale
 		
-		self._logger.info("Initializing %s slave" % BEHAVIOUR)
+		self._logger.info("Initializing %s secondary" % BEHAVIOUR)
 
 		# Plug storage
 		volume_cnf = self._get_volume_cnf()
@@ -1072,7 +1074,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		first_start = not self._storage_valid()
 		if not first_start:
 			self.mongodb.remove_replset_info()
-			self.mongodb.mongod.stop('Removing previous replication set info')
+			self.mongodb.mongod.stop('Cleaning replica set configuration')
 			self.mongodb.start_shardsvr()
 
 		stale = request_and_wait_replication_status()
@@ -1135,8 +1137,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				if stale:
 					# TODO: raise distinct exception
 					raise HandlerError("Replication status is stale")
-		else:
-			self._logger.info('Successfully joined replica set')
 
 		message.mongodb = self._compat_storage_data(self.storage_vol)
 		
@@ -1279,7 +1279,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 	def _create_storage_snapshot(self):
 		#TODO: check mongod journal option if service is running!
-		self._logger.info("Creating storage snapshot")
+		self._logger.info("Creating mongodb's storage snapshot")
 		try:
 			return self.storage_vol.snapshot()
 		except StorageError, e:
@@ -1527,7 +1527,7 @@ class ClusterTerminateWatcher(threading.Thread):
 	def run(self):
 		try:
 			# Send cluster terminate notification to all role nodes
-			self.logger.debug("Notify all nodes about cluster termination.")
+			self.logger.info("Notifying all nodes about cluster termination.")
 			for host in self.role_hosts:
 
 				shard_idx = host.shard_index
@@ -1551,7 +1551,7 @@ class ClusterTerminateWatcher(threading.Thread):
 			while not cluster_terminated:
 				# If timeout reached
 				if datetime.datetime.utcnow() > self.deadline:
-					raise Exception('Timeout reached.')
+					raise Exception('Cluster termination timeout reached.')
 
 				msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
 				messages = [pair[1] for pair in msg_queue_pairs]
@@ -1564,7 +1564,7 @@ class ClusterTerminateWatcher(threading.Thread):
 						shard_id = int(msg.shard_index)
 						rs_id = int(msg.replica_set_index)
 
-						self.logger.debug("Received ClusterTerminate status=%s from mongo-%s-%s",
+						self.logger.info("Received termination status (%s) from mongo-%s-%s",
 										msg.status, shard_id, rs_id)
 
 						if msg.status == 'ok':
@@ -1611,7 +1611,7 @@ class ClusterTerminateWatcher(threading.Thread):
 					else:
 						self.next_heartbeat += datetime.timedelta(seconds=HEARTBEAT_INTERVAL)
 
-			self.logger.debug("Cluster successfully terminated. Notifying Scalr")
+			self.logger.info("Mongodb cluster successfully terminated.")
 			self.handler.send_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT,
 															dict(status='ok'))
 		except:

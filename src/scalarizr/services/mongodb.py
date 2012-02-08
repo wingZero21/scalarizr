@@ -698,8 +698,8 @@ class Mongod(object):
 
 	def stop(self, reason=None):
 		if self.is_running:
-			self.cli.shutdown_server()
 			self._logger.debug('Stopping %s: %s' % (MONGOD,reason))
+			self.cli.shutdown_server()
 			wait_until(lambda: not self.is_running, timeout=MAX_STOP_TIMEOUT)
 			self._logger.debug('%s process has been stopped.' % MONGOD)
 	
@@ -980,7 +980,7 @@ class MongoCLI(object):
 			out = self.connection.admin.command('shutdown', force=True)
 
 		except (pymongo.errors.AutoReconnect, pymongo.errors.OperationFailure), e:
-			self._logger.warning('Could not shutdown server from the inside: %s',e)
+			self._logger.debug('Could not shutdown server from the inside: %s',e)
 			out = None
 		return out
 
