@@ -787,17 +787,26 @@ class MongoDBHandler(ServiceCtlHandler):
 
 			
 	def on_MongoDb_IntCreateDataBundle(self, message):
-		msg_data = self._create_data_bundle()
-		if msg_data:
-			self.send_int_message(message.local_ip, 
-								MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
-								msg_data)
+		try:
+			msg_data = self._create_data_bundle()
+		except:
+			self._logger.exception('Failed to create data bundle')
+			msg_data = {'status': 'error', 'last_error': str(sys.exc_info()[1])}
+		self.send_int_message(message.local_ip, 
+					MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
+					msg_data)
 			
 	
 	def on_MongoDb_CreateDataBundle(self, message):
-		msg_data = self._create_data_bundle()
-		if msg_data:
-			self.send_message(MongoDBMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)		
+		try:
+			self.send_message(
+					MongoDBMessages.CREATE_DATA_BUNDLE_RESULT, 
+					self._create_data_bundle())
+		except:
+			self.send_result_error_message(
+					MongoDBMessages.CREATE_DATA_BUNDLE_RESULT, 
+					'Failed to create data bundle')
+					
 			
 	
 	def _create_data_bundle(self):
@@ -821,12 +830,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				status		= 'ok'
 			)
 			msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
-			return msg_data
-		except (Exception, BaseException), e:
-			self._logger.exception(e)
-			
-			# Notify Scalr about error
-			msg_data = dict(status = 'error', last_error = str(e))
 			return msg_data
 		finally:
 			self.mongodb.router_cli.start_balancer()
@@ -907,14 +910,8 @@ class MongoDBHandler(ServiceCtlHandler):
 				backup_parts = result
 			))
 						
-		except (Exception, BaseException), e:
-			self._logger.exception(e)
-			
-			# Notify Scalr about error
-			self.send_message(MongoDBMessages.CREATE_BACKUP_RESULT, dict(
-				status = 'error',
-				last_error = str(e)
-			))
+		except:
+			self.send_result_error_message(MongoDBMessages.CREATE_BACKUP_RESULT, 'Failed to create backup')
 			
 		finally:
 			if tmpdir:
@@ -1142,8 +1139,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self, int(message.timeout))
 			cluster_terminate_watcher.start()
 		except:
-			err_msg = sys.exc_info()[1]
-			self.send_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT,	dict(status='error', last_error=err_msg))
+			self.send_result_error_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT, 'Cluster terminate failed')
 		
 		
 	def _get_volume_cnf(self):

@@ -16,6 +16,7 @@ import threading
 import pprint
 from distutils.file_util import write_file
 import sys
+import traceback
 
 
 
@@ -63,6 +64,20 @@ class Handler(object):
 		msg = msg_name if isinstance(msg_name, Message) else \
 					self.new_message(msg_name, msg_body, msg_meta, broadcast, include_pad, srv)
 		srv.new_producer(host).send(queue, msg)
+
+	def send_result_error_message(self, msg_name, error_text=None, exc_info=None, body=None):
+		body = body or {}
+		if not exc_info:
+			exc_info = sys.exc_info()
+		body['status'] = 'error'
+		body['last_error'] = ''
+		if error_text:
+			body['last_error'] += error_text + '. '
+		body['last_error'] += str(exc_info[1])
+		body['trace'] = ''.join(traceback.format_tb(exc_info[2]))
+
+		self._logger.error(body['last_error'], exc_info=exc_info)		
+		self.send_message(msg_name, body)
 
 	def _broadcast_message(self, msg):
 		cnf = bus.cnf
