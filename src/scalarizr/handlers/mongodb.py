@@ -16,8 +16,6 @@ import tempfile
 import datetime
 import threading
 
-from collections import namedtuple
-
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
