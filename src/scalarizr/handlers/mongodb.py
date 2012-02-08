@@ -356,7 +356,6 @@ class MongoDBHandler(ServiceCtlHandler):
 
 					wait_for_int_hostups = True
 					shards_total = int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARDS_TOTAL))
-
 					""" Status table = {server_id : {is_ready, is_notified, ip_addr}, ...} """
 					status_table = {}
 
@@ -367,15 +366,14 @@ class MongoDBHandler(ServiceCtlHandler):
 						status_table[i] = Status(False, False, None)
 
 					for host in role_hosts:
-
 						""" Skip ourself """
 						if host.shard_index == self.shard_index and \
 						   				host.replica_set_index == self.rs_id:
 							continue
 
-						""" Check if it's really cluster initialization,
-							or configserver just failed """
-						if host.replica_set_index != 0 or host.status == "Running":
+						""" Check if it's really cluster initialization, or configserver just failed """
+						#if host.replica_set_index != 0 or host.status == "Running":
+						if host.status == "Running":
 							""" Already have replicas """
 							wait_for_int_hostups = False
 							if self.shard_index != 0:
@@ -388,86 +386,84 @@ class MongoDBHandler(ServiceCtlHandler):
 
 						status_table[host.shard_index] = Status(False, False, host.internal_ip)
 
+					if wait_for_int_hostups:
+						int_before_hostup_msg_body = dict(shard_index=self.shard_index,
+							replica_set_index=self.rs_id)
+						msg_store = P2pMessageStore()
+						local_handled_msg_ids = []
+
+						while True:
+							if not status_table:
+								break
+
+							""" Inform unnotified servers """
+							for host_status in filter(lambda h: not h.is_notified, status_table.values()):
+								if host_status.ip_addr:
+									try:
+										self.send_int_message(host_status.ip_addr,
+											MongoDBMessages.INT_BEFORE_HOST_UP,
+											int_before_hostup_msg_body)
+
+										host_status.is_notified = True
+									except:
+										self._logger.warning('%s' % sys.exc_info()[1])
+
+							""" Handle all HostInits and HostDowns """
+							msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8013')
+							messages = [pair[1] for pair in msg_queue_pairs]
+							for message in messages:
+
+								if message.name not in (Messages.HOST_INIT, Messages.HOST_DOWN):
+									continue
+
+								if message.id in local_handled_msg_ids:
+									continue
+
+								node_shard_id = int(message.mongodb['shard_index'])
+								node_rs_id = int(message.mongodb['replica_set_index'])
+
+								if node_shard_id == self.shard_index:
+									continue
+
+								if message.name == Messages.HOST_INIT:
+									""" Updating hostname in /etc/hosts """
+									self.on_HostInit(message)
+									if node_rs_id == 0:
+										status_table[node_shard_id] = Status(False, False, message.local_ip)
+
+								elif message.name == Messages.HOST_DOWN:
+									if node_rs_id == 0:
+										status_table[node_shard_id] = Status(False, False, None)
+
+								local_handled_msg_ids.append(message.id)
+
+
+							""" Handle all IntBeforeHostUp messages """
+							msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
+							messages = [pair[1] for pair in msg_queue_pairs]
+
+							for message in messages:
+								if message.name == MongoDBMessages.INT_BEFORE_HOST_UP:
+									try:
+										node_shard_id = int(message.shard_index)
+										node_status = status_table[node_shard_id]
+										status_table[node_shard_id] = Status(True, True, node_status.ip_addr)
+
+									finally:
+										msg_store.mark_as_handled(message.id)
+
+							if all([status.is_ready for status in status_table.values()]):
+								""" Everybody is ready """
+								break
+
+							""" Sleep for a while """
+							time.sleep(10)
 
 				else:
 					wait_for_config_server = True
 
-				if wait_for_int_hostups:
-
-					int_before_hostup_msg_body = dict(shard_index=self.shard_index,
-													replica_set_index=self.rs_id)
-					msg_store = P2pMessageStore()
-					local_handled_msg_ids = []
-
-					while True:
-						if not status_table:
-							break
-
-						""" Inform unnotified servers """
-						for host_status in filter(lambda h: not h.is_notified, status_table.values()):
-							if host_status.ip_addr:
-								try:
-									self.send_int_message(host_status.ip_addr,
-														MongoDBMessages.INT_BEFORE_HOST_UP,
-														int_before_hostup_msg_body)
-
-									host_status.is_notified = True
-								except:
-									self._logger.warning('%s' % sys.exc_info()[1])
-
-						""" Handle all HostInits and HostDowns """
-						msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8013')
-						messages = [pair[1] for pair in msg_queue_pairs]
-						for message in messages:
-
-							if message.name not in (Messages.HOST_INIT, Messages.HOST_DOWN):
-								continue
-
-							if message.id in local_handled_msg_ids:
-								continue
-
-							node_shard_id = int(message.mongodb['shard_index'])
-							node_rs_id = int(message.mongodb['replica_set_index'])
-
-							if node_shard_id == self.shard_index:
-								continue
-
-							if message.name == Messages.HOST_INIT:
-								""" Updating hostname in /etc/hosts """
-								self.on_HostInit(message)
-								if node_rs_id == 0:
-									status_table[node_shard_id] = Status(False, False, message.local_ip)
-
-							elif message.name == Messages.HOST_DOWN:
-								if node_rs_id == 0:
-									status_table[node_shard_id] = Status(False, False, None)
-
-							local_handled_msg_ids.append(message.id)
-
-
-						""" Handle all IntBeforeHostUp messages """
-						msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
-						messages = [pair[1] for pair in msg_queue_pairs]
-
-						for message in messages:
-							if message.name == MongoDBMessages.INT_BEFORE_HOST_UP:
-								try:
-									node_shard_id = int(message.shard_index)
-									node_status = status_table[node_shard_id]
-									status_table[node_shard_id] = Status(True, True, node_status.ip_addr)
-
-								finally:
-									msg_store.mark_as_handled(message.id)
-
-						if all([status.is_ready for status in status_table.values()]):
-							""" Everybody is ready """
-							break
-
-						""" Sleep for a while """
-						time.sleep(10)
-
-
 				if wait_for_config_server:
+					self._logger.info('Waiting until mongo config server on mongo-0-0 becomes alive')
 					while not cfg_server_running:
 						try:
 							time.sleep(20)
