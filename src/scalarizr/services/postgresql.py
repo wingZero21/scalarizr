@@ -219,15 +219,7 @@ class PostgreSql(BaseService):
 			self.config_dir.move_to(self.unified_etc_path)
 			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
 			self.postgresql_conf = PostgresqlConf.find(self.config_dir)
-		
 
-	def _set(self, key, obj):
-		self._objects[key] = obj
-		
-	def _get(self, key, callback, *args, **kwargs):
-		if not self._objects.has_key(key):
-			self._set(key, callback(*args, **kwargs))
-		return self._objects[key]
 		
 	def _get_config_dir(self):
 		return self._get('config_dir', ConfigDir)

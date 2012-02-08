@@ -91,6 +91,7 @@ class BaseConfig(object):
 	data = None
 	config_name = None
 	config_type = None
+	comment_empty = False
 	
 	def __init__(self, path, autosave=True):
 		self._logger = logging.getLogger(__name__)
@@ -106,7 +107,10 @@ class BaseConfig(object):
 			self.data = Configuration(self.config_type)
 			if os.path.exists(self.path):
 				self.data.read(self.path)
-		self.data.set(option,value, force=True)
+		if value:
+			self.data.set(option,value, force=True)
+		elif self.comment_empty: 
+			self.data.comment(option)
 		if self.autosave:
 			self.save_data()
 			self.data = None
@@ -149,3 +153,6 @@ class BaseConfig(object):
 			self.data.write(self.path)			
 
 	
+
+class ServiceError(BaseException):
+	pass
