@@ -24,13 +24,27 @@ class SysInfoAPI(object):
 	def add_extension(self, extension):
 		# @todo: export each callable public attribute into self. 
 		# raise on duplicate 
+		#TODO: whats mean each callable public attribute(block_device, fqdn...)?
 		raise NotImplemented()
 
 	@rpc.service_method
 	def fqdn(self, fqdn=None):
-		# get or set hostname
+		'''@rtype: str
+		'''
+		# get or set system hostname
 		# @see: man hostname
-		raise NotImplemented()
+		#hostname --fqdn / -get long host name
+		if fqdn:
+			with open('/etc/hostname', 'w+') as fp:
+				hostname = fp.readline().strip()
+				if hostname != fqdn:
+					fp.write(fqdn)
+					return fqdn
+				return hostname
+		else:
+			with open('/etc/hostname') as fp:
+				return fp.readline().strip()
+
 
 	@rpc.service_method
 	def block_devices(self):
@@ -57,6 +71,7 @@ class SysInfoAPI(object):
 					'processor': 'x86_64',
 					'hardware_platform': 'x86_64'}'''
 		#/usr/bin/pyversions
+		#TODO: better read this from file
 		#/etc/issue
 		return {
 			'kernel_name': system2(('uname', '-s'))[0].strip(),
@@ -95,6 +110,7 @@ class SysInfoAPI(object):
 
 	@rpc.service_method
 	def pythons(self):
+		#TODO: thinking
 		raise NotImplemented()
 		return ('2.6', '2.7', '3.2')
 
@@ -103,6 +119,7 @@ class SysInfoAPI(object):
 		''' @rtype: list
 			@return: [{processor:0, vendor_id:GenuineIntel,...}, ...]
 		'''
+		# @see /proc/cpuinfo
 		if not self.__cpuinfo:
 			with open('/proc/cpuinfo') as fp:
 				self.__cpuinfo = fp.readlines()
@@ -121,7 +138,7 @@ class SysInfoAPI(object):
 				index += 1
 			res.append(core)
 		return res
-		# @see /proc/cpuinfo
+		
 
 
 	@rpc.service_method
@@ -146,18 +163,30 @@ class SysInfoAPI(object):
 				<bytes>: total number of bytes written successfully
 			}
 		}, ...]
+		http://www.kernel.org/doc/Documentation/iostats.txt
 		'''
-		# __UCD-DISKIO-MIB.py
-		# http://www.kernel.org/doc/Documentation/iostats.txt
-		raise NotImplemented()
-		return [{
-			'device': 'sda1',
-			'read': {'num': 24913, 'sectors': 501074, 'bytes': 256549888},
-			'write': {'num': 2009937, 'sectors': 54012056, 'bytes': 27654172672}
-		}, {
-			'device': 'sdb',
-			# ...
-		}]
+		if not self.__diskstats:
+			with open('/proc/diskstats') as fp:
+				self.__diskstats = fp.readlines()
+		devicelist = []
+		for value in self.__diskstats:
+			params = value.split()[2:]
+			device = params[0]
+			for i in range(1, len(params)-1):
+				params[i] = int(params[i])
+			if len(params) == 12:
+				read = {'num': params[1], 'sectors': params[3], 'bytes': params[3]*512}
+				write = {'num': params[5], 'sectors': params[7], 'bytes': params[7]*512}
+			elif len(params) == 5:
+				read = {'num': params[1], 'sectors': params[2], 'bytes': params[2]*512}
+				write = {'num': params[3], 'sectors': params[4], 'bytes': params[4]*512}
+			else:
+				raise Exception, 'scalarizr.api.sysinfo.disk_stats: number of column in\
+						diskstats is not known. Count of column = %s' % (len(params)+2)
+			devicelist.append({'device': device, 'write': write, 'read': read})
+		LOG.debug('%s', devicelist)
+		return devicelist
+
 	
 	@rpc.service_method
 	def net_stats(self):
@@ -177,8 +206,24 @@ class SysInfoAPI(object):
 			}
 		}, ...]
 		'''
+		import re
+		
+		with open('/proc/net/dev', "r") as fp:
+			list = fp.readlines()
+		
+		res = []
+		for row in list:
+			row = row.split(':')
+			iface = row.pop(0).strip()
+			columns = map(lambda x: x.strip(), row.split())
+			res.append({'iface': iface,
+						'receive': {'bytes': columns[0], 'packets': columns[1], 'errors': columns[2]},
+						'transmit': {'bytes': columns[8], 'packets': columns[9], 'errors': columns[10]},
+						})
+		return res
+		'''	
 		# __IF-MIB.py
-		raise NotImplemented()
+		
 		return [{
 			'iface': 'lo', 
 			'receive': {'bytes': 14914843, 'packets': 116750, 'errors': 0}, 
@@ -187,4 +232,4 @@ class SysInfoAPI(object):
 			'iface': 'p1p1', 
 			'receive': {'bytes': 6191422351, 'packets': 23714651, 'errors': 0}, 
 			'transmit': {'bytes': 14914843, 'packets': 116750, 'errors': 0}
-		}]
+		}]'''
