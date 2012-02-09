@@ -24,8 +24,10 @@ class SysInfoAPI(object):
 	def add_extension(self, extension):
 		# @todo: export each callable public attribute into self. 
 		# raise on duplicate 
-		#TODO: whats mean each callable public attribute(block_device, fqdn...)?
-		raise NotImplemented()
+		for ext in dir(extension):
+			if not ext.startswith('_'):
+				setattr(self, ext, getattr(extension, ext))
+
 
 	@rpc.service_method
 	def fqdn(self, fqdn=None):
