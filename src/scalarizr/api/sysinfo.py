@@ -9,6 +9,7 @@ Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(ch
 import os
 import logging
 import sys
+import re
 
 from scalarizr import rpc
 from scalarizr.util import system2
@@ -22,20 +23,24 @@ class SysInfoAPI(object):
 		self.__cpuinfo = cpuinfo if cpuinfo else None
 
 	def add_extension(self, extension):
-		# @todo: export each callable public attribute into self. 
-		# raise on duplicate 
-		for ext in dir(extension):
-			if not ext.startswith('_'):
-				setattr(self, ext, getattr(extension, ext))
+		'''
+		@param extension: obj with some public attribute for extension the self API object. 
+		@note: add each callable public attribute into extension to self SysInfoAPI object.'''
+		for name in dir(extension):
+			attr = getattr(extension, name)
+			try:
+				getattr(self, name)
+				LOG.warn('scalarizr.api.sysinfo.SysInfoAPI.add_extension: Duplicate\
+					API attribute %s. The old attribute replacing with new.' % name)
+			except:	pass
+			if not name.startswith('_') and callable(attr):
+				setattr(self, name, attr)
 
 
 	@rpc.service_method
 	def fqdn(self, fqdn=None):
-		'''@rtype: str
-		'''
-		# get or set system hostname
-		# @see: man hostname
-		#hostname --fqdn / -get long host name
+		'''	@rtype: str
+			@note: get or set system hostname'''
 		if fqdn:
 			with open('/etc/hostname', 'w+') as fp:
 				hostname = fp.readline().strip()
@@ -51,7 +56,8 @@ class SysInfoAPI(object):
 	@rpc.service_method
 	def block_devices(self):
 		'''	@rtype: list
-			@return: ['sda1', 'ram1']'''
+			@return: ['sda1', 'ram1']
+			@note: return list of all block devices'''
 		if not self.__diskstats:
 			with open('/proc/diskstats') as fp:
 				self.__diskstats = fp.readlines()
@@ -60,7 +66,8 @@ class SysInfoAPI(object):
 			devicelist.append(value.split()[2])
 		LOG.debug('%s', devicelist)
 		return devicelist
-	
+
+
 	@rpc.service_method
 	def uname(self):
 		'''
@@ -82,8 +89,8 @@ class SysInfoAPI(object):
 			'nodename': system2(('uname', '-n'))[0].strip(),
 			'machine': system2(('uname', '-m'))[0].strip(),
 			'processor': system2(('uname', '-p'))[0].strip(),
-			'hardware_platform': system2(('uname', '-i'))[0].strip()
-		}
+			'hardware_platform': system2(('uname', '-i'))[0].strip()}
+
 
 	@rpc.service_method
 	def dist(self):
@@ -93,7 +100,7 @@ class SysInfoAPI(object):
 					'release': '15',
 					'codename': 'Lovelock',
 					'description': 'Fedora release 15 (Lovelock)'}
-		#TODO: now return som as: 
+		#TODO: now return some as: 
 			{	'Codename': 'oneiric',
 				'Description': 'Ubuntu 11.10',
 				'Distributor ID': 'Ubuntu',
@@ -110,16 +117,51 @@ class SysInfoAPI(object):
 				res.update({key: value})
 		return res
 
+
 	@rpc.service_method
 	def pythons(self):
-		#TODO: thinking
-		raise NotImplemented()
-		return ('2.6', '2.7', '3.2')
+		''
+		def _check_path(path):
+			py_name = os.path.basename(path)
+			if py_name.startswith('python') and len(py_name) >= 6:
+				#filtering name as `python2.7-config` and other analogy
+				if not re.search('[^ \-.+0-9]', py_name[6:]):
+					return True
+
+		#add python path to paths if we want to find python in it
+		paths = ['/usr/bin/', '/usr/local/bin/']
+		res = []
+		for path in paths:
+			(out, err, rc) = system2(('find', path, '-name', 'python*'))
+			if rc == 0:
+				if '\n' in out:
+					out = out.split('\n')
+					for lp in out:
+						if _check_path(lp):
+							res.append(lp)
+				elif out:
+					if _check_path(out.strip()):
+							res.append(out.strip())
+			else:
+				LOG.debug('scalarizr.api.sysinfo.SysInfoAPI.pythons: error find python\
+					at path %s, details: `%s`', path, err)
+		#check full correct version
+		LOG.debug('Variant of python paths: `%s`. They checking now.', res)
+		result = []
+		for pypath in res:
+			(out, err, rc) = system2((pypath, '-V'))
+			if rc == 0:
+				result.append((out or err).strip())
+			else: 
+				LOG.debug('Can`t explore `%s -V`, details: %s', pypath, err or out)
+		return map(lambda x: x[6:].strip(), list(set(result)))
+
 
 	@rpc.service_method
 	def cpu_info(self):
 		''' @rtype: list
 			@return: [{processor:0, vendor_id:GenuineIntel,...}, ...]
+			@note: return list with cpu cores information 
 		'''
 		# @see /proc/cpuinfo
 		if not self.__cpuinfo:
@@ -140,7 +182,6 @@ class SysInfoAPI(object):
 				index += 1
 			res.append(core)
 		return res
-		
 
 
 	@rpc.service_method
@@ -184,12 +225,11 @@ class SysInfoAPI(object):
 				write = {'num': params[3], 'sectors': params[4], 'bytes': params[4]*512}
 			else:
 				raise Exception, 'scalarizr.api.sysinfo.disk_stats: number of column in\
-						diskstats is not known. Count of column = %s' % (len(params)+2)
+					/proc/diskstats is unexpected. Count of column = %s' % (len(params)+2)
 			devicelist.append({'device': device, 'write': write, 'read': read})
-		LOG.debug('%s', devicelist)
 		return devicelist
 
-	
+
 	@rpc.service_method
 	def net_stats(self):
 		'''
@@ -208,11 +248,8 @@ class SysInfoAPI(object):
 			}
 		}, ...]
 		'''
-		import re
-		
 		with open('/proc/net/dev', "r") as fp:
 			list = fp.readlines()
-		
 		res = []
 		for row in list:
 			row = row.split(':')
