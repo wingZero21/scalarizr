@@ -946,8 +946,10 @@ class MongoCLI(object):
 
 	@autoreconnect
 	def rs_reconfig(self, config, force=False):
-		self._logger.debug('Reconfiguring replica set')
-		return self.connection.admin.command("replSetReconfig", config, force=force)		
+		self._logger.debug('Reconfiguring replica set (config: %s)', config)
+		ret = self.connection.admin.command("replSetReconfig", config, force=force)
+		self._logger.debug('Mongo replSetReconfig answer: %s', ret)
+		return ret
 
 
 	def add_arbiter(self,ip, port=None):

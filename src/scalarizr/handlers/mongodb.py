@@ -1589,10 +1589,11 @@ class ClusterTerminateWatcher(threading.Thread):
 							elif status == TerminationState.TERMINATED:
 								terminated_nodes_count += 1
 
-					msg_body['progress'] = int(float(terminated_nodes_count) * 100 / self.total_nodes_count)
+					progress = int(float(terminated_nodes_count) * 100 / self.total_nodes_count)
+					msg_body['progress'] = progress
 					msg_body['start_date'] = self.start_date
 
-					self.logger.debug("Sending ClusterTerminate status to Scalr")
+					self.logger.info("Sending cluster terminate status (progress: %s%)", progress)
 					self.handler.send_message(MongoDBMessages.CLUSTER_TERMINATE_STATUS, msg_body)
 
 					if terminated_nodes_count == self.total_nodes_count:
