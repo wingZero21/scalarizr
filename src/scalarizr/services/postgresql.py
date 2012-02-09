@@ -325,7 +325,7 @@ class PgUser(object):
 		
 		return new_pass
 	
-	def check_password(self, password=None):
+	def check_system_password(self, password=None):
 		#TODO: check (password or self.password), raise ValueError
 		pass
 
@@ -437,6 +437,17 @@ class PgUser(object):
 				self._logger.error('Unable to create role %s: %s' % (self.name, e))
 				raise
 		self.change_role_password(password)
+	
+		
+	def check_role_password(self, password):
+		try:
+			system2(['%s -U %s -h 127.0.0.1 -c "SELECT 1;"' % (self.psql.path, self.name)], silent=True)[0]
+		except PopenError, e:
+			#password authentication failed for user
+			self._logger.error('Unable to check password for pg_role %s: %s' % (self.name, e))
+			return False
+		return True	
+
 			
 	def change_role_password(self, password):
 		self._logger.debug('Changing password for pg role %s' % self.name)

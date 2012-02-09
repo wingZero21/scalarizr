@@ -172,12 +172,16 @@ class PostgreSqlHander(ServiceCtlHandler):
 					self.postgresql.root_user = self.postgresql.create_user(ROOT_USER, root_password)
 				else:
 					try:
-						self.postgresql.root_user.check_password(root_password)
+						self.postgresql.root_user.check_system_password(root_password)
 						self._logger.debug("Scalr's root PgSQL user is present. Password is correct.")				
 					except ValueError:
 						self._logger.warning("Scalr's root PgSQL user was changed. Recreating.")
 						self.postgresql.root_user.change_system_password(root_password)
-						self.postgresql.root_user.change_role_password(root_password)
+				
+				self._logger.debug("Checking password for pg_role scalr.")		
+				if not self.postgresql.root_user.check_role_password(root_password):
+					self._logger.warning("Scalr's root PgSQL role was changed. Recreating.")
+					self.postgresql.root_user.change_role_password(root_password)
 			
 
 	def on_reload(self):
