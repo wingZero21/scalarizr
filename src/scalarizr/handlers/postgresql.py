@@ -164,20 +164,22 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self.postgresql.service.start()
 			self.accept_app_hosts()
 			
-			if self.is_replication_master:
-				self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
-				root_password = self.root_password
-				if not self.postgresql.root_user.exists():
-					self._logger.debug("Scalr's PostgreSQL root user does not exist. Recreating")
-					self.postgresql.root_user = self.postgresql.create_user(ROOT_USER, root_password)
-				else:
-					try:
-						self.postgresql.root_user.check_system_password(root_password)
-						self._logger.debug("Scalr's root PgSQL user is present. Password is correct.")				
-					except ValueError:
-						self._logger.warning("Scalr's root PgSQL user was changed. Recreating.")
-						self.postgresql.root_user.change_system_password(root_password)
-				
+			self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
+			root_password = self.root_password
+			
+			if not self.postgresql.root_user.exists():
+				self._logger.debug("Scalr's PostgreSQL root user does not exist. Recreating")
+				self.postgresql.root_user = self.postgresql.create_user(ROOT_USER, root_password)
+			else:
+				try:
+					self.postgresql.root_user.check_system_password(root_password)
+					self._logger.debug("Scalr's root PgSQL user is present. Password is correct.")				
+				except ValueError:
+					self._logger.warning("Scalr's root PgSQL user was changed. Recreating.")
+					self.postgresql.root_user.change_system_password(root_password)
+					
+			if self.is_replication_master:	
+				#ALTER ROLE cannot be executed in a read-only transaction
 				self._logger.debug("Checking password for pg_role scalr.")		
 				if not self.postgresql.root_user.check_role_password(root_password):
 					self._logger.warning("Scalr's root PgSQL role was changed. Recreating.")
@@ -221,7 +223,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	@property			
 	def app_hosts(self):
 		app = BuiltinBehaviours.APP
-		list_roles = self._queryenv.list_roles(behaviour=app)
+		list_roles = self._queryenv.list_roles(behaviour=app, with_init=True)
 		servers = []
 		for app_serv in list_roles:
 			for app_host in app_serv.hosts :

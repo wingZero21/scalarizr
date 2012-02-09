@@ -199,6 +199,7 @@ class PostgreSql(BaseService):
 		self.root_user = self.create_user(ROOT_USER, password)
 		
 		if not self.cluster_dir.is_initialized(mpoint):
+			#slaves never do this
 			self.create_pg_role(ROOT_USER, password, super=True)
 		
 		self.service.stop()
