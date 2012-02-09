@@ -10,6 +10,7 @@ import glob
 import shlex
 import shutil
 import logging
+import subprocess
 
 from M2Crypto import RSA
 
@@ -441,17 +442,21 @@ class PgUser(object):
 		
 	def check_role_password(self, password):
 		try:
-			system2(['%s -U %s -h 127.0.0.1 -c "SELECT 1;"' % (self.psql.path, self.name)], silent=True)[0]
+			psql_env = dict(PGUSER=self.name, PGPASSWORD=password, PGHOSTADDR='127.0.0.1', PGPORT='5432')
+			psql_args = [PSQL_PATH, '-c', 'SELECT 1;']
+			system2(psql_args, env=psql_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, silent=True)[0]
 		except PopenError, e:
-			#password authentication failed for user
-			self._logger.error('Unable to check password for pg_role %s: %s' % (self.name, e))
+			if 'password authentication failed for user' in str(e):
+				pass
+			else:
+				self._logger.error('Unable to check password for pg_role %s: %s' % (self.name, e))
 			return False
 		return True	
 
 			
 	def change_role_password(self, password):
 		self._logger.debug('Changing password for pg role %s' % self.name)
-		self.psql.execute("ALTER USER %s WITH PASSWORD '%s';" % (self.name, password))
+		self.psql.execute("ALTER USER %s WITH PASSWORD '%s';" % (self.name, password), silent=True)
 		
 	def _create_pg_database(self):
 		if self._is_pg_database_exist:
