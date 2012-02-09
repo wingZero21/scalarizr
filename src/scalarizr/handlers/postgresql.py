@@ -217,13 +217,13 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	
 	def on_HostDown(self, message):
-		if message.local_ip != self._platform.get_private_ip() and message.local_ip in self.app_hosts:
+		if message.local_ip != self._platform.get_private_ip():
 			self.postgresql.unregister_app_host(message.local_ip)
 	
 	@property			
 	def app_hosts(self):
 		app = BuiltinBehaviours.APP
-		list_roles = self._queryenv.list_roles(behaviour=app, with_init=True)
+		list_roles = self._queryenv.list_roles(behaviour=app)
 		servers = []
 		for app_serv in list_roles:
 			for app_host in app_serv.hosts :
