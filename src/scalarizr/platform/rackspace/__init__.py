@@ -23,21 +23,24 @@ LOG = logging.getLogger(__name__)
 
 def _patch_cloudservers():
 	C = CloudServersClient
+
+	@functools.wraps(C.request)
+	def request_decorator(f):
+		def request(*args, **kwds):
+			interval = 10
+			for _ in range(0, 5):
+				try:
+					return f(*args, **kwds)
+				except CloudServersException, e:
+					if 'Unhandled exception occurred during processing' in str(e):
+						LOG.debug('Caught Rackspace API error: %s. sleeping %s seconds', str(e), interval)
+						time.sleep(interval)
+						continue
+					raise
+		return request
 	
-	def request(*args, **kwds):
-		interval = 10
-		for _ in range(0, 5):
-			try:
-				C.request(*args, **kwds)
-			except CloudServersException, e:
-				if 'Unhandled exception occurred during processing' in str(e):
-					LOG.debug('Caught Rackspace API error: %s. sleeping %s seconds', str(e), interval)
-					time.sleep(interval)
-					continue
-				raise
-			
-	C.request = functools.wraps(C.request, request)
-	
+	C.request = request_decorator(C.request)
+
 _patch_cloudservers()
 
 
