@@ -28,12 +28,12 @@ class SysInfoAPI(object):
 		@note: add each callable public attribute into extension to self SysInfoAPI object.'''
 		for name in dir(extension):
 			attr = getattr(extension, name)
-			try:
-				getattr(self, name)
-				LOG.warn('scalarizr.api.sysinfo.SysInfoAPI.add_extension: Duplicate\
-					API attribute %s. The old attribute replacing with new.' % name)
-			except:	pass
 			if not name.startswith('_') and callable(attr):
+				try:
+					getattr(self, name)
+					LOG.warn('scalarizr.api.sysinfo.SysInfoAPI.add_extension: Duplicate\
+						API attribute %s. The old attribute replacing with new.' % name)
+				except:	pass
 				setattr(self, name, attr)
 
 
@@ -41,15 +41,22 @@ class SysInfoAPI(object):
 	def fqdn(self, fqdn=None):
 		'''	@rtype: str
 			@note: get or set system hostname'''
+		path = '/etc/hostname'
 		if fqdn:
-			with open('/etc/hostname', 'w+') as fp:
-				hostname = fp.readline().strip()
-				if hostname != fqdn:
-					fp.write(fqdn)
-					return fqdn
-				return hostname
+			try:
+				with open(path, 'w') as fp:
+					fp.write('%s\n' % fqdn)
+			except:
+				raise Exception, 'api.SysInfoAPI.fqdn: can`t write to file `%s`.' % path,\
+					sys.exc_info()[2]
+			(out, err, rc) = system2(('hostname', '%s' % fqdn))
+			if rc == 0:
+				return fqdn
+			else:
+				LOG.warn('api.SysInfoAPI.fqdn:Can`t change hostname to `%s`, out `%s`, err `%s`',\
+						fqdn, out, err)
 		else:
-			with open('/etc/hostname') as fp:
+			with open(path, 'r') as fp:
 				return fp.readline().strip()
 
 
@@ -120,7 +127,8 @@ class SysInfoAPI(object):
 
 	@rpc.service_method
 	def pythons(self):
-		''
+		'''	@return: ['2.7.2+', '3.2.2',...]
+			@rtype: list'''
 		def _check_path(path):
 			py_name = os.path.basename(path)
 			if py_name.startswith('python') and len(py_name) >= 6:
@@ -146,7 +154,7 @@ class SysInfoAPI(object):
 				LOG.debug('scalarizr.api.sysinfo.SysInfoAPI.pythons: error find python\
 					at path %s, details: `%s`', path, err)
 		#check full correct version
-		LOG.debug('Variant of python paths: `%s`. They checking now.', res)
+		LOG.debug('Variants of python bin paths: `%s`. They`ll be checking now.', res)
 		result = []
 		for pypath in res:
 			(out, err, rc) = system2((pypath, '-V'))
@@ -206,8 +214,8 @@ class SysInfoAPI(object):
 				<bytes>: total number of bytes written successfully
 			}
 		}, ...]
-		http://www.kernel.org/doc/Documentation/iostats.txt
 		'''
+		#http://www.kernel.org/doc/Documentation/iostats.txt
 		if not self.__diskstats:
 			with open('/proc/diskstats') as fp:
 				self.__diskstats = fp.readlines()
