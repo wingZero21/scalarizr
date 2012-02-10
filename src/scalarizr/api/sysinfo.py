@@ -6,6 +6,8 @@ Created on Nov 25, 2011
 Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(chef)
 '''
 
+from __future__ import with_statement
+
 import os
 import logging
 import sys
@@ -24,17 +26,20 @@ class SysInfoAPI(object):
 	_CPUINFO = '/proc/cpuinfo'
 	_NETSTAT = '/proc/net/dev'
 
+
 	def __init__(self):
 		self._diskstats = None
 		self._cpuinfo = None
 		self._netstat = None
 
-	def _check_path(self, path):
+
+	def _check_python_path(self, path):
 		py_name = os.path.basename(path)
 		if py_name.lower().startswith('python') and len(py_name) >= 6:
 			#filtering name as `python2.7-config` and other analogy
 			if not re.search('[^ \-.+0-9]', py_name[6:]):
 				return True
+
 
 	def _readvar(self, PATH, test_value):
 		if not test_value:
@@ -44,39 +49,44 @@ class SysInfoAPI(object):
 			lines = test_value
 		return lines 
 
+
 	def add_extension(self, extension):
 		'''
-		@param extension: obj with some public attribute for extension the self API object. 
-		@note: add each callable public attribute into extension to self SysInfoAPI object.'''
+		@param extension: Object with some callables to extend SysInfo public interface
+		@type extension: object
+		@note: Duplicates resolves by overriding old function with a new one
+		'''
 		for name in dir(extension):
 			attr = getattr(extension, name)
 			if not name.startswith('_') and callable(attr):
-				try:
-					getattr(self, name)
-					LOG.warn('SysInfoAPI.add_extension: Duplicate API attribute %s. \
-							The old attribute replacing with new.' % name)
-				except:	pass
+				if hasattr(self, name):
+					LOG.warn('Duplicate attribute %s. Overriding %s with %s', 
+							name, getattr(self, name), attr)
 				setattr(self, name, attr)
+
 
 	@rpc.service_method
 	def fqdn(self, fqdn=None):
-		'''	@rtype: str
-			@note: get or set system hostname'''
+		'''
+		Get/Update host FQDN
+		@param fqdn: Fully Qualified Domain Name to set for this host
+		@rtype: str: Current FQDN
+		'''
 		if fqdn:
+			# changing permanent hostname
 			try:
 				with open(self._HOSTNAME, 'r') as fp:
 					old_hn = fp.readline().strip()
 				with open(self._HOSTNAME, 'w+') as fp:
 					fp.write('%s\n' % fqdn)
 			except:
-				raise Exception, 'can`t write to file `%s`.' % \
+				raise Exception, 'Can`t write file `%s`.' % \
 					self._HOSTNAME, sys.exc_info()[2]
-			#changing hostname now
-			(out, err, rc) = system2(('hostname', '%s' % fqdn))
-			if rc != 0:
-				LOG.warn('SysInfoAPI.fqdn:Can`t change hostname to `%s`, out `%s`,'\
-						' err `%s`', fqdn, out, err)
-			#changing hostname in hosts
+					
+			# changing runtime hostname
+			system2(('hostname', '%s' % fqdn))
+			
+			# changing hostname in hosts file
 			if old_hn:
 				hosts = dns.HostsFile()
 				hosts._reload()
@@ -86,35 +96,46 @@ class SysInfoAPI(object):
 										hosts._hosts[index]['hostname'] == old_hn:
 							hosts._hosts[index]['hostname'] = fqdn
 					hosts._flush()
+					
+			return fqdn
+		
 		else:
 			with open(self._HOSTNAME, 'r') as fp:
 				return fp.readline().strip()
 
+
 	@rpc.service_method
 	def block_devices(self):
-		'''	@rtype: list
-			@return: ['sda1', 'ram1']
-			@note: return list of all block devices'''
+		'''
+		Block devices list
+		@return: List of block devices including ramX and loopX
+		@rtype: list 
+		'''
 		lines = self._readvar(self._DISKSTATS, self._diskstats)
 		devicelist = []
 		for value in lines:
 			devicelist.append(value.split()[2])
 		return devicelist
 
+
 	@rpc.service_method
 	def uname(self):
 		'''
+		Return system information
 		@rtype: dict
-		@return: {	'kernel_name': 'Linux',
-					'kernel_release': '2.6.41.10-3.fc15.x86_64',
-					'kernel_version': '#1 SMP Mon Jan 23 15:46:37 UTC 2012',
-					'nodename': 'marat.office.webta',			
-					'machine': 'x86_64',
-					'processor': 'x86_64',
-					'hardware_platform': 'x86_64'}'''
-		#uname = system2(('uname', '-a'))[0].split()
+		
+		Sample:
+		{'kernel_name': 'Linux',
+		'kernel_release': '2.6.41.10-3.fc15.x86_64',
+		'kernel_version': '#1 SMP Mon Jan 23 15:46:37 UTC 2012',
+		'nodename': 'marat.office.webta',			
+		'machine': 'x86_64',
+		'processor': 'x86_64',
+		'hardware_platform': 'x86_64'}
+		'''
+		
 		uname = disttool.uname()
-		res = {
+		return {
 			'kernel_name': uname[0],
 			'nodename': uname[1],
 			'kernel_release': uname[2],
@@ -122,47 +143,54 @@ class SysInfoAPI(object):
 			'machine': uname[4],
 			'processor': uname[5],
 			'hardware_platform': disttool.arch()#uname[-2]
-			}
-		LOG.debug('SysInfoAPI.uname: `%s`', res)
-		return res 
+		}
+
 
 	@rpc.service_method
 	def dist(self):
 		'''
+		Return Linux distribution information 
 		@rtype: dict
-		@return: {	'id': 'Fedora',
-					'release': '15',
-					'codename': 'Lovelock',
-					'description': 'Fedora release 15 (Lovelock)'}
+		
+		Sample:
+		{'id': 'Fedora',
+		'release': '15',
+		'codename': 'Lovelock',
+		'description': 'Fedora release 15 (Lovelock)'}
 		'''
+		
 		linux_dist = disttool.linux_dist()
-		if linux_dist:
-			return {'id': linux_dist[0],
-					'release': linux_dist[1],
-					'codename': linux_dist[2],
-					'description': '%s %s (%s)' % (linux_dist[0], linux_dist[1], linux_dist[2])
-					}
+		return {
+			'id': linux_dist[0],
+			'release': linux_dist[1],
+			'codename': linux_dist[2],
+			'description': '%s %s (%s)' % (linux_dist[0], linux_dist[1], linux_dist[2])
+		}
+
 
 	@rpc.service_method
 	def pythons(self):
-		'''	@return: ['2.7.2+', '3.2.2',...]
-			@rtype: list'''
-		#add python path to paths if we want to find python in it
+		'''
+		Return installed Python versions
+		@rtype: list
+		
+		Sample:
+		['2.7.2+', '3.2.2']
+		'''
+
 		res = []
-		for path in self._PYTHON:
-			(out, err, rc) = system2(('find', path, '-name', 'python*'))
-			if rc == 0:
-				if '\n' in out:
-					out = out.split('\n')
-					for lp in out:
-						if self._check_path(lp):
-							res.append(lp)
-				elif out:
-					if self._check_path(out.strip()):
-							res.append(out.strip())
-			else:
-				LOG.debug('SysInfoAPI.pythons: error find python at path %s, details: \
-						`%s`', path, err)
+		for path in self._PATH:
+			# @fixme use glob module: glob.glob('/usr/bin/python[0-9].[0-9]')
+			out = system2(('find', path, '-name', 'python*'))[0]
+			if '\n' in out:
+				out = out.split('\n')
+				for lp in out:
+					if self._check_python_path(lp):
+						res.append(lp)
+			elif out:
+				if self._check_python_path(out.strip()):
+						res.append(out.strip())
+
 		#check full correct version
 		LOG.debug('SysInfoAPI.pythons: variants of python bin paths: `%s`. They`ll be \
 				checking now.', res)
@@ -176,13 +204,14 @@ class SysInfoAPI(object):
 						pypath, err or out)
 		return map(lambda x: x[6:].strip(), list(set(result)))
 
+
 	@rpc.service_method
 	def cpu_info(self):
-		''' @rtype: list
-			@return: [{processor:0, vendor_id:GenuineIntel,...}, ...]
-			@note: return list with cpu cores information 
 		'''
-		# @see /proc/cpuinfo
+		Return CPU info from /proc/cpuinfo
+		@rtype: list
+		'''
+
 		lines = self._readvar(self._CPUINFO, self._cpuinfo)
 		res = []
 		index = 0
@@ -200,9 +229,15 @@ class SysInfoAPI(object):
 			res.append(core)
 		return res
 
+
 	@rpc.service_method
 	def load_average(self):
+		'''
+		Return Load average (1, 5, 15) in 3 items list  
+		'''
+
 		return os.getloadavg()
+
 
 	@rpc.service_method
 	def disk_stats(self):
@@ -222,6 +257,7 @@ class SysInfoAPI(object):
 			}
 		}, ...]
 		'''
+		
 		#http://www.kernel.org/doc/Documentation/iostats.txt
 		lines = self._readvar(self._DISKSTATS, self._diskstats)
 		devicelist = []
@@ -242,6 +278,7 @@ class SysInfoAPI(object):
 			devicelist.append({'device': device, 'write': write, 'read': read})
 		return devicelist
 
+
 	@rpc.service_method
 	def net_stats(self):
 		'''
@@ -260,6 +297,7 @@ class SysInfoAPI(object):
 			}
 		}, ...]
 		'''
+		
 		lines = self._readvar(self._NETSTAT, self._netstat)
 		res = []
 		for row in lines:
