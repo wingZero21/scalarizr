@@ -12,16 +12,37 @@ import sys
 import re
 
 from scalarizr import rpc
-from scalarizr.util import system2, dns
+from scalarizr.util import system2, dns, disttool
 
 LOG = logging.getLogger(__name__)
 
 class SysInfoAPI(object):
-	
-	def __init__(self, diskstats=None, cpuinfo=None, netstat=None):
-		self.__diskstats = diskstats if diskstats else None
-		self.__cpuinfo = cpuinfo if cpuinfo else None
-		self.__netstat = netstat if netstat else None
+
+	_HOSTNAME = '/etc/hostname'
+	_DISKSTATS = '/proc/diskstats'
+	_PYTHON = ['/usr/bin/', '/usr/local/bin/']
+	_CPUINFO = '/proc/cpuinfo'
+	_NETSTAT = '/proc/net/dev'
+
+	def __init__(self):
+		self._diskstats = None
+		self._cpuinfo = None
+		self._netstat = None
+
+	def _check_path(self, path):
+		py_name = os.path.basename(path)
+		if py_name.lower().startswith('python') and len(py_name) >= 6:
+			#filtering name as `python2.7-config` and other analogy
+			if not re.search('[^ \-.+0-9]', py_name[6:]):
+				return True
+
+	def _readvar(self, PATH, test_value):
+		if not test_value:
+				with open(PATH, "r") as fp:
+					lines = fp.readlines()
+		else:
+			lines = test_value
+		return lines 
 
 	def add_extension(self, extension):
 		'''
@@ -32,33 +53,30 @@ class SysInfoAPI(object):
 			if not name.startswith('_') and callable(attr):
 				try:
 					getattr(self, name)
-					LOG.warn('scalarizr.api.sysinfo.SysInfoAPI.add_extension: Duplicate\
-						API attribute %s. The old attribute replacing with new.' % name)
+					LOG.warn('SysInfoAPI.add_extension: Duplicate API attribute %s. \
+							The old attribute replacing with new.' % name)
 				except:	pass
 				setattr(self, name, attr)
-
 
 	@rpc.service_method
 	def fqdn(self, fqdn=None):
 		'''	@rtype: str
 			@note: get or set system hostname'''
-		path = '/etc/hostname'
 		if fqdn:
 			try:
-				with open(path, 'r') as fp:
+				with open(self._HOSTNAME, 'r') as fp:
 					old_hn = fp.readline().strip()
-				with open(path, 'w+') as fp:
+				with open(self._HOSTNAME, 'w+') as fp:
 					fp.write('%s\n' % fqdn)
 			except:
-				raise Exception, 'api.SysInfoAPI.fqdn: can`t write to file `%s`.' % path,\
-					sys.exc_info()[2]
+				raise Exception, 'can`t write to file `%s`.' % \
+					self._HOSTNAME, sys.exc_info()[2]
 			#changing hostname now
 			(out, err, rc) = system2(('hostname', '%s' % fqdn))
 			if rc != 0:
-				LOG.warn('api.SysInfoAPI.fqdn:Can`t change hostname to `%s`, out `%s`,'\
+				LOG.warn('SysInfoAPI.fqdn:Can`t change hostname to `%s`, out `%s`,'\
 						' err `%s`', fqdn, out, err)
 			#changing hostname in hosts
-			#Sam-G31M-ES2C
 			if old_hn:
 				hosts = dns.HostsFile()
 				hosts._reload()
@@ -69,24 +87,19 @@ class SysInfoAPI(object):
 							hosts._hosts[index]['hostname'] = fqdn
 					hosts._flush()
 		else:
-			with open(path, 'r') as fp:
+			with open(self._HOSTNAME, 'r') as fp:
 				return fp.readline().strip()
-
 
 	@rpc.service_method
 	def block_devices(self):
 		'''	@rtype: list
 			@return: ['sda1', 'ram1']
 			@note: return list of all block devices'''
-		if not self.__diskstats:
-			with open('/proc/diskstats') as fp:
-				self.__diskstats = fp.readlines()
+		lines = self._readvar(self._DISKSTATS, self._diskstats)
 		devicelist = []
-		for value in self.__diskstats:
+		for value in lines:
 			devicelist.append(value.split()[2])
-		LOG.debug('%s', devicelist)
 		return devicelist
-
 
 	@rpc.service_method
 	def uname(self):
@@ -99,15 +112,19 @@ class SysInfoAPI(object):
 					'machine': 'x86_64',
 					'processor': 'x86_64',
 					'hardware_platform': 'x86_64'}'''
-		return {
-			'kernel_name': system2(('uname', '-s'))[0].strip(),
-			'kernel_release': system2(('uname', '-r'))[0].strip(),
-			'kernel_version': system2(('uname', '-v'))[0].strip(),
-			'nodename': system2(('uname', '-n'))[0].strip(),
-			'machine': system2(('uname', '-m'))[0].strip(),
-			'processor': system2(('uname', '-p'))[0].strip(),
-			'hardware_platform': system2(('uname', '-i'))[0].strip()}
-
+		#uname = system2(('uname', '-a'))[0].split()
+		uname = disttool.uname()
+		res = {
+			'kernel_name': uname[0],
+			'nodename': uname[1],
+			'kernel_release': uname[2],
+			'kernel_version': uname[3],#' '.join(uname[3:len(uname)-4]),
+			'machine': uname[4],
+			'processor': uname[5],
+			'hardware_platform': disttool.arch()#uname[-2]
+			}
+		LOG.debug('SysInfoAPI.uname: `%s`', res)
+		return res 
 
 	@rpc.service_method
 	def dist(self):
@@ -117,63 +134,47 @@ class SysInfoAPI(object):
 					'release': '15',
 					'codename': 'Lovelock',
 					'description': 'Fedora release 15 (Lovelock)'}
-		#TODO: now return some as: 
-			{	'Codename': 'oneiric',
-				'Description': 'Ubuntu 11.10',
-				'Distributor ID': 'Ubuntu',
-				'Release': '11.10'}'''
-		out, err, rcode = system2(('lsb_release', '-a'))
-		if rcode == 0:
-			self.__dist = out.split('\n')
-		else:
-			raise Exception, err
-		res = {}
-		for ln in self.__dist:
-			if ':' in ln:
-				(key,value) = map(lambda x: x.strip(), ln.split(':'))
-				res.update({key: value})
-		return res
-
+		'''
+		linux_dist = disttool.linux_dist()
+		if linux_dist:
+			return {'id': linux_dist[0],
+					'release': linux_dist[1],
+					'codename': linux_dist[2],
+					'description': '%s %s (%s)' % (linux_dist[0], linux_dist[1], linux_dist[2])
+					}
 
 	@rpc.service_method
 	def pythons(self):
 		'''	@return: ['2.7.2+', '3.2.2',...]
 			@rtype: list'''
-		def _check_path(path):
-			py_name = os.path.basename(path)
-			if py_name.startswith('python') and len(py_name) >= 6:
-				#filtering name as `python2.7-config` and other analogy
-				if not re.search('[^ \-.+0-9]', py_name[6:]):
-					return True
-
 		#add python path to paths if we want to find python in it
-		paths = ['/usr/bin/', '/usr/local/bin/']
 		res = []
-		for path in paths:
+		for path in self._PYTHON:
 			(out, err, rc) = system2(('find', path, '-name', 'python*'))
 			if rc == 0:
 				if '\n' in out:
 					out = out.split('\n')
 					for lp in out:
-						if _check_path(lp):
+						if self._check_path(lp):
 							res.append(lp)
 				elif out:
-					if _check_path(out.strip()):
+					if self._check_path(out.strip()):
 							res.append(out.strip())
 			else:
-				LOG.debug('scalarizr.api.sysinfo.SysInfoAPI.pythons: error find python\
-					at path %s, details: `%s`', path, err)
+				LOG.debug('SysInfoAPI.pythons: error find python at path %s, details: \
+						`%s`', path, err)
 		#check full correct version
-		LOG.debug('Variants of python bin paths: `%s`. They`ll be checking now.', res)
+		LOG.debug('SysInfoAPI.pythons: variants of python bin paths: `%s`. They`ll be \
+				checking now.', res)
 		result = []
 		for pypath in res:
 			(out, err, rc) = system2((pypath, '-V'))
 			if rc == 0:
 				result.append((out or err).strip())
 			else: 
-				LOG.debug('Can`t explore `%s -V`, details: %s', pypath, err or out)
+				LOG.debug('SysInfoAPI.pythons: can`t execute `%s -V`, details: %s',\
+						pypath, err or out)
 		return map(lambda x: x[6:].strip(), list(set(result)))
-
 
 	@rpc.service_method
 	def cpu_info(self):
@@ -182,16 +183,14 @@ class SysInfoAPI(object):
 			@note: return list with cpu cores information 
 		'''
 		# @see /proc/cpuinfo
-		if not self.__cpuinfo:
-			with open('/proc/cpuinfo') as fp:
-				self.__cpuinfo = fp.readlines()
+		lines = self._readvar(self._CPUINFO, self._cpuinfo)
 		res = []
 		index = 0
-		while index < len(self.__cpuinfo):
+		while index < len(lines):
 			core = {}
-			while index < len(self.__cpuinfo):
-				if ':' in self.__cpuinfo[index]:
-					tmp = map(lambda x: x.strip(), self.__cpuinfo[index].split(':'))
+			while index < len(lines):
+				if ':' in lines[index]:
+					tmp = map(lambda x: x.strip(), lines[index].split(':'))
 					(key, value) = list(tmp) if len(list(tmp)) == 2 else (tmp, None)
 					if key not in core.keys():
 						core.update({key:value})
@@ -201,11 +200,9 @@ class SysInfoAPI(object):
 			res.append(core)
 		return res
 
-
 	@rpc.service_method
 	def load_average(self):
 		return os.getloadavg()
-
 
 	@rpc.service_method
 	def disk_stats(self):
@@ -226,11 +223,9 @@ class SysInfoAPI(object):
 		}, ...]
 		'''
 		#http://www.kernel.org/doc/Documentation/iostats.txt
-		if not self.__diskstats:
-			with open('/proc/diskstats') as fp:
-				self.__diskstats = fp.readlines()
+		lines = self._readvar(self._DISKSTATS, self._diskstats)
 		devicelist = []
-		for value in self.__diskstats:
+		for value in lines:
 			params = value.split()[2:]
 			device = params[0]
 			for i in range(1, len(params)-1):
@@ -242,11 +237,10 @@ class SysInfoAPI(object):
 				read = {'num': params[1], 'sectors': params[2], 'bytes': params[2]*512}
 				write = {'num': params[3], 'sectors': params[4], 'bytes': params[4]*512}
 			else:
-				raise Exception, 'scalarizr.api.sysinfo.disk_stats: number of column in\
-					/proc/diskstats is unexpected. Count of column = %s' % (len(params)+2)
+				raise Exception, 'number of column in %s is unexpected. Count of column =\
+					 %s' % (self._DISKSTATS, len(params)+2)
 			devicelist.append({'device': device, 'write': write, 'read': read})
 		return devicelist
-
 
 	@rpc.service_method
 	def net_stats(self):
@@ -266,18 +260,16 @@ class SysInfoAPI(object):
 			}
 		}, ...]
 		'''
-		if not self.__netstat:
-			with open('/proc/net/dev', "r") as fp:
-				self.__netstat = fp.readlines()
+		lines = self._readvar(self._NETSTAT, self._netstat)
 		res = []
-		for row in self.__netstat:
+		for row in lines:
 			if ':' not in row:
 				continue
 			row = row.split(':')
 			iface = row.pop(0).strip()
 			columns = map(lambda x: x.strip(), row[0].split())
 			res.append({'iface': iface,
-						'receive': {'bytes': columns[0], 'packets': columns[1], 'errors': columns[2]},
-						'transmit': {'bytes': columns[8], 'packets': columns[9], 'errors': columns[10]},
-						})
+				'receive': {'bytes': columns[0], 'packets': columns[1], 'errors': columns[2]},
+				'transmit': {'bytes': columns[8], 'packets': columns[9], 'errors': columns[10]},
+				})
 		return res

@@ -45,11 +45,14 @@ CPUINFO = ['processor\t: 0\n', 'vendor_id\t: GenuineIntel\n', 'cpu family\t: 6\n
 NETSTAT = ['Inter-|   Receive                                                |  Transmit\n', ' face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n', '    lo:  946846    1957    0    0    0     0          0         0   946846    1957    0    0    0     0       0          0\n', '  eth0: 45323389  187745    0    0    0     0          0         0 21474707  224662    0    0    0     0       0          0\n']
 
 class TestSysInfoAPI(unittest.TestCase):
-	
+
 	def __init__(self, methodName='runTest'):
 		unittest.TestCase.__init__(self, methodName=methodName)
-		self.info = sysinfo.SysInfoAPI(diskstats=DISKSTATS, cpuinfo=CPUINFO, netstat=NETSTAT)
-	
+		self.info = sysinfo.SysInfoAPI()
+		self.info._diskstats=DISKSTATS
+		self.info._cpuinfo=CPUINFO
+		self.info._netstat=NETSTAT
+
 	def test_add_extension(self):
 		class ApiExt(object):
 			def smile(self):
@@ -84,9 +87,9 @@ class TestSysInfoAPI(unittest.TestCase):
 		
 	def test_uname(self):
 		self.assertTrue(isinstance(self.info.uname(), dict) and self.info.uname())
-
+		
 	def test_dist(self):
-		self.assertIsNotNone(self.info.dist())
+		self.assertEqual(self.info.dist(), {'codename': 'oneiric', 'description': 'Ubuntu 11.10 (oneiric)', 'id': 'Ubuntu', 'release': '11.10'})
 
 	def test_pythons(self):
 		self.assertIsNotNone(self.info.pythons())
@@ -104,7 +107,6 @@ class TestSysInfoAPI(unittest.TestCase):
 		
 	def test_net_stats(self):
 		self.assertEqual(self.info.net_stats(), [{'receive': {'packets': '1957', 'errors': '0', 'bytes': '946846'}, 'transmit': {'packets': '1957', 'errors': '0', 'bytes': '946846'}, 'iface': 'lo'}, {'receive': {'packets': '187745', 'errors': '0', 'bytes': '45323389'}, 'transmit': {'packets': '224662', 'errors': '0', 'bytes': '21474707'}, 'iface': 'eth0'}])
-
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
