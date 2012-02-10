@@ -7,7 +7,6 @@ import os
 import sys
 import shutil
 import logging
-import pexpect
 import urllib2
 import tempfile
 import mimetypes
@@ -74,7 +73,7 @@ class DeploymentHandler(Handler):
 			src.update(msg_body['remote_path'])
 			if msg_body.get('post_deploy_routines') and msg_body['post_deploy_routines'].get('body'):
 				self._exec_script(name='PostDeploy', **msg_body['post_deploy_routines'])
-			
+
 			self.send_message(
 				Messages.DEPLOY_RESULT, 
 				dict(
@@ -138,8 +137,13 @@ class SvnSource(Source):
 			except IndexError:
 				raise SourceError('Cannot extract Subversion URL. Text:\n %s', out)
 			if svn_url != self.url:
-				raise SourceError('Working copy %s is checkouted from different repository %s' % (workdir, svn_url))
-			do_update = True
+				#raise SourceError('Working copy %s is checkouted from different repository %s' % (workdir, svn_url))
+				self._logger.info('%s is not origin of %s (%s is)', self.url, workdir, svn_url)
+				self._logger.info('Remove all files in %s and checkout from %s', workdir, self.url)
+				shutil.rmtree(workdir)
+				os.mkdir(workdir)
+			else:
+				do_update = True
 			
 		args = [
 			'svn' , 
@@ -173,14 +177,13 @@ class SvnSource(Source):
 
 class GitSource(Source):
 	EXECUTABLE = '/usr/bin/git'
-	ssh_tpl = '#!/bin/bash\nexec ssh -i %s "$@"'
+	ssh_tpl = '#!/bin/bash\nexec ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i %s "$@"'
 
-	def __init__(self, url=None, private_key=None, pk_passphrase=None, executable=None):
+	def __init__(self, sshPrivateKey, url, executable=None):
 		self._logger = logging.getLogger(__name__)
 		self.url = url
-		self.pk_pass = pk_passphrase
 		self.executable = executable or self.EXECUTABLE
-		self.private_key = private_key
+		self.private_key = sshPrivateKey
 
 
 	def update(self, workdir):
@@ -198,20 +201,37 @@ class GitSource(Source):
 			os.makedirs(workdir)
 
 		tmpdir = tempfile.mkdtemp()
+		env = {}
+
 		try:
 			pk_path = os.path.join(tmpdir, 'pk.pem')
 			filetool.write_file(pk_path, self.private_key)
+			os.chmod(pk_path, 0400)
 
 			git_ssh_path = os.path.join(tmpdir, 'git_ssh.sh')
 			filetool.write_file(git_ssh_path, self.ssh_tpl % pk_path)
 			os.chmod(git_ssh_path, 0755)
 
-			env = dict(GIT_SSH=git_ssh_path)
-			events = {'(?i)password' : self.pk_pass} if self.pk_pass else None
-			out, rcode = pexpect.run('git clone %s %s' % (self.url, workdir), events=events, env=env, timeout=1200)
-			if rcode:
+			env.update(dict(GIT_SSH=git_ssh_path))
+
+			if os.path.exists(os.path.join(workdir, '.git')):
+				origin_url = system2(('git', 'config', '--get', 'remote.origin.url'), cwd=workdir, raise_exc=False)[0]
+				if origin_url.strip() != self.url.strip():
+					self._logger.info('%s is not origin of %s (%s is)', self.url, workdir, origin_url)
+					self._logger.info('Remove all files in %s and checkout from %s', workdir, self.url )
+					shutil.rmtree(workdir)
+					os.mkdir(workdir)
+
+					out, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
+				else:
+					out, ret_code = system2(('git', 'pull'), env=env, cwd=workdir)
+			else:
+				out, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
+
+			if ret_code:
 				raise Exception('Git failed to clone repository. %s' % out)
 
+			self._logger.info('Successfully deployed %s from %s', workdir, self.url)
 		finally:
 			shutil.rmtree(tmpdir)
 		
