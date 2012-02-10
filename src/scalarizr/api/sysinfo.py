@@ -12,15 +12,16 @@ import sys
 import re
 
 from scalarizr import rpc
-from scalarizr.util import system2
+from scalarizr.util import system2, dns
 
 LOG = logging.getLogger(__name__)
 
 class SysInfoAPI(object):
 	
-	def __init__(self, diskstats=None, cpuinfo=None):
+	def __init__(self, diskstats=None, cpuinfo=None, netstat=None):
 		self.__diskstats = diskstats if diskstats else None
 		self.__cpuinfo = cpuinfo if cpuinfo else None
+		self.__netstat = netstat if netstat else None
 
 	def add_extension(self, extension):
 		'''
@@ -44,17 +45,29 @@ class SysInfoAPI(object):
 		path = '/etc/hostname'
 		if fqdn:
 			try:
-				with open(path, 'w') as fp:
+				with open(path, 'r') as fp:
+					old_hn = fp.readline().strip()
+				with open(path, 'w+') as fp:
 					fp.write('%s\n' % fqdn)
 			except:
 				raise Exception, 'api.SysInfoAPI.fqdn: can`t write to file `%s`.' % path,\
 					sys.exc_info()[2]
+			#changing hostname now
 			(out, err, rc) = system2(('hostname', '%s' % fqdn))
-			if rc == 0:
-				return fqdn
-			else:
-				LOG.warn('api.SysInfoAPI.fqdn:Can`t change hostname to `%s`, out `%s`, err `%s`',\
-						fqdn, out, err)
+			if rc != 0:
+				LOG.warn('api.SysInfoAPI.fqdn:Can`t change hostname to `%s`, out `%s`,'\
+						' err `%s`', fqdn, out, err)
+			#changing hostname in hosts
+			#Sam-G31M-ES2C
+			if old_hn:
+				hosts = dns.HostsFile()
+				hosts._reload()
+				if hosts._hosts:
+					for index in range(0, len(hosts._hosts)):
+						if isinstance(hosts._hosts[index], dict) and \
+										hosts._hosts[index]['hostname'] == old_hn:
+							hosts._hosts[index]['hostname'] = fqdn
+					hosts._flush()
 		else:
 			with open(path, 'r') as fp:
 				return fp.readline().strip()
@@ -86,9 +99,6 @@ class SysInfoAPI(object):
 					'machine': 'x86_64',
 					'processor': 'x86_64',
 					'hardware_platform': 'x86_64'}'''
-		#/usr/bin/pyversions
-		#TODO: better read this from file
-		#/etc/issue
 		return {
 			'kernel_name': system2(('uname', '-s'))[0].strip(),
 			'kernel_release': system2(('uname', '-r'))[0].strip(),
@@ -256,27 +266,18 @@ class SysInfoAPI(object):
 			}
 		}, ...]
 		'''
-		with open('/proc/net/dev', "r") as fp:
-			list = fp.readlines()
+		if not self.__netstat:
+			with open('/proc/net/dev', "r") as fp:
+				self.__netstat = fp.readlines()
 		res = []
-		for row in list:
+		for row in self.__netstat:
+			if ':' not in row:
+				continue
 			row = row.split(':')
 			iface = row.pop(0).strip()
-			columns = map(lambda x: x.strip(), row.split())
+			columns = map(lambda x: x.strip(), row[0].split())
 			res.append({'iface': iface,
 						'receive': {'bytes': columns[0], 'packets': columns[1], 'errors': columns[2]},
 						'transmit': {'bytes': columns[8], 'packets': columns[9], 'errors': columns[10]},
 						})
 		return res
-		'''	
-		# __IF-MIB.py
-		
-		return [{
-			'iface': 'lo', 
-			'receive': {'bytes': 14914843, 'packets': 116750, 'errors': 0}, 
-			'transmit': {'bytes': 14914843, 'packets': 116750, 'errors': 0}
-		}, {
-			'iface': 'p1p1', 
-			'receive': {'bytes': 6191422351, 'packets': 23714651, 'errors': 0}, 
-			'transmit': {'bytes': 14914843, 'packets': 116750, 'errors': 0}
-		}]'''

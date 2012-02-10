@@ -42,24 +42,25 @@ DISKSTATS = ['   1       0 ram0 0 0 0 0 0 0 0 0 0 0 0\n',
 
 CPUINFO = ['processor\t: 0\n', 'vendor_id\t: GenuineIntel\n', 'cpu family\t: 6\n', 'model\t\t: 23\n', 'model name\t: Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz\n', 'stepping\t: 10\n', 'cpu MHz\t\t: 2600.000\n', 'cache size\t: 2048 KB\n', 'physical id\t: 0\n', 'siblings\t: 2\n', 'core id\t\t: 0\n', 'cpu cores\t: 2\n', 'apicid\t\t: 0\n', 'initial apicid\t: 0\n', 'fdiv_bug\t: no\n', 'hlt_bug\t\t: no\n', 'f00f_bug\t: no\n', 'coma_bug\t: no\n', 'fpu\t\t: yes\n', 'fpu_exception\t: yes\n', 'cpuid level\t: 13\n', 'wp\t\t: yes\n', 'flags\t\t: fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority\n', 'bogomips\t: 5200.26\n', 'clflush size\t: 64\n', 'cache_alignment\t: 64\n', 'address sizes\t: 36 bits physical, 48 bits virtual\n', 'power management:\n', '\n', 'processor\t: 1\n', 'vendor_id\t: GenuineIntel\n', 'cpu family\t: 6\n', 'model\t\t: 23\n', 'model name\t: Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz\n', 'stepping\t: 10\n', 'cpu MHz\t\t: 2600.000\n', 'cache size\t: 2048 KB\n', 'physical id\t: 0\n', 'siblings\t: 2\n', 'core id\t\t: 1\n', 'cpu cores\t: 2\n', 'apicid\t\t: 1\n', 'initial apicid\t: 1\n', 'fdiv_bug\t: no\n', 'hlt_bug\t\t: no\n', 'f00f_bug\t: no\n', 'coma_bug\t: no\n', 'fpu\t\t: yes\n', 'fpu_exception\t: yes\n', 'cpuid level\t: 13\n', 'wp\t\t: yes\n', 'flags\t\t: fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority\n', 'bogomips\t: 5199.83\n', 'clflush size\t: 64\n', 'cache_alignment\t: 64\n', 'address sizes\t: 36 bits physical, 48 bits virtual\n', 'power management:\n', '\n']
 
+NETSTAT = ['Inter-|   Receive                                                |  Transmit\n', ' face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n', '    lo:  946846    1957    0    0    0     0          0         0   946846    1957    0    0    0     0       0          0\n', '  eth0: 45323389  187745    0    0    0     0          0         0 21474707  224662    0    0    0     0       0          0\n']
 
 class TestSysInfoAPI(unittest.TestCase):
 	
 	def __init__(self, methodName='runTest'):
 		unittest.TestCase.__init__(self, methodName=methodName)
-		self.info = sysinfo.SysInfoAPI(diskstats=DISKSTATS, cpuinfo=CPUINFO)
+		self.info = sysinfo.SysInfoAPI(diskstats=DISKSTATS, cpuinfo=CPUINFO, netstat=NETSTAT)
 	
 	def test_add_extension(self):
 		class ApiExt(object):
 			def smile(self):
-				return 'Just smile'
+				return 'Just smile if you see that'
 			
 			def __bugaga(self):
 				return 'You can`t see this'
 
 		ext = ApiExt()
 		self.info.add_extension(ext)
-		self.assertEqual(self.info.smile(), 'Just smile')
+		self.assertEqual(self.info.smile(), 'Just smile if you see that')
 		'''
 		try:
 			self.info.__bugaga()
@@ -70,19 +71,19 @@ class TestSysInfoAPI(unittest.TestCase):
 
 	def test_fqdn(self):
 		(out, err, rc) = system2(('hostname'))
-		self.assertEqual(out.strip() or err, self.info.fqdn())
-		old_name = out.strip() or err
+		self.assertEqual(out.strip(), self.info.fqdn())
+		old_name = out.strip()
 		
 		self.info.fqdn('Scalr-Role-12345')
 		(out, err, rc) = system2(('hostname'))
 		self.assertEqual(out.strip(), 'Scalr-Role-12345')
 		self.info.fqdn(old_name)
-	
+
 	def test_block_devices(self):
 		self.assertIsNotNone(self.info.block_devices())
 		
 	def test_uname(self):
-		self.assertIsNotNone(self.info.uname())
+		self.assertTrue(isinstance(self.info.uname(), dict) and self.info.uname())
 
 	def test_dist(self):
 		self.assertIsNotNone(self.info.dist())
@@ -99,10 +100,10 @@ class TestSysInfoAPI(unittest.TestCase):
 		pass
 
 	def test_disk_stats(self):
-		pass
-
+		self.assertEqual(self.info.disk_stats(), [{'device': 'ram0', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram1', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram2', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram3', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram4', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram5', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram6', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram7', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram8', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram9', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram10', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram11', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram12', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram13', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram14', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'ram15', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'loop0', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'loop1', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'loop2', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'loop3', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'loop4', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'loop5', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'loop6', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'loop7', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 0, 'bytes': 0, 'sectors': 0}}, {'device': 'sda', 'write': {'num': 98504, 'bytes': 1908502528, 'sectors': 3727544}, 'read': {'num': 122983, 'bytes': 2748488192L, 'sectors': 5368141}}, {'device': 'sda1', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 166, 'bytes': 679936, 'sectors': 1328}}, {'device': 'sda2', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 162, 'bytes': 663552, 'sectors': 1296}}, {'device': 'sda3', 'write': {'num': 0, 'bytes': 0, 'sectors': 0}, 'read': {'num': 2, 'bytes': 6144, 'sectors': 12}}, {'device': 'sda5', 'write': {'num': 72407, 'bytes': 1635532800, 'sectors': 3194400}, 'read': {'num': 113013, 'bytes': 2637333504L, 'sectors': 5151042}}, {'device': 'sda6', 'write': {'num': 16759, 'bytes': 272969728, 'sectors': 533144}, 'read': {'num': 9464, 'bytes': 109109760, 'sectors': 213105}}, {'device': 'dm-0', 'write': {'num': 66644, 'bytes': 272969728, 'sectors': 533144}, 'read': {'num': 26316, 'bytes': 107790336, 'sectors': 210528}}])
+		
 	def test_net_stats(self):
-		pass
+		self.assertEqual(self.info.net_stats(), [{'receive': {'packets': '1957', 'errors': '0', 'bytes': '946846'}, 'transmit': {'packets': '1957', 'errors': '0', 'bytes': '946846'}, 'iface': 'lo'}, {'receive': {'packets': '187745', 'errors': '0', 'bytes': '45323389'}, 'transmit': {'packets': '224662', 'errors': '0', 'bytes': '21474707'}, 'iface': 'eth0'}])
 
 
 if __name__ == "__main__":
