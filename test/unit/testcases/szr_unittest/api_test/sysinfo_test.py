@@ -4,11 +4,12 @@ Created on 07.02.2012
 @author: sam
 '''
 import unittest
+import os
 
 from scalarizr.api import sysinfo
 from scalarizr.util import system2
 
-DISKSTATS = ['   1       0 ram0 0 0 0 0 0 0 0 0 0 0 0\n',
+DISKSTATS_ = ['   1       0 ram0 0 0 0 0 0 0 0 0 0 0 0\n',
 	'   1       1 ram1 0 0 0 0 0 0 0 0 0 0 0\n',
 	'   1       2 ram2 0 0 0 0 0 0 0 0 0 0 0\n',
 	'   1       3 ram3 0 0 0 0 0 0 0 0 0 0 0\n',
@@ -40,37 +41,42 @@ DISKSTATS = ['   1       0 ram0 0 0 0 0 0 0 0 0 0 0 0\n',
 	'   8       6 sda6 9464 17189 213105 58520 16759 49837 533144 63332 0 48456 121876\n', 
 	' 253       0 dm-0 26316 0 210528 284168 66644 0 533144 9233892 0 50344 9518068\n']
 
-CPUINFO = ['processor\t: 0\n', 'vendor_id\t: GenuineIntel\n', 'cpu family\t: 6\n', 'model\t\t: 23\n', 'model name\t: Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz\n', 'stepping\t: 10\n', 'cpu MHz\t\t: 2600.000\n', 'cache size\t: 2048 KB\n', 'physical id\t: 0\n', 'siblings\t: 2\n', 'core id\t\t: 0\n', 'cpu cores\t: 2\n', 'apicid\t\t: 0\n', 'initial apicid\t: 0\n', 'fdiv_bug\t: no\n', 'hlt_bug\t\t: no\n', 'f00f_bug\t: no\n', 'coma_bug\t: no\n', 'fpu\t\t: yes\n', 'fpu_exception\t: yes\n', 'cpuid level\t: 13\n', 'wp\t\t: yes\n', 'flags\t\t: fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority\n', 'bogomips\t: 5200.26\n', 'clflush size\t: 64\n', 'cache_alignment\t: 64\n', 'address sizes\t: 36 bits physical, 48 bits virtual\n', 'power management:\n', '\n', 'processor\t: 1\n', 'vendor_id\t: GenuineIntel\n', 'cpu family\t: 6\n', 'model\t\t: 23\n', 'model name\t: Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz\n', 'stepping\t: 10\n', 'cpu MHz\t\t: 2600.000\n', 'cache size\t: 2048 KB\n', 'physical id\t: 0\n', 'siblings\t: 2\n', 'core id\t\t: 1\n', 'cpu cores\t: 2\n', 'apicid\t\t: 1\n', 'initial apicid\t: 1\n', 'fdiv_bug\t: no\n', 'hlt_bug\t\t: no\n', 'f00f_bug\t: no\n', 'coma_bug\t: no\n', 'fpu\t\t: yes\n', 'fpu_exception\t: yes\n', 'cpuid level\t: 13\n', 'wp\t\t: yes\n', 'flags\t\t: fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority\n', 'bogomips\t: 5199.83\n', 'clflush size\t: 64\n', 'cache_alignment\t: 64\n', 'address sizes\t: 36 bits physical, 48 bits virtual\n', 'power management:\n', '\n']
+CPUINFO_ = ['processor\t: 0\n', 'vendor_id\t: GenuineIntel\n', 'cpu family\t: 6\n', 'model\t\t: 23\n', 'model name\t: Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz\n', 'stepping\t: 10\n', 'cpu MHz\t\t: 2600.000\n', 'cache size\t: 2048 KB\n', 'physical id\t: 0\n', 'siblings\t: 2\n', 'core id\t\t: 0\n', 'cpu cores\t: 2\n', 'apicid\t\t: 0\n', 'initial apicid\t: 0\n', 'fdiv_bug\t: no\n', 'hlt_bug\t\t: no\n', 'f00f_bug\t: no\n', 'coma_bug\t: no\n', 'fpu\t\t: yes\n', 'fpu_exception\t: yes\n', 'cpuid level\t: 13\n', 'wp\t\t: yes\n', 'flags\t\t: fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority\n', 'bogomips\t: 5200.26\n', 'clflush size\t: 64\n', 'cache_alignment\t: 64\n', 'address sizes\t: 36 bits physical, 48 bits virtual\n', 'power management:\n', '\n', 'processor\t: 1\n', 'vendor_id\t: GenuineIntel\n', 'cpu family\t: 6\n', 'model\t\t: 23\n', 'model name\t: Pentium(R) Dual-Core  CPU      E5300  @ 2.60GHz\n', 'stepping\t: 10\n', 'cpu MHz\t\t: 2600.000\n', 'cache size\t: 2048 KB\n', 'physical id\t: 0\n', 'siblings\t: 2\n', 'core id\t\t: 1\n', 'cpu cores\t: 2\n', 'apicid\t\t: 1\n', 'initial apicid\t: 1\n', 'fdiv_bug\t: no\n', 'hlt_bug\t\t: no\n', 'f00f_bug\t: no\n', 'coma_bug\t: no\n', 'fpu\t\t: yes\n', 'fpu_exception\t: yes\n', 'cpuid level\t: 13\n', 'wp\t\t: yes\n', 'flags\t\t: fpu vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx lm constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm xsave lahf_lm dts tpr_shadow vnmi flexpriority\n', 'bogomips\t: 5199.83\n', 'clflush size\t: 64\n', 'cache_alignment\t: 64\n', 'address sizes\t: 36 bits physical, 48 bits virtual\n', 'power management:\n', '\n']
 
-NETSTAT = ['Inter-|   Receive                                                |  Transmit\n', ' face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n', '    lo:  946846    1957    0    0    0     0          0         0   946846    1957    0    0    0     0       0          0\n', '  eth0: 45323389  187745    0    0    0     0          0         0 21474707  224662    0    0    0     0       0          0\n']
+NETSTAT_ = ['Inter-|   Receive                                                |  Transmit\n', ' face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n', '    lo:  946846    1957    0    0    0     0          0         0   946846    1957    0    0    0     0       0          0\n', '  eth0: 45323389  187745    0    0    0     0          0         0 21474707  224662    0    0    0     0       0          0\n']
+
+
+DISKSTATS = '/tmp/diskstats'
+CPUINFO = '/tmp/cpuinfo'
+NETSTAT = '/tmp/netstat'
 
 class TestSysInfoAPI(unittest.TestCase):
 
 	def __init__(self, methodName='runTest'):
 		unittest.TestCase.__init__(self, methodName=methodName)
 		self.info = sysinfo.SysInfoAPI()
-		self.info._diskstats=DISKSTATS
-		self.info._cpuinfo=CPUINFO
-		self.info._netstat=NETSTAT
+		with open(DISKSTATS, 'w+') as fp:
+			fp.writelines(DISKSTATS_)
+		with open(CPUINFO, 'w+') as fp:
+			fp.writelines(CPUINFO_)
+		with open(NETSTAT, 'w+') as fp:
+			fp.writelines(NETSTAT_)
 
+		self.info._DISKSTATS = DISKSTATS
+		self.info._CPUINFO = CPUINFO
+		self.info._NETSTAT = NETSTAT
+	
 	def test_add_extension(self):
 		class ApiExt(object):
 			def smile(self):
-				return 'Just smile if you see that'
+				return 'test_txt'
 			
 			def __bugaga(self):
 				return 'You can`t see this'
-
+		
 		ext = ApiExt()
 		self.info.add_extension(ext)
-		self.assertEqual(self.info.smile(), 'Just smile if you see that')
-		'''
-		try:
-			self.info.__bugaga()
-		except AttributeError, ae:
-			self.assertRaises(AttributeError, ae)'''
-		#AttributeError("'SysInfoAPI' object has no attribute "\
-				#"'_TestSysInfoAPI__bugaga'",))
+		self.assertEqual(self.info.smile(), 'test_txt')
 
 	def test_fqdn(self):
 		(out, err, rc) = system2(('hostname'))
@@ -93,7 +99,7 @@ class TestSysInfoAPI(unittest.TestCase):
 
 	def test_pythons(self):
 		self.assertIsNotNone(self.info.pythons())
-		self.assertEqual(self.info.pythons(), ['2.7.2+', '3.2.2'])
+		self.assertEqual(self.info.pythons(), ['3.2.2', '2.7.2+'])
 
 	def test_cpu_info(self):
 		cpu = self.info.cpu_info()
@@ -107,6 +113,11 @@ class TestSysInfoAPI(unittest.TestCase):
 		
 	def test_net_stats(self):
 		self.assertEqual(self.info.net_stats(), [{'receive': {'packets': '1957', 'errors': '0', 'bytes': '946846'}, 'transmit': {'packets': '1957', 'errors': '0', 'bytes': '946846'}, 'iface': 'lo'}, {'receive': {'packets': '187745', 'errors': '0', 'bytes': '45323389'}, 'transmit': {'packets': '224662', 'errors': '0', 'bytes': '21474707'}, 'iface': 'eth0'}])
+
+def tearDownModule():
+	os.remove(DISKSTATS)
+	os.remove(CPUINFO)
+	os.remove(NETSTAT)
 
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']

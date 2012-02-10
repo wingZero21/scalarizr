@@ -25,7 +25,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.port=1154
 		self.server_port=2254
 		self.backend='role:1234'
-		self.ipaddr='248.64.125.158'		
+		self.ipaddr='248.64.125.158'
 		
 	def setUp(self):
 		shutil.copy(os.path.dirname(__file__) + '/../../../resources/etc/haproxy_api.cfg.backup',
@@ -36,7 +36,6 @@ class TestHAProxyAPI(unittest.TestCase):
 	def tearDown(self):
 		if os.path.exists(TEMP_PATH):
 			self.api.svs.stop()
-			#os.remove(TEMP_PATH)
 
 	def test_create_listener(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port,
@@ -193,7 +192,9 @@ class TestHAProxyAPI(unittest.TestCase):
 		LOG.debug('%s', stats)
 		self.assertIsNotNone(stats)
 
-	
+def tearDownModule():
+	os.remove(TEMP_PATH)
+
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
 	unittest.main()

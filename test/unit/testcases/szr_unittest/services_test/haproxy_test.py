@@ -297,6 +297,9 @@ class _TestHAProxyInitScript(unittest.TestCase):
 		finally:
 			return pid
 
+def tearDownModule():
+	os.remove(TEMP_PATH)
+
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
 	unittest.main()

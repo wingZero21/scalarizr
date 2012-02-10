@@ -12,6 +12,7 @@ import os
 import logging
 import sys
 import re
+import glob
 
 from scalarizr import rpc
 from scalarizr.util import system2, dns, disttool
@@ -26,29 +27,10 @@ class SysInfoAPI(object):
 	_CPUINFO = '/proc/cpuinfo'
 	_NETSTAT = '/proc/net/dev'
 
+	def _readf(self, PATH):
 
-	def __init__(self):
-		self._diskstats = None
-		self._cpuinfo = None
-		self._netstat = None
-
-
-	def _check_python_path(self, path):
-		py_name = os.path.basename(path)
-		if py_name.lower().startswith('python') and len(py_name) >= 6:
-			#filtering name as `python2.7-config` and other analogy
-			if not re.search('[^ \-.+0-9]', py_name[6:]):
-				return True
-
-
-	def _readvar(self, PATH, test_value):
-		if not test_value:
-				with open(PATH, "r") as fp:
-					lines = fp.readlines()
-		else:
-			lines = test_value
-		return lines 
-
+		with open(PATH, "r") as fp:
+			return fp.readlines()
 
 	def add_extension(self, extension):
 		'''
@@ -56,6 +38,7 @@ class SysInfoAPI(object):
 		@type extension: object
 		@note: Duplicates resolves by overriding old function with a new one
 		'''
+
 		for name in dir(extension):
 			attr = getattr(extension, name)
 			if not name.startswith('_') and callable(attr):
@@ -64,7 +47,6 @@ class SysInfoAPI(object):
 							name, getattr(self, name), attr)
 				setattr(self, name, attr)
 
-
 	@rpc.service_method
 	def fqdn(self, fqdn=None):
 		'''
@@ -72,6 +54,7 @@ class SysInfoAPI(object):
 		@param fqdn: Fully Qualified Domain Name to set for this host
 		@rtype: str: Current FQDN
 		'''
+
 		if fqdn:
 			# changing permanent hostname
 			try:
@@ -82,10 +65,8 @@ class SysInfoAPI(object):
 			except:
 				raise Exception, 'Can`t write file `%s`.' % \
 					self._HOSTNAME, sys.exc_info()[2]
-					
 			# changing runtime hostname
-			system2(('hostname', '%s' % fqdn))
-			
+			system2(('hostname', fqdn))
 			# changing hostname in hosts file
 			if old_hn:
 				hosts = dns.HostsFile()
@@ -98,7 +79,7 @@ class SysInfoAPI(object):
 					hosts._flush()
 					
 			return fqdn
-		
+
 		else:
 			with open(self._HOSTNAME, 'r') as fp:
 				return fp.readline().strip()
@@ -111,7 +92,8 @@ class SysInfoAPI(object):
 		@return: List of block devices including ramX and loopX
 		@rtype: list 
 		'''
-		lines = self._readvar(self._DISKSTATS, self._diskstats)
+
+		lines = self._readf(self._DISKSTATS)
 		devicelist = []
 		for value in lines:
 			devicelist.append(value.split()[2])
@@ -133,16 +115,16 @@ class SysInfoAPI(object):
 		'processor': 'x86_64',
 		'hardware_platform': 'x86_64'}
 		'''
-		
+
 		uname = disttool.uname()
 		return {
 			'kernel_name': uname[0],
 			'nodename': uname[1],
 			'kernel_release': uname[2],
-			'kernel_version': uname[3],#' '.join(uname[3:len(uname)-4]),
+			'kernel_version': uname[3],
 			'machine': uname[4],
 			'processor': uname[5],
-			'hardware_platform': disttool.arch()#uname[-2]
+			'hardware_platform': disttool.arch()
 		}
 
 
@@ -151,14 +133,14 @@ class SysInfoAPI(object):
 		'''
 		Return Linux distribution information 
 		@rtype: dict
-		
+
 		Sample:
 		{'id': 'Fedora',
 		'release': '15',
 		'codename': 'Lovelock',
 		'description': 'Fedora release 15 (Lovelock)'}
 		'''
-		
+
 		linux_dist = disttool.linux_dist()
 		return {
 			'id': linux_dist[0],
@@ -173,36 +155,28 @@ class SysInfoAPI(object):
 		'''
 		Return installed Python versions
 		@rtype: list
-		
+
 		Sample:
 		['2.7.2+', '3.2.2']
 		'''
 
 		res = []
-		for path in self._PATH:
-			# @fixme use glob module: glob.glob('/usr/bin/python[0-9].[0-9]')
-			out = system2(('find', path, '-name', 'python*'))[0]
-			if '\n' in out:
-				out = out.split('\n')
-				for lp in out:
-					if self._check_python_path(lp):
-						res.append(lp)
-			elif out:
-				if self._check_python_path(out.strip()):
-						res.append(out.strip())
-
+		for path in self._PYTHON:
+			pythons = glob.glob(os.path.join(path, 'python[0-9].[0-9]'))
+			for el in pythons:
+				res.append(el)
 		#check full correct version
 		LOG.debug('SysInfoAPI.pythons: variants of python bin paths: `%s`. They`ll be \
-				checking now.', res)
+				checking now.', list(set(res)))
 		result = []
-		for pypath in res:
-			(out, err, rc) = system2((pypath, '-V'))
+		for pypath in list(set(res)):
+			(out, err, rc) = system2((pypath, '-V'), raise_exc=False)
 			if rc == 0:
 				result.append((out or err).strip())
-			else: 
+			else:
 				LOG.debug('SysInfoAPI.pythons: can`t execute `%s -V`, details: %s',\
 						pypath, err or out)
-		return map(lambda x: x[6:].strip(), list(set(result)))
+		return map(lambda x: x.lower().replace('python', '').strip(), list(set(result)))
 
 
 	@rpc.service_method
@@ -212,7 +186,7 @@ class SysInfoAPI(object):
 		@rtype: list
 		'''
 
-		lines = self._readvar(self._CPUINFO, self._cpuinfo)
+		lines = self._readf(self._CPUINFO)
 		res = []
 		index = 0
 		while index < len(lines):
@@ -257,9 +231,9 @@ class SysInfoAPI(object):
 			}
 		}, ...]
 		'''
-		
 		#http://www.kernel.org/doc/Documentation/iostats.txt
-		lines = self._readvar(self._DISKSTATS, self._diskstats)
+
+		lines = self._readf(self._DISKSTATS)
 		devicelist = []
 		for value in lines:
 			params = value.split()[2:]
@@ -297,8 +271,8 @@ class SysInfoAPI(object):
 			}
 		}, ...]
 		'''
-		
-		lines = self._readvar(self._NETSTAT, self._netstat)
+
+		lines = self._readf(self._NETSTAT)
 		res = []
 		for row in lines:
 			if ':' not in row:
