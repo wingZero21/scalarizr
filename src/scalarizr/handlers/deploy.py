@@ -179,11 +179,11 @@ class GitSource(Source):
 	EXECUTABLE = '/usr/bin/git'
 	ssh_tpl = '#!/bin/bash\nexec ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i %s "$@"'
 
-	def __init__(self, sshPrivateKey, url, executable=None):
+	def __init__(self, url, ssh_private_key=None, executable=None):
 		self._logger = logging.getLogger(__name__)
 		self.url = url
 		self.executable = executable or self.EXECUTABLE
-		self.private_key = sshPrivateKey
+		self.private_key = ssh_private_key
 
 
 	def update(self, workdir):
@@ -198,21 +198,23 @@ class GitSource(Source):
 								str(disttool.linux_dist()))
 
 		if not os.path.exists(workdir):
+			self._logger.info('Creating destination directory')
 			os.makedirs(workdir)
 
 		tmpdir = tempfile.mkdtemp()
 		env = {}
 
 		try:
-			pk_path = os.path.join(tmpdir, 'pk.pem')
-			filetool.write_file(pk_path, self.private_key)
-			os.chmod(pk_path, 0400)
+			if self.private_key:
+				pk_path = os.path.join(tmpdir, 'pk.pem')
+				filetool.write_file(pk_path, self.private_key)
+				os.chmod(pk_path, 0400)
 
-			git_ssh_path = os.path.join(tmpdir, 'git_ssh.sh')
-			filetool.write_file(git_ssh_path, self.ssh_tpl % pk_path)
-			os.chmod(git_ssh_path, 0755)
+				git_ssh_path = os.path.join(tmpdir, 'git_ssh.sh')
+				filetool.write_file(git_ssh_path, self.ssh_tpl % pk_path)
+				os.chmod(git_ssh_path, 0755)
 
-			env.update(dict(GIT_SSH=git_ssh_path))
+				env.update(dict(GIT_SSH=git_ssh_path))
 
 			if os.path.exists(os.path.join(workdir, '.git')):
 				origin_url = system2(('git', 'config', '--get', 'remote.origin.url'), cwd=workdir, raise_exc=False)[0]
@@ -222,11 +224,13 @@ class GitSource(Source):
 					shutil.rmtree(workdir)
 					os.mkdir(workdir)
 
-					out, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
+					out, err, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
 				else:
-					out, ret_code = system2(('git', 'pull'), env=env, cwd=workdir)
+					self._logger.info('Updating directory %s (git-pull)', workdir)
+					out, err, ret_code = system2(('git', 'pull'), env=env, cwd=workdir)
 			else:
-				out, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
+				self._logger.info('Checkout from %s', self.url)
+				out, err, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
 
 			if ret_code:
 				raise Exception('Git failed to clone repository. %s' % out)
