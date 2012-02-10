@@ -3,29 +3,37 @@ Created on Apr 6, 2011
 
 @author: marat
 '''
+import os
+import sys
+import shutil
+import logging
+import pexpect
+import urllib2
+import tempfile
+import mimetypes
+from urlparse import urlparse
+
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages, Queues
 from scalarizr.handlers import Handler, script_executor
-from scalarizr.util import system2, disttool, dicts
+from scalarizr.util import system2, disttool, dicts, filetool
 from scalarizr.queryenv import Script
-import tempfile
-import shutil
-import sys
 
-import os
-import logging
-import urllib2
-from urlparse import urlparse
-import mimetypes
+
+
 
 
 class SourceError(BaseException):
 	pass
+
+
 class UndefinedSourceError(SourceError):
 	pass
 
+
 def get_handlers():
 	return (DeploymentHandler(), )
+
 
 class DeploymentHandler(Handler):
 
@@ -96,7 +104,7 @@ class Source(object):
 	
 	@staticmethod
 	def from_type(srctype, **init_kwargs):
-		clsname = srctype[0].upper() + srctype.lower()[1:] + 'Source'
+		clsname = srctype.capitalize() + 'Source'
 		assert clsname in globals(), 'implementation class %s of source type %s is undefined' % (clsname, srctype)
 		return globals()[clsname](**init_kwargs)
 
@@ -164,16 +172,16 @@ class SvnSource(Source):
 	
 
 class GitSource(Source):
-	EXECUTABLE = '/usr/bin/git'	
-	
-	def __init__(self, url=None, ssl_certificate=None, ssl_private_key=None, ssl_ca_info=None, ssl_no_verify=None, executable=None):
+	EXECUTABLE = '/usr/bin/git'
+	ssh_tpl = '#!/bin/bash\nexec ssh -i %s "$@"'
+
+	def __init__(self, url=None, private_key=None, pk_passphrase=None, executable=None):
 		self._logger = logging.getLogger(__name__)
 		self.url = url
-		self.ssl_certificate = ssl_certificate
-		self.ssl_private_key = ssl_private_key
-		self.ssl_ca_info = ssl_ca_info
-		self.ssl_no_verify = ssl_no_verify
+		self.pk_pass = pk_passphrase
 		self.executable = executable or self.EXECUTABLE
+		self.private_key = private_key
+
 
 	def update(self, workdir):
 		if not os.access(self.executable, os.X_OK):
@@ -183,31 +191,29 @@ class GitSource(Source):
 			elif disttool.is_redhat_based():
 				system2(('yum', '-y', 'install', 'git'))
 			else:
-				raise SourceError('Cannot install Git. Unknown distribution %s' % 
+				raise SourceError('Cannot install Git. Unknown distribution %s' %
 								str(disttool.linux_dist()))
-		
-		env = {}
-		cnf = bus.cnf		
-		if self.ssl_certificate and self.ssl_private_key:
-			env['GIT_SSL_CERT'] = cnf.write_key('git-client.crt', self.ssl_certificate)
-			env['GIT_SSL_KEY'] = cnf.write_key('git-client.key', self.ssl_private_key)
-		if self.ssl_ca_info:
-			env['GIT_SSL_CAINFO'] = cnf.write_key('git-client-ca.crt', self.ssl_ca_info)
-		if self.ssl_no_verify:
-			env['GIT_SSL_NO_VERIFY'] = '1'
-		
+
+		if not os.path.exists(workdir):
+			os.makedirs(workdir)
+
+		tmpdir = tempfile.mkdtemp()
 		try:
-			self._logger.info('Updating source from %s into working dir %s', self.url, workdir)		
-			if os.path.exists(os.path.join(workdir, '.git')):
-				out = system2(('git', 'pull'), cwd=workdir, env=env)[0]
-			else:
-				out = system2(('git', 'clone', self.url, workdir), env=env)[0]
-			self._logger.info(out)
-			
+			pk_path = os.path.join(tmpdir, 'pk.pem')
+			filetool.write_file(pk_path, self.private_key)
+
+			git_ssh_path = os.path.join(tmpdir, 'git_ssh.sh')
+			filetool.write_file(git_ssh_path, self.ssh_tpl % pk_path)
+			os.chmod(git_ssh_path, 0755)
+
+			env = dict(GIT_SSH=git_ssh_path)
+			events = {'(?i)password' : self.pk_pass} if self.pk_pass else None
+			out, rcode = pexpect.run('git clone %s %s' % (self.url, workdir), events=events, env=env, timeout=1200)
+			if rcode:
+				raise Exception('Git failed to clone repository. %s' % out)
+
 		finally:
-			for var in ('GIT_SSL_CERT', 'GIT_SSL_KEY', 'GIT_SSL_CAINFO'):
-				if var in env:
-					os.remove(env[var])
+			shutil.rmtree(tmpdir)
 		
 		
 
