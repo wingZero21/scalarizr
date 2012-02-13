@@ -11,7 +11,6 @@ from __future__ import with_statement
 import os
 import logging
 import sys
-import re
 import glob
 
 from scalarizr import rpc
@@ -19,17 +18,17 @@ from scalarizr.util import system2, dns, disttool
 
 LOG = logging.getLogger(__name__)
 
+
 class SysInfoAPI(object):
 
 	_HOSTNAME = '/etc/hostname'
 	_DISKSTATS = '/proc/diskstats'
-	_PYTHON = ['/usr/bin/', '/usr/local/bin/']
+	_PATH = ['/usr/bin/', '/usr/local/bin/']
 	_CPUINFO = '/proc/cpuinfo'
-	_NETSTAT = '/proc/net/dev'
+	_NETSTATS = '/proc/net/dev'
 
-	def _readf(self, PATH):
-
-		with open(PATH, "r") as fp:
+	def _readlines(self, path):
+		with open(path, "r") as fp:
 			return fp.readlines()
 
 	def add_extension(self, extension):
@@ -93,7 +92,7 @@ class SysInfoAPI(object):
 		@rtype: list 
 		'''
 
-		lines = self._readf(self._DISKSTATS)
+		lines = self._readlines(self._DISKSTATS)
 		devicelist = []
 		for value in lines:
 			devicelist.append(value.split()[2])
@@ -161,12 +160,12 @@ class SysInfoAPI(object):
 		'''
 
 		res = []
-		for path in self._PYTHON:
+		for path in self._PATH:
 			pythons = glob.glob(os.path.join(path, 'python[0-9].[0-9]'))
 			for el in pythons:
 				res.append(el)
 		#check full correct version
-		LOG.debug('SysInfoAPI.pythons: variants of python bin paths: `%s`. They`ll be \
+		LOG.debug('variants of python bin paths: `%s`. They`ll be \
 				checking now.', list(set(res)))
 		result = []
 		for pypath in list(set(res)):
@@ -174,7 +173,7 @@ class SysInfoAPI(object):
 			if rc == 0:
 				result.append((out or err).strip())
 			else:
-				LOG.debug('SysInfoAPI.pythons: can`t execute `%s -V`, details: %s',\
+				LOG.debug('Can`t execute `%s -V`, details: %s',\
 						pypath, err or out)
 		return map(lambda x: x.lower().replace('python', '').strip(), list(set(result)))
 
@@ -186,7 +185,7 @@ class SysInfoAPI(object):
 		@rtype: list
 		'''
 
-		lines = self._readf(self._CPUINFO)
+		lines = self._readlines(self._CPUINFO)
 		res = []
 		index = 0
 		while index < len(lines):
@@ -233,7 +232,7 @@ class SysInfoAPI(object):
 		'''
 		#http://www.kernel.org/doc/Documentation/iostats.txt
 
-		lines = self._readf(self._DISKSTATS)
+		lines = self._readlines(self._DISKSTATS)
 		devicelist = []
 		for value in lines:
 			params = value.split()[2:]
@@ -272,7 +271,7 @@ class SysInfoAPI(object):
 		}, ...]
 		'''
 
-		lines = self._readf(self._NETSTAT)
+		lines = self._readlines(self._NETSTATS)
 		res = []
 		for row in lines:
 			if ':' not in row:
