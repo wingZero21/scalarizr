@@ -134,13 +134,6 @@ class MongoDB(BaseService):
 		return cls._instance
 
 
-	def authenticate(self, login=SCALR_USER, password=None):
-		self._logger.debug('Setting auth to mongo connection')
-		self.login = login
-		self.password = password
-		self.cli.auth(login, password)
-		
-		
 	@property
 	def is_replication_master(self):
 		res = self.cli.is_master()['ismaster']
@@ -382,7 +375,7 @@ class MongoDB(BaseService):
 
 
 	def _get_cli(self):
-		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT, self.login, self.password)
+		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT)
 	
 	def _set_cli(self, obj):
 		self._set('cli', obj)
@@ -800,29 +793,41 @@ def autoreconnect(f):
 	return wrapper
 
 
+class MongoCLIMeta(type):
+	""" Port-based multiton metaclass for MongoCLI """
+	def __call__(cls, *args, **kwargs):
+		port = args[0] if args else kwargs['port'] if 'port' in kwargs else REPLICA_DEFAULT_PORT
+		if cls._instances.has_key(port):
+			return cls._instances[port]
+
+		cli = type.__call__(cls, *args, **kwargs)
+		cls._instances[port] = cli
+		return cli
+
+
 
 class MongoCLI(object):
-	
+
+	__metaclass__ = MongoCLIMeta
 	authenticated = False
 	host = 'localhost'
 	_instances = dict()
-	
+
 	def __init__(self, port=REPLICA_DEFAULT_PORT, login=SCALR_USER, password=None):
 		self.port = port
-		self._logger = logging.getLogger(__name__)
 		self.login = login
 		self.password = password
+		self._logger = logging.getLogger(__name__)
 		self.sock = initdv2.SockParam(port)
 
-
-	def __new__(cls, *args, **kwargs):
+	"""
+	def __call__(cls, *args, **kwargs):
 		'MongoCLI gives only one connection per port'
 		port = args[0] if args else kwargs['port'] if 'port' in kwargs else REPLICA_DEFAULT_PORT
 		if port not in cls._instances:
-			cls._instances[port] = super(MongoCLI, cls).__new__(
-				cls, *args, **kwargs)
+			cls._instances[port] = super(MongoCLI, cls).__call__(*args, **kwargs)
 		return cls._instances[port]
-
+	"""
 
 	@classmethod
 	def find(cls, port=REPLICA_DEFAULT_PORT, login=SCALR_USER, password=None):
@@ -840,7 +845,7 @@ class MongoCLI(object):
 			self._logger.debug('creating pymongo connection to %s:%s' % (self.host,self.port))
 			self._con = pymongo.Connection(self.host, self.port)
 		if not self.authenticated and self.login and self.password and self.is_port_listening:
-			self._logger.debug('Authenticating as %s' % self.login)
+			self._logger.debug('Authenticating connection on port %s as %s', self.port, self.login)
 			self._con.admin.authenticate(self.login, self.password)
 			self.authenticated = True
 		return self._con

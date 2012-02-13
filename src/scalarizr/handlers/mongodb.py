@@ -1060,7 +1060,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.stop_default_init_script()
 		self.mongodb.prepare(rs_name)
 		self.mongodb.start_shardsvr()
-		#self.mongodb.authenticate(mongo_svc.SCALR_USER, self.scalr_password)
+
 		
 		first_start = not self._storage_valid()
 		if not first_start:
