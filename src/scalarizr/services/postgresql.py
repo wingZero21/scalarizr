@@ -147,8 +147,8 @@ class PostgreSql(BaseService):
 		if force_restart:
 			self.service.restart(reason='Registering slave', force=True)
 			
-	def register_app_host(self, ip, force=True):
-		self.pg_hba_conf.add_app_host(ip)
+	def register_client(self, ip, force=True):
+		self.pg_hba_conf.add_client(ip)
 		self.service.reload('Allowing access for new app instance: %s' % ip, force=force)
 		
 	def change_primary(self, primary_ip, primary_port, username):
@@ -158,9 +158,9 @@ class PostgreSql(BaseService):
 		self.pg_hba_conf.delete_standby_host(slave_ip, self.root_user.name)
 		self.service.restart(reason='Unregistering slave', force=True)
 		
-	def unregister_app_host(self, ip):
-		self.pg_hba_conf.delete_app_host(ip)
-		self.service.reload(reason='Unregistering terminated app instance: %s' % ip, force=True)
+	def unregister_client(self, ip):
+		self.pg_hba_conf.delete_client(ip)
+		self.service.reload(reason='Unregistering terminated instance: %s' % ip, force=True)
 
 	def stop_replication(self):
 		self.trigger_file.create()
@@ -909,7 +909,7 @@ class PgHbaRecord(object):
 		return line	
 	
 		
-class PgHbaConf(Configuration):
+class PgHbaConf(object):
 	
 	config_name = 'pg_hba.conf'
 	path = None
@@ -917,9 +917,9 @@ class PgHbaConf(Configuration):
 	password_mode = PgHbaRecord('local', 'all', 'postgres', auth_method = 'password')
 	
 	
-	def __init__(self, config_dir_path):
-		self.config_dir_path = config_dir_path
-		self.path = os.path.join(self.config_name, config_dir_path)
+	def __init__(self, path):
+		
+		self.path = path
 		self._logger = logging.getLogger(__name__)
 
 	@classmethod
@@ -969,12 +969,12 @@ class PgHbaConf(Configuration):
 		self.delete_record(record)
 		
 	
-	def add_app_host(self, ip):
-		record = self._make_app_record(ip)
+	def add_client(self, ip):
+		record = self._make_farm_server_record(ip)
 		self.add_record(record)
 
-	def delete_app_host(self, ip):
-		record = self._make_app_record(ip)
+	def delete_client(self, ip):
+		record = self._make_farm_server_record(ip)
 		self.delete_record(record)		
 	
 	
@@ -993,7 +993,7 @@ class PgHbaConf(Configuration):
 	def _make_standby_record(self,ip, user='postgres'):
 		return PgHbaRecord('host','replication', user=user,address='%s/32'%ip, auth_method='trust')
 	
-	def _make_app_record(self,ip):
+	def _make_farm_server_record(self,ip):
 		return PgHbaRecord(host='host', address='%s/32'%ip, auth_method='md5')
 	
 	

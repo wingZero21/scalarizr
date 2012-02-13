@@ -162,7 +162,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				self.storage_vol.mount()
 			
 			self.postgresql.service.start()
-			self.accept_app_hosts()
+			self.accept_all_clients()
 			
 			self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
 			root_password = self.root_password
@@ -210,25 +210,24 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def on_HostUp(self, message):
 		if message.local_ip == self._platform.get_private_ip():
-			self.accept_app_hosts()
-		elif message.local_ip in self.app_hosts:
-			self.postgresql.register_app_host(message.local_ip)
+			self.accept_all_clients()
+		elif message.local_ip in self.farm_hosts:
+			self.postgresql.register_client(message.local_ip)
 		
 	
 	
 	def on_HostDown(self, message):
 		if message.local_ip != self._platform.get_private_ip():
-			self.postgresql.unregister_app_host(message.local_ip)
+			self.postgresql.unregister_client(message.local_ip)
 	
 	@property			
-	def app_hosts(self):
-		app = BuiltinBehaviours.APP
-		list_roles = self._queryenv.list_roles(behaviour=app)
+	def farm_hosts(self):
+		list_roles = self._queryenv.list_roles()
 		servers = []
-		for app_serv in list_roles:
-			for app_host in app_serv.hosts :
-				servers.append(app_host.internal_ip or app_host.external_ip)
-		self._logger.debug("QueryEnv returned list of %s servers: %s" % (app,servers))
+		for serv in list_roles:
+			for host in serv.hosts :
+				servers.append(host.internal_ip or host.external_ip)
+		self._logger.debug("QueryEnv returned list of servers within farm: %s" % servers)
 		return servers				
 		
 		
@@ -246,12 +245,12 @@ class PostgreSqlHander(ServiceCtlHandler):
 		return servers
 	
 	
-	def accept_app_hosts(self):
-		app_hosts = self.app_hosts
-		for ip in app_hosts:
-				self.postgresql.register_app_host(ip, force=False)
-		if app_hosts:
-			self.postgresql.service.reload('Granting access to all app servers.', force=True)
+	def accept_all_clients(self):
+		farm_hosts = self.farm_hosts
+		for ip in farm_hosts:
+				self.postgresql.register_client(ip, force=False)
+		if farm_hosts:
+			self.postgresql.service.reload('Granting access to all servers within farm.', force=True)
 				
 	
 	@property
