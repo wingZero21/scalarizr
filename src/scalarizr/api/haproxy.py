@@ -100,9 +100,9 @@ class HAProxyAPI(object):
 	@rpc.service_method
 	@validate.param('target', required=_rule_hc_target)
 	@validate.param('interval', 'timeout', re=r'^\d+[sm]$')
-	@validate.param('fall_threshold', 'rise_threshold', type=int)'''
+	@validate.param('unhealthy_threshold', 'healthy_threshold', type=int)'''
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
-							fall_threshold=None, rise_threshold=None):
+							unhealthy_threshold=None, healthy_threshold=None):
 
 		bnds = haproxy.naming('backend', backend=target)  
 		if not self.cfg.sections(bnds):
@@ -114,8 +114,8 @@ class HAProxyAPI(object):
 
 			default_server = {
 				'inter': interval,
-				'fall': fall_threshold,
-				'rise': rise_threshold
+				'fall': unhealthy_threshold,
+				'rise': healthy_threshold
 			}
 
 			self.cfg['backend'][bnd]['default-server'] = default_server

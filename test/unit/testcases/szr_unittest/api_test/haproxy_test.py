@@ -110,8 +110,8 @@ class TestHAProxyAPI(unittest.TestCase):
 			self.api.configure_healthcheck(target='http:14080', 
 										interval='5s', 
 										timeout={'check': '3s'}, 
-										fall_threshold=2, 
-        								rise_threshold=10)
+										unhealthy_threshold=2, 
+        								healthy_threshold=10)
 			flag = False
 		except Exception, e:
 			LOG.debug('Backend not exist. Details: %s', e)
@@ -126,8 +126,8 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.api.configure_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port), 
 										interval='5s', 
 										timeout={'check': '5s'}, 
-										fall_threshold=20, 
-        								rise_threshold=100)
+										unhealthy_threshold=20, 
+        								healthy_threshold=100)
 		
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
 			self.server_protocol, self.server_port)]['default-server'], {'inter': '5s', 'rise': '100', 'fall': '20'})
@@ -144,8 +144,8 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.api.configure_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port),
 										interval='5s', 
 										timeout={'check': '5s'}, 
-										fall_threshold=20, 
-        								rise_threshold=100)
+										unhealthy_threshold=20, 
+        								healthy_threshold=100)
 		
 		self.api.reset_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port))
 		
