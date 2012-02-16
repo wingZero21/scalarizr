@@ -202,10 +202,11 @@ class HAProxyCfg(filetool.ConfigurationFile):
 							og[key_el] = value[key_el]
 					else:
 						og = HAProxyCfg.option_group(self.conf, self._child_xpath(key))
-						og[key][''] = value
+						LOG.debug('key=`%s`, value=`%s`', key, value)
+						og[''] = value
 				except Exception, e:
-					raise ValueError('section.__setitem__: error set value=`%s`. Details:'
-						' `%s`'% (value, sys.exc_info()[1]))
+					raise Exception, 'section.__setitem__: error set value=`%s`. Details: KeyError('\
+						'`%s`)'% (value, sys.exc_info()[1]), sys.exc_info()[2]
 			else:
 				index = self._indexof(key)
 				var = _serializers[key].serialize(value)
@@ -264,7 +265,8 @@ class HAProxyCfg(filetool.ConfigurationFile):
 					section_ = HAProxyCfg.section(self.conf, self._child_xpath(ind))
 					for key_ in value.keys():
 						LOG.debug('	inside dict:	key_= `%s`, value `%s`', key_, value[key_])
-						section_[key_] = value.get(key_)#because value `section` class type
+						section_[key_] = value.get(key_)
+						#because `value` is `section` class type, need use get and not []
 				else:
 					raise 'section_group.__setitem__:	section `%s` was not added' % key
 			else:
@@ -338,14 +340,6 @@ class HAProxyCfg(filetool.ConfigurationFile):
 				result.append(section)
 			index += 1
 		return result
-
-	'''
-	def get(self, path, key): #or __get__(self, key):
-		try:
-			#TODO: need implement safe get, what can return `result` or None
-			pass
-		except:
-			return None'''
 
 	def el_in_path(self, path, key):
 		'''Find key in any of children in path. If key found return True'''

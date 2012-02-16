@@ -1,6 +1,5 @@
-import gevent.monkey
-gevent.monkey.patch_all()
-#delattr(sys.modules['select'], 'poll')
+#import gevent.monkey
+#gevent.monkey.patch_all(dns = False)
 
 # Core
 from scalarizr import config 
@@ -12,7 +11,7 @@ from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
-from scalarizr.api.binding import jsonrpc_zmq
+#from scalarizr.api.binding import jsonrpc_zmq
 
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
@@ -290,10 +289,12 @@ def _init_services():
 
 	Storage.maintain_volume_table = True
 	
+	'''
 	routes = {
 		'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
 	}
 	bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
+	'''
 
 
 def _start_services():
@@ -310,8 +311,8 @@ def _start_services():
 	globals()['_msg_thread'] = msg_thread
 	
 	# Start API server
-	api_server = bus.api_server
-	api_server.start()
+	#api_server = bus.api_server
+	#api_server.start()
 	
 	# Start periodical executor
 	ex = bus.periodical_executor
@@ -499,9 +500,9 @@ def _shutdown_services(force=False):
 	
 	# Shutdown API server
 	logger.debug('Shutdowning API server')
-	api_server = bus.api_server
-	api_server.stop()
-	bus.api_server = None
+	#api_server = bus.api_server
+	#api_server.stop()
+	#bus.api_server = None
 
 	# Shutdown periodical executor
 	logger.debug('Shutdowning periodical executor')

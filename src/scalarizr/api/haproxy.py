@@ -7,7 +7,7 @@ Created on Nov 25, 2011
 from scalarizr import exceptions
 from scalarizr.libs import validate
 from scalarizr.services import haproxy
-
+from scalarizr.util import iptables 
 
 import logging
 LOG = logging.getLogger(__name__)
@@ -34,6 +34,18 @@ class HAProxyAPI(object):
 			ipaddr = ipaddr.strip().split(':')[0]
 		return ipaddr.replace('.', '-')
 	
+	def _insert_iptables_rules(self, port, protocol):
+		'''@type port: int
+		   @type protocol: str'''
+		iptab = iptables.IpTables()
+		if iptab.usable() and protocol in iptables.PROTOCOLS:
+			#TODO: whats protocol adding to rules only iptables.PROTOCOLS?
+			iptab.insert_rule(None, rule_spec = iptables.RuleSpec(
+					dport=port, jump='ACCEPT', protocol=protocol))
+			LOG.debug('Added rule for listener port `%s` accepted with prototcol `%s`',
+					port, protocol)
+
+
 	'''
 	@rpc.service_method
 	@validate.param('port', 'server_port', type=int)
@@ -42,12 +54,12 @@ class HAProxyAPI(object):
 	@validate.param('backend', optional=_rule_backend)'''
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
-
+		''' '''
 		ln = haproxy.naming('listen', protocol, port)
 		bnd = haproxy.naming('backend', server_protocol or protocol, server_port or port, backend=backend)
 		listener = backend = None
 		LOG.debug('HAProxyAPI.create_listener: listener = `%s`, backend = `%s`', ln, bnd)
-
+		
 		try:
 			if self.cfg.listener[ln]:
 				raise 'Duplicate'
@@ -78,11 +90,11 @@ class HAProxyAPI(object):
 		else:
 			raise ValueError('Unexpected protocol: %s' % (backend_protocol, ))
 			#TODO: not correct for https or ssl...
-			
+
 		# backend config:
 		backend.update({'mode': backend_protocol})
 		backend.update(HEALTHCHECK_DEFAULTS)
-		
+
 		# apply changes
 		#with self.svs.trans(exit='running'):
 		#	with self.cfg.trans(enter='reload', exit='working'):
@@ -92,9 +104,13 @@ class HAProxyAPI(object):
 				if not self.cfg.backend or not bnd in self.cfg.backend:
 					self.cfg['backend'][bnd] = backend
 
+				self._insert_iptables_rules(port, protocol)
 				self.cfg.save()
 				self.svs.reload()
+				
+				return listener
 
+	
 
 	'''
 	@rpc.service_method
@@ -103,14 +119,17 @@ class HAProxyAPI(object):
 	@validate.param('unhealthy_threshold', 'healthy_threshold', type=int)'''
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							unhealthy_threshold=None, healthy_threshold=None):
-
+		''' '''
 		bnds = haproxy.naming('backend', backend=target)  
 		if not self.cfg.sections(bnds):
-			raise exceptions.NotFound('Backend `%s` not found' % target)
+			raise exceptions.NotFound('Backend `%s` not found' % bnds)
 
 		for bnd in self.cfg.sections(bnds):
 			if timeout:
-				self.cfg['backend'][bnd]['timeout'] = timeout
+				if isinstance(timeout, dict):
+					self.cfg['backend'][bnd]['timeout'] = timeout
+				else:
+					self.cfg['backend'][bnd]['timeout'] = {'check': str(timeout)}
 
 			default_server = {
 				'inter': interval,
@@ -127,7 +146,6 @@ class HAProxyAPI(object):
 
 		#with self.svs.trans(exit='running'):
 			#	with self.cfg.trans(enter='reload', exit='working'):
-
 		self.cfg.save()
 		self.svs.reload()
 
@@ -148,7 +166,6 @@ class HAProxyAPI(object):
 				raise exceptions.NotFound('Backend not found: %s' % (backend, ))
 			else:
 				raise exceptions.Empty('No listeners to add server to')
-
 		#with self.svs.trans(exit='running'):
 			#with self.cfg.trans(exit='working'):
 		if True:
@@ -199,7 +216,7 @@ class HAProxyAPI(object):
 		for path in self.cfg.sections(ln):
 			del self.cfg['listen'][ln]
 			LOG.debug('HAProxyAPI.delete_listener: removed listener `%s`' % ln)
-			
+
 		if default_backend:
 			has_ref = False
 			for ln in self.cfg.listener:

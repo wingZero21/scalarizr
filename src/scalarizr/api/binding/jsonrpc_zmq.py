@@ -55,7 +55,7 @@ class ZmqServer(baseserver.BaseServer, rpc.Server):
 	def set_listener(self, listener, backlog=None):
 		if isinstance(listener, zmq.Socket):
 			socktype = listener.getsockopt(zmq.TYPE)
-			if socktype != zmq.ROUTER:
+			if socktype != zmq.XREP:
 				raise TypeError('Expected a ROUTER socket: %s' % (socktype, ))
 			self.socket = listener
 		else:
@@ -68,7 +68,7 @@ class ZmqServer(baseserver.BaseServer, rpc.Server):
 	def pre_start(self):
 		if not hasattr(self, 'socket'):
 			context = zmq.Context()
-			self.socket = context.socket(zmq.ROUTER)
+			self.socket = context.socket(zmq.XREP)
 			self.socket.setsockopt(zmq.BACKLOG, self.backlog)
 			self.socket.bind(self.address)
 		super(ZmqServer, self).pre_start()
