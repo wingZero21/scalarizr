@@ -37,6 +37,12 @@ def _patch_cloudservers():
 						time.sleep(interval)
 						continue
 					raise
+				except ValueError, e:
+					if 'No JSON object could be decoded' in str(e):
+						LOG.debug('Rackspace API failed with invalid JSON response. sleeping %s seconds', interval)
+						time.sleep(interval)
+						continue
+					raise
 		return request
 	
 	C.request = request_decorator(C.request)
