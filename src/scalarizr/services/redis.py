@@ -81,7 +81,11 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 		
 	def start(self):
 		initdv2.ParametrizedInitScript.start(self)
-	
+		wait_until(lambda: self._processes, timeout=10, sleep=1)
+		redis_conf = RedisConf.find()
+		password = redis_conf.masterauth or redis_conf.requirepass
+		cli = RedisCLI(password)
+		wait_until(lambda: cli.test_connection(), timeout=10, sleep=1)
 	
 initdv2.explore(SERVICE_NAME, RedisInitScript)
 	
@@ -390,6 +394,7 @@ class RedisConf(BaseRedisConfig):
 	dbfilename	 = property(_get_dbfilename, _set_dbfilename)
 	dbfilename_default = DB_FILENAME
 
+
 class RedisCLI(object):
 	path = REDIS_CLI_PATH
 	
@@ -409,7 +414,7 @@ class RedisCLI(object):
 				query = 'AUTH %s\n%s' % (self.password, query)
 		try:
 			out = system2([self.path], stdin=query,silent=True)[0]
-			if out.startswith('ERR'):
+			if out.startswith('ERR') or out.startswith('LOADING'):
 				raise PopenError(out)
 			elif out.startswith('OK\n'):
 				out = out[3:]
@@ -417,8 +422,20 @@ class RedisCLI(object):
 				out = out[:-1]
 			return out	
 		except PopenError, e:
-			self._logger.error('Unable to execute query %s with redis-cli: %s' % (query, e))
+			if 'LOADING' in str(e):
+				self._logger.debug('Unable to execute query %s: Redis is loading the dataset in memory' % query)
+			else:
+				self._logger.error('Unable to execute query %s with redis-cli: %s' % (query, e))
 			raise	
+		
+	def test_connection(self):
+		try:
+			self.execute('select (1)')
+		except PopenError, e:
+			if 'LOADING' in str(e):
+				return False
+		return True
+			
 	
 	@property
 	def info(self):
