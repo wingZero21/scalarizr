@@ -59,7 +59,8 @@ class BlockDeviceHandler(handlers.Handler):
 			handlers.script_executor.skip_events.add(Messages.INT_BLOCK_DEVICE_UPDATED)
 		except AttributeError:
 			pass
-	
+
+
 	def on_before_host_init(self, *args, **kwargs):
 		self._logger.debug("Adding udev rule for EBS devices")
 		try:
@@ -75,11 +76,13 @@ class BlockDeviceHandler(handlers.Handler):
 			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' Error: %s", str(e))
 			raise
 
+
 	def on_host_init_response(self, *args, **kwargs):
 		self._logger.info('Configuring block device mountpoints')
 		wait_until(self._plug_all_volumes, sleep=10, timeout=600, 
 				error_text='Cannot attach and mount disks in a reasonable time')
-	
+
+
 	def _plug_all_volumes(self):
 		unplugged = 0
 		plugged_names = []
@@ -92,54 +95,60 @@ class BlockDeviceHandler(handlers.Handler):
 				self._plug_volume(qe_mpoint)
 				plugged_names.append(qe_mpoint.name)
 		return not unplugged
-	
+
+
 	def _plug_volume(self, qe_mpoint):
 		try:
 			assert len(qe_mpoint.volumes), 'Invalid mpoint info %s. Volumes list is empty' % qe_mpoint
 			qe_volume = qe_mpoint.volumes[0]
+			mpoint = qe_mpoint.dir or None
 			assert qe_volume.volume_id, 'Invalid volume info %s. volume_id should be non-empty' % qe_volume
 			
 			vol = Storage.create(
 				type=self._vol_type, 
 				id=qe_volume.volume_id, 
 				device=qe_volume.device, 
-				mpoint=qe_mpoint.dir
+				mpoint=mpoint
 			)
-				
-			mtab = fstool.Mtab()	
-			if not mtab.contains(vol.device, reload=True):
-				self._logger.debug("Mounting device %s to %s", vol.device, vol.mpoint)
-				try:
-					fstool.mount(vol.device, vol.mpoint, auto_mount=True)
-				except fstool.FstoolError, e:
-					if e.code == fstool.FstoolError.NO_FS:
-						vol.mkfs()
+
+			if mpoint:
+				mtab = fstool.Mtab()
+				if not mtab.contains(vol.device, reload=True):
+					self._logger.debug("Mounting device %s to %s", vol.device, vol.mpoint)
+					try:
 						fstool.mount(vol.device, vol.mpoint, auto_mount=True)
-					else:
-						raise
-				self._logger.info("Device %s is mounted to %s", vol.device, vol.mpoint)
-				
-				self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
-					volume_id = vol.id,
-					device_name = vol.ebs_device
-				), broadcast=True, wait_ack=True)
-				bus.fire("block_device_mounted", volume_id=qe_volume.volume_id, device=vol.device)				
-				
-			else:
-				entry = mtab.find(vol.device)[0]
-				self._logger.debug("Skip device %s already mounted to %s", vol.device, entry.mpoint)
+					except fstool.FstoolError, e:
+						if e.code == fstool.FstoolError.NO_FS:
+							vol.mkfs()
+							fstool.mount(vol.device, vol.mpoint, auto_mount=True)
+						else:
+							raise
+					self._logger.info("Device %s is mounted to %s", vol.device, vol.mpoint)
+
+					self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
+						volume_id = vol.id,
+						device_name = vol.ebs_device
+					), broadcast=True, wait_ack=True)
+					bus.fire("block_device_mounted", volume_id=qe_volume.volume_id, device=vol.device)
+
+				else:
+					entry = mtab.find(vol.device)[0]
+					self._logger.debug("Skip device %s already mounted to %s", vol.device, entry.mpoint)
 		except:
 			self._logger.exception("Can't attach volume")
-		
+
+
 	def get_devname(self, devname):
 		return devname
+
 
 	def on_MountPointsReconfigure(self, message):
 		self._logger.info("Reconfiguring mountpoints")
 		for qe_mpoint in self._queryenv.list_ebs_mountpoints():
 			self._plug_volume(qe_mpoint)
 		self._logger.debug("Mountpoints reconfigured")
-		
+
+
 	def on_IntBlockDeviceUpdated(self, message):
 		if not message.devname:
 			return

@@ -59,7 +59,7 @@ class DeploymentHandler(Handler):
 			assert 'deploy_task_id' in msg_body, 'deploy task is undefined'
 			assert 'source' in msg_body, 'source is undefined'
 			assert 'type' in msg_body['source'], 'source type is undefined'
-			assert 'remote_path' in msg_body, 'remote path is undefined'
+			assert 'remote_path' in msg_body and msg_body['remote_path'], 'remote path is undefined'
 			assert 'body' in msg_body['pre_deploy_routines'] if 'pre_deploy_routines' in msg_body else True
 			assert 'body' in msg_body['post_deploy_routines'] if 'post_deploy_routines' in msg_body else True
 
