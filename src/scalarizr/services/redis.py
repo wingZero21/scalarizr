@@ -124,7 +124,7 @@ class Redis(BaseService):
 		self.service.start()
 		self.is_replication_master = False
 	
-	def wait_for_sync(self,link_timeout=600,sync_timeout=3200):	
+	def wait_for_sync(self,link_timeout=None,sync_timeout=None):
 		self._logger.info('Waiting for link with master')
 		wait_until(lambda: self.redis_cli.master_link_status == 'up', sleep=3, timeout=link_timeout)
 		self._logger.info('Waiting for sync with master to complete')
