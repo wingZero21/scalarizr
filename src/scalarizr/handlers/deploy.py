@@ -46,8 +46,8 @@ class DeploymentHandler(Handler):
 		bus.on(host_init_response=self.on_host_init_response)
 		
 	def on_host_init_response(self, message):
-		if 'deploy' in message:
-			self.on_Deploy(self.new_message(Messages.DEPLOY, message['deploy']))
+		if 'deploy' in message.body:
+			self.on_Deploy(self.new_message(Messages.DEPLOY, message.body['deploy']))
 
 	def _exec_script(self, name=None, body=None, exec_timeout=None):
 		if not self._script_executor:
