@@ -86,7 +86,7 @@ class SshManager:
 		while channel.recv_ready():
 			out += channel.recv(1)
 			
-		if 	'Please login as the ubuntu user rather than root user' in out:
+		if 'Please login' in out and 'ubuntu' in out:
 			self.user = 'ubuntu'
 			self.connect()
 		else:
@@ -155,6 +155,7 @@ def clean_output(channel, timeout = 60):
 		else:
 			if time.time() - last_recv_time > timeout:
 				#raise Exception('Timeout (%s sec) while waiting for root prompt. Out:\n%s' % (timeout, out))	
+				print out
 				raise Exception('Timeout (%s sec) while waiting for root prompt. ' % timeout)	
 	return out
 

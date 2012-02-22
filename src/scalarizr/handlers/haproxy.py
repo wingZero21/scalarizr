@@ -76,12 +76,13 @@ class HAProxyHandler(Handler):
 
 	def on_before_host_up(self, msg):
 		LOG.debug('HAProxyHandler.on_before_host_up')
-		
+
 		try:
-			self.svs.start()
+			if self.svs.status() != 0:
+				self.svs.start()
 		except:
-			#TODO: if it not starting it raise exception. Do we need catch this exception?
-			LOG.warn('Can`t start `haproxy`. Details: `%s`', sys.exc_info()[1])
+			#TODO: if it not run and not starting, do we need raising exception or logging as error?
+			LOG.error('Can`t start `haproxy`. Details: `%s`', sys.exc_info()[1])
 
 		data = {'listeners': [], 'healthchecks': []}
 
@@ -91,8 +92,9 @@ class HAProxyHandler(Handler):
 					ln0 = self.api.create_listener(**ln)
 					data['listeners'].append(ln0)
 				except:
-					LOG.error('Failed to add listener `%s`.', str(ln))
-					#raise Exception, sys.exc_info()[1], sys.exc_info()[2]
+					LOG.error('HAProxyHandler.on_before_host_up. Failed to add listener'\
+							' `%s`.', str(ln))
+					raise Exception, sys.exc_info()[1], sys.exc_info()[2]
 
 		if isinstance(self._healthchecks, list):
 			for hl in self._healthchecks:
@@ -100,33 +102,37 @@ class HAProxyHandler(Handler):
 					hl0 = self.api.configure_healthcheck(**hl)
 					data['healthchecks'].append(hl0)
 				except:
-					LOG.error('Failed to configure healthcheck `%s`.', str(hl))
-					#raise Exception, sys.exc_info()[1], sys.exc_info()[2]
+					LOG.error('HAProxyHandler.on_before_host_up. Failed to configure'\
+							' healthcheck `%s`.', str(hl))
+					raise Exception, sys.exc_info()[1], sys.exc_info()[2]
 		msg.haproxy = data
-		
-		
+
 
 	def on_HostUp(self, msg):
 		# Add roles to backends
 		pass
-	
-	
+
+
+	def on_HostInit(self, msg):
+		pass
+
+
 	def on_HostDown(self, msg):
 		# Remove roles from backends
 		pass
-	
+
 	on_BeforeHostTerminate = on_HostDown
-		
+
 	@_result_message('HAProxy_AddServerResult')
 	def on_HAProxy_AddServer(self, msg):
 		return self.api.add_server(**msg.body)
-		
-	
+
+
 	@_result_message('HAProxy_RemoveServerResult')
 	def on_HAProxy_RemoveServer(self, msg):
 		return self.api.remove_server(**msg.body)
-		
-	
+
+
 	@_result_message('HAProxy_ConfigureHealthcheckResult')
 	def on_HAProxy_ConfigureHealthcheck(self, msg):
 		return self.api.configure_healthcheck(**msg.body)

@@ -33,10 +33,16 @@ class HAProxyAPI(object):
 		if ':' in ipaddr:
 			ipaddr = ipaddr.strip().split(':')[0]
 		return ipaddr.replace('.', '-')
-	
+
+	def _check_rule_unique(self, port, protocol):
+		'''raise exception if port with protocol already used in iptables'''
+		rlist = iptables.IpTables().list_rules()
+		for rule in rlist:
+			if port == rule[0].specs['--dport'] and protocol == rule[0].specs['-p']:
+				raise exceptions.Duplicate('Rules for port=`%s`,protocol=`%s` already exist'\
+					% port, protocol)
+
 	def _insert_iptables_rules(self, port, protocol):
-		'''@type port: int
-		   @type protocol: str'''
 		iptab = iptables.IpTables()
 		if iptab.usable() and protocol in iptables.PROTOCOLS:
 			#TODO: whats protocol adding to rules only iptables.PROTOCOLS?
@@ -44,7 +50,12 @@ class HAProxyAPI(object):
 					dport=port, jump='ACCEPT', protocol=protocol))
 			LOG.debug('Added rule for listener port `%s` accepted with prototcol `%s`',
 					port, protocol)
-
+	
+	def _remove_iptables_rules(self, port, protocol):
+		'''remove rules from iptables'''
+		iptab = iptables.IpTables()
+		iptab.delete_rule(rule_spec = iptables.RuleSpec(
+				dport=port, jump='ACCEPT', protocol=protocol))
 
 	'''
 	@rpc.service_method
@@ -55,33 +66,34 @@ class HAProxyAPI(object):
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
 		''' '''
+		if protocol:
+			protocol = protocol.lower()
 		ln = haproxy.naming('listen', protocol, port)
 		bnd = haproxy.naming('backend', server_protocol or protocol, server_port or port, backend=backend)
 		listener = backend = None
 		LOG.debug('HAProxyAPI.create_listener: listener = `%s`, backend = `%s`', ln, bnd)
-		
+
 		try:
 			if self.cfg.listener[ln]:
 				raise 'Duplicate'
 		except Exception, e:
 			if 'Duplicate' in e:
 				raise exceptions.Duplicate('Listener %s:%s already exists' % (protocol, port))
-		
-		if protocol == 'tcp': 
+		if protocol == 'tcp':
 			listener = {'balance': 'roundrobin'}
 		elif protocol == 'http':
 			listener = {'option': {'forwardfor': True}}
 		else:
 			raise ValueError('Unexpected protocol: %s' % (protocol, ))
 			#TODO: not correct for https or ssl...
-			
+
 		# listen config:
 		listener.update({
 			'bind': '*:%s' % port,
 			'mode': protocol,
 			'default_backend': bnd
 		})
-		
+
 		backend_protocol = server_protocol or protocol
 		if backend_protocol == 'tcp':
 			backend = {}
@@ -103,14 +115,16 @@ class HAProxyAPI(object):
 				self.cfg['listen'][ln] = listener
 				if not self.cfg.backend or not bnd in self.cfg.backend:
 					self.cfg['backend'][bnd] = backend
+				try:
+					self._check_rule_unique(port, protocol)
+					self._insert_iptables_rules(port, protocol)
+				except:
+					raise exceptions.Duplicate('Listener %s:%s already exists' % (protocol, port))
 
-				self._insert_iptables_rules(port, protocol)
 				self.cfg.save()
 				self.svs.reload()
-				
-				return listener
 
-	
+				return listener
 
 	'''
 	@rpc.service_method
@@ -229,8 +243,16 @@ class HAProxyAPI(object):
 			if not has_ref:
 				#it not used in other section, so will be deleting
 				del self.cfg.backends[default_backend]
+		
+		try:
+			self._check_rule_unique( port, protocol)
+		except:
+			self._remove_iptables_rules( port, protocol)
+
 		self.cfg.save()
 		self.svs.reload()
+		
+		#TODO: delete from iptables
 
 	'''
 	@rpc.service_method
@@ -294,7 +316,6 @@ class HAProxyAPI(object):
 					'server_protocol': bnd['mode'],
 					'backend': bnd_role,
 				})
-
 		return res
 
 

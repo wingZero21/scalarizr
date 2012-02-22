@@ -65,7 +65,12 @@ class SysInfoAPI(object):
 				raise Exception, 'Can`t write file `%s`.' % \
 					self._HOSTNAME, sys.exc_info()[2]
 			# changing runtime hostname
-			system2(('hostname', fqdn))
+			try:
+				system2(('hostname', fqdn))
+			except:
+				with open(self._HOSTNAME, 'w+') as fp:
+					fp.write('%s\n' % old_hn)
+				raise Exception('Failed to change the hostname to `%s`' % fqdn)
 			# changing hostname in hosts file
 			if old_hn:
 				hosts = dns.HostsFile()
@@ -76,9 +81,7 @@ class SysInfoAPI(object):
 										hosts._hosts[index]['hostname'] == old_hn:
 							hosts._hosts[index]['hostname'] = fqdn
 					hosts._flush()
-					
 			return fqdn
-
 		else:
 			with open(self._HOSTNAME, 'r') as fp:
 				return fp.readline().strip()
