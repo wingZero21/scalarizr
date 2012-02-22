@@ -40,6 +40,14 @@ class DeploymentHandler(Handler):
 		self._logger = logging.getLogger(__name__)
 		self._log_hdlr = DeployLogHandler()
 		self._script_executor = None
+		bus.on(init=self.on_init)
+
+	def on_init(self):
+		bus.on(host_init_response=self.on_host_init_response)
+		
+	def on_host_init_response(self, message):
+		if 'deploy' in message:
+			self.on_Deploy(self.new_message(Messages.DEPLOY, message['deploy']))
 
 	def _exec_script(self, name=None, body=None, exec_timeout=None):
 		if not self._script_executor:
