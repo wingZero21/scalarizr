@@ -731,6 +731,8 @@ class MysqlHandler(ServiceCtlHandler):
 			storage_conf = Storage.restore_config(self._volume_config_path)
 			self.storage_vol = Storage.create(storage_conf)
 			if not self.storage_vol.mounted():
+				if not os.path.exists(self.storage_vol.mpoint):
+					os.makedirs(self.storage_vol.mpoint)
 				self.storage_vol.mount()
 			
 			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
