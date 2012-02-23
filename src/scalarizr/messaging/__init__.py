@@ -290,6 +290,16 @@ class Messages:
 	Fires after deployment finished
 	'''
 	
+	OPERATION_DEFINITION = 'OperationDefinition'
+	'''
+	Fires before long timed operation
+	'''
+	
+	OPERATION_PROGRESS = 'OperationProgress'
+	'''
+	Log message described operation progress
+	''' 
+	
 	REBUNDLE_LOG = "RebundleLog"
 	
 	DEPLOY_LOG = "DeployLog"

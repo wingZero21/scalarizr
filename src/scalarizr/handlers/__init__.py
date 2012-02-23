@@ -23,6 +23,9 @@ import traceback
 class Handler(object):
 	_logger = logging.getLogger(__name__)
 	
+	def get_initialization_phases(self):
+		return []
+	
 	def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
 		srv = srv or bus.messaging_service
 		pl = bus.platform		

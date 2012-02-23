@@ -19,6 +19,8 @@ from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 
 # Stdlibs
 import logging, os, sys, threading
+from scalarizr.config import STATE
+import uuid
 
 
 _lifecycle = None
@@ -298,6 +300,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
+		self._define_initialization()
 		bus.fire("host_init_response", message)
 		if bus.scalr_version >= (2, 2, 3):
 			self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
@@ -326,6 +329,22 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		"""
 		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
 		
+	def _define_initialization(self):
+		# XXX: from the asshole
+		handlers = bus.messaging_service.get_consumer().listeners[0]._get_handlers_chain()
+		order = {'host_init_response': [], 'before_host_up': []}
+		for handler in handlers:
+			for ph in handler.get_initialization_phases():
+				for key in order.keys():
+					order[key] += ph.get(key, [])
+		phases = order['host_init_response'] + order['before_host_up']
+		
+		STATE['lifecycle.initialization'] = str(uuid.uuid4())
+		self.send_message(Messages.OPERATION_DEFINITION, {
+			'id': STATE['lifecycle.initialization'],
+			'name': 'Initialization',
+			'phases': phases
+		})
 		
 	def _get_flag_filename(self, name):
 		return self._cnf.private_path('.%s' % name)
