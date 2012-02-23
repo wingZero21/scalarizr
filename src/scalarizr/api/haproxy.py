@@ -34,29 +34,6 @@ class HAProxyAPI(object):
 			ipaddr = ipaddr.strip().split(':')[0]
 		return ipaddr.replace('.', '-')
 
-	def _check_rule_unique(self, port, protocol):
-		'''raise exception if port with protocol already used in iptables'''
-		rlist = iptables.IpTables().list_rules()
-		for rule in rlist:
-			if port == rule[0].specs['--dport'] and protocol == rule[0].specs['-p']:
-				raise exceptions.Duplicate('Rules for port=`%s`,protocol=`%s` already exist'\
-					% port, protocol)
-
-	def _insert_iptables_rules(self, port, protocol):
-		iptab = iptables.IpTables()
-		if iptab.usable() and protocol in iptables.PROTOCOLS:
-			#TODO: whats protocol adding to rules only iptables.PROTOCOLS?
-			iptab.insert_rule(None, rule_spec = iptables.RuleSpec(
-					dport=port, jump='ACCEPT', protocol=protocol))
-			LOG.debug('Added rule for listener port `%s` accepted with prototcol `%s`',
-					port, protocol)
-	
-	def _remove_iptables_rules(self, port, protocol):
-		'''remove rules from iptables'''
-		iptab = iptables.IpTables()
-		iptab.delete_rule(rule_spec = iptables.RuleSpec(
-				dport=port, jump='ACCEPT', protocol=protocol))
-
 	'''
 	@rpc.service_method
 	@validate.param('port', 'server_port', type=int)
@@ -116,10 +93,9 @@ class HAProxyAPI(object):
 				if not self.cfg.backend or not bnd in self.cfg.backend:
 					self.cfg['backend'][bnd] = backend
 				try:
-					self._check_rule_unique(port, protocol)
-					self._insert_iptables_rules(port, protocol)
-				except:
-					raise exceptions.Duplicate('Listener %s:%s already exists' % (protocol, port))
+					iptables.insert_rule_once('ACCEPT', port, protocol if protocol != 'http' else 'tcp')
+				except Exception, e:
+					raise exceptions.Duplicate(e)
 
 				self.cfg.save()
 				self.svs.reload()
@@ -243,16 +219,15 @@ class HAProxyAPI(object):
 			if not has_ref:
 				#it not used in other section, so will be deleting
 				del self.cfg.backends[default_backend]
-		
+
 		try:
-			self._check_rule_unique( port, protocol)
-		except:
-			self._remove_iptables_rules( port, protocol)
+			iptables.remove_rule('ACCEPT', port, protocol if protocol != 'http' else 'tcp')
+		except Exception, e:
+			raise exceptions.NotFound(e)
 
 		self.cfg.save()
 		self.svs.reload()
-		
-		#TODO: delete from iptables
+
 
 	'''
 	@rpc.service_method

@@ -35,6 +35,15 @@ def _result_message(name):
 	return result_wrapper
 
 
+class HAProxyMessages:
+	HAPROXY_ADDSERVER = 'HAProxy_AddServer'
+	HAPROXY_REMOVESERVER = 'HAProxy_RemoveServer'
+	HAPROXY_CONFIGURE_HEALTHCHECK = 'HAProxy_ConfigureHealthcheck'
+	HAPROXY_GETSERVERSHEALTH = 'HAProxy_GetServersHealth'
+	HAPROXY_RESETHEALTHCHECK = 'HAProxy_ResetHealthcheck'
+	HAPROXY_LISTLISTENERS = 'HAProxy_ListListeners',
+	HAPROXY_LISTSERVERS = 'HAProxy_ListServers'
+
 class HAProxyHandler(Handler):
 	def __init__(self):
 		self.api = haproxy_api.HAProxyAPI()
@@ -42,14 +51,32 @@ class HAProxyHandler(Handler):
 		bus.on(init=self.on_init, reload=self.on_reload)
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return haproxy_svs.BEHAVIOUR in behaviour or message.name in (
-			Messages.HOST_UP, Messages.HOST_DOWN, Messages.BEFORE_HOST_TERMINATE)
-
+		accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
+			#message.haproxy in message or
+			#TODO: message.haproxy or haproxymessage?
+			Messages.HOST_UP, Messages.HOST_DOWN, Messages.BEFORE_HOST_TERMINATE,
+			HAProxyMessages.HAPROXY_ADDSERVER,
+			HAProxyMessages.HAPROXY_CONFIGURE_HEALTHCHECK,
+			HAProxyMessages.HAPROXY_GETSERVERSHEALTH,
+			HAProxyMessages.HAPROXY_LISTLISTENERS,
+			HAProxyMessages.HAPROXY_LISTSERVERS,
+			HAProxyMessages.HAPROXY_REMOVESERVER,
+			HAProxyMessages.HAPROXY_RESETHEALTHCHECK
+			)
+		LOG.debug('--------------------------------------------')
+		LOG.debug('haproxy_svs.BEHAVIOUR = `%s`', haproxy_svs.BEHAVIOUR)
+		LOG.debug('behaviour = `%s`', behaviour)
+		LOG.debug('haproxy_svs.BEHAVIOUR in behaviour =`%s`', (haproxy_svs.BEHAVIOUR in behaviour))
+		LOG.debug('message.name = `%s`', message.name)
+		LOG.debug('`%s`', accept_res)
+		LOG.debug('message = `%s`', message)
+		LOG.debug('--------------------------------------------')
+		return accept_res
 
 	def on_init(self, *args, **kwds):
 		bus.on(
 			host_init_response=self.on_host_init_response,
-			before_host_up=self.on_before_host_up
+			before_host_up=self.on_before_host_up,
 		)
 
 	def on_reload(self, *args):
@@ -94,7 +121,7 @@ class HAProxyHandler(Handler):
 				except:
 					LOG.error('HAProxyHandler.on_before_host_up. Failed to add listener'\
 							' `%s`.', str(ln))
-					raise Exception, sys.exc_info()[1], sys.exc_info()[2]
+					#raise Exception, sys.exc_info()[1], sys.exc_info()[2]
 
 		if isinstance(self._healthchecks, list):
 			for hl in self._healthchecks:
@@ -104,24 +131,48 @@ class HAProxyHandler(Handler):
 				except:
 					LOG.error('HAProxyHandler.on_before_host_up. Failed to configure'\
 							' healthcheck `%s`.', str(hl))
-					raise Exception, sys.exc_info()[1], sys.exc_info()[2]
+					#raise Exception, sys.exc_info()[1], sys.exc_info()[2]
 		msg.haproxy = data
 
-
 	def on_HostUp(self, msg):
-		# Add roles to backends
-		pass
-
-
-	def on_HostInit(self, msg):
-		pass
-
+		LOG.debug('------------------------')
+		LOG.debug('Host_Up')
+		LOG.debug('------------------------')
+		self._farm_role_id = msg.body.get('farm_role_id')
+		self._local_ip = msg.body.get('local_ip')
+		try:
+			self.api.add_server(ipaddr=self._local_ip, 
+								backend='role:%s' % self._farm_role_id)
+		except:
+			LOG.error('HAProxyHandler.on_before_host_up. Failed add_server `%s`, details:'
+					' %s' %	(self._local_ip, sys.exc_info()[1]))
 
 	def on_HostDown(self, msg):
+		LOG.debug('------------------------')
+		LOG.debug('Host_Down')
+		LOG.debug('------------------------')
 		# Remove roles from backends
-		pass
+		self._farm_role_id = msg.body.get('farm_role_id')
+		self._local_ip = msg.body.get('local_ip')
+		try:
+			self.api.remove_server(ipaddr=self._local_ip, 
+								backend='role:%s' % self._farm_role_id)
+		except:
+			LOG.error('HAProxyHandler.on_before_host_Down. Failed remove server `%s`, '
+					'details: %s' %	(self._local_ip, sys.exc_info()[1]))
 
 	on_BeforeHostTerminate = on_HostDown
+
+
+	def host_up(self, msg):
+		LOG.debug('------------------------')
+		LOG.debug('host_up')
+		LOG.debug('------------------------')
+		
+	def host_down(self, msg):
+		LOG.debug('------------------------')
+		LOG.debug('host_down')
+		LOG.debug('------------------------')
 
 	@_result_message('HAProxy_AddServerResult')
 	def on_HAProxy_AddServer(self, msg):
@@ -147,12 +198,12 @@ class HAProxyHandler(Handler):
 	def on_HAProxy_ResetHealthcheck(self, msg):
 		return self.api.reset_healthcheck(msg.target)
 
-	
+
 	@_result_message('HAProxy_ListListenersResult')
 	def on_HAProxy_ListListeners(self, msg):
 		return {'listeners': self.api.list_listeners()} 
-	
-	
+
+
 	@_result_message('HAProxy_ListServersResult')
 	def on_HAProxy_ListServers(self, msg):
 		return {'servers': self.api.list_servers(msg.backend) }
