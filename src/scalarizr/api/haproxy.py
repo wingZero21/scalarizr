@@ -147,6 +147,8 @@ class HAProxyAPI(object):
 	def add_server(self, ipaddr=None, backend=None):
 		'''Add server with ipaddr in backend section''' 
 		self.cfg.reload()
+		if backend: backend=backend.strip()
+		if ipaddr: ipaddr=ipaddr.strip()
 		LOG.debug('HAProxyAPI.add_server')
 		LOG.debug('	%s' % haproxy.naming('backend', backend=backend))
 		bnds = self.cfg.sections(haproxy.naming('backend', backend=backend))
@@ -234,6 +236,7 @@ class HAProxyAPI(object):
 	@validate.param('target', required=_rule_hc_target)'''
 	def reset_healthcheck(self, target):		
 		'''Return to defaults for `tartget` backend sections'''
+		target = target.strip()
 		bnds = haproxy.naming('backend', backend=target)
 		if not self.cfg.sections(bnds):
 			raise exceptions.NotFound('Backend `%s` not found' % target)
@@ -255,6 +258,8 @@ class HAProxyAPI(object):
 	@validate.param('backend', optional=_rule_backend)'''
 	def remove_server(self, ipaddr=None, backend=None):
 		'''Remove server from backend section with ipaddr'''
+		if ipaddr: ipaddr = ipaddr.strip()
+		if backend: backend = backend.strip()
 		srv_name = self._server_name(ipaddr)
 		for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
 			if srv_name in self.cfg.backends[bd]['server']:
@@ -302,10 +307,12 @@ class HAProxyAPI(object):
 		List all servers, or servers from particular backend
 		@rtype: [<ipaddr>, ...]
 		'''
+		if backend: backend = backend.strip()
 		list_section = self.cfg.sections(haproxy.naming('backend', backend=backend))
 
 		res = []
 		for bnd in list_section:
 			for srv_name in self.cfg.backends[bnd]['server']:
 				res.append(self.cfg.backends[bnd]['server'][srv_name]['address'])
+		res = list(set(res))
 		return res
