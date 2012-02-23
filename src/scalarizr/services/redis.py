@@ -424,6 +424,8 @@ class RedisCLI(object):
 		except PopenError, e:
 			if 'LOADING' in str(e):
 				self._logger.debug('Unable to execute query %s: Redis is loading the dataset in memory' % query)
+			elif 'Client sent AUTH, but no password is set' in str(e):
+				return 
 			else:
 				self._logger.error('Unable to execute query %s with redis-cli: %s' % (query, e))
 			raise	

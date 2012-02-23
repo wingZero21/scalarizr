@@ -164,6 +164,11 @@ class RedisHandler(ServiceCtlHandler):
 		redis_data = message.redis.copy()	
 		self._logger.info('Got Redis part of HostInitResponse: %s' % redis_data)
 		
+		#saving volume id in db to assert it with future volume ids before destroying them
+		if OPT_VOLUME_CNF in redis_data:
+			vol_config = redis_data[OPT_VOLUME_CNF]
+			config.STATE['volume_id'] = vol_config.get('id', None)
+		
 		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 			if os.path.exists(file):
@@ -219,6 +224,9 @@ class RedisHandler(ServiceCtlHandler):
 				self.redis.service.stop('Server will be terminated')
 			self._logger.info('Detaching Redis storage')
 			self.storage_vol.detach()
+			if self._cnf.state == ScalarizrState.INITIALIZING:
+				if config.STATE['volume_id'] != self.storage_vol.id:
+					self.storage_vol.destroy(remove_disks=True)
 	
 	
 	def on_DbMsr_CreateDataBundle(self, message):
