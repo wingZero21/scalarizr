@@ -9,7 +9,7 @@ Created on Dec 25, 2009
 from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
-from scalarizr.handlers import HandlerError, ServiceCtlHandler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler, operation
 from scalarizr.messaging import Messages
 
 # Libs
@@ -232,6 +232,20 @@ class ApacheHandler(ServiceCtlHandler):
 			message.name == Messages.HOST_DOWN or \
 			message.name == Messages.BEFORE_HOST_TERMINATE)
 
+	def get_initialization_phases(self):
+		return {
+			'before_host_up': [{
+				'name': 'Apache', 
+				'steps': [
+					'Update virtual hosts', 
+					'Reload RPAF'
+				]
+			}]
+		}
+	
+	def initialization_id(self):
+		return STATE['lifecycle.initialization_id']
+	
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			self._update_vhosts()			
@@ -239,9 +253,13 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def on_before_host_up(self, message):
 		
-		self._update_vhosts()
-		self._rpaf_reload()
-		bus.fire('service_configured', service_name=SERVICE_NAME)
+		with operation(id=self.initialization_id()) as op:
+			with op.phase('Apache'):
+				with op.step('Update virtual hosts'):
+					self._update_vhosts()
+				with op.step('Reload RPAF'):
+					self._rpaf_reload()
+				bus.fire('service_configured', service_name=SERVICE_NAME)
 
 	def on_before_reboot_finish(self, *args, **kwargs):
 		self._insert_iptables_rules()

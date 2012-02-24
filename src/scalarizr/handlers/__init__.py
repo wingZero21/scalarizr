@@ -17,7 +17,86 @@ import pprint
 from distutils.file_util import write_file
 import sys
 import traceback
+import uuid
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
+
+
+class operation(object):
+	def __init__(self, id=None, name=None, phases=None):
+		self.id = id or str(uuid.uuid4())
+		self.name = name
+		self.phases = phases or []
+		self.depth = None
+	
+	def phase(self, name):
+		self.phase = name
+		self.depth = 'phase'
+		return self
+	
+	def step(self, name):
+		self.step = name
+		self.depth = 'step'
+		return self
+	
+	def __enter__(self):
+		return self
+	
+	def __exit__(self, *args):
+		if self.depth == 'step':
+			try:
+				if not args[0]:
+					self.progress(100)
+				else:
+					self.exception(exc_info=args)					
+			finally:
+				self.depth = 'phase'
+
+	def define(self):
+		srv = bus.messaging_service
+		msg = srv.new_message(Messages.OPERATION_DEFINITION, None, {
+			'id': self.id,
+			'name': self.name,
+			'phases': self.phases
+		})
+		srv.get_producer().send(Queues.CONTROL, msg)
+	
+	def progress(self, percent=None):
+		self._send_progress('running', progress=percent)
+	
+	def exception(self, exc_info=None, handler=None):
+		if not exc_info:
+			exc_info = sys.exc_info()
+		error = {
+			'message': str(exc_info[1]),
+			'trace': ''.join(traceback.format_tb(exc_info[2])),
+			'handler': handler
+		}
+		self._send_progress('error', error=error)
+
+	def _send_progress(self, status, progress=None, error=None):
+		srv = bus.messaging_service
+		msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
+			'id': self.id,
+			'phase': self.phase,
+			'step': self.step,
+			'status': status,
+			'progress': progress,
+			'error': error
+		})
+		srv.get_producer().send(Queues.LOG, msg)
+
+	def as_json(self):
+		return json.dumps({'id': self.id, 'name': self.name, 'phases': self.phases})
+	
+	def from_json(self, value):
+		d = json.loads(value)
+		self.id = d['id']
+		self.name = d['name']
+		self.phases = d['phases']
 
 
 class Handler(object):
@@ -25,6 +104,7 @@ class Handler(object):
 	
 	def get_initialization_phases(self):
 		return []
+	
 	
 	def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
 		srv = srv or bus.messaging_service
@@ -370,33 +450,35 @@ class ServiceCtlHandler(Handler):
 		
 		if self._cnf_ctl:	
 			
-			# Backup default configuration
-			my_preset = self._cnf_ctl.current_preset()
-			self._preset_store.save(my_preset, PresetType.DEFAULT)
+			with bus.initialization.step('Apply configuration preset'):
 			
-			# Stop service if it's already running 
-			self._stop_service('Applying configuration preset')	
-			
-			# Fetch current configuration preset
-			service_conf = self._queryenv.get_service_configuration(self._service_name)
-			cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
-			self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
-			
-			if cur_preset.name == 'default':
-				# Scalr respond with default preset
-				self._logger.debug('%s configuration is default', self._service_name)
-				#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
-				self._start_service()
-				return
-			
-			elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
-				self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
-				self._start_service()
-				return
-			
-			else:
-				self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
-				self._cnf_ctl.apply_preset(cur_preset)
+				# Backup default configuration
+				my_preset = self._cnf_ctl.current_preset()
+				self._preset_store.save(my_preset, PresetType.DEFAULT)
+				
+				# Stop service if it's already running 
+				self._stop_service('Applying configuration preset')	
+				
+				# Fetch current configuration preset
+				service_conf = self._queryenv.get_service_configuration(self._service_name)
+				cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
+				self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
+				
+				if cur_preset.name == 'default':
+					# Scalr respond with default preset
+					self._logger.debug('%s configuration is default', self._service_name)
+					#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
+					self._start_service()
+					return
+				
+				elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
+					self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+					self._start_service()
+					return
+				
+				else:
+					self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
+					self._cnf_ctl.apply_preset(cur_preset)
 				
 			# Start service with updated configuration
 			self._start_service_with_preset(cur_preset)

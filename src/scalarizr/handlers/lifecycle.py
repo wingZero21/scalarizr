@@ -9,6 +9,7 @@ import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr import config
 from scalarizr.config import ScalarizrState
+from scalarizr.handlers import operation
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
@@ -339,12 +340,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 					order[key] += ph.get(key, [])
 		phases = order['host_init_response'] + order['before_host_up']
 		
-		STATE['lifecycle.initialization'] = str(uuid.uuid4())
-		self.send_message(Messages.OPERATION_DEFINITION, {
-			'id': STATE['lifecycle.initialization'],
-			'name': 'Initialization',
-			'phases': phases
-		})
+		initialization = operation(name='Initialization', phases=phases)
+		initialization.define()
+		
+		bus.initialization = initialization
+		STATE['lifecycle.initialization_id'] = initialization.id
+
 		
 	def _get_flag_filename(self, name):
 		return self._cnf.private_path('.%s' % name)
