@@ -410,12 +410,20 @@ class RedisCLI(object):
 		return cls(redis_conf.masterauth or redis_conf.requirepass)
 		
 	def execute(self, query):
-		if self.password:
-				query = 'AUTH %s\n%s' % (self.password, query)
+		if not self.password:
+			full_query = query
+		else:
+			full_query = 'AUTH %s\n%s' % (self.password, query)
 		try:
-			out = system2([self.path], stdin=query,silent=True)[0]
+			out = system2([self.path], stdin=full_query,silent=True)[0]
+			
+			#fix for redis 2.4 AUTH
+			if 'Client sent AUTH, but no password is set' in out:
+				out = system2([self.path], stdin=query,silent=True)[0]
+				
 			if out.startswith('ERR') or out.startswith('LOADING'):
 				raise PopenError(out)
+			
 			elif out.startswith('OK\n'):
 				out = out[3:]
 			if out.endswith('\n'):
@@ -424,8 +432,6 @@ class RedisCLI(object):
 		except PopenError, e:
 			if 'LOADING' in str(e):
 				self._logger.debug('Unable to execute query %s: Redis is loading the dataset in memory' % query)
-			elif 'Client sent AUTH, but no password is set' in str(e):
-				return 
 			else:
 				self._logger.error('Unable to execute query %s with redis-cli: %s' % (query, e))
 			raise	
