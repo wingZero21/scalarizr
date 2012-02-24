@@ -63,7 +63,8 @@ class BlockDeviceHandler(handlers.Handler):
 	def get_initialization_phases(self):
 		mpoint = self._queryenv.list_ebs_mountpoints()
 		if mpoint:
-			return {'host_init_response': [{'name': 'Attach %s volume' % self._vol_type.upper(), 'steps': []}]}
+			self._phase_plug_volume = 'Plug %s volume' % self._vol_type.upper()
+			return {'host_init_response': [{'name': self._phase_plug_volume, 'steps': []}]}
 		
 
 	def on_before_host_init(self, *args, **kwargs):
@@ -84,8 +85,10 @@ class BlockDeviceHandler(handlers.Handler):
 
 	def on_host_init_response(self, *args, **kwargs):
 		self._logger.info('Configuring block device mountpoints')
-		wait_until(self._plug_all_volumes, sleep=10, timeout=600, 
-				error_text='Cannot attach and mount disks in a reasonable time')
+		with bus.initialization as op:
+			with op.phase(self._phase_plug_volume):
+				wait_until(self._plug_all_volumes, sleep=10, timeout=600, 
+						error_text='Cannot attach and mount disks in a reasonable time')
 
 
 	def _plug_all_volumes(self):

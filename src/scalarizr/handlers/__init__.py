@@ -30,30 +30,32 @@ class operation(object):
 		self.id = id or str(uuid.uuid4())
 		self.name = name
 		self.phases = phases or []
-		self.depth = None
+		self._depth = None
 	
 	def phase(self, name):
-		self.phase = name
-		self.depth = 'phase'
+		self._phase = name
+		self._depth = 'phase'
 		return self
 	
 	def step(self, name):
-		self.step = name
-		self.depth = 'step'
+		self._step = name
+		self._depth = 'step'
 		return self
 	
 	def __enter__(self):
+		if self._depth == 'step':
+			self.progress(0)
 		return self
 	
 	def __exit__(self, *args):
-		if self.depth == 'step':
+		if self._depth == 'step':
 			try:
 				if not args[0]:
-					self.progress(100)
+					self.complete()
 				else:
-					self.exception(exc_info=args)					
+					self.error(exc_info=args)					
 			finally:
-				self.depth = 'phase'
+				self._depth = 'phase'
 
 	def define(self):
 		srv = bus.messaging_service
@@ -67,7 +69,10 @@ class operation(object):
 	def progress(self, percent=None):
 		self._send_progress('running', progress=percent)
 	
-	def exception(self, exc_info=None, handler=None):
+	def complete(self):
+		self._send_progress('complete', progress=100)
+	
+	def error(self, exc_info=None, handler=None):
 		if not exc_info:
 			exc_info = sys.exc_info()
 		error = {
@@ -81,8 +86,8 @@ class operation(object):
 		srv = bus.messaging_service
 		msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
 			'id': self.id,
-			'phase': self.phase,
-			'step': self.step,
+			'phase': self._phase,
+			'step': self._step,
 			'status': status,
 			'progress': progress,
 			'error': error
