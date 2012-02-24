@@ -37,9 +37,10 @@ class operation(object):
 		self._depth = 'phase'
 		return self
 	
-	def step(self, name):
+	def step(self, name, stop_on_error=True):
 		self._step = name
 		self._depth = 'step'
+		self._stop_on_error= stop_on_error
 		return self
 	
 	def __enter__(self):
@@ -80,7 +81,7 @@ class operation(object):
 			'trace': ''.join(traceback.format_tb(exc_info[2])),
 			'handler': handler
 		}
-		self._send_progress('error', error=error)
+		self._send_progress('error-stop' if self._stop_on_error else 'error-continue', error=error)
 
 	def _send_progress(self, status, progress=None, error=None):
 		srv = bus.messaging_service
