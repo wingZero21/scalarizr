@@ -243,9 +243,6 @@ class ApacheHandler(ServiceCtlHandler):
 			}]
 		}
 	
-	def initialization_id(self):
-		return STATE['lifecycle.initialization_id']
-	
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
 			self._update_vhosts()			
@@ -253,7 +250,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def on_before_host_up(self, message):
 		
-		with operation(id=self.initialization_id()) as op:
+		with bus.initialization as op:
 			with op.phase('Apache'):
 				with op.step('Update virtual hosts'):
 					self._update_vhosts()

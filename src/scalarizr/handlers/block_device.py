@@ -60,6 +60,11 @@ class BlockDeviceHandler(handlers.Handler):
 		except AttributeError:
 			pass
 
+	def get_initialization_phases(self):
+		mpoint = self._queryenv.list_ebs_mountpoints()
+		if mpoint:
+			return {'host_init_response': [{'name': 'Attach %s volume' % self._vol_type.upper(), 'steps': []}]}
+		
 
 	def on_before_host_init(self, *args, **kwargs):
 		self._logger.debug("Adding udev rule for EBS devices")
@@ -114,22 +119,23 @@ class BlockDeviceHandler(handlers.Handler):
 			if mpoint:
 				mtab = fstool.Mtab()
 				if not mtab.contains(vol.device, reload=True):
-					self._logger.debug("Mounting device %s to %s", vol.device, vol.mpoint)
-					try:
-						fstool.mount(vol.device, vol.mpoint, auto_mount=True)
-					except fstool.FstoolError, e:
-						if e.code == fstool.FstoolError.NO_FS:
-							vol.mkfs()
+					with bus.initialization.step('Mount device %s to %s' % (vol.device, vol.mpoint)):					
+						self._logger.debug("Mounting device %s to %s", vol.device, vol.mpoint)
+						try:
 							fstool.mount(vol.device, vol.mpoint, auto_mount=True)
-						else:
-							raise
-					self._logger.info("Device %s is mounted to %s", vol.device, vol.mpoint)
-
-					self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
-						volume_id = vol.id,
-						device_name = vol.ebs_device
-					), broadcast=True, wait_ack=True)
-					bus.fire("block_device_mounted", volume_id=qe_volume.volume_id, device=vol.device)
+						except fstool.FstoolError, e:
+							if e.code == fstool.FstoolError.NO_FS:
+								vol.mkfs()
+								fstool.mount(vol.device, vol.mpoint, auto_mount=True)
+							else:
+								raise
+						self._logger.info("Device %s is mounted to %s", vol.device, vol.mpoint)
+	
+						self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
+							volume_id = vol.id,
+							device_name = vol.ebs_device
+						), broadcast=True, wait_ack=True)
+						bus.fire("block_device_mounted", volume_id=qe_volume.volume_id, device=vol.device)
 
 				else:
 					entry = mtab.find(vol.device)[0]

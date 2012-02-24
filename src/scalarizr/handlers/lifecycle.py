@@ -333,12 +333,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	def _define_initialization(self):
 		# XXX: from the asshole
 		handlers = bus.messaging_service.get_consumer().listeners[0]._get_handlers_chain()
-		order = {'host_init_response': [], 'before_host_up': []}
+		phases = {'host_init_response': [], 'before_host_up': []}
 		for handler in handlers:
-			for ph in handler.get_initialization_phases():
-				for key in order.keys():
-					order[key] += ph.get(key, [])
-		phases = order['host_init_response'] + order['before_host_up']
+			h_phases = handler.get_initialization_phases() or {}
+			for key in phases.keys():
+				phases[key] += h_phases.get(key, [])
+
+		phases = phases['host_init_response'] + phases['before_host_up']
 		
 		initialization = operation(name='Initialization', phases=phases)
 		initialization.define()
