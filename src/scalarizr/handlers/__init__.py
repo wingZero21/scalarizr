@@ -18,10 +18,6 @@ from distutils.file_util import write_file
 import sys
 import traceback
 import uuid
-try:
-	import json
-except ImportError:
-	import simplejson as json
 
 
 
@@ -37,10 +33,10 @@ class operation(object):
 		self._depth = 'phase'
 		return self
 	
-	def step(self, name, stop_on_error=True):
+	def step(self, name, warning=False):
 		self._step = name
 		self._depth = 'step'
-		self._stop_on_error= stop_on_error
+		self._warning = warning
 		return self
 	
 	def __enter__(self):
@@ -65,7 +61,7 @@ class operation(object):
 			'name': self.name,
 			'phases': self.phases
 		})
-		srv.get_producer().send(Queues.CONTROL, msg)
+		srv.get_producer().send(Queues.LOG, msg)
 	
 	def progress(self, percent=None):
 		self._send_progress('running', progress=percent)
@@ -81,9 +77,10 @@ class operation(object):
 			'trace': ''.join(traceback.format_tb(exc_info[2])),
 			'handler': handler
 		}
-		self._send_progress('error-stop' if self._stop_on_error else 'error-continue', error=error)
+		status = 'warning' if self._warning else 'error'
+		self._send_progress(status, **{status: error})
 
-	def _send_progress(self, status, progress=None, error=None):
+	def _send_progress(self, status, progress=None, error=None, warning=None):
 		srv = bus.messaging_service
 		msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
 			'id': self.id,
@@ -91,24 +88,17 @@ class operation(object):
 			'step': self._step,
 			'status': status,
 			'progress': progress,
-			'error': error
+			'error': error,
+			'warning': warning
 		})
 		srv.get_producer().send(Queues.LOG, msg)
 
-	def as_json(self):
-		return json.dumps({'id': self.id, 'name': self.name, 'phases': self.phases})
-	
-	def from_json(self, value):
-		d = json.loads(value)
-		self.id = d['id']
-		self.name = d['name']
-		self.phases = d['phases']
 
 
 class Handler(object):
 	_logger = logging.getLogger(__name__)
 	
-	def get_initialization_phases(self):
+	def get_initialization_phases(self, hir_message):
 		return {}
 	
 	def initialization_id(self):
@@ -456,43 +446,45 @@ class ServiceCtlHandler(Handler):
 	def sc_on_configured(self, service_name, **kwargs):
 		if self._service_name != service_name:
 			return
-		
-		if self._cnf_ctl:	
+
+		with bus.initialization_op as op:		
+			if self._cnf_ctl:	
+				with op.step('Apply configuration preset'):
 			
-			with bus.initialization.step('Apply configuration preset'):
-			
-				# Backup default configuration
-				my_preset = self._cnf_ctl.current_preset()
-				self._preset_store.save(my_preset, PresetType.DEFAULT)
-				
-				# Stop service if it's already running 
-				self._stop_service('Applying configuration preset')	
-				
-				# Fetch current configuration preset
-				service_conf = self._queryenv.get_service_configuration(self._service_name)
-				cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
-				self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
-				
-				if cur_preset.name == 'default':
-					# Scalr respond with default preset
-					self._logger.debug('%s configuration is default', self._service_name)
-					#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
+					# Backup default configuration
+					my_preset = self._cnf_ctl.current_preset()
+					self._preset_store.save(my_preset, PresetType.DEFAULT)
+					
+					# Stop service if it's already running 
+					self._stop_service('Applying configuration preset')	
+					
+					# Fetch current configuration preset
+					service_conf = self._queryenv.get_service_configuration(self._service_name)
+					cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
+					self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
+					
+					if cur_preset.name == 'default':
+						# Scalr respond with default preset
+						self._logger.debug('%s configuration is default', self._service_name)
+						#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
+						self._start_service()
+						return
+					
+					elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
+						self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+						self._start_service()
+						return
+					
+					else:
+						self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
+						self._cnf_ctl.apply_preset(cur_preset)
+					
+				with op.step('Start %s with configuration preset' % service_name):
+					# Start service with updated configuration
+					self._start_service_with_preset(cur_preset)
+			else:
+				with op.step('Start %s' % service_name):
 					self._start_service()
-					return
-				
-				elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
-					self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
-					self._start_service()
-					return
-				
-				else:
-					self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
-					self._cnf_ctl.apply_preset(cur_preset)
-				
-			# Start service with updated configuration
-			self._start_service_with_preset(cur_preset)
-		else:
-			self._start_service()
 			
 		bus.fire(self._service_name + '_configure', **kwargs)		
 
