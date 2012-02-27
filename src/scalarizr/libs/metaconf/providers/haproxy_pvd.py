@@ -77,6 +77,7 @@ class HaproxyFormatProvider(IniFormatProvider):
 			fp.write('\n')
 			self._indent = '\t'
 			self.write(fp, node, False)
+			fp.write('\n')
 			self._indent = ''
 			return True
 		return False
