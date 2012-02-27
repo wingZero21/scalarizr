@@ -301,8 +301,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
-		self._define_initialization(message)
+		bus.initialization_op = operation(name='Initialization')
 		try:
+			self._define_initialization(message)			
 			bus.fire("host_init_response", message)
 			if bus.scalr_version >= (2, 2, 3):
 				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
@@ -313,8 +314,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			bus.fire("host_up")
 		except:
 			with bus.initialization_op as op:
-				with op.step('Unnamed'):
-					op.error()
+				with op.phase('Scalarizr routines'):
+					with op.step('Scalarizr routines'):
+						op.error()
 			raise
 
 
@@ -347,11 +349,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 		phases = phases['host_init_response'] + phases['before_host_up']
 		
-		initialization = operation(name='Initialization', phases=phases)
-		initialization.define()
+		op = bus.initialization_op
+		op.phases = phases
+		op.define()
 		
-		bus.initialization_op = initialization
-		STATE['lifecycle.initialization_id'] = initialization.id
+		STATE['lifecycle.initialization_id'] = op.id
 
 		
 	def _get_flag_filename(self, name):

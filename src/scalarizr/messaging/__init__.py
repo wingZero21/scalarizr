@@ -300,6 +300,11 @@ class Messages:
 	Log message described operation progress
 	''' 
 	
+	OPERATION_RESULT = 'OperationResult'
+	'''
+	Operation result message
+	'''
+	
 	REBUNDLE_LOG = "RebundleLog"
 	
 	DEPLOY_LOG = "DeployLog"

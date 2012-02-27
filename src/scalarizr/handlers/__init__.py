@@ -49,6 +49,8 @@ class operation(object):
 			try:
 				if not args[0]:
 					self.complete()
+				elif self._warning:
+					self.warning(exc_info=args)
 				else:
 					self.error(exc_info=args)					
 			finally:
@@ -69,18 +71,10 @@ class operation(object):
 	def complete(self):
 		self._send_progress('complete', progress=100)
 	
-	def error(self, exc_info=None, handler=None):
-		if not exc_info:
-			exc_info = sys.exc_info()
-		error = {
-			'message': str(exc_info[1]),
-			'trace': ''.join(traceback.format_tb(exc_info[2])),
-			'handler': handler
-		}
-		status = 'warning' if self._warning else 'error'
-		self._send_progress(status, **{status: error})
+	def warning(self, exc_info=None, handler=None):
+		self._send_progress('warning', warning=self._format_error(exc_info, handler))
 
-	def _send_progress(self, status, progress=None, error=None, warning=None):
+	def _send_progress(self, status, progress=None, warning=None):
 		srv = bus.messaging_service
 		msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
 			'id': self.id,
@@ -88,11 +82,38 @@ class operation(object):
 			'step': self._step,
 			'status': status,
 			'progress': progress,
-			'error': error,
 			'warning': warning
 		})
 		srv.get_producer().send(Queues.LOG, msg)
 
+	def ok(self):
+		self._send_result('ok')
+	
+	def error(self, exc_info=None, handler=None):
+		self._send_result('error', error=self._format_error(exc_info, handler))
+	
+	def _send_result(self, status, error=None):
+		srv = bus.messaging_service
+		msg = srv.new_message(Messages.OPERATION_RESULT, None, {
+			'id': self.id,
+			'status': status,
+			'error': error
+		})
+		if status == 'error':
+			msg.body.update({
+				'phase': self._phase,
+				'step': self._step,
+			})
+		srv.get_producer().send(Queues.CONTROL, msg)
+	
+	def _format_error(self, exc_info=None, handler=None):
+		if not exc_info:
+			exc_info = sys.exc_info()
+		return {
+			'message': str(exc_info[1]),
+			'trace': ''.join(traceback.format_tb(exc_info[2])),
+			'handler': handler
+		}
 
 
 class Handler(object):
