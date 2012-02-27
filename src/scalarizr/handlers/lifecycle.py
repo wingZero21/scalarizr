@@ -301,7 +301,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
-		self._define_initialization()
+		self._define_initialization(message)
 		bus.fire("host_init_response", message)
 		if bus.scalr_version >= (2, 2, 3):
 			self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
@@ -330,12 +330,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		"""
 		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
 		
-	def _define_initialization(self):
+	def _define_initialization(self, hir_message):
 		# XXX: from the asshole
 		handlers = bus.messaging_service.get_consumer().listeners[0]._get_handlers_chain()
 		phases = {'host_init_response': [], 'before_host_up': []}
 		for handler in handlers:
-			h_phases = handler.get_initialization_phases() or {}
+			h_phases = handler.get_initialization_phases(hir_message) or {}
 			for key in phases.keys():
 				phases[key] += h_phases.get(key, [])
 
@@ -344,7 +344,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		initialization = operation(name='Initialization', phases=phases)
 		initialization.define()
 		
-		bus.initialization = initialization
+		bus.initialization_op = initialization
 		STATE['lifecycle.initialization_id'] = initialization.id
 
 		

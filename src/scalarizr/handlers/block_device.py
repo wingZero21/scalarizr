@@ -60,10 +60,10 @@ class BlockDeviceHandler(handlers.Handler):
 		except AttributeError:
 			pass
 
-	def get_initialization_phases(self):
+	def get_initialization_phases(self, hir_message):
 		mpoint = self._queryenv.list_ebs_mountpoints()
 		if mpoint:
-			self._phase_plug_volume = 'Plug %s volume' % self._vol_type.upper()
+			self._phase_plug_volume = 'Configure storage'
 			return {'host_init_response': [{'name': self._phase_plug_volume, 'steps': []}]}
 		
 
@@ -85,7 +85,7 @@ class BlockDeviceHandler(handlers.Handler):
 
 	def on_host_init_response(self, *args, **kwargs):
 		self._logger.info('Configuring block device mountpoints')
-		with bus.initialization as op:
+		with bus.initialization_op as op:
 			with op.phase(self._phase_plug_volume):
 				wait_until(self._plug_all_volumes, sleep=10, timeout=600, 
 						error_text='Cannot attach and mount disks in a reasonable time')
@@ -122,7 +122,7 @@ class BlockDeviceHandler(handlers.Handler):
 			if mpoint:
 				mtab = fstool.Mtab()
 				if not mtab.contains(vol.device, reload=True):
-					with bus.initialization.step('Mount device %s to %s' % (vol.device, vol.mpoint)):					
+					with bus.initialization_op.step('Mount device %s to %s' % (vol.device, vol.mpoint)):					
 						self._logger.debug("Mounting device %s to %s", vol.device, vol.mpoint)
 						try:
 							fstool.mount(vol.device, vol.mpoint, auto_mount=True)

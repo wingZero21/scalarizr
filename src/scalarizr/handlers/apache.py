@@ -232,16 +232,15 @@ class ApacheHandler(ServiceCtlHandler):
 			message.name == Messages.HOST_DOWN or \
 			message.name == Messages.BEFORE_HOST_TERMINATE)
 
-	def get_initialization_phases(self):
-		return {
-			'before_host_up': [{
-				'name': 'Apache', 
-				'steps': [
-					'Update virtual hosts', 
-					'Reload RPAF'
-				]
-			}]
-		}
+	def get_initialization_phases(self, hir_message):
+		self._phase = 'Configure Apache'
+		self._step_update_vhosts = 'Update virtual hosts'
+		self._step_reload_rpaf = 'Reload RPAF'
+		
+		return {'before_host_up': [{
+			'name': self._phase,
+			'steps': [self._step_update_vhosts, self._step_reload_rpaf]
+		}]}
 	
 	def on_start(self):
 		if self._cnf.state == ScalarizrState.RUNNING:
@@ -250,11 +249,11 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def on_before_host_up(self, message):
 		
-		with bus.initialization as op:
-			with op.phase('Apache'):
-				with op.step('Update virtual hosts'):
+		with bus.initialization_op as op:
+			with op.phase(self._phase):
+				with op.step(self._step_update_vhosts):
 					self._update_vhosts()
-				with op.step('Reload RPAF'):
+				with op.step(self._step_reload_rpaf):
 					self._rpaf_reload()
 				bus.fire('service_configured', service_name=SERVICE_NAME)
 
