@@ -61,9 +61,10 @@ class BlockDeviceHandler(handlers.Handler):
 			pass
 
 	def get_initialization_phases(self, hir_message):
+		self._phase_plug_volume = 'Configure storage'		
+		
 		mpoint = self._queryenv.list_ebs_mountpoints()
 		if mpoint:
-			self._phase_plug_volume = 'Configure storage'
 			return {'host_init_response': [{'name': self._phase_plug_volume, 'steps': []}]}
 		
 
