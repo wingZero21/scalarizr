@@ -302,14 +302,20 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	def on_HostInitResponse(self, message):
 		self._define_initialization(message)
-		bus.fire("host_init_response", message)
-		if bus.scalr_version >= (2, 2, 3):
-			self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
-		msg = self.new_message(Messages.HOST_UP, broadcast=True)
-		bus.fire("before_host_up", msg)
-		self.send_message(msg)
-		bus.cnf.state = ScalarizrState.RUNNING
-		bus.fire("host_up")
+		try:
+			bus.fire("host_init_response", message)
+			if bus.scalr_version >= (2, 2, 3):
+				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
+			msg = self.new_message(Messages.HOST_UP, broadcast=True)
+			bus.fire("before_host_up", msg)
+			self.send_message(msg)
+			bus.cnf.state = ScalarizrState.RUNNING
+			bus.fire("host_up")
+		except:
+			with bus.initialization_op as op:
+				with op.step('Unnamed'):
+					op.error()
+			raise
 
 
 	def on_ScalarizrUpdateAvailable(self, message):
