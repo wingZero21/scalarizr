@@ -152,10 +152,12 @@ class IpTables(object):
 
 def _is_rule_not_exist(jump, port, protocol):
 	'''raise exception if current rule exist'''
+	jump, port, protocol = str(jump).strip(), str(port).strip(), str(protocol).strip()
 	for rule in IpTables().list_rules():
-			if port == rule[0].specs['--dport'] and protocol == rule[0].specs['-p'] \
-						and jump == rule[0].specs['-j']:
-				raise Exception('Rule `%s` already exist' % rule[0])
+		if port == rule[0].specs['--dport'] and protocol == rule[0].specs['-p'] \
+				and jump == rule[0].specs['-j']:
+			raise Exception('Rule `%s` already exist' % rule[0])
+
 
 def insert_rule_once(jump, port, protocol):
 	'''add rule in iptables if it not exist'''
@@ -169,7 +171,8 @@ def insert_rule_once(jump, port, protocol):
 		raise Exception('protocol `%s` is not known. It must be one of `%s`' % 
 			(protocol,	PROTOCOLS) if ipt.usable() else 'IpTables is not usable') 
 
-def remove_rule(jump, port, protocol):
+
+def remove_rule_once(jump, port, protocol):
 	'''remove rule from iptables'''
 	try:
 		_is_rule_not_exist(jump, port, protocol)

@@ -7,7 +7,8 @@ Created on Nov 25, 2011
 from scalarizr import exceptions
 from scalarizr.libs import validate
 from scalarizr.services import haproxy
-from scalarizr.util import iptables 
+from scalarizr.util import iptables
+from scalarizr import rpc 
 
 import logging
 LOG = logging.getLogger(__name__)
@@ -30,19 +31,21 @@ class HAProxyAPI(object):
 	
 	def _server_name(self, ipaddr):
 		'''@rtype: str'''
-		if ':' in ipaddr:
-			ipaddr = ipaddr.strip().split(':')[0]
-		return ipaddr.replace('.', '-')
+		if isinstance(ipaddr, str):
+			if ':' in ipaddr:
+				ipaddr = ipaddr.strip().split(':')[0]
+			return ipaddr.replace('.', '-')
 
-	'''
-	@rpc.service_method
-	@validate.param('port', 'server_port', type=int)
-	@validate.param('protocol', required=_rule_protocol)
-	@validate.param('server_port', optional=True, type=int)
-	@validate.param('backend', optional=_rule_backend)'''
+	
+	#@rpc.service_method
+	#@validate.param('port', 'server_port', type=int)
+	#@validate.param('protocol', required=_rule_protocol)
+	#@validate.param('server_port', optional=True, type=int)
+	#@validate.param('backend', optional=_rule_backend)
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
 		''' '''
+		LOG.debug('create_listener: %s, %s, %s, %s, %s, %s', self, port, protocol, server_port, server_protocol, backend)
 		if protocol:
 			protocol = protocol.lower()
 		ln = haproxy.naming('listen', protocol, port)
@@ -223,7 +226,7 @@ class HAProxyAPI(object):
 				del self.cfg.backends[default_backend]
 
 		try:
-			iptables.remove_rule('ACCEPT', port, protocol if protocol != 'http' else 'tcp')
+			iptables.remove_rule_once('ACCEPT', port, protocol if protocol != 'http' else 'tcp')
 		except Exception, e:
 			raise exceptions.NotFound(e)
 
@@ -262,8 +265,10 @@ class HAProxyAPI(object):
 		if backend: backend = backend.strip()
 		srv_name = self._server_name(ipaddr)
 		for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
-			if srv_name in self.cfg.backends[bd]['server']:
+			if ipaddr and srv_name in self.cfg.backends[bd]['server']:
 				del self.cfg.backends[bd]['server'][srv_name]
+			elif not ipaddr:
+				del self.cfg.backends[bd]['server']
 
 		self.cfg.save()
 		self.svs.reload()

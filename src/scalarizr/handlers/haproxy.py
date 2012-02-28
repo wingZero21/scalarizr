@@ -6,14 +6,16 @@ from scalarizr.api import haproxy as haproxy_api
 from scalarizr.services import haproxy as haproxy_svs
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages
+from scalarizr.config import ScalarizrCnf
+from scalarizr.queryenv import QueryEnvService
 
+import os
 import sys
 import logging
 
 
 def get_handlers():
 	return [HAProxyHandler()]
-
 
 LOG = logging.getLogger(__name__)
 
@@ -34,31 +36,58 @@ def _result_message(name):
 	return result_wrapper
 
 
-class HAProxyMessages:
-	HAPROXY_ADDSERVER = 'HAProxy_AddServer'
-	HAPROXY_REMOVESERVER = 'HAProxy_RemoveServer'
-	HAPROXY_CONFIGURE_HEALTHCHECK = 'HAProxy_ConfigureHealthcheck'
-	HAPROXY_GETSERVERSHEALTH = 'HAProxy_GetServersHealth'
-	HAPROXY_RESETHEALTHCHECK = 'HAProxy_ResetHealthcheck'
-	HAPROXY_LISTLISTENERS = 'HAProxy_ListListeners'
-	HAPROXY_LISTSERVERS = 'HAProxy_ListServers'
-
 class HAProxyHandler(Handler):
 	def __init__(self):
 		self.api = haproxy_api.HAProxyAPI()
 		self.on_reload()
 		bus.on(init=self.on_init, reload=self.on_reload)
 
+	def _remove_add_servers_from_queryenv(self):
+		cnf = ScalarizrCnf(bus.etc_path)
+		cnf.bootstrap()
+		globals()['ini'] = cnf.rawini
+		key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
+		server_id = ini.get('general', 'server_id')
+		url = ini.get('general','queryenv_url')
+		queryenv = QueryEnvService(url, server_id, key_path)
+		result = queryenv.list_roles()
+		running_servers = []
+		
+		bnds = []
+		for elem in self.api.list_listeners():
+			bnds.append(elem['backend'])
+		bnds = list(set(bnds))
+
+		for bnd in bnds:
+			self.api.remove_server(backend = bnd)
+
+		for d in result:
+			behaviour=', '.join(d.behaviour)
+			for host in d.hosts:
+				try:
+					if 'role:%s' % d.farm_roleid in bnds:
+						self.api.add_server(ipaddr=host.internal_ip, 
+							backend='role:%s' % d.farm_roleid)
+				except:
+					LOG.warn('HAProxyHandler.on_before_host_up.Failed add_server `%s` in'
+							' backend=`role:%s`, details: %s' %	(
+							host.internal_ip.replace('.', '-'),
+							d.farm_roleid, sys.exc_info()[1]))
+				running_servers.append([d.farm_roleid, host.internal_ip])
+		LOG.debug('running_servers: `%s`', running_servers)
+	
+	
+	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
 			Messages.HOST_UP, Messages.HOST_DOWN, Messages.BEFORE_HOST_TERMINATE,
-			HAProxyMessages.HAPROXY_ADDSERVER,
-			HAProxyMessages.HAPROXY_CONFIGURE_HEALTHCHECK,
-			HAProxyMessages.HAPROXY_GETSERVERSHEALTH,
-			HAProxyMessages.HAPROXY_LISTLISTENERS,
-			HAProxyMessages.HAPROXY_LISTSERVERS,
-			HAProxyMessages.HAPROXY_REMOVESERVER,
-			HAProxyMessages.HAPROXY_RESETHEALTHCHECK
+			'HAProxy_AddServer',
+			'HAProxy_ConfigureHealthcheck',
+			'HAProxy_GetServersHealth',
+			'HAProxy_ListListeners',
+			'HAProxy_ListServers',
+			'HAProxy_RemoveServer',
+			'HAProxy_ResetHealthcheck'
 			)
 		return accept_res
 
@@ -75,8 +104,10 @@ class HAProxyHandler(Handler):
 	def on_start(self):
 		if bus.cnf.state == ScalarizrState.INITIALIZING:
 			# todo: Repair data from HIR
-			# 
 			pass
+		if bus.cnf.state == ScalarizrState.RUNNING:
+			#remove all servers from backends and add from queryenv
+			self._remove_old_add_servers_from_queryenv()
 
 	def on_host_init_response(self, msg):
 		LOG.debug('HAProxyHandler.on_host_init_response')
@@ -122,6 +153,8 @@ class HAProxyHandler(Handler):
 					#raise Exception, sys.exc_info()[1], sys.exc_info()[2]
 		msg.haproxy = data
 
+		self._add_servers_from_queryenv()
+		
 	def on_HostUp(self, msg):
 		self._farm_role_id = msg.body.get('farm_role_id')
 		self._local_ip = msg.body.get('local_ip')
@@ -131,6 +164,7 @@ class HAProxyHandler(Handler):
 		except:
 			LOG.error('HAProxyHandler.on_before_host_up. Failed add_server `%s`, details:'
 					' %s' %	(self._local_ip, sys.exc_info()[1]))
+
 
 	def on_HostDown(self, msg):
 		self._farm_role_id = msg.body.get('farm_role_id')

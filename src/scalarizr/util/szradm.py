@@ -257,7 +257,7 @@ class ListRolesCommand(Command):
 	name = "list-roles"
 	method = "list_roles"
 	group = "QueryEnv"
-	fields = ['behaviour','name', 'index', 'internal-ip',
+	fields = ['behaviour','name', 'farm-roleid', 'index', 'internal-ip',
 		'external-ip', 'replication-master']
 	parser = OptionParser(usage='list-roles [-b --behaviour] '
 		'[-r --role] [--with-initializing]', description='Display roles list',
@@ -272,7 +272,7 @@ class ListRolesCommand(Command):
 		for d in result:
 			behaviour=', '.join(d.behaviour)
 			for host in d.hosts:
-				yield [behaviour, d.name, str(host.index), 
+				yield [behaviour, d.name, d.farm_roleid, str(host.index), 
 					host.internal_ip, host.external_ip, 
 					str(host.replication_master)]
 
