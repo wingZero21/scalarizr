@@ -47,9 +47,7 @@ CHANGE_MASTER_TIMEOUT   = '30'
 
 # Mysql storage constants
 STORAGE_PATH 			= "/mnt/dbstorage"
-STORAGE_DATA_DIR 		= "mysql-data"
 STORAGE_TMP_DIR 		= "tmp"
-STORAGE_BINLOG 			= "mysql-misc/binlog"
 STORAGE_VOLUME_CNF 		= 'mysql.json'
 STORAGE_SNAPSHOT_CNF 	= 'mysql-snap.json'
 
@@ -62,7 +60,9 @@ PMA_USER 				= "pma"
 BACKUP_CHUNK_SIZE 		= 200*1024*1024
 STOP_SLAVE_TIMEOUT		= 180
 
-
+PRIVILEGES = dict(REPL_USER='Repl_slave_priv', STAT_USER='Repl_client_priv')
+	
+	
 class MysqlMessages:
 	
 	CREATE_PMA_USER = "Mysql_CreatePmaUser"
@@ -227,6 +227,14 @@ class MysqlHandler(DBMSRandler):
 	
 	
 	def __init__(self):
+		#use constants instead of members!
+		self._mycnf_path = mysql_svc.MYCNF_PATH
+		self._mysqld_path = mysql_svc.MYSQLD_PATH
+		self._change_master_timeout = CHANGE_MASTER_TIMEOUT
+		
+		self._data_dir = os.path.join(STORAGE_PATH, STORAGE_DATA_DIR)
+		self._binlog_base = os.path.join(STORAGE_PATH, STORAGE_BINLOG)
+		
 		self.mysql = mysql_svc.Mysql()
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, self.mysql.service, MysqlCnfController())
 		
@@ -250,13 +258,35 @@ class MysqlHandler(DBMSRandler):
 		)
 		self.on_reload()	
 
+		
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return BEHAVIOUR in behaviour and (
+					message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
+				or 	message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
+				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
+				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
+				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
+				or  message.name == Messages.HOST_INIT
+				or  message.name == Messages.BEFORE_HOST_TERMINATE
+				or  message.name == MysqlMessages.CREATE_PMA_USER)	
+		
+			
+	def on_reload(self):
+		self._queryenv = bus.queryenv_service
+		self._platform = bus.platform
+		self._cnf = bus.cnf
+		ini = self._cnf.rawini
+		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
+		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
+			
 
 	def on_init(self):		
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
-		bus.on("before_reboot_finish", self.on_before_reboot_finish)
-		
+		bus.on("before_reboot_finish", self.on_before_reboot_finish)		
+				
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
 		
@@ -269,355 +299,8 @@ class MysqlHandler(DBMSRandler):
 			
 			if self.is_replication_master:
 				LOG.debug("Checking Scalr's %s system users presence." % BEHAVIOUR)
-				root_password, repl_password, stat_password = self._get_ini_options(
-						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_STAT_PASSWORD)
-				
-				if not self.mysql.service.running:
-					self.mysql.service.start()
-				
-				users = {} #TODO: fill in users and passwords	
-				self.mysql.setup_users(**users)
-					
-				'''
-				try:
-					my_cli = spawn_mysql_cli(ROOT_USER, root_password, timeout=5)
-					mysqld=None
-				except:
-					self._stop_service('Checking mysql users') 
-					mysqld = spawn_mysqld()
-					self._ping_mysql()
-					my_cli = spawn_mysql_cli()
-										
-				try:					
-					check_mysql_password(my_cli, ROOT_USER, root_password)
-					check_mysql_password(my_cli, REPL_USER, repl_password)
-					check_mysql_password(my_cli, STAT_USER, stat_password)
-					self._logger.debug("Scalr's MySQL system users are present. Passwords are correct.")				
-				except ValueError:
-					self._logger.warning("Scalr's MySQL system users were changed. Recreating.")
-					self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER,
-										  root_password, repl_password, stat_password, 
-										  mysqld, my_cli)
-				finally:
-					if mysqld:
-						term_mysqld(mysqld)
-					self._start_service()
-				'''
-	
-	
-	def on_reload(self):
-		self._queryenv = bus.queryenv_service
-		self._platform = bus.platform
-		self._cnf = bus.cnf
-		ini = self._cnf.rawini
-		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
-		
-		#use constants instead of members!
-		self._mycnf_path = mysql_svc.MYCNF_PATH
-		self._mysqld_path = mysql_svc.MYSQLD_PATH
-		self._change_master_timeout = CHANGE_MASTER_TIMEOUT
-		
-		self._storage_path = STORAGE_PATH
-		self._data_dir = os.path.join(self._storage_path, STORAGE_DATA_DIR)
-		self._tmp_dir = os.path.join(self._storage_path, STORAGE_TMP_DIR)		
-		self._binlog_base = os.path.join(self._storage_path, STORAGE_BINLOG)
-	
-		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
-		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
-			
-	
-		
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return BEHAVIOUR in behaviour and (
-					message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
-				or 	message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
-				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
-				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
-				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
-				or  message.name == Messages.HOST_INIT
-				or  message.name == Messages.BEFORE_HOST_TERMINATE
-				or  message.name == MysqlMessages.CREATE_PMA_USER)	
+				self.create_users()
 
-	@property
-	def is_replication_master(self):
-		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
-		LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
-		return True if int(value) else False
-	
-	
-	def on_BeforeHostTerminate(self, message):
-		if message.local_ip == self._platform.get_private_ip():
-			self.mysql.service.stop(reason='Server will be terminated')
-			LOG.info('Detaching MySQL storage')
-			self.storage_vol.detach()
-	
-	
-	def on_Mysql_CreatePmaUser(self, message):
-		try:
-			# Operation allowed only on Master server
-			if not self.is_replication_master:
-				raise HandlerError('Cannot add pma user on slave. It should be a Master server')
-			
-			pma_server_ip = message.pma_server_ip
-			farm_role_id  = message.farm_role_id
-			
-			LOG.info("Adding phpMyAdmin system user")
-			pma_password = cryptotool.pwgen(20)
-			#self.mysql.pma_user = mysql_svc.MySQLUser(login=PMA_USER,pma_password)
-			self.mysql.pma_user.create(host=pma_server_ip, privileges=None,password=pma_password)
-			
-			LOG.info('PhpMyAdmin system user successfully added')
-			
-			# Notify Scalr
-			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
-				status       = 'ok',
-				pma_user	 = PMA_USER,
-				pma_password = pma_password,
-				farm_role_id = farm_role_id,
-			))
-			
-		except (Exception, BaseException), e:
-			LOG.exception(e)
-			
-			# Notify Scalr about error
-			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
-				status		= 'error',
-				last_error	=  str(e).strip(),
-				farm_role_id = farm_role_id
-			))
-	
-	
-	def on_DbMsr_CreateBackup(self, message):
-		
-		# Retrieve password for scalr mysql user
-		tmpdir = backup_path = None
-		try:
-			# Get databases list
-			databases = self.mysql.cli.list_databases()
-			
-			# Defining archive name and path
-			if not os.path.exists(self._tmp_dir):
-				os.makedirs(self._tmp_dir)
-			backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
-			backup_path = os.path.join(self._tmp_dir, backup_filename)
-			
-			# Creating archive 
-			backup = tarfile.open(backup_path, 'w:gz')
-
-			# Dump all databases
-			LOG.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)
-			mysqldump = mysql_svc.MySQLDump(root_user=ROOT_USER, root_password=self.root_password)			
-			for db_name in databases:
-				try:
-					dump_path = os.path.join(tmpdir, db_name + '.sql') 
-					mysqldump.create(db_name, dump_path)
-					backup.add(dump_path, os.path.basename(dump_path))						
-				except PopenError, e:
-					LOG.exception('Cannot dump database %s. %s', db_name, e)
-			
-			backup.close()
-			
-			# Creating list of full paths to archive chunks
-			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-				parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-			else:
-				parts = [backup_path]
-					
-			LOG.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
-			trn = transfer.Transfer()
-			result = trn.upload(parts, self._platform.cloud_storage_path)
-			LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
-							self._platform.cloud_storage_path, backup_filename)
-			
-			# Notify Scalr
-			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-				db_type = BEHAVIOUR,
-				status = 'ok',
-				backup_parts = result
-			))
-						
-		except (Exception, BaseException), e:
-			LOG.exception(e)
-			
-			# Notify Scalr about error
-			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-				db_type = BEHAVIOUR,
-				status = 'error',
-				last_error = str(e)
-			))
-			
-		finally:
-			if tmpdir:
-				shutil.rmtree(tmpdir, ignore_errors=True)
-			if backup_path and os.path.exists(backup_path):
-				os.remove(backup_path)		
-
-
-	def on_DbMsr_CreateDataBundle(self, message):
-		try:
-			bus.fire('before_mysql_data_bundle')
-			
-			# Creating snapshot
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, self.root_password)
-			used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
-				
-			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
-			
-			# Notify scalr
-			msg_data = dict(
-				log_file=log_file,
-				log_pos=log_pos,
-				used_size='%.3f' % (float(used_size) / 1024 / 1024,),
-				status='ok'
-			)
-			msg_data.update(self._compat_storage_data(snap=snap))
-			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
-		except (Exception, BaseException), e:
-			self._logger.exception(e)
-			
-			# Notify Scalr about error
-			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
-				status		='error',
-				last_error	= str(e)
-			))
-	
-	
-	def on_DbMsr_PromoteToMaster(self, message):
-		"""
-		Promote slave to master
-		"""
-		old_conf 		= None
-		new_storage_vol	= None
-		
-		if not self.is_replication_master:
-			
-			bus.fire('before_slave_promote_to_master')
-			
-			if bus.scalr_version >= (2, 2):
-				master_storage_conf = message.body.get('volume_config')
-			else:
-				if 'volume_id' in message.body:
-					master_storage_conf = dict(type='ebs', id=message.body['volume_id'])
-				else:
-					master_storage_conf = None
-				
-			tx_complete = False
-						
-			try:
-				# Stop mysql
-				if master_storage_conf:
-					if self._init_script.running:
-						self.mysql.cli.stop_slave(timeout=STOP_SLAVE_TIMEOUT)
-
-						self._stop_service('Swapping storages to promote slave to master')
-					
-					# Unplug slave storage and plug master one
-					#self._unplug_storage(slave_vol_id, self._storage_path)
-					old_conf = self.storage_vol.detach(force=True) # ??????
-					#master_vol = self._take_master_volume(master_vol_id)
-					#self._plug_storage(master_vol.id, self._storage_path)
-					new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)				
-					# Continue if master storage is a valid MySQL storage 
-					if self._storage_valid():
-						# Patch configuration files 
-						self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-						self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
-						self._replication_init()
-						# Update behaviour configuration
-						updates = {
-							OPT_ROOT_PASSWORD : message.root_password,
-							OPT_REPL_PASSWORD : message.repl_password,
-							OPT_STAT_PASSWORD : message.stat_password,
-							OPT_REPLICATION_MASTER 	: "1"
-						}
-						self._update_config(updates)
-						Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
-						
-						# Send message to Scalr
-						msg_data = dict(status='ok')
-						msg_data.update(self._compat_storage_data(vol=new_storage_vol))
-						self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
-					else:
-						raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
-					self._start_service()
-				else:
-					self._start_service()
-					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
-					timeout = 180
-					try:
-						mysql.sendline("STOP SLAVE;")
-						mysql.expect("mysql>", timeout=timeout)
-						mysql.sendline("RESET MASTER;")
-						mysql.expect("mysql>", 20)
-						filetool.remove(os.path.join(self._data_dir, 'relay-log.info'))
-						filetool.remove(os.path.join(self._data_dir, 'master.info'))
-					except pexpect.TIMEOUT:
-						raise HandlerError("Timeout (%d seconds) reached " + 
-									"while waiting for slave stop and master reset." % (timeout,))
-					finally:
-						mysql.close()
-
-					updates = {
-						OPT_ROOT_PASSWORD : message.root_password,
-						OPT_REPL_PASSWORD : message.repl_password,
-						OPT_STAT_PASSWORD : message.stat_password,
-						OPT_REPLICATION_MASTER 	: "1"
-					}
-					self._update_config(updates)
-										
-					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
-					Storage.backup_config(snap.config(), self._snapshot_config_path)
-					
-					# Send message to Scalr
-					msg_data = dict(
-						status="ok",
-						log_file = log_file,
-						log_pos = log_pos
-					)
-					msg_data.update(self._compat_storage_data(self.storage_vol, snap))
-					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)							
-					
-				tx_complete = True
-				bus.fire('slave_promote_to_master')
-				
-			except (Exception, BaseException), e:
-				self._logger.exception(e)
-				if new_storage_vol:
-					new_storage_vol.detach()
-				# Get back slave storage
-				if old_conf:
-					self._plug_storage(self._storage_path, old_conf)
-				
-				self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
-					status="error",
-					last_error=str(e)
-				))
-
-				# Start MySQL
-				self._start_service()
-			
-			if tx_complete and master_storage_conf:
-				# Delete slave EBS
-				self.storage_vol.destroy(remove_disks=True)
-				self.storage_vol = new_storage_vol
-				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
-		else:
-			self._logger.warning('Cannot promote to master. Already master')
-
-	
-	
-	def on_DbMsr_NewMasterUp(self, message):
-		pass
-	
-	
-	def on_before_reboot_start(self, *args, **kwargs):
-		self.mysql.service.stop('Instance is going to reboot')
-	
-	
-	def on_before_reboot_finish(self, *args, **kwargs):
-		self._insert_iptables_rules()
-	
 	
 	def on_host_init_response(self, message):
 		"""
@@ -675,6 +358,327 @@ class MysqlHandler(DBMSRandler):
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 	
 	
+	def get_user_creds(self):
+		options = dict(ROOT_USER=OPT_ROOT_PASSWORD, REPL_USER=OPT_REPL_PASSWORD, STAT_USER=OPT_STAT_PASSWORD)
+		creds = {}
+		for login, opt_pwd in options.items():
+			password = self._get_ini_options(opt_pwd)
+			if not password:
+				password = cryptotool.pwgen(20)
+				self._update_config({opt_pwd:password})
+			creds[login] = password
+		return creds
+	
+	
+	def create_users(self):
+		users = {}
+		creds = self.get_user_creds()
+		root_cli = mysql_svc.MySQLClient(ROOT_USER, creds[ROOT_USER])
+		local_root = mysql_svc.MySQLUser(root_cli, ROOT_USER, creds[ROOT_USER], host='localhost')
+
+		if not self.mysql.service.running:
+			self.mysql.service.start()
+			if not local_root.exists() or not local_root.check_password():
+				users.update({'local_root': local_root})
+				self.mysql.service.stop('creating users')
+				self.mysql.service.start_skip_grant_tables()
+		
+		for login, password in creds.items():
+			user = mysql_svc.MySQLUser(root_cli, login, password, host='%', privileges=PRIVILEGES.get(login, None))
+			users[login] = user
+			
+		for login, user in users.items():
+			if not user.exists():
+				user.create()
+			elif not user.check_password():
+				user.remove()
+				user.create()
+			users[login] = user
+			
+		self.mysql.service.stop_skip_grant_tables()	
+		return users
+		
+
+	@property
+	def is_replication_master(self):
+		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
+		LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
+		return True if int(value) else False
+	
+	
+	def on_BeforeHostTerminate(self, message):
+		if message.local_ip == self._platform.get_private_ip():
+			self.mysql.service.stop(reason='Server will be terminated')
+			LOG.info('Detaching MySQL storage')
+			self.storage_vol.detach()
+	
+	
+	def on_Mysql_CreatePmaUser(self, message):
+		try:
+			# Operation allowed only on Master server
+			if not self.is_replication_master:
+				raise HandlerError('Cannot add pma user on slave. It should be a Master server')
+			
+			pma_server_ip = message.pma_server_ip
+			farm_role_id  = message.farm_role_id
+			
+			LOG.info("Adding phpMyAdmin system user")
+			pma_password = cryptotool.pwgen(20)
+			#self.mysql.pma_user = mysql_svc.MySQLUser(login=PMA_USER,pma_password)
+			self.mysql.pma_user.create(host=pma_server_ip, privileges=None,password=pma_password)
+			
+			LOG.info('PhpMyAdmin system user successfully added')
+			
+			# Notify Scalr
+			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+				status       = 'ok',
+				pma_user	 = PMA_USER,
+				pma_password = pma_password,
+				farm_role_id = farm_role_id,
+			))
+			
+		except (Exception, BaseException), e:
+			LOG.exception(e)
+			
+			# Notify Scalr about error
+			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+				status		= 'error',
+				last_error	=  str(e).strip(),
+				farm_role_id = farm_role_id
+			))
+	
+	
+	def on_DbMsr_CreateBackup(self, message):
+		tmp_dir = os.path.join(STORAGE_PATH, STORAGE_TMP_DIR)		
+		# Retrieve password for scalr mysql user
+		tmpdir = backup_path = None
+		try:
+			# Get databases list
+			databases = self.mysql.cli.list_databases()
+			
+			# Defining archive name and path
+			if not os.path.exists(tmp_dir):
+				os.makedirs(tmp_dir)
+			backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
+			backup_path = os.path.join(tmp_dir, backup_filename)
+			
+			# Creating archive 
+			backup = tarfile.open(backup_path, 'w:gz')
+
+			# Dump all databases
+			LOG.info("Dumping all databases")
+			tmpdir = tempfile.mkdtemp(dir=tmp_dir)
+			mysqldump = mysql_svc.MySQLDump(root_user=ROOT_USER, root_password=self.root_password)			
+			for db_name in databases:
+				try:
+					dump_path = os.path.join(tmpdir, db_name + '.sql') 
+					mysqldump.create(db_name, dump_path)
+					backup.add(dump_path, os.path.basename(dump_path))						
+				except PopenError, e:
+					LOG.exception('Cannot dump database %s. %s', db_name, e)
+			
+			backup.close()
+			
+			# Creating list of full paths to archive chunks
+			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+				parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+			else:
+				parts = [backup_path]
+					
+			LOG.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+			trn = transfer.Transfer()
+			result = trn.upload(parts, self._platform.cloud_storage_path)
+			LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
+							self._platform.cloud_storage_path, backup_filename)
+			
+			# Notify Scalr
+			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+				db_type = BEHAVIOUR,
+				status = 'ok',
+				backup_parts = result
+			))
+						
+		except (Exception, BaseException), e:
+			LOG.exception(e)
+			
+			# Notify Scalr about error
+			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+				db_type = BEHAVIOUR,
+				status = 'error',
+				last_error = str(e)
+			))
+			
+		finally:
+			if tmpdir:
+				shutil.rmtree(tmpdir, ignore_errors=True)
+			if backup_path and os.path.exists(backup_path):
+				os.remove(backup_path)		
+
+
+	def on_DbMsr_CreateDataBundle(self, message):
+		try:
+			bus.fire('before_mysql_data_bundle')
+			
+			# Creating snapshot
+			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, self.root_password)
+			used_size = firstmatched(lambda r: r.mpoint == STORAGE_PATH, filetool.df()).used
+				
+			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
+			
+			# Notify scalr
+			msg_data = dict(
+				log_file=log_file,
+				log_pos=log_pos,
+				used_size='%.3f' % (float(used_size) / 1024 / 1024,),
+				status='ok'
+			)
+			msg_data.update(self._compat_storage_data(snap=snap))
+			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
+		except (Exception, BaseException), e:
+			self._logger.exception(e)
+			
+			# Notify Scalr about error
+			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
+				status		='error',
+				last_error	= str(e)
+			))
+	
+	
+	def on_DbMsr_PromoteToMaster(self, message):
+		"""
+		Promote slave to master
+		"""
+		old_conf 		= None
+		new_storage_vol	= None
+		
+		if not self.is_replication_master:
+			
+			bus.fire('before_slave_promote_to_master')
+			
+			if bus.scalr_version >= (2, 2):
+				master_storage_conf = message.body.get('volume_config')
+			else:
+				if 'volume_id' in message.body:
+					master_storage_conf = dict(type='ebs', id=message.body['volume_id'])
+				else:
+					master_storage_conf = None
+				
+			tx_complete = False
+						
+			try:
+				# Stop mysql
+				if master_storage_conf:
+					if self._init_script.running:
+						self.mysql.cli.stop_slave(timeout=STOP_SLAVE_TIMEOUT)
+
+						self._stop_service('Swapping storages to promote slave to master')
+					
+					# Unplug slave storage and plug master one
+					#self._unplug_storage(slave_vol_id, STORAGE_PATH)
+					old_conf = self.storage_vol.detach(force=True) # ??????
+					#master_vol = self._take_master_volume(master_vol_id)
+					#self._plug_storage(master_vol.id, STORAGE_PATH)
+					new_storage_vol = self._plug_storage(STORAGE_PATH, master_storage_conf)				
+					# Continue if master storage is a valid MySQL storage 
+					if self._storage_valid():
+						# Patch configuration files 
+						self.mysql.move_mysql_to(STORAGE_PATH)
+						self._replication_init()
+						# Update behaviour configuration
+						updates = {
+							OPT_ROOT_PASSWORD : message.root_password,
+							OPT_REPL_PASSWORD : message.repl_password,
+							OPT_STAT_PASSWORD : message.stat_password,
+							OPT_REPLICATION_MASTER 	: "1"
+						}
+						self._update_config(updates)
+						Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
+						
+						# Send message to Scalr
+						msg_data = dict(status='ok')
+						msg_data.update(self._compat_storage_data(vol=new_storage_vol))
+						self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
+					else:
+						raise HandlerError("%s is not a valid MySQL storage" % STORAGE_PATH)
+					self._start_service()
+				else:
+					self._start_service()
+					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
+					timeout = 180
+					try:
+						mysql.sendline("STOP SLAVE;")
+						mysql.expect("mysql>", timeout=timeout)
+						mysql.sendline("RESET MASTER;")
+						mysql.expect("mysql>", 20)
+						filetool.remove(os.path.join(self._data_dir, 'relay-log.info'))
+						filetool.remove(os.path.join(self._data_dir, 'master.info'))
+					except pexpect.TIMEOUT:
+						raise HandlerError("Timeout (%d seconds) reached " + 
+									"while waiting for slave stop and master reset." % (timeout,))
+					finally:
+						mysql.close()
+
+					updates = {
+						OPT_ROOT_PASSWORD : message.root_password,
+						OPT_REPL_PASSWORD : message.repl_password,
+						OPT_STAT_PASSWORD : message.stat_password,
+						OPT_REPLICATION_MASTER 	: "1"
+					}
+					self._update_config(updates)
+										
+					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
+					Storage.backup_config(snap.config(), self._snapshot_config_path)
+					
+					# Send message to Scalr
+					msg_data = dict(
+						status="ok",
+						log_file = log_file,
+						log_pos = log_pos
+					)
+					msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)							
+					
+				tx_complete = True
+				bus.fire('slave_promote_to_master')
+				
+			except (Exception, BaseException), e:
+				self._logger.exception(e)
+				if new_storage_vol:
+					new_storage_vol.detach()
+				# Get back slave storage
+				if old_conf:
+					self._plug_storage(STORAGE_PATH, old_conf)
+				
+				self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
+					status="error",
+					last_error=str(e)
+				))
+
+				# Start MySQL
+				self._start_service()
+			
+			if tx_complete and master_storage_conf:
+				# Delete slave EBS
+				self.storage_vol.destroy(remove_disks=True)
+				self.storage_vol = new_storage_vol
+				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		else:
+			self._logger.warning('Cannot promote to master. Already master')
+
+	
+	
+	def on_DbMsr_NewMasterUp(self, message):
+		pass
+	
+	
+	def on_before_reboot_start(self, *args, **kwargs):
+		self.mysql.service.stop('Instance is going to reboot')
+	
+	
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
+	
+	
 	def generate_datadir(self):
 		try:
 			out = system2("my_print_defaults mysqld", shell=True)
@@ -705,4 +709,6 @@ class MysqlHandler(DBMSRandler):
 	@property
 	def root_password(self):
 		return bus.cnf.rawini.get('mysql', 'root_password')
+	
+
 	

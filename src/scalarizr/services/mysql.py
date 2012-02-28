@@ -3,14 +3,19 @@ Created on Nov 8, 2011
 
 @author: dmitry
 '''
-
-import logging, os, re
+import os
+import logging
+import re
+import subprocess
+import signal
 import pymysql
+import random
 
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError
 from scalarizr.util.initdv2 import wait_sock, InitdError
+from scalarizr.util.filetool import read_file, write_file, rchown
 
 
 LOG = logging.getLogger(__name__)
@@ -22,13 +27,16 @@ MYSQLD_PATH = '/usr/sbin/mysqld'  if disttool.is_ubuntu() else '/usr/libexec/mys
 MYSQLDUMP_PATH = '/usr/bin/mysqldump'
 DEFAULT_DATADIR	= "/var/lib/mysql"
 
+STORAGE_DATA_DIR = "mysql-data"
+STORAGE_BINLOG = "mysql-misc/binlog"
+
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 
 
 class Mysql(BaseService):
 	
 	service = None
-	is_replication_master = False
+	my_cnf = None
 	
 		
 	def __new__(cls, *args, **kwargs):
@@ -51,12 +59,19 @@ class Mysql(BaseService):
 	def _init_service(self):
 		pass
 	
+	def _init_replication(self, master=True):
+		server_id = 1 if master else int(random.random() * 100000)+1
+		self.my_cnf.server_id = server_id
+		self.my_cnf.bind_address = None
+		self.my_cnf.skip_networking = None
+
 	@property
 	def version(self):
 		#5.1/5.5
 		#percona/mysql
 		pass
 	
+	@property
 	def is_replication_master(self):
 		pass
 	
@@ -70,6 +85,61 @@ class Mysql(BaseService):
 		# on fail get status from error.log
 		pass
 	
+	def move_mysqldir_to(self, storage_path):
+		
+		for directive, dirname in (
+				('mysqld/log_bin', os.path.join(storage_path,STORAGE_BINLOG)), 
+				('mysqld/datadir', os.path.join(storage_path,STORAGE_DATA_DIR))): 
+			
+			directory	= os.path.dirname(dirname)
+			try:
+				raw_value = self.my_cnf.get(directive)
+				if not os.path.isdir(directory):
+					os.makedirs(directory)
+					src_dir = os.path.dirname(raw_value + "/") + "/"
+					if os.path.isdir(src_dir):
+						set_se_path = software.whereis('setsebool')
+						if set_se_path:
+							self._logger.debug('Make SELinux rule for rsync')
+							system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
+						self._logger.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
+						rsync = filetool.Rsync().archive()
+						rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
+						system2(str(rsync), shell=True)
+						self._mysql_config.set(directive, dirname)
+					else:
+						self._logger.info('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
+				else:
+					self._mysql_config.set(directive, dirname)
+					
+			except NoPathError:
+				self._logger.debug('There is no such option "%s" in mysql config.' % directive)
+				if not os.path.isdir(directory):
+					os.makedirs(directory)
+				
+				self._mysql_config.add(directive, dirname)
+	
+			rchown("mysql", directory)
+			# Adding rules to apparmor config 
+			if disttool.is_debian_based():
+				_add_apparmor_rules(directory)
+
+		
+	def _get_my_cnf(self):
+		return self._get('my_cnf', MySQLConf.find)
+	
+	def _set_my_cnf(self, obj):
+		self._set('my_cnf', obj)	
+				
+	def _get_cli(self):
+		return self._get('cli', MySQLClient.find)
+	
+	def _set_cli(self, obj):
+		self._set('cli', obj)	
+		
+	my_cnf = property(_get_my_cnf, _set_my_cnf)
+	cli = property(_get_cli, _set_cli)		
+	
 	
 class MySQLClient(object):
 	_pool = None
@@ -78,9 +148,7 @@ class MySQLClient(object):
 		self.db = None
 		self.user = user
 		self.passwd = passwd
-		
-	def reconnect_as(self, user, passwd):
-		pass	
+			
 	
 	def test_connection(self):
 		self._logger.debug('Checking MySQL service status')
@@ -215,12 +283,11 @@ class MySQLClient(object):
 		return self.fetchone('SELECT VERSION()')
 	
 		
-	@property
-	def conn(self):
+	def get_connection(self, force=False):
 		creds = (self.user, self.passwd, self.db)
-		if not creds in self._pool:
+		if force or not creds in self._pool:
 			self._pool[creds] = pymysql.connect(host="127.0.0.1", user=self.user, passwd=self.passwd, db=self.db)
-		return self._connection
+		return self._pool[creds]
 	
 	
 	def _priv_count(self):
@@ -229,8 +296,16 @@ class MySQLClient(object):
 	
 		
 	def _fetch(self, query, cursor = None, fetch_one=False):
+		conn = self.get_connection()
 		cursor = self.conn.cursor(cursor)
-		cursor.execute(query)
+		try:
+			cursor.execute(query)
+		except pymysql.err.OperationalError, e:
+			#catching mysqld restarts (e.g. sgt)
+			if e.args[0] == 2013:
+				conn = self.get_connection(true)
+				cursor = self.conn.cursor(cursor)
+				
 		res = cursor.fetchone if fetch_one else cursor.fetchall()
 		return res
 
@@ -245,11 +320,6 @@ class MySQLClient(object):
 	
 	def fetchone(self, query):
 		return self._fetch(query, fetch_one=True)
-	
-
-class MySqlPrivileges(object):
-	repl_user = 'Repl_slave_priv'
-	stat_user = 'Repl_client_priv'
 
 
 class MySQLUser(object):
@@ -291,9 +361,13 @@ class MySQLUser(object):
 
 	
 class DataDir(object):
-	#check if it is possible to use one base class with WorkingDir and ClusterDir
-	pass
-
+	
+	def __init__(self):
+		pass
+	
+	def move_to(self, dst):
+		pass
+	
 
 class MySQLConf(BaseConfig):
 	
@@ -378,6 +452,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 	
 	socket_file = None
 	cli = None
+	sgt_pid = None
+	sgt_pid_path = None
+	
 	
 	def __init__(self):
 		#todo: provide user and password
@@ -442,7 +519,6 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		return initdv2.ParametrizedInitScript.status(self)
 
 	
-	
 	def start(self):
 		mysql_cnf_err_re = re.compile('Unknown option|ERROR')
 		stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True)[1]
@@ -460,8 +536,58 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		
 		return self._start_stop_reload('start')
 
+	def _is_sgt_process_exists(self):
+		out = system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
+		return MYSQLD_PATH in out and 'skip-grant-tables' in out
+
 
 	def start_skip_grant_tables(self):
-		pass
+		pid_dir = '/var/run/mysqld/'
+		if not os.path.isdir(pid_dir):
+			os.makedirs(pid_dir, mode=0755)
+			mysql_user	= pwd.getpwnam("mysql")
+			os.chown(pid_dir, mysql_user.pw_uid, -1)
+		if self._is_sgt_process_exists():	
+			args = [MYSQLD_PATH, '--user=mysql', '--skip-grant-tables']
+			p = subprocess.Popen(args, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
+		
+		wait_until(lambda: self._is_sgt_process_exists(), timeout=10, sleep=1)
+		wait_until(lambda: self.running, timeout=10, sleep=1)
 
+	
+	def stop_skip_grant_tables(self):
+		if self._is_sgt_process_exists():
+			os.kill(self.sgt_pid, signal.SIGTERM)
+			wait_until(lambda: not self._is_sgt_process_exists(), timeout=10, sleep=1)
+			wait_until(lambda: not self.running, timeout=10, sleep=1)
+		
+
+
+def _add_apparmor_rules(directory):
+	if not os.path.exists('/etc/init.d/apparmor'):
+		return
+	try:
+		file = open('/etc/apparmor.d/usr.sbin.mysqld', 'r')
+	except IOError, e:
+		pass
+	else:
+		app_rules = file.read()
+		file.close()
+		if not re.search (directory, app_rules):
+			file = open('/etc/apparmor.d/usr.sbin.mysqld', 'w')
+			if os.path.isdir(directory):
+				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1\n'+directory+'/ r,\n'+'\\2\\3', app_rules)
+				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1'+directory+'/** rwk,\n'+'\\2\\3', app_rules)
+			else:
+				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1\n'+directory+' r,\n'+'\\2\\3', app_rules)
+			file.write(app_rules)
+			file.close()
+			apparmor_initd = ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
+			try:
+				apparmor_initd.reload()
+			except InitdError, e:
+				_logger.error('Cannot restart apparmor. %s', e)	
+
+		
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
+
