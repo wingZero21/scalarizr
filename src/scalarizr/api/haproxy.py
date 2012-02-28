@@ -31,17 +31,16 @@ class HAProxyAPI(object):
 	
 	def _server_name(self, ipaddr):
 		'''@rtype: str'''
-		if isinstance(ipaddr, str):
-			if ':' in ipaddr:
-				ipaddr = ipaddr.strip().split(':')[0]
-			return ipaddr.replace('.', '-')
+		if ':' in ipaddr:
+			ipaddr = ipaddr.strip().split(':')[0]
+		return ipaddr.replace('.', '-')
 
-	
-	#@rpc.service_method
-	#@validate.param('port', 'server_port', type=int)
-	#@validate.param('protocol', required=_rule_protocol)
-	#@validate.param('server_port', optional=True, type=int)
-	#@validate.param('backend', optional=_rule_backend)
+	'''
+	@rpc.service_method
+	@validate.param('port', 'server_port', type=int)
+	@validate.param('protocol', required=_rule_protocol)
+	@validate.param('server_port', optional=True, type=int)
+	@validate.param('backend', optional=_rule_backend)'''
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
 		''' '''
@@ -267,7 +266,6 @@ class HAProxyAPI(object):
 		for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
 			if ipaddr and srv_name in self.cfg.backends[bd]['server']:
 				del self.cfg.backends[bd]['server'][srv_name]
-
 		self.cfg.save()
 		self.svs.reload()
 
