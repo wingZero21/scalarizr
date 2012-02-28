@@ -83,7 +83,7 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.start(self)
 		wait_until(lambda: self._processes, timeout=10, sleep=1)
 		redis_conf = RedisConf.find()
-		password = redis_conf.masterauth or redis_conf.requirepass
+		password = redis_conf.requirepass
 		cli = RedisCLI(password)
 		wait_until(lambda: cli.test_connection(), timeout=10, sleep=1)
 	
@@ -109,17 +109,15 @@ class Redis(BaseService):
 
 	def init_master(self, mpoint, password=None):
 		self.service.stop('Configuring master. Moving Redis db files')	
-		self.init_service(mpoint)
+		self.init_service(mpoint, password)
 		self.redis_conf.masterauth = None
 		self.redis_conf.slaveof = None
-		self.redis_conf.requirepass = password or self.generate_password()
 		self.service.start()
 		self.is_replication_master = True
 		
 	def init_slave(self, mpoint, primary_ip, primary_port, password):
 		self.service.stop('Configuring slave')
-		self.init_service(mpoint)
-		self.redis_conf.requirepass = None
+		self.init_service(mpoint, password)
 		self.change_primary(primary_ip, primary_port, password)
 		self.service.start()
 		self.is_replication_master = False
@@ -144,9 +142,10 @@ class Redis(BaseService):
 		self.redis_conf.masterauth = password
 		self.redis_conf.slaveof = (primary_ip, primary_port)
 		
-	def init_service(self, mpoint):
+	def init_service(self, mpoint, password):
 		move_files = not self.working_directory.is_initialized(mpoint)
-		self.working_directory.move_to(mpoint, move_files)	
+		self.working_directory.move_to(mpoint, move_files)
+		self.redis_conf.requirepass = password or self.generate_password()	
 		self.redis_conf.dir = mpoint
 		self.redis_conf.bind = None
 		if self.persistence_type == SNAP_TYPE:
@@ -157,7 +156,7 @@ class Redis(BaseService):
 		
 	@property	
 	def password(self):
-		return self.redis_conf.requirepass if self.is_replication_master else self.redis_conf.masterauth
+		return self.redis_conf.requirepass
 	
 	@property
 	def db_path(self):
@@ -407,7 +406,7 @@ class RedisCLI(object):
 	
 	@classmethod	
 	def find(cls, redis_conf):
-		return cls(redis_conf.masterauth or redis_conf.requirepass)
+		return cls(redis_conf.requirepass)
 		
 	def execute(self, query):
 		if not self.password:
