@@ -351,6 +351,7 @@ def _apply_user_data(cnf):
 	cnf.update_ini('config.ini', updates)
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
 	
+	logger.debug('Reloading configuration after user-data applying')
 	cnf.bootstrap(force_reload=True)
 
 def _detect_scalr_version():

@@ -95,6 +95,31 @@ class PostgreSqlHander(ServiceCtlHandler):
 				or  message.name == Messages.HOST_DOWN)	
 
 	
+	def get_initialization_phases(self, hir_message):
+		if BEHAVIOUR in hir_message.body:
+			self._phase_postgresql = 'Configure PostgreSQL'
+			self._step_accept_scalr_conf = 'Accept Scalr configuration'
+			self._step_patch_conf = 'Patch configuration files'
+			self._step_create_storage = 'Create storage'
+			self._step_init_master = 'Initialize Master'
+			self._step_init_slave = 'Initialize Slave'
+			self._step_create_data_bundle = 'Create data bundle'
+			self._step_change_replication_master = 'Change replication Master'
+			self._step_collect_host_up_data = 'Collect HostUp data'
+
+			steps = [self._step_accept_scalr_conf, self._step_create_storage]
+			if hir_message.body['mysql']['replication_master'] == '1':
+				steps += [self._step_init_master, self._step_create_data_bundle]
+			else:
+				steps += [self._step_init_slave]
+			steps += [self._step_collect_host_up_data]
+			
+			return {'before_host_up': [{
+				'name': self._phase_postgresql, 
+				'steps': steps
+			}]}
+	
+	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		bus.on("init", self.on_init)
@@ -280,43 +305,48 @@ class PostgreSqlHander(ServiceCtlHandler):
 		@type message: scalarizr.messaging.Message
 		@param message: HostInitResponse
 		"""
-		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
-			raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
 		
-		'''
-		if message.postgresql[OPT_REPLICATION_MASTER] != '1'  and \
-				(not message.body.has_key(OPT_ROOT_SSH_PUBLIC_KEY) or not 
-				message.body.has_key(OPT_ROOT_SSH_PRIVATE_KEY)):
-			raise HandlerError("HostInitResponse message for PostgreSQL slave must contain both public and private ssh keys")
-		'''
+		with bus.initialization_op as op:
+			with op.phase(self._phase_postgresql):
+				with op.step(self._step_accept_scalr_conf):
 		
-		dir = os.path.dirname(self._volume_config_path)
-		if not os.path.exists(dir):
-			os.makedirs(dir)
-		
-		postgresql_data = message.postgresql.copy()
-
-		root = PgUser(ROOT_USER, self.pg_keys_dir)
-		root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
-		del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
-		del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]		
-		
-		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
-						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
-			if os.path.exists(file):
-				os.remove(file)
+					if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
+						raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
+					
+					'''
+					if message.postgresql[OPT_REPLICATION_MASTER] != '1'  and \
+							(not message.body.has_key(OPT_ROOT_SSH_PUBLIC_KEY) or not 
+							message.body.has_key(OPT_ROOT_SSH_PRIVATE_KEY)):
+						raise HandlerError("HostInitResponse message for PostgreSQL slave must contain both public and private ssh keys")
+					'''
+					
+					dir = os.path.dirname(self._volume_config_path)
+					if not os.path.exists(dir):
+						os.makedirs(dir)
+					
+					postgresql_data = message.postgresql.copy()
 			
-			if key in postgresql_data:
-				if postgresql_data[key]:
-					Storage.backup_config(postgresql_data[key], file)
-				del postgresql_data[key]
-		
-		root_user= postgresql_data[OPT_ROOT_USER] or ROOT_USER
-		postgresql_data['%s_password' % root_user] = postgresql_data.get(OPT_ROOT_PASSWORD) or cryptotool.pwgen(10)
-		del postgresql_data[OPT_ROOT_PASSWORD]
-		
-		self._logger.debug("Update postgresql config with %s", postgresql_data)
-		self._update_config(postgresql_data)
+					root = PgUser(ROOT_USER, self.pg_keys_dir)
+					root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
+					del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
+					del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]		
+					
+					for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
+									(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
+						if os.path.exists(file):
+							os.remove(file)
+						
+						if key in postgresql_data:
+							if postgresql_data[key]:
+								Storage.backup_config(postgresql_data[key], file)
+							del postgresql_data[key]
+					
+					root_user= postgresql_data[OPT_ROOT_USER] or ROOT_USER
+					postgresql_data['%s_password' % root_user] = postgresql_data.get(OPT_ROOT_PASSWORD) or cryptotool.pwgen(10)
+					del postgresql_data[OPT_ROOT_PASSWORD]
+					
+					self._logger.debug("Update postgresql config with %s", postgresql_data)
+					self._update_config(postgresql_data)
 
 
 	def on_before_host_up(self, message):
@@ -603,44 +633,49 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 		self._logger.info("Initializing PostgreSQL master")
 		
-		# Plug storage
-		volume_cnf = Storage.restore_config(self._volume_config_path)
-		try:
-			snap_cnf = Storage.restore_config(self._snapshot_config_path)
-			volume_cnf['snapshot'] = snap_cnf
-		except IOError:
-			pass
-		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
-		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
+		with bus.initialization_op as op:
+			with op.step(self._step_create_storage):		
 		
-		self.postgresql.init_master(mpoint=self._storage_path, password=self.root_password)
-		
-		msg_data = dict()
-		msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.is_replication_master)),
-							OPT_ROOT_USER				:	self.postgresql.root_user.name,
-							OPT_ROOT_PASSWORD			:	self.root_password,
-							OPT_CURRENT_XLOG_LOCATION	: 	None})	
+				# Plug storage
+				volume_cnf = Storage.restore_config(self._volume_config_path)
+				try:
+					snap_cnf = Storage.restore_config(self._snapshot_config_path)
+					volume_cnf['snapshot'] = snap_cnf
+				except IOError:
+					pass
+				self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
+				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
+				
+			with op.step(self._step_init_master):
+				self.postgresql.init_master(mpoint=self._storage_path, password=self.root_password)
+				
+				msg_data = dict()
+				msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.is_replication_master)),
+									OPT_ROOT_USER				:	self.postgresql.root_user.name,
+									OPT_ROOT_PASSWORD			:	self.root_password,
+									OPT_CURRENT_XLOG_LOCATION	: 	None})	
+					
+			with op.step(self._step_create_data_bundle):
+				# Create snapshot
+				snap = self._create_snapshot()
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
 			
-		# Create snapshot
-		snap = self._create_snapshot()
-		
-		Storage.backup_config(snap.config(), self._snapshot_config_path)
-	
-		# Update HostUp message 
-		msg_data.update(self._compat_storage_data(self.storage_vol, snap))
-			
-		if msg_data:
-			message.db_type = BEHAVIOUR
-			message.postgresql = msg_data.copy()
-			message.postgresql.update({
-							OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key, 
-							OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key
-							})
-			try:
-				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
-			except KeyError:
-				pass 
-			self._update_config(msg_data)
+			with op.step(self._step_collect_host_up_data):
+				# Update HostUp message 
+				msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+					
+				if msg_data:
+					message.db_type = BEHAVIOUR
+					message.postgresql = msg_data.copy()
+					message.postgresql.update({
+									OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key, 
+									OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key
+									})
+					try:
+						del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
+					except KeyError:
+						pass 
+					self._update_config(msg_data)
 	
 	def _get_master_host(self):
 		master_host = None
@@ -669,24 +704,28 @@ class PostgreSqlHander(ServiceCtlHandler):
 		"""
 		self._logger.info("Initializing postgresql slave")
 		
-		if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
-			self._logger.debug("Initialize slave storage")
-			self.storage_vol = self._plug_storage(self._storage_path, 
-					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
-			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		with bus.initialization_op as op:
+			with op.step(self._step_create_storage):
+				if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
+					self._logger.debug("Initialize slave storage")
+					self.storage_vol = self._plug_storage(self._storage_path, 
+							dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+					Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 			
-		# Change replication master 
-		master_host = self._get_master_host()
+			with op.step(self._step_init_slave):
+				# Change replication master 
+				master_host = self._get_master_host()
+						
+				self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
+						master_host.internal_ip, master_host.external_ip)
 				
-		self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
-				master_host.internal_ip, master_host.external_ip)
-		
-		host = master_host.internal_ip or master_host.external_ip
-		self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT, self.root_password)
-		
-		# Update HostUp message
-		message.postgresql = self._compat_storage_data(self.storage_vol)
-		message.db_type = BEHAVIOUR
+				host = master_host.internal_ip or master_host.external_ip
+				self.postgresql.init_slave(self._storage_path, host, POSTGRESQL_DEFAULT_PORT, self.root_password)
+			
+			with op.step(self._step_collect_host_up_data):
+				# Update HostUp message
+				message.postgresql = self._compat_storage_data(self.storage_vol)
+				message.db_type = BEHAVIOUR
 
 
 	def _update_config(self, data): 

@@ -318,6 +318,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 					with op.step('Scalarizr routines'):
 						op.error()
 			raise
+		with bus.initialization_op as op:
+			op.ok()
 
 
 	def on_ScalarizrUpdateAvailable(self, message):

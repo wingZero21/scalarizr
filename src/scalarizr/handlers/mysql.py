@@ -809,14 +809,15 @@ class MysqlHandler(ServiceCtlHandler):
 			self._step_create_data_bundle = 'Create data bundle'
 			self._step_change_replication_master = 'Change replication Master'
 			self._step_innodb_recovery = 'InnoDB recovery'
+			self._step_collect_hostup_data = 'Collect HostUp data'
 
 			steps = [self._step_accept_scalr_conf, self._step_create_storage]
 			if hir_message.body['mysql']['replication_master'] == '1':
 				steps.append(self._step_create_data_bundle)
 			else:
 				steps.append(self._step_change_replication_master)
-			
-			
+			steps.append(self._step_collect_hostup_data)
+		
 			
 			return {'before_host_up': [{
 				'name': self._phase_mysql, 
@@ -1400,13 +1401,14 @@ class MysqlHandler(ServiceCtlHandler):
 					pass
 				raise
 				
-			if msg_data:
-				message.mysql = msg_data.copy()
-				try:
-					del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
-				except KeyError:
-					pass 
-				self._update_config(msg_data)
+			with op.step(self._step_collect_hostup_data):
+				if msg_data:
+					message.mysql = msg_data.copy()
+					try:
+						del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
+					except KeyError:
+						pass 
+					self._update_config(msg_data)
 	
 	def _compat_storage_data(self, vol=None, snap=None):
 		ret = dict()
@@ -1498,8 +1500,9 @@ class MysqlHandler(ServiceCtlHandler):
 						timeout=self._change_master_timeout
 					)
 				
-				# Update HostUp message
-				message.mysql = self._compat_storage_data(self.storage_vol)
+				with op.step(self._step_collect_hostup_data):
+					# Update HostUp message
+					message.mysql = self._compat_storage_data(self.storage_vol)
 			except:
 				exc_type, exc_value, exc_trace = sys.exc_info()
 				if ive_created_storage:

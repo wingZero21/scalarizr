@@ -751,7 +751,7 @@ class ScalarizrCnf(Observable):
 	def load_ini(self, name, configparser=None):
 		name = self._name(name)
 		if not name in self._loaded_ini_names:
-			files = (os.path.join(self._priv_path, name), os.path.join(self._pub_path, name))
+			files = (os.path.join(self._pub_path, name), os.path.join(self._priv_path, name))
 			ini = configparser or self.rawini 
 			for file in files:
 				if os.path.exists(file):
