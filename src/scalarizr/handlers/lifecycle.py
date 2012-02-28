@@ -21,7 +21,7 @@ from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 # Stdlibs
 import logging, os, sys, threading
 from scalarizr.config import STATE
-import uuid
+import time
 
 
 _lifecycle = None
@@ -337,6 +337,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		Add scalarizr version to meta
 		"""
 		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
+		message.meta[MetaOptions.TIMESTAMP] = time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
 		
 	def _define_initialization(self, hir_message):
 		# XXX: from the asshole
