@@ -108,7 +108,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self._step_collect_host_up_data = 'Collect HostUp data'
 
 			steps = [self._step_accept_scalr_conf, self._step_create_storage]
-			if hir_message.body['mysql']['replication_master'] == '1':
+			if hir_message.body[BEHAVIOUR]['replication_master'] == '1':
 				steps += [self._step_init_master, self._step_create_data_bundle]
 			else:
 				steps += [self._step_init_slave]

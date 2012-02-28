@@ -297,7 +297,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		try:
 			bus.fire("before_host_down", msg)
 		finally:
-			self.send_message(msg)		
+			self.send_message(msg)
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
