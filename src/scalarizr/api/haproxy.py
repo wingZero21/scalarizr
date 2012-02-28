@@ -259,7 +259,7 @@ class HAProxyAPI(object):
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
 	@validate.param('backend', optional=_rule_backend)'''
-	def remove_server(self, ipaddr=None, backend=None):
+	def remove_server(self, ipaddr, backend=None):
 		'''Remove server from backend section with ipaddr'''
 		if ipaddr: ipaddr = ipaddr.strip()
 		if backend: backend = backend.strip()
@@ -267,8 +267,6 @@ class HAProxyAPI(object):
 		for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
 			if ipaddr and srv_name in self.cfg.backends[bd]['server']:
 				del self.cfg.backends[bd]['server'][srv_name]
-			elif not ipaddr:
-				del self.cfg.backends[bd]['server']
 
 		self.cfg.save()
 		self.svs.reload()

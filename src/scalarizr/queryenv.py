@@ -200,7 +200,7 @@ class QueryEnvService(object):
 			role.behaviour = role_el.getAttribute("behaviour").split(',')
 			if role.behaviour == ('base',) or role.behaviour == ('',):
 				role.behaviour = ()
-			role.farm_roleid = role_el.getAttribute("id")
+			role.farm_role_id = role_el.getAttribute("id")
 			role.name = role_el.getAttribute("name")
 			for host_el in role_el.firstChild.childNodes:
 				host = RoleHost()
@@ -419,23 +419,23 @@ class Role(object):
 	behaviour = None
 	name = None
 	hosts = None
-	farm_roleid = None
+	farm_role_id = None
 	
-	def __init__(self, behaviour=None, name=None, hosts=None, farm_roleid=None):
+	def __init__(self, behaviour=None, name=None, hosts=None, farm_role_id=None):
 		self.behaviour = behaviour
 		self.name = name
 		self.hosts = hosts or []
-		self.farm_roleid = farm_roleid
+		self.farm_role_id = farm_role_id
 
 	def __str__(self):
-		opts = (self.name, self.behaviour, len(self.hosts), self.farm_roleid)
-		return "qe:Role(name: %s, behaviour: %s, num_hosts: %s, farm_roleid: %s)" % opts
+		opts = (self.name, self.behaviour, len(self.hosts), self.farm_role_id)
+		return "qe:Role(name: %s, behaviour: %s, num_hosts: %s, farm_role_id: %s)" % opts
 	
 	def __repr__(self):
 		return 'behaviour = ' + str(self.behaviour) \
 	+ "; name = " + str(self.name) \
 	+ "; hosts = " + str(self.hosts) \
-	+ "; farm_roleid = " + str(self.farm_roleid) + ";"
+	+ "; farm_role_id = " + str(self.farm_role_id) + ";"
 
 class RoleHost(object):
 	index = None

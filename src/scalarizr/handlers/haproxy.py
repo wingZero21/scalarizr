@@ -59,21 +59,22 @@ class HAProxyHandler(Handler):
 		bnds = list(set(bnds))
 
 		for bnd in bnds:
-			self.api.remove_server(backend = bnd)
+			for srv in self.api.list_servers(backend=bnd):
+				self.api.remove_server(ipaddr=srv, backend=bnd)
 
 		for d in result:
 			behaviour=', '.join(d.behaviour)
 			for host in d.hosts:
 				try:
-					if 'role:%s' % d.farm_roleid in bnds:
+					if 'role:%s' % d.farm_role_id in bnds:
 						self.api.add_server(ipaddr=host.internal_ip, 
-							backend='role:%s' % d.farm_roleid)
+							backend='role:%s' % d.farm_role_id)
 				except:
 					LOG.warn('HAProxyHandler.on_before_host_up.Failed add_server `%s` in'
 							' backend=`role:%s`, details: %s' %	(
 							host.internal_ip.replace('.', '-'),
-							d.farm_roleid, sys.exc_info()[1]))
-				running_servers.append([d.farm_roleid, host.internal_ip])
+							d.farm_role_id, sys.exc_info()[1]))
+				running_servers.append([d.farm_role_id, host.internal_ip])
 		LOG.debug('running_servers: `%s`', running_servers)
 	
 	
@@ -106,8 +107,8 @@ class HAProxyHandler(Handler):
 			# todo: Repair data from HIR
 			pass
 		if bus.cnf.state == ScalarizrState.RUNNING:
-			#remove all servers from backends and add from queryenv
-			self._remove_old_add_servers_from_queryenv()
+			#remove all servers from backends and add its from queryenv
+			self._remove_add_servers_from_queryenv()
 
 	def on_host_init_response(self, msg):
 		LOG.debug('HAProxyHandler.on_host_init_response')
@@ -153,14 +154,15 @@ class HAProxyHandler(Handler):
 					#raise Exception, sys.exc_info()[1], sys.exc_info()[2]
 		msg.haproxy = data
 
-		self._add_servers_from_queryenv()
-		
+		self._remove_add_servers_from_queryenv()
+
+
 	def on_HostUp(self, msg):
 		self._farm_role_id = msg.body.get('farm_role_id')
 		self._local_ip = msg.body.get('local_ip')
 		try:
 			self.api.add_server(ipaddr=self._local_ip, 
-								backend='role:%s' % self._farm_role_id)
+				backend=('role:%s' % self._farm_role_id) if self._farm_role_id else None)
 		except:
 			LOG.error('HAProxyHandler.on_before_host_up. Failed add_server `%s`, details:'
 					' %s' %	(self._local_ip, sys.exc_info()[1]))
