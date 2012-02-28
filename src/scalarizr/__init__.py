@@ -350,6 +350,8 @@ def _apply_user_data(cnf):
 		
 	cnf.update_ini('config.ini', updates)
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
+	
+	cnf.bootstrap(force_reload=True)
 
 def _detect_scalr_version():
 	pl = bus.platform
@@ -687,13 +689,6 @@ def main():
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
 			cnf.fire('apply_user_data', cnf)			
-
-		'''		
-		# At first scalarizr startup platform user-data should be applied
-		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
-			cnf.state = ScalarizrState.BOOTSTRAPPING
-			cnf.fire('apply_user_data', cnf)
-		'''
 		
 		# Check Scalr version
 		if not bus.scalr_version:
