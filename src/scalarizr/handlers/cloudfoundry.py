@@ -145,7 +145,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		return result
 	
 	def get_initialization_phases(self, hir_message):
-		self._phase_cloudfoundry = 'CloudFoundry'
+		self._phase_cloudfoundry = 'Configure CloudFoundry'
 		self._step_locate_cloud_controller = 'Locate CloudController'
 		self._step_patch_conf = 'Patch configuration files'
 		self._step_start_svs = 'Start services'

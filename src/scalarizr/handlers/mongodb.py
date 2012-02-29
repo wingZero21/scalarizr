@@ -179,20 +179,44 @@ class MongoDBHandler(ServiceCtlHandler):
 				Messages.HOST_INIT,
 				Messages.HOST_UP)
 		
-	
+	def get_initialization_phases(self, hir_message):
+		self._phase_mongodb = 'Configure MongoDB'
+		self._step_accept_scalr_conf = 'Accept Scalr configuration'
+		self._step_check_cfg_server = 'Check that ConfigServer is running'
+		self._step_change_hostname = 'Change hostname'
+		self._step_init_master = 'Initialize Master'
+		self._step_init_slave = 'Initialize Slave'
+		self._step_start_arbiter = 'Start Arbiter'
+		self._step_start_cfg_server = 'Start ConfigServer'
+		self._step_start_router = 'Start Router'
+		self._step_enter_rs0_barrier = 'Enter rs-0 barrier'
+		self._step_wait_cfg_server = 'Wait for ConfigServer on mongo-0-0'
+		self._step_auth_on_cfg_server_and_router = 'Authenticate on ConfigServer and Router'
+		self._step_create_scalr_users = 'Create Scalr users'
+		self._step_create_shard = 'Create Shard'
+		
+		return {'before_host_up': [{
+			'name': self._phase_mongodb,
+			'steps': [
+				self._step_accept_scalr_conf,
+				self._step_check_cfg_server,
+			]
+		}]}
+
+
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_%s_data_bundle' % BEHAVIOUR,
 			
-			'%s_data_bundle',
+			'%s_data_bundle' % BEHAVIOUR,
 			
 			# @param host: New master hostname 
-			'before_%s_change_master',
+			'before_%s_change_master' % BEHAVIOUR,
 			
 			# @param host: New master hostname 
-			'%s_change_master',
+			'%s_change_master' % BEHAVIOUR,
 			
 			'before_slave_promote_to_master',
 			
@@ -256,36 +280,39 @@ class MongoDBHandler(ServiceCtlHandler):
 		@type message: scalarizr.messaging.Message
 		@param message: HostInitResponse
 		"""
-		if not message.body.has_key(BEHAVIOUR):
-			raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property " 
-							% (BEHAVIOUR, BEHAVIOUR))
-		
-		path = os.path.dirname(self._volume_config_path)
-		if not os.path.exists(path):
-			os.makedirs(path)
-		
-		mongodb_data = message.mongodb.copy()
-
-		for key, fpath in ((OPT_VOLUME_CNF, self._volume_config_path), 
-						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
-			if os.path.exists(fpath):
-				os.remove(fpath)
+		with bus.initialization_op as op:
+			with op.phase(self._phase_mongodb):
+				with op.step(self._step_accept_scalr_conf):
+					if not message.body.has_key(BEHAVIOUR):
+						raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property " 
+										% (BEHAVIOUR, BEHAVIOUR))
+					
+					path = os.path.dirname(self._volume_config_path)
+					if not os.path.exists(path):
+						os.makedirs(path)
+					
+					mongodb_data = message.mongodb.copy()
 			
-			if key in mongodb_data:
-				if mongodb_data[key]:
-					Storage.backup_config(mongodb_data[key], fpath)
-				del mongodb_data[key]
-				
-		mongodb_key = mongodb_data[OPT_KEYFILE]
-		del mongodb_data[OPT_KEYFILE]
-		
-		mongodb_key = mongodb_key or cryptotool.pwgen(22)
-		self._cnf.write_key(BEHAVIOUR, mongodb_key)
-		
-		mongodb_data['password'] = mongodb_data.get('password') or cryptotool.pwgen(10)
-			
-		self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
-		self._update_config(mongodb_data)
+					for key, fpath in ((OPT_VOLUME_CNF, self._volume_config_path), 
+									(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
+						if os.path.exists(fpath):
+							os.remove(fpath)
+						
+						if key in mongodb_data:
+							if mongodb_data[key]:
+								Storage.backup_config(mongodb_data[key], fpath)
+							del mongodb_data[key]
+							
+					mongodb_key = mongodb_data[OPT_KEYFILE]
+					del mongodb_data[OPT_KEYFILE]
+					
+					mongodb_key = mongodb_key or cryptotool.pwgen(22)
+					self._cnf.write_key(BEHAVIOUR, mongodb_key)
+					
+					mongodb_data['password'] = mongodb_data.get('password') or cryptotool.pwgen(10)
+						
+					self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
+					self._update_config(mongodb_data)
 		
 
 	def on_before_host_up(self, hostup_msg):
@@ -294,49 +321,57 @@ class MongoDBHandler(ServiceCtlHandler):
 		@type hostup_msg: scalarizr.messaging.Message
 		@param hostup_msg: HostUp message
 		"""
+		with bus.initialization_op as op:
+			with op.phase(self._phase_mongodb):
+				with op.step(self._step_check_cfg_server):
 
-		first_in_rs = True
-		cfg_server_running = False
+					first_in_rs = True
+					cfg_server_running = False
+			
+					local_ip = self._platform.get_private_ip()
+					role_hosts = self._queryenv.list_roles(self._role_name, with_init=True)[0].hosts
+			
+					for host in role_hosts:
+						if host.internal_ip == local_ip:
+							continue
+						hostname = HOSTNAME_TPL % (host.shard_index, host.replica_set_index)
+						Hosts.set(host.internal_ip, hostname)
+						if host.shard_index == self.shard_index :
+							first_in_rs = False
+			
+						if host.shard_index == 0 and host.replica_set_index == 0:
+							# TODO: Move queryenv host statuses to separate class
+							if host.status == "Running":
+								cfg_server_running = True
 
-		local_ip = self._platform.get_private_ip()
-		role_hosts = self._queryenv.list_roles(self._role_name, with_init=True)[0].hosts
-
-		for host in role_hosts:
-			if host.internal_ip == local_ip:
-				continue
-			hostname = HOSTNAME_TPL % (host.shard_index, host.replica_set_index)
-			Hosts.set(host.internal_ip, hostname)
-			if host.shard_index == self.shard_index :
-				first_in_rs = False
-
-			if host.shard_index == 0 and host.replica_set_index == 0:
-				# TODO: Move queryenv host statuses to separate class
-				if host.status == "Running":
-					cfg_server_running = True
-
-		""" Set hostname"""
-		self._logger.info('Setting new hostname: %s' % self.hostname)
-		Hosts.set(local_ip, self.hostname)
-		with open('/etc/hostname', 'w') as f:
-			f.write(self.hostname)
-		system2(('hostname', '-F', '/etc/hostname'))
+				with op.step(self._step_change_hostname):
+					""" Set hostname"""
+					self._logger.info('Setting new hostname: %s' % self.hostname)
+					Hosts.set(local_ip, self.hostname)
+					with open('/etc/hostname', 'w') as f:
+						f.write(self.hostname)
+					system2(('hostname', '-F', '/etc/hostname'))
 		
-		rs_name = RS_NAME_TPL % self.shard_index
-		
-		if first_in_rs:
-			self._init_master(hostup_msg, rs_name)
-		else:
-			self._init_slave(hostup_msg, rs_name)
+				rs_name = RS_NAME_TPL % self.shard_index
+				
+				if first_in_rs:
+					with op.step(self._step_init_master):
+						self._init_master(hostup_msg, rs_name)
+				else:
+					with op.step(self._step_init_slave):
+						self._init_slave(hostup_msg, rs_name)
 
-		possible_self_arbiter = "%s:%s" % (self.hostname, mongo_svc.ARBITER_DEFAULT_PORT)
-		if possible_self_arbiter in self.mongodb.arbiters:
-			self.mongodb.start_arbiter()
+				possible_self_arbiter = "%s:%s" % (self.hostname, mongo_svc.ARBITER_DEFAULT_PORT)
+				if possible_self_arbiter in self.mongodb.arbiters:
+					with op.step(self._step_start_arbiter):
+						self.mongodb.start_arbiter()
 		
-		if self.shard_index == 0 and self.rs_id == 0:
-			self.mongodb.start_config_server()
-			hostup_msg.mongodb['config_server'] = 1
-		else:
-			hostup_msg.mongodb['config_server'] = 0
+				if self.shard_index == 0 and self.rs_id == 0:
+					with op.step(self._step_start_cfg_server):
+						self.mongodb.start_config_server()
+					hostup_msg.mongodb['config_server'] = 1
+				else:
+					hostup_msg.mongodb['config_server'] = 0
 
 
 		if self.rs_id in (0,1):
@@ -351,143 +386,150 @@ class MongoDBHandler(ServiceCtlHandler):
 				wait_for_config_server = False
 
 				if self.rs_id == 0:
-					self.mongodb.mongod.restart(reason="Workaround, authentication bug in mongo"
-													"(see https://jira.mongodb.org/browse/SERVER-4238)")
-
-					wait_for_int_hostups = True
-					shards_total = int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARDS_TOTAL))
-					""" Status table = {server_id : {is_ready, is_notified, ip_addr}, ...} """
-					status_table = {}
-
-					""" Fill status table """
-					for i in range(shards_total):
-						if i == self.shard_index:
-							continue
-						status_table[i] = Status(False, False, None)
-
-					for host in role_hosts:
-						""" Skip ourself """
-						if host.shard_index == self.shard_index and \
-						   				host.replica_set_index == self.rs_id:
-							continue
-
-						""" Check if it's really cluster initialization, or configserver just failed """
-						#if host.replica_set_index != 0 or host.status == "Running":
-						if host.status == "Running":
-							""" Already have replicas """
-							wait_for_int_hostups = False
-							if self.shard_index != 0:
-								wait_for_config_server = True
-							break
-
-						if host.shard_index > (shards_total - 1):
-							""" WTF? Artifact server from unknown shard. Just skip it """
-							continue
-
-						status_table[host.shard_index] = Status(False, False, host.internal_ip)
-
-					if wait_for_int_hostups:
-						int_before_hostup_msg_body = dict(shard_index=self.shard_index,
-							replica_set_index=self.rs_id)
-						msg_store = P2pMessageStore()
-						local_handled_msg_ids = []
-
-						while True:
-							if not status_table:
+					with op.step(self._step_enter_rs0_barrier):
+						self.mongodb.mongod.restart(reason="Workaround, authentication bug in mongo"
+														"(see https://jira.mongodb.org/browse/SERVER-4238)")
+	
+						wait_for_int_hostups = True
+						shards_total = int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARDS_TOTAL))
+						""" Status table = {server_id : {is_ready, is_notified, ip_addr}, ...} """
+						status_table = {}
+	
+						""" Fill status table """
+						for i in range(shards_total):
+							if i == self.shard_index:
+								continue
+							status_table[i] = Status(False, False, None)
+	
+						for host in role_hosts:
+							""" Skip ourself """
+							if host.shard_index == self.shard_index and \
+							   				host.replica_set_index == self.rs_id:
+								continue
+	
+							""" Check if it's really cluster initialization, or configserver just failed """
+							#if host.replica_set_index != 0 or host.status == "Running":
+							if host.status == "Running":
+								""" Already have replicas """
+								wait_for_int_hostups = False
+								if self.shard_index != 0:
+									wait_for_config_server = True
 								break
-
-							""" Inform unnotified servers """
-							for host_status in filter(lambda h: not h.is_notified, status_table.values()):
-								if host_status.ip_addr:
-									try:
-										self.send_int_message(host_status.ip_addr,
-											MongoDBMessages.INT_BEFORE_HOST_UP,
-											int_before_hostup_msg_body)
-
-										host_status.is_notified = True
-									except:
-										self._logger.warning('%s' % sys.exc_info()[1])
-
-							""" Handle all HostInits and HostDowns """
-							msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8013')
-							messages = [pair[1] for pair in msg_queue_pairs]
-							for message in messages:
-
-								if message.name not in (Messages.HOST_INIT, Messages.HOST_DOWN):
-									continue
-
-								if message.id in local_handled_msg_ids:
-									continue
-
-								node_shard_id = int(message.mongodb['shard_index'])
-								node_rs_id = int(message.mongodb['replica_set_index'])
-
-								if node_shard_id == self.shard_index:
-									continue
-
-								if message.name == Messages.HOST_INIT:
-									""" Updating hostname in /etc/hosts """
-									self.on_HostInit(message)
-									if node_rs_id == 0:
-										status_table[node_shard_id] = Status(False, False, message.local_ip)
-
-								elif message.name == Messages.HOST_DOWN:
-									if node_rs_id == 0:
-										status_table[node_shard_id] = Status(False, False, None)
-
-								local_handled_msg_ids.append(message.id)
-
-
-							""" Handle all IntBeforeHostUp messages """
-							msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
-							messages = [pair[1] for pair in msg_queue_pairs]
-
-							for message in messages:
-								if message.name == MongoDBMessages.INT_BEFORE_HOST_UP:
-									try:
-										node_shard_id = int(message.shard_index)
-										node_status = status_table[node_shard_id]
-										status_table[node_shard_id] = Status(True, True, node_status.ip_addr)
-
-									finally:
-										msg_store.mark_as_handled(message.id)
-
-							if all([status.is_ready for status in status_table.values()]):
-								""" Everybody is ready """
-								break
-
-							""" Sleep for a while """
-							time.sleep(10)
+	
+							if host.shard_index > (shards_total - 1):
+								""" WTF? Artifact server from unknown shard. Just skip it """
+								continue
+	
+							status_table[host.shard_index] = Status(False, False, host.internal_ip)
+	
+						if wait_for_int_hostups:
+							int_before_hostup_msg_body = dict(shard_index=self.shard_index,
+								replica_set_index=self.rs_id)
+							msg_store = P2pMessageStore()
+							local_handled_msg_ids = []
+	
+							while True:
+								if not status_table:
+									break
+	
+								""" Inform unnotified servers """
+								for host_status in filter(lambda h: not h.is_notified, status_table.values()):
+									if host_status.ip_addr:
+										try:
+											self.send_int_message(host_status.ip_addr,
+												MongoDBMessages.INT_BEFORE_HOST_UP,
+												int_before_hostup_msg_body)
+	
+											host_status.is_notified = True
+										except:
+											self._logger.warning('%s' % sys.exc_info()[1])
+	
+								""" Handle all HostInits and HostDowns """
+								msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8013')
+								messages = [pair[1] for pair in msg_queue_pairs]
+								for message in messages:
+	
+									if message.name not in (Messages.HOST_INIT, Messages.HOST_DOWN):
+										continue
+	
+									if message.id in local_handled_msg_ids:
+										continue
+	
+									node_shard_id = int(message.mongodb['shard_index'])
+									node_rs_id = int(message.mongodb['replica_set_index'])
+	
+									if node_shard_id == self.shard_index:
+										continue
+	
+									if message.name == Messages.HOST_INIT:
+										""" Updating hostname in /etc/hosts """
+										self.on_HostInit(message)
+										if node_rs_id == 0:
+											status_table[node_shard_id] = Status(False, False, message.local_ip)
+	
+									elif message.name == Messages.HOST_DOWN:
+										if node_rs_id == 0:
+											status_table[node_shard_id] = Status(False, False, None)
+	
+									local_handled_msg_ids.append(message.id)
+	
+	
+								""" Handle all IntBeforeHostUp messages """
+								msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
+								messages = [pair[1] for pair in msg_queue_pairs]
+	
+								for message in messages:
+									if message.name == MongoDBMessages.INT_BEFORE_HOST_UP:
+										try:
+											node_shard_id = int(message.shard_index)
+											node_status = status_table[node_shard_id]
+											status_table[node_shard_id] = Status(True, True, node_status.ip_addr)
+	
+										finally:
+											msg_store.mark_as_handled(message.id)
+	
+								if all([status.is_ready for status in status_table.values()]):
+									""" Everybody is ready """
+									break
+	
+								""" Sleep for a while """
+								time.sleep(10)
 
 				else:
 					wait_for_config_server = True
 
 				if wait_for_config_server:
 					self._logger.info('Waiting until mongo config server on mongo-0-0 becomes alive')
-					while not cfg_server_running:
-						try:
-							time.sleep(20)
-							role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
-							for host in role_hosts:
-								if host.shard_index == 0 and host.replica_set_index == 0:
-									cfg_server_running = True
-									break
-						except:
-							pass
+					with op.step(self._step_wait_cfg_server):
+						while not cfg_server_running:
+							try:
+								time.sleep(20)
+								role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+								for host in role_hosts:
+									if host.shard_index == 0 and host.replica_set_index == 0:
+										cfg_server_running = True
+										break
+							except:
+								pass
 
 
-			self.mongodb.start_router()
-			hostup_msg.mongodb['router'] = 1
+			with op.step(self._step_start_router):
+				self.mongodb.start_router()
+				hostup_msg.mongodb['router'] = 1
 
 			if self.rs_id == 0 and self.shard_index == 0:
-				try:
-					self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
-				except BaseException, e:
-					self._logger.error(e)
-
-			self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-			self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-			self.create_shard()
+				with op.step(self._step_create_scalr_users):
+					try:
+						self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+					except BaseException, e:
+						self._logger.error(e)
+						
+			with op.step(self._step_auth_on_cfg_server_and_router):
+				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
+				self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
+				
+			with op.step(self._step_create_shard):
+				self.create_shard()
 
 		else:
 			hostup_msg.mongodb['router'] = 0
