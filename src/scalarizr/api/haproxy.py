@@ -108,11 +108,24 @@ class HAProxyAPI(object):
 	@rpc.service_method
 	@validate.param('unhealthy_threshold', 'healthy_threshold', type=int)
 	@validate.param('target', required=_rule_hc_target, type=str)
-	@validate.param('interval', 'timeout', re=r'^\d+[sm]$')
+	@validate.param('interval', 'timeout', re=r'(^\d+[sm]$)|(^\d$)')
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							unhealthy_threshold=None, healthy_threshold=None):
 		''' '''
-		bnds = haproxy.naming('backend', backend=target)  
+		try:
+			if interval == 'None': interval=None
+			int(interval)
+			interval = '%ss' % interval
+		except:
+			pass
+		try:
+			if timeout == 'None': timeout=None
+			int(timeout)
+			timeout = '%ss' % timeout
+		except:
+			pass
+
+		bnds = haproxy.naming('backend', backend=target)
 		if not self.cfg.sections(bnds):
 			raise exceptions.NotFound('Backend `%s` not found' % bnds)
 

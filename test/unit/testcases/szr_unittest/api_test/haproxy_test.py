@@ -169,8 +169,8 @@ class TestHAProxyAPI(unittest.TestCase):
 		flag = True
 		try:
 			self.api.configure_healthcheck(target='http:14080', 
-										interval='5s', 
-										timeout='3s', 
+										interval=5, 
+										timeout=3, 
 										unhealthy_threshold=2, 
         								healthy_threshold=10)
 			flag = False
@@ -185,15 +185,26 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.api.add_server(ipaddr='218.124.68.210', backend=self.backend)
 		
 		self.api.configure_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port), 
-										interval='5s', 
-										timeout='5s', 
+										interval='5m', 
+										timeout=5,
 										unhealthy_threshold=20, 
         								healthy_threshold=100)
 		
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
-			self.server_protocol, self.server_port)]['default-server'], {'inter': '5s', 'rise': '100', 'fall': '20'})
+			self.server_protocol, self.server_port)]['default-server'], {'inter': '5m', 'rise': '100', 'fall': '20'})
 		self.assertTrue(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
 			self.server_protocol, self.server_port)]['server'][self.ipaddr.replace('.','-')]['check'])
+		
+		try:
+			self.api.configure_healthcheck(target='http:14080', 
+										interval=5, 
+										timeout=3, 
+										unhealthy_threshold=2, 
+        								healthy_threshold=10)
+			flag = False
+		except Exception, e:
+			LOG.debug('Backend not exist. Details: %s', e)
+			self.assertTrue(flag)
 		
 	def test_reset_healthcheck(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port, 
@@ -207,11 +218,12 @@ class TestHAProxyAPI(unittest.TestCase):
 		LOG.debug('target = `%s`', target)
 		LOG.debug('-----------------------------------------')
 		self.api.configure_healthcheck(target=target,
-										interval='5s', 
-										timeout='5s', 
+										interval='29m',
+										timeout='3m',
 										unhealthy_threshold=20, 
         								healthy_threshold=100)
 		
+				
 		self.api.reset_healthcheck(target)
 		
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
