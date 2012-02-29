@@ -168,7 +168,7 @@ class TestHAProxyAPI(unittest.TestCase):
 	def test_configure_healthcheck(self):
 		flag = True
 		try:
-			self.api.configure_healthcheck(target='http:14080', 
+			self.api.configure_healthcheck(target=None, 
 										interval=5, 
 										timeout=3, 
 										unhealthy_threshold=2, 
@@ -205,7 +205,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		except Exception, e:
 			LOG.debug('Backend not exist. Details: %s', e)
 			self.assertTrue(flag)
-		
+
 	def test_reset_healthcheck(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port, 
 			server_protocol=self.server_protocol, backend=self.backend)
@@ -271,8 +271,8 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.assertIsNotNone(stats)
 
 def tearDownModule():
-	os.remove(TEMP_PATH)
-	
+	#os.remove(TEMP_PATH)
+	pass
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
 	unittest.main()

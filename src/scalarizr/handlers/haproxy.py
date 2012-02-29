@@ -78,7 +78,6 @@ class HAProxyHandler(Handler):
 		LOG.debug('running_servers: `%s`', running_servers)
 	
 	
-	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
 			Messages.HOST_UP, Messages.HOST_DOWN, Messages.BEFORE_HOST_TERMINATE,
@@ -129,7 +128,8 @@ class HAProxyHandler(Handler):
 			if self.svs.status() != 0:
 				self.svs.start()
 		except:
-			LOG.warn('Can`t start `haproxy`. Details: `%s`', sys.exc_info()[1])
+			LOG.warn('Can`t start `haproxy`. Details: `%s`', sys.exc_info()[1], 
+					exc_info=sys.exc_info())
 
 		data = {'listeners': [], 'healthchecks': []}
 
@@ -138,9 +138,9 @@ class HAProxyHandler(Handler):
 				try:
 					ln0 = self.api.create_listener(**ln)
 					data['listeners'].append(ln0)
-				except:
+				except Exception, e:
 					LOG.error('HAProxyHandler.on_before_host_up. Failed to add listener'\
-							' `%s`.', str(ln))
+						' `%s`. Details: %s', str(ln), e, exc_info=sys.exc_info())
 					#raise Exception, sys.exc_info()[1], sys.exc_info()[2]
 
 		if isinstance(self._healthchecks, list):
@@ -148,9 +148,9 @@ class HAProxyHandler(Handler):
 				try:
 					hl0 = self.api.configure_healthcheck(**hl)
 					data['healthchecks'].append(hl0)
-				except:
+				except Exception, e:
 					LOG.error('HAProxyHandler.on_before_host_up. Failed to configure'\
-							' healthcheck `%s`.', str(hl))
+						' healthcheck `%s`. Details: %s', str(hl), e, exc_info=sys.exc_info())
 					#raise Exception, sys.exc_info()[1], sys.exc_info()[2]
 		msg.haproxy = data
 
@@ -164,8 +164,8 @@ class HAProxyHandler(Handler):
 			self.api.add_server(ipaddr=self._local_ip, 
 				backend=('role:%s' % self._farm_role_id) if self._farm_role_id else None)
 		except:
-			LOG.error('HAProxyHandler.on_before_host_up. Failed add_server `%s`, details:'
-					' %s' %	(self._local_ip, sys.exc_info()[1]))
+			LOG.error('HAProxyHandler.on_HostUp. Failed add_server `%s`, details:'
+				' %s' %	(self._local_ip, sys.exc_info()[1]), exc_info=sys.exc_info())
 
 
 	def on_HostDown(self, msg):
@@ -175,11 +175,10 @@ class HAProxyHandler(Handler):
 			self.api.remove_server(ipaddr=self._local_ip, 
 								backend='role:%s' % self._farm_role_id)
 		except:
-			LOG.error('HAProxyHandler.on_before_host_Down. Failed remove server `%s`, '
-					'details: %s' %	(self._local_ip, sys.exc_info()[1]))
+			LOG.error('HAProxyHandler.on_HostDown. Failed remove server `%s`, '
+				'details: %s' %	(self._local_ip, sys.exc_info()[1]), exc_info=sys.exc_info())
 
 	on_BeforeHostTerminate = on_HostDown
-
 
 	@_result_message('HAProxy_AddServerResult')
 	def on_HAProxy_AddServer(self, msg):

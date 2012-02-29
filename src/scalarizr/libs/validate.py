@@ -155,6 +155,7 @@ def validate(values, params):
 				if not rule.type:
 					try:
 						value = str(value)
+						LOG.debug('value = %s', value)
 					except:
 						raise ValueError(MESSAGES['type'] % (rule.type.__name__, name))
 				elif rule.type.__name__ == 'int' and isinstance(value, basestring):

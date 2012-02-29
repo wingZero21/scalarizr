@@ -107,8 +107,8 @@ class HAProxyAPI(object):
 	
 	@rpc.service_method
 	@validate.param('unhealthy_threshold', 'healthy_threshold', type=int)
-	@validate.param('target', required=_rule_hc_target, type=str)
-	@validate.param('interval', 'timeout', re=r'(^\d+[smhd]$)|(^\d$)')
+	@validate.param('target', optional=_rule_hc_target)
+	@validate.param('interval', 'timeout', re=r'(^\d+[smhd]$)|^\d')
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							unhealthy_threshold=None, healthy_threshold=None):
 		''' '''
