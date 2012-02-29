@@ -157,7 +157,11 @@ def validate(values, params):
 						value = str(value)
 					except:
 						raise ValueError(MESSAGES['type'] % (rule.type, '%s, value=%s'%(name,value)))
-
+				if rule.type == int and not isinstance(value, int):
+					try:
+						value = int(value)
+					except:
+						raise ValueError(MESSAGES['type'] % (rule.type.__name__, name))
 				if isinstance(value, str) and rule.re and not rule.re.search(value):
 					if rule.user_type:
 						raise ValueError(MESSAGES['type'] % (rule.user_type, name))
