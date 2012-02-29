@@ -6,10 +6,11 @@ Created on 26.01.2012
 import unittest
 import os
 import logging
+import shutil
 
 from scalarizr.api import haproxy
 from scalarizr.services import haproxy as hap_serv
-import shutil
+from scalarizr.util import iptables
 
 LOG = logging.getLogger(__name__)
 
@@ -32,10 +33,14 @@ class TestHAProxyAPI(unittest.TestCase):
 			TEMP_PATH)
 		self.api = haproxy.HAProxyAPI(TEMP_PATH)
 		self.api.svs.start()
-
+	
 	def tearDown(self):
 		if os.path.exists(TEMP_PATH):
 			self.api.svs.stop()
+		try:
+			iptables.remove_rule_once('ACCEPT', self.port, 'tcp')
+		except:
+			pass
 
 	def test_create_listener(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port,
@@ -74,7 +79,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.assertEqual(self.api.cfg.sections('scalr:listen:%s:%s' % (self.protocol, self.port)), [])
 		self.assertEqual(self.api.cfg.sections('scalr:backend:%s:%s:%s' %\
 						(self.backend, self.server_protocol, self.server_port)), [])
-	
+
 	def test_add_server(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port, 
 			backend=self.backend)
@@ -85,7 +90,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
 			self.server_protocol, self.server_port)]['server'][self.ipaddr.replace('.', '-')], 
 			{'address': self.ipaddr, 'port': str(self.server_port), 'check':True})
-
+	
 	def test_remove_server(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port,
 			server_protocol=self.server_protocol, backend=self.backend)
@@ -103,13 +108,69 @@ class TestHAProxyAPI(unittest.TestCase):
 		except:
 			server = None
 		self.assertIsNone(server)
-	
+		
+		
+		self.api.add_server(ipaddr=self.ipaddr, backend=self.backend)
+		self.api.add_server(ipaddr='10.168.58.46', backend=self.backend)
+		
+		
+		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
+			self.server_protocol, self.server_port)]['server'][self.ipaddr.replace('.', '-')], 
+			{'address': self.ipaddr, 'port': str(self.server_port), 'check':True})
+		
+		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
+			self.server_protocol, self.server_port)]['server']['10-168-58-46'], 
+			{'address': '10.168.58.46', 'port': str(self.server_port), 'check':True})
+
+		for srv in self.api.list_servers(backend=self.backend):
+			self.api.remove_server(ipaddr=srv, backend=self.backend)
+
+		try:
+			server = self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
+				self.protocol, self.port)]['server'][self.ipaddr.replace('.', '-')]
+
+			server = self.api.cfg.backends['scalr:backend:%s:%s:%s' % (
+				self.backend, self.protocol, self.port)]['server']['10-168-58-46']
+		except:
+			server = None
+		self.assertIsNone(server)
+
+		self.api.create_listener(protocol=self.protocol, port=2288, server_port=self.server_port,
+				server_protocol=self.server_protocol, backend='role:4321')
+		
+		self.api.add_server(ipaddr=self.ipaddr)
+		self.api.add_server(ipaddr='10.168.58.46')
+		
+		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
+			self.server_protocol, self.server_port)]['server']['10-168-58-46'], 
+			{'address': '10.168.58.46', 'port': str(self.server_port), 'check':True})
+
+		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % ('role:4321', 
+			self.server_protocol, self.server_port)]['server']['10-168-58-46'], 
+			{'address': '10.168.58.46', 'port': str(self.server_port), 'check':True})
+		
+		
+		for srv in self.api.list_servers():
+			self.api.remove_server(ipaddr=srv)
+		
+		try:
+			server = self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
+				self.protocol, self.port)]['server'][self.ipaddr.replace('.', '-')]
+
+			server = self.api.cfg.backends['scalr:backend:%s:%s:%s' % ('role:4321',
+				self.protocol, self.port)]['server']['10-168-58-46']
+		except:
+			server = None
+		self.assertIsNone(server)
+		
+		iptables.remove_rule_once('ACCEPT', 2288, 'tcp')
+
 	def test_configure_healthcheck(self):
 		flag = True
 		try:
 			self.api.configure_healthcheck(target='http:14080', 
 										interval='5s', 
-										timeout={'check': '3s'}, 
+										timeout='3s', 
 										unhealthy_threshold=2, 
         								healthy_threshold=10)
 			flag = False
@@ -125,7 +186,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		
 		self.api.configure_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port), 
 										interval='5s', 
-										timeout={'check': '5s'}, 
+										timeout='5s', 
 										unhealthy_threshold=20, 
         								healthy_threshold=100)
 		
@@ -133,7 +194,7 @@ class TestHAProxyAPI(unittest.TestCase):
 			self.server_protocol, self.server_port)]['default-server'], {'inter': '5s', 'rise': '100', 'fall': '20'})
 		self.assertTrue(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
 			self.server_protocol, self.server_port)]['server'][self.ipaddr.replace('.','-')]['check'])
-	
+		
 	def test_reset_healthcheck(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, server_port=self.server_port, 
 			server_protocol=self.server_protocol, backend=self.backend)
@@ -141,13 +202,17 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.api.add_server(ipaddr=self.ipaddr, backend=self.backend)
 		self.api.add_server(ipaddr='218.124.68.210', backend=self.backend)
 		
-		self.api.configure_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port),
+		LOG.debug('-----------------------------------------')
+		target='%s:%s' % (self.server_protocol, self.server_port)
+		LOG.debug('target = `%s`', target)
+		LOG.debug('-----------------------------------------')
+		self.api.configure_healthcheck(target=target,
 										interval='5s', 
-										timeout={'check': '5s'}, 
+										timeout='5s', 
 										unhealthy_threshold=20, 
         								healthy_threshold=100)
 		
-		self.api.reset_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port))
+		self.api.reset_healthcheck(target)
 		
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
 			self.server_protocol, self.server_port)]['default-server'], {'inter': '30s', 'rise': '10', 'fall': '2'})
@@ -155,14 +220,13 @@ class TestHAProxyAPI(unittest.TestCase):
 			self.server_protocol, self.server_port)]['timeout']['check'], '3s')
 		#self.assertTrue(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 
 		#	self.protocol, self.port)]['server'][self.ipaddr.replace('.','-')]['check'])
-	
+
 	def test_list_servers(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, 
 			server_protocol=self.server_protocol, server_port=self.server_port, backend=self.backend)
 		self.api.add_server(ipaddr=self.ipaddr, backend=self.backend)
 		self.api.add_server(ipaddr='218.124.68.210', backend=self.backend)
-		
-		
+
 		self.api.create_listener(protocol='tcp', port=46852, backend='role:468513')
 		self.api.add_server(ipaddr='18.24.6.10', backend='role:468513')
 		self.api.add_server(ipaddr='218.45.86.41', backend='role:468513')
@@ -171,17 +235,19 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.assertEqual(servers, ['248.64.125.158', '218.124.68.210', '18.24.6.10', '218.45.86.41'])
 		servers = self.api.list_servers('role:468513')
 		self.assertEqual(servers, ['18.24.6.10', '218.45.86.41'])
-	
+		self.api.delete_listener(protocol='tcp', port=46852)
+
 	def test_list_listeners(self):
 		self.api.create_listener(protocol=self.protocol, port=self.port, 
 			server_port=self.server_port, backend=self.backend)
-		self.api.create_listener(protocol=self.protocol, port='1%s' % self.port, 
+		self.api.create_listener(protocol=self.protocol, port=int('1%s' % self.port), 
 			server_port=self.server_port, backend='%s5' % self.backend)
 
 		listens = self.api.list_listeners()
 
 		self.assertIsNotNone(listens[0])
 		self.assertIsNotNone(listens[1])
+		self.api.delete_listener(protocol=self.protocol, port=int('1%s' % self.port))
 		
 	def test_get_servers_health(self):
 		try:
@@ -194,7 +260,7 @@ class TestHAProxyAPI(unittest.TestCase):
 
 def tearDownModule():
 	os.remove(TEMP_PATH)
-
+	
 if __name__ == "__main__":
 	#import sys;sys.argv = ['', 'Test.testName']
 	unittest.main()

@@ -4,13 +4,37 @@ Created on Dec 22, 2011
 @author: marat
 '''
 import unittest
+import inspect
 
 from scalarizr.libs import validate
+
+_rule_protocol = validate.rule(choises=['tcp', 'http'])
+_rule_backend = validate.rule(re=r'^role:\d+$')
+_rule_hc_target = validate.rule(re='^[tcp|http]:\d+$')
 
 def foo(protocol=None, port=None, ipv4=None, ipv6=None, backend=None):
 	return 'bar'
 
-class TestRequired(unittest.TestCase):
+class Bar(object):
+	@validate.param('only_int', type=int)
+	@validate.param('backend', optional=_rule_backend)
+	@validate.param('something', type=int)
+	def foo(self, only_int=789, backend='ololo', something=None):
+		pass
+
+class TestObjectBounded(unittest.TestCase):
+	def test(self):
+		bar = Bar()
+		#print bar.foo
+		#print inspect.getargspec(bar.foo)
+		
+		try:
+			bar.foo(only_int=123, backend='role:123', something='dasd')
+			#self.fail()
+		except ValueError, e:
+				assert 'Type error(int expected)' in str(e)
+
+class _TestRequired(unittest.TestCase):
 
 	def setUp(self):
 		self.foo = validate.param('protocol', required=True)(foo)
@@ -26,7 +50,7 @@ class TestRequired(unittest.TestCase):
 			assert 'Empty: protocol' in str(e)
 
 
-class TestChoises(unittest.TestCase):
+class _TestChoises(unittest.TestCase):
 	
 	def setUp(self):
 		self.foo = validate.param('protocol', choises=['tcp', 'http'])(foo)
@@ -39,11 +63,10 @@ class TestChoises(unittest.TestCase):
 			self.foo(protocol='https')
 			self.fail()
 		except ValueError, e:
-			
 			assert 'Allowed values are' in str(e)
 
 
-class TestRe(unittest.TestCase):
+class _TestRe(unittest.TestCase):
 	
 	def setUp(self):
 		self.foo = validate.param('backend', optional=validate.rule(re=r'^role:\d+$'))(foo)
@@ -63,7 +86,7 @@ class TestRe(unittest.TestCase):
 			assert "^role:\d+$" in str(e)
 
 
-class TestType(unittest.TestCase):
+class _TestType(unittest.TestCase):
 	
 	def setUp(self):
 		self.foo = validate.param('port', type=int)(foo)
@@ -86,7 +109,7 @@ class TestType(unittest.TestCase):
 			assert 'Type error(int expected)' in str(e)
 	
 
-class TestUserType(unittest.TestCase):
+class _TestUserType(unittest.TestCase):
 	
 	def setUp(self):
 		self.foo = validate.param('ipv6', type='ipv6', optional=True)(

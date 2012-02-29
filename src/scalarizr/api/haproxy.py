@@ -19,7 +19,7 @@ HEALTHCHECK_DEFAULTS = {
 
 _rule_protocol = validate.rule(choises=['tcp', 'http'])
 _rule_backend = validate.rule(re=r'^role:\d+$')
-_rule_hc_target = validate.rule(re='^[tcp|http]:\d+$')
+_rule_hc_target = validate.rule(re='^[tcp|http]+:\d+$')
 
 
 class HAProxyAPI(object):
@@ -35,12 +35,12 @@ class HAProxyAPI(object):
 			ipaddr = ipaddr.strip().split(':')[0]
 		return ipaddr.replace('.', '-')
 
-	'''
+
 	@rpc.service_method
 	@validate.param('port', 'server_port', type=int)
 	@validate.param('protocol', required=_rule_protocol)
 	@validate.param('server_port', optional=True, type=int)
-	@validate.param('backend', optional=_rule_backend)'''
+	@validate.param('backend', optional=_rule_backend)
 	def create_listener(self, port=None, protocol=None, server_port=None, 
 					server_protocol=None, backend=None):
 		''' '''
@@ -104,11 +104,11 @@ class HAProxyAPI(object):
 
 				return listener
 
-	'''
+	
 	@rpc.service_method
-	@validate.param('target', required=_rule_hc_target)
+	@validate.param('unhealthy_threshold', 'healthy_threshold', type=int)
+	@validate.param('target', required=_rule_hc_target, type=str)
 	@validate.param('interval', 'timeout', re=r'^\d+[sm]$')
-	@validate.param('unhealthy_threshold', 'healthy_threshold', type=int)'''
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							unhealthy_threshold=None, healthy_threshold=None):
 		''' '''
@@ -122,30 +122,25 @@ class HAProxyAPI(object):
 					self.cfg['backend'][bnd]['timeout'] = timeout
 				else:
 					self.cfg['backend'][bnd]['timeout'] = {'check': str(timeout)}
-
 			default_server = {
 				'inter': interval,
 				'fall': unhealthy_threshold,
 				'rise': healthy_threshold
 			}
-
 			self.cfg['backend'][bnd]['default-server'] = default_server
-
 			for srv in self.cfg['backend'][bnd]['server']:
 				server = self.cfg['backend'][bnd]['server'][srv]
 				server.update({'check' : True})
 				self.cfg['backend'][bnd]['server'][srv] = server
-
 		#with self.svs.trans(exit='running'):
 			#	with self.cfg.trans(enter='reload', exit='working'):
 		self.cfg.save()
 		self.svs.reload()
 
 
-	'''
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
-	@validate.param('backend', optional=_rule_backend)'''
+	@validate.param('backend', optional=_rule_backend)
 	def add_server(self, ipaddr=None, backend=None):
 		'''Add server with ipaddr in backend section''' 
 		self.cfg.reload()
@@ -174,9 +169,9 @@ class HAProxyAPI(object):
 				self.cfg.save()
 				self.svs.reload()
 
-	'''
+
 	@rpc.service_method
-	@validate.param('ipaddr', type='ipv4', optional=True)'''
+	@validate.param('ipaddr', type='ipv4', optional=True)
 	def get_servers_health(self, ipaddr=None):
 		try:
 			if self.cfg.defaults['stats'][''] == 'enable' and \
@@ -192,10 +187,10 @@ class HAProxyAPI(object):
 		stats = haproxy.StatSocket().show_stat()
 		return stats
 
-	'''
+
 	@rpc.service_method
 	@validate.param('port', type=int)
-	@validate.param('protocol', required=_rule_protocol)'''
+	@validate.param('protocol', required=_rule_protocol)
 	def delete_listener(self, port=None, protocol=None):
 		''' Delete listen section(s) by port (and)or protocol '''
 
@@ -233,9 +228,8 @@ class HAProxyAPI(object):
 		self.svs.reload()
 
 
-	'''
 	@rpc.service_method
-	@validate.param('target', required=_rule_hc_target)'''
+	@validate.param('target', required=_rule_hc_target)
 	def reset_healthcheck(self, target):		
 		'''Return to defaults for `tartget` backend sections'''
 		target = target.strip()
@@ -254,10 +248,9 @@ class HAProxyAPI(object):
 		self.svs.reload()
 
 
-	'''
 	@rpc.service_method
 	@validate.param('ipaddr', type='ipv4')
-	@validate.param('backend', optional=_rule_backend)'''
+	@validate.param('backend', optional=_rule_backend)
 	def remove_server(self, ipaddr, backend=None):
 		'''Remove server from backend section with ipaddr'''
 		if ipaddr: ipaddr = ipaddr.strip()
@@ -270,7 +263,7 @@ class HAProxyAPI(object):
 		self.svs.reload()
 
 
-	#@rpc.service_method
+	@rpc.service_method
 	def list_listeners(self):
 		'''
 		@return: Listeners list 
@@ -300,9 +293,8 @@ class HAProxyAPI(object):
 		return res
 
 
-	'''
 	@rpc.service_method
-	@validate.param('backend', optional=_rule_backend)'''
+	@validate.param('backend', optional=_rule_backend)
 	def list_servers(self, backend=None):
 		'''
 		List all servers, or servers from particular backend

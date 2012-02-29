@@ -18,6 +18,8 @@ The current limitation: all function args should have default values
 import re
 import inspect
 
+import logging
+LOG = logging.getLogger(__name__)
 
 MESSAGES = {
 	'type': 'Type error(%s expected): %s',
@@ -39,6 +41,7 @@ class rule(object):
 	user_type = None
 	
 	def __init__(self, type=None, re=None, choises=None):
+		#LOG.debug('Class rule.__init__:, type =%s, re=%s, choises=%s', type, re, choises)
 		if isinstance(type, basestring):
 			if type in USER_TYPES:
 				re = USER_TYPES[type]
@@ -48,6 +51,7 @@ class rule(object):
 				raise ValueError(MESSAGES['unknown_user_type'] % (type, ))
 		if isinstance(re, basestring):
 			re = globals()['re'].compile(re)
+		#LOG.debug('re=%s, type=%s, choises=%s',re, type, choises)
 		self.re = re 
 		self.type = type
 		self.choises = choises
@@ -75,6 +79,7 @@ class param(object):
 		@keyword type: value type
 		@keyword type: type|str
 		'''
+		#LOG.debug('Class param._init_:, names =%s, kwds=%s', names, kwds)
 		self.names = names
 		for key in ('optional', 'required'):
 			if key in kwds:
@@ -85,36 +90,64 @@ class param(object):
 					self.required = False
 		if not self.rule:
 			self.rule = rule(**kwds)
-	
-	
+		#LOG.debug('self.rule = `%s`', self.rule.re)
+		self.vl = []
+
+	'''	
 	def __call__(self, fn):
+		LOG.debug('Class param.__call__ fn=%s', fn)
 		if not isinstance(fn, _func_wrapper):
+			
 			fn = _func_wrapper(fn)
 		fn.params.append(self)
 		return fn
-		
+	'''
 
+	def __call__(self, fn):
+		#LOG.debug('Class param.__call__ fn=%s', fn)
+		if not hasattr(fn, '_validation_params'):
+			fn._validation_params = []
+			def wrapper(*args, **kwds):
+				asp = inspect.getargspec(fn)
+				values = dict(zip(asp.args, (asp.defaults,)))
+				values.update(kwds)
+				#LOG.debug('fn._validation_params=%s', fn._validation_params[0].names)
+				#LOG.debug('asp.defaults=%s', asp.defaults)
+				validate(values, fn._validation_params)
+				return fn(*args, **kwds)
+			wrapper._fn = fn
+			wrapper._wrapped = True
+		fn._validation_params.append(self)
+		return wrapper
+
+'''	
 class _func_wrapper(object):
 	params = None
 	def __init__(self, fn):
+		LOG.debug('Class _func_wrapper.__init__ fn=%s', fn)
 		self.fn = fn
 		self.params = []
 		
 	def __call__(self, *args, **kwds):
+		LOG.debug('Class _func_wrapper.__call__:self type=%s, args =%s, kwds=%s', type(self), args, kwds)
 		asp = inspect.getargspec(self.fn)
 		values = dict(zip(asp.args, asp.defaults))
 		values.update(kwds)
 		validate(values, self.params)
+		LOG.debug('-> _func_wrapper.__call__:, args =%s, kwds=%s', args, kwds)
+		LOG.debug('%s', self.fn)
+		#TODO: insert here HAProxyAPI self object as first paramatr in args
 		return self.fn(**kwds)
-	
-	
+'''
+
 def validate(values, params):
+	#LOG.debug('validate:, values =%s, params=%s', values, params)
 	for name, value in values.items():
 		for param in params:
 			if name in param.names:
 				if not param.required and not value:
 					break
-				
+
 				rule = param.rule				
 				if param.required and not value:
 					raise ValueError(MESSAGES['empty'] % (name, ))
