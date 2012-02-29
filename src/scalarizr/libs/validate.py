@@ -151,23 +151,25 @@ def validate(values, params):
 				rule = param.rule				
 				if param.required and not value:
 					raise ValueError(MESSAGES['empty'] % (name, ))
-				
+
 				if not rule.type:
 					try:
 						value = str(value)
 					except:
-						raise ValueError(MESSAGES['type'] % (rule.type, '%s, value=%s'%(name,value)))
-				if rule.type == int and not isinstance(value, int):
+						raise ValueError(MESSAGES['type'] % (rule.type.__name__, name))
+				elif rule.type.__name__ == 'int' and isinstance(value, basestring):
 					try:
 						value = int(value)
 					except:
-						raise ValueError(MESSAGES['type'] % (rule.type.__name__, name))
+						raise ValueError(MESSAGES['type'] % (rule.type, '%s, value=%s'%(name,value)))
+
 				if isinstance(value, str) and rule.re and not rule.re.search(value):
 					if rule.user_type:
 						raise ValueError(MESSAGES['type'] % (rule.user_type, name))
 					else:
 						raise ValueError(MESSAGES['re'] % (rule.re.pattern, name))
 				if rule.choises and value not in rule.choises:
+					
 					raise ValueError(MESSAGES['choises'] % (str(rule.choises), name))
 				if rule.type and not isinstance(value, rule.type):
 					raise ValueError(MESSAGES['type'] % (rule.type.__name__, name))

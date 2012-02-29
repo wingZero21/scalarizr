@@ -23,7 +23,7 @@ class TestHAProxyAPI(unittest.TestCase):
 		
 		self.protocol='http'
 		self.server_protocol='http'
-		self.port=1154
+		self.port='1154'
 		self.server_port=2254
 		self.backend='role:1234'
 		self.ipaddr='248.64.125.158'
@@ -185,9 +185,9 @@ class TestHAProxyAPI(unittest.TestCase):
 		self.api.add_server(ipaddr='218.124.68.210', backend=self.backend)
 		
 		self.api.configure_healthcheck(target='%s:%s' % (self.server_protocol, self.server_port), 
-										interval='5m', 
+										interval='5m',
 										timeout=5,
-										unhealthy_threshold=20, 
+										unhealthy_threshold=20,
         								healthy_threshold=100)
 		
 		self.assertEqual(self.api.cfg.backends['scalr:backend:%s:%s:%s' % (self.backend, 

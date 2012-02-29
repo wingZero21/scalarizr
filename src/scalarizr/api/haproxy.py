@@ -17,7 +17,7 @@ HEALTHCHECK_DEFAULTS = {
 	'default-server': {'inter': '30s', 'fall': 2, 'rise': 10}
 }
 
-_rule_protocol = validate.rule(choises=['tcp', 'http'])
+_rule_protocol = validate.rule(choises=['tcp', 'http', 'TCP', 'HTTP'])
 _rule_backend = validate.rule(re=r'^role:\d+$')
 _rule_hc_target = validate.rule(re='^[tcp|http]+:\d+$')
 
@@ -28,7 +28,7 @@ class HAProxyAPI(object):
 		self.path_cfg = path
 		self.cfg = haproxy.HAProxyCfg(path)
 		self.svs = haproxy.HAProxyInitScript(path)
-	
+
 	def _server_name(self, ipaddr):
 		'''@rtype: str'''
 		if ':' in ipaddr:
@@ -108,7 +108,7 @@ class HAProxyAPI(object):
 	@rpc.service_method
 	@validate.param('unhealthy_threshold', 'healthy_threshold', type=int)
 	@validate.param('target', required=_rule_hc_target, type=str)
-	@validate.param('interval', 'timeout', re=r'(^\d+[sm]$)|(^\d$)')
+	@validate.param('interval', 'timeout', re=r'(^\d+[smhd]$)|(^\d$)')
 	def configure_healthcheck(self, target=None, interval=None, timeout=None, 
 							unhealthy_threshold=None, healthy_threshold=None):
 		''' '''
