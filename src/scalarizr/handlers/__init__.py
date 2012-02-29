@@ -59,8 +59,7 @@ class operation(object):
 					self.error(exc_info=args)					
 			finally:
 				self._depth = 'phase'
-		elif self._depth == 'phase':
-			del self._stepnos[self._phase]
+
 
 	def define(self):
 		srv = bus.messaging_service
