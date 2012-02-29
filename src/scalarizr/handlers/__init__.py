@@ -27,10 +27,13 @@ class operation(object):
 		self.name = name
 		self.phases = phases or []
 		self._depth = None
+		self._stepnos = {}
 	
 	def phase(self, name):
 		self._phase = name
 		self._depth = 'phase'
+		if not self._phase in self._stepnos:
+			self._stepnos[self._phase] = 0
 		return self
 	
 	def step(self, name, warning=False):
@@ -41,6 +44,7 @@ class operation(object):
 	
 	def __enter__(self):
 		if self._depth == 'step':
+			self._stepnos[self._phase] += 1			
 			self.progress(0)
 		return self
 	
@@ -55,6 +59,8 @@ class operation(object):
 					self.error(exc_info=args)					
 			finally:
 				self._depth = 'phase'
+		elif self._depth == 'phase':
+			del self._stepnos[self._phase]
 
 	def define(self):
 		srv = bus.messaging_service
@@ -80,6 +86,7 @@ class operation(object):
 			'id': self.id,
 			'phase': self._phase,
 			'step': self._step,
+			'stepno' : self._stepnos[self._phase],
 			'status': status,
 			'progress': progress,
 			'warning': warning
