@@ -248,15 +248,23 @@ class RedisHandler(ServiceCtlHandler):
 
 
 	def on_BeforeHostTerminate(self, message):
+		self._logger.info('Handling BeforeHostTerminate message from %s' % message.local_ip)
 		if message.local_ip == self._platform.get_private_ip():
 			if self.redis.service.running:
+				self._logger.info('Dumping redis data on disk')
 				self.redis.redis_cli.save()
+				self._logger.info('Stopping redis service')
 				self.redis.service.stop('Server will be terminated')
 			self._logger.info('Detaching Redis storage')
 			self.storage_vol.detach()
+			self._logger.info('Scalarizr state is %s ' % self._cnf.state)
 			if self._cnf.state == ScalarizrState.INITIALIZING:
+				self._logger.info('During initializing server received volume: %s' % config.STATE['volume_id'])
+				self._logger.info('Attached volume is %s' % self.storage_vol.id)
 				if config.STATE['volume_id'] != self.storage_vol.id:
+					self._logger.info('Destroying volume %s' % self.storage_vol.id)
 					self.storage_vol.destroy(remove_disks=True)
+					self._logger.info('Volume %s was destroyed.' % self.storage_vol.id)
 	
 	
 	def on_DbMsr_CreateDataBundle(self, message):
