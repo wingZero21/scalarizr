@@ -109,7 +109,7 @@ class RedisHandler(ServiceCtlHandler):
 			steps += [self._step_collect_host_up_data]
 			
 			return {'before_host_up': [{
-				'name': self._phase_postgresql, 
+				'name': self._phase_redis, 
 				'steps': steps
 			}]}
 
@@ -179,7 +179,7 @@ class RedisHandler(ServiceCtlHandler):
 		@param message: HostInitResponse
 		"""
 		with bus.initialization_op as op:
-			with op.phase(self._phase_postgresql):
+			with op.phase(self._phase_redis):
 				with op.step(self._step_accept_scalr_conf):
 
 					if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
