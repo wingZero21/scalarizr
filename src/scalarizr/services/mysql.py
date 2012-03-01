@@ -124,21 +124,28 @@ class Mysql(BaseService):
 			if disttool.is_debian_based():
 				_add_apparmor_rules(directory)
 
+	
+	def flush_logs(self, data_dir):
+		if not os.path.exists(data_dir):
+			return
+		
+		info_files = ['relay-log.info', 'master.info']
+		files = os.listdir(data_dir)
+		
+		for file in files:
+			if file in info_files or file.find('relay-bin') != -1:
+				os.remove(os.path.join(data_dir, file))
+				
 		
 	def _get_my_cnf(self):
 		return self._get('my_cnf', MySQLConf.find)
 	
+	
 	def _set_my_cnf(self, obj):
 		self._set('my_cnf', obj)	
 				
-	def _get_cli(self):
-		return self._get('cli', MySQLClient.find)
-	
-	def _set_cli(self, obj):
-		self._set('cli', obj)	
 		
 	my_cnf = property(_get_my_cnf, _set_my_cnf)
-	cli = property(_get_cli, _set_cli)		
 	
 	
 class MySQLClient(object):
