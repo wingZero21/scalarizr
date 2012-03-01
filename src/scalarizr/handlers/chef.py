@@ -60,6 +60,16 @@ class ChefHandler(Handler):
 		self._client_key_path = '/etc/chef/client.pem'
 
 
+	def get_initialization_phases(self, hir_message):
+		if 'chef' in hir_message.body:
+			self._phase_chef = 'Bootstrap node with Chef'
+			self._step_register_node = 'Register node'
+			self._step_execute_run_list = 'Execute run list'
+			return {'before_host_up': [{
+				'name': self._phase_chef, 
+				'steps': [self._step_register_node,	self._step_execute_run_list]
+			}]}
+
 	def on_host_init_response(self, message):
 		if 'chef' in message.body:
 			self._chef_data = message.chef.copy()
@@ -69,44 +79,48 @@ class ChefHandler(Handler):
 		if not self._chef_data:
 			return
 		
-		try:
-			# Create client configuration
-			dir = os.path.dirname(self._client_conf_path)
-			if not os.path.exists(dir):
-				os.makedirs(dir)
-			with open(self._client_conf_path, 'w+') as fp:
-				fp.write(CLIENT_CONF_TPL % self._chef_data)
-			os.chmod(self._client_conf_path, 0644)
-				
-			# Write validation cert
-			with open(self._validator_key_path, 'w+') as fp:
-				fp.write(self._chef_data['validator_key'])
-				
-			# Register node
-			LOG.info('Registering Chef node')
-			try:
-				self.run_chef_client()
-			finally:
-				os.remove(self._validator_key_path)
-				
-			LOG.debug('Initializing Chef API client')
-			node_name = self._chef_data['node_name'] = self.get_node_name()
-			chef = ChefAPI(self._chef_data['server_url'], self._client_key_path, node_name)
-			
-			LOG.debug('Loading node')
-			node = chef['/nodes/%s' % node_name]
-			
-			LOG.debug('Updating run_list')
-			node['run_list'] = [u'role[%s]' % self._chef_data['role']] 
-			chef.api_request('PUT', '/nodes/%s' % node_name, data=node)
-				
-			LOG.info('Applying run_list')
-			self.run_chef_client()
-			
-			msg.chef = self._chef_data
-			
-		finally:
-			self._chef_data = None
+		with bus.initialization_op as op:
+			with op.phase(self._phase_chef):
+				try:
+					with op.step(self._step_register_node):
+						# Create client configuration
+						dir = os.path.dirname(self._client_conf_path)
+						if not os.path.exists(dir):
+							os.makedirs(dir)
+						with open(self._client_conf_path, 'w+') as fp:
+							fp.write(CLIENT_CONF_TPL % self._chef_data)
+						os.chmod(self._client_conf_path, 0644)
+							
+						# Write validation cert
+						with open(self._validator_key_path, 'w+') as fp:
+							fp.write(self._chef_data['validator_key'])
+							
+						# Register node
+						LOG.info('Registering Chef node')
+						try:
+							self.run_chef_client()
+						finally:
+							os.remove(self._validator_key_path)
+
+					with op.step(self._step_register_node):
+						LOG.debug('Initializing Chef API client')
+						node_name = self._chef_data['node_name'] = self.get_node_name()
+						chef = ChefAPI(self._chef_data['server_url'], self._client_key_path, node_name)
+						
+						LOG.debug('Loading node')
+						node = chef['/nodes/%s' % node_name]
+						
+						LOG.debug('Updating run_list')
+						node['run_list'] = [u'role[%s]' % self._chef_data['role']] 
+						chef.api_request('PUT', '/nodes/%s' % node_name, data=node)
+							
+						LOG.info('Applying run_list')
+						self.run_chef_client()
+						
+						msg.chef = self._chef_data
+					
+				finally:
+					self._chef_data = None
 		
 		
 	def run_chef_client(self):

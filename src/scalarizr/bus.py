@@ -85,6 +85,13 @@ class _Bus(Observable):
 	'''
 	@ivar: scalarizr.util.PeriodicalExecutor
 	'''
+	
+	initialization_op = None
+	'''
+	@ivar: scalarizr.handlers.operation 
+	'''
+	
+	deploy_op = None
 
 bus = _Bus()
 

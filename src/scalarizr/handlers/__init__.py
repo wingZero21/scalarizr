@@ -1,7 +1,7 @@
 
 from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr.config import ScalarizrState
+from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, iptables
 from scalarizr.util.filetool import write_file
@@ -17,11 +17,120 @@ import pprint
 from distutils.file_util import write_file
 import sys
 import traceback
+import uuid
 
+
+
+class operation(object):
+	def __init__(self, id=None, name=None, phases=None):
+		self.id = id or str(uuid.uuid4())
+		self.name = name
+		self.phases = phases or []
+		self._depth = None
+		self._stepnos = {}
+	
+	def phase(self, name):
+		self._phase = name
+		self._depth = 'phase'
+		if not self._phase in self._stepnos:
+			self._stepnos[self._phase] = 0
+		return self
+	
+	def step(self, name, warning=False):
+		self._step = name
+		self._depth = 'step'
+		self._warning = warning
+		return self
+	
+	def __enter__(self):
+		if self._depth == 'step':
+			self._stepnos[self._phase] += 1			
+			self.progress(0)
+		return self
+	
+	def __exit__(self, *args):
+		if self._depth == 'step':
+			try:
+				if not args[0]:
+					self.complete()
+				elif self._warning:
+					self.warning(exc_info=args)
+				else:
+					self.error(exc_info=args)					
+			finally:
+				self._depth = 'phase'
+
+
+	def define(self):
+		srv = bus.messaging_service
+		msg = srv.new_message(Messages.OPERATION_DEFINITION, None, {
+			'id': self.id,
+			'name': self.name,
+			'phases': self.phases
+		})
+		srv.get_producer().send(Queues.LOG, msg)
+	
+	def progress(self, percent=None):
+		self._send_progress('running', progress=percent)
+	
+	def complete(self):
+		self._send_progress('complete', progress=100)
+	
+	def warning(self, exc_info=None, handler=None):
+		self._send_progress('warning', warning=self._format_error(exc_info, handler))
+
+	def _send_progress(self, status, progress=None, warning=None):
+		srv = bus.messaging_service
+		msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
+			'id': self.id,
+			'phase': self._phase,
+			'step': self._step,
+			'stepno' : self._stepnos[self._phase],
+			'status': status,
+			'progress': progress,
+			'warning': warning
+		})
+		srv.get_producer().send(Queues.LOG, msg)
+
+	def ok(self):
+		self._send_result('ok')
+	
+	def error(self, exc_info=None, handler=None):
+		self._send_result('error', error=self._format_error(exc_info, handler))
+	
+	def _send_result(self, status, error=None):
+		srv = bus.messaging_service
+		msg = srv.new_message(Messages.OPERATION_RESULT, None, {
+			'id': self.id,
+			'status': status,
+			'error': error
+		})
+		if status == 'error':
+			msg.body.update({
+				'phase': self._phase,
+				'step': self._step,
+			})
+		srv.get_producer().send(Queues.CONTROL, msg)
+	
+	def _format_error(self, exc_info=None, handler=None):
+		if not exc_info:
+			exc_info = sys.exc_info()
+		return {
+			'message': str(exc_info[1]),
+			'trace': ''.join(traceback.format_tb(exc_info[2])),
+			'handler': handler
+		}
 
 
 class Handler(object):
 	_logger = logging.getLogger(__name__)
+	
+	def get_initialization_phases(self, hir_message):
+		return {}
+	
+	def initialization_id(self):
+		return STATE['lifecycle.initialization_id']
+
 	
 	def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
 		srv = srv or bus.messaging_service
@@ -364,41 +473,45 @@ class ServiceCtlHandler(Handler):
 	def sc_on_configured(self, service_name, **kwargs):
 		if self._service_name != service_name:
 			return
-		
-		if self._cnf_ctl:	
+
+		with bus.initialization_op as op:		
+			if self._cnf_ctl:	
+				with op.step('Apply configuration preset'):
 			
-			# Backup default configuration
-			my_preset = self._cnf_ctl.current_preset()
-			self._preset_store.save(my_preset, PresetType.DEFAULT)
-			
-			# Stop service if it's already running 
-			self._stop_service('Applying configuration preset')	
-			
-			# Fetch current configuration preset
-			service_conf = self._queryenv.get_service_configuration(self._service_name)
-			cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
-			self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
-			
-			if cur_preset.name == 'default':
-				# Scalr respond with default preset
-				self._logger.debug('%s configuration is default', self._service_name)
-				#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
-				self._start_service()
-				return
-			
-			elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
-				self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
-				self._start_service()
-				return
-			
+					# Backup default configuration
+					my_preset = self._cnf_ctl.current_preset()
+					self._preset_store.save(my_preset, PresetType.DEFAULT)
+					
+					# Stop service if it's already running 
+					self._stop_service('Applying configuration preset')	
+					
+					# Fetch current configuration preset
+					service_conf = self._queryenv.get_service_configuration(self._service_name)
+					cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
+					self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
+					
+					if cur_preset.name == 'default':
+						# Scalr respond with default preset
+						self._logger.debug('%s configuration is default', self._service_name)
+						#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
+						self._start_service()
+						return
+					
+					elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
+						self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+						self._start_service()
+						return
+					
+					else:
+						self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
+						self._cnf_ctl.apply_preset(cur_preset)
+					
+				with op.step('Start %s with configuration preset' % service_name):
+					# Start service with updated configuration
+					self._start_service_with_preset(cur_preset)
 			else:
-				self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
-				self._cnf_ctl.apply_preset(cur_preset)
-				
-			# Start service with updated configuration
-			self._start_service_with_preset(cur_preset)
-		else:
-			self._start_service()
+				with op.step('Start %s' % service_name):
+					self._start_service()
 			
 		bus.fire(self._service_name + '_configure', **kwargs)		
 

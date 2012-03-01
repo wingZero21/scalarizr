@@ -14,7 +14,7 @@ from urlparse import urlparse
 
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages, Queues
-from scalarizr.handlers import Handler, script_executor
+from scalarizr.handlers import Handler, script_executor, operation
 from scalarizr.util import system2, disttool, dicts, filetool
 from scalarizr.queryenv import Script
 
@@ -44,10 +44,22 @@ class DeploymentHandler(Handler):
 
 	def on_init(self):
 		bus.on(host_init_response=self.on_host_init_response)
+
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return message.name == Messages.DEPLOY
+
+	def get_initialization_phases(self, hir_message):
+		self._phase_deploy = 'Deploy'
+		self._step_execute_pre_deploy_script = 'Execute pre deploy script'
+		self._step_execute_post_deploy_script = 'Execute post deploy script'
+		self._step_update_from_scm = 'Update from SCM'
+		
+		if 'deploy' in hir_message.body:
+			return {'host_init_response': [self._get_phase_definition(hir_message)]}
 		
 	def on_host_init_response(self, message):
 		if 'deploy' in message.body:
-			self.on_Deploy(self.new_message(Messages.DEPLOY, message.body['deploy']))
+			self.on_Deploy(self.new_message(Messages.DEPLOY, message.body['deploy']), define_operation=False)
 
 	def _exec_script(self, name=None, body=None, exec_timeout=None):
 		if not self._script_executor:
@@ -57,38 +69,60 @@ class DeploymentHandler(Handler):
 		kwargs = dict(name=name, body=body, exec_timeout=exec_timeout or 3600)
 		self._script_executor.exec_scripts_on_event(scripts=(Script(**kwargs), ))
 	
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.DEPLOY
+	def _get_phase_definition(self, message):
+		steps = []
+		if 'pre_deploy_routines' in message.body:
+			steps.append(self._step_execute_pre_deploy_script)
+		steps.append(self._step_update_from_scm)
+		if 'post_deploy_routines' in message.body:
+			steps.append(self._step_execute_post_deploy_script)
+			
+		return {'name': self._phase_deploy, 'steps': steps}
+		
 	
-	def on_Deploy(self, message):
+	def on_Deploy(self, message, define_operation=True):
 		try:
-			msg_body = dicts.encode(message.body, encoding='ascii')
+			if define_operation:
+				op = operation(name='Deploy')
+				op.phases = self._get_phase_definition(message)
+				op.define()
+			else:
+				op = bus.initialization_op
+			
+			with op.phase(self._phase_deploy):
+				msg_body = dicts.encode(message.body, encoding='ascii')
+							
+				assert 'deploy_task_id' in msg_body, 'deploy task is undefined'
+				assert 'source' in msg_body, 'source is undefined'
+				assert 'type' in msg_body['source'], 'source type is undefined'
+				assert 'remote_path' in msg_body and msg_body['remote_path'], 'remote path is undefined'
+				assert 'body' in msg_body['pre_deploy_routines'] if 'pre_deploy_routines' in msg_body else True
+				assert 'body' in msg_body['post_deploy_routines'] if 'post_deploy_routines' in msg_body else True
+	
+				self._log_hdlr.deploy_task_id = msg_body['deploy_task_id']
+				self._logger.addHandler(self._log_hdlr)
+	
+				src_type = msg_body['source'].pop('type')
+				src = Source.from_type(src_type, **msg_body['source'])
+				
+				if msg_body.get('pre_deploy_routines') and msg_body['pre_deploy_routines'].get('body'):
+					with op.step(self._step_execute_pre_deploy_script):
+						self._exec_script(name='PreDeploy', **msg_body['pre_deploy_routines'])
 						
-			assert 'deploy_task_id' in msg_body, 'deploy task is undefined'
-			assert 'source' in msg_body, 'source is undefined'
-			assert 'type' in msg_body['source'], 'source type is undefined'
-			assert 'remote_path' in msg_body and msg_body['remote_path'], 'remote path is undefined'
-			assert 'body' in msg_body['pre_deploy_routines'] if 'pre_deploy_routines' in msg_body else True
-			assert 'body' in msg_body['post_deploy_routines'] if 'post_deploy_routines' in msg_body else True
-
-			self._log_hdlr.deploy_task_id = msg_body['deploy_task_id']
-			self._logger.addHandler(self._log_hdlr)
-
-			src_type = msg_body['source'].pop('type')
-			src = Source.from_type(src_type, **msg_body['source'])
-			if msg_body.get('pre_deploy_routines') and msg_body['pre_deploy_routines'].get('body'):
-				self._exec_script(name='PreDeploy', **msg_body['pre_deploy_routines'])
-			src.update(msg_body['remote_path'])
-			if msg_body.get('post_deploy_routines') and msg_body['post_deploy_routines'].get('body'):
-				self._exec_script(name='PostDeploy', **msg_body['post_deploy_routines'])
-
-			self.send_message(
-				Messages.DEPLOY_RESULT, 
-				dict(
-					status='ok', 
-					deploy_task_id=msg_body['deploy_task_id']
+				with op.step(self._step_update_from_scm):
+					src.update(msg_body['remote_path'])
+					
+				if msg_body.get('post_deploy_routines') and msg_body['post_deploy_routines'].get('body'):
+					with op.step(self._step_execute_post_deploy_script):
+						self._exec_script(name='PostDeploy', **msg_body['post_deploy_routines'])
+	
+				self.send_message(
+					Messages.DEPLOY_RESULT, 
+					dict(
+						status='ok', 
+						deploy_task_id=msg_body['deploy_task_id']
+					)
 				)
-			)
 			
 		except (Exception, BaseException), e:
 			self._logger.exception(e)

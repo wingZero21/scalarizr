@@ -88,6 +88,31 @@ class RedisHandler(ServiceCtlHandler):
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
 				or  message.name == Messages.BEFORE_HOST_TERMINATE)	
 
+
+	def get_initialization_phases(self, hir_message):
+		if BEHAVIOUR in hir_message.body:
+			self._phase_redis = 'Configure Redis'
+			self._step_accept_scalr_conf = 'Accept Scalr configuration'
+			self._step_patch_conf = 'Patch configuration files'
+			self._step_create_storage = 'Create storage'
+			self._step_init_master = 'Initialize Master'
+			self._step_init_slave = 'Initialize Slave'
+			self._step_create_data_bundle = 'Create data bundle'
+			self._step_change_replication_master = 'Change replication Master'
+			self._step_collect_host_up_data = 'Collect HostUp data'
+
+			steps = [self._step_accept_scalr_conf, self._step_create_storage]
+			if hir_message.body[BEHAVIOUR]['replication_master'] == '1':
+				steps += [self._step_init_master, self._step_create_data_bundle]
+			else:
+				steps += [self._step_init_slave]
+			steps += [self._step_collect_host_up_data]
+			
+			return {'before_host_up': [{
+				'name': self._phase_redis, 
+				'steps': steps
+			}]}
+
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
@@ -153,37 +178,42 @@ class RedisHandler(ServiceCtlHandler):
 		@type message: scalarizr.messaging.Message
 		@param message: HostInitResponse
 		"""
-		if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
-			raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property and db_type '%s'" 
-							% (BEHAVIOUR, BEHAVIOUR, BEHAVIOUR))
+		with bus.initialization_op as op:
+			with op.phase(self._phase_redis):
+				with op.step(self._step_accept_scalr_conf):
 		
-		dir = os.path.dirname(self._volume_config_path)
-		if not os.path.exists(dir):
-			os.makedirs(dir)
-		
-		redis_data = message.redis.copy()	
-		self._logger.info('Got Redis part of HostInitResponse: %s' % redis_data)
-		
-		#saving volume id in db to assert it with future volume ids before destroying them
-		if OPT_VOLUME_CNF in redis_data:
-			vol_config = redis_data[OPT_VOLUME_CNF]
-			config.STATE['volume_id'] = vol_config.get('id', None)
-		
-		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
-						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
-			if os.path.exists(file):
-				os.remove(file)
-			
-			if key in redis_data:
-				if redis_data[key]:
-					Storage.backup_config(redis_data[key], file)
-				del redis_data[key]
-		
-		self._logger.debug("Update redis config with %s", redis_data)
-		self._update_config(redis_data)
-		
-		self.redis.is_replication_master = self.is_replication_master
-		self.redis.persistence_type = self.persistence_type 
+					if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
+						raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property and db_type '%s'" 
+										% (BEHAVIOUR, BEHAVIOUR, BEHAVIOUR))
+					
+					dir = os.path.dirname(self._volume_config_path)
+					if not os.path.exists(dir):
+						os.makedirs(dir)
+					
+					redis_data = message.redis.copy()	
+					self._logger.info('Got Redis part of HostInitResponse: %s' % redis_data)
+					
+					#saving volume id in db to assert it with future volume ids before destroying them
+					if OPT_VOLUME_CNF in redis_data:
+						vol_config = redis_data[OPT_VOLUME_CNF]
+						config.STATE['volume_id'] = vol_config.get('id', None)
+					
+					for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
+									(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
+						if os.path.exists(file):
+							os.remove(file)
+						
+						if key in redis_data:
+							if redis_data[key]:
+								Storage.backup_config(redis_data[key], file)
+							del redis_data[key]
+					
+					self._logger.debug("Update redis config with %s", redis_data)
+					self._update_config(redis_data)
+					
+					self.redis.is_replication_master = self.is_replication_master
+					self.redis.persistence_type = self.persistence_type 
+
 
 	def on_before_host_up(self, message):
 		"""
@@ -431,40 +461,46 @@ class RedisHandler(ServiceCtlHandler):
 		@param message: HostUp message
 		"""
 		
-		self._logger.info("Initializing %s master" % BEHAVIOUR)
+		with bus.initialization_op as op:
+			with op.step(self._step_create_storage):		
 		
-		# Plug storage
-		volume_cnf = Storage.restore_config(self._volume_config_path)
-		try:
-			snap_cnf = Storage.restore_config(self._snapshot_config_path)
-			volume_cnf['snapshot'] = snap_cnf
-		except IOError:
-			pass
-		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
-		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)	
+				self._logger.info("Initializing %s master" % BEHAVIOUR)
+				
+				# Plug storage
+				volume_cnf = Storage.restore_config(self._volume_config_path)
+				try:
+					snap_cnf = Storage.restore_config(self._snapshot_config_path)
+					volume_cnf['snapshot'] = snap_cnf
+				except IOError:
+					pass
+				self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
+				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)	
 			
-		password = self._get_password()
-		self.redis.init_master(mpoint=self._storage_path, password=password)
+			with op.step(self._step_init_master):
+				password = self._get_password()
+				self.redis.init_master(mpoint=self._storage_path, password=password)
+			
+				msg_data = dict()
+				msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
+									OPT_MASTER_PASSWORD			:	self.redis.password})	
+				
+			with op.step(self._step_create_data_bundle):
+				# Create snapshot
+				snap = self._create_snapshot()
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
 		
-		msg_data = dict()
-		msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
-							OPT_MASTER_PASSWORD			:	self.redis.password})	
-			
-		# Create snapshot
-		snap = self._create_snapshot()
-		Storage.backup_config(snap.config(), self._snapshot_config_path)
-	
-		# Update HostUp message 
-		msg_data.update(self._compat_storage_data(self.storage_vol, snap))
-			
-		if msg_data:
-			message.db_type = BEHAVIOUR
-			message.redis = msg_data.copy()
-			try:
-				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
-			except KeyError:
-				pass 
-			self._update_config(msg_data)		
+			with op.step(self._step_collect_host_up_data):
+				# Update HostUp message 
+				msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+					
+				if msg_data:
+					message.db_type = BEHAVIOUR
+					message.redis = msg_data.copy()
+					try:
+						del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
+					except KeyError:
+						pass 
+					self._update_config(msg_data)		
 
 	def _get_password(self):
 		password = None 
@@ -495,29 +531,35 @@ class RedisHandler(ServiceCtlHandler):
 		"""
 		self._logger.info("Initializing %s slave" % BEHAVIOUR)
 		
-		# Plug storage
-		volume_cfg = Storage.restore_config(self._volume_config_path)
-		volume = Storage.create(Storage.blank_config(volume_cfg))	
-		self.storage_vol = 	self._plug_storage(self._storage_path, volume)
-		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		with bus.initialization_op as op:
+			with op.step(self._step_create_storage):
 		
-		#cleaning volume
-		if self.redis.working_directory.is_initialized(self._storage_path):
-			self.redis.working_directory.empty()
-			
-		# Change replication master 
-		master_host = self._get_master_host()
+				# Plug storage
+				volume_cfg = Storage.restore_config(self._volume_config_path)
+				volume = Storage.create(Storage.blank_config(volume_cfg))	
+				self.storage_vol = 	self._plug_storage(self._storage_path, volume)
+				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 				
-		self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
-				master_host.internal_ip, master_host.external_ip)
-		
-		host = master_host.internal_ip or master_host.external_ip
-		self.redis.init_slave(self._storage_path, host, DEFAULT_PORT, self._get_password())
-		self.redis.wait_for_sync()
-		
-		# Update HostUp message
-		message.redis = self._compat_storage_data(self.storage_vol)
-		message.db_type = BEHAVIOUR
+				#cleaning volume
+				if self.redis.working_directory.is_initialized(self._storage_path):
+					self.redis.working_directory.empty()
+
+			with op.step(self._step_init_slave):				
+				# Change replication master 
+				master_host = self._get_master_host()
+						
+				self._logger.debug("Master server obtained (local_ip: %s, public_ip: %s)",
+						master_host.internal_ip, master_host.external_ip)
+				
+				host = master_host.internal_ip or master_host.external_ip
+				self.redis.init_slave(self._storage_path, host, DEFAULT_PORT, self._get_password())
+				op.progress(50)
+				self.redis.wait_for_sync()
+			
+			with op.step(self._step_collect_host_up_data):
+				# Update HostUp message
+				message.redis = self._compat_storage_data(self.storage_vol)
+				message.db_type = BEHAVIOUR
 
 
 	def _update_config(self, data): 

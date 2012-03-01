@@ -144,6 +144,20 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 				messaging.Messages.BEFORE_HOST_TERMINATE)
 		return result
 	
+	def get_initialization_phases(self, hir_message):
+		self._phase_cloudfoundry = 'Configure CloudFoundry'
+		self._step_locate_cloud_controller = 'Locate CloudController'
+		self._step_patch_conf = 'Patch configuration files'
+		self._step_start_svs = 'Start services'
+		
+		return {'before_host_up': [{
+			'name': self._phase_cloudfoundry,
+			'steps': [
+				self._step_locate_cloud_controller, 
+				self._step_patch_conf,
+				self._step_start_svs 
+			]
+		}]}
 	
 	def on_init(self, *args, **kwds):
 		LOG.debug('Called on_init')
@@ -168,15 +182,21 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 	def on_before_host_up(self, msg):
 		LOG.debug('Called on_before_host_up')
 		
-		self._locate_cloud_controller()
+		with bus.initialization_op as op:
+			with op.phase(self._phase_cloudfoundry):
+				
+				with op.step(self._step_locate_cloud_controller): 
+					self._locate_cloud_controller()
 
-		LOG.debug('Setting ip route')
-		for name in _components:
-			_cf.components[name].ip_route = local_ip()
-		for name in _services:
-			_cf.services[name].ip_route = local_ip()
-			
-		self._start_services()
+				with op.step(self._step_patch_conf):
+					LOG.debug('Setting ip route')
+					for name in _components:
+						_cf.components[name].ip_route = local_ip()
+					for name in _services:
+						_cf.services[name].ip_route = local_ip()
+						
+				with op.step(self._step_start_svs):
+					self._start_services()
 
 
 	def on_HostUp(self, msg):
@@ -300,6 +320,10 @@ class CloudControllerHandler(handlers.Handler):
 				reload=self.on_reload
 			)
 			self._init_objects()
+			
+			self._step_create_storage = 'Create VCAP data storage'
+			self._step_locate_nginx = 'Locate Nginx frontend'
+			self._step_create_database = 'Create CloudController database'
 
 
 	def on_reload(self):
@@ -326,30 +350,35 @@ class CloudControllerHandler(handlers.Handler):
 		'''
 		Plug storage, initialize database
 		'''
-		# Initialize storage			
-		LOG.info('Initializing vcap data storage')
-		tmp_mpoint = '/mnt/tmp.vcap'
-		try:
-			self.volume = self._plug_storage(mpoint=tmp_mpoint)
-			if not _cf.valid_datadir(tmp_mpoint):
-				LOG.info('Copying data from %s to storage', _datadir)
-				rsync = filetool.Rsync().archive().delete().\
-							source(_datadir + '/').dest(tmp_mpoint)
-				rsync.execute()
-				
-			LOG.debug('Mounting storage to %s', _datadir)
-			self.volume.umount()
-			self.volume.mount(_datadir)
-		except:
-			LOG.exception('Failed to initialize storage')
-		finally:
-			if os.path.exists(tmp_mpoint):
-				os.removedirs(tmp_mpoint)		
-		self.volume_config = self.volume.config()
+		with bus.initialization_op as op:
+			with op.step(self._step_create_storage):
+				# Initialize storage			
+				LOG.info('Initializing vcap data storage')
+				tmp_mpoint = '/mnt/tmp.vcap'
+				try:
+					self.volume = self._plug_storage(mpoint=tmp_mpoint)
+					if not _cf.valid_datadir(tmp_mpoint):
+						LOG.info('Copying data from %s to storage', _datadir)
+						rsync = filetool.Rsync().archive().delete().\
+									source(_datadir + '/').dest(tmp_mpoint)
+						rsync.execute()
+						
+					LOG.debug('Mounting storage to %s', _datadir)
+					self.volume.umount()
+					self.volume.mount(_datadir)
+				except:
+					LOG.exception('Failed to initialize storage')
+				finally:
+					if os.path.exists(tmp_mpoint):
+						os.removedirs(tmp_mpoint)		
+				self.volume_config = self.volume.config()
 
-		_cf.components['cloud_controller'].allow_external_app_uris = True
-		self._locate_nginx()
-		_cf.init_db()
+			with op.step(self._step_locate_nginx):
+				_cf.components['cloud_controller'].allow_external_app_uris = True
+				self._locate_nginx()
+				
+			with op.step(self._step_create_database):
+				_cf.init_db()
 
 
 	def on_before_host_up(self, msg):

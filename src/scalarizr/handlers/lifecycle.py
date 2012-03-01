@@ -9,6 +9,7 @@ import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr import config
 from scalarizr.config import ScalarizrState
+from scalarizr.handlers import operation
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
@@ -19,6 +20,8 @@ from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 
 # Stdlibs
 import logging, os, sys, threading
+from scalarizr.config import STATE
+import time
 
 
 _lifecycle = None
@@ -294,18 +297,29 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		try:
 			bus.fire("before_host_down", msg)
 		finally:
-			self.send_message(msg)		
+			self.send_message(msg)
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
-		bus.fire("host_init_response", message)
-		if bus.scalr_version >= (2, 2, 3):
-			self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
-		msg = self.new_message(Messages.HOST_UP, broadcast=True)
-		bus.fire("before_host_up", msg)
-		self.send_message(msg)
-		bus.cnf.state = ScalarizrState.RUNNING
-		bus.fire("host_up")
+		bus.initialization_op = operation(name='Initialization')
+		try:
+			self._define_initialization(message)			
+			bus.fire("host_init_response", message)
+			if bus.scalr_version >= (2, 2, 3):
+				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
+			msg = self.new_message(Messages.HOST_UP, broadcast=True)
+			bus.fire("before_host_up", msg)
+			self.send_message(msg)
+			bus.cnf.state = ScalarizrState.RUNNING
+			bus.fire("host_up")
+		except:
+			with bus.initialization_op as op:
+				with op.phase('Scalarizr routines'):
+					with op.step('Scalarizr routines'):
+						op.error()
+			raise
+		with bus.initialization_op as op:
+			op.ok()
 
 
 	def on_ScalarizrUpdateAvailable(self, message):
@@ -325,7 +339,25 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		Add scalarizr version to meta
 		"""
 		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
+		message.meta[MetaOptions.TIMESTAMP] = time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
 		
+	def _define_initialization(self, hir_message):
+		# XXX: from the asshole
+		handlers = bus.messaging_service.get_consumer().listeners[0]._get_handlers_chain()
+		phases = {'host_init_response': [], 'before_host_up': []}
+		for handler in handlers:
+			h_phases = handler.get_initialization_phases(hir_message) or {}
+			for key in phases.keys():
+				phases[key] += h_phases.get(key, [])
+
+		phases = phases['host_init_response'] + phases['before_host_up']
+		
+		op = bus.initialization_op
+		op.phases = phases
+		op.define()
+		
+		STATE['lifecycle.initialization_id'] = op.id
+
 		
 	def _get_flag_filename(self, name):
 		return self._cnf.private_path('.%s' % name)
