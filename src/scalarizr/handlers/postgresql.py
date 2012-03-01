@@ -3,6 +3,8 @@ Created on April 18th, 2011
 
 @author: Dmytro Korsakov
 '''
+from __future__ import with_statement
+
 import os
 import time
 import shutil

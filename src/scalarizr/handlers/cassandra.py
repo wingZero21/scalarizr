@@ -6,6 +6,8 @@ Created on Jun 23, 2010
 @author: Dmytro Korsakov
 '''
 
+from __future__ import with_statement
+
 # Core
 from scalarizr import config
 from scalarizr.bus import bus

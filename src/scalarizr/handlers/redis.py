@@ -3,6 +3,7 @@ Created on Aug 12, 2011
 
 @author: Dmytro Korsakov
 '''
+from __future__ import with_statement
 
 import os
 import time

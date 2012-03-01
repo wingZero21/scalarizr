@@ -6,6 +6,8 @@ Created on Jan 6, 2010
 @author: spike
 '''
 
+from __future__ import with_statement
+
 # Core components
 from scalarizr.bus import bus
 from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState

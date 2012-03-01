@@ -121,7 +121,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 		self._step_accept_scalr_conf = 'Accept Scalr configuration'
 		self._step_create_storage = 'Create storage'
 		self._step_patch_conf = 'Patch configuration files'
-		self._step_join_cluster = 'Join a cluster'
+		self._step_join_cluster = 'Join cluster'
 		self._step_collect_hostup_data = 'Collect HostUp data'
 		
 		return {'before_host_up': [{

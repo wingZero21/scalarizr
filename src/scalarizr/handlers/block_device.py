@@ -4,6 +4,8 @@ Created on Oct 13, 2011
 @author: marat
 '''
 
+from __future__ import with_statement
+
 from scalarizr.bus import bus
 from scalarizr import config, handlers
 from scalarizr.messaging import Messages

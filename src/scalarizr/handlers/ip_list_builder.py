@@ -5,6 +5,8 @@ Created on Dec 11, 2009
 @author: marat
 '''
 
+from __future__ import with_statement
+
 # Core
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler

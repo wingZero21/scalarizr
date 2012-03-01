@@ -4,6 +4,8 @@ Created on Mar 3, 2010
 @author: marat
 '''
 
+from __future__ import with_statement
+
 # Core
 import scalarizr.handlers
 from scalarizr.bus import bus

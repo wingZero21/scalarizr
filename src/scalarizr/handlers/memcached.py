@@ -5,6 +5,8 @@ Created on Jul 23, 2010
 @author: Dmytro Korsakov
 '''
 
+from __future__ import with_statement
+
 # Core
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours

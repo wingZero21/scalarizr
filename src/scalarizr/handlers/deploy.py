@@ -3,6 +3,9 @@ Created on Apr 6, 2011
 
 @author: marat
 '''
+
+from __future__ import with_statement
+
 import os
 import sys
 import shutil
