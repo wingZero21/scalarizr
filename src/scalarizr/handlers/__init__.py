@@ -109,11 +109,11 @@ class operation(object):
 		msg = srv.new_message(Messages.OPERATION_RESULT, None, {
 			'id': self.id,
 			'name': self.name,
-			'status': status,
-			'error': error
+			'status': status
 		})
 		if status == 'error':
 			msg.body.update({
+				'error': error,							
 				'phase': self._phase,
 				'step': self._step,
 			})
