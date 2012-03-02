@@ -194,11 +194,6 @@ class RedisHandler(ServiceCtlHandler):
 					redis_data = message.redis.copy()	
 					self._logger.info('Got Redis part of HostInitResponse: %s' % redis_data)
 					
-					#saving volume id in db to assert it with future volume ids before destroying them
-					if OPT_VOLUME_CNF in redis_data:
-						vol_config = redis_data[OPT_VOLUME_CNF]
-						config.STATE['volume_id'] = vol_config.get('id', None)
-					
 					for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 									(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 						if os.path.exists(file):
@@ -254,18 +249,11 @@ class RedisHandler(ServiceCtlHandler):
 			if self.redis.service.running:
 				self._logger.info('Dumping redis data on disk')
 				self.redis.redis_cli.save()
-				self._logger.info('Stopping redis service')
+				self._logger.info('Stopping %s service' % BEHAVIOUR)
 				self.redis.service.stop('Server will be terminated')
-			self._logger.info('Detaching Redis storage')
-			self.storage_vol.detach()
-			self._logger.info('Scalarizr state is %s ' % self._cnf.state)
-			if self._cnf.state == ScalarizrState.INITIALIZING:
-				self._logger.info('During initializing server received volume: %s' % config.STATE['volume_id'])
-				self._logger.info('Attached volume is %s' % self.storage_vol.id)
-				if config.STATE['volume_id'] != self.storage_vol.id:
-					self._logger.info('Destroying volume %s' % self.storage_vol.id)
-					self.storage_vol.destroy(remove_disks=True)
-					self._logger.info('Volume %s was destroyed.' % self.storage_vol.id)
+			self._logger.info('Destroying volume %s' % self.storage_vol.id)
+			self.storage_vol.destroy(remove_disks=True)
+			self._logger.info('Volume %s was destroyed.' % self.storage_vol.id)
 	
 	
 	def on_DbMsr_CreateDataBundle(self, message):
@@ -542,16 +530,18 @@ class RedisHandler(ServiceCtlHandler):
 		
 		with bus.initialization_op as op:
 			with op.step(self._step_create_storage):
-		
-				# Plug storage
-				volume_cfg = Storage.restore_config(self._volume_config_path)
-				volume = Storage.create(Storage.blank_config(volume_cfg))	
-				self.storage_vol = 	self._plug_storage(self._storage_path, volume)
-				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 				
+				self._logger.debug("Initializing slave storage")
+				self.storage_vol = self._plug_storage(self._storage_path, 
+						dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+					
+
+				'''
 				#cleaning volume
 				if self.redis.working_directory.is_initialized(self._storage_path):
 					self.redis.working_directory.empty()
+				'''
 
 			with op.step(self._step_init_slave):				
 				# Change replication master 

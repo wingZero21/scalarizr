@@ -825,10 +825,14 @@ class MysqlHandler(ServiceCtlHandler):
 			}]}
 
 	def on_BeforeHostTerminate(self, message):
+		self._logger.info('Handling BeforeHostTerminate message from %s' % message.local_ip)
 		if message.local_ip == self._platform.get_private_ip():
+			self._logger.info('Stopping %s service' % BEHAVIOUR)
 			self._stop_service(reason='Server will be terminated')
-			self._logger.info('Detaching MySQL storage')
-			self.storage_vol.detach()
+			self._logger.info('Destroying volume %s' % self.storage_vol.id)
+			self.storage_vol.destroy(remove_disks=True)
+			self._logger.info('Volume %s has been destroyed.' % self.storage_vol.id)
+			
 		
 	def on_Mysql_CreatePmaUser(self, message):
 		try:
@@ -1438,12 +1442,9 @@ class MysqlHandler(ServiceCtlHandler):
 				root_pass, repl_pass, log_file, log_pos = self._get_ini_options(
 						OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_LOG_FILE, OPT_LOG_POS)
 				
-				ive_created_storage = False
-				if not self._storage_valid():
-					self._logger.debug("Initialize slave storage")
-					self.storage_vol = self._plug_storage(self._storage_path, 
-							dict(snapshot=Storage.restore_config(self._snapshot_config_path)))
-					ive_created_storage = True			
+				self._logger.debug("Initialize slave storage")
+				self.storage_vol = self._plug_storage(self._storage_path, 
+						dict(snapshot=Storage.restore_config(self._snapshot_config_path)))
 				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 			
 				
@@ -1505,15 +1506,14 @@ class MysqlHandler(ServiceCtlHandler):
 					message.mysql = self._compat_storage_data(self.storage_vol)
 			except:
 				exc_type, exc_value, exc_trace = sys.exc_info()
-				if ive_created_storage:
-					try:
-						self._stop_service(reason='Cleaning up')
-					except:
-						pass
-					try:
-						self.storage_vol.destroy(remove_disks=True)
-					except:
-						pass
+				try:
+					self._stop_service(reason='Cleaning up')
+				except:
+					pass
+				try:
+					self.storage_vol.destroy(remove_disks=True)
+				except:
+					pass
 				raise exc_type, exc_value, exc_trace
 		
 	def _plug_storage(self, mpoint, vol):

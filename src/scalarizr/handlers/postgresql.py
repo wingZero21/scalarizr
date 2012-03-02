@@ -386,12 +386,16 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
 	def on_BeforeHostTerminate(self, message):
+		self._logger.info('Handling BeforeHostTerminate message from %s' % message.local_ip)
 		if message.local_ip == self._platform.get_private_ip():
+			self._logger.info('Stopping %s service' % BEHAVIOUR)
 			self.postgresql.service.stop('Server will be terminated')
-			self._logger.info('Detaching PgSQL storage')
-			self.storage_vol.detach()
+			self._logger.info('Destroying volume %s' % self.storage_vol.id)
+			self.storage_vol.destroy(remove_disks=True)
+			self._logger.info('Volume %s has been destroyed.' % self.storage_vol.id)
 		elif self.is_replication_master:
 			self.postgresql.unregister_slave(message.local_ip)	
+
 
 	def on_DbMsr_CreateDataBundle(self, message):
 		
@@ -708,11 +712,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 		with bus.initialization_op as op:
 			with op.step(self._step_create_storage):
-				if not self.postgresql.cluster_dir.is_initialized(self._storage_path):
-					self._logger.debug("Initialize slave storage")
-					self.storage_vol = self._plug_storage(self._storage_path, 
-							dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
-					Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+				self._logger.debug("Initialize slave storage")
+				self.storage_vol = self._plug_storage(self._storage_path, 
+						dict(snapshot=Storage.restore_config(self._snapshot_config_path)))			
+				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 			
 			with op.step(self._step_init_slave):
 				# Change replication master 
