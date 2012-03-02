@@ -251,9 +251,10 @@ class RedisHandler(ServiceCtlHandler):
 				self.redis.redis_cli.save()
 				self._logger.info('Stopping %s service' % BEHAVIOUR)
 				self.redis.service.stop('Server will be terminated')
-			self._logger.info('Destroying volume %s' % self.storage_vol.id)
-			self.storage_vol.destroy(remove_disks=True)
-			self._logger.info('Volume %s was destroyed.' % self.storage_vol.id)
+			if not self.is_replication_master:
+				self._logger.info('Destroying volume %s' % self.storage_vol.id)
+				self.storage_vol.destroy(remove_disks=True)
+				self._logger.info('Volume %s was destroyed.' % self.storage_vol.id)
 	
 	
 	def on_DbMsr_CreateDataBundle(self, message):

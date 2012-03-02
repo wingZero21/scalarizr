@@ -390,9 +390,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if message.local_ip == self._platform.get_private_ip():
 			self._logger.info('Stopping %s service' % BEHAVIOUR)
 			self.postgresql.service.stop('Server will be terminated')
-			self._logger.info('Destroying volume %s' % self.storage_vol.id)
-			self.storage_vol.destroy(remove_disks=True)
-			self._logger.info('Volume %s has been destroyed.' % self.storage_vol.id)
+			if not self.is_replication_master:
+				self._logger.info('Destroying volume %s' % self.storage_vol.id)
+				self.storage_vol.destroy(remove_disks=True)
+				self._logger.info('Volume %s has been destroyed.' % self.storage_vol.id)
 		elif self.is_replication_master:
 			self.postgresql.unregister_slave(message.local_ip)	
 

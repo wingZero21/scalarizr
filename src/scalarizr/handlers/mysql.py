@@ -829,9 +829,10 @@ class MysqlHandler(ServiceCtlHandler):
 		if message.local_ip == self._platform.get_private_ip():
 			self._logger.info('Stopping %s service' % BEHAVIOUR)
 			self._stop_service(reason='Server will be terminated')
-			self._logger.info('Destroying volume %s' % self.storage_vol.id)
-			self.storage_vol.destroy(remove_disks=True)
-			self._logger.info('Volume %s has been destroyed.' % self.storage_vol.id)
+			if not int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
+				self._logger.info('Destroying volume %s' % self.storage_vol.id)
+				self.storage_vol.destroy(remove_disks=True)
+				self._logger.info('Volume %s has been destroyed.' % self.storage_vol.id)
 			
 		
 	def on_Mysql_CreatePmaUser(self, message):
