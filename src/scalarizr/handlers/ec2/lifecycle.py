@@ -59,6 +59,8 @@ class Ec2LifeCycleHandler(Handler):
 			c = filetool.read_file(authorized_keys_path)
 			ssh_key = self._platform.get_ssh_pub_key()
 			if c.find(ssh_key) == -1:
+				if c and c[-1] != '\n':
+					c += '\n'
 				c += ssh_key + "\n"
 				self._logger.debug("Add server ssh public key to authorized_keys")
 				filetool.write_file(authorized_keys_path, c)

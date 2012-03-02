@@ -28,6 +28,7 @@ class operation(object):
 		self.id = id or str(uuid.uuid4())
 		self.name = name
 		self.phases = phases or []
+		self.finished = False
 		self._depth = None
 		self._stepnos = {}
 	
@@ -85,6 +86,7 @@ class operation(object):
 		srv = bus.messaging_service
 		msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
 			'id': self.id,
+			'name': self.name,
 			'phase': self._phase,
 			'step': self._step,
 			'stepno' : self._stepnos[self._phase],
@@ -96,14 +98,17 @@ class operation(object):
 
 	def ok(self):
 		self._send_result('ok')
+		self.finished = True
 	
 	def error(self, exc_info=None, handler=None):
 		self._send_result('error', error=self._format_error(exc_info, handler))
+		self.finished = True
 	
 	def _send_result(self, status, error=None):
 		srv = bus.messaging_service
 		msg = srv.new_message(Messages.OPERATION_RESULT, None, {
 			'id': self.id,
+			'name': self.name,
 			'status': status,
 			'error': error
 		})

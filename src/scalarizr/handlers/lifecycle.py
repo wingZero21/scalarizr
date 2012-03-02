@@ -316,9 +316,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			bus.fire("host_up")
 		except:
 			with bus.initialization_op as op:
-				with op.phase('Scalarizr routines'):
-					with op.step('Scalarizr routines'):
-						op.error()
+				if not op.finished:
+					with op.phase('Scalarizr routines'):
+						with op.step('Scalarizr routines'):
+							op.error()
 			raise
 		with bus.initialization_op as op:
 			op.ok()
