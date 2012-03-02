@@ -56,6 +56,7 @@ class AptPackageMgr(PackageMgr):
 			'DEBIAN_PRIORITY': 'critical',
 			'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'
 		})
+		LOG.debug('apt_get_command `%s`', ' '.join(('apt-get', '-q', '-y') + tuple(filter(None, command.split()))))
 		return system2(('apt-get', '-q', '-y') + tuple(filter(None, command.split())), **kwds)
 
 	def apt_cache_command(self, command, **kwds):
@@ -277,14 +278,19 @@ class ImpLoader(object):
 	def __installer(self, full_package_name):
 		'''Try to install target package'''
 		if disttool.is_debian_based():
-			self.mgr = self.pkg_mgrs['apt']
+			self.mgr = self.pkg_mgrs['apt']()
 		elif disttool.is_redhat_based():
-			self.mgr = self.pkg_mgrs['yum']
+			self.mgr = self.pkg_mgrs['yum']()
 		else:
 			raise Exception('Operation system is unknown type. Can`t install package `%s`'
 				' package manager is `undefined`' % full_package_name)
-		version = self.mgr.candidates(full_package_name)[-1]
-		self.mgr.install(full_package_name, version)
+		version = self.mgr.candidates(full_package_name)
+		LOG.debug('ImpLoader.__installer: version: %s', version)
+		#TODO: check candidates, [] always?
+		if version:
+			self.mgr.install(full_package_name, version[-1])
+		else: 
+			raise Exception, 'Not found package `%s`, nothing to do' % full_package_name
 
 	'''-----------------------------
 	# overloading find_modul
