@@ -1004,7 +1004,11 @@ class MongoDBHandler(ServiceCtlHandler):
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
 						
 		# Create snapshot
-		snap = self._create_snapshot()
+		self.mongodb.cli.sync(lock=True)
+		try:
+			snap = self._create_snapshot()
+		finally:
+			self.mongodb.cli.unlock()
 		Storage.backup_config(snap.config(), self._snapshot_config_path)
 
 		# Update HostInitResponse message 
