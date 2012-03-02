@@ -1293,6 +1293,11 @@ class MysqlHandler(ServiceCtlHandler):
 					self._stop_service('Autogenerating datadir')				
 		except:
 			pass
+		
+		try:
+			self._init_script.stop()
+		except:
+			pass
 
 		repl = 'master' if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else 'slave'
 		if repl == 'master':
@@ -1325,7 +1330,7 @@ class MysqlHandler(ServiceCtlHandler):
 				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 				
 				# Stop MySQL server
-				self._stop_service('Required by Master initialization process')
+				#self._stop_service('Required by Master initialization process')
 				self._flush_logs()
 		
 			msg_data = None
@@ -1452,7 +1457,7 @@ class MysqlHandler(ServiceCtlHandler):
 			try:
 				with op.step(self._step_patch_conf):
 					# Stop MySQL
-					self._stop_service('Required by Slave initialization process')			
+					#self._stop_service('Required by Slave initialization process')			
 					self._flush_logs()
 					
 					# Change configuration files
