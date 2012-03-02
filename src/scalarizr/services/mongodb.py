@@ -61,7 +61,7 @@ CONFIG_SERVER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.configsrv.log')
 
 ROUTER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.router.log')
 
-MAX_START_TIMEOUT = 360
+MAX_START_TIMEOUT = 600
 MAX_STOP_TIMEOUT = 180
 
 
@@ -104,8 +104,8 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
 		
 	def start(self):
 		initdv2.ParametrizedInitScript.start(self)
-		wait_until(lambda: self.status() == initdv2.Status.RUNNING, sleep=1, timeout=MAX_START_TIMEOUT, 
-				error_text="In %s seconds after start Redis state still isn't 'Running'" % MAX_START_TIMEOUT)
+		wait_until(lambda: self.status() == initdv2.Status.RUNNING, sleep=1)
+		#error_text="In %s seconds after start Mongodb state still isn't 'Running'" % MAX_START_TIMEOUT)
 
 		
 initdv2.explore(SERVICE_NAME, MongoDBDefaultInitScript)
@@ -997,13 +997,22 @@ class MongoCLI(object):
 
 
 	@autoreconnect
-	def sync(self):
+	def sync(self, lock=False):
 		self._logger.debug('Performing fsync on server')
 		'''
 		By default the command returns after synchronizing.
 		'''
-		ret = self.connection.admin.command('fsync')
+		ret = self.connection.admin.command('fsync', lock=lock)
 		self._logger.debug('fsync is done.')
+		return ret
+
+
+	@autoreconnect
+	def unlock(self):
+		self._logger.debug('Requesting fsync unlock')
+		ret = self.connection.admin['$cmd'].sys.unlock.find_one()
+		if ret['ok'] != 1:
+			raise Exception('Failed to get fsync unlock: %s' % ret.get('errmsg'))
 		return ret
 
 

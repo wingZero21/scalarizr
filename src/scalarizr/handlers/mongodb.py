@@ -53,6 +53,7 @@ HEARTBEAT_INTERVAL		= 60
 
 CLUSTER_STATE_KEY		= "mongodb.cluster_state"
 REMOVE_VOLUME_KEY		= "mongodb.remove_volume"
+MONGO_VOLUME_CREATED	= "mongodb_created_volume_id"
 
 
 	
@@ -790,6 +791,10 @@ class MongoDBHandler(ServiceCtlHandler):
 				self._logger.info("Destroying storage")
 				self.storage_vol.destroy()
 
+			if self._cnf.state == ScalarizrState.INITIALIZING:
+				if STATE[MONGO_VOLUME_CREATED] == self.storage_vol.id:
+					self.storage_vol.destroy(remove_disks=True)
+
 		else:
 			shard_idx = int(message.mongodb['shard_index'])
 			rs_idx = int(message.mongodb['replica_set_index'])
@@ -859,20 +864,24 @@ class MongoDBHandler(ServiceCtlHandler):
 		try:
 			bus.fire('before_%s_data_bundle' % BEHAVIOUR)
 			self.mongodb.router_cli.stop_balancer()
-			self.mongodb.cli.sync()
+			self.mongodb.cli.sync(lock=True)
+			try:
 			
-			# Creating snapshot		
-			snap = self._create_snapshot()
-			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-			bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)			
-			
-			# Notify scalr
-			msg_data = dict(
-				used_size	= '%.3f' % (float(used_size) / 1000,),
-				status		= 'ok'
-			)
-			msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
-			return msg_data
+				# Creating snapshot
+				snap = self._create_snapshot()
+				used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+				bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
+
+				# Notify scalr
+				msg_data = dict(
+					used_size	= '%.3f' % (float(used_size) / 1000,),
+					status		= 'ok'
+				)
+				msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
+				return msg_data
+			finally:
+				self.mongodb.cli.unlock()
+
 		finally:
 			self.mongodb.router_cli.start_balancer()
 		
@@ -971,11 +980,8 @@ class MongoDBHandler(ServiceCtlHandler):
 		"""
 		
 		self._logger.info("Initializing %s primary" % BEHAVIOUR)
-		
-		# Plug storage
-		volume_cnf = self._get_volume_cnf()		
-		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
-		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+
+		self.plug_storage()
 
 		self.mongodb.prepare(rs_name)
 		self.mongodb.start_shardsvr()
@@ -1020,6 +1026,16 @@ class MongoDBHandler(ServiceCtlHandler):
 
 	def _get_cluster_hosts(self):
 		return self._queryenv.list_roles(self._role_name)[0].hosts
+
+
+	def plug_storage(self):
+		# Plug storage
+		volume_cnf = self._get_volume_cnf()
+		volume_received = volume_cnf.get('id')
+		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
+		if not volume_received:
+			STATE[MONGO_VOLUME_CREATED] = self.storage_vol.id
+		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
 
 	def _init_slave(self, message, rs_name):
@@ -1094,10 +1110,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		self._logger.info("Initializing %s secondary" % BEHAVIOUR)
 
-		# Plug storage
-		volume_cnf = self._get_volume_cnf()
-		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
-		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		self.plug_storage()
 
 		self.mongodb.stop_default_init_script()
 		self.mongodb.prepare(rs_name)
