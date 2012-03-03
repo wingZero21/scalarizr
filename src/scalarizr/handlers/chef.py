@@ -26,6 +26,7 @@ log_level        :info
 log_location     STDOUT
 chef_server_url  '%(server_url)s'
 validation_client_name '%(validator_name)s'
+node_name        '%(node_name)s'
 '''
 
 
@@ -58,6 +59,7 @@ class ChefHandler(Handler):
 		self._client_conf_path = '/etc/chef/client.rb'
 		self._validator_key_path = '/etc/chef/validation.pem'
 		self._client_key_path = '/etc/chef/client.pem'
+		self._platform = bus.platform
 
 
 	def get_initialization_phases(self, hir_message):
@@ -73,6 +75,7 @@ class ChefHandler(Handler):
 	def on_host_init_response(self, message):
 		if 'chef' in message.body:
 			self._chef_data = message.chef.copy()
+			self._chef_data['node_name'] = self.get_node_name()
 
 
 	def on_before_host_up(self, msg):
@@ -102,9 +105,11 @@ class ChefHandler(Handler):
 						finally:
 							os.remove(self._validator_key_path)
 
-					with op.step(self._step_register_node):
+					with op.step(self._step_execute_run_list):
+						LOG.info('Executing run list')
+						
 						LOG.debug('Initializing Chef API client')
-						node_name = self._chef_data['node_name'] = self.get_node_name()
+						node_name = self.get_node_name()
 						chef = ChefAPI(self._chef_data['server_url'], self._client_key_path, node_name)
 						
 						LOG.debug('Loading node')
@@ -114,7 +119,7 @@ class ChefHandler(Handler):
 						node['run_list'] = [u'role[%s]' % self._chef_data['role']] 
 						chef.api_request('PUT', '/nodes/%s' % node_name, data=node)
 							
-						LOG.info('Applying run_list')
+						LOG.debug('Applying run_list')
 						self.run_chef_client()
 						
 						msg.chef = self._chef_data
@@ -128,7 +133,4 @@ class ChefHandler(Handler):
 
 
 	def get_node_name(self):
-		cloud = json.loads(system2([self._ohai_bin, 'cloud'])[0])
-		return cloud[0][1]
-
-
+		return '%s-%s' % (self._platform.name, self._platform.get_public_ip())
