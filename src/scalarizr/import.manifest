@@ -1,15 +1,15 @@
 [apt]
 snmp = python-pysnmp4
-mongo = python-mongo
+pymongo = python-pymongo
 
 [apt:ubuntu804]
 zmq = python25-zeromq
 
 [yum:el5]
-mongo = python26-pymongo
+pymongo = python26-pymongo
 
 [yum:centos5]
-mongo = python26-pymongo
+pymongo = python26-pymongo
 
 [yum:el6]
-mongo = python-pymongo
+pymongo = python-pymongo
