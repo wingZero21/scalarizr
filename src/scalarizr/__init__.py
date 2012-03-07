@@ -680,7 +680,7 @@ def main():
 		# Initialize local database
 		_init_db()
 		
-		STATE['global.start_after_update'] = int(STATE['global.version'] and STATE['global.version'] != __version__) 
+		STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__)) 
 		STATE['global.version'] = __version__
 		
 		if cnf.state == ScalarizrState.UNKNOWN:
