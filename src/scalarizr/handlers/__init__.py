@@ -1,7 +1,7 @@
 
 from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr.config import ScalarizrState
+from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, iptables
 from scalarizr.util.filetool import write_file
@@ -331,10 +331,15 @@ class ServiceCtlHandler(Handler):
 				# Apply current preset
 				my_preset = self._cnf_ctl.current_preset()
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
-					self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
-					self._cnf_ctl.apply_preset(cur_preset)
-					# Start service with updated configuration
-					self._start_service_with_preset(cur_preset)
+					if not STATE['global.start_after_update']:
+						self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
+						self._cnf_ctl.apply_preset(cur_preset)
+						# Start service with updated configuration
+						self._start_service_with_preset(cur_preset)
+					else:
+						self._logger.debug('Skiping apply configuration preset whereas Scalarizr was restarted after update')
+						self._start_service()
+					
 				else:
 					self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
 					self._start_service()
