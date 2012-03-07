@@ -625,9 +625,6 @@ def main():
 		# Write PID
 		write_file(PID_FILE, str(pid))
 			
-		STATE['global.start_after_update'] = int(STATE['global.version'] and STATE['global.version'] != __version__) 
-		STATE['global.version'] = __version__
-					
 		cnf = bus.cnf
 		cnf.on('apply_user_data', _apply_user_data)
 		
@@ -683,6 +680,8 @@ def main():
 		# Initialize local database
 		_init_db()
 		
+		STATE['global.start_after_update'] = int(STATE['global.version'] and STATE['global.version'] != __version__) 
+		STATE['global.version'] = __version__
 		
 		if cnf.state == ScalarizrState.UNKNOWN:
 			cnf.state = ScalarizrState.BOOTSTRAPPING
