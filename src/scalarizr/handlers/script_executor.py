@@ -62,13 +62,14 @@ class ScriptExecutor(Handler):
 	_logs_truncate_over = None
 	
 	_wait_async = False
+	_tmp_dirs_to_delete = None
 
 	def __init__(self, wait_async=False):
 		self._logger = logging.getLogger(__name__)	
 		self._wait_async = wait_async
 		self._lock = threading.Lock()
 		self._msg_queue = Queue.Queue()
-		
+		self._tmp_dirs_to_delete = []
 		bus.on(reload=self.on_reload)
 		self.on_reload()		
 	
@@ -157,7 +158,7 @@ class ScriptExecutor(Handler):
 					if msg_data:
 						self.send_message(Messages.EXEC_SCRIPT_RESULT, msg_data, queue=Queues.LOG)						
 
-
+			self._tmp_dirs_to_delete.append(self._exec_dir)
 			# Wait
 			if self._wait_async:
 				for t in async_threads:
@@ -178,8 +179,10 @@ class ScriptExecutor(Handler):
 			self._logger.debug("[cleanup] Starting")		
 			while self._num_pending_async > 0:
 				time.sleep(0.5)
-			self._logger.debug("[cleanup] Doing cleanup")
-			shutil.rmtree(self._exec_dir)
+			for dir in self._tmp_dirs_to_delete:
+				self._logger.debug("[cleanup] Removing %s" % dir)
+				shutil.rmtree(dir)
+				self._tmp_dirs_to_delete.remove(dir)
 			self._logger.debug("[cleanup] Done")
 		finally:
 			self._cleaner_running = False
