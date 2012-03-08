@@ -65,13 +65,14 @@ class operation(object):
 
 
 	def define(self):
-		srv = bus.messaging_service
-		msg = srv.new_message(Messages.OPERATION_DEFINITION, None, {
-			'id': self.id,
-			'name': self.name,
-			'phases': self.phases
-		})
-		srv.get_producer().send(Queues.LOG, msg)
+		if bus.scalr_version >= (2, 6):
+			srv = bus.messaging_service
+			msg = srv.new_message(Messages.OPERATION_DEFINITION, None, {
+				'id': self.id,
+				'name': self.name,
+				'phases': self.phases
+			})
+			srv.get_producer().send(Queues.LOG, msg)
 	
 	def progress(self, percent=None):
 		self._send_progress('running', progress=percent)
@@ -83,18 +84,19 @@ class operation(object):
 		self._send_progress('warning', warning=self._format_error(exc_info, handler))
 
 	def _send_progress(self, status, progress=None, warning=None):
-		srv = bus.messaging_service
-		msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
-			'id': self.id,
-			'name': self.name,
-			'phase': self._phase,
-			'step': self._step,
-			'stepno' : self._stepnos[self._phase],
-			'status': status,
-			'progress': progress,
-			'warning': warning
-		})
-		srv.get_producer().send(Queues.LOG, msg)
+		if bus.scalr_version >= (2, 6):
+			srv = bus.messaging_service
+			msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
+				'id': self.id,
+				'name': self.name,
+				'phase': self._phase,
+				'step': self._step,
+				'stepno' : self._stepnos[self._phase],
+				'status': status,
+				'progress': progress,
+				'warning': warning
+			})
+			srv.get_producer().send(Queues.LOG, msg)
 
 	def ok(self):
 		self._send_result('ok')
@@ -105,19 +107,20 @@ class operation(object):
 		self.finished = True
 	
 	def _send_result(self, status, error=None):
-		srv = bus.messaging_service
-		msg = srv.new_message(Messages.OPERATION_RESULT, None, {
-			'id': self.id,
-			'name': self.name,
-			'status': status
-		})
-		if status == 'error':
-			msg.body.update({
-				'error': error,							
-				'phase': self._phase,
-				'step': self._step,
+		if bus.scalr_version >= (2, 6):
+			srv = bus.messaging_service
+			msg = srv.new_message(Messages.OPERATION_RESULT, None, {
+				'id': self.id,
+				'name': self.name,
+				'status': status
 			})
-		srv.get_producer().send(Queues.CONTROL, msg)
+			if status == 'error':
+				msg.body.update({
+					'error': error,							
+					'phase': self._phase,
+					'step': self._step,
+				})
+			srv.get_producer().send(Queues.CONTROL, msg)
 	
 	def _format_error(self, exc_info=None, handler=None):
 		if not exc_info:
