@@ -225,15 +225,31 @@ class NginxHandler(ServiceCtlHandler):
 			message.name == Messages.VHOST_RECONFIGURE or \
 			message.name == Messages.UPDATE_SERVICE_CONFIGURATION)		
 
+	def get_initialization_phases(self, hir_message):
+		self._phase = 'Configure Nginx'
+		self._step_update_vhosts = 'Update virtual hosts'
+		self._step_reload_upstream = 'Reload upstream'
+		
+		return {'before_host_up': [{
+			'name': self._phase,
+			'steps': [self._step_update_vhosts, self._step_reload_upstream]
+		}]}
+
 	def on_start(self): 
 		if self._cnf.state == ScalarizrState.RUNNING:
 			self._update_vhosts()
 			self._reload_upstream()						
 		
 	def on_before_host_up(self, message):
-		self._update_vhosts()
-		self._reload_upstream()
-		bus.fire('service_configured', service_name=SERVICE_NAME)
+		with bus.initialization_op as op:
+			with op.phase(self._phase):
+				with op.step(self._step_update_vhosts):
+					self._update_vhosts()
+
+				with op.step(self._step_reload_upstream):
+					self._reload_upstream()
+
+				bus.fire('service_configured', service_name=SERVICE_NAME)
 		
 	def on_before_reboot_finish(self, *args, **kwargs):
 		self._insert_iptables_rules()
