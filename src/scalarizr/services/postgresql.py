@@ -78,7 +78,7 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.start(self)
 		timeout = 60
 		wait_until(lambda: self.status() == initdv2.Status.RUNNING, sleep=1, timeout=timeout, 
-				error_text="In %s seconds after start Redis state still isn't 'Running'" % timeout)
+				error_text="%s state still isn't 'Running' In %s seconds after start " % (SERVICE_NAME, timeout))
 	
 	
 initdv2.explore(SERVICE_NAME, PgSQLInitScript)
