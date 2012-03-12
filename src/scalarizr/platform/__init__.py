@@ -25,6 +25,8 @@ class UserDataOptions:
 	MESSAGE_SERVER_URL = "p2p_producer_endpoint"
 	FARM_HASH = "hash"
 	CLOUD_STORAGE_PATH = 'cloud_storage_path'
+	ENV_ID = 'env_id'
+	FARMROLE_ID = 'farm_roleid'
 
 class PlatformFactory(object):
 	_platforms = {}
