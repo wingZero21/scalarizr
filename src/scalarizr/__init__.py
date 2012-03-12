@@ -11,7 +11,7 @@ if sys.version_info < (2, 6):
 # Core
 from scalarizr import config 
 from scalarizr.bus import bus
-from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions
+from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
 from scalarizr.handlers import MessageListener
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
 from scalarizr.messaging.p2p import P2pConfigOptions
@@ -627,7 +627,7 @@ def main():
 					
 		# Write PID
 		write_file(PID_FILE, str(pid))
-					
+			
 		cnf = bus.cnf
 		cnf.on('apply_user_data', _apply_user_data)
 		
@@ -683,6 +683,8 @@ def main():
 		# Initialize local database
 		_init_db()
 		
+		STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__)) 
+		STATE['global.version'] = __version__
 		
 		if cnf.state == ScalarizrState.UNKNOWN:
 			cnf.state = ScalarizrState.BOOTSTRAPPING

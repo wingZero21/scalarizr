@@ -1,53 +1,89 @@
-#!/bin/sh
+#!/bin/bash
 #
-# scalarizr_update Scalarizr update tool
+# scalarizr_update Scalarizr update on OS boot
 #
 # chkconfig:   2345 84 15
 # description: Scalarizr is a part of Scalr project
 
 
-update_flag=/etc/scalr/private.d/.update
+. /lib/lsb/init-functions
+. /etc/rc.d/init.d/functions
 
-case "$1" in
-		start)
-				exec 2>&1
-				exec 1>/var/log/scalarizr_update.log
-				
-                echo 'Updating scalarizr...'
-    
-    			echo 'Checking network'
-    			url=$(cat /etc/yum.repos.d/scalr.repo | grep 'baseurl' | cut -d '=' -f 2)            
-                python -c "
+SCALARIZR_INI='/etc/scalr/public.d/config.ini'
+PYTHON='/usr/bin/python2.6'
+NAME='scalarizr_update'
+PACKAGE_MGR_CLASS='YumPackageMgr'
+
+
+
+upd_scalarizr_option() {
+	$PYTHON -c "
+import ConfigParser
+p = ConfigParser.ConfigParser()
+p.read('$SCALARIZR_INI')
+print p.get('general', '$1')
+"
+}
+
+upd_wait_network() {
+	log_success_msg 'checking network'
+	$PYTHON -c "
 import time
-import urlparse
 import socket
-host = urlparse.urlparse('$url')[1]
 while True:
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((host, 80))
+        sock.connect(('apt.scalr.net', 80))
         break
     except:
         time.sleep(1)                
 "
-				echo 'Executing package manager'
-				platform=`echo -e "import re;\nf = open('/etc/scalr/public.d/config.ini');\nprint re.search('platform\s*=\s*(\w+)', f.read()).group(1)" | python`
-				yum -y update scalarizr-$platform && touch $update_flag
-                ;;
-		stop)
-				;;        
 
-		status)
-                if [ -f $update_flag ]; then
-                        last_update=$(date -r $update_flag)
-                else
-                        last_update="never"
-                fi
-                [ -x /usr/local/bin/scalarizr ] && /usr/local/bin/scalarizr -v
-                echo "Last update:  $last_update"
+}
+
+upd_update_scalarizr() {
+	log_success_msg 'checking scalarizr updates'
+	PACKAGE="scalarizr-"$(upd_scalarizr_option 'platform')
+	$PYTHON -c "
+from upd.supervisor.package_mgr import $PACKAGE_MGR_CLASS
+mgr = $PACKAGE_MGR_CLASS()
+versions = mgr.candidates('$PACKAGE')
+if len(versions) > 1:
+	print 'Installing $PACKAGE=%s' % versions[-2]
+	mgr.install('scalarizr-base', versions[-2], '$PACKAGE', versions[-2])
+"
+}
+
+
+case "$1" in
+        start)
+				if [ -f $SCALARIZR_INI ]; then
+					upd_wait_network
+					upd_update_scalarizr
+				else
+					log_failure_msg "scalarizr config not found: $SCALARIZR_INI"
+					exit 1
+				fi
+                ;;
+
+		reload)
+				;;
+             
+		restart)
+				;;
+				
+		condrestart)
+				;;
+   
+        stop)
+				;;
+
+        status)
                 ;;
 
         *)
-                echo $"Usage: $0 {start|status}"
+                echo "Usage: $0 {start|stop|restart|condrestart|reload|status}"
+                ;;
 esac
+
 
