@@ -394,7 +394,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				self._logger.info('Destroying volume %s' % self.storage_vol.id)
 				self.storage_vol.destroy(remove_disks=True)
 				self._logger.info('Volume %s has been destroyed.' % self.storage_vol.id)
-		elif self.is_replication_master:
+		elif self.is_replication_master and message.local_ip in self.pg_hosts:
 			self.postgresql.unregister_slave(message.local_ip)	
 
 
