@@ -1512,14 +1512,6 @@ class MysqlHandler(ServiceCtlHandler):
 					message.mysql = self._compat_storage_data(self.storage_vol)
 			except:
 				exc_type, exc_value, exc_trace = sys.exc_info()
-				try:
-					self._stop_service(reason='Cleaning up')
-				except:
-					pass
-				try:
-					self.storage_vol.destroy(remove_disks=True)
-				except:
-					pass
 				raise exc_type, exc_value, exc_trace
 		
 	def _plug_storage(self, mpoint, vol):

@@ -223,13 +223,7 @@ class RedisHandler(ServiceCtlHandler):
 		if self.redis.is_replication_master:
 			self._init_master(message)									  	
 		else:
-			try:
-				self._init_slave(message)	
-			except:
-				if self.storage_vol:
-					self.redis.service.stop('Cleaning up')	
-					self.storage_vol.destroy(remove_disks=True)
-				raise			
+			self._init_slave(message)			
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 					
 					
