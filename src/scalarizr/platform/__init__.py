@@ -26,7 +26,7 @@ class UserDataOptions:
 	FARM_HASH = "hash"
 	CLOUD_STORAGE_PATH = 'cloud_storage_path'
 	ENV_ID = 'env_id'
-	FARMROLE_ID = 'farm_roleid'
+	FARMROLE_ID = 'farmrole_id'
 
 class PlatformFactory(object):
 	_platforms = {}
