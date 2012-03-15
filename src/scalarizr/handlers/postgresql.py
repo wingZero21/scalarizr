@@ -219,6 +219,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+		self._farmrole_id =  ini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
 		self._storage_path = STORAGE_PATH
 		self._tmp_path = os.path.join(self._storage_path, 'tmp')
 		
@@ -244,8 +245,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	
 	def on_HostDown(self, message):
-		if message.local_ip != self._platform.get_private_ip():
+		if  message.local_ip != self._platform.get_private_ip():
 			self.postgresql.unregister_client(message.local_ip)
+			if self.is_replication_master and self._farmrole_id == message.farm_role_id:
+				self.postgresql.unregister_slave(message.local_ip)
 	
 	@property			
 	def farm_hosts(self):
@@ -394,8 +397,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 				self._logger.info('Destroying volume %s' % self.storage_vol.id)
 				self.storage_vol.destroy(remove_disks=True)
 				self._logger.info('Volume %s has been destroyed.' % self.storage_vol.id)
-		elif self.is_replication_master and message.local_ip in self.pg_hosts:
-			self.postgresql.unregister_slave(message.local_ip)	
 
 
 	def on_DbMsr_CreateDataBundle(self, message):

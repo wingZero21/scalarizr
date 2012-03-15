@@ -16,12 +16,12 @@ class UtilError(BaseException):
 
 
 class LocalObject:
-	def __init__(self, creator, pool_size=10):
+	def __init__(self, creator, pool_size=50):
 		self._logger = logging.getLogger(__name__)
 		self._creator = creator		
 		self._object = threading.local()
 		
-		self._all_conns = set()
+		self._all_conns = []
 		self.size = pool_size
 	
 	def do_create(self):
@@ -42,16 +42,18 @@ class LocalObject:
 		self._logger.debug("Created %s", o)
 		self._object.current = weakref.ref(o)
 		self._logger.debug("Added weakref %s", self._object.current)
-		self._all_conns.add(o)
+		self._all_conns.append(o)
 		if len(self._all_conns) > self.size:
 			self.cleanup()
 		return o
 	
 	def cleanup(self):
-		for conn in list(self._all_conns):
-			self._all_conns.discard(conn)
-			if len(self._all_conns) <= self.size:
-				return
+		if len(self._all_conns) > self.size:
+			self._logger.debug("Pool has exceeded the amount of maximum connections (%s). Starting cleaning process.", self.size)
+			l = len(self._all_conns) - self.size
+			self._logger.debug("Removing %s from connection pool", self._all_conns[:l])
+			self._all_conns = self._all_conns[l:]
+
 	
 class SqliteLocalObject(LocalObject):
 	def do_create(self):
