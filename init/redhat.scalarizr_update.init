@@ -45,7 +45,7 @@ upd_update_scalarizr() {
 	log_success_msg 'checking scalarizr updates'
 	PACKAGE="scalarizr-"$(upd_scalarizr_option 'platform')
 	$PYTHON -c "
-from upd.supervisor.package_mgr import $PACKAGE_MGR_CLASS
+from upd.client.package_mgr import $PACKAGE_MGR_CLASS
 mgr = $PACKAGE_MGR_CLASS()
 versions = mgr.candidates('$PACKAGE')
 if len(versions) > 1:
