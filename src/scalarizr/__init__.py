@@ -90,6 +90,13 @@ class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 			socks=[initdv2.SockParam(8013)]
 		)
 
+class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
+	def __init__(self):
+		initdv2.ParametrizedInitScript.__init__(self, 
+			'scalr-upd-client', 
+			'/etc/init.d/scalr-upd-client'
+		)
+
 
 def _init():
 	optparser = bus.optparser
@@ -696,7 +703,8 @@ def main():
 			
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
-			cnf.fire('apply_user_data', cnf)			
+			cnf.fire('apply_user_data', cnf)
+			ScalrUpdClientScript().start()			
 		
 		# Check Scalr version
 		if not bus.scalr_version:
