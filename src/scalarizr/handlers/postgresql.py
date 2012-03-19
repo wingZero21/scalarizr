@@ -219,7 +219,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
-		self._farmrole_id =  ini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
 		self._storage_path = STORAGE_PATH
 		self._tmp_path = os.path.join(self._storage_path, 'tmp')
 		
@@ -247,7 +246,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	def on_HostDown(self, message):
 		if  message.local_ip != self._platform.get_private_ip():
 			self.postgresql.unregister_client(message.local_ip)
-			if self.is_replication_master and self._farmrole_id == message.farm_role_id:
+			if self.is_replication_master and self.farmrole_id == message.farm_role_id:
 				self.postgresql.unregister_slave(message.local_ip)
 	
 	@property			
@@ -291,6 +290,15 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
 			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
 		return password
+
+
+	@property	
+	def farmrole_id(self):
+		id = None
+		if self._cnf.rawini.has_option(config.SECT_GENERAL, config.OPT_FARMROLE_ID):
+			id = self._cnf.rawini.ini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
+		return id
+	
 			
 	def store_password(self, name, password):
 		opt_user_password = '%s_password' % name
