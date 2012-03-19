@@ -4,7 +4,7 @@ Created on Sep 10, 2010
 @author: marat
 '''
 from scalarizr.util import disttool, system2
-import os, re, zipfile
+import os, re, zipfile, string
 
 __all__ = ('all_installed', 'software_info', 'explore', 'whereis')
 
@@ -54,6 +54,11 @@ def system_info():
 	ret['os'] = {}	
 	ret['os']['version'] 		= ' '.join(disttool.linux_dist())
 	ret['os']['string_version'] = ' '.join(disttool.uname()).strip()
+
+	ret['dist'] = dict(zip(('distributor', 'release', 'codename'), 
+						map(string.lower, disttool.linux_dist())))
+	
+	
 	
 	modprobe = whereis('modprobe')[0]
 	ret['storage'] = {}

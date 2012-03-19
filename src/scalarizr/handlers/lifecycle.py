@@ -344,8 +344,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		"""
 		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
 		message.meta[MetaOptions.TIMESTAMP] = time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
-		message.meta[MetaOptions.DIST] = dict(zip(('distributor', 'release', 'codename'), 
-												map(string.lower, disttool.linux_dist())))
+
 		
 	def _define_initialization(self, hir_message):
 		# XXX: from the asshole
