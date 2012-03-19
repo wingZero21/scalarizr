@@ -704,7 +704,9 @@ def main():
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
 			cnf.fire('apply_user_data', cnf)
-			ScalrUpdClientScript().start()			
+			upd = ScalrUpdClientScript()
+			if not upd.running:
+				upd.start()			
 		
 		# Check Scalr version
 		if not bus.scalr_version:
