@@ -54,10 +54,13 @@ class AptPackageMgr(PackageMgr):
 		kwds.update(env={
 			'DEBIAN_FRONTEND': 'noninteractive', 
 			'DEBIAN_PRIORITY': 'critical',
-			'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'
+			'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/'\
+					'sbin:/bin:/usr/games'
 		})
-		LOG.debug('apt_get_command `%s`', ' '.join(('apt-get', '-q', '-y') + tuple(filter(None, command.split()))))
-		return system2(('apt-get', '-q', '-y') + tuple(filter(None, command.split())), **kwds)
+		LOG.debug('apt_get_command `%s`', ' '.join(('apt-get', '-q', '-y') + 
+				tuple(filter(None, command.split()))))
+		return system2(('apt-get', '-q', '-y') + \
+				tuple(filter(None, command.split())), **kwds)
 
 	def apt_cache_command(self, command, **kwds):
 		return system2(('apt-cache',) + tuple(filter(None, command.split())), **kwds)
@@ -103,11 +106,13 @@ class AptPackageMgr(PackageMgr):
 				continue
 			
 		if candidate and installed:
-			if not system2(('dpkg', '--compare-versions', candidate, 'gt', installed), raise_exc = False)[2]:
+			if not system2(('dpkg', '--compare-versions', candidate, 'gt',
+											installed), raise_exc = False)[2]:
 				return candidate
 	
 	def install(self, name, version, *args):
-		self.apt_get_command('install %s' % self._join_packages_str('=', name, version, *args), raise_exc=True)
+		self.apt_get_command('install %s' % self._join_packages_str('=', name,
+											version, *args), raise_exc=True)
 
 
 class RpmVersion(object):
@@ -165,7 +170,8 @@ class RpmVersion(object):
 class YumPackageMgr(PackageMgr):
 
 	def yum_command(self, command, **kwds):
-		return system2((('yum', '-d0', '-y') + tuple(filter(None, command.split()))), **kwds)
+		return system2((('yum', '-d0', '-y') + tuple(filter(None,
+												 command.split()))), **kwds)
 
 	def rpm_ver_cmp(self, v1, v2):
 		return cmp(RpmVersion(v1), RpmVersion(v2))
@@ -183,7 +189,8 @@ class YumPackageMgr(PackageMgr):
 		except ValueError:
 			installed = None
 
-		versions = [version_re.match(line).group(1) for line in lines[lines.index('Available Packages')+1:]]
+		versions = [version_re.match(line).group(1) for line in lines[
+										lines.index('Available Packages')+1:]]
 		if installed:
 			versions = [v for v in versions if self.rpm_ver_cmp(v, installed) > 0]
 
@@ -197,7 +204,8 @@ class YumPackageMgr(PackageMgr):
 			return filter(None, out.strip().split(' '))[1]
 
 	def install(self, name, version, *args):
-		self.yum_command('install %s' %  self._join_packages_str('-', name, version, *args), raise_exc=True)
+		self.yum_command('install %s' %  self._join_packages_str('-', name, 
+											version, *args), raise_exc=True)
 
 
 '''---------------------------------
@@ -206,11 +214,12 @@ class YumPackageMgr(PackageMgr):
 
 class Manifest(object):
 	_instance = None
+	_MANIFEST = '../import.manifest'
 	path = None
 
 	def __init__(self, path=None):
 		if not self.path:
-			self.path = os.path.join(os.path.dirname(__file__), '../import.manifest')
+			self.path = os.path.join(os.path.dirname(__file__), self._MANIFEST)
 			if not os.path.exists(self.path):
 				self.path = None
 				LOG.error('Import manifest not found')
@@ -236,7 +245,7 @@ def setup(path=None):
 ---------------------------------'''
 
 class ImpImport(object):
-	'''Overloading find_modul and runtime install package if it not installed already'''
+	'''Overloading find_modul and install pckg if it not installed already'''
 
 	def __init__(self, path=None):
 		#available package managers:
@@ -247,7 +256,7 @@ class ImpImport(object):
 		self.conf = configparser.ConfigParser()
 		self.conf.read(Manifest().path)
 
-		self.names =  ['apt' if disttool.is_debian_based() else 'yum']
+		self.names = ['apt' if disttool.is_debian_based() else 'yum']
 		#['apt', 'apt:ubuntu', 'apt:ubuntu11', 'apt:ubuntu11.10']
 		#['yum', 'yum:el', 'yum:el5', 'yum:centos5.7']
 		dist = disttool.linux_dist()
@@ -260,10 +269,9 @@ class ImpImport(object):
 		self.names.append(self.names[0] + ':' + dist[0].lower() + dist[1])
 		LOG.debug('Expected manifest sections: `%s`', self.names)
 
-
 	def _install_package(self, package):
 		#LOG.debug('install_package %s', package)
-		dist_names = self.names
+		dist_names = self.names[0:]
 		while len(dist_names) > 0:
 			dist_name = dist_names.pop()
 			if dist_name in self.conf.sections():
@@ -274,22 +282,22 @@ class ImpImport(object):
 					elif disttool.is_redhat_based():
 						self.mgr = self.pkg_mgrs['yum']()
 					else:
-						raise Exception('OS is unknown type. Can`t install package `%s` '\
-							'package manager is `undefined`' %	full_package_name)
+						raise Exception('OS is unknown type. Can`t install`%s`'\
+							' pckg manager is `unknown`' %	full_package_name)
 					version = self.mgr.candidates(full_package_name)
 					LOG.debug('ImpImport._install_package: version: %s', version)
 					if version:
 						self.mgr.install(full_package_name, version[-1])
 					else:
-						raise Exception, 'Not found package `%s`, nothing to do' % full_package_name
+						raise Exception, 'Pckg `%s`don`t found, nothing to do'\
+							 % full_package_name
 					LOG.debug('Package `%s` successfully installed', package)
 				except:
-					LOG.debug('ImpImport.install_package: exception install in package'\
+					LOG.debug('ImpImport.install_package: error install pckg'\
 						' `%s`. Details: %s', self.conf.get(dist_name, package),
 						sys.exc_info()[1], exc_info=sys.exc_info())
 			else:
 				LOG.debug('No found section `%s` in import.manifest', dist_name)
-
 
 	def find_module(self, full_name, path=None):
 		name = full_name.split('.')[-1]
@@ -298,15 +306,15 @@ class ImpImport(object):
 		try:
 			self.file, self.filename, self.etc = imp.find_module(name, path)
 		except:
-			LOG.debug('Package or modul`%s`not found. Check in import.manifest...', full_name)
+			LOG.debug('Pckg or modul`%s` don`t found. Checking in manifest...',
+				full_name)
 			try:
 				self._install_package(pkg_name)
 				self.file, self.filename, self.etc = imp.find_module(pkg_name, path)
 			except:
-				raise ImportError, 'Installation error in package `%s`. Details: %s' %\
+				raise ImportError, 'Installation error in package `%s`. %s' %\
 					(full_name, sys.exc_info()[1])
 		return self
-
 
 	def load_module(self, full_name):
 		#LOG.debug('ImpImport.load_module: %s', full_name)
@@ -320,8 +328,7 @@ class ImpImport(object):
 sys.meta_path = [ImpImport()]
 
 
-"""	
-		def find_module(self, full_name, path=None):
+"""		def find_module(self, full_name, path=None):
 				name = full_name.split('.')[-1]
 				pkg_name = full_name.split('.')[0]
 
@@ -360,5 +367,4 @@ sys.meta_path = [ImpImport()]
 				#if self.file or self.filename or self.etc:
 				return imp.load_module(name, self.file, self.filename, self.etc)
 				#else:
-				#	   self.find_module()
-"""
+				#	   self.find_module()"""

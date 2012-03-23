@@ -1,6 +1,18 @@
 [apt]
 snmp = python-pysnmp4
 pymongo = python-pymongo
+prettytable = python-prettytable
+pyyaml = python-PyYAML
+m2crypto = python-m2crypto
+
+[yum]
+pysnmp = python26-pysnmp
+pyyaml = python26-PyYAML
+m2crypto = python26-m2crypto
+pexpect = python26-pexpect
+pysnmp = python26-pysnmp
+pysnmp-mibs = python26-pysnmp-mibs
+prettytable = python26-prettytable
 
 [apt:ubuntu804]
 zmq = python25-zeromq
