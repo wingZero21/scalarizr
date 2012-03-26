@@ -372,7 +372,7 @@ class HttpSource(Source):
 			
 class DeployLogHandler(logging.Handler):
 	def __init__(self, deploy_task_id=None):
-		logging.Handler.__init__(self)
+		logging.Handler.__init__(self, logging.INFO)
 		self.deploy_task_id = deploy_task_id
 		self._msg_service = bus.messaging_service
 		

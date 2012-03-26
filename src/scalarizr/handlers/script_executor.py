@@ -7,7 +7,7 @@ from __future__ import with_statement
 
 from scalarizr import queryenv
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang
 from scalarizr.util.filetool import write_file
@@ -156,7 +156,10 @@ class ScriptExecutor(Handler):
 				else:
 					msg_data = self._execute_script(script)
 					if msg_data:
-						self.send_message(Messages.EXEC_SCRIPT_RESULT, msg_data, queue=Queues.LOG)						
+						self.send_message(Messages.EXEC_SCRIPT_RESULT, msg_data, queue=Queues.LOG)
+						if msg_data['return_code']:
+							raise HandlerError('Script %s returned exit code: %s' % 
+											(script.name, msg_data['return_code'])) 				
 
 			self._tmp_dirs_to_delete.append(self._exec_dir)
 			# Wait
