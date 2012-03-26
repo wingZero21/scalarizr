@@ -185,67 +185,6 @@ def _create_db(db_file=None, script_file=None):
 	conn.commit()	
 	
 
-def _mount_private_d(mpoint, privated_image, blocks_count):
-	logger = logging.getLogger(__name__)
-	
-	logger.debug("Move private.d configuration %s to mounted filesystem (img: %s, size: %s)", 
-			mpoint, privated_image, format_size(1024*(blocks_count-1)))
-	mtab = fstool.Mtab()
-	if mtab.contains(mpoint=mpoint): # if privated_image exists
-		logger.debug("private.d already mounted to %s", mpoint)
-		return
-	loopdevs = listloop()
-	if privated_image in loopdevs.values():
-		loopdevs = dict(zip(loopdevs.values(), loopdevs.keys()))
-		loop = loopdevs[privated_image]
-		logger.debug('%s already associated with %s. mounting', privated_image, loop)		
-		fstool.mount(loop, mpoint)
-		return
-	
-	if not os.path.exists(mpoint):
-		os.makedirs(mpoint)
-		
-	mnt_opts = ('-t', 'auto', '-o', 'loop,rw')	
-	if not os.path.exists(privated_image):	
-		build_image_cmd = 'dd if=/dev/zero of=%s bs=1024 count=%s 2>&1' % (privated_image, blocks_count-1)
-		retcode = system2(build_image_cmd, shell=True)[2]
-		if retcode:
-			logger.error('Cannot create image device')
-		os.chmod(privated_image, 0600)
-			
-		logger.debug("Creating file system on image device")
-		fstool.mkfs(privated_image)
-		
-	if os.listdir(mpoint):
-		logger.debug("%s contains data. Need to copy it ot image before mounting", mpoint)
-		# If mpoint not empty copy all data to the image
-		try:
-			tmp_mpoint = "/mnt/tmp-privated"
-			os.makedirs(tmp_mpoint)
-			logger.debug("Mounting %s to %s", privated_image, tmp_mpoint)
-			fstool.mount(privated_image, tmp_mpoint, mnt_opts)
-			logger.debug("Copy data from %s to %s", mpoint, tmp_mpoint)
-			system2(str(filetool.Rsync().archive().source(mpoint+"/" if mpoint[-1] != "/" else mpoint).dest(tmp_mpoint)), shell=True)
-			private_list = os.listdir(mpoint)
-			for file in private_list:
-				path = os.path.join(mpoint, file)
-				if os.path.isdir(path):
-					shutil.rmtree(path)
-				else:
-					os.remove(path)
-		finally:
-			try:
-				fstool.umount(mpoint=tmp_mpoint)
-			except fstool.FstoolError:
-				pass
-			try:
-				os.removedirs(tmp_mpoint)
-			except OSError:
-				pass
-		
-	logger.debug("Mounting %s to %s", privated_image, mpoint)
-	fstool.mount(privated_image, mpoint, mnt_opts)	
-
 
 def _init_platform():
 	logger = logging.getLogger(__name__)
@@ -631,11 +570,6 @@ def main():
 		cnf = bus.cnf
 		cnf.on('apply_user_data', _apply_user_data)
 		
-		# Move private configuration to loop device
-		#privated_img_path = '/mnt/privated.img'
-		#_mount_private_d(cnf.private_path(), privated_img_path, 10000)
-		
-
 		if optparser.values.configure:
 			do_configure()
 			sys.exit()
