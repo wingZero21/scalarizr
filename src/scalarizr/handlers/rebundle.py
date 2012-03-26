@@ -38,7 +38,7 @@ class StopRebundle(BaseException):
 
 class RebundleLogHandler(logging.Handler):
 	def __init__(self, bundle_task_id=None):
-		logging.Handler.__init__(self)
+		logging.Handler.__init__(self, logging.INFO)
 		self.bundle_task_id = bundle_task_id
 		self._msg_service = bus.messaging_service
 		
