@@ -702,6 +702,20 @@ class MysqlHandler(ServiceCtlHandler):
 			
 			'slave_promote_to_master'
 		)
+		
+		self._phase_mysql = 'Configure MySQL'
+		self._phase_data_bundle = self._op_data_bundle = 'MySQL data bundle'
+		self._step_accept_scalr_conf = 'Accept Scalr configuration'
+		self._step_patch_conf = 'Patch my.cnf configuration file'
+		self._step_create_storage = 'Create storage'
+		self._step_move_datadir = 'Move data directory to storage'
+		self._step_create_users = 'Create Scalr users'
+		self._step_restore_users = 'Restore Scalr users'
+		self._step_create_data_bundle = 'Create data bundle'
+		self._step_change_replication_master = 'Change replication Master'
+		self._step_innodb_recovery = 'InnoDB recovery'
+		self._step_collect_hostup_data = 'Collect HostUp data'
+		
 		self.on_reload()		
 
 	def on_init(self):		
@@ -800,19 +814,6 @@ class MysqlHandler(ServiceCtlHandler):
 
 	def get_initialization_phases(self, hir_message):
 		if BEHAVIOUR in hir_message.body:
-			self._phase_mysql = 'Configure MySQL'
-			self._phase_data_bundle = self._op_data_bundle = 'MySQL data bundle'
-			self._step_accept_scalr_conf = 'Accept Scalr configuration'
-			self._step_patch_conf = 'Patch my.cnf configuration file'
-			self._step_create_storage = 'Create storage'
-			self._step_move_datadir = 'Move data directory to storage'
-			self._step_create_users = 'Create Scalr users'
-			self._step_restore_users = 'Restore Scalr users'
-			self._step_create_data_bundle = 'Create data bundle'
-			self._step_change_replication_master = 'Change replication Master'
-			self._step_innodb_recovery = 'InnoDB recovery'
-			self._step_collect_hostup_data = 'Collect HostUp data'
-
 			steps = [self._step_accept_scalr_conf, self._step_create_storage]
 			if hir_message.body['mysql']['replication_master'] == '1':
 				steps.append(self._step_create_data_bundle)

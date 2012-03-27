@@ -100,17 +100,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	def get_initialization_phases(self, hir_message):
 		if BEHAVIOUR in hir_message.body:
-			self._phase_postgresql = 'Configure PostgreSQL'
-			self._phase_data_bundle = self._op_data_bundle = 'PostgreSQL data bundle'			
-			self._step_accept_scalr_conf = 'Accept Scalr configuration'
-			self._step_patch_conf = 'Patch configuration files'
-			self._step_create_storage = 'Create storage'
-			self._step_init_master = 'Initialize Master'
-			self._step_init_slave = 'Initialize Slave'
-			self._step_create_data_bundle = 'Create data bundle'
-			self._step_change_replication_master = 'Change replication Master'
-			self._step_collect_host_up_data = 'Collect HostUp data'
-
 			steps = [self._step_accept_scalr_conf, self._step_create_storage]
 			if hir_message.body[BEHAVIOUR]['replication_master'] == '1':
 				steps += [self._step_init_master, self._step_create_data_bundle]
@@ -142,6 +131,17 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 			'slave_promote_to_master'
 		)	
+		
+		self._phase_postgresql = 'Configure PostgreSQL'
+		self._phase_data_bundle = self._op_data_bundle = 'PostgreSQL data bundle'			
+		self._step_accept_scalr_conf = 'Accept Scalr configuration'
+		self._step_patch_conf = 'Patch configuration files'
+		self._step_create_storage = 'Create storage'
+		self._step_init_master = 'Initialize Master'
+		self._step_init_slave = 'Initialize Slave'
+		self._step_create_data_bundle = 'Create data bundle'
+		self._step_change_replication_master = 'Change replication Master'
+		self._step_collect_host_up_data = 'Collect HostUp data'
 		
 		self.on_reload()		
 

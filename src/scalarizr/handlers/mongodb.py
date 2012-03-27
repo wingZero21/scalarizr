@@ -182,25 +182,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				Messages.HOST_UP)
 		
 	def get_initialization_phases(self, hir_message):
-		self._phase_mongodb = 'Configure MongoDB'
-		self._phase_data_bundle = self._op_data_bundle = 'MongoDB data bundle'
-		self._step_create_snapshot = 'Create snapshot'
-		self._step_stop_balancer = 'Stop balancer'
-		self._step_fsync = 'Perform fsync'
-		self._step_accept_scalr_conf = 'Accept Scalr configuration'
-		self._step_check_cfg_server = 'Check that ConfigServer is running'
-		self._step_change_hostname = 'Change hostname'
-		self._step_init_master = 'Initialize Master'
-		self._step_init_slave = 'Initialize Slave'
-		self._step_start_arbiter = 'Start Arbiter'
-		self._step_start_cfg_server = 'Start ConfigServer'
-		self._step_start_router = 'Start Router'
-		self._step_enter_rs0_barrier = 'Enter rs-0 barrier'
-		self._step_wait_cfg_server = 'Wait for ConfigServer on mongo-0-0'
-		self._step_auth_on_cfg_server_and_router = 'Authenticate on ConfigServer and Router'
-		self._step_create_scalr_users = 'Create Scalr users'
-		self._step_create_shard = 'Create Shard'
-		
 		return {'before_host_up': [{
 			'name': self._phase_mongodb,
 			'steps': [
@@ -228,6 +209,27 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 			'slave_promote_to_master'
 		)	
+		
+		self._phase_mongodb = 'Configure MongoDB'
+		self._phase_data_bundle = self._op_data_bundle = 'MongoDB data bundle'
+		self._step_create_snapshot = 'Create snapshot'
+		self._step_stop_balancer = 'Stop balancer'
+		self._step_fsync = 'Perform fsync'
+		self._step_accept_scalr_conf = 'Accept Scalr configuration'
+		self._step_check_cfg_server = 'Check that ConfigServer is running'
+		self._step_change_hostname = 'Change hostname'
+		self._step_init_master = 'Initialize Master'
+		self._step_init_slave = 'Initialize Slave'
+		self._step_start_arbiter = 'Start Arbiter'
+		self._step_start_cfg_server = 'Start ConfigServer'
+		self._step_start_router = 'Start Router'
+		self._step_enter_rs0_barrier = 'Enter rs-0 barrier'
+		self._step_wait_cfg_server = 'Wait for ConfigServer on mongo-0-0'
+		self._step_auth_on_cfg_server_and_router = 'Authenticate on ConfigServer and Router'
+		self._step_create_scalr_users = 'Create Scalr users'
+		self._step_create_shard = 'Create Shard'
+		
+		
 		self.on_reload()   
 		self._status_trackers = dict()
 	
