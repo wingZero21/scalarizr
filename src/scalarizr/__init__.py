@@ -90,6 +90,7 @@ class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 			socks=[initdv2.SockParam(8013)]
 		)
 
+
 class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
 		initdv2.ParametrizedInitScript.__init__(self, 
