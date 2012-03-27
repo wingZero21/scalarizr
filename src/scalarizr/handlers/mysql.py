@@ -825,7 +825,7 @@ class MysqlHandler(ServiceCtlHandler):
 			}]}
 
 	def on_BeforeHostTerminate(self, message):
-		self._logger.info('Handling BeforeHostTerminate message from %s' % message.local_ip)
+		self._logger.debug('Handling BeforeHostTerminate message from %s' % message.local_ip)
 		if message.local_ip == self._platform.get_private_ip():
 			self._logger.info('Stopping %s service' % BEHAVIOUR)
 			self._stop_service(reason='Server will be terminated')

@@ -94,7 +94,8 @@ class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
 		initdv2.ParametrizedInitScript.__init__(self, 
 			'scalr-upd-client', 
-			'/etc/init.d/scalr-upd-client'
+			'/etc/init.d/scalr-upd-client',
+			pid_file='/var/run/scalr-upd-client.pid'
 		)
 
 
