@@ -37,6 +37,7 @@ import ConfigParser
 # Extra
 import pexpect
 import signal
+from scalarizr.handlers import operation
 
 
 
@@ -800,6 +801,7 @@ class MysqlHandler(ServiceCtlHandler):
 	def get_initialization_phases(self, hir_message):
 		if BEHAVIOUR in hir_message.body:
 			self._phase_mysql = 'Configure MySQL'
+			self._phase_data_bundle = self._op_data_bundle = 'MySQL data bundle'
 			self._step_accept_scalr_conf = 'Accept Scalr configuration'
 			self._step_patch_conf = 'Patch my.cnf configuration file'
 			self._step_create_storage = 'Create storage'
@@ -950,24 +952,33 @@ class MysqlHandler(ServiceCtlHandler):
 
 	def on_Mysql_CreateDataBundle(self, message):
 		try:
-			bus.fire('before_mysql_data_bundle')
+			op = operation(name=self._op_data_bundle, [{
+				'name': self._phase_data_bundle, 
+				'steps': [self._step_create_data_bundle]
+			}])
+			op.define()
 			
-			# Creating snapshot
-			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-			used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
-				
-			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
+			with op.phase(self._phase_data_bundle):
+				with op.step(self._step_create_data_bundle):
 			
-			# Notify scalr
-			msg_data = dict(
-				log_file=log_file,
-				log_pos=log_pos,
-				used_size='%.3f' % (float(used_size) / 1024 / 1024,),
-				status='ok'
-			)
-			msg_data.update(self._compat_storage_data(snap=snap))
-			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
+					bus.fire('before_mysql_data_bundle')
+					
+					# Creating snapshot
+					root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
+					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+					used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
+						
+					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
+					
+					# Notify scalr
+					msg_data = dict(
+						log_file=log_file,
+						log_pos=log_pos,
+						used_size='%.3f' % (float(used_size) / 1024 / 1024,),
+						status='ok'
+					)
+					msg_data.update(self._compat_storage_data(snap=snap))
+					self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
