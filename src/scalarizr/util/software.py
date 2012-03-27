@@ -4,7 +4,7 @@ Created on Sep 10, 2010
 @author: marat
 '''
 from scalarizr.util import disttool, system2
-import os, re, zipfile, string
+import os, re, zipfile, string, glob
 
 __all__ = ('all_installed', 'software_info', 'explore', 'whereis')
 
@@ -93,12 +93,12 @@ class SoftwareInfo:
 	'''
 	@param version: tuple(major, minor, bugfix)
 	'''
-	version_string = None
+	string_version = None
 	
 	def __init__(self, name, version, string_version):
 		self.name    		= name
 		self.string_version = string_version
-		ver_nums		= tuple(map(int, version.split('.')))
+		ver_nums		= map(int, version.split('.'))
 		if len(ver_nums) < 3: 
 			for i in range(len(ver_nums), 3):
 				ver_nums.append(0)
@@ -387,3 +387,20 @@ def chef_software_info():
 	
 	raise SoftwareError
 explore('chef', chef_software_info)
+
+
+def postgresql_software_info():
+
+	versions_dirs = glob.glob('/usr/lib/p*sql/*')
+	versions_dirs.sort()
+	versions_dirs.reverse()
+	for version in versions_dirs:
+		bin_path = os.path.join(version, 'bin/postgres')
+		if os.path.isfile(bin_path):
+			version_string = system2((bin_path, '--version'))[0].strip()
+			version = version_string.split()[-1]
+			return SoftwareInfo('postgresql', version, version_string)
+	else:
+		raise SoftwareError
+
+explore('postgresql', postgresql_software_info)
