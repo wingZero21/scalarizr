@@ -952,7 +952,7 @@ class MysqlHandler(ServiceCtlHandler):
 
 	def on_Mysql_CreateDataBundle(self, message):
 		try:
-			op = operation(name=self._op_data_bundle, [{
+			op = operation(name=self._op_data_bundle, phases=[{
 				'name': self._phase_data_bundle, 
 				'steps': [self._step_create_data_bundle]
 			}])
