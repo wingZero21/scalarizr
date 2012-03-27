@@ -27,6 +27,7 @@ from scalarizr.handlers import ServiceCtlHandler, HandlerError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 import scalarizr.services.mongodb as mongo_svc
 from scalarizr.messaging.p2p import P2pMessageStore
+from scalarizr.handlers import operation
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
@@ -182,6 +183,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 	def get_initialization_phases(self, hir_message):
 		self._phase_mongodb = 'Configure MongoDB'
+		self._phase_data_bundle = self._op_data_bundle = 'MongoDB data bundle'
+		self._step_create_snapshot = 'Create snapshot'
+		self._step_stop_balancer = 'Stop balancer'
+		self._step_fsync = 'Perform fsync'
 		self._step_accept_scalr_conf = 'Accept Scalr configuration'
 		self._step_check_cfg_server = 'Check that ConfigServer is running'
 		self._step_change_hostname = 'Change hostname'
@@ -862,25 +867,41 @@ class MongoDBHandler(ServiceCtlHandler):
 			return
 		
 		try:
-			bus.fire('before_%s_data_bundle' % BEHAVIOUR)
-			self.mongodb.router_cli.stop_balancer()
-			self.mongodb.cli.sync(lock=True)
-			try:
+			op = operation(name=self._op_data_bundle, phases=[{
+				'name': self._phase_data_bundle, 
+				'steps': [
+					self._step_stop_balancer, 
+					self._step_fsync, 
+					self._step_create_snapshot
+				]
+			}])
+			op.define()
 			
-				# Creating snapshot
-				snap = self._create_snapshot()
-				used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-				bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
-
-				# Notify scalr
-				msg_data = dict(
-					used_size	= '%.3f' % (float(used_size) / 1000,),
-					status		= 'ok'
-				)
-				msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
-				return msg_data
-			finally:
-				self.mongodb.cli.unlock()
+			with op.phase(self._phase_data_bundle):
+				with op.step(self._step_stop_balancer):
+					bus.fire('before_%s_data_bundle' % BEHAVIOUR)
+					self.mongodb.router_cli.stop_balancer()
+					
+				with op.step(self._step_fsync):
+					self.mongodb.cli.sync(lock=True)
+					
+				with op.step(self._step_create_snapshot):
+					try:
+					
+						# Creating snapshot
+						snap = self._create_snapshot()
+						used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+						bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
+		
+						# Notify scalr
+						msg_data = dict(
+							used_size	= '%.3f' % (float(used_size) / 1000,),
+							status		= 'ok'
+						)
+						msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
+						return msg_data
+					finally:
+						self.mongodb.cli.unlock()
 
 		finally:
 			self.mongodb.router_cli.start_balancer()
