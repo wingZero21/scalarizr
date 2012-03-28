@@ -115,9 +115,7 @@ class PostgreSql(BaseService):
 		self._init_service(mpoint, password)
 		self.postgresql_conf.hot_standby = 'off'
 
-		if not self.cluster_dir.is_initialized(mpoint):
-			#slaves never do this
-			self.create_pg_role(ROOT_USER, password, super=True)
+		self.create_pg_role(ROOT_USER, password, super=True)
 					
 		if slaves:
 			self._logger.debug('Registering slave hosts: %s' % ' '.join(slaves))
