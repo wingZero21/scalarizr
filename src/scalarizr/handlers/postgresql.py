@@ -6,6 +6,7 @@ Created on April 18th, 2011
 from __future__ import with_statement
 
 import os
+import glob
 import time
 import shutil
 import tarfile
@@ -32,6 +33,7 @@ STORAGE_PATH 				= "/mnt/pgstorage"
 STORAGE_VOLUME_CNF 			= 'postgresql.json'
 STORAGE_SNAPSHOT_CNF 		= 'postgresql-snap.json'
 
+OPT_PG_VERSION				= 'pg_version'
 OPT_VOLUME_CNF				= 'volume_config'
 OPT_SNAPSHOT_CNF			= 'snapshot_config'
 OPT_ROOT_USER				= 'root_user'
@@ -228,7 +230,27 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		
 		self.pg_keys_dir = self._cnf.private_path('keys')
-		self.postgresql = PostgreSql(self.pg_keys_dir)
+		self.postgresql = PostgreSql(self.version, self.pg_keys_dir)
+		
+		
+	@property
+	def version(self):
+		ver = None
+		if self._cnf.rawini.has_option(CNF_SECTION, OPT_PG_VERSION):
+			ver = self._cnf.rawini.get(CNF_SECTION, OPT_PG_VERSION)
+			
+		if not ver:
+			try:
+				path_list = glob.glob('/var/lib/p*sql/9.*')
+				path_list.sort()
+				path = path_list[-1]
+				ver = os.path.basename(path)
+			except IndexError:
+				self._logger.warning('Postgresql default directory not found. Assuming that PostgreSQL 9.0 is installed.')
+				ver = '9.0'
+			finally:
+				self._update_config({OPT_PG_VERSION : ver})
+		return ver
 		
 	
 	def on_HostInit(self, message):

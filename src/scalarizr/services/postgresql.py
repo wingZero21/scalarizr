@@ -20,7 +20,7 @@ from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, system2, PopenError
 from scalarizr.util.filetool import read_file, write_file, rchown
-from scalarizr.services import BaseService, BaseConfig, lazy
+from scalarizr.services import BaseService, BaseConfig, ServiceError, lazy
 
 
 SERVICE_NAME = BuiltinBehaviours.POSTGRESQL 
@@ -38,6 +38,7 @@ CREATEDB = '/usr/bin/createdb'
 PG_DUMP = '/usr/bin/pg_dump'
 
 ROOT_USER 				= "scalr"
+DEFAULT_USER			= "postgres"
 
 STORAGE_DATA_DIR 		= "data"
 TRIGGER_NAME 			= "trigger"
@@ -97,20 +98,13 @@ class PostgreSql(BaseService):
 								cls, *args, **kwargs)
 		return cls._instance
 	
-	def __init__(self, pg_keys_dir):
+	def __init__(self, version, pg_keys_dir):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
 		self.pg_keys_dir = pg_keys_dir
+		self.version = version
 	
-	@property
-	def version(self):
-		try:
-			path = glob.glob('/var/lib/p*sql/9.*')[0]
-			ver = os.path.basename(path)
-		except IndexError:
-			ver = None
-		return ver
 
 	@property	
 	def unified_etc_path(self):
@@ -229,7 +223,7 @@ class PostgreSql(BaseService):
 		return self._objects[key]
 		
 	def _get_config_dir(self):
-		return self._get('config_dir', ConfigDir)
+		return self._get('config_dir', ConfigDir.find, self.version)
 		
 	def _set_config_dir(self, obj):
 		self._set('config_dir', obj)
@@ -493,7 +487,7 @@ class PSQL(object):
 	path = PSQL_PATH
 	user = None
 	
-	def __init__(self, user='postgres'):	
+	def __init__(self, user=DEFAULT_USER):	
 		self.user = user
 		self._logger = logging.getLogger(__name__)
 		
@@ -561,9 +555,9 @@ class ClusterDir(object):
 	default_centos_path = os.path.join(base_path, 'data')
 	default_ubuntu_path = os.path.join(base_path, 'main')
 	
-	def __init__(self, path=None, user = "postgres"):
+	def __init__(self, path=None):
 		self.path = path
-		self.user = user
+		self.user = DEFAULT_USER
 		self._logger = logging.getLogger(__name__)
 		
 	@classmethod
@@ -614,17 +608,17 @@ class ConfigDir(object):
 	user = None
 	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
-	def __init__(self, path=None, user = "postgres"):
+	def __init__(self, path):
 		self._logger = logging.getLogger(__name__)
-		self.path = path or self.find_path()
-		self.user = user
+		self.path = path
 	
-	def find_path(self):
-		path = self.get_sysconfig_pgdata()
-		if path:
-			return path
-		l = glob.glob('/etc/postgresql/9.*/main') if disttool.is_ubuntu() else glob.glob('/var/lib/p*sql/9.*/data')
-		return l[0] if l else None
+	@classmethod
+	def find(cls, version='9.0'):
+		path = cls.get_sysconfig_pgdata()
+		if not path:
+			path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/postgresql/%s/main/' % version
+		return cls(path)
+		
 	
 	def move_to(self, dst):
 		if not os.path.exists(dst):
@@ -641,7 +635,7 @@ class ConfigDir(object):
 				self._logger.debug('%s is already in place. Skipping.' % config)
 			else:
 				raise BaseException('Postgresql config file not found: %s' % old_config)
-			rchown(self.user, new_config)
+			rchown(DEFAULT_USER, new_config)
 
 		#the following block needs revision
 		
@@ -669,15 +663,14 @@ class ConfigDir(object):
 		file = open(self.sysconf_path, 'w')
 		file.write('PGDATA=%s' % pgdata)
 		file.close()
-		
-	def get_sysconfig_pgdata(self):
+	
+	@classmethod
+	def get_sysconfig_pgdata(cls):
 		pgdata = None
-		if os.path.exists(self.sysconf_path):
-			s = open(self.sysconf_path, 'r').readline().strip()
+		if os.path.exists(cls.sysconf_path):
+			s = open(cls.sysconf_path, 'r').readline().strip()
 			if s and len(s)>7:
 				pgdata = s[7:]
-			else: 
-				self._logger.debug('sysconfig has no PGDATA')
 		return pgdata
 
 
