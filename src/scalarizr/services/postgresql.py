@@ -734,7 +734,7 @@ class PostgresqlConf(BasePGConfig):
 		return self.get('data_directory')
 	
 	def _set_data_directory(self, path):
-		self.set_path_type_option('data_directory', path)
+		self.set('data_directory', path)
 	
 	def _get_wal_level(self):
 		return self.get('wal_level')
