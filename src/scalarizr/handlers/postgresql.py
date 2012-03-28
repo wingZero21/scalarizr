@@ -320,7 +320,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	def farmrole_id(self):
 		id = None
 		if self._cnf.rawini.has_option(config.SECT_GENERAL, config.OPT_FARMROLE_ID):
-			id = self._cnf.rawini.ini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
+			id = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
 		return id
 	
 			
