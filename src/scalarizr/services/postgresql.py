@@ -114,7 +114,11 @@ class PostgreSql(BaseService):
 	def init_master(self, mpoint, password, slaves=None):
 		self._init_service(mpoint, password)
 		self.postgresql_conf.hot_standby = 'off'
-		
+
+		if not self.cluster_dir.is_initialized(mpoint):
+			#slaves never do this
+			self.create_pg_role(ROOT_USER, password, super=True)
+					
 		if slaves:
 			self._logger.debug('Registering slave hosts: %s' % ' '.join(slaves))
 			for host in slaves:
@@ -190,13 +194,10 @@ class PostgreSql(BaseService):
 			self.service.reload(reason='Applying password mode', force=True)
 
 	def _init_service(self, mpoint, password):
+		self.service.stop()
+		
 		self.root_user = self.create_user(ROOT_USER, password)
 		
-		if not self.cluster_dir.is_initialized(mpoint):
-			#slaves never do this
-			self.create_pg_role(ROOT_USER, password, super=True)
-		
-		self.service.stop()
 		move_files = not self.cluster_dir.is_initialized(mpoint)
 		self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
 		self.postgresql_conf.wal_level = 'hot_standby'
