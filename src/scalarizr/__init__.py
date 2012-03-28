@@ -457,7 +457,7 @@ def _shutdown_services(force=False):
 	# Shutdown messaging
 	logger.debug('Shutdowning external messaging')	
 	msg_service = bus.messaging_service
-	msg_service.get_consumer().shutdown()
+	msg_service.get_consumer().shutdown(force=True)
 	msg_service.get_producer().shutdown()
 	bus.messaging_service = None
 	
