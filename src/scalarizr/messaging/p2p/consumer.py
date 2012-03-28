@@ -164,7 +164,8 @@ class P2pMessageConsumer(MessageConsumer):
 		try:
 			self.handler_status = 'running'					
 			self._logger.debug('Notify message listeners (message_id: %s)', message.id)
-			for ln in self.listeners:
+			self._logger.debug('Listeners: %s', self.listeners)
+			for ln in list(self.listeners):
 				ln(message, queue)
 		except (BaseException, Exception), e:
 			self._logger.exception(e)
