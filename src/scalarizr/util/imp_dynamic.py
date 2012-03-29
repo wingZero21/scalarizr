@@ -1,23 +1,19 @@
 '''
 Created on 29.02.2012
 
+@author: marat
 @author: sam
 '''
 
 from scalarizr.util import disttool	
 from scalarizr.util import system2
-#from scalarizr.libs import metaconf
-
 
 import logging
 import re
 import string
 import sys, os
 import imp
-try:
-	import ConfigParser as configparser
-except:
-	import configparser as configparser
+import ConfigParser as configparser
 
 LOG = logging.getLogger(__name__)
 
@@ -83,7 +79,6 @@ class AptPackageMgr(PackageMgr):
 
 		versions.reverse()
 		return versions
-
 
 	def check_update(self, name):
 		installed_re = re.compile(r'^\s{2}Installed: (.+)$')
@@ -172,7 +167,6 @@ class YumPackageMgr(PackageMgr):
 	def yum_command(self, command, **kwds):
 		return system2((('yum', '-d0', '-y') + tuple(filter(None,
 												 command.split()))), **kwds)
-
 	def rpm_ver_cmp(self, v1, v2):
 		return cmp(RpmVersion(v1), RpmVersion(v2))
 	
@@ -207,11 +201,9 @@ class YumPackageMgr(PackageMgr):
 		self.yum_command('install %s' %  self._join_packages_str('-', name, 
 											version, *args), raise_exc=True)
 
-
 '''---------------------------------
 # path to manifest
 ---------------------------------'''
-
 class Manifest(object):
 	_instance = None
 	_MANIFEST = '../import.manifest'
@@ -222,85 +214,81 @@ class Manifest(object):
 			self.path = os.path.join(os.path.dirname(__file__), self._MANIFEST)
 			if not os.path.exists(self.path):
 				self.path = None
-				LOG.error('Import manifest not found')
-				#TODO: realize finding manifest
-
+				LOG.error('Path to manifest fail - import manifest didn`t found')
 		if path:
 			if os.path.exists(path):
 				self.path = path
 			else:
-				LOG.debug('Path `%s` not exist try standart path `%s`', path, self.path)
+				LOG.debug('Path `%s` not exist try standard`%s`', path, self.path)
 
 	def __new__(cls, *args, **kwargs):
 		if not cls._instance:
 			cls._instance = super(Manifest, cls).__new__(cls, *args, **kwargs)
 		return cls._instance
 
-
 def setup(path=None):
 	Manifest(path)
 
 '''---------------------------------
-# importer 
+# extension for import 
 ---------------------------------'''
-
 class ImpImport(object):
-	'''Overloading find_modul and install pckg if it not installed already'''
+	'''Extension for standard import'''
 
-	def __init__(self, path=None):
+	def __init__(self, manifest_path=None):
 		#available package managers:
 		self.pkg_mgrs = {'apt': AptPackageMgr,	'yum': YumPackageMgr}
-		self.mgr = None
+		if disttool.is_debian_based():
+			self.mgr = self.pkg_mgrs['apt']()
+		elif disttool.is_redhat_based():
+			self.mgr = self.pkg_mgrs['yum']()
 
-		self._path = None
-		self.pkg_name = None
-		
 		self.conf = configparser.ConfigParser()
-		self.conf.read(Manifest().path)
+		self.conf.read(Manifest(path=manifest_path).path)
 
-		self.names = ['apt' if disttool.is_debian_based() else 'yum']
+		self.sections_to_look = ['apt' if disttool.is_debian_based() else 'yum']
 		#['apt', 'apt:ubuntu', 'apt:ubuntu11', 'apt:ubuntu11.10']
 		#['yum', 'yum:el', 'yum:el5', 'yum:centos5.7']
 		dist = disttool.linux_dist()
 		if disttool.is_redhat_based():
-			self.names.append(self.names[0] + ':' + 'el')
-			self.names.append(self.names[1] + dist[1].split('.')[0])
+			self.sections_to_look += [
+				self.sections_to_look[0] + ':' + 'el',
+				self.sections_to_look[0] + ':' + 'el' + dist[1].split('.')[0]]
 		else:
-			self.names.append(self.names[0] + ':' + dist[0].lower())
-			self.names.append(self.names[1] + dist[1].split('.')[0])
-		self.names.append(self.names[0] + ':' + dist[0].lower() + dist[1])
-		LOG.debug('Expected manifest sections: `%s`', self.names)
+			self.sections_to_look += [
+				self.sections_to_look[0] + ':' + dist[0].lower(),
+				self.sections_to_look[0] + ':' + dist[0].lower() + \
+					dist[1].split('.')[0]]
+		self.sections_to_look.append(self.sections_to_look[0] + ':' + \
+				dist[0].lower() + dist[1])
+		LOG.debug('expected manifest sections: `%s`', self.sections_to_look)
 
-	def _install_package(self, package):
-		#LOG.debug('install_package %s', package)
-		dist_names = self.names[0:]
+	def install_pypackage(self, package):
+		package = package.lower()
+		LOG.debug('install_package %s', package)
+		dist_names = self.sections_to_look[0:]
 		while len(dist_names) > 0:
 			dist_name = dist_names.pop()
-			#LOG.debug('dist_name=`%s`', dist_name)
 			if dist_name in self.conf.sections() and \
 						package in self.conf.options(dist_name):
-				
 				full_package_name = self.conf.get(dist_name, package)
-				if disttool.is_debian_based():
-					self.mgr = self.pkg_mgrs['apt']()
-				elif disttool.is_redhat_based():
-					self.mgr = self.pkg_mgrs['yum']()
-				else:
-					raise Exception('OS is unknown type. Can`t install`%s`'\
-						' pckg manager is `unknown`' %	full_package_name)
+				LOG.debug('dist_name:%s, package:%s, full_package_name:%s',
+						dist_name, package, full_package_name)
+				if not self.mgr:
+					raise Exception('Can`t install`%s`,pckg manager is unknown'
+						% full_package_name)
 				version = self.mgr.candidates(full_package_name)
-				LOG.debug('ImpImport._install_package: version: %s', version)
+				LOG.debug('ImpImport.install_pypackage: version: %s', version)
 				if version:
 					self.mgr.install(full_package_name, version[-1])
-					break
 				else:
-					raise Exception, 'Pckg `%s`didn`t found, nothing to do'\
-						 % full_package_name
+					raise Exception, 'Pckg mgr didn`t found actual version'\
+						' of `%s`, nothing to do' % full_package_name
 				LOG.debug('Package `%s` successfully installed', package)
 			else:
 				LOG.debug('Didn`t found `%s` in section `%s` import.manifest',
 					package, dist_name)
-	
+
 	def find_module(self, full_name, path=None):
 		if full_name in sys.modules:
 			return self
@@ -309,138 +297,24 @@ class ImpImport(object):
 		#LOG.debug('ImpImport.find_modul. name=`%s`, path=`%s`', name, path or '')
 		try:
 			self.file, self.filename, self.etc = imp.find_module(name, path)
+			return self
 		except:
 			try:
 				#LOG.debug('pkg_name=`%s` didn`t found yet', pkg_name)
 				if pkg_name not in sys.modules:
-					LOG.debug('Pckg or modul`%s`didn`t found. Checking in manifest...',
-					full_name)
-					self._install_package(pkg_name.lower())
-				
+					LOG.debug('Pckg or modul`%s`didn`t found. Checking in'\
+						' manifest...', full_name)
+					self.install_pypackage(pkg_name)
 				self.file, self.filename, self.etc = imp.find_module(name, path)
 				return self
 			except:
-				raise ImportError, 'Installation error in package `%s`. %s' %\
+				raise ImportError, 'Exception in installing package`%s`. %s' %\
 					(full_name, sys.exc_info()[1])
-			raise ImportError, 'Didn`t found package `%s`. %s' %\
-					(full_name, sys.exc_info()[1])
-		return self
 
 	def load_module(self, full_name):
 		if full_name in sys.modules:
 			return sys.modules[full_name]
 		LOG.debug('ImpImport.load_module: %s', full_name)
-		if len(full_name.split('.'))>1:
-			name = full_name.split('.')[-1]
-			LOG.debug('ImpImport.load_module:name = `%s`, full_name = `%s`', name, full_name)
-		else:
-			name = full_name
-		#LOG.debug('ImpImport.load_module:name=`%s`, self.file=`%s`, full_name=`%s`,'\
-		#' self.filename=`%s`, self.etc=`%s`', name, self.file, full_name, self.filename, self.etc)
 		return imp.load_module(full_name, self.file, self.filename, self.etc)
 
-	
 sys.meta_path = [ImpImport()]
-
-"""
-	def find_module(self, full_name, path=None):
-		if full_name in sys.modules:
-			return self
-		name = full_name.split('.')[-1]
-		pkg_name = full_name.split('.')[0]
-		LOG.debug('ImpImport.find_modul. name=`%s`, path=`%s`', name, path or '')
-		try:
-			if isinstance(path, list):
-				if os.path.exists(os.path.join(path[0], name)):
-					self.file, self.filename, self.etc = imp.find_module(name, path)
-					return self
-				elif os.path.exists(os.path.join(path[0])):
-					for ext in ('py', 'pyc', 'pyo', 'so'): 
-						if os.path.exists(os.path.join(path[0], '%s.%s'% (name, ext))):
-							self.file, self.filename, self.etc = imp.find_module(name, path)
-							return self
-						if name in path[0]:
-							self.file, self.filename, self.etc = imp.find_module(name, path)
-
-			elif isinstance(path, None):
-				self.file, self.filename, self.etc = imp.find_module(name, path)
-				return self
-
-		except:
-			try:
-				LOG.debug('Pckg or modul`%s` don`t found. Checking in manifest...',
-					full_name, path)
-				self._install_package(pkg_name)
-				self.file, self.filename, self.etc = imp.find_module(name, path)
-				return self
-			except:
-				raise ImportError, 'Installation error in package `%s`. %s' %\
-					(full_name, sys.exc_info()[1])
-			raise ImportError, 'Didn`t found package `%s`. %s' %\
-					(full_name, sys.exc_info()[1])
-		return self
-
-
-	def load_module(self, full_name):
-		if full_name in sys.modules:
-			return sys.modules[full_name]
-		LOG.debug('ImpImport.load_module: %s', full_name)
-		if len(full_name.split('.'))>1:
-			name = full_name.split('.')[-1]
-			LOG.debug('name = `%s`, full_name = `%s`', name, full_name)
-		else:
-			name = full_name
-		LOG.debug('name=`%s`, self.file=`%s`, full_name=`%s`, self.filename=`%s`, self.etc=`%s`',
-				name, self.file, full_name, self.filename, self.etc)
-		return imp.load_module(full_name, self.file, self.filename, self.etc)
-"""
-
-
-'''
-		 cmd_folder = os.path.abspath(os.path.split(inspect.getfile( inspect.currentframe() ))[0])
-		 if cmd_folder not in sys.path:
-		     sys.path.insert(0, cmd_folder)
-		'''
-
-
-
-"""		def find_module(self, full_name, path=None):
-				name = full_name.split('.')[-1]
-				pkg_name = full_name.split('.')[0]
-
-				LOG.debug('ImpImport.find_modul. name=`%s`, path=`%s`', name, path or '')
-				try:
-						self.file, self.filename, self.etc = imp.find_module(name, path)
-						#self.path = filename
-				except:
-						LOG.debug('Modul or package `%s` is not found. Trying install it now...', full_name)
-						try:
-								self._install_package(pkg_name)
-								LOG.debug('Package `%s` installed', pkg_name)
-								self.file, self.filename, self.etc = imp.find_module(pkg_name, path)
-								#self.path = filename
-								#sys.modules[pkg_name] = imp.load_module(pkg_name, self.file, self.filename, self.etc)
-								#return imp.load_module(pkg_name, self.file, self.filename, self.etc)
-						except:
-								raise ImportError, 'Can`t install modul `%s`. Details: %s' % (full_name,
-										sys.exc_info()[1])
-				return self#imp.load_module(name, file, filename, etc)
-
-		def load_module(self, full_name):
-				LOG.debug('ImpImport.load_module: %s', full_name)
-				pkg_name = full_name.split('.')[0]
-				#pkg_name = 
-				if len(full_name.split('.'))>1:
-						#file, filename, etc = imp.find_module(pkg_name)
-						name = full_name.split('.')[-1]
-						LOG.debug('name = `%s`, full_name = `%s`', name, full_name)
-						#self.file, self.filename, self.etc = imp.find_module(name, path=self.filename)
-						#LOG.debug('filename = `%s`, etc = `%s`', self.filename, self.etc)
-				else:
-						name = full_name
-						#self.file, self.filename, self.etc = imp.find_module(pkg_name)
-				LOG.debug('Before load_modul: name=`%s`, self.file=`%s`, self.filename=`%s`, self.etc=`%s`', name, self.file, self.filename, self.etc)
-				#if self.file or self.filename or self.etc:
-				return imp.load_module(name, self.file, self.filename, self.etc)
-				#else:
-				#	   self.find_module()"""
