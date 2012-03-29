@@ -550,9 +550,9 @@ class PSQL(object):
 					
 	
 class ClusterDir(object):
+	
 	base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
-	default_centos_path = os.path.join(base_path, 'data')
-	default_ubuntu_path = os.path.join(base_path, 'main')
+	default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
 	
 	def __init__(self, path=None):
 		self.path = path
@@ -561,10 +561,7 @@ class ClusterDir(object):
 		
 	@classmethod
 	def find(cls, postgresql_conf):
-		path = postgresql_conf.data_directory
-		if not path:
-			path = cls.default_ubuntu_path if disttool.is_ubuntu() else cls.default_centos_path
-		return cls(path)
+		return cls(postgresql_conf.data_directory or cls.default_path)
 
 	def move_to(self, dst, move_files=True):
 		new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
@@ -573,9 +570,14 @@ class ClusterDir(object):
 			self._logger.debug('Creating directory structure for postgresql cluster: %s' % dst)
 			os.makedirs(dst)
 		
-		if move_files and os.path.exists(self.path):
-			self._logger.debug("copying cluster files from %s into %s" % (self.path, new_cluster_dir))
-			shutil.copytree(self.path, new_cluster_dir)	
+		if move_files:
+			source = self.path 
+			if not os.path.exists(self.path):
+				source = self.default_path
+				self._logger.debug('data_directory in postgresql.conf points to non-existing location, using %s instead' % source)
+			if source != new_cluster_dir:
+				self._logger.debug("copying cluster files from %s into %s" % (source, new_cluster_dir))
+				shutil.copytree(source, new_cluster_dir)	
 		self._logger.debug("changing directory owner to %s" % self.user)	
 		rchown(self.user, dst)
 		
