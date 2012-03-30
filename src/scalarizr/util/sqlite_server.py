@@ -59,6 +59,8 @@ class CursorProxy(Proxy):
 		self._wait = False
 		self._call('cursor_delete', wait=False)
 		
+	close = __del__
+		
 
 class ConnectionProxy(Proxy):
 		
@@ -111,22 +113,33 @@ class SqliteServer(object):
 		
 		
 	def _cursor_delete(self, hash):
-		result = self.cursors[hash].close()
-		del self.cursors[hash]
-		#print 'deleted cursor for ', hash
+		result = None
+		if hash in self.cursors:
+			result = self.cursors[hash].close()
+			del self.cursors[hash]
+			#print 'deleted cursor for ', hash
 		return result
 		
 		
 	def _cursor_execute(self, hash, *args, **kwds):
-		return self.cursors[hash].execute(*args, **kwds)
+		result = None
+		if hash in self.cursors:
+			result  = self.cursors[hash].execute(*args, **kwds)
+		return result 
 	
 	
 	def _cursor_fetchone(self, hash):
-		return self.cursors[hash].fetchone()
+		result = None
+		if hash in self.cursors:
+			result = self.cursors[hash].fetchone()
+		return result 
 		
 		
 	def _cursor_fetchall(self, hash):
-		return self.cursors[hash].fetchall()
+		result = None
+		if hash in self.cursors:
+			result = self.cursors[hash].fetchall()
+		return result 
 			
 			
 	def _executescript(self, hash, sql):
