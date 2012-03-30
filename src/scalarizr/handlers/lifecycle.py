@@ -205,9 +205,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		), broadcast=True)
 		bus.fire("before_host_init", msg)
 		# Update key file
+	
+		self.send_message(msg)
+
 		self._cnf.write_key(self._cnf.DEFAULT_KEY, new_crypto_key)		
-		self.send_message(msg, wait_ack=True)
-		
 
 		bus.cnf.state = ScalarizrState.INITIALIZING
 		bus.fire("host_init")
