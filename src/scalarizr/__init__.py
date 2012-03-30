@@ -90,11 +90,13 @@ class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 			socks=[initdv2.SockParam(8013)]
 		)
 
+
 class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
 		initdv2.ParametrizedInitScript.__init__(self, 
 			'scalr-upd-client', 
-			'/etc/init.d/scalr-upd-client'
+			'/etc/init.d/scalr-upd-client',
+			pid_file='/var/run/scalr-upd-client.pid'
 		)
 
 
@@ -455,7 +457,7 @@ def _shutdown_services(force=False):
 	# Shutdown messaging
 	logger.debug('Shutdowning external messaging')	
 	msg_service = bus.messaging_service
-	msg_service.get_consumer().shutdown()
+	msg_service.get_consumer().shutdown(force=True)
 	msg_service.get_producer().shutdown()
 	bus.messaging_service = None
 	
@@ -638,7 +640,9 @@ def main():
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
 			cnf.fire('apply_user_data', cnf)
-			ScalrUpdClientScript().start()			
+			upd = ScalrUpdClientScript()
+			if not upd.running:
+				upd.start()			
 		
 		# Check Scalr version
 		if not bus.scalr_version:

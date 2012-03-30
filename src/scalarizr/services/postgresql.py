@@ -20,7 +20,7 @@ from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, system2, PopenError
 from scalarizr.util.filetool import read_file, write_file, rchown
-from scalarizr.services import BaseService, BaseConfig, lazy
+from scalarizr.services import BaseService, BaseConfig, ServiceError, lazy
 
 
 SERVICE_NAME = BuiltinBehaviours.POSTGRESQL 
@@ -38,6 +38,7 @@ CREATEDB = '/usr/bin/createdb'
 PG_DUMP = '/usr/bin/pg_dump'
 
 ROOT_USER 				= "scalr"
+DEFAULT_USER			= "postgres"
 
 STORAGE_DATA_DIR 		= "data"
 TRIGGER_NAME 			= "trigger"
@@ -97,20 +98,13 @@ class PostgreSql(BaseService):
 								cls, *args, **kwargs)
 		return cls._instance
 	
-	def __init__(self, pg_keys_dir):
+	def __init__(self, version, pg_keys_dir):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
 		self.pg_keys_dir = pg_keys_dir
+		self.version = version
 	
-	@property
-	def version(self):
-		try:
-			path = glob.glob('/var/lib/p*sql/9.*')[0]
-			ver = os.path.basename(path)
-		except IndexError:
-			ver = None
-		return ver
 
 	@property	
 	def unified_etc_path(self):
@@ -120,7 +114,9 @@ class PostgreSql(BaseService):
 	def init_master(self, mpoint, password, slaves=None):
 		self._init_service(mpoint, password)
 		self.postgresql_conf.hot_standby = 'off'
-		
+
+		self.create_pg_role(ROOT_USER, password, super=True)
+					
 		if slaves:
 			self._logger.debug('Registering slave hosts: %s' % ' '.join(slaves))
 			for host in slaves:
@@ -196,13 +192,10 @@ class PostgreSql(BaseService):
 			self.service.reload(reason='Applying password mode', force=True)
 
 	def _init_service(self, mpoint, password):
+		self.service.stop()
+		
 		self.root_user = self.create_user(ROOT_USER, password)
 		
-		if not self.cluster_dir.is_initialized(mpoint):
-			#slaves never do this
-			self.create_pg_role(ROOT_USER, password, super=True)
-		
-		self.service.stop()
 		move_files = not self.cluster_dir.is_initialized(mpoint)
 		self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
 		self.postgresql_conf.wal_level = 'hot_standby'
@@ -229,7 +222,7 @@ class PostgreSql(BaseService):
 		return self._objects[key]
 		
 	def _get_config_dir(self):
-		return self._get('config_dir', ConfigDir)
+		return self._get('config_dir', ConfigDir.find, self.version)
 		
 	def _set_config_dir(self, obj):
 		self._set('config_dir', obj)
@@ -493,7 +486,7 @@ class PSQL(object):
 	path = PSQL_PATH
 	user = None
 	
-	def __init__(self, user='postgres'):	
+	def __init__(self, user=DEFAULT_USER):	
 		self.user = user
 		self._logger = logging.getLogger(__name__)
 		
@@ -557,21 +550,18 @@ class PSQL(object):
 					
 	
 class ClusterDir(object):
-	base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
-	default_centos_path = os.path.join(base_path, 'data')
-	default_ubuntu_path = os.path.join(base_path, 'main')
 	
-	def __init__(self, path=None, user = "postgres"):
+	base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
+	default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
+	
+	def __init__(self, path=None):
 		self.path = path
-		self.user = user
+		self.user = DEFAULT_USER
 		self._logger = logging.getLogger(__name__)
 		
 	@classmethod
 	def find(cls, postgresql_conf):
-		path = postgresql_conf.data_directory
-		if not path:
-			path = cls.default_ubuntu_path if disttool.is_ubuntu() else cls.default_centos_path
-		return cls(path)
+		return cls(postgresql_conf.data_directory or cls.default_path)
 
 	def move_to(self, dst, move_files=True):
 		new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
@@ -580,9 +570,14 @@ class ClusterDir(object):
 			self._logger.debug('Creating directory structure for postgresql cluster: %s' % dst)
 			os.makedirs(dst)
 		
-		if move_files and os.path.exists(self.path):
-			self._logger.debug("copying cluster files from %s into %s" % (self.path, new_cluster_dir))
-			shutil.copytree(self.path, new_cluster_dir)	
+		if move_files:
+			source = self.path 
+			if not os.path.exists(self.path):
+				source = self.default_path
+				self._logger.debug('data_directory in postgresql.conf points to non-existing location, using %s instead' % source)
+			if source != new_cluster_dir:
+				self._logger.debug("copying cluster files from %s into %s" % (source, new_cluster_dir))
+				shutil.copytree(source, new_cluster_dir)	
 		self._logger.debug("changing directory owner to %s" % self.user)	
 		rchown(self.user, dst)
 		
@@ -614,17 +609,17 @@ class ConfigDir(object):
 	user = None
 	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
-	def __init__(self, path=None, user = "postgres"):
+	def __init__(self, path):
 		self._logger = logging.getLogger(__name__)
-		self.path = path or self.find_path()
-		self.user = user
+		self.path = path
 	
-	def find_path(self):
-		path = self.get_sysconfig_pgdata()
-		if path:
-			return path
-		l = glob.glob('/etc/postgresql/9.*/main') if disttool.is_ubuntu() else glob.glob('/var/lib/p*sql/9.*/data')
-		return l[0] if l else None
+	@classmethod
+	def find(cls, version='9.0'):
+		path = cls.get_sysconfig_pgdata()
+		if not path:
+			path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/postgresql/%s/main/' % version
+		return cls(path)
+		
 	
 	def move_to(self, dst):
 		if not os.path.exists(dst):
@@ -641,7 +636,7 @@ class ConfigDir(object):
 				self._logger.debug('%s is already in place. Skipping.' % config)
 			else:
 				raise BaseException('Postgresql config file not found: %s' % old_config)
-			rchown(self.user, new_config)
+			rchown(DEFAULT_USER, new_config)
 
 		#the following block needs revision
 		
@@ -669,15 +664,14 @@ class ConfigDir(object):
 		file = open(self.sysconf_path, 'w')
 		file.write('PGDATA=%s' % pgdata)
 		file.close()
-		
-	def get_sysconfig_pgdata(self):
+	
+	@classmethod
+	def get_sysconfig_pgdata(cls):
 		pgdata = None
-		if os.path.exists(self.sysconf_path):
-			s = open(self.sysconf_path, 'r').readline().strip()
+		if os.path.exists(cls.sysconf_path):
+			s = open(cls.sysconf_path, 'r').readline().strip()
 			if s and len(s)>7:
 				pgdata = s[7:]
-			else: 
-				self._logger.debug('sysconfig has no PGDATA')
 		return pgdata
 
 
@@ -740,7 +734,7 @@ class PostgresqlConf(BasePGConfig):
 		return self.get('data_directory')
 	
 	def _set_data_directory(self, path):
-		self.set_path_type_option('data_directory', path)
+		self.set('data_directory', path)
 	
 	def _get_wal_level(self):
 		return self.get('wal_level')

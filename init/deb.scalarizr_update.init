@@ -57,7 +57,12 @@ versions = mgr.candidates('$PACKAGE')
 if len(versions) > 1:
 	print 'Installing $PACKAGE=%s' % versions[-2]
 	mgr.install('scalarizr-base', versions[-2], '$PACKAGE', versions[-2])
+versions = mgr.candidates('scalr-upd-client')
+if versions:
+	print 'Installing scalr-upd-client=%s' % versions[-1]
+	mgr.install('scalr-upd-client', versions[-1])
 "
+
 }
 
 

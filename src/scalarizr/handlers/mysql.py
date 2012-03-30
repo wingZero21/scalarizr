@@ -37,6 +37,7 @@ import ConfigParser
 # Extra
 import pexpect
 import signal
+from scalarizr.handlers import operation
 
 
 
@@ -701,6 +702,22 @@ class MysqlHandler(ServiceCtlHandler):
 			
 			'slave_promote_to_master'
 		)
+		
+		self._phase_mysql = 'Configure MySQL'
+		self._phase_data_bundle = self._op_data_bundle = 'MySQL data bundle'
+		self._phase_backup = self._op_backup = 'MySQL backup'
+		self._step_upload_to_cloud_storage = 'Upload data to cloud storage'
+		self._step_accept_scalr_conf = 'Accept Scalr configuration'
+		self._step_patch_conf = 'Patch my.cnf configuration file'
+		self._step_create_storage = 'Create storage'
+		self._step_move_datadir = 'Move data directory to storage'
+		self._step_create_users = 'Create Scalr users'
+		self._step_restore_users = 'Restore Scalr users'
+		self._step_create_data_bundle = 'Create data bundle'
+		self._step_change_replication_master = 'Change replication Master'
+		self._step_innodb_recovery = 'InnoDB recovery'
+		self._step_collect_hostup_data = 'Collect HostUp data'
+		
 		self.on_reload()		
 
 	def on_init(self):		
@@ -799,18 +816,6 @@ class MysqlHandler(ServiceCtlHandler):
 
 	def get_initialization_phases(self, hir_message):
 		if BEHAVIOUR in hir_message.body:
-			self._phase_mysql = 'Configure MySQL'
-			self._step_accept_scalr_conf = 'Accept Scalr configuration'
-			self._step_patch_conf = 'Patch my.cnf configuration file'
-			self._step_create_storage = 'Create storage'
-			self._step_move_datadir = 'Move data directory to storage'
-			self._step_create_users = 'Create Scalr users'
-			self._step_restore_users = 'Restore Scalr users'
-			self._step_create_data_bundle = 'Create data bundle'
-			self._step_change_replication_master = 'Change replication Master'
-			self._step_innodb_recovery = 'InnoDB recovery'
-			self._step_collect_hostup_data = 'Collect HostUp data'
-
 			steps = [self._step_accept_scalr_conf, self._step_create_storage]
 			if hir_message.body['mysql']['replication_master'] == '1':
 				steps.append(self._step_create_data_bundle)
@@ -825,7 +830,7 @@ class MysqlHandler(ServiceCtlHandler):
 			}]}
 
 	def on_BeforeHostTerminate(self, message):
-		self._logger.info('Handling BeforeHostTerminate message from %s' % message.local_ip)
+		self._logger.debug('Handling BeforeHostTerminate message from %s' % message.local_ip)
 		if message.local_ip == self._platform.get_private_ip():
 			self._logger.info('Stopping %s service' % BEHAVIOUR)
 			self._stop_service(reason='Server will be terminated')
@@ -891,46 +896,56 @@ class MysqlHandler(ServiceCtlHandler):
 			databases = list(row['Database'] for row in mysql.client.fetchall('SHOW DATABASES'))
 			if 'information_schema' in databases:
 				databases.remove('information_schema')
-			
-			# Defining archive name and path
-			if not os.path.exists(self._tmp_dir):
-				os.makedirs(self._tmp_dir)
-			backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
-			backup_path = os.path.join(self._tmp_dir, backup_filename)
-			
-			# Creating archive 
-			backup = tarfile.open(backup_path, 'w:gz')
 
-			# Dump all databases
-			self._logger.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)			
-			for db_name in databases:
-				try:
-					dump_path = os.path.join(tmpdir, db_name + '.sql') 
-					mysql.dump_database(db_name, dump_path)
-					backup.add(dump_path, os.path.basename(dump_path))						
-				except PopenError, e:
-					self._logger.exception('Cannot dump database %s. %s', db_name, e)
+			op = operation(name=self._op_backup, phases=[{
+				'name': self._phase_backup, 
+				'steps': ["Backup '%s'" % db for db in databases] + [self._step_upload_to_cloud_storage]
+			}])
+			op.define()			
+
+			with op.phase(self._phase_backup):
 			
-			backup.close()
-			
-			# Creating list of full paths to archive chunks
-			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-				parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-			else:
-				parts = [backup_path]
+				# Defining archive name and path
+				if not os.path.exists(self._tmp_dir):
+					os.makedirs(self._tmp_dir)
+				backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
+				backup_path = os.path.join(self._tmp_dir, backup_filename)
+				
+				# Creating archive 
+				backup = tarfile.open(backup_path, 'w:gz')
+	
+				# Dump all databases
+				self._logger.info("Dumping all databases")
+				tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)			
+				for db in databases:
+					try:
+						with op.step("Backup '%s'" % db, warning=True):						
+							dump_path = os.path.join(tmpdir, db + '.sql') 
+							mysql.dump_database(db, dump_path)
+							backup.add(dump_path, os.path.basename(dump_path))						
+					except PopenError, e:
+						self._logger.exception('Cannot dump database %s. %s', db, e)
+				
+				backup.close()
+				
+				with op.step(self._step_upload_to_cloud_storage):
+					# Creating list of full paths to archive chunks
+					if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+						parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+					else:
+						parts = [backup_path]
+							
+					self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+					trn = transfer.Transfer()
+					result = trn.upload(parts, self._platform.cloud_storage_path)
+					self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
+									self._platform.cloud_storage_path, backup_filename)
 					
-			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
-			trn = transfer.Transfer()
-			result = trn.upload(parts, self._platform.cloud_storage_path)
-			self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
-							self._platform.cloud_storage_path, backup_filename)
-			
-			# Notify Scalr
-			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
-				status = 'ok',
-				backup_parts = result
-			))
+				# Notify Scalr
+				self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
+					status = 'ok',
+					backup_parts = result
+				))
 						
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
@@ -950,24 +965,33 @@ class MysqlHandler(ServiceCtlHandler):
 
 	def on_Mysql_CreateDataBundle(self, message):
 		try:
-			bus.fire('before_mysql_data_bundle')
+			op = operation(name=self._op_data_bundle, phases=[{
+				'name': self._phase_data_bundle, 
+				'steps': [self._step_create_data_bundle]
+			}])
+			op.define()
 			
-			# Creating snapshot
-			root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
-			used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
-				
-			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
+			with op.phase(self._phase_data_bundle):
+				with op.step(self._step_create_data_bundle):
 			
-			# Notify scalr
-			msg_data = dict(
-				log_file=log_file,
-				log_pos=log_pos,
-				used_size='%.3f' % (float(used_size) / 1024 / 1024,),
-				status='ok'
-			)
-			msg_data.update(self._compat_storage_data(snap=snap))
-			self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
+					bus.fire('before_mysql_data_bundle')
+					
+					# Creating snapshot
+					root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
+					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+					used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
+						
+					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
+					
+					# Notify scalr
+					msg_data = dict(
+						log_file=log_file,
+						log_pos=log_pos,
+						used_size='%.3f' % (float(used_size) / 1024 / 1024,),
+						status='ok'
+					)
+					msg_data.update(self._compat_storage_data(snap=snap))
+					self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 		except (Exception, BaseException), e:
 			self._logger.exception(e)

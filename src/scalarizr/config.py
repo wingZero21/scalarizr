@@ -946,7 +946,6 @@ class State(object):
 			cur.close()
 		conn.commit()
 
-	
 	def get_all(self, name):
 		conn = self._conn()
 		cur = conn.cursor()

@@ -25,9 +25,11 @@ class P2pMessageConsumer(MessageConsumer):
 	_logger = None
 	_server = None
 	_handler_thread = None
+
 	#_not_empty = None
 	handler_locked = False
 	handler_status = 'stopped'
+	handing_message_id = None	
 	
 	def __init__(self, endpoint=None, msg_handler_enabled=True):
 		MessageConsumer.__init__(self)
@@ -153,6 +155,10 @@ class P2pMessageConsumer(MessageConsumer):
 			self._logger.debug('Waiting for message handler to complete it`s task. Timeout: %d seconds', t)
 			wait_until(lambda: self.handler_status in ('idle', 'stopped'), 
 					timeout=t, error_text='Message consumer is busy', logger=self._logger)
+		
+		if self.handing_message_id:
+			store = P2pMessageStore()
+			store.mark_as_handled(self.handing_message_id)
 	
 		if self._handler_thread:
 			self._handler_thread.join()
@@ -164,14 +170,16 @@ class P2pMessageConsumer(MessageConsumer):
 		try:
 			self.handler_status = 'running'					
 			self._logger.debug('Notify message listeners (message_id: %s)', message.id)
-			for ln in self.listeners:
+			self.handing_message_id = message.id
+			for ln in list(self.listeners):
 				ln(message, queue)
 		except (BaseException, Exception), e:
 			self._logger.exception(e)
 		finally:
 			self._logger.debug('Mark message (message_id: %s) as handled', message.id)
 			store.mark_as_handled(message.id)
-			self.handler_status = 'idle'			
+			self.handler_status = 'idle'
+			self.handing_message_id = None			
 
 	def message_handler (self):
 		store = P2pMessageStore()

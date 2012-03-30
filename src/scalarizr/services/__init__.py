@@ -155,5 +155,8 @@ class BaseConfig(object):
 	def save_data(self):
 		if self.data:
 			self.data.write(self.path)			
+			
+class ServiceError(BaseException):
+	pass
 
 	

@@ -24,6 +24,7 @@ from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.libs.metaconf import Configuration, NoPathError
+from scalarizr.handlers import operation
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
@@ -92,15 +93,6 @@ class RedisHandler(ServiceCtlHandler):
 
 	def get_initialization_phases(self, hir_message):
 		if BEHAVIOUR in hir_message.body:
-			self._phase_redis = 'Configure Redis'
-			self._step_accept_scalr_conf = 'Accept Scalr configuration'
-			self._step_patch_conf = 'Patch configuration files'
-			self._step_create_storage = 'Create storage'
-			self._step_init_master = 'Initialize Master'
-			self._step_init_slave = 'Initialize Slave'
-			self._step_create_data_bundle = 'Create data bundle'
-			self._step_change_replication_master = 'Change replication Master'
-			self._step_collect_host_up_data = 'Collect HostUp data'
 
 			steps = [self._step_accept_scalr_conf, self._step_create_storage]
 			if hir_message.body[BEHAVIOUR]['replication_master'] == '1':
@@ -134,6 +126,20 @@ class RedisHandler(ServiceCtlHandler):
 			
 			'slave_promote_to_master'
 		)	
+
+		self._phase_redis = 'Configure Redis'
+		self._phase_data_bundle = self._op_data_bundle = 'Redis data bundle'
+		self._phase_backup = self._op_backup = 'Redis backup'
+		self._step_copy_database_file = 'Copy database file'
+		self._step_upload_to_cloud_storage = 'Upload data to cloud storage'
+		self._step_accept_scalr_conf = 'Accept Scalr configuration'
+		self._step_patch_conf = 'Patch configuration files'
+		self._step_create_storage = 'Create storage'
+		self._step_init_master = 'Initialize Master'
+		self._step_init_slave = 'Initialize Slave'
+		self._step_create_data_bundle = 'Create data bundle'
+		self._step_change_replication_master = 'Change replication Master'
+		self._step_collect_host_up_data = 'Collect HostUp data'
 		
 		self.on_reload()		
 
@@ -254,20 +260,30 @@ class RedisHandler(ServiceCtlHandler):
 	def on_DbMsr_CreateDataBundle(self, message):
 		
 		try:
-			bus.fire('before_%s_data_bundle' % BEHAVIOUR)
-			# Creating snapshot		
-			snap = self._create_snapshot()
-			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-			bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)			
+			op = operation(name=self._op_data_bundle, phases=[{
+				'name': self._phase_data_bundle, 
+				'steps': [self._step_create_data_bundle]
+			}])
+			op.define()
+
 			
-			# Notify scalr
-			msg_data = dict(
-				db_type 	= BEHAVIOUR,
-				used_size	= '%.3f' % (float(used_size) / 1000,),
-				status		= 'ok'
-			)
-			msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
-			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
+			with op.phase(self._phase_data_bundle):
+				with op.step(self._step_create_data_bundle):
+			
+					bus.fire('before_%s_data_bundle' % BEHAVIOUR)
+					# Creating snapshot		
+					snap = self._create_snapshot()
+					used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+					bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)			
+					
+					# Notify scalr
+					msg_data = dict(
+						db_type 	= BEHAVIOUR,
+						used_size	= '%.3f' % (float(used_size) / 1000,),
+						status		= 'ok'
+					)
+					msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
+					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
@@ -389,39 +405,52 @@ class RedisHandler(ServiceCtlHandler):
 	def on_DbMsr_CreateBackup(self, message):
 		tmpdir = backup_path = None
 		try:
-			# Dump all databases
-			self._logger.info("Dumping all databases")			
-			tmpdir = tempfile.mkdtemp()		
-			src_path = self.redis.db_path
-			dump_path = os.path.join(tmpdir, os.path.basename(self.redis.db_path))
+			op = operation(name=self._op_backup, phases=[{
+				'name': self._phase_backup, 
+				'steps': [self._step_copy_database_file, 
+						self._step_upload_to_cloud_storage]
+			}])
+			op.define()			
 			
-			if not os.path.exists(src_path):
-				raise BaseException('%s DB file %s does not exist. Skipping Backup process' % (BEHAVIOUR, src_path))
 			
-			# Defining archive name and path
-			backup_filename = 'redis-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-			backup_path = os.path.join('/tmp', backup_filename)
+			with op.phase(self._phase_backup):
 
-			shutil.copyfile(src_path, dump_path)
-			rchown('redis', tmpdir)
+				with op.step(self._step_copy_database_file):
 			
-			# Creating archive 
-			backup = tarfile.open(backup_path, 'w:gz')
-			backup.add(dump_path, os.path.basename(self.redis.db_path))
-			backup.close()
-			
-			# Creating list of full paths to archive chunks
-			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-				parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-			else:
-				parts = [backup_path]
+					# Dump all databases
+					self._logger.info("Dumping all databases")			
+					tmpdir = tempfile.mkdtemp()		
+					src_path = self.redis.db_path
+					dump_path = os.path.join(tmpdir, os.path.basename(self.redis.db_path))
 					
-			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
-			trn = transfer.Transfer()
-			result = trn.upload(parts, self._platform.cloud_storage_path)
-			self._logger.info("%s backup uploaded to cloud storage under %s/%s" % 
-						(BEHAVIOUR, self._platform.cloud_storage_path, backup_filename))
-			
+					if not os.path.exists(src_path):
+						raise BaseException('%s DB file %s does not exist. Skipping Backup process' % (BEHAVIOUR, src_path))
+					
+					# Defining archive name and path
+					backup_filename = 'redis-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+					backup_path = os.path.join('/tmp', backup_filename)
+		
+					shutil.copyfile(src_path, dump_path)
+					rchown('redis', tmpdir)
+					
+					# Creating archive 
+					backup = tarfile.open(backup_path, 'w:gz')
+					backup.add(dump_path, os.path.basename(self.redis.db_path))
+					backup.close()
+				
+					# Creating list of full paths to archive chunks
+					if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+						parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+					else:
+						parts = [backup_path]
+					
+				with op.step(self._step_upload_to_cloud_storage):
+					self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+					trn = transfer.Transfer()
+					result = trn.upload(parts, self._platform.cloud_storage_path)
+					self._logger.info("%s backup uploaded to cloud storage under %s/%s" % 
+								(BEHAVIOUR, self._platform.cloud_storage_path, backup_filename))
+				
 			# Notify Scalr
 			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
 				db_type = BEHAVIOUR,

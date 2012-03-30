@@ -47,13 +47,21 @@ class operation(object):
 	
 	def __enter__(self):
 		if self._depth == 'step':
-			self._stepnos[self._phase] += 1			
+			self._stepnos[self._phase] += 1
+			STATE['operation.step'] = self._step
+			STATE['operation.in_progress'] = 1			
 			self.progress(0)
+			
+		elif self._depth == 'phase':
+			STATE['operation.phase'] = self._phase
+			
 		return self
 	
 	def __exit__(self, *args):
 		if self._depth == 'step':
 			try:
+				STATE['operation.step'] = ''
+				STATE['operation.in_progress'] = 0
 				if not args[0]:
 					self.complete()
 				elif self._warning:
@@ -62,6 +70,9 @@ class operation(object):
 					self.error(exc_info=args)					
 			finally:
 				self._depth = 'phase'
+				
+		elif self._depth == 'phase':
+			STATE['operation.phase'] = ''
 
 
 	def define(self):

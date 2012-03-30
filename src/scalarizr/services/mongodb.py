@@ -22,14 +22,10 @@ from scalarizr.util.filetool import rchown, read_file, write_file
 import pymongo
 
 
-try:
-	MONGOD = software.whereis('mongod')[0]
-	MONGO_CLI = software.whereis('mongo')[0]
-	MONGO_DUMP = software.whereis('mongodump')[0]
-	MONGOS = software.whereis('mongos')[0]	
-except IndexError:
-	#raise Exception('Cannot locate mongo executables.')
-	pass
+MONGOD = software.which('mongod')
+MONGO_CLI = software.which('mongo')
+MONGO_DUMP = software.which('mongodump')
+MONGOS = software.which('mongos')
 
 ROUTER_DEFAULT_PORT = 27017
 ARBITER_DEFAULT_PORT = 27020

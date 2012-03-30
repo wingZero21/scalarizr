@@ -27,6 +27,7 @@ from scalarizr.handlers import ServiceCtlHandler, HandlerError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 import scalarizr.services.mongodb as mongo_svc
 from scalarizr.messaging.p2p import P2pMessageStore
+from scalarizr.handlers import operation
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
@@ -181,21 +182,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				Messages.HOST_UP)
 		
 	def get_initialization_phases(self, hir_message):
-		self._phase_mongodb = 'Configure MongoDB'
-		self._step_accept_scalr_conf = 'Accept Scalr configuration'
-		self._step_check_cfg_server = 'Check that ConfigServer is running'
-		self._step_change_hostname = 'Change hostname'
-		self._step_init_master = 'Initialize Master'
-		self._step_init_slave = 'Initialize Slave'
-		self._step_start_arbiter = 'Start Arbiter'
-		self._step_start_cfg_server = 'Start ConfigServer'
-		self._step_start_router = 'Start Router'
-		self._step_enter_rs0_barrier = 'Enter rs-0 barrier'
-		self._step_wait_cfg_server = 'Wait for ConfigServer on mongo-0-0'
-		self._step_auth_on_cfg_server_and_router = 'Authenticate on ConfigServer and Router'
-		self._step_create_scalr_users = 'Create Scalr users'
-		self._step_create_shard = 'Create Shard'
-		
 		return {'before_host_up': [{
 			'name': self._phase_mongodb,
 			'steps': [
@@ -223,6 +209,29 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 			'slave_promote_to_master'
 		)	
+		
+		self._phase_mongodb = 'Configure MongoDB'
+		self._phase_data_bundle = self._op_data_bundle = 'MongoDB data bundle'
+		self._phase_backup = self._op_backup = 'MongoDB backup'
+		self._step_upload_to_cloud_storage = 'Upload data to cloud storage'		
+		self._step_create_snapshot = 'Create snapshot'
+		self._step_stop_balancer = 'Stop balancer'
+		self._step_fsync = 'Perform fsync'
+		self._step_accept_scalr_conf = 'Accept Scalr configuration'
+		self._step_check_cfg_server = 'Check that ConfigServer is running'
+		self._step_change_hostname = 'Change hostname'
+		self._step_init_master = 'Initialize Master'
+		self._step_init_slave = 'Initialize Slave'
+		self._step_start_arbiter = 'Start Arbiter'
+		self._step_start_cfg_server = 'Start ConfigServer'
+		self._step_start_router = 'Start Router'
+		self._step_enter_rs0_barrier = 'Enter rs-0 barrier'
+		self._step_wait_cfg_server = 'Wait for ConfigServer on mongo-0-0'
+		self._step_auth_on_cfg_server_and_router = 'Authenticate on ConfigServer and Router'
+		self._step_create_scalr_users = 'Create Scalr users'
+		self._step_create_shard = 'Create Shard'
+		
+		
 		self.on_reload()   
 		self._status_trackers = dict()
 	
@@ -862,25 +871,41 @@ class MongoDBHandler(ServiceCtlHandler):
 			return
 		
 		try:
-			bus.fire('before_%s_data_bundle' % BEHAVIOUR)
-			self.mongodb.router_cli.stop_balancer()
-			self.mongodb.cli.sync(lock=True)
-			try:
+			op = operation(name=self._op_data_bundle, phases=[{
+				'name': self._phase_data_bundle, 
+				'steps': [
+					self._step_stop_balancer, 
+					self._step_fsync, 
+					self._step_create_snapshot
+				]
+			}])
+			op.define()
 			
-				# Creating snapshot
-				snap = self._create_snapshot()
-				used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-				bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
-
-				# Notify scalr
-				msg_data = dict(
-					used_size	= '%.3f' % (float(used_size) / 1000,),
-					status		= 'ok'
-				)
-				msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
-				return msg_data
-			finally:
-				self.mongodb.cli.unlock()
+			with op.phase(self._phase_data_bundle):
+				with op.step(self._step_stop_balancer):
+					bus.fire('before_%s_data_bundle' % BEHAVIOUR)
+					self.mongodb.router_cli.stop_balancer()
+					
+				with op.step(self._step_fsync):
+					self.mongodb.cli.sync(lock=True)
+					
+				with op.step(self._step_create_snapshot):
+					try:
+					
+						# Creating snapshot
+						snap = self._create_snapshot()
+						used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+						bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
+		
+						# Notify scalr
+						msg_data = dict(
+							used_size	= '%.3f' % (float(used_size) / 1000,),
+							status		= 'ok'
+						)
+						msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
+						return msg_data
+					finally:
+						self.mongodb.cli.unlock()
 
 		finally:
 			self.mongodb.router_cli.start_balancer()
@@ -894,31 +919,47 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		tmpdir = backup_path = None
 		try:
-			#turn balancer off
-			self.mongodb.router_cli.stop_balancer()
+			op = operation(name=self._op_backup, phases=[{
+				'name': self._phase_backup, 
+				'steps': [self._step_fsync] + 
+						["Backup '%s'" % db for db in self.mongodb.router_cli.list_database_names()] + 
+						[self._step_upload_to_cloud_storage]
+			}])
+			op.define()			
 			
-			#perform fsync
-			self.mongodb.cli.sync()
+			with op.phase(self._phase_backup):
 			
-			#create temporary dir for dumps
-			if not os.path.exists(self._tmp_dir):
-				os.makedirs(self._tmp_dir)
-			tmpdir = tempfile.mkdtemp(self._tmp_dir)		
-			rchown(mongo_svc.DEFAULT_USER, tmpdir) 
-
-			#dump config db on router
-			r_dbs = self.mongodb.router_cli.list_database_names()
-			rdb_name = 'config'
-			if rdb_name  in r_dbs:
-				private_ip = self._platform.get_private_ip()
-				router_port = mongo_svc.ROUTER_DEFAULT_PORT
-				router_dump = mongo_svc.MongoDump(private_ip, router_port)
-				router_dump_path = tmpdir + os.sep + 'router_' + rdb_name + '.bson'
-				err = router_dump.create(rdb_name, router_dump_path)
-				if err:
-					raise HandlerError('Error while dumping database %s: %s' % (rdb_name, err))
-			else:
-				self._logger.warning('config db not found. Nothing to dump on router.')
+				#turn balancer off
+				self.mongodb.router_cli.stop_balancer()
+			
+				with op.step(self._step_fsync):
+					#perform fsync
+					self.mongodb.cli.sync()
+			
+				
+				#create temporary dir for dumps
+				if not os.path.exists(self._tmp_dir):
+					os.makedirs(self._tmp_dir)
+				tmpdir = tempfile.mkdtemp(self._tmp_dir)		
+				rchown(mongo_svc.DEFAULT_USER, tmpdir) 
+	
+				#dump config db on router
+				r_dbs = self.mongodb.router_cli.list_database_names()
+				rdb_name = 'config'
+				if rdb_name  in r_dbs:
+					try:
+						with op.step("Backup '%s'" % rdb_name, warning=True):
+							private_ip = self._platform.get_private_ip()
+							router_port = mongo_svc.ROUTER_DEFAULT_PORT
+							router_dump = mongo_svc.MongoDump(private_ip, router_port)
+							router_dump_path = tmpdir + os.sep + 'router_' + rdb_name + '.bson'
+							err = router_dump.create(rdb_name, router_dump_path)
+							if err:
+								raise HandlerError('Error while dumping database %s: %s' % (rdb_name, err))
+					except:
+						self._logger.exception('Cannot dump database %s', rdb_name)
+				else:
+					self._logger.warning('config db not found. Nothing to dump on router.')
 			
 			# Get databases list
 			dbs = self.mongodb.cli.list_database_names()
@@ -936,24 +977,29 @@ class MongoDBHandler(ServiceCtlHandler):
 			md = mongo_svc.MongoDump()  
 			
 			for db_name in dbs:
-				dump_path = tmpdir + os.sep + db_name + '.bson'
-				err = md.create(db_name, dump_path)[1]
-				if err:
-					raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
-				backup.add(dump_path, os.path.basename(dump_path))
+				try:
+					with ("Backup '%s'" % db_name):
+						dump_path = tmpdir + os.sep + db_name + '.bson'
+						err = md.create(db_name, dump_path)[1]
+						if err:
+							raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
+						backup.add(dump_path, os.path.basename(dump_path))
+				except:
+					self._logger.exception('Cannot dump database %s', db_name)
 			backup.close()
 			
-			# Creating list of full paths to archive chunks
-			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-				parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-			else:
-				parts = [backup_path]
-					
-			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
-			trn = transfer.Transfer()
-			result = trn.upload(parts, self._platform.cloud_storage_path)
-			self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
-							BEHAVIOUR, self._platform.cloud_storage_path, backup_filename)
+			with op.step(self._step_upload_to_cloud_storage):
+				# Creating list of full paths to archive chunks
+				if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+					parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+				else:
+					parts = [backup_path]
+						
+				self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+				trn = transfer.Transfer()
+				result = trn.upload(parts, self._platform.cloud_storage_path)
+				self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
+								BEHAVIOUR, self._platform.cloud_storage_path, backup_filename)
 			
 			# Notify Scalr
 			self.send_message(MongoDBMessages.CREATE_BACKUP_RESULT, dict(
