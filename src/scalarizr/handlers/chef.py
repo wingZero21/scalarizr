@@ -11,13 +11,9 @@ import os
 
 from scalarizr.bus import bus
 from scalarizr.util import system2
-from scalarizr.util.software import whereis
-from scalarizr.handlers import Handler, HandlerError
+from scalarizr.util.software import which
+from scalarizr.handlers import Handler
 from scalarizr.externals.chef.api import ChefAPI
-try:
-	import json
-except ImportError:
-	import simplejson as json
 
 
 LOG = logging.getLogger(__name__)
@@ -47,14 +43,7 @@ class ChefHandler(Handler):
 		)
 
 	def on_reload(self):
-		try:
-			self._chef_client_bin = whereis('chef-client')[0]
-		except IndexError:
-			raise HandlerError('chef-client not found')
-		try:
-			self._ohai_bin = whereis('ohai')
-		except IndexError:
-			raise HandlerError('ohai not found')
+		self._chef_client_bin = which('chef-client')
 		self._chef_data = None
 		self._client_conf_path = '/etc/chef/client.rb'
 		self._validator_key_path = '/etc/chef/validation.pem'

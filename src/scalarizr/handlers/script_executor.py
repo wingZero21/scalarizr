@@ -72,7 +72,7 @@ class ScriptExecutor(Handler):
 		self._lock = threading.Lock()
 		self._msg_queue = Queue.Queue()
 		self._tmp_dirs_to_delete = []
-		bus.on(reload=self.on_reload)
+		bus.on(reload=self.on_reload, shutdown=self.on_shutdown)
 		self._op_exec_scripts = 'Execute scripts'
 		self.on_reload()		
 	
@@ -101,6 +101,9 @@ class ScriptExecutor(Handler):
 		# logs_truncate_over
 		self._logs_truncate_over = parse_size(self._config.get(sect_name, self.OPT_LOGS_TRUNCATE_OVER))
 
+
+	def on_shutdown(self):
+		pass
 
 	def exec_scripts_on_event (self, event_name=None, event_id=None, target_ip=None, local_ip=None, 
 							scripts=None):

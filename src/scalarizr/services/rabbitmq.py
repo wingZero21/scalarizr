@@ -32,12 +32,9 @@ class NodeTypes:
 	RAM = 'ram'
 	DISK = 'disk'
 
-try:
-	RABBITMQCTL = software.whereis('rabbitmqctl')[0]
-	RABBITMQ_SERVER = software.whereis('rabbitmq-server')[0]
-	RABBITMQ_PLUGINS = software.whereis('rabbitmq-plugins')[0]
-except:
-	raise Exception('Some of rabbitmq executables where not found.')
+RABBITMQCTL = software.which('rabbitmqctl')
+RABBITMQ_SERVER = software.which('rabbitmq-server')
+RABBITMQ_PLUGINS = software.which('rabbitmq-plugins')
 
 
 class RabbitMQInitScript(initdv2.ParametrizedInitScript):

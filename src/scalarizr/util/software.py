@@ -29,6 +29,12 @@ def explore(name, lookup_fn):
 		raise Exception("'%s' software has been already explored" % name)
 	software_list[name] = lookup_fn
 	
+def which(name):
+	try:
+		whereis(name)[0]
+	except IndexError:
+		raise LookupError("Command '%s' not found" % (name, ))
+	
 def whereis(name):
 	'''
 	Search executable in /bin /sbin /usr/bin /usr/sbin /usr/libexec /usr/local/bin /usr/local/sbin
