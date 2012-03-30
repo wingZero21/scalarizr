@@ -9,6 +9,9 @@ import threading
 import weakref
 from weakref import WeakValueDictionary
 
+from scalarizr.util import wait_until
+
+
 class Proxy(object):
 	
 	
@@ -25,11 +28,11 @@ class Proxy(object):
 		
 	def _call(self, method, wait, args=None, kwds=None):
 		self.result_available.clear()
-		print 'Into queue:', method, args, kwds, '[%s]'% self.hash
+		#print 'Into queue:', method, args, kwds, '[%s]'% self.hash
 		self.tasks_queue.put((method, self.__hash__(), args, kwds))
 		if wait:
 			self.result_available.wait()
-		print 'Got result from server: ', self.result
+		#print 'Got result from server: ', self.result
 		return self.result
 	
 
@@ -61,7 +64,7 @@ class ConnectionProxy(Proxy):
 		
 	def cursor(self):
 		cp = CursorProxy(self.tasks_queue)
-		print 'created new cursor proxy:', cp
+		#print 'created new cursor proxy:', cp
 		return cp
 
 
@@ -88,29 +91,29 @@ class SqliteServer(object):
 	
 	def serve_forever(self):
 		while True:
-			print 'Looking for new message in server queue'
+			#print 'Looking for new message in server queue'
 			job = self.single_conn_proxy.tasks_queue.get()
 			method, hash, args, kwds = '_%s' % job[0], job[1], job[2] or [], job[3] or {}
-			print 'Got new job from queue:', method, hash, args, kwds
+			#print 'Got new job from queue:', method, hash, args, kwds
 			result = getattr(self, method)(hash, *args, **kwds)
 			if hash in self.clients:
 				self.clients[hash].result = result
 				self.clients[hash].result_available.set()
-				print 'result:', result
+				#print 'result:', result
 	
 	
 	def _cursor_create(self, hash, proxy):
-		print 'hash=%s, proxy=%s' % (hash, proxy)
+		#print 'hash=%s, proxy=%s' % (hash, proxy)
 		self.cursors[hash] = self.master_conn.cursor()
 		self.clients[hash] = proxy
-		print 'created cursor for ', hash
+		#print 'created cursor for ', hash
 		return self.cursors[hash]
 		
 		
 	def _cursor_delete(self, hash):
 		result = self.cursors[hash].close()
 		del self.cursors[hash]
-		print 'deleted cursor for ', hash
+		#print 'deleted cursor for ', hash
 		return result
 		
 		
@@ -129,3 +132,25 @@ class SqliteServer(object):
 	def _executescript(self, hash, sql):
 		return self.connect.executescript(sql)
 	
+	
+
+class SQLiteServerThread(threading.Thread):
+	
+	ready = None
+	connection = None
+	conn_creator = None
+	
+	def __init__(self, conn_creator):
+		self.ready = False
+		self.conn_creator = conn_creator
+		threading.Thread.__init__(self)
+		
+	def run(self):
+		server = SqliteServer(self.conn_creator)
+		self.connection = server.connect()
+		self.ready = True
+		server.serve_forever()
+		
+
+def wait_for_server_thread(t):
+	wait_until(lambda: t.ready == True, sleep = 0.1)

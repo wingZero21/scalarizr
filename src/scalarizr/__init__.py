@@ -36,8 +36,7 @@ from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 import pprint
-from scalarizr.util import wait_until
-
+from scalarizr.util import sqlite_server, wait_until
 
 
 class ScalarizrError(BaseException):
@@ -153,7 +152,13 @@ def _init():
 	initdv2.explore("scalarizr", ScalarizrInitScript)
 
 	# Configure database connection pool
-	bus.db = SqliteLocalObject(_db_connect)
+	#bus.db = SqliteLocalObject(_db_connect)
+	t = sqlite_server.SQLiteServerThread(_db_connect)
+	t.daemon = True
+	t.start()
+	sqlite_server.wait_for_server_thread(t)
+	bus.db = t.connection
+	
 
 
 DB_NAME = 'db.sqlite'

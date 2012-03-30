@@ -8,56 +8,80 @@ import time
 import threading
 import sqlite3
 import unittest
-from scalarizr.util import sqlite_server
+from scalarizr.util import sqlite_server, wait_until
 
 
-db = None
+conn = None
 
-		
 def get_connection():
 	return sqlite3.Connection(database='/Users/dmitry/Documents/workspace/scalarizr-localobj/share/db.sql')
 
+	
+def test_fetchall(conn):
+	cursor = conn.cursor()
+	cursor.execute('select 1;')
+	return cursor.fetchall()
 
+
+def test_fetchone(conn):	
+	cursor = conn.cursor()
+	cursor.execute('select 1;')
+	return cursor.fetchone()
+
+		
 class ThreadClass(threading.Thread):
 	
-	def __init__(self):
+	fetchall = None
+	fetchone = None
+
+	def __init__(self, conn):
+		self.conn = conn
 		threading.Thread.__init__(self)
-		
+			
 	def run(self):
-		server = sqlite_server.SqliteServer(get_connection)
-		global db
-		db = server.connect()
-		server.serve_forever()
-		
+		self.fetchall = test_fetchall(self.conn)
+		self.fetchone =  test_fetchone(self.conn)
+	
 		
 class Test(unittest.TestCase):
 
-
+	conn = None
+	
+	
 	def setUp(self):
 		pass
+
 
 	def tearDown(self):
 		pass
 
 
-	def testSingleThread(self):
-		
-		t = ThreadClass()
+	@classmethod
+	def setUpClass(cls):
+		t = sqlite_server.SQLiteServerThread(get_connection)
 		t.daemon = True
 		t.start()
-		time.sleep(1)
-		
-		cursor = db.cursor()
-		cursor.execute('select 1;')
-		result = cursor.fetchall()
+		wait_until(lambda: t.ready == True, sleep = 0.1)
+		#print 'ready'
+		cls.connection = t.connection
+	
+	
+	def testSingleThread(self):
+		result = test_fetchall(self.connection)
 		self.assertEqual(result, [(1,)])
 		
-		
-		cursor = db.cursor()
-		cursor.execute('select 1;')
-		result = cursor.fetchone()
+		result = test_fetchone(self.connection)
 		self.assertEqual(result, (1,))
 
+
+	def testMultipleThreads(self):
+		t = ThreadClass(self.connection)
+		t.daemon = True
+		t.start()
+		t.join()
+		self.assertEqual(t.fetchall, [(1,)])
+		self.assertEqual(t.fetchone, (1,))
+		
 
 class DummyConnection(object):
 	
