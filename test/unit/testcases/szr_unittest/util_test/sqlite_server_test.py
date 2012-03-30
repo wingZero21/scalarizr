@@ -28,11 +28,18 @@ def test_fetchone(conn):
 	cursor.execute('select 1;')
 	return cursor.fetchone()
 
+	
+def test_rowcount(conn):
+	cursor = conn.cursor()
+	cursor.execute('select 1;')
+	return cursor.rowcount
+
 		
 class ThreadClass(threading.Thread):
 	
 	fetchall = None
 	fetchone = None
+	rowcount = None
 
 	def __init__(self, conn):
 		self.conn = conn
@@ -41,6 +48,7 @@ class ThreadClass(threading.Thread):
 	def run(self):
 		self.fetchall = test_fetchall(self.conn)
 		self.fetchone =  test_fetchone(self.conn)
+		self.rowcount = test_rowcount(self.conn)
 	
 		
 class Test(unittest.TestCase):
@@ -71,6 +79,9 @@ class Test(unittest.TestCase):
 		
 		result = test_fetchone(self.connection)
 		self.assertEqual(result, (1,))
+		
+		result = test_rowcount(self.connection)
+		self.assertEqual(result, -1)
 
 
 	def testMultipleThreads(self):
@@ -80,6 +91,7 @@ class Test(unittest.TestCase):
 		t.join()
 		self.assertEqual(t.fetchall, [(1,)])
 		self.assertEqual(t.fetchone, (1,))
+		self.assertEqual(t.rowcount, -1)
 		
 
 class DummyConnection(object):

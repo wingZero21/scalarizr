@@ -51,10 +51,13 @@ class CursorProxy(Proxy):
 
 	def fetchall(self):
 		return self._call('cursor_fetchall', wait=True)
+	
+	@property
+	def rowcount(self):
+		return self._call('cursor_rowcount', wait=True)
 
 	
 	def __del__(self):
-		self._wait = False
 		self._call('cursor_delete', wait=False)
 		
 	close = __del__
@@ -134,6 +137,13 @@ class SqliteServer(object):
 		result = None
 		if hash in self.cursors:
 			result = self.cursors[hash].fetchall()
+		return result 
+	
+	
+	def _cursor_rowcount(self, hash):
+		result = None
+		if hash in self.cursors:
+			result = self.cursors[hash].rowcount
 		return result 
 			
 			
