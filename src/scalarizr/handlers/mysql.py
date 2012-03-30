@@ -705,6 +705,8 @@ class MysqlHandler(ServiceCtlHandler):
 		
 		self._phase_mysql = 'Configure MySQL'
 		self._phase_data_bundle = self._op_data_bundle = 'MySQL data bundle'
+		self._phase_backup = self._op_backup = 'MySQL backup'
+		self._step_upload_to_cloud_storage = 'Upload data to cloud storage'
 		self._step_accept_scalr_conf = 'Accept Scalr configuration'
 		self._step_patch_conf = 'Patch my.cnf configuration file'
 		self._step_create_storage = 'Create storage'
@@ -894,46 +896,56 @@ class MysqlHandler(ServiceCtlHandler):
 			databases = list(row['Database'] for row in mysql.client.fetchall('SHOW DATABASES'))
 			if 'information_schema' in databases:
 				databases.remove('information_schema')
-			
-			# Defining archive name and path
-			if not os.path.exists(self._tmp_dir):
-				os.makedirs(self._tmp_dir)
-			backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
-			backup_path = os.path.join(self._tmp_dir, backup_filename)
-			
-			# Creating archive 
-			backup = tarfile.open(backup_path, 'w:gz')
 
-			# Dump all databases
-			self._logger.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)			
-			for db_name in databases:
-				try:
-					dump_path = os.path.join(tmpdir, db_name + '.sql') 
-					mysql.dump_database(db_name, dump_path)
-					backup.add(dump_path, os.path.basename(dump_path))						
-				except PopenError, e:
-					self._logger.exception('Cannot dump database %s. %s', db_name, e)
+			op = operation(name=self._op_backup, phases=[{
+				'name': self._phase_backup, 
+				'steps': ["Backup '%s'" % db for db in databases] + [self._step_upload_to_cloud_storage]
+			}])
+			op.define()			
+
+			with op.phase(self._phase_backup):
 			
-			backup.close()
-			
-			# Creating list of full paths to archive chunks
-			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-				parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-			else:
-				parts = [backup_path]
+				# Defining archive name and path
+				if not os.path.exists(self._tmp_dir):
+					os.makedirs(self._tmp_dir)
+				backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
+				backup_path = os.path.join(self._tmp_dir, backup_filename)
+				
+				# Creating archive 
+				backup = tarfile.open(backup_path, 'w:gz')
+	
+				# Dump all databases
+				self._logger.info("Dumping all databases")
+				tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)			
+				for db in databases:
+					try:
+						with op.step("Backup '%s'" % db, warning=True):						
+							dump_path = os.path.join(tmpdir, db + '.sql') 
+							mysql.dump_database(db, dump_path)
+							backup.add(dump_path, os.path.basename(dump_path))						
+					except PopenError, e:
+						self._logger.exception('Cannot dump database %s. %s', db, e)
+				
+				backup.close()
+				
+				with op.step(self._step_upload_to_cloud_storage):
+					# Creating list of full paths to archive chunks
+					if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+						parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+					else:
+						parts = [backup_path]
+							
+					self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+					trn = transfer.Transfer()
+					result = trn.upload(parts, self._platform.cloud_storage_path)
+					self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
+									self._platform.cloud_storage_path, backup_filename)
 					
-			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
-			trn = transfer.Transfer()
-			result = trn.upload(parts, self._platform.cloud_storage_path)
-			self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
-							self._platform.cloud_storage_path, backup_filename)
-			
-			# Notify Scalr
-			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
-				status = 'ok',
-				backup_parts = result
-			))
+				# Notify Scalr
+				self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
+					status = 'ok',
+					backup_parts = result
+				))
 						
 		except (Exception, BaseException), e:
 			self._logger.exception(e)

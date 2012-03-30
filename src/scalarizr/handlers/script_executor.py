@@ -13,6 +13,8 @@ from scalarizr.util import parse_size, format_size, read_shebang
 from scalarizr.util.filetool import write_file
 import threading
 from scalarizr.config import ScalarizrState
+from scalarizr.handlers import operation
+from scalarizr.handlers import HandlerError
 try:
 	import time
 except ImportError:
@@ -71,6 +73,7 @@ class ScriptExecutor(Handler):
 		self._msg_queue = Queue.Queue()
 		self._tmp_dirs_to_delete = []
 		bus.on(reload=self.on_reload)
+		self._op_exec_scripts = 'Execute scripts'
 		self.on_reload()		
 	
 	def on_reload(self):
@@ -110,68 +113,78 @@ class ScriptExecutor(Handler):
 		
 		if scripts:
 			if event_name:
-				self._logger.info("Executing %d %s script(s)", len(scripts), event_name)
+				phase = "Executing %d %s script(s)" % (len(scripts), event_name)
 			else:
-				self._logger.info('Executing %d script(s)', len(scripts))
+				phase = 'Executing %d script(s)' % (len(scripts), )
+			self._logger.info(phase)
 			
-			self._exec_dir = self._exec_dir_prefix + str(time.time())
-			if not os.path.isdir(self._exec_dir):
-				self._logger.debug("Create temp exec dir %s", self._exec_dir)
-				os.makedirs(self._exec_dir)
+			op = operation(name=self._op_exec_scripts, phases=[{
+				'name': phase,
+				'steps': ["Execute '%s'" % script.name for script in scripts if not script.asynchronous]
+			}])
+			op.define()
 			
-			if self._wait_async:
-				async_threads = []
-	
-			'''	
-			c = None
-			if any(script.asynchronous for script in scripts) and not self._cleaner_running:
-				self._num_pending_async = 0				
-				c = threading.Thread(target=self._cleanup)
-				c.setDaemon(True)
-			'''
+			with op.phase(phase):
 			
-			cleaner_thread = threading.Thread(target=self._cleanup)
-			cleaner_thread.setDaemon(True)
-			
-			msg_sender_thread = threading.Thread(target=self._msg_sender)
-			msg_sender_thread.setDaemon(True)
-			
-			log_rotate_thread = threading.Thread(target=self._log_rotate)
-			log_rotate_thread.setDaemon(True)
-			
+				self._exec_dir = self._exec_dir_prefix + str(time.time())
+				if not os.path.isdir(self._exec_dir):
+					self._logger.debug("Create temp exec dir %s", self._exec_dir)
+					os.makedirs(self._exec_dir)
 				
-			for script in scripts:
-				self._logger.debug("Execute script '%s' in %s mode; exec timeout: %d", 
-								script.name, "async" if script.asynchronous else "sync", script.exec_timeout)
-				if script.asynchronous:
-					self._lock.acquire()
-					self._num_pending_async += 1
-					self._lock.release()
-					
-					# Start new thread
-					t = threading.Thread(target=self._execute_script_runnable, args=[script])
-					t.start()
+				if self._wait_async:
+					async_threads = []
+		
+				'''	
+				c = None
+				if any(script.asynchronous for script in scripts) and not self._cleaner_running:
+					self._num_pending_async = 0				
+					c = threading.Thread(target=self._cleanup)
+					c.setDaemon(True)
+				'''
+				
+				cleaner_thread = threading.Thread(target=self._cleanup)
+				cleaner_thread.setDaemon(True)
+				
+				msg_sender_thread = threading.Thread(target=self._msg_sender)
+				msg_sender_thread.setDaemon(True)
+				
+				log_rotate_thread = threading.Thread(target=self._log_rotate)
+				log_rotate_thread.setDaemon(True)
+				
+				try:	
+					for script in scripts:
+						self._logger.debug("Execute script '%s' in %s mode; exec timeout: %d", 
+										script.name, "async" if script.asynchronous else "sync", script.exec_timeout)
+						if script.asynchronous:
+							self._lock.acquire()
+							self._num_pending_async += 1
+							self._lock.release()
+							
+							# Start new thread
+							t = threading.Thread(target=self._execute_script_runnable, args=[script])
+							t.start()
+							if self._wait_async:
+								async_threads.append(t)
+						else:
+							with op.step("Execute '%s'" % script.name):
+								msg_data = self._execute_script(script)
+								if msg_data:
+									self.send_message(Messages.EXEC_SCRIPT_RESULT, msg_data, queue=Queues.LOG)
+				finally:
+					self._tmp_dirs_to_delete.append(self._exec_dir)
+					# Wait
 					if self._wait_async:
-						async_threads.append(t)
-				else:
-					msg_data = self._execute_script(script)
-					if msg_data:
-						self.send_message(Messages.EXEC_SCRIPT_RESULT, msg_data, queue=Queues.LOG)						
-
-			self._tmp_dirs_to_delete.append(self._exec_dir)
-			# Wait
-			if self._wait_async:
-				for t in async_threads:
-					t.join()
-			
-			if not self._cleaner_running:
-				cleaner_thread.start()
-				
-			if not self._msg_sender_running:
-				msg_sender_thread.start()
-				
-			if not self._log_rotate_running:
-				log_rotate_thread.start()
+						for t in async_threads:
+							t.join()
+					
+					if not self._cleaner_running:
+						cleaner_thread.start()
+						
+					if not self._msg_sender_running:
+						msg_sender_thread.start()
+						
+					if not self._log_rotate_running:
+						log_rotate_thread.start()
 								
 	def _cleanup(self):
 		try:

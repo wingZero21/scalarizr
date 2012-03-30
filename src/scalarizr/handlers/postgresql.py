@@ -135,7 +135,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 		)	
 		
 		self._phase_postgresql = 'Configure PostgreSQL'
-		self._phase_data_bundle = self._op_data_bundle = 'PostgreSQL data bundle'			
+		self._phase_data_bundle = self._op_data_bundle = 'PostgreSQL data bundle'
+		self._phase_backup = self._op_backup = 'PostgreSQL backup'
+		self._step_upload_to_cloud_storage = 'Upload data to cloud storage'
 		self._step_accept_scalr_conf = 'Accept Scalr configuration'
 		self._step_patch_conf = 'Patch configuration files'
 		self._step_create_storage = 'Create storage'
@@ -607,54 +609,67 @@ class PostgreSqlHander(ServiceCtlHandler):
 			# Get databases list
 			psql = PSQL(user=self.postgresql.root_user.name)
 			databases = psql.list_pg_databases()
+			if 'template0' in databases:
+				databases.remove('template0')
 			
-			if not os.path.exists(self._tmp_path):
-				os.makedirs(self._tmp_path)
-				
-			# Defining archive name and path
-			backup_filename = 'pgsql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-			backup_path = os.path.join(self._tmp_path, backup_filename)
 			
-			# Creating archive 
-			backup = tarfile.open(backup_path, 'w:gz')
-
-			# Dump all databases
-			self._logger.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
-			rchown(self.postgresql.root_user.name, tmpdir)	
+			op = operation(name=self._op_backup, phases=[{
+				'name': self._phase_backup, 
+				'steps': ["Backup '%s'" % db for db in databases] + [self._step_upload_to_cloud_storage]
+			}])
+			op.define()			
 			
-			for db_name in databases:
-				if db_name == 'template0':
-					continue
-				
-				dump_path = tmpdir + os.sep + db_name + '.sql'
-				pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path)
-				su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
-				err = system2(su_args)[1]
-				if err:
-					raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
-				
-				backup.add(dump_path, os.path.basename(dump_path))
-			backup.close()
+			with op.phase(self._phase_backup):
 			
-			# Creating list of full paths to archive chunks
-			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-				parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-			else:
-				parts = [backup_path]
+				if not os.path.exists(self._tmp_path):
+					os.makedirs(self._tmp_path)
 					
-			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
-			trn = transfer.Transfer()
-			result = trn.upload(parts, self._platform.cloud_storage_path)
-			self._logger.info("Postgresql backup uploaded to cloud storage under %s/%s", 
-							self._platform.cloud_storage_path, backup_filename)
-			
-			# Notify Scalr
-			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-				db_type = BEHAVIOUR,
-				status = 'ok',
-				backup_parts = result
-			))
+				# Defining archive name and path
+				backup_filename = 'pgsql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+				backup_path = os.path.join(self._tmp_path, backup_filename)
+				
+				# Creating archive 
+				backup = tarfile.open(backup_path, 'w:gz')
+	
+				# Dump all databases
+				self._logger.info("Dumping all databases")
+				tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
+				rchown(self.postgresql.root_user.name, tmpdir)	
+				
+				for db in databases:
+					try:
+						with op.step("Backup '%s'" % db, warning=True):
+							dump_path = tmpdir + os.sep + db + '.sql'
+							pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db, dump_path)
+							su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
+							err = system2(su_args)[1]
+							if err:
+								raise HandlerError('Error while dumping database %s: %s' % (db, err))
+							backup.add(dump_path, os.path.basename(dump_path))							
+					except:
+						self._logger.exception('Cannot dump database %s. %s', db)
+
+				backup.close()
+				
+				with op.step(self._step_upload_to_cloud_storage):
+					# Creating list of full paths to archive chunks
+					if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+						parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+					else:
+						parts = [backup_path]
+							
+					self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+					trn = transfer.Transfer()
+					result = trn.upload(parts, self._platform.cloud_storage_path)
+					self._logger.info("Postgresql backup uploaded to cloud storage under %s/%s", 
+									self._platform.cloud_storage_path, backup_filename)
+				
+				# Notify Scalr
+				self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+					db_type = BEHAVIOUR,
+					status = 'ok',
+					backup_parts = result
+				))
 						
 		except (Exception, BaseException), e:
 			self._logger.exception(e)

@@ -212,6 +212,8 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		self._phase_mongodb = 'Configure MongoDB'
 		self._phase_data_bundle = self._op_data_bundle = 'MongoDB data bundle'
+		self._phase_backup = self._op_backup = 'MongoDB backup'
+		self._step_upload_to_cloud_storage = 'Upload data to cloud storage'		
 		self._step_create_snapshot = 'Create snapshot'
 		self._step_stop_balancer = 'Stop balancer'
 		self._step_fsync = 'Perform fsync'
@@ -917,31 +919,47 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		tmpdir = backup_path = None
 		try:
-			#turn balancer off
-			self.mongodb.router_cli.stop_balancer()
+			op = operation(name=self._op_backup, phases=[{
+				'name': self._phase_backup, 
+				'steps': [self._step_fsync] + 
+						["Backup '%s'" % db for db in self.mongodb.router_cli.list_database_names()] + 
+						[self._step_upload_to_cloud_storage]
+			}])
+			op.define()			
 			
-			#perform fsync
-			self.mongodb.cli.sync()
+			with op.phase(self._phase_backup):
 			
-			#create temporary dir for dumps
-			if not os.path.exists(self._tmp_dir):
-				os.makedirs(self._tmp_dir)
-			tmpdir = tempfile.mkdtemp(self._tmp_dir)		
-			rchown(mongo_svc.DEFAULT_USER, tmpdir) 
-
-			#dump config db on router
-			r_dbs = self.mongodb.router_cli.list_database_names()
-			rdb_name = 'config'
-			if rdb_name  in r_dbs:
-				private_ip = self._platform.get_private_ip()
-				router_port = mongo_svc.ROUTER_DEFAULT_PORT
-				router_dump = mongo_svc.MongoDump(private_ip, router_port)
-				router_dump_path = tmpdir + os.sep + 'router_' + rdb_name + '.bson'
-				err = router_dump.create(rdb_name, router_dump_path)
-				if err:
-					raise HandlerError('Error while dumping database %s: %s' % (rdb_name, err))
-			else:
-				self._logger.warning('config db not found. Nothing to dump on router.')
+				#turn balancer off
+				self.mongodb.router_cli.stop_balancer()
+			
+				with op.step(self._step_fsync):
+					#perform fsync
+					self.mongodb.cli.sync()
+			
+				
+				#create temporary dir for dumps
+				if not os.path.exists(self._tmp_dir):
+					os.makedirs(self._tmp_dir)
+				tmpdir = tempfile.mkdtemp(self._tmp_dir)		
+				rchown(mongo_svc.DEFAULT_USER, tmpdir) 
+	
+				#dump config db on router
+				r_dbs = self.mongodb.router_cli.list_database_names()
+				rdb_name = 'config'
+				if rdb_name  in r_dbs:
+					try:
+						with op.step("Backup '%s'" % rdb_name, warning=True):
+							private_ip = self._platform.get_private_ip()
+							router_port = mongo_svc.ROUTER_DEFAULT_PORT
+							router_dump = mongo_svc.MongoDump(private_ip, router_port)
+							router_dump_path = tmpdir + os.sep + 'router_' + rdb_name + '.bson'
+							err = router_dump.create(rdb_name, router_dump_path)
+							if err:
+								raise HandlerError('Error while dumping database %s: %s' % (rdb_name, err))
+					except:
+						self._logger.exception('Cannot dump database %s', rdb_name)
+				else:
+					self._logger.warning('config db not found. Nothing to dump on router.')
 			
 			# Get databases list
 			dbs = self.mongodb.cli.list_database_names()
@@ -959,24 +977,29 @@ class MongoDBHandler(ServiceCtlHandler):
 			md = mongo_svc.MongoDump()  
 			
 			for db_name in dbs:
-				dump_path = tmpdir + os.sep + db_name + '.bson'
-				err = md.create(db_name, dump_path)[1]
-				if err:
-					raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
-				backup.add(dump_path, os.path.basename(dump_path))
+				try:
+					with ("Backup '%s'" % db_name):
+						dump_path = tmpdir + os.sep + db_name + '.bson'
+						err = md.create(db_name, dump_path)[1]
+						if err:
+							raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
+						backup.add(dump_path, os.path.basename(dump_path))
+				except:
+					self._logger.exception('Cannot dump database %s', db_name)
 			backup.close()
 			
-			# Creating list of full paths to archive chunks
-			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-				parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-			else:
-				parts = [backup_path]
-					
-			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
-			trn = transfer.Transfer()
-			result = trn.upload(parts, self._platform.cloud_storage_path)
-			self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
-							BEHAVIOUR, self._platform.cloud_storage_path, backup_filename)
+			with op.step(self._step_upload_to_cloud_storage):
+				# Creating list of full paths to archive chunks
+				if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+					parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+				else:
+					parts = [backup_path]
+						
+				self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+				trn = transfer.Transfer()
+				result = trn.upload(parts, self._platform.cloud_storage_path)
+				self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
+								BEHAVIOUR, self._platform.cloud_storage_path, backup_filename)
 			
 			# Notify Scalr
 			self.send_message(MongoDBMessages.CREATE_BACKUP_RESULT, dict(
