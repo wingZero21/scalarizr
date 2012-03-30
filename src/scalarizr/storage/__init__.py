@@ -218,8 +218,7 @@ class Storage:
 def _update_volume_tablerow(vol, state=None):
 	if Storage.maintain_volume_table:
 		from scalarizr.bus import bus
-		db = bus.db
-		conn = db.get().get_connection()
+		conn = bus.db
 		cur = conn.cursor()
 		cur.execute('UPDATE storage SET state = ? WHERE device = ?', (state, vol.device))
 		if not cur.rowcount:

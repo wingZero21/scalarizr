@@ -684,8 +684,7 @@ def main():
 
 		if options.reinit:
 			print 'Call scalarizr to reinitialize role (see /var/log/scalarizr.log for results)'
-			db = bus.db
-			conn = db.get().get_connection()
+			conn = bus.db
 			cur = conn.cursor()
 			try:
 				cur.execute(

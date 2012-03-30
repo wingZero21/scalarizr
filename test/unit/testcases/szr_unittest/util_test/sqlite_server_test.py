@@ -62,7 +62,6 @@ class Test(unittest.TestCase):
 		t.daemon = True
 		t.start()
 		wait_until(lambda: t.ready == True, sleep = 0.1)
-		#print 'ready'
 		cls.connection = t.connection
 	
 	
