@@ -88,9 +88,9 @@ class _P2pMessageStore:
 			ex.add_task(self.rotate, 3600, 'Rotate messages sqlite table') # execute rotate task each hour
 
 	def _conn(self):
-		db = bus.db
-		return db.get().get_connection()
-		
+		return bus.db
+	
+	
 	def rotate(self):
 		conn = self._conn()
 		cur = conn.cursor()

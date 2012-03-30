@@ -51,7 +51,7 @@ class _Bus(Observable):
 	db = None
 	"""
 	@ivar db: Database connection pool. Single connection per thread
-	@type db: scalarizr.util.SqliteLocalObject
+	@type db: scalarizr.util.sqlite_server.ConnectionProxy
 	"""
 	
 	messaging_service = None

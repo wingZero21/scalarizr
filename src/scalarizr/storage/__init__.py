@@ -56,8 +56,7 @@ class Storage:
 	def volume_table():
 		if Storage.maintain_volume_table:
 			from scalarizr.bus import bus
-			db = bus.db
-			conn = db.get().get_connection()
+			conn = bus.db
 			cur = conn.cursor()
 			try:
 				return cur.execute('SELECT * FROM storage').fetchall()

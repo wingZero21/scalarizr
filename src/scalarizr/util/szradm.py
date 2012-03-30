@@ -215,8 +215,7 @@ class Command(object):
 		print (out)
 
 	def get_db_conn(self):
-		db = bus.db
-		return db.get().get_connection()
+		return bus.db
 
 
 class GetlatestVersionCommand(Command):

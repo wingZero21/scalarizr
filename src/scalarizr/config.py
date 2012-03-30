@@ -922,8 +922,7 @@ class ScalarizrCnf(Observable):
 class State(object):
 	
 	def _conn(self):
-		db = bus.db
-		return db.get().get_connection()
+		return bus.db
 	
 	
 	def __getitem__(self, name):
