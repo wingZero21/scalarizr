@@ -74,6 +74,10 @@ class ConnectionProxy(Proxy):
 		return self._call('executescript', sql)
 	
 	
+	def commit(self):
+		pass
+	
+		
 class SqliteServer(object):
 	
 	def __init__(self, conn_creator):
@@ -144,7 +148,6 @@ class SqliteServer(object):
 			
 	def _executescript(self, hash, sql):
 		return self.connect.executescript(sql)
-	
 	
 
 class SQLiteServerThread(threading.Thread):
