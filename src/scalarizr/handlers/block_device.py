@@ -140,7 +140,7 @@ class BlockDeviceHandler(handlers.Handler):
 						self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
 							volume_id = vol.id,
 							device_name = vol.ebs_device
-						), broadcast=True, wait_ack=True)
+						), broadcast=True, wait_subhandler=True)
 						bus.fire("block_device_mounted", volume_id=qe_volume.volume_id, device=vol.device)
 
 				else:

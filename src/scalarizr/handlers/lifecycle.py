@@ -308,7 +308,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			self._define_initialization(message)			
 			bus.fire("host_init_response", message)
 			if bus.scalr_version >= (2, 2, 3):
-				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
+				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_subhandler=True)
 			msg = self.new_message(Messages.HOST_UP, broadcast=True)
 			bus.fire("before_host_up", msg)
 			self.send_message(msg)

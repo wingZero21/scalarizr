@@ -4,6 +4,8 @@ Created on Dec 5, 2009
 @author: marat
 '''
 
+from scalarizr.bus import bus
+
 # Core
 from scalarizr.messaging import MessageConsumer, MessagingError
 from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage
@@ -191,6 +193,12 @@ class P2pMessageConsumer(MessageConsumer):
 		self._logger.debug('Fired message acknowledge event: %s', message.name)
 		
 	def wait_subhandler(self, message):
+		pl = bus.platform
+			
+		saved_access_data = pl._access_data
+		if saved_access_data:
+			saved_access_data = dict(saved_access_data)		
+		
 		self.message_to_ack = message
 		self.return_on_ack = True
 		thread = threading.Thread(name='%sHandler' % message.name, target=self.message_handler)
@@ -200,6 +208,8 @@ class P2pMessageConsumer(MessageConsumer):
 		thread.join()
 		self._logger.debug('Completed message subhandler thread: %s', thread.getName())
 		
+		if saved_access_data:
+			pl.set_access_data(saved_access_data)		
 	
 	def message_handler (self):
 		store = P2pMessageStore()
