@@ -165,11 +165,16 @@ class Handler(object):
 		return msg
 	
 	def send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
-					queue=Queues.CONTROL, wait_ack=False):
+					queue=Queues.CONTROL, wait_ack=False, new_crypto_key=None):
 		srv = bus.messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
 				self.new_message(msg_name, msg_body, msg_meta, broadcast)
 		srv.get_producer().send(queue, msg)
+		
+		if new_crypto_key:
+			cnf = bus.cnf
+			cnf.write_key(cnf.DEFAULT_KEY, new_crypto_key)
+			
 		if wait_ack:
 			pl = bus.platform
 			cons = srv.get_consumer()
