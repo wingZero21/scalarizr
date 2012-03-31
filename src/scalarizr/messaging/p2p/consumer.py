@@ -184,9 +184,23 @@ class P2pMessageConsumer(MessageConsumer):
 		
 	def wait_acknowledge(self, message):
 		self.message_to_ack = message
+		self.return_on_ack = False
 		self.ack_event.clear()
+		self._logger.debug('Waiting message acknowledge event: %s', message.name)
 		self.ack_event.wait()
+		self._logger.debug('Fired message acknowledge event: %s', message.name)
 		
+	def wait_subhandler(self, message):
+		self.message_to_ack = message
+		self.return_on_ack = True
+		thread = threading.Thread(name='%sHandler' % message.name, target=self.message_handler)
+		self._logger.debug('Starting message subhandler thread: %s', thread.getName())
+		thread.start()
+		self._logger.debug('Waiting message subhandler thread: %s', thread.getName())
+		thread.join()
+		self._logger.debug('Completed message subhandler thread: %s', thread.getName())
+		
+	
 	def message_handler (self):
 		store = P2pMessageStore()
 		self.handler_status = 'idle'
@@ -207,6 +221,8 @@ class P2pMessageConsumer(MessageConsumer):
 								
 								self.message_to_ack = None
 								self.ack_event.set()
+								if self.return_on_ack:
+									return
 								break
 						time.sleep(0.1)
 						continue
