@@ -41,6 +41,7 @@ class P2pMessageConsumer(MessageConsumer):
 		else:
 			self._handler_thread = None
 		self.message_to_ack = None
+		self.ack_event = threading.Event()
 		#self._not_empty = threading.Event()
 			
 	def start(self):
@@ -181,7 +182,11 @@ class P2pMessageConsumer(MessageConsumer):
 			self.handler_status = 'idle'
 			self.handing_message_id = None
 		
-
+	def wait_acknowledge(self, message):
+		self.message_to_ack = message
+		self.ack_event.clear()
+		self.ack_event.wait()
+		
 	def message_handler (self):
 		store = P2pMessageStore()
 		self.handler_status = 'idle'
@@ -193,13 +198,16 @@ class P2pMessageConsumer(MessageConsumer):
 				try:
 					if self.message_to_ack:
 						for queue, message in store.get_unhandled(self.endpoint):
-							#self._logger.debug('Got: %s', message.name)
+
 							if message.name == self.message_to_ack.name and \
 									message.meta['server_id'] == self.message_to_ack.meta['server_id']:
 								self._logger.debug('Going to handle_one_message. Thread: %s', threading.currentThread().getName())
 								self._handle_one_message(message, queue, store)
 								self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
-								return
+								
+								self.message_to_ack = None
+								self.ack_event.set()
+								break
 						time.sleep(0.1)
 						continue
 					
