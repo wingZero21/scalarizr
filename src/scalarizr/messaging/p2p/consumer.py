@@ -179,7 +179,8 @@ class P2pMessageConsumer(MessageConsumer):
 			self._logger.debug('Mark message (message_id: %s) as handled', message.id)
 			store.mark_as_handled(message.id)
 			self.handler_status = 'idle'
-			self.handing_message_id = None			
+			self.handing_message_id = None
+		
 
 	def message_handler (self):
 		store = P2pMessageStore()
@@ -195,7 +196,9 @@ class P2pMessageConsumer(MessageConsumer):
 							#self._logger.debug('Got: %s', message.name)
 							if message.name == self.message_to_ack.name and \
 									message.meta['server_id'] == self.message_to_ack.meta['server_id']:
+								self._logger.debug('Going to handle_one_message. Thread: %s', threading.currentThread().getName())
 								self._handle_one_message(message, queue, store)
+								self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
 								return
 						time.sleep(0.1)
 						continue
