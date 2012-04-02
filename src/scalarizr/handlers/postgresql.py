@@ -496,7 +496,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 			)
 			
 			self.postgresql.stop_replication()
-			slaves = [host.internal_ip for host in self._get_slave_hosts()]
 			
 			if master_storage_conf:
 
@@ -511,7 +510,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
-					
+				
+			slaves = [host.internal_ip for host in self._get_slave_hosts()]		
 			self.postgresql.init_master(self._storage_path, self.root_password, slaves)
 			self._update_config({OPT_REPLICATION_MASTER : "1"})	
 				
