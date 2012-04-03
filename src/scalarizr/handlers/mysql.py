@@ -766,6 +766,7 @@ class MysqlHandler(ServiceCtlHandler):
 					my_cli = spawn_mysql_cli()
 										
 				try:					
+					check_mysql_password(my_cli, ROOT_USER, root_password, host='localhost')
 					check_mysql_password(my_cli, ROOT_USER, root_password)
 					check_mysql_password(my_cli, REPL_USER, repl_password)
 					check_mysql_password(my_cli, STAT_USER, stat_password)
@@ -1968,9 +1969,9 @@ def get_mysql_version(my_cli):
 		raise Exception("Can't obtain MySQL version.")
 	return version.group(0)
 
-def check_mysql_password(my_cli, user, password):
-	my_cli.sendline("SELECT PASSWORD('%s') AS hash, Password AS valid_hash FROM mysql.user WHERE mysql.user.User = '%s';" % 
-				(password, user));
+def check_mysql_password(my_cli, user, password, host='%'):
+	my_cli.sendline("SELECT PASSWORD('%s') AS hash, Password AS valid_hash FROM mysql.user WHERE mysql.user.User = '%s' and mysql.user.Host = '%s';" % 
+				(password, user, host));
 	my_cli.expect('mysql>')
 	if not 'Empty set' in my_cli.before:
 		hash, valid_hash = filter(None, map(string.strip, my_cli.before.strip().split('\r\n')[4].split('|')))
