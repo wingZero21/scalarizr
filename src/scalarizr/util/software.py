@@ -31,7 +31,7 @@ def explore(name, lookup_fn):
 	
 def which(name):
 	try:
-		whereis(name)[0]
+		return whereis(name)[0]
 	except IndexError:
 		raise LookupError("Command '%s' not found" % (name, ))
 	
