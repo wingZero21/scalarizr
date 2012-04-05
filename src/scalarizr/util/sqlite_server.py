@@ -107,7 +107,6 @@ class SqliteServer(object):
 		self.single_conn_proxy = None
 		self.clients = WeakValueDictionary()
 		self.cursors = {}
-		self.connect()
 
 
 	def connect(self):
@@ -119,6 +118,9 @@ class SqliteServer(object):
 	
 	def serve_forever(self):
 		while True:
+			if not self.single_conn_proxy:
+				time.sleep(0.2)
+				continue
 			job = self.single_conn_proxy.tasks_queue.get()
 			method, hash, args, kwds = '_%s' % job[0], job[1], job[2] or [], job[3] or {}
 			result = getattr(self, method)(hash, *args, **kwds)
