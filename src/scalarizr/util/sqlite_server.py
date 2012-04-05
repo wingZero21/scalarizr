@@ -4,6 +4,7 @@ Created on Mar 14, 2012
 @author: marat
 '''
 
+import time
 import Queue
 import threading
 import weakref
@@ -106,6 +107,7 @@ class SqliteServer(object):
 		self.single_conn_proxy = None
 		self.clients = WeakValueDictionary()
 		self.cursors = {}
+		self.connect()
 
 
 	def connect(self):
