@@ -205,24 +205,3 @@ class SqliteServer(object):
 	def _executescript(self, hash, sql):
 		return self.connect.executescript(sql)
 	
-
-class SQLiteServerThread(threading.Thread):
-	
-	ready = None
-	connection = None
-	conn_creator = None
-	
-	def __init__(self, conn_creator):
-		self.ready = False
-		self.conn_creator = conn_creator
-		threading.Thread.__init__(self)
-		
-	def run(self):
-		server = SqliteServer(self.conn_creator)
-		self.connection = server.connect()
-		self.ready = True
-		server.serve_forever()
-		
-
-def wait_for_server_thread(t):
-	wait_until(lambda: t.ready == True, sleep = 0.1)
