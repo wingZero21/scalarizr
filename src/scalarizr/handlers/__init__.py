@@ -472,7 +472,7 @@ class ServiceCtlHandler(Handler):
 				# Apply current preset
 				my_preset = self._cnf_ctl.current_preset()
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
-					if not STATE['global.start_after_update']:
+					if STATE['global.start_after_update'] != '1':
 						self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
 						self._cnf_ctl.apply_preset(cur_preset)
 						# Start service with updated configuration
