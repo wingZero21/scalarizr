@@ -103,7 +103,6 @@ class _P2pMessageStore:
 		
 	def put_ingoing(self, message, queue, consumer_id):
 		conn = self._conn()
-		conn.text_factory = sqlite3.OptimizedUnicode
 		cur = conn.cursor()
 		try:
 			sql = """INSERT INTO p2p_message (id, message, message_id, 
