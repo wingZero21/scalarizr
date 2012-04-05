@@ -9,7 +9,7 @@ from __future__ import with_statement
 
 # Core
 from scalarizr.bus import bus
-from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
+from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
 from scalarizr.handlers import HandlerError, ServiceCtlHandler, operation
 from scalarizr.messaging import Messages
@@ -17,8 +17,7 @@ from scalarizr.messaging import Messages
 # Libs
 from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 	NoPathError, strip_quotes
-from scalarizr.util import disttool, cached, firstmatched, validators, software,\
-	wait_until
+from scalarizr.util import disttool, firstmatched, software, wait_until
 from scalarizr.util import initdv2, system2
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
@@ -35,8 +34,11 @@ import shutil, pwd
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.APP
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR + '.ini'
-APP_CONF_PATH = 'apache_conf_path'
+#APP_CONF_PATH = 'apache_conf_path'
+APACHE_CONF_PATH = '/etc/apache2/apache2.conf' if disttool.is_debian_based() else '/etc/httpd/conf/httpd.conf'
+VHOSTS_PATH = 'private.d/vhosts'
 VHOST_EXTENSION = '.vhost.conf'
+
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
 	_apachectl = None
@@ -120,48 +122,14 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 initdv2.explore('apache', ApacheInitScript)
 
 
-# Export behavior configuration
-class ApacheOptions(Configurator.Container):
-	'''
-	app behavior
-	'''
-	cnf_name = CNF_NAME
-
-	class apache_conf_path(Configurator.Option):
-		'''
-		Apache configuration file location.
-		'''
-		name = CNF_SECTION + '/apache_conf_path'
-		required = True
-
-		@property
-		@cached
-		def default(self):
-			return firstmatched(lambda p: os.path.exists(p),
-					('/etc/apache2/apache2.conf', '/etc/httpd/conf/httpd.conf'), '')
-
-		@validators.validate(validators.file_exists)
-		def _set_value(self, v):
-			Configurator.Option._set_value(self, v)
-
-		value = property(Configurator.Option._get_value, _set_value)
 
 
-	class vhosts_path(Configurator.Option):
-		'''
-		Directory to create virtual hosts configuration in.
-		All Apache virtual hosts, created in the Scalr user interface are placed in a separate
-		directory and included to the main Apache configuration file.
-		'''
-		name = CNF_SECTION + '/vhosts_path'
-		default = 'private.d/vhosts'
-		required = True
+		
 
 class ApacheCnfController(CnfController):
 
 	def __init__(self):
-		cnf = bus.cnf; ini = cnf.rawini
-		CnfController.__init__(self, BEHAVIOUR, ini.get(CNF_SECTION, APP_CONF_PATH), 'apache', {'1':'on','0':'off'})
+		CnfController.__init__(self, BEHAVIOUR, APACHE_CONF_PATH, 'apache', {'1':'on','0':'off'})
 
 	@property
 	def _software_version(self):
@@ -221,7 +189,7 @@ class ApacheHandler(ServiceCtlHandler):
 	def on_reload(self):
 		self._queryenv = bus.queryenv_service		
 		self._cnf = bus.cnf
-		self._httpd_conf_path = self._cnf.rawini.get(CNF_SECTION, APP_CONF_PATH)
+		self._httpd_conf_path = APACHE_CONF_PATH
 		self._config = Configuration('apache')
 		self._config.read(self._httpd_conf_path)
 
@@ -328,9 +296,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 
 	def _update_vhosts(self):
-
-		config = bus.config
-		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION, 'vhosts_path'))
+		vhosts_path = VHOSTS_PATH
 		if not os.path.exists(vhosts_path):
 			if not vhosts_path:
 				self._logger.error('Property vhosts_path is empty.')
