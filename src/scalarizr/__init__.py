@@ -176,6 +176,7 @@ def _db_connect(file=None):
 	
 	conn = sqlite.connect(file, 5.0)
 	conn.row_factory = sqlite.Row
+	conn.text_factory = sqlite.OptimizedUnicode
 	return conn
 
 def _init_db(file=None):
