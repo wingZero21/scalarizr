@@ -152,12 +152,18 @@ def _init():
 	initdv2.explore("scalarizr", ScalarizrInitScript)
 
 	# Configure database connection pool
-	
+	'''
 	sqlite_srv = sqlite_server.SqliteServer(_db_connect)
 	t =  threading.Thread(target=sqlite_srv.serve_forever)
 	t.daemon = True
 	t.start()
 	bus.db = sqlite_srv.connect() 
+	'''
+	t = sqlite_server.SQLiteServerThread(_db_connect)
+	t.daemon = True
+	t.start()
+	sqlite_server.wait_for_server_thread(t)
+	bus.db = t.connection
 	
 
 DB_NAME = 'db.sqlite'
@@ -182,7 +188,7 @@ def _init_db(file=None):
 	# Check that database exists (after rebundle for example)	
 	db_file = file or cnf.private_path(DB_NAME)
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
-		logger.debug("Database doesn't exists, create new one from script")
+		logger.debug("Database doesn't exist, creating new one from script")
 		_create_db(file)
 	
 def _create_db(db_file=None, script_file=None):	

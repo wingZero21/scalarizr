@@ -72,7 +72,7 @@ class ConnectionProxy(Proxy):
 
 
 	def executescript(self, sql):
-		return self._call('executescript', sql)
+		return self._call('executescript', True, sql)
 	
 	
 	def commit(self):
@@ -81,19 +81,19 @@ class ConnectionProxy(Proxy):
 	
 	
 	def _get_row_factory(self):
-		return self._call('get_row_factory')
+		return self._call('get_row_factory', True)
 	
 	
 	def _set_row_factory(self,f):
-		return self._call('set_row_factory', f)
+		return self._call('set_row_factory', True, f)
 	
 	
 	def _get_text_factory(self):
-		return self._call('get_text_factory')
+		return self._call('get_text_factory', True)
 	
 	
 	def _set_text_factory(self,f):
-		return self._call('set_text_factory', f)
+		return self._call('set_text_factory', True, f)
 	
 	text_factory = property(_get_text_factory, _set_text_factory)
 	row_factory = property(_get_row_factory, _set_row_factory)
@@ -118,9 +118,6 @@ class SqliteServer(object):
 	
 	def serve_forever(self):
 		while True:
-			if not self.single_conn_proxy:
-				time.sleep(0.2)
-				continue
 			job = self.single_conn_proxy.tasks_queue.get()
 			method, hash, args, kwds = '_%s' % job[0], job[1], job[2] or [], job[3] or {}
 			result = getattr(self, method)(hash, *args, **kwds)
@@ -169,26 +166,7 @@ class SqliteServer(object):
 		if hash in self.cursors:
 			result = self.cursors[hash].rowcount
 		return result 
-			
-	'''
-		
-	def _get_row_factory(self):
-		return self._call('get_row_factory')
-	
-	
-	def _set_row_factory(self,f):
-		return self._call('set_row_factory', f)
-	
-	
-	def _get_text_factory(self):
-		return self._call('get_text_factory')
-	
-	
-	def _set_text_factory(self,f):
-		return self._call('set_text_factory', f)
-		
-	'''		
-	
+
 	
 	def _set_row_factory(self, hash, f):
 		self.connect.row_factory = f	
@@ -208,4 +186,28 @@ class SqliteServer(object):
 		
 	def _executescript(self, hash, sql):
 		return self.connect.executescript(sql)
+	
+	
+	
+	
+class SQLiteServerThread(threading.Thread):
+	
+	ready = None
+	connection = None
+	conn_creator = None
+	
+	def __init__(self, conn_creator):
+		self.ready = False
+		self.conn_creator = conn_creator
+		threading.Thread.__init__(self)
+		
+	def run(self):
+		server = SqliteServer(self.conn_creator)
+		self.connection = server.connect()
+		self.ready = True
+		server.serve_forever()
+		
+
+def wait_for_server_thread(t):
+	wait_until(lambda: t.ready == True, sleep = 0.1)
 	
