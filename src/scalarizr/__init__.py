@@ -155,7 +155,7 @@ def _init():
 	#bus.db = SqliteLocalObject(_db_connect)
 	
 	sqlite_srv = sqlite_server.SqliteServer(_db_connect)
-	t =  threading.Thread(target=sqlite_srv.serve_forever())
+	t =  threading.Thread(target=sqlite_srv.serve_forever)
 	t.daemon = True
 	t.start()
 	bus.db = sqlite_srv.connect() 
