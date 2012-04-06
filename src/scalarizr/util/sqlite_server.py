@@ -72,7 +72,7 @@ class ConnectionProxy(Proxy):
 
 
 	def executescript(self, sql):
-		return self._call('executescript', True, sql)
+		return self._call('executescript', True, [sql])
 	
 	
 	def commit(self):
@@ -85,7 +85,7 @@ class ConnectionProxy(Proxy):
 	
 	
 	def _set_row_factory(self,f):
-		return self._call('set_row_factory', True, f)
+		return self._call('set_row_factory', True, [f])
 	
 	
 	def _get_text_factory(self):
@@ -93,7 +93,7 @@ class ConnectionProxy(Proxy):
 	
 	
 	def _set_text_factory(self,f):
-		return self._call('set_text_factory', True, f)
+		return self._call('set_text_factory', True, [f])
 	
 	text_factory = property(_get_text_factory, _set_text_factory)
 	row_factory = property(_get_row_factory, _set_row_factory)
@@ -169,23 +169,28 @@ class SqliteServer(object):
 
 	
 	def _set_row_factory(self, hash, f):
-		self.connect.row_factory = f	
+		conn = self.connect()
+		conn.row_factory = f	
 	
 	
 	def _set_text_factory(self, hash, f):
-		self.connect.text_factory = f	
+		conn = self.connect()
+		conn.text_factory = f	
 		
 		
 	def _get_row_factory(self, hash):
-		return self.connect.row_factory	
+		conn = self.connect()
+		return conn.row_factory	
 	
 	
 	def _get_text_factory(self, hash):
-		return self.connect.text_factory
+		conn = self.connect()
+		return conn.text_factory
 		
 		
 	def _executescript(self, hash, sql):
-		return self.connect.executescript(sql)
+		conn = self.connect()
+		return conn.executescript(sql)
 	
 	
 	
