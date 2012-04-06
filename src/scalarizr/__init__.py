@@ -152,7 +152,6 @@ def _init():
 	initdv2.explore("scalarizr", ScalarizrInitScript)
 
 	# Configure database connection pool
-	#bus.db = SqliteLocalObject(_db_connect)
 	
 	sqlite_srv = sqlite_server.SqliteServer(_db_connect)
 	t =  threading.Thread(target=sqlite_srv.serve_forever)
