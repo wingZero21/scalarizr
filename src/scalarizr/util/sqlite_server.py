@@ -169,28 +169,23 @@ class SqliteServer(object):
 
 	
 	def _set_row_factory(self, hash, f):
-		conn = self.connect()
-		conn.row_factory = f	
+		self.master_conn.row_factory = f	
 	
 	
 	def _set_text_factory(self, hash, f):
-		conn = self.connect()
-		conn.text_factory = f	
+		self.master_conn.text_factory = f	
 		
 		
 	def _get_row_factory(self, hash):
-		conn = self.connect()
-		return conn.row_factory	
+		return self.master_conn.row_factory	
 	
 	
 	def _get_text_factory(self, hash):
-		conn = self.connect()
-		return conn.text_factory
+		return self.master_conn.text_factory
 		
 		
 	def _executescript(self, hash, sql):
-		conn = self.connect()
-		return conn.executescript(sql)
+		return self.master_conn.executescript(sql)
 	
 	
 	
