@@ -617,7 +617,7 @@ class ConfigDir(object):
 	def find(cls, version='9.0'):
 		path = cls.get_sysconfig_pgdata()
 		if not path:
-			path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/postgresql/%s/main/' % version
+			path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
 		return cls(path)
 		
 	

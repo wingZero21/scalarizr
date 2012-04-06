@@ -23,6 +23,8 @@ from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 from scalarizr.util import system2, disttool, filetool, \
 	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool,\
 	PopenError
+from scalarizr.handlers import operation	
+from scalarizr.util.software import which
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
@@ -37,7 +39,7 @@ import ConfigParser
 # Extra
 import pexpect
 import signal
-from scalarizr.handlers import operation
+
 
 
 
@@ -49,12 +51,12 @@ CNF_NAME = BEHAVIOUR
 
 _logger = logging.getLogger(__name__)
 
-# TODO: use these global settings anywhere. update them once from mysql.ini 
-mysqld_path = None
-mysql_path = None
-mysqldump_path = None
-mycnf_path = None
+mysqld_path = which('mysqld')
+mysql_path = which('mysql')
+mysqldump_path = which('mysqldump')
+mycnf_path = '/etc/my.cnf' if disttool.is_redhat_based() else '/etc/mysql/my.cnf'
 change_master_timeout = 30
+
 
 class MysqlInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
@@ -766,6 +768,7 @@ class MysqlHandler(ServiceCtlHandler):
 					my_cli = spawn_mysql_cli()
 										
 				try:					
+					check_mysql_password(my_cli, ROOT_USER, root_password, host='localhost')
 					check_mysql_password(my_cli, ROOT_USER, root_password)
 					check_mysql_password(my_cli, REPL_USER, repl_password)
 					check_mysql_password(my_cli, STAT_USER, stat_password)
@@ -1968,9 +1971,9 @@ def get_mysql_version(my_cli):
 		raise Exception("Can't obtain MySQL version.")
 	return version.group(0)
 
-def check_mysql_password(my_cli, user, password):
-	my_cli.sendline("SELECT PASSWORD('%s') AS hash, Password AS valid_hash FROM mysql.user WHERE mysql.user.User = '%s';" % 
-				(password, user));
+def check_mysql_password(my_cli, user, password, host='%'):
+	my_cli.sendline("SELECT PASSWORD('%s') AS hash, Password AS valid_hash FROM mysql.user WHERE mysql.user.User = '%s' and mysql.user.Host = '%s';" % 
+				(password, user, host));
 	my_cli.expect('mysql>')
 	if not 'Empty set' in my_cli.before:
 		hash, valid_hash = filter(None, map(string.strip, my_cli.before.strip().split('\r\n')[4].split('|')))

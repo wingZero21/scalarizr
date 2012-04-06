@@ -40,9 +40,14 @@ skip_events = set()
 class ScriptExecutor(Handler):
 	name = "script_executor"
 	
+	defaults = {
+		'exec_dir_prefix': '/usr/local/bin/scalr-scripting.',
+		'logs_dir': '/var/log/scalarizr/scripting',
+		'logs_truncate_over': '20K'
+	}
+	
 	OPT_EXEC_DIR_PREFIX = "exec_dir_prefix"
 	OPT_LOGS_DIR = 'logs_dir'
-	OPT_LOGS_DIR_PREFIX = "logs_dir_prefix"
 	OPT_LOGS_TRUNCATE_OVER = "logs_truncate_over"	
 	
 	_logger = None

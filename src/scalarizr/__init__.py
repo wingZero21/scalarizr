@@ -176,6 +176,7 @@ def _db_connect(file=None):
 	
 	conn = sqlite.connect(file, 5.0)
 	conn.row_factory = sqlite.Row
+	conn.text_factory = sqlite.OptimizedUnicode
 	return conn
 
 def _init_db(file=None):
@@ -631,7 +632,7 @@ def main():
 		STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__)) 
 		STATE['global.version'] = __version__
 		
-		if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
+		if STATE['global.start_after_update'] == '1' and ScalarizrState.RUNNING:
 			logger.info('Scalarizr was updated to %s', __version__)
 		
 		if cnf.state == ScalarizrState.UNKNOWN:

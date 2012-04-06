@@ -204,12 +204,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			snmp_community_name = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
 		), broadcast=True)
 		bus.fire("before_host_init", msg)
-		self.send_message(msg)
-		
 		# Update key file
-		self._cnf.write_key(self._cnf.DEFAULT_KEY, new_crypto_key)		
 
-		bus.cnf.state = ScalarizrState.INITIALIZING
+		bus.cnf.state = ScalarizrState.INITIALIZING	
+		self.send_message(msg, new_crypto_key=new_crypto_key, wait_ack=True)
+
 		bus.fire("host_init")
 
 		

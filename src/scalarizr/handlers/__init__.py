@@ -165,27 +165,22 @@ class Handler(object):
 		return msg
 	
 	def send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
-					queue=Queues.CONTROL, wait_ack=False):
+					queue=Queues.CONTROL, wait_ack=False, wait_subhandler=False, new_crypto_key=None):
 		srv = bus.messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
 				self.new_message(msg_name, msg_body, msg_meta, broadcast)
 		srv.get_producer().send(queue, msg)
+		cons = srv.get_consumer()
+		
+		if new_crypto_key:
+			cnf = bus.cnf
+			cnf.write_key(cnf.DEFAULT_KEY, new_crypto_key)
+			
 		if wait_ack:
-			pl = bus.platform
-			cons = srv.get_consumer()
-			cons.message_to_ack = msg
-			self._logger.debug('Creating %s acknowledgement handler', msg.name)
-			saved_access_data = pl._access_data
-			if saved_access_data:
-				saved_access_data = dict(saved_access_data)
-			waiter = threading.Thread(name='%sMessageHandler' % msg.name, target=cons.message_handler)
-			waiter.start()
-			self._logger.debug('Joining %s acknowledgement handler', msg.name)
-			waiter.join()
-			self._logger.debug('%s acknowledgement handler joined!', msg.name)
-			cons.message_to_ack = None
-			if saved_access_data:
-				pl.set_access_data(saved_access_data)
+			cons.wait_acknowledge(msg)
+		elif wait_subhandler:
+			cons.wait_subhandler(msg)
+			
 		
 		
 	def send_int_message(self, host, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
@@ -477,7 +472,7 @@ class ServiceCtlHandler(Handler):
 				# Apply current preset
 				my_preset = self._cnf_ctl.current_preset()
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
-					if not STATE['global.start_after_update']:
+					if STATE['global.start_after_update'] != '1':
 						self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
 						self._cnf_ctl.apply_preset(cur_preset)
 						# Start service with updated configuration
