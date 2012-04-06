@@ -59,7 +59,8 @@ class Storage:
 			conn = bus.db
 			cur = conn.cursor()
 			try:
-				return cur.execute('SELECT * FROM storage').fetchall()
+				cur.execute('SELECT * FROM storage')
+				return cur.fetchall()
 			finally:
 				cur.close()
 		else:
