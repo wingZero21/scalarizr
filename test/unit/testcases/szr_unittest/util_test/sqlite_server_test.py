@@ -67,7 +67,7 @@ class Test(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
 		t = sqlite_server.SQLiteServerThread(get_connection)
-		t.daemon = True
+		t.setDaemon(True)
 		t.start()
 		wait_until(lambda: t.ready == True, sleep = 0.1)
 		cls.connection = t.connection
@@ -86,7 +86,7 @@ class Test(unittest.TestCase):
 
 	def testMultipleThreads(self):
 		t = ThreadClass(self.connection)
-		t.daemon = True
+		t.setDaemon(True)
 		t.start()
 		t.join()
 		self.assertEqual(t.fetchall, [(1,)])

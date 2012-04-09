@@ -169,7 +169,7 @@ def _init():
 	bus.db = sqlite_srv.connect() 
 	'''
 	t = sqlite_server.SQLiteServerThread(_db_connect)
-	t.daemon = True
+	t.setDaemon(True)
 	t.start()
 	sqlite_server.wait_for_server_thread(t)
 	bus.db = t.connection
