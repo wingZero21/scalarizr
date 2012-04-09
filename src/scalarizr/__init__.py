@@ -36,8 +36,7 @@ from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 import pprint
-from scalarizr.util import wait_until
-
+from scalarizr.util import sqlite_server, wait_until
 
 
 class ScalarizrError(BaseException):
@@ -162,8 +161,19 @@ def _init():
 	initdv2.explore("scalarizr", ScalarizrInitScript)
 
 	# Configure database connection pool
-	bus.db = SqliteLocalObject(_db_connect)
-
+	'''
+	sqlite_srv = sqlite_server.SqliteServer(_db_connect)
+	t =  threading.Thread(target=sqlite_srv.serve_forever)
+	t.daemon = True
+	t.start()
+	bus.db = sqlite_srv.connect() 
+	'''
+	t = sqlite_server.SQLiteServerThread(_db_connect)
+	t.daemon = True
+	t.start()
+	sqlite_server.wait_for_server_thread(t)
+	bus.db = t.connection
+	
 
 DB_NAME = 'db.sqlite'
 DB_SCRIPT = 'db.sql'
@@ -177,6 +187,7 @@ def _db_connect(file=None):
 	conn = sqlite.connect(file, 5.0)
 	conn.row_factory = sqlite.Row
 	conn.text_factory = sqlite.OptimizedUnicode
+	
 	return conn
 
 def _init_db(file=None):
@@ -186,11 +197,11 @@ def _init_db(file=None):
 	# Check that database exists (after rebundle for example)	
 	db_file = file or cnf.private_path(DB_NAME)
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
-		logger.debug("Database doesn't exists, create new one from script")
+		logger.debug("Database doesn't exist, creating new one from script")
 		_create_db(file)
 	
-def _create_db(db_file=None, script_file=None):
-	conn = _db_connect(db_file)
+def _create_db(db_file=None, script_file=None):	
+	conn = bus.db if hasattr(bus, 'db') and bus.db else _db_connect(db_file)
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
 	conn.commit()	
 	

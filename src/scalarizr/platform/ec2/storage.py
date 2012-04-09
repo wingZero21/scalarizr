@@ -377,8 +377,7 @@ def location_from_region(region):
 # and instance need to be rebooted to fix this issue.
 
 def _cleanup_volume_table(*args, **kwargs):
-	db = bus.db
-	conn = db.get().get_connection()
+	conn = bus.db
 	cur = conn.cursor()
 	cur.execute("DELETE FROM storage where (device LIKE '/dev/sd%' or type = 'ebs') and state = 'detached'")
 	conn.commit()

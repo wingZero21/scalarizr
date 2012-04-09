@@ -215,8 +215,7 @@ class Command(object):
 		print (out)
 
 	def get_db_conn(self):
-		db = bus.db
-		return db.get().get_connection()
+		return bus.db
 
 
 class GetlatestVersionCommand(Command):
@@ -685,8 +684,7 @@ def main():
 
 		if options.reinit:
 			print 'Call scalarizr to reinitialize role (see /var/log/scalarizr.log for results)'
-			db = bus.db
-			conn = db.get().get_connection()
+			conn = bus.db
 			cur = conn.cursor()
 			try:
 				cur.execute(
