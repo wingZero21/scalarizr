@@ -32,7 +32,7 @@ def create_snapshot(ec2_conn, volume_id, description=None, logger=None, timeout=
 	
 	# Apply tags
 	tags = tags or dict()
-	tags.update(_std_tags())
+	#tags.update(_std_tags())
 	try:
 		ec2_conn.create_tags((snap.id, ), tags)
 	except:
@@ -93,7 +93,7 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout
 	
 	# Apply tags
 	tags = tags or dict()
-	tags.update(_std_tags())
+	#tags.update(_std_tags())
 	try:
 		ec2_conn.create_tags((vol.id, ), tags)
 	except:

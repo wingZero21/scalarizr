@@ -1667,7 +1667,7 @@ class MysqlHandler(ServiceCtlHandler):
 	def _create_storage_snapshot(self, tags=None):
 		self._logger.info("Creating storage snapshot")
 		tags = tags or dict()
-		tags.update({'storage': 'mysql'})		
+		#tags.update({'storage': 'mysql'})		
 		try:
 			return self.storage_vol.snapshot(self._data_bundle_description(), tags=tags)
 		except StorageError, e:
