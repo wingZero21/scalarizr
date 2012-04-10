@@ -14,7 +14,7 @@ from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
 from scalarizr.config import BuiltinBehaviours, Configurator, ScalarizrState
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.messaging import Messages
-from scalarizr.handlers import HandlerError, ServiceCtlHandler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler, prepare_tags
 from scalarizr.platform import UserDataOptions
 
 # Libs
@@ -746,7 +746,7 @@ class MysqlHandler(ServiceCtlHandler):
 		elif self._cnf.state == ScalarizrState.RUNNING:
 			# Creating self.storage_vol object from configuration
 			storage_conf = Storage.restore_config(self._volume_config_path)
-			self.storage_vol = Storage.create(storage_conf)
+			self.storage_vol = Storage.create(storage_conf, tags=self.mysql_tags)
 			if not self.storage_vol.mounted():
 				if not os.path.exists(self.storage_vol.mpoint):
 					os.makedirs(self.storage_vol.mpoint)
@@ -979,7 +979,7 @@ class MysqlHandler(ServiceCtlHandler):
 					
 					# Creating snapshot
 					root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
-					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
 					used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
 						
 					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
@@ -1138,7 +1138,7 @@ class MysqlHandler(ServiceCtlHandler):
 					}
 					self._update_config(updates)
 										
-					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
+					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password, tags=self.mysql_tags)
 					Storage.backup_config(snap.config(), self._snapshot_config_path)
 					
 					# Send message to Scalr
@@ -1201,7 +1201,7 @@ class MysqlHandler(ServiceCtlHandler):
 				self._logger.debug('Storage destoyed')
 				
 				self._logger.debug('Plugging new storage')
-				vol = Storage.create(snapshot=message.snapshot_config.copy())
+				vol = Storage.create(snapshot=message.snapshot_config.copy(), tags=self.mysql_tags)
 				self._plug_storage(self._storage_path, vol)
 				self._logger.debug('Storage plugged')
 				
@@ -1393,7 +1393,7 @@ class MysqlHandler(ServiceCtlHandler):
 					
 					with op.step(self._step_create_data_bundle):
 						# Get binary logfile, logpos and create storage snapshot
-						snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+						snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
 						Storage.backup_config(snap.config(), self._snapshot_config_path)
 					
 					# Update HostUp message 
@@ -1417,7 +1417,7 @@ class MysqlHandler(ServiceCtlHandler):
 					
 					with op.step(self._step_create_data_bundle):
 						# Create snapshot
-						snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password)
+						snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
 						Storage.backup_config(snap.config(), self._snapshot_config_path)
 					
 					# Update HostUp message 
@@ -1541,7 +1541,7 @@ class MysqlHandler(ServiceCtlHandler):
 		
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
-			vol = Storage.create(vol)
+			vol = Storage.create(vol, tags=self.mysql_tags)
 
 		try:
 			if not os.path.exists(mpoint):
@@ -1556,6 +1556,12 @@ class MysqlHandler(ServiceCtlHandler):
 			else:
 				raise
 		return vol
+	
+	@property
+	def mysql_tags(self):
+		is_master = bool(int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]))
+		return prepare_tags(BEHAVIOUR, db_replication_role=is_master)
+		
 	
 	def _insert_iptables_rules(self):
 		iptables = IpTables()

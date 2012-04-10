@@ -23,7 +23,7 @@ from scalarizr.util import system2, wait_until, disttool, software, filetool, cr
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, PgUser, SU_EXEC
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
-from scalarizr.handlers import operation
+from scalarizr.handlers import operation, prepare_tags
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -190,7 +190,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if self._cnf.state == ScalarizrState.RUNNING:
 
 			storage_conf = Storage.restore_config(self._volume_config_path)
-			self.storage_vol = Storage.create(storage_conf)
+			self.storage_vol = Storage.create(storage_conf, tags=self.postgres_tags)
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 			
@@ -330,14 +330,19 @@ class PostgreSqlHander(ServiceCtlHandler):
 		opt_user_password = '%s_password' % name
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {opt_user_password:password}})
 			
+			
 	@property
 	def is_replication_master(self):
 		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
 		self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
 		return True if int(value) else False
-	
 				
+				
+	@property
+	def postgres_tags(self):
+		return prepare_tags(BEHAVIOUR, db_replication_role=self.is_replication_master)
 		
+				
 	def on_host_init_response(self, message):
 		"""
 		Check postgresql data in host init response
@@ -581,7 +586,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self._logger.debug('Storage destroyed')
 			
 			self._logger.debug('Plugging new storage')
-			vol = Storage.create(snapshot=snap_data.copy())
+			vol = Storage.create(snapshot=snap_data.copy(), tags=self.postgres_tags)
 			self._plug_storage(self._storage_path, vol)
 			self._logger.debug('Storage plugged')
 			
@@ -798,7 +803,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
-			vol = Storage.create(vol)
+			vol = Storage.create(vol, tags=self.postgres_tags)
 
 		try:
 			if not os.path.exists(mpoint):
@@ -837,7 +842,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	def _create_storage_snapshot(self):
 		self._logger.info("Creating storage snapshot")
 		try:
-			return self.storage_vol.snapshot()
+			return self.storage_vol.snapshot(tags=self.postgres_tags)
 		except StorageError, e:
 			self._logger.error("Cannot create PostgreSQL data snapshot. %s", e)
 			raise

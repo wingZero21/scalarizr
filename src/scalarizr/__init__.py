@@ -293,8 +293,10 @@ def _apply_user_data(cnf):
 			'role_name' : g(UserDataOptions.ROLE_NAME),
 			'queryenv_url' : g(UserDataOptions.QUERYENV_URL),
 			'cloud_storage_path': g(UserDataOptions.CLOUD_STORAGE_PATH),
-			'farmrole_id' : g(UserDataOptions.FARMROLE_ID),
-			'env_id' : g(UserDataOptions.ENV_ID)
+			'farm_role_id' : g(UserDataOptions.FARMROLE_ID),
+			'env_id' : g(UserDataOptions.ENV_ID), 
+			'farm_id' : g(UserDataOptions.FARM_ID),
+			'role_id' : g(UserDataOptions.ROLE_ID), 
 		},
 		messaging_p2p={
 			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),

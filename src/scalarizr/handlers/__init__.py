@@ -707,3 +707,31 @@ class FarmSecurityMixin(object):
 		rules.reverse()
 		for rule in rules:
 			self._iptables.insert_rule(1, rule)
+
+
+def prepare_tags(handler=None, **kwargs):
+	'''
+	@return dict(tags for volumes and snapshots)
+	'''
+	
+	def get_cfg_option(option):
+		id = None
+		cnf = bus.cnf
+		if cnf.rawini.has_option(config.SECT_GENERAL, option):
+			id = cnf.rawini.get(config.SECT_GENERAL, option)
+		return id
+	
+	tags = dict(creator = 'scalarizr')
+	farmid = get_cfg_option(config.OPT_FARM_ID)
+	roleid = get_cfg_option(config.OPT_ROLE_ID)
+	farmroleid = get_cfg_option(config.OPT_FARMROLE_ID)
+	tags.update(farm_id = farmid, role_id = roleid, farm_role_id = farmroleid)
+	
+	if handler:
+		tags['service'] = handler
+	if kwargs:
+		# example: db_replication_role = master | slave, tmp = 1
+		tags.update(kwargs)	
+	return tags
+		
+		

@@ -5,7 +5,7 @@ Created on Mar 11, 2010
 
 import scalarizr
 from scalarizr.bus import bus
-from scalarizr.handlers import HandlerError
+from scalarizr.handlers import HandlerError, prepare_tags
 from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, get_free_devname, firstmatched
 from scalarizr.platform.ec2 import ebstool
@@ -521,7 +521,7 @@ class RebundleEbsStrategy(RebundleStratery):
 		vol = self._image.ebs_volume
 		LOG.info('Creating snapshot of root device image %s', vol.id)
 		self._snap = vol.create_snapshot("Root device snapshot created from role: %s instance: %s" 
-					% (self._role_name, self._platform.get_instance_id()))
+					% (self._role_name, self._platform.get_instance_id()), tags=prepare_tags(tmp=1))
 
 		LOG.debug('Checking that snapshot %s is completed', self._snap.id)
 		start_time = time.time()
@@ -645,7 +645,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 	def _create_image(self):
 		if not self.ebs_volume:
 			self.ebs_volume = ebstool.create_volume(self._ec2_conn, self._volume_size, 
-					self._avail_zone, logger=LOG, tags={'tmp' : '1'})
+					self._avail_zone, logger=LOG, tags=prepare_tags(tmp=1))
 		return ebstool.attach_volume(self._ec2_conn, self.ebs_volume, 
 				self._instance_id, self.devname, to_me=True, logger=LOG)[1]
 		

@@ -27,7 +27,7 @@ from scalarizr.handlers import ServiceCtlHandler, HandlerError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 import scalarizr.services.mongodb as mongo_svc
 from scalarizr.messaging.p2p import P2pMessageStore
-from scalarizr.handlers import operation
+from scalarizr.handlers import operation, prepare_tags
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
@@ -252,7 +252,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		if self._cnf.state == ScalarizrState.RUNNING:
 	
 			storage_conf = Storage.restore_config(self._volume_config_path)
-			self.storage_vol = Storage.create(storage_conf)
+			self.storage_vol = Storage.create(storage_conf, tags=self.mongo_tags)
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 				
@@ -1076,6 +1076,10 @@ class MongoDBHandler(ServiceCtlHandler):
 
 	def _get_cluster_hosts(self):
 		return self._queryenv.list_roles(self._role_name)[0].hosts
+	
+	@property
+	def mongo_tags(self):
+		return prepare_tags(BEHAVIOUR)
 
 
 	def plug_storage(self):
@@ -1343,7 +1347,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
-			vol = Storage.create(vol)
+			vol = Storage.create(vol, tags=self.mongo_tags)
 
 		try:
 			if not os.path.exists(mpoint):
@@ -1376,7 +1380,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		#TODO: check mongod journal option if service is running!
 		self._logger.info("Creating mongodb's storage snapshot")
 		try:
-			return self.storage_vol.snapshot()
+			return self.storage_vol.snapshot(tags=self.mongo_tags)
 		except StorageError, e:
 			self._logger.error("Cannot create %s data snapshot. %s", (BEHAVIOUR, e))
 			raise

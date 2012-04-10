@@ -17,13 +17,15 @@ SECT_GENERAL = "general"
 OPT_SERVER_ID = "server_id"
 OPT_BEHAVIOUR = "behaviour"
 OPT_ROLE_NAME = "role_name"
-OPT_FARMROLE_ID = 'farmrole_id'
+OPT_FARMROLE_ID = 'farm_role_id'
 OPT_STORAGE_PATH = "storage_path"
 OPT_CRYPTO_KEY_PATH = "crypto_key_path"
 OPT_FARM_CRYPTO_KEY_PATH = "farm_crypto_key_path"
 OPT_PLATFORM = "platform"
 OPT_QUERYENV_URL = "queryenv_url"
 OPT_SCRIPTS_PATH = "scripts_path"
+OPT_ROLE_ID = 'role_id'
+OPT_FARM_ID = 'farm_id'
 
 SECT_MESSAGING = "messaging"
 OPT_ADAPTER = "adapter"

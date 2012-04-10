@@ -287,11 +287,16 @@ class CloudControllerHandler(handlers.Handler):
 		return bool(host)
 	
 	
+	@property
+	def cf_tags(self):
+		return handlers.prepare_tags(SERVICE_NAME)
+		
+		
 	def _plug_storage(self, vol=None, mpoint=None):
 		vol = vol or self.volume_config
 		mpoint = mpoint or _datadir
 		if not hasattr(vol, 'id'):
-			vol = storage.Storage.create(vol)
+			vol = storage.Storage.create(vol, tags=self.cf_tags)
 
 		try:
 			if not os.path.exists(mpoint):

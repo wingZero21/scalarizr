@@ -14,7 +14,7 @@ import logging
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr import storage
-from scalarizr.handlers import HandlerError, ServiceCtlHandler
+from scalarizr.handlers import HandlerError, ServiceCtlHandler, prepare_tags
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.util import system2, initdv2, software, dns, cryptotool
 from scalarizr.storage import StorageError
@@ -90,7 +90,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 		elif self.cnf.state == ScalarizrState.RUNNING:
 			
 			storage_conf = storage.Storage.restore_config(self._volume_config_path)
-			self.storage_vol = storage.Storage.create(storage_conf)
+			self.storage_vol = storage.Storage.create(storage_conf, tags=self.rabbitmq_tags)
 			if not self.storage_vol.mounted():
 				self.service.stop()
 				self.storage_vol.mount()
@@ -355,9 +355,13 @@ class RabbitMQHandler(ServiceCtlHandler):
 					message.rabbitmq = msg_data
 
 
+	@property
+	def rabbitmq_tags(self):
+		return prepare_tags(BEHAVIOUR)
+
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, storage.Volume):
-			vol = storage.Storage.create(vol)
+			vol = storage.Storage.create(vol, tags=self.rabbitmq_tags)
 
 		if not os.path.exists(mpoint):
 			os.makedirs(mpoint)

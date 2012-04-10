@@ -24,7 +24,7 @@ from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.handlers import operation
+from scalarizr.handlers import operation, prepare_tags
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
@@ -72,6 +72,12 @@ class RedisHandler(ServiceCtlHandler):
 			value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
 			self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
 		return True if int(value) else False
+	
+					
+	@property
+	def redis_tags(self):
+		return prepare_tags(BEHAVIOUR, db_replication_role=self.is_replication_master)
+		
 
 	@property
 	def persistence_type(self):
@@ -80,6 +86,7 @@ class RedisHandler(ServiceCtlHandler):
 			value = self._cnf.rawini.get(CNF_SECTION, OPT_PERSISTENCE_TYPE)
 			self._logger.debug('Got %s : %s' % (OPT_PERSISTENCE_TYPE, value))
 		return value
+			
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
@@ -157,7 +164,7 @@ class RedisHandler(ServiceCtlHandler):
 		if self._cnf.state == ScalarizrState.RUNNING:
 
 			storage_conf = Storage.restore_config(self._volume_config_path)
-			self.storage_vol = Storage.create(storage_conf)
+			self.storage_vol = Storage.create(storage_conf, tags=self.redis_tags)
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 			
@@ -598,7 +605,7 @@ class RedisHandler(ServiceCtlHandler):
 
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
-			vol = Storage.create(vol)
+			vol = Storage.create(vol, tags=self.redis_tags)
 
 		try:
 			if not os.path.exists(mpoint):
@@ -634,7 +641,7 @@ class RedisHandler(ServiceCtlHandler):
 			self.redis.redis_cli.save()
 		self._logger.info("Creating storage snapshot")
 		try:
-			return self.storage_vol.snapshot()
+			return self.storage_vol.snapshot(tags=self.redis_tags)
 		except StorageError, e:
 			self._logger.error("Cannot create %s data snapshot. %s", (BEHAVIOUR, e))
 			raise
