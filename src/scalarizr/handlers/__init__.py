@@ -21,6 +21,7 @@ import sys
 import traceback
 import uuid
 
+LOG = logging.getLogger(__name__)
 
 
 class operation(object):
@@ -732,6 +733,8 @@ def prepare_tags(handler=None, **kwargs):
 	if kwargs:
 		# example: db_replication_role = master | slave, tmp = 1
 		tags.update(kwargs)	
+		
+	LOG.debug('Prepared tags: %s' % tags)
 	return tags
 		
 		
