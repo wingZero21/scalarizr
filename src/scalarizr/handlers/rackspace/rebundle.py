@@ -14,7 +14,6 @@ import sys
 
 from cloudservers import ImageManager
 
-
 LOG = rebundle_hdlr.LOG
 
 def get_handlers ():
@@ -48,16 +47,23 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			LOG.debug('Image %s created', image.id)
 			
 			LOG.info('Checking that image %s is completed', image.id)
+			'''
 			wait_until(hasattr, args=(image, 'progress'), 
 					sleep=5, logger=LOG, timeout=3600,
 					error_text="Image %s has no attribute 'progress'" % image.id)
-			def completed():
+			'''
+			def completed(image_id):
 				try:
-					return image_manager.get(image.id).progress == 100
+					image = image_manager.get(image_id)
+					return image.status in ('ACTIVE', 'FAILED')
 				except:
-					pass
-			wait_until(completed, sleep=30, logger=LOG, timeout=3600,
+					LOG.debug('Caught exception', exc_info=sys.exc_info())
+
+			wait_until(completed, args=(image.id, ), sleep=30, logger=LOG, timeout=3600,
 					error_text="Image %s wasn't completed in a reasonable time" % image.id)
+			image = image_manager.get(image.id)
+			if image.status == 'FAILED':
+				raise HandlerError('Image %s becomes failed' % image.id)
 			LOG.info('Image %s completed and available for use!', image.id)
 		except:
 			exc_type, exc_value, exc_trace = sys.exc_info()
@@ -67,8 +73,4 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 				except:
 					pass
 			raise exc_type, exc_value, exc_trace
-		
 		return image.id
-
-
-			
