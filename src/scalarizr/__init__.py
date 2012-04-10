@@ -1,5 +1,5 @@
-#import gevent.monkey
-#gevent.monkey.patch_all(dns = False)
+import gevent.monkey
+gevent.monkey.patch_all(dns = False)
 
 # Core
 from scalarizr import config 
@@ -11,7 +11,7 @@ from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
-#from scalarizr.api.binding import jsonrpc_zmq
+from scalarizr.api.binding import jsonrpc_zmq
 
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
@@ -40,10 +40,10 @@ class NotConfiguredError(BaseException):
 __version__ = open(os.path.join(os.path.dirname(__file__), 'version')).read().strip()
 
 
-EMBED_SNMPD = True
-NET_SNMPD = False
+#EMBED_SNMPD = True
+#NET_SNMPD = False
 
-SNMP_RESTART_DELAY = 5 # Seconds
+#SNMP_RESTART_DELAY = 5 # Seconds
 
 PID_FILE = '/var/run/scalarizr.pid' 
 
@@ -57,12 +57,12 @@ _pid = None
 Scalarizr main process PID
 '''
 
-_snmp_pid = None
+#_snmp_pid = None
 '''
 Embed SNMP server process PID
 '''
 
-_snmp_scheduled_start_time = None
+#_snmp_scheduled_start_time = None
 '''
 Next time when SNMP process should be forked
 '''
@@ -284,35 +284,38 @@ def _init_services():
 	consumer = msg_service.get_consumer()
 	consumer.listeners.append(MessageListener())
 	
-	logger.debug('Schedule SNMP process')
-	globals()['_snmp_scheduled_start_time'] = time.time()		
+	#logger.debug('Schedule SNMP process')
+	#globals()['_snmp_scheduled_start_time'] = time.time()		
 
 	Storage.maintain_volume_table = True
 	
-	'''
+	
 	routes = {
 		'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
 	}
 	bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
-	'''
+	
 
 
 def _start_services():
+	logger = logging.getLogger(__name__)
+
 	# Create message server thread
 	msg_service = bus.messaging_service
 	consumer = msg_service.get_consumer()
 	msg_thread = threading.Thread(target=consumer.start, name="Message server")
 
 	# Start SNMP
-	_start_snmp_server()
+	#_start_snmp_server()
 
 	# Start message server
 	msg_thread.start()
 	globals()['_msg_thread'] = msg_thread
 	
 	# Start API server
-	#api_server = bus.api_server
-	#api_server.start()
+	api_server = bus.api_server
+	logger.debug('Start API server')
+	api_server.start()
 	
 	# Start periodical executor
 	ex = bus.periodical_executor
@@ -333,11 +336,11 @@ def _apply_user_data(cnf):
 		},
 		messaging_p2p={
 			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
-		},
-		snmp={
-			'security_name' : 'notConfigUser',			
-			'community_name' : g(UserDataOptions.FARM_HASH)
 		}
+		#snmp={
+		#	'security_name' : 'notConfigUser',			
+		#	'community_name' : g(UserDataOptions.FARM_HASH)
+		#}
 	))
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
 
@@ -371,7 +374,7 @@ def init_script():
 	msg_service = factory.new_service(adapter, **kwargs)
 	bus.messaging_service = msg_service
 
-
+'''
 def _start_snmp_server():
 	logger = logging.getLogger(__name__)
 	# Start SNMP server in a separate process
@@ -397,7 +400,7 @@ def _start_snmp_server():
 			logger.exception(e)
 			sys.exit(1)
 	else:
-		globals()["_snmp_pid"] = pid
+		globals()["_snmp_pid"] = pid'''
 
 def onSIGHUP(*args):
 	pid = os.getpid()
@@ -431,15 +434,17 @@ def onSIGTERM(*args):
 		logger.debug('Shutdown main process (pid: %d)', pid)
 		_shutdown()
 	else:
+		pass
 		# SNMP process
-		logger.debug('Shutdown SNMP server process (pid: %d)', pid)
-		snmp = bus.snmp_server
-		snmp.stop()
+		#logger.debug('Shutdown SNMP server process (pid: %d)', pid)
+		#snmp = bus.snmp_server
+		#snmp.stop()
 
 def onSIGCHILD(*args):
 	logger = logging.getLogger(__name__)
-	#logger.debug("Received SIGCHILD")
+	logger.debug("Received SIGCHILD")
 	
+	"""
 	if globals()["_running"] and _snmp_pid:
 		try:
 			# Restart SNMP process if it terminates unexpectedly
@@ -460,7 +465,8 @@ def onSIGCHILD(*args):
 				globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY
 				globals()['_snmp_pid'] = None
 		except OSError:
-			pass	
+			pass
+		"""	
 	
 
 def _shutdown(*args):
@@ -483,6 +489,7 @@ def _shutdown_services(force=False):
 	logger = logging.getLogger(__name__)
 	
 	# Shutdown SNMP
+	'''
 	if _snmp_pid:
 		logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
 		try:
@@ -490,6 +497,7 @@ def _shutdown_services(force=False):
 		except (Exception, BaseException), e:
 			logger.debug("Can't kill SNMP process: %s" % e)
 		globals()['_snmp_pid'] = None
+	'''
 	
 	# Shutdown messaging
 	logger.debug('Shutdowning external messaging')	
@@ -500,9 +508,9 @@ def _shutdown_services(force=False):
 	
 	# Shutdown API server
 	logger.debug('Shutdowning API server')
-	#api_server = bus.api_server
-	#api_server.stop()
-	#bus.api_server = None
+	api_server = bus.api_server
+	api_server.stop()
+	bus.api_server = None
 
 	# Shutdown periodical executor
 	logger.debug('Shutdowning periodical executor')
@@ -718,8 +726,8 @@ def main():
 			while _running:
 				_msg_thread.join(0.2)
 				# Recover SNMP 
-				if _running and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
-					_start_snmp_server()
+				#if _running and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
+					#_start_snmp_server()
 		except KeyboardInterrupt:
 			logger.debug('Mainloop: KeyboardInterrupt')
 			pass

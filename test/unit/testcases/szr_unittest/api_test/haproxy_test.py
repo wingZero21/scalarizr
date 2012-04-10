@@ -63,7 +63,6 @@ class TestHAProxyAPI(unittest.TestCase):
 		#TODO: add some server with another default-server and wait for exception
 
 	def test_delete_listener(self):
-		
 		self.api.create_listener(protocol=self.protocol, port=self.port, 
 				server_protocol=self.server_protocol,server_port=self.server_port, backend=self.backend)
 		self.assertEqual(self.api.cfg.listener['scalr:listen:%s:%s' %\

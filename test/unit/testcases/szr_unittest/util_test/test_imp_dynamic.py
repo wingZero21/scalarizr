@@ -45,7 +45,7 @@ class TestImpLoader2(unittest.TestCase):
 		self.imp.install_pypackage('PyYAML')
 		self.imp.mgr.install.assert_called_with('python-pyyaml', '3.10')
 
-		
+
 	def test_install_pypackage_if_didnt_found_package_versions(self):
 		'''test_didnt_found_package_versions_in_install_pypackage'''
 
@@ -60,7 +60,6 @@ class TestImpLoader2(unittest.TestCase):
 			self.fail('not raising exception, when it must')
 		except Exception, e:
 			self.assertRaises(Exception, e)
-
 
 """
 class TestImpLoader(unittest.TestCase):
