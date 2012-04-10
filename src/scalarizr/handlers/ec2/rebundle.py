@@ -521,7 +521,8 @@ class RebundleEbsStrategy(RebundleStratery):
 		vol = self._image.ebs_volume
 		LOG.info('Creating snapshot of root device image %s', vol.id)
 		self._snap = vol.create_snapshot("Root device snapshot created from role: %s instance: %s" 
-					% (self._role_name, self._platform.get_instance_id()), tags=prepare_tags(tmp=1))
+					% (self._role_name, self._platform.get_instance_id()))
+		self._ec2_conn.create_tags((self._snap.id, ), prepare_tags(tmp=1))
 
 		LOG.debug('Checking that snapshot %s is completed', self._snap.id)
 		start_time = time.time()
