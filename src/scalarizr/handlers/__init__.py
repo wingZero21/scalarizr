@@ -731,7 +731,9 @@ def prepare_tags(handler=None, **kwargs):
 	if handler:
 		tags['service'] = handler
 	if kwargs:
-		# example: db_replication_role = master | slave, tmp = 1
+		# example: tmp = 1
+		if 'db_replication_role' in kwargs and type(kwargs['db_replication_role']) == bool:
+			kwargs['db_replication_role'] = 'master' if kwargs['db_replication_role'] else 'slave'
 		tags.update(kwargs)	
 		
 	LOG.debug('Prepared tags: %s' % tags)
