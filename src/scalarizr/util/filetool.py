@@ -119,10 +119,10 @@ def write_file(filename, data, mode = 'w', msg = None, error_msg="Cannot write t
 		logger = logging.getLogger(__name__)
 	logger.debug(msg) if msg else logger.debug("Writing file %s", filename)
 	if not os.path.isfile(filename):
-		logger.debug("File %s does not exist. Trying to create.", filename)
+		#logger.debug("File %s does not exist. Trying to create.", filename)
 		dir = os.path.dirname(filename)
 		if not os.path.isdir(dir):
-			logger.debug("Directory %s does not exist. Trying to create.", dir)
+			logger.debug("Parent directory %s does not exist. Creating", dir)
 			os.makedirs(dir)
 
 	file = None

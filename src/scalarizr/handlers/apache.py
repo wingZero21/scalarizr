@@ -494,22 +494,22 @@ class ApacheHandler(ServiceCtlHandler):
 					#ssl_conf.comment(".//SSLCertificateKeyFile")
 					
 			try:
-				old_ca_crt_path = ssl_conf.get(".//SSLCACertificateFile")
+				old_ca_crt_path = ssl_conf.get(".//SSLCertificateChainFile")
 			except NoPathError, e:
 				pass	
 			finally:
 				if os.path.exists(ca_crt_path):
 					try:
-						ssl_conf.set(".//SSLCACertificateFile", ca_crt_path)
+						ssl_conf.set(".//SSLCertificateChainFile", ca_crt_path)
 					except NoPathError:
 						# XXX: ugly hack
 						parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
 						before_el = ssl_conf.etree.find('.//SSLCertificateFile')
-						ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCACertificateFile', ca_crt_path)
+						ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCertificateChainFile', ca_crt_path)
 						ch.text = ca_crt_path
 						parent.insert(list(parent).index(before_el), ch)
 				elif old_ca_crt_path and not os.path.exists(old_ca_crt_path):
-					ssl_conf.comment(".//SSLCACertificateFile")	
+					ssl_conf.comment(".//SSLCertificateChainFile")	
 					
 			ssl_conf.write(ssl_conf_path)
 		#else:
