@@ -437,10 +437,8 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 				upload_files.append(os.path.join(manifest_dir, part[0]))
 
 			#TODO: s3://scalr-<env-id>-<region>/images/
-			cfg = ConfigParser.ConfigParser()
-			cfg.read('/etc/scalr/private.d/config.ini')
-			env_id = cfg.get('general', 'env-id')
-			bucket_name = '%s-%s/images/' % (env_id,
+			bucket_name = '%s-%s/images/' % (
+								bus.cnf.rawini.get('general', 'env_id'),
 								self._platform.get_avail_zone())
 
 			trn = Transfer(pool=4, max_attempts=5, logger=LOG)
