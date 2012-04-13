@@ -916,15 +916,35 @@ class MysqlHandler(ServiceCtlHandler):
 			
 			# Creating list of full paths to archive chunks
 			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-				parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+				parts = [os.path.join(tmpdir, file) for file in filetool.split(
+					backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
 			else:
 				parts = [backup_path]
-					
-			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+			
+			
+			
+			
+			cloud_storage_path = '%s://scalr-%s-%s/backups/%s/%s/%s-%s/%s.tar.gz' % (
+				self._platform.cloud_storage_path.split('://')[0],
+				self._platform.get_user_data('env_id'),
+				self._platform.get_user_data('region'),
+				self._platform.get_user_data('farmid'),
+				self._platform.get_user_data('role'), #TODO: not sure, need be chek
+				self._platform.get_user_data('farm_roleid'),
+				self._platform.get_user_data('realrolename'),
+				time.strftime('%Y-%m-%d-%H:%M:%S'))
+			#self._platform.cloud_storage_path -> [cf|s3]://farm-fgddfdfdf
+			#[cf|s3]://scalr-<env-id>-<region>/backups/<farm-id>/[mysql|redis...]/<farm-role-id>-<rolename>/<timestamp>.tar.gz
+			
+			self._logger.info("Uploading backup to cloud storage (%s)",
+							#self._platform.cloud_storage_path
+							cloud_storage_path)
 			trn = transfer.Transfer()
-			result = trn.upload(parts, self._platform.cloud_storage_path)
+			result = trn.upload(parts, #self._platform.cloud_storage_path
+							cloud_storage_path)
 			self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
-							self._platform.cloud_storage_path, backup_filename)
+							cloud_storage_path,#self._platform.cloud_storage_path
+							backup_filename)
 			
 			# Notify Scalr
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(

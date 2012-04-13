@@ -600,12 +600,25 @@ class PostgreSqlHander(ServiceCtlHandler):
 				parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
 			else:
 				parts = [backup_path]
-					
-			self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+			
+			cloud_storage_path = '%s://scalr-%s-%s/backups/%s/%s/%s-%s/%s.tar.gz' % (
+				self._platform.cloud_storage_path.split('://')[0],
+				self._platform.get_user_data('env_id'),
+				self._platform.get_user_data('region'),
+				self._platform.get_user_data('farmid'),
+				self._platform.get_user_data('role'), #TODO: not sure, need be chek
+				self._platform.get_user_data('farm_roleid'),
+				self._platform.get_user_data('realrolename'),
+				time.strftime('%Y-%m-%d-%H:%M:%S'))
+			
+			self._logger.info("Uploading backup to cloud storage (%s)", #self._platform.
+							cloud_storage_path)
 			trn = transfer.Transfer()
-			result = trn.upload(parts, self._platform.cloud_storage_path)
+			result = trn.upload(parts, #self._platform.cloud_storage_path
+							cloud_storage_path)
 			self._logger.info("Postgresql backup uploaded to cloud storage under %s/%s", 
-							self._platform.cloud_storage_path, backup_filename)
+							cloud_storage_path,#self._platform.cloud_storage_path
+							backup_filename)
 			
 			# Notify Scalr
 			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
