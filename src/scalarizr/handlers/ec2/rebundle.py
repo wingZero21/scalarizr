@@ -18,6 +18,7 @@ from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
 import time, os, re, shutil, glob
+import ConfigParser
 
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
@@ -427,29 +428,27 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 	def _upload_image(self, bucket_name, manifest_path, manifest, region=None, acl="aws-exec-read"):
 		try:
 			LOG.info("Uploading bundle")
-			
+
 			# Files to upload
 			LOG.debug("Enqueue files to upload")
 			manifest_dir = os.path.dirname(manifest_path)			
 			upload_files = [manifest_path]
 			for part in manifest.parts:
 				upload_files.append(os.path.join(manifest_dir, part[0]))
-			
-			#s3://scalr-<env-id>-<region>/images/
-			bucket_name = 'scalr-%s-%s/images/' % (
-					self._platform.get_user_data('env_id'),
-					self._platform.get_user_data('region')
-					)
-			LOG.debug('upload_path = s3://%s' % bucket_name)
+
+			#TODO: s3://scalr-<env-id>-<region>/images/
+			cfg = ConfigParser.ConfigParser()
+			env_id = cfg.get('general', 'env-id')
+			bucket_name = '%s-%s/images/' % (env_id, self._platform.get_avail_zone())
+
 			trn = Transfer(pool=4, max_attempts=5, logger=LOG)
 			trn.upload(upload_files, 's3://%s' % bucket_name)
-			
+
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
 
 		except (Exception, BaseException):
 			LOG.error("Cannot upload image")
 			raise
-
 
 	def _register_image(self, s3_manifest_path):
 		try:
