@@ -438,8 +438,10 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 
 			#TODO: s3://scalr-<env-id>-<region>/images/
 			cfg = ConfigParser.ConfigParser()
+			cfg.read('/etc/scalr/private.d/config.ini')
 			env_id = cfg.get('general', 'env-id')
-			bucket_name = '%s-%s/images/' % (env_id, self._platform.get_avail_zone())
+			bucket_name = '%s-%s/images/' % (env_id,
+								self._platform.get_avail_zone())
 
 			trn = Transfer(pool=4, max_attempts=5, logger=LOG)
 			trn.upload(upload_files, 's3://%s' % bucket_name)
