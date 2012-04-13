@@ -207,6 +207,35 @@ class ScalarizrOptions(Configurator.Container):
 		private = True
 		#required = True
 		
+	class env_id(Configurator.Option):
+		'''
+		Environment ID
+		'''
+		name = 'general/env_id'
+		private = True
+
+	class farm_id(Configurator.Option):
+		'''
+		Farm ID
+		'''
+		name = 'general/farm_id'
+		private = True
+
+	class role_id(Configurator.Option):
+		'''
+		Role ID
+		'''
+		name = 'general/role_id'
+		private = True
+
+	class farm_role_id(Configurator.Option):
+		'''
+		Farm role ID
+		'''
+		name = 'general/farm_role_id'
+		private = True
+		
+		
 	class queryenv_url(Configurator.Option):
 		'''
 		QueryEnv URL.
