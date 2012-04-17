@@ -5,24 +5,22 @@ Created on Dec 24, 2009
 '''
 from __future__ import with_statement
 
-from scalarizr import queryenv
 from scalarizr.bus import bus
 from scalarizr.config import STATE
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang
 from scalarizr.util.filetool import write_file
-import threading
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
-from scalarizr.handlers import HandlerError
-import ConfigParser
 
 try:
 	import time
 except ImportError:
 	import timemodule as time
+import ConfigParser	
 import subprocess
+import threading
 import os
 import shutil
 import stat
@@ -30,7 +28,6 @@ import signal
 import logging
 import binascii
 import Queue
-
 
 
 def get_handlers ():
@@ -70,7 +67,7 @@ class ScriptExecutor2(Handler):
 		bus.on(
 			init=self.on_init,
 			start=self.on_start, 
-			shutdown=self.on_shudown
+			shutdown=self.on_shutdown
 		)
 		
 		# Operations
