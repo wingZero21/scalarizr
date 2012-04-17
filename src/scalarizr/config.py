@@ -937,7 +937,10 @@ class State(object):
 		try:
 			cur.execute("SELECT value FROM state WHERE name = ?", [name])
 			ret = cur.fetchone()
-			return json.loads(ret['value']) if ret else ret
+			try:
+				return json.loads(ret['value'])
+			except (TypeError, KeyError, ValueError):
+				return ret
 		finally:
 			cur.close()
 

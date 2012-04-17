@@ -6,7 +6,8 @@ Created on Dec 24, 2009
 from __future__ import with_statement
 
 from scalarizr.bus import bus
-from scalarizr.config import STATE
+#from scalarizr.config import STATE
+from scalarizr import config as szrconfig
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang
@@ -116,14 +117,15 @@ class ScriptExecutor2(Handler):
 		self.log_rotate_thread.start()
 		
 		# Restore in-progress scripts
-		scripts = [Script(**kwds) for kwds in STATE['script_executor.in_progress'] or []]
+		scripts = [Script(**kwds) for kwds in szrconfig.STATE['script_executor.in_progress'] or []]
 		for sc in scripts:
 			self._execute_one_script(sc)
 		
 	
 	def on_shutdown(self):
 		# save state
-		STATE['script_executor.in_progress'] = [sc.state() for sc in self.in_progress]
+		LOG.debug('Saving Work In Progress (%d items)', len(self.in_progress))
+		szrconfig.STATE['script_executor.in_progress'] = [sc.state() for sc in self.in_progress]
 
 
 	def _execute_one_script(self, script):

@@ -6,40 +6,36 @@ Created on Apr 11, 2012
 import mock
 
 from scalarizr.bus import bus
-from scalarizr import handlers
+from scalarizr import handlers, config as szrconfig
 from scalarizr.handlers import script_executor
 from scalarizr.config import ScalarizrState
 
 import os
 import platform
 import binascii
+import threading
+import ConfigParser
+
+
 
 class TestScriptExecutor(object):
 
 	@classmethod
 	def setup_class(cls):
 		bus.queryenv_service = mock.Mock()
+		#bus.queryenv_service.get_producer.return_value = mock.Mock()
 		bus.platform = mock.Mock()
 		bus.cnf = mock.Mock()
 		bus.cnf.state = ScalarizrState.RUNNING
 		handlers.operation = mock.Mock()
 		
-
 	def test_fetch_scripts_from_message(self):
-		message = dict(
-			body=dict(
-				scripts=[dict(
-					
-				)]
-			)
-		)
-		
 		pass
 	
 	def test_fetch_scripts_from_queryenv(self):
 		pass
-	
-	
+
+
 class TestScript(object):
 	DATA = dict(
 		name='mike', 
