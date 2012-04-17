@@ -634,7 +634,7 @@ def main():
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			
 		# At first startup platform user-data should be applied
-		if cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.RUNNING):
+		if cnf.state == ScalarizrState.BOOTSTRAPPING:
 			cnf.fire('apply_user_data', cnf)
 		
 		# Check Scalr version
@@ -656,6 +656,10 @@ def main():
 		
 		# Initialize scalarizr services
 		_init_services()
+		if cnf.state == ScalarizrState.RUNNING:
+			# ReSync user-data
+			cnf.fire('apply_user_data', cnf)		
+		
 		bus.fire('init')
 		
 		# Install signal handlers
