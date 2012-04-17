@@ -259,10 +259,17 @@ def _start_services():
 def _apply_user_data(cnf):
 	logger = logging.getLogger(__name__)
 	platform = bus.platform
+	cnf = bus.cnf
 	
-	def g(key):
-		value = platform.get_user_data(key)
-		return value if value is not None else ''	
+	if cnf.state == ScalarizrState.RUNNING:
+		queryenv = bus.queryenv_service
+		userdata = queryenv.get_server_user_data()
+		def g(key):
+			return userdata.get(key, '')
+	else:
+		def g(key):
+			value = platform.get_user_data(key)
+			return value if value is not None else ''	
 	
 	logger.debug('Applying user-data to configuration')
 	logger.debug('User-data:\n%s', pprint.pformat(platform.get_user_data()))
@@ -294,6 +301,9 @@ def _apply_user_data(cnf):
 	
 	logger.debug('Reloading configuration after user-data applying')
 	cnf.bootstrap(force_reload=True)
+
+
+
 
 def _detect_scalr_version():
 	pl = bus.platform
@@ -624,8 +634,8 @@ def main():
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			
 		# At first startup platform user-data should be applied
-		if cnf.state == ScalarizrState.BOOTSTRAPPING:
-			cnf.fire('apply_user_data', cnf)			
+		if cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.RUNNING):
+			cnf.fire('apply_user_data', cnf)
 		
 		# Check Scalr version
 		if not bus.scalr_version:
