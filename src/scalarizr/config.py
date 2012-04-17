@@ -11,6 +11,10 @@ from scalarizr.util import validators, filetool
 from ConfigParser import ConfigParser, RawConfigParser, NoOptionError, NoSectionError
 from getpass import getpass
 import os, sys, logging
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
 
 SECT_GENERAL = "general"
@@ -933,7 +937,7 @@ class State(object):
 		try:
 			cur.execute("SELECT value FROM state WHERE name = ?", [name])
 			ret = cur.fetchone()
-			return ret['value'] if ret else ret
+			return json.loads(ret['value']) if ret else ret
 		finally:
 			cur.close()
 
@@ -941,7 +945,7 @@ class State(object):
 		conn = self._conn()
 		cur = conn.cursor()
 		try:
-			cur.execute("INSERT INTO state VALUES (?, ?)", [name, value])
+			cur.execute("INSERT INTO state VALUES (?, ?)", [name, json.dumps(value) ])
 		finally:
 			cur.close()
 		conn.commit()
