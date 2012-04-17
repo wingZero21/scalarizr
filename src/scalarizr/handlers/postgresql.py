@@ -190,7 +190,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if self._cnf.state == ScalarizrState.RUNNING:
 
 			storage_conf = Storage.restore_config(self._volume_config_path)
-			self.storage_vol = Storage.create(storage_conf, tags=self.postgres_tags)
+			storage_conf['tags'] = self.postgres_tags
+			self.storage_vol = Storage.create(storage_conf)
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 			
@@ -803,7 +804,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
-			vol = Storage.create(vol, tags=self.postgres_tags)
+			vol['tags'] = self.postgres_tags
+			vol = Storage.create(vol)
 
 		try:
 			if not os.path.exists(mpoint):
