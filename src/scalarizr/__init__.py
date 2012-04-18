@@ -201,7 +201,9 @@ def _init_db(file=None):
 		_create_db(file)
 	
 def _create_db(db_file=None, script_file=None):	
+	logger = logging.getLogger(__name__)
 	conn = bus.db if hasattr(bus, 'db') and bus.db else _db_connect(db_file)
+	logger.debug('conn: %s', conn)
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
 	conn.commit()	
 	

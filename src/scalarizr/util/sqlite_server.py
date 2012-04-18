@@ -12,6 +12,7 @@ import logging
 from weakref import WeakValueDictionary
 
 from scalarizr.util import wait_until
+import sys
 
 LOG = logging.getLogger(__name__)
 
@@ -190,7 +191,12 @@ class SqliteServer(object):
 		
 		
 	def _executescript(self, hash, sql):
-		return self.master_conn.executescript(sql)
+		LOG.debug('_executescript')
+		try:
+			return self.master_conn.executescript(sql)
+		except:
+			LOG.debug('caught', exc_info=sys.exc_info())
+			raise
 	
 	
 	
