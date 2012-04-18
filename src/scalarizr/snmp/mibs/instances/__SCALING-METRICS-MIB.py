@@ -57,6 +57,7 @@ class MtxTableImpl(MibTable):
 MtxTableInst = MtxTableImpl(mtxTable.getName())
 
 def values():
+	logger.debug('Calling __SCALING-METRICS-MIB::values()')
 	global _metrics
 	global _metrics_timestamp
 	
