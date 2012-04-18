@@ -192,14 +192,8 @@ class SqliteServer(object):
 		
 		
 	def _executescript(self, hash, sql):
-		LOG.debug('_executescript (wait 30 seconds before operation to trace it)')
-		time.sleep(30)
-		try:
-			return self.master_conn.executescript(sql)
-		except sqlite3.OperationalError:
-			LOG.debug('caught', exc_info=sys.exc_info())
-			raise
-	
+		return self.master_conn.executescript(sql)
+
 	
 	
 	
