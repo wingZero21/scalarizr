@@ -8,10 +8,12 @@ import time
 import Queue
 import threading
 import weakref
+import logging
 from weakref import WeakValueDictionary
 
 from scalarizr.util import wait_until
 
+LOG = logging.getLogger(__name__)
 
 class Proxy(object):
 	
@@ -121,9 +123,12 @@ class SqliteServer(object):
 			job = self.single_conn_proxy.tasks_queue.get()
 			method, hash, args, kwds = '_%s' % job[0], job[1], job[2] or [], job[3] or {}
 			result = getattr(self, method)(hash, *args, **kwds)
-			if hash in self.clients:
-				self.clients[hash].result = result
-				self.clients[hash].result_available.set()
+			try:
+				if hash in self.clients:
+					self.clients[hash].result = result
+					self.clients[hash].result_available.set()
+			except:
+				LOG.exception('Caught exception in SQLite server loop')
 	
 	
 	def _cursor_create(self, hash, proxy):
