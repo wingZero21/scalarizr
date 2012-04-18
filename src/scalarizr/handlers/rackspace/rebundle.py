@@ -80,7 +80,7 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 				try:
 					image_manager.delete(image)
 				except:
-					pass
+					LOG.debug('Image delete exception', exc_info=sys.exc_info())
 			raise exc_type, exc_value, exc_trace
 		
 		return image.id

@@ -434,9 +434,13 @@ def _shutdown(*args):
 	try:
 		logger.info("[pid: %d] Stopping scalarizr %s", os.getpid(), __version__)
 		_shutdown_services()
+	except:
+		logger.debug('Shutdown services exception', exc_info=sys.exc_info())
+		
+	try:
 		bus.fire("shutdown")
 	except:
-		pass
+		logger.debug('Shutdown hooks exception', exc_info=sys.exc_info())
 	finally:
 		if os.path.exists(PID_FILE):
 			os.remove(PID_FILE)
@@ -456,7 +460,7 @@ def _shutdown_services(force=False):
 		globals()['_snmp_pid'] = None
 	
 	# Shutdown messaging
-	logger.debug('Shutdowning external messaging')	
+	logger.debug('Shutdowning external messaging')
 	msg_service = bus.messaging_service
 	msg_service.get_consumer().shutdown(force=True)
 	msg_service.get_producer().shutdown()
