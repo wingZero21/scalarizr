@@ -117,7 +117,10 @@ class ScriptExecutor2(Handler):
 		self.log_rotate_thread.start()
 		
 		# Restore in-progress scripts
+		LOG.debug('STATE[script_executor.in_progress]: %s', szrconfig.STATE['script_executor.in_progress'])
 		scripts = [Script(**kwds) for kwds in szrconfig.STATE['script_executor.in_progress'] or []]
+		LOG.debug('Restoring %d in-progress scripts', len(scripts))
+		
 		for sc in scripts:
 			self._execute_one_script(sc)
 		
@@ -139,7 +142,9 @@ class ScriptExecutor2(Handler):
 	def _execute_one_script0(self, script):
 		try:
 			self.in_progress.append(script)
-			script.start()
+			if not script.start_time:
+				script.start()
+			script.wait()
 			self.send_message(Messages.EXEC_SCRIPT_RESULT, script.wait(), queue=Queues.LOG)
 		finally:
 			self.in_progress.remove(script)
