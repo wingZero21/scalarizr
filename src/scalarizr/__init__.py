@@ -373,8 +373,9 @@ def onSIGHUP(*args):
 	logger.info('Reloading scalarizr')
 	signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 	globals()["_running"] = False
-	_shutdown_services()
 	bus.fire('shutdown')
+	_shutdown_services()
+	
 	
 	globals()["_running"] = True
 	signal.signal(signal.SIGCHLD, onSIGCHILD)		
@@ -430,21 +431,21 @@ def onSIGCHILD(*args):
 def _shutdown(*args):
 	logger = logging.getLogger(__name__)
 	globals()["_running"] = False
+
+	try:
+		bus.fire("shutdown")
+	except:
+		logger.debug('Shutdown hooks exception', exc_info=sys.exc_info())
 		
 	try:
 		logger.info("[pid: %d] Stopping scalarizr %s", os.getpid(), __version__)
 		_shutdown_services()
 	except:
 		logger.debug('Shutdown services exception', exc_info=sys.exc_info())
-		
-	try:
-		bus.fire("shutdown")
-	except:
-		logger.debug('Shutdown hooks exception', exc_info=sys.exc_info())
 	finally:
 		if os.path.exists(PID_FILE):
 			os.remove(PID_FILE)
-	
+		
 	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
 
 def _shutdown_services(force=False):
