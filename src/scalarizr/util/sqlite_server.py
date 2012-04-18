@@ -13,6 +13,7 @@ from weakref import WeakValueDictionary
 
 from scalarizr.util import wait_until
 import sys
+import sqlite3
 
 LOG = logging.getLogger(__name__)
 
@@ -194,9 +195,10 @@ class SqliteServer(object):
 		LOG.debug('_executescript')
 		try:
 			return self.master_conn.executescript(sql)
-		except:
-			LOG.debug('caught', exc_info=sys.exc_info())
-			raise
+		except sqlite3.OperationalError:
+			LOG.debug('sleep and _second try')
+			time.sleep(10)
+			return self.master_conn.executescript(sql)
 	
 	
 	
