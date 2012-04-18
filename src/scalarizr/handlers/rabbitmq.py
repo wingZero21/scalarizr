@@ -90,7 +90,8 @@ class RabbitMQHandler(ServiceCtlHandler):
 		elif self.cnf.state == ScalarizrState.RUNNING:
 			
 			storage_conf = storage.Storage.restore_config(self._volume_config_path)
-			self.storage_vol = storage.Storage.create(storage_conf, tags=self.rabbitmq_tags)
+			storage_conf['tags'] = self.rabbitmq_tags
+			self.storage_vol = storage.Storage.create(storage_conf)
 			if not self.storage_vol.mounted():
 				self.service.stop()
 				self.storage_vol.mount()
@@ -361,7 +362,8 @@ class RabbitMQHandler(ServiceCtlHandler):
 
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, storage.Volume):
-			vol = storage.Storage.create(vol, tags=self.rabbitmq_tags)
+			vol['tags'] = self.rabbitmq_tags
+			vol = storage.Storage.create(vol)
 
 		if not os.path.exists(mpoint):
 			os.makedirs(mpoint)
