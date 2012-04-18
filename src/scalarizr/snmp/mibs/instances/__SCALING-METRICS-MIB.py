@@ -21,7 +21,7 @@ from scalarizr.config import ScalarizrState
 		'SCALING-METRICS-MIB', 
 		'scalr', 'mtxTable', 'mtxEntry', 'mtxIndex', 'mtxId', 'mtxName', 'mtxValue', 'mtxError', 'authShutdown')
 
-(MibTable, MibScalarInstance) = mibBuilder.importSymbols('SNMPv2-SMI','MibTable', 'MibScalarInstance')
+(MibTableRow, MibScalarInstance) = mibBuilder.importSymbols('SNMPv2-SMI','MibTableRow', 'MibScalarInstance')
 
 
 CACHE_TIME = 600 # 10 minutes
@@ -31,7 +31,7 @@ _metrics_timestamp = 0
 logger = logging.getLogger('scalarizr.snmp.mibs.SCALING-METRICS-MIB')
 
 
-class MtxTableImpl(MibTable):
+class MtxTableRowImpl(MibTableRow):
 
 	EXEC_TIMEOUT = 3
 	'''
@@ -51,10 +51,10 @@ class MtxTableImpl(MibTable):
 			self._last_request_time = now
 			# Update with new values
 			mibBuilder.mibSymbols['__SCALING-METRICS-MIB'] = values()
-		return MibTable.getNextNode(self, name, idx)
+		return MibTableRow.getNextNode(self, name, idx)
 
 
-MtxTableInst = MtxTableImpl(mtxTable.getName())
+mtxEntryInst = MtxTableRowImpl((1, 3, 6, 1, 4, 1, 36632, 5, 1)).setIndexNames((0, "SCALING-METRICS-MIB", "mtxIndex"))
 
 def values():
 	logger.debug('Calling __SCALING-METRICS-MIB::values()')
@@ -64,25 +64,30 @@ def values():
 	queryenv = bus.queryenv_service
 	cnf = bus.cnf
 	ret = {
-		'mtxTable' : MtxTableInst,
-		'scalr'    : scalr,
+		'mtxTable' : mtxTable,
+		#'scalr'    : scalr,
 		'mtxIndex' : mtxIndex,
+		'mtxEntry' : mtxEntryInst,
 		'mtxId'    : mtxId,
 		'mtxName'  : mtxName,
 		'mtxValue' : mtxValue,
 		'mtxError' : mtxError,
 		'mtxEntry' : mtxEntry
 	}
+	logger.debug('ret: %s', ret)
 
 
-	if cnf.state != ScalarizrState.RUNNING:
-		return ret
+	#if cnf.state != ScalarizrState.RUNNING:
+	#	logger.debug("Breaking from method values(): Requires 'running' state but got '%s'", cnf.state)
+	#	return ret
 	
 	# Obtain scaling metrics from Scalr. Cache result
+	
+	
 	now = time.time()
 	if _metrics is None or now - _metrics_timestamp > CACHE_TIME:
 		logger.debug('Obtain scaling metrics from QueryEnv')
-		_metrics = queryenv.get_scaling_metrics()
+		_metrics = queryenv.get_scaling_metrics()		
 		_metrics_timestamp = now
 	else:
 		logger.debug('Use cached scaling metrics. Expires: %s', 
