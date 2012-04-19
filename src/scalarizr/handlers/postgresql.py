@@ -637,17 +637,14 @@ class PostgreSqlHander(ServiceCtlHandler):
 				rchown(self.postgresql.root_user.name, tmpdir)	
 				
 				for db in databases:
-					try:
-						with op.step("Backup '%s'" % db, warning=True):
-							dump_path = tmpdir + os.sep + db + '.sql'
-							pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db, dump_path)
-							su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
-							err = system2(su_args)[1]
-							if err:
-								raise HandlerError('Error while dumping database %s: %s' % (db, err))
-							backup.add(dump_path, os.path.basename(dump_path))							
-					except:
-						self._logger.exception('Cannot dump database %s. %s', db)
+					with op.step("Backup '%s'" % db):
+						dump_path = tmpdir + os.sep + db + '.sql'
+						pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db, dump_path)
+						su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
+						err = system2(su_args)[1]
+						if err:
+							raise HandlerError('Error while dumping database %s: %s' % (db, err))
+						backup.add(dump_path, os.path.basename(dump_path))							
 
 				backup.close()
 				

@@ -920,13 +920,10 @@ class MysqlHandler(ServiceCtlHandler):
 				self._logger.info("Dumping all databases")
 				tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)			
 				for db in databases:
-					try:
-						with op.step("Backup '%s'" % db, warning=True):						
-							dump_path = os.path.join(tmpdir, db + '.sql') 
-							mysql.dump_database(db, dump_path)
-							backup.add(dump_path, os.path.basename(dump_path))						
-					except PopenError, e:
-						self._logger.exception('Cannot dump database %s. %s', db, e)
+					with op.step("Backup '%s'" % db):						
+						dump_path = os.path.join(tmpdir, db + '.sql') 
+						mysql.dump_database(db, dump_path)
+						backup.add(dump_path, os.path.basename(dump_path))						
 				
 				backup.close()
 				

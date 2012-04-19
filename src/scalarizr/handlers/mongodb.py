@@ -948,17 +948,14 @@ class MongoDBHandler(ServiceCtlHandler):
 				r_dbs = self.mongodb.router_cli.list_database_names()
 				rdb_name = 'config'
 				if rdb_name  in r_dbs:
-					try:
-						with op.step("Backup '%s'" % rdb_name, warning=True):
-							private_ip = self._platform.get_private_ip()
-							router_port = mongo_svc.ROUTER_DEFAULT_PORT
-							router_dump = mongo_svc.MongoDump(private_ip, router_port)
-							router_dump_path = tmpdir + os.sep + 'router_' + rdb_name + '.bson'
-							err = router_dump.create(rdb_name, router_dump_path)
-							if err:
-								raise HandlerError('Error while dumping database %s: %s' % (rdb_name, err))
-					except:
-						self._logger.exception('Cannot dump database %s', rdb_name)
+					with op.step("Backup '%s'" % rdb_name, warning=True):
+						private_ip = self._platform.get_private_ip()
+						router_port = mongo_svc.ROUTER_DEFAULT_PORT
+						router_dump = mongo_svc.MongoDump(private_ip, router_port)
+						router_dump_path = tmpdir + os.sep + 'router_' + rdb_name + '.bson'
+						err = router_dump.create(rdb_name, router_dump_path)
+						if err:
+							raise HandlerError('Error while dumping database %s: %s' % (rdb_name, err))
 				else:
 					self._logger.warning('config db not found. Nothing to dump on router.')
 			
