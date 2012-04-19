@@ -115,17 +115,20 @@ class ScriptExecutor(Handler):
 			self._logger.debug("Fetched %d scripts", len(scripts))
 		
 		if scripts:
-			if event_name:
-				phase = "Executing %d %s script(s)" % (len(scripts), event_name)
+			if self._cnf.state != ScalarizrState.INITIALIZING:
+				if event_name:
+					phase = "Executing %d %s script(s)" % (len(scripts), event_name)
+				else:
+					phase = 'Executing %d script(s)' % (len(scripts), )
+				self._logger.info(phase)
+				
+				op = operation(name=self._op_exec_scripts, phases=[{
+					'name': phase,
+					'steps': ["Execute '%s'" % script.name for script in scripts if not script.asynchronous]
+				}])
+				op.define()
 			else:
-				phase = 'Executing %d script(s)' % (len(scripts), )
-			self._logger.info(phase)
-			
-			op = operation(name=self._op_exec_scripts, phases=[{
-				'name': phase,
-				'steps': ["Execute '%s'" % script.name for script in scripts if not script.asynchronous]
-			}])
-			op.define()
+				op = bus.initialization_op
 			
 			with op.phase(phase):
 			
