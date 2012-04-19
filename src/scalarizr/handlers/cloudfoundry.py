@@ -152,7 +152,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 		self._step_patch_conf = 'Patch configuration files'
 		self._step_start_svs = 'Start services'
 		
-		return {'before_host_up': [{
+		return {'host_init_response': [{
 			'name': self._phase_cloudfoundry,
 			'steps': [
 				self._step_locate_cloud_controller, 
@@ -347,10 +347,10 @@ class CloudControllerHandler(handlers.Handler):
 		self.volume_config = ini.pop('volume_config', 
 									dict(type='loop',file='/mnt/cfdata.loop',size=500))
 
-	
-	def on_BeforeHostUp(self, msg):
 		'''
 		Plug storage, initialize database
+		Why here? cause before_host_up routines could be executed after MysqlHandler 
+		and it will lead to fail
 		'''
 		with bus.initialization_op as op:
 			with op.step(self._step_create_storage):
@@ -400,7 +400,6 @@ class SvssHandler(handlers.Handler):
 class MysqlHandler(handlers.Handler):
 	def __init__(self):
 		self.enabled = False
-		self.svs_conf = None
 		bus.on(init=self.on_init)
 	
 	
@@ -416,13 +415,11 @@ class MysqlHandler(handlers.Handler):
 		ini = msg.body.get(_bhs.service, {})
 		self.enabled = 'mysql' in ini
 		if self.enabled:
-			self.svs_conf = ini['mysql'].copy()
+			svs_conf = ini['mysql'].copy()
+			
+			svs = _cf.services['mysql']
+			svs.node_config['mysql']['host'] = svs_conf['hostname']
+			svs.node_config['mysql']['user'] = svs_conf['user']
+			svs.node_config['mysql']['password'] = svs_conf['password']
+			svs.flush_node_config()
 	
-	
-	def on_BeforeHostUp(self, msg):
-		svs = _cf.services['mysql']
-		svs.node_config['mysql']['host'] = self.svs_conf['hostname']
-		svs.node_config['mysql']['user'] = self.svs_conf['user']
-		svs.node_config['mysql']['password'] = self.svs_conf['password']
-		svs.flush_node_config()
-
