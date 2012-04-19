@@ -1714,15 +1714,14 @@ class MysqlHandler(ServiceCtlHandler):
 		return (root_password, repl_password, stat_password)
 	
 	def _add_mysql_user(self, my_cli, login, password, host, privileges=None):
-			
-		my_cli.sendline('select count(*) from information_schema.COLUMNS where TABLE_SCHEMA="mysql" and TABLE_NAME="user"\G')
+
+		my_cli.sendline('SHOW COLUMNS FROM mysql.user\G')
 		my_cli.expect('mysql>')
 		res = my_cli.before
 		if 'ERROR' in res:
 			raise HandlerError("Can't get privileges columns count.")
-		
-		# Retrieveing privileges column count from mysql output
-		priv_count = int(res.strip().split('\r\n')[2].split()[-1]) - 11
+		priv_count = len([line for line in res.split('\r\n') if line.strip().startswith('Field') and line.endswith('_priv')])
+		self._logger.debug("*_priv columns total: %s" % priv_count)		
 		
 		if not privileges:
 			cmd = "INSERT INTO mysql.user VALUES('%s','%s',PASSWORD('%s')" % (host, login, password) + ",'Y'"*priv_count + ",''"*4 +',0'*4+");" 
