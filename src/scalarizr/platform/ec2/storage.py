@@ -135,7 +135,7 @@ class EbsVolumeProvider(VolumeProvider):
 										ebs_vol.id, ebs_vol.zone, pl.get_avail_zone())
 						volume_id = None
 						delete_snap = True
-						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger, wait_completion=True).id
+						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger, wait_completion=True, tags=kwargs.get('tags')).id
 					else:
 						snap_id = None
 						
