@@ -25,17 +25,23 @@ class Proxy(object):
 		Ingoing tasks queue. Item is a tuple(method, client_hash, args, kwds)
 		Outgoing result.  
 		'''
-		self.tasks_queue = tasks_queue
 		self.result = None
+		self.error = None
+		self.tasks_queue = tasks_queue
 		self.hash = self.__hash__()
 		self.result_available = threading.Event()
-		
+	
 		
 	def _call(self, method, wait, args=None, kwds=None):
 		self.result_available.clear()
 		self.tasks_queue.put((method, self.__hash__(), args, kwds))
 		if wait:
 			self.result_available.wait()
+		try:	
+			if self.error:
+				raise self.error[0], self.error[1]
+		finally:
+			self.error = None
 		return self.result
 	
 
@@ -124,13 +130,17 @@ class SqliteServer(object):
 		while True:
 			job = self.single_conn_proxy.tasks_queue.get()
 			method, hash, args, kwds = '_%s' % job[0], job[1], job[2] or [], job[3] or {}
-			result = getattr(self, method)(hash, *args, **kwds)
+			result = None
 			try:
+				handler = getattr(self, method)
+				result = handler(hash, *args, **kwds)
+			except:
+				LOG.exception('Caught exception in SQLite server loop, handler: %s' % method)
+				self.clients[hash].error = sys.exc_info()
+			finally:
 				if hash in self.clients:
 					self.clients[hash].result = result
 					self.clients[hash].result_available.set()
-			except:
-				LOG.exception('Caught exception in SQLite server loop')
 	
 	
 	def _cursor_create(self, hash, proxy):
