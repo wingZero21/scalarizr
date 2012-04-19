@@ -205,8 +205,12 @@ def _create_db(db_file=None, script_file=None):
 	conn = bus.db if hasattr(bus, 'db') and bus.db else _db_connect(db_file)
 	logger.debug('conn: %s', conn)
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
-	conn.commit()	
-	
+	#conn.commit()	
+	cur = conn.cursor()
+	cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+	raw = cur.fetchone()
+	res = tuple([i for i in raw])
+	logger.debug('list tables: %s', res)
 
 
 def _init_platform():
