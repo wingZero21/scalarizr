@@ -959,45 +959,47 @@ class MongoDBHandler(ServiceCtlHandler):
 				else:
 					self._logger.warning('config db not found. Nothing to dump on router.')
 			
-			# Get databases list
-			dbs = self.mongodb.cli.list_database_names()
+				# Get databases list
+				dbs = self.mongodb.cli.list_database_names()
+				
+				# Defining archive name and path
+				rs_name = RS_NAME_TPL % self.shard_index
+				backup_filename = '%s-%s-backup-'%(BEHAVIOUR,rs_name) + time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+				backup_path = os.path.join(self._tmp_dir, backup_filename)
+				
+				# Creating archive 
+				backup = tarfile.open(backup_path, 'w:gz')
+				
+				# Dump all databases
+				self._logger.info("Dumping all databases")
+				md = mongo_svc.MongoDump()  
+				
+				for db_name in dbs:
+					try:
+						with ("Backup '%s'" % db_name):
+							dump_path = tmpdir + os.sep + db_name + '.bson'
+							err = md.create(db_name, dump_path)[1]
+							if err:
+								raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
+							backup.add(dump_path, os.path.basename(dump_path))
+					except:
+						self._logger.exception('Cannot dump database %s', db_name)
+				backup.close()
+				
+				with op.step(self._step_upload_to_cloud_storage):
+					# Creating list of full paths to archive chunks
+					if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+						parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+					else:
+						parts = [backup_path]
+							
+					self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+					trn = transfer.Transfer()
+					result = trn.upload(parts, self._platform.cloud_storage_path)
+					self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
+									BEHAVIOUR, self._platform.cloud_storage_path, backup_filename)
 			
-			# Defining archive name and path
-			rs_name = RS_NAME_TPL % self.shard_index
-			backup_filename = '%s-%s-backup-'%(BEHAVIOUR,rs_name) + time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-			backup_path = os.path.join(self._tmp_dir, backup_filename)
-			
-			# Creating archive 
-			backup = tarfile.open(backup_path, 'w:gz')
-			
-			# Dump all databases
-			self._logger.info("Dumping all databases")
-			md = mongo_svc.MongoDump()  
-			
-			for db_name in dbs:
-				try:
-					with ("Backup '%s'" % db_name):
-						dump_path = tmpdir + os.sep + db_name + '.bson'
-						err = md.create(db_name, dump_path)[1]
-						if err:
-							raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
-						backup.add(dump_path, os.path.basename(dump_path))
-				except:
-					self._logger.exception('Cannot dump database %s', db_name)
-			backup.close()
-			
-			with op.step(self._step_upload_to_cloud_storage):
-				# Creating list of full paths to archive chunks
-				if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-					parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-				else:
-					parts = [backup_path]
-						
-				self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
-				trn = transfer.Transfer()
-				result = trn.upload(parts, self._platform.cloud_storage_path)
-				self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
-								BEHAVIOUR, self._platform.cloud_storage_path, backup_filename)
+			op.ok()
 			
 			# Notify Scalr
 			self.send_message(MongoDBMessages.CREATE_BACKUP_RESULT, dict(

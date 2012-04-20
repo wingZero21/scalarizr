@@ -660,13 +660,15 @@ class PostgreSqlHander(ServiceCtlHandler):
 					result = trn.upload(parts, self._platform.cloud_storage_path)
 					self._logger.info("Postgresql backup uploaded to cloud storage under %s/%s", 
 									self._platform.cloud_storage_path, backup_filename)
+			
+			op.ok()
 				
-				# Notify Scalr
-				self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-					db_type = BEHAVIOUR,
-					status = 'ok',
-					backup_parts = result
-				))
+			# Notify Scalr
+			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+				db_type = BEHAVIOUR,
+				status = 'ok',
+				backup_parts = result
+			))
 						
 		except (Exception, BaseException), e:
 			self._logger.exception(e)

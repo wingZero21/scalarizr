@@ -458,6 +458,8 @@ class RedisHandler(ServiceCtlHandler):
 					result = trn.upload(parts, self._platform.cloud_storage_path)
 					self._logger.info("%s backup uploaded to cloud storage under %s/%s" % 
 								(BEHAVIOUR, self._platform.cloud_storage_path, backup_filename))
+			
+			op.ok()
 				
 			# Notify Scalr
 			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
@@ -465,6 +467,8 @@ class RedisHandler(ServiceCtlHandler):
 				status = 'ok',
 				backup_parts = result
 			))
+			
+			
 						
 		except (Exception, BaseException), e:
 			self._logger.exception(e)

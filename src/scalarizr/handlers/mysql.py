@@ -939,12 +939,14 @@ class MysqlHandler(ServiceCtlHandler):
 					result = trn.upload(parts, self._platform.cloud_storage_path)
 					self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
 									self._platform.cloud_storage_path, backup_filename)
+			
+			op.ok()
 					
-				# Notify Scalr
-				self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
-					status = 'ok',
-					backup_parts = result
-				))
+			# Notify Scalr
+			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
+				status = 'ok',
+				backup_parts = result
+			))
 						
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
