@@ -191,6 +191,14 @@ def _init_db(file=None):
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
 		logger.debug("Database doesn't exist, creating new one from script")
 		_create_db(file)
+		
+	def do_check():
+		while True:
+			logger.debug('db.sqlite exists: %s', os.path.exists(db_file))
+			time.sleep(.1)
+	db_file_checker = threading.Thread(target=do_check)
+	db_file_checker.setDaemon(True)
+	db_file_checker.start()
 	
 def _create_db(db_file=None, script_file=None):	
 	logger = logging.getLogger(__name__)
