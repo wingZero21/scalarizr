@@ -748,7 +748,7 @@ def prepare_tags(handler=None, **kwargs):
 			try:
 				tags[k] = str(v)
 			except:
-				excludes.append(v)
+				excludes.append(k)
 				
 	LOG.debug('Prepared tags: %s. Excluded empty tags: %s' % (tags, excludes))
 	return tags
