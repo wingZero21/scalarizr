@@ -30,6 +30,8 @@ class operation(object):
 		self.phases = phases or []
 		self.finished = False
 		self._depth = None
+		self._phase = None
+		self._step = None
 		self._stepnos = {}
 	
 	def phase(self, name):
