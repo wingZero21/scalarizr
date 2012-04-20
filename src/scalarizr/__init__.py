@@ -276,10 +276,15 @@ def _init_services():
 	Storage.maintain_volume_table = True
 
 	
+<<<<<<< .mine
+
+=======
+>>>>>>> .r3105
 	routes = {
 		'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
 	}
 	bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
+
 
 
 def _start_services():
