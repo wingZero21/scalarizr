@@ -330,6 +330,7 @@ class CloudControllerHandler(handlers.Handler):
 			)
 			self._init_objects()
 			
+			self._phase_cloudfoundry = 'Configure CloudFoundry'
 			self._step_create_storage = 'Create VCAP data storage'
 			self._step_locate_nginx = 'Locate Nginx frontend'
 			self._step_create_database = 'Create CloudController database'
