@@ -736,7 +736,18 @@ def prepare_tags(handler=None, **kwargs):
 			kwargs['db_replication_role'] = 'master' if kwargs['db_replication_role'] else 'slave'
 		tags.update(kwargs)	
 		
-	LOG.debug('Prepared tags: %s' % tags)
+	excludes = []
+	for k,v in tags.items():
+		if not v:
+			excludes.append(v)
+			del tags[k]
+		else:
+			try:
+				tags[k] = str(v)
+			except:
+				excludes.append(v)
+				
+	LOG.debug('Prepared tags: %s. Excluded empty tags: %s' % (tags, excludes))
 	return tags
 		
 		
