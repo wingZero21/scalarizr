@@ -78,6 +78,7 @@ class ScriptExecutor2(Handler):
 		# Services
 		self._cnf = bus.cnf
 		self._queryenv = bus.queryenv_service
+		self._platform = bus.platform
 	
 	def on_init(self):
 		global exec_dir_prefix, logs_dir, logs_truncate_over
