@@ -145,7 +145,6 @@ class ScriptExecutor2(Handler):
 			self.in_progress.append(script)
 			if not script.start_time:
 				script.start()
-			script.wait()
 			self.send_message(Messages.EXEC_SCRIPT_RESULT, script.wait(), queue=Queues.LOG)
 		finally:
 			self.in_progress.remove(script)
