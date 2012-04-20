@@ -315,9 +315,9 @@ class CloudControllerHandler(handlers.Handler):
 		return vol
 	
 	
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		result = is_cloud_controller() and message.name == messaging.Messages.BEFORE_HOST_UP and its_me(message) 
-		return result
+	#def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+	#	result = is_cloud_controller() and message.name == messaging.Messages.BEFORE_HOST_UP and its_me(message) 
+	#	return result
 		
 	
 	def on_init(self):
@@ -412,8 +412,8 @@ class MysqlHandler(handlers.Handler):
 		bus.on(init=self.on_init)
 	
 	
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return self.enabled and message.name in (messaging.Messages.BEFORE_HOST_UP, ) 
+	#def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+	#	return self.enabled and message.name in (messaging.Messages.BEFORE_HOST_UP, ) 
 	
 	
 	def on_init(self):
