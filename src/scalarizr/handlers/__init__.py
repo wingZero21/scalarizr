@@ -31,6 +31,8 @@ class operation(object):
 		self.phases = phases or []
 		self.finished = False
 		self._depth = None
+		self._phase = None
+		self._step = None
 		self._stepnos = {}
 	
 	def phase(self, name):
@@ -49,6 +51,7 @@ class operation(object):
 	def __enter__(self):
 		if self._depth == 'step':
 			self._stepnos[self._phase] += 1
+			STATE['operation.id'] = self.id
 			STATE['operation.step'] = self._step
 			STATE['operation.in_progress'] = 1			
 			self.progress(0)

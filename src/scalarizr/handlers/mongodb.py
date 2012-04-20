@@ -30,6 +30,7 @@ from scalarizr.messaging.p2p import P2pMessageStore
 from scalarizr.handlers import operation, prepare_tags
 
 
+
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
 
 STORAGE_VOLUME_CNF		= 'mongodb.json'
@@ -521,7 +522,7 @@ class MongoDBHandler(ServiceCtlHandler):
 										cfg_server_running = True
 										break
 							except:
-								pass
+								self._logger.debug('Caught exception', exc_info=sys.exc_info())
 
 
 			with op.step(self._step_start_router):
@@ -778,7 +779,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.stop_router()
 		self.mongodb.stop_config_server()
 		self.mongodb.mongod.stop('Rebooting instance')
-		pass
 	
 			
 	def on_BeforeHostTerminate(self, message):
@@ -936,7 +936,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				with op.step(self._step_fsync):
 					#perform fsync
 					self.mongodb.cli.sync()
-			
 				
 				#create temporary dir for dumps
 				if not os.path.exists(self._tmp_dir):

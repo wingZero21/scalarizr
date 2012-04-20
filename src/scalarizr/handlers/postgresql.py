@@ -26,6 +26,7 @@ from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.handlers import operation, prepare_tags
 
 
+
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
 
 PG_SOCKET_DIR 				= '/var/run/postgresql/'

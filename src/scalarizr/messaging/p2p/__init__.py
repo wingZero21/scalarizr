@@ -161,10 +161,7 @@ class _P2pMessageStore:
 			sql = """UPDATE p2p_message SET in_is_handled = ? 
 					WHERE message_id = ? AND is_ingoing = ?"""
 			cur.execute(sql, [1, message_id, 1])
-
-			self._logger.debug("Commiting mark_as_handled")
 			conn.commit()
-			self._logger.debug("Commited mark_as_handled")
 		finally:
 			cur.close()
 
@@ -178,10 +175,7 @@ class _P2pMessageStore:
 						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
 			
 			cur.execute(sql, [message.toxml(), message.id, message.name, queue, 0, 0, 0, sender])
-			
-			self._logger.debug("Commiting put_outgoing")
 			conn.commit()
-			self._logger.debug("Commited put_outgoing")
 		finally:
 			cur.close()
 
