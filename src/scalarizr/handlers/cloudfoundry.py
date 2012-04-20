@@ -360,34 +360,35 @@ class CloudControllerHandler(handlers.Handler):
 		and it will lead to fail
 		'''
 		with bus.initialization_op as op:
-			with op.step(self._step_create_storage):
-				# Initialize storage			
-				LOG.info('Initializing vcap data storage')
-				tmp_mpoint = '/mnt/tmp.vcap'
-				try:
-					self.volume = self._plug_storage(mpoint=tmp_mpoint)
-					if not _cf.valid_datadir(tmp_mpoint):
-						LOG.info('Copying data from %s to storage', _datadir)
-						rsync = filetool.Rsync().archive().delete().\
-									source(_datadir + '/').dest(tmp_mpoint)
-						rsync.execute()
-						
-					LOG.debug('Mounting storage to %s', _datadir)
-					self.volume.umount()
-					self.volume.mount(_datadir)
-				except:
-					LOG.exception('Failed to initialize storage')
-				finally:
-					if os.path.exists(tmp_mpoint):
-						os.removedirs(tmp_mpoint)		
-				self.volume_config = self.volume.config()
-
-			with op.step(self._step_locate_nginx):
-				_cf.components['cloud_controller'].allow_external_app_uris = True
-				self._locate_nginx()
-				
-			with op.step(self._step_create_database):
-				_cf.init_db()
+			with op.phase(self._phase_cloudfoundry):
+				with op.step(self._step_create_storage):
+					# Initialize storage			
+					LOG.info('Initializing vcap data storage')
+					tmp_mpoint = '/mnt/tmp.vcap'
+					try:
+						self.volume = self._plug_storage(mpoint=tmp_mpoint)
+						if not _cf.valid_datadir(tmp_mpoint):
+							LOG.info('Copying data from %s to storage', _datadir)
+							rsync = filetool.Rsync().archive().delete().\
+										source(_datadir + '/').dest(tmp_mpoint)
+							rsync.execute()
+							
+						LOG.debug('Mounting storage to %s', _datadir)
+						self.volume.umount()
+						self.volume.mount(_datadir)
+					except:
+						LOG.exception('Failed to initialize storage')
+					finally:
+						if os.path.exists(tmp_mpoint):
+							os.removedirs(tmp_mpoint)		
+					self.volume_config = self.volume.config()
+	
+				with op.step(self._step_locate_nginx):
+					_cf.components['cloud_controller'].allow_external_app_uris = True
+					self._locate_nginx()
+					
+				with op.step(self._step_create_database):
+					_cf.init_db()
 
 
 	def on_before_host_up(self, msg):
