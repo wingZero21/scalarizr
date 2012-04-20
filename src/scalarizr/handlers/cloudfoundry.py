@@ -194,6 +194,13 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 					LOG.debug('Setting ip route')
 					for name in _components:
 						_cf.components[name].ip_route = local_ip()
+					LOG.debug('Creating log directories')
+					for name in _components:
+						cmp = _cf.components[name]
+						if 'log_file' in cmp.config:
+							dir = os.path.dirname(cmp.config['log_file'])
+							if not os.path.exists(dir):
+								os.makedirs(dir)
 					for name in _services:
 						_cf.services[name].ip_route = local_ip()
 						
