@@ -161,13 +161,6 @@ def _init():
 	initdv2.explore("scalarizr", ScalarizrInitScript)
 
 	# Configure database connection pool
-	'''
-	sqlite_srv = sqlite_server.SqliteServer(_db_connect)
-	t =  threading.Thread(target=sqlite_srv.serve_forever)
-	t.daemon = True
-	t.start()
-	bus.db = sqlite_srv.connect() 
-	'''
 	t = sqlite_server.SQLiteServerThread(_db_connect)
 	t.setDaemon(True)
 	t.start()
@@ -202,15 +195,17 @@ def _init_db(file=None):
 	
 def _create_db(db_file=None, script_file=None):	
 	logger = logging.getLogger(__name__)
-	conn = bus.db if hasattr(bus, 'db') and bus.db else _db_connect(db_file)
+	conn = bus.db
 	logger.debug('conn: %s', conn)
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
 	#conn.commit()	
 	cur = conn.cursor()
 	cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-	raw = cur.fetchone()
-	res = tuple([i for i in raw])
-	logger.debug('list tables: %s', res)
+	tables = []
+	rows = cur.fetchall()
+	for row in rows:
+		tables += [i for i in row]
+	logger.debug('list tables: %s', tables)
 
 
 def _init_platform():
