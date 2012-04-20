@@ -275,11 +275,7 @@ def _init_services():
 	
 	Storage.maintain_volume_table = True
 
-	
-<<<<<<< .mine
 
-=======
->>>>>>> .r3105
 	routes = {
 		'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
 	}
@@ -591,7 +587,7 @@ def main():
 			if server_id and ud_server_id and server_id != ud_server_id:
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
-				cnf.state = ScalarizrState.BOOTSTRAPPING						
+				cnf.state = ScalarizrState.BOOTSTRAPPING
 
 		
 		# Initialize local database
@@ -603,7 +599,9 @@ def main():
 			
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
-			cnf.fire('apply_user_data', cnf)			
+			cnf.fire('apply_user_data', cnf)	
+			
+			#TODO: start API now?		
 
 		'''		
 		# At first scalarizr startup platform user-data should be applied
