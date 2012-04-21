@@ -539,7 +539,7 @@ def main():
 		globals()['_pid'] = pid = os.getpid()		
 		logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
 		
-		# Check for another running scalarzir 
+		# Check for another running scalarzir
 		if os.path.exists(PID_FILE):
 			try:
 				another_pid = int(read_file(PID_FILE).strip())
@@ -598,16 +598,17 @@ def main():
 		
 		
 		# At first scalarizr startup platform user-data should be applied
-		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
+		if cnf.state == ScalarizrState.UNKNOWN:
 			cnf.state = ScalarizrState.BOOTSTRAPPING
-
+		
+		if cnf.state == ScalarizrState.REBUNDLING:
+			logger.info('Server was started after rebundle. Performing some cleanups')
+			_cleanup_after_rebundle()
+			cnf.state = ScalarizrState.BOOTSTRAPPING
 
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
-			cnf.fire('apply_user_data', cnf)	
-
 			#TODO: now API server will be start
-						
 			routes = {
 				'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
 			}
@@ -615,8 +616,10 @@ def main():
 			
 			# Start API server
 			api_server = bus.api_server
-			logger.debug('Start API server')
+			logger.info('Start API server')
 			api_server.start()
+			
+			cnf.fire('apply_user_data', cnf)
 					
 
 		# Check Scalr version
