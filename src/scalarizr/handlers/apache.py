@@ -297,6 +297,8 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def _update_vhosts(self):
 		vhosts_path = VHOSTS_PATH
+		if not os.path.isabs(vhosts_path):
+			vhosts_path = os.path.join(self._cnf.private_path(), vhosts_path)
 		if not os.path.exists(vhosts_path):
 			if not vhosts_path:
 				self._logger.error('Property vhosts_path is empty.')
