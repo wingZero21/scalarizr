@@ -1,5 +1,6 @@
 import gevent.monkey
-gevent.monkey.patch_all(dns = False)
+gevent.monkey.patch_all()
+
 
 # Core
 from scalarizr import config 
@@ -17,9 +18,6 @@ from scalarizr.api.binding import jsonrpc_zmq
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
 
-from scalarizr.storage.util.loop import listloop
-from scalarizr.util.filetool import write_file, read_file
-
 # Stdlibs
 import logging
 import logging.config
@@ -30,6 +28,8 @@ import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
+from scalarizr.storage.util.loop import listloop
+from scalarizr.util.filetool import write_file, read_file
 
 
 class ScalarizrError(BaseException):
@@ -42,6 +42,11 @@ class NotConfiguredError(BaseException):
 __version__ = open(os.path.join(os.path.dirname(__file__), 'version')).read().strip()
 
 
+EMBED_SNMPD = True
+NET_SNMPD = False
+
+SNMP_RESTART_DELAY = 5 # Seconds
+
 PID_FILE = '/var/run/scalarizr.pid' 
 
 _running = False
@@ -52,6 +57,16 @@ True when scalarizr daemon should be running
 _pid = None
 '''
 Scalarizr main process PID
+'''
+
+_snmp_pid = None
+'''
+Embed SNMP server process PID
+'''
+
+_snmp_scheduled_start_time = None
+'''
+Next time when SNMP process should be forked
 '''
 
 _msg_thread = None
@@ -93,6 +108,7 @@ def _init():
 		os.makedirs(cnf.private_path())
 	bus.cnf = cnf
 	
+	
 	# Find shared resources dir
 	if not bus.share_path:
 		share_places = [
@@ -103,6 +119,7 @@ def _init():
 		bus.share_path = firstmatched(lambda p: os.access(p, os.F_OK), share_places)
 		if not bus.share_path:
 			raise ScalarizrError('Cannot find scalarizr share dir. Search path: %s' % ':'.join(share_places))
+
 	
 	# Configure logging
 	if sys.version_info < (2,6):
@@ -134,7 +151,6 @@ def _init():
 DB_NAME = 'db.sqlite'
 DB_SCRIPT = 'db.sql'
 
-
 def _db_connect(file=None):
 	logger = logging.getLogger(__name__)
 	cnf = bus.cnf
@@ -145,7 +161,6 @@ def _db_connect(file=None):
 	conn.row_factory = sqlite.Row
 	return conn
 
-
 def _init_db(file=None):
 	logger = logging.getLogger(__name__)	
 	cnf = bus.cnf
@@ -155,13 +170,12 @@ def _init_db(file=None):
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
 		logger.debug("Database doesn't exists, create new one from script")
 		_create_db(file)
-
 	
 def _create_db(db_file=None, script_file=None):
 	conn = _db_connect(db_file)
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
 	conn.commit()	
-
+	
 
 def _mount_private_d(mpoint, privated_image, blocks_count):
 	logger = logging.getLogger(__name__)
@@ -237,7 +251,6 @@ def _init_platform():
 	else:
 		raise ScalarizrError("Platform not defined")
 
-
 def _init_services():
 	logger = logging.getLogger(__name__)
 	cnf = bus.cnf; ini = cnf.rawini
@@ -273,40 +286,37 @@ def _init_services():
 	consumer = msg_service.get_consumer()
 	consumer.listeners.append(MessageListener())
 	
+	logger.debug('Schedule SNMP process')
+	globals()['_snmp_scheduled_start_time'] = time.time()		
+
 	Storage.maintain_volume_table = True
-
-	if not bus.api_server:
-		routes = {
-			'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
-		}
-		bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
-
+	
+	routes = {
+		'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
+	}
+	bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
 
 
 def _start_services():
-	logger = logging.getLogger(__name__)
-
 	# Create message server thread
 	msg_service = bus.messaging_service
 	consumer = msg_service.get_consumer()
 	msg_thread = threading.Thread(target=consumer.start, name="Message server")
 
+	# Start SNMP
+	_start_snmp_server()
+
 	# Start message server
 	msg_thread.start()
 	globals()['_msg_thread'] = msg_thread
 	
-	'''
-	#TODO: need check status server and start it if it not yet
 	# Start API server
 	api_server = bus.api_server
-	logger.debug('Start API server')
 	api_server.start()
-	'''
 	
 	# Start periodical executor
 	ex = bus.periodical_executor
 	ex.start()
-
 
 def _apply_user_data(cnf):
 	logger = logging.getLogger(__name__)
@@ -323,10 +333,13 @@ def _apply_user_data(cnf):
 		},
 		messaging_p2p={
 			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
+		},
+		snmp={
+			'security_name' : 'notConfigUser',			
+			'community_name' : g(UserDataOptions.FARM_HASH)
 		}
 	))
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
-
 
 def _detect_scalr_version():
 	pl = bus.platform
@@ -358,6 +371,33 @@ def init_script():
 	msg_service = factory.new_service(adapter, **kwargs)
 	bus.messaging_service = msg_service
 
+
+def _start_snmp_server():
+	logger = logging.getLogger(__name__)
+	# Start SNMP server in a separate process
+	pid = os.fork()
+	if pid == 0:
+		from scalarizr.snmp.agent import SnmpServer
+		globals()['_pid'] = 0
+		cnf = bus.cnf; ini = cnf.rawini		
+		snmp_server = SnmpServer(
+			port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
+			security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
+			community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
+		)
+		bus.snmp_server = snmp_server
+		
+		try:
+			snmp_server.start()
+			logger.info('[pid: %d] SNMP process terminated', os.getpid())
+			sys.exit(0)
+		except SystemExit:
+			raise
+		except (BaseException, Exception), e:
+			logger.exception(e)
+			sys.exit(1)
+	else:
+		globals()["_snmp_pid"] = pid
 
 def onSIGHUP(*args):
 	pid = os.getpid()
@@ -391,13 +431,36 @@ def onSIGTERM(*args):
 		logger.debug('Shutdown main process (pid: %d)', pid)
 		_shutdown()
 	else:
-		logger.debug('Failed shutdowning main process '
-					'pid(`%s`)!=_pid(`%s`)', pid or '', _pid or '')
-
+		# SNMP process
+		logger.debug('Shutdown SNMP server process (pid: %d)', pid)
+		snmp = bus.snmp_server
+		snmp.stop()
 
 def onSIGCHILD(*args):
 	logger = logging.getLogger(__name__)
-	logger.debug("Received SIGCHILD")
+	#logger.debug("Received SIGCHILD")
+	
+	if globals()["_running"] and _snmp_pid:
+		try:
+			# Restart SNMP process if it terminates unexpectedly
+			pid, sts = os.waitpid(_snmp_pid, os.WNOHANG)
+			'''
+			logger.debug(
+				'Child terminated (pid: %d, status: %s, WIFEXITED: %s, '
+				'WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)', 
+				pid, sts, os.WIFEXITED(sts), 
+				os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts)
+			)
+			'''
+			if pid == _snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
+				logger.warning(
+					'SNMP process [pid: %d] died unexpectedly. Restarting it', 
+					_snmp_pid
+				)
+				globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY
+				globals()['_snmp_pid'] = None
+		except OSError:
+			pass	
 	
 
 def _shutdown(*args):
@@ -416,9 +479,17 @@ def _shutdown(*args):
 	
 	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
 
-
 def _shutdown_services(force=False):
 	logger = logging.getLogger(__name__)
+	
+	# Shutdown SNMP
+	if _snmp_pid:
+		logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
+		try:
+			os.kill(_snmp_pid, signal.SIGTERM)
+		except (Exception, BaseException), e:
+			logger.debug("Can't kill SNMP process: %s" % e)
+		globals()['_snmp_pid'] = None
 	
 	# Shutdown messaging
 	logger.debug('Shutdowning external messaging')	
@@ -457,7 +528,6 @@ def _cleanup_after_rebundle():
 		path = os.path.join(priv_path, file)
 		os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
 
-
 def do_validate_cnf():
 	errors = list()
 	def on_error(o, e, errors=errors):
@@ -469,7 +539,6 @@ def do_validate_cnf():
 	cnf.validate(on_error)
 	return len(errors)
 
-
 def do_configure():
 	optparser = bus.optparser
 	cnf = bus.cnf
@@ -478,7 +547,6 @@ def do_configure():
 		silent=optparser.values.import_server, 
 		yesall=optparser.values.yesall
 	)
-
 
 def do_keygen():
 	from scalarizr.util import cryptotool
@@ -539,7 +607,7 @@ def main():
 		globals()['_pid'] = pid = os.getpid()		
 		logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
 		
-		# Check for another running scalarzir
+		# Check for another running scalarzir 
 		if os.path.exists(PID_FILE):
 			try:
 				another_pid = int(read_file(PID_FILE).strip())
@@ -590,38 +658,27 @@ def main():
 			if server_id and ud_server_id and server_id != ud_server_id:
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
-				cnf.state = ScalarizrState.BOOTSTRAPPING
+				cnf.state = ScalarizrState.BOOTSTRAPPING						
 
 		
 		# Initialize local database
 		_init_db()
 		
 		
-		# At first scalarizr startup platform user-data should be applied
 		if cnf.state == ScalarizrState.UNKNOWN:
 			cnf.state = ScalarizrState.BOOTSTRAPPING
-		
-		if cnf.state == ScalarizrState.REBUNDLING:
-			logger.info('Server was started after rebundle. Performing some cleanups')
-			_cleanup_after_rebundle()
-			cnf.state = ScalarizrState.BOOTSTRAPPING
-
+			
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
-			#TODO: now API server will be start
-			routes = {
-				'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
-			}
-			bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
-			
-			# Start API server
-			api_server = bus.api_server
-			logger.info('Start API server')
-			api_server.start()
-			
-			cnf.fire('apply_user_data', cnf)
-					
+			cnf.fire('apply_user_data', cnf)			
 
+		'''		
+		# At first scalarizr startup platform user-data should be applied
+		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
+			cnf.state = ScalarizrState.BOOTSTRAPPING
+			cnf.fire('apply_user_data', cnf)
+		'''
+		
 		# Check Scalr version
 		if not bus.scalr_version:
 			version_file = cnf.private_path('.scalr-version')
@@ -660,7 +717,9 @@ def main():
 		try:
 			while _running:
 				_msg_thread.join(0.2)
-
+				# Recover SNMP 
+				if _running and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
+					_start_snmp_server()
 		except KeyboardInterrupt:
 			logger.debug('Mainloop: KeyboardInterrupt')
 			pass
@@ -669,7 +728,7 @@ def main():
 			if _running and os.getpid() == _pid:
 				_shutdown()
 		logger.debug('Mainloop: leave')
-
+			
 	except (BaseException, Exception), e:
 		if isinstance(e, SystemExit):
 			raise
