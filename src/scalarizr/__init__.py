@@ -275,11 +275,11 @@ def _init_services():
 	
 	Storage.maintain_volume_table = True
 
-
-	routes = {
-		'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
-	}
-	bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
+	if not bus.api_server:
+		routes = {
+			'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
+		}
+		bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
 
 
 
@@ -295,10 +295,13 @@ def _start_services():
 	msg_thread.start()
 	globals()['_msg_thread'] = msg_thread
 	
+	'''
+	#TODO: need check status server and start it if it not yet
 	# Start API server
 	api_server = bus.api_server
 	logger.debug('Start API server')
 	api_server.start()
+	'''
 	
 	# Start periodical executor
 	ex = bus.periodical_executor
@@ -594,22 +597,28 @@ def main():
 		_init_db()
 		
 		
-		if cnf.state == ScalarizrState.UNKNOWN:
-			cnf.state = ScalarizrState.BOOTSTRAPPING
-			
-		# At first startup platform user-data should be applied
-		if cnf.state == ScalarizrState.BOOTSTRAPPING:
-			cnf.fire('apply_user_data', cnf)	
-			
-			#TODO: start API now?		
-
-		'''		
 		# At first scalarizr startup platform user-data should be applied
 		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
 			cnf.state = ScalarizrState.BOOTSTRAPPING
-			cnf.fire('apply_user_data', cnf)
-		'''
-		
+
+
+		# At first startup platform user-data should be applied
+		if cnf.state == ScalarizrState.BOOTSTRAPPING:
+			cnf.fire('apply_user_data', cnf)	
+
+			#TODO: now API server will be start
+						
+			routes = {
+				'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
+			}
+			bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
+			
+			# Start API server
+			api_server = bus.api_server
+			logger.debug('Start API server')
+			api_server.start()
+					
+
 		# Check Scalr version
 		if not bus.scalr_version:
 			version_file = cnf.private_path('.scalr-version')
