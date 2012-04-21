@@ -40,6 +40,7 @@ VHOSTS_PATH = 'private.d/vhosts'
 VHOST_EXTENSION = '.vhost.conf'
 
 
+
 class ApacheInitScript(initdv2.ParametrizedInitScript):
 	_apachectl = None
 
