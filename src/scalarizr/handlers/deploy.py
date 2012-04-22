@@ -72,7 +72,7 @@ class DeploymentHandler(Handler):
 			
 		self._logger.info('Executing %s script', name)
 		kwargs = dict(name=name, body=body, exec_timeout=exec_timeout or 3600)
-		self._script_executor.exec_scripts_on_event(scripts=(Script(**kwargs), ))
+		self._script_executor.execute_scripts(scripts=(Script(**kwargs), ))
 	
 	def _get_phase_definition(self, message):
 		steps = []
