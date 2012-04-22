@@ -8,6 +8,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError
 from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr.util import wait_until, system2
+from scalarizr.config import ScalarizrState
 
 import time
 import sys
@@ -26,6 +27,8 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 		image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 		
 		pl = bus.platform
+		cnf = bus.cnf
+
 		con = pl.new_cloudservers_conn()
 		servers = con.servers.list()
 
@@ -39,13 +42,15 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 		LOG.debug('Found server %s. server id: %s', pl.get_public_ip(), server.id)
 
 		image = None
+		
+		old_state = cnf.state
+		cnf.state = ScalarizrState.REBUNDLING
 		try:
 			image_manager = ImageManager(con)
 			system2("sync", shell=True)
 			LOG.info("Creating server image. server id: %s, image name: '%s'", server.id, image_name)
 			image = image_manager.create(image_name, server.id)
 			LOG.debug('Image %s created', image.id)
-			
 			LOG.info('Checking that image %s is completed', image.id)
 			'''
 			wait_until(hasattr, args=(image, 'progress'), 
@@ -55,6 +60,7 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			def completed(image_id):
 				try:
 					image = image_manager.get(image_id)
+					LOG.debug('image.status: %s', image.status)
 					return image.status in ('ACTIVE', 'FAILED')
 				except:
 					LOG.debug('Caught exception', exc_info=sys.exc_info())
@@ -73,4 +79,6 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 				except:
 					pass
 			raise exc_type, exc_value, exc_trace
+		finally:
+			cnf.state = old_state
 		return image.id

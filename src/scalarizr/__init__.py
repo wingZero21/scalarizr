@@ -298,6 +298,7 @@ def _init_services():
 
 
 def _start_services():
+	logger = logging.getLogger(__name__)
 	# Create message server thread
 	msg_service = bus.messaging_service
 	consumer = msg_service.get_consumer()
@@ -311,6 +312,7 @@ def _start_services():
 	globals()['_msg_thread'] = msg_thread
 	
 	# Start API server
+	logger.info('Start API server')
 	api_server = bus.api_server
 	api_server.start()
 	
@@ -649,12 +651,18 @@ def main():
 		pl = bus.platform
 
 		# Check that service started after dirty bundle
+		logger.debug('Condition for cleanup: {%s} and ({%s} or {%s})', ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID),
+				 pl.name != 'nimbula', cnf.state != ScalarizrState.IMPORTING)
+		
 		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
 				and (pl.name != 'nimbula' or cnf.state != ScalarizrState.IMPORTING):
 			# XXX: nimbula's user-data uploaded via ssh, 
 			# and pl.get_user_data() permanently blocked when scalarizr is in `importing` state
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
+			logger.debug('Condition for cleanup #2: {%s} and {%s} and {%s}',
+						server_id, ud_server_id, server_id != ud_server_id)
+			
 			if server_id and ud_server_id and server_id != ud_server_id:
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
@@ -668,10 +676,20 @@ def main():
 		if cnf.state == ScalarizrState.UNKNOWN:
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			
+		if cnf.state == ScalarizrState.REBUNDLING:
+			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
+			if server_id and ud_server_id and server_id != ud_server_id:
+				logger.info('Server was started after rebundle. Performing some cleanups')
+				_cleanup_after_rebundle()
+				cnf.state = ScalarizrState.BOOTSTRAPPING
+			
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
 			cnf.fire('apply_user_data', cnf)			
-
+			
+			#TODO: start API server
+			
 		'''		
 		# At first scalarizr startup platform user-data should be applied
 		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
