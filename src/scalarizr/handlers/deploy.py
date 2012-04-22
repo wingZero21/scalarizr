@@ -19,8 +19,6 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages, Queues
 from scalarizr.handlers import Handler, script_executor, operation
 from scalarizr.util import system2, disttool, dicts, filetool
-from scalarizr.queryenv import Script
-
 
 
 
@@ -72,7 +70,7 @@ class DeploymentHandler(Handler):
 			
 		self._logger.info('Executing %s script', name)
 		kwargs = dict(name=name, body=body, exec_timeout=exec_timeout or 3600)
-		self._script_executor.execute_scripts(scripts=(Script(**kwargs), ))
+		self._script_executor.execute_scripts(scripts=(script_executor.Script(**kwargs), ))
 	
 	def _get_phase_definition(self, message):
 		steps = []
