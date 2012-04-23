@@ -1,7 +1,6 @@
 import gevent.monkey
 gevent.monkey.patch_all()
 
-
 # Core
 from scalarizr import config 
 from scalarizr.bus import bus
@@ -30,7 +29,6 @@ from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 from scalarizr.storage.util.loop import listloop
 from scalarizr.util.filetool import write_file, read_file
-
 
 class ScalarizrError(BaseException):
 	pass
@@ -73,6 +71,11 @@ _msg_thread = None
 
 _logging_configured = False
 
+
+_routes = {'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'}
+'''
+Before start API server, for object jsonrpc_zmq.ZmqServer with handlers routes  
+'''
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -122,10 +125,11 @@ def _init():
 
 	
 	# Configure logging
-	if sys.version_info < (2,6):
+	if sys.version_info < (2, 6):
 		# Fix logging handler resolve for python 2.5
 		from scalarizr.util.log import fix_py25_handler_resolving		
 		fix_py25_handler_resolving()
+	
 	
 	logging.config.fileConfig(os.path.join(bus.etc_path, "logging-debug.ini" if optparser and optparser.values.debug else 'logging.ini'))
 	logger = logging.getLogger(__name__)
@@ -291,10 +295,8 @@ def _init_services():
 
 	Storage.maintain_volume_table = True
 	
-	routes = {
-		'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'
-	}
-	bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', routes)
+	if not bus.api_server:
+		bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', _routes)
 
 
 def _start_services():
@@ -311,10 +313,13 @@ def _start_services():
 	msg_thread.start()
 	globals()['_msg_thread'] = msg_thread
 	
-	# Start API server
-	logger.info('Start API server')
-	api_server = bus.api_server
-	api_server.start()
+	try:
+		# Start API server
+		api_server = bus.api_server
+		api_server.start()
+		logger.info('Start API server')
+	except:
+		pass
 	
 	# Start periodical executor
 	ex = bus.periodical_executor
@@ -668,14 +673,10 @@ def main():
 				_cleanup_after_rebundle()
 				cnf.state = ScalarizrState.BOOTSTRAPPING						
 
-		
-		# Initialize local database
-		_init_db()
-		
-		
 		if cnf.state == ScalarizrState.UNKNOWN:
 			cnf.state = ScalarizrState.BOOTSTRAPPING
-			
+		
+		'''
 		if cnf.state == ScalarizrState.REBUNDLING:
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
@@ -683,13 +684,23 @@ def main():
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
 				cnf.state = ScalarizrState.BOOTSTRAPPING
-			
+		'''
+
+		# Initialize local database
+		_init_db()
+		
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
 			cnf.fire('apply_user_data', cnf)			
-			
-			#TODO: start API server
-			
+
+			if not bus.api_server:
+				bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', _routes)
+			# Start API server
+			logger.info('Start API server')
+			api_server = bus.api_server
+			api_server.start()
+
+
 		'''		
 		# At first scalarizr startup platform user-data should be applied
 		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
