@@ -6,8 +6,6 @@ from distutils.util import change_root
 from distutils.command.install_data import install_data
 import platform
 
-
-
 class my_install_data(install_data):
 	def run(self):
 		install_data.run(self)
