@@ -199,13 +199,6 @@ def _create_db(db_file=None, script_file=None):
 	logger.debug('conn: %s', conn)
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
 	#conn.commit()	
-	cur = conn.cursor()
-	cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-	tables = []
-	rows = cur.fetchall()
-	for row in rows:
-		tables += [i for i in row]
-	logger.debug('list tables: %s', tables)
 
 
 def _init_platform():
