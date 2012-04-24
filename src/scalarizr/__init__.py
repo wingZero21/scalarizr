@@ -16,6 +16,9 @@ from scalarizr.api.binding import jsonrpc_zmq
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
+from scalarizr.util.filetool import write_file, read_file
+from scalarizr.util import wait_until
+from scalarizr.storage.util.loop import listloop
 
 # Stdlibs
 import logging
@@ -27,8 +30,6 @@ import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
-from scalarizr.storage.util.loop import listloop
-from scalarizr.util.filetool import write_file, read_file
 
 class ScalarizrError(BaseException):
 	pass
@@ -656,18 +657,23 @@ def main():
 		pl = bus.platform
 
 		# Check that service started after dirty bundle
-		logger.debug('Condition for cleanup: {%s} and ({%s} or {%s})', ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID),
-				 pl.name != 'nimbula', cnf.state != ScalarizrState.IMPORTING)
+		#logger.debug('Condition for cleanup: {%s} and ({%s} or {%s})', ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID),
+		#		 pl.name != 'nimbula', cnf.state != ScalarizrState.IMPORTING)
 		
 		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
 				and (pl.name != 'nimbula' or cnf.state != ScalarizrState.IMPORTING):
 			# XXX: nimbula's user-data uploaded via ssh, 
 			# and pl.get_user_data() permanently blocked when scalarizr is in `importing` state
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+
+			#*fix: user_data not recived when it need
+			wait_until(lambda: pl.get_user_data(UserDataOptions.SERVER_ID) is not None, 
+						timeout=60, error_text="User data server id doesn't received")
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
+
 			logger.debug('Condition for cleanup #2: {%s} and {%s} and {%s}',
 						server_id, ud_server_id, server_id != ud_server_id)
-			
+
 			if server_id and ud_server_id and server_id != ud_server_id:
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
