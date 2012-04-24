@@ -644,7 +644,7 @@ def main():
 		STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__)) 
 		STATE['global.version'] = __version__
 		
-		if STATE['global.start_after_update'] == '1' and ScalarizrState.RUNNING:
+		if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
 			logger.info('Scalarizr was updated to %s', __version__)
 		
 		if cnf.state == ScalarizrState.UNKNOWN:
