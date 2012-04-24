@@ -667,8 +667,14 @@ def main():
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 
 			#*fix: user_data not recived when it need
-			wait_until(lambda: pl.get_user_data(UserDataOptions.SERVER_ID) is not None, 
-						timeout=60, error_text="User data server id doesn't received")
+			def check_ud_server_id():
+				#cnf.on('apply_user_data', _apply_user_data)
+				cnf.fire('apply_user_data', cnf)
+				if pl.get_user_data(UserDataOptions.SERVER_ID):
+					return True
+
+			wait_until(lambda: check_ud_server_id, 
+						timeout=120, error_text="User data server id doesn't received")
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
 
 			logger.debug('Condition for cleanup #2: {%s} and {%s} and {%s}',
