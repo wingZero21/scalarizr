@@ -673,7 +673,7 @@ def main():
 				if pl.get_user_data(UserDataOptions.SERVER_ID):
 					return True
 
-			wait_until(lambda: check_ud_server_id, 
+			wait_until(check_ud_server_id, 
 						timeout=120, error_text="User data server id doesn't received")
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
 
