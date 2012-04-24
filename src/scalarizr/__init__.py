@@ -691,14 +691,14 @@ def main():
 		
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
-			cnf.fire('apply_user_data', cnf)			
-
 			if not bus.api_server:
 				bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', _routes)
 			# Start API server
 			logger.info('Start API server')
 			api_server = bus.api_server
 			api_server.start()
+			
+			cnf.fire('apply_user_data', cnf)
 
 
 		'''		
