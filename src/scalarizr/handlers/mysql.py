@@ -140,6 +140,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 					except HandlerError, e:
 						if 'Access denied' in str(e):
 							return initdv2.Status.RUNNING
+					except pexpect.ExceptionPexpect, e:
+						if 'close() could not terminate the child using terminate()' in str(e):
+							return initdv2.Status.RUNNING
 			else:
 				return initdv2.Status.NOT_RUNNING
 					
