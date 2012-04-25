@@ -656,28 +656,30 @@ def main():
 		_init_platform()
 		pl = bus.platform
 
+
 		# Check that service started after dirty bundle
-		#logger.debug('Condition for cleanup: {%s} and ({%s} or {%s})', ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID),
-		#		 pl.name != 'nimbula', cnf.state != ScalarizrState.IMPORTING)
-		
 		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
-				and (pl.name != 'nimbula' or cnf.state != ScalarizrState.IMPORTING):
-			# XXX: nimbula's user-data uploaded via ssh, 
-			# and pl.get_user_data() permanently blocked when scalarizr is in `importing` state
+				and cnf.state != ScalarizrState.IMPORTING:
+			# XXX: nimbula's user-data is uploaded by ssh
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-
-			#*fix: user_data not recived when it need
-			wait_until(lambda: pl.get_user_data(UserDataOptions.SERVER_ID) is not None, 
-						timeout=360, error_text="User data server id doesn't received")
+			if pl.name in ('nimbula', 'rackspace'):
+				if cnf.state == ScalarizrState.REBUNDLING:
+					# XXX: temporary workaround
+					# XXX: rackspace injects files and boots OS in a parallell. There were situations when
+					# .user-data file was stale and new server started from rebundled image
+					# toughts that he's an old server and continue rebundling  
+					time.sleep(30)
+					
+				udfile = cnf.private_path('.user-data')
+				wait_until(lambda: os.path.exists(udfile), 
+						timeout=60, error_text="User-data file %s doesn't exist" % udfile)					
+			
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
-
-			logger.debug('Condition for cleanup #2: {%s} and {%s} and {%s}',
-						server_id, ud_server_id, server_id != ud_server_id)
-
 			if server_id and ud_server_id and server_id != ud_server_id:
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
-				cnf.state = ScalarizrState.BOOTSTRAPPING						
+				cnf.state = ScalarizrState.BOOTSTRAPPING
+										
 
 		if cnf.state == ScalarizrState.UNKNOWN:
 			cnf.state = ScalarizrState.BOOTSTRAPPING
