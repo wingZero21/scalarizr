@@ -260,7 +260,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			iptables.insert_rule_once('ACCEPT', 8013, iptables.P_TCP)
 			iptables.insert_rule_once('ACCEPT', 8014, iptables.P_UDP)
 		except:
-			self._logger.warn('Rule wasn`t added. Detail: %s', sys.exc_info()[1], exc_info=sys.exc_info())
+			self._logger.warn('Rule wasn`t added. Detail: %s', sys.exc_info()[1])#, exc_info=sys.exc_info())
 
 
 	def on_IntServerReboot(self, message):
