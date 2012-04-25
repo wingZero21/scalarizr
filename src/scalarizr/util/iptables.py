@@ -146,3 +146,6 @@ class IpTables(object):
 		
 	def usable(self):
 		return os.access(self.executable, os.X_OK)
+	
+	def enabled(self):
+		return self.usable() and self.list_rules('INPUT')

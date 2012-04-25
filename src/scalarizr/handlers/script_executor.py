@@ -258,9 +258,13 @@ class Script(object):
 			self.id = str(time.time())
 			interpreter = read_shebang(script=self.body)
 			if not interpreter:
-				raise HandlerError('Script execution failed: Shebang not found. Script "%s"' % (self.name, ))
+				raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
+								"First line of the script should have the form of a shebang "
+								"interpreter directive is as follows:\n" 
+								"#!interpreter [optional-arg]" % (self.name, ))
 			if not os.path.exists(interpreter):
-				raise HandlerError('Script execution failed: Interpreter %s not found. Script "%s"' % (interpreter, self.name))
+				raise HandlerError("Can't execute script '%s' cause "
+								"interpreter '%s' not found" % (self.name, interpreter))
 			self.interpreter = interpreter
 		else:
 			assert self.id, '`id` required'
