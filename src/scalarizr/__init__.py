@@ -667,7 +667,7 @@ def main():
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 
 			#*fix: user_data not recived when it need
-			wait_until(pl.get_user_data(UserDataOptions.SERVER_ID) is not None, 
+			wait_until(lambda: pl.get_user_data(UserDataOptions.SERVER_ID) is not None, 
 						timeout=360, error_text="User data server id doesn't received")
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
 
