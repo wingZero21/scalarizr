@@ -300,8 +300,9 @@ class P2pMessage(Message):
 		self.__dict__["_store"] = P2pMessageStore()
 		if bus.cnf:
 			cnf = bus.cnf; ini = cnf.rawini
+			# XXX: when it is incoming message 
 			self.meta[MetaOptions.SERVER_ID] = ini.get('general', 'server_id')
-	
+
 	def is_handled(self):
 		return self._store.is_handled(self.id)
 	

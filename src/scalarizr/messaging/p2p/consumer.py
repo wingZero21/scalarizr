@@ -224,7 +224,8 @@ class P2pMessageConsumer(MessageConsumer):
 						for queue, message in store.get_unhandled(self.endpoint):
 
 							if message.name == self.message_to_ack.name and \
-									message.meta['server_id'] == self.message_to_ack.meta['server_id']:
+									message.body.get('server_id') == self.message_to_ack.meta['server_id'] and \
+									message.body.get('remote_ip') == self.message_to_ack.body.get('remote_ip'):
 								self._logger.debug('Going to handle_one_message. Thread: %s', threading.currentThread().getName())
 								self._handle_one_message(message, queue, store)
 								self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
