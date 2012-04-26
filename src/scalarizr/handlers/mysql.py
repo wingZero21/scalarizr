@@ -1489,7 +1489,7 @@ class MysqlHandler(ServiceCtlHandler):
 	
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
-		if iptables.usable():
+		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
 	
 	def _get_ini_options(self, *args):

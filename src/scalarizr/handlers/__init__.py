@@ -620,7 +620,7 @@ class FarmSecurityMixin(object):
 	def __init__(self, ports):
 		self._ports = ports
 		self._iptables = iptables.IpTables()
-		if not self._iptables.usable():
+		if not self._iptables.enabled():
 			raise HandlerError('iptables is not installed. iptables is required to run me correctly')
 		
 		bus.on('init', self.__on_init)

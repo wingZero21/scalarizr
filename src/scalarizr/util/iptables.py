@@ -4,7 +4,7 @@ Created on Jul 21, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.util import system2
+from scalarizr.util import system2, ChkConfig, disttool
 
 import os
 
@@ -148,4 +148,11 @@ class IpTables(object):
 		return os.access(self.executable, os.X_OK)
 	
 	def enabled(self):
-		return self.usable() and self.list_rules('INPUT')
+		result = False
+		if disttool.is_redhat_based():
+			chkconfig = ChkConfig()
+			c_list = chkconfig.list()
+			result = any(c_list['iptables']) if 'iptables' in c_list else False
+		else:
+			result = self.usable() and self.list_rules('INPUT')
+		return result

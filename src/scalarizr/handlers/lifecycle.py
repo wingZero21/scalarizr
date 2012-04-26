@@ -240,7 +240,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	def _insert_iptables_rules(self, *args, **kwargs):
 		self._logger.debug('Adding iptables rules for scalarizr ports')		
 		iptables = IpTables()
-		if iptables.usable():		
+		if iptables.enabled():		
 			rules = []
 			
 			# Scalarizr ports

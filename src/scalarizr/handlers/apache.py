@@ -249,7 +249,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
-		if iptables.usable():
+		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))
 			iptables.insert_rule(None, RuleSpec(dport=443, jump='ACCEPT', protocol=P_TCP))		
 

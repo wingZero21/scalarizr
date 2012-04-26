@@ -861,6 +861,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
-		if iptables.usable():
+		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=POSTGRESQL_DEFAULT_PORT, 
 											jump='ACCEPT', protocol=P_TCP))		
