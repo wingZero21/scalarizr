@@ -262,9 +262,6 @@ class Script(object):
 								"First line of the script should have the form of a shebang "
 								"interpreter directive is as follows:\n" 
 								"#!interpreter [optional-arg]" % (self.name, ))
-			if not os.path.exists(interpreter):
-				raise HandlerError("Can't execute script '%s' cause "
-								"interpreter '%s' not found" % (self.name, interpreter))
 			self.interpreter = interpreter
 		else:
 			assert self.id, '`id` required'
@@ -278,6 +275,14 @@ class Script(object):
 		
 	
 	def start(self):
+		# Check interpreter here, and not in __init__ 
+		# cause scripts can create sequences when previous script 
+		# installs interpreter for the next one
+		if not os.path.exists(self.interpreter):
+			raise HandlerError("Can't execute script '%s' cause "
+							"interpreter '%s' not found" % (self.name, interpreter))
+
+
 		# Write script to disk, prepare execution
 		exec_dir = os.path.dirname(self.exec_path)
 		if not os.path.exists(exec_dir):
