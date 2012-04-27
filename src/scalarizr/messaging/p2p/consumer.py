@@ -102,7 +102,7 @@ class P2pMessageConsumer(MessageConsumer):
 					return
 				
 				try:
-					logger.debug("Decoding message")
+					logger.debug("Decoding message: %s", rawmsg)
 					message = P2pMessage()
 					message.fromxml(rawmsg)
 				except (BaseException, Exception), e:
@@ -222,10 +222,9 @@ class P2pMessageConsumer(MessageConsumer):
 				try:
 					if self.message_to_ack:
 						for queue, message in store.get_unhandled(self.endpoint):
-
+							sid = self.message_to_ack.meta['server_id']
 							if message.name == self.message_to_ack.name and \
-									message.body.get('server_id') == self.message_to_ack.meta['server_id'] and \
-									message.body.get('remote_ip') == self.message_to_ack.body.get('remote_ip'):
+									message.body.get('server_id', sid) == sid:
 								self._logger.debug('Going to handle_one_message. Thread: %s', threading.currentThread().getName())
 								self._handle_one_message(message, queue, store)
 								self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
