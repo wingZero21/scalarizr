@@ -618,38 +618,4 @@ class Hosts:
 			for hostname, addr in hosts.iteritems():
 				f.write('%s\t%s\n' % (addr, hostname))
 
-
-class ChkConfig:
-	
-	path = None
-	
-	def __init__(self):
-		if not os.path.exists('/sbin/chkconfig'):
-			raise UtilError('chkconfig not found')
-			
-	
-	def list(self, filter=None):
-		'''
-		chkconfig --list
-		returns dict
-		'''
-		
-		result = {}
-		out, err, retcode = system2(['/sbin/chkconfig', '--list'])
-		if err:
-			raise UtilError(str(err))
-		if out:
-			raw = out.split('\n')
-			for row in raw:
-				if row:
-					data = row.split('\t')
-					if len(data) == 8:
-						service = data.pop(0).strip()
-						levels = []
-						for level in data:
-							levels.append(True if 'on' in level else False)
-						if len(levels) == 7:
-							result[service] = levels			
-		return result
-				
 		
