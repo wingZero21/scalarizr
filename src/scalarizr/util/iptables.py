@@ -4,7 +4,7 @@ Created on Jul 21, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.util import system2, ChkConfig, disttool, UtilError
+from scalarizr.util import system2, disttool, UtilError
 
 import os
 
