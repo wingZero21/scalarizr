@@ -10,7 +10,6 @@ import signal
 import string
 
 from scalarizr.bus import bus
-from scalarizr.util import software
 
 class UtilError(BaseException):
 	pass
@@ -625,10 +624,9 @@ class ChkConfig:
 	path = None
 	
 	def __init__(self):
-		res = software.whereis('chkconfig')
-		self.path = res[0] if res else '/sbin/chkconfig'
-		if not os.path.exists(self.path):
+		if not os.path.exists('/sbin/chkconfig'):
 			raise UtilError('chkconfig not found')
+			
 	
 	def list(self, filter=None):
 		'''
