@@ -71,6 +71,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
 	def reload(self):
 		if self.running:
+			self.configtest()
 			out, err, retcode = system2(self._apachectl + ' graceful', shell=True)
 			if retcode > 0:
 				raise initdv2.InitdError('Cannot reload apache: %s' % err)
@@ -110,6 +111,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		return True
 
 	def restart(self):
+		self.configtest()
 		ret = initdv2.ParametrizedInitScript.restart(self)
 		if self.pid_file:
 			try:
@@ -123,9 +125,6 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 initdv2.explore('apache', ApacheInitScript)
 
 
-
-
-		
 
 class ApacheCnfController(CnfController):
 

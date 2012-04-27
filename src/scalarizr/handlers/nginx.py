@@ -96,6 +96,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 		return ret
 	
 	def restart(self):
+		self.configtest()
 		ret = initdv2.ParametrizedInitScript.restart(self)
 		time.sleep(1)
 		return ret
