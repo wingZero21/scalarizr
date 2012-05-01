@@ -3,106 +3,163 @@ Created on Mar 21, 2012
 
 @author: dmitry
 '''
-import sys
-import time
+
 import threading
 import sqlite3
-import unittest
-from scalarizr.util import sqlite_server, wait_until
+import os
+
+from scalarizr.util import sqlite_server, system2
+from scalarizr.util.software import which
+
+from nose.tools import assert_raises, nottest
+from nose.tools import nottest
+
+import mock
+import sys
 
 
-conn = None
-
-def get_connection():
-	return sqlite3.Connection(database='/Users/dmitry/Documents/workspace/scalarizr-localobj/share/db.sql')
-
+DATABASE = '/tmp/sqlite_server_test.db'
+SQLITE3 = None
+CONN = None
 	
-def test_fetchall(conn):
-	cursor = conn.cursor()
-	cursor.execute('select 1;')
-	return cursor.fetchall()
-
-
-def test_fetchone(conn):	
-	cursor = conn.cursor()
-	cursor.execute('select 1;')
-	return cursor.fetchone()
-
 	
-def test_rowcount(conn):
-	cursor = conn.cursor()
-	cursor.execute('select 1;')
-	return cursor.rowcount
+def setup():
+	global CONN, SQLITE3
+	
+	SQLITE3 = which('sqlite3')
+	
+	def creator():
+		return sqlite3.Connection(database=DATABASE)
+	
+	t = sqlite_server.SQLiteServerThread(creator)
+	t.setDaemon(True)
+	t.start()
+	sqlite_server.wait_for_server_thread(t)
 
+	CONN = t.connection
+
+
+def teardown(cls):
+	os.remove(DATABASE)
+
+
+class TestConnectionProxy(object):
+	
+	def test_executescript(self):
+		script = '''
+DROP TABLE IF EXISTS test_execute_script;
+CREATE TABLE test_execute_script (
+	"id" INTEGER PRIMARY KEY,
+	"script_name" TEXT,
+	"return_code" INTEGER
+);
+INSERT INTO test_execute_script VALUES (1, '/usr/bin/python', -9);
+'''
+		CONN.executescript(script)
 		
-class ThreadClass(threading.Thread):
-	
-	fetchall = None
-	fetchone = None
-	rowcount = None
-
-	def __init__(self, conn):
-		self.conn = conn
-		threading.Thread.__init__(self)
-			
-	def run(self):
-		self.fetchall = test_fetchall(self.conn)
-		self.fetchone =  test_fetchone(self.conn)
-		self.rowcount = test_rowcount(self.conn)
-	
-		
-class Test(unittest.TestCase):
-
-	conn = None
-	
-	
-	def setUp(self):
-		pass
+		query_result = system2("sqlite3 /tmp/db.sqlite 'select script_name from test_execute_script'", shell=True)[0].strip()
+		assert query_result == '/usr/bin/python'
 
 
-	def tearDown(self):
-		pass
+	def test_cursor(self):
+		cur = CONN.cursor()
+		assert type(cur) == sqlite_server.CursorProxy
 
 
+class TestCursorProxy(object):
 	@classmethod
-	def setUpClass(cls):
-		t = sqlite_server.SQLiteServerThread(get_connection)
-		t.setDaemon(True)
-		t.start()
-		wait_until(lambda: t.ready == True, sleep = 0.1)
-		cls.connection = t.connection
+	def setup_class(cls):
+		script = '''
+CREATE TABLE test_clients (
+	"id" INTEGER PRIMARY KEY,
+	"name" TEXT,
+	"age" INTEGER
+);
+INSERT INTO test_clients VALUES (1, 'Mr. First', 36);
+INSERT INTO test_clients VALUES (2, 'Mr. Seconds', 41);
+'''
+		CONN.executescript(script)
 	
-	
-	def testSingleThread(self):
-		result = test_fetchall(self.connection)
-		self.assertEqual(result, [(1,)])
+	def test_execute(self):
+		cur = CONN.cursor()
+		ret = cur.execute('SELECT * FROM test_clients WHERE id = ?', (2, ))
+		assert type(ret) == sqlite_server.CursorProxy
 		
-		result = test_fetchone(self.connection)
-		self.assertEqual(result, (1,))
+	
+	def test_fetchone(self):
+		cur = CONN.cursor()
+		cur.execute('SELECT * FROM test_clients WHERE id = ?', (2, ))
+		assert cur.fetchone() == (2, 'Mr. Seconds', 41)
+		assert cur.fetchone() is None
+	
+	def test_fetchall(self):
+		cur = CONN.cursor()
+		cur.execute('SELECT * FROM test_clients ORDER BY id')
+		assert cur.fetchall() == [(1, u'Mr. First', 36), (2, u'Mr. Seconds', 41)]
+
+	
+	def test_rowcount(self):
+		pass
+	
+	def test_close(self):
+		pass
+	
+	def test_operate_closed_cursor(self):
+		cur = CONN.cursor()
+		cur.close()
+		# This wasn't works. method silently dies by timeout
+		assert_raises(Exception, cur.execute, 'SELECT * FROM sqlite_master')
+
+
+class TestSQLiteServer(object):
+	
+	def test_threadsafity(self):
+		num_threads = 3
+		threads = [None]*num_threads		
 		
-		result = test_rowcount(self.connection)
-		self.assertEqual(result, -1)
+		def work(i):
+			def inner():
+				try:
+					cur = CONN.cursor()
+					cur.execute('CREATE TABLE t%d (id INTEGER PRIMARY KEY, name TEXT)' % i)
+					assert cur.rowcount == -1
+					cur.execute('INSERT INTO t%d VALUES (?, ?)' % i, [None, 'Mister'])
+					cur.execute('SELECT * FROM t%d' % i)
+					assert cur.fetchone() == (1, 'Mister')
+				except:
+					threads[i][1] = sys.exc_info()
+			return inner
+		
+		for i in range(0, num_threads):
+			thread = threading.Thread(target=work(i))
+			threads[i] = [thread, None]
+			thread.start()
+		
+		for i in range(0, num_threads):
+			threads[i][0].join()
 
-
-	def testMultipleThreads(self):
-		t = ThreadClass(self.connection)
-		t.setDaemon(True)
-		t.start()
-		t.join()
-		self.assertEqual(t.fetchall, [(1,)])
-		self.assertEqual(t.fetchone, (1,))
-		self.assertEqual(t.rowcount, -1)
+		for i in range(0, num_threads):
+			if threads[i][1]:
+				raise threads[i][1][0], threads[i][1][1], threads[i][1][2]
+	
+	
+	def test_invalid_query(self):
+		cur = CONN.cursor()
+		assert_raises(sqlite3.OperationalError, cur.execute, 'U KNOW SQL!')
+		self.assert_requests_accepting()
 		
 
-class DummyConnection(object):
-	
-	isolation_level = None
-	
-	def __call__(self):
-		return self
+	def test_invalid_server_method_name(self):
+		cur = CONN.cursor()
+		assert_raises(AttributeError, cur._call, 'unknown')
+		self.assert_requests_accepting()
 
-
-if __name__ == "__main__":
-	#import sys;sys.argv = ['', 'Test.testName']
-	unittest.main()
 	
+	def test_client_gone_during_server_method_call(self):
+		pass
+
+	
+	def assert_requests_accepting(self):
+		cur = CONN.cursor()
+		cur.execute('select 1')
+		assert cur.fetchone() == (1, )
