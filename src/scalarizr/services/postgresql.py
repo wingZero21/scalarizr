@@ -137,7 +137,6 @@ class PostgreSql(BaseService):
 		self.service.start()
 		
 	def register_slave(self, slave_ip, force_restart=True):
-		self.postgresql_conf.listen_addresses = '*'
 		self.pg_hba_conf.add_standby_host(slave_ip, self.root_user.name)
 		self.postgresql_conf.max_wal_senders += 1
 		if force_restart:
@@ -198,6 +197,7 @@ class PostgreSql(BaseService):
 		
 		move_files = not self.cluster_dir.is_initialized(mpoint)
 		self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
+		self.postgresql_conf.listen_addresses = '*'
 		self.postgresql_conf.wal_level = 'hot_standby'
 		self.postgresql_conf.max_wal_senders = 5
 		self.postgresql_conf.wal_keep_segments = 32
