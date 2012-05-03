@@ -250,30 +250,18 @@ class MessageListener:
 		)
 		self._logger.debug("Keywords for each Handler::accept\n%s", pprint.pformat(self._accept_kwargs))
 		
-		self._get_handlers_chain()
+		self.get_handlers_chain()
 	
 
-	def _get_handlers_chain (self):
+	def get_handlers_chain (self):
 		if self._handlers_chain is None:
 			self._handlers_chain = []
 			self._logger.debug("Collecting message handlers...");
 			
 			cnf = bus.cnf 
-			for handler_name, module_name in cnf.rawini.items(config.SECT_HANDLERS):
-				try:
-					module_name = cnf.rawini.get(config.SECT_HANDLERS, handler_name)
-					try:
-						module = __import__(module_name, globals(), locals(), ["get_handlers"], -1)
-						try:
-							self._handlers_chain.extend(module.get_handlers())
-						except:
-							self._logger.exception("Can't get module handlers (module: %s)", module_name)
-						
-					except:
-						self._logger.exception("Can't import module '%s'", module_name)
-							
-				except:
-					self._logger.exception('Unhandled exception in notification loop')
+			for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
+				__import__(module_str)
+				self._handlers_chain.extend(sys.modules[module_str].get_handlers())
 						
 			self._logger.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
 						
@@ -300,7 +288,7 @@ class MessageListener:
 					bus.scalr_version = ver					
 			
 			accepted = False
-			for handler in self._get_handlers_chain():
+			for handler in self.get_handlers_chain():
 				hnd_name = handler.__class__.__name__
 				try:
 					if handler.accept(message, queue, **self._accept_kwargs):
