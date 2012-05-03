@@ -103,10 +103,9 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		ret = initdv2.ParametrizedInitScript.start(self)
 		if self.pid_file:
 			try:
-				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=10, 
-						error_text="Apache pid file %s doesn't exists" % self.pid_file)
+				wait_until(lambda: os.path.exists(self.pid_file) or self._process_started(), sleep=0.2, timeout=30)
 			except:
-				raise initdv2.InitdError("Cannot start Apache: pid file %s hasn't been created" % self.pid_file)
+				raise initdv2.InitdError("Cannot start Apache (%s)" % self.pid_file)
 		time.sleep(0.5)
 		return True
 
@@ -121,6 +120,12 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 				raise initdv2.InitdError("Cannot start Apache: pid file %s hasn't been created" % self.pid_file)
 		time.sleep(0.5)
 		return ret
+	
+	def _main_process_started(self):
+		bin = '/usr/sbin/apache2' if disttool.is_debian_based() else '/usr/sbin/httpd'
+		group = 'www-data' if disttool.is_debian_based() else 'apache'
+		out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'))[0]
+		return True if len([p for p in out.split('\n') if bin in p]) else False
 
 initdv2.explore('apache', ApacheInitScript)
 
