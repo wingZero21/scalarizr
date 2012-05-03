@@ -18,6 +18,7 @@ from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
 import time, os, re, shutil, glob
+import string
 
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume
@@ -94,8 +95,12 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 			# EBS-root device instance
 			volume_size = self._rebundle_message.body.get('volume_size')			
 			if not volume_size:
-				volume_size = int(root_disk.size / 1000 / 1000)
-			
+				#volume_size = int(root_disk.size / 1000 / 1000)
+				volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
+				#in KByte
+				volume_size = int(volume_size[0].strip())/1024/1024
+				#in GByte
+
 			self._strategy = self._ebs_strategy_cls(
 				self, self._role_name, image_name, self._excludes,
 				devname=get_free_devname(), 
@@ -649,12 +654,130 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 					self._avail_zone, logger=LOG, tags=prepare_tags(tmp=1))
 		return ebstool.attach_volume(self._ec2_conn, self.ebs_volume, 
 				self._instance_id, self.devname, to_me=True, logger=LOG)[1]
+
+	"""
+	for work with MBR read|write from|into dev.mbr
+	def _read_mbr_list(self, PATH='/tmp/sda.mbr.bak'):
+		with open(PATH, 'r+') as f:
+			mbr = f.read().split('\n')
+	
+		newmbr = []
+		for line in mbr:
+			if line.strip().startswith('/dev'):
+				(key, value) = map(string.strip, line.split(':'))
+				value = map(string.strip, value.split(','))
+				tmp = []
+				for val in value:
+					tmp.append(map(string.strip, val.split('='))) if '=' in val else tmp.append(val)
+				newmbr.append([key, tmp])
+			else:
+				newmbr.append(line)
+		return newmbr
+		'''
+		['#some coment',
+		'',
+		['/dev/sda1',
+  		[['start', '63'], ['size', '192717'], ['Id', '83'], 'bootable']],
+ 		['/dev/sda2', [['start', '192780'], ['size', '21607425'], ['Id', '83']]],
+		['/dev/sda3', [['start', '21800205'], ['size', '4209030'], ['Id', '82']]],
+		['/dev/sda4', [['start', '0'], ['size', '0'], ['Id', '0']]]]
+		'''	
+	def _write_mbr_from_list(self, PATH, mbr_list):
+		mbr = []
+		for line in mbr_list:
+			if isinstance(line, list):
+				tmp = ''
+				for el in line:
+					if isinstance(el, list):
+						for k in el:
+							if '=' in tmp: 
+								tmp += ','
+							if isinstance(k, list):
+								tmp += ' %s= %s' % (k[0], k[1])
+							else:
+								tmp += ' %s' % k
+					elif isinstance(el, basestring):
+						tmp += '%s : ' % el
+				mbr.append('%s\n' % tmp)		
+			elif isinstance(line, basestring):
+				mbr.append('%s\n' % line)
 		
+		with open(PATH, 'w+') as f:
+			mbr = f.writelines(mbr)"""
+
+
 	def make(self):
 		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)", 
 				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
-		rebundle_hdlr.LinuxImage.make(self)
-		
+		#rebundle_hdlr.LinuxImage.make(self)
+
+		self.devname = self._create_image()
+		LOG.debug('new device name %s', self.devname)
+
+		self._format_image()
+		system2("sync", shell=True)  # Flush so newly formatted filesystem is ready to mount.
+		LOG.debug('sync data')
+
+		rdev_partition = firstmatched(lambda x: x.mpoint == '/', filetool.df())
+		#rdev_partition is like '/dev/sda1'
+		rdev_name = rdev_partition[:-1]
+		#rdev_name is like '/dev/sda'
+		LOG.debug('root device %s', rdev_name)
+
+		#copy MBR from root device to new EBS volume
+		system2(('sfdisk', '-d', rdev_name, '|', self.devname), )
+		LOG.debug('copied MBR from %s to %s', rdev_name, self.devname)
+
+		#self._mount_image()
+		#mounting partitions
+
+		#from_devs - list with device, source which will be copying
+		from_devs = [dev for dev in filetool.df() if dev.device.startswith(rdev_name)]
+		LOG.debug('list from_devs `%s`', from_devs)
+		#list all partitions of device, with partition mounting as root
+		#from_devnames = list(set([dev.device for dev in from_devs]))
+		#LOG.debug('LinuxEbsImage.make: list_rdevnames `%s`', from_devnames)
+		to_devs = [filter(None, map(string.strip, el.split(' '))) for el in [dev for dev in system2(('sfdisk', '-l', self.devname))[0].split('\n') if dev.startswith('/dev')]]
+		#to_devs - list with device distination, which will be copying data to
+		#this device from source device
+		LOG.debug('list to_devs `%s`', to_devs)
+
+		for from_dev in from_devs:
+			num = os.path.basename(from_dev.device)[-1]
+
+			if self._mtab.contains(mpoint=os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num))) or\
+					self._mtab.contains(mpoint=os.path.join(self.mpoint, os.path.basename(from_dev.device))):
+				raise HandlerError("Partition already mounted")
+
+			to_mpoint = os.path.join(self.mpoint, '%s%s'%(os.path.basename(self.devname), num))
+			LOG.debug('try to mount dev `%s` like `%s`', dev, to_mpoint)
+			fstool.mount(dev, to_mpoint)
+			#mount partition seems like /mnt/img-mnt/sdh1
+
+			if os.path.basename(from_dev.device) == os.path.basename(rdev_partition):
+
+				from_mpoint =os.path.join(self.mpoint, os.path.basename(rdev_name))
+				LOG.debug('try to mount dev `%s` like `%s`', dev, from_mpoint)
+				fstool.mount(dev, from_mpoint)
+				#mount old volume partition
+
+				#copy all consitstant
+				self._copy_rec(from_mpoint, to_mpoint)
+			else:
+				old_mpoint = self.mpoint
+				self.mpoint = to_mpoint
+				self._make_special_dirs()
+				self._copy_rec(self._volume, self.mpoint)
+				self.mpoint = old_mpoint
+
+		#TODO: check correct copying not shore about it, and mpoint return like `/mnt/img-mnt`. Is it realy need?
+
+		#self._make_special_dirs()
+		#self._copy_rec(self._volume, self.mpoint)
+		system2("sync", shell=True)  # Flush buffers
+		return self.mpoint
+
+
 	def cleanup(self):
 		rebundle_hdlr.LinuxImage.cleanup(self)
 		if self.ebs_volume:
@@ -688,7 +811,7 @@ class AmiManifest:
 	ramdisk_id=None
 	product_codes=None
 	ancestor_ami_ids=None 
-	block_device_mapping=None	
+	block_device_mapping=None
 
 	
 	def __init__(self, name=None, user=None, arch=None, 
