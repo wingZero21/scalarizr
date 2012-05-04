@@ -1,4 +1,5 @@
 import sys
+import cStringIO
 if sys.version_info < (2, 6):
 	import scalarizr.externals.logging as logging
 	import scalarizr.externals.logging.config as logging_config
@@ -56,6 +57,54 @@ SNMP_RESTART_DELAY = 5 # Seconds
 
 PID_FILE = '/var/run/scalarizr.pid' 
 
+LOGGING_CONFIG = '''
+[loggers]
+keys=root,scalarizr
+
+[handlers]
+keys=console,file,file_debug,scalr
+
+[formatters]
+keys=simple
+
+[logger_root]
+level=DEBUG
+handlers=file,file_debug,scalr
+
+[logger_scalarizr]
+level=DEBUG
+qualname=scalarizr
+handlers=file,file_debug,scalr
+propagate=0
+
+[handler_console]
+class=StreamHandler
+level=INFO
+formatter=simple
+args=(sys.stdout,)
+
+[handler_file]
+class=scalarizr.util.log.RotatingFileHandler
+level=INFO
+formatter=simple
+args=('/var/log/scalarizr.log', 'a+', 5242880, 5, 0600)
+
+[handler_file_debug]
+class=scalarizr.util.log.RotatingFileHandler
+level=DEBUG
+formatter=simple
+args=('/var/log/scalarizr_debug.log', 'a+', 5242880, 5, 0600)
+
+
+[handler_scalr]
+class=scalarizr.util.log.MessagingHandler
+level=INFO
+args=(20, "30s")
+
+[formatter_simple]
+format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
+'''
+
 _running = False
 '''
 True when scalarizr daemon should be running
@@ -103,6 +152,9 @@ def _init():
 	optparser = bus.optparser
 	bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
 	
+	_init_logging()
+	logger = logging.getLogger(__name__)	
+	
 	# Initialize configuration
 	if not bus.etc_path:
 		etc_places = [
@@ -137,26 +189,6 @@ def _init():
 			raise ScalarizrError('Cannot find scalarizr share dir. Search path: %s' % ':'.join(share_places))
 
 	
-	# Configure logging
-	if sys.version_info < (2,6):
-		# Fix logging handler resolve for python 2.5
-		from scalarizr.util.log import fix_py25_handler_resolving		
-		fix_py25_handler_resolving()
-	
-	logging.config.fileConfig(os.path.join(bus.etc_path, "logging-debug.ini" if optparser and optparser.values.debug else 'logging.ini'))
-	logger = logging.getLogger(__name__)
-	globals()['_logging_configured'] = True
-	
-	# During server import user must see all scalarizr activity in his terminal
-	# Add console handler if it doesn't configured in logging.ini	
-	if optparser and optparser.values.import_server:
-		if not any(isinstance(hdlr, logging.StreamHandler) \
-				and (hdlr.stream == sys.stdout or hdlr.stream == sys.stderr) 
-				for hdlr in logger.handlers):
-			hdlr = logging.StreamHandler(sys.stdout)
-			hdlr.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
-			logger.addHandler(hdlr)
-
 	# Registering in init.d
 	initdv2.explore("scalarizr", ScalarizrInitScript)
 
@@ -199,6 +231,29 @@ def _create_db(db_file=None, script_file=None):
 	logger.debug('conn: %s', conn)
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
 	#conn.commit()	
+
+def _init_logging():
+	optparser = bus.optparser
+	
+	# Configure logging
+	if sys.version_info < (2,6):
+		# Fix logging handler resolve for python 2.5
+		from scalarizr.util.log import fix_py25_handler_resolving		
+		fix_py25_handler_resolving()
+	
+	logging.config.fileConfig(cStringIO.StringIO(LOGGING_CONFIG))
+	globals()['_logging_configured'] = True
+	logger = logging.getLogger(__name__)
+	
+	# During server import user must see all scalarizr activity in his terminal
+	# Add console handler if it doesn't configured in logging.ini	
+	if optparser and optparser.values.import_server:
+		if not any(isinstance(hdlr, logging.StreamHandler) \
+				and (hdlr.stream == sys.stdout or hdlr.stream == sys.stderr) 
+				for hdlr in logger.handlers):
+			hdlr = logging.StreamHandler(sys.stdout)
+			hdlr.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+			logger.addHandler(hdlr)	
 
 
 def _init_platform():

@@ -347,7 +347,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		
 	def _define_initialization(self, hir_message):
 		# XXX: from the asshole
-		handlers = bus.messaging_service.get_consumer().listeners[0]._get_handlers_chain()
+		handlers = bus.messaging_service.get_consumer().listeners[0].get_handlers_chain()
 		phases = {'host_init_response': [], 'before_host_up': []}
 		for handler in handlers:
 			h_phases = handler.get_initialization_phases(hir_message) or {}
