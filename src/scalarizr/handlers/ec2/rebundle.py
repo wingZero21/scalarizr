@@ -98,7 +98,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 				#volume_size = int(root_disk.size / 1000 / 1000)
 				volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
 				#in KByte
-				volume_size = int(volume_size[0].strip())/1024/1024
+				volume_size = int(volume_size[0].strip()) / 1024 / 1024
 				#in GByte
 
 			self._strategy = self._ebs_strategy_cls(
@@ -707,6 +707,15 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 
 	def make(self):
+		"""
+		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)", 
+				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
+		rebundle_hdlr.LinuxImage.make(self)
+		"""
+
+		#TODO: or if some partition in EBS volume:
+
+
 		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)", 
 				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
 		#rebundle_hdlr.LinuxImage.make(self)
@@ -718,29 +727,38 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		system2("sync", shell=True)  # Flush so newly formatted filesystem is ready to mount.
 		LOG.debug('sync data')
 
-		rdev_partition = firstmatched(lambda x: x.mpoint == '/', filetool.df())
-		#rdev_partition is like '/dev/sda1'
+		rdev_partition = firstmatched(lambda x: x.mpoint == '/', filetool.df()).device
+		""" rdev_partition is like `/dev/sda1` """
 		rdev_name = rdev_partition[:-1]
-		#rdev_name is like '/dev/sda'
-		LOG.debug('root device %s', rdev_name)
+		""" rdev_name is like '/dev/sda' """
+		LOG.debug('root device: `%s` rdev_partition: `%s`', rdev_name, rdev_partition)
 
-		#copy MBR from root device to new EBS volume
-		system2(('sfdisk', '-d', rdev_name, '|', self.devname), )
-		LOG.debug('copied MBR from %s to %s', rdev_name, self.devname)
-
+		#copy Partition Table from root device to new EBS volume
+		#system2(('sfdisk', '-d', rdev_name, '|', 'sfdisk', self.devname), )
+		
+		system2(('dd', 'if=%s'%rdev_name, 'of=%s'%self.devname, 'bs=512', 'count=1'), )
+		system2('partprobe')
+		LOG.debug('copied full MBR from %s to %s', rdev_name, self.devname)
+		
+		from scalarizr.storage import Storage
+		Storage.lookup_filesystem().mkfs('/dev/sdf1')
+		
 		#self._mount_image()
 		#mounting partitions
 
-		#from_devs - list with device, source which will be copying
+		""" from_devs - list with device, source which will be copying """
 		from_devs = [dev for dev in filetool.df() if dev.device.startswith(rdev_name)]
 		LOG.debug('list from_devs `%s`', from_devs)
 		#list all partitions of device, with partition mounting as root
 		#from_devnames = list(set([dev.device for dev in from_devs]))
 		#LOG.debug('LinuxEbsImage.make: list_rdevnames `%s`', from_devnames)
 		to_devs = [filter(None, map(string.strip, el.split(' '))) for el in [dev for dev in system2(('sfdisk', '-l', self.devname))[0].split('\n') if dev.startswith('/dev')]]
-		#to_devs - list with device distination, which will be copying data to
-		#this device from source device
+		""" to_devs - list with device distination, which will be copying data to
+			this device from source device """
 		LOG.debug('list to_devs `%s`', to_devs)
+		
+		#if os.path.basename(from_devs[0].device)[:1] == os.path.basename(from_devs[0].device)[:1]   
+
 
 		for from_dev in from_devs:
 			num = os.path.basename(from_dev.device)[-1]
@@ -749,32 +767,41 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 					self._mtab.contains(mpoint=os.path.join(self.mpoint, os.path.basename(from_dev.device))):
 				raise HandlerError("Partition already mounted")
 
-			to_mpoint = os.path.join(self.mpoint, '%s%s'%(os.path.basename(self.devname), num))
-			LOG.debug('try to mount dev `%s` like `%s`', dev, to_mpoint)
-			fstool.mount(dev, to_mpoint)
-			#mount partition seems like /mnt/img-mnt/sdh1
+			dev = '%s%s' % (os.path.basename(self.devname), num)
+			""" dev like `/dev/sdg1` """
+			to_mpoint = os.path.join(self.mpoint, dev)
+
+			LOG.debug('try mount dev(distination) `/dev/%s` like `%s`', dev, to_mpoint)
+			fstool.mount('/dev/%s' % dev, to_mpoint)
+			""" mount partition seems like /mnt/img-mnt/sdh1 """
 
 			if os.path.basename(from_dev.device) == os.path.basename(rdev_partition):
-
 				from_mpoint =os.path.join(self.mpoint, os.path.basename(rdev_name))
-				LOG.debug('try to mount dev `%s` like `%s`', dev, from_mpoint)
-				fstool.mount(dev, from_mpoint)
+
+				LOG.debug('try mount dev(source) `%s` like `%s`', from_dev.device, from_mpoint)
+				fstool.mount(from_dev.device, from_mpoint)
 				#mount old volume partition
 
 				#copy all consitstant
 				self._copy_rec(from_mpoint, to_mpoint)
+				
+				
+				#storage.Storage.lookup_filesystem('ext3').mkfs('/dev/sdf2')
+				
+				LOG.debug('Copied sucesfull from %s to %s', from_mpoint, to_mpoint)
 			else:
 				old_mpoint = self.mpoint
 				self.mpoint = to_mpoint
 				self._make_special_dirs()
 				self._copy_rec(self._volume, self.mpoint)
+				LOG.debug('Copied sucesfull from %s to %s', self._volume, self.mpoint)
 				self.mpoint = old_mpoint
 
 		#TODO: check correct copying not shore about it, and mpoint return like `/mnt/img-mnt`. Is it realy need?
 
 		#self._make_special_dirs()
 		#self._copy_rec(self._volume, self.mpoint)
-		system2("sync", shell=True)  # Flush buffers
+		system2("sync", shell=True) #Flush buffers
 		return self.mpoint
 
 
