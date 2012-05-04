@@ -103,7 +103,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		ret = initdv2.ParametrizedInitScript.start(self)
 		if self.pid_file:
 			try:
-				wait_until(lambda: os.path.exists(self.pid_file) or self._process_started(), sleep=0.2, timeout=30)
+				wait_until(lambda: os.path.exists(self.pid_file) or self._main_process_started(), sleep=0.2, timeout=30)
 			except:
 				raise initdv2.InitdError("Cannot start Apache (%s)" % self.pid_file)
 		time.sleep(0.5)
