@@ -261,7 +261,11 @@ class MessageListener:
 			cnf = bus.cnf 
 			for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
 				__import__(module_str)
-				self._handlers_chain.extend(sys.modules[module_str].get_handlers())
+				try:
+					self._handlers_chain.extend(sys.modules[module_str].get_handlers())
+				except:
+					self._logger.error("Can't get module handlers (module: %s)", module_str)
+					raise
 						
 			self._logger.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
 						
@@ -606,12 +610,13 @@ class DbMsrMessages:
 
 class FarmSecurityMixin(object):
 	def __init__(self, ports):
+		self._logger = logging.getLogger(__name__)
 		self._ports = ports
 		self._iptables = iptables.IpTables()
-		if not self._iptables.enabled():
-			raise HandlerError('iptables is not installed. iptables is required to run me correctly')
-		
-		bus.on('init', self.__on_init)
+		if self._iptables.enabled():
+			bus.on('init', self.__on_init)			
+		else:
+			self._logger.warn("iptables is not enabled. ports %s won't be protected by firewall" %  (ports, ))
 		
 	def __on_init(self):
 		bus.on(
@@ -628,6 +633,9 @@ class FarmSecurityMixin(object):
 	
 	def on_HostInit(self, message):
 		# Append new server to allowed list
+		if not self._iptables.enabled():
+			return
+		
 		rules = []
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
@@ -637,6 +645,9 @@ class FarmSecurityMixin(object):
 
 	def on_HostDown(self, message):
 		# Remove terminated server from allowed list
+		if not self._iptables.enabled():
+			return
+		
 		rules = []
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)

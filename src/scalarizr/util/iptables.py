@@ -152,7 +152,7 @@ class IpTables(object):
 		if disttool.is_redhat_based():
 			return self._chkconfig()
 		else:
-			return self.usable() and self.list_rules('INPUT')
+			return self.usable()
 
 
 	def _chkconfig(self):
