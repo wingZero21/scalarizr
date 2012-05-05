@@ -122,10 +122,19 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		return ret
 	
 	def _main_process_started(self):
+		res = False
 		bin = '/usr/sbin/apache2' if disttool.is_debian_based() else '/usr/sbin/httpd'
 		group = 'www-data' if disttool.is_debian_based() else 'apache'
-		out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'))[0]
-		return True if len([p for p in out.split('\n') if bin in p]) else False
+		try:
+			'''
+			_first_ scalarizr start returns error:
+			(ps (code: 1) <out>:  <err>:  <args>: ('ps', '-G', 'www-data', '-o', 'command', '--no-headers')
+			'''
+			out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'))[0]
+			res = True if len([p for p in out.split('\n') if bin in p]) else False
+		except:
+			pass
+		return res
 
 initdv2.explore('apache', ApacheInitScript)
 
