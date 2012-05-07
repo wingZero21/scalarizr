@@ -4,7 +4,7 @@ Created on Jul 21, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.util import system2
+from scalarizr.util import system2, disttool, UtilError
 
 import os
 
@@ -18,6 +18,7 @@ P_AH = "ah"
 P_SCTP = "sctp"
 P_ALL = "all"
 PROTOCOLS = (P_TCP, P_UDP, P_UDPLITE, P_ICMP, P_ESP, P_AH, P_SCTP, P_ALL)
+CHKCONFIG = '/sbin/chkconfig'
 
 class RuleSpec(object):
 	specs = None
@@ -146,3 +147,37 @@ class IpTables(object):
 		
 	def usable(self):
 		return os.access(self.executable, os.X_OK)
+	
+	def enabled(self):
+		if disttool.is_redhat_based():
+			return self._chkconfig()
+		else:
+			return self.usable()
+
+
+	def _chkconfig(self):
+		'''
+		returns True if iptables is enabled on any runlevel
+		redhat-based only
+		'''
+		
+		if not os.path.exists(CHKCONFIG):
+			raise UtilError('chkconfig not found')
+		out, err, retcode = system2([CHKCONFIG, '--list', 'iptables'])
+		if err:
+			raise UtilError(str(err))
+		if out:
+			raw = out.split('\n')
+			for row in raw:
+				if row:
+					data = row.split('\t')
+					if len(data) == 8:
+						service = data.pop(0).strip()
+						levels = []
+						for level in data:
+							levels.append(True if 'on' in level else False)
+						if len(levels) == 7 and service=='iptables' and any(levels):
+							return True
+		return False
+				
+				

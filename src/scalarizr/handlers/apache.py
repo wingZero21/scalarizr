@@ -9,7 +9,7 @@ from __future__ import with_statement
 
 # Core
 from scalarizr.bus import bus
-from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
+from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
 from scalarizr.handlers import HandlerError, ServiceCtlHandler, operation
 from scalarizr.messaging import Messages
@@ -17,8 +17,7 @@ from scalarizr.messaging import Messages
 # Libs
 from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 	NoPathError, strip_quotes
-from scalarizr.util import disttool, cached, firstmatched, validators, software,\
-	wait_until
+from scalarizr.util import disttool, firstmatched, software, wait_until
 from scalarizr.util import initdv2, system2
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
@@ -35,8 +34,12 @@ import shutil, pwd
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.APP
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR + '.ini'
-APP_CONF_PATH = 'apache_conf_path'
+#APP_CONF_PATH = 'apache_conf_path'
+APACHE_CONF_PATH = '/etc/apache2/apache2.conf' if disttool.is_debian_based() else '/etc/httpd/conf/httpd.conf'
+VHOSTS_PATH = 'private.d/vhosts'
 VHOST_EXTENSION = '.vhost.conf'
+
+
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
 	_apachectl = None
@@ -68,6 +71,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
 	def reload(self):
 		if self.running:
+			self.configtest()
 			out, err, retcode = system2(self._apachectl + ' graceful', shell=True)
 			if retcode > 0:
 				raise initdv2.InitdError('Cannot reload apache: %s' % err)
@@ -99,14 +103,14 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		ret = initdv2.ParametrizedInitScript.start(self)
 		if self.pid_file:
 			try:
-				wait_until(lambda: os.path.exists(self.pid_file), sleep=0.2, timeout=10, 
-						error_text="Apache pid file %s doesn't exists" % self.pid_file)
-			except:
-				raise initdv2.InitdError("Cannot start Apache: pid file %s hasn't been created" % self.pid_file)
+				wait_until(lambda: os.path.exists(self.pid_file) or self._main_process_started(), sleep=0.2, timeout=30)
+			except (Exception, BaseException), e:
+				raise initdv2.InitdError("Cannot start Apache (%s)" % str(e))
 		time.sleep(0.5)
 		return True
 
 	def restart(self):
+		self.configtest()
 		ret = initdv2.ParametrizedInitScript.restart(self)
 		if self.pid_file:
 			try:
@@ -116,52 +120,30 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 				raise initdv2.InitdError("Cannot start Apache: pid file %s hasn't been created" % self.pid_file)
 		time.sleep(0.5)
 		return ret
+	
+	def _main_process_started(self):
+		res = False
+		bin = '/usr/sbin/apache2' if disttool.is_debian_based() else '/usr/sbin/httpd'
+		group = 'www-data' if disttool.is_debian_based() else 'apache'
+		try:
+			'''
+			_first_ scalarizr start returns error:
+			(ps (code: 1) <out>:  <err>:  <args>: ('ps', '-G', 'www-data', '-o', 'command', '--no-headers')
+			'''
+			out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'))[0]
+			res = True if len([p for p in out.split('\n') if bin in p]) else False
+		except:
+			pass
+		return res
 
 initdv2.explore('apache', ApacheInitScript)
 
 
-# Export behavior configuration
-class ApacheOptions(Configurator.Container):
-	'''
-	app behavior
-	'''
-	cnf_name = CNF_NAME
-
-	class apache_conf_path(Configurator.Option):
-		'''
-		Apache configuration file location.
-		'''
-		name = CNF_SECTION + '/apache_conf_path'
-		required = True
-
-		@property
-		@cached
-		def default(self):
-			return firstmatched(lambda p: os.path.exists(p),
-					('/etc/apache2/apache2.conf', '/etc/httpd/conf/httpd.conf'), '')
-
-		@validators.validate(validators.file_exists)
-		def _set_value(self, v):
-			Configurator.Option._set_value(self, v)
-
-		value = property(Configurator.Option._get_value, _set_value)
-
-
-	class vhosts_path(Configurator.Option):
-		'''
-		Directory to create virtual hosts configuration in.
-		All Apache virtual hosts, created in the Scalr user interface are placed in a separate
-		directory and included to the main Apache configuration file.
-		'''
-		name = CNF_SECTION + '/vhosts_path'
-		default = 'private.d/vhosts'
-		required = True
 
 class ApacheCnfController(CnfController):
 
 	def __init__(self):
-		cnf = bus.cnf; ini = cnf.rawini
-		CnfController.__init__(self, BEHAVIOUR, ini.get(CNF_SECTION, APP_CONF_PATH), 'apache', {'1':'on','0':'off'})
+		CnfController.__init__(self, BEHAVIOUR, APACHE_CONF_PATH, 'apache', {'1':'on','0':'off'})
 
 	@property
 	def _software_version(self):
@@ -221,7 +203,7 @@ class ApacheHandler(ServiceCtlHandler):
 	def on_reload(self):
 		self._queryenv = bus.queryenv_service		
 		self._cnf = bus.cnf
-		self._httpd_conf_path = self._cnf.rawini.get(CNF_SECTION, APP_CONF_PATH)
+		self._httpd_conf_path = APACHE_CONF_PATH
 		self._config = Configuration('apache')
 		self._config.read(self._httpd_conf_path)
 
@@ -280,7 +262,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
-		if iptables.usable():
+		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))
 			iptables.insert_rule(None, RuleSpec(dport=443, jump='ACCEPT', protocol=P_TCP))		
 
@@ -328,9 +310,9 @@ class ApacheHandler(ServiceCtlHandler):
 
 
 	def _update_vhosts(self):
-
-		config = bus.config
-		vhosts_path = os.path.join(bus.etc_path,config.get(CNF_SECTION, 'vhosts_path'))
+		vhosts_path = VHOSTS_PATH
+		if not os.path.isabs(vhosts_path):
+			vhosts_path = os.path.join(bus.etc_path, vhosts_path)
 		if not os.path.exists(vhosts_path):
 			if not vhosts_path:
 				self._logger.error('Property vhosts_path is empty.')
@@ -494,22 +476,22 @@ class ApacheHandler(ServiceCtlHandler):
 					#ssl_conf.comment(".//SSLCertificateKeyFile")
 					
 			try:
-				old_ca_crt_path = ssl_conf.get(".//SSLCACertificateFile")
+				old_ca_crt_path = ssl_conf.get(".//SSLCertificateChainFile")
 			except NoPathError, e:
 				pass	
 			finally:
 				if os.path.exists(ca_crt_path):
 					try:
-						ssl_conf.set(".//SSLCACertificateFile", ca_crt_path)
+						ssl_conf.set(".//SSLCertificateChainFile", ca_crt_path)
 					except NoPathError:
 						# XXX: ugly hack
 						parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
 						before_el = ssl_conf.etree.find('.//SSLCertificateFile')
-						ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCACertificateFile', ca_crt_path)
+						ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCertificateChainFile', ca_crt_path)
 						ch.text = ca_crt_path
 						parent.insert(list(parent).index(before_el), ch)
 				elif old_ca_crt_path and not os.path.exists(old_ca_crt_path):
-					ssl_conf.comment(".//SSLCACertificateFile")	
+					ssl_conf.comment(".//SSLCertificateChainFile")	
 					
 			ssl_conf.write(ssl_conf_path)
 		#else:

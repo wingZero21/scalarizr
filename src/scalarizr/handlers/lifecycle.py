@@ -21,9 +21,10 @@ from scalarizr.util import cryptotool
 from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 
 # Stdlibs
-import logging, os, sys, threading
+import logging, os, sys, threading, string
 from scalarizr.config import STATE
 import time
+from scalarizr.util import disttool
 
 
 _lifecycle = None
@@ -203,12 +204,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			snmp_community_name = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
 		), broadcast=True)
 		bus.fire("before_host_init", msg)
-		self.send_message(msg)
-		
 		# Update key file
-		self._cnf.write_key(self._cnf.DEFAULT_KEY, new_crypto_key)		
 
+		self.send_message(msg, new_crypto_key=new_crypto_key, wait_ack=True)
 		bus.cnf.state = ScalarizrState.INITIALIZING
+
 		bus.fire("host_init")
 
 		
@@ -240,7 +240,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	def _insert_iptables_rules(self, *args, **kwargs):
 		self._logger.debug('Adding iptables rules for scalarizr ports')		
 		iptables = IpTables()
-		if iptables.usable():		
+		if iptables.enabled():		
 			rules = []
 			
 			# Scalarizr ports
@@ -307,11 +307,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		try:
 			self._define_initialization(message)			
 			bus.fire("host_init_response", message)
+			hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)
+			bus.fire("before_host_up", hostup_msg)
 			if bus.scalr_version >= (2, 2, 3):
-				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
-			msg = self.new_message(Messages.HOST_UP, broadcast=True)
-			bus.fire("before_host_up", msg)
-			self.send_message(msg)
+				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_subhandler=True)
+			self.send_message(hostup_msg)
 			bus.cnf.state = ScalarizrState.RUNNING
 			bus.fire("host_up")
 		except:
@@ -343,10 +343,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		"""
 		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
 		message.meta[MetaOptions.TIMESTAMP] = time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
+
 		
 	def _define_initialization(self, hir_message):
 		# XXX: from the asshole
-		handlers = bus.messaging_service.get_consumer().listeners[0]._get_handlers_chain()
+		handlers = bus.messaging_service.get_consumer().listeners[0].get_handlers_chain()
 		phases = {'host_init_response': [], 'before_host_up': []}
 		for handler in handlers:
 			h_phases = handler.get_initialization_phases(hir_message) or {}

@@ -32,16 +32,25 @@ class NodeTypes:
 	RAM = 'ram'
 	DISK = 'disk'
 
+RABBITMQCTL = software.which('rabbitmqctl')
+RABBITMQ_SERVER = software.which('rabbitmq-server')
+
+# RabbitMQ from ubuntu repo puts rabbitmq-plugins
+# binary in non-obvious place
 try:
-	RABBITMQCTL = software.whereis('rabbitmqctl')[0]
-	RABBITMQ_SERVER = software.whereis('rabbitmq-server')[0]
-	RABBITMQ_PLUGINS = software.whereis('rabbitmq-plugins')[0]
-except:
-	raise Exception('Some of rabbitmq executables where not found.')
+	RABBITMQ_PLUGINS = software.which('rabbitmq-plugins')
+except LookupError:
+	possible_path = '/usr/lib/rabbitmq/bin/rabbitmq-plugins'
+
+	if os.path.exists(possible_path):
+		RABBITMQ_PLUGINS = possible_path
+	else:
+		raise
+
 
 
 class RabbitMQInitScript(initdv2.ParametrizedInitScript):
-	
+
 	@lazy
 	def __new__(cls, *args, **kws):
 		obj = super(RabbitMQInitScript, cls).__new__(cls, *args, **kws)
@@ -70,7 +79,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 
 	def start(self):
 		env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid',
-				'RABBITMQ_MNESIA_BASE': '/var/lib/rabbitmq/mnesia'}
+			    'RABBITMQ_MNESIA_BASE': '/var/lib/rabbitmq/mnesia'}
 		
 		run_detached(RABBITMQ_SERVER, args=['-detached'], env=env)
 		initdv2.wait_sock(self.socks[0])

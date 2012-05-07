@@ -6,6 +6,7 @@ Created on April 18th, 2011
 from __future__ import with_statement
 
 import os
+import glob
 import time
 import shutil
 import tarfile
@@ -22,6 +23,8 @@ from scalarizr.util import system2, wait_until, disttool, software, filetool, cr
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, PgUser, SU_EXEC
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.handlers import operation, prepare_tags
+
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -31,6 +34,7 @@ STORAGE_PATH 				= "/mnt/pgstorage"
 STORAGE_VOLUME_CNF 			= 'postgresql.json'
 STORAGE_SNAPSHOT_CNF 		= 'postgresql-snap.json'
 
+OPT_PG_VERSION				= 'pg_version'
 OPT_VOLUME_CNF				= 'volume_config'
 OPT_SNAPSHOT_CNF			= 'snapshot_config'
 OPT_ROOT_USER				= 'root_user'
@@ -99,16 +103,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	def get_initialization_phases(self, hir_message):
 		if BEHAVIOUR in hir_message.body:
-			self._phase_postgresql = 'Configure PostgreSQL'
-			self._step_accept_scalr_conf = 'Accept Scalr configuration'
-			self._step_patch_conf = 'Patch configuration files'
-			self._step_create_storage = 'Create storage'
-			self._step_init_master = 'Initialize Master'
-			self._step_init_slave = 'Initialize Slave'
-			self._step_create_data_bundle = 'Create data bundle'
-			self._step_change_replication_master = 'Change replication Master'
-			self._step_collect_host_up_data = 'Collect HostUp data'
-
 			steps = [self._step_accept_scalr_conf, self._step_create_storage]
 			if hir_message.body[BEHAVIOUR]['replication_master'] == '1':
 				steps += [self._step_init_master, self._step_create_data_bundle]
@@ -140,6 +134,19 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 			'slave_promote_to_master'
 		)	
+		
+		self._phase_postgresql = 'Configure PostgreSQL'
+		self._phase_data_bundle = self._op_data_bundle = 'PostgreSQL data bundle'
+		self._phase_backup = self._op_backup = 'PostgreSQL backup'
+		self._step_upload_to_cloud_storage = 'Upload data to cloud storage'
+		self._step_accept_scalr_conf = 'Accept Scalr configuration'
+		self._step_patch_conf = 'Patch configuration files'
+		self._step_create_storage = 'Create storage'
+		self._step_init_master = 'Initialize Master'
+		self._step_init_slave = 'Initialize Slave'
+		self._step_create_data_bundle = 'Create data bundle'
+		self._step_change_replication_master = 'Change replication Master'
+		self._step_collect_host_up_data = 'Collect HostUp data'
 		
 		self.on_reload()		
 
@@ -184,6 +191,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if self._cnf.state == ScalarizrState.RUNNING:
 
 			storage_conf = Storage.restore_config(self._volume_config_path)
+			storage_conf['tags'] = self.postgres_tags
 			self.storage_vol = Storage.create(storage_conf)
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
@@ -226,7 +234,27 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		
 		self.pg_keys_dir = self._cnf.private_path('keys')
-		self.postgresql = PostgreSql(self.pg_keys_dir)
+		self.postgresql = PostgreSql(self.version, self.pg_keys_dir)
+		
+		
+	@property
+	def version(self):
+		ver = None
+		if self._cnf.rawini.has_option(CNF_SECTION, OPT_PG_VERSION):
+			ver = self._cnf.rawini.get(CNF_SECTION, OPT_PG_VERSION)
+			
+		if not ver:
+			try:
+				path_list = glob.glob('/var/lib/p*sql/9.*')
+				path_list.sort()
+				path = path_list[-1]
+				ver = os.path.basename(path)
+			except IndexError:
+				self._logger.warning('Postgresql default directory not found. Assuming that PostgreSQL 9.0 is installed.')
+				ver = '9.0'
+			finally:
+				self._update_config({OPT_PG_VERSION : ver})
+		return ver
 		
 	
 	def on_HostInit(self, message):
@@ -244,8 +272,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	
 	def on_HostDown(self, message):
-		if message.local_ip != self._platform.get_private_ip():
+		if  message.local_ip != self._platform.get_private_ip():
 			self.postgresql.unregister_client(message.local_ip)
+			if self.is_replication_master and self.farmrole_id == message.farm_role_id:
+				self.postgresql.unregister_slave(message.local_ip)
 	
 	@property			
 	def farm_hosts(self):
@@ -288,19 +318,33 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
 			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
 		return password
+
+
+	@property	
+	def farmrole_id(self):
+		id = None
+		if self._cnf.rawini.has_option(config.SECT_GENERAL, config.OPT_FARMROLE_ID):
+			id = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
+		return id
+	
 			
 	def store_password(self, name, password):
 		opt_user_password = '%s_password' % name
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {opt_user_password:password}})
+			
 			
 	@property
 	def is_replication_master(self):
 		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
 		self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
 		return True if int(value) else False
-	
 				
+				
+	@property
+	def postgres_tags(self):
+		return prepare_tags(BEHAVIOUR, db_replication_role=self.is_replication_master)
 		
+				
 	def on_host_init_response(self, message):
 		"""
 		Check postgresql data in host init response
@@ -364,13 +408,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if self.is_replication_master:
 			self._init_master(message)									  
 		else:
-			try:
-				self._init_slave(message)	
-			except:
-				if self.storage_vol:
-					self.postgresql.service.stop('Cleaning up')	
-					self.storage_vol.destroy(remove_disks=True)
-				raise
+			self._init_slave(message)	
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 					
 				
@@ -394,28 +432,35 @@ class PostgreSqlHander(ServiceCtlHandler):
 				self._logger.info('Destroying volume %s' % self.storage_vol.id)
 				self.storage_vol.destroy(remove_disks=True)
 				self._logger.info('Volume %s has been destroyed.' % self.storage_vol.id)
-		elif self.is_replication_master:
-			self.postgresql.unregister_slave(message.local_ip)	
 
 
 	def on_DbMsr_CreateDataBundle(self, message):
 		
 		try:
-			bus.fire('before_postgresql_data_bundle')
-			# Retrieve password for scalr postgresql root user
-			# Creating snapshot		
-			snap = self._create_snapshot()
-			used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-			bus.fire('postgresql_data_bundle', snapshot_id=snap.id)			
+			op = operation(name=self._op_data_bundle, phases=[{
+				'name': self._phase_data_bundle, 
+				'steps': [self._step_create_data_bundle]
+			}])
+			op.define()
 			
-			# Notify scalr
-			msg_data = dict(
-				db_type 	= BEHAVIOUR,
-				used_size	= '%.3f' % (float(used_size) / 1000,),
-				status		= 'ok'
-			)
-			msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
-			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
+			with op.phase(self._phase_data_bundle):
+				with op.step(self._step_create_data_bundle):
+					
+					bus.fire('before_postgresql_data_bundle')
+					# Retrieve password for scalr postgresql root user
+					# Creating snapshot		
+					snap = self._create_snapshot()
+					used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+					bus.fire('postgresql_data_bundle', snapshot_id=snap.id)			
+					
+					# Notify scalr
+					msg_data = dict(
+						db_type 	= BEHAVIOUR,
+						used_size	= '%.3f' % (float(used_size) / 1000,),
+						status		= 'ok'
+					)
+					msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
+					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
@@ -458,7 +503,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 			)
 			
 			self.postgresql.stop_replication()
-			slaves = [host.internal_ip for host in self._get_slave_hosts()]
 			
 			if master_storage_conf:
 
@@ -473,7 +517,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
-					
+				
+			slaves = [host.internal_ip for host in self._get_slave_hosts()]		
 			self.postgresql.init_master(self._storage_path, self.root_password, slaves)
 			self._update_config({OPT_REPLICATION_MASTER : "1"})	
 				
@@ -543,7 +588,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self._logger.debug('Storage destroyed')
 			
 			self._logger.debug('Plugging new storage')
-			vol = Storage.create(snapshot=snap_data.copy())
+			vol = Storage.create(snapshot=snap_data.copy(), tags=self.postgres_tags)
 			self._plug_storage(self._storage_path, vol)
 			self._logger.debug('Storage plugged')
 			
@@ -565,61 +610,72 @@ class PostgreSqlHander(ServiceCtlHandler):
 			# Get databases list
 			psql = PSQL(user=self.postgresql.root_user.name)
 			databases = psql.list_pg_databases()
+			if 'template0' in databases:
+				databases.remove('template0')
 			
-			if not os.path.exists(self._tmp_path):
-				os.makedirs(self._tmp_path)
+			
+			op = operation(name=self._op_backup, phases=[{
+				'name': self._phase_backup, 
+				'steps': ["Backup '%s'" % db for db in databases] + [self._step_upload_to_cloud_storage]
+			}])
+			op.define()			
+			
+			with op.phase(self._phase_backup):
+			
+				if not os.path.exists(self._tmp_path):
+					os.makedirs(self._tmp_path)
+					
+				# Defining archive name and path
+				backup_filename = 'pgsql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+				backup_path = os.path.join(self._tmp_path, backup_filename)
 				
-			# Defining archive name and path
-			backup_filename = 'pgsql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-			backup_path = os.path.join(self._tmp_path, backup_filename)
-			
-			# Creating archive 
-			backup = tarfile.open(backup_path, 'w:gz')
+				# Creating archive 
+				backup = tarfile.open(backup_path, 'w:gz')
+	
+				# Dump all databases
+				self._logger.info("Dumping all databases")
+				tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
+				rchown(self.postgresql.root_user.name, tmpdir)	
+				
+				for db in databases:
+					with op.step("Backup '%s'" % db):
+						dump_path = tmpdir + os.sep + db + '.sql'
+						pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db, dump_path)
+						su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
+						err = system2(su_args)[1]
+						if err:
+							raise HandlerError('Error while dumping database %s: %s' % (db, err))
+						backup.add(dump_path, os.path.basename(dump_path))							
 
-			# Dump all databases
-			self._logger.info("Dumping all databases")
-			tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
-			rchown(self.postgresql.root_user.name, tmpdir)	
-			
-			for db_name in databases:
-				if db_name == 'template0':
-					continue
+				backup.close()
 				
-				dump_path = tmpdir + os.sep + db_name + '.sql'
-				pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path)
-				su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
-				err = system2(su_args)[1]
-				if err:
-					raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
+				with op.step(self._step_upload_to_cloud_storage):
+					# Creating list of full paths to archive chunks
+					if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+						parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+					else:
+						parts = [backup_path]
+						
+					cloud_storage_path = '%s://scalr-%s-%s/backups/%s/%s/%s-%s/%s.tar.gz' % (
+		                                self._platform.cloud_storage_path.split('://')[0],
+	                	                self._platform.get_user_data('env_id'),
+        	                	        self._platform.get_user_data('region'),
+	        	                        self._platform.get_user_data('farmid'),
+        	        	                self._platform.get_user_data('role'), #TODO: not sure, need be chek
+                	        	        self._platform.get_user_data('farm_roleid'),
+	                        	        self._platform.get_user_data('realrolename'),
+        	                        	time.strftime('%Y-%m-%d-%H:%M:%S')
+					)
+	
+					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
+					trn = transfer.Transfer()
+					result = trn.upload(parts, self._platform.cloud_storage_path)
+					self._logger.info("Postgresql backup uploaded to cloud storage under %s/%s", 
+									cloud_storage_path, backup_filename)
+			
+			
+			op.ok()
 				
-				backup.add(dump_path, os.path.basename(dump_path))
-			backup.close()
-			
-			# Creating list of full paths to archive chunks
-			if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-				parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-			else:
-				parts = [backup_path]
-			
-			cloud_storage_path = '%s://scalr-%s-%s/backups/%s/%s/%s-%s/%s.tar.gz' % (
-				self._platform.cloud_storage_path.split('://')[0],
-				self._platform.get_user_data('env_id'),
-				self._platform.get_user_data('region'),
-				self._platform.get_user_data('farmid'),
-				self._platform.get_user_data('role'), #TODO: not sure, need be chek
-				self._platform.get_user_data('farm_roleid'),
-				self._platform.get_user_data('realrolename'),
-				time.strftime('%Y-%m-%d-%H:%M:%S'))
-			
-			self._logger.info("Uploading backup to cloud storage (%s)", #self._platform.
-							cloud_storage_path)
-			trn = transfer.Transfer()
-			result = trn.upload(parts, #self._platform.cloud_storage_path
-							cloud_storage_path)
-			self._logger.info("Postgresql backup uploaded to cloud storage under %s/%s", 
-							cloud_storage_path,#self._platform.cloud_storage_path
-							backup_filename)
-			
 			# Notify Scalr
 			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
 				db_type = BEHAVIOUR,
@@ -760,6 +816,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
+			vol['tags'] = self.postgres_tags
 			vol = Storage.create(vol)
 
 		try:
@@ -799,7 +856,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	def _create_storage_snapshot(self):
 		self._logger.info("Creating storage snapshot")
 		try:
-			return self.storage_vol.snapshot()
+			return self.storage_vol.snapshot(tags=self.postgres_tags)
 		except StorageError, e:
 			self._logger.error("Cannot create PostgreSQL data snapshot. %s", e)
 			raise
@@ -816,6 +873,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
-		if iptables.usable():
+		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=POSTGRESQL_DEFAULT_PORT, 
 											jump='ACCEPT', protocol=P_TCP))		

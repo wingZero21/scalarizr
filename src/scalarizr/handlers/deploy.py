@@ -19,8 +19,6 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages, Queues
 from scalarizr.handlers import Handler, script_executor, operation
 from scalarizr.util import system2, disttool, dicts, filetool
-from scalarizr.queryenv import Script
-
 
 
 
@@ -43,20 +41,22 @@ class DeploymentHandler(Handler):
 		self._logger = logging.getLogger(__name__)
 		self._log_hdlr = DeployLogHandler()
 		self._script_executor = None
-		bus.on(init=self.on_init)
 
-	def on_init(self):
-		bus.on(host_init_response=self.on_host_init_response)
-
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.DEPLOY
-
-	def get_initialization_phases(self, hir_message):
 		self._phase_deploy = 'Deploy'
 		self._step_execute_pre_deploy_script = 'Execute pre deploy script'
 		self._step_execute_post_deploy_script = 'Execute post deploy script'
 		self._step_update_from_scm = 'Update from SCM'
 		
+		bus.on(init=self.on_init)
+
+	def on_init(self):
+		bus.on(host_init_response=self.on_host_init_response)
+		
+
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return message.name == Messages.DEPLOY
+
+	def get_initialization_phases(self, hir_message):
 		if 'deploy' in hir_message.body:
 			return {'host_init_response': [self._get_phase_definition(hir_message)]}
 		
@@ -70,7 +70,7 @@ class DeploymentHandler(Handler):
 			
 		self._logger.info('Executing %s script', name)
 		kwargs = dict(name=name, body=body, exec_timeout=exec_timeout or 3600)
-		self._script_executor.exec_scripts_on_event(scripts=(Script(**kwargs), ))
+		self._script_executor.execute_scripts(scripts=(script_executor.Script(**kwargs), ))
 	
 	def _get_phase_definition(self, message):
 		steps = []
@@ -84,6 +84,8 @@ class DeploymentHandler(Handler):
 		
 	
 	def on_Deploy(self, message, define_operation=True):
+		msg_body = dicts.encode(message.body, encoding='ascii')		
+		
 		try:
 			if define_operation:
 				op = operation(name='Deploy')
@@ -93,7 +95,6 @@ class DeploymentHandler(Handler):
 				op = bus.initialization_op
 			
 			with op.phase(self._phase_deploy):
-				msg_body = dicts.encode(message.body, encoding='ascii')
 							
 				assert 'deploy_task_id' in msg_body, 'deploy task is undefined'
 				assert 'source' in msg_body, 'source is undefined'

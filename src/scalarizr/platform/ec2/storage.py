@@ -135,7 +135,7 @@ class EbsVolumeProvider(VolumeProvider):
 										ebs_vol.id, ebs_vol.zone, pl.get_avail_zone())
 						volume_id = None
 						delete_snap = True
-						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger, wait_completion=True).id
+						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger, wait_completion=True, tags=kwargs.get('tags')).id
 					else:
 						snap_id = None
 						
@@ -377,8 +377,7 @@ def location_from_region(region):
 # and instance need to be rebooted to fix this issue.
 
 def _cleanup_volume_table(*args, **kwargs):
-	db = bus.db
-	conn = db.get().get_connection()
+	conn = bus.db
 	cur = conn.cursor()
 	cur.execute("DELETE FROM storage where (device LIKE '/dev/sd%' or type = 'ebs') and state = 'detached'")
 	conn.commit()

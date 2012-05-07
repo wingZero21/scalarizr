@@ -11,18 +11,25 @@ from scalarizr.util import validators, filetool
 from ConfigParser import ConfigParser, RawConfigParser, NoOptionError, NoSectionError
 from getpass import getpass
 import os, sys, logging
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
 
 SECT_GENERAL = "general"
 OPT_SERVER_ID = "server_id"
 OPT_BEHAVIOUR = "behaviour"
 OPT_ROLE_NAME = "role_name"
+OPT_FARMROLE_ID = 'farm_role_id'
 OPT_STORAGE_PATH = "storage_path"
 OPT_CRYPTO_KEY_PATH = "crypto_key_path"
 OPT_FARM_CRYPTO_KEY_PATH = "farm_crypto_key_path"
 OPT_PLATFORM = "platform"
 OPT_QUERYENV_URL = "queryenv_url"
 OPT_SCRIPTS_PATH = "scripts_path"
+OPT_ROLE_ID = 'role_id'
+OPT_FARM_ID = 'farm_id'
 
 SECT_MESSAGING = "messaging"
 OPT_ADAPTER = "adapter"
@@ -951,8 +958,7 @@ class ScalarizrCnf(Observable):
 class State(object):
 	
 	def _conn(self):
-		db = bus.db
-		return db.get().get_connection()
+		return bus.db
 	
 	
 	def __getitem__(self, name):
@@ -961,7 +967,10 @@ class State(object):
 		try:
 			cur.execute("SELECT value FROM state WHERE name = ?", [name])
 			ret = cur.fetchone()
-			return ret['value'] if ret else ret
+			try:
+				return json.loads(ret['value'])
+			except (TypeError, KeyError, ValueError):
+				return ret
 		finally:
 			cur.close()
 
@@ -969,12 +978,11 @@ class State(object):
 		conn = self._conn()
 		cur = conn.cursor()
 		try:
-			cur.execute("INSERT INTO state VALUES (?, ?)", [name, value])
+			cur.execute("INSERT INTO state VALUES (?, ?)", [name, json.dumps(value) ])
 		finally:
 			cur.close()
 		conn.commit()
 
-	
 	def get_all(self, name):
 		conn = self._conn()
 		cur = conn.cursor()

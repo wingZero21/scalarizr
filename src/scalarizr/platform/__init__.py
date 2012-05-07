@@ -27,6 +27,7 @@ class UserDataOptions:
 	CLOUD_STORAGE_PATH = 'cloud_storage_path'
 	ENV_ID = 'env_id'
 	FARMROLE_ID = 'farm_roleid'
+	ROLE_ID = 'roleid'
 
 class PlatformFactory(object):
 	_platforms = {}

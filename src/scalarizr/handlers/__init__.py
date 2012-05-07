@@ -21,6 +21,7 @@ import sys
 import traceback
 import uuid
 
+LOG = logging.getLogger(__name__)
 
 
 class operation(object):
@@ -30,6 +31,8 @@ class operation(object):
 		self.phases = phases or []
 		self.finished = False
 		self._depth = None
+		self._phase = None
+		self._step = None
 		self._stepnos = {}
 	
 	def phase(self, name):
@@ -47,13 +50,22 @@ class operation(object):
 	
 	def __enter__(self):
 		if self._depth == 'step':
-			self._stepnos[self._phase] += 1			
+			self._stepnos[self._phase] += 1
+			STATE['operation.id'] = self.id
+			STATE['operation.step'] = self._step
+			STATE['operation.in_progress'] = 1			
 			self.progress(0)
+			
+		elif self._depth == 'phase':
+			STATE['operation.phase'] = self._phase
+			
 		return self
 	
 	def __exit__(self, *args):
 		if self._depth == 'step':
 			try:
+				STATE['operation.step'] = ''
+				STATE['operation.in_progress'] = 0
 				if not args[0]:
 					self.complete()
 				elif self._warning:
@@ -62,16 +74,20 @@ class operation(object):
 					self.error(exc_info=args)					
 			finally:
 				self._depth = 'phase'
+				
+		elif self._depth == 'phase':
+			STATE['operation.phase'] = ''
 
 
 	def define(self):
-		srv = bus.messaging_service
-		msg = srv.new_message(Messages.OPERATION_DEFINITION, None, {
-			'id': self.id,
-			'name': self.name,
-			'phases': self.phases
-		})
-		srv.get_producer().send(Queues.LOG, msg)
+		if bus.scalr_version >= (2, 6):
+			srv = bus.messaging_service
+			msg = srv.new_message(Messages.OPERATION_DEFINITION, None, {
+				'id': self.id,
+				'name': self.name,
+				'phases': self.phases
+			})
+			srv.get_producer().send(Queues.LOG, msg)
 	
 	def progress(self, percent=None):
 		self._send_progress('running', progress=percent)
@@ -83,18 +99,19 @@ class operation(object):
 		self._send_progress('warning', warning=self._format_error(exc_info, handler))
 
 	def _send_progress(self, status, progress=None, warning=None):
-		srv = bus.messaging_service
-		msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
-			'id': self.id,
-			'name': self.name,
-			'phase': self._phase,
-			'step': self._step,
-			'stepno' : self._stepnos[self._phase],
-			'status': status,
-			'progress': progress,
-			'warning': warning
-		})
-		srv.get_producer().send(Queues.LOG, msg)
+		if bus.scalr_version >= (2, 6):
+			srv = bus.messaging_service
+			msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
+				'id': self.id,
+				'name': self.name,
+				'phase': self._phase,
+				'step': self._step,
+				'stepno' : self._stepnos[self._phase],
+				'status': status,
+				'progress': progress,
+				'warning': warning
+			})
+			srv.get_producer().send(Queues.LOG, msg)
 
 	def ok(self):
 		self._send_result('ok')
@@ -105,19 +122,20 @@ class operation(object):
 		self.finished = True
 	
 	def _send_result(self, status, error=None):
-		srv = bus.messaging_service
-		msg = srv.new_message(Messages.OPERATION_RESULT, None, {
-			'id': self.id,
-			'name': self.name,
-			'status': status
-		})
-		if status == 'error':
-			msg.body.update({
-				'error': error,							
-				'phase': self._phase,
-				'step': self._step,
+		if bus.scalr_version >= (2, 6):
+			srv = bus.messaging_service
+			msg = srv.new_message(Messages.OPERATION_RESULT, None, {
+				'id': self.id,
+				'name': self.name,
+				'status': status
 			})
-		srv.get_producer().send(Queues.CONTROL, msg)
+			if status == 'error':
+				msg.body.update({
+					'error': error,							
+					'phase': self._phase,
+					'step': self._step,
+				})
+			srv.get_producer().send(Queues.CONTROL, msg)
 	
 	def _format_error(self, exc_info=None, handler=None):
 		if not exc_info:
@@ -151,27 +169,22 @@ class Handler(object):
 		return msg
 	
 	def send_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
-					queue=Queues.CONTROL, wait_ack=False):
+					queue=Queues.CONTROL, wait_ack=False, wait_subhandler=False, new_crypto_key=None):
 		srv = bus.messaging_service
 		msg = msg_name if isinstance(msg_name, Message) else \
 				self.new_message(msg_name, msg_body, msg_meta, broadcast)
 		srv.get_producer().send(queue, msg)
+		cons = srv.get_consumer()
+		
+		if new_crypto_key:
+			cnf = bus.cnf
+			cnf.write_key(cnf.DEFAULT_KEY, new_crypto_key)
+			
 		if wait_ack:
-			pl = bus.platform
-			cons = srv.get_consumer()
-			cons.message_to_ack = msg
-			self._logger.debug('Creating %s acknowledgement handler', msg.name)
-			saved_access_data = pl._access_data
-			if saved_access_data:
-				saved_access_data = dict(saved_access_data)
-			waiter = threading.Thread(name='%sMessageHandler' % msg.name, target=cons.message_handler)
-			waiter.start()
-			self._logger.debug('Joining %s acknowledgement handler', msg.name)
-			waiter.join()
-			self._logger.debug('%s acknowledgement handler joined!', msg.name)
-			cons.message_to_ack = None
-			if saved_access_data:
-				pl.set_access_data(saved_access_data)
+			cons.wait_acknowledge(msg)
+		elif wait_subhandler:
+			cons.wait_subhandler(msg)
+			
 		
 		
 	def send_int_message(self, host, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
@@ -237,30 +250,22 @@ class MessageListener:
 		)
 		self._logger.debug("Keywords for each Handler::accept\n%s", pprint.pformat(self._accept_kwargs))
 		
-		self._get_handlers_chain()
+		self.get_handlers_chain()
 	
 
-	def _get_handlers_chain (self):
+	def get_handlers_chain (self):
 		if self._handlers_chain is None:
 			self._handlers_chain = []
 			self._logger.debug("Collecting message handlers...");
 			
 			cnf = bus.cnf 
-			for handler_name, module_name in cnf.rawini.items(config.SECT_HANDLERS):
+			for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
+				__import__(module_str)
 				try:
-					module_name = cnf.rawini.get(config.SECT_HANDLERS, handler_name)
-					try:
-						module = __import__(module_name, globals(), locals(), ["get_handlers"], -1)
-						try:
-							self._handlers_chain.extend(module.get_handlers())
-						except:
-							self._logger.exception("Can't get module handlers (module: %s)", module_name)
-						
-					except:
-						self._logger.exception("Can't import module '%s'", module_name)
-							
+					self._handlers_chain.extend(sys.modules[module_str].get_handlers())
 				except:
-					self._logger.exception('Unhandled exception in notification loop')
+					self._logger.error("Can't get module handlers (module: %s)", module_str)
+					raise
 						
 			self._logger.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
 						
@@ -279,6 +284,7 @@ class MessageListener:
 			if 'scalr_version' in message.meta:
 				try:
 					ver = tuple(map(int, message.meta['scalr_version'].strip().split('.')))
+					self._logger.debug('Scalr version: %s', ver)
 				except:
 					pass
 				else:
@@ -286,7 +292,7 @@ class MessageListener:
 					bus.scalr_version = ver					
 			
 			accepted = False
-			for handler in self._get_handlers_chain():
+			for handler in self.get_handlers_chain():
 				hnd_name = handler.__class__.__name__
 				try:
 					if handler.accept(message, queue, **self._accept_kwargs):
@@ -462,10 +468,15 @@ class ServiceCtlHandler(Handler):
 				# Apply current preset
 				my_preset = self._cnf_ctl.current_preset()
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
-					self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
-					self._cnf_ctl.apply_preset(cur_preset)
-					# Start service with updated configuration
-					self._start_service_with_preset(cur_preset)
+					if not STATE['global.start_after_update']:
+						self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
+						self._cnf_ctl.apply_preset(cur_preset)
+						# Start service with updated configuration
+						self._start_service_with_preset(cur_preset)
+					else:
+						self._logger.debug('Skiping apply configuration preset whereas Scalarizr was restarted after update')
+						self._start_service()
+					
 				else:
 					self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
 					self._start_service()
@@ -599,12 +610,13 @@ class DbMsrMessages:
 
 class FarmSecurityMixin(object):
 	def __init__(self, ports):
+		self._logger = logging.getLogger(__name__)
 		self._ports = ports
 		self._iptables = iptables.IpTables()
-		if not self._iptables.usable():
-			raise HandlerError('iptables is not installed. iptables is required to run me correctly')
-		
-		bus.on('init', self.__on_init)
+		if self._iptables.enabled():
+			bus.on('init', self.__on_init)			
+		else:
+			self._logger.warn("iptables is not enabled. ports %s won't be protected by firewall" %  (ports, ))
 		
 	def __on_init(self):
 		bus.on(
@@ -621,6 +633,9 @@ class FarmSecurityMixin(object):
 	
 	def on_HostInit(self, message):
 		# Append new server to allowed list
+		if not self._iptables.enabled():
+			return
+		
 		rules = []
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
@@ -630,6 +645,9 @@ class FarmSecurityMixin(object):
 
 	def on_HostDown(self, message):
 		# Remove terminated server from allowed list
+		if not self._iptables.enabled():
+			return
+		
 		rules = []
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
@@ -692,3 +710,46 @@ class FarmSecurityMixin(object):
 		rules.reverse()
 		for rule in rules:
 			self._iptables.insert_rule(1, rule)
+
+
+def prepare_tags(handler=None, **kwargs):
+	'''
+	@return dict(tags for volumes and snapshots)
+	'''
+	
+	def get_cfg_option(option):
+		id = None
+		cnf = bus.cnf
+		if cnf.rawini.has_option(config.SECT_GENERAL, option):
+			id = cnf.rawini.get(config.SECT_GENERAL, option)
+		return id
+	
+	tags = dict(creator = 'scalarizr')
+	farmid = get_cfg_option(config.OPT_FARM_ID)
+	roleid = get_cfg_option(config.OPT_ROLE_ID)
+	farmroleid = get_cfg_option(config.OPT_FARMROLE_ID)
+	tags.update(farm_id = farmid, role_id = roleid, farm_role_id = farmroleid)
+	
+	if handler:
+		tags['service'] = handler
+	if kwargs:
+		# example: tmp = 1
+		if 'db_replication_role' in kwargs and type(kwargs['db_replication_role']) == bool:
+			kwargs['db_replication_role'] = 'master' if kwargs['db_replication_role'] else 'slave'
+		tags.update(kwargs)	
+		
+	excludes = []
+	for k,v in tags.items():
+		if not v:
+			excludes.append(v)
+			del tags[k]
+		else:
+			try:
+				tags[k] = str(v)
+			except:
+				excludes.append(k)
+				
+	LOG.debug('Prepared tags: %s. Excluded empty tags: %s' % (tags, excludes))
+	return tags
+		
+		

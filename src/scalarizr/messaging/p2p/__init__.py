@@ -88,9 +88,9 @@ class _P2pMessageStore:
 			ex.add_task(self.rotate, 3600, 'Rotate messages sqlite table') # execute rotate task each hour
 
 	def _conn(self):
-		db = bus.db
-		return db.get().get_connection()
-		
+		return bus.db
+	
+	
 	def rotate(self):
 		conn = self._conn()
 		cur = conn.cursor()
@@ -103,7 +103,6 @@ class _P2pMessageStore:
 		
 	def put_ingoing(self, message, queue, consumer_id):
 		conn = self._conn()
-		conn.text_factory = sqlite3.OptimizedUnicode
 		cur = conn.cursor()
 		try:
 			sql = """INSERT INTO p2p_message (id, message, message_id, 
@@ -162,10 +161,7 @@ class _P2pMessageStore:
 			sql = """UPDATE p2p_message SET in_is_handled = ? 
 					WHERE message_id = ? AND is_ingoing = ?"""
 			cur.execute(sql, [1, message_id, 1])
-
-			self._logger.debug("Commiting mark_as_handled")
 			conn.commit()
-			self._logger.debug("Commited mark_as_handled")
 		finally:
 			cur.close()
 
@@ -179,10 +175,7 @@ class _P2pMessageStore:
 						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
 			
 			cur.execute(sql, [message.toxml(), message.id, message.name, queue, 0, 0, 0, sender])
-			
-			self._logger.debug("Commiting put_outgoing")
 			conn.commit()
-			self._logger.debug("Commited put_outgoing")
 		finally:
 			cur.close()
 
@@ -307,8 +300,9 @@ class P2pMessage(Message):
 		self.__dict__["_store"] = P2pMessageStore()
 		if bus.cnf:
 			cnf = bus.cnf; ini = cnf.rawini
+			# XXX: when it is incoming message 
 			self.meta[MetaOptions.SERVER_ID] = ini.get('general', 'server_id')
-	
+
 	def is_handled(self):
 		return self._store.is_handled(self.id)
 	

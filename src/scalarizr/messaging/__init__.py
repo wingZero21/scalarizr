@@ -36,6 +36,7 @@ class MetaOptions(object):
 	SERVER_ID 	= "server_id"
 	PLATFORM 	= "platform" # ec2, vps, rs
 	OS 			= "os" # linux, win, sunos
+	DIST		= "dist"
 	REQUEST_ID 	= "request_id"
 	TIMESTAMP	= "timestamp"
 	SZR_VERSION = "szr_version"

@@ -17,11 +17,15 @@ from Queue import Queue, Empty
 from pysnmp.smi.builder import MibBuilder
 from scalarizr.config import ScalarizrState
 
-(scalr, mtxTable, mtxEntry, mtxIndex, mtxId, mtxName, mtxValue, mtxError, authShutdown) = mibBuilder.importSymbols(
-		'SCALING-METRICS-MIB', 
-		'scalr', 'mtxTable', 'mtxEntry', 'mtxIndex', 'mtxId', 'mtxName', 'mtxValue', 'mtxError', 'authShutdown')
 
-(MibTable, MibScalarInstance) = mibBuilder.importSymbols('SNMPv2-SMI','MibTable', 'MibScalarInstance')
+(Bits, Counter32, Integer32, ModuleIdentity, MibIdentifier, NotificationType,
+ MibScalar, MibTable, MibTableRow, MibTableColumn,
+ Opaque, TimeTicks, enterprises, MibScalarInstance ) = mibBuilder.importSymbols(
+"SNMPv2-SMI", "Bits", "Counter32", "Integer32", "ModuleIdentity", "MibIdentifier",
+"NotificationType", "MibScalar", "MibTable", "MibTableRow",
+"MibTableColumn", "Opaque", "TimeTicks", "enterprises", "MibScalarInstance")
+
+(DisplayString, ) = mibBuilder.importSymbols('SNMPv2-TC', 'DisplayString')
 
 
 CACHE_TIME = 600 # 10 minutes
@@ -41,9 +45,11 @@ class MtxTableImpl(MibTable):
 	CACHE_TIME = 5
 	
 	_last_request_time = None
+
+	def __init__(self, name):
+		MibTable.__init__(self, name)
 	
 	def getNextNode(self, name, idx):
-		logger.debug('Entering mtxTable.getNextNode %s', name)
 		mibBuilder.lastBuildId += 1
 		
 		now = time.time()
@@ -54,7 +60,37 @@ class MtxTableImpl(MibTable):
 		return MibTable.getNextNode(self, name, idx)
 
 
-MtxTableInst = MtxTableImpl(mtxTable.getName())
+class GetAuthShutdown():
+	def __init__(self, i=None):
+		self.i = i
+	def clone(self):
+		script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
+		ret = 1
+		if os.access(script_path, os.X_OK):
+			try:
+				logger.debug('Executing %s', metric.path)
+				proc = Popen(metric.path, stdout=PIPE, stderr=PIPE, close_fds=True)
+				ret = int(proc.communicate()[0])
+			except:
+				pass
+		return authShutdown.getSyntax().clone(ret)
+
+
+
+scalr = ModuleIdentity((1, 3, 6, 1, 4, 1, 36632))
+mtxTable = MtxTableImpl((1, 3, 6, 1, 4, 1, 36632, 5))
+mtxEntry = MibTableRow((1, 3, 6, 1, 4, 1, 36632, 5, 1)).setIndexNames((0, "SCALING-METRICS-MIB", "mtxIndex"))
+mtxIndex = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 1), Integer32()).setMaxAccess("readonly")
+mtxId = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 2), Integer32()).setMaxAccess("readonly")
+mtxName = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 3), DisplayString()).setMaxAccess("readonly")
+mtxValue = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 4), DisplayString()).setMaxAccess("readonly")
+mtxError = MibTableColumn((1, 3, 6, 1, 4, 1, 36632, 5, 1, 5), DisplayString()).setMaxAccess("readonly")
+
+uglyFeatures = MibIdentifier((1, 3, 6, 1, 4, 1, 36632, 6))
+authShutdown = MibScalar((1, 3, 6, 1, 4, 1, 36632, 6, 1), Integer32()).setMaxAccess("readonly")
+
+__authShutdown = MibScalarInstance(authShutdown.name, (0,), GetAuthShutdown(0))
+
 
 def values():
 	global _metrics
@@ -63,14 +99,17 @@ def values():
 	queryenv = bus.queryenv_service
 	cnf = bus.cnf
 	ret = {
-		'mtxTable' : MtxTableInst,
 		'scalr'    : scalr,
+		'mtxTable' : mtxTable,
 		'mtxIndex' : mtxIndex,
 		'mtxId'    : mtxId,
 		'mtxName'  : mtxName,
 		'mtxValue' : mtxValue,
 		'mtxError' : mtxError,
-		'mtxEntry' : mtxEntry
+		'mtxEntry' : mtxEntry,
+		'uglyfeatures': uglyFeatures,
+		'autoshutdown': authShutdown,
+		'__autoshutdown': __authShutdown
 	}
 
 
@@ -196,23 +235,6 @@ def update_metric(queue, index, ret):
 			error
 		))
 	})
-	
-class GetAuthShutdown():
-	def __init__(self, i=None):
-		self.i = i
-	def clone(self):
-		script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
-		ret = 1
-		if os.access(script_path, os.X_OK):
-			try:
-				logger.debug('Executing %s', metric.path)
-				proc = Popen(metric.path, stdout=PIPE, stderr=PIPE, close_fds=True)
-				ret = int(proc.communicate()[0])
-			except:
-				pass
-		return authShutdown.getSyntax().clone(ret)
 
 mibBuilder.mibSymbols["__SCALING-METRICS-MIB"] = values()
 
-__authShutdown = MibScalarInstance(authShutdown.name, (0,), GetAuthShutdown(0))
-mibBuilder.mibSymbols["__SCALING-METRICS-MIB"]['authShutdown'] = __authShutdown
