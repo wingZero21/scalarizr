@@ -104,8 +104,8 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		if self.pid_file:
 			try:
 				wait_until(lambda: os.path.exists(self.pid_file) or self._main_process_started(), sleep=0.2, timeout=30)
-			except:
-				raise initdv2.InitdError("Cannot start Apache (%s)" % self.pid_file)
+			except (Exception, BaseException), e:
+				raise initdv2.InitdError("Cannot start Apache (%s)" % str(e))
 		time.sleep(0.5)
 		return True
 
@@ -122,10 +122,19 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 		return ret
 	
 	def _main_process_started(self):
+		res = False
 		bin = '/usr/sbin/apache2' if disttool.is_debian_based() else '/usr/sbin/httpd'
 		group = 'www-data' if disttool.is_debian_based() else 'apache'
-		out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'))[0]
-		return True if len([p for p in out.split('\n') if bin in p]) else False
+		try:
+			'''
+			_first_ scalarizr start returns error:
+			(ps (code: 1) <out>:  <err>:  <args>: ('ps', '-G', 'www-data', '-o', 'command', '--no-headers')
+			'''
+			out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'))[0]
+			res = True if len([p for p in out.split('\n') if bin in p]) else False
+		except:
+			pass
+		return res
 
 initdv2.explore('apache', ApacheInitScript)
 
