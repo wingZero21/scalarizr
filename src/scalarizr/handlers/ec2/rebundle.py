@@ -11,7 +11,7 @@ from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 from scalarizr.platform.ec2 import ebstool
 from scalarizr.storage.transfer import Transfer
 from scalarizr.handlers import rebundle as rebundle_hdlr
-
+from scalarizr.storage import Storage
 
 from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
@@ -615,16 +615,16 @@ class RebundleEbsStrategy(RebundleStratery):
 		
 		self._succeed = True
 		return ami_id
-			
+
 	def cleanup(self):
 		RebundleStratery.cleanup(self)
 		if not self._succeed and self._snap:
 			LOG.debug('Deleting snapshot %s', self._snap.id)
 			self._snap.delete()
 
-		
-		
-	
+
+
+
 class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 	'''
 	This class encapsulate functionality to create a EBS from a root volume 
@@ -655,139 +655,121 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		return ebstool.attach_volume(self._ec2_conn, self.ebs_volume, 
 				self._instance_id, self.devname, to_me=True, logger=LOG)[1]
 
-	"""
-	for work with MBR read|write from|into dev.mbr
-	def _read_mbr_list(self, PATH='/tmp/sda.mbr.bak'):
-		with open(PATH, 'r+') as f:
-			mbr = f.read().split('\n')
-	
-		newmbr = []
-		for line in mbr:
-			if line.strip().startswith('/dev'):
-				(key, value) = map(string.strip, line.split(':'))
-				value = map(string.strip, value.split(','))
-				tmp = []
-				for val in value:
-					tmp.append(map(string.strip, val.split('='))) if '=' in val else tmp.append(val)
-				newmbr.append([key, tmp])
-			else:
-				newmbr.append(line)
-		return newmbr
-		'''
-		['#some coment',
-		'',
-		['/dev/sda1',
-  		[['start', '63'], ['size', '192717'], ['Id', '83'], 'bootable']],
- 		['/dev/sda2', [['start', '192780'], ['size', '21607425'], ['Id', '83']]],
-		['/dev/sda3', [['start', '21800205'], ['size', '4209030'], ['Id', '82']]],
-		['/dev/sda4', [['start', '0'], ['size', '0'], ['Id', '0']]]]
-		'''	
-	def _write_mbr_from_list(self, PATH, mbr_list):
-		mbr = []
-		for line in mbr_list:
-			if isinstance(line, list):
-				tmp = ''
-				for el in line:
-					if isinstance(el, list):
-						for k in el:
-							if '=' in tmp: 
-								tmp += ','
-							if isinstance(k, list):
-								tmp += ' %s= %s' % (k[0], k[1])
-							else:
-								tmp += ' %s' % k
-					elif isinstance(el, basestring):
-						tmp += '%s : ' % el
-				mbr.append('%s\n' % tmp)		
-			elif isinstance(line, basestring):
-				mbr.append('%s\n' % line)
+
+
+	def _read_pt(self, dev_name):
+		""" 
+		rtype: dict partition table one of device, example: dev_name='/dev/sda'
+
+		{'/dev/sdf1': {'bootable': True, 'start': '63', 'Id': '83', 'size': '192717'},
+		 '/dev/sdf3': {'start': '21800205', 'Id': '82', 'size': '4209030'},
+		 ...
+		 '/dev/sdf4': {'start': '0', 'Id': '0', 'size': '0'}}
+		"""
+
+		pt = [el for el in [dev for dev in system2(('sfdisk', '-d', dev_name),
+					)[0].split('\n') if dev.startswith('/dev')]] 
+		res = {}
+		for line in pt:
+			dev_name, params = map(string.strip, line.split(':'))
+			params = map(string.strip, params.split(','))
+			res[dev_name] = {}
+			for val in params:
+				tmp = map(string.strip, val.split('=')) if '=' in val else [val.strip(), True]
+				res[dev_name].update({tmp[0]:tmp[1]})
+		return res
+
+	def make_some_partitions(self):
 		
-		with open(PATH, 'w+') as f:
-			mbr = f.writelines(mbr)"""
-
-
-	def make(self):
-		"""
-		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)", 
-				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
-		rebundle_hdlr.LinuxImage.make(self)
-		"""
-
-		#TODO: or if some partition in EBS volume:
-
-
-		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)", 
-				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
-		#rebundle_hdlr.LinuxImage.make(self)
-
+		#TODO: delete this hardcode
+		#dd if=/dev/zero of=/dev/sdg bs=512 count=1
+		#sfdisk -R /dev/sdg
 		self.devname = self._create_image()
+		#'/dev/sdg'
 		LOG.debug('new device name %s', self.devname)
 
-		self._format_image()
+		#self._format_image()
 		system2("sync", shell=True)  # Flush so newly formatted filesystem is ready to mount.
 		LOG.debug('sync data')
 
-		rdev_partition = firstmatched(lambda x: x.mpoint == '/', filetool.df()).device
 		""" rdev_partition is like `/dev/sda1` """
-		rdev_name = rdev_partition[:-1]
+		rdev_partition = firstmatched(lambda x: x.mpoint == '/', filetool.df()).device
 		""" rdev_name is like '/dev/sda' """
+		rdev_name = rdev_partition[:-1]
 		LOG.debug('root device: `%s` rdev_partition: `%s`', rdev_name, rdev_partition)
 
-		#copy Partition Table from root device to new EBS volume
+		""" copy Partition Table from root device to new EBS volume """
 		#system2(('sfdisk', '-d', rdev_name, '|', 'sfdisk', self.devname), )
-		
-		system2(('dd', 'if=%s'%rdev_name, 'of=%s'%self.devname, 'bs=512', 'count=1'), )
-		system2('partprobe')
+		system2(('dd', 'if=%s'%rdev_name, 'of=%s'%self.devname, 'bs=512', 'count=1'))
+		system2(('sfdisk', '-R', self.devname))
+		wait_until(lambda: os.path.exists('%s1'%self.devname), sleep=0.2,
+			 timeout=5, start_text='check refresh partition table on %s'%self.devname,
+			 error_text='device `%s` not exist'%self.devname)
 		LOG.debug('copied full MBR from %s to %s', rdev_name, self.devname)
-		
-		from scalarizr.storage import Storage
-		Storage.lookup_filesystem().mkfs('/dev/sdf1')
-		
-		#self._mount_image()
-		#mounting partitions
 
-		""" from_devs - list with device, source which will be copying """
+		""" list with device, source which will be copying """
 		from_devs = [dev for dev in filetool.df() if dev.device.startswith(rdev_name)]
 		LOG.debug('list from_devs `%s`', from_devs)
 		#list all partitions of device, with partition mounting as root
 		#from_devnames = list(set([dev.device for dev in from_devs]))
 		#LOG.debug('LinuxEbsImage.make: list_rdevnames `%s`', from_devnames)
-		to_devs = [filter(None, map(string.strip, el.split(' '))) for el in [dev for dev in system2(('sfdisk', '-l', self.devname))[0].split('\n') if dev.startswith('/dev')]]
-		""" to_devs - list with device distination, which will be copying data to
-			this device from source device """
+
+		""" Dict with device(distination) partition table params. """
+		to_devs = self._read_pt(self.devname)
 		LOG.debug('list to_devs `%s`', to_devs)
-		
-		#if os.path.basename(from_devs[0].device)[:1] == os.path.basename(from_devs[0].device)[:1]   
 
+		""" List of device for detecting fs type"""
+		lparts = [line.split() for line in system2(('df', '-hT'),)[0].split('\n') if line.startswith(rdev_name)]
 
+		""" Make fs on volume's partitions """
+		for to_dev in to_devs.keys():
+			try:
+				part_id = int(to_devs[to_dev]['Id'])
+			except:
+				raise HandlerError("Cant detect type device `%s` with Id=`%s`", to_dev, to_devs[to_dev]['Id'])
+
+			""" try detect type_fs with `df -hT` of root device """
+			type_fs = None
+			for part in lparts:
+				""" compaire partition's names by last symbol /dev/sda1 and /dev/sdf1"""
+				if len(part[0]) == len(to_dev) and part[0][-1] == to_dev[-1]:
+					type_fs = part[1]
+					break
+
+			""" check partition Id(Hex) and create fs """
+			if part_id != 0 and part_id != 82:
+				Storage.lookup_filesystem(type_fs or 'ext3').mkfs(to_dev)
+			elif part_id == 82:
+				""" swap partition """
+				out, err, ret_code = system2(('mkswap', '-L', 'swap', to_dev),)
+				if ret_code:		
+					raise HandlerError("Can't create fs on device %s:\n%s" % 
+									(to_dev, err))
+
+		#if os.path.basename(from_devs[0].device)[:1] == os.path.basename(from_devs[0].device)[:1]
+		""" mounting and copy partitions """
 		for from_dev in from_devs:
 			num = os.path.basename(from_dev.device)[-1]
 
 			if self._mtab.contains(mpoint=os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num))) or\
 					self._mtab.contains(mpoint=os.path.join(self.mpoint, os.path.basename(from_dev.device))):
 				raise HandlerError("Partition already mounted")
-
+			""" dev like `sdg1` """
 			dev = '%s%s' % (os.path.basename(self.devname), num)
-			""" dev like `/dev/sdg1` """
+
 			to_mpoint = os.path.join(self.mpoint, dev)
 
 			LOG.debug('try mount dev(distination) `/dev/%s` like `%s`', dev, to_mpoint)
-			fstool.mount('/dev/%s' % dev, to_mpoint)
 			""" mount partition seems like /mnt/img-mnt/sdh1 """
-
-			if os.path.basename(from_dev.device) == os.path.basename(rdev_partition):
-				from_mpoint =os.path.join(self.mpoint, os.path.basename(rdev_name))
-
+			fstool.mount('/dev/%s' % dev, to_mpoint)
+			
+			if os.path.basename(from_dev.device) != os.path.basename(rdev_partition):
+				from_mpoint =os.path.join(self.mpoint, os.path.basename(from_dev.device))
 				LOG.debug('try mount dev(source) `%s` like `%s`', from_dev.device, from_mpoint)
+				""" mount old volume partition """
 				fstool.mount(from_dev.device, from_mpoint)
-				#mount old volume partition
-
 				#copy all consitstant
 				self._copy_rec(from_mpoint, to_mpoint)
-				
-				
-				#storage.Storage.lookup_filesystem('ext3').mkfs('/dev/sdf2')
-				
 				LOG.debug('Copied sucesfull from %s to %s', from_mpoint, to_mpoint)
 			else:
 				old_mpoint = self.mpoint
@@ -797,12 +779,23 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 				LOG.debug('Copied sucesfull from %s to %s', self._volume, self.mpoint)
 				self.mpoint = old_mpoint
 
-		#TODO: check correct copying not shore about it, and mpoint return like `/mnt/img-mnt`. Is it realy need?
-
-		#self._make_special_dirs()
-		#self._copy_rec(self._volume, self.mpoint)
+				#TODO: check correct copying not shore about it, and mpoint return like `/mnt/img-mnt`. Is it realy need?
 		system2("sync", shell=True) #Flush buffers
+		self.mpoint = os.path.join(self.mpoint, '%s%s'%(os.path.basename(self.devname),
+					os.path.basename(rdev_partition)[-1]))
 		return self.mpoint
+		
+	def make(self):
+		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)", 
+				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
+		
+		#TODO: del hardcode: if some partition in EBS volume else rebundle_hdlr.LinuxImage.make(self)
+		one_partition = False
+
+		if one_partition:
+			rebundle_hdlr.LinuxImage.make(self)
+		else:
+			self.make_some_partitions()
 
 
 	def cleanup(self):
