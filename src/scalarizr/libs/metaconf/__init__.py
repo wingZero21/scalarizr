@@ -357,7 +357,7 @@ class Configuration:
 		return self.get(path).lower() in ["1", "yes", "true", "on"]
 	
 	def get_list(self, path):
-		return list(el.text for el in self._find_all(path))
+		return list(el.text for el in self._find_all(path) if el.tag)
 	
 	def get_dict(self, path):
 		return [x.attrib for x in self._find_all(path) if x.attrib]

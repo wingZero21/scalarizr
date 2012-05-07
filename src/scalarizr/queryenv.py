@@ -16,7 +16,6 @@ from scalarizr.util import cryptotool
 from scalarizr.util import urltool
 
 
-
 class QueryEnvError(Exception):
 	pass
 
@@ -118,7 +117,6 @@ class QueryEnvService(object):
 		parameters = {}
 		if name:
 			parameters["name"] = name
-			self._logger.warn('\n\nrole_name=%s\n'%name)
 		return {'params':self._request("list-role-params", parameters, self._read_list_role_params_response)}
 
 
@@ -207,8 +205,15 @@ class QueryEnvService(object):
 				host.index = int(host_el.getAttribute("index"))
 				if host_el.hasAttribute("replication-master"):
 					host.replication_master = bool(int(host_el.getAttribute("replication-master")))
+				if host_el.hasAttribute("shard-index"):
+					host.shard_index = int(host_el.getAttribute("shard-index"))
+				if host_el.hasAttribute("replica-set-index"):
+					host.replica_set_index = int(host_el.getAttribute("replica-set-index"))
+				if host_el.hasAttribute("status"):
+					host.status = host_el.getAttribute("status")
 				host.internal_ip = host_el.getAttribute("internal-ip")
 				host.external_ip = host_el.getAttribute("external-ip")
+				host.status = host_el.getAttribute("status")
 				role.hosts.append(host)
 				
 			ret.append(role)
@@ -442,19 +447,23 @@ class RoleHost(object):
 	replication_master = False
 	internal_ip = None
 	external_ip	= None
+	shard_index = None
 	
-	def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None):
+	def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None, shard_index=None):
 		self.index = index
 		self.replication_master = replication_master
 		self.internal_ip = internal_ip
 		self.external_ip = external_ip
+		self.shard_index = shard_index
 		
 	
 	def __repr__(self):
 		return "index = " + str(self.index) \
 	+ "; replication_master = " + str(self.replication_master) \
 	+ "; internal_ip = " + str(self.internal_ip) \
-	+ "; external_ip = " + str(self.external_ip)
+	+ "; external_ip = " + str(self.external_ip) \
+	+ "; shard_index = " + str(self.shard_index)
+
 	
 class Script(object):
 	asynchronous = False

@@ -1,10 +1,11 @@
 '''
 Created on Sep 28, 2011
 '''
-
+from __future__ import with_statement
 from collections import namedtuple
 import string
 import re
+
 
 HostLine=namedtuple('host', ['ipaddr', 'hostname', 'aliases'])
 

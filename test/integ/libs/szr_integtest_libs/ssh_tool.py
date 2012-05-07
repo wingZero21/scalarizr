@@ -86,7 +86,7 @@ class SshManager:
 		while channel.recv_ready():
 			out += channel.recv(1)
 			
-		if 'Please login' in out and 'ubuntu' in out:
+		if 'Please login' in out and "ubuntu" in out:
 			self.user = 'ubuntu'
 			self.connect()
 		else:

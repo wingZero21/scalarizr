@@ -5,6 +5,8 @@ Created on Jul 23, 2010
 @author: Dmytro Korsakov
 '''
 
+from __future__ import with_statement
+
 # Core
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours
@@ -142,6 +144,12 @@ class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 		return message.name in (Messages.HOST_INIT, Messages.HOST_DOWN, Messages.UPDATE_SERVICE_CONFIGURATION) \
 				and BEHAVIOUR in behaviour
 	
+	def get_initialization_phases(self, hir_message):
+		self._phase_memcached = 'Configure Memcached'
+		return {'before_host_up': [{'name': self._phase_memcached, 'steps': []}]}
+	
 	def on_before_host_up(self, message):
 		# Service configured
-		bus.fire('service_configured', service_name=SERVICE_NAME)
+		with bus.initialization_op as op:
+			with op.phase(self._phase_memcached):
+				bus.fire('service_configured', service_name=SERVICE_NAME)

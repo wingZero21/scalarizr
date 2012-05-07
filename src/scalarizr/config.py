@@ -11,18 +11,25 @@ from scalarizr.util import validators, filetool
 from ConfigParser import ConfigParser, RawConfigParser, NoOptionError, NoSectionError
 from getpass import getpass
 import os, sys, logging
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
 
 SECT_GENERAL = "general"
 OPT_SERVER_ID = "server_id"
 OPT_BEHAVIOUR = "behaviour"
 OPT_ROLE_NAME = "role_name"
+OPT_FARMROLE_ID = 'farm_role_id'
 OPT_STORAGE_PATH = "storage_path"
 OPT_CRYPTO_KEY_PATH = "crypto_key_path"
 OPT_FARM_CRYPTO_KEY_PATH = "farm_crypto_key_path"
 OPT_PLATFORM = "platform"
 OPT_QUERYENV_URL = "queryenv_url"
 OPT_SCRIPTS_PATH = "scripts_path"
+OPT_ROLE_ID = 'role_id'
+OPT_FARM_ID = 'farm_id'
 
 SECT_MESSAGING = "messaging"
 OPT_ADAPTER = "adapter"
@@ -268,9 +275,9 @@ class ScalarizrOptions(Configurator.Container):
 		
 		def _set_value(self, v):
 			v = split(v.strip())
-			bhvs = BuiltinBehaviours.values()
-			if any(vv not in bhvs for vv in v):
-				raise ValueError('unknown behaviour')
+			#bhvs = BuiltinBehaviours.values()
+			#if any(vv not in bhvs for vv in v):
+			#	raise ValueError('unknown behaviour')
 			self._value = ','.join(v)
 		
 		value = property(Configurator.Option._get_value, _set_value)
@@ -751,7 +758,7 @@ class ScalarizrCnf(Observable):
 	def load_ini(self, name, configparser=None):
 		name = self._name(name)
 		if not name in self._loaded_ini_names:
-			files = (os.path.join(self._priv_path, name), os.path.join(self._pub_path, name))
+			files = (os.path.join(self._pub_path, name), os.path.join(self._priv_path, name))
 			ini = configparser or self.rawini 
 			for file in files:
 				if os.path.exists(file):
@@ -919,6 +926,50 @@ class ScalarizrCnf(Observable):
 		self._explored_keys[(name, private)] = title
 
 
+class State(object):
+	
+	def _conn(self):
+		return bus.db
+	
+	
+	def __getitem__(self, name):
+		conn = self._conn()
+		cur = conn.cursor()
+		try:
+			cur.execute("SELECT value FROM state WHERE name = ?", [name])
+			ret = cur.fetchone()
+			try:
+				return json.loads(ret['value'])
+			except (TypeError, KeyError, ValueError):
+				return ret
+		finally:
+			cur.close()
+
+	def __setitem__(self, name, value):
+		conn = self._conn()
+		cur = conn.cursor()
+		try:
+			cur.execute("INSERT INTO state VALUES (?, ?)", [name, json.dumps(value) ])
+		finally:
+			cur.close()
+		conn.commit()
+
+	def get_all(self, name):
+		conn = self._conn()
+		cur = conn.cursor()
+		try:
+			cur.execute("SELECT * FROM state WHERE name LIKE '%s%%'" % name)
+			ret = {}
+			for row in cur.fetchall():
+				ret[row['name']] = row['value']
+			return ret
+		finally:
+			cur.close()
+
+
+STATE = State()
+
+
 class BuiltinBehaviours:
 	APP = 'app'
 	WWW = 'www'
@@ -929,15 +980,17 @@ class BuiltinBehaviours:
 	RABBITMQ = 'rabbitmq'
 	REDIS = 'redis'
 	HAPROXY = 'haproxy'
-
+	MONGODB = 'mongodb'
+	CHEF = 'chef'
+	
 	CF_ROUTER = 'cf_router'
 	CF_CLOUD_CONTROLLER = 'cf_cloud_controller'
 	CF_HEALTH_MANAGER = 'cf_health_manager'
 	CF_DEA = 'cf_dea'
 	CF_SERVICE = 'cf_service'
 	
+	
 	CUSTOM = 'custom'
-
 	
 	@staticmethod
 	def values():
@@ -951,6 +1004,7 @@ class BuiltinPlatforms:
 	EUCA 		= 'eucalyptus'	
 	RACKSPACE 	= 'rackspace'
 	NIMBULA		= 'nimbula'
+	CLOUDSTACK	= 'cloudstack'
 
 	@staticmethod
 	def values():

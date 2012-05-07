@@ -5,6 +5,8 @@ Created on Mar 3, 2010
 @author: Dmytro Korsakov
 '''
 
+from __future__ import with_statement
+
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler

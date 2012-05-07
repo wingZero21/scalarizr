@@ -3,29 +3,37 @@ Created on Apr 6, 2011
 
 @author: marat
 '''
-from scalarizr.bus import bus
-from scalarizr.messaging import Messages, Queues
-from scalarizr.handlers import Handler, script_executor
-from scalarizr.util import system2, disttool, dicts
-from scalarizr.queryenv import Script
-import tempfile
-import shutil
-import sys
+
+from __future__ import with_statement
 
 import os
+import sys
+import shutil
 import logging
 import urllib2
-from urlparse import urlparse
+import tempfile
 import mimetypes
+from urlparse import urlparse
+
+from scalarizr.bus import bus
+from scalarizr.messaging import Messages, Queues
+from scalarizr.handlers import Handler, script_executor, operation
+from scalarizr.util import system2, disttool, dicts, filetool
+
+
 
 
 class SourceError(BaseException):
 	pass
+
+
 class UndefinedSourceError(SourceError):
 	pass
 
+
 def get_handlers():
 	return (DeploymentHandler(), )
+
 
 class DeploymentHandler(Handler):
 
@@ -34,46 +42,91 @@ class DeploymentHandler(Handler):
 		self._log_hdlr = DeployLogHandler()
 		self._script_executor = None
 
+		self._phase_deploy = 'Deploy'
+		self._step_execute_pre_deploy_script = 'Execute pre deploy script'
+		self._step_execute_post_deploy_script = 'Execute post deploy script'
+		self._step_update_from_scm = 'Update from SCM'
+		
+		bus.on(init=self.on_init)
+
+	def on_init(self):
+		bus.on(host_init_response=self.on_host_init_response)
+		
+
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return message.name == Messages.DEPLOY
+
+	def get_initialization_phases(self, hir_message):
+		if 'deploy' in hir_message.body:
+			return {'host_init_response': [self._get_phase_definition(hir_message)]}
+		
+	def on_host_init_response(self, message):
+		if 'deploy' in message.body:
+			self.on_Deploy(self.new_message(Messages.DEPLOY, message.body['deploy']), define_operation=False)
+
 	def _exec_script(self, name=None, body=None, exec_timeout=None):
 		if not self._script_executor:
 			self._script_executor = script_executor.get_handlers()[0]
 			
 		self._logger.info('Executing %s script', name)
 		kwargs = dict(name=name, body=body, exec_timeout=exec_timeout or 3600)
-		self._script_executor.exec_scripts_on_event(scripts=(Script(**kwargs), ))
+		self._script_executor.execute_scripts(scripts=(script_executor.Script(**kwargs), ))
 	
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name == Messages.DEPLOY
-	
-	def on_Deploy(self, message):
-		try:
-			msg_body = dicts.encode(message.body, encoding='ascii')
-						
-			assert 'deploy_task_id' in msg_body, 'deploy task is undefined'
-			assert 'source' in msg_body, 'source is undefined'
-			assert 'type' in msg_body['source'], 'source type is undefined'
-			assert 'remote_path' in msg_body, 'remote path is undefined'
-			assert 'body' in msg_body['pre_deploy_routines'] if 'pre_deploy_routines' in msg_body else True
-			assert 'body' in msg_body['post_deploy_routines'] if 'post_deploy_routines' in msg_body else True
-
-			self._log_hdlr.deploy_task_id = msg_body['deploy_task_id']
-			self._logger.addHandler(self._log_hdlr)
-
-			src_type = msg_body['source'].pop('type')
-			src = Source.from_type(src_type, **msg_body['source'])
-			if msg_body.get('pre_deploy_routines') and msg_body['pre_deploy_routines'].get('body'):
-				self._exec_script(name='PreDeploy', **msg_body['pre_deploy_routines'])
-			src.update(msg_body['remote_path'])
-			if msg_body.get('post_deploy_routines') and msg_body['post_deploy_routines'].get('body'):
-				self._exec_script(name='PostDeploy', **msg_body['post_deploy_routines'])
+	def _get_phase_definition(self, message):
+		steps = []
+		if 'pre_deploy_routines' in message.body:
+			steps.append(self._step_execute_pre_deploy_script)
+		steps.append(self._step_update_from_scm)
+		if 'post_deploy_routines' in message.body:
+			steps.append(self._step_execute_post_deploy_script)
 			
-			self.send_message(
-				Messages.DEPLOY_RESULT, 
-				dict(
-					status='ok', 
-					deploy_task_id=msg_body['deploy_task_id']
+		return {'name': self._phase_deploy, 'steps': steps}
+		
+	
+	def on_Deploy(self, message, define_operation=True):
+		msg_body = dicts.encode(message.body, encoding='ascii')		
+		
+		try:
+			if define_operation:
+				op = operation(name='Deploy')
+				op.phases = self._get_phase_definition(message)
+				op.define()
+			else:
+				op = bus.initialization_op
+			
+			with op.phase(self._phase_deploy):
+							
+				assert 'deploy_task_id' in msg_body, 'deploy task is undefined'
+				assert 'source' in msg_body, 'source is undefined'
+				assert 'type' in msg_body['source'], 'source type is undefined'
+				assert 'remote_path' in msg_body and msg_body['remote_path'], 'remote path is undefined'
+				assert 'body' in msg_body['pre_deploy_routines'] if 'pre_deploy_routines' in msg_body else True
+				assert 'body' in msg_body['post_deploy_routines'] if 'post_deploy_routines' in msg_body else True
+	
+				self._log_hdlr.deploy_task_id = msg_body['deploy_task_id']
+				self._logger.addHandler(self._log_hdlr)
+	
+				src_type = msg_body['source'].pop('type')
+				src = Source.from_type(src_type, **msg_body['source'])
+				
+				if msg_body.get('pre_deploy_routines') and msg_body['pre_deploy_routines'].get('body'):
+					with op.step(self._step_execute_pre_deploy_script):
+						self._exec_script(name='PreDeploy', **msg_body['pre_deploy_routines'])
+						
+				with op.step(self._step_update_from_scm):
+					src.update(msg_body['remote_path'])
+					
+				if msg_body.get('post_deploy_routines') and msg_body['post_deploy_routines'].get('body'):
+					with op.step(self._step_execute_post_deploy_script):
+						self._exec_script(name='PostDeploy', **msg_body['post_deploy_routines'])
+	
+				self.send_message(
+					Messages.DEPLOY_RESULT, 
+					dict(
+						status='ok', 
+						deploy_task_id=msg_body['deploy_task_id']
+					)
 				)
-			)
 			
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
@@ -96,7 +149,7 @@ class Source(object):
 	
 	@staticmethod
 	def from_type(srctype, **init_kwargs):
-		clsname = srctype[0].upper() + srctype.lower()[1:] + 'Source'
+		clsname = srctype.capitalize() + 'Source'
 		assert clsname in globals(), 'implementation class %s of source type %s is undefined' % (clsname, srctype)
 		return globals()[clsname](**init_kwargs)
 
@@ -130,8 +183,13 @@ class SvnSource(Source):
 			except IndexError:
 				raise SourceError('Cannot extract Subversion URL. Text:\n %s', out)
 			if svn_url != self.url:
-				raise SourceError('Working copy %s is checkouted from different repository %s' % (workdir, svn_url))
-			do_update = True
+				#raise SourceError('Working copy %s is checkouted from different repository %s' % (workdir, svn_url))
+				self._logger.info('%s is not origin of %s (%s is)', self.url, workdir, svn_url)
+				self._logger.info('Remove all files in %s and checkout from %s', workdir, self.url)
+				shutil.rmtree(workdir)
+				os.mkdir(workdir)
+			else:
+				do_update = True
 			
 		args = [
 			'svn' , 
@@ -164,16 +222,15 @@ class SvnSource(Source):
 	
 
 class GitSource(Source):
-	EXECUTABLE = '/usr/bin/git'	
-	
-	def __init__(self, url=None, ssl_certificate=None, ssl_private_key=None, ssl_ca_info=None, ssl_no_verify=None, executable=None):
+	EXECUTABLE = '/usr/bin/git'
+	ssh_tpl = '#!/bin/bash\nexec ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i %s "$@"'
+
+	def __init__(self, url, ssh_private_key=None, executable=None):
 		self._logger = logging.getLogger(__name__)
 		self.url = url
-		self.ssl_certificate = ssl_certificate
-		self.ssl_private_key = ssl_private_key
-		self.ssl_ca_info = ssl_ca_info
-		self.ssl_no_verify = ssl_no_verify
 		self.executable = executable or self.EXECUTABLE
+		self.private_key = ssh_private_key
+
 
 	def update(self, workdir):
 		if not os.access(self.executable, os.X_OK):
@@ -183,31 +240,50 @@ class GitSource(Source):
 			elif disttool.is_redhat_based():
 				system2(('yum', '-y', 'install', 'git'))
 			else:
-				raise SourceError('Cannot install Git. Unknown distribution %s' % 
+				raise SourceError('Cannot install Git. Unknown distribution %s' %
 								str(disttool.linux_dist()))
-		
+
+		if not os.path.exists(workdir):
+			self._logger.info('Creating destination directory')
+			os.makedirs(workdir)
+
+		tmpdir = tempfile.mkdtemp()
 		env = {}
-		cnf = bus.cnf		
-		if self.ssl_certificate and self.ssl_private_key:
-			env['GIT_SSL_CERT'] = cnf.write_key('git-client.crt', self.ssl_certificate)
-			env['GIT_SSL_KEY'] = cnf.write_key('git-client.key', self.ssl_private_key)
-		if self.ssl_ca_info:
-			env['GIT_SSL_CAINFO'] = cnf.write_key('git-client-ca.crt', self.ssl_ca_info)
-		if self.ssl_no_verify:
-			env['GIT_SSL_NO_VERIFY'] = '1'
-		
+
 		try:
-			self._logger.info('Updating source from %s into working dir %s', self.url, workdir)		
+			if self.private_key:
+				pk_path = os.path.join(tmpdir, 'pk.pem')
+				filetool.write_file(pk_path, self.private_key)
+				os.chmod(pk_path, 0400)
+
+				git_ssh_path = os.path.join(tmpdir, 'git_ssh.sh')
+				filetool.write_file(git_ssh_path, self.ssh_tpl % pk_path)
+				os.chmod(git_ssh_path, 0755)
+
+				env.update(dict(GIT_SSH=git_ssh_path))
+
 			if os.path.exists(os.path.join(workdir, '.git')):
-				out = system2(('git', 'pull'), cwd=workdir, env=env)[0]
+				origin_url = system2(('git', 'config', '--get', 'remote.origin.url'), cwd=workdir, raise_exc=False)[0]
+				if origin_url.strip() != self.url.strip():
+					self._logger.info('%s is not origin of %s (%s is)', self.url, workdir, origin_url)
+					self._logger.info('Remove all files in %s and checkout from %s', workdir, self.url )
+					shutil.rmtree(workdir)
+					os.mkdir(workdir)
+
+					out, err, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
+				else:
+					self._logger.info('Updating directory %s (git-pull)', workdir)
+					out, err, ret_code = system2(('git', 'pull'), env=env, cwd=workdir)
 			else:
-				out = system2(('git', 'clone', self.url, workdir), env=env)[0]
-			self._logger.info(out)
-			
+				self._logger.info('Checkout from %s', self.url)
+				out, err, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
+
+			if ret_code:
+				raise Exception('Git failed to clone repository. %s' % out)
+
+			self._logger.info('Successfully deployed %s from %s', workdir, self.url)
 		finally:
-			for var in ('GIT_SSL_CERT', 'GIT_SSL_KEY', 'GIT_SSL_CAINFO'):
-				if var in env:
-					os.remove(env[var])
+			shutil.rmtree(tmpdir)
 		
 		
 
@@ -294,7 +370,7 @@ class HttpSource(Source):
 			
 class DeployLogHandler(logging.Handler):
 	def __init__(self, deploy_task_id=None):
-		logging.Handler.__init__(self)
+		logging.Handler.__init__(self, logging.INFO)
 		self.deploy_task_id = deploy_task_id
 		self._msg_service = bus.messaging_service
 		

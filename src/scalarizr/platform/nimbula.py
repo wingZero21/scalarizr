@@ -5,7 +5,7 @@ Created on Feb 14, 2011
 '''
 from scalarizr.libs import nimbula
 from scalarizr.util import wait_until, filetool
-from . import Ec2LikePlatform, PlatformError
+from . import Platform, Ec2LikePlatform, PlatformError
 import os
 
 def get_platform():
@@ -16,9 +16,14 @@ class NimbulaPlatform(Ec2LikePlatform):
 	
 	name = "nimbula"
 	
+	features = []
+	
 	_userdata_key = 'latest/user-data'
 	_metadata_key = 'latest/meta-data'
 	
+	get_user_data = Platform.get_user_data
+	
+	'''
 	def get_user_data(self, key=None):
 		"""
 		Since userdata is not implemented on Nimbula cloud yet, .user-data file is used.		
@@ -41,6 +46,7 @@ class NimbulaPlatform(Ec2LikePlatform):
 			return self._userdata[key] if key in self._userdata else None
 		else:
 			return self._userdata
+	'''
 		
 	def set_access_data(self, access_data):
 		Ec2LikePlatform.set_access_data(self, access_data)

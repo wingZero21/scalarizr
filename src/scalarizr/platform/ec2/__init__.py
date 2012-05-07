@@ -1,6 +1,6 @@
 
 from scalarizr.bus import bus
-from scalarizr.platform import Ec2LikePlatform, PlatformError
+from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
 from scalarizr.storage.transfer import Transfer
 from .storage import S3TransferProvider
 
@@ -43,14 +43,17 @@ class Ec2Platform(Ec2LikePlatform):
 		"us-east-1" 		: "ec2.amazonaws.com",
 		"us-west-1" 		: "ec2.us-west-1.amazonaws.com",
 		"us-west-2" 		: "ec2.us-west-2.amazonaws.com",
+		"sa-east-1"			: "ec2.sa-east-1.amazonaws.com",
 		"eu-west-1" 		: "ec2.eu-west-1.amazonaws.com",
 		"ap-southeast-1" 	: "ec2.ap-southeast-1.amazonaws.com",
 		"ap-northeast-1" 	: "ec2.ap-northeast-1.amazonaws.com"
+		
 	}
 	s3_endpoints = {
 		'us-east-1' 		: 's3.amazonaws.com',
 		'us-west-1' 		: 's3-us-west-1.amazonaws.com',
 		'us-west-2' 		: 's3-us-west-2.amazonaws.com',
+		"sa-east-1"			: "s3-sa-east-1.amazonaws.com",
 		'eu-west-1' 		: 's3.amazonaws.com',
 		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com',
 		'ap-northeast-1' 	: 's3-ap-northeast-1.amazonaws.com'
@@ -66,6 +69,8 @@ class Ec2Platform(Ec2LikePlatform):
 	_logger = None	
 	_ec2_cert = None
 	_cnf = None
+	
+	features = [PlatformFeatures.SNAPSHOTS, PlatformFeatures.VOLUMES]
 	
 	def get_account_id(self):
 		return self.get_access_data("account_id").encode("ascii")

@@ -4,7 +4,7 @@ Created on Jul 21, 2010
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.util import system2
+from scalarizr.util import system2, disttool, UtilError
 
 import os
 import logging
@@ -20,6 +20,7 @@ P_AH = "ah"
 P_SCTP = "sctp"
 P_ALL = "all"
 PROTOCOLS = (P_TCP, P_UDP, P_UDPLITE, P_ICMP, P_ESP, P_AH, P_SCTP, P_ALL)
+CHKCONFIG = '/sbin/chkconfig'
 
 class RuleSpec(object):
 	specs = None
@@ -148,35 +149,67 @@ class IpTables(object):
 		
 	def usable(self):
 		return os.access(self.executable, os.X_OK)
+	
+	def enabled(self):
+		if disttool.is_redhat_based():
+			return self._chkconfig()
+		else:
+			return self.usable()
 
+	def _chkconfig(self):
+		'''
+		returns True if iptables is enabled on any runlevel
+		redhat-based only
+		'''
+		
+		if not os.path.exists(CHKCONFIG):
+			raise UtilError('chkconfig not found')
+		out, err, retcode = system2([CHKCONFIG, '--list', 'iptables'])
+		if err:
+			raise UtilError(str(err))
+		if out:
+			raw = out.split('\n')
+			for row in raw:
+				if row:
+					data = row.split('\t')
+					if len(data) == 8:
+						service = data.pop(0).strip()
+						levels = []
+						for level in data:
+							levels.append(True if 'on' in level else False)
+						if len(levels) == 7 and service=='iptables' and any(levels):
+							return True
+		return False
+		
 
 def _is_rule_not_exist(jump, port, protocol):
-	'''raise exception if current rule exist'''
-	jump, port, protocol = str(jump).strip(), str(port).strip(), str(protocol).strip()
-	for rule in IpTables().list_rules():
-		if port == rule[0].specs['--dport'] and protocol == rule[0].specs['-p'] \
-				and jump == rule[0].specs['-j']:
-			raise Exception('Rule `%s` already exist' % rule[0])
+        '''raise exception if current rule exist'''
+        jump, port, protocol = str(jump).strip(), str(port).strip(), str(protocol).strip()
+        for rule in IpTables().list_rules():
+                if port == rule[0].specs['--dport'] and protocol == rule[0].specs['-p'] \
+                                and jump == rule[0].specs['-j']:
+                        raise Exception('Rule `%s` already exist' % rule[0])
 
 
 def insert_rule_once(jump, port, protocol):
-	'''add rule in iptables if it not exist'''
-	_is_rule_not_exist(jump, port, protocol)
-	ipt = IpTables()
-	if ipt.usable() and protocol in PROTOCOLS:
-		rspec = RuleSpec(dport=port, jump=jump, protocol=protocol)
-		ipt.insert_rule(None, rule_spec=rspec)
-		LOG.debug('Rule `%s` added to iptables rules', rspec)
-	else:
-		raise Exception('protocol `%s` is not known. It must be one of `%s`' % 
-			(protocol,	PROTOCOLS) if ipt.usable() else 'IpTables is not usable') 
+        '''add rule in iptables if it not exist'''
+        _is_rule_not_exist(jump, port, protocol)
+        ipt = IpTables()
+        if ipt.usable() and protocol in PROTOCOLS:
+                rspec = RuleSpec(dport=port, jump=jump, protocol=protocol)
+                ipt.insert_rule(None, rule_spec=rspec)
+                LOG.debug('Rule `%s` added to iptables rules', rspec)
+        else:
+                raise Exception('protocol `%s` is not known. It must be one of `%s`' %
+                        (protocol,      PROTOCOLS) if ipt.usable() else 'IpTables is not usable')
 
 
 def remove_rule_once(jump, port, protocol):
-	'''remove rule from iptables'''
-	try:
-		_is_rule_not_exist(jump, port, protocol)
-		raise Exception('Rule for port=`%s`, protocol=`%s`, jump=`%s` '\
-			'not exist. It can`t be removed.' % (port, protocol, jump))
-	except:
-		IpTables().delete_rule(rule_spec = RuleSpec(dport=port, jump=jump, protocol=protocol))
+        '''remove rule from iptables'''
+        try:
+                _is_rule_not_exist(jump, port, protocol)
+                raise Exception('Rule for port=`%s`, protocol=`%s`, jump=`%s` '\
+                        'not exist. It can`t be removed.' % (port, protocol, jump))
+        except:
+                IpTables().delete_rule(rule_spec = RuleSpec(dport=port, jump=jump, protocol=protocol))
+		

@@ -14,6 +14,7 @@ import time
 import sys
 
 from cloudservers import ImageManager
+from cloudservers.exceptions import CloudServersException
 
 LOG = rebundle_hdlr.LOG
 
@@ -25,7 +26,7 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 
 	def rebundle(self):
 		image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
-		
+
 		pl = bus.platform
 		cnf = bus.cnf
 
@@ -49,22 +50,30 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			image_manager = ImageManager(con)
 			system2("sync", shell=True)
 			LOG.info("Creating server image. server id: %s, image name: '%s'", server.id, image_name)
-			image = image_manager.create(image_name, server.id)
+			try:
+				image = image_manager.create(image_name, server.id)
+			except CloudServersException, e:
+				if 'Cannot create a new backup request while saving a prior backup or migrating' in str(e):
+					raise HandlerError('Another image is currently creating from this server. '
+							'Rackspace allows to create only ONE image per server at a time. '
+							'Try again later')
+				raise
 			LOG.debug('Image %s created', image.id)
+
+			
 			LOG.info('Checking that image %s is completed', image.id)
-			'''
-			wait_until(hasattr, args=(image, 'progress'), 
-					sleep=5, logger=LOG, timeout=3600,
-					error_text="Image %s has no attribute 'progress'" % image.id)
-			'''
+
+			start_time = time.time()
 			def completed(image_id):
 				try:
 					image = image_manager.get(image_id)
-					LOG.debug('image.status: %s', image.status)
+					if time.time() - start_time > 191:
+						globals()['start_time'] = time.time()
+						LOG.info('Progress: %s', image.progress)
 					return image.status in ('ACTIVE', 'FAILED')
 				except:
 					LOG.debug('Caught exception', exc_info=sys.exc_info())
-
+			
 			wait_until(completed, args=(image.id, ), sleep=30, logger=LOG, timeout=3600,
 					error_text="Image %s wasn't completed in a reasonable time" % image.id)
 			image = image_manager.get(image.id)
@@ -77,8 +86,8 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 				try:
 					image_manager.delete(image)
 				except:
-					pass
+					LOG.debug('Image delete exception', exc_info=sys.exc_info())
 			raise exc_type, exc_value, exc_trace
-		finally:
-			cnf.state = old_state
+		
 		return image.id
+

@@ -13,6 +13,8 @@ def get_platform():
 class VpsPlatform(Platform):
 	name = "vps"
 	
+	features = []
+	
 	def get_private_ip(self):
 		return self.get_public_ip()
 	

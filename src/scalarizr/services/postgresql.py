@@ -10,20 +10,20 @@ import glob
 import shlex
 import shutil
 import logging
+import subprocess
 
 from M2Crypto import RSA
 
 from scalarizr.libs.metaconf import Configuration
-from scalarizr.util import disttool, cryptotool, firstmatched, wait_until
+from scalarizr.util import disttool, firstmatched, wait_until
 from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, PopenError
 from scalarizr.util.filetool import read_file, write_file, rchown
-from scalarizr.services import BaseService, BaseConfig, lazy
+from scalarizr.services import BaseService, BaseConfig, ServiceError, lazy
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL #TODO: remove extra
+SERVICE_NAME = BuiltinBehaviours.POSTGRESQL 
 
 SU_EXEC = '/bin/su'
 USERMOD = '/usr/sbin/usermod'
@@ -38,8 +38,7 @@ CREATEDB = '/usr/bin/createdb'
 PG_DUMP = '/usr/bin/pg_dump'
 
 ROOT_USER 				= "scalr"
-
-OPT_REPLICATION_MASTER  = "replication_master"
+DEFAULT_USER			= "postgres"
 
 STORAGE_DATA_DIR 		= "data"
 TRIGGER_NAME 			= "trigger"
@@ -74,13 +73,13 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.restart(self)
 	
 	def reload(self, reason=None):
-		initdv2.ParametrizedInitScript.restart(self)
+		initdv2.ParametrizedInitScript.reload(self)
 		
 	def start(self):
 		initdv2.ParametrizedInitScript.start(self)
 		timeout = 60
 		wait_until(lambda: self.status() == initdv2.Status.RUNNING, sleep=1, timeout=timeout, 
-				error_text="In %s seconds after start Redis state still isn't 'Running'" % timeout)
+				error_text="%s state still isn't 'Running' In %s seconds after start " % (SERVICE_NAME, timeout))
 	
 	
 initdv2.explore(SERVICE_NAME, PgSQLInitScript)
@@ -99,44 +98,33 @@ class PostgreSql(BaseService):
 								cls, *args, **kwargs)
 		return cls._instance
 	
-	def __init__(self):
+	def __init__(self, version, pg_keys_dir):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
+		self.pg_keys_dir = pg_keys_dir
+		self.version = version
 	
-	@property
-	def version(self):
-		try:
-			path = glob.glob('/var/lib/p*sql/9.*')[0]
-			ver = os.path.basename(path)
-		except IndexError:
-			ver = None
-		return ver
 
 	@property	
 	def unified_etc_path(self):
-		return '/etc/postgresql/%s/main' % self.version if float(self.version) else '9.0'
-					
-	@property
-	def is_replication_master(self):
-		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
-		self._logger.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
-		return True if int(value) else False
+		return '/etc/postgresql/%s/main' % self.version if float(self.version) else '9.0'					
 
 	
-	def init_master(self, mpoint, slaves=None):
-		self._init_service(mpoint)
+	def init_master(self, mpoint, password, slaves=None):
+		self._init_service(mpoint, password)
 		self.postgresql_conf.hot_standby = 'off'
-		
+
+		self.create_pg_role(ROOT_USER, password, super=True)
+					
 		if slaves:
 			self._logger.debug('Registering slave hosts: %s' % ' '.join(slaves))
 			for host in slaves:
 				self.register_slave(host, force_restart=False)
 		self.service.start()
 		
-	def init_slave(self, mpoint, primary_ip, primary_port):
-		self._init_service(mpoint)
+	def init_slave(self, mpoint, primary_ip, primary_port, password):
+		self._init_service(mpoint, password)
 		
 		self.root_user.apply_public_ssh_key() 
 		self.root_user.apply_private_ssh_key()
@@ -149,11 +137,14 @@ class PostgreSql(BaseService):
 		self.service.start()
 		
 	def register_slave(self, slave_ip, force_restart=True):
-		self.postgresql_conf.listen_addresses = '*'
 		self.pg_hba_conf.add_standby_host(slave_ip, self.root_user.name)
 		self.postgresql_conf.max_wal_senders += 1
 		if force_restart:
 			self.service.restart(reason='Registering slave', force=True)
+			
+	def register_client(self, ip, force=True):
+		self.pg_hba_conf.add_client(ip)
+		self.service.reload('Allowing access for new app instance: %s' % ip, force=force)
 		
 	def change_primary(self, primary_ip, primary_port, username):
 		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, username)
@@ -161,6 +152,10 @@ class PostgreSql(BaseService):
 	def unregister_slave(self, slave_ip):
 		self.pg_hba_conf.delete_standby_host(slave_ip, self.root_user.name)
 		self.service.restart(reason='Unregistering slave', force=True)
+		
+	def unregister_client(self, ip):
+		self.pg_hba_conf.delete_client(ip)
+		self.service.reload(reason='Unregistering terminated instance: %s' % ip, force=True)
 
 	def stop_replication(self):
 		self.trigger_file.create()
@@ -168,51 +163,41 @@ class PostgreSql(BaseService):
 	def start_replication(self):
 		self.trigger_file.destroy()
 	
-	def create_user(self, name, password=None, sys_user_only=True):
-		user = PgUser(name)	
-		password = password or user.generate_password(20)
+	def create_user(self, name, password, sys_user_only=True):
+		user = PgUser(name, self.pg_keys_dir)	
+		#password = password or user.generate_password(20)
 		user._create_system_user(password)
 		return user	
 	
-	def create_pg_role(self, name, super=True):
+	def create_pg_role(self, name, password=None, super=True):
 		self.set_trusted_mode()
-		user = PgUser(name)	
+		user = PgUser(name, self.pg_keys_dir)	
 		self.service.start()
 		user._create_pg_database()
-		user._create_role(super)
+		user._create_role(password, super)
 		self.set_password_mode()
 		return user			
 
 	def set_trusted_mode(self):
 		self.pg_hba_conf.set_trusted_access_mode()
 		#Temporary we need to force restart the service 
-		self.service.restart(reason='Applying trusted mode', force=True)
+		if self.service.running:
+			self.service.reload(reason='Applying trusted mode', force=True)
 	
 	def set_password_mode(self):
 		self.pg_hba_conf.set_password_access_mode()
 		#Temporary we need to force restart the service 
-		self.service.restart(reason='Applying password mode', force=True)
+		if self.service.running:
+			self.service.reload(reason='Applying password mode', force=True)
 
-	def _init_service(self, mpoint):
-		password = None 
-		
-		opt_pwd = '%s_password' % ROOT_USER
-		if self._cnf.rawini.has_option(CNF_SECTION, opt_pwd):
-			password = self._cnf.rawini.get(CNF_SECTION, opt_pwd)
-			
-		#this is highly temporary solution 
-		if not password and self._cnf.rawini.has_option(CNF_SECTION, "root_password"):
-			password = self._cnf.rawini.get(CNF_SECTION, "root_password")
-		
+	def _init_service(self, mpoint, password):
+		self.service.stop()
 		
 		self.root_user = self.create_user(ROOT_USER, password)
 		
-		if not self.cluster_dir.is_initialized(mpoint):
-			self.create_pg_role(ROOT_USER, super=True)
-		
-		self.service.stop()
 		move_files = not self.cluster_dir.is_initialized(mpoint)
 		self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
+		self.postgresql_conf.listen_addresses = '*'
 		self.postgresql_conf.wal_level = 'hot_standby'
 		self.postgresql_conf.max_wal_senders = 5
 		self.postgresql_conf.wal_keep_segments = 32
@@ -223,6 +208,9 @@ class PostgreSql(BaseService):
 			self.config_dir.move_to(self.unified_etc_path)
 			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
 			self.postgresql_conf = PostgresqlConf.find(self.config_dir)
+			self.pg_hba_conf = PgHbaConf.find(self.config_dir)
+			
+		self.pg_hba_conf.allow_local_connections()
 		
 
 	def _set(self, key, obj):
@@ -234,7 +222,7 @@ class PostgreSql(BaseService):
 		return self._objects[key]
 		
 	def _get_config_dir(self):
-		return self._get('config_dir', ConfigDir)
+		return self._get('config_dir', ConfigDir.find, self.version)
 		
 	def _set_config_dir(self, obj):
 		self._set('config_dir', obj)
@@ -278,7 +266,7 @@ class PostgreSql(BaseService):
 	def _get_root_user(self):
 		key = 'root_user'
 		if not self._objects.has_key(key):
-			self._objects[key] = PgUser(ROOT_USER)
+			self._objects[key] = PgUser(ROOT_USER, self.pg_keys_dir)
 		return self._objects[key]
 	
 	def _set_root_user(self, user):
@@ -294,24 +282,18 @@ class PostgreSql(BaseService):
 	trigger_file = property(_get_trigger_file, _set_trigger_file)
 
 	
-postgresql = PostgreSql()
-
-	
 class PgUser(object):
 	name = None
 	psql = None
-	
+	password = None
 	public_key_path = None
 	private_key_path = None
-	opt_user_password = None
 
-	def __init__(self, name, group='postgres'):
+	def __init__(self, name, pg_keys_dir, group='postgres'):
 		self._logger = logging.getLogger(__name__)
-		self._cnf = bus.cnf
 			
-		self.public_key_path = self._cnf.key_path('%s_public_key.pem' % name)
-		self.private_key_path = self._cnf.key_path('%s_private_key.pem' % name)
-		self.opt_user_password = '%s_password' % name
+		self.public_key_path = os.path.join(pg_keys_dir, '%s_public_key.pem' % name)
+		self.private_key_path = os.path.join(pg_keys_dir, '%s_private_key.pem' % name)
 		
 		self.name = name
 		self.group = group
@@ -319,16 +301,8 @@ class PgUser(object):
 		
 	def exists(self):
 		return self._is_system_user_exist and self._is_role_exist and self._is_pg_database_exist
-		
-	@property
-	def password(self):
-		return self._cnf.rawini.get(CNF_SECTION, self.opt_user_password)
-		
-	def generate_password(self, length=20):
-		return cryptotool.pwgen(length)
 
-	def change_password(self, new_pass=None):
-		new_pass = new_pass or self.generate_password()
+	def change_system_password(self, new_pass):
 		self._logger.debug('Changing password of system user %s to %s' % (self.name, new_pass)) 
 		out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
 		shadow_password = out.strip()
@@ -342,16 +316,13 @@ class PgUser(object):
 			self._logger.error('Error changing password for ' + self.name)	
 		
 		#change password in privated/pgsql.ini
-		self.store_password(new_pass)
+		self.password = new_pass
 		
 		return new_pass
 	
-	def check_password(self, password=None):
+	def check_system_password(self, password=None):
 		#TODO: check (password or self.password), raise ValueError
 		pass
-
-	def store_password(self, password):
-		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: {self.opt_user_password:password}})	
 
 		
 	def store_keys(self, pub_key=None, pvt_key=None):
@@ -449,7 +420,7 @@ class PgUser(object):
 		file = open(PASSWD_FILE, 'r')
 		return -1 != file.read().find(self.name)
 
-	def _create_role(self, super=True):
+	def _create_role(self, password=None, super=True):
 		if self._is_role_exist:
 			self._logger.debug('Cannot create role: role %s already exists' % self.name)
 		else:
@@ -460,6 +431,26 @@ class PgUser(object):
 			except PopenError, e:
 				self._logger.error('Unable to create role %s: %s' % (self.name, e))
 				raise
+		self.change_role_password(password)
+	
+		
+	def check_role_password(self, password):
+		try:
+			psql_env = dict(PGUSER=self.name, PGPASSWORD=password, PGHOSTADDR='127.0.0.1', PGPORT='5432')
+			psql_args = [PSQL_PATH, '-c', 'SELECT 1;']
+			system2(psql_args, env=psql_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, silent=True)[0]
+		except PopenError, e:
+			if 'password authentication failed for user' in str(e):
+				pass
+			else:
+				self._logger.error('Unable to check password for pg_role %s: %s' % (self.name, e))
+			return False
+		return True	
+
+			
+	def change_role_password(self, password):
+		self._logger.debug('Changing password for pg role %s' % self.name)
+		self.psql.execute("ALTER USER %s WITH PASSWORD '%s';" % (self.name, password), silent=True)
 		
 	def _create_pg_database(self):
 		if self._is_pg_database_exist:
@@ -485,7 +476,7 @@ class PgUser(object):
 			except PopenError, e:
 				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
 				raise
-		self.store_password(password)
+		self.password = password
 	
 	def _store_key(self, key_str, private=True):
 		write_file(self.private_key_path if private else self.public_key_path, data=key_str, logger=self._logger)
@@ -495,7 +486,7 @@ class PSQL(object):
 	path = PSQL_PATH
 	user = None
 	
-	def __init__(self, user='postgres'):	
+	def __init__(self, user=DEFAULT_USER):	
 		self.user = user
 		self._logger = logging.getLogger(__name__)
 		
@@ -504,24 +495,25 @@ class PSQL(object):
 		
 		def test_recursive(attempt):
 			try:
-				self.execute('SELECT 1;')
+				self.execute('SELECT 1;', silent=True)
 			except PopenError, e:
 				if 'could not connect to server' in str(e):
 					return False
 				elif 'the database system is starting up' in str(e):
 					if not attempt:
 						raise BaseException('Postgresql service stuck on starting up database system')
-					time.sleep(5)
+					time.sleep(10)
 					return test_recursive(attempt-1)
 			return True
-		return test_recursive(6)
+		return test_recursive(12)
 		
-	def execute(self, query):
+	def execute(self, query, silent=False):
 		try:
 			out = system2([SU_EXEC, '-', self.user, '-c', '%s -c "%s"' % (self.path, query)], silent=True)[0]
 			return out	
 		except PopenError, e:
-			self._logger.error('Unable to execute query %s from user %s: %s' % (query, self.user, e))
+			if not silent:
+				self._logger.error('Unable to execute query %s from user %s: %s' % (query, self.user, e))
 			raise		
 
 	def list_pg_roles(self):
@@ -558,21 +550,18 @@ class PSQL(object):
 					
 	
 class ClusterDir(object):
-	base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
-	default_centos_path = os.path.join(base_path, 'data')
-	default_ubuntu_path = os.path.join(base_path, 'main')
 	
-	def __init__(self, path=None, user = "postgres"):
+	base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
+	default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
+	
+	def __init__(self, path=None):
 		self.path = path
-		self.user = user
+		self.user = DEFAULT_USER
 		self._logger = logging.getLogger(__name__)
 		
 	@classmethod
 	def find(cls, postgresql_conf):
-		path = postgresql_conf.data_directory
-		if not path:
-			path = cls.default_ubuntu_path if disttool.is_ubuntu() else cls.default_centos_path
-		return cls(path)
+		return cls(postgresql_conf.data_directory or cls.default_path)
 
 	def move_to(self, dst, move_files=True):
 		new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
@@ -581,9 +570,14 @@ class ClusterDir(object):
 			self._logger.debug('Creating directory structure for postgresql cluster: %s' % dst)
 			os.makedirs(dst)
 		
-		if move_files and os.path.exists(self.path):
-			self._logger.debug("copying cluster files from %s into %s" % (self.path, new_cluster_dir))
-			shutil.copytree(self.path, new_cluster_dir)	
+		if move_files:
+			source = self.path 
+			if not os.path.exists(self.path):
+				source = self.default_path
+				self._logger.debug('data_directory in postgresql.conf points to non-existing location, using %s instead' % source)
+			if source != new_cluster_dir:
+				self._logger.debug("copying cluster files from %s into %s" % (source, new_cluster_dir))
+				shutil.copytree(source, new_cluster_dir)	
 		self._logger.debug("changing directory owner to %s" % self.user)	
 		rchown(self.user, dst)
 		
@@ -615,17 +609,17 @@ class ConfigDir(object):
 	user = None
 	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
 	
-	def __init__(self, path=None, user = "postgres"):
+	def __init__(self, path):
 		self._logger = logging.getLogger(__name__)
-		self.path = path or self.find_path()
-		self.user = user
+		self.path = path
 	
-	def find_path(self):
-		path = self.get_sysconfig_pgdata()
-		if path:
-			return path
-		l = glob.glob('/etc/postgresql/9.*/main') if disttool.is_ubuntu() else glob.glob('/var/lib/p*sql/9.*/data')
-		return l[0] if l else None
+	@classmethod
+	def find(cls, version='9.0'):
+		path = cls.get_sysconfig_pgdata()
+		if not path:
+			path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
+		return cls(path)
+		
 	
 	def move_to(self, dst):
 		if not os.path.exists(dst):
@@ -642,7 +636,7 @@ class ConfigDir(object):
 				self._logger.debug('%s is already in place. Skipping.' % config)
 			else:
 				raise BaseException('Postgresql config file not found: %s' % old_config)
-			rchown(self.user, new_config)
+			rchown(DEFAULT_USER, new_config)
 
 		#the following block needs revision
 		
@@ -670,15 +664,14 @@ class ConfigDir(object):
 		file = open(self.sysconf_path, 'w')
 		file.write('PGDATA=%s' % pgdata)
 		file.close()
-		
-	def get_sysconfig_pgdata(self):
+	
+	@classmethod
+	def get_sysconfig_pgdata(cls):
 		pgdata = None
-		if os.path.exists(self.sysconf_path):
-			s = open(self.sysconf_path, 'r').readline().strip()
+		if os.path.exists(cls.sysconf_path):
+			s = open(cls.sysconf_path, 'r').readline().strip()
 			if s and len(s)>7:
 				pgdata = s[7:]
-			else: 
-				self._logger.debug('sysconfig has no PGDATA')
 		return pgdata
 
 
@@ -741,7 +734,7 @@ class PostgresqlConf(BasePGConfig):
 		return self.get('data_directory')
 	
 	def _set_data_directory(self, path):
-		self.set_path_type_option('data_directory', path)
+		self.set('data_directory', path)
 	
 	def _get_wal_level(self):
 		return self.get('wal_level')
@@ -910,40 +903,55 @@ class PgHbaRecord(object):
 		return line	
 	
 		
-class PgHbaConf(Configuration):
+class PgHbaConf(object):
 	
 	config_name = 'pg_hba.conf'
 	path = None
 	trusted_mode = PgHbaRecord('local', 'all', 'postgres', auth_method = 'trust')
 	password_mode = PgHbaRecord('local', 'all', 'postgres', auth_method = 'password')
 	
-	def __init__(self, config_dir_path):
-		self.config_dir_path = config_dir_path
-		self.path = os.path.join(self.config_name, config_dir_path)
+	
+	def __init__(self, path):
+		
+		self.path = path
 		self._logger = logging.getLogger(__name__)
 
 	@classmethod
 	def find(cls, config_dir):
 		return cls(os.path.join(config_dir.path, cls.config_name))
 	
-	def add_record(self, record):
+	@property
+	def records(self):
+		l = []
 		text = read_file(self.path) or ''
 		for line in text.splitlines():
-			if  line.strip() and not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
-				#already in file
-				return
-		write_file(self.path, str(record)+'\n' if text.endswith('\n') else '\n'+str(record)+'\n', 'a')
+			if line.strip() and not line.strip().startswith('#'):
+				record = PgHbaRecord.from_string(line)
+				l.append(record)
+		return l
+	
+	def add_record(self, record, replace_similar=False):
+		if replace_similar:
+			for old_record in self.records:
+				if old_record != record and old_record.is_similar_to(record):
+					self.delete_record(old_record)
+		if record not in self.records:
+			self._logger.debug('Adding record "%s" to %s' % (str(record),self.path))
+			write_file(self.path, '\n'+str(record)+'\n', 'a')
 			
-	def delete_record(self, record):
+	def delete_record(self, record, delete_similar=False):
+		deleted = []
 		lines = []
 		changed = False
-		text = read_file(self.path) or ''
-		for line in text.splitlines():
-			if line.strip() and not line.strip().startswith('#') and PgHbaRecord.from_string(line) == record:
+		for old_record in self.records:
+			if (old_record == record) or (delete_similar and old_record.is_similar_to(record)):
+				deleted.append(str(old_record))
 				changed = True
 				continue
-			lines.append(line)
+			else:
+				lines.append(str(old_record))
 		if changed:
+			self._logger.debug('Removing records "%s" from %s' % (deleted,self.path))
 			write_file(self.path, '\n'.join(lines))
 	
 	def add_standby_host(self, ip, user='postgres'):
@@ -953,6 +961,16 @@ class PgHbaConf(Configuration):
 	def delete_standby_host(self, ip, user='postgres'):
 		record = self._make_standby_record(ip, user)
 		self.delete_record(record)
+		
+	
+	def add_client(self, ip):
+		record = self._make_farm_server_record(ip)
+		self.add_record(record)
+
+	def delete_client(self, ip):
+		record = self._make_farm_server_record(ip)
+		self.delete_record(record)		
+	
 	
 	def set_trusted_access_mode(self):
 		self.delete_record(self.password_mode)
@@ -961,9 +979,16 @@ class PgHbaConf(Configuration):
 	def set_password_access_mode(self):
 		self.delete_record(self.trusted_mode)
 		self.add_record(self.password_mode)
-	
+
+	def allow_local_connections(self):
+		record = PgHbaRecord('host', 'all', 'all', address='127.0.0.1/32', auth_method = 'md5')
+		self.add_record(record, replace_similar=True)
+			
 	def _make_standby_record(self,ip, user='postgres'):
 		return PgHbaRecord('host','replication', user=user,address='%s/32'%ip, auth_method='trust')
+	
+	def _make_farm_server_record(self,ip):
+		return PgHbaRecord(host='host', address='%s/32'%ip, auth_method='md5')
 	
 	
 class ParseError(BaseException):

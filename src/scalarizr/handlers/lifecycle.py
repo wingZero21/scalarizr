@@ -4,23 +4,28 @@ Created on Mar 3, 2010
 @author: marat
 '''
 
+from __future__ import with_statement
+
 # Core
 import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr import config
 from scalarizr.config import ScalarizrState
+from scalarizr.handlers import operation
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
 from scalarizr.util import iptables
-#from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 
 # Libs
 from scalarizr.util import cryptotool
+from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 
 # Stdlibs
-import logging, os, sys, threading
-
+import logging, os, sys, threading, string
+from scalarizr.config import STATE
+import time
+from scalarizr.util import disttool
 
 
 _lifecycle = None
@@ -111,6 +116,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			init=self.on_init, 
 			start=self.on_start, 
 			reload=self.on_reload, 
+			before_reboot_finish=self.on_before_reboot_finish,
 			shutdown=self.on_shutdown
 		)
 		self.on_reload()
@@ -142,6 +148,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 		# Mount all filesystems
 		system2(('mount', '-a'), raise_exc=False)
+
+		# Add firewall rules
+		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
+			self._insert_iptables_rules()
 
 
 	def on_start(self):
@@ -195,16 +205,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			snmp_community_name = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
 		), broadcast=True)
 		bus.fire("before_host_init", msg)
-		self.send_message(msg)
-		
 		# Update key file
-		self._cnf.write_key(self._cnf.DEFAULT_KEY, new_crypto_key)		
 
+		self.send_message(msg, new_crypto_key=new_crypto_key, wait_ack=True)
 		bus.cnf.state = ScalarizrState.INITIALIZING
+
 		bus.fire("host_init")
 
 		
-
 	
 	def _start_import(self):
 		# Send Hello 
@@ -225,6 +233,26 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if self._cnf.state == ScalarizrState.RUNNING and self._cnf.key_exists(self._cnf.FARM_KEY):
 			self._start_int_messaging()
 
+
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
+
+
+	def _insert_iptables_rules(self, *args, **kwargs):
+		self._logger.debug('Adding iptables rules for scalarizr ports')		
+		iptables = IpTables()
+		if iptables.enabled():		
+			rules = []
+			
+			# Scalarizr ports
+			rules.append(RuleSpec(dport=8012, jump='ACCEPT', protocol=P_TCP))
+			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
+			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
+			
+			for rule in rules:
+				iptables.insert_rule(1, rule_spec = rule)
+
+
 	def on_shutdown(self):
 		self._logger.debug('Calling %s.on_shutdown', __name__)
 		# Shutdown internal messaging
@@ -233,6 +261,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			self._logger.debug('Shutdowning internal messaging')			
 			int_msg_service.get_consumer().shutdown()
 		bus.int_messaging_service = None
+
 
 	def on_host_init_response(self, message):
 		farm_crypto_key = message.body.get('farm_crypto_key', '')
@@ -253,42 +282,48 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		t.start()
 
 
-	def _insert_iptables_rules(self, *args, **kwds):
-		self._logger.debug('Adding iptables rules for scalarizr ports')	
-		try:
-			iptables.insert_rule_once('ACCEPT', 8012, iptables.P_TCP)
-			iptables.insert_rule_once('ACCEPT', 8013, iptables.P_TCP)
-			iptables.insert_rule_once('ACCEPT', 8014, iptables.P_UDP)
-		except:
-			self._logger.warn('Rule wasn`t added. Detail: %s', sys.exc_info()[1])#, exc_info=sys.exc_info())
-
-
 	def on_IntServerReboot(self, message):
 		# Scalarizr must detect that it was resumed after reboot
 		self._set_flag(self.FLAG_REBOOT)
 		# Send message 
 		msg = self.new_message(Messages.REBOOT_START, broadcast=True)
-		bus.fire("before_reboot_start", msg)
-		self.send_message(msg)
+		try:
+			bus.fire("before_reboot_start", msg)
+		finally:
+			self.send_message(msg)
 		bus.fire("reboot_start")
 		
 	
 	def on_IntServerHalt(self, message):
 		self._set_flag(self.FLAG_HALT)
 		msg = self.new_message(Messages.HOST_DOWN, broadcast=True)
-		bus.fire("before_host_down", msg)
-		self.send_message(msg)		
+		try:
+			bus.fire("before_host_down", msg)
+		finally:
+			self.send_message(msg)
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
-		bus.fire("host_init_response", message)
-		if bus.scalr_version >= (2, 2, 3):
-			self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_ack=True)
-		msg = self.new_message(Messages.HOST_UP, broadcast=True)
-		bus.fire("before_host_up", msg)
-		self.send_message(msg)
-		bus.cnf.state = ScalarizrState.RUNNING
-		bus.fire("host_up")
+		bus.initialization_op = operation(name='Initialization')
+		try:
+			self._define_initialization(message)			
+			bus.fire("host_init_response", message)
+			hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)
+			bus.fire("before_host_up", hostup_msg)
+			if bus.scalr_version >= (2, 2, 3):
+				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_subhandler=True)
+			self.send_message(hostup_msg)
+			bus.cnf.state = ScalarizrState.RUNNING
+			bus.fire("host_up")
+		except:
+			with bus.initialization_op as op:
+				if not op.finished:
+					with op.phase('Scalarizr routines'):
+						with op.step('Scalarizr routines'):
+							op.error()
+			raise
+		with bus.initialization_op as op:
+			op.ok()
 
 
 	def on_ScalarizrUpdateAvailable(self, message):
@@ -308,7 +343,26 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		Add scalarizr version to meta
 		"""
 		message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
+		message.meta[MetaOptions.TIMESTAMP] = time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
+
 		
+	def _define_initialization(self, hir_message):
+		# XXX: from the asshole
+		handlers = bus.messaging_service.get_consumer().listeners[0].get_handlers_chain()
+		phases = {'host_init_response': [], 'before_host_up': []}
+		for handler in handlers:
+			h_phases = handler.get_initialization_phases(hir_message) or {}
+			for key in phases.keys():
+				phases[key] += h_phases.get(key, [])
+
+		phases = phases['host_init_response'] + phases['before_host_up']
+		
+		op = bus.initialization_op
+		op.phases = phases
+		op.define()
+		
+		STATE['lifecycle.initialization_id'] = op.id
+
 		
 	def _get_flag_filename(self, name):
 		return self._cnf.private_path('.%s' % name)
@@ -344,7 +398,8 @@ class IntMessagingService(object):
 		self._msg_service = f.new_service("p2p", **{
 			P2pConfigOptions.SERVER_ID : cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID),
 			P2pConfigOptions.CRYPTO_KEY_PATH : cnf.key_path(cnf.FARM_KEY),
-			P2pConfigOptions.CONSUMER_URL : 'http://0.0.0.0:8012'
+			P2pConfigOptions.CONSUMER_URL : 'http://0.0.0.0:8012',
+			P2pConfigOptions.MSG_HANDLER_ENABLED : False
 		})
 	
 	def get_consumer(self):

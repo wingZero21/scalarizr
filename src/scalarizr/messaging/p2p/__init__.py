@@ -9,12 +9,14 @@ from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingE
 from scalarizr.messaging.p2p.security import P2pMessageSecurity
 import logging
 import threading
-
+import sqlite3
 
 """
 InFilter
 OutFilter
 """
+
+LOG = logging.getLogger(__name__)
 
 class P2pConfigOptions:
 	SERVER_ID 						= "server_id"
@@ -23,6 +25,7 @@ class P2pConfigOptions:
 	PRODUCER_RETRIES_PROGRESSION 	= "producer_retries_progression"
 	PRODUCER_SENDER					= "producer_sender"	
 	CONSUMER_URL 					= "consumer_url"
+	MSG_HANDLER_ENABLED				= 'msg_handler_enabled'
 
 
 class P2pMessageService(MessageService):
@@ -43,7 +46,8 @@ class P2pMessageService(MessageService):
 	def get_consumer(self):
 		if not self._default_consumer:
 			self._default_consumer = self.new_consumer(
-				endpoint=self._params[P2pConfigOptions.CONSUMER_URL]
+				endpoint=self._params[P2pConfigOptions.CONSUMER_URL],
+				msg_handler_enabled=self._params.get(P2pConfigOptions.MSG_HANDLER_ENABLED, True)
 			)
 		return self._default_consumer
 	
@@ -52,7 +56,7 @@ class P2pMessageService(MessageService):
 		c = consumer.P2pMessageConsumer(**params)
 		c.filters['protocol'].append(self._security.in_protocol_filter)
 		return c
-	
+
 	def get_producer(self):
 		if not self._default_producer:
 			self._default_producer = self.new_producer(
@@ -84,9 +88,9 @@ class _P2pMessageStore:
 			ex.add_task(self.rotate, 3600, 'Rotate messages sqlite table') # execute rotate task each hour
 
 	def _conn(self):
-		db = bus.db
-		return db.get().get_connection()
-		
+		return bus.db
+	
+	
 	def rotate(self):
 		conn = self._conn()
 		cur = conn.cursor()
@@ -105,8 +109,15 @@ class _P2pMessageStore:
 						message_name, queue, is_ingoing, in_is_handled, in_consumer_id)
 					VALUES 
 						(NULL, ?, ?, ?, ?, ?, ?, ?)"""
-			cur.execute(sql, [str(message), message.id, message.name, queue, 1, 0, consumer_id])
 			
+				
+			#self._logger.debug('Representation mes: %s', repr(str(message)))
+			cur.execute(sql, [message.toxml(), message.id, message.name, queue, 1, 0, consumer_id])
+			'''
+			cur.execute(sql, [str(message), message.id.decode('utf-8'),
+					message.name.decode('utf-8'), queue.encode('utf-8'), 1, 0,
+					consumer_id.encode('utf-8')])
+			'''
 			if message.meta.has_key(MetaOptions.REQUEST_ID):
 				cur.execute("""UPDATE p2p_message 
 						SET response_uuid = ? WHERE message_id = ?""", 
@@ -125,10 +136,17 @@ class _P2pMessageStore:
 		"""
 		cur = self._conn().cursor()
 		try:
+			'''
 			sql = """SELECT queue, message_id FROM p2p_message
 					WHERE is_ingoing = ? AND in_is_handled = ? AND in_consumer_id = ? 
 					ORDER BY id"""
 			cur.execute(sql, [1, 0, consumer_id])
+			'''
+			sql = """SELECT queue, message_id FROM p2p_message
+					WHERE is_ingoing = ? AND in_is_handled = ? 
+					ORDER BY id"""
+			cur.execute(sql, [1, 0])			
+			
 			ret = []
 			for r in cur.fetchall():
 				ret.append((r["queue"], self.load(r["message_id"], True)))
@@ -143,10 +161,7 @@ class _P2pMessageStore:
 			sql = """UPDATE p2p_message SET in_is_handled = ? 
 					WHERE message_id = ? AND is_ingoing = ?"""
 			cur.execute(sql, [1, message_id, 1])
-
-			self._logger.debug("Commiting mark_as_handled")
 			conn.commit()
-			self._logger.debug("Commited mark_as_handled")
 		finally:
 			cur.close()
 
@@ -158,11 +173,9 @@ class _P2pMessageStore:
 						is_ingoing, out_is_delivered, out_delivery_attempts, out_sender) 
 					VALUES 
 						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
-			cur.execute(sql, [str(message), message.id, message.name, queue, 0, 0, 0, sender])
 			
-			self._logger.debug("Commiting put_outgoing")
+			cur.execute(sql, [message.toxml(), message.id, message.name, queue, 0, 0, 0, sender])
 			conn.commit()
-			self._logger.debug("Commited put_outgoing")
 		finally:
 			cur.close()
 
@@ -263,12 +276,13 @@ class _P2pMessageStore:
 			cur.close()
 		
 	def _unmarshall(self, message, row):
+		#message.fromxml(row["message"].encode('utf-8'))
 		message.fromxml(row["message"])
 		
 	def _marshall(self, message, row={}):
 		row["message_id"] = message.id
 		row["message_name"] = message.name
-		row["message"] = str(message)
+		row["message"] = message.toxml()
 		return row
 
 _message_store = None
@@ -286,8 +300,9 @@ class P2pMessage(Message):
 		self.__dict__["_store"] = P2pMessageStore()
 		if bus.cnf:
 			cnf = bus.cnf; ini = cnf.rawini
+			# XXX: when it is incoming message 
 			self.meta[MetaOptions.SERVER_ID] = ini.get('general', 'server_id')
-	
+
 	def is_handled(self):
 		return self._store.is_handled(self.id)
 	

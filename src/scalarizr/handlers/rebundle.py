@@ -3,6 +3,7 @@ Created on Sep 7, 2011
 
 @author: marat
 '''
+from __future__ import with_statement
 
 import os
 import logging
@@ -38,7 +39,7 @@ class StopRebundle(BaseException):
 
 class RebundleLogHandler(logging.Handler):
 	def __init__(self, bundle_task_id=None):
-		logging.Handler.__init__(self)
+		logging.Handler.__init__(self, logging.INFO)
 		self.bundle_task_id = bundle_task_id
 		self._msg_service = bus.messaging_service
 		
@@ -167,6 +168,7 @@ class RebundleHandler(Handler):
 		
 		
 	def cleanup_image(self, rootdir):
+		LOG.info('Perforing image cleanup')
 		# Truncate logs
 		LOG.debug('Cleanuping image')
 
@@ -317,12 +319,14 @@ class LinuxImage:
 					
 		# create filesystem
 		fs.mkfs(self.devname)
+		
 		# set EXT3/4 options
 		if fs.name.startswith('ext'):
 			# max mounts before check (-1 = disable)
 			system2(('/sbin/tune2fs', '-c', '1', self.devname))
 			# time based (3m = 3 month)
 			system2(('/sbin/tune2fs', '-i', '3m', self.devname))
+
 		# set label
 		label = fs.get_label(vol_entry.devname)
 		if label:

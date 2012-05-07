@@ -26,7 +26,9 @@ class Test(unittest.TestCase):
 		message = Message("EventNotice", {}, {
 				"InternalIP": "10.23.75.199", 
 				"RoleName": "app64", 
-				"EventName": "MazzaFakkaLaunched"})
+				"EventName": "MazzaFakkaLaunched",
+				"local_ip": "10.23.75.199",
+				"scripts":"#!/bin/sh\n\necho 'text: ñ ç \u304b\u3099'"})
 		
 		handler(message)
 

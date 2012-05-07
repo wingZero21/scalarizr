@@ -19,12 +19,12 @@ class UtilError(BaseException):
 
 
 class LocalObject:
-	def __init__(self, creator, pool_size=10):
+	def __init__(self, creator, pool_size=50):
 		self._logger = logging.getLogger(__name__)
 		self._creator = creator		
 		self._object = threading.local()
 		
-		self._all_conns = set()
+		self._all_conns = []
 		self.size = pool_size
 	
 	def do_create(self):
@@ -45,16 +45,18 @@ class LocalObject:
 		self._logger.debug("Created %s", o)
 		self._object.current = weakref.ref(o)
 		self._logger.debug("Added weakref %s", self._object.current)
-		self._all_conns.add(o)
+		self._all_conns.append(o)
 		if len(self._all_conns) > self.size:
 			self.cleanup()
 		return o
 	
 	def cleanup(self):
-		for conn in list(self._all_conns):
-			self._all_conns.discard(conn)
-			if len(self._all_conns) <= self.size:
-				return
+		if len(self._all_conns) > self.size:
+			self._logger.debug("Pool has exceeded the amount of maximum connections (%s). Starting cleaning process.", self.size)
+			l = len(self._all_conns) - self.size
+			self._logger.debug("Removing %s from connection pool", self._all_conns[:l])
+			self._all_conns = self._all_conns[l:]
+
 	
 class SqliteLocalObject(LocalObject):
 	def do_create(self):
@@ -280,7 +282,7 @@ def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, timeout=Non
 	if timeout:
 		time_until = time.time() + timeout
 	if start_text and logger:
-		logger.info('%s. Timeout: %d seconds', start_text, timeout)
+		logger.info('%s. (timeout: %d seconds)', start_text, timeout)
 	while not target(*args, **kwargs):
 		if time_until and time.time() >= time_until:
 			msg = error_text + '. ' if error_text else ''
@@ -415,7 +417,7 @@ def get_free_devname():
 		for volume in volumes:
 			try:
 				avail_letters.remove(volume.attach_data.device[-1])
-			except ValueError:
+			except KeyError:
 				pass
 	except:
 		pass
@@ -532,7 +534,7 @@ class PeriodicalExecutor:
 					break
 			if not self._shutdown:
 				time.sleep(1)
-				
+			
 				
 				
 def run_detached(binary, args=[], env=None):
@@ -577,6 +579,7 @@ def run_detached(binary, args=[], env=None):
 			else:
 				os.execl(binary, binary, *args)
 		except Exception:
+<<<<<<< .working
 			os._exit(255)
 			
 			
@@ -610,4 +613,50 @@ def import_object(import_str, *args, **kwds):
 	except ImportError:
 		cls = import_class(import_str)
 		return cls(*args, **kwds)
+
+
+
+def linux_package(name):
+	# @todo install package with apt or yum. raise beautiful errors
+	raise NotImplemented()
+				
+
+class Hosts:	
+	@classmethod
+	def set(cls, addr, hostname):
+		hosts = cls.hosts()
+		hosts[hostname] = addr
+		cls._write(hosts)
+		
+	@classmethod
+	def delete(cls, addr=None, hostname=None):
+		hosts = cls.hosts()
+		if hostname:
+			if hosts.has_key(hostname):
+				del hosts[hostname]
+		if addr:
+			hostnames = hosts.keys()
+			for host in hostnames:
+				if addr == hosts[host]: 
+					del hosts[host]
+		cls._write(hosts)		
+	
+	@classmethod
+	def hosts(cls):
+		ret = {}
+		with open('/etc/hosts') as f:
+			hosts = f.readlines()
+			for host in hosts:
+				host_line = host.strip()
+				if not host_line or host_line.startswith('#'):
+					continue
+				addr, hostname = host.split(None, 1)
+				ret[hostname.strip()] = addr
+		return ret
+	
+	@classmethod
+	def _write(cls, hosts):
+		with open('/etc/hosts', 'w') as f:
+			for hostname, addr in hosts.iteritems():
+				f.write('%s\t%s\n' % (addr, hostname))
 

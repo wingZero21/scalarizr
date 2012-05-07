@@ -5,7 +5,7 @@ Created on Mar 11, 2010
 
 import scalarizr
 from scalarizr.bus import bus
-from scalarizr.handlers import HandlerError
+from scalarizr.handlers import HandlerError, prepare_tags
 from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, get_free_devname, firstmatched
 from scalarizr.platform.ec2 import ebstool
@@ -54,6 +54,8 @@ EPH_STORAGE_MAPPING = {
 		'ephemeral3': '/dev/sde',
 	}
 } 
+
+NETWORK_FILESYSTEMS = ('nfs', 'glusterfs')
 
 
 class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
@@ -144,14 +146,14 @@ class RebundleStratery:
 	def _bundle_vol(self, image):
 		try:
 			LOG.info('Bundling volume %s', self._volume)
-			
+
 			LOG.debug("Checking that user is root")
 			if not self._is_super_user():
 				raise HandlerError("You need to be root to run rebundle")
 			LOG.debug("User check success")
 			
 			# Create image from volume
-			LOG.debug('Exclude list: %s', image.excludes)			
+			LOG.debug('Exclude list: %s', image.excludes)
 			image.make()
 			LOG.info("Volume bundle complete!")
 
@@ -177,21 +179,26 @@ class RebundleStratery:
 
 	def _fix_fstab(self, image_mpoint):
 		LOG.debug('Fixing fstab')
-		pl = bus.platform	
-		fstab = fstool.Fstab(os.path.join(image_mpoint, 'etc/fstab'), True)		
-		
-		# Remove EBS volumes from fstab	
+		pl = bus.platform
+		fstab = fstool.Fstab(os.path.join(image_mpoint, 'etc/fstab'), True)
+
+		# Remove EBS volumes from fstab
 		ec2_conn = pl.new_ec2_conn()
 		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
-		
+
 		ebs_devs = list(vol.attach_data.device 
 					for vol in ec2_conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()}) 
 					if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id() 
 						and instance.root_device_name != vol.attach_data.device)
-		
+
 		for devname in ebs_devs:
 			fstab.remove(devname, autosave=False)
-			
+		
+		# Remove Non-local filesystems
+		for entry in fstab.list_entries():
+			if entry.fstype in NETWORK_FILESYSTEMS:
+				fstab.remove(entry.devname, autosave=False)
+		
 		# Ubuntu 10.04 mountall workaround
 		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
 		# @see http://alestic.com/2010/09/ec2-bug-mountall
@@ -202,10 +209,10 @@ class RebundleStratery:
 						entry.options = re.sub(r'(nobootwait),(\S+)', r'\2,\1', entry.options)
 					else:
 						entry.options += ',nobootwait'
-						
+		
 		fstab.save()
 
-	
+
 	def _cleanup_image(self, image_mpoint, role_name=None):
 		# Create message of the day
 		self._create_motd(image_mpoint, role_name)
@@ -218,6 +225,7 @@ class RebundleStratery:
 		Run instance bundle 
 		'''
 		pass
+
 	
 	def cleanup(self):
 		'''
@@ -259,6 +267,8 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 					user_cert_string, ec2_cert_string, key=None, iv=None):
 		try:
 			LOG.info("Bundling image...")
+
+
 			# Create named pipes.
 			digest_pipe = os.path.join('/tmp', 'ec2-bundle-image-digest-pipe')
 			if os.path.exists(digest_pipe):
@@ -268,7 +278,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			except:
 				LOG.error("Cannot create named pipe %s", digest_pipe)
 				raise
-		
+
 			# Load and generate necessary keys.
 			name = os.path.basename(image_file)
 			manifest_file = os.path.join(destination, name + '.manifest.xml')
@@ -292,8 +302,8 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			iv = iv or hexlify(Rand.rand_bytes(8))
 			LOG.debug('Key: %s', key)
 			LOG.debug('IV: %s', iv)
-	
-	
+
+
 			# Bundle the AMI.
 			# The image file is tarred - to maintain sparseness, gzipped for
 			# compression and then encrypted with AES in CBC mode for
@@ -307,7 +317,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			tar.create().dereference().sparse()
 			tar.add(os.path.basename(image_file), os.path.dirname(image_file))
 			digest_file = os.path.join('/tmp', 'ec2-bundle-image-digest.sha1')
-			
+
 			LOG.info("Encrypting image")
 			system2(" | ".join([
 				"%(openssl)s %(digest_algo)s -out %(digest_file)s < %(digest_pipe)s & %(tar)s", 
@@ -317,7 +327,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 					openssl=openssl, digest_algo=DIGEST_ALGO, digest_file=digest_file, digest_pipe=digest_pipe, 
 					tar=str(tar), crypto_algo=CRYPTO_ALGO, key=key, iv=iv, bundled_file_path=bundled_file_path
 			), shell=True)
-			
+
 			try:
 				# openssl produce different outputs:
 				# (stdin)= 8ac0626e9a8d54e46e780149a95695ec894449c8
@@ -332,7 +342,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 				raise
 			finally:
 				os.remove(digest_file)
-			
+
 			#digest = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
 	
 			# Split the bundled AMI. 
@@ -343,14 +353,14 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			LOG.info("Splitting image into chunks")
 			part_names = filetool.split(bundled_file_path, name, self._IMAGE_CHUNK_SIZE, destination)
 			LOG.debug("Image splitted into %s chunks", len(part_names))			
-			
+
 			# Sum the parts file sizes to get the encrypted file size.
 			bundled_size = 0
 			for part_name in part_names:
 				bundled_size += os.path.getsize(os.path.join(destination, part_name))
 			LOG.debug('Image size: %d bytes', bundled_size)
-	
-			
+
+
 			# Encrypt key and iv.
 			LOG.info("Encrypting keys")
 			padding = RSA.pkcs1_padding
@@ -359,15 +369,15 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			user_encrypted_iv = hexlify(user_public_key.get_rsa().public_encrypt(iv, padding))
 			ec2_encrypted_iv = hexlify(ec2_public_key.get_rsa().public_encrypt(iv, padding))
 			LOG.debug("Keys encrypted")
-			
+
 			# Digest parts.		
 			parts = self._digest_parts(part_names, destination)
-			
+
 			# Create bundle manifest
 			bdm = list((name, device) for name, device in self._platform.block_devs_mapping() 
 					if not name.startswith('ephemeral'))
 			bdm += EPH_STORAGE_MAPPING[disttool.arch()].items()
-			
+
 			manifest = AmiManifest(
 				name=name,
 				user=user, 
@@ -387,13 +397,13 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 				block_device_mapping=bdm
 			)
 			manifest.save(manifest_file)
-			
+
 			LOG.info("Image bundle complete!")
 			return manifest_file, manifest
 		except (Exception, BaseException), e:
 			LOG.error("Cannot bundle image. %s", e)
 			raise
-	
+
 
 	def _digest_parts(self, part_names, destination):
 		LOG.info("Generating digests for each chunk")
@@ -429,13 +439,13 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			trn.upload(upload_files, 's3://%s/' % bucket_name)
 			
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
-		
-			
+
+
 		except (Exception, BaseException):
 			LOG.error("Cannot upload image")
 			raise
 
-	
+
 	def _register_image(self, s3_manifest_path):
 		try:
 			LOG.info("Registering image '%s'", s3_manifest_path)
@@ -474,7 +484,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 		
 		# Register image on EC2
 		return self._register_image(s3_manifest_path)
-			
+
 	def cleanup(self):
 		RebundleStratery.cleanup(self)
 		if self._image:
@@ -486,7 +496,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 						os.remove(path)
 				except (OSError, IOError), e:
 					LOG.error("Error during cleanup. %s", e)
-							
+
 
 class RebundleEbsStrategy(RebundleStratery):
 	_devname = None
@@ -496,7 +506,7 @@ class RebundleEbsStrategy(RebundleStratery):
 	_snap = None
 	
 	_succeed = None
-	
+
 	def __init__(self, handler, role_name, image_name, excludes, volume='/', 
 				volume_id=None, volume_size=None, devname='/dev/sdr'):
 		RebundleStratery.__init__(self, handler, role_name, image_name, excludes, volume)
@@ -505,28 +515,35 @@ class RebundleEbsStrategy(RebundleStratery):
 		self._volsize = volume_size
 		self._platform = bus.platform
 
-	
+
 	def _create_shapshot(self):
 		self._image.umount() 
 		vol = self._image.ebs_volume
 		LOG.info('Creating snapshot of root device image %s', vol.id)
 		self._snap = vol.create_snapshot("Root device snapshot created from role: %s instance: %s" 
 					% (self._role_name, self._platform.get_instance_id()))
+		self._ec2_conn.create_tags((self._snap.id, ), prepare_tags(tmp=1))
 
 		LOG.debug('Checking that snapshot %s is completed', self._snap.id)
+		start_time = time.time()
 		while True:
 			self._snap.update()
+			if time.time() - start_time > 191:
+				start_time = time.time()
+				LOG.info('Progress: %s', self._snap.progress)
+
 			if self._snap.status == 'completed':
+				LOG.info('Progress: %s', self._snap.progress)
 				break
 			elif self._snap.status == 'failed':
 				raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))
 			LOG.debug('Progress: %s', self._snap.progress)
 			time.sleep(5)
 		LOG.debug('Snapshot %s completed', self._snap.id)
-		
+
 		LOG.info('Snapshot %s of root device image %s created', self._snap.id, vol.id)
 		return self._snap
-	
+
 	def _register_image(self):
 		instance = self._ec2_conn.get_all_instances((self._platform.get_instance_id(), ))[0].instances[0]
 
@@ -549,11 +566,11 @@ class RebundleEbsStrategy(RebundleStratery):
 		else:
 			bdmap[instance.root_device_name] = root_device_type
 		
-		LOG.info('Registering image')		
+		LOG.info('Registering image')
 		ami_id = self._ec2_conn.register_image(self._image_name, architecture=disttool.arch(), 
 				kernel_id=self._platform.get_kernel_id(), ramdisk_id=self._platform.get_ramdisk_id(),
 				root_device_name=instance.root_device_name, block_device_map=bdmap)
-			
+
 		LOG.info('Checking that %s is available', ami_id)
 		def check_image():
 			try:
@@ -566,20 +583,20 @@ class RebundleEbsStrategy(RebundleStratery):
 		wait_until(check_image, logger=LOG, timeout=3600,
 				error_text="Image %s wasn't completed in a reasonable time" % ami_id)
 		LOG.debug('Image %s available', ami_id)
-		
+
 		LOG.info('Image registered and available for use!')
 		return ami_id
 
-	
+
 	def run(self):
 		self._succeed = False
-		
+
 		# Bundle image
 		self._ec2_conn = self._platform.new_ec2_conn()
 		self._image = LinuxEbsImage(self._volume, self._devname, self._ec2_conn,
 					self._platform.get_avail_zone(), self._platform.get_instance_id(),
 					self._volsize, self._volume_id, self._excludes) 
-		
+
 		self._bundle_vol(self._image)
 		
 		# Clean up 
@@ -629,7 +646,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 	def _create_image(self):
 		if not self.ebs_volume:
 			self.ebs_volume = ebstool.create_volume(self._ec2_conn, self._volume_size, 
-					self._avail_zone, logger=LOG, tags={'tmp' : '1'})
+					self._avail_zone, logger=LOG, tags=prepare_tags(tmp=1))
 		return ebstool.attach_volume(self._ec2_conn, self.ebs_volume, 
 				self._instance_id, self.devname, to_me=True, logger=LOG)[1]
 		

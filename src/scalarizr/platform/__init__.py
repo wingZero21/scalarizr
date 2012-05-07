@@ -19,11 +19,15 @@ class UserDataOptions:
 	FARM_ID = "farmid"
 	SERVER_ID = "serverid"	
 	ROLE_NAME = "realrolename"
+	BEHAVIOUR = 'behaviors'
 	CRYPTO_KEY = "szr_key"
 	QUERYENV_URL = "queryenv_url"
 	MESSAGE_SERVER_URL = "p2p_producer_endpoint"
 	FARM_HASH = "hash"
 	CLOUD_STORAGE_PATH = 'cloud_storage_path'
+	ENV_ID = 'env_id'
+	FARMROLE_ID = 'farm_roleid'
+	ROLE_ID = 'roleid'
 
 class PlatformFactory(object):
 	_platforms = {}
@@ -35,11 +39,19 @@ class PlatformFactory(object):
 
 		return self._platforms[name];
 
+
+class PlatformFeatures:
+	VOLUMES		= 'volumes'
+	SNAPSHOTS	= 'snapshots'
+
+
 class Platform():
 	name = None
 	_arch = None
 	_access_data = None
 	_userdata = None
+	
+	features = []					
 	
 	def get_private_ip(self):
 		return self.get_public_ip()
@@ -50,14 +62,13 @@ class Platform():
 	def get_user_data(self, key=None):
 		cnf = bus.cnf
 		if self._userdata is None:
-			self._userdata = {}
-			path = cnf.private_path('.user-data')			
+			path = cnf.private_path('.user-data')
 			if os.path.exists(path):
 				rawmeta = read_file(path)
 				if not rawmeta:
 					raise PlatformError("Empty user-data")
 				self._userdata = self._parse_user_data(rawmeta)
-		if key:
+		if key and self._userdata:
 			return self._userdata[key] if key in self._userdata else None
 		else:
 			return self._userdata
