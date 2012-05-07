@@ -284,7 +284,9 @@ class MysqlHandler(DBMSRandler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
-		bus.on("before_reboot_finish", self.on_before_reboot_finish)		
+		bus.on("before_reboot_finish", self.on_before_reboot_finish)
+		
+		'''		
 				
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
@@ -301,6 +303,7 @@ class MysqlHandler(DBMSRandler):
 				LOG.debug("Checking Scalr's %s system users presence." % BEHAVIOUR)
 				creds = self.get_user_creds()
 				self.create_users(**creds)
+		'''
 				
 
 	def on_host_init_response(self, message):
@@ -311,7 +314,16 @@ class MysqlHandler(DBMSRandler):
 		"""
 		if not message.body.has_key("mysql"):
 			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
-
+		
+		mysql = message.body["mysql"]
+		assert mysql.has_key("root_password")
+		assert mysql.has_key("repl_password")
+		assert mysql.has_key("stat_password")
+		assert mysql.has_key("log_file")
+		assert mysql.has_key("log_pos")
+		
+		
+		'''
 		dir = os.path.dirname(self._volume_config_path)
 		if not os.path.exists(dir):
 			os.makedirs(dir)
@@ -338,7 +350,7 @@ class MysqlHandler(DBMSRandler):
 		LOG.debug("Update mysql config with %s", mysql_data)
 		self._update_config(mysql_data)
 		self.mysql = mysql_svc.MySQL(self.cli)
-	
+		'''
 	
 	def on_before_host_up(self, message):
 		"""
@@ -347,6 +359,8 @@ class MysqlHandler(DBMSRandler):
 		@param message: HostUp message
 		"""
 		
+	
+		"""
 		self.generate_datadir()
 
 		repl = 'master' if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else 'slave'
@@ -363,7 +377,10 @@ class MysqlHandler(DBMSRandler):
 			self._init_slave(message)		
 		
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+		"""
+		pass
 	
+	"""
 	
 	def get_user_creds(self):
 		options = dict(ROOT_USER=OPT_ROOT_PASSWORD, REPL_USER=OPT_REPL_PASSWORD, STAT_USER=OPT_STAT_PASSWORD)
@@ -411,15 +428,33 @@ class MysqlHandler(DBMSRandler):
 		LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
 		return True if int(value) else False
 	
+	"""
 	
 	def on_BeforeHostTerminate(self, message):
+		"""
 		if message.local_ip == self._platform.get_private_ip():
 			self.mysql.service.stop(reason='Server will be terminated')
 			LOG.info('Detaching MySQL storage')
 			self.storage_vol.detach()
+			
+		"""
+		assert message.local_ip
 	
 	
 	def on_Mysql_CreatePmaUser(self, message):
+		assert message.pma_server_ip
+		assert message.farm_role_id
+		
+		self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+				status       = 'ok',
+				pma_user	 = PMA_USER,
+				pma_password = 'awesome_pma_password',
+				farm_role_id = message.farm_role_id,
+			))
+		
+		
+		
+		'''
 		try:
 			# Operation allowed only on Master server
 			if not self.is_replication_master:
@@ -452,9 +487,21 @@ class MysqlHandler(DBMSRandler):
 				last_error	=  str(e).strip(),
 				farm_role_id = farm_role_id
 			))
+		'''
 	
 	
 	def on_DbMsr_CreateBackup(self, message):
+		
+		self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+			db_type = BEHAVIOUR,
+			status = 'ok',
+			backup_parts = tuple()
+		))		
+		
+		
+		
+		
+		'''
 		tmp_dir = os.path.join(STORAGE_PATH, STORAGE_TMP_DIR)		
 		# Retrieve password for scalr mysql user
 		tmpdir = backup_path = None
@@ -518,10 +565,23 @@ class MysqlHandler(DBMSRandler):
 			if tmpdir:
 				shutil.rmtree(tmpdir, ignore_errors=True)
 			if backup_path and os.path.exists(backup_path):
-				os.remove(backup_path)		
+				os.remove(backup_path)	
+		'''	
+
 
 
 	def on_DbMsr_CreateDataBundle(self, message):
+		
+		msg_data = dict(
+				log_file='blabla',
+				log_pos='lala',
+				used_size='1.0',
+				status='ok'
+			)
+		
+		
+		
+		'''
 		try:
 			bus.fire('before_mysql_data_bundle')
 			
@@ -548,12 +608,31 @@ class MysqlHandler(DBMSRandler):
 				status		='error',
 				last_error	= str(e)
 			))
+		'''
 	
 	
 	def on_DbMsr_PromoteToMaster(self, message):
 		"""
 		Promote slave to master
 		"""
+		
+		assert message.body['volume_config']
+		assert message.root_password
+		assert message.repl_password
+		assert message.stat_password
+
+		msg_data = dict(
+			status="ok",
+			log_file = 'ololo',
+			log_pos = 'trololo',
+			volume_config = 'super_config',
+			snapshot_config = 'uber_config'
+		)
+		self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)	
+		
+		
+		
+		'''
 		old_conf 		= None
 		new_storage_vol	= None
 		
@@ -670,21 +749,33 @@ class MysqlHandler(DBMSRandler):
 				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		else:
 			LOG.warning('Cannot promote to master. Already master')
-
+		'''
 	
 	
 	def on_DbMsr_NewMasterUp(self, message):
-		pass
+		mysql = message.body["mysql"]	
+		assert mysql.has_key("local_ip")
+		assert mysql.has_key("remote_ip")
+		assert mysql.has_key("log_file")
+		assert mysql.has_key("log_pos")
+		assert mysql.has_key("snapshot_config")
+		
 	
 	
 	def on_before_reboot_start(self, *args, **kwargs):
+		pass
+		'''
 		self.mysql.service.stop('Instance is going to reboot')
+		'''
 	
 	
 	def on_before_reboot_finish(self, *args, **kwargs):
+		pass
+		'''
 		self._insert_iptables_rules()
+		'''
 	
-	
+	'''
 	def generate_datadir(self):
 		try:
 			out = system2("my_print_defaults mysqld", shell=True)
@@ -897,7 +988,9 @@ class MysqlHandler(DBMSRandler):
 				ret['snapshot_id'] = snap.config()['id']
 		return ret
 			
+	'''
 		
+	"""	
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
 			vol = Storage.create(vol)
@@ -942,3 +1035,5 @@ class MysqlHandler(DBMSRandler):
 			'--bootstrap', 
 			'--skip-slave-start')
 		system2(mysqld_safe_cmd, stdin="select 1;")	
+		
+	"""
