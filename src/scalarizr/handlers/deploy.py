@@ -127,6 +127,9 @@ class DeploymentHandler(Handler):
 						deploy_task_id=msg_body['deploy_task_id']
 					)
 				)
+				
+			if define_operation:
+				op.ok()
 			
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
