@@ -31,12 +31,14 @@ def create_snapshot(ec2_conn, volume_id, description=None, logger=None, timeout=
 	logger.debug('Snapshot %s created for EBS volume %s', snap.id, volume_id)
 	
 	# Apply tags
-	tags = tags or dict()
-	tags.update(_std_tags())
-	try:
-		ec2_conn.create_tags((snap.id, ), tags)
-	except:
-		logger.warn('Cannot apply tags to EBS snapshot %s', snap.id)
+	if not tags:
+		logger.debug('No tags to apply to EBS snapshot %s' % snap.id)
+	else:
+		try:
+			logger.debug('Applying tags to EBS snapshot %s : %s' % (snap.id, tags))
+			ec2_conn.create_tags((snap.id, ), tags)
+		except:
+			logger.warn('Cannot apply tags to EBS snapshot %s', snap.id)
 
 	if wait_completion:
 		wait_snapshot(ec2_conn, snap, logger, timeout)
@@ -91,13 +93,14 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout
 	)
 	logger.debug('EBS volume %s available', vol.id)		
 	
-	# Apply tags
-	tags = tags or dict()
-	tags.update(_std_tags())
-	try:
-		ec2_conn.create_tags((vol.id, ), tags)
-	except:
-		logger.warn('Cannot apply tags to EBS volume %s', vol.id)
+	if not tags:
+		logger.debug('No tags to apply to volume %s' % vol.id)
+	else:
+		try:
+			logger.debug('Applying tags to EBS volume %s : %s' % (vol.id, tags))
+			ec2_conn.create_tags((vol.id, ), tags)
+		except:
+			logger.warn('Cannot apply tags to EBS volume %s', vol.id)
 	
 	return vol
 

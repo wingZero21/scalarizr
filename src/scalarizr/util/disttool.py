@@ -18,6 +18,7 @@ _is_rhel = _is_centos = _is_fedora = False
 _debian_based_dists = ['debian', 'ubuntu']
 _redhat_based_dists = map(string.lower, (
 	'centos', 
+	'centos linux', #centos60 only
 	'rhel', 
 	'redhat', 
 	'fedora',
@@ -50,7 +51,7 @@ if _is_linux:
 	_is_debian = dist_name == "debian"
 	_is_ubuntu = dist_name == "ubuntu"
 	_is_fedora = dist_name == "fedora" or (dist_name == 'redhat' and _linux_dist[2].lower() == 'werewolf')
-	_is_centos = dist_name == "centos"
+	_is_centos = dist_name == "centos" or dist_name == "centos linux"
 
 
 def is_linux(): return _is_linux
@@ -76,6 +77,12 @@ def arch():
 	elif re.search("^x86_64$", _uname[4]):
 		return Architectures.X86_64
 	return Architectures.UNKNOWN
+
+def arch_bits():
+	if arch() == Architectures.X86_64:
+		return 64
+	else:
+		return 32
 
 class Architectures:
 	I386 = "i386"

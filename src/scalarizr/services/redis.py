@@ -81,7 +81,11 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 		
 	def start(self):
 		initdv2.ParametrizedInitScript.start(self)
-	
+		wait_until(lambda: self._processes, timeout=10, sleep=1)
+		redis_conf = RedisConf.find()
+		password = redis_conf.requirepass
+		cli = RedisCLI(password)
+		wait_until(lambda: cli.test_connection(), timeout=10, sleep=1)
 	
 initdv2.explore(SERVICE_NAME, RedisInitScript)
 	
@@ -104,26 +108,21 @@ class Redis(BaseService):
 		return cls._instance				
 
 	def init_master(self, mpoint, password=None):
-		self.service.stop('Configuring master. Moving Redis db files')
-		move_files = not self.working_directory.is_initialized(mpoint)
-		self.working_directory.move_to(mpoint, move_files)		
-		self.init_service(mpoint)
+		self.service.stop('Configuring master. Moving Redis db files')	
+		self.init_service(mpoint, password)
 		self.redis_conf.masterauth = None
 		self.redis_conf.slaveof = None
-		self.redis_conf.requirepass = password or self.generate_password()
 		self.service.start()
 		self.is_replication_master = True
 		
 	def init_slave(self, mpoint, primary_ip, primary_port, password):
-		rchown(REDIS_USER, mpoint)
 		self.service.stop('Configuring slave')
-		self.init_service(mpoint)
-		self.redis_conf.requirepass = None
+		self.init_service(mpoint, password)
 		self.change_primary(primary_ip, primary_port, password)
 		self.service.start()
 		self.is_replication_master = False
 	
-	def wait_for_sync(self,link_timeout=600,sync_timeout=3200):	
+	def wait_for_sync(self,link_timeout=None,sync_timeout=None):
 		self._logger.info('Waiting for link with master')
 		wait_until(lambda: self.redis_cli.master_link_status == 'up', sleep=3, timeout=link_timeout)
 		self._logger.info('Waiting for sync with master to complete')
@@ -131,13 +130,24 @@ class Redis(BaseService):
 		self._logger.info('Sync with master completed')
 		
 	def change_primary(self, primary_ip, primary_port, password):
+		'''
+		Currently redis slaves cannot use existing data to catch master
+		Instead they create another db file while performing full sync
+		Wchich may potentially cause free space problem on redis storage
+		And broke whole initializing process.
+		So scalarizr removing all existing data on initializing slave 
+		to free as much storage space as possible.
+		'''
 		self.working_directory.empty()
 		self.redis_conf.masterauth = password
 		self.redis_conf.slaveof = (primary_ip, primary_port)
 		
-	def init_service(self, mpoint):
-		self.redis_conf.bind = None
+	def init_service(self, mpoint, password):
+		move_files = not self.working_directory.is_initialized(mpoint)
+		self.working_directory.move_to(mpoint, move_files)
+		self.redis_conf.requirepass = password or self.generate_password()	
 		self.redis_conf.dir = mpoint
+		self.redis_conf.bind = None
 		if self.persistence_type == SNAP_TYPE:
 			self.redis_conf.appendonly = False
 		elif self.persistence_type == AOF_TYPE:
@@ -146,7 +156,7 @@ class Redis(BaseService):
 		
 	@property	
 	def password(self):
-		return self.redis_conf.requirepass if self.is_replication_master else self.redis_conf.masterauth
+		return self.redis_conf.requirepass
 	
 	@property
 	def db_path(self):
@@ -381,8 +391,9 @@ class RedisConf(BaseRedisConfig):
 	requirepass	 = property(_get_requirepass, _set_requirepass)
 	appendonly	 = property(_get_appendonly, _set_appendonly)
 	dbfilename	 = property(_get_dbfilename, _set_dbfilename)
-		
-		
+	dbfilename_default = DB_FILENAME
+
+
 class RedisCLI(object):
 	path = REDIS_CLI_PATH
 	
@@ -395,23 +406,43 @@ class RedisCLI(object):
 	
 	@classmethod	
 	def find(cls, redis_conf):
-		return cls(redis_conf.masterauth or redis_conf.requirepass)
+		return cls(redis_conf.requirepass)
 		
 	def execute(self, query):
-		if self.password:
-				query = 'AUTH %s\n%s' % (self.password, query)
+		if not self.password:
+			full_query = query
+		else:
+			full_query = 'AUTH %s\n%s' % (self.password, query)
 		try:
-			out = system2([self.path], stdin=query,silent=True)[0]
-			if out.startswith('ERR'):
+			out = system2([self.path], stdin=full_query,silent=True)[0]
+			
+			#fix for redis 2.4 AUTH
+			if 'Client sent AUTH, but no password is set' in out:
+				out = system2([self.path], stdin=query,silent=True)[0]
+				
+			if out.startswith('ERR') or out.startswith('LOADING'):
 				raise PopenError(out)
+			
 			elif out.startswith('OK\n'):
 				out = out[3:]
 			if out.endswith('\n'):
 				out = out[:-1]
 			return out	
 		except PopenError, e:
-			self._logger.error('Unable to execute query %s with redis-cli: %s' % (query, e))
+			if 'LOADING' in str(e):
+				self._logger.debug('Unable to execute query %s: Redis is loading the dataset in memory' % query)
+			else:
+				self._logger.error('Unable to execute query %s with redis-cli: %s' % (query, e))
 			raise	
+		
+	def test_connection(self):
+		try:
+			self.execute('select (1)')
+		except PopenError, e:
+			if 'LOADING' in str(e):
+				return False
+		return True
+			
 	
 	@property
 	def info(self):

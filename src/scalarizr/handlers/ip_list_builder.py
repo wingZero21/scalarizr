@@ -5,12 +5,13 @@ Created on Dec 11, 2009
 @author: marat
 '''
 
+from __future__ import with_statement
+
 # Core
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers.mysql import MysqlMessages
 
 # Stdlibs
 import logging, os
@@ -50,7 +51,7 @@ class IpListBuilder(Handler):
 			or message.name == Messages.HOST_DOWN \
 			or message.name == Messages.REBOOT_START \
 			or message.name == Messages.REBOOT_FINISH \
-			or message.name == MysqlMessages.NEW_MASTER_UP
+			or message.name == 'Mysql_NewMasterUp'
 			
 	def on_start(self, *args):
 		cnf = bus.cnf

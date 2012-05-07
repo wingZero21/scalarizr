@@ -9,10 +9,46 @@ from scalarizr.util import system2
 import logging
 import re
 import os
+import functools
+import time
 
 from cloudservers import CloudServers
-from cloudservers.client import CloudServersClient 
+from cloudservers.client import CloudServersClient
+from cloudservers.exceptions import CloudServersException 
 import cloudfiles
+
+
+LOG = logging.getLogger(__name__)
+
+
+def _patch_cloudservers():
+	C = CloudServersClient
+
+	@functools.wraps(C.request)
+	def request_decorator(f):
+		def request(*args, **kwds):
+			interval = 10
+			for _ in range(0, 5):
+				try:
+					return f(*args, **kwds)
+				except CloudServersException, e:
+					if 'Unhandled exception occurred during processing' in str(e):
+						LOG.debug('Caught Rackspace API error: %s. sleeping %s seconds', str(e), interval)
+						time.sleep(interval)
+						continue
+					raise
+				except ValueError, e:
+					if 'No JSON object could be decoded' in str(e):
+						LOG.debug('Rackspace API failed with invalid JSON response. sleeping %s seconds', interval)
+						time.sleep(interval)
+						continue
+					raise
+		return request
+	
+	C.request = request_decorator(C.request)
+
+_patch_cloudservers()
+
 
 Transfer.explore_provider(CFTransferProvider)
 

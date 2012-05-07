@@ -193,7 +193,7 @@ def mount (device, mpoint = '/mnt', options=None, make_fs=False, fstype='ext3', 
 	
 	if make_fs:
 		mkfs(device,fstype)
-			
+	
 	out, code = system2(['mount'] + list(options) + [device, mpoint], stderr=subprocess.STDOUT, raise_error=False)[0::2]
 	if code:
 		if out.find("you must specify the filesystem type") != -1:

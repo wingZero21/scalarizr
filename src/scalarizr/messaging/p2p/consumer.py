@@ -4,6 +4,8 @@ Created on Dec 5, 2009
 @author: marat
 '''
 
+from scalarizr.bus import bus
+
 # Core
 from scalarizr.messaging import MessageConsumer, MessagingError
 from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage
@@ -18,23 +20,30 @@ import sys
 import os
 import time 
 import socket
+import HTMLParser
 
 class P2pMessageConsumer(MessageConsumer):
 	endpoint = None
 	_logger = None
 	_server = None
 	_handler_thread = None
+
 	#_not_empty = None
 	handler_locked = False
 	handler_status = 'stopped'
+	handing_message_id = None	
 	
-	def __init__(self, endpoint=None):
+	def __init__(self, endpoint=None, msg_handler_enabled=True):
 		MessageConsumer.__init__(self)
 		self._logger = logging.getLogger(__name__)		
 		self.endpoint = endpoint
 		
-		self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
+		if msg_handler_enabled:
+			self._handler_thread = threading.Thread(name='MessageHandler', target=self.message_handler)
+		else:
+			self._handler_thread = None
 		self.message_to_ack = None
+		self.ack_event = threading.Event()
 		#self._not_empty = threading.Event()
 			
 	def start(self):
@@ -54,7 +63,8 @@ class P2pMessageConsumer(MessageConsumer):
 		self._logger.debug('Starting message consumer %s', self.endpoint)
 		try:
 			self.running = True
-			self._handler_thread.start() 	# start message handler
+			if self._handler_thread:
+				self._handler_thread.start() 	# start message handler
 			self._server.serve_forever() 	# start http server
 		except (BaseException, Exception), e:
 			self._logger.exception(e)
@@ -77,6 +87,13 @@ class P2pMessageConsumer(MessageConsumer):
 				try:
 					for f in self.consumer.filters['protocol']:
 						rawmsg = f(self.consumer, queue, rawmsg)
+						try:
+							if isinstance(rawmsg, str):
+								h = HTMLParser.HTMLParser()
+								rawmsg = h.unescape(rawmsg).encode('utf-8')
+						except:
+							logger.debug('%s', sys.exc_info()[1], sys.exc_info()[2])
+
 				except (BaseException, Exception), e:
 					err = 'Message consumer protocol filter raises exception: %s' % str(e)
 					logger.error(err)
@@ -85,7 +102,7 @@ class P2pMessageConsumer(MessageConsumer):
 					return
 				
 				try:
-					logger.debug("Decoding message")
+					logger.debug("Decoding message: %s", rawmsg)
 					message = P2pMessage()
 					message.fromxml(rawmsg)
 				except (BaseException, Exception), e:
@@ -141,9 +158,14 @@ class P2pMessageConsumer(MessageConsumer):
 			self._logger.debug('Waiting for message handler to complete it`s task. Timeout: %d seconds', t)
 			wait_until(lambda: self.handler_status in ('idle', 'stopped'), 
 					timeout=t, error_text='Message consumer is busy', logger=self._logger)
+		
+		if self.handing_message_id:
+			store = P2pMessageStore()
+			store.mark_as_handled(self.handing_message_id)
 	
-		self._handler_thread.join()
-		self._logger.debug("Message handler terminated")
+		if self._handler_thread:
+			self._handler_thread.join()
+			self._logger.debug("Message handler terminated")
 		
 		self._logger.debug('Message consumer %s terminated', self.endpoint)
 		
@@ -151,15 +173,44 @@ class P2pMessageConsumer(MessageConsumer):
 		try:
 			self.handler_status = 'running'					
 			self._logger.debug('Notify message listeners (message_id: %s)', message.id)
-			for ln in self.listeners:
+			self.handing_message_id = message.id
+			for ln in list(self.listeners):
 				ln(message, queue)
 		except (BaseException, Exception), e:
 			self._logger.exception(e)
 		finally:
 			self._logger.debug('Mark message (message_id: %s) as handled', message.id)
 			store.mark_as_handled(message.id)
-			self.handler_status = 'idle'			
-
+			self.handler_status = 'idle'
+			self.handing_message_id = None
+		
+	def wait_acknowledge(self, message):
+		self.message_to_ack = message
+		self.return_on_ack = False
+		self.ack_event.clear()
+		self._logger.debug('Waiting message acknowledge event: %s', message.name)
+		self.ack_event.wait()
+		self._logger.debug('Fired message acknowledge event: %s', message.name)
+		
+	def wait_subhandler(self, message):
+		pl = bus.platform
+			
+		saved_access_data = pl._access_data
+		if saved_access_data:
+			saved_access_data = dict(saved_access_data)		
+		
+		self.message_to_ack = message
+		self.return_on_ack = True
+		thread = threading.Thread(name='%sHandler' % message.name, target=self.message_handler)
+		self._logger.debug('Starting message subhandler thread: %s', thread.getName())
+		thread.start()
+		self._logger.debug('Waiting message subhandler thread: %s', thread.getName())
+		thread.join()
+		self._logger.debug('Completed message subhandler thread: %s', thread.getName())
+		
+		if saved_access_data:
+			pl.set_access_data(saved_access_data)		
+	
 	def message_handler (self):
 		store = P2pMessageStore()
 		self.handler_status = 'idle'
@@ -171,11 +222,18 @@ class P2pMessageConsumer(MessageConsumer):
 				try:
 					if self.message_to_ack:
 						for queue, message in store.get_unhandled(self.endpoint):
-							#self._logger.debug('Got: %s', message.name)
+							sid = self.message_to_ack.meta['server_id']
 							if message.name == self.message_to_ack.name and \
-									message.meta['server_id'] == self.message_to_ack.meta['server_id']:
+									message.body.get('server_id', sid) == sid:
+								self._logger.debug('Going to handle_one_message. Thread: %s', threading.currentThread().getName())
 								self._handle_one_message(message, queue, store)
-								return
+								self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
+								
+								self.message_to_ack = None
+								self.ack_event.set()
+								if self.return_on_ack:
+									return
+								break
 						time.sleep(0.1)
 						continue
 					

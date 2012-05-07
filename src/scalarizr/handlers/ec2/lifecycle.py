@@ -58,9 +58,16 @@ class Ec2LifeCycleHandler(Handler):
 		if os.path.exists(authorized_keys_path):
 			c = filetool.read_file(authorized_keys_path)
 			ssh_key = self._platform.get_ssh_pub_key()
-			if c.find(ssh_key) == -1:
+			idx = c.find(ssh_key)
+			if idx == -1:
+				if c and c[-1] != '\n':
+					c += '\n'
 				c += ssh_key + "\n"
 				self._logger.debug("Add server ssh public key to authorized_keys")
+				filetool.write_file(authorized_keys_path, c)
+			elif idx > 0 and c[idx-1] != '\n':
+				c = c[0:idx] + '\n' + c[idx:]
+				self._logger.warn('Adding new-line character before server SSH key in authorized_keys file')
 				filetool.write_file(authorized_keys_path, c)
 				
 		# Mount ephemeral devices

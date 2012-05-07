@@ -3,6 +3,7 @@ Created on Sep 7, 2011
 
 @author: marat
 '''
+from __future__ import with_statement
 
 import os
 import logging
@@ -167,6 +168,7 @@ class RebundleHandler(Handler):
 		
 		
 	def cleanup_image(self, rootdir):
+		LOG.info('Perforing image cleanup')
 		# Truncate logs
 		LOG.debug('Cleanuping image')
 
@@ -311,17 +313,20 @@ class LinuxImage:
 	def _format_image(self):
 		LOG.info("Formatting image")
 		
-		vol_entry = self._mtab.find(mpoint=self._volume)[0]
+		vol_entry = list(v for v in self._mtab.find(mpoint=self._volume) 
+						if v.devname.startswith('/dev'))[0]
 		fs = Storage.lookup_filesystem(vol_entry.fstype)
 					
 		# create filesystem
 		fs.mkfs(self.devname)
+		
 		# set EXT3/4 options
 		if fs.name.startswith('ext'):
 			# max mounts before check (-1 = disable)
 			system2(('/sbin/tune2fs', '-c', '1', self.devname))
-			# time based (0 = never)
-			system2(('/sbin/tune2fs', '-i', '0', self.devname))
+			# time based (3m = 3 month)
+			system2(('/sbin/tune2fs', '-i', '3m', self.devname))
+
 		# set label
 		label = fs.get_label(vol_entry.devname)
 		if label:

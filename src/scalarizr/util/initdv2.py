@@ -94,11 +94,12 @@ class ParametrizedInitScript(InitScript):
 	name = None
 	
 	def __init__(self, name, initd_script, pid_file=None, lock_file=None, socks=None):
-		if isinstance(initd_script, basestring) \
-			and not os.access(initd_script, os.F_OK | os.X_OK):
-			err = 'Cannot find %s init script at %s. Make sure that %s is installed' % (
-					name, initd_script, name)
-			raise InitdError(err)
+		if isinstance(initd_script, basestring):
+			if not os.path.exists(initd_script):
+				raise InitdError("Can't find %s init script at %s. Make sure that %s is installed" % (
+					name, initd_script, name))
+			if not os.access(initd_script, os.X_OK):
+				raise InitdError("Permission denied to execute %s" % (initd_script))
 		
 		self.name = name		
 		self.initd_script = initd_script
@@ -171,6 +172,8 @@ class ParametrizedInitScript(InitScript):
 					pid_state = re.search('State:\s+(?P<state>\w)', status).group('state')
 					if pid_state in ('T', 'Z'):
 						return Status.NOT_RUNNING
+			else:
+				return Status.NOT_RUNNING
 		if self.socks:
 			try:
 				for sock in self.socks:

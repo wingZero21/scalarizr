@@ -35,6 +35,7 @@ try:
 except:
 	print('Error: prettytable modul not found!')
 
+
 from yaml import dump
 from yaml.representer import Representer
 from yaml.emitter import Emitter
@@ -214,8 +215,7 @@ class Command(object):
 		print (out)
 
 	def get_db_conn(self):
-		db = bus.db
-		return db.get().get_connection()
+		return bus.db
 
 
 class GetlatestVersionCommand(Command):
@@ -260,10 +260,12 @@ class ListRolesCommand(Command):
 	fields = ['behaviour','name', 'index', 'internal-ip',
 		'external-ip', 'replication-master']
 	parser = OptionParser(usage='list-roles [-b --behaviour] '
-		'[-r --role] ', description='Display roles list',
+		'[-r --role] [--with-initializing]', description='Display roles list',
 		 formatter= IndHelpFormatter())
 	parser.add_option('-b', '--behaviour', dest='behaviour', help='Role behaviour')
 	parser.add_option('-r', '--role-name', dest='role_name', help='Role name')
+	parser.add_option('--with-initializing', dest='with_init', 
+					action='store_true', default=None, help='Show initializing servers')
 
 	def iter_result(self, result):
 		'''Return array of result'''
@@ -682,8 +684,7 @@ def main():
 
 		if options.reinit:
 			print 'Call scalarizr to reinitialize role (see /var/log/scalarizr.log for results)'
-			db = bus.db
-			conn = db.get().get_connection()
+			conn = bus.db
 			cur = conn.cursor()
 			try:
 				cur.execute(

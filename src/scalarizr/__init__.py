@@ -1,18 +1,30 @@
+import sys
+import cStringIO
+if sys.version_info < (2, 6):
+	import scalarizr.externals.logging as logging
+	import scalarizr.externals.logging.config as logging_config
+	import scalarizr.externals.logging.handlers as logging_handlers
+	sys.modules['logging'] = logging
+	sys.modules['logging.config'] = logging_config
+	sys.modules['logging.handlers'] = logging_handlers
+
 
 # Core
 from scalarizr import config 
 from scalarizr.bus import bus
-from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions
+from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
 from scalarizr.handlers import MessageListener
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
+from scalarizr.storage.util.loop import listloop
 
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
+from scalarizr.util.filetool import write_file, read_file
 
 # Stdlibs
 import logging
@@ -24,8 +36,8 @@ import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
-from scalarizr.storage.util.loop import listloop
-from scalarizr.util.filetool import write_file, read_file
+import pprint
+from scalarizr.util import sqlite_server, wait_until
 
 
 class ScalarizrError(BaseException):
@@ -44,6 +56,54 @@ NET_SNMPD = False
 SNMP_RESTART_DELAY = 5 # Seconds
 
 PID_FILE = '/var/run/scalarizr.pid' 
+
+LOGGING_CONFIG = '''
+[loggers]
+keys=root,scalarizr
+
+[handlers]
+keys=console,file,file_debug,scalr
+
+[formatters]
+keys=simple
+
+[logger_root]
+level=DEBUG
+handlers=file,file_debug,scalr
+
+[logger_scalarizr]
+level=DEBUG
+qualname=scalarizr
+handlers=file,file_debug,scalr
+propagate=0
+
+[handler_console]
+class=StreamHandler
+level=INFO
+formatter=simple
+args=(sys.stdout,)
+
+[handler_file]
+class=scalarizr.util.log.RotatingFileHandler
+level=INFO
+formatter=simple
+args=('/var/log/scalarizr.log', 'a+', 5242880, 5, 0600)
+
+[handler_file_debug]
+class=scalarizr.util.log.RotatingFileHandler
+level=DEBUG
+formatter=simple
+args=('/var/log/scalarizr_debug.log', 'a+', 5242880, 5, 0600)
+
+
+[handler_scalr]
+class=scalarizr.util.log.MessagingHandler
+level=INFO
+args=(20, "30s")
+
+[formatter_simple]
+format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
+'''
 
 _running = False
 '''
@@ -79,9 +139,21 @@ class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 		)
 
 
+class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
+	def __init__(self):
+		initdv2.ParametrizedInitScript.__init__(self, 
+			'scalr-upd-client', 
+			'/etc/init.d/scalr-upd-client',
+			pid_file='/var/run/scalr-upd-client.pid'
+		)
+
+
 def _init():
 	optparser = bus.optparser
 	bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
+	
+	_init_logging()
+	logger = logging.getLogger(__name__)	
 	
 	# Initialize configuration
 	if not bus.etc_path:
@@ -117,32 +189,16 @@ def _init():
 			raise ScalarizrError('Cannot find scalarizr share dir. Search path: %s' % ':'.join(share_places))
 
 	
-	# Configure logging
-	if sys.version_info < (2,6):
-		# Fix logging handler resolve for python 2.5
-		from scalarizr.util.log import fix_py25_handler_resolving		
-		fix_py25_handler_resolving()
-	
-	logging.config.fileConfig(os.path.join(bus.etc_path, "logging-debug.ini" if optparser and optparser.values.debug else 'logging.ini'))
-	logger = logging.getLogger(__name__)
-	globals()['_logging_configured'] = True
-	
-	# During server import user must see all scalarizr activity in his terminal
-	# Add console handler if it doesn't configured in logging.ini	
-	if optparser and optparser.values.import_server:
-		if not any(isinstance(hdlr, logging.StreamHandler) \
-				and (hdlr.stream == sys.stdout or hdlr.stream == sys.stderr) 
-				for hdlr in logger.handlers):
-			hdlr = logging.StreamHandler(sys.stdout)
-			hdlr.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
-			logger.addHandler(hdlr)
-
 	# Registering in init.d
 	initdv2.explore("scalarizr", ScalarizrInitScript)
 
 	# Configure database connection pool
-	bus.db = SqliteLocalObject(_db_connect)
-
+	t = sqlite_server.SQLiteServerThread(_db_connect)
+	t.setDaemon(True)
+	t.start()
+	sqlite_server.wait_for_server_thread(t)
+	bus.db = t.connection
+	
 
 DB_NAME = 'db.sqlite'
 DB_SCRIPT = 'db.sql'
@@ -155,6 +211,7 @@ def _db_connect(file=None):
 	
 	conn = sqlite.connect(file, 5.0)
 	conn.row_factory = sqlite.Row
+	conn.text_factory = sqlite.OptimizedUnicode
 	return conn
 
 def _init_db(file=None):
@@ -164,14 +221,39 @@ def _init_db(file=None):
 	# Check that database exists (after rebundle for example)	
 	db_file = file or cnf.private_path(DB_NAME)
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
-		logger.debug("Database doesn't exists, create new one from script")
+		logger.debug("Database doesn't exist, creating new one from script")
 		_create_db(file)
+
 	
-def _create_db(db_file=None, script_file=None):
-	conn = _db_connect(db_file)
+def _create_db(db_file=None, script_file=None):	
+	logger = logging.getLogger(__name__)
+	conn = bus.db
+	logger.debug('conn: %s', conn)
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
-	conn.commit()	
+	#conn.commit()	
+
+def _init_logging():
+	optparser = bus.optparser
 	
+	# Configure logging
+	if sys.version_info < (2,6):
+		# Fix logging handler resolve for python 2.5
+		from scalarizr.util.log import fix_py25_handler_resolving		
+		fix_py25_handler_resolving()
+	
+	logging.config.fileConfig(cStringIO.StringIO(LOGGING_CONFIG))
+	globals()['_logging_configured'] = True
+	logger = logging.getLogger(__name__)
+	
+	# During server import user must see all scalarizr activity in his terminal
+	# Add console handler if it doesn't configured in logging.ini	
+	if optparser and optparser.values.import_server:
+		if not any(isinstance(hdlr, logging.StreamHandler) \
+				and (hdlr.stream == sys.stdout or hdlr.stream == sys.stderr) 
+				for hdlr in logger.handlers):
+			hdlr = logging.StreamHandler(sys.stdout)
+			hdlr.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+			logger.addHandler(hdlr)	
 
 
 def _init_platform():
@@ -247,15 +329,23 @@ def _start_services():
 def _apply_user_data(cnf):
 	logger = logging.getLogger(__name__)
 	platform = bus.platform
-	g = platform.get_user_data
 	
-	logger.debug('Apply scalarizr user-data to configuration')
-	cnf.update_ini('config.ini', dict(
+	def g(key):
+		value = platform.get_user_data(key)
+		return value if value is not None else ''	
+	
+	logger.debug('Applying user-data to configuration')
+	logger.debug('User-data:\n%s', pprint.pformat(platform.get_user_data()))
+	updates = dict(
 		general={
 			'server_id' : g(UserDataOptions.SERVER_ID),
 			'role_name' : g(UserDataOptions.ROLE_NAME),
 			'queryenv_url' : g(UserDataOptions.QUERYENV_URL),
-			'cloud_storage_path': g(UserDataOptions.CLOUD_STORAGE_PATH)
+			'cloud_storage_path': g(UserDataOptions.CLOUD_STORAGE_PATH),
+			'farm_role_id' : g(UserDataOptions.FARMROLE_ID),
+			'env_id' : g(UserDataOptions.ENV_ID), 
+			'farm_id' : g(UserDataOptions.FARM_ID),
+			'role_id' : g(UserDataOptions.ROLE_ID), 
 		},
 		messaging_p2p={
 			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
@@ -264,8 +354,18 @@ def _apply_user_data(cnf):
 			'security_name' : 'notConfigUser',			
 			'community_name' : g(UserDataOptions.FARM_HASH)
 		}
-	))
+	)
+	behaviour = g(UserDataOptions.BEHAVIOUR)
+	if behaviour:
+		if behaviour == 'base':
+			behaviour = ''
+		updates['general']['behaviour'] = behaviour
+		
+	cnf.update_ini('config.ini', updates)
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
+	
+	logger.debug('Reloading configuration after user-data applying')
+	cnf.bootstrap(force_reload=True)
 
 def _detect_scalr_version():
 	pl = bus.platform
@@ -335,8 +435,9 @@ def onSIGHUP(*args):
 	logger.info('Reloading scalarizr')
 	signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 	globals()["_running"] = False
-	_shutdown_services()
 	bus.fire('shutdown')
+	_shutdown_services()
+	
 	
 	globals()["_running"] = True
 	signal.signal(signal.SIGCHLD, onSIGCHILD)		
@@ -392,17 +493,21 @@ def onSIGCHILD(*args):
 def _shutdown(*args):
 	logger = logging.getLogger(__name__)
 	globals()["_running"] = False
+
+	try:
+		bus.fire("shutdown")
+	except:
+		logger.debug('Shutdown hooks exception', exc_info=sys.exc_info())
 		
 	try:
 		logger.info("[pid: %d] Stopping scalarizr %s", os.getpid(), __version__)
 		_shutdown_services()
-		bus.fire("shutdown")
 	except:
-		pass
+		logger.debug('Shutdown services exception', exc_info=sys.exc_info())
 	finally:
 		if os.path.exists(PID_FILE):
 			os.remove(PID_FILE)
-	
+		
 	logger.info('[pid: %d] Scalarizr terminated', os.getpid())
 
 def _shutdown_services(force=False):
@@ -418,9 +523,9 @@ def _shutdown_services(force=False):
 		globals()['_snmp_pid'] = None
 	
 	# Shutdown messaging
-	logger.debug('Shutdowning external messaging')	
+	logger.debug('Shutdowning external messaging')
 	msg_service = bus.messaging_service
-	msg_service.get_consumer().shutdown()
+	msg_service.get_consumer().shutdown(force=True)
 	msg_service.get_producer().shutdown()
 	bus.messaging_service = None
 	
@@ -540,7 +645,7 @@ def main():
 					
 		# Write PID
 		write_file(PID_FILE, str(pid))
-					
+			
 		cnf = bus.cnf
 		cnf.on('apply_user_data', _apply_user_data)
 		
@@ -565,34 +670,47 @@ def main():
 
 		# Check that service started after dirty bundle
 		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
-				and (pl.name != 'nimbula' or cnf.state != ScalarizrState.IMPORTING):
-			# XXX: nimbula's user-data uploaded via ssh, 
-			# and pl.get_user_data() permanently blocked when scalarizr is in `importing` state
+				and cnf.state != ScalarizrState.IMPORTING:
+			
+			# XXX: nimbula's user-data is uploaded by ssh
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+			if pl.name in ('nimbula', 'rackspace'):
+				if cnf.state == ScalarizrState.REBUNDLING:
+					# XXX: temporary workaround
+					# XXX: rackspace injects files and boots OS in a parallell. There were situations when
+					# .user-data file was stale and new server started from rebundled image
+					# toughts that he's an old server and continue rebundling  
+					time.sleep(30)
+					
+				udfile = cnf.private_path('.user-data')
+				wait_until(lambda: os.path.exists(udfile), 
+						timeout=60, error_text="User-data file %s doesn't exist" % udfile)					
+			
 			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
 			if server_id and ud_server_id and server_id != ud_server_id:
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
-				cnf.state = ScalarizrState.BOOTSTRAPPING						
+				cnf.state = ScalarizrState.BOOTSTRAPPING
 
 		
 		# Initialize local database
 		_init_db()
 		
+		STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__)) 
+		STATE['global.version'] = __version__
+		
+		if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
+			logger.info('Scalarizr was updated to %s', __version__)
 		
 		if cnf.state == ScalarizrState.UNKNOWN:
 			cnf.state = ScalarizrState.BOOTSTRAPPING
 			
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
-			cnf.fire('apply_user_data', cnf)			
-
-		'''		
-		# At first scalarizr startup platform user-data should be applied
-		if cnf.state in (ScalarizrState.UNKNOWN, ScalarizrState.REBUNDLING):
-			cnf.state = ScalarizrState.BOOTSTRAPPING
 			cnf.fire('apply_user_data', cnf)
-		'''
+			upd = ScalrUpdClientScript()
+			if not upd.running:
+				upd.start()			
 		
 		# Check Scalr version
 		if not bus.scalr_version:

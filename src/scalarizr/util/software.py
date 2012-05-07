@@ -4,7 +4,7 @@ Created on Sep 10, 2010
 @author: marat
 '''
 from scalarizr.util import disttool, system2
-import os, re, zipfile
+import os, re, zipfile, string, glob
 
 __all__ = ('all_installed', 'software_info', 'explore', 'whereis')
 
@@ -28,6 +28,12 @@ def explore(name, lookup_fn):
 		
 		raise Exception("'%s' software has been already explored" % name)
 	software_list[name] = lookup_fn
+	
+def which(name):
+	try:
+		return whereis(name)[0]
+	except IndexError:
+		raise LookupError("Command '%s' not found" % (name, ))
 	
 def whereis(name):
 	'''
@@ -54,6 +60,11 @@ def system_info():
 	ret['os'] = {}	
 	ret['os']['version'] 		= ' '.join(disttool.linux_dist())
 	ret['os']['string_version'] = ' '.join(disttool.uname()).strip()
+
+	ret['dist'] = dict(zip(('distributor', 'release', 'codename'), 
+						map(string.lower, disttool.linux_dist())))
+	
+	
 	
 	modprobe = whereis('modprobe')[0]
 	ret['storage'] = {}
@@ -88,12 +99,12 @@ class SoftwareInfo:
 	'''
 	@param version: tuple(major, minor, bugfix)
 	'''
-	version_string = None
+	string_version = None
 	
 	def __init__(self, name, version, string_version):
 		self.name    		= name
 		self.string_version = string_version
-		ver_nums		= tuple(map(int, version.split('.')))
+		ver_nums		= map(int, version.split('.'))
 		if len(ver_nums) < 3: 
 			for i in range(len(ver_nums), 3):
 				ver_nums.append(0)
@@ -220,6 +231,7 @@ def apache_software_info():
 
 
 explore('apache', apache_software_info)
+	
 
 def tomcat_software_info():
 	
@@ -316,4 +328,85 @@ def cassandra_software_info():
 		raise SoftwareError
 	finally:
 		cassandra.close()
+
 explore('cassandra', cassandra_software_info)
+
+
+def rabbitmq_software_info():
+
+	binaries = whereis('rabbitmq-server')
+	if not binaries:
+		raise SoftwareError("Can't find executable for rabbitmq server")
+	
+	# Start rabbitmq server with broken parameters
+	# in order to receive version
+	env = dict(RABBITMQ_NODE_IP_ADDRESS='256.0.0.0', RABBITMQ_LOG_BASE='/tmp', RABBITMQ_NODENAME='version_test')
+	out = system2((binaries[0]), env=env, raise_exc=False, silent=True)[0]
+	if not out:
+		raise SoftwareError
+	
+	res = re.search('\|\s+v([\d\.]+)\s+\+---\+', out)
+	if res:
+		version = res.group(1)
+	
+		return SoftwareInfo('rabbitmq', version, version)
+	raise SoftwareError
+
+explore('rabbitmq', rabbitmq_software_info)
+
+
+def redis_software_info():
+
+	binary_name = "redis-server" # if disttool.is_redhat_based() else "redis-cli"
+	binaries = whereis(binary_name)
+	if not binaries:
+		raise SoftwareError("Can't find executable for redis server")
+		
+	out = system2((binaries[0], '-v'))[0]
+	if not out:
+		raise SoftwareError
+	
+	version_string = out.splitlines()[0]
+	res = re.search('[\d\.]+', version_string)
+	if res:
+		version = res.group(0)
+	
+		return SoftwareInfo('redis-server', version, out)
+	raise SoftwareError
+explore('redis', redis_software_info)
+
+
+def chef_software_info():	
+	binaries = whereis('chef-client')
+	if not binaries:
+		raise SoftwareError("Can't find executable for chef client")
+
+	version_string = system2((binaries[0], '-v'))[0].strip()
+	if not version_string:
+		raise SoftwareError
+	
+	res = re.search('Chef:\s+([\d\.]+)', version_string)
+	
+	if res:
+		version = res.group(1)
+		return SoftwareInfo('chef', version, version_string)
+	
+	raise SoftwareError
+explore('chef', chef_software_info)
+
+
+def postgresql_software_info():
+
+	versions_dirs = glob.glob('/usr/lib/p*sql/*')
+	versions_dirs.sort()
+	versions_dirs.reverse()
+	for version in versions_dirs:
+		bin_path = os.path.join(version, 'bin/postgres')
+		if os.path.isfile(bin_path):
+			version_string = system2((bin_path, '--version'))[0].strip()
+			version = version_string.split()[-1]
+			return SoftwareInfo('postgresql', version, version_string)
+	else:
+		raise SoftwareError
+
+explore('postgresql', postgresql_software_info)

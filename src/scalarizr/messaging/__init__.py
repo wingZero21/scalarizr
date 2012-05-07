@@ -4,6 +4,9 @@ import xml.dom.minidom as dom
 import threading
 import logging
 
+
+LOG = logging.getLogger(__name__)
+
 class MessagingError(BaseException):
 	pass
 
@@ -33,7 +36,9 @@ class MetaOptions(object):
 	SERVER_ID 	= "server_id"
 	PLATFORM 	= "platform" # ec2, vps, rs
 	OS 			= "os" # linux, win, sunos
+	DIST		= "dist"
 	REQUEST_ID 	= "request_id"
+	TIMESTAMP	= "timestamp"
 	SZR_VERSION = "szr_version"
 
 	
@@ -126,8 +131,17 @@ class Message(object):
 					itemEl = doc.createElement("item")
 					el.appendChild(itemEl)
 					self._walk_encode(v, itemEl, doc)
-		else:	
+		else:
+			'''
+			if not isinstance(value, unicode):
+				if value is not None:
+					value = str(value)
+				else:
+					value = ''
+			el.appendChild(doc.createTextNode(value))
+			'''
 			el.appendChild(doc.createTextNode(str(value) if value is not None else ""))
+
 
 class MessageProducer(Observable):
 	filters = None
@@ -276,6 +290,21 @@ class Messages:
 	DEPLOY_RESULT = 'DeployResult'
 	'''
 	Fires after deployment finished
+	'''
+	
+	OPERATION_DEFINITION = 'OperationDefinition'
+	'''
+	Fires before long timed operation
+	'''
+	
+	OPERATION_PROGRESS = 'OperationProgress'
+	'''
+	Log message described operation progress
+	''' 
+	
+	OPERATION_RESULT = 'OperationResult'
+	'''
+	Operation result message
 	'''
 	
 	REBUNDLE_LOG = "RebundleLog"

@@ -135,7 +135,7 @@ class EbsVolumeProvider(VolumeProvider):
 										ebs_vol.id, ebs_vol.zone, pl.get_avail_zone())
 						volume_id = None
 						delete_snap = True
-						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger, wait_completion=True).id
+						snap_id = ebstool.create_snapshot(conn, ebs_vol, logger=self._logger, wait_completion=True, tags=kwargs.get('tags')).id
 					else:
 						snap_id = None
 						
@@ -169,17 +169,14 @@ class EbsVolumeProvider(VolumeProvider):
 					device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device, 
 						to_me=True, logger=self._logger)[1]
 				
-			except (Exception, BaseException), e:
+			except:
 				self._logger.debug('Caught exception')
 				if ebs_vol:
 					self._logger.debug('Detaching EBS')
 					if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
 						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
 							
-					#if not volume_id:
-					#	ebs_vol.delete()
-						
-				raise StorageError('EBS volume construction failed: %s' % str(e))
+				raise StorageError, 'EBS volume construction failed: %s' % str(sys.exc_value), sys.exc_traceback
 			
 			finally:
 				if delete_snap and snap_id:
@@ -225,7 +222,8 @@ class EbsVolumeProvider(VolumeProvider):
 		super(EbsVolumeProvider, self).destroy(vol)
 		conn = self._new_ec2_conn()
 		if conn:
-			ebstool.detach_volume(conn, vol.id, self._logger)
+			if not vol.detached:
+				ebstool.detach_volume(conn, vol.id, self._logger)
 			ebstool.delete_volume(conn, vol.id, self._logger)
 		vol.device = None							
 	
@@ -379,8 +377,7 @@ def location_from_region(region):
 # and instance need to be rebooted to fix this issue.
 
 def _cleanup_volume_table(*args, **kwargs):
-	db = bus.db
-	conn = db.get().get_connection()
+	conn = bus.db
 	cur = conn.cursor()
 	cur.execute("DELETE FROM storage where (device LIKE '/dev/sd%' or type = 'ebs') and state = 'detached'")
 	conn.commit()
