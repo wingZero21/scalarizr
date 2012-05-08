@@ -271,6 +271,7 @@ class MysqlHandler(DBMSRandler):
 		
 			
 	def on_reload(self):
+		LOG.info("on_reload")
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
 		self._cnf = bus.cnf
@@ -280,7 +281,8 @@ class MysqlHandler(DBMSRandler):
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 
 
-	def on_init(self):		
+	def on_init(self):	
+		LOG.info("on_init")	
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
@@ -312,6 +314,7 @@ class MysqlHandler(DBMSRandler):
 		@type message: scalarizr.messaging.Message
 		@param message: HostInitResponse
 		"""
+		LOG.info("on_host_init_response")
 		if not message.body.has_key("mysql"):
 			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
 		
@@ -353,6 +356,7 @@ class MysqlHandler(DBMSRandler):
 		'''
 	
 	def on_before_host_up(self, message):
+		LOG.info("on_before_host_up")
 		"""
 		Configure MySQL behaviour
 		@type message: scalarizr.messaging.Message		
@@ -431,6 +435,7 @@ class MysqlHandler(DBMSRandler):
 	"""
 	
 	def on_BeforeHostTerminate(self, message):
+		LOG.info("on_BeforeHostTerminate")
 		"""
 		if message.local_ip == self._platform.get_private_ip():
 			self.mysql.service.stop(reason='Server will be terminated')
@@ -442,6 +447,7 @@ class MysqlHandler(DBMSRandler):
 	
 	
 	def on_Mysql_CreatePmaUser(self, message):
+		LOG.info("on_Mysql_CreatePmaUser")
 		assert message.pma_server_ip
 		assert message.farm_role_id
 		
@@ -491,7 +497,7 @@ class MysqlHandler(DBMSRandler):
 	
 	
 	def on_DbMsr_CreateBackup(self, message):
-		
+		LOG.info("on_DbMsr_CreateBackup")
 		self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
 			db_type = BEHAVIOUR,
 			status = 'ok',
@@ -571,7 +577,7 @@ class MysqlHandler(DBMSRandler):
 
 
 	def on_DbMsr_CreateDataBundle(self, message):
-		
+		LOG.info("on_DbMsr_CreateDataBundle")
 		msg_data = dict(
 				log_file='blabla',
 				log_pos='lala',
@@ -615,7 +621,7 @@ class MysqlHandler(DBMSRandler):
 		"""
 		Promote slave to master
 		"""
-		
+		LOG.info("on_DbMsr_PromoteToMaster")
 		assert message.body['volume_config']
 		assert message.root_password
 		assert message.repl_password
@@ -753,6 +759,7 @@ class MysqlHandler(DBMSRandler):
 	
 	
 	def on_DbMsr_NewMasterUp(self, message):
+		LOG.info("on_DbMsr_NewMasterUp")
 		mysql = message.body["mysql"]	
 		assert mysql.has_key("local_ip")
 		assert mysql.has_key("remote_ip")
@@ -763,6 +770,7 @@ class MysqlHandler(DBMSRandler):
 	
 	
 	def on_before_reboot_start(self, *args, **kwargs):
+		LOG.info("on_before_reboot_start")
 		pass
 		'''
 		self.mysql.service.stop('Instance is going to reboot')
@@ -770,6 +778,7 @@ class MysqlHandler(DBMSRandler):
 	
 	
 	def on_before_reboot_finish(self, *args, **kwargs):
+		LOG.info("on_before_reboot_finish")
 		pass
 		'''
 		self._insert_iptables_rules()
