@@ -235,7 +235,10 @@ class MysqlHandler(DBMSRandler):
 		self._data_dir = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_DATA_DIR)
 		self._binlog_base = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_BINLOG)
 		
+		'''
+		#commented to run early tests
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, self.mysql.service, MysqlCnfController())
+		'''
 		
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
