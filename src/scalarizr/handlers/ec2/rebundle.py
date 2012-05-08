@@ -436,13 +436,8 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			for part in manifest.parts:
 				upload_files.append(os.path.join(manifest_dir, part[0]))
 
-			#TODO: s3://scalr-<env-id>-<region>/images/
-			bucket_name = '%s-%s/images/' % (
-								bus.cnf.rawini.get('general', 'env_id'),
-								self._platform.get_avail_zone())
-
 			trn = Transfer(pool=4, max_attempts=5, logger=LOG)
-			trn.upload(upload_files, 's3://%s' % bucket_name)
+			trn.upload(upload_files, self._platform.scalrfs.images())
 
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
 

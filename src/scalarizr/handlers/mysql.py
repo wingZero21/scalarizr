@@ -832,7 +832,7 @@ class MysqlHandler(ServiceCtlHandler):
 				# Defining archive name and path
 				if not os.path.exists(self._tmp_dir):
 					os.makedirs(self._tmp_dir)
-				backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
+				backup_filename = '%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
 				backup_path = os.path.join(self._tmp_dir, backup_filename)
 				
 				# Creating archive 
@@ -856,21 +856,10 @@ class MysqlHandler(ServiceCtlHandler):
 					else:
 						parts = [backup_path]
 						
-
-					cloud_storage_path = '%s://scalr-%s-%s/backups/%s/%s/%s-%s/%s.tar.gz' % (
-		                                self._platform.cloud_storage_path.split('://')[0],
-		                                self._platform.get_user_data('env_id'),
-        		                        self._platform.get_user_data('region'),
-                		                self._platform.get_user_data('farmid'),
-                        		        self._platform.get_user_data('role'), #TODO: not sure, need be chek
-	                        	        self._platform.get_user_data('farm_roleid'),
-	        	                        self._platform.get_user_data('realrolename'),
-        	        	                time.strftime('%Y-%m-%d-%H:%M:%S')
-					)
-	
+					cloud_storage_path = self._platform.scalrfs.backup('mysql')
 					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
-					result = trn.upload(parts, self._platform.cloud_storage_path)
+					result = trn.upload(parts, cloud_storage_path)
 					self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
 									cloud_storage_path, backup_filename)
 			

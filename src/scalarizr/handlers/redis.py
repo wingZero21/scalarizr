@@ -435,7 +435,7 @@ class RedisHandler(ServiceCtlHandler):
 						raise BaseException('%s DB file %s does not exist. Skipping Backup process' % (BEHAVIOUR, src_path))
 					
 					# Defining archive name and path
-					backup_filename = 'redis-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+					backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
 					backup_path = os.path.join('/tmp', backup_filename)
 		
 					shutil.copyfile(src_path, dump_path)
@@ -453,21 +453,11 @@ class RedisHandler(ServiceCtlHandler):
 						parts = [backup_path]
 					
 				with op.step(self._step_upload_to_cloud_storage):
-
-					cloud_storage_path = '%s://scalr-%s-%s/backups/%s/%s/%s-%s/%s.tar.gz' % (
-		                                self._platform.cloud_storage_path.split('://')[0],
-		                                self._platform.get_user_data('env_id'),
-        		                        self._platform.get_user_data('region'),
-                		                self._platform.get_user_data('farmid'),
-                        		        self._platform.get_user_data('role'), #TODO: not sure, need be chek
-	                        	        self._platform.get_user_data('farm_roleid'),
-	        	                        self._platform.get_user_data('realrolename'),
-        	        	                time.strftime('%Y-%m-%d-%H:%M:%S')
-					)
-
+					
+					cloud_storage_path = self._platform.scalrfs.backup(BEHAVIOUR)
 					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
-					result = trn.upload(parts, self._platform.cloud_storage_path)
+					result = trn.upload(parts, cloud_storage_path)
 					self._logger.info("%s backup uploaded to cloud storage under %s/%s" % 
 								(BEHAVIOUR, cloud_storage_path, backup_filename))
 			
