@@ -143,7 +143,7 @@ class Platform():
 			if bus.scalr_version >= (3, 1, 0):
 				return os.path.join(self.root(), 'images')
 			else:
-				return 's3://scalr2-images-%s-%s' % (
+				return '%s://scalr2-images-%s-%s' % (
 					self.platform.cloud_storage_path.split('://')[0],
 					self.ini.get('general', 'region'),
 					self.platform.get_account_id()
@@ -152,7 +152,7 @@ class Platform():
 		
 		def database_backup(self, service):
 			if bus.scalr_version >= (3, 1, 0):
-				path = 'backups/%s/%s/%s-%s/%s' % (
+				path = 'backups/%s/%s/%s-%s' % (
 					self.ini.get('general', 'farm_id'),
 					service,
 					self.ini.get('general', 'farm_role_id'),
