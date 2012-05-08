@@ -31,7 +31,7 @@ from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 
 
-BEHAVIOUR = CNF_SECTION = SERVICE_NAME = BuiltinBehaviours.MYSQL
+BEHAVIOUR = CNF_SECTION = SERVICE_NAME = BuiltinBehaviours.MYSQL2
 LOG = logging.getLogger(__name__)
 
 
