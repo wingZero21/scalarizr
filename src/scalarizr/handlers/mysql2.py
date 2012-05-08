@@ -46,7 +46,6 @@ OPT_SNAPSHOT_CNF		= 'snapshot_config'
 CHANGE_MASTER_TIMEOUT   = '30'
 
 # Mysql storage constants
-STORAGE_DATA_DIR 		= "mysql-data"
 STORAGE_PATH 			= "/mnt/dbstorage"
 STORAGE_TMP_DIR 		= "tmp"
 STORAGE_VOLUME_CNF 		= 'mysql.json'
@@ -233,8 +232,8 @@ class MysqlHandler(DBMSRandler):
 		self._mycnf_path = mysql_svc.MYCNF_PATH
 		self._mysqld_path = mysql_svc.MYSQLD_PATH
 		
-		self._data_dir = os.path.join(STORAGE_PATH, STORAGE_DATA_DIR)
-		self._binlog_base = os.path.join(STORAGE_PATH, STORAGE_BINLOG)
+		self._data_dir = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_DATA_DIR)
+		self._binlog_base = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_BINLOG)
 		
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, self.mysql.service, MysqlCnfController())
 		
@@ -800,8 +799,8 @@ class MysqlHandler(DBMSRandler):
 	
 	
 	def _storage_valid(self, path=None):
-		data_dir = os.path.join(path, STORAGE_DATA_DIR) if path else self._data_dir
-		binlog_base = os.path.join(path, STORAGE_BINLOG) if path else self._binlog_base
+		data_dir = os.path.join(path, mysql_svc.STORAGE_DATA_DIR) if path else self._data_dir
+		binlog_base = os.path.join(path, mysql_svc.STORAGE_BINLOG) if path else self._binlog_base
 		return os.path.exists(data_dir) and glob.glob(binlog_base + '*')
 	
 		
@@ -1028,8 +1027,8 @@ class MysqlHandler(DBMSRandler):
 
 	def _innodb_recovery(self, storage_path=None):
 		storage_path = storage_path or STORAGE_PATH
-		binlog_path	= os.path.join(storage_path, STORAGE_BINLOG)		
-		data_dir = os.path.join(storage_path, STORAGE_DATA_DIR),
+		binlog_path	= os.path.join(storage_path, mysql_svc.STORAGE_BINLOG)		
+		data_dir = os.path.join(storage_path, mysql_svc.STORAGE_DATA_DIR),
 		pid_file = os.path.join(storage_path, 'mysql.pid')
 		socket_file = os.path.join(storage_path, 'mysql.sock')
 		mysqld_safe_bin	= software.whereis('mysqld_safe')[0]
