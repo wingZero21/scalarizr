@@ -318,10 +318,10 @@ class MysqlHandler(DBMSRandler):
 		@param message: HostInitResponse
 		"""
 		LOG.info("on_host_init_response")
-		if not message.body.has_key("mysql"):
-			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
+		if not message.body.has_key("mysql2"):
+			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql2' property")
 		
-		mysql = message.body["mysql"]
+		mysql = message.body["mysql2"]
 		assert mysql.has_key("root_password")
 		assert mysql.has_key("repl_password")
 		assert mysql.has_key("stat_password")
@@ -763,7 +763,7 @@ class MysqlHandler(DBMSRandler):
 	
 	def on_DbMsr_NewMasterUp(self, message):
 		LOG.info("on_DbMsr_NewMasterUp")
-		mysql = message.body["mysql"]	
+		mysql = message.body["mysql2"]	
 		assert mysql.has_key("local_ip")
 		assert mysql.has_key("remote_ip")
 		assert mysql.has_key("log_file")
