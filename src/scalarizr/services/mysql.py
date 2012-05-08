@@ -318,7 +318,7 @@ class MySQLClient(object):
 
 
 	def fetch_dict(self, query, fetch_one=True):
-		return self._fetch(query, cursor=pymysql.cursors.DictCursor, fetch_one)
+		return self._fetch(query, pymysql.cursors.DictCursor, fetch_one)
 	
 	
 	def fetchall(self, query):
