@@ -47,6 +47,7 @@ CHANGE_MASTER_TIMEOUT   = '30'
 
 # Mysql storage constants
 STORAGE_PATH 			= "/mnt/dbstorage"
+STORAGE_DATA_DIR 		= "mysql-data"
 STORAGE_TMP_DIR 		= "tmp"
 STORAGE_VOLUME_CNF 		= 'mysql.json'
 STORAGE_SNAPSHOT_CNF 	= 'mysql-snap.json'
