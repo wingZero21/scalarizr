@@ -454,7 +454,7 @@ class RedisHandler(ServiceCtlHandler):
 					
 				with op.step(self._step_upload_to_cloud_storage):
 					
-					cloud_storage_path = self._platform.scalrfs.backup(BEHAVIOUR)
+					cloud_storage_path = self._platform.scalrfs.database_backup(BEHAVIOUR)
 					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
 					result = trn.upload(parts, cloud_storage_path)
