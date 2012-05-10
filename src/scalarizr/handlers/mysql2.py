@@ -82,9 +82,13 @@ class MysqlMessages:
 	@ivar pma_password
 	@ivar farm_role_id
 	"""
+
+
+def get_handlers():
+	return [MysqlHandler()]
 	
 	
-class DBMSRandler(ServiceCtlHandler):
+class DBMSRHandler(ServiceCtlHandler):
 	pass
 
 
@@ -224,7 +228,7 @@ class MysqlCnfController(CnfController):
 		return self._mysql_version
 
 
-class MysqlHandler(DBMSRandler):
+class MysqlHandler(DBMSRHandler):
 	
 	
 	def __init__(self):
