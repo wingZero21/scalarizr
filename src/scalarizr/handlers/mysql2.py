@@ -588,8 +588,10 @@ class MysqlHandler(DBMSRHandler):
 				log_file='blabla',
 				log_pos='lala',
 				used_size='1.0',
-				status='ok'
+				status='ok',
+				snapshot_config='{my_snapshot_config:1}'
 			)
+		self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 		
 		
 		
