@@ -439,7 +439,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			trn = Transfer(pool=4, max_attempts=5, logger=LOG)
 			trn.upload(upload_files, self._platform.scalrfs.images())
 
-			return os.path.join(self._platform.scalrfs.images(), manifest_path)
+			return os.path.join(self._platform.scalrfs.images(), os.path.basename(manifest_path))
 
 		except (Exception, BaseException):
 			LOG.error("Cannot upload image")
