@@ -213,6 +213,14 @@ class ScalarizrOptions(Configurator.Container):
 		name = 'general/role_name'
 		private = True
 		#required = True
+
+	class region(Configurator.Option):
+		'''
+		Cloud location: us-east-1
+		'''
+		name = 'general/region'
+		private = True
+
 		
 	class env_id(Configurator.Option):
 		'''

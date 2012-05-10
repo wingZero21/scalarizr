@@ -437,7 +437,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 				upload_files.append(os.path.join(manifest_dir, part[0]))
 
 			trn = Transfer(pool=4, max_attempts=5, logger=LOG)
-			trn.upload(upload_files, self._platform.scalrfs.images())
+			trn.upload(upload_files, self._platform.scalrfs.image())
 
 			return os.path.join(bucket_name, os.path.basename(manifest_path))
 
