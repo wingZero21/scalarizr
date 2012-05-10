@@ -139,7 +139,7 @@ class Platform():
 				return self.platform.cloud_storage_path
 
 		
-		def image(self):
+		def images(self):
 			if bus.scalr_version >= (3, 1, 0):
 				return os.path.join(self.root(), 'images')
 			else:
@@ -150,7 +150,7 @@ class Platform():
 				)
 
 		
-		def database_backup(self, service):
+		def backups(self, service):
 			if bus.scalr_version >= (3, 1, 0):
 				path = 'backups/%s/%s/%s-%s' % (
 					self.ini.get('general', 'farm_id'),

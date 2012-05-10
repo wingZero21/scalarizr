@@ -856,7 +856,7 @@ class MysqlHandler(ServiceCtlHandler):
 					else:
 						parts = [backup_path]
 						
-					cloud_storage_path = self._platform.scalrfs.database_backup('mysql')
+					cloud_storage_path = self._platform.scalrfs.backups('mysql')
 					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
 					result = trn.upload(parts, cloud_storage_path)
