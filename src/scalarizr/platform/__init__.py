@@ -139,7 +139,7 @@ class Platform():
 				return self.platform.cloud_storage_path
 
 		
-		def image(self, file):
+		def image(self):
 			if bus.scalr_version >= (3, 1, 0):
 				return os.path.join(self.root(), 'images')
 			else:
