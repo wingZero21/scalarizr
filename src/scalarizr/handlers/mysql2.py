@@ -272,7 +272,6 @@ class MysqlHandler(DBMSRHandler):
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
-				or  message.name == Messages.HOST_INIT
 				or  message.name == Messages.BEFORE_HOST_TERMINATE
 				or  message.name == MysqlMessages.CREATE_PMA_USER)	
 		
@@ -767,12 +766,13 @@ class MysqlHandler(DBMSRHandler):
 	
 	def on_DbMsr_NewMasterUp(self, message):
 		LOG.info("on_DbMsr_NewMasterUp")
-		mysql = message.body["mysql2"]	
-		assert mysql.has_key("local_ip")
-		assert mysql.has_key("remote_ip")
-		assert mysql.has_key("log_file")
-		assert mysql.has_key("log_pos")
-		assert mysql.has_key("snapshot_config")
+		mysql2 = message.body["mysql2"]
+		assert mysql2.has_key("log_file")
+		assert mysql2.has_key("log_pos")		
+		assert message.body.has_key("db_type")
+		assert message.body.has_key("local_ip")
+		assert message.body.has_key("remote_ip")
+		assert message.body.has_key("snapshot_config")
 		
 	
 	
