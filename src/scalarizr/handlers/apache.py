@@ -130,7 +130,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			_first_ scalarizr start returns error:
 			(ps (code: 1) <out>:  <err>:  <args>: ('ps', '-G', 'www-data', '-o', 'command', '--no-headers')
 			'''
-			out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'))[0]
+			out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'), raise_exc=False)[0]
 			res = True if len([p for p in out.split('\n') if bin in p]) else False
 		except:
 			pass
