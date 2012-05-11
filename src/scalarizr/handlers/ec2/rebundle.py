@@ -690,7 +690,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		"""
 
 		pt = [el for el in [dev for dev in system2(('sfdisk', '-d', dev_name),
-					)[0].split('\n') if dev.startswith('/dev')]] 
+					)[0].split('\n') if dev.startswith('/dev')]]
 		res = {}
 		for line in pt:
 			dev_name, params = map(string.strip, line.split(':'))
@@ -701,7 +701,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 				res[dev_name].update({tmp[0]:tmp[1]})
 		return res
 
-	def make_some_partitions(self):
+	def make_partitions(self):
 
 		self.devname = self._create_image()
 		LOG.debug('Created volume and attached as `%s`', self.devname)
@@ -731,7 +731,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			 error_text='device `%s` not exist'%self.devname)
 		LOG.debug('Copied MBR from %s to %s device', rdev_name, self.devname)
 		
-	
 		""" list with device, source which will be copying """
 		from_devs = [dev for dev in list_devices if dev.device.startswith(rdev_name)]
 		LOG.debug('list from_devs `%s`', from_devs)
@@ -739,8 +738,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		""" Dict with device(distination) partition table params. """
 		to_devs = self._read_pt(self.devname)
 		LOG.debug('list to_devs `%s`', to_devs)
-		
-		#TODO: It needs be refactoring, like in self._format_image() ----->>>
+
 		"""  used for detecting fs type of device, list of device """
 		lparts = [line.split() for line in system2(('df', '-hT'),)[0].split('\n') if line.startswith(rdev_name)]
 
@@ -751,7 +749,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			""" try detect type_fs with `df -hT` of root device """
 			type_fs = None
 			for part in lparts:
-				""" compaire partition's names by last symbol /dev/sda1 and /dev/sdf1"""
+				""" compaire partition's names by last symbol of root part and distination"""
 				if len(part[0]) == len(to_dev) and part[0][-1] == to_dev[-1]:
 					type_fs = part[1]
 					break
@@ -765,8 +763,8 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 				if ret_code:		
 					raise HandlerError("Can't create fs on device %s:\n%s" % 
 									(to_dev, err))
-		#<<<-----
-		
+
+
 		""" mounting and copy partitions """
 		for from_dev in from_devs:
 			num = os.path.basename(from_dev.device)[-1]
@@ -774,7 +772,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			if self._mtab.contains(mpoint=os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num))) or\
 					self._mtab.contains(mpoint=os.path.join(self.mpoint, os.path.basename(from_dev.device))):
 				raise HandlerError("Partition already mounted")
-			
+
 			""" dev like `sdg1` """
 			dev = '%s%s' % (os.path.basename(self.devname), num)
 
@@ -844,7 +842,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		""" for one partition in root device EBS volume using LinuxImage.make(self)
 			else copy partitions of root device """
 		if self.is_few_partition:
-			self.make_some_partitions()
+			self.make_partitions()
 		else:
 			rebundle_hdlr.LinuxImage.make(self)
 
@@ -866,7 +864,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 	def cleanup(self):
 		self.umount()
-
 		mp = None
 		if self.is_few_partition:
 			""" self.mountpoint like /mnt/img-mnt/sdg2 """
