@@ -916,6 +916,8 @@ class MysqlHandler(ServiceCtlHandler):
 					)
 					msg_data.update(self._compat_storage_data(snap=snap))
 					self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
+					
+			op.ok()
 
 		except (Exception, BaseException), e:
 			LOG.exception(e)
