@@ -98,15 +98,18 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 			# EBS-root device instance
 
 			""" detecting root device like rdev=`sda` """
+			rdev = None
 			for el in os.listdir('/sys/block'):
-			    if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
-			        rdev = el
-			        break
+				if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
+					rdev = el
+					break
+			if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
+				rdev = root_disk.device
 
 			""" list partition of root device """
 			list_rdevparts = [dev.device for dev in list_device
 								if dev.device.startswith('/dev/%s' % rdev)]
-			
+
 			""" if one partition we use old method """
 			if len(list(set(list_rdevparts))) > 1:
 				""" size of volume in KByte"""
@@ -788,7 +791,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 				""" mount source volume partition """
 				fstool.mount(from_dev.device, from_mpoint)
-				#copy all consitstant
+				""" copy all consitstant"""
 				excludes = self.excludes
 				self.excludes = tuple()
 				self._copy_rec('%s/'%from_mpoint if from_mpoint[-1] != '/' else from_mpoint, to_mpoint)
@@ -823,10 +826,13 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		if not root_disk:
 			raise HandlerError("Can't find root device")
 		""" detecting root device like rdev=`sda` """
+		rdev = None
 		for el in os.listdir('/sys/block'):
 			if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
 				rdev = el
 				break
+		if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
+			rdev = root_disk.device
 		""" list partition of root device """
 		list_rdevparts = [dev.device for dev in list_device
 								if dev.device.startswith('/dev/%s' % rdev)]
