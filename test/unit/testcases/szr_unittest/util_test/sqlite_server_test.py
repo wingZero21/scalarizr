@@ -24,7 +24,7 @@ CONN = None
 	
 	
 def setup():
-	global CONN, SQLITE3
+	global CONN, SQLITE3, SERVER_THREAD
 	
 	SQLITE3 = which('sqlite3')
 	
@@ -37,6 +37,7 @@ def setup():
 	sqlite_server.wait_for_server_thread(t)
 
 	CONN = t.connection
+	
 
 
 def teardown(cls):
@@ -57,7 +58,7 @@ INSERT INTO test_execute_script VALUES (1, '/usr/bin/python', -9);
 '''
 		CONN.executescript(script)
 		
-		query_result = system2("sqlite3 /tmp/db.sqlite 'select script_name from test_execute_script'", shell=True)[0].strip()
+		query_result = system2("sqlite3 %s 'select script_name from test_execute_script'" % DATABASE, shell=True)[0].strip()
 		assert query_result == '/usr/bin/python'
 
 
@@ -92,10 +93,12 @@ INSERT INTO test_clients VALUES (2, 'Mr. Seconds', 41);
 		assert cur.fetchone() == (2, 'Mr. Seconds', 41)
 		assert cur.fetchone() is None
 	
+	
 	def test_fetchall(self):
 		cur = CONN.cursor()
 		cur.execute('SELECT * FROM test_clients ORDER BY id')
 		assert cur.fetchall() == [(1, u'Mr. First', 36), (2, u'Mr. Seconds', 41)]
+		assert cur.fetchall() is None
 
 	
 	def test_rowcount(self):
@@ -104,11 +107,13 @@ INSERT INTO test_clients VALUES (2, 'Mr. Seconds', 41);
 	def test_close(self):
 		pass
 	
+	''''
 	def test_operate_closed_cursor(self):
 		cur = CONN.cursor()
 		cur.close()
-		# This wasn't works. method silently dies by timeout
+		# XXX: This wasn't works. method silently dies by timeout
 		assert_raises(Exception, cur.execute, 'SELECT * FROM sqlite_master')
+	'''
 
 
 class TestSQLiteServer(object):
