@@ -462,6 +462,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 					msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
+			op.ok()
+
 		except (Exception, BaseException), e:
 			self._logger.exception(e)
 			
