@@ -861,14 +861,11 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 					LOG.debug("Unmounting '%s'", mpt)
 					system2("umount -d " + mpt, shell=True, raise_exc=False)
 		else:
-			rebundle_hdlr.LinuxImage.umount()
+			rebundle_hdlr.LinuxImage.umount(self)
 
 
 	def cleanup(self):
-		try:
-			self.umount()
-		except:
-			rebundle_hdlr.LinuxImage.umount()
+		self.umount()
 
 		mp = None
 		if self.is_few_partition:
