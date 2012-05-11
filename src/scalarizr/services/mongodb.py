@@ -948,13 +948,7 @@ class MongoCLI(object):
 	@autoreconnect
 	def rs_reconfig(self, config, force=False):
 		self._logger.debug('Reconfiguring replica set (config: %s)', config)
-		try:
-			ret = self.connection.admin.command("replSetReconfig", config)
-		except:
-			if force:
-				ret = self.connection.admin.command("replSetReconfig", config, force=force)
-			else:
-				raise
+		ret = self.connection.admin.command("replSetReconfig", config, force=force)
 
 		self._logger.debug('Mongo replSetReconfig answer: %s', ret)
 		return ret
