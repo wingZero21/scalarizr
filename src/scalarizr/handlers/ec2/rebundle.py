@@ -865,7 +865,11 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 
 	def cleanup(self):
-		self.umount()
+		try:
+			self.umount()
+		except:
+			rebundle_hdlr.LinuxImage.umount()
+
 		mp = None
 		if self.is_few_partition:
 			""" self.mountpoint like /mnt/img-mnt/sdg2 """
