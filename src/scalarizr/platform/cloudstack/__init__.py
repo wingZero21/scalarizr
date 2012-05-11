@@ -20,6 +20,8 @@ class CloudStackPlatform(Platform):
 	name = 'cloudstack'
 	
 	def __init__(self):
+		Platform.__init__(self)
+		
 		# Find the virtual router.
 		eth0leases = '/var/lib/dhclient/dhclient-eth0.leases'
 		if not os.path.exists(eth0leases):

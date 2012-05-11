@@ -963,7 +963,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				
 				# Defining archive name and path
 				rs_name = RS_NAME_TPL % self.shard_index
-				backup_filename = '%s-%s-backup-'%(BEHAVIOUR,rs_name) + time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+				backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
 				backup_path = os.path.join(self._tmp_dir, backup_filename)
 				
 				# Creating archive 
@@ -992,11 +992,12 @@ class MongoDBHandler(ServiceCtlHandler):
 					else:
 						parts = [backup_path]
 							
-					self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+					cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
+					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
-					result = trn.upload(parts, self._platform.cloud_storage_path)
+					result = trn.upload(parts, cloud_storage_path)
 					self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
-									BEHAVIOUR, self._platform.cloud_storage_path, backup_filename)
+									BEHAVIOUR, cloud_storage_path, backup_filename)
 			
 			op.ok()
 			

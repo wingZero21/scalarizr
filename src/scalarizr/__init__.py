@@ -329,10 +329,17 @@ def _start_services():
 def _apply_user_data(cnf):
 	logger = logging.getLogger(__name__)
 	platform = bus.platform
+	cnf = bus.cnf
 	
-	def g(key):
-		value = platform.get_user_data(key)
-		return value if value is not None else ''	
+	if cnf.state == ScalarizrState.RUNNING:
+		queryenv = bus.queryenv_service
+		userdata = queryenv.get_server_user_data()
+		def g(key):
+			return userdata.get(key, '')
+	else:
+		def g(key):
+			value = platform.get_user_data(key)
+			return value if value is not None else ''	
 	
 	logger.debug('Applying user-data to configuration')
 	logger.debug('User-data:\n%s', pprint.pformat(platform.get_user_data()))
@@ -345,7 +352,8 @@ def _apply_user_data(cnf):
 			'farm_role_id' : g(UserDataOptions.FARMROLE_ID),
 			'env_id' : g(UserDataOptions.ENV_ID), 
 			'farm_id' : g(UserDataOptions.FARM_ID),
-			'role_id' : g(UserDataOptions.ROLE_ID), 
+			'role_id' : g(UserDataOptions.ROLE_ID),
+			'region' : g(UserDataOptions.REGION) 
 		},
 		messaging_p2p={
 			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
@@ -366,6 +374,9 @@ def _apply_user_data(cnf):
 	
 	logger.debug('Reloading configuration after user-data applying')
 	cnf.bootstrap(force_reload=True)
+
+
+
 
 def _detect_scalr_version():
 	pl = bus.platform
@@ -731,6 +742,10 @@ def main():
 		
 		# Initialize scalarizr services
 		_init_services()
+		if cnf.state == ScalarizrState.RUNNING:
+			# ReSync user-data
+			cnf.fire('apply_user_data', cnf)		
+		
 		bus.fire('init')
 		
 		# Install signal handlers
