@@ -613,6 +613,9 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	def on_HostUp(self, message):
+		if BuiltinBehaviours.MONGODB not in message.behaviour:
+			return
+
 		private_ip = self._platform.get_private_ip()
 		if message.local_ip != private_ip:
 			

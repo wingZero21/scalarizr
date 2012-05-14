@@ -151,7 +151,7 @@ class SqliteServer(object):
 			# This will allow us to remove SQLiteServerThread class
 			
 			job = self._single_conn_proxy.tasks_queue.get()
-			LOG.debug('job: %s', job)
+			#LOG.debug('job: %s', job)
 			try:
 				result = error = None				
 				try:
@@ -168,7 +168,8 @@ class SqliteServer(object):
 						self._clients[hash].error = error
 						self._clients[hash].result_available.set()
 					else:
-						LOG.debug('result is ready but client disconnected (client: %s)', hash)
+						#LOG.debug('result is ready but client disconnected (client: %s)', hash)
+						pass
 			except:
 				LOG.warning('Recoverable error in SQLite server loop', exc_info=sys.exc_info())
 	
