@@ -1,27 +1,57 @@
 [apt]
-snmp = python-pysnmp4
-pymongo = python-pymongo
-prettytable = python-prettytable
-pyyaml = python-PyYAML
+boto = python-boto
+cloudfiles = python-rackspace-cloudfiles
+cloudservers = python-rackspace-cloudservers
+cloudstack = python-cloudstack
+gevent = python-gevent
 m2crypto = python-m2crypto
+novaclient = python-novaclient
+pexpect = python-pexpect
+prettytable = python-prettytable
+pymongo = python-pymongo
+pymysql = python-pymysql
+pysnmp = python-pysnmp4, python-pysnmp4-mibs
+yaml = python-yaml
+
 
 [yum]
-pysnmp = python26-pysnmp
-pyyaml = python26-PyYAML
-m2crypto = python26-m2crypto
-pexpect = python26-pexpect
-pysnmp = python26-pysnmp
-pysnmp-mibs = python26-pysnmp-mibs
-prettytable = python26-prettytable
+boto = python-boto
+cloudfiles = python-cloudfiles
+cloudservers = python-cloudservers
+cloudstack = python-cloudstack
+gevent = python-gevent
+m2crypto = m2crypto
+novaclient = python-novaclient
+pexpect = pexpect
+prettytable = python-prettytable
+pymongo = python-pymongo
+pymysql = python-pymysql
+pysnmp = pysnmp, python-pyasn1, python-pysnmp-mibs
+yaml = PyYAML
 
-[apt:ubuntu804]
-zmq = python25-zeromq
 
 [yum:el5]
+boto = python26-boto
+cloudfiles = python26-cloudfiles
+cloudservers = python26-cloudservers
+cloudstack = python26-cloudstack
+gevent = python26-gevent
+m2crypto = python26-m2crypto
+novaclient = python26-novaclient
+pexpect = python26-pexpect
+prettytable = python26-prettytable
 pymongo = python26-pymongo
+pymysql = python26-pymysql
+pysnmp = python26-pysnmp, python26-pysnmp-mibs
+yaml = pythn26-pyyaml
 
-[yum:centos5]
-pymongo = python26-pymongo
 
-[yum:el6]
-pymongo = python-pymongo
+[apt:ubuntu804]
+json = python-simplejson
+zmq = python25-zeromq
+gevent = python25-gevent
+
+
+
+
+

@@ -27,7 +27,7 @@ from scalarizr.storage.util.loop import listloop
 
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
-from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
+from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size, dynimp
 from scalarizr.util.filetool import write_file, read_file
 from scalarizr.util import wait_until
 from scalarizr.storage.util.loop import listloop
@@ -162,6 +162,8 @@ class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
 def _init():
 	optparser = bus.optparser
 	bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
+	
+	dynimp.setup()
 	
 	_init_logging()
 	logger = logging.getLogger(__name__)	

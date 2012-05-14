@@ -579,7 +579,6 @@ def run_detached(binary, args=[], env=None):
 			else:
 				os.execl(binary, binary, *args)
 		except Exception:
-<<<<<<< .working
 			os._exit(255)
 			
 			

@@ -201,120 +201,100 @@ class YumPackageMgr(PackageMgr):
 		self.yum_command('install %s' %  self._join_packages_str('-', name, 
 											version, *args), raise_exc=True)
 
-'''---------------------------------
-# path to manifest
----------------------------------'''
-class Manifest(object):
-	_instance = None
-	_MANIFEST = '../import.manifest'
-	path = None
 
-	def __init__(self, path=None):
-		if not self.path:
-			self.path = os.path.join(os.path.dirname(__file__), self._MANIFEST)
-			if not os.path.exists(self.path):
-				self.path = None
-				LOG.error('Path to manifest fail - import manifest didn`t found')
-		if path:
-			if os.path.exists(path):
-				self.path = path
-			else:
-				LOG.debug('Path `%s` not exist try standard`%s`', path, self.path)
 
-	def __new__(cls, *args, **kwargs):
-		if not cls._instance:
-			cls._instance = super(Manifest, cls).__new__(cls, *args, **kwargs)
-		return cls._instance
+class ImpLoader(object):
+	'''
+	Extension for standard import
+	'''
 
-def setup(path=None):
-	Manifest(path)
+	DEFAULT_MANIFEST = os.path.abspath(os.path.dirname(__file__) + '/../import.manifest')
+	
+	manifest = None
+	
+	sections = None
+	'''
+	For Ubuntu: ('apt', 'apt:ubuntu', 'apt:ubuntu10.04')
+	For Debian: ('apt', 'apt:debian', 'apt:debian6')
+	For CentOS/RHEL/OEL: ('yum', 'yum:el', 'yum:el5')
+	For Fedora: ('yum', 'yum:fedora', 'yum:fedora16')
+	'''
 
-'''---------------------------------
-# extension for import 
----------------------------------'''
-class ImpImport(object):
-	'''Extension for standard import'''
+	def __init__(self, manifest=None):
+		mgr_name = 'apt' if disttool.is_debian_based() else 'yum'		
+		self.mgr = AptPackageMgr() if disttool.is_debian_based() else YumPackageMgr()
 
-	def __init__(self, manifest_path=None):
-		#available package managers:
-		self.pkg_mgrs = {'apt': AptPackageMgr,	'yum': YumPackageMgr}
-		if disttool.is_debian_based():
-			self.mgr = self.pkg_mgrs['apt']()
-		elif disttool.is_redhat_based():
-			self.mgr = self.pkg_mgrs['yum']()
-
+		self.manifest = os.path.abspath(manifest or self.DEFAULT_MANIFEST)
 		self.conf = configparser.ConfigParser()
-		self.conf.read(Manifest(path=manifest_path).path)
+		self.conf.read(self.manifest)
 
-		self.sections_to_look = ['apt' if disttool.is_debian_based() else 'yum']
-		#['apt', 'apt:ubuntu', 'apt:ubuntu11', 'apt:ubuntu11.10']
-		#['yum', 'yum:el', 'yum:el5', 'yum:centos5.7']
-		dist = disttool.linux_dist()
-		if disttool.is_redhat_based():
-			self.sections_to_look += [
-				self.sections_to_look[0] + ':' + 'el',
-				self.sections_to_look[0] + ':' + 'el' + dist[1].split('.')[0]]
-		else:
-			self.sections_to_look += [
-				self.sections_to_look[0] + ':' + dist[0].lower(),
-				self.sections_to_look[0] + ':' + dist[0].lower() + \
-					dist[1].split('.')[0]]
-		self.sections_to_look.append(self.sections_to_look[0] + ':' + \
-				dist[0].lower() + dist[1])
-		LOG.debug('expected manifest sections: `%s`', self.sections_to_look)
+		dist_id, release = disttool.linux_dist()[0:2]
+		if disttool.is_redhat_based() and not disttool.is_fedora():
+			dist_id = 'el'
+		dist_id = dist_id.lower()
+		self.sections = [s % locals() for s in ('%(mgr_name)s', 
+											'%(mgr_name)s:%(dist_id)s', 
+											'%(mgr_name)s:%(dist_id)s%(release)s')]
+		self.sections.reverse()
+		
+		LOG.debug('Initialized ImpLoader with such settings\n'
+				'  manifest: %s\n'
+				'  sections: %s\n',
+				self.manifest, self.sections)
 
-	def install_pypackage(self, package):
+
+	def install_python_package(self, package):
+		LOG.info('Resolving OS package for %s', package)
 		package = package.lower()
-		LOG.debug('install_package %s', package)
-		dist_names = self.sections_to_look[0:]
-		while len(dist_names) > 0:
-			dist_name = dist_names.pop()
-			if dist_name in self.conf.sections() and \
-						package in self.conf.options(dist_name):
-				full_package_name = self.conf.get(dist_name, package)
-				LOG.debug('dist_name:%s, package:%s, full_package_name:%s',
-						dist_name, package, full_package_name)
-				if not self.mgr:
-					raise Exception('Can`t install`%s`,pckg manager is unknown'
-						% full_package_name)
-				version = self.mgr.candidates(full_package_name)
-				LOG.debug('ImpImport.install_pypackage: version: %s', version)
-				if version:
-					self.mgr.install(full_package_name, version[-1])
-				else:
-					raise Exception, 'Pckg mgr didn`t found actual version'\
-						' of `%s`, nothing to do' % full_package_name
-				LOG.debug('Package `%s` successfully installed', package)
-			else:
-				LOG.debug('Didn`t found `%s` in section `%s` import.manifest',
-					package, dist_name)
+		for section in self.sections:
+			if self.conf.has_option(section, package):
+				os_packages = map(string.strip, self.conf.get(section, package).split(','))
+				LOG.debug('  %s -> %s', package, ', '.join(os_packages))
+				LOG.debug('    %d OS package(s) will be installed', len(os_packages))
+				install_args = []
+				for os_package in os_packages:
+					candidates = self.mgr.candidates(os_package)
+					if not candidates:
+						raise ImportError("There are no installation candidates "
+										"for OS package %s" % (os_package, ))
+					install_args += [os_package, candidates[-1]]
+					
+				LOG.debug('    Installing %s', ', '.join(['%s == %s' % tuple(install_args[i:i+2]) 
+													for i in xrange(0, len(install_args), 2)]) )	
+				try:
+					self.mgr.install(*install_args)
+				except:
+					raise ImportError("Failed to install OS packages. "
+										"Error: %s" % (os_package, sys.exc_info()[1]))
+				
+				LOG.debug('  Successfully installed %s', package)
+				break
+		else:
+			raise ImportError("Unknown package. There are no mappings for package '%s' "
+							"to OS package in manifest '%s'" % (package, self.manifest))
+			
 
-	def find_module(self, full_name, path=None):
-		if full_name in sys.modules:
+	def find_module(self, fullname, path=None):
+		if fullname in sys.modules:
 			return self
-		name = full_name.split('.')[-1]
-		pkg_name = full_name.split('.')[0]
-		#LOG.debug('ImpImport.find_modul. name=`%s`, path=`%s`', name, path or '')
+		
+		name = fullname.split('.')[-1]
+		package = fullname.split('.')[0]
 		try:
 			self.file, self.filename, self.etc = imp.find_module(name, path)
 			return self
 		except:
-			try:
-				#LOG.debug('pkg_name=`%s` didn`t found yet', pkg_name)
-				if pkg_name not in sys.modules:
-					LOG.debug('Pckg or modul`%s`didn`t found. Checking in'\
-						' manifest...', full_name)
-					self.install_pypackage(pkg_name)
-				self.file, self.filename, self.etc = imp.find_module(name, path)
-				return self
-			except:
-				raise ImportError, 'Exception in installing package`%s`. %s' %\
-					(full_name, sys.exc_info()[1])
+			if package not in sys.modules:
+				self.install_python_package(package)
+			self.file, self.filename, self.etc = imp.find_module(name, path)
+			return self
 
-	def load_module(self, full_name):
-		if full_name in sys.modules:
-			return sys.modules[full_name]
-		LOG.debug('ImpImport.load_module: %s', full_name)
-		return imp.load_module(full_name, self.file, self.filename, self.etc)
+	def load_module(self, fullname):
+		if fullname in sys.modules:
+			return sys.modules[fullname]
 
-sys.meta_path = [ImpImport()]
+		return imp.load_module(fullname, self.file, self.filename, self.etc)
+
+
+def setup():
+	sys.meta_path += [ImpLoader()]
