@@ -991,9 +991,9 @@ class MysqlHandler(DBMSRHandler):
 	
 		
 	def _insert_iptables_rules(self):
-		iptables = iptables.IpTables()
-		if iptables.usable():
-			iptables.insert_rule(None, iptables.RuleSpec(dport=mysql_svc.MYSQL_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))	
+		ipt = iptables.IpTables()
+		if ipt.usable():
+			ipt.insert_rule(None, iptables.RuleSpec(dport=mysql_svc.MYSQL_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))	
 
 
 
