@@ -19,7 +19,7 @@ from gevent import baseserver
 from gevent_zeromq import zmq
 
 
-LOG_CATEGORY = 'scalarizr.api.zmq'
+LOG_CATEGORY = 'scalarizr.api'
 LOG = logging.getLogger(LOG_CATEGORY)
 
 
@@ -102,43 +102,3 @@ class ZmqServer(baseserver.BaseServer, rpc.Server):
 	def handle_error(self):
 		traceback.print_exc()
 	
-	
-'''
-class ZmqServer2(rpc.Server):
-	def __init__(self, endpoint, handler, pool_size=8):
-		super(ZmqServer2, self).__init__(endpoint, handler)
-		self.workers = pool.Pool(pool_size)
-		self._shutdown_event = event.Event()
-		self._shutdown_requests = False
-		
-	def serve_forever(self):
-		self.context = zmq.Context(1)
-		
-		LOG.debug('Creating ROUTER on %s', self.endpoint)
-		self.frontend = zmq.Socket(self.context, zmq.ROUTER)
-		self.frontend.bind(self.endpoint)
-
-		try:
-			while not self._shutdown_requests:
-				self.workers.spawn(self.handle_one_request, self.frontend.recv_multipart(), len(self.workers)-1)
-		finally:
-			self.workers.kill()
-			self.frontend.close()
-			self.context.term()
-		self._shutdown_event.set()	
-			
-		
-	def handle_one_request(self, message, index):
-		LOG = logging.getLogger('%s.worker.%d' % (LOG_CATEGORY, index))
-		LOG.debug('recv: %s', message)
-		resp = self.handler.handle_request(message[2])
-		self.frontend.send_multipart(message[0:2] + [resp])
-		
-	def shutdown(self):
-		LOG.debug('Shutdowning %s ...', self.endpoint)
-		self._shutdown_requests = True
-		self._shutdown_event.wait()
-		LOG.debug('Shutdowned %s', self.endpoint)
-'''
-			
-

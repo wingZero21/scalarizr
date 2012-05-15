@@ -8,15 +8,18 @@ JSON-RPC implementation and utilities for 0MQ and HTTP transport
 
 import sys
 import time
-try:
-	import json
-except ImportError:
-	import simplejson as json
+import json
+import urllib2
+import urlparse
+import struct
+import socket
 try:
 	from gevent.local import local
 except ImportError:
 	from threading import local
 import traceback
+
+
 from scalarizr import util
 
 def service_method(fn):
@@ -96,6 +99,8 @@ class RequestHandler(object):
 			svs = self._find_service(namespace)
 			fn = self._find_method(svs, method)
 			result = self._invoke_method(fn, params)
+			# important to test json serializarion before serialize the whole result
+			json.dumps(result) 
 		except ServiceError, e:
 			error = {'code': e.code, 
 					'message': e.message, 
@@ -106,7 +111,7 @@ class RequestHandler(object):
 					'message': 'Internal error', 
 					'data': str(sys.exc_info()[1])}
 		finally:
-			if result:
+			if not error:
 				resp = {'result': result}
 			else:
 				resp = {'error': error}
@@ -145,10 +150,13 @@ class RequestHandler(object):
 		
 		
 	def _invoke_method(self, method, params):
+		return method(**params)
+		'''
 		try:
 			return method(**params)
 		except:
 			raise InternalError()
+		'''
 
 
 class ServiceProxy(object):
@@ -188,4 +196,3 @@ class Server(object):
 	
 	def stop(self):
 		raise NotImplemented()
-	

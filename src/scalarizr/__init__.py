@@ -13,7 +13,7 @@ if sys.version_info < (2, 6):
 
 
 # Core
-from scalarizr import config 
+from scalarizr import config, rpc
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
 from scalarizr.handlers import MessageListener
@@ -22,7 +22,7 @@ from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
-from scalarizr.api.binding import jsonrpc_zmq
+from scalarizr.api.binding import jsonrpc_http
 from scalarizr.storage.util.loop import listloop
 
 # Utils
@@ -30,7 +30,6 @@ from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size, dynimp
 from scalarizr.util.filetool import write_file, read_file
 from scalarizr.util import wait_until
-from scalarizr.storage.util.loop import listloop
 
 # Stdlibs
 import logging
@@ -136,7 +135,10 @@ _msg_thread = None
 _logging_configured = False
 
 
-_routes = {'haproxy': 'scalarizr.api.haproxy.HAProxyAPI'}
+_api_routes = {
+	'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
+	'sysinfo': 'scalarizr.api.sysinfo.SysinfoAPI'
+}
 '''
 Before start API server, for object jsonrpc_zmq.ZmqServer with handlers routes  
 '''
@@ -322,7 +324,9 @@ def _init_services():
 	Storage.maintain_volume_table = True
 	
 	if not bus.api_server:
-		bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', _routes)
+		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
+											cnf.key_path(cnf.DEFAULT_KEY))
+		bus.api_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 8011), api_app)
 
 
 def _start_services():
@@ -339,13 +343,11 @@ def _start_services():
 	msg_thread.start()
 	globals()['_msg_thread'] = msg_thread
 	
-	try:
-		# Start API server
-		api_server = bus.api_server
-		api_server.start()
-		logger.info('Start API server')
-	except:
-		pass
+	# Start API server
+	api_server = bus.api_server
+	logger.info('Starting API server on http://%s:%s', 
+			api_server.hostname, api_server.port)
+	api_server.serve_forever()
 	
 	# Start periodical executor
 	ex = bus.periodical_executor
