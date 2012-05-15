@@ -33,7 +33,7 @@ STORAGE_BINLOG = "mysql-misc/binlog"
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 
 
-class Mysql(BaseService):
+class MySQL(BaseService):
 	
 	service = None
 	my_cnf = None
@@ -41,7 +41,7 @@ class Mysql(BaseService):
 		
 	def __new__(cls, *args, **kwargs):
 		if not cls._instance:
-			cls._instance = super(Mysql, cls).__new__(
+			cls._instance = super(MySQL, cls).__new__(
 								cls, *args, **kwargs)
 		return cls._instance
 	

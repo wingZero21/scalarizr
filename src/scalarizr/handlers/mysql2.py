@@ -239,10 +239,9 @@ class MysqlHandler(DBMSRHandler):
 		self._data_dir = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_DATA_DIR)
 		self._binlog_base = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_BINLOG)
 		
-		'''
-		#commented to run early tests
+		self.mysql = mysql_svc.MySQL()
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, self.mysql.service, MysqlCnfController())
-		'''
+
 		
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
@@ -293,8 +292,6 @@ class MysqlHandler(DBMSRHandler):
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
-		
-		'''		
 				
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
@@ -306,13 +303,11 @@ class MysqlHandler(DBMSRHandler):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 			
-			self.mysql = mysql_svc.MySQL(self.cli)
 			if self.is_replication_master:
 				LOG.debug("Checking Scalr's %s system users presence." % BEHAVIOUR)
 				creds = self.get_user_creds()
 				self.create_users(**creds)
-		'''
-				
+	
 
 	def on_host_init_response(self, message):
 		"""
@@ -324,15 +319,6 @@ class MysqlHandler(DBMSRHandler):
 		if not message.body.has_key("mysql2"):
 			raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql2' property")
 		
-		mysql = message.body["mysql2"]
-		assert mysql.has_key("root_password")
-		assert mysql.has_key("repl_password")
-		assert mysql.has_key("stat_password")
-		assert mysql.has_key("log_file")
-		assert mysql.has_key("log_pos")
-		
-		
-		'''
 		dir = os.path.dirname(self._volume_config_path)
 		if not os.path.exists(dir):
 			os.makedirs(dir)
@@ -358,8 +344,7 @@ class MysqlHandler(DBMSRHandler):
 		
 		LOG.debug("Update mysql config with %s", mysql_data)
 		self._update_config(mysql_data)
-		self.mysql = mysql_svc.MySQL(self.cli)
-		'''
+
 	
 	def on_before_host_up(self, message):
 		LOG.info("on_before_host_up")
@@ -390,55 +375,7 @@ class MysqlHandler(DBMSRHandler):
 		"""
 		pass
 	
-	"""
-	
-	def get_user_creds(self):
-		options = dict(ROOT_USER=OPT_ROOT_PASSWORD, REPL_USER=OPT_REPL_PASSWORD, STAT_USER=OPT_STAT_PASSWORD)
-		creds = {}
-		for login, opt_pwd in options.items():
-			password = self._get_ini_options(opt_pwd)
-			if not password:
-				password = cryptotool.pwgen(20)
-				self._update_config({opt_pwd:password})
-			creds[login] = password
-		return creds
-	
-	
-	def create_users(**creds):
-		users = {}
-		root_cli = mysql_svc.MySQLClient(ROOT_USER, creds[ROOT_USER])
-		local_root = mysql_svc.MySQLUser(root_cli, ROOT_USER, creds[ROOT_USER], host='localhost')
 
-		if not self.mysql.service.running:
-			self.mysql.service.start()
-			if not local_root.exists() or not local_root.check_password():
-				users.update({'local_root': local_root})
-				self.mysql.service.stop('creating users')
-				self.mysql.service.start_skip_grant_tables()
-		
-		for login, password in creds.items():
-			user = mysql_svc.MySQLUser(root_cli, login, password, host='%', privileges=PRIVILEGES.get(login, None))
-			users[login] = user
-			
-		for login, user in users.items():
-			if not user.exists():
-				user.create()
-			elif not user.check_password():
-				user.remove()
-				user.create()
-			users[login] = user
-			
-		self.mysql.service.stop_skip_grant_tables()	
-		return users
-		
-
-	@property
-	def is_replication_master(self):
-		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
-		LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
-		return True if int(value) else False
-	
-	"""
 	
 	def on_BeforeHostTerminate(self, message):
 		LOG.info("on_BeforeHostTerminate")
@@ -1027,11 +964,6 @@ class MysqlHandler(DBMSRHandler):
 				raise
 		return vol
 	
-		
-	def _insert_iptables_rules(self):
-		iptables = iptables.IpTables()
-		if iptables.usable():
-			iptables.insert_rule(None, iptables.RuleSpec(dport=mysql_svc.MYSQL_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))	
 
 
 	def _innodb_recovery(self, storage_path=None):
@@ -1055,3 +987,58 @@ class MysqlHandler(DBMSRHandler):
 		system2(mysqld_safe_cmd, stdin="select 1;")	
 		
 	"""
+	
+		
+	def _insert_iptables_rules(self):
+		iptables = iptables.IpTables()
+		if iptables.usable():
+			iptables.insert_rule(None, iptables.RuleSpec(dport=mysql_svc.MYSQL_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))	
+
+
+
+	@property
+	def is_replication_master(self):
+		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
+		LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
+		return True if int(value) else False
+	
+	
+	def get_user_creds(self):
+		options = dict(ROOT_USER=OPT_ROOT_PASSWORD, REPL_USER=OPT_REPL_PASSWORD, STAT_USER=OPT_STAT_PASSWORD)
+		creds = {}
+		for login, opt_pwd in options.items():
+			password = self._get_ini_options(opt_pwd)
+			if not password:
+				password = cryptotool.pwgen(20)
+				self._update_config({opt_pwd:password})
+			creds[login] = password
+		return creds
+	
+	
+	def create_users(self, **creds):
+		users = {}
+		root_cli = mysql_svc.MySQLClient(ROOT_USER, creds[ROOT_USER])
+		local_root = mysql_svc.MySQLUser(root_cli, ROOT_USER, creds[ROOT_USER], host='localhost')
+
+		if not self.mysql.service.running:
+			self.mysql.service.start()
+			if not local_root.exists() or not local_root.check_password():
+				users.update({'local_root': local_root})
+				self.mysql.service.stop('creating users')
+				self.mysql.service.start_skip_grant_tables()
+		
+		for login, password in creds.items():
+			user = mysql_svc.MySQLUser(root_cli, login, password, host='%', privileges=PRIVILEGES.get(login, None))
+			users[login] = user
+			
+		for login, user in users.items():
+			if not user.exists():
+				user.create()
+			elif not user.check_password():
+				user.remove()
+				user.create()
+			users[login] = user
+			
+		self.mysql.service.stop_skip_grant_tables()	
+		return users
+		

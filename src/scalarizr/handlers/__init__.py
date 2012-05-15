@@ -537,7 +537,7 @@ class ServiceCtlHandler(Handler):
 class DbMsrMessages:
 	DBMSR_CREATE_DATA_BUNDLE = "DbMsr_CreateDataBundle"
 	
-	DBMSR_CREATE_DATA_BUNDLE_RESULT = "DbMsr_CreateDataBundleResult"
+	DBMSR_CREATE_DATA_BUNDLE_RESULT = "c"
 	'''
 	@ivar: db_type: postgresql|mysql
 	@ivar: status: Operation status [ ok | error ]
