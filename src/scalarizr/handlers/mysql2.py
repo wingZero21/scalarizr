@@ -91,6 +91,7 @@ def get_handlers():
 class DBMSRHandler(ServiceCtlHandler):
 	pass
 
+initdv2.explore(SERVICE_NAME, mysql_svc.MysqlInitScript)
 
 class MysqlCnfController(CnfController):
 	cli = None
