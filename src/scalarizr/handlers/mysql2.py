@@ -324,7 +324,7 @@ class MysqlHandler(DBMSRHandler):
 		if not os.path.exists(dir):
 			os.makedirs(dir)
 		
-		mysql_data = message.mysql.copy()
+		mysql_data = message.mysql2.copy()
 		for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 						(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 			if os.path.exists(file):
