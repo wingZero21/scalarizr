@@ -78,6 +78,12 @@ CREATE TABLE test_clients (
 );
 INSERT INTO test_clients VALUES (1, 'Mr. First', 36);
 INSERT INTO test_clients VALUES (2, 'Mr. Seconds', 41);
+CREATE TABLE test_clients_update (
+	"id" INTEGER PRIMARY KEY,
+	"name" TEXT,
+	"age" INTEGER
+);
+INSERT INTO test_clients_update VALUES (1, 'Mr. First', 36);
 '''
 		CONN.executescript(script)
 	
@@ -86,6 +92,10 @@ INSERT INTO test_clients VALUES (2, 'Mr. Seconds', 41);
 		ret = cur.execute('SELECT * FROM test_clients WHERE id = ?', (2, ))
 		assert type(ret) == sqlite_server.CursorProxy
 		
+	def test_execute_update(self):
+		cur = CONN.cursor()
+		cur.execute('UPDATE test_clients_update SET age = ? WHERE id = ?', [37, 1])
+		assert cur.rowcount == 1
 	
 	def test_fetchone(self):
 		cur = CONN.cursor()
