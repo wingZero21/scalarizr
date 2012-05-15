@@ -948,15 +948,16 @@ class MongoCLI(object):
 	@autoreconnect
 	def rs_reconfig(self, config, force=False):
 		self._logger.debug('Reconfiguring replica set (config: %s)', config)
-
-		ret = self.connection.admin.command("replSetReconfig", config)
-		self._logger.debug('Mongo replSetReconfig answer: %s', ret)
-
-		if ret['ok'] == 0 and force:
-			self._logger.debug('Retrying with "force" argument')
-			ret = self.connection.admin.command("replSetReconfig", config, force=force)
+		try:
+			ret = self.connection.admin.command("replSetReconfig", config)
 			self._logger.debug('Mongo replSetReconfig answer: %s', ret)
-
+		except:
+			if force:
+				self._logger.debug('Reconfiguring failed. Retrying with "force" argument')
+				ret = self.connection.admin.command("replSetReconfig", config, force=force)
+				self._logger.debug('Mongo replSetReconfig answer: %s', ret)
+			else:
+				raise
 		return ret
 
 
