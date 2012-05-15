@@ -265,7 +265,7 @@ class ImpLoader(object):
 					self.mgr.install(*install_args)
 				except:
 					raise ImportError("Failed to install OS packages. "
-										"Error: %s" % (os_package, sys.exc_info()[1]))
+										"Error: %s" % (sys.exc_info()[1], ))
 				
 				LOG.debug('  Successfully installed %s', package)
 				break
@@ -278,17 +278,22 @@ class ImpLoader(object):
 		if fullname in sys.modules:
 			return self
 		
-		name = fullname.split('.')[-1]
-		package = fullname.split('.')[0]
 		try:
-			self.file, self.filename, self.etc = imp.find_module(name, path)
-			return self
+			name = fullname.split('.')[-1]
+			package = fullname.split('.')[0]
+			try:
+				self.file, self.filename, self.etc = imp.find_module(name, path)
+				return self
+			except:
+				if package not in sys.modules:
+					self.install_python_package(package)
+				self.file, self.filename, self.etc = imp.find_module(name, path)
+				return self
 		except:
-			if package not in sys.modules:
-				self.install_python_package(package)
-			self.file, self.filename, self.etc = imp.find_module(name, path)
-			return self
+			LOG.error('%s: %s', sys.exc_info()[0].__name__, sys.exc_info()[1])
+			raise
 
+	
 	def load_module(self, fullname):
 		if fullname in sys.modules:
 			return sys.modules[fullname]

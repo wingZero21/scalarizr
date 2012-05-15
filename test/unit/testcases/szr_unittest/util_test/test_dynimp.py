@@ -6,15 +6,22 @@ Created on 22.03.2012
 
 import os
 import sys
+import tempfile
 
 from scalarizr.util import disttool, dynimp
 
 import mock
 from nose.tools import raises
+import shutil
+
 
 
 class TestImpLoader(object):
 	def setup(self):
+		self.tmp = tempfile.mkdtemp()
+		self.site_packages = os.path.join(self.tmp, 'site-packages')
+		os.makedirs(self.site_packages)
+		
 		self.manifest = os.path.dirname(__file__) + '/dynimp-manifest.ini'
 		
 		disttool.linux_dist = mock.Mock(return_value = ('', '', ''))
@@ -22,11 +29,23 @@ class TestImpLoader(object):
 		disttool.is_redhat_based = mock.Mock(return_value=False)
 		disttool.is_fedora = mock.Mock(return_value=False)
 
+	def teardown(self):
+		shutil.rmtree(self.tmp)
 
-	def test_redhat_install_python_package(self):
+	def env_ubuntu(self):
+		disttool.linux_dist.return_value = ('Ubuntu', '12.04', 'oneiric')		
+		disttool.is_redhat_based.return_value = False
+		disttool.is_debian_based.return_value = True
+	
+	
+	def env_rhel5(self):
 		disttool.linux_dist.return_value = ('redhat', '5.6', 'final')
 		disttool.is_redhat_based.return_value = True
 		disttool.is_debian_based.return_value = False
+
+
+	def test_redhat_install_python_package(self):
+		self.env_rhel5()
 
 		self.imp = dynimp.ImpLoader(self.manifest)
 		self.imp.mgr.install = mock.Mock()		
@@ -37,9 +56,7 @@ class TestImpLoader(object):
 		
 	
 	def test_ubuntu_install_python_package(self):
-		disttool.linux_dist.return_value = ('Ubuntu', '12.04', 'oneiric')		
-		disttool.is_redhat_based.return_value = False
-		disttool.is_debian_based.return_value = True
+		self.env_ubuntu()
 
 		self.imp = dynimp.ImpLoader(self.manifest)
 		self.imp.mgr.install = mock.Mock()		
@@ -51,9 +68,7 @@ class TestImpLoader(object):
 		
 	@raises(ImportError)
 	def test_install_python_package_os_package_has_no_candidates(self):
-		disttool.linux_dist.return_value = ('redhat', '5.6', 'final')
-		disttool.is_redhat_based.return_value = True
-		disttool.is_debian_based.return_value = False
+		self.env_rhel5()
 
 		self.imp = dynimp.ImpLoader(self.manifest)
 		self.imp.mgr.install = mock.Mock()		
@@ -64,9 +79,7 @@ class TestImpLoader(object):
 		
 	@raises(ImportError)		
 	def test_install_python_package_no_os_package_mapping(self):
-		disttool.linux_dist.return_value = ('redhat', '5.6', 'final')
-		disttool.is_redhat_based.return_value = True
-		disttool.is_debian_based.return_value = False
+		self.env_rhel5()		
 
 		self.imp = dynimp.ImpLoader(self.manifest)
 		self.imp.mgr.install = mock.Mock()		
@@ -74,18 +87,43 @@ class TestImpLoader(object):
 		self.imp.install_python_package('unknown-package')
 		assert False, 'ImportError expected but never raised'
 
-	'''
+
 	def test_import(self):
-		disttool.linux_dist.return_value = ('Ubuntu', '12.04', 'oneiric')		
-		disttool.is_redhat_based.return_value = False
-		disttool.is_debian_based.return_value = True
+		self.env_ubuntu()
 
 		self.imp = dynimp.ImpLoader(self.manifest)
-		self.imp.mgr.install = mock.Mock()		
+		def install(*args):
+			open(self.site_packages + '/mypackage.py', 'w').close()
+		self.imp.mgr.install = mock.Mock(side_effect=install)		
 		self.imp.mgr.candidates = mock.Mock(return_value = ['1.01a-1ubuntu0'])
 		
 		sys.meta_path += [self.imp]
-		__import__('package_to_install')
+		sys.path += [self.site_packages]
+		try:
+			__import__('mypackage')
+			assert 'mypackage' in sys.modules
+		finally:
+			sys.path.remove(self.site_packages)
+			sys.meta_path.remove(self.imp)
 		
-		self.imp.mgr.install.assert_called_with('python-package-to-install', '1.01a-1ubuntu0')
-	'''
+	def test_import_subpackage(self):
+		self.env_ubuntu()
+
+		self.imp = dynimp.ImpLoader(self.manifest)
+		def install(*args):
+			os.makedirs(self.site_packages + '/mypackage2/mysubpackage')
+			open(self.site_packages + '/mypackage2/__init__.py', 'w').close()
+			open(self.site_packages + '/mypackage2/mysubpackage/__init__.py', 'w').close()
+			open(self.site_packages + '/mypackage2/mysubpackage/mymodule.py', 'w').close()
+		self.imp.mgr.install = mock.Mock(side_effect=install)		
+		self.imp.mgr.candidates = mock.Mock(return_value = ['1.0'])
+		
+		sys.meta_path += [self.imp]
+		sys.path += [self.site_packages]
+		try:
+			__import__('mypackage2.mysubpackage.mymodule')
+			assert 'mypackage2.mysubpackage' in sys.modules
+			assert 'mymodule' in sys.modules['mypackage2.mysubpackage'].__dict__
+		finally:
+			sys.path.remove(self.site_packages)
+			sys.meta_path.remove(self.imp)
