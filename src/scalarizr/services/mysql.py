@@ -37,6 +37,7 @@ class MySQL(BaseService):
 	
 	service = None
 	my_cnf = None
+	_instance = None
 	
 		
 	def __new__(cls, *args, **kwargs):
