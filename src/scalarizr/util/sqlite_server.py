@@ -60,6 +60,8 @@ class CursorProxy(Proxy):
 		if parameters:
 			args += [parameters]
 		self._execute_result = self._call('cursor_execute', args)
+		if not self._execute_result:
+			self._execute_result = dict(data=[], rowcount=0)
 		self._execute_result['iter'] = iter(self._execute_result['data'] or [None])
 		return self
 	
@@ -164,6 +166,7 @@ class SqliteServer(object):
 				finally:
 					# If client stil exists
 					if hash in self._clients:
+
 						self._clients[hash].result = result
 						self._clients[hash].error = error
 						self._clients[hash].result_available.set()
