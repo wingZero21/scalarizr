@@ -927,9 +927,6 @@ class MysqlHandler(DBMSRHandler):
 		return mysql_svc.MysqlClient(ROOT_USER, self.root_password)
 		
 
-	def _update_config(self, data): 
-		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
-
 	
 	def _compat_storage_data(self, vol=None, snap=None):
 		ret = dict()
@@ -1044,3 +1041,6 @@ class MysqlHandler(DBMSRHandler):
 		self.mysql.service.stop_skip_grant_tables()	
 		return users
 		
+
+	def _update_config(self, data): 
+		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
