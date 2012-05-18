@@ -330,7 +330,8 @@ class MysqlHandler(DBMSRHandler):
 			if os.path.exists(file):
 				os.remove(file)
 			if key in mysql_data:
-				Storage.backup_config(mysql_data[key], file)
+				if mysql_data[key]:
+					Storage.backup_config(mysql_data[key], file)
 				del mysql_data[key]
 				
 		# Compatibility with Scalr <= 2.1
