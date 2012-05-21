@@ -696,13 +696,19 @@ class MysqlHandler(DBMSRHandler):
 	
 	def on_DbMsr_NewMasterUp(self, message):
 		LOG.info("on_DbMsr_NewMasterUp")
+		'''
 		mysql2 = message.body["mysql2"]
 		assert mysql2.has_key("log_file")
 		assert mysql2.has_key("log_pos")		
+		'''
 		assert message.body.has_key("db_type")
 		assert message.body.has_key("local_ip")
 		assert message.body.has_key("remote_ip")
 		assert message.body.has_key("snapshot_config")
+		
+		
+		if  self.is_replication_master():
+			LOG.debug('Skip NewMasterUp. My replication role is master')
 		
 	
 	
