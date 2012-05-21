@@ -696,8 +696,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
 			return
 
-		shard_idx = int(message.mongodb['shard_index'])
-		rs_idx = int(message.mongodb['replica_set_index'])
+		try:
+			shard_idx = int(message.mongodb['shard_index'])
+			rs_idx = int(message.mongodb['replica_set_index'])
+		except:
+			self._logger.debug('Received malformed HostDown message.')
+			return
 
 		down_node_host = HOSTNAME_TPL % (shard_idx, rs_idx)
 		down_node_name = '%s:%s' % (down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
