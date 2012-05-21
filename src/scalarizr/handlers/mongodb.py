@@ -685,6 +685,9 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	def on_HostDown(self, message):
+		if not BuiltinBehaviours.MONGODB in message.behaviour:
+			return
+
 		if message.local_ip in self._status_trackers:
 			t = self._status_trackers[message.local_ip]
 			t.stop()
