@@ -239,27 +239,28 @@ class MySQLClient(object):
 	
 	
 	def slave_status(self):
-		vars = {}
+		variables = {}
 		out = self.fetchdict("SHOW SLAVE STATUS")
 		if out:
-			vars = out[0]
-			for name in vars.keys():
-				if name not in ('Exec_Master_Log_Pos', 
+			for name, value in out[0].keys():
+				if name in ('Exec_Master_Log_Pos', 
 							'Relay_Master_Log_File', 
 							"Master_Log_File", 
 							"Read_Master_Log_Pos", 
 							'Slave_IO_Running', 
 							'Slave_SQL_Running'):
-					del vars[name]
-		return vars
+					variables[name] = value
+		else:
+			raise ServiceError('SHOW SLAVE STATUS returned empty set. Slave is not started?')
+		return variables
 	
 	
 	def master_status(self):
 		out = self.fetcdict('SHOW MASTER STATUS')
 		log_file, log_pos = None, None
 		if out:
-			vars = out[0]
-			log_file, log_pos = vars['File'], vars['Position']
+			variables = out[0]
+			log_file, log_pos = variables['File'], variables['Position']
 		return (log_file, log_pos)
 	
 	
