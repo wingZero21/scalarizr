@@ -766,7 +766,7 @@ class MysqlHandler(DBMSRHandler):
 		self.storage_vol = self._plug_storage(mpoint=STORAGE_PATH, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 		
-		self.mysql.flush_logs()
+		self.mysql.flush_logs(self._data_dir)
 		
 		msg_data = None
 		storage_valid = self._storage_valid()
