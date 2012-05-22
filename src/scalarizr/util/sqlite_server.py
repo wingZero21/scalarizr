@@ -64,6 +64,9 @@ class CursorProxy(Proxy):
 		if not self._execute_result:
 			self._execute_result = dict(data=[], rowcount=0)
 
+		# Temporary
+		LOG.debug('Execute result: %s', self._execute_result)
+
 		self._execute_result['iter'] = iter(self._execute_result['data'] or [None])
 		return self
 	
@@ -107,6 +110,8 @@ class ConnectionProxy(Proxy):
 
 	def executescript(self, sql):
 		return self._call('conn_executescript', [sql])
+
+
 
 	
 	def _get_row_factory(self):

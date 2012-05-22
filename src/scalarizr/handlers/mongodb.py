@@ -602,6 +602,9 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	def on_HostInit(self, message):
+		if BuiltinBehaviours.MONGODB not in message.behaviour:
+			return
+
 		if message.local_ip != self._platform.get_private_ip():
 		
 			shard_idx = int(message.mongodb['shard_index'])
@@ -794,6 +797,9 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_BeforeHostTerminate(self, message):
 
 		if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
+			return
+
+		if not BuiltinBehaviours.MONGODB in message.behaviour:
 			return
 
 		if message.local_ip == self._platform.get_private_ip():
