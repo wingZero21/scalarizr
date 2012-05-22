@@ -13,7 +13,7 @@ import random
 import pwd
 
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.services import  BaseService, ServiceError, BaseConfig
+from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import read_file, write_file, rchown
@@ -470,6 +470,13 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 	sgt_pid_path = None
 	
 	
+	@lazy
+	def __new__(cls, *args, **kws):
+		obj = super(MysqlInitScript, cls).__new__(cls, *args, **kws)
+		cls.__init__(obj)
+		return obj
+			
+				
 	def __init__(self):
 		#todo: provide user and password
 		self.mysql_cli = MySQLClient()
@@ -553,6 +560,14 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 	def stop(self, reason=None):
 		initdv2.ParametrizedInitScript.stop(self)
 
+	
+	def restart(self, reason=None):
+		initdv2.ParametrizedInitScript.restart(self)
+		
+	def reload(self, reason=None):
+		initdv2.ParametrizedInitScript.reload(self)
+		
+		
 	def _is_sgt_process_exists(self):
 		out = system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
 		return MYSQLD_PATH in out and 'skip-grant-tables' in out
