@@ -102,20 +102,20 @@ class MySQL(BaseService):
 					if os.path.isdir(src_dir):
 						set_se_path = software.whereis('setsebool')
 						if set_se_path:
-							self._logger.debug('Make SELinux rule for rsync')
+							LOG.debug('Make SELinux rule for rsync')
 							system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
-						self._logger.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
+						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 						rsync = filetool.Rsync().archive()
 						rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
 						system2(str(rsync), shell=True)
 						self._mysql_config.set(directive, dirname)
 					else:
-						self._logger.info('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
+						LOG.info('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
 				else:
 					self._mysql_config.set(directive, dirname)
 					
 			except NoPathError:
-				self._logger.debug('There is no such option "%s" in mysql config.' % directive)
+				LOG.debug('There is no such option "%s" in mysql config.' % directive)
 				if not os.path.isdir(directory):
 					os.makedirs(directory)
 				
@@ -164,7 +164,7 @@ class MySQLClient(object):
 			
 	
 	def test_connection(self):
-		self._logger.debug('Checking MySQL service status')
+		LOG.debug('Checking MySQL service status')
 		try:
 			self.fetchone('SELECT 1')
 		except pymysql.err.OperationalError, e:
