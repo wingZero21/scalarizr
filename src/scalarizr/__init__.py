@@ -721,7 +721,10 @@ def main():
 			cnf.fire('apply_user_data', cnf)
 			upd = ScalrUpdClientScript()
 			if not upd.running:
-				upd.start()			
+				try:
+					upd.start()
+				except:
+					logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])			
 		
 		# Check Scalr version
 		if not bus.scalr_version:
