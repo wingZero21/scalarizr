@@ -785,7 +785,7 @@ class MysqlHandler(DBMSRHandler):
 		
 		# Patch configuration
 		
-		self.mysqlmove_mysqldir_to(STORAGE_PATH)
+		self.mysql.move_mysqldir_to(STORAGE_PATH)
 		
 		# Init replication
 		self.mysql._init_replication(master=True)
