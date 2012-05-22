@@ -10,10 +10,11 @@ import subprocess
 import signal
 import pymysql
 import random
+import pwd
 
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig
-from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError
+from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import read_file, write_file, rchown
 
@@ -87,7 +88,7 @@ class MySQL(BaseService):
 		pass
 	
 	def move_mysqldir_to(self, storage_path):
-		
+		'''
 		for directive, dirname in (
 				('mysqld/log_bin', os.path.join(storage_path,STORAGE_BINLOG)), 
 				('mysqld/datadir', os.path.join(storage_path,STORAGE_DATA_DIR))): 
@@ -124,6 +125,10 @@ class MySQL(BaseService):
 			# Adding rules to apparmor config 
 			if disttool.is_debian_based():
 				_add_apparmor_rules(directory)
+		'''
+		#TODO: rewrite
+		pass
+		
 
 	
 	def flush_logs(self, data_dir):
@@ -312,8 +317,8 @@ class MySQLClient(object):
 		except pymysql.err.OperationalError, e:
 			#catching mysqld restarts (e.g. sgt)
 			if e.args[0] == 2013:
-				conn = self.get_connection(true)
-				cursor = self.conn.cursor(cursor)
+				conn = self.get_connection(force=True)
+				cursor = conn.cursor(cursor)
 				
 		res = cursor.fetchone if fetch_one else cursor.fetchall()
 		return res
@@ -544,6 +549,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 					raise
 		
 		return self._start_stop_reload('start')
+	
+	def stop(self, reason=None):
+		initdv2.ParametrizedInitScript.stop(self)
 
 	def _is_sgt_process_exists(self):
 		out = system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
@@ -591,11 +599,11 @@ def _add_apparmor_rules(directory):
 				app_rules = re.sub(re.compile('(.*)(})([^}]*)', re.S), '\\1\n'+directory+' r,\n'+'\\2\\3', app_rules)
 			file.write(app_rules)
 			file.close()
-			apparmor_initd = ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
+			apparmor_initd = initdv2.ParametrizedInitScript('apparmor', '/etc/init.d/apparmor')
 			try:
 				apparmor_initd.reload()
 			except InitdError, e:
-				_logger.error('Cannot restart apparmor. %s', e)	
+				LOG.error('Cannot restart apparmor. %s', e)	
 
 		
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
