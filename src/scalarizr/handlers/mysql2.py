@@ -13,6 +13,7 @@ import tarfile
 import tempfile
 import logging
 import glob
+import ConfigParser
 
 # Core
 from scalarizr import config
@@ -1073,4 +1074,17 @@ class MysqlHandler(DBMSRHandler):
 		LOG.info('MySQL data bundle created\n  snapshot: %s\n  log_file: %s\n  log_pos: %s', 
 						snap.id, log_file, log_pos)
 		return snap, log_file, log_pos
+	
+	
+	def _get_ini_options(self, *args):
+		ret = []
+		for opt in args:
+			try:
+				ret.append(self._cnf.rawini.get(CNF_SECTION, opt))
+			except ConfigParser.Error:
+				err = 'Required configuration option is missed in mysql.ini: %s' % opt
+				raise HandlerError(err)
+		return tuple(ret)
+	
+	
 			
