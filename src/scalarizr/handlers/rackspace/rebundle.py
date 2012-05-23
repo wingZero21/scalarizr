@@ -25,8 +25,6 @@ def get_handlers ():
 class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 
 	def rebundle(self):
-		image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
-
 		pl = bus.platform
 		con = pl.new_cloudservers_conn()
 		servers = con.servers.list()
@@ -39,20 +37,38 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			raise HandlerError('Server %s not found in servers list' % pl.get_public_ip())
 		
 		LOG.debug('Found server %s. server id: %s', pl.get_public_ip(), server.id)
-
 		image = None
+
 		try:
-			image_manager = ImageManager(con)
-			system2("sync", shell=True)
-			LOG.info("Creating server image. server id: %s, image name: '%s'", server.id, image_name)
-			try:
-				image = image_manager.create(image_name, server.id)
-			except CloudServersException, e:
-				if 'Cannot create a new backup request while saving a prior backup or migrating' in str(e):
-					raise HandlerError('Another image is currently creating from this server. '
-							'Rackspace allows to create only ONE image per server at a time. '
-							'Try again later')
-				raise
+			attempts_left = 3
+
+			while attempts_left:
+				image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+				image_manager = ImageManager(con)
+				system2("sync", shell=True)
+				LOG.info("Creating server image. server id: %s, image name: '%s'", server.id, image_name)
+				try:
+					image = image_manager.create(image_name, server.id)
+				except CloudServersException, e:
+					if 'Cannot create a new backup request while saving a prior backup or migrating' in str(e):
+						LOG.warning('Rackspace API answered "Cannot create a new backup request while saving'
+									'a prior backup or migrating".')
+						attempts_left -= 1
+						time.sleep(30)
+						LOG.info('Searching "%s" image', image_name)
+						try:
+							image = image_manager.find(name=image_name)
+							break
+						except:
+							LOG.info('Image "%s" not found', image_name)
+							continue
+
+					raise
+			else:
+				raise HandlerError('Another image is currently creating from this server. '
+								   'Rackspace allows to create only ONE image per server at a time. '
+								   'Try again later')
+
 			LOG.debug('Image %s created', image.id)
 
 			LOG.info('Checking that image %s is completed', image.id)
