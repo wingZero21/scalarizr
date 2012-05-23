@@ -51,31 +51,47 @@ class CursorProxy(Proxy):
 
 	def __init__(self, tasks_queue):
 		super(CursorProxy, self).__init__(tasks_queue)
-		self._cursor = self._call('cursor_create', [self])
+		self._execute_result = None
+		self._call('cursor_create', [self])		
 		
 		
 	def execute(self, sql, parameters=None):
 		args = [sql]
 		if parameters:
 			args += [parameters]
-		self._call('cursor_execute', args)
+		self._execute_result = self._call('cursor_execute', args)
+
+		if not self._execute_result:
+			self._execute_result = dict(data=[], rowcount=0)
+
+		# Temporary
+		LOG.debug('Execute result: %s', self._execute_result)
+
+		self._execute_result['iter'] = iter(self._execute_result['data'] or [None])
 		return self
 	
 	
 	def fetchone(self):
-		return self._call('cursor_fetchone')
+		try:
+			return self._execute_result['iter'].next()
+		except StopIteration:
+			return None
 
 
 	def fetchall(self):
-		return self._call('cursor_fetchall')
+		try:
+			return self._execute_result['data']
+		finally:
+			self._execute_result['data'] = None
 	
 	@property
 	def rowcount(self):
-		return self._call('cursor_rowcount')
+		return self._execute_result['rowcount']
 
 	
 	def __del__(self):
-		self._call('cursor_delete', wait=False)
+		pass
+		#self._call('cursor_delete', wait=False)
 		
 		
 	close = __del__
@@ -88,14 +104,16 @@ class ConnectionProxy(Proxy):
 		return cp
 
 
-	def executescript(self, sql):
-		return self._call('conn_executescript', [sql])
-
-	
 	def commit(self):
 		# no worries, autocommit is set
 		pass
-	
+
+
+	def executescript(self, sql):
+		return self._call('conn_executescript', [sql])
+
+
+
 	
 	def _get_row_factory(self):
 		return self._call('conn_get_row_factory')
@@ -143,6 +161,7 @@ class SqliteServer(object):
 			# This will allow us to remove SQLiteServerThread class
 			
 			job = self._single_conn_proxy.tasks_queue.get()
+			LOG.debug('job: %s', job)
 			try:
 				result = error = None				
 				try:
@@ -154,35 +173,51 @@ class SqliteServer(object):
 					error = sys.exc_info()
 				finally:
 					# If client stil exists
+					LOG.debug('Result: %s, Error: %s', result, error)
 					if hash in self._clients:
+
 						self._clients[hash].result = result
 						self._clients[hash].error = error
 						self._clients[hash].result_available.set()
+					else:
+						LOG.debug('result is ready but client disconnected (client: %s)', hash)
 			except:
 				LOG.warning('Recoverable error in SQLite server loop', exc_info=sys.exc_info())
 	
 	
 	def _cursor_create(self, hash, proxy):
+		"""
 		self._cursors[hash] = self._master_conn.cursor()
-		self._clients[hash] = proxy
 		return self._cursors[hash]
-		
-		
+		"""
+		LOG.debug('create cursor %s', hash)
+		self._clients[hash] = proxy
+
+
 	def _cursor_delete(self, hash):
+		"""
 		result = None
 		if hash in self._cursors:
 			result = self._cursors[hash].close()
 			del self._cursors[hash]
-			del self._clients[hash]
 		return result
-		
-		
+		"""
+		if hash in self._clients:
+			LOG.debug('delete cursor %s', hash)
+			del self._clients[hash]
+
+
 	def _cursor_execute(self, hash, *args, **kwds):
-		result = None
-		if hash in self._cursors:
-			result  = self._cursors[hash].execute(*args, **kwds)
-		return result 
-	
+		cur = self._master_conn.cursor()
+		try:
+			cur.execute(*args, **kwds)
+			return {
+				'data': cur.fetchall(),
+				'rowcount': cur.rowcount
+			}
+		finally:
+			cur.close()
+
 	
 	def _cursor_fetchone(self, hash):
 		result = None
@@ -224,8 +259,35 @@ class SqliteServer(object):
 	def _conn_executescript(self, hash, sql):
 		return self._master_conn.executescript(sql)
 
+
+	def _conn_execute(self, hash, *args, **kwds):
+		cur = self._cursor_create(hash, self._single_conn_proxy)
+		try:
+			cur.execute(*args)
+		finally:
+			self._cursor_delete(hash)
+
 	
+	def _conn_fetchall(self, hash, *args, **kwds):
+		cur = self._cursor_create(hash, self._single_conn_proxy)
+		try:
+			cur.execute(*args)
+			return cur.fetchall()
+		finally:
+			self._cursor_delete(hash)
+			
+			
+	def _conn_fetchone(self, hash, *args, **kwds):
+		cur = self._cursor_create(hash, self._single_conn_proxy)
+		try:
+			cur.execute(*args)
+			return cur.fetchone()
+		finally:
+			self._cursor_delete(hash)
+
 	
+class _NULL(object):
+	pass	
 	
 class SQLiteServerThread(threading.Thread):
 	

@@ -628,7 +628,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					os.makedirs(self._tmp_path)
 					
 				# Defining archive name and path
-				backup_filename = 'pgsql-backup-'+time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+				backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
 				backup_path = os.path.join(self._tmp_path, backup_filename)
 				
 				# Creating archive 
@@ -657,12 +657,13 @@ class PostgreSqlHander(ServiceCtlHandler):
 						parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
 					else:
 						parts = [backup_path]
-							
-					self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+						
+					cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
+					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
-					result = trn.upload(parts, self._platform.cloud_storage_path)
+					result = trn.upload(parts, cloud_storage_path)
 					self._logger.info("Postgresql backup uploaded to cloud storage under %s/%s", 
-									self._platform.cloud_storage_path, backup_filename)
+									cloud_storage_path, backup_filename)
 			
 			op.ok()
 				

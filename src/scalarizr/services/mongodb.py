@@ -950,13 +950,14 @@ class MongoCLI(object):
 		self._logger.debug('Reconfiguring replica set (config: %s)', config)
 		try:
 			ret = self.connection.admin.command("replSetReconfig", config)
+			self._logger.debug('Mongo replSetReconfig answer: %s', ret)
 		except:
 			if force:
+				self._logger.debug('Reconfiguring failed. Retrying with "force" argument')
 				ret = self.connection.admin.command("replSetReconfig", config, force=force)
+				self._logger.debug('Mongo replSetReconfig answer: %s', ret)
 			else:
 				raise
-
-		self._logger.debug('Mongo replSetReconfig answer: %s', ret)
 		return ret
 
 

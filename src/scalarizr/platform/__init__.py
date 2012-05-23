@@ -28,6 +28,7 @@ class UserDataOptions:
 	ENV_ID = 'env_id'
 	FARMROLE_ID = 'farm_roleid'
 	ROLE_ID = 'roleid'
+	REGION = 'region'
 
 class PlatformFactory(object):
 	_platforms = {}
@@ -51,7 +52,11 @@ class Platform():
 	_access_data = None
 	_userdata = None
 	
-	features = []					
+	features = []
+	scalrfs = None			
+	
+	def __init__(self):
+		self.scalrfs = self._scalrfs(self)
 	
 	def get_private_ip(self):
 		return self.get_public_ip()
@@ -114,6 +119,49 @@ class Platform():
 		for k, v in re.findall("([^=]+)=([^;]*);?", raw_userdata):
 			userdata[k] = v
 		return userdata
+	
+	
+	class _scalrfs(object):
+		
+		def __init__(self, platform):
+			self.platform = platform
+			self.ini = bus.cnf.rawini
+		
+		
+		def root(self):
+			if bus.scalr_version >= (3, 1, 0):
+				return '%s://scalr-%s-%s' % (
+					self.platform.cloud_storage_path.split('://')[0],
+					self.ini.get('general', 'env_id'),
+				    self.ini.get('general', 'region')
+				)
+			else:
+				return self.platform.cloud_storage_path
+
+		
+		def images(self):
+			if bus.scalr_version >= (3, 1, 0):
+				return os.path.join(self.root(), 'images')
+			else:
+				return '%s://scalr2-images-%s-%s' % (
+					self.platform.cloud_storage_path.split('://')[0],
+					self.ini.get('general', 'region'),
+					self.platform.get_account_id()
+				)
+
+		
+		def backups(self, service):
+			if bus.scalr_version >= (3, 1, 0):
+				path = 'backups/%s/%s/%s-%s' % (
+					self.ini.get('general', 'farm_id'),
+					service,
+					self.ini.get('general', 'farm_role_id'),
+					self.ini.get('general', 'role_name')
+				)
+				return os.path.join(self.root(), path)
+			else:
+				return os.path.join(self.root(), '%s-backup' % service)
+	
 
 class Ec2LikePlatform(Platform):
 	
@@ -124,6 +172,7 @@ class Ec2LikePlatform(Platform):
 	_userdata = None
 	
 	def __init__(self):
+		Platform.__init__(self)
 		self._logger = logging.getLogger(__name__)
 		self._cnf = bus.cnf
 	

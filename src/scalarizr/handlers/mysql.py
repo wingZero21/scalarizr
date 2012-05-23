@@ -832,7 +832,7 @@ class MysqlHandler(ServiceCtlHandler):
 				# Defining archive name and path
 				if not os.path.exists(self._tmp_dir):
 					os.makedirs(self._tmp_dir)
-				backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
+				backup_filename = '%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
 				backup_path = os.path.join(self._tmp_dir, backup_filename)
 				
 				# Creating archive 
@@ -855,12 +855,13 @@ class MysqlHandler(ServiceCtlHandler):
 						parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
 					else:
 						parts = [backup_path]
-							
-					self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+						
+					cloud_storage_path = self._platform.scalrfs.backups('mysql')
+					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
-					result = trn.upload(parts, self._platform.cloud_storage_path)
+					result = trn.upload(parts, cloud_storage_path)
 					self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
-									self._platform.cloud_storage_path, backup_filename)
+									cloud_storage_path, backup_filename)
 			
 			op.ok()
 					
@@ -898,6 +899,7 @@ class MysqlHandler(ServiceCtlHandler):
 			with op.phase(self._phase_data_bundle):
 				with op.step(self._step_create_data_bundle):
 			
+<<<<<<< .working
 					bus.fire('before_mysql_data_bundle')
 					
 					# Creating snapshot
@@ -918,6 +920,26 @@ class MysqlHandler(ServiceCtlHandler):
 					self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
 					
 			op.ok()
+=======
+					bus.fire('before_mysql_data_bundle')
+					
+					# Creating snapshot
+					root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
+					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
+					used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
+						
+					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
+					
+					# Notify scalr
+					msg_data = dict(
+						log_file=log_file,
+						log_pos=log_pos,
+						used_size='%.3f' % (float(used_size) / 1024 / 1024,),
+						status='ok'
+					)
+					msg_data.update(self._compat_storage_data(snap=snap))
+					self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
+>>>>>>> .merge-right.r3232
 
 		except (Exception, BaseException), e:
 			LOG.exception(e)
