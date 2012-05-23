@@ -86,7 +86,7 @@ class _P2pMessageStore:
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		# List of (message, queue) tuples
-		self._unhandled_messages = []
+		self._unhandled_messages = self._get_unhandled_from_db()
 		self._local_storage_lock = threading.Lock()
 
 		ex = bus.periodical_executor
@@ -150,19 +150,20 @@ class _P2pMessageStore:
 
 			return ret
 
-		'''
+
+	def _get_unhandled_from_db(self):
 		"""
 		Return list of unhandled messages in obtaining order
 		@return: [(queue, message), ...]   
 		"""
 		cur = self._conn().cursor()
 		try:
-			"""
+			'''
 			sql = """SELECT queue, message_id FROM p2p_message
 					WHERE is_ingoing = ? AND in_is_handled = ? AND in_consumer_id = ? 
 					ORDER BY id"""
 			cur.execute(sql, [1, 0, consumer_id])
-			"""
+			'''
 			sql = """SELECT queue, message_id FROM p2p_message
 					WHERE is_ingoing = ? AND in_is_handled = ? 
 					ORDER BY id"""
@@ -174,7 +175,6 @@ class _P2pMessageStore:
 			return ret
 		finally:
 			cur.close()
-		'''
 
 
 	def mark_as_handled(self, message_id):
