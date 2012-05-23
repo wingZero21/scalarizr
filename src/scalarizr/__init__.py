@@ -230,7 +230,7 @@ def _create_db(db_file=None, script_file=None):
 	conn = bus.db
 	logger.debug('conn: %s', conn)
 	# Disk I/O Error workaround
-	conn.executescript("PRAGMA journal_mode=TRUNCATE;")
+	conn.executescript("PRAGMA journal_mode=OFF;")
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
 	#conn.commit()	
 
