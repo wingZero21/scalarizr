@@ -549,7 +549,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		if not self.running:
 			try:
 				LOG.info("Starting mysql")
-				self._init_script.start()
+				initdv2.ParametrizedInitScript.start(self)
 				LOG.debug("mysql started")
 			except:
 				if not self.running:
