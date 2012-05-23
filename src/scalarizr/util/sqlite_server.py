@@ -55,24 +55,19 @@ class CursorProxy(Proxy):
 		
 		
 	def execute(self, sql, parameters=None):
-		self._call('cursor_create', [self])
-		try:
-			args = [sql]
-			if parameters:
-				args += [parameters]
-			self._execute_result = self._call('cursor_execute', args)
+		args = [sql]
+		if parameters:
+			args += [parameters]
+		self._execute_result = self._call('cursor_execute', args)
 
-			if not self._execute_result:
-				self._execute_result = dict(data=[], rowcount=0)
+		if not self._execute_result:
+			self._execute_result = dict(data=[], rowcount=0)
 
-			# Temporary
-			LOG.debug('Execute result: %s', self._execute_result)
+		# Temporary
+		LOG.debug('Execute result: %s', self._execute_result)
 
-			self._execute_result['iter'] = iter(self._execute_result['data'] or [None])
-			return self
-
-		finally:
-			self.close()
+		self._execute_result['iter'] = iter(self._execute_result['data'] or [None])
+		return self
 	
 	
 	def fetchone(self):
@@ -94,7 +89,8 @@ class CursorProxy(Proxy):
 
 	
 	def __del__(self):
-		self._call('cursor_delete', wait=False)
+		pass
+		#self._call('cursor_delete', wait=False)
 		
 		
 	close = __del__
@@ -189,27 +185,33 @@ class SqliteServer(object):
 	
 	
 	def _cursor_create(self, hash, proxy):
+		"""
 		self._cursors[hash] = self._master_conn.cursor()
 		self._clients[hash] = proxy
 		return self._cursors[hash]
-		
+		"""
+		return
 		
 	def _cursor_delete(self, hash):
+		return
+		"""
 		result = None
 		if hash in self._cursors:
 			result = self._cursors[hash].close()
 			del self._cursors[hash]
 		return result
-		
+		"""
 		
 	def _cursor_execute(self, hash, *args, **kwds):
-		if hash in self._cursors:
-			cur = self._cursors[hash]
+		cur = self._master_conn.cursor()
+		try:
 			cur.execute(*args, **kwds)
 			return {
 				'data': cur.fetchall(),
 				'rowcount': cur.rowcount
 			}
+		finally:
+			cur.close()
 	
 	
 	def _cursor_fetchone(self, hash):
