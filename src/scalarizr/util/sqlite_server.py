@@ -189,6 +189,7 @@ class SqliteServer(object):
 		self._cursors[hash] = self._master_conn.cursor()
 		return self._cursors[hash]
 		"""
+		LOG.debug('create cursor %s', hash)
 		self._clients[hash] = proxy
 
 
@@ -201,6 +202,7 @@ class SqliteServer(object):
 		return result
 		"""
 		if hash in self._clients:
+			LOG.debug('delete cursor %s', hash)
 			del self._clients[hash]
 
 
