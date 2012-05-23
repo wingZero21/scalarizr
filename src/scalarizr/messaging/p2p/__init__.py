@@ -142,7 +142,14 @@ class _P2pMessageStore:
 
 	def get_unhandled(self, consumer_id):
 		with self._local_storage_lock:
-			return copy.deepcopy(self._unhandled_messages)
+			ret = []
+			for queue, message in self._unhandled_messages:
+				msg_copy = P2pMessage()
+				msg_copy.fromxml(message.toxml())
+				ret.append((queue, msg_copy))
+
+			return ret
+
 		'''
 		"""
 		Return list of unhandled messages in obtaining order
