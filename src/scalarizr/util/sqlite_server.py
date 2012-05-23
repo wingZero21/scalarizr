@@ -52,6 +52,7 @@ class CursorProxy(Proxy):
 	def __init__(self, tasks_queue):
 		super(CursorProxy, self).__init__(tasks_queue)
 		self._execute_result = None
+		self._call('cursor_create')		
 		
 		
 	def execute(self, sql, parameters=None):
