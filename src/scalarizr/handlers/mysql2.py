@@ -977,7 +977,7 @@ class MysqlHandler(DBMSRHandler):
 		options = dict(ROOT_USER=OPT_ROOT_PASSWORD, REPL_USER=OPT_REPL_PASSWORD, STAT_USER=OPT_STAT_PASSWORD)
 		creds = {}
 		for login, opt_pwd in options.items():
-			password = self._get_ini_options(opt_pwd)
+			password = self._get_ini_options(opt_pwd)[0]
 			if not password:
 				password = cryptotool.pwgen(20)
 				self._update_config({opt_pwd:password})
