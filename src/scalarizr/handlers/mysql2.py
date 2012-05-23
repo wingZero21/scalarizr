@@ -974,7 +974,7 @@ class MysqlHandler(DBMSRHandler):
 	
 	
 	def get_user_creds(self):
-		options = dict(ROOT_USER=OPT_ROOT_PASSWORD, REPL_USER=OPT_REPL_PASSWORD, STAT_USER=OPT_STAT_PASSWORD)
+		options = {ROOT_USER:OPT_ROOT_PASSWORD, REPL_USER:OPT_REPL_PASSWORD, STAT_USER:OPT_STAT_PASSWORD}
 		creds = {}
 		for login, opt_pwd in options.items():
 			password = self._get_ini_options(opt_pwd)[0]
