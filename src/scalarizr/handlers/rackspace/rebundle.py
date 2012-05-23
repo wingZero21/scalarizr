@@ -60,7 +60,7 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 							image = image_manager.find(name=image_name)
 							break
 						except:
-							LOG.info('Image "%s" not found.')
+							LOG.info('Image "%s" not found', image_name)
 							continue
 
 					raise
