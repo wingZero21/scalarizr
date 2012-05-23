@@ -187,13 +187,12 @@ class SqliteServer(object):
 	def _cursor_create(self, hash, proxy):
 		"""
 		self._cursors[hash] = self._master_conn.cursor()
-		self._clients[hash] = proxy
 		return self._cursors[hash]
 		"""
-		return
-		
+		self._clients[hash] = proxy
+
+
 	def _cursor_delete(self, hash):
-		return
 		"""
 		result = None
 		if hash in self._cursors:
@@ -201,7 +200,10 @@ class SqliteServer(object):
 			del self._cursors[hash]
 		return result
 		"""
-		
+		if hash in self._clients:
+			del self._clients[hash]
+
+
 	def _cursor_execute(self, hash, *args, **kwds):
 		cur = self._master_conn.cursor()
 		try:
@@ -212,7 +214,7 @@ class SqliteServer(object):
 			}
 		finally:
 			cur.close()
-	
+
 	
 	def _cursor_fetchone(self, hash):
 		result = None
