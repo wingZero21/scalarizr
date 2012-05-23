@@ -3,13 +3,16 @@ Created on Dec 5, 2009
 
 @author: marat
 '''
+from __future__ import with_statement
+
+import logging
+import threading
+import copy
 
 from scalarizr.bus import bus
 from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingError
 from scalarizr.messaging.p2p.security import P2pMessageSecurity
-import logging
-import threading
-import sqlite3
+
 
 """
 InFilter
@@ -107,7 +110,7 @@ class _P2pMessageStore:
 		
 	def put_ingoing(self, message, queue, consumer_id):
 		with self._local_storage_lock:
-			self._unhandled_messages.append((message, queue))
+			self._unhandled_messages.append((queue, message))
 
 		conn = self._conn()
 		cur = conn.cursor()
@@ -139,7 +142,7 @@ class _P2pMessageStore:
 
 	def get_unhandled(self, consumer_id):
 		with self._local_storage_lock:
-			return [x[0] for x in self._unhandled_messages]
+			return copy.deepcopy(self._unhandled_messages)
 		'''
 		"""
 		Return list of unhandled messages in obtaining order
@@ -169,7 +172,7 @@ class _P2pMessageStore:
 
 	def mark_as_handled(self, message_id):
 		with self._local_storage_lock:
-			filter_fn = lambda x: x[0].id != message_id
+			filter_fn = lambda x: x[1].id != message_id
 			self._unhandled_messages = filter(filter_fn, self._unhandled_messages)
 
 		conn = self._conn()
@@ -252,7 +255,7 @@ class _P2pMessageStore:
 	
 	def is_handled(self, message_id):
 		with self._local_storage_lock:
-			filter_fn = lambda x: x[0].id == message_id
+			filter_fn = lambda x: x[1].id == message_id
 			filtered = filter(filter_fn, self._unhandled_messages)
 			return not filtered
 
