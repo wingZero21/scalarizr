@@ -51,24 +51,28 @@ class CursorProxy(Proxy):
 
 	def __init__(self, tasks_queue):
 		super(CursorProxy, self).__init__(tasks_queue)
-		self._cursor = self._call('cursor_create', [self])
 		self._execute_result = None
 		
 		
 	def execute(self, sql, parameters=None):
-		args = [sql]
-		if parameters:
-			args += [parameters]
-		self._execute_result = self._call('cursor_execute', args)
+		self._call('cursor_create', [self])
+		try:
+			args = [sql]
+			if parameters:
+				args += [parameters]
+			self._execute_result = self._call('cursor_execute', args)
 
-		if not self._execute_result:
-			self._execute_result = dict(data=[], rowcount=0)
+			if not self._execute_result:
+				self._execute_result = dict(data=[], rowcount=0)
 
-		# Temporary
-		LOG.debug('Execute result: %s', self._execute_result)
+			# Temporary
+			LOG.debug('Execute result: %s', self._execute_result)
 
-		self._execute_result['iter'] = iter(self._execute_result['data'] or [None])
-		return self
+			self._execute_result['iter'] = iter(self._execute_result['data'] or [None])
+			return self
+
+		finally:
+			self.close()
 	
 	
 	def fetchone(self):
