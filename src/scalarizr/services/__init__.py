@@ -110,7 +110,7 @@ class BaseConfig(object):
 			if os.path.exists(self.path):
 				self.data.read(self.path)
 		if value:
-			self.data.set(option,value, force=True)
+			self.data.set(option,str(value), force=True)
 		elif self.comment_empty: 
 			self.data.comment(option)
 		if self.autosave:
