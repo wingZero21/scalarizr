@@ -82,6 +82,10 @@ class _P2pMessageStore:
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		# List of (message, queue) tuples
+		self._unhandled_messages = []
+		self._local_storage_lock = threading.Lock()
+
 		ex = bus.periodical_executor
 		if ex: 
 			self._logger.debug('Add rotate messages table task for periodical executor')
@@ -102,15 +106,18 @@ class _P2pMessageStore:
 		conn.commit()
 		
 	def put_ingoing(self, message, queue, consumer_id):
+		with self._local_storage_lock:
+			self._unhandled_messages.append((message, queue))
+
 		conn = self._conn()
 		cur = conn.cursor()
 		try:
-			sql = """INSERT INTO p2p_message (id, message, message_id, 
+			sql = """INSERT INTO p2p_message (id, message, message_id,
 						message_name, queue, is_ingoing, in_is_handled, in_consumer_id)
-					VALUES 
+					VALUES
 						(NULL, ?, ?, ?, ?, ?, ?, ?)"""
-			
-				
+
+
 			#self._logger.debug('Representation mes: %s', repr(str(message)))
 			cur.execute(sql, [message.toxml(), message.id, message.name, queue, 1, 0, consumer_id])
 			'''
@@ -119,8 +126,8 @@ class _P2pMessageStore:
 					consumer_id.encode('utf-8')])
 			'''
 			if message.meta.has_key(MetaOptions.REQUEST_ID):
-				cur.execute("""UPDATE p2p_message 
-						SET response_uuid = ? WHERE message_id = ?""", 
+				cur.execute("""UPDATE p2p_message
+						SET response_uuid = ? WHERE message_id = ?""",
 						[message.id, message.meta[MetaOptions.REQUEST_ID]])
 
 			self._logger.debug("Commiting put_ingoing")
@@ -128,20 +135,24 @@ class _P2pMessageStore:
 			self._logger.debug("Commited put_ingoing")
 		finally:
 			cur.close()
-			
+
+
 	def get_unhandled(self, consumer_id):
+		with self._local_storage_lock:
+			return [x[0] for x in self._unhandled_messages]
+		'''
 		"""
 		Return list of unhandled messages in obtaining order
 		@return: [(queue, message), ...]   
 		"""
 		cur = self._conn().cursor()
 		try:
-			'''
+			"""
 			sql = """SELECT queue, message_id FROM p2p_message
 					WHERE is_ingoing = ? AND in_is_handled = ? AND in_consumer_id = ? 
 					ORDER BY id"""
 			cur.execute(sql, [1, 0, consumer_id])
-			'''
+			"""
 			sql = """SELECT queue, message_id FROM p2p_message
 					WHERE is_ingoing = ? AND in_is_handled = ? 
 					ORDER BY id"""
@@ -153,8 +164,14 @@ class _P2pMessageStore:
 			return ret
 		finally:
 			cur.close()
-	
+		'''
+
+
 	def mark_as_handled(self, message_id):
+		with self._local_storage_lock:
+			filter_fn = lambda x: x[0].id != message_id
+			self._unhandled_messages = filter(filter_fn, self._unhandled_messages)
+
 		conn = self._conn()
 		cur = conn.cursor()
 		try:
@@ -164,6 +181,7 @@ class _P2pMessageStore:
 			conn.commit()
 		finally:
 			cur.close()
+
 
 	def put_outgoing(self, message, queue, sender):
 		conn = self._conn()
@@ -180,7 +198,7 @@ class _P2pMessageStore:
 			cur.close()
 
 			
-	def get_undelivered (self, sender):
+	def get_undelivered(self, sender):
 		"""
 		Return list of undelivered messages in outgoing order
 		"""
@@ -233,6 +251,12 @@ class _P2pMessageStore:
 			cur.close()
 	
 	def is_handled(self, message_id):
+		with self._local_storage_lock:
+			filter_fn = lambda x: x[0].id == message_id
+			filtered = filter(filter_fn, self._unhandled_messages)
+			return not filtered
+
+		'''
 		cur = self._conn().cursor()
 		try:
 			cur.execute("""SELECT in_is_handled FROM p2p_message 
@@ -241,7 +265,8 @@ class _P2pMessageStore:
 			return cur.fetchone()["in_is_handled"] == 1
 		finally:
 			cur.close()
-	
+		'''
+
 	def is_delivered(self, message_id):
 		cur = self._conn().cursor()
 		try:
