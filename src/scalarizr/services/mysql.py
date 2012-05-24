@@ -17,7 +17,6 @@ from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import rchown
-from scalarizr.libs import metaconf
 
 
 LOG = logging.getLogger(__name__)
@@ -94,39 +93,29 @@ class MySQL(BaseService):
 				('mysqld/datadir', os.path.join(storage_path,STORAGE_DATA_DIR))): 
 			
 			directory	= os.path.dirname(dirname)
-			try:
+			if not os.path.isdir(directory):
+				os.makedirs(directory)
+				
 				raw_value = self.my_cnf.get(directive)
-				if not os.path.isdir(directory):
-					os.makedirs(directory)
+				if raw_value:
 					src_dir = os.path.dirname(raw_value + "/") + "/"
 					if os.path.isdir(src_dir):
+						
 						set_se_path = software.whereis('setsebool')
 						if set_se_path:
 							LOG.debug('Make SELinux rule for rsync')
 							system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
+							
 						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
 						rsync = filetool.Rsync().archive()
 						rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
 						system2(str(rsync), shell=True)
-						self._mysql_config.set(directive, dirname)
-					else:
-						LOG.info('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)
-				else:
-					self._mysql_config.set(directive, dirname)
-					
-			except metaconf.NoPathError:
-				LOG.debug('There is no such option "%s" in mysql config.' % directive)
-				if not os.path.isdir(directory):
-					os.makedirs(directory)
-				
-				self._mysql_config.add(directive, dirname)
+			self.my_cnf.set(directive, dirname)
 	
 			rchown("mysql", directory)
 			# Adding rules to apparmor config 
 			if disttool.is_debian_based():
 				_add_apparmor_rules(directory)
-
-		
 
 	
 	def flush_logs(self, data_dir):
