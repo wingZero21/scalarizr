@@ -166,7 +166,7 @@ def _init():
 		]
 		if optparser and optparser.values.etc_path:
 			# Insert command-line passed etc_path into begining
-			etc_places.index(optparser.values.etc_path, 0)
+			etc_places.insert(0, optparser.values.etc_path)
 			
 		bus.etc_path = firstmatched(lambda p: os.access(p, os.F_OK), etc_places)
 		if not bus.etc_path:
