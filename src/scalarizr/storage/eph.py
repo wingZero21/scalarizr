@@ -68,7 +68,7 @@ class EphVolumeProvider(VolumeProvider):
 		      /   \ 
 		  [Data] [Tranzit]
 		'''
-
+				
 		# Create PV
 		self._lvm.create_pv(pv)		
 
@@ -152,6 +152,14 @@ class EphVolumeProvider(VolumeProvider):
 				self._lvm.restore_vg(kwargs['vg'], cStringIO.StringIO(kwargs['lvm_group_cfg']))
 			else:
 				# Create LV layout
+				pv = kwargs['disk'].devname
+				if pv in ('/dev/sda2', '/deb/sdb', '/dev/sdc', '/dev/sdd', '/dev/sde') and not os.path.exists(pv):
+					xen_device = pv.replace('sd', 'xvd')
+					if os.path.exists(xen_device):
+						kwargs['disk'].devname = xen_device
+				
+				kwargs['disk'].umount()
+				
 				kwargs['vg'], kwargs['device'], kwargs['size'] = self._create_layout(
 						kwargs['disk'].devname, vg=kwargs.get('vg'), size=kwargs.get('size'))
 			

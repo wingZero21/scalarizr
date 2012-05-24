@@ -85,10 +85,7 @@ class _P2pMessageStore:
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		# List of (message, queue) tuples
-		self._unhandled_messages = self._get_unhandled_from_db()
 		self._local_storage_lock = threading.Lock()
-
 		ex = bus.periodical_executor
 		if ex: 
 			self._logger.debug('Add rotate messages table task for periodical executor')
@@ -96,7 +93,13 @@ class _P2pMessageStore:
 
 	def _conn(self):
 		return bus.db
-	
+
+
+	@property
+	def _unhandled_messages(self):
+		if not hasattr(self, '__unhandled'):
+			self.__unhandled = self._get_unhandled_from_db()
+		return self.__unhandled
 	
 	def rotate(self):
 		conn = self._conn()
