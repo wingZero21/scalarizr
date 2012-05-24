@@ -68,6 +68,10 @@ class EphVolumeProvider(VolumeProvider):
 		      /   \ 
 		  [Data] [Tranzit]
 		'''
+		if pv in ('/dev/sda2', '/deb/sdb', '/dev/sdc', '/dev/sdd', '/dev/sde') and not os.path.exists(pv):
+			xen_device = pv.replace('sd', 'xvd')
+			if os.path.exists(xen_device):
+				pv = xen_device
 
 		# Create PV
 		self._lvm.create_pv(pv)		
