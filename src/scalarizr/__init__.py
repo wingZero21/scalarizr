@@ -333,7 +333,7 @@ def _apply_user_data(cnf):
 	platform = bus.platform
 	cnf = bus.cnf
 	
-	if cnf.state == ScalarizrState.RUNNING:
+	if cnf.state == ScalarizrState.RUNNING and bus.scalr_version >= (3, 1, 0):
 		queryenv = bus.queryenv_service
 		userdata = queryenv.get_server_user_data()
 		def g(key):
