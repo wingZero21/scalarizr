@@ -602,6 +602,9 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	def on_HostInit(self, message):
+		if BuiltinBehaviours.MONGODB not in message.behaviour:
+			return
+
 		if message.local_ip != self._platform.get_private_ip():
 		
 			shard_idx = int(message.mongodb['shard_index'])
@@ -613,6 +616,9 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	def on_HostUp(self, message):
+		if BuiltinBehaviours.MONGODB not in message.behaviour:
+			return
+
 		private_ip = self._platform.get_private_ip()
 		if message.local_ip != private_ip:
 			
@@ -682,6 +688,9 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	def on_HostDown(self, message):
+		if not BuiltinBehaviours.MONGODB in message.behaviour:
+			return
+
 		if message.local_ip in self._status_trackers:
 			t = self._status_trackers[message.local_ip]
 			t.stop()
@@ -690,8 +699,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
 			return
 
-		shard_idx = int(message.mongodb['shard_index'])
-		rs_idx = int(message.mongodb['replica_set_index'])
+		try:
+			shard_idx = int(message.mongodb['shard_index'])
+			rs_idx = int(message.mongodb['replica_set_index'])
+		except:
+			self._logger.debug('Received malformed HostDown message.')
+			return
 
 		down_node_host = HOSTNAME_TPL % (shard_idx, rs_idx)
 		down_node_name = '%s:%s' % (down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
@@ -784,6 +797,9 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_BeforeHostTerminate(self, message):
 
 		if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
+			return
+
+		if not BuiltinBehaviours.MONGODB in message.behaviour:
 			return
 
 		if message.local_ip == self._platform.get_private_ip():
@@ -963,7 +979,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				
 				# Defining archive name and path
 				rs_name = RS_NAME_TPL % self.shard_index
-				backup_filename = '%s-%s-backup-'%(BEHAVIOUR,rs_name) + time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+				backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
 				backup_path = os.path.join(self._tmp_dir, backup_filename)
 				
 				# Creating archive 
@@ -992,11 +1008,12 @@ class MongoDBHandler(ServiceCtlHandler):
 					else:
 						parts = [backup_path]
 							
-					self._logger.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+					cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
+					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
-					result = trn.upload(parts, self._platform.cloud_storage_path)
+					result = trn.upload(parts, cloud_storage_path)
 					self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
-									BEHAVIOUR, self._platform.cloud_storage_path, backup_filename)
+									BEHAVIOUR, cloud_storage_path, backup_filename)
 			
 			op.ok()
 			

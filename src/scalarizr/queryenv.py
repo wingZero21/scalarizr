@@ -27,7 +27,7 @@ class QueryEnvService(object):
 	key_path = None
 	server_id = None
 	
-	def __init__(self, url, server_id=None, key_path=None, api_version='2010-09-23'):
+	def __init__(self, url, server_id=None, key_path=None, api_version='2012-04-17'):
 		self._logger = logging.getLogger(__name__)
 		self.url = url if url[-1] != "/" else url[0:-1]
 		self.server_id = server_id		
@@ -120,6 +120,11 @@ class QueryEnvService(object):
 			parameters["name"] = name
 		return {'params':self._request("list-role-params", parameters, self._read_list_role_params_response)}
 
+	def get_server_user_data(self):
+		"""
+		@return: dict
+		"""
+		return self._request('get-server-user-data', {}, self._read_get_server_user_data_response)
 
 	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None, 
 		target_ip=None, local_ip=None):
@@ -266,6 +271,8 @@ class QueryEnvService(object):
 					value = None
 				ret[param_el.getAttribute("name")] = value
 		return ret
+
+	_read_get_server_user_data_response = _read_list_role_params_response
 
 	def _read_get_latest_version_response(self, xml):
 		response = xml.documentElement
