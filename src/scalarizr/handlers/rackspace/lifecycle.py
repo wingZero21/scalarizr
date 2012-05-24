@@ -38,6 +38,7 @@ class RackspaceLifeCycleHandler(Handler):
 			rules = []
 			
 			# Scalarizr ports
+			rules.append(RuleSpec(dport=8008, jump='ACCEPT', protocol=P_TCP))
 			rules.append(RuleSpec(dport=8012, jump='ACCEPT', protocol=P_TCP))
 			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
 			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
