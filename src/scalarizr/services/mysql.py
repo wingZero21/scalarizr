@@ -88,7 +88,6 @@ class MySQL(BaseService):
 		pass
 	
 	def move_mysqldir_to(self, storage_path):
-		'''
 		for directive, dirname in (
 				('mysqld/log_bin', os.path.join(storage_path,STORAGE_BINLOG)), 
 				('mysqld/datadir', os.path.join(storage_path,STORAGE_DATA_DIR))): 
@@ -125,9 +124,7 @@ class MySQL(BaseService):
 			# Adding rules to apparmor config 
 			if disttool.is_debian_based():
 				_add_apparmor_rules(directory)
-		'''
-		#TODO: rewrite
-		pass
+
 		
 
 	
@@ -155,7 +152,7 @@ class MySQL(BaseService):
 	
 	
 class MySQLClient(object):
-	_pool = None
+	_pool = dict()
 	
 	def __init__(self, user=None, passwd=None, db=None):
 		self.db = None
