@@ -832,7 +832,7 @@ class MysqlHandler(ServiceCtlHandler):
 				# Defining archive name and path
 				if not os.path.exists(self._tmp_dir):
 					os.makedirs(self._tmp_dir)
-				backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
+				backup_filename = '%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
 				backup_path = os.path.join(self._tmp_dir, backup_filename)
 				
 				# Creating archive 
@@ -855,12 +855,13 @@ class MysqlHandler(ServiceCtlHandler):
 						parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
 					else:
 						parts = [backup_path]
-							
-					LOG.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+						
+					cloud_storage_path = self._platform.scalrfs.backups('mysql')
+					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
-					result = trn.upload(parts, self._platform.cloud_storage_path)
+					result = trn.upload(parts, cloud_storage_path)
 					LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
-									self._platform.cloud_storage_path, backup_filename)
+									cloud_storage_path, backup_filename)
 			
 			op.ok()
 					
