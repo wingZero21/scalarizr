@@ -93,6 +93,7 @@ class RackspacePlatform(Platform):
 	features = []
 	
 	def __init__(self):
+		Platform.__init__(self)
 		self._logger = logging.getLogger(__name__)
 
 	def get_private_ip(self):
