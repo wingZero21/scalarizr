@@ -16,7 +16,8 @@ from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
-from scalarizr.util.filetool import read_file, write_file, rchown
+from scalarizr.util.filetool import rchown
+from scalarizr.libs import metaconf
 
 
 LOG = logging.getLogger(__name__)
@@ -113,7 +114,7 @@ class MySQL(BaseService):
 				else:
 					self._mysql_config.set(directive, dirname)
 					
-			except NoPathError:
+			except metaconf.NoPathError:
 				LOG.debug('There is no such option "%s" in mysql config.' % directive)
 				if not os.path.isdir(directory):
 					os.makedirs(directory)
