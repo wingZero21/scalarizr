@@ -304,9 +304,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		bus.fire("host_down")
 
 	def on_HostInitResponse(self, message):
+		if bus.cnf.state == ScalarizrState.RUNNING:
+			self._logger.warning("Recieved 'HostInitResponse' message,"
+								"but state is already %s", bus.cnf.state)
+			return
+
 		bus.initialization_op = operation(name='Initialization')
 		try:
-			self._define_initialization(message)			
+			self._define_initialization(message)
 			bus.fire("host_init_response", message)
 			hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)
 			bus.fire("before_host_up", hostup_msg)
