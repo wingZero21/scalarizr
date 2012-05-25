@@ -90,7 +90,8 @@ class MySQL(BaseService):
 	def move_mysqldir_to(self, storage_path):
 		for directive, dirname in (
 				('mysqld/log_bin', os.path.join(storage_path,STORAGE_BINLOG)), 
-				('mysqld/datadir', os.path.join(storage_path,STORAGE_DATA_DIR)) + '/'): 
+				('mysqld/datadir', os.path.join(storage_path,STORAGE_DATA_DIR) + '/')
+				): 
 			
 			dest = os.path.dirname(dirname)
 			if os.path.isdir(dest):
@@ -103,7 +104,7 @@ class MySQL(BaseService):
 				if raw_value:
 					src_dir = os.path.dirname(raw_value + "/") + "/"
 					LOG.debug('source path: %s' % src_dir)
-					if os.path.isdir(src_dir):
+					if os.path.isdir(src_dir) and src_dir != dest:
 						
 						set_se_path = software.whereis('setsebool')
 						if set_se_path:
