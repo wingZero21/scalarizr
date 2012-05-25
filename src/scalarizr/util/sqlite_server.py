@@ -65,7 +65,7 @@ class CursorProxy(Proxy):
 			self._execute_result = dict(data=[], rowcount=0)
 
 		# Temporary
-		LOG.debug('Execute result: %s', self._execute_result)
+		#LOG.debug('Execute result: %s', self._execute_result)
 
 		self._execute_result['iter'] = iter(self._execute_result['data'] or [None])
 		return self
@@ -161,7 +161,7 @@ class SqliteServer(object):
 			# This will allow us to remove SQLiteServerThread class
 			
 			job = self._single_conn_proxy.tasks_queue.get()
-			LOG.debug('job: %s', job)
+			#LOG.debug('job: %s', job)
 			try:
 				result = error = None				
 				try:
@@ -173,16 +173,18 @@ class SqliteServer(object):
 					error = sys.exc_info()
 				finally:
 					# If client stil exists
-					LOG.debug('Result: %s, Error: %s', result, error)
+					#LOG.debug('Result: %s, Error: %s', result, error)
 					if hash in self._clients:
 
 						self._clients[hash].result = result
 						self._clients[hash].error = error
 						self._clients[hash].result_available.set()
 					else:
-						LOG.debug('result is ready but client disconnected (client: %s)', hash)
+						#LOG.debug('result is ready but client disconnected (client: %s)', hash)
+						pass
 			except:
-				LOG.warning('Recoverable error in SQLite server loop', exc_info=sys.exc_info())
+				#LOG.warning('Recoverable error in SQLite server loop', exc_info=sys.exc_info())
+				pass
 	
 	
 	def _cursor_create(self, hash, proxy):
@@ -190,7 +192,7 @@ class SqliteServer(object):
 		self._cursors[hash] = self._master_conn.cursor()
 		return self._cursors[hash]
 		"""
-		LOG.debug('create cursor %s', hash)
+		#LOG.debug('create cursor %s', hash)
 		self._clients[hash] = proxy
 
 
@@ -203,7 +205,7 @@ class SqliteServer(object):
 		return result
 		"""
 		if hash in self._clients:
-			LOG.debug('delete cursor %s', hash)
+			#LOG.debug('delete cursor %s', hash)
 			del self._clients[hash]
 
 
