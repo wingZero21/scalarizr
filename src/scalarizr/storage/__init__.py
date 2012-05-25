@@ -296,9 +296,15 @@ class Volume(VolumeConfig):
 
 	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
 		self._logger = logging.getLogger(__name__)
+
 		if not device:
 			raise ValueError('device name should be non-empty')
+		if device in ('/dev/sda2', '/deb/sdb', '/dev/sdc', '/dev/sdd', '/dev/sde') and not os.path.exists(device):
+			xen_device = device.replace('sd', 'xvd')
+			if os.path.exists(xen_device):
+				device = xen_device
 		self.device = device
+		
 		self.mpoint = mpoint
 		if fstype:
 			self.fstype = fstype
