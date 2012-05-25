@@ -6,7 +6,7 @@ Created on Sep 7, 2010
 '''
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.util.filetool import write_file
+
 
 import os, time, logging
 import shutil, urllib2
@@ -338,7 +338,7 @@ class CnfController(object):
 					new_manifest.set('./%s/default-value' % variable, sys_value)
 					
 				new_manifest.write(path)
-				#write_file(path, data, logger=self._logger)
+
 		return _CnfManifest(path)
 	
 	@property
