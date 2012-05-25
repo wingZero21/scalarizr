@@ -5,6 +5,7 @@ from scalarizr.config import ScalarizrState
 from scalarizr.util import iptables
 import logging
 import sys
+from scalarizr.util import disttool, system2
 
 def get_handlers ():
 	return [RackspaceLifeCycleHandler()]
@@ -38,10 +39,17 @@ class RackspaceLifeCycleHandler(Handler):
 			rules = []
 			
 			# Scalarizr ports
+			rules.append(RuleSpec(dport=8008, jump='ACCEPT', protocol=P_TCP))
 			rules.append(RuleSpec(dport=8012, jump='ACCEPT', protocol=P_TCP))
 			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
 			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
 			
 			for rule in rules:
 				iptables.insert_rule(None, rule_spec = rule)
-
+				
+			if disttool.is_redhat_based():
+				for rule in rules:
+					try:
+						iptables.insert_rule(None, rule_spec = rule, chain='RH-Firewall-1-INPUT')
+					except:
+						pass

@@ -3,6 +3,7 @@ Created on Nov 26, 2010
 
 @author: Dmytro Korsakov
 '''
+from scalarizr.messaging import Queues
 from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.bus import bus
@@ -24,6 +25,7 @@ import tarfile
 import sys
 import os
 import logging
+from scalarizr.messaging.p2p import P2pMessageStore
 try:
 	import json
 except ImportError:
@@ -684,16 +686,30 @@ def main():
 
 		if options.reinit:
 			print 'Call scalarizr to reinitialize role (see /var/log/scalarizr.log for results)'
+			
+			init_script()
+
 			conn = bus.db
 			cur = conn.cursor()
 			try:
-				cur.execute(
-						'UPDATE p2p_message SET in_is_handled = ? WHERE message_name = ?', 
-					(0, 'HostInitResponse')
+				msg_service = bus.messaging_service
+				msg = msg_service.new_message()				
+								
+				cur.execute('SELECT message '
+						'FROM p2p_message '
+						'WHERE message_name = ? '
+						'ORDER BY id DESC '
+						'LIMIT 1', ('HostInitResponse', )
 				)
-				conn.commit()
+				xml = cur.fetchone()['message']
+				msg.fromxml(xml)
+				
+				producer = msg_service.get_producer()
+				producer.send(Queues.CONTROL, msg)
+				
 			finally:
 				cur.close()
+			
 
 		if options.report:			#collecting
 			hostname = system2(whereis('hostname'), shell=True)[0]
