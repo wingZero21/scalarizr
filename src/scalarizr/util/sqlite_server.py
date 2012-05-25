@@ -161,7 +161,7 @@ class SqliteServer(object):
 			# This will allow us to remove SQLiteServerThread class
 			
 			job = self._single_conn_proxy.tasks_queue.get()
-			LOG.debug('job: %s', job)
+			#LOG.debug('job: %s', job)
 			try:
 				result = error = None				
 				try:
@@ -173,7 +173,7 @@ class SqliteServer(object):
 					error = sys.exc_info()
 				finally:
 					# If client stil exists
-					LOG.debug('Result: %s, Error: %s', result, error)
+					#LOG.debug('Result: %s, Error: %s', result, error)
 					if hash in self._clients:
 
 						self._clients[hash].result = result
