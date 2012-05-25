@@ -92,13 +92,17 @@ class MySQL(BaseService):
 				('mysqld/log_bin', os.path.join(storage_path,STORAGE_BINLOG)), 
 				('mysqld/datadir', os.path.join(storage_path,STORAGE_DATA_DIR))): 
 			
-			directory	= os.path.dirname(dirname)
-			if not os.path.isdir(directory):
-				os.makedirs(directory)
+			dest = os.path.dirname(dirname)
+			if os.path.isdir(dest):
+				LOG.debug('No need to move %s to %s: already in place.' % (directive, dest))
+			else:
+				os.makedirs(dest)
 				
 				raw_value = self.my_cnf.get(directive)
+				LOG.debug('directive %s:%s' % (directive, raw_value))
 				if raw_value:
 					src_dir = os.path.dirname(raw_value + "/") + "/"
+					LOG.debug('source path: %s' % src_dir)
 					if os.path.isdir(src_dir):
 						
 						set_se_path = software.whereis('setsebool')
@@ -106,16 +110,16 @@ class MySQL(BaseService):
 							LOG.debug('Make SELinux rule for rsync')
 							system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
 							
-						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
+						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
 						rsync = filetool.Rsync().archive()
-						rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
+						rsync.source(src_dir).dest(dest).exclude(['ib_logfile*'])
 						system2(str(rsync), shell=True)
 			self.my_cnf.set(directive, dirname)
 	
-			rchown("mysql", directory)
+			rchown("mysql", dest)
 			# Adding rules to apparmor config 
 			if disttool.is_debian_based():
-				_add_apparmor_rules(directory)
+				_add_apparmor_rules(dest)
 
 	
 	def flush_logs(self, data_dir):
