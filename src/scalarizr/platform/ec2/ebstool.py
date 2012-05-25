@@ -14,6 +14,7 @@ from boto.ec2.volume import Volume
 from boto.exception import BotoServerError
 from boto.ec2.snapshot import Snapshot
 import sys
+from scalarizr.util import disttool, fstool
 
 
 DEFAULT_TIMEOUT = 2400 		# 40 min
@@ -138,12 +139,32 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		
 	return vol, devname
 
+DEVICE_ORDERING_BUG = False
+if disttool.is_redhat_based():
+	# Check that system is affected by devices ordering bug
+	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
+	fstab = fstool.Fstab()
+	entry = fstab.find(mpoint='/')
+	DEVICE_ORDERING_BUG = entry.devname in ('/dev/xvda1', '/dev/sda1') and \
+							not os.path.exists('/dev/xvda1') and \
+							os.path.exists('/dev/xvde1') 
+	
+
 def get_system_devname(devname):
-	return devname.replace('/sd', '/xvd') if os.path.exists('/dev/xvda1') else devname
+	ret = devname.replace('/sd', '/xvd') if os.path.exists('/dev/xvda1') else devname
+	if DEVICE_ORDERING_BUG:
+		ret = ret[0:8] + chr(ord(ret[8])+4) + ret[9:]
+	return ret
+
 real_devname = get_system_devname
 
+
 def get_ebs_devname(devname):
-	return devname.replace('/xvd', '/sd')
+	ret = devname
+	if DEVICE_ORDERING_BUG:
+		ret = ret[0:8] + chr(ord(ret[8])-4) + ret[9:]
+	return ret.replace('/xvd', '/sd')
+
 
 def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIMEOUT):
 	logger = logger or logging.getLogger(__name__)
