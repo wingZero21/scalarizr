@@ -23,6 +23,9 @@ class LazyInitScript(object):
 	reload_queue = None
 	restart_queue = None
 	
+	def __getattr__(self, name):
+		return getattr(self._script, name) 
+	
 	def __init__(self, script):
 		self._script = script
 		self.reload_queue = []
