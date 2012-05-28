@@ -358,7 +358,10 @@ class MySQLUser(object):
 	
 	
 	def exists(self):
-		return self.cli.user_exists(self.login, self.host)
+		try:
+			result = self.cli.user_exists(self.login, self.host)
+		except pymysql.err.OperationalError, e:
+			raise ServiceError(str(e))
 	
 	
 	def remove(self):

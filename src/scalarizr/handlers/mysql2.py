@@ -23,6 +23,7 @@ from scalarizr.messaging import Messages
 from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError
 import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
+from scalarizr.services import ServiceError
 from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
 from scalarizr.util import system2, disttool, filetool, \
 	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool,\
@@ -992,10 +993,17 @@ class MysqlHandler(DBMSRHandler):
 
 		if not self.mysql.service.running:
 			self.mysql.service.start()
-			if not local_root.exists() or not local_root.check_password():
-				users.update({'local_root': local_root})
-				self.mysql.service.stop('creating users')
-				self.mysql.service.start_skip_grant_tables()
+			try:
+				if not local_root.exists() or not local_root.check_password():
+					users.update({'local_root': local_root})
+					self.mysql.service.stop('creating users')
+					self.mysql.service.start_skip_grant_tables()
+			except ServiceError, e:
+				if 'Access denied for user' in str(e):
+					users.update({'local_root': local_root})
+					self.mysql.service.stop('creating users')
+					self.mysql.service.start_skip_grant_tables()
+				
 		
 		for login, password in creds.items():
 			user = mysql_svc.MySQLUser(root_cli, login, password, host='%', privileges=PRIVILEGES.get(login, None))
