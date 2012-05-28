@@ -1004,7 +1004,6 @@ class MysqlHandler(DBMSRHandler):
 					self.mysql.service.stop('creating users')
 					self.mysql.service.start_skip_grant_tables()
 				
-		
 		for login, password in creds.items():
 			user = mysql_svc.MySQLUser(root_cli, login, password, host='%', privileges=PRIVILEGES.get(login, None))
 			users[login] = user
