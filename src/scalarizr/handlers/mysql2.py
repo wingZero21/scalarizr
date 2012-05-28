@@ -993,6 +993,7 @@ class MysqlHandler(DBMSRHandler):
 
 		if not self.mysql.service.running:
 			self.mysql.service.start()
+			
 			try:
 				if not local_root.exists() or not local_root.check_password():
 					users.update({'local_root': local_root})
