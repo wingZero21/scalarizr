@@ -303,7 +303,7 @@ class MySQLClient(object):
 		
 	def _fetch(self, query, cursor = None, fetch_one=False):
 		conn = self.get_connection()
-		cursor = self.conn.cursor(cursor)
+		cursor = conn.cursor(cursor)
 		try:
 			cursor.execute(query)
 		except pymysql.err.OperationalError, e:
