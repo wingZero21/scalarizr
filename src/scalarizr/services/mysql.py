@@ -150,9 +150,9 @@ class MySQLClient(object):
 	_pool = dict()
 	
 	def __init__(self, user=None, passwd=None, db=None):
-		self.db = None
+		self.db = db
 		self.user = user
-		self.passwd = passwd
+		self.passwd = passwd or ''
 			
 	
 	def test_connection(self):
