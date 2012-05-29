@@ -171,7 +171,7 @@ class SvnSource(Source):
 		if not os.access(self.executable, os.X_OK):
 			self._logger.info('Installing Subversion SCM...')
 			if disttool.is_debian_based():
-				system2(('apt-get', '-y', 'install', 'subversion'))
+				system2(('apt-get', '-y', '--force-yes', 'install', 'subversion'))
 			elif disttool.is_redhat_based():
 				system2(('yum', '-y', 'install', 'subversion'))
 			else:
