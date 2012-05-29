@@ -4,7 +4,6 @@ from scalarizr.handlers import Handler
 from scalarizr.config import ScalarizrState
 from scalarizr.util import iptables
 import logging
-import sys
 from scalarizr.util import disttool, system2
 
 def get_handlers ():

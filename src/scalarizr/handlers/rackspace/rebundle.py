@@ -41,9 +41,6 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 		LOG.debug('Found server %s. server id: %s', pl.get_public_ip(), server.id)
 		image = None
 
-		
-		old_state = cnf.state
-		cnf.state = ScalarizrState.REBUNDLING
 		try:
 			attempts_left = 3
 

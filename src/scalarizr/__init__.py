@@ -359,6 +359,7 @@ def _apply_user_data(cnf):
 	logger = logging.getLogger(__name__)
 	platform = bus.platform
 	cnf = bus.cnf
+	
 	if cnf.state == ScalarizrState.RUNNING and bus.scalr_version >= (3, 1, 0):
 		logger.debug('Scalr version: %s', bus.scalr_version)
 		queryenv = bus.queryenv_service
@@ -774,8 +775,8 @@ def main():
 				try:
                                         upd.start()
                                 except:
-                                        logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
-			
+					logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
+
 			if not bus.api_server:
 				bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', _routes)
 			# Start API server
@@ -783,6 +784,7 @@ def main():
 			api_server = bus.api_server
 			api_server.start()
 
+		
 		# Check Scalr version
 		if not bus.scalr_version:
 			version_file = cnf.private_path('.scalr-version')

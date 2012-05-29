@@ -7,9 +7,6 @@
 <pydev_pathproperty name="org.python.pydev.PROJECT_SOURCE_PATH">
 <path>/scalarizr-branch-0.9-newage/src</path>
 <path>/scalarizr-branch-0.9-newage/externals</path>
-<path>/scalarizr-branch-0.9-newage/test/integ/testcases</path>
-<path>/scalarizr-branch-0.9-newage/test/integ/libs</path>
-<path>/scalarizr-branch-0.9-newage/test/unit/testcases</path>
-<path>/scalarizr-branch-0.9-newage/test/unit/libs</path>
+<path>/scalarizr-branch-0.9-newage/tests/unit</path>
 </pydev_pathproperty>
 </pydev_project>
