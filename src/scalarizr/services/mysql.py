@@ -312,7 +312,7 @@ class MySQLClient(object):
 				conn = self.get_connection(force=True)
 				cursor = conn.cursor(cursor)
 				
-		res = cursor.fetchone if fetch_one else cursor.fetchall()
+		res = cursor.fetchone() if fetch_one else cursor.fetchall()
 		return res
 
 
