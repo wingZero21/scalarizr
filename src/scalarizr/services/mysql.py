@@ -12,6 +12,8 @@ import pymysql
 import random
 import pwd
 
+from pymysql import cursors
+
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
@@ -206,7 +208,15 @@ class MySQLClient(object):
 	def create_user(self, login, host, password, privileges=None):
 		priv_count = self._priv_count()		
 		if not privileges:
-			cmd = "INSERT INTO mysql.user VALUES('%s','%s',PASSWORD('%s')" % (host, login, password) + ",'Y'"*priv_count + ",''"*4 +',0'*4+");" 
+			'''
+			XXX: temporary solution for mysql55
+			'''
+			cmd = "INSERT INTO mysql.user VALUES('%s','%s',PASSWORD('%s')" % (host, login, password) + ",'Y'"*priv_count
+			if len(self.fetch_dict("select * from mysql.user LIMIT 1;")) == 42:
+				cmd += ",'','','','',0,0,0,0,'',''"
+			else:
+				cmd += ",''"*4 +',0'*4
+			cmd += ");" 
 		else:
 			cmd = "INSERT INTO mysql.user (Host, User, Password, %s) VALUES ('%s','%s',PASSWORD('%s'), %s);" \
 					% (', '.join(privileges), host,login,password, ', '.join(["'Y'"]*len(privileges)))
@@ -318,7 +328,7 @@ class MySQLClient(object):
 
 
 	def fetch_dict(self, query, fetch_one=True):
-		return self._fetch(query, pymysql.cursors.DictCursor, fetch_one)
+		return self._fetch(query, cursors.DictCursor, fetch_one)
 	
 	
 	def fetchall(self, query):
