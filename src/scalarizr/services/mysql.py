@@ -312,18 +312,18 @@ class MySQLClient(object):
 		return len([r for r in res.keys() if r.endswith('priv')])
 	
 		
-	def _fetch(self, query, cursor = None, fetch_one=False):
+	def _fetch(self, query, cursor_type = None, fetch_one=False):
 		conn = self.get_connection()
-		cursor = conn.cursor(cursor)
+		cur = conn.cursor(cursor_type)
 		LOG.debug(query)
 		try:
-			cursor.execute(query)
+			cur.execute(query)
 		except pymysql.err.OperationalError, e:
 			#catching mysqld restarts (e.g. sgt)
 			if e.args[0] == 2013:
 				conn = self.get_connection(force=True)
-				cursor = conn.cursor(cursor)
-		res = cursor.fetchone() if fetch_one else cursor.fetchall()
+				cur = conn.cursor(cursor_type)
+		res = cur.fetchone() if fetch_one else cur.fetchall()
 		return res
 
 
