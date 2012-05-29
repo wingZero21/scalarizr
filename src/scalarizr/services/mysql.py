@@ -166,6 +166,7 @@ class MySQLClient(object):
 				return False
 		except BaseException, e:
 			LOG.debug('test_connection returned error: %s' % e)
+			raise
 		return True
 
 	
@@ -547,7 +548,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 				initdv2.ParametrizedInitScript.start(self)
 				LOG.debug("mysql started")
 			except:
-				if not self.running:
+				if self._is_sgt_process_exists():
+					LOG.warning('MySQL service is running with skip-grant-tables mode.')
+				elif not self.running:
 					raise
 		
 		return self._start_stop_reload('start')
