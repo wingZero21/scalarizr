@@ -323,6 +323,7 @@ class MySQLClient(object):
 			if e.args[0] == 2013:
 				conn = self.get_connection(force=True)
 				cur = conn.cursor(cursor_type)
+				cur.execute(query)
 		res = cur.fetchone() if fetch_one else cur.fetchall()
 		return res
 
