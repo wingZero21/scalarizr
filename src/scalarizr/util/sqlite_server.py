@@ -180,19 +180,14 @@ class SqliteServer(object):
 						self._clients[hash].error = error
 						self._clients[hash].result_available.set()
 					else:
-						#LOG.debug('result is ready but client disconnected (client: %s)', hash)
-						pass
+						LOG.debug('result is ready but client disconnected (client: %s)', hash)
 			except:
 				#LOG.warning('Recoverable error in SQLite server loop', exc_info=sys.exc_info())
 				pass
 	
 	
 	def _cursor_create(self, hash, proxy):
-		"""
-		self._cursors[hash] = self._master_conn.cursor()
-		return self._cursors[hash]
-		"""
-		#LOG.debug('create cursor %s', hash)
+		LOG.debug('create cursor %s', hash)
 		self._clients[hash] = proxy
 
 
@@ -205,7 +200,7 @@ class SqliteServer(object):
 		return result
 		"""
 		if hash in self._clients:
-			#LOG.debug('delete cursor %s', hash)
+			LOG.debug('delete cursor %s', hash)
 			del self._clients[hash]
 
 

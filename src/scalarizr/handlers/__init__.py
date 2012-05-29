@@ -16,7 +16,6 @@ import platform
 import logging
 import threading
 import pprint
-from distutils.file_util import write_file
 import sys
 import traceback
 import uuid

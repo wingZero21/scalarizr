@@ -860,7 +860,7 @@ class MysqlHandler(ServiceCtlHandler):
 					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
 					result = trn.upload(parts, cloud_storage_path)
-					LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
+					self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
 									cloud_storage_path, backup_filename)
 			
 			op.ok()
