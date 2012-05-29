@@ -209,7 +209,7 @@ class MySQLClient(object):
 		else:
 			cmd = "INSERT INTO mysql.user (Host, User, Password, %s) VALUES ('%s','%s',PASSWORD('%s'), %s);" \
 					% (', '.join(privileges), host,login,password, ', '.join(["'Y'"]*len(privileges)))
-		self.cli.fetchone(cmd)
+		self.fetchone(cmd)
 		self.flush_privileges()
 	
 	
