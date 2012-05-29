@@ -304,6 +304,7 @@ class MySQLClient(object):
 	def _fetch(self, query, cursor = None, fetch_one=False):
 		conn = self.get_connection()
 		cursor = conn.cursor(cursor)
+		LOG.debug(query)
 		try:
 			cursor.execute(query)
 		except pymysql.err.OperationalError, e:
@@ -311,7 +312,6 @@ class MySQLClient(object):
 			if e.args[0] == 2013:
 				conn = self.get_connection(force=True)
 				cursor = conn.cursor(cursor)
-		LOG.debug(query)		
 		res = cursor.fetchone() if fetch_one else cursor.fetchall()
 		return res
 
