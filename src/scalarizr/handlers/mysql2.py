@@ -65,7 +65,7 @@ STOP_SLAVE_TIMEOUT		= 180
 DEFAULT_DATADIR			= "/var/lib/mysql"
 DEBIAN_CNF_PATH			= "/etc/mysql/debian.cnf"
 
-PRIVILEGES = dict(REPL_USER='Repl_slave_priv', STAT_USER='Repl_client_priv')
+PRIVILEGES = {REPL_USER:'Repl_slave_priv', STAT_USER:'Repl_client_priv'}
 	
 	
 class MysqlMessages:

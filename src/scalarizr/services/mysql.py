@@ -346,7 +346,7 @@ class MySQLUser(object):
 	def create(self):
 		if self.exists():
 			raise ServiceError('Unable to create user %s@%s: already exists.')
-		
+		LOG.debug('Creating user %s on host %s with password %s and privileges %s' % (self.login, self.host, self.password, self.privileges))
 		self.cli.create_user(self.login, self.host, self.password, self.privileges) 
 		return self
 	
