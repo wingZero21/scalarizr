@@ -7,9 +7,6 @@
 <pydev_pathproperty name="org.python.pydev.PROJECT_SOURCE_PATH">
 <path>/scalarizr-branch-0.7-rebundle-ec2-disk-partitioning/src</path>
 <path>/scalarizr-branch-0.7-rebundle-ec2-disk-partitioning/externals</path>
-<path>/scalarizr-branch-0.7-rebundle-ec2-disk-partitioning/test/integ/testcases</path>
-<path>/scalarizr-branch-0.7-rebundle-ec2-disk-partitioning/test/integ/libs</path>
-<path>/scalarizr-branch-0.7-rebundle-ec2-disk-partitioning/test/unit/testcases</path>
-<path>/scalarizr-branch-0.7-rebundle-ec2-disk-partitioning/test/unit/libs</path>
+<path>/scalarizr-branch-0.7-rebundle-ec2-disk-partitioning/tests/unit</path>
 </pydev_pathproperty>
 </pydev_project>
