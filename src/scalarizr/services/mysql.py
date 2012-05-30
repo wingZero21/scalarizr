@@ -267,8 +267,7 @@ class MySQLClient(object):
 		out = self.fetchdict('SHOW MASTER STATUS')
 		log_file, log_pos = None, None
 		if out:
-			variables = out[0]
-			log_file, log_pos = variables['File'], variables['Position']
+			log_file, log_pos = out['File'], out['Position']
 		return (log_file, log_pos)
 	
 	
