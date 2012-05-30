@@ -144,7 +144,7 @@ if disttool.is_redhat_based():
 	# Check that system is affected by devices ordering bug
 	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
 	fstab = fstool.Fstab()
-	entry = fstab.find(mpoint='/')
+	entry = fstab.find(mpoint='/')[0]
 	DEVICE_ORDERING_BUG = entry.devname in ('/dev/xvda1', '/dev/sda1') and \
 							not os.path.exists('/dev/xvda1') and \
 							os.path.exists('/dev/xvde1') 
