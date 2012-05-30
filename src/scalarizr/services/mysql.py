@@ -264,7 +264,7 @@ class MySQLClient(object):
 	
 	
 	def master_status(self):
-		out = self.fetcdict('SHOW MASTER STATUS')
+		out = self.fetchdict('SHOW MASTER STATUS')
 		log_file, log_pos = None, None
 		if out:
 			variables = out[0]
