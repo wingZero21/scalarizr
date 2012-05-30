@@ -917,7 +917,7 @@ class MysqlHandler(DBMSRHandler):
 	@property
 	def root_password(self):
 		cnf = bus.cnf
-		return cnf.rawini.get('mysql', 'root_password')
+		return cnf.rawini.get('mysql2', 'root_password')
 	
 			
 	@property
