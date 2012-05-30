@@ -24,6 +24,7 @@ from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError
 import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
+from scalarizr.platform import UserDataOptions
 from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
 from scalarizr.util import system2, disttool, filetool, \
 	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool,\
@@ -1104,4 +1105,11 @@ class MysqlHandler(DBMSRHandler):
 			LOG.error("Cannot create MySQL data snapshot. %s", e)
 			raise
 	
-			
+
+	def _data_bundle_description(self):
+		pl = bus.platform
+		return 'MySQL data bundle (farm: %s role: %s)' % (
+					pl.get_user_data(UserDataOptions.FARM_ID), 
+					pl.get_user_data(UserDataOptions.ROLE_NAME))
+		
+					
