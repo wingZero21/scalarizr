@@ -473,8 +473,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 	
 	socket_file = None
 	cli = None
-	sgt_pid = None
-	sgt_pid_path = None
+	sgt_pid_path = '/var/run/mysqld/mysqld.pid'
 	
 	
 	@lazy
@@ -599,10 +598,14 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
 	
 	def stop_skip_grant_tables(self):
-		if self._is_sgt_process_exists():
-			os.kill(self.sgt_pid, signal.SIGTERM)
-			wait_until(lambda: not self._is_sgt_process_exists(), timeout=10, sleep=1)
-			wait_until(lambda: not self.running, timeout=10, sleep=1)
+		if self._is_sgt_process_exists() and os.path.exists(self.sgt_pid_path):
+			sgt_pid = open(self.sgt_pid_path).read().strip()
+			if sgt_pid:
+				os.kill(int(sgt_pid), signal.SIGTERM)
+				wait_until(lambda: not self._is_sgt_process_exists(), timeout=10, sleep=1)
+				wait_until(lambda: not self.running, timeout=10, sleep=1)
+			else:
+				LOG.warning('Unable to stop mysql running with skip-grant-tables. PID not found.')
 		
 
 
