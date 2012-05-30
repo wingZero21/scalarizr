@@ -1525,6 +1525,7 @@ class MysqlHandler(ServiceCtlHandler):
 
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False, tags=None):
+		self._logger.info('Creating MySQL data bundle')
 		was_running = self._init_script.running
 		if not was_running:
 			self._start_service()
@@ -1592,7 +1593,6 @@ class MysqlHandler(ServiceCtlHandler):
 		return snap, log_file, log_pos
 			
 	def _create_storage_snapshot(self, tags=None):
-		LOG.info("Creating storage snapshot")
 		tags = tags or dict()
 		#tags.update({'storage': 'mysql'})		
 		try:
