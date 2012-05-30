@@ -168,7 +168,7 @@ class MysqlCnfController(CnfController):
 		vars = CnfController.get_system_variables(self)
 		if self._init_script.running:
 			
-			out = self.cli.execute('SHOW DATABASES')
+			out = self.root_client.execute('SHOW DATABASES')
 			raw_text = out.splitlines()
 			text = raw_text[4:-3]
 			vars = {}
@@ -921,7 +921,7 @@ class MysqlHandler(DBMSRHandler):
 	
 			
 	@property
-	def cli(self):
+	def root_client(self):
 		return mysql_svc.MySQLClient(ROOT_USER, self.root_password)
 	
 	
@@ -1056,22 +1056,21 @@ class MysqlHandler(DBMSRHandler):
 		was_running = self.mysql.service.running
 		if not was_running:
 			self.mysql.service.start()
-		cli = self.mysql.cli
 		try:
-			cli.lock_tables()
+			self.root_client.lock_tables()
 			system2('sync', shell=True)
 			
 			if self.is_replication_master():
-				log_file, log_pos = cli.master_status()  
+				log_file, log_pos = self.root_client.master_status()  
 			else: 
-				data = self.cli.slave_status()
+				data = self.root_client.slave_status()
 				log_file = data['Relay_Master_Log_File']
 				log_pos = data['Exec_Master_Log_Pos']
 	
 			# Creating storage snapshot
 			snap = self._create_storage_snapshot(tags)
 		finally:
-			cli.unlock_tables()
+			self.root_client.unlock_tables()
 			if not was_running:
 				self.mysql.service.stop('Restoring service`s state after making snapshot')
 		
