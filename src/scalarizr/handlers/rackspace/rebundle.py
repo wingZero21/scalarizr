@@ -49,6 +49,7 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 				LOG.info("Creating server image. server id: %s, image name: '%s'", server.id, image_name)
 				try:
 					image = image_manager.create(image_name, server.id)
+					break
 				except CloudServersException, e:
 					if 'Cannot create a new backup request while saving a prior backup or migrating' in str(e):
 						LOG.warning('Rackspace API answered "Cannot create a new backup request while saving'
