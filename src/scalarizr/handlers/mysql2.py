@@ -368,7 +368,10 @@ class MysqlHandler(DBMSRHandler):
 			self._init_master(message)	
 		else:
 			self._init_slave(message)
-		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+		'''
+		service configuration is temporary disabled
+		'''
+		#bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 
 
 	def on_BeforeHostTerminate(self, message):
