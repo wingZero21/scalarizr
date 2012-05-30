@@ -212,7 +212,7 @@ class MySQLClient(object):
 			XXX: temporary solution for mysql55
 			'''
 			cmd = "INSERT INTO mysql.user VALUES('%s','%s',PASSWORD('%s')" % (host, login, password) + ",'Y'"*priv_count
-			if len(self.fetch_dict("select * from mysql.user LIMIT 1;")) == 42:
+			if len(self.fetchdict("select * from mysql.user LIMIT 1;")) == 42:
 				cmd += ",'','','','',0,0,0,0,'',''"
 			else:
 				cmd += ",''"*4 +',0'*4
@@ -308,7 +308,7 @@ class MySQLClient(object):
 	
 	
 	def _priv_count(self):
-		res = self.fetch_dict("select * from mysql.user LIMIT 1;")
+		res = self.fetchdict("select * from mysql.user LIMIT 1;")
 		return len([r for r in res.keys() if r.endswith('priv')])
 	
 		
@@ -328,7 +328,7 @@ class MySQLClient(object):
 		return res
 
 
-	def fetch_dict(self, query, fetch_one=True):
+	def fetchdict(self, query, fetch_one=True):
 		return self._fetch(query, cursors.DictCursor, fetch_one)
 	
 	
