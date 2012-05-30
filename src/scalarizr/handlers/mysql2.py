@@ -1060,7 +1060,7 @@ class MysqlHandler(DBMSRHandler):
 			self.root_client.lock_tables()
 			system2('sync', shell=True)
 			
-			if self.is_replication_master():
+			if self.is_replication_master:
 				log_file, log_pos = self.root_client.master_status()  
 			else: 
 				data = self.root_client.slave_status()
