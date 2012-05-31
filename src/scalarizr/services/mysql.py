@@ -232,7 +232,7 @@ class MySQLClient(object):
 		ret = self.fetchone("select User,Host from mysql.user where User='%s' and Host='%s'" % (login, host))
 		
 		#return True if ret and ret['Host']==host and ret['User']==login else False
-		result = True if len(ret)==2 and ret[0]==login and ret[1]==host else False 
+		result = True if ret and len(ret)==2 and ret[0]==login and ret[1]==host else False 
 		LOG.debug('user_exists query returned value: %s for user %s on host %s. User exists: %s' % (str(ret), login, host, str(result)))
 		return result
 		
