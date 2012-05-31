@@ -710,7 +710,7 @@ class MysqlHandler(DBMSRHandler):
 		assert message.body.has_key("db_type")
 		assert message.body.has_key("local_ip")
 		assert message.body.has_key("remote_ip")
-		assert message.body.has_key("snapshot_config")
+		assert message.body.mysql2.has_key("snapshot_config")
 		
 		
 		if  self.is_replication_master():
