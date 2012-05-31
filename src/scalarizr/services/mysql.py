@@ -229,9 +229,9 @@ class MySQLClient(object):
 	
 	
 	def user_exists(self, login, host):
-		ret = self.fetchone("select Host,User from mysql.user where User='%s' and Host='%s'" % (login, host))
-		return True if ret and ret['Host']==host and ret['User']==login else False
-		
+		ret = self.fetchone("select User,Host from mysql.user where User='%s' and Host='%s'" % (login, host))
+		#return True if ret and ret['Host']==host and ret['User']==login else False
+		return True if ret==(login,host) else False 
 		
 	def flush_privileges(self):
 		return self.fetchone("FLUSH PRIVILEGES")
