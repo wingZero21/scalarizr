@@ -810,6 +810,7 @@ class MysqlHandler(DBMSRHandler):
 			
 			# Update HostUp message 
 			msg_data = dict(
+				OPT_REPLICATION_MASTER=str(int(self.is_replication_master)),
 				root_password=user_creds[ROOT_USER],
 				repl_password=user_creds[REPL_USER],
 				stat_password=user_creds[STAT_USER],
