@@ -816,9 +816,7 @@ class MysqlHandler(DBMSRHandler):
 				log_file=log_file,
 				log_pos=log_pos
 			)
-			msg_data.update({OPT_REPLICATION_MASTER:str(int(self.is_replication_master))})
-			msg_data.update(self._compat_storage_data(self.storage_vol, snap))
-				
+			
 		# If volume has mysql storage directory structure (N-th init)
 		else:
 			self._copy_debian_cnf_back()
@@ -832,7 +830,9 @@ class MysqlHandler(DBMSRHandler):
 				log_file=log_file, 
 				log_pos=log_pos
 			)
-			msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+			
+		msg_data.update({OPT_REPLICATION_MASTER:str(int(self.is_replication_master))})
+		msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 			
 		if msg_data:
 			message.db_type = BEHAVIOUR
