@@ -834,6 +834,7 @@ class MysqlHandler(DBMSRHandler):
 			msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 			
 		if msg_data:
+			message.db_type = BEHAVIOUR
 			message.mysql2 = msg_data.copy()
 			try:
 				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
