@@ -230,6 +230,7 @@ class MySQLClient(object):
 	
 	def user_exists(self, login, host):
 		ret = self.fetchone("select User,Host from mysql.user where User='%s' and Host='%s'" % (login, host))
+		LOG.debug('user_exists query returned value: %s' % ret)
 		#return True if ret and ret['Host']==host and ret['User']==login else False
 		return True if ret==(login,host) else False 
 		
