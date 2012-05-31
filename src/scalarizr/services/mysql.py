@@ -230,9 +230,11 @@ class MySQLClient(object):
 	
 	def user_exists(self, login, host):
 		ret = self.fetchone("select User,Host from mysql.user where User='%s' and Host='%s'" % (login, host))
-		LOG.debug('user_exists query returned value: %s for user %s on host %s' % (str(ret), login, host))
+		
 		#return True if ret and ret['Host']==host and ret['User']==login else False
-		return True if len(ret)==2 and ret[0]==login and ret[1]==host else False 
+		result = True if len(ret)==2 and ret[0]==login and ret[1]==host else False 
+		LOG.debug('user_exists query returned value: %s for user %s on host %s. User exists: %s' % (str(ret), login, host, str(result)))
+		return result
 		
 	def flush_privileges(self):
 		return self.fetchone("FLUSH PRIVILEGES")
@@ -370,10 +372,12 @@ class MySQLUser(object):
 	
 	
 	def exists(self):
+		result = False
 		try:
 			result = self.cli.user_exists(self.login, self.host)
 		except pymysql.err.OperationalError, e:
 			raise ServiceError(str(e))
+		return result
 	
 	
 	def remove(self):
