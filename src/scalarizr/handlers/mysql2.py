@@ -810,15 +810,15 @@ class MysqlHandler(DBMSRHandler):
 			
 			# Update HostUp message 
 			msg_data = dict(
-				OPT_REPLICATION_MASTER=str(int(self.is_replication_master)),
 				root_password=user_creds[ROOT_USER],
 				repl_password=user_creds[REPL_USER],
 				stat_password=user_creds[STAT_USER],
 				log_file=log_file,
 				log_pos=log_pos
 			)
-			msg_data.update(self._compat_storage_data(self.storage_vol, snap))	
-			
+			msg_data.update({OPT_REPLICATION_MASTER:str(int(self.is_replication_master))})
+			msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+				
 		# If volume has mysql storage directory structure (N-th init)
 		else:
 			self._copy_debian_cnf_back()
