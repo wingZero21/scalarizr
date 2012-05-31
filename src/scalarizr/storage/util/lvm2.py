@@ -60,8 +60,8 @@ def system(*args, **kwargs):
 	kwargs['exc_class'] = Lvm2Error
 	return system2(*args, **kwargs)
 
-class PVInfo(namedtuple('PVInfo', 'pv vg format attr size free')):
-	COMMAND = (PVS,)
+class PVInfo(namedtuple('PVInfo', 'pv vg format attr size free uuid')):
+	COMMAND = (PVS, '-o', 'pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pv_uuid')
 	pass
 
 class VGInfo(namedtuple('VGInfo', 'vg num_pv num_lv num_sn attr size free')):

@@ -37,6 +37,16 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			raise HandlerError('Server %s not found in servers list' % pl.get_public_ip())
 		
 		LOG.debug('Found server %s. server id: %s', pl.get_public_ip(), server.id)
+
+		""" Searching for server images, which are in progress	"""
+		imgs_of_server = con.images.find(server_id=server.id)
+		imgs_in_process = filter(lambda img: img.status != "ACTIVE", imgs_of_server)
+
+		if imgs_in_process:
+			img = imgs_in_process[0]
+			raise HandlerError("Another image is currently creating from this server"
+								". Image id: %s name: %s" % (img.id, img.name))
+
 		image = None
 
 		try:

@@ -4,21 +4,25 @@ Created on Jan 6, 2011
 @author: marat
 '''
 
+import os
+import sys
+import copy
+import time
+import logging
+import binascii
+
+
 from . import VolumeConfig, Volume, Snapshot, VolumeProvider, Storage, \
 		StorageError, system, devname_not_empty
 from .util.mdadm import Mdadm
 from .util.lvm2 import Lvm2, lvm_group_b64
 
+from scalarizr.libs.pubsub import Observable
 from scalarizr.util import firstmatched
 from scalarizr.util.filetool import write_file, read_file
 
-import logging
-import os
-import time
-import binascii
 
 logger = logging.getLogger(__name__)
-
 
 
 class RaidConfig(VolumeConfig):
@@ -32,17 +36,36 @@ class RaidConfig(VolumeConfig):
 	
 	def config(self, as_snapshot=False):
 		cnf = VolumeConfig.config(self, as_snapshot)
+
 		if isinstance(cnf['raid_pv'], Volume):
 			cnf['raid_pv'] = cnf['raid_pv'].config()
+
 		if isinstance(cnf['snap_pv'], Volume):
 			cnf['snap_pv'] = cnf['snap_pv'].config()
+
 		return cnf
 
+
 class RaidVolume(Volume, RaidConfig):
-	pass
+
+	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
+		super(RaidVolume, self).__init__(device, mpoint, fstype, type, *args, **kwargs)
+		self._events = Observable()
+		self._events.define_events('active', 'inactive')
+
+	def on(self, *args, **kwargs):
+		self._events.on(*args, **kwargs)
+
+	def un(self, event, listener):
+		self._events.un(event, listener)
+
+	def fire(self, event, *args, **kwargs):
+		self._events.fire(event, *args, **kwargs)
+
 	
 class RaidSnapshot(Snapshot, RaidConfig):
 	pass
+
 
 class RaidVolumeProvider(VolumeProvider):
 	type = 'raid'
@@ -65,7 +88,7 @@ class RaidVolumeProvider(VolumeProvider):
 		@param disks: Raid disks
 		@type disks: list(Volume)
 		
-		@param level: Raid level 0, 1, 5 - are valid values
+		@param level: Raid level 0, 1, 5, 10 - are valid values
 		@type level: int
 		
 		@param vg: Volume group over RAID PV
@@ -74,6 +97,7 @@ class RaidVolumeProvider(VolumeProvider):
 		@param snap_pv: Physical volume for LVM snapshot
 		@type snap_pv: str|dict|Volume
 		'''
+
 		if kwargs.get('lvm_group_cfg'):
 			volume = self.create_from_snapshot(**kwargs)
 		else:
@@ -99,11 +123,16 @@ class RaidVolumeProvider(VolumeProvider):
 		@param snap_pv: Physical volume for future LVM snapshot creation
 		'''
 
-		vg				= kwargs['vg']
-		raw_vg			= os.path.basename(vg)
-		raid_pv			= self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
-		lvm_raw_backup	= binascii.a2b_base64(kwargs['lvm_group_cfg'])
-		
+		vg = kwargs['vg']
+		level = kwargs['level']
+		raw_vg = os.path.basename(vg)
+
+		if int(level) in (1, 10):
+			raid_pv	= self._mdadm.create([vol.devname for vol in kwargs['disks']], level)
+		else:
+			raid_pv	= self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
+
+		lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
 		write_file(self._lvm_backup_filename, lvm_raw_backup, logger=logger)
 		
 		if 'pv_uuid' in kwargs:
@@ -138,28 +167,42 @@ class RaidVolumeProvider(VolumeProvider):
 		else:
 			snap_pv = Storage.create(vol.snap_pv)
 
+		# Save lvm group cfg info
+		self.save_lvm_group_cfg(vol, snap)
+
 		# Extend RAID volume group with snapshot disk
 		self._lvm.create_pv(snap_pv.devname)
 		if not self._lvm.pv_info(snap_pv.devname).vg == vol.vg:
 			self._lvm.extend_vg(vol.vg, snap_pv.devname)
-			
+
 		# Create RAID LVM snapshot
 		snap_lv = self._lvm.create_lv_snapshot(vol.devname, 'snap', '100%FREE')
 		try:
 			# Creating RAID members snapshots
 			snap.level		= vol.level
 			snap.vg			= vol.vg
+			snap.pv_uuid	= self._lvm.pv_info(vol.raid_pv).uuid
 			snap.tmp_snaps	= []
 			snap.disks		= []
 			snap.snap_pv	= vol.snap_pv.config() if isinstance(vol.snap_pv, Volume) else vol.snap_pv
 
-			for _vol, i in zip(vol.disks, range(0, len(vol.disks))):
+			for i, _vol in enumerate(vol.disks):
+				description = 'RAID%s disk #%d - %s' % (vol.level, i, snap.description)
+
+				if int(vol.level) in (1, 10) and (i % 2):
+					last_copy = copy.copy(snap.disks[i-1])
+					last_copy.description = description
+					snap.disks.append(last_copy)
+					continue
+
 				pvd = Storage.lookup_provider(_vol.type)
-				_snap = pvd.snapshot_factory('RAID%s disk #%d - %s' % (vol.level, i, snap.description))
-				snap.tmp_snaps.append((_vol, pvd.create_snapshot(_vol, _snap)))
-		except (Exception, BaseException), e:
-			raise StorageError("Error occured during snapshot creation: '%s'" % e)
-					
+				_snap = pvd.snapshot_factory(description)
+				snap.disks.append(pvd.create_snapshot(_vol, _snap))
+
+		except:
+			e, t = sys.exc_info()[1:]
+			raise StorageError, "Error occured during snapshot creation: '%s'" % e, t
+
 		finally: 
 			self._lvm.remove_lv(snap_lv)
 			self._lvm.remove_pv(snap_pv.devname)
@@ -167,22 +210,17 @@ class RaidVolumeProvider(VolumeProvider):
 			snap_pv.detach() if isinstance(vol.snap_pv, Volume) else snap_pv.destroy()
 		
 		return snap
-	
+
+
 	@devname_not_empty
-	def save_snapshot(self, vol, snap):
+	def save_lvm_group_cfg(self, vol, snap):
 		raw_vg = os.path.basename(vol.vg)
 		lvmgroupcfg = read_file('/etc/lvm/backup/%s' % raw_vg)
 		if lvmgroupcfg is None:
 			raise StorageError('Backup file for volume group "%s" does not exists' % raw_vg)
 		snap.lvm_group_cfg = binascii.b2a_base64(lvmgroupcfg)
-			
-		# Saving RAID members snapshots
-		for _vol, _snap in snap.tmp_snaps:
-			pvd = Storage.lookup_provider(_vol.type)
-			snap.disks.append(pvd.save_snapshot(_vol, _snap))
-		del snap.tmp_snaps
-		
 		return snap
+
 
 	def destroy(self, vol, force=False, **kwargs):
 		super(RaidVolumeProvider, self).destroy(vol, force, **kwargs)
