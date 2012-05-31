@@ -1005,6 +1005,8 @@ class MysqlHandler(DBMSRHandler):
 					users.update({'local_root': local_root})
 					self.mysql.service.stop('creating users')
 					self.mysql.service.start_skip_grant_tables()
+				else:
+					LOG.debug('User %s exists and has correct password' % ROOT_USER)
 			except ServiceError, e:
 				if 'Access denied for user' in str(e):
 					users.update({'local_root': local_root})
@@ -1017,8 +1019,10 @@ class MysqlHandler(DBMSRHandler):
 			
 		for login, user in users.items():
 			if not user.exists():
+				LOG.debug('User %s not found. Recreating.' % login)
 				user.create()
 			elif not user.check_password():
+				LOG.warning('Password for user %s was changed. Recreating.' %  login)
 				user.remove()
 				user.create()
 			users[login] = user
@@ -1075,6 +1079,10 @@ class MysqlHandler(DBMSRHandler):
 	
 			# Creating storage snapshot
 			snap = self._create_storage_snapshot(tags)
+		except BaseException, e:
+			LOG.error('Snapshot creation failed with error: %s' % e)
+			raise	
+		
 		finally:
 			self.root_client.unlock_tables()
 			if not was_running:
