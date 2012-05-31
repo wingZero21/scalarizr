@@ -774,7 +774,6 @@ class MysqlHandler(DBMSRHandler):
 		
 		self.mysql.flush_logs(self._data_dir)
 		
-		msg_data = None
 		storage_valid = self._storage_valid()
 		user_creds = self.get_user_creds()
 
@@ -795,53 +794,50 @@ class MysqlHandler(DBMSRHandler):
 		# Init replication
 		self.mysql._init_replication(master=True)
 		
+		msg_data = dict()
+		
 		# If It's 1st init of mysql master storage
 		if not storage_valid:
 			if os.path.exists(DEBIAN_CNF_PATH):
 				LOG.debug("Copying debian.cnf file to mysql storage")
 				shutil.copy(DEBIAN_CNF_PATH, STORAGE_PATH)		
-				
-			# Add system users	
-			self.create_users(**user_creds)
-			
-			# Get binary logfile, logpos and create storage snapshot
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER])
-			Storage.backup_config(snap.config(), self._snapshot_config_path)
-			
+
 			# Update HostUp message 
-			msg_data = dict(
+			passwords = dict(
 				root_password=user_creds[ROOT_USER],
 				repl_password=user_creds[REPL_USER],
-				stat_password=user_creds[STAT_USER],
-				log_file=log_file,
-				log_pos=log_pos
-			)
+				stat_password=user_creds[STAT_USER])
+			msg_data.update(passwords)
 			
 		# If volume has mysql storage directory structure (N-th init)
 		else:
 			self._copy_debian_cnf_back()
 			self._innodb_recovery()			
-			# Create snapshot
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER])
-			Storage.backup_config(snap.config(), self._snapshot_config_path)
-			
-			# Update HostUp message 
-			msg_data = dict(
-				log_file=log_file, 
-				log_pos=log_pos
-			)
-			
+
+		# Add system users	
+		self.create_users(**user_creds)	
+		
+		# Get binary logfile, logpos and create storage snapshot
+		snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER])
+		Storage.backup_config(snap.config(), self._snapshot_config_path)
+
+		# Update HostUp message 
+		logs = dict(
+			log_file=log_file, 
+			log_pos=log_pos
+		)	
+		msg_data.update(logs)		
 		msg_data.update({OPT_REPLICATION_MASTER:str(int(self.is_replication_master))})
 		msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 			
-		if msg_data:
-			message.db_type = BEHAVIOUR
-			message.mysql2 = msg_data.copy()
-			try:
-				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
-			except KeyError:
-				pass 
-			self._update_config(msg_data)
+		message.db_type = BEHAVIOUR
+		message.mysql2 = msg_data.copy()
+		try:
+			del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
+		except KeyError:
+			pass 
+		self._update_config(msg_data)
+			
 			
 	'''
 	def _init_slave(self, message):
