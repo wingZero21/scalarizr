@@ -1130,7 +1130,7 @@ class MysqlHandler(DBMSRHandler):
 		LOG.info("Changing replication Master to server %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
 		
 		# Changing replication master
-		self.root_client.start_slave()
+		self.root_client.stop_slave()
 		self.root_client.change_master_to(host, user, password, log_file, log_pos)
 		
 		# Starting slave
