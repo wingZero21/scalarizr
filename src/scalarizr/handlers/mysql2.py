@@ -859,7 +859,7 @@ class MysqlHandler(DBMSRHandler):
 		
 		if not self._storage_valid():
 			LOG.debug("Initialize slave storage")
-			self.storage_vol = self._plug_storage(self._storage_path, 
+			self.storage_vol = self._plug_storage(STORAGE_PATH, 
 					dict(snapshot=Storage.restore_config(self._snapshot_config_path)))
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
