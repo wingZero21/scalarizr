@@ -185,7 +185,7 @@ class MySQLClient(object):
 		return self.fetchone('START SLAVE')
 	
 			
-	def stop_slave(self, timeout):
+	def stop_slave(self):
 		#TODO: think how to use timeouts
 		'''
 		timeout_reached = False
