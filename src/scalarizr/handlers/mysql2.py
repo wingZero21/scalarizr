@@ -865,7 +865,7 @@ class MysqlHandler(DBMSRHandler):
 		
 		try:
 			self._stop_service('Required by Slave initialization process')			
-			self.mysql.flush_logs()
+			self.mysql.flush_logs(self._data_dir)
 			
 			# Change configuration files
 			LOG.info("Changing configuration files")
