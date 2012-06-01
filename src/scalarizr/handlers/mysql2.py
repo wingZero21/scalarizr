@@ -98,13 +98,13 @@ class DBMSRHandler(ServiceCtlHandler):
 initdv2.explore(SERVICE_NAME, mysql_svc.MysqlInitScript)
 
 class MysqlCnfController(CnfController):
-	cli = None
+	root_client = None
 	_mysql_version = None
 	_merged_manifest = None	
 	
 	def __init__(self):
 		self._init_script = initdv2.lookup(SERVICE_NAME)
-		self.cli = mysql_svc.MySQLClient(ROOT_USER, self.root_password)
+		self.root_client = mysql_svc.MySQLClient(ROOT_USER, self.root_password)
 		definitions = {'ON':'1', 'TRUE':'1','OFF':'0','FALSE':'0'}
 		CnfController.__init__(self, BEHAVIOUR, mysql_svc.MYCNF_PATH, 'mysql', definitions) #TRUE,FALSE
 		
@@ -212,17 +212,17 @@ class MysqlCnfController(CnfController):
 			LOG.info('MySQL isn`t running, skipping process of applying run-time variables')
 			return
 		
-			if self.sendline and self.cli.has_connection():
+			if self.sendline and self.root_client.has_connection():
 				LOG.debug(self.sendline)
 				try:
-					self.cli.execute(self.sendline)
+					self.root_client.execute(self.sendline)
 				except PopenError, e:
 					LOG.error('Cannot set global variables: %s' % e)
 				else:
 					LOG.debug('All global variables has been set.')
 			elif not self.sendline:
 				LOG.debug('No global variables changed. Nothing to set.')
-			elif not self.cli.has_connection():
+			elif not self.root_client.has_connection():
 				LOG.debug('No connection to MySQL. Skipping SETs.')
 
 	
