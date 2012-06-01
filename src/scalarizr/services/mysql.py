@@ -64,6 +64,7 @@ class MySQL(BaseService):
 		pass
 	
 	def _init_replication(self, master=True):
+		LOG.info('Initializing replication')
 		server_id = 1 if master else int(random.random() * 100000)+1
 		self.my_cnf.server_id = server_id
 		self.my_cnf.bind_address = None
@@ -90,6 +91,7 @@ class MySQL(BaseService):
 		pass
 	
 	def move_mysqldir_to(self, storage_path):
+		LOG.info('Moving mysql dir to %s' % storage_path)
 		for directive, dirname in (
 				('mysqld/log_bin', os.path.join(storage_path,STORAGE_BINLOG)), 
 				('mysqld/datadir', os.path.join(storage_path,STORAGE_DATA_DIR) + '/')
@@ -97,7 +99,7 @@ class MySQL(BaseService):
 			
 			dest = os.path.dirname(dirname)
 			if os.path.isdir(dest):
-				LOG.debug('No need to move %s to %s: already in place.' % (directive, dest))
+				LOG.info('No need to move %s to %s: already in place.' % (directive, dest))
 			else:
 				os.makedirs(dest)
 				
@@ -126,6 +128,7 @@ class MySQL(BaseService):
 
 	
 	def flush_logs(self, data_dir):
+		LOG.info('Flushing logs')
 		if not os.path.exists(data_dir):
 			return
 		

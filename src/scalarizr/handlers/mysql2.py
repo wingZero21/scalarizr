@@ -608,7 +608,7 @@ class MysqlHandler(DBMSRHandler):
 					if self._init_script.running:
 						self.mysql.cli.stop_slave(timeout=STOP_SLAVE_TIMEOUT)
 
-						self._stop_service('Swapping storages to promote slave to master')
+						self.mysql.service.stop('Swapping storages to promote slave to master')
 					
 					# Unplug slave storage and plug master one
 					#self._unplug_storage(slave_vol_id, STORAGE_PATH)
@@ -864,7 +864,7 @@ class MysqlHandler(DBMSRHandler):
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
 		try:
-			self._stop_service('Required by Slave initialization process')			
+			self.mysql.service.stop('Required by Slave initialization process')			
 			self.mysql.flush_logs(self._data_dir)
 			
 			# Change configuration files
