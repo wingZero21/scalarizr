@@ -452,7 +452,7 @@ class MySQLConf(BaseConfig):
 
 	log_bin = property(_get_log_bin, set_log_bin)
 	server_id = property(_get_server_id, set_server_id)
-	bind_adress = property(_get_bind_address, set_bind_address)
+	bind_address = property(_get_bind_address, set_bind_address)
 	skip_networking = property(_get_skip_networking, set_skip_networking)
 	datadir	 = property(_get_datadir, _set_datadir)
 	datadir_default = DEFAULT_DATADIR
