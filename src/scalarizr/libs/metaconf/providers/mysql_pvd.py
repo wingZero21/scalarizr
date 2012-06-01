@@ -17,7 +17,11 @@ if sys.version_info[0:2] >= (2, 7):
 else:
 	from scalarizr.externals.etree import ElementTree as ET
 
+
 class MysqlFormatProvider(IniFormatProvider):
+
+	_opt_re_string		= r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*?)\s*(?P<comment>#(.*))?$'
+
 	def __init__(self):
 		IniFormatProvider.__init__(self)
 		self._readers  = (self.read_statement,
@@ -25,6 +29,7 @@ class MysqlFormatProvider(IniFormatProvider):
 		
 		self._writers  = (self.write_statement,
 						   self.write_include) + self._writers
+
 
 	def create_element(self, etree, path, value):
 		el = FormatProvider.create_element(self, etree, path, value)
