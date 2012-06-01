@@ -1125,9 +1125,11 @@ class MysqlHandler(DBMSRHandler):
 					pl.get_user_data(UserDataOptions.ROLE_NAME))
 		
 
-	def _change_master(self, host, user, password, log_file, log_pos, timeout=CHANGE_MASTER_TIMEOUT):
+	def _change_master(self, host, user, password, log_file, log_pos, timeout=None):
 		
 		LOG.info("Changing replication Master to server %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
+		
+		timeout = timeout or int(CHANGE_MASTER_TIMEOUT)
 		
 		# Changing replication master
 		self.root_client.stop_slave()
