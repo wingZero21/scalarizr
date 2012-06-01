@@ -1136,7 +1136,7 @@ class MysqlHandler(DBMSRHandler):
 		# Starting slave
 		result = self.root_client.start_slave()
 		LOG.debug('Start slave returned: %s' % result)
-		if 'ERROR' in result:
+		if result and 'ERROR' in result:
 			raise HandlerError('Cannot start mysql slave: %s' % result)
 
 		time_until = time.time() + timeout
