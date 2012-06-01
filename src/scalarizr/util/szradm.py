@@ -177,12 +177,7 @@ class Command(object):
 	@classmethod
 	def queryenv(cls):
 		if not hasattr(cls, '_queryenv'):
-			init_cnf()
-
-			key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
-			server_id = ini.get('general', 'server_id')
-			url = ini.get('general','queryenv_url')
-			cls._queryenv = QueryEnvService(url, server_id, key_path)		
+			cls._queryenv = new_queryenv()		
 		return cls._queryenv
 
 	def __init__(self, argv=None):
@@ -573,6 +568,25 @@ def init_cnf():
 	cnf.bootstrap()
 	globals()['ini'] = cnf.rawini
 
+
+def new_queryenv():
+	init_cnf()
+	key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
+	server_id = ini.get('general', 'server_id')
+	url = ini.get('general','queryenv_url')
+	cnf = bus.cnf
+	if not bus.scalr_version:
+		version_file = cnf.private_path('.scalr-version')
+		if os.path.exists(version_file):
+			bus.scalr_version = tuple(read_file(version_file).strip().split('.'))
+	
+	if bus.scalr_version:
+		api_version = '2012-04-17' if bus.scalr_version >= (3, 1, 0) else '2010-09-23'
+	else:
+		api_version = '2012-04-17'
+	return QueryEnvService(url, server_id, key_path, api_version)		
+	
+
 def main():
 	global ini
 	init_script()
@@ -644,13 +658,8 @@ def main():
 				com=Help(com_dict)
 				com.run()
 				sys.exit()
-			init_cnf()
 
-			key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
-			server_id = ini.get('general', 'server_id')
-			url = ini.get('general','queryenv_url')
-
-			qe = QueryEnvService(url, server_id, key_path)
+			qe = new_queryenv()
 			xml = qe.fetch(*args, **kv)
 			print xml.toprettyxml()
 
