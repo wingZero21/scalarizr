@@ -7,6 +7,7 @@ Created on Nov 15, 2011
 from __future__ import with_statement
 import re
 import os
+import sys
 import time
 import shutil
 import tarfile
@@ -43,6 +44,9 @@ OPT_ROOT_PASSWORD 		= "root_password"
 OPT_REPL_PASSWORD 		= "repl_password"
 OPT_STAT_PASSWORD   	= "stat_password"
 OPT_REPLICATION_MASTER  = "replication_master"
+
+OPT_LOG_FILE 			= "log_file"
+OPT_LOG_POS				= "log_pos"
 
 OPT_VOLUME_CNF			= 'volume_config'
 OPT_SNAPSHOT_CNF		= 'snapshot_config'
@@ -841,7 +845,7 @@ class MysqlHandler(DBMSRHandler):
 		self._update_config(msg_data)
 			
 			
-	'''
+
 	def _init_slave(self, message):
 		"""
 		Initialize MySQL slave
@@ -851,7 +855,7 @@ class MysqlHandler(DBMSRHandler):
 		LOG.info("Initializing MySQL slave")
 		
 		# Read required configuration options
-		log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
+		log_file, log_pos, repl_pass = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS, OPT_REPL_PASSWORD)
 		
 		if not self._storage_valid():
 			LOG.debug("Initialize slave storage")
@@ -875,25 +879,22 @@ class MysqlHandler(DBMSRHandler):
 			self.mysql.service.start()
 			
 			# Change replication master 
-			master_host = None
 			LOG.info("Requesting master server")
+			master_host = self.get_master_host()
 
 			self._change_master( 
-				host=self.get_master_host(), 
+				host=master_host, 
 				user=REPL_USER, 
 				password=repl_pass,
 				log_file=log_file, 
-				log_pos=log_pos, 
-				mysql_user=ROOT_USER,
-				mysql_password=root_pass,
-				timeout=CHANGE_MASTER_TIMEOUT
-			)
+				log_pos=log_pos)
 			# Update HostUp message
 			message.mysql = self._compat_storage_data(self.storage_vol)
+			message.db_type = BEHAVIOUR
 		except:
 			exc_type, exc_value, exc_trace = sys.exc_info()
 			raise exc_type, exc_value, exc_trace
-	'''
+
 		
 	def get_master_host(self):
 		master_host = None
@@ -1123,4 +1124,55 @@ class MysqlHandler(DBMSRHandler):
 					pl.get_user_data(UserDataOptions.FARM_ID), 
 					pl.get_user_data(UserDataOptions.ROLE_NAME))
 		
-					
+
+	def _change_master(self, host, user, password, log_file, log_pos, timeout=CHANGE_MASTER_TIMEOUT):
+		
+		LOG.info("Changing replication Master to server %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
+		
+		# Changing replication master
+		self.root_client.start_slave()
+		self.root_client.change_master_to(host, user, password, log_file, log_pos)
+		
+		# Starting slave
+		result = self.root_client.start_slave()
+		LOG.debug('Start slave returned: %s' % result)
+		if 'ERROR' in result:
+			raise HandlerError('Cannot start mysql slave: %s' % result)
+
+		time_until = time.time() + timeout
+		status = None
+		while time.time() <= time_until:
+			status = self.root_client.slave_status()
+			if status['Slave_IO_Running'] == 'Yes' and \
+				status['Slave_SQL_Running'] == 'Yes':
+				break
+			time.sleep(5)
+		else:
+			if status:
+				if not status['Last_Error']:
+					logfile = firstmatched(lambda p: os.path.exists(p), 
+										('/var/log/mysqld.log', '/var/log/mysql.log'))
+					if logfile:
+						gotcha = '[ERROR] Slave I/O thread: '
+						size = os.path.getsize(logfile)
+						fp = open(logfile, 'r')
+						try:
+							fp.seek(max((0, size - 8192)))
+							lines = fp.read().split('\n')
+							for line in lines:
+								if gotcha in line:
+									status['Last_Error'] = line.split(gotcha)[-1]
+						finally:
+							fp.close()
+				
+				msg = "Cannot change replication Master server to '%s'. "  \
+						"Slave_IO_Running: %s, Slave_SQL_Running: %s, " \
+						"Last_Errno: %s, Last_Error: '%s'" % (
+						host, status['Slave_IO_Running'], status['Slave_SQL_Running'],
+						status['Last_Errno'], status['Last_Error'])
+				raise HandlerError(msg)
+			else:
+				raise HandlerError('Cannot change replication master to %s' % (host))
+
+				
+		LOG.debug('Replication master is changed to host %s', host)		

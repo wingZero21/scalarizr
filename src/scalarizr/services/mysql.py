@@ -259,7 +259,8 @@ class MySQLClient(object):
 							"Master_Log_File", 
 							"Read_Master_Log_Pos", 
 							'Slave_IO_Running', 
-							'Slave_SQL_Running'):
+							'Slave_SQL_Running',
+							'Last_Error'):
 					variables[name] = value
 		else:
 			raise ServiceError('SHOW SLAVE STATUS returned empty set. Slave is not started?')
