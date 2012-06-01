@@ -157,7 +157,7 @@ class RaidVolumeProvider(VolumeProvider):
 
 	
 	@devname_not_empty
-	def create_snapshot(self, vol, snap):
+	def create_snapshot(self, vol, snap, **kwargs):
 		if not vol.snap_pv:
 			raise ValueError('Volume should have non-empty snap_pv attribute')
 		if isinstance(vol.snap_pv, Volume):
@@ -197,7 +197,7 @@ class RaidVolumeProvider(VolumeProvider):
 
 				pvd = Storage.lookup_provider(_vol.type)
 				_snap = pvd.snapshot_factory(description)
-				snap.disks.append(pvd.create_snapshot(_vol, _snap))
+				snap.disks.append(pvd.create_snapshot(_vol, _snap, tags=kwargs.get('tags')))
 
 		except:
 			e, t = sys.exc_info()[1:]

@@ -59,7 +59,7 @@ class Mdadm:
 				pass
 			
 		# Create RAID device
-		cmd = [MDADM_EXEC, '--create', devname, '--level=%d' % level, '-f', '-e', 'default', '-n', len(devices)]
+		cmd = [MDADM_EXEC, '--create', devname, '--level=%s' % level, '-f', '-e', 'default', '-n', len(devices)]
 		cmd.extend(devices)
 		system(cmd, error_text='Error occured during raid device creation')
 		system2((MDADM_EXEC, '-W', devname), raise_error=False)
@@ -120,7 +120,7 @@ class Mdadm:
 			total_devs = array_info['total_devices']
 		
 			if total_devs > raid_devs:
-				cmd = (MDADM_EXEC, '--grow', array, '--raid-devices=%d' % total_devs)
+				cmd = (MDADM_EXEC, '--grow', array, '--raid-devices=%s' % total_devs)
 				system(cmd, error_text='Error occured during array "%s" growth')
 
 		system2((MDADM_EXEC, '-W', array), raise_error=False)
