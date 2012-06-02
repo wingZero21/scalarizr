@@ -719,7 +719,7 @@ class MysqlHandler(DBMSRHandler):
 		assert mysql2["snapshot_config"]
 		
 		
-		if  self.is_replication_master():
+		if  self.is_replication_master:
 			LOG.debug('Skip NewMasterUp. My replication role is master')
 		
 	
@@ -806,8 +806,11 @@ class MysqlHandler(DBMSRHandler):
 		if not storage_valid:
 			if os.path.exists(DEBIAN_CNF_PATH):
 				LOG.debug("Copying debian.cnf file to mysql storage")
-				shutil.copy(DEBIAN_CNF_PATH, STORAGE_PATH)		
-
+				shutil.copy(DEBIAN_CNF_PATH, STORAGE_PATH)	
+					
+			# Add system users	
+			self.create_users(**user_creds)	
+			
 			# Update HostUp message 
 			passwords = dict(
 				root_password=user_creds[ROOT_USER],
@@ -819,9 +822,6 @@ class MysqlHandler(DBMSRHandler):
 		else:
 			self._copy_debian_cnf_back()
 			self._innodb_recovery()			
-
-		# Add system users	
-		self.create_users(**user_creds)	
 		
 		# Get binary logfile, logpos and create storage snapshot
 		snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER])
@@ -1027,6 +1027,7 @@ class MysqlHandler(DBMSRHandler):
 			users[login] = user
 			
 		self.mysql.service.stop_skip_grant_tables()	
+		self.mysql.service.start()
 		return users
 		
 

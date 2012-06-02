@@ -244,7 +244,7 @@ class MySQLClient(object):
 	
 			
 	def change_master_to(self, host, user, password, log_file, log_pos):
-		self.fetchone('CHANGE MASTER TO MASTER_HOST="%(host)s", \
+		return self.fetchone('CHANGE MASTER TO MASTER_HOST="%(host)s", \
 						MASTER_USER="%(user)s", \
 						MASTER_PASSWORD="%(password)s", \
 						MASTER_LOG_FILE="%(log_file)s", \
