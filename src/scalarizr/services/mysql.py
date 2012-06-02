@@ -257,7 +257,7 @@ class MySQLClient(object):
 		out = self.fetchdict("SHOW SLAVE STATUS")
 		LOG.debug('slave status: %s' % str(out))
 		if out:
-			for name, value in out.keys():
+			for name, value in out.items():
 				if name in ('Exec_Master_Log_Pos', 
 							'Relay_Master_Log_File', 
 							"Master_Log_File", 
