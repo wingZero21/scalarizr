@@ -181,6 +181,8 @@ class MySQLClient(object):
 		databases = [db[0] for db in out if db]
 		if 'information_schema' in databases:
 			databases.remove('information_schema')
+		if 'performance_schema' in databases:
+			databases.remove('performance_schema')
 		return databases
 		
 	
