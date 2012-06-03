@@ -173,20 +173,7 @@ class MysqlCnfController(CnfController):
 	def get_system_variables(self):
 		vars = CnfController.get_system_variables(self)
 		if self._init_script.running:
-			
-			out = self.root_client.fetchdict('SHOW GLOBAL VARIABLES')
-			LOG.debug(out)
-			
-			raw_text = out.splitlines()
-			text = raw_text[4:-3]
-			vars = {}
-			
-			for line in text:
-				splitted_line = line.split('|')					
-				name = splitted_line[1].strip()
-				value = splitted_line[2].strip()
-				vars[name] = value
-		
+			vars.update(self.root_client.show_global_variables())
 		return vars
 	
 	def apply_preset(self, preset):
