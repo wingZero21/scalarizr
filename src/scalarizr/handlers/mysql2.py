@@ -174,7 +174,7 @@ class MysqlCnfController(CnfController):
 		vars = CnfController.get_system_variables(self)
 		if self._init_script.running:
 			
-			out = self.root_client.fetchall('SHOW DATABASES')
+			out = self.root_client.fetchdict('SHOW GLOBAL VARIABLES')
 			LOG.debug(out)
 			
 			raw_text = out.splitlines()
