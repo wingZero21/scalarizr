@@ -522,18 +522,7 @@ class MysqlHandler(DBMSRHandler):
 
 	def on_DbMsr_CreateDataBundle(self, message):
 		LOG.info("on_DbMsr_CreateDataBundle")
-		msg_data = dict(
-				log_file='blabla',
-				log_pos='lala',
-				used_size='1.0',
-				status='ok',
-				snapshot_config='{my_snapshot_config:1}'
-			)
-		self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
-		
-		
-		
-		'''
+
 		try:
 			bus.fire('before_mysql_data_bundle')
 			
@@ -545,6 +534,7 @@ class MysqlHandler(DBMSRHandler):
 			
 			# Notify scalr
 			msg_data = dict(
+				db_type = BEHAVIOUR,
 				log_file=log_file,
 				log_pos=log_pos,
 				used_size='%.3f' % (float(used_size) / 1024 / 1024,),
@@ -557,10 +547,10 @@ class MysqlHandler(DBMSRHandler):
 			
 			# Notify Scalr about error
 			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
+				db_type = BEHAVIOUR,
 				status		='error',
 				last_error	= str(e)
 			))
-		'''
 	
 	
 	def on_DbMsr_PromoteToMaster(self, message):
