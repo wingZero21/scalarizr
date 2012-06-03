@@ -573,88 +573,43 @@ class MysqlHandler(DBMSRHandler):
 		assert message.repl_password
 		assert message.stat_password
 
-		msg_data = dict(
-			status="ok",
-			log_file = 'ololo',
-			log_pos = 'trololo',
-			volume_config = 'super_config',
-			snapshot_config = 'uber_config'
-		)
-		self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)	
 		
-		
-		
-		'''
+		if self.is_replication_master:
+			LOG.warning('Cannot promote to master. Already master')
+			return
+			
+		bus.fire('before_slave_promote_to_master')
+
+		if bus.scalr_version >= (2, 2):
+			master_storage_conf = message.body.get('volume_config')
+		else:
+			if 'volume_id' in message.body:
+				master_storage_conf = dict(type='ebs', id=message.body['volume_id'])
+			else:
+				master_storage_conf = None
+
 		old_conf 		= None
 		new_storage_vol	= None
-		
-		if not self.is_replication_master:
-			
-			bus.fire('before_slave_promote_to_master')
-			
-			if bus.scalr_version >= (2, 2):
-				master_storage_conf = message.body.get('volume_config')
-			else:
-				if 'volume_id' in message.body:
-					master_storage_conf = dict(type='ebs', id=message.body['volume_id'])
-				else:
-					master_storage_conf = None
-				
-			tx_complete = False
-						
-			try:
-				# Stop mysql
-				if master_storage_conf:
-					if self._init_script.running:
-						self.mysql.cli.stop_slave(timeout=STOP_SLAVE_TIMEOUT)
-
-						self.mysql.service.stop('Swapping storages to promote slave to master')
+		tx_complete 	= False
 					
-					# Unplug slave storage and plug master one
-					#self._unplug_storage(slave_vol_id, STORAGE_PATH)
-					old_conf = self.storage_vol.detach(force=True) # ??????
-					#master_vol = self._take_master_volume(master_vol_id)
-					#self._plug_storage(master_vol.id, STORAGE_PATH)
-					new_storage_vol = self._plug_storage(STORAGE_PATH, master_storage_conf)				
-					# Continue if master storage is a valid MySQL storage 
-					if self._storage_valid():
-						# Patch configuration files 
-						self.mysqlmove_mysqldir_to(STORAGE_PATH)
-						self._replication_init()
-						# Update behaviour configuration
-						updates = {
-							OPT_ROOT_PASSWORD : message.root_password,
-							OPT_REPL_PASSWORD : message.repl_password,
-							OPT_STAT_PASSWORD : message.stat_password,
-							OPT_REPLICATION_MASTER 	: "1"
-						}
-						self._update_config(updates)
-						Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
-						
-						# Send message to Scalr
-						msg_data = dict(status='ok')
-						msg_data.update(self._compat_storage_data(vol=new_storage_vol))
-						self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
-					else:
-						raise HandlerError("%s is not a valid MySQL storage" % STORAGE_PATH)
-					self.mysql.service.start()
-				else:
-					self.mysql.service.start()
-					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
-					timeout = 180
-					try:
-						mysql.sendline("STOP SLAVE;")
-						mysql.expect("mysql>", timeout=timeout)
-						mysql.sendline("RESET MASTER;")
-						mysql.expect("mysql>", 20)
-						filetool.remove(os.path.join(self._data_dir, 'relay-log.info'))
-						filetool.remove(os.path.join(self._data_dir, 'master.info'))
-					except pexpect.TIMEOUT:
-						raise HandlerError("Timeout (%d seconds) reached " + 
-									"while waiting for slave stop and master reset." % (timeout,))
-					finally:
-						mysql.close()
+		try:
+			# Stop mysql
+			if master_storage_conf:
+				if self.mysql.service.running:
+					self.mysql.cli.stop_slave(timeout=STOP_SLAVE_TIMEOUT)
 
+					self.mysql.service.stop('Swapping storages to promote slave to master')
+				
+				# Unplug slave storage and plug master one
+				old_conf = self.storage_vol.detach(force=True) # ??????
+				#master_vol = self._take_master_volume(master_vol_id)
+				new_storage_vol = self._plug_storage(STORAGE_PATH, master_storage_conf)				
+				# Continue if master storage is a valid MySQL storage 
+				if self._storage_valid():
+					# Patch configuration files 
+					self.mysql.move_mysqldir_to(STORAGE_PATH)
+					self.mysql._init_replication(master=True)
+					# Update behaviour configuration
 					updates = {
 						OPT_ROOT_PASSWORD : message.root_password,
 						OPT_REPL_PASSWORD : message.repl_password,
@@ -662,48 +617,73 @@ class MysqlHandler(DBMSRHandler):
 						OPT_REPLICATION_MASTER 	: "1"
 					}
 					self._update_config(updates)
-										
-					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
-					Storage.backup_config(snap.config(), self._snapshot_config_path)
+					Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 					
 					# Send message to Scalr
-					msg_data = dict(
-						status="ok",
-						log_file = log_file,
-						log_pos = log_pos
-					)
-					msg_data.update(self._compat_storage_data(self.storage_vol, snap))
-					self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)							
-					
-				tx_complete = True
-				bus.fire('slave_promote_to_master')
-				
-			except (Exception, BaseException), e:
-				LOG.exception(e)
-				if new_storage_vol:
-					new_storage_vol.detach()
-				# Get back slave storage
-				if old_conf:
-					self._plug_storage(STORAGE_PATH, old_conf)
-				
-				self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, dict(
-					status="error",
-					last_error=str(e)
-				))
-
-				# Start MySQL
+					msg_data = dict(status='ok')
+					log_file, log_pos = self.root_cli.master_status()
+					msg_data.update(dict(log_file = log_file, log_pos = log_pos, db_type = BEHAVIOUR))
+					msg_data.update(self._compat_storage_data(vol=new_storage_vol))
+					self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
+				else:
+					raise HandlerError("%s is not a valid MySQL storage" % STORAGE_PATH)
 				self.mysql.service.start()
+			else:
+				self.mysql.service.start()
+
+				self.root_client.stop_slave()
+				self.root_client.reset_master()
+				self.mysql.flush_logs(self._data_dir)
+
+				updates = {
+					OPT_ROOT_PASSWORD : message.root_password,
+					OPT_REPL_PASSWORD : message.repl_password,
+					OPT_STAT_PASSWORD : message.stat_password,
+					OPT_REPLICATION_MASTER 	: "1"
+				}
+				self._update_config(updates)
+									
+				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
+				
+				# Send message to Scalr
+				msg_data = dict(
+					status="ok",
+					log_file = log_file,
+					log_pos = log_pos,
+					db_type = BEHAVIOUR
+				)
+				msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)							
+				
+			tx_complete = True
+			bus.fire('slave_promote_to_master')
 			
-			if tx_complete and master_storage_conf:
-				# Delete slave EBS
-				self.storage_vol.destroy(remove_disks=True)
-				self.storage_vol = new_storage_vol
-				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
-		else:
-			LOG.warning('Cannot promote to master. Already master')
-		'''
-	
-	
+		except (Exception, BaseException), e:
+			LOG.exception(e)
+			if new_storage_vol:
+				new_storage_vol.detach()
+			# Get back slave storage
+			if old_conf:
+				self._plug_storage(STORAGE_PATH, old_conf)
+			
+			msg_data = dict(
+				db_type = BEHAVIOUR,
+				status="error",
+				last_error=str(e))
+			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
+
+			# Start MySQL
+			self.mysql.service.start()
+		
+		if tx_complete and master_storage_conf:
+			# Delete slave EBS
+			self.storage_vol.destroy(remove_disks=True)
+			self.storage_vol = new_storage_vol
+			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		
+
+		
 	def on_DbMsr_NewMasterUp(self, message):
 		LOG.info("on_DbMsr_NewMasterUp")
 		'''
