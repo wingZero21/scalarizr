@@ -416,8 +416,7 @@ class MysqlHandler(DBMSRHandler):
 			LOG.info('PhpMyAdmin system user successfully added')
 			
 			# Notify Scalr
-			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-				db_type = BEHAVIOUR,
+			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
 				status       = 'ok',
 				pma_user	 = PMA_USER,
 				pma_password = pma_password,
@@ -428,8 +427,7 @@ class MysqlHandler(DBMSRHandler):
 			LOG.exception(e)
 			
 			# Notify Scalr about error
-			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-				db_type = BEHAVIOUR,
+			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
 				status		= 'error',
 				last_error	=  str(e).strip(),
 				farm_role_id = farm_role_id
