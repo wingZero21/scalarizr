@@ -172,8 +172,11 @@ class MysqlCnfController(CnfController):
 			
 	def get_system_variables(self):
 		vars = CnfController.get_system_variables(self)
+		LOG.debug('Variables from config: %s' % str(vars))
 		if self._init_script.running:
-			vars.update(self.root_client.show_global_variables())
+			cli_vars = self.root_client.show_global_variables()
+			LOG.debug('Variables from cli: %s' % str(vars))
+			vars.update(cli_vars)
 		return vars
 	
 	def apply_preset(self, preset):
