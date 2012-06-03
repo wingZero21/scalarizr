@@ -10,6 +10,9 @@ import logging
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
+LOG = logging.getLogger(__name__)
+
+
 def lazy(init):
 	def wrapper(cls, *args, **kwargs):
 		obj = init(cls, *args, **kwargs)
@@ -48,6 +51,7 @@ class LazyInitScript(object):
 	def stop(self, reason=None):
 		if self._script.running:
 			try:
+				LOG.info('Stopping service: %s' % reason)
 				self._script.stop(reason)
 			finally:
 				self.restart_queue = []

@@ -812,7 +812,8 @@ class MysqlHandler(DBMSRHandler):
 		# If volume has mysql storage directory structure (N-th init)
 		else:
 			self._copy_debian_cnf_back()
-			self._innodb_recovery()			
+			self._innodb_recovery()	
+			self.mysql.service.start()		
 		
 		# Get binary logfile, logpos and create storage snapshot
 		snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER])
