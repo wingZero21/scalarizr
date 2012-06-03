@@ -113,9 +113,10 @@ class MysqlCnfController(CnfController):
 		CnfController.__init__(self, BEHAVIOUR, mysql_svc.MYCNF_PATH, 'mysql', definitions) #TRUE,FALSE
 		
 		
-	@property	
+	@property
 	def root_password(self):
-		pass
+		cnf = bus.cnf
+		return cnf.rawini.get('mysql2', 'root_password')
 
 
 	@property
@@ -173,7 +174,9 @@ class MysqlCnfController(CnfController):
 		vars = CnfController.get_system_variables(self)
 		if self._init_script.running:
 			
-			out = self.root_client.execute('SHOW DATABASES')
+			out = self.root_client.fetchall('SHOW DATABASES')
+			LOG.debug(out)
+			
 			raw_text = out.splitlines()
 			text = raw_text[4:-3]
 			vars = {}
@@ -183,6 +186,7 @@ class MysqlCnfController(CnfController):
 				name = splitted_line[1].strip()
 				value = splitted_line[2].strip()
 				vars[name] = value
+		
 		return vars
 	
 	def apply_preset(self, preset):
@@ -440,7 +444,7 @@ class MysqlHandler(DBMSRHandler):
 		tmpdir = backup_path = None
 		try:
 			# Get databases list
-			databases = self.mysql.cli.list_databases()
+			databases = self.root_client.list_databases()
 			
 			# Defining archive name and path
 			if not os.path.exists(tmp_dir):
@@ -567,7 +571,7 @@ class MysqlHandler(DBMSRHandler):
 			# Stop mysql
 			if master_storage_conf:
 				if self.mysql.service.running:
-					self.mysql.cli.stop_slave(timeout=STOP_SLAVE_TIMEOUT)
+					self.root_client.stop_slave(timeout=STOP_SLAVE_TIMEOUT)
 
 					self.mysql.service.stop('Swapping storages to promote slave to master')
 				
