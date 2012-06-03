@@ -379,15 +379,17 @@ class MysqlHandler(DBMSRHandler):
 
 
 	def on_BeforeHostTerminate(self, message):
-		LOG.info("on_BeforeHostTerminate")
-		"""
+		LOG.debug('Handling BeforeHostTerminate message from %s' % message.local_ip)
+		assert message.local_ip
+
 		if message.local_ip == self._platform.get_private_ip():
 			self.mysql.service.stop(reason='Server will be terminated')
 			LOG.info('Detaching MySQL storage')
 			self.storage_vol.detach()
-			
-		"""
-		assert message.local_ip
+			if not self.is_replication_master:
+				LOG.info('Destroying volume %s' % self.storage_vol.id)
+				self.storage_vol.destroy(remove_disks=True)
+				LOG.info('Volume %s has been destroyed.' % self.storage_vol.id)	
 	
 	
 	def on_Mysql_CreatePmaUser(self, message):
@@ -722,20 +724,12 @@ class MysqlHandler(DBMSRHandler):
 
 		
 	def on_before_reboot_start(self, *args, **kwargs):
-		LOG.info("on_before_reboot_start")
-		pass
-		'''
 		self.mysql.service.stop('Instance is going to reboot')
-		'''
-	
+
 	
 	def on_before_reboot_finish(self, *args, **kwargs):
-		LOG.info("on_before_reboot_finish")
-		pass
-		'''
 		self._insert_iptables_rules()
-		'''
-	
+
 
 	def generate_datadir(self):
 		try:
