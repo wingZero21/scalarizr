@@ -196,7 +196,7 @@ class MySQLClient(object):
 		return self.fetchone("STOP SLAVE")
 
 
-	def stop_slave_io_thread(self, timeout):
+	def stop_slave_io_thread(self):
 		return self.fetchone("STOP SLAVE IO_THREAD")
 	
 	

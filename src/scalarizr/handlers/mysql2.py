@@ -701,9 +701,57 @@ class MysqlHandler(DBMSRHandler):
 		
 		if  self.is_replication_master:
 			LOG.debug('Skip NewMasterUp. My replication role is master')
+			return
 		
-	
-	
+		host = message.local_ip or message.remote_ip
+		LOG.info("Switching replication to a new MySQL master %s", host)
+		bus.fire('before_mysql_change_master', host=host)			
+		
+		if 'snapshot_config' in message.body:
+			LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
+					message.snapshot_config['id'], message.log_file, message.log_pos)
+			self.mysql.service.stop('Swapping storages to reinitialize slave')
+			
+			LOG.debug('Destroing old storage')
+			self.storage_vol.destroy()
+			LOG.debug('Storage destoyed')
+			
+			LOG.debug('Plugging new storage')
+			vol = Storage.create(snapshot=message.snapshot_config.copy(), tags=self.mysql_tags)
+			self._plug_storage(self._storage_path, vol)
+			LOG.debug('Storage plugged')
+			
+			Storage.backup_config(vol.config(), self._volume_config_path)
+			Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
+			self.storage_vol = vol
+			log_file = message.log_file
+			log_pos = message.log_pos
+			
+			self.service.mysql.start()				
+		
+		if not 'snapshot_config' in message.body:
+			LOG.debug("Stopping slave i/o thread")
+			self.root_client.stop_slave_io_thread()
+			LOG.debug("Slave i/o thread stopped")
+			
+			LOG.debug("Retrieving current log_file and log_pos")
+			status = self.root_client.slave_status()
+			log_file = status['Master_Log_File']
+			log_pos = status['Read_Master_Log_Pos']
+			LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+
+		self._change_master(
+			host=host, 
+			user=REPL_USER, 
+			password=message.repl_password,
+			log_file=log_file, 
+			log_pos=log_pos
+		)
+			
+		LOG.debug("Replication switched")
+		bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)		
+
+		
 	def on_before_reboot_start(self, *args, **kwargs):
 		LOG.info("on_before_reboot_start")
 		pass
