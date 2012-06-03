@@ -176,9 +176,12 @@ class MySQLClient(object):
 
 	
 	def list_databases(self):
-		databases = [db[0] for db in self.fetchone('SHOW DATABASES') if db]
+		out = self.fetchone('SHOW DATABASES')
+		LOG.debug('databases: %s' % out)
+		databases = [db[0] for db in out if db]
 		if 'information_schema' in databases:
 			databases.remove('information_schema')
+		return databases
 		
 	
 	def start_slave(self):
