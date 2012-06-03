@@ -802,13 +802,6 @@ class MysqlHandler(DBMSRHandler):
 			# Add system users	
 			self.create_users(**user_creds)	
 			
-			# Update HostUp message 
-			passwords = dict(
-				root_password=user_creds[ROOT_USER],
-				repl_password=user_creds[REPL_USER],
-				stat_password=user_creds[STAT_USER])
-			msg_data.update(passwords)
-			
 		# If volume has mysql storage directory structure (N-th init)
 		else:
 			self._copy_debian_cnf_back()
@@ -827,7 +820,11 @@ class MysqlHandler(DBMSRHandler):
 		msg_data.update(logs)		
 		msg_data.update({OPT_REPLICATION_MASTER:str(int(self.is_replication_master))})
 		msg_data.update(self._compat_storage_data(self.storage_vol, snap))
-			
+		passwords = dict(
+				root_password=user_creds[ROOT_USER],
+				repl_password=user_creds[REPL_USER],
+				stat_password=user_creds[STAT_USER])
+		msg_data.update(passwords)			
 		message.db_type = BEHAVIOUR
 		message.mysql2 = msg_data.copy()
 		try:
