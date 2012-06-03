@@ -395,16 +395,6 @@ class MysqlHandler(DBMSRHandler):
 		assert message.pma_server_ip
 		assert message.farm_role_id
 		
-		self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
-				status       = 'ok',
-				pma_user	 = PMA_USER,
-				pma_password = 'awesome_pma_password',
-				farm_role_id = message.farm_role_id,
-			))
-		
-		
-		
-		'''
 		try:
 			# Operation allowed only on Master server
 			if not self.is_replication_master:
@@ -415,13 +405,13 @@ class MysqlHandler(DBMSRHandler):
 			
 			LOG.info("Adding phpMyAdmin system user")
 			pma_password = cryptotool.pwgen(20)
-			#self.mysql.pma_user = mysql_svc.MySQLUser(login=PMA_USER,pma_password)
-			self.mysql.pma_user.create(host=pma_server_ip, privileges=None,password=pma_password)
+			self.root_client.create_user(PMA_USER, pma_server_ip, pma_password, privileges=None)
 			
 			LOG.info('PhpMyAdmin system user successfully added')
 			
 			# Notify Scalr
-			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+				db_type = BEHAVIOUR,
 				status       = 'ok',
 				pma_user	 = PMA_USER,
 				pma_password = pma_password,
@@ -432,26 +422,17 @@ class MysqlHandler(DBMSRHandler):
 			LOG.exception(e)
 			
 			# Notify Scalr about error
-			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
+			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+				db_type = BEHAVIOUR,
 				status		= 'error',
 				last_error	=  str(e).strip(),
 				farm_role_id = farm_role_id
 			))
-		'''
 	
 	
 	def on_DbMsr_CreateBackup(self, message):
 		LOG.info("on_DbMsr_CreateBackup")
-		self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-			db_type = BEHAVIOUR,
-			status = 'ok',
-			backup_parts = tuple()
-		))		
-		
-		
-		
-		
-		'''
+
 		tmp_dir = os.path.join(STORAGE_PATH, STORAGE_TMP_DIR)		
 		# Retrieve password for scalr mysql user
 		tmpdir = backup_path = None
@@ -516,8 +497,6 @@ class MysqlHandler(DBMSRHandler):
 				shutil.rmtree(tmpdir, ignore_errors=True)
 			if backup_path and os.path.exists(backup_path):
 				os.remove(backup_path)	
-		'''	
-
 
 
 	def on_DbMsr_CreateDataBundle(self, message):
