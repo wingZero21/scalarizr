@@ -583,6 +583,7 @@ class MysqlHandler(DBMSRHandler):
 					# Patch configuration files 
 					self.mysql.move_mysqldir_to(STORAGE_PATH)
 					self.mysql._init_replication(master=True)
+					self.mysql.service.start()
 					# Update behaviour configuration
 					updates = {
 						OPT_ROOT_PASSWORD : message.root_password,
