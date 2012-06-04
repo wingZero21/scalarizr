@@ -217,18 +217,18 @@ class MysqlCnfController(CnfController):
 			LOG.info('MySQL isn`t running, skipping process of applying run-time variables')
 			return
 		
-			if self.sendline and self.root_client.test_connection():
-				LOG.debug(self.sendline)
-				try:
-					self.root_client.fetchone(self.sendline)
-				except PopenError, e:
-					LOG.error('Cannot set global variables: %s' % e)
-				else:
-					LOG.debug('All global variables has been set.')
-			elif not self.sendline:
-				LOG.debug('No global variables changed. Nothing to set.')
-			elif not self.root_client.test_connection():
-				LOG.debug('No connection to MySQL. Skipping SETs.')
+		if self.sendline and self.root_client.test_connection():
+			LOG.debug(self.sendline)
+			try:
+				self.root_client.fetchone(self.sendline)
+			except BaseException, e:
+				LOG.error('Cannot set global variables: %s' % e)
+			else:
+				LOG.debug('All global variables has been set.')
+		elif not self.sendline:
+			LOG.debug('No global variables changed. Nothing to set.')
+		elif not self.root_client.test_connection():
+			LOG.debug('No connection to MySQL. Skipping SETs.')
 
 	
 	def _get_version(self):
@@ -361,10 +361,7 @@ class MysqlHandler(DBMSRHandler):
 			self._init_master(message)	
 		else:
 			self._init_slave(message)
-		'''
-		service configuration is temporary disabled
-		'''
-		#bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 
 
 	def on_BeforeHostTerminate(self, message):
@@ -1161,8 +1158,8 @@ class MysqlHandler(DBMSRHandler):
 		LOG.debug('Replication master is changed to host %s', host)		
 
 
-	
 	@property
 	def mysql_tags(self):
 		is_master = bool(int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]))
 		return prepare_tags(BEHAVIOUR, db_replication_role=is_master)
+	
