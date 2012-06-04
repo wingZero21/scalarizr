@@ -444,11 +444,12 @@ class MysqlHandler(DBMSRHandler):
 			# Dump all databases
 			LOG.info("Dumping all databases")
 			tmpdir = tempfile.mkdtemp(dir=tmp_dir)
-			mysqldump = mysql_svc.MySQLDump(root_user=ROOT_USER, root_password=self.root_password)			
+			mysqldump = mysql_svc.MySQLDump(root_user=ROOT_USER, root_password=self.root_password)		
+			dump_options = config.split(self._cnf.rawini.get('mysql', 'mysqldump_options'), ' ')	
 			for db_name in databases:
 				try:
 					dump_path = os.path.join(tmpdir, db_name + '.sql') 
-					mysqldump.create(db_name, dump_path)
+					mysqldump.create(db_name, dump_path, dump_options)
 					backup.add(dump_path, os.path.basename(dump_path))						
 				except PopenError, e:
 					LOG.exception('Cannot dump database %s. %s', db_name, e)

@@ -53,6 +53,15 @@ class MySQL(BaseService):
 	def __init__(self):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
+
+	
+	def _init_replication(self, master=True):
+		LOG.info('Initializing replication')
+		server_id = 1 if master else int(random.random() * 100000)+1
+		self.my_cnf.server_id = server_id
+		self.my_cnf.bind_address = None
+		self.my_cnf.skip_networking = None
+
 	
 	def init_master(self):
 		pass
@@ -63,32 +72,22 @@ class MySQL(BaseService):
 	def _init_service(self):
 		pass
 	
-	def _init_replication(self, master=True):
-		LOG.info('Initializing replication')
-		server_id = 1 if master else int(random.random() * 100000)+1
-		self.my_cnf.server_id = server_id
-		self.my_cnf.bind_address = None
-		self.my_cnf.skip_networking = None
-
-	@property
-	def version(self):
-		#5.1/5.5
-		#percona/mysql
-		pass
-	
-	@property
-	def is_replication_master(self):
-		pass
-	
 	def change_master_to(self):
 		# client.change_master_to
 		# check_replication_health and wait 
 		pass
-	
+
 	def check_replication_health(self):
 		# set slave status
 		# on fail get status from error.log
 		pass
+			
+	@property
+	def version(self):
+		#5.1/5.5
+		#percona/mysql
+		pass	
+
 	
 	def move_mysqldir_to(self, storage_path):
 		LOG.info('Moving mysql dir to %s' % storage_path)
@@ -191,13 +190,6 @@ class MySQLClient(object):
 	
 			
 	def stop_slave(self):
-		#TODO: think how to use timeouts
-		'''
-		timeout_reached = False
-		if timeout_reached:
-			raise ServiceError("Timeout (%d seconds) reached " + 
-									"while waiting for slave stop" % (timeout,))
-		'''
 		return self.fetchone("STOP SLAVE")
 
 
@@ -476,8 +468,6 @@ class MySQLDump(object):
 		self.root_password = root_password or ''
 	
 	def create(self, dbname, filename, opts=None):
-		#TODO: move opts to handler
-		#opts = config.split(bus.cnf.rawini.get('mysql', 'mysqldump_options'), ' ')
 		opts = opts or []
 		LOG.debug('Dumping database %s to %s' % (dbname, filename))
 		opts = [MYSQLDUMP_PATH, '-u', self.root_user, '-p'] + opts + ['--databases']
@@ -500,7 +490,6 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			
 				
 	def __init__(self):
-		#todo: provide user and password
 		self.mysql_cli = MySQLClient()
 		
 
