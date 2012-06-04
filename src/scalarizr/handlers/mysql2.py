@@ -543,9 +543,9 @@ class MysqlHandler(DBMSRHandler):
 		assert message.body['volume_config']
 		assert message.mysql2
 		mysql2 = message.mysql2
-		assert mysql2.root_password
-		assert mysql2.repl_password
-		assert mysql2.stat_password
+		assert mysql2['root_password']
+		assert mysql2['repl_password']
+		assert mysql2['stat_password']
 
 		
 		if self.is_replication_master:
