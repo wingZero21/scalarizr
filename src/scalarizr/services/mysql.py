@@ -292,6 +292,7 @@ class MySQLClient(object):
 	def show_global_variables(self):
 		d = {} 
 		raw = self.fetchdict('SHOW GLOBAL VARIABLES', fetch_one=False)
+		LOG.debug('global variables: %s' % str(raw))
 		for row in raw:
 			name = row['Variable_name']
 			val = row['Value']
