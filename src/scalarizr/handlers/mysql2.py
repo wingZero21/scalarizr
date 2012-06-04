@@ -679,7 +679,7 @@ class MysqlHandler(DBMSRHandler):
 			
 			LOG.debug('Plugging new storage')
 			vol = Storage.create(snapshot=snap_config.copy(), tags=self.mysql_tags)
-			self._plug_storage(self._storage_path, vol)
+			self._plug_storage(STORAGE_PATH, vol)
 			LOG.debug('Storage plugged')
 			
 			Storage.backup_config(vol.config(), self._volume_config_path)
