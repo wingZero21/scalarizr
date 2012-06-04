@@ -111,7 +111,7 @@ class MysqlCnfController(CnfController):
 		definitions = {'ON':'1', 'TRUE':'1','OFF':'0','FALSE':'0'}
 		CnfController.__init__(self, BEHAVIOUR, mysql_svc.MYCNF_PATH, 'mysql', definitions) #TRUE,FALSE
 
-
+	@property
 	def root_client(self):
 		if not self._cli:
 			self._cli = mysql_svc.MySQLClient(ROOT_USER, self.root_password)	
