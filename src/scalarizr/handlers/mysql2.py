@@ -541,9 +541,11 @@ class MysqlHandler(DBMSRHandler):
 		"""
 		LOG.info("on_DbMsr_PromoteToMaster")
 		assert message.body['volume_config']
-		assert message.root_password
-		assert message.repl_password
-		assert message.stat_password
+		assert message.mysql2
+		mysql2 = message.mysql2
+		assert mysql2.root_password
+		assert mysql2.repl_password
+		assert mysql2.stat_password
 
 		
 		if self.is_replication_master:
