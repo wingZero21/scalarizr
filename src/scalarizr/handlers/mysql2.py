@@ -595,7 +595,7 @@ class MysqlHandler(DBMSRHandler):
 					
 					# Send message to Scalr
 					msg_data = dict(status='ok')
-					log_file, log_pos = self.root_cli.master_status()
+					log_file, log_pos = self.root_client.master_status()
 					msg_data.update(dict(log_file = log_file, log_pos = log_pos, db_type = BEHAVIOUR))
 					msg_data.update(self._compat_storage_data(vol=new_storage_vol))
 					self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
