@@ -96,7 +96,7 @@ class LoopVolumeProvider(VolumeProvider):
 		kwargs['file'] = new_file
 		return self.create(**kwargs)
 	
-	def create_snapshot(self, vol, snap):
+	def create_snapshot(self, vol, snap, tags=None):
 		backup_filename = vol.file + '.%s.bak' % time.strftime('%d-%m_%H:%M:%S')
 		shutil.copy(vol.file, backup_filename)
 		snap.file = backup_filename
