@@ -31,7 +31,6 @@ class RaidConfig(VolumeConfig):
 	raid_pv = None
 	snap_pv = None
 	vg		= None
-	lvm_group_cfg = None
 	disks	= None
 	
 	def config(self, as_snapshot=False):
