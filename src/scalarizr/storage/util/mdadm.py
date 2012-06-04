@@ -59,7 +59,7 @@ class Mdadm:
 				pass
 			
 		# Create RAID device
-		cmd = [MDADM_EXEC, '--create', devname, '--level=%s' % level, '-f', '-e', 'default', '-n', len(devices)]
+		cmd = [MDADM_EXEC, '--create', devname, '--level=%s' % level, '--assume-clean', '-f', '-e', 'default', '-n', len(devices)]
 		cmd.extend(devices)
 		system(cmd, error_text='Error occured during raid device creation')
 		system2((MDADM_EXEC, '-W', devname), raise_error=False)
