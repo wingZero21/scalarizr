@@ -70,6 +70,8 @@ STOP_SLAVE_TIMEOUT		= 180
 DEFAULT_DATADIR			= "/var/lib/mysql"
 DEBIAN_CNF_PATH			= "/etc/mysql/debian.cnf"
 
+DATA_DIR = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_DATA_DIR)
+
 PRIVILEGES = {REPL_USER:('Repl_slave_priv',), STAT_USER:('Repl_client_priv',),}
 	
 	
@@ -240,34 +242,20 @@ class MysqlHandler(DBMSRHandler):
 	
 	
 	def __init__(self):
-		#use constants instead of members!
-		self._mycnf_path = mysql_svc.MYCNF_PATH
-		self._mysqld_path = mysql_svc.MYSQLD_PATH
-		
-		self._data_dir = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_DATA_DIR)
-		self._binlog_base = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_BINLOG)
-		
 		self.mysql = mysql_svc.MySQL()
-
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, self.mysql.service, MysqlCnfController())
 
-		
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
 			'before_mysql_data_bundle',
-			
 			'mysql_data_bundle',
-			
 			# @param host: New master hostname 
 			'before_mysql_change_master',
-			
 			# @param host: New master hostname 
 			# @param log_file: log file to start from 
 			# @param log_pos: log pos to start from 
 			'mysql_change_master'
-			
 			'before_slave_promote_to_master',
-			
 			'slave_promote_to_master'
 		)
 		self.on_reload()	
@@ -608,7 +596,7 @@ class MysqlHandler(DBMSRHandler):
 
 				self.root_client.stop_slave()
 				self.root_client.reset_master()
-				self.mysql.flush_logs(self._data_dir)
+				self.mysql.flush_logs(DATA_DIR)
 
 				updates = {
 					OPT_ROOT_PASSWORD : mysql2['root_password'],
@@ -746,8 +734,9 @@ class MysqlHandler(DBMSRHandler):
 	
 
 	def _storage_valid(self, path=None):
-		data_dir = os.path.join(path, mysql_svc.STORAGE_DATA_DIR) if path else self._data_dir
-		binlog_base = os.path.join(path, mysql_svc.STORAGE_BINLOG) if path else self._binlog_base
+		default_binlog_base = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_BINLOG)
+		data_dir = os.path.join(path, mysql_svc.STORAGE_DATA_DIR) if path else DATA_DIR
+		binlog_base = os.path.join(path, mysql_svc.STORAGE_BINLOG) if path else default_binlog_base
 		return os.path.exists(data_dir) and glob.glob(binlog_base + '*')
 	
 		
@@ -769,7 +758,7 @@ class MysqlHandler(DBMSRHandler):
 		self.storage_vol = self._plug_storage(mpoint=STORAGE_PATH, vol=volume_cnf)
 		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 		
-		self.mysql.flush_logs(self._data_dir)
+		self.mysql.flush_logs(DATA_DIR)
 		
 		storage_valid = self._storage_valid()
 		user_creds = self.get_user_creds()
@@ -779,7 +768,7 @@ class MysqlHandler(DBMSRHandler):
 			datadir = DEFAULT_DATADIR
 			self.mysql.my_cnf.datadir = DEFAULT_DATADIR
 
-		if not storage_valid and datadir.find(self._data_dir) == 0:
+		if not storage_valid and datadir.find(DATA_DIR) == 0:
 			# When role was created from another mysql role it contains modified my.cnf settings 
 			self.mysql.my_cnf.datadir = DEFAULT_DATADIR
 			self.mysql.my_cnf.log_bin = None
@@ -854,7 +843,7 @@ class MysqlHandler(DBMSRHandler):
 		
 		try:
 			self.mysql.service.stop('Required by Slave initialization process')			
-			self.mysql.flush_logs(self._data_dir)
+			self.mysql.flush_logs(DATA_DIR)
 			
 			# Change configuration files
 			LOG.info("Changing configuration files")
