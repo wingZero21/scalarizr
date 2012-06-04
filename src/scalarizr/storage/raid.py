@@ -31,6 +31,7 @@ class RaidConfig(VolumeConfig):
 	raid_pv = None
 	snap_pv = None
 	vg		= None
+	lvm_group_cfg = None
 	disks	= None
 	
 	def config(self, as_snapshot=False):
@@ -110,6 +111,7 @@ class RaidVolumeProvider(VolumeProvider):
 			kwargs['vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
 			kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
 			kwargs['raid_pv'] = raid_pv
+			kwargs['lvm_group_cfg'] = self.save_lvm_group_cfg(kwargs['vg'])
 			volume = super(RaidVolumeProvider, self).create(**kwargs)
 		return volume
 	
@@ -152,7 +154,8 @@ class RaidVolumeProvider(VolumeProvider):
 						 	vg		= vg,
 							disks	= kwargs['disks'],
 							level	= kwargs['level'],
-							snap_pv	= kwargs['snap_pv'])
+							snap_pv	= kwargs['snap_pv'],
+							lvm_group_cfg = kwargs['lvm_group_cfg'])
 
 	
 	@devname_not_empty
@@ -166,8 +169,6 @@ class RaidVolumeProvider(VolumeProvider):
 		else:
 			snap_pv = Storage.create(vol.snap_pv)
 
-		# Save lvm group cfg info
-		self.save_lvm_group_cfg(vol, snap)
 
 		# Extend RAID volume group with snapshot disk
 		self._lvm.create_pv(snap_pv.devname)
@@ -184,6 +185,7 @@ class RaidVolumeProvider(VolumeProvider):
 			snap.tmp_snaps	= []
 			snap.disks		= []
 			snap.snap_pv	= vol.snap_pv.config() if isinstance(vol.snap_pv, Volume) else vol.snap_pv
+			snap.lvm_group_cfg = vol.lvm_group_cfg
 
 			for i, _vol in enumerate(vol.disks):
 				description = 'RAID%s disk #%d - %s' % (vol.level, i, snap.description)
@@ -212,13 +214,12 @@ class RaidVolumeProvider(VolumeProvider):
 
 
 	@devname_not_empty
-	def save_lvm_group_cfg(self, vol, snap):
-		raw_vg = os.path.basename(vol.vg)
+	def save_lvm_group_cfg(self, vg):
+		raw_vg = os.path.basename(vg)
 		lvmgroupcfg = read_file('/etc/lvm/backup/%s' % raw_vg)
 		if lvmgroupcfg is None:
 			raise StorageError('Backup file for volume group "%s" does not exists' % raw_vg)
-		snap.lvm_group_cfg = binascii.b2a_base64(lvmgroupcfg)
-		return snap
+		return binascii.b2a_base64(lvmgroupcfg)
 
 
 	def destroy(self, vol, force=False, **kwargs):
