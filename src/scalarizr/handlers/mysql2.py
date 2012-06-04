@@ -404,11 +404,12 @@ class MysqlHandler(DBMSRHandler):
 			
 			pma_server_ip = message.pma_server_ip
 			farm_role_id  = message.farm_role_id
-			
-			LOG.info("Adding phpMyAdmin system user")
 			pma_password = cryptotool.pwgen(20)
+			LOG.info("Adding phpMyAdmin system user")
+			
 			if  self.root_client.user_exists(PMA_USER, pma_server_ip):
-				LOG.info('PhpMyAdmin system user already exists')
+				LOG.info('PhpMyAdmin system user already exists. Removing user.')
+				self.root_client.remove_user(PMA_USER, pma_server_ip)
 			else:
 				self.root_client.create_user(PMA_USER, pma_server_ip, pma_password, privileges=None)
 				LOG.info('PhpMyAdmin system user successfully added')
