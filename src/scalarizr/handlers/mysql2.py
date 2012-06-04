@@ -215,17 +215,17 @@ class MysqlCnfController(CnfController):
 			LOG.info('MySQL isn`t running, skipping process of applying run-time variables')
 			return
 		
-			if self.sendline and self.root_client.has_connection():
+			if self.sendline and self.root_client.test_connection():
 				LOG.debug(self.sendline)
 				try:
-					self.root_client.execute(self.sendline)
+					self.root_client.fetchone(self.sendline)
 				except PopenError, e:
 					LOG.error('Cannot set global variables: %s' % e)
 				else:
 					LOG.debug('All global variables has been set.')
 			elif not self.sendline:
 				LOG.debug('No global variables changed. Nothing to set.')
-			elif not self.root_client.has_connection():
+			elif not self.root_client.test_connection():
 				LOG.debug('No connection to MySQL. Skipping SETs.')
 
 	
