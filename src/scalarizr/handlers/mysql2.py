@@ -570,7 +570,7 @@ class MysqlHandler(DBMSRHandler):
 			# Stop mysql
 			if master_storage_conf:
 				if self.mysql.service.running:
-					self.root_client.stop_slave(timeout=STOP_SLAVE_TIMEOUT)
+					self.root_client.stop_slave()
 
 					self.mysql.service.stop('Swapping storages to promote slave to master')
 				
