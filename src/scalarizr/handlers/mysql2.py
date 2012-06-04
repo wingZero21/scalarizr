@@ -586,9 +586,9 @@ class MysqlHandler(DBMSRHandler):
 					self.mysql.service.start()
 					# Update behaviour configuration
 					updates = {
-						OPT_ROOT_PASSWORD : message.root_password,
-						OPT_REPL_PASSWORD : message.repl_password,
-						OPT_STAT_PASSWORD : message.stat_password,
+						OPT_ROOT_PASSWORD : mysql2.root_password,
+						OPT_REPL_PASSWORD : mysql2.repl_password,
+						OPT_STAT_PASSWORD : mysql2.stat_password,
 						OPT_REPLICATION_MASTER 	: "1"
 					}
 					self._update_config(updates)
@@ -602,7 +602,6 @@ class MysqlHandler(DBMSRHandler):
 					self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 				else:
 					raise HandlerError("%s is not a valid MySQL storage" % STORAGE_PATH)
-				self.mysql.service.start()
 			else:
 				self.mysql.service.start()
 
@@ -611,14 +610,14 @@ class MysqlHandler(DBMSRHandler):
 				self.mysql.flush_logs(self._data_dir)
 
 				updates = {
-					OPT_ROOT_PASSWORD : message.root_password,
-					OPT_REPL_PASSWORD : message.repl_password,
-					OPT_STAT_PASSWORD : message.stat_password,
+					OPT_ROOT_PASSWORD : mysql2.root_password,
+					OPT_REPL_PASSWORD : mysql2.repl_password,
+					OPT_STAT_PASSWORD : mysql2.stat_password,
 					OPT_REPLICATION_MASTER 	: "1"
 				}
 				self._update_config(updates)
 									
-				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, message.root_password)
+				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, mysql2.root_password)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				
 				# Send message to Scalr
