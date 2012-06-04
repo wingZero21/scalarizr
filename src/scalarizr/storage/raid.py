@@ -15,7 +15,7 @@ import binascii
 from . import VolumeConfig, Volume, Snapshot, VolumeProvider, Storage, \
 		StorageError, system, devname_not_empty
 from .util.mdadm import Mdadm
-from .util.lvm2 import Lvm2, lvm_group_b64
+from .util.lvm2 import Lvm2, lvm_group_b64, Lvm2Error
 
 from scalarizr.libs.pubsub import Observable
 from scalarizr.util import firstmatched
@@ -133,21 +133,34 @@ class RaidVolumeProvider(VolumeProvider):
 		else:
 			raid_pv	= self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
 
-		lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
-		write_file(self._lvm_backup_filename, lvm_raw_backup, logger=logger)
-		
-		if 'pv_uuid' in kwargs:
-			system(('pvcreate', '--uuid', kwargs['pv_uuid'], raid_pv))
-					
+		initialized = False
 		try:
-			self._lvm.restore_vg(vg, self._lvm_backup_filename)
-		finally:
-			os.unlink(self._lvm_backup_filename)
+			self._lvm.pv_scan()
+			self._lvm.change_vg(kwargs['vg'], available=True)
+			lvinfo = self._lvm.lv_info(kwargs['device'])
+			gvi = self._lvm.vg_info(kwargs['vg'])
+			initialized = lvinfo.path == kwargs['device'] and gvi.vg == kwargs['vg']
+		except (LookupError, Lvm2Error):
+			pass
+
+		if not initialized:
+
+			lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
+			write_file(self._lvm_backup_filename, lvm_raw_backup, logger=logger)
+
+			if 'pv_uuid' in kwargs:
+				system(('pvcreate', '--uuid', kwargs['pv_uuid'], raid_pv))
+			else:
+				self._lvm.create_pv(raid_pv)
+			try:
+				self._lvm.restore_vg(vg, self._lvm_backup_filename)
+			finally:
+				os.unlink(self._lvm_backup_filename)
 		
-		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg_name == raw_vg, self._lvm.lv_status())
-		if not lvinfo:
-			raise StorageError('Volume group %s does not contain any logical volume.' % raw_vg)
-		self._lvm.change_vg(raw_vg, available=True)
+			lvinfo = firstmatched(lambda lvinfo: lvinfo.vg_name == raw_vg, self._lvm.lv_status())
+			if not lvinfo:
+				raise StorageError('Volume group %s does not contain any logical volume.' % raw_vg)
+			self._lvm.change_vg(raw_vg, available=True)
 		
 		return RaidVolume(	lvinfo.lv_path,
 							raid_pv	= raid_pv,
