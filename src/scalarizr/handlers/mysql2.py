@@ -102,17 +102,22 @@ class DBMSRHandler(ServiceCtlHandler):
 initdv2.explore(SERVICE_NAME, mysql_svc.MysqlInitScript)
 
 class MysqlCnfController(CnfController):
-	root_client = None
 	_mysql_version = None
 	_merged_manifest = None	
+	_cli = None
 	
 	def __init__(self):
 		self._init_script = initdv2.lookup(SERVICE_NAME)
-		self.root_client = mysql_svc.MySQLClient(ROOT_USER, self.root_password)
 		definitions = {'ON':'1', 'TRUE':'1','OFF':'0','FALSE':'0'}
 		CnfController.__init__(self, BEHAVIOUR, mysql_svc.MYCNF_PATH, 'mysql', definitions) #TRUE,FALSE
-		
-		
+
+
+	def root_client(self):
+		if not self._cli:
+			self._cli = mysql_svc.MySQLClient(ROOT_USER, self.root_password)	
+		return self._cli
+	
+	
 	@property
 	def root_password(self):
 		cnf = bus.cnf
@@ -243,6 +248,7 @@ class MysqlHandler(DBMSRHandler):
 		self._binlog_base = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_BINLOG)
 		
 		self.mysql = mysql_svc.MySQL()
+
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, self.mysql.service, MysqlCnfController())
 
 		
