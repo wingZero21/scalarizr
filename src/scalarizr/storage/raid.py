@@ -213,7 +213,6 @@ class RaidVolumeProvider(VolumeProvider):
 		return snap
 
 
-	@devname_not_empty
 	def save_lvm_group_cfg(self, vg):
 		raw_vg = os.path.basename(vg)
 		lvmgroupcfg = read_file('/etc/lvm/backup/%s' % raw_vg)
