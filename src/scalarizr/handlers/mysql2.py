@@ -686,7 +686,7 @@ class MysqlHandler(DBMSRHandler):
 			Storage.backup_config(snap_config, self._snapshot_config_path)
 			self.storage_vol = vol
 			
-			self.service.mysql.start()				
+			self.mysql.service.mysql.start()				
 		
 		if not 'snapshot_config' in mysql2:
 			LOG.debug("Stopping slave i/o thread")
