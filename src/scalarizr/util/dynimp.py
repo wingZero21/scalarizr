@@ -232,8 +232,10 @@ class ImpLoader(object):
 		if disttool.is_redhat_based() and not disttool.is_fedora():
 			dist_id = 'el'
 		dist_id = dist_id.lower()
+		major_release = release.split('.')[0]
 		self.sections = [s % locals() for s in ('%(mgr_name)s', 
 											'%(mgr_name)s:%(dist_id)s', 
+											'%(mgr_name)s:%(dist_id)s%(major_release)s',
 											'%(mgr_name)s:%(dist_id)s%(release)s')]
 		self.sections.reverse()
 		

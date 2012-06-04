@@ -46,9 +46,8 @@ pysnmp = python26-pysnmp, python26-pysnmp-mibs
 yaml = pythn26-pyyaml
 
 
-[apt:ubuntu804]
+[apt:ubuntu8.04]
 json = python-simplejson
-zmq = python25-zeromq
 gevent = python25-gevent
 
 

@@ -11,7 +11,7 @@ import tempfile
 from scalarizr.util import disttool, dynimp
 
 import mock
-from nose.tools import raises
+from nose.tools import raises, assert_equals
 import shutil
 
 
@@ -43,6 +43,15 @@ class TestImpLoader(object):
 		disttool.is_redhat_based.return_value = True
 		disttool.is_debian_based.return_value = False
 
+	def test_redhat_sections(self):
+		self.env_rhel5()
+		self.imp = dynimp.ImpLoader(self.manifest)
+		assert_equals(self.imp.sections, ['yum:el5.6', 'yum:el5', 'yum:el', 'yum'])
+
+	def test_ubuntu_sections(self):
+		self.env_ubuntu()
+		self.imp = dynimp.ImpLoader(self.manifest)
+		assert_equals(self.imp.sections, ['apt:ubuntu12.04', 'apt:ubuntu12', 'apt:ubuntu', 'apt'])
 
 	def test_redhat_install_python_package(self):
 		self.env_rhel5()
