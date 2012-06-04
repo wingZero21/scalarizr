@@ -21,7 +21,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.messaging import Messages
-from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError
+from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError, prepare_tags
 import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
@@ -308,6 +308,7 @@ class MysqlHandler(DBMSRHandler):
 		elif self._cnf.state == ScalarizrState.RUNNING:
 			# Creating self.storage_vol object from configuration
 			storage_conf = Storage.restore_config(self._volume_config_path)
+			storage_conf['tags'] = self.mysql_tags
 			self.storage_vol = Storage.create(storage_conf)
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
@@ -509,7 +510,7 @@ class MysqlHandler(DBMSRHandler):
 			bus.fire('before_mysql_data_bundle')
 			
 			# Creating snapshot
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, self.root_password)
+			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, self.root_password, tags=self.mysql_tags)
 			used_size = firstmatched(lambda r: r.mpoint == STORAGE_PATH, filetool.df()).used
 				
 			bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
@@ -617,7 +618,7 @@ class MysqlHandler(DBMSRHandler):
 				}
 				self._update_config(updates)
 									
-				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, mysql2['root_password'])
+				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, mysql2['root_password'], tags=self.mysql_tags)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				
 				# Send message to Scalr
@@ -813,7 +814,7 @@ class MysqlHandler(DBMSRHandler):
 			self.mysql.service.start()		
 		
 		# Get binary logfile, logpos and create storage snapshot
-		snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER])
+		snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
 		Storage.backup_config(snap.config(), self._snapshot_config_path)
 
 		# Update HostUp message 
@@ -1038,6 +1039,7 @@ class MysqlHandler(DBMSRHandler):
 
 	def _plug_storage(self, mpoint, vol):
 		if not isinstance(vol, Volume):
+			vol['tags'] = self.mysql_tags
 			vol = Storage.create(vol)
 
 		try:
@@ -1172,3 +1174,10 @@ class MysqlHandler(DBMSRHandler):
 
 				
 		LOG.debug('Replication master is changed to host %s', host)		
+
+
+	
+	@property
+	def mysql_tags(self):
+		is_master = bool(int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]))
+		return prepare_tags(BEHAVIOUR, db_replication_role=is_master)
