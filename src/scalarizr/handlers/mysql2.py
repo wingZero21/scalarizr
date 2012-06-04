@@ -407,9 +407,11 @@ class MysqlHandler(DBMSRHandler):
 			
 			LOG.info("Adding phpMyAdmin system user")
 			pma_password = cryptotool.pwgen(20)
-			self.root_client.create_user(PMA_USER, pma_server_ip, pma_password, privileges=None)
-			
-			LOG.info('PhpMyAdmin system user successfully added')
+			if  self.root_client.user_exists(PMA_USER, pma_server_ip):
+				LOG.info('PhpMyAdmin system user already exists')
+			else:
+				self.root_client.create_user(PMA_USER, pma_server_ip, pma_password, privileges=None)
+				LOG.info('PhpMyAdmin system user successfully added')
 			
 			# Notify Scalr
 			self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
