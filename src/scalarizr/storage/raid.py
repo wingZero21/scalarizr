@@ -19,7 +19,7 @@ from .util.mdadm import Mdadm
 from .util.lvm2 import Lvm2, lvm_group_b64
 
 from scalarizr.libs.pubsub import Observable
-from scalarizr.util import firstmatched
+from scalarizr.util import firstmatched, system2
 from scalarizr.util.filetool import write_file
 
 
@@ -129,6 +129,9 @@ class RaidVolumeProvider(VolumeProvider):
 
 		lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
 		write_file(self._lvm_backup_filename, lvm_raw_backup, logger=logger)
+
+		pv_uuid = kwargs['pv_uuid']
+		system2(('pvcreate', '-u', pv_uuid, raid_pv))
 
 		try:
 			self._lvm.restore_vg(vg, self._lvm_backup_filename)
