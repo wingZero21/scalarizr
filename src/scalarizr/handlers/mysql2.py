@@ -442,7 +442,7 @@ class MysqlHandler(DBMSRHandler):
 			LOG.info("Dumping all databases")
 			tmpdir = tempfile.mkdtemp(dir=tmp_dir)
 			mysqldump = mysql_svc.MySQLDump(root_user=ROOT_USER, root_password=self.root_password)		
-			dump_options = config.split(self._cnf.rawini.get('mysql', 'mysqldump_options'), ' ')	
+			dump_options = config.split(self._cnf.rawini.get('mysql2', 'mysqldump_options'), ' ')	
 			for db_name in databases:
 				try:
 					dump_path = os.path.join(tmpdir, db_name + '.sql') 
