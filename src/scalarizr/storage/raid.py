@@ -33,6 +33,7 @@ class RaidConfig(VolumeConfig):
 	vg		= None
 	lvm_group_cfg = None
 	disks	= None
+
 	
 	def config(self, as_snapshot=False):
 		cnf = VolumeConfig.config(self, as_snapshot)
@@ -106,6 +107,7 @@ class RaidVolumeProvider(VolumeProvider):
 			kwargs['vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
 			kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
 			kwargs['raid_pv'] = raid_pv
+			#kwargs['pv_uuid'] = self._lvm.pv_info(raid_pv).uuid
 			kwargs['lvm_group_cfg'] = lvm_group_b64(kwargs['vg'])
 			volume = super(RaidVolumeProvider, self).create(**kwargs)
 		return volume
@@ -130,9 +132,6 @@ class RaidVolumeProvider(VolumeProvider):
 		lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
 		write_file(self._lvm_backup_filename, lvm_raw_backup, logger=logger)
 
-		pv_uuid = kwargs['pv_uuid']
-		system2(('pvcreate', '-u', pv_uuid, raid_pv))
-
 		try:
 			self._lvm.restore_vg(vg, self._lvm_backup_filename)
 		finally:
@@ -156,7 +155,7 @@ class RaidVolumeProvider(VolumeProvider):
 
 		snap.level		= vol.level
 		snap.vg			= vol.vg
-		snap.pv_uuid	= self._lvm.pv_info(vol.raid_pv).uuid
+		#snap.pv_uuid	= self._lvm.pv_info(vol.raid_pv).uuid
 		snap.disks		= []
 		snap.lvm_group_cfg = vol.lvm_group_cfg
 
@@ -248,15 +247,18 @@ class RaidVolumeProvider(VolumeProvider):
 		self._logger.debug('Detaching volume %s' % vol.devname)
 		super(RaidVolumeProvider, self).detach(vol, force)
 		pv_uuid = system(('pvs', '-o', 'pv_uuid', vol.raid_pv))[0].splitlines()[1].strip()
+
 		vol.lvm_group_cfg = lvm_group_b64(vol.vg)
 		self._remove_lvm(vol)
 		self._mdadm.delete(vol.raid_pv, zero_superblock=False)
 		for disk in vol.disks:
 			disk.detach(force)
+
 		ret = vol.config()
 		ret['pv_uuid'] = pv_uuid
 		vol.detached = True
 		return ret
+
 
 	def _remove_lvm(self, vol, force=False):
 		self._lvm.remove_vg(vol.vg)
