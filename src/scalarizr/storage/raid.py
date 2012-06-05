@@ -137,9 +137,7 @@ class RaidVolumeProvider(VolumeProvider):
 		finally:
 			os.unlink(self._lvm_backup_filename)
 
-		lvinfo = firstmatched(lambda lvinfo: lvinfo.vg_name == raw_vg, self._lvm.lv_status())
-		if not lvinfo:
-			raise StorageError('Volume group %s does not contain any logical volume.' % raw_vg)
+		lvinfo = self._lvm.lv_info(raw_vg)
 		self._lvm.change_vg(raw_vg, available=True)
 		
 		return RaidVolume(	lvinfo.lv_path,
