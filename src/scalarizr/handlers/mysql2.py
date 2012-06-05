@@ -292,7 +292,7 @@ class MysqlHandler(DBMSRHandler):
 	def get_initialization_phases(self, hir_message):
 		if BEHAVIOUR in hir_message.body:
 			steps = [self._step_accept_scalr_conf, self._step_create_storage]
-			if hir_message.body['mysql']['replication_master'] == '1':
+			if hir_message.body['mysql2']['replication_master'] == '1':
 				steps.append(self._step_create_data_bundle)
 			else:
 				steps.append(self._step_change_replication_master)
