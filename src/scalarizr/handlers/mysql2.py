@@ -460,9 +460,11 @@ class MysqlHandler(DBMSRHandler):
 	def on_DbMsr_CreateBackup(self, message):
 		LOG.info("on_DbMsr_CreateBackup")
 
-		tmp_dir = os.path.join(STORAGE_PATH, STORAGE_TMP_DIR)		
+		tmp_basedir = os.path.join(STORAGE_PATH, STORAGE_TMP_DIR)
+		if not os.path.exists(tmp_basedir):
+			os.makedirs(tmp_basedir)		
 		# Retrieve password for scalr mysql user
-		tmpdir = backup_path = None
+		backup_path = None
 		try:
 			# Get databases list
 			databases = self.root_client.list_databases()
@@ -477,10 +479,10 @@ class MysqlHandler(DBMSRHandler):
 
 				# Dump all databases
 				LOG.info("Dumping all databases")
-				tmpdir = tempfile.mkdtemp(dir=tmp_dir)
+				tmpdir = tempfile.mkdtemp(dir=tmp_basedir)
 
 				backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
-				backup_path = os.path.join(tmp_dir, backup_filename)
+				backup_path = os.path.join(tmpdir, backup_filename)
 				
 				# Creating archive 
 				backup = tarfile.open(backup_path, 'w:gz')
