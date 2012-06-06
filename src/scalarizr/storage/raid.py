@@ -138,7 +138,7 @@ class RaidVolumeProvider(VolumeProvider):
 			os.unlink(self._lvm_backup_filename)
 
 		lvinfo = self._lvm.lv_info(kwargs['device'])
-		self._lvm.change_vg(raw_vg, available=True)
+		#self._lvm.change_vg(raw_vg, available=True)
 
 		return RaidVolume(	lvinfo.lv_path,
 							raid_pv	= raid_pv,
