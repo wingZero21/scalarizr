@@ -11,6 +11,8 @@ import signal
 import pymysql
 import random
 import pwd
+import threading
+import time
 
 from pymysql import cursors
 
@@ -191,6 +193,10 @@ class MySQLClient(object):
 			
 	def stop_slave(self):
 		return self.fetchone("STOP SLAVE")
+			
+			
+	def reset_slave(self):
+		return self.fetchone("RESET SLAVE")
 
 
 	def stop_slave_io_thread(self):
@@ -250,19 +256,22 @@ class MySQLClient(object):
 	
 	
 	def slave_status(self):
-		variables = {}
+		variables = dict(
+				Slave_IO_Running=None, 
+				Slave_SQL_Running=None,
+				Last_Error = None,
+				Last_Errno = None,
+				Exec_Master_Log_Pos = None,
+				Relay_Master_Log_File = None,
+				Master_Log_File = None,
+				Read_Master_Log_Pos = None
+				)
+					
 		out = self.fetchdict("SHOW SLAVE STATUS")
 		LOG.debug('slave status: %s' % str(out))
 		if out:
 			for name, value in out.items():
-				if name in ('Exec_Master_Log_Pos', 
-							'Relay_Master_Log_File', 
-							"Master_Log_File", 
-							"Read_Master_Log_Pos", 
-							'Slave_IO_Running', 
-							'Slave_SQL_Running',
-							'Last_Error',
-							'Last_Errno'):
+				if name in variables.keys():
 					variables[name] = value
 		else:
 			raise ServiceError('SHOW SLAVE STATUS returned empty set. Slave is not started?')
@@ -475,6 +484,87 @@ class MySQLDump(object):
 			system2(opts + [dbname], stdin=self.root_password, stdout=fp)
 
 
+class RepicationWatcher(threading.Thread):
+	
+	
+	_state = None
+	_client = None
+	_master_host = None
+	_repl_user = None
+	_repl_password = None
+	
+	
+	WATCHER_RUNNING = 'running'
+	WATCHER_STOPPED = 'stopped'
+	TIMEOUT = 60
+	
+	
+	def __init__(self, client, master_host, repl_user, repl_password):
+		super(RepicationWatcher, self).__init__()
+		self._client = client
+		self.change_master_host(master_host, repl_user, repl_password)
+	
+	
+	def change_master_host(self, host, user, password):
+		self.suspend()
+		self._master_host = host
+		self._repl_user	= user
+		self._repl_password = password
+		self.resume()
+		
+		
+	def start(self):
+		self.resume()
+		while True:
+			if self._state == self.WATCHER_RUNNING:
+				r_status = None
+				try:
+					r_status = self._client.slave_status()
+				except ServiceError, e:
+					LOG.error(e)
+					
+				if not r_status:
+					time.sleep(self.TIMEOUT)
+				
+				elif r_status['Slave_IO_Running'] == 'Yes' and r_status['Slave_SQL_Running'] == 'Yes':
+					time.sleep(self.TIMEOUT)
+				
+				elif r_status and r_status['Slave_SQL_Running'] == 'No' and \
+							'Relay log read failure: Could not parse relay log event entry' in r_status['Last_Error']:
+					self.repair_relaylog(r_status['Relay_Master_Log_File'], r_status['Exec_Master_Log_Pos'])
+					time.sleep(self.TIMEOUT)
+				else:
+					self.suspend()
+					msg = 'Replication is broken. Slave_IO_Running=%s, Slave_SQL_Running=%s, Last_Error=%s' % (
+									r_status['Slave_IO_Running'], 
+									r_status['Slave_SQL_Running'],
+									r_status['Last_Error']
+									)
+					LOG.error(msg)
+	
+	def repair_relaylog(self, log_file, log_pos):
+		LOG.info('Repairing relay log')
+		try:
+			self._client.stop_slave()
+			self._client.reset_slave()
+			self._client.change_master_to(self._master_host, self._repl_user, self._repl_password, log_file, log_pos)
+			self._client.sart_slave()
+		except BaseException, e:
+			self.suspend()
+			LOG.error(e)
+		else:
+			LOG.info('Relay log has been repaired')
+		
+		
+	def resume(self):
+		self._state = self.WATCHER_RUNNING
+	
+	
+	def suspend(self):
+		self._state = self.WATCHER_STOPPED
+	
+		
+		
 class MysqlInitScript(initdv2.ParametrizedInitScript):
 	
 	socket_file = None

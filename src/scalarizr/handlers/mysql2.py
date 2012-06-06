@@ -25,7 +25,7 @@ from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError, p
 import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
-from scalarizr.platform import UserDataOptions
+from scalarizr.platform import UserDataOptions, PlatformFeatures
 from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
 from scalarizr.util import system2, disttool, filetool, \
 	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool,\
@@ -51,7 +51,7 @@ OPT_LOG_POS				= "log_pos"
 OPT_VOLUME_CNF			= 'volume_config'
 OPT_SNAPSHOT_CNF		= 'snapshot_config'
 
-CHANGE_MASTER_TIMEOUT   = '30'
+CHANGE_MASTER_TIMEOUT   = '60'
 
 # Mysql storage constants
 STORAGE_PATH 			= "/mnt/dbstorage"
@@ -612,8 +612,7 @@ class MysqlHandler(DBMSRHandler):
 		tx_complete 	= False
 					
 		try:
-			# Stop mysql
-			if master_storage_conf:
+			if PlatformFeatures.VOLUMES in self._platform.features:
 				if self.mysql.service.running:
 					self.root_client.stop_slave()
 
@@ -640,9 +639,9 @@ class MysqlHandler(DBMSRHandler):
 					Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 					
 					# Send message to Scalr
-					msg_data = dict(status='ok')
-					log_file, log_pos = self.root_client.master_status()
-					msg_data.update(dict(log_file = log_file, log_pos = log_pos, db_type = BEHAVIOUR))
+					msg_data = dict(status='ok', db_type = BEHAVIOUR)
+					#log_file, log_pos = self.root_client.master_status()
+					#msg_data.update(dict(log_file = log_file, log_pos = log_pos))
 					msg_data.update(self._compat_storage_data(vol=new_storage_vol))
 					self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 				else:
@@ -721,7 +720,7 @@ class MysqlHandler(DBMSRHandler):
 		LOG.info("Switching replication to a new MySQL master %s", host)
 		bus.fire('before_mysql_change_master', host=host)			
 		
-		if 'snapshot_config' in mysql2:
+		if PlatformFeatures.VOLUMES not in self._platform.features:
 			log_file = mysql2['log_file']
 			log_pos = mysql2['log_pos']
 			snap_config = mysql2['snapshot_config']
@@ -744,7 +743,7 @@ class MysqlHandler(DBMSRHandler):
 			
 			self.mysql.service.start()				
 		
-		if not 'snapshot_config' in mysql2:
+		else:
 			LOG.debug("Stopping slave i/o thread")
 			self.root_client.stop_slave_io_thread()
 			LOG.debug("Slave i/o thread stopped")
