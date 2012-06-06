@@ -19,7 +19,7 @@ from .util.mdadm import Mdadm
 from .util.lvm2 import Lvm2, lvm_group_b64
 
 from scalarizr.libs.pubsub import Observable
-from scalarizr.util import firstmatched, system2
+from scalarizr.util import wait_until
 from scalarizr.util.filetool import write_file
 
 
@@ -138,7 +138,7 @@ class RaidVolumeProvider(VolumeProvider):
 			os.unlink(self._lvm_backup_filename)
 
 		lvinfo = self._lvm.lv_info(kwargs['device'])
-		self._logger.debug('LVM Device %s exists: %s', kwargs['device'], os.path.exists(kwargs['device']))
+		wait_until(lambda: os.path.exists(kwargs['device']), logger=self._logger)
 		#self._lvm.change_vg(raw_vg, available=True)
 
 		return RaidVolume(	lvinfo.lv_path,
