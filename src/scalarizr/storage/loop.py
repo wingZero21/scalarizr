@@ -8,8 +8,10 @@ from . import VolumeConfig, Volume, Snapshot, VolumeProvider, Storage, StorageEr
 from .util.loop import mkloop, rmloop, listloop
 
 import os
+import sys
 import time
-import shutil 
+import shutil
+import random
 from scalarizr.util import wait_until
 
 class LoopConfig(VolumeConfig):
@@ -29,7 +31,7 @@ class LoopVolumeProvider(VolumeProvider):
 	type = 'loop'
 	vol_class = LoopVolume
 	snap_class = LoopSnapshot
-	
+
 	def create(self, **kwargs):
 		
 		'''
@@ -79,9 +81,23 @@ class LoopVolumeProvider(VolumeProvider):
 			kwargs['device'] = mkloop(file, device=device, size=size, quick=not kwargs.get('zerofill'))
 			
 		return super(LoopVolumeProvider, self).create(**kwargs)
+
+
+	def create_from_snapshot(self, **kwargs):
+		file = kwargs.get('file')
+		try:
+			base = file.split('.')[0]
+			new_file = base + time.strftime('.%d-%m_%H:%M:%S_') + str(random.randint(1,1000))
+			shutil.copy(file, new_file)
+		except:
+			e,t = sys.exc_info()[1:]
+			raise Exception, "Can't copy snapshot file %s: %s" % (file, e), t
+
+		kwargs['file'] = new_file
+		return self.create(**kwargs)
 	
-	def create_snapshot(self, vol, snap):
-		backup_filename = vol.file + '.%s.bak' % time.strftime('%d-%m-%Y_%H:%M')
+	def create_snapshot(self, vol, snap, tags=None):
+		backup_filename = vol.file + '.%s.bak' % time.strftime('%d-%m_%H:%M:%S')
 		shutil.copy(vol.file, backup_filename)
 		snap.file = backup_filename
 		return snap

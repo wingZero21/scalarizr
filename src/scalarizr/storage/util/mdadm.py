@@ -46,7 +46,7 @@ class Mdadm:
 		
 	def create(self, devices, level=1):
 		# Validate RAID level
-		if not int(level) in (0,1,5):
+		if not int(level) in (0,1,5,10):
 			raise MdadmError('Unknown RAID level: %s' % level)
 		
 		# Select RAID device name 
@@ -59,7 +59,7 @@ class Mdadm:
 				pass
 			
 		# Create RAID device
-		cmd = [MDADM_EXEC, '--create', devname, '--level=%d' % level, '-f', '-e', 'default', '-n', len(devices)]
+		cmd = [MDADM_EXEC, '--create', devname, '--level=%s' % level, '--assume-clean', '-f', '-e', 'default', '-n', len(devices)]
 		cmd.extend(devices)
 		system(cmd, error_text='Error occured during raid device creation')
 		system2((MDADM_EXEC, '-W', devname), raise_error=False)
@@ -120,7 +120,7 @@ class Mdadm:
 			total_devs = array_info['total_devices']
 		
 			if total_devs > raid_devs:
-				cmd = (MDADM_EXEC, '--grow', array, '--raid-devices=%d' % total_devs)
+				cmd = (MDADM_EXEC, '--grow', array, '--raid-devices=%s' % total_devs)
 				system(cmd, error_text='Error occured during array "%s" growth')
 
 		system2((MDADM_EXEC, '-W', array), raise_error=False)
@@ -129,8 +129,8 @@ class Mdadm:
 		array = self._get_array_by_device(device)
 		wait_until(lambda: not self.get_array_info(array)['rebuild_status'], timeout=60)
 
-		cmd = (MDADM_EXEC, array, '-f', '--fail', device)	
-		system(cmd, error_text='Error occured while markin device as failed')
+		cmd = (MDADM_EXEC, array, '-f', '--fail', device)
+		system(cmd, error_text='Error occured while marking device as failed')
 		
 		cmd = (MDADM_EXEC, array, '-f', '--remove', device)
 		system(cmd, error_text='Error occured during device removal')
@@ -139,8 +139,8 @@ class Mdadm:
 		array = self._get_array_by_device(old)
 		if self.get_array_info(array)['level'] == 'raid0':
 			raise MdadmError("Can't replace disk in raid level 0.")
-		self.add_disk(array, new, False)
 		self.remove_disk(old)
+		self.add_disk(array, new, False)
 		system2((MDADM_EXEC, '-W', array), raise_error=False)
 
 
