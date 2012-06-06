@@ -100,6 +100,7 @@ class _P2pMessageStore:
 		if not hasattr(self, '_unhandled'):
 			self._unhandled = self._get_unhandled_from_db()
 		return self._unhandled
+
 	
 	def rotate(self):
 		conn = self._conn()

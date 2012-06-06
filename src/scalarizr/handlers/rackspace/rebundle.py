@@ -47,16 +47,6 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 			image = images[0]
 			raise HandlerError(duplicate_errmsg % (image.id, image.name, image.status))
 		
-
-		""" Searching for server images, which are in progress	"""
-		imgs_of_server = con.images.find(server_id=server.id)
-		imgs_in_process = filter(lambda img: img.status != "ACTIVE", imgs_of_server)
-
-		if imgs_in_process:
-			img = imgs_in_process[0]
-			raise HandlerError("Another image is currently creating from this server"
-								". Image id: %s name: %s" % (img.id, img.name))
-
 		image = None
 		image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 		retry_seconds = 30
