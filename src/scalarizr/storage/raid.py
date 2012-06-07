@@ -139,7 +139,7 @@ class RaidVolumeProvider(VolumeProvider):
 
 		lvinfo = self._lvm.lv_info(kwargs['device'])
 		wait_until(lambda: os.path.exists(kwargs['device']), logger=self._logger)
-		#self._lvm.change_vg(raw_vg, available=True)
+		self._lvm.change_vg(raw_vg, available=True)
 
 		return RaidVolume(	lvinfo.lv_path,
 							raid_pv	= raid_pv,
