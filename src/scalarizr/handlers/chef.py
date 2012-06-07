@@ -13,7 +13,8 @@ from scalarizr.bus import bus
 from scalarizr.util import system2
 from scalarizr.util.software import which
 from scalarizr.handlers import Handler
-from scalarizr.externals.chef.api import ChefAPI
+
+from chef.api import ChefAPI
 
 
 LOG = logging.getLogger(__name__)
