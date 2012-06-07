@@ -14,11 +14,14 @@ from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.util import initdv2, software
 from scalarizr.messaging import Messages
-from scalarizr.handlers import ServiceCtlHandler, mysql
+from scalarizr.handlers import ServiceCtlHandler
+from scalarizr.config import BuiltinBehaviours
 
 BEHAVIOUR = SERVICE_NAME = 'mysql_proxy'
 CONFIG_FILE_PATH = '/etc/mysql_proxy.conf'
 PID_FILE = '/var/run/mysql-proxy.pid'
+NEW_MASTER_UP = "Mysql_NewMasterUp"
+
 
 def get_handlers():
 	return (MysqlProxyHandler(),)
@@ -129,10 +132,10 @@ class MysqlProxyHandler(ServiceCtlHandler):
 		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.behaviour \
-				and mysql.BEHAVIOUR in message.behaviour \
+				and BuiltinBehaviours.MYSQL in message.behaviour \
 				and message.name in (Messages.HOST_UP,
 									 Messages.HOST_DOWN,
-									 mysql.MysqlMessages.NEW_MASTER_UP)
+									 NEW_MASTER_UP)
 	
 	
 	def on_reload(self):
@@ -152,7 +155,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 			self.config.add('./mysql-proxy')
 		
 		queryenv = bus.queryenv_service
-		roles = queryenv.list_roles(behaviour=mysql.BEHAVIOUR)
+		roles = queryenv.list_roles(behaviour=BuiltinBehaviours.MYSQL)
 		master = None
 		slaves = []
 		for role in roles:
@@ -181,7 +184,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 		self.service.restart()
 
 	def on_HostUp(self, message):
-		if mysql.BEHAVIOUR in message.behaviour:
+		if BuiltinBehaviours.MYSQL in message.behaviour:
 			self._reload_backends()
 
 	on_HostDown = on_HostUp

@@ -1,4 +1,4 @@
-u'''
+'''
 Created on Jul 7, 2011
 
 @author: shaitanich
@@ -213,13 +213,6 @@ class PostgreSql(BaseService):
 		self.pg_hba_conf.allow_local_connections()
 		
 
-	def _set(self, key, obj):
-		self._objects[key] = obj
-		
-	def _get(self, key, callback, *args, **kwargs):
-		if not self._objects.has_key(key):
-			self._set(key, callback(*args, **kwargs))
-		return self._objects[key]
 		
 	def _get_config_dir(self):
 		return self._get('config_dir', ConfigDir.find, self.version)

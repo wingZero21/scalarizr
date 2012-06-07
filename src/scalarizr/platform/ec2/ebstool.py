@@ -143,15 +143,14 @@ DEVICE_ORDERING_BUG = False
 if disttool.is_redhat_based():
 	# Check that system is affected by devices ordering bug
 	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
-	fstab = fstool.Fstab()
-	entry = fstab.find(mpoint='/')
-	DEVICE_ORDERING_BUG = entry.devname in ('/dev/xvda1', '/dev/sda1') and \
-							not os.path.exists('/dev/xvda1') and \
-							os.path.exists('/dev/xvde1') 
+	mtab = fstool.Mtab()
+	entry = [v for v in mtab.find(mpoint='/') 
+			if v.devname.startswith('/dev')][0]
+	DEVICE_ORDERING_BUG = entry.devname == '/dev/xvde1' 
 	
 
 def get_system_devname(devname):
-	ret = devname.replace('/sd', '/xvd') if os.path.exists('/dev/xvda1') else devname
+	ret = devname.replace('/sd', '/xvd') if os.path.exists('/dev/xvda1') or DEVICE_ORDERING_BUG else devname
 	if DEVICE_ORDERING_BUG:
 		ret = ret[0:8] + chr(ord(ret[8])+4) + ret[9:]
 	return ret

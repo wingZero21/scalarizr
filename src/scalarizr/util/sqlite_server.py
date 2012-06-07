@@ -89,12 +89,12 @@ class CursorProxy(Proxy):
 		return self._execute_result['rowcount']
 
 	
-	def __del__(self):
+	def close(self):
 		pass
 		#self._call('cursor_delete', wait=False)
 		
-		
-	close = __del__
+
+	__del__ = close
 		
 
 class ConnectionProxy(Proxy):
