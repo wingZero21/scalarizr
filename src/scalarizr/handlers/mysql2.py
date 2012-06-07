@@ -306,7 +306,7 @@ class MysqlHandler(DBMSRHandler):
 	
 			
 	def on_reload(self):
-		LOG.info("on_reload")
+		LOG.debug("on_reload")
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
 		self._cnf = bus.cnf
@@ -317,7 +317,7 @@ class MysqlHandler(DBMSRHandler):
 
 
 	def on_init(self):	
-		LOG.info("on_init")	
+		LOG.debug("on_init")	
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
@@ -346,7 +346,7 @@ class MysqlHandler(DBMSRHandler):
 		@type message: scalarizr.messaging.Message
 		@param message: HostInitResponse
 		"""
-		LOG.info("on_host_init_response")
+		LOG.debug("on_host_init_response")
 		
 		with bus.initialization_op as op:
 			with op.phase(self._phase_mysql):
@@ -384,7 +384,7 @@ class MysqlHandler(DBMSRHandler):
 
 	
 	def on_before_host_up(self, message):
-		LOG.info("on_before_host_up")
+		LOG.debug("on_before_host_up")
 		"""
 		Configure MySQL behaviour
 		@type message: scalarizr.messaging.Message		
@@ -417,7 +417,7 @@ class MysqlHandler(DBMSRHandler):
 	
 	
 	def on_Mysql_CreatePmaUser(self, message):
-		LOG.info("on_Mysql_CreatePmaUser")
+		LOG.debug("on_Mysql_CreatePmaUser")
 		assert message.pma_server_ip
 		assert message.farm_role_id
 		
@@ -458,7 +458,7 @@ class MysqlHandler(DBMSRHandler):
 	
 	
 	def on_DbMsr_CreateBackup(self, message):
-		LOG.info("on_DbMsr_CreateBackup")
+		LOG.debug("on_DbMsr_CreateBackup")
 
 		tmp_basedir = os.path.join(STORAGE_PATH, STORAGE_TMP_DIR)
 		if not os.path.exists(tmp_basedir):
@@ -537,7 +537,7 @@ class MysqlHandler(DBMSRHandler):
 
 
 	def on_DbMsr_CreateDataBundle(self, message):
-		LOG.info("on_DbMsr_CreateDataBundle")
+		LOG.debug("on_DbMsr_CreateDataBundle")
 
 		try:
 			op = operation(name=self._op_data_bundle, phases=[{
@@ -584,7 +584,7 @@ class MysqlHandler(DBMSRHandler):
 		"""
 		Promote slave to master
 		"""
-		LOG.info("on_DbMsr_PromoteToMaster")
+		LOG.debug("on_DbMsr_PromoteToMaster")
 		assert message.body['volume_config']
 		assert message.mysql2
 		mysql2 = message.mysql2
