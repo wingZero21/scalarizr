@@ -826,6 +826,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
 	def _create_snapshot(self):
+		self._logger.info("Creating PostgreSQL data bundle")
 		psql = PSQL()
 		if self.postgresql.service.running:
 			psql.start_backup()
@@ -845,7 +846,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
 	def _create_storage_snapshot(self):
-		self._logger.info("Creating storage snapshot")
 		try:
 			return self.storage_vol.snapshot(tags=self.postgres_tags)
 		except StorageError, e:

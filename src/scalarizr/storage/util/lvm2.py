@@ -45,6 +45,7 @@ try:
 	PVREMOVE = whereis('pvremove')[0]
 	VGREMOVE = whereis('vgremove')[0]
 	LVREMOVE = whereis('lvremove')[0]
+	DMSETUP  = whereis('dmsetup')[0]
 	
 except IndexError:
 	raise Lvm2Error('Some of lvm2 executables were not found.')
@@ -60,8 +61,8 @@ def system(*args, **kwargs):
 	kwargs['exc_class'] = Lvm2Error
 	return system2(*args, **kwargs)
 
-class PVInfo(namedtuple('PVInfo', 'pv vg format attr size free')):
-	COMMAND = (PVS,)
+class PVInfo(namedtuple('PVInfo', 'pv vg format attr size free uuid')):
+	COMMAND = (PVS, '-o', 'pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pv_uuid')
 	pass
 
 class VGInfo(namedtuple('VGInfo', 'vg num_pv num_lv num_sn attr size free')):
@@ -218,7 +219,7 @@ class Lvm2:
 		
 	def create_vg(self, group, ph_volumes, ph_extent_size=4):
 		group = os.path.basename(group)
-		system([VGCREATE, '-s', ph_extent_size, group] + list(ph_volumes), 
+		system([VGCREATE, '-s', ph_extent_size, group] + list(ph_volumes),
 				error_text='Cannot create a volume group %s' % group)
 		return '/dev/%s' % group
 	
@@ -305,6 +306,14 @@ class Lvm2:
 			cmd.append('-ay' if available else '-an')
 		cmd.append(group)
 		system(cmd, error_text='Cannot volume group attributes')
+
+
+	def suspend_lv(self, lv):
+		system2((DMSETUP, 'suspend', lv))
+
+
+	def resume_lv(self, lv):
+		system2((DMSETUP, 'resume', lv))
 
 
 	# Untested --->

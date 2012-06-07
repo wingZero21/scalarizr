@@ -166,7 +166,7 @@ class Storage:
 			
 		# Find provider	
 		pvd = self.lookup_provider(kwargs.get('type'), from_snap)
-		attaching = 'device' in kwargs and not os.path.exists(kwargs['device'])
+		attaching = kwargs.get('device') and not os.path.exists(kwargs['device'])
 		vol = getattr(pvd, 'create_from_snapshot' if from_snap else 'create').__call__(**kwargs)
 		if attaching:
 			Storage.fire('attach', vol)
@@ -272,7 +272,8 @@ class VolumeConfig(object):
 			else:
 				ret[attr] = getattr(self, attr)
 		return ret
-	
+
+
 def _fs_should_be_set(f):
 	def d(*args):
 		if args[0]._fs is None:
@@ -280,12 +281,15 @@ def _fs_should_be_set(f):
 		return f(*args)
 	return d
 
+
 def devname_not_empty(f):
 	def d(*args, **kwargs):
 		if not args[1].devname:
 			raise StorageError('Device name is empty.')
 		return f(*args, **kwargs)
 	return d
+
+
 
 class Volume(VolumeConfig):
 	detached = False

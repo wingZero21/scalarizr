@@ -10,6 +10,9 @@ import logging
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
+LOG = logging.getLogger(__name__)
+
+
 def lazy(init):
 	def wrapper(cls, *args, **kwargs):
 		obj = init(cls, *args, **kwargs)
@@ -22,6 +25,9 @@ class LazyInitScript(object):
 	_script = None
 	reload_queue = None
 	restart_queue = None
+	
+	def __getattr__(self, name):
+		return getattr(self._script, name) 
 	
 	def __init__(self, script):
 		self._script = script
@@ -45,6 +51,7 @@ class LazyInitScript(object):
 	def stop(self, reason=None):
 		if self._script.running:
 			try:
+				LOG.info('Stopping service: %s' % reason)
 				self._script.stop(reason)
 			finally:
 				self.restart_queue = []
@@ -93,6 +100,7 @@ class BaseConfig(object):
 	data = None
 	config_name = None
 	config_type = None
+	comment_empty = False
 	
 	def __init__(self, path, autosave=True):
 		self._logger = logging.getLogger(__name__)
@@ -108,7 +116,10 @@ class BaseConfig(object):
 			self.data = Configuration(self.config_type)
 			if os.path.exists(self.path):
 				self.data.read(self.path)
-		self.data.set(option,value, force=True)
+		if value:
+			self.data.set(option,str(value), force=True)
+		elif self.comment_empty: 
+			self.data.comment(option)
 		if self.autosave:
 			self.save_data()
 			self.data = None
@@ -160,3 +171,6 @@ class ServiceError(BaseException):
 	pass
 
 	
+
+class ServiceError(BaseException):
+	pass
