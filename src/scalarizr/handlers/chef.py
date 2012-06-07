@@ -8,13 +8,15 @@ from __future__ import with_statement
 
 import logging
 import os
+import sys
 
 from scalarizr.bus import bus
 from scalarizr.util import system2
 from scalarizr.util.software import which
 from scalarizr.handlers import Handler
 
-from chef.api import ChefAPI
+__import__('chef.api')
+ChefAPI = sys.modules['chef.api'].ChefAPI
 
 
 LOG = logging.getLogger(__name__)
