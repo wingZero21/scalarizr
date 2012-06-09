@@ -426,7 +426,12 @@ class RedisHandler(ServiceCtlHandler):
 			with op.phase(self._phase_backup):
 
 				with op.step(self._step_copy_database_file):
-			
+
+					# Flush redis data on disk before creating backup
+					if self.redis.service.running:
+						self._logger.info("Dumping Redis data on disk")
+						self.redis.redis_cli.save()
+
 					# Dump all databases
 					self._logger.info("Dumping all databases")			
 					tmpdir = tempfile.mkdtemp()		
