@@ -92,7 +92,7 @@ class EbsVolumeProvider(VolumeProvider):
 		
 		if conn:
 
-			def get_free_devname(self, device):
+			def get_free_devname(device):
 				if device:
 					device = ebstool.get_ebs_devname(device)
 
@@ -180,10 +180,12 @@ class EbsVolumeProvider(VolumeProvider):
 				if not volume_attached:
 					device = kwargs.get('device')
 					device = get_free_devname(device)
+
 					try:
 						self._logger.debug('Attaching EBS to this instance')
 						device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device,
 							to_me=True, logger=self._logger)[1]
+
 					except:
 						if not os.path.exists(ebstool.real_devname(device)):
 							with self.letters_lock:
