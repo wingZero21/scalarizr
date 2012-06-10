@@ -135,7 +135,6 @@ def firstmatched(function, sequence, default=None):
 	for s in sequence:
 		if function(s):
 			return s
-			break
 	else:
 		return default	
 

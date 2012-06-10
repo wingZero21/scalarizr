@@ -514,13 +514,13 @@ class RedisCLI(object):
 		return None
 	
 	def bgsave(self, wait_until_complete=True):
-		if self.changes_since_last_save and not self.bgsave_in_progress:
+		if not self.bgsave_in_progress:
 			self.execute('bgsave')
 		if wait_until_complete:
 			wait_until(lambda: not self.bgsave_in_progress, sleep=5, timeout=900)
 			
 	def bgrewriteaof(self, wait_until_complete=True):
-		if self.changes_since_last_save and not self.bgrewriteaof_in_progress:
+		if not self.bgrewriteaof_in_progress:
 			self.execute('bgrewriteaof')
 		if wait_until_complete:
 			wait_until(lambda: not self.bgrewriteaof_in_progress, sleep=5, timeout=900)
