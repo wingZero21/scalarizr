@@ -585,7 +585,6 @@ class MysqlHandler(DBMSRHandler):
 		Promote slave to master
 		"""
 		LOG.debug("on_DbMsr_PromoteToMaster")
-		assert message.body['volume_config']
 		assert message.mysql2
 		mysql2 = message.mysql2
 		assert mysql2['root_password']
@@ -600,7 +599,7 @@ class MysqlHandler(DBMSRHandler):
 		bus.fire('before_slave_promote_to_master')
 
 		if bus.scalr_version >= (2, 2):
-			master_storage_conf = message.body.get('volume_config')
+			master_storage_conf = mysql2.get('volume_config')
 		else:
 			if 'volume_id' in message.body:
 				master_storage_conf = dict(type='ebs', id=message.body['volume_id'])
@@ -695,7 +694,7 @@ class MysqlHandler(DBMSRHandler):
 			# Start MySQL
 			self.mysql.service.start()
 		
-		if tx_complete and master_storage_conf:
+		if tx_complete and PlatformFeatures.VOLUMES in self._platform.features:
 			# Delete slave EBS
 			self.storage_vol.destroy(remove_disks=True)
 			self.storage_vol = new_storage_vol
