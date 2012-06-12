@@ -404,7 +404,7 @@ class MysqlHandler(DBMSRHandler):
 
 	def on_BeforeHostTerminate(self, message):
 		LOG.debug('Handling BeforeHostTerminate message from %s' % message.local_ip)
-		assert message.local_ip
+		#assert message.local_ip
 
 		if message.local_ip == self._platform.get_private_ip():
 			self.mysql.service.stop(reason='Server will be terminated')
