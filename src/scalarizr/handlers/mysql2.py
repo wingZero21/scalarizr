@@ -558,14 +558,16 @@ class MysqlHandler(DBMSRHandler):
 					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 					
 					# Notify scalr
-					msg_data = dict(
-						db_type = BEHAVIOUR,
-						log_file=log_file,
-						log_pos=log_pos,
-						used_size='%.3f' % (float(used_size) / 1024 / 1024,),
-						status='ok'
-					)
-					msg_data.update(self._compat_storage_data(snap=snap))
+					msg_data = {
+						'db_type': BEHAVIOUR,
+						'used_size': '%.3f' % (float(used_size) / 1024 / 1024,),
+						'status': 'ok',
+						BEHAVIOUR: {
+							'log_file': log_file,
+							'log_pos': log_pos
+						}
+					}
+					msg_data[BEHAVIOUR].update(self._compat_storage_data(snap=snap))
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 			op.ok()
 			
@@ -640,9 +642,9 @@ class MysqlHandler(DBMSRHandler):
 					
 					# Send message to Scalr
 					msg_data = dict(status='ok', db_type = BEHAVIOUR)
+					msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
 					#log_file, log_pos = self.root_client.master_status()
 					#msg_data.update(dict(log_file = log_file, log_pos = log_pos))
-					msg_data.update(self._compat_storage_data(vol=new_storage_vol))
 					self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 				else:
 					raise HandlerError("%s is not a valid MySQL storage" % STORAGE_PATH)
@@ -667,11 +669,13 @@ class MysqlHandler(DBMSRHandler):
 				# Send message to Scalr
 				msg_data = dict(
 					status="ok",
-					log_file = log_file,
-					log_pos = log_pos,
 					db_type = BEHAVIOUR
 				)
-				msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+				msg_data[BEHAVIOUR] = dict(
+					log_file = log_file,
+					log_pos = log_pos,
+				)
+				msg_data[BEHAVIOUR].update(self._compat_storage_data(self.storage_vol, snap))
 				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)							
 				
 			tx_complete = True
