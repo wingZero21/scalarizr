@@ -100,7 +100,8 @@ class RequestHandler(object):
 			fn = self._find_method(svs, method)
 			result = self._invoke_method(fn, params)
 			# important to test json serializarion before serialize the whole result
-			json.dumps(result) 
+			json.dumps(result)
+
 		except ServiceError, e:
 			error = {'code': e.code, 
 					'message': e.message, 

@@ -107,8 +107,8 @@ class Mdadm:
 
 	def add_disk(self, array, device, grow=True):
 		info = self.get_array_info(array)
-		if info['level'] == 'raid0':
-			raise MdadmError("Can't add devices to raid level 0.")
+		if info['level'] in ('raid0', 'raid10'):
+			raise MdadmError("Can't add devices to %s." % info['level'])
 		
 		wait_until(lambda: not self.get_array_info(array)['rebuild_status'], timeout=60)
 		cmd = (MDADM_EXEC, '--add', array, device)
@@ -125,8 +125,11 @@ class Mdadm:
 
 		system2((MDADM_EXEC, '-W', array), raise_error=False)
 
-	def remove_disk(self, device):
-		array = self._get_array_by_device(device)
+	def remove_disk(self, array, device):
+		array_disks = self.get_array_devices(array)
+		if not old in array_disks:
+			raise MdadmError('Disk %s is not part of %s array' % (old, array))
+
 		wait_until(lambda: not self.get_array_info(array)['rebuild_status'], timeout=60)
 
 		cmd = (MDADM_EXEC, array, '-f', '--fail', device)
@@ -135,11 +138,11 @@ class Mdadm:
 		cmd = (MDADM_EXEC, array, '-f', '--remove', device)
 		system(cmd, error_text='Error occured during device removal')
 
-	def replace_disk(self, old, new):
-		array = self._get_array_by_device(old)
+	def replace_disk(self, array, old, new):
 		if self.get_array_info(array)['level'] == 'raid0':
 			raise MdadmError("Can't replace disk in raid level 0.")
-		self.remove_disk(old)
+
+		self.remove_disk(array, old)
 		self.add_disk(array, new, False)
 		system2((MDADM_EXEC, '-W', array), raise_error=False)
 

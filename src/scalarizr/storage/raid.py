@@ -18,7 +18,6 @@ from . import VolumeConfig, Volume, Snapshot, VolumeProvider, Storage, \
 from .util.mdadm import Mdadm
 from .util.lvm2 import Lvm2, lvm_group_b64
 
-from scalarizr.libs.pubsub import Observable
 from scalarizr.util import wait_until
 from scalarizr.util.filetool import write_file
 
@@ -44,25 +43,45 @@ class RaidConfig(VolumeConfig):
 		return cnf
 
 
+
 class RaidVolume(Volume, RaidConfig):
 
 	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
 		super(RaidVolume, self).__init__(device, mpoint, fstype, type, *args, **kwargs)
-		self._events = Observable()
-		self._events.define_events('active', 'inactive')
+		self.define_events(
+			'before_replace_disk', 'after_replace_disk', 'replace_disk_failed',
+			'before_add_disk', 'after_add_disk', 'add_disk_failed'
+		)
 
-	def on(self, *args, **kwargs):
-		self._events.on(*args, **kwargs)
 
-	def un(self, event, listener):
-		self._events.un(event, listener)
+	def replace_disk(self, old, new):
+		self.fire('before_replace_disk')
+		try:
+			pvd = Storage.lookup_provider(self.type)
+			pvd.replace_disk(self, old, new)
+		except:
+			self.fire('replace_disk_failed')
+			raise
+		else:
+			self.fire('after_replace_disk')
 
-	def fire(self, event, *args, **kwargs):
-		self._events.fire(event, *args, **kwargs)
+
+	def add_disks(self, disks):
+		self.fire('before_add_disk')
+		try:
+			pvd = Storage.lookup_provider(self.type)
+			pvd.add_disks(self, disks)
+		except:
+			self.fire('add_disk_failed')
+			raise
+		else:
+			self.fire('after_add_disk')
+
 
 	
 class RaidSnapshot(Snapshot, RaidConfig):
 	pass
+
 
 
 class RaidVolumeProvider(VolumeProvider):
@@ -70,10 +89,7 @@ class RaidVolumeProvider(VolumeProvider):
 	vol_class = RaidVolume
 	snap_class = RaidSnapshot
 
-	_mdadm = None
-	_lvm = None
-	_logger = None
-	
+
 	def __init__(self):
 		self._mdadm = Mdadm()
 		self._lvm = Lvm2()
@@ -111,7 +127,8 @@ class RaidVolumeProvider(VolumeProvider):
 			kwargs['lvm_group_cfg'] = lvm_group_b64(kwargs['vg'])
 			volume = super(RaidVolumeProvider, self).create(**kwargs)
 		return volume
-	
+
+
 	def create_from_snapshot(self, **kwargs):
 		'''
 		@param level: Raid level 0, 1, 5 - are valid values
@@ -264,5 +281,27 @@ class RaidVolumeProvider(VolumeProvider):
 		self._lvm.remove_vg(vol.vg)
 		self._lvm.remove_pv(vol.raid_pv)
 		vol.device = None
+
+
+	def replace_disk(self, raid_vol, old, new):
+		self._mdadm.replace_disk(raid_vol.raid_pv, old.device, new.device)
+		index = raid_vol.disks.index(old)
+		raid_vol.disks[index] = new
+
+
+	def add_disks(self, raid_vol, disks):
+		for disk in disks:
+			self._mdadm.add_disk(raid_vol.raid_pv, disk.device)
+
+
+	def remove_disks(self, raid_vol, disks):
+		for disk in disks:
+			self._mdadm.remove_disk(raid_vol.raid_pv, disk.device)
+
+
+	def status(self, raid_vol):
+		return self._mdadm.get_array_info(raid_vol.raid_pv)
+
+
 	
 Storage.explore_provider(RaidVolumeProvider)
