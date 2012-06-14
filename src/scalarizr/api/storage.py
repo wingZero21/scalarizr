@@ -54,17 +54,20 @@ class StorageAPI(object):
 		assert storage_cfg.get('type') == 'raid', 'Configuration type is not raid'
 		raid = Storage.create(**storage_cfg)
 
-		failed = filter(lambda x: x.device == target_disk_device, raid.disks)
-		if not failed:
+		target = filter(lambda x: x.device == target_disk_device, raid.disks)
+		if not target:
 			raise Exception("Can't find failed disk in array")
-		failed = failed[0]
+		target = target[0]
 		new_drive = Storage.create(**replacement_disk_cfg)
+
 		try:
-			raid.replace_disk(failed, new_drive)
+			raid.replace_disk(target, new_drive)
 		except:
-			pass
+			if not replacement_disk_cfg.get('id'):
+				# Disk was created during replacement. Deleting
+				new_drive.destroy()
 		else:
-			failed.destroy()
+			target.destroy()
 			return raid.config()
 
 

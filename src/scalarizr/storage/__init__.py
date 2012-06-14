@@ -331,7 +331,7 @@ class Volume(VolumeConfig, Observable):
 
 	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
 		super(Volume, self).__init__()
-		self._lock = threading.RLock()
+		self.lock = threading.RLock()
 		self._logger = logging.getLogger(__name__)
 
 		if not device:

@@ -214,13 +214,19 @@ class Lvm2:
 		raise LookupError('Logical volume %s not found' % lvolume)
 	
 	def create_pv(self, *devices):
-		system([PVCREATE] + list(devices),
-				error_text='Cannot initiate a disk for use by LVM')
+		for device in devices:
+			try:
+				self.pv_info(device)
+			except:
+				system([PVCREATE, device],	error_text='Cannot initiate a disk for use by LVM')
 		
 	def create_vg(self, group, ph_volumes, ph_extent_size=4):
 		group = os.path.basename(group)
-		system([VGCREATE, '-s', ph_extent_size, group] + list(ph_volumes),
-				error_text='Cannot create a volume group %s' % group)
+		try:
+			self.vg_info(group)
+		except:
+			system([VGCREATE, '-s', ph_extent_size, group] + list(ph_volumes),
+					error_text='Cannot create a volume group %s' % group)
 		return '/dev/%s' % group
 	
 	def create_lv(self, group=None, name=None, extents=None, size=None, segment_type=None, ph_volumes=None):

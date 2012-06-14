@@ -26,6 +26,7 @@ def system(*popenargs, **kwargs):
 
 class Mdadm:
 
+
 	def __init__(self):
 		if not os.path.exists(MDADM_EXEC):
 			raise MdadmError("Make sure you have mdadm package installed.")
@@ -43,27 +44,41 @@ class Mdadm:
 		self._state_re         	= re.compile('State\s+:\s+(?P<state>.+)')
 		self._rebuild_re       	= re.compile('Rebuild\s+Status\s+:\s+(?P<percent>\d+)%')
 		self._level_re			= re.compile('Raid Level : (?P<level>.+)')
-		
+
+
 	def create(self, devices, level=1):
 		# Validate RAID level
 		if not int(level) in (0,1,5,10):
 			raise MdadmError('Unknown RAID level: %s' % level)
-		
+
+		array = None
+		for device in devices:
+			try:
+				array = self._get_array_by_device(device)
+			except:
+				pass
+
+		if array:
+			array_disks = self.get_array_devices(array)
+			array_level = int(self.get_array_info(array)['level'])
+			if sorted(array_disks) == sorted(devices) and level == array_level:
+
+				return array
+
 		# Select RAID device name 
 		devname = self._get_free_md_devname()
-		
 		for device in devices:
 			try:
 				self._zero_superblock(device)
 			except:
 				pass
-			
+
 		# Create RAID device
 		cmd = [MDADM_EXEC, '--create', devname, '--level=%s' % level, '--assume-clean', '-f', '-e', 'default', '-n', len(devices)]
 		cmd.extend(devices)
 		system(cmd, error_text='Error occured during raid device creation')
-		system2((MDADM_EXEC, '-W', devname), raise_error=False)
-		
+		self._wait(devname)
+
 		return devname
 
 		
@@ -73,8 +88,7 @@ class Mdadm:
 		
 		# Stop raid
 		devices = self.get_array_devices(array)
-		system2((MDADM_EXEC, '-W', array), raise_error=False)
-		#wait_until(lambda: not self.get_array_info(array)['rebuild_status'])
+		self._wait(array)
 		cmd = (MDADM_EXEC, '-S', '-f', array)
 		try:
 			system(cmd, error_text='Error occured during array stopping')
@@ -97,20 +111,22 @@ class Mdadm:
 		if zero_superblock:
 			for device in devices: 
 				self._zero_superblock(device)
-			
+
+
 	def assemble(self, devices):
 		md_devname = self._get_free_md_devname()
 		cmd = (MDADM_EXEC, '--assemble', md_devname) + tuple(devices)
 		system(cmd, error_text="Error occured during array assembling")
-		system2((MDADM_EXEC, '-W', md_devname), raise_error=False)
+		self._wait(md_devname)
 		return md_devname
+
 
 	def add_disk(self, array, device, grow=True):
 		info = self.get_array_info(array)
 		if info['level'] in ('raid0', 'raid10'):
 			raise MdadmError("Can't add devices to %s." % info['level'])
 		
-		wait_until(lambda: not self.get_array_info(array)['rebuild_status'], timeout=60)
+		self._wait(array)
 		cmd = (MDADM_EXEC, '--add', array, device)
 		system(cmd, error_text='Error occured during device addition')
 		
@@ -123,14 +139,16 @@ class Mdadm:
 				cmd = (MDADM_EXEC, '--grow', array, '--raid-devices=%s' % total_devs)
 				system(cmd, error_text='Error occured during array "%s" growth')
 
-		system2((MDADM_EXEC, '-W', array), raise_error=False)
+		self._wait(array)
+
 
 	def remove_disk(self, array, device):
 		array_disks = self.get_array_devices(array)
-		if not old in array_disks:
-			raise MdadmError('Disk %s is not part of %s array' % (old, array))
 
-		wait_until(lambda: not self.get_array_info(array)['rebuild_status'], timeout=60)
+		if not device in array_disks:
+			raise MdadmError('Disk %s is not part of %s array' % (device, array))
+
+		self._wait(array)
 
 		cmd = (MDADM_EXEC, array, '-f', '--fail', device)
 		system(cmd, error_text='Error occured while marking device as failed')
@@ -138,27 +156,30 @@ class Mdadm:
 		cmd = (MDADM_EXEC, array, '-f', '--remove', device)
 		system(cmd, error_text='Error occured during device removal')
 
+
 	def replace_disk(self, array, old, new):
 		if self.get_array_info(array)['level'] == 'raid0':
 			raise MdadmError("Can't replace disk in raid level 0.")
 
 		self.remove_disk(array, old)
 		self.add_disk(array, new, False)
-		system2((MDADM_EXEC, '-W', array), raise_error=False)
-
+		self._wait(array)
 
 	def get_array_info(self, array):
 		ret = {}
-		cmd = (MDADM_EXEC, '-D', array)
-		error_text = 'Error occured while obtaining array %s info' % array
-		out = system(cmd, error_text=error_text)[0]
-		ret['raid_devices']   = int(re.search(self._raid_devices_re, out).group('count'))
-		ret['total_devices']  = int(re.search(self._total_devices_re, out).group('count'))
-		ret['state']		  = re.search(self._state_re, out).group('state')
-		ret['level']		  = re.search(self._level_re, out).group('level')
-		rebuild_res    		  = re.search(self._rebuild_re, out)
+		details = self._get_array_details(array)
+
+		ret['raid_devices']   = int(re.search(self._raid_devices_re, details).group('count'))
+		ret['total_devices']  = int(re.search(self._total_devices_re, details).group('count'))
+		ret['state']		  = re.search(self._state_re, details).group('state')
+		level				  = re.search(self._level_re, details).group('level')
+		if level.startswith('raid'):
+			level = level[4:]
+		ret['level']		  = level
+		rebuild_res    		  = re.search(self._rebuild_re, details)
 		ret['rebuild_status'] = rebuild_res.group('percent') if rebuild_res else None
 		return ret
+
 
 	def _get_array_by_device(self, device):
 		devname = os.path.basename(device)
@@ -175,27 +196,29 @@ class Mdadm:
 		
 		return '/dev/%s' % array
 
+
 	def _zero_superblock(self, device):
 		devname = os.path.basename(device)
 		cmd = (MDADM_EXEC, '--zero-superblock', '-f', '/dev/%s' % devname)
 		system(cmd, error_text='Error occured during zeroing superblock on %s' % device)
-		
+
+
 	def _get_free_md_devname(self):
 		return '/dev/md%s' % firstmatched(lambda x: not os.path.exists('/dev/md%s' % x), range(100))
 
+
 	def get_array_devices(self, array):
-		devname = os.path.basename(array)
-		
-		out = filetool.read_file('/proc/mdstat')
-		if not out:
-			raise Exception("Can't get array info from /proc/mdstat.")
-		
-		for line in out.splitlines():
-			if not line.startswith(devname):
-				continue
-			devices = re.findall('([^\s]+)\[\d+\]', line)
-			break
-		else:
-			devices = []
-		return devices
+		details = self._get_array_details(array)
+		return re.findall('(/dev/[\w]+)\n', details)
+
+
+	def _get_array_details(self, array):
+		cmd = (MDADM_EXEC, '-D', array)
+		error_text = 'Error occured while obtaining array %s info' % array
+		return system(cmd, error_text=error_text)[0]
+
+
+	def _wait(self, array):
+		""" Wait for array to finish any resync, recover or reshape activity """
+		system2((MDADM_EXEC, '-W', array), raise_error=False)
 	

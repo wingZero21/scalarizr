@@ -121,7 +121,14 @@ class RaidVolumeProvider(VolumeProvider):
 			vg_options = kwargs['vg']
 			self._lvm.create_pv(raid_pv)		
 			kwargs['vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
-			kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
+
+			if not int(self._lvm.vg_info(vg_name).num_lv):
+				kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
+			else:
+				lvs = filter(lambda l: l.vg_name == vg_name, self._lvm.lv_status())[0]
+				kwargs['device'] = lvs.lv_path
+
+
 			kwargs['raid_pv'] = raid_pv
 			#kwargs['pv_uuid'] = self._lvm.pv_info(raid_pv).uuid
 			kwargs['lvm_group_cfg'] = lvm_group_b64(kwargs['vg'])
@@ -284,17 +291,31 @@ class RaidVolumeProvider(VolumeProvider):
 
 
 	def replace_disk(self, raid_vol, old, new):
-		self._mdadm.replace_disk(raid_vol.raid_pv, old.device, new.device)
-		index = raid_vol.disks.index(old)
-		raid_vol.disks[index] = new
+		try:
+			self._mdadm.replace_disk(raid_vol.raid_pv, old.device, new.device)
+		except:
+			e, t = sys.exc_info()[1:]
+			try:
+				array_devices = self._mdadm.get_array_devices(raid_vol.raid_pv)
+				if new.device in array_devices:
+					self.remove_disks(raid_vol, new)
+				if not old.device in array_devices:
+					self.add_disks(raid_vol, old)
+			except:
+				pass
+			finally:
+				raise StorageError, str(e), t
+		else:
+			index = raid_vol.disks.index(old)
+			raid_vol.disks[index] = new
 
 
-	def add_disks(self, raid_vol, disks):
+	def add_disks(self, raid_vol, *disks):
 		for disk in disks:
 			self._mdadm.add_disk(raid_vol.raid_pv, disk.device)
 
 
-	def remove_disks(self, raid_vol, disks):
+	def remove_disks(self, raid_vol, *disks):
 		for disk in disks:
 			self._mdadm.remove_disk(raid_vol.raid_pv, disk.device)
 
