@@ -1,5 +1,3 @@
-#import gevent.monkey
-#gevent.monkey.patch_all()
 
 import sys
 import cStringIO
@@ -35,7 +33,6 @@ from scalarizr.util import wait_until
 import logging
 import logging.config
 import os, sys, re, shutil, time
-#import gevent.pywsgi
 import binascii, string, traceback
 import sqlite3 as sqlite
 import threading, socket, signal

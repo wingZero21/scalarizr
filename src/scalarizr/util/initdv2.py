@@ -10,11 +10,7 @@ import time
 from scalarizr.util import system2, PopenError
 from scalarizr.util.filetool import read_file
 import re
-
-try:
-	from gevent.local import local
-except ImportError:
-	from threading import local
+from threading import local
 
 
 _services  = dict()

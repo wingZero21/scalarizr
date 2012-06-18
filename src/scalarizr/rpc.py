@@ -13,10 +13,7 @@ import urllib2
 import urlparse
 import struct
 import socket
-try:
-	from gevent.local import local
-except ImportError:
-	from threading import local
+from threading import local
 import traceback
 
 

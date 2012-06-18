@@ -19,10 +19,7 @@ except ImportError:
 	from scalarizr.externals.collections import namedtuple
 
 
-try:
-	from gevent.local import local
-except ImportError:
-	from threading import local
+from threading import local
 
 
 
