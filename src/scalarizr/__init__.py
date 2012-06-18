@@ -22,7 +22,7 @@ from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
-from scalarizr.api.binding import jsonrpc_http, jsonrpc_zmq
+from scalarizr.api.binding import jsonrpc_http
 from scalarizr.storage.util.loop import listloop
 
 # Utils
@@ -137,11 +137,10 @@ _logging_configured = False
 
 _api_routes = {
 	'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
-	'sysinfo': 'scalarizr.api.sysinfo.SysinfoAPI'
+	'sysinfo': 'scalarizr.api.sysinfo.SysinfoAPI',
+	'storage': 'scalarizr.api.storage.StorageAPI'
 }
-'''
-Before start API server, for object jsonrpc_zmq.ZmqServer with handlers routes  
-'''
+
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -165,7 +164,7 @@ def _init():
 	optparser = bus.optparser
 	bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
 	
-	dynimp.setup()
+	#dynimp.setup()
 	
 	_init_logging()
 	logger = logging.getLogger(__name__)	
@@ -777,13 +776,6 @@ def main():
 					upd.start()
 				except:
 					logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
-
-			if not bus.api_server:
-				bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', _api_routes)
-			# Start API server
-			logger.info('Start API server')
-			api_server = bus.api_server
-			api_server.start()
 
 		
 		# Check Scalr version
