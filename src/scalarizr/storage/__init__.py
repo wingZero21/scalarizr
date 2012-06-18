@@ -324,6 +324,7 @@ def devname_not_empty(f):
 class Volume(VolumeConfig, Observable):
 	detached = False
 	lock = None
+	_non_blocking_methods = ['status']
 	
 	_logger = None
 	_fs = None
@@ -362,8 +363,10 @@ class Volume(VolumeConfig, Observable):
 
 	def __getattribute__(self, item):
 		attr = super(Volume, self).__getattribute__(item)
+		if item in self._non_blocking_methods:
+			return attr
 
-		if hasattr(attr, 'im_self') and attr.im_self is not None:
+		if getattr(attr, 'im_self', None) is not None:
 			def with_lock(*args, **kwargs):
 				with self.lock:
 					return attr(*args, **kwargs)

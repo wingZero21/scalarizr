@@ -397,6 +397,13 @@ class RedisConf(BaseRedisConfig):
 class RedisCLI(object):
 	path = REDIS_CLI_PATH
 	
+	class no_keyerror_dict(dict):
+		def __getitem__(self, key):
+			try:
+				dict.__getitem__(self, key)
+			except KeyError:
+				return None
+	
 	def __init__(self, password=None):
 		self.password = password
 		self._logger = logging.getLogger(__name__)
@@ -448,7 +455,7 @@ class RedisCLI(object):
 	def info(self):
 		info = self.execute('info')
 		self._logger.debug('Redis INFO: %s' % info)
-		d = {}
+		d = self.no_keyerror_dict()
 		if info:
 			for i in info.strip().split('\n'):
 				raw = i[:-1] if i.endswith('\r') else i

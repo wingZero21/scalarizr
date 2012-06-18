@@ -32,6 +32,7 @@ class RaidConfig(VolumeConfig):
 	vg		= None
 	lvm_group_cfg = None
 	disks	= None
+	pv_uuid = None
 
 	
 	def config(self, as_snapshot=False):
@@ -119,21 +120,42 @@ class RaidVolumeProvider(VolumeProvider):
 			vg_name = kwargs['vg']['name']
 			del kwargs['vg']['name']
 			vg_options = kwargs['vg']
-			self._lvm.create_pv(raid_pv)		
-			kwargs['vg'] = self._lvm.create_vg(vg_name, (raid_pv,), **vg_options)
 
-			if not int(self._lvm.vg_info(vg_name).num_lv):
-				kwargs['device'] = self._lvm.create_lv(vg_name, extents='100%FREE')
-			else:
-				lvs = filter(lambda l: l.vg_name == vg_name, self._lvm.lv_status())[0]
-				kwargs['device'] = lvs.lv_path
-
-
+			self._create_pv(raid_pv)
+			kwargs['vg'] = self._create_vg(vg_name, raid_pv, **vg_options)
+			kwargs['device'] = self._create_lv(vg_name, kwargs.get('device'))
 			kwargs['raid_pv'] = raid_pv
-			#kwargs['pv_uuid'] = self._lvm.pv_info(raid_pv).uuid
+			kwargs['pv_uuid'] = self._lvm.pv_info(raid_pv).uuid
 			kwargs['lvm_group_cfg'] = lvm_group_b64(kwargs['vg'])
 			volume = super(RaidVolumeProvider, self).create(**kwargs)
 		return volume
+
+
+	def _create_pv(self, device, uuid=None):
+		try:
+			self._lvm.pv_info(device)
+		except LookupError:
+			self._logger.debug('Creating physical volume. %s ' % (uuid and 'uuid=%s' % uuid or ''))
+			self._lvm.create_pv(device, uuid=uuid)
+
+
+	def _create_vg(self, name, device, **options):
+		try:
+			self._lvm.vg_info(name)
+			return '/dev/%s' % name
+		except:
+			return self._lvm.create_vg(name, (device,), **options)
+
+
+	def _create_lv(self, vg_name, device=None):
+		if device:
+			try:
+				lvi = self._lvm.lv_info(device)
+				return lvi.path
+			except:
+				pass
+
+		return self._lvm.create_lv(vg_name, extents='100%FREE')
 
 
 	def create_from_snapshot(self, **kwargs):
@@ -153,6 +175,9 @@ class RaidVolumeProvider(VolumeProvider):
 		else:
 			raid_pv	= self._mdadm.assemble([vol.devname for vol in kwargs['disks']])
 
+		pv_uuid = kwargs.get('pv_uuid')
+		self._create_pv(raid_pv, pv_uuid )
+
 		lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
 		write_file(self._lvm_backup_filename, lvm_raw_backup, logger=logger)
 
@@ -164,13 +189,14 @@ class RaidVolumeProvider(VolumeProvider):
 		lvinfo = self._lvm.lv_info(kwargs['device'])
 		self._lvm.change_vg(raw_vg, available=True)
 		wait_until(lambda: os.path.exists(kwargs['device']), logger=self._logger)
-
+		pv_info = self._lvm.pv_info(raid_pv)
 
 		return RaidVolume(	lvinfo.lv_path,
 							raid_pv	= raid_pv,
 						 	vg		= vg,
 							disks	= kwargs['disks'],
 							level	= kwargs['level'],
+							pv_uuid = pv_info.uuid,
 							lvm_group_cfg = kwargs['lvm_group_cfg'])
 
 	
@@ -179,7 +205,7 @@ class RaidVolumeProvider(VolumeProvider):
 
 		snap.level		= vol.level
 		snap.vg			= vol.vg
-		#snap.pv_uuid	= self._lvm.pv_info(vol.raid_pv).uuid
+		snap.pv_uuid	= vol.pv_uuid
 		snap.disks		= []
 		snap.lvm_group_cfg = vol.lvm_group_cfg
 
