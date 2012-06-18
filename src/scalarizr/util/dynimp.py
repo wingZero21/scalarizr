@@ -280,20 +280,15 @@ class ImpLoader(object):
 		if fullname in sys.modules:
 			return self
 		
-		try:
-			name = fullname.split('.')[-1]
-			package = fullname.split('.')[0]
-			try:
+		name = fullname.split('.')[-1]
+		package = fullname.split('.')[0]
+		
+		for section in self.sections:
+			if self.conf.has_option(section, package):
+				self.install_python_package(package)
 				self.file, self.filename, self.etc = imp.find_module(name, path)
 				return self
-			except:
-				if package not in sys.modules:
-					self.install_python_package(package)
-				self.file, self.filename, self.etc = imp.find_module(name, path)
-				return self
-		except:
-			LOG.error('%s: %s', sys.exc_info()[0].__name__, sys.exc_info()[1])
-			raise
+		
 
 	
 	def load_module(self, fullname):
@@ -304,4 +299,5 @@ class ImpLoader(object):
 
 
 def setup():
-	sys.meta_path += [ImpLoader()]
+	sys.path_hooks += [ImpLoader()]
+	#sys.meta_path += [ImpLoader()]
