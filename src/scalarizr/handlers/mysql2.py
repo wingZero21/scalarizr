@@ -404,7 +404,7 @@ class MysqlHandler(DBMSRHandler):
 
 	def on_BeforeHostTerminate(self, message):
 		LOG.debug('Handling BeforeHostTerminate message from %s' % message.local_ip)
-		assert message.local_ip
+		#assert message.local_ip
 
 		if message.local_ip == self._platform.get_private_ip():
 			self.mysql.service.stop(reason='Server will be terminated')
@@ -558,14 +558,16 @@ class MysqlHandler(DBMSRHandler):
 					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 					
 					# Notify scalr
-					msg_data = dict(
-						db_type = BEHAVIOUR,
-						log_file=log_file,
-						log_pos=log_pos,
-						used_size='%.3f' % (float(used_size) / 1024 / 1024,),
-						status='ok'
-					)
-					msg_data.update(self._compat_storage_data(snap=snap))
+					msg_data = {
+						'db_type': BEHAVIOUR,
+						'used_size': '%.3f' % (float(used_size) / 1024 / 1024,),
+						'status': 'ok',
+						BEHAVIOUR: {
+							'log_file': log_file,
+							'log_pos': log_pos
+						}
+					}
+					msg_data[BEHAVIOUR].update(self._compat_storage_data(snap=snap))
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 			op.ok()
 			
@@ -585,7 +587,7 @@ class MysqlHandler(DBMSRHandler):
 		Promote slave to master
 		"""
 		LOG.debug("on_DbMsr_PromoteToMaster")
-		assert message.body['volume_config']
+		#assert message.body['volume_config']
 		assert message.mysql2
 		mysql2 = message.mysql2
 		assert mysql2['root_password']
@@ -600,7 +602,7 @@ class MysqlHandler(DBMSRHandler):
 		bus.fire('before_slave_promote_to_master')
 
 		if bus.scalr_version >= (2, 2):
-			master_storage_conf = message.body.get('volume_config')
+			master_storage_conf = mysql2.get('volume_config')
 		else:
 			if 'volume_id' in message.body:
 				master_storage_conf = dict(type='ebs', id=message.body['volume_id'])
@@ -640,9 +642,9 @@ class MysqlHandler(DBMSRHandler):
 					
 					# Send message to Scalr
 					msg_data = dict(status='ok', db_type = BEHAVIOUR)
+					msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
 					#log_file, log_pos = self.root_client.master_status()
 					#msg_data.update(dict(log_file = log_file, log_pos = log_pos))
-					msg_data.update(self._compat_storage_data(vol=new_storage_vol))
 					self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 				else:
 					raise HandlerError("%s is not a valid MySQL storage" % STORAGE_PATH)
@@ -667,11 +669,13 @@ class MysqlHandler(DBMSRHandler):
 				# Send message to Scalr
 				msg_data = dict(
 					status="ok",
-					log_file = log_file,
-					log_pos = log_pos,
 					db_type = BEHAVIOUR
 				)
-				msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+				msg_data[BEHAVIOUR] = dict(
+					log_file = log_file,
+					log_pos = log_pos,
+				)
+				msg_data[BEHAVIOUR].update(self._compat_storage_data(self.storage_vol, snap))
 				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)							
 				
 			tx_complete = True
@@ -695,7 +699,7 @@ class MysqlHandler(DBMSRHandler):
 			# Start MySQL
 			self.mysql.service.start()
 		
-		if tx_complete and master_storage_conf:
+		if tx_complete and PlatformFeatures.VOLUMES in self._platform.features:
 			# Delete slave EBS
 			self.storage_vol.destroy(remove_disks=True)
 			self.storage_vol = new_storage_vol
