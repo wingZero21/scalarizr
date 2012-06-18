@@ -35,6 +35,7 @@ from scalarizr.util import wait_until
 import logging
 import logging.config
 import os, sys, re, shutil, time
+import gevent.pywsgi
 import binascii, string, traceback
 import sqlite3 as sqlite
 import threading, socket, signal
@@ -347,8 +348,7 @@ def _start_services():
 	
 	# Start API server
 	api_server = bus.api_server
-	logger.info('Starting API server on http://%s:%s', 
-			api_server.hostname, api_server.port)
+	logger.info('Starting API server on http://0.0.0.0:8011')
 	api_server.serve_forever()
 	
 	# Start periodical executor
