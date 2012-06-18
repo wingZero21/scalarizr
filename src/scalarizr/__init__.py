@@ -1,5 +1,5 @@
-import gevent.monkey
-gevent.monkey.patch_all()
+#import gevent.monkey
+#gevent.monkey.patch_all()
 
 import sys
 import cStringIO
@@ -35,7 +35,7 @@ from scalarizr.util import wait_until
 import logging
 import logging.config
 import os, sys, re, shutil, time
-import gevent.pywsgi
+#import gevent.pywsgi
 import binascii, string, traceback
 import sqlite3 as sqlite
 import threading, socket, signal
@@ -44,6 +44,7 @@ from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 import pprint
+import wsgiref.simple_server
 from scalarizr.util import sqlite_server, wait_until
 
 class ScalarizrError(BaseException):
@@ -329,7 +330,7 @@ def _init_services():
 	if not bus.api_server:
 		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
 											cnf.key_path(cnf.DEFAULT_KEY))
-		bus.api_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 8011), api_app)
+		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', 8011, api_app)
 
 
 def _start_services():
