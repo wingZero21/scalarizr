@@ -92,8 +92,9 @@ class WsgiApplication(Security):
 				return str(sys.exc_info()[1])
 			
 			LOG.debug('request: %s', data)
-			with self.handle_meta_params(data):
-				result = self.req_handler.handle_request(data, namespace=environ['PATH_INFO'][1:] or None)
+			req = json.loads(data)
+			with self.handle_meta_params(req):
+				result = self.req_handler.handle_request(req, namespace=environ['PATH_INFO'][1:] or None)
 			LOG.debug('response: %s', result)		
 			
 			result = self.encrypt_data(result)
@@ -111,8 +112,7 @@ class WsgiApplication(Security):
 			return ''
 
 
-	def handle_meta_params(self, data):
-		req = json.loads(data)
+	def handle_meta_params(self, req):
 		if '_access_data' in req:
 			pl = bus.platform
 			pl.set_access_data(req['_access_data'])

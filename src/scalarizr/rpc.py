@@ -94,7 +94,7 @@ class RequestHandler(object):
 	def handle_request(self, data, namespace=None):
 		id, result, error = '', None, None
 		try:
-			req = self._parse_request(data)
+			req = self._parse_request(data) if isinstance(data, basestring) else data 
 			id, method, params = self._translate_request(req)
 			svs = self._find_service(namespace)
 			fn = self._find_method(svs, method)
