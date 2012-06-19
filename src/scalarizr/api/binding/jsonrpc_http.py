@@ -15,11 +15,15 @@ import time
 import urllib2
 import hashlib
 import hmac
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
 
 from scalarizr import rpc
 from scalarizr.util import cryptotool
-
+from scalarizr.bus import bus
 
 LOG_CATEGORY = 'scalarizr.api'
 LOG = logging.getLogger(LOG_CATEGORY)
@@ -88,7 +92,8 @@ class WsgiApplication(Security):
 				return str(sys.exc_info()[1])
 			
 			LOG.debug('request: %s', data)
-			result = self.req_handler.handle_request(data, namespace=environ['PATH_INFO'][1:] or None)
+			with self.handle_meta_params(data):
+				result = self.req_handler.handle_request(data, namespace=environ['PATH_INFO'][1:] or None)
 			LOG.debug('response: %s', result)		
 			
 			result = self.encrypt_data(result)
@@ -104,6 +109,23 @@ class WsgiApplication(Security):
 			start_response('500 Internal Server Error', [], sys.exc_info())
 			LOG.exception('Unhandled exception')
 			return ''
+
+
+	def handle_meta_params(self, data):
+		req = json.loads(data)
+		if '_access_data' in req:
+			pl = bus.platform
+			pl.set_access_data(req['_access_data'])
+			del req['_access_data']
+			
+			
+	def __enter__(self):
+		return self
+	
+	
+	def __exit__(self, *args):
+		pl = bus.platform
+		pl.clear_access_data()
 
 
 class HttpServiceProxy(rpc.ServiceProxy, Security):
