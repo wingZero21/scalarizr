@@ -9,6 +9,7 @@ from scalarizr.util import system2, PopenError
 import logging
 import threading
 import os
+import sys
 import re
 import uuid
 from scalarizr.libs.pubsub import Observable
@@ -171,12 +172,35 @@ class Storage:
 			
 		if 'disks' in kwargs:
 			disks = []
-			for item in kwargs['disks']:
+			errors = []
+			threads = []
+
+			def _create(self, i, item):
+				try:
+					disk = self.create(**item) if isinstance(item, dict) else self.create(item)
+					disks.append((i, disk))
+				except:
+					e = sys.exc_info()[0]
+					errors.append(e)
+
+			for i, item in enumerate(kwargs['disks']):
 				if isinstance (item, Volume):
-					disks.append(item)
+					disks.append((i,item))
 					continue
-				disk = self.create(**item) if isinstance(item, dict) else self.create(item)
-				disks.append(disk)
+
+				t = threading.Thread(target=_create, args=(self, i, item))
+				t.start()
+				threads.append(t)
+
+			for t in threads:
+				t.join()
+
+			if errors:
+				raise StorageError('Failed to attach disks:\n%s' % '\n'.join([str(e) for e in errors]))
+
+			disks.sort(lambda x,y: cmp(x[0], y[0]))
+			disks = [disk for i, disk in disks]
+
 			kwargs['disks'] = disks
 			
 		if 'disk' in kwargs:
