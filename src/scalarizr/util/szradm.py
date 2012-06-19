@@ -379,7 +379,7 @@ class ListMessagesCommand(Command):
 					FROM p2p_message")
 			res=[]
 
-			for row in cur:
+			for row in cur.fetchall():
 				res.append([row[0],row[1], row[2],'in' if row[3] else 'out',
 					'yes' if row[4]	else 'no'])
 			self.output(res)
