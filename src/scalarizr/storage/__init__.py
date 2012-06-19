@@ -387,7 +387,8 @@ class Volume(VolumeConfig, Observable):
 
 	def __getattribute__(self, item):
 		attr = super(Volume, self).__getattribute__(item)
-		if item in self._non_blocking_methods:
+		non_blocking = super(Volume, self).__getattribute__('_non_blocking_methods')
+		if item in non_blocking:
 			return attr
 
 		if getattr(attr, 'im_self', None) is not None:
