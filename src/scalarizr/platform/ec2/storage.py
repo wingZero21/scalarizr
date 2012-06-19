@@ -55,8 +55,8 @@ class EbsVolumeProvider(VolumeProvider):
 	snap_class = EbsSnapshot
 
 	letters_lock = threading.Lock()
-	all_letters = tuple(string.ascii_lowercase[5:16])
-	acquired_letters = list()
+	all_letters = set(string.ascii_lowercase[5:16])
+	acquired_letters = set()
 
 	snapshot_state_map = {
 		'pending' : Snapshot.CREATED,
@@ -120,7 +120,7 @@ class EbsVolumeProvider(VolumeProvider):
 						)
 						if letter:
 							device = '/dev/sd%s' % letter
-							self.acquired_letters.append(letter)
+							self.acquired_letters.add(letter)
 						else:
 							raise StorageError('No free letters for block device name remains')
 
@@ -128,9 +128,11 @@ class EbsVolumeProvider(VolumeProvider):
 
 			self._logger.debug('storage._create kwds: %s', kwargs)
 			volume_id = kwargs.get('id')
-			# xxx: hotfix
+
+			# TODO: hotfix
 			if volume_id and volume_id.startswith('snap-'):
 				volume_id = None
+
 			snap_id = kwargs.get('snapshot_id')
 			ebs_vol = None
 			delete_snap = False
