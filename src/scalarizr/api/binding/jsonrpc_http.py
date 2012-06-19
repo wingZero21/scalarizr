@@ -117,7 +117,7 @@ class WsgiApplication(Security):
 			pl = bus.platform
 			pl.set_access_data(req['_access_data'])
 			del req['_access_data']
-			
+		return self
 			
 	def __enter__(self):
 		return self

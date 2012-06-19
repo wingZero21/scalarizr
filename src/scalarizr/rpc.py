@@ -14,10 +14,13 @@ import urlparse
 import struct
 import socket
 from threading import local
-import traceback
+import logging
 
 
 from scalarizr import util
+
+
+LOG = logging.getLogger(__name__)
 
 def service_method(fn):
 	fn._jsonrpc = True
@@ -86,7 +89,7 @@ class RequestHandler(object):
 			self.services = services
 		
 	def handle_error(self):
-		traceback.print_exc()
+		LOG.exception('Caught exception')
 		
 	def handle_request(self, data, namespace=None):
 		id, result, error = '', None, None
