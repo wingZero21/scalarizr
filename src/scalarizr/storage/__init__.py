@@ -224,9 +224,12 @@ class Storage:
 	@staticmethod	
 	def detach(vol, force=False):
 		Storage.fire('detach', vol)
+		id = vol.id
 		pvd = Storage.lookup_provider(vol.type)
 		ret = pvd.detach(vol, force)
 		vol.detached = True
+		if id in Storage.volumes:
+			del Storage.volumes[id]
 		return ret
 
 
