@@ -80,7 +80,7 @@ class StorageAPI(object):
 
 
 	@rpc.service_method
-	def destroy(self, volume_config, remove_disks=False, async=False):
+	def destroy(self, volume_config, destroy_disks=False, async=False):
 		assert volume_config.get('id'), 'volume_config[id] is empty'
 		
 		vol = storage_lib.Storage.create(volume_config)
@@ -91,13 +91,13 @@ class StorageAPI(object):
 				op.define()
 				with op.phase(txt):
 					with op.step(txt):
-						vol.destroy(remove_disks=remove_disks)
+						vol.destroy(remove_disks=destroy_disks)
 				op.ok()
 			threading.Thread(target=block).start()
 			return op.id
 		
 		else:
-			vol.destroy(remove_disks=remove_disks)
+			vol.destroy(remove_disks=destroy_disks)
 
 
 	@rpc.service_method
