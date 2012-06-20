@@ -21,8 +21,15 @@ def mkloop(filename, device=None, size=None, quick=False):
 			cmd.extend(['count=%d' % size])
 		system(cmd)
 	if not device:
-		device = system(('/sbin/losetup', '-f'))[0].strip()
-	system((LOSETUP_EXEC, device, filename))
+		system((LOSETUP_EXEC, '-f', filename))
+		loops = listloop()
+		for loopdev, fname in loops.iteritems():
+			if fname == filename:
+				return loopdev
+		else:
+			raise Exception('Cannot find loop device with %s file' % filename)
+	else:
+		system((LOSETUP_EXEC, device, filename))
 	return device
 
 def listloop():
