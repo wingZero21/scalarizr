@@ -113,10 +113,10 @@ class WsgiApplication(Security):
 
 
 	def handle_meta_params(self, req):
-		if '_access_data' in req['params']:
+		if '_platform_access_data' in req['params']:
 			pl = bus.platform
-			pl.set_access_data(req['params']['_access_data'])
-			del req['params']['_access_data']
+			pl.set_access_data(req['params']['_platform_access_data'])
+			del req['params']['_platform_access_data']
 		return self
 			
 	def __enter__(self):
