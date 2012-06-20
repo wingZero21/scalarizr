@@ -13,17 +13,17 @@ from scalarizr import storage as storage_lib
 class StorageAPI(object):
 
 	@rpc.service_method
-	def create(self, storage_config=None, snapshot_config=None, async=False):
-		if storage_config and snapshot_config:
-			raise AssertionError('Both storage and snapshot configurations'
+	def create(self, volume_config=None, snapshot_config=None, async=False):
+		if volume_config and snapshot_config:
+			raise AssertionError('Both volume and snapshot configurations'
 			'were passed. Only one configuration expected.')
 
-		if not storage_config and not snapshot_config:
+		if not volume_config and not snapshot_config:
 			raise AssertionError('No configuration were passed')
 
-		kw = storage_config or {'snapshot': snapshot_config}
+		kw = volume_config or {'snapshot': snapshot_config}
 		if async:
-			txt = 'Create storage'
+			txt = 'Create volume'
 			op = handlers.operation(name=txt)
 			def block():
 				op.define()
@@ -40,10 +40,10 @@ class StorageAPI(object):
 
 
 	@rpc.service_method
-	def snapshot(self, storage_config, async=False):
-		vol = storage_lib.Storage.create(storage_config)
+	def snapshot(self, volume_config, async=False):
+		vol = storage_lib.Storage.create(volume_config)
 		if async:
-			txt = 'Create storage snapshot'
+			txt = 'Create snapshot'
 			op = handlers.operation(name=txt)
 			def block():
 				op.define()
@@ -60,11 +60,11 @@ class StorageAPI(object):
 
 
 	@rpc.service_method
-	def detach(self, storage_config, async=False):
-		assert storage_config.get('id'), 'storage_config[id] is empty'
-		vol = storage_lib.Storage.create(storage_config)
+	def detach(self, volume_config, async=False):
+		assert volume_config.get('id'), 'volume_config[id] is empty'
+		vol = storage_lib.Storage.create(volume_config)
 		if async:
-			txt = 'Detach storage'
+			txt = 'Detach volume'
 			op = handlers.operation(name=txt)
 			def block():
 				op.define()
@@ -80,12 +80,12 @@ class StorageAPI(object):
 
 
 	@rpc.service_method
-	def destroy(self, storage_config, remove_disks=False, async=False):
-		assert storage_config.get('id'), 'storage_config[id] is empty'
+	def destroy(self, volume_config, remove_disks=False, async=False):
+		assert volume_config.get('id'), 'volume_config[id] is empty'
 		
-		vol = storage_lib.Storage.create(storage_config)
+		vol = storage_lib.Storage.create(volume_config)
 		if async:
-			txt = 'Destroy storage'
+			txt = 'Destroy volume'
 			op = handlers.operation(name=txt)
 			def block():
 				op.define()
@@ -101,9 +101,9 @@ class StorageAPI(object):
 
 
 	@rpc.service_method
-	def replace_raid_disk(self, storage_config, target_disk_device, replacement_disk_config, async=False):
-		assert storage_config.get('type') == 'raid', 'Configuration type is not raid'
-		raid = storage_lib.Storage.create(**storage_config)
+	def replace_raid_disk(self, volume_config, target_disk_device, replacement_disk_config, async=False):
+		assert volume_config.get('type') == 'raid', 'Configuration type is not raid'
+		raid = storage_lib.Storage.create(**volume_config)
 
 		def replace_disk_block():
 			target = filter(lambda x: x.device == target_disk_device, raid.disks)
@@ -138,8 +138,8 @@ class StorageAPI(object):
 			return replace_disk_block()
 
 	@rpc.service_method
-	def status(self, storage_config):
-		vol_id = storage_config.get('id')
+	def status(self, volume_config):
+		vol_id = volume_config.get('id')
 		vol = storage_lib.Storage.get(vol_id)
 		return vol.status()
 
