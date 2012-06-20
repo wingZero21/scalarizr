@@ -83,8 +83,7 @@ class SysInfoAPI(object):
 					hosts._flush()
 			return fqdn
 		else:
-			with open(self._HOSTNAME, 'r') as fp:
-				return fp.readline().strip()
+			return system2(('hostname', ))[0].strip()
 
 
 	@rpc.service_method
