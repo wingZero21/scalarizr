@@ -40,7 +40,7 @@ class StorageAPI(object):
 
 
 	@rpc.service_method
-	def snapshot(self, volume_config, async=False):
+	def snapshot(self, volume_config, description=None, async=False):
 		vol = storage_lib.Storage.create(volume_config)
 		if async:
 			txt = 'Create snapshot'
@@ -49,13 +49,13 @@ class StorageAPI(object):
 				op.define()
 				with op.phase(txt):
 					with op.step(txt):
-						snap = vol.snapshot()
+						snap = vol.snapshot(description)
 				op.ok(data=snap.config())
 			threading.Thread(target=block).start()
 			return op.id
 			
 		else:
-			snap = vol.snapshot()
+			snap = vol.snapshot(description)
 			return snap.config()
 
 
