@@ -151,8 +151,9 @@ class Storage:
 			else:
 				kwargs['device'] = args[0]
 
-		if kwargs.get('id') in self.volumes:
-			return self.volumes['id']
+		id = kwargs.get('id')
+		if id in self.volumes:
+			return self.volumes[id]
 				
 		if 'snapshot' in kwargs:
 			# Save original kwargs
