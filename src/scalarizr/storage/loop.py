@@ -57,7 +57,7 @@ class LoopVolumeProvider(VolumeProvider):
 				file = '/mnt/loopdev' + str(time.time())
 			if not os.path.exists(file):			
 				try:
-					size = int(size)
+					size = int(size) * 1024
 				except ValueError:
 					if isinstance(size, basestring) and '%root' in size.lower():
 						# Getting size in percents

@@ -14,7 +14,7 @@ LOSETUP_EXEC = '/sbin/losetup'
 def mkloop(filename, device=None, size=None, quick=False):
 	''' Create loop device '''
 	if size and not os.path.exists(filename):
-		cmd = ['dd', 'if=/dev/zero', 'of=%s' % filename, 'bs=1G']
+		cmd = ['dd', 'if=/dev/zero', 'of=%s' % filename, 'bs=1M']
 		if quick:
 			cmd.extend(['seek=%d' % (size - 1,), 'count=1'])
 		else:
@@ -27,7 +27,7 @@ def mkloop(filename, device=None, size=None, quick=False):
 			if fname == filename:
 				return loopdev
 		else:
-			raise Exception('Cannot find loop device with %s file' % filename)
+			raise Exception('Cannot find loop device with %s file' % file)
 	else:
 		system((LOSETUP_EXEC, device, filename))
 	return device
