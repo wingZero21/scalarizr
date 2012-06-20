@@ -1,3 +1,4 @@
+
 import sys
 import cStringIO
 if sys.version_info < (2, 6):
@@ -10,7 +11,7 @@ if sys.version_info < (2, 6):
 
 
 # Core
-from scalarizr import config 
+from scalarizr import config, rpc
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
 from scalarizr.handlers import MessageListener
@@ -19,12 +20,14 @@ from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
+from scalarizr.api.binding import jsonrpc_http
 from scalarizr.storage.util.loop import listloop
 
 # Utils
 from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
-from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
+from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size, dynimp
 from scalarizr.util.filetool import write_file, read_file
+from scalarizr.util import wait_until
 
 # Stdlibs
 import logging
@@ -33,12 +36,13 @@ import os, sys, re, shutil, time
 import binascii, string, traceback
 import sqlite3 as sqlite
 import threading, socket, signal
+import pprint
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 import pprint
+import wsgiref.simple_server
 from scalarizr.util import sqlite_server, wait_until
-
 
 class ScalarizrError(BaseException):
 	pass
@@ -130,6 +134,13 @@ _msg_thread = None
 _logging_configured = False
 
 
+_api_routes = {
+	'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
+	'sysinfo': 'scalarizr.api.sysinfo.SysInfoAPI',
+	'storage': 'scalarizr.api.storage.StorageAPI'
+}
+
+
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
 		initdv2.ParametrizedInitScript.__init__(self, 
@@ -151,6 +162,8 @@ class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
 def _init():
 	optparser = bus.optparser
 	bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
+	
+	#dynimp.setup()
 	
 	_init_logging()
 	logger = logging.getLogger(__name__)	
@@ -310,9 +323,15 @@ def _init_services():
 	globals()['_snmp_scheduled_start_time'] = time.time()		
 
 	Storage.maintain_volume_table = True
+	
+	if not bus.api_server:
+		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
+											cnf.key_path(cnf.DEFAULT_KEY))
+		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', 8011, api_app)
 
 
 def _start_services():
+	logger = logging.getLogger(__name__)
 	# Create message server thread
 	msg_service = bus.messaging_service
 	consumer = msg_service.get_consumer()
@@ -324,6 +343,12 @@ def _start_services():
 	# Start message server
 	msg_thread.start()
 	globals()['_msg_thread'] = msg_thread
+	
+	# Start API server
+	api_server = bus.api_server
+	logger.info('Starting API server on http://0.0.0.0:8011')
+	api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
+	api_thread.start()
 	
 	# Start periodical executor
 	ex = bus.periodical_executor
@@ -544,6 +569,12 @@ def _shutdown_services(force=False):
 	msg_service.get_producer().shutdown()
 	bus.messaging_service = None
 	
+	# Shutdown API server
+	logger.debug('Shutdowning API server')
+	api_server = bus.api_server
+	api_server.stop()
+	bus.api_server = None
+
 	# Shutdown periodical executor
 	logger.debug('Shutdowning periodical executor')
 	ex = bus.periodical_executor
@@ -683,6 +714,7 @@ def main():
 		_init_platform()
 		pl = bus.platform
 
+
 		# Check that service started after dirty bundle
 		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
 				and cnf.state != ScalarizrState.IMPORTING:
@@ -707,10 +739,23 @@ def main():
 				_cleanup_after_rebundle()
 				cnf.state = ScalarizrState.BOOTSTRAPPING
 
+		if cnf.state == ScalarizrState.UNKNOWN:
+			cnf.state = ScalarizrState.BOOTSTRAPPING
 		
+		'''
+		if cnf.state == ScalarizrState.REBUNDLING:
+			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
+			if server_id and ud_server_id and server_id != ud_server_id:
+				logger.info('Server was started after rebundle. Performing some cleanups')
+				_cleanup_after_rebundle()
+				cnf.state = ScalarizrState.BOOTSTRAPPING
+		'''
+
 		# Initialize local database
 		_init_db()
-		
+	
+	
 		STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__)) 
 		STATE['global.version'] = __version__
 		
@@ -723,12 +768,14 @@ def main():
 		# At first startup platform user-data should be applied
 		if cnf.state == ScalarizrState.BOOTSTRAPPING:
 			cnf.fire('apply_user_data', cnf)
+
 			upd = ScalrUpdClientScript()
 			if not upd.running:
 				try:
 					upd.start()
 				except:
-					logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])			
+					logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
+
 		
 		# Check Scalr version
 		if not bus.scalr_version:

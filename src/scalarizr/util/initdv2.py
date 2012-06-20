@@ -10,6 +10,8 @@ import time
 from scalarizr.util import system2, PopenError
 from scalarizr.util.filetool import read_file
 import re
+from threading import local
+
 
 _services  = dict()
 _instances = dict()
@@ -74,13 +76,53 @@ class InitScript(object):
 		@return: Service status
 		@rtype: scalarizr.util.initdv2.Status
 		'''
-		pass
+		if self.pid_file:
+			if not os.path.exists(self.pid_file):
+				return Status.NOT_RUNNING
+			pid = read_file(self.pid_file).strip()
+			if os.path.isfile('/proc/%s/status' % pid):
+				try:
+					fp = open('/proc/%s/status' % pid)
+					status = fp.read()
+				except:
+					return Status.NOT_RUNNING
+				finally:
+					fp.close()
+					
+				if status:
+					pid_state = re.search('State:\s+(?P<state>\w)', status).group('state')
+					if pid_state in ('T', 'Z'):
+						return Status.NOT_RUNNING
+			else:
+				return Status.NOT_RUNNING
+		if self.socks:
+			try:
+				for sock in self.socks:
+					timeout = sock.timeout
+					sock.timeout = 1
+					try:
+						wait_sock(sock)
+					finally:
+						sock.timeout = timeout
+			except InitdError:
+				return Status.NOT_RUNNING
+		
+		return Status.RUNNING
 
 	def configtest(self):
 		"""
 		@raise InitdError:
 		"""
 		pass
+
+	def trans(self, enter=None, exit=None):
+		return self
+	
+	def __enter__(self):
+		return self
+	
+	def __exit__(self, *args):
+		return None
 
 class SockParam:
 	def __init__(self, port=None, family=socket.AF_INET, type=socket.SOCK_STREAM, conn_address=None, timeout=5):
@@ -106,6 +148,7 @@ class ParametrizedInitScript(InitScript):
 		self.pid_file = pid_file
 		self.lock_file = lock_file
 		self.socks = socks
+		self.local = local()
 		
 		'''
 		@param socks: list(SockParam)
@@ -154,43 +197,43 @@ class ParametrizedInitScript(InitScript):
 			raise InitdError('Service "%s" is not running' % self.name, InitdError.NOT_RUNNING)
 		return self._start_stop_reload('reload') 
 	
-	def status(self):
-		if self.pid_file:
-			if not os.path.exists(self.pid_file):
-				return Status.NOT_RUNNING
-			pid = read_file(self.pid_file).strip()
-			if os.path.isfile('/proc/%s/status' % pid):
-				try:
-					fp = open('/proc/%s/status' % pid)
-					status = fp.read()
-				except:
-					return Status.NOT_RUNNING
-				finally:
-					fp.close()
-					
-				if status:
-					pid_state = re.search('State:\s+(?P<state>\w)', status).group('state')
-					if pid_state in ('T', 'Z'):
-						return Status.NOT_RUNNING
-			else:
-				return Status.NOT_RUNNING
-		if self.socks:
-			try:
-				for sock in self.socks:
-					timeout = sock.timeout
-					sock.timeout = 1
-					try:
-						wait_sock(sock)
-					finally:
-						sock.timeout = timeout
-			except InitdError:
-				return Status.NOT_RUNNING
-		
-		return Status.RUNNING
-	
 	@property
 	def running(self):
 		return self.status() == Status.RUNNING
+	
+	def running_on_exit(self):
+		self.local.on_exit = Status.RUNNING
+		return self
+	
+	def running_on_enter(self):
+		self.local.on_enter = Status.RUNNING
+		return self
+	
+	def __enter__(self):
+		self._ctxmgr_ensure_status('on_enter')
+		return self
+
+	def __exit__(self, *args):
+		self._ctxmgr_ensure_status('on_exit')
+
+	def _ctxmgr_ensure_status(self, status_attr, reason_attr=None):
+		if hasattr(self.local, status_attr):
+			cur_status = self.status()
+			status = getattr(self.local, status_attr)
+			if status != cur_status:
+				if status == Status.RUNNING:
+					if cur_status == Status.NOT_RUNNING:
+						self.start()
+					else:
+						self.restart()
+				else:
+					self.stop(getattr(self.local, reason_attr))
+		
+			delattr(self.local, status_attr)
+			if reason_attr:
+				delattr(self.local, reason_attr)
+		
+		
 
 def explore(name, init_script_cls):
 	_services[name] = init_script_cls

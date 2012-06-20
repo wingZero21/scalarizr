@@ -15,6 +15,7 @@ import os
 import sys
 import logging
 import urlparse
+import threading
 import string
 
 from boto.s3.key import Key
@@ -52,7 +53,11 @@ class EbsVolumeProvider(VolumeProvider):
 	type = 'ebs'
 	vol_class = EbsVolume
 	snap_class = EbsSnapshot
-	all_letters = tuple(string.ascii_lowercase[5:16])
+
+	letters_lock = threading.Lock()
+	all_letters = set(string.ascii_lowercase[5:16])
+	acquired_letters = set()
+
 	snapshot_state_map = {
 		'pending' : Snapshot.CREATED,
 		'completed' : Snapshot.COMPLETED,
@@ -86,37 +91,48 @@ class EbsVolumeProvider(VolumeProvider):
 		conn = self._new_ec2_conn()
 		
 		if conn:
-			# Find free devname			
-			device = kwargs.get('device')
-			if device:
-				device = ebstool.get_ebs_devname(device)
 
-			used_letters = set(row['device'][-1] 
-						for row in Storage.volume_table() 
-						if row['state'] == 'attached' or ( \
-							pl.get_instance_type() == 't1.micro' and row['state'] == 'detached'
-						))
-			avail_letters = list(set(self.all_letters) - used_letters)			
-			
-			volumes = conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
-			for volume in volumes:
-				try:
-					avail_letters.remove(volume.attach_data.device[-1])
-				except ValueError:
-					pass
-			
-			if not device or not (device[-1] in avail_letters) or os.path.exists(device):
-				letter = firstmatched(lambda l: not os.path.exists('/dev/sd%s' % l), avail_letters)
-				if letter:
-					device = '/dev/sd%s' % letter
-				else:
-					raise StorageError('No free letters for block device name remains')
-			
+			def get_free_devname(device):
+				if device:
+					device = ebstool.get_ebs_devname(device)
+
+				used_letters = set(row['device'][-1]
+							for row in Storage.volume_table()
+							if row['state'] == 'attached' or ( \
+								pl.get_instance_type() == 't1.micro' and row['state'] == 'detached'
+							))
+
+				with self.letters_lock:
+
+					avail_letters = list(set(self.all_letters) - used_letters - self.acquired_letters)
+
+					volumes = conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
+
+					for volume in volumes:
+						try:
+							avail_letters.remove(volume.attach_data.device[-1])
+						except ValueError:
+							pass
+
+					if not device or not (device[-1] in avail_letters) or os.path.exists(device):
+						letter = firstmatched(
+							lambda l: not os.path.exists(ebstool.real_devname('/dev/sd%s' % l)), avail_letters
+						)
+						if letter:
+							device = '/dev/sd%s' % letter
+							self.acquired_letters.add(letter)
+						else:
+							raise StorageError('No free letters for block device name remains')
+
+				return device
+
 			self._logger.debug('storage._create kwds: %s', kwargs)
 			volume_id = kwargs.get('id')
-			# xxx: hotfix
+
+			# TODO: hotfix
 			if volume_id and volume_id.startswith('snap-'):
 				volume_id = None
+
 			snap_id = kwargs.get('snapshot_id')
 			ebs_vol = None
 			delete_snap = False
@@ -162,18 +178,26 @@ class EbsVolumeProvider(VolumeProvider):
 						wait_until(lambda: os.path.exists(device), sleep=1, timeout=300, 
 								error_text="Device %s wasn't available in a reasonable time" % device)						
 						volume_attached = True
-
 				
 				if not volume_attached:
-					self._logger.debug('Attaching EBS to this instance')
-					device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device, 
-						to_me=True, logger=self._logger)[1]
-				
+					device = kwargs.get('device')
+					device = get_free_devname(device)
+
+					try:
+						self._logger.debug('Attaching EBS to this instance')
+						device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device,
+							to_me=True, logger=self._logger)[1]
+
+					except:
+						if not os.path.exists(ebstool.real_devname(device)):
+							with self.letters_lock:
+								self.acquired_letters.remove(device[-1])
+
 			except:
 				self._logger.debug('Caught exception')
 				if ebs_vol:
 					self._logger.debug('Detaching EBS')
-					if (ebs_vol.update() and ebs_vol.attachment_state() != 'available'):
+					if ebs_vol.update() and ebs_vol.attachment_state() != 'available':
 						ebstool.detach_volume(conn, ebs_vol, force=True, logger=self._logger)
 							
 				raise StorageError, 'EBS volume construction failed: %s' % str(sys.exc_value), sys.exc_traceback

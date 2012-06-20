@@ -7,7 +7,9 @@ Created on Jul 21, 2010
 from scalarizr.util import system2, disttool, UtilError
 
 import os
+import logging
 
+LOG = logging.getLogger(__name__)
 
 P_TCP = "tcp"
 P_UDP = "udp"
@@ -154,7 +156,6 @@ class IpTables(object):
 		else:
 			return self.usable()
 
-
 	def _chkconfig(self):
 		'''
 		returns True if iptables is enabled on any runlevel
@@ -179,5 +180,36 @@ class IpTables(object):
 						if len(levels) == 7 and service=='iptables' and any(levels):
 							return True
 		return False
-				
-				
+		
+
+def _is_rule_not_exist(jump, port, protocol):
+        '''raise exception if current rule exist'''
+        jump, port, protocol = str(jump).strip(), str(port).strip(), str(protocol).strip()
+        for rule in IpTables().list_rules():
+                if port == rule[0].specs['--dport'] and protocol == rule[0].specs['-p'] \
+                                and jump == rule[0].specs['-j']:
+                        raise Exception('Rule `%s` already exist' % rule[0])
+
+
+def insert_rule_once(jump, port, protocol):
+        '''add rule in iptables if it not exist'''
+        _is_rule_not_exist(jump, port, protocol)
+        ipt = IpTables()
+        if ipt.usable() and protocol in PROTOCOLS:
+                rspec = RuleSpec(dport=port, jump=jump, protocol=protocol)
+                ipt.insert_rule(None, rule_spec=rspec)
+                LOG.debug('Rule `%s` added to iptables rules', rspec)
+        else:
+                raise Exception('protocol `%s` is not known. It must be one of `%s`' %
+                        (protocol,      PROTOCOLS) if ipt.usable() else 'IpTables is not usable')
+
+
+def remove_rule_once(jump, port, protocol):
+        '''remove rule from iptables'''
+        try:
+                _is_rule_not_exist(jump, port, protocol)
+                raise Exception('Rule for port=`%s`, protocol=`%s`, jump=`%s` '\
+                        'not exist. It can`t be removed.' % (port, protocol, jump))
+        except:
+                IpTables().delete_rule(rule_spec = RuleSpec(dport=port, jump=jump, protocol=protocol))
+		

@@ -15,6 +15,7 @@ from scalarizr.handlers import operation
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
+from scalarizr.util import iptables
 
 # Libs
 from scalarizr.util import cryptotool

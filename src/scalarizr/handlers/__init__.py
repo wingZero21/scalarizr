@@ -112,21 +112,22 @@ class operation(object):
 			})
 			srv.get_producer().send(Queues.LOG, msg)
 
-	def ok(self):
-		self._send_result('ok')
+	def ok(self, data=None):
+		self._send_result('ok', data=data)
 		self.finished = True
 	
 	def error(self, exc_info=None, handler=None):
 		self._send_result('error', error=self._format_error(exc_info, handler))
 		self.finished = True
 	
-	def _send_result(self, status, error=None):
+	def _send_result(self, status, error=None, data=None):
 		if bus.scalr_version >= (2, 6):
 			srv = bus.messaging_service
 			msg = srv.new_message(Messages.OPERATION_RESULT, None, {
 				'id': self.id,
 				'name': self.name,
-				'status': status
+				'status': status,
+				'data': data
 			})
 			if status == 'error':
 				msg.body.update({

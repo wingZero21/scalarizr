@@ -1017,6 +1017,7 @@ class BuiltinBehaviours:
 	POSTGRESQL = 'postgresql'
 	RABBITMQ = 'rabbitmq'
 	REDIS = 'redis'
+	HAPROXY = 'haproxy'
 	MONGODB = 'mongodb'
 	CHEF = 'chef'
 	

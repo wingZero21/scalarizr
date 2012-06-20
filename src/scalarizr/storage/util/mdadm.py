@@ -5,7 +5,7 @@ Created on Nov 11, 2010
 @author: marat
 '''
 
-from scalarizr.util import system2, firstmatched, filetool, PopenError
+from scalarizr.util import system2, wait_until, firstmatched, filetool, PopenError
 from scalarizr.util.filetool import read_file, write_file
 
 import logging
@@ -173,6 +173,7 @@ class Mdadm:
 		self.remove_disk(array, old)
 		self.add_disk(array, new, False)
 		self._wait(array)
+
 
 	def get_array_info(self, array):
 		ret = {}
