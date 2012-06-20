@@ -98,9 +98,9 @@ class EbsVolumeProvider(VolumeProvider):
 
 				used_letters = set(row['device'][-1]
 							for row in Storage.volume_table()
-							if row['state'] == 'attached' or ( \
-								pl.get_instance_type() == 't1.micro' and row['state'] == 'detached'
-							))
+							if row['device'] and ( \
+								row['state'] == 'attached' or ( \
+								pl.get_instance_type() == 't1.micro' and row['state'] == 'detached')))
 
 				with self.letters_lock:
 
