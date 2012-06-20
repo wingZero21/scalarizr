@@ -400,7 +400,7 @@ class RedisCLI(object):
 	class no_keyerror_dict(dict):
 		def __getitem__(self, key):
 			try:
-				dict.__getitem__(self, key)
+				return dict.__getitem__(self, key)
 			except KeyError:
 				return None
 	
