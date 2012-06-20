@@ -139,8 +139,7 @@ class StorageAPI(object):
 
 	@rpc.service_method
 	def status(self, volume_config):
-		vol_id = volume_config.get('id')
-		vol = storage_lib.Storage.get(vol_id)
+		vol = storage_lib.Storage.create(volume_config)
 		return vol.status()
 
 
