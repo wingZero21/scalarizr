@@ -7,14 +7,55 @@ Created on Jun 22, 2010
 from scalarizr.util import system2
 from scalarizr.util import disttool
 import os
+import shutil
 import pwd
 import math
 import logging
+import time
 
 try:
 	from collections import namedtuple
 except ImportError:
 	from scalarizr.externals.collections import namedtuple
+
+
+from threading import local
+
+
+
+class ConfigurationFile(object):
+
+	BACKUP_BASE_DIR = '/var/lib/scalarizr/backup'
+	
+	def __init__(self, path):
+		self.path = path
+		self.backup_dir = os.path.join(self.BACKUP_BASE_DIR, self.path[1:])
+		self.local = local()
+		
+	def __str__(self):
+		raise NotImplemented()
+
+	def __enter__(self):
+		self.local.last_trans_id = str(time.time())
+		if not os.path.exists(self.backup_dir):
+			os.makedirs(self.backup_dir)
+		shutil.copy(self.path, os.path.join(self.backup_dir, self.local.last_trans_id))
+		with open(self.path, 'w+') as fp:
+			fp.write(str(self))
+		return self
+
+	def __exit__(self, *args):
+		if args[0] and hasattr(self.local, 'last_trans_id'):
+			backup_path = os.path.join(self.backup_dir, self.local.last_trans_id)
+			shutil.copy(backup_path, self.path)
+
+	def trans(self, enter=None, exit=None):
+		#raise NotImplemented()
+		return self
+
+	def reload(self):
+		#raise NotImplemented()
+		pass
 
 BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
 PART_SUFFIX = '.part.'	

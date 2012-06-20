@@ -2,10 +2,9 @@
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.config import ScalarizrState
-from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
+from scalarizr.util import iptables
 import logging
 from scalarizr.util import disttool, system2
-
 
 def get_handlers ():
 	return [RackspaceLifeCycleHandler()]

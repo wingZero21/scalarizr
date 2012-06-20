@@ -212,6 +212,7 @@ class Lvm2:
 		if info:
 			return info
 		raise LookupError('Logical volume %s not found' % lvolume)
+
 	
 	def create_pv(self, device, uuid=None):
 		cmd = [PVCREATE]

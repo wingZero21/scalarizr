@@ -8,12 +8,12 @@ from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError
 from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr.util import wait_until, system2
+from scalarizr.config import ScalarizrState
 
 import time
 import sys
 
 from cloudservers.exceptions import CloudServersException, NotFound
-
 
 LOG = rebundle_hdlr.LOG
 
@@ -78,8 +78,9 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 					else:
 						raise
 
-			LOG.info('Checking that image %s is completed', image.id)
 			
+			LOG.info('Checking that image %s is completed', image.id)
+
 			start_time = time.time()
 			def completed(image_id):
 				try:
@@ -108,4 +109,3 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 		
 		return image.id
 
-			

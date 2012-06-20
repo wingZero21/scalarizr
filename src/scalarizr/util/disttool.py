@@ -70,6 +70,9 @@ def uname(): return _uname
 def linux_dist(): return _linux_dist
 def version_info(): return tuple(map(int, linux_dist()[1].split('.')))
 
+redhat = is_redhat_based() and version_info() or (0, 0)
+ubuntu = is_ubuntu() and version_info() or (0, 0)
+	
 
 def arch():
 	if re.search("^i\\d86$", _uname[4]):

@@ -7,11 +7,15 @@ Created on Nov 11, 2010
 from scalarizr.util import system2, PopenError
 
 import logging
+import threading
 import os
+import sys
 import re
 import uuid
 from scalarizr.libs.pubsub import Observable
 from functools import partial
+
+
 try:
 	import json
 except ImportError:
@@ -51,6 +55,8 @@ class Storage:
 	)
 	on, un, fire = _obs.on, _obs.un, _obs.fire
 
+	volumes = dict()
+
 	
 	@staticmethod
 	def volume_table():
@@ -65,7 +71,8 @@ class Storage:
 				cur.close()
 		else:
 			return ()
-	
+
+
 	@staticmethod
 	def lookup_filesystem(fstype):
 		self = Storage
@@ -78,11 +85,13 @@ class Storage:
 		except ImportError:
 			raise LookupError('Unknown filesystem %s' % fstype)
 
+
 	@staticmethod
 	def explore_filesystem(fstype, FileSystemClass):
 		self = Storage
 		self._fs_drivers[fstype] = FileSystemClass()	
-	
+
+
 	@staticmethod
 	def explore_provider(PvdClass, default_for_vol=False, default_for_snap=False):
 		self = Storage
@@ -92,7 +101,8 @@ class Storage:
 			self.default_vol_provider = type
 		if default_for_snap:
 			self.default_snap_provider = type
-	
+
+
 	@staticmethod
 	def lookup_provider(pvd_type=None, for_snap=False):
 		'''
@@ -115,6 +125,15 @@ class Storage:
 			self.providers[pvd_type] = pvd
 		return pvd
 
+
+	@staticmethod
+	def get(vol_id):
+		try:
+			return Storage.volumes[vol_id]
+		except KeyError:
+			raise StorageError('Unknown volume with id="%s"' % vol_id)
+
+
 	@staticmethod
 	def create(*args, **kwargs):
 		'''
@@ -131,6 +150,10 @@ class Storage:
 				kwargs = args[0]
 			else:
 				kwargs['device'] = args[0]
+
+		id = kwargs.get('id')
+		if id in self.volumes:
+			return self.volumes[id]
 				
 		if 'snapshot' in kwargs:
 			# Save original kwargs
@@ -150,12 +173,35 @@ class Storage:
 			
 		if 'disks' in kwargs:
 			disks = []
-			for item in kwargs['disks']:
+			errors = []
+			threads = []
+
+			def _create(self, i, item):
+				try:
+					disk = self.create(**item) if isinstance(item, dict) else self.create(item)
+					disks.append((i, disk))
+				except:
+					e = sys.exc_info()[0]
+					errors.append(e)
+
+			for i, item in enumerate(kwargs['disks']):
 				if isinstance (item, Volume):
-					disks.append(item)
+					disks.append((i,item))
 					continue
-				disk = self.create(**item) if isinstance(item, dict) else self.create(item)
-				disks.append(disk)
+
+				t = threading.Thread(target=_create, args=(self, i, item))
+				t.start()
+				threads.append(t)
+
+			for t in threads:
+				t.join()
+
+			if errors:
+				raise StorageError('Failed to attach disks:\n%s' % '\n'.join([str(e) for e in errors]))
+
+			disks.sort(lambda x,y: cmp(x[0], y[0]))
+			disks = [disk for i, disk in disks]
+
 			kwargs['disks'] = disks
 			
 		if 'disk' in kwargs:
@@ -170,6 +216,8 @@ class Storage:
 		vol = getattr(pvd, 'create_from_snapshot' if from_snap else 'create').__call__(**kwargs)
 		if attaching:
 			Storage.fire('attach', vol)
+
+		self.volumes[vol.id] = vol
 		return vol
 
 
@@ -180,13 +228,18 @@ class Storage:
 		ret = pvd.detach(vol, force)
 		vol.detached = True
 		return ret
-	
+
+
 	@staticmethod
 	def destroy(vol, force=False, **kwargs):
+		id = vol.id
 		Storage.fire('destroy', vol)		
 		pvd = Storage.lookup_provider(vol.type)
 		pvd.destroy(vol, force, **kwargs)
-		
+		if id in Storage.volumes:
+			del Storage.volumes[id]
+
+
 	@staticmethod
 	def backup_config(cnf, filename):
 		logger.debug('Backuping volume config {id: %s, type: %s ...} into %s', 
@@ -196,7 +249,8 @@ class Storage:
 			fp.write(json.dumps(cnf, indent=4))
 		finally:
 			fp.close()
-	
+
+
 	@staticmethod
 	def restore_config(filename):
 		fp = open(filename, 'r')
@@ -242,8 +296,9 @@ class VolumeConfig(object):
 	device = None
 	mpoint = None
 	fstype = None
+	fs_created = None
 	_id_format = '%s-%s'
-	_id = None	
+	_id = None
 	_ignores = ()
 	
 	def _id_setter(self, id):
@@ -291,14 +346,18 @@ def devname_not_empty(f):
 
 
 
-class Volume(VolumeConfig):
+class Volume(VolumeConfig, Observable):
 	detached = False
+	lock = None
+	_non_blocking_methods = ['status']
 	
 	_logger = None
 	_fs = None
 	_id_format = '%s-vol-%s'
 
 	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
+		super(Volume, self).__init__()
+		self.lock = threading.RLock()
 		self._logger = logging.getLogger(__name__)
 
 		if not device:
@@ -318,19 +377,50 @@ class Volume(VolumeConfig):
 			if hasattr(self, k):
 				setattr(self, k, v)
 
+		self.define_events(
+			'before_detach', 'after_detach', 'detach_failed',
+			'before_snapshot', 'after_snapshot', 'snapshot_failed',
+			'before_mkfs', 'after_mkfs', 'mkfs_failed',
+			'before_mount', 'after_mount', 'mount_failed',
+			'before_umount', 'after_umount', 'umount_failed'
+		)
+
+
+	def __getattribute__(self, item):
+		attr = super(Volume, self).__getattribute__(item)
+		non_blocking = super(Volume, self).__getattribute__('_non_blocking_methods')
+		if item in non_blocking:
+			return attr
+
+		if getattr(attr, 'im_self', None) is not None:
+			def with_lock(*args, **kwargs):
+				with self.lock:
+					return attr(*args, **kwargs)
+
+			return with_lock
+		else:
+			return attr
+
 	@property	
 	def devname(self):
 		return self.device
 
+
 	def _fstype_setter(self, fstype):
 		self._fs = Storage.lookup_filesystem(fstype)
+
 
 	def _fstype_getter(self):
 		return self._fs.name if self._fs else None
 
+
 	fstype = property(_fstype_getter, _fstype_setter)
 
+
 	def mkfs(self, fstype=None):
+		if self.fs_created:
+			return
+
 		fstype = fstype or self.fstype or 'ext3'
 		if not fstype:
 			raise ValueError('Filesystem cannot be None')
@@ -338,55 +428,90 @@ class Volume(VolumeConfig):
 		logger.info('Creating filesystem on %s', self.device)
 		fs.mkfs(self.devname)
 		self.fstype = fstype
+		self.fs_created = True
 		self._fs = fs
+
 	
 	@_fs_should_be_set
 	def resize(self, size=None, **fsargs):
 		fsargs = fsargs or dict()
 		return self._fs.resize(self.devname, **fsargs)
+
 	
 	@_fs_should_be_set
 	def _get_label(self):
 		return self._fs.get_label(self.devname)
+
 	
 	@_fs_should_be_set
 	def _set_label(self, lbl):
 		self._fs.set_label(self.devname, lbl)
+
 		
 	label = property(_get_label, _set_label)
+
 	
 	@_fs_should_be_set
 	def freeze(self):
 		return self._fs.freeze(self.devname)
+
 	
 	@_fs_should_be_set
 	def unfreeze(self):
 		return self._fs.unfreeze(self.devname)
+
 	
 	def mounted(self):
 		res = re.search('%s\s+on\s+(?P<mpoint>.+)\s+type' % self.devname, system(MOUNT_EXEC)[0])
 		return bool(res)
+
 	
 	def mount(self, mpoint=None):
+		self.fire('before_mount')
 		mpoint = mpoint or self.mpoint
 		cmd = (MOUNT_EXEC, self.devname, mpoint)
-		system(cmd, error_text='Cannot mount device %s' % self.devname)
+		try:
+			system(cmd, error_text='Cannot mount device %s' % self.devname)
+		except StorageError, e:
+			try:
+				if 'you must specify the filesystem type' in str(e):
+					if self.fs_created is True:
+						raise
+
+					self.mkfs()
+					system(cmd, error_text='Cannot mount device %s' % self.devname)
+				else:
+					raise
+			except:
+				self.fire('mount_failed')
+				raise
+
+		self.fs_created = True
 		self.mpoint = mpoint
-	
+		self.fire('after_mount')
+
+
 	def umount(self, lazy=False):
+		self.fire('before_umount')
 		cmd = (UMOUNT_EXEC, '-l' if lazy else '-f' , self.devname)
 		try:
 			system(cmd, error_text='Cannot umount device %s' % self.devname)
 		except (Exception, BaseException), e:
 			if not 'not mounted' in str(e):
+				self.fire('umount_failed')
 				raise
+		else:
+			self.fire('after_umount')
+
 	
 	def snapshot(self, description=None, **kwargs):
+		self.fire('before_snapshot')
+		snapshot_failed = False
 		# Freeze filesystem
 		if self._fs:
 			system(SYNC_EXEC)
 			self.freeze()
-			
+
 		try:
 			# Create snapshot
 			pvd = Storage.lookup_provider(self.type)
@@ -394,25 +519,39 @@ class Volume(VolumeConfig):
 			del conf['id']
 			snap = pvd.snapshot_factory(description, **conf)		
 			return pvd.create_snapshot(self, snap, **kwargs)
+		except:
+			snapshot_failed = True
 		finally:
-			# Unfreeze filesystem
-			if self._fs:
-				self.unfreeze()
+			try:
+				# Unfreeze filesystem
+				if self._fs:
+					self.unfreeze()
+			finally:
+				event = 'snapshot_failed' if snapshot_failed else 'after_snapshot'
+				self.fire(event)
+
 
 	def detach(self, force=False):
+		self.fire('before_detach')
 		was_mounted = self.mounted()
 		if was_mounted:
 			self.umount()
 		try:
-			return Storage.detach(self, force)
+			ret = Storage.detach(self, force)
 		except BaseException, e:
+			self.fire('detach_failed')
 			self._logger.error('Storage detach failed with error %s' % e)
 			if was_mounted:
 				self.mount()
 			raise
+		else:
+			self.fire('after_detach')
+			return ret
+
 	
 	def destroy(self, force=False, **kwargs):
 		Storage.destroy(self, force, **kwargs)
+
 
 	def __str__(self):
 		fmt = '[volume:%s] %s\n' + '%-10s : %s\n'*3
@@ -422,6 +561,11 @@ class Volume(VolumeConfig):
 			'mpoint', self.mpoint or '',
 			'fstype', self.fstype or ''
 		)
+
+
+	def status(self):
+		pvd = Storage.lookup_provider(self.type)
+		return pvd.status(self)
 		
 		
 class Snapshot(VolumeConfig):
