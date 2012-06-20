@@ -1,5 +1,3 @@
-import gevent.monkey
-gevent.monkey.patch_all()
 
 import sys
 import cStringIO
@@ -43,6 +41,7 @@ from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 import pprint
+import wsgiref.simple_server
 from scalarizr.util import sqlite_server, wait_until
 
 class ScalarizrError(BaseException):
@@ -137,11 +136,10 @@ _logging_configured = False
 
 _api_routes = {
 	'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
-	'sysinfo': 'scalarizr.api.sysinfo.SysinfoAPI'
+	'sysinfo': 'scalarizr.api.sysinfo.SysInfoAPI',
+	'storage': 'scalarizr.api.storage.StorageAPI'
 }
-'''
-Before start API server, for object jsonrpc_zmq.ZmqServer with handlers routes  
-'''
+
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -165,7 +163,7 @@ def _init():
 	optparser = bus.optparser
 	bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
 	
-	dynimp.setup()
+	#dynimp.setup()
 	
 	_init_logging()
 	logger = logging.getLogger(__name__)	
@@ -329,7 +327,7 @@ def _init_services():
 	if not bus.api_server:
 		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
 											cnf.key_path(cnf.DEFAULT_KEY))
-		bus.api_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 8011), api_app)
+		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', 8011, api_app)
 
 
 def _start_services():
@@ -348,9 +346,9 @@ def _start_services():
 	
 	# Start API server
 	api_server = bus.api_server
-	logger.info('Starting API server on http://%s:%s', 
-			api_server.hostname, api_server.port)
-	api_server.serve_forever()
+	logger.info('Starting API server on http://0.0.0.0:8011')
+	api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
+	api_thread.start()
 	
 	# Start periodical executor
 	ex = bus.periodical_executor
@@ -774,16 +772,9 @@ def main():
 			upd = ScalrUpdClientScript()
 			if not upd.running:
 				try:
-                                        upd.start()
-                                except:
+					upd.start()
+				except:
 					logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
-
-			if not bus.api_server:
-				bus.api_server = jsonrpc_zmq.ZmqServer('tcp://*:8011', _routes)
-			# Start API server
-			logger.info('Start API server')
-			api_server = bus.api_server
-			api_server.start()
 
 		
 		# Check Scalr version

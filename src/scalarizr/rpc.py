@@ -13,14 +13,14 @@ import urllib2
 import urlparse
 import struct
 import socket
-try:
-	from gevent.local import local
-except ImportError:
-	from threading import local
-import traceback
+from threading import local
+import logging
 
 
 from scalarizr import util
+
+
+LOG = logging.getLogger(__name__)
 
 def service_method(fn):
 	fn._jsonrpc = True
@@ -89,18 +89,19 @@ class RequestHandler(object):
 			self.services = services
 		
 	def handle_error(self):
-		traceback.print_exc()
+		LOG.exception('Caught exception')
 		
 	def handle_request(self, data, namespace=None):
 		id, result, error = '', None, None
 		try:
-			req = self._parse_request(data)
+			req = self._parse_request(data) if isinstance(data, basestring) else data 
 			id, method, params = self._translate_request(req)
 			svs = self._find_service(namespace)
 			fn = self._find_method(svs, method)
 			result = self._invoke_method(fn, params)
 			# important to test json serializarion before serialize the whole result
-			json.dumps(result) 
+			json.dumps(result)
+
 		except ServiceError, e:
 			error = {'code': e.code, 
 					'message': e.message, 

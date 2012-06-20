@@ -47,7 +47,7 @@ class LoopVolumeProvider(VolumeProvider):
 		size = kwargs.get('size')
 		file = kwargs.get('file')
 		device = kwargs.get('device')
-		
+
 		if not (device and file and listloop().get(device) == file):
 			# Construct volume
 			if (not size and (not file or not os.path.exists(file))):
@@ -78,7 +78,11 @@ class LoopVolumeProvider(VolumeProvider):
 						raise StorageError('Incorrect size format: %s' % size)
 			
 			kwargs['file']	= file
-			kwargs['device'] = mkloop(file, device=device, size=size, quick=not kwargs.get('zerofill'))
+			existed = filter(lambda x: x[1] == file, listloop().iteritems())
+			if existed:
+				kwargs['device'] = existed[0][0]
+			else:
+				kwargs['device'] = mkloop(file, device=device, size=size, quick=not kwargs.get('zerofill'))
 			
 		return super(LoopVolumeProvider, self).create(**kwargs)
 
