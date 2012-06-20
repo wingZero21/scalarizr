@@ -54,7 +54,7 @@ class LoopVolumeProvider(VolumeProvider):
 				raise StorageError('You must specify size of new loop device or existing file.')
 			
 			if not file:
-				file = '/mnt/loopdev' + time.strftime('%Y%m%d%H%M%S')
+				file = '/mnt/loopdev' + str(time.time())
 			if not os.path.exists(file):			
 				try:
 					size = int(size)
