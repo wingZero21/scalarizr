@@ -71,12 +71,13 @@ class StorageAPI(object):
 				with op.phase(txt):
 					with op.step(txt):
 						vol.detach()
-				op.ok()
+				op.ok(data=vol.config())
 			threading.Thread(target=block).start()
 			return op.id
 			
 		else:
 			vol.detach()
+			return vol.config()
 
 
 	@rpc.service_method
