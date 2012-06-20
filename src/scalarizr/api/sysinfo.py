@@ -235,7 +235,7 @@ class SysInfoAPI(object):
 		#http://www.kernel.org/doc/Documentation/iostats.txt
 
 		lines = self._readlines(self._DISKSTATS)
-		devicelist = []
+		devicelist = {}
 		for value in lines:
 			params = value.split()[2:]
 			device = params[0]
@@ -250,7 +250,7 @@ class SysInfoAPI(object):
 			else:
 				raise Exception, 'number of column in %s is unexpected. Count of column =\
 					 %s' % (self._DISKSTATS, len(params)+2)
-			devicelist.append({'device': device, 'write': write, 'read': read})
+			devicelist[device] = {'write': write, 'read': read}
 		return devicelist
 
 
