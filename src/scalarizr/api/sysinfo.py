@@ -218,19 +218,20 @@ class SysInfoAPI(object):
 	def disk_stats(self):
 		'''
 		Disks I/O statistics
-		@rtype: [{
-			<device>: Linux device name
-			<read>: {
-				<num>: total number of reads completed successfully
-				<sectors>: total number of sectors read successfully
-				<bytes>: total number of bytes read successfully
-			}
-			<write>: {
-				<num>: total number of writes completed successfully
-				<sectors>: total number of sectors written successfully
-				<bytes>: total number of bytes written successfully
-			}
-		}, ...]
+		@rtype: {
+			<device>: {
+				<read>: {
+					<num>: total number of reads completed successfully
+					<sectors>: total number of sectors read successfully
+					<bytes>: total number of bytes read successfully
+				}
+				<write>: {
+					<num>: total number of writes completed successfully
+					<sectors>: total number of sectors written successfully
+					<bytes>: total number of bytes written successfully
+				},
+			...
+		}
 		'''
 		#http://www.kernel.org/doc/Documentation/iostats.txt
 
@@ -258,31 +259,34 @@ class SysInfoAPI(object):
 	def net_stats(self):
 		'''
 		Network I/O statistics
-		@rtype: [{
-			<iface>: Network interface name
-			<receive>: {
-				<bytes>: total received bytes
-				<packets>: total received packets
-				<errors>: total receive errors
-			}
-			<transmit>: {
-				<bytes>: total transmitted bytes
-				<packets>: total transmitted packets
-				<errors>: total transmit errors
-			}
-		}, ...]
+		@rtype: {
+			<iface>: {
+				<receive>: {
+					<bytes>: total received bytes
+					<packets>: total received packets
+					<errors>: total receive errors
+				}
+				<transmit>: {
+					<bytes>: total transmitted bytes
+					<packets>: total transmitted packets
+					<errors>: total transmit errors
+				}
+			},
+			...
+		}
 		'''
 
 		lines = self._readlines(self._NETSTATS)
-		res = []
+		res = {}
 		for row in lines:
 			if ':' not in row:
 				continue
 			row = row.split(':')
 			iface = row.pop(0).strip()
 			columns = map(lambda x: x.strip(), row[0].split())
-			res.append({'iface': iface,
+			res[iface] = {
 				'receive': {'bytes': columns[0], 'packets': columns[1], 'errors': columns[2]},
 				'transmit': {'bytes': columns[8], 'packets': columns[9], 'errors': columns[10]},
-				})
+			}
+
 		return res
