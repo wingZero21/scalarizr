@@ -33,7 +33,7 @@ class RackspaceLifeCycleHandler(Handler):
 				
 	def _insert_iptables_rules(self):
 		self._logger.debug('Adding iptables rules for scalarizr ports')		
-		firewall = IpTables()
+		firewall = iptables.IpTables()
 		if firewall.enabled():
 			rules = []
 			
