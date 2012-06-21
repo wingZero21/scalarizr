@@ -8,7 +8,10 @@ JSON-RPC implementation and utilities for 0MQ and HTTP transport
 
 import sys
 import time
-import json
+try:
+	import json
+except ImportError:
+	import simplejson as json 
 import urllib2
 import urlparse
 import struct
