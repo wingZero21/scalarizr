@@ -13,6 +13,7 @@ import random
 import pwd
 import threading
 import time
+import shutil
 
 from pymysql import cursors
 
@@ -55,6 +56,11 @@ class MySQL(BaseService):
 	def __init__(self):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
+		if not os.path.exists(MYCNF_PATH):
+			if disttool.is_centos() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
+				shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF_PATH)
+			else:
+				open(MYCNF_PATH, 'w').close()
 
 	
 	def _init_replication(self, master=True):
