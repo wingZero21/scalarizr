@@ -60,7 +60,9 @@ class MySQL(BaseService):
 			if disttool.is_centos() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
 				shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF_PATH)
 			else:
-				open(MYCNF_PATH, 'w').close()
+				fp = open(MYCNF_PATH, 'w')
+				fp.write('[mysqld]')
+				fp.close()
 
 	
 	def _init_replication(self, master=True):
