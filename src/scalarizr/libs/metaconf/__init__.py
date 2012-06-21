@@ -393,7 +393,7 @@ class Configuration:
 		'''
 		nodes = self._find_all(self._normalize_path(path))
 		return tuple(node.tag for node in nodes 
-				if self._is_element(node) and len(node))
+				if self._is_element(node) and (len(node) or node.attrib.get('mc_type') == 'section'))
 		
 	def options(self, path):
 		'''
@@ -401,7 +401,7 @@ class Configuration:
 		'''
 		nodes = self._find_all(self._normalize_path(path))
 		return tuple(node.tag for node in nodes 
-				if self._is_element(node) and not len(node))
+				if self._is_element(node) and not (len(node) or node.attrib.get('mc_type') == 'section'))
 				
 	def set(self, path, value, force=False):
 		if not self.etree:
