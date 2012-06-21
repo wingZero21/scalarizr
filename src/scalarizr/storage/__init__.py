@@ -405,7 +405,7 @@ class Volume(VolumeConfig, Observable):
 		if item in non_blocking:
 			return attr
 
-		if getattr(attr, 'im_self', None) is not None:
+		if getattr(attr, 'im_self', None) is self:
 			def with_lock(*args, **kwargs):
 				with self.lock:
 					return attr(*args, **kwargs)
