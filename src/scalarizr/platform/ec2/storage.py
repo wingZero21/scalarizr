@@ -4,6 +4,7 @@ Created on Nov 24, 2010
 @author: marat
 @author: Dmytro Korsakov
 '''
+from __future__ import with_statement
 
 from scalarizr.bus import bus
 from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, devname_not_empty, \

@@ -3,6 +3,8 @@ Created on Nov 11, 2010
 
 @author: marat
 '''
+from __future__ import with_statement
+
 
 from scalarizr.util import system2, PopenError
 

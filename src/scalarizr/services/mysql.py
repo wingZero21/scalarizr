@@ -3,6 +3,8 @@ Created on Nov 8, 2011
 
 @author: dmitry
 '''
+from __future__ import with_statement
+
 import os
 import logging
 import re

@@ -6,6 +6,7 @@ Public Scalarizr API
 - Simple to Learn
 - Simple to Use
 '''
+from __future__ import with_statement
 
 import os
 import binascii

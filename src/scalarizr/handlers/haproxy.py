@@ -1,4 +1,4 @@
-
+from __future__ import with_statement
 
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler, HandlerError
