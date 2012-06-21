@@ -1300,7 +1300,7 @@ class MysqlHandler(ServiceCtlHandler):
 					except NoPathError:
 						""" There is no datadir in config """
 						datadir = DEFAULT_DATADIR
-						if not 'mysqld' in self._mysql_config.options('./'):
+						if not 'mysqld' in self._mysql_config.sections('./'):
 							self._mysql_config.add('mysqld', '')
 						self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
 					if not storage_valid and datadir.find(self._data_dir) == 0:
