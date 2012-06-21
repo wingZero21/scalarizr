@@ -120,7 +120,10 @@ class StorageAPI(object):
 					# Disk was created during replacement. Deleting
 					new_drive.destroy()
 			else:
-				target.destroy()
+				try:
+					target.destroy()
+				except:
+					pass
 				return raid.config()
 
 		if async:

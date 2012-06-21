@@ -54,10 +54,10 @@ class LoopVolumeProvider(VolumeProvider):
 				raise StorageError('You must specify size of new loop device or existing file.')
 			
 			if not file:
-				file = '/mnt/loopdev%s' % time.time()
+				file = '/mnt/loopdev%s' % repr(time.time())
 			if not os.path.exists(file):			
 				try:
-					size = int(size) * 1024
+					size = int(float(size) * 1024)
 				except ValueError:
 					if isinstance(size, basestring) and '%root' in size.lower():
 						# Getting size in percents
@@ -105,7 +105,7 @@ class LoopVolumeProvider(VolumeProvider):
 		shutil.copy(vol.file, backup_filename)
 		snap.file = backup_filename
 		return snap
-	
+
 	def detach(self, vol, force=False):
 		super(LoopVolumeProvider, self).detach(vol, force)
 		rmloop(vol.devname)

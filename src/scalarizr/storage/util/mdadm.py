@@ -179,6 +179,14 @@ class Mdadm:
 		ret = {}
 		details = self._get_array_details(array)
 
+		disk_stats = re.findall('([a-zA-Z\s]+/dev/[\w]+)\n', details)
+		ret['devices'] = {}
+		for stat in disk_stats:
+			status, devname = stat.rsplit(None, 1)
+			status = status.strip()
+			ret['devices'][devname] = status
+
+
 		ret['raid_devices']   = int(re.search(self._raid_devices_re, details).group('count'))
 		ret['total_devices']  = int(re.search(self._total_devices_re, details).group('count'))
 		ret['state']		  = re.search(self._state_re, details).group('state')

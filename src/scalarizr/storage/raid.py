@@ -132,6 +132,7 @@ class RaidVolumeProvider(VolumeProvider):
 
 
 	def _create_pv(self, device, uuid=None):
+		self._lvm.pv_scan()
 		try:
 			self._lvm.pv_info(device)
 		except LookupError:
@@ -332,6 +333,7 @@ class RaidVolumeProvider(VolumeProvider):
 			finally:
 				raise StorageError, str(e), t
 		else:
+			# Delete failed device
 			index = raid_vol.disks.index(old)
 			raid_vol.disks[index] = new
 
