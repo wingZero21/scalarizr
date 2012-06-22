@@ -111,15 +111,17 @@ class StorageAPI(object):
 			target = filter(lambda x: x.device == target_disk_device, raid.disks)
 			if not target:
 				raise Exception("Can't find failed disk in array")
+
 			target = target[0]
 			new_drive = storage_lib.Storage.create(**replacement_disk_config)
-	
+
 			try:
 				raid.replace_disk(target, new_drive)
 			except:
 				if not replacement_disk_config.get('id'):
 					# Disk was created during replacement. Deleting
 					new_drive.destroy()
+				raise
 			else:
 				try:
 					target.destroy()
@@ -138,7 +140,6 @@ class StorageAPI(object):
 				op.ok(data=raid_config)
 			threading.Thread(target=block).start()
 			return op.id
-
 		else:
 			return replace_disk_block()
 
