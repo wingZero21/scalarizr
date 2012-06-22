@@ -16,15 +16,15 @@ from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
 
+
 # Libs
 from scalarizr.util import cryptotool
 from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
 
 # Stdlibs
-import logging, os, sys, threading, string
+import logging, os, sys, threading
 from scalarizr.config import STATE
 import time
-from scalarizr.util import disttool
 
 
 _lifecycle = None

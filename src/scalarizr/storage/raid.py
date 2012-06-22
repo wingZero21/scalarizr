@@ -18,7 +18,6 @@ from . import VolumeConfig, Volume, Snapshot, VolumeProvider, Storage, \
 from .util.mdadm import Mdadm
 from .util.lvm2 import Lvm2, lvm_group_b64
 
-from scalarizr.libs.pubsub import Observable
 from scalarizr.util import wait_until
 from scalarizr.util.filetool import write_file
 
@@ -45,25 +44,45 @@ class RaidConfig(VolumeConfig):
 		return cnf
 
 
+
 class RaidVolume(Volume, RaidConfig):
 
 	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
 		super(RaidVolume, self).__init__(device, mpoint, fstype, type, *args, **kwargs)
-		self._events = Observable()
-		self._events.define_events('active', 'inactive')
+		self.define_events(
+			'before_replace_disk', 'after_replace_disk', 'replace_disk_failed',
+			'before_add_disk', 'after_add_disk', 'add_disk_failed'
+		)
 
-	def on(self, *args, **kwargs):
-		self._events.on(*args, **kwargs)
 
-	def un(self, event, listener):
-		self._events.un(event, listener)
+	def replace_disk(self, old, new):
+		self.fire('before_replace_disk')
+		try:
+			pvd = Storage.lookup_provider(self.type)
+			pvd.replace_disk(self, old, new)
+		except:
+			self.fire('replace_disk_failed')
+			raise
+		else:
+			self.fire('after_replace_disk')
 
-	def fire(self, event, *args, **kwargs):
-		self._events.fire(event, *args, **kwargs)
+
+	def add_disks(self, disks):
+		self.fire('before_add_disk')
+		try:
+			pvd = Storage.lookup_provider(self.type)
+			pvd.add_disks(self, disks)
+		except:
+			self.fire('add_disk_failed')
+			raise
+		else:
+			self.fire('after_add_disk')
+
 
 	
 class RaidSnapshot(Snapshot, RaidConfig):
 	pass
+
 
 
 class RaidVolumeProvider(VolumeProvider):
@@ -77,19 +96,19 @@ class RaidVolumeProvider(VolumeProvider):
 		self._lvm = Lvm2()
 		self._logger = logging.getLogger(__name__)
 		self._lvm_backup_filename = '/tmp/lvm_backup'
-
-
+		
+	
 	def create(self, **kwargs):
 		'''
 		@param disks: Raid disks
 		@type disks: list(Volume)
-
+		
 		@param level: Raid level 0, 1, 5, 10 - are valid values
 		@type level: int
-
+		
 		@param vg: Volume group over RAID PV
 		@type vg: str|dict
-
+		
 		'''
 
 		if kwargs.get('lvm_group_cfg'):
@@ -113,6 +132,7 @@ class RaidVolumeProvider(VolumeProvider):
 
 
 	def _create_pv(self, device, uuid=None):
+		self._lvm.pv_scan()
 		try:
 			self._lvm.pv_info(device)
 		except LookupError:
@@ -180,7 +200,7 @@ class RaidVolumeProvider(VolumeProvider):
 							pv_uuid = pv_info.uuid,
 							lvm_group_cfg = kwargs['lvm_group_cfg'])
 
-
+	
 	@devname_not_empty
 	def create_snapshot(self, vol, snap, **kwargs):
 
@@ -259,8 +279,8 @@ class RaidVolumeProvider(VolumeProvider):
 
 	def destroy(self, vol, force=False, **kwargs):
 		super(RaidVolumeProvider, self).destroy(vol, force, **kwargs)
-
-		remove_disks=kwargs.get('remove_disks')
+		
+		remove_disks=kwargs.get('remove_disks') 
 		if not vol.detached:
 			self._remove_lvm(vol, force)
 			# Check if sleeping is necessary
@@ -273,11 +293,11 @@ class RaidVolumeProvider(VolumeProvider):
 
 
 
-	@devname_not_empty
+	@devname_not_empty			
 	def detach(self, vol, force=False):
 		self._logger.debug('Detaching volume %s' % vol.devname)
 		super(RaidVolumeProvider, self).detach(vol, force)
-		pv_uuid = self._lvm.pv_info(vol.raid_pv).uuid
+		pv_uuid = system(('pvs', '-o', 'pv_uuid', vol.raid_pv))[0].splitlines()[1].strip()
 
 		vol.lvm_group_cfg = lvm_group_b64(vol.vg)
 		self._remove_lvm(vol)
@@ -296,4 +316,41 @@ class RaidVolumeProvider(VolumeProvider):
 		self._lvm.remove_pv(vol.raid_pv)
 		vol.device = None
 
+
+	def replace_disk(self, raid_vol, old, new):
+		try:
+			self._mdadm.replace_disk(raid_vol.raid_pv, old.device, new.device)
+		except:
+			e, t = sys.exc_info()[1:]
+			try:
+				array_devices = self._mdadm.get_array_devices(raid_vol.raid_pv)
+				if new.device in array_devices:
+					self.remove_disks(raid_vol, new)
+				if not old.device in array_devices:
+					self.add_disks(raid_vol, old)
+			except:
+				pass
+			finally:
+				raise StorageError, str(e), t
+		else:
+			# Delete failed device
+			index = raid_vol.disks.index(old)
+			raid_vol.disks[index] = new
+
+
+	def add_disks(self, raid_vol, *disks):
+		for disk in disks:
+			self._mdadm.add_disk(raid_vol.raid_pv, disk.device)
+
+
+	def remove_disks(self, raid_vol, *disks):
+		for disk in disks:
+			self._mdadm.remove_disk(raid_vol.raid_pv, disk.device)
+
+
+	def status(self, raid_vol):
+		return self._mdadm.get_array_info(raid_vol.raid_pv)
+
+
+	
 Storage.explore_provider(RaidVolumeProvider)

@@ -2,10 +2,9 @@
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.config import ScalarizrState
-from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
+from scalarizr.util import iptables
 import logging
-from scalarizr.util import disttool, system2
-
+from scalarizr.util import disttool
 
 def get_handlers ():
 	return [RackspaceLifeCycleHandler()]
@@ -34,22 +33,22 @@ class RackspaceLifeCycleHandler(Handler):
 				
 	def _insert_iptables_rules(self):
 		self._logger.debug('Adding iptables rules for scalarizr ports')		
-		iptables = IpTables()
-		if iptables.enabled():		
+		firewall = iptables.IpTables()
+		if firewall.enabled():
 			rules = []
 			
 			# Scalarizr ports
-			rules.append(RuleSpec(dport=8008, jump='ACCEPT', protocol=P_TCP))
-			rules.append(RuleSpec(dport=8012, jump='ACCEPT', protocol=P_TCP))
-			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
-			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
+			rules.append(iptables.RuleSpec(dport=8008, jump='ACCEPT', protocol=iptables.P_TCP))
+			rules.append(iptables.RuleSpec(dport=8012, jump='ACCEPT', protocol=iptables.P_TCP))
+			rules.append(iptables.RuleSpec(dport=8013, jump='ACCEPT', protocol=iptables.P_TCP))
+			rules.append(iptables.RuleSpec(dport=8014, jump='ACCEPT', protocol=iptables.P_UDP))
 			
 			for rule in rules:
-				iptables.insert_rule(None, rule_spec = rule)
+				firewall.insert_rule(None, rule_spec = rule)
 				
 			if disttool.is_redhat_based():
 				for rule in rules:
 					try:
-						iptables.insert_rule(None, rule_spec = rule, chain='RH-Firewall-1-INPUT')
+						firewall.insert_rule(None, rule_spec = rule, chain='RH-Firewall-1-INPUT')
 					except:
 						pass

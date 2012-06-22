@@ -108,7 +108,6 @@ class QueryEnvService(object):
 		if None != with_init:
 			parameters["showInitServers"] = "1"
 			
-			
 		return self._request("list-roles", parameters, self._read_list_roles_response)
 	
 	def list_role_params(self, name=None):
@@ -204,6 +203,7 @@ class QueryEnvService(object):
 			role.behaviour = role_el.getAttribute("behaviour").split(',')
 			if role.behaviour == ('base',) or role.behaviour == ('',):
 				role.behaviour = ()
+			role.farm_role_id = role_el.getAttribute("id")
 			role.name = role_el.getAttribute("name")
 			for host_el in role_el.firstChild.childNodes:
 				host = RoleHost()
@@ -431,20 +431,23 @@ class Role(object):
 	behaviour = None
 	name = None
 	hosts = None
+	farm_role_id = None
 	
-	def __init__(self, behaviour=None, name=None, hosts=None):
+	def __init__(self, behaviour=None, name=None, hosts=None, farm_role_id=None):
 		self.behaviour = behaviour
 		self.name = name
 		self.hosts = hosts or []
-	
+		self.farm_role_id = farm_role_id
+
 	def __str__(self):
-		opts = (self.name, self.behaviour, len(self.hosts))
-		return "qe:Role(name: %s, behaviour: %s, num_hosts: %s)" % opts
+		opts = (self.name, self.behaviour, len(self.hosts), self.farm_role_id)
+		return "qe:Role(name: %s, behaviour: %s, num_hosts: %s, farm_role_id: %s)" % opts
 	
 	def __repr__(self):
 		return 'behaviour = ' + str(self.behaviour) \
 	+ "; name = " + str(self.name) \
-	+ "; hosts = " + str(self.hosts) + ";"
+	+ "; hosts = " + str(self.hosts) \
+	+ "; farm_role_id = " + str(self.farm_role_id) + ";"
 
 class RoleHost(object):
 	index = None

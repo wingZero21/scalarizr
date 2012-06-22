@@ -68,13 +68,15 @@ class IniFormatProvider(FormatProvider):
 			self._cursect.attrib['mc_type'] = 'section'
 			return True
 		return False
-	
+
+
 	def read_blank(self, line, root):
 		if '' == line.strip():
 			ET.SubElement(self._cursect, '')
 			return True
 		return False
-	
+
+
 	def read_option(self, line, root):
 		if not hasattr(self, "_opt_re"):
 			self._opt_re = re.compile(self._opt_re_string)
@@ -90,7 +92,8 @@ class IniFormatProvider(FormatProvider):
 			new_opt.attrib['mc_type'] = 'option'
 			return True
 		return False
-	
+
+
 	def write_comment(self, fp, node):
 		if callable(node.tag):
 			comment_lines  = str(node.text).split('\n')
@@ -98,14 +101,16 @@ class IniFormatProvider(FormatProvider):
 					fp.write('#'+line+'\n')
 			return True
 		return False
-	
+
+
 	def write_section(self, fp, node):
 		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'section': 
 			fp.write('['+unquote(node.tag)+']\n')	
 			self.write(fp, node, False)
 			return True
 		return False
-	
+
+
 	def write_option(self, fp, node):
 		if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
 			value = str(node.text if node.text else '')
@@ -114,6 +119,7 @@ class IniFormatProvider(FormatProvider):
 			fp.write(unquote(node.tag)+"\t= "+value+'\n')
 			return True
 		return False
+
 
 	def write_blank(self, fp, node):
 		if not node.tag and not callable(node.tag):

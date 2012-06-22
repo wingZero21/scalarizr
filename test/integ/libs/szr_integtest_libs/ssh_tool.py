@@ -155,6 +155,7 @@ def clean_output(channel, timeout = 60):
 		else:
 			if time.time() - last_recv_time > timeout:
 				#raise Exception('Timeout (%s sec) while waiting for root prompt. Out:\n%s' % (timeout, out))	
+				print out
 				raise Exception('Timeout (%s sec) while waiting for root prompt. ' % timeout)	
 	return out
 

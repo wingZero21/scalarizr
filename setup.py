@@ -87,5 +87,3 @@ cfg = dict(
 	cmdclass={"install_data" : my_install_data}
 )
 setup(**cfg)
-
-

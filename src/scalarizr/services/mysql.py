@@ -3,6 +3,8 @@ Created on Nov 8, 2011
 
 @author: dmitry
 '''
+from __future__ import with_statement
+
 import os
 import logging
 import re
@@ -13,6 +15,7 @@ import random
 import pwd
 import threading
 import time
+import shutil
 
 from pymysql import cursors
 
@@ -55,6 +58,13 @@ class MySQL(BaseService):
 	def __init__(self):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
+		if not os.path.exists(MYCNF_PATH):
+			if disttool.is_centos() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
+				shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF_PATH)
+			else:
+				fp = open(MYCNF_PATH, 'w')
+				fp.write('[mysqld]')
+				fp.close()
 
 	
 	def _init_replication(self, master=True):

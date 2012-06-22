@@ -5,7 +5,7 @@ Created on Nov 11, 2010
 @author: marat
 '''
 
-from scalarizr.util import system2, firstmatched, filetool, PopenError
+from scalarizr.util import system2, wait_until, firstmatched, filetool, PopenError
 from scalarizr.util.filetool import read_file, write_file
 
 import logging
@@ -174,9 +174,18 @@ class Mdadm:
 		self.add_disk(array, new, False)
 		self._wait(array)
 
+
 	def get_array_info(self, array):
 		ret = {}
 		details = self._get_array_details(array)
+
+		disk_stats = re.findall('([a-zA-Z\s]+/dev/[\w]+)\n', details)
+		ret['devices'] = {}
+		for stat in disk_stats:
+			status, devname = stat.rsplit(None, 1)
+			status = status.strip()
+			ret['devices'][devname] = status
+
 
 		ret['raid_devices']   = int(re.search(self._raid_devices_re, details).group('count'))
 		ret['total_devices']  = int(re.search(self._total_devices_re, details).group('count'))
