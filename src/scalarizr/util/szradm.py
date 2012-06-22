@@ -177,12 +177,7 @@ class Command(object):
 	@classmethod
 	def queryenv(cls):
 		if not hasattr(cls, '_queryenv'):
-			init_cnf()
-
-			key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
-			server_id = ini.get('general', 'server_id')
-			url = ini.get('general','queryenv_url')
-			cls._queryenv = QueryEnvService(url, server_id, key_path)		
+			cls._queryenv = new_queryenv()		
 		return cls._queryenv
 
 	def __init__(self, argv=None):
@@ -259,7 +254,7 @@ class ListRolesCommand(Command):
 	name = "list-roles"
 	method = "list_roles"
 	group = "QueryEnv"
-	fields = ['behaviour','name', 'index', 'internal-ip',
+	fields = ['behaviour','name', 'farm-role-id', 'index', 'internal-ip',
 		'external-ip', 'replication-master']
 	parser = OptionParser(usage='list-roles [-b --behaviour] '
 		'[-r --role] [--with-initializing]', description='Display roles list',
@@ -274,7 +269,7 @@ class ListRolesCommand(Command):
 		for d in result:
 			behaviour=', '.join(d.behaviour)
 			for host in d.hosts:
-				yield [behaviour, d.name, str(host.index), 
+				yield [behaviour, d.name, d.farm_role_id, str(host.index), 
 					host.internal_ip, host.external_ip, 
 					str(host.replication_master)]
 
@@ -384,7 +379,7 @@ class ListMessagesCommand(Command):
 					FROM p2p_message")
 			res=[]
 
-			for row in cur:
+			for row in cur.fetchall():
 				res.append([row[0],row[1], row[2],'in' if row[3] else 'out',
 					'yes' if row[4]	else 'no'])
 			self.output(res)
@@ -573,6 +568,25 @@ def init_cnf():
 	cnf.bootstrap()
 	globals()['ini'] = cnf.rawini
 
+
+def new_queryenv():
+	init_cnf()
+	key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
+	server_id = ini.get('general', 'server_id')
+	url = ini.get('general','queryenv_url')
+	cnf = bus.cnf
+	if not bus.scalr_version:
+		version_file = cnf.private_path('.scalr-version')
+		if os.path.exists(version_file):
+			bus.scalr_version = tuple(read_file(version_file).strip().split('.'))
+	
+	if bus.scalr_version:
+		api_version = '2012-04-17' if bus.scalr_version >= (3, 1, 0) else '2010-09-23'
+	else:
+		api_version = '2012-04-17'
+	return QueryEnvService(url, server_id, key_path, api_version)		
+	
+
 def main():
 	global ini
 	init_script()
@@ -644,13 +658,8 @@ def main():
 				com=Help(com_dict)
 				com.run()
 				sys.exit()
-			init_cnf()
 
-			key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
-			server_id = ini.get('general', 'server_id')
-			url = ini.get('general','queryenv_url')
-
-			qe = QueryEnvService(url, server_id, key_path)
+			qe = new_queryenv()
 			xml = qe.fetch(*args, **kv)
 			print xml.toprettyxml()
 

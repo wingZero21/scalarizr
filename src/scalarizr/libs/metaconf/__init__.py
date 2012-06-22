@@ -303,7 +303,7 @@ class Configuration:
 			self._init()
 		if not path:
 			path = '.'
-		ret = self.etree.findall(self._root_path + quote(path))
+		ret = self.etree.findall(self._root_path + path)
 		indexes = []
 		for node in ret:
 			if callable(node.tag):
@@ -328,7 +328,7 @@ class Configuration:
 	def _find(self, path):
 		if not self.etree:
 			self._init()
-		el = self.etree.find(self._root_path + quote(path))
+		el = self.etree.find(self._root_path + path)
 		# el = ElementPath13.find(self.etree, self._root_path + quote(path))
 		if el != None:
 			return el
@@ -376,7 +376,7 @@ class Configuration:
 		'''
 		return tuple(
 			(node.tag, node.text) 
-			for node in self._find_all(quote(self._normalize_path(path)))
+			for node in self._find_all(self._normalize_path(path))
 			if self._is_element(node)
 		)
 	
@@ -384,29 +384,29 @@ class Configuration:
 		'''
 		Returns a list of child names (options and sections)
 		'''
-		ret_list = self._find_all(quote(self._normalize_path(path)))
+		ret_list = self._find_all(self._normalize_path(path))
 		return tuple(node.tag for node in ret_list if self._is_element(node))
 	
 	def sections(self, path):
 		'''
 		Returns a list of child sections
 		'''
-		nodes = self._find_all(quote(self._normalize_path(path)))
+		nodes = self._find_all(self._normalize_path(path))
 		return tuple(node.tag for node in nodes 
-				if self._is_element(node) and len(node))
+				if self._is_element(node) and (len(node) or node.attrib.get('mc_type') == 'section'))
 		
 	def options(self, path):
 		'''
 		Returns a list of child options
 		'''
-		nodes = self._find_all(quote(self._normalize_path(path)))
+		nodes = self._find_all(self._normalize_path(path))
 		return tuple(node.tag for node in nodes 
-				if self._is_element(node) and not len(node))
+				if self._is_element(node) and not (len(node) or node.attrib.get('mc_type') == 'section'))
 				
 	def set(self, path, value, force=False):
 		if not self.etree:
 			self._init()
-		el = self.etree.find(self._root_path + quote(path))
+		el = self.etree.find(self._root_path + path)
 		if el != None:
 			self._set(el, value)
 		elif force:

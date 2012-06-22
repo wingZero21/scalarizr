@@ -397,6 +397,13 @@ class RedisConf(BaseRedisConfig):
 class RedisCLI(object):
 	path = REDIS_CLI_PATH
 	
+	class no_keyerror_dict(dict):
+		def __getitem__(self, key):
+			try:
+				return dict.__getitem__(self, key)
+			except KeyError:
+				return None
+	
 	def __init__(self, password=None):
 		self.password = password
 		self._logger = logging.getLogger(__name__)
@@ -448,7 +455,7 @@ class RedisCLI(object):
 	def info(self):
 		info = self.execute('info')
 		self._logger.debug('Redis INFO: %s' % info)
-		d = {}
+		d = self.no_keyerror_dict()
 		if info:
 			for i in info.strip().split('\n'):
 				raw = i[:-1] if i.endswith('\r') else i
@@ -514,13 +521,13 @@ class RedisCLI(object):
 		return None
 	
 	def bgsave(self, wait_until_complete=True):
-		if self.changes_since_last_save and not self.bgsave_in_progress:
+		if not self.bgsave_in_progress:
 			self.execute('bgsave')
 		if wait_until_complete:
 			wait_until(lambda: not self.bgsave_in_progress, sleep=5, timeout=900)
 			
 	def bgrewriteaof(self, wait_until_complete=True):
-		if self.changes_since_last_save and not self.bgrewriteaof_in_progress:
+		if not self.bgrewriteaof_in_progress:
 			self.execute('bgrewriteaof')
 		if wait_until_complete:
 			wait_until(lambda: not self.bgrewriteaof_in_progress, sleep=5, timeout=900)

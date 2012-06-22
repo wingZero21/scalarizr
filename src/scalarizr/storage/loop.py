@@ -8,8 +8,10 @@ from . import VolumeConfig, Volume, Snapshot, VolumeProvider, Storage, StorageEr
 from .util.loop import mkloop, rmloop, listloop
 
 import os
+import sys
 import time
-import shutil 
+import shutil
+import random
 from scalarizr.util import wait_until
 
 class LoopConfig(VolumeConfig):
@@ -29,7 +31,7 @@ class LoopVolumeProvider(VolumeProvider):
 	type = 'loop'
 	vol_class = LoopVolume
 	snap_class = LoopSnapshot
-	
+
 	def create(self, **kwargs):
 		
 		'''
@@ -45,17 +47,17 @@ class LoopVolumeProvider(VolumeProvider):
 		size = kwargs.get('size')
 		file = kwargs.get('file')
 		device = kwargs.get('device')
-		
+
 		if not (device and file and listloop().get(device) == file):
 			# Construct volume
 			if (not size and (not file or not os.path.exists(file))):
 				raise StorageError('You must specify size of new loop device or existing file.')
 			
 			if not file:
-				file = '/mnt/loopdev' + time.strftime('%Y%m%d%H%M%S')
+				file = '/mnt/loopdev%s' % repr(time.time())
 			if not os.path.exists(file):			
 				try:
-					size = int(size)
+					size = int(float(size) * 1024)
 				except ValueError:
 					if isinstance(size, basestring) and '%root' in size.lower():
 						# Getting size in percents
@@ -76,16 +78,34 @@ class LoopVolumeProvider(VolumeProvider):
 						raise StorageError('Incorrect size format: %s' % size)
 			
 			kwargs['file']	= file
-			kwargs['device'] = mkloop(file, device=device, size=size, quick=not kwargs.get('zerofill'))
+			existed = filter(lambda x: x[1] == file, listloop().iteritems())
+			if existed:
+				kwargs['device'] = existed[0][0]
+			else:
+				kwargs['device'] = mkloop(file, size=size, quick=not kwargs.get('zerofill'))
 			
 		return super(LoopVolumeProvider, self).create(**kwargs)
+
+
+	def create_from_snapshot(self, **kwargs):
+		file = kwargs.get('file')
+		try:
+			base = file.split('.')[0]
+			new_file = base + time.strftime('.%d-%m_%H:%M:%S_') + str(random.randint(1,1000))
+			shutil.copy(file, new_file)
+		except:
+			e,t = sys.exc_info()[1:]
+			raise Exception, "Can't copy snapshot file %s: %s" % (file, e), t
+
+		kwargs['file'] = new_file
+		return self.create(**kwargs)
 	
-	def create_snapshot(self, vol, snap):
-		backup_filename = vol.file + '.%s.bak' % time.strftime('%d-%m-%Y_%H:%M')
+	def create_snapshot(self, vol, snap, tags=None):
+		backup_filename = vol.file + '.%s.bak' % time.strftime('%d-%m_%H:%M:%S')
 		shutil.copy(vol.file, backup_filename)
 		snap.file = backup_filename
 		return snap
-	
+
 	def detach(self, vol, force=False):
 		super(LoopVolumeProvider, self).detach(vol, force)
 		rmloop(vol.devname)

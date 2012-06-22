@@ -1011,11 +1011,13 @@ class BuiltinBehaviours:
 	APP = 'app'
 	WWW = 'www'
 	MYSQL = 'mysql'
+	MYSQL2 = 'mysql2'
 	CASSANDRA = 'cassandra'
 	MEMCACHED = 'memcached'
 	POSTGRESQL = 'postgresql'
 	RABBITMQ = 'rabbitmq'
 	REDIS = 'redis'
+	HAPROXY = 'haproxy'
 	MONGODB = 'mongodb'
 	CHEF = 'chef'
 	

@@ -426,7 +426,11 @@ class RedisHandler(ServiceCtlHandler):
 			with op.phase(self._phase_backup):
 
 				with op.step(self._step_copy_database_file):
-			
+					# Flush redis data on disk before creating backup
+					if self.redis.service.running:
+						self._logger.info("Dumping Redis data on disk")
+						self.redis.redis_cli.save()
+
 					# Dump all databases
 					self._logger.info("Dumping all databases")			
 					tmpdir = tempfile.mkdtemp()		
@@ -632,7 +636,7 @@ class RedisHandler(ServiceCtlHandler):
 
 
 	def _create_snapshot(self):
-		
+		self._logger.info("Creating Redis data bundle")		
 		system2('sync', shell=True)
 		# Creating storage snapshot
 		snap = self._create_storage_snapshot()
@@ -649,7 +653,6 @@ class RedisHandler(ServiceCtlHandler):
 		if self.redis.service.running:
 			self._logger.info("Dumping Redis data on disk")
 			self.redis.redis_cli.save()
-		self._logger.info("Creating storage snapshot")
 		try:
 			return self.storage_vol.snapshot(tags=self.redis_tags)
 		except StorageError, e:

@@ -607,6 +607,12 @@ class MysqlHandler(ServiceCtlHandler):
 	storage_vol = None
 	
 	def __init__(self):
+		if not os.path.exists(MYCNF):
+			if disttool.is_centos() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
+				shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF)
+			else:
+				open(MYCNF, 'w').close()
+				
 		initd = initdv2.lookup(SERVICE_NAME)
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, initd, MysqlCnfController())
 		
@@ -839,7 +845,7 @@ class MysqlHandler(ServiceCtlHandler):
 				backup = tarfile.open(backup_path, 'w:gz')
 	
 				# Dump all databases
-				self._logger.info("Dumping all databases")
+				LOG.info("Dumping all databases")
 				tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)			
 				for db in databases:
 					with op.step("Backup '%s'" % db):						
@@ -1294,6 +1300,8 @@ class MysqlHandler(ServiceCtlHandler):
 					except NoPathError:
 						""" There is no datadir in config """
 						datadir = DEFAULT_DATADIR
+						if not 'mysqld' in self._mysql_config.sections('./'):
+							self._mysql_config.add('mysqld', '')
 						self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
 					if not storage_valid and datadir.find(self._data_dir) == 0:
 						# When role was created from another mysql role it contains modified my.cnf settings 
@@ -1525,6 +1533,7 @@ class MysqlHandler(ServiceCtlHandler):
 
 
 	def _create_snapshot(self, root_user, root_password, dry_run=False, tags=None):
+		self._logger.info('Creating MySQL data bundle')
 		was_running = self._init_script.running
 		if not was_running:
 			self._start_service()
@@ -1649,7 +1658,7 @@ class MysqlHandler(ServiceCtlHandler):
 		if 'ERROR' in res:
 			raise HandlerError("Can't get privileges columns count.")
 		priv_count = len([line for line in res.split('\r\n') if line.strip().startswith('Field') and line.endswith('_priv')])
-		self._logger.debug("*_priv columns total: %s" % priv_count)		
+		LOG.debug("*_priv columns total: %s" % priv_count)		
 		
 		if not privileges:
 			cmd = "INSERT INTO mysql.user VALUES('%s','%s',PASSWORD('%s')" % (host, login, password) + ",'Y'"*priv_count + ",''"*4 +',0'*4+");" 
