@@ -16,7 +16,7 @@ except ImportError:
 class HTTPServer25(HTTPServer):
 	
 	def __init__(self, server_address, RequestHandlerClass):
-		super(HTTPServer, self).__init__(server_address, RequestHandlerClass)
+		super(HTTPServer25, self).__init__(server_address, RequestHandlerClass)
 		self.__is_shut_down = threading.Event()
 		self.__serving = False
 	
