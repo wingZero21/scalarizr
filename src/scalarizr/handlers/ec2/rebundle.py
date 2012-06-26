@@ -621,7 +621,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			
 	def __init__(self, volume, ec2_conn, avail_zone, instance_id,
 				volume_size=None, volume_id=None, excludes=None):
-		rebundle_hdlr.LinuxImage.__init__(self, volume, '', excludes)
+		rebundle_hdlr.LinuxImage.__init__(self, volume, excludes=excludes)
 		self._ec2_conn = ec2_conn
 		self._avail_zone = avail_zone
 		self._instance_id = instance_id
