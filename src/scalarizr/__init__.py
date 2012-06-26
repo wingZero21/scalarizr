@@ -1,13 +1,8 @@
 
 import sys
-import cStringIO
 if sys.version_info < (2, 6):
-	import scalarizr.externals.logging as logging
-	import scalarizr.externals.logging.config as logging_config
-	import scalarizr.externals.logging.handlers as logging_handlers
-	sys.modules['logging'] = logging
-	sys.modules['logging.config'] = logging_config
-	sys.modules['logging.handlers'] = logging_handlers
+	from scalarizr.util import compat
+	compat.patch()
 
 
 # Core
@@ -30,6 +25,7 @@ from scalarizr.util.filetool import write_file, read_file
 from scalarizr.util import wait_until
 
 # Stdlibs
+import cStringIO
 import logging
 import logging.config
 import os, sys, re, shutil, time
@@ -572,7 +568,7 @@ def _shutdown_services(force=False):
 	# Shutdown API server
 	logger.debug('Shutdowning API server')
 	api_server = bus.api_server
-	api_server.stop()
+	api_server.shutdown()
 	bus.api_server = None
 
 	# Shutdown periodical executor
