@@ -518,27 +518,18 @@ class RebundleEbsStrategy(RebundleStratery):
 		self._image.umount() 
 		vol = self._image.ebs_volume
 		LOG.info('Creating snapshot of root device image %s', vol.id)
-		self._snap = vol.create_snapshot("Root device snapshot created from role: %s instance: %s" 
-					% (self._role_name, self._platform.get_instance_id()))
-		self._ec2_conn.create_tags((self._snap.id, ), prepare_tags(tmp=1))
+		description = "Root device snapshot created from role: %s instance: %s" \
+					% (self._role_name, self._platform.get_instance_id())
+		self._snap = vol.snapshot(description, tags=prepare_tags(tmp=1))
 
 		LOG.debug('Checking that snapshot %s is completed', self._snap.id)
-		start_time = time.time()
-		while True:
-			self._snap.update()
-			if time.time() - start_time > 191:
-				start_time = time.time()
-				LOG.info('Progress: %s', self._snap.progress)
+		wait_until(lambda: self._snap.state in (storage.Snapshot.COMPLETED,
+												storage.Snapshot.FAILED), logger=LOG)
 
-			if self._snap.status == 'completed':
-				LOG.info('Progress: %s', self._snap.progress)
-				break
-			elif self._snap.status == 'failed':
-				raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))
-			LOG.debug('Progress: %s', self._snap.progress)
-			time.sleep(5)
+		if self._snap.state == storage.Snapshot.FAILED:
+			raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))
+
 		LOG.debug('Snapshot %s completed', self._snap.id)
-
 		LOG.info('Snapshot %s of root device image %s created', self._snap.id, vol.id)
 		return self._snap
 
@@ -613,7 +604,7 @@ class RebundleEbsStrategy(RebundleStratery):
 		RebundleStratery.cleanup(self)
 		if not self._succeed and self._snap:
 			LOG.debug('Deleting snapshot %s', self._snap.id)
-			self._snap.delete()
+			self._snap.destroy()
 
 		
 		
@@ -630,7 +621,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			
 	def __init__(self, volume, ec2_conn, avail_zone, instance_id,
 				volume_size=None, volume_id=None, excludes=None):
-		rebundle_hdlr.LinuxImage.__init__(self, volume, None, excludes)
+		rebundle_hdlr.LinuxImage.__init__(self, volume, '', excludes)
 		self._ec2_conn = ec2_conn
 		self._avail_zone = avail_zone
 		self._instance_id = instance_id
