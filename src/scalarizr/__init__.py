@@ -327,7 +327,7 @@ def _init_services():
 	if not bus.api_server:
 		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
 											cnf.key_path(cnf.DEFAULT_KEY))
-		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', 8011, api_app)
+		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', 8010, api_app)
 
 
 def _start_services():
@@ -346,7 +346,7 @@ def _start_services():
 	
 	# Start API server
 	api_server = bus.api_server
-	logger.info('Starting API server on http://0.0.0.0:8011')
+	logger.info('Starting API server on http://0.0.0.0:8010')
 	api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
 	api_thread.start()
 	
