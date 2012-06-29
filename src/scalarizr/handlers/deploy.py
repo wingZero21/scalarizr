@@ -246,9 +246,9 @@ class GitSource(Source):
 				raise SourceError('Cannot install Git. Unknown distribution %s' %
 								str(disttool.linux_dist()))
 
-		if not os.path.exists(workdir):
-			self._logger.info('Creating destination directory')
-			os.makedirs(workdir)
+		#if not os.path.exists(workdir):
+		#	self._logger.info('Creating destination directory')
+		#	os.makedirs(workdir)
 
 		tmpdir = tempfile.mkdtemp()
 		env = {}

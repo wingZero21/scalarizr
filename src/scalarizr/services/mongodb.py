@@ -670,7 +670,7 @@ class Mongod(object):
 		try:
 			if not self.is_running:
 				self._logger.debug('Starting %s' % MONGOD)
-				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args)
+				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args, close_fds=True, preexec_fn=os.setsid)
 				'''
 				mongod process takes some time before it actualy starts accepting connections
 				it can easily be as long as 160 seconds on a Large instance
