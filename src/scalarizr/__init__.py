@@ -1,13 +1,8 @@
 
 import sys
-import cStringIO
 if sys.version_info < (2, 6):
-	import scalarizr.externals.logging as logging
-	import scalarizr.externals.logging.config as logging_config
-	import scalarizr.externals.logging.handlers as logging_handlers
-	sys.modules['logging'] = logging
-	sys.modules['logging.config'] = logging_config
-	sys.modules['logging.handlers'] = logging_handlers
+	from scalarizr.util import compat
+	compat.patch()
 
 
 # Core
@@ -30,6 +25,7 @@ from scalarizr.util.filetool import write_file, read_file
 from scalarizr.util import wait_until
 
 # Stdlibs
+import cStringIO
 import logging
 import logging.config
 import os, sys, re, shutil, time
@@ -327,7 +323,7 @@ def _init_services():
 	if not bus.api_server:
 		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
 											cnf.key_path(cnf.DEFAULT_KEY))
-		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', 8011, api_app)
+		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', 8010, api_app)
 
 
 def _start_services():
@@ -346,7 +342,7 @@ def _start_services():
 	
 	# Start API server
 	api_server = bus.api_server
-	logger.info('Starting API server on http://0.0.0.0:8011')
+	logger.info('Starting API server on http://0.0.0.0:8010')
 	api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
 	api_thread.start()
 	
@@ -572,7 +568,7 @@ def _shutdown_services(force=False):
 	# Shutdown API server
 	logger.debug('Shutdowning API server')
 	api_server = bus.api_server
-	api_server.stop()
+	api_server.shutdown()
 	bus.api_server = None
 
 	# Shutdown periodical executor

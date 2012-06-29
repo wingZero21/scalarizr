@@ -7,7 +7,7 @@ import scalarizr
 from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError, prepare_tags
 from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
-	wait_until, get_free_devname, firstmatched
+	wait_until, firstmatched
 from scalarizr.platform.ec2 import ebstool
 from scalarizr.storage.transfer import Transfer
 from scalarizr.handlers import rebundle as rebundle_hdlr
@@ -126,7 +126,6 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 
 			self._strategy = self._ebs_strategy_cls(
 				self, self._role_name, image_name, self._excludes,
-				devname=get_free_devname(), 
 				volume_size=volume_size,  # in Gb
 				volume_id=self._rebundle_message.body.get('volume_id')
 			)
@@ -526,7 +525,6 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 
 
 class RebundleEbsStrategy(RebundleStratery):
-	_devname = None
 	_volsize = None
 	_volume_id = None
 	_platform = None
@@ -535,9 +533,8 @@ class RebundleEbsStrategy(RebundleStratery):
 	_succeed = None
 
 	def __init__(self, handler, role_name, image_name, excludes, volume='/', 
-				volume_id=None, volume_size=None, devname='/dev/sdr'):
+				volume_id=None, volume_size=None):
 		RebundleStratery.__init__(self, handler, role_name, image_name, excludes, volume)
-		self._devname = devname
 		self._volume_id = volume_id
 		self._volsize = volume_size
 		self._platform = bus.platform
@@ -547,27 +544,18 @@ class RebundleEbsStrategy(RebundleStratery):
 		self._image.umount() 
 		vol = self._image.ebs_volume
 		LOG.info('Creating snapshot of root device image %s', vol.id)
-		self._snap = vol.create_snapshot("Root device snapshot created from role: %s instance: %s" 
-					% (self._role_name, self._platform.get_instance_id()))
-		self._ec2_conn.create_tags((self._snap.id, ), prepare_tags(tmp=1))
+		description = "Root device snapshot created from role: %s instance: %s" \
+					% (self._role_name, self._platform.get_instance_id())
+		self._snap = vol.snapshot(description, tags=prepare_tags(tmp=1))
 
 		LOG.debug('Checking that snapshot %s is completed', self._snap.id)
-		start_time = time.time()
-		while True:
-			self._snap.update()
-			if time.time() - start_time > 191:
-				start_time = time.time()
-				LOG.info('Progress: %s', self._snap.progress)
+		wait_until(lambda: self._snap.state in (storage.Snapshot.COMPLETED,
+												storage.Snapshot.FAILED), logger=LOG)
 
-			if self._snap.status == 'completed':
-				LOG.info('Progress: %s', self._snap.progress)
-				break
-			elif self._snap.status == 'failed':
-				raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))
-			LOG.debug('Progress: %s', self._snap.progress)
-			time.sleep(5)
+		if self._snap.state == storage.Snapshot.FAILED:
+			raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))
+
 		LOG.debug('Snapshot %s completed', self._snap.id)
-
 		LOG.info('Snapshot %s of root device image %s created', self._snap.id, vol.id)
 		return self._snap
 
@@ -620,7 +608,7 @@ class RebundleEbsStrategy(RebundleStratery):
 
 		# Bundle image
 		self._ec2_conn = self._platform.new_ec2_conn()
-		self._image = LinuxEbsImage(self._volume, self._devname, self._ec2_conn,
+		self._image = LinuxEbsImage(self._volume, self._ec2_conn,
 					self._platform.get_avail_zone(), self._platform.get_instance_id(),
 					self._volsize, self._volume_id, self._excludes) 
 
@@ -642,7 +630,7 @@ class RebundleEbsStrategy(RebundleStratery):
 		RebundleStratery.cleanup(self)
 		if not self._succeed and self._snap:
 			LOG.debug('Deleting snapshot %s', self._snap.id)
-			self._snap.delete()
+			self._snap.destroy()
 
 
 
@@ -659,25 +647,25 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 	
 	is_few_partition = None
 	
-	def __init__(self, volume, devname, ec2_conn, avail_zone, instance_id, 
+	def __init__(self, volume, ec2_conn, avail_zone, instance_id,
 				volume_size=None, volume_id=None, excludes=None):
-		rebundle_hdlr.LinuxImage.__init__(self, volume, devname, excludes)
-		self.devname = devname
+		rebundle_hdlr.LinuxImage.__init__(self, volume, excludes=excludes)
 		self._ec2_conn = ec2_conn
 		self._avail_zone = avail_zone
 		self._instance_id = instance_id
+		self._ebs_config = dict(type='ebs')
+
 		if volume_id:
-			self.ebs_volume = Volume(self._ec2_conn)
-			self.ebs_volume.id = volume_id
+			self._ebs_config['id'] = volume_id
 		else:		
-			self._volume_size = volume_size
+			self._ebs_config['size'] = volume_size
+
 
 	def _create_image(self):
-		if not self.ebs_volume:
-			self.ebs_volume = ebstool.create_volume(self._ec2_conn, self._volume_size, 
-					self._avail_zone, logger=LOG, tags=prepare_tags(tmp=1))
-		return ebstool.attach_volume(self._ec2_conn, self.ebs_volume, 
-				self._instance_id, self.devname, to_me=True, logger=LOG)[1]
+		self._ebs_config['tags'] = prepare_tags(tmp=1)
+		self.ebs_volume = Storage.create(self._ebs_config)
+		return self.ebs_volume.devname
+
 
 	def _read_pt(self, dev_name):
 		""" 
@@ -813,7 +801,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 
 	def make(self):
-		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)", 
+		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)",
 				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
 
 		#TODO: need transmit flag `is_few_partition` from Ec2RebundleHandler.before_rebundle
@@ -861,6 +849,8 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		else:
 			rebundle_hdlr.LinuxImage.umount(self)
 
+		rebundle_hdlr.LinuxImage.make(self)
+
 
 	def cleanup(self):
 		self.umount()
@@ -878,8 +868,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			os.rmdir(mp or self.mpoint)
 
 		if self.ebs_volume:
-			ebstool.detach_volume(self._ec2_conn, self.ebs_volume, logger=LOG)
-			ebstool.delete_volume(self._ec2_conn, self.ebs_volume)
+			self.ebs_volume.destroy()
 			self.ebs_volume = None
 
 

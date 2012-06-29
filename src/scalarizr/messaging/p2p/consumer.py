@@ -54,8 +54,8 @@ class P2pMessageConsumer(MessageConsumer):
 			if self._server is None:
 				r = urlparse(self.endpoint)
 				self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)				
-				server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-				self._server = server_class((r.hostname, r.port), self._get_request_handler_class())
+				#server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
+				self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
 		except (BaseException, Exception), e:
 			self._logger.error("Cannot build server. %s", e)
 			return
@@ -246,38 +246,5 @@ class P2pMessageConsumer(MessageConsumer):
 			
 		self.handler_status = 'stopped'
 		self._logger.debug('Message handler stopped')		
-	
-
-if sys.version_info < (2,6):
-	try:
-		import selectmodule as select
-	except ImportError:
-		import select
-	class _HTTPServer25(HTTPServer):
-		
-		def __init__(self, server_address, RequestHandlerClass):
-			HTTPServer.__init__(self, server_address, RequestHandlerClass)
-			self.__is_shut_down = threading.Event()
-			self.__serving = False
-		
-		def serve_forever(self, poll_interval=0.5):
-			logger = logging.getLogger(__name__)
-			logger.debug("_HTTPServer25 serving...")
-			self.__serving = True
-			self.__is_shut_down.clear()
-			while self.__serving:
-				# XXX: Consider using another file descriptor or
-				# connecting to the socket to wake this up instead of
-				# polling. Polling reduces our responsiveness to a
-				# shutdown request and wastes cpu at all other times.
-				r, w, e = select.select([self], [], [], poll_interval)
-				if r:
-					self.handle_request()
-			
-			self.__is_shut_down.set()
-		
-		def shutdown(self):
-			self.__serving = False
-			self.__is_shut_down.wait()
 
 			
