@@ -15,6 +15,11 @@ from scalarizr import util
 from scalarizr.util import cryptotool
 from scalarizr.util import urltool
 
+if sys.version_info[0:2] >= (2, 7):
+	from xml.etree import ElementTree as ET 
+else:
+	from scalarizr.externals.etree import ElementTree as ET
+
 
 class QueryEnvError(Exception):
 	pass
@@ -118,6 +123,17 @@ class QueryEnvService(object):
 		if name:
 			parameters["name"] = name
 		return {'params':self._request("list-role-params", parameters, self._read_list_role_params_response)}
+	
+	
+	def list_farm_role_params(self, farm_role_id=None):
+		"""
+		@return dict
+		"""
+		parameters = {}
+		if farm_role_id:
+			parameters["farm-role-id"] = farm_role_id
+		return {'params':self._request("list-farm-role-params", parameters, self._read_list_farm_role_params_response)}
+
 
 	def get_server_user_data(self):
 		"""
@@ -273,6 +289,10 @@ class QueryEnvService(object):
 		return ret
 
 	_read_get_server_user_data_response = _read_list_role_params_response
+
+	def _read_list_farm_role_params_response(self, xml):
+		response = xml.documentElement.toxml()
+		return XmlDictConfig(ET.XML(response))
 
 	def _read_get_latest_version_response(self, xml):
 		response = xml.documentElement
@@ -531,3 +551,44 @@ class ScalingMetric(object):
 	
 	def __str__(self):
 		return 'qe:ScalingMetric(%s, id: %s, path: %s:%s)' % (self.name, self.id, self.path, self.retrieve_method)
+
+
+class XmlListConfig(list):
+	def __init__(self, aList):
+		for element in aList:
+			if element:
+				if len(element) == 1 or element[0].tag != element[1].tag:
+					self.append(XmlDictConfig(element))
+				elif element[0].tag == element[1].tag:
+					self.append(XmlListConfig(element))
+			elif element.text:
+				text = element.text.strip()
+				if text:
+					self.append(text)
+
+
+class XmlDictConfig(dict):
+	'''
+	usage:
+	>>> tree = ElementTree.parse('file.xml')
+	>>> root = tree.getroot()
+	>>> xmldict = XmlDictConfig(root)
+	'''
+
+	def __init__(self, parent_element):
+		if parent_element.items():
+			self.update(dict(parent_element.items()))
+		for element in parent_element:
+			if element:
+				if len(element) == 1 or element[0].tag != element[1].tag:
+					a_dict = XmlDictConfig(element)
+				else:
+					a_dict = {element[0].tag: XmlListConfig(element)}
+				if element.items():
+					a_dict.update(dict(element.items()))
+				self.update({element.tag: a_dict})
+			elif element.items():
+				self.update({element.tag: dict(element.items())})
+			else:
+				self.update({element.tag: element.text})
+

@@ -9,6 +9,11 @@ from xml.dom.minidom import parseString
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import xml_strip
 from szr_unittest import RESOURCE_PATH
+from scalarizr.queryenv import XmlDictConfig
+if sys.version_info[0:2] >= (2, 7):
+	from xml.etree import ElementTree as ET 
+else:
+	from scalarizr.externals.etree import ElementTree as ET
 
 def get_xml_file(filename):
 	return os.path.realpath(os.path.join(RESOURCE_PATH, filename))
@@ -152,6 +157,14 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
                                 
                                 ''')
 		self.assertTrue(vhosts[1].https)
+
+
+	def testXmlDictConfig(self):
+		result = {'mysql': {'root_password': 'NTw23g', 'stat_password': 'maicho9A', 'volume_config': {'device': '/dev/xvdp', 'mpoint': '/mnt/dbstorage', 'type': 'ebs', 'id': 'vol-12345678', 'size': '100'}, 'log_file': 'binlog.000003', 'repl_password': 'Ooyu6im0', 'log_pos': '106'}}
+		tree = ET.parse('xml2dict.xml')
+		root = tree.getroot()
+		#print ET.tostring(root)
+		self.assertEqual(XmlDictConfig(root), result)
 
 	#def test_sign(self):
 	#	str = "Can I Has Cheezburger?"
