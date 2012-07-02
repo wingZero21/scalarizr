@@ -308,11 +308,12 @@ class EphSnapshotProviderLite(object):
 				
 				self._logger.debug("Creating and compressing snapshot data.")
 				tar = subprocess.Popen(tar_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
-				compressor = subprocess.Popen(compress_cmd, stdin=tar.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
-				reader = threading.Thread(target=self._reader, name='reader', 
-						  args=(compressor.stdout, tranzit_path, chunk_prefix, snapshot))
-				reader.start()
-				
+				compress = subprocess.Popen(compress_cmd, stdin=tar.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
+				tar.stdout.close() # Allow tar to receive a SIGPIPE if compress exits.
+				split = threading.Thread(target=self._split, name='split', 
+						  args=(compress.stdout, tranzit_path, chunk_prefix, snapshot))
+				split.start()
+								
 				uploaders = []
 				for i in range(2):
 					uploader = threading.Thread(name="Uploader-%s" % i, target=self._uploader, 
@@ -321,17 +322,15 @@ class EphSnapshotProviderLite(object):
 					
 					uploader.start()
 					uploaders.append(uploader)
-				reader.join()
+
+				err = compress.communicate()[1]
+				if compress.returncode:
+					raise StorageError('%s process terminated with exit code %s. <err>: %s' % (compress.returncode, err))				
+					
+				split.join()
 				for uploader in uploaders:
 					uploader.join()
 				
-				r_code = tar.wait()
-				if r_code:
-					raise StorageError('Tar process finished with code %s' % r_code)
-
-				r_code = compressor.wait()
-				if r_code:
-					raise StorageError('Pigz process finished with code %s' % r_code)				
 
 			finally:
 				umount(snap_mpoint, options=('-f',))
@@ -345,7 +344,7 @@ class EphSnapshotProviderLite(object):
 			if complete_cb:
 				complete_cb()
 	
-	def _reader(self, stdin, tranzit_path, chunk_prefix, snapshot):
+	def _split(self, stdin, tranzit_path, chunk_prefix, snapshot):
 		try:
 			self._read_finished.clear()
 			chunk_max_size = 100*1024*1024
