@@ -77,6 +77,8 @@ class QueryEnvService(object):
 						host, port = urllib.splitnport(req.host, req.port or 80)
 						raise QueryEnvError, "Cannot connect to QueryEnv server on %s:%s. %s" % (host, port, str(e)), sys.exc_traceback
 			except:
+				if 'not supported' in str(sys.exc_info()[1]):
+					raise
 				self._logger.debug('QueryEnv failed. %s', sys.exc_info()[1])
 				if i < max_attempts:
 					self._logger.debug('Waiting %d seconds before the next try', 10)
