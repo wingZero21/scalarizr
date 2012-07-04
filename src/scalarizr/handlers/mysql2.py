@@ -505,11 +505,12 @@ class MysqlHandler(DBMSRHandler):
 					parts = [backup_path]
 				sizes = [os.path.getsize(file) for file in parts]
 						
-				LOG.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+				cloud_storage_path = self._platform.scalrfs.backups('mysql')
+				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 				trn = transfer.Transfer()
-				cloud_files = trn.upload(parts, self._platform.cloud_storage_path)
+				cloud_files = trn.upload(parts, cloud_storage_path)
 				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
-								self._platform.cloud_storage_path, backup_filename)
+								cloud_storage_path, backup_filename)
 			
 			result = list(dict(path=path, size=size) for path in cloud_files for size in sizes)								
 			op.ok(data=result)
