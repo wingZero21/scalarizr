@@ -3,17 +3,20 @@ Created on Dec 23, 2009
 
 @author: Dmytro Korsakov
 '''
+from __future__ import absolute_import
 import os
+import sys
 import unittest
 from xml.dom.minidom import parseString
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import xml_strip
-from szr_unittest import RESOURCE_PATH
-from scalarizr.queryenv import XmlDictConfig
+from scalarizr.queryenv import xml2dict
 if sys.version_info[0:2] >= (2, 7):
 	from xml.etree import ElementTree as ET 
 else:
 	from scalarizr.externals.etree import ElementTree as ET
+
+RESOURCE_PATH = '/Users/dmitry/Documents/workspace/scalarizr-active-sprint/tests/unit/fixtures/queryenv/'
 
 def get_xml_file(filename):
 	return os.path.realpath(os.path.join(RESOURCE_PATH, filename))
@@ -27,12 +30,11 @@ class Test(unittest.TestCase):
 		xmlfile = get_xml_file("get-service-configuration_response.xml")
 		xml = xml_strip(parseString(open(xmlfile, "r").read()))
 		ret = self._queryenv._read_get_service_configuration_response(xml, 'app')
-		print ret
 		self.assertFalse(ret is None)
 		self.assertTrue(type(ret.settings) is dict)
 		self.assertTrue(len(ret.settings))
+		self.assertTrue('__defaults__' in ret.settings)
 		self.assertTrue(type(ret.name) is type(""))
-		#self.assertEqual(ret.settings,{u'safe_mysqld/open_files_limit': u'8192', u'mysqld/wait_timeout': u'15'})
 		self.assertEqual(ret.name, "app-test")
 				
 	def test_get_latest_version_response(self):
@@ -82,14 +84,15 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
 	def test_list_roles(self):
 		xmlfile = get_xml_file("list_roles_response.xml")
 		xml = parseString(open(xmlfile, "r").read())
+		#print open(xmlfile, "r").read()
 		xml = xml_strip(xml)
 		
 		roles = self._queryenv._read_list_roles_response(xml)
 		role = roles[0]
 		self.assertFalse(roles is None)
-		self.assertEqual(len(roles), 3)
-		self.assertEqual(role.behaviour, ["mysql"])
-		self.assertEqual(role.name, "mysql-lvm")
+		self.assertEqual(len(roles), 2)
+		self.assertEqual(role.behaviour, ['app', "mysql"])
+		self.assertEqual(role.name, "lamp-custom")
 		
 		hosts = role.hosts
 		host = hosts[0]
@@ -98,6 +101,7 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
 		self.assertEqual(host.external_ip, "211.31.14.198")
 		self.assertTrue(host.replication_master)
 		self.assertEqual(host.index, 1)
+
 	
 	def test_read_list_ebs_mountpoints_response(self):
 		xmlfile = get_xml_file("list_ebs_mountpoints_response.xml")
@@ -121,12 +125,10 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
 		xmlfile = get_xml_file("list_role_params_response.xml")
 		xml = parseString(open(xmlfile, "r").read())
 		xml = xml_strip(xml)
-		parametres = self._queryenv._read_list_role_params_response(xml)
-		self.assertFalse(parametres is None)
+		parameters = self._queryenv._read_list_role_params_response(xml)
+		self.assertFalse(parameters is None)
 		#self.assertTrue(parametres.has_key("external_ips_to_allow_access_from"))
-		self.assertEqual(parametres.get("external_ips_to_allow_access_from", None), """
-
-                                """)
+		self.assertEqual(parameters["external_ips_to_allow_access_from"].strip(), '')
 		
 	def test_read_list_scripts_response(self):
 		xmlfile = get_xml_file("list_scripts_response.xml")
@@ -139,9 +141,8 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
 		self.assertTrue(script.asynchronous)
 		self.assertEqual(script.exec_timeout, 100)
 		self.assertEqual(script.name, 'script_name')
-		self.assertEqual(script.body, """
-                
-                                """)
+		self.assertEqual(script.body.strip(), '')
+
 
 	def test_read_list_virtualhosts_response(self):
 		xmlfile = get_xml_file("list_virtualhosts_response.xml")
@@ -159,12 +160,23 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
 		self.assertTrue(vhosts[1].https)
 
 
-	def testXmlDictConfig(self):
+	def test__read_list_farm_role_params_response(self):
+		xmlfile = get_xml_file("list_farm_role_params_response.xml")
+		xml = parseString(open(xmlfile, "r").read())
+		xml = xml_strip(xml)
+		params = self._queryenv._read_list_farm_role_params_response(xml)
+		print params
+
+
+	def test_xml2dict(self):
 		result = {'mysql': {'root_password': 'NTw23g', 'stat_password': 'maicho9A', 'volume_config': {'device': '/dev/xvdp', 'mpoint': '/mnt/dbstorage', 'type': 'ebs', 'id': 'vol-12345678', 'size': '100'}, 'log_file': 'binlog.000003', 'repl_password': 'Ooyu6im0', 'log_pos': '106'}}
-		tree = ET.parse('xml2dict.xml')
-		root = tree.getroot()
-		#print ET.tostring(root)
-		self.assertEqual(XmlDictConfig(root), result)
+		xmlfile = get_xml_file('xml2dict.xml')
+		self.assertEqual(xml_file_to_dict(xmlfile), result)
+		print 'done'
+
+def xml_file_to_dict(filename):
+	tree = ET.fromstring(open(filename).read())
+	return xml2dict(tree)
 
 	#def test_sign(self):
 	#	str = "Can I Has Cheezburger?"

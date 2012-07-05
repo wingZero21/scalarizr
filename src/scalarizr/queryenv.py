@@ -101,7 +101,7 @@ class QueryEnvService(object):
 		return xml
 	
 	
-	def list_roles (self, role_name=None, behaviour=None, with_init=None):
+	def list_roles(self, role_name=None, behaviour=None, with_init=None):
 		"""
 		@return Role[]
 		"""
@@ -161,7 +161,7 @@ class QueryEnvService(object):
 			parameters['local_ip'] = local_ip
 		return self._request("list-scripts",parameters, self._read_list_scripts_response)
 	
-	def list_virtual_hosts (self, name=None, https=None):
+	def list_virtual_hosts(self, name=None, https=None):
 		"""
 		@return VirtualHost[]
 		"""
@@ -172,19 +172,19 @@ class QueryEnvService(object):
 			parameters["https"] = https
 		return self._request("list-virtualhosts",parameters, self._read_list_virtualhosts_response)
 	
-	def get_https_certificate (self):
+	def get_https_certificate(self):
 		"""
 		@return (cert, pkey, cacert)
 		"""
 		return self._request("get-https-certificate",{}, self._read_get_https_certificate_response)
 	
-	def list_ebs_mountpoints (self):
+	def list_ebs_mountpoints(self):
 		"""
 		@return Mountpoint[]
 		"""
 		return self._request("list-ebs-mountpoints",{}, self._read_list_ebs_mountpoints_response)
 	
-	def get_latest_version (self):
+	def get_latest_version(self):
 		"""
 		@return string
 		"""
@@ -212,87 +212,60 @@ class QueryEnvService(object):
 
 	def _read_list_roles_response(self, xml):
 		ret = []
-		
-		response = xml.documentElement
-		for role_el in response.firstChild.childNodes:
-			role = Role()
-			role.behaviour = role_el.getAttribute("behaviour").split(',')
-			if role.behaviour == ('base',) or role.behaviour == ('',):
-				role.behaviour = ()
-			role.farm_role_id = role_el.getAttribute("id")
-			role.name = role_el.getAttribute("name")
-			for host_el in role_el.firstChild.childNodes:
-				host = RoleHost()
-				host.index = int(host_el.getAttribute("index"))
-				if host_el.hasAttribute("replication-master"):
-					host.replication_master = bool(int(host_el.getAttribute("replication-master")))
-				if host_el.hasAttribute("shard-index"):
-					host.shard_index = int(host_el.getAttribute("shard-index"))
-				if host_el.hasAttribute("replica-set-index"):
-					host.replica_set_index = int(host_el.getAttribute("replica-set-index"))
-				if host_el.hasAttribute("status"):
-					host.status = host_el.getAttribute("status")
-				host.internal_ip = host_el.getAttribute("internal-ip")
-				host.external_ip = host_el.getAttribute("external-ip")
-				host.status = host_el.getAttribute("status")
-				role.hosts.append(host)
-				
+		response = xml.documentElement.toxml()
+		data = xml2dict(ET.XML(response))
+		for rdict in data['roles']:
+			behaviours = rdict['behaviour'].split(',')
+			if behaviours == ('base',) or behaviours == ('',):
+				behaviours = ()
+			name = rdict['name']
+			hosts = []
+			if 'hosts' in rdict:
+				hosts = [RoleHost.from_dict(d) for d in rdict['hosts']]
+			farm_role_id  = rdict['id'] if 'id' in rdict else None
+			role = Role(behaviours, name, hosts, farm_role_id)
 			ret.append(role)
 		return ret
 	
 	
 	def _read_list_ebs_mountpoints_response(self, xml):
 		ret = []
-		
-		response = xml.documentElement
-		for mountpoint_el in response.firstChild.childNodes:
-			mountpoint = Mountpoint()
-			mountpoint.name = mountpoint_el.getAttribute("name")
-			mountpoint.dir = mountpoint_el.getAttribute("dir")
-			mountpoint.create_fs = bool(int(mountpoint_el.getAttribute("createfs")))
-			mountpoint.is_array = bool(int(mountpoint_el.getAttribute("isarray")))
-			for volume_el in mountpoint_el.firstChild.childNodes:
-				volume = Volume()
-				volume.volume_id = volume_el.getAttribute("volume-id")
-				volume.device = volume_el.getAttribute("device")
-				mountpoint.volumes.append(volume)
-				
-			ret.append(mountpoint)
-
+		response = xml.documentElement.toxml()
+		data = xml2dict(ET.XML(response))
+		for mp in data['mountpoints']:
+			create_fs = bool(int(mp["createfs"]))
+			is_array = bool(int(mp["isarray"]))
+			volumes = [Volume(vol_data["volume-id"], vol_data["device"]) for vol_data in mp["volumes"]]
+			ret.append(Mountpoint(mp["name"], mp["dir"], create_fs, is_array, volumes))
 		return ret
 	
 	
 	def _read_list_scripts_response(self, xml):
 		ret = []
-		
-		response = xml.documentElement
-		if response.firstChild:
-			for script_el in response.firstChild.childNodes:
-				script = Script()
-				script.asynchronous = bool(int(script_el.getAttribute("asynchronous")))
-				script.exec_timeout = int(script_el.getAttribute("exec-timeout"))
-				script.name = script_el.getAttribute("name")
-				script.body = script_el.firstChild.firstChild.nodeValue
-				ret.append(script)		
+		response = xml.documentElement.toxml()
+		data = xml2dict(ET.XML(response))
+		for raw_script in data['scripts']:
+			asynchronous = bool(int(raw_script["asynchronous"]))
+			exec_timeout = int(raw_script["exec-timeout"])
+			script = Script(asynchronous, exec_timeout, raw_script["name"], raw_script["body"])
+			ret.append(script)
 		return ret
 	
 	def _read_list_role_params_response(self, xml):
 		ret = {}
-		response = xml.documentElement
-		if response:
-			for param_el in response.firstChild.childNodes:
-				if param_el.firstChild.firstChild:
-					value = param_el.firstChild.firstChild.nodeValue
-				else:
-					value = None
-				ret[param_el.getAttribute("name")] = value
+		response = xml.documentElement.toxml()
+		data = xml2dict(ET.XML(response))
+		for raw_param in data['params']:
+			key = raw_param['name']
+			value = raw_param['value']
+			ret[key]=value
 		return ret
 
 	_read_get_server_user_data_response = _read_list_role_params_response
 
 	def _read_list_farm_role_params_response(self, xml):
 		response = xml.documentElement.toxml()
-		return XmlDictConfig(ET.XML(response))
+		return xml2dict(ET.XML(response))
 
 	def _read_get_latest_version_response(self, xml):
 		response = xml.documentElement
@@ -335,41 +308,17 @@ class QueryEnvService(object):
 		return ret
 	
 	def _read_get_service_configuration_response(self, xml, behaviour):
-		ret = {}
-		name = None
-		restart_service = None
-		
-		name_attr = 'preset-name'
-		restart_service_attr = 'restart-service'
-		key_attr = "key"
-		
-		response = xml.documentElement
-		
-		if not response or not response.firstChild:
-			return QueryEnvError("Expected element 'settings' not found in QueryEnv response")
-		else:
-			for settings in response.childNodes:
-				
-				if settings.hasAttribute('behaviour') and settings.getAttribute('behaviour') != behaviour:
-					continue
-			
-				if settings.hasAttribute(name_attr):
-					name = settings.getAttribute(name_attr)
-					
-				if settings.hasAttribute(restart_service_attr):
-					restart_service = settings.getAttribute(restart_service_attr)
-				
-				for setting in settings.childNodes:
-					if setting.hasAttribute(key_attr):
-						k = setting.getAttribute(key_attr)
-						if k and setting.firstChild:
-							ret[k] = setting.firstChild.nodeValue
-					
+		response = xml.documentElement.toxml()
+		data = xml2dict(ET.XML(response))
 		preset = Preset()
-		preset.name = str(name)
-		preset.restart_service = restart_service
-		preset.settings = ret
+		for raw_preset in data:
+			if behaviour != raw_preset['behaviour']:
+				continue
+			preset.name = raw_preset['preset-name']
+			preset.restart_service = raw_preset['restart-service']
+			preset.settings = raw_preset['values']
 		return preset
+
 	
 	def _read_get_scaling_metrics_response(self, xml):
 		ret = []
@@ -469,27 +418,46 @@ class Role(object):
 	+ "; hosts = " + str(self.hosts) \
 	+ "; farm_role_id = " + str(self.farm_role_id) + ";"
 
-class RoleHost(object):
+
+class QueryEnvResult(object):
+	@classmethod
+	def from_dict(cls,dict_data):
+		kwargs = {}
+		for k,v in dict_data.items():
+			member = k.replace('-','_')
+			if hasattr(cls, member):
+				kwargs[member] = v
+		obj = cls(**kwargs)
+		return obj
+
+class RoleHost(QueryEnvResult):
 	index = None
 	replication_master = False
 	internal_ip = None
 	external_ip	= None
 	shard_index = None
+	replica_set_index = None
 	
-	def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None, shard_index=None):
-		self.index = index
-		self.replication_master = replication_master
+	def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None, shard_index=None, replica_set_index=None):
 		self.internal_ip = internal_ip
 		self.external_ip = external_ip
-		self.shard_index = shard_index
-		
+		if index:
+			self.index = int(index)
+		if replication_master:
+			self.replication_master = bool(int(replication_master))
+		if shard_index:
+			self.shard_index = int(shard_index)
+		if replica_set_index:
+			self.replica_set_index = int(replica_set_index)
+
 	
 	def __repr__(self):
 		return "index = " + str(self.index) \
 	+ "; replication_master = " + str(self.replication_master) \
 	+ "; internal_ip = " + str(self.internal_ip) \
 	+ "; external_ip = " + str(self.external_ip) \
-	+ "; shard_index = " + str(self.shard_index)
+	+ "; shard_index = " + str(self.shard_index) \
+	+ "; replica_set_index = " + str(self.replica_set_index)
 
 	
 class Script(object):
@@ -553,42 +521,23 @@ class ScalingMetric(object):
 		return 'qe:ScalingMetric(%s, id: %s, path: %s:%s)' % (self.name, self.id, self.path, self.retrieve_method)
 
 
-class XmlListConfig(list):
-	def __init__(self, aList):
-		for element in aList:
-			if element:
-				if len(element) == 1 or element[0].tag != element[1].tag:
-					self.append(XmlDictConfig(element))
-				elif element[0].tag == element[1].tag:
-					self.append(XmlListConfig(element))
-			elif element.text:
-				text = element.text.strip()
-				if text:
-					self.append(text)
-
-
-class XmlDictConfig(dict):
-	'''
-	usage:
-	>>> tree = ElementTree.parse('file.xml')
-	>>> root = tree.getroot()
-	>>> xmldict = XmlDictConfig(root)
-	'''
-
-	def __init__(self, parent_element):
-		if parent_element.items():
-			self.update(dict(parent_element.items()))
-		for element in parent_element:
-			if element:
-				if len(element) == 1 or element[0].tag != element[1].tag:
-					a_dict = XmlDictConfig(element)
-				else:
-					a_dict = {element[0].tag: XmlListConfig(element)}
-				if element.items():
-					a_dict.update(dict(element.items()))
-				self.update({element.tag: a_dict})
-			elif element.items():
-				self.update({element.tag: dict(element.items())})
-			else:
-				self.update({element.tag: element.text})
+def xml2dict(el):
+	if el.attrib:
+		ret = el.attrib
+		if el.tag == 'settings':
+			ret['values'] = {}
+			for ch in el:
+				ret['values'][ch.attrib['key']] = ch.text
+		else:
+			for ch in el:
+				ret[ch.tag] = xml2dict(ch)
+		return ret
+	if len(el):
+		tag = el[0].tag
+		if tag in ('item', 'role', 'host', 'settings', 'volume', 'mountpoint', 'script', 'param') and  all(ch.tag == tag for ch in el):
+			return list(xml2dict(ch) for ch in el)
+		else:
+			return dict((ch.tag, xml2dict(ch)) for ch in el)
+	else:
+		return el.text
 

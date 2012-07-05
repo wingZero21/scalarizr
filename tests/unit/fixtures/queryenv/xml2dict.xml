@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<response>
+<mysql>
+<volume_config>
+<type>ebs</type>
+<size>100</size>
+<id>vol-12345678</id>
+<device>/dev/xvdp</device>
+<mpoint>/mnt/dbstorage</mpoint>
+</volume_config>
+<root_password>NTw23g</root_password>
+<repl_password>Ooyu6im0</repl_password>
+<stat_password>maicho9A</stat_password>
+<log_file>binlog.000003</log_file>
+<log_pos>106</log_pos>
+</mysql>
+</response>
