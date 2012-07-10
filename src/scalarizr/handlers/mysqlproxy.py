@@ -16,12 +16,15 @@ from scalarizr.util import initdv2, software
 from scalarizr.messaging import Messages
 from scalarizr.handlers import ServiceCtlHandler
 from scalarizr.config import BuiltinBehaviours
+from scalarizr.util import disttool
+import ConfigParser
+import sys
 
 BEHAVIOUR = SERVICE_NAME = 'mysql_proxy'
 CONFIG_FILE_PATH = '/etc/mysql_proxy.conf'
 PID_FILE = '/var/run/mysql-proxy.pid'
 NEW_MASTER_UP = "Mysql_NewMasterUp"
-
+LOG = logging.getLogger(__name__)
 
 def get_handlers():
 	return (MysqlProxyHandler(),)
@@ -84,8 +87,14 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
 				os.dup2(0, 2)	
 				
 				try:
-					os.execl(self.bin_path, 'mysql-proxy', '--defaults-file=' + CONFIG_FILE_PATH)
-				except Exception:
+					if disttool.is_centos() and disttool.version_info()[0] == 5:
+						defaults = ConfigParser.ConfigParser()
+						defaults.read(CONFIG_FILE_PATH)
+						opts = ['--%s=%s' % item for item in defaults.items('mysql-proxy')]
+					else:
+						opts = ['--defaults-file=' + CONFIG_FILE_PATH]
+						os.execl(self.bin_path, 'mysql-proxy', *opts)
+				except:
 					os._exit(255)
 	
 	
