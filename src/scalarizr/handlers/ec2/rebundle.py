@@ -9,9 +9,9 @@ from scalarizr.handlers import HandlerError, prepare_tags
 from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, firstmatched
 from scalarizr.platform.ec2 import ebstool
+from scalarizr import storage
 from scalarizr.storage.transfer import Transfer
 from scalarizr.handlers import rebundle as rebundle_hdlr
-from scalarizr.storage import Storage
 
 from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
@@ -111,15 +111,15 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 			list_rdevparts = [dev.device for dev in list_device
 								if dev.device.startswith('/dev/%s' % rdev)]
 
-			""" if one partition we use old method """
 			if len(list(set(list_rdevparts))) > 1:
 				""" size of volume in KByte"""
 				volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
 				""" size of volume in GByte"""
 				volume_size = int(volume_size[0].strip()) / 1024 / 1024
 				#TODO: need set flag, which be for few partitions
-				#is_few_partition = True
+				#copy_partition_table = True
 			else:
+				""" if one partition we use old method """				
 				volume_size = self._rebundle_message.body.get('volume_size')			
 				if not volume_size:
 					volume_size = int(root_disk.size / 1000 / 1000)
@@ -645,7 +645,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 	_volume_size = None
 	ebs_volume = None
 	
-	is_few_partition = None
+	copy_partition_table = None
 	
 	def __init__(self, volume, ec2_conn, avail_zone, instance_id,
 				volume_size=None, volume_id=None, excludes=None):
@@ -663,7 +663,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 	def _create_image(self):
 		self._ebs_config['tags'] = prepare_tags(tmp=1)
-		self.ebs_volume = Storage.create(self._ebs_config)
+		self.ebs_volume = storage.Storage.create(self._ebs_config)
 		return self.ebs_volume.devname
 
 
@@ -744,7 +744,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 			""" check partition Id(Hex) and create fs """
 			if part_id != 0 and part_id != 82:
-				Storage.lookup_filesystem(type_fs or 'ext3').mkfs(to_dev)
+				storage.Storage.lookup_filesystem(type_fs or 'ext3').mkfs(to_dev)
 			elif part_id == 82:
 				""" swap partition """
 				out, err, ret_code = system2(('mkswap', '-L', 'swap', to_dev),)
@@ -804,7 +804,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)",
 				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
 
-		#TODO: need transmit flag `is_few_partition` from Ec2RebundleHandler.before_rebundle
+		#TODO: need transmit flag `copy_partition_table` from Ec2RebundleHandler.before_rebundle
 		""" list of all mounted devices """
 		list_device = filetool.df()
 		""" root device partition like `df(device='/dev/sda2', ..., mpoint='/')` """
@@ -824,19 +824,19 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 								if dev.device.startswith('/dev/%s' % rdev)]
 		""" if one partition we use old method """
 		if len(list(set(list_rdevparts))) > 1:
-			self.is_few_partition = True
+			self.copy_partition_table = True
 
 
 		""" for one partition in root device EBS volume using LinuxImage.make(self)
 			else copy partitions of root device """
-		if self.is_few_partition:
+		if self.copy_partition_table:
 			self.make_partitions()
 		else:
 			rebundle_hdlr.LinuxImage.make(self)
 
 
 	def umount(self):
-		if self.is_few_partition:
+		if self.copy_partition_table:
 			""" self.mpoint like `/mnt/img-mnt/sda2' root partition copy 
 				finding all new mounted partitions in `/mnt/img-mnt`... """
 			mpt = '/'+ '/'.join(filter(None, self.mpoint.split('/'))[:-1])
@@ -855,7 +855,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 	def cleanup(self):
 		self.umount()
 		mp = None
-		if self.is_few_partition:
+		if self.copy_partition_table:
 			""" self.mountpoint like /mnt/img-mnt/sdg2 """
 			mp = '/'+ '/'.join(filter(None, self.mpoint.split('/'))[:-1])
 			""" removing all directories inside mountpoint"""
