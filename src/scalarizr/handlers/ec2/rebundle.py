@@ -849,8 +849,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		else:
 			rebundle_hdlr.LinuxImage.umount(self)
 
-		rebundle_hdlr.LinuxImage.make(self)
-
 
 	def cleanup(self):
 		self.umount()
