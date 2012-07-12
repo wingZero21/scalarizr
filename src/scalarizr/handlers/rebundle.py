@@ -271,7 +271,7 @@ class LinuxImage:
 	
 	_mtab = None
 	
-	def __init__(self, volume, path, excludes=None):
+	def __init__(self, volume, path=None, excludes=None):
 		self._mtab = fstool.Mtab()
 		self._volume = volume
 		self.mpoint = '/mnt/img-mnt'
@@ -281,7 +281,8 @@ class LinuxImage:
 		self.excludes = set(self.SPECIAL_DIRS) 	# Add special dirs
 		self.excludes.update(excludes or ()) 	# Add user input
 		self.excludes.add(self.mpoint) 			# Add image mount point
-		self.excludes.add(self.path) 			# Add image path
+		if self.path:
+			self.excludes.add(self.path) 		# Add image path
 		# Add all mounted filesystems, except bundle volume 
 		self._excluded_mpoints = list(entry.mpoint
 				for entry in self._mtab.list_entries() 

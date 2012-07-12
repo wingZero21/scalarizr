@@ -10,6 +10,7 @@ from Queue import Queue, Empty
 from threading import Thread, Lock
 from urlparse import urlparse
 import sys
+import os
 
 '''
 Example:
@@ -55,6 +56,9 @@ trn.download('s3://scalr-files/path/to/some-shit/', dst, recursive=True)
 '''
 
 class TransferError(BaseException):
+	pass
+
+class StopTransfer(Exception):
 	pass
 
 class Transfer(object):
@@ -113,6 +117,7 @@ class Transfer(object):
 		# Enqueue 
 		queue = Queue()
 		for file in files:
+			os.access(file, os.R_OK)
 			queue.put((file, 0)) 
 
 		workers = []
@@ -149,6 +154,8 @@ class Transfer(object):
 				filename, attempts = queue.get(False)
 				try:
 					result[filename] = action(filename)
+				except StopTransfer:
+					break
 				except (Exception, BaseException), e:
 					self._logger.warn("Cannot transfer '%s'. %s", filename, e, exc_info=sys.exc_info())
 					# For all transfer errors give a second chance					

@@ -48,7 +48,7 @@ from scalarizr.messaging import Message
 
 
 LOG = logging.getLogger('szradm')
-
+QUERYENV_API_VERSION = None
 
 def encode(a, encoding='ascii'):
 	'used for recursive ecnode in class MarkAsUnhandledCommand'
@@ -537,6 +537,7 @@ def help_misc():
 	parser = OptionParser(usage="Usage: %prog [options] key=value key2=value2 ...")
 	parser.add_option("-q", "--queryenv", dest="queryenv", action="store_true",
 		default=False, help="QueryEnv CLI")
+	parser.add_option('--api-version', dest='api_version', help='QueryEnv API version')
 	parser.add_option("-m", "--msgsnd", dest="msgsnd", action="store_true",
 		default=False, help="Message sender CLI")
 	parser.add_option("-r", "--repair", dest="repair", action="store_true",
@@ -574,16 +575,18 @@ def new_queryenv():
 	key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
 	server_id = ini.get('general', 'server_id')
 	url = ini.get('general','queryenv_url')
-	cnf = bus.cnf
-	if not bus.scalr_version:
-		version_file = cnf.private_path('.scalr-version')
-		if os.path.exists(version_file):
-			bus.scalr_version = tuple(read_file(version_file).strip().split('.'))
-	
-	if bus.scalr_version:
-		api_version = '2012-04-17' if bus.scalr_version >= (3, 1, 0) else '2010-09-23'
-	else:
-		api_version = '2012-04-17'
+	api_version = QUERYENV_API_VERSION
+	if not api_version:
+		cnf = bus.cnf
+		if not bus.scalr_version:
+			version_file = cnf.private_path('.scalr-version')
+			if os.path.exists(version_file):
+				bus.scalr_version = tuple(read_file(version_file).strip().split('.'))
+		
+		if bus.scalr_version:
+			api_version = '2012-04-17' if bus.scalr_version >= (3, 1, 0) else '2010-09-23'
+		else:
+			api_version = '2012-04-17'
 	return QueryEnvService(url, server_id, key_path, api_version)		
 	
 
@@ -632,6 +635,8 @@ def main():
 		parser=help_misc()
 #------------------------------------------------------------------------------------------------
 		(options, raw_args) = parser.parse_args()
+		if options.api_version:
+			globals()['QUERYENV_API_VERSION'] = options.api_version
 
 		if not options.queryenv and not options.msgsnd and not options.repair \
 			and not options.report and not options.reinit:

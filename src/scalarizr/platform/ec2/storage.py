@@ -13,6 +13,7 @@ from scalarizr.storage.transfer import TransferProvider, TransferError
 from . import ebstool
 
 import os
+import re
 import sys
 import logging
 import urlparse
@@ -110,8 +111,10 @@ class EbsVolumeProvider(VolumeProvider):
 					volumes = conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
 
 					for volume in volumes:
+						volume_device = volume.attach_data.device
+						volume_device = re.sub('\d+', '', volume_device)
 						try:
-							avail_letters.remove(volume.attach_data.device[-1])
+							avail_letters.remove(volume_device[-1])
 						except ValueError:
 							pass
 
