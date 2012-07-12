@@ -505,11 +505,12 @@ class MysqlHandler(DBMSRHandler):
 				else:
 					parts = [backup_path]
 						
-				LOG.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+				cloud_storage_path = self._platform.scalrfs.backups('mysql')
+				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 				trn = transfer.Transfer()
-				result = trn.upload(parts, self._platform.cloud_storage_path)
+				result = trn.upload(parts, cloud_storage_path)
 				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
-								self._platform.cloud_storage_path, backup_filename)
+								cloud_storage_path, backup_filename)
 											
 			op.ok()
 			
