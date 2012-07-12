@@ -16,6 +16,8 @@ import pwd
 import threading
 import time
 import shutil
+import socket
+import errno
 
 from pymysql import cursors
 
@@ -343,9 +345,9 @@ class MySQLClient(object):
 		LOG.debug(query)
 		try:
 			cur.execute(query)
-		except pymysql.err.OperationalError, e:
+		except (pymysql.err.OperationalError, socket.error, IOError), e:
 			#catching mysqld restarts (e.g. sgt)
-			if e.args[0] == 2013:
+			if e.args[0] in (2013,32,errno.EPIPE):
 				conn = self.get_connection(force=True)
 				cur = conn.cursor(cursor_type)
 				cur.execute(query)

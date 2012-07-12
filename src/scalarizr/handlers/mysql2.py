@@ -465,6 +465,7 @@ class MysqlHandler(DBMSRHandler):
 			os.makedirs(tmp_basedir)		
 		# Retrieve password for scalr mysql user
 		backup_path = None
+		tmpdir = None
 		try:
 			# Get databases list
 			databases = self.root_client.list_databases()
