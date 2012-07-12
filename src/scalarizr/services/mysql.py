@@ -491,9 +491,9 @@ class MySQLDump(object):
 	def create(self, dbname, filename, opts=None):
 		opts = opts or []
 		LOG.debug('Dumping database %s to %s' % (dbname, filename))
-		opts = [MYSQLDUMP_PATH, '-u', self.root_user, '-p'] + opts + ['--databases']
+		opts = [MYSQLDUMP_PATH, '-u', self.root_user, '--password='+self.root_password] + opts + ['--databases']
 		with open(filename, 'w') as fp: 
-			system2(opts + [dbname], stdin=self.root_password, stdout=fp)
+			system2(opts + [dbname], stdout=fp)
 
 
 class RepicationWatcher(threading.Thread):
