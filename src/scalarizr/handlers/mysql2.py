@@ -491,7 +491,7 @@ class MysqlHandler(DBMSRHandler):
 				mysqldump = mysql_svc.MySQLDump(root_user=ROOT_USER, root_password=self.root_password)		
 				dump_options = config.split(self._cnf.rawini.get('mysql2', 'mysqldump_options'), ' ')	
 				for db_name in databases:
-					with op.step("Backup '%s'" % db):
+					with op.step("Backup '%s'" % db_name):
 						dump_path = os.path.join(tmpdir, db_name + '.sql') 
 						mysqldump.create(db_name, dump_path, dump_options)
 						backup.add(dump_path, os.path.basename(dump_path))
