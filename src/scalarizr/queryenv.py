@@ -142,12 +142,6 @@ class QueryEnvService(object):
 		"""
 		return self._request('get-server-user-data', {}, self._read_get_server_user_data_response)
 
-	def get_server_user_data(self):
-		"""
-		@return: dict
-		"""
-		return self._request('get-server-user-data', {}, self._read_get_server_user_data_response)
-
 	def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None, 
 		target_ip=None, local_ip=None):
 		"""
@@ -210,24 +204,39 @@ class QueryEnvService(object):
 		'''
 		return self._request('get-scaling-metrics', {}, self._read_get_scaling_metrics_response)
 		pass
+	
+	def get_global_config(self):
+		"""
+		@return dict
+		"""
+		return {'params':self._request("get-global-config", {}, self._read_get_global_config_response)}
 
 	def _request (self, command, params={}, response_reader=None, response_reader_args=None):
 		xml = self.fetch(command, **params)
 		response_reader_args = response_reader_args or ()
 		return response_reader(xml, *response_reader_args)
 
+	def _read_get_global_config_response(self, xml):
+		"""
+		@return dict
+		"""
+		ret = xml2dict(ET.XML(xml))
+		if ret:
+			data = ret[0]
+		return data['values'] if 'values' in data else {}
+
 
 	def _read_list_roles_response(self, xml):
 		ret = []
-		response = xml.documentElement.toxml()
-		data = xml2dict(ET.XML(response))
-		for rdict in data['roles']:
+		data = xml2dict(ET.XML(xml))
+		roles = data['roles'] or []
+		for rdict in roles:
 			behaviours = rdict['behaviour'].split(',')
 			if behaviours == ('base',) or behaviours == ('',):
 				behaviours = ()
 			name = rdict['name']
 			hosts = []
-			if 'hosts' in rdict:
+			if 'hosts' in rdict and rdict['hosts']:
 				hosts = [RoleHost.from_dict(d) for d in rdict['hosts']]
 			farm_role_id  = rdict['id'] if 'id' in rdict else None
 			role = Role(behaviours, name, hosts, farm_role_id)
@@ -237,21 +246,21 @@ class QueryEnvService(object):
 	
 	def _read_list_ebs_mountpoints_response(self, xml):
 		ret = []
-		response = xml.documentElement.toxml()
-		data = xml2dict(ET.XML(response))
-		for mp in data['mountpoints']:
-			create_fs = bool(int(mp["createfs"]))
-			is_array = bool(int(mp["isarray"]))
-			volumes = [Volume(vol_data["volume-id"], vol_data["device"]) for vol_data in mp["volumes"]]
-			ret.append(Mountpoint(mp["name"], mp["dir"], create_fs, is_array, volumes))
+		data = xml2dict(ET.XML(xml))
+		mpoints = data['mountpoints'] or []
+		for mp in mpoints:
+				create_fs = bool(int(mp["createfs"]))
+				is_array = bool(int(mp["isarray"]))
+				volumes = [Volume(vol_data["volume-id"], vol_data["device"]) for vol_data in mp["volumes"]]
+				ret.append(Mountpoint(mp["name"], mp["dir"], create_fs, is_array, volumes))
 		return ret
 	
 	
 	def _read_list_scripts_response(self, xml):
 		ret = []
-		response = xml.documentElement.toxml()
-		data = xml2dict(ET.XML(response))
-		for raw_script in data['scripts']:
+		data = xml2dict(ET.XML(xml))
+		scripts = data['scripts'] or []
+		for raw_script in scripts:
 			asynchronous = bool(int(raw_script["asynchronous"]))
 			exec_timeout = int(raw_script["exec-timeout"])
 			script = Script(asynchronous, exec_timeout, raw_script["name"], raw_script["body"])
@@ -260,44 +269,36 @@ class QueryEnvService(object):
 	
 	def _read_list_role_params_response(self, xml):
 		ret = {}
-		response = xml.documentElement.toxml()
-		data = xml2dict(ET.XML(response))
-		for raw_param in data['params']:
+		data = xml2dict(ET.XML(xml))
+		role_params = data['params'] or []
+		for raw_param in role_params:
 			key = raw_param['name']
 			value = raw_param['value']
 			ret[key]=value
 		return ret
 
-	_read_get_server_user_data_response = _read_list_role_params_response
+	def _read_get_server_user_data_response(self, xml):
+		data = xml2dict(ET.XML(xml))
+		user_data = data['user-data']
+		return user_data['values'] if 'values' in user_data else {}
 
 	def _read_list_farm_role_params_response(self, xml):
-		response = xml.documentElement.toxml()
-		return xml2dict(ET.XML(response))
+		return xml2dict(ET.XML(xml))
 
 	def _read_get_latest_version_response(self, xml):
-		response = xml.documentElement
-		version = response.firstChild.firstChild.nodeValue
-		return version
+		result = xml2dict(ET.XML(xml))
+		return result['version'] if 'version' in result else None
 	
 	def _read_get_https_certificate_response(self, xml):
-		response = xml.documentElement
-		if len(response.childNodes):
-			virtualhost = response.firstChild
-			ca_cert = None
-			for ssl_data in virtualhost.childNodes:
-				if ssl_data.nodeName == "cert":
-					cert = ssl_data.firstChild.nodeValue if ssl_data.firstChild else None
-				elif ssl_data.nodeName == "pkey":
-					pkey = ssl_data.firstChild.nodeValue if ssl_data.firstChild else None
-				elif ssl_data.nodeName == "ca_cert":
-					ca_cert = ssl_data.firstChild.nodeValue if ssl_data.firstChild else None
-			if not cert:
-				self._logger.error("Queryenv didn`t return SSL cert")
-			if not pkey:
-				self._logger.error("Queryenv didn`t return SSL keys")
-			return (cert, pkey, ca_cert)
-		self._logger.error("Queryenv return empty SSL cert & keys")
-		return (None, None, None)	
+		result = xml2dict(ET.XML(xml))
+		if 'virtualhost' in result:
+			data = result['virtualhost']
+			cert = data['cert'] if 'cert' in data else None
+			pkey = data['pkey'] if 'pkey' in data else None
+			ca = data['ca_cert'] if 'ca_cert' in data else None
+			return (cert, pkey, ca)
+		return (None, None, None)
+
 
 	def _read_list_virtualhosts_response(self, xml):
 		ret = []
@@ -329,21 +330,15 @@ class QueryEnvService(object):
 	
 	def _read_get_scaling_metrics_response(self, xml):
 		ret = []
-		
-		response = xml.documentElement
-		for metric_el in response.firstChild.childNodes:
+		data = xml2dict(ET.XML(xml))
+		raw_metrics = data['metrics'] or []
+		for metric_el in raw_metrics:
 			m = ScalingMetric()
-			m.id = metric_el.getAttribute('id')
-			m.name = metric_el.getAttribute('name')
-			
-			tpl = metric_el.childNodes[0].firstChild
-			m.path = tpl and tpl.nodeValue or None
-			
-			tpl = metric_el.childNodes[1].firstChild
-			m.retrieve_method = tpl and tpl.nodeValue or None
-			
+			m.id = metric_el['id']
+			m.name = metric_el['name']
+			m.path = metric_el['path']
+			m.retrieve_method = metric_el['retrieve-method'].strip()
 			ret.append(m)
-			
 		return ret
 
 
@@ -540,8 +535,22 @@ def xml2dict(el):
 				ret[ch.tag] = xml2dict(ch)
 		return ret
 	if len(el):
+		if el.tag == 'settings':
+			return {'values':dict((ch.attrib['key'], ch.text) for ch in el)}
+
+		if el.tag == 'user-data':
+			ret = {}
+			ret['values'] = {}
+			for ch in el: 
+				key = ch.attrib['name']
+				value = ch[0].text
+				ret['values'][key] = value
+			return ret
+		
+		
 		tag = el[0].tag
-		if tag in ('item', 'role', 'host', 'settings', 'volume', 'mountpoint', 'script', 'param') and  all(ch.tag == tag for ch in el):
+		list_tags = ('item', 'role', 'host', 'settings', 'volume', 'mountpoint', 'script', 'param', 'vhost', 'metric')
+		if tag in list_tags and  all(ch.tag == tag for ch in el):
 			return list(xml2dict(ch) for ch in el)
 		else:
 			return dict((ch.tag, xml2dict(ch)) for ch in el)
