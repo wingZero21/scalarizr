@@ -345,7 +345,7 @@ def _start_services():
 	logger.info('Starting API server on http://0.0.0.0:8010')
 	api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
 	api_thread.start()
-	
+
 	# Start periodical executor
 	ex = bus.periodical_executor
 	ex.start()

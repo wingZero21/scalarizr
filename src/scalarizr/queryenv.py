@@ -136,6 +136,11 @@ class QueryEnvService(object):
 			parameters["farm-role-id"] = farm_role_id
 		return {'params':self._request("list-farm-role-params", parameters, self._read_list_farm_role_params_response)}
 
+	def get_server_user_data(self):
+		"""
+		@return: dict
+		"""
+		return self._request('get-server-user-data', {}, self._read_get_server_user_data_response)
 
 	def get_server_user_data(self):
 		"""

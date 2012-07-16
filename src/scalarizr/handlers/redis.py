@@ -465,6 +465,7 @@ class RedisHandler(ServiceCtlHandler):
 					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
 					cloud_files = trn.upload(parts, cloud_storage_path)
+					result = trn.upload(parts, cloud_storage_path)
 					self._logger.info("%s backup uploaded to cloud storage under %s/%s" % 
 								(BEHAVIOUR, cloud_storage_path, backup_filename))
 			

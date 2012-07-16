@@ -9,16 +9,17 @@ from scalarizr.handlers import HandlerError, prepare_tags
 from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
 	wait_until, firstmatched
 from scalarizr.platform.ec2 import ebstool
+from scalarizr import storage
 from scalarizr.storage.transfer import Transfer
 from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr import storage
-
 
 from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
 import time, os, re, shutil, glob
+import string
 import ConfigParser
 
 from boto.exception import BotoServerError
@@ -70,7 +71,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		self._ebs_strategy_cls = ebs_strategy_cls or RebundleEbsStrategy
 		self._instance_store_strategy_cls = instance_store_strategy_cls or RebundleInstanceStoreStrategy
 		
-		
+
 	def before_rebundle(self):
 		'''
 		@param message.volume_size:  
@@ -87,17 +88,43 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		ec2_conn = pl.new_ec2_conn()
 		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
 		
-		# Find root device
-		root_disk = firstmatched(lambda x: x.mpoint == '/', filetool.df())
+		""" list of all mounted devices """
+		list_device = filetool.df()
+		
+		""" root device partition like `df(device='/dev/sda2', ..., mpoint='/')` """
+		root_disk = firstmatched(lambda x: x.mpoint == '/', list_device)
 		if not root_disk:
 			raise HandlerError("Can't find root device")
-		
+
 		if instance.root_device_name:
 			# EBS-root device instance
-			volume_size = self._rebundle_message.body.get('volume_size')			
-			if not volume_size:
-				volume_size = int(root_disk.size / 1000 / 1000)
-			
+
+			""" detecting root device like rdev=`sda` """
+			rdev = None
+			for el in os.listdir('/sys/block'):
+				if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
+					rdev = el
+					break
+			if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
+				rdev = root_disk.device
+
+			""" list partition of root device """
+			list_rdevparts = [dev.device for dev in list_device
+								if dev.device.startswith('/dev/%s' % rdev)]
+
+			if len(list(set(list_rdevparts))) > 1:
+				""" size of volume in KByte"""
+				volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
+				""" size of volume in GByte"""
+				volume_size = int(volume_size[0].strip()) / 1024 / 1024
+				#TODO: need set flag, which be for few partitions
+				#copy_partition_table = True
+			else:
+				""" if one partition we use old method """				
+				volume_size = self._rebundle_message.body.get('volume_size')			
+				if not volume_size:
+					volume_size = int(root_disk.size / 1000 / 1000)
+
 			self._strategy = self._ebs_strategy_cls(
 				self, self._role_name, image_name, self._excludes,
 				volume_size=volume_size,  # in Gb
@@ -599,16 +626,16 @@ class RebundleEbsStrategy(RebundleStratery):
 		
 		self._succeed = True
 		return ami_id
-			
+
 	def cleanup(self):
 		RebundleStratery.cleanup(self)
 		if not self._succeed and self._snap:
 			LOG.debug('Deleting snapshot %s', self._snap.id)
 			self._snap.destroy()
 
-		
-		
-	
+
+
+
 class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 	'''
 	This class encapsulate functionality to create a EBS from a root volume 
@@ -618,7 +645,9 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 	_instance_id = None
 	_volume_size = None
 	ebs_volume = None
-			
+	
+	copy_partition_table = None
+	
 	def __init__(self, volume, ec2_conn, avail_zone, instance_id,
 				volume_size=None, volume_id=None, excludes=None):
 		rebundle_hdlr.LinuxImage.__init__(self, volume, excludes=excludes)
@@ -638,15 +667,205 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		self.ebs_volume = storage.Storage.create(self._ebs_config)
 		return self.ebs_volume.devname
 
+
+	def _read_pt(self, dev_name):
+		""" 
+		rtype: dict partition table one of device, example: dev_name='/dev/sda'
+
+		{'/dev/sdf1': {'bootable': True, 'start': '63', 'Id': '83', 'size': '192717'},
+		 '/dev/sdf3': {'start': '21800205', 'Id': '82', 'size': '4209030'},
+		 ...
+		 '/dev/sdf4': {'start': '0', 'Id': '0', 'size': '0'}}
+		"""
+
+		pt = [el for el in [dev for dev in system2(('sfdisk', '-d', dev_name),
+					)[0].split('\n') if dev.startswith('/dev')]]
+		res = {}
+		for line in pt:
+			dev_name, params = map(string.strip, line.split(':'))
+			params = map(string.strip, params.split(','))
+			res[dev_name] = {}
+			for val in params:
+				tmp = map(string.strip, val.split('=')) if '=' in val else [val.strip(), True]
+				res[dev_name].update({tmp[0]:tmp[1]})
+		return res
+
+	def make_partitions(self):
+
+		self.devname = self._create_image()
+		LOG.debug('Created volume and attached as `%s`', self.devname)
+
+		system2("sync", shell=True)  
+		# Flush so newly formatted filesystem is ready to mount.
+
+		list_devices = filetool.df()
 		
+		""" rdev_partition is like `/dev/sda1` """
+		rdev_partition = firstmatched(lambda x: x.mpoint == '/', list_devices).device
+		
+		""" detect root device rdev_name is like '/dev/sda' """
+		for el in os.listdir('/sys/block'):
+			if os.path.basename(rdev_partition) in os.listdir('/sys/block/%s'%el):
+				rdev_name = '/dev/%s' % el
+				break
+		if not rdev_name:
+			rdev_name = rdev_partition[-1]
+		LOG.debug('root dev: `%s`; root part: `%s`', rdev_name, rdev_partition)
+
+		""" copy bootloader and MBR from root device to new EBS volume """
+		system2(('dd', 'if=%s'%rdev_name, 'of=%s'%self.devname, 'bs=512', 'count=1'))
+		system2(('sfdisk', '-R', self.devname))
+		wait_until(lambda: os.path.exists('%s1'%self.devname), sleep=0.2,
+			 timeout=5, start_text='check refresh partition table on %s'%self.devname,
+			 error_text='device `%s` not exist'%self.devname)
+		LOG.debug('Copied MBR from %s to %s device', rdev_name, self.devname)
+		
+		""" list with device, source which will be copying """
+		from_devs = [dev for dev in list_devices if dev.device.startswith(rdev_name)]
+		LOG.debug('list from_devs `%s`', from_devs)
+
+		""" Dict with device(distination) partition table params. """
+		to_devs = self._read_pt(self.devname)
+		LOG.debug('list to_devs `%s`', to_devs)
+
+		"""  used for detecting fs type of device, list of device """
+		lparts = [line.split() for line in system2(('df', '-hT'),)[0].split('\n') if line.startswith(rdev_name)]
+
+		""" make fs on volume's partitions """
+		for to_dev in to_devs.keys():
+			part_id = int(to_devs[to_dev]['Id'])
+
+			""" try detect type_fs with `df -hT` of root device """
+			type_fs = None
+			for part in lparts:
+				""" compaire partition's names by last symbol of root part and distination"""
+				if len(part[0]) == len(to_dev) and part[0][-1] == to_dev[-1]:
+					type_fs = part[1]
+					break
+
+			""" check partition Id(Hex) and create fs """
+			if part_id != 0 and part_id != 82:
+				storage.Storage.lookup_filesystem(type_fs or 'ext3').mkfs(to_dev)
+			elif part_id == 82:
+				""" swap partition """
+				out, err, ret_code = system2(('mkswap', '-L', 'swap', to_dev),)
+				if ret_code:		
+					raise HandlerError("Can't create fs on device %s:\n%s" % 
+									(to_dev, err))
+
+
+		""" mounting and copy partitions """
+		for from_dev in from_devs:
+			num = os.path.basename(from_dev.device)[-1]
+
+			if self._mtab.contains(mpoint=os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num))) or\
+					self._mtab.contains(mpoint=os.path.join(self.mpoint, os.path.basename(from_dev.device))):
+				raise HandlerError("Partition already mounted")
+
+			""" dev like `sdg1` """
+			dev = '%s%s' % (os.path.basename(self.devname), num)
+
+			to_mpoint = os.path.join(self.mpoint, dev)
+
+			LOG.debug('try mount dev(distination) `/dev/%s` like `%s`', dev, to_mpoint)
+			""" mount partition seems like /mnt/img-mnt/sdh1 """
+			fstool.mount('/dev/%s' % dev, to_mpoint)
+
+			if os.path.basename(from_dev.device) != os.path.basename(rdev_partition):
+				""" copying not root partition """
+				from_mpoint = os.path.join(self.mpoint, os.path.basename(from_dev.device))
+				LOG.debug('try mount dev(source) `%s` like `%s`', from_dev.device, from_mpoint)
+
+				""" mount source volume partition """
+				fstool.mount(from_dev.device, from_mpoint)
+				""" copy all consitstant"""
+				excludes = self.excludes
+				self.excludes = tuple()
+				self._copy_rec('%s/'%from_mpoint if from_mpoint[-1] != '/' else from_mpoint, to_mpoint)
+				LOG.debug('Copied sucesfull from %s to %s', from_mpoint, to_mpoint)
+				self.excludes = excludes
+			else:
+				""" copying root partition """
+				old_mpoint = self.mpoint
+				self.mpoint = to_mpoint
+				self._make_special_dirs()
+				self._copy_rec(self._volume, '%s/'%self.mpoint if self.mpoint[-1]!='/' else self.mpoint)
+				LOG.debug('Copied sucesfull from %s to %s', self._volume, self.mpoint)
+				self.mpoint = old_mpoint
+
+		system2("sync", shell=True) #Flush buffers
+
+		self.mpoint = os.path.join(self.mpoint, '%s%s'%(os.path.basename(self.devname),
+					os.path.basename(rdev_partition)[-1]))
+
+		return self.mpoint
+
+
 	def make(self):
-		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)",
-				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
-		rebundle_hdlr.LinuxImage.make(self)
+		LOG.info("Make EBS volume (size: %sGb) from volume %s (excludes: %s)",
+				self._ebs_config['size'], self._volume, ":".join(self.excludes))
+
+		#TODO: need transmit flag `copy_partition_table` from Ec2RebundleHandler.before_rebundle
+		""" list of all mounted devices """
+		list_device = filetool.df()
+		""" root device partition like `df(device='/dev/sda2', ..., mpoint='/')` """
+		root_disk = firstmatched(lambda x: x.mpoint == '/', list_device)
+		if not root_disk:
+			raise HandlerError("Can't find root device")
+		""" detecting root device like rdev=`sda` """
+		rdev = None
+		for el in os.listdir('/sys/block'):
+			if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
+				rdev = el
+				break
+		if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
+			rdev = root_disk.device
+		""" list partition of root device """
+		list_rdevparts = [dev.device for dev in list_device
+								if dev.device.startswith('/dev/%s' % rdev)]
+		""" if one partition we use old method """
+		if len(list(set(list_rdevparts))) > 1:
+			self.copy_partition_table = True
+
+
+		""" for one partition in root device EBS volume using LinuxImage.make(self)
+			else copy partitions of root device """
+		if self.copy_partition_table:
+			self.make_partitions()
+		else:
+			rebundle_hdlr.LinuxImage.make(self)
+
+
+	def umount(self):
+		if self.copy_partition_table:
+			""" self.mpoint like `/mnt/img-mnt/sda2' root partition copy 
+				finding all new mounted partitions in `/mnt/img-mnt`... """
+			mpt = '/'+ '/'.join(filter(None, self.mpoint.split('/'))[:-1])
+			mparts = [dev.mpoint for dev in filetool.df() if dev.mpoint.startswith(mpt)]
+			LOG.debug('Partitions which will be unmounting: %s' % mparts)
+			for mpt in mparts:
+				if self._mtab.contains(mpoint=mpt, reload=True):
+					LOG.debug("Unmounting '%s'", mpt)
+					system2("umount -d " + mpt, shell=True, raise_exc=False)
+		else:
+			rebundle_hdlr.LinuxImage.umount(self)
 
 
 	def cleanup(self):
-		rebundle_hdlr.LinuxImage.cleanup(self)
+		self.umount()
+		mp = None
+		if self.copy_partition_table:
+			""" self.mountpoint like /mnt/img-mnt/sdg2 """
+			mp = '/'+ '/'.join(filter(None, self.mpoint.split('/'))[:-1])
+			""" removing all directories inside mountpoint"""
+			if os.path.exists(mp):
+				for el in os.listdir(mp):
+					os.rmdir(os.path.join(mp, el))
+
+		if os.path.exists(mp or self.mpoint):
+			LOG.debug('Remove dirrectory: `%s`' % (mp or self.mpoint))
+			os.rmdir(mp or self.mpoint)
+
 		if self.ebs_volume:
 			self.ebs_volume.destroy()
 			self.ebs_volume = None
@@ -677,7 +896,7 @@ class AmiManifest:
 	ramdisk_id=None
 	product_codes=None
 	ancestor_ami_ids=None 
-	block_device_mapping=None	
+	block_device_mapping=None
 
 	
 	def __init__(self, name=None, user=None, arch=None, 
