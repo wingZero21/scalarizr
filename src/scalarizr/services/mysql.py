@@ -16,6 +16,8 @@ import pwd
 import threading
 import time
 import shutil
+import socket
+import errno
 
 from pymysql import cursors
 
@@ -343,9 +345,9 @@ class MySQLClient(object):
 		LOG.debug(query)
 		try:
 			cur.execute(query)
-		except pymysql.err.OperationalError, e:
+		except (pymysql.err.OperationalError, socket.error, IOError), e:
 			#catching mysqld restarts (e.g. sgt)
-			if e.args[0] == 2013:
+			if e.args[0] in (2013,32,errno.EPIPE):
 				conn = self.get_connection(force=True)
 				cur = conn.cursor(cursor_type)
 				cur.execute(query)
@@ -489,9 +491,9 @@ class MySQLDump(object):
 	def create(self, dbname, filename, opts=None):
 		opts = opts or []
 		LOG.debug('Dumping database %s to %s' % (dbname, filename))
-		opts = [MYSQLDUMP_PATH, '-u', self.root_user, '-p'] + opts + ['--databases']
+		opts = [MYSQLDUMP_PATH, '-u', self.root_user, '--password='+self.root_password] + opts + ['--databases']
 		with open(filename, 'w') as fp: 
-			system2(opts + [dbname], stdin=self.root_password, stdout=fp)
+			system2(opts + [dbname], stdout=fp)
 
 
 class RepicationWatcher(threading.Thread):

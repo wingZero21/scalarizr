@@ -801,8 +801,8 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 
 	def make(self):
-		LOG.info("Make EBS volume %s (size: %sGb) from volume %s (excludes: %s)",
-				self.devname, self._volume_size, self._volume, ":".join(self.excludes))
+		LOG.info("Make EBS volume (size: %sGb) from volume %s (excludes: %s)",
+				self._ebs_config['size'], self._volume, ":".join(self.excludes))
 
 		#TODO: need transmit flag `copy_partition_table` from Ec2RebundleHandler.before_rebundle
 		""" list of all mounted devices """

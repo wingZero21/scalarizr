@@ -465,6 +465,7 @@ class MysqlHandler(DBMSRHandler):
 			os.makedirs(tmp_basedir)		
 		# Retrieve password for scalr mysql user
 		backup_path = None
+		tmpdir = None
 		try:
 			# Get databases list
 			databases = self.root_client.list_databases()
@@ -490,7 +491,7 @@ class MysqlHandler(DBMSRHandler):
 				mysqldump = mysql_svc.MySQLDump(root_user=ROOT_USER, root_password=self.root_password)		
 				dump_options = config.split(self._cnf.rawini.get('mysql2', 'mysqldump_options'), ' ')	
 				for db_name in databases:
-					with op.step("Backup '%s'" % db):
+					with op.step("Backup '%s'" % db_name):
 						dump_path = os.path.join(tmpdir, db_name + '.sql') 
 						mysqldump.create(db_name, dump_path, dump_options)
 						backup.add(dump_path, os.path.basename(dump_path))
@@ -504,11 +505,12 @@ class MysqlHandler(DBMSRHandler):
 				else:
 					parts = [backup_path]
 						
-				LOG.info("Uploading backup to cloud storage (%s)", self._platform.cloud_storage_path)
+				cloud_storage_path = self._platform.scalrfs.backups('mysql')
+				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 				trn = transfer.Transfer()
-				result = trn.upload(parts, self._platform.cloud_storage_path)
+				result = trn.upload(parts, cloud_storage_path)
 				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
-								self._platform.cloud_storage_path, backup_filename)
+								cloud_storage_path, backup_filename)
 											
 			op.ok()
 			
