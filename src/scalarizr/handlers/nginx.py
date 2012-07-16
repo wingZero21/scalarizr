@@ -354,6 +354,14 @@ class NginxHandler(ServiceCtlHandler):
 					self._logger.debug('comment site-enabled include')
 				except ValueError, IndexError:
 					self._logger.debug('site-enabled include already commented')
+			elif disttool.is_redhat_based():
+				def_host_path = '/etc/nginx/conf.d/default.conf'
+				if os.path.exists(def_host_path):
+					default_host = Configuration('nginx')
+					default_host.read(def_host_path)
+					default_host.comment('server')
+					default_host.write(def_host_path)
+					
 
 		if dump == self._dump_config(self._config):	
 			self._logger.debug("Main nginx config wasn`t changed")
