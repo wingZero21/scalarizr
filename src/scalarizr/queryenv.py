@@ -8,10 +8,8 @@ import logging
 import sys
 import urllib
 import urllib2
-import xml.dom.minidom as dom
 import time
 
-from scalarizr import util
 from scalarizr.util import cryptotool
 from scalarizr.util import urltool
 
@@ -82,8 +80,6 @@ class QueryEnvService(object):
 						host, port = urllib.splitnport(req.host, req.port or 80)
 						raise QueryEnvError, "Cannot connect to QueryEnv server on %s:%s. %s" % (host, port, str(e)), sys.exc_traceback
 			except:
-				if 'not supported' in str(sys.exc_info()[1]):
-					raise
 				self._logger.debug('QueryEnv failed. %s', sys.exc_info()[1])
 				if i < max_attempts:
 					self._logger.debug('Waiting %d seconds before the next try', 10)
@@ -93,14 +89,7 @@ class QueryEnvService(object):
 
 		resp_body = response.read()
 		self._logger.debug("QueryEnv response: %s", resp_body)
-
-		# Parse XML response
-		xml = None
-		try:
-			xml = util.xml_strip(dom.parseString(resp_body))
-		except (Exception, BaseException), e:
-			raise QueryEnvError("Cannot parse XML. %s" % [str(e)])		
-		return xml
+		return resp_body
 	
 	
 	def list_roles(self, role_name=None, behaviour=None, with_init=None):
@@ -135,6 +124,7 @@ class QueryEnvService(object):
 		if farm_role_id:
 			parameters["farm-role-id"] = farm_role_id
 		return {'params':self._request("list-farm-role-params", parameters, self._read_list_farm_role_params_response)}
+
 
 	def get_server_user_data(self):
 		"""
@@ -303,21 +293,20 @@ class QueryEnvService(object):
 	def _read_list_virtualhosts_response(self, xml):
 		ret = []
 		
-		response = xml.documentElement
-		for vhost_el in response.firstChild.childNodes:
-			vhost = VirtualHost()
-			vhost.hostname = vhost_el.getAttribute("hostname")
-			vhost.type = vhost_el.getAttribute("type")
-			vhost.raw = vhost_el.firstChild.firstChild.nodeValue
-			if vhost_el.hasAttribute("https"):
-				vhost.https = bool(int(vhost_el.getAttribute("https")))
-			ret.append(vhost)	
-				
+		result = xml2dict(ET.XML(xml))
+		raw_vhosts = result['vhosts'] or []
+		for raw_vhost in raw_vhosts:
+			if raw_vhost:
+				hostname = raw_vhost['hostname']
+				v_type = raw_vhost['type']
+				raw_data = raw_vhost['raw']
+				https = bool(int(raw_vhost['https'])) if 'https' in raw_vhost else False
+				vhost = VirtualHost(hostname,v_type,raw_data,https)
+				ret.append(vhost)
 		return ret
 	
 	def _read_get_service_configuration_response(self, xml, behaviour):
-		response = xml.documentElement.toxml()
-		data = xml2dict(ET.XML(response))
+		data = xml2dict(ET.XML(xml))
 		preset = Preset()
 		for raw_preset in data:
 			if behaviour != raw_preset['behaviour']:
