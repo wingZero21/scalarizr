@@ -58,7 +58,10 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			initd_script = ('/usr/sbin/service', 'postgresql')
 		else:
-			initd_script = firstmatched(os.path.exists, ('/etc/init.d/postgresql-9.0', '/etc/init.d/postgresql'))
+			initd_script = firstmatched(os.path.exists, (
+						'/etc/init.d/postgresql-9.0', 
+						'/etc/init.d/postgresql-9.1', 
+						'/etc/init.d/postgresql'))
 		initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
 				initd_script=initd_script)
 		
