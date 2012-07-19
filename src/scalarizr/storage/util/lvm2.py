@@ -9,6 +9,7 @@ from __future__ import with_statement
 from scalarizr.util import system2, disttool, firstmatched, PopenError
 from scalarizr.util.software import whereis
 from scalarizr.util.filetool import read_file
+from scalarizr.util import dynimp
 
 import re
 import binascii
@@ -131,6 +132,10 @@ class Lvm2:
 	def usable():
 		if Lvm2._usable is None:
 			Lvm2._usable = False
+			mgr = dynimp.package_mgr()
+			if not mgr.installed('lvm2'):
+				mgr.install('lvm2', mgr.candidates('lvm2')[-1])
+			
 			err_text = 'Cannot load device mapper kernel module'
 			try:
 				system(['/sbin/modprobe', 'dm_snapshot'], error_text=err_text)

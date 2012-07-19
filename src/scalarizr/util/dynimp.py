@@ -28,6 +28,10 @@ class PackageMgr(object):
 		''' Installs a `version` of package `name` '''
 		raise NotImplemented()
 
+	def installed(self, name):
+		''' Return installed package version '''
+		raise NotImplemented()	
+
 	def _join_packages_str(self, sep, name, version, *args):
 		packages = [(name, version)]
 		if args:
@@ -35,6 +39,10 @@ class PackageMgr(object):
 				packages.append(args[i:i+2])
 		format = '%s' + sep +'%s'
 		return ' '.join(format % p for p in packages)		
+
+	def updatedb(self):
+		''' Updates package manager internal database '''
+		raise NotImplemented()
 
 	def check_update(self, name):
 		''' Returns info for package `name` '''
@@ -50,22 +58,23 @@ class AptPackageMgr(PackageMgr):
 		kwds.update(env={
 			'DEBIAN_FRONTEND': 'noninteractive', 
 			'DEBIAN_PRIORITY': 'critical',
-			'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/'\
-					'sbin:/bin:/usr/games'
+			'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'
 		})
-		LOG.debug('apt_get_command `%s`', ' '.join(('apt-get', '-q', '-y') + 
-				tuple(filter(None, command.split()))))
-		return system2(('apt-get', '-q', '-y') + \
-				tuple(filter(None, command.split())), **kwds)
+		return system2(('/usr/bin/apt-get',
+						'-q', '-y', '--force-yes',
+						'-o Dpkg::Options::=--force-confold') + \
+						tuple(filter(None, command.split())), **kwds)
+		
 
 	def apt_cache_command(self, command, **kwds):
-		return system2(('apt-cache',) + tuple(filter(None, command.split())), **kwds)
+		return system2(('/usr/bin/apt-cache',) + tuple(filter(None, command.split())), **kwds)
+
+	def updatedb(self):
+		self.apt_get_command('update')		
 
 	def candidates(self, name):
 		version_available_re = re.compile(r'^\s{5}([^\s]+)\s{1}')
 		version_installed_re = re.compile(r'^\s{1}\*\*\*|s{1}([^\s]+)\s{1}')
-		
-		self.apt_get_command('update')
 		
 		versions = []
 		
@@ -85,8 +94,6 @@ class AptPackageMgr(PackageMgr):
 		candidate_re = re.compile(r'^\s{2}Candidate: (.+)$')
 		installed = candidate = None
 
-		self.apt_get_command('update')
-		
 		for line in self.apt_cache_command('policy %s' % name)[0].splitlines():
 			m = installed_re.match(line)
 			if m:
@@ -101,13 +108,23 @@ class AptPackageMgr(PackageMgr):
 				continue
 			
 		if candidate and installed:
-			if not system2(('dpkg', '--compare-versions', candidate, 'gt',
+			if not system2(('usr/bin/dpkg', '--compare-versions', candidate, 'gt',
 											installed), raise_exc = False)[2]:
 				return candidate
 	
 	def install(self, name, version, *args):
 		self.apt_get_command('install %s' % self._join_packages_str('=', name,
 											version, *args), raise_exc=True)
+
+	def installed(self, name):
+		version_re = re.compile(r'^Version: (.+)$')
+		
+		out, code = system2(('/usr/bin/dpkg', '--status', name), raise_exc=False)[::2]
+		if not code:
+			for line in out.splitlines():
+				m = version_re.match(line)
+				if m:
+					return m.group(1)
 
 
 class RpmVersion(object):
@@ -165,13 +182,12 @@ class RpmVersion(object):
 class YumPackageMgr(PackageMgr):
 
 	def yum_command(self, command, **kwds):
-		return system2((('yum', '-d0', '-y') + tuple(filter(None,
+		return system2((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None,
 												 command.split()))), **kwds)
 	def rpm_ver_cmp(self, v1, v2):
 		return cmp(RpmVersion(v1), RpmVersion(v2))
 	
-	def candidates(self, name):
-		self.yum_command('clean expire-cache')
+	def yum_list(self, name):
 		out = self.yum_command('list --showduplicates %s' % name)[0].strip()
 		
 		version_re = re.compile(r'[^\s]+\s+([^\s]+)')
@@ -183,16 +199,26 @@ class YumPackageMgr(PackageMgr):
 		except ValueError:
 			installed = None
 
-		versions = [version_re.match(line).group(1) for line in lines[
-										lines.index('Available Packages')+1:]]
+		if 'Available Packages' in lines:		
+			versions = [version_re.match(line).group(1) for line in lines[lines.index('Available Packages')+1:]]
+		else:
+			versions = []
+		
+		return installed, versions
+	
+	
+	def candidates(self, name):
+		installed, versions = self.yum_list(name)
+		
 		if installed:
 			versions = [v for v in versions if self.rpm_ver_cmp(v, installed) > 0]
-
+		
 		return versions
 
+	def updatedb(self):
+		self.yum_command('clean expire-cache')		
 
 	def check_update(self, name):
-		self.yum_command('clean expire-cache')
 		out, _, code = self.yum_command('check-update %s' % name)
 		if code == 100:
 			return filter(None, out.strip().split(' '))[1]
@@ -201,7 +227,11 @@ class YumPackageMgr(PackageMgr):
 		self.yum_command('install %s' %  self._join_packages_str('-', name, 
 											version, *args), raise_exc=True)
 
+	def installed(self, name):
+		return self.yum_list(name)[0]
 
+def package_mgr():
+	return AptPackageMgr() if disttool.is_debian_based() else YumPackageMgr()
 
 class ImpLoader(object):
 	'''

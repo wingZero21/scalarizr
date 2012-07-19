@@ -7,11 +7,13 @@ Created on Nov 11, 2010
 
 from scalarizr.util import system2, wait_until, firstmatched, filetool, PopenError
 from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util import dynimp
 
 import logging
 import os
 import re
 import time
+from scalarizr.util import disttool
 
 MDADM_EXEC='/sbin/mdadm'
 logger = logging.getLogger(__name__)
@@ -29,7 +31,11 @@ class Mdadm:
 
 	def __init__(self):
 		if not os.path.exists(MDADM_EXEC):
-			raise MdadmError("Make sure you have mdadm package installed.")
+			if disttool.is_redhat_based():
+				system2(('/usr/bin/yum', '-d0', '-y', 'install', 'mdadm', '-x', 'exim'), raise_exc=False)
+			else:
+				mgr = dynimp.package_mgr()				
+				mgr.install('mdadm', mgr.candidates('mdadm')[-1])
 		for location in ['/etc ', '/lib']:
 			path = os.path.join(location, 'udev/rules.d/85-mdadm.rules')
 			if os.path.exists(path):
