@@ -608,7 +608,7 @@ class MysqlHandler(ServiceCtlHandler):
 	
 	def __init__(self):
 		if not os.path.exists(MYCNF):
-			if disttool.is_centos() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
+			if disttool.is_redhat_based() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
 				shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF)
 			else:
 				open(MYCNF, 'w').close()

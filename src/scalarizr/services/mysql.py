@@ -61,7 +61,7 @@ class MySQL(BaseService):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		if not os.path.exists(MYCNF_PATH):
-			if disttool.is_centos() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
+			if disttool.is_redhat_based() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
 				shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF_PATH)
 			else:
 				fp = open(MYCNF_PATH, 'w')

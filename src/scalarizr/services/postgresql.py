@@ -207,7 +207,7 @@ class PostgreSql(BaseService):
 		
 		self.cluster_dir.clean()
 		
-		if disttool.is_centos():
+		if disttool.is_redhat_based():
 			self.config_dir.move_to(self.unified_etc_path)
 			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
 			self.postgresql_conf = PostgresqlConf.find(self.config_dir)
@@ -578,7 +578,7 @@ class ClusterDir(object):
 		rchown(self.user, dst)
 		
 		self._logger.debug("Changing postgres user`s home directory")
-		if disttool.is_centos():
+		if disttool.is_redhat_based():
 			#looks like ubuntu doesn`t need this
 			system2([USERMOD, '-d', new_cluster_dir, self.user]) 
 			
