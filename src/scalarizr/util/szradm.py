@@ -706,6 +706,9 @@ def main():
 			conn = bus.db
 			cur = conn.cursor()
 			try:
+				with open('/etc/scalr/private.d/.state') as fp:
+					fp.write('bootstrapping')
+				
 				msg_service = bus.messaging_service
 				msg = msg_service.new_message()				
 								
