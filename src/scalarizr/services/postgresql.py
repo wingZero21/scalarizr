@@ -618,7 +618,7 @@ class ConfigDir(object):
 	version = None
 	
 	@classmethod
-	def get_sysconf_path(self, cls):
+	def get_sysconf_path(cls):
 		return '/etc/sysconfig/pgsql/postgresql-%s' % cls.version or '9.0'
 	
 	
