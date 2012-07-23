@@ -206,6 +206,59 @@ class SysInfoAPI(object):
 
 
 	@rpc.service_method
+	def cpu_stat(self):
+		'''
+		Return CPU stat from /proc/stat
+		@rtype: dict
+		
+		Sample: {
+			'user': 8416,
+			'nice': 0,
+			'system': 6754,
+			'idle': 147309
+		}
+		'''
+		cpu = open('/proc/stat').readline().strip().split()
+		return {
+			'user': int(cpu[1]),
+			'nice': int(cpu[2]),
+			'system': int(cpu[3]),
+			'idle': int(cpu[4])
+		}
+
+
+	@rpc.service_method
+	def mem_info(self):
+		'''
+		Return Memory information from /proc/meminfo
+		@rtype: dict
+		
+		Sample: {
+			'total_swap': 0,
+			'avail_swap': 0,
+			'total_real': 604364,
+			'total_free': 165108,
+			'shared': 168,
+			'buffer': 17832,
+			'cached': 316756
+		}
+		'''
+		info = {}
+		for line in open('/proc/meminfo'):
+			pairs = line.split(':', 1)
+			info[pairs[0]] = int(pairs[1].strip().split(' ')[0])
+		return {
+			'total_swap': info['SwapTotal'],
+			'avail_swap': info['SwapFree'],
+			'total_real': info['MemTotal'],
+			'total_free': info['MemFree'],
+			'shared': info['Shmem'],
+			'buffer': info['Buffers'],
+			'cached': info['Cached']
+		}
+
+
+	@rpc.service_method
 	def load_average(self):
 		'''
 		Return Load average (1, 5, 15) in 3 items list  
