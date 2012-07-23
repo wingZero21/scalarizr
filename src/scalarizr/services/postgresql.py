@@ -633,7 +633,7 @@ class ConfigDir(object):
 		path = cls.get_sysconfig_pgdata()
 		if not path:
 			path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
-		return cls(path)
+		return cls(path, version)
 		
 	
 	def move_to(self, dst):
