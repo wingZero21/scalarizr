@@ -630,6 +630,7 @@ class ConfigDir(object):
 	
 	@classmethod
 	def find(cls, version=None):
+		cls.version = version
 		path = cls.get_sysconfig_pgdata()
 		if not path:
 			path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
