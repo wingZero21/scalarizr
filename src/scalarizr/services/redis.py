@@ -21,8 +21,13 @@ SERVICE_NAME = CNF_SECTION = DEFAULT_USER = 'redis'
 
 UBUNTU_BIN_PATH 	 = '/usr/bin/redis-server'	
 CENTOS_BIN_PATH 	 = '/usr/sbin/redis-server'	
+BIN_PATH = UBUNTU_BIN_PATH if disttool.is_ubuntu() else CENTOS_BIN_PATH
+
 UBUNTU_CONFIG_DIR = '/etc/redis'
-CENTOS_CONFIG_DIR = '/etc/redis'
+CENTOS_CONFIG_DIR = '/etc/'
+CONFIG_DIR = UBUNTU_CONFIG_DIR if disttool.is_ubuntu() else CENTOS_CONFIG_DIR
+DEFAULT_CONF_PATH = os.path.join(CONFIG_DIR, 'redis.conf')
+
 
 OPT_REPLICATION_MASTER  = "replication_master"
 
@@ -63,11 +68,8 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 	@property
 	def _processes(self):
 		args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
-		bin_path = UBUNTU_BIN_PATH if disttool.is_ubuntu() else CENTOS_BIN_PATH	
-		conf_dir = UBUNTU_CONFIG_DIR if disttool.is_ubuntu() else CENTOS_CONFIG_DIR
-		conf_path = os.path.join(conf_dir, 'redis.conf')
 		try:	
-			p = [x for x in system2(args, silent=True)[0].split('\n') if x and bin_path + ' ' + conf_path in x]
+			p = [x for x in system2(args, silent=True)[0].split('\n') if x and BIN_PATH + ' ' + DEFAULT_CONF_PATH in x]
 		except PopenError,e:
 			p = []
 		return p
@@ -100,7 +102,7 @@ initdv2.explore(SERVICE_NAME, RedisInitScript)
 class Redisd(object):
 
 	redis_conf = None
-	bin_path = UBUNTU_BIN_PATH if disttool.is_ubuntu() else CENTOS_BIN_PATH	
+	
 	
 	def __init__(self, config_path=None):
 		self.config_path = config_path
@@ -108,8 +110,9 @@ class Redisd(object):
 		self.cli = RedisCLI(self.redis_conf.requirepass, self.redis_conf.port)
 	
 	
-	def find(self):
-		pass
+	@classmethod
+	def find(cls, config_obj=None):
+		return cls(config_obj.path)
 	
 	
 	@property
@@ -120,10 +123,10 @@ class Redisd(object):
 	def start(self):
 		try:
 			if not self.running:
-				LOG.debug('Starting %s' % self.bin_path)
-				system2(['sudo', '-u', DEFAULT_USER, self.bin_path,] + self.args)
+				LOG.debug('Starting %s' % BIN_PATH)
+				system2(['sudo', '-u', DEFAULT_USER, BIN_PATH,] + self.args)
 				wait_until(lambda: self.running, timeout=MAX_START_TIMEOUT)
-				wait_until(lambda: self.cli.test_connection, timeout=MAX_START_TIMEOUT)
+				wait_until(lambda: self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
 				LOG.debug('%s process has been started.' % SERVICE_NAME)
 				
 		except PopenError, e:
@@ -132,7 +135,21 @@ class Redisd(object):
 	
 	def stop(self):
 		os.kill(int(self.pid), signal.SIGTERM)
-	
+		wait_until(lambda: not self.running, timeout=MAX_START_TIMEOUT)
+		wait_until(lambda: not self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
+		
+		#TODO: think about moving this code elsewhere
+		if self.redis_conf.port == DEFAULT_PORT:
+			base_dir = self.redis_conf.dir
+			snap_src = os.path.join(base_dir, DB_FILENAME)
+			snap_dst = os.path.join(base_dir, get_snap_db_filename(DEFAULT_PORT))
+			if os.path.exists(snap_src) and not os.path.exists(snap_dst):
+				shutil.move(snap_src, snap_dst)
+			aof_src = os.path.join(base_dir, AOF_FILENAME)
+			aof_dst = os.path.join(base_dir, get_aof_db_filename(DEFAULT_PORT))
+			if os.path.exists(aof_src) and not os.path.exists(aof_dst):
+				shutil.move(aof_src, aof_dst)
+		
 	
 	def restart(self):
 		if self.running:
@@ -149,8 +166,11 @@ class Redisd(object):
 		try:
 			out = system2(('ps', '-G', 'redis', '-o', 'command', '--no-headers'))[0]
 		except:
-			out = None
-		return False if not out else self.bin_path in out and self.config_path in out	
+			out = ''
+		is_config_matches = self.config_path in out
+		if not is_config_matches and self.redis_conf.port == DEFAULT_PORT:
+			is_config_matches = DEFAULT_CONF_PATH in out
+		return BIN_PATH in out and is_config_matches	
 	
 	
 	@property
@@ -176,8 +196,10 @@ class RedisInstances(object):
 		self.creds = dict()
 		self.init_processes(ports, passwords)
 		
+		
 	def __iter__(self):
 		return iter(self.instances)
+			
 			
 	def get_instances(self, port=None, password=None):
 		for instance in self.instances:
@@ -185,11 +207,13 @@ class RedisInstances(object):
 				return instance
 		raise ServiceError('Redis instance with password %s or port %s not found' % (port, password))	
 		
+		
 	def init_processes(self, ports=[], passwords=[]):
 		creds = dict(zip(ports or [], passwords or []))
 		for port,password in creds.items():
 			ports = [instance.port for instance in self.instances]
 			if port not in ports:
+				self.create_redis_conf_copy(port)
 				redis_process = Redis(self.master, self.persistence_type, port, password)
 				self.instances.append(redis_process)
 				self.creds[port] = password
@@ -227,21 +251,35 @@ class RedisInstances(object):
 		#consider using threads
 		for redis in self.instances:
 			redis.wait_for_sync(link_timeout,sync_timeout)
+			
+			
+	def create_redis_conf_copy(self, port=DEFAULT_PORT):
+		if not os.path.exists(DEFAULT_CONF_PATH):
+			raise ServiceError('Default redis config %s does not exist' % DEFAULT_CONF_PATH)
+		dst = get_redis_conf_path(port)
+		'''
+		if port == DEFAULT_PORT and not os.path.exists(dst):
+			os.symlink(DEFAULT_CONF_PATH, dst)
+		'''
+		if not os.path.exists(dst):
+			shutil.copy(DEFAULT_CONF_PATH, dst)
+		else: 
+			LOG.debug('%s already exists.' % dst)
 	
 	
 class Redis(BaseService):
 	_instance = None
-	service = None
 	port = None
 	password = None
 
+
 	def __init__(self, master=False, persistence_type=SNAP_TYPE, port=DEFAULT_PORT, password = None):
 		self._objects = {}
-		self.service = initdv2.lookup(SERVICE_NAME)
 		self.is_replication_master = master
 		self.persistence_type = persistence_type		
 		self.port = port		
 		self.password = password or self.generate_password()		
+
 
 	def init_master(self, mpoint):
 		self.service.stop('Configuring master. Moving Redis db files')	
@@ -251,6 +289,7 @@ class Redis(BaseService):
 		self.service.start()
 		self.is_replication_master = True
 		
+		
 	def init_slave(self, mpoint, primary_ip, primary_port):
 		self.service.stop('Configuring slave')
 		self.init_service(mpoint, self.password)
@@ -258,12 +297,14 @@ class Redis(BaseService):
 		self.service.start()
 		self.is_replication_master = False
 	
+	
 	def wait_for_sync(self,link_timeout=None,sync_timeout=None):
 		LOG.info('Waiting for link with master')
 		wait_until(lambda: self.redis_cli.master_link_status == 'up', sleep=3, timeout=link_timeout)
 		LOG.info('Waiting for sync with master to complete')
 		wait_until(lambda: not self.redis_cli.master_sync_in_progress, sleep=10, timeout=sync_timeout)
 		LOG.info('Sync with master completed')
+		
 		
 	def change_primary(self, primary_ip, primary_port):
 		'''
@@ -278,6 +319,7 @@ class Redis(BaseService):
 		self.redis_conf.masterauth = self.password
 		self.redis_conf.slaveof = (primary_ip, primary_port)
 		
+		
 	def init_service(self, mpoint):
 		move_files = not self.working_directory.is_initialized(mpoint)
 		self.working_directory.move_to(mpoint, move_files)
@@ -285,44 +327,63 @@ class Redis(BaseService):
 		self.redis_conf.dir = mpoint
 		self.redis_conf.bind = None
 		self.redis_conf.port = self.port
-		self.redis_conf.dbfilename = 'dump.%s.rdb' % self.port
-		self.redis_conf.appendfilename = 'appendonly.%s.aof' % self.port 
+		self.redis_conf.dbfilename = get_snap_db_filename(self.port)
+		self.redis_conf.appendfilename = get_aof_db_filename(self.port)
 		if self.persistence_type == SNAP_TYPE:
 			self.redis_conf.appendonly = False
 		elif self.persistence_type == AOF_TYPE:
 			self.redis_conf.appendonly = True
 			self.redis_conf.save = {}
 		
+		
 	@property	
 	def current_password(self):
 		return self.redis_conf.requirepass
+	
 	
 	@property
 	def db_path(self):
 		fname = self.redis_conf.dbfilename if not self.redis_conf.appendonly else self.redis_conf.appendfilename
 		return os.path.join(self.redis_conf.dir, fname)
 	
+	
 	def generate_password(self, length=20):
 		return cryptotool.pwgen(length)	
+	
 	
 	def _get_redis_conf(self):
 		return self._get('redis_conf', RedisConf.find)
 	
+	
 	def _set_redis_conf(self, obj):
 		self._set('redis_conf', obj)	
+	
 	
 	def _get_redis_cli(self):
 		return self._get('redis_cli', RedisCLI.find, self.redis_conf)
 	
+	
 	def _set_redis_cli(self, obj):
 		self._set('redis_cli', obj)
+	
 	
 	def _get_working_directory(self):
 		return self._get('working_directory', WorkingDirectory.find, self.redis_conf)
 		
-	def _set_working_directory(self, obj):
-		self._set('working_directory', obj)
 		
+	def _set_working_directory(self, obj):
+		self._set('working_directory', obj)	
+		
+		
+	def _get_service(self):
+		return self._get('service', Redisd.find, self.redis_conf)
+		
+		
+	def _set_service(self, obj):
+		self._set('service', obj)
+		
+		
+	service = property(_get_service, _set_service)
 	working_directory = property(_get_working_directory, _set_working_directory)
 	redis_conf = property(_get_redis_conf, _set_redis_conf)
 	redis_cli = property(_get_redis_cli, _set_redis_cli)
@@ -392,7 +453,9 @@ class WorkingDirectory(object):
 	
 	
 class BaseRedisConfig(BaseConfig):
+	
 	config_type = 'redis'
+		
 		
 	def set(self, option, value, append=False):
 		if not self.data:
@@ -410,6 +473,7 @@ class BaseRedisConfig(BaseConfig):
 			self.save_data()
 			self.data = None
 	
+	
 	def set_sequential_option(self, option, seq):
 		is_typle = type(seq) is tuple
 		try:
@@ -418,9 +482,11 @@ class BaseRedisConfig(BaseConfig):
 			raise ValueError('%s must be a sequence (got %s instead)' % (option, seq))	
 		self.set(option, ' '.join(map(str,seq)) if is_typle else None)
 
+
 	def get_sequential_option(self, option):
 		raw = self.get(option)
 		return raw.split() if raw else ()
+				
 				
 	def get_list(self, option):
 		if not self.data:
@@ -438,6 +504,7 @@ class BaseRedisConfig(BaseConfig):
 			self.data = None
 		return value
 	
+	
 	def get_dict_option(self, option):
 		raw = self.get_list(option)
 		d = {}
@@ -446,6 +513,7 @@ class BaseRedisConfig(BaseConfig):
 			if k and v:
 				d[k] = v
 		return d
+		
 		
 	def set_dict_option(self, option, d):
 		try:
@@ -469,25 +537,30 @@ class RedisConf(BaseRedisConfig):
 	
 	@classmethod
 	def find(cls, config_dir=None, port=DEFAULT_PORT):
-		default_conf_dir = UBUNTU_CONFIG_DIR if disttool.is_ubuntu() else CENTOS_CONFIG_DIR
-		conf_name = 'redis.%s.conf' % port
-		conf_path = os.path.join(default_conf_dir, conf_name)
+		conf_name = get_redis_conf_basename(port)
+		conf_path = os.path.join(CONFIG_DIR, conf_name)
 		return cls(os.path.join(config_dir, conf_name) if config_dir else conf_path)
+	
 	
 	def _get_dir(self):
 		return self.get('dir')
 	
+	
 	def _set_dir(self, path):
 		self.set_path_type_option('dir', path)
+	
 	
 	def _get_bind(self):
 		return self.get_sequential_option('bind')
 	
+	
 	def _set_bind(self, list_ips):
 		self.set_sequential_option('bind', list_ips)
+	
 				
 	def _get_slaveof(self):
 		return self.get_sequential_option('slaveof')
+	
 	
 	def _set_slaveof(self, conn_data):
 		'''
@@ -495,57 +568,75 @@ class RedisConf(BaseRedisConfig):
 		'''
 		self.set_sequential_option('slaveof', conn_data)		
 	
+	
 	def _get_masterauth(self):
 		return self.get('masterauth')
+	
 	
 	def _set_masterauth(self, passwd):
 		self.set('masterauth', passwd)		
 	
+	
 	def _get_requirepass(self):
 		return self.get('requirepass')
 	
+	
 	def _set_requirepass(self, passwd):
 		self.set('requirepass', passwd)	
+	
 					
 	def _get_appendonly(self):
 		return True if self.get('appendonly') == 'yes' else False
+	
 	
 	def _set_appendonly(self, on):
 		assert on == True or on == False
 		self.set('appendonly', 'yes' if on else 'no')	
 	
+	
 	def _get_dbfilename(self):
 		return self.get('dbfilename')
+	
 	
 	def _set_dbfilename(self, fname):
 		self.set('dbfilename', fname)	
 	
+	
 	def _get_save(self):
 		return self.get_dict_option('save')
 	
+	
 	def _set_save(self, save_dict):
 		self.set_dict_option('save', save_dict)
+	
 												
 	def _get_pidfile(self):
 		return self.get('pidfile')
 	
+	
 	def _set_pidfile(self, pid):
 		self.set('pidfile', pid)
+	
 														
 	def _get_port(self):
 		return self.get('port')
 	
+	
 	def _set_port(self, number):
 		self.set('port', number)
+	
 																
 	def _get_logfile(self):
 		return self.get('logfile')
 	
+	
 	def _set_logfile(self, path):
 		self.set('logfile', path)
+	
 																	
 	def _get_appendfilename(self):
 		return self.get('appendfilename')
+	
 	
 	def _set_appendfilename(self, path):
 		self.set('appendfilename', path)
@@ -745,4 +836,16 @@ class RedisCLI(object):
 		if info['role']=='slave':
 			return True if info['master_sync_in_progress']=='1' else False
 		return False
-		
+	
+	
+def get_snap_db_filename(port=DEFAULT_PORT):	
+	return 'dump.%s.rdb' % port	
+
+def get_aof_db_filename(port=DEFAULT_PORT):	
+	return 'appendonly.%s.aof' % port 
+
+def get_redis_conf_basename(port=DEFAULT_PORT):
+	return 'redis.%s.conf' % port
+
+def get_redis_conf_path(port=DEFAULT_PORT):
+	os.path.join(CONFIG_DIR, get_redis_conf_basename(port))
