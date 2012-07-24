@@ -430,9 +430,11 @@ class RoleHost(QueryEnvResult):
 	replica_set_index = None
 	status = None
 	
-	def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None, shard_index=None, replica_set_index=None):
+	def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None, 
+				shard_index=None, replica_set_index=None, status=None):
 		self.internal_ip = internal_ip
 		self.external_ip = external_ip
+		self.status = status
 		if index:
 			self.index = int(index)
 		if replication_master:
