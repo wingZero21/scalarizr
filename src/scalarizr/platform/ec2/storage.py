@@ -191,11 +191,11 @@ class EbsVolumeProvider(VolumeProvider):
 						self._logger.debug('Attaching EBS to this instance')
 						device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device,
 							to_me=True, logger=self._logger)[1]
-
 					except:
 						if not os.path.exists(ebstool.real_devname(device)):
 							with self.letters_lock:
 								self.acquired_letters.remove(device[-1])
+						raise
 
 			except:
 				self._logger.debug('Caught exception')
