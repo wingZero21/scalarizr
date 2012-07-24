@@ -78,8 +78,9 @@ class RabbitMQHandler(ServiceCtlHandler):
 			self.cleanup_hosts_file('/')
 			self._logger.info('Performing initial cluster reset')
 
-			rabbitmq_user = pwd.getpwnam("rabbitmq")
-			os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
+			if os.path.exists(DEFAULT_STORAGE_PATH):
+				rabbitmq_user = pwd.getpwnam("rabbitmq")
+				os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 
 			self.service.start()
 			self.rabbitmq.stop_app()
