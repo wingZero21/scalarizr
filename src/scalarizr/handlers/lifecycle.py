@@ -132,8 +132,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		bus.on("host_init_response", self.on_host_init_response)
 		self._producer.on("before_send", self.on_before_message_send)
 		bus.on(before_reboot_finish=self._insert_iptables_rules)	
-		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
-			self._insert_iptables_rules()
 		
 		# Add internal messages to scripting skip list
 		try:
