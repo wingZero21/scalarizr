@@ -304,11 +304,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	def on_HostInitResponse(self, message):
 		if bus.cnf.state == ScalarizrState.RUNNING:
-			# Accepting multiple HostInitResponse messaged required for better testing
-			pass
-			#self._logger.warning("Recieved 'HostInitResponse' message,"
-			#					"but state is already %s", bus.cnf.state)
-			#return
+			self._logger.warning("Ignoring 'HostInitResponse' message, cause state is '%s'", bus.cnf.state)
+			return
 
 		bus.initialization_op = operation(name='Initialization')
 		try:
