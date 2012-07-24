@@ -428,6 +428,7 @@ class RoleHost(QueryEnvResult):
 	external_ip	= None
 	shard_index = None
 	replica_set_index = None
+	status = None
 	
 	def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None, shard_index=None, replica_set_index=None):
 		self.internal_ip = internal_ip
