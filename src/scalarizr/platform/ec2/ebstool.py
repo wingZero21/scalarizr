@@ -113,16 +113,19 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 	else:
 		vol = volume_id
 		
-	msg = 'Attaching volume %s as device %s%s' % (vol.id, devname, not to_me and ' instance %s' % instance_id or '')
-	logger.debug(msg)
-	try:
-		vol.attach(instance_id, devname)
-	except BotoServerError, e:
-		if e.status == 400 and not e.code:
-			# RHEL here can raise Null body error			
-			pass
-		else:
-			raise
+	def attach():
+		try:
+			vol.attach(instance_id, devname)
+		except BotoServerError, e:
+			if e.status == 400 and not e.code:
+				# RHEL here can raise Null body error				
+				return
+			else:
+				raise
+		return 1
+	wait_until(attach, logger=logger, timeout=30, 
+			start_text='Attaching volume %s as device %s%s' % (vol.id, devname, not to_me and ' instance %s' % instance_id or ''), 
+			error_text="Failed to attach EBS volume %s. AttachVolume operation respond with 400 code without any details" % vol.id)
 
 	
 	logger.debug('Checking that volume %s is attached', vol.id)
