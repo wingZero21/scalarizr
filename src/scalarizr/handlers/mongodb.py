@@ -20,7 +20,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, Hosts, cryptotool
+from scalarizr.util import system2, wait_until, Hosts, cryptotool, iptables
 from scalarizr.util.filetool import split, rchown
 from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
@@ -242,6 +242,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
+		bus.on("before_reboot_finish", self._insert_iptables_rules)	
+		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
+			self._insert_iptables_rules()
 		
 		if 'ec2' == self._platform.name:
 			updates = dict(hostname_as_pubdns = '0')
@@ -284,6 +287,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.disable_requiretty()
 		key_path = self._cnf.key_path(BEHAVIOUR)
 		self.mongodb.keyfile = mongo_svc.KeyFile(key_path)
+
+
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
 		
 
 	def on_host_init_response(self, message):
@@ -1438,6 +1445,21 @@ class MongoDBHandler(ServiceCtlHandler):
 			t = self._status_trackers[ip]
 			t.stop()
 			del self._status_trackers[ip]
+		
+	def _insert_iptables_rules(self, *args, **kwargs):
+		self._logger.debug('Adding iptables rules for scalarizr ports')		
+		ipt = iptables.IpTables()
+		if ipt.enabled():		
+			rules = []
+			
+			# Scalarizr ports
+			rules.append(iptables.RuleSpec(dport=mongo_svc.ROUTER_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
+			rules.append(iptables.RuleSpec(dport=mongo_svc.ARBITER_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
+			rules.append(iptables.RuleSpec(dport=mongo_svc.REPLICA_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
+			rules.append(iptables.RuleSpec(dport=mongo_svc.CONFIG_SERVER_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
+			
+			for rule in rules:
+				ipt.insert_rule(1, rule_spec = rule)
 		
 			
 	@property
