@@ -115,8 +115,14 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		
 	msg = 'Attaching volume %s as device %s%s' % (vol.id, devname, not to_me and ' instance %s' % instance_id or '')
 	logger.debug(msg)
-	vol.attach(instance_id, devname)
-	# RHEL here can raise Null body error
+	try:
+		vol.attach(instance_id, devname)
+	except BotoServerError, e:
+		if e.status == 400 and not e.code:
+			# RHEL here can raise Null body error			
+			pass
+		else:
+			raise
 
 	
 	logger.debug('Checking that volume %s is attached', vol.id)
