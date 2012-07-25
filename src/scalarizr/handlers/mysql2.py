@@ -37,9 +37,10 @@ from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 
 if 'Percona Server' in system2((software.which('mysqld'), '-V'))[0]:
-	BEHAVIOUR = CNF_SECTION = SERVICE_NAME = BuiltinBehaviours.PERCONA
+	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.PERCONA
 else:
-	BEHAVIOUR = CNF_SECTION = SERVICE_NAME = BuiltinBehaviours.MYSQL2
+	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL2
+CNF_SECTION = 'mysql2'
 LOG = logging.getLogger(__name__)
 
 
@@ -126,7 +127,7 @@ class MysqlCnfController(CnfController):
 	@property
 	def root_password(self):
 		cnf = bus.cnf
-		return cnf.rawini.get('mysql2', 'root_password')
+		return cnf.rawini.get(CNF_SECTION, 'root_password')
 
 
 	@property
@@ -328,6 +329,7 @@ class MysqlHandler(DBMSRHandler):
 				
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._insert_iptables_rules()
+			os.symlink(self._cnf.private_path('mysql2.ini'), self._cnf.private_path('percona.ini'))
 		
 		elif self._cnf.state == ScalarizrState.RUNNING:
 			# Creating self.storage_vol object from configuration
@@ -492,7 +494,7 @@ class MysqlHandler(DBMSRHandler):
 				backup = tarfile.open(backup_path, 'w:gz')
 				
 				mysqldump = mysql_svc.MySQLDump(root_user=ROOT_USER, root_password=self.root_password)		
-				dump_options = config.split(self._cnf.rawini.get('mysql2', 'mysqldump_options'), ' ')	
+				dump_options = config.split(self._cnf.rawini.get(CNF_SECTION, 'mysqldump_options'), ' ')	
 				for db_name in databases:
 					with op.step("Backup '%s'" % db_name):
 						dump_path = os.path.join(tmpdir, db_name + '.sql') 
@@ -981,7 +983,7 @@ class MysqlHandler(DBMSRHandler):
 	@property
 	def root_password(self):
 		cnf = bus.cnf
-		return cnf.rawini.get('mysql2', 'root_password')
+		return cnf.rawini.get(CNF_SECTION, 'root_password')
 	
 			
 	@property
@@ -1098,7 +1100,7 @@ class MysqlHandler(DBMSRHandler):
 			if v: 
 				updates[k] = v
 		
-		self._cnf.update_ini('mysql2', {CNF_SECTION: data})
+		self._cnf.update_ini(CNF_SECTION, {CNF_SECTION : data})
 		
 
 
