@@ -445,7 +445,7 @@ class MySQLConf(BaseConfig):
 		return self.get('mysqld/log-bin')
 	
 	
-	def set_log_bin(self, path):
+	def _set_log_bin(self, path):
 		self.set('mysqld/log-bin', path)	
 
 
@@ -453,7 +453,7 @@ class MySQLConf(BaseConfig):
 		return self.get('mysqld/server-id')
 	
 	
-	def set_server_id(self, id):
+	def _set_server_id(self, id):
 		self.set('mysqld/server-id', id)	
 
 
@@ -461,7 +461,7 @@ class MySQLConf(BaseConfig):
 		return self.get('mysqld/bind-address')
 	
 	
-	def set_bind_address(self, addr):
+	def _set_bind_address(self, addr):
 		self.set('mysqld/bind-address', addr)	
 
 
@@ -469,14 +469,23 @@ class MySQLConf(BaseConfig):
 		return self.get('mysqld/skip-networking')
 	
 	
-	def set_skip_networking(self, val):
+	def _set_skip_networking(self, val):
 		self.set('mysqld/skip-networking', val)	
+		
 
-
-	log_bin = property(_get_log_bin, set_log_bin)
-	server_id = property(_get_server_id, set_server_id)
-	bind_address = property(_get_bind_address, set_bind_address)
-	skip_networking = property(_get_skip_networking, set_skip_networking)
+	def _get_expire_logs_days(self):
+		return self.get('mysqld/skip-networking')
+	
+	
+	def _set_expire_logs_days(self, val):
+		self.set('mysqld/expire_logs_days', val)	
+		
+		
+	expire_logs_days = property(_get_expire_logs_days, _set_expire_logs_days)
+	log_bin = property(_get_log_bin, _set_log_bin)
+	server_id = property(_get_server_id, _set_server_id)
+	bind_address = property(_get_bind_address, _set_bind_address)
+	skip_networking = property(_get_skip_networking, _set_skip_networking)
 	datadir	 = property(_get_datadir, _set_datadir)
 	datadir_default = DEFAULT_DATADIR
 	

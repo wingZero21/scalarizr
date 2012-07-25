@@ -841,7 +841,7 @@ class MysqlHandler(DBMSRHandler):
 					self.mysql.my_cnf.log_bin = None
 				
 				# Patch configuration
-				
+				self.mysql.my_cnf.expire_logs_days = 10
 				self.mysql.move_mysqldir_to(STORAGE_PATH)
 		
 			with op.step(self._step_patch_conf):
@@ -924,6 +924,7 @@ class MysqlHandler(DBMSRHandler):
 				LOG.info("Changing configuration files")
 				if not self.mysql.my_cnf.datadir:
 					self.mysql.my_cnf.datadir = DEFAULT_DATADIR
+				self.mysql.my_cnf.expire_logs_days = 10
 	
 			with op.step(self._step_move_datadir):
 				self.mysql.move_mysqldir_to(STORAGE_PATH)
