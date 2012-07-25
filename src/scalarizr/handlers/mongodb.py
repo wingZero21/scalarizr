@@ -20,7 +20,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, Hosts, cryptotool
+from scalarizr.util import system2, wait_until, Hosts, cryptotool, iptables
 from scalarizr.util.filetool import split, rchown
 from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
@@ -242,6 +242,9 @@ class MongoDBHandler(ServiceCtlHandler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
+		bus.on("before_reboot_finish", self._insert_iptables_rules)	
+		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
+			self._insert_iptables_rules()
 		
 		if 'ec2' == self._platform.name:
 			updates = dict(hostname_as_pubdns = '0')
@@ -284,6 +287,10 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.disable_requiretty()
 		key_path = self._cnf.key_path(BEHAVIOUR)
 		self.mongodb.keyfile = mongo_svc.KeyFile(key_path)
+
+
+	def on_before_reboot_finish(self, *args, **kwargs):
+		self._insert_iptables_rules()
 		
 
 	def on_host_init_response(self, message):
@@ -1007,15 +1014,17 @@ class MongoDBHandler(ServiceCtlHandler):
 						parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
 					else:
 						parts = [backup_path]
+					sizes = [os.path.getsize(file) for file in parts]
 							
 					cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
 					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
-					result = trn.upload(parts, cloud_storage_path)
+					cloud_files = trn.upload(parts, cloud_storage_path)
 					self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
 									BEHAVIOUR, cloud_storage_path, backup_filename)
 			
-			op.ok()
+			result = list(dict(path=path, size=size) for path in cloud_files for size in sizes)
+			op.ok(data=result)
 			
 			# Notify Scalr
 			self.send_message(MongoDBMessages.CREATE_BACKUP_RESULT, dict(
@@ -1436,6 +1445,21 @@ class MongoDBHandler(ServiceCtlHandler):
 			t = self._status_trackers[ip]
 			t.stop()
 			del self._status_trackers[ip]
+		
+	def _insert_iptables_rules(self, *args, **kwargs):
+		self._logger.debug('Adding iptables rules for scalarizr ports')		
+		ipt = iptables.IpTables()
+		if ipt.enabled():		
+			rules = []
+			
+			# Scalarizr ports
+			rules.append(iptables.RuleSpec(dport=mongo_svc.ROUTER_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
+			rules.append(iptables.RuleSpec(dport=mongo_svc.ARBITER_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
+			rules.append(iptables.RuleSpec(dport=mongo_svc.REPLICA_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
+			rules.append(iptables.RuleSpec(dport=mongo_svc.CONFIG_SERVER_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
+			
+			for rule in rules:
+				ipt.insert_rule(1, rule_spec = rule)
 		
 			
 	@property

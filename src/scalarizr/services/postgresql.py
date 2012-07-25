@@ -58,7 +58,10 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
 		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			initd_script = ('/usr/sbin/service', 'postgresql')
 		else:
-			initd_script = firstmatched(os.path.exists, ('/etc/init.d/postgresql-9.0', '/etc/init.d/postgresql'))
+			initd_script = firstmatched(os.path.exists, (
+						'/etc/init.d/postgresql-9.0', 
+						'/etc/init.d/postgresql-9.1', 
+						'/etc/init.d/postgresql'))
 		initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
 				initd_script=initd_script)
 		
@@ -89,14 +92,15 @@ class PostgreSql(BaseService):
 	
 	_objects = None
 	_instance = None
-	
 	service = None
+		
 		
 	def __new__(cls, *args, **kwargs):
 		if not cls._instance:
 			cls._instance = super(PostgreSql, cls).__new__(
 								cls, *args, **kwargs)
 		return cls._instance
+	
 	
 	def __init__(self, version, pg_keys_dir):
 		self._objects = {}
@@ -123,6 +127,7 @@ class PostgreSql(BaseService):
 				self.register_slave(host, force_restart=False)
 		self.service.start()
 		
+		
 	def init_slave(self, mpoint, primary_ip, primary_port, password):
 		self._init_service(mpoint, password)
 		
@@ -136,18 +141,22 @@ class PostgreSql(BaseService):
 		self.change_primary(primary_ip, primary_port, self.root_user.name)
 		self.service.start()
 		
+		
 	def register_slave(self, slave_ip, force_restart=True):
 		self.pg_hba_conf.add_standby_host(slave_ip, self.root_user.name)
 		self.postgresql_conf.max_wal_senders += 1
 		if force_restart:
 			self.service.restart(reason='Registering slave', force=True)
 			
+			
 	def register_client(self, ip, force=True):
 		self.pg_hba_conf.add_client(ip)
 		self.service.reload('Allowing access for new app instance: %s' % ip, force=force)
 		
+		
 	def change_primary(self, primary_ip, primary_port, username):
 		self.recovery_conf.primary_conninfo = (primary_ip, primary_port, username)
+	
 	
 	def unregister_slave(self, slave_ip):
 		self.pg_hba_conf.delete_standby_host(slave_ip, self.root_user.name)
@@ -157,17 +166,21 @@ class PostgreSql(BaseService):
 		self.pg_hba_conf.delete_client(ip)
 		self.service.reload(reason='Unregistering terminated instance: %s' % ip, force=True)
 
+
 	def stop_replication(self):
 		self.trigger_file.create()
 		
+		
 	def start_replication(self):
 		self.trigger_file.destroy()
+	
 	
 	def create_user(self, name, password, sys_user_only=True):
 		user = PgUser(name, self.pg_keys_dir)	
 		#password = password or user.generate_password(20)
 		user._create_system_user(password)
 		return user	
+	
 	
 	def create_pg_role(self, name, password=None, super=True):
 		self.set_trusted_mode()
@@ -178,17 +191,20 @@ class PostgreSql(BaseService):
 		self.set_password_mode()
 		return user			
 
+
 	def set_trusted_mode(self):
 		self.pg_hba_conf.set_trusted_access_mode()
 		#Temporary we need to force restart the service 
 		if self.service.running:
 			self.service.reload(reason='Applying trusted mode', force=True)
 	
+	
 	def set_password_mode(self):
 		self.pg_hba_conf.set_password_access_mode()
 		#Temporary we need to force restart the service 
 		if self.service.running:
 			self.service.reload(reason='Applying password mode', force=True)
+
 
 	def _init_service(self, mpoint, password):
 		self.service.stop()
@@ -204,7 +220,7 @@ class PostgreSql(BaseService):
 		
 		self.cluster_dir.clean()
 		
-		if disttool.is_centos():
+		if disttool.is_redhat_based():
 			self.config_dir.move_to(self.unified_etc_path)
 			make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
 			self.postgresql_conf = PostgresqlConf.find(self.config_dir)
@@ -213,7 +229,6 @@ class PostgreSql(BaseService):
 		self.pg_hba_conf.allow_local_connections()
 		
 
-		
 	def _get_config_dir(self):
 		return self._get('config_dir', ConfigDir.find, self.version)
 		
@@ -575,7 +590,7 @@ class ClusterDir(object):
 		rchown(self.user, dst)
 		
 		self._logger.debug("Changing postgres user`s home directory")
-		if disttool.is_centos():
+		if disttool.is_redhat_based():
 			#looks like ubuntu doesn`t need this
 			system2([USERMOD, '-d', new_cluster_dir, self.user]) 
 			
@@ -600,18 +615,26 @@ class ConfigDir(object):
 	
 	path = None
 	user = None
-	sysconf_path = '/etc/sysconfig/pgsql/postgresql-9.0'
-	
-	def __init__(self, path):
-		self._logger = logging.getLogger(__name__)
-		self.path = path
+	version = None
 	
 	@classmethod
-	def find(cls, version='9.0'):
+	def get_sysconf_path(cls):
+		return '/etc/sysconfig/pgsql/postgresql-%s' % cls.version or '9.0'
+	
+	
+	def __init__(self, path, version=None):
+		self._logger = logging.getLogger(__name__)
+		self.path = path
+		self.version = version
+	
+	
+	@classmethod
+	def find(cls, version=None):
+		cls.version = version
 		path = cls.get_sysconfig_pgdata()
 		if not path:
 			path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
-		return cls(path)
+		return cls(path, version)
 		
 	
 	def move_to(self, dst):
@@ -642,27 +665,30 @@ class ConfigDir(object):
 		conf = PostgresqlConf.find(self)
 		conf.pid_file = os.path.join(dst, 'postmaster.pid')
 
+
 	def _patch_sysconfig(self, config_dir):
 		if config_dir == self.get_sysconfig_pgdata():
 			self._logger.debug('sysconfig file already rewrites PGDATA. Skipping.')
 		else:
 			self.set_sysconfig_pgdata(config_dir)
 	
+	
 	def set_sysconfig_pgdata(self, pgdata):
 		self._logger.debug("rewriting PGDATA path in sysconfig")
-		dir = os.path.dirname(self.sysconf_path)
+		dir = os.path.dirname(self.get_sysconf_path())
 		if not os.path.exists(dir):
 			#ubuntu 11.10 has no sysconfig dir in etc
 			os.makedirs(dir)
-		file = open(self.sysconf_path, 'w')
+		file = open(self.get_sysconf_path(), 'w')
 		file.write('PGDATA=%s' % pgdata)
 		file.close()
+	
 	
 	@classmethod
 	def get_sysconfig_pgdata(cls):
 		pgdata = None
-		if os.path.exists(cls.sysconf_path):
-			s = open(cls.sysconf_path, 'r').readline().strip()
+		if os.path.exists(cls.get_sysconf_path()):
+			s = open(cls.get_sysconf_path(), 'r').readline().strip()
 			if s and len(s)>7:
 				pgdata = s[7:]
 		return pgdata

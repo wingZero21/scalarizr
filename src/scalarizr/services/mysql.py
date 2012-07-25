@@ -61,7 +61,7 @@ class MySQL(BaseService):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		if not os.path.exists(MYCNF_PATH):
-			if disttool.is_centos() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
+			if disttool.is_redhat_based() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
 				shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF_PATH)
 			else:
 				fp = open(MYCNF_PATH, 'w')
@@ -122,11 +122,13 @@ class MySQL(BaseService):
 					src_dir = os.path.dirname(raw_value + "/") + "/"
 					LOG.debug('source path: %s' % src_dir)
 					if os.path.isdir(src_dir) and src_dir != dest:
-						
-						set_se_path = software.whereis('setsebool')
-						if set_se_path:
-							LOG.debug('Make SELinux rule for rsync')
-							system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
+						try:
+							if not system2((software.which('selinuxenabled'), ), raise_exc=False)[2]:
+								if not system2((software.which('getsebool'), 'mysqld_disable_trans'), raise_exc=False)[2]:
+									LOG.debug('Make SELinux rule for rsync')									
+									system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
+						except LookupError:
+							pass
 							
 						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
 						rsync = filetool.Rsync().archive()

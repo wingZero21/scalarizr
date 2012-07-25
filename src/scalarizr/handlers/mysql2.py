@@ -504,6 +504,7 @@ class MysqlHandler(DBMSRHandler):
 					parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
 				else:
 					parts = [backup_path]
+				sizes = [os.path.getsize(file) for file in parts]
 						
 				cloud_storage_path = self._platform.scalrfs.backups('mysql')
 				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
@@ -511,8 +512,9 @@ class MysqlHandler(DBMSRHandler):
 				result = trn.upload(parts, cloud_storage_path)
 				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
 								cloud_storage_path, backup_filename)
-											
-			op.ok()
+			
+			result = list(dict(path=path, size=size) for path in cloud_files for size in sizes)								
+			op.ok(data=result)
 			
 			# Notify Scalr
 			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(

@@ -131,6 +131,7 @@ class RequestHandler(object):
 	
 	def _translate_request(self, req):
 		try:
+			assert req['params'] is not None
 			return req['id'], req['method'], req['params']
 		except:
 			raise InvalidRequestError()

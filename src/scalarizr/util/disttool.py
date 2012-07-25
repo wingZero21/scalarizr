@@ -1,6 +1,7 @@
 '''
 @author: Dmytro Korsakov
 '''
+from __future__ import absolute_import
 import platform
 import re
 import os
@@ -26,7 +27,6 @@ _redhat_based_dists = map(string.lower, (
 	'Red Hat Enterprise Linux Server',
 	'Enterprise Linux Enterprise Linux Server' # OEL 5.0 - 5.2 
 ))
-
 
 _uname = platform.uname()
 os_name = _uname[0].lower()

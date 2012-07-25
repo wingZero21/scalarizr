@@ -9,6 +9,7 @@ from __future__ import with_statement
 from scalarizr.util import system2, disttool, firstmatched, PopenError
 from scalarizr.util.software import whereis
 from scalarizr.util.filetool import read_file
+from scalarizr.util import dynimp
 
 import re
 import binascii
@@ -25,6 +26,12 @@ logger = logging.getLogger(__name__)
 
 class Lvm2Error(PopenError):
 	pass
+
+if not os.path.exists('/sbin/pvs'):
+	mgr = dynimp.package_mgr()
+	if not mgr.installed('lvm2'):
+		mgr.install('lvm2', mgr.candidates('lvm2')[-1])
+
 
 try:
 	PVS = whereis('pvs')[0]

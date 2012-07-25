@@ -608,7 +608,7 @@ class MysqlHandler(ServiceCtlHandler):
 	
 	def __init__(self):
 		if not os.path.exists(MYCNF):
-			if disttool.is_centos() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
+			if disttool.is_redhat_based() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
 				shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF)
 			else:
 				open(MYCNF, 'w').close()
@@ -663,16 +663,12 @@ class MysqlHandler(ServiceCtlHandler):
 			self._stop_service('Configuring')
 			
 			# Add SELinux rule
-			selinux_enabled = False
-			selinuxenabled_path = software.whereis('selinuxenabled')
-			if selinuxenabled_path:
-				ret = system2((selinuxenabled_path[0],), raise_exc=False)[2]
-				selinux_enabled = True if not ret else False
-
-			if selinux_enabled:
-				set_se_path = software.whereis('setsebool')
-				if set_se_path:
-					system2((set_se_path[0], '-P', 'mysqld_disable_trans', '1'))
+			try:
+				if not system2((software.which('selinuxenabled'), ), raise_exc=False)[2]:
+					if not system2((software.which('getsebool'), 'mysqld_disable_trans'), raise_exc=False)[2]:
+						system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
+			except LookupError:
+				pass
 
 		
 		elif self._cnf.state == ScalarizrState.RUNNING:
@@ -861,15 +857,17 @@ class MysqlHandler(ServiceCtlHandler):
 						parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
 					else:
 						parts = [backup_path]
+					sizes = [os.path.getsize(file) for file in parts]
 						
 					cloud_storage_path = self._platform.scalrfs.backups('mysql')
 					self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 					trn = transfer.Transfer()
-					result = trn.upload(parts, cloud_storage_path)
+					cloud_files = trn.upload(parts, cloud_storage_path)
 					self._logger.info("Mysql backup uploaded to cloud storage under %s/%s", 
 									cloud_storage_path, backup_filename)
 			
-			op.ok()
+			result = list(dict(path=path, size=size) for path in cloud_files for size in sizes)
+			op.ok(data=result)
 					
 			# Notify Scalr
 			self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(

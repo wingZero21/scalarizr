@@ -569,7 +569,6 @@ def init_cnf():
 	cnf.bootstrap()
 	globals()['ini'] = cnf.rawini
 
-
 def new_queryenv():
 	init_cnf()
 	key_path = os.path.join(bus.etc_path, ini.get('general', 'crypto_key_path'))
