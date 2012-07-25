@@ -29,14 +29,17 @@ from scalarizr.platform import UserDataOptions, PlatformFeatures
 from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
 from scalarizr.util import system2, disttool, filetool, \
 	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool,\
-	PopenError, iptables
+	PopenError, iptables, dynimp
+	
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 
-
-BEHAVIOUR = CNF_SECTION = SERVICE_NAME = BuiltinBehaviours.MYSQL2
+if 'Percona Server' in system2((software.which('mysqld'), '-V'))[0]:
+	BEHAVIOUR = CNF_SECTION = SERVICE_NAME = BuiltinBehaviours.PERCONA
+else:
+	BEHAVIOUR = CNF_SECTION = SERVICE_NAME = BuiltinBehaviours.MYSQL2
 LOG = logging.getLogger(__name__)
 
 
@@ -292,7 +295,7 @@ class MysqlHandler(DBMSRHandler):
 	def get_initialization_phases(self, hir_message):
 		if BEHAVIOUR in hir_message.body:
 			steps = [self._step_accept_scalr_conf, self._step_create_storage]
-			if hir_message.body['mysql2']['replication_master'] == '1':
+			if hir_message.body[BEHAVIOUR]['replication_master'] == '1':
 				steps.append(self._step_create_data_bundle)
 			else:
 				steps.append(self._step_change_replication_master)
@@ -352,14 +355,14 @@ class MysqlHandler(DBMSRHandler):
 			with op.phase(self._phase_mysql):
 				with op.step(self._step_accept_scalr_conf):
 		
-					if not message.body.has_key("mysql2"):
-						raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql2' property")
+					if not message.body.has_key(BEHAVIOUR):
+						raise HandlerError("HostInitResponse message for MySQL behaviour must have '%s' property" % BEHAVIOUR)
 					
 					dir = os.path.dirname(self._volume_config_path)
 					if not os.path.exists(dir):
 						os.makedirs(dir)
 					
-					mysql_data = message.mysql2.copy()
+					mysql_data = getattr(message, BEHAVIOUR).copy()
 					for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 									(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 						if os.path.exists(file):
@@ -592,11 +595,11 @@ class MysqlHandler(DBMSRHandler):
 		"""
 		LOG.debug("on_DbMsr_PromoteToMaster")
 		#assert message.body['volume_config']
-		assert message.mysql2
-		mysql2 = message.mysql2
-		assert mysql2['root_password']
-		assert mysql2['repl_password']
-		assert mysql2['stat_password']
+		#assert message.mysql2
+		mysql2 = message.body[BEHAVIOUR]
+		#assert mysql2['root_password']
+		#assert mysql2['repl_password']
+		#assert mysql2['stat_password']
 
 		
 		if self.is_replication_master:
@@ -716,9 +719,9 @@ class MysqlHandler(DBMSRHandler):
 		assert message.body.has_key("db_type")
 		assert message.body.has_key("local_ip")
 		assert message.body.has_key("remote_ip")
-		assert message.body.has_key("mysql2")
+		assert message.body.has_key(BEHAVIOUR)
 	
-		mysql2 = message.body["mysql2"]
+		mysql2 = message.body[BEHAVIOUR]
 		
 		if  self.is_replication_master:
 			LOG.debug('Skip NewMasterUp. My replication role is master')
@@ -887,7 +890,7 @@ class MysqlHandler(DBMSRHandler):
 					stat_password=user_creds[STAT_USER])
 			msg_data.update(passwords)			
 			message.db_type = BEHAVIOUR
-			message.mysql2 = msg_data.copy()
+			setattr(message, BEHAVIOUR, msg_data.copy())
 			try:
 				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
 			except KeyError:
@@ -1095,7 +1098,7 @@ class MysqlHandler(DBMSRHandler):
 			if v: 
 				updates[k] = v
 		
-		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
+		self._cnf.update_ini('mysql2', {CNF_SECTION: data})
 		
 
 

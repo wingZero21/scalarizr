@@ -1012,6 +1012,7 @@ class BuiltinBehaviours:
 	WWW = 'www'
 	MYSQL = 'mysql'
 	MYSQL2 = 'mysql2'
+	PERCONA = 'percona'
 	CASSANDRA = 'cassandra'
 	MEMCACHED = 'memcached'
 	POSTGRESQL = 'postgresql'
