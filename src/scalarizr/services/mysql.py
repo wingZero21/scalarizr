@@ -485,15 +485,15 @@ class MySQLConf(BaseConfig):
 		return self.get('mysqld/skip-locking')
 	
 	
-	def set_skip_locking(self, val):
+	def _set_skip_locking(self, val):
 		self.set('mysqld/skip-locking', val)
 
 
-	log_bin = property(_get_log_bin, set_log_bin)
-	server_id = property(_get_server_id, set_server_id)
-	bind_address = property(_get_bind_address, set_bind_address)
-	skip_networking = property(_get_skip_networking, set_skip_networking)
-	skip_locking = property(_get_skip_locking, set_skip_locking)
+	log_bin = property(_get_log_bin, _set_log_bin)
+	server_id = property(_get_server_id, _set_server_id)
+	bind_address = property(_get_bind_address, _set_bind_address)
+	skip_networking = property(_get_skip_networking, _set_skip_networking)
+	skip_locking = property(_get_skip_locking, _set_skip_locking)
 	expire_logs_days = property(_get_expire_logs_days, _set_expire_logs_days)
 	datadir	 = property(_get_datadir, _set_datadir)
 	datadir_default = DEFAULT_DATADIR
