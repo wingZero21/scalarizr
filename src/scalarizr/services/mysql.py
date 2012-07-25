@@ -33,7 +33,7 @@ LOG = logging.getLogger(__name__)
 MYSQL_DEFAULT_PORT=3306
 MYSQL_PATH  = '/usr/bin/mysql' # old mysql_path
 MYCNF_PATH 	= '/etc/mysql/my.cnf' if disttool.is_ubuntu() else '/etc/my.cnf' 
-MYSQLD_PATH = '/usr/sbin/mysqld'  if disttool.is_ubuntu() else '/usr/libexec/mysqld' #old mysqld_path
+MYSQLD_PATH = firstmatched(lambda x: os.access(x, os.X_OK), ('/usr/sbin/mysqld', '/usr/libexec/mysqld'))
 MYSQLDUMP_PATH = '/usr/bin/mysqldump'
 DEFAULT_DATADIR	= "/var/lib/mysql"
 
@@ -474,20 +474,30 @@ class MySQLConf(BaseConfig):
 		
 
 	def _get_expire_logs_days(self):
-		return self.get('mysqld/skip-networking')
+		return self.get('mysqld/expire_logs_days')
 	
 	
 	def _set_expire_logs_days(self, val):
 		self.set('mysqld/expire_logs_days', val)	
 		
-		
+
+	def _get_skip_locking(self):
+		return self.get('mysqld/skip-locking')
+	
+	
+	def set_skip_locking(self, val):
+		self.set('mysqld/skip-locking', val)
+
+
+	log_bin = property(_get_log_bin, set_log_bin)
+	server_id = property(_get_server_id, set_server_id)
+	bind_address = property(_get_bind_address, set_bind_address)
+	skip_networking = property(_get_skip_networking, set_skip_networking)
+	skip_locking = property(_get_skip_locking, set_skip_locking)
 	expire_logs_days = property(_get_expire_logs_days, _set_expire_logs_days)
-	log_bin = property(_get_log_bin, _set_log_bin)
-	server_id = property(_get_server_id, _set_server_id)
-	bind_address = property(_get_bind_address, _set_bind_address)
-	skip_networking = property(_get_skip_networking, _set_skip_networking)
 	datadir	 = property(_get_datadir, _set_datadir)
 	datadir_default = DEFAULT_DATADIR
+
 	
 	
 class MySQLDump(object):
@@ -592,7 +602,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 	
 	socket_file = None
 	cli = None
-	sgt_pid_path = '/var/run/mysqld/mysqld.pid'
+	sgt_pid_path = '/tmp/mysqld-sgt.pid'
 	
 	
 	@lazy
@@ -697,9 +707,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 	def _is_sgt_process_exists(self):
 		try:
 			out = system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
+			return MYSQLD_PATH in out and 'skip-grant-tables' in out
 		except:
-			out = None
-		return False if not out else MYSQLD_PATH in out and 'skip-grant-tables' in out
+			return False
 
 
 	def start_skip_grant_tables(self):
@@ -709,7 +719,8 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			mysql_user	= pwd.getpwnam("mysql")
 			os.chown(pid_dir, mysql_user.pw_uid, -1)
 		if not self._is_sgt_process_exists():	
-			args = [MYSQLD_PATH, '--user=mysql', '--skip-grant-tables']
+			args = [MYSQLD_PATH, '--user=mysql', '--skip-grant-tables', '--pid-file=%s' % self.sgt_pid_path]
+			LOG.debug('Starting mysqld with a skip-grant-tables')
 			p = subprocess.Popen(args, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
 			wait_until(lambda: self._is_sgt_process_exists(), timeout=10, sleep=1)
 		wait_until(lambda: self.running, timeout=10, sleep=1)
@@ -719,11 +730,14 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		if self._is_sgt_process_exists() and os.path.exists(self.sgt_pid_path):
 			sgt_pid = open(self.sgt_pid_path).read().strip()
 			if sgt_pid:
+				LOG.debug('Stopping mysqld with a skip-grant-tables')
 				os.kill(int(sgt_pid), signal.SIGTERM)
 				wait_until(lambda: not self._is_sgt_process_exists(), timeout=10, sleep=1)
 				wait_until(lambda: not self.running, timeout=10, sleep=1)
 			else:
 				LOG.warning('Unable to stop mysql running with skip-grant-tables. PID not found.')
+		else:
+			LOG.debug('Skip stopping mysqld with a skip-grant-tables')
 		
 
 
