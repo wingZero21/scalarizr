@@ -1095,12 +1095,8 @@ class MysqlHandler(DBMSRHandler):
 	def _update_config(self, data): 
 		#XXX: I just don't like it
 		#ditching empty data
-		updates = dict()
-		for k,v in data.items():
-			if v: 
-				updates[k] = v
-		
-		self._cnf.update_ini(CNF_SECTION, {CNF_SECTION : data})
+		updates = dict((k, v or '') for k, v in data.items())
+		self._cnf.update_ini(CNF_SECTION, {CNF_SECTION : updates})
 		
 
 
