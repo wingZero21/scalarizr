@@ -407,8 +407,14 @@ def _detect_scalr_version():
 	pl = bus.platform
 	cnf = bus.cnf
 	if pl and cnf.state != ScalarizrState.IMPORTING:
-		return (2, 2) if pl.get_user_data('cloud_storage_path') else (2, 1)
-	return (2, 0)	
+		if pl.get_user_data('cloud_storage_path'):
+			if pl.get_user_data('env_id'):
+				return (3, 5, 0)
+			if pl.get_user_data('behaviors'):
+				return (3, 1, 0)
+		else:
+			return (2, 1)
+	return (2, 0)
 
 	
 def init_script():
