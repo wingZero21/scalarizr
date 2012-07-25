@@ -1680,29 +1680,7 @@ class MysqlHandler(ServiceCtlHandler):
 	@_reload_mycnf
 	def _replication_init(self, master=True):
 		# Create replication config
-		'''
-		if not os.path.exists('/etc/mysql'):
-			os.makedirs('/etc/mysql')		
-		
-		LOG.info("Creating farm-replication config")
-		repl_conf_path = '/etc/mysql/farm-replication.cnf'
-		try:
-			file = open(repl_conf_path, 'w')
-		except IOError, e:
-			LOG.error('Cannot open %s: %s', repl_conf_path, e.strerror)
-			raise
-		else:
-			server_id = 1 if master else int(random.random() * 100000)+1
-			file.write('[mysqld]\nserver-id\t\t=\t'+ str(server_id)+'\nmaster-connect-retry\t\t=\t15\n')
-			file.close()
-			os.chmod(repl_conf_path, 0644)
-			
-		LOG.debug("farm-replication config created")
-		
-		if not repl_conf_path in self._mysql_config.get_list('*/!include'):
-			# Include farm-replication.cnf in my.cnf
-			self._mysql_config.add('!include', repl_conf_path)
-		'''
+		self._mysql_config.set('mysqld/expire_logs_days', 10, force=True)
 		server_id = 1 if master else int(random.random() * 100000)+1
 		self._mysql_config.remove('mysqld/server-id')
 		self._mysql_config.add('mysqld/server-id', server_id)
@@ -1714,11 +1692,6 @@ class MysqlHandler(ServiceCtlHandler):
 				pass
 		self.write_config()
 		
-		'''
-		if disttool.is_debian_based():
-			_add_apparmor_rules(repl_conf_path)
-		'''	
-
 
 	def _change_master(self, host, user, password, log_file, log_pos, 
 					my_cli=None, mysql_user=None, mysql_password=None, 
