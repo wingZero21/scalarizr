@@ -1788,7 +1788,10 @@ class MysqlHandler(ServiceCtlHandler):
 				else:
 					raise HandlerError('Cannot change replication master to %s' % (host))
 		finally:
-			my_cli.close()
+			try:
+				my_cli.close()
+			except:
+				os.kill(my_cli.pid, signal.SIGKILL)
 				
 		LOG.debug('Replication master is changed to host %s', host)		
 
