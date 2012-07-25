@@ -698,9 +698,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 	def _is_sgt_process_exists(self):
 		try:
 			out = system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
+			return MYSQLD_PATH in out and 'skip-grant-tables' in out
 		except:
-			out = None
-		return False if not out else MYSQLD_PATH in out and 'skip-grant-tables' in out
+			return False
 
 
 	def start_skip_grant_tables(self):
