@@ -593,7 +593,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 	
 	socket_file = None
 	cli = None
-	sgt_pid_path = '/var/run/mysqld/mysqld.pid'
+	sgt_pid_path = '/tmp/mysqld-sgt.pid'
 	
 	
 	@lazy
@@ -710,7 +710,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			mysql_user	= pwd.getpwnam("mysql")
 			os.chown(pid_dir, mysql_user.pw_uid, -1)
 		if not self._is_sgt_process_exists():	
-			args = [MYSQLD_PATH, '--user=mysql', '--skip-grant-tables']
+			args = [MYSQLD_PATH, '--user=mysql', '--skip-grant-tables', '--pid-file=%s' % self.sgt_pid_path]
 			LOG.debug('Starting mysqld with a skip-grant-tables')
 			p = subprocess.Popen(args, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
 			wait_until(lambda: self._is_sgt_process_exists(), timeout=10, sleep=1)
