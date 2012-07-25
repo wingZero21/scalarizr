@@ -846,8 +846,9 @@ class MysqlHandler(DBMSRHandler):
 					self.mysql.my_cnf.log_bin = None
 				
 				# Patch configuration
-				
+				self.mysql.my_cnf.skip_locking = False				
 				self.mysql.move_mysqldir_to(STORAGE_PATH)
+
 		
 			with op.step(self._step_patch_conf):
 				# Init replication

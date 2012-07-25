@@ -473,12 +473,22 @@ class MySQLConf(BaseConfig):
 		self.set('mysqld/skip-networking', val)	
 
 
+	def _get_skip_locking(self):
+		return self.get('mysqld/skip-locking')
+	
+	
+	def set_skip_locking(self, val):
+		self.set('mysqld/skip-locking', val)
+
+
 	log_bin = property(_get_log_bin, set_log_bin)
 	server_id = property(_get_server_id, set_server_id)
 	bind_address = property(_get_bind_address, set_bind_address)
 	skip_networking = property(_get_skip_networking, set_skip_networking)
+	skip_locking = property(_get_skip_locking, set_skip_locking)
 	datadir	 = property(_get_datadir, _set_datadir)
 	datadir_default = DEFAULT_DATADIR
+
 	
 	
 class MySQLDump(object):
