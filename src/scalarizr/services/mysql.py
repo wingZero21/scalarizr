@@ -33,7 +33,7 @@ LOG = logging.getLogger(__name__)
 MYSQL_DEFAULT_PORT=3306
 MYSQL_PATH  = '/usr/bin/mysql' # old mysql_path
 MYCNF_PATH 	= '/etc/mysql/my.cnf' if disttool.is_ubuntu() else '/etc/my.cnf' 
-MYSQLD_PATH = '/usr/sbin/mysqld'  if disttool.is_ubuntu() else '/usr/libexec/mysqld' #old mysqld_path
+MYSQLD_PATH = firstmatched(lambda x: os.access(x, os.X_OK), ('/usr/sbin/mysqld', '/usr/libexec/mysqld'))
 MYSQLDUMP_PATH = '/usr/bin/mysqldump'
 DEFAULT_DATADIR	= "/var/lib/mysql"
 
