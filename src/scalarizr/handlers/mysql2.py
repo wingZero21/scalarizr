@@ -36,7 +36,7 @@ from scalarizr.util import system2, disttool, filetool, \
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 
-if 'Percona Server' in system2((software.which('mysqld'), '-V'))[0]:
+if 'Percona Server' in system2((software.which('mysqld'), '-V'))[0] and disttool.is_redhat_based():
 	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.PERCONA
 else:
 	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL2
