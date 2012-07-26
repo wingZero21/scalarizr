@@ -583,9 +583,14 @@ def new_queryenv():
 				bus.scalr_version = tuple(read_file(version_file).strip().split('.'))
 		
 		if bus.scalr_version:
-			api_version = '2012-04-17' if bus.scalr_version >= (3, 1, 0) else '2010-09-23'
+			if bus.scalr_version >= (3, 5, 3):
+				api_version = '2012-07-01'
+			elif bus.scalr_version >= (3, 1, 0):
+				api_version = '2012-04-17'
+			else:
+				api_version = '2010-09-23'
 		else:
-			api_version = '2012-04-17'
+			api_version = '2012-07-01'
 	return QueryEnvService(url, server_id, key_path, api_version)		
 	
 

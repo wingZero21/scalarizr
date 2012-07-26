@@ -295,7 +295,12 @@ def _init_services():
 	bus.periodical_executor = PeriodicalExecutor()
 
 	logger.debug("Initialize QueryEnv client")
-	api_version = '2012-04-17' if bus.scalr_version >= (3, 1, 0) else '2010-09-23'
+	if bus.scalr_version >= (3, 5, 3):
+		api_version = '2012-07-01'
+	elif bus.scalr_version >= (3, 1, 0):
+		api_version = '2012-04-17'
+	else:
+		api_version = '2010-09-23'
 	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), api_version)
 	bus.queryenv_service = queryenv
 	
@@ -409,7 +414,7 @@ def _detect_scalr_version():
 	if pl and cnf.state != ScalarizrState.IMPORTING:
 		if pl.get_user_data('cloud_storage_path'):
 			if pl.get_user_data('env_id'):
-				return (3, 5, 0)
+				return (3, 5, 3)
 			if pl.get_user_data('behaviors'):
 				return (3, 1, 0)
 		else:
