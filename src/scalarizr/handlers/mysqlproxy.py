@@ -118,6 +118,10 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
 
 initdv2.explore(BEHAVIOUR, MysqlProxyInitScript)
 
+def is_mysql_role(behaviours):
+	return bool(set((BuiltinBehaviours.MYSQL,
+			   BuiltinBehaviours.MYSQL2,
+			   BuiltinBehaviours.PERCONA)).intersection(set(behaviours)))
 
 
 class MysqlProxyHandler(ServiceCtlHandler):
@@ -131,23 +135,17 @@ class MysqlProxyHandler(ServiceCtlHandler):
 
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.behaviour\
-			   and (
-		BuiltinBehaviours.MYSQL in message.behaviour or
-		BuiltinBehaviours.MYSQL2 in message.behaviour or
-		BuiltinBehaviours.PERCONA in message.behaviour
-		)\
-		and message.name in (
-		Messages.HOST_UP,
-		Messages.HOST_DOWN,
-		NEW_MASTER_UP,
-		DbMsrMessages.DBMSR_NEW_MASTER_UP
+		return is_mysql_role(message.behaviour)and message.name in (
+					Messages.HOST_UP,
+					Messages.HOST_DOWN,
+					NEW_MASTER_UP,
+					DbMsrMessages.DBMSR_NEW_MASTER_UP
 		)
 
 
 	def on_reload(self):
 		self._reload_backends()
-		
+
 
 	def _reload_backends(self):
 		self._logger.info('Updating mysql-proxy backends list')
@@ -163,10 +161,14 @@ class MysqlProxyHandler(ServiceCtlHandler):
 			self.config.add('./mysql-proxy')
 
 		queryenv = bus.queryenv_service
-		roles = queryenv.list_roles(behaviour=BuiltinBehaviours.MYSQL)
+		roles = queryenv.list_roles()
 		master = None
 		slaves = []
+
 		for role in roles:
+			if not is_mysql_role(role.behaviour):
+				continue
+
 			for host in role.hosts:
 				ip = host.internal_ip or host.external_ip
 				if host.replication_master:
