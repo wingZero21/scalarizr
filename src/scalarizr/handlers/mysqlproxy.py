@@ -147,6 +147,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 
 	def on_reload(self):
 		self._reload_backends()
+		
 
 	def _reload_backends(self):
 		self._logger.info('Updating mysql-proxy backends list')
@@ -189,6 +190,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 		os.chmod(CONFIG_FILE_PATH, 0660)
 
 		self.service.restart()
+
 
 	def on_HostUp(self, message):
 		self._reload_backends()
