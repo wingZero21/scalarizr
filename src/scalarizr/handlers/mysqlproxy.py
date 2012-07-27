@@ -13,7 +13,7 @@ import logging
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.util import initdv2, software
+from scalarizr.util import initdv2, software, system2
 from scalarizr.messaging import Messages
 from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages
 from scalarizr.config import BuiltinBehaviours
@@ -36,6 +36,9 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
 		if not res:
 			raise initdv2.InitdError("Mysql-proxy binary not found. Check your installation")
 		self.bin_path = res[0]
+		version_str = system2((self.bin_path, '-V'))[0].splitlines()[0]
+		self.version = tuple(version_str.split()[1].split('.'))
+		self.sock = initdv2.SockParam(4040)
 
 
 	def status(self):
@@ -59,36 +62,8 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
 
 	def start(self):
 		if not self.running:
-			pid = os.fork()
-			if pid == 0:
-				os.setsid()
-				pid = os.fork()
-				if pid != 0:
-					os._exit(0)
-
-				os.chdir('/')
-				os.umask(0)
-
-				import resource		# Resource usage information.
-				maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
-				if (maxfd == resource.RLIM_INFINITY):
-					maxfd = 1024
-
-				for fd in range(0, maxfd):
-					try:
-						os.close(fd)
-					except OSError:
-						pass
-
-				os.open('/dev/null', os.O_RDWR)
-
-				os.dup2(0, 1)
-				os.dup2(0, 2)
-
-				try:
-					os.execl(self.bin_path, 'mysql-proxy', '--defaults-file=' + CONFIG_FILE_PATH)
-				except Exception:
-					os._exit(255)
+			system2((self.bin_path, '--defaults-file=' + CONFIG_FILE_PATH))
+			initdv2.wait_sock(self.sock)
 
 
 	def stop(self):
@@ -136,7 +111,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return is_mysql_role(message.behaviour)and message.name in (
+		return message.behaviour and is_mysql_role(message.behaviour) and message.name in (
 					Messages.HOST_UP,
 					Messages.HOST_DOWN,
 					NEW_MASTER_UP,
@@ -204,8 +179,10 @@ class MysqlProxyHandler(ServiceCtlHandler):
 				self.config.add('./mysql-proxy/proxy-read-only-backend-addresses', '%s:3306' % slave)
 
 		self.config.set('./mysql-proxy/pid-file', PID_FILE, force=True)
-		self.config.set('./mysql-proxy/daemon', '', force=True)
+		self.config.set('./mysql-proxy/daemon', 'true', force=True)
 		self.config.set('./mysql-proxy/log-file', LOG_FILE, force=True)
+		if self.service.version > (0,8,0):
+			self.config.set('./mysql-proxy/plugins', 'proxy', force=True)
 
 		self._logger.debug('Saving new mysql-proxy defaults file')
 		self.config.write(CONFIG_FILE_PATH)
