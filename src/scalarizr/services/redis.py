@@ -200,8 +200,8 @@ class RedisInstances(object):
 	def __iter__(self):
 		return iter(self.instances)
 			
-			
-	def get_instances(self, port=None, password=None):
+
+	def get_instance(self, port=None, password=None):
 		for instance in self.instances:
 			if instance.port == port or instance.password == password:
 				return instance
