@@ -510,7 +510,7 @@ class RedisHandler(ServiceCtlHandler):
 			
 			with op.step(self._step_init_master):
 				password = self._get_password()
-				redis = self.redis_instances.get_instance(password=password)
+				redis = self.redis_instances.get_instance(port=DEFAULT_PORT)
 				redis.init_master(mpoint=self._storage_path)
 			
 				msg_data = dict()
@@ -581,7 +581,7 @@ class RedisHandler(ServiceCtlHandler):
 				
 				host = master_host.internal_ip or master_host.external_ip
 				password = self._get_password()
-				redis = self.redis_instances.get_instance(password=password)
+				redis = self.redis_instances.get_instance(port=DEFAULT_PORT)
 				redis.init_slave(self._storage_path, host, DEFAULT_PORT)
 				op.progress(50)
 				redis.wait_for_sync()
