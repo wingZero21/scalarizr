@@ -62,7 +62,36 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
 
 	def start(self):
 		if not self.running:
-			system2((self.bin_path, '--defaults-file=' + CONFIG_FILE_PATH))
+			pid = os.fork()
+			if pid == 0:
+				os.setsid()
+				pid = os.fork()
+				if pid != 0:
+					os._exit(0)
+
+				os.chdir('/')
+				os.umask(0)
+
+				import resource		# Resource usage information.
+				maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+				if (maxfd == resource.RLIM_INFINITY):
+					maxfd = 1024
+
+				for fd in range(0, maxfd):
+					try:
+						os.close(fd)
+					except OSError:
+						pass
+
+				os.open('/dev/null', os.O_RDWR)
+
+				os.dup2(0, 1)
+				os.dup2(0, 2)
+
+				try:
+					os.execl(self.bin_path, 'mysql-proxy', '--defaults-file=' + CONFIG_FILE_PATH)
+				except Exception:
+					os._exit(255)
 			initdv2.wait_sock(self.sock)
 
 
