@@ -657,7 +657,7 @@ class RedisHandler(ServiceCtlHandler):
 	def _insert_iptables_rules(self):
 		iptables = IpTables()
 		if iptables.enabled():
-			for port in self.redis_instances.ports():
+			for port in self.redis_instances.ports:
 				iptables.insert_rule(None, RuleSpec(dport=port, jump='ACCEPT', protocol=P_TCP))		
 	
 
