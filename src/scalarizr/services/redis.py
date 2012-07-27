@@ -123,7 +123,20 @@ class Redisd(object):
 	def start(self):
 		try:
 			if not self.running:
-				LOG.debug('Starting %s' % BIN_PATH)
+		
+				#TODO: think about moving this code elsewhere
+				if self.redis_conf.port == DEFAULT_PORT:
+					base_dir = self.redis_conf.dir
+					snap_src = os.path.join(base_dir, DB_FILENAME)
+					snap_dst = os.path.join(base_dir, get_snap_db_filename(DEFAULT_PORT))
+					if os.path.exists(snap_src) and not os.path.exists(snap_dst):
+						shutil.move(snap_src, snap_dst)
+					aof_src = os.path.join(base_dir, AOF_FILENAME)
+					aof_dst = os.path.join(base_dir, get_aof_db_filename(DEFAULT_PORT))
+					if os.path.exists(aof_src) and not os.path.exists(aof_dst):
+						shutil.move(aof_src, aof_dst)
+				
+				LOG.debug('Starting %s on port %s' % (BIN_PATH, self.redis_conf.port))
 				system2(['sudo', '-u', DEFAULT_USER, BIN_PATH,] + self.args)
 				wait_until(lambda: self.running, timeout=MAX_START_TIMEOUT)
 				wait_until(lambda: self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
@@ -133,31 +146,21 @@ class Redisd(object):
 			LOG.error('Unable to start redis process: %s' % e)
 	
 	
-	def stop(self):
-		os.kill(int(self.pid), signal.SIGTERM)
-		wait_until(lambda: not self.running, timeout=MAX_START_TIMEOUT)
-		wait_until(lambda: not self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
-		
-		#TODO: think about moving this code elsewhere
-		if self.redis_conf.port == DEFAULT_PORT:
-			base_dir = self.redis_conf.dir
-			snap_src = os.path.join(base_dir, DB_FILENAME)
-			snap_dst = os.path.join(base_dir, get_snap_db_filename(DEFAULT_PORT))
-			if os.path.exists(snap_src) and not os.path.exists(snap_dst):
-				shutil.move(snap_src, snap_dst)
-			aof_src = os.path.join(base_dir, AOF_FILENAME)
-			aof_dst = os.path.join(base_dir, get_aof_db_filename(DEFAULT_PORT))
-			if os.path.exists(aof_src) and not os.path.exists(aof_dst):
-				shutil.move(aof_src, aof_dst)
+	def stop(self, reason=None):
+		if self.running:
+			LOG.info('Stopping redis server on port %s. Reason: %s' % (self.redis_conf.port, reason))
+			os.kill(int(self.pid), signal.SIGTERM)
+			wait_until(lambda: not self.running, timeout=MAX_START_TIMEOUT)
+			wait_until(lambda: not self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
 		
 	
-	def restart(self):
+	def restart(self, reason=None):
 		if self.running:
 			self.stop()
 		self.start()
 	
 	
-	def reload(self):
+	def reload(self, reason=None):
 		self.restart()
 	
 	
