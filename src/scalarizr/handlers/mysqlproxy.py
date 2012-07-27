@@ -205,7 +205,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 
 		self.config.set('./mysql-proxy/pid-file', PID_FILE, force=True)
 		self.config.set('./mysql-proxy/daemon', '', force=True)
-		self.config.set('./mysql-proxy/log-file', LOG_FILE)
+		self.config.set('./mysql-proxy/log-file', LOG_FILE, force=True)
 
 		self._logger.debug('Saving new mysql-proxy defaults file')
 		self.config.write(CONFIG_FILE_PATH)
