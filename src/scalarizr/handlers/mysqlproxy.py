@@ -24,6 +24,8 @@ PID_FILE = '/var/run/mysql-proxy.pid'
 NEW_MASTER_UP = "Mysql_NewMasterUp"
 LOG_FILE = '/var/log/mysql-proxy.log'
 
+LOG = logging.getLogger(__name__)
+
 
 def get_handlers():
 	return (MysqlProxyHandler(),)
@@ -37,7 +39,7 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
 			raise initdv2.InitdError("Mysql-proxy binary not found. Check your installation")
 		self.bin_path = res[0]
 		version_str = system2((self.bin_path, '-V'))[0].splitlines()[0]
-		self.version = tuple(version_str.split()[1].split('.'))
+		self.version = tuple(map(int, version_str.split()[1].split('.')))
 		self.sock = initdv2.SockParam(4040)
 
 
@@ -62,6 +64,7 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
 
 	def start(self):
 		if not self.running:
+			LOG.debug('Starting mysql-proxy')
 			pid = os.fork()
 			if pid == 0:
 				os.setsid()
@@ -97,6 +100,7 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
 
 	def stop(self):
 		if self.running:
+			LOG.debug('Stopping mysql-proxy')
 			with open(PID_FILE) as f:
 				pid = int(f.read())
 
