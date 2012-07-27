@@ -848,4 +848,4 @@ def get_redis_conf_basename(port=DEFAULT_PORT):
 	return 'redis.%s.conf' % port
 
 def get_redis_conf_path(port=DEFAULT_PORT):
-	os.path.join(CONFIG_DIR, get_redis_conf_basename(port))
+	return os.path.join(CONFIG_DIR, get_redis_conf_basename(port))
