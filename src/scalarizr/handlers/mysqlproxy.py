@@ -10,6 +10,7 @@ import os
 import time
 import logging
 
+from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.util import initdv2, software
@@ -131,8 +132,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self.service = initdv2.lookup(BEHAVIOUR)
-		bus.on("reload", self.on_reload)
-		self.on_reload()
+		bus.on(init=self.on_init)
 
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -144,7 +144,25 @@ class MysqlProxyHandler(ServiceCtlHandler):
 		)
 
 
+	def on_init(self):
+		bus.on(
+			start=self.on_start,
+			before_host_up=self.on_before_host_up,
+			reload=self.on_reload
+		)
+
+
 	def on_reload(self):
+		self._reload_backends()
+
+
+	def on_start(self):
+		cnf = bus.cnf
+		if cnf.state == config.ScalarizrState.RUNNING:
+			self._reload_backends()
+
+
+	def on_before_host_up(self, msg):
 		self._reload_backends()
 
 
