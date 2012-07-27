@@ -157,9 +157,6 @@ class RedisHandler(ServiceCtlHandler):
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 		
-		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
-			self._insert_iptables_rules()
-		
 		if self._cnf.state == ScalarizrState.RUNNING:
 
 			storage_conf = Storage.restore_config(self._volume_config_path)
@@ -222,6 +219,7 @@ class RedisHandler(ServiceCtlHandler):
 					self._update_config(redis_data)
 					
 					self.redis_instances = RedisInstances(self.is_replication_master, self.persistence_type, ports=[DEFAULT_PORT,], passwords=[self._get_password(),])
+					self._insert_iptables_rules()
 					
 
 	def on_before_host_up(self, message):
