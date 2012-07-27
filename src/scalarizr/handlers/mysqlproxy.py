@@ -21,6 +21,7 @@ BEHAVIOUR = SERVICE_NAME = 'mysql_proxy'
 CONFIG_FILE_PATH = '/etc/mysql_proxy.conf'
 PID_FILE = '/var/run/mysql-proxy.pid'
 NEW_MASTER_UP = "Mysql_NewMasterUp"
+LOG_FILE = '/var/log/mysql-proxy.log'
 
 
 def get_handlers():
@@ -149,7 +150,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 
 	def _reload_backends(self):
 		self._logger.info('Updating mysql-proxy backends list')
-		self.config = Configuration('ini')
+		self.config = Configuration('mysql')
 		if os.path.exists(CONFIG_FILE_PATH):
 			self.config.read(CONFIG_FILE_PATH)
 			self.config.remove('./mysql-proxy/proxy-backend-addresses')
@@ -185,7 +186,8 @@ class MysqlProxyHandler(ServiceCtlHandler):
 				self.config.add('./mysql-proxy/proxy-read-only-backend-addresses', '%s:3306' % slave)
 
 		self.config.set('./mysql-proxy/pid-file', PID_FILE, force=True)
-		self.config.set('./mysql-proxy/daemon', 'true', force=True)
+		self.config.set('./mysql-proxy/daemon', '', force=True)
+		self.config.set('./mysql-proxy/log-file', LOG_FILE)
 
 		self._logger.debug('Saving new mysql-proxy defaults file')
 		self.config.write(CONFIG_FILE_PATH)
