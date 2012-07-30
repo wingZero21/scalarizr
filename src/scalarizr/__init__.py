@@ -295,13 +295,8 @@ def _init_services():
 	bus.periodical_executor = PeriodicalExecutor()
 
 	logger.debug("Initialize QueryEnv client")
-	if bus.scalr_version >= (3, 5, 3):
-		api_version = '2012-07-01'
-	elif bus.scalr_version >= (3, 1, 0):
-		api_version = '2012-04-17'
-	else:
-		api_version = '2010-09-23'
-	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), api_version)
+	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), '2008-12-16')
+	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), queryenv.get_latest_version())
 	bus.queryenv_service = queryenv
 	
 	logger.debug("Initialize messaging")
