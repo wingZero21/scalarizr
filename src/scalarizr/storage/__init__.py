@@ -16,6 +16,7 @@ import re
 import uuid
 from scalarizr.libs.pubsub import Observable
 from functools import partial
+import re
 
 
 try:
@@ -391,7 +392,7 @@ class Volume(VolumeConfig, Observable):
 			raise ValueError('device name should be non-empty')
 		
 		# ephemeral block device -> xen device
-		if device in ('/dev/sda2', '/deb/sdb', '/dev/sdc', '/dev/sdd', '/dev/sde') and not os.path.exists(device):
+		if device.startswith('/dev/sd') and not os.path.exists(device):
 			device = get_system_devname(device)
 				
 		# sometimes on m1.small instead of sda2 we saw sdb
