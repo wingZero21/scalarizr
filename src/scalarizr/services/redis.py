@@ -148,10 +148,9 @@ class Redisd(object):
 	
 	def stop(self, reason=None):
 		if self.running:
-			LOG.info('Stopping redis server on port %s. Reason: %s' % (self.redis_conf.port, reason))
+			LOG.info('Stopping redis server on port %s (pid %s). Reason: %s' % (self.redis_conf.port, self.pid, reason))
 			os.kill(int(self.pid), signal.SIGTERM)
 			wait_until(lambda: not self.running, timeout=MAX_START_TIMEOUT)
-			wait_until(lambda: not self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
 		
 	
 	def restart(self, reason=None):
