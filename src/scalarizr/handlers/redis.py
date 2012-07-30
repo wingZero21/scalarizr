@@ -15,7 +15,7 @@ import logging
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, initdv2, disttool, software
+from scalarizr.util import system2, wait_until, disttool, software
 from scalarizr.util.filetool import split
 from scalarizr.services import redis
 from scalarizr.service import CnfController

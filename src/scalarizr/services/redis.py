@@ -197,9 +197,11 @@ class RedisInstances(object):
 		self.persistence_type = persistence_type
 		self.instances = []
 		
+		
 	@property	
 	def ports(self):
 		return [instance.port for instance in self.instances]	
+		
 		
 	def __iter__(self):
 		return iter(self.instances)
@@ -208,8 +210,10 @@ class RedisInstances(object):
 	def get_processes(self):
 		return [instance.service for instance in self.instances]
 	
+	
 	def get_config_files(self):
 		return [instance.redis_conf.path for instance in self.instances]
+	
 	
 	def get_default_process(self):
 		return self.get_instance(port=DEFAULT_PORT).service
