@@ -22,7 +22,7 @@ import string
 
 from boto.s3.key import Key
 from boto.exception import BotoServerError, S3ResponseError
-from scalarizr.util import firstmatched, wait_until
+from scalarizr.util import firstmatched, wait_until, disttool
 
 
 class EbsConfig(VolumeConfig):
@@ -57,7 +57,10 @@ class EbsVolumeProvider(VolumeProvider):
 	snap_class = EbsSnapshot
 
 	letters_lock = threading.Lock()
-	all_letters = set(string.ascii_lowercase[5:16])
+	is_rhel = disttool.dist_name in ('redhat', 'rhel')
+
+	# Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
+	all_letters = set(string.ascii_lowercase[6 if is_rhel else 5:16])
 	acquired_letters = set()
 
 	snapshot_state_map = {
