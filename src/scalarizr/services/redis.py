@@ -173,7 +173,7 @@ class Redisd(object):
 		LOG.debug('ps -G out: %s' % out)
 		is_config_matches = self.config_path in out
 		LOG.debug('config_path: %s' % self.config_path)
-		if not is_config_matches and self.redis_conf.port == DEFAULT_PORT:
+		if not is_config_matches and int(self.redis_conf.port) == DEFAULT_PORT:
 			LOG.debug('self.redis_conf.port == DEFAULT_PORT')
 			is_config_matches = DEFAULT_CONF_PATH in out
 		LOG.debug('is_config_matches: %s' % str(is_config_matches))
@@ -663,6 +663,7 @@ class RedisConf(BaseRedisConfig):
 	dbfilename	 = property(_get_dbfilename, _set_dbfilename)
 	dbfilename_default = DB_FILENAME
 	appendfilename_default = AOF_FILENAME
+	port_default = DEFAULT_PORT
 
 
 class RedisCLI(object):
