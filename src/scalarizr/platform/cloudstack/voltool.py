@@ -145,7 +145,7 @@ def get_disk_offering_id(conn, size):
 
 def get_system_devname(deviceid):
 	if isinstance(deviceid, int):
-		return '/dev/xvd%s' % string.ascii_letters[deviceid]
+		return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda') else 's', string.ascii_letters[deviceid])
 	return deviceid
 
 
