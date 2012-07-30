@@ -15,6 +15,7 @@ from boto.exception import BotoServerError
 from boto.ec2.snapshot import Snapshot
 import sys
 from scalarizr.util import disttool, fstool
+from scalarizr import storage
 
 
 DEFAULT_TIMEOUT = 2400 		# 40 min
@@ -150,30 +151,10 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		
 	return vol, devname
 
-DEVICE_ORDERING_BUG = False
-if disttool.is_redhat_based():
-	# Check that system is affected by devices ordering bug
-	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
-	mtab = fstool.Mtab()
-	entry = [v for v in mtab.find(mpoint='/') 
-			if v.devname.startswith('/dev')][0]
-	DEVICE_ORDERING_BUG = entry.devname == '/dev/xvde1' 
-	
 
-def get_system_devname(devname):
-	ret = devname.replace('/sd', '/xvd') if os.path.exists('/dev/xvda1') or DEVICE_ORDERING_BUG else devname
-	if DEVICE_ORDERING_BUG:
-		ret = ret[0:8] + chr(ord(ret[8])+4) + ret[9:]
-	return ret
+get_system_devname = real_devname= storage.get_system_devname
 
-real_devname = get_system_devname
-
-
-def get_ebs_devname(devname):
-	ret = devname
-	if DEVICE_ORDERING_BUG:
-		ret = ret[0:8] + chr(ord(ret[8])-4) + ret[9:]
-	return ret.replace('/xvd', '/sd')
+get_ebs_devname = storage.get_cloud_devname 
 
 
 def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT_TIMEOUT):
