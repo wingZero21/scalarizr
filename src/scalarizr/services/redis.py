@@ -467,9 +467,9 @@ class BaseRedisConfig(BaseConfig):
 				self.data.read(self.path)
 		if value:
 			if append:
-				self.data.add(option, value)
+				self.data.add(option, str(value))
 			else:
-				self.data.set(option,value, force=True)
+				self.data.set(option,str(value), force=True)
 		else: 
 			self.data.comment(option)
 		if self.autosave:
