@@ -112,11 +112,19 @@ def attach_volume(conn, volume_id, instance_id, device_id=None,
 	vol = conn.listVolumes(id=volume_id)[0]
 	devname = get_system_devname(vol.deviceid)
 
+	def scsi_attached():
+		# Rescan all SCSI buses
+		scsi_host = '/sys/class/scsi_host'
+		for name in os.listdir(scsi_host):
+			with open(scsi_host + '/' + name + '/scan', 'w') as fp:
+				fp.write('- - -')
+		return os.access(devname, os.F_OK | os.R_OK)
+
 	if to_me:
 		logger.debug('Checking that device %s is available', devname)
 		wait_until(
-			lambda: os.access(devname, os.F_OK | os.R_OK), 
-			sleep=1, logger=logger, timeout=timeout,
+			scsi_attached, 
+			sleep=5, logger=logger, timeout=timeout,
 			error_text="Device %s wasn't available in a reasonable time" % devname
 		)
 		logger.debug('Device %s is available', devname)
