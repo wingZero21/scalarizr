@@ -47,6 +47,9 @@ class BlockDeviceHandler(handlers.Handler):
 			"block_device_mounted"
 		)
 		
+		self._phase_plug_volume = 'Configure storage'
+		
+		
 	def on_reload(self):
 		self._platform = bus.platform
 		self._queryenv = bus.queryenv_service
@@ -62,13 +65,6 @@ class BlockDeviceHandler(handlers.Handler):
 		except AttributeError:
 			pass
 
-	def get_initialization_phases(self, hir_message):
-		self._phase_plug_volume = 'Configure storage'		
-		
-		mpoint = self._queryenv.list_ebs_mountpoints()
-		if mpoint:
-			return {'host_init_response': [{'name': self._phase_plug_volume, 'steps': []}]}
-		
 
 	def on_before_host_init(self, *args, **kwargs):
 		self._logger.debug("Adding udev rule for EBS devices")
