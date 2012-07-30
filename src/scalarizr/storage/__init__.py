@@ -358,7 +358,7 @@ if disttool.is_redhat_based():
 	mtab = fstool.Mtab()
 	entry = [v for v in mtab.find(mpoint='/') 
 			if v.devname.startswith('/dev')][0]
-	RHEL_DEVICE_ORDERING_BUG = entry.devname == '/dev/xvde1' 
+	RHEL_DEVICE_ORDERING_BUG = entry.devname.startswith('/dev/xvde') 
 
 
 def get_system_devname(devname):
