@@ -286,7 +286,7 @@ class Redis(BaseService):
 
 	def init_master(self, mpoint):
 		self.service.stop('Configuring master. Moving Redis db files')	
-		self.init_service(mpoint, self.password)
+		self.init_service(mpoint)
 		self.redis_conf.masterauth = None
 		self.redis_conf.slaveof = None
 		self.service.start()
@@ -295,7 +295,7 @@ class Redis(BaseService):
 		
 	def init_slave(self, mpoint, primary_ip, primary_port):
 		self.service.stop('Configuring slave')
-		self.init_service(mpoint, self.password)
+		self.init_service(mpoint)
 		self.change_primary(primary_ip, primary_port, self.password)
 		self.service.start()
 		self.is_replication_master = False
