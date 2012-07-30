@@ -240,7 +240,6 @@ class RedisInstances(object):
 		for redis in self.instances:
 			if redis.service.running:
 					redis.redis_cli.save()
-					redis.service.stop('rebooting')
 		
 		
 	def init_as_masters(self, mpoint):
