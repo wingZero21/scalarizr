@@ -187,24 +187,32 @@ class Redisd(object):
 
 class RedisInstances(object):
 
-	creds = None
 	instances = None
-	ports = None
 	master = None
 	persistence_type = None
 	
 	
-	def __init__(self, master=False, persistence_type=SNAP_TYPE, ports=[], passwords=[]):
+	def __init__(self, master=False, persistence_type=SNAP_TYPE):
 		self.master = master
 		self.persistence_type = persistence_type
-		self.ports = ports 
 		self.instances = []
-		self.creds = dict()
-		self.init_processes(ports, passwords)
 		
+	@property	
+	def ports(self):
+		return [instance.port for instance in self.instances]	
 		
 	def __iter__(self):
 		return iter(self.instances)
+	
+	
+	def get_processes(self):
+		return [instance.service for instance in self.instances]
+	
+	def get_config_files(self):
+		return [instance.redis_conf.path for instance in self.instances]
+	
+	def get_default_process(self):
+		return self.get_instance(port=DEFAULT_PORT).service
 			
 
 	def get_instance(self, port=None, password=None):
@@ -217,24 +225,31 @@ class RedisInstances(object):
 	def init_processes(self, ports=[], passwords=[]):
 		creds = dict(zip(ports or [], passwords or []))
 		for port,password in creds.items():
-			ports = [instance.port for instance in self.instances]
-			if port not in ports:
+			if port not in self.ports:
 				self.create_redis_conf_copy(port)
 				redis_process = Redis(self.master, self.persistence_type, port, password)
 				self.instances.append(redis_process)
-				self.creds[port] = password
 				
 	
-	def start_all(self):	
+	def start(self):	
 		for redis in self.instances:
 			redis.service.start()
 	
 	
-	def stop_all(self, reason = None):
+	def stop(self, reason = None):
 		for redis in self.instances:
-			if redis.service.running:
-				redis.service.stop(reason)
-	
+			redis.service.stop(reason)
+
+
+	def restart(self, reason = None):
+		for redis in self.instances:
+			redis.service.restart(reason)	
+				
+				
+	def reload(self, reason = None):
+		for redis in self.instances:
+			redis.service.reload(reason)
+				
 	
 	def save_all(self):
 		for redis in self.instances:

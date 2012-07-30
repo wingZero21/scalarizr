@@ -17,7 +17,7 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, initdv2, disttool, software
 from scalarizr.util.filetool import split
-from scalarizr.services.redis import RedisCLI, DEFAULT_PORT, RedisInstances
+from scalarizr.services import redis
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
@@ -115,7 +115,7 @@ class RedisHandler(ServiceCtlHandler):
 
 	
 	def __init__(self):
-		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup('redis'), RedisCnfController())
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_%s_data_bundle' % BEHAVIOUR,
@@ -165,8 +165,9 @@ class RedisHandler(ServiceCtlHandler):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 			
-			self.redis_instances = RedisInstances(self.is_replication_master, self.persistence_type, ports=[DEFAULT_PORT,], passwords=[self._get_password(),])
-			self.redis_instances.start_all()
+			self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
+			self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self._get_password(),])
+			self.redis_instances.start()
 			
 
 	def on_reload(self):
@@ -218,7 +219,8 @@ class RedisHandler(ServiceCtlHandler):
 					LOG.debug("Update redis config with %s", redis_data)
 					self._update_config(redis_data)
 					
-					self.redis_instances = RedisInstances(self.is_replication_master, self.persistence_type, ports=[DEFAULT_PORT,], passwords=[self._get_password(),])
+					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
+					self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self._get_password(),])
 					self._insert_iptables_rules()
 					
 
@@ -234,7 +236,8 @@ class RedisHandler(ServiceCtlHandler):
 		if self.is_replication_master:
 			self._init_master(message)									  	
 		else:
-			self._init_slave(message)			
+			self._init_slave(message)
+		self._init_script = self.redis_instances.get_default_process()			
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 					
 					
@@ -252,7 +255,7 @@ class RedisHandler(ServiceCtlHandler):
 			LOG.info('Dumping redis data on disk')
 			self.redis_instances.save_all()
 			LOG.info('Stopping %s service' % BEHAVIOUR)
-			self.redis_instances.stop_all('Server will be terminated')
+			self.redis_instances.stop('Server will be terminated')
 			if not self.is_replication_master:
 				LOG.info('Destroying volume %s' % self.storage_vol.id)
 				self.storage_vol.destroy(remove_disks=True)
@@ -329,7 +332,7 @@ class RedisHandler(ServiceCtlHandler):
 			
 			if master_storage_conf:
 
-				self.redis_instances.stop_all('Unplugging slave storage and then plugging master one')
+				self.redis_instances.stop('Unplugging slave storage and then plugging master one')
 
 				old_conf = self.storage_vol.detach(force=True) # ??????
 				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
@@ -371,7 +374,7 @@ class RedisHandler(ServiceCtlHandler):
 			))
 
 			# Start redis
-			self.redis_instances.start_all()
+			self.redis_instances.start()
 		
 		if tx_complete and master_storage_conf:
 			# Delete slave EBS
@@ -510,7 +513,7 @@ class RedisHandler(ServiceCtlHandler):
 			
 			with op.step(self._step_init_master):
 				password = self._get_password()
-				redis = self.redis_instances.get_instance(port=DEFAULT_PORT)
+				redis = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
 				redis.init_master(mpoint=self._storage_path)
 			
 				msg_data = dict()
@@ -581,8 +584,8 @@ class RedisHandler(ServiceCtlHandler):
 				
 				host = master_host.internal_ip or master_host.external_ip
 				password = self._get_password()
-				redis = self.redis_instances.get_instance(port=DEFAULT_PORT)
-				redis.init_slave(self._storage_path, host, DEFAULT_PORT)
+				redis = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
+				redis.init_slave(self._storage_path, host, redis.DEFAULT_PORT)
 				op.progress(50)
 				redis.wait_for_sync()
 			
@@ -664,7 +667,7 @@ class RedisHandler(ServiceCtlHandler):
 class RedisCnfController(CnfController):
 
 	def __init__(self):
-		cnf_path = UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
+		cnf_path = redis.get_redis_conf_path()
 		CnfController.__init__(self, BEHAVIOUR, cnf_path, 'redis', {'1':'yes', '0':'no'})
 
 
@@ -683,6 +686,6 @@ class RedisCnfController(CnfController):
 	
 	def _after_apply_preset(self):
 		password = self._get_password()
-		cli = RedisCLI(password)
+		cli = redis.RedisCLI(password)
 		cli.bgsave()
 
