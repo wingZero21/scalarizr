@@ -63,6 +63,7 @@ class EbsVolumeProvider(VolumeProvider):
 	all_letters = set(string.ascii_lowercase[7 if is_rhel else 5:16])
 	acquired_letters = set()
 
+
 	snapshot_state_map = {
 		'pending' : Snapshot.CREATED,
 		'completed' : Snapshot.COMPLETED,
