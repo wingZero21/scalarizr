@@ -182,8 +182,6 @@ class RedisHandler(ServiceCtlHandler):
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		
-		#self.redis = Redis(self.is_replication_master, self.persistence_type)
-		
 		
 	def on_host_init_response(self, message):
 		"""
@@ -337,9 +335,9 @@ class RedisHandler(ServiceCtlHandler):
 				old_conf = self.storage_vol.detach(force=True) # ??????
 				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
 							
-				for redis in self.redis_instances:
+				for r in self.redis_instances:
 					# Continue if master storage is a valid redis storage 
-					if not redis.working_directory.is_initialized(self._storage_path):
+					if not r.working_directory.is_initialized(self._storage_path):
 						raise HandlerError("%s is not a valid %s storage" % (self._storage_path, BEHAVIOUR))
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
@@ -433,7 +431,7 @@ class RedisHandler(ServiceCtlHandler):
 					# Defining archive name and path
 					backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
 					backup_path = os.path.join('/tmp', backup_filename)	
-					dbs = [redis.db_path for redis in self.redis_instances]
+					dbs = [r.db_path for r in self.redis_instances]
 					
 					# Creating archive 
 					backup = tarfile.open(backup_path, 'w:gz')
@@ -513,8 +511,8 @@ class RedisHandler(ServiceCtlHandler):
 			
 			with op.step(self._step_init_master):
 				password = self._get_password()
-				redis = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
-				redis.init_master(mpoint=self._storage_path)
+				ri = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
+				ri.init_master(mpoint=self._storage_path)
 			
 				msg_data = dict()
 				msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
@@ -583,11 +581,10 @@ class RedisHandler(ServiceCtlHandler):
 						master_host.internal_ip, master_host.external_ip)
 				
 				host = master_host.internal_ip or master_host.external_ip
-				password = self._get_password()
-				redis = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
-				redis.init_slave(self._storage_path, host, redis.DEFAULT_PORT)
+				instance = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
+				instance.init_slave(self._storage_path, host, redis.DEFAULT_PORT)
 				op.progress(50)
-				redis.wait_for_sync()
+				instance.wait_for_sync()
 			
 			with op.step(self._step_collect_host_up_data):
 				# Update HostUp message
