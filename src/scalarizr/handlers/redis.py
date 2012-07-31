@@ -12,10 +12,11 @@ import tarfile
 import tempfile
 import logging
 
+
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, disttool, software
+from scalarizr.util import system2, wait_until, cryptotool, software
 from scalarizr.util.filetool import split
 from scalarizr.services import redis
 from scalarizr.service import CnfController
@@ -540,6 +541,9 @@ class RedisHandler(ServiceCtlHandler):
 		password = None 
 		if self._cnf.rawini.has_option(CNF_SECTION, OPT_MASTER_PASSWORD):
 			password = self._cnf.rawini.get(CNF_SECTION, OPT_MASTER_PASSWORD)	
+		if not password:
+			password = cryptotool.pwgen(20)
+			self._update_config({OPT_MASTER_PASSWORD:password})
 		return password		
 	
 	def _get_master_host(self):
