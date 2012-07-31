@@ -317,7 +317,7 @@ class Redis(BaseService):
 	def init_slave(self, mpoint, primary_ip, primary_port):
 		self.service.stop('Configuring slave')
 		self.init_service(mpoint)
-		self.change_primary(primary_ip, primary_port, self.password)
+		self.change_primary(primary_ip, primary_port)
 		self.service.start()
 		self.is_replication_master = False
 	
@@ -717,7 +717,7 @@ class RedisCLI(object):
 		else:
 			full_query = 'AUTH %s\n%s' % (self.password, query)
 		try:
-			out = system2([self.path, '-p', self.port], stdin=full_query,silent=True)[0]
+			out = system2([self.path, '-p', self.port], stdin=full_query,silent=True, warn_stderr=False)[0]
 			
 			#fix for redis 2.4 AUTH
 			if 'Client sent AUTH, but no password is set' in out:
