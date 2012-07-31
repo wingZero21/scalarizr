@@ -57,10 +57,9 @@ class EbsVolumeProvider(VolumeProvider):
 	snap_class = EbsSnapshot
 
 	letters_lock = threading.Lock()
-	is_rhel = disttool.dist_name in ('redhat', 'rhel')
 
 	# Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-	all_letters = set(string.ascii_lowercase[7 if is_rhel else 5:16])
+	all_letters = set(string.ascii_lowercase[7 if disttool._is_rhel else 5:16])
 	acquired_letters = set()
 
 

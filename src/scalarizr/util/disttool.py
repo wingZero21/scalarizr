@@ -52,6 +52,8 @@ if _is_linux:
 	_is_ubuntu = dist_name == "ubuntu"
 	_is_fedora = dist_name == "fedora" or (dist_name == 'redhat' and _linux_dist[2].lower() == 'werewolf')
 	_is_centos = dist_name == "centos" or dist_name == "centos linux"
+	_is_rhel = dist_name in ('red hat enterprise linux server', 'rhel',
+							 'red hat enterprise linux server release', 'redhat')
 
 
 def is_linux(): return _is_linux
