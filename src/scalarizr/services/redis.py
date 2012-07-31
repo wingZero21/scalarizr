@@ -169,13 +169,9 @@ class Redisd(object):
 			out = system2(('ps', '-G', 'redis', '-o', 'command', '--no-headers'))[0]
 		except:
 			out = ''
-		LOG.debug('ps -G out: %s' % out)
 		is_config_matches = self.config_path in out
-		LOG.debug('config_path: %s' % self.config_path)
 		if not is_config_matches and int(self.redis_conf.port) == DEFAULT_PORT:
-			LOG.debug('self.redis_conf.port == DEFAULT_PORT')
 			is_config_matches = DEFAULT_CONF_PATH in out
-		LOG.debug('is_config_matches: %s' % str(is_config_matches))
 		return BIN_PATH in out and is_config_matches	
 	
 	
@@ -711,7 +707,7 @@ class RedisCLI(object):
 		return cls(redis_conf.requirepass)
 		
 		
-	def execute(self, query):
+	def execute(self, query, silent=False):
 		if not self.password:
 			full_query = query
 		else:
@@ -734,14 +730,14 @@ class RedisCLI(object):
 		except PopenError, e:
 			if 'LOADING' in str(e):
 				LOG.debug('Unable to execute query %s: Redis is loading the dataset in memory' % query)
-			else:
+			elif not silent:
 				LOG.error('Unable to execute query %s with redis-cli: %s' % (query, e))
 			raise	
 		
 		
 	def test_connection(self):
 		try:
-			self.execute('select (1)')
+			self.execute('select (1)', silent=True)
 		except PopenError, e:
 			if 'LOADING' in str(e):
 				return False
