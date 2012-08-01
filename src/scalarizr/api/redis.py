@@ -13,6 +13,7 @@ Created on Nov 25, 2011
 
 from __future__ import with_statement
 
+import os
 import time
 import logging
 import threading
@@ -40,6 +41,73 @@ class RedisAPI(object):
 		self._queryenv = bus.queryenv_service
 
 
+	
+	@rpc.service_method
+	def launch_processes(self, num=None, ports=None, passwords=None, async=False):	
+		if ports and passwords and len(ports) != len(passwords):
+			raise AssertionError('Number of ports must be equal to number of passwords')
+		if num and ports and num != len(ports):
+				raise AssertionError('When ports range is passed its length must be equal to num parameter')
+		if not self.is_replication_master:
+			if not passwords or not ports:
+				raise AssertionError('ports and passwords are required to launch processes on redis slave')
+		
+		if async:
+			txt = 'Launch Redis processes'
+			op = handlers.operation(name=txt)
+			def block():
+				op.define()
+				with op.phase(txt):
+					with op.step(txt):
+						result = self._launch(ports, passwords)
+				op.ok(data=dict(ports=result[0], passwords=result[1]))
+			threading.Thread(target=block).start()
+			return op.id
+		
+		else:
+			result = self._launch(ports, passwords)
+			return dict(ports=result[0], passwords=result[1])
+
+		
+	@rpc.service_method
+	def shutdown_processes(self, ports, remove_data=False, async=False):
+		if async:
+			txt = 'Shutdown Redis processes'
+			op = handlers.operation(name=txt)
+			def block():
+				op.define()
+				with op.phase(txt):
+					with op.step(txt):
+						self._shutdown(ports, remove_data)
+				op.ok()
+			threading.Thread(target=block).start()
+			return op.id
+		else:
+			self._shutdown(ports, remove_data)
+			
+
+	def _launch(self, ports=[], passwords=[]):
+		primary_ip = self.get_primary_ip()
+		assert primary_ip is not None
+		
+		for port,password in zip(ports, passwords or [None for port in ports]):
+			if port not in self.ports:
+				self.create_redis_conf_copy(port)
+				redis_process = redis_service.Redis(self.is_replication_master, self.persistence_type, port, password)
+				if not redis_process.service.running:
+					res = redis_process.init_master(STORAGE_PATH) if self.is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
+		return res
+	
+	
+	def _shutdown(self, ports, remove_data=False):
+		for port in ports:
+			instance = redis_service.Redis(port=port)
+			if instance.service.running:
+				instance.service.stop()
+			if remove_data and os.path.exists(instance.db_path):
+				os.remove(instance.db_path)
+		
+		
 	@property
 	def is_replication_master(self):
 		value = 0
@@ -71,60 +139,3 @@ class RedisAPI(object):
 		host = master_host.internal_ip or master_host.external_ip
 		return host
 
-
-	def _start_processes(self, ports=[], passwords=[]):
-		redis_instances = redis_service.RedisInstances(self.is_replication_master, self.persistence_type)
-		redis_instances.init_processes(ports, passwords)
-		if self.is_replication_master:
-			res = redis_instances.init_as_masters(mpoint=STORAGE_PATH)
-		else:
-			primary_ip = self.get_primary_ip()
-			assert primary_ip is not None
-			res = redis_instances.init_as_slaves(mpoint=STORAGE_PATH, primary_ip=primary_ip)
-		return res
-	
-	
-	@rpc.service_method
-	def launch_processes(self, num=None, ports=None, passwords=None, async=False):	
-		if ports and passwords and len(ports) != len(passwords):
-			raise AssertionError('Number of ports must be equal to number of passwords')
-		if num and ports and num != len(ports):
-				raise AssertionError('When ports range is passed its length must be equal to num parameter')
-		if not self.is_replication_master:
-			if not passwords or not ports:
-				raise AssertionError('ports and passwords are required to launch processes on redis slave')
-		
-		if async:
-			txt = 'Launch Redis processes'
-			op = handlers.operation(name=txt)
-			def block():
-				op.define()
-				with op.phase(txt):
-					with op.step(txt):
-						result = self._start_processes(ports, passwords)
-				op.ok(data=dict(ports=result[0], passwords=result[1]))
-			threading.Thread(target=block).start()
-			return op.id
-		else:
-			result = self._start_processes(ports, passwords)
-			return dict(ports=result[0], passwords=result[1])
-
-		
-	@rpc.service_method
-	def shutdown_processes(self, ports, remove_data=False, async=False):
-		redis_instances = redis_service.RedisInstances()
-		redis_instances.init_processes(ports)
-		if async:
-			txt = 'Shutdown Redis processes'
-			op = handlers.operation(name=txt)
-			def block():
-				op.define()
-				with op.phase(txt):
-					with op.step(txt):
-						redis_instances.kill_processes(ports, remove_data)
-				op.ok()
-			threading.Thread(target=block).start()
-			return op.id
-		else:
-			redis_instances.kill_processes(ports, remove_data)
-		

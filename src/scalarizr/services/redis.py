@@ -296,10 +296,6 @@ class RedisInstances(object):
 		if not os.path.exists(DEFAULT_CONF_PATH):
 			raise ServiceError('Default redis config %s does not exist' % DEFAULT_CONF_PATH)
 		dst = get_redis_conf_path(port)
-		'''
-		if port == DEFAULT_PORT and not os.path.exists(dst):
-			os.symlink(DEFAULT_CONF_PATH, dst)
-		'''
 		if not os.path.exists(dst):
 			shutil.copy(DEFAULT_CONF_PATH, dst)
 		else: 
