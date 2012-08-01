@@ -223,12 +223,23 @@ class RedisInstances(object):
 		
 		
 	def init_processes(self, ports=[], passwords=[]):
-		creds = dict(zip(ports or [], passwords or []))
+		if not passwords:
+			passwords = [cryptotool.pwgen(20) for port in ports]
+		creds = dict(zip(ports or [], passwords))
 		for port,password in creds.items():
 			if port not in self.ports:
 				self.create_redis_conf_copy(port)
 				redis_process = Redis(self.master, self.persistence_type, port, password)
 				self.instances.append(redis_process)
+				
+				
+	def kill_processes(self, ports=[], remove_data=False):
+		for instance in self.instances:
+			if instance.port in ports:
+				instance.service.stop()
+				if remove_data and os.path.exists(instance.db_path):
+					os.remove(instance.db_path)
+				self.instances.remove(instance)
 				
 	
 	def start(self):	
@@ -258,13 +269,21 @@ class RedisInstances(object):
 		
 		
 	def init_as_masters(self, mpoint):
+		passwords = ports = []
 		for redis in self.instances:
 			redis.init_master(mpoint)
+			passwords.append(redis.password)
+			ports.append(redis.port)
+		return (ports, passwords)
 	
 	
 	def init_as_slaves(self, mpoint, primary_ip):
+		passwords = ports = []
 		for redis in self.instances:
+			passwords.append(redis.password)
+			ports.append(redis.port)
 			redis.init_slave(mpoint, primary_ip, redis.port)
+		return (ports, passwords)
 
 	
 	def wait_for_sync(self,link_timeout=None,sync_timeout=None):
