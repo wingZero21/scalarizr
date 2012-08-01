@@ -1819,6 +1819,12 @@ class MysqlHandler(ServiceCtlHandler):
 			LOG.error('Cannot chown Mysql directory %s', directory)
 		
 		LOG.debug('New permissions for mysql directory "%s" were successfully set.' % directory)
+
+		chcon = software.whereis('chcon')
+		if disttool.is_rhel() and chcon:
+			LOG.debug('Changing SELinux file security context for mysql directory %s' % directory)
+			system2((chcon[0], '-R', '-u', 'system_u', '-r',
+					 'object_r', '-t', 'mysqld_db_t', directory), raise_exc=False)
 		
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
