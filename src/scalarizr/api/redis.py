@@ -4,13 +4,6 @@ Created on Aug 1, 2012
 @author: dmitry
 '''
 
-'''
-Created on Nov 25, 2011
-
-@author: marat
-'''
-
-
 from __future__ import with_statement
 
 import os
