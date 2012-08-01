@@ -7,6 +7,7 @@ Created on Aug 1, 2012
 from __future__ import with_statement
 
 import os
+import sys
 import time
 import logging
 import threading
@@ -52,7 +53,7 @@ class RedisAPI(object):
 				op.define()
 				with op.phase(txt):
 					with op.step(txt):
-						result = self._launch(ports, passwords)
+						result = self._launch(ports, passwords, op)
 				op.ok(data=dict(ports=result[0], passwords=result[1]))
 			threading.Thread(target=block).start()
 			return op.id
@@ -71,7 +72,7 @@ class RedisAPI(object):
 				op.define()
 				with op.phase(txt):
 					with op.step(txt):
-						self._shutdown(ports, remove_data)
+						self._shutdown(ports, remove_data, op)
 				op.ok()
 			threading.Thread(target=block).start()
 			return op.id
@@ -79,27 +80,56 @@ class RedisAPI(object):
 			self._shutdown(ports, remove_data)
 			
 
-	def _launch(self, ports=[], passwords=[]):
+	def _launch(self, ports=[], passwords=[], op=None):
+		is_replication_master = self.is_replication_master
 		primary_ip = self.get_primary_ip()
 		assert primary_ip is not None
 		
 		for port,password in zip(ports, passwords or [None for port in ports]):
-			if port not in self.ports:
-				self.create_redis_conf_copy(port)
-				redis_process = redis_service.Redis(self.is_replication_master, self.persistence_type, port, password)
-				if not redis_process.service.running:
-					res = redis_process.init_master(STORAGE_PATH) if self.is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
-		return res
-	
-	
-	def _shutdown(self, ports, remove_data=False):
-		for port in ports:
-			instance = redis_service.Redis(port=port)
-			if instance.service.running:
-				instance.service.stop()
-			if remove_data and os.path.exists(instance.db_path):
-				os.remove(instance.db_path)
+			if op:
+				op.step('Launch Redis %s on port %s' ('Master' if is_replication_master else 'Slave', port))
+			try:
+				if op:
+					op.__enter__()
+
+				if port not in self.ports:
+					self.create_redis_conf_copy(port)
+					redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
+					if not redis_process.service.running:
+						res = redis_process.init_master(STORAGE_PATH) if is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
+					return res
+				
+			except:
+				if op:
+					op.__exit__(sys.exc_info())
+				raise
+			finally:
+				if op:
+					op.__exit__()
 		
+	
+	def _shutdown(self, ports, remove_data=False, op=None):
+		is_replication_master = self.is_replication_master
+		for port in ports:
+			if op:
+				op.step('Shutdown Redis %s on port %s' ('Master' if is_replication_master else 'Slave', port))
+			try:
+				if op:
+					op.__enter__()
+	
+				instance = redis_service.Redis(port=port)
+				if instance.service.running:
+					instance.service.stop()
+				if remove_data and os.path.exists(instance.db_path):
+					os.remove(instance.db_path)
+			except:
+				if op:
+					op.__exit__(sys.exc_info())
+				raise
+			finally:
+				if op:
+					op.__exit__()
+					
 		
 	@property
 	def is_replication_master(self):
