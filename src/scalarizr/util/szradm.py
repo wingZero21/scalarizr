@@ -30,6 +30,7 @@ try:
 	import json
 except ImportError:
 	import simplejson as json
+from xml.dom import minidom
 
 #23.09.11----------------------------------------------------------------------------------------------
 try:
@@ -670,7 +671,7 @@ def main():
 
 			qe = new_queryenv()
 			xml = qe.fetch(*args, **kv)
-			print xml.toprettyxml()
+			print minidom.parseString(xml).toprettyxml()
 
 		if options.msgsnd:
 
