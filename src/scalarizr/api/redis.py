@@ -92,7 +92,7 @@ class RedisAPI(object):
 				raise AssertionError('When ports range is passed its length must be equal to num parameter')
 		if not self.is_replication_master:
 			if not passwords or not ports:
-				raise AssertionError('ports and passwords are compulsory to launch processes on redis slave')
+				raise AssertionError('ports and passwords are required to launch processes on redis slave')
 		
 		if async:
 			txt = 'Launch Redis processes'
@@ -122,10 +122,9 @@ class RedisAPI(object):
 				with op.phase(txt):
 					with op.step(txt):
 						redis_instances.kill_processes(ports, remove_data)
-				op.ok(data={})
+				op.ok()
 			threading.Thread(target=block).start()
 			return op.id
 		else:
 			redis_instances.kill_processes(ports, remove_data)
-			return {}
 		
