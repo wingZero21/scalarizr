@@ -141,12 +141,6 @@ class MySQL(BaseService):
 			if disttool.is_debian_based():
 				_add_apparmor_rules(dest)
 
-			chcon = software.whereis('chcon')
-			if disttool.is_rhel() and chcon:
-				LOG.debug('Changing SELinux file security context for mysql directory %s' % directory)
-				system2((chcon[0], '-R', '-u', 'system_u', '-r',
-						 	'object_r', '-t', 'mysqld_db_t', directory), raise_exc=False)
-
 	
 	def flush_logs(self, data_dir):
 		LOG.info('Flushing logs')
