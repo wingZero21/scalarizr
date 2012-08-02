@@ -680,6 +680,8 @@ class MysqlHandler(ServiceCtlHandler):
 				if not os.path.exists(self.storage_vol.mpoint):
 					os.makedirs(self.storage_vol.mpoint)
 				self.storage_vol.mount()
+
+			self._change_selinux_ctx()
 			
 			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
 				LOG.debug("Checking Scalr's MySQL system users presence.")
@@ -1266,8 +1268,10 @@ class MysqlHandler(ServiceCtlHandler):
 
 
 	def _change_selinux_ctx(self):
-		chcon = software.whereis('chcon')
-		if disttool.is_rhel() and chcon:
+		if disttool.is_rhel():
+			chcon = software.whereis('chcon')
+			if not chcon:
+				return
 			LOG.debug('Changing SELinux file security context for new mysql home')
 			system2((chcon[0], '-R', '-u', 'system_u', '-r',
 				 'object_r', '-t', 'mysqld_db_t', STORAGE_PATH), raise_exc=False)
