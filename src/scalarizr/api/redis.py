@@ -11,6 +11,7 @@ import sys
 import time
 import logging
 import threading
+from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr import handlers, rpc
 from scalarizr.services import redis as redis_service
@@ -33,6 +34,8 @@ class RedisAPI(object):
 	def __init__(self):
 		self._cnf = bus.cnf
 		self._queryenv = bus.queryenv_service
+		ini = self._cnf.rawini
+		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 
 
 	
