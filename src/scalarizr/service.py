@@ -335,7 +335,8 @@ class CnfController(object):
 				
 				for variable in diff.sections('./'):
 					sys_value = diff.get('./%s/default-value' % variable)
-					new_manifest.set('./%s/default-value' % variable, sys_value, force=True)
+					if sys_value and variable in new_manifest.sections('./'):
+						new_manifest.set('./%s/default-value' % variable, sys_value, force=True)
 				new_manifest.write(path)
 
 		return _CnfManifest(path)
