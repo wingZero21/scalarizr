@@ -375,7 +375,7 @@ class Redis(BaseService):
 	
 	
 	def _get_redis_conf(self):
-		return self._get('redis_conf', RedisConf.find)
+		return self._get('redis_conf', RedisConf.find, CONFIG_DIR, self.port)
 	
 	
 	def _set_redis_conf(self, obj):
