@@ -19,6 +19,8 @@ from scalarizr.libs.metaconf import Configuration, NoPathError
 
 SERVICE_NAME = CNF_SECTION = DEFAULT_USER = 'redis'
 
+SU_EXEC = '/bin/su'
+
 UBUNTU_BIN_PATH 	 = '/usr/bin/redis-server'	
 CENTOS_BIN_PATH 	 = '/usr/sbin/redis-server'	
 BIN_PATH = UBUNTU_BIN_PATH if disttool.is_ubuntu() else CENTOS_BIN_PATH
@@ -113,11 +115,6 @@ class Redisd(object):
 	@classmethod
 	def find(cls, config_obj=None):
 		return cls(config_obj.path)
-	
-	
-	@property
-	def args(self):
-		return [self.config_path,]
 
 
 	def start(self):
@@ -137,7 +134,7 @@ class Redisd(object):
 						shutil.move(aof_src, aof_dst)
 				
 				LOG.debug('Starting %s on port %s' % (BIN_PATH, self.redis_conf.port))
-				system2(['sudo', '-u', DEFAULT_USER, BIN_PATH,] + self.args)
+				system2([SU_EXEC, '-', DEFAULT_USER, '-c', '%s %s' % (BIN_PATH, self.config_path)])
 				wait_until(lambda: self.running, timeout=MAX_START_TIMEOUT)
 				wait_until(lambda: self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
 				LOG.debug('%s process has been started.' % SERVICE_NAME)
