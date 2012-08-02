@@ -174,7 +174,7 @@ class RedisAPI(object):
 			LOG.debug('checking redis process: %s' % redis_process)
 			for port in PORTS_RANGE:
 				conf_name = redis_service.get_redis_conf_basename(port)
-				LOG.debug('checking config %s in %s: %s' % conf_name, redis_process,conf_name in redis_process)
+				LOG.debug('checking config %s in %s: %s' % (conf_name, redis_process,conf_name in redis_process))
 				if conf_name not in redis_process:
 					free_ports.append(port)
 		LOG.debug('available_ports: %s' % free_ports)
