@@ -96,25 +96,11 @@ class RedisAPI(object):
 		else:
 			self._shutdown(ports, remove_data)
 			
-	@property
-	def available_ports(self):
-		free_ports = []
-		args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
-		out = system2(args, silent=True)[0].split('\n')
-		try:	
-			p = [x for x in out if x and BIN_PATH in x]
-		except PopenError,e:
-			p = []
-		for redis_process in p:
-			for port in PORTS_RANGE:
-				conf_name = redis_service.get_redis_conf_basename(port)
-				if conf_name not in redis_process:
-					free_ports.append(port)
-		return free_ports
-			
 
 	def _launch(self, ports=[], passwords=[], op=None):
+		LOG.debug('Launching redis processes on ports %s with passwords %s' % (ports, passwords))
 		is_replication_master = self.is_replication_master
+		
 		primary_ip = self.get_primary_ip()
 		assert primary_ip is not None
 		
@@ -123,7 +109,7 @@ class RedisAPI(object):
 		
 		for port,password in zip(ports, passwords or [None for port in ports]):
 			if op:
-				op.step('Launch Redis %s on port %s' ('Master' if is_replication_master else 'Slave', port))
+				op.step('Launch Redis %s on port %s' % ('Master' if is_replication_master else 'Slave', port))
 			try:
 				if op:
 					op.__enter__()
@@ -132,9 +118,13 @@ class RedisAPI(object):
 				redis_service.create_redis_conf_copy(port)
 				redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
 				if not redis_process.service.running:
-					password = redis_process.init_master(STORAGE_PATH) if is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
-					new_passwords.append(password)
+					LOG.debug('Launch Redis %s on port %s' % ('Master' if is_replication_master else 'Slave', port))
+					current_password = redis_process.init_master(STORAGE_PATH) if is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
+					new_passwords.append(current_password)
 					new_ports.append(port)
+					LOG.debug('Redis process has been launched on port %s with password %s' % (port, current_password))
+				else:
+					raise BaseException('Cannot launch redis on port %s: the process is already running' % port)
 				
 			except:
 				if op:
@@ -167,14 +157,35 @@ class RedisAPI(object):
 			finally:
 				if op:
 					op.__exit__()
-					
+	
+	
+	@property
+	def available_ports(self):
+		free_ports = []
+		args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
+		out = system2(args, silent=True)[0].split('\n')
+		try:	
+			p = [x for x in out if x and BIN_PATH in x]
+		except PopenError,e:
+			p = []
+		LOG.debug('PORTS_RANGE: %s' % PORTS_RANGE)
+		for redis_process in p:
+			for port in PORTS_RANGE:
+				conf_name = redis_service.get_redis_conf_basename(port)
+				if conf_name not in redis_process:
+					free_ports.append(port)
+		LOG.debug('available_ports: %s' % free_ports)
+		return free_ports
+							
 		
 	@property
 	def is_replication_master(self):
 		value = 0
 		if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, OPT_REPLICATION_MASTER):
 			value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
-		return True if int(value) else False
+		res = True if int(value) else False
+		LOG.debug('is_replication_master: %s' % res)
+		return res
 	
 	
 	@property
@@ -182,6 +193,7 @@ class RedisAPI(object):
 		value = 'snapshotting'
 		if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, OPT_PERSISTENCE_TYPE):
 			value = self._cnf.rawini.get(CNF_SECTION, OPT_PERSISTENCE_TYPE)
+		LOG.debug('persistence_type: %s' % value)
 		return value
 
 
@@ -198,5 +210,6 @@ class RedisAPI(object):
 						"Waiting %d seconds before the next attempt" % 5)
 				time.sleep(5)
 		host = master_host.internal_ip or master_host.external_ip
+		LOG.debug('primary IP: %s' % host)
 		return host
 

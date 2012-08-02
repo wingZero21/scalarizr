@@ -883,6 +883,7 @@ def create_redis_conf_copy(port=DEFAULT_PORT):
 		raise ServiceError('Default redis config %s does not exist' % DEFAULT_CONF_PATH)
 	dst = get_redis_conf_path(port)
 	if not os.path.exists(dst):
+		LOG.debug('Copying %s to %s.' % (DEFAULT_CONF_PATH,dst))
 		shutil.copy(DEFAULT_CONF_PATH, dst)
 	else: 
 		LOG.debug('%s already exists.' % dst)
