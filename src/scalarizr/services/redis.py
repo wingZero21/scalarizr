@@ -353,6 +353,7 @@ class Redis(BaseService):
 		self.redis_conf.port = self.port
 		self.redis_conf.dbfilename = get_snap_db_filename(self.port)
 		self.redis_conf.appendfilename = get_aof_db_filename(self.port)
+		self.redis_conf.pidfile = get_pidfile(self.port)
 		if self.persistence_type == SNAP_TYPE:
 			self.redis_conf.appendonly = False
 		elif self.persistence_type == AOF_TYPE:
@@ -878,6 +879,11 @@ def get_redis_conf_basename(port=DEFAULT_PORT):
 def get_redis_conf_path(port=DEFAULT_PORT):
 	return os.path.join(CONFIG_DIR, get_redis_conf_basename(port))
 
+def get_log_path(port=DEFAULT_PORT):
+	return '/var/log/redis/redis-server.%s.log' % port
+
+def get_pidfile(port=DEFAULT_PORT):
+	return '/var/run/redis-server.%s.pid' % port
 
 def create_redis_conf_copy(port=DEFAULT_PORT):
 	if not os.path.exists(DEFAULT_CONF_PATH):

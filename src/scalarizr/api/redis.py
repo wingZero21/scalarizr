@@ -138,6 +138,7 @@ class RedisAPI(object):
 	
 	def _shutdown(self, ports, remove_data=False, op=None):
 		is_replication_master = self.is_replication_master
+		freed_ports = []
 		for port in ports:
 			if op:
 				op.step('Shutdown Redis %s on port %s' ('Master' if is_replication_master else 'Slave', port))
@@ -148,6 +149,7 @@ class RedisAPI(object):
 				instance = redis_service.Redis(port=port)
 				if instance.service.running:
 					instance.service.stop()
+					freed_ports.append(port)
 				if remove_data and os.path.exists(instance.db_path):
 					os.remove(instance.db_path)
 			except:
@@ -157,6 +159,7 @@ class RedisAPI(object):
 			finally:
 				if op:
 					op.__exit__()
+			return dict(ports=freed_ports)
 	
 	
 	@property
