@@ -1274,7 +1274,7 @@ class MysqlHandler(ServiceCtlHandler):
 				return
 			LOG.debug('Changing SELinux file security context for new mysql home')
 			system2((chcon[0], '-R', '-u', 'system_u', '-r',
-				 'object_r', '-t', 'mysqld_db_t', STORAGE_PATH), raise_exc=False)
+				 'object_r', '-t', 'mysqld_db_t', os.path.dirname(STORAGE_PATH)), raise_exc=False)
 	
 	def _init_master(self, message):
 		"""
