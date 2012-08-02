@@ -169,6 +169,7 @@ class RedisHandler(ServiceCtlHandler):
 			self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
 			self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self._get_password(),])
 			self.redis_instances.start()
+			self._init_script = self.redis_instances.get_default_process()
 			
 
 	def on_reload(self):
