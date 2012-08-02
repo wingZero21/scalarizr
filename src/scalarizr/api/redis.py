@@ -161,7 +161,7 @@ class RedisAPI(object):
 	
 	@property
 	def available_ports(self):
-		free_ports = []
+		busy_ports = []
 		args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
 		out = system2(args, silent=True)[0].split('\n')
 		try:	
@@ -175,10 +175,10 @@ class RedisAPI(object):
 			for port in PORTS_RANGE:
 				conf_name = redis_service.get_redis_conf_basename(port)
 				LOG.debug('checking config %s in %s: %s' % (conf_name, redis_process,conf_name in redis_process))
-				if conf_name not in redis_process:
-					free_ports.append(port)
-		LOG.debug('available_ports: %s' % free_ports)
-		return free_ports
+				if conf_name in redis_process:
+					busy_ports.append(port)
+		LOG.debug('busy_ports: %s' % busy_ports)
+		return [port for port in PORTS_RANGE if port not in busy_ports]
 							
 		
 	@property
