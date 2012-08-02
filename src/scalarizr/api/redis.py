@@ -14,13 +14,21 @@ import threading
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr import handlers, rpc
+from scalarizr.util import system2, PopenError
 from scalarizr.services import redis as redis_service
 from scalarizr.handlers import redis as redis_handler
+
 
 BEHAVIOUR = CNF_SECTION = redis_handler.CNF_SECTION
 OPT_REPLICATION_MASTER = redis_handler.OPT_REPLICATION_MASTER
 OPT_PERSISTENCE_TYPE = redis_handler.OPT_PERSISTENCE_TYPE
 STORAGE_PATH = redis_handler.STORAGE_PATH
+DEFAULT_PORT = redis_service.DEFAULT_PORT
+BIN_PATH = redis_service.BIN_PATH
+DEFAULT_CONF_PATH = redis_service.DEFAULT_CONF_PATH
+MAX_CUSTOM_PROCESSES = 15
+PORTS_RANGE = range(DEFAULT_PORT+1, DEFAULT_PORT+MAX_CUSTOM_PROCESSES)
+
 
 
 LOG = logging.getLogger(__name__)
@@ -48,6 +56,12 @@ class RedisAPI(object):
 		if not self.is_replication_master:
 			if not passwords or not ports:
 				raise AssertionError('ports and passwords are required to launch processes on redis slave')
+		available_ports = self.available_ports
+		if num > len(available_ports):
+			raise AssertionError('Cannot launch %s new processes: Ports available: %s' % (num, str(available_ports)))
+		
+		if not ports:
+			ports = available_ports[:num]
 		
 		if async:
 			txt = 'Launch Redis processes'
@@ -81,6 +95,22 @@ class RedisAPI(object):
 			return op.id
 		else:
 			self._shutdown(ports, remove_data)
+			
+	@property
+	def available_ports(self):
+		free_ports = []
+		args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
+		out = system2(args, silent=True)[0].split('\n')
+		try:	
+			p = [x for x in out if x and BIN_PATH in x]
+		except PopenError,e:
+			p = []
+		for redis_process in p:
+			for port in PORTS_RANGE:
+				conf_name = redis_service.get_redis_conf_basename(port)
+				if conf_name not in redis_process:
+					free_ports.append(port)
+		return free_ports
 			
 
 	def _launch(self, ports=[], passwords=[], op=None):
