@@ -362,6 +362,8 @@ if disttool.is_redhat_based():
 
 
 def get_system_devname(devname):
+	if '/xvd' in devname:
+		return devname
 	ret = devname.replace('/sd', '/xvd') if os.path.exists('/dev/xvda1') or RHEL_DEVICE_ORDERING_BUG else devname
 	if RHEL_DEVICE_ORDERING_BUG:
 		ret = ret[0:8] + chr(ord(ret[8])+4) + ret[9:]
