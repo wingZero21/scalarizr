@@ -120,6 +120,7 @@ class RedisAPI(object):
 				if not redis_process.service.running:
 					LOG.debug('Launch Redis %s on port %s' % ('Master' if is_replication_master else 'Slave', port))
 					current_password = redis_process.init_master(STORAGE_PATH) if is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
+					redis_process.service.start()
 					new_passwords.append(current_password)
 					new_ports.append(port)
 					LOG.debug('Redis process has been launched on port %s with password %s' % (port, current_password))
