@@ -320,6 +320,7 @@ class Redis(BaseService):
 		self.redis_conf.slaveof = None
 		self.service.start()
 		self.is_replication_master = True
+		return self.current_password
 		
 		
 	def init_slave(self, mpoint, primary_ip, primary_port):
@@ -328,6 +329,7 @@ class Redis(BaseService):
 		self.change_primary(primary_ip, primary_port)
 		self.service.start()
 		self.is_replication_master = False
+		return self.current_password
 	
 	
 	def wait_for_sync(self,link_timeout=None,sync_timeout=None):

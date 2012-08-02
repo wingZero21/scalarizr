@@ -118,6 +118,9 @@ class RedisAPI(object):
 		primary_ip = self.get_primary_ip()
 		assert primary_ip is not None
 		
+		new_passwords = []
+		new_ports = []
+		
 		for port,password in zip(ports, passwords or [None for port in ports]):
 			if op:
 				op.step('Launch Redis %s on port %s' ('Master' if is_replication_master else 'Slave', port))
@@ -129,8 +132,9 @@ class RedisAPI(object):
 					self.create_redis_conf_copy(port)
 					redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
 					if not redis_process.service.running:
-						res = redis_process.init_master(STORAGE_PATH) if is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
-					return res
+						password = redis_process.init_master(STORAGE_PATH) if is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
+						new_passwords.append(password)
+						new_ports.append(port)
 				
 			except:
 				if op:
@@ -139,6 +143,7 @@ class RedisAPI(object):
 			finally:
 				if op:
 					op.__exit__()
+		return (new_ports, new_passwords)
 		
 	
 	def _shutdown(self, ports, remove_data=False, op=None):
