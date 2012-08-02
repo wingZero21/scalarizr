@@ -125,7 +125,7 @@ class RedisAPI(object):
 				if op:
 					op.__enter__()
 
-				if port not in self.ports:
+				if port not in ports:
 					self.create_redis_conf_copy(port)
 					redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
 					if not redis_process.service.running:
