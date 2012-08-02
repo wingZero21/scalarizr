@@ -392,17 +392,15 @@ class Volume(VolumeConfig, Observable):
 
 		if not device:
 			raise ValueError('device name should be non-empty')
-		
-		# ephemeral block device -> xen device
-		if device.startswith('/dev/sd') and not os.path.exists(device):
-			device = get_system_devname(device)
-				
-		# sometimes on m1.small instead of sda2 we saw sdb
+
 		if device == '/dev/sda2' and not os.path.exists(get_system_devname('/dev/sda2')):
+			# sometimes on m1.small instead of sda2 we saw sdb
 			sdb = get_system_devname('/dev/sdb')
 			if os.path.exists(sdb):
 				device = sdb
-
+		elif device.startswith('/dev/sd') and not os.path.exists(device):
+			# ephemeral block device -> xen device			
+			device = get_system_devname(device)
 			
 		self.device = device
 		
