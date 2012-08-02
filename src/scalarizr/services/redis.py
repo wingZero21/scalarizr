@@ -135,7 +135,7 @@ class Redisd(object):
 						shutil.move(aof_src, aof_dst)
 				
 				LOG.debug('Starting %s on port %s' % (BIN_PATH, self.redis_conf.port))
-				system2('%s %s -s %s -c "%s %s"'%(SU_EXEC, DEFAULT_USER, BASH, BIN_PATH, self.config_path), shell=True)
+				system2('%s %s -s %s -c "%s %s"'%(SU_EXEC, DEFAULT_USER, BASH, BIN_PATH, self.config_path), shell=True, close_fds=True, preexec_fn=os.setsid)
 				wait_until(lambda: self.running, timeout=MAX_START_TIMEOUT)
 				wait_until(lambda: self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
 				LOG.debug('%s process has been started.' % SERVICE_NAME)
