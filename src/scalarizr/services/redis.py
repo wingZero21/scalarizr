@@ -225,7 +225,7 @@ class RedisInstances(object):
 		creds = dict(zip(ports or [], passwords))
 		for port,password in creds.items():
 			if port not in self.ports:
-				self.create_redis_conf_copy(port)
+				create_redis_conf_copy(port)
 				redis_process = Redis(self.master, self.persistence_type, port, password)
 				self.instances.append(redis_process)
 				
@@ -288,17 +288,6 @@ class RedisInstances(object):
 		for redis in self.instances:
 			redis.wait_for_sync(link_timeout,sync_timeout)
 			
-			
-	def create_redis_conf_copy(self, port=DEFAULT_PORT):
-		if not os.path.exists(DEFAULT_CONF_PATH):
-			raise ServiceError('Default redis config %s does not exist' % DEFAULT_CONF_PATH)
-		dst = get_redis_conf_path(port)
-		if not os.path.exists(dst):
-			shutil.copy(DEFAULT_CONF_PATH, dst)
-		else: 
-			LOG.debug('%s already exists.' % dst)
-	
-	
 class Redis(BaseService):
 	_instance = None
 	port = None
@@ -876,11 +865,24 @@ class RedisCLI(object):
 def get_snap_db_filename(port=DEFAULT_PORT):	
 	return 'dump.%s.rdb' % port	
 
+
 def get_aof_db_filename(port=DEFAULT_PORT):	
 	return 'appendonly.%s.aof' % port 
+
 
 def get_redis_conf_basename(port=DEFAULT_PORT):
 	return 'redis.%s.conf' % port
 
+
 def get_redis_conf_path(port=DEFAULT_PORT):
 	return os.path.join(CONFIG_DIR, get_redis_conf_basename(port))
+
+
+def create_redis_conf_copy(port=DEFAULT_PORT):
+	if not os.path.exists(DEFAULT_CONF_PATH):
+		raise ServiceError('Default redis config %s does not exist' % DEFAULT_CONF_PATH)
+	dst = get_redis_conf_path(port)
+	if not os.path.exists(dst):
+		shutil.copy(DEFAULT_CONF_PATH, dst)
+	else: 
+		LOG.debug('%s already exists.' % dst)
