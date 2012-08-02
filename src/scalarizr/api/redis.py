@@ -168,10 +168,13 @@ class RedisAPI(object):
 			p = [x for x in out if x and BIN_PATH in x]
 		except PopenError,e:
 			p = []
+		LOG.debug('Running redis processes: %s' % p)
 		LOG.debug('PORTS_RANGE: %s' % PORTS_RANGE)
 		for redis_process in p:
+			LOG.debug('checking redis process: %s' % redis_process)
 			for port in PORTS_RANGE:
 				conf_name = redis_service.get_redis_conf_basename(port)
+				LOG.debug('checking config %s in %s: %s' % conf_name, redis_process,conf_name in redis_process)
 				if conf_name not in redis_process:
 					free_ports.append(port)
 		LOG.debug('available_ports: %s' % free_ports)
