@@ -128,13 +128,13 @@ class RedisAPI(object):
 				if op:
 					op.__enter__()
 
-				if port not in ports:
-					self.create_redis_conf_copy(port)
-					redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
-					if not redis_process.service.running:
-						password = redis_process.init_master(STORAGE_PATH) if is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
-						new_passwords.append(password)
-						new_ports.append(port)
+
+				self.create_redis_conf_copy(port)
+				redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
+				if not redis_process.service.running:
+					password = redis_process.init_master(STORAGE_PATH) if is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
+					new_passwords.append(password)
+					new_ports.append(port)
 				
 			except:
 				if op:
