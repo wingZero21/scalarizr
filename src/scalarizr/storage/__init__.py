@@ -370,6 +370,8 @@ def get_system_devname(devname):
 	return ret
 
 def get_cloud_devname(devname):
+	if '/sd' in devname:
+		return devname
 	ret = devname
 	if RHEL_DEVICE_ORDERING_BUG:
 		ret = ret[0:8] + chr(ord(ret[8])-4) + ret[9:]
