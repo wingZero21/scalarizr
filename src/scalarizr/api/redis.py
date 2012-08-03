@@ -98,20 +98,8 @@ class RedisAPI(object):
 			
 		
 	@rpc.service_method
-	def list_processes(self, async=False):
-		if async:
-			txt = 'List Redis processes'
-			op = handlers.operation(name=txt)
-			def block():
-				op.define()
-				with op.phase(txt):
-					with op.step(txt):
-						self.get_running_processes()
-				op.ok()
-			threading.Thread(target=block).start()
-			return op.id
-		else:
-			return self.get_running_processes()
+	def list_processes(self):
+		return self.get_running_processes()
 		
 		
 	def _launch(self, ports=[], passwords=[], op=None):
