@@ -903,7 +903,7 @@ def get_log_path(port=DEFAULT_PORT):
 
 
 def get_pidfile(port=DEFAULT_PORT):
-	return '/var/run/redis-server.%s.pid' % port
+	return '/var/run/redis/redis-server.%s.pid' % port
 
 
 def create_redis_conf_copy(port=DEFAULT_PORT):
