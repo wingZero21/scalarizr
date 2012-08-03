@@ -290,7 +290,7 @@ class ApacheHandler(ServiceCtlHandler):
 			self._logger.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
 			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
 			
-			#fixing bug in rpaf 0.6-2
+			#fixing bug in rpaf 0.6-2 on ubuntu1204
 			if disttool.is_ubuntu():
 				pm = dynimp.package_mgr()
 				out = pm.apt_cache_command('policy', 'libapache2-mod-rpaf')[0]
