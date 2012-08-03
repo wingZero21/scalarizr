@@ -149,8 +149,12 @@ class _P2pMessageStore:
 			ret = []
 			for queue, message in self._unhandled_messages:
 				msg_copy = P2pMessage()
-				msg_copy.fromxml(message.toxml())
-				ret.append((queue, msg_copy))
+				try:
+					msg_copy.fromxml(message.toxml())
+				except UnicodeEncodeError, e:
+					self._logger.warn('Fail to decode message: %s', str(e))
+				else:
+					ret.append((queue, msg_copy))
 
 			return ret
 

@@ -721,9 +721,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		if not self._is_sgt_process_exists():	
 			args = [MYSQLD_PATH, '--user=mysql', '--skip-grant-tables', '--pid-file=%s' % self.sgt_pid_path]
 			LOG.debug('Starting mysqld with a skip-grant-tables')
-			p = subprocess.Popen(args, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
+			subprocess.Popen(args, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
 			wait_until(lambda: self._is_sgt_process_exists(), timeout=10, sleep=1)
-		wait_until(lambda: self.running, timeout=10, sleep=1)
+		wait_until(lambda: self.running, timeout=60, sleep=1)
 
 	
 	def stop_skip_grant_tables(self):
@@ -733,7 +733,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 				LOG.debug('Stopping mysqld with a skip-grant-tables')
 				os.kill(int(sgt_pid), signal.SIGTERM)
 				wait_until(lambda: not self._is_sgt_process_exists(), timeout=10, sleep=1)
-				wait_until(lambda: not self.running, timeout=10, sleep=1)
+				wait_until(lambda: not self.running, timeout=60, sleep=1)
 			else:
 				LOG.warning('Unable to stop mysql running with skip-grant-tables. PID not found.')
 		else:
