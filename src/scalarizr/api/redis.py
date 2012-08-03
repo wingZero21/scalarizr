@@ -96,7 +96,24 @@ class RedisAPI(object):
 		else:
 			return self._shutdown(ports, remove_data)
 			
-
+		
+	@rpc.service_method
+	def list_processes(self, async=False):
+		if async:
+			txt = 'List Redis processes'
+			op = handlers.operation(name=txt)
+			def block():
+				op.define()
+				with op.phase(txt):
+					with op.step(txt):
+						self.get_running_processes()
+				op.ok()
+			threading.Thread(target=block).start()
+			return op.id
+		else:
+			return self.get_running_processes()
+		
+		
 	def _launch(self, ports=[], passwords=[], op=None):
 		LOG.debug('Launching redis processes on ports %s with passwords %s' % (ports, passwords))
 		is_replication_master = self.is_replication_master
@@ -164,11 +181,11 @@ class RedisAPI(object):
 			finally:
 				if op:
 					op.__exit__()
-			return dict(ports=freed_ports)
+		return dict(ports=freed_ports)
 	
 	
 	@property
-	def available_ports(self):
+	def busy_ports(self):
 		busy_ports = []
 		args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
 		out = system2(args, silent=True)[0].split('\n')
@@ -186,8 +203,25 @@ class RedisAPI(object):
 				if conf_name in redis_process:
 					busy_ports.append(port)
 		LOG.debug('busy_ports: %s' % busy_ports)
-		return [port for port in PORTS_RANGE if port not in busy_ports]
-							
+		return busy_ports
+	
+	
+	@property
+	def available_ports(self):
+		return [port for port in PORTS_RANGE if port not in self.busy_ports]
+	
+	
+	def get_running_processes(self):
+		processes = {}
+		for port in self.busy_ports:
+			conf_path = redis_service.get_redis_conf_path(port)
+			LOG.debug('Got config path %s for port %s' % (conf_path, port))
+			redis_conf = redis_service.RedisConf(conf_path)
+			password = redis_conf.requirepass
+			processes[port] = password
+			LOG.debug('Redis config %s has password %s' % (conf_path, password))
+		return processes
+								
 		
 	@property
 	def is_replication_master(self):
