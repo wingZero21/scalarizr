@@ -149,6 +149,7 @@ class RedisAPI(object):
 				instance = redis_service.Redis(port=port)
 				if instance.service.running:
 					instance.service.stop()
+					#instance.redis_cli.save()
 					freed_ports.append(port)
 				if remove_data and os.path.exists(instance.db_path):
 					os.remove(instance.db_path)

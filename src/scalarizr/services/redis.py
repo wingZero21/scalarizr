@@ -36,7 +36,11 @@ OPT_REPLICATION_MASTER  = "replication_master"
 
 REDIS_CLI_PATH = '/usr/bin/redis-cli'	
 DEFAULT_DIR_PATH = '/var/lib/redis'
-DEFAULT_PIDFILE = '/var/run/redis.pid'
+
+CENTOS_DEFAULT_PIDFILE = '/var/run/redis/redis.pid'
+UBUNTU_DEFAULT_PIDFILE = '/var/run/redis/redis-server.pid'
+DEFAULT_PIDFILE = UBUNTU_DEFAULT_PIDFILE if disttool.is_ubuntu() else CENTOS_DEFAULT_PIDFILE
+
 REDIS_USER = 'redis'	
 DB_FILENAME = 'dump.rdb'
 AOF_FILENAME = 'appendonly.aof'
@@ -185,7 +189,7 @@ class Redisd(object):
 		
 		if os.path.exists(pidfile):
 			pid = open(pidfile).read().strip()
-			
+		LOG.debug('Redis process on port ')	
 		return pid
 
 
