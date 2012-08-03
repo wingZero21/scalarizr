@@ -727,7 +727,7 @@ class RedisCLI(object):
 	
 	@classmethod	
 	def find(cls, redis_conf):
-		return cls(redis_conf.requirepass)
+		return cls(redis_conf.requirepass, port=redis_conf.port)
 		
 		
 	def execute(self, query, silent=False):

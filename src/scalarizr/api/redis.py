@@ -145,11 +145,15 @@ class RedisAPI(object):
 			try:
 				if op:
 					op.__enter__()
-	
+				LOG.debug('Shutting down redis instance on port %s' % (port))
 				instance = redis_service.Redis(port=port)
 				if instance.service.running:
-					instance.service.stop()
+					password = instance.redis_conf.requirepass
+					instance.password = password
+					LOG.debug('Dumping redis data on disk using password %s from config file %s' % (password, instance.redis_conf.path))
 					instance.redis_cli.save()
+					LOG.debug('Stopping the process')
+					instance.service.stop()
 					freed_ports.append(port)
 				if remove_data and os.path.exists(instance.db_path):
 					os.remove(instance.db_path)
