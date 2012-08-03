@@ -290,17 +290,14 @@ class ApacheHandler(ServiceCtlHandler):
 			self._logger.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
 			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
 			
-			#fixing bug in rpaf 0.6-2 on ubuntu1204
-			if disttool.is_ubuntu():
-				pm = dynimp.package_mgr()
-				out = pm.apt_cache_command('policy', 'libapache2-mod-rpaf')[0]
-				self._logger.debug('apt-cache policy: %s' % out) 
-				if '0.6-2' in out:
-					try:
-						self._logger.debug('Patching IfModule value in rpaf.conf')
-						rpaf.set("./IfModule[@value='mod_rpaf.c']", {'value': 'mod_rpaf-2.0.c'})
-					except NoPathError:
-						pass
+			#fixing bug in rpaf 0.6-2
+			pm = dynimp.package_mgr()
+			if '0.6-2' == pm.installed('libapache2-mod-rpaf'):
+				try:
+					self._logger.debug('Patching IfModule value in rpaf.conf')
+					rpaf.set("./IfModule[@value='mod_rpaf.c']", {'value': 'mod_rpaf-2.0.c'})
+				except NoPathError:
+					pass
 			
 			rpaf.write(file)
 			st = os.stat(self._httpd_conf_path)
