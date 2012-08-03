@@ -182,14 +182,18 @@ class Redisd(object):
 	def pid(self):
 		pid = None
 		pidfile = self.redis_conf.pidfile
+		LOG.debug('Got pidfile %s from redis config' % (pidfile, self.redis_conf.path))
 		
 		if pidfile == get_pidfile(DEFAULT_PORT):
 			if not os.path.exists(pidfile) or not open(pidfile).read().strip():
+				LOG.debug('Pidfile is empty. Trying default pidfile %s' % DEFAULT_PIDFILE)
 				pidfile = DEFAULT_PIDFILE
 		
 		if os.path.exists(pidfile):
 			pid = open(pidfile).read().strip()
-		LOG.debug('Redis process on port ')	
+		else:
+			LOG.debug('No pid found in pidfile %s' % pidfile)
+		LOG.debug('Redis process on port %s has pidfile %s and pid %s' % (self.redis_conf.port, pidfile, pid))	
 		return pid
 
 
