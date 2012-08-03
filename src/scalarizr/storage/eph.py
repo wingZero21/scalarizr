@@ -327,9 +327,8 @@ class EphSnapshotProviderLite(object):
 					uploaders.append(uploader)
 
 				compress.wait()
-				err = compress.communicate()[1]
 				if compress.returncode:
-					raise StorageError('%s process terminated with exit code %s. <err>: %s' % (compress.returncode, err))				
+					raise StorageError('%s process terminated with exit code %s. <err>: %s' % (compress.returncode, compress.stderr.read()))				
 					
 				split.join()
 				if self._inner_exc_info:
