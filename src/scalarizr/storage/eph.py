@@ -348,8 +348,11 @@ class EphSnapshotProviderLite(object):
 			self._state_map[snapshot.id] = Snapshot.FAILED
 			self._logger.exception('Snapshot creation failed. %s' % e)
 		finally:
-			if complete_cb:
-				complete_cb()
+			try:
+				if complete_cb:
+					complete_cb()
+			except:
+				self._logger.warn('complete_cb() failed', exc_info=sys.exc_info())
 	
 	def _split(self, stdin, tranzit_path, chunk_prefix, snapshot):
 		try:
