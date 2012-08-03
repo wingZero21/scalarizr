@@ -94,7 +94,7 @@ class RedisAPI(object):
 			threading.Thread(target=block).start()
 			return op.id
 		else:
-			self._shutdown(ports, remove_data)
+			return self._shutdown(ports, remove_data)
 			
 
 	def _launch(self, ports=[], passwords=[], op=None):
