@@ -331,12 +331,12 @@ class EphSnapshotProviderLite(object):
 					raise StorageError('%s process terminated with exit code %s. <err>: %s' % (compress.returncode, compress.stderr.read()))				
 					
 				split.join()
-				if self._inner_exc_info:
-					t, e, s = self._inner_exc_info
-					raise t, e, s
 				for uploader in uploaders:
 					uploader.join()
 				
+				if self._inner_exc_info:
+					t, e, s = self._inner_exc_info
+					raise t, e, s
 
 			finally:
 				umount(snap_mpoint, options=('-f',))
@@ -355,6 +355,7 @@ class EphSnapshotProviderLite(object):
 				self._logger.warn('complete_cb() failed', exc_info=sys.exc_info())
 	
 	def _split(self, stdin, tranzit_path, chunk_prefix, snapshot):
+		chunk_fp = None
 		try:
 			self._read_finished.clear()
 			chunk_max_size = 100*1024*1024
@@ -413,6 +414,9 @@ class EphSnapshotProviderLite(object):
 		finally:
 			self._read_finished.set()
 			stdin.close()
+			if chunk_fp and not chunk_fp.closed:
+				chunk_fp.close()
+			
 
 		
 	def _uploader(self, dst, snapshot):
