@@ -811,9 +811,9 @@ class MysqlHandler(DBMSRHandler):
 	def _change_selinux_ctx(self):
 		chcon = software.whereis('chcon')
 		if disttool.is_rhel() and chcon:
-			LOG.debug('Changing SELinux file security context for new mysql home')
+			LOG.debug('Changing SELinux file security context for new mysql datadir')
 			system2((chcon[0], '-R', '-u', 'system_u', '-r',
-					 'object_r', '-t', 'mysqld_db_t', STORAGE_PATH), raise_exc=False)
+					 'object_r', '-t', 'mysqld_db_t', os.path.dirname(STORAGE_PATH)), raise_exc=False)
 	
 		
 	def _init_master(self, message):
