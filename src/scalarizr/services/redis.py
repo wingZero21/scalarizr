@@ -36,6 +36,7 @@ OPT_REPLICATION_MASTER  = "replication_master"
 
 REDIS_CLI_PATH = '/usr/bin/redis-cli'	
 DEFAULT_DIR_PATH = '/var/lib/redis'
+DEFAULT_PIDFILE = '/var/run/redis.pid'
 REDIS_USER = 'redis'	
 DB_FILENAME = 'dump.rdb'
 AOF_FILENAME = 'appendonly.aof'
@@ -175,7 +176,16 @@ class Redisd(object):
 	
 	@property
 	def pid(self):
-		pid = open(self.redis_conf.pidfile).read().strip()
+		pid = None
+		pidfile = self.redis_conf.pidfile
+		
+		if pidfile == get_pidfile(DEFAULT_PORT):
+			if not os.path.exists(pidfile) or not open(pidfile).read().strip():
+				pidfile = DEFAULT_PIDFILE
+		
+		if os.path.exists(pidfile):
+			pid = open(pidfile).read().strip()
+			
 		return pid
 
 
@@ -879,11 +889,14 @@ def get_redis_conf_basename(port=DEFAULT_PORT):
 def get_redis_conf_path(port=DEFAULT_PORT):
 	return os.path.join(CONFIG_DIR, get_redis_conf_basename(port))
 
+
 def get_log_path(port=DEFAULT_PORT):
 	return '/var/log/redis/redis-server.%s.log' % port
 
+
 def get_pidfile(port=DEFAULT_PORT):
 	return '/var/run/redis-server.%s.pid' % port
+
 
 def create_redis_conf_copy(port=DEFAULT_PORT):
 	if not os.path.exists(DEFAULT_CONF_PATH):
@@ -894,3 +907,5 @@ def create_redis_conf_copy(port=DEFAULT_PORT):
 		shutil.copy(DEFAULT_CONF_PATH, dst)
 	else: 
 		LOG.debug('%s already exists.' % dst)
+		
+		
