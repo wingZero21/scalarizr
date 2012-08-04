@@ -26,7 +26,7 @@ class P2pConfigOptions:
 	CRYPTO_KEY_PATH 				= "crypto_key_path"
 	PRODUCER_URL 					= "producer_url"
 	PRODUCER_RETRIES_PROGRESSION 	= "producer_retries_progression"
-	PRODUCER_SENDER					= "producer_sender"	
+	PRODUCER_SENDER					= "producer_sender"
 	CONSUMER_URL 					= "consumer_url"
 	MSG_HANDLER_ENABLED				= 'msg_handler_enabled'
 
@@ -35,7 +35,7 @@ class P2pMessageService(MessageService):
 	_params = {}
 	_default_producer = None
 	_default_consumer = None
-	
+
 	def __init__(self, **params):
 		self._params = params
 		self._security = P2pMessageSecurity(
@@ -45,7 +45,7 @@ class P2pMessageService(MessageService):
 
 	def new_message(self, name=None, meta=None, body=None):
 		return P2pMessage(name, meta, body)
-	
+
 	def get_consumer(self):
 		if not self._default_consumer:
 			self._default_consumer = self.new_consumer(
@@ -53,7 +53,7 @@ class P2pMessageService(MessageService):
 				msg_handler_enabled=self._params.get(P2pConfigOptions.MSG_HANDLER_ENABLED, True)
 			)
 		return self._default_consumer
-	
+
 	def new_consumer(self, **params):
 		import consumer
 		c = consumer.P2pMessageConsumer(**params)
@@ -65,29 +65,29 @@ class P2pMessageService(MessageService):
 			self._default_producer = self.new_producer(
 				endpoint=self._params[P2pConfigOptions.PRODUCER_URL],
 				retries_progression=self._params[P2pConfigOptions.PRODUCER_RETRIES_PROGRESSION],
-			)
+				)
 		return self._default_producer
-	
+
 	def new_producer(self, **params):
 		import producer
 		p = producer.P2pMessageProducer(**params)
 		p.filters['protocol'].append(self._security.out_protocol_filter)
 		return p
-		
+
 
 def new_service(**kwargs):
 	return P2pMessageService(**kwargs)
 
 class _P2pMessageStore:
-	_logger = None	
-	
-	TAIL_LENGTH = 50	
+	_logger = None
+
+	TAIL_LENGTH = 50
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._local_storage_lock = threading.Lock()
 		ex = bus.periodical_executor
-		if ex: 
+		if ex:
 			self._logger.debug('Add rotate messages table task for periodical executor')
 			ex.add_task(self.rotate, 3600, 'Rotate messages sqlite table') # execute rotate task each hour
 
@@ -101,7 +101,7 @@ class _P2pMessageStore:
 			self._unhandled = self._get_unhandled_from_db()
 		return self._unhandled
 
-	
+
 	def rotate(self):
 		conn = self._conn()
 		cur = conn.cursor()
@@ -111,7 +111,7 @@ class _P2pMessageStore:
 			self._logger.debug('Deleting messages older then messageid: %s', row['message_id'])
 			cur.execute('DELETE FROM p2p_message WHERE id <= ?', (row['id'],))
 		conn.commit()
-		
+
 	def put_ingoing(self, message, queue, consumer_id):
 		with self._local_storage_lock:
 			self._unhandled_messages.append((queue, message))
@@ -126,7 +126,7 @@ class _P2pMessageStore:
 
 
 			#self._logger.debug('Representation mes: %s', repr(str(message)))
-			cur.execute(sql, [message.toxml(), message.id, message.name, queue, 1, 0, consumer_id])
+			cur.execute(sql, [message.toxml().decode('utf-8'), message.id, message.name, queue, 1, 0, consumer_id])
 			'''
 			cur.execute(sql, [str(message), message.id.decode('utf-8'),
 					message.name.decode('utf-8'), queue.encode('utf-8'), 1, 0,
@@ -135,7 +135,7 @@ class _P2pMessageStore:
 			if message.meta.has_key(MetaOptions.REQUEST_ID):
 				cur.execute("""UPDATE p2p_message
 						SET response_uuid = ? WHERE message_id = ?""",
-						[message.id, message.meta[MetaOptions.REQUEST_ID]])
+					[message.id, message.meta[MetaOptions.REQUEST_ID]])
 
 			self._logger.debug("Commiting put_ingoing")
 			conn.commit()
@@ -149,12 +149,8 @@ class _P2pMessageStore:
 			ret = []
 			for queue, message in self._unhandled_messages:
 				msg_copy = P2pMessage()
-				try:
-					msg_copy.fromxml(message.toxml())
-				except UnicodeEncodeError, e:
-					self._logger.warn('Fail to decode message: %s', str(e))
-				else:
-					ret.append((queue, msg_copy))
+				msg_copy.fromxml(message.toxml())
+				ret.append((queue, msg_copy))
 
 			return ret
 
@@ -175,8 +171,8 @@ class _P2pMessageStore:
 			sql = """SELECT queue, message_id FROM p2p_message
 					WHERE is_ingoing = ? AND in_is_handled = ? 
 					ORDER BY id"""
-			cur.execute(sql, [1, 0])			
-			
+			cur.execute(sql, [1, 0])
+
 			ret = []
 			for r in cur.fetchall():
 				ret.append((r["queue"], self.load(r["message_id"], True)))
@@ -209,13 +205,13 @@ class _P2pMessageStore:
 						is_ingoing, out_is_delivered, out_delivery_attempts, out_sender) 
 					VALUES 
 						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
-			
-			cur.execute(sql, [message.toxml(), message.id, message.name, queue, 0, 0, 0, sender])
+
+			cur.execute(sql, [message.toxml().decode('utf-8'), message.id, message.name, queue, 0, 0, 0, sender])
 			conn.commit()
 		finally:
 			cur.close()
 
-			
+
 	def get_undelivered(self, sender):
 		"""
 		Return list of undelivered messages in outgoing order
@@ -231,10 +227,10 @@ class _P2pMessageStore:
 			return ret
 		finally:
 			cur.close()
-			
+
 	def mark_as_delivered(self, message_id):
 		return self._mark_as_delivered(message_id, 1)
-	
+
 
 	def mark_as_undelivered(self, message_id):
 		return self._mark_as_delivered(message_id, 0)
@@ -251,13 +247,13 @@ class _P2pMessageStore:
 			conn.commit()
 		finally:
 			cur.close()
-			
+
 	def load(self, message_id, is_ingoing):
 		cur = self._conn().cursor()
 		try:
 			cur.execute("""SELECT * FROM p2p_message 
-					WHERE message_id = ? AND is_ingoing = ?""", 
-					[message_id, int(bool(is_ingoing))])
+					WHERE message_id = ? AND is_ingoing = ?""",
+				[message_id, int(bool(is_ingoing))])
 			row = cur.fetchone()
 			if not row is None:
 				message = P2pMessage()
@@ -267,7 +263,7 @@ class _P2pMessageStore:
 				raise MessagingError("Cannot find message (message_id: %s)" % (message_id))
 		finally:
 			cur.close()
-	
+
 	def is_handled(self, message_id):
 		with self._local_storage_lock:
 			filter_fn = lambda x: x[1].id == message_id
@@ -289,12 +285,12 @@ class _P2pMessageStore:
 		cur = self._conn().cursor()
 		try:
 			cur.execute("""SELECT is_delivered FROM p2p_message
-					"WHERE message_id = ? AND is_ingoing = ?""", 
-					[message_id, 0])
+					"WHERE message_id = ? AND is_ingoing = ?""",
+				[message_id, 0])
 			return cur.fetchone()["out_is_delivered"] == 1
 		finally:
 			cur.close()
-		
+
 	def is_response_received(self, message_id):
 		cur = self._conn().cursor()
 		try:
@@ -304,24 +300,24 @@ class _P2pMessageStore:
 			return cur.fetchone()["response_id"] != ""
 		finally:
 			cur.close()
-		
+
 	def get_response(self, message_id):
 		cur = self._conn().cursor()
 		try:
 			cur.execute("""SELECT response_id FROM p2p_message 
-					WHERE message_id = ? AND is_ingoing = ?""", 
-					[message_id, 0])
+					WHERE message_id = ? AND is_ingoing = ?""",
+				[message_id, 0])
 			response_id = cur.fetchone()["response_id"]
 			if not response_id is None:
 				return self.load(response_id, True)
 			return None
 		finally:
 			cur.close()
-		
+
 	def _unmarshall(self, message, row):
 		#message.fromxml(row["message"].encode('utf-8'))
 		message.fromxml(row["message"])
-		
+
 	def _marshall(self, message, row={}):
 		row["message_id"] = message.id
 		row["message_name"] = message.name
@@ -348,12 +344,12 @@ class P2pMessage(Message):
 
 	def is_handled(self):
 		return self._store.is_handled(self.id)
-	
+
 	def is_delivered(self):
 		return self._store.is_delivered(self.id)
-	
+
 	def is_responce_received(self):
 		return self._store.is_response_received(self.id)
-		
+
 	def get_response(self):
 		return self._store.get_response(self.id)
