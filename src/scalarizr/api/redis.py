@@ -226,7 +226,7 @@ class RedisAPI(object):
 			password = redis_conf.requirepass
 			processes[port] = password
 			ports.append(port)
-			password.append(password)
+			passwords.append(password)
 			LOG.debug('Redis config %s has password %s' % (conf_path, password))
 		return dict(ports=ports, passwords=passwords)
 								
