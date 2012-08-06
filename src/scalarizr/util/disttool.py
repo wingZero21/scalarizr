@@ -67,6 +67,7 @@ def is_fedora(): return _is_fedora
 def is_centos(): return _is_centos
 def is_ubuntu(): return _is_ubuntu
 def is_debian(): return _is_debian
+def is_rhel(): return _is_rhel
 
 def uname(): return _uname
 def linux_dist(): return _linux_dist

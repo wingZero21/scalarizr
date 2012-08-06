@@ -680,6 +680,8 @@ class MysqlHandler(ServiceCtlHandler):
 				if not os.path.exists(self.storage_vol.mpoint):
 					os.makedirs(self.storage_vol.mpoint)
 				self.storage_vol.mount()
+
+			self._change_selinux_ctx()
 			
 			if int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]):
 				LOG.debug("Checking Scalr's MySQL system users presence.")
@@ -1263,6 +1265,16 @@ class MysqlHandler(ServiceCtlHandler):
 			self._init_slave(message)		
 		
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+
+
+	def _change_selinux_ctx(self):
+		if disttool.is_rhel():
+			chcon = software.whereis('chcon')
+			if not chcon:
+				return
+			LOG.debug('Changing SELinux file security context for new mysql home')
+			system2((chcon[0], '-R', '-u', 'system_u', '-r',
+				 'object_r', '-t', 'mysqld_db_t', os.path.dirname(STORAGE_PATH)), raise_exc=False)
 	
 	def _init_master(self, message):
 		"""
@@ -1308,8 +1320,8 @@ class MysqlHandler(ServiceCtlHandler):
 					# Patch configuration
 					self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
 					self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-				
-				
+					self._change_selinux_ctx()
+
 				with op.step(self._step_patch_conf):
 					# Init replication
 					self._replication_init(master=True)
@@ -1428,6 +1440,7 @@ class MysqlHandler(ServiceCtlHandler):
 				with op.step(self._step_move_datadir):
 					self._move_mysql_dir('mysqld/datadir', self._data_dir)
 					self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
+					self._change_selinux_ctx()
 					self._replication_init(master=False)
 					self._copy_debian_cnf_back()
 				
@@ -1819,7 +1832,7 @@ class MysqlHandler(ServiceCtlHandler):
 			LOG.error('Cannot chown Mysql directory %s', directory)
 		
 		LOG.debug('New permissions for mysql directory "%s" were successfully set.' % directory)
-		
+
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based():
 			_add_apparmor_rules(directory)

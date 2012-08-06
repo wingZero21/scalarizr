@@ -59,7 +59,7 @@ class EbsVolumeProvider(VolumeProvider):
 	letters_lock = threading.Lock()
 
 	# Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-	all_letters = set(string.ascii_lowercase[7 if disttool._is_rhel else 5:16])
+	all_letters = set(string.ascii_lowercase[7 if disttool.is_rhel() else 5:16])
 	acquired_letters = set()
 
 
