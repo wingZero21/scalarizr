@@ -690,8 +690,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 					LOG.warning('MySQL service is running with skip-grant-tables mode.')
 				elif not self.running:
 					raise
-		
-		return self._start_stop_reload('start')
+
 	
 	def stop(self, reason=None):
 		initdv2.ParametrizedInitScript.stop(self)
