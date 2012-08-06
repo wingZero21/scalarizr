@@ -217,14 +217,18 @@ class RedisAPI(object):
 	
 	def get_running_processes(self):
 		processes = {}
+		ports = []
+		passwords = []
 		for port in self.busy_ports:
 			conf_path = redis_service.get_redis_conf_path(port)
 			LOG.debug('Got config path %s for port %s' % (conf_path, port))
 			redis_conf = redis_service.RedisConf(conf_path)
 			password = redis_conf.requirepass
 			processes[port] = password
+			ports.append(port)
+			password.append(password)
 			LOG.debug('Redis config %s has password %s' % (conf_path, password))
-		return processes
+		return dict(ports=ports, passwords=passwords)
 								
 		
 	@property
