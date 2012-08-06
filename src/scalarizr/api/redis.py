@@ -60,7 +60,11 @@ class RedisAPI(object):
 		if num > len(available_ports):
 			raise AssertionError('Cannot launch %s new processes: Ports available: %s' % (num, str(available_ports)))
 		
-		if not ports:
+		if ports:
+			for port in ports:
+				if port not in available_ports:
+					raise AssertionError('Cannot launch Redis process on port %s: Already running' % port)
+		else:
 			ports = available_ports[:num]
 		
 		if async:
