@@ -15,6 +15,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr import handlers, rpc
 from scalarizr.util import system2, PopenError
+from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.services import redis as redis_service
 from scalarizr.handlers import redis as redis_handler
 
@@ -116,22 +117,33 @@ class RedisAPI(object):
 		new_passwords = []
 		new_ports = []
 		
+		
+		iptables = IpTables()
+		
+		
 		for port,password in zip(ports, passwords or [None for port in ports]):
 			if op:
 				op.step('Launch Redis %s on port %s' % ('Master' if is_replication_master else 'Slave', port))
 			try:
 				if op:
 					op.__enter__()
-
+					
+				if iptables.enabled():
+					iptables.insert_rule(None, RuleSpec(dport=port, jump='ACCEPT', protocol=P_TCP))
 
 				redis_service.create_redis_conf_copy(port)
 				redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
+				
 				if not redis_process.service.running:
 					LOG.debug('Launch Redis %s on port %s' % ('Master' if is_replication_master else 'Slave', port))
-					current_password = redis_process.init_master(STORAGE_PATH) if is_replication_master else redis_process.init_slave(STORAGE_PATH, primary_ip)
+					if is_replication_master:
+						current_password = redis_process.init_master(STORAGE_PATH)  
+					else: 
+						current_password = redis_process.init_slave(STORAGE_PATH, primary_ip, port)
 					new_passwords.append(current_password)
 					new_ports.append(port)
 					LOG.debug('Redis process has been launched on port %s with password %s' % (port, current_password))
+					
 				else:
 					raise BaseException('Cannot launch redis on port %s: the process is already running' % port)
 				
