@@ -37,8 +37,9 @@ OPT_REPLICATION_MASTER  = "replication_master"
 REDIS_CLI_PATH = '/usr/bin/redis-cli'	
 DEFAULT_DIR_PATH = '/var/lib/redis'
 
-CENTOS_DEFAULT_PIDFILE = '/var/run/redis/redis.pid'
-UBUNTU_DEFAULT_PIDFILE = '/var/run/redis/redis-server.pid'
+DEFAULT_PID_DIR = '/var/run/redis' if os.path.isdir('/var/run/redis') else '/var/run'
+CENTOS_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR,'redis.pid')
+UBUNTU_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR,'redis-server.pid')
 DEFAULT_PIDFILE = UBUNTU_DEFAULT_PIDFILE if disttool.is_ubuntu() else CENTOS_DEFAULT_PIDFILE
 
 REDIS_USER = 'redis'	
@@ -903,7 +904,7 @@ def get_log_path(port=DEFAULT_PORT):
 
 
 def get_pidfile(port=DEFAULT_PORT):
-	return '/var/run/redis/redis-server.%s.pid' % port
+	return os.path.join(DEFAULT_PID_DIR,'/edis-server.%s.pid' % port)
 
 
 def create_redis_conf_copy(port=DEFAULT_PORT):
