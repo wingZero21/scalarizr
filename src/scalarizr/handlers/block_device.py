@@ -147,7 +147,7 @@ class BlockDeviceHandler(handlers.Handler):
 						raise
 					finally:
 						if bus.initialization_op:
-							bus.initialization_op.__exit__()
+							bus.initialization_op.__exit__(*())
 
 				else:
 					entry = mtab.find(vol.device)[0]
