@@ -904,7 +904,7 @@ def get_log_path(port=DEFAULT_PORT):
 
 
 def get_pidfile(port=DEFAULT_PORT):
-	return os.path.join(DEFAULT_PID_DIR,'/edis-server.%s.pid' % port)
+	return os.path.join(DEFAULT_PID_DIR,'redis-server.%s.pid' % port)
 
 
 def create_redis_conf_copy(port=DEFAULT_PORT):
