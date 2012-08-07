@@ -139,10 +139,13 @@ class Redisd(object):
 					snap_dst = os.path.join(base_dir, get_snap_db_filename(DEFAULT_PORT))
 					if os.path.exists(snap_src) and not os.path.exists(snap_dst):
 						shutil.move(snap_src, snap_dst)
+						self.redis_conf.dbfilename = snap_dst
 					aof_src = os.path.join(base_dir, AOF_FILENAME)
 					aof_dst = os.path.join(base_dir, get_aof_db_filename(DEFAULT_PORT))
 					if os.path.exists(aof_src) and not os.path.exists(aof_dst):
 						shutil.move(aof_src, aof_dst)
+						self.redis_conf.appendfilename = aof_dst
+						
 				
 				LOG.debug('Starting %s on port %s' % (BIN_PATH, self.port))
 				system2('%s %s -s %s -c "%s %s"'%(SU_EXEC, DEFAULT_USER, BASH, BIN_PATH, self.config_path), shell=True, close_fds=True, preexec_fn=os.setsid)
