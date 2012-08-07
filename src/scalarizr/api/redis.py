@@ -198,13 +198,15 @@ class RedisAPI(object):
 		except PopenError,e:
 			p = []
 		LOG.debug('Running redis processes: %s' % p)
-		LOG.debug('PORTS_RANGE: %s' % PORTS_RANGE)
+		#LOG.debug('PORTS_RANGE: %s' % PORTS_RANGE)
 		for redis_process in p:
-			LOG.debug('checking redis process: %s' % redis_process)
+			#LOG.debug('checking redis process: %s' % redis_process)
 			for port in PORTS_RANGE:
 				conf_name = redis_service.get_redis_conf_basename(port)
-				LOG.debug('checking config %s in %s: %s' % (conf_name, redis_process,conf_name in redis_process))
+				#LOG.debug('checking config %s in %s: %s' % (conf_name, redis_process,conf_name in redis_process))
 				if conf_name in redis_process:
+					busy_ports.append(port)
+				elif redis_service.DEFAULT_PORT == port and redis_service.DEFAULT_CONF_PATH in redis_process:
 					busy_ports.append(port)
 		LOG.debug('busy_ports: %s' % busy_ports)
 		return busy_ports
@@ -221,6 +223,17 @@ class RedisAPI(object):
 		passwords = []
 		for port in self.busy_ports:
 			conf_path = redis_service.get_redis_conf_path(port)
+			
+			if port == redis_service.DEFAULT_PORT:
+				args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
+				out = system2(args, silent=True)[0].split('\n')
+				try:
+					p = [x for x in out if x and BIN_PATH in x and redis_service.DEFAULT_CONF_PATH in x]
+				except PopenError,e:
+					p = []
+				if p:
+					conf_path = redis_service.DEFAULT_CONF_PATH
+					
 			LOG.debug('Got config path %s for port %s' % (conf_path, port))
 			redis_conf = redis_service.RedisConf(conf_path)
 			password = redis_conf.requirepass

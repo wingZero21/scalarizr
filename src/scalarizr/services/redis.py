@@ -109,19 +109,23 @@ initdv2.explore(SERVICE_NAME, RedisInitScript)
 	
 	
 class Redisd(object):
-
+	
+	config_path = None
 	redis_conf = None
+	port = None
+	cli = None
 	
 	
-	def __init__(self, config_path=None):
+	def __init__(self, config_path=None, port=None):
 		self.config_path = config_path
 		self.redis_conf = RedisConf(config_path)
-		self.cli = RedisCLI(self.redis_conf.requirepass, self.redis_conf.port)
+		self.port = port or self.redis_conf.port
+		self.cli = RedisCLI(self.redis_conf.requirepass, self.port)
 	
 	
 	@classmethod
-	def find(cls, config_obj=None):
-		return cls(config_obj.path)
+	def find(cls, config_obj=None, port=None):
+		return cls(config_obj.path, port)
 
 
 	def start(self):
@@ -129,7 +133,7 @@ class Redisd(object):
 			if not self.running:
 		
 				#TODO: think about moving this code elsewhere
-				if self.redis_conf.port == DEFAULT_PORT:
+				if self.port == DEFAULT_PORT:
 					base_dir = self.redis_conf.dir
 					snap_src = os.path.join(base_dir, DB_FILENAME)
 					snap_dst = os.path.join(base_dir, get_snap_db_filename(DEFAULT_PORT))
@@ -140,7 +144,7 @@ class Redisd(object):
 					if os.path.exists(aof_src) and not os.path.exists(aof_dst):
 						shutil.move(aof_src, aof_dst)
 				
-				LOG.debug('Starting %s on port %s' % (BIN_PATH, self.redis_conf.port))
+				LOG.debug('Starting %s on port %s' % (BIN_PATH, self.port))
 				system2('%s %s -s %s -c "%s %s"'%(SU_EXEC, DEFAULT_USER, BASH, BIN_PATH, self.config_path), shell=True, close_fds=True, preexec_fn=os.setsid)
 				wait_until(lambda: self.running, timeout=MAX_START_TIMEOUT)
 				wait_until(lambda: self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
@@ -152,7 +156,7 @@ class Redisd(object):
 	
 	def stop(self, reason=None):
 		if self.running:
-			LOG.info('Stopping redis server on port %s (pid %s). Reason: %s' % (self.redis_conf.port, self.pid, reason))
+			LOG.info('Stopping redis server on port %s (pid %s). Reason: %s' % (self.port, self.pid, reason))
 			os.kill(int(self.pid), signal.SIGTERM)
 			wait_until(lambda: not self.running, timeout=MAX_START_TIMEOUT)
 		
@@ -174,7 +178,7 @@ class Redisd(object):
 		except:
 			out = ''
 		is_config_matches = self.config_path in out
-		if not is_config_matches and int(self.redis_conf.port) == DEFAULT_PORT:
+		if not is_config_matches and int(self.port) == DEFAULT_PORT:
 			is_config_matches = DEFAULT_CONF_PATH in out
 		return BIN_PATH in out and is_config_matches	
 	
@@ -194,7 +198,7 @@ class Redisd(object):
 			pid = open(pidfile).read().strip()
 		else:
 			LOG.debug('No pid found in pidfile %s' % pidfile)
-		LOG.debug('Redis process on port %s has pidfile %s and pid %s' % (self.redis_conf.port, pidfile, pid))	
+		LOG.debug('Redis process on port %s has pidfile %s and pid %s' % (self.port, pidfile, pid))	
 		return pid
 
 
@@ -420,7 +424,7 @@ class Redis(BaseService):
 		
 		
 	def _get_service(self):
-		return self._get('service', Redisd.find, self.redis_conf)
+		return self._get('service', Redisd.find, self.redis_conf, self.port)
 		
 		
 	def _set_service(self, obj):
