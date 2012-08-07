@@ -904,9 +904,17 @@ def get_log_path(port=DEFAULT_PORT):
 
 
 def get_pidfile(port=DEFAULT_PORT):
-	return os.path.join(DEFAULT_PID_DIR,'redis-server.%s.pid' % port)
-
-
+	
+	pid_file = os.path.join(DEFAULT_PID_DIR,'redis-server.%s.pid' % port)
+	'''
+	fix for ubuntu1004
+	'''
+	if not os.path.exists(pid_file):
+		open(pid_file, 'w').close()
+	rchown('redis', pid_file)
+	return pid_file
+	
+	
 def create_redis_conf_copy(port=DEFAULT_PORT):
 	if not os.path.exists(DEFAULT_CONF_PATH):
 		raise ServiceError('Default redis config %s does not exist' % DEFAULT_CONF_PATH)
