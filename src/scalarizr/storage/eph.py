@@ -25,6 +25,7 @@ import hashlib
 import logging
 import time
 import os
+import sys
 
 LVM_EXTENT_SIZE = 4*1024*1024
 
@@ -260,6 +261,7 @@ class EphSnapshotProviderLite(object):
 	_upload_queue= None
 	_chunks_md5 = None
 	_read_finished = None
+	_inner_exc_info = None
 	
 	def __init__(self, chunk_size=100):
 		self.chunk_size			= chunk_size		
@@ -273,6 +275,7 @@ class EphSnapshotProviderLite(object):
 		self._download_finished = threading.Event()
 		self._slot_available	= threading.Semaphore(2)
 		self._transfer_cls  	= Transfer
+		self._inner_exc_info	= None
 	
 	def create(self, volume, snapshot, tranzit_path, complete_cb=None):
 		try:
@@ -324,28 +327,36 @@ class EphSnapshotProviderLite(object):
 					uploaders.append(uploader)
 
 				compress.wait()
-				err = compress.communicate()[1]
 				if compress.returncode:
-					raise StorageError('%s process terminated with exit code %s. <err>: %s' % (compress.returncode, err))				
+					raise StorageError('%s process terminated with exit code %s. <err>: %s' % (compress.returncode, compress.stderr.read()))				
 					
 				split.join()
+
 				for uploader in uploaders:
 					uploader.join()
 				
+				if self._inner_exc_info:
+					t, e, s = self._inner_exc_info
+					raise t, e, s
 
 			finally:
 				umount(snap_mpoint, options=('-f',))
 				os.rmdir(snap_mpoint)
 				self._lvm.remove_lv(snap_lv)
+				self._inner_exc_info = None
 			self._state_map[snapshot.id] = Snapshot.COMPLETED
 		except (Exception, BaseException), e:
 			self._state_map[snapshot.id] = Snapshot.FAILED
 			self._logger.exception('Snapshot creation failed. %s' % e)
 		finally:
-			if complete_cb:
-				complete_cb()
+			try:
+				if complete_cb:
+					complete_cb()
+			except:
+				self._logger.warn('complete_cb() failed', exc_info=sys.exc_info())
 	
 	def _split(self, stdin, tranzit_path, chunk_prefix, snapshot):
+		chunk_fp = None
 		try:
 			self._read_finished.clear()
 			chunk_max_size = 100*1024*1024
@@ -399,9 +410,14 @@ class EphSnapshotProviderLite(object):
 					chunk_md5 = hashlib.md5()
 					index += 1
 					chunk_size = 0
+		except:
+			self._inner_exc_info = sys.exc_info()
 		finally:
 			self._read_finished.set()
 			stdin.close()
+			if chunk_fp and not chunk_fp.closed:
+				chunk_fp.close()
+			
 
 		
 	def _uploader(self, dst, snapshot):
@@ -579,200 +595,3 @@ class DeviceRestoreStrategy(RestoreStrategy):
 		if ret_code:
 			raise StorageError('Snapshot decompression failed.')		
 
-"""
-class EphSnapshotProvider(object):
-
-	MANIFEST_NAME 		= 'manifest.ini'
-	SNAPSHOT_LV_NAME 	= 'snap'	
-	
-	chunk_size = None
-	'''	Data chunk size in Mb '''
-
-	_logger = None	
-	_transfer = None
-	_lvm = None
-	_state_map = None
-	
-	def __init__(self, chunk_size=100):
-		self.chunk_size = chunk_size		
-		self._logger = logging.getLogger(__name__)
-		self._transfer = Transfer()
-		self._lvm = Lvm2()
-		self._state_map = dict()
-	
-	def create(self, volume, snapshot, complete_cb=None):
-		if snapshot.id in self._state_map:
-			raise StorageError('Snapshot %s is already %s. Cannot create it again' % (
-					snapshot.id, self._state_map[snapshot.id]))
-		self._state_map[snapshot.id] = Snapshot.CREATING
-		self.prepare_tranzit_vol(volume.tranzit_vol)
-		snap_lv = self._lvm.create_lv_snapshot(volume.devname, self.SNAPSHOT_LV_NAME, extents='100%FREE')
-		self._logger.info('Created LVM snapshot %s for volume %s', snap_lv, volume.device)
-		t = threading.Thread(name='%s creator' % snapshot.id, target=self._create, 
-							args=(volume, snapshot, snap_lv))
-		t.start()
-		return snapshot
-
-	def prepare_tranzit_vol(self, vol):
-		os.makedirs(vol.mpoint)
-		vol.mkfs()
-		vol.mount()
-		
-	def cleanup_tranzit_vol(self, vol):
-		vol.umount()
-		if os.path.exists(vol.mpoint):
-			os.rmdir(vol.mpoint)
-
-	def _create(self, volume, snapshot, snap_lv):
-		try:
-			tranzit_path = volume.tranzit_vol.mpoint
-			chunk_prefix = '%s.data' % snapshot.id			
-			try:
-				self._copy_gzip_split(snap_lv, tranzit_path, chunk_prefix)
-			finally:
-				self._lvm.remove_lv(snap_lv)
-			#snapshot.lvm_group_cfg = lvm_group_b64(snapshot.vg)			
-			snapshot.path = self._write_manifest(snapshot, tranzit_path, chunk_prefix)
-			snapshot.path = self._upload(volume, snapshot, tranzit_path)
-			self._state_map[snapshot.id] = Snapshot.COMPLETED
-		except:
-			self._state_map[snapshot.id] = Snapshot.FAILED
-			self._logger.exception('Snapshot creation failed')
-		finally:
-			self.cleanup_tranzit_vol(volume.tranzit_vol)
-
-	def _copy_gzip_split(self, device, tranzit_path, chunk_prefix):
-		''' Copy | gzip | split snapshot into tranzit volume directory '''
-		self._logger.info('Packing %s -> %s', device, tranzit_path)		
-		cmd1 = ['dd', 'if=%s' % device]
-		cmd2 = ['gzip', '-1']
-		cmd3 = ['split', '-a','3', '-d', '-b', '%sm' % self.chunk_size, '-', '%s/%s.gz.' % 
-				(tranzit_path, chunk_prefix)]
-		p1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		p2 = subprocess.Popen(cmd2, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		p3 = subprocess.Popen(cmd3, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		out, err = p3.communicate()
-
-		if p3.returncode:
-			p1.stdout.close()
-			p2.stdout.close()				
-			p1.wait()
-			p2.wait()
-			raise StorageError('Error during coping LVM snapshot device (code: %d) <out>: %s <err>: %s' % 
-					(p3.returncode, out, err))
-
-	def _write_manifest(self, snapshot, tranzit_path, chunk_prefix):
-		''' Make snapshot manifest '''
-		manifest_path = os.path.join(tranzit_path, '%s.%s' % (snapshot.id, self.MANIFEST_NAME))		
-		self._logger.info('Writing snapshot manifest file in %s', manifest_path)
-		config = Configuration('ini')
-		config.add('snapshot/description', snapshot.description, force=True)
-		config.add('snapshot/created_at', time.strftime("%Y-%m-%d %H:%M:%S"))
-		config.add('snapshot/pack_method', 'gzip') # Not used yet
-		for chunk in glob.glob(os.path.join(tranzit_path, chunk_prefix + '*')):
-			config.add('chunks/%s' % os.path.basename(chunk), self._md5sum(chunk), force=True)
-		
-		config.write(manifest_path)
-		
-		return manifest_path
-	
-	def _upload(self, volume, snapshot, tranzit_path):
-		''' Upload manifest and chunks to cloud storage '''
-		mnf = Configuration('ini')
-		mnf.read(snapshot.path)
-		num_chunks = len(mnf.options('chunks'))
-		self._logger.info('Uploading %d chunks into cloud storage (total transfer: %dMb)', 
-						num_chunks, self.chunk_size*num_chunks)		
-		
-		files = [snapshot.path]
-		files += [os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks')]
-		
-		return self._transfer.upload(files, volume.snap_backend['path'])[0]	
-	
-	def restore(self, volume, snapshot, tranzit_path):
-		# Load manifest
-		mnf = Configuration('ini')
-		mnf.read(os.path.join(tranzit_path, os.path.basename(snapshot.path)))
-		
-		# Checksum
-		for chunk, md5sum_o in mnf.items('chunks'):
-			chunkpath = os.path.join(tranzit_path, chunk)
-			md5sum_a = self._md5sum(chunkpath)
-			if md5sum_a != md5sum_o:
-				raise StorageError(
-						'Chunk file %s checksum mismatch. Actual md5sum %s != %s defined in snapshot manifest', 
-						chunkpath, md5sum_a, md5sum_o)
-
-		# Restore chunks 
-		self._logger.info('Unpacking snapshot from %s -> %s', tranzit_path, volume.devname)
-		chunks = list(os.path.join(tranzit_path, chunk) for chunk in mnf.options('chunks'))
-		chunks.sort()
-		#self._gunzip_subprocess(chunks, volume.devname)
-		self._gunzip_native(chunks, volume.devname)
-
-	def _gunzip_subprocess(self, chunks, device):
-		self._logger.debug('Decompress chunks with `cat | gunzip`')
-		cat = ['cat']
-		cat.extend(chunks)
-		gunzip = ['gunzip']
-		dest = open(device, 'w')
-		#Todo: find out where to extract file
-		try:
-			p1 = subprocess.Popen(cat, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			p2 = subprocess.Popen(gunzip, stdin=p1.stdout, stdout=dest, stderr=subprocess.PIPE)
-			out, err = p2.communicate()
-			if p2.returncode:
-				p1.stdout.close()
-				p1.wait()
-				raise StorageError('Error during snapshot restoring (code: %d) <out>: %s <err>: %s' % 
-						(p2.returncode, out, err))
-		finally:
-			dest.close()			
-
-	def _gunzip_native(self, chunks, device):
-		self._logger.debug('Decompress chunks with zlib')
-		dest = open(device, 'w')
-		try:
-			dec = zlib.decompressobj(16 + zlib.MAX_WBITS)
-			for chunk in chunks:
-				fp = None
-				try:
-					fp = open(chunk, 'r')
-					while True:
-						data = fp.read(8192)
-						if not data:
-							break
-						dest.write(dec.decompress(data))
-				finally:
-					if fp:
-						fp.close()
-		finally:
-			dest.close()
-
-	def get_snapshot_state(self, snapshot):
-		return self._state_map[snapshot.id]
-
-	def download(self, volume, snapshot, tranzit_path):
-		# Load manifest
-		mnf_path = self._transfer.download(snapshot.path, tranzit_path)[0]
-		mnf = Configuration('ini')
-		mnf.read(mnf_path)
-		
-		# Load files
-		remote_path = os.path.dirname(snapshot.path)
-		files = tuple(os.path.join(remote_path, chunk) for chunk in mnf.options('chunks'))
-		self._transfer.download(files, tranzit_path)
-
-	def _md5sum(self, file, block_size=4096):
-		fp = open(file, 'rb')
-		try:
-			md5 = hashlib.md5()
-			while True:
-				data = fp.read(block_size)
-				if not data:
-					break
-				md5.update(data)
-			return binascii.hexlify(md5.digest())
-		finally:
-			fp.close()
-"""			

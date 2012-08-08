@@ -15,6 +15,7 @@ from scalarizr.util import fstool, wait_until
 import os
 import logging
 from scalarizr.storage import Storage, Volume
+import sys
 
 
 
@@ -47,6 +48,9 @@ class BlockDeviceHandler(handlers.Handler):
 			"block_device_mounted"
 		)
 		
+		self._phase_plug_volume = 'Configure storage'
+		
+		
 	def on_reload(self):
 		self._platform = bus.platform
 		self._queryenv = bus.queryenv_service
@@ -62,13 +66,6 @@ class BlockDeviceHandler(handlers.Handler):
 		except AttributeError:
 			pass
 
-	def get_initialization_phases(self, hir_message):
-		self._phase_plug_volume = 'Configure storage'		
-		
-		mpoint = self._queryenv.list_ebs_mountpoints()
-		if mpoint:
-			return {'host_init_response': [{'name': self._phase_plug_volume, 'steps': []}]}
-		
 
 	def on_before_host_init(self, *args, **kwargs):
 		self._logger.debug("Adding udev rule for EBS devices")
@@ -125,7 +122,9 @@ class BlockDeviceHandler(handlers.Handler):
 			if mpoint:
 				mtab = fstool.Mtab()
 				if not mtab.contains(vol.device, reload=True):
-					with bus.initialization_op.step('Mount device %s to %s' % (vol.device, vol.mpoint)):					
+					if bus.initialization_op:
+						bus.initialization_op.step('Mount device %s to %s' % (vol.device, vol.mpoint)).__enter__()
+					try:
 						self._logger.debug("Mounting device %s to %s", vol.device, vol.mpoint)
 						try:
 							fstool.mount(vol.device, vol.mpoint, auto_mount=True)
@@ -142,6 +141,13 @@ class BlockDeviceHandler(handlers.Handler):
 							device_name = vol.ebs_device
 						), broadcast=True, wait_subhandler=True)
 						bus.fire("block_device_mounted", volume_id=qe_volume.volume_id, device=vol.device)
+					except:
+						if bus.initialization_op:
+							bus.initialization_op.__exit__(sys.exc_info())
+						raise
+					finally:
+						if bus.initialization_op:
+							bus.initialization_op.__exit__(*())
 
 				else:
 					entry = mtab.find(vol.device)[0]

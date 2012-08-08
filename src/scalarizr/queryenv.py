@@ -77,8 +77,7 @@ class QueryEnvService(object):
 						resp_body = e.read() if e.fp is not None else ""
 						raise QueryEnvError, "Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body), sys.exc_traceback
 					else:
-						host, port = urllib.splitnport(req.host, req.port or 80)
-						raise QueryEnvError, "Cannot connect to QueryEnv server on %s:%s. %s" % (host, port, str(e)), sys.exc_traceback
+						raise QueryEnvError, "Cannot connect to QueryEnv server on %s. %s" % (url, str(e)), sys.exc_traceback
 			except:
 				if 'not supported' in str(sys.exc_info()[1]):
 					raise
@@ -550,4 +549,5 @@ def xml2dict(el):
 			return dict((ch.tag, xml2dict(ch)) for ch in el)
 	else:
 		return el.text
+
 

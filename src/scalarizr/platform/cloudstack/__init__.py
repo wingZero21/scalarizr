@@ -7,6 +7,7 @@ import logging
 from scalarizr.bus import bus
 from scalarizr.platform import Platform, PlatformError
 from . import storage
+from scalarizr import util
 
 import cloudstack
 
@@ -23,7 +24,11 @@ class CloudStackPlatform(Platform):
 		Platform.__init__(self)
 		
 		# Find the virtual router.
-		eth0leases = '/var/lib/dhclient/dhclient-eth0.leases'
+		eth0leases = util.firstmatched(lambda x: os.path.exists(x), 
+									['/var/lib/dhcp/dhclient-eth0.leases',
+									'/var/lib/dhcp3/dhclient-eth0.leases',
+									'/var/lib/dhclient/dhclient-eth0.leases'],
+									'/var/lib/dhclient/dhclient-eth0.leases') 
 		if not os.path.exists(eth0leases):
 			raise PlatformError("Can't find virtual router. file %s not exists" % eth0leases)
 		

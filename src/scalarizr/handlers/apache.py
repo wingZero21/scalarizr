@@ -18,7 +18,7 @@ from scalarizr.messaging import Messages
 from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 	NoPathError, strip_quotes
 from scalarizr.util import disttool, firstmatched, software, wait_until
-from scalarizr.util import initdv2, system2
+from scalarizr.util import initdv2, system2, dynimp
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.filetool import read_file, write_file
@@ -289,6 +289,16 @@ class ApacheHandler(ServiceCtlHandler):
 				
 			self._logger.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
 			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
+			
+			#fixing bug in rpaf 0.6-2
+			pm = dynimp.package_mgr()
+			if '0.6-2' == pm.installed('libapache2-mod-rpaf'):
+				try:
+					self._logger.debug('Patching IfModule value in rpaf.conf')
+					rpaf.set("./IfModule[@value='mod_rpaf.c']", {'value': 'mod_rpaf-2.0.c'})
+				except NoPathError:
+					pass
+			
 			rpaf.write(file)
 			st = os.stat(self._httpd_conf_path)
 			os.chown(file, st.st_uid, st.st_gid)

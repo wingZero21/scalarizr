@@ -1023,7 +1023,7 @@ class MongoDBHandler(ServiceCtlHandler):
 					self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
 									BEHAVIOUR, cloud_storage_path, backup_filename)
 			
-			result = list(dict(path=path, size=size) for path in cloud_files for size in sizes)
+			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))
 			op.ok(data=result)
 			
 			# Notify Scalr

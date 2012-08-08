@@ -518,7 +518,7 @@ class MysqlHandler(DBMSRHandler):
 				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
 								cloud_storage_path, backup_filename)
 			
-			result = list(dict(path=path, size=size) for path in cloud_files for size in sizes)								
+			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))								
 			op.ok(data=result)
 			
 			# Notify Scalr
@@ -806,6 +806,14 @@ class MysqlHandler(DBMSRHandler):
 		data_dir = os.path.join(path, mysql_svc.STORAGE_DATA_DIR) if path else DATA_DIR
 		binlog_base = os.path.join(path, mysql_svc.STORAGE_BINLOG) if path else default_binlog_base
 		return os.path.exists(data_dir) and glob.glob(binlog_base + '*')
+
+
+	def _change_selinux_ctx(self):
+		chcon = software.whereis('chcon')
+		if disttool.is_rhel() and chcon:
+			LOG.debug('Changing SELinux file security context for new mysql datadir')
+			system2((chcon[0], '-R', '-u', 'system_u', '-r',
+					 'object_r', '-t', 'mysqld_db_t', os.path.dirname(STORAGE_PATH)), raise_exc=False)
 	
 		
 	def _init_master(self, message):
@@ -849,6 +857,7 @@ class MysqlHandler(DBMSRHandler):
 				self.mysql.my_cnf.expire_logs_days = 10
 				self.mysql.my_cnf.skip_locking = False				
 				self.mysql.move_mysqldir_to(STORAGE_PATH)
+				self._change_selinux_ctx()
 
 		
 			with op.step(self._step_patch_conf):
@@ -935,6 +944,7 @@ class MysqlHandler(DBMSRHandler):
 	
 			with op.step(self._step_move_datadir):
 				self.mysql.move_mysqldir_to(STORAGE_PATH)
+				self._change_selinux_ctx()
 				self.mysql._init_replication(master=False)
 				self._copy_debian_cnf_back()
 				
