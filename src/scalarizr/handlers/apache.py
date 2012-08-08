@@ -277,7 +277,7 @@ class ApacheHandler(ServiceCtlHandler):
 			rpaf.read(file)
 			
 			if operation == 'add' or operation == 'remove':
-				proxy_ips = set(re.split(r'\s+', rpaf.get('//RPAFproxy_ips')))
+				proxy_ips = set(re.split(r'\s+', rpaf.get('.//RPAFproxy_ips')))
 				if operation == 'add':
 					proxy_ips |= set(ips)
 				else:
@@ -288,10 +288,10 @@ class ApacheHandler(ServiceCtlHandler):
 				proxy_ips.add('127.0.0.1')
 				
 			self._logger.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
-			rpaf.set('//RPAFproxy_ips', ' '.join(proxy_ips))
+			rpaf.set('.//RPAFproxy_ips', ' '.join(proxy_ips))
 			
 			#fixing bug in rpaf 0.6-2
-			if not disttool.is_debian_based():
+			if disttool.is_debian_based():
 				pm = dynimp.package_mgr()
 				if '0.6-2' == pm.installed('libapache2-mod-rpaf'):
 					try:

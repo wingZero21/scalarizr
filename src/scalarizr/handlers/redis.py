@@ -256,6 +256,8 @@ class RedisHandler(ServiceCtlHandler):
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
+		if self.default_service.running:
+			self.default_service.stop('Treminating default redis instance')
 		self._insert_iptables_rules()		
 
 
