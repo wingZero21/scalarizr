@@ -15,6 +15,11 @@ if sys.version_info[0:2] >= (2, 7):
 	from xml.etree import ElementTree as ET 
 else:
 	from scalarizr.externals.etree import ElementTree as ET
+from scalarizr.queryenv import XmlDictConfig
+if sys.version_info[0:2] >= (2, 7):
+	from xml.etree import ElementTree as ET 
+else:
+	from scalarizr.externals.etree import ElementTree as ET
 
 RESOURCE_PATH = '/Users/dmitry/Documents/workspace/scalarizr-active-sprint/tests/unit/fixtures/queryenv/'
 

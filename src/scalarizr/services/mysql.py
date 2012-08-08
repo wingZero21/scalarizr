@@ -19,6 +19,7 @@ import shutil
 import socket
 import errno
 
+
 from pymysql import cursors
 
 from scalarizr.config import BuiltinBehaviours

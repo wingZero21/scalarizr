@@ -169,8 +169,3 @@ class BaseConfig(object):
 			
 class ServiceError(BaseException):
 	pass
-
-	
-
-class ServiceError(BaseException):
-	pass

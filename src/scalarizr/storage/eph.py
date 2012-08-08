@@ -331,6 +331,7 @@ class EphSnapshotProviderLite(object):
 					raise StorageError('%s process terminated with exit code %s. <err>: %s' % (compress.returncode, compress.stderr.read()))				
 					
 				split.join()
+
 				for uploader in uploaders:
 					uploader.join()
 				

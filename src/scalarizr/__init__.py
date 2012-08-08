@@ -133,7 +133,8 @@ _logging_configured = False
 _api_routes = {
 	'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
 	'sysinfo': 'scalarizr.api.sysinfo.SysInfoAPI',
-	'storage': 'scalarizr.api.storage.StorageAPI'
+	'storage': 'scalarizr.api.storage.StorageAPI',
+	'redis': 'scalarizr.api.redis.RedisAPI'
 }
 
 

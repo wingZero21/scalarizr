@@ -327,7 +327,7 @@ class ServiceCtlHandler(Handler):
 	_init_script = None
 	_preset_store = None
 	
-	def __init__(self, service_name, init_script, cnf_ctl=None):
+	def __init__(self, service_name, init_script=None, cnf_ctl=None):
 		self._logger = logging.getLogger(__name__)		
 		
 		self._service_name = service_name

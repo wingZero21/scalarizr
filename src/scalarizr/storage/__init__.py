@@ -404,6 +404,14 @@ class Volume(VolumeConfig, Observable):
 			# ephemeral block device -> xen device			
 			device = get_system_devname(device)
 			
+				
+		# sometimes on m1.small instead of sda2 we saw sdb
+		if device == '/dev/sda2' and not os.path.exists('/dev/sda2'):
+			if os.path.exists('/dev/sdb'):
+				device = '/dev/sdb'
+			elif os.path.exists('/dev/xvdb'):
+				device = '/dev/xvdb'
+			
 		self.device = device
 		
 		self.mpoint = mpoint
