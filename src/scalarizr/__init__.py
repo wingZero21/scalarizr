@@ -587,12 +587,15 @@ def _shutdown_services(force=False):
 
 def _cleanup_after_rebundle():
 	cnf = bus.cnf
+	pl = bus.platform
 	logger = logging.getLogger(__name__)
-	# Destory mysql storages
-	if os.path.exists(cnf.private_path('storage/mysql.json')):
-		logger.info('Cleanuping old MySQL storage')
-		vol = Storage.create(Storage.restore_config(cnf.private_path('storage/mysql.json')))
-		vol.destroy(force=True)				
+	
+	if 'volumes' not in pl.features:
+		# Destory mysql storages
+		if os.path.exists(cnf.private_path('storage/mysql.json')):
+			logger.info('Cleanuping old MySQL storage')
+			vol = Storage.create(Storage.restore_config(cnf.private_path('storage/mysql.json')))
+			vol.destroy(force=True)				
 	
 	# Reset private configuration
 	priv_path = cnf.private_path()
