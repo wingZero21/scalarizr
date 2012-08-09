@@ -190,15 +190,9 @@ class EbsVolumeProvider(VolumeProvider):
 					device = kwargs.get('device')
 					device = get_free_devname(device)
 
-					try:
-						self._logger.debug('Attaching EBS to this instance')
-						device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device,
-							to_me=True, logger=self._logger)[1]
-					except:
-						if not os.path.exists(ebstool.real_devname(device)):
-							with self.letters_lock:
-								self.acquired_letters.remove(device[-1])
-						raise
+					self._logger.debug('Attaching EBS to this instance')
+					device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device,
+						to_me=True, logger=self._logger)[1]
 
 			except:
 				self._logger.debug('Caught exception')
@@ -212,6 +206,8 @@ class EbsVolumeProvider(VolumeProvider):
 			finally:
 				if delete_snap and snap_id:
 					conn.delete_snapshot(snap_id)
+				if device[-1] in self.acquired_letters:
+					self.acquired_letters.remove(device[-1])
 					
 			
 			kwargs['device'] = device
