@@ -12,6 +12,7 @@ from scalarizr.util.filetool import read_file
 from scalarizr.util import dynimp
 
 import re
+import time
 import binascii
 from scalarizr.storage import StorageError
 try:
@@ -276,7 +277,14 @@ class Lvm2:
 		system((VGREMOVE, '-ff', group), error_text='Cannot remove volume group')
 	
 	def remove_lv(self, lvolume):
-		system((LVREMOVE, '-f', '%s/%s' % extract_vg_lvol(lvolume)), error_text='Cannot remove logical volume')
+		vol = '%s/%s' % extract_vg_lvol(lvolume)
+		# test that volume could be removed
+		# see https://bugzilla.redhat.com/show_bug.cgi?id=570359		
+		for _ in range(0, 3):
+			if not system((LVREMOVE, '--test', '--force', vol), raise_exc=False)[2]:
+				break
+			time.sleep(1)
+		system((LVREMOVE, '--force', vol), error_text='Cannot remove logical volume')
 		'''
 		lvi = self.lv_info(lvolume)
 		if 'a' in lvi.attr and not 's' in lvi.attr:
