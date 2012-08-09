@@ -351,16 +351,14 @@ class S3TransferProvider(TransferProvider):
 		try:
 			connection = self._get_connection()
 			
-			if not self._bucket_check_cache(bucket_name):
-				try:
-					bkt = connection.get_bucket(bucket_name, validate=False)
-					key = bkt.get_key(key_name)
-				except S3ResponseError, e:
-					if e.code in ('NoSuchBucket', 'NoSuchKey'):
-						raise TransferError("S3 path '%s' not found" % remote_path)
-					raise
-				# Cache container object
-				self._bucket = bkt				
+			try:
+				if not self._bucket_check_cache(bucket_name):					
+					self._bucket = connection.get_bucket(bucket_name, validate=False)
+				key = self._bucket.get_key(key_name)
+			except S3ResponseError, e:
+				if e.code in ('NoSuchBucket', 'NoSuchKey'):
+					raise TransferError("S3 path '%s' not found" % remote_path)
+				raise
 			
 			key.get_contents_to_filename(dest_path)			
 			return dest_path			
