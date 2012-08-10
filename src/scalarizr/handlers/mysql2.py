@@ -35,6 +35,7 @@ from scalarizr.util import system2, disttool, filetool, \
 # Libs
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
+from scalarizr.handlers.postgresql import snap_cnf
 
 if 'Percona Server' in system2((software.which('mysqld'), '-V'))[0] and disttool.is_redhat_based():
 	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.PERCONA
@@ -825,6 +826,7 @@ class MysqlHandler(DBMSRHandler):
 		LOG.info("Initializing MySQL master")
 		
 		with bus.initialization_op as op:
+			snap_cnf = None
 			with op.step(self._step_create_storage):		
 		
 				# Plug storage
@@ -883,10 +885,16 @@ class MysqlHandler(DBMSRHandler):
 				self._innodb_recovery()	
 				self.mysql.service.start()		
 		
-		with op.step(self._step_create_data_bundle):
-			# Get binary logfile, logpos and create storage snapshot
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
-			Storage.backup_config(snap.config(), self._snapshot_config_path)
+		if not snap_cnf:
+			with op.step(self._step_create_data_bundle):
+				# Get binary logfile, logpos and create storage snapshot
+				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
+		else:
+			LOG.debug('Skip data bundle, cause MySQL storage was initialized from snapshot')
+			log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
+			snap = snap_cnf
+			
 
 		with op.step(self._step_collect_hostup_data):
 			# Update HostUp message 
@@ -1008,14 +1016,14 @@ class MysqlHandler(DBMSRHandler):
 		ret = dict()
 		if bus.scalr_version >= (2, 2):
 			if vol:
-				ret['volume_config'] = vol.config()
+				ret['volume_config'] = vol.config() if not isinstance(vol, dict) else vol
 			if snap:
-				ret['snapshot_config'] = snap.config()
+				ret['snapshot_config'] = snap.config() if not isinstance(snap, dict) else snap
 		else:
 			if vol:
-				ret['volume_id'] = vol.config()['id']
+				ret['volume_id'] = vol.config()['id'] if not isinstance(vol, dict) else vol['id']
 			if snap:
-				ret['snapshot_id'] = snap.config()['id']
+				ret['snapshot_id'] = snap.config()['id'] if not isinstance(snap, dict) else snap['id']
 		return ret
 			
 
