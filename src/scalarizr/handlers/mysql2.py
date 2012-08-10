@@ -833,7 +833,7 @@ class MysqlHandler(DBMSRHandler):
 				volume_cnf = Storage.restore_config(self._volume_config_path)
 				try:
 					snap_cnf = Storage.restore_config(self._snapshot_config_path)
-					volume_cnf['snapshot'] = snap_cnf
+					volume_cnf['snapshot'] = snap_cnf.copy()
 				except IOError:
 					pass
 				self.storage_vol = self._plug_storage(mpoint=STORAGE_PATH, vol=volume_cnf)
