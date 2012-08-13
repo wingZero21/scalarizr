@@ -512,7 +512,7 @@ class MySQLDump(object):
 		self.root_password = root_password or ''
 	
 	def create(self, dbname, filename, opts=None, mysql_upgrade=True):
-		_opts = opts or []
+		_opts = opts and list(opts) or []
 		LOG.debug('Dumping database %s to %s' % (dbname, filename))
 		_opts = [MYSQLDUMP_PATH, '-u', self.root_user, '--password='+self.root_password] + opts + ['--databases']
 		try:
