@@ -27,6 +27,7 @@ from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import rchown
+import sys
 
 
 LOG = logging.getLogger(__name__)
@@ -510,12 +511,19 @@ class MySQLDump(object):
 		self.root_user = root_user or 'root'
 		self.root_password = root_password or ''
 	
-	def create(self, dbname, filename, opts=None):
+	def create(self, dbname, filename, opts=None, mysql_upgrade=True):
 		opts = opts or []
 		LOG.debug('Dumping database %s to %s' % (dbname, filename))
 		opts = [MYSQLDUMP_PATH, '-u', self.root_user, '--password='+self.root_password] + opts + ['--databases']
-		with open(filename, 'w') as fp: 
-			system2(opts + [dbname], stdout=fp)
+		try:
+			with open(filename, 'w') as fp: 
+				system2(opts + [dbname], stdout=fp)
+		except:
+			if 'Cannot load from mysql.proc. The table is probably corrupted' in str(sys.exc_info()[1]) and mysql_upgrade:
+				system2(('/usr/bin/mysql_upgrade', ), raise_exc=False)
+				self.create(dbname, filename, opts, mysql_upgrade=False)
+			else:
+				raise
 
 
 class RepicationWatcher(threading.Thread):
