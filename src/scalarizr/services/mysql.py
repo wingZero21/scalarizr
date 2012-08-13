@@ -512,12 +512,12 @@ class MySQLDump(object):
 		self.root_password = root_password or ''
 	
 	def create(self, dbname, filename, opts=None, mysql_upgrade=True):
-		opts = opts or []
+		_opts = opts or []
 		LOG.debug('Dumping database %s to %s' % (dbname, filename))
-		opts = [MYSQLDUMP_PATH, '-u', self.root_user, '--password='+self.root_password] + opts + ['--databases']
+		_opts = [MYSQLDUMP_PATH, '-u', self.root_user, '--password='+self.root_password] + opts + ['--databases']
 		try:
 			with open(filename, 'w') as fp: 
-				system2(opts + [dbname], stdout=fp)
+				system2(_opts + [dbname], stdout=fp)
 		except:
 			if 'Cannot load from mysql.proc. The table is probably corrupted' in str(sys.exc_info()[1]) and mysql_upgrade:
 				system2(('/usr/bin/mysql_upgrade', ), raise_exc=False)
