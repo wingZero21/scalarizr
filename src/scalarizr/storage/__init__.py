@@ -400,6 +400,12 @@ class Volume(VolumeConfig, Observable):
 			sdb = get_system_devname('/dev/sdb')
 			if os.path.exists(sdb):
 				device = sdb
+			else:
+				# ugly
+				from scalarizr.bus import bus
+				bdm = bus.platform.get_block_device_mapping()
+				if 'ephemeral0' in bdm:
+					device = get_system_devname(bdm['ephemeral0'])
 		elif device.startswith('/dev/sd') and not os.path.exists(device):
 			# ephemeral block device -> xen device			
 			device = get_system_devname(device)
