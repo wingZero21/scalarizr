@@ -96,7 +96,8 @@ class EbsVolumeProvider(VolumeProvider):
 		conn = self._new_ec2_conn()
 		
 		if conn:
-
+			device = kwargs.get('device')
+			
 			def get_free_devname(device):
 				if device:
 					device = ebstool.get_ebs_devname(device)
@@ -206,7 +207,7 @@ class EbsVolumeProvider(VolumeProvider):
 			finally:
 				if delete_snap and snap_id:
 					conn.delete_snapshot(snap_id)
-				if device[-1] in self.acquired_letters:
+				if device and device[-1] in self.acquired_letters:
 					self.acquired_letters.remove(device[-1])
 					
 			
