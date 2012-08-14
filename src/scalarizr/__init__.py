@@ -828,8 +828,8 @@ def main():
 				#_msg_thread.join(0.2)
 				try:
 					select.select([], [], [], 30)
-				except IOError, e:
-					if e.errno == 4:
+				except select.error, e:
+					if e.args[0] == 4:
 						# Interrupted syscall
 						continue
 					raise
