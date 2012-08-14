@@ -604,6 +604,10 @@ def _cleanup_after_rebundle():
 			continue
 		path = os.path.join(priv_path, file)
 		os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+		
+	# XXX: sometimes we got OperationalError: no such table: p2p_message after calling cleanup
+	# and db.sqlite has zero size. 
+	_init_db()
 
 def do_validate_cnf():
 	errors = list()
