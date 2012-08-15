@@ -515,6 +515,10 @@ class MySQLDump(object):
 		_opts = opts and list(opts) or []
 		LOG.debug('Dumping database %s to %s' % (dbname, filename))
 		_opts = [MYSQLDUMP_PATH, '-u', self.root_user, '--password='+self.root_password] + opts + ['--databases']
+		with open(filename, 'w') as fp: 
+			system2(_opts + [dbname], stdout=fp)
+		# commented cause mysql_upgrade hanged forever on devel roles
+		'''
 		try:
 			with open(filename, 'w') as fp: 
 				system2(_opts + [dbname], stdout=fp)
@@ -524,6 +528,7 @@ class MySQLDump(object):
 				self.create(dbname, filename, opts, mysql_upgrade=False)
 			else:
 				raise
+		'''
 
 
 class RepicationWatcher(threading.Thread):
