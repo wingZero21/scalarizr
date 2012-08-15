@@ -710,7 +710,7 @@ class MysqlHandler(DBMSRHandler):
 			# Start MySQL
 			self.mysql.service.start()
 		
-		if tx_complete and PlatformFeatures.VOLUMES in self._platform.features:
+		if tx_complete and PlatformFeatures.VOLUMES in self._platform.features and master_storage_conf['type'] != 'eph':
 			# Delete slave EBS
 			self.storage_vol.destroy(remove_disks=True)
 			self.storage_vol = new_storage_vol
