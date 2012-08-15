@@ -857,7 +857,7 @@ class MysqlHandler(DBMSRHandler):
 				
 				# Patch configuration
 				self.mysql.my_cnf.expire_logs_days = 10
-				#self.mysql.my_cnf.skip_external_locking = False				
+				self.mysql.my_cnf.skip_locking = False				
 				self.mysql.move_mysqldir_to(STORAGE_PATH)
 				self._change_selinux_ctx()
 
