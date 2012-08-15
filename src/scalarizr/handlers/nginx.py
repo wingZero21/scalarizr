@@ -21,6 +21,7 @@ from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2, disttool
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.filetool import read_file, write_file
+from scalarizr.services import BaseConfig, PresetProvider
 
 # Stdlibs
 import os, logging, shutil, re, time
@@ -511,4 +512,22 @@ class NginxHandler(ServiceCtlHandler):
 
 			msg = 'Writing virtualhosts to https.include'
 			write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
+
+				
+
+class NginxConf(BaseConfig):
 	
+		config_type = 'www'
+		config_name = 'nginx.conf'
+	
+				
+class NginxPresetProvider(PresetProvider):
+	
+	def __init__(self):
+		cnf = bus.cnf
+		ini = cnf.rawini
+		nginx_conf_path = os.path.join(os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)), 'nginx.conf')
+		config_objects = (NginxConf(nginx_conf_path),)
+		service = initdv2.lookup(SERVICE_NAME)
+		PresetProvider.__init__(service, config_objects)
+		

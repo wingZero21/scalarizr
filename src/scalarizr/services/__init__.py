@@ -91,6 +91,7 @@ class BaseService(object):
 	
 	
 class BaseConfig(object):
+	
 	'''
 	Parent class for object representations of postgresql.conf and recovery.conf which fortunately both have similar syntax
 	'''
@@ -102,20 +103,20 @@ class BaseConfig(object):
 	config_type = None
 	comment_empty = False
 	
+	
 	def __init__(self, path, autosave=True):
 		self._logger = logging.getLogger(__name__)
 		self.autosave = autosave
 		self.path = path
 		
+		
 	@classmethod
 	def find(cls, config_dir):
 		return cls(os.path.join(config_dir.path, cls.config_name))
 		
+		
 	def set(self, option, value):
-		if not self.data:
-			self.data = Configuration(self.config_type)
-			if os.path.exists(self.path):
-				self.data.read(self.path)
+		self._init_configuration()
 		if value:
 			self.data.set(option,str(value), force=True)
 		elif self.comment_empty: 
@@ -124,10 +125,12 @@ class BaseConfig(object):
 			self.save_data()
 			self.data = None
 			
+			
 	def set_path_type_option(self, option, path):
 		if not os.path.exists(path):
 			raise ValueError('%s %s does not exist' % (option, path))
 		self.set(option, path)		
+		
 		
 	def set_numeric_option(self, option, number):
 		try:
@@ -140,10 +143,7 @@ class BaseConfig(object):
 
 					
 	def get(self, option):
-		if not self.data:
-			self.data =  Configuration(self.config_type)
-			if os.path.exists(self.path):
-				self.data.read(self.path)	
+		self._init_configuration()	
 		try:
 			value = self.data.get(option)	
 		except NoPathError:
@@ -155,6 +155,7 @@ class BaseConfig(object):
 			self.data = None
 		return value
 	
+	
 	def get_numeric_option(self, option):
 		value = self.get(option)
 		try:
@@ -163,9 +164,72 @@ class BaseConfig(object):
 			raise ValueError('%s must be a number (got %s instead)' % (option, type(value)))
 		return value if value is None else int(value)
 	
+	
 	def save_data(self):
 		if self.data:
-			self.data.write(self.path)			
+			self.data.write(self.path)		
 			
+			
+	def to_dict(self, section=None):
+		self._init_configuration()
+		section = './' + section if section else './'		
+		try:
+			kv = dict(self.data.items())	
+		except NoPathError:
+			kv = {}
+		if self.autosave:
+			self.data = None
+		return kv
+	
+	
+	def apply_values(self, kv, section=None):
+		for option, value in kv.items():
+			path = '%s/%s' (section, option) if section else option
+			self.set(path, value)
+	
+	
+	def _init_configuration(self, file_path):
+		if not self.data:
+			self.data = Configuration(self.config_type)
+			if os.path.exists(self.path):
+				self.data.read(self.path)
+			
+				
 class ServiceError(BaseException):
 	pass
+
+
+class PresetProvider(object):
+	
+	service = None
+	config_data = None
+	
+	
+	def __init__(self, service, *config_objects, **kv):
+		self.service = service
+		self.config_data = kv or dict()
+		for obj in config_objects:
+			self.config_data[obj] = None
+			
+
+	def get_preset(self):
+		preset = {}
+		for obj, section in self.config_sections.items():
+			preset[obj.config_name] = obj.to_dict(section)
+		return preset
+			
+	
+	def set_preset(self, settings):
+		for obj in self.config_data:
+			if obj.config_name in settings:
+				obj.apply_values(settings[obj.config_name])
+			
+			
+	def config_test(self, path):
+		return self.service.configtest(path)
+	
+	
+	def restart(self, reason=None):
+		self.service.restart(reason)
+	
+		

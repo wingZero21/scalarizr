@@ -23,7 +23,7 @@ import errno
 from pymysql import cursors
 
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
+from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy, PresetProvider
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import rchown
@@ -766,6 +766,14 @@ def _add_apparmor_rules(directory):
 			except InitdError, e:
 				LOG.error('Cannot restart apparmor. %s', e)	
 
-		
+
+class MySQLPresetProvider(PresetProvider):
+	
+	def __init__(self):
+		service = initdv2.lookup(SERVICE_NAME)
+		config_objects = (MySQLConf(MYCNF_PATH),)
+		PresetProvider.__init__(service, config_objects)
+	
+
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
 

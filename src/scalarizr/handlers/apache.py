@@ -23,6 +23,7 @@ from scalarizr.util.initdv2 import InitdError
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr import filetool
+from scalarizr.services import PresetProvider, BaseConfig
 
 # Stdlibs
 import logging, os, re
@@ -685,3 +686,18 @@ class ApacheHandler(ServiceCtlHandler):
 						' Error: %s',	doc_root, sys.exc_value)
 			else:
 				self._logger.warn("Vhost config file `%s` not found.", vhost_path)
+				
+
+class ApacheConf(BaseConfig):
+	
+		config_type = 'app'
+		config_name = 'apache2.conf' if disttool.is_debian_based() else 'httpd.conf'
+	
+				
+class ApachePresetProvider(PresetProvider):
+	
+	def __init__(self):
+		service = initdv2.lookup(SERVICE_NAME)
+		config_objects = (ApacheConf(APACHE_CONF_PATH),)
+		PresetProvider.__init__(service, config_objects)
+		
