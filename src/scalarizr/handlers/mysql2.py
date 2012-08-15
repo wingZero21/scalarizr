@@ -948,6 +948,7 @@ class MysqlHandler(DBMSRHandler):
 				LOG.info("Changing configuration files")
 				if not self.mysql.my_cnf.datadir:
 					self.mysql.my_cnf.datadir = DEFAULT_DATADIR
+				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
 	
 			with op.step(self._step_move_datadir):
