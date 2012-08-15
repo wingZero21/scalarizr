@@ -3,12 +3,20 @@ Created on Dec 23, 2009
 
 @author: Dmytro Korsakov
 '''
+from __future__ import absolute_import
 import os
+import sys
 import unittest
 from xml.dom.minidom import parseString
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.util import xml_strip
-from szr_unittest import RESOURCE_PATH
+from scalarizr.queryenv import xml2dict
+if sys.version_info[0:2] >= (2, 7):
+	from xml.etree import ElementTree as ET 
+else:
+	from scalarizr.externals.etree import ElementTree as ET
+
+RESOURCE_PATH = '/Users/dmitry/Documents/workspace/scalarizr-active-sprint/tests/unit/fixtures/queryenv/'
 
 def get_xml_file(filename):
 	return os.path.realpath(os.path.join(RESOURCE_PATH, filename))
@@ -20,29 +28,30 @@ class Test(unittest.TestCase):
 	
 	def test_get_service_configuration_response(self):
 		xmlfile = get_xml_file("get-service-configuration_response.xml")
-		xml = xml_strip(parseString(open(xmlfile, "r").read()))
+		xml = open(xmlfile, "r").read()
 		ret = self._queryenv._read_get_service_configuration_response(xml, 'app')
-		print ret
 		self.assertFalse(ret is None)
 		self.assertTrue(type(ret.settings) is dict)
 		self.assertTrue(len(ret.settings))
+		self.assertTrue('__defaults__' in ret.settings)
 		self.assertTrue(type(ret.name) is type(""))
-		#self.assertEqual(ret.settings,{u'safe_mysqld/open_files_limit': u'8192', u'mysqld/wait_timeout': u'15'})
 		self.assertEqual(ret.name, "app-test")
 				
 	def test_get_latest_version_response(self):
 		xmlfile = get_xml_file("get_latest_version_response.xml")
-		xml = xml_strip(parseString(open(xmlfile, "r").read()))
+		xml = open(xmlfile, "r").read()
 		version = self._queryenv._read_get_latest_version_response(xml)
 		self.assertFalse(version is None)
 		self.assertEqual(version, "2009-03-05")
 	
 	def test_get_https_certificate_response(self):
 		xmlfile = get_xml_file("get_https_certificate_response.xml")
-		xml = parseString(open(xmlfile, "r").read())
-		xml = xml_strip(xml)
+		xml = open(xmlfile, "r").read()
 		cert = self._queryenv._read_get_https_certificate_response(xml)
-		self.assertFalse(cert is (None,None))
+		
+		self.assertFalse(cert is (None,None,None))
+		self.assertEqual(len(cert), 3)
+		self.assertEqual(cert[2], None)
 		self.assertEqual(cert[0], """-----BEGIN CERTIFICATE-----
 MIICATCCAWoCCQDVWoPxl2kzdzANBgkqhkiG9w0BAQUFADBFMQswCQYDVQQGEwJB
 VTETMBEGA1UECBMKU29tZS1TdGF0ZTEhMB8GA1UEChMYSW50ZXJuZXQgV2lkZ2l0
@@ -76,15 +85,14 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
 
 	def test_list_roles(self):
 		xmlfile = get_xml_file("list_roles_response.xml")
-		xml = parseString(open(xmlfile, "r").read())
-		xml = xml_strip(xml)
+		xml = open(xmlfile, "r").read()
 		
 		roles = self._queryenv._read_list_roles_response(xml)
 		role = roles[0]
 		self.assertFalse(roles is None)
-		self.assertEqual(len(roles), 3)
-		self.assertEqual(role.behaviour, ["mysql"])
-		self.assertEqual(role.name, "mysql-lvm")
+		self.assertEqual(len(roles), 2)
+		self.assertEqual(role.behaviour, ['app', "mysql"])
+		self.assertEqual(role.name, "lamp-custom")
 		
 		hosts = role.hosts
 		host = hosts[0]
@@ -93,11 +101,11 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
 		self.assertEqual(host.external_ip, "211.31.14.198")
 		self.assertTrue(host.replication_master)
 		self.assertEqual(host.index, 1)
+
 	
 	def test_read_list_ebs_mountpoints_response(self):
 		xmlfile = get_xml_file("list_ebs_mountpoints_response.xml")
-		xml = parseString(open(xmlfile, "r").read())
-		xml = xml_strip(xml)
+		xml = open(xmlfile, "r").read()
 		mountpoints = self._queryenv._read_list_ebs_mountpoints_response(xml)
 		mountpoint = mountpoints[0]
 		volumes = mountpoint.volumes
@@ -112,21 +120,23 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
 		self.assertEqual(volume.volume_id, "vol-123451")
 		self.assertEqual(volume.device, "/dev/sdb")
 		
+	def test_read_list_ebs_mountpoints_response_empty(self):
+		xmlfile = get_xml_file("list_ebs_mountpoints_response_empty.xml")
+		xml = open(xmlfile, "r").read()
+		mountpoints = self._queryenv._read_list_ebs_mountpoints_response(xml)
+		self.assertEqual(mountpoints, [])
+		
 	def test_list_role_params(self):
 		xmlfile = get_xml_file("list_role_params_response.xml")
-		xml = parseString(open(xmlfile, "r").read())
-		xml = xml_strip(xml)
-		parametres = self._queryenv._read_list_role_params_response(xml)
-		self.assertFalse(parametres is None)
+		xml = open(xmlfile, "r").read()
+		parameters = self._queryenv._read_list_role_params_response(xml)
+		self.assertFalse(parameters is None)
 		#self.assertTrue(parametres.has_key("external_ips_to_allow_access_from"))
-		self.assertEqual(parametres.get("external_ips_to_allow_access_from", None), """
-
-                                """)
+		self.assertEqual(parameters["external_ips_to_allow_access_from"].strip(), '')
 		
 	def test_read_list_scripts_response(self):
 		xmlfile = get_xml_file("list_scripts_response.xml")
-		xml = parseString(open(xmlfile, "r").read())
-		xml = xml_strip(xml)
+		xml = open(xmlfile, "r").read()
 		scripts = self._queryenv._read_list_scripts_response(xml)
 		script = scripts[0]
 		self.assertFalse(scripts is None)
@@ -134,24 +144,73 @@ jWaz4RQX6FHZJY7cameJy1w+phAE4ufQ4TcshddO+dZlYUAspYWJm3gBEaq6K76g
 		self.assertTrue(script.asynchronous)
 		self.assertEqual(script.exec_timeout, 100)
 		self.assertEqual(script.name, 'script_name')
-		self.assertEqual(script.body, """
-                
-                                """)
+		self.assertEqual(script.body.strip(), '')
+
 
 	def test_read_list_virtualhosts_response(self):
 		xmlfile = get_xml_file("list_virtualhosts_response.xml")
-		xml = parseString(open(xmlfile, "r").read())
-		xml = xml_strip(xml)
+		xml = open(xmlfile, "r").read()
 		vhosts = self._queryenv._read_list_virtualhosts_response(xml)
 		vhost = vhosts[0]
 		self.assertFalse(vhosts is None)
 		self.assertEqual(len(vhosts), 2)
 		self.assertEqual(vhost.hostname, 'gpanel.net')
 		self.assertEqual(vhost.type, 'apache')
-		self.assertEqual(vhost.raw, '''
-                                
-                                ''')
+		self.assertEqual(vhost.raw.strip(), '')
 		self.assertTrue(vhosts[1].https)
+
+	def test_read_list_farm_role_params_response(self):
+		xmlfile = get_xml_file("list_farm_role_params_response.xml")
+		xml = open(xmlfile, "r").read()
+		params = self._queryenv._read_list_farm_role_params_response(xml)
+		self.assertTrue('mysql' in params)
+		self.assertEqual(params['mysql']['stat_password'], 'maicho9A')
+
+	def test_read_get_server_user_data_response(self):
+		xmlfile = get_xml_file("get_server_user_data_response.xml")
+		xml = open(xmlfile, "r").read()
+		user_data = self._queryenv._read_get_server_user_data_response(xml)
+		self.assertTrue(len(user_data))
+		self.assertEqual(user_data['eventhandlerurl'], 'my.scalr.net')
+		self.assertEqual(user_data['p2p_producer_endpoint'], 'https://my.scalr.net/messaging')
+		
+	
+	def test_read_get_scaling_metrics_response(self):
+		xmlfile = get_xml_file("get-scaling-metrics-response.xml")
+		xml = open(xmlfile, "r").read()
+		metrics = self._queryenv._read_get_scaling_metrics_response(xml)
+		self.assertTrue(len(metrics))
+		metric = metrics[0]
+		self.assertEqual(metric.name, 'test01')
+		self.assertEqual(metric.path, None)
+		self.assertEqual(metric.id, '56')
+		self.assertEqual(metric.retrieve_method, 'read')
+
+
+	def test_read_get_scaling_metrics_response_empty(self):
+		xmlfile = get_xml_file("get-scaling-metrics-response-empty.xml")
+		xml = open(xmlfile, "r").read()
+		metrics = self._queryenv._read_get_scaling_metrics_response(xml)
+		self.assertFalse(len(metrics))
+		
+	def test_read_get_global_config_response(self):
+		xmlfile = get_xml_file("get_global_config_response.xml")
+		xml = open(xmlfile, "r").read()
+		config = self._queryenv._read_get_global_config_response(xml)
+		print config
+		self.assertTrue(len(config))
+		self.assertEqual(config, {'scalr.version': '3.5.2', 'dns.static.endpoint': 'scalr-dns.net'})
+				
+
+	def test_xml2dict(self):
+		result = {'mysql': {'root_password': 'NTw23g', 'stat_password': 'maicho9A', 'volume_config': {'device': '/dev/xvdp', 'mpoint': '/mnt/dbstorage', 'type': 'ebs', 'id': 'vol-12345678', 'size': '100'}, 'log_file': 'binlog.000003', 'repl_password': 'Ooyu6im0', 'log_pos': '106'}}
+		xmlfile = get_xml_file('xml2dict.xml')
+		self.assertEqual(xml_file_to_dict(xmlfile), result)
+
+
+def xml_file_to_dict(filename):
+	tree = ET.fromstring(open(filename).read())
+	return xml2dict(tree)
 
 	#def test_sign(self):
 	#	str = "Can I Has Cheezburger?"
