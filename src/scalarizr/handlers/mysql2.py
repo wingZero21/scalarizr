@@ -624,7 +624,8 @@ class MysqlHandler(DBMSRHandler):
 		tx_complete 	= False
 					
 		try:
-			if PlatformFeatures.VOLUMES in self._platform.features:
+			# xxx: ugly condition 
+			if PlatformFeatures.VOLUMES in self._platform.features and master_storage_conf['type'] != 'eph':
 				if self.mysql.service.running:
 					self.root_client.stop_slave()
 
