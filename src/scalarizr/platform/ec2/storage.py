@@ -31,6 +31,8 @@ class EbsConfig(VolumeConfig):
 	snapshot_id = None
 	avail_zone = None
 	size = None
+	volume_type = None
+	iops = None
 
 class EbsVolume(Volume, EbsConfig):
 	@property
@@ -166,9 +168,10 @@ class EbsVolumeProvider(VolumeProvider):
 				if snap_id or not volume_id:
 					self._logger.debug('Creating new EBS')
 					kwargs['avail_zone'] = pl.get_avail_zone()
-					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), kwargs.get('avail_zone'), 
-						snap_id, logger=self._logger, tags=kwargs.get('tags'))
-
+					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), 
+												kwargs.get('avail_zone'), snap_id, 
+												kwargs.get('volume_type'), kwargs.get('iops'), 
+												logger=self._logger, tags=kwargs.get('tags'))
 			
 				if 'available' != ebs_vol.volume_state():
 					if ebs_vol.attachment_state() == 'attaching':
