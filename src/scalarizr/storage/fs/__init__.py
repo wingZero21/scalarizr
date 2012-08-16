@@ -49,7 +49,7 @@ class FileSystem:
 
 	def __init__(self):
 		if not os.path.exists('/sbin/mkfs.%s' % self.name):
-			#system(('/sbin/modprobe', self.name), error_text="Cannot load '%s' kernel module" % self.name)
+			system(('/sbin/modprobe', self.name), error_text="Cannot load '%s' kernel module" % self.name)
 			mgr = dynimp.package_mgr()
 			if self.os_packages:
 				for package in self.os_packages:
