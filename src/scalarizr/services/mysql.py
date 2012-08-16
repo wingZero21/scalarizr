@@ -37,7 +37,7 @@ MYCNF_PATH 	= '/etc/mysql/my.cnf' if disttool.is_ubuntu() else '/etc/my.cnf'
 MYSQLD_PATH = firstmatched(lambda x: os.access(x, os.X_OK), ('/usr/sbin/mysqld', '/usr/libexec/mysqld'))
 MYSQLDUMP_PATH = '/usr/bin/mysqldump'
 DEFAULT_DATADIR	= "/var/lib/mysql"
-
+DEFAULT_OWNER = "mysql"
 STORAGE_DATA_DIR = "mysql-data"
 STORAGE_BINLOG = "mysql-misc/binlog"
 
@@ -137,7 +137,7 @@ class MySQL(BaseService):
 						system2(str(rsync), shell=True)
 			self.my_cnf.set(directive, dirname)
 	
-			rchown("mysql", dest)
+			rchown(DEFAULT_OWNER, dest)
 			# Adding rules to apparmor config 
 			if disttool.is_debian_based():
 				_add_apparmor_rules(dest)
@@ -653,7 +653,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			try:
 				LOG.debug('waiting for mysql process')
-				wait_until(lambda: MYSQLD_PATH in system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
+				wait_until(lambda: MYSQLD_PATH in system2(('ps', '-G', DEFAULT_OWNER, '-o', 'command', '--no-headers'))[0]
 							, timeout=10, sleep=1)
 			except:
 				self._start_stop_reload('restart')
@@ -706,7 +706,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		
 	def _is_sgt_process_exists(self):
 		try:
-			out = system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
+			out = system2(('ps', '-G', DEFAULT_OWNER, '-o', 'command', '--no-headers'))[0]
 			return MYSQLD_PATH in out and 'skip-grant-tables' in out
 		except:
 			return False
@@ -716,7 +716,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		pid_dir = '/var/run/mysqld/'
 		if not os.path.isdir(pid_dir):
 			os.makedirs(pid_dir, mode=0755)
-			mysql_user	= pwd.getpwnam("mysql")
+			mysql_user	= pwd.getpwnam(DEFAULT_OWNER)
 			os.chown(pid_dir, mysql_user.pw_uid, -1)
 		if not self._is_sgt_process_exists():	
 			args = [MYSQLD_PATH, '--user=mysql', '--skip-grant-tables', '--pid-file=%s' % self.sgt_pid_path]
@@ -773,7 +773,12 @@ class MySQLPresetProvider(PresetProvider):
 		service = initdv2.lookup(SERVICE_NAME)
 		config_objects = (MySQLConf(MYCNF_PATH),)
 		PresetProvider.__init__(service, config_objects)
-	
+
+
+	def rollback_hook(self):
+			for obj in self.config_data:
+				rchown(DEFAULT_OWNER, obj.path)
+			
 
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
 

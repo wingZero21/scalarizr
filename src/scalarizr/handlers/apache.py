@@ -95,8 +95,11 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			return initdv2.Status.NOT_RUNNING
 		return status
 
-	def configtest(self):
-		out = system2(self._apachectl +' configtest', shell=True)[1]
+	def configtest(self, path=None):
+		args = self._apachectl +' configtest'
+		if path:
+			args += '-f %s' % path
+		out = system2(args, shell=True)[1]
 		if 'error' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 
@@ -701,3 +704,13 @@ class ApachePresetProvider(PresetProvider):
 		config_objects = (ApacheConf(APACHE_CONF_PATH),)
 		PresetProvider.__init__(service, config_objects)
 		
+
+	def rollback_hook(self):
+		try:
+			pwd.getpwnam('apache')
+			uname = 'apache'
+		except:
+			uname = 'www-data'
+		for obj in self.config_data:
+			filetool.rchown(uname, obj.path)
+			

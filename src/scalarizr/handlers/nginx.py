@@ -20,11 +20,11 @@ from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2, disttool
 from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
-from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util.filetool import read_file, write_file, rchown
 from scalarizr.services import BaseConfig, PresetProvider
 
 # Stdlibs
-import os, logging, shutil, re, time
+import os, logging, shutil, re, time, pwd
 from telnetlib import Telnet
 from datetime import datetime
 import ConfigParser
@@ -84,8 +84,12 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 			return initdv2.Status.UNKNOWN
 		return status
 
-	def configtest(self):
-		out = system2('%s -t' % self._nginx_binary, shell=True)[1]
+	def configtest(self, path = None):
+		args = '%s -t' % self._nginx_binary
+		if path:
+			args += '-c %s' % path
+			
+		out = system2(args, shell=True)[1]
 		if 'failed' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 		
@@ -530,4 +534,14 @@ class NginxPresetProvider(PresetProvider):
 		config_objects = (NginxConf(nginx_conf_path),)
 		service = initdv2.lookup(SERVICE_NAME)
 		PresetProvider.__init__(service, config_objects)
-		
+
+
+	def rollback_hook(self):
+		try:
+			pwd.getpwnam('nginx')
+		except:
+			pass
+		else:
+			for obj in self.config_data:
+				rchown('nginx', obj.path)
+			

@@ -109,7 +109,7 @@ class InitScript(object):
 		
 		return Status.RUNNING
 
-	def configtest(self):
+	def configtest(self, path=None):
 		"""
 		@raise InitdError:
 		"""

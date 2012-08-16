@@ -8,6 +8,8 @@ import os
 import logging
 
 from scalarizr.libs.metaconf import Configuration, NoPathError
+from scalarizr.util import initdv2
+import shutil
 
 
 LOG = logging.getLogger(__name__)
@@ -68,6 +70,10 @@ class LazyInitScript(object):
 			self._script.reload(reason)
 		elif self._script.running:
 			self.reload_queue.append(reason)
+			
+	def configtest(self, path=None):
+		self._script.configtest(path)
+		
 	
 	@property		
 	def running(self):
@@ -199,10 +205,15 @@ class ServiceError(BaseException):
 	pass
 
 
+class PresetError(BaseException):
+	pass
+
+
 class PresetProvider(object):
 	
 	service = None
 	config_data = None
+	backup_prefix = '.scalr.backup'
 	
 	
 	def __init__(self, service, *config_objects, **kv):
@@ -220,16 +231,68 @@ class PresetProvider(object):
 			
 	
 	def set_preset(self, settings):
+		self.backup()
+		
 		for obj in self.config_data:
 			if obj.config_name in settings:
 				obj.apply_values(settings[obj.config_name])
+				
+		try:
+			self.configtest()
+		except initdv2.InitdError, e:
+			self.rollback(cleanup=True)
+			raise PresetError('Service %s was unable to pass configtest' % self.service.name)
 			
+		try:
+			self.restart('Applying configuration preset to %s service' % self.service.name)
+		except BaseException, e:
+				if not self.service.running:
+					self.rollback()
+					self.restart('Restarting %s service with old configuration files' % self.service.name)
+					raise PresetError('Service %s was unable to start with the new preset.' % self.service.name)
+		else:
+			self.cleanup()
 			
-	def config_test(self, path):
-		return self.service.configtest(path)
+		
+	def backup(self):
+		for obj in self.config_data:
+			src = obj.path
+			if os.path.exists(src):
+				dst = src + self.backup_prefix
+				shutil.copy(src, dst)
+
+
+	def cleanup(self):
+		for obj in self.config_data:
+			src = obj.path + self.backup_prefix
+			if os.path.exists(src):
+				os.remove(src)
+
+					
+	def rollback(self, cleanup=False):
+		for obj in self.config_data:
+			src = obj.path + self.backup_prefix
+			if os.path.exists(src):
+				dst = obj.path
+				shutil.copy(src, dst)
+				self.rollback_hook()
+		if cleanup:
+			self.cleanup()
+			
+				
+	def rollback_hook(self):
+		'''
+		for tasks like setting bitmask and owner
+		'''
+		pass
+				
+				
+	def configtest(self):
+		return self.service.configtest()
 	
 	
 	def restart(self, reason=None):
 		self.service.restart(reason)
+
 	
 		
