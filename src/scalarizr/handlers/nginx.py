@@ -84,7 +84,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 			return initdv2.Status.UNKNOWN
 		return status
 
-	def configtest(self, path = None):
+	def configtest(self, path=None):
 		args = '%s -t' % self._nginx_binary
 		if path:
 			args += '-c %s' % path

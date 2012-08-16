@@ -676,22 +676,25 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
 	
 	def start(self):
+		self.configtest()
+		
+		try:
+			LOG.info("Starting mysql")
+			initdv2.ParametrizedInitScript.start(self)
+			LOG.debug("mysql started")
+		except:
+			if self._is_sgt_process_exists():
+				LOG.warning('MySQL service is running with skip-grant-tables mode.')
+			elif not self.running:
+				raise
+
+
+	def configtest(self, path=None):
 		mysql_cnf_err_re = re.compile('Unknown option|ERROR')
 		stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True)[1]
 		if re.search(mysql_cnf_err_re, stderr):
-			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
-		
-		if not self.running:
-			try:
-				LOG.info("Starting mysql")
-				initdv2.ParametrizedInitScript.start(self)
-				LOG.debug("mysql started")
-			except:
-				if self._is_sgt_process_exists():
-					LOG.warning('MySQL service is running with skip-grant-tables mode.')
-				elif not self.running:
-					raise
-
+			raise initdv2.InitdError('Error in mysql configuration detected. Output:\n%s' % stderr)
+	
 	
 	def stop(self, reason=None):
 		initdv2.ParametrizedInitScript.stop(self)

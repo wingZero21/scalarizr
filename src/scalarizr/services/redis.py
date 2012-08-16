@@ -890,15 +890,19 @@ class RedisCLI(object):
 		return False
 	
 
-
 class RedisPresetProvider(PresetProvider):
 	
 	def __init__(self):
 		service = initdv2.lookup(SERVICE_NAME)
 		config_objects = (RedisConf(DEFAULT_CONF_PATH),)
 		PresetProvider.__init__(service, config_objects)
-
-	
+		
+		
+	def rollback_hook(self):
+		for obj in self.config_data:
+			rchown(DEFAULT_USER, obj.path)
+			
+				
 def get_snap_db_filename(port=DEFAULT_PORT):	
 	return 'dump.%s.rdb' % port	
 

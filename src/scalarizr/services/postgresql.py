@@ -1039,6 +1039,7 @@ class PgSQLPresetProvider(PresetProvider):
 		config_objects = (PostgresqlConf('/etc/postgresql/%s/main' % version),)
 		PresetProvider.__init__(service, config_objects)
 		
+		
 	def rollback_hook(self):
 		for obj in self.config_data:
 			rchown(DEFAULT_USER, obj.path)

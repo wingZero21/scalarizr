@@ -288,7 +288,8 @@ class PresetProvider(object):
 				
 				
 	def configtest(self):
-		return self.service.configtest()
+		if hasattr(self.service, 'configtest'):
+			self.service.configtest()
 	
 	
 	def restart(self, reason=None):
