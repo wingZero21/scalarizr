@@ -15,12 +15,16 @@ XFS_GROWFS_PATH = "/usr/sbin/xfs_growfs"
 XFS_FREEZE_PATH = "/usr/sbin/xfs_freeze"
 
 
+
 class XfsFileSystem(FileSystem):
 	name = 'xfs'
 	umount_on_resize = False
+	os_packages = ('xfsprogs', )
 	
 	def __init__(self):
+		FileSystem.__init__(self)
 		self._label_re  = re.compile('label\s+=\s+"(?P<label>.*)"', re.IGNORECASE)
+		
 
 	@device_should_exists
 	def set_label(self, device, label):
