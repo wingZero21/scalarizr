@@ -303,7 +303,10 @@ class EphSnapshotProviderLite(object):
 			snapshot.path = None
 			snap_mpoint = mkdtemp()
 			try:
-				mount(snap_lv, snap_mpoint)				
+				opts = []
+				if volume.fstype == 'xfs':
+					opts += ['-o nouuid,ro']
+				mount(snap_lv, snap_mpoint, opts)				
 				tar_cmd = ['tar', 'cp', '-C', snap_mpoint, '.']
 				
 				pigz_bins = whereis('pigz')
