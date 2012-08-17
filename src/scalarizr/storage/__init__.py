@@ -551,7 +551,6 @@ class Volume(VolumeConfig, Observable):
 	
 	def snapshot(self, description=None, **kwargs):
 		self.fire('before_snapshot')
-		snapshot_failed = False
 		# Freeze filesystem
 		if self._fs:
 			system(SYNC_EXEC)
@@ -564,16 +563,10 @@ class Volume(VolumeConfig, Observable):
 			del conf['id']
 			snap = pvd.snapshot_factory(description, **conf)		
 			return pvd.create_snapshot(self, snap, **kwargs)
-		except:
-			snapshot_failed = True
 		finally:
-			try:
-				# Unfreeze filesystem
-				if self._fs:
-					self.unfreeze()
-			finally:
-				event = 'snapshot_failed' if snapshot_failed else 'after_snapshot'
-				self.fire(event)
+			# Unfreeze filesystem
+			if self._fs:
+				self.unfreeze()
 
 
 	def detach(self, force=False):
