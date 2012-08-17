@@ -305,7 +305,7 @@ class EphSnapshotProviderLite(object):
 			try:
 				opts = []
 				if volume.fstype == 'xfs':
-					opts += ['-o nouuid,ro']
+					opts += ['-o', 'nouuid,ro']
 				mount(snap_lv, snap_mpoint, opts)				
 				tar_cmd = ['tar', 'cp', '-C', snap_mpoint, '.']
 				
