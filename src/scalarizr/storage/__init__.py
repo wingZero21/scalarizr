@@ -554,7 +554,9 @@ class Volume(VolumeConfig, Observable):
 		# Freeze filesystem
 		if self._fs:
 			system(SYNC_EXEC)
-			self.freeze()
+			# When using XFS over eph storage (lvm+lvm-snap) LVM freeze failed with  
+			# device-mapper: suspend ioctl failed: Device or resource busy
+			#self.freeze()
 
 		try:
 			# Create snapshot
@@ -565,8 +567,9 @@ class Volume(VolumeConfig, Observable):
 			return pvd.create_snapshot(self, snap, **kwargs)
 		finally:
 			# Unfreeze filesystem
-			if self._fs:
-				self.unfreeze()
+			#if self._fs:
+			#	self.unfreeze()
+			pass
 
 
 	def detach(self, force=False):
