@@ -224,9 +224,9 @@ class MySQL(object):
 	def dump_database(self, database, filename):
 		self.logger.info('Dumping database %s', database)
 		opts = config.split(bus.cnf.rawini.get('mysql', 'mysqldump_options'), ' ')
-		opts = [MYSQLDUMP, '-u', self.root_user, '-p'] + opts + ['--databases']
+		opts = [MYSQLDUMP, '-u', self.root_user, '-p%s' % self.root_password] + opts + ['--databases']
 		with open(filename, 'w') as fp: 
-			system2(opts + [database], stdin=self.root_password, stdout=fp)
+			system2(opts + [database], stdout=fp)
 	
 	
 class MySQLClient(object):

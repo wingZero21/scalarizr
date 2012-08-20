@@ -36,6 +36,7 @@ from scalarizr.util import system2, disttool, filetool, \
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 
+
 if 'Percona Server' in system2((software.which('mysqld'), '-V'))[0] and disttool.is_redhat_based():
 	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.PERCONA
 else:
@@ -623,7 +624,8 @@ class MysqlHandler(DBMSRHandler):
 		tx_complete 	= False
 					
 		try:
-			if PlatformFeatures.VOLUMES in self._platform.features:
+			# xxx: ugly condition 
+			if PlatformFeatures.VOLUMES in self._platform.features and master_storage_conf['type'] != 'eph':
 				if self.mysql.service.running:
 					self.root_client.stop_slave()
 
@@ -708,7 +710,7 @@ class MysqlHandler(DBMSRHandler):
 			# Start MySQL
 			self.mysql.service.start()
 		
-		if tx_complete and PlatformFeatures.VOLUMES in self._platform.features:
+		if tx_complete and PlatformFeatures.VOLUMES in self._platform.features and master_storage_conf['type'] != 'eph':
 			# Delete slave EBS
 			self.storage_vol.destroy(remove_disks=True)
 			self.storage_vol = new_storage_vol
@@ -825,13 +827,14 @@ class MysqlHandler(DBMSRHandler):
 		LOG.info("Initializing MySQL master")
 		
 		with bus.initialization_op as op:
+			snap_cnf = None
 			with op.step(self._step_create_storage):		
 		
 				# Plug storage
 				volume_cnf = Storage.restore_config(self._volume_config_path)
 				try:
 					snap_cnf = Storage.restore_config(self._snapshot_config_path)
-					volume_cnf['snapshot'] = snap_cnf
+					volume_cnf['snapshot'] = snap_cnf.copy()
 				except IOError:
 					pass
 				self.storage_vol = self._plug_storage(mpoint=STORAGE_PATH, vol=volume_cnf)
@@ -883,10 +886,16 @@ class MysqlHandler(DBMSRHandler):
 				self._innodb_recovery()	
 				self.mysql.service.start()		
 		
-		with op.step(self._step_create_data_bundle):
-			# Get binary logfile, logpos and create storage snapshot
-			snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
-			Storage.backup_config(snap.config(), self._snapshot_config_path)
+		if not snap_cnf:
+			with op.step(self._step_create_data_bundle):
+				# Get binary logfile, logpos and create storage snapshot
+				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
+				Storage.backup_config(snap.config(), self._snapshot_config_path)
+		else:
+			LOG.debug('Skip data bundle, cause MySQL storage was initialized from snapshot')
+			log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
+			snap = snap_cnf
+			
 
 		with op.step(self._step_collect_hostup_data):
 			# Update HostUp message 
@@ -940,6 +949,7 @@ class MysqlHandler(DBMSRHandler):
 				LOG.info("Changing configuration files")
 				if not self.mysql.my_cnf.datadir:
 					self.mysql.my_cnf.datadir = DEFAULT_DATADIR
+				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
 	
 			with op.step(self._step_move_datadir):
@@ -1008,14 +1018,14 @@ class MysqlHandler(DBMSRHandler):
 		ret = dict()
 		if bus.scalr_version >= (2, 2):
 			if vol:
-				ret['volume_config'] = vol.config()
+				ret['volume_config'] = vol.config() if not isinstance(vol, dict) else vol
 			if snap:
-				ret['snapshot_config'] = snap.config()
+				ret['snapshot_config'] = snap.config() if not isinstance(snap, dict) else snap
 		else:
 			if vol:
-				ret['volume_id'] = vol.config()['id']
+				ret['volume_id'] = vol.config()['id'] if not isinstance(vol, dict) else vol['id']
 			if snap:
-				ret['snapshot_id'] = snap.config()['id']
+				ret['snapshot_id'] = snap.config()['id'] if not isinstance(snap, dict) else snap['id']
 		return ret
 			
 

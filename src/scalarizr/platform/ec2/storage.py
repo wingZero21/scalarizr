@@ -31,6 +31,8 @@ class EbsConfig(VolumeConfig):
 	snapshot_id = None
 	avail_zone = None
 	size = None
+	volume_type = None
+	iops = None
 
 class EbsVolume(Volume, EbsConfig):
 	@property
@@ -96,7 +98,8 @@ class EbsVolumeProvider(VolumeProvider):
 		conn = self._new_ec2_conn()
 		
 		if conn:
-
+			device = kwargs.get('device')
+			
 			def get_free_devname(device):
 				if device:
 					device = ebstool.get_ebs_devname(device)
@@ -165,9 +168,10 @@ class EbsVolumeProvider(VolumeProvider):
 				if snap_id or not volume_id:
 					self._logger.debug('Creating new EBS')
 					kwargs['avail_zone'] = pl.get_avail_zone()
-					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), kwargs.get('avail_zone'), 
-						snap_id, logger=self._logger, tags=kwargs.get('tags'))
-
+					ebs_vol = ebstool.create_volume(conn, kwargs.get('size'), 
+												kwargs.get('avail_zone'), snap_id, 
+												kwargs.get('volume_type'), kwargs.get('iops'), 
+												logger=self._logger, tags=kwargs.get('tags'))
 			
 				if 'available' != ebs_vol.volume_state():
 					if ebs_vol.attachment_state() == 'attaching':
@@ -190,15 +194,9 @@ class EbsVolumeProvider(VolumeProvider):
 					device = kwargs.get('device')
 					device = get_free_devname(device)
 
-					try:
-						self._logger.debug('Attaching EBS to this instance')
-						device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device,
-							to_me=True, logger=self._logger)[1]
-					except:
-						if not os.path.exists(ebstool.real_devname(device)):
-							with self.letters_lock:
-								self.acquired_letters.remove(device[-1])
-						raise
+					self._logger.debug('Attaching EBS to this instance')
+					device = ebstool.attach_volume(conn, ebs_vol, pl.get_instance_id(), device,
+						to_me=True, logger=self._logger)[1]
 
 			except:
 				self._logger.debug('Caught exception')
@@ -212,6 +210,8 @@ class EbsVolumeProvider(VolumeProvider):
 			finally:
 				if delete_snap and snap_id:
 					conn.delete_snapshot(snap_id)
+				if device and device[-1] in self.acquired_letters:
+					self.acquired_letters.remove(device[-1])
 					
 			
 			kwargs['device'] = device
@@ -351,16 +351,14 @@ class S3TransferProvider(TransferProvider):
 		try:
 			connection = self._get_connection()
 			
-			if not self._bucket_check_cache(bucket_name):
-				try:
-					bkt = connection.get_bucket(bucket_name, validate=False)
-					key = bkt.get_key(key_name)
-				except S3ResponseError, e:
-					if e.code in ('NoSuchBucket', 'NoSuchKey'):
-						raise TransferError("S3 path '%s' not found" % remote_path)
-					raise
-				# Cache container object
-				self._bucket = bkt				
+			try:
+				if not self._bucket_check_cache(bucket_name):					
+					self._bucket = connection.get_bucket(bucket_name, validate=False)
+				key = self._bucket.get_key(key_name)
+			except S3ResponseError, e:
+				if e.code in ('NoSuchBucket', 'NoSuchKey'):
+					raise TransferError("S3 path '%s' not found" % remote_path)
+				raise
 			
 			key.get_contents_to_filename(dest_path)			
 			return dest_path			

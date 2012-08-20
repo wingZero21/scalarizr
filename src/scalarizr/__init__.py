@@ -32,11 +32,11 @@ import os, sys, re, shutil, time
 import binascii, string, traceback
 import sqlite3 as sqlite
 import threading, socket, signal
-import pprint
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 import pprint
+import select
 import wsgiref.simple_server
 from scalarizr.util import sqlite_server, wait_until
 
@@ -821,10 +821,19 @@ def main():
 	
 		try:
 			while _running:
-				_msg_thread.join(0.2)
 				# Recover SNMP 
 				if _running and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
 					_start_snmp_server()
+				
+				#_msg_thread.join(0.2)
+				try:
+					select.select([], [], [], 30)
+				except select.error, e:
+					if e.args[0] == 4:
+						# Interrupted syscall
+						continue
+					raise
+				
 		except KeyboardInterrupt:
 			logger.debug('Mainloop: KeyboardInterrupt')
 			pass

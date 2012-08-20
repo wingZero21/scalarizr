@@ -7,28 +7,22 @@ Created on Nov 11, 2010
 from . import MOUNT_EXEC
 from . import FileSystem, device_should_exists, system 
 
-from scalarizr.util import disttool
-
 import re
-import os
 
 
 JFS_TUNE_EXEC	= '/sbin/jfs_tune'
 
+
 class JfsFileSystem(FileSystem):
 	name = 'jfs'
 	umount_on_resize = False
+	os_packages = ('jfsutils', )
 		
 	_label_re  = None
 	
 	def __init__(self):
+		FileSystem.__init__(self)
 		self._label_re  = re.compile("volume\s+label:\s+'(?P<label>.*)'", re.IGNORECASE)
-		if not os.path.exists(JFS_TUNE_EXEC):
-			system(('/sbin/modprobe', 'jfs'), error_text="Cannot load 'jfs' kernel module")
-			if disttool.is_redhat_based():
-				system(('/usr/bin/yum', '-y', 'install', 'jfsutils'))
-			else:
-				system(('/usr/bin/apt-get', '-y', 'install', 'jfsutils'))			
 		
 	def mkfs(self, device, options=None):
 		FileSystem.mkfs(self, device, ('-q',))
