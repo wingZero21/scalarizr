@@ -27,8 +27,8 @@ class CloudStackPlatform(Platform):
 		
 		# Find the virtual router.
 		eth0leases = util.firstmatched(lambda x: os.path.exists(x), 
-									['/var/lib/dhcp/dhclient-eth0.leases',
-									'/var/lib/dhcp3/dhclient-eth0.leases',
+									['/var/lib/dhcp/dhclient.eth0.leases',
+									'/var/lib/dhcp3/dhclient.eth0.leases',
 									'/var/lib/dhclient/dhclient-eth0.leases'],
 									'/var/lib/dhclient/dhclient-eth0.leases') 
 		if not os.path.exists(eth0leases):

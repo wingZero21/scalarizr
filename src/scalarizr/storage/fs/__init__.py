@@ -8,6 +8,7 @@ Created on Nov 11, 2010
 from .. import MKFS_EXEC, MOUNT_EXEC
 
 from scalarizr.util import system2, PopenError
+from scalarizr.util import dynimp
 
 import os
 import re
@@ -36,6 +37,7 @@ class FileSystem:
 	freezable = False
 	resizable = True
 	umount_on_resize = False
+	os_packages = None
 
 	E_MKFS 		= 'Error during filesystem creation on device %s'
 	E_RESIZE 	= 'Error during filesystem resize on device %s'
@@ -44,6 +46,20 @@ class FileSystem:
 	E_FREEZE	= 'Error during filesystem freeze on device %s'
 	E_UNFREEZE	= 'Error during filesystem un-freeze on device %s'
 	E_NOT_MOUNTED = 'Device %s should be mounted'
+
+	def __init__(self):
+		if not os.path.exists('/sbin/mkfs.%s' % self.name):
+			system(('/sbin/modprobe', self.name), error_text="Cannot load '%s' kernel module" % self.name)
+			mgr = dynimp.package_mgr()
+			if self.os_packages:
+				for package in self.os_packages:
+					candidates = mgr.candidates(package)
+					if candidates:
+						mgr.install(package, candidates[-1])
+					else:
+						raise Exception("No installation candidates for package '%s'", package)
+		
+		
 
 	@device_should_exists
 	def mkfs(self, device, options=None):

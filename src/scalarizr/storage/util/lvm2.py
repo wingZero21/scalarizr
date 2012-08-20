@@ -285,12 +285,6 @@ class Lvm2:
 				break
 			time.sleep(1)
 		system((LVREMOVE, '--force', vol), error_text='Cannot remove logical volume')
-		'''
-		lvi = self.lv_info(lvolume)
-		if 'a' in lvi.attr and not 's' in lvi.attr:
-			self.change_lv(lvolume, available=False)
-		system((LVREMOVE, '-f', normalize_lvname(lvolume)), error_text='Cannot remove logical volume')
-		'''	
 
 	def extend_vg(self, group, *ph_volumes):
 		system([VGEXTEND, group] + list(ph_volumes), error_text='Cannot extend volume group')

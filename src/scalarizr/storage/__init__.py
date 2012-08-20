@@ -400,17 +400,16 @@ class Volume(VolumeConfig, Observable):
 			sdb = get_system_devname('/dev/sdb')
 			if os.path.exists(sdb):
 				device = sdb
+			else:
+				# ugly
+				from scalarizr.bus import bus
+				bdm = bus.platform.get_block_device_mapping()
+				if 'ephemeral0' in bdm:
+					device = get_system_devname(bdm['ephemeral0'])
 		elif device.startswith('/dev/sd') and not os.path.exists(device):
 			# ephemeral block device -> xen device			
 			device = get_system_devname(device)
-			
 				
-		# sometimes on m1.small instead of sda2 we saw sdb
-		if device == '/dev/sda2' and not os.path.exists('/dev/sda2'):
-			if os.path.exists('/dev/sdb'):
-				device = '/dev/sdb'
-			elif os.path.exists('/dev/xvdb'):
-				device = '/dev/xvdb'
 			
 		self.device = device
 		
@@ -552,11 +551,12 @@ class Volume(VolumeConfig, Observable):
 	
 	def snapshot(self, description=None, **kwargs):
 		self.fire('before_snapshot')
-		snapshot_failed = False
 		# Freeze filesystem
 		if self._fs:
 			system(SYNC_EXEC)
-			self.freeze()
+			# When using XFS over eph storage (lvm+lvm-snap) LVM freeze failed with  
+			# device-mapper: suspend ioctl failed: Device or resource busy
+			#self.freeze()
 
 		try:
 			# Create snapshot
@@ -565,16 +565,11 @@ class Volume(VolumeConfig, Observable):
 			del conf['id']
 			snap = pvd.snapshot_factory(description, **conf)		
 			return pvd.create_snapshot(self, snap, **kwargs)
-		except:
-			snapshot_failed = True
 		finally:
-			try:
-				# Unfreeze filesystem
-				if self._fs:
-					self.unfreeze()
-			finally:
-				event = 'snapshot_failed' if snapshot_failed else 'after_snapshot'
-				self.fire(event)
+			# Unfreeze filesystem
+			#if self._fs:
+			#	self.unfreeze()
+			pass
 
 
 	def detach(self, force=False):

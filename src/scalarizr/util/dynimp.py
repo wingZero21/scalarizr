@@ -118,10 +118,14 @@ class AptPackageMgr(PackageMgr):
 
 	def installed(self, name):
 		version_re = re.compile(r'^Version: (.+)$')
-		
+		status_re = re.compile(r'^Status: (.+)$')
 		out, code = system2(('/usr/bin/dpkg', '--status', name), raise_exc=False)[::2]
 		if not code:
 			for line in out.splitlines():
+				m = status_re.match(line)
+				if m and ('deinstall' in m.group(1) or 'not-installed' in m.group(1)):
+					# package was removed/purged
+					return
 				m = version_re.match(line)
 				if m:
 					return m.group(1)
