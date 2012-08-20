@@ -742,7 +742,7 @@ class Mongos(object):
 			if cls.keyfile and os.path.exists(cls.keyfile):
 				rchown(DEFAULT_USER, cls.keyfile)
 				args.append('--keyFile=%s' % cls.keyfile)
-			system2(args)
+			system2(args, close_fds=True, preexec_fn=os.setsid)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 			wait_until(lambda: cls.get_cli().has_connection, timeout=MAX_START_TIMEOUT)
 			cls._logger.debug('%s process has been started.' % MONGOS)
