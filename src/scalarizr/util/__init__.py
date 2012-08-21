@@ -243,11 +243,10 @@ def system2(*popenargs, **kwargs):
 		popenargs = list(popenargs)
 		popenargs[0] = tuple('%s' % arg for arg in popenargs[0])
 		
-	if kwargs.get('shell'):
-		# Set en_US locale
-		if not 'env' in kwargs:
-			kwargs['env'] = {}
-		kwargs['env']['LANG'] = 'en_US'
+	# Set en_US locale
+	if not 'env' in kwargs:
+		kwargs['env'] = {}
+	kwargs['env']['LANG'] = 'en_US'
 		
 	for k in ('logger', 'err2out', 'warn_stderr', 'raise_exc', 'raise_error', 'exc_class', 'error_text', 'silent'):
 		try:
