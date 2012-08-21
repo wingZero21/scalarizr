@@ -517,7 +517,7 @@ class PSQL(object):
 		
 	def execute(self, query, silent=False):
 		try:
-			out = system2([SU_EXEC, '-', self.user, '-c', '%s -c "%s"' % (self.path, query)], silent=True)[0]
+			out = system2([SU_EXEC, '-', self.user, '-c', 'export LANG=en_US; %s -c "%s"' % (self.path, query)], silent=True)[0]
 			return out	
 		except PopenError, e:
 			if not silent:
