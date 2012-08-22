@@ -142,7 +142,7 @@ class Message(object):
 					value = ''
 			el.appendChild(doc.createTextNode(value))
 			'''
-			if not isinstance(value, unicode):
+			if value is not None and not isinstance(value, unicode):
 				value = str(value).decode('utf-8')
 			el.appendChild(doc.createTextNode(value or ''))
 
