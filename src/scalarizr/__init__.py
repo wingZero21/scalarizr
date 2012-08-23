@@ -1,5 +1,6 @@
 
 import sys
+import urllib2
 if sys.version_info < (2, 6):
 	from scalarizr.util import compat
 	compat.patch()
@@ -657,6 +658,14 @@ def main():
 				help='Answer "yes" to all questions')
 		optparser.add_option('-o', dest='cnf', action='append',
 				help='Runtime .ini option key=value')
+		
+		if ('cloud-location=' in sys.argv or 'region=' in sys.argv) and 'platform=ec2' in sys.argv:
+			region = urllib2.urlopen('http://169.254.169.254/latest/meta-data/placement/availability-zone').read().strip()[:-1]
+			try:
+				sys.argv[sys.argv.index('region=')] += region
+			except ValueError:
+				sys.argv += ['-o', 'region=' + region]		
+		
 		optparser.parse_args()
 
 		
