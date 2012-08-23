@@ -37,10 +37,13 @@ from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 
 
+BEHAVIOUR = SERVICE_NAME = 'percona' if 'percona' in bus.cnf.rawini.get('general', 'behaviour') else 'mysql2'
+'''
 if 'Percona Server' in system2((software.which('mysqld'), '-V'))[0] and disttool.is_redhat_based():
 	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.PERCONA
 else:
 	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL2
+'''
 CNF_SECTION = 'mysql2'
 LOG = logging.getLogger(__name__)
 
