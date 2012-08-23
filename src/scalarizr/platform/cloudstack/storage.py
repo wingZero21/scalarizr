@@ -171,7 +171,10 @@ class CSVolumeProvider(VolumeProvider):
 		return snap
 
 	def get_snapshot_state(self, snap):
-		state = self._new_conn().listSnapshots(id=snap.id)[0].state
+		snapshots = self._new_conn().listSnapshots(id=snap.id)
+		if not snapshots:
+			raise StorageError('listSnapshots returned empty list for snapshot %s' % snap.id)
+		state = snapshots[0].state
 		return self.snapshot_state_map[state]
 
 	def blank_config(self, cnf):
