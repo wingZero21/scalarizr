@@ -142,7 +142,7 @@ class RebundleHandler(Handler):
 			result.update(software.system_info())
 
 			# Fire 'rebundle'diss
-			bus.fire("rebundle", role_name=self._role_name, snapshot_id=image_id, result)
+			bus.fire("rebundle", role_name=self._role_name, snapshot_id=image_id, rebundle_result=result)
 		
 			# Notify Scalr
 			self.send_message(Messages.REBUNDLE_RESULT, result)
