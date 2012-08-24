@@ -140,12 +140,13 @@ class RebundleHandler(Handler):
 			
 			# Updating message with OS, software and modules info
 			result.update(software.system_info())
-			
+
+			# Fire 'rebundle'diss
+			bus.fire("rebundle", role_name=self._role_name, snapshot_id=image_id, result)
+		
 			# Notify Scalr
 			self.send_message(Messages.REBUNDLE_RESULT, result)
 			
-			# Fire 'rebundle'diss
-			bus.fire("rebundle", role_name=self._role_name, snapshot_id=image_id)
 			LOG.info('Rebundle complete! If you imported this server to Scalr, you can terminate Scalarizr now.')
 			
 		except (Exception, BaseException), e:

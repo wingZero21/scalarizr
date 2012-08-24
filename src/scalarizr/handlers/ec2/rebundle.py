@@ -64,12 +64,14 @@ NETWORK_FILESYSTEMS = ('nfs', 'glusterfs')
 class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 	_ebs_strategy_cls = None
 	_instance_store_strategy_cls = None
+	_instance = None
 	
 	def __init__(self, ebs_strategy_cls=None, instance_store_strategy_cls=None):
 		rebundle_hdlr.RebundleHandler.__init__(self)
 		
 		self._ebs_strategy_cls = ebs_strategy_cls or RebundleEbsStrategy
 		self._instance_store_strategy_cls = instance_store_strategy_cls or RebundleInstanceStoreStrategy
+		self._instance = None
 		
 
 	def before_rebundle(self):
@@ -87,6 +89,8 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		pl = bus.platform 
 		ec2_conn = pl.new_ec2_conn()
 		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
+		self._instance = instance
+
 		
 		""" list of all mounted devices """
 		list_device = filetool.df()
@@ -142,6 +146,11 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 	def rebundle(self):
 		return self._strategy.run()
 		
+	def on_rebundle(self, role_name, snapshot_id, rebundle_result):
+		rebundle_result['aws'] = {
+			'root_device_type': self._instance.root_device_type,
+			'virtualization_type': self._instance.virtualization_type
+		}
 			
 	def after_rebundle(self):
 		if self._strategy:
