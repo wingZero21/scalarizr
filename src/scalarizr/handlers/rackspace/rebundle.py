@@ -28,12 +28,12 @@ class RackspaceRebundleHandler(rebundle_hdlr.RebundleHandler):
 		conn = pl.new_cloudservers_conn()
 
 
-		LOG.debug('Lookup server %s on CloudServers', pl.get_public_ip())
+		LOG.debug('Lookup server %s on CloudServers', pl.get_private_ip())
 		try:
-			server = conn.servers.find(public_ip=pl.get_public_ip())
-			LOG.debug('Found server %s. server id: %s', pl.get_public_ip(), server.id)
+			server = conn.servers.find(private_ip=pl.get_private_ip())
+			LOG.debug('Found server %s. server id: %s', pl.get_private_ip(), server.id)
 		except NotFound:
-			raise HandlerError('Server %s not found in servers list' % pl.get_public_ip())
+			raise HandlerError('Server %s not found in servers list' % pl.get_private_ip())
 		
 		
 		duplicate_errmsg = 'Another image is currently creating from this server. ' \
