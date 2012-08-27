@@ -602,7 +602,7 @@ def _cleanup_after_rebundle():
 			continue
 		path = os.path.join(priv_path, file)
 		os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
-	system2(('sync', ))
+	system2('sync', shell=True)
 
 def do_validate_cnf():
 	errors = list()
