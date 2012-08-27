@@ -352,9 +352,13 @@ class MySQLClient(object):
 		except (pymysql.err.OperationalError, socket.error, IOError), e:
 			#catching mysqld restarts (e.g. sgt)
 			if e.args[0] in (2013,32,errno.EPIPE):
-				conn = self.get_connection(force=True)
-				cur = conn.cursor(cursor_type)
-				cur.execute(query)
+				try:
+					conn = self.get_connection(force=True)
+					cur = conn.cursor(cursor_type)
+					cur.execute(query)
+				except socket.error, err:
+					if err.args[0] == 32:
+						raise ServiceError('Could not connect to mysql, the service is probably not running (%s)' % str(err))
 		res = cur.fetchone() if fetch_one else cur.fetchall()
 		return res
 
