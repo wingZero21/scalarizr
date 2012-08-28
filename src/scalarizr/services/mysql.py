@@ -349,9 +349,9 @@ class MySQLClient(object):
 		LOG.debug(query)
 		try:
 			cur.execute(query)
-		except (pymysql.err.OperationalError, socket.error, IOError), e:
+		except (pymysql.err.Error, pymysql.err.OperationalError, socket.error, IOError), e:
 			#catching mysqld restarts (e.g. sgt)
-			if e.args[0] in (2013,32,errno.EPIPE):
+			if type(e) == pymysql.err.Error or e.args[0] in (2013,32,errno.EPIPE):
 				try:
 					conn = self.get_connection(force=True)
 					cur = conn.cursor(cursor_type)
