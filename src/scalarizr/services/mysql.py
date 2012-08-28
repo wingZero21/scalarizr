@@ -349,12 +349,16 @@ class MySQLClient(object):
 		LOG.debug(query)
 		try:
 			cur.execute(query)
-		except (pymysql.err.OperationalError, socket.error, IOError), e:
+		except (pymysql.err.Error, pymysql.err.OperationalError, socket.error, IOError), e:
 			#catching mysqld restarts (e.g. sgt)
-			if e.args[0] in (2013,32,errno.EPIPE):
-				conn = self.get_connection(force=True)
-				cur = conn.cursor(cursor_type)
-				cur.execute(query)
+			if type(e) == pymysql.err.Error or e.args[0] in (2013,32,errno.EPIPE):
+				try:
+					conn = self.get_connection(force=True)
+					cur = conn.cursor(cursor_type)
+					cur.execute(query)
+				except socket.error, err:
+					if err.args[0] == 32:
+						raise ServiceError('Scalarizr was unable to connect to mysql with user %s: (%s)' % (self.user, str(err)))
 		res = cur.fetchone() if fetch_one else cur.fetchall()
 		return res
 
