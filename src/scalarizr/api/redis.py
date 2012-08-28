@@ -153,7 +153,7 @@ class RedisAPI(object):
 				raise
 			finally:
 				if op:
-					op.__exit__(*())
+					op.__exit__(None)
 		return (new_ports, new_passwords)
 		
 	
@@ -184,7 +184,7 @@ class RedisAPI(object):
 				raise
 			finally:
 				if op:
-					op.__exit__(*())
+					op.__exit__(None)
 		return dict(ports=freed_ports)
 	
 	
