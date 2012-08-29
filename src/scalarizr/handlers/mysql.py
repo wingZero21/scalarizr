@@ -42,6 +42,9 @@ import signal
 from scalarizr.handlers import operation
 
 
+SU_EXEC = '/bin/su'
+BASH = '/bin/bash'
+
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR
@@ -437,14 +440,15 @@ class MysqlCnfController(CnfController):
 		out = None
 		
 		if not self._merged_manifest:
-			out = system2([MYSQLD, '--no-defaults', '--verbose', '--help'],raise_exc=False,silent=True)[0]
+			cmd = '%s --no-defaults --verbose --help' % MYSQLD
+			out = system2('%s - mysql -s %s -c "%s"' % (SU_EXEC, BASH, cmd),shell=True, raise_exc=False,silent=True)[0]
 			
 		if out:
 			raw = out.split('--------------------------------- -----------------------------')
 			if raw:
 				a = raw[-1].split('\n')
-				if len(a) > 7:
-					b = a[1:-7]
+				if len(a) > 4:
+					b = a[1:-4]
 					for item in b:
 						c = item.split()
 						if len(c) > 1:
