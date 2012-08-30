@@ -245,7 +245,7 @@ def system2(*popenargs, **kwargs):
 		
 	# Set en_US locale
 	if not 'env' in kwargs:
-		kwargs['env'] = {}
+		kwargs['env'] = os.environ
 	kwargs['env']['LANG'] = 'en_US'
 		
 	for k in ('logger', 'err2out', 'warn_stderr', 'raise_exc', 'raise_error', 'exc_class', 'error_text', 'silent'):
