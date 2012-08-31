@@ -463,7 +463,7 @@ def _start_snmp_server():
 		except SystemExit:
 			raise
 		except (BaseException, Exception), e:
-			logger.exception(e)
+			logger.warn('Caught SNMP error: %s', str(e))
 			sys.exit(1)
 	else:
 		globals()["_snmp_pid"] = pid
