@@ -6,14 +6,16 @@ Created on 29.02.2012
 '''
 
 from scalarizr.util import disttool	
-from scalarizr.util import system2
+from scalarizr.util import system2, PopenError
 
 import logging
 import re
 import string
 import sys, os
 import imp
+import time
 import ConfigParser as configparser
+
 
 LOG = logging.getLogger(__name__)
 
@@ -113,8 +115,15 @@ class AptPackageMgr(PackageMgr):
 				return candidate
 	
 	def install(self, name, version, *args):
-		self.apt_get_command('install %s' % self._join_packages_str('=', name,
+		for _ in range(0, 30):
+			try:
+				self.apt_get_command('install %s' % self._join_packages_str('=', name,
 											version, *args), raise_exc=True)
+				break
+			except PopenError, e:
+				if not 'E: Could not get lock' in e.err:
+					raise
+				time.sleep(2)
 
 	def installed(self, name):
 		version_re = re.compile(r'^Version: (.+)$')
