@@ -28,6 +28,7 @@ from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 import scalarizr.services.mongodb as mongo_svc
 from scalarizr.messaging.p2p import P2pMessageStore
 from scalarizr.handlers import operation, prepare_tags
+from scalarizr.util import disttool
 
 
 
@@ -60,6 +61,23 @@ MONGO_VOLUME_CREATED	= "mongodb_created_volume_id"
 
 	
 def get_handlers():
+	from scalarizr.util.dynimp import package_mgr
+	mgr = package_mgr()
+	
+	if disttool.is_redhat_based():
+		if disttool.version_info()[0] >= 6:
+			if mgr.installed('python-pymongo'):
+				system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo', 'python-bson'))
+			if not mgr.installed('pymongo'):
+				mgr.install('pymongo', mgr.candidates('pymongo')[-1])
+		elif disttool.version_info()[0] == 5:
+			if not mgr.installed('python26-pymongo'):
+				mgr.install('python26-pymongo', mgr.candidates('python26-pymongo')[-1])
+	else:
+		if not mgr.installed('python-pymongo'):
+			mgr.install('python-pymongo', mgr.candidates('python-pymongo')[-1])
+			
+	
 	return (MongoDBHandler(), )
 
 
