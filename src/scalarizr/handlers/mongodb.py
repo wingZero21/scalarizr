@@ -21,7 +21,9 @@ if disttool.is_redhat_based():
 			mgr.install('python26-pymongo', mgr.candidates('python26-pymongo')[-1])
 else:
 	if not mgr.installed('python-pymongo'):
-		mgr.install('python-pymongo', mgr.candidates('python-pymongo')[-1])
+		# without python-bson explicit version won't work
+		ver = mgr.candidates('python-pymongo')[-1]
+		mgr.install('python-pymongo', ver, 'python-bson', ver)   
 
 
 
