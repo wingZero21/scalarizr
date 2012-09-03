@@ -735,6 +735,10 @@ class MysqlHandler(ServiceCtlHandler):
 	
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
+		
+		f = '/sys/module/apparmor/parameters/enabled'
+		self._apparmor_enabled = os.access(f, os.R_OK) and open(f).read().strip() == 'Y'
+
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
@@ -1838,7 +1842,7 @@ class MysqlHandler(ServiceCtlHandler):
 		LOG.debug('New permissions for mysql directory "%s" were successfully set.' % directory)
 
 		# Adding rules to apparmor config 
-		if disttool.is_debian_based():
+		if disttool.is_debian_based() and self._apparmor_enabled:
 			_add_apparmor_rules(directory)
 	
 	def _flush_logs(self):
