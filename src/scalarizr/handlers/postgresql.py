@@ -293,7 +293,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		'''
 		All pg instances including those in Initializing state
 		'''
-		list_roles = self._queryenv.list_roles(self._role_name, with_init=True)
+		list_roles = self._queryenv.list_roles(behaviour=BEHAVIOUR, with_init=True)
 		servers = []
 		for pg_serv in list_roles:
 			for pg_host in pg_serv.hosts:
@@ -752,7 +752,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		while not master_host:
 			try:
 				master_host = list(host 
-					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+					for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts 
 					if host.replication_master)[0]
 			except IndexError:
 				self._logger.debug("QueryEnv respond with no postgresql master. " + 
@@ -762,7 +762,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	def _get_slave_hosts(self):
 		self._logger.info("Requesting standby servers")
-		return list(host for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+		return list(host for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts 
 				if not host.replication_master)
 				
 	def _init_slave(self, message):

@@ -370,7 +370,7 @@ class MongoDBHandler(ServiceCtlHandler):
 					cfg_server_running = False
 			
 					local_ip = self._platform.get_private_ip()
-					role_hosts = self._queryenv.list_roles(self._role_name, with_init=True)[0].hosts
+					role_hosts = self._queryenv.list_roles(behaviour=BEHAVIOUR, with_init=True)[0].hosts
 			
 					for host in role_hosts:
 						if host.internal_ip == local_ip:
@@ -545,7 +545,7 @@ class MongoDBHandler(ServiceCtlHandler):
 						while not cfg_server_running:
 							try:
 								time.sleep(20)
-								role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+								role_hosts = self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
 								for host in role_hosts:
 									if host.shard_index == 0 and host.replica_set_index == 0:
 										cfg_server_running = True
@@ -1122,7 +1122,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	def _get_cluster_hosts(self):
-		return self._queryenv.list_roles(self._role_name)[0].hosts
+		return self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
 	
 	@property
 	def mongo_tags(self):
@@ -1291,7 +1291,7 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_MongoDb_ClusterTerminate(self, message):
 		try:
 			STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
-			role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+			role_hosts = self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
 			cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self, int(message.timeout))
 			cluster_terminate_watcher.start()
 		except:
