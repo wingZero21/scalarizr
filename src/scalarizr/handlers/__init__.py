@@ -284,6 +284,11 @@ class MessageListener:
 			if 'scalr_version' in message.meta:
 				try:
 					ver = tuple(map(int, message.meta['scalr_version'].strip().split('.')))
+					if ver != bus.scalr_version:
+						# Refresh QueryEnv version
+						queryenv = bus.queryenv_service
+						queryenv.api_version = queryenv.get_latest_version()
+						bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 					self._logger.debug('Scalr version: %s', ver)
 				except:
 					pass
