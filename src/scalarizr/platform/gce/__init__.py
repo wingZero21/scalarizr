@@ -2,15 +2,24 @@ __author__ = 'Nick Demyanchuk'
 
 import os
 import urllib2
+import httplib2
+
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
 from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
-import httplib2
 
 from scalarizr.platform import Platform
 
 COMPUTE_RW_SCOPE = 'https://www.googleapis.com/auth/compute'
 STORAGE_FULL_SCOPE = 'https://www.googleapis.com/auth/devstorage.full_control'
+
+
+def get_platform():
+	return GcePlatform()
 
 
 class GcePlatform(Platform):
@@ -44,11 +53,13 @@ class GcePlatform(Platform):
 
 	def get_public_ip(self):
 		network = self._get_metadata('network')
+		network = json.loads(network)
 		return network['networkInterface'][0]['accessConfiguration'][0]['externalIp']
 
 
 	def get_private_ip(self):
 		network = self._get_metadata('network')
+		network = json.loads(network)
 		return network['networkInterface'][0]['ip']
 
 
