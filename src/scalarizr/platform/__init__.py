@@ -132,7 +132,7 @@ class Platform():
 			scalr_id = ''
 			if bus.queryenv_version >= (2012, 7, 1):
 				queryenv = bus.queryenv_service
-				scalr_id = queryenv.get_global_config().get('scalr.id')
+				scalr_id = queryenv.get_global_config()['params'].get('scalr.id', '')
 			if scalr_id:
 				scalr_id = scalr_id + '-'
 			if bus.scalr_version >= (3, 1, 0):
