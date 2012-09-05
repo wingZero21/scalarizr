@@ -3,6 +3,8 @@ Created on Nov 26, 2010
 
 @author: Dmytro Korsakov
 '''
+from __future__ import with_statement
+
 from scalarizr.messaging import Queues
 from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
