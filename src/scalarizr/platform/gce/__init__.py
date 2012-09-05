@@ -9,8 +9,8 @@ import httplib2
 
 from scalarizr.platform import Platform
 
-COMPUTE_RW = 'https://www.googleapis.com/auth/compute'
-STORAGE_FULL = 'https://www.googleapis.com/auth/devstorage.full_control'
+COMPUTE_RW_SCOPE = 'https://www.googleapis.com/auth/compute'
+STORAGE_FULL_SCOPE = 'https://www.googleapis.com/auth/devstorage.full_control'
 
 
 class GcePlatform(Platform):
@@ -90,7 +90,7 @@ class GcePlatform(Platform):
 		http = httplib2.Http()
 		email = self.get_access_data('email')
 		pk = self.get_access_data('private_key')
-		cred = SignedJwtAssertionCredentials(email, pk, scope=[COMPUTE_RW, STORAGE_FULL])
+		cred = SignedJwtAssertionCredentials(email, pk, scope=[COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE])
 		return cred.authorize(http)
 
 
