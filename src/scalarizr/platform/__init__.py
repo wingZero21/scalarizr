@@ -129,9 +129,16 @@ class Platform():
 		
 		
 		def root(self):
+			scalr_id = ''
+			if bus.queryenv_version >= (2012, 7, 1):
+				queryenv = bus.queryenv_service
+				scalr_id = queryenv.get_global_config().get('scalr.id')
+			if scalr_id:
+				scalr_id = scalr_id + '-'
 			if bus.scalr_version >= (3, 1, 0):
-				return '%s://scalr-%s-%s' % (
+				return '%s://scalr%s-%s-%s' % (
 					self.platform.cloud_storage_path.split('://')[0],
+					scalr_id,
 					self.ini.get('general', 'env_id'),
 				    self.ini.get('general', 'region')
 				)

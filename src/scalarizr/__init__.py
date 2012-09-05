@@ -300,6 +300,7 @@ def _init_services():
 	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), '2008-12-16')
 	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), queryenv.get_latest_version())
 	bus.queryenv_service = queryenv
+	bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 	
 	logger.debug("Initialize messaging")
 	factory = MessageServiceFactory()
