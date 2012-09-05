@@ -134,7 +134,7 @@ class Platform():
 				queryenv = bus.queryenv_service
 				scalr_id = queryenv.get_global_config()['params'].get('scalr.id', '')
 			if scalr_id:
-				scalr_id = scalr_id + '-'
+				scalr_id = '-' + scalr_id
 			if bus.scalr_version >= (3, 1, 0):
 				return '%s://scalr%s-%s-%s' % (
 					self.platform.cloud_storage_path.split('://')[0],
