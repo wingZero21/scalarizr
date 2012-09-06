@@ -234,3 +234,4 @@ def package_mgr():
 	if linux.os['family'] in ('RedHat', 'Oracle'):
 		return YumPackageMgr()
 	return AptPackageMgr()
+

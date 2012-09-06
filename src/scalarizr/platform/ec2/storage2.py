@@ -160,7 +160,7 @@ class EbsVolume(base.Volume, EbsMixin):
 			ebs = create volume
 		
 		if not ebs is in-use by this server:
-			if attaching:
+			if attaching or detaching:
 				wait for state change
 			if in-use:
 				detach volume
@@ -201,7 +201,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		
 			if not (ebs.volume_state() == 'in-use' and  \
 					ebs.attach_data.instance_id == self._instance_id()):
-				if ebs.attachment_state() == 'attaching':
+				if ebs.attachment_state() in ('attaching', 'detaching'):
 					self._wait_attachment_state_change(ebs)
 				if ebs.attachment_state() == 'attached':
 					self._detach_volume(ebs)
