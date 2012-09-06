@@ -14,7 +14,7 @@ from scalarizr.util import filetool, system2, fstool, wait_until
 from scalarizr.handlers import rebundle as rebundle_hndlr
 
 
-def get_handlers ():
+def get_handlers():
 	return [GceRebundleHandler()]
 
 
@@ -76,11 +76,13 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 				exclude_dirs.extend(self.exclude_dirs)
 
 				rsync = filetool.Rsync()
-				rsync.source('/').dest(tmp_mount_dir).sparse().recursive()
+				rsync.source('/').dest(tmp_mount_dir).sparse().archive().times()
 				rsync.exclude([os.path.join(ex, '**') for ex in exclude_dirs])
 				rsync.exclude(self.exclude_files)
 				rsync.exclude(self._excludes)
 				rsync.execute()
+
+				# TODO: Create special files
 
 				""" Cleanup network """
 				f_to_del_path = os.path.join(tmp_mount_dir, 'lib/udev/rules.d/75-persistent-net-generator.rules')
