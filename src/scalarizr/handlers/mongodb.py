@@ -6,6 +6,27 @@ Created on Sep 30, 2011
 from __future__ import with_statement
 
 
+from scalarizr.util.dynimp import package_mgr
+from scalarizr.util import disttool, system2
+mgr = package_mgr()
+
+if disttool.is_redhat_based():
+	if disttool.version_info()[0] >= 6:
+		if mgr.installed('python-pymongo'):
+			system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo', 'python-bson'))
+		if not mgr.installed('pymongo'):
+			mgr.install('pymongo', mgr.candidates('pymongo')[-1])
+	elif disttool.version_info()[0] == 5:
+		if not mgr.installed('python26-pymongo'):
+			mgr.install('python26-pymongo', mgr.candidates('python26-pymongo')[-1])
+else:
+	if not mgr.installed('python-pymongo'):
+		# without python-bson explicit version won't work
+		ver = mgr.candidates('python-pymongo')[-1]
+		mgr.install('python-pymongo', ver, 'python-bson', ver)   
+
+
+
 import os
 import sys
 import time
@@ -20,7 +41,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, Hosts, cryptotool, iptables
+from scalarizr.util import wait_until, Hosts, cryptotool, iptables
 from scalarizr.util.filetool import split, rchown
 from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
@@ -28,6 +49,7 @@ from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 import scalarizr.services.mongodb as mongo_svc
 from scalarizr.messaging.p2p import P2pMessageStore
 from scalarizr.handlers import operation, prepare_tags
+
 
 
 
@@ -348,7 +370,7 @@ class MongoDBHandler(ServiceCtlHandler):
 					cfg_server_running = False
 			
 					local_ip = self._platform.get_private_ip()
-					role_hosts = self._queryenv.list_roles(self._role_name, with_init=True)[0].hosts
+					role_hosts = self._queryenv.list_roles(behaviour=BEHAVIOUR, with_init=True)[0].hosts
 			
 					for host in role_hosts:
 						if host.internal_ip == local_ip:
@@ -523,7 +545,7 @@ class MongoDBHandler(ServiceCtlHandler):
 						while not cfg_server_running:
 							try:
 								time.sleep(20)
-								role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+								role_hosts = self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
 								for host in role_hosts:
 									if host.shard_index == 0 and host.replica_set_index == 0:
 										cfg_server_running = True
@@ -1100,7 +1122,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	def _get_cluster_hosts(self):
-		return self._queryenv.list_roles(self._role_name)[0].hosts
+		return self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
 	
 	@property
 	def mongo_tags(self):
@@ -1269,7 +1291,7 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_MongoDb_ClusterTerminate(self, message):
 		try:
 			STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
-			role_hosts = self._queryenv.list_roles(self._role_name)[0].hosts
+			role_hosts = self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
 			cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self, int(message.timeout))
 			cluster_terminate_watcher.start()
 		except:

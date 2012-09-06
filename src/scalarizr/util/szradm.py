@@ -3,6 +3,8 @@ Created on Nov 26, 2010
 
 @author: Dmytro Korsakov
 '''
+from __future__ import with_statement
+
 from scalarizr.messaging import Queues
 from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
@@ -421,12 +423,10 @@ class MessageDetailsCommand(Command):
 
 			assert self.kwds['message_id'], 'message_id must be defined'
 			query="SELECT `message` FROM p2p_message WHERE `message_id`='%s'"\
-				%self.kwds['message_id']
+				% self.kwds['message_id']
 			cur.execute(query)
-			res=[]
-			for row in cur:
-				res.append(row[0])
-			if res[0]:
+			res = cur.fetchone()
+			if res:
 				msg=Message()
 				msg.fromxml(res[0])
 				try:

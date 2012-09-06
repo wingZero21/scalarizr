@@ -71,6 +71,8 @@ class _Bus(Observable):
 	@ivar scalarizr.queryenv.QueryEnv:  QueryEnv service client
 	"""
 	
+	queryenv_version = None
+	
 	snmp_server = None
 	"""
 	@ivar scalarizr.snmpagent.SnmpServer: SNMP embed server

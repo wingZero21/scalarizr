@@ -179,27 +179,27 @@ class Configuration:
 		"""
 		Comment part of the configuration (one option or subtree)
 		"""
-		temp_nodes = self._find_all(path)
-		
 		path = quote(path)
-		if not temp_nodes:
+		parent_els	= self._find_all(os.path.join(path,'..'))
+		if not parent_els:
 			return
 
-		parent_els	= self._find_all(os.path.join(path,'..'))
+		el_to_comment_path = os.path.basename(path)
 
-		for temp_node in temp_nodes:
-			comment_value = StringIO()
-			temp_root	= ET.Element('mc_conf')
-			temp_tree	= ET.ElementTree(temp_root)
-			temp_root.append(temp_node)
-			new_conf	= Configuration(format=self._format, etree=temp_tree)
-			new_conf._init()
-			new_conf.write_fp(comment_value, close = False)
-			parent_el   = parent_els.pop(0)
-			index = list(parent_el).index(temp_node)
-			comment		= ET.Comment(comment_value.getvalue().strip())
-			parent_el.insert(index, comment)
-			parent_el.remove(temp_node)
+		for parent_el in parent_els:
+			nodes_to_cmt = parent_el.findall(el_to_comment_path)
+			for node_to_cmt in nodes_to_cmt:
+				comment_value = StringIO()
+				temp_root	= ET.Element('mc_conf')
+				temp_tree	= ET.ElementTree(temp_root)
+				temp_root.append(node_to_cmt)
+				new_conf	= Configuration(format=self._format, etree=temp_tree)
+				new_conf._init()
+				new_conf.write_fp(comment_value, close = False)
+				index = list(parent_el).index(node_to_cmt)
+				comment		= ET.Comment(comment_value.getvalue().strip())
+				parent_el.insert(index, comment)
+				parent_el.remove(node_to_cmt)
 
 	def uncomment(self, path):
 		"""

@@ -89,7 +89,7 @@ class IpListBuilder(Handler):
 					rolename, behaviour, ip)
 			self._modify_tree(rolename, behaviour, ip, 
 					modfn=self._create_file, 
-					replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
+					replication_master='mysql' in behaviour and self._host_is_replication_master(ip, 'mysql'))
 			
 	def on_HostDown(self, message):
 		behaviour = message.behaviour
@@ -101,7 +101,7 @@ class IpListBuilder(Handler):
 							rolename, behaviour, ip)
 			self._modify_tree(rolename, behaviour, ip, 
 					modfn=self._remove_file, 
-					replication_master=BuiltinBehaviours.MYSQL in behaviour and self._host_is_replication_master(ip, rolename))
+					replication_master='mysql' in behaviour and self._host_is_replication_master(ip, 'mysql'))
 
 	def on_Mysql_NewMasterUp(self, message):
 		ip = message.local_ip or message.remote_ip
@@ -166,9 +166,9 @@ class IpListBuilder(Handler):
 				self._logger.error(x)
 		self._remove_dir(os.path.dirname(f))
 			
-	def _host_is_replication_master(self, ip, role_name):
+	def _host_is_replication_master(self, ip, behaviour):
 		try:
-			received_roles = self._queryenv.list_roles(role_name)
+			received_roles = self._queryenv.list_roles(behaviour=behaviour)
 		except:
 			self._logger.error('Can`t retrieve list of roles from Scalr.')
 			raise

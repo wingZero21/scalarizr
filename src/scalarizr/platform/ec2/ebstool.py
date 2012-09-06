@@ -71,7 +71,8 @@ def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 		logger.debug('Snapshot %s completed', snap.id)
 
 
-def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout=DEFAULT_TIMEOUT, tags=None):
+def create_volume(ec2_conn, size, avail_zone, snap_id=None, volume_type=None, iops=None, 
+				logger=None, timeout=DEFAULT_TIMEOUT, tags=None):
 	logger = logger or logging.getLogger(__name__)
 	
 	msg = 'Creating EBS volume%s%s in avail zone %s' % (
@@ -84,7 +85,7 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, logger=None, timeout
 	if snap_id:
 		wait_snapshot(ec2_conn, snap_id, logger)
 	
-	vol = ec2_conn.create_volume(size, avail_zone, snap_id)
+	vol = ec2_conn.create_volume(size, avail_zone, snapshot=snap_id, volume_type=volume_type, iops=iops)
 	logger.debug('EBS volume %s created%s', vol.id, snap_id and ' from snapshot %s' % snap_id or '')
 	
 	logger.debug('Checking that EBS volume %s is available', vol.id)

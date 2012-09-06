@@ -16,7 +16,7 @@ import logging
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, cryptotool, software
+from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
 from scalarizr.util.filetool import split
 from scalarizr.services import redis
 from scalarizr.service import CnfController
@@ -46,7 +46,11 @@ CENTOS_CONFIG_PATH			= '/etc/redis.conf'
 
 BACKUP_CHUNK_SIZE 			= 200*1024*1024
 
+
 LOG = logging.getLogger(__name__)
+
+
+initdv2.explore(SERVICE_NAME, redis.RedisInitScript)
 
 
 def get_handlers():
@@ -65,6 +69,7 @@ class RedisHandler(ServiceCtlHandler):
 	''' @type _cnf: scalarizr.config.ScalarizrCnf '''
 	
 	storage_vol = None	
+	default_service = None
 		
 	@property
 	def is_replication_master(self):
@@ -184,6 +189,8 @@ class RedisHandler(ServiceCtlHandler):
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		
+		self.default_service = initdv2.lookup(SERVICE_NAME)
+		
 		
 	def on_host_init_response(self, message):
 		"""
@@ -219,6 +226,9 @@ class RedisHandler(ServiceCtlHandler):
 					LOG.debug("Update redis config with %s", redis_data)
 					self._update_config(redis_data)
 					
+					if self.default_service.running:
+						self.default_service.stop('Treminating default redis instance')
+						
 					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
 					self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self._get_password(),])
 					self._insert_iptables_rules()
@@ -246,6 +256,8 @@ class RedisHandler(ServiceCtlHandler):
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
+		if self.default_service.running:
+			self.default_service.stop('Treminating default redis instance')
 		self._insert_iptables_rules()		
 
 
@@ -555,7 +567,7 @@ class RedisHandler(ServiceCtlHandler):
 		while not master_host:
 			try:
 				master_host = list(host 
-					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+					for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts 
 					if host.replication_master)[0]
 			except IndexError:
 				LOG.debug("QueryEnv respond with no %s master. " % BEHAVIOUR + 

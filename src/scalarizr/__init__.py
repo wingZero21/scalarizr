@@ -1,5 +1,6 @@
 
 import sys
+import urllib2
 if sys.version_info < (2, 6):
 	from scalarizr.util import compat
 	compat.patch()
@@ -32,11 +33,11 @@ import os, sys, re, shutil, time
 import binascii, string, traceback
 import sqlite3 as sqlite
 import threading, socket, signal
-import pprint
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
 import pprint
+import select
 import wsgiref.simple_server
 from scalarizr.util import sqlite_server, wait_until
 
@@ -299,6 +300,7 @@ def _init_services():
 	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), '2008-12-16')
 	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), queryenv.get_latest_version())
 	bus.queryenv_service = queryenv
+	bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 	
 	logger.debug("Initialize messaging")
 	factory = MessageServiceFactory()
@@ -601,6 +603,7 @@ def _cleanup_after_rebundle():
 			continue
 		path = os.path.join(priv_path, file)
 		os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+	system2('sync', shell=True)
 
 def do_validate_cnf():
 	errors = list()
@@ -657,6 +660,14 @@ def main():
 				help='Answer "yes" to all questions')
 		optparser.add_option('-o', dest='cnf', action='append',
 				help='Runtime .ini option key=value')
+		
+		if ('cloud-location=' in sys.argv or 'region=' in sys.argv) and 'platform=ec2' in sys.argv:
+			region = urllib2.urlopen('http://169.254.169.254/latest/meta-data/placement/availability-zone').read().strip()[:-1]
+			try:
+				sys.argv[sys.argv.index('region=')] += region
+			except ValueError:
+				sys.argv += ['-o', 'region=' + region]		
+		
 		optparser.parse_args()
 
 		
@@ -821,10 +832,19 @@ def main():
 	
 		try:
 			while _running:
-				_msg_thread.join(0.2)
 				# Recover SNMP 
 				if _running and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
 					_start_snmp_server()
+				
+				#_msg_thread.join(0.2)
+				try:
+					select.select([], [], [], 30)
+				except select.error, e:
+					if e.args[0] == 4:
+						# Interrupted syscall
+						continue
+					raise
+				
 		except KeyboardInterrupt:
 			logger.debug('Mainloop: KeyboardInterrupt')
 			pass
