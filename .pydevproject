@@ -5,12 +5,12 @@
 <pydev_property name="org.python.pydev.PYTHON_PROJECT_INTERPRETER">Default</pydev_property>
 <pydev_property name="org.python.pydev.PYTHON_PROJECT_VERSION">python 2.6</pydev_property>
 <pydev_pathproperty name="org.python.pydev.PROJECT_SOURCE_PATH">
-<path>/scalarizr-trunk/src</path>
-<path>/scalarizr-trunk/externals</path>
-<path>/scalarizr-trunk/tests/unit</path>
-<path>/scalarizr-trunk/test/integ/testcases</path>
-<path>/scalarizr-trunk/test/integ/libs</path>
-<path>/scalarizr-trunk/test/unit/testcases</path>
-<path>/scalarizr-trunk/test/unit/libs</path>
+<path>/scalarizr-feature-xtrabackup-data-bundle/src</path>
+<path>/scalarizr-feature-xtrabackup-data-bundle/externals</path>
+<path>/scalarizr-feature-xtrabackup-data-bundle/tests/unit</path>
+<path>/scalarizr-feature-xtrabackup-data-bundle/test/integ/testcases</path>
+<path>/scalarizr-feature-xtrabackup-data-bundle/test/integ/libs</path>
+<path>/scalarizr-feature-xtrabackup-data-bundle/test/unit/testcases</path>
+<path>/scalarizr-feature-xtrabackup-data-bundle/test/unit/libs</path>
 </pydev_pathproperty>
 </pydev_project>

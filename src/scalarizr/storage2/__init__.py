@@ -16,7 +16,7 @@ def volume(**kwds):
 	type_ = kwds.get('type', 'base')
 	if type_ not in volume_types:
 		try:
-			__import__('volumes.%s' % type_)
+			__import__('scalarizr.storage2.volumes.%s' % type_)
 		except ImportError:
 			pass
 	try:
@@ -31,7 +31,7 @@ def snapshot(**kwds):
 	type_ = kwds.get('type', 'base')
 	if type_ not in snapshot_types:
 		try:
-			__import__('volumes.%s' % type_)
+			__import__('scalarizr.storage2.volumes.%s' % type_)
 		except ImportError:
 			pass
 	try:
@@ -46,7 +46,7 @@ def filesystem(fstype=None):
 	fstype = fstype or 'ext3'
 	if not fstype in filesystem_types:
 		try:
-			__import__('filesystems.%s' % fstype)
+			__import__('scalarizr.storage2.filesystems.%s' % fstype)
 		except ImportError:
 			pass
 	try:
