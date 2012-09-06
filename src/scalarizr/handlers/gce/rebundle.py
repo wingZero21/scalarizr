@@ -76,7 +76,8 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 				exclude_dirs.extend(self.exclude_dirs)
 
 				rsync = filetool.Rsync()
-				rsync.source('/').dest(tmp_mount_dir).sparse().archive().times()
+				rsync.source('/').dest(tmp_mount_dir).sparse()
+				rsync.hardlinks().archive().times()
 				rsync.exclude([os.path.join(ex, '**') for ex in exclude_dirs])
 				rsync.exclude(self.exclude_files)
 				rsync.exclude(self._excludes)
