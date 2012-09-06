@@ -12,7 +12,6 @@ def system(*args, **kwds):
 	kwds['exc_class'] = LinuxError
 	if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
 		args[0][0] = which(args[0][0])
-	print args
 	return util.system2(*args, **kwds)
 
 class __os(dict):

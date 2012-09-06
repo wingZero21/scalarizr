@@ -53,9 +53,11 @@ class FileSystem(object):
 		if not os.path.exists('/sbin/mkfs.%s' % self.name):
 			coreutils.modprobe(self.name)
 			if self.os_packages:
+				LOG.debug('Installing OS packages')
 				from scalarizr.linux import pkgmgr
 				mgr = pkgmgr.package_mgr()
-				(mgr.install(package) for package in self.os_packages)
+				for package in self.os_packages:
+					mgr.install(package)
 		
 
 	def mkfs(self, device, *short_args):

@@ -830,11 +830,17 @@ class StandardDataBundle(object):
 
 
 class XtrabackupDataBundle(object):
+
 	def __init__(self, mysql_init, storage_volume, snapshot_volume, lock_myisam=False):
-		pass
+		self.mysql_init = mysql_init
+		self.storage_volume = storage_volume
+		self.snapshot_volume = snapshot_volume
+		self.lock_myisam = lock_myisam
+
 	
 	def create(self, snapshot_tags=None):
 		pass
+	
 	
 	def restore(self, storage_snapshot, log_file, log_pos):
 		pass
