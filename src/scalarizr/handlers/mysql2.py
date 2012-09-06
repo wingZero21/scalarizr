@@ -37,10 +37,13 @@ from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 
 
+BEHAVIOUR = SERVICE_NAME = 'percona' if 'percona' in bus.cnf.rawini.get('general', 'behaviour') else 'mysql2'
+'''
 if 'Percona Server' in system2((software.which('mysqld'), '-V'))[0] and disttool.is_redhat_based():
 	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.PERCONA
 else:
 	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL2
+'''
 CNF_SECTION = 'mysql2'
 LOG = logging.getLogger(__name__)
 
@@ -985,7 +988,7 @@ class MysqlHandler(DBMSRHandler):
 		while not master_host:
 			try:
 				master_host = list(host 
-					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+					for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts 
 					if host.replication_master)[0]
 			except IndexError:
 				LOG.debug("QueryEnv respond with no mysql master. " + 

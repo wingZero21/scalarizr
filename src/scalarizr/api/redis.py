@@ -153,7 +153,7 @@ class RedisAPI(object):
 				raise
 			finally:
 				if op:
-					op.__exit__(*())
+					op.__exit__(None)
 		return (new_ports, new_passwords)
 		
 	
@@ -184,7 +184,7 @@ class RedisAPI(object):
 				raise
 			finally:
 				if op:
-					op.__exit__(*())
+					op.__exit__(None)
 		return dict(ports=freed_ports)
 	
 	
@@ -269,7 +269,7 @@ class RedisAPI(object):
 		while not master_host:
 			try:
 				master_host = list(host 
-					for host in self._queryenv.list_roles(self._role_name)[0].hosts 
+					for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts 
 					if host.replication_master)[0]
 			except IndexError:
 				LOG.debug("QueryEnv respond with no %s master. " % BEHAVIOUR + 
