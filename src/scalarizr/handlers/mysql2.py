@@ -17,7 +17,7 @@ import glob
 import ConfigParser
 
 # Core
-from scalarizr import config
+from scalarizr import config, storage2
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.messaging import Messages
@@ -387,9 +387,29 @@ class MysqlHandler(DBMSRHandler):
 							if mysql_data['snapshot_id']:
 								Storage.backup_config(dict(type='ebs', id=mysql_data['snapshot_id']), self._snapshot_config_path)
 							del mysql_data['snapshot_id']
-					
 					LOG.debug("Update mysql config with %s", mysql_data)
 					self._update_config(mysql_data)
+					
+					tmp = Storage.restore_config(self._volume_config_path)
+					self.storage_vol = storage2.volume(**tmp)
+					if os.path.exists(self._snapshot_config_path):
+						tmp = Storage.restore_config(self._snapshot_config_path)
+						self.storage_snap = storage2.snapshot(**tmp)
+					else:
+						self.storage_snap = None
+					
+					data_bundle_type = mysql_data.get('data_bundle_type', 'standard')
+					if data_bundle_type == 'standard':
+						self.data_bundle = mysql_svc.StandardDataBundle(
+												self.mysql.service, 
+												self.root_client, 
+												self.storage_vol)
+					elif data_bundle_type == 'xtrabackup':
+						self.data_bundle = mysql_svc.XtrabackupDataBundle(
+												self.mysql.service,
+												self.storage_vol,
+												{'type': 'ebs', 'size': self._datadir_size},
+												lock_myisam=mysql_data.get('lock_myisam', False))
 
 	
 	def on_before_host_up(self, message):
@@ -833,14 +853,11 @@ class MysqlHandler(DBMSRHandler):
 			snap_cnf = None
 			with op.step(self._step_create_storage):		
 		
-				# Plug storage
-				volume_cnf = Storage.restore_config(self._volume_config_path)
-				try:
-					snap_cnf = Storage.restore_config(self._snapshot_config_path)
-					volume_cnf['snapshot'] = snap_cnf.copy()
-				except IOError:
-					pass
-				self.storage_vol = self._plug_storage(mpoint=STORAGE_PATH, vol=volume_cnf)
+				if self.storage_snap:
+					log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
+					self.data_bundle.restore(self.storage_snap, log_file, log_pos)
+		
+				self._plug_storage(mpoint=STORAGE_PATH, vol=self.storage_vol)
 				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 				
 				self.mysql.flush_logs(DATA_DIR)
@@ -940,8 +957,9 @@ class MysqlHandler(DBMSRHandler):
 				
 				if not self._storage_valid():
 					LOG.debug("Initialize slave storage")
-					self.storage_vol = self._plug_storage(STORAGE_PATH, 
-							dict(snapshot=Storage.restore_config(self._snapshot_config_path)))
+					self.data_bundle.restore(self.storage_snap, log_file, log_pos)
+				else:
+					self.storage_vol.ensure()
 				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
 			with op.step(self._step_patch_conf):		
@@ -1127,53 +1145,16 @@ class MysqlHandler(DBMSRHandler):
 
 
 	def _plug_storage(self, mpoint, vol):
-		if not isinstance(vol, Volume):
-			vol['tags'] = self.mysql_tags
-			vol = Storage.create(vol)
-
-		try:
-			if not os.path.exists(mpoint):
-				os.makedirs(mpoint)
-			if not vol.mounted():
-				vol.mount(mpoint)
-		except StorageError, e:
-			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
-			if 'you must specify the filesystem type' in str(e):
-				vol.mkfs()
-				vol.mount(mpoint)
-			else:
-				raise
+		vol.tags = self.mysql_tags
+		vol.mpoint = mpoint
+		vol.ensure(mount=True, mkfs=True)
 		return vol
 	
 
 	def _create_snapshot(self, root_user, root_password, tags=None):
-		was_running = self.mysql.service.running
-		if not was_running:
-			self.mysql.service.start()
-		try:
-			self.root_client.lock_tables()
-			system2('sync', shell=True)
-			
-			if self.is_replication_master:
-				log_file, log_pos = self.root_client.master_status()  
-			else: 
-				data = self.root_client.slave_status()
-				log_file = data['Relay_Master_Log_File']
-				log_pos = data['Exec_Master_Log_Pos']
-	
-			# Creating storage snapshot
-			snap = self._create_storage_snapshot(tags)
-		except BaseException, e:
-			LOG.error('Snapshot creation failed with error: %s' % e)
-			raise	
-		
-		finally:
-			self.root_client.unlock_tables()
-			if not was_running:
-				self.mysql.service.stop('Restoring service`s state after making snapshot')
-		
-		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
-		if snap.state == Snapshot.FAILED:
+		snap, log_file, log_pos = self.data_bundle.create(tags)
+		wait_until(lambda: snap.status() != snap.QUEUED)
+		if snap.state == snap.FAILED:
 			raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
 		
 		LOG.info('MySQL data bundle created\n  snapshot: %s\n  log_file: %s\n  log_pos: %s', 
@@ -1192,22 +1173,16 @@ class MysqlHandler(DBMSRHandler):
 		return tuple(ret)
 	
 
-	def _create_storage_snapshot(self, tags=None):
-		LOG.info("Creating storage snapshot")
-		tags = tags or dict()
-		#tags.update({'storage': 'mysql'})		
-		try:
-			return self.storage_vol.snapshot(self._data_bundle_description(), tags=tags)
-		except StorageError, e:
-			LOG.error("Cannot create MySQL data snapshot. %s", e)
-			raise
-	
-
 	def _data_bundle_description(self):
 		pl = bus.platform
 		return 'MySQL data bundle (farm: %s role: %s)' % (
 					pl.get_user_data(UserDataOptions.FARM_ID), 
 					pl.get_user_data(UserDataOptions.ROLE_NAME))
+
+
+	def _datadir_size(self):
+		stat = os.statvfs(STORAGE_PATH)
+		return stat.f_bsize * stat.f_blocks / 1024 / 1024 / 1024 + 1
 		
 
 	def _change_master(self, host, user, password, log_file, log_pos, timeout=None):

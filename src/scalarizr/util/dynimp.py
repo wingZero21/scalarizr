@@ -28,11 +28,11 @@ class PackageMgr(object):
 
 	def install(self, name, version, *args):
 		''' Installs a `version` of package `name` '''
-		raise NotImplemented()
+		raise NotImplementedError()
 
 	def installed(self, name):
 		''' Return installed package version '''
-		raise NotImplemented()	
+		raise NotImplementedError()	
 
 	def _join_packages_str(self, sep, name, version, *args):
 		packages = [(name, version)]
@@ -44,15 +44,15 @@ class PackageMgr(object):
 
 	def updatedb(self):
 		''' Updates package manager internal database '''
-		raise NotImplemented()
+		raise NotImplementedError()
 
 	def check_update(self, name):
 		''' Returns info for package `name` '''
-		raise NotImplemented()
+		raise NotImplementedError()
 
 	def candidates(self, name):
 		''' Returns all available installation candidates for `name` '''
-		raise NotImplemented()
+		raise NotImplementedError()
 
 
 class AptPackageMgr(PackageMgr):

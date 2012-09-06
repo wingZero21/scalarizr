@@ -688,7 +688,7 @@ class VolumeProvider(object):
 			self._umount(vol, force)
 		
 	def blank_config(self, cnf):
-		raise NotImplemented()
+		raise NotImplementedError()
 	
 	def _umount(self, vol, force=False):
 		try:

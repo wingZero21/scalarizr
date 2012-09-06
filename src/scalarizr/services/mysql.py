@@ -27,7 +27,9 @@ from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import rchown
+from scalarizr import storage2
 import sys
+
 
 
 LOG = logging.getLogger(__name__)
@@ -785,4 +787,56 @@ def _add_apparmor_rules(directory):
 
 		
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
+
+
+class DataBundle(object):
+	
+	def create(self, snapshot_tags=None):
+		raise NotImplementedError()
+	
+	def restore(self, storage_snapshot, log_file, log_pos):
+		raise NotImplementedError()
+	
+	
+class StandardDataBundle(object):
+	def __init__(self, mysql_init, mysql_client, storage_volume):
+		self.mysql_init = mysql_init
+		self.mysql_client = mysql_client
+		self.storage_volume = storage_volume
+		
+	def create(self, snapshot_tags=None):
+		self.mysql_client.lock_tables()
+		was_running = self.mysql_init.running
+		if not was_running:
+			self.mysql_init.start()
+		try:
+			self.mysql_client.lock_tables()
+			system2('sync', shell=True)
+			log_file, log_pos = self.mysql_client.master_status()
+			snap = self.storage_volume.snapshot(snapshot_tags)  
+			return snap, log_file, log_pos
+		except:
+			LOG.error('MySQL data bundle failed')
+			raise	
+		
+		finally:
+			self.mysql_client.unlock_tables()
+			if not was_running:
+				self.mysql_init.stop('Restoring service`s state after making snapshot')
+				
+	def restore(self, storage_snapshot, log_file, log_pos):
+		self.storage_volume.snap = storage_snapshot
+		self.storage_volume.ensure()
+		return self.storage_volume 
+
+
+class XtrabackupDataBundle(object):
+	def __init__(self, mysql_init, storage_volume, snapshot_volume, lock_myisam=False):
+		pass
+	
+	def create(self, snapshot_tags=None):
+		pass
+	
+	def restore(self, storage_snapshot, log_file, log_pos):
+		pass
 

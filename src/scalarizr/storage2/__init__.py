@@ -1,153 +1,73 @@
-import uuid
+
+import logging
+import re
+
+from scalarizr import linux
+
+LOG = logging.getLogger(__name__)
 
 
-def create_volume():
-	pass
-
-def create_snapshot():
-	pass
-
-storage_types = {}
-
-class StorageError(Exception):
-	pass
-
-class NoFileSystem(StorageError):
-	pass
+volume_types = dict()
+snapshot_types = dict()
+filesystem_types = dict()
 
 
-class Base(object):
-	_data = None
-	
-	def __init__(self, **kwds):
-		if not self._data:
-			self._data = {}
-		self._data['type'] = kwds.pop('type', 'base')
-		self._data.update(kwds)
-
-
-	def config(self):
-		return self._walk_config(self._data)
-
-	
-	def __setattr__(self, name, value):
-		data = self.__dict__ if 'name' in self.__dict__ else self.__dict__['_data']
-		data[name] = value
-	
-	
-	def __getattr__(self, name):
-		if name in self.__dict__['_data']:
-			return self.__dict__['_data'][name]
-		raise AttributeError(name)
-	
-	
-	def _walk_config(self, data=None):
-		# todo: walk and extract config
-		
-		if hasattr(data, '__iter__'):
-			
-			ret = {}
-			for key, value in self._data:
-				if hasattr(value, '__iter__'):
-					if isinstance(value, list):
-						ret[key] = [self._walk_config(v) for v in value]
-					else:
-						ret[key] = self._walk_config(data)
-				if isinstance(value, Base):
-					ret[key] = value.config()
-				else:
-					ret[key] = value
+def volume(**kwds):
+	type_ = kwds.get('type', 'base')
+	if type_ not in volume_types:
+		try:
+			__import__('volumes.%s' % type_)
+		except ImportError:
 			pass
-			return ret
-		return data
+	try:
+		cls = volume_types[type_]
+	except KeyError:
+		raise KeyError("Unknown volume type '%s'. "
+						"Have you registered it in storage2.volume_types?" % type_)
+	return cls(**kwds)
 
 
-	def _genid(self, prefix=''):
-		return '%s%s-%s' % (prefix, self.type, uuid.uuid4().hex[0:8])		
+def snapshot(**kwds):
+	type_ = kwds.get('type', 'base')
+	if type_ not in snapshot_types:
+		try:
+			__import__('volumes.%s' % type_)
+		except ImportError:
+			pass
+	try:
+		cls = snapshot_types[type_]
+	except KeyError:
+		raise KeyError("Unknown snapshot type '%s'. "
+					"Have you registered it in storage2.snapshot_types?" % type_)
+	return cls(**kwds)
 
 
-class Volume(Base):
-	
-	def ensure(self, mount=False, mkfs=False, **updates):
-		self._ensure()
-		if not self.id:
-			self.id = self._genid('vol-')
-		if mount:
-			try:
-				self.mount()
-			except NoFileSystem:
-				if mkfs:
-					self.mkfs()
-					self.mount()
-				else:
-					raise
-		return self.config()
-	
-	def snapshot(self, description=None, tags=None):
-		return self._snapshot(description, tags)
+def filesystem(fstype=None):
+	fstype = fstype or 'ext3'
+	if not fstype in filesystem_types:
+		try:
+			__import__('filesystems.%s' % fstype)
+		except ImportError:
+			pass
+	try:
+		cls = filesystem_types[fstype]
+	except KeyError:
+		raise KeyError("Unknown filesystem type '%s'. "
+					"Have you registered it in storage2.filesystem_types?" % fstype)
+	return cls()
+
+		
+class StorageError(linux.LinuxError):
+	pass
 
 
-	def destroy(self, force=False):
-		if self.device:
-			self.detach(force)
-		self._destroy(force)
-
-
-	def detach(self, force=False):
-		self.umount()
-		self._detach(force)
-
-
-	def mount(self):
-		pass
-
-
-	def umount(self):
-		pass
-
-
-	def mkfs(self):
-		pass
-
-	
-	def _ensure(self):
-		pass
-	
-	
-	def _snapshot(self, description, tags):
-		pass
-
-
-	def _detach(self, force):
-		pass
-
-	
-	def _destroy(self, force):
-		pass
-	
-	
-class Snapshot(Base):
-	QUEUED = 'queued'
-	IN_PROGRESS = 'in-progress'
-	COMPLETED = 'completed'
-	FAILED = 'failed'
-
-	def __init__(self, **kwds):
-		super(Snapshot, self).__init__(**kwds)
-		if not self._data.get('id'):
-			self._data['id'] = self._genid('snap-')
-	
-	def destroy(self):
-		return self._destroy()
-	
-	
-	def status(self):
-		return self._status()
-	
-	
-	def _destroy(self):
-		pass
-	
-	def _status(self):
-		pass
-	
+RHEL_DEVICE_ORDERING_BUG = False
+if linux.os.redhat_family:
+	# Check that system is affected by devices ordering bug
+	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
+	from scalarizr.linux import mount
+	try:
+		entry = mount.mounts()['/dev/xvde']
+		RHEL_DEVICE_ORDERING_BUG = entry.mpoint == '/'
+	except KeyError:
+		pass 

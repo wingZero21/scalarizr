@@ -192,7 +192,7 @@ class PopenError(BaseException):
 	
 	@property
 	def error_text(self):
-		return self.args[0]
+		return len(self.args) and self.args[0] or ''
 	
 	@property
 	def out(self):
@@ -615,7 +615,7 @@ def import_object(import_str, *args, **kwds):
 
 def linux_package(name):
 	# @todo install package with apt or yum. raise beautiful errors
-	raise NotImplemented()
+	raise NotImplementedError()
 				
 
 class Hosts:	
