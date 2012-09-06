@@ -28,7 +28,7 @@ def system(*args, **kwargs):
 	
 
 class FileSystem(object):
-	name = None
+	type = None
 
 	features = {
 		'freezable': False,
@@ -50,8 +50,8 @@ class FileSystem(object):
 
 
 	def __init__(self):
-		if not os.path.exists('/sbin/mkfs.%s' % self.name):
-			coreutils.modprobe(self.name)
+		if not os.path.exists('/sbin/mkfs.%s' % self.type):
+			coreutils.modprobe(self.type)
 			if self.os_packages:
 				LOG.debug('Installing OS packages')
 				from scalarizr.linux import pkgmgr
@@ -62,7 +62,7 @@ class FileSystem(object):
 
 	def mkfs(self, device, *short_args):
 		short_args = list(short_args)
-		short_args.extend(('-t', self.name))
+		short_args.extend(('-t', self.type))
 		args = linux.build_cmd_args(
 					executable='/sbin/mkfs', 
 					short=short_args, 

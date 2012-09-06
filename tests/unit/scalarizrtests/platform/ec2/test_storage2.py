@@ -120,6 +120,7 @@ class TestEbsVolume(object):
 				assert self.vol.avail_zone == 'us-east-1a'
 				assert self.vol.name == '/dev/sdb'
 				assert self.vol.device == '/dev/xvdb'
+				assert self.vol.config()
 
 
 	def test_ensure_existed(self):
@@ -141,6 +142,8 @@ class TestEbsVolume(object):
 				assert self.vol.name == '/dev/sdb'
 				assert self.vol.device == '/dev/xvdb'
 				self.conn.get_all_volumes.assert_called_once_with(['vol-12345678'])
+				assert self.vol.config()
+				
 
 
 	def test_ensure_existed_in_different_zone(self):

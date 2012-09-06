@@ -126,6 +126,7 @@ class EbsVolume(base.Volume, EbsMixin):
 	
 	_free_device_letter_mgr = FreeDeviceLetterMgr()
 	_global_timeout = 3600
+	_conn = None
 
 	error_messages = base.Volume.error_messages.copy()
 	error_messages.update({

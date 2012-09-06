@@ -9,7 +9,7 @@ from scalarizr.storage2.filesystems import ext3
 
 
 class Ext4FileSystem(ext3.ExtFileSystem):
-	name = 'ext4'
+	type = 'ext4'
 
 
-storage2.filesystem_types['ext4'] = Ext4FileSystem
+storage2.filesystem_types[Ext4FileSystem.type] = Ext4FileSystem

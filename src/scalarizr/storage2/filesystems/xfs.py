@@ -16,7 +16,7 @@ XFS_FREEZE_EXEC = '/usr/sbin/xfs_freeze'
 
 
 class XfsFileSystem(filesystems.FileSystem):
-	name = 'xfs'
+	type = 'xfs'
 	
 	os_packages = ('xfsprogs', )
 	
@@ -70,5 +70,5 @@ class XfsFileSystem(filesystems.FileSystem):
 				self.error_messages['not_mounted'] % device)
 
 
-storage2.filesystem_types['xfs'] = XfsFileSystem
+storage2.filesystem_types[XfsFileSystem.type] = XfsFileSystem
 

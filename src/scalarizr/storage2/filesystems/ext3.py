@@ -51,7 +51,7 @@ class ExtFileSystem(filesystems.FileSystem):
 
 
 class Ext3FileSystem(ExtFileSystem):
-	name = 'ext3'
+	type = 'ext3'
 	
 	
-storage2.filesystem_types['ext3'] = Ext3FileSystem
+storage2.filesystem_types[Ext3FileSystem.type] = Ext3FileSystem

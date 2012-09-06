@@ -1,5 +1,6 @@
 
 import uuid
+import types
 
 from scalarizr import storage2
 from scalarizr.linux import mount as mountmod
@@ -55,8 +56,11 @@ class Base(object):
 			ret = [self._dictify(item) for item in data]
 		elif isinstance(data, Base):
 			ret = data.config()
-		else:
+		elif type(data) in (str, unicode, bool, int, long, float, types.NoneType):
 			ret = data
+		else:
+			msg = 'Value is not serializable: %s' % (data, )
+			raise ValueError(msg)
 			
 		return ret
 
