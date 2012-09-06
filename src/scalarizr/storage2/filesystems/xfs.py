@@ -21,6 +21,7 @@ class XfsFileSystem(filesystems.FileSystem):
 	os_packages = ('xfsprogs', )
 	
 	def __init__(self):
+		super(XfsFileSystem, self).__init__()
 		self._label_re  = re.compile('label\s+=\s+"(?P<label>.*)"', 
 									re.IGNORECASE)
 

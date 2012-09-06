@@ -27,7 +27,7 @@ def system(*args, **kwargs):
 	return linux.system(*args, **kwargs)
 	
 
-class FileSystem:
+class FileSystem(object):
 	name = None
 
 	features = {
