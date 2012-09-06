@@ -805,7 +805,6 @@ class StandardDataBundle(object):
 		self.storage_volume = storage_volume
 		
 	def create(self, snapshot_tags=None):
-		self.mysql_client.lock_tables()
 		was_running = self.mysql_init.running
 		if not was_running:
 			self.mysql_init.start()

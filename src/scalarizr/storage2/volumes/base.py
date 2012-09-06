@@ -2,7 +2,8 @@
 import uuid
 
 from scalarizr import storage2
-from scalarizr.linux import mount
+from scalarizr.linux import mount as mountmod
+import os
 
 
 LOG = storage2.LOG
@@ -98,7 +99,7 @@ class Volume(Base):
 		if mount:
 			try:
 				self.mount()
-			except mount.NoFileSystem:
+			except mountmod.NoFileSystem:
 				if mkfs:
 					self.mkfs()
 					self.mount()
@@ -131,18 +132,20 @@ class Volume(Base):
 			return
 		elif mounted_to: 
 			self.umount()
-		mount.mount(self.device, self.mpoint)
+		if not os.path.exists(self.mpoint):
+			os.makedirs(self.mpoint)
+		mountmod.mount(self.device, self.mpoint)
 
 
 	def umount(self):
 		self._check()
-		mount.umount(self.device)
+		mountmod.umount(self.device)
 
 
 	def mounted_to(self):
 		self._check()
 		try:
-			return mount.mounts()[self.device].mpoint
+			return mountmod.mounts()[self.device].mpoint
 		except KeyError:
 			return False
 

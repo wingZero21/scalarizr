@@ -181,7 +181,7 @@ class PopenError(BaseException):
 	
 	def __str__(self):
 		if len(self.args) >= 5:
-			args = [self.error_text or '']
+			args = [self.error_text + '. ' if self.error_text else '']
 			args += [self.proc_args[0] if hasattr(self.proc_args, '__iter__') else self.proc_args.split(' ')[0]]
 			args += [self.returncode, self.out, self.err, self.proc_args]
 
