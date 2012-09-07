@@ -16,8 +16,8 @@ class LvmVolume(base.Volume):
 			'pv': [],
 			'vg': None,
 			'name': None,
-			'size': None,
-			'extents': None
+			'size': None   
+			# LogicalVolumeSize[bBsSkKmMgGtTpPeE] or %{VG|PVS|FREE|ORIGIN}
 		})
 		super(LvmVolume, self).__init__(**kwds)
 		
@@ -32,7 +32,7 @@ class LvmVolume(base.Volume):
 		try:
 			lv_info = self._lvinfo()
 		except lvm2.NotFound:
-			assert self.size or self.extents, 'Please specify either size or extents (not both)'
+			self._check_attr('size')
 
 			pvs = lvm2.pvs()			
 			pv_disks = []
@@ -51,10 +51,10 @@ class LvmVolume(base.Volume):
 				lvm2.vgcreate(self.vg, *[disk.device for disk in self.pv])
 
 			kwds = {'name': self.name}
-			if self.size:
+			if '%' in str(self.size):
+				kwds['extents'] = self.size
+			else:
 				kwds['size'] = self.size
-			elif self.extents:
-				kwds['extents'] = self.extents
 			lvm2.lvcreate(self.vg, **kwds)
 			lv_info = self._lvinfo()
 
@@ -64,23 +64,24 @@ class LvmVolume(base.Volume):
 			lvm2.lvchange(self.device, available=True)
 
 		
-	def _snapshot(self, description, tags, **kwds):
+	def lvm_snapshot(self, name=None, size=None):
 		long_kwds = {
-			'name': kwds.get('name', '%snap' % self.name),
+			'name': name or '%snap' % self.name,
 			'snapshot': '%s/%s' % (self.vg, self.name)
 		}
-		if kwds.get('extents'):
-			long_kwds['extents'] = kwds['extents']
-		elif kwds.get('size'):
-			long_kwds['size'] = kwds['size']
+		if size:
+			if '%' in size:
+				long_kwds['extents'] = size
+			else:
+				long_kwds['size'] = size
 		else:
 			long_kwds['extents'] = '1%ORIGIN'
 
 		lvm2.lvcreate(**long_kwds)
 		lv_info = lvm2.lvs('%s/%s' % (self.vg, long_kwds['name'])).values()[0]
-		
+ 
 		return storage2.snapshot(
-				type='lvm', 
+				type='lvm-native', 
 				name=lv_info.lv_name, 
 				vg=lv_info.vg_name,
 				device=lv_info.lv_path)
@@ -108,11 +109,9 @@ class LvmVolume(base.Volume):
 					lvm2.vgremove(self.vg)
 					for device in pv_disks:
 						lvm2.pvremove(device)
-			
 
-		
-class LvmSnapshot(base.Snapshot):
 			
+class LvmNativeSnapshot(base.Snapshot):
 	def _destroy(self):
 		lvm2.lvremove(self.device)
 
@@ -124,7 +123,12 @@ class LvmSnapshot(base.Snapshot):
 		except lvm2.NotFound:
 			return self.FAILED
 
+		
+class LvmSnapshot(base.Snapshot):
+	pass
+
 
 storage2.volume_types['lvm'] = LvmVolume
 storage2.snapshot_types['lvm'] = LvmSnapshot
-		
+storage2.snapshot_types['lvm-native'] = LvmNativeSnapshot
+

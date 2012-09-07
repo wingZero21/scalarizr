@@ -9,6 +9,7 @@ import mock
 from scalarizr.storage2.volumes import lvm
 from scalarizr.storage2.volumes import base
 
+
 class TestLvmVolume(object):
 	
 	@mock.patch('scalarizr.storage2.volumes.lvm.lvm2')
@@ -31,7 +32,7 @@ class TestLvmVolume(object):
 				name='vol1', 
 				vg='data', 
 				pv=['/dev/sdb', '/dev/sdc'], 
-				extents='98%FREE')
+				size='98%FREE')
 		vol.ensure()
 		
 		assert len(vol.pv) == 2
@@ -59,7 +60,11 @@ class TestLvmVolume(object):
 		lvm2.lvs.side_effect = lvs		
 		lvm2.pvs.return_value = {'/dev/sdb': mock.Mock(), '/dev/sdc': mock.Mock()}
 
-		vol = lvm.LvmVolume(name='vol1', vg='data', pv=['/dev/sdb', '/dev/sdc'], extents='98%FREE')
+		vol = lvm.LvmVolume(
+				name='vol1', 
+				vg='data', 
+				pv=['/dev/sdb', '/dev/sdc'], 
+				size='98%FREE')
 		vol.ensure()
 
 		assert len(vol.pv) == 2

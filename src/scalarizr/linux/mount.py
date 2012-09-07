@@ -57,8 +57,13 @@ class mounts(object):
 				for entry in self._entries])
 		
 
-def mount(device, mpoint, **long_kwds):
-	args = [MOUNT_EXEC, device, mpoint] + linux.build_cmd_args(long=long_kwds)
+def mount(device, mpoint, *short_args, **long_kwds):
+	args = linux.build_cmd_args(
+		executable=MOUNT_EXEC,
+		short=short_args, 
+		long=long_kwds, 
+		params=(device, mpoint)
+	)
 	try:
 		linux.system(args, error_text='Cannot mount %s -> %s' % (device, mpoint))
 	except linux.LinuxError, e:

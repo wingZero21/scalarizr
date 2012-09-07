@@ -73,6 +73,7 @@ class Volume(Base):
 	
 	error_messages = {
 		'empty_attr': 'Attribute should be specified: %s',
+		'empty_param': 'Parameter should be specified: %s',
 		'restore_unsupported': 'Restores from snapshot not supported by this volume type: %s',
 	}
 	
