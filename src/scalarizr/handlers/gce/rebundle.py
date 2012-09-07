@@ -6,6 +6,7 @@ import stat
 import uuid
 import time
 import logging
+import shutil
 import tempfile
 
 from scalarizr.bus import bus
@@ -28,118 +29,123 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 	def rebundle(self):
 		# TODO: ADD LOGGING
 		rebundle_dir = tempfile.mkdtemp()
-		tmp_mount_dir = os.path.join(rebundle_dir, 'root')
-		os.makedirs(tmp_mount_dir)
-
-		image_name	= 'disk.raw'
-		image_path	= os.path.join(rebundle_dir, image_name)
-
-
-		root = filter(lambda x: x.mpoint == '/', filetool.df())[0]
-
-		""" Creating disk file """
-		with open(image_path, 'w') as f:
-			f.truncate(root.size*1024 + 1*1024)
 
 		try:
+			tmp_mount_dir = os.path.join(rebundle_dir, 'root')
+			os.makedirs(tmp_mount_dir)
 
-			""" Partitioning """
-			# Create partition table
-			system2(('parted', image_path, 'mklabel', 'msdos'))
+			image_name	= 'disk.raw'
+			image_path	= os.path.join(rebundle_dir, image_name)
 
-			# Making partition
-			system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root.size/1024)))
 
-			# Map disk image
-			out = system2(('kpartx', '-av', image_path))[0]
+			root = filter(lambda x: x.mpoint == '/', filetool.df())[0]
+
+			""" Creating disk file """
+			with open(image_path, 'w') as f:
+				f.truncate(root.size*1024 + 1*1024)
+
 			try:
-				loop = re.search('(/dev/loop\d+)', out).group(1)
-				root_dev_name = '/dev/mapper/%sp1' % loop.split('/')[-1]
 
-				LOG.debug('### Root dev name %s' % root_dev_name)
+				""" Partitioning """
+				# Create partition table
+				system2(('parted', image_path, 'mklabel', 'msdos'))
 
-				""" Creating fs """
-				fstool.mkfs(root_dev_name, 'ext4')
-				dev_uuid = uuid.uuid4()
-				system2(('tune2fs', '-U', str(dev_uuid), root_dev_name))
+				# Making partition
+				system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root.size/1024)))
 
-				""" Mounting """
-				fstool.mount(root_dev_name, tmp_mount_dir)
+				# Map disk image
+				out = system2(('kpartx', '-av', image_path))[0]
 				try:
-					""" Rsync """
-					# Get mounts
-					lines = system2(('/bin/mount', '-l'))[0].splitlines()
-					exclude_dirs = []
-					for line in lines:
-						mpoint = line.split()[2]
-						if mpoint != '/':
-							exclude_dirs.append(mpoint)
+					loop = re.search('(/dev/loop\d+)', out).group(1)
+					root_dev_name = '/dev/mapper/%sp1' % loop.split('/')[-1]
 
-					exclude_dirs.extend(self.exclude_dirs)
+					LOG.debug('### Root dev name %s' % root_dev_name)
 
-					rsync = filetool.Rsync()
-					rsync.source('/').dest(tmp_mount_dir).sparse()
-					rsync.hardlinks().archive().times()
-					rsync.exclude([os.path.join(ex, '**') for ex in exclude_dirs])
-					rsync.exclude(self.exclude_files)
-					rsync.exclude(self._excludes)
-					rsync.execute()
+					""" Creating fs """
+					fstool.mkfs(root_dev_name, 'ext4')
+					dev_uuid = uuid.uuid4()
+					system2(('tune2fs', '-U', str(dev_uuid), root_dev_name))
 
-					self._create_spec_devices(tmp_mount_dir)
+					""" Mounting """
+					fstool.mount(root_dev_name, tmp_mount_dir)
+					try:
+						""" Rsync """
+						# Get mounts
+						lines = system2(('/bin/mount', '-l'))[0].splitlines()
+						exclude_dirs = []
+						for line in lines:
+							mpoint = line.split()[2]
+							if mpoint != '/':
+								exclude_dirs.append(mpoint)
 
-					""" Cleanup network """
-					f_to_del_path = os.path.join(tmp_mount_dir, 'lib/udev/rules.d/75-persistent-net-generator.rules')
-					if os.path.exists(f_to_del_path):
-						os.remove(f_to_del_path)
+						exclude_dirs.extend(self.exclude_dirs)
 
-					""" Patch fstab"""
-					fstab_path = os.path.join(tmp_mount_dir, 'etc/fstab')
-					if os.path.exists(fstab_path):
-						with open(fstab_path) as f:
-							fstab = f.read()
+						rsync = filetool.Rsync()
+						rsync.source('/').dest(tmp_mount_dir).sparse()
+						rsync.hardlinks().archive().times()
+						rsync.exclude([os.path.join(ex, '**') for ex in exclude_dirs])
+						rsync.exclude(self.exclude_files)
+						rsync.exclude(self._excludes)
+						rsync.execute()
 
-						new_fstab = re.sub('UUID=\S+\s+/\s+(.*)', 'UUID=%s / \\1' % dev_uuid, fstab)
+						self._create_spec_devices(tmp_mount_dir)
 
-						with open(fstab_path, 'w') as f:
-							f.write(new_fstab)
+						""" Cleanup network """
+						f_to_del_path = os.path.join(tmp_mount_dir, 'lib/udev/rules.d/75-persistent-net-generator.rules')
+						if os.path.exists(f_to_del_path):
+							os.remove(f_to_del_path)
 
+						""" Patch fstab"""
+						fstab_path = os.path.join(tmp_mount_dir, 'etc/fstab')
+						if os.path.exists(fstab_path):
+							with open(fstab_path) as f:
+								fstab = f.read()
+
+							new_fstab = re.sub('UUID=\S+\s+/\s+(.*)', 'UUID=%s / \\1' % dev_uuid, fstab)
+
+							with open(fstab_path, 'w') as f:
+								f.write(new_fstab)
+
+					finally:
+						fstool.umount(device=root_dev_name)
 				finally:
-					fstool.umount(device=root_dev_name)
+					system2(('kpartx', '-d', image_path))
+
+				""" Tar.gzipping """
+				LOG.info('Compressing image.')
+				arch_name = '%s.tar.gz' % self._role_name.lower()
+				arch_path = os.path.join(rebundle_dir, arch_name)
+
+				tar = filetool.Tar()
+				tar.create().gzip().sparse()
+				tar.archive(arch_path)
+				tar.add(image_name, rebundle_dir)
+				system2(str(tar), shell=True)
+
 			finally:
-				system2(('kpartx', '-d', image_path))
+				os.unlink(image_path)
 
-			""" Tar.gzipping """
-			LOG.info('Compressing image.')
-			arch_name = '%s.tar.gz' % self._role_name.lower()
-			arch_path = os.path.join(rebundle_dir, arch_name)
+			try:
+				""" Hash """
+				# add sha1Checksum to register request
 
-			tar = filetool.Tar()
-			tar.create().gzip().sparse()
-			tar.archive(arch_path)
-			tar.add(image_name, rebundle_dir)
-			system2(str(tar), shell=True)
+				""" Uploading """
+				uploader = transfer.Transfer(logger=LOG)
+				tmp_bucket_name = 'scalr-images-tmp-bucket-%s' % int(time.time())
 
-		finally:
-			os.unlink(image_path)
+				pl = bus.platform
+				proj_id = pl.get_numeric_project_id()
+				cloudstorage = pl.new_storage_client()
+				cloudstorage.buckets().insert(id=tmp_bucket_name, projectId=proj_id)
 
-		try:
-			""" Hash """
-			# add sha1Checksum to register request
+				remote_path = 'gs://%s/%s' % (tmp_bucket_name, arch_name)
+				uploader.upload(arch_path, remote_path)
 
-			""" Uploading """
-			uploader = transfer.Transfer(logger=LOG)
-			tmp_bucket_name = 'scalr-images-tmp-bucket-%s' % int(time.time())
-
-			pl = bus.platform
-			proj_id = pl.get_numeric_project_id()
-			cloudstorage = pl.new_storage_client()
-			cloudstorage.buckets().insert(id=tmp_bucket_name, projectId=proj_id)
-
-			remote_path = 'gs://%s/%s' % (tmp_bucket_name, arch_name)
-			uploader.upload(arch_path, remote_path)
+			finally:
+				os.unlink(arch_path)
 
 		finally:
-			os.unlink(arch_path)
+			shutil.rmtree(rebundle_dir)
 
 		try:
 			""" Register new image """
@@ -176,23 +182,32 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 	def _create_spec_devices(self, root):
 		console_dev = os.makedev(5, 1)
-		os.mknod(os.path.join(root, 'dev/console'), stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR,
+		tmp_path = os.path.join('/tmp', 'devconsole')
+		os.mknod(tmp_path, stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR,
 				  											console_dev)
+		shutil.move(tmp_path, os.path.join(root, 'dev/console'))
 
 		null_dev = os.makedev(1, 3)
-		os.mknod(os.path.join(root, 'dev/null'), stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR |
+		tmp_path = os.path.join('/tmp', 'devnull')
+		os.mknod(tmp_path, stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR |
 												 stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH |
 												 stat.S_IWOTH, null_dev)
+		shutil.move(tmp_path, os.path.join(root, 'dev/null'))
+
 
 		tty_dev = os.makedev(5, 0)
+		tmp_path = os.path.join('/tmp', 'devtty')
 		os.mknod(os.path.join(root, 'dev/tty'), stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR |
 												stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH |
 												stat.S_IWOTH, tty_dev)
+		shutil.move(tmp_path, os.path.join(root, 'dev/tty'))
 
 		zero_dev = os.makedev(1, 5)
+		tmp_path = os.path.join('/tmp', 'devzero')
 		os.mknod(os.path.join(root, 'dev/zero'), stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR |
 												 stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH |
 												 stat.S_IWOTH, zero_dev)
+		shutil.move(tmp_path, os.path.join(root, 'dev/zero'))
 
 
 
