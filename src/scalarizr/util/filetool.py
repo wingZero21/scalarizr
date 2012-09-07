@@ -236,7 +236,7 @@ class Rsync(object):
 		self._options.append('-H')
 		return self
 
-	def exclude(self, files):
+	def _exclude(self, files):
 		for file in files:
 			self._options += ['--exclude', file]
 		return self

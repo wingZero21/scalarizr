@@ -99,8 +99,8 @@ class GcePlatform(Platform):
 
 	def _get_auth(self):
 		http = httplib2.Http()
-		email = self.get_access_data('email')
-		pk = self.get_access_data('private_key')
+		email = self.get_access_data('service_account_name')
+		pk = self.get_access_data('key')
 		cred = SignedJwtAssertionCredentials(email, pk, scope=[COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE])
 		return cred.authorize(http)
 
