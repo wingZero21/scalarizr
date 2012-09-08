@@ -30,6 +30,14 @@ def modprobe(module_name, **long_kwds):
 				params=[module_name]), 
 			error_text='Kernel module %s is not available' % module_name)
 	
+
+def dmsetup(action, *params, **long_kwds):
+	return linux.system(linux.build_cmd_args(
+			executable='/sbin/dmsetup', 
+			short=[action], 
+			long=long_kwds, 
+			params=params))	
+	
 	
 def losetup(*args, **long_kwds):
 	return linux.system(linux.build_cmd_args(

@@ -28,7 +28,9 @@ from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until,
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import rchown
 from scalarizr import storage2
+from scalarizr.linux import pkgmgr
 import sys
+from scalarizr import linux
 
 
 
@@ -805,23 +807,26 @@ class StandardDataBundle(object):
 		self.storage_volume = storage_volume
 		
 	def create(self, snapshot_tags=None):
-		was_running = self.mysql_init.running
-		if not was_running:
-			self.mysql_init.start()
+		running = self.mysql_init.running
 		try:
-			self.mysql_client.lock_tables()
+			if running:
+				self.mysql_client.lock_tables()
 			system2('sync', shell=True)
 			log_file, log_pos = self.mysql_client.master_status()
-			snap = self.storage_volume.snapshot(snapshot_tags)  
-			return snap, log_file, log_pos
+			snap = self.storage_volume.snapshot(snapshot_tags)
+			return {
+				'data_bundle_type': 'standard',
+				'snapshot_config': snap.config(),
+				'log_pos': log_pos,
+				'log_file': log_file
+			}  
 		except:
 			LOG.error('MySQL data bundle failed')
 			raise	
-		
 		finally:
-			self.mysql_client.unlock_tables()
-			if not was_running:
-				self.mysql_init.stop('Restoring service`s state after making snapshot')
+			if running:
+				self.mysql_client.unlock_tables()
+
 				
 	def restore(self, storage_snapshot, log_file, log_pos):
 		self.storage_volume.snap = storage_snapshot
@@ -830,18 +835,144 @@ class StandardDataBundle(object):
 
 
 class XtrabackupDataBundle(object):
-
-	def __init__(self, mysql_init, storage_volume, snapshot_volume, lock_myisam=False):
-		self.mysql_init = mysql_init
+	
+	def __init__(self, storage_volume):
 		self.storage_volume = storage_volume
-		self.snapshot_volume = snapshot_volume
-		self.lock_myisam = lock_myisam
-
 	
-	def create(self, snapshot_tags=None):
+	
+	def create(self, backup_type='full', from_lsn=None, 
+			backup_dir=None, backup_volume=None, snapshot_tags=None):
+		backup_dir = backup_dir or '/mnt/dbbackup'
+		if not os.path.exists(backup_dir):
+			os.makedirs(backup_dir)
+		if backup_volume:
+			if isinstance(backup_volume, dict):
+				backup_volume = storage2.volume(**backup_volume)
+			# Always create LVM?
+			
+			pass
+			
+			
 		pass
 	
 	
-	def restore(self, storage_snapshot, log_file, log_pos):
+	def restore(self, backup_snapshots):
 		pass
 
+
+
+def innobackupex(*params, **long_kwds):
+	if not os.path.exists('/usr/bin/innobackupex'):
+		mgr = pkgmgr.package_mgr()
+		mgr.install('percona-xtrabackup')
+	return linux.system(linux.build_cmd_args(
+			executable='/usr/bin/innobackupex', 
+			long=long_kwds, 
+			params=params))
+		
+		
+def my_print_defaults(*option_groups):
+	out = linux.system(linux.build_cmd_args(
+			executable='/usr/bin/my_print_defaults', 
+			params=option_groups))[0]
+	ret = {}
+	for line in out.splitlines():
+		cols = line.split('=')
+		ret[cols[0][2:]] = cols[1] if len(cols) > 1 else True
+	return ret
+
+
+
+
+class XtrabackupDataBundle(object):
+	def create(self):
+		self.root_password
+		pass
+
+	def restore(self):
+		pass
+
+'''
+create_data_bundle:
+  - data_bundle_type: xtrabackup
+  - xtrabackup:
+    - backup_type: incremental    # default: full. allowed: full | incremental
+    - from_lsn: 45353454          # default: none
+    - backup_dir: /data/backup    # default /mnt/dbbackup
+    - backup_volume:              # default none
+      - id: vol-12345678
+        type: ebs
+      - id: vol-23456789
+        type: ebs
+
+create_data_bundle_result:
+  - data_bundle_type: xtrabackup  # default: standard. allowed: standard | xtrabackup
+  - xtrabackup:
+    - backup_type: full # values: full | incremental
+    - from_lsn: 0
+    - to_lsn: 1598918
+    - backup_volume_config:          
+      - type: lvm
+      - pvs:
+        - id: vol-12345678
+          type: ebs
+        - id: vol-23456789
+          type: ebs
+      - vg: percona_backup
+      - name: data
+    - backup_snapshot_config:
+      - type: lvm
+      - pv_snapshots:
+        - id: snap-12345678
+          type: ebs
+        - id: snap-23456789
+          type: ebs
+      - vg: percona_backup
+      - name: data
+  - log_file: binlog.000007
+  - log_pos: 107
+
+
+create_data_bundle:
+
+create_data_bundle_result:  
+  - data_bundle_type: standard
+  - snapshot_config: 
+    - type: ebs
+    - id: snap-12345678
+  - log_file: binlog.000007
+  - log_pos: 107
+
+
+restore_data_bundle:
+  - data_bundle_type: xtrabackup
+  - xtrabackup:
+    - backup_type: full # default: none values: full | incremental
+    - backup_snapshots:
+      - id: snap-12345678
+        type: ebs
+      - id: snap-23456789
+        type: ebs
+  - log_file
+  - log_pos  
+
+
+restore_data_bundle:
+  - snapshot_config: 
+    - type: ebs
+    - id: snap-12345678
+  - log_file: binlog.000007
+  - log_pos: 107
+  
+
+
+
+
+
+'lvm-vol-12345678 PV$index{} snapshot'
+
+'lvm-vol-12345678 PV-0'
+'lvm-vol-12345678 PV-1'
+
+
+'''

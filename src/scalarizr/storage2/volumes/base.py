@@ -157,6 +157,11 @@ class Volume(Base):
 
 	def mkfs(self):
 		self._check()
+		if self.fscreated:
+			raise storage2.OperationError(
+					'fscreated flag is active. Filesystem creation denied '
+					'to preserve the original filesystem. If you wish to '
+					'proceed anyway set fscreated=False and retry')
 		fs = storage2.filesystem(self.fstype)
 		LOG.info('Creating filesystem on %s', self.device)
 		fs.mkfs(self.device)
@@ -206,6 +211,7 @@ class Snapshot(Base):
 	IN_PROGRESS = 'in-progress'
 	COMPLETED = 'completed'
 	FAILED = 'failed'
+	UNKNOWN = 'unknown'
 
 	def __init__(self, **kwds):
 		super(Snapshot, self).__init__(**kwds)
