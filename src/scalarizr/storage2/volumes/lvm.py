@@ -11,23 +11,27 @@ from scalarizr.linux import lvm2, coreutils
 
 class LvmVolume(base.Volume):
 	features = base.Volume.features.copy()
-	features['restore'] = True
+	features.update({
+		'restore': True
+	})
 
-	def __init__(self, **kwds):
-		self.default_config.update({
-			'pvs': [],
-			'vg': None,
-			'name': None,
-			'size': None   
-			# LogicalVolumeSize[bBsSkKmMgGtTpPeE] or %{VG|PVS|FREE|ORIGIN}
-		})
-		super(LvmVolume, self).__init__(**kwds)
-		
-		
+	default_config = base.Volume.default_config.copy()
+	default_config.update({
+		'pvs': [],
+		# Physical volumes
+		'vg': None,
+		# Volume group name
+		'name': None,
+		# Logical volume name
+		'size': None   
+		# Logical volume size <int>[bBsSkKmMgGtTpPeE] or %{VG|PVS|FREE|ORIGIN}
+	})
+
+
 	def _lvinfo(self):
 		return lvm2.lvs(lvm2.lvpath(self.vg, self.name)).values()[0]
 		
-		
+
 	def _ensure(self):
 		if self.snap:
 			for snap in self.snap.pv_snaps:
@@ -66,7 +70,11 @@ class LvmVolume(base.Volume):
 			if '%' in str(self.size):
 				kwds['extents'] = self.size
 			else:
-				kwds['size'] = self.size
+				try:
+					int(self.size)
+					kwds['size'] = '%sG' self.size
+				except:
+					kwds['size'] = self.size
 			lvm2.lvcreate(self.vg, **kwds)
 			lv_info = self._lvinfo()
 

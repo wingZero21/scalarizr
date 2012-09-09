@@ -2,11 +2,12 @@
 import logging
 import re
 import operator
-
-from scalarizr import linux
 import Queue
 import sys
 import threading
+
+from scalarizr import linux
+
 
 LOG = logging.getLogger(__name__)
 
@@ -16,7 +17,12 @@ snapshot_types = dict()
 filesystem_types = dict()
 
 
-def volume(**kwds):
+def volume(*args, **kwds):
+	if args:
+		if isinstance(args[0], dict):
+			return volume(**args[0])
+		else:
+			return args[0]
 	type_ = kwds.get('type', 'base')
 	if type_ not in volume_types:
 		try:
@@ -26,12 +32,18 @@ def volume(**kwds):
 	try:
 		cls = volume_types[type_]
 	except KeyError:
-		raise KeyError("Unknown volume type '%s'. "
-						"Have you registered it in storage2.volume_types?" % type_)
+		msg = "Unknown volume type '%s'. " \
+				"Have you registered it in storage2.volume_types?" % type_
+		raise KeyError(msg)
 	return cls(**kwds)
 
 
 def snapshot(**kwds):
+	if args:
+		if isinstance(args[0], dict):
+			return snapshot(**args[0])
+		else:
+			return args[0]
 	type_ = kwds.get('type', 'base')
 	if type_ not in snapshot_types:
 		try:
@@ -41,8 +53,9 @@ def snapshot(**kwds):
 	try:
 		cls = snapshot_types[type_]
 	except KeyError:
-		raise KeyError("Unknown snapshot type '%s'. "
-					"Have you registered it in storage2.snapshot_types?" % type_)
+		msg = "Unknown snapshot type '%s'. " \
+				"Have you registered it in storage2.snapshot_types?" % type_
+		raise KeyError(msg)
 	return cls(**kwds)
 
 
@@ -56,8 +69,9 @@ def filesystem(fstype=None):
 	try:
 		cls = filesystem_types[fstype]
 	except KeyError:
-		raise KeyError("Unknown filesystem type '%s'. "
-					"Have you registered it in storage2.filesystem_types?" % fstype)
+		msg = "Unknown filesystem type '%s'. " \
+				"Have you registered it in storage2.filesystem_types?" % fstype
+		raise KeyError(msg)
 	return cls()
 
 

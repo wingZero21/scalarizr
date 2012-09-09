@@ -6,14 +6,15 @@ from scalarizr.storage2.volumes import base
 
 class TmpfsVolume(base.Volume):
 
-	def __init__(self, **kwds):
-		self.error_messages.update({
-			'invalid_size': 'Volume size required and should be int value in Mb'
-		})
-		self.default_config.update({
-			'size': None   # size in Mb
-		})
-		super(TmpfsVolume, self).__init__(**kwds)
+	error_messages = base.Volume.error_messages.copy()
+	error_messages.update({
+		'invalid_size': 'Volume size required and should be int value in Mb'
+	})
+
+	default_config = base.Volume.default_config.copy()
+	default_config.update({
+		'size': None   # size in Mb
+	})
 
 
 	def _ensure(self):

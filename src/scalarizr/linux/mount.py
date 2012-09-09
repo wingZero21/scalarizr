@@ -9,31 +9,29 @@ import collections
 
 from scalarizr import linux
 
+
 class NoFileSystem(linux.LinuxError):
 	pass
 
-MOUNT_EXEC = linux.which('mount')
-UMOUNT_EXEC = linux.which('umount')
 
-_MountEntry = collections.namedtuple('_MountEntry', 'device mpoint fstype options dump fsck_order')
+_MountEntry = collections.namedtuple('_MountEntry', 
+				'device mpoint fstype options dump fsck_order')
 
-class mounts(object):
-	'''
-	Utility for /etc/fstab
-	@see http://www.debianhelp.co.uk/fstab.htm
-	'''
-	filename = None	
+
+class _Mounts(object):
+	filename = '/proc/mounts'	
 	_entries = None
 	_entry_re = None
 
 	
-	def __init__(self, filename='/proc/mounts'):
-		self.filename = filename
+	def __init__(self, filename=None):
+		if filename:
+			self.filename = filename
 		self._entry_re = re.compile("\\s+")
-		self.reload()
+		self._reload()
 
 
-	def reload(self):
+	def _reload(self):
 		self._entries = []
 		for line in open(self.filename):
 			if line[0] != "#":
@@ -43,29 +41,50 @@ class mounts(object):
 
 	
 	def __getitem__(self, device_or_mpoint):
-		self.reload()
+		self._reload()
 		for entry in self._entries:
-			if entry.device == device_or_mpoint or entry.mpoint == device_or_mpoint:
+			if entry.device == device_or_mpoint or \
+				entry.mpoint == device_or_mpoint:
 				return entry
 		raise KeyError(device_or_mpoint)
 
 
 	def __contains__(self, device_or_mpoint):
-		self.reload()
+		self._reload()
 		return any([entry.device == device_or_mpoint or 
 				entry.mpoint == device_or_mpoint 
 				for entry in self._entries])
 		
 
+class _Fstab(_Mounts):
+	filename = '/etc/fstab'
+
+
+	def add(device, mpoint, fstype, options='auto', dump=0, fsck_order=0):
+		with open(self.filename, 'a+') as fp:
+			line = ' '.join(device, mpoint, fstype, options, dump, fsck_order)
+			fp.write('\n')
+			fp.write(line)
+		
+
+def mounts():
+	return _Mounts()
+
+
+def fstab():
+	return _Fstab()	
+
+
 def mount(device, mpoint, *short_args, **long_kwds):
 	args = linux.build_cmd_args(
-		executable=MOUNT_EXEC,
+		executable='/bin/mount',
 		short=short_args, 
 		long=long_kwds, 
 		params=(device, mpoint)
 	)
 	try:
-		linux.system(args, error_text='Cannot mount %s -> %s' % (device, mpoint))
+		msg = error_text='Cannot mount %s -> %s' % (device, mpoint)
+		linux.system(args, msg)
 	except linux.LinuxError, e:
 		if 'you must specify the filesystem type' in e.err:
 			raise NoFileSystem(device)
@@ -73,10 +92,14 @@ def mount(device, mpoint, *short_args, **long_kwds):
 
 
 def umount(device_or_mpoint, **long_kwds):
-	args = [UMOUNT_EXEC, '-f' , device_or_mpoint] + linux.build_cmd_args(long=long_kwds)
+	args = linux.build_cmd_args(
+			executable='/bin/umount',
+			short=('-f', device_or_mpoint),
+			long=long_kwds)
 	try:
 		linux.system(args, error_text='Cannot umount %s' % device_or_mpoint)
 	except linux.LinuxError, e:
-		if not 'not mounted' in e.err:
-			raise
-	
+		if 'not mounted' in e.err:
+			return
+		raise
+

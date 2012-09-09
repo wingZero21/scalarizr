@@ -4,19 +4,24 @@ Created on Aug 28, 2012
 @author: marat
 '''
 
+import os
+import shutil
+
 from scalarizr import linux
+from scalarizr.linux import pkgmgr
 
 
 def sync():
 	return linux.system(('/bin/sync', ))
 
 
-def df():
-	raise NotImplementedError()
-
-
 def dd(**kwds):
-	raise NotImplementedError()
+	short = []
+	for k, v in kwds.items():
+		short.append('%s=%s' % (k, v))
+	return linux.system(linux.build_cmd_args(
+				executable='/bin/dd',
+				short=short))
 
 
 def sfdisk():
@@ -32,6 +37,13 @@ def modprobe(module_name, **long_kwds):
 	
 
 def dmsetup(action, *params, **long_kwds):
+	if not os.path.exists('/sbin/dmsetup'):
+		if linux.os.debian_family:
+			package = 'dmsetup'
+		else:
+			package = 'device-mapper'
+		pkgmgr.package_mgr().install(package)
+
 	return linux.system(linux.build_cmd_args(
 			executable='/sbin/dmsetup', 
 			short=[action], 
@@ -46,23 +58,38 @@ def losetup(*args, **long_kwds):
 				params=args))
 
 	
-def losetup_all():
+def losetup_all(flip=False):
 	'''
 	Alias to losetup --all with parsing output into python dict.
+	When flip=True filenames becomes keys and devices are values
 	Example:
 		{'/dev/loop0': '/mnt/loop0',
  		'/dev/loop1': '/mnt/loop1',
  		'/dev/loop2': '/mnt/loop2'}
 	'''
-	ret = dict()
+	ret = list()
 	out = losetup(all=True)[0].strip()
 	for line in out.splitlines():
 		cols = line.split()
-		ret[cols[0][:-1]] = cols[-1][1:-1]
-	return ret
+		device = cols[0][:-1]
+		filename = cols[-1][1:-1]
+		ret.append((device, filename) if not flip else (filename, device))
+	return dict(ret)
 
-	
-def truncate(filename, size):
-	# truncate with dd or /usr/bin/truncate
+
+def touch(filename):
+	open(filename, "w+").close()
+
+
+def chown_r(path, owner, group=None):
 	raise NotImplementedError()
-	
+
+
+def remove(path):
+	if os.path.isfile(path):
+		os.remove(path)	
+	elif os.path.isdir(path):
+		shutil.rmtree(path)
+
+
+
