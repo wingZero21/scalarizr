@@ -181,39 +181,17 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 
 	def _create_spec_devices(self, root):
-		console_dev = os.makedev(5, 1)
-		tmp_path = os.path.join('/tmp', 'devconsole')
-		os.mknod(tmp_path, stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR,
-				  											console_dev)
-		shutil.move(tmp_path, os.path.join(root, 'dev/console'))
+		nodes = (
+			'console c 5 1',
+			'null c 1 3',
+			'zero c 1 5',
+			'tty c 5 0',
+		)
 
-		null_dev = os.makedev(1, 3)
-		tmp_path = os.path.join('/tmp', 'devnull')
-		os.mknod(tmp_path, stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR |
-												 stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH |
-												 stat.S_IWOTH, null_dev)
-		shutil.move(tmp_path, os.path.join(root, 'dev/null'))
-
-
-		tty_dev = os.makedev(5, 0)
-		tmp_path = os.path.join('/tmp', 'devtty')
-		os.mknod(os.path.join(root, 'dev/tty'), stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR |
-												stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH |
-												stat.S_IWOTH, tty_dev)
-		shutil.move(tmp_path, os.path.join(root, 'dev/tty'))
-
-		zero_dev = os.makedev(1, 5)
-		tmp_path = os.path.join('/tmp', 'devzero')
-		os.mknod(os.path.join(root, 'dev/zero'), stat.S_IFCHR | stat.S_IRUSR | stat.S_IWUSR |
-												 stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH |
-												 stat.S_IWOTH, zero_dev)
-		shutil.move(tmp_path, os.path.join(root, 'dev/zero'))
-
-
-
-
-
-
+		for node in nodes:
+			args = node.split()
+			args[0] = os.path.join(root, 'dev', args[0])
+			system2(['mknod'] + args)
 
 
 
