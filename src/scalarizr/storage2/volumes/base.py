@@ -218,6 +218,13 @@ class Snapshot(Base):
 		if not self._config.get('id'):
 			self._config['id'] = self._genid('snap-')
 	
+	
+	def restore(self):
+		vol = storage2.volume(type=self.type, snap=self)
+		vol.ensure()
+		return vol
+	
+	
 	def destroy(self):
 		return self._destroy()
 	

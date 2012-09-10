@@ -38,7 +38,7 @@ def volume(*args, **kwds):
 	return cls(**kwds)
 
 
-def snapshot(**kwds):
+def snapshot(*args, **kwds):
 	if args:
 		if isinstance(args[0], dict):
 			return snapshot(**args[0])
@@ -142,7 +142,7 @@ if linux.os.redhat_family:
 	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
 	from scalarizr.linux import mount
 	try:
-		entry = mount.mounts()['/dev/xvde']
+		entry = mount.mounts()['/dev/xvde1']
 		RHEL_DEVICE_ORDERING_BUG = entry.mpoint == '/'
 	except KeyError:
 		pass 

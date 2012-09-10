@@ -34,15 +34,20 @@ class LvmVolume(base.Volume):
 
 	def _ensure(self):
 		if self.snap:
-			for snap in self.snap.pv_snaps:
-				if isinstance(snap, dict):
+			pvs = []
+			try:
+				for snap in self.snap.pv_snaps:
 					snap = storage2.snapshot(**snap)
-				# TODO: restore
-				# TODO: think how to avoid such isinstance checks
-				pass 
+					pvs.append(snap.restore())
+			except:
+				for pv in pvs:
+					pv.destroy()
+				raise
+			self.pvs = pvs
+			self.vg = snap.vg
+			self.name = snap.name
 		
 		self._check_attr('vg')
-		
 		try:
 			lv_info = self._lvinfo()
 		except lvm2.NotFound:
@@ -72,7 +77,7 @@ class LvmVolume(base.Volume):
 			else:
 				try:
 					int(self.size)
-					kwds['size'] = '%sG' self.size
+					kwds['size'] = '%sG' % self.size
 				except:
 					kwds['size'] = self.size
 			lvm2.lvcreate(self.vg, **kwds)
