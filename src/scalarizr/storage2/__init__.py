@@ -21,6 +21,8 @@ def volume(*args, **kwds):
 	if args:
 		if isinstance(args[0], dict):
 			return volume(**args[0])
+		elif isinstance(args[0], basestring):
+			return volume(device=args[0])
 		else:
 			return args[0]
 	type_ = kwds.get('type', 'base')

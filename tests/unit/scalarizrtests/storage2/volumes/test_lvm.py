@@ -31,14 +31,13 @@ class TestLvmVolume(object):
 		vol = lvm.LvmVolume(
 				name='vol1', 
 				vg='data', 
-				pv=['/dev/sdb', '/dev/sdc'], 
+				pvs=['/dev/sdb', '/dev/sdc'], 
 				size='98%FREE')
 		vol.ensure()
 		
-		assert len(vol.pv) == 2
-		print vol.pv[0]
-		assert isinstance(vol.pv[0], base.Volume)
-		assert isinstance(vol.pv[1], base.Volume)
+		assert len(vol.pvs) == 2
+		assert isinstance(vol.pvs[0], base.Volume)
+		assert isinstance(vol.pvs[1], base.Volume)
 		assert vol.device == '/dev/mapper/data-vol1'
 		calls = [mock.call('/dev/sdb'),  mock.call('/dev/sdc')]
 		lvm2.pvcreate.assert_has_calls(calls)
@@ -64,13 +63,13 @@ class TestLvmVolume(object):
 		vol = lvm.LvmVolume(
 				name='vol1', 
 				vg='data', 
-				pv=['/dev/sdb', '/dev/sdc'], 
+				pvs=['/dev/sdb', '/dev/sdc'], 
 				size='98%FREE')
 		vol.ensure()
 
-		assert len(vol.pv) == 2
-		assert isinstance(vol.pv[0], base.Volume)
-		assert isinstance(vol.pv[1], base.Volume)
+		assert len(vol.pvs) == 2
+		assert isinstance(vol.pvs[0], base.Volume)
+		assert isinstance(vol.pvs[1], base.Volume)
 		assert vol.device == '/dev/mapper/data-vol1'
 		lvm2.pvs.assert_called_once_with()
 		assert lvm2.pvcreate.call_count == 0

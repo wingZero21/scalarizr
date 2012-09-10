@@ -8,7 +8,6 @@ import os
 import sys
 import time
 import shutil
-import random
 
 from scalarizr import storage2
 from scalarizr.storage2.volumes import base
@@ -39,7 +38,7 @@ class LoopVolume(base.Volume):
 			try:
 				filename = '%s.%s' % (self.snap['file'].split('.')[0], 
 									self._uniq()) 
-				shutil.copy(self.snap['file'], file_)
+				shutil.copy(self.snap['file'], filename)
 			except:
 				msg = 'Failed to copy snapshot file %s: %s' % (
 						self.snap['file'], sys.exc_info()[1])
@@ -51,12 +50,14 @@ class LoopVolume(base.Volume):
 		if self.device and os.path.exists(self.device):
 			if coreutils.losetup_all()[self.device] != self.file:
 				coreutils.losetup(self.device, detach=True)
+			else:
+				self.size = os.stat(self.file).st_size / 1073741824
 
 		if not self.device or not os.path.exists(self.device):
 			# Construct volume
 			if (not self.size and \
 				(not self.file or not os.path.exists(self.file))):
-				msg = 'You must specify size of a new loop device '
+				msg = 'You must specify size of a new loop device ' \
 						'or existing file'
 				raise storage2.StorageError(msg)
 			if not self.file:
@@ -68,7 +69,7 @@ class LoopVolume(base.Volume):
 					except:
 						msg = 'Incorrect size format: %s' % self.size
 						raise storage2.StorageError(msg)
-					stat = os.starvfs('/')
+					stat = os.statvfs('/')
 					total = stat.f_bsize * stat.f_blocks / 1048576
 					size = total * pc / 100
 					free = stat.f_bsize * stat.f_bfree / 1048576

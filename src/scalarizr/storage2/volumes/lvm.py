@@ -37,7 +37,7 @@ class LvmVolume(base.Volume):
 			pvs = []
 			try:
 				for snap in self.snap.pv_snaps:
-					snap = storage2.snapshot(**snap)
+					snap = storage2.snapshot(snap)
 					pvs.append(snap.restore())
 			except:
 				for pv in pvs:
@@ -56,10 +56,7 @@ class LvmVolume(base.Volume):
 			pvs = lvm2.pvs()			
 			pv_volumes = []
 			for pv_volume in self.pvs:
-				if isinstance(pv_volume, dict):
-					pv_volume = storage2.volume(**pv_volume)
-				elif isinstance(pv_volume, basestring):
-					pv_volume = storage2.volume(device=pv_volume)
+				pv_volume = storage2.volume(pv_volume)
 				pv_volume.ensure()
 				if pv_volume.device not in pvs:
 					lvm2.pvcreate(pv_volume.device)
