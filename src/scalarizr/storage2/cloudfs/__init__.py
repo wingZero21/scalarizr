@@ -22,6 +22,7 @@ class Transfer(object):
 
 		@param: direction 'upload' or 'download'
 
+		# XXX(marat): We should extend class from Observable
 		@param: listener function or object to call when file transfer is 
 		started, finished, failed, restarted.
 			on_start: fn(src, dst, state='start')

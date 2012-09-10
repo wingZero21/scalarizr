@@ -27,10 +27,13 @@ from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import rchown
-from scalarizr import storage2
-from scalarizr.linux import pkgmgr
 import sys
-from scalarizr import linux
+
+
+from scalarizr import linux, storage2
+from scalarizr.linux import coreutils, pkgmgr
+from scalarizr.services import backup
+from scalarizr.node import __node__
 
 
 
@@ -791,49 +794,65 @@ def _add_apparmor_rules(directory):
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
 
 
-class DataBundle(object):
-	
-	def create(self, snapshot_tags=None):
-		raise NotImplementedError()
-	
-	def restore(self, storage_snapshot, log_file, log_pos):
-		raise NotImplementedError()
-	
-	
-class StandardDataBundle(object):
-	def __init__(self, mysql_init, mysql_client, storage_volume):
-		self.mysql_init = mysql_init
-		self.mysql_client = mysql_client
-		self.storage_volume = storage_volume
+class MySQLSnapBackup(backup.SnapBackup):
+	def __init__(self, **kwds):
+		super(MySQLSnapBackup, self).__init__(**kwds)
+		self.on(
+			freeze_service=self.freeze,
+			complete=self.complete,
+			error=self.unfreeze
+		)
+		self.mykey = __node__['mysql']['type']
+
+
+	def _client(self):
+		return MySQLClient('scalr', __node__[self.mykey]['root_password'])
+
+
+	def freeze(self, *args):
+		client = self._client()
+		client.lock_tables()
+		coreutils.sync()
+		(log_file, log_pos) = client.master_status()
+		return {
+			'log_file': log_file,
+			'log_pos': log_pos
+		}
+
+
+	def unfreeze(self, *args):
+		client = self._client()
+		client.unlock_tables()
+
+	def complete(self, restore):
+		self.unfreeze()
+		__node__['mysql_data_bundle'] = {
+			'log_file': restore.service_state['log_file'],
+			'log_pos': restore.service_state['log_pos'],
+			'snapshot_config': restore.snapshot
+		}
 		
-	def create(self, snapshot_tags=None):
-		running = self.mysql_init.running
-		try:
-			if running:
-				self.mysql_client.lock_tables()
-			system2('sync', shell=True)
-			log_file, log_pos = self.mysql_client.master_status()
-			snap = self.storage_volume.snapshot(snapshot_tags)
-			return {
-				'data_bundle_type': 'standard',
-				'snapshot_config': snap.config(),
-				'log_pos': log_pos,
-				'log_file': log_file
-			}  
-		except:
-			LOG.error('MySQL data bundle failed')
-			raise	
-		finally:
-			if running:
-				self.mysql_client.unlock_tables()
+		
+class MySQLSnapRestore(backup.SnapBackup):
+	def __init__(self, **kwds):
+		super(MySQLSnapRestore, self).__init__(**kwds)
+		#self.svs = MysqlInitScript()
+		self.on(complete=self.complete)
 
-				
-	def restore(self, storage_snapshot, log_file, log_pos):
-		self.storage_volume.snap = storage_snapshot
-		self.storage_volume.ensure()
-		return self.storage_volume 
+	def complete(self, volume):
+		volume = storage2.volume(**volume)
+		volume.mpoint = my_print_defaults()['datadir']
+		volume.mount()
 
 
+backup.backup_types['snap+mysql'] = MySQLSnapBackup
+backup.restore_types['snap+mysql'] = MySQLSnapRestore
+
+
+
+class XtrabackupBackup(backup.Backup):
+	
+	
 class XtrabackupDataBundle(object):
 	
 	def __init__(self, storage_volume):
@@ -882,15 +901,6 @@ def my_print_defaults(*option_groups):
 	return ret
 
 
-
-
-class XtrabackupDataBundle(object):
-	def create(self):
-		self.root_password
-		pass
-
-	def restore(self):
-		pass
 
 '''
 create_data_bundle:
