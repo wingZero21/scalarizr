@@ -23,7 +23,9 @@ LOG = logging.getLogger(__name__)
 
 
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
-	exclude_dirs = ('/tmp', '/var/run', '/var/lib/google/per-instance')
+	exclude_dirs = set('/tmp', '/var/run', '/proc', '/dev',
+					   '/mnt' ,'/var/lib/google/per-instance',
+					   '/sys', '/cdrom', '/media')
 	exclude_files = ('/etc/ssh/.host_key_regenerated', )
 
 	def rebundle(self):
@@ -72,13 +74,13 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 						""" Rsync """
 						# Get mounts
 						lines = system2(('/bin/mount', '-l'))[0].splitlines()
-						exclude_dirs = []
+						exclude_dirs = set()
 						for line in lines:
 							mpoint = line.split()[2]
 							if mpoint != '/':
-								exclude_dirs.append(mpoint)
+								exclude_dirs.add(mpoint)
 
-						exclude_dirs.extend(self.exclude_dirs)
+						exclude_dirs.update(self.exclude_dirs)
 
 						rsync = filetool.Rsync()
 						rsync.source('/').dest(tmp_mount_dir).sparse()
