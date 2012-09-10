@@ -107,6 +107,7 @@ class CSVolumeProvider(VolumeProvider):
 						snap_id=snap_id,
 						logger=LOG
 					)
+					
 			
 				if voltool.volume_attached(native_vol):
 					if native_vol.virtualmachineid == pl.get_instance_id():
@@ -121,7 +122,7 @@ class CSVolumeProvider(VolumeProvider):
 						if native_vol.vmstate == 'Stopping':
 							# We should wait for state chage
 							def vm_state_changed():
-								native_vol = conn.listVolumes(id=volume_id)[0]
+								native_vol = conn.listVolumes(id=volume_id or native_vol.id)[0]
 								return voltool.volume_detached(native_vol) or \
 										native_vol.vmstate != 'Stopping'
 							wait_until(vm_state_changed)
@@ -141,7 +142,7 @@ class CSVolumeProvider(VolumeProvider):
 				if native_vol:
 					LOG.debug('Detaching volume')
 					try:
-						conn.detachVolume(id=volume_id)
+						conn.detachVolume(id=native_vol.id)
 					except:
 						pass
 
@@ -171,7 +172,10 @@ class CSVolumeProvider(VolumeProvider):
 		return snap
 
 	def get_snapshot_state(self, snap):
-		state = self._new_conn().listSnapshots(id=snap.id)[0].state
+		snapshots = self._new_conn().listSnapshots(id=snap.id)
+		if not snapshots:
+			raise StorageError('listSnapshots returned empty list for snapshot %s' % snap.id)
+		state = snapshots[0].state
 		return self.snapshot_state_map[state]
 
 	def blank_config(self, cnf):

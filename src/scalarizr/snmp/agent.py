@@ -69,7 +69,7 @@ class SnmpServer():
 		try:
 			mibBuilder.loadModules(*self._modules)
 		except SmiError:
-			self._logger.error('Can\'t load modules')
+			self._logger.warn('Can\'t load modules')
 			raise
 
 		config.addV1System(self._engine, self._security_name, self._community_name)

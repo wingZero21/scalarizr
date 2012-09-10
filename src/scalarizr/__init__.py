@@ -243,7 +243,8 @@ def _create_db(db_file=None, script_file=None):
 	# Disk I/O Error workaround
 	conn.executescript("PRAGMA journal_mode=OFF;")
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
-	#conn.commit()	
+	#conn.commit()
+	system2('sync', shell=True)	
 
 def _init_logging():
 	optparser = bus.optparser
@@ -465,7 +466,7 @@ def _start_snmp_server():
 		except SystemExit:
 			raise
 		except (BaseException, Exception), e:
-			logger.exception(e)
+			logger.warn('Caught SNMP error: %s', str(e))
 			sys.exit(1)
 	else:
 		globals()["_snmp_pid"] = pid
@@ -589,12 +590,15 @@ def _shutdown_services(force=False):
 
 def _cleanup_after_rebundle():
 	cnf = bus.cnf
+	pl = bus.platform
 	logger = logging.getLogger(__name__)
-	# Destory mysql storages
-	if os.path.exists(cnf.private_path('storage/mysql.json')):
-		logger.info('Cleanuping old MySQL storage')
-		vol = Storage.create(Storage.restore_config(cnf.private_path('storage/mysql.json')))
-		vol.destroy(force=True)				
+	
+	if 'volumes' not in pl.features:
+		# Destory mysql storages
+		if os.path.exists(cnf.private_path('storage/mysql.json')):
+			logger.info('Cleanuping old MySQL storage')
+			vol = Storage.create(Storage.restore_config(cnf.private_path('storage/mysql.json')))
+			vol.destroy(force=True)				
 	
 	# Reset private configuration
 	priv_path = cnf.private_path()

@@ -14,6 +14,7 @@ import urllib2
 from scalarizr import messaging, util
 from scalarizr.messaging import p2p
 from scalarizr.util import urltool
+import sys
 
 
 class P2pMessageProducer(messaging.MessageProducer):
@@ -122,18 +123,17 @@ class P2pMessageProducer(messaging.MessageProducer):
 				
 			if isinstance(e, urllib2.HTTPError):
 				if e.code == 401:
-					self._logger.error("Cannot authenticate on message server. %s", e.msg)
+					self._logger.warn("Cannot authenticate on message server. %s", e.msg)
 				elif e.code == 400:
-					self._logger.error("Malformed request. %s", e.msg)	
+					self._logger.warn("Malformed request. %s", e.msg)	
 				else:
-					self._logger.error("Cannot post message to %s. %s", url, e)
+					self._logger.warn("Cannot post message to %s. %s", url, e)
 						
 			elif isinstance(e, urllib2.URLError):
-				host, port = urllib.splitnport(req.host, req.port or 80)
-				self._logger.error("Cannot connect to message server on %s:%s. %s", host, port, e)
+				self._logger.warn("Cannot connect to message server on %s. %s", self.endpoint, e)
 				
 			else:
-				self._logger.exception(e)
+				self._logger.warn('Caught exception', exc_info=sys.exc_info())
 			
 			# Call user code
 			if fail_callback:

@@ -348,11 +348,14 @@ class RedisHandler(ServiceCtlHandler):
 
 				old_conf = self.storage_vol.detach(force=True) # ??????
 				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
-							
+				
+				'''
+				#This code was removed because redis master storage can be empty yet valid
 				for r in self.redis_instances:
 					# Continue if master storage is a valid redis storage 
 					if not r.working_directory.is_initialized(self._storage_path):
 						raise HandlerError("%s is not a valid %s storage" % (self._storage_path, BEHAVIOUR))
+				'''
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
@@ -373,7 +376,7 @@ class RedisHandler(ServiceCtlHandler):
 			
 		except (Exception, BaseException), e:
 			LOG.exception(e)
-			if new_storage_vol:
+			if new_storage_vol and not new_storage_vol.detached:
 				new_storage_vol.detach()
 			# Get back slave storage
 			if old_conf:

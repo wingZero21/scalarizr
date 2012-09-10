@@ -142,7 +142,9 @@ class Message(object):
 					value = ''
 			el.appendChild(doc.createTextNode(value))
 			'''
-			el.appendChild(doc.createTextNode(unicode(value) if value is not None else ""))
+			if value is not None and not isinstance(value, unicode):
+				value = str(value).decode('utf-8')
+			el.appendChild(doc.createTextNode(value or ''))
 
 
 class MessageProducer(Observable):
