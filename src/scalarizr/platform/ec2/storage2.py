@@ -45,7 +45,7 @@ class FreeDeviceLetterMgr(object):
 
 	def __init__(self):
 		# Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-		self._all = list(string.ascii_lowercase[7 if linux.os.redhat else 5:16])
+		self._all = list(string.ascii_lowercase[7 if linux.os['release'] and linux.os.redhat else 5:16])
 		self._acquired = set()
 		self._lock = threading.Lock()
 		self._local = threading.local()	

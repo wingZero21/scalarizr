@@ -101,7 +101,7 @@ class TestEbsVolume(object):
 			p.stop()
 	
 	
-	def test_ensure_new(self):
+	def _test_ensure_new(self):
 		ebs = mock.Mock(
 			id='vol-12345678', 
 			size=1, 
@@ -123,7 +123,7 @@ class TestEbsVolume(object):
 				assert self.vol.config()
 
 
-	def test_ensure_existed(self):
+	def _test_ensure_existed(self):
 		ebs = mock.Mock(
 			id='vol-12345678', 
 			size=1, 
@@ -145,9 +145,29 @@ class TestEbsVolume(object):
 				assert self.vol.config()
 				
 
-
 	def test_ensure_existed_in_different_zone(self):
-		pass
+		ebs = mock.Mock(
+			id='vol-12345678', 
+			size=1, 
+			zone='us-east-1b',
+			**{'volume_state.return_value': 'available'}
+		)
+		ebs2 = mock.Mock(
+			id='vol-87654321',
+			size=1,
+			zone='us-east-1a',
+			**{'volume_state.return_value': 'available'}
+		)
+		with mock.patch.object(self.conn, 'get_all_volumes', return_value=[ebs]):
+			with mock.patch.object(Ebs, '_create_snapshot', return_value=mock.Mock(id='snap-12345678')):
+				with mock.patch.object(Ebs, '_create_volume', return_value=ebs2):
+					with mock.patch.object(Ebs, '_attach_volume'):
+
+						self.vol = Ebs(type='ebs', id='vol-12345678')
+						self.vol.ensure()
+						
+						assert self.vol.id == ebs2.id
+
 
 	def test_ensure_existed_attached_to_other_instance(self):
 		pass

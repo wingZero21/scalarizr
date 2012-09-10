@@ -137,7 +137,7 @@ class OperationError(StorageError):
 	pass
 
 RHEL_DEVICE_ORDERING_BUG = False
-if linux.os.redhat_family:
+if linux.os['release'] and linux.os['family'] == 'RedHat':
 	# Check that system is affected by devices ordering bug
 	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
 	from scalarizr.linux import mount
