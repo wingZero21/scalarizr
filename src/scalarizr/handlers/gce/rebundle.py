@@ -23,34 +23,34 @@ LOG = logging.getLogger(__name__)
 
 
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
-	exclude_dirs = ('/tmp', '', '/var/lib/google/per-instance')
+	exclude_dirs = ('/tmp', '/var/run', '/var/lib/google/per-instance')
 	exclude_files = ('/etc/ssh/.host_key_regenerated', )
 
 	def rebundle(self):
-		# TODO: ADD LOGGING
 		rebundle_dir = tempfile.mkdtemp()
 
 		try:
+			pl = bus.platform
+			proj_id = pl.get_numeric_project_id()
+			cloudstorage = pl.new_storage_client()
+
 			tmp_mount_dir = os.path.join(rebundle_dir, 'root')
 			os.makedirs(tmp_mount_dir)
 
 			image_name	= 'disk.raw'
 			image_path	= os.path.join(rebundle_dir, image_name)
 
-
 			root = filter(lambda x: x.mpoint == '/', filetool.df())[0]
 
 			""" Creating disk file """
+			LOG.debug('Creating image file %s' % image_path)
 			with open(image_path, 'w') as f:
 				f.truncate(root.size*1024 + 1*1024)
 
 			try:
 
-				""" Partitioning """
-				# Create partition table
+				LOG.debug('Creating partition table on image')
 				system2(('parted', image_path, 'mklabel', 'msdos'))
-
-				# Making partition
 				system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root.size/1024)))
 
 				# Map disk image
@@ -61,7 +61,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 					LOG.debug('### Root dev name %s' % root_dev_name)
 
-					""" Creating fs """
+					LOG.debug('Creating filesystem')
 					fstool.mkfs(root_dev_name, 'ext4')
 					dev_uuid = uuid.uuid4()
 					system2(('tune2fs', '-U', str(dev_uuid), root_dev_name))
@@ -86,8 +86,10 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 						rsync.exclude([os.path.join(ex, '**') for ex in exclude_dirs])
 						rsync.exclude(self.exclude_files)
 						rsync.exclude(self._excludes)
+						LOG.info('Copying root filesystem to image')
 						rsync.execute()
 
+						LOG.info('Cleanup image')
 						self._create_spec_devices(tmp_mount_dir)
 
 						""" Cleanup network """
@@ -131,15 +133,21 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 				""" Uploading """
 				uploader = transfer.Transfer(logger=LOG)
+				# Make bucket name more random
 				tmp_bucket_name = 'scalr-images-tmp-bucket-%s' % int(time.time())
 
-				pl = bus.platform
-				proj_id = pl.get_numeric_project_id()
-				cloudstorage = pl.new_storage_client()
-				cloudstorage.buckets().insert(id=tmp_bucket_name, projectId=proj_id)
+				try:
+					remote_path = 'gs://%s/' % tmp_bucket_name
+					uploader.upload((arch_path,), remote_path)
+				except:
+					try:
+						objs = cloudstorage.objects()
+						objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
+					except:
+						pass
 
-				remote_path = 'gs://%s/%s' % (tmp_bucket_name, arch_name)
-				uploader.upload(arch_path, remote_path)
+					cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
+					raise
 
 			finally:
 				os.unlink(arch_path)
@@ -149,6 +157,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 		try:
 			""" Register new image """
+			LOG.info('Registering new image %s' % self._role_name.lower())
 			compute = pl.new_compute_client()
 
 			image_url = 'http://storage.googleapis.com/%s/%s' % (tmp_bucket_name, arch_name)
@@ -174,8 +183,9 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 			wait_until(image_is_ready, logger=LOG, timeout=600)
 		finally:
-			# TODO: delete image and bucket
-			pass
+			objs = cloudstorage.objects()
+			objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
+			cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
 
 		return 'projects/%s/images/%s' % (proj_id, self._role_name.lower())
 

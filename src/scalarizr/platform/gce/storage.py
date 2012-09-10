@@ -88,6 +88,8 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 
 		req = self.cloudstorage.buckets().list(projectId=proj_id)
 		resp = req.execute()
+		if 'items' not in resp:
+			return []
 		buckets = [b['id'] for b in resp['items']]
 		return buckets
 

@@ -1,6 +1,7 @@
 __author__ = 'Nick Demyanchuk'
 
 import os
+import base64
 import urllib2
 import httplib2
 
@@ -13,6 +14,10 @@ from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
 
 from scalarizr.platform import Platform
+from scalarizr.storage.transfer import Transfer
+from .storage import GoogleCSTransferProvider
+
+Transfer.explore_provider(GoogleCSTransferProvider)
 
 COMPUTE_RW_SCOPE = 'https://www.googleapis.com/auth/compute'
 STORAGE_FULL_SCOPE = 'https://www.googleapis.com/auth/devstorage.full_control'
@@ -100,7 +105,7 @@ class GcePlatform(Platform):
 	def _get_auth(self):
 		http = httplib2.Http()
 		email = self.get_access_data('service_account_name')
-		pk = self.get_access_data('key')
+		pk = base64.b64decode(self.get_access_data('key'))
 		cred = SignedJwtAssertionCredentials(email, pk, scope=[COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE])
 		return cred.authorize(http)
 
