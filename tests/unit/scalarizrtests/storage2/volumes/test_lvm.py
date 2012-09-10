@@ -36,6 +36,7 @@ class TestLvmVolume(object):
 		vol.ensure()
 		
 		assert len(vol.pv) == 2
+		print vol.pv[0]
 		assert isinstance(vol.pv[0], base.Volume)
 		assert isinstance(vol.pv[1], base.Volume)
 		assert vol.device == '/dev/mapper/data-vol1'

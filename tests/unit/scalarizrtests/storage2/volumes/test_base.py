@@ -109,3 +109,8 @@ class TestVolume(object):
 	
 	def test_ensure_with_mount_and_mkfs(self):
 		pass
+
+
+class TestSnapshot(object):
+	def test_restore(self):
+		pass

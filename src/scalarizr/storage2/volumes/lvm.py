@@ -69,7 +69,7 @@ class LvmVolume(base.Volume):
 			try:
 				lvm2.vgs(self.vg)
 			except lvm2.NotFound:
-				lvm2.vgcreate(self.vg, *[disk.device for disk in self.pv])
+				lvm2.vgcreate(self.vg, *[disk.device for disk in self.pvs])
 
 			kwds = {'name': self.name}
 			if '%' in str(self.size):

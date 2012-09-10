@@ -83,8 +83,8 @@ def mount(device, mpoint, *short_args, **long_kwds):
 		params=(device, mpoint)
 	)
 	try:
-		msg = error_text='Cannot mount %s -> %s' % (device, mpoint)
-		linux.system(args, msg)
+		msg = 'Cannot mount %s -> %s' % (device, mpoint)
+		linux.system(args, error_text=msg)
 	except linux.LinuxError, e:
 		if 'you must specify the filesystem type' in e.err:
 			raise NoFileSystem(device)
