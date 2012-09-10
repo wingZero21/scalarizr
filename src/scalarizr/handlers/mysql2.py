@@ -897,7 +897,9 @@ class MysqlHandler(DBMSRHandler):
 					shutil.copy(DEBIAN_CNF_PATH, STORAGE_PATH)	
 						
 				# Add system users	
-				self.create_users(**user_creds)	
+				self.create_users(**user_creds)
+				if hasattr(self.data_bundle, 'root_client'):
+					self.data_bunlde.root_client = self.root_client
 			
 		# If volume has mysql storage directory structure (N-th init)
 		else:
