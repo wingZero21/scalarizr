@@ -899,7 +899,7 @@ class MysqlHandler(DBMSRHandler):
 				# Add system users	
 				self.create_users(**user_creds)
 				if hasattr(self.data_bundle, 'root_client'):
-					self.data_bunlde.root_client = self.root_client
+					self.data_bunlde= mysql_svc.MySQLClient(ROOT_USER, user_creds[ROOT_USER])
 			
 		# If volume has mysql storage directory structure (N-th init)
 		else:
