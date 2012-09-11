@@ -2,9 +2,9 @@ __author__ = 'Nick Demyanchuk'
 
 import re
 import os
-import stat
 import uuid
 import time
+import random
 import logging
 import shutil
 import tempfile
@@ -23,10 +23,11 @@ LOG = logging.getLogger(__name__)
 
 
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
-	exclude_dirs = set('/tmp', '/var/run', '/proc', '/dev',
+	exclude_dirs = set(['/tmp', '/var/run', '/proc', '/dev',
 					   '/mnt' ,'/var/lib/google/per-instance',
-					   '/sys', '/cdrom', '/media')
-	exclude_files = ('/etc/ssh/.host_key_regenerated', )
+					   '/sys', '/cdrom', '/media'])
+	exclude_files = ('/etc/ssh/.host_key_regenerated',
+					 '/lib/udev/rules.d/75-persistent-net-generator.rules')
 
 	def rebundle(self):
 		rebundle_dir = tempfile.mkdtemp()
@@ -44,7 +45,6 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 			root = filter(lambda x: x.mpoint == '/', filetool.df())[0]
 
-			""" Creating disk file """
 			LOG.debug('Creating image file %s' % image_path)
 			with open(image_path, 'w') as f:
 				f.truncate(root.size*1024 + 1*1024)
@@ -61,18 +61,13 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 					loop = re.search('(/dev/loop\d+)', out).group(1)
 					root_dev_name = '/dev/mapper/%sp1' % loop.split('/')[-1]
 
-					LOG.debug('### Root dev name %s' % root_dev_name)
-
-					LOG.debug('Creating filesystem')
+					LOG.info('Creating filesystem')
 					fstool.mkfs(root_dev_name, 'ext4')
 					dev_uuid = uuid.uuid4()
 					system2(('tune2fs', '-U', str(dev_uuid), root_dev_name))
 
-					""" Mounting """
 					fstool.mount(root_dev_name, tmp_mount_dir)
 					try:
-						""" Rsync """
-						# Get mounts
 						lines = system2(('/bin/mount', '-l'))[0].splitlines()
 						exclude_dirs = set()
 						for line in lines:
@@ -94,11 +89,6 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 						LOG.info('Cleanup image')
 						self._create_spec_devices(tmp_mount_dir)
 
-						""" Cleanup network """
-						f_to_del_path = os.path.join(tmp_mount_dir, 'lib/udev/rules.d/75-persistent-net-generator.rules')
-						if os.path.exists(f_to_del_path):
-							os.remove(f_to_del_path)
-
 						""" Patch fstab"""
 						fstab_path = os.path.join(tmp_mount_dir, 'etc/fstab')
 						if os.path.exists(fstab_path):
@@ -115,7 +105,6 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 				finally:
 					system2(('kpartx', '-d', image_path))
 
-				""" Tar.gzipping """
 				LOG.info('Compressing image.')
 				arch_name = '%s.tar.gz' % self._role_name.lower()
 				arch_path = os.path.join(rebundle_dir, arch_name)
@@ -130,13 +119,10 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 				os.unlink(image_path)
 
 			try:
-				""" Hash """
-				# add sha1Checksum to register request
-
-				""" Uploading """
+				LOG.info('Uploading compressed image to cloud storage')
 				uploader = transfer.Transfer(logger=LOG)
-				# Make bucket name more random
-				tmp_bucket_name = 'scalr-images-tmp-bucket-%s' % int(time.time())
+				tmp_bucket_name = 'scalr-images-%s-%s' % (
+									random.randint(1,1000000), int(time.time()))
 
 				try:
 					remote_path = 'gs://%s/' % tmp_bucket_name
@@ -158,7 +144,6 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			shutil.rmtree(rebundle_dir)
 
 		try:
-			""" Register new image """
 			LOG.info('Registering new image %s' % self._role_name.lower())
 			compute = pl.new_compute_client()
 
@@ -182,8 +167,8 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 				if res['status'] == 'DONE':
 					return True
 				return False
-
 			wait_until(image_is_ready, logger=LOG, timeout=600)
+
 		finally:
 			objs = cloudstorage.objects()
 			objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
@@ -204,11 +189,3 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			args = node.split()
 			args[0] = os.path.join(root, 'dev', args[0])
 			system2(['mknod'] + args)
-
-
-
-
-
-
-
-

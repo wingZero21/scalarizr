@@ -66,12 +66,14 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 		req = self.cloudstorage.objects().insert(
 			bucket=bucket, name=name, media_body=media
 		)
-
+		last_progress = 0
 		while response is None:
 			status, response = req.next_chunk()
 			if status:
-				LOG.debug("Uploaded %d%%." % int(status.progress() * 100))
-
+				percentage = int(status.progress() * 100)
+				if percentage - last_progress > 10:
+					LOG.debug("Uploaded %d%%." % percentage)
+					last_progress = percentage
 		LOG.debug('Upload completed.')
 
 
