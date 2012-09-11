@@ -1,7 +1,9 @@
 __author__ = 'Nick Demyanchuk'
 
 import os
+import sys
 import urlparse
+import threading
 import logging
 
 from apiclient.http import MediaFileUpload, MediaIoBaseDownload
@@ -13,10 +15,10 @@ from scalarizr.storage import transfer
 LOG = logging.getLogger(__name__)
 CHUNK_SIZE = 2*1024*1024
 
-
+tlock = threading.Lock()
 class GoogleCSTransferProvider(transfer.TransferProvider):
 
-	schema = 'gs'
+	schema = 'gcs'
 	urlparse.uses_netloc.append(schema)
 
 
@@ -27,12 +29,13 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 			bucket=bucket, prefix=path, delimiter='/'
 		)
 		resp = req.execute()
-		return tuple('gs://' % o['name'] for o in resp['items'])
+		return tuple('gcs://%s' % o['name'] for o in resp['items'])
 
 
 	def get(self, remote_path, local_path):
 		LOG.debug('Downloading %s from cloud storage (local path: %s)', remote_path, local_path)
 		bucket, name = self._parse_path(remote_path)
+		local_path = os.path.join(local_path, os.path.basename(remote_path))
 		f = open(local_path, 'w')
 		request = self.cloudstorage.objects().get_media(
 			bucket=bucket, object=name)
@@ -45,6 +48,7 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 				LOG.debug('Downloaded %d%%' % int(status.progress() * 100))
 
 		LOG.debug('Download complete.')
+		return local_path
 
 
 	def put(self, local_path, remote_path):
@@ -75,6 +79,8 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 					LOG.debug("Uploaded %d%%." % percentage)
 					last_progress = percentage
 		LOG.debug('Upload completed.')
+		return 'gcs://%s' % os.path.join(bucket, name)
+
 
 
 	def _parse_path(self, path):
@@ -102,12 +108,18 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 
 		req_body = dict(id=bucket_name, projectId=proj_id)
 		req = self.cloudstorage.buckets().insert(body=req_body)
-		req.execute()
+		try:
+			req.execute()
+		except:
+			e = sys.exc_info()[1]
+			if not 'You already own this bucket' in str(e):
+				raise
 
 
 	@property
 	def cloudstorage(self):
-		if not hasattr(self, '_cloudstorage'):
-			pl = bus.platform
-			self._cloudstorage = pl.new_storage_client()
-		return self._cloudstorage
+		with tlock:
+			if not hasattr(self, '_cloudstorage'):
+				pl = bus.platform
+				self._cloudstorage = pl.new_storage_client()
+			return self._cloudstorage

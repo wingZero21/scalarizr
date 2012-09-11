@@ -88,6 +88,10 @@ class GcePlatform(Platform):
 		return self._get_metadata('instance-id')
 
 
+	def get_hostname(self):
+		return self._get_metadata('hostname')
+
+
 	def get_image(self):
 		return self._get_metadata('image')
 

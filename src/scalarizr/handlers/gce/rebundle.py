@@ -125,7 +125,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 									random.randint(1,1000000), int(time.time()))
 
 				try:
-					remote_path = 'gs://%s/' % tmp_bucket_name
+					remote_path = 'gcs://%s/' % tmp_bucket_name
 					uploader.upload((arch_path,), remote_path)
 				except:
 					try:
