@@ -796,17 +796,17 @@ initdv2.explore(SERVICE_NAME, MysqlInitScript)
 
 class MySQLSnapBackup(backup.SnapBackup):
 	def __init__(self, **kwds):
+		if not kwds.get('volume'):
+			kwds['volume'] = __node__['mysql']['volume']
 		super(MySQLSnapBackup, self).__init__(**kwds)
 		self.on(
 			freeze_service=self.freeze,
 			complete=self.complete,
 			error=self.unfreeze
 		)
-		self.mykey = __node__['mysql']['type']
-
 
 	def _client(self):
-		return MySQLClient('scalr', __node__[self.mykey]['root_password'])
+		return MySQLClient('scalr', __node__['mysql']['root_password'])
 
 
 	def freeze(self, *args):
@@ -833,8 +833,10 @@ class MySQLSnapBackup(backup.SnapBackup):
 		}
 		
 		
-class MySQLSnapRestore(backup.SnapBackup):
+class MySQLSnapRestore(backup.SnapRestore):
 	def __init__(self, **kwds):
+		if not kwds.get('snapshot'):
+			kwds['snapshot'] = __node__['mysql']['snapshot']
 		super(MySQLSnapRestore, self).__init__(**kwds)
 		#self.svs = MysqlInitScript()
 		self.on(complete=self.complete)
@@ -845,13 +847,11 @@ class MySQLSnapRestore(backup.SnapBackup):
 		volume.mount()
 
 
-backup.backup_types['snap+mysql'] = MySQLSnapBackup
-backup.restore_types['snap+mysql'] = MySQLSnapRestore
+backup.backup_types['snap_mysql'] = MySQLSnapBackup
+backup.restore_types['snap_mysql'] = MySQLSnapRestore
 
 
 
-class XtrabackupBackup(backup.Backup):
-	
 	
 class XtrabackupDataBundle(object):
 	

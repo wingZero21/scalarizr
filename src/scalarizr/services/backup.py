@@ -14,12 +14,35 @@ restore_types = {}
 
 
 def backup(*args, **kwds):
-	# backup factory
-	pass
+	if args:
+		if isinstance(args[0], dict):
+			return backup(**args[0])
+		else:
+			return args[0]
+	type_ = kwds.get('type', 'base')
+	try:
+		cls = backup_types[type_]
+	except KeyError:
+		msg = "Unknown backup type '%s'. " \
+				"Have you registered it in scalarizr.services.backup.backup_types?" % type_
+		raise KeyError(msg)
+	return cls(**kwds)
+
 
 def restore(*args, **kwds):
-	# backup factory
-	pass
+	if args:
+		if isinstance(args[0], dict):
+			return restore(**args[0])
+		else:
+			return args[0]
+	type_ = kwds.get('type', 'base')
+	try:
+		cls = restore_types[type_]
+	except KeyError:
+		msg = "Unknown restore type '%s'. " \
+				"Have you registered it in scalarizr.services.backup.restore_types?" % type_
+		raise KeyError(msg)
+	return cls(**kwds)
 
 
 class ConfigMixin(object):
@@ -72,11 +95,16 @@ class Task(pubsub.Observable, ConfigMixin):
 	def kill(self):
 		if self.__running:
 			self._kill()
+			self._cleanup()
 
 
 	def _kill(self):
 		pass
 
+
+	def _cleanup(self):
+		pass
+	
 
 	def run(self):
 		if self.__running:
@@ -87,8 +115,10 @@ class Task(pubsub.Observable, ConfigMixin):
 			result = self._run()
 			self.fire('complete', result)
 		except:
-			self.fire('error', sys.exc_info())
-			raise
+			exc_info = sys.exc_info()
+			self.fire('error', exc_info)
+			self._cleanup()
+			raise exc_info[0], exc_info[1], exc_info[2]
 		finally:
 			self.__running = False
 

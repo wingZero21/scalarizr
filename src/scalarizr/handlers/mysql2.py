@@ -17,7 +17,7 @@ import glob
 import ConfigParser
 
 # Core
-from scalarizr import config, storage2
+from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.messaging import Messages
@@ -30,20 +30,21 @@ from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
 from scalarizr.util import system2, disttool, filetool, \
 	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool,\
 	PopenError, iptables, dynimp
-	
+
+from scalarizr import storage2	
+from scalarizr.services import backup
+from scalarizr.node import __node__
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
 
 
-BEHAVIOUR = SERVICE_NAME = 'percona' if 'percona' in bus.cnf.rawini.get('general', 'behaviour') else 'mysql2'
-'''
-if 'Percona Server' in system2((software.which('mysqld'), '-V'))[0] and disttool.is_redhat_based():
-	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.PERCONA
-else:
-	BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL2
-'''
+__mysql__ = __node__['mysql']
+
+BEHAVIOUR = SERVICE_NAME = 'percona' \
+				if 'percona' in __node__['behavior'] \
+				else 'mysql2'
 CNF_SECTION = 'mysql2'
 LOG = logging.getLogger(__name__)
 
@@ -318,10 +319,10 @@ class MysqlHandler(DBMSRHandler):
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
 		self._cnf = bus.cnf
-		ini = self._cnf.rawini
-		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
-		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
-		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
+		#ini = self._cnf.rawini
+		#self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+		#self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
+		#self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 
 
 	def on_init(self):	
@@ -331,11 +332,20 @@ class MysqlHandler(DBMSRHandler):
 		bus.on("before_reboot_start", self.on_before_reboot_start)
 		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 				
-		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+		if __node__['state'] == 'bootstrapping':
 			self._insert_iptables_rules()
-			os.symlink(self._cnf.private_path('mysql2.ini'), self._cnf.private_path('percona.ini'))
 		
-		elif self._cnf.state == ScalarizrState.RUNNING:
+		elif __node__['state'] == 'running':
+			vol = storage2.volume(__node__['mysql']['volume'])
+			if not vol.tags:
+				vol.tags = self.mysql_tags
+			vol.ensure(mount=True)
+			if __node__['mysql']['replication_master']:
+				LOG.debug("Checking Scalr's %s system users presence", BEHAVIOUR)
+				creds = self.get_user_creds()
+				self.create_users(**creds)
+				
+			'''
 			# Creating self.storage_vol object from configuration
 			storage_conf = Storage.restore_config(self._volume_config_path)
 			storage_conf['tags'] = self.mysql_tags
@@ -347,6 +357,7 @@ class MysqlHandler(DBMSRHandler):
 				LOG.debug("Checking Scalr's %s system users presence." % BEHAVIOUR)
 				creds = self.get_user_creds()
 				self.create_users(**creds)
+			'''
 	
 
 	def on_host_init_response(self, message):
@@ -362,12 +373,43 @@ class MysqlHandler(DBMSRHandler):
 				with op.step(self._step_accept_scalr_conf):
 		
 					if not message.body.has_key(BEHAVIOUR):
-						raise HandlerError("HostInitResponse message for MySQL behaviour must have '%s' property" % BEHAVIOUR)
+						msg = "HostInitResponse message for MySQL behaviour " \
+								"must have '%s' property" % BEHAVIOUR
+						raise HandlerError(msg)
 					
+					# storage will do this
+					'''
 					dir = os.path.dirname(self._volume_config_path)
 					if not os.path.exists(dir):
 						os.makedirs(dir)
+					'''
 					
+					mysql_data = getattr(message, BEHAVIOUR).copy()
+					if __node__['scalr']['version'] <= (2, 1):
+						if mysql_data.get('volume_id'):
+							mysql_data['volume'] = storage2.volume(
+								type='ebs', 
+								id=mysql_data.pop('volume_id')
+							)
+						if mysql_data.get('snapshot_id'):
+							mysql_data['restore'] = backup.restore(
+								type='snap_mysql',
+								snapshot=dict(
+									type='ebs',
+									id=mysql_data.pop('snapshot_id')
+								)
+							)
+					else:
+						mysql_data['volume'] = mysql_data.pop('volume_config')
+						if mysql_data.get('snapshot_config'):
+							mysql_data['restore'] = backup.restore(
+								type='snap_mysql', 
+								snapshot=mysql_data.pop('snapshot_config')
+							)
+					
+					__mysql__.update(mysql_data)
+					
+					'''
 					mysql_data = getattr(message, BEHAVIOUR).copy()
 					for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
 									(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
@@ -377,7 +419,9 @@ class MysqlHandler(DBMSRHandler):
 							if mysql_data[key]:
 								Storage.backup_config(mysql_data[key], file)
 							del mysql_data[key]
+					'''
 							
+					'''
 					# Compatibility with Scalr <= 2.1
 					if bus.scalr_version <= (2, 1):
 						if 'volume_id' in mysql_data:
@@ -389,27 +433,7 @@ class MysqlHandler(DBMSRHandler):
 							del mysql_data['snapshot_id']
 					LOG.debug("Update mysql config with %s", mysql_data)
 					self._update_config(mysql_data)
-					
-					tmp = Storage.restore_config(self._volume_config_path)
-					self.storage_vol = storage2.volume(**tmp)
-					if os.path.exists(self._snapshot_config_path):
-						tmp = Storage.restore_config(self._snapshot_config_path)
-						self.storage_snap = storage2.snapshot(**tmp)
-					else:
-						self.storage_snap = None
-					
-					data_bundle_type = mysql_data.get('data_bundle_type', 'standard')
-					if data_bundle_type == 'standard':
-						self.data_bundle = mysql_svc.StandardDataBundle(
-												self.mysql.service, 
-												self.root_client, 
-												self.storage_vol)
-					elif data_bundle_type == 'xtrabackup':
-						self.data_bundle = mysql_svc.XtrabackupDataBundle(
-												self.mysql.service,
-												self.storage_vol,
-												{'type': 'ebs', 'size': self._datadir_size},
-												lock_myisam=mysql_data.get('lock_myisam', False))
+					'''
 
 	
 	def on_before_host_up(self, message):
@@ -422,7 +446,7 @@ class MysqlHandler(DBMSRHandler):
 		
 		self.generate_datadir()
 		self.mysql.service.stop('configuring mysql')
-		repl = 'master' if int(self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)) else 'slave'
+		repl = 'master' if __mysql__['replication_master'] else 'slave'
 		bus.fire('before_mysql_configure', replication=repl)
 		if repl == 'master':
 			self._init_master(message)	
@@ -852,24 +876,29 @@ class MysqlHandler(DBMSRHandler):
 		with bus.initialization_op as op:
 			snap_cnf = None
 			with op.step(self._step_create_storage):		
-		
+				if 'restore' in __mysql__:
+					restore = backup.restore(__mysql__['restore'])
+					__mysql__['volume'] = restore.run()
+				'''	
 				if self.storage_snap:
 					log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
 					self.data_bundle.restore(self.storage_snap, log_file, log_pos)
 		
 				self._plug_storage(mpoint=STORAGE_PATH, vol=self.storage_vol)
 				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
-				
+				'''
 				self.mysql.flush_logs(DATA_DIR)
 		
 			with op.step(self._step_move_datadir):
 				storage_valid = self._storage_valid()				
 				user_creds = self.get_user_creds()
 		
+				 
 				datadir = self.mysql.my_cnf.datadir
 				if not datadir:
 					datadir = DEFAULT_DATADIR
 					self.mysql.my_cnf.datadir = DEFAULT_DATADIR
+
 		
 				if not storage_valid and datadir.find(DATA_DIR) == 0:
 					# When role was created from another mysql role it contains modified my.cnf settings 

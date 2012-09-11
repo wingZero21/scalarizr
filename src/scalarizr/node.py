@@ -7,7 +7,7 @@ import ConfigParser
 
 
 class ConfigFile(object):
-	def __init__(filename, default_section):
+	def __init__(self, filename, default_section):
 		self.filename = filename
 		self.default_section = default_section
 		self._reload()
@@ -23,7 +23,7 @@ class ConfigFile(object):
 			self._reload()
 			return self.ini.get(*self._parse_key(key))
 		except ConfigParser.Error:
-			raise KeyError(name)
+			raise KeyError(key)
 
 
 	def __setitem__(self, key, value):
@@ -34,7 +34,7 @@ class ConfigFile(object):
 			self.ini.write(fp)
 
 
-	def _parse_key(self, key)
+	def _parse_key(self, key):
 		if not '.' in key:
 			key = self.default_section + '.' + key
 		return key.split('.', 1)
@@ -47,7 +47,10 @@ class MySQLData(ConfigFile):
 				return 'percona'
 			return 'mysql'
 		return super(MySQLData, self).__getitem__(key)
-
+	
+	def __setitem__(self, key, value):
+		if key in ('snapshot_config', 'snapshot'):
+			pass
 
 class Node(object):
 	etc_base = '/etc/scalr'
@@ -85,11 +88,11 @@ class Node(object):
 			self._ext[key] = value
 
 
-	def _config_file(name, private=True)
+	def _config_file(self, name, private=True):
 		type_ = 'private' if private else 'public'
 		key = name + '.' + type_
 		if not key in self._config_files:
-			filename = '%s/%s.d/%s.ini' % (self.etc_path, type_ name)
+			filename = '%s/%s.d/%s.ini' % (self.etc_path, type_, name)
 			cls = ConfigFile
 			if name in ('mysql', 'percona'):
 				cls = MySQLData
@@ -97,4 +100,4 @@ class Node(object):
 		return self._config_files[key]
 
 
-__node__ = _Node()
+__node__ = Node()
