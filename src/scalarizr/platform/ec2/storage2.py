@@ -351,8 +351,8 @@ class EbsVolume(base.Volume, EbsMixin):
 		LOG.debug('EBS volume %s is available', ebs.id)		
 	
 	
-	def _wait_attachment_state_change(self, ebs):
-		ebs = self._ebs_volume(ebs)
+	def _wait_attachment_state_change(self, volume):
+		ebs = self._ebs_volume(volume)
 		msg = 'EBS volume %s hangs in attaching state. ' \
 				'Timeout reached (%s seconds)' % (ebs.id, self._global_timeout)
 		util.wait_until(
