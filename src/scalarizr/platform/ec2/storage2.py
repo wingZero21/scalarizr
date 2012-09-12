@@ -192,6 +192,8 @@ class EbsVolume(base.Volume, EbsMixin):
 					size = ebs.size
 			elif self.snap:
 				snap = self.snap['id']
+				if not self.tags:
+					self.tags = snap['tags']
 			if not self.id:
 				ebs = self._create_volume(
 						zone=zone, 
