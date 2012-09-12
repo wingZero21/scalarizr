@@ -127,7 +127,10 @@ class EbsVolume(base.Volume, EbsMixin):
 	_free_device_letter_mgr = FreeDeviceLetterMgr()
 	_global_timeout = 3600
 	_conn = None
-
+	
+	features = base.Volume.features.copy()
+	features.update({'restore' : True})
+	
 	error_messages = base.Volume.error_messages.copy()
 	error_messages.update({
 		'no_id_or_conn': 'Volume has no ID and EC2 connection '
@@ -144,8 +147,8 @@ class EbsVolume(base.Volume, EbsMixin):
 			'iops': None
 		})
 		base.Volume.__init__(self, **kwds)
-		EbsMixin.__init__(self)		
-
+		EbsMixin.__init__(self)	
+		
 		
 	def _ensure(self):
 		'''
@@ -189,7 +192,6 @@ class EbsVolume(base.Volume, EbsMixin):
 					size = ebs.size
 			elif self.snap:
 				snap = self.snap['id']
-				
 			if not self.id:
 				ebs = self._create_volume(
 						zone=zone, 
