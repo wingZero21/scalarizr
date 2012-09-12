@@ -21,7 +21,6 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 	schema = 'gcs'
 	urlparse.uses_netloc.append(schema)
 
-
 	def list(self, remote_path):
 		bucket, path = self._parse_path(remote_path)
 
