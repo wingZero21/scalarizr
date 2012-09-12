@@ -2,8 +2,10 @@ __author__ = 'Nick Demyanchuk'
 
 import os
 import base64
+import logging
 import urllib2
 import httplib2
+import threading
 
 try:
 	import json
@@ -23,13 +25,61 @@ COMPUTE_RW_SCOPE = 'https://www.googleapis.com/auth/compute'
 STORAGE_FULL_SCOPE = 'https://www.googleapis.com/auth/devstorage.full_control'
 
 
+LOG = logging.getLogger(__name__)
+
 def get_platform():
 	return GcePlatform()
+
+
+class GoogleServiceManager(object):
+	"""
+	Manages 1 service connection per thread
+	Works out dead threads' connections
+	"""
+
+	def __init__(self, pl, s_name, s_ver, *scope):
+		self.pl = pl
+		self.s_name= s_name
+		self.s_ver = s_ver
+		self.scope = list(scope)
+		self.map = {}
+		self.lock = threading.Lock()
+		self.pool = []
+
+	def get_service(self):
+		current_thread = threading.current_thread()
+		with self.lock:
+			if not current_thread in self.map:
+				# Check other threads
+				for t, s in self.map.items():
+					if not t.is_alive():
+						self.pool.append(s)
+						del self.map[t]
+
+				if self.pool:
+					s = self.pool.pop()
+					self.map[current_thread] = s
+					return s
+
+				http = self.pl._get_auth(self.scope)
+				s = build(self.s_name, self.s_ver, http=http)
+				self.map[current_thread] = s
+
+			return self.map[current_thread]
+
 
 
 class GcePlatform(Platform):
 	metadata_url = 'http://metadata.google.internal/0.1/meta-data/'
 	_metadata = None
+
+	def __init__(self):
+		Platform.__init__(self)
+		self.compute_svc_mgr = GoogleServiceManager(
+			self, 'compute', 'v1beta12', COMPUTE_RW_SCOPE)
+
+		self.storage_svs_mgr = GoogleServiceManager(
+			self, 'storage', 'v1beta1', STORAGE_FULL_SCOPE)
 
 
 	def get_user_data(self, key=None):
@@ -97,20 +147,18 @@ class GcePlatform(Platform):
 
 
 	def new_compute_client(self):
-		http = self._get_auth()
-		return build('compute', 'v1beta12', http=http)
+		return self.compute_svc_mgr.get_service()
 
 
 	def new_storage_client(self):
-		http = self._get_auth()
-		return build('storage', 'v1beta1', http=http)
+		return self.storage_svs_mgr.get_service()
 
 
-	def _get_auth(self):
+	def _get_auth(self, scope):
 		http = httplib2.Http()
 		email = self.get_access_data('service_account_name')
 		pk = base64.b64decode(self.get_access_data('key'))
-		cred = SignedJwtAssertionCredentials(email, pk, scope=[COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE])
+		cred = SignedJwtAssertionCredentials(email, pk, scope=list(scope))
 		return cred.authorize(http)
 
 

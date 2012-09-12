@@ -117,8 +117,5 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 
 	@property
 	def cloudstorage(self):
-		with tlock:
-			if not hasattr(self, '_cloudstorage'):
-				pl = bus.platform
-				self._cloudstorage = pl.new_storage_client()
-			return self._cloudstorage
+		pl = bus.platform
+		return pl.new_storage_client()
