@@ -92,11 +92,11 @@ class Node(object):
 		type_ = 'private' if private else 'public'
 		key = name + '.' + type_
 		if not key in self._config_files:
-			filename = '%s/%s.d/%s.ini' % (self.etc_path, type_, name)
+			filename = '%s/%s.d/%s.ini' % (self.etc_base, type_, name)
 			cls = ConfigFile
 			if name in ('mysql', 'percona'):
 				cls = MySQLData
-			self._config_files[key] = cls(filename)
+			self._config_files[key] = cls(filename, name)
 		return self._config_files[key]
 
 

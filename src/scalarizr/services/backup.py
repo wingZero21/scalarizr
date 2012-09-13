@@ -155,8 +155,8 @@ backup_types['base'] = Backup
 restore_types['base'] = Restore
 
 
-class SnapBackup(backup.Backup):
-	default_config = backup.Backup.default_config.copy()
+class SnapBackup(Backup):
+	default_config = Backup.default_config.copy()
 	default_config.update({
 		'volume': None
 	})
@@ -178,8 +178,8 @@ class SnapBackup(backup.Backup):
 				service_state=service_state)
 
 
-class SnapRestore(backup.Restore):
-	default_config = backup.Restore.default_config.copy()
+class SnapRestore(Restore):
+	default_config = Restore.default_config.copy()
 	default_config.update({
 		'snapshot': None,
 		'service_state': None

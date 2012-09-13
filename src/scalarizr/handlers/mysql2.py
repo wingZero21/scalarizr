@@ -5,39 +5,29 @@ Created on Nov 15, 2011
 '''
 
 from __future__ import with_statement
-import re
 import os
 import sys
 import time
 import shutil
-import tarfile
-import tempfile
 import logging
 import glob
-import ConfigParser
 
 # Core
-from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.messaging import Messages
 from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError, prepare_tags, operation
 import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
-from scalarizr.platform import UserDataOptions, PlatformFeatures
-from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
-from scalarizr.util import system2, disttool, filetool, \
-	firstmatched, cached, validators, initdv2, software, wait_until, cryptotool,\
-	PopenError, iptables, dynimp
+from scalarizr.platform import UserDataOptions
+from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, iptables
 
 from scalarizr import storage2	
 from scalarizr.services import backup
 from scalarizr.node import __node__
 
 # Libs
-from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
-	ParseError
+from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
 LOG = logging.getLogger(__name__)
@@ -49,8 +39,9 @@ behavior = 'percona' \
 
 __mysql__ = __node__[behavior]
 __mysql__.update({
-	'behavior': behavior
-	'basedir': '/mnt/dbstorage'
+	'behavior': behavior,
+	'port': 3306,
+	'basedir': '/mnt/dbstorage',
 	'datadir': '/mnt/dbstorage/mysql-data',
 	'tmpdir': '/mnt/dbstorage/tmp',
 	'root_user': 'scalr',
@@ -58,10 +49,11 @@ __mysql__.update({
 	'stat_user': 'scalr_stat',
 	'pma_user': 'pma',
 	'debian.cnf': '/etc/mysql/debian.cnf',
-	'mysqldump_chunk_size': 200 * 1024 * 1024
+	'mysqldump_chunk_size': 200 * 1024 * 1024,
 	'stop_slave_timeout': 180,
 	'change_master_timeout': 60
 })
+
 
 '''
 OPT_ROOT_PASSWORD 		= "root_password"
@@ -98,7 +90,10 @@ DEBIAN_CNF_PATH			= "/etc/mysql/debian.cnf"
 DATA_DIR = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_DATA_DIR)
 '''
 
-PRIVILEGES = {REPL_USER:('Repl_slave_priv',), STAT_USER:('Repl_client_priv',),}
+PRIVILEGES = {
+	__mysql__['repl_user']: ('Repl_slave_priv', ), 
+	__mysql__['stat_user']: ('Repl_client_priv', )
+}
 	
 	
 class MysqlMessages:
@@ -309,8 +304,8 @@ class MysqlHandler(DBMSRHandler):
 		self.on_reload()	
 
 		
-	def accept(self, message, queue, __mysql__['behavior']=None, platform=None, os=None, dist=None):
-		return __mysql__['behavior'] in __mysql__['behavior'] and (
+	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+		return __mysql__['behavior'] in behaviour and (
 					message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
 				or 	message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
@@ -409,29 +404,19 @@ class MysqlHandler(DBMSRHandler):
 					'''
 					
 					mysql_data = getattr(message, __mysql__['behavior']).copy()
-					if __node__['scalr']['version'] <= (2, 1):
-						if mysql_data.get('volume_id'):
-							mysql_data['volume'] = storage2.volume(
-								type='ebs', 
-								id=mysql_data.pop('volume_id')
-							)
-						if mysql_data.get('snapshot_id'):
-							mysql_data['restore'] = backup.restore(
-								type='snap_mysql',
-								snapshot=dict(
-									type='ebs',
-									id=mysql_data.pop('snapshot_id')
-								)
-							)
-					else:
-						mysql_data['volume'] = mysql_data.pop('volume_config')
-						if mysql_data.get('snapshot_config'):
-							mysql_data['restore'] = backup.restore(
+					mysql_data['volume'] = storage2.volume(**mysql_data.pop('volume_config'))
+					
+					if mysql_data.get('snapshot_config'):
+						mysql_data['restore'] = backup.restore(
 								type='snap_mysql', 
-								snapshot=mysql_data.pop('snapshot_config')
-							)
+								snapshot=mysql_data.pop('snapshot_config'))
+					if not mysql_data.get('backup'):
+						mysql_data['backup'] = backup.backup(
+								type='snap_mysql',
+								volume=mysql_data['volume'])
 					
 					__mysql__.update(mysql_data)
+					print __mysql__
 					
 					'''
 					mysql_data = getattr(message, __mysql__['behavior']).copy()
@@ -476,7 +461,7 @@ class MysqlHandler(DBMSRHandler):
 			self._init_master(message)	
 		else:
 			self._init_slave(message)
-		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+		bus.fire('service_configured', service_name=__mysql__['behavior'], replication=repl)
 
 
 	def on_BeforeHostTerminate(self, message):
@@ -710,8 +695,8 @@ class MysqlHandler(DBMSRHandler):
 							'restore': restore.config()
 						}
 					}
-					if __node__['scalr']['version'] <= (2, 1):
-						msg_data[__mysql__['behavior']] = self._compat_storage_data(snap=restore.snapshot['id'])
+					if restore.type == 'snap_mysql':
+						msg_data[__mysql__['behavior']]['snapshot_config'] = restore.snapshot.config()
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 			op.ok()
 			
@@ -745,20 +730,13 @@ class MysqlHandler(DBMSRHandler):
 			
 		bus.fire('before_slave_promote_to_master')
 
-		if bus.scalr_version >= (2, 2):
-			master_storage_conf = mysql2.get('volume_config')
-		else:
-			if 'volume_id' in message.body:
-				master_storage_conf = dict(type='ebs', id=message.body['volume_id'])
-			else:
-				master_storage_conf = None
-
-		old_vol = None
 		new_vol	= None
+		if mysql2.get('volume_config'):
+			new_vol = storage2.volume(mysql2.get('volume_config'))
 					
 		try:
 			# xxx: ugly condition 
-			if master_storage_conf['type'] not in ('eph', 'lvm'):
+			if new_vol and new_vol.type not in ('eph', 'lvm'):
 				if self.mysql.service.running:
 					self.root_client.stop_slave()
 
@@ -766,11 +744,10 @@ class MysqlHandler(DBMSRHandler):
 				
 				# Unplug slave storage and plug master one
 				#old_conf = self.storage_vol.detach(force=True) # ??????
+				old_vol = storage2.volume(__mysql__['volume'])				
 				try:
-					old_vol = storage2.volume(__mysql__['volume'])
 					old_vol.detach(force=True)
 					#master_vol = self._take_master_volume(master_vol_id)
-					new_vol = storage2.volume(master_storage_conf)
 					new_vol.mpoint = __mysql__['basedir']				
 					new_vol.ensure(mount=True)				
 					#new_storage_vol = self._plug_storage(STORAGE_PATH, master_storage_conf)				
@@ -807,20 +784,18 @@ class MysqlHandler(DBMSRHandler):
 
 						# Send message to Scalr
 						msg_data = dict(status='ok', db_type = __mysql__['behavior'])
-						if __node__['scalr']['version'] <= (2, 1):
-							msg_data[__mysql__['behavior']] = self._compat_storage_data(vol=new_vol)
+						msg_data[__mysql__['behavior']] = {
+							'volume_config': __mysql__['volume']
+						} 
 						#log_file, log_pos = self.root_client.master_status()
 						#msg_data.update(dict(log_file = log_file, log_pos = log_pos))
 						self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 					else:
 						raise HandlerError("%s is not a valid MySQL storage" % __mysql__['datadir'])
 				except:
-					if new_vol:
-						self.mysql.service.stop('Detaching new volume')
-						new_vol.detach()
-					# Get back slave storage
-					if old_vol:
-						old_vol.ensure(mount=True)
+					self.mysql.service.stop('Detaching new volume')
+					new_vol.detach()
+					old_vol.ensure(mount=True)
 					raise
 			else:
 				self.mysql.service.start()
@@ -846,9 +821,9 @@ class MysqlHandler(DBMSRHandler):
 				'''
 
 				if mysql2.get('backup'):
-					bak = backup.create(**mysql2.get('backup'))
+					bak = backup.backup(**mysql2.get('backup'))
 				else:
-					bak = backup.create(
+					bak = backup.backup(
 							type='snap_mysql', 
 							volume=__mysql__['volume'])
 				restore = bak.run()
@@ -867,8 +842,10 @@ class MysqlHandler(DBMSRHandler):
 					'log_pos': restore.log_pos,
 					'restore': restore.config()
 				}
-				if __node__['scalr']['version'] <= (2, 1):
-					msg_data[__mysql__['behavior']] = self._compat_storage_data(snap=restore.snapshot['id'])
+				if restore.type == 'snap_mysql':
+					msg_data['snapshot_config'] = restore.snapshot.config()
+				msg_data['volume_config'] = __mysql__['volume']
+				
 				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)							
 				
 			bus.fire('slave_promote_to_master')
@@ -1030,7 +1007,6 @@ class MysqlHandler(DBMSRHandler):
 				storage_valid = self._storage_valid()				
 				user_creds = self.get_user_creds()
 		
-				 
 				datadir = mysql_svc.my_print_defaults('mysqld').get('datadir', '/var/lib/mysql')
 				self.mysql.my_cnf.datadir = datadir
 
@@ -1050,8 +1026,6 @@ class MysqlHandler(DBMSRHandler):
 			with op.step(self._step_patch_conf):
 				# Init replication
 				self.mysql._init_replication(master=True)
-		
-			msg_data = dict()
 		
 		# If It's 1st init of mysql master storage
 		if not storage_valid:
@@ -1074,35 +1048,35 @@ class MysqlHandler(DBMSRHandler):
 			with op.step(self._step_create_data_bundle):
 				# TODO: start here!
 				# Get binary logfile, logpos and create storage snapshot
+				bak = backup.backup(**__mysql__['backup'])
+				__mysql__['restore'] = bak.run()
+				'''
 				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
+				'''
 		else:
+			pass
+			'''
 			LOG.debug('Skip data bundle, cause MySQL storage was initialized from snapshot')
 			log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
 			snap = snap_cnf
+			'''
 			
 
 		with op.step(self._step_collect_hostup_data):
-			# Update HostUp message 
-			logs = dict(
-				log_file=log_file, 
-				log_pos=log_pos
-			)	
-			msg_data.update(logs)		
-			msg_data.update({OPT_REPLICATION_MASTER:str(int(self.is_replication_master))})
-			msg_data.update(self._compat_storage_data(self.storage_vol, snap))
-			passwords = dict(
-					root_password=user_creds[ROOT_USER],
-					repl_password=user_creds[REPL_USER],
-					stat_password=user_creds[STAT_USER])
-			msg_data.update(passwords)			
+			# Update HostUp message
+			msg_data = dict()
+			for key in ('replication_master', 'root_password', 
+					'repl_password', 'stat_password', 'restore'):
+				msg_data[key] = __mysql__[key]
+			msg_data['log_file'] = __mysql__['restore']['log_file']
+			msg_data['log_pos'] = __mysql__['restore']['log_pos']
+			if __mysql__['restore']['type'] == 'snap_mysql':
+				msg_data['snapshot_config'] = __mysql__['restore']['snapshot']
+			msg_data['volume_config'] = __mysql__['volume']
+			
 			message.db_type = __mysql__['behavior']
-			setattr(message, __mysql__['behavior'], msg_data.copy())
-			try:
-				del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
-			except KeyError:
-				pass 
-			self._update_config(msg_data)
+			setattr(message, __mysql__['behavior'], msg_data)
 			
 			
 
@@ -1116,30 +1090,26 @@ class MysqlHandler(DBMSRHandler):
 		
 		with bus.initialization_op as op:
 			with op.step(self._step_create_storage):
-		
-				# Read required configuration options
-				log_file, log_pos, repl_pass = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS, OPT_REPL_PASSWORD)
-				
 				if not self._storage_valid():
 					LOG.debug("Initialize slave storage")
-					self.data_bundle.restore(self.storage_snap, log_file, log_pos)
+					restore = backup.restore(__mysql__['restore'])
+					restore.run()
 				else:
-					self.storage_vol.ensure()
-				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+					vol = storage2.volume(__mysql__['volume'])
+					vol.ensure()
 		
 			with op.step(self._step_patch_conf):		
 				self.mysql.service.stop('Required by Slave initialization process')			
-				self.mysql.flush_logs(DATA_DIR)
+				self.mysql.flush_logs(__mysql__['datadir'])
 				
 				# Change configuration files
 				LOG.info("Changing configuration files")
-				if not self.mysql.my_cnf.datadir:
-					self.mysql.my_cnf.datadir = DEFAULT_DATADIR
+				self.mysql.my_cnf.datadir = __mysql__['datadir']
 				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
 	
 			with op.step(self._step_move_datadir):
-				self.mysql.move_mysqldir_to(STORAGE_PATH)
+				self.mysql.move_mysqldir_to(__mysql__['basedir'])
 				self._change_selinux_ctx()
 				self.mysql._init_replication(master=False)
 				self._copy_debian_cnf_back()
@@ -1154,15 +1124,15 @@ class MysqlHandler(DBMSRHandler):
 				master_host = self.get_master_host()
 	
 				self._change_master( 
-					host=master_host, 
-					user=REPL_USER, 
-					password=repl_pass,
-					log_file=log_file, 
-					log_pos=log_pos)
+						host=master_host, 
+						user=__mysql__['repl_user'], 
+						password=__mysql__['repl_password'],
+						log_file=__mysql__['restore']['log_file'], 
+						log_pos=__mysql__['restore']['log_pos'])
 			
 			with op.step(self._step_collect_hostup_data):
 				# Update HostUp message
-				message.mysql = self._compat_storage_data(self.storage_vol)
+				#message.mysql = self._compat_storage_data(self.storage_vol)
 				message.db_type = __mysql__['behavior']
 
 		
@@ -1171,7 +1141,7 @@ class MysqlHandler(DBMSRHandler):
 		while not master_host:
 			try:
 				master_host = list(host 
-					for host in self._queryenv.list_roles(__mysql__['behavior']=__mysql__['behavior'])[0].hosts 
+					for host in self._queryenv.list_roles(behaviours=__mysql__['behavior'])[0].hosts 
 					if host.replication_master)[0]
 			except IndexError:
 				LOG.debug("QueryEnv respond with no mysql master. " + 
@@ -1183,23 +1153,19 @@ class MysqlHandler(DBMSRHandler):
 
 			
 	def _copy_debian_cnf_back(self):
-		debian_cnf = os.path.join(STORAGE_PATH, 'debian.cnf')
+		debian_cnf = os.path.join(__mysql__['basedir'], 'debian.cnf')
 		if disttool.is_debian_based() and os.path.exists(debian_cnf):
 			LOG.debug("Copying debian.cnf from storage to mysql configuration directory")
 			shutil.copy(debian_cnf, '/etc/mysql/')
 			
 			
 	@property
-	def root_password(self):
-		cnf = bus.cnf
-		return cnf.rawini.get(CNF_SECTION, 'root_password')
-	
-			
-	@property
 	def root_client(self):
-		return mysql_svc.MySQLClient(ROOT_USER, self.root_password)
+		return mysql_svc.MySQLClient(
+					__mysql__['root_user'], 
+					__mysql__['root_password'])
 	
-	
+	'''
 	def _compat_storage_data(self, vol=None, snap=None):
 		ret = dict()
 		if bus.scalr_version >= (2, 2):
@@ -1213,10 +1179,10 @@ class MysqlHandler(DBMSRHandler):
 			if snap:
 				ret['snapshot_id'] = snap.config()['id'] if not isinstance(snap, dict) else snap['id']
 		return ret
-			
+	'''		
 
 	def _innodb_recovery(self, storage_path=None):
-		storage_path = storage_path or STORAGE_PATH
+		storage_path = storage_path or __mysql__['basedir']
 		binlog_path	= os.path.join(storage_path, mysql_svc.STORAGE_BINLOG)		
 		data_dir = os.path.join(storage_path, mysql_svc.STORAGE_DATA_DIR),
 		pid_file = os.path.join(storage_path, 'mysql.pid')
@@ -1239,32 +1205,30 @@ class MysqlHandler(DBMSRHandler):
 	def _insert_iptables_rules(self):
 		ipt = iptables.IpTables()
 		if ipt.usable():
-			ipt.insert_rule(None, iptables.RuleSpec(dport=mysql_svc.MYSQL_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))	
+			ipt.insert_rule(None, iptables.RuleSpec(dport=mysql_svc.MYSQL_DEFAULT_PORT, 
+												jump='ACCEPT', protocol=iptables.P_TCP))	
 			
 
-	@property
-	def is_replication_master(self):
-		value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
-		LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
-		return True if int(value) else False
-	
 	
 	def get_user_creds(self):
-		options = {ROOT_USER:OPT_ROOT_PASSWORD, REPL_USER:OPT_REPL_PASSWORD, STAT_USER:OPT_STAT_PASSWORD}
+		options = {
+			__mysql__['root_user']: 'root_password', 
+			__mysql__['repl_user']: 'repl_password', 
+			__mysql__['stat_user']: 'stat_password'}
 		creds = {}
 		for login, opt_pwd in options.items():
-			password = self._get_ini_options(opt_pwd)[0]
+			password = __mysql__[opt_pwd]
 			if not password:
 				password = cryptotool.pwgen(20)
-				self._update_config({opt_pwd:password})
+				__mysql__[opt_pwd] = password
 			creds[login] = password
 		return creds
 	
 	
 	def create_users(self, **creds):
 		users = {}
-		root_cli = mysql_svc.MySQLClient(ROOT_USER, creds[ROOT_USER])
-		local_root = mysql_svc.MySQLUser(root_cli, ROOT_USER, creds[ROOT_USER], host='localhost')
+		root_cli = mysql_svc.MySQLClient(__mysql__['root_user'], creds[__mysql__['root_user']])
+		local_root = mysql_svc.MySQLUser(root_cli, __mysql__['root_user'], creds[__mysql__['root_user']], host='localhost')
 
 		if not self.mysql.service.running:
 			self.mysql.service.start()
@@ -1275,7 +1239,7 @@ class MysqlHandler(DBMSRHandler):
 					self.mysql.service.stop('creating users')
 					self.mysql.service.start_skip_grant_tables()
 				else:
-					LOG.debug('User %s exists and has correct password' % ROOT_USER)
+					LOG.debug('User %s exists and has correct password' % __mysql__['root_user'])
 			except ServiceError, e:
 				if 'Access denied for user' in str(e):
 					users.update({'local_root': local_root})
@@ -1301,6 +1265,7 @@ class MysqlHandler(DBMSRHandler):
 		return users
 		
 
+	'''
 	def _update_config(self, data): 
 		#XXX: I just don't like it
 		#ditching empty data
@@ -1336,7 +1301,7 @@ class MysqlHandler(DBMSRHandler):
 				err = 'Required configuration option is missed in mysql.ini: %s' % opt
 				raise HandlerError(err)
 		return tuple(ret)
-	
+	'''
 
 	def _data_bundle_description(self):
 		pl = bus.platform
@@ -1346,7 +1311,7 @@ class MysqlHandler(DBMSRHandler):
 
 
 	def _datadir_size(self):
-		stat = os.statvfs(STORAGE_PATH)
+		stat = os.statvfs(__mysql__['basedir'])
 		return stat.f_bsize * stat.f_blocks / 1024 / 1024 / 1024 + 1
 		
 
@@ -1354,7 +1319,7 @@ class MysqlHandler(DBMSRHandler):
 		
 		LOG.info("Changing replication Master to server %s (log_file: %s, log_pos: %s)", host, log_file, log_pos)
 		
-		timeout = timeout or int(CHANGE_MASTER_TIMEOUT)
+		timeout = timeout or int(__mysql__['change_master_timeout'])
 		
 		# Changing replication master
 		self.root_client.stop_slave()
