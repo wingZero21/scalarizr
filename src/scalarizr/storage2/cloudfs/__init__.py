@@ -1,5 +1,6 @@
 import urlparse
 
+filesystem_types = {}
 
 class Transfer(object):
 	UPLOAD = 'upload'

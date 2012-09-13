@@ -16,6 +16,7 @@ from scalarizr import storage2 as storage2mod
 from scalarizr import util
 from scalarizr.bus import bus
 from scalarizr.config import STATE
+from scalarizr.storage2 import cloudfs
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
 
@@ -440,3 +441,18 @@ class Ec2EphemeralVolume(base.Volume):
 	
 	
 storage2mod.volume_types['ec2-ephemeral'] = Ec2EphemeralVolume
+
+
+class S3FileSystem(cloudfs.CloudFileSystem):
+	'''
+	Handle in bucket creation
+	
+	Caller: c3640de7-8cb2-432b-9f3b-1202fa0acc50 <https://my.scalr.net/#/servers/c3640de7-8cb2-432b-9f3b-1202fa0acc50/view>/scalarizr.storage.transfer
+	Message: Cannot transfer '/tmp/2012-09-12-04:08:02.tar.gz'. S3CreateError: 409 Conflict
+	<?xml version="1.0" encoding="UTF-8"?>
+	<Error><Code>BucketAlreadyOwnedByYou</Code><Message>Your previous request to create the named bucket succeeded and you already own it.</Message><BucketName>scalr-ab6d8171-7218-eu-west-1</BucketName><RequestId>9FB0834F278A1C46</RequestId><HostId>hfcgy1xDomq5MLFvMT+66wOajoBFiNHICDULVA4uhxEWi4TgYw1ugqOOyPgBfTRc</HostId></Error>
+	
+	'''	
+	pass
+
+cloudfs.filesystem_types['s3'] = S3FileSystem
