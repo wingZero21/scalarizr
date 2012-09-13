@@ -963,7 +963,7 @@ class ScalarizrCnf(Observable):
 		self._explored_keys[(name, private)] = title
 
 
-class State(object):
+class State(dict):
 	
 	def _conn(self):
 		return bus.db

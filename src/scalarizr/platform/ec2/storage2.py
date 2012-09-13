@@ -53,7 +53,7 @@ class FreeDeviceLetterMgr(object):
 	
 	def __enter__(self):
 		with self._lock:
-			detached = STATE['ec2.t1micro_detached'] or list()
+			detached = STATE.get('ec2.t1micro_detached', list())
 			detached = set(name[-1] for name in detached)
 		letters = list(set(self._all) - self._acquired - detached)
 		for l in letters:
@@ -79,9 +79,9 @@ class EbsMixin(object):
 	
 	def __init__(self):
 		self._conn = None
-		self.error_messages.update({
+		self.error_messages = {
 			'no_connection': 'EC2 connection should be available to perform this operation'								
-		})
+		}
 
 	
 	def _ebs_snapshot(self, snapshot):
@@ -233,6 +233,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		@type nowait: bool
 		@param nowait: Wait for snapshot completion. Default: True
 		'''
+		
 		self._check_ec2()
 		snapshot = self._create_snapshot(self.id, description, tags, 
 										kwds.get('nowait', True))
@@ -246,12 +247,12 @@ class EbsVolume(base.Volume, EbsMixin):
 		self._check_ec2()
 		self._detach_volume(self.id, force)
 		if self._instance_type() == 't1.micro':
-			detached = STATE['ec2.t1micro_detached'] or list()
+			detached = STATE.get('ec2.t1micro_detached', list())
 			detached.append(self.name)
 			STATE['ec2.t1micro_detached'] = detached
 
 	
-	def _delete(self, force, **kwds):
+	def _destroy(self, force, **kwds):
 		self._check_ec2()
 		self._conn.delete_volume(self.id)
 

@@ -226,6 +226,7 @@ class Snapshot(Base):
 	
 	
 	def destroy(self):
+		print 'destroy1'
 		return self._destroy()
 	
 	

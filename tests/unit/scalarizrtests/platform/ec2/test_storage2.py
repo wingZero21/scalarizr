@@ -5,8 +5,11 @@ Created on Sep 4, 2012
 '''
 
 import mock
+from nose.tools import raises
 
 from scalarizr.platform.ec2 import storage2 as ec2storage
+from scalarizr.linux import coreutils
+#from scalarizr.config import STATE, State
 
 
 def test_name2device():
@@ -66,14 +69,12 @@ class TestFreeDeviceLetterMgr(object):
 	
 	
 	@mock.patch('glob.glob', return_value=[])
-	@mock.patch('scalarizr.platform.ec2.storage2.STATE')
+	@mock.patch('scalarizr.platform.ec2.storage2.STATE', new_callable=mock.MagicMock)
 	def test_acquire_t1micro(self, state, glob):
-		state.__getitem__.return_value = ['/dev/sdg', '/dev/sdf']
-		
+		state.get.return_value = ['/dev/sdg', '/dev/sdf']
 		letter = self.mgr.__enter__().get()
-		
 		assert letter not in ('g', 'f')
-		state.__getitem__.assert_called_once_with('ec2.t1micro_detached')
+		state.get.assert_called_once_with('ec2.t1micro_detached', [])
 
 
 Ebs = ec2storage.EbsVolume
@@ -101,7 +102,7 @@ class TestEbsVolume(object):
 			p.stop()
 	
 	
-	def _test_ensure_new(self):
+	def test_ensure_new(self):
 		ebs = mock.Mock(
 			id='vol-12345678', 
 			size=1, 
@@ -123,7 +124,7 @@ class TestEbsVolume(object):
 				assert self.vol.config()
 
 
-	def _test_ensure_existed(self):
+	def test_ensure_existed(self):
 		ebs = mock.Mock(
 			id='vol-12345678', 
 			size=1, 
@@ -170,34 +171,172 @@ class TestEbsVolume(object):
 
 
 	def test_ensure_existed_attached_to_other_instance(self):
-		pass
+		ebs = mock.Mock(
+			id='vol-12345678', 
+			size=1, 
+			zone='us-east-1a',
+			
+			**{'volume_state.return_value': 'available',
+				'attachment_state.return_value': 'attached'}
+		)
+		
+		with mock.patch.object(self.conn, 'get_all_volumes', return_value=[ebs]):
+			with mock.patch.object(Ebs, '_attach_volume'):
+				with mock.patch.object(Ebs, '_detach_volume'):
+					self.vol = Ebs(type='ebs', id='vol-12345678')
+					self.vol.ensure()
+					assert self.vol.id == ebs.id
+					self.vol._detach_volume.assert_called_once_with(ebs)
+					self.vol._attach_volume.assert_called_once_with(ebs, '/dev/sdb')
+				
 
 	def test_ensure_existed_attaching_to_other_instance(self):
-		pass
+		ebs = mock.Mock(
+			id='vol-12345678', 
+			size=1, 
+			zone='us-east-1a',
+			
+			**{'volume_state.return_value': 'available',
+				'attachment_state.return_value': 'attaching'}
+		)
+		
+		with mock.patch.object(self.conn, 'get_all_volumes', return_value=[ebs]):
+			with mock.patch.object(Ebs, '_attach_volume'):
+				with mock.patch.object(Ebs, '_detach_volume'):
+					with mock.patch.object(Ebs, '_wait_attachment_state_change'):
+						self.vol = Ebs(type='ebs', id='vol-12345678')
+						self.vol.ensure()
+						assert self.vol.id == ebs.id
+						assert self.vol._detach_volume.call_count == 0
+						self.vol._attach_volume.assert_called_once_with(ebs, '/dev/sdb')
+
 	
 	def test_ensure_restore(self):
-		pass
+		with mock.patch.object(self.conn, 'get_all_volumes', return_value=[]):
+			with mock.patch.object(Ebs, '_attach_volume'):
+				with mock.patch.object(Ebs, '_create_volume'):
+					with mock.patch.object(Ebs, '_dictify'):
+						snap_config = {'id':'snap-12345678', 'tags':{'tag1':'1'}}
+						size=1
+						zone='us-east-1a'
+						self.vol = Ebs(id=None, size=size, zone=zone, snap=snap_config)
+						self.vol.ensure()
+						self.vol._create_volume.assert_called_once_with(
+							zone=zone, 
+							size=size, 
+							snapshot=snap_config['id'],
+							tags=snap_config['tags'],
+							volume_type=None, 
+							iops=None)
+
 
 	def test_snapshot(self):
-		pass
-	
+		with mock.patch.object(Ebs, '_create_snapshot'):
+			vol_id='vol-12345678'
+			description='test'
+			tags={'tag1':'1'}
+			kwds = {'nowait' : True}
+			self.vol = Ebs(type='ebs', id=vol_id)
+			snap = self.vol.snapshot(description=description, tags=tags, **kwds)
+			self.vol._create_snapshot.assert_called_once_with(vol_id, description, tags, kwds['nowait'])
+		
+			
+	def test_snapshot_tags(self):
+		snapshot = mock.Mock(id='snap-12345678')
+		with mock.patch.object(self.conn, 'create_snapshot', return_value=snapshot):
+			with mock.patch.object(self.conn, 'create_tags'):
+				with mock.patch.object(coreutils, 'sync'):
+					vol_id='vol-12345678'
+					description='test'
+					tags={'tag1':'1'}
+					kwds = {'nowait' : True}
+					self.vol = Ebs(type='ebs', id=vol_id)
+					snap = self.vol.snapshot(description=description, tags=tags, **kwds)
+					self.conn.create_tags.assert_called_once_with([snapshot.id], tags)
+			
+					
 	def test_snapshot_nowait(self):
-		pass
+		snapshot = mock.Mock(id='snap-12345678')
+		with mock.patch.object(self.conn, 'create_snapshot', return_value=snapshot):
+			with mock.patch.object(self.conn, 'create_tags'): 
+				with mock.patch.object(Ebs, '_wait_snapshot'):
+					vol_id='vol-12345678'
+					description='test'
+					tags={'tag1':'1'}
+					nowait_kwds = {'nowait' : True}
+					wait_kwds = {'nowait' : False}
+					self.vol = Ebs(type='ebs', id=vol_id)
+					snap = self.vol.snapshot(description=description, tags=tags, **nowait_kwds)
+					self.vol._wait_snapshot.call_count == 0
+					snap = self.vol.snapshot(description=description, tags=tags, **wait_kwds)
+					self.vol._wait_snapshot.assert_called_once_with(snapshot)
 
+	@raises(AssertionError)
 	def test_snapshot_no_connection(self):
-		pass
+		with mock.patch.object(Ebs, '_create_snapshot'):
+			with mock.patch.object(Ebs, '_connect_ec2', return_value=None): 
+				vol_id='vol-12345678'
+				description='test'
+				tags={'tag1':'1'}
+				kwds = {'nowait' : True}
+				self.vol = Ebs(type='ebs', id=vol_id)
+				snap = self.vol.snapshot(description=description, tags=tags, **kwds)
+
 
 	def test_detach(self):
-		pass
-	
+		ebs = mock.Mock(
+		id='vol-12345678', 
+		size=1, 
+		zone='us-east-1a',
+		
+		**{'detach.return_value': None,
+			'update.return_value': 'available'}
+				)
+		
+		with mock.patch.object(Ebs, '_ebs_volume', return_value=ebs):
+			self.vol = Ebs(type='ebs', id='vol-12345678')
+			self.vol.detach()
+			ebs.detach.call_count == 1
+			ebs.update.call_count == 1
+			
+			
 	def test_detach_t1micro(self):
-		pass
+		ebs = mock.Mock(
+		id='vol-12345678', 
+		size=1, 
+		zone='us-east-1a',
+		
+		**{'detach.return_value': None,
+			'update.return_value': 'available'}
+				)
+		with mock.patch('scalarizr.platform.ec2.storage2.STATE', new_callable=dict):
+			with mock.patch.object(Ebs, '_ebs_volume', return_value=ebs):
+				with mock.patch.object(Ebs, '_detach_volume'):
+					with mock.patch.object(Ebs, '_instance_type', return_value='t1.micro'):
+						self.vol = Ebs(name='/dev/sdf', type='ebs', id='vol-12345678')
+						self.vol._detach(True)
+						from scalarizr.platform.ec2.storage2 import STATE
+						assert STATE['ec2.t1micro_detached'] == [self.vol.name,]
 	
+
+	@raises(AssertionError)
 	def test_detach_no_connection(self):
-		pass
+		with mock.patch.object(Ebs, '_detach_volume'):
+			with mock.patch.object(Ebs, '_connect_ec2', return_value=None): 
+				vol_id='vol-12345678'
+				description='test'
+				tags={'tag1':'1'}
+				kwds = {'nowait' : True}
+				self.vol = Ebs(type='ebs', id=vol_id)
+				snap = self.vol._detach(False)	
+	
 	
 	def test_destroy(self):
-		pass
+		with mock.patch.object(self.conn, 'delete_volume'): 
+			vol_id='vol-12345678'
+			self.vol = Ebs(type='ebs', id=vol_id)
+			snap = self.vol.destroy(True)
+			self.conn.delete_volume.assert_called_once_with(self.vol.id)
 		
 	def test_destroy_no_connection(self):
 		pass
