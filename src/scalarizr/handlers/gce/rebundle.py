@@ -35,6 +35,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 		try:
 			pl = bus.platform
 			proj_id = pl.get_numeric_project_id()
+			proj_name = pl.get_project_id()
 			cloudstorage = pl.new_storage_client()
 
 			tmp_mount_dir = os.path.join(rebundle_dir, 'root')
@@ -174,7 +175,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
 			cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
 
-		return 'projects/%s/images/%s' % (proj_id, self._role_name.lower())
+		return '%s/images/%s' % (proj_name, self._role_name.lower())
 
 
 	def _create_spec_devices(self, root):
