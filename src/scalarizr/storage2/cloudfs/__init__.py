@@ -76,20 +76,18 @@ class Transfer(object):
 
 
 	@property
-	def started(self):
+	def running(self):
 		pass
 
 
-	@property
-	def finished(self):
+	def result(self):
 		pass
 	
 	
-	def status(self):
-		pass
 
 def cloudfs(fstype, **driver_kwds):
 	raise NotImplementedError()
+
 
 class CloudFileSystem(object):
 
