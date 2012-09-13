@@ -3,7 +3,6 @@ __author__ = 'Nick Demyanchuk'
 import os
 import sys
 import urlparse
-import threading
 import logging
 
 from apiclient.http import MediaFileUpload, MediaIoBaseDownload
@@ -15,7 +14,6 @@ from scalarizr.storage import transfer
 LOG = logging.getLogger(__name__)
 CHUNK_SIZE = 2*1024*1024
 
-tlock = threading.Lock()
 class GoogleCSTransferProvider(transfer.TransferProvider):
 
 	schema = 'gcs'

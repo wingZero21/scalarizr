@@ -19,6 +19,7 @@ from scalarizr.platform import Platform
 from scalarizr.storage.transfer import Transfer
 from .storage import GoogleCSTransferProvider
 
+
 Transfer.explore_provider(GoogleCSTransferProvider)
 
 COMPUTE_RW_SCOPE = 'https://www.googleapis.com/auth/compute'
@@ -61,11 +62,19 @@ class GoogleServiceManager(object):
 					self.map[current_thread] = s
 					return s
 
-				http = self.pl._get_auth(self.scope)
+				http = self._get_auth()
 				s = build(self.s_name, self.s_ver, http=http)
 				self.map[current_thread] = s
 
 			return self.map[current_thread]
+
+
+	def _get_auth(self):
+		http = httplib2.Http()
+		email = self.pl.get_access_data('service_account_name')
+		pk = base64.b64decode(self.pl.get_access_data('key'))
+		cred = SignedJwtAssertionCredentials(email, pk, scope=self.scope)
+		return cred.authorize(http)
 
 
 
@@ -152,17 +161,3 @@ class GcePlatform(Platform):
 
 	def new_storage_client(self):
 		return self.storage_svs_mgr.get_service()
-
-
-	def _get_auth(self, scope):
-		http = httplib2.Http()
-		email = self.get_access_data('service_account_name')
-		pk = base64.b64decode(self.get_access_data('key'))
-		cred = SignedJwtAssertionCredentials(email, pk, scope=list(scope))
-		return cred.authorize(http)
-
-
-
-
-
-
