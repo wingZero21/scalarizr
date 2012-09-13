@@ -65,7 +65,7 @@ class Mdadm:
 			array_disks = self.get_array_devices(array)
 			array_level = int(self.get_array_info(array)['level'])
 			if sorted(array_disks) == sorted(devices) and (
-					level is not None or int(level) == array_level):
+					level is None or int(level) == array_level):
 				return array
 
 
