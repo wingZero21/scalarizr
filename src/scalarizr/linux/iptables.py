@@ -1,10 +1,3 @@
-
-'''
-Usage:
-'''
-
-from scalarizr.linux import iptables
-
 # Operations with chains:
 # - append
 # - insert
@@ -14,8 +7,85 @@ from scalarizr.linux import iptables
 # Predefined chains:
 # INPUT FORWARD OUTPUT 	PREROUTING 	POSTROUTING
 
+from scalarizr import linux
 
-iptables.INPUT.extend([
+
+class Chains(object):
+	#? singleton
+
+	container = {}
+
+	def __getitem__(self, name):
+		try:
+			return self.container[name]
+		except KeyError:
+			self.container[name] = Chain(name)
+			return self.container[name]
+
+	def add(self, name):
+		print linux.build_cmd_args(executable='/sbin/iptables', short=['-N', name])
+
+	def remove(self, name, force=False):
+		if force:
+			print linux.build_cmd_args(executable='/sbin/iptables', short=['-X', name])
+			#? delete references
+		print linux.build_cmd_args(executable='/sbin/iptables', short=['-X', name])
+		# del container[name]
+
+
+class Chain(object):
+
+	def __init__(self, chain):
+		self.name = chain
+
+	def append(self, rule, persistent=False):
+		short = ['-A', self.name]
+		long = {}
+		for key, val in rule.items():
+			if key in ('protocol', 'match'):
+				short.extend(['--' + key, val])
+			else:
+				long[key] = val
+		print linux.build_cmd_args(executable='/sbin/iptables', short=short, long=long)
+
+	def insert(self, index, rule, persistent=False):
+		pass
+
+	def replace(self, index, rule, persistent=False):
+		pass
+
+	def remove(self, arg):
+		if isinstance(arg, int):
+			self._remove_by_index(arg)
+		elif isinstance(arg, dict):
+			self._remove_by_rule(arg)
+
+	def _remove_by_index(self, index):
+		pass
+
+	def _remove_by_rule(self, rule):
+		pass
+
+
+chains = Chains()
+
+
+chains['TEST'].append({
+	'protocol': 'tcp',
+	'syn': True,
+	'dport': 23,
+	'match': 'connlimit',
+	'connlimit_above': 2,
+	'jump': 'REJECT'
+})
+
+
+
+raise Exception("OK")
+#################################################################################
+INPUT = chains['INPUT']
+
+iptables.INPUT.append([
 	{'protocol': 'tcp', 'dport': 3306, 'jump': 'ACCEPT'}
 ])
 iptables.chains['RH-Input-1'].append(
@@ -45,6 +115,7 @@ iptables.PREROUTING.append({
 	'set_mask': '0xffff'
 })
 
+'''
 # negative match [!]
 # iptables -A INPUT -p tcp --syn --dport 23 -m connlimit ! --connlimit-above 2 -j ACCEPT
 iptables.INPUT.append({
@@ -55,6 +126,7 @@ iptables.INPUT.append({
 	'!connlimit_above': 2,
 	'jump': 'ACCEPT'
 })
+'''
 
 # insert rule at the head
 iptables.PREROUTING.insert(None, {
@@ -82,8 +154,9 @@ iptables.INPUT.list(numeric=True)
 iptables.list('INPUT', table='nat', numeric=True)
 
 # List all chains with rules
+'''
 iptables.list_all()
-
+'''
 
 # Add new chain
 iptables.chains.add('RH-Input-2')
@@ -100,7 +173,7 @@ iptables.chains.remove('RH-Input-2', force=True)
 iptables.INPUT.insert(1, rulespec, persistent=True)
 iptables.INPUT.replace(2, rulespec, persistent=True)
 
-# You can enable auto persistence. by default it's False 
+# You can enable auto persistence. by default it's False
 iptables.auto_persistence = True
 
 
@@ -116,8 +189,9 @@ def iptables_save(filename=None, *short_args, **long_kwds):
 def iptables_restore(filename, *short_args, **long_kwds):
 	pass
 
-
+'''
 # TODO: State function
 def ensure(
 	
 )
+'''
