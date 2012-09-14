@@ -169,6 +169,12 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 				req = compute.operations().get(project=proj_id, operation=operation)
 				res = req.execute()
 				if res['status'] == 'DONE':
+					if res.get('error'):
+						errors = []
+						for e in res['error']['errors']:
+							err_text = '%s: %s' % (e['code'], e['message'])
+							errors.append(err_text)
+						raise Exception('\n'.join(errors))
 					return True
 				return False
 			wait_until(image_is_ready, logger=LOG, timeout=600)
