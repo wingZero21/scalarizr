@@ -62,6 +62,9 @@ class ConfigMixin(object):
 	def config(self):
 		return self._config.copy()
 
+	def __iter__(self):
+		for key, value in self.config():
+			yield (key, value)
 
 	def __setattr__(self, name, value):
 		data = self.__dict__ if name in dir(self) else self.__dict__['_config']

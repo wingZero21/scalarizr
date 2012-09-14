@@ -80,7 +80,10 @@ class LvmVolume(base.Volume):
 			lvm2.lvcreate(self.vg, **kwds)
 			lv_info = self._lvinfo()
 
-		self.device = lv_info.lv_path
+		self._config.update({
+			'device': lv_info.lv_path,
+			'snap': None
+		})
 			
 		if lv_info.lv_attr[4] == '-':
 			lvm2.lvchange(self.device, available=True)

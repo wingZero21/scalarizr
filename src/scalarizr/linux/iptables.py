@@ -9,9 +9,12 @@
 
 from scalarizr import linux
 
+IPTABLES_EXEC = '/sbin/iptables'
 
 class Chains(object):
 	#? singleton
+	# FIXME: use long args
+	# replace /sbin/iptables with IPTABLES_EXEC 
 
 	container = {}
 
@@ -34,6 +37,7 @@ class Chains(object):
 
 
 class Chain(object):
+	# FIXME: use long args
 
 	def __init__(self, chain):
 		self.name = chain

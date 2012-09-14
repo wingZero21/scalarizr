@@ -3,6 +3,7 @@ import mock
 
 import sys
 
+
 eph_host_init_response_new_master = {
 	'server_index': '1',
 	'db_type': 'percona',
@@ -66,6 +67,7 @@ class NodeMock(dict):
 		super(NodeMock, self).__setitem__(key, value)
 
 
+@mock.patch.dict('scalarizr.node.__node__', {'percona': {}, 'behavior': ['percona']})
 @mock.patch.multiple('scalarizr.handlers.mysql2', 
 				bus=mock.DEFAULT, 
 				mysql_svc=mock.DEFAULT,
@@ -77,24 +79,65 @@ class NodeMock(dict):
 @mock.patch.multiple('scalarizr.services.backup', 
 				backup=mock.DEFAULT,
 				restore=mock.DEFAULT)
-@mock.patch('scalarizr.node.__node__', NodeMock())
 class TestMysqlHandler(object):
 	
 		
 	def test_master_new(self, **kwds):
+		#from scalarizr.node import __node__
+		#print __node__
+		snapshot = mock.MagicMock(
+				name='master storage snapshot', 
+				type='eph',
+				id='eph-snap-12345678')
+		restore = mock.Mock(
+				name='master restore',
+				type='snap_mysql',
+				snapshot=snapshot,
+				log_file='binlog.000003',
+				log_pos='107')
+		backup = mock.Mock(
+				name='master backup', 
+				**{'run.return_value': restore})
+		kwds['backup'].configure_mock(return_value=backup)
+		
+		
 		from scalarizr.handlers import mysql2
 		
 		hdlr = mysql2.MysqlHandler()
 		mock.patch.object(hdlr, '_storage_valid', return_value=False)
-		
+				
 		msg = mock.Mock(**eph_host_init_response_new_master)
 		hdlr.on_host_init_response(msg)
 		hdlr.on_before_host_up(msg)
 		
-		__mysql__ = mysql2.__mysql__
+		# restore was created
+		# datadir was moved
+		#
+		__mysql__ = mysql2.__mysql__		
+		
+		backup.run.assert_called_once_with()
+		hdlr.mysql.move_mysqldir_to.assert_called_once_with(__mysql__['basedir'])
+		assert __mysql__['root_password']
+		assert __mysql__['repl_password']
+		assert __mysql__['stat_password']
 		assert 'backup' in __mysql__
-		assert __mysql__['backup'].type == 'snap_mysql'
-		assert __mysql__['volume']
+		assert 'volume' in __mysql__
+		assert 'restore' in __mysql__
+		
+		#kwds.get('backup').assert_called_with(type='snap_mysql', volume=mock.ANY)
+		#assert __mysql__['backup'].type == 'snap_mysql'
+		assert msg.db_type == 'percona'
+		assert msg.percona['log_file'] == restore.log_file
+		assert msg.percona['log_pos'] == restore.log_pos
+		assert int(msg.percona['replication_master']) == 1
+		assert msg.percona['root_password'] == __mysql__['root_password']
+		assert msg.percona['repl_password'] == __mysql__['repl_password']
+		assert msg.percona['stat_password'] == __mysql__['stat_password']
+		assert 'volume_config' in msg.percona
+		assert 'snapshot_config' in msg.percona
+		
+
+		
 	
 	def test_master_respawn(self, **kwds):
 		pass

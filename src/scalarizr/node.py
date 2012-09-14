@@ -1,16 +1,91 @@
 from __future__ import with_statement
 
-__all__ = ['__node__']
 
-
+import re
 import ConfigParser
+import json
+import sys
 
 
-class ConfigFile(object):
-	def __init__(self, filename, default_section):
+class Store(dict):
+	pass
+
+
+class Compound(Store):
+	def __init__(self, patterns=None):
+		self.__re_map = {}
+		self.__plain_map = {}
+		patterns = patterns or {}
+		for pattern, store in patterns.items():
+			keys = pattern.split(',')
+			for key in keys:
+				if '*' in key:
+					key = re.compile(r'^%s$' % key.replace('*', '.+'))
+					self.__re_map[key] = store
+				elif isinstance(store, Store):
+					self.__plain_map[key] = store
+				else:
+					dict.__setitem__(self, key, store)
+
+
+	def __setitem__(self, key, value):
+		store = self.__find_store(key)
+		if store:
+			store.__setitem__(key, value)
+		else:
+			dict.__setitem__(self, key, value)
+
+
+	def __getitem__(self, key):
+		store = self.__find_store(key)
+		if store:
+			return store.__getitem__(key)
+		else:
+			return dict.__getitem__(self, key)
+
+
+	def __find_store(self, key):
+		if key in self.__plain_map:
+			return self.__plain_map[key]
+		else:
+			for rkey, store in self.__re_map.items():
+				if rkey.match(key):
+					return store
+
+		
+
+class Json(Store):
+	def __init__(self, filename, fn):
+		'''
+		Example:
+		jstore = Json('/etc/scalr/private.d/storage/mysql.json', 
+					'scalarizr.storage2.volume')
+		'''
 		self.filename = filename
-		self.default_section = default_section
-		self._reload()
+		self.fn = fn
+
+	def __getitem__(self, key):
+		try:
+			with open(self.filename, 'r') as fp:
+				kwds = json.load(fp)
+		except:
+			raise KeyError(key)
+		else:
+			return self.fn(**kwds)
+
+
+	def __setitem__(self, key, value):
+		if hasattr(value, 'config'):
+			value = value.config()
+		with open(self.filename, 'w+') as fp:
+			json.dump(fp, value)
+
+
+class Ini(Store):
+	def __init__(self, filename, section):
+		self.filename = filename
+		self.section = section
+		self.ini = None
 
 
 	def _reload(self):
@@ -21,83 +96,60 @@ class ConfigFile(object):
 	def __getitem__(self, key):
 		try:
 			self._reload()
-			return self.ini.get(*self._parse_key(key))
+			return self.ini.get(self.section, key)
 		except ConfigParser.Error:
 			raise KeyError(key)
 
 
 	def __setitem__(self, key, value):
 		self._reload()
-		section, option = self._parse_key(key)
-		self.ini.set(section, option, value)
-		with open(self.filename, 'w') as fp:
-			self.ini.write(fp)
-
-
-	def _parse_key(self, key):
-		if not '.' in key:
-			key = self.default_section + '.' + key
-		return key.split('.', 1)
-
-
-class MySQLData(ConfigFile):
-	def __getitem__(self, key):
-		if key == 'type':
-			if 'percona' in __node__['behavior']:
-				return 'percona'
-			return 'mysql'
-		return super(MySQLData, self).__getitem__(key)
-	
-	def __setitem__(self, key, value):
-		if key in ('snapshot_config', 'snapshot'):
-			pass
-
-class Node(object):
-	etc_base = '/etc/scalr'
-
-	def __init__(self):
-		self._config_files = {}
-		self._ext = {}
-
-	def __getitem__(self, key):
-		if key in ('mysql', 'percona', 'postgresql', 'redis', 'mongodb'):
-			if key == 'mysql' and 'mysql2' in self.behaviors:
-				key = 'mysql2'
-			return self._config_file(key)
-		elif key in ('server_id', 'platform'):
-			return self._config_file('config', False)['general.' + key]
-		elif key == 'behavior':
-			try:
-				value = self._config_file('config')['general.behaviour']
-			except KeyError:
-				value = self._config_file('config', False)['general.behaviour']
-			return value.strip().split(',')
-		elif key in self._ext:
-			return self._ext[key]
+		if value is None:
+			value = ''
+		elif isinstance(value, bool):
+			value = str(int(value))
 		else:
-			raise KeyError(key)		
+			value = str(value)
+		self.ini.set(self.section, key, value)
+		with open(self.filename, 'w+') as fp:
+			self.ini.write(fp)	
+
+
+class IniOption(Ini):
+	def __init__(self, filename, section, option, 
+			getfilter=None, setfilter=None):
+		self.option = option
+		self.getfilter = getfilter
+		self.setfilter = setfilter
+		super(IniOption, self).__init__(filename, section)
+
+
+	def __getitem__(self, key):
+		value = super(IniOption, self).__getitem__(self, self.option)
+		if self.getfilter:
+			return self.getfilter(value)
+		return value
 
 
 	def __setitem__(self, key, value):
-		if key in ('server_id', 'platform', 'behavior'):
-			if key == 'behavior':
-				value = ','.join(value)
-				key = 'behaviours'
-			self._config_file('config')['general.' + key] = value
-		else:
-			self._ext[key] = value
+		if self.setfilter:
+			value = self.setfilter(value)
+		super(IniOption, self).__setitem__(self, self.option, value)
 
 
-	def _config_file(self, name, private=True):
-		type_ = 'private' if private else 'public'
-		key = name + '.' + type_
-		if not key in self._config_files:
-			filename = '%s/%s.d/%s.ini' % (self.etc_base, type_, name)
-			cls = ConfigFile
-			if name in ('mysql', 'percona'):
-				cls = MySQLData
-			self._config_files[key] = cls(filename, name)
-		return self._config_files[key]
+_base_dir = '/etc/scalr'
+_private_dir = _base_dir + '/private.d'
+_public_dir = _base_dir + '/public.d'
+_storage_dir = _private_dir + '/storage'
 
-
-__node__ = Node()
+__node__ = {}
+for behavior in ('mysql', 'mysql2', 'percona'):
+	__node__[behavior] = Compound({
+		'volume,volume_config': Json('%s/%s.json' % (_private_dir, behavior), 'scalarizr.storage2.volume'),
+		'*_password,log_*,replication_master': Ini('%s/%s.ini' % (_private_dir, behavior), behavior),
+		'mysqldump_options': Ini('%s/%s.ini' % (_public_dir, behavior), behavior)		
+	})
+__node__['behavior'] = IniOption(_private_dir + '/config.ini', 'general', 'behaviour', 
+						lambda val: val.strip().split(','),
+						lambda val: ','.join(val))
+__node__['platform,server_id'] = Ini(_public_dir + '/config.ini', 'general')
+__node__ = Compound(__node__)

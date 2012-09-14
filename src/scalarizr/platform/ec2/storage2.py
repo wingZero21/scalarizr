@@ -80,9 +80,9 @@ class EbsMixin(object):
 	
 	def __init__(self):
 		self._conn = None
-		self.error_messages = {
+		self.error_messages.update({
 			'no_connection': 'EC2 connection should be available to perform this operation'								
-		}
+		})
 
 	
 	def _ebs_snapshot(self, snapshot):

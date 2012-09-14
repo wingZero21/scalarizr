@@ -336,7 +336,7 @@ class MysqlHandler(DBMSRHandler):
 		LOG.debug("on_reload")
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
-		self._cnf = bus.cnf
+		#self._cnf = bus.cnf
 		#ini = self._cnf.rawini
 		#self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 		#self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
@@ -358,7 +358,7 @@ class MysqlHandler(DBMSRHandler):
 			if not vol.tags:
 				vol.tags = storage_tags()
 			vol.ensure(mount=True)
-			if __node__['mysql']['replication_master']:
+			if int(__node__['mysql']['replication_master']):
 				LOG.debug("Checking Scalr's %s system users presence", 
 						__mysql__['behavior'])
 				creds = self.get_user_creds()
@@ -406,17 +406,19 @@ class MysqlHandler(DBMSRHandler):
 					mysql_data = getattr(message, __mysql__['behavior']).copy()
 					mysql_data['volume'] = storage2.volume(**mysql_data.pop('volume_config'))
 					
-					if mysql_data.get('snapshot_config'):
+					snapshot = mysql_data.pop('snapshot_config')
+					if snapshot:
 						mysql_data['restore'] = backup.restore(
 								type='snap_mysql', 
 								snapshot=mysql_data.pop('snapshot_config'))
 					if not mysql_data.get('backup'):
-						mysql_data['backup'] = backup.backup(
+						bak = backup.backup(
 								type='snap_mysql',
 								volume=mysql_data['volume'])
-					
+						#backup.backup.assert_called_with(type='snap_mysql', volume=mysql_data['volume'])
+						mysql_data['backup'] = bak
+				
 					__mysql__.update(mysql_data)
-					print __mysql__
 					
 					'''
 					mysql_data = getattr(message, __mysql__['behavior']).copy()
@@ -455,7 +457,7 @@ class MysqlHandler(DBMSRHandler):
 		
 		self.generate_datadir()
 		self.mysql.service.stop('configuring mysql')
-		repl = 'master' if __mysql__['replication_master'] else 'slave'
+		repl = 'master' if int(__mysql__['replication_master']) else 'slave'
 		bus.fire('before_mysql_configure', replication=repl)
 		if repl == 'master':
 			self._init_master(message)	
@@ -473,7 +475,7 @@ class MysqlHandler(DBMSRHandler):
 			LOG.info('Detaching MySQL storage')
 			vol = storage2.volume(__mysql__['volume'])
 			vol.detach()
-			if not __mysql__['replication_master']:
+			if not int(__mysql__['replication_master']):
 				LOG.info('Destroying volume %s', vol.id)
 				vol.destroy(remove_disks=True)
 				LOG.info('Volume %s has been destroyed.' % vol.id)	
@@ -486,7 +488,7 @@ class MysqlHandler(DBMSRHandler):
 		
 		try:
 			# Operation allowed only on Master server
-			if not __mysql__['replication_master']:
+			if not int(__mysql__['replication_master']):
 				msg = 'Cannot add pma user on slave. ' \
 						'It should be a Master server'
 				raise HandlerError(msg)
@@ -724,7 +726,7 @@ class MysqlHandler(DBMSRHandler):
 		#assert mysql2['stat_password']
 
 		
-		if __mysql__['replication_master']:
+		if int(__mysql__['replication_master']):
 			LOG.warning('Cannot promote to master. Already master')
 			return
 			
@@ -874,7 +876,7 @@ class MysqlHandler(DBMSRHandler):
 	
 		mysql2 = message.body[__mysql__['behavior']]
 		
-		if __mysql__['replication_master']:
+		if int(__mysql__['replication_master']):
 			LOG.debug('Skip NewMasterUp. My replication role is master')
 			return
 		
@@ -991,8 +993,7 @@ class MysqlHandler(DBMSRHandler):
 			snap_cnf = None
 			with op.step(self._step_create_storage):		
 				if 'restore' in __mysql__:
-					restore = backup.restore(__mysql__['restore'])
-					__mysql__['volume'] = restore.run()
+					__mysql__['volume'] = __mysql__['restore'].run()
 				'''	
 				if self.storage_snap:
 					log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
@@ -1048,7 +1049,7 @@ class MysqlHandler(DBMSRHandler):
 			with op.step(self._step_create_data_bundle):
 				# TODO: start here!
 				# Get binary logfile, logpos and create storage snapshot
-				bak = backup.backup(**__mysql__['backup'])
+				bak = backup.backup(__mysql__['backup'])
 				__mysql__['restore'] = bak.run()
 				'''
 				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
@@ -1069,11 +1070,11 @@ class MysqlHandler(DBMSRHandler):
 			for key in ('replication_master', 'root_password', 
 					'repl_password', 'stat_password', 'restore'):
 				msg_data[key] = __mysql__[key]
-			msg_data['log_file'] = __mysql__['restore']['log_file']
-			msg_data['log_pos'] = __mysql__['restore']['log_pos']
-			if __mysql__['restore']['type'] == 'snap_mysql':
-				msg_data['snapshot_config'] = __mysql__['restore']['snapshot']
-			msg_data['volume_config'] = __mysql__['volume']
+			msg_data['log_file'] = __mysql__['restore'].log_file
+			msg_data['log_pos'] = __mysql__['restore'].log_pos
+			if __mysql__['restore'].type == 'snap_mysql':
+				msg_data['snapshot_config'] = dict(__mysql__['restore'].snapshot)
+			msg_data['volume_config'] = dict(__mysql__['volume'])
 			
 			message.db_type = __mysql__['behavior']
 			setattr(message, __mysql__['behavior'], msg_data)
