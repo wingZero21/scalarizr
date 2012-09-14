@@ -145,12 +145,15 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			shutil.rmtree(rebundle_dir)
 
 		try:
-			LOG.info('Registering new image %s' % self._role_name.lower())
+			goog_image_name = self._role_name.lower().replace('_', '-')
+			LOG.info('Registering new image %s' % goog_image_name)
+			# TODO: check duplicate names
 			compute = pl.new_compute_client()
 
-			image_url = 'http://storage.googleapis.com/%s/%s' % (tmp_bucket_name, arch_name)
+			image_url = 'http://storage.googleapis.com/%s/%s' % (
+											tmp_bucket_name, arch_name)
 			req_body = dict(
-				name=self._role_name.lower(),
+				name=goog_image_name,
 				sourceType='RAW',
 				rawDisk=dict(
 					containerType='TAR',
@@ -175,7 +178,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
 			cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
 
-		return '%s/images/%s' % (proj_name, self._role_name.lower())
+		return '%s/images/%s' % (proj_name, goog_image_name)
 
 
 	def _create_spec_devices(self, root):

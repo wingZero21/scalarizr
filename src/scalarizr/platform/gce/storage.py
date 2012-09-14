@@ -72,7 +72,7 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 			status, response = req.next_chunk()
 			if status:
 				percentage = int(status.progress() * 100)
-				if percentage - last_progress > 10:
+				if percentage - last_progress >= 10:
 					LOG.debug("Uploaded %d%%." % percentage)
 					last_progress = percentage
 		LOG.debug('Upload completed.')
