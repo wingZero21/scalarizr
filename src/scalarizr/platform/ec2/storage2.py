@@ -12,10 +12,9 @@ import boto.ec2.volume
 import boto.exception
 
 from scalarizr import linux
-from scalarizr import storage2 as storage2mod
+from scalarizr import storage2 as mod_storage2
 from scalarizr import util
-from scalarizr.bus import bus
-from scalarizr.config import STATE
+from scalarizr.node import __node__
 from scalarizr.storage2 import cloudfs
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
@@ -27,9 +26,9 @@ LOG = logging.getLogger(__name__)
 def name2device(name):
 	if name.startswith('/dev/xvd'):
 		return name
-	if storage2mod.RHEL_DEVICE_ORDERING_BUG or os.path.exists('/dev/xvda1'):
+	if mod_storage2.RHEL_DEVICE_ORDERING_BUG or os.path.exists('/dev/xvda1'):
 		name = name.replace('/sd', '/xvd')
-	if storage2mod.RHEL_DEVICE_ORDERING_BUG:
+	if mod_storage2.RHEL_DEVICE_ORDERING_BUG:
 		name = name[0:8] + chr(ord(name[8])+4) + name[9:]
 	return name
 
@@ -37,7 +36,7 @@ def name2device(name):
 def device2name(device):
 	if device.startswith('/dev/sd'):
 		return device
-	elif storage2mod.RHEL_DEVICE_ORDERING_BUG:
+	elif mod_storage2.RHEL_DEVICE_ORDERING_BUG:
 		device = device[0:8] + chr(ord(device[8])-4) + device[9:]
 	return device.replace('/xvd', '/sd')
 
@@ -46,7 +45,8 @@ class FreeDeviceLetterMgr(object):
 
 	def __init__(self):
 		# Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-		self._all = list(string.ascii_lowercase[7 if linux.os['release'] and linux.os.redhat else 5:16])
+		s = 7 if linux.os['release'] and linux.os.redhat else 5
+		self._all = list(string.ascii_lowercase[s:16])
 		self._acquired = set()
 		self._lock = threading.Lock()
 		self._local = threading.local()	
@@ -54,7 +54,7 @@ class FreeDeviceLetterMgr(object):
 	
 	def __enter__(self):
 		with self._lock:
-			detached = STATE.get('ec2.t1micro_detached', list())
+			detached = __node__['ec2']['t1micro_detached_ebs'] or list()
 			detached = set(name[-1] for name in detached)
 		letters = list(set(self._all) - self._acquired - detached)
 		for l in letters:
@@ -65,7 +65,8 @@ class FreeDeviceLetterMgr(object):
 						self._acquired.add(l)
 						self._local.letter = l
 						return self
-		raise storage2mod.StorageError('No free letters for block device name remains')
+		msg = 'No free letters for block device name remains'
+		raise mod_storage2.StorageError(msg)
 
 	def get(self):
 		return self._local.letter
@@ -81,7 +82,8 @@ class EbsMixin(object):
 	def __init__(self):
 		self._conn = None
 		self.error_messages.update({
-			'no_connection': 'EC2 connection should be available to perform this operation'								
+			'no_connection': 'EC2 connection should be available '
+							'to perform this operation'								
 		})
 
 	
@@ -108,19 +110,19 @@ class EbsMixin(object):
 
 
 	def _connect_ec2(self):
-		return bus.platform.new_ec2_conn()
+		return __node__['ec2']['connect_ec2']()
 
 
 	def _avail_zone(self):
-		return bus.platform.get_avail_zone()
+		return __node__['ec2']['avail_zone']
 
 
 	def _instance_id(self):
-		return bus.platform.get_instance_id()
+		return __node__['ec2']['instance_id']
 
 
 	def _instance_type(self):
-		return bus.platform.get_instance_type()
+		return __node__['ec2']['instance_type']
 
 
 class EbsVolume(base.Volume, EbsMixin):
@@ -183,8 +185,8 @@ class EbsVolume(base.Volume, EbsMixin):
 			if self.id:
 				ebs = self._conn.get_all_volumes([self.id])[0]
 				if ebs.zone != zone:
-					LOG.warn('EBS volume %s is in the different ' \
-							'availability zone (%s). Snapshoting it ' \
+					LOG.warn('EBS volume %s is in the different '
+							'availability zone (%s). Snapshoting it '
 							'and create a new EBS volume in %s', 
 							ebs.id, ebs.zone, zone)
 					snap = self._create_snapshot(self.id).id
@@ -238,7 +240,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		self._check_ec2()
 		snapshot = self._create_snapshot(self.id, description, tags, 
 										kwds.get('nowait', True))
-		return storage2mod.snapshot(
+		return mod_storage2.snapshot(
 				type='ebs', 
 				id=snapshot.id, 
 				description=snapshot.description)
@@ -248,9 +250,9 @@ class EbsVolume(base.Volume, EbsMixin):
 		self._check_ec2()
 		self._detach_volume(self.id, force)
 		if self._instance_type() == 't1.micro':
-			detached = STATE.get('ec2.t1micro_detached', list())
+			detached = __node__['ec2']['t1micro_detached_ebs'] or list()
 			detached.append(self.name)
-			STATE['ec2.t1micro_detached'] = detached
+			__node__['ec2']['t1micro_detached_ebs'] = detached
 
 	
 	def _destroy(self, force, **kwds):
@@ -371,7 +373,8 @@ class EbsVolume(base.Volume, EbsMixin):
 	def _wait_snapshot(self, snapshot):
 		snapshot = self._ebs_snapshot(snapshot)
 		LOG.debug('Checking that EBS snapshot %s is completed', snapshot.id)
-		msg = "EBS snapshot %s wasn't completed. Timeout reached (%s seconds)" % (
+		msg = "EBS snapshot %s wasn't completed. " \
+				"Timeout reached (%s seconds)" % (
 				snapshot.id, self._global_timeout)
 		util.wait_until(
 			lambda: snapshot.update() and snapshot.status != 'pending', 
@@ -380,12 +383,14 @@ class EbsVolume(base.Volume, EbsMixin):
 		)
 		if snapshot.status == 'error':
 			msg = 'Snapshot %s creation failed. AWS status is "error"' % snapshot.id
-			raise storage2mod.StorageError(msg)
+			raise mod_storage2.StorageError(msg)
 		elif snapshot.status == 'completed':
 			LOG.debug('Snapshot %s completed', snapshot.id)		
 
 
 class EbsSnapshot(EbsMixin, base.Snapshot):
+
+	error_messages = base.Snapshot.error_messages.copy()
 	
 	_status_map = {
 		'pending': base.Snapshot.IN_PROGRESS,
@@ -396,8 +401,7 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 	
 	def __init__(self, **kwds):
 		base.Snapshot.__init__(self, **kwds)
-		EbsMixin.__init__(self)		
-		
+		EbsMixin.__init__(self)			
 
 	def _status(self):
 		self._check_ec2()
@@ -410,8 +414,8 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 		self._conn.delete_snapshot(self.id)
 
 
-storage2mod.volume_types['ebs'] = EbsVolume
-storage2mod.snapshot_types['ebs'] = EbsSnapshot
+mod_storage2.volume_types['ebs'] = EbsVolume
+mod_storage2.snapshot_types['ebs'] = EbsSnapshot
 
 		
 class Ec2EphemeralVolume(base.Volume):
@@ -432,7 +436,7 @@ class Ec2EphemeralVolume(base.Volume):
 		except:
 			msg = 'Failed to get block device for %s. Error: %s' % (
 					self.name, sys.exc_info()[1])
-			raise storage2mod.StorageError, msg, sys.exc_info()[2]
+			raise mod_storage2.StorageError, msg, sys.exc_info()[2]
 		self.device = name2device(device)
 
 	
@@ -440,7 +444,7 @@ class Ec2EphemeralVolume(base.Volume):
 		raise NotImplementedError()
 	
 	
-storage2mod.volume_types['ec2-ephemeral'] = Ec2EphemeralVolume
+mod_storage2.volume_types['ec2-ephemeral'] = Ec2EphemeralVolume
 
 
 class S3FileSystem(cloudfs.CloudFileSystem):

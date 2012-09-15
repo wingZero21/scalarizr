@@ -61,10 +61,18 @@ class TestCompound(object):
 		
 class TestJson(object):
 	def setup(self):
-		filename = os.path.dirname(__file__) + '/../fixtures/node.json'
+		self.fixtures_dir = os.path.dirname(__file__) + '/../fixtures'
+		filename = self.fixtures_dir + '/node.json'
 		self.store = node.Json(filename, mock.Mock())
 
-	
+
+	def teardown(self):
+		for name in ('node-test-set-dict.json', 'node-test-set-object.json'):
+			filename = os.path.join(self.fixtures_dir, name)
+			if os.path.isfile(filename):
+				os.remove(filename)
+
+
 	def test_get(self):
 		val = self.store['any_key']
 		
@@ -75,31 +83,23 @@ class TestJson(object):
 				size='80%')
 
 	
-	@mock.patch('__builtin__.open')
-	@mock.patch('json.dump')
-	def test_set_dict(self, json, open):
+	def test_set_dict(self):
 		data = {'type': 'lvm', 'vg': 'mysql'}
 
+		self.store.filename = self.fixtures_dir + '/node-test-set-dict.json'
 		self.store['any_key'] = data
-		
-		json.assert_called_with(mock.ANY, data)
-		open.assert_called_with(self.store.filename, mock.ANY)
 			
 	
-	@mock.patch('__builtin__.open')
-	@mock.patch('json.dump')
-	def test_set_object(self, json, open):
+	def test_set_object(self):
 		class _Data(object):
 			def __init__(self, data):
 				self.data = data
-			def __json__(self):
+			def config(self):
 				return self.data
 		
 		data = {'type': 'lvm', 'vg': 'mysql'}
+		self.store.filename = self.fixtures_dir + '/node-test-set-object.json'
 		self.store['any_key'] = _Data(data)
-		
-		json.assert_called_with(mock.ANY, data)
-		open.assert_called_with(self.store.filename, mock.ANY)
 
 
 class TestIni(object):

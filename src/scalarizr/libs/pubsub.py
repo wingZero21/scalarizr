@@ -6,9 +6,11 @@ Created on Aug 19, 2010
 
 class Observable(object):
 	
-	def __init__(self):
+	def __init__(self, *args):
 		self._listeners = {}
 		self._events_suspended = False
+		self.define_events(*args)
+
 	
 	def define_events(self, *args):
 		for event in args:

@@ -3,71 +3,29 @@ import uuid
 import types
 
 from scalarizr import storage2
-from scalarizr.linux import mount as mountmod
+from scalarizr.libs import cdo
+from scalarizr.linux import mount as mod_mount
 import os
 
 
 LOG = storage2.LOG
 
 
-class Base(object):
+class Base(cdo.ConfigDriven):
 
 	default_config = {
 		'version': '2.0',
 		'type': 'base',
 		'id': None
 	}
-	_config = None
-	initial_config = None
-	
-	def __init__(self, **kwds):
-		if not self._config:
-			self._config = self.default_config.copy()
-		self._config.update(kwds)
-		self.initial_config = self._config.copy()
 
+	error_messages = {
+		'empty_attr': 'Attribute should be specified: %s',
+		'empty_param': 'Parameter should be specified: %s',
+		'restore_unsupported': 'Restores from snapshot not supported '
+								'by this volume type: %s',
+	}
 
-	def config(self):
-		return self._dictify(self._config)
-
-
-	def __iter__(self):
-		for key, value in self.config():
-			yield (key, value)
-	
-	
-	def __setattr__(self, name, value):
-		data = self.__dict__ if name in dir(self) else self.__dict__['_config']
-		data[name] = value
-	
-	
-	def __getattr__(self, name):
-		if name in self.__dict__['_config']:
-			return self.__dict__['_config'][name]
-		raise AttributeError(name)
-	
-	
-	def __hasattr__(self, name):
-		return name in self.__dict__['_config']
-	
-	
-	def _dictify(self, data=None):
-		if isinstance(data, dict):
-			ret = {}
-			for key in data:
-				ret[key] = self._dictify(data[key])
-			return ret
-		elif isinstance(data, list):
-			ret = [self._dictify(item) for item in data]
-		elif isinstance(data, Base):
-			ret = data.config()
-		elif type(data) in (str, unicode, bool, int, long, float, types.NoneType):
-			ret = data
-		else:
-			msg = 'Value is not serializable: %s' % (data, )
-			raise ValueError(msg)
-			
-		return ret
 
 	def _genid(self, prefix=''):
 		return '%s%s-%s' % (prefix, self.type, uuid.uuid4().hex[0:8])		
@@ -75,12 +33,6 @@ class Base(object):
 
 class Volume(Base):
 	MAX_SIZE = None
-	
-	error_messages = {
-		'empty_attr': 'Attribute should be specified: %s',
-		'empty_param': 'Parameter should be specified: %s',
-		'restore_unsupported': 'Restores from snapshot not supported by this volume type: %s',
-	}
 	
 	features = {
 		'restore': False
@@ -109,7 +61,7 @@ class Volume(Base):
 		if mount:
 			try:
 				self.mount()
-			except mountmod.NoFileSystem:
+			except mod_mount.NoFileSystem:
 				if mkfs:
 					self.mkfs()
 					self.mount()
@@ -144,18 +96,18 @@ class Volume(Base):
 			self.umount()
 		if not os.path.exists(self.mpoint):
 			os.makedirs(self.mpoint)
-		mountmod.mount(self.device, self.mpoint)
+		mod_mount.mount(self.device, self.mpoint)
 
 
 	def umount(self):
 		self._check()
-		mountmod.umount(self.device)
+		mod_mount.umount(self.device)
 
 
 	def mounted_to(self):
 		self._check()
 		try:
-			return mountmod.mounts()[self.device].mpoint
+			return mod_mount.mounts()[self.device].mpoint
 		except KeyError:
 			return False
 
@@ -231,7 +183,6 @@ class Snapshot(Base):
 	
 	
 	def destroy(self):
-		print 'destroy1'
 		return self._destroy()
 	
 	

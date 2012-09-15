@@ -22,8 +22,9 @@ from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
 from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, iptables
 
-from scalarizr import storage2	
+from scalarizr import linux, storage2	
 from scalarizr.services import backup
+from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
 
 # Libs
@@ -33,26 +34,7 @@ from scalarizr.libs.metaconf import Configuration, NoPathError
 LOG = logging.getLogger(__name__)
 
 
-behavior = 'percona' \
-			if 'percona' in __node__['behavior'] \
-			else 'mysql2'
-
-__mysql__ = __node__[behavior]
-__mysql__.update({
-	'behavior': behavior,
-	'port': 3306,
-	'basedir': '/mnt/dbstorage',
-	'datadir': '/mnt/dbstorage/mysql-data',
-	'tmpdir': '/mnt/dbstorage/tmp',
-	'root_user': 'scalr',
-	'repl_user': 'scalr_repl',
-	'stat_user': 'scalr_stat',
-	'pma_user': 'pma',
-	'debian.cnf': '/etc/mysql/debian.cnf',
-	'mysqldump_chunk_size': 200 * 1024 * 1024,
-	'stop_slave_timeout': 180,
-	'change_master_timeout': 60
-})
+__mysql__ = mysql2_svc.__mysql__
 
 
 '''
@@ -410,7 +392,8 @@ class MysqlHandler(DBMSRHandler):
 					if snapshot:
 						mysql_data['restore'] = backup.restore(
 								type='snap_mysql', 
-								snapshot=mysql_data.pop('snapshot_config'))
+								snapshot=snapshot,
+								volume=mysql_data['volume'])
 					if not mysql_data.get('backup'):
 						bak = backup.backup(
 								type='snap_mysql',
@@ -456,7 +439,7 @@ class MysqlHandler(DBMSRHandler):
 		"""
 		
 		self.generate_datadir()
-		self.mysql.service.stop('configuring mysql')
+		self.mysql.service.stop('Configuring MySQL')
 		repl = 'master' if int(__mysql__['replication_master']) else 'slave'
 		bus.fire('before_mysql_configure', replication=repl)
 		if repl == 'master':
@@ -531,7 +514,7 @@ class MysqlHandler(DBMSRHandler):
 		bak = backup.backup(
 				type='mysqldump', 
 				file_per_database=True,
-				tmpdir=__mysql__['tmpdir'],
+				tmpdir=__mysql__['tmp_dir'],
 				cloudfsdir=self._platform.scalrfs.backups(__mysql__['behavior']),
 				chunk_size=__mysql__['mysqldump_chunk_size'])
 		restore = None
@@ -694,11 +677,11 @@ class MysqlHandler(DBMSRHandler):
 						__mysql__['behavior']: {
 							'log_file': restore.log_file,
 							'log_pos': restore.log_pos,
-							'restore': restore.config()
+							'restore': dict(restore)
 						}
 					}
 					if restore.type == 'snap_mysql':
-						msg_data[__mysql__['behavior']]['snapshot_config'] = restore.snapshot.config()
+						msg_data[__mysql__['behavior']]['snapshot_config'] = dict(restore.snapshot)
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 			op.ok()
 			
@@ -750,13 +733,13 @@ class MysqlHandler(DBMSRHandler):
 				try:
 					old_vol.detach(force=True)
 					#master_vol = self._take_master_volume(master_vol_id)
-					new_vol.mpoint = __mysql__['basedir']				
+					new_vol.mpoint = __mysql__['storage_dir']				
 					new_vol.ensure(mount=True)				
 					#new_storage_vol = self._plug_storage(STORAGE_PATH, master_storage_conf)				
 					# Continue if master storage is a valid MySQL storage 
 					if self._storage_valid():
 						# Patch configuration files 
-						self.mysql.move_mysqldir_to(__mysql__['datadir'])
+						self.mysql.move_mysqldir_to(__mysql__['data_dir'])
 						self.mysql._init_replication(master=True)
 						self.mysql.service.start()
 						# Update __mysql__['behavior'] configuration
@@ -785,15 +768,21 @@ class MysqlHandler(DBMSRHandler):
 						'''
 
 						# Send message to Scalr
-						msg_data = dict(status='ok', db_type = __mysql__['behavior'])
-						msg_data[__mysql__['behavior']] = {
-							'volume_config': __mysql__['volume']
+						msg_data = {
+							'status': 'ok',
+							'db_type': __mysql__['behavior'],
+							__mysql__['behavior']: {
+								'volume_config': dict(__mysql__['volume'])
+							}
 						} 
 						#log_file, log_pos = self.root_client.master_status()
 						#msg_data.update(dict(log_file = log_file, log_pos = log_pos))
-						self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
+						self.send_message(
+								DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, 
+								msg_data)
 					else:
-						raise HandlerError("%s is not a valid MySQL storage" % __mysql__['datadir'])
+						msg = "%s is not a valid MySQL storage" % __mysql__['data_dir']
+						raise HandlerError(msg)
 				except:
 					self.mysql.service.stop('Detaching new volume')
 					new_vol.detach()
@@ -804,7 +793,7 @@ class MysqlHandler(DBMSRHandler):
 
 				self.root_client.stop_slave()
 				self.root_client.reset_master()
-				self.mysql.flush_logs(__mysql__['datadir'])
+				self.mysql.flush_logs(__mysql__['data_dir'])
 				
 				__mysql__.update({
 					'replication_master': 1,
@@ -842,11 +831,11 @@ class MysqlHandler(DBMSRHandler):
 				msg_data[__mysql__['behavior']] = {
 					'log_file': restore.log_file,
 					'log_pos': restore.log_pos,
-					'restore': restore.config()
+					'restore': dict(restore)
 				}
 				if restore.type == 'snap_mysql':
-					msg_data['snapshot_config'] = restore.snapshot.config()
-				msg_data['volume_config'] = __mysql__['volume']
+					msg_data['snapshot_config'] = dict(restore.snapshot)
+				msg_data['volume_config'] = dict(__mysql__['volume'])
 				
 				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)							
 				
@@ -893,6 +882,7 @@ class MysqlHandler(DBMSRHandler):
 							type='mysql_snap',
 							log_file=mysql2['log_file'],
 							log_pos=mysql2['log_pos'],
+							volume=__mysql__['volume'],
 							snapshot=mysql2['snapshot_config'])
 				'''
 				LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
@@ -968,8 +958,8 @@ class MysqlHandler(DBMSRHandler):
 	
 
 	def _storage_valid(self):
-		binlog_base = os.path.join(__mysql__['basedir'], mysql_svc.STORAGE_BINLOG)
-		return os.path.exists(__mysql__['datadir']) and glob.glob(binlog_base + '*')
+		binlog_base = os.path.join(__mysql__['storage_dir'], mysql_svc.STORAGE_BINLOG)
+		return os.path.exists(__mysql__['data_dir']) and glob.glob(binlog_base + '*')
 
 
 	def _change_selinux_ctx(self):
@@ -978,7 +968,7 @@ class MysqlHandler(DBMSRHandler):
 			LOG.debug('Changing SELinux file security context for new mysql datadir')
 			system2((chcon[0], '-R', '-u', 'system_u', '-r',
 					'object_r', '-t', 'mysqld_db_t', 
-					os.path.dirname(__mysql__['basedir'])), raise_exc=False)
+					os.path.dirname(__mysql__['storage_dir'])), raise_exc=False)
 	
 		
 	def _init_master(self, message):
@@ -993,7 +983,7 @@ class MysqlHandler(DBMSRHandler):
 			snap_cnf = None
 			with op.step(self._step_create_storage):		
 				if 'restore' in __mysql__:
-					__mysql__['volume'] = __mysql__['restore'].run()
+					__mysql__['restore'].run()
 				'''	
 				if self.storage_snap:
 					log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
@@ -1002,7 +992,7 @@ class MysqlHandler(DBMSRHandler):
 				self._plug_storage(mpoint=STORAGE_PATH, vol=self.storage_vol)
 				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
 				'''
-				self.mysql.flush_logs(__mysql__['datadir'])
+				self.mysql.flush_logs(__mysql__['data_dir'])
 		
 			with op.step(self._step_move_datadir):
 				storage_valid = self._storage_valid()				
@@ -1012,7 +1002,7 @@ class MysqlHandler(DBMSRHandler):
 				self.mysql.my_cnf.datadir = datadir
 
 		
-				if not storage_valid and datadir.find(__mysql__['datadir']) == 0:
+				if not storage_valid and datadir.find(__mysql__['data_dir']) == 0:
 					# When role was created from another mysql role it contains modified my.cnf settings 
 					self.mysql.my_cnf.datadir = '/var/lib/mysql'
 					self.mysql.my_cnf.log_bin = None
@@ -1020,7 +1010,7 @@ class MysqlHandler(DBMSRHandler):
 				# Patch configuration
 				self.mysql.my_cnf.expire_logs_days = 10
 				self.mysql.my_cnf.skip_locking = False				
-				self.mysql.move_mysqldir_to(__mysql__['basedir'])
+				self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
 				self._change_selinux_ctx()
 
 		
@@ -1033,7 +1023,7 @@ class MysqlHandler(DBMSRHandler):
 			with op.step(self._step_create_users):			
 				if os.path.exists(__mysql__['debian.cnf']):
 					LOG.debug("Copying debian.cnf file to mysql storage")
-					shutil.copy(__mysql__['debian.cnf'], __mysql__['basedir'])	
+					shutil.copy(__mysql__['debian.cnf'], __mysql__['storage_dir'])	
 						
 				# Add system users	
 				self.create_users(**user_creds)
@@ -1101,16 +1091,16 @@ class MysqlHandler(DBMSRHandler):
 		
 			with op.step(self._step_patch_conf):		
 				self.mysql.service.stop('Required by Slave initialization process')			
-				self.mysql.flush_logs(__mysql__['datadir'])
+				self.mysql.flush_logs(__mysql__['data_dir'])
 				
 				# Change configuration files
 				LOG.info("Changing configuration files")
-				self.mysql.my_cnf.datadir = __mysql__['datadir']
+				self.mysql.my_cnf.datadir = __mysql__['data_dir']
 				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
 	
 			with op.step(self._step_move_datadir):
-				self.mysql.move_mysqldir_to(__mysql__['basedir'])
+				self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
 				self._change_selinux_ctx()
 				self.mysql._init_replication(master=False)
 				self._copy_debian_cnf_back()
@@ -1154,7 +1144,7 @@ class MysqlHandler(DBMSRHandler):
 
 			
 	def _copy_debian_cnf_back(self):
-		debian_cnf = os.path.join(__mysql__['basedir'], 'debian.cnf')
+		debian_cnf = os.path.join(__mysql__['storage_dir'], 'debian.cnf')
 		if disttool.is_debian_based() and os.path.exists(debian_cnf):
 			LOG.debug("Copying debian.cnf from storage to mysql configuration directory")
 			shutil.copy(debian_cnf, '/etc/mysql/')
@@ -1183,7 +1173,7 @@ class MysqlHandler(DBMSRHandler):
 	'''		
 
 	def _innodb_recovery(self, storage_path=None):
-		storage_path = storage_path or __mysql__['basedir']
+		storage_path = storage_path or __mysql__['storage_dir']
 		binlog_path	= os.path.join(storage_path, mysql_svc.STORAGE_BINLOG)		
 		data_dir = os.path.join(storage_path, mysql_svc.STORAGE_DATA_DIR),
 		pid_file = os.path.join(storage_path, 'mysql.pid')
@@ -1312,7 +1302,7 @@ class MysqlHandler(DBMSRHandler):
 
 
 	def _datadir_size(self):
-		stat = os.statvfs(__mysql__['basedir'])
+		stat = os.statvfs(__mysql__['storage_dir'])
 		return stat.f_bsize * stat.f_blocks / 1024 / 1024 / 1024 + 1
 		
 

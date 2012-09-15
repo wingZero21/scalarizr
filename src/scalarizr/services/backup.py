@@ -2,7 +2,7 @@
 import sys
 
 from scalarizr import storage2
-from scalarizr.libs import pubsub
+from scalarizr.libs import pubsub, cdo
 
 
 class Error(Exception):
@@ -23,9 +23,10 @@ def backup(*args, **kwds):
 	try:
 		cls = backup_types[type_]
 	except KeyError:
-		msg = "Unknown backup type '%s'. " \
-				"Have you registered it in scalarizr.services.backup.backup_types?" % type_
-		raise KeyError(msg)
+		msg = "Unknown backup type '%s'. "
+		"Have you registered it in "
+		"scalarizr.services.backup.backup_types?" % type_
+		raise Error(msg)
 	return cls(**kwds)
 
 
@@ -39,60 +40,28 @@ def restore(*args, **kwds):
 	try:
 		cls = restore_types[type_]
 	except KeyError:
-		msg = "Unknown restore type '%s'. " \
-				"Have you registered it in scalarizr.services.backup.restore_types?" % type_
-		raise KeyError(msg)
+		msg = "Unknown restore type '%s'. "
+		"Have you registered it in " 
+		"scalarizr.services.backup.restore_types?" % type_
+		raise Error(msg)
 	return cls(**kwds)
 
 
-class ConfigMixin(object):
-	default_config = {}
 
-	_config = None
-	initial_config = None
 
+	
+
+class Task(pubsub.Observable, cdo.ConfigDriven):
 
 	def __init__(self, **kwds):
-		if not self._config:
-			self._config = self.default_config.copy()
-		self._config.update(kwds)
-		self.initial_config = self._config.copy()		
-
-
-	def config(self):
-		return self._config.copy()
-
-	def __iter__(self):
-		for key, value in self.config():
-			yield (key, value)
-
-	def __setattr__(self, name, value):
-		data = self.__dict__ if name in dir(self) else self.__dict__['_config']
-		data[name] = value
-	
-	
-	def __getattr__(self, name):
-		if name in self.__dict__['_config']:
-			return self.__dict__['_config'][name]
-		raise AttributeError(name)
-	
-	
-	def __hasattr__(self, name):
-		return name in self.__dict__['_config']
-
-	
-
-class Task(pubsub.Observable, ConfigMixin):
-
-
-	def __init__(self, **kwds):
-		ConfigMixin.__init__(self, **kwds)
-		self.define_events(
+		cdo.ConfigDriven.__init__(self, **kwds)
+		pubsub.Observable.__init__(self, 
 			'start',    # When job is started
 			'complete', # When job is finished with success
 			'error'     # When job is finished with error
 		)
 		self.__running = False
+		self.__result  = None
 
 
 	def kill(self):
@@ -115,8 +84,9 @@ class Task(pubsub.Observable, ConfigMixin):
 		try:
 			self.__running = True
 			self.fire('start')
-			result = self._run()
-			self.fire('complete', result)
+			self.__result = self._run()
+			self.fire('complete', self.__result)
+			return self.__result
 		except:
 			exc_info = sys.exc_info()
 			self.fire('error', exc_info)
@@ -134,6 +104,8 @@ class Task(pubsub.Observable, ConfigMixin):
 	def running(self):
 		return self.__running
 
+	def result(self):
+		return self.__result
 
 
 class Backup(Task):
@@ -167,32 +139,38 @@ class SnapBackup(Backup):
 	def __init__(self, **kwds):
 		super(SnapBackup, self).__init__(**kwds)
 		self.define_events(
-			# Fires when all service disk I/O activity should be freezed 
-			'freeze_service'   
+			# Fires when all disk I/O activity should be freezed 
+			'freeze'   
 		)
 
 	def _run(self):
-		vol = storage2.volume(self.volume)
-		service_state = self.fire('freeze_service', vol)
+		self.volume = storage2.volume(self.volume)
+		state = {}
+		self.fire('freeze', self.volume, state)
 		snap = self.volume.snapshot(self.description, tags=self.tags)
-		return backup.restore(
-				type='snap', 
-				snapshot=snap.config(),
-				service_state=service_state)
+		return restore(
+				type=self.type, 
+				snapshot=snap,
+				**state)
 
 
 class SnapRestore(Restore):
 	default_config = Restore.default_config.copy()
 	default_config.update({
 		'snapshot': None,
-		'service_state': None
+		'volume': None
 	})
 
 
 	def _run(self):
-		snap = storage2.snapshot(self.snapshot)
-		vol = snap.restore()
-		return vol.config()
+		self.snapshot = storage2.snapshot(self.snapshot)
+		if self.volume:
+			self.volume = storage2.volume(self.volume)
+			self.volume.snap = self.snapshot
+			self.volume.ensure()
+		else:
+			self.volume = self.snapshot.restore()
+		return self.volume
 		
 
 backup_types['snap'] = SnapBackup

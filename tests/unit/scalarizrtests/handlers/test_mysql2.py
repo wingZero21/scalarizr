@@ -21,6 +21,28 @@ eph_host_init_response_new_master = {
 	}
 }
 
+eph_host_init_response_respawn_master = {
+	'server_index': '1',
+	'db_type': 'percona',
+	'percona': {
+		'replication_master': 1,
+		'volume_config': {
+			'type': 'eph',
+			'mpoint': '/mnt/dbstorage',
+			'device': '/dev/percona/data'
+		},
+		'snapshot_config': {
+			'type': 'eph',
+			'id': 'eph-snap-12345678'
+		},
+		'root_password': 'Q9OgJxYf19ygFHpRprL',
+		'repl_password': 'MGVmwVu6CkaKvwr4g7mT',
+		'stat_password': 'ngATsFuvHFhKR1rAybLr',
+		'log_file': 'binlog.000003',
+		'log_pos': '107'
+	}
+}
+
 eph_host_init_response_slave = {
 	'local_ip': '10.146.34.58',
 	'remote_ip': '176.34.6.168',
@@ -83,8 +105,6 @@ class TestMysqlHandler(object):
 	
 		
 	def test_master_new(self, **kwds):
-		#from scalarizr.node import __node__
-		#print __node__
 		snapshot = mock.MagicMock(
 				name='master storage snapshot', 
 				type='eph',
@@ -100,48 +120,73 @@ class TestMysqlHandler(object):
 				**{'run.return_value': restore})
 		kwds['backup'].configure_mock(return_value=backup)
 		
-		
 		from scalarizr.handlers import mysql2
 		
 		hdlr = mysql2.MysqlHandler()
 		mock.patch.object(hdlr, '_storage_valid', return_value=False)
 				
-		msg = mock.Mock(**eph_host_init_response_new_master)
-		hdlr.on_host_init_response(msg)
-		hdlr.on_before_host_up(msg)
+		hir = mock.Mock(**eph_host_init_response_new_master)
+		host_up = mock.Mock()
+		hdlr.on_host_init_response(hir)
+		hdlr.on_before_host_up(host_up)
 		
-		# restore was created
-		# datadir was moved
-		#
 		__mysql__ = mysql2.__mysql__		
-		
+
+		# datadir moved
+		hdlr.mysql.move_mysqldir_to.assert_called_once_with(__mysql__['storage_dir'])
+		# restore created
 		backup.run.assert_called_once_with()
-		hdlr.mysql.move_mysqldir_to.assert_called_once_with(__mysql__['basedir'])
+		# data stored in __mysql__
 		assert __mysql__['root_password']
 		assert __mysql__['repl_password']
 		assert __mysql__['stat_password']
 		assert 'backup' in __mysql__
 		assert 'volume' in __mysql__
 		assert 'restore' in __mysql__
-		
-		#kwds.get('backup').assert_called_with(type='snap_mysql', volume=mock.ANY)
-		#assert __mysql__['backup'].type == 'snap_mysql'
-		assert msg.db_type == 'percona'
-		assert msg.percona['log_file'] == restore.log_file
-		assert msg.percona['log_pos'] == restore.log_pos
-		assert int(msg.percona['replication_master']) == 1
-		assert msg.percona['root_password'] == __mysql__['root_password']
-		assert msg.percona['repl_password'] == __mysql__['repl_password']
-		assert msg.percona['stat_password'] == __mysql__['stat_password']
-		assert 'volume_config' in msg.percona
-		assert 'snapshot_config' in msg.percona
-		
-
+		# HostUp message is valid		
+		assert host_up.db_type == 'percona'
+		assert host_up.percona['log_file'] == restore.log_file
+		assert host_up.percona['log_pos'] == restore.log_pos
+		assert int(host_up.percona['replication_master']) == 1
+		assert host_up.percona['root_password'] == __mysql__['root_password']
+		assert host_up.percona['repl_password'] == __mysql__['repl_password']
+		assert host_up.percona['stat_password'] == __mysql__['stat_password']
+		assert 'volume_config' in host_up.percona
+		assert 'snapshot_config' in host_up.percona
 		
 	
 	def test_master_respawn(self, **kwds):
-		pass
-	
+		from scalarizr.handlers import mysql2
+		
+		hdlr = mysql2.MysqlHandler()
+		mock.patch.object(hdlr, '_storage_valid', return_value=True)	
+
+		hir = mock.Mock(**eph_host_init_response_respawn_master)
+		hdlr.on_host_init_response(hir)
+
+		__mysql__ = mysql2.__mysql__
+		assert (__mysql__['replication_master']) == 1
+		assert __mysql__['restore']
+		kwds['restore'].assert_called_with(
+				type='snap_mysql',
+				snapshot=mock.ANY,
+				volume=mock.ANY)
+		__mysql__['restore'].type = 'snap_mysql'
+
+
+		host_up = mock.Mock()
+		hdlr.on_before_host_up(host_up)
+
+		assert host_up.db_type == 'percona'
+		assert host_up.percona['log_file']
+		assert host_up.percona['log_pos']
+		assert int(host_up.percona['replication_master']) == 1
+		assert host_up.percona['root_password'] == __mysql__['root_password']
+		assert host_up.percona['repl_password'] == __mysql__['repl_password']
+		assert host_up.percona['stat_password'] == __mysql__['stat_password']
+		assert 'volume_config' in host_up.percona
+		assert 'snapshot_config' in host_up.percona
+
 	
 	def test_master_respawn_from_snapshot(self, **kwds):
 		pass
@@ -165,7 +210,6 @@ class TestMysqlHandler(object):
 	
 	def test_new_master_up(self, **kwds):
 		pass
-	
 	
 	
 class TestMysqlHandlerXtrabackup(object):

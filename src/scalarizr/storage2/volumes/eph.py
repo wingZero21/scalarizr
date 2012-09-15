@@ -16,5 +16,8 @@ class EphVolume(base.Volume):
 		super(EphVolume, self).__init__(**kwds)
 		
 	def _ensure(self):
+		# snap should be applied after layout: download and extract data.
+		# this could be done on already ensured volume. 
+		# Example: resync slave data 
 		raise NotImplementedError()
 

@@ -49,7 +49,7 @@ def test_umount_raise_error():
 class TestMounts(object):
 	def setup(self):
 		filename = os.path.abspath(__file__ + '/../../../fixtures/linux/proc.mounts')
-		self.mounts = mount.mounts(filename)
+		self.mounts = mount._Mounts(filename)
 	
 	
 	def test_getitem_by_unique_device(self):
