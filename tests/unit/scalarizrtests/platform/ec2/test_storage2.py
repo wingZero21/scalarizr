@@ -292,12 +292,14 @@ class TestEbsVolume(object):
 	def test_detach_no_connection(self, _connect_ec2, *args):
 		_connect_ec2.return_value = None
 		vol = Ebs(type='ebs', id='vol-12345678', device='/dev/xvdp')
-		snap = vol._detach(False)	
+		vol._detach(False)
 	
 	
 	def test_destroy(self, _connect_ec2, *args):
 		vol = Ebs(type='ebs', id='vol-12345678')
 		snap = vol.destroy(True)
+		
+		assert snap
 		conn = _connect_ec2.return_value
 		conn.delete_volume.assert_called_once_with(vol.id)
 
@@ -318,6 +320,7 @@ class TestEbsSnapshot(object):
 
 
 class TestEc2EphemeralVolume(object):
+	# TODO: simulate 169.254.169.254 with wsgi_intercept 
 	def test_ensure(self):
 		pass
 	
