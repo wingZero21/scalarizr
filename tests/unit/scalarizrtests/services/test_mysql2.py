@@ -5,6 +5,7 @@ import mock
 
 from scalarizr.services import backup
 
+
 @mock.patch('scalarizr.storage2.volume')
 @mock.patch('scalarizr.linux.coreutils.sync')
 class TestMySQLSnapBackupAndRestore(object):
@@ -62,5 +63,39 @@ class TestMySQLSnapBackupAndRestore(object):
 
 		vol_factory = args[1]
 		vol_factory.return_value.mount.assert_called_with()
+
+
+class TestXtrabackupBackup(object):
+	def test_run_full(self):
+		pass
+
+	def test_run_incremental(self):
+		pass
+
+	def test_run_with_volume(self):
+		pass
+
+	def test_checkpoints(self):
+		pass
+
+	def test_binlog_info(self):
+		pass
+
+
+class TestXtrabackupRestore(object):
+	def test_tmp_volume_creation_only_snapshot(self):
+		pass
+
+	def test_tmp_volume_creation_both_volume_and_snapshot(self):
+		pass
+
+	def test_run(self):
+		pass
+
+	def test_copyback_start_commit(self):
+		pass
+
+	def test_copyback_start_rollback(self):
+		pass
 
 

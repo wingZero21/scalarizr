@@ -93,35 +93,7 @@ backup.backup_types['snap_mysql'] = MySQLSnapBackup
 backup.restore_types['snap_mysql'] = MySQLSnapRestore
 
 
-class XtrabackupMixin(object):
-
-	def _latest_backup_dir(self):
-		try:
-			name = sorted(os.listdir(self.backup_dir))[0]
-		except IndexError:
-			msg = 'Failed to find any previous backup in %s'
-			raise Error(msg, self.backup_dir)
-		else:
-			return os.path.join(self.backup_dir, name) 	
-
-	
-	def _checkpoints(self, filename=None):
-		if not filename:
-			filename = self._latest_backup_dir() + '/xtrabackup_checkpoints'
-		ret = {}
-		for line in open(filename):
-			key, value = line.split('=')
-			ret[key.strip()] = value.strip()
-		return ret
-
-
-	def _binlog_info(self, filename=None):
-		if not filename:
-			filename = self._latest_backup_dir() + '/xtrabackup_binlog_info'
-		return map(string.strip, open(filename).read().split(' '))
-
-
-class XtrabackupBackup(XtrabackupMixin, backup.Backup):
+class XtrabackupBackup(backup.Backup):
 	default_config = backup.Backup.default_config.copy()
 	default_config.update({
 		'backup_type': 'full',	
@@ -158,6 +130,7 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 				'incremental_lsn': from_lsn
 			})
 
+		exc_info = None
 		try:
 			innobackupex(self.backup_dir, 
 					user=__mysql__['root_user'], 
@@ -167,7 +140,8 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 			chkpoints = self._checkpoints()
 			to_lsn = chkpoints['to_lsn']
 			from_lsn = chkpoints['from_lsn']
-			snapshot = None
+		except:
+			exc_info = sys.exc_info()
 		finally:
 			if self.volume:
 				try:
@@ -175,9 +149,11 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 				except:
 					msg = 'Failed to detach backup volume: %s'
 					LOG.warn(msg, sys.exc_info()[1])
-				snapshot = self.volume.snapshot(
-							self.description or 'MySQL xtrabackup', 
-							self.tags)
+		if exc_info:
+			raise exc_info[0], exc_info[1], exc_info[2]
+		snapshot = self.volume.snapshot(
+					self.description or 'MySQL xtrabackup', 
+					self.tags)
 
 		return backup.restore(
 				type='xtrabackup', 
@@ -191,7 +167,40 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 				snapshot=snapshot)
 
 
+	def _latest_backup_dir(self):
+		try:
+			name = sorted(os.listdir(self.backup_dir))[0]
+		except IndexError:
+			msg = 'Failed to find any previous backup in %s'
+			raise Error(msg, self.backup_dir)
+		else:
+			return os.path.join(self.backup_dir, name) 	
+
+	
+	def _checkpoints(self, filename=None):
+		if not filename:
+			filename = self._latest_backup_dir() + '/xtrabackup_checkpoints'
+		ret = {}
+		for line in open(filename):
+			key, value = line.split('=')
+			ret[key.strip()] = value.strip()
+		return ret
+
+
+	def _binlog_info(self, filename=None):
+		if not filename:
+			filename = self._latest_backup_dir() + '/xtrabackup_binlog_info'
+		return map(string.strip, open(filename).read().split(' '))
+
+
 class XtrabackupRestore(backup.Restore):
+	'''
+	Example:
+		rst = backup.restore(
+					type='xtrabackup', 
+					snapshot=dict(type='ebs', id='snap-12345678'))
+	'''
+
 	default_config = backup.Backup.default_config.copy()
 	default_config.update({
 		'log_file': None,
@@ -220,13 +229,20 @@ class XtrabackupRestore(backup.Restore):
 		
 		self._mysql_init.stop()				
 		try:
-			if self.snapshot and self.volume:
-				# Clone volume object
+			if self.snapshot:
 				LOG.info('Creating restore volume from snapshot')
-				rst_volume = storage2.volume(self.volume.config())
-				rst_volume.snap = self.snapshot
+				if self.volume:
+					# Clone volume object
+					rst_volume = storage2.volume(self.volume.config())
+					rst_volume.snap = self.snapshot
+				else:
+					self.snapshot = storage2.snapshot(self.snapshot)
+					rst_volume = storage2.volume(type=self.snapshot.type, 
+											snap=self.snapshot)
+				rst_volume.tags.update({'tmp': 1})
 				rst_volume.mpoint = self.backup_dir
 				rst_volume.ensure(mount=True)
+
 	
 			if not os.listdir(self.backup_dir):
 				msg = 'Failed to find any backups in %s'
@@ -259,7 +275,8 @@ class XtrabackupRestore(backup.Restore):
 			self._start_copyback()
 			try:
 				innobackupex(target_dir, copy_back=True)
-				coreutils.chown_r(self._my_defaults['datadir'], 'mysql', 'mysql')
+				coreutils.chown_r(self._my_defaults['datadir'], 
+								'mysql', 'mysql')
 				self.mysql_init.start()
 				self._commit_copyback()
 			except:
@@ -310,6 +327,31 @@ class XtrabackupRestore(backup.Restore):
 
 backup.backup_types['xtrabackup'] = XtrabackupBackup
 backup.restore_types['xtrabackup'] = XtrabackupRestore		
+
+
+class MySQLDumpBackup(backup.Backup):
+	'''
+	Example:
+		bak = backup.backup(
+				type='mysqldump',
+				cloudfs_dir='s3://scalr-1a8f341e/backups/mysql/1265/')
+		bak.run()
+	'''
+
+	default_config = backup.Backup.default_config.copy()
+	default_config.update({
+		'cloudfs_dir': None,
+		'file_per_database': True,
+		'tmp_dir': __mysql__['tmp_dir'],
+		'chunk_size': __mysql__['mysqldump_chunk_size']
+	})
+
+
+	def _run(self):
+		pass
+
+
+backup.backup_types['mysqldump'] = MySQLDumpBackup
 
 
 class User(cdo.ConfigDriven):
