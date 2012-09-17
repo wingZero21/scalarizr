@@ -8,6 +8,10 @@ class ConfigDriven(object):
 	_config = None
 	initial_config = None
 
+	error_messages = {
+		'empty_attr': 'Attribute should be specified: %s',
+		'empty_param': 'Parameter should be specified: %s'
+	}
 
 	def __init__(self, **kwds):
 		if not self._config:
@@ -54,3 +58,7 @@ class ConfigDriven(object):
 	
 	def __hasattr__(self, name):
 		return name in self.__dict__['_config']
+
+	def _check_attr(self, name):
+		assert hasattr(self, name) and getattr(self, name),  \
+				self.error_messages['empty_attr'] % name

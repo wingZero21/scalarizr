@@ -19,12 +19,11 @@ class Base(cdo.ConfigDriven):
 		'id': None
 	}
 
-	error_messages = {
-		'empty_attr': 'Attribute should be specified: %s',
-		'empty_param': 'Parameter should be specified: %s',
+	error_messages = cdo.ConfigDriven.error_messages.copy()
+	error_messages.update({
 		'restore_unsupported': 'Restores from snapshot not supported '
 								'by this volume type: %s',
-	}
+	})
 
 
 	def _genid(self, prefix=''):

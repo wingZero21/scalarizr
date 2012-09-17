@@ -1,5 +1,8 @@
 
 import os
+import sys
+import string
+import logging
 
 from scalarizr import linux, storage2
 from scalarizr.linux import coreutils, pkgmgr
@@ -7,6 +10,15 @@ from scalarizr.node import __node__
 from scalarizr.services import mysql as mysql_svc
 from scalarizr.services import backup
 from scalarizr.libs import cdo
+import shutil
+import glob
+
+
+LOG = logging.getLogger(__name__)
+
+
+class Error(Exception):
+	pass
 
 
 __behavior__ = 'percona' \
@@ -81,16 +93,44 @@ backup.backup_types['snap_mysql'] = MySQLSnapBackup
 backup.restore_types['snap_mysql'] = MySQLSnapRestore
 
 
-class XtrabackupBackup(backup.Backup):
+class XtrabackupMixin(object):
+
+	def _latest_backup_dir(self):
+		try:
+			name = sorted(os.listdir(self.backup_dir))[0]
+		except IndexError:
+			msg = 'Failed to find any previous backup in %s'
+			raise Error(msg, self.backup_dir)
+		else:
+			return os.path.join(self.backup_dir, name) 	
+
+	
+	def _checkpoints(self, filename=None):
+		if not filename:
+			filename = self._latest_backup_dir() + '/xtrabackup_checkpoints'
+		ret = {}
+		for line in open(filename):
+			key, value = line.split('=')
+			ret[key.strip()] = value.strip()
+		return ret
+
+
+	def _binlog_info(self, filename=None):
+		if not filename:
+			filename = self._latest_backup_dir() + '/xtrabackup_binlog_info'
+		return map(string.strip, open(filename).read().split(' '))
+
+
+class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 	default_config = backup.Backup.default_config.copy()
 	default_config.update({
 		'backup_type': 'full',	
 		# Allowed: full | incremental
 		'from_lsn': None,
 		# Allowed: int. Log sequence number to start from
-		'backup_dir': '/mnt/dbbackup'
+		'backup_dir': '/mnt/dbbackup',
 		# Directory to store backup files
-		'backup_volume': None
+		'volume': None
 		# Volume to ensure and mount to 'backup_dir'.
 		# After backup completion it will be snapshoted and
 		# snapshot will be available in Restore configuration
@@ -98,10 +138,12 @@ class XtrabackupBackup(backup.Backup):
 
 	
 	def _run(self):
-		if self.backup_volume:
-			self.backup_volume = storage2.volume(self.backup_volume)
-			self.backup_volume.mpoint = self.backup_dir
-			self.backup_volume.ensure(mount=True)
+		if self.volume:
+			self.volume = storage2.volume(self.volume)
+			if self.tags:
+				self.volume.tags = self.tags
+			self.volume.mpoint = self.backup_dir
+			self.volume.ensure(mount=True)
 		else:
 			os.makedirs(self.backup_dir)
 
@@ -109,9 +151,8 @@ class XtrabackupBackup(backup.Backup):
 		if self.backup_type == 'incremental':
 			from_lsn = self.from_lsn
 			if not from_lsn:
-				dir_ = self._latest_backup_dir()
-				# TODO: find LSN in backup_dir
-				from_lsn = None
+				checkpoints = self._checkpoints()
+				from_lsn = checkpoints['to_lsn']
 			kwds.update({
 				'incremental': True,
 				'incremental_lsn': from_lsn
@@ -122,17 +163,21 @@ class XtrabackupBackup(backup.Backup):
 					user=__mysql__['root_user'], 
 					password=__mysql__['root_password'],
 					**kwds)
-			# TODO: find binary file/pos
-			log_file = log_pos = None
-			# TODO: find from_lsn/to_lsn
-			from_lsn = to_lsn = None
+			log_file, log_pos = self._binlog_info()
+			chkpoints = self._checkpoints()
+			to_lsn = chkpoints['to_lsn']
+			from_lsn = chkpoints['from_lsn']
+			snapshot = None
 		finally:
-			if self.backup_volume:
+			if self.volume:
 				try:
-					self.backup_volume.detach()
+					self.volume.detach()
 				except:
 					msg = 'Failed to detach backup volume: %s'
 					LOG.warn(msg, sys.exc_info()[1])
+				snapshot = self.volume.snapshot(
+							self.description or 'MySQL xtrabackup', 
+							self.tags)
 
 		return backup.restore(
 				type='xtrabackup', 
@@ -142,15 +187,125 @@ class XtrabackupBackup(backup.Backup):
 				to_lsn=to_lsn,
 				backup_type=self.backup_type,
 				backup_dir=self.backup_dir,
-				backup_volume=self.backup_volume)
-
-
-	def _latest_backup_dir(self):
-		pass
+				volume=self.volume,
+				snapshot=snapshot)
 
 
 class XtrabackupRestore(backup.Restore):
-	pass
+	default_config = backup.Backup.default_config.copy()
+	default_config.update({
+		'log_file': None,
+		'log_pos': None,
+		'from_lsn': None,
+		'to_lsn': None,
+		'backup_type': None,
+		'backup_dir': '/mnt/dbbackup',
+		'volume': None,
+		'snapshot': None
+	})
+
+	def __init__(self, **kwds):
+		self._mysql_init = mysql_svc.MysqlInitScript()
+		self._data_dir = None
+		self._binlog_dir = None
+		self._log_bin = None
+
+	def _run(self):
+		rst_volume = None
+		exc_info = None
+		my_defaults = my_print_defaults('mysqld')
+		self._data_dir = my_defaults['datadir']
+		self._log_bin = self._my_defaults['log_bin']
+		self._binlog_dir = os.path.dirname(self._log_bin)
+		
+		self._mysql_init.stop()				
+		try:
+			if self.snapshot and self.volume:
+				# Clone volume object
+				LOG.info('Creating restore volume from snapshot')
+				rst_volume = storage2.volume(self.volume.config())
+				rst_volume.snap = self.snapshot
+				rst_volume.mpoint = self.backup_dir
+				rst_volume.ensure(mount=True)
+	
+			if not os.listdir(self.backup_dir):
+				msg = 'Failed to find any backups in %s'
+				raise Error(msg, self.backup_dir)
+			
+			backups = sorted(os.listdir(self.backup_dir))
+			LOG.info('Preparing the base backup')
+			base = backups.pop(0)
+			target_dir = os.path.join(self.backup_dir, base)
+			innobackupex(target_dir, 
+						apply_log=True, 
+						redo_only=True,
+						user=__mysql__['root_user'],
+						password=__mysql__['root_password'])
+			for inc in backups:
+				LOG.info('Preparing incremental backup %s', inc)
+				innobackupex(target_dir,
+							apply_log=True, 
+							redo_only=True, 
+							incremental_dir=os.path.join(self.backup_dir, inc),
+							user=__mysql__['root_user'],
+							password=__mysql__['root_password'])
+			LOG.info('Preparing the full backup')
+			innobackupex(target_dir, 
+						apply_log=True, 
+						user=__mysql__['root_user'],
+						password=__mysql__['root_password'])
+			
+			LOG.info('Copying backup to datadir')
+			self._start_copyback()
+			try:
+				innobackupex(target_dir, copy_back=True)
+				coreutils.chown_r(self._my_defaults['datadir'], 'mysql', 'mysql')
+				self.mysql_init.start()
+				self._commit_copyback()
+			except:
+				self._rollback_copyback()
+				raise
+		except:
+			exc_info = sys.exc_info()
+		finally:
+			if rst_volume:
+				LOG.info('Destroying restore volume')
+				try:
+					rst_volume.destroy()
+				except:
+					msg = 'Failed to destroy volume %s: %s'
+					LOG.warn(msg, rst_volume.id, sys.exc_info()[1])
+		if exc_info:
+			raise exc_info[0], exc_info[1], exc_info[2]
+
+
+	def _start_copyback(self):
+		src = self._data_dir
+		dst = src + '.bak'
+		LOG.debug('Backup %s -> %s', src, dst)
+		os.rename(src, dst)
+		for name in glob.glob(self._log_bin + '*'):
+			src = os.path.join(self._binlog_dir, name)
+			dst = src + '.bak'
+			LOG.debug('Backup %s -> %s', src, dst)
+			os.rename(src, dst)
+		os.makedirs(self._data_dir)				
+		
+	
+	def _commit_copyback(self):
+		shutil.rmtree(self._data_dir + '.bak')
+		for name in glob.glob(self._log_bin + '*.bak'):
+			os.remove(os.path.join(self._binlog_dir, name))
+	
+	
+	def _rollback_copyback(self):
+		if os.path.exists(self._data_dir):
+			shutil.rmtree(self._data_dir)
+		os.rename(self._data_dir + '.bak', self._data_dir)
+		for name in glob.glob(self._log_bin + '*.bak'):
+			dstname = os.path.splitext(name)[0]
+			shutil.move(os.path.join(self._binlog_dir, name), 
+						os.path.join(self._binlog_dir, dstname))
 
 
 backup.backup_types['xtrabackup'] = XtrabackupBackup
