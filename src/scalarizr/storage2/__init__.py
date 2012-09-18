@@ -83,7 +83,7 @@ def concurrent_snapshot(volumes, description, tags=None, **kwds):
 	returns list of snapshot in correct order
 	'''
 	results = []
-	def snapshot(index, volumes, description, tags=None, **kwds):
+	def snapshot(index, volume, description, tags=None, **kwds):
 		try:
 			snap = volume.snapshot(description, tags, **kwds)
 			results.append((1, index, snap))

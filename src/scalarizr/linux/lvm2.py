@@ -4,7 +4,9 @@ Created on Aug 28, 2012
 @author: marat
 '''
 
+import os
 import logging
+import base64
 import collections
 
 from scalarizr import linux
@@ -218,6 +220,14 @@ def vgremove(*volume_group_names, **long_kwds):
 		raise
 
 
+def vgcfgrestore(volume_group_name, **long_kwds):
+	return linux.system(linux.build_cmd_args(
+		executable='/sbin/vgcfgrestore',
+		long=long_kwds,
+		params=[volume_group_name]))
+
+
+
 def lvcreate(*params, **long_kwds):
 	return linux.system(linux.build_cmd_args(
 			executable='/sbin/lvcreate',
@@ -248,3 +258,19 @@ def lvremove(*logical_volume_paths, **long_kwds):
 		if e.returncode == 5:
 			raise NotFound()
 		raise
+
+
+def backup_vg_config(vg_name):
+	vgfile = '/etc/lvm/backup/%s' % os.path.basename(vg_name)
+	if os.path.exists(vgfile):
+		with open(vgfile) as f:
+			return base64.b64encode(f.read())
+	raise NotFound('Volume group %s not found' % vg_name)
+
+
+def dmsetup(command, device=None, **long_kwargs):
+	return linux.system(linux.build_cmd_args(
+		executable='/sbin/dmsetup',
+		short = [command, device or ''],
+		long=long_kwargs
+	))
