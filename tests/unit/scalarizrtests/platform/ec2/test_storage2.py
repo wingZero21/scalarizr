@@ -352,26 +352,28 @@ class TestEbsSnapshot(object):
 Ec2Eph = ec2storage.Ec2EphemeralVolume
 class TestEc2EphemeralVolume(object):
 
-	def _response(self, environ, start_response):
-		response_headers = [('Content-type','text/plain')]
-		if environ['PATH_INFO'].endswith('ephemeral3'):
-			status = '404 Not Found'
+	def setup(self, *args, **kwargs):
+		def response(environ, start_response):
+			response_headers = [('Content-type','text/plain')]
+			if environ['PATH_INFO'].endswith('ephemeral3'):
+				status = '404 Not Found'
+				start_response(status, response_headers)
+				return []
+			else:
+				status = '200 OK'
 			start_response(status, response_headers)
-			return []
-		else:
-			status = '200 OK'
-		start_response(status, response_headers)
-		return ['/dev/sdb']
+			return ['/dev/sdb']
+		wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : response)
+
 
 	def test_ensure(self, *args, **kwargs):
-		wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
 		eph = Ec2Eph(name='ephemeral0')
 		eph.ensure()
 		assert eph.device == '/dev/sdb'
 
 	@mock.patch.object(ec2storage, 'mod_storage2')
 	def test_ensure_rhel(self, s, *args, **kwargs):
-		wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
+		#wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
 		eph = Ec2Eph(name='ephemeral0')
 		s.RHEL_DEVICE_ORDERING_BUG = True
 		eph.ensure()
@@ -379,7 +381,7 @@ class TestEc2EphemeralVolume(object):
 
 	@raises(StorageError)
 	def test_ensure_metadata_server_error(self):
-		wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
+		#wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
 		eph = Ec2Eph(name='ephemeral3')
 		eph.ensure()
 
