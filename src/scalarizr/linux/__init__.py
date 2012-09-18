@@ -133,7 +133,9 @@ class __os(dict):
 				
 		if not 'name' in self:
 			self['name'] = 'Unknown {0}'.format(self['kernel'])
-			self['family'] = 'Unknown'		
+			self['family'] = 'Unknown'
+		if not 'family' in self:
+			self['family'] = 'Unknown'
 
 	def _detect_kernel(self):
 		pass

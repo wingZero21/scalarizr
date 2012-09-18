@@ -132,15 +132,31 @@ class TestXtrabackupBackup(object):
 
 
 	def test_checkpoints(self, *args):
-		pass
+		fixtures_path = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', 'fixtures', 'services', 'mysql', 'dbbackup',
+		                                              '2012-09-18_09-06-49'))
+		bak = backup.backup(
+			type='xtrabackup')
+		mock.patch.object(bak, '_latest_backup_dir', return_value=fixtures_path).start()
+		assert bak._checkpoints() == {'backup_type': 'full-backuped', 'to_lsn': '1597945', 'last_lsn': '1597945', 'from_lsn': '0'}
+		bak._latest_backup_dir.assert_called_once()
 
 
 	def test_binlog_info(self, *args):
-		pass
+		fixtures_path = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', 'fixtures', 'services', 'mysql', 'dbbackup',
+		                                              '2012-09-18_09-06-49'))
+		bak = backup.backup(
+			type='xtrabackup')
+		mock.patch.object(bak, '_latest_backup_dir', return_value=fixtures_path).start()
+		assert bak._binlog_info() == ['binlog.000009', '192']
+		bak._latest_backup_dir.assert_called_once()
 
 
 	def test_latest_backup_dir(self, *args):
-		pass
+		fixtures_path = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', 'fixtures', 'services', 'mysql', 'dbbackup'))
+		bak = backup.backup(
+			type='xtrabackup')
+		bak.backup_dir = fixtures_path
+		assert bak._latest_backup_dir() == os.path.join(fixtures_path, '2012-09-18_09-06-49')
 
 
 @mock.patch.object(mysql2, 'my_print_defaults',

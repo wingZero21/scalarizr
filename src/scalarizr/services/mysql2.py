@@ -188,7 +188,8 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 
 	def _latest_backup_dir(self):
 		try:
-			name = sorted(os.listdir(self.backup_dir))[0]
+			dirs = filter(lambda x: not x.startswith('.'), os.listdir(self.backup_dir))
+			name = sorted(dirs)[0]
 		except IndexError:
 			msg = 'Failed to find any previous backup in %s'
 			raise Error(msg, self.backup_dir)
@@ -209,7 +210,7 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 	def _binlog_info(self, filename=None):
 		if not filename:
 			filename = self._latest_backup_dir() + '/xtrabackup_binlog_info'
-		return map(string.strip, open(filename).read().split(' '))
+		return map(string.strip, open(filename).read().split('	'))
 
 
 class XtrabackupRestore(XtrabackupMixin, backup.Restore):
