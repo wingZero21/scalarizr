@@ -7,6 +7,12 @@ Created on Sep 4, 2012
 import mock
 from nose.tools import raises
 
+from wsgi_intercept.urllib2_intercept import install_opener
+install_opener()
+import wsgi_intercept
+
+from scalarizr.storage2 import StorageError
+from scalarizr.storage2.volumes import base
 from scalarizr.platform.ec2 import storage2 as ec2storage
 from scalarizr.linux import coreutils
 
@@ -314,28 +320,28 @@ EbsSnapshot = ec2storage.EbsSnapshot
 class TestEbsSnapshot(object):
 
 	@mock.patch.object(EbsSnapshot, '_ebs_snapshot')
-	def test_status(self, _ebs_snapshot, _connect_ec2):
+	def test_status(self, _ebs_snapshot, _connect_ec2, *args, **kwargs):
 		snap = EbsSnapshot(id='vol-123456ab')
 		snapshot = mock.Mock(id='vol-123456ab')
 		snapshot.update.return_value = 'pending'
 		_ebs_snapshot.return_value = snapshot
-		assert snap.status() == 'in-progress'
+		assert snap.status() == base.Snapshot.IN_PROGRESS
 		_ebs_snapshot.assert_called_once_with('vol-123456ab')
 		snapshot.update.assert_called_with()
 		snapshot.update.return_value = 'available'
-		assert snap.status() == 'completed'
+		assert snap.status() == base.Snapshot.COMPLETED
 		snapshot.update.return_value = 'error'
-		assert snap.status() == 'failed'
+		assert snap.status() == base.Snapshot.FAILED
 
 
 	@raises(AssertionError)
-	def test_status_no_connection(self, _connect_ec2):
+	def test_status_no_connection(self, _connect_ec2, *args, **kwargs):
 		_connect_ec2.return_value = None
 		snap = EbsSnapshot(id='vol-123456ab')
 		snap.status()
 
 
-	def test_destroy(self, _connect_ec2):
+	def test_destroy(self, _connect_ec2, *args, **kwargs):
 		snap = EbsSnapshot(id='vol-123456ab')
 		snap.destroy()
 		conn = _connect_ec2.return_value
@@ -343,13 +349,39 @@ class TestEbsSnapshot(object):
 
 
 
+Ec2Eph = ec2storage.Ec2EphemeralVolume
 class TestEc2EphemeralVolume(object):
-	# TODO: simulate 169.254.169.254 with wsgi_intercept 
-	def test_ensure(self):
-		pass
-	
+
+	def _response(self, environ, start_response):
+		response_headers = [('Content-type','text/plain')]
+		if environ['PATH_INFO'].endswith('ephemeral3'):
+			status = '404 Not Found'
+			start_response(status, response_headers)
+			return []
+		else:
+			status = '200 OK'
+		start_response(status, response_headers)
+		return ['/dev/sdb']
+
+	def test_ensure(self, *args, **kwargs):
+		wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
+		eph = Ec2Eph(name='ephemeral0')
+		eph.ensure()
+		assert eph.device == '/dev/sdb'
+
+	@mock.patch.object(ec2storage, 'mod_storage2')
+	def test_ensure_rhel(self, s, *args, **kwargs):
+		wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
+		eph = Ec2Eph(name='ephemeral0')
+		s.RHEL_DEVICE_ORDERING_BUG = True
+		eph.ensure()
+		assert eph.device == '/dev/xvdf'
+
+	@raises(StorageError)
 	def test_ensure_metadata_server_error(self):
-		pass
+		wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
+		eph = Ec2Eph(name='ephemeral3')
+		eph.ensure()
 
 
 	
