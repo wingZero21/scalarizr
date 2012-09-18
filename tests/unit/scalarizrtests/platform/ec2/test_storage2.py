@@ -319,13 +319,13 @@ class TestEbsSnapshot(object):
 		snapshot = mock.Mock(id='vol-123456ab')
 		snapshot.update.return_value = 'pending'
 		_ebs_snapshot.return_value = snapshot
-		assert snap.status() == 'IN PROGRESS'
+		assert snap.status() == 'in-progress'
 		_ebs_snapshot.assert_called_once_with('vol-123456ab')
 		snapshot.update.assert_called_with()
 		snapshot.update.return_value = 'available'
-		assert snap.status() == 'COMPLETED'
+		assert snap.status() == 'completed'
 		snapshot.update.return_value = 'error'
-		assert snap.status() == 'FAILED'
+		assert snap.status() == 'failed'
 
 
 	@raises(AssertionError)
@@ -336,7 +336,11 @@ class TestEbsSnapshot(object):
 
 
 	def test_destroy(self, _connect_ec2):
-		pass
+		snap = EbsSnapshot(id='vol-123456ab')
+		snap.destroy()
+		conn = _connect_ec2.return_value
+		conn.delete_snapshot.assert_called_once_with(snap.id)
+
 
 
 class TestEc2EphemeralVolume(object):
