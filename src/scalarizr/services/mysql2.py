@@ -221,6 +221,11 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 					snapshot=dict(type='ebs', id='snap-12345678'))
 	'''
 
+	features = backup.Restore.features.copy()
+	features.update({
+		'master_binlog_reset': True
+	})
+
 	default_config = backup.Backup.default_config.copy()
 	default_config.update({
 		'log_file': None,
@@ -251,7 +256,6 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 		self._log_bin = my_defaults['log_bin']
 		self._binlog_dir = os.path.dirname(self._log_bin)
 		
-		self._mysql_init.stop()				
 		try:
 			if self.snapshot:
 				LOG.info('Creating restore volume from snapshot')
@@ -296,6 +300,7 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 						password=__mysql__['root_password'])
 			
 			LOG.info('Copying backup to datadir')
+			self._mysql_init.stop()
 			self._start_copyback()
 			try:
 				innobackupex(target_dir, copy_back=True)
@@ -370,6 +375,11 @@ class MySQLDumpBackup(backup.Backup):
 		'chunk_size': __mysql__['mysqldump_chunk_size']
 	})
 
+	features = backup.Backup.features.copy()
+	features.update({
+		'start_slave': False
+	})
+
 
 	def _run(self):
 		pass
@@ -431,3 +441,43 @@ def mysqldump(*databases, **long_kwds):
 	return linux.system(cmd, **kwds)
 
 
+def mysqlbinlog(log_file, **log_kwds):
+	return linux.system(linux.build_cmd_args(
+			executable='/usr/bin/mysqlbinlog',
+			long=long_kwds,
+			params=[log_file]))
+
+
+def binlog_head():
+	'''
+	Returns the first binary log file position
+	Example:
+		>> binlog_head()
+		>> ('binlog.000001', 107)
+	'''
+	my_defaults = my_print_defaults('mysqld')
+	binlog_dir = os.path.dirname(my_defaults['log_bin']) \
+				if my_defaults['log_bin'][0] == '/' \
+				else my_defaults['datadir']
+	binlog_index = os.path.join(binlog_dir, 
+					os.path.basename(my_default['log_bin'])) + '.index'
+	with open(binlog_index) as fp:
+		binlog_1 = fp.readline().strip()
+		binlog_1 = os.path.join(binlog_dir, binlog_1)
+	
+	# FORMAT_DESCRIPTION_EVENT minimum length
+	# @see http://dev.mysql.com/doc/internals/en/binary-log-versions.html
+	stop_position = 91 
+	out = mysqlbinlog(binlog_1, verbose=True, 
+					stop_position=stop_position)[0]
+	end_log_pos_re = re.compile(r'end_log_pos\s+(\d+)')
+	for line in out.splitlines():
+		m = end_log_pos_re.match(line)
+		if m:
+			return (os.path.basename(binlog_1), m.group(1))
+
+	msg = 'Failed to read FORMAT_DESCRIPTION_EVENT ' \
+			'at the top of the %s' % binlog_1
+	raise Error(msg)
+
+	

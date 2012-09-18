@@ -984,6 +984,12 @@ class MysqlHandler(DBMSRHandler):
 			with op.step(self._step_create_storage):		
 				if 'restore' in __mysql__:
 					__mysql__['restore'].run()
+					if __mysql__['restore'].features['master_binlog_reset']:
+						self.mysql.service.start()
+						self.mysql.service.stop()
+						log_file, log_pos = mysql2_svc.binlog_head()
+						__mysql__['restore'].log_file = log_file
+						__mysql__['restore'].log_pos = log_pos
 				'''	
 				if self.storage_snap:
 					log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
@@ -1032,13 +1038,13 @@ class MysqlHandler(DBMSRHandler):
 		else:
 			with op.step(self._step_innodb_recovery):
 				self._copy_debian_cnf_back()
-				self._innodb_recovery()	
-				self.mysql.service.start()		
+				if 'restore' in __mysql__ \
+					and __mysql__['restore'].type != 'xtrabackup':
+					self._innodb_recovery()	
+					self.mysql.service.start()
 		
 		if 'restore' not in __mysql__:
 			with op.step(self._step_create_data_bundle):
-				# TODO: start here!
-				# Get binary logfile, logpos and create storage snapshot
 				bak = backup.backup(__mysql__['backup'])
 				__mysql__['restore'] = bak.run()
 				'''
@@ -1056,15 +1062,21 @@ class MysqlHandler(DBMSRHandler):
 
 		with op.step(self._step_collect_hostup_data):
 			# Update HostUp message
-			msg_data = dict()
-			for key in ('replication_master', 'root_password', 
-					'repl_password', 'stat_password', 'restore'):
-				msg_data[key] = __mysql__[key]
-			msg_data['log_file'] = __mysql__['restore'].log_file
-			msg_data['log_pos'] = __mysql__['restore'].log_pos
-			if __mysql__['restore'].type == 'snap_mysql':
-				msg_data['snapshot_config'] = dict(__mysql__['restore'].snapshot)
-			msg_data['volume_config'] = dict(__mysql__['volume'])
+			msg_data = dict(
+				replication_master=__mysql__['replication_master'],
+				root_password=__mysql__['root_password'],
+				repl_password=__mysql__['repl_password'],
+				stat_password=__mysql__['stat_password'],
+				restore=dict(__mysql__['restore']),
+				volume=dict(__mysql__['volume']),
+				# Compatibility
+				log_file=__mysql__['restore'].log_file,
+				log_pos=__mysql__['restore'].log_pos,
+				volume_config=dict(__mysql__['volume']),
+				snapshot_config=dict(__mysql__['restore'].snapshot) \
+								if __mysql__['restore'].type == 'snap_mysql' \
+								else None
+			)
 			
 			message.db_type = __mysql__['behavior']
 			setattr(message, __mysql__['behavior'], msg_data)

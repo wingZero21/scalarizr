@@ -110,7 +110,7 @@ class Task(pubsub.Observable, cdo.ConfigDriven):
 
 class Backup(Task):
 	features = {
-		'boot_slave': True
+		'start_slave': True
 	}
 
 	default_config = {
@@ -121,6 +121,18 @@ class Backup(Task):
 
 
 class Restore(Task):
+
+	features = {
+		'master_binlog_reset': False
+	}
+	'''
+	When 'master_binlog_reset' = False, 
+	rolling this restore on Master causes replication binary log reset. 
+	Slaves should start from the binary log head. Detecting the first 
+	position in binary log is implementation dependent and Master is 
+	responsible for this.
+	'''
+
 
 	default_config = {
 		'type': 'base'
