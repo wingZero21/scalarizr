@@ -1,27 +1,25 @@
 
-import sys
+import os
 
 import mock
+from nose.tools import raises
 
+from scalarizr import storage2
+from scalarizr.linux import coreutils
 from scalarizr.services import backup
+__node__mock = mock.patch.dict('scalarizr.node.__node__', {
+				'behavior': ['percona'],
+				'percona': {
+					'root_user': 'scalr',
+					'root_password': 'abc'
+				}})
+__node__mock.start()
+from scalarizr.services import mysql2
 
 
 @mock.patch('scalarizr.storage2.volume')
 @mock.patch('scalarizr.linux.coreutils.sync')
 class TestMySQLSnapBackupAndRestore(object):
-	@classmethod
-	def setup_class(cls):
-		cls.patcher = mock.patch.dict('scalarizr.node.__node__', 
-						{'percona': {}, 'behavior': ['percona']})
-		cls.patcher.start()
-		from scalarizr.services import mysql2
-		cls.mysql2 = mysql2
-
-
-	@classmethod
-	def teardown_class(cls):
-		cls.patcher.stop()
-
 
 	def setup(self):
 		self.bak = backup.backup(type='snap_mysql')
@@ -39,8 +37,8 @@ class TestMySQLSnapBackupAndRestore(object):
 
 
 	def test_correct_type(self, *args, **kwds):
-		assert type(self.bak) == self.mysql2.MySQLSnapBackup
-		assert type(self.rst) == self.mysql2.MySQLSnapRestore
+		assert type(self.bak) == mysql2.MySQLSnapBackup
+		assert type(self.rst) == mysql2.MySQLSnapRestore
 
 
 	def test_freeze(self, *args, **kwds):
@@ -65,37 +63,130 @@ class TestMySQLSnapBackupAndRestore(object):
 		vol_factory.return_value.mount.assert_called_with()
 
 
+@mock.patch.object(mysql2, 'my_print_defaults',
+				return_value={'datadir': '/mnt/dbstorage/mysql-data', 
+							'log_bin': '/mnt/dbstorage/mysql-misc/binlog'})
+@mock.patch.object(mysql2, 'innobackupex')
 class TestXtrabackupBackup(object):
-	def test_run_full(self):
+
+	@raises(AssertionError)
+	def test_run_invalid_backup_type(self, *args):
+		bak = backup.backup(
+				type='xtrabackup',
+				backup_type=None)
+		bak.run()
+
+	@mock.patch.object(os.path, 'exists', return_value=False)
+	@mock.patch.object(os, 'makedirs')
+	def test_run_full(self, md, ex, innobackupex, *args):
+		bak = backup.backup(
+				type='xtrabackup')
+		self._patch_bak(bak)
+		rst = bak.run()
+		
+		assert rst.type == 'xtrabackup'
+		assert rst.backup_type == 'full'
+		assert rst.log_file == 'binlog.000003'
+		assert rst.log_pos == '107'
+		assert rst.from_lsn == '0'
+		assert rst.to_lsn == '53201'
+		innobackupex.assert_called_with(bak.backup_dir, 
+						user=mock.ANY, password=mock.ANY)
+		bak._checkpoints.assert_called_with()
+		bak._binlog_info.assert_called_with()
+
+
+	@mock.patch.object(os.path, 'exists', return_value=False)
+	@mock.patch.object(os, 'makedirs')
+	def test_run_incremental(self, md, ex, innobackupex, *args):
+		bak = backup.backup(
+					type='xtrabackup',
+					backup_type='incremental',					
+					from_lsn='23146')
+		self._patch_bak(bak)
+		rst = bak.run()
+
+		assert rst.type == 'xtrabackup'
+		assert rst.backup_type == 'incremental'
+		assert rst.log_file == 'binlog.000003'
+		assert rst.log_pos == '107'
+		assert rst.from_lsn == '0'
+		assert rst.to_lsn == '53201'
+		innobackupex.assert_called_with(bak.backup_dir, 
+						incremental=True, incremental_lsn='23146',
+						user=mock.ANY, password=mock.ANY)
+		bak._checkpoints.assert_called_with()
+		bak._binlog_info.assert_called_with()
+	
+
+	def _patch_bak(self, bak):
+		mock.patch.object(bak, '_mysql_init')
+		mock.patch.object(bak, '_checkpoints', 
+					return_value={'to_lsn': '53201', 'from_lsn': '0'}).start()
+		mock.patch.object(bak, '_binlog_info', 
+					return_value=('binlog.000003', '107')).start()
+		
+
+	def test_run_with_volume(self, *args):
 		pass
 
-	def test_run_incremental(self):
-		pass
 
-	def test_run_with_volume(self):
-		pass
-
-	def test_checkpoints(self):
-		pass
-
-	def test_binlog_info(self):
+	def test_checkpoints(self, *args):
 		pass
 
 
+	def test_binlog_info(self, *args):
+		pass
+
+
+	def test_latest_backup_dir(self, *args):
+		pass
+
+
+@mock.patch.object(mysql2, 'my_print_defaults',
+				return_value={'datadir': '/mnt/dbstorage/mysql-data', 
+							'log_bin': '/mnt/dbstorage/mysql-misc/binlog'})
 class TestXtrabackupRestore(object):
-	def test_tmp_volume_creation_only_snapshot(self):
+	def test_tmp_volume_creation_only_snapshot(self, *args):
 		pass
 
-	def test_tmp_volume_creation_both_volume_and_snapshot(self):
+	def test_tmp_volume_creation_both_volume_and_snapshot(self, *args):
 		pass
 
-	def test_run(self):
+
+	@mock.patch.object(os, 'listdir', 
+				return_value=['2012-09-16_11-54', '2012-09-15_18-06'])
+	@mock.patch.object(coreutils, 'chown_r')
+	@mock.patch.object(mysql2, 'innobackupex')
+	def test_run(self, innobackupex, chown_r, *args):
+		rst = backup.restore(type='xtrabackup')
+		mock.patch.object(rst, '_mysql_init').start()
+		mock.patch.object(rst, '_start_copyback').start()
+		mock.patch.object(rst, '_commit_copyback').start()
+		mock.patch.object(rst, '_rollback_copyback').start()
+		rst.run()
+
+		rst._mysql_init.stop.assert_called_with()
+		calls = innobackupex.call_args_list
+		# Prepare base
+		assert calls[0] == ((os.path.join(rst.backup_dir, '2012-09-15_18-06'), ), 
+				dict(apply_log=True, redo_only=True, user=mock.ANY, password=mock.ANY))
+		# Prepare inc
+		assert calls[1] == ((os.path.join(rst.backup_dir, '2012-09-15_18-06'), ), 
+				dict(incremental_dir=os.path.join(rst.backup_dir, '2012-09-16_11-54'), 
+					apply_log=True, redo_only=True, 
+					user=mock.ANY, password=mock.ANY))
+		# Prepare full
+		assert calls[2] == ((os.path.join(rst.backup_dir, '2012-09-15_18-06'), ), 
+				dict(apply_log=True, user=mock.ANY, password=mock.ANY))
+		chown_r.assert_called_with(rst._data_dir, 'mysql', 'mysql')
+		rst._mysql_init.start.assert_called_with()
+		
+
+	def test_copyback_start_commit(self, *args):
 		pass
 
-	def test_copyback_start_commit(self):
-		pass
-
-	def test_copyback_start_rollback(self):
+	def test_copyback_start_rollback(self, *args):
 		pass
 
 

@@ -1,6 +1,6 @@
 from __future__ import with_statement
 
-
+import os
 import re
 import ConfigParser
 import sys
@@ -196,7 +196,7 @@ class Attr(Store):
 
 	def __getitem__(self, key):
 		try:
-			if isisntance(self.module, basestring):
+			if isinstance(self.module, basestring):
 				__import__(self.module)
 				self.module = sys.modules[self.module]
 			if not self.getter:
