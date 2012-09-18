@@ -96,9 +96,9 @@ class GcePlatform(Platform):
 			self._userdata = dict()
 			resp = self._get_metadata('attributes/')
 			keys = resp.strip().split()
-			for key in keys:
-				value = self._get_metadata('attributes/%s' % key)
-				self._userdata[key] = value
+			for k in keys:
+				value = self._get_metadata('attributes/%s' % k)
+				self._userdata[k] = value
 
 		return self._userdata.get(key) if key else self._userdata
 
