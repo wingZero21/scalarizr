@@ -7,33 +7,39 @@
 # Predefined chains:
 # INPUT FORWARD OUTPUT 	PREROUTING 	POSTROUTING
 
+from collections import OrderedDict
+from copy import copy
+import re
+from contextlib import contextmanager
+
 from scalarizr import linux
 
-IPTABLES_EXEC = '/sbin/iptables'
+
+AUTO_PERSISTENCE = False
+IPTABLES_BIN = '/sbin/iptables'
+IPTABLES_CONF = '/home/vladimir/test2/dump'
+
 
 class Chains(object):
 	#? singleton
 	# FIXME: use long args
 	# replace /sbin/iptables with IPTABLES_EXEC 
 
-	container = {}
+	_container = {}
 
 	def __getitem__(self, name):
-		try:
-			return self.container[name]
-		except KeyError:
-			self.container[name] = Chain(name)
-			return self.container[name]
+		return self._container[name]
 
 	def add(self, name):
-		print linux.build_cmd_args(executable='/sbin/iptables', short=['-N', name])
+		print linux.build_cmd_args(executable=IPTABLES_BIN, short=['-N', name])
+		self._container[name] = Chain(name)
 
 	def remove(self, name, force=False):
 		if force:
-			print linux.build_cmd_args(executable='/sbin/iptables', short=['-X', name])
+			print linux.build_cmd_args(executable=IPTABLES_BIN, short=['-F', name])
 			#? delete references
-		print linux.build_cmd_args(executable='/sbin/iptables', short=['-X', name])
-		# del container[name]
+		print linux.build_cmd_args(executable=IPTABLES_BIN, short=['-X', name])
+		del self._container[name]
 
 
 class Chain(object):
@@ -42,45 +48,176 @@ class Chain(object):
 	def __init__(self, chain):
 		self.name = chain
 
+	def _execute(self, short, long):
+		return linux.build_cmd_args(executable=IPTABLES_BIN, short=short, long=long)
+
+	def _rule_to_kwargs(self, rule):
+		_rule = copy(rule)
+
+		kwargs = OrderedDict()
+		for key in ("protocol", "match"):
+			if key in _rule:
+				kwargs[key] = _rule.pop(key)
+		kwargs.update(_rule)
+
+		return kwargs
+
 	def append(self, rule, persistent=False):
 		short = ['-A', self.name]
-		long = {}
-		for key, val in rule.items():
-			if key in ('protocol', 'match'):
-				short.extend(['--' + key, val])
-			else:
-				long[key] = val
-		print linux.build_cmd_args(executable='/sbin/iptables', short=short, long=long)
+		long = self._rule_to_kwargs(rule)
+		print self._execute(short, long)
+
+		if AUTO_PERSISTENCE or persistent:
+			Persistent.append(short, long)
 
 	def insert(self, index, rule, persistent=False):
-		pass
+		short = ['-I', self.name]
+		if index:
+			short.append(index)
+		long = self._rule_to_kwargs(rule)
+		print self._execute(short, long)
+
+		if AUTO_PERSISTENCE or persistent:
+			Persistent.insert(short, long)
 
 	def replace(self, index, rule, persistent=False):
-		pass
+		short = ['-R', self.name, index]
+		long = self._rule_to_kwargs(rule)
+		print self._execute(short, long)
+
+		if AUTO_PERSISTENCE or persistent:
+			Persistent.replace(short, long)
 
 	def remove(self, arg):
 		if isinstance(arg, int):
-			self._remove_by_index(arg)
+			short = ['-D', self.name, arg]
+			long = {}
 		elif isinstance(arg, dict):
-			self._remove_by_rule(arg)
+			short = ['-D', self.name]
+			long = self._rule_to_kwargs(arg)
+		print self._execute(short, long)
 
-	def _remove_by_index(self, index):
+	def list(self, numeric=False, table=None):
+		short = ['-L', self.name]
+		if numeric:
+			short.append('-n')
+		if table:
+			short.extend(['-t', table])
+		print self._execute(short, long={})
+
+
+def splitlist(lst, sep):
+	"""
+	splitlist(["word1", "word2", "and", "word3", "and", "word4"], "and")
+	->
+	[
+		["word1", "word2"],
+		["word3"],
+		["word4"],
+	]
+	"""
+	result = [[]]
+	for element in lst:
+		if element == sep:
+			result.append([])
+		else:
+			result[-1].append(element)
+	return result
+
+
+def joinlists(lst, sep):
+	"""
+	splitlist reverse
+	"""
+	result = []
+	for l in lst:
+		result.extend(l)
+		result.append(sep)
+	del result[-1]
+	return result
+
+
+class Persistent(object):
+
+	# TODO: persistent rule for non-persistent chain
+
+	@staticmethod
+	@contextmanager
+	def _modify_config(table_name="filter"):
+		"""
+		Yields list of strings from config's table section, excluding 'COMMIT'.
+		"""
+		## parse
+		with open(IPTABLES_CONF) as fd:
+			datalist = fd.read().splitlines()
+
+		# delete comments and empty/whitespace lines
+		datalist = filter(lambda x: not re.match(r'^(#|\s*$)', x), datalist)
+
+		# split datalist into list of tables + []
+		datalist = splitlist(datalist, 'COMMIT')
+
+		del datalist[-1]
+
+		## yield
+		for table in datalist:
+			if table[0][1:] == table_name:
+				yield table
+				break
+		else:
+			raise Exception("No such table")  # TODO: handle
+
+		## dump
+		datalist.append([])
+
+		datalist = joinlists(datalist, 'COMMIT')
+
+		datastring = '\n'.join(datalist) + '\n'
+
+		with open(IPTABLES_CONF, 'w') as fd:
+			fd.write(datastring)
+
+	@staticmethod
+	def append():
+		with Persistent._modify_config() as data:
+			print data
+
+	@staticmethod
+	def insert():
 		pass
 
-	def _remove_by_rule(self, rule):
+	@staticmethod
+	def replace():
 		pass
 
+
+
+Persistent.append()
+
+
+raise Exception("OK")
 
 chains = Chains()
 
 
-chains['TEST'].append({
+Chain('TEST').append({
 	'protocol': 'tcp',
 	'syn': True,
 	'dport': 23,
 	'match': 'connlimit',
 	'connlimit_above': 2,
 	'jump': 'REJECT'
+})
+
+
+Chain('TEST').insert(None, {
+	'table': 'nat',
+	'protocol': 'tcp',
+	'dport': 80,
+	'match': 'cpu',
+	'cpu': 0,
+	'jump': 'REDIRECT',
+	'to_port': 8080
 })
 
 
