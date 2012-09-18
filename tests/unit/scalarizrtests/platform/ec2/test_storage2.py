@@ -297,25 +297,45 @@ class TestEbsVolume(object):
 	
 	def test_destroy(self, _connect_ec2, *args):
 		vol = Ebs(type='ebs', id='vol-12345678')
-		snap = vol.destroy(True)
-		
-		assert snap
+		vol.destroy(True)
 		conn = _connect_ec2.return_value
 		conn.delete_volume.assert_called_once_with(vol.id)
 
-		
-	def test_destroy_no_connection(self, *args):
-		pass
+
+	@raises(AssertionError)
+	def test_destroy_no_connection(self, _connect_ec2, *args):
+		_connect_ec2.return_value = None
+		vol = Ebs(type='ebs', id='vol-12345678')
+		vol.destroy(True)
 
 
+EbsSnapshot = ec2storage.EbsSnapshot
+@mock.patch.object(EbsSnapshot, '_connect_ec2')
 class TestEbsSnapshot(object):
-	def test_status(self):
-		pass
-	
-	def test_status_no_connection(self):
-		pass
-	
-	def test_destroy(self):
+
+	@mock.patch.object(EbsSnapshot, '_ebs_snapshot')
+	def test_status(self, _ebs_snapshot, _connect_ec2):
+		snap = EbsSnapshot(id='vol-123456ab')
+		snapshot = mock.Mock(id='vol-123456ab')
+		snapshot.update.return_value = 'pending'
+		_ebs_snapshot.return_value = snapshot
+		assert snap.status() == 'IN PROGRESS'
+		_ebs_snapshot.assert_called_once_with('vol-123456ab')
+		snapshot.update.assert_called_with()
+		snapshot.update.return_value = 'available'
+		assert snap.status() == 'COMPLETED'
+		snapshot.update.return_value = 'error'
+		assert snap.status() == 'FAILED'
+
+
+	@raises(AssertionError)
+	def test_status_no_connection(self, _connect_ec2):
+		_connect_ec2.return_value = None
+		snap = EbsSnapshot(id='vol-123456ab')
+		snap.status()
+
+
+	def test_destroy(self, _connect_ec2):
 		pass
 
 
