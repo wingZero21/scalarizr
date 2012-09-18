@@ -152,7 +152,7 @@ class TestXtrabackupRestore(object):
 
 	def test_tmp_volume_creation_both_volume_and_snapshot(self, *args):
 		pass
-
+я 
 
 	@mock.patch.object(os, 'listdir', 
 				return_value=['2012-09-16_11-54', '2012-09-15_18-06'])
