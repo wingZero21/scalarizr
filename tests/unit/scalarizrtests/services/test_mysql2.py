@@ -117,7 +117,7 @@ class TestXtrabackupBackup(object):
 						user=mock.ANY, password=mock.ANY)
 		bak._checkpoints.assert_called_with()
 		bak._binlog_info.assert_called_with()
-	
+
 
 	def _patch_bak(self, bak):
 		mock.patch.object(bak, '_mysql_init')
@@ -125,10 +125,34 @@ class TestXtrabackupBackup(object):
 					return_value={'to_lsn': '53201', 'from_lsn': '0'}).start()
 		mock.patch.object(bak, '_binlog_info', 
 					return_value=('binlog.000003', '107')).start()
-		
 
-	def test_run_with_volume(self, *args):
-		pass
+
+	@mock.patch.object(storage2, 'volume')
+	@mock.patch.object(os.path, 'exists', return_value=False)
+	@mock.patch.object(os, 'makedirs')
+	def test_run_with_volume(self, md, ex, st2vol, innobackupex, *args):
+		ebs = mock.Mock(
+			id='vol-12345678',
+			size=1,
+			zone='us-east-1a',
+			**{'volume_state.return_value': 'available',
+			   'attachment_state.return_value': 'attaching'}
+		)
+		bak = backup.backup(
+			type='xtrabackup',
+			backup_type='incremental',
+			from_lsn='23146',
+			volume=ebs)
+		self._patch_bak(bak)
+		st2vol.return_value = ebs
+		rst = bak.run()
+		st2vol.assert_called_with(ebs)
+		md.asert_called_with(bak.backup_dir)
+		assert ebs.mpoint == bak.backup_dir
+		ebs.detach.assert_called_with()
+		ebs.snapshot.assert_called_with('MySQL xtrabackup', None)
+		assert rst.volume == ebs
+		assert rst.snapshot
 
 
 	def test_checkpoints(self, *args):
@@ -163,11 +187,60 @@ class TestXtrabackupBackup(object):
 				return_value={'datadir': '/mnt/dbstorage/mysql-data', 
 							'log_bin': '/mnt/dbstorage/mysql-misc/binlog'})
 class TestXtrabackupRestore(object):
-	def test_tmp_volume_creation_only_snapshot(self, *args):
-		pass
 
-	def test_tmp_volume_creation_both_volume_and_snapshot(self, *args):
-		pass
+	@mock.patch.object(os, 'listdir',
+	                   return_value=['2012-09-16_11-54', '2012-09-15_18-06'])
+	@mock.patch.object(coreutils, 'chown_r')
+	@mock.patch.object(mysql2, 'innobackupex')
+	@mock.patch.object(storage2, 'snapshot')
+	@mock.patch.object(storage2, 'volume')
+	def test_tmp_volume_creation_only_snapshot(self, ec2volume, ec2snapshot, *args):
+		snapshot = mock.Mock(id='vol-123456ab', type='base')
+		ebs = mock.Mock(
+			id='vol-12345678',
+			size=1,
+			zone='us-east-1a',
+			**{'volume_state.return_value': 'available',
+			   'attachment_state.return_value': 'attaching'}
+		)
+		ec2volume.return_value = ebs
+		ec2snapshot.return_value = snapshot
+		rst = backup.restore(type='xtrabackup', snapshot=snapshot)
+		mock.patch.object(rst, '_mysql_init').start()
+		mock.patch.object(rst, '_start_copyback').start()
+		mock.patch.object(rst, '_commit_copyback').start()
+		mock.patch.object(rst, '_rollback_copyback').start()
+		res = rst.run()
+		ec2volume.assert_called_with(snap=snapshot, type=snapshot.type)
+		ebs.destroy.assert_called_once_with()
+
+
+	@mock.patch.object(os, 'listdir',
+	                   return_value=['2012-09-16_11-54', '2012-09-15_18-06'])
+	@mock.patch.object(coreutils, 'chown_r')
+	@mock.patch.object(mysql2, 'innobackupex')
+	@mock.patch.object(storage2, 'snapshot')
+	@mock.patch.object(storage2, 'volume')
+	def test_tmp_volume_creation_both_volume_and_snapshot(self, ec2volume, ec2snapshot, *args):
+		snapshot = mock.Mock(id='vol-123456ab', type='base')
+		ebs = mock.Mock(
+			id='vol-12345678',
+			size=1,
+			zone='us-east-1a',
+			**{'volume_state.return_value': 'available',
+			   'attachment_state.return_value': 'attaching'}
+		)
+		ec2volume.return_value = ebs
+		ec2snapshot.return_value = snapshot
+		rst = backup.restore(type='xtrabackup', snapshot=snapshot, volume=ebs)
+		mock.patch.object(rst, '_mysql_init').start()
+		mock.patch.object(rst, '_start_copyback').start()
+		mock.patch.object(rst, '_commit_copyback').start()
+		mock.patch.object(rst, '_rollback_copyback').start()
+		res = rst.run()
+		ebs.config.assert_called_once_with()
+		ec2volume.assert_called_with(ebs.config())
+		ebs.destroy.assert_called_once_with()
 
 
 	@mock.patch.object(os, 'listdir', 
