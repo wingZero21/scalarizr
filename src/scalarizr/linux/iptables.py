@@ -8,209 +8,125 @@
 # INPUT FORWARD OUTPUT 	PREROUTING 	POSTROUTING
 
 from collections import OrderedDict
-from copy import copy
-import re
-from contextlib import contextmanager
 
 from scalarizr import linux
 
 
-AUTO_PERSISTENCE = False
+_PREDEFINED_CHAINS = (
+	"INPUT",
+	"FORWARD",
+	"OUTPUT",
+	"PREROUTING",
+	"POSTROUTING"
+)
 IPTABLES_BIN = '/sbin/iptables'
-IPTABLES_CONF = '/home/vladimir/test2/dump'
 
 
-class Chains(object):
-	#? singleton
-	# FIXME: use long args
-	# replace /sbin/iptables with IPTABLES_EXEC 
+def iptables(**long_kwds):
 
-	_container = {}
+	ordered_long = OrderedDict()
+	for key in ("protocol", "match"):
+		if key in long_kwds:
+			ordered_long[key] = long_kwds.pop(key)
+	ordered_long.update(long_kwds)
 
-	def __getitem__(self, name):
-		return self._container[name]
+	# TODO: deal with tuples
 
-	def add(self, name):
-		print linux.build_cmd_args(executable=IPTABLES_BIN, short=['-N', name])
-		self._container[name] = Chain(name)
-
-	def remove(self, name, force=False):
-		if force:
-			print linux.build_cmd_args(executable=IPTABLES_BIN, short=['-F', name])
-			#? delete references
-		print linux.build_cmd_args(executable=IPTABLES_BIN, short=['-X', name])
-		del self._container[name]
+	return linux.build_cmd_args(executable=IPTABLES_BIN, long=ordered_long)
 
 
-class Chain(object):
-	# FIXME: use long args
+def save():
+	'''
+	on RHEL call 'service iptables save'
+	on Ubuntu:
+		- touch or create /etc/network/if-pre-up.d/iptables.sh
+			$ cat /etc/network/if-pre-up.d/iptables.sh
+			#!/bin/bash
+			iptables-restore < /etc/iptables.rules
+		- iptables-save > /etc/iptables.rules
+	'''
+
+
+class _Chain(object):
 
 	def __init__(self, chain):
 		self.name = chain
+		self._ensure_existence()
 
-	def _execute(self, short, long):
-		return linux.build_cmd_args(executable=IPTABLES_BIN, short=short, long=long)
+	def _ensure_existence(self):
+		# TODO: ensure, not create
+		kwargs = {"new-chain": self.name}
+		return iptables(**kwargs)
 
-	def _rule_to_kwargs(self, rule):
-		_rule = copy(rule)
+	def _destroy(self, force):
+		if force:
+			iptables(flush=self.name)
+			#? delete references
+		destroy = {"--delete-chain": self.name}
+		iptables(**destroy)
 
-		kwargs = OrderedDict()
-		for key in ("protocol", "match"):
-			if key in _rule:
-				kwargs[key] = _rule.pop(key)
-		kwargs.update(_rule)
+	def append(self, rule):
+		return iptables(append=self.name, **rule)
 
-		return kwargs
-
-	def append(self, rule, persistent=False):
-		short = ['-A', self.name]
-		long = self._rule_to_kwargs(rule)
-		print self._execute(short, long)
-
-		if AUTO_PERSISTENCE or persistent:
-			Persistent.append(short, long)
-
-	def insert(self, index, rule, persistent=False):
-		short = ['-I', self.name]
+	def insert(self, index, rule):
 		if index:
-			short.append(index)
-		long = self._rule_to_kwargs(rule)
-		print self._execute(short, long)
+			insert = (self.name, index)
+		else:
+			insert = self.name
+		return iptables(insert=insert, **rule)
 
-		if AUTO_PERSISTENCE or persistent:
-			Persistent.insert(short, long)
-
-	def replace(self, index, rule, persistent=False):
-		short = ['-R', self.name, index]
-		long = self._rule_to_kwargs(rule)
-		print self._execute(short, long)
-
-		if AUTO_PERSISTENCE or persistent:
-			Persistent.replace(short, long)
+	def replace(self, index, rule):
+		return iptables(replace=(self.name, index), **rule)
 
 	def remove(self, arg):
 		if isinstance(arg, int):
-			short = ['-D', self.name, arg]
-			long = {}
+			delete = (self.name, arg)
+			rule = {}
 		elif isinstance(arg, dict):
-			short = ['-D', self.name]
-			long = self._rule_to_kwargs(arg)
-		print self._execute(short, long)
+			delete = self.name
+			rule = arg
+		return iptables(delete=delete, **rule)
 
 	def list(self, numeric=False, table=None):
-		short = ['-L', self.name]
+		optional = {}
 		if numeric:
-			short.append('-n')
+			optional["numeric"] = True
 		if table:
-			short.extend(['-t', table])
-		print self._execute(short, long={})
+			optional["table"] = table
+		return iptables(list=self.name, **optional)
 
 
-def splitlist(lst, sep):
-	"""
-	splitlist(["word1", "word2", "and", "word3", "and", "word4"], "and")
-	->
-	[
-		["word1", "word2"],
-		["word3"],
-		["word4"],
-	]
-	"""
-	result = [[]]
-	for element in lst:
-		if element == sep:
-			result.append([])
-		else:
-			result[-1].append(element)
-	return result
+class _Chains(object):
+
+	_predefined = _PREDEFINED_CHAINS
+	_container = dict(map(lambda name: (name, _Chain(name)), _predefined))
+
+	@classmethod
+	def __getitem__(cls, name):
+		return cls._container[name]
+
+	@classmethod
+	def add(cls, name):
+		assert name not in cls._predefined
+		cls._container[name] = _Chain(name)
+		#?? add to globals
+
+	@classmethod
+	def remove(cls, name, force=False):
+		assert name not in cls._predefined
+		cls._container.pop(name)._destroy(force)
 
 
-def joinlists(lst, sep):
-	"""
-	splitlist reverse
-	"""
-	result = []
-	for l in lst:
-		result.extend(l)
-		result.append(sep)
-	del result[-1]
-	return result
+chains = _Chains()
+globals().update(chains._container) #?
+#INPUT = chains["INPUT"]
+#FORWARD = chains["FORWARD"]
+#OUTPUT = chains["OUTPUT"]
+#PREROUTING = chains["PREROUTING"]
+#POSTROUTING = chains["POSTROUTING"]
 
 
-class Persistent(object):
-
-	# TODO: persistent rule for non-persistent chain
-
-	@staticmethod
-	@contextmanager
-	def _modify_config(table_name="filter"):
-		"""
-		Yields list of strings from config's table section, excluding 'COMMIT'.
-		"""
-		## parse
-		with open(IPTABLES_CONF) as fd:
-			datalist = fd.read().splitlines()
-
-		# delete comments and empty/whitespace lines
-		datalist = filter(lambda x: not re.match(r'^(#|\s*$)', x), datalist)
-
-		# split datalist into list of tables + []
-		datalist = splitlist(datalist, 'COMMIT')
-
-		del datalist[-1]
-
-		## yield
-		for table in datalist:
-			if table[0][1:] == table_name:
-				yield table
-				break
-		else:
-			raise Exception("No such table")  # TODO: handle
-
-		## dump
-		datalist.append([])
-
-		datalist = joinlists(datalist, 'COMMIT')
-
-		datastring = '\n'.join(datalist) + '\n'
-
-		with open(IPTABLES_CONF, 'w') as fd:
-			fd.write(datastring)
-
-	@staticmethod
-	def append():
-		with Persistent._modify_config() as data:
-			print data
-
-	@staticmethod
-	def insert():
-		pass
-
-	@staticmethod
-	def replace():
-		pass
-
-
-
-Persistent.append()
-
-
-raise Exception("OK")
-
-chains = Chains()
-
-
-Chain('TEST').append({
-	'protocol': 'tcp',
-	'syn': True,
-	'dport': 23,
-	'match': 'connlimit',
-	'connlimit_above': 2,
-	'jump': 'REJECT'
-})
-
-
-Chain('TEST').insert(None, {
+print POSTROUTING.insert(8, {
 	'table': 'nat',
 	'protocol': 'tcp',
 	'dport': 80,
