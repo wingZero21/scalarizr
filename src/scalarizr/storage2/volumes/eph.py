@@ -72,7 +72,9 @@ class EphVolume(base.Volume):
 						mpoint=tempfile.mkdtemp())
 		transfer = cloudfs.LargeTransfer(
 						src=lvm_snap_vol.mpoint + '/',
-						dst=snap.path)
+						dst=snap.path
+						tar_it=True,
+						gzip_it=True)
 		try:
 			transfer.run()
 		finally:
