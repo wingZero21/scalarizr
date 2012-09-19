@@ -106,7 +106,7 @@ class LvmVolume(base.Volume):
 		lv_info = lvm2.lvs('%s/%s' % (self.vg, long_kwds['name'])).values()[0]
 
 		return storage2.snapshot(
-				type='lvm', 
+				type='lvm_native', 
 				name=lv_info.lv_name, 
 				vg=lv_info.vg_name,
 				device=lv_info.lv_path)
@@ -184,5 +184,5 @@ class LvmSnapshot(base.Snapshot):
 		
 storage2.volume_types['lvm'] = LvmVolume
 storage2.snapshot_types['lvm'] = LvmSnapshot
-storage2.snapshot_types['lvm-native'] = LvmNativeSnapshot
+storage2.snapshot_types['lvm_native'] = LvmNativeSnapshot
 

@@ -11,7 +11,8 @@ except ImportError:
 
 
 class Store(dict):
-	pass
+	def __len__(self):
+		return 1
 
 
 class Compound(Store):
@@ -42,7 +43,10 @@ class Compound(Store):
 	def __getitem__(self, key):
 		store = self.__find_store(key)
 		if store:
-			return store.__getitem__(key)
+			if isinstance(store, Compound):
+				return store
+			else:
+				return store.__getitem__(key)
 		else:
 			return dict.__getitem__(self, key)
 
@@ -127,7 +131,7 @@ class IniOption(Ini):
 
 
 	def __getitem__(self, key):
-		value = super(IniOption, self).__getitem__(self, self.option)
+		value = super(IniOption, self).__getitem__(self.option)
 		if self.getfilter:
 			return self.getfilter(value)
 		return value
@@ -136,7 +140,7 @@ class IniOption(Ini):
 	def __setitem__(self, key, value):
 		if self.setfilter:
 			value = self.setfilter(value)
-		super(IniOption, self).__setitem__(self, self.option, value)
+		super(IniOption, self).__setitem__(self.option, value)
 
 
 class File(Store):
@@ -200,11 +204,13 @@ class Attr(Store):
 				__import__(self.module)
 				self.module = sys.modules[self.module]
 			if not self.getter:
-				path = self.attr.split('.')
-				base = self.module
-				for name in path[:-1]:
-					base = getattr(base, name)
-				self.getter = lambda: getattr(base, path[-1])
+				def getter():
+					path = self.attr.split('.')
+					base = self.module
+					for name in path[:-1]:
+						base = getattr(base, name)
+					return getattr(base, path[-1])
+				self.getter = getter
 		except:
 			raise KeyError(key) 
 		return self.getter()
@@ -221,7 +227,20 @@ _private_dir = _base_dir + '/private.d'
 _public_dir = _base_dir + '/public.d'
 _storage_dir = _private_dir + '/storage'
 
-__node__ = {}
+__node__ = {
+	'server_id,role_id,farm_id,farm_role_id,env_id': 
+				Ini(_private_dir + '/config.ini', 'general'),
+	'platform': Ini(_public_dir + '/config.ini', 'general'),
+	'behavior': IniOption(
+						_private_dir + '/config.ini', 'general', 'behaviour', 
+						lambda val: val.strip().split(','),
+						lambda val: ','.join(val)),
+	'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),
+	'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
+	'state': File(_private_dir + '/.state'),
+	'rebooted': BoolFile(_private_dir + '/.reboot'),
+	'halted': BoolFile(_private_dir + '/.halt')
+}
 for behavior in ('mysql', 'mysql2', 'percona'):
 	__node__[behavior] = Compound({
 		'volume,volume_config': 
@@ -247,16 +266,6 @@ __node__['ec2'] = Compound({
 	'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
 	'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
 })
-__node__['behavior'] = IniOption(
-						_private_dir + '/config.ini', 'general', 'behaviour', 
-						lambda val: val.strip().split(','),
-						lambda val: ','.join(val))
-__node__['platform,server_id'] = Ini(_public_dir + '/config.ini', 'general')
-__node__['public_ip'] = Call('scalarizr.bus', 'bus.platform.get_public_ip'),
-__node__['private_ip'] = Call('scalarizr.bus', 'bus.platform.get_private_ip'),
-__node__['state'] = File(_private_dir + '/.state')
-__node__['reboot'] = BoolFile(_private_dir + '/.reboot')
-__node__['halt'] = BoolFile(_private_dir + '/.halt')
 __node__ = Compound(__node__)
 
 

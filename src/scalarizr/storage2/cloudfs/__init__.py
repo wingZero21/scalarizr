@@ -83,8 +83,83 @@ class Transfer(object):
 
 	def result(self):
 		pass
+
+
+CHUNK_1MB = 1024 * 1024
+CHUNK_10MB = CHUNK_1MB * 10
+CHUNK_100MB = CHUNK_1MB * 100
 	
-	
+def LargeTransfer(Transfer):
+	def __init__(self, src, dst,
+				transfer_id=None,
+				tar_it=True,
+				gzip_it=True, 
+				chunk_size=CHUNK_100MB, 
+				try_pigz=True,
+				manifest='manifest.ini' 
+				**kwds):
+		'''
+		@param src: transfer source path
+			- str file or directory path. 
+			- file-like object (stream)
+		'''
+		super(Transfer, self).__init__(src, dst, **kwds)
+
+
+	def _run(self):
+		pass
+
+
+'''
+SQL dump. File-per-database.
+---------------------------
+
+def src_gen():
+	yield stream = mysqldump ${database}
+def dst_gen():
+	yield ${database}
+
+s3://.../${transfer_id}/manifest.ini
+						${database_1}.gz.00
+						${database_1}.gz.01
+						${database_2}.gz.00
+						${database_2}.gz.01
+						${database_2}.gz.02
+
+$ manifest.ini
+[snapshot]
+description = description here
+created_at = datetime
+pack_method = "pigz"
+
+[chunks]
+${database_1}.gz.part00 = md5sum
+${database_1}.gz.part01 = md5sum
+${database_2}.gz.part00 = md5sum
+
+
+Directory backup
+----------------
+
+src = '/mnt/dbbackup'
+dst = 's3://backup/key1/key2/'
+
+s3://backup/key1/key2/${transfer_id}/manifest.ini
+s3://backup/key1/key2/${transfer_id}/part.gz.00
+s3://backup/key1/key2/${transfer_id}/part.gz.01
+s3://backup/key1/key2/${transfer_id}/part.gz.02
+
+
+Directory restore
+-----------------
+
+src = s3://backup/key1/key2/eph-snap-12345678/manifest.ini
+dst = /mnt/dbbackup/
+
+1. Download manifest 
+2. <chunk downloader> | gunzip | tar -x -C /mnt/dbbackup
+'''
+
 
 def cloudfs(fstype, **driver_kwds):
 	raise NotImplementedError()
@@ -96,6 +171,10 @@ class CloudFileSystem(object):
 		raise NotImplementedError()
 
 	def stat(self, path):
+		'''
+		size in bytes
+		type = dir | file | container
+		'''
 		raise NotImplementedError()
 
 	def put(self, srcfp, path):
@@ -106,3 +185,4 @@ class CloudFileSystem(object):
 
 	def delete(self, path):
 		raise NotImplementedError()
+
