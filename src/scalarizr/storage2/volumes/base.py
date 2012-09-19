@@ -134,7 +134,7 @@ class Volume(Base):
 
 	
 	def _check_attr(self, name):
-		assert hasattr(self, name) and getattr(self, name),  \
+		assert hasattr(self, name) and getattr(self, name) is not None,  \
 				self.error_messages['empty_attr'] % name
 	
 	def _check_restore_unsupported(self):

@@ -19,7 +19,8 @@ def mdadm(mode, md_device=None, *devices, **long_kwds):
 	"""
 
 	return linux.system(linux.build_cmd_args(
-					mdadm_binary, ['--%s' % mode, md_device or ''],
+					mdadm_binary,
+					['--%s' % mode] + ([md_device] if md_device else []),
 					long_kwds, devices))
 
 

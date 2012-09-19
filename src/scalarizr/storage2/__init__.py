@@ -91,7 +91,7 @@ def concurrent_snapshot(volumes, description, tags=None, **kwds):
 			exc_info = sys.exc_info()
 			LOG.warn('Failed to create snapshot of %s(%s): %s', 
 					vol.id, vol.type, exc_info[1], exc_info=exc_info)
-			results.put((0, index, exc_info))
+			results.append((0, index, exc_info))
 
 	threads = []
 	index = 0

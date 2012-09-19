@@ -58,30 +58,42 @@ class RaidVolume(base.Volume):
 
 			self.disks = disks
 
-			self.vg = self.snap.vg
-			self.level = int(self.snap.level)
-			self.pv_uuid = self.snap.pv_uuid
-			self.lvm_group_cfg = self.snap.lvm_group_cfg
+			self.vg = self.snap['vg']
+			self.level = int(self.snap['level'])
+			self.pv_uuid = self.snap['pv_uuid']
+			self.lvm_group_cfg = self.snap['lvm_group_cfg']
 
-			# Here?
 			self.snap = None
+
+		self._check_attr('level')
+		self._check_attr('vg')
+		self._check_attr('disks')
+
+		assert int(self.level) in (0,1,5,10),\
+									'Unknown raid level: %s' % self.level
+
+		disks = []
+		for disk in self.disks:
+			disk = storage2.volume(disk)
+			disk.ensure()
+			disks.append(disk)
+		self.disks = disks
 
 		disks_devices = [disk.device for disk in self.disks]
 		vg_name = os.path.basename(self.vg)
 
 		if self.lvm_group_cfg:
-			self._check_attr('device')
-			raid_device = mdadm.mdfind(*disks_devices)
-			if not raid_device:
+			try:
+				raid_device = mdadm.mdfind(*disks_devices)
+			except storage2.StorageError:
 				raid_device = mdadm.findname()
 				if self.level in (1, 10):
 					for disk in disks_devices:
-						mdadm.mdadm('misc', disk,
+						mdadm.mdadm('misc', None, disk,
 									zero_superblock=True, force=True)
 					mdadm.mdadm('create', raid_device, *disks_devices,
-								force=True,
-								level=self.level,
-								assume_clean=True,
+								force=True, metadata='default',
+								level=self.level, assume_clean=True,
 								raid_devices=len(disks_devices))
 				else:
 					mdadm.mdadm('assemble', raid_device, *disks_devices)
@@ -97,13 +109,18 @@ class RaidVolume(base.Volume):
 			tmpfile = tempfile.mktemp()
 			try:
 				with open(tmpfile, 'w') as f:
-					f.write(base64.b64encode(self.lvm_group_cfg))
+					f.write(base64.b64decode(self.lvm_group_cfg))
 				lvm2.vgcfgrestore(vg_name, file=tmpfile)
 			finally:
 				os.remove(tmpfile)
 
 			# Check that logical volume exists
-			lvm2.lvs(self.device)
+			lv_infos = lvm2.lvs(self.vg)
+			if not lv_infos:
+				raise storage2.StorageError(
+					'No logical volumes found in %s vol. group')
+			lv_name = lv_infos.popitem()[1].lv_name
+			self.device = lvm2.lvpath(self.vg, lv_name)
 
 			# Activate volume group
 			lvm2.vgchange(vg_name, available='y')
@@ -116,16 +133,19 @@ class RaidVolume(base.Volume):
 		else:
 			raid_device = mdadm.findname()
 			mdadm.mdadm('create', raid_device, *disks_devices,
-						force=True, level=self.level, assume_clean=True)
+						force=True, level=self.level, assume_clean=True,
+						raid_devices=len(disks_devices), metadata='default')
+			mdadm.mdadm('misc', raid_device, wait=True)
 
-			lvm2.pvcreate(raid_device)
+			lvm2.pvcreate(raid_device, force=True)
 			self.pv_uuid = lvm2.pvs(raid_device)[raid_device].pv_uuid
 
 			lvm2.vgcreate(vg_name, raid_device)
 
-			out, err = lvm2.lvcreate()[:2]
+			out, err = lvm2.lvcreate(vg_name, extents='100%FREE')[:2]
 			try:
-				vol = re.match(self.lv_re, out.split('\n')[-1].strip()).group(1)
+				clean_out = out.strip().split('\n')[-1].strip()
+				vol = re.match(self.lv_re, clean_out).group(1)
 				self.device = lvm2.lvpath(vg_name, vol)
 			except:
 				e = 'Logical volume creation failed: %s\n%s' % (out, err)
@@ -136,20 +156,28 @@ class RaidVolume(base.Volume):
 		self.raid_pv = raid_device
 
 
-
 	def _detach(self, force, **kwds):
 		self.lvm_group_cfg = lvm2.backup_vg_config(self.vg)
 		lvm2.vgremove(self.vg, force=True)
 		self.device = None
 		lvm2.pvremove(self.raid_pv, force=True)
 
-		mdadm.mdadm('misc', self.raid_pv, stop=True, force=True)
-		mdadm.mdadm('manage', self.raid_pv, remove=True, force=True)
+		mdadm.mdadm('misc', None, self.raid_pv, stop=True, force=True)
+		try:
+			mdadm.mdadm('manage', None, self.raid_pv, remove=True, force=True)
+		except (Exception, BaseException), e:
+			if not 'No such file or directory' in str(e):
+				raise
+
+		try:
+			os.remove(self.raid_pv)
+		except:
+			pass
 
 		self.raid_pv = None
 
 		for disk in self.disks:
-			disk.detach()
+			disk.detach(force=force)
 
 
 	def _snapshot(self, description, tags, **kwds):
@@ -176,9 +204,6 @@ class RaidVolume(base.Volume):
 
 
 	def _destroy(self, force, **kwds):
-		for disk in self.disks:
-			disk.detach(force=force)
-
 		remove_disks = kwds.get('remove_disks')
 		if remove_disks:
 			for disk in self.disks:

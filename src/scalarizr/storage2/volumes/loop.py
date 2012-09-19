@@ -43,7 +43,7 @@ class LoopVolume(base.Volume):
 				msg = 'Failed to copy snapshot file %s: %s' % (
 						self.snap['file'], sys.exc_info()[1])
 				raise storage2.StorageError(msg)
-			del self._config['snap']
+			self.snap = None
 			self.file = filename
 
 
