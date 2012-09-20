@@ -267,5 +267,6 @@ __node__['ec2'] = Compound({
 	'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
 })
 __node__ = Compound(__node__)
+__node__ = dict() # XXX: added for unittests
 
 

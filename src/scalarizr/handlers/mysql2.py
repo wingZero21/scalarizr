@@ -340,7 +340,7 @@ class MysqlHandler(DBMSRHandler):
 			if not vol.tags:
 				vol.tags = storage_tags()
 			vol.ensure(mount=True)
-			if int(__node__['mysql']['replication_master']):
+			if int(__mysql__['replication_master']):
 				LOG.debug("Checking Scalr's %s system users presence", 
 						__mysql__['behavior'])
 				creds = self.get_user_creds()

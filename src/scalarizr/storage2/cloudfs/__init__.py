@@ -87,6 +87,8 @@ class Transfer(object):
 
 
 def LargeTransfer(pubsub.Observable):
+	UPLOAD = 'upload'
+	DOWNLOAD = 'download'
 	'''
 	SQL dump. File-per-database.
 	---------------------------
@@ -136,7 +138,7 @@ def LargeTransfer(pubsub.Observable):
 	1. Download manifest 
 	2. <chunk downloader> | gunzip | tar -x -C /mnt/dbbackup
 	'''
-	def __init__(self, src, dst,
+	def __init__(self, src, dst, direction,
 				transfer_id=None,
 				tar_it=True,
 				gzip_it=True, 
