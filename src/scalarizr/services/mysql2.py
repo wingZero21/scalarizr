@@ -341,6 +341,7 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 	def _commit_copyback(self):
 		shutil.rmtree(self._data_dir + '.bak')
 		for name in glob.glob(self._log_bin + '*.bak'):
+			LOG.debug('Remove %s' % os.path.join(self._binlog_dir, name))
 			os.remove(os.path.join(self._binlog_dir, name))
 	
 	

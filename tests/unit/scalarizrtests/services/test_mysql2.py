@@ -1,5 +1,7 @@
 
 import os
+import shutil
+import glob
 
 import mock
 from nose.tools import raises
@@ -270,12 +272,68 @@ class TestXtrabackupRestore(object):
 				dict(apply_log=True, user=mock.ANY, password=mock.ANY))
 		chown_r.assert_called_with(rst._data_dir, 'mysql', 'mysql')
 		rst._mysql_init.start.assert_called_with()
-		
 
-	def test_copyback_start_commit(self, *args):
-		pass
 
-	def test_copyback_start_rollback(self, *args):
-		pass
+	@mock.patch.object(os, 'listdir',
+	                   return_value=['2012-09-16_11-54', '2012-09-15_18-06'])
+	@mock.patch.object(coreutils, 'chown_r')
+	@mock.patch.object(mysql2, 'innobackupex')
+	@mock.patch.object(glob, 'glob')
+	@mock.patch.object(shutil, 'rmtree')
+	@mock.patch.object(os, 'remove')
+	@mock.patch.object(os, 'makedirs')
+	@mock.patch.object(os, 'rename')
+	def test_copyback_start_commit(self, rename, makedirs, remove, rmtree, pglob, *args):
+		def glob_returns(*args):
+			if '.bak' in args[0]:
+				return ['/mnt/dbstorage/mysql-misc/logbin.index.bak', '/mnt/dbstorage/mysql-misc/logbin.000001.bak']
+			return ['/mnt/dbstorage/mysql-misc/logbin.index', '/mnt/dbstorage/mysql-misc/logbin.000001']
+		rst = backup.restore(type='xtrabackup')
+		mock.patch.object(rst, '_mysql_init').start()
+		rollback = mock.patch.object(rst, '_rollback_copyback').start()
+		pglob.side_effect = glob_returns
+		rst.run()
+		assert not rollback.call_count
+		rename_calls = [mock.call(rst._data_dir, rst._data_dir+'.bak'),
+		                mock.call('/mnt/dbstorage/mysql-misc/logbin.index', '/mnt/dbstorage/mysql-misc/logbin.index.bak'),
+		                mock.call('/mnt/dbstorage/mysql-misc/logbin.000001', '/mnt/dbstorage/mysql-misc/logbin.000001.bak')]
+		rename.assert_has_calls(rename_calls)
+		makedirs.assert_called_once_with(rst._data_dir)
+		rmtree.assert_called_with(rst._data_dir + '.bak')
+		remove_calls = [mock.call('/mnt/dbstorage/mysql-misc/logbin.index.bak'),
+						mock.call('/mnt/dbstorage/mysql-misc/logbin.000001.bak')]
+		remove.assert_has_calls(remove_calls)
 
+
+	@mock.patch.object(os, 'listdir',
+	                   return_value=['2012-09-16_11-54', '2012-09-15_18-06'])
+	@mock.patch.object(coreutils, 'chown_r')
+	@mock.patch.object(mysql2, 'innobackupex')
+	@mock.patch.object(glob, 'glob')
+	@mock.patch.object(shutil, 'rmtree')
+	@mock.patch.object(os, 'remove')
+	@mock.patch.object(os, 'makedirs')
+	@mock.patch.object(os, 'rename')
+	def test_copyback_start_rollback(self, rename, makedirs, remove, rmtree, pglob, *args):
+		def glob_returns(*args, **kwargs):
+			if '.bak' in args[0]:
+				return ['/mnt/dbstorage/mysql-misc/logbin.index.bak', '/mnt/dbstorage/mysql-misc/logbin.000001.bak']
+			return ['/mnt/dbstorage/mysql-misc/logbin.index', '/mnt/dbstorage/mysql-misc/logbin.000001']
+		rst = backup.restore(type='xtrabackup')
+		mock.patch.object(rst._mysql_init, 'start', side_effect=Exception('Test')).start()
+		mock.patch.object(rst, '_commit_copyback').start()
+		pglob.side_effect = glob_returns
+		try:
+			rst.run()
+		except:
+			pass
+		rename_calls = [mock.call(rst._data_dir, rst._data_dir+'.bak'),
+		                mock.call('/mnt/dbstorage/mysql-misc/logbin.index', '/mnt/dbstorage/mysql-misc/logbin.index.bak'),
+		                mock.call('/mnt/dbstorage/mysql-misc/logbin.000001', '/mnt/dbstorage/mysql-misc/logbin.000001.bak'),
+		                mock.call(rst._data_dir+'.bak', rst._data_dir),
+		                mock.call('/mnt/dbstorage/mysql-misc/logbin.index.bak', '/mnt/dbstorage/mysql-misc/logbin.index'),
+		                mock.call('/mnt/dbstorage/mysql-misc/logbin.000001.bak', '/mnt/dbstorage/mysql-misc/logbin.000001')
+		                ]
+		rename.assert_has_calls(rename_calls)
+		makedirs.assert_called_once_with(rst._data_dir)
 
