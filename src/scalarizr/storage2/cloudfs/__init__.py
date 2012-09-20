@@ -1,27 +1,81 @@
+import re
+import os
+import sys
+import Queue
 import urlparse
+import itertools
+import tempfile
+import inspect
+import subprocess
+import threading
+import logging
+
+from scalarizr import storage2
+from scalarizr.libs import pubsub
+from scalarizr.linux import coreutils
 
 filesystem_types = {}
+LOG = logging.getLogger(__name__)
 
-class Transfer(object):
-	UPLOAD = 'upload'
-	DOWNLOAD = 'download'
 
-	def __init__(self, src, dst, direction, num_workers=4, listeners=None):
+class BaseTransfer(pubsub.Observable):
+	
+	src = None
+	dst = None
+	num_workers = None
+	max_retry = None
+	listeners = None
+	
+	def __init__(self, src, dst, num_workers=4, max_retry=4, listeners=None):
+		
+		super(BaseTransfer, self).__init__()
+		
+		if callable(src):
+			src = (item for item in src())
+		else:
+			if not hasattr(src, '__iter__'):
+				src = [src]
+			src = iter(src)
+		if callable(dst):
+			dst = (item for item in dst())
+		elif not hasattr(dst, '__iter__'):
+			dst = itertools.repeat(dst)
+		else:
+			dst = iter(dst)	
+	
+		self.src = src
+		self.dst = dst
+		self.num_workers = num_workers
+		self.max_retry = max_retry
+		self.listeners = listeners
+		
+		self.define_events('transfer_started', 'transfer_complete', 'transfer_error', 'transfer_stopped')		
+		
+
+class Transfer(BaseTransfer):
+		
+	running = None
+	result = None
+	failed_files = None
+			
+	_retries_queue = None
+	_stop_all = None
+	_lock = None
+	
+
+	def __init__(self, src, dst, num_workers=4, max_retry=4, listeners=None):
+
 		'''
 		@param: src transfer source path
 			- str file or directory path. directory processed recursively
-			- file-like object
-			- list of path strings and file-likes objects
-			- generator function that will produce path strings and file-like objects 
+			- list of path strings 
+			- generator function that will produce path strings 
 
 		@param: dst transfer destination path
 			- str file or directory path
-			- file-like object (when direction=download)
-			- list of path strings and file-likes objects			
-			- generator function that will produce path strings or file-like objects 
+			- list of path strings			
+			- generator function that will produce path strings
 
-
-		@param: direction 'upload' or 'download'
 
 		# XXX(marat): We should extend class from Observable
 		@param: listener function or object to call when file transfer is 
@@ -29,26 +83,18 @@ class Transfer(object):
 			on_start: fn(src, dst, state='start')
 			on_complete: fn(src, dst, state='complete', retry=1, transfered_bytes=1892331)
 			on_error: fn(src, dst, state='error', retry=1, exc_info=(3 items tuple))
-			on_restart: fn(src, dst, state='restart', retry=2)
+			on_restart: fn(src, dst, state='restart', retry=2) (????)
 
 		Examples:
 
 			Upload pathes
 				Transfer('/mnt/backups/daily.tar.gz', 's3://backups/mysql/2012-09-05/', 'upload')
 
-			Upload file object
-				Transfer(StringIO('10.167.51.13'), 's3://directory-server/hosts/controller', 'upload')
-
-
 			Upload generator
 				def files():
 					yield 'part.1'
 					yield 'part.2'
 				Transfer(files, 's3://images/ubuntu12.04.1/', 'upload')
-			
-
-			Download file-like object
-				Transfer('s3://backups/mysql/2012-09-05/daily.tar.gz', StringIO(), 'download')
 
 			Download both generators
 				def src():
@@ -59,34 +105,103 @@ class Transfer(object):
 					yield '/backups/daily-from-s3.tar.gz'
 					yield '/backups/daily-from-cloudfiles.tar.gz'
 		'''
-		self.src = src
-		self.dst = dst
-		self.direction = direction
-		self.num_workers = num_workers
+		super(Transfer, self).__init__(src, dst, num_workers, max_retry, listeners)
+		
+		self.result = self.failed_files = {}
+		self._retries_queue = Queue.Queue()
+		self._stop_all = threading.Event()
+		self._lock = threading.RLock()
+
+		
+	def get_job(self):
+		while True:
+			try:
+				with self._lock:
+					s = self.src.next()
+					d = self.dst.next()
+					r = 1
+					yield [s, d, r]
+			except StopIteration:
+				pass	
+			try:
+				yield self._retries_queue.get_nowait()
+			except Queue.Empty:
+				raise StopIteration()
+			
+			
+	def is_remote_path(self, path):
+		url_re = re.compile(r'^[\w-]+://')
+		return isinstance(path, basestring) and url_re.match(path)
+				
+				
+	def _worker(self, result, failed):
+		for src, dst, retries in self.get_job():
+			self.fire('transfer_started', src, dst)
+			try:
+				fs = cloudfs(src if self.is_remote_path(src) else dst)
+				
+				if self.is_remote_path(src):
+					result[src] = fs.get(src, dst)
+					
+				elif self.is_remote_path(dst):
+					if os.path.isdir(src):
+						for path in os.path.walk(src):
+							if os.path.isfile(path):
+								with open(path) as fp:
+									result[path] = fs.put(fp, dst)
+							
+					elif os.path.isfile(src):
+						with open(src) as srcfp:
+							result[src] = fs.put(srcfp, dst)
+
+					else:
+						raise BaseException('%s is not a file nor directory' % dst)
+
+			except BaseException, e:
+				retries += 1
+				if retries < self.max_retry:
+					self._retries_queue.put([src,dst,retries])
+				else:
+					failed[src] = str(e)
+				self.fire('transfer_error', src, dst, retries, sys.exc_info())
+			else:
+				self.fire('transfer_complete', src, dst)
+			finally:
+				if self._stop_all.isSet():
+					return
 
 
 	def start(self):
-		pass
+		self._stop_all.clar()
+		self.running = True
+		
+		
+		#Starting threads
+		workers = []
+		for n in range(self.num_workers):
+			worker = threading.Thread(name="Worker-%s" % n, target=self._worker, 
+					args=(self.result, self.failed_files))
+			self._logger.debug("Starting worker '%s'", worker.getName())
+			worker.start()
+			workers.append(worker)
+		
+		# Join workers
+		for worker in workers:
+			worker.join()
+			LOG.debug("Worker '%s' finished", worker.getName())		
+		self.running = False
+		self.fire('transfer_complete')
+		return self.src, self.dst, self.result, self.failed_files
 
 
 	def kill(self):
-		pass
-
-	def join(self, timeout=None):
-		pass
-
-
-	@property
-	def running(self):
-		pass
+		self._stop_all.set()
+		self.running = False
+		self.fire('transfer_stopped', self.src, self.dst)
+		return self.src, self.dst, self.result, self.failed_files
 
 
-	def result(self):
-		pass
-
-
-
-def LargeTransfer(pubsub.Observable):
+class LargeTransfer(pubsub.Observable):
 	UPLOAD = 'upload'
 	DOWNLOAD = 'download'
 	'''
@@ -144,7 +259,7 @@ def LargeTransfer(pubsub.Observable):
 				gzip_it=True, 
 				chunk_size=100, 
 				try_pigz=True,
-				manifest='manifest.ini' 
+				manifest='manifest.ini',
 				**kwds):
 		'''
 		@param src: transfer source path
@@ -164,7 +279,7 @@ def LargeTransfer(pubsub.Observable):
 		if self._up:
 			if callable(src):
 				src = (item for item in src())
-			else
+			else:
 				if not hasattr(src, '__iter__'):
 					src = [src]
 				src = iter(src)
@@ -190,7 +305,7 @@ def LargeTransfer(pubsub.Observable):
 								mpoint=tempfile.mkdtemp())
 		self._chunk_num = -1
 
-		events = self._transfer._listeners.keys()
+		events = self._transfer.listeners.keys()
 		self.define_events(*events)
 		for ev in events:
 			self._transfer.on(ev=self._proxy_event(ev))
@@ -204,8 +319,7 @@ def LargeTransfer(pubsub.Observable):
 		if self._up:
 			# Tranzit volume size is chunk for each worker 
 			# and Ext filesystem overhead
-			self._tranzit_vol.size = 
-					int(self.chunk_size * (self._transfer.num_workers) * 1.1)
+			self._tranzit_vol.size = int(self.chunk_size * (self._transfer.num_workers) * 1.1)
 			self._tranzit_vol.ensure(mkfs=True)
 			try:
 				for src in self.src:
@@ -250,7 +364,7 @@ def LargeTransfer(pubsub.Observable):
 							stream = gzip.stdout
 						
 					#dst = self.dst.next() 
-					while filename in self._split(stream, prefix):
+					for filename in self._split(stream, prefix):
 						yield filename
 					if cmd:
 						cmd.communicate() 
@@ -273,7 +387,7 @@ def LargeTransfer(pubsub.Observable):
 		def next_chunk():
 			self._chunk_num += 1
 			read_bytes = 0
-			fp = open(self.prefix + '%03d' % chunk_num)
+			fp = open(self.prefix + '%03d' % self._chunk_num)
 		next_chunk()
 
 		while True:
@@ -297,7 +411,7 @@ def LargeTransfer(pubsub.Observable):
 		return '/bin/gzip'		
 
 
-	def _proxy_event(event):
+	def _proxy_event(self,event):
 		def proxy(*args, **kwds):
 			self.fire(event, *args, **kwds)
 		return proxy
