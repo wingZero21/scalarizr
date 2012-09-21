@@ -7,6 +7,7 @@ import time
 import random
 import logging
 import shutil
+import pexpect
 import tempfile
 
 from scalarizr.bus import bus
@@ -21,6 +22,7 @@ def get_handlers():
 
 LOG = logging.getLogger(__name__)
 
+ROLEBUILDER_USER = 'scalr-rolesbuilder'
 
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 	exclude_dirs = set(['/tmp', '/var/run', '/proc', '/dev',
@@ -91,8 +93,14 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 						self._create_spec_devices(tmp_mount_dir)
 
 						LOG.debug('Removing roles-builder user')
-						with chroot(tmp_mount_dir):
-							system2(('userdel', '-rf', 'scalr-rolesbuilder'))
+						sh = pexpect.spawn('/bin/sh')
+						try:
+							sh.sendline('chroot %s' % tmp_mount_dir)
+							sh.expect('#')
+							sh.sendline('userdel -rf %s' % ROLEBUILDER_USER)
+							sh.expect('#')
+						finally:
+							sh.close()
 
 						""" Patch fstab"""
 						fstab_path = os.path.join(tmp_mount_dir, 'etc/fstab')
