@@ -2,6 +2,7 @@
 import os
 import shutil
 import glob
+from StringIO import StringIO
 
 import mock
 from nose.tools import raises
@@ -336,4 +337,21 @@ class TestXtrabackupRestore(object):
 		                ]
 		rename.assert_has_calls(rename_calls)
 		makedirs.assert_called_once_with(rst._data_dir)
+
+
+@mock.patch.object(mysql2, 'my_print_defaults',
+                   return_value={'datadir': '/mnt/dbstorage/mysql-data',
+                                 'log_bin': '/mnt/dbstorage/mysql-misc/binlog'})
+class TestMysql2Utilities(object):
+
+	def test_binlog_head(self, *args, **kwargs):
+		fixtures = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', 'fixtures', 'services', 'mysql'))
+		m = mock.mock_open(read_data=StringIO('binlog.000001'))
+		m.return_value.readline = lambda : 'binlog.000001'
+		mysqlbinlog = mock.patch.object(mysql2, 'mysqlbinlog', return_value=(open(os.path.join(fixtures, 'mysqlbinlog.out'), 'r+').read(), '', 0)).start()
+		with mock.patch('scalarizr.services.mysql2.open', m, create=True):
+			head_log = mysql2.binlog_head()
+		assert head_log == ('binlog.000001', '107')
+		m.assert_called_once_with('/mnt/dbstorage/mysql-misc/binlog.index')
+		mysqlbinlog.assert_called_once_with('/mnt/dbstorage/mysql-misc/binlog.000001', verbose=True, stop_position=91)
 

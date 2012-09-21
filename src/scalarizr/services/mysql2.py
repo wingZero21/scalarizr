@@ -1,5 +1,5 @@
-
 import os
+import re
 import sys
 import string
 import logging
@@ -445,7 +445,7 @@ def mysqldump(*databases, **long_kwds):
 def mysqlbinlog(log_file, **log_kwds):
 	return linux.system(linux.build_cmd_args(
 			executable='/usr/bin/mysqlbinlog',
-			long=long_kwds,
+			long=log_kwds,
 			params=[log_file]))
 
 
@@ -461,11 +461,10 @@ def binlog_head():
 				if my_defaults['log_bin'][0] == '/' \
 				else my_defaults['datadir']
 	binlog_index = os.path.join(binlog_dir, 
-					os.path.basename(my_default['log_bin'])) + '.index'
+					os.path.basename(my_defaults['log_bin'])) + '.index'
 	with open(binlog_index) as fp:
 		binlog_1 = fp.readline().strip()
 		binlog_1 = os.path.join(binlog_dir, binlog_1)
-	
 	# FORMAT_DESCRIPTION_EVENT minimum length
 	# @see http://dev.mysql.com/doc/internals/en/binary-log-versions.html
 	stop_position = 91 
@@ -473,7 +472,7 @@ def binlog_head():
 					stop_position=stop_position)[0]
 	end_log_pos_re = re.compile(r'end_log_pos\s+(\d+)')
 	for line in out.splitlines():
-		m = end_log_pos_re.match(line)
+		m = end_log_pos_re.search(line) # must be search?
 		if m:
 			return (os.path.basename(binlog_1), m.group(1))
 
