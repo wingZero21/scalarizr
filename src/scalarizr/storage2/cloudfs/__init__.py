@@ -290,6 +290,7 @@ class LargeTransfer(pubsub.Observable):
 			else:
 				dst = iter(dst)
 
+		self.direction = direction
 		self.src = src
 		self.dst = dst
 		self.tar_it = tar_it
@@ -316,12 +317,13 @@ class LargeTransfer(pubsub.Observable):
 		'''
 		Compress, split, yield out
 		'''
-		if self._up:
-			# Tranzit volume size is chunk for each worker 
-			# and Ext filesystem overhead
-			self._tranzit_vol.size = int(self.chunk_size * (self._transfer.num_workers) * 1.1)
-			self._tranzit_vol.ensure(mkfs=True)
-			try:
+		self._tranzit_vol.size = 
+				int(self.chunk_size * (self._transfer.num_workers) * 1.1)
+		self._tranzit_vol.ensure(mkfs=True)
+		try:
+			if self.direction == self.UPLOAD:
+				# Tranzit volume size is chunk for each worker 
+				# and Ext filesystem overhead
 				for src in self.src:
 					prefix = self._tranzit_vol.mpoint
 					stream = None
@@ -362,15 +364,34 @@ class LargeTransfer(pubsub.Observable):
 								# Allow tar to receive SIGPIPE if gzip exits.
 								tar.stdout.close()
 							stream = gzip.stdout
-						
+					
 					#dst = self.dst.next() 
 					for filename in self._split(stream, prefix):
 						yield filename
 					if cmd:
 						cmd.communicate() 
-			finally:
-				self._tranzit_vol.destroy()
-				coreutils.remove(self._tranzit_vol.mpoint)
+			else:
+				src = self.src.next()
+				src_pr = urlparse.urlparse(src)
+				drv = cloudfs(src_pr.scheme)
+				filename = drv.get(src, self._tranzit_vol.mpoint)
+				manifest = Manifest(filename)
+				os.remove(filename)
+				
+				if manifest.type == 'files':
+					# Files 
+					for name in manifest:
+						for chunk in manifest.chunks(name):
+							pass
+				else:
+					# Directory transfer
+					name = iter(manifest).next()
+					for chunk in manifest.chunks(name):
+						# Restore
+						pass
+		finally:
+			self._tranzit_vol.destroy()
+			coreutils.remove(self._tranzit_vol.mpoint)
 
 
 	def _dst_generator(self):
@@ -419,6 +440,41 @@ class LargeTransfer(pubsub.Observable):
 
 	def _run(self):
 		self._transfer.run()
+
+
+class Manifest(object)
+	def __init__(self, filename):
+		self.filename = filename
+		self.ini = ConfigParser.ConfigParser()
+		self.ini.read(self.filename)
+
+
+	def __getattr__(self, name):
+		try:
+			if self.__dict__['ini'].get('snapshot', name)
+		except ConfigParser.NoOptionError:
+			# Compatibility with old 'eph' storage manifests
+			if name == 'type' and 'eph-snap' in self.filename: 
+				return 'dir'
+			raise AttributeError(name)
+
+
+	def __setattr__(self, name, value):
+		if name in dir(self):
+			self.__dict__[name] = value
+		else:
+			self.__dict__['ini'].set('snapshot', str(value))
+
+
+	def __iter__(self):
+		'''
+		Iterates over file names
+		'''
+		raise NotImplementedError()
+
+
+	def chunks(self, name):
+		raise NotImplementedError()
 
 
 def cloudfs(fstype, **driver_kwds):

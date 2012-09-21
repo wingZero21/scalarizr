@@ -372,7 +372,7 @@ class MySQLDumpBackup(backup.Backup):
 	default_config.update({
 		'cloudfs_dir': None,
 		'file_per_database': True,
-		'tmp_dir': __mysql__['tmp_dir'],
+		#'tmp_dir': __mysql__['tmp_dir'],
 		'chunk_size': __mysql__['mysqldump_chunk_size']
 	})
 
