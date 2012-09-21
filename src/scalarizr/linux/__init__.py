@@ -157,6 +157,10 @@ def build_cmd_args(executable=None, short=None, long=None, params=None):
 			ret.append('--%s' % key.replace('_', '-'))
 			if type(value) == bool and value:
 				continue
+			# sometimes we should duplicate keys
+			elif type(value) in (list, tuple):
+				ret.extend(value)
+				continue
 			ret.append(value)
 	if params:
 		ret += list(params)

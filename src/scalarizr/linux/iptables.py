@@ -12,13 +12,6 @@ from collections import OrderedDict
 from scalarizr import linux
 
 
-_PREDEFINED_CHAINS = (
-	"INPUT",
-	"FORWARD",
-	"OUTPUT",
-	"PREROUTING",
-	"POSTROUTING"
-)
 IPTABLES_BIN = '/sbin/iptables'
 
 
@@ -30,9 +23,27 @@ def iptables(**long_kwds):
 			ordered_long[key] = long_kwds.pop(key)
 	ordered_long.update(long_kwds)
 
-	# TODO: deal with tuples
-
 	return linux.build_cmd_args(executable=IPTABLES_BIN, long=ordered_long)
+
+
+def iptables_save(filename=None, *short_args, **long_kwds):
+	# file name is a path string or file-like object
+	# if filename is None return output
+	kwds = {}
+	if isinstance(filename, basestring):
+		filename = open(filename, 'w+')
+	if hasattr(filename, 'write'):
+		kwds['stdout'] = filename
+	out = linux.system(linux.build_cmd_args(executable='iptables-save',
+		short=short_args, long=long_kwds), **kwds)[0]
+	return out
+
+
+def iptables_restore(filename, *short_args, **long_kwds):
+	if isinstance(filename, basestring):
+		filename = open(filename)
+	linux.system(linux.build_cmd_args(executable='iptables-restore',
+		short=short_args, long=long_kwds), stdin=filename)
 
 
 def save():
@@ -45,25 +56,21 @@ def save():
 			iptables-restore < /etc/iptables.rules
 		- iptables-save > /etc/iptables.rules
 	'''
+	if linux.os["family"] in ("RedHat", "Oracle"):
+		linux.system(linux.build_cmd_args(executable="service", short=['iptables',
+																	   'save']))
+	elif linux.os["family"] == "Debian":
+		with open('/etc/network/if-pre-up.d/iptables.sh', 'w') as fp:
+			fp.write('#!/bin/bash\n'
+					 'iptables-restore < /etc/iptables.rules')
+
+		iptables_save('/etc/iptables.rules')
 
 
 class _Chain(object):
 
 	def __init__(self, chain):
 		self.name = chain
-		self._ensure_existence()
-
-	def _ensure_existence(self):
-		# TODO: ensure, not create
-		kwargs = {"new-chain": self.name}
-		return iptables(**kwargs)
-
-	def _destroy(self, force):
-		if force:
-			iptables(flush=self.name)
-			#? delete references
-		destroy = {"--delete-chain": self.name}
-		iptables(**destroy)
 
 	def append(self, rule):
 		return iptables(append=self.name, **rule)
@@ -87,19 +94,26 @@ class _Chain(object):
 			rule = arg
 		return iptables(delete=delete, **rule)
 
-	def list(self, numeric=False, table=None):
-		optional = {}
-		if numeric:
-			optional["numeric"] = True
+	def list(self, table=None):
+		kwargs = {}
 		if table:
-			optional["table"] = table
-		return iptables(list=self.name, **optional)
+			kwargs = {'table': table}
+		out = iptables(list=self.name, **kwargs)[0]
+		# 'Chain INPUT (policy ACCEPT)\ntarget     prot opt source               destination         \n\nChain FORWARD (policy ACCEPT)\ntarget     prot opt source               destination         \n\nChain OUTPUT (policy ACCEPT)\ntarget     prot opt source               destination         \n'
+		#TODO:parse
+		out.split('\n\n')
 
 
 class _Chains(object):
 
-	_predefined = _PREDEFINED_CHAINS
-	_container = dict(map(lambda name: (name, _Chain(name)), _predefined))
+	_predefined = (
+		"INPUT",
+		"FORWARD",
+		"OUTPUT",
+		"PREROUTING",
+		"POSTROUTING",
+	)
+	_container = dict([(name, _Chain(name)) for name in _predefined])
 
 	@classmethod
 	def __getitem__(cls, name):
@@ -108,36 +122,57 @@ class _Chains(object):
 	@classmethod
 	def add(cls, name):
 		assert name not in cls._predefined
-		cls._container[name] = _Chain(name)
-		#?? add to globals
+		cls._container.setdefault(name, _Chain(name))
+
+		# create
+		try:
+			iptables(**{"new-chain": name})
+		except linux.LinuxError, e:
+			if not e.err == "iptables: Chain already exists.":
+				raise
 
 	@classmethod
 	def remove(cls, name, force=False):
 		assert name not in cls._predefined
-		cls._container.pop(name)._destroy(force)
+
+		if force:
+			iptables(flush=name)
+			# TODO: delete references
+		iptables(**{"delete-chain": name})
+
+		cls._container.pop(name)
 
 
 chains = _Chains()
-globals().update(chains._container) #?
-#INPUT = chains["INPUT"]
-#FORWARD = chains["FORWARD"]
-#OUTPUT = chains["OUTPUT"]
-#PREROUTING = chains["PREROUTING"]
-#POSTROUTING = chains["POSTROUTING"]
+
+INPUT = chains["INPUT"]
+FORWARD = chains["FORWARD"]
+OUTPUT = chains["OUTPUT"]
+PREROUTING = chains["PREROUTING"]
+POSTROUTING = chains["POSTROUTING"]
 
 
-print POSTROUTING.insert(8, {
-	'table': 'nat',
-	'protocol': 'tcp',
-	'dport': 80,
-	'match': 'cpu',
-	'cpu': 0,
-	'jump': 'REDIRECT',
-	'to_port': 8080
-})
+def list(chain, table=None):
+	return chains[chain].list(table)
 
 
 
+
+if __name__ == "__main__":
+
+	print POSTROUTING.insert(8, {
+		'table': 'nat',
+		'protocol': 'tcp',
+		'dport': 80,
+		'match': 'cpu',
+		'cpu': 0,
+		'jump': 'REDIRECT',
+		'to_port': 8080
+	})
+
+
+
+"""
 raise Exception("OK")
 #################################################################################
 INPUT = chains['INPUT']
@@ -230,10 +265,6 @@ iptables.chains.remove('RH-Input-2', force=True)
 iptables.INPUT.insert(1, rulespec, persistent=True)
 iptables.INPUT.replace(2, rulespec, persistent=True)
 
-# You can enable auto persistence. by default it's False
-iptables.auto_persistence = True
-
-
 # wrappers over binaries
 def iptables(**long_kwds):
 	pass
@@ -252,3 +283,4 @@ def ensure(
 	
 )
 '''
+"""
