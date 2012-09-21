@@ -9,6 +9,7 @@ import sys
 import signal
 import string
 import pkgutil
+import contextlib
 
 from scalarizr.bus import bus
 from scalarizr import exceptions
@@ -657,3 +658,16 @@ class Hosts:
 			for hostname, addr in hosts.iteritems():
 				f.write('%s\t%s\n' % (addr, hostname))
 
+
+@contextlib.contextmanager
+def chroot(path):
+	if not os.path.isdir(path):
+		raise Exception("Chroot to %s failed: no such directory")
+	real_root = os.open("/", os.O_RDONLY)
+	os.chroot(path)
+
+	yield
+
+	os.fchdir(real_root)
+	os.chroot(".")
+	os.close(real_root)

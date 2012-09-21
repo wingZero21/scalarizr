@@ -11,7 +11,7 @@ import tempfile
 
 from scalarizr.bus import bus
 from scalarizr.storage import transfer
-from scalarizr.util import filetool, system2, fstool, wait_until
+from scalarizr.util import filetool, system2, fstool, wait_until, chroot
 from scalarizr.handlers import rebundle as rebundle_hndlr
 
 
@@ -89,6 +89,10 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 						LOG.info('Cleanup image')
 						self._create_spec_devices(tmp_mount_dir)
+
+						LOG.debug('Removing roles-builder user')
+						with chroot(tmp_mount_dir):
+							system2(('userdel', '-rf', 'scalr-rolesbuilder'))
 
 						""" Patch fstab"""
 						fstab_path = os.path.join(tmp_mount_dir, 'etc/fstab')
