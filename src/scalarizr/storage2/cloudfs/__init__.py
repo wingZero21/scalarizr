@@ -483,6 +483,10 @@ def cloudfs(fstype, **driver_kwds):
 
 class CloudFileSystem(object):
 
+	features = {
+		'multipart': False
+	}
+
 	def ls(self, path):
 		raise NotImplementedError()
 
@@ -493,12 +497,49 @@ class CloudFileSystem(object):
 		'''
 		raise NotImplementedError()
 
-	def put(self, srcfp, path):
+	def put(self, src, path):
 		raise NotImplementedError()
 
-	def get(self, path, dstfp):
+	def multipart_init(self, path):
+		'''
+		Returns upload_id
+		'''
+		raise NotImplementedError()
+
+	def multipart_put(self, upload_id, src):
+		raise NotImplementedError()
+
+	def multipart_complete(self, upload_id):
+		raise NotImplementedError()
+
+	def multipart_abort(self, upload_id):
+		raise NotImplementedError()
+
+	def get(self, path, dst):
 		raise NotImplementedError()
 
 	def delete(self, path):
 		raise NotImplementedError()
 
+
+'''
+bak = backup.backup(
+		type='mysqldump', 
+		file_per_database=True, 
+		cloudfs_dir='glacier://Vault_1/')
+rst = buk.run()
+print rst
+>>> {
+	type: mysqldump
+	files: [{
+		size: 14503104
+		path: glacier://Vault_1/?avail_zone=us-east-1&archive_id=NkbByEejwEggmBz2fTHgJrg0XBoDfjP4q6iu87-TjhqG6eGoOY9Z8i1_AUyUsuhPAdTqLHy8pTl5nfCFJmDl2yEZONi5L26Omw12vcs01MNGntHEQL8MBfGlqrEXAMPLEArchiveId
+	}]
+
+Inside LargeTransfer:
+
+pack into single tar | gzip | split | Transfer(generator, 'glacier://Vault_1/', multipart=True)
+
+
+
+'''
