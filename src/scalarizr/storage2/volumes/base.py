@@ -3,7 +3,7 @@ import uuid
 import types
 
 from scalarizr import storage2
-from scalarizr.libs import cdo
+from scalarizr.libs import bases
 from scalarizr.linux import mount as mod_mount
 import os
 
@@ -11,19 +11,18 @@ import os
 LOG = storage2.LOG
 
 
-class Base(cdo.ConfigDriven):
+class Base(bases.ConfigDriven):
 
-	default_config = {
-		'version': '2.0',
-		'type': 'base',
-		'id': None
-	}
-
-	error_messages = cdo.ConfigDriven.error_messages.copy()
-	error_messages.update({
-		'restore_unsupported': 'Restores from snapshot not supported '
-								'by this volume type: %s',
-	})
+	def __init__(self, 
+				version='2.0', 
+				type='base', 
+				id=None, 
+				**kwds):
+		super(Base, self).__init__(version=version, type=type, id=id, **kwds)
+		self.error_messages.update({
+			'restore_unsupported': 'Restores from snapshot not supported '
+									'by this volume type: %s',
+		})
 
 
 	def _genid(self, prefix=''):
@@ -33,19 +32,21 @@ class Base(cdo.ConfigDriven):
 class Volume(Base):
 	MAX_SIZE = None
 	
-	features = {
-		'restore': False
-	}
-
-	def __init__(self, **kwds):
-		self.default_config.update({
-			'device': None,
-			'fstype': 'ext3',
-			'fscreated': False,
-			'mpoint': None,
-			'snap': None
-		})
-		super(Volume, self).__init__(**kwds)
+	def __init__(self, 
+				device=None, 
+				fstype='ext3', 
+				fscreated=False, 
+				mpoint=None, 
+				snap=None, 
+				**kwds):
+		super(Volume, self).__init__(
+				device=device,
+				fstype=fstype,
+				fscreated=fscreated,
+				mpoint=mpoint,
+				snap=snap,
+				**kwds)
+		self.features.update({'restore': False})
 		
 
 	def ensure(self, mount=False, mkfs=False, **updates):

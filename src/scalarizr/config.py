@@ -5,7 +5,7 @@ Created on Aug 11, 2010
 '''
 
 from scalarizr.bus import bus
-from scalarizr.libs.pubsub import Observable
+from scalarizr.libs.bases import Observable
 from scalarizr.util import validators, filetool
 
 from ConfigParser import ConfigParser, RawConfigParser, NoOptionError, NoSectionError

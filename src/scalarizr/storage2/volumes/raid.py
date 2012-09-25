@@ -16,33 +16,41 @@ LOG = logging.getLogger(__name__)
 
 class RaidVolume(base.Volume):
 
-	features = base.Volume.features.copy()
-	features.update({
-		'restore': True
-	})
-
-	default_config = base.Volume.default_config.copy()
-	default_config.update({
-		#Raid disks
-		'disks': [],
-
-		#Raid device name, e.g: /dev/md0
-		'raid_pv': None,
-
-		#Raid level 0|1|5|10
-		'level': None,
-
-		#LVM volume group configuration (base64 encoded)
-		'lvm_group_cfg': None,
-
-		#LVM volume group name
-		'vg': None,
-
-		#Mdadm device physical volume id
-		'pv_uuid': None
-	})
 
 	lv_re = re.compile(r'Logical volume "([^\"]+)" created')
+
+	
+	def __init__(self, 
+				disks=None, raid_pv=None, level=None, lvm_group_cfg=None, 
+				vg=None, pv_uuid=None, **kwds):
+		'''
+		:type disks: list
+		:param disks: Raid disks
+
+		:type raid_pv: string
+		:param raid_pv: Raid device name (e.g: /dev/md0)
+
+		:type level: int
+		:param level: Raid level. Valid values are
+			* 0
+			* 1
+			* 5
+			* 10
+
+		:type lvm_group_cfg: string
+		:param lvm_group_cfg: LVM volume group configuration (base64 encoded)
+
+		:type vg: string
+		:param vg: LVM volume group name
+
+		:type pv_uuid: string
+		:param pv_uuid: Mdadm device physical volume id
+		'''
+		super(RaidVolume, self).__init__(disks=disks or [],
+				raid_pv=raid_pv, level=level, lvm_group_cfg=lvm_group_cfg,
+				vg=vg, pv_uuid=pv_uuid, **kwds)
+		self.features['restore'] = True
+
 
 	def _ensure(self):
 		if self.snap:

@@ -16,22 +16,26 @@ from scalarizr.linux import coreutils
 
 class LoopVolume(base.Volume):
 	
-	features = base.Volume.features.copy()
-	features.update({
-		'restore': True
-	})
+	def __init__(self, 
+				file=None, 
+				size=None, 
+				zerofill=None, 
+				**kwds):
+		'''
+		:type file: string
+		:param file: Filename for loop device
 
-	default_config = base.Volume.default_config.copy()
-	default_config.update({
-		'file': None,   	
-		# Filename for loop device
-		'size': None,  		
-		# Size in Gb or % of root device
-		'zerofill': False	
-		# Fill device with zero bytes. Takes more time, 
-		# but greater GZip compression
-	})
-	
+		:type size: string or int
+		:param size: Size in Gb or % of root device (e.g. '75%')
+
+		:type zerofill: bool
+		:param zerofill: Fill device with zero bytes. Takes more time, 
+			but greater GZip compression
+		'''
+		super(LoopVolume, self).__init__(file=file, size=size, 
+				zerofill=zerofill, **kwds)
+		self.features['restore'] = True
+		
 	
 	def _ensure(self):
 		if self.snap:

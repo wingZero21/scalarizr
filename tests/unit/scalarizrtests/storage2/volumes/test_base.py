@@ -14,7 +14,6 @@ class TestBase(object):
 	def test_config_simple(self):
 		vol = base.Base(device='/dev/sda1', mpoint='/', size=100, fscreated=False)
 		config = vol.config()
-		assert set(vol.default_config.keys()) <= set(config.keys()) 
 		assert config.get('device') == '/dev/sda1'
 		assert config.get('mpoint') == '/'
 

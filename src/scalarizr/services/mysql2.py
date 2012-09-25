@@ -110,22 +110,33 @@ class XtrabackupMixin(object):
 
 
 class XtrabackupBackup(XtrabackupMixin, backup.Backup):
-	default_config = backup.Backup.default_config.copy()
-	default_config.update({
-		'backup_type': 'full',	
-		# Allowed: full | incremental
-		'from_lsn': None,
-		# Allowed: int. Log sequence number to start from
-		'backup_dir': '/mnt/dbbackup',
-		# Directory to store backup files
-		'volume': None
-		# Volume to ensure and mount to 'backup_dir'.
-		# After backup completion it will be snapshoted and
-		# snapshot will be available in Restore configuration
-	})
 
-	def __init__(self, **kwds):
-		backup.Backup.__init__(self, **kwds)
+	def __init__(self, 
+				backup_type='full', 
+				from_lsn=None,
+				backup_dir='/mnt/dbbackup',
+				volume=None,
+				**kwds):
+		'''
+		:type backup_type: string
+		:param backup_type: Xtrabackup type. Valid values are
+			* full
+			* incremental
+
+		:type from_lsn: int
+		:param from_lsn: Log sequence number to start from
+
+		:type backup_dir: string
+		:param backup_dir: Directory to store backup files
+
+		:type volume: :class:`scalarizr.storage2.volumes.base.Volume` or dict
+		:param volume: A volume object or configuration to ensure and mount 
+			to 'backup_dir'. After backup completion it will be snapshoted 
+			and snapshot will be available in Restore configuration
+		'''
+		backup.Backup.__init__(self, 
+				backup_type=backup_type, from_lsn=from_lsn,
+				backup_dir=backup_dir, volume=volume, **kwds)
 		XtrabackupMixin.__init__(self)
 
 
@@ -242,8 +253,49 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 		'snapshot': None
 	})
 
-	def __init__(self, **kwds):
-		backup.Restore.__init__(self, **kwds)
+	def __init__(self, 
+				log_file=None,
+				log_pos=None,
+				from_lsn=None,
+				to_lsn=None,
+				backup_type=None,
+				backup_dir='/mnt/dbbackup',
+				volume=None,
+				snapshot=None,
+				**kwds):
+		'''
+		:type log_file: string
+		:param log_file: MySQL binary log file (e.g. binlog.000003)
+
+		:type log_pos: int
+		:param log_pos: MySQL binary log file position (e.g. 126)
+
+		:type from_lsn: int
+		:param from_lsn: InnoDB start log sequence number
+
+		:type to_lsn: int
+		:param to_lsn: InnoDB end log sequence number
+		
+		:type backup_type: string
+		:param backup_type: Xtrabackup type. Valid values are
+			* full
+			* incremental
+		
+		:type backup_dir: string
+		:param backup_dir: Directory to store backup files
+
+		:type volume: :class:`scalarizr.storage2.volumes.base.Volume` or dict
+		:param volume: A volume object or configuration to ensure and mount 
+			to 'backup_dir'.
+
+		:type snapshot: :class:`scalarizr.storage2.volumes.base.Snapshot` 
+			or dict
+		:param snapshot: A snapshot object to restore backup Volume from
+		'''
+		backup.Restore.__init__(self, 
+				log_file=log_file, log_pos=log_pos, from_lsn=from_lsn,
+				to_lsn=to_lsn, backup_type=backup_type, backup_dir=backup_dir,
+				volume=volume, snapshot=snapshot, **kwds)
 		XtrabackupMixin.__init__(self)
 		self._mysql_init = mysql_svc.MysqlInitScript()
 		self._data_dir = None
@@ -372,50 +424,52 @@ class MySQLDumpBackup(backup.Backup):
 		bak.run()
 	'''
 
-	default_config = backup.Backup.default_config.copy()
-	default_config.update({
-		'cloudfs_dir': None,
-		'file_per_database': True,
-		#'tmp_dir': __mysql__['tmp_dir'],
-		'chunk_size': __mysql__['mysqldump_chunk_size']
-	})
-
-	features = backup.Backup.features.copy()
-	features.update({
-		'start_slave': False
-	})
+	def __init__(self,
+				cloudfs_dir=None,
+				file_per_database=True,
+				chunk_size=None,
+				**kwds):
+		super(MySQLDumpBackup, self).__init__(cloudfs_dir=cloudfs_dir, 
+				file_per_database=file_per_database, 
+				chunk_size=chunk_size or __mysql__['mysqldump_chunk_size'],
+				**kwds)
+		self.features.update({
+			'start_slave': False
+		})
 
 
 	def _run(self):
 		client = mysql_svc.MySQLClient(
-			__mysql__['root_user'],
-			__mysql__['root_password'])
+					__mysql__['root_user'],
+					__mysql__['root_password'])
 		self._databases = client.list_databases()
-		transfer = LargeTransfer(self._gen_src, self._gen_dst, 'upload', tar_it=False,
-		                         chunk_size=self.default_config['chunk_size'])
-
+		transfer = LargeTransfer(self._gen_src, self._gen_dst, 'upload', 
+								tar_it=False, chunk_size=self.chunk_size)
 
 
 	def _gen_src(self):
-		if self.default_config['file_per_database']:
+		if self.file_per_database:
 			for db_name in self._databases:
 				self._current_db = db_name
 				cmd = linux.build_cmd_args(
 					executable='/usr/bin/mysqldump',
-					params=__mysql__['mysqldump_options'].split()+[db_name])
-				mysql_dump = subprocess.Popen(cmd, bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+					params=__mysql__['mysqldump_options'].split() + [db_name])
+				mysql_dump = subprocess.Popen(cmd, bufsize=-1, 
+								stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 				yield mysql_dump.stdout
 		else:
 			cmd = linux.build_cmd_args(
 				executable='/usr/bin/mysqldump',
-				params=__mysql__['mysqldump_options'].split()+['--all-databases'])
-			mysql_dump = subprocess.Popen(cmd, bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+				params=__mysql__['mysqldump_options'].split() + ['--all-databases'])
+			mysql_dump = subprocess.Popen(cmd, bufsize=-1, 
+							stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			yield mysql_dump.stdout
+
 
 	def _gen_dst(self):
 		while True:
-			if self.default_config['file_per_database']:
-				yield os.path.join(self.default_config['cloudfs_dir'], self._current_db)
+			if self.file_per_database:
+				yield os.path.join(self.cloudfs_dir, self._current_db)
 			else:
 				yield 'mysql'
 

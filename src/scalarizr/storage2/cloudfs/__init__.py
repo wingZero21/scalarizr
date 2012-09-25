@@ -12,25 +12,22 @@ import logging
 import ConfigParser
 
 from scalarizr import storage2
-from scalarizr.libs import pubsub
+from scalarizr.libs import bases
 from scalarizr.linux import coreutils
 
 filesystem_types = {}
 LOG = logging.getLogger(__name__)
 
 
-class BaseTransfer(pubsub.Observable):
+class BaseTransfer(bases.Task):
 	
-	src = None
-	dst = None
-	num_workers = None
-	max_retry = None
-	listeners = None
+	default_config = bases.Task.default_config.copy()
+	default_config.update({
+		'src': None,
+		'dst': None
+	})
 	
-	def __init__(self, src, dst, num_workers=4, max_retry=4, listeners=None):
-		
-		super(BaseTransfer, self).__init__()
-		
+	def __init__(self, src, dst, **kwds):
 		if callable(src):
 			src = (item for item in src())
 		else:
@@ -44,28 +41,30 @@ class BaseTransfer(pubsub.Observable):
 		else:
 			dst = iter(dst)	
 	
-		self.src = src
-		self.dst = dst
-		self.num_workers = num_workers
-		self.max_retry = max_retry
-		self.listeners = listeners
-		
-		self.define_events( 'started',  'complete',  'error',  'stopped')		
+		super(BaseTransfer, self).__init__(src=src, dst=dst, **kwds)
+		self.define_events('transfer_start', 'transfer_error', 'transfer_complete')
 		
 
 class Transfer(BaseTransfer):
 		
-	running = None
+	default_config = bases.Task.default_config.copy()
+	default_config.update({
+		'src': None,
+		'dst': None
+	})
+
+
 	result = None
 	failed_files = None
 	multipart = None
-			
+
+	_running = None			
 	_retries_queue = None
 	_stop_all = None
 	_lock = None
 	
 
-	def __init__(self, src, dst, num_workers=4, max_retry=4, listeners=None, multipart=True):
+	def __init__(self, src, dst, num_workers=4, max_retry=4, listeners=None, multipart=False):
 
 		'''
 		@param: src transfer source path
@@ -107,16 +106,22 @@ class Transfer(BaseTransfer):
 					yield '/backups/daily-from-s3.tar.gz'
 					yield '/backups/daily-from-cloudfiles.tar.gz'
 		'''
-		super(Transfer, self).__init__(src, dst, num_workers, max_retry, listeners)
+		super(Transfer, self).__init__(src, dst)
 		
+		self.num_workers = num_workers
+		self.max_retry = max_retry
 		self.result = self.failed_files = {}
 		self.multipart = multipart
 		self._retries_queue = Queue.Queue()
 		self._stop_all = threading.Event()
 		self._lock = threading.RLock()
+		self._url_re = re.compile(r'^[\w-]+://')
+		self._running = False
+		self._pool = []
 
 		
-	def get_job(self):
+	def iter_jobs(self):
+		num = -1
 		while True:
 			try:
 				yield self._retries_queue.get_nowait()
@@ -128,31 +133,36 @@ class Transfer(BaseTransfer):
 						s = self.src.next()
 						d = self.dst.next()
 						r = 1
-						yield [s, d, r]	
+						num += 1
+						yield [s, d, r, num]
 			except Queue.Empty:
 				raise StopIteration()
 			
 			
 	def is_remote_path(self, path):
-		url_re = re.compile(r'^[\w-]+://')
-		return isinstance(path, basestring) and url_re.match(path)
+		return isinstance(path, basestring) and self._url_re.match(path)
 				
 				
 	def _worker(self, result, failed):
-		upload_id = None
-		fs = None
-		for src, dst, retries in self.get_job():
-			self.fire('started', src, dst)
+		upload_id = chunk_size = None
+		driver = None
+		for src, dst, retry, chunk_num in self.iter_jobs():
+			self.fire('start', src, dst)
 			try:
-				remote_path = src if self.is_remote_path(src) else dst
-				fs = fs or cloudfs(remote_path)
-				if self.multipart: 
-					upload_id = fs.multipart_init(remote_path)
+				uploading = self.is_remote_path(dst)
+				downloading = self.is_remote_path(src)
+				assert not (uploading and downloading)
+				remote_path, local_path = dst, src if uploading else src, dst
+
+				if not driver:
+					driver = cloudfs(urlparse.urlparse(remote_path).schema)
+					if self.multipart:
+						chunk_size = os.path.getsize(local_path)
+						upload_id = driver.multipart_init(remote_path, chunk_size)
 				
-				if self.is_remote_path(src):
-					result[src] = fs.get(src, dst)
 					
-				elif self.is_remote_path(dst):
+				if uploading:
+					'''
 					if os.path.isdir(src):
 						for path in os.path.walk(src):
 							if os.path.isfile(path):
@@ -161,56 +171,71 @@ class Transfer(BaseTransfer):
 										result[path] = fs.multipart_put(upload_id, fp) 
 									else:
 										result[path] = fs.put(fp, dst) 
-							
 					elif os.path.isfile(src):
-						with open(src) as srcfp:
-							if self.multipart:	
-								result[src] = fs.multipart_put(srcfp)
-							else:
-								result[src] = fs.put(srcfp, dst)
-
+						if self.multipart:	
+							result[src] = driver.multipart_put(src)
+						else:
+							result[src] = fs.put(srcfp, dst)
+					'''
+					if os.path.isfile(local_path):
+						if self.multipart:
+							result[src] = driver.multipart_put(upload_id, 
+													chunk_num, src)
+						else:
+							result[local_path] = driver.put(local_path, 
+													remote_path)
 					else:
-						raise BaseException('%s is not a file nor directory' % dst)
+						raise BaseException('%s is not a regular file' % src)
+				else:
+					result[remote_path] = driver.get(remote_path, local_path)
 
-			except BaseException, e:
-				retries += 1
-				if retries < self.max_retry:
-					self._retries_queue.put([src,dst,retries])
+			except:
+				retry += 1
+				if retry < self.max_retry:
+					self._retries_queue.put([src, dst, retry, chunk_num])
 				else:
 					failed[src] = str(e)
-				self.fire('error', src, dst, retries, sys.exc_info())
+				self.fire('error', src, dst, retry, sys.exc_info())
 			else:
 				if self.multipart and upload_id:
-					fs.multipart_complete(upload_id)
+					driver.multipart_complete(upload_id)
 				self.fire('complete', src, dst)
 			finally:
 				if self._stop_all.isSet():
 					if self.multipart and upload_id:
-						fs.multipart_abort(upload_id)
-					return
+						driver.multipart_abort(upload_id)
+					break
 
 
-	def start(self):
-		self._stop_all.clar()
-		self.running = True
-		
+	def run(self):
+		if self._running:
+			return
+		self._running = True
+		self._stop_all.clear()
 		
 		#Starting threads
-		workers = []
 		for n in range(self.num_workers):
-			worker = threading.Thread(name="Worker-%s" % n, target=self._worker, 
-					args=(self.result, self.failed_files))
-			self._logger.debug("Starting worker '%s'", worker.getName())
+			worker = threading.Thread(
+						name='transfer-worker-%s' % n, 
+						target=self._worker, 
+						args=(self.result, self.failed_files))
+			LOG.debug("Starting worker '%s'", worker.getName())
 			worker.start()
-			workers.append(worker)
-		
-		# Join workers
-		for worker in workers:
-			worker.join()
-			LOG.debug("Worker '%s' finished", worker.getName())		
-		self.running = False
-		self.fire( 'complete')
-		return self.src, self.dst, self.result, self.failed_files
+			self._pool.append(worker)
+		try:
+			
+			# Join workers
+			for worker in workers:
+				worker.join()
+				LOG.debug("Worker '%s' finished", worker.getName())		
+			self.fire('complete')
+			self._result = {
+				'completed': self._completed,
+				'failed': self._failed
+			}
+			return self._result
+		finally:
+			self._running = False
 
 
 	def kill(self, timeout=None):
@@ -221,7 +246,7 @@ class Transfer(BaseTransfer):
 		return self.result, self.failed_files
 
 
-class LargeTransfer(pubsub.Observable):
+class LargeTransfer(bases.Task):
 	UPLOAD = 'upload'
 	DOWNLOAD = 'download'
 	'''

@@ -2,7 +2,7 @@
 import sys
 
 from scalarizr import storage2
-from scalarizr.libs import pubsub, cdo
+from scalarizr.libs import bases
 
 
 class Error(Exception):
@@ -47,80 +47,24 @@ def restore(*args, **kwds):
 	return cls(**kwds)
 
 
-
-
-	
-
-class Task(pubsub.Observable, cdo.ConfigDriven):
-
-	def __init__(self, **kwds):
-		cdo.ConfigDriven.__init__(self, **kwds)
-		pubsub.Observable.__init__(self, 
-			'start',    # When job is started
-			'complete', # When job is finished with success
-			'error'     # When job is finished with error
-		)
-		self.__running = False
-		self.__result  = None
-
-
-	def kill(self):
-		if self.__running:
-			self._kill()
-			self._cleanup()
-
-
-	def _kill(self):
-		pass
-
-
-	def _cleanup(self):
-		pass
-	
-
-	def run(self):
-		if self.__running:
-			raise Error('Another operation is running')
-		try:
-			self.__running = True
-			self.fire('start')
-			self.__result = self._run()
-			self.fire('complete', self.__result)
-			return self.__result
-		except:
-			exc_info = sys.exc_info()
-			self.fire('error', exc_info)
-			self._cleanup()
-			raise exc_info[0], exc_info[1], exc_info[2]
-		finally:
-			self.__running = False
-
-
-	def _run(self):
-		pass
-
-
-	@property
-	def running(self):
-		return self.__running
-
-	def result(self):
-		return self.__result
-
-
-class Backup(Task):
+class Backup(bases.Task):
 	features = {
 		'start_slave': True
 	}
 
-	default_config = {
-		'type': 'base',
-		'description': None,
-		'tags': None
-	}
+	def __init__(self, 
+				type='base', 
+				description=None, 
+				tags=None,
+				**kwds):
+		super(Backup, self).__init__(
+				type=type,
+				description=description,
+				tags=tags or {},
+				**kwds)
 
 
-class Restore(Task):
+class Restore(bases.Task):
 
 	features = {
 		'master_binlog_reset': False
@@ -133,23 +77,26 @@ class Restore(Task):
 	responsible for this.
 	'''
 
+	def __init__(self, 
+				type='base', 
+				**kwds):
+		super(Backup, self).__init__(
+				type=type,
+				**kwds)
 
-	default_config = {
-		'type': 'base'
-	}
 
 backup_types['base'] = Backup
 restore_types['base'] = Restore
 
 
 class SnapBackup(Backup):
-	default_config = Backup.default_config.copy()
-	default_config.update({
-		'volume': None
-	})
 
-	def __init__(self, **kwds):
-		super(SnapBackup, self).__init__(**kwds)
+	def __init__(self, 
+				volume=None, 
+				**kwds):
+		super(SnapBackup, self).__init__(
+				volume=volume, 
+				**kwds)
 		self.define_events(
 			# Fires when all disk I/O activity should be freezed 
 			'freeze'   
@@ -167,11 +114,12 @@ class SnapBackup(Backup):
 
 
 class SnapRestore(Restore):
-	default_config = Restore.default_config.copy()
-	default_config.update({
-		'snapshot': None,
-		'volume': None
-	})
+
+	def __init__(self, snapshot=None, volume=None, **kwds):
+		super(SnapRestore, self).__init__(
+				snapshot=snapshot, 
+				volume=volume, 
+				**kwds)
 
 
 	def _run(self):

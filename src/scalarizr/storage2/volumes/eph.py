@@ -6,22 +6,35 @@ from scalarizr.storage2.volumes import base
 
 class EphVolume(base.Volume):
 	
-	def __init__(self, **kwds):
-		self.default_config.update({
-			'vg': None,
-			'disk': None,
-			'size': None,
-			'cloudfs_dir': None
-		})
+	def __init__(self, 
+				vg=None, 
+				disk=None, 
+				size=None, 
+				cloudfs_dir=None, 
+				**kwds):
+		'''
+		:type vg:
+		:param vg:
+
+		:type disk:
+		:param disk:
+
+		:type size:
+		:param size:
+
+		:type cloudfs_dir:
+		:param cloudfs_dir:
+		'''
 		self._lvm_volume = None
 		self._transfer = None
 
 		# Compatibility with 1.0
 		snap_backed = kwds.pop('snap_backend')
-		kwds['cloudfs_dir'] = snap_backend['path'] + '/'
+		cloudfs_dir = snap_backend['path'] + '/'
 		kwds.pop('lvm_group_cfg', None)
 
-		super(EphVolume, self).__init__(**kwds)
+		super(EphVolume, self).__init__(vg=vg, disk=disk, size=size,
+				cloudfs_dir=cloudfs_dir, **kwds)
 
 		
 	def _ensure(self):

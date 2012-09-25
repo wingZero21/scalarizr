@@ -14,7 +14,7 @@ import os
 import sys
 import re
 import uuid
-from scalarizr.libs.pubsub import Observable
+from scalarizr.libs.bases import Observable
 from functools import partial
 import re
 

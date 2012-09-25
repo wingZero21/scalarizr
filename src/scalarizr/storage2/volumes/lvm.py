@@ -10,23 +10,30 @@ from scalarizr.linux import lvm2, coreutils
 
 
 class LvmVolume(base.Volume):
-	features = base.Volume.features.copy()
-	features.update({
-		'restore': True
-	})
 
-	default_config = base.Volume.default_config.copy()
-	default_config.update({
-		'pvs': [],
-		# Physical volumes
-		'vg': None,
-		# Volume group name
-		'name': None,
-		# Logical volume name
-		'size': None   
-		# Logical volume size <int>[bBsSkKmMgGtTpPeE] or %{VG|PVS|FREE|ORIGIN}
-	})
+	def __init__(self, 
+				pvs=None, 
+				vg=None, 
+				name=None, 
+				size=None, 
+				**kwds):
+		'''
+		:type pvs: list
+		:param pvs: Physical volumes
 
+		:type vg: string
+		:param vg: Volume group name
+
+		:type name: string
+		:param name: Logical volume name
+
+		:type size: int or string
+		:param size: Logical volume size <int>[bBsSkKmMgGtTpPeE] 
+			or %{VG|PVS|FREE|ORIGIN}
+		'''
+		super(LvmVolume, self).__init__(pvs=pvs or [], vg=vg, name=name,
+				size=size, **kwds)
+		self.features['restore'] = True
 
 	def _lvinfo(self):
 		return lvm2.lvs(lvm2.lvpath(self.vg, self.name)).values()[0]

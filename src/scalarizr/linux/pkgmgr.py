@@ -230,6 +230,39 @@ class YumPackageMgr(PackageMgr):
 		return self.yum_list(name)[0]
 
 
+def epel_repository():
+	'''
+	Ensure EPEL repository for RHEL based servers.
+	Figure out linux.os['arch'], linux.os['release']
+	'''
+	pass
+
+def apt_source(sources, gpg_keyserver=None, gpg_keyid=None):
+	'''
+	@param sources: list of apt sources.list entries.
+	Example:
+		['deb http://repo.percona.com/apt ${codename} main',
+		'deb-src http://repo.percona.com/apt ${codename} main']
+		All ${var} templates should be replaced with 
+		scalarizr.linux.os['var'] substitution
+	if gpg_keyserver:
+		apt-key adv --keyserver ${gpg_keyserver} --recv ${gpg_keyid}
+	'''
+	pass
+
+
+def installed(name, version=None, updatedb=False):
+	pass
+
+
+def removed(name, purge=False):
+	pass
+
+
+def latest(name, updatedb=False):
+	pass
+
+
 def package_mgr():
 	if linux.os['family'] in ('RedHat', 'Oracle'):
 		return YumPackageMgr()
