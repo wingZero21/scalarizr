@@ -1,8 +1,11 @@
 import os
 import re
 import sys
+import glob
 import string
+import shutil
 import logging
+import subprocess
 
 from scalarizr import linux, storage2
 from scalarizr.linux import coreutils, pkgmgr
@@ -10,8 +13,9 @@ from scalarizr.node import __node__
 from scalarizr.services import mysql as mysql_svc
 from scalarizr.services import backup
 from scalarizr.libs import cdo
-import shutil
-import glob
+from scalarizr.storage2.cloudfs import LargeTransfer
+
+
 
 
 LOG = logging.getLogger(__name__)
@@ -383,7 +387,37 @@ class MySQLDumpBackup(backup.Backup):
 
 
 	def _run(self):
-		pass
+		client = mysql_svc.MySQLClient(
+			__mysql__['root_user'],
+			__mysql__['root_password'])
+		self._databases = client.list_databases()
+		transfer = LargeTransfer(self._gen_src, self._gen_dst, 'upload', tar_it=False,
+		                         chunk_size=self.default_config['chunk_size'])
+
+
+
+	def _gen_src(self):
+		if self.default_config['file_per_database']:
+			for db_name in self._databases:
+				self._current_db = db_name
+				cmd = linux.build_cmd_args(
+					executable='/usr/bin/mysqldump',
+					params=__mysql__['mysqldump_options'].split()+[db_name])
+				mysql_dump = subprocess.Popen(cmd, bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+				yield mysql_dump.stdout
+		else:
+			cmd = linux.build_cmd_args(
+				executable='/usr/bin/mysqldump',
+				params=__mysql__['mysqldump_options'].split()+['--all-databases'])
+			mysql_dump = subprocess.Popen(cmd, bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			yield mysql_dump.stdout
+
+	def _gen_dst(self):
+		while True:
+			if self.default_config['file_per_database']:
+				yield os.path.join(self.default_config['cloudfs_dir'], self._current_db)
+			else:
+				yield 'mysql'
 
 
 backup.backup_types['mysqldump'] = MySQLDumpBackup
