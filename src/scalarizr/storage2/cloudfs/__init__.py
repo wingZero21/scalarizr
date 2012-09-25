@@ -49,7 +49,7 @@ class BaseTransfer(pubsub.Observable):
 		self.max_retry = max_retry
 		self.listeners = listeners
 		
-		self.define_events('transfer_started', 'transfer_complete', 'transfer_error', 'transfer_stopped')		
+		self.define_events( 'started',  'complete',  'error',  'stopped')		
 		
 
 class Transfer(BaseTransfer):
@@ -57,13 +57,14 @@ class Transfer(BaseTransfer):
 	running = None
 	result = None
 	failed_files = None
+	multipart = None
 			
 	_retries_queue = None
 	_stop_all = None
 	_lock = None
 	
 
-	def __init__(self, src, dst, num_workers=4, max_retry=4, listeners=None):
+	def __init__(self, src, dst, num_workers=4, max_retry=4, listeners=None, multipart=True):
 
 		'''
 		@param: src transfer source path
@@ -108,6 +109,7 @@ class Transfer(BaseTransfer):
 		super(Transfer, self).__init__(src, dst, num_workers, max_retry, listeners)
 		
 		self.result = self.failed_files = {}
+		self.multipart = multipart
 		self._retries_queue = Queue.Queue()
 		self._stop_all = threading.Event()
 		self._lock = threading.RLock()
@@ -116,15 +118,16 @@ class Transfer(BaseTransfer):
 	def get_job(self):
 		while True:
 			try:
-				with self._lock:
-					s = self.src.next()
-					d = self.dst.next()
-					r = 1
-					yield [s, d, r]
+				yield self._retries_queue.get_nowait()
+				
 			except StopIteration:
 				pass	
 			try:
-				yield self._retries_queue.get_nowait()
+				with self._lock:
+						s = self.src.next()
+						d = self.dst.next()
+						r = 1
+						yield [s, d, r]	
 			except Queue.Empty:
 				raise StopIteration()
 			
@@ -135,10 +138,15 @@ class Transfer(BaseTransfer):
 				
 				
 	def _worker(self, result, failed):
+		upload_id = None
+		fs = None
 		for src, dst, retries in self.get_job():
-			self.fire('transfer_started', src, dst)
+			self.fire('started', src, dst)
 			try:
-				fs = cloudfs(src if self.is_remote_path(src) else dst)
+				remote_path = src if self.is_remote_path(src) else dst
+				fs = fs or cloudfs(remote_path)
+				if self.multipart: 
+					upload_id = fs.multipart_init(remote_path)
 				
 				if self.is_remote_path(src):
 					result[src] = fs.get(src, dst)
@@ -148,11 +156,17 @@ class Transfer(BaseTransfer):
 						for path in os.path.walk(src):
 							if os.path.isfile(path):
 								with open(path) as fp:
-									result[path] = fs.put(fp, dst)
+									if self.multipart:
+										result[path] = fs.multipart_put(upload_id, fp) 
+									else:
+										result[path] = fs.put(fp, dst) 
 							
 					elif os.path.isfile(src):
 						with open(src) as srcfp:
-							result[src] = fs.put(srcfp, dst)
+							if self.multipart:	
+								result[src] = fs.multipart_put(srcfp)
+							else:
+								result[src] = fs.put(srcfp, dst)
 
 					else:
 						raise BaseException('%s is not a file nor directory' % dst)
@@ -163,11 +177,15 @@ class Transfer(BaseTransfer):
 					self._retries_queue.put([src,dst,retries])
 				else:
 					failed[src] = str(e)
-				self.fire('transfer_error', src, dst, retries, sys.exc_info())
+				self.fire('error', src, dst, retries, sys.exc_info())
 			else:
-				self.fire('transfer_complete', src, dst)
+				if self.multipart and upload_id:
+					fs.multipart_complete(upload_id)
+				self.fire('complete', src, dst)
 			finally:
 				if self._stop_all.isSet():
+					if self.multipart and upload_id:
+						fs.multipart_abort(upload_id)
 					return
 
 
@@ -190,15 +208,16 @@ class Transfer(BaseTransfer):
 			worker.join()
 			LOG.debug("Worker '%s' finished", worker.getName())		
 		self.running = False
-		self.fire('transfer_complete')
+		self.fire( 'complete')
 		return self.src, self.dst, self.result, self.failed_files
 
 
-	def kill(self):
-		self._stop_all.set()
+	def kill(self, timeout=None):
+		#self._stop_all.set()
 		self.running = False
-		self.fire('transfer_stopped', self.src, self.dst)
-		return self.src, self.dst, self.result, self.failed_files
+		self._stopped.wait(timeout)
+		self.fire( 'stopped', self.src, self.dst, self._retries_queue)
+		return self.result, self.failed_files
 
 
 class LargeTransfer(pubsub.Observable):
