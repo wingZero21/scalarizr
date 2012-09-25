@@ -9,6 +9,7 @@ import inspect
 import subprocess
 import threading
 import logging
+import ConfigParser
 
 from scalarizr import storage2
 from scalarizr.libs import pubsub
@@ -336,8 +337,7 @@ class LargeTransfer(pubsub.Observable):
 		'''
 		Compress, split, yield out
 		'''
-		self._tranzit_vol.size = 
-				int(self.chunk_size * (self._transfer.num_workers) * 1.1)
+		self._tranzit_vol.size = int(self.chunk_size * (self._transfer.num_workers) * 1.1)
 		self._tranzit_vol.ensure(mkfs=True)
 		try:
 			if self.direction == self.UPLOAD:
@@ -461,7 +461,7 @@ class LargeTransfer(pubsub.Observable):
 		self._transfer.run()
 
 
-class Manifest(object)
+class Manifest(object):
 	def __init__(self, filename):
 		self.filename = filename
 		self.ini = ConfigParser.ConfigParser()
