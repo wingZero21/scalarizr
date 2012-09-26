@@ -15,22 +15,22 @@ class GlacierFilesystem(cloudfs.CloudFileSystem):
 		self._total_size = 0
 		self._tree_hashes = []
 		
-	def _conn(self):
+	def _connect_glacier(self):
 		'''
 		Returns Boto.Glacier.Layer1 object
 		'''
-		self._api = __node__['ec2']['connect_glacier']()
+		return __node__['ec2']['connect_glacier']()
 
-		return self._api 
 
 	def multipart_init(self, path, part_size):
 		'''
 		Returns upload_id
 		'''
+		self._conn = self._connect_glacier()
 		self._part_size = part_size
 		self._vault_name = urlparse(path).netloc
 
-        response = self._api.initiate_multipart_upload(self._vault_name, part_size, None)
+        response = self._conn.initiate_multipart_upload(self._vault_name, part_size, None)
 
         return response['UploadId']
 
@@ -38,7 +38,7 @@ class GlacierFilesystem(cloudfs.CloudFileSystem):
 		start_byte = part_num * self._part_size
 		content_range = (start_byte, start_byte + len(part) - 1) 
 		linear_hash = hashlib.sha256(part).hexdigest()
-        part_tree_hash = tree_hash(chunk_hashes(part))
+		part_tree_hash = tree_hash(chunk_hashes(part))
 		self._tree_hashes.append(part_tree_hash)
 		hex_part_tree_hash = bytes_to_hex(part_tree_hash)
 

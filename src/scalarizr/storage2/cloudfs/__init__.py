@@ -21,13 +21,14 @@ LOG = logging.getLogger(__name__)
 
 class BaseTransfer(bases.Task):
 	
-	default_config = bases.Task.default_config.copy()
-	default_config.update({
-		'src': None,
-		'dst': None
-	})
-	
-	def __init__(self, src, dst, **kwds):
+	def __init__(self, src=None, dst=None, **kwds):
+		'''
+		:type src: string / generator / iterator
+		:param src: Transfer source
+
+		:type dst: string / generator / iterator
+		:param dst: Transfer destination
+		'''
 		if callable(src):
 			src = (item for item in src())
 		else:
@@ -46,27 +47,33 @@ class BaseTransfer(bases.Task):
 		
 
 class Transfer(BaseTransfer):
-		
-	default_config = bases.Task.default_config.copy()
-	default_config.update({
-		'src': None,
-		'dst': None
-	})
 
+	_url_re = re.compile(r'^[\w-]+://')
 
-	result = None
-	failed_files = None
-	multipart = None
-
-	_running = None			
-	_retries_queue = None
-	_stop_all = None
-	_lock = None
-	
-
-	def __init__(self, src, dst, num_workers=4, max_retry=4, listeners=None, multipart=False):
-
+	def __init__(self, num_workers=4, retries=3, multipart=False, **kwds):
 		'''
+		:type num_workers: int
+		:param num_workers: Number of worker threads
+
+		:type retries: int
+		:param retries: Max retries to transfer one file
+
+		:type multipart: bool
+		:param multipart: Use multipart uploading functionality of the underlying
+			driver. :param:`src` should be a chunks iterator / generator
+
+		:event transfer_start: Fired when started transfer of the particular file
+
+		:evtype src: string
+		:evparam src: Full source path
+
+		:evtype dst: string
+		:evparam dst: Full destination path
+
+		:event transfer_complete: Fired when file transfer complete
+
+		:event transfer_error: Fired when file transfer failed	
+
 		@param: src transfer source path
 			- str file or directory path. directory processed recursively
 			- list of path strings 
@@ -106,144 +113,136 @@ class Transfer(BaseTransfer):
 					yield '/backups/daily-from-s3.tar.gz'
 					yield '/backups/daily-from-cloudfiles.tar.gz'
 		'''
-		super(Transfer, self).__init__(src, dst)
-		
-		self.num_workers = num_workers
-		self.max_retry = max_retry
-		self.result = self.failed_files = {}
-		self.multipart = multipart
+		super(Transfer, self).__init__(num_workers=num_workers, 
+						num_retries=num_retries, multipart=multipart, **kwds)
+
+		self._completed = {}
+		self._failed = {}
 		self._retries_queue = Queue.Queue()
 		self._stop_all = threading.Event()
-		self._lock = threading.RLock()
-		self._url_re = re.compile(r'^[\w-]+://')
-		self._running = False
-		self._pool = []
+		self._stopped = threading.Event()
+		self._gen_lock = threading.RLock()
+		self._worker_lock = threading.Lock()
+		self._upload_id = None
 
 		
-	def iter_jobs(self):
-		num = -1
+	def _job_generator(self):
+		chunk_num = -1
+		no_more = False
 		while True:
 			try:
 				yield self._retries_queue.get_nowait()
-				
-			except StopIteration:
-				pass	
-			try:
-				with self._lock:
-						s = self.src.next()
-						d = self.dst.next()
-						r = 1
-						num += 1
-						yield [s, d, r, num]
 			except Queue.Empty:
-				raise StopIteration()
+				if no_more:
+					raise StopIteration
+			try:
+				with self._gen_lock:
+						src = self.src.next()
+						dst = self.dst.next()
+						retry = 1
+						chunk_num += 1
+						yield [src, dst, retry, chunk_num]
+			except StopIteration:
+				no_more = True
 			
 			
-	def is_remote_path(self, path):
+	def _is_remote_path(self, path):
 		return isinstance(path, basestring) and self._url_re.match(path)
 				
 				
-	def _worker(self, result, failed):
-		upload_id = chunk_size = None
+	def _worker(self):
 		driver = None
-		for src, dst, retry, chunk_num in self.iter_jobs():
-			self.fire('start', src, dst)
+		for src, dst, retry, chunk_num in self._job_generator():
+			self.fire('transfer_start', src, dst, retry, chunk_num)
 			try:
-				uploading = self.is_remote_path(dst)
-				downloading = self.is_remote_path(src)
-				assert not (uploading and downloading)
-				remote_path, local_path = dst, src if uploading else src, dst
+				uploading = self._is_remote_path(dst)
+				assert not (uploading and self._is_remote_path(src))
+				assert (uploading and os.path.isfile(src)) or not uploading
 
 				if not driver:
-					driver = cloudfs(urlparse.urlparse(remote_path).schema)
-					if self.multipart:
-						chunk_size = os.path.getsize(local_path)
-						upload_id = driver.multipart_init(remote_path, chunk_size)
-				
+					rem, loc = dst, src if uploading else src, dst
+					driver = cloudfs(urlparse.urlparse(rem).schema)
+					with self._worker_lock:
+						if self.multipart and not self._upload_id:
+							chunk_size = os.path.getsize(loc)
+							self._upload_id = driver.multipart_init(rem, 
+															chunk_size)
 					
 				if uploading:
-					'''
-					if os.path.isdir(src):
-						for path in os.path.walk(src):
-							if os.path.isfile(path):
-								with open(path) as fp:
-									if self.multipart:
-										result[path] = fs.multipart_put(upload_id, fp) 
-									else:
-										result[path] = fs.put(fp, dst) 
-					elif os.path.isfile(src):
-						if self.multipart:	
-							result[src] = driver.multipart_put(src)
-						else:
-							result[src] = fs.put(srcfp, dst)
-					'''
-					if os.path.isfile(local_path):
-						if self.multipart:
-							result[src] = driver.multipart_put(upload_id, 
-													chunk_num, src)
-						else:
-							result[local_path] = driver.put(local_path, 
-													remote_path)
+					if self.multipart:
+						driver.multipart_put(self._upload_id, chunk_num, src)
 					else:
-						raise BaseException('%s is not a regular file' % src)
+						driver.put(src, dst)
+					self._completed.append({
+							'src': src,
+							'dst': dst,
+							'chunk_num': chunk_num,
+							'size': os.path.getsize(src)})
 				else:
-					result[remote_path] = driver.get(remote_path, local_path)
+					driver.get(src, dst)
+					self._completed.append({
+							'src': src,
+							'dst': dst,
+							'size': os.path.getsize(dst)})
+				self.fire('transfer_complete', src, dst, retry, chunk_num)
 
+			except AssertionError:
+				self.fire('transfer_error', src, dst, retry, chunk_num, 
+							sys.exc_info())
 			except:
 				retry += 1
-				if retry < self.max_retry:
-					self._retries_queue.put([src, dst, retry, chunk_num])
+				if retry <= self.retries:
+					self._retries_queue.put((src, dst, retry, chunk_num))
 				else:
-					failed[src] = str(e)
-				self.fire('error', src, dst, retry, sys.exc_info())
-			else:
-				if self.multipart and upload_id:
-					driver.multipart_complete(upload_id)
-				self.fire('complete', src, dst)
+					self._failed.append({
+							'src': src,
+							'dst': dst,
+							'exc_info': sys.exc_info()})
+				self.fire('transfer_error', src, dst, retry, chunk_num, 
+							sys.exc_info())
 			finally:
 				if self._stop_all.isSet():
-					if self.multipart and upload_id:
-						driver.multipart_abort(upload_id)
+					with self._worker_lock:
+						if self.multipart and self._upload_id:
+							driver.multipart_abort(self._upload_id)
+							self._upload_id = None
 					break
 
+		with self._worker_lock:
+			if self.multipart and self._upload_id:
+				driver.multipart_complete(self._upload_id)
+				self._upload_id = None
 
-	def run(self):
-		if self._running:
-			return
-		self._running = True
+
+	def _run(self):
 		self._stop_all.clear()
-		
-		#Starting threads
-		for n in range(self.num_workers):
-			worker = threading.Thread(
-						name='transfer-worker-%s' % n, 
-						target=self._worker, 
-						args=(self.result, self.failed_files))
-			LOG.debug("Starting worker '%s'", worker.getName())
-			worker.start()
-			self._pool.append(worker)
+		self._stopped.clear()
 		try:
-			
+			# Starting threads
+			pool = []
+			for n in range(self.num_workers):
+				worker = threading.Thread(
+							name='transfer-worker-%s' % n, 
+							target=self._worker)
+				LOG.debug("Starting worker '%s'", worker.getName())
+				worker.start()
+				pool.append(worker)
 			# Join workers
-			for worker in workers:
+			for worker in pool:
 				worker.join()
 				LOG.debug("Worker '%s' finished", worker.getName())		
-			self.fire('complete')
-			self._result = {
+			return {
 				'completed': self._completed,
 				'failed': self._failed
 			}
-			return self._result
 		finally:
-			self._running = False
+			self._stopped.set()
 
 
 	def kill(self, timeout=None):
-		#self._stop_all.set()
-		self.running = False
+		self._stop_all.set()
 		self._stopped.wait(timeout)
-		self.fire( 'stopped', self.src, self.dst, self._retries_queue)
-		return self.result, self.failed_files
+
 
 
 class LargeTransfer(bases.Task):
@@ -486,6 +485,7 @@ class LargeTransfer(bases.Task):
 		self._transfer.run()
 
 
+"""
 class Manifest(object):
 	def __init__(self, filename):
 		self.filename = filename
@@ -519,7 +519,7 @@ class Manifest(object):
 
 	def chunks(self, name):
 		raise NotImplementedError()
-
+"""
 
 def cloudfs(fstype, **driver_kwds):
 	raise NotImplementedError()
