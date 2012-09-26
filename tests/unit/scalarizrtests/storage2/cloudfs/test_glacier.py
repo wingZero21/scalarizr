@@ -34,6 +34,16 @@ class TestGlacierFilesystem(object):
 		driver.multipart_put('LSKGJ236AD36EQ36_e42YT5', 1, '0123456789')
 		driver.multipart_complete('LSKGJ236AD36EQ36_e42YT5') 
 
-		#driver._conn.complete_multipart_upload(
-	#		'Vault_1',
-	#   		'LSKGJ236AD36EQ36_e42YT5',
+		driver._conn.complete_multipart_upload.assert_called_with(
+			'Vault_1',
+	   		'LSKGJ236AD36EQ36_e42YT5',
+			'3f9b42f36cfc0aec3d720aeb2af77f46b84106e0f3f62c28cc3286530c27496a',
+			20
+		)
+
+	def test_multipart_abort(self, *args):
+		driver = glacier.GlacierFilesystem()
+		driver.multipart_init('glacier://Vault_1/', 1024)
+		driver.multipart_abort('LSKGJ236AD36EQ36_e42YT5')
+
+		driver._conn.abort_multipart_upload.assert_called_with('Vault_1', 'LSKGJ236AD36EQ36_e42YT5')

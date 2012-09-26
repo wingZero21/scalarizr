@@ -20,7 +20,9 @@ class GlacierFilesystem(CloudFileSystem):
 		'''
 		Returns Boto.Glacier.Layer1 object
 		'''
-		return __node__['ec2']['connect_glacier']()
+		#return __node__['ec2']['connect_glacier']()
+		from boto.glacier.layer1 import Layer1
+		return Layer1('AKIAJO6DOVEREBMYUERQ', 'LBEvgTXt+o7X3NsUr0c5paD4Uf9EWZsyrWMOixeD', 615271354814)
 
 
 	def multipart_init(self, path, part_size):
@@ -30,7 +32,7 @@ class GlacierFilesystem(CloudFileSystem):
 		self._conn = self._connect_glacier()
 		self._part_size = part_size
 		self._vault_name = urlparse(path).netloc
-
+		
 		response = self._conn.initiate_multipart_upload(self._vault_name, part_size, None)
 
 		return response['UploadId']
@@ -59,9 +61,6 @@ class GlacierFilesystem(CloudFileSystem):
 		Returns glacier://Vault_1/?avail_zone=us-east-1&archive_id=NkbByEejwEggmBz2fTHgJrg0XBoDfjP4q6iu87-TjhqG6eGoOY9Z8i1_AUyUsuhPAdTqLHy8pTl5nfCFJmDl2yEZONi5L26Omw12vcs01MNGntHEQL8MBfGlqrEXAMPLEArchiveId
 		'''
 		hex_tree_hash = bytes_to_hex(tree_hash(self._tree_hashes))
-
-		print 'hex_tree_hash:', hex_tree_hash
-		print 'total_size:', self._total_size
 
 		response = self._conn.complete_multipart_upload(
 			self._vault_name,
