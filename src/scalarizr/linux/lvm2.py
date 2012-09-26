@@ -131,7 +131,7 @@ def vgs(*volume_groups, **long_kwds):
 	
 
 def pvcreate(*physical_volumes, **long_kwds):
-	long_kwds.update({'yes': True})
+	long_kwds.update({'yes': True, 'force': True})
 	return linux.system(linux.build_cmd_args(
 			executable='/sbin/pvcreate', 
 			long=long_kwds, 
@@ -258,6 +258,14 @@ def lvremove(*logical_volume_paths, **long_kwds):
 		if e.returncode == 5:
 			raise NotFound()
 		raise
+
+
+def lvextend(logical_volume_path, **long_kwds):
+	return linux.system(linux.build_cmd_args(
+		executable='/sbin/lvextend',
+		long=long_kwds,
+		params=[logical_volume_path]))
+
 
 
 def backup_vg_config(vg_name):

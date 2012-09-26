@@ -99,7 +99,7 @@ def umount(device_or_mpoint, **long_kwds):
 	try:
 		linux.system(args, error_text='Cannot umount %s' % device_or_mpoint)
 	except linux.LinuxError, e:
-		if 'not mounted' in e.err:
+		if 'not mounted' in e.err or 'not found' in e.err:
 			return
 		raise
 

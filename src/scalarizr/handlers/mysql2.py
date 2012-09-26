@@ -96,6 +96,19 @@ class MysqlMessages:
 	@ivar farm_role_id
 	"""
 
+	CONVERT_VOLUME = "ConvertVolume"
+	"""
+	@ivar volume: volume configuration
+	"""
+
+	CONVERT_VOLUME_RESULT = "ConvertVolumeResult"
+	"""
+	@ivar status: ok|error
+	@ivar last_error
+	@ivar volume: converted volume configuration
+	"""
+
+
 
 def get_handlers():
 	return [MysqlHandler()]
@@ -294,7 +307,8 @@ class MysqlHandler(DBMSRHandler):
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
 				or  message.name == Messages.BEFORE_HOST_TERMINATE
-				or  message.name == MysqlMessages.CREATE_PMA_USER)	
+				or  message.name == MysqlMessages.CREATE_PMA_USER
+				or	message.name == MysqlMessages.CONVERT_VOLUME)
 		
 	
 	def get_initialization_phases(self, hir_message):
@@ -933,7 +947,29 @@ class MysqlHandler(DBMSRHandler):
 		)
 			
 		LOG.debug("Replication switched")
-		bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)		
+		bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
+
+
+	def on_ConvertVolume(self, message):
+		try:
+			if __node__['state'] != 'running':
+				raise HandlerError('scalarizr is not in "running" state')
+
+			old_volume = storage2.volume(__mysql__['volume'])
+			new_volume = storage2.volume(message.volume)
+
+			if old_volume.type != 'eph' or new_volume.type != 'lvm':
+				raise HandlerError('%s to %s convertation unsupported.' %
+								   (old_volume.type, new_volume.type))
+
+			new_volume.ensure()
+			__mysql__.update({'volume': new_volume})
+		except:
+			e = sys.exc_info()[1]
+			LOG.error('Volume convertation failed: %s' % e)
+			self.send_message(MysqlMessages.CONVERT_VOLUME_RESULT,
+					dict(status='error', last_error=str(e)))
+
 
 		
 	def on_before_reboot_start(self, *args, **kwargs):

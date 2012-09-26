@@ -1,4 +1,8 @@
+import unittest
 
+import mock
+
+from scalarizr.storage2.volumes import eph
 
 volume = {
 	'snap_backend': {
@@ -45,5 +49,53 @@ snapshot = {
 		'id': 'base-vol-1fdb2bf0'
 	},
 	'type': 'eph',
-	'id': 'eph-snap-fe9ac9ce'			
+	'id': 'eph-snap-fe9ac9ce'
 }
+
+@mock.patch('scalarizr.storage2.volumes.eph.storage2')
+class EphVolumeTest(unittest.TestCase):
+
+
+	def test_10_compatible(self, storage2):
+		vol = eph.EphVolume(**volume)
+		self.assertFalse(hasattr(vol, 'snap_backend'))
+		self.assertEqual(vol.cloudfs_dir, volume['snap_backend']['path'] + '/')
+
+
+	def test_ensure(self, storage2):
+		vol = eph.EphVolume(**volume)
+		vol.ensure()
+
+		storage2.volume.assert_called_once_with(
+			type='lvm', pvs=[volume['disk']], size='%sVG' % volume['size'],
+			vg=volume['vg'], name='data'
+		)
+
+		lvm_vol = storage2.volume.return_value
+		lvm_vol.ensure.assert_called_once_with()
+
+		self.assertEqual(lvm_vol.device, vol.device)
+
+
+
+	def test_ensure_from_snap(self, storage2):
+		vol = eph.EphVolume(type='eph', snap=snapshot)
+		vol.ensure()
+
+
+	def test_detach(self, storage2):
+		pass
+
+
+	def test_destroy(self, storage2):
+		pass
+
+
+	def test_snapshot(self, storage2):
+		pass
+
+
+class EphSnapshotTest(unittest.TestCase):
+
+	def test_destroy(self):
+		pass

@@ -92,4 +92,31 @@ def remove(path):
 		shutil.rmtree(path)
 
 
+def blkid(device_path, **kwargs):
+	ret = dict()
+	kwargs.update({'o': 'export'})
+	args = ['/sbin/blkid']
+	for k,v in kwargs.items():
+		if type(v) == bool:
+			args.append('-%s' % k)
+		else:
+			args.extend(['-%s' % k, str(v)])
+
+	args.append(device_path)
+
+	out = linux.system(args)[0].splitlines()
+	for line in out:
+		line = line.strip()
+		if line:
+			k,v = line.split('=',1)
+			ret[k.lower()] = v
+
+	return ret
+
+
+
+
+
+
+
 

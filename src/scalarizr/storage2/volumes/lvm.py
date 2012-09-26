@@ -3,6 +3,7 @@ Created on Aug 22, 2012
 
 @author: marat
 '''
+import os
 
 from scalarizr import storage2
 from scalarizr.storage2.volumes import base
@@ -40,6 +41,18 @@ class LvmVolume(base.Volume):
 		
 
 	def _ensure(self):
+		def get_lv_size_kwarg(size):
+			kwd = dict()
+			if '%' in str(size):
+				kwd['extents'] = size
+			else:
+				try:
+					int(size)
+					kwd['size'] = '%sG' % size
+				except:
+					kwd['size'] = size
+			return kwd
+
 		if self.snap:
 			pvs = []
 			try:
@@ -54,36 +67,32 @@ class LvmVolume(base.Volume):
 			self.vg = snap.vg
 			self.name = snap.name
 		
+		pvs = lvm2.pvs()
+		pv_volumes = []
+		for pv_volume in self.pvs:
+			pv_volume = storage2.volume(pv_volume)
+			pv_volume.ensure()
+			if pv_volume.device not in pvs:
+				lvm2.pvcreate(pv_volume.device)
+			pv_volumes.append(pv_volume)
+		self.pvs = pv_volumes
+
 		self._check_attr('vg')
 		try:
 			lv_info = self._lvinfo()
+
 		except lvm2.NotFound:
 			self._check_attr('size')
-
-			pvs = lvm2.pvs()			
-			pv_volumes = []
-			for pv_volume in self.pvs:
-				pv_volume = storage2.volume(pv_volume)
-				pv_volume.ensure()
-				if pv_volume.device not in pvs:
-					lvm2.pvcreate(pv_volume.device)
-				pv_volumes.append(pv_volume)
-			self.pvs = pv_volumes
 			
 			try:
 				lvm2.vgs(self.vg)
+
 			except lvm2.NotFound:
 				lvm2.vgcreate(self.vg, *[disk.device for disk in self.pvs])
 
 			kwds = {'name': self.name}
-			if '%' in str(self.size):
-				kwds['extents'] = self.size
-			else:
-				try:
-					int(self.size)
-					kwds['size'] = '%sG' % self.size
-				except:
-					kwds['size'] = self.size
+			kwds.update(get_lv_size_kwarg(self.size))
+
 			lvm2.lvcreate(self.vg, **kwds)
 			lv_info = self._lvinfo()
 
@@ -91,7 +100,29 @@ class LvmVolume(base.Volume):
 			'device': lv_info.lv_path,
 			'snap': None
 		})
-			
+
+		pvs_to_extend_vg = []
+		for pv in self.pvs:
+			pv_info = lvm2.pvs(pv.device)[pv.device]
+
+			if not pv_info.vg_name:
+				pvs_to_extend_vg.append(pv.device)
+				continue
+
+			if os.path.basename(self.vg) != pv_info.vg_name:
+				raise storage2.StorageError(
+					'Can not add physical volume %s to volume group %s: already'
+					'in volume group %s' % (pv.device, self.vg, pv_info.vg_name)
+				)
+
+		if pvs_to_extend_vg:
+			lvm2.vgextend(self.vg, *pvs_to_extend_vg)
+			lvm2.lvextend(self.device, **get_lv_size_kwarg(self.size))
+			if self.fscreated:
+				fs = storage2.filesystem(self.fstype)
+				if fs.features.get('resizable'):
+					fs.resize(self.device)
+
 		if lv_info.lv_attr[4] == '-':
 			lvm2.lvchange(self.device, available=True)
 
@@ -153,7 +184,7 @@ class LvmVolume(base.Volume):
 				pass
 			else:
 				if not (int(vg_info.snap_count) or int(vg_info.lv_count)):
-					pv_disks = [device for device, pv_info in lvm2.pvs() 
+					pv_disks = [device for device, pv_info in lvm2.pvs().items()
 								if pv_info.vg_name == self.vg]
 					lvm2.vgremove(self.vg)
 					for device in pv_disks:

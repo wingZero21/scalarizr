@@ -225,10 +225,21 @@ class RaidSnapshot(base.Snapshot):
 		super(RaidSnapshot, self).__init__(**kwds)
 		self.disks = map(storage2.snapshot, self.disks)
 
+
 	def _destroy(self):
 		for disk in self.disks:
 			disk.destroy()
 
-	# STATUS?
+
+	def _status(self):
+		if all((snap.status() == self.COMPLETED for snap in self.disks)):
+			return self.COMPLETED
+		elif any((snap.status() == self.FAILED for snap in self.disks)):
+			return self.FAILED
+		elif any((snap.status() == self.IN_PROGRESS for snap in self.disks)):
+			return self.IN_PROGRESS
+		return self.UNKNOWN
+
+
 storage2.volume_types['raid'] = RaidVolume
 storage2.snapshot_types['raid'] = RaidSnapshot
