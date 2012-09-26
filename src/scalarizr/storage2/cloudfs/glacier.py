@@ -43,13 +43,6 @@ class GlacierFilesystem(CloudFileSystem):
 		self._tree_hashes.append(part_tree_hash)
 		hex_part_tree_hash = bytes_to_hex(part_tree_hash)
 
-		print 'vault_name:', self._vault_name
-		print 'upload_id:', upload_id
-		print 'linear_hash:', linear_hash
-		print 'hex_part_tree_hash:', hex_part_tree_hash
-		print 'content_range:', content_range
-		print 'part:', part
-
 		self._conn.upload_part(
 			self._vault_name,
 			upload_id,
@@ -66,6 +59,9 @@ class GlacierFilesystem(CloudFileSystem):
 		Returns glacier://Vault_1/?avail_zone=us-east-1&archive_id=NkbByEejwEggmBz2fTHgJrg0XBoDfjP4q6iu87-TjhqG6eGoOY9Z8i1_AUyUsuhPAdTqLHy8pTl5nfCFJmDl2yEZONi5L26Omw12vcs01MNGntHEQL8MBfGlqrEXAMPLEArchiveId
 		'''
 		hex_tree_hash = bytes_to_hex(tree_hash(self._tree_hashes))
+
+		print 'hex_tree_hash:', hex_tree_hash
+		print 'total_size:', self._total_size
 
 		response = self._conn.complete_multipart_upload(
 			self._vault_name,
