@@ -8,11 +8,42 @@
 # INPUT FORWARD OUTPUT 	PREROUTING 	POSTROUTING
 
 from collections import OrderedDict
+import shlex
 
 from scalarizr import linux
 
 
 IPTABLES_BIN = '/sbin/iptables'
+
+# from iptables --help, must cover all short options
+_OPTIONS = {
+	"-A": "--append",
+	"-D": "--delete",
+	"-I": "--insert",
+	"-R": "--replace",
+	"-L": "--list",
+	"-S": "--list-rules",
+	"-F": "--flush",
+	"-Z": "--zero",
+	"-N": "--new",
+	"-X": "--delete-chain",
+	"-P": "--policy",
+	"-E": "--rename-chain",
+	"-p": "--proto",
+	"-s": "--source",
+	"-d": "--destination",
+	"-i": "--in-interface",
+	"-j": "--jump",
+	"-g": "--goto",
+	"-m": "--match",
+	"-n": "--numeric",
+	"-o": "--out-interface",
+	"-t": "--table",
+	"-v": "--verbose",
+	"-x": "--exact",
+	"-f": "--fragment",
+	"-V": "--version",
+}
 
 
 def iptables(**long_kwds):
@@ -23,7 +54,8 @@ def iptables(**long_kwds):
 			ordered_long[key] = long_kwds.pop(key)
 	ordered_long.update(long_kwds)
 
-	return linux.build_cmd_args(executable=IPTABLES_BIN, long=ordered_long)
+	return linux.system(linux.build_cmd_args(executable=IPTABLES_BIN,
+		long=ordered_long))
 
 
 def iptables_save(filename=None, *short_args, **long_kwds):
@@ -95,13 +127,54 @@ class _Chain(object):
 		return iptables(delete=delete, **rule)
 
 	def list(self, table=None):
-		kwargs = {}
+		result = []
+
+		def build_ruledict(option, element):
+			"""
+			For use in reduce(build_ruledict, arglist). This will result in
+			filling the last dict from 'result' with {'option': 'value'} pairs
+			from ['--option', 'value', ...] arglist. Multiple or no values per
+			option is acceptable.
+			"""
+
+			ruledict = result[-1]
+			key = option[2:]
+			val = ruledict.setdefault(key, True)
+
+			if element.startswith('--'):  # element is the new option
+				return element
+			else:
+				if val == True:
+					ruledict[key] = element
+				elif not hasattr(val, 'append'):
+					ruledict[key] = [val, element]
+				else:
+					ruledict[key].append(element)
+				return option
+
+		# get stdout
+		kwargs = {"list-rules": self.name}
 		if table:
-			kwargs = {'table': table}
-		out = iptables(list=self.name, **kwargs)[0]
-		# 'Chain INPUT (policy ACCEPT)\ntarget     prot opt source               destination         \n\nChain FORWARD (policy ACCEPT)\ntarget     prot opt source               destination         \n\nChain OUTPUT (policy ACCEPT)\ntarget     prot opt source               destination         \n'
-		#TODO:parse
-		out.split('\n\n')
+			kwargs['table'] = table
+		out = iptables(**kwargs)[0]
+
+		# parse
+		for rule in out.splitlines():
+			args = shlex.split(rule)
+			if "-P" in args or "-N" in args:
+				continue  # dull rules
+
+			# convert all short options to long
+			for i in range(len(args)):
+				arg = args[i]
+				if len(arg) == 2 and arg.startswith('-'):
+					args[i] = _OPTIONS[arg]  # will crash on unknown short opt
+
+			# build a new ruledict in result
+			result.append({})
+			reduce(build_ruledict, args)
+
+		return result
 
 
 class _Chains(object):
@@ -115,14 +188,15 @@ class _Chains(object):
 	)
 	_container = dict([(name, _Chain(name)) for name in _predefined])
 
-	@classmethod
-	def __getitem__(cls, name):
-		return cls._container[name]
+	def __getitem__(self, name):
+		return self._container[name]
 
-	@classmethod
-	def add(cls, name):
-		assert name not in cls._predefined
-		cls._container.setdefault(name, _Chain(name))
+	def __iter__(self):
+		return iter(self._container)
+
+	def add(self, name):
+		assert name not in self._predefined
+		self._container.setdefault(name, _Chain(name))
 
 		# create
 		try:
@@ -131,16 +205,15 @@ class _Chains(object):
 			if not e.err == "iptables: Chain already exists.":
 				raise
 
-	@classmethod
-	def remove(cls, name, force=False):
-		assert name not in cls._predefined
+	def remove(self, name, force=False):
+		assert name not in self._predefined
 
 		if force:
 			iptables(flush=name)
 			# TODO: delete references
 		iptables(**{"delete-chain": name})
 
-		cls._container.pop(name)
+		self._container.pop(name)
 
 
 chains = _Chains()
@@ -154,22 +227,6 @@ POSTROUTING = chains["POSTROUTING"]
 
 def list(chain, table=None):
 	return chains[chain].list(table)
-
-
-
-
-if __name__ == "__main__":
-
-	print POSTROUTING.insert(8, {
-		'table': 'nat',
-		'protocol': 'tcp',
-		'dport': 80,
-		'match': 'cpu',
-		'cpu': 0,
-		'jump': 'REDIRECT',
-		'to_port': 8080
-	})
-
 
 
 """
