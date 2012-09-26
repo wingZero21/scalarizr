@@ -544,7 +544,7 @@ class CloudFileSystem(object):
 	def put(self, src, path):
 		raise NotImplementedError()
 
-	def multipart_init(self, path):
+	def multipart_init(self, path, part_size):
 		'''
 		Returns upload_id
 		'''

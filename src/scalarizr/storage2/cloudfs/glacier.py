@@ -4,12 +4,13 @@ import hashlib
 from urlparse import urlparse
 from scalarizr.node import __node__
 from boto.glacier.writer import chunk_hashes, tree_hash, bytes_to_hex 
+from scalarizr.storage2.cloudfs import CloudFileSystem 
 
 
-class GlacierFilesystem(cloudfs.CloudFileSystem):
+class GlacierFilesystem(CloudFileSystem):
 
 	def __init__(self):
-		self._api = None
+		self._conn = None
 		self._vault_name = None
 		self._part_size = None
 		self._total_size = 0
@@ -30,9 +31,9 @@ class GlacierFilesystem(cloudfs.CloudFileSystem):
 		self._part_size = part_size
 		self._vault_name = urlparse(path).netloc
 
-        response = self._conn.initiate_multipart_upload(self._vault_name, part_size, None)
+		response = self._conn.initiate_multipart_upload(self._vault_name, part_size, None)
 
-        return response['UploadId']
+		return response['UploadId']
 
 	def multipart_put(self, upload_id, part_num, part):
 		start_byte = part_num * self._part_size
@@ -42,14 +43,23 @@ class GlacierFilesystem(cloudfs.CloudFileSystem):
 		self._tree_hashes.append(part_tree_hash)
 		hex_part_tree_hash = bytes_to_hex(part_tree_hash)
 
-		self._api.upload_part(self._vault_name,
-							  upload_id,
-							  linear_hash,
-							  hex_part_tree_hash,
-							  content_range,
-							  part)
+		print 'vault_name:', self._vault_name
+		print 'upload_id:', upload_id
+		print 'linear_hash:', linear_hash
+		print 'hex_part_tree_hash:', hex_part_tree_hash
+		print 'content_range:', content_range
+		print 'part:', part
 
-		self.total_size = self.total_size + len(part)
+		self._conn.upload_part(
+			self._vault_name,
+			upload_id,
+			linear_hash,
+			hex_part_tree_hash,
+			content_range,
+			part
+		)
+
+		self._total_size += len(part)
 
 	def multipart_complete(self, upload_id):
 		'''
@@ -57,12 +67,14 @@ class GlacierFilesystem(cloudfs.CloudFileSystem):
 		'''
 		hex_tree_hash = bytes_to_hex(tree_hash(self._tree_hashes))
 
-		response = self._api.complete_multipart_upload(self._vault_name,
-													   upload_id,
-													   hex_tree_hash,
-                                                       self._total_size)
+		response = self._conn.complete_multipart_upload(
+			self._vault_name,
+			upload_id,
+			hex_tree_hash,
+			self._total_size
+		)
 
 		return response['ArchiveId']
 
 	def multipart_abort(self, upload_id):
-		self._api.abort_multipart_upload(self._vault_name, upload_id)
+		self._conn.abort_multipart_upload(self._vault_name, upload_id)
