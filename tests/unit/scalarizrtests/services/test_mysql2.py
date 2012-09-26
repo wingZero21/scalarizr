@@ -7,9 +7,10 @@ from StringIO import StringIO
 import mock
 from nose.tools import raises
 
-from scalarizr import storage2
+from scalarizr import storage2, linux
 from scalarizr.linux import coreutils
 from scalarizr.services import backup
+
 __node__mock = mock.patch.dict('scalarizr.node.__node__', {
 				'behavior': ['percona'],
 				'percona': {
@@ -17,6 +18,7 @@ __node__mock = mock.patch.dict('scalarizr.node.__node__', {
 					'root_password': 'abc'
 				}})
 __node__mock.start()
+
 from scalarizr.services import mysql2
 
 
@@ -355,3 +357,68 @@ class TestMysql2Utilities(object):
 		m.assert_called_once_with('/mnt/dbstorage/mysql-misc/binlog.index')
 		mysqlbinlog.assert_called_once_with('/mnt/dbstorage/mysql-misc/binlog.000001', verbose=True, stop_position=91)
 
+
+@mock.patch.object(mysql2, 'mysql_svc')
+@mock.patch.object(mysql2, 'LargeTransfer')
+class TestMysqlDumpBackup(object):
+
+	def test_run(self, transfer, mysql_svc, *args, **kwargs):
+		mysqldump = backup.Backup(type='mysqldump',
+		                          cloudfs_dir='s3://scalr-1a8f341e/backups/mysql/1265/',
+		                          chunk_size=512)
+		mysql_svc.MySQLClient.list_databases.return_value = ['db1', 'db2']
+		mysqldump.run()
+		mysql_svc.MySQLClient.assert_called_once_with(mysql2.__mysql__['root_user'],
+		                                              mysql2.__mysql__['root_password'])
+		mysql_svc.MySQLClient.list_databases.assert_called_once_with()
+		transfer.assert_called_once_with(mock.ANY, mock.ANY, 'upload', tar_it=False, chunk_size=512)
+
+
+	@mock.patch.object(mysql2.subprocess, 'Popen')
+	def test_src_gen_per_db(self, popen, transfer, mysql_svc, *args, **kwargs):
+		mysqldump = backup.Backup(type='mysqldump',
+		                          cloudfs_dir='s3://scalr-1a8f341e/backups/mysql/1265/',
+		                          chunk_size=512)
+		mysqldump._databases = ['db1', 'db2']
+		backups = list(mysqldump._gen_src())
+		assert len(backups) == popen.stdout.call_count
+		assert len(backups) == len(mysqldump._databases)
+		assert mock.call(linux.build_cmd_args(
+			executable='/usr/bin/mysqldump',
+			params=mysql2.__mysql__['mysqldump_options'].split() + ['db1'])) in popen.call_list()
+		assert mock.call(linux.build_cmd_args(
+			executable='/usr/bin/mysqldump',
+			params=mysql2.__mysql__['mysqldump_options'].split() + ['db2'])) in popen.call_list()
+
+
+	@mock.patch.object(mysql2.subprocess, 'Popen')
+	def test_src_gen_one(self, popen, transfer, mysql_svc, *args, **kwargs):
+		mysqldump = backup.Backup(type='mysqldump',
+		                          cloudfs_dir='s3://scalr-1a8f341e/backups/mysql/1265/',
+		                          chunk_size=512,
+		                          file_per_databse=False)
+		mysqldump._databases = ['db1', 'db2']
+		backups = list(mysqldump._gen_src())
+		assert len(backups) == popen.stdout.call_count
+		assert len(backups) == 1
+		assert mock.call(linux.build_cmd_args(
+			executable='/usr/bin/mysqldump',
+			params=mysql2.__mysql__['mysqldump_options'].split() + ['--all-databases'])) in popen.call_list()
+
+
+	def test_dst_gen_per_db(self, transfer, mysql_svc, *args, **kwargs):
+		mysqldump = backup.Backup(type='mysqldump',
+		                          cloudfs_dir='s3://scalr-1a8f341e/backups/mysql/1265/',
+		                          chunk_size=512)
+		mysqldump._databases = ['db1', 'db2']
+		for db in mysqldump._databases:
+			mysqldump._current_db = db
+			assert mysqldump._gen_dst().next() == os.path.join(mysqldump.cloudfs_dir, mysqldump._current_db)
+
+
+	def test_dst_gen_one(self, transfer, mysql_svc, *args, **kwargs):
+		mysqldump = backup.Backup(type='mysqldump',
+		                          cloudfs_dir='s3://scalr-1a8f341e/backups/mysql/1265/',
+		                          chunk_size=512,
+		                          file_per_databse=False)
+		assert mysqldump._gen_dst().next() == os.path.join(self.cloudfs_dir, 'mysql')

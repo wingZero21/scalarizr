@@ -471,7 +471,7 @@ class MySQLDumpBackup(backup.Backup):
 			if self.file_per_database:
 				yield os.path.join(self.cloudfs_dir, self._current_db)
 			else:
-				yield 'mysql'
+				yield os.path.join(self.cloudfs_dir, 'mysql')
 
 
 backup.backup_types['mysqldump'] = MySQLDumpBackup
