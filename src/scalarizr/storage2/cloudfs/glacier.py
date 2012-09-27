@@ -1,4 +1,5 @@
 
+import os
 import hashlib
 
 from urlparse import urlparse
@@ -8,27 +9,31 @@ from scalarizr.storage2.cloudfs import CloudFileSystem
 
 
 class GlacierFilesystem(CloudFileSystem):
+	def _connect_glacier(self):
+		'''
+		Returns Boto.Glacier.Layer1 object
+		'''
+		#comment for test
+		#return __node__['ec2']['connect_glacier']()
 
-	def __init__(self):
+		#delete this two lines after test
+		from boto.glacier.layer1 import Layer1
+		return Layer1('AKIAJO6DOVEREBMYUERQ', 'LBEvgTXt+o7X3NsUr0c5paD4Uf9EWZsyrWMOixeD', 615271354814)
+
+	def _clear(self):
 		self._conn = None
 		self._vault_name = None
 		self._part_size = None
 		self._total_size = 0
 		self._tree_hashes = []
-		
-	def _connect_glacier(self):
-		'''
-		Returns Boto.Glacier.Layer1 object
-		'''
-		#return __node__['ec2']['connect_glacier']()
-		from boto.glacier.layer1 import Layer1
-		return Layer1('AKIAJO6DOVEREBMYUERQ', 'LBEvgTXt+o7X3NsUr0c5paD4Uf9EWZsyrWMOixeD', 615271354814)
+		self._part_num_list = []
 
 
 	def multipart_init(self, path, part_size):
 		'''
 		Returns upload_id
 		'''
+		self._clear()
 		self._conn = self._connect_glacier()
 		self._part_size = part_size
 		self._vault_name = urlparse(path).netloc
@@ -38,11 +43,14 @@ class GlacierFilesystem(CloudFileSystem):
 		return response['UploadId']
 
 	def multipart_put(self, upload_id, part_num, part):
+		fileobj = open(part, 'rb')
+		bytes_to_upload = fileobj.read(self._part_size)
+		part_size = os.fstat(fileobj.fileno()).st_size
+
 		start_byte = part_num * self._part_size
-		content_range = (start_byte, start_byte + len(part) - 1) 
-		linear_hash = hashlib.sha256(part).hexdigest()
-		part_tree_hash = tree_hash(chunk_hashes(part))
-		self._tree_hashes.append(part_tree_hash)
+		content_range = (start_byte, start_byte + part_size - 1) 
+		linear_hash = hashlib.sha256(bytes_to_upload).hexdigest()
+		part_tree_hash = tree_hash(chunk_hashes(bytes_to_upload))
 		hex_part_tree_hash = bytes_to_hex(part_tree_hash)
 
 		self._conn.upload_part(
@@ -51,10 +59,15 @@ class GlacierFilesystem(CloudFileSystem):
 			linear_hash,
 			hex_part_tree_hash,
 			content_range,
-			part
+			bytes_to_upload	
 		)
 
-		self._total_size += len(part)
+		if part_num not in self._part_num_list:
+			self._part_num_list.append(part_num)
+			self._tree_hashes.append(part_tree_hash)
+			self._total_size += part_size
+
+		fileobj.close()
 
 	def multipart_complete(self, upload_id):
 		'''
@@ -69,7 +82,8 @@ class GlacierFilesystem(CloudFileSystem):
 			self._total_size
 		)
 
-		return response['ArchiveId']
+		path = 'glacier://' + self._vault_name + '/?avail_zone=' + self._conn.region.name + '&archive_id=' + response['ArchiveId']
+		return path
 
 	def multipart_abort(self, upload_id):
 		self._conn.abort_multipart_upload(self._vault_name, upload_id)
