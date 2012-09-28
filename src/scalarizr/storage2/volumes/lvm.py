@@ -80,13 +80,11 @@ class LvmVolume(base.Volume):
 		self._check_attr('vg')
 		try:
 			lv_info = self._lvinfo()
-
 		except lvm2.NotFound:
 			self._check_attr('size')
 			
 			try:
 				lvm2.vgs(self.vg)
-
 			except lvm2.NotFound:
 				lvm2.vgcreate(self.vg, *[disk.device for disk in self.pvs])
 
@@ -112,13 +110,14 @@ class LvmVolume(base.Volume):
 			if os.path.basename(self.vg) != pv_info.vg_name:
 				raise storage2.StorageError(
 					'Can not add physical volume %s to volume group %s: already'
-					'in volume group %s' % (pv.device, self.vg, pv_info.vg_name)
-				)
+					' in volume group %s' %
+					(pv.device, self.vg, pv_info.vg_name))
 
 		if pvs_to_extend_vg:
 			lvm2.vgextend(self.vg, *pvs_to_extend_vg)
 			lvm2.lvextend(self.device, **get_lv_size_kwarg(self.size))
-			if self.fscreated:
+			if self.is_fs_created():
+				self.fscreated = True
 				fs = storage2.filesystem(self.fstype)
 				if fs.features.get('resizable'):
 					fs.resize(self.device)

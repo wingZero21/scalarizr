@@ -1,11 +1,9 @@
-
+import os
 import uuid
-import types
 
 from scalarizr import storage2
 from scalarizr.libs import bases
-from scalarizr.linux import mount as mod_mount
-import os
+from scalarizr.linux import coreutils, mount as mod_mount
 
 
 LOG = storage2.LOG
@@ -112,6 +110,22 @@ class Volume(Base):
 			return False
 
 
+	def is_fs_created(self):
+		self._check()
+		try:
+			device_attrs = coreutils.blkid(self.device)
+		except:
+			return False
+
+		fstype = device_attrs.get('type')
+
+		if fstype is None:
+			return False
+		else:
+			self.fstype = fstype
+			return True
+
+
 	def mkfs(self):
 		self._check()
 		if self.fscreated:
@@ -137,7 +151,8 @@ class Volume(Base):
 	def _check_attr(self, name):
 		assert hasattr(self, name) and getattr(self, name) is not None,  \
 				self.error_messages['empty_attr'] % name
-	
+
+
 	def _check_restore_unsupported(self):
 		if self.snap:
 			msg = self.error_messages['restore_unsupported'] % self.type
