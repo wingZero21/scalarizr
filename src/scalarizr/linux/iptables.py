@@ -11,9 +11,12 @@ from collections import OrderedDict
 import shlex
 
 from scalarizr import linux
+from subprocess import call #TMP
 
 
 IPTABLES_BIN = '/sbin/iptables'
+IPTABLES_SAVE = '/sbin/iptables-save'
+IPTABLES_RESTORE = '/sbin/iptables-restore'
 
 # from iptables --help, must cover all short options
 _OPTIONS = {
@@ -29,7 +32,7 @@ _OPTIONS = {
 	"-X": "--delete-chain",
 	"-P": "--policy",
 	"-E": "--rename-chain",
-	"-p": "--proto",
+	"-p": "--protocol",
 	"-s": "--source",
 	"-d": "--destination",
 	"-i": "--in-interface",
@@ -66,7 +69,7 @@ def iptables_save(filename=None, *short_args, **long_kwds):
 		filename = open(filename, 'w+')
 	if hasattr(filename, 'write'):
 		kwds['stdout'] = filename
-	out = linux.system(linux.build_cmd_args(executable='iptables-save',
+	out = linux.system(linux.build_cmd_args(executable=IPTABLES_SAVE,
 		short=short_args, long=long_kwds), **kwds)[0]
 	return out
 
@@ -74,7 +77,7 @@ def iptables_save(filename=None, *short_args, **long_kwds):
 def iptables_restore(filename, *short_args, **long_kwds):
 	if isinstance(filename, basestring):
 		filename = open(filename)
-	linux.system(linux.build_cmd_args(executable='iptables-restore',
+	linux.system(linux.build_cmd_args(executable=IPTABLES_RESTORE,
 		short=short_args, long=long_kwds), stdin=filename)
 
 
@@ -108,18 +111,18 @@ class _Chain(object):
 		return iptables(append=self.name, **rule)
 
 	def insert(self, index, rule):
-		if index:
-			insert = (self.name, index)
+		if isinstance(index, int):
+			insert = [self.name, index]
 		else:
 			insert = self.name
 		return iptables(insert=insert, **rule)
 
 	def replace(self, index, rule):
-		return iptables(replace=(self.name, index), **rule)
+		return iptables(replace=[self.name, index], **rule)
 
 	def remove(self, arg):
 		if isinstance(arg, int):
-			delete = (self.name, arg)
+			delete = [self.name, arg]
 			rule = {}
 		elif isinstance(arg, dict):
 			delete = self.name
@@ -165,8 +168,7 @@ class _Chain(object):
 				continue  # dull rules
 
 			# convert all short options to long
-			for i in range(len(args)):
-				arg = args[i]
+			for i, arg in enumerate(args):
 				if len(arg) == 2 and arg.startswith('-'):
 					args[i] = _OPTIONS[arg]  # will crash on unknown short opt
 
@@ -193,6 +195,9 @@ class _Chains(object):
 
 	def __iter__(self):
 		return iter(self._container)
+
+	def __contains__(self, value):
+		return value in self._container
 
 	def add(self, name):
 		assert name not in self._predefined
@@ -227,6 +232,22 @@ POSTROUTING = chains["POSTROUTING"]
 
 def list(chain, table=None):
 	return chains[chain].list(table)
+
+
+def ensure(chain_rules):
+	# {chain: [rule, ...]}
+	# Will simply insert missing rules at the beginning.
+	# TODO: smart rule comparison (e.g. --proto == --protocol,
+	# 	--syn == --tcp-flags FIN,SYN,RST,ACK SYN,
+	# 	192.168.0.1 == 192.168.0.1/32,
+	# 	--protocol tcp == --protocol tcp --match tcp)
+	# note: existing rules don't have table attribute
+
+	for chain, rules in chain_rules.iteritems():
+		existing = list(chain)
+		for rule in reversed(rules):
+			if rule not in existing:
+				chains[chain].insert(None, rule)
 
 
 """
@@ -337,7 +358,7 @@ def iptables_restore(filename, *short_args, **long_kwds):
 '''
 # TODO: State function
 def ensure(
-	
+# iptables.ensure({'INPUT': [{rule}, {rule}]})
 )
 '''
 """
