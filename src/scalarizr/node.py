@@ -14,6 +14,16 @@ class Store(dict):
 	def __len__(self):
 		return 1
 
+    def __repr__(self):
+		return '<%s at %s>' % (type(self).__name__, hex(id(self)))
+
+    def __contains__(self, key):
+		try:
+			self.__getitem__(key)
+			return True
+		except KeyError:
+			return False
+
 
 class Compound(Store):
 	def __init__(self, patterns=None):

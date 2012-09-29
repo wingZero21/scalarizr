@@ -80,7 +80,7 @@ class Restore(bases.Task):
 	def __init__(self, 
 				type='base', 
 				**kwds):
-		super(Backup, self).__init__(
+		super(Restore, self).__init__(
 				type=type,
 				**kwds)
 

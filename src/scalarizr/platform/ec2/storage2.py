@@ -140,16 +140,17 @@ class EbsVolume(base.Volume, EbsMixin):
 						'required for volume construction is not available'
 	})
 	
-	def __init__(self, **kwds):
-		self.default_config.update({
-			'name': None,   # i.e. /dev/sdf
-			'tags': {},
-			'avail_zone': None,
-			'size': None,
-			'volume_type': None,
-			'iops': None
-		})
-		base.Volume.__init__(self, **kwds)
+	def __init__(self, 
+				name=None,
+				tags=None,
+				avail_zone=None,
+				size=None,
+				volume_type=None,
+				iops=None,
+				**kwds):
+		base.Volume.__init__(self, name=name, tags=tags or {}, 
+				avail_zone=avail_zone, size=size, 
+				volume_type=volume_type, iops=iops, **kwds)	
 		EbsMixin.__init__(self)	
 		
 		
@@ -390,7 +391,7 @@ class EbsVolume(base.Volume, EbsMixin):
 
 class EbsSnapshot(EbsMixin, base.Snapshot):
 
-	error_messages = base.Snapshot.error_messages.copy()
+	#error_messages = base.Snapshot.error_messages.copy()
 	
 	_status_map = {
 		'pending': base.Snapshot.IN_PROGRESS,
