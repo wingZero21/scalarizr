@@ -398,22 +398,32 @@ class MysqlHandler(DBMSRHandler):
 					if not os.path.exists(dir):
 						os.makedirs(dir)
 					'''
+
+					mysql_data = getattr(message, __mysql__['behavior']).copy()					
+					mysql_data['compat_prior_xtrabackup'] = False
+
+					if 'volume_config' in mysql_data:
+						mysql_data['compat_prior_xtrabackup'] = True
+						mysql_data['volume'] = storage2.volume(
+												mysql_data.pop('volume_config'))
+						if 'snapshot_config' in mysql_data:
+							mysql_data['restore'] = backup.restore(
+									type='snap_mysql', 
+									snapshot=mysql_data.pop('snapshot_config'),
+									volume=mysql_data['volume'],
+									log_file=mysql_data.pop('log_file'),
+									log_pos=mysql_data.pop('log_pos'))
+						else:
+							mysql_data['backup'] = backup.backup(
+									type='snap_mysql',
+									volume=mysql_data['volume'])
+					else:
+						mysql_data['volume'] = storage2.volume(mysql_data['volume'])
 					
-					mysql_data = getattr(message, __mysql__['behavior']).copy()
-					mysql_data['volume'] = storage2.volume(**mysql_data.pop('volume_config'))
-					
-					snapshot = mysql_data.pop('snapshot_config')
-					if snapshot:
-						mysql_data['restore'] = backup.restore(
-								type='snap_mysql', 
-								snapshot=snapshot,
-								volume=mysql_data['volume'])
-					if not mysql_data.get('backup'):
-						bak = backup.backup(
-								type='snap_mysql',
-								volume=mysql_data['volume'])
-						#backup.backup.assert_called_with(type='snap_mysql', volume=mysql_data['volume'])
-						mysql_data['backup'] = bak
+					if 'backup' in mysql_data:
+						mysql_data['backup'] = backup.backup(mysql_data['backup'])
+					if 'restore' in mysql_data:
+						mysql_data['restore'] = backup.restore(mysql_data['restore'])
 				
 					__mysql__.update(mysql_data)
 					
@@ -1079,10 +1089,9 @@ class MysqlHandler(DBMSRHandler):
 					self._innodb_recovery()	
 					self.mysql.service.start()
 		
-		if 'restore' not in __mysql__:
+		if 'backup' in __mysql__:
 			with op.step(self._step_create_data_bundle):
-				bak = backup.backup(__mysql__['backup'])
-				__mysql__['restore'] = bak.run()
+				__mysql__['restore'] = __mysql__['backup'].run()
 				'''
 				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
@@ -1098,21 +1107,37 @@ class MysqlHandler(DBMSRHandler):
 
 		with op.step(self._step_collect_hostup_data):
 			# Update HostUp message
-			msg_data = dict(
+			mysql_data = dict(
 				replication_master=__mysql__['replication_master'],
 				root_password=__mysql__['root_password'],
 				repl_password=__mysql__['repl_password'],
 				stat_password=__mysql__['stat_password'],
-				restore=dict(__mysql__['restore']),
-				volume=dict(__mysql__['volume']),
-				# Compatibility
-				log_file=__mysql__['restore'].log_file,
-				log_pos=__mysql__['restore'].log_pos,
-				volume_config=dict(__mysql__['volume']),
-				snapshot_config=dict(__mysql__['restore'].snapshot) \
-								if __mysql__['restore'].type == 'snap_mysql' \
-								else None
 			)
+			if __mysql__['compat_prior_xtrabackup']:
+				msg_data.update(dict(
+					log_file=__mysql__['restore'].log_file,
+					log_pos=__mysql__['restore'].log_pos,
+					volume_config=dict(__mysql__['volume']),
+					snapshot_config=dict(__mysql__['restore'].snapshot)
+				))
+				
+			else:
+
+				msg_data = dict(
+					replication_master=__mysql__['replication_master'],
+					root_password=__mysql__['root_password'],
+					repl_password=__mysql__['repl_password'],
+					stat_password=__mysql__['stat_password'],
+					restore=dict(__mysql__['restore']),
+					volume=dict(__mysql__['volume']),
+					# Compatibility
+					log_file=__mysql__['restore'].log_file,
+					log_pos=__mysql__['restore'].log_pos,
+					volume_config=dict(__mysql__['volume']),
+					snapshot_config=dict(__mysql__['restore'].snapshot) \
+									if __mysql__['restore'].type == 'snap_mysql' \
+									else None
+				)
 			
 			message.db_type = __mysql__['behavior']
 			setattr(message, __mysql__['behavior'], msg_data)

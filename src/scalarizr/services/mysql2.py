@@ -12,7 +12,7 @@ from scalarizr.linux import coreutils, pkgmgr
 from scalarizr.node import __node__
 from scalarizr.services import mysql as mysql_svc
 from scalarizr.services import backup
-from scalarizr.libs import cdo
+from scalarizr.libs import bases
 from scalarizr.storage2.cloudfs import LargeTransfer
 
 
@@ -131,7 +131,7 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 
 		:type volume: :class:`scalarizr.storage2.volumes.base.Volume` or dict
 		:param volume: A volume object or configuration to ensure and mount 
-			to 'backup_dir'. After backup completion it will be snapshoted 
+			to 'backup_dir'. After backup completion it will be snapshotted 
 			and snapshot will be available in Restore configuration
 		'''
 		backup.Backup.__init__(self, 
@@ -236,23 +236,6 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 					snapshot=dict(type='ebs', id='snap-12345678'))
 	'''
 
-	features = backup.Restore.features.copy()
-	features.update({
-		'master_binlog_reset': True
-	})
-
-	default_config = backup.Backup.default_config.copy()
-	default_config.update({
-		'log_file': None,
-		'log_pos': None,
-		'from_lsn': None,
-		'to_lsn': None,
-		'backup_type': None,
-		'backup_dir': '/mnt/dbbackup',
-		'volume': None,
-		'snapshot': None
-	})
-
 	def __init__(self, 
 				log_file=None,
 				log_pos=None,
@@ -297,6 +280,7 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 				to_lsn=to_lsn, backup_type=backup_type, backup_dir=backup_dir,
 				volume=volume, snapshot=snapshot, **kwds)
 		XtrabackupMixin.__init__(self)
+		self.features['master_binlog_reset'] = True
 		self._mysql_init = mysql_svc.MysqlInitScript()
 		self._data_dir = None
 		self._binlog_dir = None
@@ -445,6 +429,9 @@ class MySQLDumpBackup(backup.Backup):
 		self._databases = client.list_databases()
 		transfer = LargeTransfer(self._gen_src, self._gen_dst, 'upload', 
 								tar_it=False, chunk_size=self.chunk_size)
+		transfer.run()
+		return backup.restore(type='mysqldump', 
+						files=transfer.result()['completed'])
 
 
 	def _gen_src(self):
@@ -477,12 +464,9 @@ class MySQLDumpBackup(backup.Backup):
 backup.backup_types['mysqldump'] = MySQLDumpBackup
 
 
-class User(cdo.ConfigDriven):
-	default_config = {
-		'user': None,
-		'password': None,
-		'priveleges': '*'
-	}
+class User(bases.ConfigDriven):
+	def __init__(self, user=None, password=None, privileges='*'):
+		pass
 
 
 	def ensure(self):

@@ -5,8 +5,35 @@ Created on Sep 19, 2012
 '''
 import Queue
 import mock
+
 from scalarizr.storage2 import cloudfs
 
+
+
+class TestTransfer(object):
+	def test_job_generator(self):
+		pass
+
+	def test_job_generator_with_retries(self):
+		pass
+
+
+	def test_worker_upload(self):
+		pass
+
+	def test_worker_upload_multipart(self):
+		pass
+
+	def test_worker_upload_error(self):
+		pass
+
+	def test_worker_assertion_error(self):
+		pass
+
+	def test_worker_download(self):
+		pass
+
+	
 
 def firstn(n=2):
 	num = 0
