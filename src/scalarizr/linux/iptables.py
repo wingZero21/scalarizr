@@ -17,6 +17,7 @@ import os
 import re
 
 from scalarizr import linux
+from scalarizr.linux import redhat
 from scalarizr.util import disttool
 
 
@@ -262,7 +263,7 @@ def ensure(chain_rules):
 
 def enabled():
 	if linux.os['family'] in ('RedHat', 'Oracle'):
-		out = linux.redhat.chkconfig(list="iptables")[0]
+		out = redhat.chkconfig(list="iptables")[0]
 		return bool(re.search(r"iptables.*?\s\d:on", out))
 	else:
 		return os.access(IPTABLES_BIN, os.X_OK)
