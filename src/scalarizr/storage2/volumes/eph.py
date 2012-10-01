@@ -76,6 +76,14 @@ class EphVolume(base.Volume):
 			transfer = cloudfs.LargeTransfer(self.snap.path, self.mpoint + '/')
 			try:
 				self.mount()
+				if hasattr(self.snap, 'size'):
+					df_info = filetool.df()
+					df = filter(lambda x: x.mpoint == self.mpoint, df_info)[0]
+					if df.free < self.snap.size:
+						raise storage2.StorageError('Not enough free space'
+								' on device %s to restore snapshot.' %
+								self.device)
+
 				transfer.run()
 			except:
 				e = sys.exc_info()[1]
@@ -105,6 +113,7 @@ class EphVolume(base.Volume):
 
 			df_info = filetool.df()
 			df = filter(lambda x: x.mpoint == lvm_snap_vol.mpoint, df_info)
+
 			snap.size = df[0].used
 
 			try:
@@ -116,7 +125,7 @@ class EphVolume(base.Volume):
 				transfer.run()
 			finally:
 				lvm_snap_vol.umount()
-				os.remove(lvm_snap_vol.mpoint)
+				os.rmdir(lvm_snap_vol.mpoint)
 		finally:
 			lvm_snap.destroy()
 
@@ -150,6 +159,8 @@ class EphSnapshot(base.Snapshot):
 			for chunk in c.children('./chunks/'):
 				chunk_path = os.path.join(base_url, chunk)
 				storage_drv.delete(chunk_path)
+			storage_drv.delete(self.path)
+			self.path = None
 		finally:
 			os.remove(manifest_path)
 
