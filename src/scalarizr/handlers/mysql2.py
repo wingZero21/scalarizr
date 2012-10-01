@@ -470,6 +470,8 @@ class MysqlHandler(DBMSRHandler):
 			self._init_master(message)	
 		else:
 			self._init_slave(message)
+		# Force to resave volume settings
+		__mysql__['volume'] = dict(storage2.volume(__mysql__['volume']))
 		bus.fire('service_configured', service_name=__mysql__['behavior'], replication=repl)
 
 
@@ -678,12 +680,13 @@ class MysqlHandler(DBMSRHandler):
 		
 					bus.fire('before_mysql_data_bundle')
 					
-					if message.body.get('backup'):
-						bak = backup.backup(**message.body.get('backup'))
-					else:
+					compat_prior_xtrabackup = 'backup' not in message.body
+					if compat_prior_xtrabackup:
 						bak = backup.backup(
 								type='snap_mysql',
 								volume=__mysql__['volume'])
+					else:
+						bak = backup.backup(message.backup)
 					restore = bak.run()
 					
 					'''
@@ -693,20 +696,23 @@ class MysqlHandler(DBMSRHandler):
 					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 					'''
 				
-					
 					# Notify scalr
 					msg_data = {
 						'db_type': __mysql__['behavior'],
-#						'used_size': '%.3f' % (float(used_size) / 1024 / 1024,),
 						'status': 'ok',
-						__mysql__['behavior']: {
+						__mysql__['behavior']: {}
+					}
+					if compat_prior_xtrabackup:
+						msg_data[__mysql__['behavior']].update({
+							'snapshot_config' = dict(restore.snapshot)
 							'log_file': restore.log_file,
 							'log_pos': restore.log_pos,
+						})
+					else:
+						msg_data[__mysql__['behavior']].update({						
 							'restore': dict(restore)
 						}
 					}
-					if restore.type == 'snap_mysql':
-						msg_data[__mysql__['behavior']]['snapshot_config'] = dict(restore.snapshot)
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 			op.ok()
 			
@@ -1142,6 +1148,7 @@ class MysqlHandler(DBMSRHandler):
 			
 			message.db_type = __mysql__['behavior']
 			setattr(message, __mysql__['behavior'], msg_data)
+
 			
 			
 

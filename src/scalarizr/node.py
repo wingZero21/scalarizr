@@ -24,6 +24,16 @@ class Store(dict):
 		except KeyError:
 			return False
 
+	def update(self, *args, **kwds):
+		if args:
+			if len(args) == 1 and isinstance(args[0], dict):
+				kwds = args[0]
+			else:
+				kwds = dict(args)
+		for key, value in kwds.items():
+			self.__setitem__(key, value)
+		
+
 
 class Compound(Store):
 	def __init__(self, patterns=None):
@@ -94,6 +104,9 @@ class Json(Store):
 	def __setitem__(self, key, value):
 		if hasattr(value, 'config'):
 			value = value.config()
+		dirname = os.path.dirname(self.filename)
+		if not os.path.exists(dirname):
+			os.makedirs(dirname)
 		with open(self.filename, 'w+') as fp:
 			json.dump(value, fp)
 
@@ -257,7 +270,7 @@ __node__ = {
 for behavior in ('mysql', 'mysql2', 'percona'):
 	__node__[behavior] = Compound({
 		'volume,volume_config': 
-				Json('%s/%s.json' % (_private_dir, behavior), 
+				Json('%s/storage/%s.json' % (_private_dir, behavior), 
 					'scalarizr.storage2.volume'),
 		'*_password,log_*,replication_master': 
 				Ini('%s/%s.ini' % (_private_dir, behavior), 
