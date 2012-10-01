@@ -983,7 +983,7 @@ class MysqlHandler(DBMSRHandler):
 
 	def generate_datadir(self):
 		try:
-			datadir = mysql_svc.my_print_defaults('mysqld').get('datadir')
+			datadir = mysql2_svc.my_print_defaults('mysqld').get('datadir')
 			if datadir and \
 				os.path.isdir(datadir) and \
 				not os.path.isdir(os.path.join(datadir, 'mysql')):
@@ -1041,7 +1041,7 @@ class MysqlHandler(DBMSRHandler):
 				storage_valid = self._storage_valid()
 				user_creds = self.get_user_creds()
 
-				datadir = mysql_svc.my_print_defaults('mysqld').get('datadir', '/var/lib/mysql')
+				datadir = mysql2_svc.my_print_defaults('mysqld').get('datadir', '/var/lib/mysql')
 				self.mysql.my_cnf.datadir = datadir
 
 
