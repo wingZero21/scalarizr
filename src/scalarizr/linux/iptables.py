@@ -7,7 +7,11 @@
 # Predefined chains:
 # INPUT FORWARD OUTPUT 	PREROUTING 	POSTROUTING
 
-from collections import OrderedDict
+import sys
+if sys.version_info[0:2] >= (2, 7):
+	from collections import OrderedDict
+else:
+	from scalarizr.externals.collections import OrderedDict
 import shlex
 import os
 import re
