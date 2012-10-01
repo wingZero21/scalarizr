@@ -98,6 +98,8 @@ class Json(Store):
 		except:
 			raise KeyError(key)
 		else:
+			if isinstance(self.fn, basestring):
+				self.fn = _import(self.fn)
 			return self.fn(**kwds)
 
 
@@ -227,8 +229,7 @@ class Attr(Store):
 	def __getitem__(self, key):
 		try:
 			if isinstance(self.module, basestring):
-				__import__(self.module)
-				self.module = sys.modules[self.module]
+				self.module = _import(self.module)
 			if not self.getter:
 				def getter():
 					path = self.attr.split('.')
@@ -248,6 +249,19 @@ class Call(Attr):
 		return attr()	
 
 
+def _import(objectstr):
+	try:
+		__import__(objectstr)
+		return sys.modules[objectstr]
+	except ImportError:
+		module_s, _, attr = objectstr.rpartition('.')
+		__import__(module_s)
+		try:
+			return getattr(sys.modules[module_s], attr)
+		except (KeyError, AttributeError):
+			raise ImportError('No module named %s' % attr)
+
+	
 _base_dir = '/etc/scalr'
 _private_dir = _base_dir + '/private.d'
 _public_dir = _base_dir + '/public.d'

@@ -22,7 +22,7 @@ from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
 from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, iptables
 
-from scalarizr import linux, storage2	
+from scalarizr import storage2	
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
@@ -704,15 +704,14 @@ class MysqlHandler(DBMSRHandler):
 					}
 					if compat_prior_xtrabackup:
 						msg_data[__mysql__['behavior']].update({
-							'snapshot_config' = dict(restore.snapshot)
+							'snapshot_config': dict(restore.snapshot),
 							'log_file': restore.log_file,
 							'log_pos': restore.log_pos,
 						})
 					else:
 						msg_data[__mysql__['behavior']].update({						
 							'restore': dict(restore)
-						}
-					}
+						})
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 			op.ok()
 			
