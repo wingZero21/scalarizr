@@ -57,6 +57,18 @@ class TestCompound(object):
 
 		master['key1'] = 'ooo'
 		assert master['key1'] == 'ooo'
+
+
+	def test_update(self):
+		mysql = node.Compound({
+			'behavior': 'percona'
+		})
+		mysql.update({
+			'replication_master': '1'
+		})
+	
+		assert 'replication_master' in mysql
+		assert mysql['replication_master'] == '1'
 		
 		
 class TestJson(object):
@@ -128,3 +140,14 @@ class TestIni(object):
 			self.store['new_option'] = 1
 			self.store.ini.set.assert_called_with(self.store.section, 'new_option', '1')
 			assert self.store.ini.write.call_count == 1
+
+	def test_set_new_file(self):
+		filename = os.path.dirname(__file__) + '/../fixtures/node_new.ini'
+		self.store.filename = filename
+		try:
+			self.store['root_password'] = 'abs'
+			assert self.store['root_password'] == 'abs'
+		finally:
+			if os.path.exists(filename):
+				os.remove(filename)
+

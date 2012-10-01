@@ -107,7 +107,8 @@ class Ini(Store):
 
 	def _reload(self):
 		self.ini = ConfigParser.ConfigParser()
-		self.ini.read(self.filename)
+		if os.path.exists(self.filename):
+			self.ini.read(self.filename)
 
 
 	def __getitem__(self, key):
@@ -126,6 +127,8 @@ class Ini(Store):
 			value = str(int(value))
 		else:
 			value = str(value)
+		if not self.ini.has_section(self.section):
+			self.ini.add_section(self.section)
 		self.ini.set(self.section, key, value)
 		with open(self.filename, 'w+') as fp:
 			self.ini.write(fp)	

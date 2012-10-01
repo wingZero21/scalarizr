@@ -400,10 +400,10 @@ class MysqlHandler(DBMSRHandler):
 					'''
 
 					mysql_data = getattr(message, __mysql__['behavior']).copy()					
-					mysql_data['compat_prior_xtrabackup'] = False
+					mysql_data['compat_hostup_prior_xtrabackup'] = False
 
 					if 'volume_config' in mysql_data:
-						mysql_data['compat_prior_xtrabackup'] = True
+						mysql_data['compat_hostup_prior_xtrabackup'] = True
 						mysql_data['volume'] = storage2.volume(
 												mysql_data.pop('volume_config'))
 						if 'snapshot_config' in mysql_data:
@@ -693,6 +693,7 @@ class MysqlHandler(DBMSRHandler):
 					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 					'''
 				
+					
 					# Notify scalr
 					msg_data = {
 						'db_type': __mysql__['behavior'],
@@ -1113,7 +1114,7 @@ class MysqlHandler(DBMSRHandler):
 				repl_password=__mysql__['repl_password'],
 				stat_password=__mysql__['stat_password'],
 			)
-			if __mysql__['compat_prior_xtrabackup']:
+			if __mysql__['compat_hostup_prior_xtrabackup']:
 				msg_data.update(dict(
 					log_file=__mysql__['restore'].log_file,
 					log_pos=__mysql__['restore'].log_pos,
