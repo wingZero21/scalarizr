@@ -1,6 +1,5 @@
 import os
 import tempfile
-import logging
 
 from lettuce import world, step, after
 from scalarizr.storage2 import volume
@@ -51,7 +50,6 @@ def i_see_volume_growth(step):
 @after.all
 def cleanup(total):
 	if hasattr(world, 'lvm_vol'):
-		LOG.info('Cleaning up')
 		world.lvm_vol.destroy(force=True)
 
 	if hasattr(world, 'loops'):

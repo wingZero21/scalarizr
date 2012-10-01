@@ -24,6 +24,7 @@ class TestLvmVolume(object):
 			if isinstance(ret, Exception):
 				raise ret
 			return ret
+
 		lvm2.lvs.side_effect = lvs
 		lvm2.pvs.side_effect = [{}, {'/dev/sdb': mock.Mock(vg_name=None)},
 									 {'/dev/sdc':  mock.Mock(vg_name=None)}]

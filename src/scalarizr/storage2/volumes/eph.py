@@ -35,19 +35,21 @@ class EphVolume(base.Volume):
 		:type cloudfs_dir:
 		:param cloudfs_dir:
 		'''
-		self._transfer = None
-
 		# Compatibility with 1.0
 		snap_backend = kwds.get('snap_backend')
 		if snap_backend:
 			kwds.pop('snap_backend')
-			kwds['cloudfs_dir'] = snap_backend['path'] + '/'
+			cloudfs_dir = snap_backend['path'] + '/'
 		kwds.pop('lvm_group_cfg', None)
 
 		super(EphVolume, self).__init__(vg=vg, disk=disk, size=size,
 				cloudfs_dir=cloudfs_dir, **kwds)
 
-		
+		self._transfer = None
+		self.features.update({'restore': True})
+
+
+
 	def _ensure(self):
 		# snap should be applied after layout: download and extract data.
 		# this could be done on already ensured volume. 
@@ -64,6 +66,7 @@ class EphVolume(base.Volume):
 		self.device = self._lvm_volume.device
 
 		if self.snap:
+			self.snap = storage2.snapshot(self.snap)
 			self.mkfs()
 			tmp_mpoint = not self.mpoint
 			if tmp_mpoint:
@@ -79,11 +82,11 @@ class EphVolume(base.Volume):
 				raise storage2.StorageError("Snapshot restore error: %s" % e)
 			finally:
 				try:
+					self.umount()
+				finally:
 					if tmp_mpoint:
 						self.mpoint = None
-						os.remove(tmp_mpoint)
-				finally:
-					self.umount()
+						os.rmdir(tmp_mpoint)
 
 			self.snap = None
 
@@ -126,7 +129,6 @@ class EphVolume(base.Volume):
 
 
 	def _detach(self, force, **kwds):
-		self.umount()
 		self._lvm_volume.detach(force=force, **kwds)
 
 

@@ -421,12 +421,8 @@ mod_storage2.snapshot_types['ebs'] = EbsSnapshot
 		
 class Ec2EphemeralVolume(base.Volume):
 	
-	def __init__(self, **kwds):
-		self.default_config.update({
-			'name': None   # Allowed values: ^ephemeral[0-3]$
-		})
-		super(Ec2EphemeralVolume, self).__init__(**kwds)
-		
+	def __init__(self, name=None, **kwds):
+		super(Ec2EphemeralVolume, self).__init__(name=name, **kwds)
 		
 	def _ensure(self):
 		self._check_attr('name')
