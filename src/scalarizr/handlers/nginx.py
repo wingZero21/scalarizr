@@ -19,7 +19,7 @@ from scalarizr.messaging import Messages
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2, disttool
-from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.linux import iptables
 from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
@@ -455,10 +455,18 @@ class NginxHandler(ServiceCtlHandler):
 	
 
 	def _insert_iptables_rules(self, *args, **kwargs):
+		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "80"},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "443"},
+			]})
+
+		"""
 		iptables = IpTables()
 		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))
-			iptables.insert_rule(None, RuleSpec(dport=443, jump='ACCEPT', protocol=P_TCP))		
+			iptables.insert_rule(None, RuleSpec(dport=443, jump='ACCEPT', protocol=P_TCP))
+		"""
 
 	def _update_vhosts(self):
 		self._logger.debug("Requesting virtual hosts list")

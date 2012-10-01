@@ -9,9 +9,11 @@
 
 from collections import OrderedDict
 import shlex
+import os
+import re
 
 from scalarizr import linux
-from subprocess import call #TMP
+from scalarizr.util import disttool
 
 
 IPTABLES_BIN = '/sbin/iptables'
@@ -176,6 +178,9 @@ class _Chain(object):
 			result.append({})
 			reduce(build_ruledict, args)
 
+			# postprocess: hide append option
+			del result[-1]["append"]  #? except KeyError: pass
+
 		return result
 
 
@@ -241,6 +246,7 @@ def ensure(chain_rules):
 	# 	--syn == --tcp-flags FIN,SYN,RST,ACK SYN,
 	# 	192.168.0.1 == 192.168.0.1/32,
 	# 	--protocol tcp == --protocol tcp --match tcp)
+	#? accept ints in rules?
 	# note: existing rules don't have table attribute
 
 	for chain, rules in chain_rules.iteritems():
@@ -248,6 +254,14 @@ def ensure(chain_rules):
 		for rule in reversed(rules):
 			if rule not in existing:
 				chains[chain].insert(None, rule)
+
+
+def enabled():
+	if linux.os['family'] in ('RedHat', 'Oracle'):
+		out = linux.redhat.chkconfig(list="iptables")[0]
+		return bool(re.search(r"iptables.*?\s\d:on", out))
+	else:
+		return os.access(IPTABLES_BIN, os.X_OK)
 
 
 """

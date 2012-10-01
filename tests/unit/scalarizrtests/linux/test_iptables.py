@@ -3,7 +3,6 @@ __author__ = 'vladimir'
 import mock
 
 from scalarizr.linux import iptables
-from subprocess import call #TMP
 
 
 IPTABLES_LINUX = iptables.linux
@@ -135,7 +134,6 @@ class TestIptables(object):
 
 		iptables.iptables.assert_called_once_with(**{"list-rules": "INPUT"})
 		assert res == [{
-			"append": "INPUT",
 			"source": "192.168.0.1/32",
 			"destination": "192.168.0.2/32",
 			"protocol": "tcp",
@@ -144,7 +142,6 @@ class TestIptables(object):
 			"jump": "ACCEPT",
 		},
 		{
-			"append": "INPUT",
 			"in-interface": "eth1",
 			"match": "comment",
 			"comment": "my local LAN",
@@ -154,7 +151,6 @@ class TestIptables(object):
 	@mock.patch('scalarizr.linux.iptables.list')
 	def test_ensure(self, list_w, chains):
 		two_rules = [{
-			"append": "INPUT",
 			"source": "192.168.0.1/32",
 			"destination": "192.168.0.2/32",
 			"protocol": "tcp",
@@ -163,7 +159,6 @@ class TestIptables(object):
 			"jump": "ACCEPT",
 		},
 		{
-			"append": "INPUT",
 			"in-interface": "eth1",
 			"match": "comment",
 			"comment": "my local LAN",

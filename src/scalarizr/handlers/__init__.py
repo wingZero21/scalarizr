@@ -5,7 +5,8 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool, iptables
+from scalarizr.util import initdv2, disttool
+from scalarizr.linux import iptables
 from scalarizr.util.filetool import write_file
 from scalarizr.util.initdv2 import Status
 from scalarizr.service import CnfPresetStore, CnfPreset, CnfController,\
@@ -617,7 +618,7 @@ class FarmSecurityMixin(object):
 	def __init__(self, ports):
 		self._logger = logging.getLogger(__name__)
 		self._ports = ports
-		self._iptables = iptables.IpTables()
+		self._iptables = iptables
 		if self._iptables.enabled():
 			bus.on('init', self.__on_init)			
 		else:
@@ -644,8 +645,12 @@ class FarmSecurityMixin(object):
 		rules = []
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
+
+		self._iptables.ensure({"INPUT": rules})
+		"""
 		for rule in rules:
 			self._iptables.insert_rule(1, rule)
+		"""
 		
 
 	def on_HostDown(self, message):
@@ -658,22 +663,29 @@ class FarmSecurityMixin(object):
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
 		for rule in rules:
 			try:
-				self._iptables.delete_rule(rule)
-			except:
+				self._iptables.INPUT.remove(rule)
+				#self._iptables.delete_rule(rule)
+			except: #?
 				if 'does a matching rule exist in that chain' in str(sys.exc_info()[1]):
 					# When HostDown comes from a server that didn't send HostInit    
 					pass
 				else:
 					raise
-				
 
 
 	def __create_rule(self, source, dport, jump):
+		rule = {"jump": jump, "protocol": "tcp", "match": "tcp", "dport": str(dport)}
+		if source:
+			rule["source"] = source
+		return rule
+
+		"""
 		return iptables.RuleSpec(
 					source=source, 
 					protocol=iptables.P_TCP, 
 					dport=dport, 
 					jump=jump)
+		"""
 		
 		
 	def __create_accept_rule(self, source, dport):
@@ -713,8 +725,11 @@ class FarmSecurityMixin(object):
 			rules.append(self.__create_drop_rule(port))
 			
 		rules.reverse()
+		self._iptables.ensure({"INPUT": rules})
+		"""
 		for rule in rules:
 			self._iptables.insert_rule(1, rule)
+		"""
 
 
 def prepare_tags(handler=None, **kwargs):

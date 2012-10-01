@@ -21,8 +21,8 @@ from scalarizr.libs.metaconf import Configuration, NoPathError,\
 	MetaconfError, ParseError
 from scalarizr.util import  fstool, system2, get_free_devname, filetool,\
 	firstmatched, wait_until
-from scalarizr.util import initdv2, iptables, software
-from scalarizr.util.iptables import IpTables, RuleSpec
+from scalarizr.util import initdv2, software
+from scalarizr.linux import iptables
 
 # Stdlibs
 import logging, os, re
@@ -212,8 +212,8 @@ class CassandraScalingHandler(ServiceCtlHandler):
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
-		self._iptables = IpTables()
-		if not self._ip_tables.usable():
+		self._iptables = iptables()
+		if not self._iptables.enabled():
 			raise HandlerError('iptables is not installed. iptables is required for cassandra behaviour')
 		
 
@@ -488,24 +488,46 @@ class CassandraScalingHandler(ServiceCtlHandler):
 			except:
 				pass
 
+	def __create_rule(self, source, dport, jump):
+		rule = {"jump": jump, "protocol": "tcp", "match": "tcp", "dport": str(dport)}
+		if source:
+			rule["source"] = source
+		return rule
+
 	def _insert_iptables_rule(self, ip):
+		iptables.ensure({"INPUT": [
+			self.__create_rule(ip, '7000', 'ACCEPT'),
+			self.__create_rule(ip, '9160', 'ACCEPT'),
+		]})
+		"""
 		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='ACCEPT', source = ip)
 		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='ACCEPT', source = ip)
 		self._iptables.insert_rule(None, storage_rule)
 		self._iptables.insert_rule(None, thrift_rule)
+		"""
 		
 			
 	def _del_iptables_rule(self, ip):
+		iptables.INPUT.remove(self.__create_rule(ip, '7000', 'ACCEPT'))
+		iptables.INPUT.remove(self.__create_rule(ip, '9160', 'ACCEPT'))
+
+		"""
 		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='ACCEPT', source = ip)
 		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='ACCEPT', source = ip)
 		self._iptables.delete_rule(storage_rule)
 		self._iptables.delete_rule(thrift_rule)
+		"""
 			
 	def _drop_iptable_rules(self):
+		iptables.INPUT.append(self.__create_rule(None, '7000', 'DROP'))
+		iptables.INPUT.append(self.__create_rule(None, '9160', 'DROP'))
+
+		"""
 		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='DROP')
 		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='DROP')
 		self._iptables.append_rule(storage_rule)
 		self._iptables.append_rule(thrift_rule)
+		"""
 			
 	def _is_decommissioned(self):
 		try:

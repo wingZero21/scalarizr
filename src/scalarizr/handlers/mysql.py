@@ -25,7 +25,7 @@ from scalarizr.util import system2, disttool, filetool, \
 	PopenError
 from scalarizr.handlers import operation	
 from scalarizr.util.software import which
-from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.linux import iptables
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
@@ -1510,9 +1510,16 @@ class MysqlHandler(ServiceCtlHandler):
 		
 	
 	def _insert_iptables_rules(self):
+		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "3306"},
+			]})
+
+		"""
 		iptables = IpTables()
 		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
+		"""
 	
 	def _get_ini_options(self, *args):
 		ret = []

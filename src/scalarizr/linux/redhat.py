@@ -1,6 +1,9 @@
+from scalarizr import linux
+
 
 def chkconfig(**long_kwds):
-	raise NotImplementedError()
+	return linux.system(linux.build_cmd_args(executable='/sbin/chkconfig',
+		long=long_kwds))
 
 
 def selinuxenabled():

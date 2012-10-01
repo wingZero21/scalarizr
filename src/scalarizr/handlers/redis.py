@@ -23,7 +23,7 @@ from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.linux import iptables
 from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.handlers import operation, prepare_tags
 
@@ -674,10 +674,18 @@ class RedisHandler(ServiceCtlHandler):
 		return ret
 	
 	def _insert_iptables_rules(self):
+		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp",
+				 "dport": str(port)} for port in self.redis_instances.ports
+			]})
+
+		"""
 		iptables = IpTables()
 		if iptables.enabled():
 			for port in self.redis_instances.ports:
-				iptables.insert_rule(None, RuleSpec(dport=port, jump='ACCEPT', protocol=P_TCP))		
+				iptables.insert_rule(None, RuleSpec(dport=port, jump='ACCEPT', protocol=P_TCP))
+		"""
 	
 
 class RedisCnfController(CnfController):
