@@ -90,20 +90,24 @@ class Json(Store):
 		'''
 		self.filename = filename
 		self.fn = fn
+		self._obj = None
 
 	def __getitem__(self, key):
-		try:
-			with open(self.filename, 'r') as fp:
-				kwds = json.load(fp)
-		except:
-			raise KeyError(key)
-		else:
-			if isinstance(self.fn, basestring):
-				self.fn = _import(self.fn)
-			return self.fn(**kwds)
+		if not self._obj:
+			try:
+				with open(self.filename, 'r') as fp:
+					kwds = json.load(fp)
+			except:
+				raise KeyError(key)
+			else:
+				if isinstance(self.fn, basestring):
+					self.fn = _import(self.fn)
+				self._obj = self.fn(**kwds)
+		return self._obj
 
 
 	def __setitem__(self, key, value):
+		self._obj = value
 		if hasattr(value, 'config'):
 			value = value.config()
 		dirname = os.path.dirname(self.filename)

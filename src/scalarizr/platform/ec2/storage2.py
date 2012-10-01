@@ -131,15 +131,6 @@ class EbsVolume(base.Volume, EbsMixin):
 	_global_timeout = 3600
 	_conn = None
 	
-	features = base.Volume.features.copy()
-	features.update({'restore' : True})
-	
-	error_messages = base.Volume.error_messages.copy()
-	error_messages.update({
-		'no_id_or_conn': 'Volume has no ID and EC2 connection '
-						'required for volume construction is not available'
-	})
-	
 	def __init__(self, 
 				name=None,
 				tags=None,
@@ -151,7 +142,12 @@ class EbsVolume(base.Volume, EbsMixin):
 		base.Volume.__init__(self, name=name, tags=tags or {}, 
 				avail_zone=avail_zone, size=size, 
 				volume_type=volume_type, iops=iops, **kwds)	
-		EbsMixin.__init__(self)	
+		EbsMixin.__init__(self)
+		self.features['restore'] = True
+		self.error_messages.update({
+			'no_id_or_conn': 'Volume has no ID and EC2 connection '
+							'required for volume construction is not available'
+		})	
 		
 		
 	def _ensure(self):
