@@ -46,7 +46,7 @@ class BaseTransfer(bases.Task):
 		self.define_events('transfer_start', 'transfer_error', 'transfer_complete')
 		
 
-class Transfer(BaseTransfer):
+class FileTransfer(BaseTransfer):
 
 	_url_re = re.compile(r'^[\w-]+://')
 
@@ -113,8 +113,8 @@ class Transfer(BaseTransfer):
 					yield '/backups/daily-from-s3.tar.gz'
 					yield '/backups/daily-from-cloudfiles.tar.gz'
 		'''
-		super(Transfer, self).__init__(num_workers=num_workers, 
-						num_retries=num_retries, multipart=multipart, **kwds)
+		super(FileTransfer, self).__init__(num_workers=num_workers, 
+						retries=retries, multipart=multipart, **kwds)
 
 		self._completed = {}
 		self._failed = {}
@@ -343,7 +343,7 @@ class LargeTransfer(bases.Task):
 		self.try_pigz = try_pigz
 		self.transfer_id = transfer_id
 		self.manifest = manifest
-		self._transfer = Transfer(self._src_generator, 
+		self._transfer = FileTransfer(self._src_generator, 
 								self._dst_generator, **kwds)
 		self._tranzit_vol = storage2.volume(
 								type='tmpfs',

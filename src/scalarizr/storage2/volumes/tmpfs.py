@@ -1,4 +1,6 @@
 
+import os
+
 from scalarizr.linux import mount
 from scalarizr import storage2
 from scalarizr.storage2.volumes import base
