@@ -129,10 +129,11 @@ class LvmVolume(base.Volume):
 
 	def lvm_snapshot(self, name=None, size=None):
 		long_kwds = {
-			'name': name or '%snap' % self.name,
+			'name': name or '%ssnap' % self.name,
 			'snapshot': '%s/%s' % (self.vg, self.name)
 		}
 		if size:
+			size=str(size)
 			if '%' in size:
 				long_kwds['extents'] = size
 			else:
@@ -183,7 +184,7 @@ class LvmVolume(base.Volume):
 			except lvm2.NotFound:
 				pass
 			else:
-				if not (int(vg_info.snap_count) or int(vg_info.lv_count)):
+				if not (int(vg_info.snap_count) and not int(vg_info.lv_count)):
 					pv_disks = [device for device, pv_info in lvm2.pvs().items()
 								if pv_info.vg_name == self.vg]
 					lvm2.vgremove(self.vg)

@@ -5,18 +5,19 @@ Created on Aug 22, 2012
 '''
 
 import mock
+import unittest
 
 from scalarizr.storage2.volumes import lvm
 from scalarizr.storage2.volumes import base
 
+@mock.patch('scalarizr.storage2.volumes.lvm.lvm2')
+class TestLvmVolume(unittest.TestCase):
 
-class TestLvmVolume(object):
-	
-	@mock.patch('scalarizr.storage2.volumes.lvm.lvm2')
+
 	def test_ensure_new(self, lvm2):
 		lvm2.NotFound = Exception
 		lvs_returns = [
-			lvm2.NotFound, 
+			lvm2.NotFound,
 			{'data/vol1': mock.Mock(lv_path='/dev/mapper/data-vol1', lv_attr='-wi-ao')}
 		]
 		def lvs(*args, **kwds):
@@ -27,14 +28,14 @@ class TestLvmVolume(object):
 
 		lvm2.lvs.side_effect = lvs
 		lvm2.pvs.side_effect = [{}, {'/dev/sdb': mock.Mock(vg_name=None)},
-									 {'/dev/sdc':  mock.Mock(vg_name=None)}]
+									{'/dev/sdc':  mock.Mock(vg_name=None)}]
 		lvm2.vgs.side_effect = lvm2.NotFound
-		
+
 		vol = lvm.LvmVolume(
-				name='vol1', 
-				vg='data', 
-				pvs=['/dev/sdb', '/dev/sdc'], 
-				size='98%FREE')
+			name='vol1',
+			vg='data',
+			pvs=['/dev/sdb', '/dev/sdc'],
+			size='98%FREE')
 		vol.ensure()
 		
 		assert len(vol.pvs) == 2
@@ -47,7 +48,6 @@ class TestLvmVolume(object):
 		lvm2.lvcreate.assert_called_once_with('data', name='vol1', extents='98%FREE')
 
 
-	@mock.patch('scalarizr.storage2.volumes.lvm.lvm2')
 	def test_ensure_new_with_existed_layout(self, lvm2):
 		lvm2.NotFound = Exception
 		lvs_returns = [
@@ -81,40 +81,126 @@ class TestLvmVolume(object):
 		lvm2.lvchange.assert_called_once_with(vol.device, available=True)
 		
 	
-	def test_ensure_existed(self):
-		pass
+	def test_detach(self, lvm2):
+		vol = self._create_vol(lvm2)
+		vol.detach()
+		lvm2.lvchange.assert_called_once_with(vol.device, available='n')
 
 
-	def test_ensure_existed_with_changed_layout(self):
-		pass
+
+	def test_destroy(self, lvm2):
+		vol = self._create_vol(lvm2)
+		vol.destroy()
+		lvm2.lvremove.assert_called_once_with(vol.device)
+		self.assertFalse(lvm2.vgremove.mock_calls)
+		self.assertFalse(lvm2.pvremove.mock_calls)
+
+		vol = self._create_vol(lvm2)
+		lvm2.vgs.return_value = {'data': mock.MagicMock(snap_count=0, lv_count=0)}
+		lvm2.pvs.return_value = {'/dev/sdb': mock.MagicMock(vg_name='data'),
+								 '/dev/sdc': mock.MagicMock(vg_name='data')}
+		vol.destroy(force=True)
+		lvm2.lvremove.assert_called_once_with(vol.device)
+		lvm2.vgs.assert_called_once_with(vol.vg)
+
+		lvm2.pvs.assert_called_once_with()
+		lvm2.vgremove.assert_called_once_with(vol.vg)
+		self.assertEqual(lvm2.pvremove.mock_calls,
+						 [mock.call('/dev/sdb'), mock.call('/dev/sdc')])
 
 
-	def test_detach(self):
-		pass
 
 
-	def test_detach_already_detached(self):
-		pass
+	def _create_vol(self, lvm2):
+		"""
+		Creates mocked lvm volume with 2 pvs
+		"""
+		lvm2.NotFound = Exception
+		lvs_returns = [
+			lvm2.NotFound,
+			{'data/vol1': mock.Mock(lv_path='/dev/mapper/data-vol1', lv_attr='-wi-ao')}
+		]
+		def lvs(*args, **kwds):
+			ret = lvs_returns.pop(0)
+			if isinstance(ret, Exception):
+				raise ret
+			return ret
+
+		lvm2.lvs.side_effect = lvs
+		lvm2.pvs.side_effect = [{}, {'/dev/sdb': mock.Mock(vg_name=None)},
+									{'/dev/sdc':  mock.Mock(vg_name=None)}]
+		lvm2.vgs.side_effect = lvm2.NotFound
+
+		vol = lvm.LvmVolume(
+			name='vol1',
+			vg='data',
+			pvs=['/dev/sdb', '/dev/sdc'],
+			size='98%FREE')
+		vol.ensure()
+
+		lvm2.reset_mock()
+		lvm2.lvs.side_effect = lvm2.pvs.side_effect = lvm2.vgs.side_effect = None
+		return vol
 
 
-	def test_destroy(self):
-		pass
+	@mock.patch('scalarizr.storage2.volumes.lvm.storage2.concurrent_snapshot')
+	@mock.patch('scalarizr.storage2.volumes.lvm.coreutils')
+	def test_snapshot(self, coreutils, conc_snap, lvm2):
+		vol = self._create_vol(lvm2)
+
+		""" Successfull snapshot """
+		snap = vol.snapshot(description='test_descr', tags=dict(tag='val'))
+
+		assert coreutils.dmsetup.mock_calls == [
+			mock.call('suspend', vol.device), mock.call('resume', vol.device)
+		]
+		conc_snap.assert_called_once_with(vol.pvs,'test_descr PV-${index}',
+																dict(tag='val'))
+
+		assert type(snap) == lvm.LvmSnapshot
+
+		""" Pv snapshots failed """
+		conc_snap.reset_mock()
+		coreutils.dmsetup.reset_mock()
+		conc_snap.side_effect = Exception
+		self.assertRaises(Exception, vol.snapshot,
+						  description='test_descr', tags=dict(tag='val'))
+		assert coreutils.dmsetup.mock_calls == [
+			mock.call('suspend', vol.device), mock.call('resume', vol.device)
+		]
+		conc_snap.assert_called_once_with(vol.pvs,'test_descr PV-${index}',
+										  dict(tag='val'))
 
 
-	def test_destroy_already_detached(self):
-		pass
+	def test_lvm_snapshot(self, lvm2):
+		vol = self._create_vol(lvm2)
 
+		lvm_snap_info = mock.Mock(lv_path='/dev/mapper/data-vol1snap',
+								  lv_name='vol1snap', vg_name='data')
+		lvm2.lvs.side_effect = lambda *args, **kwargs: {'data/vol1snap': lvm_snap_info}
 
-	def test_destroy_already_destroyed(self):
-		pass
+		lvm2.reset_mock()
+		lvm_snap = vol.lvm_snapshot('lvm_snap_test', '2%')
+		lvm2.lvcreate.assert_called_once_with(name='lvm_snap_test',
+							snapshot='data/vol1', extents='2%')
+		lvm2.lvs.assert_called_once_with('data/lvm_snap_test')
+		assert type(lvm_snap) == lvm.LvmNativeSnapshot
 
+		lvm2.reset_mock()
+		lvm_snap = vol.lvm_snapshot()
+		lvm2.lvcreate.assert_called_once_with(name='vol1snap',
+									snapshot='data/vol1', extents='1%ORIGIN')
+		assert type(lvm_snap) == lvm.LvmNativeSnapshot
 
-	def test_snapshot(self):
-		pass
+		lvm2.reset_mock()
+		lvm_snap = vol.lvm_snapshot(size=300)
+		lvm2.lvcreate.assert_called_once_with(name='vol1snap',
+										snapshot='data/vol1', size='300')
+		assert type(lvm_snap) == lvm.LvmNativeSnapshot
+
 
 	@mock.patch('scalarizr.storage2.volumes.lvm.storage2.filesystem')
-	@mock.patch('scalarizr.storage2.volumes.lvm.lvm2')
-	def test_extend_underlying_pvs(self, lvm2, fs_fn):
+	def test_extend_underlying_pvs(self, fs_fn, lvm2):
 		lvm2.pvs.side_effect = [{}, {'/dev/sdb': mock.Mock(vg_name='data')}]
 		lvm2.NotFound = Exception
 		lvm2.vgs.side_effect = lvm2.NotFound
@@ -157,3 +243,4 @@ class TestLvmVolume(object):
 		lvm2.lvextend.assert_called_once_with('/dev/mapper/data-vol1',
 											  extents='98%FREE')
 		fs.resize.assert_called_once_with('/dev/mapper/data-vol1')
+
