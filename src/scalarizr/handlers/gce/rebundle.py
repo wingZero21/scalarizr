@@ -12,7 +12,7 @@ import tempfile
 
 from scalarizr.bus import bus
 from scalarizr.storage import transfer
-from scalarizr.util import filetool, system2, fstool, wait_until, chroot
+from scalarizr.util import filetool, system2, fstool, wait_until
 from scalarizr.handlers import rebundle as rebundle_hndlr
 
 
