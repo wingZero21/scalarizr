@@ -1044,6 +1044,7 @@ class BuiltinPlatforms:
 	RACKSPACE 	= 'rackspace'
 	NIMBULA		= 'nimbula'
 	CLOUDSTACK	= 'cloudstack'
+	IDCF		= 'idcf'
 
 	@staticmethod
 	def values():

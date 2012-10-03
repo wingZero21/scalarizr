@@ -12,6 +12,7 @@ from scalarizr.handlers import HandlerError
 from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr.util import fstool, disttool
 from scalarizr.platform.cloudstack import voltool
+import shutil
 
 LOG = rebundle_hdlr.LOG
 
@@ -47,10 +48,13 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 		conn = pl.new_cloudstack_conn()
 
 		try:
-			root_vol = conn.listVolumes(virtualMachineId=pl.get_instance_id())[0]
+			root_vol = filter(lambda x: x.type == 'ROOT', 
+				conn.listVolumes(virtualMachineId=pl.get_instance_id()))[0]
 		except IndexError:
 			raise HandlerError(
 					"Can't find root volume for virtual machine %s" % pl.get_instance_id())
+		
+		instance = conn.listVirtualMachines(id=pl.get_instance_id())[0]
 		
 		try:
 			# Create snapshot
@@ -62,12 +66,21 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 			LOG.info('Creating image')
 			image = conn.createTemplate(image_name, image_name, 
 							self.get_os_type_id(conn), 
-							snapshotId=snap.id)
+							snapshotId=snap.id,
+							passwordEnabled=instance.passwordenabled)
 			LOG.info('Image created (template: %s)', image.id)
 			
 			return image.id	
 		finally:
 			pass
 
+
+	def before_rebundle(self):
+		if os.path.exists('/etc/udev/rules.d/70-persistent-net.rules'):
+			shutil.move('/etc/udev/rules.d/70-persistent-net.rules', '/tmp')
 				
 				
+	def after_rebundle(self):
+		if os.path.exists('/tmp/70-persistent-net.rules'):
+			shutil.move('/tmp/70-persistent-net.rules', '/etc/udev/rules.d')
+			

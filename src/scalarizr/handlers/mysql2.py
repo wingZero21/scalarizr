@@ -33,6 +33,8 @@ from scalarizr.libs.metaconf import Configuration, NoPathError
 
 LOG = logging.getLogger(__name__)
 
+SU_EXEC = '/bin/su'
+BASH = '/bin/bash'
 
 __mysql__ = mysql2_svc.__mysql__
 
@@ -152,18 +154,21 @@ class MysqlCnfController(CnfController):
 		out = None
 		
 		if not self._merged_manifest:
-			out = system2([mysql_svc.MYSQLD_PATH, '--no-defaults', '--verbose', '--help'],raise_exc=False,silent=True)[0]
+			cmd = '%s --no-defaults --verbose --help' % mysql_svc.MYSQLD_PATH
+			out = system2('%s - mysql -s %s -c "%s"' % (SU_EXEC, BASH, cmd),shell=True, raise_exc=False,silent=True)[0]
 			
 		if out:
-			raw = out.split('--------------------------------- -----------------------------')
+			raw = out.split('------------------------------------------------- ------------------------')
 			if raw:
 				a = raw[-1].split('\n')
-				if len(a) > 7:
-					b = a[1:-7]
+				if len(a) > 5:
+					b = a[1:-5]
 					for item in b:
 						c = item.split()
 						if len(c) > 1:
-							s[c[0].strip()] = ' '.join(c[1:]).strip()
+							key = c[0]
+							val = ' '.join(c[1:])
+							s[key.strip()] = val.strip()
 		
 		if s:	
 			m_config = Configuration('ini')

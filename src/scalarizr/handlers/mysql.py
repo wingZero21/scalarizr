@@ -42,6 +42,9 @@ import signal
 from scalarizr.handlers import operation
 
 
+SU_EXEC = '/bin/su'
+BASH = '/bin/bash'
+
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 CNF_SECTION = BEHAVIOUR
 CNF_NAME = BEHAVIOUR
@@ -437,14 +440,15 @@ class MysqlCnfController(CnfController):
 		out = None
 		
 		if not self._merged_manifest:
-			out = system2([MYSQLD, '--no-defaults', '--verbose', '--help'],raise_exc=False,silent=True)[0]
+			cmd = '%s --no-defaults --verbose --help' % MYSQLD
+			out = system2('%s - mysql -s %s -c "%s"' % (SU_EXEC, BASH, cmd),shell=True, raise_exc=False,silent=True)[0]
 			
 		if out:
 			raw = out.split('--------------------------------- -----------------------------')
 			if raw:
 				a = raw[-1].split('\n')
-				if len(a) > 7:
-					b = a[1:-7]
+				if len(a) > 4:
+					b = a[1:-4]
 					for item in b:
 						c = item.split()
 						if len(c) > 1:
@@ -731,6 +735,10 @@ class MysqlHandler(ServiceCtlHandler):
 	
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
+		
+		f = '/sys/module/apparmor/parameters/enabled'
+		self._apparmor_enabled = os.access(f, os.R_OK) and open(f).read().strip() == 'Y'
+
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
@@ -1841,7 +1849,7 @@ class MysqlHandler(ServiceCtlHandler):
 		LOG.debug('New permissions for mysql directory "%s" were successfully set.' % directory)
 
 		# Adding rules to apparmor config 
-		if disttool.is_debian_based():
+		if disttool.is_debian_based() and self._apparmor_enabled:
 			_add_apparmor_rules(directory)
 	
 	def _flush_logs(self):
