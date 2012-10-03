@@ -406,6 +406,7 @@ class MysqlHandler(DBMSRHandler):
 						mysql_data['compat_hostup_prior_xtrabackup'] = True
 						mysql_data['volume'] = storage2.volume(
 												mysql_data.pop('volume_config'))
+						mysql_data['volume'].mpoint = __mysql__['storage_dir']
 						if mysql_data.get('snapshot_config'):
 							mysql_data['restore'] = backup.restore(
 									type='snap_mysql', 
@@ -1032,7 +1033,6 @@ class MysqlHandler(DBMSRHandler):
 		LOG.info("Initializing MySQL master")
 		
 		with bus.initialization_op as op:
-			snap_cnf = None
 			with op.step(self._step_create_storage):		
 				if 'restore' in __mysql__:
 					__mysql__['restore'].run()
@@ -1060,7 +1060,7 @@ class MysqlHandler(DBMSRHandler):
 				storage_valid = self._storage_valid()				
 				user_creds = self.get_user_creds()
 		
-				datadir = mysql_svc.my_print_defaults('mysqld').get('datadir', '/var/lib/mysql')
+				datadir = mysql2_svc.my_print_defaults('mysqld').get('datadir', '/var/lib/mysql')
 				self.mysql.my_cnf.datadir = datadir
 
 		
@@ -1125,33 +1125,22 @@ class MysqlHandler(DBMSRHandler):
 				stat_password=__mysql__['stat_password'],
 			)
 			if __mysql__['compat_hostup_prior_xtrabackup']:
-				msg_data.update(dict(
+				mysql_data.update(dict(
 					log_file=__mysql__['restore'].log_file,
 					log_pos=__mysql__['restore'].log_pos,
 					volume_config=dict(__mysql__['volume']),
 					snapshot_config=dict(__mysql__['restore'].snapshot)
 				))
-				
 			else:
-
-				msg_data = dict(
-					replication_master=__mysql__['replication_master'],
-					root_password=__mysql__['root_password'],
-					repl_password=__mysql__['repl_password'],
-					stat_password=__mysql__['stat_password'],
+				mysql_data.update(dict(
 					restore=dict(__mysql__['restore']),
-					volume=dict(__mysql__['volume']),
-					# Compatibility
-					log_file=__mysql__['restore'].log_file,
-					log_pos=__mysql__['restore'].log_pos,
-					volume_config=dict(__mysql__['volume']),
-					snapshot_config=dict(__mysql__['restore'].snapshot) \
-									if __mysql__['restore'].type == 'snap_mysql' \
-									else None
-				)
-			
+					volume=dict(__mysql__['volume'])
+				))
+				if 'backup' in __mysql__:
+					mysql_data['backup'] = dict(__mysql__['backup'])
+				
 			message.db_type = __mysql__['behavior']
-			setattr(message, __mysql__['behavior'], msg_data)
+			setattr(message, __mysql__['behavior'], mysql_data)
 
 			
 			
