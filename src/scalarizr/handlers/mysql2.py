@@ -352,7 +352,7 @@ class MysqlHandler(DBMSRHandler):
 		elif __node__['state'] == 'running':
 			vol = storage2.volume(__mysql__['volume'])
 			if not vol.tags:
-				vol.tags = storage_tags()
+				vol.tags = resource_tags()
 			vol.ensure(mount=True)
 			if int(__mysql__['replication_master']):
 				LOG.debug("Checking Scalr's %s system users presence", 
@@ -392,13 +392,7 @@ class MysqlHandler(DBMSRHandler):
 								"must have '%s' property" % __mysql__['behavior']
 						raise HandlerError(msg)
 					
-					# storage will do this
-					'''
-					dir = os.path.dirname(self._volume_config_path)
-					if not os.path.exists(dir):
-						os.makedirs(dir)
-					'''
-
+					# Apply HIR data
 					mysql_data = getattr(message, __mysql__['behavior']).copy()					
 					mysql_data['compat_hostup_prior_xtrabackup'] = False
 
@@ -420,39 +414,17 @@ class MysqlHandler(DBMSRHandler):
 									volume=mysql_data['volume'])
 					else:
 						mysql_data['volume'] = storage2.volume(mysql_data['volume'])
-					
 					if 'backup' in mysql_data:
 						mysql_data['backup'] = backup.backup(mysql_data['backup'])
 					if 'restore' in mysql_data:
 						mysql_data['restore'] = backup.restore(mysql_data['restore'])
-				
+						
 					__mysql__.update(mysql_data)
 					
-					'''
-					mysql_data = getattr(message, __mysql__['behavior']).copy()
-					for key, file in ((OPT_VOLUME_CNF, self._volume_config_path), 
-									(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
-						if os.path.exists(file):
-							os.remove(file)
-						if key in mysql_data:
-							if mysql_data[key]:
-								Storage.backup_config(mysql_data[key], file)
-							del mysql_data[key]
-					'''
-							
-					'''
-					# Compatibility with Scalr <= 2.1
-					if bus.scalr_version <= (2, 1):
-						if 'volume_id' in mysql_data:
-							Storage.backup_config(dict(type='ebs', id=mysql_data['volume_id']), self._volume_config_path)
-							del mysql_data['volume_id']
-						if 'snapshot_id' in mysql_data:
-							if mysql_data['snapshot_id']:
-								Storage.backup_config(dict(type='ebs', id=mysql_data['snapshot_id']), self._snapshot_config_path)
-							del mysql_data['snapshot_id']
-					LOG.debug("Update mysql config with %s", mysql_data)
-					self._update_config(mysql_data)
-					'''
+					# Volume tags
+					__mysql__['volume'].tags = resource_tags()
+					if 'backup' in __mysql__:
+						__mysql__['backup'].tags = resource_tags()
 
 	
 	def on_before_host_up(self, message):
@@ -1046,14 +1018,6 @@ class MysqlHandler(DBMSRHandler):
 					__mysql__['volume'].ensure(mount=True, mkfs=True)
 					LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
 					
-				'''	
-				if self.storage_snap:
-					log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
-					self.data_bundle.restore(self.storage_snap, log_file, log_pos)
-		
-				self._plug_storage(mpoint=STORAGE_PATH, vol=self.storage_vol)
-				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
-				'''
 				self.mysql.flush_logs(__mysql__['data_dir'])
 		
 			with op.step(self._step_move_datadir):
@@ -1098,23 +1062,10 @@ class MysqlHandler(DBMSRHandler):
 					and __mysql__['restore'].type != 'xtrabackup':
 					self._innodb_recovery()	
 					self.mysql.service.start()
-
-		
-		if 'backup' in __mysql__:
-			with op.step(self._step_create_data_bundle):
+					
+		with op.step(self._step_create_data_bundle):
+			if 'backup' in __mysql__:				
 				__mysql__['restore'] = __mysql__['backup'].run()
-				'''
-				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
-				Storage.backup_config(snap.config(), self._snapshot_config_path)
-				'''
-		else:
-			pass
-			'''
-			LOG.debug('Skip data bundle, cause MySQL storage was initialized from snapshot')
-			log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
-			snap = snap_cnf
-			'''
-			
 
 		with op.step(self._step_collect_hostup_data):
 			# Update HostUp message
@@ -1441,6 +1392,6 @@ class MysqlHandler(DBMSRHandler):
 		return prepare_tags(__mysql__['behavior'], db_replication_role=is_master)
 	'''	
 
-def storage_tags():
+def resource_tags():
 	return prepare_tags(__mysql__['behavior'], 
 			db_replication_role=__mysql__['replication_master'])

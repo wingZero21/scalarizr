@@ -136,7 +136,7 @@ class EbsVolume(base.Volume, EbsMixin):
 				tags=None,
 				avail_zone=None,
 				size=None,
-				volume_type='default',
+				volume_type='standard',
 				iops=None,
 				**kwds):
 		base.Volume.__init__(self, name=name, tags=tags or {}, 
