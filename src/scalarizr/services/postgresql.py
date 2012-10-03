@@ -146,7 +146,7 @@ class PostgreSql(BaseService):
 		self.pg_hba_conf.add_standby_host(slave_ip, self.root_user.name)
 		self.postgresql_conf.max_wal_senders += 1
 		if force_restart:
-			self.service.restart(reason='Registering slave', force=True)
+			self.service.reload(reason='Registering slave', force=True)
 			
 			
 	def register_client(self, ip, force=True):
@@ -160,7 +160,7 @@ class PostgreSql(BaseService):
 	
 	def unregister_slave(self, slave_ip):
 		self.pg_hba_conf.delete_standby_host(slave_ip, self.root_user.name)
-		self.service.restart(reason='Unregistering slave', force=True)
+		self.service.reload(reason='Unregistering slave', force=True)
 		
 	def unregister_client(self, ip):
 		self.pg_hba_conf.delete_client(ip)
@@ -517,7 +517,7 @@ class PSQL(object):
 		
 	def execute(self, query, silent=False):
 		try:
-			out = system2([SU_EXEC, '-', self.user, '-c', '%s -c "%s"' % (self.path, query)], silent=True)[0]
+			out = system2([SU_EXEC, '-', self.user, '-c', 'export LANG=en_US; %s -c "%s"' % (self.path, query)], silent=True)[0]
 			return out	
 		except PopenError, e:
 			if not silent:

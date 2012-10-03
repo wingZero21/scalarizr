@@ -5,7 +5,7 @@ import sys
 import logging
 
 from scalarizr.bus import bus
-from scalarizr.platform import Platform, PlatformError
+from scalarizr.platform import Platform, PlatformFeatures, PlatformError
 from . import storage
 from scalarizr import util
 
@@ -19,6 +19,8 @@ LOG = logging.getLogger(__name__)
 
 class CloudStackPlatform(Platform):
 	name = 'cloudstack'
+	
+	features = [PlatformFeatures.SNAPSHOTS, PlatformFeatures.VOLUMES]
 	
 	def __init__(self):
 		Platform.__init__(self)

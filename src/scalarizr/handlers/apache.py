@@ -345,103 +345,103 @@ class ApacheHandler(ServiceCtlHandler):
 		received_vhosts = self._queryenv.list_virtual_hosts()
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
 		
-		if [] != received_vhosts:
-			list_vhosts = os.listdir(vhosts_path)
-			if [] != list_vhosts:
-				self._logger.debug("Deleting old vhosts configuration files")
-				for fname in list_vhosts:
-					if '000-default' == fname:
-						continue
-					vhost_file = os.path.join(vhosts_path, fname)
-					if os.path.isfile(vhost_file):
-						try:
-							os.remove(vhost_file)
-						except OSError, e:
-							self._logger.error('Cannot delete vhost file %s. %s', vhost_file, e.strerror)
-					
-					if os.path.islink(vhost_file):
-						try:
-							os.unlink(vhost_file)
-						except OSError, e:
-							self._logger.error('Cannot delete vhost link %s. %s', vhost_file, e.strerror)
-
-
-				self._logger.debug("Old vhosts configuration files deleted")
-
-			self._logger.debug("Creating new vhosts configuration files")
-			for vhost in received_vhosts:
-				if (None == vhost.hostname) or (None == vhost.raw):
+		#if [] != received_vhosts:
+		list_vhosts = os.listdir(vhosts_path)
+		if [] != list_vhosts:
+			self._logger.debug("Deleting old vhosts configuration files")
+			for fname in list_vhosts:
+				if '000-default' == fname:
 					continue
-				self._logger.debug("Processing %s", vhost.hostname)
-				if vhost.https:
+				vhost_file = os.path.join(vhosts_path, fname)
+				if os.path.isfile(vhost_file):
 					try:
-						self._logger.debug("Retrieving ssl cert and private key from Scalr.")
-						https_certificate = self._queryenv.get_https_certificate()
-						self._logger.debug('Received certificate as %s type', type(https_certificate))
-					except:
-						self._logger.error('Cannot retrieve ssl cert and private key from Scalr.')
-						raise
-					else:
-						if not https_certificate[0]:
-							self._logger.error("Scalr returned empty SSL cert")
-						elif not https_certificate[1]:
-							self._logger.error("Scalr returned empty SSL key")
-						else:
-							self._logger.debug("Saving SSL certificates for %s",vhost.hostname)
-							
-							key_error_message = 'Cannot write SSL key files to %s.' % cert_path
-							cert_error_message = 'Cannot write SSL certificate files to %s.' % cert_path
-							ca_cert_error_message = 'Cannot write CA certificate to %s.' % cert_path
-							
-							for key_file in ['https.key', vhost.hostname + '.key']:
-								write_file(os.path.join(cert_path,key_file), https_certificate[1], error_msg=key_error_message, logger=self._logger)
-								os.chmod(cert_path + '/' + key_file, 0644)
-														
-							for cert_file in ['https.crt', vhost.hostname + '.crt']:
-								write_file(os.path.join(cert_path,cert_file), https_certificate[0], error_msg=cert_error_message, logger=self._logger)
-								os.chmod(cert_path + '/' + cert_file, 0644)
-								
-							if https_certificate[2]:
-								for filename in ('https-ca.crt', vhost.hostname + '-ca.crt'):
-									write_file(os.path.join(cert_path, filename), https_certificate[2], error_msg=ca_cert_error_message, logger=self._logger)
-									os.chmod(os.path.join(cert_path, filename), 0644)
-					
-					self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
-					
-					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + '-ssl' + VHOST_EXTENSION) 
-					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
-					write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl', cert_path), error_msg=vhost_error_message, logger = self._logger)
-					
-					self._create_vhost_paths(vhost_fullpath) 	
+						os.remove(vhost_file)
+					except OSError, e:
+						self._logger.error('Cannot delete vhost file %s. %s', vhost_file, e.strerror)
+				
+				if os.path.islink(vhost_file):
+					try:
+						os.unlink(vhost_file)
+					except OSError, e:
+						self._logger.error('Cannot delete vhost link %s. %s', vhost_file, e.strerror)
 
-					self._logger.debug("Checking apache SSL mod")
-					self._check_mod_ssl()
-					
-					self._logger.debug("Changing paths in ssl.conf")
-					self._patch_ssl_conf(cert_path)
-					
+
+			self._logger.debug("Old vhosts configuration files deleted")
+
+		self._logger.debug("Creating new vhosts configuration files")
+		for vhost in received_vhosts:
+			if (None == vhost.hostname) or (None == vhost.raw):
+				continue
+			self._logger.debug("Processing %s", vhost.hostname)
+			if vhost.https:
+				try:
+					self._logger.debug("Retrieving ssl cert and private key from Scalr.")
+					https_certificate = self._queryenv.get_https_certificate()
+					self._logger.debug('Received certificate as %s type', type(https_certificate))
+				except:
+					self._logger.error('Cannot retrieve ssl cert and private key from Scalr.')
+					raise
 				else:
-					self._logger.debug('Enabling virtual host %s', vhost.hostname)
-					vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + VHOST_EXTENSION)
-					vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
-					write_file(vhost_fullpath, vhost.raw, error_msg=vhost_error_message, logger=self._logger)
-					self._logger.debug("Done %s processing", vhost.hostname)
-					self._create_vhost_paths(vhost_fullpath)
-			self._logger.debug("New vhosts configuration files created")
-			
-			if disttool.is_debian_based():
-				self._patch_default_conf_deb()
-			elif not self._config.get_list('NameVirtualHost'):
-				self._config.add('NameVirtualHost', '*:80')
-			
-			self._logger.debug("Checking that vhosts directory included in main apache config")
-			
-			includes = self._config.get_list('Include')
-			
-			inc_mask = vhosts_path + '/*' + VHOST_EXTENSION
-			if not inc_mask in includes:
-				self._config.add('Include', inc_mask)
-				self._config.write(self._httpd_conf_path)			
+					if not https_certificate[0]:
+						self._logger.error("Scalr returned empty SSL cert")
+					elif not https_certificate[1]:
+						self._logger.error("Scalr returned empty SSL key")
+					else:
+						self._logger.debug("Saving SSL certificates for %s",vhost.hostname)
+						
+						key_error_message = 'Cannot write SSL key files to %s.' % cert_path
+						cert_error_message = 'Cannot write SSL certificate files to %s.' % cert_path
+						ca_cert_error_message = 'Cannot write CA certificate to %s.' % cert_path
+						
+						for key_file in ['https.key', vhost.hostname + '.key']:
+							write_file(os.path.join(cert_path,key_file), https_certificate[1], error_msg=key_error_message, logger=self._logger)
+							os.chmod(cert_path + '/' + key_file, 0644)
+													
+						for cert_file in ['https.crt', vhost.hostname + '.crt']:
+							write_file(os.path.join(cert_path,cert_file), https_certificate[0], error_msg=cert_error_message, logger=self._logger)
+							os.chmod(cert_path + '/' + cert_file, 0644)
+							
+						if https_certificate[2]:
+							for filename in ('https-ca.crt', vhost.hostname + '-ca.crt'):
+								write_file(os.path.join(cert_path, filename), https_certificate[2], error_msg=ca_cert_error_message, logger=self._logger)
+								os.chmod(os.path.join(cert_path, filename), 0644)
+				
+				self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
+				
+				vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + '-ssl' + VHOST_EXTENSION) 
+				vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
+				write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl', cert_path), error_msg=vhost_error_message, logger = self._logger)
+				
+				self._create_vhost_paths(vhost_fullpath) 	
+
+				self._logger.debug("Checking apache SSL mod")
+				self._check_mod_ssl()
+				
+				self._logger.debug("Changing paths in ssl.conf")
+				self._patch_ssl_conf(cert_path)
+				
+			else:
+				self._logger.debug('Enabling virtual host %s', vhost.hostname)
+				vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + VHOST_EXTENSION)
+				vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
+				write_file(vhost_fullpath, vhost.raw, error_msg=vhost_error_message, logger=self._logger)
+				self._logger.debug("Done %s processing", vhost.hostname)
+				self._create_vhost_paths(vhost_fullpath)
+		self._logger.debug("New vhosts configuration files created")
+		
+		if disttool.is_debian_based():
+			self._patch_default_conf_deb()
+		elif not self._config.get_list('NameVirtualHost'):
+			self._config.add('NameVirtualHost', '*:80')
+		
+		self._logger.debug("Checking that vhosts directory included in main apache config")
+		
+		includes = self._config.get_list('Include')
+		
+		inc_mask = vhosts_path + '/*' + VHOST_EXTENSION
+		if not inc_mask in includes:
+			self._config.add('Include', inc_mask)
+			self._config.write(self._httpd_conf_path)			
 
 	def _patch_ssl_conf(self, cert_path):
 		
