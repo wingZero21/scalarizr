@@ -79,7 +79,7 @@ class ConfigDriven(object):
 		arginfo = inspect.getargvalues(inspect.currentframe())
 		self._config = dict((arg, arginfo.locals[arg]) for arg in arginfo.args[1:])
 		self._config.update(arginfo.locals[arginfo.keywords])
-		self._initial_config = self._config.copy()
+		self.initial_config = self._config.copy()
 
 
 	def config(self):

@@ -1042,6 +1042,10 @@ class MysqlHandler(DBMSRHandler):
 						log_file, log_pos = mysql2_svc.binlog_head()
 						__mysql__['restore'].log_file = log_file
 						__mysql__['restore'].log_pos = log_pos
+				else:
+					__mysql__['volume'].ensure(mount=True, mkfs=True)
+					LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
+					
 				'''	
 				if self.storage_snap:
 					log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)

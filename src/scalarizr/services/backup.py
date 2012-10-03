@@ -1,8 +1,11 @@
 
 import sys
+import logging
 
 from scalarizr import storage2
 from scalarizr.libs import bases
+
+LOG = logging.getLogger(__name__)
 
 
 class Error(Exception):
@@ -104,6 +107,8 @@ class SnapBackup(Backup):
 
 	def _run(self):
 		self.volume = storage2.volume(self.volume)
+		LOG.debug('Volume obj: %s', self.volume)
+		LOG.debug('Volume config: %s', dict(self.volume))
 		state = {}
 		self.fire('freeze', self.volume, state)
 		snap = self.volume.snapshot(self.description, tags=self.tags)
