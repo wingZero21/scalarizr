@@ -402,11 +402,11 @@ class MysqlHandler(DBMSRHandler):
 					mysql_data = getattr(message, __mysql__['behavior']).copy()					
 					mysql_data['compat_hostup_prior_xtrabackup'] = False
 
-					if 'volume_config' in mysql_data:
+					if mysql_data.get('volume_config'):
 						mysql_data['compat_hostup_prior_xtrabackup'] = True
 						mysql_data['volume'] = storage2.volume(
 												mysql_data.pop('volume_config'))
-						if 'snapshot_config' in mysql_data:
+						if mysql_data.get('snapshot_config'):
 							mysql_data['restore'] = backup.restore(
 									type='snap_mysql', 
 									snapshot=mysql_data.pop('snapshot_config'),
