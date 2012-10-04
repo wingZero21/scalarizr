@@ -423,7 +423,8 @@ class MysqlHandler(DBMSRHandler):
 						mysql_data['backup'] = backup.backup(mysql_data['backup'])
 					if 'restore' in mysql_data:
 						mysql_data['restore'] = backup.restore(mysql_data['restore'])
-						
+
+					LOG.debug('__mysql__: %s', mysql_data)
 					__mysql__.update(mysql_data)
 					
 					# Volume tags

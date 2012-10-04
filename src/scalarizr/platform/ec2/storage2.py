@@ -79,8 +79,9 @@ class FreeDeviceLetterMgr(object):
 
 class EbsMixin(object):
 	
+	_conn = None	
+	
 	def __init__(self):
-		self._conn = None
 		self.error_messages.update({
 			'no_connection': 'EC2 connection should be available '
 							'to perform this operation'								
@@ -129,7 +130,6 @@ class EbsVolume(base.Volume, EbsMixin):
 	
 	_free_device_letter_mgr = FreeDeviceLetterMgr()
 	_global_timeout = 3600
-	_conn = None
 	
 	def __init__(self, 
 				name=None,
