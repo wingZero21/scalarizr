@@ -1118,6 +1118,10 @@ class MysqlHandler(DBMSRHandler):
 							log_file=__mysql__['restore'].log_file,
 							log_pos=__mysql__['restore'].log_pos,
 							snapshot_config=dict(__mysql__['restore'].snapshot)))
+				elif 'log_file' in __mysql__:
+					md.update(dict(
+							log_file=__mysql__['log_file'],
+							log_pos=__mysql__['log_pos']))
 				md.update(dict(
 							volume_config=dict(__mysql__['volume'])))
 			else:

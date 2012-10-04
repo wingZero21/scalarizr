@@ -144,7 +144,7 @@ class EbsVolume(base.Volume, EbsMixin):
 				iops=None,
 				**kwds):
 		base.Volume.__init__(self, name=name, tags=tags or {}, 
-				avail_zone=avail_zone, size=size, 
+				avail_zone=avail_zone, size=size and int(size) or None, 
 				volume_type=volume_type, iops=iops, **kwds)	
 		EbsMixin.__init__(self)
 		self.features['restore'] = True
