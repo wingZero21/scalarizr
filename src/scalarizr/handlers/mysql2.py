@@ -745,7 +745,7 @@ class MysqlHandler(DBMSRHandler):
 				#old_conf = self.storage_vol.detach(force=True) # ??????
 				old_vol = storage2.volume(__mysql__['volume'])				
 				try:
-					old_vol.detach(force=True)
+					old_vol.umount()
 					#master_vol = self._take_master_volume(master_vol_id)
 					new_vol.mpoint = __mysql__['storage_dir']				
 					new_vol.ensure(mount=True)				
@@ -805,7 +805,7 @@ class MysqlHandler(DBMSRHandler):
 				except:
 					self.mysql.service.stop('Detaching new volume')
 					new_vol.detach()
-					old_vol.ensure(mount=True)
+					old_vol.mount()
 					raise
 			else:
 				self.mysql.service.start()

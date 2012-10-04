@@ -1,9 +1,8 @@
 
 from scalarizr.bus import bus
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
-#from scalarizr.storage.transfer import Transfer
-import scalarizr.platform.ec2.storage2
-#from .storage import S3TransferProvider
+from scalarizr.storage.transfer import Transfer
+from .storage import S3TransferProvider
 
 from boto import connect_s3
 from boto.ec2.connection import EC2Connection
@@ -11,7 +10,7 @@ from boto.ec2.regioninfo import RegionInfo
 import urllib2, re, os
 
 
-#Transfer.explore_provider(S3TransferProvider)
+Transfer.explore_provider(S3TransferProvider)
 
 
 """
