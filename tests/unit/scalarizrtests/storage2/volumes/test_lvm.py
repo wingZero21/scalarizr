@@ -10,11 +10,12 @@ import unittest
 from scalarizr.storage2.volumes import lvm
 from scalarizr.storage2.volumes import base
 
+@mock.patch('scalarizr.storage2.volumes.base.mod_mount')
 @mock.patch('scalarizr.storage2.volumes.lvm.lvm2')
 class TestLvmVolume(unittest.TestCase):
 
 
-	def test_ensure_new(self, lvm2):
+	def test_ensure_new(self, lvm2, mod_mount):
 		lvm2.NotFound = Exception
 		lvs_returns = [
 			lvm2.NotFound,
@@ -48,7 +49,7 @@ class TestLvmVolume(unittest.TestCase):
 		lvm2.lvcreate.assert_called_once_with('data', name='vol1', extents='98%FREE')
 
 
-	def test_ensure_new_with_existed_layout(self, lvm2):
+	def test_ensure_new_with_existed_layout(self, lvm2, mod_mount):
 		lvm2.NotFound = Exception
 		lvs_returns = [
 			lvm2.NotFound, 
@@ -81,14 +82,14 @@ class TestLvmVolume(unittest.TestCase):
 		lvm2.lvchange.assert_called_once_with(vol.device, available=True)
 		
 	
-	def test_detach(self, lvm2):
+	def test_detach(self, lvm2, mod_mount):
 		vol = self._create_vol(lvm2)
 		vol.detach()
 		lvm2.lvchange.assert_called_once_with(vol.device, available='n')
 
 
 
-	def test_destroy(self, lvm2):
+	def test_destroy(self, lvm2, mod_mount):
 		vol = self._create_vol(lvm2)
 		vol.destroy()
 		lvm2.lvremove.assert_called_once_with(vol.device)
@@ -145,7 +146,7 @@ class TestLvmVolume(unittest.TestCase):
 
 	@mock.patch('scalarizr.storage2.volumes.lvm.storage2.concurrent_snapshot')
 	@mock.patch('scalarizr.storage2.volumes.lvm.coreutils')
-	def test_snapshot(self, coreutils, conc_snap, lvm2):
+	def test_snapshot(self, coreutils, conc_snap, lvm2, mod_mount):
 		vol = self._create_vol(lvm2)
 
 		""" Successfull snapshot """
@@ -172,7 +173,7 @@ class TestLvmVolume(unittest.TestCase):
 										  dict(tag='val'))
 
 
-	def test_lvm_snapshot(self, lvm2):
+	def test_lvm_snapshot(self, lvm2, mod_mount):
 		vol = self._create_vol(lvm2)
 
 		lvm_snap_info = mock.Mock(lv_path='/dev/mapper/data-vol1snap',
@@ -200,7 +201,7 @@ class TestLvmVolume(unittest.TestCase):
 
 
 	@mock.patch('scalarizr.storage2.volumes.lvm.storage2.filesystem')
-	def test_extend_underlying_pvs(self, fs_fn, lvm2):
+	def test_extend_underlying_pvs(self, fs_fn, lvm2, mod_mount):
 		lvm2.pvs.side_effect = [{}, {'/dev/sdb': mock.Mock(vg_name='data')}]
 		lvm2.NotFound = Exception
 		lvm2.vgs.side_effect = lvm2.NotFound
