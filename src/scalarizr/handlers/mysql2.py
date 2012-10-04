@@ -414,7 +414,7 @@ class MysqlHandler(DBMSRHandler):
 												mysql_data.pop('volume_config'))
 
 					if mysql_data['volume'].device and \
-						mysql_data['volume'].type in ('ebs', 'raid'):
+							mysql_data['volume'].type in ('ebs', 'raid'):
 						mysql_data.pop('snapshot_config', None)
 
 					if mysql_data.get('snapshot_config'):
@@ -425,7 +425,9 @@ class MysqlHandler(DBMSRHandler):
 								log_file=mysql_data.pop('log_file'),
 								log_pos=mysql_data.pop('log_pos'))
 
-					elif mysql_data['compat_prior_xtrabackup']:
+					elif mysql_data['compat_prior_xtrabackup'] and \
+							mysql_data['replication_master'] and \
+							not mysql_data['volume'].device:
 						mysql_data['backup'] = backup.backup(
 								type='snap_mysql',
 								volume=mysql_data['volume'])
