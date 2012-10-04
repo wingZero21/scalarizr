@@ -1106,29 +1106,31 @@ class MysqlHandler(DBMSRHandler):
 
 		with op.step(self._step_collect_hostup_data):
 			# Update HostUp message
-			mysql_data = dict(
+			md = dict(
 				replication_master=__mysql__['replication_master'],
 				root_password=__mysql__['root_password'],
 				repl_password=__mysql__['repl_password'],
 				stat_password=__mysql__['stat_password'],
 			)
 			if __mysql__['compat_prior_xtrabackup']:
-				mysql_data.update(dict(
-					log_file=__mysql__['restore'].log_file,
-					log_pos=__mysql__['restore'].log_pos,
-					volume_config=dict(__mysql__['volume']),
-					snapshot_config=dict(__mysql__['restore'].snapshot)
-				))
+				if 'restore' in __mysql__:
+					md.update(dict(					
+							log_file=__mysql__['restore'].log_file,
+							log_pos=__mysql__['restore'].log_pos,
+							snapshot_config=dict(__mysql__['restore'].snapshot)))
+				md.update(dict(
+							volume_config=dict(__mysql__['volume'])))
 			else:
-				mysql_data.update(dict(
-					restore=dict(__mysql__['restore']),
+				md.update(dict(
 					volume=dict(__mysql__['volume'])
 				))
-				if 'backup' in __mysql__:
-					mysql_data['backup'] = dict(__mysql__['backup'])
+				for key in ('backup', 'restore'):
+					if key in __mysql__:
+						md[key] = dict(__mysql__[key])						
+					
 				
 			message.db_type = __mysql__['behavior']
-			setattr(message, __mysql__['behavior'], mysql_data)
+			setattr(message, __mysql__['behavior'], md)
 
 			
 			
