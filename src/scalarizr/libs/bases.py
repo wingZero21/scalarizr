@@ -108,7 +108,9 @@ class ConfigDriven(object):
 
 
 	def __setattr__(self, name, value):
-		data = self.__dict__ if name in dir(self) else self.__dict__['_config']
+		data = self.__dict__ \
+				if name in dir(self) or name[0] == '_' \
+				else self.__dict__['_config']
 		data[name] = value
 	
 	

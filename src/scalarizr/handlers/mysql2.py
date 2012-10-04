@@ -437,11 +437,13 @@ class MysqlHandler(DBMSRHandler):
 						mysql_data['backup'] = backup.backup(mysql_data['backup'])
 					if 'restore' in mysql_data:
 						mysql_data['restore'] = backup.restore(mysql_data['restore'])
+					__mysql__.update(mysql_data)
 
 					LOG.debug('__mysql__: %s', mysql_data)
 					LOG.debug('volume in __mysql__: %s', 'volume' in __mysql__)
 					LOG.debug('restore in __mysql__: %s', 'restore' in __mysql__)
-					__mysql__.update(mysql_data)
+					LOG.debug('backup in __mysql__: %s', 'backup' in __mysql__)
+
 					
 					__mysql__['volume'].tags = resource_tags()
 					if 'backup' in __mysql__:

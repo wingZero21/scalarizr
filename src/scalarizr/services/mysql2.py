@@ -59,6 +59,7 @@ class MySQLSnapBackup(backup.SnapBackup):
 			complete=self.unfreeze,
 			error=self.unfreeze
 		)
+		self._mysql_init = mysql_svc.MysqlInitScript()
 
 	def _client(self):
 		return mysql_svc.MySQLClient(
@@ -67,6 +68,7 @@ class MySQLSnapBackup(backup.SnapBackup):
 
 
 	def freeze(self, volume, state):
+		self._mysql_init.start()
 		client = self._client()
 		client.lock_tables()
 		coreutils.sync()
