@@ -29,6 +29,7 @@ from scalarizr.node import __node__
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
+from scalarizr.handlers.postgresql import msg_data
 
 
 LOG = logging.getLogger(__name__)
@@ -399,10 +400,10 @@ class MysqlHandler(DBMSRHandler):
 					
 					# Apply HIR data
 					mysql_data = getattr(message, __mysql__['behavior']).copy()					
-					mysql_data['compat_hostup_prior_xtrabackup'] = False
+					mysql_data['compat_prior_xtrabackup'] = False
 
 					if mysql_data.get('volume_config') or mysql_data.get('snapshot_config'):
-						mysql_data['compat_hostup_prior_xtrabackup'] = True
+						mysql_data['compat_prior_xtrabackup'] = True
 						if mysql_data.get('volume_config'):
 							mysql_data['volume'] = storage2.volume(
 													mysql_data.pop('volume_config'))
@@ -728,6 +729,7 @@ class MysqlHandler(DBMSRHandler):
 			
 		bus.fire('before_slave_promote_to_master')
 
+		__mysql__['compat_prior_xtrabackup'] = 'volume_config' in mysql2
 		new_vol	= None
 		if mysql2.get('volume_config'):
 			new_vol = storage2.volume(mysql2.get('volume_config'))
@@ -784,12 +786,17 @@ class MysqlHandler(DBMSRHandler):
 						msg_data = {
 							'status': 'ok',
 							'db_type': __mysql__['behavior'],
-							__mysql__['behavior']: {
-								'volume_config': dict(__mysql__['volume'])
-							}
+							__mysql__['behavior']: {}
 						} 
-						#log_file, log_pos = self.root_client.master_status()
-						#msg_data.update(dict(log_file = log_file, log_pos = log_pos))
+						if __mysql__['compat_prior_xtrabackup']:
+							msg_data[__mysql__['behavior']].update({
+								'volume_config': dict(__mysql__['volume'])
+							})
+						else:
+							msg_data[__mysql__['behavior']].update({
+								'volume': dict(__mysql__['volume'])
+							})
+		
 						self.send_message(
 								DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, 
 								msg_data)
@@ -841,14 +848,18 @@ class MysqlHandler(DBMSRHandler):
 					status="ok",
 					db_type = __mysql__['behavior']
 				)
-				msg_data[__mysql__['behavior']] = {
-					'log_file': restore.log_file,
-					'log_pos': restore.log_pos,
-					'restore': dict(restore)
-				}
-				if restore.type == 'snap_mysql':
-					msg_data['snapshot_config'] = dict(restore.snapshot)
-				msg_data['volume_config'] = dict(__mysql__['volume'])
+				if __mysql__['compat_prior_xtrabackup']:
+					msg_data[__mysql__['behavior']] = {
+						'log_file': restore.log_file,
+						'log_pos': restore.log_pos,
+						'snapshot_config': dict(restore.snapshot),
+						'volume_config': dict(__mysql__['volume'])
+					}
+				else:
+					msg_data[__mysql__['behavior']] = {
+						'restore': dict(restore),
+						'volume': dict(__mysql__['volume'])
+					}
 				
 				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)							
 				
@@ -1085,7 +1096,7 @@ class MysqlHandler(DBMSRHandler):
 				repl_password=__mysql__['repl_password'],
 				stat_password=__mysql__['stat_password'],
 			)
-			if __mysql__['compat_hostup_prior_xtrabackup']:
+			if __mysql__['compat_prior_xtrabackup']:
 				mysql_data.update(dict(
 					log_file=__mysql__['restore'].log_file,
 					log_pos=__mysql__['restore'].log_pos,
