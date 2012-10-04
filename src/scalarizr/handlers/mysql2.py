@@ -29,7 +29,6 @@ from scalarizr.node import __node__
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.handlers.postgresql import msg_data
 
 
 LOG = logging.getLogger(__name__)
@@ -1032,7 +1031,7 @@ class MysqlHandler(DBMSRHandler):
 					if __mysql__['restore'].features['master_binlog_reset']:
 						self.mysql.service.start()
 						self.mysql.service.stop()
-						log_file, log_pos = mysql2_svc.binlog_head()
+						log_file, log_pos = mysql2_svc.mysqlbinlog_head()
 						__mysql__['restore'].log_file = log_file
 						__mysql__['restore'].log_pos = log_pos
 				else:

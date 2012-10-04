@@ -521,7 +521,7 @@ def mysqlbinlog(log_file, **log_kwds):
 			params=[log_file]))
 
 
-def binlog_head():
+def mysqlbinlog_head():
 	'''
 	Returns the first binary log file position
 	Example:
