@@ -397,33 +397,42 @@ class MysqlHandler(DBMSRHandler):
 								"must have '%s' property" % __mysql__['behavior']
 						raise HandlerError(msg)
 					
+
 					# Apply HIR data
 					mysql_data = getattr(message, __mysql__['behavior']).copy()					
-					mysql_data['compat_prior_xtrabackup'] = False
 
-					if mysql_data.get('volume_config') or mysql_data.get('snapshot_config'):
-						mysql_data['compat_prior_xtrabackup'] = True
-						if mysql_data.get('volume_config'):
-							mysql_data['volume'] = storage2.volume(
-													mysql_data.pop('volume_config'))
-						else:
-							mysql_data.pop('volume_config', None)
-							mysql_data['volume'] = storage2.volume(
-													type=mysql_data['snapshot_config']['type'])
-						mysql_data['volume'].mpoint = __mysql__['storage_dir']
-						if mysql_data.get('snapshot_config'):
-							mysql_data['restore'] = backup.restore(
-									type='snap_mysql', 
-									snapshot=mysql_data.pop('snapshot_config'),
-									volume=mysql_data['volume'],
-									log_file=mysql_data.pop('log_file'),
-									log_pos=mysql_data.pop('log_pos'))
-						else:
-							mysql_data['backup'] = backup.backup(
-									type='snap_mysql',
-									volume=mysql_data['volume'])
-					else:
-						mysql_data['volume'] = storage2.volume(mysql_data['volume'])
+					# Compatibility transformation
+					# - volume_config -> volume
+					# - master n'th start, type=ebs - del snapshot_config
+					# - snapshot_config + log_file + log_pos -> restore
+					mysql_data['compat_prior_xtrabackup'] = \
+								'volume_config' in mysql_data and \
+								'snapshot_config' in mysql_data
+
+					if mysql_data.get('volume_config'):
+						mysql_data['volume'] = storage2.volume(
+												mysql_data.pop('volume_config'))
+
+					if mysql_data['volume'].device and \
+						mysql_data['volume'].type in ('ebs', 'raid'):
+						mysql_data.pop('snapshot_config', None)
+
+					if mysql_data.get('snapshot_config'):
+						mysql_data['restore'] = backup.restore(
+								type='snap_mysql', 
+								snapshot=mysql_data.pop('snapshot_config'),
+								volume=mysql_data['volume'],
+								log_file=mysql_data.pop('log_file'),
+								log_pos=mysql_data.pop('log_pos'))
+
+					elif mysql_data['compat_prior_xtrabackup']:
+						mysql_data['backup'] = backup.backup(
+								type='snap_mysql',
+								volume=mysql_data['volume'])
+					# end Compatibility
+
+
+					mysql_data['volume'] = storage2.volume(mysql_data['volume'])
 					if 'backup' in mysql_data:
 						mysql_data['backup'] = backup.backup(mysql_data['backup'])
 					if 'restore' in mysql_data:
@@ -434,7 +443,6 @@ class MysqlHandler(DBMSRHandler):
 					LOG.debug('restore in __mysql__: %s', 'restore' in __mysql__)
 					__mysql__.update(mysql_data)
 					
-					# Volume tags
 					__mysql__['volume'].tags = resource_tags()
 					if 'backup' in __mysql__:
 						__mysql__['backup'].tags = resource_tags()
