@@ -981,7 +981,7 @@ class MysqlHandler(DBMSRHandler):
 
 	def generate_datadir(self):
 		try:
-			datadir = mysql_svc.my_print_defaults('mysqld').get('datadir')
+			datadir = mysql2_svc.my_print_defaults('mysqld').get('datadir')
 			if datadir and \
 				os.path.isdir(datadir) and \
 				not os.path.isdir(os.path.join(datadir, 'mysql')):
