@@ -401,10 +401,14 @@ class MysqlHandler(DBMSRHandler):
 					mysql_data = getattr(message, __mysql__['behavior']).copy()					
 					mysql_data['compat_hostup_prior_xtrabackup'] = False
 
-					if mysql_data.get('volume_config'):
+					if mysql_data.get('volume_config') or mysql_data.get('snapshot_config'):
 						mysql_data['compat_hostup_prior_xtrabackup'] = True
-						mysql_data['volume'] = storage2.volume(
-												mysql_data.pop('volume_config'))
+						if mysql_data.get('volume_config'):
+							mysql_data['volume'] = storage2.volume(
+													mysql_data.pop('volume_config'))
+						else:
+							mysql_data['volume'] = storage2.volume(
+													type=mysql_data['snapshot_config']['type'])
 						mysql_data['volume'].mpoint = __mysql__['storage_dir']
 						if mysql_data.get('snapshot_config'):
 							mysql_data['restore'] = backup.restore(
@@ -1114,11 +1118,9 @@ class MysqlHandler(DBMSRHandler):
 			with op.step(self._step_create_storage):
 				if not self._storage_valid():
 					LOG.debug("Initialize slave storage")
-					restore = backup.restore(__mysql__['restore'])
-					restore.run()
+					__mysql__['restore'].run()
 				else:
-					vol = storage2.volume(__mysql__['volume'])
-					vol.ensure()
+					__mysql__['volume'].ensure(mount=True)
 		
 			with op.step(self._step_patch_conf):		
 				self.mysql.service.stop('Required by Slave initialization process')			
@@ -1163,7 +1165,7 @@ class MysqlHandler(DBMSRHandler):
 		while not master_host:
 			try:
 				master_host = list(host 
-					for host in self._queryenv.list_roles(behaviours=__mysql__['behavior'])[0].hosts 
+					for host in self._queryenv.list_roles(behaviour=__mysql__['behavior'])[0].hosts 
 					if host.replication_master)[0]
 			except IndexError:
 				LOG.debug("QueryEnv respond with no mysql master. " + 
