@@ -407,6 +407,7 @@ class MysqlHandler(DBMSRHandler):
 							mysql_data['volume'] = storage2.volume(
 													mysql_data.pop('volume_config'))
 						else:
+							mysql_data.pop('volume_config', None)
 							mysql_data['volume'] = storage2.volume(
 													type=mysql_data['snapshot_config']['type'])
 						mysql_data['volume'].mpoint = __mysql__['storage_dir']
@@ -429,6 +430,8 @@ class MysqlHandler(DBMSRHandler):
 						mysql_data['restore'] = backup.restore(mysql_data['restore'])
 
 					LOG.debug('__mysql__: %s', mysql_data)
+					LOG.debug('volume in __mysql__: %s', 'volume' in __mysql__)
+					LOG.debug('restore in __mysql__: %s', 'restore' in __mysql__)
 					__mysql__.update(mysql_data)
 					
 					# Volume tags
