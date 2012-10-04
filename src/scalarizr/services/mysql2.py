@@ -71,7 +71,6 @@ class MySQLSnapBackup(backup.SnapBackup):
 		self._mysql_init.start()
 		client = self._client()
 		client.lock_tables()
-		coreutils.sync()
 		(log_file, log_pos) = client.master_status()
 		state.update({
 			'log_file': log_file,

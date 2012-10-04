@@ -398,54 +398,56 @@ class MysqlHandler(DBMSRHandler):
 						raise HandlerError(msg)
 					
 
-					# Apply HIR data
-					mysql_data = getattr(message, __mysql__['behavior']).copy()					
+					# Apply MySQL data from HIR
+					md = getattr(message, __mysql__['behavior']).copy()					
 
 					# Compatibility transformation
 					# - volume_config -> volume
 					# - master n'th start, type=ebs - del snapshot_config
 					# - snapshot_config + log_file + log_pos -> restore
-					mysql_data['compat_prior_xtrabackup'] = \
-								'volume_config' in mysql_data and \
-								'snapshot_config' in mysql_data
+					md['compat_prior_xtrabackup'] = \
+							'volume_config' in md and \
+							'snapshot_config' in md
 
-					if mysql_data.get('volume_config'):
-						mysql_data['volume'] = storage2.volume(
-												mysql_data.pop('volume_config'))
+					if md.get('volume_config'):
+						md['volume'] = storage2.volume(
+								md.pop('volume_config'))
+					elif md['compat_prior_xtrabackup']:
+						md['volume'] = storage2.volume(
+								type=md['snapshot_config']['type'])
 
-					if mysql_data['volume'].device and \
-							mysql_data['volume'].type in ('ebs', 'raid'):
-						mysql_data.pop('snapshot_config', None)
+					if md['volume'].device and \
+								md['volume'].type in ('ebs', 'raid'):
+						md.pop('snapshot_config', None)
 
-					if mysql_data.get('snapshot_config'):
-						mysql_data['restore'] = backup.restore(
+					if md.get('snapshot_config'):
+						md['restore'] = backup.restore(
 								type='snap_mysql', 
-								snapshot=mysql_data.pop('snapshot_config'),
-								volume=mysql_data['volume'],
-								log_file=mysql_data.pop('log_file'),
-								log_pos=mysql_data.pop('log_pos'))
+								snapshot=md.pop('snapshot_config'),
+								volume=md['volume'],
+								log_file=md.pop('log_file'),
+								log_pos=md.pop('log_pos'))
 
-					elif mysql_data['compat_prior_xtrabackup'] and \
-							mysql_data['replication_master'] and \
-							not mysql_data['volume'].device:
-						mysql_data['backup'] = backup.backup(
+					elif md['compat_prior_xtrabackup'] and \
+								md['replication_master'] and \
+								not md['volume'].device:
+						md['backup'] = backup.backup(
 								type='snap_mysql',
-								volume=mysql_data['volume'])
+								volume=md['volume'])
 					# end Compatibility
 
+					md['volume'] = storage2.volume(md['volume'])
+					if 'backup' in md:
+						md['backup'] = backup.backup(md['backup'])
+					if 'restore' in md:
+						md['restore'] = backup.restore(md['restore'])
 
-					mysql_data['volume'] = storage2.volume(mysql_data['volume'])
-					if 'backup' in mysql_data:
-						mysql_data['backup'] = backup.backup(mysql_data['backup'])
-					if 'restore' in mysql_data:
-						mysql_data['restore'] = backup.restore(mysql_data['restore'])
-					__mysql__.update(mysql_data)
+					__mysql__.update(md)
 
-					LOG.debug('__mysql__: %s', mysql_data)
+					LOG.debug('__mysql__: %s', md)
 					LOG.debug('volume in __mysql__: %s', 'volume' in __mysql__)
 					LOG.debug('restore in __mysql__: %s', 'restore' in __mysql__)
 					LOG.debug('backup in __mysql__: %s', 'backup' in __mysql__)
-
 					
 					__mysql__['volume'].tags = resource_tags()
 					if 'backup' in __mysql__:
