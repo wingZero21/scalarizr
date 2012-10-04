@@ -1,5 +1,4 @@
 
-import urllib2
 import sys
 import os
 import glob
@@ -12,10 +11,9 @@ import boto.ec2.volume
 import boto.exception
 
 from scalarizr import linux
-from scalarizr import storage2 as mod_storage2
+from scalarizr import storage2
 from scalarizr import util
 from scalarizr.node import __node__
-from scalarizr.storage2 import cloudfs
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
 
@@ -26,9 +24,9 @@ LOG = logging.getLogger(__name__)
 def name2device(name):
 	if name.startswith('/dev/xvd'):
 		return name
-	if mod_storage2.RHEL_DEVICE_ORDERING_BUG or os.path.exists('/dev/xvda1'):
+	if storage2.RHEL_DEVICE_ORDERING_BUG or os.path.exists('/dev/xvda1'):
 		name = name.replace('/sd', '/xvd')
-	if mod_storage2.RHEL_DEVICE_ORDERING_BUG:
+	if storage2.RHEL_DEVICE_ORDERING_BUG:
 		name = name[0:8] + chr(ord(name[8])+4) + name[9:]
 	return name
 
@@ -36,7 +34,7 @@ def name2device(name):
 def device2name(device):
 	if device.startswith('/dev/sd'):
 		return device
-	elif mod_storage2.RHEL_DEVICE_ORDERING_BUG:
+	elif storage2.RHEL_DEVICE_ORDERING_BUG:
 		device = device[0:8] + chr(ord(device[8])-4) + device[9:]
 	return device.replace('/xvd', '/sd')
 
@@ -66,7 +64,7 @@ class FreeDeviceLetterMgr(object):
 						self._local.letter = l
 						return self
 		msg = 'No free letters for block device name remains'
-		raise mod_storage2.StorageError(msg)
+		raise storage2.StorageError(msg)
 
 	def get(self):
 		return self._local.letter
@@ -111,7 +109,13 @@ class EbsMixin(object):
 
 
 	def _connect_ec2(self):
-		return __node__['ec2']['connect_ec2']()
+		try:
+			return __node__['ec2']['connect_ec2']()
+		except:
+			if sys.exc_type.__name__ not \
+				in ('AttributeError', 'NoAuthHandlerFound'):
+				raise
+		
 
 
 	def _avail_zone(self):
@@ -239,7 +243,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		self._check_ec2()
 		snapshot = self._create_snapshot(self.id, description, tags, 
 										kwds.get('nowait', True))
-		return mod_storage2.snapshot(
+		return storage2.snapshot(
 				type='ebs', 
 				id=snapshot.id, 
 				description=snapshot.description)
@@ -382,7 +386,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		)
 		if snapshot.status == 'error':
 			msg = 'Snapshot %s creation failed. AWS status is "error"' % snapshot.id
-			raise mod_storage2.StorageError(msg)
+			raise storage2.StorageError(msg)
 		elif snapshot.status == 'completed':
 			LOG.debug('Snapshot %s completed', snapshot.id)		
 
@@ -413,45 +417,11 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 		self._conn.delete_snapshot(self.id)
 
 
-mod_storage2.volume_types['ebs'] = EbsVolume
-mod_storage2.snapshot_types['ebs'] = EbsSnapshot
+storage2.volume_types['ebs'] = EbsVolume
+storage2.snapshot_types['ebs'] = EbsSnapshot
 
 		
-class Ec2EphemeralVolume(base.Volume):
-	
-	def __init__(self, name=None, **kwds):
-		super(Ec2EphemeralVolume, self).__init__(name=name, **kwds)
-		
-	def _ensure(self):
-		self._check_attr('name')
-		device = ''
-		try:
-			url = 'http://169.254.169.254/latest/meta-data/block-device-mapping/%s' % self.name
-			device = urllib2.urlopen(url).read().strip()
-		except:
-			msg = 'Failed to get block device for %s. Error: %s' % (
-					self.name, sys.exc_info()[1])
-			raise mod_storage2.StorageError, msg, sys.exc_info()[2]
-		self.device = name2device(device)
-
-	
-	def _snapshot(self):
-		raise NotImplementedError()
-	
-	
-mod_storage2.volume_types['ec2-ephemeral'] = Ec2EphemeralVolume
 
 
-class S3FileSystem(cloudfs.CloudFileSystem):
-	'''
-	Handle in bucket creation
-	
-	Caller: c3640de7-8cb2-432b-9f3b-1202fa0acc50 <https://my.scalr.net/#/servers/c3640de7-8cb2-432b-9f3b-1202fa0acc50/view>/scalarizr.storage.transfer
-	Message: Cannot transfer '/tmp/2012-09-12-04:08:02.tar.gz'. S3CreateError: 409 Conflict
-	<?xml version="1.0" encoding="UTF-8"?>
-	<Error><Code>BucketAlreadyOwnedByYou</Code><Message>Your previous request to create the named bucket succeeded and you already own it.</Message><BucketName>scalr-ab6d8171-7218-eu-west-1</BucketName><RequestId>9FB0834F278A1C46</RequestId><HostId>hfcgy1xDomq5MLFvMT+66wOajoBFiNHICDULVA4uhxEWi4TgYw1ugqOOyPgBfTRc</HostId></Error>
-	
-	'''	
-	pass
 
-cloudfs.filesystem_types['s3'] = S3FileSystem
+

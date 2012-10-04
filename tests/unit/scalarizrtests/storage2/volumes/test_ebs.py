@@ -7,13 +7,9 @@ Created on Sep 4, 2012
 import mock
 from nose.tools import raises
 
-from wsgi_intercept.urllib2_intercept import install_opener
-install_opener()
-import wsgi_intercept
-
 from scalarizr.storage2 import StorageError
 from scalarizr.storage2.volumes import base
-from scalarizr.platform.ec2 import storage2 as ec2storage
+from scalarizr.storage2.volumes import ebs
 from scalarizr.linux import coreutils
 
 
@@ -23,15 +19,15 @@ def test_name2device():
 
 @mock.patch('os.path.exists', return_value=True)
 def test_name2device_xen(*args):
-	device = ec2storage.name2device('/dev/sda1')
+	device = ebs.name2device('/dev/sda1')
 	assert device == '/dev/xvda1'
 	
 
 @mock.patch('os.path.exists', return_value=True)
-@mock.patch.object(ec2storage, 'mod_storage2')
+@mock.patch.object(ebs, 'storage2')
 def test_name2device_rhel_bug(s, exists):
 	s.RHEL_DEVICE_ORDERING_BUG = True
-	device = ec2storage.name2device('/dev/sda1')
+	device = ebs.name2device('/dev/sda1')
 	assert device == '/dev/xvde1'
 
 
@@ -53,10 +49,10 @@ def test_device2name_name_passed():
 
 class TestFreeDeviceLetterMgr(object):
 	def setup(self):
-		self.mgr = ec2storage.FreeDeviceLetterMgr()
+		self.mgr = ebs.FreeDeviceLetterMgr()
 		
 	@mock.patch('glob.glob')
-	@mock.patch.dict(ec2storage.__node__, {'ec2': {
+	@mock.patch.object(ebs, '__node__', new={'ec2': {
 					't1micro_detached_ebs': None}})
 	def test_acquire(self, glob):
 		glob_returns = [['/dev/sdf1'], []]
@@ -75,19 +71,19 @@ class TestFreeDeviceLetterMgr(object):
 	
 	
 	@mock.patch('glob.glob', return_value=[])
-	@mock.patch.dict(ec2storage.__node__, {'ec2': {
+	@mock.patch.object(ebs, '__node__', new={'ec2': {
 					't1micro_detached_ebs': ['/dev/sdg', '/dev/sdf']}})
 	def test_acquire_t1micro(self, glob):
 		letter = self.mgr.__enter__().get()
 		assert letter not in ('g', 'f')
 
 
-Ebs = ec2storage.EbsVolume
-@mock.patch.dict(ec2storage.__node__, {'ec2': {
+Ebs = ebs.EbsVolume
+@mock.patch.object(ebs, '__node__', new={'ec2': {
 				'instance_id': 'i-12345678',
 				'instance_type': 'm1.small',
 				'avail_zone': 'us-east-1a'}})
-@mock.patch.object(ec2storage, 'name2device',
+@mock.patch.object(ebs, 'name2device',
 				side_effect=lambda name: name.replace('/sd', '/xvd'))
 @mock.patch.object(Ebs, '_free_device_letter_mgr', 
 				**{'get.return_value' : 'b'})
@@ -288,10 +284,10 @@ class TestEbsVolume(object):
 	@mock.patch.object(Ebs, '_detach_volume')
 	@mock.patch.object(Ebs, '_instance_type', return_value='t1.micro')
 	def test_detach_t1micro(self, *args):
-		ec2storage.__node__['ec2']['t1micro_detached_ebs'] = None		
+		ebs.__node__['ec2']['t1micro_detached_ebs'] = None		
 		vol = Ebs(name='/dev/sdf', type='ebs', id='vol-12345678')
 		vol._detach(True)
-		assert ec2storage.__node__['ec2']['t1micro_detached_ebs'] == [vol.name,]
+		assert ebs.__node__['ec2']['t1micro_detached_ebs'] == [vol.name,]
 	
 
 	@raises(AssertionError)
@@ -315,7 +311,7 @@ class TestEbsVolume(object):
 		vol.destroy(True)
 
 
-EbsSnapshot = ec2storage.EbsSnapshot
+EbsSnapshot = ebs.EbsSnapshot
 @mock.patch.object(EbsSnapshot, '_connect_ec2')
 class TestEbsSnapshot(object):
 
@@ -349,41 +345,6 @@ class TestEbsSnapshot(object):
 
 
 
-Ec2Eph = ec2storage.Ec2EphemeralVolume
-class TestEc2EphemeralVolume(object):
-
-	def setup(self, *args, **kwargs):
-		def response(environ, start_response):
-			response_headers = [('Content-type','text/plain')]
-			if environ['PATH_INFO'].endswith('ephemeral3'):
-				status = '404 Not Found'
-				start_response(status, response_headers)
-				return []
-			else:
-				status = '200 OK'
-			start_response(status, response_headers)
-			return ['/dev/sdb']
-		wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : response)
-
-
-	def test_ensure(self, *args, **kwargs):
-		eph = Ec2Eph(name='ephemeral0')
-		eph.ensure()
-		assert eph.device == '/dev/sdb'
-
-	@mock.patch.object(ec2storage, 'mod_storage2')
-	def test_ensure_rhel(self, s, *args, **kwargs):
-		#wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
-		eph = Ec2Eph(name='ephemeral0')
-		s.RHEL_DEVICE_ORDERING_BUG = True
-		eph.ensure()
-		assert eph.device == '/dev/xvdf'
-
-	@raises(StorageError)
-	def test_ensure_metadata_server_error(self):
-		#wsgi_intercept.add_wsgi_intercept('169.254.169.254', 80, lambda : self._response)
-		eph = Ec2Eph(name='ephemeral3')
-		eph.ensure()
 
 
 	
