@@ -60,11 +60,14 @@ class _Fstab(_Mounts):
 	filename = '/etc/fstab'
 
 
-	def add(device, mpoint, fstype, options='auto', dump=0, fsck_order=0):
+	def add(self, device, mpoint, fstype, options='auto', dump=0, fsck_order=0):
 		with open(self.filename, 'a+') as fp:
 			line = ' '.join(device, mpoint, fstype, options, dump, fsck_order)
 			fp.write('\n')
 			fp.write(line)
+			
+	def remove(self, device_or_mpoint):
+		raise NotImplementedError()
 		
 
 def mounts():

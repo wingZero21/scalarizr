@@ -47,7 +47,7 @@ class Volume(Base):
 		self.features.update({'restore': False})
 		
 
-	def ensure(self, mount=False, mkfs=False, **updates):
+	def ensure(self, mount=False, mkfs=False, fstab=False, **updates):
 		if not self.features['restore']:
 			self._check_restore_unsupported()
 		if self.snap and isinstance(self.snap, Snapshot):
@@ -58,13 +58,18 @@ class Volume(Base):
 			self.id = self._genid('vol-')
 		if mount:
 			try:
+				LOG.debug('Mounting: %s', self.id)
 				self.mount()
 			except mod_mount.NoFileSystem:
 				if mkfs:
+					LOG.debug('Creating %s filesystem: %s', self.fstype, self.id)
 					self.mkfs()
 					self.mount()
 				else:
 					raise
+			if fstab and self.device not in mod_mount.fstab():
+				LOG.debug('Adding to fstab: %s', self.id)
+				mod_mount.fstab().add(self.device, self.mpoint)
 		return self.config()
 	
 	

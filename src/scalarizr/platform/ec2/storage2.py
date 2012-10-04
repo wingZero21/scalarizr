@@ -216,16 +216,18 @@ class EbsVolume(base.Volume, EbsMixin):
 					
 			else:
 				name = ebs.attach_data.device
-			device = name2device(name)
 			
 			self._config.update({
 				'id': ebs.id,
 				'name': name,
-				'device': device,
 				'avail_zone': zone,
 				'size': size,
 				'snap': None
 			})
+			
+		if self.name:
+			self.device = name2device(self.name)			
+			
 
 
 	def _snapshot(self, description, tags, **kwds):
