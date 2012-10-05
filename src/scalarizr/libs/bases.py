@@ -96,9 +96,8 @@ class ConfigDriven(object):
 			ret = [self._dictify(item) for item in data]
 		elif type(data) in (str, unicode, bool, int, long, float, types.NoneType):
 			ret = data
-		else:
+		elif hasattr(data, '__iter__'):
 			ret = dict(data)
-			
 		return ret
 
 

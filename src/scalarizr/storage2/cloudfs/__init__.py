@@ -10,6 +10,7 @@ import subprocess
 import threading
 import logging
 import ConfigParser
+from subprocess import call
 
 from scalarizr import storage2
 from scalarizr.libs import bases
@@ -112,12 +113,29 @@ class FileTransfer(BaseTransfer):
 				def dst():
 					yield '/backups/daily-from-s3.tar.gz'
 					yield '/backups/daily-from-cloudfiles.tar.gz'
+
+
+		Usage:
+			==========  ==========  ==========  ====================================
+			SRC         DST         MULTIPART   EXPECTED INPUT
+			==========  ==========  ==========  ====================================
+			str         str         -           src: path, dst: path
+			iter        str         False       src: paths, dst: path
+			iter        str         True        src: chunks of a file, dst: path
+			iter        iter        -           src: paths, dst: paths
+			==========  ==========  ==========  ====================================
+
 		'''
+		#? move to BaseTransfer
+		if not (not isinstance(kwds["src"], basestring) and
+				isinstance(kwds["dst"], basestring)) and multipart:
+			multipart = False
+
 		super(FileTransfer, self).__init__(num_workers=num_workers, 
 						retries=retries, multipart=multipart, **kwds)
 
-		self._completed = {}
-		self._failed = {}
+		self._completed = []
+		self._failed = []
 		self._retries_queue = Queue.Queue()
 		self._stop_all = threading.Event()
 		self._stopped = threading.Event()
@@ -137,11 +155,12 @@ class FileTransfer(BaseTransfer):
 					raise StopIteration
 			try:
 				with self._gen_lock:
-						src = self.src.next()
-						dst = self.dst.next()
-						retry = 1
+					src = self.src.next()
+					dst = self.dst.next()
+					retry = 0
+					if self.multipart:
 						chunk_num += 1
-						yield [src, dst, retry, chunk_num]
+					yield src, dst, retry, chunk_num
 			except StopIteration:
 				no_more = True
 			
@@ -155,19 +174,18 @@ class FileTransfer(BaseTransfer):
 		for src, dst, retry, chunk_num in self._job_generator():
 			self.fire('transfer_start', src, dst, retry, chunk_num)
 			try:
-				uploading = self._is_remote_path(dst)
-				assert not (uploading and self._is_remote_path(src))
-				assert (uploading and os.path.isfile(src)) or not uploading
+				uploading = self._is_remote_path(dst) and os.path.isfile(src)
+				downloading = self._is_remote_path(src) and not self._is_remote_path(dst)
+				assert uploading or downloading
 
+				rem, loc = (dst, src) if uploading else (src, dst)
 				if not driver:
-					rem, loc = dst, src if uploading else src, dst
-					driver = cloudfs(urlparse.urlparse(rem).schema)
-					with self._worker_lock:
-						if self.multipart and not self._upload_id:
-							chunk_size = os.path.getsize(loc)
-							self._upload_id = driver.multipart_init(rem, 
-															chunk_size)
-					
+					driver = cloudfs(urlparse.urlparse(rem).scheme)
+				with self._worker_lock:
+					if self.multipart and not self._upload_id:
+						chunk_size = os.path.getsize(loc)
+						self._upload_id = driver.multipart_init(rem, chunk_size)
+
 				if uploading:
 					if self.multipart:
 						driver.multipart_put(self._upload_id, chunk_num, src)
@@ -230,7 +248,7 @@ class FileTransfer(BaseTransfer):
 			# Join workers
 			for worker in pool:
 				worker.join()
-				LOG.debug("Worker '%s' finished", worker.getName())		
+				LOG.debug("Worker '%s' finished", worker.getName())
 			return {
 				'completed': self._completed,
 				'failed': self._failed

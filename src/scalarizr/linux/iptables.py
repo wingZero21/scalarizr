@@ -17,8 +17,6 @@ import os
 import re
 
 from scalarizr import linux
-from scalarizr.linux import redhat
-from scalarizr.util import disttool
 
 
 IPTABLES_BIN = '/sbin/iptables'
