@@ -357,7 +357,7 @@ class MysqlHandler(DBMSRHandler):
 		elif __node__['state'] == 'running':
 			vol = storage2.volume(__mysql__['volume'])
 			if not vol.tags:
-				vol.tags = resource_tags()
+				vol.tags = self.resource_tags()
 			vol.ensure(mount=True)
 			if int(__mysql__['replication_master']):
 				LOG.debug("Checking Scalr's %s system users presence", 
@@ -401,46 +401,45 @@ class MysqlHandler(DBMSRHandler):
 					# Apply MySQL data from HIR
 					md = getattr(message, __mysql__['behavior']).copy()					
 
-					# Compatibility transformation
-					# - volume_config -> volume
-					# - master n'th start, type=ebs - del snapshot_config
-					# - snapshot_config + log_file + log_pos -> restore
-					md['compat_prior_xtrabackup'] = \
-							'volume_config' in md and \
-							'snapshot_config' in md
+					md['compat_prior_backup_restore'] = False
+					if md.get('volume'):
+						# New format
+						md['volume'] = storage2.volume(md['volume'])
+						if 'backup' in md:
+							md['backup'] = backup.backup(md['backup'])
+						if 'restore' in md:
+							md['restore'] = backup.restore(md['restore'])
 
-					if md.get('volume_config'):
-						md['volume'] = storage2.volume(
-								md.pop('volume_config'))
-					elif md['compat_prior_xtrabackup']:
-						md['volume'] = storage2.volume(
-								type=md['snapshot_config']['type'])
+					else:
+						# Compatibility transformation
+						# - volume_config -> volume
+						# - master n'th start, type=ebs - del snapshot_config
+						# - snapshot_config + log_file + log_pos -> restore
+						# - create backup on master 1'st start
+						md['compat_prior_backup_restore'] = True
+						if md.get('volume_config'):
+							md['volume'] = storage2.volume(
+									md.pop('volume_config'))
+						else:
+							md['volume'] = storage2.volume(
+									type=md['snapshot_config']['type'])
 
-					if md['volume'].device and \
-								md['volume'].type in ('ebs', 'raid'):
-						md.pop('snapshot_config', None)
+						if md['volume'].device and \
+									md['volume'].type in ('ebs', 'raid'):
+							md.pop('snapshot_config', None)
 
-					if md.get('snapshot_config'):
-						md['restore'] = backup.restore(
-								type='snap_mysql', 
-								snapshot=md.pop('snapshot_config'),
-								volume=md['volume'],
-								log_file=md.pop('log_file'),
-								log_pos=md.pop('log_pos'))
-
-					elif md['compat_prior_xtrabackup'] and \
-								md['replication_master'] and \
-								not md['volume'].device:
-						md['backup'] = backup.backup(
-								type='snap_mysql',
-								volume=md['volume'])
-					# end Compatibility
-
-					md['volume'] = storage2.volume(md['volume'])
-					if 'backup' in md:
-						md['backup'] = backup.backup(md['backup'])
-					if 'restore' in md:
-						md['restore'] = backup.restore(md['restore'])
+						if md.get('snapshot_config'):
+							md['restore'] = backup.restore(
+									type='snap_mysql', 
+									snapshot=md.pop('snapshot_config'),
+									volume=md['volume'],
+									log_file=md.pop('log_file'),
+									log_pos=md.pop('log_pos'))
+						elif int(md['replication_master']) and \
+									not md['volume'].device:
+							md['backup'] = backup.backup(
+									type='snap_mysql',
+									volume=md['volume'])
 
 					__mysql__.update(md)
 
@@ -449,9 +448,9 @@ class MysqlHandler(DBMSRHandler):
 					LOG.debug('restore in __mysql__: %s', 'restore' in __mysql__)
 					LOG.debug('backup in __mysql__: %s', 'backup' in __mysql__)
 					
-					__mysql__['volume'].tags = resource_tags()
+					__mysql__['volume'].tags = self.resource_tags()
 					if 'backup' in __mysql__:
-						__mysql__['backup'].tags = resource_tags()
+						__mysql__['backup'].tags = self.resource_tags()
 
 	
 	def on_before_host_up(self, message):
@@ -1426,13 +1425,7 @@ class MysqlHandler(DBMSRHandler):
 				
 		LOG.debug('Replication master is changed to host %s', host)		
 
-	'''
-	@property
-	def mysql_tags(self):
-		is_master = bool(int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]))
-		return prepare_tags(__mysql__['behavior'], db_replication_role=is_master)
-	'''	
 
-def resource_tags():
-	return prepare_tags(__mysql__['behavior'], 
-			db_replication_role=__mysql__['replication_master'])
+	def resource_tags(self):
+		return prepare_tags(__mysql__['behavior'], 
+				db_replication_role=__mysql__['replication_master'])
