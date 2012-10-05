@@ -448,6 +448,7 @@ class MysqlHandler(DBMSRHandler):
 					LOG.debug('restore in __mysql__: %s', 'restore' in __mysql__)
 					LOG.debug('backup in __mysql__: %s', 'backup' in __mysql__)
 					
+					__mysql__['volume'].mpoint = __mysql__['storage_dir']
 					__mysql__['volume'].tags = self.resource_tags()
 					if 'backup' in __mysql__:
 						__mysql__['backup'].tags = self.resource_tags()

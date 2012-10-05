@@ -27,6 +27,7 @@ from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import rchown
+from scalarizr.libs import metaconf
 import sys
 
 
@@ -440,10 +441,21 @@ class MySQLConf(BaseConfig):
 	config_name = 'my.cnf'
 	comment_empty = True
 	
-	
+
 	@classmethod
 	def find(cls):
 		return cls(MYCNF_PATH)
+
+
+	def __init__(self, path, autosave=True):
+		super(MySQLConf, self).__init__(path, autosave=True)
+		self.data = metaconf.Configuration(self.config_type)
+		if os.path.exists(self.path):
+			self.data.read(self.path)
+		try:
+			self.data.options('mysqld')
+		except metaconf.NoPathError:
+			self.data.add('mysqld')
 		
 	
 	def _get_datadir(self):
