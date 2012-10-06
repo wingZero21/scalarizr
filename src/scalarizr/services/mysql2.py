@@ -226,7 +226,7 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 	def _binlog_info(self, filename=None):
 		if not filename:
 			filename = self._latest_backup_dir() + '/xtrabackup_binlog_info'
-		return map(string.strip, open(filename).read().split('	'))
+		return map(string.strip, open(filename).read().strip().split('\t'))
 
 
 class XtrabackupRestore(XtrabackupMixin, backup.Restore):
