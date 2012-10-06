@@ -685,8 +685,8 @@ class MysqlHandler(DBMSRHandler):
 		
 					bus.fire('before_mysql_data_bundle')
 					
-					compat_prior_xtrabackup = 'backup' not in message.body
-					if compat_prior_xtrabackup:
+					compat_prior_backup_restore = 'backup' not in message.body
+					if compat_prior_backup_restore:
 						bak = backup.backup(
 								type='snap_mysql',
 								volume=__mysql__['volume'])
@@ -707,7 +707,7 @@ class MysqlHandler(DBMSRHandler):
 						'status': 'ok',
 						__mysql__['behavior']: {}
 					}
-					if compat_prior_xtrabackup:
+					if compat_prior_backup_restore:
 						msg_data[__mysql__['behavior']].update({
 							'snapshot_config': dict(restore.snapshot),
 							'log_file': restore.log_file,
@@ -750,7 +750,7 @@ class MysqlHandler(DBMSRHandler):
 			
 		bus.fire('before_slave_promote_to_master')
 
-		__mysql__['compat_prior_xtrabackup'] = 'volume_config' in mysql2
+		__mysql__['compat_prior_backup_restore'] = 'volume_config' in mysql2
 		new_vol	= None
 		if mysql2.get('volume_config'):
 			new_vol = storage2.volume(mysql2.get('volume_config'))
@@ -809,7 +809,7 @@ class MysqlHandler(DBMSRHandler):
 							'db_type': __mysql__['behavior'],
 							__mysql__['behavior']: {}
 						} 
-						if __mysql__['compat_prior_xtrabackup']:
+						if __mysql__['compat_prior_backup_restore']:
 							msg_data[__mysql__['behavior']].update({
 								'volume_config': dict(__mysql__['volume'])
 							})
@@ -869,7 +869,7 @@ class MysqlHandler(DBMSRHandler):
 					status="ok",
 					db_type = __mysql__['behavior']
 				)
-				if __mysql__['compat_prior_xtrabackup']:
+				if __mysql__['compat_prior_backup_restore']:
 					msg_data[__mysql__['behavior']] = {
 						'log_file': restore.log_file,
 						'log_pos': restore.log_pos,
@@ -1117,7 +1117,7 @@ class MysqlHandler(DBMSRHandler):
 				repl_password=__mysql__['repl_password'],
 				stat_password=__mysql__['stat_password'],
 			)
-			if __mysql__['compat_prior_xtrabackup']:
+			if __mysql__['compat_prior_backup_restore']:
 				if 'restore' in __mysql__:
 					md.update(dict(					
 							log_file=__mysql__['restore'].log_file,
