@@ -11,6 +11,8 @@ import time
 import shutil
 import logging
 import glob
+import tarfile
+import tempfile
 
 # Core
 from scalarizr.bus import bus
@@ -20,9 +22,12 @@ import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
-from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, iptables
+from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, filetool
+from scalarizr.storage import transfer
 
-from scalarizr import storage2	
+
+from scalarizr import storage2
+from scalarizr.linux import iptables	
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
@@ -537,6 +542,7 @@ class MysqlHandler(DBMSRHandler):
 	def on_DbMsr_CreateBackup(self, message):
 		LOG.debug("on_DbMsr_CreateBackup")
 
+		'''
 		bak = backup.backup(
 				type='mysqldump', 
 				file_per_database=True,
@@ -554,14 +560,13 @@ class MysqlHandler(DBMSRHandler):
 			with op.phase(self._phase_backup):
 				with op.step(self._phase_backup):
 					restore = bak.run()
-					'''
-					- type: mysqldump
-					- files:
-					  - size: 1234567
-		              - path: s3://farm-2121-44/backups/mysql/20120314.tar.gz.part0
-					  - size: 3524567
-		              - path: s3://farm-2121-44/backups/mysql/20120314.tar.gz.part1
-					'''
+					
+					#- type: mysqldump
+					#- files:
+					#  - size: 1234567
+		            #  - path: s3://farm-2121-44/backups/mysql/20120314.tar.gz.part0
+					#  - size: 3524567
+		            #  - path: s3://farm-2121-44/backups/mysql/20120314.tar.gz.part1
 					#result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))								
 			op.ok(data=restore.files)
 	
@@ -585,7 +590,7 @@ class MysqlHandler(DBMSRHandler):
 		'''
 
 
-		tmp_basedir = os.path.join(STORAGE_PATH, STORAGE_TMP_DIR)
+		tmp_basedir = __mysql__['tmp_dir']
 		if not os.path.exists(tmp_basedir):
 			os.makedirs(tmp_basedir)		
 		# Retrieve password for scalr mysql user
@@ -613,8 +618,8 @@ class MysqlHandler(DBMSRHandler):
 				# Creating archive 
 				backup = tarfile.open(backup_path, 'w:gz')
 				
-				mysqldump = mysql_svc.MySQLDump(root_user=ROOT_USER, root_password=self.root_password)		
-				dump_options = config.split(self._cnf.rawini.get(CNF_SECTION, 'mysqldump_options'), ' ')	
+				mysqldump = mysql_svc.MySQLDump(root_user=__mysql__['root_user'], root_password=self.root_password)		
+				dump_options = __mysql__['mysqldump_options'].split(' ')	
 				for db_name in databases:
 					with op.step("Backup '%s'" % db_name):
 						dump_path = os.path.join(tmpdir, db_name + '.sql') 
@@ -625,8 +630,8 @@ class MysqlHandler(DBMSRHandler):
 				
 			with op.step(self._step_upload_to_cloud_storage):
 				# Creating list of full paths to archive chunks
-				if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-					parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+				if os.path.getsize(backup_path) > __mysql__['mysqldump_chunk_size']:
+					parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, __mysql__['mysqldump_chunk_size'] , tmpdir)]
 				else:
 					parts = [backup_path]
 				sizes = [os.path.getsize(file) for file in parts]
@@ -663,7 +668,7 @@ class MysqlHandler(DBMSRHandler):
 				shutil.rmtree(tmpdir, ignore_errors=True)
 			if backup_path and os.path.exists(backup_path):
 				os.remove(backup_path)	
-		'''
+
 
 	def on_DbMsr_CreateDataBundle(self, message):
 		LOG.debug("on_DbMsr_CreateDataBundle")
@@ -1260,11 +1265,17 @@ class MysqlHandler(DBMSRHandler):
 
 		
 	def _insert_iptables_rules(self):
+		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "3306"},
+			]})
+		
+		'''
 		ipt = iptables.IpTables()
 		if ipt.usable():
 			ipt.insert_rule(None, iptables.RuleSpec(dport=mysql_svc.MYSQL_DEFAULT_PORT, 
 												jump='ACCEPT', protocol=iptables.P_TCP))	
-			
+		'''
 
 	
 	def get_user_creds(self):
