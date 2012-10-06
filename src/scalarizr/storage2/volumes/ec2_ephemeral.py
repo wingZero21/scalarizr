@@ -25,8 +25,8 @@ class Ec2EphemeralVolume(base.Volume):
 			url = 'http://169.254.169.254/latest/meta-data/block-device-mapping/%s' % self.name
 			device = urllib2.urlopen(url).read().strip()
 		except:
-			msg = 'Failed to get block device for %s. Error: %s' % (
-					self.name, sys.exc_info()[1])
+			msg = "Failed to fetch device name for instance store '%s'. %s (%s)" % (
+					self.name, sys.exc_info()[1], url)
 			raise storage2.StorageError, msg, sys.exc_info()[2]
 		else:
 			self.device = ebs.name2device(device)

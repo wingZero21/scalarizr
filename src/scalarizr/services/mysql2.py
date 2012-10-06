@@ -148,7 +148,7 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 			if self.tags:
 				self.volume.tags = self.tags
 			self.volume.mpoint = self.backup_dir
-			self.volume.ensure(mount=True)
+			self.volume.ensure(mount=True, mkfs=True)
 		elif not os.path.exists(self.backup_dir):
 			os.makedirs(self.backup_dir)
 
