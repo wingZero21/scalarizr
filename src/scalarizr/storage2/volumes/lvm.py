@@ -152,7 +152,9 @@ class LvmVolume(base.Volume):
 	
 		
 	def _snapshot(self, description, tags, **kwds):
-		coreutils.dmsetup('suspend', self.device)
+		active = os.path.exists(self.device)
+		if active:
+			coreutils.dmsetup('suspend', self.device)
 		try:
 			if not description:
 				description = self.id
@@ -165,7 +167,8 @@ class LvmVolume(base.Volume):
 					vg=self.vg,
 					name=self.name)
 		finally:
-			coreutils.dmsetup('resume', self.device) 
+			if active:
+				coreutils.dmsetup('resume', self.device) 
 		
 		
 	def _detach(self, force, **kwds):
