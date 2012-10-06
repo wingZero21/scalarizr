@@ -47,7 +47,11 @@ __mysql__.update({
 	#'mysqld_exec': util.try_exec('/usr/sbin/mysqld', '/usr/libexec/mysqld')
 	'mysqldump_chunk_size': 200 * 1024 * 1024,
 	'stop_slave_timeout': 180,
-	'change_master_timeout': 60
+	'change_master_timeout': 60,
+	'defaults': {
+		'datadir': '/var/lib/mysql',
+		'log-bin': 'mysql-bin'
+	}
 })
 
 
@@ -294,8 +298,9 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 		exc_info = None
 		my_defaults = my_print_defaults('mysqld')
 		self._data_dir = my_defaults['datadir']
-		self._log_bin = my_defaults['log_bin']
-		self._binlog_dir = os.path.dirname(self._log_bin)
+		self._log_bin = my_defaults['log-bin']
+		if self._binlog_dir.startswith('/'):
+			self._binlog_dir = os.path.dirname(self._log_bin)
 		
 		try:
 			if self.snapshot:
@@ -371,29 +376,32 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 		dst = src + '.bak'
 		LOG.debug('Backup %s -> %s', src, dst)
 		os.rename(src, dst)
-		for name in glob.glob(self._log_bin + '*'):
-			src = os.path.join(self._binlog_dir, name)
-			dst = src + '.bak'
-			LOG.debug('Backup %s -> %s', src, dst)
-			os.rename(src, dst)
+		if self._binlog_dir:
+			for name in glob.glob(self._log_bin + '*'):
+				src = os.path.join(self._binlog_dir, name)
+				dst = src + '.bak'
+				LOG.debug('Backup %s -> %s', src, dst)
+				os.rename(src, dst)
 		os.makedirs(self._data_dir)				
 		
 	
 	def _commit_copyback(self):
 		shutil.rmtree(self._data_dir + '.bak')
-		for name in glob.glob(self._log_bin + '*.bak'):
-			LOG.debug('Remove %s' % os.path.join(self._binlog_dir, name))
-			os.remove(os.path.join(self._binlog_dir, name))
+		if self._binlog_dir:
+			for name in glob.glob(self._log_bin + '*.bak'):
+				LOG.debug('Remove %s' % os.path.join(self._binlog_dir, name))
+				os.remove(os.path.join(self._binlog_dir, name))
 	
 	
 	def _rollback_copyback(self):
 		if os.path.exists(self._data_dir):
 			shutil.rmtree(self._data_dir)
 		os.rename(self._data_dir + '.bak', self._data_dir)
-		for name in glob.glob(self._log_bin + '*.bak'):
-			dstname = os.path.splitext(name)[0]
-			shutil.move(os.path.join(self._binlog_dir, name), 
-						os.path.join(self._binlog_dir, dstname))
+		if self._binlog_dir:
+			for name in glob.glob(self._log_bin + '*.bak'):
+				dstname = os.path.splitext(name)[0]
+				shutil.move(os.path.join(self._binlog_dir, name), 
+							os.path.join(self._binlog_dir, dstname))
 
 
 backup.backup_types['xtrabackup'] = XtrabackupBackup
@@ -500,6 +508,9 @@ def my_print_defaults(*option_groups):
 	for line in out.splitlines():
 		cols = line.split('=')
 		ret[cols[0][2:]] = cols[1] if len(cols) > 1 else True
+	for key in __mysql__['defaults']:
+		if key not in ret:
+			ret[key] = __mysql__['defaults'][key]
 	return ret
 
 
@@ -530,8 +541,8 @@ def mysqlbinlog_head():
 		>> ('binlog.000001', 107)
 	'''
 	my_defaults = my_print_defaults('mysqld')
-	binlog_dir = os.path.dirname(my_defaults['log_bin']) \
-				if my_defaults['log_bin'][0] == '/' \
+	binlog_dir = os.path.dirname(my_defaults['log-bin']) \
+				if my_defaults['log-bin'][0] == '/' \
 				else my_defaults['datadir']
 	binlog_index = os.path.join(binlog_dir, 
 					os.path.basename(my_defaults['log_bin'])) + '.index'
