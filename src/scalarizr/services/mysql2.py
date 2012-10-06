@@ -364,7 +364,7 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 			if rst_volume:
 				LOG.info('Destroying restore volume')
 				try:
-					rst_volume.destroy()
+					rst_volume.destroy(force=True)
 				except:
 					msg = 'Failed to destroy volume %s: %s'
 					LOG.warn(msg, rst_volume.id, sys.exc_info()[1])

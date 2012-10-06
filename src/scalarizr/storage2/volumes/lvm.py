@@ -126,7 +126,7 @@ class LvmVolume(base.Volume):
 					fs.resize(self.device)
 
 		if lv_info.lv_attr[4] == '-':
-			lvm2.lvchange(self.device, available=True)
+			lvm2.lvchange(self.device, available='y')
 
 
 	def lvm_snapshot(self, name=None, size=None):
