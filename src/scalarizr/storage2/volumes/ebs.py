@@ -137,14 +137,13 @@ class EbsVolume(base.Volume, EbsMixin):
 	
 	def __init__(self, 
 				name=None,
-				tags=None,
 				avail_zone=None,
 				size=None,
 				volume_type='standard',
 				iops=None,
 				**kwds):
-		base.Volume.__init__(self, name=name, tags=tags or {}, 
-				avail_zone=avail_zone, size=size and int(size) or None, 
+		base.Volume.__init__(self, name=name, avail_zone=avail_zone, 
+				size=size and int(size) or None, 
 				volume_type=volume_type, iops=iops, **kwds)	
 		EbsMixin.__init__(self)
 		self.features['restore'] = True
@@ -180,7 +179,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		
 		if self._conn:
 			zone = self._avail_zone()			
-			snap = device = name = None
+			snap = name = None
 			size = self.size() if callable(self.size) else self.size
 			
 			if self.id:

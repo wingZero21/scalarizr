@@ -307,7 +307,8 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 				LOG.info('Creating restore volume from snapshot')
 				if self.volume:
 					# Clone volume object
-					rst_volume = storage2.volume(self.volume.config())
+					self.volume = storage2.volume(self.volume)
+					rst_volume = self.volume.clone()
 					rst_volume.snap = self.snapshot
 				else:
 					self.snapshot = storage2.snapshot(self.snapshot)

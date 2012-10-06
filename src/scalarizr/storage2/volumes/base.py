@@ -15,8 +15,11 @@ class Base(bases.ConfigDriven):
 				version='2.0', 
 				type='base', 
 				id=None, 
+				tags=None,
 				**kwds):
-		super(Base, self).__init__(version=version, type=type, id=id, **kwds)
+		super(Base, self).__init__(
+				version=version, type=type, 
+				id=id, tags=tags or {}, **kwds)
 		self.error_messages.update({
 			'restore_unsupported': 'Restores from snapshot not supported '
 									'by this volume type: %s',
@@ -35,7 +38,7 @@ class Volume(Base):
 				fstype='ext3', 
 				fscreated=False, 
 				mpoint=None, 
-				snap=None, 
+				snap=None,
 				**kwds):
 		super(Volume, self).__init__(
 				device=device,
