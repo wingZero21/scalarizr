@@ -299,7 +299,7 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 		my_defaults = my_print_defaults('mysqld')
 		self._data_dir = my_defaults['datadir']
 		self._log_bin = my_defaults['log-bin']
-		if self._binlog_dir.startswith('/'):
+		if self._log_bin.startswith('/'):
 			self._binlog_dir = os.path.dirname(self._log_bin)
 		
 		try:
