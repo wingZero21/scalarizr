@@ -96,8 +96,10 @@ class ConfigDriven(object):
 			ret = [self._dictify(item) for item in data]
 		elif type(data) in (str, unicode, bool, int, long, float, types.NoneType):
 			ret = data
-		elif hasattr(data, '__iter__'):
-			ret = dict(data)
+		elif isinstance(data, ConfigDriven):
+			ret = data.config()
+		else:
+			ret = repr(data)
 		return ret
 
 
