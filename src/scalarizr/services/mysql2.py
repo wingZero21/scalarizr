@@ -14,6 +14,7 @@ from scalarizr.services import mysql as mysql_svc
 from scalarizr.services import backup
 from scalarizr.libs import bases
 from scalarizr.storage2.cloudfs import LargeTransfer
+from scalarizr.libs import metaconf
 
 
 
@@ -296,6 +297,22 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 			self._check_backup_type()
 		rst_volume = None
 		exc_info = None
+		'''
+		# Create custom my.cnf
+		# XXX: it's not a good think to do, but we should create this hacks, 
+		# cause when handler calls restore.run() my.cnf is not patched yet 
+		shutil.copy(__mysql__['my.cnf'], '/tmp/my.cnf')
+		mycnf = metaconf.Configuration('mysql')
+		mycnf.read('/tmp/my.cnf')
+		try:
+			mycnf.options('mysqld')
+		except metaconf.NoPathError:
+			mycnf.add('mysqld')
+		mycnf.set('mysqld/datadir', __mysql__['data_dir'])
+		mycnf.set('mysqld/log-bin', __mysql__['binlog_dir'])
+		mycnf.write('/tmp/my.cnf')
+		'''
+		
 		my_defaults = my_print_defaults('mysqld')
 		self._data_dir = my_defaults['datadir']
 		self._log_bin = my_defaults['log-bin']
