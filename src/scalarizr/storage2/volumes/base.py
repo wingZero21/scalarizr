@@ -144,6 +144,10 @@ class Volume(Base):
 		self.fscreated = True
 
 
+	def clone(self):
+		return storage2.volume(self.initial_config)
+
+
 	def _check(self, fstype=True, device=True, **kwds):
 		if fstype:
 			self._check_attr('fstype')

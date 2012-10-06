@@ -129,7 +129,7 @@ def concurrent_snapshot(volumes, description, tags=None, **kwds):
 				'Failed to create one or more snapshots. '
 				'Successfuly created snapshots were deleted to rollback. '
 				'See log for detailed report about each failed snapshot')
-	return (r[2] for r in results)
+	return tuple(r[2] for r in results)
 		
 			
 class StorageError(linux.LinuxError):

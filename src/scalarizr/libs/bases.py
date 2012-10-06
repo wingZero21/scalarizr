@@ -92,7 +92,7 @@ class ConfigDriven(object):
 			for key in data:
 				ret[key] = self._dictify(data[key])
 			return ret
-		elif isinstance(data, list):
+		elif isinstance(data, list) or isinstance(data, tuple):
 			ret = [self._dictify(item) for item in data]
 		elif type(data) in (str, unicode, bool, int, long, float, types.NoneType):
 			ret = data
