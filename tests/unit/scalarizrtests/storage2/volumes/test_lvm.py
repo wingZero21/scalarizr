@@ -146,7 +146,8 @@ class TestLvmVolume(unittest.TestCase):
 
 	@mock.patch('scalarizr.storage2.volumes.lvm.storage2.concurrent_snapshot')
 	@mock.patch('scalarizr.storage2.volumes.lvm.coreutils')
-	def test_snapshot(self, coreutils, conc_snap, lvm2, mod_mount):
+	@mock.patch('os.path.exists', return_value=True)
+	def test_snapshot(self, ex, coreutils, conc_snap, lvm2, mod_mount):
 		vol = self._create_vol(lvm2)
 
 		""" Successfull snapshot """

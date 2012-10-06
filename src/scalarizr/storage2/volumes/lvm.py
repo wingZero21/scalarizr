@@ -56,16 +56,18 @@ class LvmVolume(base.Volume):
 		if self.snap:
 			pvs = []
 			try:
-				for snap in self.snap.pv_snaps:
-					snap = storage2.snapshot(snap)
-					pvs.append(snap.restore())
+				for pv_snap, pv_vol in zip(self.snap['pv_snaps'], self.pvs):
+					pv_vol = storage2.volume(pv_vol)
+					pv_vol.snap = pv_snap
+					pv_vol.ensure()
+					pvs.append(pv_vol)
 			except:
 				for pv in pvs:
 					pv.destroy()
 				raise
 			self.pvs = pvs
-			self.vg = snap.vg
-			self.name = snap.name
+			self.vg = self.snap['vg']
+			self.name = self.snap['name']
 		
 		pvs = lvm2.pvs()
 		pv_volumes = []
