@@ -51,7 +51,7 @@ __mysql__.update({
 	'change_master_timeout': 60,
 	'defaults': {
 		'datadir': '/var/lib/mysql',
-		'log-bin': 'mysql-bin'
+		'log_bin': 'mysql_bin'
 	}
 })
 
@@ -170,6 +170,7 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 
 		exc_info = None
 		try:
+			LOG.info('Creating %s xtrabackup', self.backup_type)
 			innobackupex(self.backup_dir, 
 					user=__mysql__['root_user'], 
 					password=__mysql__['root_password'],
@@ -315,7 +316,7 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 		
 		my_defaults = my_print_defaults('mysqld')
 		self._data_dir = os.path.normpath(my_defaults['datadir'])
-		self._log_bin = os.path.normpath(my_defaults['log-bin'])
+		self._log_bin = os.path.normpath(my_defaults['log_bin'])
 		if self._log_bin.startswith('/'):
 			self._binlog_dir = os.path.dirname(self._log_bin)
 		
@@ -559,8 +560,8 @@ def mysqlbinlog_head():
 		>> ('binlog.000001', 107)
 	'''
 	my_defaults = my_print_defaults('mysqld')
-	binlog_dir = os.path.dirname(my_defaults['log-bin']) \
-				if my_defaults['log-bin'][0] == '/' \
+	binlog_dir = os.path.dirname(my_defaults['log_bin']) \
+				if my_defaults['log_bin'][0] == '/' \
 				else my_defaults['datadir']
 	binlog_index = os.path.join(binlog_dir, 
 					os.path.basename(my_defaults['log_bin'])) + '.index'
