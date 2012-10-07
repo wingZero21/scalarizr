@@ -1160,11 +1160,18 @@ class MysqlHandler(DBMSRHandler):
 		
 		with bus.initialization_op as op:
 			with op.step(self._step_create_storage):
+				if 'restore' in __mysql__ and \
+						__mysql__['restore'].type == 'snap_mysql':
+					__mysql__['restore'].run()
+				else:
+					__mysql__['volume'].ensure(mount=True, mkfs=True)
+				'''
 				if not self._storage_valid():
 					LOG.debug("Initialize slave storage")
 					__mysql__['restore'].run()
 				else:
-					__mysql__['volume'].ensure(mount=True)
+					__mysql__['volume'].ensure(mount=True, mkfs=True)
+				'''
 		
 			with op.step(self._step_patch_conf):		
 				self.mysql.service.stop('Required by Slave initialization process')			
@@ -1182,9 +1189,15 @@ class MysqlHandler(DBMSRHandler):
 				self.mysql._init_replication(master=False)
 				self._copy_debian_cnf_back()
 				
+			if 'restore' in __mysql__ and \
+					__mysql__['restore'].type == 'xtrabackup':
+				__mysql__['restore'].run()
+				
 			with op.step(self._step_innodb_recovery):
-				self._innodb_recovery()
-				self.mysql.service.start()
+				if 'restore' in __mysql__ \
+						and __mysql__['restore'].type != 'xtrabackup':
+					self._innodb_recovery()
+					self.mysql.service.start()
 			
 			with op.step(self._step_change_replication_master):
 				# Change replication master 
