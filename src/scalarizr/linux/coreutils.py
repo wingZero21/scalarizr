@@ -82,7 +82,11 @@ def touch(filename):
 
 
 def chown_r(path, owner, group=None):
-	raise NotImplementedError()
+	# TODO: port python implementation from scalarizr.util.filetool
+	return linux.system(linux.build_cmd_args(
+				executable='/bin/chown', 
+				long={'recursive': True}, 
+				params=[owner if not group else owner + ':' + group, path]))	
 
 
 def remove(path):
