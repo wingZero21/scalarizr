@@ -24,6 +24,7 @@ CLIENT_CONF_TPL = '''
 log_level        :info
 log_location     STDOUT
 chef_server_url  '%(server_url)s'
+environment      '%(environment)s'
 validation_client_name '%(validator_name)s'
 node_name        '%(node_name)s'
 '''
