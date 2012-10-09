@@ -4,7 +4,7 @@ Created on Sep 19, 2012
 @author: Dmytro Korsakov
 '''
 import mock
-from subprocess import call
+from Queue import Empty
 
 from nose.tools import assert_raises
 
@@ -37,13 +37,14 @@ class TestFileTransfer(object):
 		assert res == [(self.path1, self.path2, 0, -1)], res
 
 		# iter str multipart
-		src_gen = self.make_generator(self.path0, self.path1)
+		src_gen = self.make_generator(self.path0, self.path1, self.path0)
 		obj = cloudfs.FileTransfer(src=src_gen, dst=self.path2, multipart=True)
 		res = [job for job in obj._job_generator()]
 
 		assert res == [
 			(self.path0, self.path2, 0, 0),
 			(self.path1, self.path2, 0, 1),
+			(self.path0, self.path2, 0, 2),
 		], res
 
 		# iter str not multipart
@@ -225,11 +226,76 @@ class TestFileTransfer(object):
 		]
 		assert len(ret["completed"]) == len(completed)
 		for job in completed:
-			assert job in ret["completed"]
+			assert job in ret["completed"], str(job) + ' not in ' + str(ret["completed"])
 		assert ret["failed"] == []
 
-	def test_worker_upload_retry(self):
-		pass
+	@mock.patch("scalarizr.storage2.cloudfs.os.path.isfile")
+	@mock.patch("scalarizr.storage2.cloudfs.os.path.getsize")
+	def test_worker_upload_retry(self, getsize, isfile):
+		# basic retry queue interaction
+		src_gen = self.make_generator(self.path0, self.path1)
+		obj = cloudfs.FileTransfer(src=src_gen, dst=self.path2)
+		driver = cloudfs.cloudfs.return_value
+		driver.put.side_effect = Exception("test exception")
+		obj._retries_queue = mock.MagicMock()
+		obj._retries_queue.get_nowait.side_effect = Empty("test exc")
+
+		ret = obj.run()
+
+		assert len(obj._retries_queue.put.call_args_list) == 2
+		obj._retries_queue.put.assert_any_call((self.path0, self.path2, 1, -1))
+		obj._retries_queue.put.assert_any_call((self.path1, self.path2, 1, -1))
+		assert obj._retries_queue.get_nowait.call_args_list == [mock.call()] * 10
+
+		# iter str multipart
+		cloudfs.cloudfs.reset_mock()
+
+		def side_effect(upload_id, chunk_num, src, firsttime=[True]):
+			"""
+			raise exception once on src=self.path1;
+			for driver.multipart_put(self._upload_id, chunk_num, src)
+			"""
+			if src == self.path1 and firsttime[0]:
+				firsttime[0] = False
+				raise Exception("test exception")
+
+		src_gen = self.make_generator(self.path0, self.path1, self.path0)
+		obj = cloudfs.FileTransfer(src=src_gen, dst=self.path2, multipart=True)
+		driver = cloudfs.cloudfs.return_value
+		driver.multipart_put.side_effect = side_effect
+
+		ret = obj.run()
+
+		upload_id = driver.multipart_init.return_value
+
+		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
+		driver.multipart_init.assert_called_once_with(self.path2,
+			getsize.return_value)
+
+		# check for the 4 calls 2 of which are equal
+		assert len(driver.multipart_put.call_args_list) == 4
+		driver.multipart_put.assert_any_call(upload_id, 0, self.path0)
+		driver.multipart_put.assert_any_call(upload_id, 2, self.path0)
+		driver.multipart_put.assert_any_call(upload_id, 1, self.path1)
+		driver.multipart_put.call_args_list.remove(mock.call(upload_id, 1, self.path1))
+		driver.multipart_put.assert_any_call(upload_id, 1, self.path1)
+		assert not driver.put.called
+		assert not driver.get.called
+		assert not driver.multipart_abort.called
+		driver.multipart_complete.assert_called_once_with(upload_id)
+		completed = [
+				{"src": self.path0, "dst": self.path2, "chunk_num": 0,
+				 "size": getsize.return_value},
+				{"src": self.path1, "dst": self.path2, "chunk_num": 1,
+				 "size": getsize.return_value},
+				{"src": self.path0, "dst": self.path2, "chunk_num": 2,
+				 "size": getsize.return_value},
+		]
+		assert len(ret["completed"]) == len(completed)
+		for job in completed:
+			assert job in ret["completed"], str(job) + ' not in ' + str(ret["completed"])
+		assert ret["failed"] == []
+
 
 	@mock.patch("scalarizr.storage2.cloudfs.os.path.isfile")
 	@mock.patch("scalarizr.storage2.cloudfs.os.path.getsize")

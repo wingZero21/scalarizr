@@ -92,7 +92,6 @@ class FileTransfer(BaseTransfer):
 			on_start: fn(src, dst, state='start')
 			on_complete: fn(src, dst, state='complete', retry=1, transfered_bytes=1892331)
 			on_error: fn(src, dst, state='error', retry=1, exc_info=(3 items tuple))
-			on_restart: fn(src, dst, state='restart', retry=2) (????)
 
 		Examples:
 
@@ -142,14 +141,15 @@ class FileTransfer(BaseTransfer):
 		self._gen_lock = threading.RLock()
 		self._worker_lock = threading.Lock()
 		self._upload_id = None
+		self._chunk_num = -1
 
 		
 	def _job_generator(self):
-		chunk_num = -1
 		no_more = False
 		while True:
 			try:
 				yield self._retries_queue.get_nowait()
+				continue
 			except Queue.Empty:
 				if no_more:
 					raise StopIteration
@@ -159,8 +159,8 @@ class FileTransfer(BaseTransfer):
 					dst = self.dst.next()
 					retry = 0
 					if self.multipart:
-						chunk_num += 1
-					yield src, dst, retry, chunk_num
+						self._chunk_num += 1
+					yield src, dst, retry, self._chunk_num
 			except StopIteration:
 				no_more = True
 			
@@ -176,6 +176,7 @@ class FileTransfer(BaseTransfer):
 			try:
 				uploading = self._is_remote_path(dst) and os.path.isfile(src)
 				downloading = self._is_remote_path(src) and not self._is_remote_path(dst)
+				assert not (uploading and downloading)
 				assert uploading or downloading
 
 				rem, loc = (dst, src) if uploading else (src, dst)
@@ -227,7 +228,9 @@ class FileTransfer(BaseTransfer):
 					break
 
 		with self._worker_lock:
-			if self.multipart and self._upload_id:
+			# 'if driver' condition prevents threads that did nothing from
+			# entering (could happen in case num_workers > chunks)
+			if driver and self.multipart and self._upload_id:
 				driver.multipart_complete(self._upload_id)
 				self._upload_id = None
 
