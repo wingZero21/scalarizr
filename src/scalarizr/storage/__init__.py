@@ -388,9 +388,9 @@ class Volume(VolumeConfig, Observable):
 	_id_format = '%s-vol-%s'
 
 	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
-		super(Volume, self).__init__()
 		self.lock = threading.RLock()
 		self._logger = logging.getLogger(__name__)
+		super(Volume, self).__init__()
 
 		if not device:
 			raise ValueError('device name should be non-empty')
