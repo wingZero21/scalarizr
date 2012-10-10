@@ -524,8 +524,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self.postgresql.init_master(self._storage_path, self.root_password, slaves)
 			self._update_config({OPT_REPLICATION_MASTER : "1"})	
 				
-			if not master_storage_conf or master_storage_conf['type'] == 'eph':
-									
+			if not master_storage_conf or master_storage_conf['type'] == 'eph':									
 				snap = self._create_snapshot()
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol, snap)
