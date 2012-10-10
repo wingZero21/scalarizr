@@ -618,7 +618,8 @@ class MysqlHandler(DBMSRHandler):
 				# Creating archive 
 				backup = tarfile.open(backup_path, 'w:gz')
 				
-				mysqldump = mysql_svc.MySQLDump(root_user=__mysql__['root_user'], root_password=self.root_password)		
+				mysqldump = mysql_svc.MySQLDump(root_user=__mysql__['root_user'],
+									root_password=__mysql__['root_password'])
 				dump_options = __mysql__['mysqldump_options'].split(' ')	
 				for db_name in databases:
 					with op.step("Backup '%s'" % db_name):
