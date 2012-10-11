@@ -1010,7 +1010,7 @@ class MysqlHandler(ServiceCtlHandler):
 						
 			try:
 				# Stop mysql
-				if master_storage_conf:
+				if master_storage_conf and master_storage_conf['type'] != 'eph':
 					if self._init_script.running:
 						mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
 						timeout = 180
@@ -1053,7 +1053,7 @@ class MysqlHandler(ServiceCtlHandler):
 					else:
 						raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
 					self._start_service()
-				else:
+				elif not master_storage_conf or master_storage_conf['type'] == 'eph':
 					self._start_service()
 					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
 					timeout = 180
@@ -1109,7 +1109,7 @@ class MysqlHandler(ServiceCtlHandler):
 				# Start MySQL
 				self._start_service()
 			
-			if tx_complete and master_storage_conf:
+			if tx_complete and master_storage_conf and master_storage_conf['type'] != 'eph':
 				# Delete slave EBS
 				self.storage_vol.destroy(remove_disks=True)
 				self.storage_vol = new_storage_vol
@@ -1126,67 +1126,68 @@ class MysqlHandler(ServiceCtlHandler):
 		"""
 		is_repl_master, = self._get_ini_options(OPT_REPLICATION_MASTER)
 		
-		if not int(is_repl_master):
-			host = message.local_ip or message.remote_ip
-			LOG.info("Switching replication to a new MySQL master %s", host)
-			bus.fire('before_mysql_change_master', host=host)			
+		if int(is_repl_master):
+			LOG.debug('Skip NewMasterUp. My replication role is master')
+			return
+		mysql = message.body
+		host = message.local_ip or message.remote_ip
+		LOG.info("Switching replication to a new MySQL master %s", host)
+		bus.fire('before_mysql_change_master', host=host)			
+		
+		if 'snapshot_config' in mysql and mysql['snapshot_config']['type'] != 'eph':
+			LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
+					message.snapshot_config['id'], message.log_file, message.log_pos)
+			self._stop_service('Swapping storages to reinitialize slave')
 			
-			if 'snapshot_config' in message.body:
-				LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
-						message.snapshot_config['id'], message.log_file, message.log_pos)
-				self._stop_service('Swapping storages to reinitialize slave')
-				
-				LOG.debug('Destroing old storage')
-				self.storage_vol.destroy()
-				LOG.debug('Storage destoyed')
-				
-				LOG.debug('Plugging new storage')
-				vol = Storage.create(snapshot=message.snapshot_config.copy(), tags=self.mysql_tags)
-				self._plug_storage(self._storage_path, vol)
-				LOG.debug('Storage plugged')
-				
-				Storage.backup_config(vol.config(), self._volume_config_path)
-				Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
-				self.storage_vol = vol
-				log_file = message.log_file
-				log_pos = message.log_pos
-				
-				self._start_service()				
+			LOG.debug('Destroing old storage')
+			self.storage_vol.destroy()
+			LOG.debug('Storage destoyed')
 			
-			my_cli = spawn_mysql_cli(ROOT_USER, message.root_password)
+			LOG.debug('Plugging new storage')
+			vol = Storage.create(snapshot=message.snapshot_config.copy(), tags=self.mysql_tags)
+			self._plug_storage(self._storage_path, vol)
+			LOG.debug('Storage plugged')
 			
-			if not 'snapshot_config' in message.body:
-				LOG.debug("Stopping slave i/o thread")
-				my_cli.sendline("STOP SLAVE IO_THREAD;")
-				my_cli.expect("mysql>")
-				LOG.debug("Slave i/o thread stopped")
-				
-				LOG.debug("Retrieving current log_file and log_pos")
-				my_cli.sendline("SHOW SLAVE STATUS\\G");
-				my_cli.expect("mysql>")
-				log_file = log_pos = None
-				for line in my_cli.before.split("\n"):
-					pair = map(str.strip, line.split(": ", 1))
-					if pair[0] == "Master_Log_File":
-						log_file = pair[1]
-					elif pair[0] == "Read_Master_Log_Pos":
-						log_pos = pair[1]
-				LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+			Storage.backup_config(vol.config(), self._volume_config_path)
+			Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
+			self.storage_vol = vol
+			log_file = message.log_file
+			log_pos = message.log_pos
+			
+			self._start_service()				
+		
+		my_cli = spawn_mysql_cli(ROOT_USER, message.root_password)
+		
+		if not 'snapshot_config' in mysql or mysql['snapshot_config']['type'] == 'eph':
+			LOG.debug("Stopping slave i/o thread")
+			my_cli.sendline("STOP SLAVE IO_THREAD;")
+			my_cli.expect("mysql>")
+			LOG.debug("Slave i/o thread stopped")
+			
+			LOG.debug("Retrieving current log_file and log_pos")
+			my_cli.sendline("SHOW SLAVE STATUS\\G");
+			my_cli.expect("mysql>")
+			log_file = log_pos = None
+			for line in my_cli.before.split("\n"):
+				pair = map(str.strip, line.split(": ", 1))
+				if pair[0] == "Master_Log_File":
+					log_file = pair[1]
+				elif pair[0] == "Read_Master_Log_Pos":
+					log_pos = pair[1]
+			LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
 
-			self._change_master(
-				host=host, 
-				user=REPL_USER, 
-				password=message.repl_password,
-				log_file=log_file, 
-				log_pos=log_pos, 
-				timeout=self._change_master_timeout,
-				my_cli=my_cli
-			)
-				
-			LOG.debug("Replication switched")
-			bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
-		else:
-			LOG.debug('Skip NewMasterUp. My replication role is master')		
+		self._change_master(
+			host=host, 
+			user=REPL_USER, 
+			password=message.repl_password,
+			log_file=log_file, 
+			log_pos=log_pos, 
+			timeout=self._change_master_timeout,
+			my_cli=my_cli
+		)
+			
+		LOG.debug("Replication switched")
+		bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
 
 	
 	def on_before_reboot_start(self, *args, **kwargs):

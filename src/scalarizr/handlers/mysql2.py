@@ -736,8 +736,20 @@ class MysqlHandler(DBMSRHandler):
 		host = message.local_ip or message.remote_ip
 		LOG.info("Switching replication to a new MySQL master %s", host)
 		bus.fire('before_mysql_change_master', host=host)			
+
 		
-		if PlatformFeatures.VOLUMES not in self._platform.features:
+		if PlatformFeatures.VOLUMES in self._platform.features and mysql2[OPT_SNAPSHOT_CNF]['type'] != 'eph':
+			LOG.debug("Stopping slave i/o thread")
+			self.root_client.stop_slave_io_thread()
+			LOG.debug("Slave i/o thread stopped")
+			
+			LOG.debug("Retrieving current log_file and log_pos")
+			status = self.root_client.slave_status()
+			log_file = status['Master_Log_File']
+			log_pos = status['Read_Master_Log_Pos']
+			LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+		
+		else:
 			log_file = mysql2['log_file']
 			log_pos = mysql2['log_pos']
 			snap_config = mysql2['snapshot_config']
@@ -759,17 +771,7 @@ class MysqlHandler(DBMSRHandler):
 			self.storage_vol = vol
 			
 			self.mysql.service.start()				
-		
-		else:
-			LOG.debug("Stopping slave i/o thread")
-			self.root_client.stop_slave_io_thread()
-			LOG.debug("Slave i/o thread stopped")
-			
-			LOG.debug("Retrieving current log_file and log_pos")
-			status = self.root_client.slave_status()
-			log_file = status['Master_Log_File']
-			log_pos = status['Read_Master_Log_Pos']
-			LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+
 
 		self._change_master(
 			host=host, 
