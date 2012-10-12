@@ -338,12 +338,17 @@ class MySQLClient(object):
 	def version(self):
 		return self.fetchone('SELECT VERSION()')
 	
+	def reconnect(self):
+		self._pool[self.creds] = pymysql.connect(host="127.0.0.1", user=self.user, passwd=self.passwd, db=self.db)
+		
+	@property
+	def creds(self):
+		return (self.user, self.passwd, self.db)
 		
 	def get_connection(self, force=False):
-		creds = (self.user, self.passwd, self.db)
-		if force or not creds in self._pool:
-			self._pool[creds] = pymysql.connect(host="127.0.0.1", user=self.user, passwd=self.passwd, db=self.db)
-		return self._pool[creds]
+		if force or not self.creds in self._pool:
+			self.reconnect()
+		return self._pool[self.creds]
 	
 	
 	def _priv_count(self):

@@ -251,6 +251,9 @@ class MysqlCnfController(CnfController):
 				LOG.error('Cannot set global variables: %s' % e)
 			else:
 				LOG.debug('All global variables has been set.')
+			finally:
+				#temporary fix for percona55 backup issue (SCALARIZR-435)
+				self.root_client.reconnect()
 		elif not self.sendline:
 			LOG.debug('No global variables changed. Nothing to set.')
 		elif not self.root_client.test_connection():
