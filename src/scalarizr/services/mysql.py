@@ -367,6 +367,8 @@ class MySQLClient(object):
 				except socket.error, err:
 					if err.args[0] == 32:
 						raise ServiceError('Scalarizr was unable to connect to mysql with user %s: (%s)' % (self.user, str(err)))
+			else:
+				raise
 		res = cur.fetchone() if fetch_one else cur.fetchall()
 		return res
 
