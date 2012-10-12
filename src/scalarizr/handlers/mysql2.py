@@ -779,7 +779,7 @@ class MysqlHandler(DBMSRHandler):
 					# Continue if master storage is a valid MySQL storage 
 					if self._storage_valid():
 						# Patch configuration files 
-						self.mysql.move_mysqldir_to(__mysql__['data_dir'])
+						self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
 						self.mysql._init_replication(master=True)
 						self.mysql.service.start()
 						# Update __mysql__['behavior'] configuration
