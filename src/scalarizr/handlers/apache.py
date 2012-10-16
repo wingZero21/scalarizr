@@ -396,7 +396,6 @@ class ApacheHandler(ServiceCtlHandler):
 						self._logger.error("Scalr returned empty SSL key")
 					else:
 						self._logger.debug("Saving SSL certificates for %s",vhost.hostname)
-						
 						key_error_message = 'Cannot write SSL key files to %s.' % cert_path
 						cert_error_message = 'Cannot write SSL certificate files to %s.' % cert_path
 						ca_cert_error_message = 'Cannot write CA certificate to %s.' % cert_path
