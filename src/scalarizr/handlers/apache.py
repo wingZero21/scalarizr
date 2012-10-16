@@ -414,6 +414,7 @@ class ApacheHandler(ServiceCtlHandler):
 								os.chmod(os.path.join(cert_path, filename), 0644)
 				
 				self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
+				
 				vhost_fullpath = self.get_vhost_filename(vhost.hostname, ssl=True)
 				raw = vhost.raw.replace('/etc/aws/keys/ssl', cert_path)
 				vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
