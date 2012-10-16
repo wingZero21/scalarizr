@@ -321,9 +321,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 
 	def _update_vhosts(self):
-		vhosts_path = VHOSTS_PATH
-		if not os.path.isabs(vhosts_path):
-			vhosts_path = os.path.join(bus.etc_path, vhosts_path)
+		vhosts_path = os.path.join(bus.etc_path, VHOSTS_PATH)
 		if not os.path.exists(vhosts_path):
 			if not vhosts_path:
 				self._logger.error('Property vhosts_path is empty.')
@@ -454,7 +452,7 @@ class ApacheHandler(ServiceCtlHandler):
 			
 	def get_vhost_filename(self, hostname, ssl=False):
 		end = VHOST_EXTENSION if not ssl else '-ssl' + VHOST_EXTENSION
-		return os.path.join(VHOSTS_PATH, hostname + end)
+		return os.path.join(bus.etc_path, VHOSTS_PATH, hostname + end)
 
 	def _patch_ssl_conf(self, cert_path):
 		
