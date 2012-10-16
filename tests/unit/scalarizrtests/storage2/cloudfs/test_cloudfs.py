@@ -5,16 +5,15 @@ Created on Sep 19, 2012
 '''
 import mock
 from Queue import Empty
+from os.path import basename
+from subprocess import call
 
 from nose.tools import assert_raises
 
 from scalarizr.storage2 import cloudfs
 
 
-cloudfs.cloudfs = mock.MagicMock()
-
-
-class TestFileTransfer(object):
+class NTestFileTransfer(object):
 
 	path0 = '/mnt/backups/daily0.tar.gz'
 	path1 = '/mnt/backups/daily.tar.gz'
@@ -26,8 +25,8 @@ class TestFileTransfer(object):
 				yield arg
 		return generator
 
-	def teardown(self):
-		cloudfs.cloudfs.reset_mock()
+	def setup(self):
+		cloudfs.cloudfs = mock.MagicMock()
 
 	def test_job_generator(self):
 		# the simplest case (str str)
@@ -284,12 +283,12 @@ class TestFileTransfer(object):
 		assert not driver.multipart_abort.called
 		driver.multipart_complete.assert_called_once_with(upload_id)
 		completed = [
-				{"src": self.path0, "dst": self.path2, "chunk_num": 0,
-				 "size": getsize.return_value},
-				{"src": self.path1, "dst": self.path2, "chunk_num": 1,
-				 "size": getsize.return_value},
-				{"src": self.path0, "dst": self.path2, "chunk_num": 2,
-				 "size": getsize.return_value},
+			{"src": self.path0, "dst": self.path2, "chunk_num": 0,
+			 "size": getsize.return_value},
+			{"src": self.path1, "dst": self.path2, "chunk_num": 1,
+			 "size": getsize.return_value},
+			{"src": self.path0, "dst": self.path2, "chunk_num": 2,
+			 "size": getsize.return_value},
 		]
 		assert len(ret["completed"]) == len(completed)
 		for job in completed:
@@ -308,7 +307,7 @@ class TestFileTransfer(object):
 		ret = obj.run()
 
 		assert ('transfer_error', self.path2, self.path2, 0, -1) in \
-			   [list(x)[0][:5] for x in obj.fire.call_args_list]
+			[list(x)[0][:5] for x in obj.fire.call_args_list]
 		assert not ret["completed"]
 		assert not ret["failed"]
 
@@ -320,7 +319,7 @@ class TestFileTransfer(object):
 		ret = obj.run()
 
 		assert ('transfer_error', self.path1, self.path1, 0, -1) in\
-			   [list(x)[0][:5] for x in obj.fire.call_args_list]
+			[list(x)[0][:5] for x in obj.fire.call_args_list]
 		assert not ret["completed"]
 		assert not ret["failed"]
 
@@ -332,7 +331,7 @@ class TestFileTransfer(object):
 		ret = obj.run()
 
 		assert ('transfer_error', self.path1, self.path2, 0, -1) in\
-			   [list(x)[0][:5] for x in obj.fire.call_args_list]
+			[list(x)[0][:5] for x in obj.fire.call_args_list]
 		assert not ret["completed"]
 		assert not ret["failed"]
 
@@ -354,7 +353,7 @@ class TestFileTransfer(object):
 		assert not driver.multipart_abort.called
 		assert not driver.multipart_complete.called
 		assert ret["completed"] == [
-				{"src": self.path2, "dst": self.path1, "size": getsize.return_value},
+			{"src": self.path2, "dst": self.path1, "size": getsize.return_value},
 		]
 		assert ret["failed"] == []
 
@@ -380,12 +379,57 @@ class TestFileTransfer(object):
 		assert not driver.multipart_abort.called
 		assert not driver.multipart_complete.called
 		completed = [
-				{"src": self.path2, "dst": self.path0, "size": getsize.return_value},
-				{"src": dst2, "dst": self.path1, "size": getsize.return_value},
-				{"src": dst3, "dst": self.path0, "size": getsize.return_value},
+			{"src": self.path2, "dst": self.path0, "size": getsize.return_value},
+			{"src": dst2, "dst": self.path1, "size": getsize.return_value},
+			{"src": dst3, "dst": self.path0, "size": getsize.return_value},
 		]
 		assert len(ret["completed"]) == len(completed)
 		for job in completed:
 			assert job in ret["completed"]
 		assert ret["failed"] == []
+
+
+class TestLargeTransfer(object):
+
+	mpoint = '/mpoint/'
+
+	path1 = '/mnt/backups/daily.tar.gz'
+	path2 = 's3://backups/mysql/2012-09-05/'  # dir
+
+	def setup(self):
+		cloudfs.cloudfs = mock.MagicMock()
+		cloudfs.FileTransfer = mock.MagicMock()
+		cloudfs.storage2.volume = mock.MagicMock()
+		cloudfs.coreutils.remove = mock.MagicMock()
+		cloudfs.tempfile = mock.MagicMock()
+
+		self.stream = mock.MagicMock()
+		self.stream.read = lambda size: 'c' * size
+		def myopen(path, mode=None):
+			if mode is None:
+				return self.stream
+			obj = mock.MagicMock()
+			obj.name = path
+			return obj
+		cloudfs.open = myopen
+
+	@mock.patch("scalarizr.storage2.cloudfs.os.path.isfile")
+	def test_src_gen_upload(self, isfile):
+		isfile.return_value = True
+		cloudfs.storage2.volume.return_value.mpoint = self.mpoint
+
+		obj = cloudfs.LargeTransfer(self.path1, self.path2,
+			cloudfs.LargeTransfer.UPLOAD, gzip_it=False)
+		assert cloudfs.FileTransfer.call_count == 1
+		src_gen = cloudfs.FileTransfer.call_args[0][0]()
+
+		res = []
+		for src in src_gen:
+			res.append(src)
+
+		assert res == [self.mpoint + basename(self.path1) + '.000'], res
+
+
+
+
 

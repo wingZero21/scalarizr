@@ -10,6 +10,9 @@ import subprocess
 import threading
 import logging
 import ConfigParser
+import json
+import time
+from copy import copy
 from subprocess import call
 
 from scalarizr import storage2
@@ -355,6 +358,8 @@ class LargeTransfer(bases.Task):
 			else:
 				dst = iter(dst)
 
+		super(LargeTransfer, self).__init__()
+
 		self.direction = direction
 		self.src = src
 		self.dst = dst
@@ -382,7 +387,7 @@ class LargeTransfer(bases.Task):
 		'''
 		Compress, split, yield out
 		'''
-		self._tranzit_vol.size = int(self.chunk_size * (self._transfer.num_workers) * 1.1)
+		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.1)
 		self._tranzit_vol.ensure(mkfs=True)
 		try:
 			if self.direction == self.UPLOAD:
@@ -428,13 +433,14 @@ class LargeTransfer(bases.Task):
 								# Allow tar to receive SIGPIPE if gzip exits.
 								tar.stdout.close()
 							stream = gzip.stdout
-					
-					#dst = self.dst.next() 
+
+					#dst = self.dst.next()
 					for filename in self._split(stream, prefix):
 						yield filename
 					if cmd:
 						cmd.communicate() 
 			else:
+				# TODO: new manifest
 				src = self.src.next()
 				src_pr = urlparse.urlparse(src)
 				drv = cloudfs(src_pr.scheme)
@@ -459,21 +465,20 @@ class LargeTransfer(bases.Task):
 
 
 	def _dst_generator(self):
-		while True:
-			# What here?
-			yield None
+		#? what here?
+		for dst in self.dst:
+			yield dst
 
 	def _split(self, stream, prefix):
 		buf_size = 4096
 		chunk_size = self.chunk_size * 1024 * 1024
-		read_bytes = None		
+		read_bytes = 0
 		fp = None
 
 		def next_chunk():
 			self._chunk_num += 1
-			read_bytes = 0
-			fp = open(self.prefix + '%03d' % self._chunk_num)
-		next_chunk()
+			return open(prefix + '%03d' % self._chunk_num, 'w')
+		fp = next_chunk()
 
 		while True:
 			size = min(buf_size, chunk_size - read_bytes)
@@ -487,7 +492,7 @@ class LargeTransfer(bases.Task):
 			if read_bytes == chunk_size:
 				fp.close()
 				yield fp.name
-				next_chunk()
+				fp = next_chunk()
 
 
 	def _gzip_bin(self):
@@ -503,7 +508,92 @@ class LargeTransfer(bases.Task):
 
 
 	def _run(self):
-		self._transfer.run()
+		res = self._transfer.run()
+
+		#? if not multipart:
+		# manifest containing res["completed"] with md5 checksums
+		"""
+		$ manifest.ini
+		[snapshot]
+		description = description here
+		created_at = datetime
+		pack_method = pigz
+		tags = dict
+
+		[chunks]
+		${database_1}.gz.part00 = md5sum
+		${database_1}.gz.part01 = md5sum
+		${database_2}.gz.part00 = md5sum
+		"""
+
+		# TODO: FileTransfer(manifest)
+		# TODO: raise StopIteration
+
+
+class Manifest(object):
+	"""
+	Will perform JSON serialization on every dict-value when writing to file.
+	Only [snapshot][tags] will be converted back to dict when parsing though.
+
+	LargeTransfer-specific: default sections value
+	"""
+
+	def __init__(self, sections=("snapshot", "chunks")):
+		self._predefined_sections = copy(sections)
+		self.data = dict([(sect, {}) for sect in self._predefined_sections])
+
+	def __getitem__(self, item):
+		return self.data.__getitem__(item)
+
+	def __setitem__(self, key, value):
+		return self.data.__setitem__(key, value)
+
+	def __delitem__(self, key):
+		return self.data.__delitem__(key)
+
+	def __iter__(self):
+		return self.data.__iter__()
+
+	def __contains__(self, value):
+		return self.data.__contains__(value)
+
+	def parse(self, filename):
+		parser = ConfigParser.ConfigParser()
+		parser.read(filename)
+
+		for section in parser.sections():
+			self.data[section] = dict(parser.items(section))
+
+		try:
+			self.data["snapshot"]["tags"] = json.loads(
+				self.data["snapshot"]["tags"])
+		except KeyError:
+			pass
+
+	def write(self, filename):  #? accept file objects
+		self.data["snapshot"]["created_at"] = str(int(time.time()))
+
+		parser = ConfigParser.ConfigParser()
+
+		# the predefined sections are always ahead and ordered
+		map(parser.add_section, self._predefined_sections)
+
+		for section in self.data:
+			if not parser.has_section(section):
+				parser.add_section(section)
+			for option, value in self.data[section].iteritems():
+				if not isinstance(value, basestring):
+					value = self._format_value(value)
+				parser.set(section, option, value)
+
+		with open(filename, 'w') as fd:
+			parser.write(fd)
+
+	def _format_value(self, value):
+		if isinstance(value, dict):
+			return json.dumps(value)
+		else:
+			return str(value)
 
 
 """
