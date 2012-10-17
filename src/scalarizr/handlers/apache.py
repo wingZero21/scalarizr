@@ -350,24 +350,23 @@ class ApacheHandler(ServiceCtlHandler):
 				continue
 			
 			for vhost in received_vhosts:
-				vhost_fname = self.get_vhost_filename(vhost.hostname, vhost.https)
-				if vhost_fname == fname:
+				old_vhost_path = os.path.join(vhosts_path, fname)
+				new_vhost_path = self.get_vhost_filename(vhost.hostname, vhost.https)
+				if new_vhost_path == old_vhost_path:
 					break
 			else:
-				vhost_file = os.path.join(vhosts_path, fname)
-				
-				if os.path.isfile(vhost_file):
+				if os.path.isfile(old_vhost_path):
 					try:
-						self._logger.debug("Removing old vhost: %s" % vhost_file)
-						os.remove(vhost_file)
+						self._logger.debug("Removing old vhost: %s" % old_vhost_path)
+						os.remove(old_vhost_path)
 					except OSError, e:
-						self._logger.error('Cannot delete vhost file %s. %s', vhost_file, e.strerror)
+						self._logger.error('Cannot delete vhost file %s. %s', old_vhost_path, e.strerror)
 				
-				if os.path.islink(vhost_file):
+				if os.path.islink(old_vhost_path):
 					try:
-						os.unlink(vhost_file)
+						os.unlink(old_vhost_path)
 					except OSError, e:
-						self._logger.error('Cannot delete vhost link %s. %s', vhost_file, e.strerror)					
+						self._logger.error('Cannot delete vhost link %s. %s', old_vhost_path, e.strerror)					
 		self._logger.debug("Old vhosts configuration files deleted")
 		
 
