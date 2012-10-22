@@ -245,7 +245,8 @@ class EbsVolume(base.Volume, EbsMixin):
 		return storage2.snapshot(
 				type='ebs', 
 				id=snapshot.id, 
-				description=snapshot.description)
+				description=snapshot.description,
+				tags=tags)
 
 
 	def _detach(self, force, **kwds):

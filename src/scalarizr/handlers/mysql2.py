@@ -688,14 +688,16 @@ class MysqlHandler(DBMSRHandler):
 				with op.step(self._step_create_data_bundle):
 		
 					bus.fire('before_mysql_data_bundle')
-					
-					compat_prior_backup_restore = 'backup' not in message.body
+
+					backup_info = message.body[__mysql__['behavior']]
+
+					compat_prior_backup_restore = 'backup' not in backup_info
 					if compat_prior_backup_restore:
 						bak = backup.backup(
 								type='snap_mysql',
 								volume=__mysql__['volume'])
 					else:
-						bak = backup.backup(message.backup)
+						bak = backup.backup(backup_info['backup'])
 					restore = bak.run()
 					
 					'''

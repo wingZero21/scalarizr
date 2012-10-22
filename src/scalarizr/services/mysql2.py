@@ -77,10 +77,10 @@ class MySQLSnapBackup(backup.SnapBackup):
 		client = self._client()
 		client.lock_tables()
 		(log_file, log_pos) = client.master_status()
-		state.update({
-			'log_file': log_file,
-			'log_pos': log_pos
-		})
+
+		upd = {'log_file': log_file, 'log_pos': log_pos}
+		state.update(upd)
+		self.tags.update(upd)
 
 
 	def unfreeze(self, *args):

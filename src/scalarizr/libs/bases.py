@@ -159,7 +159,7 @@ class Task(Observable, ConfigDriven):
 
 	def run(self):
 		if self.__running:
-			raise Error('Another operation is running')
+			raise Exception('Another operation is running')
 		try:
 			self.__running = True
 			self.fire('start')

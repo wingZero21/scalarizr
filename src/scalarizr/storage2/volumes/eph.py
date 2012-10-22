@@ -121,7 +121,8 @@ class EphVolume(base.Volume):
 								src=lvm_snap_vol.mpoint + '/',
 								dst=snap.path,
 								tar_it=True,
-								gzip_it=True)
+								gzip_it=True,
+								tags=tags)
 				transfer.run()
 			finally:
 				lvm_snap_vol.umount()
