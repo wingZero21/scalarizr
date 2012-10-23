@@ -4,6 +4,7 @@ Created on Aug 22, 2012
 @author: marat
 '''
 import os
+import itertools
 
 from scalarizr import storage2
 from scalarizr.storage2.volumes import base
@@ -56,11 +57,11 @@ class LvmVolume(base.Volume):
 		if self.snap:
 			pvs = []
 			try:
-				for pv_snap, pv_vol in zip(self.snap['pv_snaps'], self.pvs):
-					pv_vol = storage2.volume(pv_vol)
-					pv_vol.snap = pv_snap
-					pv_vol.ensure()
-					pvs.append(pv_vol)
+				for snap in self.snap['pv_snaps']:
+					snap = storage2.snapshot(snap)
+					vol = storage2.volume(type=snap.type, snap=snap)
+					vol.ensure()
+					pvs.append(vol)
 			except:
 				for pv in pvs:
 					pv.destroy()
