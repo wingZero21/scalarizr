@@ -204,7 +204,7 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 				to_lsn=to_lsn,
 				backup_type=self.backup_type,
 				backup_dir=self.backup_dir,
-				volume=self.volume.clone(),
+				#volume=self.volume.clone(),
 				snapshot=snapshot)
 
 

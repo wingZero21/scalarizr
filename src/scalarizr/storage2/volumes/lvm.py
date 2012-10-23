@@ -167,7 +167,8 @@ class LvmVolume(base.Volume):
 					type='lvm',
 					pv_snaps=pv_snaps,
 					vg=self.vg,
-					name=self.name)
+					name=self.name,
+					size=self.size)
 		finally:
 			if active:
 				coreutils.dmsetup('resume', self.device) 
