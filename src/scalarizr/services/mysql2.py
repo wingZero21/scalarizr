@@ -368,7 +368,7 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 			self._mysql_init.stop()
 			self._start_copyback()
 			try:
-				innobackupex(target_dir, scopy_back=True)
+				innobackupex(target_dir, copy_back=True)
 				coreutils.chown_r(self._data_dir, 
 								'mysql', 'mysql')
 				self._mysql_init.start()
