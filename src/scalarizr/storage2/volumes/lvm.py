@@ -70,11 +70,12 @@ class LvmVolume(base.Volume):
 			self.vg = self.snap['vg']
 			self.name = self.snap['name']
 		
-		pvs = lvm2.pvs()
 		pv_volumes = []
 		for pv_volume in self.pvs:
 			pv_volume = storage2.volume(pv_volume)
 			pv_volume.ensure()
+
+			pvs = lvm2.pvs()
 			if pv_volume.device not in pvs:
 				pv_volume.umount()
 				lvm2.pvcreate(pv_volume.device)
