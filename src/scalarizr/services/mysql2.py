@@ -167,6 +167,8 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 				'incremental': True,
 				'incremental_lsn': from_lsn
 			})
+		elif 'full' == self.backup_type and self.volume:
+			coreutils.delete_all_from_dir(self.backup_dir)
 
 		exc_info = None
 		try:

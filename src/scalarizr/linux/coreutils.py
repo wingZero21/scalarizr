@@ -5,6 +5,7 @@ Created on Aug 28, 2012
 '''
 
 import os
+import glob
 import shutil
 
 from scalarizr import linux
@@ -94,6 +95,15 @@ def remove(path):
 		os.remove(path)	
 	elif os.path.isdir(path):
 		shutil.rmtree(path)
+
+
+def delete_all_from_dir(path):
+	if not os.path.isdir(path):
+		raise Exception('No such directory: %s' % path)
+
+	content = glob.glob(os.path.join(path, '*'))
+	for item in content:
+		remove(item)
 
 
 def blkid(device_path, **kwargs):
