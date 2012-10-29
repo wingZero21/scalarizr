@@ -506,7 +506,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 			self.postgresql.stop_replication()
 			
-			if master_storage_conf:
+			if master_storage_conf and master_storage_conf['type'] != 'eph':
 
 				self.postgresql.service.stop('Unplugging slave storage and then plugging master one')
 
@@ -524,8 +524,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self.postgresql.init_master(self._storage_path, self.root_password, slaves)
 			self._update_config({OPT_REPLICATION_MASTER : "1"})	
 				
-			if not master_storage_conf:
-									
+			if not master_storage_conf or master_storage_conf['type'] == 'eph':									
 				snap = self._create_snapshot()
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
 				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol, snap)
@@ -553,7 +552,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			# Start postgresql
 			self.postgresql.service.start()
 		
-		if tx_complete and master_storage_conf:
+		if tx_complete and master_storage_conf and master_storage_conf['type'] != 'eph':
 			# Delete slave EBS
 			self.storage_vol.destroy(remove_disks=True)
 			self.storage_vol = new_storage_vol
@@ -579,7 +578,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._logger.info("Switching replication to a new postgresql master %s", host)
 		bus.fire('before_postgresql_change_master', host=host)			
 		
-		if OPT_SNAPSHOT_CNF in postgresql_data:
+		if OPT_SNAPSHOT_CNF in postgresql_data and postgresql_data[OPT_SNAPSHOT_CNF]['type'] != 'eph':
 			snap_data = postgresql_data[OPT_SNAPSHOT_CNF]
 			self._logger.info('Reinitializing Slave from the new snapshot %s', 
 					snap_data['id'])

@@ -354,7 +354,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 				status="ok",
 			)
 
-			if master_storage_conf:
+			if master_storage_conf and master_storage_conf['type'] != 'eph':
 
 				self.redis_instances.stop('Unplugging slave storage and then plugging master one')
 
@@ -377,7 +377,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			self.redis_instances.init_as_masters(self._storage_path)
 			self._update_config({OPT_REPLICATION_MASTER : "1"})
 
-			if not master_storage_conf:
+			if not master_storage_conf or master_storage_conf['type'] == 'eph':
 
 				snap = self._create_snapshot()
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
@@ -405,7 +405,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			# Start redis
 			self.redis_instances.start()
 
-		if tx_complete and master_storage_conf:
+		if tx_complete and master_storage_conf and master_storage_conf['type'] != 'eph':
 			# Delete slave EBS
 			self.storage_vol.destroy(remove_disks=True)
 			self.storage_vol = new_storage_vol

@@ -922,6 +922,7 @@ class MysqlHandler(DBMSRHandler):
 		host = message.local_ip or message.remote_ip
 		LOG.info("Switching replication to a new MySQL master %s", host)
 		bus.fire('before_mysql_change_master', host=host)			
+
 		
 		if __mysql__['volume']['type'] in ('eph', 'lvm'):
 			if 'restore' in mysql2:
@@ -961,8 +962,7 @@ class MysqlHandler(DBMSRHandler):
 			self.storage_vol = vol
 			'''
 			
-			self.mysql.service.start()				
-		
+			self.mysql.service.start()
 		else:
 			LOG.debug("Stopping slave i/o thread")
 			self.root_client.stop_slave_io_thread()
@@ -973,6 +973,7 @@ class MysqlHandler(DBMSRHandler):
 			log_file = status['Master_Log_File']
 			log_pos = status['Read_Master_Log_Pos']
 			LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+
 
 		self._change_master(
 			host=host, 
