@@ -15,6 +15,7 @@ import logging
 
 from scalarizr import config
 from scalarizr.bus import bus
+from scalarizr import handlers
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, cryptotool, software
 from scalarizr.util.filetool import split
@@ -55,7 +56,7 @@ def get_handlers():
 	return (RedisHandler(), )
 
 
-class RedisHandler(ServiceCtlHandler):
+class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 	_queryenv = None
 	""" @type _queryenv: scalarizr.queryenv.QueryEnvService	"""
@@ -120,6 +121,7 @@ class RedisHandler(ServiceCtlHandler):
 	def __init__(self):
 		self.preset_provider = redis.RedisPresetProvider()
 		preset_service.services[BEHAVIOUR] = self.preset_provider
+		handlers.FarmSecurityMixin.__init__(self, [redis.DEFAULT_PORT])
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
 		bus.on("init", self.on_init)
 		bus.define_events(
