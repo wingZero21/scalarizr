@@ -22,7 +22,7 @@ from scalarizr.util.filetool import split, rchown
 from scalarizr.util import system2, wait_until, disttool, software, filetool, cryptotool
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, PgUser, SU_EXEC
-from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.linux import iptables
 from scalarizr.handlers import operation, prepare_tags
 
 
@@ -865,7 +865,14 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
 	def _insert_iptables_rules(self):
+		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(POSTGRESQL_DEFAULT_PORT)},
+			]})
+
+		"""
 		iptables = IpTables()
 		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=POSTGRESQL_DEFAULT_PORT, 
-											jump='ACCEPT', protocol=P_TCP))		
+											jump='ACCEPT', protocol=P_TCP))
+		"""

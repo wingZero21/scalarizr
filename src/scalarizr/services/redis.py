@@ -101,8 +101,6 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 		cli = RedisCLI(password)
 		wait_until(lambda: cli.test_connection(), timeout=10, sleep=1)
 
-initdv2.explore(SERVICE_NAME, RedisInitScript)
-
 
 class Redisd(object):
 

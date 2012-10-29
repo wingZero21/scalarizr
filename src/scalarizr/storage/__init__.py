@@ -14,7 +14,7 @@ import os
 import sys
 import re
 import uuid
-from scalarizr.libs.pubsub import Observable
+from scalarizr.libs.bases import Observable
 from functools import partial
 import re
 
@@ -388,9 +388,9 @@ class Volume(VolumeConfig, Observable):
 	_id_format = '%s-vol-%s'
 
 	def __init__(self, device=None, mpoint=None, fstype=None, type=None, *args, **kwargs):
-		super(Volume, self).__init__()
 		self.lock = threading.RLock()
 		self._logger = logging.getLogger(__name__)
+		super(Volume, self).__init__()
 
 		if not device:
 			raise ValueError('device name should be non-empty')
@@ -688,7 +688,7 @@ class VolumeProvider(object):
 			self._umount(vol, force)
 		
 	def blank_config(self, cnf):
-		raise NotImplemented()
+		raise NotImplementedError()
 	
 	def _umount(self, vol, force=False):
 		try:

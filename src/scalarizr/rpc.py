@@ -188,16 +188,16 @@ class ServiceProxy(object):
 			self.local.method = []
 		
 	def exchange(self, request):
-		raise NotImplemented()
+		raise NotImplementedError()
 	
 	
 class Server(object):
 
 	def __init__(self, endpoint, handler):
-		raise NotImplemented()
+		raise NotImplementedError()
 
 	def serve_forever(self):
-		raise NotImplemented()
+		raise NotImplementedError()
 	
 	def stop(self):
-		raise NotImplemented()
+		raise NotImplementedError()

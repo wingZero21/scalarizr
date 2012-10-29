@@ -41,7 +41,8 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
-from scalarizr.util import wait_until, Hosts, cryptotool, iptables
+from scalarizr.util import wait_until, Hosts, cryptotool
+from scalarizr.linux import iptables
 from scalarizr.util.filetool import split, rchown
 from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
@@ -1469,7 +1470,17 @@ class MongoDBHandler(ServiceCtlHandler):
 			del self._status_trackers[ip]
 		
 	def _insert_iptables_rules(self, *args, **kwargs):
-		self._logger.debug('Adding iptables rules for scalarizr ports')		
+		self._logger.debug('Adding iptables rules for scalarizr ports')
+
+		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.ROUTER_DEFAULT_PORT)},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.ARBITER_DEFAULT_PORT)},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.REPLICA_DEFAULT_PORT)},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.CONFIG_SERVER_DEFAULT_PORT)},
+			]})
+
+		"""
 		ipt = iptables.IpTables()
 		if ipt.enabled():		
 			rules = []
@@ -1482,6 +1493,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 			for rule in rules:
 				ipt.insert_rule(1, rule_spec = rule)
+		"""
 		
 			
 	@property

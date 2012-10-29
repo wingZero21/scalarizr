@@ -20,7 +20,7 @@ from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 from scalarizr.util import disttool, firstmatched, software, wait_until
 from scalarizr.util import initdv2, system2, dynimp
 from scalarizr.util.initdv2 import InitdError
-from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.linux import iptables
 from scalarizr.util.filetool import read_file, write_file
 from scalarizr import filetool
 
@@ -261,10 +261,16 @@ class ApacheHandler(ServiceCtlHandler):
 		self._reload_service('virtual hosts have been updated')
 
 	def _insert_iptables_rules(self):
-		iptables = IpTables()
 		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "80"},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "443"},
+			]})
+
+			"""
 			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		
 			iptables.insert_rule(None, RuleSpec(dport=443, jump='ACCEPT', protocol=P_TCP))
+			"""
 
 	def _rpaf_modify_proxy_ips(self, ips, operation=None):
 		self._logger.debug('Modify RPAFproxy_ips (operation: %s, ips: %s)', operation, ','.join(ips))
@@ -342,7 +348,6 @@ class ApacheHandler(ServiceCtlHandler):
 		self._logger.debug("Requesting virtual hosts list")
 		received_vhosts = self._queryenv.list_virtual_hosts()
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
-		
 		
 		self._logger.debug("Deleting old vhosts configuration files")
 		for fname in os.listdir(vhosts_path):
@@ -452,6 +457,7 @@ class ApacheHandler(ServiceCtlHandler):
 	def get_vhost_filename(self, hostname, ssl=False):
 		end = VHOST_EXTENSION if not ssl else '-ssl' + VHOST_EXTENSION
 		return os.path.join(bus.etc_path, VHOSTS_PATH, hostname + end)
+
 
 	def _patch_ssl_conf(self, cert_path):
 		

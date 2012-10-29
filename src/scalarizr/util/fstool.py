@@ -3,6 +3,8 @@ Created on May 10, 2010
 
 @author: marat
 @author: Dmytro Korsakov
+@deprecated: scalarizr.linux.mount is replacement.
+@ported 
 '''
 
 from scalarizr.util import disttool, system2

@@ -27,7 +27,15 @@ from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import rchown
+from scalarizr.libs import metaconf
 import sys
+
+
+from scalarizr import linux, storage2
+from scalarizr.linux import coreutils, pkgmgr
+from scalarizr.services import backup
+from scalarizr.node import __node__
+
 
 
 LOG = logging.getLogger(__name__)
@@ -330,12 +338,17 @@ class MySQLClient(object):
 	def version(self):
 		return self.fetchone('SELECT VERSION()')
 	
+	def reconnect(self):
+		self._pool[self.creds] = pymysql.connect(host="127.0.0.1", user=self.user, passwd=self.passwd, db=self.db)
+		
+	@property
+	def creds(self):
+		return (self.user, self.passwd, self.db)
 		
 	def get_connection(self, force=False):
-		creds = (self.user, self.passwd, self.db)
-		if force or not creds in self._pool:
-			self._pool[creds] = pymysql.connect(host="127.0.0.1", user=self.user, passwd=self.passwd, db=self.db)
-		return self._pool[creds]
+		if force or not self.creds in self._pool:
+			self.reconnect()
+		return self._pool[self.creds]
 	
 	
 	def _priv_count(self):
@@ -359,6 +372,8 @@ class MySQLClient(object):
 				except socket.error, err:
 					if err.args[0] == 32:
 						raise ServiceError('Scalarizr was unable to connect to mysql with user %s: (%s)' % (self.user, str(err)))
+			else:
+				raise
 		res = cur.fetchone() if fetch_one else cur.fetchall()
 		return res
 
@@ -433,10 +448,21 @@ class MySQLConf(BaseConfig):
 	config_name = 'my.cnf'
 	comment_empty = True
 	
-	
+
 	@classmethod
 	def find(cls):
 		return cls(MYCNF_PATH)
+
+
+	def __init__(self, path, autosave=True):
+		super(MySQLConf, self).__init__(path, autosave=True)
+		self.data = metaconf.Configuration(self.config_type)
+		if os.path.exists(self.path):
+			self.data.read(self.path)
+		try:
+			self.data.options('mysqld')
+		except metaconf.NoPathError:
+			self.data.add('mysqld')
 		
 	
 	def _get_datadir(self):
@@ -444,6 +470,8 @@ class MySQLConf(BaseConfig):
 	
 	
 	def _set_datadir(self, path):
+		if not path:
+			raise BaseException('Datadir value cannot be empty')
 		self.set('mysqld/datadir', path)	
 
 
@@ -785,4 +813,6 @@ def _add_apparmor_rules(directory):
 
 		
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
+
+
 

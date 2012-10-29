@@ -25,7 +25,7 @@ from scalarizr.util import system2, disttool, filetool, \
 	PopenError
 from scalarizr.handlers import operation	
 from scalarizr.util.software import which
-from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.linux import iptables
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
@@ -1518,9 +1518,16 @@ class MysqlHandler(ServiceCtlHandler):
 		
 	
 	def _insert_iptables_rules(self):
+		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "3306"},
+			]})
+
+		"""
 		iptables = IpTables()
 		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
+		"""
 	
 	def _get_ini_options(self, *args):
 		ret = []
@@ -1618,7 +1625,8 @@ class MysqlHandler(ServiceCtlHandler):
 		LOG.info('MySQL data bundle created\n  snapshot: %s\n  log_file: %s\n  log_pos: %s', 
 						snap.id, log_file, log_pos)
 		return snap, log_file, log_pos
-			
+
+
 	def _create_storage_snapshot(self, tags=None):
 		LOG.info("Creating storage snapshot")
 		tags = tags or dict()
@@ -1628,10 +1636,12 @@ class MysqlHandler(ServiceCtlHandler):
 		except StorageError, e:
 			LOG.error("Cannot create MySQL data snapshot. %s", e)
 			raise
-	
+
+
 	def _repair_original_mycnf(self):
 		self._mysql_config.set('mysqld/datadir', '/var/lib/mysql')
 		self._mysql_config.remove('mysqld/log_bin')
+
 
 	def _add_mysql_users(self, root_user, repl_user, stat_user, root_pass=None, repl_pass=None, stat_pass=None, mysqld=None, my_cli=None):
 		LOG.info("Adding mysql system users")
@@ -1668,7 +1678,8 @@ class MysqlHandler(ServiceCtlHandler):
 
 		LOG.debug("MySQL system users added")
 		return (root_password, repl_password, stat_password)
-	
+
+
 	def _add_mysql_user(self, my_cli, login, password, host, privileges=None):
 
 		my_cli.sendline('SHOW COLUMNS FROM mysql.user\G')
@@ -1694,10 +1705,12 @@ class MysqlHandler(ServiceCtlHandler):
 			raise HandlerError("Error occured while adding user '%s' to MySQL user table.\n%s" % (login, res))
 		my_cli.sendline("FLUSH PRIVILEGES;")
 		my_cli.expect('mysql>')
-		
+
+
 	def _update_config(self, data): 
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
-	
+
+
 	@_reload_mycnf
 	def _replication_init(self, master=True):
 		# Create replication config
@@ -1745,7 +1758,6 @@ class MysqlHandler(ServiceCtlHandler):
 			lines = map(string.strip, out.strip().split('\r\n')[2:-1])
 			return dict(map(string.strip, line.split(':', 1)) for line in lines)
 
-
 		try:
 			time_until = time.time() + timeout
 			status = None
@@ -1789,10 +1801,12 @@ class MysqlHandler(ServiceCtlHandler):
 				
 		LOG.debug('Replication master is changed to host %s', host)		
 
+
 	def _ping_mysql(self):
 		for sock in self._init_script.socks:
 			wait_sock(sock)
-	
+
+
 	def _move_mysql_dir(self, directive=None, dirname = None):
 
 		# Retrieveing mysql user from passwd		
@@ -1844,7 +1858,8 @@ class MysqlHandler(ServiceCtlHandler):
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based() and self._apparmor_enabled:
 			_add_apparmor_rules(directory)
-	
+
+
 	def _flush_logs(self):
 		if not os.path.exists(self._data_dir):
 			return
@@ -1855,7 +1870,8 @@ class MysqlHandler(ServiceCtlHandler):
 		for file in files:
 			if file in info_files or file.find('relay-bin') != -1:
 				os.remove(os.path.join(self._data_dir, file))
-				
+
+
 	def write_config(self):
 		self._mysql_config.write(MYCNF)
 

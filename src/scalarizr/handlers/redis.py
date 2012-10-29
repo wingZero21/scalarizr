@@ -17,14 +17,14 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr import handlers
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, cryptotool, software
+from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
 from scalarizr.util.filetool import split
 from scalarizr.services import redis
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.linux import iptables
 from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.handlers import operation, prepare_tags
 from scalarizr.api import service as preset_service
@@ -49,7 +49,11 @@ CENTOS_CONFIG_PATH			= '/etc/redis.conf'
 
 BACKUP_CHUNK_SIZE 			= 200*1024*1024
 
+
 LOG = logging.getLogger(__name__)
+
+
+initdv2.explore(SERVICE_NAME, redis.RedisInitScript)
 
 
 def get_handlers():
@@ -66,9 +70,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 	_cnf = None
 	''' @type _cnf: scalarizr.config.ScalarizrCnf '''
-
-	storage_vol = None
-
+	
+	storage_vol = None	
+	default_service = None
+		
 	@property
 	def is_replication_master(self):
 		value = 0
@@ -189,8 +194,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
-
-
+		
+		self.default_service = initdv2.lookup(SERVICE_NAME)
+		
+		
 	def on_host_init_response(self, message):
 		"""
 		Check redis data in host init response
@@ -231,6 +238,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					LOG.debug("Update redis config with %s", redis_data)
 					self._update_config(redis_data)
 
+					if self.default_service.running:
+						self.default_service.stop('Treminating default redis instance')
+						
 					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
 					self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self.get_main_password(),])
 					self._insert_iptables_rules()
@@ -258,8 +268,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
-		self._insert_iptables_rules()
-		bus.fire('service_configured', service_name=SERVICE_NAME)
+		if self.default_service.running:
+			self.default_service.stop('Treminating default redis instance')
+		self._insert_iptables_rules()		
 
 
 	def on_BeforeHostTerminate(self, message):
@@ -348,14 +359,19 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 				self.redis_instances.stop('Unplugging slave storage and then plugging master one')
 
 				old_conf = self.storage_vol.detach(force=True) # ??????
-				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)
-
+				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
+				
+				'''
+				#This code was removed because redis master storage can be empty yet valid
 				for r in self.redis_instances:
 					# Continue if master storage is a valid redis storage 
 					if not r.working_directory.is_initialized(self._storage_path):
 						raise HandlerError("%s is not a valid %s storage" % (self._storage_path, BEHAVIOUR))
 
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path)
+				'''
+				
+				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)
 
 			self.redis_instances.init_as_masters(self._storage_path)
@@ -374,7 +390,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 		except (Exception, BaseException), e:
 			LOG.exception(e)
-			if new_storage_vol:
+			if new_storage_vol and not new_storage_vol.detached:
 				new_storage_vol.detach()
 			# Get back slave storage
 			if old_conf:
@@ -576,9 +592,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		LOG.info("Requesting master server")
 		while not master_host:
 			try:
-				master_host = list(host
-				for host in self._queryenv.list_roles(self._role_name)[0].hosts
-				if host.replication_master)[0]
+				master_host = list(host 
+					for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts 
+					if host.replication_master)[0]
 			except IndexError:
 				LOG.debug("QueryEnv respond with no %s master. " % BEHAVIOUR +
 				          "Waiting %d seconds before the next attempt" % 5)
@@ -684,10 +700,19 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		return ret
 
 	def _insert_iptables_rules(self):
+		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp",
+				 "dport": str(port)} for port in self.redis_instances.ports
+			]})
+
+		"""
 		iptables = IpTables()
 		if iptables.enabled():
 			for port in self.redis_instances.ports:
 				iptables.insert_rule(None, RuleSpec(dport=port, jump='ACCEPT', protocol=P_TCP))
+		"""
+	
 
 
 class RedisCnfController(CnfController):

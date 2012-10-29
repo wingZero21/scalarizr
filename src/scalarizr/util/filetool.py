@@ -35,7 +35,7 @@ class ConfigurationFile(object):
 		self.local = local()
 		
 	def __str__(self):
-		raise NotImplemented()
+		raise NotImplementedError()
 
 	def __enter__(self):
 		self.local.last_trans_id = str(time.time())
@@ -52,11 +52,11 @@ class ConfigurationFile(object):
 			shutil.copy(backup_path, self.path)
 
 	def trans(self, enter=None, exit=None):
-		#raise NotImplemented()
+		#raise NotImplementedError()
 		return self
 
 	def reload(self):
-		#raise NotImplemented()
+		#raise NotImplementedError()
 		pass
 
 BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
