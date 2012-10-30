@@ -38,8 +38,35 @@ CNF_NAME = BEHAVIOUR + '.ini'
 APACHE_CONF_PATH = '/etc/apache2/apache2.conf' if disttool.is_debian_based() else '/etc/httpd/conf/httpd.conf'
 VHOSTS_PATH = 'private.d/vhosts'
 VHOST_EXTENSION = '.vhost.conf'
+LOGROTATE_CONF_PATH = '/etc/logrotate.d/scalarizr_app'
+LOGROTATE_CONF_DEB_RAW = """/var/log/http-*.log {
+         weekly
+         missingok
+         rotate 52
+         compress
+         delaycompress
+         notifempty
+         create 640 root adm
+         sharedscripts
+         postrotate
+                 if [ -f "`. /etc/apache2/envvars ; echo 
+${APACHE_PID_FILE:-/var/run/apache2.pid}`" ]; then
+                         /etc/init.d/apache2 reload > /dev/null
+                 fi
+         endscript
+}
+"""
 
-
+LOGROTATE_CONF_REDHAT_RAW = """/var/log/http-*.log {
+     missingok
+     notifempty
+     sharedscripts
+     delaycompress
+     postrotate
+         /sbin/service httpd reload > /dev/null 2>/dev/null || true
+     endscript
+}
+"""
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
 	_apachectl = None
@@ -452,12 +479,22 @@ class ApacheHandler(ServiceCtlHandler):
 		inc_mask = vhosts_path + '/*' + VHOST_EXTENSION
 		if not inc_mask in includes:
 			self._config.add('Include', inc_mask)
-			self._config.write(self._httpd_conf_path)		
+			self._config.write(self._httpd_conf_path)
+
+		self._logger.debug("Creating logrotate config")
+		self._create_logrotate_conf(LOGROTATE_CONF_PATH)
 			
 	def get_vhost_filename(self, hostname, ssl=False):
 		end = VHOST_EXTENSION if not ssl else '-ssl' + VHOST_EXTENSION
 		return os.path.join(bus.etc_path, VHOSTS_PATH, hostname + end)
 
+	def _create_logrotate_conf(self, logrotate_conf_path):
+		if not os.path.exists(logrotate_conf_path):
+			if disttool.is_debian_based():
+				write_file(logrotate_conf_path, LOGROTATE_CONF_DEB_RAW, logger=self._logger)
+			else:
+				write_file(logrotate_conf_path, LOGROTATE_CONF_REDHAT_RAW, logger=self._logger)
+				
 
 	def _patch_ssl_conf(self, cert_path):
 		

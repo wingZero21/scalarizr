@@ -389,7 +389,7 @@ class LinuxImage:
 			nod[0] = devdir + '/' + nod[0]
 			system2([mknod] + nod)
 		
-		LOG.debug("Special directories maked")			
+		LOG.debug("Special directories were created")
 	
 	
 	def _copy_rec(self, source, dest, xattr=True):

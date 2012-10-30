@@ -9,6 +9,7 @@ import sys
 import signal
 import string
 import pkgutil
+import contextlib
 
 from scalarizr.bus import bus
 from scalarizr import exceptions
@@ -655,4 +656,3 @@ class Hosts:
 		with open('/etc/hosts', 'w') as f:
 			for hostname, addr in hosts.iteritems():
 				f.write('%s\t%s\n' % (addr, hostname))
-
