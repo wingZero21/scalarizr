@@ -49,8 +49,7 @@ LOGROTATE_CONF_DEB_RAW = """/var/log/http-*.log {
          create 640 root adm
          sharedscripts
          postrotate
-                 if [ -f "`. /etc/apache2/envvars ; echo 
-${APACHE_PID_FILE:-/var/run/apache2.pid}`" ]; then
+                 if [ -f "`. /etc/apache2/envvars ; echo ${APACHE_PID_FILE:-/var/run/apache2.pid}`" ]; then
                          /etc/init.d/apache2 reload > /dev/null
                  fi
          endscript
