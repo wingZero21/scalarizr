@@ -232,9 +232,13 @@ class Rsync(object):
 		self._options.append('-X')
 		return self
 
+	def hardlinks(self):
+		self._options.append('-H')
+		return self
+
 	def exclude(self, files):
 		for file in files:
-			self._options += ['--exclude', file]
+			self._options.append('--exclude=%s' % file)
 		return self
 
 	def version(self):

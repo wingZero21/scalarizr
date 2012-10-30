@@ -1045,6 +1045,7 @@ class BuiltinPlatforms:
 	NIMBULA		= 'nimbula'
 	CLOUDSTACK	= 'cloudstack'
 	IDCF		= 'idcf'
+	GCE		= 'gce'
 
 	@staticmethod
 	def values():

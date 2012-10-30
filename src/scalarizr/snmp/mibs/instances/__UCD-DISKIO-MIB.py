@@ -69,7 +69,6 @@ diskIOWrites    = MibTableColumn((1, 3, 6, 1, 4, 1, 2021, 13, 15, 1, 1, 6), Coun
 #diskIONWrittenX = MibTableColumn((1, 3, 6, 1, 4, 1, 2021, 13, 15, 1, 1, 13), Counter64()).setMaxAccess("readonly")
 
 def values():
-	logger.debug('Calling __UCD-DISKIO-MIB::values()')	
 	devicelist = dict(diskIOTable = NewdiskIOTable,
 					  diskIOIndex = diskIOIndex, 
 					  diskIOEntry = diskIOEntry,
