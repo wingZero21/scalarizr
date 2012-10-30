@@ -380,9 +380,9 @@ class ApacheHandler(ServiceCtlHandler):
 		for fname in os.listdir(vhosts_path):
 			if '000-default' == fname:
 				continue
-			
+
+			old_vhost_path = os.path.join(vhosts_path, fname)
 			for vhost in received_vhosts:
-				old_vhost_path = os.path.join(vhosts_path, fname)
 				new_vhost_path = self.get_vhost_filename(vhost.hostname, vhost.https)
 				if new_vhost_path == old_vhost_path:
 					break
