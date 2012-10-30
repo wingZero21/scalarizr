@@ -38,7 +38,7 @@ CNF_NAME = BEHAVIOUR + '.ini'
 APACHE_CONF_PATH = '/etc/apache2/apache2.conf' if disttool.is_debian_based() else '/etc/httpd/conf/httpd.conf'
 VHOSTS_PATH = 'private.d/vhosts'
 VHOST_EXTENSION = '.vhost.conf'
-LOGROTATE_CONF_PATH = 'logrotate.d/scalarizr_app'
+LOGROTATE_CONF_PATH = '/etc/logrotate.d/scalarizr_app'
 LOGROTATE_CONF_DEB_RAW = """/var/log/http-*.log {
          weekly
          missingok
@@ -488,8 +488,7 @@ class ApacheHandler(ServiceCtlHandler):
 		end = VHOST_EXTENSION if not ssl else '-ssl' + VHOST_EXTENSION
 		return os.path.join(bus.etc_path, VHOSTS_PATH, hostname + end)
 
-	def _create_logrotate_conf(self, logrotate_conf_relative_path):
-		logrotate_conf_path = os.path.join(bus.etc_path, logrotate_conf_relative_path)
+	def _create_logrotate_conf(self, logrotate_conf_path):
 		if not os.path.exists(logrotate_conf_path):
 			if disttool.is_debian_based():
 				write_file(logrotate_conf_path, LOGROTATE_CONF_DEB_RAW, logger=self._logger)
