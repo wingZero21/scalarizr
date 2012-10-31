@@ -148,7 +148,11 @@ class Volume(Base):
 
 
 	def clone(self):
-		return storage2.volume(self.initial_config)
+		config = self.initial_config.copy()
+		config.pop('id', None)		
+		config.pop('fscreated', None)
+		self._clone(config)
+		return storage2.volume(config)
 
 
 	def _check(self, fstype=True, device=True, **kwds):
@@ -186,6 +190,9 @@ class Volume(Base):
 	def _destroy(self, force, **kwds):
 		pass
 
+	def _clone(self, config):
+		pass
+	
 
 storage2.volume_types['base'] = Volume	
 	

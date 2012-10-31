@@ -924,7 +924,7 @@ class MysqlHandler(DBMSRHandler):
 		bus.fire('before_mysql_change_master', host=host)			
 
 		
-		if __mysql__['volume'].type in ('eph', 'lvm'):
+		if __mysql__['volume']['type'] in ('eph', 'lvm'):
 			if 'restore' in mysql2:
 				restore = backup.restore(**mysql2['restore'])
 			else:

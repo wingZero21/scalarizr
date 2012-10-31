@@ -115,6 +115,10 @@ class LoopVolume(base.Volume):
 			os.remove(self.file)
 
 
+	def _clone(self, config):
+		config.pop('file', None)
+		
+		
 	def _uniq(self):
 		return repr(time.time())
 

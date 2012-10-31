@@ -199,6 +199,9 @@ class LvmVolume(base.Volume):
 					lvm2.vgremove(self.vg)
 					for device in pv_disks:
 						lvm2.pvremove(device)
+						
+	def _clone(self, config):
+		config['pvs'] = [storage2.volume(pv).clone() for pv in config['pvs']]
 
 			
 class LvmNativeSnapshot(base.Snapshot):

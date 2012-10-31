@@ -151,7 +151,12 @@ class EbsVolume(base.Volume, EbsMixin):
 			'no_id_or_conn': 'Volume has no ID and EC2 connection '
 							'required for volume construction is not available'
 		})	
+
 		
+	def _clone(self, config):
+		config.pop('device', None)
+		config.pop('avail_zone', None)
+
 		
 	def _ensure(self):
 		'''
