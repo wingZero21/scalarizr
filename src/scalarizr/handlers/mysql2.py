@@ -753,6 +753,7 @@ class MysqlHandler(DBMSRHandler):
 		if int(__mysql__['replication_master']):
 			LOG.warning('Cannot promote to master. Already master')
 			return
+		LOG.info('Starting Slave -> Master promotion')
 			
 		bus.fire('before_slave_promote_to_master')
 
@@ -887,7 +888,8 @@ class MysqlHandler(DBMSRHandler):
 						'volume': dict(__mysql__['volume'])
 					}
 				
-				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)							
+				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
+				LOG.info('Promotion completed')							
 				
 			bus.fire('slave_promote_to_master')
 			
