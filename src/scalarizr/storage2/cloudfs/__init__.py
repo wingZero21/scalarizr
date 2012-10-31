@@ -13,12 +13,17 @@ import ConfigParser
 import json
 import time
 import hashlib
+import uuid
 from io import BytesIO
 from copy import copy
 if sys.version_info[0:2] >= (2, 7):
 	from collections import OrderedDict
 else:
 	from scalarizr.externals.collections import OrderedDict
+try:
+	import json
+except ImportError:
+	import simplejson as json
 
 from scalarizr import storage2
 from scalarizr.libs import bases
@@ -275,11 +280,6 @@ class FileTransfer(BaseTransfer):
 
 
 class LargeTransfer(bases.Task):
-	UPLOAD = 'upload'
-	DOWNLOAD = 'download'
-
-	pigz_bin = '/usr/bin/pigz'
-	gzip_bin = '/bin/gzip'
 	'''
 	SQL dump. File-per-database.
 	---------------------------
@@ -308,6 +308,23 @@ class LargeTransfer(bases.Task):
 	${database_2}.gz.part00 = md5sum
 
 
+	New manifest.json
+	{
+		version: 2.0,
+		description,
+		tags,
+		created_at,
+		files: [
+			{
+				name,
+				tar: true,
+				gzip: true,
+				chunks: {basename001: md5sum}
+			}
+		]
+	}
+
+
 	Directory backup
 	----------------
 
@@ -329,13 +346,25 @@ class LargeTransfer(bases.Task):
 	1. Download manifest 
 	2. <chunk downloader> | gunzip | tar -x -C /mnt/dbbackup
 	'''
+
+	# TODO: upload-download the same path shouldn't change anything
+	# (tar -C src . instead of tar src) ?
+
+	# NOTE: use directory dst for downloading.
+	UPLOAD = 'upload'
+	DOWNLOAD = 'download'
+
+	pigz_bin = '/usr/bin/pigz'
+	gzip_bin = '/bin/gzip'
+
 	def __init__(self, src, dst, direction,
 				transfer_id=None,
 				tar_it=True,
 				gzip_it=True, 
 				chunk_size=100, 
 				try_pigz=True,
-				manifest='manifest.ini',
+				manifest='manifest.json',
+				description='',
 				tags=None,
 				**kwds):
 		'''
@@ -369,7 +398,7 @@ class LargeTransfer(bases.Task):
 
 		super(LargeTransfer, self).__init__()
 
-		self._stop = False
+		self.description = description
 		self.tags = tags
 		self.multipart = kwds.get("multipart")
 		self.direction = direction
@@ -379,7 +408,10 @@ class LargeTransfer(bases.Task):
 		self.gzip_it = gzip_it
 		self.chunk_size = chunk_size
 		self.try_pigz = try_pigz
-		self.transfer_id = transfer_id
+		if transfer_id is None:
+			self.transfer_id = uuid.uuid4().hex
+		else:
+			self.transfer_id = transfer_id
 		self.manifest = manifest
 		self._transfer = FileTransfer(self._src_generator, 
 								self._dst_generator, **kwds)
@@ -391,10 +423,10 @@ class LargeTransfer(bases.Task):
 		self._restoration_queue = Queue.Queue()
 		self._dl_lock = threading.Lock()
 
-		events = self._transfer.listeners.keys()  #? _listeners
+		events = self._transfer.list_events()
 		self.define_events(*events)
-#		for ev in events:
-#			self._transfer.on(ev=self._proxy_event(ev))
+		for ev in events:
+			self._transfer.on(ev, self._proxy_event(ev))
 		
 
 
@@ -405,22 +437,38 @@ class LargeTransfer(bases.Task):
 		if self.direction == self.UPLOAD:
 			# Tranzit volume size is chunk for each worker
 			# and Ext filesystem overhead
+
+			#? if not multipart
+			manifest = Manifest()
+			manifest["description"] = self.description
+			if self.tags:
+				manifest["tags"] = self.tags
+
 			for src in self.src:
+				fileinfo = {
+					"name": '',
+					"tar": False,
+					"gzip": False,
+					"chunks": [],
+				}
 				prefix = self._tranzit_vol.mpoint
 				stream = None
 				cmd = tar = gzip = None
 
 				if hasattr(src, 'read'):
+					# leaving fileinfo["name"] == ''
 					stream = src
 					if hasattr(stream, 'name'):
 						name = stream.name
 					else:
 						name = 'stream-%s' % hash(stream)
 					prefix = os.path.join(prefix, name) + '.'
-
 				elif os.path.isdir(src):
-					prefix = os.path.join(prefix, os.path.basename(src.rstrip('/'))) + '.tar.'
-					#prefix = os.path.join(prefix, 'part.')
+					name = os.path.basename(src.rstrip('/'))
+					fileinfo["name"] = name
+					fileinfo["tar"] = True
+					prefix = os.path.join(prefix, name) + '.tar.'
+
 					tar = cmd = subprocess.Popen(
 									#['/bin/tar', 'cp', '-C', src, '.'],
 									['/bin/tar', 'cp', src],
@@ -429,94 +477,98 @@ class LargeTransfer(bases.Task):
 									close_fds=True)
 					stream = tar.stdout
 				elif os.path.isfile(src):
-					prefix = os.path.join(prefix,
-									os.path.basename(src)) + '.'
+					name = os.path.basename(src)
+					fileinfo["name"] = name
+					prefix = os.path.join(prefix, name) + '.'
+
 					stream = open(src)
 				else:
 					raise ValueError('Unsupported src: %s' % src)
 
 				if self.gzip_it:
-						prefix += 'gz.'
-						gzip = cmd = subprocess.Popen(
-									[self._gzip_bin(), '-5'],
-									stdin=stream,
-									stdout=subprocess.PIPE,
-									stderr=subprocess.PIPE,
-									close_fds=True)
-						if tar:
-							# Allow tar to receive SIGPIPE if gzip exits.
-							tar.stdout.close()
-						stream = gzip.stdout
+					fileinfo["gzip"] = True
+					prefix += 'gz.'
+					gzip = cmd = subprocess.Popen(
+								[self._gzip_bin(), '-5'],
+								stdin=stream,
+								stdout=subprocess.PIPE,
+								stderr=subprocess.PIPE,
+								close_fds=True)
+					if tar:
+						# Allow tar to receive SIGPIPE if gzip exits.
+						tar.stdout.close()
+					stream = gzip.stdout
 
-				#dst = self.dst.next()
-				for filename in self._split(stream, prefix):
-					yield filename
+				for filename, md5sum in self._split(stream, prefix):
+					fileinfo["chunks"].append((os.path.basename(filename), md5sum))
+					yield filename  # TODO: remove the uploaded
 				if cmd:
 					cmd.communicate()
 
-			# upload manifest
-			if not self.multipart:
-				manifest = Manifest()
-				if False:  #?
-					manifest["snapshot"]["description"] = ''
-				manifest["snapshot"]["pack_method"] = self._gzip_bin()[-4:] \
-					if self.gzip_it else "none"
-				if self.tags:
-					manifest["snapshot"]["tags"] = self.tags
-				manifest["chunks"] = self._given_chunks
+				manifest["files"].append(fileinfo)
 
-				m_file = os.path.join(self._tranzit_vol.mpoint, self.manifest)
-				manifest.write(m_file)
-				yield m_file
+			# send manifest to file transfer
+			manifest_f = os.path.join(self._tranzit_vol.mpoint, self.manifest)
+			manifest.write(manifest_f)
+			yield manifest_f
+
 		else:
-			src = self.src.next()
-			src_pr = urlparse.urlparse(src)
-			drv = cloudfs(src_pr.scheme)
-			filename = drv.get(src, self._tranzit_vol.mpoint)
-			manifest = Manifest(filename)
-			self._chunks = OrderedDict()
-			chunk_group = -1
-			for chunk, checksum in manifest["chunks"].iteritems():
-				if chunk.endswith("000"):
-					chunk_group += 1
-				self._chunks[chunk] = {
-					"checksum": checksum,
-					"ready": False,
-					"group": chunk_group,
-				}
-			self._unpack_bin = None
-			if manifest["snapshot"]["pack_method"] in ("gzip", "pigz"):
-				self._unpack_bin = self._gzip_bin()
-			os.remove(filename)
+			def transfer_kill(*args, **kwargs):
+				self._transfer.kill()
+			self._transfer.on(transfer_error=transfer_kill())
 
-			prefix = os.path.dirname(src)
-			for chunk in self._chunks:
-				yield prefix + '/' + chunk
+			# The first yielded object will be the manifest, so
+			# catch_manifest is a listener that's supposed to trigger only
+			# once and unsubscribe itself.
+			manifest_ready = threading.Event()
+			def catch_manifest(src, dst, retry, chunk_num):
+				manifest_ready.set()
+				self._transfer.un('transfer_complete', catch_manifest)
+			self._transfer.on(transfer_complete=catch_manifest)
+
+			manifest_path = self.src.next()
+			yield manifest_path
+
+			manifest_ready.wait()
+			# we should have the manifest on the tmpfs by now
+			manifest_local = os.path.join(self._tranzit_vol.mpoint,
+				os.path.basename(manifest_path))
+			manifest = Manifest(manifest_local)
+			remote_path = os.path.dirname(manifest_path)
+			os.remove(manifest_local)
 
 			"""
-				if manifest.type == 'files':
-					# Files 
-					for name in manifest:
-						for chunk in manifest.chunks(name):
-							pass
-				else:
-					# Directory transfer
-					name = iter(manifest).next()
-					for chunk in manifest.chunks(name):
-						# Restore
-						pass
+			{
+			   	version: 2.0,
+			   	description,
+			   	tags,
+				created_at,
+				files: [
+					{
+						name,
+						tar: true,
+						gzip: true,
+						chunks: [(basename001, md5sum)]
+					}
+				]
+			}
 			"""
 
+			for file in manifest["files"]:
+				for chunk, md5sum in file["chunks"]:
+					yield os.path.join(remote_path, chunk)
+
+			# TODO: stop yielding when tmpfs is full
 
 
 	def _dst_generator(self):
 		if self.direction == self.UPLOAD:
 			for dst in self.dst:
-				yield dst
+				yield os.path.join(dst, self.transfer_id)
 			# last yield for manifest
-			# TODO: this only works if dst is a dir
+			# NOTE: this only works if dst is a dir
 			else:
-				yield dst
+				yield os.path.join(dst, self.transfer_id)
 		else:
 			while True:
 				yield self._tranzit_vol.mpoint
@@ -526,13 +578,12 @@ class LargeTransfer(bases.Task):
 		buf_size = 4096
 		chunk_size = self.chunk_size * 1024 * 1024
 		read_bytes = 0
-		self._chunk_num = -1
 		fp = None
 
-		def next_chunk():
-			self._chunk_num += 1
-			return open(prefix + '%03d' % self._chunk_num, 'w'), hashlib.md5()
-		fp, md5sum = next_chunk()
+		def next_chunk(chunk_num=-1):
+			chunk_num += 1
+			return open(prefix + '%03d' % chunk_num, 'w'), hashlib.md5(), chunk_num
+		fp, md5sum, chunk_num = next_chunk()
 
 		while True:
 			size = min(buf_size, chunk_size - read_bytes)
@@ -546,9 +597,8 @@ class LargeTransfer(bases.Task):
 			md5sum.update(bytes)
 			if read_bytes == chunk_size:
 				fp.close()
-				self._given_chunks[os.path.basename(fp.name)] = md5sum.hexdigest()
-				yield fp.name
-				fp, md5sum = next_chunk()
+				yield fp.name, md5sum.hexdigest()
+				fp, md5sum, chunk_num = next_chunk(chunk_num)
 
 
 	def _gzip_bin(self):
@@ -557,7 +607,6 @@ class LargeTransfer(bases.Task):
 		return self.gzip_bin
 
 
-	#? infinite fire loop?
 	def _proxy_event(self, event):
 		def proxy(*args, **kwds):
 			self.fire(event, *args, **kwds)
@@ -565,9 +614,16 @@ class LargeTransfer(bases.Task):
 
 
 	def _dl_restorer(self):
+		# TODO: new restorer
 		# local dir or file
 		# NOTE: file is expected only when downloading a single file!
 		dst = self.dst.next()
+
+		def unzip(input):
+			gzip = subprocess.Popen([self._unpack_bin, '-d'],
+				stdin=input, stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE, close_fds=True)
+			return gzip
 
 		while True:
 			group = self._restoration_queue.get()
@@ -586,24 +642,31 @@ class LargeTransfer(bases.Task):
 						stream.write(fd.read())
 			stream.seek(0)
 
-			if self._unpack_bin is not None:
-				gzip = subprocess.Popen([self._unpack_bin, '-d'],
-					stdin=stream, stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE, close_fds=True)
-				stream = BytesIO(gzip.communicate()[0])
-				name = name[:-3]  # strip .gz
-
-			if name.endswith(".tar"):  # tar archive
+			if name.endswith(".tar") or name.endswith(".tar.gz"):  # if tar
+				# unzip if zipped
+				if self._unpack_bin is not None:
+					stream = unzip(stream).stdout
+				# untar
 				tar = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
-					stdin = stream, close_fds=True)
+					stdin=stream, close_fds=True)
+				stream.close()
 				tar.communicate()
-			else:  # file
+			else:
+				gzip = None
+				# unzip if zipped
+				if self._unpack_bin is not None:
+					stream = unzip(stream).stdout
+					name = name[:-3]  # strip .gz
+
 				if os.path.isdir(dst):
 					path = os.path.join(dst, name)
 				else:
 					path = dst
 				with open(path, "w") as fd:
 					fd.write(stream.read())
+
+				if gzip:
+					gzip.communicate()
 
 
 	def _dl_transfer_complete(self, *args, **kwargs):
@@ -622,25 +685,12 @@ class LargeTransfer(bases.Task):
 				self._restoration_queue.put(group)
 
 
-	def _dl_transfer_error(self, *args, **kwargs):
-		self._transfer.kill()
-		
-
 	def _run(self):
-		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.1)
+		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.1)  # TODO: space for manifest
 		self._tranzit_vol.ensure(mkfs=True)
 		try:
-			if self.direction == self.DOWNLOAD:
-				self._transfer.on(transfer_error=self._dl_transfer_error)
-				self._transfer.on(transfer_complete=self._dl_transfer_complete)
-				# launch _restorer
-
 			res = self._transfer.run()
-
-			if self.direction == self.DOWNLOAD:
-				self._restoration_queue.put(None)
-				# join _restorer
-
+			# TODO: return manifest path when uploading
 		finally:
 			self._tranzit_vol.destroy()
 			coreutils.remove(self._tranzit_vol.mpoint)
@@ -648,21 +698,113 @@ class LargeTransfer(bases.Task):
 
 class Manifest(object):
 	"""
-	Will perform JSON serialization on every dict-value when writing to file.
-	Only [snapshot][tags] will be converted back to dict when parsing though.
+	manifest.json
+	-------------
 
-	LargeTransfer-specific: default sections value
+	{
+		version: 2.0,
+		description,
+		tags,
+		created_at,
+		files: [
+			{
+				name,
+				tar: true,
+				gzip: true,
+				chunks: [(basename001, md5sum)]
+			}
+		]
+	}
+
+
+	Supports reading of old ini-manifests and represents their data in the
+	new-manifest style.
+
+	Make sure to write to a file with '.json' extension.
 	"""
 
-	def __init__(self, readfile=None, sections=("snapshot", "chunks")):
-		self._predefined_sections = copy(sections)
+	def __init__(self, filename=None):
 		self.reset()
-		if readfile:
-			self.read(readfile)
+		if filename:
+			self.read(filename)
 
 	def reset(self):
-		self.data = OrderedDict([(section, OrderedDict())
-			for section in self._predefined_sections])
+		self.data = {
+			"version": 2.0,
+			"description": '',
+			"tags": {},
+			"files": [],
+		}
+
+	def read(self, filename):
+		if filename.endswith(".json"):
+			self.data = self._read_json(filename)
+		elif filename.endswith(".ini"):
+			self.data = self._read_ini(filename)
+		else:
+			raise TypeError(".json or .ini manifests only")
+		return self
+
+	def write(self, filename):
+		self.data["created_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+		with open(filename, 'w') as fd:
+			fd.write(json.dumps(self.data) + '\n')
+
+	def _read_json(self, filename):
+		with open(filename) as fd:
+			return json.load(fd)
+
+	def _read_ini(self, filename):
+		"""
+		Backward compatibility with the old ini manifests.
+
+
+		manifest.ini
+		------------
+
+		[snapshot]
+		description = description here
+		created_at = datetime
+		pack_method = "pigz"
+
+		[chunks]
+		${database_1}.gz.part00 = md5sum
+		${database_1}.gz.part01 = md5sum
+
+
+		Chunks are parts of a single directory packed with tar and gz. They
+		were stored unordered.
+		"""
+		parser = ConfigParser.ConfigParser()
+		parser.read(filename)
+
+		# get name using the first chunk name
+		chunkname = parser.options("chunks")[0]
+		chunkname = chunkname.rsplit('.', 1)[0]  # strip part number
+		if chunkname.endswith(".tar.gz"):  # this should always be true
+			name = chunkname[:-7]
+		else:
+			name = chunkname  # just in case
+		tar = True
+		gzip = True
+
+		chunks = parser.items("chunks")
+		chunks.sort()
+
+		return {
+			"version": 1.0,
+			"description": parser.get("snapshot", "description"),
+			"tags": {},
+			"created_at": parser.get("snapshot", "created_at"),
+			"files": [
+				{
+					"name": name,
+					"tar": tar,
+					"gzip": gzip,
+					"chunks": chunks,
+				}
+			]
+		}
 
 	def __getitem__(self, item):
 		return self.data.__getitem__(item)
@@ -678,40 +820,6 @@ class Manifest(object):
 
 	def __contains__(self, value):
 		return self.data.__contains__(value)
-
-	def read(self, filename):
-		parser = ConfigParser.ConfigParser()
-		parser.read(filename)
-
-		for section in parser.sections():
-			self.data[section] = OrderedDict(parser.items(section))
-
-		try:
-			self.data["snapshot"]["tags"] = json.loads(
-				self.data["snapshot"]["tags"])
-		except KeyError:
-			pass
-
-	def write(self, filename):  #? accept file objects
-		self.data["snapshot"]["created_at"] = str(int(time.time()))
-
-		parser = ConfigParser.ConfigParser()
-
-		for section in self.data:
-			parser.add_section(section)
-			for option, value in self.data[section].iteritems():
-				if not isinstance(value, basestring):
-					value = self._format_value(value)
-				parser.set(section, option, value)
-
-		with open(filename, 'w') as fd:
-			parser.write(fd)
-
-	def _format_value(self, value):
-		if isinstance(value, dict):
-			return json.dumps(value)
-		else:
-			return str(value)
 
 
 """
@@ -759,6 +867,21 @@ class CloudFileSystem(object):
 	features = {
 		'multipart': False
 	}
+
+	def parseurl(self, url):
+		"""
+		{
+			'bucket',
+			'path'
+
+		}
+		{
+			'container',
+			'object'
+
+		}
+		"""
+		pass
 
 	def ls(self, path):
 		raise NotImplementedError()
