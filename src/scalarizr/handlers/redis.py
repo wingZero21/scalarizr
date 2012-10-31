@@ -123,7 +123,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
 	def __init__(self):
-		self.preset_provider = redis.RedisPresetProvider()
 		handlers.FarmSecurityMixin.__init__(self, [redis.DEFAULT_PORT])
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
 		bus.on("init", self.on_init)
