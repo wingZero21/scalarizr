@@ -756,7 +756,7 @@ class MysqlHandler(DBMSRHandler):
 			
 		bus.fire('before_slave_promote_to_master')
 
-		__mysql__['compat_prior_backup_restore'] = 'volume_config' in mysql2
+		__mysql__['compat_prior_backup_restore'] = mysql2.get('volume_config') or mysql2.get('snapshot_config')
 		new_vol	= None
 		if mysql2.get('volume_config'):
 			new_vol = storage2.volume(mysql2.get('volume_config'))
@@ -924,7 +924,7 @@ class MysqlHandler(DBMSRHandler):
 		bus.fire('before_mysql_change_master', host=host)			
 
 		
-		if __mysql__['volume']['type'] in ('eph', 'lvm'):
+		if __mysql__['volume'].type in ('eph', 'lvm'):
 			if 'restore' in mysql2:
 				restore = backup.restore(**mysql2['restore'])
 			else:

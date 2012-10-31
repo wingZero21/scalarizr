@@ -97,7 +97,7 @@ def remove(path):
 		shutil.rmtree(path)
 
 
-def delete_all_from_dir(path):
+def clean_dir(path):
 	if not os.path.isdir(path):
 		raise Exception('No such directory: %s' % path)
 
