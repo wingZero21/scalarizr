@@ -331,7 +331,7 @@ class EphSnapshotProviderLite(object):
 
 				compress.wait()
 				if compress.returncode:
-					raise StorageError('%s process terminated with exit code %s. <err>: %s' % (compress.returncode, compress.stderr.read()))				
+					raise StorageError('Compress process terminated with exit code %s. <err>: %s' % (compress.returncode, compress.stderr.read()))				
 					
 				split.join()
 
