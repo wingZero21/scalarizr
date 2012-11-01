@@ -15,6 +15,7 @@ else:
 import shlex
 import os
 import re
+from copy import copy
 
 from scalarizr import linux
 from scalarizr.linux import redhat
@@ -246,18 +247,41 @@ def list(chain, table=None):
 def ensure(chain_rules):
 	# {chain: [rule, ...]}
 	# Will simply insert missing rules at the beginning.
-	# TODO: smart rule comparison (e.g. --proto == --protocol,
-	# 	--syn == --tcp-flags FIN,SYN,RST,ACK SYN,
-	# 	192.168.0.1 == 192.168.0.1/32,
-	# 	--protocol tcp == --protocol tcp --match tcp)
-	#? accept ints in rules?
+	# NOTE: rule comparsion is far from ideal, check _to_inner method
 	# note: existing rules don't have table attribute
 
 	for chain, rules in chain_rules.iteritems():
 		existing = list(chain)
 		for rule in reversed(rules):
-			if rule not in existing:
+			if _to_inner(rule) not in existing:
 				chains[chain].insert(None, rule)
+
+
+def _to_inner(rule):
+	"""
+	For smart rule comparsion. It does:
+
+	1. "source": "192.168.0.1" -> "source": "192.168.0.1/32"
+	2. "dport": 22 -> "dport": "22"
+
+	TODO:
+
+	"src": $value -> "source": $value
+	"proto": $value -> "protocol": $value
+	"syn": True -> "tcp-flags": "FIN,SYN,RST,ACK SYN"
+	"protocol": "tcp" -> "protocol": "tcp", "match": "tcp" for all protocols
+	format "destination" same way as "source"
+	"""
+	inner = copy(rule)
+
+	# 1
+	if inner.has_key("source") and inner["source"][-3] != '/':
+		inner["source"] += "/32"
+	# 2
+	if inner.has_key("dport") and isinstance(inner["dport"], int):
+		inner["dport"] = str(inner["dport"])
+
+	return inner
 
 
 def enabled():
