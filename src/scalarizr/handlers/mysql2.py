@@ -925,6 +925,7 @@ class MysqlHandler(DBMSRHandler):
 		LOG.info("Switching replication to a new MySQL master %s", host)
 		bus.fire('before_mysql_change_master', host=host)			
 
+		LOG.debug("__mysql__['volume']: %s", __mysql__['volume'])
 		
 		if __mysql__['volume'].type in ('eph', 'lvm'):
 			if 'restore' in mysql2:
