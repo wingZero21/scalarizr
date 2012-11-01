@@ -641,8 +641,7 @@ class FarmSecurityMixin(object):
 		# Append new server to allowed list
 		if not self._iptables.enabled():
 			return
-		if message.local_ip == self._platform.get_private_ip():
-			return
+
 		rules = []
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
@@ -716,6 +715,8 @@ class FarmSecurityMixin(object):
 		
 		rules = []
 		for port in self._ports:
+			# TODO: this will be duplicated, because current host is in the
+			# hosts list too
 			rules += self.__accept_host(self._platform.get_private_ip(), 
 									self._platform.get_public_ip(), port)
 			for local_ip, public_ip in hosts:

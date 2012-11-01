@@ -256,7 +256,7 @@ def ensure(chain_rules):
 			rule_repr = _to_inner(rule)
 			if rule_repr not in existing:
 				chains[chain].insert(None, rule)
-				existing.insert(0, rule_repr)
+				existing.insert(0, rule_repr)  #? existing = list(chain)
 
 
 def _to_inner(rule):
