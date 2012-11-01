@@ -160,13 +160,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 		optparser = bus.optparser
 		
-		if self._flag_exists(self.FLAG_REBOOT):
-			self._logger.info("Scalarizr resumed after reboot")
-			self._clear_flag(self.FLAG_REBOOT)			
+		if self._was_hard_reboot():
+			self._logger.info("Scalarizr resumed after hard reboot")
 			self._start_after_reboot()
 
-		elif self._was_hard_reboot():
-			self._logger.info("Scalarizr resumed after hard reboot")
+		elif self._flag_exists(self.FLAG_REBOOT):
+			self._logger.info("Scalarizr resumed after reboot")
+			self._clear_flag(self.FLAG_REBOOT)			
 			self._start_after_reboot()
 			
 		elif self._flag_exists(self.FLAG_HALT):
@@ -199,7 +199,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		second_reboot_pos = out.find("reboot", first_reboot_pos)
 		shutdown_pos = out.find("shutdown", first_reboot_pos)
 
-		if second_reboot_pos < shutdown_pos:
+		if abs(second_reboot_pos) < abs(shutdown_pos):
 			#if date of last reboot is equal to date saved in flag contents, 
 			#then scalarizr process was restarted, system wasn't hard rebooted
 			last_reboot_info = out[first_reboot_pos : out.find("\n", first_reboot_pos)].strip()
