@@ -193,7 +193,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if return_code != 0:
 			self._logger.error("Can't determine if it was hard reboot: " + err)
 			return False
-
+		self._logger.debug("last out: \n"+out)
 		#if in `last -x' output there are no shutdown record between 2 reboot records, hard reboot was occurred 
 		first_reboot_pos = out.find("reboot") + len("reboot")
 		second_reboot_pos = out.find("reboot", first_reboot_pos)
