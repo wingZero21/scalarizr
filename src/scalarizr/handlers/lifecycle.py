@@ -45,7 +45,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	
 	FLAG_REBOOT = "reboot"
 	FLAG_HALT = "halt"
-	
+	FLAG_HARD_REBOOT = "hard_reboot"
+
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		
@@ -150,6 +151,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
 			self._insert_iptables_rules()
 
+		# ensure that /var/log/wtmp file is created 
+		system2(("touch", "/var/log/wtmp"))
+
 
 	def on_start(self):
 		iptables.save()
@@ -159,6 +163,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if self._flag_exists(self.FLAG_REBOOT):
 			self._logger.info("Scalarizr resumed after reboot")
 			self._clear_flag(self.FLAG_REBOOT)			
+			self._start_after_reboot()
+
+		elif self._was_hard_reboot():
+			self._logger.info("Scalarizr resumed after hard reboot")
 			self._start_after_reboot()
 			
 		elif self._flag_exists(self.FLAG_HALT):
@@ -179,6 +187,34 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			
 		else:
 			self._logger.info("Normal start")
+
+	def _was_hard_reboot(self):
+		out, err, return_code = system2(("last", "-x"))
+		if return_code != 0:
+			self._logger.error("Can't determine if it was hard reboot: " + err)
+			return False
+
+		#if in `last -x' output there are no shutdown record between 2 reboot records, hard reboot was occurred
+		first_reboot_pos = out.find("reboot") + len("reboot")
+		second_reboot_pos = out.find("reboot", first_reboot_pos)
+		shutdown_pos = out.find("shutdown", first_reboot_pos)
+
+		if second_reboot_pos < shutdown_pos:
+			#if date of last reboot is equal to date saved in flag contents, 
+			#then scalarizr process was restarted, system wasn't hard rebooted
+			#TODO: test dates (because there are no year in date string)
+			last_reboot_info = out[first_reboot_pos : out.find("\n", first_reboot_pos)].strip()
+			saved_reboot_info = self._get_flag_contents(FLAG_HARD_REBOOT)
+
+			if last_reboot_info != saved_reboot_info:
+				self._set_flag(self.FLAG_HARD_REBOOT, last_reboot_info)
+				return True
+			else:
+				return False
+
+		else:
+			self._clear_flag(self.FLAG_HARD_REBOOT)
+			return False	
 
 
 	def _start_after_reboot(self):
@@ -385,19 +421,34 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	def _get_flag_filename(self, name):
 		return self._cnf.private_path('.%s' % name)
 	
-	def _set_flag(self, name):
+	def _set_flag(self, name, contents=None):
 		file = self._get_flag_filename(name)
 		try:
 			self._logger.debug("Touch file '%s'", file)
-			open(file, "w+").close()
+			f = open(file, "w+")
+			if contents:
+				f.write(contents)
+			f.close()
 		except IOError, e:
-			self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))		
+			self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))
 	
 	def _flag_exists(self, name):
 		return os.path.exists(self._get_flag_filename(name))
 	
 	def _clear_flag(self, name):
 		os.remove(self._get_flag_filename(name))	
+
+	def _get_flag_contents(self, name):
+		file = self._get_flag_filename(name)
+		try:
+			self._logger.debug("Reading file '%s'", file)
+			f = open(file, "r+")
+			contents = f.readlines()
+			f.close()
+			return contents
+
+		except IOError, e:
+			self._logger.error("Cannot read file '%s'. IOError: %s", file, str(e))
 	
 
 class IntMessagingService(object):
