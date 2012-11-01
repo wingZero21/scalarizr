@@ -97,7 +97,9 @@ class P2pMessageProducer(messaging.MessageProducer):
 		try:
 			# Serialize
 			xml = message.toxml()
-			self._logger.debug("Delivering message '%s' %s", message.name, xml)
+			if message.name not in ('Log', 'OperationDefinition', 
+								'OperationProgress', 'OperationResult'):
+				self._logger.debug("Delivering message '%s' %s", message.name, xml)
 			
 			headers = {}
 			data = xml
@@ -141,7 +143,10 @@ class P2pMessageProducer(messaging.MessageProducer):
 
 
 	def _message_delivered(self, queue, message, callback=None):
-		self._logger.debug("Message '%s' delivered (message_id: %s)", message.name, message.id)
+		if message.name not in ('Log', 'OperationDefinition', 
+							'OperationProgress', 'OperationResult'):
+			self._logger.debug("Message '%s' delivered (message_id: %s)", 
+							message.name, message.id)
 		self._store.mark_as_delivered(message.id)
 		self.fire("send", queue, message)
 		if callback:
