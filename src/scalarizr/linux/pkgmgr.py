@@ -237,7 +237,8 @@ def epel_repository():
 	'''
 	pass
 
-def apt_source(sources, gpg_keyserver=None, gpg_keyid=None):
+
+def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 	'''
 	@param sources: list of apt sources.list entries.
 	Example:
