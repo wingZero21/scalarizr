@@ -253,8 +253,10 @@ def ensure(chain_rules):
 	for chain, rules in chain_rules.iteritems():
 		existing = list(chain)
 		for rule in reversed(rules):
-			if _to_inner(rule) not in existing:
+			rule_repr = _to_inner(rule)
+			if rule_repr not in existing:
 				chains[chain].insert(None, rule)
+				existing.insert(0, rule_repr)
 
 
 def _to_inner(rule):
