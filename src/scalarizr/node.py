@@ -111,7 +111,10 @@ class Json(Store):
 
 	def __setitem__(self, key, value):
 		self._obj = value
-		vv = dict(value)
+		if hasattr(value, 'config'):
+			vv = dict(value)
+		else:
+			vv = value
 		dirname = os.path.dirname(self.filename)
 		if not os.path.exists(dirname):
 			os.makedirs(dirname)
