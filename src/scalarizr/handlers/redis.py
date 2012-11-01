@@ -123,7 +123,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
 	def __init__(self):
-		handlers.FarmSecurityMixin.__init__(self, [redis.DEFAULT_PORT])
+		handlers.FarmSecurityMixin.__init__(self, 
+					range(redis.DEFAULT_PORT, redis.DEFAULT_PORT+16))
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
 		bus.on("init", self.on_init)
 		bus.define_events(
@@ -240,7 +241,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 						
 					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
 					self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self.get_main_password(),])
-					self._insert_iptables_rules()
 
 
 	def on_before_host_up(self, message):
@@ -267,7 +267,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 	def on_before_reboot_finish(self, *args, **kwargs):
 		if self.default_service.running:
 			self.default_service.stop('Treminating default redis instance')
-		self._insert_iptables_rules()		
 
 
 	def on_BeforeHostTerminate(self, message):
@@ -696,20 +695,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			ret['snapshot_config'] = snap.config()
 		return ret
 
-	def _insert_iptables_rules(self):
-		if iptables.enabled():
-			iptables.ensure({"INPUT": [
-				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp",
-				 "dport": str(port)} for port in self.redis_instances.ports
-			]})
-
-		"""
-		iptables = IpTables()
-		if iptables.enabled():
-			for port in self.redis_instances.ports:
-				iptables.insert_rule(None, RuleSpec(dport=port, jump='ACCEPT', protocol=P_TCP))
-		"""
-	
 
 
 class RedisCnfController(CnfController):
