@@ -123,8 +123,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
 	def __init__(self):
-		handlers.FarmSecurityMixin.__init__(self, 
-					range(redis.DEFAULT_PORT, redis.DEFAULT_PORT+16))
+		handlers.FarmSecurityMixin.__init__(self, ["%s:%s" %
+			 (redis.DEFAULT_PORT, redis.DEFAULT_PORT+16)])
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
 		bus.on("init", self.on_init)
 		bus.define_events(
