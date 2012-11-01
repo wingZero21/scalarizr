@@ -367,6 +367,7 @@ class MysqlHandler(DBMSRHandler):
 			if not vol.tags:
 				vol.tags = self.resource_tags()
 			vol.ensure(mount=True)
+			__mysql__['volume'] = vol
 			if int(__mysql__['replication_master']):
 				LOG.debug("Checking Scalr's %s system users presence", 
 						__mysql__['behavior'])
@@ -479,7 +480,7 @@ class MysqlHandler(DBMSRHandler):
 		else:
 			self._init_slave(message)
 		# Force to resave volume settings
-		__mysql__['volume'] = dict(storage2.volume(__mysql__['volume']))
+		__mysql__['volume'] = storage2.volume(__mysql__['volume'])
 		bus.fire('service_configured', service_name=__mysql__['behavior'], replication=repl)
 
 

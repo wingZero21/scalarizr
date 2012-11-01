@@ -8,7 +8,9 @@ try:
 	import json
 except ImportError:
 	import simplejson as json 
+import logging
 
+LOG = logging.getLogger(__name__)
 
 class Store(dict):
 	def __len__(self):
@@ -102,19 +104,19 @@ class Json(Store):
 			else:
 				if isinstance(self.fn, basestring):
 					self.fn = _import(self.fn)
+				LOG.debug('getitem: %s', key)
 				self._obj = self.fn(**kwds)
 		return self._obj
 
 
 	def __setitem__(self, key, value):
 		self._obj = value
-		if hasattr(value, 'config'):
-			value = value.config()
+		vv = dict(value)
 		dirname = os.path.dirname(self.filename)
 		if not os.path.exists(dirname):
 			os.makedirs(dirname)
 		with open(self.filename, 'w+') as fp:
-			json.dump(value, fp)
+			json.dump(vv, fp)
 
 
 class Ini(Store):
