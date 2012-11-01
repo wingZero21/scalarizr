@@ -724,7 +724,6 @@ class FarmSecurityMixin(object):
 		for port in self._ports:
 			rules.append(self.__create_drop_rule(port))
 			
-		rules.reverse()
 		self._iptables.ensure({"INPUT": rules})
 		"""
 		for rule in rules:
