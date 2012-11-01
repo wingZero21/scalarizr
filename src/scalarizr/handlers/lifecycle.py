@@ -189,7 +189,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			self._logger.info("Normal start")
 
 	def _was_hard_reboot(self):
-		out, err, return_code = system2(("last", "-x"))
+		out, err, return_code = system2(("last", "-xF"))
 		if return_code != 0:
 			self._logger.error("Can't determine if it was hard reboot: " + err)
 			return False
@@ -202,7 +202,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if second_reboot_pos < shutdown_pos:
 			#if date of last reboot is equal to date saved in flag contents, 
 			#then scalarizr process was restarted, system wasn't hard rebooted
-			#TODO: test dates (because there are no year in date string)
 			last_reboot_info = out[first_reboot_pos : out.find("\n", first_reboot_pos)].strip()
 			saved_reboot_info = self._get_flag_contents(FLAG_HARD_REBOOT)
 
