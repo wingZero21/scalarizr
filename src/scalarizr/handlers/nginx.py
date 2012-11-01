@@ -524,15 +524,18 @@ class NginxHandler(ServiceCtlHandler):
 					raw = raw.replace('/etc/aws/keys/ssl/https.key',pk_path)
 					https_config += raw + '\n'
 
+			if https_config:
+				if os.path.exists(self._https_inc_path)\
+				and read_file(self._https_inc_path, logger=self._logger):
+					time_suffix = str(datetime.now()).replace(' ','.')
+					shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
+
+				msg = 'Writing virtualhosts to https.include'
+				write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
+				
 		else:
-			self._logger.debug('Scalr returned empty virtualhost list')
+			self._logger.debug('Scalr returned empty virtualhost list. Removing junk files.')
+			if os.path.exists(self._https_inc_path):
+				os.remove(self._https_inc_path)
+				self._logger.debug('%s deleted' % self._https_inc_path)
 
-		if https_config:
-			if os.path.exists(self._https_inc_path) \
-					and read_file(self._https_inc_path, logger=self._logger):
-				time_suffix = str(datetime.now()).replace(' ','.')
-				shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
-
-			msg = 'Writing virtualhosts to https.include'
-			write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
-	
