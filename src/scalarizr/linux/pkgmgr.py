@@ -252,15 +252,26 @@ def apt_source(sources, gpg_keyserver=None, gpg_keyid=None):
 
 
 def installed(name, version=None, updatedb=False):
-	pass
-
-
-def removed(name, purge=False):
+	'''
+	Ensure that package installed
+	'''
 	pass
 
 
 def latest(name, updatedb=False):
+	'''
+	Ensure that latest version of package installed 
+	'''
 	pass
+
+
+def removed(name, purge=False):
+	'''
+	Ensure that package removed (purged)
+	'''
+	pass
+
+
 
 
 def package_mgr():
