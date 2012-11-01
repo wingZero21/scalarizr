@@ -509,6 +509,12 @@ class NginxHandler(ServiceCtlHandler):
 				msg = 'Appending CA cert to cert file'
 				cert = https_certificate[2]
 				write_file(cert_path, '\n' + https_certificate[2], mode='a', msg=msg, logger=self._logger)
+		else:
+			self._logger.error('No SSL vhosts obtained. Removing old SSL keys.')
+			for key_path in (cert_path, pk_path):
+				if os.path.exists(key_path):
+					os.remove(key_path)
+					self._logger.error('%s deleted' % key_path)
 
 		if received_vhosts:
 
