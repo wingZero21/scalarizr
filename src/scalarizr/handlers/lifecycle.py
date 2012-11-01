@@ -436,7 +436,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	
 	def _clear_flag(self, name):
 		if self._flag_exists(name):
-			os.remove(self._get_flag_filename(name))	
+			os.remove(self._get_flag_filename(name))
 
 	def _get_flag_contents(self, name):
 		file = self._get_flag_filename(name)
