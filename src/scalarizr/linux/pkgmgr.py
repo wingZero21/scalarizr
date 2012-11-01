@@ -237,7 +237,8 @@ def epel_repository():
 	'''
 	pass
 
-def apt_source(sources, gpg_keyserver=None, gpg_keyid=None):
+
+def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 	'''
 	@param sources: list of apt sources.list entries.
 	Example:
@@ -252,14 +253,23 @@ def apt_source(sources, gpg_keyserver=None, gpg_keyid=None):
 
 
 def installed(name, version=None, updatedb=False):
-	pass
-
-
-def removed(name, purge=False):
+	'''
+	Ensure that package installed
+	'''
 	pass
 
 
 def latest(name, updatedb=False):
+	'''
+	Ensure that latest version of package installed 
+	'''
+	pass
+
+
+def removed(name, purge=False):
+	'''
+	Ensure that package removed (purged)
+	'''
 	pass
 
 
