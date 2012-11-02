@@ -155,7 +155,7 @@ class EphVolumeProvider(VolumeProvider):
 				# Create LV layout
 				kwargs['disk'].umount()
 				kwargs['vg'], kwargs['device'], kwargs['size'] = self._create_layout(
-						kwargs['disk'].devname, vg=kwargs.get('vg'), size=kwargs.get('size'))
+						kwargs['disk'].device, vg=kwargs.get('vg'), size=kwargs.get('size'))
 			
 		# Accept snapshot backend
 		if not isinstance(kwargs['snap_backend'], dict):
@@ -234,7 +234,7 @@ class EphVolumeProvider(VolumeProvider):
 		super(EphVolumeProvider, self).detach(vol, force)
 		if vol.vg:
 			vol.lvm_group_cfg = lvm_group_b64(vol.vg)
-			self._destroy_layout(vol.vg, vol.devname)
+			self._destroy_layout(vol.vg, vol.device)
 		vol.disk.detach(force)
 		return vol.config()
 
@@ -285,7 +285,7 @@ class EphSnapshotProviderLite(object):
 			self._chunks_md5 = {}
 			self._state_map[snapshot.id] = Snapshot.CREATING
 			#self.prepare_tranzit_vol(volume.tranzit_vol)
-			snap_lv = self._lvm.create_lv_snapshot(volume.devname, self.SNAPSHOT_LV_NAME, extents='100%FREE')		
+			snap_lv = self._lvm.create_lv_snapshot(volume.device, self.SNAPSHOT_LV_NAME, extents='100%FREE')		
 			self._logger.info('Created LVM snapshot %s for volume %s', snap_lv, volume.device)
 			t = threading.Thread(name='%s creator' % snapshot.id, target=self._create, 
 								args=(volume, snapshot, snap_lv, tranzit_path, complete_cb))
@@ -490,7 +490,7 @@ class EphSnapshotProviderLite(object):
 		mnf.read(mnf_path)
 		
 		if snapshot.fstype:
-			mkfs(volume.devname, snapshot.fstype)	
+			mkfs(volume.device, snapshot.fstype)	
 
 		remote_path = os.path.dirname(snapshot.path)
 		# Get links with md5 sums
@@ -586,7 +586,7 @@ class DataRestoreStrategy(RestoreStrategy):
 
 class DeviceRestoreStrategy(RestoreStrategy):
 	def restore(self, queue, volume, download_finished):
-		device_fp = open(volume.devname, 'w')
+		device_fp = open(volume.device, 'w')
 		pigz_bins = whereis('pigz')
 		cmd = ('pigz' if pigz_bins else 'gzip', '-d')
 		compressor = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=device_fp, stderr=subprocess.PIPE, close_fds=True)
