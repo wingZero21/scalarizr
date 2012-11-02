@@ -261,7 +261,7 @@ def ensure(chain_rules):
 
 def _to_inner(rule):
 	"""
-	For smart rule comparsion. It does:
+	Converts rule to its inner representation for comparsion.
 
 	1. "source": "192.168.0.1" -> "source": "192.168.0.1/32"
 	2. "dport": 22 -> "dport": "22"

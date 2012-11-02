@@ -103,7 +103,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
 		or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 		or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
-		or  message.name == Messages.BEFORE_HOST_TERMINATE)
+		or  message.name == Messages.BEFORE_HOST_TERMINATE
+		or  message.name == Messages.HOST_INIT)
 
 
 	def get_initialization_phases(self, hir_message):
