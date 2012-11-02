@@ -532,7 +532,7 @@ class NginxHandler(ServiceCtlHandler):
 
 				msg = 'Writing virtualhosts to https.include'
 				write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
-				
+
 		else:
 			self._logger.debug('Scalr returned empty virtualhost list. Removing junk files.')
 			if os.path.exists(self._https_inc_path):

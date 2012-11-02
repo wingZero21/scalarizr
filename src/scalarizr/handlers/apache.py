@@ -413,7 +413,6 @@ class ApacheHandler(ServiceCtlHandler):
 					if not https_certificate:
 						self._logger.debug("Retrieving ssl cert and private key from Scalr.")
 						https_certificate = self._queryenv.get_https_certificate()
-						self._logger.debug('Received certificate as %s type', type(https_certificate))
 				except:
 					self._logger.error('Cannot retrieve ssl cert and private key from Scalr.')
 					raise
