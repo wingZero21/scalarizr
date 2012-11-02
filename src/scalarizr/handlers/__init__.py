@@ -725,10 +725,12 @@ class FarmSecurityMixin(object):
 				rules += self.__accept_host(local_ip, public_ip, port)
 		
 		# Deny from all
+		drop_rules = []
 		for port in self._ports:
-			rules.append(self.__create_drop_rule(port))
+			drop_rules.append(self.__create_drop_rule(port))
 
 		self._iptables.ensure({"INPUT": rules})
+		self._iptables.ensure({"INPUT": drop_rules}, append=True)
 		"""
 		for rule in rules:
 			self._iptables.insert_rule(1, rule)
