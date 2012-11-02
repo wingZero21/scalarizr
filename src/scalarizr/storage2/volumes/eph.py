@@ -183,7 +183,7 @@ class EphSnapshot(base.Snapshot):
 class EphVolumeAdapter(EphVolume):
 	
 	def __init__(self, **kwds):
-		super(EphVolume, self).__init__(**kwds)
+		super(EphVolumeAdapter, self).__init__(**kwds)
 		self.snap_backend = self._config.pop('cloudfs_dir')
 		self._eph_vol = None
 		self._eph_pvd = old_eph.EphVolumeProvider()
@@ -198,7 +198,7 @@ class EphVolumeAdapter(EphVolume):
 						type='ec2_ephemeral', 
 						name='ephemeral0')
 				disk.ensure()
-				config['disk'] = disk.device
+			config['disk'] = disk
 
 			if self.snap:
 				self._eph_vol = self._eph_pvd.create_from_snapshot(**config)
