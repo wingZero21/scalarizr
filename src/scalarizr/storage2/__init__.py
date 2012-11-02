@@ -100,7 +100,7 @@ def concurrent_snapshot(volumes, description, tags=None, **kwds):
 		description0 = description.replace('${index}', sindex)
 		tags0 = tags and tags.copy() or {}
 		for k, v in tags0.items():
-			tags0[k] = v.replace('${index}', sindex)
+			tags0[k] =  unicode(v).replace('${index}', sindex)
 		thread = threading.Thread(
 					target=snapshot, 
 					args=(index, vol, description0, tags0), 
