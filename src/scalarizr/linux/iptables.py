@@ -248,7 +248,7 @@ def list(chain, table=None):
 	return chains[chain].list(table)
 
 
-def ensure(chain_rules):
+def ensure(chain_rules, append=False):
 	# {chain: [rule, ...]}
 	# Will simply insert missing rules at the beginning.
 	# NOTE: rule comparsion is far from ideal, check _to_inner method
@@ -262,8 +262,12 @@ def ensure(chain_rules):
 		for rule in reversed(rules):
 			rule_repr = _to_inner(rule)
 			if rule_repr not in existing:
-				chains[chain].insert(None, rule)
-				existing.insert(0, rule_repr)
+				if not append:
+					chains[chain].insert(None, rule)
+					existing.insert(0, rule_repr)
+				else:
+					chains[chain].append(rule)
+					existing.append(rule_repr)
 
 
 def _to_inner(rule):

@@ -717,6 +717,8 @@ class FarmSecurityMixin(object):
 		for port in self._ports:
 			# TODO: this will be duplicated, because current host is in the
 			# hosts list too
+			# TODO: this also duplicates the rules, inserted in on_HostInit
+			# for the current host
 			rules += self.__accept_host(self._platform.get_private_ip(), 
 									self._platform.get_public_ip(), port)
 			for local_ip, public_ip in hosts:
