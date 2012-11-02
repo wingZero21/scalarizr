@@ -191,7 +191,12 @@ class EphVolumeAdapter(EphVolume):
 		
 	def _ensure(self):
 		if not self._eph_vol:
-			config = self.snap.config() if self.snap else self.config()
+			if self.snap:
+				config = self.snap \
+						if isinstance(self.snap, dict) \
+						else self.snap.config()
+			else:	
+				config = self.config()
 			disk = storage2.volume(config['disk'])
 			if disk.device.startswith('/dev/sd'):
 				disk = storage2.volume(
