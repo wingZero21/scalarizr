@@ -210,10 +210,10 @@ class EphVolumeAdapter(EphVolume):
 		
 		
 	def _snapshot(self, description, tags, **kwds):
-		eph_snap = self._eph_pvd.snapshot_factory(description, 
-												tags=tags)
-		eph_snap = self._eph_pvd.create_snapshot(self._eph_vol, eph_snap)
-		LOG.debug('eph_snap: %s', eph_snap.config())
+		conf = self._eph_vol.config()
+		del conf['id']
+		eph_snap = self._eph_pvd.snapshot_factory(description, **conf)		
+		eph_snap = self._eph_pvd.create_snapshot(self._eph_vol, eph_snap, **kwds)
 		
 		snap = storage2.snapshot(type='eph')
 		snap._config.update(eph_snap.config())
