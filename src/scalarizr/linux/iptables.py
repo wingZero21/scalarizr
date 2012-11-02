@@ -21,6 +21,10 @@ from scalarizr import linux
 from scalarizr.linux import redhat
 
 
+import logging
+LOG = logging.getLogger(__name__)
+
+
 IPTABLES_BIN = '/sbin/iptables'
 IPTABLES_SAVE = '/sbin/iptables-save'
 IPTABLES_RESTORE = '/sbin/iptables-restore'
@@ -250,13 +254,16 @@ def ensure(chain_rules):
 	# NOTE: rule comparsion is far from ideal, check _to_inner method
 	# note: existing rules don't have table attribute
 
+	LOG.debug("Current iptables %s: " % str(list("INPUT")))
+	LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
+
 	for chain, rules in chain_rules.iteritems():
 		existing = list(chain)
 		for rule in reversed(rules):
 			rule_repr = _to_inner(rule)
 			if rule_repr not in existing:
 				chains[chain].insert(None, rule)
-				existing.insert(0, rule_repr)  #? existing = list(chain)
+				existing.insert(0, rule_repr)
 
 
 def _to_inner(rule):
