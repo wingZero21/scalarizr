@@ -690,7 +690,7 @@ class MysqlHandler(DBMSRHandler):
 		
 					bus.fire('before_mysql_data_bundle')
 
-					backup_info = message.body[__mysql__['behavior']]
+					backup_info = message.body.get([__mysql__['behavior']], {})
 
 					compat_prior_backup_restore = 'backup' not in backup_info
 					if compat_prior_backup_restore:
