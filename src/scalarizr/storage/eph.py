@@ -295,8 +295,8 @@ class EphSnapshotProviderLite(object):
 				complete_cb()
 			raise
 		snapshot.snap_strategy = 'data'
-		snapshot.path = os.path.normpath(os.path.join(volume.snap_backend['path'], 
-									'%s.%s' % (snapshot.id, self.MANIFEST_NAME)))
+		snapshot.path = os.path.join(volume.snap_backend['path'], 
+									'%s.%s' % (snapshot.id, self.MANIFEST_NAME))
 		return snapshot
 
 	def _create(self, volume, snapshot, snap_lv, tranzit_path,  complete_cb):
