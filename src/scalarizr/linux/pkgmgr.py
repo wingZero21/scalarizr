@@ -26,13 +26,23 @@ class PackageMgr(object):
 		''' Removes package with given name. '''
 		raise NotImplementedError()
 
-	def installed(self, name):
-		''' Return installed package version '''
-		raise NotImplementedError()	
+	def info(self, name):
+		'''
+		Example:
+			{'installed': '2.6.7-ubuntu1',
+			'candidate': '2.6.7-ubuntu5'}
+		'''
+		raise NotImplementedError()
 
 	def updatedb(self):
 		''' Updates package manager internal database '''
 		raise NotImplementedError()
+
+	'''
+	def installed(self, name):
+		''' Return installed package version '''
+		raise NotImplementedError()	
+
 
 	def check_update(self, name):
 		''' Returns info for package `name` '''
@@ -41,6 +51,7 @@ class PackageMgr(object):
 	def candidates(self, name):
 		''' Returns all available installation candidates for `name` '''
 		raise NotImplementedError()
+	'''
 
 
 class AptPackageMgr(PackageMgr):
