@@ -41,7 +41,9 @@ class EphVolume(base.Volume):
 		# Compatibility with 1.0
 		snap_backend = kwds.pop('snap_backend', None)
 		if snap_backend:
-			cloudfs_dir = snap_backend
+			cloudfs_dir = snap_backend['path'] \
+						if isinstance(snap_backend, dict) \
+						else snap_backend
 			if not cloudfs_dir.endswith('/'):
 				cloudfs_dir += '/'
 		kwds.pop('lvm_group_cfg', None)
