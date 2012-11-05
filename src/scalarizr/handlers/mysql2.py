@@ -36,8 +36,6 @@ from scalarizr.node import __node__
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
-BEHAVIOUR = SERVICE_NAME = 'percona' if 'percona' in bus.cnf.rawini.get('general', 'behaviour') else 'mysql2'
-CNF_SECTION = 'mysql2'
 LOG = logging.getLogger(__name__)
 
 SU_EXEC = '/bin/su'
@@ -766,8 +764,7 @@ class MysqlHandler(DBMSRHandler):
 			new_vol = storage2.volume(mysql2.get('volume_config'))
 					
 		try:
-			# xxx: ugly condition 
-			if PlatformFeatures.VOLUMES in self._platform.features and master_storage_conf['type'] != 'eph':
+			if new_vol and new_vol.type not in ('eph', 'lvm'):
 				if self.mysql.service.running:
 					self.root_client.stop_slave()
 
@@ -909,12 +906,6 @@ class MysqlHandler(DBMSRHandler):
 			# Start MySQL
 			self.mysql.service.start()
 
-		
-		if tx_complete and PlatformFeatures.VOLUMES in self._platform.features and master_storage_conf['type'] != 'eph':
-			# Delete slave EBS
-			self.storage_vol.destroy(remove_disks=True)
-			self.storage_vol = new_storage_vol
-			Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 		
 
 		
@@ -1066,20 +1057,15 @@ class MysqlHandler(DBMSRHandler):
 		LOG.info("Initializing MySQL master")
 		
 		with bus.initialization_op as op:
-			snap_cnf = None
-			with op.step(self._step_create_storage):		
-		
-				# Plug storage
-				volume_cnf = Storage.restore_config(self._volume_config_path)
-				try:
-					snap_cnf = Storage.restore_config(self._snapshot_config_path)
-					volume_cnf['snapshot'] = snap_cnf.copy()
-				except IOError:
-					pass
-				self.storage_vol = self._plug_storage(mpoint=STORAGE_PATH, vol=volume_cnf)
-				Storage.backup_config(self.storage_vol.config(), self._volume_config_path)		
-				
-				self.mysql.flush_logs(DATA_DIR)
+			with op.step(self._step_create_storage):
+				if 'restore' in __mysql__ and \
+						__mysql__['restore'].type == 'snap_mysql':
+					__mysql__['restore'].run()
+				else:
+					__mysql__['volume'].ensure(mount=True, mkfs=True)
+					LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
+					
+				self.mysql.flush_logs(__mysql__['data_dir'])
 		
 			with op.step(self._step_move_datadir):
 				storage_valid = self._storage_valid()				
@@ -1135,16 +1121,9 @@ class MysqlHandler(DBMSRHandler):
 					self._innodb_recovery()	
 					self.mysql.service.start()
 					
-		if not snap_cnf:
-			with op.step(self._step_create_data_bundle):
-				# Get binary logfile, logpos and create storage snapshot
-				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, user_creds[ROOT_USER], tags=self.mysql_tags)
-				Storage.backup_config(snap.config(), self._snapshot_config_path)
-		else:
-			LOG.debug('Skip data bundle, cause MySQL storage was initialized from snapshot')
-			log_file, log_pos = self._get_ini_options(OPT_LOG_FILE, OPT_LOG_POS)
-			snap = snap_cnf
-			
+		with op.step(self._step_create_data_bundle):
+			if 'backup' in __mysql__:				
+				__mysql__['restore'] = __mysql__['backup'].run()
 
 		with op.step(self._step_collect_hostup_data):
 			# Update HostUp message
@@ -1213,7 +1192,6 @@ class MysqlHandler(DBMSRHandler):
 				self.mysql.my_cnf.datadir = __mysql__['data_dir']
 				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.skip_locking = False
-				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
 	
 			with op.step(self._step_move_datadir):
@@ -1255,7 +1233,7 @@ class MysqlHandler(DBMSRHandler):
 		while not master_host:
 			try:
 				master_host = list(host 
-					for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts 
+					for host in self._queryenv.list_roles(behaviour=__mysql__['behavior'])[0].hosts 
 					if host.replication_master)[0]
 			except IndexError:
 				LOG.debug("QueryEnv respond with no mysql master. " + 
