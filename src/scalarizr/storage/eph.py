@@ -333,22 +333,26 @@ class EphSnapshotProviderLite(object):
 					
 					uploader.start()
 					uploaders.append(uploader)
-				self._return_ev.set()
+				self._logger.debug('uploaders started. waiting compress')
 
 				compress.wait()
+				self._logger.debug('compress completed (code: %s). waiting split', compress.returncode)
 				if compress.returncode:
 					raise StorageError('Compress process terminated with exit code %s. <err>: %s' % (compress.returncode, compress.stderr.read()))				
 					
 				split.join()
+				self._logger.debug('split completed. waiting uploaders')
 
 				for uploader in uploaders:
 					uploader.join()
+				self._logger.debug('uploaders completed')
 				
 				if self._inner_exc_info:
 					t, e, s = self._inner_exc_info
 					raise t, e, s
 
 			finally:
+				self._return_ev.set()				
 				umount(snap_mpoint, options=('-f',))
 				os.rmdir(snap_mpoint)
 				self._lvm.remove_lv(snap_lv)
@@ -443,6 +447,7 @@ class EphSnapshotProviderLite(object):
 				continue
 			
 			with self._slot_available:
+				self._return_ev.set()
 				link = transfer.upload([chunk_path], dst)[0]
 				os.remove(chunk_path)
 			
