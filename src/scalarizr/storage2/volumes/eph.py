@@ -39,10 +39,11 @@ class EphVolume(base.Volume):
 		:param cloudfs_dir:
 		'''
 		# Compatibility with 1.0
-		snap_backend = kwds.get('snap_backend')
+		snap_backend = kwds.pop('snap_backend', None)
 		if snap_backend:
-			kwds.pop('snap_backend')
-			cloudfs_dir = snap_backend + '/'
+			cloudfs_dir = snap_backend
+			if not cloudfs_dir.endswith('/'):
+				cloudfs_dir += '/'
 		kwds.pop('lvm_group_cfg', None)
 
 		super(EphVolume, self).__init__(vg=vg, disk=disk, size=size,

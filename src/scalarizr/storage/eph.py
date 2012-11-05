@@ -276,6 +276,7 @@ class EphSnapshotProviderLite(object):
 		self._slot_available	= threading.Semaphore(2)
 		self._transfer_cls  	= Transfer
 		self._inner_exc_info	= None
+		self._return_ev 		= threading.Event()
 	
 	def create(self, volume, snapshot, tranzit_path, complete_cb=None):
 		try:
@@ -287,9 +288,11 @@ class EphSnapshotProviderLite(object):
 			#self.prepare_tranzit_vol(volume.tranzit_vol)
 			snap_lv = self._lvm.create_lv_snapshot(volume.device, self.SNAPSHOT_LV_NAME, extents='100%FREE')		
 			self._logger.info('Created LVM snapshot %s for volume %s', snap_lv, volume.device)
+			self._return_ev.clear()
 			t = threading.Thread(name='%s creator' % snapshot.id, target=self._create, 
 								args=(volume, snapshot, snap_lv, tranzit_path, complete_cb))
 			t.start()
+			self._return_ev.wait()
 		except:
 			if complete_cb:
 				complete_cb()
@@ -330,6 +333,7 @@ class EphSnapshotProviderLite(object):
 					
 					uploader.start()
 					uploaders.append(uploader)
+				self._return_ev.set()
 
 				compress.wait()
 				if compress.returncode:
