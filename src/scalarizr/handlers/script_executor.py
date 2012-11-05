@@ -184,6 +184,7 @@ class ScriptExecutor2(Handler):
 
 	def __call__(self, message):
 		event_name = message.event_name if message.name == Messages.EXEC_SCRIPT else message.name
+		role_name = message.role_name if hasattr(message, 'role_name') else 'unknown_role'
 		LOG.debug("Scalr notified me that '%s' fired", event_name)		
 		
 		if self._cnf.state == ScalarizrState.IMPORTING:
@@ -200,7 +201,8 @@ class ScriptExecutor2(Handler):
 			LOG.debug('Fetching scripts from incoming message')
 			scripts = [Script(name=item['name'], body=item['body'], 
 							asynchronous=int(item['asynchronous']), 
-							exec_timeout=item['timeout'], event_name=event_name) 
+							exec_timeout=item['timeout'], event_name=event_name,
+							role_name=role_name)
 						for item in message.body['scripts']]
 				
 		else:
@@ -212,7 +214,8 @@ class ScriptExecutor2(Handler):
 			queryenv_scripts = self._queryenv.list_scripts(event_name, event_id, 
 														target_ip=target_ip, local_ip=local_ip)
 			scripts = [Script(name=s.name, body=s.body, asynchronous=s.asynchronous, 
-						exec_timeout=s.exec_timeout, event_name=event_name) for s in queryenv_scripts]
+						exec_timeout=s.exec_timeout, event_name=event_name, role_name=role_name) \
+			            for s in queryenv_scripts]
 			
 
 		LOG.debug('Fetched %d scripts', len(scripts))
@@ -225,6 +228,7 @@ class Script(object):
 	body = None
 	asynchronous = None
 	event_name = None
+	role_name = None
 	exec_timeout = None
 	
 	id = None
@@ -269,9 +273,10 @@ class Script(object):
 			assert self.start_time, '`start_time` required'
 
 		self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
-		self.exec_path = os.path.join(exec_dir_prefix + self.id, self.name)		
-		self.stdout_path = os.path.join(logs_dir, '%s.%s-out.log' % (self.id, self.name))
-		self.stderr_path = os.path.join(logs_dir, '%s.%s-err.log' % (self.id, self.name))
+		self.exec_path = os.path.join(exec_dir_prefix + self.id, self.name)
+		args = (self.name, self.event_name, self.role_name, self.id)
+		self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
+		self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
 		
 	
 	def start(self):
@@ -280,7 +285,7 @@ class Script(object):
 		# installs interpreter for the next one
 		if not os.path.exists(self.interpreter):
 			raise HandlerError("Can't execute script '%s' cause "
-							"interpreter '%s' not found" % (self.name, interpreter))
+							"interpreter '%s' not found" % (self.name, self.interpreter))
 
 
 		# Write script to disk, prepare execution
@@ -371,6 +376,7 @@ class Script(object):
 			'start_time': self.start_time,
 			'asynchronous': self.asynchronous,
 			'event_name': self.event_name,
+		    'role_name' : self.role_name,
 			'exec_timeout': self.exec_timeout
 		}
 	

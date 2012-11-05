@@ -2,9 +2,9 @@
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.config import ScalarizrState
-from scalarizr.util import iptables
+from scalarizr.linux import iptables, os as linux_os
 import logging
-from scalarizr.util import disttool
+
 
 def get_handlers ():
 	return [RackspaceLifeCycleHandler()]
@@ -32,7 +32,22 @@ class RackspaceLifeCycleHandler(Handler):
 		self._insert_iptables_rules()
 				
 	def _insert_iptables_rules(self):
-		self._logger.debug('Adding iptables rules for scalarizr ports')		
+		self._logger.debug('Adding iptables rules for scalarizr ports')
+
+		if iptables.enabled():
+			rules = [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8008"},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8012"},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8013"},
+				{"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
+			]
+
+			if linux_os["family"] in ("RedHat", "Oracle"):
+				iptables.ensure({"RH-Firewall-1-INPUT": rules}) #? try except
+			else:
+				iptables.ensure({"INPUT": rules})
+
+		"""
 		firewall = iptables.IpTables()
 		if firewall.enabled():
 			rules = []
@@ -52,3 +67,4 @@ class RackspaceLifeCycleHandler(Handler):
 						firewall.insert_rule(None, rule_spec = rule, chain='RH-Firewall-1-INPUT')
 					except:
 						pass
+		"""

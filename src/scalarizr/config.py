@@ -5,7 +5,7 @@ Created on Aug 11, 2010
 '''
 
 from scalarizr.bus import bus
-from scalarizr.libs.pubsub import Observable
+from scalarizr.libs.bases import Observable
 from scalarizr.util import validators, filetool
 
 from ConfigParser import ConfigParser, RawConfigParser, NoOptionError, NoSectionError
@@ -963,7 +963,7 @@ class ScalarizrCnf(Observable):
 		self._explored_keys[(name, private)] = title
 
 
-class State(object):
+class State(dict):
 	
 	def _conn(self):
 		return bus.db
@@ -1045,6 +1045,7 @@ class BuiltinPlatforms:
 	NIMBULA		= 'nimbula'
 	CLOUDSTACK	= 'cloudstack'
 	IDCF		= 'idcf'
+	GCE		= 'gce'
 
 	@staticmethod
 	def values():
