@@ -308,6 +308,7 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 	if linux.os['family'] in ('RedHat', 'Oracle'):
 		return
 
+	# FIXME: this works only for single substitution
 	def _get_codename(s):
 		start = s.find('${') + 2 #2 is len of '${'
 		end = s.find('}')
@@ -345,6 +346,7 @@ def latest(name, updatedb=False):
 	'''
 	Ensure that latest version of package installed 
 	'''
+	# FIXME: it will fail when package is not installed 
 	mgr = package_mgr()
 	candidate = mgr.check_update(name)
 	if candidate:
@@ -355,6 +357,7 @@ def removed(name, purge=False):
 	'''
 	Ensure that package removed (purged)
 	'''
+	# FIXME: removed(purge=True) will fail when package was already removed but not purged 
 	mgr = package_mgr()
 	if mgr.installed(name):
 		mgr.remove(name, purge)

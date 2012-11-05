@@ -25,16 +25,16 @@ def test_epel_repository(system, install, installed):
 	install.assert_called_once_with(pkgmgr.EPEL_RPM_URL)
 
 
-@mock.patch.dict('scalarizr.linux.os', {'family': 'Debian', 'codename1': 'c1', 'codename2': 'c2'})
+@mock.patch.dict('scalarizr.linux.os', {'family': 'Debian', 'codename1': 'c1', 'codename2': 'c2', 'arch': 'x86_64'})
 @mock.patch('__builtin__.open')
 @mock.patch('scalarizr.linux.system')
 def test_apt_source(system, open):
 	name = 'test_list'
-	sources = ['deb http://test.repo/apt ${codename1} main',
+	sources = ['deb http://test.repo/apt/${arch} ${codename1} main',
 			   'deb-src http://test.repo/apt ${codename2} main']
 	gpg_keyserver = 'key_server'
 	gpg_keyid = 'key_id'
-	file_contents = 'deb http://test.repo/apt c1 main\ndeb-src http://test.repo/apt c2 main'
+	file_contents = 'deb http://test.repo/apt/x86_64 c1 main\ndeb-src http://test.repo/apt c2 main'
 	pkgmgr.apt_source(name, sources, gpg_keyserver, gpg_keyid)
 
 	linux.system.assert_called_once_with(('apt-key', 'adv', 
@@ -74,6 +74,7 @@ def test_removed(mgr):
 	mgr().remove.assert_called_once_with('thing', True)
 
 
+# FIXME: wrap tests into TestRPMPackageMgr 
 #RPMPackageMgr class tests
 
 @mock.patch('scalarizr.linux.system')
