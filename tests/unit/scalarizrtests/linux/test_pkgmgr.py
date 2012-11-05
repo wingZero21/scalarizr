@@ -25,16 +25,21 @@ def test_epel_repository(system, install, installed):
 	install.assert_called_once_with(pkgmgr.EPEL_RPM_URL)
 
 
-@mock.patch.dict('scalarizr.linux.os', {'family': 'Debian', 'codename1': 'c1', 'codename2': 'c2', 'arch': 'x86_64'})
+@mock.patch.dict('scalarizr.linux.os', {'family': 'Debian',
+										'codename1': 'c1',
+										'codename12': 'c12', 
+										'codename2': 'c2', 
+										'codename22': 'c22', 
+										'arch': 'x86_64'})
 @mock.patch('__builtin__.open')
 @mock.patch('scalarizr.linux.system')
 def test_apt_source(system, open):
 	name = 'test_list'
-	sources = ['deb http://test.repo/apt/${arch} ${codename1} main',
-			   'deb-src http://test.repo/apt ${codename2} main']
+	sources = ['deb http://test.repo/apt/${arch} ${codename1} ${codename12} main',
+			   'deb-src http://test.repo/apt ${codename2} ${codename22} main']
 	gpg_keyserver = 'key_server'
 	gpg_keyid = 'key_id'
-	file_contents = 'deb http://test.repo/apt/x86_64 c1 main\ndeb-src http://test.repo/apt c2 main'
+	file_contents = 'deb http://test.repo/apt/x86_64 c1 c12 main\ndeb-src http://test.repo/apt c2 c22 main'
 	pkgmgr.apt_source(name, sources, gpg_keyserver, gpg_keyid)
 
 	linux.system.assert_called_once_with(('apt-key', 'adv', 
@@ -57,12 +62,15 @@ def test_installed(mgr):
 
 @mock.patch('scalarizr.linux.pkgmgr.package_mgr')
 def test_latest(mgr):
-	mgr().check_update.return_value = 'better_thing'
-
+	mgr().check_update.return_value = None
 	pkgmgr.latest('thing', True)
 
-	mgr().check_update.assert_called_with('thing')
-	mgr().install.assert_called_once_with('better_thing', updatedb=True)
+	mgr().install.assert_called_once_with('thing', updatedb=True)
+
+	mgr().check_update.return_value = 'better_thing'
+	pkgmgr.latest('thing', False)
+
+	mgr().install.assert_called_with('better_thing', updatedb=False)
 
 
 @mock.patch('scalarizr.linux.pkgmgr.package_mgr')
@@ -74,55 +82,62 @@ def test_removed(mgr):
 	mgr().remove.assert_called_once_with('thing', True)
 
 
-# FIXME: wrap tests into TestRPMPackageMgr 
 #RPMPackageMgr class tests
+class TestRPMPackageMgr(object):
+		
+	@mock.patch('scalarizr.linux.system')
+	def test_rpm_command(self, system):
+		mgr = pkgmgr.RPMPackageMgr()
+		mgr.rpm_command('-Uvh test.rpm', raise_exc=True)
 
-@mock.patch('scalarizr.linux.system')
-def test_rpm_command(system):
-	mgr = pkgmgr.RPMPackageMgr()
-	mgr.rpm_command('-Uvh test.rpm', raise_exc=True)
+		system.assert_called_once_with(('/usr/bin/rpm', '-Uvh', 'test.rpm'), raise_exc=True)
 
-	system.assert_called_once_with(('/usr/bin/rpm', '-Uvh', 'test.rpm'), raise_exc=True)
 
-@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
-def test_RPMPackageMgr_install(rpm_command):
-	mgr = pkgmgr.RPMPackageMgr()
-	mgr.install('test.rpm', 1.1, True, test_kwd=True)
+	@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
+	def test_install(self, rpm_command):
+		mgr = pkgmgr.RPMPackageMgr()
+		mgr.install('test.rpm', 1.1, True, test_kwd=True)
 
-	rpm_command.assert_called_once_with('-Uvh test.rpm', raise_exc=True, test_kwd=True)
+		rpm_command.assert_called_once_with('-Uvh test.rpm', raise_exc=True, test_kwd=True)
+		
 
-@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
-def test_RPMPackageMgr_remove(rpm_command):
-	mgr = pkgmgr.RPMPackageMgr()
-	mgr.remove('test.rpm', True)
+	@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
+	def test_remove(self, rpm_command):
+		mgr = pkgmgr.RPMPackageMgr()
+		mgr.remove('test.rpm', True)
 
-	rpm_command.assert_called_once_with('-e test.rpm', raise_exc=True)
+		rpm_command.assert_called_once_with('-e test.rpm', raise_exc=True)
+		
 
-@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
-def test_RPMPackageMgr_installed(rpm_command):
-	mgr = pkgmgr.RPMPackageMgr()
-	mgr.installed('http://www.test.repo/smothing/test.rpm')
+	@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
+	def test_installed(self, rpm_command):
+		mgr = pkgmgr.RPMPackageMgr()
+		mgr.installed('http://www.test.repo/smothing/test.rpm')
 
-	rpm_command.assert_called_once_with('-q test.rpm', raise_exc=False)
+		rpm_command.assert_called_once_with('-q test.rpm', raise_exc=False)
+		
 
-@mock.patch('scalarizr.linux.system')
-def test_RPMPackageMgr_updatedb(system):
-	mgr = pkgmgr.RPMPackageMgr()
-	mgr.updatedb()
+	@mock.patch('scalarizr.linux.system')
+	def test_updatedb(self, system):
+		mgr = pkgmgr.RPMPackageMgr()
+		mgr.updatedb()
 
-	assert not system.called
+		assert not system.called
+		
 
-@mock.patch('scalarizr.linux.system')
-def test_RPMPackageMgr_check_update(system):
-	mgr = pkgmgr.RPMPackageMgr()
-	mgr.check_update('test')
+	@mock.patch('scalarizr.linux.system')
+	def test_check_update(self, system):
+		mgr = pkgmgr.RPMPackageMgr()
+		mgr.check_update('test')
 
-	assert not system.called
+		assert not system.called
+		
 
-@mock.patch('scalarizr.linux.system')
-def test_RPMPackageMgr_candidates(system):
-	mgr = pkgmgr.RPMPackageMgr()
-	result = mgr.candidates('test')
+	@mock.patch('scalarizr.linux.system')
+	def test_candidates(self, system):
+		mgr = pkgmgr.RPMPackageMgr()
+		result = mgr.candidates('test')
 
-	assert not system.called
-	assert result == []
+		assert not system.called
+		assert result == []
+	

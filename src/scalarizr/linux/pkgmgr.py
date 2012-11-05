@@ -285,7 +285,7 @@ def epel_repository():
 	Ensure EPEL repository for RHEL based servers.
 	Figure out linux.os['arch'], linux.os['release']
 	'''
-	if linux.os['family'] is not 'RedHat' or linux.os['name'] is 'Fedora':
+	if linux.os['family'] != 'RedHat' or linux.os['name'] == 'Fedora':
 		return
 
 	mgr = RPMPackageMgr()
@@ -308,20 +308,17 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 	if linux.os['family'] in ('RedHat', 'Oracle'):
 		return
 
-	# FIXME: this works only for single substitution
-	def _get_codename(s):
-		start = s.find('${') + 2 #2 is len of '${'
-		end = s.find('}')
-		if start != -1 and end != -1:
-			return s[start : end]
+	def _get_codenames(s):
+		codenames = re.findall('\$\{.+?\}', s)
+		return map((lambda(name): name[2:-1]), codenames) #2 is len of '${'
 
-	def _replace_codename(s):
-		codename = _get_codename(s)
-		if codename:
-			return s.replace('${'+codename+'}', linux.os[codename])
+	def _replace_codenames(s):
+		codenames = _get_codenames(s)
+		for codename in codenames:
+			s = s.replace('${'+codename+'}', linux.os[codename])
 		return s
 
-	prepared_sources = map(_replace_codename, sources)
+	prepared_sources = map(_replace_codenames, sources)
 	sources_file = open('/etc/apt/sources.list.d/'+name, 'w+')
 	sources_file.write('\n'.join(prepared_sources))
 	sources_file.close()
@@ -346,21 +343,16 @@ def latest(name, updatedb=False):
 	'''
 	Ensure that latest version of package installed 
 	'''
-	# FIXME: it will fail when package is not installed 
 	mgr = package_mgr()
 	candidate = mgr.check_update(name)
-	if candidate:
-		mgr.install(candidate, updatedb=updatedb)
+	mgr.install(candidate if candidate else name, updatedb=updatedb)
 
 
 def removed(name, purge=False):
 	'''
 	Ensure that package removed (purged)
 	'''
-	# FIXME: removed(purge=True) will fail when package was already removed but not purged 
 	mgr = package_mgr()
-	if mgr.installed(name):
+	if mgr.installed(name) or purge:
 		mgr.remove(name, purge)
-
-
 
