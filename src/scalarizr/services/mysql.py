@@ -27,7 +27,9 @@ from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr.util.filetool import rchown
+from scalarizr.libs import metaconf
 import sys
+
 
 
 from scalarizr import linux, storage2
