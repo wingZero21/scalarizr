@@ -10,15 +10,18 @@ import string
 import time
 
 from scalarizr import linux
-
+from urlparse import urlparse
 
 LOG = logging.getLogger(__name__)
-
 
 class PackageMgr(object):
 
 	def install(self, name, version=None, updatedb=False, **kwds):
 		''' Installs a `version` of package `name` '''
+		raise NotImplementedError()
+
+	def remove(self, name, purge=False):
+		''' Removes package with given name. '''
 		raise NotImplementedError()
 
 	def installed(self, name):
@@ -85,7 +88,8 @@ class AptPackageMgr(PackageMgr):
 
 	def check_update(self, name):
 		installed, candidate = self.apt_policy(name) 
-		if not linux.system(('usr/bin/dpkg', '--compare-versions', candidate, 'gt',
+		#'not' is needed because '/usr/bin/dpkg --compare-versions' returns 0 if success
+		if not linux.system(('/usr/bin/dpkg', '--compare-versions', candidate, 'gt',
 											installed), raise_exc = False)[2]:
 				return candidate
 				
@@ -103,7 +107,16 @@ class AptPackageMgr(PackageMgr):
 					raise
 				time.sleep(2)
 
-
+	def remove(self, name, purge=False):
+		command = 'purge' if purge else 'remove'
+		for _ in xrange(0, 30):
+			try:
+				self.apt_get_command('%s %s' % (command, name), raise_exc=True)
+				break
+			except linux.LinuxError, e:
+				if not 'E: Could not get lock' in e.err:
+					raise
+				time.sleep(2)
 
 	def installed(self, name):
 		out, code = linux.system(('dpkg-query', '--showformat', 
@@ -170,7 +183,6 @@ class RpmVersion(object):
 
 class YumPackageMgr(PackageMgr):
 
-
 	def yum_command(self, command, **kwds):
 		return linux.system((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None, command.split()))), **kwds)
 	
@@ -226,16 +238,59 @@ class YumPackageMgr(PackageMgr):
 		self.yum_command('install %s' %  name, raise_exc=True)
 
 
+	def remove(self, name, purge=False):
+		command = 'remove'
+		self.yum_command('%s %s' % (command, name), raise_exc=True)
+
 	def installed(self, name):
 		return self.yum_list(name)[0]
 
 
+class RPMPackageMgr(PackageMgr):
+
+	def rpm_command(self, command, **kwds):
+		return linux.system((('/usr/bin/rpm', ) + tuple(filter(None, command.split()))), **kwds)
+
+	def install(self, name, version=None, updatedb=False, **kwds):
+		''' Installs a package from file or url with `name' '''
+		self.rpm_command('-Uvh '+name, raise_exc=True, **kwds)
+
+	def remove(self, name, purge=False):
+		self.rpm_command('-e '+name, raise_exc=True)
+
+	def installed(self, name):
+		name = urlparse(name).path.split('/')[-1]
+		code = self.rpm_command('-q '+name, raise_exc=False)[2]
+		return not code
+
+	def updatedb(self):
+		pass
+
+	def check_update(self, name):
+		pass
+
+	def candidates(self, name):
+		return []
+
+
+def package_mgr():
+	if linux.os['family'] in ('RedHat', 'Oracle'):
+		return YumPackageMgr()
+	return AptPackageMgr()
+
+
+EPEL_RPM_URL = 'http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-7.noarch.rpm'
 def epel_repository():
 	'''
 	Ensure EPEL repository for RHEL based servers.
 	Figure out linux.os['arch'], linux.os['release']
 	'''
-	pass
+	if linux.os['family'] is not 'RedHat' or linux.os['name'] is 'Fedora':
+		return
+
+	mgr = RPMPackageMgr()
+	if not mgr.installed(EPEL_RPM_URL):
+		mgr.install(EPEL_RPM_URL)
 
 
 def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
@@ -248,33 +303,61 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 		scalarizr.linux.os['var'] substitution
 	if gpg_keyserver:
 		apt-key adv --keyserver ${gpg_keyserver} --recv ${gpg_keyid}
+	Creates file /etc/apt/sources.list.d/${name}
 	'''
-	pass
+	if linux.os['family'] in ('RedHat', 'Oracle'):
+		return
+
+	def _get_codename(s):
+		start = s.find('${') + 2 #2 is len of '${'
+		end = s.find('}')
+		if start != -1 and end != -1:
+			return s[start : end]
+
+	def _replace_codename(s):
+		codename = _get_codename(s)
+		if codename:
+			return s.replace('${'+codename+'}', linux.os[codename])
+		return s
+
+	prepared_sources = map(_replace_codename, sources)
+	sources_file = open('/etc/apt/sources.list.d/'+name, 'w+')
+	sources_file.write('\n'.join(prepared_sources))
+	sources_file.close()
+
+	if gpg_keyserver and gpg_keyid:
+		linux.system(('apt-key', 'adv', 
+					  '--keyserver', gpg_keyserver,
+					  '--recv', gpg_keyid),
+					 raise_exc=False)
 
 
 def installed(name, version=None, updatedb=False):
 	'''
 	Ensure that package installed
 	'''
-	pass
+	mgr = package_mgr()
+	if not mgr.installed(name):
+		mgr.install(name, version, updatedb)
 
 
 def latest(name, updatedb=False):
 	'''
 	Ensure that latest version of package installed 
 	'''
-	pass
+	mgr = package_mgr()
+	candidate = mgr.check_update(name)
+	if candidate:
+		mgr.install(candidate, updatedb=updatedb)
 
 
 def removed(name, purge=False):
 	'''
 	Ensure that package removed (purged)
 	'''
-	pass
+	mgr = package_mgr()
+	if mgr.installed(name):
+		mgr.remove(name, purge)
 
 
-def package_mgr():
-	if linux.os['family'] in ('RedHat', 'Oracle'):
-		return YumPackageMgr()
-	return AptPackageMgr()
 

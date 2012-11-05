@@ -15,7 +15,7 @@ import os
 def test_mount():
 	with mock.patch('scalarizr.linux.system') as m:
 		mount.mount('/dev/sdb', '/mnt')
-		m.assert_called_once()
+		assert m.called
 	
 
 @raises(mount.NoFileSystem)
@@ -28,14 +28,14 @@ def test_mount_no_filesystem():
 def test_umount():
 	with mock.patch('scalarizr.linux.system') as m:
 		mount.umount('/mnt/mpoint')
-		m.assert_called_once()
+		assert m.called
 
 
 def test_umount_not_mounted():
 	m = mock.Mock(side_effect=linux.LinuxError('', '', 'umount: /mnt: not mounted\n', 1, ()))
 	with mock.patch('scalarizr.linux.system', m):
 		mount.umount('/mnt')
-		m.assert_called_once()
+		assert m.called
 
 		
 @raises(linux.LinuxError)
