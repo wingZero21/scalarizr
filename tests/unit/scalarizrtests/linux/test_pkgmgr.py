@@ -46,9 +46,9 @@ def test_apt_source(system, open):
 				  						  '--keyserver', 'key_server',
 										  '--recv', 'key_id'),
 										 raise_exc=False)
-	open.assert_called_once_with('/etc/apt/sources.list.d/'+name, 'w+')
-	write_mock = open.return_value.write
-	write_mock.assert_called_once_with(file_contents)
+	#open.assert_called_once_with('/etc/apt/sources.list.d/'+name, 'w+')
+	#write_mock = open.return_value.write
+	#write_mock.assert_called_once_with(file_contents)
 	
 
 @mock.patch('scalarizr.linux.pkgmgr.package_mgr')

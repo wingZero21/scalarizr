@@ -3,6 +3,8 @@ Created on Aug 28, 2012
 
 @author: marat
 '''
+from __future__ import with_statement
+
 
 import logging
 import re
@@ -308,20 +310,18 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 	if linux.os['family'] in ('RedHat', 'Oracle'):
 		return
 
-	def _get_codenames(s):
-		codenames = re.findall('\$\{.+?\}', s)
-		return map((lambda(name): name[2:-1]), codenames) #2 is len of '${'
+	def _vars(s):
+		vars_ = re.findall('\$\{.+?\}', s)
+		return map((lambda(name): name[2:-1]), vars_) #2 is len of '${'
 
-	def _replace_codenames(s):
-		codenames = _get_codenames(s)
-		for codename in codenames:
-			s = s.replace('${'+codename+'}', linux.os[codename])
+	def _substitude(s):
+		for var in _vars(s):
+			s = s.replace('${'+var+'}', linux.os[var])
 		return s
 
-	prepared_sources = map(_replace_codenames, sources)
-	sources_file = open('/etc/apt/sources.list.d/'+name, 'w+')
-	sources_file.write('\n'.join(prepared_sources))
-	sources_file.close()
+	prepared_sources = map(_substitude, sources)
+	with open('/etc/apt/sources.list.d/' + name, 'w+') as fp:
+		fp.write('\n'.join(prepared_sources))
 
 	if gpg_keyserver and gpg_keyid:
 		linux.system(('apt-key', 'adv', 
@@ -335,8 +335,10 @@ def installed(name, version=None, updatedb=False):
 	Ensure that package installed
 	'''
 	mgr = package_mgr()
+	if updatedb:
+		mgr.updatedb()
 	if not mgr.installed(name):
-		mgr.install(name, version, updatedb)
+		mgr.install(name, version)
 
 
 def latest(name, updatedb=False):
@@ -344,8 +346,11 @@ def latest(name, updatedb=False):
 	Ensure that latest version of package installed 
 	'''
 	mgr = package_mgr()
+	if updatedb:
+		mgr.updatedb()
 	candidate = mgr.check_update(name)
-	mgr.install(candidate if candidate else name, updatedb=updatedb)
+	if candidate:
+		mgr.install(name, candidate)
 
 
 def removed(name, purge=False):
@@ -353,6 +358,6 @@ def removed(name, purge=False):
 	Ensure that package removed (purged)
 	'''
 	mgr = package_mgr()
-	if mgr.installed(name) or purge:
+	if purge or mgr.installed(name):
 		mgr.remove(name, purge)
 
