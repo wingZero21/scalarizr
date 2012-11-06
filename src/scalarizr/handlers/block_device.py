@@ -6,22 +6,19 @@ Created on Oct 13, 2011
 
 from __future__ import with_statement
 
+import os
+import logging
+
 from scalarizr.bus import bus
+from scalarizr import storage2
 from scalarizr import config, handlers
 from scalarizr.messaging import Messages
 from scalarizr.util import fstool, wait_until
 
 
-import os
-import logging
-from scalarizr.storage import Storage, Volume
-import sys
-
-
-
+LOG = logging.getLogger(__name__)
 
 class BlockDeviceHandler(handlers.Handler):
-	_logger = None
 	_platform = None
 	_queryenv = None
 	_msg_service = None
@@ -30,7 +27,6 @@ class BlockDeviceHandler(handlers.Handler):
 
 	def __init__(self, vol_type):
 		self._vol_type = vol_type
-		self._logger = logging.getLogger(__name__)
 		self.on_reload()
 		
 		bus.on(init=self.on_init, reload=self.on_reload)
@@ -68,7 +64,7 @@ class BlockDeviceHandler(handlers.Handler):
 
 
 	def on_before_host_init(self, *args, **kwargs):
-		self._logger.debug("Adding udev rule for EBS devices")
+		LOG.debug("Adding udev rule for EBS devices")
 		try:
 			cnf = bus.cnf
 			scripts_path = cnf.rawini.get(config.SECT_GENERAL, config.OPT_SCRIPTS_PATH)
@@ -79,12 +75,12 @@ class BlockDeviceHandler(handlers.Handler):
 			f.write('KERNEL=="xvd*", ACTION=="add|remove", RUN+="'+ scripts_path + '/udev"')
 			f.close()
 		except (OSError, IOError), e:
-			self._logger.error("Cannot add udev rule into '/etc/udev/rules.d' Error: %s", str(e))
+			LOG.error("Cannot add udev rule into '/etc/udev/rules.d' Error: %s", str(e))
 			raise
 
 
 	def on_host_init_response(self, *args, **kwargs):
-		self._logger.info('Configuring block device mountpoints')
+		LOG.info('Configuring block device mountpoints')
 		with bus.initialization_op as op:
 			with op.phase(self._phase_plug_volume):
 				wait_until(self._plug_all_volumes, sleep=10, timeout=600, 
@@ -112,14 +108,27 @@ class BlockDeviceHandler(handlers.Handler):
 			mpoint = qe_mpoint.dir or None
 			assert qe_volume.volume_id, 'Invalid volume info %s. volume_id should be non-empty' % qe_volume
 			
-			vol = Storage.create(
+			vol = storage2.volume(
 				type=self._vol_type, 
 				id=qe_volume.volume_id, 
-				device=qe_volume.device, 
+				name=qe_volume.device,
 				mpoint=mpoint
 			)
 
 			if mpoint:
+				def block():
+					vol.ensure(mount=True, mkfs=True, fstab=True)
+					bus.fire("block_device_mounted", 
+							volume_id=vol.id, device=vol.device)
+				
+				if bus.initialization_op:
+					msg = 'Mount device %s to %s' % (vol.device, vol.mpoint)
+					with bus.initialization_op.step(msg):
+						block()
+				else:
+					block()
+				
+				'''
 				mtab = fstool.Mtab()
 				if not mtab.contains(vol.device, reload=True):
 					if bus.initialization_op:
@@ -152,8 +161,9 @@ class BlockDeviceHandler(handlers.Handler):
 				else:
 					entry = mtab.find(vol.device)[0]
 					self._logger.debug("Skip device %s already mounted to %s", vol.device, entry.mpoint)
+				'''
 		except:
-			self._logger.exception("Can't attach volume")
+			LOG.exception("Can't attach volume")
 
 
 	def get_devname(self, devname):
@@ -161,10 +171,10 @@ class BlockDeviceHandler(handlers.Handler):
 
 
 	def on_MountPointsReconfigure(self, message):
-		self._logger.info("Reconfiguring mountpoints")
+		LOG.info("Reconfiguring mountpoints")
 		for qe_mpoint in self._queryenv.list_ebs_mountpoints():
 			self._plug_volume(qe_mpoint)
-		self._logger.debug("Mountpoints reconfigured")
+		LOG.debug("Mountpoints reconfigured")
 
 
 	def on_IntBlockDeviceUpdated(self, message):
@@ -172,7 +182,7 @@ class BlockDeviceHandler(handlers.Handler):
 			return
 		
 		if message.action == "add":
-			self._logger.debug("udev notified me that block device %s was attached", message.devname)
+			LOG.debug("udev notified me that block device %s was attached", message.devname)
 			
 			self.send_message(
 				Messages.BLOCK_DEVICE_ATTACHED, 
@@ -181,10 +191,9 @@ class BlockDeviceHandler(handlers.Handler):
 			)
 			
 			bus.fire("block_device_attached", device=message.devname)
-			Storage.fire('attach', Volume(device=message.devname))
 			
 		elif message.action == "remove":
-			self._logger.debug("udev notified me that block device %s was detached", message.devname)
+			LOG.debug("udev notified me that block device %s was detached", message.devname)
 			fstab = fstool.Fstab()
 			fstab.remove(message.devname)
 			
@@ -195,4 +204,3 @@ class BlockDeviceHandler(handlers.Handler):
 			)
 			
 			bus.fire("block_device_detached", device=message.devname)
-			Storage.fire('detach', Volume(device=message.devname))

@@ -19,7 +19,7 @@ from scalarizr.util import system2, port_in_use
 
 # Libs
 from scalarizr.util import cryptotool
-from scalarizr.util.iptables import RuleSpec, IpTables, P_TCP, P_UDP
+from scalarizr.linux import iptables
 
 # Stdlibs
 import logging, os, sys, threading
@@ -45,7 +45,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	
 	FLAG_REBOOT = "reboot"
 	FLAG_HALT = "halt"
-	
+
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		
@@ -152,6 +152,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 	def on_start(self):
+		iptables.save()
+
 		optparser = bus.optparser
 		
 		if self._flag_exists(self.FLAG_REBOOT):
@@ -236,7 +238,19 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 	def _insert_iptables_rules(self, *args, **kwargs):
-		self._logger.debug('Adding iptables rules for scalarizr ports')		
+		self._logger.debug('Adding iptables rules for scalarizr ports')
+
+		if iptables.enabled():
+			# Scalarizr ports
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8008"},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8010"},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8012"},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8013"},
+				{"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
+			]})
+
+		"""
 		iptables = IpTables()
 		if iptables.enabled():		
 			rules = []
@@ -250,6 +264,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			
 			for rule in rules:
 				iptables.insert_rule(1, rule_spec = rule)
+		"""
 
 
 	def on_shutdown(self):
@@ -375,14 +390,16 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		try:
 			self._logger.debug("Touch file '%s'", file)
 			open(file, "w+").close()
+			
 		except IOError, e:
-			self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))		
+			self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))
 	
 	def _flag_exists(self, name):
 		return os.path.exists(self._get_flag_filename(name))
 	
 	def _clear_flag(self, name):
-		os.remove(self._get_flag_filename(name))	
+		if self._flag_exists(name):
+			os.remove(self._get_flag_filename(name))
 	
 
 class IntMessagingService(object):

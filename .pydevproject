@@ -5,12 +5,12 @@
 <pydev_property name="org.python.pydev.PYTHON_PROJECT_INTERPRETER">Default</pydev_property>
 <pydev_property name="org.python.pydev.PYTHON_PROJECT_VERSION">python 2.6</pydev_property>
 <pydev_pathproperty name="org.python.pydev.PROJECT_SOURCE_PATH">
-<path>/scalarizr-branch-0.9-idcf/src</path>
-<path>/scalarizr-branch-0.9-idcf/externals</path>
-<path>/scalarizr-branch-0.9-idcf/tests/unit</path>
-<path>/scalarizr-branch-0.9-idcf/test/integ/testcases</path>
-<path>/scalarizr-branch-0.9-idcf/test/integ/libs</path>
-<path>/scalarizr-branch-0.9-idcf/test/unit/testcases</path>
-<path>/scalarizr-branch-0.9-idcf/test/unit/libs</path>
+<path>/scalarizr-dev/src</path>
+<path>/scalarizr-dev/externals</path>
+<path>/scalarizr-dev/tests/unit</path>
+<path>/scalarizr-dev/test/integ/testcases</path>
+<path>/scalarizr-dev/test/integ/libs</path>
+<path>/scalarizr-dev/test/unit/testcases</path>
+<path>/scalarizr-dev/test/unit/libs</path>
 </pydev_pathproperty>
 </pydev_project>

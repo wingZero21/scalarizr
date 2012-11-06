@@ -9,6 +9,7 @@ import sys
 import signal
 import string
 import pkgutil
+import contextlib
 
 from scalarizr.bus import bus
 from scalarizr import exceptions
@@ -181,7 +182,7 @@ class PopenError(BaseException):
 	
 	def __str__(self):
 		if len(self.args) >= 5:
-			args = [self.error_text or '']
+			args = [self.error_text + '. ' if self.error_text else '']
 			args += [self.proc_args[0] if hasattr(self.proc_args, '__iter__') else self.proc_args.split(' ')[0]]
 			args += [self.returncode, self.out, self.err, self.proc_args]
 
@@ -192,7 +193,7 @@ class PopenError(BaseException):
 	
 	@property
 	def error_text(self):
-		return self.args[0]
+		return len(self.args) and self.args[0] or ''
 	
 	@property
 	def out(self):
@@ -614,7 +615,7 @@ def import_object(import_str, *args, **kwds):
 
 def linux_package(name):
 	# @todo install package with apt or yum. raise beautiful errors
-	raise NotImplemented()
+	raise NotImplementedError()
 				
 
 class Hosts:	
@@ -655,4 +656,3 @@ class Hosts:
 		with open('/etc/hosts', 'w') as f:
 			for hostname, addr in hosts.iteritems():
 				f.write('%s\t%s\n' % (addr, hostname))
-

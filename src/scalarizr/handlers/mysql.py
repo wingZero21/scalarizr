@@ -25,7 +25,7 @@ from scalarizr.util import system2, disttool, filetool, \
 	PopenError
 from scalarizr.handlers import operation	
 from scalarizr.util.software import which
-from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
+from scalarizr.linux import iptables
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
@@ -1010,7 +1010,7 @@ class MysqlHandler(ServiceCtlHandler):
 						
 			try:
 				# Stop mysql
-				if master_storage_conf:
+				if master_storage_conf and master_storage_conf['type'] != 'eph':
 					if self._init_script.running:
 						mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
 						timeout = 180
@@ -1053,7 +1053,7 @@ class MysqlHandler(ServiceCtlHandler):
 					else:
 						raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
 					self._start_service()
-				else:
+				elif not master_storage_conf or master_storage_conf['type'] == 'eph':
 					self._start_service()
 					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
 					timeout = 180
@@ -1109,7 +1109,7 @@ class MysqlHandler(ServiceCtlHandler):
 				# Start MySQL
 				self._start_service()
 			
-			if tx_complete and master_storage_conf:
+			if tx_complete and master_storage_conf and master_storage_conf['type'] != 'eph':
 				# Delete slave EBS
 				self.storage_vol.destroy(remove_disks=True)
 				self.storage_vol = new_storage_vol
@@ -1126,67 +1126,68 @@ class MysqlHandler(ServiceCtlHandler):
 		"""
 		is_repl_master, = self._get_ini_options(OPT_REPLICATION_MASTER)
 		
-		if not int(is_repl_master):
-			host = message.local_ip or message.remote_ip
-			LOG.info("Switching replication to a new MySQL master %s", host)
-			bus.fire('before_mysql_change_master', host=host)			
+		if int(is_repl_master):
+			LOG.debug('Skip NewMasterUp. My replication role is master')
+			return
+		mysql = message.body
+		host = message.local_ip or message.remote_ip
+		LOG.info("Switching replication to a new MySQL master %s", host)
+		bus.fire('before_mysql_change_master', host=host)			
+		
+		if 'snapshot_config' in mysql and mysql['snapshot_config']['type'] != 'eph':
+			LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
+					message.snapshot_config['id'], message.log_file, message.log_pos)
+			self._stop_service('Swapping storages to reinitialize slave')
 			
-			if 'snapshot_config' in message.body:
-				LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
-						message.snapshot_config['id'], message.log_file, message.log_pos)
-				self._stop_service('Swapping storages to reinitialize slave')
-				
-				LOG.debug('Destroing old storage')
-				self.storage_vol.destroy()
-				LOG.debug('Storage destoyed')
-				
-				LOG.debug('Plugging new storage')
-				vol = Storage.create(snapshot=message.snapshot_config.copy(), tags=self.mysql_tags)
-				self._plug_storage(self._storage_path, vol)
-				LOG.debug('Storage plugged')
-				
-				Storage.backup_config(vol.config(), self._volume_config_path)
-				Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
-				self.storage_vol = vol
-				log_file = message.log_file
-				log_pos = message.log_pos
-				
-				self._start_service()				
+			LOG.debug('Destroing old storage')
+			self.storage_vol.destroy()
+			LOG.debug('Storage destoyed')
 			
-			my_cli = spawn_mysql_cli(ROOT_USER, message.root_password)
+			LOG.debug('Plugging new storage')
+			vol = Storage.create(snapshot=message.snapshot_config.copy(), tags=self.mysql_tags)
+			self._plug_storage(self._storage_path, vol)
+			LOG.debug('Storage plugged')
 			
-			if not 'snapshot_config' in message.body:
-				LOG.debug("Stopping slave i/o thread")
-				my_cli.sendline("STOP SLAVE IO_THREAD;")
-				my_cli.expect("mysql>")
-				LOG.debug("Slave i/o thread stopped")
-				
-				LOG.debug("Retrieving current log_file and log_pos")
-				my_cli.sendline("SHOW SLAVE STATUS\\G");
-				my_cli.expect("mysql>")
-				log_file = log_pos = None
-				for line in my_cli.before.split("\n"):
-					pair = map(str.strip, line.split(": ", 1))
-					if pair[0] == "Master_Log_File":
-						log_file = pair[1]
-					elif pair[0] == "Read_Master_Log_Pos":
-						log_pos = pair[1]
-				LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+			Storage.backup_config(vol.config(), self._volume_config_path)
+			Storage.backup_config(message.snapshot_config, self._snapshot_config_path)
+			self.storage_vol = vol
+			log_file = message.log_file
+			log_pos = message.log_pos
+			
+			self._start_service()				
+		
+		my_cli = spawn_mysql_cli(ROOT_USER, message.root_password)
+		
+		if not 'snapshot_config' in mysql or mysql['snapshot_config']['type'] == 'eph':
+			LOG.debug("Stopping slave i/o thread")
+			my_cli.sendline("STOP SLAVE IO_THREAD;")
+			my_cli.expect("mysql>")
+			LOG.debug("Slave i/o thread stopped")
+			
+			LOG.debug("Retrieving current log_file and log_pos")
+			my_cli.sendline("SHOW SLAVE STATUS\\G");
+			my_cli.expect("mysql>")
+			log_file = log_pos = None
+			for line in my_cli.before.split("\n"):
+				pair = map(str.strip, line.split(": ", 1))
+				if pair[0] == "Master_Log_File":
+					log_file = pair[1]
+				elif pair[0] == "Read_Master_Log_Pos":
+					log_pos = pair[1]
+			LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
 
-			self._change_master(
-				host=host, 
-				user=REPL_USER, 
-				password=message.repl_password,
-				log_file=log_file, 
-				log_pos=log_pos, 
-				timeout=self._change_master_timeout,
-				my_cli=my_cli
-			)
-				
-			LOG.debug("Replication switched")
-			bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
-		else:
-			LOG.debug('Skip NewMasterUp. My replication role is master')		
+		self._change_master(
+			host=host, 
+			user=REPL_USER, 
+			password=message.repl_password,
+			log_file=log_file, 
+			log_pos=log_pos, 
+			timeout=self._change_master_timeout,
+			my_cli=my_cli
+		)
+			
+		LOG.debug("Replication switched")
+		bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
 
 	
 	def on_before_reboot_start(self, *args, **kwargs):
@@ -1518,9 +1519,16 @@ class MysqlHandler(ServiceCtlHandler):
 		
 	
 	def _insert_iptables_rules(self):
+		if iptables.enabled():
+			iptables.ensure({"INPUT": [
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "3306"},
+			]})
+
+		"""
 		iptables = IpTables()
 		if iptables.enabled():
 			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
+		"""
 	
 	def _get_ini_options(self, *args):
 		ret = []
@@ -1618,7 +1626,8 @@ class MysqlHandler(ServiceCtlHandler):
 		LOG.info('MySQL data bundle created\n  snapshot: %s\n  log_file: %s\n  log_pos: %s', 
 						snap.id, log_file, log_pos)
 		return snap, log_file, log_pos
-			
+
+
 	def _create_storage_snapshot(self, tags=None):
 		LOG.info("Creating storage snapshot")
 		tags = tags or dict()
@@ -1628,10 +1637,12 @@ class MysqlHandler(ServiceCtlHandler):
 		except StorageError, e:
 			LOG.error("Cannot create MySQL data snapshot. %s", e)
 			raise
-	
+
+
 	def _repair_original_mycnf(self):
 		self._mysql_config.set('mysqld/datadir', '/var/lib/mysql')
 		self._mysql_config.remove('mysqld/log_bin')
+
 
 	def _add_mysql_users(self, root_user, repl_user, stat_user, root_pass=None, repl_pass=None, stat_pass=None, mysqld=None, my_cli=None):
 		LOG.info("Adding mysql system users")
@@ -1668,7 +1679,8 @@ class MysqlHandler(ServiceCtlHandler):
 
 		LOG.debug("MySQL system users added")
 		return (root_password, repl_password, stat_password)
-	
+
+
 	def _add_mysql_user(self, my_cli, login, password, host, privileges=None):
 
 		my_cli.sendline('SHOW COLUMNS FROM mysql.user\G')
@@ -1694,10 +1706,12 @@ class MysqlHandler(ServiceCtlHandler):
 			raise HandlerError("Error occured while adding user '%s' to MySQL user table.\n%s" % (login, res))
 		my_cli.sendline("FLUSH PRIVILEGES;")
 		my_cli.expect('mysql>')
-		
+
+
 	def _update_config(self, data): 
 		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: data})
-	
+
+
 	@_reload_mycnf
 	def _replication_init(self, master=True):
 		# Create replication config
@@ -1745,7 +1759,6 @@ class MysqlHandler(ServiceCtlHandler):
 			lines = map(string.strip, out.strip().split('\r\n')[2:-1])
 			return dict(map(string.strip, line.split(':', 1)) for line in lines)
 
-
 		try:
 			time_until = time.time() + timeout
 			status = None
@@ -1789,10 +1802,12 @@ class MysqlHandler(ServiceCtlHandler):
 				
 		LOG.debug('Replication master is changed to host %s', host)		
 
+
 	def _ping_mysql(self):
 		for sock in self._init_script.socks:
 			wait_sock(sock)
-	
+
+
 	def _move_mysql_dir(self, directive=None, dirname = None):
 
 		# Retrieveing mysql user from passwd		
@@ -1844,7 +1859,8 @@ class MysqlHandler(ServiceCtlHandler):
 		# Adding rules to apparmor config 
 		if disttool.is_debian_based() and self._apparmor_enabled:
 			_add_apparmor_rules(directory)
-	
+
+
 	def _flush_logs(self):
 		if not os.path.exists(self._data_dir):
 			return
@@ -1855,7 +1871,8 @@ class MysqlHandler(ServiceCtlHandler):
 		for file in files:
 			if file in info_files or file.find('relay-bin') != -1:
 				os.remove(os.path.join(self._data_dir, file))
-				
+
+
 	def write_config(self):
 		self._mysql_config.write(MYCNF)
 

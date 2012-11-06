@@ -32,13 +32,13 @@ class HAProxyCfg(filetool.ConfigurationFile):
 			self.name = os.path.basename(xpath)
 
 		def __contains__(self, name):
-			raise NotImplemented()
+			raise NotImplementedError()
 
 		def __getitem__(self, name):
-			raise NotImplemented()
+			raise NotImplementedError()
 
 		def __setitem__(self, name, value):
-			raise NotImplemented()
+			raise NotImplementedError()
 
 		def __iter__(self):
 			LOG.debug('slice_.__iter__')
@@ -316,7 +316,7 @@ class HAProxyCfg(filetool.ConfigurationFile):
 	
 	def __delitem__(self, key):
 		LOG.debug('HAProxyCfg.__delitem__: key `%s`', key)
-		return NotImplemented
+		return NotImplementedError
 
 	def sections(self, filter):
 		'''
