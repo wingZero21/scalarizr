@@ -191,28 +191,27 @@ class EphVolumeAdapter(EphVolume):
 		
 		
 	def _ensure(self):
-		if not self._eph_vol:
-			if self.snap:
-				config = self.snap \
-						if isinstance(self.snap, dict) \
-						else self.snap.config()
-			else:	
-				config = self.config()
-			disk = storage2.volume(config['disk'])
-			if disk.device.startswith('/dev/sd'):
-				disk = storage2.volume(
-						type='ec2_ephemeral', 
-						name='ephemeral0')
-				disk.ensure()
-			config['disk'] = disk
+		if self.snap:
+			config = self.snap \
+					if isinstance(self.snap, dict) \
+					else self.snap.config()
+		else:	
+			config = self.config()
+		disk = storage2.volume(config['disk'])
+		if disk.device.startswith('/dev/sd'):
+			disk = storage2.volume(
+					type='ec2_ephemeral', 
+					name='ephemeral0')
+			disk.ensure()
+		config['disk'] = disk
 
-			if self.snap:
-				self._eph_vol = self._eph_pvd.create_from_snapshot(**config)
-				self.snap = None
-			else:
-				self._eph_vol = self._eph_pvd.create(**config)
-			
-			self.device = self._eph_vol.device
+		if self.snap:
+			self._eph_vol = self._eph_pvd.create_from_snapshot(**config)
+			self.snap = None
+		else:
+			self._eph_vol = self._eph_pvd.create(**config)
+		
+		self.device = self._eph_vol.device
 		
 		
 	def _snapshot(self, description, tags, **kwds):
