@@ -146,7 +146,6 @@ class EbsVolume(base.Volume, EbsMixin):
 				size=size and int(size) or None, 
 				volume_type=volume_type, iops=iops, **kwds)	
 		EbsMixin.__init__(self)
-		self.features['restore'] = True
 		self.error_messages.update({
 			'no_id_or_conn': 'Volume has no ID and EC2 connection '
 							'required for volume construction is not available'

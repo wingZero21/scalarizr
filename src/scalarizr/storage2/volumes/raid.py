@@ -50,7 +50,6 @@ class RaidVolume(base.Volume):
 				raid_pv=raid_pv, level=level and int(level), 
 				lvm_group_cfg=lvm_group_cfg,
 				vg=vg, pv_uuid=pv_uuid, **kwds)
-		self.features['restore'] = True
 
 
 	def _ensure(self):

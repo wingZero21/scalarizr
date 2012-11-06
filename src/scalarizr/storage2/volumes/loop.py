@@ -34,7 +34,6 @@ class LoopVolume(base.Volume):
 		'''
 		super(LoopVolume, self).__init__(file=file, size=size, 
 				zerofill=zerofill, **kwds)
-		self.features['restore'] = True
 		
 	
 	def _ensure(self):

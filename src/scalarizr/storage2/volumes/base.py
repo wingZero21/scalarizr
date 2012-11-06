@@ -47,7 +47,7 @@ class Volume(Base):
 				mpoint=mpoint,
 				snap=snap,
 				**kwds)
-		self.features.update({'restore': False})
+		self.features.update({'restore': True})
 		
 
 	def ensure(self, mount=False, mkfs=False, fstab=False, **updates):

@@ -35,7 +35,7 @@ class LvmVolume(base.Volume):
 		'''
 		super(LvmVolume, self).__init__(pvs=pvs or [], vg=vg, name=name,
 				size=size, **kwds)
-		self.features['restore'] = True
+
 
 	def _lvinfo(self):
 		return lvm2.lvs(lvm2.lvpath(self.vg, self.name)).values()[0]

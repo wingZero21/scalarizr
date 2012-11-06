@@ -17,6 +17,7 @@ class TmpfsVolume(base.Volume):
 		self.error_messages.update({
 			'invalid_size': 'Volume size required and should be int value in Mb'
 		})
+		self.features['restore'] = False		
 
 
 	def _ensure(self):
