@@ -375,39 +375,44 @@ class ApacheHandler(ServiceCtlHandler):
 		received_vhosts = self._queryenv.list_virtual_hosts()
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
 		
-		#if [] != received_vhosts:
-		list_vhosts = os.listdir(vhosts_path)
-		if [] != list_vhosts:
-			self._logger.debug("Deleting old vhosts configuration files")
-			for fname in list_vhosts:
-				if '000-default' == fname:
-					continue
-				vhost_file = os.path.join(vhosts_path, fname)
-				if os.path.isfile(vhost_file):
+		self._logger.debug("Deleting old vhosts configuration files")
+		for fname in os.listdir(vhosts_path):
+			if '000-default' == fname:
+				continue
+
+			old_vhost_path = os.path.join(vhosts_path, fname)
+			for vhost in received_vhosts:
+				new_vhost_path = self.get_vhost_filename(vhost.hostname, vhost.https)
+				if new_vhost_path == old_vhost_path:
+					break
+			else:
+				if os.path.isfile(old_vhost_path):
 					try:
-						os.remove(vhost_file)
+						self._logger.debug("Removing old vhost: %s" % old_vhost_path)
+						os.remove(old_vhost_path)
 					except OSError, e:
-						self._logger.error('Cannot delete vhost file %s. %s', vhost_file, e.strerror)
+						self._logger.error('Cannot delete vhost file %s. %s', old_vhost_path, e.strerror)
 				
-				if os.path.islink(vhost_file):
+				if os.path.islink(old_vhost_path):
 					try:
-						os.unlink(vhost_file)
+						os.unlink(old_vhost_path)
 					except OSError, e:
-						self._logger.error('Cannot delete vhost link %s. %s', vhost_file, e.strerror)
-
-
-			self._logger.debug("Old vhosts configuration files deleted")
+						self._logger.error('Cannot delete vhost link %s. %s', old_vhost_path, e.strerror)					
+		self._logger.debug("Old vhosts configuration files deleted")
+		
 
 		self._logger.debug("Creating new vhosts configuration files")
+		https_certificate = None
 		for vhost in received_vhosts:
 			if (None == vhost.hostname) or (None == vhost.raw):
 				continue
+			
 			self._logger.debug("Processing %s", vhost.hostname)
 			if vhost.https:
 				try:
-					self._logger.debug("Retrieving ssl cert and private key from Scalr.")
-					https_certificate = self._queryenv.get_https_certificate()
-					self._logger.debug('Received certificate as %s type', type(https_certificate))
+					if not https_certificate:
+						self._logger.debug("Retrieving ssl cert and private key from Scalr.")
+						https_certificate = self._queryenv.get_https_certificate()
 				except:
 					self._logger.error('Cannot retrieve ssl cert and private key from Scalr.')
 					raise
@@ -418,7 +423,6 @@ class ApacheHandler(ServiceCtlHandler):
 						self._logger.error("Scalr returned empty SSL key")
 					else:
 						self._logger.debug("Saving SSL certificates for %s",vhost.hostname)
-						
 						key_error_message = 'Cannot write SSL key files to %s.' % cert_path
 						cert_error_message = 'Cannot write SSL certificate files to %s.' % cert_path
 						ca_cert_error_message = 'Cannot write CA certificate to %s.' % cert_path
@@ -438,9 +442,10 @@ class ApacheHandler(ServiceCtlHandler):
 				
 				self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
 				
-				vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + '-ssl' + VHOST_EXTENSION) 
+				vhost_fullpath = self.get_vhost_filename(vhost.hostname, ssl=True)
+				raw = vhost.raw.replace('/etc/aws/keys/ssl', cert_path)
 				vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
-				write_file(vhost_fullpath, vhost.raw.replace('/etc/aws/keys/ssl', cert_path), error_msg=vhost_error_message, logger = self._logger)
+				write_file(vhost_fullpath, raw, error_msg=vhost_error_message, logger = self._logger)
 				
 				self._create_vhost_paths(vhost_fullpath) 	
 
@@ -452,12 +457,13 @@ class ApacheHandler(ServiceCtlHandler):
 				
 			else:
 				self._logger.debug('Enabling virtual host %s', vhost.hostname)
-				vhost_fullpath = os.path.join(vhosts_path, vhost.hostname + VHOST_EXTENSION)
+				vhost_fullpath = self.get_vhost_filename(vhost.hostname)
 				vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
 				write_file(vhost_fullpath, vhost.raw, error_msg=vhost_error_message, logger=self._logger)
 				self._logger.debug("Done %s processing", vhost.hostname)
 				self._create_vhost_paths(vhost_fullpath)
 		self._logger.debug("New vhosts configuration files created")
+		
 		
 		if disttool.is_debian_based():
 			self._patch_default_conf_deb()
@@ -471,7 +477,14 @@ class ApacheHandler(ServiceCtlHandler):
 		inc_mask = vhosts_path + '/*' + VHOST_EXTENSION
 		if not inc_mask in includes:
 			self._config.add('Include', inc_mask)
-			self._config.write(self._httpd_conf_path)			
+			self._config.write(self._httpd_conf_path)
+
+		self._logger.debug("Creating logrotate config")
+		self._create_logrotate_conf(LOGROTATE_CONF_PATH)
+			
+	def get_vhost_filename(self, hostname, ssl=False):
+		end = VHOST_EXTENSION if not ssl else '-ssl' + VHOST_EXTENSION
+		return os.path.join(bus.etc_path, VHOSTS_PATH, hostname + end)
 
 	def _create_logrotate_conf(self, logrotate_conf_path):
 		if not os.path.exists(logrotate_conf_path):

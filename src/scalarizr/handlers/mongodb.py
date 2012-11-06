@@ -41,7 +41,8 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
-from scalarizr.util import wait_until, Hosts, cryptotool, iptables
+from scalarizr.util import wait_until, Hosts, cryptotool
+from scalarizr.linux import iptables
 from scalarizr.util.filetool import split, rchown
 from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError

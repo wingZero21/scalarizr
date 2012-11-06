@@ -240,9 +240,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					if self.default_service.running:
 						self.default_service.stop('Treminating default redis instance')
 						
-					if self.default_service.running:
-						self.default_service.stop('Treminating default redis instance')
-						
 					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
 					self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self.get_main_password(),])
 
@@ -367,6 +364,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					# Continue if master storage is a valid redis storage 
 					if not r.working_directory.is_initialized(self._storage_path):
 						raise HandlerError("%s is not a valid %s storage" % (self._storage_path, BEHAVIOUR))
+
+				Storage.backup_config(new_storage_vol.config(), self._volume_config_path)
 				'''
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
