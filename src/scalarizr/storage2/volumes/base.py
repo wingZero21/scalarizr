@@ -172,7 +172,9 @@ class Volume(Base):
 	def _check_restore_unsupported(self):
 		if self.snap:
 			msg = self.error_messages['restore_unsupported'] % self.type
-			raise NotImplementedError(msg)
+			LOG.debug(msg)
+			LOG.debug('Some details: features=%s, config=%s', self.features, self.config())
+			#raise NotImplementedError(msg)
 		
 	
 	def _ensure(self):

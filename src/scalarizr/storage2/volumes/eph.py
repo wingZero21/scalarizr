@@ -53,8 +53,6 @@ class EphVolume(base.Volume):
 
 		self._transfer = None
 		self._lvm_volume = None
-		self.features.update({'restore': True})
-
 
 
 	def _ensure(self):
