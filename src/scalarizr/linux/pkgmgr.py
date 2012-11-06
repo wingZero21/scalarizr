@@ -18,6 +18,9 @@ LOG = logging.getLogger(__name__)
 
 class PackageMgr(object):
 
+	INFO_CANDIDATE_KEY = 'candidate'
+	INFO_INSTALLED_KEY = 'installed'
+
 	def install(self, name, version=None, updatedb=False, **kwds):
 		''' Installs a `version` of package `name` '''
 		raise NotImplementedError()
@@ -28,30 +31,18 @@ class PackageMgr(object):
 
 	def info(self, name):
 		'''
+		Returns info about package
 		Example:
 			{'installed': '2.6.7-ubuntu1',
 			'candidate': '2.6.7-ubuntu5'}
+		installed is None, if package not installed
+		candidate is None, if latest version of package is installed
 		'''
 		raise NotImplementedError()
 
 	def updatedb(self):
 		''' Updates package manager internal database '''
 		raise NotImplementedError()
-
-	'''
-	def installed(self, name):
-		''' Return installed package version '''
-		raise NotImplementedError()	
-
-
-	def check_update(self, name):
-		''' Returns info for package `name` '''
-		raise NotImplementedError()
-
-	def candidates(self, name):
-		''' Returns all available installation candidates for `name` '''
-		raise NotImplementedError()
-	'''
 
 
 class AptPackageMgr(PackageMgr):
@@ -95,17 +86,6 @@ class AptPackageMgr(PackageMgr):
 	def updatedb(self):
 		self.apt_get_command('update')		
 
-
-	def candidates(self, name):
-		return [self.apt_policy(name)[1]]
-
-	def check_update(self, name):
-		installed, candidate = self.apt_policy(name) 
-		#'not' is needed because '/usr/bin/dpkg --compare-versions' returns 0 if success
-		if not linux.system(('/usr/bin/dpkg', '--compare-versions', candidate, 'gt',
-											installed), raise_exc = False)[2]:
-				return candidate
-				
 	def install(self, name, version=None, updatedb=False, **kwds):
 		if version:
 			name += '=%s' % version
@@ -131,16 +111,11 @@ class AptPackageMgr(PackageMgr):
 					raise
 				time.sleep(2)
 
-	def installed(self, name):
-		out, code = linux.system(('dpkg-query', '--showformat', 
-								'${Status} ${Package} ${Version}', 
-								'--show', name), 
-								raise_exc=False)[::2]
-		if not code:
-			cols = out.split()
-			return cols[2] == 'installed' and cols[4]
-		return None 
-
+	def info(self, name):
+		installed, candidate = self.apt_policy(name)
+		return {self.INFO_INSTALLED_KEY: installed,
+				self.INFO_CANDIDATE_KEY: candidate if installed != candidate else None}
+				
 
 class RpmVersion(object):
 	
@@ -222,25 +197,10 @@ class YumPackageMgr(PackageMgr):
 			versions = []
 		
 		return installed, versions
-	
-	
-	def candidates(self, name):
-		installed, versions = self.yum_list(name)
-		
-		if installed:
-			versions = [v for v in versions if self.rpm_ver_cmp(v, installed) > 0]
-		
-		return versions
 
 
 	def updatedb(self):
 		self.yum_command('clean expire-cache')		
-
-
-	def check_update(self, name):
-		out, _, code = self.yum_command('check-update %s' % name)
-		if code == 100:
-			return filter(None, out.strip().split(' '))[1]
 
 
 	def install(self, name, version=None, updatedb=False, **kwds):
@@ -252,11 +212,14 @@ class YumPackageMgr(PackageMgr):
 
 
 	def remove(self, name, purge=False):
-		command = 'remove'
-		self.yum_command('%s %s' % (command, name), raise_exc=True)
+		self.yum_command('remove '+name, raise_exc=True)
 
-	def installed(self, name):
-		return self.yum_list(name)[0]
+
+	def info(self, name):
+		installed, candidates = self.yum_list(name)
+		return {self.INFO_INSTALLED_KEY: installed,
+				self.INFO_CANDIDATE_KEY: candidates[-1] if candidates else None}
+
 
 
 class RPMPackageMgr(PackageMgr):
@@ -271,19 +234,32 @@ class RPMPackageMgr(PackageMgr):
 	def remove(self, name, purge=False):
 		self.rpm_command('-e '+name, raise_exc=True)
 
-	def installed(self, name):
+	def _version_from_name(self, name):
+		''' Returns version of package that contains in its name
+			Example: 
+				name = vim-common-7.3.682-1.fc17.x86_64
+				version = 7.3.682-1.fc17.x86_64
+		'''
+		# TODO: remove architecture info from version string
 		name = urlparse(name).path.split('/')[-1]
-		code = self.rpm_command('-q '+name, raise_exc=False)[2]
-		return not code
+		name = name.replace('.rpm', '')
+
+		version = re.findall(r'-[0-9][^-]*\..*', name)[0][1:]
+		return version
+
+	def info(self, name):
+		name = urlparse(name).path.split('/')[-1]
+		name = name.replace('.rpm', '')
+
+		out, _, code = self.rpm_command('-q '+name, raise_exc=False)
+		installed = not code
+		installed_version = self._version_from_name(out)
+
+		return {self.INFO_INSTALLED_KEY: installed_version if installed else None,
+				self.INFO_CANDIDATE_KEY: None}
 
 	def updatedb(self):
 		pass
-
-	def check_update(self, name):
-		pass
-
-	def candidates(self, name):
-		return []
 
 
 def package_mgr():
@@ -302,7 +278,8 @@ def epel_repository():
 		return
 
 	mgr = RPMPackageMgr()
-	if not mgr.installed(EPEL_RPM_URL):
+	installed = mgr.info(EPEL_RPM_URL)[PackageMgr.INFO_INSTALLED_KEY]
+	if not installed:
 		mgr.install(EPEL_RPM_URL)
 
 
@@ -348,7 +325,9 @@ def installed(name, version=None, updatedb=False):
 	mgr = package_mgr()
 	if updatedb:
 		mgr.updatedb()
-	if not mgr.installed(name):
+
+	installed = mgr.info(name)[PackageMgr.INFO_INSTALLED_KEY]
+	if not installed:
 		mgr.install(name, version)
 
 
@@ -359,8 +338,12 @@ def latest(name, updatedb=False):
 	mgr = package_mgr()
 	if updatedb:
 		mgr.updatedb()
-	candidate = mgr.check_update(name)
-	if candidate:
+
+	info_dict = mgr.info(name)
+	candidate = info_dict[PackageMgr.INFO_CANDIDATE_KEY]
+	installed = info_dict[PackageMgr.INFO_INSTALLED_KEY]
+
+	if candidate or not installed:
 		mgr.install(name, candidate)
 
 
@@ -369,6 +352,7 @@ def removed(name, purge=False):
 	Ensure that package removed (purged)
 	'''
 	mgr = package_mgr()
-	if purge or mgr.installed(name):
+	installed = mgr.info(name)[PackageMgr.INFO_INSTALLED_KEY]
+	if purge or installed:
 		mgr.remove(name, purge)
 

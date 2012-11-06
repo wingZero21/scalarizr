@@ -54,10 +54,10 @@ class FileSystem(object):
 			coreutils.modprobe(self.type)
 			if self.os_packages:
 				LOG.debug('Installing OS packages')
+				
 				from scalarizr.linux import pkgmgr
-				mgr = pkgmgr.package_mgr()
 				for package in self.os_packages:
-					mgr.install(package)
+					pkgmgr.latest(package)
 		
 
 	def mkfs(self, device, *short_args):

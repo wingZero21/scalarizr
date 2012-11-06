@@ -514,8 +514,7 @@ class User(bases.ConfigDriven):
 
 def innobackupex(*params, **long_kwds):
 	if not os.path.exists('/usr/bin/innobackupex'):
-		mgr = pkgmgr.package_mgr()
-		mgr.install('percona-xtrabackup')
+		pkgmgr.latest('percona-xtrabackup')
 	return linux.system(linux.build_cmd_args(
 			executable='/usr/bin/innobackupex', 
 			long=long_kwds, 
