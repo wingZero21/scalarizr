@@ -26,8 +26,8 @@ def backup(*args, **kwds):
 	try:
 		cls = backup_types[type_]
 	except KeyError:
-		msg = "Unknown backup type '%s'. "
-		"Have you registered it in "
+		msg = "Unknown backup type '%s'. " \
+		"Have you registered it in " \
 		"scalarizr.services.backup.backup_types?" % type_
 		raise Error(msg)
 	return cls(**kwds)
@@ -40,11 +40,12 @@ def restore(*args, **kwds):
 		else:
 			return args[0]
 	type_ = kwds.get('type', 'base')
+	print type_
 	try:
 		cls = restore_types[type_]
 	except KeyError:
-		msg = "Unknown restore type '%s'. "
-		"Have you registered it in " 
+		msg = "Unknown restore type '%s'. " \
+		"Have you registered it in " \
 		"scalarizr.services.backup.restore_types?" % type_
 		raise Error(msg)
 	return cls(**kwds)

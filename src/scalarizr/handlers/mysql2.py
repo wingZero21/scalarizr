@@ -932,9 +932,9 @@ class MysqlHandler(DBMSRHandler):
 			if 'restore' in mysql2:
 				restore = backup.restore(**mysql2['restore'])
 			else:
-				# mysql_snap restore should update MySQL volume, and delete old one
+				# snap_mysql restore should update MySQL volume, and delete old one
 				restore = backup.restore(
-							type='mysql_snap',
+							type='snap_mysql',
 							log_file=mysql2['log_file'],
 							log_pos=mysql2['log_pos'],
 							volume=__mysql__['volume'],
