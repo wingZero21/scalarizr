@@ -224,6 +224,7 @@ class EphVolumeAdapter(EphVolume):
 		
 		snap = storage2.snapshot(type='eph')
 		snap._config.update(eph_snap.config())
+		snap._eph_pvd = self._eph_pvd
 		return snap
 	
 	
@@ -235,7 +236,15 @@ class EphVolumeAdapter(EphVolume):
 		self._eph_pvd.detach(self._eph_vol, force)
 
 
+class EphSnapshotAdapter(base.Snapshot):
+	_eph_pvd = None
+	
+	def _status(self):
+		return self._eph_pvd.get_snapshot_state(self)
+		
+
 #storage2.volume_types['eph'] = EphVolume
 storage2.volume_types['eph'] = EphVolumeAdapter
-storage2.snapshot_types['eph'] = EphSnapshot
+#storage2.snapshot_types['eph'] = EphSnapshot
+storage2.snapshot_types['eph'] = EphSnapshotAdapter
 

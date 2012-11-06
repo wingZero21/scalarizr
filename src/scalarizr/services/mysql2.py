@@ -61,8 +61,7 @@ class MySQLSnapBackup(backup.SnapBackup):
 		super(MySQLSnapBackup, self).__init__(**kwds)
 		self.on(
 			freeze=self.freeze,
-			complete=self.unfreeze,
-			error=self.unfreeze
+			unfreeze=self.unfreeze
 		)
 		self._mysql_init = mysql_svc.MysqlInitScript()
 
