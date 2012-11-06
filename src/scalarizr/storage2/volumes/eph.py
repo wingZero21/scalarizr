@@ -206,6 +206,8 @@ class EphVolumeAdapter(EphVolume):
 		config['disk'] = disk
 
 		if self.snap:
+			if self._eph_vol:
+				self._eph_vol.detach(force=True)
 			self._eph_vol = self._eph_pvd.create_from_snapshot(**config)
 			self.snap = None
 		else:
