@@ -939,9 +939,9 @@ class MysqlHandler(DBMSRHandler):
 							log_pos=mysql2['log_pos'],
 							volume=__mysql__['volume'],
 							snapshot=mysql2['snapshot_config'])
-				# XXX: ugly
-				if __mysql__['volume'].type == 'eph':
-					self.mysql.service.stop('Swapping storages to reinitialize slave')
+			# XXX: ugly
+			if __mysql__['volume'].type == 'eph':
+				self.mysql.service.stop('Swapping storages to reinitialize slave')
 				'''
 				LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
 						restore.snapshot['id'], restore.log_file, restore.log_pos)
