@@ -413,7 +413,8 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 	def _status(self):
 		self._check_ec2()
 		snapshot = self._ebs_snapshot(self.id)
-		return self._status_map[snapshot.update()]
+		snapshot.update()
+		return self._status_map[snapshot.status]
 	
 
 	def _destroy(self):
