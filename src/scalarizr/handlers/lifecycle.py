@@ -14,7 +14,7 @@ from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
-from scalarizr.util import system2, port_in_use
+from scalarizr.util import system2, port_in_use, software
 
 
 # Libs
@@ -214,9 +214,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		
 	
 	def _start_import(self):
-		# Send Hello 
-		msg = self.new_message(Messages.HELLO, 
-			{"architecture" : self._platform.get_architecture()}, 
+		# Send Hello
+		msg = self.new_message(Messages.HELLO,
+			dict(architecture = self._platform.get_architecture(),
+			    private_ip = self._platform.get_private_ip(),
+				public_ip = self._platform.get_public_ip(),
+				server_id = self.cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID,
+				handlers = [entry['name'] for entry in software.system_info()['software']])
+			),
 			broadcast=True # It's not really broadcast but need to contain broadcast message data 
 		)		
 		bus.fire("before_hello", msg)
