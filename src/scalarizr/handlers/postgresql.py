@@ -601,7 +601,30 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 		self._logger.debug("Replication switched")
 		bus.fire('postgresql_change_master', host=host)
+	
+	def _make_backup_steps(self, db_list, operation_, _single_backup_fun):
+		max_single_stepped_dbs = 10   # max number of databases above which database backups are grouped in steps
+		db_portion_size = 10          # number of databases backuped in single step
+		num_db = len(db_list)
+
+		if num_db > max_single_stepped_dbs:
 			
+			iter_step = db_portion_size
+			for (start, end) in zip(xrange(0, num_db, iter_step), xrange(iter_step, num_db+iter_step, iter_step)):
+				operation_msg = None
+				if start+1 != end:
+					operation_msg = "Backup %d-%d databases" % (start+1, end) 
+				else:
+					operation_msg = "Backup %d database" % end
+
+				with operation_.step(operation_msg):
+					portion = db_list[start:end]
+					for db_name in portion:
+						_single_backup_fun(db_name)
+		else:
+			for db_name in db_list:
+				with operation_.step("Backup '%s'" % db_name):
+					_single_backup_fun(db_name)	
 
 	def on_DbMsr_CreateBackup(self, message):
 		#TODO: Think how to move the most part of it into Postgresql class 
@@ -636,17 +659,18 @@ class PostgreSqlHander(ServiceCtlHandler):
 				# Dump all databases
 				self._logger.info("Dumping all databases")
 				tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
-				rchown(self.postgresql.root_user.name, tmpdir)	
-				
-				for db in databases:
-					with op.step("Backup '%s'" % db):
-						dump_path = tmpdir + os.sep + db + '.sql'
-						pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db, dump_path)
-						su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
-						err = system2(su_args)[1]
-						if err:
-							raise HandlerError('Error while dumping database %s: %s' % (db, err))
-						backup.add(dump_path, os.path.basename(dump_path))							
+				rchown(self.postgresql.root_user.name, tmpdir)
+
+				def _single_backup(db_name):
+					dump_path = tmpdir + os.sep + db_name + '.sql'
+					pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path)
+					su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
+					err = system2(su_args)[1]
+					if err:
+						raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
+					backup.add(dump_path, os.path.basename(dump_path))	
+
+				self._make_backup_steps(databases, op, _single_backup)						
 
 				backup.close()
 				

@@ -541,7 +541,30 @@ class MysqlHandler(DBMSRHandler):
 				farm_role_id = farm_role_id
 			))
 	
-	
+	def _make_backup_steps(self, db_list, operation_, _single_backup_fun):
+		max_single_stepped_dbs = 10   # max number of databases above which database backups are grouped in steps
+		db_portion_size = 10          # number of databases backuped in single step
+		num_db = len(db_list)
+
+		if num_db > max_single_stepped_dbs:
+
+			iter_step = db_portion_size
+			for (start, end) in zip(xrange(0, num_db, iter_step), xrange(iter_step, num_db+iter_step, iter_step)):
+				operation_msg = None
+				if start+1 != end:
+					operation_msg = "Backup %d-%d databases" % (start+1, end) 
+				else:
+					operation_msg = "Backup %d database" % end
+
+				with operation_.step(operation_msg):
+					portion = db_list[start:end]
+					for db_name in portion:
+						_single_backup_fun(db_name)
+		else:
+			for db_name in db_list:
+				with operation_.step("Backup '%s'" % db_name):
+					_single_backup_fun(db_name)
+
 	def on_DbMsr_CreateBackup(self, message):
 		LOG.debug("on_DbMsr_CreateBackup")
 
@@ -591,8 +614,6 @@ class MysqlHandler(DBMSRHandler):
 			))
 
 		'''
-
-
 		tmp_basedir = __mysql__['tmp_dir']
 		if not os.path.exists(tmp_basedir):
 			os.makedirs(tmp_basedir)		
@@ -610,7 +631,6 @@ class MysqlHandler(DBMSRHandler):
 			op.define()			
 
 			with op.phase(self._phase_backup):
-
 				# Dump all databases
 				LOG.info("Dumping all databases")
 				tmpdir = tempfile.mkdtemp(dir=tmp_basedir)
@@ -620,15 +640,16 @@ class MysqlHandler(DBMSRHandler):
 				
 				# Creating archive 
 				backup = tarfile.open(backup_path, 'w:gz')
-				
 				mysqldump = mysql_svc.MySQLDump(root_user=__mysql__['root_user'],
 									root_password=__mysql__['root_password'])
-				dump_options = __mysql__['mysqldump_options'].split(' ')	
-				for db_name in databases:
-					with op.step("Backup '%s'" % db_name):
-						dump_path = os.path.join(tmpdir, db_name + '.sql') 
-						mysqldump.create(db_name, dump_path, dump_options)
-						backup.add(dump_path, os.path.basename(dump_path))
+				dump_options = __mysql__['mysqldump_options'].split(' ')
+
+				def _single_backup(db_name):
+					dump_path = os.path.join(tmpdir, db_name + '.sql') 
+					mysqldump.create(db_name, dump_path, dump_options)
+					backup.add(dump_path, os.path.basename(dump_path))
+
+				self._make_backup_steps(databases, op, _single_backup)
 						
 				backup.close()
 				
