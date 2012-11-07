@@ -736,7 +736,7 @@ class FarmSecurityMixin(object):
 		"""
 		for rule in rules:
 			self._iptables.insert_rule(1, rule)
-		"""
+		
 
 
 def prepare_tags(handler=None, **kwargs):
