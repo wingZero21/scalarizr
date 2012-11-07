@@ -401,7 +401,7 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 	
 	_status_map = {
 		'pending': base.Snapshot.IN_PROGRESS,
-		'available': base.Snapshot.COMPLETED,
+		'completed': base.Snapshot.COMPLETED,
 		'error': base.Snapshot.FAILED
 	}
 	
