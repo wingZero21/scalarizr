@@ -602,20 +602,33 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._logger.debug("Replication switched")
 		bus.fire('postgresql_change_master', host=host)
 	
+	def _backup_step_msg(self, str_or_pair):
+		if isinstance(str_or_pair, str):
+			return "Backup '%s'" % str_or_pair
+		elif str_or_pair[0]+1 != str_or_pair[1]:
+			return 'Backup %d-%d databases' % str_or_pair
+		else:
+			return 'Backup %d database' % end
+
+	max_single_stepped_dbs = 10   # max number of databases above which database backups are grouped in steps
+	db_portion_size = 10          # number of databases backuped in single step
+
+	def _backup_step_msg_list(self, db_list):
+		num_db = len(db_list)
+		if num_db > self.max_single_stepped_dbs:
+			iter_step = self.db_portion_size
+			return map(self._backup_step_msg, zip(xrange(0, num_db, iter_step), xrange(iter_step, num_db+iter_step, iter_step)))
+		else:
+			return map(self._backup_step_msg, db_list)
+
 	def _make_backup_steps(self, db_list, operation_, _single_backup_fun):
-		max_single_stepped_dbs = 10   # max number of databases above which database backups are grouped in steps
-		db_portion_size = 10          # number of databases backuped in single step
+		
 		num_db = len(db_list)
 
-		if num_db > max_single_stepped_dbs:
-			
-			iter_step = db_portion_size
+		if num_db > self.max_single_stepped_dbs:
+			iter_step = self.db_portion_size
 			for (start, end) in zip(xrange(0, num_db, iter_step), xrange(iter_step, num_db+iter_step, iter_step)):
-				operation_msg = None
-				if start+1 != end:
-					operation_msg = "Backup %d-%d databases" % (start+1, end) 
-				else:
-					operation_msg = "Backup %d database" % end
+				operation_msg = self._backup_step_msg((start, end))
 
 				with operation_.step(operation_msg):
 					portion = db_list[start:end]
@@ -623,7 +636,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 						_single_backup_fun(db_name)
 		else:
 			for db_name in db_list:
-				with operation_.step("Backup '%s'" % db_name):
+				with operation_.step(self._backup_step_msg(db_name)):
 					_single_backup_fun(db_name)	
 
 	def on_DbMsr_CreateBackup(self, message):
@@ -640,7 +653,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 			op = operation(name=self._op_backup, phases=[{
 				'name': self._phase_backup, 
-				'steps': ["Backup '%s'" % db for db in databases] + [self._step_upload_to_cloud_storage]
+				'steps': self._backup_step_msg_list(databases) + [self._step_upload_to_cloud_storage]
 			}])
 			op.define()			
 			
