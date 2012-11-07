@@ -883,31 +883,6 @@ class RedisCLI(object):
 		return False
 
 
-class RedisPresetProvider(object):
-
-	providers = None
-
-	def __init__(self):
-		self.providers = []
-		for config_path in get_redis_processes():
-			port = get_port(config_path)
-			service = Redisd(config_path, port)
-			config_objects = {'redis.conf':service.redis_conf}
-			provider = PresetProvider(service, config_objects)
-			self.providers.append(provider)
-
-
-	def get_perset(self, manifest):
-		for provider in self.providers:
-			if provider.service.port == DEFAULT_PORT:
-				return provider.get_preset(manifest)
-
-
-	def set_preset(self, settings, manifest):
-		for provider in self.providers:
-			provider.set_preset(settings, manifest)
-
-
 def get_snap_db_filename(port=DEFAULT_PORT):
 	return 'dump.%s.rdb' % port
 

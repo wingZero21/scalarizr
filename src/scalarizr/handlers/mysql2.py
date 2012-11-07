@@ -367,6 +367,7 @@ class MysqlHandler(DBMSRHandler):
 			if not vol.tags:
 				vol.tags = self.resource_tags()
 			vol.ensure(mount=True)
+			__mysql__['volume'] = vol
 			if int(__mysql__['replication_master']):
 				LOG.debug("Checking Scalr's %s system users presence", 
 						__mysql__['behavior'])
@@ -479,7 +480,7 @@ class MysqlHandler(DBMSRHandler):
 		else:
 			self._init_slave(message)
 		# Force to resave volume settings
-		__mysql__['volume'] = dict(storage2.volume(__mysql__['volume']))
+		__mysql__['volume'] = storage2.volume(__mysql__['volume'])
 		bus.fire('service_configured', service_name=__mysql__['behavior'], replication=repl)
 
 
@@ -628,6 +629,8 @@ class MysqlHandler(DBMSRHandler):
 			))
 
 		'''
+
+
 		tmp_basedir = __mysql__['tmp_dir']
 		if not os.path.exists(tmp_basedir):
 			os.makedirs(tmp_basedir)		
@@ -724,7 +727,7 @@ class MysqlHandler(DBMSRHandler):
 		
 					bus.fire('before_mysql_data_bundle')
 
-					backup_info = message.body[__mysql__['behavior']]
+					backup_info = message.body.get(__mysql__['behavior'], {})
 
 					compat_prior_backup_restore = 'backup' not in backup_info
 					if compat_prior_backup_restore:
@@ -788,10 +791,11 @@ class MysqlHandler(DBMSRHandler):
 		if int(__mysql__['replication_master']):
 			LOG.warning('Cannot promote to master. Already master')
 			return
+		LOG.info('Starting Slave -> Master promotion')
 			
 		bus.fire('before_slave_promote_to_master')
 
-		__mysql__['compat_prior_backup_restore'] = 'volume_config' in mysql2
+		__mysql__['compat_prior_backup_restore'] = mysql2.get('volume_config') or mysql2.get('snapshot_config')
 		new_vol	= None
 		if mysql2.get('volume_config'):
 			new_vol = storage2.volume(mysql2.get('volume_config'))
@@ -922,7 +926,8 @@ class MysqlHandler(DBMSRHandler):
 						'volume': dict(__mysql__['volume'])
 					}
 				
-				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)							
+				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
+				LOG.info('Promotion completed')							
 				
 			bus.fire('slave_promote_to_master')
 			
@@ -957,19 +962,21 @@ class MysqlHandler(DBMSRHandler):
 		host = message.local_ip or message.remote_ip
 		LOG.info("Switching replication to a new MySQL master %s", host)
 		bus.fire('before_mysql_change_master', host=host)			
-
 		
-		if __mysql__['volume']['type'] in ('eph', 'lvm'):
+		if __mysql__['volume'].type in ('eph', 'lvm'):
 			if 'restore' in mysql2:
 				restore = backup.restore(**mysql2['restore'])
 			else:
-				# mysql_snap restore should update MySQL volume, and delete old one
+				# snap_mysql restore should update MySQL volume, and delete old one
 				restore = backup.restore(
-							type='mysql_snap',
+							type='snap_mysql',
 							log_file=mysql2['log_file'],
 							log_pos=mysql2['log_pos'],
 							volume=__mysql__['volume'],
 							snapshot=mysql2['snapshot_config'])
+			# XXX: ugly
+			if __mysql__['volume'].type == 'eph':
+				self.mysql.service.stop('Swapping storages to reinitialize slave')
 				'''
 				LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
 						restore.snapshot['id'], restore.log_file, restore.log_pos)

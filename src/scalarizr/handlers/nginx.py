@@ -16,7 +16,7 @@ from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 
 # Libs
-from scalarizr.libs.metaconf import Configuration
+from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2, disttool
 from scalarizr.linux import iptables
@@ -425,6 +425,13 @@ class NginxHandler(ServiceCtlHandler):
 				and os.access(self._cnf.key_path("https.key"), os.F_OK):
 			self._logger.debug('Add https include %s', self._https_inc_path)
 			backend_include.set('include', self._https_inc_path, force=True)
+		else:
+			self._logger.debug('Removing https include %s', self._https_inc_path)
+			try:
+				backend_include.remove('include', self._https_inc_path)
+			except NoPathError:
+				pass
+
 		
 		old_include = None
 		if os.path.isfile(self._app_inc_path):
@@ -468,27 +475,28 @@ class NginxHandler(ServiceCtlHandler):
 			iptables.insert_rule(None, RuleSpec(dport=443, jump='ACCEPT', protocol=P_TCP))
 		"""
 
+
 	def _update_vhosts(self):
 		self._logger.debug("Requesting virtual hosts list")
 		received_vhosts = self._queryenv.list_virtual_hosts()
 		self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
 	
 		https_config = ''
-		
-		if received_vhosts:
+		cert_path = self._cnf.key_path("https.crt")
+		pk_path = self._cnf.key_path("https.key")
+		ssl_present = any(vhost.https for vhost in received_vhosts)
+
+		if ssl_present:
 			https_certificate = self._queryenv.get_https_certificate()
-			
-			cert_path = self._cnf.key_path("https.crt")
-			pk_path = self._cnf.key_path("https.key")
-			
+
 			if https_certificate[0]:
-				msg = 'Writing ssl cert' 
+				msg = 'Writing ssl cert'
 				cert = https_certificate[0]
 				write_file(cert_path, cert, msg=msg, logger=self._logger)
 			else:
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
-				
+
 			if len(https_certificate)>1 and https_certificate[1]:
 				msg = 'Writing ssl key'
 				pk = https_certificate[1]
@@ -496,11 +504,19 @@ class NginxHandler(ServiceCtlHandler):
 			else:
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
-			
+
 			if https_certificate[2]:
 				msg = 'Appending CA cert to cert file'
 				cert = https_certificate[2]
 				write_file(cert_path, '\n' + https_certificate[2], mode='a', msg=msg, logger=self._logger)
+		else:
+			self._logger.debug('No SSL vhosts obtained. Removing old SSL keys.')
+			for key_path in (cert_path, pk_path):
+				if os.path.exists(key_path):
+					os.remove(key_path)
+					self._logger.debug('%s deleted' % key_path)
+
+		if received_vhosts:
 
 			for vhost in received_vhosts:
 				if vhost.hostname and vhost.type == 'nginx': #and vhost.https
@@ -508,15 +524,18 @@ class NginxHandler(ServiceCtlHandler):
 					raw = raw.replace('/etc/aws/keys/ssl/https.key',pk_path)
 					https_config += raw + '\n'
 
+			if https_config:
+				if os.path.exists(self._https_inc_path)\
+				and read_file(self._https_inc_path, logger=self._logger):
+					time_suffix = str(datetime.now()).replace(' ','.')
+					shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
+
+				msg = 'Writing virtualhosts to https.include'
+				write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
+
 		else:
-			self._logger.debug('Scalr returned empty virtualhost list')
+			self._logger.debug('Scalr returned empty virtualhost list. Removing junk files.')
+			if os.path.exists(self._https_inc_path):
+				os.remove(self._https_inc_path)
+				self._logger.debug('%s deleted' % self._https_inc_path)
 
-		if https_config:
-			if os.path.exists(self._https_inc_path) \
-					and read_file(self._https_inc_path, logger=self._logger):
-				time_suffix = str(datetime.now()).replace(' ','.')
-				shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
-
-			msg = 'Writing virtualhosts to https.include'
-			write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
-	
