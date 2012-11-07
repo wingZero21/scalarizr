@@ -606,9 +606,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if isinstance(str_or_pair, str):
 			return "Backup '%s'" % str_or_pair
 		elif str_or_pair[0]+1 != str_or_pair[1]:
-			return 'Backup %d-%d databases' % str_or_pair
+			return 'Backup %d-%d databases' % (str_or_pair[0]+1, str_or_pair[1])
 		else:
-			return 'Backup %d database' % end
+			return 'Backup %d database' % str_or_pair[1]
 
 	max_single_stepped_dbs = 10   # max number of databases above which database backups are grouped in steps
 	db_portion_size = 10          # number of databases backuped in single step
@@ -617,12 +617,12 @@ class PostgreSqlHander(ServiceCtlHandler):
 		num_db = len(db_list)
 		if num_db > self.max_single_stepped_dbs:
 			iter_step = self.db_portion_size
-			return map(self._backup_step_msg, zip(xrange(0, num_db, iter_step), xrange(iter_step, num_db+iter_step, iter_step)))
+			return map(self._backup_step_msg, zip(xrange(0, num_db, iter_step), range(iter_step, num_db, iter_step)+[num_db]))
 		else:
 			return map(self._backup_step_msg, db_list)
 
 	def _make_backup_steps(self, db_list, operation_, _single_backup_fun):
-		
+
 		num_db = len(db_list)
 
 		if num_db > self.max_single_stepped_dbs:

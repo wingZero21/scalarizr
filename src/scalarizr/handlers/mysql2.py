@@ -545,9 +545,9 @@ class MysqlHandler(DBMSRHandler):
 		if isinstance(str_or_pair, str):
 			return "Backup '%s'" % str_or_pair
 		elif str_or_pair[0]+1 != str_or_pair[1]:
-			return 'Backup %d-%d databases' % str_or_pair
+			return 'Backup %d-%d databases' % (str_or_pair[0]+1, str_or_pair[1])
 		else:
-			return 'Backup %d database' % end
+			return 'Backup %d database' % str_or_pair[1]
 
 	max_single_stepped_dbs = 10   # max number of databases above which database backups are grouped in steps
 	db_portion_size = 10          # number of databases backuped in single step
@@ -556,7 +556,7 @@ class MysqlHandler(DBMSRHandler):
 		num_db = len(db_list)
 		if num_db > self.max_single_stepped_dbs:
 			iter_step = self.db_portion_size
-			return map(self._backup_step_msg, zip(xrange(0, num_db, iter_step), xrange(iter_step, num_db+iter_step, iter_step)))
+			return map(self._backup_step_msg, zip(xrange(0, num_db, iter_step), range(iter_step, num_db, iter_step)+[num_db]))
 		else:
 			return map(self._backup_step_msg, db_list)
 
@@ -639,7 +639,7 @@ class MysqlHandler(DBMSRHandler):
 			
 			op = operation(name=self._op_backup, phases=[{
 				'name': self._phase_backup, 
-				'steps': self._backup_step_msg_list(databases) + [self._step_upload_to_cloud_storage]
+				'steps': self._backup_step_msg_list(databases) + [self._step_upload_to_cloud_storage, 'Done']
 			}])
 			op.define()			
 
@@ -681,6 +681,8 @@ class MysqlHandler(DBMSRHandler):
 				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
 								cloud_storage_path, backup_filename)
 			
+			op.step('Done') # DBG:
+
 			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))								
 			op.ok(data=result)
 			
