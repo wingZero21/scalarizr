@@ -567,7 +567,7 @@ class MysqlHandler(DBMSRHandler):
 		if num_db > self.max_single_stepped_dbs:
 			iter_step = self.db_portion_size
 			for (start, end) in zip(xrange(0, num_db, iter_step), range(iter_step, num_db, iter_step)+[num_db]):
-				
+
 				operation_msg = self._backup_step_msg((start, end))
 
 				with operation_.step(operation_msg):
@@ -640,7 +640,7 @@ class MysqlHandler(DBMSRHandler):
 			
 			op = operation(name=self._op_backup, phases=[{
 				'name': self._phase_backup, 
-				'steps': self._backup_step_msg_list(databases) + [self._step_upload_to_cloud_storage, 'Done']
+				'steps': self._backup_step_msg_list(databases) + [self._step_upload_to_cloud_storage]
 			}])
 			op.define()			
 
@@ -681,8 +681,6 @@ class MysqlHandler(DBMSRHandler):
 				cloud_files = trn.upload(parts, cloud_storage_path)
 				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
 								cloud_storage_path, backup_filename)
-			
-			op.step('Done') # DBG:
 
 			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))								
 			op.ok(data=result)
