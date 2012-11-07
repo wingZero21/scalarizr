@@ -566,7 +566,7 @@ class MysqlHandler(DBMSRHandler):
 
 		if num_db > self.max_single_stepped_dbs:
 			iter_step = self.db_portion_size
-			for (start, end) in zip(xrange(0, num_db, iter_step), xrange(iter_step, num_db+iter_step, iter_step)):
+			for (start, end) in zip(xrange(0, num_db, iter_step), range(iter_step, num_db, iter_step)+[num_db])):
 				operation_msg = self._backup_step_msg((start, end))
 
 				with operation_.step(operation_msg):
