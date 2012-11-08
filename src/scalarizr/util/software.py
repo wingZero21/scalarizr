@@ -191,7 +191,7 @@ def php_software_info():
 
 explore('php', php_software_info)
 
-def python_software_info():	
+def python_software_info():
 	binaries = whereis('python')
 	if not binaries:
 		raise SoftwareError("Can't find executable for python interpreter")
@@ -199,18 +199,39 @@ def python_software_info():
 	version_string = system2((binaries[0], '-V'))[1].strip()
 	if not version_string:
 		raise SoftwareError
-	
+
 	version_string = version_string.splitlines()[0]
-	
+
 	res = re.search('Python\s+([\d\.]+)', version_string)
-	
+
 	if res:
 		version = res.group(1)
 		return SoftwareInfo('python', version, version_string)
-	
+
 	raise SoftwareError
 
 explore('python', python_software_info)
+
+def mysqlproxy_software_info():
+	binaries = whereis('mysql-proxy')
+	if not binaries:
+		raise SoftwareError("Can't find executable for mysql-proxy")
+
+	version_string = system2((binaries[0], '-V'))[0].strip()
+	if not version_string:
+		raise SoftwareError
+
+	version_string = version_string.splitlines()[0]
+
+	res = re.search('mysql-proxy\s+([\d\.]+)', version_string)
+
+	if res:
+		version = res.group(1)
+		return SoftwareInfo('mysql-proxy', version, version_string)
+
+	raise SoftwareError
+
+explore('mysql-proxy', mysqlproxy_software_info)
 
 def apache_software_info():
 
