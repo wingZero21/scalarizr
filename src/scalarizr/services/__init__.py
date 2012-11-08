@@ -182,7 +182,8 @@ def backup_step_msg(str_or_tuple):
 	if start+1 != end:
 		return 'Backup %d-%d of %d databases' % (start+1, end, num)
 	else:
-		return 'Backup last %d database' % end
+		return 'Backup last database'
+		
 
 # number of databases backuped in single step
 backup_num_databases_in_step = 10  
