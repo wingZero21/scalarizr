@@ -268,6 +268,16 @@ def enabled():
 		return os.access(IPTABLES_BIN, os.X_OK)
 
 
+def _after_merge():
+	raise Exception()
+	# replace ip check with this
+	def is_ip(s):
+		return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] == \
+			   [True] * 4
+	# make auto match for tcp and udp
+
+
+
 """
 raise Exception("OK")
 #################################################################################

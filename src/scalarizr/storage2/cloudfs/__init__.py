@@ -10,11 +10,9 @@ import subprocess
 import threading
 import logging
 import ConfigParser
-import json
 import time
 import hashlib
 import uuid
-from io import BytesIO
 from copy import copy
 if sys.version_info[0:2] >= (2, 7):
 	from collections import OrderedDict
@@ -138,7 +136,6 @@ class FileTransfer(BaseTransfer):
 			==========  ==========  ==========  ====================================
 
 		'''
-		#? move to BaseTransfer
 		if not (not isinstance(kwds["src"], basestring) and
 				isinstance(kwds["dst"], basestring)) and multipart:
 			multipart = False
@@ -155,6 +152,7 @@ class FileTransfer(BaseTransfer):
 		self._worker_lock = threading.Lock()
 		self._upload_id = None
 		self._chunk_num = -1
+		self._multipart_result = None
 
 		
 	def _job_generator(self):
@@ -244,7 +242,7 @@ class FileTransfer(BaseTransfer):
 			# 'if driver' condition prevents threads that did nothing from
 			# entering (could happen in case num_workers > chunks)
 			if driver and self.multipart and self._upload_id:
-				driver.multipart_complete(self._upload_id)
+				self._multipart_result = driver.multipart_complete(self._upload_id)
 				self._upload_id = None
 
 
@@ -267,7 +265,8 @@ class FileTransfer(BaseTransfer):
 				LOG.debug("Worker '%s' finished", worker.getName())
 			return {
 				'completed': self._completed,
-				'failed': self._failed
+				'failed': self._failed,
+				'multipart_result': self._multipart_result,
 			}
 		finally:
 			self._stopped.set()
@@ -289,40 +288,12 @@ class LargeTransfer(bases.Task):
 	def dst_gen():
 		yield ${database}
 
-	s3://.../${transfer_id}/manifest.ini
+	s3://.../${transfer_id}/manifest.json
 							${database_1}.gz.00
 							${database_1}.gz.01
 							${database_2}.gz.00
 							${database_2}.gz.01
 							${database_2}.gz.02
-
-	$ manifest.ini
-	[snapshot]
-	description = description here
-	created_at = datetime
-	pack_method = "pigz"
-
-	[chunks]
-	${database_1}.gz.part00 = md5sum
-	${database_1}.gz.part01 = md5sum
-	${database_2}.gz.part00 = md5sum
-
-
-	New manifest.json
-	{
-		version: 2.0,
-		description,
-		tags,
-		created_at,
-		files: [
-			{
-				name,
-				tar: true,
-				gzip: true,
-				chunks: {basename001: md5sum}
-			}
-		]
-	}
 
 
 	Directory backup
@@ -331,7 +302,7 @@ class LargeTransfer(bases.Task):
 	src = '/mnt/dbbackup'
 	dst = 's3://backup/key1/key2/'
 
-	s3://backup/key1/key2/${transfer_id}/manifest.ini
+	s3://backup/key1/key2/${transfer_id}/manifest.json
 	s3://backup/key1/key2/${transfer_id}/part.gz.00
 	s3://backup/key1/key2/${transfer_id}/part.gz.01
 	s3://backup/key1/key2/${transfer_id}/part.gz.02
@@ -340,17 +311,14 @@ class LargeTransfer(bases.Task):
 	Directory restore
 	-----------------
 
-	src = s3://backup/key1/key2/eph-snap-12345678/manifest.ini
+	src = s3://backup/key1/key2/eph-snap-12345678/manifest.json
 	dst = /mnt/dbbackup/
 
 	1. Download manifest 
-	2. <chunk downloader> | gunzip | tar -x -C /mnt/dbbackup
+	2. <chunk downloader> | funzip | tar -x -C /mnt/dbbackup
 	'''
 
-	# TODO: upload-download the same path shouldn't change anything
-	# (tar -C src . instead of tar src) ?
-
-	# NOTE: use directory dst for downloading.
+	# NOTE: use directory dst for uploading.
 	UPLOAD = 'upload'
 	DOWNLOAD = 'download'
 
@@ -438,11 +406,16 @@ class LargeTransfer(bases.Task):
 			# Tranzit volume size is chunk for each worker
 			# and Ext filesystem overhead
 
-			#? if not multipart
+			# manifest is not used in multipart uploads and is left
+			# here to avoid writing ifs everywhere
 			manifest = Manifest()
 			manifest["description"] = self.description
 			if self.tags:
 				manifest["tags"] = self.tags
+
+			def delete_uploaded_chunk(src, dst, retry, chunk_num):
+				os.remove(src)
+			self._transfer.on(transfer_complete=delete_uploaded_chunk)
 
 			for src in self.src:
 				fileinfo = {
@@ -470,8 +443,8 @@ class LargeTransfer(bases.Task):
 					prefix = os.path.join(prefix, name) + '.tar.'
 
 					tar = cmd = subprocess.Popen(
-									#['/bin/tar', 'cp', '-C', src, '.'],
-									['/bin/tar', 'cp', src],
+									['/bin/tar', 'cp', '-C', src, '.'],
+									#['/bin/tar', 'cp', src],
 									stdout=subprocess.PIPE,
 									stderr=subprocess.PIPE,
 									close_fds=True)
@@ -501,30 +474,33 @@ class LargeTransfer(bases.Task):
 
 				for filename, md5sum in self._split(stream, prefix):
 					fileinfo["chunks"].append((os.path.basename(filename), md5sum))
-					yield filename  # TODO: remove the uploaded
+					yield filename
 				if cmd:
 					cmd.communicate()
 
 				manifest["files"].append(fileinfo)
 
 			# send manifest to file transfer
-			manifest_f = os.path.join(self._tranzit_vol.mpoint, self.manifest)
-			manifest.write(manifest_f)
-			yield manifest_f
+			if not self.multipart:
+				manifest_f = os.path.join(self._tranzit_vol.mpoint, self.manifest)
+				manifest.write(manifest_f)
+				yield manifest_f
 
-		else:
+		elif self.direction == self.DOWNLOAD:
 			def transfer_kill(*args, **kwargs):
 				self._transfer.kill()
+				# TODO: rethink killing
+				#? kill self._restorer?
 			self._transfer.on(transfer_error=transfer_kill())
 
 			# The first yielded object will be the manifest, so
 			# catch_manifest is a listener that's supposed to trigger only
 			# once and unsubscribe itself.
 			manifest_ready = threading.Event()
-			def catch_manifest(src, dst, retry, chunk_num):
+			def wait_manifest(src, dst, retry, chunk_num):
+				self._transfer.un('transfer_complete', wait_manifest)
 				manifest_ready.set()
-				self._transfer.un('transfer_complete', catch_manifest)
-			self._transfer.on(transfer_complete=catch_manifest)
+			self._transfer.on(transfer_complete=wait_manifest)
 
 			manifest_path = self.src.next()
 			yield manifest_path
@@ -534,40 +510,49 @@ class LargeTransfer(bases.Task):
 			manifest_local = os.path.join(self._tranzit_vol.mpoint,
 				os.path.basename(manifest_path))
 			manifest = Manifest(manifest_local)
-			remote_path = os.path.dirname(manifest_path)
 			os.remove(manifest_local)
+			remote_path = os.path.dirname(manifest_path)
+			self.files = copy(manifest["files"])
 
-			"""
-			{
-			   	version: 2.0,
-			   	description,
-			   	tags,
-				created_at,
-				files: [
-					{
-						name,
-						tar: true,
-						gzip: true,
-						chunks: [(basename001, md5sum)]
+			# add ready and done events to each chunk without breaking the
+			# chunk order
+			for file in self.files:
+				file["chunks"] = OrderedDict([(
+					basename, {
+						"md5sum": md5sum,
+						"downloaded": threading.Event(),
+						"processed": threading.Event()
 					}
-				]
-			}
-			"""
+				) for basename, md5sum in file["chunks"]])
 
-			for file in manifest["files"]:
-				for chunk, md5sum in file["chunks"]:
+			# launch restorer
+			self._restorer = threading.Thread(target=self._dl_restorer)
+			self._restorer.start()
+
+			def wait_chunk(src, dst, retry, chunk_num):
+				basename = os.path.basename(dst)
+				for file in self.files:
+					if basename in file["chunks"]:
+						chunk = file["chunks"][basename]
+
+				chunk["downloaded"].set()
+				chunk["processed"].wait()  # TODO: avoid infinite waiting
+				os.remove(dst)
+			self._transfer.on(transfer_complete=wait_chunk)
+
+			for file in self.files:
+				for chunk in file["chunks"]:
 					yield os.path.join(remote_path, chunk)
-
-			# TODO: stop yielding when tmpfs is full
 
 
 	def _dst_generator(self):
 		if self.direction == self.UPLOAD:
-			for dst in self.dst:
-				yield os.path.join(dst, self.transfer_id)
 			# last yield for manifest
 			# NOTE: this only works if dst is a dir
-			else:
+			for dst in self.dst:
+				# has sense only if not multipart
+				self._upload_res = os.path.join(dst, self.transfer_id, self.manifest)
+
 				yield os.path.join(dst, self.transfer_id)
 		else:
 			while True:
@@ -614,83 +599,71 @@ class LargeTransfer(bases.Task):
 
 
 	def _dl_restorer(self):
-		# TODO: new restorer
-		# local dir or file
-		# NOTE: file is expected only when downloading a single file!
-		dst = self.dst.next()
+		buf_size = 4096
 
-		def unzip(input):
-			gzip = subprocess.Popen([self._unpack_bin, '-d'],
-				stdin=input, stdout=subprocess.PIPE,
-				stderr=subprocess.PIPE, close_fds=True)
-			return gzip
+		for file in self.files:
+			dst = self.dst.next()
 
-		while True:
-			group = self._restoration_queue.get()
-			if group is None:
-				return
+			# create 'cmd' and 'stream'
+			if not file["tar"] and not file["gzip"]:
+				cmd = None
+				stream = open(dst, 'w')  #? use file["name"]
+			elif file["tar"] and file["gzip"]:
+				# unzip from pipe
+				# from man unzip:
+				# Archives read from standard input are not yet supported,
+				# except with funzip (and then only the first member of the
+				# archive can be extracted).
+				unzip = subprocess.Popen(["/usr/bin/funzip"],
+					stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+				cmd = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
+					stdin=unzip.stdout)
+				unzip.stdout.close()
+				stream = unzip.stdin
+			elif file["tar"]:
+				cmd = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
+					stdin=subprocess.PIPE)
+				stream = cmd.stdin
+			elif file["gzip"]:
+				unzip = subprocess.Popen(["/usr/bin/funzip"],
+					stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+				cmd = subprocess.Popen(["/usr/bin/tee", dst],
+					stdin=unzip.stdout)
+				unzip.stdout.close()
+				stream = unzip.stdin
 
-			stream = BytesIO()
-			for chunk, chunk_info in self._chunks.iteritems():
-				if chunk_info["group"] != group:
-					continue
-				else:
-					if chunk.endswith(".000"):
-						name = chunk[:-4]
-					with open(os.path.join([self._tranzit_vol.mpoint, chunk]),
-							'rb') as fd:
-						stream.write(fd.read())
-			stream.seek(0)
+			for chunk, info in file["chunks"].iteritems():
+				info["downloaded"].wait()
 
-			if name.endswith(".tar") or name.endswith(".tar.gz"):  # if tar
-				# unzip if zipped
-				if self._unpack_bin is not None:
-					stream = unzip(stream).stdout
-				# untar
-				tar = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
-					stdin=stream, close_fds=True)
-				stream.close()
-				tar.communicate()
-			else:
-				gzip = None
-				# unzip if zipped
-				if self._unpack_bin is not None:
-					stream = unzip(stream).stdout
-					name = name[:-3]  # strip .gz
+				location = os.path.join(self._tranzit_vol.mpoint, chunk)
+				with open(location) as fd:
+					while True:
+						bytes = fd.read(buf_size)
+						if not bytes:
+							break
+						stream.write(bytes)
+						#? stream.flush()
 
-				if os.path.isdir(dst):
-					path = os.path.join(dst, name)
-				else:
-					path = dst
-				with open(path, "w") as fd:
-					fd.write(stream.read())
+				info["processed"].set()  # this leads to chunk removal
 
-				if gzip:
-					gzip.communicate()
-
-
-	def _dl_transfer_complete(self, *args, **kwargs):
-		chunk = os.path.basename(args[0])
-		group = self._chunks[chunk]["group"]
-
-		with self._dl_lock:
-			self._chunks[chunk]["ready"] = True
-
-			for chunk, chunk_info in self._chunks.iteritems():
-				if chunk_info["group"] != group:
-					continue
-				elif not chunk_info["ready"]:
-					break
-			else:
-				self._restoration_queue.put(group)
+			stream.close()
+			if cmd:
+				cmd.communicate()
 
 
 	def _run(self):
-		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.1)  # TODO: space for manifest
+		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.1)
 		self._tranzit_vol.ensure(mkfs=True)
 		try:
 			res = self._transfer.run()
-			# TODO: return manifest path when uploading
+
+			if self.direction == self.DOWNLOAD:
+				self._restorer.join()
+			elif self.direction == self.UPLOAD:
+				if self.multipart:
+					return res["multipart_result"]
+				else:
+					return self._upload_res
 		finally:
 			self._tranzit_vol.destroy()
 			coreutils.remove(self._tranzit_vol.mpoint)
@@ -822,41 +795,6 @@ class Manifest(object):
 		return self.data.__contains__(value)
 
 
-"""
-class Manifest(object):
-	def __init__(self, filename):
-		self.filename = filename
-		self.ini = ConfigParser.ConfigParser()
-		self.ini.read(self.filename)
-
-
-	def __getattr__(self, name):
-		try:
-			if self.__dict__['ini'].get('snapshot', name)
-		except ConfigParser.NoOptionError:
-			# Compatibility with old 'eph' storage manifests
-			if name == 'type' and 'eph-snap' in self.filename: 
-				return 'dir'
-			raise AttributeError(name)
-
-
-	def __setattr__(self, name, value):
-		if name in dir(self):
-			self.__dict__[name] = value
-		else:
-			self.__dict__['ini'].set('snapshot', str(value))
-
-
-	def __iter__(self):
-		'''
-		Iterates over file names
-		'''
-		raise NotImplementedError()
-
-
-	def chunks(self, name):
-		raise NotImplementedError()
-"""
 
 def cloudfs(fstype, **driver_kwds):
 	raise NotImplementedError()
