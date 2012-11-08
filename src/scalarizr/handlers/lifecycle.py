@@ -211,8 +211,44 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 		bus.fire("host_init")
 
-		
-	
+	def _get_ready_handlers(self):
+		soft = dict()
+		handlers = []
+		info = software.system_info()
+		if 'info' in software:
+			for entry in info['software']:
+				if not ('name' in entry and 'version' in entry):
+					continue
+				name = entry['name']
+				version = entry['version']
+				str_ver = entry['string_version']
+				if name == 'nginx':
+					handlers.append(config.BuiltinBehaviours.WWW)
+				elif name == 'chef':
+					handlers.append(config.BuiltinBehaviours.CHEF)
+				elif name == 'memcached':
+					handlers.append(config.BuiltinBehaviours.MEMCACHED)
+				if len(version) < 3:
+					continue
+				elif name == 'postgresql' and version[:3] in ('9.0', '9.1'):
+					handlers.append(config.BuiltinBehaviours.POSTGRESQL)
+				elif name == 'redis' and version[:3] in ('2.2', '2.4'):
+					handlers.append(config.BuiltinBehaviours.REDIS)
+				elif name == 'rabbitmq' and version[:3] in ('2.6', '2.8'):
+					handlers.append(config.BuiltinBehaviours.RABBITMQ)
+				elif name == 'mongodb' and version[:3] in ('2.0', '2.2'):
+					handlers.append(config.BuiltinBehaviours.MONGODB)
+				elif name == 'apache' and version[:3] in ('2.0', '2.1', '2.2'):
+					handlers.append(config.BuiltinBehaviours.APP)
+				elif name == 'mysql' and version.starswith('5.1'):
+					handlers.append(config.BuiltinBehaviours.MYSQL)
+				elif name == 'mysql' and version.starswith('5.5'):
+					handlers.append(config.BuiltinBehaviours.MYSQL2)
+				elif name == 'mysql' and version.starswith('5.5') and str_ver and 'percona' in str_ver:
+					handlers.append(config.BuiltinBehaviours.PERCONA)
+		return handlers
+
+
 	def _start_import(self):
 		# Send Hello
 		msg = self.new_message(Messages.HELLO,
@@ -220,7 +256,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			    private_ip = self._platform.get_private_ip(),
 				public_ip = self._platform.get_public_ip(),
 				server_id = self.cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID,
-				handlers = [entry['name'] for entry in software.system_info()['software']])
+				handlers = self._get_ready_handlers())
 			),
 			broadcast=True # It's not really broadcast but need to contain broadcast message data 
 		)		
