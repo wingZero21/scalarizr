@@ -195,8 +195,7 @@ def backup_databases_iterator(databases):
 			end = start + page_size
 			if end > num_db:
 				end = num_db
-			yield (databases[start:end],
-				   backup_step_msg((start+1, end, num_db)))
+			yield (databases[start:end], backup_step_msg((start, end, num_db)))
 	else:
 		for db_name in databases:
 			yield ([db_name], backup_step_msg(db_name))
