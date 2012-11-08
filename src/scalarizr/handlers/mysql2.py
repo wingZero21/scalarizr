@@ -550,6 +550,25 @@ class MysqlHandler(DBMSRHandler):
 		else:
 			return 'Backup %d database' % str_or_pair[1]
 
+	# FIXME: only one variable: backup_num_databases_in_step
+	'''
+	FIXME: moar simple algo, sir!
+	def backup_databases_iterator(databases):
+		page_size = backup_num_databases_in_step
+		if len(databases) >= page:
+			for i in xrange(0, len(databases), page_size):
+				yield (databases[i:i+page_size], 'Backup databases %d..%d' % (i+1, i+page_size+1))
+		else
+			for db in databases:
+				yield ([db], 'Backup database %s' % db)
+				
+	Client:
+	for dbs, title in backup_databases_iterator(databases):
+		with step(title):
+			backup dbs
+	'''
+
+	
 	max_single_stepped_dbs = 10   # max number of databases above which database backups are grouped in steps
 	db_portion_size = 10          # number of databases backuped in single step
 
