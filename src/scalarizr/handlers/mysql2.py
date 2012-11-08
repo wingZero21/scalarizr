@@ -31,7 +31,7 @@ from scalarizr.linux import iptables
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
-
+from scalarizr.services import make_backup_steps
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
@@ -541,63 +541,6 @@ class MysqlHandler(DBMSRHandler):
 				last_error	=  str(e).strip(),
 				farm_role_id = farm_role_id
 			))
-	
-	def _backup_step_msg(self, str_or_pair):
-		if isinstance(str_or_pair, str):
-			return "Backup '%s'" % str_or_pair
-		elif str_or_pair[0]+1 != str_or_pair[1]:
-			return 'Backup %d-%d databases' % (str_or_pair[0]+1, str_or_pair[1])
-		else:
-			return 'Backup %d database' % str_or_pair[1]
-
-	# FIXME: only one variable: backup_num_databases_in_step
-	'''
-	FIXME: moar simple algo, sir!
-	def backup_databases_iterator(databases):
-		page_size = backup_num_databases_in_step
-		if len(databases) >= page:
-			for i in xrange(0, len(databases), page_size):
-				yield (databases[i:i+page_size], 'Backup databases %d..%d' % (i+1, i+page_size+1))
-		else
-			for db in databases:
-				yield ([db], 'Backup database %s' % db)
-				
-	Client:
-	for dbs, title in backup_databases_iterator(databases):
-		with step(title):
-			backup dbs
-	'''
-
-	
-	max_single_stepped_dbs = 10   # max number of databases above which database backups are grouped in steps
-	db_portion_size = 10          # number of databases backuped in single step
-
-	def _backup_step_msg_list(self, db_list):
-		num_db = len(db_list)
-		if num_db > self.max_single_stepped_dbs:
-			iter_step = self.db_portion_size
-			return map(self._backup_step_msg, zip(xrange(0, num_db, iter_step), range(iter_step, num_db, iter_step)+[num_db]))
-		else:
-			return map(self._backup_step_msg, db_list)
-
-	def _make_backup_steps(self, db_list, operation_, _single_backup_fun):
-
-		num_db = len(db_list)
-
-		if num_db > self.max_single_stepped_dbs:
-			iter_step = self.db_portion_size
-			for (start, end) in zip(xrange(0, num_db, iter_step), range(iter_step, num_db, iter_step)+[num_db]):
-
-				operation_msg = self._backup_step_msg((start, end))
-
-				with operation_.step(operation_msg):
-					portion = db_list[start:end]
-					for db_name in portion:
-						_single_backup_fun(db_name)
-		else:
-			for db_name in db_list:
-				with operation_.step(self._backup_step_msg(db_name)):
-					_single_backup_fun(db_name)
 
 	def on_DbMsr_CreateBackup(self, message):
 		LOG.debug("on_DbMsr_CreateBackup")
@@ -661,8 +604,7 @@ class MysqlHandler(DBMSRHandler):
 			databases = self.root_client.list_databases()
 			
 			op = operation(name=self._op_backup, phases=[{
-				'name': self._phase_backup, 
-				'steps': self._backup_step_msg_list(databases) + [self._step_upload_to_cloud_storage]
+				'name': self._phase_backup
 			}])
 			op.define()			
 
@@ -685,7 +627,7 @@ class MysqlHandler(DBMSRHandler):
 					mysqldump.create(db_name, dump_path, dump_options)
 					backup.add(dump_path, os.path.basename(dump_path))
 
-				self._make_backup_steps(databases, op, _single_backup)
+				make_backup_steps(databases, op, _single_backup)
 						
 				backup.close()
 				

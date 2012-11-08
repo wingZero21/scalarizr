@@ -24,7 +24,7 @@ from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, PgUser, SU_EXEC
 from scalarizr.linux import iptables
 from scalarizr.handlers import operation, prepare_tags
-
+from scalarizr.services import make_backup_steps
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -601,44 +601,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 		self._logger.debug("Replication switched")
 		bus.fire('postgresql_change_master', host=host)
-	
-	def _backup_step_msg(self, str_or_pair):
-		if isinstance(str_or_pair, str):
-			return "Backup '%s'" % str_or_pair
-		elif str_or_pair[0]+1 != str_or_pair[1]:
-			return 'Backup %d-%d databases' % (str_or_pair[0]+1, str_or_pair[1])
-		else:
-			return 'Backup %d database' % str_or_pair[1]
-
-	max_single_stepped_dbs = 10   # max number of databases above which database backups are grouped in steps
-	db_portion_size = 10          # number of databases backuped in single step
-
-	def _backup_step_msg_list(self, db_list):
-		num_db = len(db_list)
-		if num_db > self.max_single_stepped_dbs:
-			iter_step = self.db_portion_size
-			return map(self._backup_step_msg, zip(xrange(0, num_db, iter_step), range(iter_step, num_db, iter_step)+[num_db]))
-		else:
-			return map(self._backup_step_msg, db_list)
-
-	def _make_backup_steps(self, db_list, operation_, _single_backup_fun):
-
-		num_db = len(db_list)
-
-		if num_db > self.max_single_stepped_dbs:
-			iter_step = self.db_portion_size
-			for (start, end) in zip(xrange(0, num_db, iter_step), range(iter_step, num_db, iter_step)+[num_db]):
-				
-				operation_msg = self._backup_step_msg((start, end))
-
-				with operation_.step(operation_msg):
-					portion = db_list[start:end]
-					for db_name in portion:
-						_single_backup_fun(db_name)
-		else:
-			for db_name in db_list:
-				with operation_.step(self._backup_step_msg(db_name)):
-					_single_backup_fun(db_name)	
 
 	def on_DbMsr_CreateBackup(self, message):
 		#TODO: Think how to move the most part of it into Postgresql class 
@@ -653,8 +615,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 			
 			op = operation(name=self._op_backup, phases=[{
-				'name': self._phase_backup, 
-				'steps': self._backup_step_msg_list(databases) + [self._step_upload_to_cloud_storage]
+				'name': self._phase_backup
 			}])
 			op.define()			
 			
@@ -684,7 +645,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 						raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
 					backup.add(dump_path, os.path.basename(dump_path))	
 
-				self._make_backup_steps(databases, op, _single_backup)						
+				make_backup_steps(databases, op, _single_backup)						
 
 				backup.close()
 				
