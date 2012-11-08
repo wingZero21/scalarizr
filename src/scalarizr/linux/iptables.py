@@ -15,9 +15,14 @@ else:
 import shlex
 import os
 import re
+from copy import copy
 
 from scalarizr import linux
 from scalarizr.linux import redhat
+
+
+import logging
+LOG = logging.getLogger(__name__)
 
 
 IPTABLES_BIN = '/sbin/iptables'
@@ -243,21 +248,53 @@ def list(chain, table=None):
 	return chains[chain].list(table)
 
 
-def ensure(chain_rules):
+def ensure(chain_rules, append=False):
 	# {chain: [rule, ...]}
 	# Will simply insert missing rules at the beginning.
-	# TODO: smart rule comparison (e.g. --proto == --protocol,
-	# 	--syn == --tcp-flags FIN,SYN,RST,ACK SYN,
-	# 	192.168.0.1 == 192.168.0.1/32,
-	# 	--protocol tcp == --protocol tcp --match tcp)
-	#? accept ints in rules?
+	# NOTE: rule comparsion is far from ideal, check _to_inner method
 	# note: existing rules don't have table attribute
+
+	LOG.debug("Current iptables %s: " % str(list("INPUT")))
+	LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
 
 	for chain, rules in chain_rules.iteritems():
 		existing = list(chain)
 		for rule in reversed(rules):
-			if rule not in existing:
-				chains[chain].insert(None, rule)
+			rule_repr = _to_inner(rule)
+			if rule_repr not in existing:
+				if not append:
+					chains[chain].insert(None, rule)
+					existing.insert(0, rule_repr)
+				else:
+					chains[chain].append(rule)
+					existing.append(rule_repr)
+
+
+def _to_inner(rule):
+	"""
+	Converts rule to its inner representation for comparsion.
+
+	1. "source": "192.168.0.1" -> "source": "192.168.0.1/32"
+	2. "dport": 22 -> "dport": "22"
+
+	TODO:
+
+	"src": $value -> "source": $value
+	"proto": $value -> "protocol": $value
+	"syn": True -> "tcp-flags": "FIN,SYN,RST,ACK SYN"
+	"protocol": "tcp" -> "protocol": "tcp", "match": "tcp" for all protocols
+	format "destination" same way as "source"
+	"""
+	inner = copy(rule)
+
+	# 1
+	if inner.has_key("source") and inner["source"][-3] != '/':
+		inner["source"] += "/32"
+	# 2
+	if inner.has_key("dport") and isinstance(inner["dport"], int):
+		inner["dport"] = str(inner["dport"])
+
+	return inner
 
 
 def enabled():
