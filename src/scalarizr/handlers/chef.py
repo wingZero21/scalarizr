@@ -68,7 +68,8 @@ class ChefHandler(Handler):
 	def on_host_init_response(self, message):
 		if 'chef' in message.body:
 			self._chef_data = message.chef.copy()
-			self._chef_data['node_name'] = self.get_node_name()
+			if not self._chef_data.get('node_name'):
+				self._chef_data['node_name'] = self.get_node_name()
 
 
 	def on_before_host_up(self, msg):
