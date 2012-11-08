@@ -57,7 +57,7 @@ class FileSystem(object):
 				
 				from scalarizr.linux import pkgmgr
 				for package in self.os_packages:
-					pkgmgr.latest(package)
+					pkgmgr.installed(package)
 		
 
 	def mkfs(self, device, *short_args):
