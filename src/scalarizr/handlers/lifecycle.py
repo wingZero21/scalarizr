@@ -242,10 +242,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 					handlers.append(config.BuiltinBehaviours.APP)
 				elif name == 'mysql' and version.starswith('5.1'):
 					handlers.append(config.BuiltinBehaviours.MYSQL)
-				elif name == 'mysql' and version.starswith('5.5'):
-					handlers.append(config.BuiltinBehaviours.MYSQL2)
 				elif name == 'mysql' and version.starswith('5.5') and str_ver and 'Percona' in str_ver:
 					handlers.append(config.BuiltinBehaviours.PERCONA)
+				elif name == 'mysql' and version.starswith('5.5'):
+					handlers.append(config.BuiltinBehaviours.MYSQL2)
 		return handlers
 
 
