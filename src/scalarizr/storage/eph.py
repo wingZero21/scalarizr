@@ -11,7 +11,7 @@ from .util import ramdisk
 
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util.software import whereis
-from scalarizr.util.fstool import mount, umount, mkfs
+from scalarizr.util.fstool import mount, umount
 from scalarizr.util import firstmatched
 
 from Queue import Queue, Empty
@@ -501,7 +501,8 @@ class EphSnapshotProviderLite(object):
 		mnf.read(mnf_path)
 		
 		if snapshot.fstype:
-			mkfs(volume.device, snapshot.fstype)	
+			volume.fstype = snapshot.fstype
+		volume.mkfs()
 
 		remote_path = os.path.dirname(snapshot.path)
 		# Get links with md5 sums
