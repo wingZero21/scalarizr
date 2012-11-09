@@ -170,7 +170,18 @@ class _Chain(object):
 		kwargs = {"list-rules": self.name}
 		if table:
 			kwargs['table'] = table
-		out = iptables(**kwargs)[0]
+		try:
+			out = iptables(**kwargs)[0]
+		except linux.LinuxError, e:
+			if "Unknown arg `--list-rules'" in e.err:
+				LOG.debug("Iptables does not support --list-rules. "
+						  "Iptables.list() defaults to [], iptables.ensure() "
+						  "degrades to simple insertion or appending that may "
+						  "result in rule duplication.")
+				return []
+			else:
+				raise
+
 
 		# parse
 		for rule in out.splitlines():
