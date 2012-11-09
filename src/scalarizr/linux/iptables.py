@@ -7,6 +7,8 @@
 # Predefined chains:
 # INPUT FORWARD OUTPUT 	PREROUTING 	POSTROUTING
 
+from __future__ import with_statement
+
 import sys
 if sys.version_info[0:2] >= (2, 7):
 	from collections import OrderedDict

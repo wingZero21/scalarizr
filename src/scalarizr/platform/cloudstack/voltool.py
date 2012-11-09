@@ -4,6 +4,8 @@ Created on Aug 25, 2010
 @author: marat
 '''
 
+from __future__ import with_statement
+
 from scalarizr.util import wait_until, system2
 
 import logging

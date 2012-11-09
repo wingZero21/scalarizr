@@ -1,7 +1,7 @@
 __all__ = ['Counter', 'deque', 'defaultdict', 'namedtuple', 'OrderedDict']
 # For bootstrapping reasons, the collection ABCs are defined in _abcoll.py.
 # They should however be considered an integral part of collections.py.
-from ._abcoll import *
+from scalarizr.externals._abcoll import *
 from . import _abcoll
 __all__ += _abcoll.__all__
 
