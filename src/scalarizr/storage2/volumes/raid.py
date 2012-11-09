@@ -101,10 +101,11 @@ class RaidVolume(base.Volume):
 					for disk in disks_devices:
 						mdadm.mdadm('misc', None, disk,
 									zero_superblock=True, force=True)
-					mdadm.mdadm('create', raid_device, *disks_devices,
-								force=True, metadata='default',
-								level=self.level, assume_clean=True,
-								raid_devices=len(disks_devices))
+
+					kwargs = dict(force=True, metadata='default',
+								  level=self.level, assume_clean=True,
+								  raid_devices=len(disks_devices))
+					mdadm.mdadm('create', raid_device, *disks_devices, **kwargs)
 				else:
 					mdadm.mdadm('assemble', raid_device, *disks_devices)
 
