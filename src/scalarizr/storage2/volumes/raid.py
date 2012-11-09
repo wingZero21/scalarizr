@@ -143,9 +143,9 @@ class RaidVolume(base.Volume):
 
 		else:
 			raid_device = mdadm.findname()
-			mdadm.mdadm('create', raid_device, *disks_devices,
-						force=True, level=self.level, assume_clean=True,
-						raid_devices=len(disks_devices), metadata='default')
+			kwargs = dict(force=True, level=self.level, assume_clean=True,
+						  raid_devices=len(disks_devices), metadata='default')
+			mdadm.mdadm('create', raid_device, *disks_devices, **kwargs)
 			mdadm.mdadm('misc', raid_device, wait=True)
 
 			lvm2.pvcreate(raid_device, force=True)
