@@ -737,7 +737,7 @@ class MysqlHandler(ServiceCtlHandler):
 		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		
 		f = '/sys/module/apparmor/parameters/enabled'
-		self._apparmor_enabled = os.access(f, os.R_OK) and open(f).read().strip() == 'Y'
+		self._apparmor_enabled = os.access(f, os.R_OK) and open(f).read().strip() in ('Y', '1')
 
 			
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
