@@ -500,9 +500,8 @@ class EphSnapshotProviderLite(object):
 		mnf = Configuration('ini')
 		mnf.read(mnf_path)
 		
-		if snapshot.fstype:
-			volume.fstype = snapshot.fstype
-		volume.mkfs()
+		volume.fs_created = False
+		volume.mkfs(snapshot.fstype)
 
 		remote_path = os.path.dirname(snapshot.path)
 		# Get links with md5 sums
