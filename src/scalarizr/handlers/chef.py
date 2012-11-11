@@ -103,7 +103,7 @@ class ChefHandler(Handler):
 						LOG.info('Executing run list')
 						
 						LOG.debug('Initializing Chef API client')
-						node_name = self.get_node_name()
+						node_name = self._chef_data['node_name']
 						chef = ChefAPI(self._chef_data['server_url'], self._client_key_path, node_name)
 						
 						LOG.debug('Loading node')
