@@ -10,6 +10,7 @@ from __future__ import with_statement
 import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr import config
+from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
@@ -290,10 +291,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 					+ "Cross-scalarizr messaging not initialized")
 
 	def _start_int_messaging(self):
-		srv = IntMessagingService()
-		bus.int_messaging_service = srv
-		t = threading.Thread(name='IntMessageConsumer', target=srv.get_consumer().start)
-		t.start()
+		if 'mongodb' in __node__['behavior']:
+			srv = IntMessagingService()
+			bus.int_messaging_service = srv
+			t = threading.Thread(name='IntMessageConsumer', target=srv.get_consumer().start)
+			t.start()
 
 
 	def on_IntServerReboot(self, message):

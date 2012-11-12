@@ -4,6 +4,8 @@ Created on Aug 28, 2012
 @author: marat
 '''
 
+from __future__ import with_statement
+
 import os
 import logging
 import base64

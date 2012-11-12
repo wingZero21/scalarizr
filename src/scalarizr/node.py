@@ -276,7 +276,7 @@ __node__ = {
 				Ini(_private_dir + '/config.ini', 'general'),
 	'platform': Ini(_public_dir + '/config.ini', 'general'),
 	'behavior': IniOption(
-						_private_dir + '/config.ini', 'general', 'behaviour', 
+						_private_dir + '/config.ini', 'general', 'behaviour',
 						lambda val: val.strip().split(','),
 						lambda val: ','.join(val)),
 	'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),

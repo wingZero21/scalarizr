@@ -42,12 +42,12 @@ class __os(dict):
 				match = regex.match(line)
 				if match:
 					# Adds: lsb_distrib_{id,release,codename,description}
-					self['lsb_{0}'.format(match.groups()[0].lower())] = match.groups()[1].rstrip()
+					self['lsb_%s' % match.groups()[0].lower()] = match.groups()[1].rstrip()
 		try:
 			import lsb_release
 			release = lsb_release.get_distro_information()
 			for key, value in release.iteritems():
-				self['lsb_{0}'.format(key.lower())] = value  # override /etc/lsb-release
+				self['lsb_%s' % key.lower()] = value  # override /etc/lsb-release
 		except ImportError:
 			pass
 		if osmod.path.isfile('/etc/arch-release'):
@@ -132,7 +132,7 @@ class __os(dict):
 		self['codename'] = codename				
 				
 		if not 'name' in self:
-			self['name'] = 'Unknown {0}'.format(self['kernel'])
+			self['name'] = 'Unknown %s' % self['kernel']
 			self['family'] = 'Unknown'
 		if not 'family' in self:
 			self['family'] = 'Unknown'

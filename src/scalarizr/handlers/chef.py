@@ -68,7 +68,8 @@ class ChefHandler(Handler):
 	def on_host_init_response(self, message):
 		if 'chef' in message.body:
 			self._chef_data = message.chef.copy()
-			self._chef_data['node_name'] = self.get_node_name()
+			if not self._chef_data.get('node_name'):
+				self._chef_data['node_name'] = self.get_node_name()
 
 
 	def on_before_host_up(self, msg):
@@ -102,7 +103,7 @@ class ChefHandler(Handler):
 						LOG.info('Executing run list')
 						
 						LOG.debug('Initializing Chef API client')
-						node_name = self.get_node_name()
+						node_name = self._chef_data['node_name'].encode('ascii')
 						chef = ChefAPI(self._chef_data['server_url'], self._client_key_path, node_name)
 						
 						LOG.debug('Loading node')

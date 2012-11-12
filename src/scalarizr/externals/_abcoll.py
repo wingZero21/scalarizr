@@ -391,7 +391,7 @@ class MappingView(Sized):
         return len(self._mapping)
 
     def __repr__(self):
-        return '{0.__class__.__name__}({0._mapping!r})'.format(self)
+        return '{0.__class__.__name__}(%s)' % repr(self._mapping)
 
 
 class KeysView(MappingView, Set):
@@ -483,7 +483,7 @@ class MutableMapping(Mapping):
     def update(*args, **kwds):
         if len(args) > 2:
             raise TypeError("update() takes at most 2 positional "
-                            "arguments ({} given)".format(len(args)))
+                            "arguments (%s given)" % len(args))
         elif not args:
             raise TypeError("update() takes at least 1 argument (0 given)")
         self = args[0]

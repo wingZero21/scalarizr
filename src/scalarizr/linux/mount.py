@@ -4,6 +4,8 @@ Created on Aug 27, 2012
 @author: marat
 '''
 
+from __future__ import with_statement
+
 import re
 import collections
 
