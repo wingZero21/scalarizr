@@ -306,6 +306,7 @@ class ScalarizrOptions(Configurator.Container):
 		Server behaviour is a role your server acts as. Built-in behaviours: {behaviours}
 		'''
 		name = 'general/behaviour'
+		private = True
 		
 		def __init__(self):
 			self.__doc__ = self.__doc__.replace('{behaviours}', ','.join(BuiltinBehaviours.values()))
