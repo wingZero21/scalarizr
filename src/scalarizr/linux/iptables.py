@@ -20,8 +20,8 @@ import re
 from copy import copy
 
 from scalarizr import linux
+from scalarizr.linux import coreutils
 from scalarizr.linux import redhat
-
 
 import logging
 LOG = logging.getLogger(__name__)
@@ -60,6 +60,8 @@ _OPTIONS = {
 	"-f": "--fragment",
 	"-V": "--version",
 }
+
+coreutils.modprobe('ip_tables')
 
 
 def iptables(**long_kwds):
