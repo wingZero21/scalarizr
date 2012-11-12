@@ -679,15 +679,7 @@ class FarmSecurityMixin(object):
 			rule["source"] = source
 		return rule
 
-		"""
-		return iptables.RuleSpec(
-					source=source, 
-					protocol=iptables.P_TCP, 
-					dport=dport, 
-					jump=jump)
-		"""
-		
-		
+
 	def __create_accept_rule(self, source, dport):
 		return self.__create_rule(source, dport, 'ACCEPT')
 	
@@ -731,12 +723,6 @@ class FarmSecurityMixin(object):
 
 		self._iptables.ensure({"INPUT": rules})
 		self._iptables.ensure({"INPUT": drop_rules}, append=True)
-		"""
-		self._iptables.ensure({"INPUT": rules})
-		"""
-		for rule in rules:
-			self._iptables.insert_rule(1, rule)
-		
 
 
 def prepare_tags(handler=None, **kwargs):

@@ -28,8 +28,12 @@ except ImportError:
 from scalarizr import storage2
 from scalarizr.libs import bases
 from scalarizr.linux import coreutils
+from scalarizr.storage2.cloudfs.s3 import S3FileSystem
 
-filesystem_types = {}
+
+DRIVERS = {
+	"s3": S3FileSystem,
+}
 LOG = logging.getLogger(__name__)
 
 
@@ -799,7 +803,11 @@ class Manifest(object):
 
 
 def cloudfs(fstype, **driver_kwds):
-	raise NotImplementedError()
+	return DRIVERS[fstype](**driver_kwds)
+
+
+class TransferError(Exception):  #? BaseException
+	pass
 
 
 class CloudFileSystem(object):
@@ -821,7 +829,7 @@ class CloudFileSystem(object):
 
 		}
 		"""
-		pass
+		raise NotImplementedError()
 
 	def ls(self, path):
 		raise NotImplementedError()

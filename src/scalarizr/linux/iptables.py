@@ -18,12 +18,12 @@ import shlex
 import os
 import re
 from copy import copy
+import logging
 
 from scalarizr import linux
 from scalarizr.linux import coreutils
 from scalarizr.linux import redhat
 
-import logging
 LOG = logging.getLogger(__name__)
 
 
@@ -145,6 +145,24 @@ class _Chain(object):
 		return iptables(delete=delete, **rule)
 
 	def list(self, table=None):
+		"""
+		List iptables rules. On systems with older iptables (that don't
+		support --list-rules arg) --list will be used with a very limited
+		parsing.
+		"""
+
+		kwargs = {"list-rules": self.name}
+		if table:
+			kwargs['table'] = table
+		try:
+			out = iptables(**kwargs)[0]
+		except linux.LinuxError, e:
+			if "Unknown arg `--list-rules'" in e.err:
+				return self._old_list(table)
+			else:
+				raise
+
+		# process the --list-rules output
 		result = []
 
 		def build_ruledict(option, element):
@@ -170,23 +188,6 @@ class _Chain(object):
 					ruledict[key].append(element)
 				return option
 
-		# get stdout
-		kwargs = {"list-rules": self.name}
-		if table:
-			kwargs['table'] = table
-		try:
-			out = iptables(**kwargs)[0]
-		except linux.LinuxError, e:
-			if "Unknown arg `--list-rules'" in e.err:
-				LOG.debug("Iptables does not support --list-rules. "
-						  "Iptables.list() defaults to [], iptables.ensure() "
-						  "degrades to simple insertion or appending that may "
-						  "result in rule duplication.")
-				return []
-			else:
-				raise
-
-
 		# parse
 		for rule in out.splitlines():
 			args = shlex.split(rule)
@@ -207,6 +208,54 @@ class _Chain(object):
 
 		return result
 
+	def _old_list(self, table=None):
+		"""
+		The problem with parsing iptables --list output is that only the first
+		5 columns have names and the rest of data is in some arbitrary format.
+		This method is supposed to understand this rest in a couple of simple
+		cases: "(tcp|udp) (dpt:\d+|dpts:d+:d+)".
+		"""
+
+		kwargs = {"list": self.name, "numeric": True}
+		if table:
+			kwargs['table'] = table
+		out = iptables(**kwargs)[0]
+		outlist = out.splitlines()[2:]  # strip the 2 header lines
+
+		headers = ["jump", "protocol", "opt", "source", "destination"]
+		defaults = {
+			"protocol": "all",
+			"opt": "--",
+			"source": "0.0.0.0/0",
+			"destination": "0.0.0.0/0"
+		}
+		result = []
+
+		for rulestr in outlist:
+			# preprocess input
+			if rulestr.startswith(' ' * 11):  # empty target
+				# TODO: fill rule["jump"] here separately?
+				_headers = headers[1:]
+			else:
+				_headers = headers
+
+			# build the rule
+			ruleitems = rulestr.split()
+			rule = dict(zip(_headers, ruleitems))  # known columns
+			rest = ruleitems[len(_headers):]  # unknown
+			# rest can be: [], ['tcp', 'dpt:8008'], ['tcp', 'dpts:6379:6395'] or [...]
+			if rest:
+				# TODO: join the rest or don't have it split at all?
+				pass
+
+			# postprocess
+			for key, default in defaults.items():
+				if rule.has_key(key) and rule[key] == default:
+					del rule[key]
+
+			result.append(rule)
+
+		return result
 
 class _Chains(object):
 
@@ -269,8 +318,8 @@ def ensure(chain_rules, append=False):
 	# NOTE: rule comparsion is far from ideal, check _to_inner method
 	# note: existing rules don't have table attribute
 
-	LOG.debug("Current iptables %s: " % str(list("INPUT")))
-	LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
+	#LOG.debug("Current iptables %s: " % str(list("INPUT")))
+	#LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
 
 	for chain, rules in chain_rules.iteritems():
 		existing = list(chain)
@@ -299,17 +348,23 @@ def _to_inner(rule):
 	"syn": True -> "tcp-flags": "FIN,SYN,RST,ACK SYN"
 	"protocol": "tcp" -> "protocol": "tcp", "match": "tcp" for all protocols
 	format "destination" same way as "source"
+	"source": $ip1,$ip2 -> 2 rules for each ip
 	"""
 	inner = copy(rule)
 
 	# 1
-	if inner.has_key("source") and inner["source"][-3] != '/':
+	if inner.has_key("source") and _is_plain_ip(inner["source"]):
 		inner["source"] += "/32"
 	# 2
 	if inner.has_key("dport") and isinstance(inner["dport"], int):
 		inner["dport"] = str(inner["dport"])
 
 	return inner
+
+
+def _is_plain_ip(s):
+	return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] == \
+		   [True] * 4
 
 
 def enabled():
@@ -320,19 +375,8 @@ def enabled():
 		return os.access(IPTABLES_BIN, os.X_OK)
 
 
-def _after_merge():
-	raise Exception()
-	# replace ip check with this
-	def is_ip(s):
-		return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] == \
-			   [True] * 4
-	# make auto match for tcp and udp
-
-
 
 """
-raise Exception("OK")
-#################################################################################
 INPUT = chains['INPUT']
 
 iptables.INPUT.append([
