@@ -428,6 +428,7 @@ def _detect_scalr_version():
 	
 def init_script():
 	_init()
+	_init_db()
 	
 	cnf = bus.cnf
 	cnf.bootstrap()
