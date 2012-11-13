@@ -198,7 +198,9 @@ class RaidVolumeProvider(VolumeProvider):
 							disks	= kwargs['disks'],
 							level	= kwargs['level'],
 							pv_uuid = pv_info.uuid,
-							lvm_group_cfg = kwargs['lvm_group_cfg'])
+							lvm_group_cfg = kwargs['lvm_group_cfg'],
+							mpoint = kwargs.get('mpoint'),
+							type = self.type)
 
 	
 	@devname_not_empty
