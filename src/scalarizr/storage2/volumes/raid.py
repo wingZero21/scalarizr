@@ -48,6 +48,10 @@ class RaidVolume(base.Volume):
 		:type pv_uuid: string
 		:param pv_uuid: Mdadm device physical volume id
 		'''
+		# Backward compatibility with old storage
+		if vg is not None:
+			vg = os.path.basename(vg)
+
 		super(RaidVolume, self).__init__(disks=disks or [],
 				raid_pv=raid_pv, level=level and int(level), 
 				lvm_group_cfg=lvm_group_cfg,
