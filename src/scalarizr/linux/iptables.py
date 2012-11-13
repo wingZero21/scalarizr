@@ -349,7 +349,8 @@ def _to_inner(rule):
 	Converts rule to its inner representation for comparison.
 
 	1. "source": "192.168.0.1" -> "source": "192.168.0.1/32"
-	2. "dport": 22 -> "dport": "22"
+	2. "destination": "192.168.0.1" -> "destination": "192.168.0.1/32"
+	3. "dport": 22 -> "dport": "22"
 
 	TODO:
 
@@ -357,7 +358,6 @@ def _to_inner(rule):
 	"proto": $value -> "protocol": $value
 	"syn": True -> "tcp-flags": "FIN,SYN,RST,ACK SYN"
 	"protocol": "tcp" -> "protocol": "tcp", "match": "tcp" for all protocols
-	format "destination" same way as "source"
 	"source": $ip1,$ip2 -> 2 rules for each ip
 	"""
 	inner = copy(rule)
@@ -366,6 +366,9 @@ def _to_inner(rule):
 	if inner.has_key("source") and _is_plain_ip(inner["source"]):
 		inner["source"] += "/32"
 	# 2
+	if inner.has_key("destination") and _is_plain_ip(inner["destination"]):
+		inner["destination"] += "/32"
+	# 3
 	if inner.has_key("dport") and isinstance(inner["dport"], int):
 		inner["dport"] = str(inner["dport"])
 
