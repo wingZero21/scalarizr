@@ -151,18 +151,25 @@ class _Chain(object):
 		parsing.
 		"""
 
-		kwargs = {"list-rules": self.name}
+		# args for both cases
+		list_rules_kwargs = {"list-rules": self.name}
+		list_kwargs = {"list": self.name, "numeric": True}
 		if table:
-			kwargs['table'] = table
+			list_rules_kwargs["table"] = table
+			list_kwargs["table"] = table
+
 		try:
-			out = iptables(**kwargs)[0]
+			out = iptables(**list_rules_kwargs)[0]
 		except linux.LinuxError, e:
 			if "Unknown arg `--list-rules'" in e.err:
-				return self._old_list(table)
+				out = iptables(**list_kwargs)[0]
+				return self._parse_list(out)
 			else:
 				raise
+		else:
+			return self._parse_list_rules(out)
 
-		# process the --list-rules output
+	def _parse_list_rules(self, output):
 		result = []
 
 		def build_ruledict(option, element):
@@ -189,7 +196,7 @@ class _Chain(object):
 				return option
 
 		# parse
-		for rule in out.splitlines():
+		for rule in output.splitlines():
 			args = shlex.split(rule)
 			if "-P" in args or "-N" in args:
 				continue  # dull rules
@@ -208,34 +215,25 @@ class _Chain(object):
 
 		return result
 
-	def _old_list(self, table=None):
+	def _parse_list(self, output):
 		"""
 		The problem with parsing iptables --list output is that only the first
 		5 columns have names and the rest of data is in some arbitrary format.
 		This method is supposed to understand this rest in a couple of simple
-		cases: "(tcp|udp) (dpt:\d+|dpts:d+:d+)".
+		cases: "(tcp|udp) (dpt:\d+|dpts:\d+:\d+)". All other cases will be kept
+		as a single string under "_unparsed" key in the rule dict.
 		"""
 
-		kwargs = {"list": self.name, "numeric": True}
-		if table:
-			kwargs['table'] = table
-		out = iptables(**kwargs)[0]
-		outlist = out.splitlines()[2:]  # strip the 2 header lines
-
 		headers = ["jump", "protocol", "opt", "source", "destination"]
-		defaults = {
-			"protocol": "all",
-			"opt": "--",
-			"source": "0.0.0.0/0",
-			"destination": "0.0.0.0/0"
-		}
-		result = []
+		defaults = [None, "all", "--", "0.0.0.0/0", "0.0.0.0/0"]
 
+		result = []
+		outlist = output.splitlines()[2:]  # strip the 2 header lines
 		for rulestr in outlist:
 			# preprocess input
 			if rulestr.startswith(' ' * 11):  # empty target
-				# TODO: fill rule["jump"] here separately?
 				_headers = headers[1:]
+				rulestr = rulestr.lstrip()  # not necessary, for readability
 			else:
 				_headers = headers
 
@@ -243,19 +241,31 @@ class _Chain(object):
 			ruleitems = rulestr.split()
 			rule = dict(zip(_headers, ruleitems))  # known columns
 			rest = ruleitems[len(_headers):]  # unknown
-			# rest can be: [], ['tcp', 'dpt:8008'], ['tcp', 'dpts:6379:6395'] or [...]
-			if rest:
-				# TODO: join the rest or don't have it split at all?
+			# rest can be: [], ['tcp', 'dpt:8008'], ['tcp', 'dpts:6379:6395']
+			# or [...]
+			if len(rest) == 2 and rest[0] in ("tcp", "udp") and \
+					rest[1].startswith(("dpt:", "dpts:")):
+				rule["match"] = rest[0]
+				rule["dport"] = rest[1].split(':', 1)[1]
+			elif not rest:
 				pass
+			else:
+				rule["_unparsed"] = ' '.join(rest)
 
 			# postprocess
-			for key, default in defaults.items():
+			# remove defaults
+			for key, default in zip(headers, defaults):
 				if rule.has_key(key) and rule[key] == default:
 					del rule[key]
+			# convert ips
+			for key, val in rule.items():
+				if _is_plain_ip(val):
+					rule[key] = val + "/32"
 
 			result.append(rule)
 
 		return result
+
 
 class _Chains(object):
 
@@ -315,8 +325,8 @@ def list(chain, table=None):
 def ensure(chain_rules, append=False):
 	# {chain: [rule, ...]}
 	# Will simply insert missing rules at the beginning.
-	# NOTE: rule comparsion is far from ideal, check _to_inner method
-	# note: existing rules don't have table attribute
+	# NOTE: rule comparison is far from ideal, check _to_inner method
+	# NOTE: existing rules don't have table attribute
 
 	#LOG.debug("Current iptables %s: " % str(list("INPUT")))
 	#LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
@@ -336,7 +346,7 @@ def ensure(chain_rules, append=False):
 
 def _to_inner(rule):
 	"""
-	Converts rule to its inner representation for comparsion.
+	Converts rule to its inner representation for comparison.
 
 	1. "source": "192.168.0.1" -> "source": "192.168.0.1/32"
 	2. "dport": 22 -> "dport": "22"
