@@ -19,7 +19,7 @@ from scalarizr.util import system2, port_in_use
 
 
 # Libs
-from scalarizr.util import cryptotool
+from scalarizr.util import cryptotool, software
 from scalarizr.linux import iptables
 
 # Stdlibs
@@ -216,8 +216,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	
 	def _start_import(self):
 		# Send Hello 
-		msg = self.new_message(Messages.HELLO, 
-			{"architecture" : self._platform.get_architecture()}, 
+		data = software.system_info()
+		data['architecture'] = self._platform.get_architecture()
+		
+		msg = self.new_message(Messages.HELLO, data, 
 			broadcast=True # It's not really broadcast but need to contain broadcast message data 
 		)		
 		bus.fire("before_hello", msg)
