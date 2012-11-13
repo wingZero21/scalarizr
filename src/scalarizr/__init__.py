@@ -734,12 +734,11 @@ def main():
 
 
 		# Check that service started after dirty bundle
-		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
-				and cnf.state != ScalarizrState.IMPORTING:
-			
+		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
+		
 			# XXX: nimbula's user-data is uploaded by ssh
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-			if pl.name in ('nimbula', 'rackspace'):
+			if pl.name in ('nimbula', 'rackspace') and cnf.state != ScalarizrState.IMPORTING:
 				if cnf.state == ScalarizrState.REBUNDLING:
 					# XXX: temporary workaround
 					# XXX: rackspace injects files and boots OS in a parallell. There were situations when
