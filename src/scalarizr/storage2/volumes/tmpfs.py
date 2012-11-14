@@ -33,7 +33,7 @@ class TmpfsVolume(base.Volume):
 			self.device = self.mpoint
 			
 
-	def _destroy(self):
+	def _destroy(self, force, **kwds):
 		mount.umount(self.mpoint)
 
 
