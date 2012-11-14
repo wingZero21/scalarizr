@@ -39,6 +39,7 @@ class Ec2Platform(Ec2LikePlatform):
 
 	_userdata_key = "latest/user-data"
 
+	'''
 	ec2_endpoints = {
 		"us-east-1" 		: "ec2.amazonaws.com",
 		"us-west-1" 		: "ec2.us-west-1.amazonaws.com",
@@ -58,6 +59,7 @@ class Ec2Platform(Ec2LikePlatform):
 		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com',
 		'ap-northeast-1' 	: 's3-ap-northeast-1.amazonaws.com'
 	}
+	'''
 	
 	instance_store_devices = (
 		'/dev/sda2', '/dev/sdb', '/dev/xvdb', 
@@ -91,12 +93,15 @@ class Ec2Platform(Ec2LikePlatform):
 	def new_ec2_conn(self):
 		""" @rtype: boto.ec2.connection.EC2Connection """
 		region = self.get_region()
-		self._logger.debug("Return ec2 connection (endpoint: %s)", self.ec2_endpoints[region])
-		return EC2Connection(region=RegionInfo(name=region, endpoint=self.ec2_endpoints[region]))
+		endpoint = self._ec2_endpoint(region)
+		self._logger.debug("Return ec2 connection (endpoint: %s)", endpoint)
+		return EC2Connection(region=RegionInfo(name=region, endpoint=endpoint))
 
 	def new_s3_conn(self):
-		self._logger.debug("Return s3 connection (endpoint: %s)", self.s3_endpoints[self.get_region()])
-		return connect_s3(host=self.s3_endpoints[self.get_region()])
+		region = self.get_region()
+		endpoint = self._s3_endpoint(region)
+		self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
+		return connect_s3(host=endpoint)
 	
 	def set_access_data(self, access_data):
 		Ec2LikePlatform.set_access_data(self, access_data)
@@ -121,4 +126,15 @@ class Ec2Platform(Ec2LikePlatform):
 		return ret
 
 
+	def _ec2_endpoint(self, region):
+		if region == 'us-east-1':
+			return 'ec2.amazonaws.com'
+		else:
+			return 'ec2.%s.amazonaws.com' % region
+		
+	def _s3_endpoint(self, region):
+		if region == 'us-east-1':
+			return 's3.amazonaws.com'
+		else:
+			return 's3-%s.amazonaws.com' % region
 

@@ -31,6 +31,7 @@ from scalarizr.linux import coreutils
 from scalarizr.storage2.cloudfs.s3 import S3FileSystem
 
 
+# FIXME: strings instead of objects. lazy loading
 DRIVERS = {
 	"s3": S3FileSystem,
 }

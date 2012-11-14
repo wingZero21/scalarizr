@@ -64,7 +64,8 @@ class SSHKeys(Handler):
 					self._logger.debug('Found %s', regexp)
 					if key in variables:
 						del variables[key]
-				elif line.startswith(key):
+				elif line.startswith(key) and key in variables:
+					# second condition is a workaround over duplicate options in sshd_config 
 					self._logger.debug('Update %s option %s: %s', self.sshd_config_path, key, variables[key])
 					line = '%s %s\n' % (key, variables[key])
 					if key in variables:

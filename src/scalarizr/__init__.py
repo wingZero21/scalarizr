@@ -203,12 +203,6 @@ def _init():
 	# Registering in init.d
 	initdv2.explore("scalarizr", ScalarizrInitScript)
 
-	# Configure database connection pool
-	t = sqlite_server.SQLiteServerThread(_db_connect)
-	t.setDaemon(True)
-	t.start()
-	sqlite_server.wait_for_server_thread(t)
-	bus.db = t.connection
 	
 
 DB_NAME = 'db.sqlite'
@@ -223,6 +217,7 @@ def _db_connect(file=None):
 	conn = sqlite.connect(file, 5.0)
 	conn.row_factory = sqlite.Row
 	conn.text_factory = sqlite.OptimizedUnicode
+	#conn.executescript("PRAGMA journal_mode=OFF;")	
 	return conn
 
 def _init_db(file=None):
@@ -234,15 +229,25 @@ def _init_db(file=None):
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
 		logger.debug("Database doesn't exist, creating new one from script")
 		_create_db(file)
+		
+	# Configure database connection pool
+	t = sqlite_server.SQLiteServerThread(_db_connect)
+	t.setDaemon(True)
+	t.start()
+	sqlite_server.wait_for_server_thread(t)
+	bus.db = t.connection
+	
 
 	
 def _create_db(db_file=None, script_file=None):	
 	logger = logging.getLogger(__name__)
-	conn = bus.db
-	logger.debug('conn: %s', conn)
-	# Disk I/O Error workaround
-	conn.executescript("PRAGMA journal_mode=OFF;")
+	#conn = bus.db
+	#logger.debug('conn: %s', conn)
+	conn = _db_connect()
 	conn.executescript(open(script_file or os.path.join(bus.share_path, DB_SCRIPT)).read())
+	conn.commit()
+	conn.close()
+	
 	#conn.commit()
 	system2('sync', shell=True)	
 
@@ -423,6 +428,7 @@ def _detect_scalr_version():
 	
 def init_script():
 	_init()
+	_init_db()
 	
 	cnf = bus.cnf
 	cnf.bootstrap()
@@ -734,12 +740,11 @@ def main():
 
 
 		# Check that service started after dirty bundle
-		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID) \
-				and cnf.state != ScalarizrState.IMPORTING:
-			
+		if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
+		
 			# XXX: nimbula's user-data is uploaded by ssh
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-			if pl.name in ('nimbula', 'rackspace'):
+			if pl.name in ('nimbula', 'rackspace') and cnf.state != ScalarizrState.IMPORTING:
 				if cnf.state == ScalarizrState.REBUNDLING:
 					# XXX: temporary workaround
 					# XXX: rackspace injects files and boots OS in a parallell. There were situations when

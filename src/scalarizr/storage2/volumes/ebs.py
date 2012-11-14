@@ -147,12 +147,16 @@ class EbsVolume(base.Volume, EbsMixin):
 				size=size and int(size) or None, 
 				volume_type=volume_type, iops=iops, **kwds)	
 		EbsMixin.__init__(self)
-		self.features['restore'] = True
 		self.error_messages.update({
 			'no_id_or_conn': 'Volume has no ID and EC2 connection '
 							'required for volume construction is not available'
 		})	
+
 		
+	def _clone(self, config):
+		config.pop('device', None)
+		config.pop('avail_zone', None)
+
 		
 	def _ensure(self):
 		'''
@@ -398,7 +402,7 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 	
 	_status_map = {
 		'pending': base.Snapshot.IN_PROGRESS,
-		'available': base.Snapshot.COMPLETED,
+		'completed': base.Snapshot.COMPLETED,
 		'error': base.Snapshot.FAILED
 	}
 	
@@ -410,7 +414,8 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 	def _status(self):
 		self._check_ec2()
 		snapshot = self._ebs_snapshot(self.id)
-		return self._status_map[snapshot.update()]
+		snapshot.update()
+		return self._status_map[snapshot.status]
 	
 
 	def _destroy(self):

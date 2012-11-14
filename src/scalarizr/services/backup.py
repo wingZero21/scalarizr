@@ -2,7 +2,7 @@
 import sys
 import logging
 
-from scalarizr import storage2
+from scalarizr import storage2, util
 from scalarizr.libs import bases
 
 LOG = logging.getLogger(__name__)
@@ -26,8 +26,8 @@ def backup(*args, **kwds):
 	try:
 		cls = backup_types[type_]
 	except KeyError:
-		msg = "Unknown backup type '%s'. "
-		"Have you registered it in "
+		msg = "Unknown backup type '%s'. " \
+		"Have you registered it in " \
 		"scalarizr.services.backup.backup_types?" % type_
 		raise Error(msg)
 	return cls(**kwds)
@@ -43,8 +43,8 @@ def restore(*args, **kwds):
 	try:
 		cls = restore_types[type_]
 	except KeyError:
-		msg = "Unknown restore type '%s'. "
-		"Have you registered it in " 
+		msg = "Unknown restore type '%s'. " \
+		"Have you registered it in " \
 		"scalarizr.services.backup.restore_types?" % type_
 		raise Error(msg)
 	return cls(**kwds)
@@ -102,7 +102,9 @@ class SnapBackup(Backup):
 				**kwds)
 		self.define_events(
 			# Fires when all disk I/O activity should be freezed 
-			'freeze'   
+			'freeze',
+			# Fires when all disk I/O activity should be resumed
+			'unfreeze'
 		)
 
 	def _run(self):
@@ -111,7 +113,15 @@ class SnapBackup(Backup):
 		LOG.debug('Volume config: %s', dict(self.volume))
 		state = {}
 		self.fire('freeze', self.volume, state)
-		snap = self.volume.snapshot(self.description, tags=self.tags)
+		try:
+			snap = self.volume.snapshot(self.description, tags=self.tags)
+		finally:
+			self.fire('unfreeze', self.volume, state)
+		util.wait_until(lambda: snap.status() in (snap.COMPLETED, snap.FAILED),
+					start_text='Polling snapshot status (%s)' % snap.id)
+		if snap.status() == snap.FAILED:
+			msg = 'Backup failed because snapshot %s failed' % snap.id
+			raise Error(msg)
 		return restore(
 				type=self.type, 
 				snapshot=snap,

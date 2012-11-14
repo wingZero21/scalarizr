@@ -63,8 +63,7 @@ class MySQLSnapBackup(backup.SnapBackup):
 		super(MySQLSnapBackup, self).__init__(**kwds)
 		self.on(
 			freeze=self.freeze,
-			complete=self.unfreeze,
-			error=self.unfreeze
+			unfreeze=self.unfreeze
 		)
 		self._mysql_init = mysql_svc.MysqlInitScript()
 
@@ -170,7 +169,7 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 				'incremental_lsn': from_lsn
 			})
 		elif 'full' == self.backup_type and self.volume:
-			coreutils.delete_all_from_dir(self.backup_dir)
+			coreutils.clean_dir(self.backup_dir)
 
 		exc_info = None
 		try:
@@ -208,7 +207,7 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 				to_lsn=to_lsn,
 				backup_type=self.backup_type,
 				backup_dir=self.backup_dir,
-				#volume=self.volume.clone(),
+				volume=self.volume.clone(),				 
 				snapshot=snapshot)
 
 

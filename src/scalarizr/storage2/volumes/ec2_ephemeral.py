@@ -17,6 +17,7 @@ class Ec2EphemeralVolume(base.Volume):
 			It depends from instance type.
 		'''
 		super(Ec2EphemeralVolume, self).__init__(name=name, **kwds)
+		self.features['restore'] = False		
 		
 
 	def _ensure(self):

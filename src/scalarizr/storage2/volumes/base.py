@@ -47,7 +47,7 @@ class Volume(Base):
 				mpoint=mpoint,
 				snap=snap,
 				**kwds)
-		self.features.update({'restore': False})
+		self.features.update({'restore': True})
 		
 
 	def ensure(self, mount=False, mkfs=False, fstab=False, **updates):
@@ -148,7 +148,11 @@ class Volume(Base):
 
 
 	def clone(self):
-		return storage2.volume(self.initial_config)
+		config = self.initial_config.copy()
+		config.pop('id', None)		
+		config.pop('fscreated', None)
+		self._clone(config)
+		return storage2.volume(config)
 
 
 	def _check(self, fstype=True, device=True, **kwds):
@@ -168,7 +172,10 @@ class Volume(Base):
 	def _check_restore_unsupported(self):
 		if self.snap:
 			msg = self.error_messages['restore_unsupported'] % self.type
-			raise NotImplementedError(msg)
+			#FIXME: eph volume in NewMasterUp raises error here
+			LOG.debug(msg)
+			LOG.debug('Some details: features=%s, config=%s', self.features, self.config())
+			#raise NotImplementedError(msg)
 		
 	
 	def _ensure(self):
@@ -186,6 +193,9 @@ class Volume(Base):
 	def _destroy(self, force, **kwds):
 		pass
 
+	def _clone(self, config):
+		pass
+	
 
 storage2.volume_types['base'] = Volume	
 	

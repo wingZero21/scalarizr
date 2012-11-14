@@ -27,7 +27,6 @@ from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.linux import iptables
 from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.handlers import operation, prepare_tags
-from scalarizr.api import service as preset_service
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
