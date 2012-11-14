@@ -10,6 +10,12 @@ except ImportError:
 	import simplejson as json 
 
 
+base_dir = '/etc/scalr'
+private_dir = base_dir + '/private.d'
+public_dir = base_dir + '/public.d'
+storage_dir = private_dir + '/storage'
+
+
 class Store(dict):
 	def __len__(self):
 		return 1
@@ -265,41 +271,40 @@ def _import(objectstr):
 		except (KeyError, AttributeError):
 			raise ImportError('No module named %s' % attr)
 
-	
-_base_dir = '/etc/scalr'
-_private_dir = _base_dir + '/private.d'
-_public_dir = _base_dir + '/public.d'
-_storage_dir = _private_dir + '/storage'
+
+class ScalrVersion(Store):
+	pass
+
 
 __node__ = {
 	'server_id,role_id,farm_id,farm_role_id,env_id': 
-				Ini(_private_dir + '/config.ini', 'general'),
-	'platform': Ini(_public_dir + '/config.ini', 'general'),
+				Ini(private_dir + '/config.ini', 'general'),
+	'platform': Ini(public_dir + '/config.ini', 'general'),
 	'behavior': IniOption(
-						_private_dir + '/config.ini', 'general', 'behaviour',
+						private_dir + '/config.ini', 'general', 'behaviour',
 						lambda val: val.strip().split(','),
 						lambda val: ','.join(val)),
 	'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),
 	'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
-	'state': File(_private_dir + '/.state'),
-	'rebooted': BoolFile(_private_dir + '/.reboot'),
-	'halted': BoolFile(_private_dir + '/.halt')
+	'state': File(private_dir + '/.state'),
+	'rebooted': BoolFile(private_dir + '/.reboot'),
+	'halted': BoolFile(private_dir + '/.halt')
 }
 for behavior in ('mysql', 'mysql2', 'percona'):
 	__node__[behavior] = Compound({
 		'volume,volume_config': 
-				Json('%s/storage/%s.json' % (_private_dir, behavior), 
+				Json('%s/storage/%s.json' % (private_dir, behavior), 
 					'scalarizr.storage2.volume'),
 		'*_password,log_*,replication_master': 
-				Ini('%s/%s.ini' % (_private_dir, behavior), 
+				Ini('%s/%s.ini' % (private_dir, behavior), 
 					behavior),
 		'mysqldump_options': 
-				Ini('%s/%s.ini' % (_public_dir, behavior), behavior)
+				Ini('%s/%s.ini' % (public_dir, behavior), behavior)
 	})
 __node__['ec2'] = Compound({
 	't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
 	'hostname_as_pubdns': 
-				Ini('%s/%s.ini' % (_public_dir, 'ec2'), 'ec2'),
+				Ini('%s/%s.ini' % (public_dir, 'ec2'), 'ec2'),
 	'ami_id': Call('scalarizr.bus', 'bus.platform.get_ami_id'),
 	'kernel_id': Call('scalarizr.bus', 'bus.platform.get_kernel_id'),
 	'ramdisk_id': Call('scalarizr.bus', 'bus.platform.get_ramdisk_id'),
@@ -309,6 +314,9 @@ __node__['ec2'] = Compound({
 	'region': Call('scalarizr.bus', 'bus.platform.get_region'),
 	'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
 	'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
+})
+__node__['scalr'] = Compound({
+	'version': ScalrVersion()
 })
 __node__ = Compound(__node__)
 #__node__ = dict() # XXX: added for unittests
