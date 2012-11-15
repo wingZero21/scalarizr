@@ -72,7 +72,7 @@ class Volume(Base):
 					raise
 			if fstab and self.device not in mod_mount.fstab():
 				LOG.debug('Adding to fstab: %s', self.id)
-				mod_mount.fstab().add(self.device, self.mpoint)
+				mod_mount.fstab().add(self.device, self.mpoint, self.fstype)
 		return self.config()
 	
 	
