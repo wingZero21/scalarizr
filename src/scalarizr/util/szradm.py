@@ -551,6 +551,7 @@ def help_misc():
 	parser.add_option("-o", "--queue", dest="queue", default=None, help="Queue")
 	parser.add_option("-s", "--qa-report", dest="report", action="store_true",
 		default=None, help="Build report with logs and system info")
+	parser.add_option("--fire-event", help='Fire custom event in Scalr. Parameters are passed in a key=value form')
 	return parser
 #-------------------------------------------------------------------------------------------------
 
@@ -644,7 +645,7 @@ def main():
 			globals()['QUERYENV_API_VERSION'] = options.api_version
 
 		if not options.queryenv and not options.msgsnd and not options.repair \
-			and not options.report and not options.reinit:
+			and not options.report and not options.reinit and not options.fire_event:
 			#printing full help
 			com=Help(com_dict)
 			com.run()
@@ -807,6 +808,21 @@ def main():
 	
 			print "Done."
 
+		if options.fire_event:
+
+			msg_service = bus.messaging_service
+			producer = msg_service.get_producer()
+
+			init_cnf()
+
+			producer.endpoint = ini.get('messaging_p2p', 'producer_url')	
+			msg = msg_service.new_message('FireEvent', 
+					body={'event_name': options.fire_event, 'params': kv})
+			print 'Sending %s' % options.fire_event
+			producer.send('control', msg)
+
+			print "Done"		
+			
 
 if __name__ == '__main__':
 	main()
