@@ -18,12 +18,12 @@ import shlex
 import os
 import re
 from copy import copy
+import logging
 
 from scalarizr import linux
 from scalarizr.linux import redhat
 
 
-import logging
 LOG = logging.getLogger(__name__)
 
 
@@ -267,8 +267,9 @@ def ensure(chain_rules, append=False):
 	# NOTE: rule comparsion is far from ideal, check _to_inner method
 	# note: existing rules don't have table attribute
 
-	LOG.debug("Current iptables %s: " % str(list("INPUT")))
-	LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
+	# for debugging INPUT chain
+	# LOG.debug("Current iptables %s: " % str(list("INPUT")))
+	# LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
 
 	for chain, rules in chain_rules.iteritems():
 		existing = list(chain)
