@@ -62,7 +62,6 @@ _OPTIONS = {
 	"-V": "--version",
 }
 
-coreutils.modprobe('ip_tables')
 
 
 def iptables(**long_kwds):
@@ -330,6 +329,13 @@ def uses_rh_input():
 			if len(rule) == 1:  # if rule redirects everything
 				return rule["jump"]  # "RH-Firewall-1-INPUT"
 	return False
+
+
+'''
+Initialization
+'''
+# Without this first call 'service iptables save' fails with code:1
+iptables(list=True)
 
 
 """
