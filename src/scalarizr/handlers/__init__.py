@@ -148,7 +148,7 @@ class Handler(object):
 	_logger = logging.getLogger(__name__)
 
 	def __init__(self):
-		if self._service_name and self._service_name not in self.get_ready_handlers():
+		if self._service_name and self._service_name not in self.get_ready_behaviours():
 			msg = 'Cannot load handler %s. Missing software.' % self.behaviour
 			raise HandlerError(msg)
 	
@@ -233,7 +233,7 @@ class Handler(object):
 			raise HandlerError("Handler has no method %s" % (fn))
 
 
-	def get_ready_handlers(self):
+	def get_ready_behaviours(self):
 		handlers = list()
 		info = software.system_info()
 		if 'software' in info:
