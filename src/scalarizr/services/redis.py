@@ -11,7 +11,7 @@ import shutil
 
 from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, PopenError, wait_until
-from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError
+from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, PresetProvider
 from scalarizr.util import disttool, cryptotool, firstmatched
 from scalarizr.util.filetool import rchown
 from scalarizr.libs.metaconf import Configuration, NoPathError
@@ -100,8 +100,8 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 		password = redis_conf.requirepass
 		cli = RedisCLI(password)
 		wait_until(lambda: cli.test_connection(), timeout=10, sleep=1)
-	
-	
+
+
 class Redisd(object):
 
 	config_path = None
@@ -886,10 +886,8 @@ class RedisCLI(object):
 def get_snap_db_filename(port=DEFAULT_PORT):
 	return 'dump.%s.rdb' % port
 
-
 def get_aof_db_filename(port=DEFAULT_PORT):
 	return 'appendonly.%s.aof' % port
-
 
 def get_redis_conf_basename(port=DEFAULT_PORT):
 	return 'redis.%s.conf' % port

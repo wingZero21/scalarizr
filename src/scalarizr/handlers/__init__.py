@@ -1,19 +1,14 @@
 from __future__ import with_statement
 
-
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool
+from scalarizr.util import initdv2, disttool, software
 from scalarizr.linux import iptables
 from scalarizr.util.filetool import write_file
-from scalarizr.util.initdv2 import Status
-from scalarizr.service import CnfPresetStore, CnfPreset, CnfController,\
-	PresetType
+from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 
-import os
-import platform
 import logging
 import threading
 import pprint
@@ -149,7 +144,13 @@ class operation(object):
 
 
 class Handler(object):
+	_service_name = None
 	_logger = logging.getLogger(__name__)
+
+	def __init__(self):
+		if self._service_name and self._service_name not in self.get_ready_handlers():
+			msg = 'Cannot load handler %s. Missing software.' % self.behaviour
+			raise HandlerError(msg)
 	
 	def get_initialization_phases(self, hir_message):
 		return {}
@@ -185,8 +186,7 @@ class Handler(object):
 			cons.wait_acknowledge(msg)
 		elif wait_subhandler:
 			cons.wait_subhandler(msg)
-			
-		
+
 		
 	def send_int_message(self, host, msg_name, msg_body=None, msg_meta=None, broadcast=False, 
 						include_pad=False, queue=Queues.CONTROL):
@@ -194,6 +194,7 @@ class Handler(object):
 		msg = msg_name if isinstance(msg_name, Message) else \
 					self.new_message(msg_name, msg_body, msg_meta, broadcast, include_pad, srv)
 		srv.new_producer(host).send(queue, msg)
+
 
 	def send_result_error_message(self, msg_name, error_text=None, exc_info=None, body=None):
 		body = body or {}
@@ -209,6 +210,7 @@ class Handler(object):
 		self._logger.error(body['last_error'], exc_info=exc_info)		
 		self.send_message(msg_name, body)
 
+
 	def _broadcast_message(self, msg):
 		cnf = bus.cnf
 		platform = bus.platform
@@ -218,15 +220,54 @@ class Handler(object):
 		msg.behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR))
 		msg.role_name = cnf.rawini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 
+
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return False
-	
+
+
 	def __call__(self, message):
 		fn = "on_" + message.name
 		if hasattr(self, fn) and callable(getattr(self, fn)):
 			getattr(self, fn)(message)
 		else:
 			raise HandlerError("Handler has no method %s" % (fn))
+
+
+	def get_ready_handlers(self):
+		handlers = list()
+		info = software.system_info()
+		if 'info' in software:
+			for entry in info['software']:
+				if not ('name' in entry and 'version' in entry):
+					continue
+				name = entry['name']
+				version = entry['version']
+				str_ver = entry['string_version']
+				if name == 'nginx':
+					handlers.append(config.BuiltinBehaviours.WWW)
+				elif name == 'chef':
+					handlers.append(config.BuiltinBehaviours.CHEF)
+				elif name == 'memcached':
+					handlers.append(config.BuiltinBehaviours.MEMCACHED)
+				if len(version) < 3:
+					continue
+				elif name == 'postgresql' and version[:3] in ('9.0', '9.1'):
+					handlers.append(config.BuiltinBehaviours.POSTGRESQL)
+				elif name == 'redis' and version[:3] in ('2.2', '2.4'):
+					handlers.append(config.BuiltinBehaviours.REDIS)
+				elif name == 'rabbitmq' and version[:3] in ('2.6', '2.8'):
+					handlers.append(config.BuiltinBehaviours.RABBITMQ)
+				elif name == 'mongodb' and version[:3] in ('2.0', '2.2'):
+					handlers.append(config.BuiltinBehaviours.MONGODB)
+				elif name == 'apache' and version[:3] in ('2.0', '2.1', '2.2'):
+					handlers.append(config.BuiltinBehaviours.APP)
+				elif name == 'mysql' and version.starswith('5.1'):
+					handlers.append(config.BuiltinBehaviours.MYSQL)
+				elif name == 'mysql' and version.starswith('5.5') and str_ver and 'Percona' in str_ver:
+					handlers.append(config.BuiltinBehaviours.PERCONA)
+				elif name == 'mysql' and version.starswith('5.5'):
+					handlers.append(config.BuiltinBehaviours.MYSQL2)
+		return handlers
 
 
 class HandlerError(BaseException):
@@ -327,20 +368,18 @@ def async(fn):
 
 class ServiceCtlHandler(Handler):
 	_logger = None 	
-	
-	_service_name = None
-	_cnf_ctl = None 
+	_cnf_ctl = None
 	_init_script = None
 	_preset_store = None
 	
 	def __init__(self, service_name, init_script=None, cnf_ctl=None):
-		self._logger = logging.getLogger(__name__)		
-		
+		self._logger = logging.getLogger(__name__)
 		self._service_name = service_name
 		self._cnf_ctl = cnf_ctl
 		self._init_script = init_script
 		self._preset_store = CnfPresetStore(self._service_name)
-		
+		Handler.__init__(self)
+
 		self._queryenv = bus.queryenv_service
 		bus.on('init', self.sc_on_init)
 		bus.define_events(
@@ -465,9 +504,6 @@ class ServiceCtlHandler(Handler):
 		szr_cnf = bus.cnf
 		if szr_cnf.state == ScalarizrState.RUNNING:
 			if self._cnf_ctl:
-				# Stop servive if it's already running
-				#self._stop_service('comparing presets')
-				
 				# Obtain current configuration preset
 				cur_preset = self._obtain_current_preset()
 
@@ -517,7 +553,6 @@ class ServiceCtlHandler(Handler):
 					if cur_preset.name == 'default':
 						# Scalr respond with default preset
 						self._logger.debug('%s configuration is default', self._service_name)
-						#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
 						self._start_service()
 						return
 					
@@ -679,7 +714,7 @@ class FarmSecurityMixin(object):
 			rule["source"] = source
 		return rule
 
-
+		
 	def __create_accept_rule(self, source, dport):
 		return self.__create_rule(source, dport, 'ACCEPT')
 	
@@ -764,5 +799,3 @@ def prepare_tags(handler=None, **kwargs):
 				
 	LOG.debug('Prepared tags: %s. Excluded empty tags: %s' % (tags, excludes))
 	return tags
-		
-		

@@ -25,13 +25,13 @@ from scalarizr.platform import UserDataOptions
 from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, filetool
 from scalarizr.storage import transfer
 
-
 from scalarizr import storage2
 from scalarizr.linux import iptables	
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
 from scalarizr.services import make_backup_steps
+
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
@@ -923,6 +923,7 @@ class MysqlHandler(DBMSRHandler):
 		host = message.local_ip or message.remote_ip
 		LOG.info("Switching replication to a new MySQL master %s", host)
 		bus.fire('before_mysql_change_master', host=host)			
+
 		
 		if __mysql__['volume'].type in ('eph', 'lvm'):
 			if 'restore' in mysql2:

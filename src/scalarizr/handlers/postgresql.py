@@ -17,7 +17,7 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
+from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages, Handler
 from scalarizr.util.filetool import split, rchown
 from scalarizr.util import system2, wait_until, disttool, software, filetool, cryptotool
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
@@ -118,6 +118,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		self._service_name = SERVICE_NAME
+		Handler.__init__(self)
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_postgresql_data_bundle',

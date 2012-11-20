@@ -29,7 +29,7 @@ from scalarizr.util import wait_until
 import cStringIO
 import logging
 import logging.config
-import os, sys, re, shutil, time
+import os, sys, re, shutil, time, uuid
 import binascii, string, traceback
 import sqlite3 as sqlite
 import threading, socket, signal
@@ -684,19 +684,19 @@ def main():
 		# Daemonize process
 		if optparser.values.daemonize:
 			daemonize()
-	
-		logger.debug("Initialize scalarizr...")
-		_init()
-	
+
 		if optparser.values.version:
 			# Report scalarizr version
 			print 'Scalarizr %s' % __version__
 			sys.exit()
-			
+
 		elif optparser.values.gen_key:
 			# Generate key-pair
 			do_keygen()
 			sys.exit()
+
+		logger.debug("Initialize scalarizr...")
+		_init()
 
 		# Starting scalarizr daemon initialization
 		globals()['_pid'] = pid = os.getpid()		
@@ -728,7 +728,10 @@ def main():
 			print "Don't terminate Scalarizr until Scalr will create the new role"
 			cnf.state = ScalarizrState.IMPORTING
 			# Load Command-line configuration options and auto-configure Scalarizr
-			cnf.reconfigure(values=CmdLineIni.to_kvals(optparser.values.cnf), silent=True, yesall=True)
+			values = CmdLineIni.to_kvals(optparser.values.cnf)
+			if not values.get('server_id'):
+				values['server_id'] = str(uuid.uuid4())
+			cnf.reconfigure(values=values, silent=True, yesall=True)
 		
 		# Load INI files configuration
 		cnf.bootstrap(force_reload=True)
