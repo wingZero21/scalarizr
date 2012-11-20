@@ -125,10 +125,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 	def _set_default_iptables_chain(self):
+		self._logger.debug("set_default_iptables_chain")
 		rh_input = iptables.uses_rh_input()
 		if rh_input:
 			iptables.chains.add(rh_input)  #? hide this in iptables
-			__node__["iptables_default_chain"] = rh_input
+			__node__["iptables_input_chain"] = rh_input
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
