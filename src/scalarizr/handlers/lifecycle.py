@@ -219,7 +219,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		data['architecture'] = self._platform.get_architecture()
 		data['private_ip'] = self._platform.get_private_ip()
 		data['public_ip'] = self._platform.get_public_ip()
-		data['server_id'] = self.cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+		data['server_id'] = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
 		data['handlers'] = self.get_ready_handlers()
 
 		# Send Hello
