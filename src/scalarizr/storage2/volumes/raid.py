@@ -4,9 +4,13 @@ __author__ = 'Nick Demyanchuk'
 
 import os
 import re
+import sys
+import Queue
 import base64
 import logging
 import tempfile
+import threading
+
 
 from scalarizr import storage2, util
 from scalarizr.linux import mdadm, lvm2, coreutils
@@ -56,7 +60,7 @@ class RaidVolume(base.Volume):
 				raid_pv=raid_pv, level=level and int(level), 
 				lvm_group_cfg=lvm_group_cfg,
 				vg=vg, pv_uuid=pv_uuid, **kwds)
-		self.features['restore'] = True
+		self.features.update({'restore': True, 'grow': True})
 
 
 	def _ensure(self):
@@ -225,6 +229,128 @@ class RaidVolume(base.Volume):
 			for disk in self.disks:
 				disk.destroy(force=force)
 			self.disks = []
+
+
+	def _clone(self, config):
+		disks = []
+		for disk_cfg_or_obj in self.disks:
+			disk = storage2.volume(disk_cfg_or_obj)
+			disk_clone = disk.clone()
+			disks.append(disk_clone)
+
+		config['disks'] = disks
+		for attr in ('pv_uuid', 'lvm_group_cfg', 'raid_pv', 'device'):
+			config.pop(attr, None)
+
+
+	def check_growth_cfg(self, growth_cfg):
+		foreach_cfg = growth_cfg['disks'].get('foreach')
+		change_disks = False
+
+		if foreach_cfg:
+			for disk_cfg_or_obj in self.disks:
+				disk = storage2.volume(disk_cfg_or_obj)
+				try:
+					disk.check_growth_cfg(foreach_cfg)
+					change_disks = True
+				except storage2.NoOpError:
+					pass
+
+		len = growth_cfg['disks'].get('len')
+		current_len = len(self.disks)
+		change_size = len and int(len) != current_len
+
+		if not change_size and not change_disks:
+			raise storage2.NoOpError('Configurations are equal. Nothing to do')
+
+		if change_size and int(len) < current_len:
+			raise storage2.StorageError('Disk count can only be increased.')
+
+		if change_size and int(self.level) in (0, 10):
+			raise storage2.StorageError("Can't add disks to raid level %s"
+																% self.level)
+
+
+	def _grow(self, growth_cfg):
+		len = growth_cfg['disks'].get('len')
+		foreach_cfg = growth_cfg['disks'].get('foreach')
+
+		current_len = len(self.disks)
+		increase_disk_count = len and int(len) != current_len
+		new_vol = self.clone()
+
+		if foreach_cfg:
+
+			def _grow(index, disk, cfg, queue):
+				try:
+					ret = disk.grow(cfg)
+					queue.put(dict(index=index, result=ret))
+				except:
+					e = sys.exc_info()[1]
+					queue.put(dict(index=index, error=e))
+
+			# Concurrently grow each descendant disk
+			queue = Queue.Queue()
+			pool = []
+			for index, disk_cfg_or_obj in enumerate(self.disks):
+				# We use index to save disk order in raid disks
+				disk = storage2.volume(disk_cfg_or_obj)
+
+				t = threading.Thread(
+					name='Raid %s disk %s grower' %	(self.id, disk.id),
+					target=_grow, args=(index, disk, foreach_cfg, queue))
+				t.daemon = True
+				t.start()
+				pool.append(t)
+
+			for thread in pool:
+				thread.join()
+
+			# Get disks growth results
+			res = []
+			while True:
+				try:
+					res.append(queue.get_nowait())
+				except Queue.Empty:
+					break
+
+			growed_disks = [r['result'] for r in res if 'result' in r]
+
+			try:
+				# Validate concurrent growth results
+				assert len(res) == len(self.disks), ("Not enough data in "
+						"concurrent raid disks grow result")
+
+				if not all(map(lambda x: 'result' in x, res)):
+					errors = '\n'.join([str(r['error']) for r in res if 'error' in r])
+					raise storage2.StorageError('Failed to grow raid disks.'
+							' Errors: \n%s' % errors)
+
+				assert len(growed_disks) == len(self.disks), ("Got malformed disks"
+							" growth result (not enough data).")
+
+			except:
+				err_type, err_val, trace = sys.exc_info()[1]
+				log_msg = 'Failed to grow all associated disks: %s.' % err_val
+				if growed_disks:
+					log_msg += ' Removing %s successfully created disks.' % len(growed_disks)
+				LOG.error(log_msg)
+
+				for disk in growed_disks:
+					try:
+						disk.destroy(force=True)
+					except:
+						LOG.error('Failed to remove raid disk: %s')
+
+				raise err_type, err_val, trace
+
+			new_vol.disks = growed_disks
+			# When we reconstruct md device with bigger volumes,
+			# lvm might find pv, vg and so on
+			# so if we yet need to add disks
+			# we should (maybe) remove all lvm info
+			# and then add disks
+
 
 
 class RaidSnapshot(base.Snapshot):

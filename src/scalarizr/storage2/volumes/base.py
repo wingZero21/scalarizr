@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 
 from scalarizr import storage2
@@ -47,7 +48,7 @@ class Volume(Base):
 				mpoint=mpoint,
 				snap=snap,
 				**kwds)
-		self.features.update({'restore': True})
+		self.features.update({'restore': True, 'grow': False})
 		
 
 	def ensure(self, mount=False, mkfs=False, fstab=False, **updates):
@@ -149,10 +150,88 @@ class Volume(Base):
 
 	def clone(self):
 		config = self.initial_config.copy()
-		config.pop('id', None)		
+		config.pop('id', None)
 		config.pop('fscreated', None)
 		self._clone(config)
 		return storage2.volume(config)
+
+
+	def grow(self, growth_cfg):
+		"""
+		Grow (and/or alternate, e.g.: change ebs type to io1) volume and fs
+		Old volume detached, but not destroyed.
+
+		:param growth_cfg: Volume type-dependent rules for volume growth
+		:type growth_cfg: dict
+		:return: New, bigger (or altered) volume instance
+		:rtype: Volume
+		"""
+
+		if not self.features.get('grow'):
+			raise storage2.StorageError("%s volume type does not support grow.")
+
+		# No id, no growth
+		if not self.id:
+			raise storage2.StorageError('Failed to grow volume: '
+									'volume has no id.')
+
+		self.check_growth_cfg(growth_cfg)
+
+		was_mounted = self.mounted_to()
+		bigger_vol = None
+		try:
+			self.detach()
+			bigger_vol = self._grow(growth_cfg)
+			bigger_vol.ensure(mount=False)
+
+			if self.fstype:
+				fs = storage2.filesystem(fstype=self.fstype)
+				umount_on_resize = fs.features.get('umount_on_resize')
+				fs_created = self.detect_fstype()
+				if fs_created:
+					if umount_on_resize:
+						fs.resize(bigger_vol.device)
+						if was_mounted:
+							bigger_vol.mount()
+					else:
+						bigger_vol.mount()
+						fs.resize(bigger_vol.device)
+						if not was_mounted:
+							bigger_vol.umount()
+
+		except:
+			e = sys.exc_info()[1]
+			LOG.debug('Failed to grow volume: %s. Trying to attach old volume')
+			try:
+				if bigger_vol:
+					try:
+						bigger_vol.destroy(force=True)
+						if bigger_vol.snap:
+							snap = storage2.snapshot(bigger_vol.snap)
+							snap.destroy(force=True)
+					except:
+						destr_err = sys.exc_info()[1]
+						LOG.error('Enlarged volume destruction failed: %s' % destr_err)
+
+				self.ensure(mount=bool(was_mounted))
+			except:
+				e = str(e) + '\nFailed to restore old volume.'
+			raise storage2.StorageError('Volume growth failed: %s' % e)
+
+		return bigger_vol
+
+
+	def _grow(self, growth_cfg):
+		"""
+		Returns volume object - copy of self volume, but bigger.
+		No attach, no mount, nothing. Just volume object
+		with appropriate configuration.
+
+		:param growth_cfg: Type-dependant config for volume growth
+		:type growth_cfg: dict
+		"""
+		pass
+
 
 
 	def _check(self, fstype=True, device=True, **kwds):
@@ -176,7 +255,17 @@ class Volume(Base):
 			LOG.debug(msg)
 			LOG.debug('Some details: features=%s, config=%s', self.features, self.config())
 			#raise NotImplementedError(msg)
-		
+
+
+	def check_growth_cfg(self, growth_cfg):
+		pass
+
+
+	def detect_fstype(self):
+		self._check_attr('device')
+		blk_info = coreutils.blkid(self.device)
+		return blk_info.get('type')
+
 	
 	def _ensure(self):
 		pass

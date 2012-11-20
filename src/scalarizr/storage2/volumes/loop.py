@@ -8,10 +8,14 @@ import os
 import sys
 import time
 import shutil
+import logging
 
 from scalarizr import storage2
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
+
+
+LOG = logging.getLogger(__name__)
 
 
 class LoopVolume(base.Volume):
@@ -34,7 +38,7 @@ class LoopVolume(base.Volume):
 		'''
 		super(LoopVolume, self).__init__(file=file, size=size, 
 				zerofill=zerofill, **kwds)
-		self.features['restore'] = True
+		self.features.update(dict(restore=True, grow=True))
 		
 	
 	def _ensure(self):
@@ -104,6 +108,47 @@ class LoopVolume(base.Volume):
 		return storage2.snapshot(type='loop', file=snapfile)
 
 
+	def _clone(self, config):
+		config.pop('file', None)
+
+
+	def check_growth_cfg(self, growth_cfg):
+		size = growth_cfg.get('size')
+		if not size:
+			raise storage2.StorageError('Size argument is missing '
+							'from grow config')
+
+		if int(size) < self.size:
+			raise storage2.StorageError('New loop device size is less than '
+						'current.')
+
+
+	def _grow(self, growth_cfg):
+		new_vol = self.clone()
+		snap = self.snapshot(description='Temporary snapshot for volume growth')
+		try:
+			size = growth_cfg.get('size')
+			size_in_mb = int(float(size) * 1024)
+			dd_kwds = {'if': '/dev/urandom', 'of': snap.file, 'bs': '1M',
+					   'seek': size_in_mb - 1, 'count' : 1}
+			coreutils.dd(**dd_kwds)
+			new_vol.snap = snap
+			new_vol.size = size
+		except:
+			err_type, err_val, trace = sys.exc_info()
+			LOG.error('Failed to grow loop volume. Error: %s'
+					  		'\nRemoving temporary snapshot.' % err_val)
+			try:
+				snap.destroy(force=True)
+			except:
+				e = sys.exc_info()[1]
+				LOG.error('Failed to remove loop snapshot: %s' % e)
+
+			raise err_type, err_val, trace
+
+		return new_vol
+
+
 	def _detach(self, force, **kwds):
 		if self.device:
 			coreutils.losetup(self.device, detach=True)
@@ -124,7 +169,10 @@ class LoopVolume(base.Volume):
 
 
 class LoopSnapshot(base.Snapshot):
-	pass
+
+	def _destroy(self):
+		os.remove(self.file)
+
 
 
 storage2.volume_types['loop'] = LoopVolume

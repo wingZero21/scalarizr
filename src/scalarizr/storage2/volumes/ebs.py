@@ -150,14 +150,55 @@ class EbsVolume(base.Volume, EbsMixin):
 		self.error_messages.update({
 			'no_id_or_conn': 'Volume has no ID and EC2 connection '
 							'required for volume construction is not available'
-		})	
+		})
+		self.features.update({'grow': True})
 
 		
 	def _clone(self, config):
 		config.pop('device', None)
 		config.pop('avail_zone', None)
 
-		
+
+	def _grow(self, growth_cfg):
+		"""
+		:param new_vol: New volume instance (almost empty)
+		:type new_vol: EbsVolume
+		:param growth_cfg: Growth rules for ebs with size, ebs type and
+						(optionally) iops
+		:type growth_cfg: dict
+		:return: New, bigger, ready to volume instance
+		:rtype: EbsVolume
+		"""
+		size = growth_cfg.get('size')
+		ebs_type = growth_cfg.get('volume_type')
+		iops = growth_cfg.get('iops')
+
+		new_vol = self.clone()
+
+		snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1})
+		new_vol.snap = snap
+		new_vol.size = size if size is not None else self.size
+		new_vol.volume_type = ebs_type if ebs_type is not None else self.volume_type
+		new_vol.iops = iops if iops is not None else self.iops
+		return new_vol
+
+
+	def check_growth_cfg(self, growth_cfg):
+		size = growth_cfg.get('size')
+		ebs_type = growth_cfg.get('volume_type')
+		iops = growth_cfg.get('iops')
+
+		change_type_or_iops = ebs_type != self.volume_type or iops != self.iops
+		change_size = size != self.size
+
+		if not change_size and not change_type_or_iops:
+			raise storage2.NoOpError('New ebs volume configuration is equal'
+										' to present. Nothing to do.')
+
+		if size and int(size) < self.size:
+			raise storage2.StorageError('New size is less than the old.')
+
+
 	def _ensure(self):
 		'''
 		Algo:
@@ -243,7 +284,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		@type nowait: bool
 		@param nowait: Wait for snapshot completion. Default: True
 		'''
-		
+
 		self._check_ec2()
 		snapshot = self._create_snapshot(self.id, description, tags, 
 										kwds.get('nowait', True))
