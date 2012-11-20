@@ -8,11 +8,14 @@ import sys
 from boto.s3.key import Key
 from boto.exception import S3ResponseError
 
-from scalarizr.storage2.cloudfs import CloudFileSystem, TransferError
 from scalarizr.bus import bus
 
 
-class S3FileSystem(CloudFileSystem):
+class TransferError(Exception):  #? BaseException
+	pass
+
+
+class S3FileSystem(object):
 	schema	= 's3'
 	urlparse.uses_netloc.append(schema)
 
@@ -74,13 +77,15 @@ class S3FileSystem(CloudFileSystem):
 				key = Key(self._bucket)
 				key.name = key_name
 				file = open(local_path, "rb")
-				key.set_contents_from_file(file, policy=self.acl)
+				self._logger.debug("Actually uploading %s" % file)
+				key.set_contents_from_file(file, policy=self.acl)  # TODO: hangs sometimes
 				return self._format_path(bucket_name, key_name)
 			finally:
 				if file:
 					file.close()
 
 		except:
+			self._logger.debug("except")
 			exc = sys.exc_info()
 			raise TransferError, exc[1], exc[2]
 
@@ -96,6 +101,7 @@ class S3FileSystem(CloudFileSystem):
 				if not self._bucket_check_cache(bucket_name):
 					self._bucket = connection.get_bucket(bucket_name, validate=False)
 				key = self._bucket.get_key(key_name)
+				if key is None: raise TransferError("Key is None. No such key?")  ###
 			except S3ResponseError, e:
 				if e.code in ('NoSuchBucket', 'NoSuchKey'):
 					raise TransferError("S3 path '%s' not found" % remote_path)
@@ -132,3 +138,5 @@ def location_from_region(region):
 	else:
 		return region
 
+
+__cloudfs__ = S3FileSystem

@@ -28,13 +28,8 @@ except ImportError:
 from scalarizr import storage2
 from scalarizr.libs import bases
 from scalarizr.linux import coreutils
-from scalarizr.storage2.cloudfs.s3 import S3FileSystem
 
 
-# FIXME: strings instead of objects. lazy loading
-DRIVERS = {
-	"s3": S3FileSystem,
-}
 LOG = logging.getLogger(__name__)
 
 
@@ -178,6 +173,7 @@ class FileTransfer(BaseTransfer):
 					retry = 0
 					if self.multipart:
 						self._chunk_num += 1
+					LOG.debug("FileTransfer yield %s %s %s %s" % (src, dst, retry, self._chunk_num))
 					yield src, dst, retry, self._chunk_num
 			except StopIteration:
 				no_more = True
@@ -388,8 +384,8 @@ class LargeTransfer(bases.Task):
 		else:
 			self.transfer_id = transfer_id
 		self.manifest = manifest
-		self._transfer = FileTransfer(self._src_generator, 
-								self._dst_generator, **kwds)
+		self._transfer = FileTransfer(src=self._src_generator,
+								dst=self._dst_generator, **kwds)
 		self._tranzit_vol = storage2.volume(
 								type='tmpfs',
 								mpoint=tempfile.mkdtemp())
@@ -481,6 +477,7 @@ class LargeTransfer(bases.Task):
 
 				for filename, md5sum in self._split(stream, prefix):
 					fileinfo["chunks"].append((os.path.basename(filename), md5sum))
+					LOG.debug("LargeTransfer yield %s" % filename)
 					yield filename
 				if cmd:
 					cmd.communicate()
@@ -489,8 +486,10 @@ class LargeTransfer(bases.Task):
 
 			# send manifest to file transfer
 			if not self.multipart:
+				LOG.debug("Manifest: %s" % manifest.data)
 				manifest_f = os.path.join(self._tranzit_vol.mpoint, self.manifest)
 				manifest.write(manifest_f)
+				LOG.debug("LargeTransfer yield %s" % manifest_f)
 				yield manifest_f
 
 		elif self.direction == self.DOWNLOAD:
@@ -566,6 +565,7 @@ class LargeTransfer(bases.Task):
 				yield self._tranzit_vol.mpoint
 
 
+	"""
 	def _split(self, stream, prefix):
 		buf_size = 4096
 		chunk_size = self.chunk_size * 1024 * 1024
@@ -578,11 +578,13 @@ class LargeTransfer(bases.Task):
 		fp, md5sum, chunk_num = next_chunk()
 
 		while True:
+			LOG.debug("%s %s %s" % (fp, md5sum.hexdigest(), chunk_num))
 			size = min(buf_size, chunk_size - read_bytes)
 			bytes = stream.read(size)
 			if not bytes:
 				if fp:
 					fp.close()
+				LOG.debug("BREAK")
 				break
 			read_bytes += len(bytes)
 			fp.write(bytes)
@@ -591,6 +593,34 @@ class LargeTransfer(bases.Task):
 				fp.close()
 				yield fp.name, md5sum.hexdigest()
 				fp, md5sum, chunk_num = next_chunk(chunk_num)
+	"""
+
+
+	def _split(self, stream, prefix):
+		buf_size = 4096
+		chunk_size = self.chunk_size * 1024 * 1024
+
+		for chunk_n in itertools.count():
+			chunk_name = prefix + '%03d' % chunk_n
+			chunk_capacity = chunk_size
+			chunk_md5 = hashlib.md5()
+
+			with open(chunk_name, 'w') as chunk:
+				while chunk_capacity:
+					bytes = stream.read(min(buf_size, chunk_capacity))
+					if not bytes:
+						break
+					chunk.write(bytes)
+					chunk_capacity -= len(bytes)
+					chunk_md5.update(bytes)
+
+			if chunk_capacity != chunk_size:  # non-empty chunk
+				yield chunk_name, chunk_md5.hexdigest()
+			else:  # empty chunk
+				os.remove(chunk_name)
+			if chunk_capacity:  # empty or half-empty chunk, meaning stream
+								# is empty (if stream.closed?)
+				break
 
 
 	def _gzip_bin(self):
@@ -659,6 +689,7 @@ class LargeTransfer(bases.Task):
 
 
 	def _run(self):
+		LOG.debug("Creating tmpfs")
 		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.1)
 		self._tranzit_vol.ensure(mkfs=True)
 		try:
@@ -672,6 +703,7 @@ class LargeTransfer(bases.Task):
 				else:
 					return self._upload_res
 		finally:
+			LOG.debug("Destroying tmpfs")
 			self._tranzit_vol.destroy()
 			coreutils.remove(self._tranzit_vol.mpoint)
 
@@ -802,13 +834,11 @@ class Manifest(object):
 		return self.data.__contains__(value)
 
 
-
-def cloudfs(fstype, **driver_kwds):
-	return DRIVERS[fstype](**driver_kwds)
-
-
-class TransferError(Exception):  #? BaseException
-	pass
+def cloudfs(fstype, imported={}, **driver_kwds):
+	if fstype not in imported:
+		imported[fstype] = __import__('scalarizr.storage2.cloudfs.%s' % fstype,
+			globals(), locals(), ["__cloudfs__"], -1).__cloudfs__
+	return imported[fstype](**driver_kwds)
 
 
 class CloudFileSystem(object):
