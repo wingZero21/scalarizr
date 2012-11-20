@@ -120,6 +120,15 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			shutdown=self.on_shutdown
 		)
 		self.on_reload()
+
+		self._set_default_iptables_chain()
+
+
+	def _set_default_iptables_chain(self):
+		rh_input = iptables.uses_rh_input()
+		if rh_input:
+			iptables.chains.add(rh_input)  #? hide this in iptables
+			__node__["iptables_default_chain"] = rh_input
 	
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):

@@ -21,8 +21,8 @@ from copy import copy
 import logging
 
 from scalarizr import linux
+from scalarizr.linux import coreutils
 from scalarizr.linux import redhat
-
 
 LOG = logging.getLogger(__name__)
 
@@ -60,6 +60,8 @@ _OPTIONS = {
 	"-f": "--fragment",
 	"-V": "--version",
 }
+
+coreutils.modprobe('ip_tables')
 
 
 def iptables(**long_kwds):
@@ -317,6 +319,16 @@ def enabled():
 		return bool(re.search(r"iptables.*?\s\d:on", out))
 	else:
 		return os.access(IPTABLES_BIN, os.X_OK)
+
+
+def uses_rh_input():
+	if linux.os['family'] in ('RedHat', 'Oracle'):
+		rh_fw_rules = [rule for rule in list("INPUT")
+				if rule.has_key("jump") and rule["jump"].startswith("RH-Firewall-")]
+		for rule in rh_fw_rules:
+			if len(rule) == 1:  # redirects everything
+				return rule["jump"]  # "RH-Firewall-1-INPUT"
+	return False
 
 
 """

@@ -288,7 +288,8 @@ __node__ = {
 	'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
 	'state': File(_private_dir + '/.state'),
 	'rebooted': BoolFile(_private_dir + '/.reboot'),
-	'halted': BoolFile(_private_dir + '/.halt')
+	'halted': BoolFile(_private_dir + '/.halt'),
+	"iptables_default_chain": "INPUT",
 }
 for behavior in ('mysql', 'mysql2', 'percona'):
 	section = 'mysql2' if behavior == 'percona' else behavior

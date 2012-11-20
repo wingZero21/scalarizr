@@ -2,7 +2,8 @@
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.config import ScalarizrState
-from scalarizr.linux import iptables, os as linux_os
+from scalarizr.linux import iptables
+from scalarizr.node import __node__
 import logging
 
 
@@ -42,10 +43,14 @@ class RackspaceLifeCycleHandler(Handler):
 				{"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
 			]
 
+			iptables.ensure({__node__["iptables_default_chain"]: rules})
+
+			"""
 			if linux_os["family"] in ("RedHat", "Oracle"):
 				iptables.ensure({"RH-Firewall-1-INPUT": rules}) #? try except
 			else:
 				iptables.ensure({"INPUT": rules})
+			"""
 
 		"""
 		firewall = iptables.IpTables()
