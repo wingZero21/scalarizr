@@ -323,16 +323,12 @@ def enabled():
 
 
 def uses_rh_input():
-	LOG.debug("uses_rh_input")
 	if linux.os['family'] in ('RedHat', 'Oracle'):
 		rh_fw_rules = [rule for rule in list("INPUT")
 				if rule.has_key("jump") and rule["jump"].startswith("RH-Firewall-")]
-		LOG.debug("rh_fw_rules: %s" % rh_fw_rules)
 		for rule in rh_fw_rules:
 			if len(rule) == 1:  # if rule redirects everything
-				LOG.debug("uses_rh_input return: %s" % rule["jump"])
 				return rule["jump"]  # "RH-Firewall-1-INPUT"
-	LOG.debug("uses_rh_input return: False")
 	return False
 
 
