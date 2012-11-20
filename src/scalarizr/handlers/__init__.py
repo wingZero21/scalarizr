@@ -236,7 +236,7 @@ class Handler(object):
 	def get_ready_handlers(self):
 		handlers = list()
 		info = software.system_info()
-		if 'info' in software:
+		if 'software' in info:
 			for entry in info['software']:
 				if not ('name' in entry and 'version' in entry):
 					continue
