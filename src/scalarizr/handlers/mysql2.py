@@ -1198,7 +1198,6 @@ class MysqlHandler(DBMSRHandler):
 				LOG.info("Changing configuration files")
 				self.mysql.my_cnf.datadir = __mysql__['data_dir']
 				self.mysql.my_cnf.skip_locking = False
-				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
 				self.mysql.my_cnf.read_only = True
 	

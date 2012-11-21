@@ -538,6 +538,7 @@ class MySQLConf(BaseConfig):
 	skip_locking = property(_get_skip_locking, _set_skip_locking)
 	expire_logs_days = property(_get_expire_logs_days, _set_expire_logs_days)
 	datadir	 = property(_get_datadir, _set_datadir)
+	read_only = property(_get_read_only, _set_read_only)
 	datadir_default = DEFAULT_DATADIR
 
 	
