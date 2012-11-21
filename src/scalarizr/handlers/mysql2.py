@@ -782,6 +782,8 @@ class MysqlHandler(DBMSRHandler):
 						# Patch configuration files 
 						self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
 						self.mysql._init_replication(master=True)
+						# Set read_only option
+						self.mysql.my_cnf.read_only = False
 						self.mysql.service.start()
 						# Update __mysql__['behavior'] configuration
 						__mysql__.update({
@@ -835,6 +837,8 @@ class MysqlHandler(DBMSRHandler):
 					old_vol.mount()
 					raise
 			else:
+				# Set read_only option
+				self.mysql.my_cnf.read_only = False
 				self.mysql.service.start()
 
 				self.root_client.stop_slave()
@@ -900,7 +904,10 @@ class MysqlHandler(DBMSRHandler):
 				status="error",
 				last_error=str(e))
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
-
+			
+			# Change back read_only option 
+			self.mysql.my_cnf.read_only = True
+			
 			# Start MySQL
 			self.mysql.service.start()
 
@@ -1193,6 +1200,7 @@ class MysqlHandler(DBMSRHandler):
 				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
+				self.mysql.my_cnf.read_only = True
 	
 			with op.step(self._step_move_datadir):
 				self.mysql.move_mysqldir_to(__mysql__['storage_dir'])

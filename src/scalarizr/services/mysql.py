@@ -523,6 +523,14 @@ class MySQLConf(BaseConfig):
 		self.set('mysqld/skip-locking', val)
 
 
+	def _get_read_only(self, val):
+		return self.get('mysqld/read_only')
+
+
+	def _set_read_only(self, val):
+		self.set('mysqld/read_only', val)
+
+
 	log_bin = property(_get_log_bin, _set_log_bin)
 	server_id = property(_get_server_id, _set_server_id)
 	bind_address = property(_get_bind_address, _set_bind_address)
