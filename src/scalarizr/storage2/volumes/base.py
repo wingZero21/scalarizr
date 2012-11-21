@@ -156,7 +156,7 @@ class Volume(Base):
 		return storage2.volume(config)
 
 
-	def grow(self, growth_cfg):
+	def grow(self, growth_cfg, resize_fs=True):
 		"""
 		Grow (and/or alternate, e.g.: change ebs type to io1) volume and fs
 		Old volume detached, but not destroyed.
@@ -176,39 +176,40 @@ class Volume(Base):
 									'volume has no id.')
 
 		self.check_growth_cfg(growth_cfg)
+		was_mounted = self.mounted_to() if self.device else False
 
-		was_mounted = self.mounted_to()
-		bigger_vol = None
+		bigger_vol = cleanup_cb = None
 		try:
 			self.detach()
-			bigger_vol = self._grow(growth_cfg)
-			bigger_vol.ensure(mount=False)
+			bigger_vol = self.clone()
+			self._grow(bigger_vol, growth_cfg)
+			if resize_fs:
+				fs_created = bigger_vol.detect_fstype()
 
-			if self.fstype:
-				fs = storage2.filesystem(fstype=self.fstype)
-				umount_on_resize = fs.features.get('umount_on_resize')
-				fs_created = self.detect_fstype()
-				if fs_created:
-					if umount_on_resize:
-						fs.resize(bigger_vol.device)
-						if was_mounted:
+				if self.fstype:
+					fs = storage2.filesystem(fstype=self.fstype)
+					umount_on_resize = fs.features.get('umount_on_resize')
+
+					if fs_created:
+						if umount_on_resize:
+							if bigger_vol.mounted_to():
+								bigger_vol.umount()
+							fs.resize(bigger_vol.device)
+							if was_mounted:
+								bigger_vol.mount()
+						else:
 							bigger_vol.mount()
-					else:
-						bigger_vol.mount()
-						fs.resize(bigger_vol.device)
-						if not was_mounted:
-							bigger_vol.umount()
+							fs.resize(bigger_vol.device)
+							if not was_mounted:
+								bigger_vol.umount()
 
 		except:
 			e = sys.exc_info()[1]
-			LOG.debug('Failed to grow volume: %s. Trying to attach old volume')
+			LOG.debug('Failed to grow volume: %s. Trying to attach old volume' % e)
 			try:
 				if bigger_vol:
 					try:
-						bigger_vol.destroy(force=True)
-						if bigger_vol.snap:
-							snap = storage2.snapshot(bigger_vol.snap)
-							snap.destroy(force=True)
+						bigger_vol.destroy(force=True, remove_disks=True)
 					except:
 						destr_err = sys.exc_info()[1]
 						LOG.error('Enlarged volume destruction failed: %s' % destr_err)
@@ -216,19 +217,19 @@ class Volume(Base):
 				self.ensure(mount=bool(was_mounted))
 			except:
 				e = str(e) + '\nFailed to restore old volume.'
+
 			raise storage2.StorageError('Volume growth failed: %s' % e)
 
 		return bigger_vol
 
 
-	def _grow(self, growth_cfg):
+	def _grow(self, bigger_vol, growth_cfg):
 		"""
-		Returns volume object - copy of self volume, but bigger.
-		No attach, no mount, nothing. Just volume object
-		with appropriate configuration.
+		Create, attach and do everything except mount
 
 		:param growth_cfg: Type-dependant config for volume growth
 		:type growth_cfg: dict
+		:rtype: Volume
 		"""
 		pass
 

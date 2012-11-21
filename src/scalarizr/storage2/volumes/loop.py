@@ -118,13 +118,12 @@ class LoopVolume(base.Volume):
 			raise storage2.StorageError('Size argument is missing '
 							'from grow config')
 
-		if int(size) < self.size:
+		if float(size) < float(self.size):
 			raise storage2.StorageError('New loop device size is less than '
 						'current.')
 
 
-	def _grow(self, growth_cfg):
-		new_vol = self.clone()
+	def _grow(self, new_vol, growth_cfg):
 		snap = self.snapshot(description='Temporary snapshot for volume growth')
 		try:
 			size = growth_cfg.get('size')
@@ -134,6 +133,7 @@ class LoopVolume(base.Volume):
 			coreutils.dd(**dd_kwds)
 			new_vol.snap = snap
 			new_vol.size = size
+			new_vol.ensure()
 		except:
 			err_type, err_val, trace = sys.exc_info()
 			LOG.error('Failed to grow loop volume. Error: %s'
@@ -146,7 +146,8 @@ class LoopVolume(base.Volume):
 
 			raise err_type, err_val, trace
 
-		return new_vol
+		finally:
+			snap.destroy()
 
 
 	def _detach(self, force, **kwds):

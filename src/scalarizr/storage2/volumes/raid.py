@@ -179,7 +179,6 @@ class RaidVolume(base.Volume):
 	def _detach(self, force, **kwds):
 		self.lvm_group_cfg = lvm2.backup_vg_config(self.vg)
 		lvm2.vgremove(self.vg, force=True)
-		self.device = None
 		lvm2.pvremove(self.raid_pv, force=True)
 
 		mdadm.mdadm('misc', None, self.raid_pv, stop=True, force=True)
@@ -198,6 +197,8 @@ class RaidVolume(base.Volume):
 
 		for disk in self.disks:
 			disk.detach(force=force)
+
+		self.device = None
 
 
 	def _snapshot(self, description, tags, **kwds):
@@ -256,14 +257,14 @@ class RaidVolume(base.Volume):
 				except storage2.NoOpError:
 					pass
 
-		len = growth_cfg['disks'].get('len')
+		new_len = growth_cfg['disks'].get('len')
 		current_len = len(self.disks)
-		change_size = len and int(len) != current_len
+		change_size = new_len and int(new_len) != current_len
 
 		if not change_size and not change_disks:
 			raise storage2.NoOpError('Configurations are equal. Nothing to do')
 
-		if change_size and int(len) < current_len:
+		if change_size and int(new_len) < current_len:
 			raise storage2.StorageError('Disk count can only be increased.')
 
 		if change_size and int(self.level) in (0, 10):
@@ -271,19 +272,18 @@ class RaidVolume(base.Volume):
 																% self.level)
 
 
-	def _grow(self, growth_cfg):
-		len = growth_cfg['disks'].get('len')
+	def _grow(self, new_vol, growth_cfg):
+		new_len = growth_cfg['disks'].get('len')
 		foreach_cfg = growth_cfg['disks'].get('foreach')
 
 		current_len = len(self.disks)
-		increase_disk_count = len and int(len) != current_len
-		new_vol = self.clone()
+		increase_disk_count = new_len and int(new_len) != current_len
 
 		if foreach_cfg:
 
 			def _grow(index, disk, cfg, queue):
 				try:
-					ret = disk.grow(cfg)
+					ret = disk.grow(cfg, resize_fs=False)
 					queue.put(dict(index=index, result=ret))
 				except:
 					e = sys.exc_info()[1]
@@ -330,7 +330,7 @@ class RaidVolume(base.Volume):
 							" growth result (not enough data).")
 
 			except:
-				err_type, err_val, trace = sys.exc_info()[1]
+				err_type, err_val, trace = sys.exc_info()
 				log_msg = 'Failed to grow all associated disks: %s.' % err_val
 				if growed_disks:
 					log_msg += ' Removing %s successfully created disks.' % len(growed_disks)
@@ -345,12 +345,13 @@ class RaidVolume(base.Volume):
 				raise err_type, err_val, trace
 
 			new_vol.disks = growed_disks
-			# When we reconstruct md device with bigger volumes,
-			# lvm might find pv, vg and so on
-			# so if we yet need to add disks
-			# we should (maybe) remove all lvm info
-			# and then add disks
+			new_vol.pv_uuid = self.pv_uuid
+			new_vol.lvm_group_cfg = self.lvm_group_cfg
+			new_vol.ensure()
 
+			mdadm.mdadm('grow', new_vol.raid_pv, size='max')
+			lvm2.pvresize(new_vol.raid_pv)
+			lvm2.lvresize(new_vol.device, extents='100%VG')
 
 
 class RaidSnapshot(base.Snapshot):

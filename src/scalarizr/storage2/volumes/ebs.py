@@ -159,7 +159,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		config.pop('avail_zone', None)
 
 
-	def _grow(self, growth_cfg):
+	def _grow(self, new_vol, growth_cfg):
 		"""
 		:param new_vol: New volume instance (almost empty)
 		:type new_vol: EbsVolume
@@ -172,8 +172,6 @@ class EbsVolume(base.Volume, EbsMixin):
 		size = growth_cfg.get('size')
 		ebs_type = growth_cfg.get('volume_type')
 		iops = growth_cfg.get('iops')
-
-		new_vol = self.clone()
 
 		snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1})
 		new_vol.snap = snap
