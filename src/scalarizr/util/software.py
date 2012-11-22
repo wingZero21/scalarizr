@@ -44,7 +44,7 @@ def whereis(name):
 	places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
 	return tuple([os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))])
 
-def system_info():
+def system_info(verbose=False):
 		
 	def check_module(module):
 		return not system2((modprobe, '-n', module), raise_exc=False)[-1]
@@ -53,10 +53,14 @@ def system_info():
 	ret['software'] = []			
 	installed_list = all_installed()
 	for software_info in installed_list:
-		ret['software'].append(dict(
-					name=software_info.name,
-					version='.'.join([str(x) for x in software_info.version])
-					))
+		v = dict(
+			name=software_info.name,
+			version='.'.join([str(x) for x in software_info.version])
+		)
+		if verbose:
+			v['string_version'] = software_info.string_version		
+		
+		ret['software'].append(v)
 	
 	ret['os'] = {}	
 	ret['os']['version'] 		= ' '.join(disttool.linux_dist())
