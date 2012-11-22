@@ -11,7 +11,7 @@ import shutil
 
 from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, PopenError, wait_until
-from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, PresetProvider
+from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError
 from scalarizr.util import disttool, cryptotool, firstmatched
 from scalarizr.util.filetool import rchown
 from scalarizr.libs.metaconf import Configuration, NoPathError
