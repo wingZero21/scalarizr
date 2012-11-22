@@ -202,7 +202,8 @@ class ScriptExecutor2(Handler):
 			scripts = [Script(name=item['name'], body=item['body'], 
 							asynchronous=int(item['asynchronous']), 
 							exec_timeout=item['timeout'], event_name=event_name,
-							role_name=role_name)
+							role_name=role_name,
+							event_server_id=message.body.get('server_id'))
 						for item in message.body['scripts']]
 				
 		else:
@@ -230,6 +231,7 @@ class Script(object):
 	event_name = None
 	role_name = None
 	exec_timeout = None
+	event_server_id = None
 	
 	id = None
 	pid = None
@@ -351,7 +353,8 @@ class Script(object):
 				script_name=self.name,
 				script_path=self.exec_path,
 				event_name=self.event_name or '',
-				return_code=self.return_code
+				return_code=self.return_code,
+				event_server_id=self.event_server_id
 			)
 			return ret 		
 
