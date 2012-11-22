@@ -17,14 +17,14 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
+from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages, Handler
 from scalarizr.util.filetool import split, rchown
 from scalarizr.util import system2, wait_until, disttool, software, filetool, cryptotool
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, PgUser, SU_EXEC
 from scalarizr.linux import iptables
 from scalarizr.handlers import operation, prepare_tags
-
+from scalarizr.services import make_backup_steps
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -118,6 +118,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 	
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		self._service_name = SERVICE_NAME
+		Handler.__init__(self)
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_postgresql_data_bundle',
@@ -601,7 +603,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 		self._logger.debug("Replication switched")
 		bus.fire('postgresql_change_master', host=host)
-			
 
 	def on_DbMsr_CreateBackup(self, message):
 		#TODO: Think how to move the most part of it into Postgresql class 
@@ -616,8 +617,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 			
 			op = operation(name=self._op_backup, phases=[{
-				'name': self._phase_backup, 
-				'steps': ["Backup '%s'" % db for db in databases] + [self._step_upload_to_cloud_storage]
+				'name': self._phase_backup
 			}])
 			op.define()			
 			
@@ -636,17 +636,18 @@ class PostgreSqlHander(ServiceCtlHandler):
 				# Dump all databases
 				self._logger.info("Dumping all databases")
 				tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
-				rchown(self.postgresql.root_user.name, tmpdir)	
-				
-				for db in databases:
-					with op.step("Backup '%s'" % db):
-						dump_path = tmpdir + os.sep + db + '.sql'
-						pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db, dump_path)
-						su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
-						err = system2(su_args)[1]
-						if err:
-							raise HandlerError('Error while dumping database %s: %s' % (db, err))
-						backup.add(dump_path, os.path.basename(dump_path))							
+				rchown(self.postgresql.root_user.name, tmpdir)
+
+				def _single_backup(db_name):
+					dump_path = tmpdir + os.sep + db_name + '.sql'
+					pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path)
+					su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
+					err = system2(su_args)[1]
+					if err:
+						raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
+					backup.add(dump_path, os.path.basename(dump_path))	
+
+				make_backup_steps(databases, op, _single_backup)						
 
 				backup.close()
 				

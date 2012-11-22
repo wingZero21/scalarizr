@@ -62,6 +62,7 @@ _OPTIONS = {
 	"-V": "--version",
 }
 
+coreutils.modprobe('ip_tables')
 
 
 def iptables(**long_kwds):
@@ -145,6 +146,31 @@ class _Chain(object):
 		return iptables(delete=delete, **rule)
 
 	def list(self, table=None):
+		"""
+		List iptables rules. On systems with older iptables (that don't
+		support --list-rules arg) --list will be used with a very limited
+		parsing.
+		"""
+
+		# args for both cases
+		list_rules_kwargs = {"list-rules": self.name}
+		list_kwargs = {"list": self.name, "numeric": True}
+		if table:
+			list_rules_kwargs["table"] = table
+			list_kwargs["table"] = table
+
+		try:
+			out = iptables(**list_rules_kwargs)[0]
+		except linux.LinuxError, e:
+			if "Unknown arg `--list-rules'" in e.err:
+				out = iptables(**list_kwargs)[0]
+				return self._parse_list(out)
+			else:
+				raise
+		else:
+			return self._parse_list_rules(out)
+
+	def _parse_list_rules(self, output):
 		result = []
 
 		def build_ruledict(option, element):
@@ -170,25 +196,9 @@ class _Chain(object):
 					ruledict[key].append(element)
 				return option
 
-		# get stdout
-		kwargs = {"list-rules": self.name}
-		if table:
-			kwargs['table'] = table
-		try:
-			out = iptables(**kwargs)[0]
-		except linux.LinuxError, e:
-			if "Unknown arg `--list-rules'" in e.err:
-				LOG.debug("Iptables does not support --list-rules. "
-						  "Iptables.list() defaults to [], iptables.ensure() "
-						  "degrades to simple insertion or appending that may "
-						  "result in rule duplication.")
-				return []
-			else:
-				raise
-
 
 		# parse
-		for rule in out.splitlines():
+		for rule in output.splitlines():
 			args = shlex.split(rule)
 			if "-P" in args or "-N" in args:
 				continue  # dull rules
@@ -204,6 +214,57 @@ class _Chain(object):
 
 			# postprocess: hide append option
 			del result[-1]["append"]  #? except KeyError: pass
+
+		return result
+
+	def _parse_list(self, output):
+		"""
+		The problem with parsing iptables --list output is that only the first
+		5 columns have names and the rest of data is in some arbitrary format.
+		This method is supposed to understand this rest in a couple of simple
+		cases: "(tcp|udp) (dpt:\d+|dpts:\d+:\d+)". All other cases will be kept
+		as a single string under "_unparsed" key in the rule dict.
+		"""
+
+		headers = ["jump", "protocol", "opt", "source", "destination"]
+		defaults = [None, "all", "--", "0.0.0.0/0", "0.0.0.0/0"]
+
+		result = []
+		outlist = output.splitlines()[2:]  # strip the 2 header lines
+		for rulestr in outlist:
+			# preprocess input
+			if rulestr.startswith(' ' * 11):  # empty target
+				_headers = headers[1:]
+				rulestr = rulestr.lstrip()  # not necessary, for readability
+			else:
+				_headers = headers
+
+			# build the rule
+			ruleitems = rulestr.split()
+			rule = dict(zip(_headers, ruleitems))  # known columns
+			rest = ruleitems[len(_headers):]  # unknown
+			# rest can be: [], ['tcp', 'dpt:8008'], ['tcp', 'dpts:6379:6395']
+			# or [...]
+			if len(rest) == 2 and rest[0] in ("tcp", "udp") and \
+					rest[1].startswith(("dpt:", "dpts:")):
+				rule["match"] = rest[0]
+				rule["dport"] = rest[1].split(':', 1)[1]
+			elif not rest:
+				pass
+			else:
+				rule["_unparsed"] = ' '.join(rest)
+
+			# postprocess
+			# remove defaults
+			for key, default in zip(headers, defaults):
+				if rule.has_key(key) and rule[key] == default:
+					del rule[key]
+			# convert ips
+			for key, val in rule.items():
+				if _is_plain_ip(val):
+					rule[key] = val + "/32"
+
+			result.append(rule)
 
 		return result
 
@@ -266,12 +327,11 @@ def list(chain, table=None):
 def ensure(chain_rules, append=False):
 	# {chain: [rule, ...]}
 	# Will simply insert missing rules at the beginning.
-	# NOTE: rule comparsion is far from ideal, check _to_inner method
-	# note: existing rules don't have table attribute
+	# NOTE: rule comparison is far from ideal, check _to_inner method
+	# NOTE: existing rules don't have table attribute
 
-	# for debugging INPUT chain
-	# LOG.debug("Current iptables %s: " % str(list("INPUT")))
-	# LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
+	#LOG.debug("Current iptables %s: " % str(list("INPUT")))
+	#LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
 
 	for chain, rules in chain_rules.iteritems():
 		existing = list(chain)
@@ -288,10 +348,11 @@ def ensure(chain_rules, append=False):
 
 def _to_inner(rule):
 	"""
-	Converts rule to its inner representation for comparsion.
+	Converts rule to its inner representation for comparison.
 
 	1. "source": "192.168.0.1" -> "source": "192.168.0.1/32"
-	2. "dport": 22 -> "dport": "22"
+	2. "destination": "192.168.0.1" -> "destination": "192.168.0.1/32"
+	3. "dport": 22 -> "dport": "22"
 
 	TODO:
 
@@ -299,18 +360,26 @@ def _to_inner(rule):
 	"proto": $value -> "protocol": $value
 	"syn": True -> "tcp-flags": "FIN,SYN,RST,ACK SYN"
 	"protocol": "tcp" -> "protocol": "tcp", "match": "tcp" for all protocols
-	format "destination" same way as "source"
+	"source": $ip1,$ip2 -> 2 rules for each ip
 	"""
 	inner = copy(rule)
 
 	# 1
-	if inner.has_key("source") and inner["source"][-3] != '/':
+	if 'source' in inner and _is_plain_ip(inner["source"]):
 		inner["source"] += "/32"
 	# 2
-	if inner.has_key("dport") and isinstance(inner["dport"], int):
+	if 'destination' in inner and _is_plain_ip(inner["destination"]):
+		inner["destination"] += "/32"
+	# 3
+	if 'dport' in inner and isinstance(inner["dport"], int):
 		inner["dport"] = str(inner["dport"])
 
 	return inner
+
+
+def _is_plain_ip(s):
+	return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] == \
+		   [True] * 4
 
 
 def enabled():
@@ -335,12 +404,10 @@ def uses_rh_input():
 Initialization
 '''
 # Without this first call 'service iptables save' fails with code:1
-iptables(list=True)
+iptables(list=True, numeric=True)
 
 
 """
-raise Exception("OK")
-#################################################################################
 INPUT = chains['INPUT']
 
 iptables.INPUT.append([

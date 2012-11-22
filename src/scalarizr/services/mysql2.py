@@ -207,8 +207,6 @@ class XtrabackupBackup(XtrabackupMixin, backup.Backup):
 				to_lsn=to_lsn,
 				backup_type=self.backup_type,
 				backup_dir=self.backup_dir,
-				# FIXME: volume should be. investigate problem with clone
-				#volume=self.volume.clone(),
 				volume=self.volume.clone(),				 
 				snapshot=snapshot)
 
@@ -517,8 +515,7 @@ class User(bases.ConfigDriven):
 
 def innobackupex(*params, **long_kwds):
 	if not os.path.exists('/usr/bin/innobackupex'):
-		mgr = pkgmgr.package_mgr()
-		mgr.install('percona-xtrabackup')
+		pkgmgr.installed('percona-xtrabackup')
 	return linux.system(linux.build_cmd_args(
 			executable='/usr/bin/innobackupex', 
 			long=long_kwds, 

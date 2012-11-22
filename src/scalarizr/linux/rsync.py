@@ -6,6 +6,6 @@ from scalarizr.linux import pkgmgr
 
 def rsync(src, dst, **long_kwds):
 	if not os.path.exists('/usr/bin/rsync'):
-		pkgmgr.package_mgr().install('rsync')
+		pkgmgr.installed('rsync')
 
 	raise NotImplementedError()

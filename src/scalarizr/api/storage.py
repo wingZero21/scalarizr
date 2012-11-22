@@ -8,21 +8,47 @@ from __future__ import with_statement
 import threading
 
 from scalarizr import handlers, rpc
-from scalarizr import storage as storage_lib
+from scalarizr import storage2
 
 
 class StorageAPI(object):
 
+	error_messages = {
+		'empty': "'%s' can't be blank",
+		'invalid': "'%s' is invalid, '%s' expected"
+	}
+
 	@rpc.service_method
-	def create(self, volume_config=None, snapshot_config=None, async=False):
-		if volume_config and snapshot_config:
-			raise AssertionError('Both volume and snapshot configurations'
-			'were passed. Only one configuration expected.')
+	def create(self, volume=None, mkfs=False, mount=False, fstab=False, async=False):
+		'''
+		:type volume: dict
+		:param volume: Volume configuration object
+		
+		:type mkfs: bool
+		:param mkfs: Whether create filesystem on volume device. 
+			Error will be raised if existed filesystem detected.
+			
+		:type mount: bool
+		:param mount: Whether mount volume device. 
+			Non blank `mpoint` in volume configuration required
+			
+		:type fstab: bool
+		:param fstab: Whether add device to /etc/fstab
+		
+		:type async: bool
+		:param async: Execute method in separate thread and report status 
+				with Operation/Steps mechanism
+				
+		:rtype: dict|string
+		'''
+		self._check_invalid(volume, 'volume', dict)
 
-		if not volume_config and not snapshot_config:
-			raise AssertionError('No configuration were passed')
+		def do_create():
+			vol = storage2.volume(volume)
+			vol.ensure(mkfs=mkfs, mount=mount, fstab=fstab)
+			return dict(vol)
+			
 
-		kw = volume_config or {'snapshot': snapshot_config}
 		if async:
 			txt = 'Create volume'
 			op = handlers.operation(name=txt)
@@ -30,19 +56,45 @@ class StorageAPI(object):
 				op.define()
 				with op.phase(txt):
 					with op.step(txt):
-						vol = storage_lib.Storage.create(**kw)
-				op.ok(data=vol.config())
+						data = do_create()
+				op.ok(data=data)
 			threading.Thread(target=block).start()
 			return op.id
 		
 		else:
-			vol = storage_lib.Storage.create(**kw)
-			return vol.config()
+			return do_create()
 
 
 	@rpc.service_method
-	def snapshot(self, volume_config, description=None, async=False):
-		vol = storage_lib.Storage.create(volume_config)
+	def snapshot(self, volume=None, description=None, tags=None, async=False):
+		'''
+		:type volume: dict
+		:param volume: Volume configuration object
+
+		:type description: string
+		:param description: Snapshot description
+		
+		:type tags: dict
+		:param tags: Key-value tagging. Only 'ebs' and 'gce_persistent' 
+			volume types support it
+				
+		:type async: bool
+		:param async: Execute method in separate thread and report status 
+				with Operation/Steps mechanism
+		'''
+		self._check_invalid(volume, 'volume', dict)
+		self._check_empty(volume.get('id'), 'volume.id')
+		if description:
+			self._check_invalid(description, 'description', basestring)
+		if tags:
+			self._check_invalid(tags, 'tags', dict)
+		
+		def do_snapshot():
+			vol = storage2.volume(volume)
+			vol.ensure()			
+			snap = vol.snapshot(description=description, tags=tags)
+			return dict(snap)
+		
 		if async:
 			txt = 'Create snapshot'
 			op = handlers.operation(name=txt)
@@ -50,20 +102,39 @@ class StorageAPI(object):
 				op.define()
 				with op.phase(txt):
 					with op.step(txt):
-						snap = vol.snapshot(description)
-				op.ok(data=snap.config())
+						data = do_snapshot()
+				op.ok(data=data)
 			threading.Thread(target=block).start()
 			return op.id
 			
 		else:
-			snap = vol.snapshot(description)
-			return snap.config()
+			return do_snapshot()
 
 
 	@rpc.service_method
-	def detach(self, volume_config, async=False):
-		assert volume_config.get('id'), 'volume_config[id] is empty'
-		vol = storage_lib.Storage.create(volume_config)
+	def detach(self, volume=None, force=False, async=False, **kwds):
+		'''
+		:type volume: dict
+		:param volume: Volume configuration object
+		
+		:type force: bool
+		:param force: More aggressive. 
+			- 'ebs' will pass it to DetachVolume
+			- 'raid' will pass it to underlying disks 
+		
+		:type async: bool
+		:param async: Execute method in separate thread and report status 
+				with Operation/Steps mechanism
+		'''
+		self._check_invalid(volume, 'volume', dict)
+		self._check_empty(volume.get('id'), 'volume.id')
+
+		def do_detach():
+			vol = storage2.volume(volume)
+			vol.ensure()
+			vol.detach(force=force, **kwds)
+			return dict(vol)
+				
 		if async:
 			txt = 'Detach volume'
 			op = handlers.operation(name=txt)
@@ -71,21 +142,39 @@ class StorageAPI(object):
 				op.define()
 				with op.phase(txt):
 					with op.step(txt):
-						vol.detach()
-				op.ok(data=vol.config())
+						data = do_detach()
+				op.ok(data=data)
 			threading.Thread(target=block).start()
 			return op.id
 			
 		else:
-			vol.detach()
-			return vol.config()
+			return do_detach()
 
 
 	@rpc.service_method
-	def destroy(self, volume_config, destroy_disks=False, async=False):
-		assert volume_config.get('id'), 'volume_config[id] is empty'
+	def destroy(self, volume, force=False, async=False, **kwds):
+		'''
+		:type volume: dict
+		:param volume: Volume configuration object
 		
-		vol = storage_lib.Storage.create(volume_config)
+		:type force: bool
+		:param force: More aggressive. 
+			- 'ebs' will pass it to DetachVolume
+			- 'raid' will pass it to underlying disks 
+		
+		:type async: bool
+		:param async: Execute method in separate thread and report status 
+				with Operation/Steps mechanism
+		'''
+		self._check_invalid(volume, 'volume', dict)
+		self._check_empty(volume.get('id'), 'volume.id')
+		
+		def do_destroy():
+			vol = storage2.volume(volume)
+			vol.ensure()
+			vol.detach(force=force, **kwds)
+			return dict(vol)
+		
 		if async:
 			txt = 'Destroy volume'
 			op = handlers.operation(name=txt)
@@ -93,15 +182,15 @@ class StorageAPI(object):
 				op.define()
 				with op.phase(txt):
 					with op.step(txt):
-						vol.destroy(remove_disks=destroy_disks)
-				op.ok()
+						data = do_destroy()
+				op.ok(data=data)
 			threading.Thread(target=block).start()
 			return op.id
 		
 		else:
-			vol.destroy(remove_disks=destroy_disks)
+			return do_destroy()
 
-
+	'''
 	@rpc.service_method
 	def replace_raid_disk(self, volume_config, target_disk_device, replacement_disk_config, async=False):
 		assert volume_config.get('type') == 'raid', 'Configuration type is not raid'
@@ -147,5 +236,11 @@ class StorageAPI(object):
 	def status(self, volume_config):
 		vol = storage_lib.Storage.create(volume_config)
 		return vol.status()
+	'''
 
 
+	def _check_invalid(self, param, name, type_):
+		assert isinstance(param, type_), self.error_messages['invalid'] % (name, type_)
+
+	def _check_empty(self, param, name):
+		assert param, self.error_messages['empty'] % name

@@ -18,6 +18,12 @@ sample_raid_config = dict(type='raid', level=5, vg='test', disks=[dict(type='loo
 
 class TestStorageAPI(object):
 	
+	ebs_config = {
+		'type': 'ebs',
+		'size': 1
+	}
+	
+	'''
 	@classmethod
 	def setup_class(cls):
 		thread_patcher = mock.patch('scalarizr.api.storage.threading.Thread')
@@ -48,19 +54,26 @@ class TestStorageAPI(object):
 		self.storage_patcher.stop()
 		self.op_patcher.stop()
 
-
+	'''
 	""" Test methods """
 
+	def setup(self):
+		self.api = storage_api.StorageAPI()
 
-	def test_create(self):
-		self.storage.create.return_value = self.sample_vol
-		ret = self.api.create(volume_config=sample_volume_config)
-		self.storage.create.assert_called_once_with(**sample_volume_config)
-		assert_equal(ret, self.sample_vol.config())
-		# No operation were defined
-		assert_equal(self.operation.mock_calls, [])
+	@mock.patch.object(storage_api.storage2, 'volume')
+	def test_create(self, vol_factory):
+		self.api.create(self.ebs_config, mkfs=True)
+		vol_factory.assert_called_once_with(self.ebs_config)
 
 
+	@mock.patch.object(storage_api.threading, 'Thread')
+	@mock.patch.object(storage_api.storage2, 'volume')
+	def test_create_async(self, vol_factory, thread):
+		ret = self.api.create(self.ebs_config, async=True)
+		assert isinstance(ret, basestring)
+		thread.assert_called_once()
+
+	'''
 	def test_create_async(self):
 		assert_raises(AssertionError, self.api.create)
 		assert_raises(AssertionError, self.api.create,
@@ -290,7 +303,7 @@ class TestStorageAPI(object):
 		assert_raises(Exception, self.api.replace_raid_disk,
 					  sample_raid_config, target_disk, sample_volume_config, async=True)
 		assert_equal(op.ok.call_count, 0)
-
+	'''
 
 
 

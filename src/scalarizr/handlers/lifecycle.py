@@ -46,7 +46,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	
 	FLAG_REBOOT = "reboot"
 	FLAG_HALT = "halt"
-	
+
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		
@@ -198,12 +198,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		self.send_message(msg)
 		bus.fire("reboot_finish")		
 
+
 	def _start_after_stop(self):
 		msg = self.new_message(Messages.RESTART)
 		bus.fire("before_restart", msg)
 		self.send_message(msg)
 		bus.fire("restart")
-	
+
+
 	def _start_init(self):
 		# Regenerage key
 		new_crypto_key = cryptotool.keygen()
@@ -215,26 +217,27 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			snmp_community_name = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
 		), broadcast=True)
 		bus.fire("before_host_init", msg)
-		# Update key file
 
 		self.send_message(msg, new_crypto_key=new_crypto_key, wait_ack=True)
 		bus.cnf.state = ScalarizrState.INITIALIZING
 
 		bus.fire("host_init")
 
-		
-	
+
 	def _start_import(self):
-		# Send Hello 
 		data = software.system_info()
 		data['architecture'] = self._platform.get_architecture()
-		
-		msg = self.new_message(Messages.HELLO, data, 
+		data['server_id'] = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+
+		# Send Hello
+		msg = self.new_message(Messages.HELLO, data,
 			broadcast=True # It's not really broadcast but need to contain broadcast message data 
-		)		
+		)
+		msg.body['behaviour'] = self.get_ready_behaviours()
 		bus.fire("before_hello", msg)
 		self.send_message(msg)
 		bus.fire("hello")
+
 
 	def on_reload(self):
 		self._msg_service = bus.messaging_service
@@ -263,22 +266,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 				{"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
 			]})
 
-		"""
-		iptables = IpTables()
-		if iptables.enabled():		
-			rules = []
-			
-			# Scalarizr ports
-			rules.append(RuleSpec(dport=8008, jump='ACCEPT', protocol=P_TCP))
-			rules.append(RuleSpec(dport=8010, jump='ACCEPT', protocol=P_TCP))
-			rules.append(RuleSpec(dport=8012, jump='ACCEPT', protocol=P_TCP))
-			rules.append(RuleSpec(dport=8013, jump='ACCEPT', protocol=P_TCP))
-			rules.append(RuleSpec(dport=8014, jump='ACCEPT', protocol=P_UDP))
-			
-			for rule in rules:
-				iptables.insert_rule(1, rule_spec = rule)
-		"""
-
 
 	def on_shutdown(self):
 		self._logger.debug('Calling %s.on_shutdown', __name__)
@@ -301,6 +288,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		else:
 			self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
 					+ "Cross-scalarizr messaging not initialized")
+
 
 	def _start_int_messaging(self):
 		if 'mongodb' in __node__['behavior']:
@@ -330,6 +318,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		finally:
 			self.send_message(msg)
 		bus.fire("host_down")
+
 
 	def on_HostInitResponse(self, message):
 		if bus.cnf.state == ScalarizrState.RUNNING:
@@ -364,11 +353,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 	def _update_package(self):
 		up_script = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_SCRIPTS_PATH) + '/update'
-		#cmd = [sys.executable, up_script]
-		#p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False, close_fds=True)
-		#p.communicate()
 		system2([sys.executable, up_script], close_fds=True)
 		self._set_flag('update')
+
 
 	def on_before_message_send(self, queue, message):
 		"""
@@ -398,30 +385,28 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		
 	def _get_flag_filename(self, name):
 		return self._cnf.private_path('.%s' % name)
-	
+
+
 	def _set_flag(self, name):
 		file = self._get_flag_filename(name)
 		try:
 			self._logger.debug("Touch file '%s'", file)
 			open(file, "w+").close()
+			
 		except IOError, e:
-			self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))		
-	
+			self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))
+
+
 	def _flag_exists(self, name):
 		return os.path.exists(self._get_flag_filename(name))
 	
 	def _clear_flag(self, name):
-		os.remove(self._get_flag_filename(name))	
+		if self._flag_exists(name):
+			os.remove(self._get_flag_filename(name))
 	
 
 class IntMessagingService(object):
-	'''
-	Usage:
-	s = bus.int_messaging_service
-	p = s.new_producer('10.152.12.38')
-	m = s.new_message('Cassandra_IntCreateDataBundle')
-	p.send(Queues.CONTROL, m)
-	'''
+
 	_msg_service = None
 	
 	def __init__(self):
@@ -433,23 +418,15 @@ class IntMessagingService(object):
 			P2pConfigOptions.CONSUMER_URL : 'http://0.0.0.0:8012',
 			P2pConfigOptions.MSG_HANDLER_ENABLED : False
 		})
-	
+
+
 	def get_consumer(self):
 		return self._msg_service.get_consumer()
-	
-	'''
-	def start_consumer(self):
-		if not self.consumer:
-			self.consumer = self.msg_service.get_consumer()
-			# IMPORTANT! to fix message double handling
-			self.consumer.create_handler_thread = False
-			# Start consumer thread
-			t = threading.Thread(name="IntMessagingConsumer", target=self.consumer.start)
-			t.start()
-	'''
+
 	
 	def new_producer(self, host):
 		return self._msg_service.new_producer(endpoint="http://%s:8012" % host)
-	
+
+
 	def new_message(self, *args, **kwargs):
 		return self._msg_service.new_message(*args, **kwargs)

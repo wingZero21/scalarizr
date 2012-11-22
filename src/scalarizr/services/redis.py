@@ -886,10 +886,8 @@ class RedisCLI(object):
 def get_snap_db_filename(port=DEFAULT_PORT):
 	return 'dump.%s.rdb' % port
 
-
 def get_aof_db_filename(port=DEFAULT_PORT):
 	return 'appendonly.%s.aof' % port
-
 
 def get_redis_conf_basename(port=DEFAULT_PORT):
 	return 'redis.%s.conf' % port

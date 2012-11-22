@@ -25,12 +25,12 @@ from scalarizr.platform import UserDataOptions
 from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, filetool
 from scalarizr.storage import transfer
 
-
 from scalarizr import storage2
 from scalarizr.linux import iptables	
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
+from scalarizr.services import make_backup_steps
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
@@ -541,8 +541,7 @@ class MysqlHandler(DBMSRHandler):
 				last_error	=  str(e).strip(),
 				farm_role_id = farm_role_id
 			))
-	
-	
+
 	def on_DbMsr_CreateBackup(self, message):
 		LOG.debug("on_DbMsr_CreateBackup")
 
@@ -605,13 +604,11 @@ class MysqlHandler(DBMSRHandler):
 			databases = self.root_client.list_databases()
 			
 			op = operation(name=self._op_backup, phases=[{
-				'name': self._phase_backup, 
-				'steps': ["Backup '%s'" % db for db in databases] + [self._step_upload_to_cloud_storage]
+				'name': self._phase_backup
 			}])
 			op.define()			
 
 			with op.phase(self._phase_backup):
-
 				# Dump all databases
 				LOG.info("Dumping all databases")
 				tmpdir = tempfile.mkdtemp(dir=tmp_basedir)
@@ -621,15 +618,16 @@ class MysqlHandler(DBMSRHandler):
 				
 				# Creating archive 
 				backup = tarfile.open(backup_path, 'w:gz')
-				
 				mysqldump = mysql_svc.MySQLDump(root_user=__mysql__['root_user'],
 									root_password=__mysql__['root_password'])
-				dump_options = __mysql__['mysqldump_options'].split(' ')	
-				for db_name in databases:
-					with op.step("Backup '%s'" % db_name):
-						dump_path = os.path.join(tmpdir, db_name + '.sql') 
-						mysqldump.create(db_name, dump_path, dump_options)
-						backup.add(dump_path, os.path.basename(dump_path))
+				dump_options = __mysql__['mysqldump_options'].split(' ')
+
+				def _single_backup(db_name):
+					dump_path = os.path.join(tmpdir, db_name + '.sql') 
+					mysqldump.create(db_name, dump_path, dump_options)
+					backup.add(dump_path, os.path.basename(dump_path))
+
+				make_backup_steps(databases, op, _single_backup)
 						
 				backup.close()
 				
@@ -647,7 +645,7 @@ class MysqlHandler(DBMSRHandler):
 				cloud_files = trn.upload(parts, cloud_storage_path)
 				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
 								cloud_storage_path, backup_filename)
-			
+
 			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))								
 			op.ok(data=result)
 			
@@ -784,6 +782,8 @@ class MysqlHandler(DBMSRHandler):
 						# Patch configuration files 
 						self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
 						self.mysql._init_replication(master=True)
+						# Set read_only option
+						self.mysql.my_cnf.read_only = False
 						self.mysql.service.start()
 						# Update __mysql__['behavior'] configuration
 						__mysql__.update({
@@ -837,6 +837,8 @@ class MysqlHandler(DBMSRHandler):
 					old_vol.mount()
 					raise
 			else:
+				# Set read_only option
+				self.mysql.my_cnf.read_only = False
 				self.mysql.service.start()
 
 				self.root_client.stop_slave()
@@ -902,7 +904,10 @@ class MysqlHandler(DBMSRHandler):
 				status="error",
 				last_error=str(e))
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
-
+			
+			# Change back read_only option 
+			self.mysql.my_cnf.read_only = True
+			
 			# Start MySQL
 			self.mysql.service.start()
 
@@ -1194,8 +1199,8 @@ class MysqlHandler(DBMSRHandler):
 				LOG.info("Changing configuration files")
 				self.mysql.my_cnf.datadir = __mysql__['data_dir']
 				self.mysql.my_cnf.skip_locking = False
-				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
+				self.mysql.my_cnf.read_only = True
 	
 			with op.step(self._step_move_datadir):
 				self.mysql.move_mysqldir_to(__mysql__['storage_dir'])

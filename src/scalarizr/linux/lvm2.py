@@ -15,7 +15,7 @@ from scalarizr import linux
 
 if not linux.which('lvs'):
 	from scalarizr.linux import pkgmgr
-	pkgmgr.package_mgr().install('lvm2')
+	pkgmgr.installed('lvm2')
 
 
 LOG = logging.getLogger(__name__)

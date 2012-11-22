@@ -697,7 +697,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		return ret
 
 
-
 class RedisCnfController(CnfController):
 
 	def __init__(self):

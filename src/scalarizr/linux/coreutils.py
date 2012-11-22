@@ -43,7 +43,7 @@ def dmsetup(action, *params, **long_kwds):
 			package = 'dmsetup'
 		else:
 			package = 'device-mapper'
-		pkgmgr.package_mgr().install(package)
+		pkgmgr.installed(package)
 
 	return linux.system(linux.build_cmd_args(
 			executable='/sbin/dmsetup', 

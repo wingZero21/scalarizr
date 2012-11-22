@@ -53,10 +53,10 @@ def system_info():
 	ret['software'] = []			
 	installed_list = all_installed()
 	for software_info in installed_list:
-		ret['software'].append(dict(name 	 = software_info.name,
-							      version = '.'.join([str(x) for x in software_info.version]),
-							      string_version = software_info.string_version
-							      ))
+		ret['software'].append(dict(
+					name=software_info.name,
+					version='.'.join([str(x) for x in software_info.version])
+					))
 	
 	ret['os'] = {}	
 	ret['os']['version'] 		= ' '.join(disttool.linux_dist())
@@ -72,7 +72,7 @@ def system_info():
 	ret['storage'] = {}
 	ret['storage']['fstypes'] = []
 	
-	for fstype in ['jfs', 'xfs', 'ext3', 'ext4']:
+	for fstype in ['xfs', 'ext3', 'ext4']:
 		retcode = system2((modprobe, '-n', fstype), raise_exc=False)[-1]
 		exe = whereis('mkfs.%s' % fstype)
 		if not retcode and exe:
@@ -108,7 +108,7 @@ class SoftwareInfo:
 		self.string_version = string_version
 		ver_nums		= map(int, version.split('.'))
 		if len(ver_nums) < 3: 
-			for i in range(len(ver_nums), 3):
+			for _ in range(len(ver_nums), 3):
 				ver_nums.append(0)
 		self.version = tuple(ver_nums)
 		
@@ -191,7 +191,7 @@ def php_software_info():
 
 explore('php', php_software_info)
 
-def python_software_info():	
+def python_software_info():
 	binaries = whereis('python')
 	if not binaries:
 		raise SoftwareError("Can't find executable for python interpreter")
@@ -199,18 +199,39 @@ def python_software_info():
 	version_string = system2((binaries[0], '-V'))[1].strip()
 	if not version_string:
 		raise SoftwareError
-	
+
 	version_string = version_string.splitlines()[0]
-	
+
 	res = re.search('Python\s+([\d\.]+)', version_string)
-	
+
 	if res:
 		version = res.group(1)
 		return SoftwareInfo('python', version, version_string)
-	
+
 	raise SoftwareError
 
 explore('python', python_software_info)
+
+def mysqlproxy_software_info():
+	binaries = whereis('mysql-proxy')
+	if not binaries:
+		raise SoftwareError("Can't find executable for mysql-proxy")
+
+	version_string = system2((binaries[0], '-V'))[0].strip()
+	if not version_string:
+		raise SoftwareError
+
+	version_string = version_string.splitlines()[0]
+
+	res = re.search('mysql-proxy\s+([\d\.]+)', version_string)
+
+	if res:
+		version = res.group(1)
+		return SoftwareInfo('mysql-proxy', version, version_string)
+
+	raise SoftwareError
+
+explore('mysql-proxy', mysqlproxy_software_info)
 
 def apache_software_info():
 
