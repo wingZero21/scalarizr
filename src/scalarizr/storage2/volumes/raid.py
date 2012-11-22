@@ -244,7 +244,7 @@ class RaidVolume(base.Volume):
 			config.pop(attr, None)
 
 
-	def check_growth_cfg(self, growth_cfg):
+	def check_growth_cfg(self, **growth_cfg):
 		foreach_cfg = growth_cfg['disks'].get('foreach')
 		change_disks = False
 
@@ -272,7 +272,7 @@ class RaidVolume(base.Volume):
 																% self.level)
 
 
-	def _grow(self, new_vol, growth_cfg):
+	def _grow(self, new_vol, **growth_cfg):
 		new_len = growth_cfg['disks'].get('len')
 		foreach_cfg = growth_cfg['disks'].get('foreach')
 
@@ -283,7 +283,7 @@ class RaidVolume(base.Volume):
 
 			def _grow(index, disk, cfg, queue):
 				try:
-					ret = disk.grow(cfg, resize_fs=False)
+					ret = disk.grow(**cfg, resize_fs=False)
 					queue.put(dict(index=index, result=ret))
 				except:
 					e = sys.exc_info()[1]

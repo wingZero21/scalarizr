@@ -156,33 +156,42 @@ class Volume(Base):
 		return storage2.volume(config)
 
 
-	def grow(self, growth_cfg, resize_fs=True):
+	def grow(self, **growth_cfg):
 		"""
-		Grow (and/or alternate, e.g.: change ebs type to io1) volume and fs
+		Grow (and/or alternate, e.g.: change ebs type to io1) volume and fs.
+		Method creates clone of current volume, increases it's size and
+		attaches it to the same place. In case of error, old volume attaches back.
+
 		Old volume detached, but not destroyed.
 
 		:param growth_cfg: Volume type-dependent rules for volume growth
 		:type growth_cfg: dict
+		:param resize_fs: Resize fs on device after it's growth or not
+		:type resize_fs: bool
 		:return: New, bigger (or altered) volume instance
 		:rtype: Volume
 		"""
 
 		if not self.features.get('grow'):
-			raise storage2.StorageError("%s volume type does not support grow.")
+			raise storage2.StorageError("%s volume type does not'"
+										" support grow." % self.type)
 
 		# No id, no growth
 		if not self.id:
 			raise storage2.StorageError('Failed to grow volume: '
 									'volume has no id.')
 
-		self.check_growth_cfg(growth_cfg)
+		# Resize_fs is true by default
+		resize_fs = growth_cfg.pop('resize_fs', True)
+
+		self.check_growth_cfg(**growth_cfg)
 		was_mounted = self.mounted_to() if self.device else False
 
-		bigger_vol = cleanup_cb = None
+		bigger_vol = None
 		try:
 			self.detach()
 			bigger_vol = self.clone()
-			self._grow(bigger_vol, growth_cfg)
+			self._grow(bigger_vol, **growth_cfg)
 			if resize_fs:
 				fs_created = bigger_vol.detect_fstype()
 
@@ -204,8 +213,8 @@ class Volume(Base):
 								bigger_vol.umount()
 
 		except:
-			e = sys.exc_info()[1]
-			LOG.debug('Failed to grow volume: %s. Trying to attach old volume' % e)
+			err_type, err_val, trace = sys.exc_info()
+			LOG.debug('Failed to grow volume: %s. Trying to attach old volume' % err_val)
 			try:
 				if bigger_vol:
 					try:
@@ -216,16 +225,20 @@ class Volume(Base):
 
 				self.ensure(mount=bool(was_mounted))
 			except:
-				e = str(e) + '\nFailed to restore old volume.'
+				e = sys.exc_info()[1]
+				err_val = str(err_val) + '\nFailed to restore old volume: %s' % e
 
-			raise storage2.StorageError('Volume growth failed: %s' % e)
+			err_val = 'Volume growth failed: %s' % err_val
+			raise storage2.StorageError, err_val, trace
 
 		return bigger_vol
 
 
-	def _grow(self, bigger_vol, growth_cfg):
+	def _grow(self, bigger_vol, **kwargs):
 		"""
-		Create, attach and do everything except mount
+		Create, attach and do everything except mount.
+		All cleanup procedures and artifact removal should be
+		performed in this method
 
 		:param growth_cfg: Type-dependant config for volume growth
 		:type growth_cfg: dict
@@ -258,7 +271,7 @@ class Volume(Base):
 			#raise NotImplementedError(msg)
 
 
-	def check_growth_cfg(self, growth_cfg):
+	def check_growth_cfg(self, **kwargs):
 		pass
 
 

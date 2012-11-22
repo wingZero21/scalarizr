@@ -14,6 +14,7 @@ import boto.exception
 from scalarizr import linux
 from scalarizr import storage2
 from scalarizr import util
+from scalarizr.externals.logging import Logger
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
@@ -159,7 +160,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		config.pop('avail_zone', None)
 
 
-	def _grow(self, new_vol, growth_cfg):
+	def _grow(self, new_vol, **growth_cfg):
 		"""
 		:param new_vol: New volume instance (almost empty)
 		:type new_vol: EbsVolume
@@ -174,14 +175,21 @@ class EbsVolume(base.Volume, EbsMixin):
 		iops = growth_cfg.get('iops')
 
 		snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1})
-		new_vol.snap = snap
-		new_vol.size = size if size is not None else self.size
-		new_vol.volume_type = ebs_type if ebs_type is not None else self.volume_type
-		new_vol.iops = iops if iops is not None else self.iops
-		return new_vol
+		try:
+			new_vol.snap = snap
+			new_vol.size = size if size is not None else self.size
+			new_vol.volume_type = ebs_type if ebs_type is not None else self.volume_type
+			new_vol.iops = iops if iops is not None else self.iops
+			new_vol.ensure()
+		finally:
+			try:
+				snap.destroy(force=True)
+			except:
+				e = sys.exc_info()[1]
+				LOG.error('Temporary snapshot desctruction failed: %s' % e)
 
 
-	def check_growth_cfg(self, growth_cfg):
+	def check_growth_cfg(self, **growth_cfg):
 		size = growth_cfg.get('size')
 		ebs_type = growth_cfg.get('volume_type')
 		iops = growth_cfg.get('iops')

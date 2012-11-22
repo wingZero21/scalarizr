@@ -112,7 +112,7 @@ class LoopVolume(base.Volume):
 		config.pop('file', None)
 
 
-	def check_growth_cfg(self, growth_cfg):
+	def check_growth_cfg(self, **growth_cfg):
 		size = growth_cfg.get('size')
 		if not size:
 			raise storage2.StorageError('Size argument is missing '
@@ -123,7 +123,7 @@ class LoopVolume(base.Volume):
 						'current.')
 
 
-	def _grow(self, new_vol, growth_cfg):
+	def _grow(self, new_vol, **growth_cfg):
 		snap = self.snapshot(description='Temporary snapshot for volume growth')
 		try:
 			size = growth_cfg.get('size')
@@ -134,20 +134,14 @@ class LoopVolume(base.Volume):
 			new_vol.snap = snap
 			new_vol.size = size
 			new_vol.ensure()
-		except:
-			err_type, err_val, trace = sys.exc_info()
-			LOG.error('Failed to grow loop volume. Error: %s'
-					  		'\nRemoving temporary snapshot.' % err_val)
+
+		finally:
+			LOG.debug('Removing temporary snapshot.')
 			try:
 				snap.destroy(force=True)
 			except:
 				e = sys.exc_info()[1]
 				LOG.error('Failed to remove loop snapshot: %s' % e)
-
-			raise err_type, err_val, trace
-
-		finally:
-			snap.destroy()
 
 
 	def _detach(self, force, **kwds):
