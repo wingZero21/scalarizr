@@ -300,11 +300,10 @@ for behavior in ('mysql', 'mysql2', 'percona'):
 	section = 'mysql2' if behavior == 'percona' else behavior
 	__node__[behavior] = Compound({
 		'volume,volume_config': 
-				Json('%s/storage/%s.json' % (private_dir, behavior), 
+				Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
 					'scalarizr.storage2.volume'),
 		'*_password,log_*,replication_master': 
-				Ini('%s/%s.ini' % (private_dir, behavior), 
-					behavior),
+				Ini('%s/%s.ini' % (private_dir, behavior), section),
 		'mysqldump_options': 
 				Ini('%s/%s.ini' % (public_dir, behavior), section)
 	})

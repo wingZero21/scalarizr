@@ -399,7 +399,7 @@ def redis_software_info():
 	if res:
 		version = res.group(0)
 	
-		return SoftwareInfo('redis-server', version, out)
+		return SoftwareInfo('redis', version, out)
 	raise SoftwareError
 explore('redis', redis_software_info)
 
