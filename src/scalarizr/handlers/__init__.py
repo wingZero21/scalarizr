@@ -235,14 +235,14 @@ class Handler(object):
 
 	def get_ready_behaviours(self):
 		handlers = list()
-		info = software.system_info()
+		info = software.system_info(verbose=True)
 		if 'software' in info:
 			for entry in info['software']:
 				if not ('name' in entry and 'version' in entry):
 					continue
 				name = entry['name']
 				version = entry['version']
-				str_ver = entry['string_version']
+				str_ver = entry['string_version'] if 'string_version' in entry else ''
 				if name == 'nginx':
 					handlers.append(config.BuiltinBehaviours.WWW)
 				elif name == 'chef':
