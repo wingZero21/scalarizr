@@ -121,17 +121,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		)
 		self.on_reload()
 
-		self._set_default_iptables_chain()
 
 
-	def _set_default_iptables_chain(self):
-		rh_input = iptables.uses_rh_input()
-		if rh_input:
-			self._logger.debug("Iptables uses non-default input chain: %s" % rh_input)
-			iptables.chains.add(rh_input)  #? hide this in iptables
-			__node__["iptables_input_chain"] = rh_input
-	
-	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.INT_SERVER_REBOOT \
 			or message.name == Messages.INT_SERVER_HALT	\
@@ -248,6 +239,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		
 		if self._cnf.state == ScalarizrState.RUNNING and self._cnf.key_exists(self._cnf.FARM_KEY):
 			self._start_int_messaging()
+
+		__node__["iptables_input_chain"] = iptables.detect_input_chain()			
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
