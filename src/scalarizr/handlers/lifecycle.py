@@ -163,7 +163,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 	def on_start(self):
-		iptables.save()
+		if iptables.enabled():
+			iptables.save()
 
 		optparser = bus.optparser
 		
