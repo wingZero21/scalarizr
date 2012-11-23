@@ -58,7 +58,7 @@ class LoopVolume(base.Volume):
 			else:
 				self.size = os.stat(self.file).st_size / 1073741824
 
-		if not self.device or self.device not in looops:
+		if not self.device or self.device not in loops:
 			# Construct volume
 			if (not self.size and \
 				(not self.file or not os.path.exists(self.file))):
