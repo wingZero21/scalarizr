@@ -51,7 +51,8 @@ class LoopVolume(base.Volume):
 
 
 		if self.device and os.path.exists(self.device):
-			if coreutils.losetup_all()[self.device] != self.file:
+			loops = coreutils.losetup_all()
+			if self.device in loops and loops[self.device] != self.file:
 				coreutils.losetup(self.device, detach=True)
 			else:
 				self.size = os.stat(self.file).st_size / 1073741824

@@ -43,7 +43,7 @@ class RackspaceLifeCycleHandler(Handler):
 				{"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
 			]
 
-			iptables.ensure({__node__["iptables_input_chain"]: rules})
+			iptables.ensure({'INPUT': rules})
 
 			"""
 			if linux_os["family"] in ("RedHat", "Oracle"):
