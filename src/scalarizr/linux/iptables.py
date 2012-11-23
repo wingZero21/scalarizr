@@ -61,8 +61,6 @@ _OPTIONS = {
 	"-V": "--version",
 }
 
-coreutils.modprobe('ip_tables')
-
 
 def iptables(**long_kwds):
 
@@ -317,7 +315,7 @@ FORWARD = chains["FORWARD"]
 OUTPUT = chains["OUTPUT"]
 PREROUTING = chains["PREROUTING"]
 POSTROUTING = chains["POSTROUTING"]
-
+FIREWALL = INPUT
 
 def list(chain, table=None):
 	return chains[chain].list(table)
@@ -407,5 +405,6 @@ if enabled():
 	#iptables(list=True, numeric=True)
 	chain = redhat_input_chain()
 	if chain:
-		INPUT.name = chain
+		# When Chain object will be extended this can fail
+		FIREWALL.name = chain
 
