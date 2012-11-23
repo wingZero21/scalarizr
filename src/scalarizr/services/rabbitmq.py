@@ -195,7 +195,16 @@ class RabbitMQ(object):
 	@property
 	def node_type(self):
 		return self._cnf.rawini.get(CNF_SECTION, 'node_type')
-	
+
+
+	def change_node_type(self, self_hostname, hostnames, disk_node):
+		if RABBITMQ_VERSION >= (3, 0, 0):
+			type = disk_node and 'disk' or 'ram'
+			cmd = [RABBITMQCTL, 'change_cluster_node_type', type]
+			system2(cmd, logger=self._logger)
+		else:
+			self.cluster_with(self_hostname, hostnames, disk_node, do_reset=False)
+
 	
 	def cluster_with(self, self_hostname, hostnames, disk_node=True, do_reset=True):
 		if RABBITMQ_VERSION >= (3, 0, 0):

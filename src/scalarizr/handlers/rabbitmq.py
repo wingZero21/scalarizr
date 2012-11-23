@@ -190,6 +190,9 @@ class RabbitMQHandler(ServiceCtlHandler):
 			ini = self.cnf.rawini
 			if message.node_type != ini.get(CNF_SECTION, 'node_type'):
 				self._logger.info('Changing node type to %s' % message.node_type)
+
+				disk_node = message.node_type == rabbitmq_svc.NodeTypes.DISK
+
 				hostname_ip_pairs = self._get_cluster_nodes()
 				nodes_to_cluster_with = []
 		
@@ -197,12 +200,14 @@ class RabbitMQHandler(ServiceCtlHandler):
 					nodes_to_cluster_with.append(hostname)
 					dns.ScalrHosts.set(ip, hostname)
 					
-				if nodes_to_cluster_with:
-					if message.node_type == rabbitmq_svc.NodeTypes.DISK:
-						hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
-						nodes_to_cluster_with.append(hostname)
-						
-					self.rabbitmq.cluster_with(nodes_to_cluster_with, do_reset=False)
+				if nodes_to_cluster_with or disk_node:
+					self_hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
+					self.rabbitmq.change_node_type(self_hostname,
+								nodes_to_cluster_with, disk_node)
+				else:
+					raise HandlerError('At least 1 disk node should'
+								'present in cluster')
+
 																
 				self._update_config(dict(node_type=message.node_type))
 			else:
