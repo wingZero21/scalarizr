@@ -26,7 +26,7 @@ RABBIT_CFG_PATH = '/etc/rabbitmq/rabbitmq.config'
 COOKIE_PATH = '/var/lib/rabbitmq/.erlang.cookie'
 RABBITMQ_ENV_CNF_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
 SCALR_USERNAME = 'scalr'
-
+NODE_HOSTNAME_TPL = 'rabbit@%s'
 
 class NodeTypes:
 	RAM = 'ram'
@@ -47,6 +47,7 @@ except LookupError:
 	else:
 		raise
 
+RABBITMQ_VERSION = software.rabbitmq_software_info().version
 
 
 class RabbitMQInitScript(initdv2.ParametrizedInitScript):
@@ -196,9 +197,18 @@ class RabbitMQ(object):
 		return self._cnf.rawini.get(CNF_SECTION, 'node_type')
 	
 	
-	def cluster_with(self, hostnames, do_reset=True):
-		nodes = ['rabbit@%s' % host for host in hostnames]
-		cmd = [RABBITMQCTL, 'cluster'] + nodes
+	def cluster_with(self, self_hostname, hostnames, disk_node=True, do_reset=True):
+		if RABBITMQ_VERSION >= (3, 0, 0):
+			# New way of clustering was introduced in rabbit 3.0.0
+			one_node = NODE_HOSTNAME_TPL % hostnames[0]
+			cmd = [RABBITMQCTL, 'join_cluster', one_node]
+			if not disk_node:
+				cmd.append('--ram')
+		else:
+			nodes = [NODE_HOSTNAME_TPL % host for host in hostnames]
+			if disk_node:
+				nodes.append(NODE_HOSTNAME_TPL % self_hostname)
+			cmd = [RABBITMQCTL, 'cluster'] + nodes
 		
 		clustered = False
 		
