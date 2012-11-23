@@ -240,8 +240,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if self._cnf.state == ScalarizrState.RUNNING and self._cnf.key_exists(self._cnf.FARM_KEY):
 			self._start_int_messaging()
 
-		__node__["iptables_input_chain"] = iptables.detect_input_chain()			
-
 
 	def on_before_reboot_finish(self, *args, **kwargs):
 		self._insert_iptables_rules()
@@ -252,7 +250,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 		if iptables.enabled():
 			# Scalarizr ports
-			iptables.ensure({"INPUT": [
+			iptables.ensure({'INPUT': [
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8008"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8010"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8012"},
@@ -285,7 +283,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 	def _start_int_messaging(self):
-		if 'mongodb' in __node__['behavior']:
+		if 'mongodb' in __node__['behavior'] or 'rabbitmq' in __node__['behavior']:
 			srv = IntMessagingService()
 			bus.int_messaging_service = srv
 			t = threading.Thread(name='IntMessageConsumer', target=srv.get_consumer().start)

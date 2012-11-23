@@ -6,7 +6,6 @@
 
 # Predefined chains:
 # INPUT FORWARD OUTPUT 	PREROUTING 	POSTROUTING
-# TODO: use __node__["iptables_input_chain"] everywhere
 
 from __future__ import with_statement
 
@@ -390,14 +389,14 @@ def enabled():
 		return os.access(IPTABLES_BIN, os.X_OK)
 
 
-def detect_input_chain():
+def redhat_input_chain():
 	if linux.os['family'] in ('RedHat', 'Oracle'):
 		rh_fw_rules = [rule for rule in list("INPUT")
 				if rule.has_key("jump") and rule["jump"].startswith("RH-Firewall-")]
 		for rule in rh_fw_rules:
 			if len(rule) == 1:  # if rule redirects everything
 				return rule["jump"]  # "RH-Firewall-1-INPUT"
-	return 'INPUT'
+	return False
 
 
 '''
@@ -405,4 +404,8 @@ Initialization.
 '''
 if enabled():
 	# Without this first call 'service iptables save' fails with code:1	
-	iptables(list=True, numeric=True)
+	#iptables(list=True, numeric=True)
+	chain = redhat_input_chain()
+	if chain:
+		INPUT.name = chain
+

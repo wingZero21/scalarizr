@@ -8,6 +8,7 @@ from scalarizr.util import initdv2, disttool, software
 from scalarizr.linux import iptables
 from scalarizr.util.filetool import write_file
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
+from scalarizr.node import __node__
 
 import logging
 import threading
@@ -681,11 +682,7 @@ class FarmSecurityMixin(object):
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
 
-		self._iptables.ensure({"INPUT": rules})
-		"""
-		for rule in rules:
-			self._iptables.insert_rule(1, rule)
-		"""
+		self._iptables.ensure({'INPUT': rules})
 		
 
 	def on_HostDown(self, message):
