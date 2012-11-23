@@ -138,7 +138,7 @@ class LoopVolume(base.Volume):
 		finally:
 			LOG.debug('Removing temporary snapshot.')
 			try:
-				snap.destroy(force=True)
+				snap.destroy()
 			except:
 				e = sys.exc_info()[1]
 				LOG.error('Failed to remove loop snapshot: %s' % e)
