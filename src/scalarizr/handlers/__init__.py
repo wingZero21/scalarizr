@@ -682,7 +682,7 @@ class FarmSecurityMixin(object):
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
 
-		self._iptables.ensure({'INPUT': rules})
+		self._iptables.FIREWALL.ensure(rules)
 		
 
 	def on_HostDown(self, message):
@@ -695,7 +695,7 @@ class FarmSecurityMixin(object):
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
 		for rule in rules:
 			try:
-				self._iptables.INPUT.remove(rule)
+				self._iptables.FIREWALL.remove(rule)
 				#self._iptables.delete_rule(rule)
 			except: #?
 				if 'does a matching rule exist in that chain' in str(sys.exc_info()[1]):
@@ -753,8 +753,8 @@ class FarmSecurityMixin(object):
 		for port in self._ports:
 			drop_rules.append(self.__create_drop_rule(port))
 
-		self._iptables.ensure({"INPUT": rules})
-		self._iptables.ensure({"INPUT": drop_rules}, append=True)
+		self._iptables.FIREWALL.ensure(rules)
+		self._iptables.FIREWALL.ensure(drop_rules, append=True)
 
 
 def prepare_tags(handler=None, **kwargs):

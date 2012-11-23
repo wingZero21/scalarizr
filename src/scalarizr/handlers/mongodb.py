@@ -1473,12 +1473,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.debug('Adding iptables rules for scalarizr ports')
 
 		if iptables.enabled():
-			iptables.ensure({"INPUT": [
+			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.ROUTER_DEFAULT_PORT)},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.ARBITER_DEFAULT_PORT)},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.REPLICA_DEFAULT_PORT)},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.CONFIG_SERVER_DEFAULT_PORT)},
-			]})
+			])
 
 		"""
 		ipt = iptables.IpTables()

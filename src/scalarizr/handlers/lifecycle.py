@@ -250,13 +250,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 		if iptables.enabled():
 			# Scalarizr ports
-			iptables.ensure({'INPUT': [
+			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8008"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8010"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8012"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8013"},
 				{"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
-			]})
+			])
 
 
 	def on_shutdown(self):
