@@ -255,7 +255,7 @@ class Handler(object):
 					handlers.append(config.BuiltinBehaviours.POSTGRESQL)
 				elif name == 'redis' and version[:3] in ('2.2', '2.4'):
 					handlers.append(config.BuiltinBehaviours.REDIS)
-				elif name == 'rabbitmq' and version[:3] in ('2.6', '2.8'):
+				elif name == 'rabbitmq' and version[:3] in ('2.6', '2.7', '2.8'):
 					handlers.append(config.BuiltinBehaviours.RABBITMQ)
 				elif name == 'mongodb' and version[:3] in ('2.0', '2.2'):
 					handlers.append(config.BuiltinBehaviours.MONGODB)
