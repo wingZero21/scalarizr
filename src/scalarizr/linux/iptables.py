@@ -404,7 +404,8 @@ def uses_rh_input():
 Initialization
 '''
 # Without this first call 'service iptables save' fails with code:1
-iptables(list=True, numeric=True)
+if enabled():
+	iptables(list=True, numeric=True)
 
 
 """
