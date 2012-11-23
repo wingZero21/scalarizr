@@ -310,7 +310,9 @@ class RabbitMQHandler(ServiceCtlHandler):
 												RabbitMQMessages.INT_RABBITMQ_HOST_INIT,
 												msg_body, broadcast=True)
 						except:
-							self._logger.warning("Can't deliver internal message to server %s" % ip)
+							e = sys.exc_info()[1]
+							self._logger.warning("Can't deliver internal message"
+									" to server %s: %s" % (ip, e))
 			
 					volume_cnf = storage.Storage.restore_config(self._volume_config_path)
 					self.storage_vol = self._plug_storage(DEFAULT_STORAGE_PATH, volume_cnf)
