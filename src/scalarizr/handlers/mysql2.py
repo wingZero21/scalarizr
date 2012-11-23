@@ -1338,19 +1338,21 @@ class MysqlHandler(DBMSRHandler):
 		if not self.mysql.service.running:
 			self.mysql.service.start()
 			
-			try:
-				if not local_root.exists() or not local_root.check_password():
-					users.update({'local_root': local_root})
-					self.mysql.service.stop('creating users')
-					self.mysql.service.start_skip_grant_tables()
-				else:
-					LOG.debug('User %s exists and has correct password' % __mysql__['root_user'])
-			except ServiceError, e:
-				if 'Access denied for user' in str(e):
-					users.update({'local_root': local_root})
-					self.mysql.service.stop('creating users')
-					self.mysql.service.start_skip_grant_tables()
-				
+		try:
+			if not local_root.exists() or not local_root.check_password():
+				users.update({'local_root': local_root})
+				self.mysql.service.stop('creating users')
+				self.mysql.service.start_skip_grant_tables()
+			else:
+				LOG.debug('User %s exists and has correct password' % __mysql__['root_user'])
+		except ServiceError, e:
+			if 'Access denied for user' in str(e):
+				users.update({'local_root': local_root})
+				self.mysql.service.stop('creating users')
+				self.mysql.service.start_skip_grant_tables()
+			else:
+				raise
+
 		for login, password in creds.items():
 			user = mysql_svc.MySQLUser(root_cli, login, password, host='%', privileges=PRIVILEGES.get(login, None))
 			users[login] = user
