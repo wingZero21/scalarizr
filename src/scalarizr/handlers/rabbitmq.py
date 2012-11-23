@@ -290,7 +290,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 		for subdir in os.listdir(storage_path):
 			if subdir.startswith('rabbit'):
 				return False
-		return True				
+		return True
 
 
 	def on_before_host_up(self, message):
@@ -322,6 +322,12 @@ class RabbitMQHandler(ServiceCtlHandler):
 					os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 					
 				with op.step(self._step_patch_conf):
+					# Check if it's first run here, before rabbit starts
+					init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
+					do_cluster = True if nodes_to_cluster_with else False
+					is_disk_node = self.rabbitmq.node_type == rabbitmq_svc.NodeTypes.DISK
+					self_hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
+
 					self._logger.debug('Enabling management agent plugin')
 					self.rabbitmq.enable_plugin(RABBITMQ_MGMT_AGENT_PLUGIN_NAME)
 					
@@ -333,11 +339,6 @@ class RabbitMQHandler(ServiceCtlHandler):
 					self.service.start()
 		
 				with op.step(self._step_join_cluster):
-					init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
-
-					do_cluster = True if nodes_to_cluster_with else False
-					is_disk_node = self.rabbitmq.node_type == rabbitmq_svc.NodeTypes.DISK
-					self_hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
 
 					if do_cluster and (not is_disk_node or init_run):
 						self.rabbitmq.cluster_with(self_hostname,
