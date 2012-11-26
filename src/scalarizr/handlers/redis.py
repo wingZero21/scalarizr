@@ -177,8 +177,19 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 				self.storage_vol.mount()
 
 			self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
-			self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self.get_main_password(),])
+
+			ports=[redis.DEFAULT_PORT,]
+			passwords=[self.get_main_password(),]
+			params = self._queryenv.list_farm_role_params()
+			if 'redis' in params:
+				redis_data = params['redis']
+				if  'ports' in redis_data and 'passwords' in redis_data:
+					ports = redis_data['redis']['ports']
+					passwords = redis_data['redis']['passwords']
+
+			self.redis_instances.init_processes(ports, passwords)
 			self.redis_instances.start()
+
 			self._init_script = self.redis_instances.get_default_process()
 
 
@@ -224,6 +235,16 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					'''
 					redis_data[OPT_USE_PASSWORD] = redis_data.get(OPT_USE_PASSWORD, '1')
 
+					ports = passwords = []
+
+					if 'ports' in redis_data:
+						ports = redis_data['ports']
+						del redis_data['ports']
+
+					if 'passwords' in redis_data:
+						passwords = redis_data['passwords']
+						del redis_data['passwords']
+
 					for key, config_file in ((OPT_VOLUME_CNF, self._volume_config_path),
 					                         (OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
 						if os.path.exists(config_file):
@@ -241,7 +262,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 						self.default_service.stop('Treminating default redis instance')
 						
 					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
-					self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self.get_main_password(),])
+					if ports and passwords:
+						self.redis_instances.init_processes(ports=ports, passwords=passwords)
+					else:
+						self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self.get_main_password(),])
 
 
 	def on_before_host_up(self, message):
@@ -257,7 +281,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			self._init_master(message)
 		else:
 			self._init_slave(message)
+
 		self._init_script = self.redis_instances.get_default_process()
+		message['redis']['ports'] = self.redis_instances.ports
+		message['redis']['passwords'] = self.redis_instances.passwords
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 
 
@@ -266,6 +293,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
 	def on_before_reboot_finish(self, *args, **kwargs):
+		"""terminating old redis instance managed by init scrit"""
 		if self.default_service.running:
 			self.default_service.stop('Treminating default redis instance')
 
@@ -356,17 +384,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 				self.redis_instances.stop('Unplugging slave storage and then plugging master one')
 
 				old_conf = self.storage_vol.detach(force=True) # ??????
-				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)	
-				
-				'''
-				#This code was removed because redis master storage can be empty yet valid
-				for r in self.redis_instances:
-					# Continue if master storage is a valid redis storage 
-					if not r.working_directory.is_initialized(self._storage_path):
-						raise HandlerError("%s is not a valid %s storage" % (self._storage_path, BEHAVIOUR))
-
-				Storage.backup_config(new_storage_vol.config(), self._volume_config_path)
-				'''
+				new_storage_vol = self._plug_storage(self._storage_path, master_storage_conf)
 				
 				Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 				msg_data[BEHAVIOUR] = self._compat_storage_data(vol=new_storage_vol)

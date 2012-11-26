@@ -216,6 +216,11 @@ class RedisInstances(object):
 		return [instance.port for instance in self.instances]
 
 
+	@property
+	def passwords(self):
+		return [instance.password for instance in self.instances]
+
+
 	def __iter__(self):
 		return iter(self.instances)
 
