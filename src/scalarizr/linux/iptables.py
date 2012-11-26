@@ -21,7 +21,6 @@ from copy import copy
 import logging
 
 from scalarizr import linux
-from scalarizr.linux import coreutils
 from scalarizr.linux import redhat
 
 LOG = logging.getLogger(__name__)
@@ -60,8 +59,6 @@ _OPTIONS = {
 	"-f": "--fragment",
 	"-V": "--version",
 }
-
-coreutils.modprobe('ip_tables')
 
 
 def iptables(**long_kwds):
@@ -267,84 +264,24 @@ class _Chain(object):
 
 		return result
 
+	def ensure(self, rules, append=False):
+		# Insert or append missing rules.
+		# NOTE: rule comparison is far from ideal, check _to_inner method
+		# NOTE: existing rules don't have table attribute
 
-class _Chains(object):
-
-	_predefined = (
-		"INPUT",
-		"FORWARD",
-		"OUTPUT",
-		"PREROUTING",
-		"POSTROUTING",
-	)
-	_container = dict([(name, _Chain(name)) for name in _predefined])
-
-	def __getitem__(self, name):
-		return self._container[name]
-
-	def __iter__(self):
-		return iter(self._container)
-
-	def __contains__(self, value):
-		return value in self._container
-
-	def add(self, name):
-		assert name not in self._predefined
-		self._container.setdefault(name, _Chain(name))
-
-		# create
-		try:
-			iptables(**{"new-chain": name})
-		except linux.LinuxError, e:
-			if not e.err == "iptables: Chain already exists.":
-				raise
-
-	def remove(self, name, force=False):
-		assert name not in self._predefined
-
-		if force:
-			iptables(flush=name)
-			# TODO: delete references
-		iptables(**{"delete-chain": name})
-
-		self._container.pop(name)
-
-
-chains = _Chains()
-
-INPUT = chains["INPUT"]
-FORWARD = chains["FORWARD"]
-OUTPUT = chains["OUTPUT"]
-PREROUTING = chains["PREROUTING"]
-POSTROUTING = chains["POSTROUTING"]
-
-
-def list(chain, table=None):
-	return chains[chain].list(table)
-
-
-def ensure(chain_rules, append=False):
-	# {chain: [rule, ...]}
-	# Will simply insert missing rules at the beginning.
-	# NOTE: rule comparison is far from ideal, check _to_inner method
-	# NOTE: existing rules don't have table attribute
-
-	#LOG.debug("Current iptables %s: " % str(list("INPUT")))
-	#LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
-
-	for chain, rules in chain_rules.iteritems():
-		existing = list(chain)
+		existing = self.list()
 		for rule in reversed(rules):
 			rule_repr = _to_inner(rule)
 			if rule_repr not in existing:
 				if not append:
-					chains[chain].insert(None, rule)
+					self.insert(None, rule)
 					existing.insert(0, rule_repr)
 				else:
-					chains[chain].append(rule)
+					self.append(rule)
 					existing.append(rule_repr)
 
 
+#? Group this two functions in a Rule class?
 def _to_inner(rule):
 	"""
 	Converts rule to its inner representation for comparison.
@@ -377,8 +314,63 @@ def _to_inner(rule):
 
 
 def _is_plain_ip(s):
-	return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] == \
+	return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] ==\
 		   [True] * 4
+
+
+class _Chains(object):
+	"""
+	Note: doesn't represent the OS chains state.
+	"""
+
+	_predefined = (
+		"INPUT",
+		"FORWARD",
+		"OUTPUT",
+		"PREROUTING",
+		"POSTROUTING",
+	)
+	_container = dict([(name, _Chain(name)) for name in _predefined])
+
+	def __getitem__(self, name):
+		return self._container.setdefault(name, _Chain(name))
+
+	def __iter__(self):
+		return iter(self._container)
+
+	def __contains__(self, value):
+		return value in self._container
+
+	def add(self, name):
+		iptables(**{"new-chain": name})
+
+	def remove(self, name, force=False):
+		if force and name not in self._predefined:  # cannot remove a builtin chain
+			iptables(flush=name)
+			# TODO: delete references
+		iptables(**{"delete-chain": name})
+
+		self._container.pop(name)
+
+
+chains = _Chains()
+
+INPUT = chains["INPUT"]
+FORWARD = chains["FORWARD"]
+OUTPUT = chains["OUTPUT"]
+PREROUTING = chains["PREROUTING"]
+POSTROUTING = chains["POSTROUTING"]
+FIREWALL = INPUT  # default chain
+
+
+def list(chain, table=None):
+	return chains[chain].list(table)
+
+
+def ensure(chain_rules, append=False):
+	# {chain: [rule, ...]}
+	for chain, rules in chain_rules.iteritems():
+		chains[chain].ensure(rules, append)
 
 
 def enabled():
@@ -391,7 +383,7 @@ def enabled():
 
 def redhat_input_chain():
 	if linux.os['family'] in ('RedHat', 'Oracle'):
-		rh_fw_rules = [rule for rule in list("INPUT")
+		rh_fw_rules = [rule for rule in INPUT.list()
 				if rule.has_key("jump") and rule["jump"].startswith("RH-Firewall-")]
 		for rule in rh_fw_rules:
 			if len(rule) == 1:  # if rule redirects everything
@@ -403,9 +395,11 @@ def redhat_input_chain():
 Initialization.
 '''
 if enabled():
-	# Without this first call 'service iptables save' fails with code:1	
-	#iptables(list=True, numeric=True)
-	chain = redhat_input_chain()
-	if chain:
-		INPUT.name = chain
+
+	# Without this first call 'service iptables save' fails with code:1
+	iptables(list=True, numeric=True)
+
+	rh_chain = redhat_input_chain()
+	if rh_chain:
+		FIREWALL = chains[rh_chain]
 
