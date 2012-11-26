@@ -205,7 +205,7 @@ class EphVolumeAdapter(EphVolume):
 					type='ec2_ephemeral', 
 					name='ephemeral0')
 		disk.ensure()
-		config['disk'] = disk
+		self.disk = config['disk'] = disk
 
 		if self.snap:
 			if self._eph_vol:
