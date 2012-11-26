@@ -49,16 +49,8 @@ class LoopVolume(base.Volume):
 			self.snap = None
 			self.file = filename
 
-
-		loops = coreutils.losetup_all()
-		if self.device and self.device in loops:
-			if loops[self.device] != self.file:
-				coreutils.losetup(self.device, detach=True)
-				self.device = None
-			else:
-				self.size = os.stat(self.file).st_size / 1073741824
-
-		if not self.device or self.device not in loops:
+		if not (self.device and self.file and \
+				self.device in coreutils.losetup_all()):
 			# Construct volume
 			if (not self.size and \
 				(not self.file or not os.path.exists(self.file))):
