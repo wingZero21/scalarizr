@@ -424,7 +424,7 @@ explore('chef', chef_software_info)
 
 
 def postgresql_software_info():
-	if disttool.is_centos():
+	if disttool.is_redhat_based():
 		lib_path = '/usr/p*sql-*/'
 	else:
 		lib_path = '/usr/lib/p*sql/*'
