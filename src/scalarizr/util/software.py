@@ -424,8 +424,11 @@ explore('chef', chef_software_info)
 
 
 def postgresql_software_info():
-
-	versions_dirs = glob.glob('/usr/lib/p*sql/*')
+	if disttool.is_centos():
+		lib_path = '/usr/p*sql-*/'
+	else:
+		lib_path = '/usr/lib/p*sql/*'
+	versions_dirs = glob.glob(lib_path)
 	versions_dirs.sort()
 	versions_dirs.reverse()
 	for version in versions_dirs:
