@@ -145,12 +145,12 @@ class operation(object):
 
 
 class Handler(object):
-	_service_name = None
+	_service_name = behaviour = None
 	_logger = logging.getLogger(__name__)
 
 	def __init__(self):
 		if self._service_name and self._service_name not in self.get_ready_behaviours():
-			msg = 'Cannot load handler %s. Missing software.' % self.behaviour
+			msg = 'Cannot load handler %s. Missing software.' % self._service_name
 			raise HandlerError(msg)
 	
 	def get_initialization_phases(self, hir_message):

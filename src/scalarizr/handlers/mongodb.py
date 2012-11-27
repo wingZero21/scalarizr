@@ -217,6 +217,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		self._service_name = BEHAVIOUR
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_%s_data_bundle' % BEHAVIOUR,

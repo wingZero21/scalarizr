@@ -58,6 +58,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 		self._logger = logging.getLogger(__name__)
 		self.rabbitmq = rabbitmq_svc.rabbitmq
 		self.service = initdv2.lookup(BuiltinBehaviours.RABBITMQ)
+		self._service_name = BEHAVIOUR
 		
 		self.on_reload()
 			

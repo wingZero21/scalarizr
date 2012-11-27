@@ -140,6 +140,7 @@ class MysqlProxyHandler(ServiceCtlHandler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self.service = initdv2.lookup(BEHAVIOUR)
+		self._service_name = BEHAVIOUR
 		bus.on(init=self.on_init)
 
 
