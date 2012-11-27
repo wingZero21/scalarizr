@@ -256,21 +256,21 @@ class Handler(object):
 					handlers.append(config.BuiltinBehaviours.MEMCACHED)
 				if len(version) < 3:
 					continue
-				elif name == 'postgresql' and Version('9.0') <= version <= Version('9.1'):
+				elif name == 'postgresql' and Version('9.0') <= version < Version('9.2'):
 					handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-				elif name == 'redis' and version[:3] in ('2.2', '2.4'):
+				elif name == 'redis' and Version('2.2') <= version < Version('2.6'):
 					handlers.append(config.BuiltinBehaviours.REDIS)
-				elif name == 'rabbitmq' and version[:3] in ('2.6', '2.7', '2.8'):
+				elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.0'):
 					handlers.append(config.BuiltinBehaviours.RABBITMQ)
-				elif name == 'mongodb' and version[:3] in ('2.0', '2.2'):
+				elif name == 'mongodb' and Version('2.0') <= version < Version('2.3'):
 					handlers.append(config.BuiltinBehaviours.MONGODB)
-				elif name == 'apache' and version[:3] in ('2.0', '2.1', '2.2'):
+				elif name == 'apache' and Version('2.0') <= version < Version('2.3'):
 					handlers.append(config.BuiltinBehaviours.APP)
-				elif name == 'mysql' and version[:3] in ('5.0', '5.1'):
+				elif name == 'mysql' and Version('5.0') <= version < Version('5.5'):
 					handlers.append(config.BuiltinBehaviours.MYSQL)
-				elif name == 'mysql' and version.startswith('5.5') and str_ver and 'Percona' in str_ver:
+				elif name == 'mysql' and Version('5.5') <= version and str_ver and 'Percona' in str_ver:
 					handlers.append(config.BuiltinBehaviours.PERCONA)
-				elif name == 'mysql' and version.startswith('5.5'):
+				elif name == 'mysql' and Version('5.5') <= version and version.startswith('5.5'):
 					handlers.append(config.BuiltinBehaviours.MYSQL2)
 		return handlers
 
