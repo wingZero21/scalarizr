@@ -374,10 +374,17 @@ class ServiceCtlHandler(Handler):
 	_preset_store = None
 	
 	def __init__(self, service_name, init_script=None, cnf_ctl=None):
-		self._logger = logging.getLogger(__name__)
+		'''
+		XXX: When migrating to the new preset system
+		do not forget that self._service_name is essential for
+		Handler.get_ready_behaviours() and should be overloaded
+		in every ServiceCtlHandler child.
+
+		'''
 		self._service_name = service_name
 		self._cnf_ctl = cnf_ctl
 		self._init_script = init_script
+		self._logger = logging.getLogger(__name__)
 		self._preset_store = CnfPresetStore(self._service_name)
 		Handler.__init__(self)
 
