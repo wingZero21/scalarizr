@@ -59,7 +59,6 @@ class RabbitMQHandler(ServiceCtlHandler):
 		self.rabbitmq = rabbitmq_svc.rabbitmq
 		self.service = initdv2.lookup(BuiltinBehaviours.RABBITMQ)
 		self._service_name = BEHAVIOUR
-		
 		self.on_reload()
 			
 		if 'ec2' == self.platform.name:
