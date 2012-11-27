@@ -16,6 +16,7 @@ import pprint
 import sys
 import traceback
 import uuid
+import distutils.version
 
 LOG = logging.getLogger(__name__)
 
@@ -238,11 +239,14 @@ class Handler(object):
 		handlers = list()
 		info = software.system_info(verbose=True)
 		if 'software' in info:
+			Version = distutils.version.LooseVersion
 			for entry in info['software']:
 				if not ('name' in entry and 'version' in entry):
 					continue
 				name = entry['name']
-				version = entry['version']
+				
+				version = Version(entry['version'])
+
 				str_ver = entry['string_version'] if 'string_version' in entry else ''
 				if name == 'nginx':
 					handlers.append(config.BuiltinBehaviours.WWW)
@@ -252,7 +256,7 @@ class Handler(object):
 					handlers.append(config.BuiltinBehaviours.MEMCACHED)
 				if len(version) < 3:
 					continue
-				elif name == 'postgresql' and version[:3] in ('9.0', '9.1'):
+				elif name == 'postgresql' and Version('9.0') <= version <= Version('9.1'):
 					handlers.append(config.BuiltinBehaviours.POSTGRESQL)
 				elif name == 'redis' and version[:3] in ('2.2', '2.4'):
 					handlers.append(config.BuiltinBehaviours.REDIS)
