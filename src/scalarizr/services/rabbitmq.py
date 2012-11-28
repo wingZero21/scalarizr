@@ -135,7 +135,8 @@ class RabbitMQ(object):
 
 
 	def enable_plugin(self, plugin_name):
-		system2((RABBITMQ_PLUGINS, 'enable', plugin_name), logger=self._logger)	
+		system2((RABBITMQ_PLUGINS, 'enable', plugin_name),
+					env={'HOME': '/root/'},	logger=self._logger)
 	
 	
 	def reset(self):
