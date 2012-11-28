@@ -403,7 +403,7 @@ def _apply_user_data(cnf):
 			behaviour = ''
 		updates['general']['behaviour'] = behaviour
 		
-	if not cnf.ini.has_option('general', 'scalr_id') and \
+	if not cnf.rawini.has_option('general', 'scalr_id') and \
 			bus.scalr_version >= (3, 5, 7):
 		global_config = bus.queryenv.get_global_config()
 		updates['general']['scalr_id'] = global_config['scalr.id']
