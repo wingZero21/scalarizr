@@ -277,10 +277,6 @@ def _import(objectstr):
 			raise ImportError('No module named %s' % attr)
 
 
-class ScalrVersion(Store):
-	pass
-
-
 __node__ = {
 	'server_id,role_id,farm_id,farm_role_id,env_id': 
 				Ini(private_dir + '/config.ini', 'general'),
@@ -321,7 +317,8 @@ __node__['ec2'] = Compound({
 	'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
 })
 __node__['scalr'] = Compound({
-	'version': ScalrVersion()
+	'version': File(private_dir + '/.scalr-version'),
+	'id': File(private_dir + '/.scalr-id')
 })
 __node__ = Compound(__node__)
 #__node__ = dict() # XXX: added for unittests
