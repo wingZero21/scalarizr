@@ -125,7 +125,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 	def __init__(self):
 		handlers.FarmSecurityMixin.__init__(self, ["%s:%s" %
-			 (redis.DEFAULT_PORT, redis.DEFAULT_PORT+16)])
+			 (redis.DEFAULT_PORT, redis.DEFAULT_PORT+redis.MAX_CUSTOM_PROCESSES)])
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
 		bus.on("init", self.on_init)
 		bus.define_events(
@@ -176,18 +176,26 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 
-			self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
+
 
 			ports=[redis.DEFAULT_PORT,]
 			passwords=[self.get_main_password(),]
+			num_processes = 1
 			params = self._queryenv.list_farm_role_params()
 			if 'redis' in params:
 				redis_data = params['redis']
-				if  'ports' in redis_data and 'passwords' in redis_data:
-					ports = redis_data['redis']['ports']
-					passwords = redis_data['redis']['passwords']
+				for param in ('ports', 'passwords', 'num_processes'):
+					if param not in redis_data:
+						break
+					else:
+						ports = redis_data['ports']
+						passwords = redis_data['passwords']
+						num_processes = int(redis_data['num_processes'])
 
-			self.redis_instances.init_processes(ports, passwords)
+			self.redis_instances = redis.RedisInstances(self.is_replication_master,
+						self.persistence_type, self.use_passwords)
+
+			self.redis_instances.init_processes(num_processes, ports, passwords)
 			self.redis_instances.start()
 
 			self._init_script = self.redis_instances.get_default_process()
@@ -236,6 +244,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					redis_data[OPT_USE_PASSWORD] = redis_data.get(OPT_USE_PASSWORD, '1')
 
 					ports = passwords = []
+					num_processes = 1
 
 					if 'ports' in redis_data:
 						ports = redis_data['ports']
@@ -244,6 +253,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					if 'passwords' in redis_data:
 						passwords = redis_data['passwords']
 						del redis_data['passwords']
+
+					if 'num_processes' in redis_data:
+						num_processes = redis_data['num_processes']
+						del redis_data['num_processes']
 
 					for key, config_file in ((OPT_VOLUME_CNF, self._volume_config_path),
 					                         (OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
@@ -262,10 +275,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 						self.default_service.stop('Treminating default redis instance')
 						
 					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
-					if ports and passwords:
-						self.redis_instances.init_processes(ports=ports, passwords=passwords)
-					else:
-						self.redis_instances.init_processes(ports=[redis.DEFAULT_PORT,], passwords=[self.get_main_password(),])
+					ports = ports or [redis.DEFAULT_PORT,]
+					passwords = passwords or [self.get_main_password(),]
+					self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)
 
 
 	def on_before_host_up(self, message):
@@ -285,6 +297,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		self._init_script = self.redis_instances.get_default_process()
 		message['redis']['ports'] = self.redis_instances.ports
 		message['redis']['passwords'] = self.redis_instances.passwords
+		message['redis']['num_processes'] = len(self.redis_instances.ports)
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 
 
@@ -585,7 +598,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					self._update_config(msg_data)
 
 	@property
-	def using_password(self):
+	def use_passwords(self):
 		if not self._cnf.rawini.has_option(CNF_SECTION, OPT_USE_PASSWORD):
 			self._update_config({OPT_USE_PASSWORD:'1'})
 		val = self._cnf.rawini.get(CNF_SECTION, OPT_USE_PASSWORD)
@@ -594,7 +607,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 	def get_main_password(self):
 		password = None
-		if self.using_password:
+		if self.use_passwords:
 			if self._cnf.rawini.has_option(CNF_SECTION, OPT_MASTER_PASSWORD):
 				password = self._cnf.rawini.get(CNF_SECTION, OPT_MASTER_PASSWORD)
 			if not password:
