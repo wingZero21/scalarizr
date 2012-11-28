@@ -1301,13 +1301,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		
 	def _get_volume_cnf(self):
-		volume_cnf = Storage.restore_config(self._volume_config_path)		
+		volume_cnf = dict()
 		try:
 			snap_cnf = Storage.restore_config(self._snapshot_config_path)
 			volume_cnf['snapshot'] = snap_cnf
 		except IOError:
-			pass
-		
+			volume_cnf = Storage.restore_config(self._volume_config_path)
+
 		return volume_cnf
 
 		
