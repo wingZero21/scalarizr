@@ -406,7 +406,7 @@ def _apply_user_data(cnf):
 	if not cnf.rawini.has_option('general', 'scalr_id') and \
 			bus.scalr_version >= (3, 5, 7):
 		queryenv = bus.queryenv_service
-		global_config = queryenv.get_global_config()
+		global_config = queryenv.get_global_config()['params']
 		updates['general']['scalr_id'] = global_config['scalr.id']
 
 
