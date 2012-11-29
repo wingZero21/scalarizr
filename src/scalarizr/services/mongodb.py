@@ -740,6 +740,10 @@ class Mongos(object):
 			args = ['sudo', '-u', DEFAULT_USER, MONGOS, '--fork',
 					'--logpath', ROUTER_LOG_PATH, '--configdb',
 					'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
+					
+			if os.path.exists(ROUTER_LOG_PATH):
+				rchown(DEFAULT_USER, ROUTER_LOG_PATH)
+
 			if cls.keyfile and os.path.exists(cls.keyfile):
 				rchown(DEFAULT_USER, cls.keyfile)
 				args.append('--keyFile=%s' % cls.keyfile)
