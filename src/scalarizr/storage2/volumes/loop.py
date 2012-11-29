@@ -58,12 +58,11 @@ class LoopVolume(base.Volume):
 		if self.device and os.path.exists(self.device):
 			if coreutils.losetup_all()[self.device] != self.file:
 				coreutils.losetup(self.device, detach=True)
-			else:
-				self.size = os.stat(self.file).st_size / 1073741824
+
 
 		if not self.device or not os.path.exists(self.device):
 			# Construct volume
-			if (not self.size and \
+			if (not self.size and
 				(not self.file or not os.path.exists(self.file))):
 				msg = 'You must specify size of a new loop device ' \
 						'or existing file'
@@ -99,8 +98,7 @@ class LoopVolume(base.Volume):
 			else:
 				coreutils.losetup(self.file, find=True)
 				self.device = coreutils.losetup_all(flip=True)[self.file]
-				
-		
+
 				
 	def _snapshot(self, description, tags, **kwds):
 		snapfile = '%s.snap.%s' % (self.file, self._uniq())

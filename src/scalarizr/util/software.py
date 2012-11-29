@@ -400,6 +400,7 @@ explore('chef', chef_software_info)
 def postgresql_software_info():
 
 	versions_dirs = glob.glob('/usr/lib/p*sql/*')
+	versions_dirs.extend(glob.glob('/usr/p*sql*/'))
 	versions_dirs.sort()
 	versions_dirs.reverse()
 	for version in versions_dirs:

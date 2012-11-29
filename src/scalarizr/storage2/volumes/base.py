@@ -149,9 +149,10 @@ class Volume(Base):
 
 
 	def clone(self):
-		config = self.initial_config.copy()
+		config = self._config.copy()
 		config.pop('id', None)
 		config.pop('fscreated', None)
+		config.pop('device', None)
 		self._clone(config)
 		return storage2.volume(config)
 
