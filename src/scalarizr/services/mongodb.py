@@ -737,8 +737,9 @@ class Mongos(object):
 	def start(cls):
 		if not cls.is_running():
 			cls._logger.info('Starting %s process' % MONGOS)
-			args = [MONGOS, '--fork', '--logpath', ROUTER_LOG_PATH,
-									'--configdb', 'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
+			args = ['sudo', '-u', DEFAULT_USER, MONGOS, '--fork',
+					'--logpath', ROUTER_LOG_PATH, '--configdb',
+					'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
 			if cls.keyfile and os.path.exists(cls.keyfile):
 				rchown(DEFAULT_USER, cls.keyfile)
 				args.append('--keyFile=%s' % cls.keyfile)
