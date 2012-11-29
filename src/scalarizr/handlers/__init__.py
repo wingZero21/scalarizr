@@ -254,7 +254,7 @@ class Handler(object):
 					handlers.append(config.BuiltinBehaviours.CHEF)
 				elif name == 'memcached':
 					handlers.append(config.BuiltinBehaviours.MEMCACHED)
-				
+
 				elif name == 'postgresql' and Version('9.0') <= version < Version('9.2'):
 					handlers.append(config.BuiltinBehaviours.POSTGRESQL)
 				elif name == 'redis' and Version('2.2') <= version < Version('2.6'):
@@ -269,7 +269,7 @@ class Handler(object):
 					handlers.append(config.BuiltinBehaviours.MYSQL)
 				elif name == 'mysql' and Version('5.5') <= version and str_ver and 'Percona' in str_ver:
 					handlers.append(config.BuiltinBehaviours.PERCONA)
-				elif name == 'mysql' and Version('5.5') <= version and version.startswith('5.5'):
+				elif name == 'mysql' and Version('5.5') <= version:
 					handlers.append(config.BuiltinBehaviours.MYSQL2)
 		return handlers
 
