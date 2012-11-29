@@ -24,7 +24,6 @@ from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.linux import iptables
 from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.handlers import operation, prepare_tags
 

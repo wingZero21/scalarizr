@@ -403,6 +403,13 @@ def _apply_user_data(cnf):
 			behaviour = ''
 		updates['general']['behaviour'] = behaviour
 		
+	if not cnf.rawini.has_option('general', 'scalr_id') and \
+			bus.scalr_version >= (3, 5, 7):
+		queryenv = bus.queryenv_service
+		global_config = queryenv.get_global_config()['params']
+		updates['general']['scalr_id'] = global_config['scalr.id']
+
+
 	cnf.update_ini('config.ini', updates)
 	cnf.write_key(cnf.DEFAULT_KEY, g(UserDataOptions.CRYPTO_KEY))
 	

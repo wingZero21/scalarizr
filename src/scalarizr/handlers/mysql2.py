@@ -1303,9 +1303,9 @@ class MysqlHandler(DBMSRHandler):
 		
 	def _insert_iptables_rules(self):
 		if iptables.enabled():
-			iptables.ensure({"INPUT": [
+			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "3306"},
-			]})
+			])
 		
 		'''
 		ipt = iptables.IpTables()

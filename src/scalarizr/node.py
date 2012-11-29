@@ -124,10 +124,11 @@ class Json(Store):
 
 
 class Ini(Store):
-	def __init__(self, filename, section):
+	def __init__(self, filename, section, mapping=None):
 		self.filename = filename
 		self.section = section
 		self.ini = None
+		self.mapping = mapping or {}
 
 
 	def _reload(self):
@@ -139,6 +140,8 @@ class Ini(Store):
 	def __getitem__(self, key):
 		try:
 			self._reload()
+			if key in self.mapping:
+				key = self.mapping[key]
 			return self.ini.get(self.section, key)
 		except ConfigParser.Error:
 			raise KeyError(key)
@@ -154,6 +157,8 @@ class Ini(Store):
 			value = str(value)
 		if not self.ini.has_section(self.section):
 			self.ini.add_section(self.section)
+		if key in self.mapping:
+			key = self.mapping[key]
 		self.ini.set(self.section, key, value)
 		with open(self.filename, 'w+') as fp:
 			self.ini.write(fp)	
@@ -293,13 +298,12 @@ __node__ = {
 for behavior in ('mysql', 'mysql2', 'percona'):
 	__node__[behavior] = Compound({
 		'volume,volume_config': 
-				Json('%s/storage/%s.json' % (private_dir, behavior), 
+				Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
 					'scalarizr.storage2.volume'),
 		'*_password,log_*,replication_master': 
-				Ini('%s/%s.ini' % (private_dir, behavior), 
-					behavior),
+				Ini('%s/%s.ini' % (private_dir, behavior), section),
 		'mysqldump_options': 
-				Ini('%s/%s.ini' % (public_dir, behavior), behavior)
+				Ini('%s/%s.ini' % (public_dir, behavior), section)
 	})
 __node__['ec2'] = Compound({
 	't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
@@ -316,9 +320,9 @@ __node__['ec2'] = Compound({
 	'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
 })
 __node__['scalr'] = Compound({
-	'version': ScalrVersion()
+	'version': File(private_dir + '/.scalr-version'),
+	'id': Ini(private_dir + '/config.ini', 'general', {'id': 'scalr_id'})
 })
 __node__ = Compound(__node__)
-#__node__ = dict() # XXX: added for unittests
 
 

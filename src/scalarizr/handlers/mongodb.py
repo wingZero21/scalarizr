@@ -217,6 +217,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		self._service_name = BEHAVIOUR
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_%s_data_bundle' % BEHAVIOUR,
@@ -1300,13 +1301,13 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		
 	def _get_volume_cnf(self):
-		volume_cnf = Storage.restore_config(self._volume_config_path)		
+		volume_cnf = dict()
 		try:
 			snap_cnf = Storage.restore_config(self._snapshot_config_path)
 			volume_cnf['snapshot'] = snap_cnf
 		except IOError:
-			pass
-		
+			volume_cnf = Storage.restore_config(self._volume_config_path)
+
 		return volume_cnf
 
 		
@@ -1473,12 +1474,12 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.debug('Adding iptables rules for scalarizr ports')
 
 		if iptables.enabled():
-			iptables.ensure({"INPUT": [
+			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.ROUTER_DEFAULT_PORT)},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.ARBITER_DEFAULT_PORT)},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.REPLICA_DEFAULT_PORT)},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.CONFIG_SERVER_DEFAULT_PORT)},
-			]})
+			])
 
 		"""
 		ipt = iptables.IpTables()

@@ -195,6 +195,7 @@ class _Chain(object):
 					ruledict[key].append(element)
 				return option
 
+
 		# parse
 		for rule in output.splitlines():
 			args = shlex.split(rule)
@@ -266,84 +267,24 @@ class _Chain(object):
 
 		return result
 
+	def ensure(self, rules, append=False):
+		# Insert or append missing rules.
+		# NOTE: rule comparison is far from ideal, check _to_inner method
+		# NOTE: existing rules don't have table attribute
 
-class _Chains(object):
-
-	_predefined = (
-		"INPUT",
-		"FORWARD",
-		"OUTPUT",
-		"PREROUTING",
-		"POSTROUTING",
-	)
-	_container = dict([(name, _Chain(name)) for name in _predefined])
-
-	def __getitem__(self, name):
-		return self._container[name]
-
-	def __iter__(self):
-		return iter(self._container)
-
-	def __contains__(self, value):
-		return value in self._container
-
-	def add(self, name):
-		assert name not in self._predefined
-		self._container.setdefault(name, _Chain(name))
-
-		# create
-		try:
-			iptables(**{"new-chain": name})
-		except linux.LinuxError, e:
-			if not e.err == "iptables: Chain already exists.":
-				raise
-
-	def remove(self, name, force=False):
-		assert name not in self._predefined
-
-		if force:
-			iptables(flush=name)
-			# TODO: delete references
-		iptables(**{"delete-chain": name})
-
-		self._container.pop(name)
-
-
-chains = _Chains()
-
-INPUT = chains["INPUT"]
-FORWARD = chains["FORWARD"]
-OUTPUT = chains["OUTPUT"]
-PREROUTING = chains["PREROUTING"]
-POSTROUTING = chains["POSTROUTING"]
-
-
-def list(chain, table=None):
-	return chains[chain].list(table)
-
-
-def ensure(chain_rules, append=False):
-	# {chain: [rule, ...]}
-	# Will simply insert missing rules at the beginning.
-	# NOTE: rule comparison is far from ideal, check _to_inner method
-	# NOTE: existing rules don't have table attribute
-
-	#LOG.debug("Current iptables %s: " % str(list("INPUT")))
-	#LOG.debug("Inserting iptables rules: " + str(chain_rules["INPUT"]))
-
-	for chain, rules in chain_rules.iteritems():
-		existing = list(chain)
+		existing = self.list()
 		for rule in reversed(rules):
 			rule_repr = _to_inner(rule)
 			if rule_repr not in existing:
 				if not append:
-					chains[chain].insert(None, rule)
+					self.insert(None, rule)
 					existing.insert(0, rule_repr)
 				else:
-					chains[chain].append(rule)
+					self.append(rule)
 					existing.append(rule_repr)
 
 
+#? Group this two functions in a Rule class?
 def _to_inner(rule):
 	"""
 	Converts rule to its inner representation for comparison.
@@ -363,16 +304,76 @@ def _to_inner(rule):
 	inner = copy(rule)
 
 	# 1
-	if inner.has_key("source") and _is_plain_ip(inner["source"]):
+	if 'source' in inner and _is_plain_ip(inner["source"]):
 		inner["source"] += "/32"
 	# 2
-	if inner.has_key("destination") and _is_plain_ip(inner["destination"]):
+	if 'destination' in inner and _is_plain_ip(inner["destination"]):
 		inner["destination"] += "/32"
 	# 3
-	if inner.has_key("dport") and isinstance(inner["dport"], int):
+	if 'dport' in inner and isinstance(inner["dport"], int):
 		inner["dport"] = str(inner["dport"])
 
 	return inner
+
+
+def _is_plain_ip(s):
+	return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] ==\
+		   [True] * 4
+
+
+class _Chains(object):
+	"""
+	Note: doesn't represent the OS chains state.
+	"""
+
+	_predefined = (
+		"INPUT",
+		"FORWARD",
+		"OUTPUT",
+		"PREROUTING",
+		"POSTROUTING",
+	)
+	_container = dict([(name, _Chain(name)) for name in _predefined])
+
+	def __getitem__(self, name):
+		return self._container.setdefault(name, _Chain(name))
+
+	def __iter__(self):
+		return iter(self._container)
+
+	def __contains__(self, value):
+		return value in self._container
+
+	def add(self, name):
+		iptables(**{"new-chain": name})
+
+	def remove(self, name, force=False):
+		if force and name not in self._predefined:  # cannot remove a builtin chain
+			iptables(flush=name)
+			# TODO: delete references
+		iptables(**{"delete-chain": name})
+
+		self._container.pop(name)
+
+
+chains = _Chains()
+
+INPUT = chains["INPUT"]
+FORWARD = chains["FORWARD"]
+OUTPUT = chains["OUTPUT"]
+PREROUTING = chains["PREROUTING"]
+POSTROUTING = chains["POSTROUTING"]
+FIREWALL = INPUT  # default chain
+
+
+def list(chain, table=None):
+	return chains[chain].list(table)
+
+
+def ensure(chain_rules, append=False):
+	# {chain: [rule, ...]}
+	for chain, rules in chain_rules.iteritems():
+		chains[chain].ensure(rules, append)
 
 
 def _is_plain_ip(s):
@@ -388,114 +389,25 @@ def enabled():
 		return os.access(IPTABLES_BIN, os.X_OK)
 
 
+def redhat_input_chain():
+	if linux.os['family'] in ('RedHat', 'Oracle'):
+		rh_fw_rules = [rule for rule in INPUT.list()
+				if rule.has_key("jump") and rule["jump"].startswith("RH-Firewall-")]
+		for rule in rh_fw_rules:
+			if len(rule) == 1:  # if rule redirects everything
+				return rule["jump"]  # "RH-Firewall-1-INPUT"
+	return False
 
-"""
-INPUT = chains['INPUT']
-
-iptables.INPUT.append([
-	{'protocol': 'tcp', 'dport': 3306, 'jump': 'ACCEPT'}
-])
-iptables.chains['RH-Input-1'].append(
-	{'protocol': 'udp', 'dport': 8014, 'jump': 'ACCEPT'}
-)
-
-# allow 2 telnet connections per client host
-iptables.INPUT.append({
-	'protocol': 'tcp',
-	'syn': True,
-	'dport': 23,
-	'match': 'connlimit',
-	'connlimit_above': 2,
-	'jump': 'REJECT'
-})
-
-#iptables -A PREROUTING -t mangle -i eth1 -m cluster --cluster-total-nodes 2 --cluster-local-node 1 --cluster-hash-seed 0xdeadbeef -j
-#              MARK --set-mark 0xffff
-iptables.PREROUTING.append({
-	'table': 'mangle',
-	'in_interface': 'eth1',
-	'match': 'cluster',
-	'cluster_total_nodes': 2,
-	'cluster_local_node': 1,
-	'cluster_hash_seed': '0xdeadbeef',
-	'jump': 'MARK',
-	'set_mask': '0xffff'
-})
 
 '''
-# negative match [!]
-# iptables -A INPUT -p tcp --syn --dport 23 -m connlimit ! --connlimit-above 2 -j ACCEPT
-iptables.INPUT.append({
-	'protocol': 'tcp',
-	'syn': True,
-	'dport': 23,
-	'match': 'connlimit',
-	'!connlimit_above': 2,
-	'jump': 'ACCEPT'
-})
+Initialization.
 '''
+if enabled():
 
-# insert rule at the head
-iptables.PREROUTING.insert(None, {
-	'table': 'nat',
-	'protocol': 'tcp',
-	'dport': 80,
-	'match': 'cpu',
-	'cpu': 0,
-	'jump': 'REDIRECT',
-	'to_port': 8080
-})
+	# Without this first call 'service iptables save' fails with code:1
+	iptables(list=True, numeric=True)
 
-# delete by rule num
-iptables.INPUT.remove(1)
+	rh_chain = redhat_input_chain()
+	if rh_chain:
+		FIREWALL = chains[rh_chain]
 
-# delete by rulespec
-iptables.INPUT.remove({'protocol': 'tcp', 'dport': 8013, 'jump': 'ACCEPT'})
-
-# Replace command
-iptables.INPUT.replace(2, rulespec)
-
-# List INPUT rules:
-iptables.INPUT.list(numeric=True)
-# Another way
-iptables.list('INPUT', table='nat', numeric=True)
-
-# List all chains with rules
-'''
-iptables.list_all()
-'''
-
-# Add new chain
-iptables.chains.add('RH-Input-2')
-
-# Delete user-defined chain
-iptables.chains.remove('RH-Input-2')
-# Delete non-empty user-defined chain
-iptables.chains.remove('RH-Input-2', force=True)
-
-
-# There is a way to create persistent rules
-# On RHEL they will be stored in /etc/sysconfig/iptables
-# On Ubuntu in iptables.rules
-iptables.INPUT.insert(1, rulespec, persistent=True)
-iptables.INPUT.replace(2, rulespec, persistent=True)
-
-# wrappers over binaries
-def iptables(**long_kwds):
-	pass
-
-def iptables_save(filename=None, *short_args, **long_kwds):
-	# file name is a path string or file-like object
-	# if filename is None return output
-	pass
-
-def iptables_restore(filename, *short_args, **long_kwds):
-	pass
-
-'''
-# TODO: State function
-def ensure(
-# iptables.ensure({'INPUT': [{rule}, {rule}]})
-)
-'''
-"""

@@ -200,12 +200,12 @@ class EphVolumeAdapter(EphVolume):
 		else:	
 			config = self.config()
 		disk = storage2.volume(config['disk'])
-		if disk.device.startswith('/dev/sd'):
+		if disk.device and disk.device.startswith('/dev/sd'):
 			disk = storage2.volume(
 					type='ec2_ephemeral', 
 					name='ephemeral0')
-			disk.ensure()
-		config['disk'] = disk
+		disk.ensure()
+		self.disk = config['disk'] = disk
 
 		if self.snap:
 			if self._eph_vol:

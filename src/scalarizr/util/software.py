@@ -61,6 +61,7 @@ def system_info(verbose=False):
 			v['string_version'] = software_info.string_version		
 		
 		ret['software'].append(v)
+
 	
 	ret['os'] = {}	
 	ret['os']['version'] 		= ' '.join(disttool.linux_dist())
@@ -398,7 +399,7 @@ def redis_software_info():
 	if res:
 		version = res.group(0)
 	
-		return SoftwareInfo('redis-server', version, out)
+		return SoftwareInfo('redis', version, out)
 	raise SoftwareError
 explore('redis', redis_software_info)
 
@@ -423,8 +424,8 @@ explore('chef', chef_software_info)
 
 
 def postgresql_software_info():
-
 	versions_dirs = glob.glob('/usr/lib/p*sql/*')
+	versions_dirs.extend(glob.glob('/usr/p*sql*/'))
 	versions_dirs.sort()
 	versions_dirs.reverse()
 	for version in versions_dirs:
