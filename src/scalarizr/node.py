@@ -296,6 +296,7 @@ __node__ = {
 	'halted': BoolFile(private_dir + '/.halt')
 }
 for behavior in ('mysql', 'mysql2', 'percona'):
+	section = 'mysql2' if behavior == 'percona' else behavior
 	__node__[behavior] = Compound({
 		'volume,volume_config': 
 				Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
