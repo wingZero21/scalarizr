@@ -247,9 +247,8 @@ class RedisInstances(object):
 
 
 	def init_processes(self, num, ports=[], passwords=[]):
-		assert not ports or len(ports) == num
-		if not ports:
-			ports = get_available_ports[:num]
+		if len(ports) < num:
+			ports += get_available_ports()[][:num-len(ports)]
 		if not passwords:
 			if self.use_passwords:
 				passwords = [cryptotool.pwgen(20) for port in ports]

@@ -242,7 +242,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					'''
 					redis_data[OPT_USE_PASSWORD] = redis_data.get(OPT_USE_PASSWORD, '1')
 
-					ports = passwords = []
+					ports = []
+					passwords = []
 					num_processes = 1
 
 					if 'ports' in redis_data:
