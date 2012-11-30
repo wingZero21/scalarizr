@@ -247,6 +247,9 @@ class RaidVolume(base.Volume):
 
 
 	def check_growth_cfg(self, **growth_cfg):
+		if int(self.level) in (0, 10):
+			raise storage2.StorageError("Raid%s doesn't support growth" % self.level)
+
 		foreach_cfg = growth_cfg.get('foreach')
 		change_disks = False
 
@@ -274,6 +277,9 @@ class RaidVolume(base.Volume):
 																% self.level)
 
 	def _grow(self, new_vol, **growth_cfg):
+		if int(self.level) in (0, 10):
+			raise storage2.StorageError("Raid%s doesn't support growth" % self.level)
+			
 		foreach_cfg = growth_cfg.get('foreach')
 
 		current_len = len(self.disks)
@@ -386,6 +392,7 @@ class RaidVolume(base.Volume):
 			mdadm.mdadm('misc', None, new_vol.raid_pv, wait=True, raise_exc=False)
 
 			lvm2.pvresize(new_vol.raid_pv)
+			# TODO: Not to raise exc when level=1 and foreach is None (only disk count increased)
 			lvm2.lvresize(new_vol.device, extents='100%VG')
 
 		except:
