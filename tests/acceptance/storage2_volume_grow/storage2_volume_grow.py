@@ -2,6 +2,7 @@ __author__ = 'Nick Demyanchuk'
 
 import os
 import boto
+import mock
 import urllib2
 import logging
 import tempfile
@@ -11,8 +12,9 @@ from scalarizr import storage2
 from scalarizr.storage2.volumes import ebs
 from scalarizr.linux import coreutils, mdadm
 
-
 from lettuce import world, step, after
+
+
 
 #logging.basicConfig()
 #logging.getLogger().setLevel(logging.DEBUG)
@@ -21,6 +23,10 @@ LOG = logging.getLogger(__name__)
 
 # Unnecessary = temporary
 global_artifacts = dict(unnecessary=[], other=[])
+
+patcher = mock.patch('scalarizr.storage2.volumes.ebs.__node__')
+mocked_node = patcher.start()
+mocked_node.__getitem__.return_value.__getitem__.return_value = False
 
 
 # Patch ec2
