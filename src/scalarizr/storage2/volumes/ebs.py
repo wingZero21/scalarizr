@@ -191,15 +191,37 @@ class EbsVolume(base.Volume, EbsMixin):
 
 	def check_growth_cfg(self, **growth_cfg):
 		size = growth_cfg.get('size')
+		target_size = int(size or self.size)
+
 		ebs_type = growth_cfg.get('volume_type')
+		target_type = ebs_type or self.volume_type
+
 		iops = growth_cfg.get('iops')
+		target_iops = iops or self.iops
 
-		change_type_or_iops = ebs_type != self.volume_type or iops != self.iops
-		change_size = size != self.size
+		change_type = ebs_type and ebs_type != self.volume_type
+		change_size = size and size != self.size
+		change_iops = iops and iops != self.iops
 
-		if not change_size and not change_type_or_iops:
+		if not (change_size or change_type or change_iops):
 			raise storage2.NoOpError('New ebs volume configuration is equal'
-										' to present. Nothing to do.')
+						' to present. Nothing to do.')
+
+		if target_iops and (target_type != 'io1'):
+			raise storage2.StorageError('EBS iops can only be used with '
+						'io1 volume type')
+
+		if 'io1' == target_type and not iops:
+			raise storage2.StorageError('Iops parameter must be specified '
+						'for io1 volumes')
+
+		if target_iops and target_size < 10:
+			raise storage2.StorageError('Volume size is too small to use '
+						'provisioned iops')
+
+		if target_iops and (int(target_iops) / target_size) < 10:
+			raise storage2.StorageError('Iops to volume size ratio is too high. '
+						'Maximum is 10')
 
 		if size and int(size) < self.size:
 			raise storage2.StorageError('New size is less than the old.')

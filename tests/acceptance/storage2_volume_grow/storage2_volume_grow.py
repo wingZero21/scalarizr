@@ -42,10 +42,10 @@ def get_from_metadata(name):
 	except IOError, e:
 		LOG.info("Looks like it's not ec2 instance")
 
-ebs.EbsMixin._connect_ec2 = boto.connect_ec2
-ebs.EbsMixin._avail_zone = lambda: get_from_metadata('placement/availability-zone')
-ebs.EbsMixin._instance_id = lambda: get_from_metadata('instance-id')
-ebs.EbsMixin._instance_type = lambda: get_from_metadata('instance-type')
+ebs.EbsMixin._avail_zone = lambda x: get_from_metadata('placement/availability-zone')
+ebs.EbsMixin._instance_id = lambda x: get_from_metadata('instance-id')
+ebs.EbsMixin._instance_type = lambda x: get_from_metadata('instance-type')
+ebs.EbsMixin._connect_ec2 = lambda x: boto.connect_ec2()
 
 
 ### HELPERS ###
