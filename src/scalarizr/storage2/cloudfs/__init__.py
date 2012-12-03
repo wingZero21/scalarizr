@@ -435,7 +435,7 @@ class LargeTransfer(bases.Task):
 				if hasattr(src, 'read'):
 					stream = src
 					if hasattr(stream, 'name'):
-						name = stream.name
+						name = os.path.basename(stream.name)  #? can stream name end with '/'
 					else:
 						name = 'stream-%s' % hash(stream)
 					fileinfo["name"] = name

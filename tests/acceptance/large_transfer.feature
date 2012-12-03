@@ -40,6 +40,7 @@ Scenario: Download files and dirs
     Then I expect original items downloaded
 
 Scenario: Upload list of streams
+    Initialize upload variables
     Given I have a list with 10 megabytes stream S1, with 10 megabytes stream S2
     When I upload multiple sources to s3 with gzipping
     Then I expect manifest as a result

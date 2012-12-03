@@ -9,6 +9,7 @@ import json
 import logging
 import hashlib
 from copy import copy
+from io import BytesIO
 
 from lettuce import step, world, before, after
 from boto import connect_s3
@@ -54,7 +55,7 @@ STORAGES = {
 @before.all
 def global_setup():
 	subprocess.Popen(["strace", "-T", "-t", "-f", "-q", "-o", "strace_latest",
-					  "-p", str(os.getpid())])
+					  "-p", str(os.getpid())], close_fds=True)
 
 
 @before.each_scenario
@@ -73,7 +74,8 @@ def teardown(scenario):
 
 def md5(name):
 	if os.path.isfile(name):
-		out = subprocess.Popen(["md5sum", name], stdout=subprocess.PIPE).communicate()
+		out = subprocess.Popen(["md5sum", name], stdout=subprocess.PIPE,
+			close_fds=True).communicate()
 		return out[0].split()[0]
 	elif os.path.isdir(name):
 		dir_md5 = []
@@ -92,9 +94,25 @@ def make_file(name, size):
 		"of=%s" % name,
 		"bs=1M",
 		"count=%s" % size
-	], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
+	], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT, close_fds=True)
 
 	return md5(name)
+
+
+def make_stream(name, size):
+	out = subprocess.Popen([
+		"dd",
+		"if=/dev/urandom",
+		"bs=1M",
+		"count=%s" % size
+	], stdout=subprocess.PIPE, stderr=open('/dev/null', 'w'),
+		close_fds=True).communicate()
+
+	md5sum = hashlib.md5(out[0])
+	stream = BytesIO(out[0])
+	stream.name = name
+
+	return stream, md5sum
 
 
 @step("Initialize upload variables")
@@ -169,7 +187,13 @@ def i_have_dir_with_files(step, dirname, f1_size, f1_name, f2_size, f2_name):
 
 @step("I have a list with (\d+) megabytes stream (\w+), with (\d+) megabytes stream (\w+)")
 def i_have_list_of_streams(step, s1_size, s1_name, s2_size, s2_name):
-	pass
+	for name, size in [(s1_name, s1_size), (s2_name, s2_size)]:
+		abs_path = os.path.join(world.basedir, name)
+		stream_md5 = make_file(abs_path, size)
+		stream = open(abs_path, 'rb')
+
+		world.sources.append(stream)
+		world.items[os.path.basename(stream.name)] = stream_md5
 
 
 @step("I have info from the previous upload")
