@@ -386,7 +386,7 @@ class EbsVolume(base.Volume, EbsMixin):
 				snapshot.id, self._global_timeout)
 		util.wait_until(
 			lambda: snapshot.update() and snapshot.status != 'pending', 
-			logger=LOG, timeout=self._global_timeout,
+			logger=LOG,
 			error_text=msg
 		)
 		if snapshot.status == 'error':
