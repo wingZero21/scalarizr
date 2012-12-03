@@ -245,7 +245,7 @@ def original_vol_is_back(step):
 @step("I see that EBS settings were really changed")
 def ebs_is_not_the_same_anymore(step):
 	conn = boto.connect_ec2()
-	ebs_vol = conn.get_all_volumes([world.volume.id])[0]
+	ebs_vol = conn.get_all_volumes([world.bigger_vol.id])[0]
 
 	if world.grow_cfg.get('volume_type'):
 		assert ebs_vol.type == world.grow_cfg.get('volume_type')

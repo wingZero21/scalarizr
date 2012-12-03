@@ -54,7 +54,7 @@ Feature: Storage2 volume grow
 		Given I have ebs volume with size=1 settings
 		And I create some file on it
 
-		When I grow volume with volume_type=io1,iops=1
+		When I grow volume with volume_type=io1,iops=100,size=10
 		Then I still see my sweet file
 		And I see that EBS settings were really changed
 
