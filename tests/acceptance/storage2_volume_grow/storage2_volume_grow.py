@@ -1,13 +1,14 @@
 __author__ = 'Nick Demyanchuk'
 
 import os
+import boto
+import urllib2
 import logging
 import tempfile
-import traceback
 
-from scalarizr import storage2
-from scalarizr.storage2.volumes import base
 from scalarizr import linux
+from scalarizr import storage2
+from scalarizr.storage2.volumes import ebs
 from scalarizr.linux import coreutils, mdadm
 
 
@@ -20,6 +21,28 @@ LOG = logging.getLogger(__name__)
 
 # Unnecessary = temporary
 global_artifacts = dict(unnecessary=[], other=[])
+
+
+# Patch ec2
+metadata = dict()
+def get_from_metadata(name):
+	url = "http://169.254.169.254/latest/meta-data"
+	try:
+		if not metadata.has_key(name):
+			target_url = os.path.join(url, name)
+			r = urllib2.urlopen(target_url)
+			metadata[name] = r.read().strip()
+		return metadata[name]
+	except IOError, e:
+		LOG.info("Looks like it's not ec2 instance")
+
+ebs.EbsMixin._connect_ec2 = boto.connect_ec2
+ebs.EbsMixin._avail_zone = lambda: get_from_metadata('placement/availability-zone')
+ebs.EbsMixin._instance_id = lambda: get_from_metadata('instance-id')
+ebs.EbsMixin._instance_type = lambda: get_from_metadata('instance-type')
+
+
+### HELPERS ###
 
 
 def parse_config(raw_cfg, dot_notation=False):
@@ -45,6 +68,9 @@ def get_device_size(device):
 def get_file_md5sum(file_path):
 	o, e, code = linux.system(['md5sum', file_path])
 	return o.strip().split()[0]
+
+
+### STEPS ###
 
 
 @step('I have (.+?) volume with (.+?) settings')
@@ -137,6 +163,7 @@ class patch_grow(object):
 
 	def __exit__(self, exc_type, exc_val, exc_tb):
 		if self.fails:
+			""" restore original grow """
 			self.vol._grow = self.orig__grow
 
 		if exc_type:
@@ -171,7 +198,7 @@ def check_space_increased(step):
 		assert mdinfo['raid_devices'] == disk_count_should_be, "Disk count doesn't match"
 
 
-@step('I still see my precious file')
+@step('I still see my \w+ file')
 def check_integrity(step):
 	new_md5 = get_file_md5sum(world.fpath)
 	assert new_md5 == world.file_md5, 'Integrity check failed'
@@ -209,8 +236,19 @@ def original_vol_is_back(step):
 	world.volume.mounted_to() == world.volume.mpoint
 
 
+@step("I see that EBS settings were really changed")
+def ebs_is_not_the_same_anymore(step):
+	conn = boto.connect_ec2()
+	ebs_vol = conn.get_all_volumes([world.volume.id])[0]
+
+	if world.grow_cfg.get('volume_type'):
+		assert ebs_vol.type == world.grow_cfg.get('volume_type')
+
+	if world.grow_cfg.get('iops'):
+		assert str(ebs_vol.iops)== str(world.grow_cfg.get('iops'))
+
+
 def teardown_scenario(*args, **kwargs):
-	LOG.info('Teardown!!!!!!!!')
 	for vol in ('volume', 'bigger_vol'):
 		if hasattr(world, vol):
 			LOG.info('Removing %s' % vol)

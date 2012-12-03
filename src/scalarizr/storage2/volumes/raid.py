@@ -392,9 +392,15 @@ class RaidVolume(base.Volume):
 			mdadm.mdadm('misc', None, new_vol.raid_pv, wait=True, raise_exc=False)
 
 			lvm2.pvresize(new_vol.raid_pv)
-			# TODO: Not to raise exc when level=1 and foreach is None (only disk count increased)
-			lvm2.lvresize(new_vol.device, extents='100%VG')
-
+			try:
+				lvm2.lvresize(new_vol.device, extents='100%VG')
+			except:
+				e = sys.exc_info()[1]
+				if (self.level == 1 and 'matches existing size' in str(e)
+														and not foreach_cfg):
+					LOG.debug('Raid1 actual size has not changed')
+				else:
+					raise
 		except:
 			err_type, err_val, trace = sys.exc_info()
 			if growed_disks or added_disks:
