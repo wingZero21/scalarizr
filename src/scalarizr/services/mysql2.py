@@ -318,6 +318,7 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 		'''
 		
 		my_defaults = my_print_defaults('mysqld')
+		rst_volume = None
 		self._data_dir = os.path.normpath(my_defaults['datadir'])
 		LOG.info('_run: datadir is "%s"' % self._data_dir)
 		self._log_bin = os.path.normpath(my_defaults['log_bin'])
