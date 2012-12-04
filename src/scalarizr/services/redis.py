@@ -255,11 +255,13 @@ class RedisInstances(object):
 				passwords = [None for port in ports]
 
 		creds = dict(zip(ports, passwords))
+		LOG.debug("Initializing redis processes: %s" % str(creds))
 		for port,password in creds.items():
 			if port not in self.ports:
 				create_redis_conf_copy(port)
 				redis_process = Redis(self.master, self.persistence_type, port, password)
 				self.instances.append(redis_process)
+		LOG.debug('Total of redis processes: %d' % len(self.instances))
 
 
 	def kill_processes(self, ports=[], remove_data=False):
