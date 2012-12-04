@@ -961,8 +961,8 @@ def get_redis_processes():
 def get_busy_ports():
 	busy_ports = []
 	args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
-	out = system2(args, silent=True)[0].split('\n')
 	try:
+		out = system2(args, silent=True)[0].split('\n')
 		p = [x for x in out if x and BIN_PATH in x]
 	except PopenError,e:
 		p = []
