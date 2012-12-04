@@ -52,6 +52,8 @@ class ChefHandler(Handler):
 		self._client_conf_path = '/etc/chef/client.rb'
 		self._validator_key_path = '/etc/chef/validation.pem'
 		self._client_key_path = '/etc/chef/client.pem'
+		self._json_attributes_path = '/etc/chef/first-run.json'
+		self._with_json_attributes = False
 		self._platform = bus.platform
 
 
@@ -70,6 +72,7 @@ class ChefHandler(Handler):
 			self._chef_data = message.chef.copy()
 			if not self._chef_data.get('node_name'):
 				self._chef_data['node_name'] = self.get_node_name()
+			self._with_json_attributes = self._chef_data.get('json_attributes')
 
 
 	def on_before_host_up(self, msg):
@@ -92,12 +95,18 @@ class ChefHandler(Handler):
 						with open(self._validator_key_path, 'w+') as fp:
 							fp.write(self._chef_data['validator_key'])
 							
+						if self._with_json_attributes:
+							with open(self._json_attributes_path, 'w+') as fp:
+								fp.write(self._chef_data['json_attributes'])
+
 						# Register node
 						LOG.info('Registering Chef node')
 						try:
-							self.run_chef_client()
+							self.run_chef_client(first_run=True)
 						finally:
 							os.remove(self._validator_key_path)
+							if self._with_json_attributes:
+								os.remove(self._json_attributes_path)
 
 					with op.step(self._step_execute_run_list):
 						LOG.info('Executing run list')
@@ -122,8 +131,11 @@ class ChefHandler(Handler):
 					self._chef_data = None
 		
 		
-	def run_chef_client(self):
-		system2([self._chef_client_bin])
+	def run_chef_client(self, first_run=False):
+		cmd = [self._chef_client_bin]
+		if first_run and self._with_json_attributes:
+			cmd += ['--json-attributes', self._json_attributes_path]
+		system2(cmd)
 
 
 	def get_node_name(self):
