@@ -9,7 +9,7 @@ import json
 import logging
 import hashlib
 from copy import copy
-from io import BytesIO
+from ConfigParser import ConfigParser
 
 from lettuce import step, world, before, after
 from boto import connect_s3
@@ -17,8 +17,13 @@ from boto import connect_s3
 from scalarizr.storage2.cloudfs import s3, LargeTransfer, LOG
 
 
-LOG.setLevel(logging.DEBUG)
-LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
+#
+# Patches
+#
+
+
+# prevent ini parser from lowercasing params
+ConfigParser.optionxform = lambda self, x: x
 
 
 # make s3 connection work
@@ -26,22 +31,35 @@ with open(os.path.dirname(__file__) +"/../fixtures/aws_keys.json") as fd:
 	data = json.loads(fd.read())
 ACCESS_KEY = data["ACCESS_KEY"]
 SECRET_KEY = data["SECRET_KEY"]
-del data
 s3.S3FileSystem._get_connection = lambda x: connect_s3(ACCESS_KEY, SECRET_KEY)
+del data
 
 
-class S3(object):
-
-	def __init__(self):
-		self.driver = s3.S3FileSystem()
+class S3(s3.S3FileSystem):
 
 	def exists(self, remote_path):
 		parent = os.path.dirname(remote_path.rstrip('/'))
-		ls = self.driver.ls(parent)
+		ls = self.ls(parent)
 		return remote_path in ls
 
-	def __getattr__(self, name):
-		return getattr(self.driver, name)
+
+#
+# Logging
+#
+
+LOG.setLevel(logging.DEBUG)
+LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
+
+
+@before.all
+def global_setup():
+	subprocess.Popen(["strace", "-T", "-t", "-f", "-q", "-o", "strace_latest",
+					  "-p", str(os.getpid())], close_fds=True)
+
+
+#
+#
+#
 
 
 STORAGES = {
@@ -52,10 +70,23 @@ STORAGES = {
 }
 
 
-@before.all
-def global_setup():
-	subprocess.Popen(["strace", "-T", "-t", "-f", "-q", "-o", "strace_latest",
-					  "-p", str(os.getpid())], close_fds=True)
+def convert_manifest(json_manifest):
+	assert len(json_manifest["files"]) == 1
+	assert json_manifest["files"][0]["gzip"] == True
+
+	parser = ConfigParser()
+	parser.add_section("snapshot")
+	parser.add_section("chunks")
+
+	parser.set("snapshot", "description", json_manifest["description"])
+	parser.set("snapshot", "created_at", json_manifest["created_at"])
+	parser.set("snapshot", "pack_method", json_manifest["files"][0]["gzip"] and "gzip")
+
+	for chunk, md5sum in reversed(json_manifest["files"][0]["chunks"]):
+		parser.set("chunks", chunk, md5sum)
+
+	LOG.debug("CONVERT: %s" % parser.items("chunks"))
+	return parser
 
 
 @before.each_scenario
@@ -97,22 +128,6 @@ def make_file(name, size):
 	], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT, close_fds=True)
 
 	return md5(name)
-
-
-def make_stream(name, size):
-	out = subprocess.Popen([
-		"dd",
-		"if=/dev/urandom",
-		"bs=1M",
-		"count=%s" % size
-	], stdout=subprocess.PIPE, stderr=open('/dev/null', 'w'),
-		close_fds=True).communicate()
-
-	md5sum = hashlib.md5(out[0])
-	stream = BytesIO(out[0])
-	stream.name = name
-
-	return stream, md5sum
 
 
 @step("Initialize upload variables")
@@ -213,4 +228,26 @@ def i_expect_original_items_downloaded(step):
 		file_loc = os.path.join(world.basedir, file)
 		assert os.path.exists(file_loc), file_loc
 		assert md5sum == md5(file_loc), file_loc
+
+
+@step("I clear the tempdir and replace the manifest with it's old representation")
+def i_replace_the_manifest_with_old_repr(step):
+
+	# relies on "I expect manifest as a result" step and
+	# LargeTransfer downloading manifest as "manifest.json"
+	with open(os.path.join(world.basedir, "manifest.json")) as fd:
+		manifest = json.loads(fd.read())
+
+	subprocess.call(["rm -r %s/*" % world.basedir], shell=True)
+
+	manifest_ini_path = os.path.join(world.basedir, "manifest.ini")
+	with open(manifest_ini_path, 'w') as fd:
+		convert_manifest(manifest).write(fd)
+
+	# world.driver.delete(world.manifest_url)
+
+	world.manifest_url = world.driver.put(manifest_ini_path, os.path.dirname(world.manifest_url))
+	LOG.debug("NEW %s" % world.manifest_url)
+
+
 
