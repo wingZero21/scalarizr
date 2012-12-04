@@ -9,6 +9,7 @@ import sys
 import signal
 import string
 import pkgutil
+import traceback
 import contextlib
 
 from scalarizr.bus import bus
@@ -656,3 +657,34 @@ class Hosts:
 		with open('/etc/hosts', 'w') as f:
 			for hostname, addr in hosts.iteritems():
 				f.write('%s\t%s\n' % (addr, hostname))
+
+
+class capture_exception:
+	def __init__(self, logger=None):
+		self.logger = logger or logging.getLogger(__name__)
+
+
+	def __enter__(self):
+		self.exc_info = sys.exc_info()
+		self.orig_exc_catched = not all(map(lambda x: x is None, self.exc_info))
+
+
+	def __exit__(self, *exc_info):
+		exc_catched = not all(map(lambda x: x is None, exc_info))
+		e_type, e_val, tb = exc_info
+		if self.orig_exc_catched:
+			if exc_catched:
+				log_msg = ''.join(traceback.format_exception(e_type, e_val, tb))
+				self.logger.debug(log_msg)
+			orig_type, orig_val, orig_tb = self.exc_info
+			raise orig_type, orig_val, orig_tb
+
+		else:
+			if exc_catched:
+				e_type, e_val, tb = exc_info
+				raise e_type, e_val, tb
+
+
+
+
+

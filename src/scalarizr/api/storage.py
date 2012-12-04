@@ -190,7 +190,7 @@ class StorageAPI(object):
 		else:
 			return do_destroy()
 
-	'''
+
 	@rpc.service_method
 	def grow(self, volume, growth_cfg, async=False):
 		self._check_invalid(volume, 'volume', dict)
