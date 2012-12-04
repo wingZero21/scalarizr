@@ -9,7 +9,6 @@ import signal
 import logging
 import shutil
 
-from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, PopenError, wait_until
 from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError
 from scalarizr.util import disttool, cryptotool, firstmatched
@@ -248,7 +247,7 @@ class RedisInstances(object):
 
 	def init_processes(self, num, ports=[], passwords=[]):
 		if len(ports) < num:
-			ports += get_available_ports()[][:num-len(ports)]
+			ports += get_available_ports()[:num-len(ports)]
 		if not passwords:
 			if self.use_passwords:
 				passwords = [cryptotool.pwgen(20) for port in ports]
