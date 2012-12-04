@@ -572,8 +572,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 			with op.step(self._step_init_master):
 				password = self.get_main_password()
-				ri = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
-				ri.init_master(mpoint=self._storage_path)
+
+				self.redis_instances.init_as_masters(mpoint=self._storage_path)
 
 				msg_data = dict()
 				msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
@@ -654,10 +654,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					master_host.internal_ip, master_host.external_ip)
 
 				host = master_host.internal_ip or master_host.external_ip
-				instance = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
-				instance.init_slave(self._storage_path, host, redis.DEFAULT_PORT)
+				self.redis_instances.init_as_slaves(self._storage_path, host)
 				op.progress(50)
-				instance.wait_for_sync()
+				self.redis_instances.wait_for_sync()
 
 			with op.step(self._step_collect_host_up_data):
 				# Update HostUp message
