@@ -255,7 +255,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 						del redis_data['passwords']
 
 					if 'num_processes' in redis_data:
-						num_processes = redis_data['num_processes']
+						num_processes = int(redis_data['num_processes'])
 						del redis_data['num_processes']
 
 					for key, config_file in ((OPT_VOLUME_CNF, self._volume_config_path),
