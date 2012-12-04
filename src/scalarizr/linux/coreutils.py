@@ -107,7 +107,11 @@ def clean_dir(path):
 
 
 def blkid(device_path, **kwargs):
+	if not os.path.exists(device_path):
+		raise Exception("Device %s doesn't exist")
+
 	ret = dict()
+
 	kwargs.update({'o': 'export'})
 	args = ['/sbin/blkid']
 	for k,v in kwargs.items():
@@ -118,7 +122,7 @@ def blkid(device_path, **kwargs):
 
 	args.append(device_path)
 
-	out = linux.system(args)[0].splitlines()
+	out = linux.system(args, raise_exc=False)[0].splitlines()
 	for line in out:
 		line = line.strip()
 		if line:

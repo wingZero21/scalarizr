@@ -192,6 +192,33 @@ class StorageAPI(object):
 
 	'''
 	@rpc.service_method
+	def grow(self, volume, growth_cfg, async=False):
+		self._check_invalid(volume, 'volume', dict)
+		self._check_empty(volume.get('id'), 'volume.id')
+
+		def do_grow():
+			vol = storage2.volume(volume)
+			growed_vol = vol.grow(**growth_cfg)
+			return dict(growed_vol)
+
+		if async:
+			txt = 'Grow volume'
+			op = handlers.operation(name=txt)
+			def block():
+				op.define()
+				with op.phase(txt):
+					with op.step(txt):
+						data = do_grow()
+				op.ok(data=data)
+			threading.Thread(target=block).start()
+			return op.id
+
+		else:
+			return do_grow()
+
+
+	'''
+	@rpc.service_method
 	def replace_raid_disk(self, volume_config, target_disk_device, replacement_disk_config, async=False):
 		assert volume_config.get('type') == 'raid', 'Configuration type is not raid'
 		raid = storage_lib.Storage.create(**volume_config)
