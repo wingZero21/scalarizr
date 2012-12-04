@@ -273,7 +273,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 					if self.default_service.running:
 						self.default_service.stop('Treminating default redis instance')
-						
+					LOG.debug("Got ports: %s . And passwords: %s" % (str(ports), str(passwords)))
 					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
 					ports = ports or [redis.DEFAULT_PORT,]
 					passwords = passwords or [self.get_main_password(),]
