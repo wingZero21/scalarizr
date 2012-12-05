@@ -248,7 +248,7 @@ class RedisInstances(object):
 	def init_processes(self, num, ports=[], passwords=[]):
 		if len(ports) < num:
 			diff = num-len(ports)
-			LOG.debug("Passed ports: %s. Need to find %s more." % (str(ports), l))
+			LOG.debug("Passed ports: %s. Need to find %s more." % (str(ports), diff))
 			additional_ports = [port for port in get_available_ports() if port not in ports]
 			if len(additional_ports) < diff:
 				raise ServiceError('Not enough free ports')
