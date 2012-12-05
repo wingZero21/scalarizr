@@ -249,9 +249,12 @@ class RedisInstances(object):
 		if len(ports) < num:
 			l = num-len(ports)
 			LOG.debug("Passed ports: %s. Need to find %s more." % (str(ports), l))
-			additional_ports = get_available_ports()[:l]
+			additional_ports = [port for port in get_available_ports() if port not in ports]
+			if len(additional_ports) < l:
+				raise ServiceError('Not enough free ports')
+			
 			LOG.debug("Found available ports: %s" % str(additional_ports))
-			ports += additional_ports
+			ports += additional_ports[:l]
 		if not passwords:
 			if self.use_passwords:
 				passwords = [cryptotool.pwgen(20) for port in ports]
