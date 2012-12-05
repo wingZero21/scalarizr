@@ -247,7 +247,11 @@ class RedisInstances(object):
 
 	def init_processes(self, num, ports=[], passwords=[]):
 		if len(ports) < num:
-			ports += get_available_ports()[:num-len(ports)]
+			l = num-len(ports)
+			LOG.debug("Passed ports: %s. Need to find %s more." % (str(ports), l))
+			additional_ports = get_available_ports()[:l]
+			LOG.debug("Found available ports: %s" % str(additional_ports))
+			ports += additional_ports
 		if not passwords:
 			if self.use_passwords:
 				passwords = [cryptotool.pwgen(20) for port in ports]
@@ -982,5 +986,7 @@ def get_busy_ports():
 
 def get_available_ports():
 	busy_ports = get_busy_ports()
-	return [port for port in PORTS_RANGE if port not in busy_ports]
+	available = [port for port in PORTS_RANGE if port not in busy_ports]
+	LOG.debug("Available ports: %s" % available)
+	return available
 
