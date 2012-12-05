@@ -175,12 +175,11 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 
-
-
 			ports=[redis.DEFAULT_PORT,]
 			passwords=[self.get_main_password(),]
 			num_processes = 1
-			params = self._queryenv.list_farm_role_params()
+			farm_role_id = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
+			params = self._queryenv.list_farm_role_params(farm_role_id)
 			if 'redis' in params:
 				redis_data = params['redis']
 				for param in ('ports', 'passwords', 'num_processes'):
