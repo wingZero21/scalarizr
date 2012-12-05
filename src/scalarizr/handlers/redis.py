@@ -273,7 +273,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 					if self.default_service.running:
 						self.default_service.stop('Treminating default redis instance')
-						
+
 					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
 					ports = ports or [redis.DEFAULT_PORT,]
 					passwords = passwords or [self.get_main_password(),]
@@ -295,9 +295,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			self._init_slave(message)
 
 		self._init_script = self.redis_instances.get_default_process()
-		message['redis']['ports'] = self.redis_instances.ports
-		message['redis']['passwords'] = self.redis_instances.passwords
-		message['redis']['num_processes'] = len(self.redis_instances.ports)
+		message.redis['ports'] = self.redis_instances.ports
+		message.redis['passwords'] = self.redis_instances.passwords
+		message.redis['num_processes'] = len(self.redis_instances.instances)
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 
 
