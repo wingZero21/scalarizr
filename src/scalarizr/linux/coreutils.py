@@ -131,10 +131,3 @@ def blkid(device_path, **kwargs):
 
 	return ret
 
-
-
-
-
-
-
-

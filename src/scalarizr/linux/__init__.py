@@ -1,6 +1,8 @@
 import re
 import os as osmod
 import platform
+import types
+import distutils.version
 
 from scalarizr import util
 
@@ -13,6 +15,17 @@ def system(*args, **kwds):
 	if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
 		args[0][0] = which(args[0][0])
 	return util.system2(*args, **kwds)
+
+
+class Version(distutils.version.LooseVersion):
+	def __cmp__(self, other):
+		if type(other) in (types.TupleType, types.ListType):
+			other0 = Version()
+			other0.version = list(other)
+			other = other0
+		return distutils.version.LooseVersion.__cmp__(self, other)
+
+
 
 class __os(dict):
 	def __init__(self, *args, **kwds):
@@ -128,7 +141,7 @@ class __os(dict):
 		name, release, codename = platform.dist()
 		if not 'name' in self:
 			self['name'] = name
-		self['release'] = release
+		self['release'] = Version(release)
 		self['codename'] = codename				
 				
 		if not 'name' in self:
@@ -181,3 +194,25 @@ def which(exe):
 	return None
 
 
+
+
+'''
+class Exec(object):
+	def __init__(self):
+		pass
+
+	def args(self, *args, **kwds):
+		pass
+
+	def popen(self, *args, **kwds):
+		pass
+
+	def __call__(self):
+		pass
+
+pigz = Exec(
+	command='/usr/bin/pigz', 
+	package='pigz'
+	supported_on='CentOS >= 6.0.0 RedHat >= 6.0.0 Ubuntu >= 10.04')
+
+'''
