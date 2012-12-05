@@ -247,19 +247,27 @@ class RedisInstances(object):
 
 	def init_processes(self, num, ports=[], passwords=[]):
 		if len(ports) < num:
-			l = num-len(ports)
+			diff = num-len(ports)
 			LOG.debug("Passed ports: %s. Need to find %s more." % (str(ports), l))
 			additional_ports = [port for port in get_available_ports() if port not in ports]
-			if len(additional_ports) < l:
+			if len(additional_ports) < diff:
 				raise ServiceError('Not enough free ports')
-			
+
 			LOG.debug("Found available ports: %s" % str(additional_ports))
-			ports += additional_ports[:l]
-		if not passwords:
+			ports += additional_ports[:diff]
+
+		if len(passwords) < len(ports):
+			diff = len(ports) - len(passwords)
 			if self.use_passwords:
-				passwords = [cryptotool.pwgen(20) for port in ports]
+				LOG.debug("Generating %s additional passwords for ports %s" % (diff, ports[-diff:]))
+				additional_passwords= [cryptotool.pwgen(20) for port in ports[-diff:]]
+				LOG.debug("Generated passwords: %s" % str(additional_passwords))
+				passwords += additional_passwords
 			else:
-				passwords = [None for port in ports]
+				LOG.debug("Setting  %s additional empty passwords for ports %s" % (diff, ports[-diff:]))
+				passwords += [None for port in ports[-diff:]]
+
+		assert len(ports) == len(passwords)
 
 		creds = dict(zip(ports, passwords))
 		LOG.debug("Initializing redis processes: %s" % str(creds))
