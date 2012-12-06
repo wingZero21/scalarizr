@@ -235,7 +235,7 @@ class Volume(Base):
 		return new_vol
 
 
-	def _grow(self, bigger_vol, **kwargs):
+	def _grow(self, bigger_vol, **growth_cfg):
 		"""
 		Create, attach and do everything except mount.
 		All cleanup procedures and artifact removal should be
@@ -272,7 +272,7 @@ class Volume(Base):
 			#raise NotImplementedError(msg)
 
 
-	def check_growth_cfg(self, **kwargs):
+	def check_growth_cfg(self, **growth_cfg):
 		pass
 
 

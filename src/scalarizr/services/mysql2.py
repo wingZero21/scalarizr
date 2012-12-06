@@ -513,6 +513,7 @@ class XtrabackupStreamRestore(backup.Restore):
 
 
 	def _run(self):
+		pass
 
 
 #backup.backup_types['xtrabackup'] = XtrabackupBackup

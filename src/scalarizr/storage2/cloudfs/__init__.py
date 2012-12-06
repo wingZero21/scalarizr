@@ -33,6 +33,18 @@ from scalarizr.linux import coreutils
 LOG = logging.getLogger(__name__)
 
 
+class namedstream(object):
+	def __init__(self, stream, name):
+		self._stream = stream
+		self.name = name
+
+	def __getattr__(self, name):
+		if name in self.__dict__:
+			return self.__dict__['name']
+		return getattr(self.__dict__['_stream'], name)
+
+
+
 class BaseTransfer(bases.Task):
 	
 	def __init__(self, src=None, dst=None, **kwds):
