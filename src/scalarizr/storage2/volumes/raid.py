@@ -63,6 +63,9 @@ class RaidVolume(base.Volume):
 			disks = []
 			try:
 				for disk_snap in self.snap['disks']:
+					if isinstance(disk_snap, dict) and 'snapshot' in disk_snap:
+						# v1 compatibility						
+						disk_snap = disk_snap['snapshot']
 					snap = storage2.snapshot(disk_snap)
 					disks.append(snap.restore())
 			except:
@@ -201,10 +204,11 @@ class RaidVolume(base.Volume):
 		coreutils.sync()
 		lvm2.dmsetup('suspend', self.device)
 		try:
-			descr = 'Raid%s disk ${index}. %s' % (self.level, description or '')
+			description = 'Raid%s disk ${index}%s' % (self.level, \
+							'. %s' % description if description else '')
 			disks_snaps = storage2.concurrent_snapshot(
 				volumes=self.disks,
-				description=descr,
+				description=description,
 				tags=tags, **kwds
 			)
 
