@@ -6,7 +6,7 @@ from scalarizr import linux
 from scalarizr.storage2 import StorageError
 
 
-if not linux.which('lvs'):
+if not linux.which('mdadm'):
 	from scalarizr.linux import pkgmgr
 	pkgmgr.installed('mdadm')
 mdadm_binary = linux.which('mdadm')
