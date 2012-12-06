@@ -8,6 +8,7 @@ import string
 import shutil
 import logging
 import subprocess
+import threading
 
 from scalarizr import linux, storage2
 from scalarizr.storage2 import cloudfs
