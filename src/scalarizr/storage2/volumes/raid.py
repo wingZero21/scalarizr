@@ -117,7 +117,7 @@ class RaidVolume(base.Volume):
 
 			# Restore vg config
 			vg_restore_file = tempfile.mktemp()
-			with open(tmpfile, 'w') as f:
+			with open(vg_restore_file, 'w') as f:
 				f.write(base64.b64decode(self.lvm_group_cfg))
 
 			# Ensure RAID physical volume
