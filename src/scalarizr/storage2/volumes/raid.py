@@ -115,19 +115,21 @@ class RaidVolume(base.Volume):
 
 				mdadm.mdadm('misc', raid_device, wait=True)
 
+			# Restore vg config
+			vg_restore_file = tempfile.mktemp()
+			with open(tmpfile, 'w') as f:
+				f.write(base64.b64decode(self.lvm_group_cfg))
+
+			# Ensure RAID physical volume
 			try:
 				lvm2.pvs(raid_device)
 			except:
-				lvm2.pvcreate(raid_device, uuid=self.pv_uuid)
-
-			# Restore vg
-			tmpfile = tempfile.mktemp()
-			try:
-				with open(tmpfile, 'w') as f:
-					f.write(base64.b64decode(self.lvm_group_cfg))
-				lvm2.vgcfgrestore(vg_name, file=tmpfile)
+				lvm2.pvcreate(raid_device, uuid=self.pv_uuid, 
+							restorefile=vg_restore_file)
 			finally:
-				os.remove(tmpfile)
+				lvm2.vgcfgrestore(vg_name, file=vg_restore_file)
+				os.remove(vg_restore_file)
+				
 
 			# Check that logical volume exists
 			lv_infos = lvm2.lvs(self.vg)

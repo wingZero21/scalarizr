@@ -10,6 +10,7 @@ class LinuxError(util.PopenError):
 
 def system(*args, **kwds):
 	kwds['exc_class'] = LinuxError
+	kwds['close_fds'] = True
 	if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
 		args[0][0] = which(args[0][0])
 	return util.system2(*args, **kwds)
