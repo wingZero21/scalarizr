@@ -10,12 +10,13 @@ import logging
 import subprocess
 
 from scalarizr import linux, storage2
+from scalarizr.storage2 import cloudfs
 from scalarizr.linux import coreutils, pkgmgr
 from scalarizr.node import __node__
 from scalarizr.services import mysql as mysql_svc
 from scalarizr.services import backup
 from scalarizr.libs import bases
-from scalarizr.storage2.cloudfs import LargeTransfer
+
 from scalarizr.libs import metaconf
 
 
@@ -77,7 +78,12 @@ class MySQLSnapBackup(backup.SnapBackup):
 		self._mysql_init.start()
 		client = self._client()
 		client.lock_tables()
-		(log_file, log_pos) = client.master_status()
+		if int(__mysql__['replication_master']):
+			(log_file, log_pos) = client.master_status()
+		else:
+			slave_status = client.slave_status()
+			log_pos = slave_status['Exec_Master_Log_Pos']
+			log_file = slave_status['Master_Log_File']
 
 		upd = {'log_file': log_file, 'log_pos': log_pos}
 		state.update(upd)
@@ -428,8 +434,91 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 							os.path.join(self._binlog_dir, dstname))
 
 
-backup.backup_types['xtrabackup'] = XtrabackupBackup
-backup.restore_types['xtrabackup'] = XtrabackupRestore		
+class XtrabackupStreamBackup(backup.Backup):
+
+	def __init__(self, 
+				backup_type='full', 
+				from_lsn=None,
+				cloudfs_dir=None,
+				**kwds):
+		super(XtrabackupStreamBackup, self).__init__(
+				backup_type=backup_type, 
+				from_lsn=int(from_lsn or 0),
+				cloudfs_dir=cloudfs_dir,
+				**kwds)
+		XtrabackupMixin.__init__(self)
+		self._re_lsn = re.compile(r"xtrabackup: The latest check point " \
+								"\(for incremental\): '(\d+)'")
+		self._re_binlog = re.compile(r"innobackupex: MySQL binlog position: " \
+								"filename '([^']+)', position (\d+)")
+
+
+	def _run(self):
+		self._check_backup_type()
+
+		kwds = {'stream': 'xbstream'}
+		if self.backup_type == 'incremental':
+			self._check_attr('from_lsn')
+			kwds.update({
+				'incremental': True,
+				'incremental_lsn': self.from_lsn
+			})
+
+		xbak = xtrabackup.args(**kwds).popen()
+		transfer = cloudfs.LargeTransfer(
+					[cloudfs.namedstream(xbak, 'xtrabackup')], 
+					self.cloudfs_dir,
+					gzip_it=True)
+		cloudfs_dest = transfer.run()
+		xbak.wait()
+		if xbak.returncode:
+			msg = xbak.stderr.read()
+			raise Error(msg)
+
+		log_file = log_pos = to_lsn	= None
+		for line in xbak.stderr.readlines():
+			m = self._re_lsn.search()
+			if m:
+				to_lsn = int(m.group(1))
+				continue
+			m = self._re_binlog.search()
+			if m:
+				log_file = m.group(1)
+				log_pos = int(m.group(2))
+				continue
+			if log_file and log_pos and to_lsn:
+				break
+
+		return backup.restore(type='xtrabackup',
+				backup_type=self.backup_type,
+				from_lsn=self.from_lsn,
+				to_lsn=to_lsn,
+				cloudfs_src=cloudfs_dest)
+
+
+class XtrabackupStreamRestore(backup.Restore):
+	def __init__(self, 
+				backup_type='full',
+				from_lsn=0,
+				to_lsn=0,
+				cloudfs_src=None,
+				**kwds):
+		super(XtrabackupStreamRestore, self).__init__(
+				backup_type=backup_type, 
+				from_lsn=int(from_lsn or 0),
+				to_lsn=int(to_lsn or 0),
+				cloudfs_src=cloudfs_src,
+				**kwds)
+		XtrabackupMixin.__init__(self)
+
+
+	def _run(self):
+
+
+#backup.backup_types['xtrabackup'] = XtrabackupBackup
+#backup.restore_types['xtrabackup'] = XtrabackupRestore		
+backup.backup_types['xtrabackup'] = XtrabackupStreamBackup
+backup.restore_types['xtrabackup'] = XtrabackupStreamRestore		
 
 
 class MySQLDumpBackup(backup.Backup):
@@ -460,7 +549,7 @@ class MySQLDumpBackup(backup.Backup):
 					__mysql__['root_user'],
 					__mysql__['root_password'])
 		self._databases = client.list_databases()
-		transfer = LargeTransfer(self._gen_src, self._gen_dst, 'upload', 
+		transfer = cloudfs.LargeTransfer(self._gen_src, self._gen_dst, 'upload', 
 								tar_it=False, chunk_size=self.chunk_size)
 		transfer.run()
 		return backup.restore(type='mysqldump', 
@@ -514,6 +603,53 @@ class User(bases.ConfigDriven):
 		pass
 
 
+class Exec(object):
+
+	executable = None
+	package = None
+
+
+	def __init__(self, executable, package=None):
+		assert isinstance(executable, basestring)
+		self.package = self.package
+		self.local = threading.local()
+
+
+	def check(self):
+		if not os.access(self.executable, os.X_OK):
+			if self.package:
+				pkgmgr.installed(self.package)
+			else:
+				msg = 'Executable %s is not found, you should eather ' \
+					'specify a `package` attribute or install software ' \
+					'manually'
+				raise linux.LinuxError(msg)
+
+
+	def args(self, *params, **long_kwds):
+		self.local.args = linux.system(linux.build_cmd_args(
+			executable=self.executable, 
+			long=long_kwds, 
+			params=params))
+		return self
+
+
+	def popen(*kwds):
+		self.check()		
+		kwds['close_fds'] = True
+		if not 'stdout' in kwds:
+			kwds['stdout'] = subprocess.PIPE
+		if not 'stderr' in kwds:
+			kwds['stderr'] = subprocess.PIPE
+		return subprocess.Popen(*self.local.args, **kwds)
+
+
+	def __call__(*params, **long_kwds):
+		self.args(*params, **long_kwds)
+		self.check()
+		return linux.system(self.local.args)
+
+'''	
 def innobackupex(*params, **long_kwds):
 	if not os.path.exists('/usr/bin/innobackupex'):
 		pkgmgr.installed('percona-xtrabackup')
@@ -521,8 +657,12 @@ def innobackupex(*params, **long_kwds):
 			executable='/usr/bin/innobackupex', 
 			long=long_kwds, 
 			params=params))
-		
-		
+'''
+
+innobackupex = Exec('/usr/bin/innobackupex',
+				package='percona-xtrabackup')
+
+
 def my_print_defaults(*option_groups):
 	out = linux.system(linux.build_cmd_args(
 			executable='/usr/bin/my_print_defaults', 
