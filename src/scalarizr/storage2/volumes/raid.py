@@ -51,7 +51,7 @@ class RaidVolume(base.Volume):
 		# Backward compatibility with old storage
 		if vg is not None:
 			vg = os.path.basename(vg)
-
+		self._v1_compat = False
 		super(RaidVolume, self).__init__(disks=disks or [],
 				raid_pv=raid_pv, level=level and int(level), 
 				lvm_group_cfg=lvm_group_cfg,
@@ -59,12 +59,16 @@ class RaidVolume(base.Volume):
 
 
 	def _ensure(self):
+		self._v1_compat = self.snap and len(self.snap['disks']) and \
+						isinstance(self.snap['disks'][0], dict) and \
+						'snapshot' in disk_snap
 		if self.snap:
 			disks = []
 			try:
+				# @fixme: pv should be based on a disk config with snapshot taste
+				# @todo: create disks concurrently
 				for disk_snap in self.snap['disks']:
-					if isinstance(disk_snap, dict) and 'snapshot' in disk_snap:
-						# v1 compatibility						
+					if self._v1_compat:
 						disk_snap = disk_snap['snapshot']
 					snap = storage2.snapshot(disk_snap)
 					disks.append(snap.restore())
@@ -109,10 +113,16 @@ class RaidVolume(base.Volume):
 						mdadm.mdadm('misc', None, disk,
 									zero_superblock=True, force=True)
 
-					kwargs = dict(force=True, metadata='default',
-								  level=self.level, assume_clean=True,
-								  raid_devices=len(disks_devices))
-					mdadm.mdadm('create', raid_device, *disks_devices, **kwargs)
+					try:
+						kwargs = dict(force=True, metadata='default',
+									  level=self.level, assume_clean=True,
+									  raid_devices=len(disks_devices))
+						mdadm.mdadm('create', raid_device, *disks_devices, **kwargs)
+					except:
+						if self.level == 10 and self._v1_compat:
+							self._v1_repair_raid10(raid_device)
+						else:
+							raise
 				else:
 					mdadm.mdadm('assemble', raid_device, *disks_devices)
 
@@ -174,6 +184,34 @@ class RaidVolume(base.Volume):
 			self.lvm_group_cfg = lvm2.backup_vg_config(vg_name)
 
 		self.raid_pv = raid_device
+
+
+	def _v1_repair_raid10(self, raid_device):
+		'''
+		Situation is the following:
+		raid10 creation from the only half of snapshots failed.
+		'''
+		disks_devices = [disk.device for disk in self.disks]
+		missing_devices = disks_devices[::2]
+		md0_devices = [disks_devices[i] if i % 2 else 'missing' \
+						for i in range(0, len(disks_devices))]
+		
+
+		# Stop broken raid
+		if os.path.exists('/dev/md127'):
+			mdadm.mdadm('stop', '/dev/md127', force=True)
+
+		# Create raid with missing disks
+		kwargs = dict(force=True, metadata='default',
+					  level=self.level, assume_clean=True,
+					  raid_devices=len(disks_devices))
+		mdadm.mdadm('create', raid_device, *md0_devices, **kwargs)
+		mdadm.mdadm('misc', raid_device, wait=True)
+
+		# Add missing devices one by one
+		for device in missing_devices:
+			mdadm.mdadm('add', raid_device, device)
+		mdadm.mdadm('misc', raid_device, wait=True)
 
 
 	def _detach(self, force, **kwds):
