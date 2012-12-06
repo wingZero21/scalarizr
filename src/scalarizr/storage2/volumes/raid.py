@@ -61,7 +61,7 @@ class RaidVolume(base.Volume):
 	def _ensure(self):
 		self._v1_compat = self.snap and len(self.snap['disks']) and \
 						isinstance(self.snap['disks'][0], dict) and \
-						'snapshot' in disk_snap
+						'snapshot' in self.snap['disks'][0]
 		if self.snap:
 			disks = []
 			try:
@@ -79,7 +79,11 @@ class RaidVolume(base.Volume):
 
 			self.disks = disks
 
-			self.vg = self.snap['vg']
+			if self._v1_compat:
+				# is some old snapshots /dev/vgname occured
+				self.vg = os.path.basename(self.snap['vg'])
+			else:
+				self.vg = self.snap['vg']
 			self.level = int(self.snap['level'])
 			self.pv_uuid = self.snap['pv_uuid']
 			self.lvm_group_cfg = self.snap['lvm_group_cfg']
@@ -101,7 +105,6 @@ class RaidVolume(base.Volume):
 		self.disks = disks
 
 		disks_devices = [disk.device for disk in self.disks]
-		vg_name = os.path.basename(self.vg)
 
 		if self.lvm_group_cfg:
 			try:
@@ -140,7 +143,7 @@ class RaidVolume(base.Volume):
 				lvm2.pvcreate(raid_device, uuid=self.pv_uuid, 
 							restorefile=vg_restore_file)
 			finally:
-				lvm2.vgcfgrestore(vg_name, file=vg_restore_file)
+				lvm2.vgcfgrestore(self.vg, file=vg_restore_file)
 				os.remove(vg_restore_file)
 				
 
@@ -153,7 +156,7 @@ class RaidVolume(base.Volume):
 			self.device = lvm2.lvpath(self.vg, lv_name)
 
 			# Activate volume group
-			lvm2.vgchange(vg_name, available='y')
+			lvm2.vgchange(self.vg, available='y')
 
 			# Wait for logical volume device file
 			util.wait_until(lambda: os.path.exists(self.device),
@@ -170,18 +173,18 @@ class RaidVolume(base.Volume):
 			lvm2.pvcreate(raid_device, force=True)
 			self.pv_uuid = lvm2.pvs(raid_device)[raid_device].pv_uuid
 
-			lvm2.vgcreate(vg_name, raid_device)
+			lvm2.vgcreate(self.vg, raid_device)
 
-			out, err = lvm2.lvcreate(vg_name, extents='100%FREE')[:2]
+			out, err = lvm2.lvcreate(self.vg, extents='100%FREE')[:2]
 			try:
 				clean_out = out.strip().split('\n')[-1].strip()
 				vol = re.match(self.lv_re, clean_out).group(1)
-				self.device = lvm2.lvpath(vg_name, vol)
+				self.device = lvm2.lvpath(self.vg, vol)
 			except:
 				e = 'Logical volume creation failed: %s\n%s' % (out, err)
 				raise Exception(e)
 
-			self.lvm_group_cfg = lvm2.backup_vg_config(vg_name)
+			self.lvm_group_cfg = lvm2.backup_vg_config(self.vg)
 
 		self.raid_pv = raid_device
 
