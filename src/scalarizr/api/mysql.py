@@ -7,8 +7,9 @@ from __future__ import with_statement
 
 import threading
 
-from scalarizr import handlers, rpc
+from scalarizr import handlers, rpc, storage2
 from scalarizr.services import mysql as mysql_svc
+from scalarizr.services.mysql2 import __mysql__
 
 
 class MySQLAPI(object):
@@ -26,6 +27,7 @@ class MySQLAPI(object):
 		self._mysql_init = mysql_svc.MysqlInitScript()
 
 
+	@rpc.service_method
 	def grow_volume(self, volume, growth, async=False):
 		self._check_invalid(volume, 'volume', dict)
 		self._check_empty(volume.get('id'), 'volume.id')
@@ -35,12 +37,13 @@ class MySQLAPI(object):
 			self._mysql_init.stop('Growing data volume')
 			try:
 				growed_vol = vol.grow(**growth)
+				__mysql__['volume'] = dict(growed_vol)
 				return dict(growed_vol)
 			finally:
 				self._mysql_init.start()
 
 		if async:
-			txt = 'Grow MySQL data volume'
+			txt = 'Grow MySQL/Percona data volume'
 			op = handlers.operation(name=txt)
 			def block():
 				op.define()
