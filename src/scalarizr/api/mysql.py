@@ -26,7 +26,7 @@ class MySQLAPI(object):
 		self._mysql_init = mysql_svc.MysqlInitScript()
 
 
-	def grow_volume(self, volume, growth_cfg, async=False):
+	def grow_volume(self, volume, growth, async=False):
 		self._check_invalid(volume, 'volume', dict)
 		self._check_empty(volume.get('id'), 'volume.id')
 
@@ -34,7 +34,7 @@ class MySQLAPI(object):
 			vol = storage2.volume(volume)
 			self._mysql_init.stop('Growing data volume')
 			try:
-				growed_vol = vol.grow(**growth_cfg)
+				growed_vol = vol.grow(**growth)
 				return dict(growed_vol)
 			finally:
 				self._mysql_init.start()

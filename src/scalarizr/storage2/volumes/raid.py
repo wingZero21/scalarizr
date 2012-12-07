@@ -246,23 +246,23 @@ class RaidVolume(base.Volume):
 			config.pop(attr, None)
 
 
-	def check_growth_cfg(self, **growth_cfg):
+	def check_growth(self, **growth):
 		if int(self.level) in (0, 10):
 			raise storage2.StorageError("Raid%s doesn't support growth" % self.level)
 
-		foreach_cfg = growth_cfg.get('foreach')
+		disk_growth = growth.get('disks')
 		change_disks = False
 
-		if foreach_cfg:
+		if disk_growth:
 			for disk_cfg_or_obj in self.disks:
 				disk = storage2.volume(disk_cfg_or_obj)
 				try:
-					disk.check_growth_cfg(**foreach_cfg)
+					disk.check_growth(**disk_growth)
 					change_disks = True
 				except storage2.NoOpError:
 					pass
 
-		new_len = growth_cfg.get('len')
+		new_len = growth.get('disks_count')
 		current_len = len(self.disks)
 		change_size = new_len and int(new_len) != current_len
 
@@ -276,14 +276,14 @@ class RaidVolume(base.Volume):
 			raise storage2.StorageError("Can't add disks to raid level %s"
 																% self.level)
 
-	def _grow(self, new_vol, **growth_cfg):
+	def _grow(self, new_vol, **growth):
 		if int(self.level) in (0, 10):
 			raise storage2.StorageError("Raid%s doesn't support growth" % self.level)
 			
-		foreach_cfg = growth_cfg.get('foreach')
+		disk_growth = growth.get('disks')
 
 		current_len = len(self.disks)
-		new_len = int(growth_cfg.get('len', 0))
+		new_len = int(growth.get('disks_count', 0))
 		increase_disk_count = new_len and new_len != current_len
 
 		new_vol.lvm_group_cfg = self.lvm_group_cfg
@@ -292,7 +292,7 @@ class RaidVolume(base.Volume):
 		growed_disks = []
 		added_disks = []
 		try:
-			if foreach_cfg:
+			if disk_growth:
 
 				def _grow(index, disk, cfg, queue):
 					try:
@@ -311,7 +311,7 @@ class RaidVolume(base.Volume):
 
 					t = threading.Thread(
 						name='Raid %s disk %s grower' %	(self.id, disk.id),
-						target=_grow, args=(index, disk, foreach_cfg, queue))
+						target=_grow, args=(index, disk, disk_growth, queue))
 					t.daemon = True
 					t.start()
 					pool.append(t)
@@ -349,7 +349,7 @@ class RaidVolume(base.Volume):
 				new_vol.ensure()
 
 			if increase_disk_count:
-				if not foreach_cfg:
+				if not disk_growth:
 					""" It means we have original disks in self.disks
 						We need to snapshot it and make new disks.
 					"""
@@ -397,7 +397,7 @@ class RaidVolume(base.Volume):
 			except:
 				e = sys.exc_info()[1]
 				if (self.level == 1 and 'matches existing size' in str(e)
-														and not foreach_cfg):
+														and not disk_growth):
 					LOG.debug('Raid1 actual size has not changed')
 				else:
 					raise

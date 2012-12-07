@@ -194,13 +194,13 @@ def check_space_increased(step):
 	assert world.size_before < new_size, "New size is not bigger than old"
 
 	if world.bigger_vol.type == 'raid':
-		each_volume_grew = world.grow_cfg.get('foreach')
+		each_volume_grew = world.grow_cfg.get('disks')
 		if int(world.bigger_vol.level) == 5 or each_volume_grew:
 			assert world.size_before < new_size, "New size is not bigger than old"
 			LOG.info('Size grew on %s' % (new_size - world.size_before))
 
 		mdinfo = mdadm.detail(world.bigger_vol.raid_pv)
-		disk_count_should_be = int(world.grow_cfg.get('len') or len(world.initial_cfg['disks']))
+		disk_count_should_be = int(world.grow_cfg.get('disks_count') or len(world.initial_cfg['disks']))
 		assert mdinfo['raid_devices'] == disk_count_should_be, "Disk count doesn't match"
 
 
