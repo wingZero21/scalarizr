@@ -436,9 +436,8 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 
 
 class XtrabackupStreamBackup(backup.Backup):
-
 	def __init__(self, 
-				backup_type='full', 
+				backup_type=None,
 				from_lsn=None,
 				cloudfs_dir=None,
 				**kwds):
@@ -457,7 +456,11 @@ class XtrabackupStreamBackup(backup.Backup):
 	def _run(self):
 		self._check_backup_type()
 
-		kwds = {'stream': 'xbstream'}
+		kwds = {
+			'stream': 'xbstream',
+			'user': __mysql__['root_user'],
+			'password': __mysql__['root_password']			
+		}
 		if self.backup_type == 'incremental':
 			self._check_attr('from_lsn')
 			kwds.update({
@@ -503,18 +506,65 @@ class XtrabackupStreamRestore(backup.Restore):
 				from_lsn=0,
 				to_lsn=0,
 				cloudfs_src=None,
+				incrementals=None,
 				**kwds):
 		super(XtrabackupStreamRestore, self).__init__(
 				backup_type=backup_type, 
 				from_lsn=int(from_lsn or 0),
 				to_lsn=int(to_lsn or 0),
 				cloudfs_src=cloudfs_src,
+				incrementals=incrementals or [],
 				**kwds)
 		XtrabackupMixin.__init__(self)
 
 
 	def _run(self):
-		pass
+		# todo: allow restore only full backup
+		coreutils.clean_dir(__mysql__['data_dir'])
+
+		LOG.info('Downloading the base backup (LSN: 0..%d)', self.to_lsn)
+		xbak = cloudfs.LargeTransfer(self.cloudfs_src, __mysql__['data_dir'])
+		xbak.run()
+
+		LOG.info('Preparing the base backup')
+		innobackupex(__mysql__['data_dir'], 
+				apply_log=True, 
+				redo_only=True,
+				user=__mysql__['root_user'],
+				password=__mysql__['root_password'])
+
+		if self.incrementals:
+			inc_dir = os.path.join(__mysql__['tmp_dir'], 'xtrabackup-restore-inc')
+			os.makedirs(inc_dir)
+			try:
+				i = 0
+				for self.incrementals as inc:
+					inc = backup.restore(inc)
+					LOG.info('Downloading incremental backup #%d (LSN: %d..%d)', i, 
+							inc.from_lsn, inc.to_lsn)
+					xbak = cloudfs.LargeTransfer(
+							inc.cloudfs_src, 
+							inc_dir,
+							decompressor=xstream.args(short=['-x']))
+					xbak.run() # todo: Largetransfer should support custom decompressor proc
+					LOG.info('Preparing incremental backup #%d', i)
+					innobackupex(__mysql__['data_dir'],
+							apply_log=True, 
+							redo_only=True, 
+							incremental_dir=inc_dir,
+							user=__mysql__['root_user'],
+							password=__mysql__['root_password'])
+					i += 1
+			finally:
+				coreutils.clean_dir(inc_dir)
+				os.remove(inc_dir)
+
+		LOG.info('Preparing the full backup')
+		innobackupex(__mysql__['data_dir'], 
+				apply_log=True, 
+				user=__mysql__['root_user'],
+				password=__mysql__['root_password'])
+
 
 
 #backup.backup_types['xtrabackup'] = XtrabackupBackup
@@ -662,6 +712,9 @@ def innobackupex(*params, **long_kwds):
 '''
 
 innobackupex = Exec('/usr/bin/innobackupex',
+				package='percona-xtrabackup')
+
+xstream = Exec('/usr/bin/xstream', 
 				package='percona-xtrabackup')
 
 
