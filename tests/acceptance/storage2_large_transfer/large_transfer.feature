@@ -67,4 +67,6 @@ Scenario: Download file when one or several chunks are missing
     When I upload it to s3 with gzipping
     Then I expect manifest as a result
     And all chunks are uploaded
-
+    I delete one of the chunks
+    When I download with the manifest
+    Then I expect failed list returned

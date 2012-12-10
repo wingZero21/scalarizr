@@ -7,7 +7,6 @@ import Queue
 import urlparse
 import itertools
 import tempfile
-import inspect
 import subprocess
 import threading
 import logging
@@ -31,6 +30,46 @@ from scalarizr.linux import coreutils
 
 
 LOG = logging.getLogger(__name__)
+
+
+### to move
+
+class EventInterrupt(Exception):
+	pass
+
+
+class InterruptibleEvent(threading._Event):
+	"""
+	Inheritance from threading._Event because threading.Event simply returns
+	threading._Event instance.
+
+	Use-case: One-time set-wait/wait-set cycle for two threads: one waiter and
+	one setter. Allows setter to raise an exception in waiter by calling
+	interrupt() instead of set().
+
+	TODO: to make behavior more universal, all operations on self._exception
+	must be covered with self.__cond acquire-release calls. Self.__cond can
+	be accessed by defining self.__cond = self._Event__cond. Also properly
+	overriden clear method must be added.
+	"""
+
+	def __init__(self):
+		super(InterruptibleEvent, self).__init__()
+		self._exception = None
+
+	def interrupt(self, exc=None):
+		""" Raise exc or default EventInterrupt() in the waiting thread """
+		self._exception = exc if exc else EventInterrupt()
+		return super(InterruptibleEvent, self).set()
+
+	def wait(self, timeout=None):
+		wait_ret = super(InterruptibleEvent, self).wait(timeout)
+		if self._exception:
+			raise self._exception
+		else:
+			return wait_ret
+
+###
 
 
 class namedstream(object):
@@ -244,8 +283,8 @@ class FileTransfer(BaseTransfer):
 							'src': src,
 							'dst': dst,
 							'exc_info': sys.exc_info()})
-				self.fire('transfer_error', src, dst, retry, chunk_num, 
-							sys.exc_info())
+					self.fire('transfer_error', src, dst, retry, chunk_num,
+								sys.exc_info())
 			finally:
 				if self._stop_all.isSet():
 					with self._worker_lock:
@@ -277,6 +316,7 @@ class FileTransfer(BaseTransfer):
 				pool.append(worker)
 			# Join workers
 			for worker in pool:
+				LOG.debug("Worker '%s' join...", worker.getName())
 				worker.join()
 				LOG.debug("Worker '%s' finished", worker.getName())
 			return {
@@ -291,6 +331,11 @@ class FileTransfer(BaseTransfer):
 	def kill(self, timeout=None):
 		self._stop_all.set()
 		self._stopped.wait(timeout)
+
+
+	def kill_nowait(self):
+		return self.kill(0)
+
 
 
 
@@ -333,6 +378,7 @@ class LargeTransfer(bases.Task):
 	1. Download manifest 
 	2. <chunk downloader> | funzip | tar -x -C /mnt/dbbackup
 	'''
+	# TODO: benchmarks bzip against pigz; unlimited disk case: download all before unpacking
 
 	# NOTE: use directory dst for uploading.
 	UPLOAD = 'upload'
@@ -352,7 +398,6 @@ class LargeTransfer(bases.Task):
 				tags=None,
 				**kwds):
 		# TODO: subprocess hang, only in 2.7.2?
-		# TODO: "dir/" means dircontent, "dir" means dir
 		'''
 		@param src: transfer source path
 			- str file or directory path. 
@@ -395,6 +440,10 @@ class LargeTransfer(bases.Task):
 		self.chunk_size = chunk_size
 		self.try_pigz = try_pigz
 		self._restorer = None
+		self._killed = False
+		self._manifest_ready = InterruptibleEvent()
+		self._chunks_events_access = threading.Lock()
+		self.files = None
 		if transfer_id is None:
 			self.transfer_id = uuid.uuid4().hex
 		else:
@@ -518,44 +567,43 @@ class LargeTransfer(bases.Task):
 				yield manifest_f
 
 		elif self.direction == self.DOWNLOAD:
-			def transfer_kill(*args, **kwargs):
-				self._transfer.kill()
-				# TODO: rethink killing
-				#? kill self._restorer?
-			self._transfer.on(transfer_error=transfer_kill)
+			self._transfer.on(transfer_error=lambda *args: self.kill())
 
 			# The first yielded object will be the manifest, so
 			# catch_manifest is a listener that's supposed to trigger only
 			# once and unsubscribe itself.
-			manifest_ready = threading.Event()
 			def wait_manifest(src, dst, retry, chunk_num):
 				self._transfer.un('transfer_complete', wait_manifest)
-				manifest_ready.set()
+				self._manifest_ready.set()
 			self._transfer.on(transfer_complete=wait_manifest)
 
 
 			manifest_path = self.src
 			yield manifest_path
 
-			manifest_ready.wait()
+			#? except EventInterrupt: save exc and return
+			self._manifest_ready.wait()
+
 			# we should have the manifest on the tmpfs by now
 			manifest_local = os.path.join(self._tranzit_vol.mpoint,
 				os.path.basename(manifest_path))
 			manifest = Manifest(manifest_local)
 			os.remove(manifest_local)
 			remote_path = os.path.dirname(manifest_path)
-			self.files = copy(manifest["files"])
 
 			# add ready and done events to each chunk without breaking the
 			# chunk order
-			for file in self.files:
-				file["chunks"] = OrderedDict([(
-					basename, {
-						"md5sum": md5sum,
-						"downloaded": threading.Event(),
-						"processed": threading.Event()
-					}
-				) for basename, md5sum in file["chunks"]])
+			with self._chunks_events_access:
+				if not self._killed:
+					self.files = copy(manifest["files"])
+					for file in self.files:
+						file["chunks"] = OrderedDict([(
+							basename, {
+								"md5sum": md5sum,
+								"downloaded": InterruptibleEvent(),
+								"processed": InterruptibleEvent()
+							}
+						) for basename, md5sum in file["chunks"]])
 
 			# launch restorer
 			if self._restorer is None:
@@ -569,7 +617,7 @@ class LargeTransfer(bases.Task):
 					if chunk_name in file["chunks"]:
 						chunk = file["chunks"][chunk_name]
 				chunk["downloaded"].set()
-				chunk["processed"].wait()  # TODO: avoid infinite waiting
+				chunk["processed"].wait()
 				os.remove(os.path.join(dst, chunk_name))
 			self._transfer.on(transfer_complete=wait_chunk)
 
@@ -638,15 +686,6 @@ class LargeTransfer(bases.Task):
 			dst = self.dst
 
 			LOG.debug("*** RESTORER start")
-			"""
-			# ugly-hack for dir untaring
-			if file["tar"]:
-				try:
-					os.mkdir(dst, 0755)
-				except OSError, e:
-					if e.strerror != 'File exists':
-						raise
-			"""
 			LOG.debug("*** RESTORER file %s to %s" % (file["name"], dst))
 
 			# create 'cmd' and 'stream'
@@ -691,29 +730,29 @@ class LargeTransfer(bases.Task):
 				stream = unzip.stdin
 				cmd = unzip
 
-			for chunk, info in file["chunks"].iteritems():
-				LOG.debug("*** RESTORER before wait %s" % chunk)
-				info["downloaded"].wait()
+			try:
+				for chunk, info in file["chunks"].iteritems():
+					LOG.debug("*** RESTORER before wait %s" % chunk)
+					info["downloaded"].wait()
 
-				location = os.path.join(self._tranzit_vol.mpoint, chunk)
-				with open(location, 'rb') as fd:
-					while True:
-						bytes = fd.read(buf_size)
-						if not bytes:
-							LOG.debug("*** RESTORER break %s" % chunk)
-							break
-						stream.write(bytes)
+					location = os.path.join(self._tranzit_vol.mpoint, chunk)
+					with open(location, 'rb') as fd:
+						while True:
+							bytes = fd.read(buf_size)
+							if not bytes:
+								LOG.debug("*** RESTORER break %s" % chunk)
+								break
+							stream.write(bytes)
 
-				# TODO: set the event in finally
-				info["processed"].set()  # this leads to chunk removal
+					info["processed"].set()  # this leads to chunk removal
+			finally:
+				stream.close()
 
-			stream.close()
+				#? wait for unzip first in case of tar&gzip
 
-			#? wait for unzip first in case of tar&gzip
-
-			if cmd:
-				LOG.debug("*** RESTORER untar wait")
-				cmd.wait()
+				if cmd:
+					LOG.debug("*** RESTORER untar wait")
+					cmd.wait()
 
 			LOG.debug("LargeTransfer download: finished restoring")
 
@@ -724,9 +763,13 @@ class LargeTransfer(bases.Task):
 		self._tranzit_vol.ensure(mkfs=True)
 		try:
 			res = self._transfer.run()
+			LOG.debug("self._transfer finished")
 
 			if self.direction == self.DOWNLOAD:
-				self._restorer.join()
+				if self._restorer:
+					LOG.debug("waiting restorer to finish...")
+					self._restorer.join()
+				return res
 			elif self.direction == self.UPLOAD:
 				if self.multipart:
 					return res["multipart_result"]
@@ -736,6 +779,24 @@ class LargeTransfer(bases.Task):
 			LOG.debug("Destroying tmpfs")
 			self._tranzit_vol.destroy()
 			coreutils.remove(self._tranzit_vol.mpoint)
+
+
+	def kill(self):
+		LOG.debug("Killing LargeTransfer")
+		self._killed = True
+		self._transfer.kill_nowait()
+
+		# interrupt all events
+		self._manifest_ready.interrupt()
+
+		with self._chunks_events_access:
+			if self.files:
+				for file in self.files:
+					for chunk, chunkinfo in file["chunks"].items():
+						chunkinfo["downloaded"].interrupt()
+						chunkinfo["processed"].interrupt()
+
+
 
 
 class Manifest(object):
