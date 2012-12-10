@@ -320,6 +320,12 @@ __node__['ec2'] = Compound({
 	'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
 	'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
 })
+__node__['gce'] = Compound({
+	'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
+	'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),
+	'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id')
+})
+
 __node__['scalr'] = Compound({
 	'version': File(private_dir + '/.scalr-version'),
 	'id': Ini(private_dir + '/config.ini', 'general', {'id': 'scalr_id'})

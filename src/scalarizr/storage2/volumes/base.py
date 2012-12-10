@@ -287,7 +287,7 @@ class Volume(Base):
 	
 	
 	def _snapshot(self, description, tags, **kwds):
-		pass
+		raise NotImplementedError()
 
 
 	def _detach(self, force, **kwds):
