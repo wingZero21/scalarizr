@@ -85,7 +85,7 @@ class Platform():
 		if prop:
 			try:
 				return self._access_data[prop]
-			except TypeError, KeyError:
+			except (TypeError, KeyError):
 				raise PlatformError("Platform access data property '%s' doesn't exists" % (prop,))
 		else:
 			return self._access_data
