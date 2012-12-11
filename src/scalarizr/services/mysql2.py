@@ -419,16 +419,16 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 							os.path.join(self._binlog_dir, dstname))
 
 
-class XtrabackupStreamBackup(backup.Backup):
+class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 	def __init__(self,
-				backup_type=None,
+				backup_type='full',
 				from_lsn=None,
-				cloudfs_dir=None,
+				cloudfs_dest=None,
 				**kwds):
-		super(XtrabackupStreamBackup, self).__init__(
+		backup.Backup.__init__(self,
 				backup_type=backup_type,
 				from_lsn=int(from_lsn or 0),
-				cloudfs_dir=cloudfs_dir,
+				cloudfs_dest=cloudfs_dest,
 				**kwds)
 		XtrabackupMixin.__init__(self)
 		self._re_lsn = re.compile(r"xtrabackup: The latest check point " \
@@ -451,10 +451,13 @@ class XtrabackupStreamBackup(backup.Backup):
 				'incremental_lsn': self.from_lsn
 			})
 
-		xbak = xtrabackup.args(**kwds).popen()
+		xbak = innobackupex.args(**kwds).popen()
+		stream_in = cloudfs.namedstream(xbak, 'xtrabackup')
+		LOG.debug('Creating LargeTransfer, src=%s dst=%s', stream_in, self.cloudfs_dest)
 		transfer = cloudfs.LargeTransfer(
-					[cloudfs.namedstream(xbak, 'xtrabackup')],
-					self.cloudfs_dir,
+					[stream_in],
+					self.cloudfs_dest,
+					'upload',  # @fixme: temporary
 					gzip_it=True)
 		cloudfs_dest = transfer.run()
 		xbak.wait()
@@ -462,7 +465,7 @@ class XtrabackupStreamBackup(backup.Backup):
 			msg = xbak.stderr.read()
 			raise Error(msg)
 
-		log_file = log_pos = to_lsn	= None
+		log_file = log_pos = to_lsn = None
 		for line in xbak.stderr.readlines():
 			m = self._re_lsn.search()
 			if m:
@@ -483,7 +486,7 @@ class XtrabackupStreamBackup(backup.Backup):
 				cloudfs_src=cloudfs_dest)
 
 
-class XtrabackupStreamRestore(backup.Restore):
+class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 	def __init__(self,
 				backup_type='full',
 				from_lsn=0,
@@ -491,7 +494,7 @@ class XtrabackupStreamRestore(backup.Restore):
 				cloudfs_src=None,
 				incrementals=None,
 				**kwds):
-		super(XtrabackupStreamRestore, self).__init__(
+		backup.Restore.__init__(self,
 				backup_type=backup_type,
 				from_lsn=int(from_lsn or 0),
 				to_lsn=int(to_lsn or 0),
@@ -501,6 +504,7 @@ class XtrabackupStreamRestore(backup.Restore):
 		XtrabackupMixin.__init__(self)
 
 	def _run(self):
+		assert self.backup_type == 'full', 'xtrabackup restore allows to restore only full backups'
 		# todo: allow restore only full backup
 		coreutils.clean_dir(__mysql__['data_dir'])
 
@@ -637,8 +641,10 @@ class Exec(object):
 
 	def __init__(self, executable, package=None):
 		assert isinstance(executable, basestring)
-		self.package = self.package
+		self.executable = executable
+		self.package = package
 		self.local = threading.local()
+		LOG.debug('Exec[%s] package=%s', self.executable, self.package)
 
 	def check(self):
 		if not os.access(self.executable, os.X_OK):
@@ -647,24 +653,25 @@ class Exec(object):
 			else:
 				msg = 'Executable %s is not found, you should eather ' \
 					'specify a `package` attribute or install software ' \
-					'manually'
+					'manually' % (self.executable)
 				raise linux.LinuxError(msg)
 
 	def args(self, *params, **long_kwds):
-		self.local.args = linux.system(linux.build_cmd_args(
+		self.local.args = linux.build_cmd_args(
 			executable=self.executable,
 			long=long_kwds,
-			params=params))
+			params=params)
+		LOG.debug('local.args: %s', self.local.args)
 		return self
 
-	def popen(self, *kwds):
+	def popen(self, **kwds):
 		self.check()
 		kwds['close_fds'] = True
 		if not 'stdout' in kwds:
 			kwds['stdout'] = subprocess.PIPE
 		if not 'stderr' in kwds:
 			kwds['stderr'] = subprocess.PIPE
-		return subprocess.Popen(*self.local.args, **kwds)
+		return subprocess.Popen(self.local.args, **kwds)
 
 	def __call__(self, *params, **long_kwds):
 		self.args(*params, **long_kwds)
