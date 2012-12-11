@@ -1,6 +1,5 @@
 __author__ = 'Nick Demyanchuk'
 
-import os
 import sys
 import datetime
 

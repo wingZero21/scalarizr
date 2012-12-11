@@ -1,4 +1,3 @@
-
 import os
 
 from scalarizr import storage2
