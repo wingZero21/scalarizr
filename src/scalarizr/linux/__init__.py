@@ -20,7 +20,7 @@ def which(exe):
 
 	for path in osmod.environ.get('PATH', default_path).split(osmod.pathsep):
 		full_path = osmod.path.join(path, exe)
-		if osmod.access(full_path, os.X_OK):
+		if osmod.access(full_path, osmod.X_OK):
 			return full_path
 	return None
 
