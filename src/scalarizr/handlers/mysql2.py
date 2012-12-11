@@ -1055,6 +1055,19 @@ class MysqlHandler(DBMSRHandler):
 					'object_r', '-t', 'mysqld_db_t', 
 					os.path.dirname(__mysql__['storage_dir'])), raise_exc=False)
 	
+	def _fix_percona_debian_cnf(self):
+		if linux.os['name'] == 'Ubuntu' and \
+				__mysql__['behavior'] == 'percona' and \
+				os.path.exists(__mysql__['debian.cnf']):
+			LOG.info('Fixing socket options in %s', __mysql__['debian.cnf'])
+			debian_cnf = metaconf.Configuration('mysql')
+			debian_cnf.read(__mysql__['debian.cnf'])
+
+			sock = mysql2_svc.my_print_defaults('mysqld')['socket']
+			debian_cnf.set('client/socket', sock)
+			debian_cnf.set('mysql_upgrade/socket', sock)
+			debian_cnf.write(__mysql__['debian.cnf'])
+
 		
 	def _init_master(self, message):
 		"""
@@ -1063,7 +1076,7 @@ class MysqlHandler(DBMSRHandler):
 		@param message: HostUp message
 		"""
 		LOG.info("Initializing MySQL master")
-		
+
 		with bus.initialization_op as op:
 			with op.step(self._step_create_storage):
 				if 'restore' in __mysql__ and \
@@ -1081,7 +1094,7 @@ class MysqlHandler(DBMSRHandler):
 		
 				datadir = mysql2_svc.my_print_defaults('mysqld').get('datadir', '/var/lib/mysql')
 				self.mysql.my_cnf.datadir = datadir
-
+				self._fix_percona_debian_cnf()
 		
 				if not storage_valid and datadir.find(__mysql__['data_dir']) == 0:
 					# When role was created from another mysql role it contains modified my.cnf settings 
@@ -1201,6 +1214,7 @@ class MysqlHandler(DBMSRHandler):
 				self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
 				self.mysql.my_cnf.read_only = True
+				self._fix_percona_debian_cnf()				
 	
 			with op.step(self._step_move_datadir):
 				self.mysql.move_mysqldir_to(__mysql__['storage_dir'])

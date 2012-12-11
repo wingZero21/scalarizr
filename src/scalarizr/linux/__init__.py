@@ -130,7 +130,7 @@ class __os(dict):
 		if not 'name' in self:
 			self['name'] = name
 		self['release'] = release
-		self['codename'] = codename				
+		self['codename'] = codename
 				
 		if not 'name' in self:
 			self['name'] = 'Unknown %s' % self['kernel']
