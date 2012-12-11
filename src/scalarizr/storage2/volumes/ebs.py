@@ -281,7 +281,7 @@ class EbsVolume(base.Volume, EbsMixin):
 						tags=self.tags)
 				size = ebs.size
 		
-			if not (ebs.volume_state() == 'in-use' and  \
+			if not (ebs.volume_state() == 'in-use' and
 					ebs.attach_data.instance_id == self._instance_id()):
 				if ebs.attachment_state() in ('attaching', 'detaching'):
 					self._wait_attachment_state_change(ebs)

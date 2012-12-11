@@ -9,7 +9,7 @@ import glob
 import shutil
 
 from scalarizr import linux
-from scalarizr.linux import pkgmgr
+from scalarizr.linux import pkgmgr, os as os_info
 
 
 def sync():
@@ -30,6 +30,9 @@ def sfdisk():
 
 
 def modprobe(module_name, **long_kwds):
+	if not os_info['mods_enabled']:
+		return (None, None, 0)
+
 	return linux.system(linux.build_cmd_args(
 				executable='/sbin/modprobe', 
 				long=long_kwds,

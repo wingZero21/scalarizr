@@ -7,11 +7,13 @@ Created on Nov 11, 2010
 
 from .. import MKFS_EXEC, MOUNT_EXEC
 
+from scalarizr.linux import coreutils
 from scalarizr.util import system2, PopenError
 from scalarizr.util import dynimp
 
 import os
 import re
+import sys
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,7 +51,13 @@ class FileSystem:
 
 	def __init__(self):
 		if not os.path.exists('/sbin/mkfs.%s' % self.name):
-			system(('/sbin/modprobe', self.name), error_text="Cannot load '%s' kernel module" % self.name)
+			try:
+				coreutils.modprobe(self.name)
+			except:
+				e = sys.exc_info()[1]
+				error_text="Cannot load '%s' kernel module: %s" % (self.name, e)
+				raise Exception(error_text)
+
 			mgr = dynimp.package_mgr()
 			if self.os_packages:
 				for package in self.os_packages:

@@ -5,6 +5,7 @@ Created on Sep 10, 2010
 '''
 from scalarizr.util import disttool, system2
 from scalarizr import linux
+from scalarizr.linux import coreutils
 import os, re, zipfile, string, glob
 
 __all__ = ('all_installed', 'software_info', 'explore', 'whereis')
@@ -47,8 +48,8 @@ def whereis(name):
 def system_info(verbose=False):
 		
 	def check_module(module):
-		return not system2((modprobe, '-n', module), raise_exc=False)[-1]
-	
+		return not coreutils.modprobe(module, dry_run=True)[2]
+
 	ret = {}
 	ret['software'] = []			
 	installed_list = all_installed()
@@ -73,12 +74,14 @@ def system_info(verbose=False):
 		'codename': linux.os['codename']
 	}
 	
-	modprobe = whereis('modprobe')[0]
 	ret['storage'] = {}
 	ret['storage']['fstypes'] = []
 	
 	for fstype in ['xfs', 'ext3', 'ext4']:
-		retcode = system2((modprobe, '-n', fstype), raise_exc=False)[-1]
+		try:
+			retcode = coreutils.modprobe(fstype, dry_run=True)[1]
+		except:
+			retcode = 1
 		exe = whereis('mkfs.%s' % fstype)
 		if not retcode and exe:
 			ret['storage']['fstypes'].append(fstype)
