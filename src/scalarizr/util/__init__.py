@@ -260,17 +260,17 @@ def system2(*popenargs, **kwargs):
 	p = subprocess.Popen(*popenargs, **kwargs)
 	out, err = p.communicate(input=input)
 
+	if p.returncode and raise_exc:
+		raise ExcClass(error_text, out and out.strip() or '', err and err.strip() or '', p.returncode, popenargs[0])
+
+	if silent:
+		return out, err, p.returncode
+
 	if out:
 		logger.debug('stdout: ' + out)
 	if err:
 		logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
 
-	if p.returncode and raise_exc:
-		raise ExcClass(error_text, out and out.strip() or '', err and err.strip() or '', p.returncode, popenargs[0])
-		
-	if silent:
-		return out, err, p.returncode
-	
 	return out, err, p.returncode
 
 
