@@ -83,11 +83,12 @@ class namedstream(object):
 		return getattr(self.__dict__['_stream'], name)
 
 	def __hasattr__(self, name):
-		return hasattr(self.__dict__['_stream'], name)
+		return name in self.__dict__['_stream'] or \
+				name in self.__dict__
 
 
 class BaseTransfer(bases.Task):
-	
+
 	def __init__(self, src=None, dst=None, **kwds):
 		'''
 		:type src: string / generator / iterator
