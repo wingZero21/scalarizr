@@ -79,7 +79,7 @@ class namedstream(object):
 
 	def __getattr__(self, name):
 		if name in self.__dict__:
-			return self.__dict__['name']
+			return self.__dict__[name]
 		return getattr(self.__dict__['_stream'], name)
 
 
@@ -387,7 +387,7 @@ class LargeTransfer(bases.Task):
 	pigz_bin = '/usr/bin/pigz'
 	gzip_bin = '/bin/gzip'
 
-	def __init__(self, src, dst, direction,
+	def __init__(self, src, dst,
 				transfer_id=None,
 				tar_it=True,
 				gzip_it=True, 
@@ -432,7 +432,6 @@ class LargeTransfer(bases.Task):
 		self.description = description
 		self.tags = tags
 		self.multipart = kwds.get("multipart")
-		self.direction = direction
 		self.src = src
 		self.dst = dst
 		self.tar_it = tar_it
@@ -467,7 +466,7 @@ class LargeTransfer(bases.Task):
 		'''
 		# TODO: popen can deadlock sometimes, create a thread that would wait
 		# for a popen success flag with a timeout, and kill everything otherwise?
-		if self.direction == self.UPLOAD:
+		if self._up:
 			# Tranzit volume size is chunk for each worker
 			# and Ext filesystem overhead
 
@@ -566,7 +565,7 @@ class LargeTransfer(bases.Task):
 				LOG.debug("LargeTransfer yield %s" % manifest_f)
 				yield manifest_f
 
-		elif self.direction == self.DOWNLOAD:
+		elif not self._up:
 			self._transfer.on(transfer_error=lambda *args: self.kill())
 
 			# The first yielded object will be the manifest, so
@@ -627,7 +626,7 @@ class LargeTransfer(bases.Task):
 
 
 	def _dst_generator(self):
-		if self.direction == self.UPLOAD:
+		if self._up:
 			# last yield for manifest
 			# NOTE: this only works if dst is a dir
 			for dst in self.dst:
@@ -765,12 +764,12 @@ class LargeTransfer(bases.Task):
 			res = self._transfer.run()
 			LOG.debug("self._transfer finished")
 
-			if self.direction == self.DOWNLOAD:
+			if not self._up:
 				if self._restorer:
 					LOG.debug("waiting restorer to finish...")
 					self._restorer.join()
 				return res
-			elif self.direction == self.UPLOAD:
+			elif self._up:
 				if self.multipart:
 					return res["multipart_result"]
 				else:

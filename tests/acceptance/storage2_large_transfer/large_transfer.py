@@ -192,7 +192,7 @@ def i_have_a_file(step, megabytes, filename):
 def i_upload_it_with_gzipping(step, storage):
 	world.destination = STORAGES[storage]["url"]
 	world.driver = STORAGES[storage]["driver"]()
-	world.manifest_url = LargeTransfer(world.sources[0], world.destination, "upload",
+	world.manifest_url = LargeTransfer(world.sources[0], world.destination,
 		gzip_it=True).run()
 
 
@@ -205,7 +205,7 @@ def i_upload_multiple_sources_with_gzipping(step, storage):
 		for src in sources:
 			yield src
 
-	world.manifest_url = LargeTransfer(src_gen(), world.destination, "upload",
+	world.manifest_url = LargeTransfer(src_gen(), world.destination,
 		gzip_it=True).run()
 
 
@@ -262,7 +262,7 @@ def i_have_info_from_previous_upload(step):
 
 @step("I download with the manifest")
 def i_download_with_the_manifest(step):
-	world.dl_result = LargeTransfer(world.manifest_url, world.basedir, "download").run()
+	world.dl_result = LargeTransfer(world.manifest_url, world.basedir).run()
 
 
 @step("I expect original items downloaded")
