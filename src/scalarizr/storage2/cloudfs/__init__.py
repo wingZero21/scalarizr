@@ -82,6 +82,8 @@ class namedstream(object):
 			return self.__dict__[name]
 		return getattr(self.__dict__['_stream'], name)
 
+	def __hasattr__(self, name):
+		return hasattr(self.__dict__['_stream'], name)
 
 
 class BaseTransfer(bases.Task):
@@ -500,7 +502,7 @@ class LargeTransfer(bases.Task):
 						name = 'stream-%s' % hash(stream)
 					fileinfo["name"] = name
 					prefix = os.path.join(prefix, name) + '.'
-				elif os.path.isdir(src):
+				elif isinstance(src, basestring) and os.path.isdir(src):
 					if src.endswith('/'):
 						# tar the directory contents
 						tar_cmdargs = ['/bin/tar', 'cp', '-C', src, '.']
@@ -523,7 +525,7 @@ class LargeTransfer(bases.Task):
 									close_fds=True)
 					LOG.debug("LargeTransfer src_generator AFTER TAR")
 					stream = tar.stdout
-				elif os.path.isfile(src):
+				elif isinstance(src, basestring) and os.path.isfile(src):
 					name = os.path.basename(src)
 					fileinfo["name"] = name
 					prefix = os.path.join(prefix, name) + '.'

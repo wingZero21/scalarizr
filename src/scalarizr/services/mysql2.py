@@ -455,9 +455,8 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		stream_in = cloudfs.namedstream(xbak, 'xtrabackup')
 		LOG.debug('Creating LargeTransfer, src=%s dst=%s', stream_in, self.cloudfs_dest)
 		transfer = cloudfs.LargeTransfer(
-					[stream_in],
+					stream_in,
 					self.cloudfs_dest,
-					'upload',  # @fixme: temporary
 					gzip_it=True)
 		cloudfs_dest = transfer.run()
 		xbak.wait()

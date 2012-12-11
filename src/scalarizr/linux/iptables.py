@@ -61,8 +61,6 @@ _OPTIONS = {
 	"-V": "--version",
 }
 
-coreutils.modprobe('ip_tables')
-
 
 def iptables(**long_kwds):
 
