@@ -22,11 +22,12 @@ import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
+from scalarizr.libs import metaconf
 from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, filetool
 from scalarizr.storage import transfer
 
-from scalarizr import storage2
-from scalarizr.linux import iptables	
+from scalarizr import storage2, linux
+from scalarizr.linux import iptables
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
