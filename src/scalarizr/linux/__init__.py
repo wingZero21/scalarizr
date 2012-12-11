@@ -166,7 +166,7 @@ class __os(dict):
 			self['family'] = 'Unknown'
 
 	def _detect_kernel(self):
-		o, e, ret_code = system(('modprobe', '-l'), raise_exc=False)
+		o, e, ret_code = system(['modprobe', '-l'], raise_exc=False)
 		self['mods_enabled'] = 0 if ret_code else 1
 
 	def _detect_cloud(self):
