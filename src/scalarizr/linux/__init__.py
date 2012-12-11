@@ -10,7 +10,6 @@ from scalarizr import util
 class LinuxError(util.PopenError):
 	pass
 
-
 def which(exe):
 	(path, _) = osmod.path.split(exe)
 	if osmod.access(exe, osmod.X_OK):

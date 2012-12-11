@@ -83,7 +83,7 @@ class namedstream(object):
 		return getattr(self.__dict__['_stream'], name)
 
 	def __hasattr__(self, name):
-		return name in self.__dict__['_stream'] or \
+		return hasattr(self.__dict__['_stream'], name) or \
 				name in self.__dict__
 
 
