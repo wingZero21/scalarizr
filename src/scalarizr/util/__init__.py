@@ -329,8 +329,12 @@ def read_shebang(path=None, script=None):
 
 	shebang = re.search(re.compile('^#!(\S+.+)'), first_line)
 	if shebang:
-		return shebang.group(1)
+		return split_strip(shebang.group(1))[0]
 	return None
+
+def split_strip(value, separator=' '):
+	return map(string.strip, value.split(separator))
+
 
 def parse_size(size):
 	"""
