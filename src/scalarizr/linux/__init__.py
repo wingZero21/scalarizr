@@ -169,14 +169,17 @@ def build_cmd_args(executable=None, short=None, long=None, params=None):
 
 
 def which(exe):
-	(path, _) = osmod.path.split(exe)
-	if osmod.access(exe, osmod.X_OK):
+	if exe and exe.startswith('/') and \
+			osmod.access(exe, osmod.X_OK):
 		return exe
 
-	default_path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
+	exe = os.path.basename(exe)
+	path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
+	if osmod.environ.get('PATH'):
+		path += ':' + osmod.environ['PATH']
 
-	for path in osmod.environ.get('PATH', default_path).split(osmod.pathsep):
-		full_path = osmod.path.join(path, exe)
+	for p in set(path.split(osmod.pathsep)):
+		full_path = osmod.path.join(p, exe)
 		if osmod.access(full_path, os.X_OK):
 			return full_path
 	return None
