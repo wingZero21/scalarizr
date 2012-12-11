@@ -4,7 +4,7 @@ Feature: Storage2 volume grow
 
 		Given I have <type> volume with <cfg> settings
 		And I create some file on it
-		When I grow volume with <grow_cfg>
+		When I grow volume with <growth>
 		Then I see that volume grew properly
 		And I still see my precious file
    		And unnecessary artifacts were destroyed
@@ -15,14 +15,14 @@ Feature: Storage2 volume grow
    		When I attach my original volume back
    		Then I still see my precious file
 
-		When I grow volume with <grow_cfg> and it fails
+		When I grow volume with <growth> and it fails
 		Then I see my original volume back
 		And I still see my lovely file
 		And all artifacts were destroyed
 
 
 	Examples:
-		| type | cfg                    										   | grow_cfg |
+		| type | cfg                    										   | growth |
 											
 		| loop | size=0.05, fstype=ext3 										   | size=0.1 |
 		| loop | size=0.05, fstype=ext4 										   | size=0.1 |
@@ -32,21 +32,21 @@ Feature: Storage2 volume grow
 #		| ebs  | size=1, fstype=ext4    										   | size=2   |
 #		| ebs  | size=1, fstype=xfs      										   | size=2   |
 
-		| raid | vg=test,level=5,disks=3,disk.type=loop,disk.size=0.05,fstype=ext3 | foreach.size=0.1        |
-		| raid | vg=test,level=5,disks=3,disk.type=loop,disk.size=0.05,fstype=ext4 | foreach.size=0.1        |
-		| raid | vg=test,level=5,disks=3,disk.type=loop,disk.size=0.05,fstype=xfs  | foreach.size=0.1        |
+		| raid | vg=test,level=5,disks=3,disk.type=loop,disk.size=0.05,fstype=ext3 | disks.size=0.1        |
+		| raid | vg=test,level=5,disks=3,disk.type=loop,disk.size=0.05,fstype=ext4 | disks.size=0.1        |
+		| raid | vg=test,level=5,disks=3,disk.type=loop,disk.size=0.05,fstype=xfs  | disks.size=0.1        |
 
-		| raid | vg=test,level=1,disks=3,disk.type=loop,disk.size=0.05,fstype=ext3 | foreach.size=0.1        |
-		| raid | vg=test,level=1,disks=3,disk.type=loop,disk.size=0.05,fstype=ext4 | foreach.size=0.1        |
-		| raid | vg=test,level=1,disks=3,disk.type=loop,disk.size=0.05,fstype=xfs  | foreach.size=0.1        |
+		| raid | vg=test,level=1,disks=3,disk.type=loop,disk.size=0.05,fstype=ext3 | disks.size=0.1        |
+		| raid | vg=test,level=1,disks=3,disk.type=loop,disk.size=0.05,fstype=ext4 | disks.size=0.1        |
+		| raid | vg=test,level=1,disks=3,disk.type=loop,disk.size=0.05,fstype=xfs  | disks.size=0.1        |
 
-		| raid | vg=test,level=5,disks=2,disk.type=loop,disk.size=0.05,fstype=ext3 | foreach.size=0.1,len=3  |
-		| raid | vg=test,level=5,disks=2,disk.type=loop,disk.size=0.05,fstype=ext4 | foreach.size=0.1,len=3  |
-		| raid | vg=test,level=5,disks=2,disk.type=loop,disk.size=0.05,fstype=xfs  | foreach.size=0.1,len=3  |
+		| raid | vg=test,level=5,disks=2,disk.type=loop,disk.size=0.05,fstype=ext3 | disks.size=0.1,disks_count=3  |
+		| raid | vg=test,level=5,disks=2,disk.type=loop,disk.size=0.05,fstype=ext4 | disks.size=0.1,disks_count=3  |
+		| raid | vg=test,level=5,disks=2,disk.type=loop,disk.size=0.05,fstype=xfs  | disks.size=0.1,disks_count=3  |
 
-		| raid | vg=test,level=1,disks=2,disk.type=loop,disk.size=0.05,fstype=ext3 | foreach.size=0.1,len=3  |
-		| raid | vg=test,level=1,disks=2,disk.type=loop,disk.size=0.05,fstype=ext4 | foreach.size=0.1,len=3  |
-		| raid | vg=test,level=1,disks=2,disk.type=loop,disk.size=0.05,fstype=xfs  | foreach.size=0.1,len=3  |
+		| raid | vg=test,level=1,disks=2,disk.type=loop,disk.size=0.05,fstype=ext3 | disks.size=0.1,disks_count=3  |
+		| raid | vg=test,level=1,disks=2,disk.type=loop,disk.size=0.05,fstype=ext4 | disks.size=0.1,disks_count=3  |
+		| raid | vg=test,level=1,disks=2,disk.type=loop,disk.size=0.05,fstype=xfs  | disks.size=0.1,disks_count=3  |
 
 
 	Scenario: grow and change EBS

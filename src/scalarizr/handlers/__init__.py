@@ -319,13 +319,15 @@ class MessageListener:
 	
 	def __call__(self, message, queue):
 		self._logger.debug("Handle '%s'" % (message.name))
-		
+
+		cnf = bus.cnf
+		pl = bus.platform
+		platform_access_data_on_me = False
 		try:
 			# Each message can contains secret data to access platform services.
 			# Scalarizr assign access data to platform object and clears it when handlers processing finished 
-			pl = bus.platform
-			cnf = bus.cnf
 			if message.body.has_key("platform_access_data"):
+				platform_access_data_on_me = True				
 				pl.set_access_data(message.platform_access_data)
 			if 'scalr_version' in message.meta:
 				try:
@@ -360,7 +362,8 @@ class MessageListener:
 			if not accepted:
 				self._logger.warning("No one could handle '%s'", message.name)
 		finally:
-			pl.clear_access_data()
+			if platform_access_data_on_me:
+				pl.clear_access_data()
 
 def async(fn):
 	def decorated(*args, **kwargs):

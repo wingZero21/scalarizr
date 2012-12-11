@@ -9,7 +9,6 @@ import signal
 import logging
 import shutil
 
-from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, PopenError, wait_until
 from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError
 from scalarizr.util import disttool, cryptotool, firstmatched
@@ -248,19 +247,36 @@ class RedisInstances(object):
 
 	def init_processes(self, num, ports=[], passwords=[]):
 		if len(ports) < num:
-			ports += get_available_ports()[][:num-len(ports)]
-		if not passwords:
+			diff = num-len(ports)
+			LOG.debug("Passed ports: %s. Need to find %s more." % (str(ports), diff))
+			additional_ports = [port for port in get_available_ports() if port not in ports]
+			if len(additional_ports) < diff:
+				raise ServiceError('Not enough free ports')
+
+			LOG.debug("Found available ports: %s" % str(additional_ports))
+			ports += additional_ports[:diff]
+
+		if len(passwords) < len(ports):
+			diff = len(ports) - len(passwords)
 			if self.use_passwords:
-				passwords = [cryptotool.pwgen(20) for port in ports]
+				LOG.debug("Generating %s additional passwords for ports %s" % (diff, ports[-diff:]))
+				additional_passwords= [cryptotool.pwgen(20) for port in ports[-diff:]]
+				LOG.debug("Generated passwords: %s" % str(additional_passwords))
+				passwords += additional_passwords
 			else:
-				passwords = [None for port in ports]
+				LOG.debug("Setting  %s additional empty passwords for ports %s" % (diff, ports[-diff:]))
+				passwords += [None for port in ports[-diff:]]
+
+		assert len(ports) == len(passwords)
 
 		creds = dict(zip(ports, passwords))
+		LOG.debug("Initializing redis processes: %s" % str(creds))
 		for port,password in creds.items():
 			if port not in self.ports:
 				create_redis_conf_copy(port)
 				redis_process = Redis(self.master, self.persistence_type, port, password)
 				self.instances.append(redis_process)
+		LOG.debug('Total of redis processes: %d' % len(self.instances))
 
 
 	def kill_processes(self, ports=[], remove_data=False):
@@ -962,8 +978,8 @@ def get_redis_processes():
 def get_busy_ports():
 	busy_ports = []
 	args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
-	out = system2(args, silent=True)[0].split('\n')
 	try:
+		out = system2(args, silent=True)[0].split('\n')
 		p = [x for x in out if x and BIN_PATH in x]
 	except PopenError,e:
 		p = []
@@ -981,5 +997,7 @@ def get_busy_ports():
 
 def get_available_ports():
 	busy_ports = get_busy_ports()
-	return [port for port in PORTS_RANGE if port not in busy_ports]
+	available = [port for port in PORTS_RANGE if port not in busy_ports]
+	LOG.debug("Available ports: %s" % available)
+	return available
 

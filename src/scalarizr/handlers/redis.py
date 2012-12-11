@@ -175,19 +175,18 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 
-
-
 			ports=[redis.DEFAULT_PORT,]
 			passwords=[self.get_main_password(),]
 			num_processes = 1
-			params = self._queryenv.list_farm_role_params()
+			farm_role_id = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
+			params = self._queryenv.list_farm_role_params(farm_role_id)
 			if 'redis' in params:
 				redis_data = params['redis']
 				for param in ('ports', 'passwords', 'num_processes'):
 					if param not in redis_data:
 						break
 					else:
-						ports = redis_data['ports']
+						ports = map(int, redis_data['ports'])
 						passwords = redis_data['passwords']
 						num_processes = int(redis_data['num_processes'])
 
@@ -247,7 +246,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					num_processes = 1
 
 					if 'ports' in redis_data:
-						ports = redis_data['ports']
+						ports = map(int, redis_data['ports'])
 						del redis_data['ports']
 
 					if 'passwords' in redis_data:
@@ -255,7 +254,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 						del redis_data['passwords']
 
 					if 'num_processes' in redis_data:
-						num_processes = redis_data['num_processes']
+						num_processes = int(redis_data['num_processes'])
 						del redis_data['num_processes']
 
 					for key, config_file in ((OPT_VOLUME_CNF, self._volume_config_path),
@@ -273,7 +272,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 					if self.default_service.running:
 						self.default_service.stop('Treminating default redis instance')
-						
+
 					self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
 					ports = ports or [redis.DEFAULT_PORT,]
 					passwords = passwords or [self.get_main_password(),]
@@ -295,9 +294,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			self._init_slave(message)
 
 		self._init_script = self.redis_instances.get_default_process()
-		message['redis']['ports'] = self.redis_instances.ports
-		message['redis']['passwords'] = self.redis_instances.passwords
-		message['redis']['num_processes'] = len(self.redis_instances.ports)
+		message.redis['ports'] = self.redis_instances.ports
+		message.redis['passwords'] = self.redis_instances.passwords
+		message.redis['num_processes'] = len(self.redis_instances.instances)
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 
 
@@ -572,8 +571,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 			with op.step(self._step_init_master):
 				password = self.get_main_password()
-				ri = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
-				ri.init_master(mpoint=self._storage_path)
+
+				self.redis_instances.init_as_masters(mpoint=self._storage_path)
 
 				msg_data = dict()
 				msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
@@ -654,10 +653,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					master_host.internal_ip, master_host.external_ip)
 
 				host = master_host.internal_ip or master_host.external_ip
-				instance = self.redis_instances.get_instance(port=redis.DEFAULT_PORT)
-				instance.init_slave(self._storage_path, host, redis.DEFAULT_PORT)
+				self.redis_instances.init_as_slaves(self._storage_path, host)
 				op.progress(50)
-				instance.wait_for_sync()
+				self.redis_instances.wait_for_sync()
 
 			with op.step(self._step_collect_host_up_data):
 				# Update HostUp message

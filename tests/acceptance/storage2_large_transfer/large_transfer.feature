@@ -52,5 +52,21 @@ Scenario: Download list of streams
     Then I expect original items downloaded
 
 Scenario: Compatibility with the old manifest
+    Initialize upload variables
+    Given I have a dir D/ with 10 megabytes file F1, with 10 megabytes file F2
+    When I upload it to s3 with gzipping
+    Then I expect manifest as a result
+    And all chunks are uploaded
+    I clear the tempdir and replace the manifest with it's old representation
+    When I download with the manifest
+    Then I expect original items downloaded
 
 Scenario: Download file when one or several chunks are missing
+    Initialize upload variables
+    Given I have a 10 megabytes file F1
+    When I upload it to s3 with gzipping
+    Then I expect manifest as a result
+    And all chunks are uploaded
+    I delete one of the chunks
+    When I download with the manifest
+    Then I expect failed list returned

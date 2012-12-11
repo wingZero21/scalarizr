@@ -17,8 +17,7 @@ class TmpfsVolume(base.Volume):
 		self.error_messages.update({
 			'invalid_size': 'Volume size required and should be int value in Mb'
 		})
-		self.features['restore'] = False		
-
+		self.features['restore'] = False
 
 	def _ensure(self):
 		expr = isinstance(self.size, int) and self.size
@@ -27,15 +26,9 @@ class TmpfsVolume(base.Volume):
 		if not self.device:
 			if not os.path.exists(self.mpoint):
 				os.makedirs(self.mpoint)
-			mount.mount('tmpfs', self.mpoint, 
-					'-t', 'tmpfs', 
+			mount.mount('tmpfs', self.mpoint,
+					'-t', 'tmpfs',
 					'-o', 'size=%sM' % self.size)
 			self.device = self.mpoint
-			
-
-	def _destroy(self, force, **kwds):
-		mount.umount(self.mpoint)
-
 
 storage2.volume_types['tmpfs'] = TmpfsVolume
-
