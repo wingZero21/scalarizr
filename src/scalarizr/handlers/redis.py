@@ -245,15 +245,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					passwords = []
 					num_processes = 1
 
-					if 'ports' in redis_data:
+					if 'ports' in redis_data and redis_data['ports']:
 						ports = map(int, redis_data['ports'])
 						del redis_data['ports']
 
-					if 'passwords' in redis_data:
-						passwords = redis_data['passwords']
+					if 'passwords' in redis_data and redis_data['passwords']:
+						passwords = redis_data['passwords'] and redis_data['ports']
 						del redis_data['passwords']
 
-					if 'num_processes' in redis_data:
+					if 'num_processes' in redis_data and redis_data['num_processes']:
 						num_processes = int(redis_data['num_processes'])
 						del redis_data['num_processes']
 
