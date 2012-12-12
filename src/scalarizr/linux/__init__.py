@@ -173,14 +173,14 @@ def which(exe):
 			osmod.access(exe, osmod.X_OK):
 		return exe
 
-	exe = os.path.basename(exe)
+	exe = osmod.path.basename(exe)
 	path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
 	if osmod.environ.get('PATH'):
 		path += ':' + osmod.environ['PATH']
 
 	for p in set(path.split(osmod.pathsep)):
 		full_path = osmod.path.join(p, exe)
-		if osmod.access(full_path, os.X_OK):
+		if osmod.access(full_path, osmod.X_OK):
 			return full_path
 	return None
 
