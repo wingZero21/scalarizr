@@ -265,10 +265,10 @@ def system2(*popenargs, **kwargs):
 		
 	if silent:
 		return out, err, p.returncode
-    if out:
-        logger.debug('stdout: ' + out)
-    if err:
-        logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
+	if out:
+		logger.debug('stdout: ' + out)
+	if err:
+		logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
 
 	return out, err, p.returncode
 
