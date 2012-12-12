@@ -452,21 +452,26 @@ class EphSnapshotProviderLite(object):
 		@rtype: tuple
 		"""
 		transfer = self._transfer_cls()
-		while True:
-			try:
-				chunk_path = self._upload_queue.get(False)
-			except Empty:
-				if self._read_finished.is_set():
-					break
-				continue
-			
-			with self._slot_available:
-				self._return_ev.set()
-				link = transfer.upload([chunk_path], dst)[0]
-				os.remove(chunk_path)
-			
-			if 'manifest.ini' in link:
-				snapshot.path = link
+		try:
+			while True:
+				try:
+					chunk_path = self._upload_queue.get(False)
+				except Empty:
+					if self._read_finished.is_set():
+						break
+					continue
+				
+				with self._slot_available:
+					self._return_ev.set()
+					link = transfer.upload([chunk_path], dst)[0]
+					os.remove(chunk_path)
+				
+				if 'manifest.ini' in link:
+					snapshot.path = link
+		except:
+			self._inner_exc_info = sys.exc_info()
+		finally:
+			self._read_finished.set()
 
 				
 	def _downloader(self, tranzit_path):
