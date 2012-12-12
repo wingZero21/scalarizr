@@ -547,7 +547,7 @@ class MongoDBHandler(ServiceCtlHandler):
 						while not cfg_server_running:
 							try:
 								time.sleep(20)
-								role_hosts = self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
+								role_hosts = self._get_cluster_hosts()
 								for host in role_hosts:
 									if host.shard_index == 0 and host.replica_set_index == 0:
 										cfg_server_running = True
@@ -1293,7 +1293,7 @@ class MongoDBHandler(ServiceCtlHandler):
 	def on_MongoDb_ClusterTerminate(self, message):
 		try:
 			STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
-			role_hosts = self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
+			role_hosts = self._get_cluster_hosts()
 			cluster_terminate_watcher = ClusterTerminateWatcher(role_hosts, self, int(message.timeout))
 			cluster_terminate_watcher.start()
 		except:
