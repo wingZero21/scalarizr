@@ -217,7 +217,7 @@ class Script(object):
 	asynchronous = None
 	event_name = None
 	role_name = None
-	exec_timeout = None
+	exec_timeout = 0
 	event_server_id = None
 
 	id = None
@@ -265,6 +265,8 @@ class Script(object):
 
 		self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
 		self.exec_path = os.path.join(exec_dir_prefix + self.id, self.name)
+		if self.exec_timeout:
+			self.exec_timeout = int(self.exec_timeout)
 		args = (self.name, self.event_name, self.role_name, self.id)
 		self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
 		self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
