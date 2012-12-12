@@ -195,10 +195,13 @@ class EphVolumeProvider(VolumeProvider):
 		vol = self.create(**_kwargs)
 
 		snap = self.snapshot_factory(**kwargs)
+		"""
+		# Free ram check disabled (wrong ram detection on GCE instances)
+
 		free_ram, free_swap = ramdisk.free()
 		if (free_ram + free_swap) < TRANZIT_VOL_SIZE:
 			raise Exception('Instance has no enough free ram to create tranzit ramdisk')
-		
+		"""
 		ramdisk.create(TRANZIT_VOL_SIZE, TRANZIT_VOL_MPOINT)
 		
 		try:
