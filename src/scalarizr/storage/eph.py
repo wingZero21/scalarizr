@@ -251,6 +251,13 @@ class EphVolumeProvider(VolumeProvider):
 Storage.explore_provider(EphVolumeProvider)
 
 
+def clear_queue(queue):
+	while True:
+		try:
+			queue.get_nowait()
+		except Empty:
+			return
+
 class EphSnapshotProviderLite(object):
 	
 	MANIFEST_NAME 		= 'manifest.ini'
@@ -291,6 +298,8 @@ class EphSnapshotProviderLite(object):
 			if snapshot.id in self._state_map:
 				raise StorageError('Snapshot %s is already %s. Cannot create it again' % (
 						snapshot.id, self._state_map[snapshot.id]))
+
+			clear_queue(self._upload_queue)
 
 			if not os.path.exists(self._pigz_bin):
 				if linux.os['name'] == 'Ubuntu' and linux.os['release'] >= (10, 4):
@@ -516,6 +525,8 @@ class EphSnapshotProviderLite(object):
 
 	def download_and_restore(self, volume, snapshot, tranzit_path):
 		# Load manifest
+		clear_queue(self._writer_queue)
+		clear_queue(self._download_queue)
 		self._download_finished.clear()
 		transfer = self._transfer_cls()
 		mnf_path = transfer.download(snapshot.path, tranzit_path)

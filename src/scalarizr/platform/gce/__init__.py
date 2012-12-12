@@ -95,12 +95,8 @@ class GcePlatform(Platform):
 
 	def get_user_data(self, key=None):
 		if self._userdata is None:
-			self._userdata = dict()
-			resp = self._get_metadata('attributes/')
-			keys = resp.strip().split()
-			for k in keys:
-				value = self._get_metadata('attributes/%s' % k)
-				self._userdata[k] = value
+			raw_userdata = self._get_metadata('attributes/scalr').strip()
+			self._userdata = self._parse_user_data(raw_userdata)
 
 		return self._userdata.get(key) if key else self._userdata
 
