@@ -3,6 +3,7 @@ from __future__ import with_statement
 __author__ = 'Nick Demyanchuk'
 
 import os
+import sys
 import base64
 import logging
 import urllib2
@@ -95,8 +96,15 @@ class GcePlatform(Platform):
 
 	def get_user_data(self, key=None):
 		if self._userdata is None:
-			raw_userdata = self._get_metadata('attributes/scalr').strip()
-			self._userdata = self._parse_user_data(raw_userdata)
+			try:
+				raw_userdata = self._get_metadata('attributes/scalr').strip()
+				self._userdata = self._parse_user_data(raw_userdata)
+			except:
+				e = sys.exc_info()[1]
+				if isinstance(e, urllib2.HTTPError) and 404 == e.code:
+					self._userdata = dict()
+				else:
+					raise
 
 		return self._userdata.get(key) if key else self._userdata
 
