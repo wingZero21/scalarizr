@@ -381,19 +381,26 @@ class LargeTransfer(bases.Task):
 	1. Download manifest 
 	2. <chunk downloader> | funzip | tar -x -C /mnt/dbbackup
 	'''
-	# TODO: benchmarks bzip against pigz; unlimited disk case: download all before unpacking
+	# TODO: benchmarks bzip against pigz
+	# http://tukaani.org/lzma/benchmarks.html
+
+	# TODO: unlimited disk case: download all before unpacking
+
+	# TODO: graceful shutdown: interrupt chunk download
+	# TODO: kill -9 tmpfs problem
+	# TODO: s3 cleanup on fail
+	# TODO: 12.04 tests
+	# TODO: single stream error
+	# TODO: bubble exceptions
 
 	# NOTE: use directory dst for uploading.
-	UPLOAD = 'upload'
-	DOWNLOAD = 'download'
-
 	pigz_bin = '/usr/bin/pigz'
 	gzip_bin = '/bin/gzip'
 
 	def __init__(self, src, dst,
 				transfer_id=None,
-				tar_it=True,
-				gzip_it=True, 
+				streamer="tar",
+				compressor="gzip",
 				chunk_size=100, 
 				try_pigz=True,
 				manifest='manifest.json',
@@ -414,8 +421,8 @@ class LargeTransfer(bases.Task):
 			self._up = True
 		else:
 			raise ValueError('Eather src or dst should be URL-like string')
-		if self._up and isinstance(src, basestring) and os.path.isdir(src) and not tar_it:
-			raise ValueError('Passed src is a directory. tar_it=True expected')
+		if self._up and isinstance(src, basestring) and os.path.isdir(src) and not streamer:
+			raise ValueError('Passed src is a directory. streamer expected')
 		if self._up:
 			if callable(src):
 				src = (item for item in src())
@@ -437,8 +444,8 @@ class LargeTransfer(bases.Task):
 		self.multipart = kwds.get("multipart")
 		self.src = src
 		self.dst = dst
-		self.tar_it = tar_it
-		self.gzip_it = gzip_it
+		self.streamer = streamer
+		self.compressor = compressor
 		self.chunk_size = chunk_size
 		self.try_pigz = try_pigz
 		self._restorer = None
@@ -487,8 +494,8 @@ class LargeTransfer(bases.Task):
 			for src in self.src:
 				fileinfo = {
 					"name": '',
-					"tar": False,
-					"gzip": False,
+					"streamer": None,
+					"compressor": None,
 					"chunks": [],
 				}
 				prefix = self._tranzit_vol.mpoint
@@ -503,7 +510,8 @@ class LargeTransfer(bases.Task):
 						name = 'stream-%s' % hash(stream)
 					fileinfo["name"] = name
 					prefix = os.path.join(prefix, name) + '.'
-				elif isinstance(src, basestring) and os.path.isdir(src):
+				elif self.streamer and isinstance(src, basestring) and os.path.isdir(src):
+					#? self.streamer == tar
 					if src.endswith('/'):
 						# tar the directory contents
 						tar_cmdargs = ['/bin/tar', 'cp', '-C', src, '.']
@@ -515,7 +523,7 @@ class LargeTransfer(bases.Task):
 
 					name = os.path.basename(src.rstrip('/'))
 					fileinfo["name"] = name
-					fileinfo["tar"] = True
+					fileinfo["streamer"] = "tar"
 					prefix = os.path.join(prefix, name) + '.tar.'
 
 					LOG.debug("LargeTransfer src_generator TAR POPEN")
@@ -535,8 +543,8 @@ class LargeTransfer(bases.Task):
 				else:
 					raise ValueError('Unsupported src: %s' % src)
 
-				if self.gzip_it:
-					fileinfo["gzip"] = True
+				if self.compressor == "gzip":
+					fileinfo["compressor"] = "gzip"
 					prefix += 'gz.'
 					LOG.debug("LargeTransfer src_generator GZIP POPEN")
 					gzip = cmd = subprocess.Popen(
@@ -550,6 +558,15 @@ class LargeTransfer(bases.Task):
 						# Allow tar to receive SIGPIPE if gzip exits.
 						tar.stdout.close()
 					stream = gzip.stdout
+				# custom compressor
+				elif hasattr(self.compressor, "popen"):
+					fileinfo["compressor"] = str(self.compressor)
+					LOG.debug("LargeTransfer src_generator custom compressor POPEN")
+					cmd = self.compressor.popen(stdin=stream)
+					LOG.debug("LargeTransfer src_generator after custom compressor POPEN")
+					if tar:
+						tar.stdout.close()
+					stream = cmd.stdout
 
 				for filename, md5sum in self._split(stream, prefix):
 					fileinfo["chunks"].append((os.path.basename(filename), md5sum))
@@ -682,6 +699,7 @@ class LargeTransfer(bases.Task):
 
 
 	def _dl_restorer(self):
+		# TODO: use custom compressor
 		buf_size = 4096
 
 		for file in self.files:
@@ -691,10 +709,10 @@ class LargeTransfer(bases.Task):
 			LOG.debug("*** RESTORER file %s to %s" % (file["name"], dst))
 
 			# create 'cmd' and 'stream'
-			if not file["tar"] and not file["gzip"]:
+			if not file["streamer"] == "tar" and not file["compressor"]:
 				stream = open(os.path.join(dst, file["name"]), 'w')
 				cmd = None
-			elif file["tar"] and file["gzip"]:
+			elif file["streamer"] == "tar" and file["compressor"] == "gzip":
 				LOG.debug("*** RESTORER unzip popen")
 				unzip = subprocess.Popen([self._gzip_bin(), "-d"],
 					stdin=subprocess.PIPE,
@@ -713,7 +731,7 @@ class LargeTransfer(bases.Task):
 
 				stream = unzip.stdin
 				cmd = untar
-			elif file["tar"]:
+			elif file["streamer"] == "tar":
 				untar = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
 					stdin=subprocess.PIPE,
 					stdout=subprocess.PIPE,
@@ -722,7 +740,7 @@ class LargeTransfer(bases.Task):
 
 				stream = untar.stdin
 				cmd = untar
-			elif file["gzip"]:
+			elif file["compressor"] == "gzip":
 				unzip = subprocess.Popen([self._gzip_bin(), "-d"],
 					stdin=subprocess.PIPE,
 					stdout=open(os.path.join(dst, file["name"]), 'w'),
@@ -814,8 +832,8 @@ class Manifest(object):
 		files: [
 			{
 				name,
-				tar: true,
-				gzip: true,
+				streamer,  # "tar" | python function | None
+				compressor,  # "gzip" | python function | None
 				chunks: [(basename001, md5sum)]
 			}
 		]
@@ -890,8 +908,8 @@ class Manifest(object):
 			name = chunkname[:-7]
 		else:
 			name = chunkname  # just in case
-		tar = True
-		gzip = True
+		streamer = "tar"
+		compressor = "gzip"
 
 		chunks = parser.items("chunks")
 		chunks.sort()
@@ -904,8 +922,8 @@ class Manifest(object):
 			"files": [
 				{
 					"name": name,
-					"tar": tar,
-					"gzip": gzip,
+					"streamer": streamer,
+					"compressor": compressor,
 					"chunks": chunks,
 				}
 			]
