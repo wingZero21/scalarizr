@@ -469,8 +469,10 @@ class EphSnapshotProviderLite(object):
 			while True:
 				try:
 					chunk_path = self._upload_queue.get(False)
+					self._logger.debug('Uploader got chunk %s' % chunk_path)
 				except Empty:
 					if self._read_finished.is_set():
+						self._logger.debug('Upload is finished.')
 						break
 					continue
 				
