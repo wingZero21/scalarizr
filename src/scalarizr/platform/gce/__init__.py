@@ -99,9 +99,8 @@ class GcePlatform(Platform):
 			try:
 				raw_userdata = self._get_metadata('attributes/scalr').strip()
 				self._userdata = self._parse_user_data(raw_userdata)
-			except:
-				e = sys.exc_info()[1]
-				if isinstance(e, urllib2.HTTPError) and 404 == e.code:
+			except urllib2.HTTPError, e:
+				if 404 == e.code:
 					self._userdata = dict()
 				else:
 					raise
