@@ -262,9 +262,10 @@ def system2(*popenargs, **kwargs):
 
 	if p.returncode and raise_exc:
 		raise ExcClass(error_text, out and out.strip() or '', err and err.strip() or '', p.returncode, popenargs[0])
-		
+
 	if silent:
 		return out, err, p.returncode
+
 	if out:
 		logger.debug('stdout: ' + out)
 	if err:

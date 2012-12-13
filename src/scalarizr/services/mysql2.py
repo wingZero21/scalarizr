@@ -452,7 +452,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			})
 
 		xbak = innobackupex.args(**kwds).popen()
-		stream_in = cloudfs.namedstream(xbak, 'xtrabackup')
+		stream_in = cloudfs.namedstream(xbak.stdout, 'xtrabackup')
 		LOG.debug('Creating LargeTransfer, src=%s dst=%s', stream_in, self.cloudfs_dest)
 		transfer = cloudfs.LargeTransfer(
 					stream_in,

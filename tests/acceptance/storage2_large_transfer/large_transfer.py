@@ -94,7 +94,7 @@ STORAGES = {
 
 def convert_manifest(json_manifest):
 	assert len(json_manifest["files"]) == 1
-	assert json_manifest["files"][0]["gzip"] == True
+	assert json_manifest["files"][0]["compressor"] == "gzip"
 
 	parser = ConfigParser()
 	parser.add_section("snapshot")
@@ -102,7 +102,7 @@ def convert_manifest(json_manifest):
 
 	parser.set("snapshot", "description", json_manifest["description"])
 	parser.set("snapshot", "created_at", json_manifest["created_at"])
-	parser.set("snapshot", "pack_method", json_manifest["files"][0]["gzip"] and "gzip")
+	parser.set("snapshot", "pack_method", json_manifest["files"][0]["compressor"])
 
 	for chunk, md5sum in reversed(json_manifest["files"][0]["chunks"]):
 		parser.set("chunks", chunk, md5sum)
@@ -192,8 +192,7 @@ def i_have_a_file(step, megabytes, filename):
 def i_upload_it_with_gzipping(step, storage):
 	world.destination = STORAGES[storage]["url"]
 	world.driver = STORAGES[storage]["driver"]()
-	world.manifest_url = LargeTransfer(world.sources[0], world.destination,
-		gzip_it=True).run()
+	world.manifest_url = LargeTransfer(world.sources[0], world.destination).run()
 
 
 @step("I upload multiple sources to ([^\s]+) with gzipping")
@@ -205,8 +204,7 @@ def i_upload_multiple_sources_with_gzipping(step, storage):
 		for src in sources:
 			yield src
 
-	world.manifest_url = LargeTransfer(src_gen(), world.destination,
-		gzip_it=True).run()
+	world.manifest_url = LargeTransfer(src_gen(), world.destination).run()
 
 
 @step("I expect manifest as a result")

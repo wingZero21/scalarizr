@@ -304,7 +304,7 @@ for behavior in ('mysql', 'mysql2', 'percona'):
 		'*_password,log_*,replication_master': 
 				Ini('%s/%s.ini' % (private_dir, behavior), section),
 		'mysqldump_options': 
-				Ini('%s/%s.ini' % (public_dir, behavior), section)
+				Ini('%s/%s.ini' % (public_dir, behavior), behavior)
 	})
 __node__['ec2'] = Compound({
 	't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),

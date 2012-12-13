@@ -208,7 +208,7 @@ class MysqlCnfController(CnfController):
 		LOG.debug('Variables from config: %s' % str(vars))
 		if self._init_script.running:
 			cli_vars = self.root_client.show_global_variables()
-			LOG.debug('Variables from cli: %s' % str(cli_vars))
+			#LOG.debug('Variables from cli: %s' % str(cli_vars))
 			vars.update(cli_vars)
 		return vars
 	
