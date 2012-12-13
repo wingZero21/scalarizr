@@ -413,6 +413,7 @@ class EphSnapshotProviderLite(object):
 					if not chunk_fp.closed:
 						chunk_fp.close()
 					if chunk_size:
+						self._logger.debug('Putting chunk %s to upload queue' % chunk_path)
 						self._upload_queue.put(chunk_path)
 						self._chunks_md5[os.path.basename(chunk_path)] = binascii.hexlify(chunk_md5.digest())
 
@@ -443,6 +444,7 @@ class EphSnapshotProviderLite(object):
 					
 				if chunk_size == chunk_max_size:
 					chunk_fp.close()
+					self._logger.debug('Putting chunk %s to upload queue' % chunk_path)
 					self._upload_queue.put(chunk_path)
 					self._chunks_md5[os.path.basename(chunk_path)] = binascii.hexlify(chunk_md5.digest())
 					chunk_md5 = hashlib.md5()
@@ -462,8 +464,8 @@ class EphSnapshotProviderLite(object):
 		"""
 		@rtype: tuple
 		"""
-		transfer = self._transfer_cls()
 		try:
+			transfer = self._transfer_cls()
 			while True:
 				try:
 					chunk_path = self._upload_queue.get(False)
