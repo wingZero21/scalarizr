@@ -666,6 +666,8 @@ class Exec(object):
 	def popen(self, **kwds):
 		self.check()
 		kwds['close_fds'] = True
+		if not 'stdin' in kwds:
+			kwds['stdin'] = subprocess.PIPE
 		if not 'stdout' in kwds:
 			kwds['stdout'] = subprocess.PIPE
 		if not 'stderr' in kwds:

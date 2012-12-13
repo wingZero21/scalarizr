@@ -511,28 +511,34 @@ class LargeTransfer(bases.Task):
 					fileinfo["name"] = name
 					prefix = os.path.join(prefix, name) + '.'
 				elif self.streamer and isinstance(src, basestring) and os.path.isdir(src):
-					#? self.streamer == tar
-					if src.endswith('/'):
-						# tar the directory contents
-						tar_cmdargs = ['/bin/tar', 'cp', '-C', src, '.']
-					else:
-						# tar the directory itself
-						# -C parent to use relative paths inside tarball
-						parent, target = os.path.split(src)
-						tar_cmdargs = ['/bin/tar', 'cp',  '-C', parent, target]
-
 					name = os.path.basename(src.rstrip('/'))
 					fileinfo["name"] = name
-					fileinfo["streamer"] = "tar"
-					prefix = os.path.join(prefix, name) + '.tar.'
 
-					LOG.debug("LargeTransfer src_generator TAR POPEN")
-					tar = cmd = subprocess.Popen(
-									tar_cmdargs,
-									stdout=subprocess.PIPE,
-									stderr=subprocess.PIPE,
-									close_fds=True)
-					LOG.debug("LargeTransfer src_generator AFTER TAR")
+					if self.streamer == "tar":
+						fileinfo["streamer"] = "tar"
+						prefix = os.path.join(prefix, name) + '.tar.'
+
+						if src.endswith('/'):  # tar dir content
+							tar_cmdargs = ['/bin/tar', 'cp', '-C', src, '.']
+						else:
+							parent, target = os.path.split(src)
+							tar_cmdargs = ['/bin/tar', 'cp',  '-C', parent, target]
+
+						LOG.debug("LargeTransfer src_generator TAR POPEN")
+						tar = cmd = subprocess.Popen(
+										tar_cmdargs,
+										stdout=subprocess.PIPE,
+										stderr=subprocess.PIPE,
+										close_fds=True)
+						LOG.debug("LargeTransfer src_generator AFTER TAR")
+					elif hasattr(self.streamer, "popen"):
+						fileinfo["streamer"] = str(self.streamer)
+						prefix = os.path.join(prefix, name) + '.'
+
+						LOG.debug("LargeTransfer src_generator custom streamer POPEN")
+						#TODO: self.streamer.args += src
+						tar = cmd = self.streamer.popen(stdin=None)
+						LOG.debug("LargeTransfer src_generator after custom streamer POPEN")
 					stream = tar.stdout
 				elif isinstance(src, basestring) and os.path.isfile(src):
 					name = os.path.basename(src)
@@ -699,7 +705,6 @@ class LargeTransfer(bases.Task):
 
 
 	def _dl_restorer(self):
-		# TODO: use custom compressor
 		buf_size = 4096
 
 		for file in self.files:
@@ -709,46 +714,51 @@ class LargeTransfer(bases.Task):
 			LOG.debug("*** RESTORER file %s to %s" % (file["name"], dst))
 
 			# create 'cmd' and 'stream'
-			if not file["streamer"] == "tar" and not file["compressor"]:
-				stream = open(os.path.join(dst, file["name"]), 'w')
+			if not file["streamer"] and not file["compressor"]:
 				cmd = None
-			elif file["streamer"] == "tar" and file["compressor"] == "gzip":
-				LOG.debug("*** RESTORER unzip popen")
-				unzip = subprocess.Popen([self._gzip_bin(), "-d"],
-					stdin=subprocess.PIPE,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE,
-					close_fds=True)
-				LOG.debug("*** RESTORER after unzip")
-				untar = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
-					stdin=unzip.stdout,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE,
-					close_fds=True)
-				LOG.debug("*** RESTORER after untar")
-				unzip.stdout.close()
-				LOG.debug("*** RESTORER unzip.stdout.close")
+				stream = open(os.path.join(dst, file["name"]), 'w')
+			else:
+				compressor_out = subprocess.PIPE
 
-				stream = unzip.stdin
-				cmd = untar
-			elif file["streamer"] == "tar":
-				untar = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
-					stdin=subprocess.PIPE,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE,
-					close_fds=True)
+				if file["compressor"]:
+					if not file["streamer"]:
+						compressor_out = open(os.path.join(dst, file["name"]), 'w')
 
-				stream = untar.stdin
-				cmd = untar
-			elif file["compressor"] == "gzip":
-				unzip = subprocess.Popen([self._gzip_bin(), "-d"],
-					stdin=subprocess.PIPE,
-					stdout=open(os.path.join(dst, file["name"]), 'w'),
-					stderr=subprocess.PIPE,
-					close_fds=True)
+					if file["compressor"] == "gzip":
+						LOG.debug("*** RESTORER unzip popen")
+						cmd = subprocess.Popen([self._gzip_bin(), "-d"],
+							stdin=subprocess.PIPE,
+							stdout=compressor_out,
+							stderr=subprocess.PIPE,
+							close_fds=True)
+						LOG.debug("*** RESTORER after unzip")
+					else:  # custom compressor
+						LOG.debug("*** RESTORER custom decompressor popen")
+						cmd = self.compressor.popen(stdout=compressor_out)
+						LOG.debug("*** RESTORER after custom decompressor popen")
+					stream = cmd.stdin
 
-				stream = unzip.stdin
-				cmd = unzip
+				if file["streamer"]:
+					if file["compressor"]:
+						compressor_out = cmd.stdout
+
+					if file["streamer"] == "tar":
+						LOG.debug("*** RESTORER untar popen")
+						cmd = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
+							stdin=compressor_out,
+							stdout=subprocess.PIPE,
+							stderr=subprocess.PIPE,
+							close_fds=True)
+						LOG.debug("*** RESTORER after untar")
+					else:  # custom streamer
+						LOG.debug("*** RESTORER custom decompressor popen")
+						cmd = self.streamer.popen(stdin=compressor_out)
+						LOG.debug("*** RESTORER after custom decompressor popen")
+
+					if file["compressor"]:
+						compressor_out.close()
+					else:
+						stream = cmd.stdin
 
 			try:
 				for chunk, info in file["chunks"].iteritems():
