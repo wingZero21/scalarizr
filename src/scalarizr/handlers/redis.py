@@ -250,7 +250,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 						del redis_data['ports']
 
 					if 'passwords' in redis_data and redis_data['passwords']:
-						passwords = redis_data['passwords'] and redis_data['ports']
+						passwords = redis_data['passwords']
 						del redis_data['passwords']
 
 					if 'num_processes' in redis_data and redis_data['num_processes']:
