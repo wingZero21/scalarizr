@@ -418,7 +418,6 @@ class EphSnapshotProviderLite(object):
 
 					manifest_path = self._write_manifest(snapshot, tranzit_path)
 					self._upload_queue.put(manifest_path)
-
 					break
 				
 				if piece_rest:
@@ -482,8 +481,6 @@ class EphSnapshotProviderLite(object):
 					snapshot.path = link
 		except:
 			self._inner_exc_info = sys.exc_info()
-		finally:
-			self._read_finished.set()
 
 				
 	def _downloader(self, tranzit_path):
