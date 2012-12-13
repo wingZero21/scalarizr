@@ -140,6 +140,10 @@ class ScriptExecutor(Handler):
 			if not script.start_time:
 				script.start()
 			self.send_message(Messages.EXEC_SCRIPT_RESULT, script.wait(), queue=Queues.LOG)
+		except:
+			if script.asynchronous:
+				LOG.exception('Caught exception')
+			raise
 		finally:
 			self.in_progress.remove(script)
 
