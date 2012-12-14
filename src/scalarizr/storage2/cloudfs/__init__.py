@@ -389,8 +389,14 @@ class LargeTransfer(bases.Task):
 	# TODO: graceful shutdown: interrupt chunk download
 	# TODO: kill -9 tmpfs problem
 	# TODO: s3 cleanup on fail
-	# TODO: 12.04 tests
-	# TODO: single stream error
+
+	# TODO: subprocess hang problem
+	# python 2.7.2 @ ubuntu 11.10 fail
+	# python 2.6.5 @ ubuntu 10.04 works
+	# python 2.7.3 @ ubuntu 12.04 ?
+	# solutions: waiter thread that would kill everything on hang or
+	# separate thread for subprocess opening?
+
 	# TODO: bubble exceptions
 
 	# NOTE: use directory dst for uploading.
@@ -407,7 +413,6 @@ class LargeTransfer(bases.Task):
 				description='',
 				tags=None,
 				**kwds):
-		# TODO: subprocess hang, only in 2.7.2?
 		'''
 		@param src: transfer source path
 			- str file or directory path. 
@@ -474,8 +479,6 @@ class LargeTransfer(bases.Task):
 		'''
 		Compress, split, yield out
 		'''
-		# TODO: popen can deadlock sometimes, create a thread that would wait
-		# for a popen success flag with a timeout, and kill everything otherwise?
 		if self._up:
 			# Tranzit volume size is chunk for each worker
 			# and Ext filesystem overhead
@@ -712,6 +715,11 @@ class LargeTransfer(bases.Task):
 
 			LOG.debug("*** RESTORER start")
 			LOG.debug("*** RESTORER file %s to %s" % (file["name"], dst))
+
+			# temporary fix for overriding download manifest settings with
+			# custom streamer
+			if hasattr(self.streamer, "popen"):
+				file["streamer"] = str(self.streamer)
 
 			# create 'cmd' and 'stream'
 			if not file["streamer"] and not file["compressor"]:
