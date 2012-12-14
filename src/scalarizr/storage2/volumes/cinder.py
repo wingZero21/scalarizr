@@ -1,22 +1,16 @@
 from __future__ import with_statement
 
-import sys
 import os
 import glob
 import string
-import logging
 import threading
 
-# from novaclient.v1_1 import client as nova_client
-from cinderclient.v1 import client as cinder_client
-
-from scalarizr import linux
 from scalarizr import storage2
 from scalarizr import util
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
-
+from scalarizr.platform.openstack import CinderWrapper
 
 
 LOG = storage2.LOG
@@ -72,81 +66,6 @@ class FreeDeviceLetterMgr(object):
 			del self._local.letter
 
 
-# TODO: move this class to config or something
-class OpenstackCredentials:
-	USER = 'admin'
-	PASSWORD = 'password'
-	TENANT = 'demo'
-	SERVER_ADDRESS = 'http://192.168.1.100'
-
-	AUTH_URL = '%s:5000/v2.0' % SERVER_ADDRESS
-	KEYSTONE_ENDPOINT = AUTH_URL
-	GLANCE_ENDPOINT = '%s:9292' % SERVER_ADDRESS
-
-
-class CinderFacade(object):
-
-	def _cinder_connect(self):
-		return cinder_client.Client(OpenstackCredentials.USER,
-									OpenstackCredentials.PASSWORD,
-									OpenstackCredentials.TENANT,
-									OpenstackCredentials.AUTH_URL)
-
-	def __init__(self):
-		self.cinder_connection = None
-		self.connect = self.reconnect
-		self._method_to_service = {
-			'create': 'volumes',
-			'get': 'volumes',
-			'list': 'volumes',
-			'delete': 'volumes',
-			'update': 'volumes',
-			'attach': 'volumes',
-			'detach': 'volumes',
-			'reserve': 'volumes',
-			'unreserve': 'volumes',
-			'begin_detaching': 'volumes',
-			'roll_detaching': 'volumes',
-			'initialize_connection': 'volumes',
-			'terminate_connection': 'volumes',
-			'snapshot_create': 'volume_snapshots',
-			'snapshot_get': 'volume_snapshots',
-			'snapshot_list': 'volume_snapshots',
-			'snapshot_delete': 'volume_snapshots'}
-		self._method_to_cinder_method = {
-			'create': 'create',
-			'get': 'get',
-			'list': 'list',
-			'delete': 'delete',
-			'update': 'update',
-			'attach': 'attach',
-			'detach': 'detach',
-			'reserve': 'reserve',
-			'unreserve': 'unreserve',
-			'begin_detaching': 'begin_detaching',
-			'roll_detaching': 'roll_detaching',
-			'initialize_connection': 'initialize_connection',
-			'terminate_connection': 'terminate_connection',
-			'snapshot_create': 'create',
-			'snapshot_get': 'get',
-			'snapshot_list': 'list',
-			'snapshot_delete': 'delete'}
-
-	def __getattr__(self, name):
-		service = getattr(self.cinder_connection, 
-						self._method_to_service[name])
-		return getattr(service, self._method_to_cinder_method[name])
-		
-	def reconnect(self):
-		self.cinder_connection = self._cinder_connect()
-
-	#TODO: make connection check more properly
-	@property
-	def has_connection(self):
-		self.reconnect()
-		return self.cinder_connection != None
-
-
 class CinderVolume(base.Volume):
 
 	_global_timeout = 3600
@@ -176,7 +95,7 @@ class CinderVolume(base.Volume):
 		self.error_messages.update({
 			'no_connection': 'Cinder connection should be available ' \
 							'to perform this operation'})
-		self._cinder = CinderFacade()
+		self._cinder = CinderWrapper()
 
 	def _server_id(self):
 		return __node__['openstack']['server_id']
@@ -189,7 +108,7 @@ class CinderVolume(base.Volume):
 			volume = None
 			name = None
 			if self.id:
-				volume = self._cinder.get(self.id)
+				volume = self._cinder.volumes.get(self.id)
 
 				if volume.availability_zone != self.avail_zone:
 					LOG.warn('Cinder volume %s is in the different '
@@ -229,8 +148,7 @@ class CinderVolume(base.Volume):
 				'id': volume.id,
 				'avail_zone': volume.availability_zone,
 				'name': name,
-				'size': volume.size,
-				'snapshot_id': volume.snapshot_id})
+				'size': volume.size})
 
 			if self.name:
 				self.device = name2device(self.name)
@@ -249,7 +167,7 @@ class CinderVolume(base.Volume):
 		LOG.debug('Creating Cinder volume (zone: %s size: %s snapshot: %s ' \
 					'volume_type: %s)', avail_zone, size,
 					 snapshot_id, volume_type)
-		volume = self._cinder.create(size=size, 
+		volume = self._cinder.volumes.create(size=size, 
 									display_name=name,
 									snapshot_id=snapshot_id,
 									display_description=display_description,
@@ -270,13 +188,13 @@ class CinderVolume(base.Volume):
 
 		LOG.debug('Creating snapshot of Cinder volume', volume_id)
 		coreutils.sync()		
-		snapshot = self._cinder.snapshot_create(volume_id, 
+		snapshot = self._cinder.volume_snapshots.create(volume_id, 
 							force=True,
 							display_description=description)
 		LOG.debug('Snapshot %s created for Cinder volume %s', 
 				snapshot.id, volume_id)
 		if not nowait:
-			self._wait_snapshot(snapshot)	
+			self._wait_snapshot(snapshot.id)	
 		return snapshot
 
 	def _snapshot(self, description, tags, **kwds):
@@ -285,7 +203,7 @@ class CinderVolume(base.Volume):
 		return storage2.snapshot(
 				type='cinder', 
 				id=snapshot.id, 
-				description=snapshot.description,
+				description=snapshot.display_description,
 				tags=tags)
 
 	def _attach_volume(self, server_id=None, device_name='auto'):
@@ -297,7 +215,7 @@ class CinderVolume(base.Volume):
 		#volume attaching
 		LOG.debug('Attaching Cinder volume %s (device: %s)', volume_id,
 				 device_name)
-		self._cinder.attach(volume_id, server_id, device_name)
+		self._cinder.volumes.attach(volume_id, server_id, device_name)
 
 		#waiting for attaching transitional state
 		LOG.debug('Checking that Cinder volume %s is attached', volume_id)
@@ -310,6 +228,7 @@ class CinderVolume(base.Volume):
 		LOG.debug('Cinder device name %s is mapped to %s in operation system', 
 				device_name, device)
 		LOG.debug('Checking that device %s is available', device)
+		#TODO: uncomment next lines for true testing
 		# msg = 'Device %s is not available in operation system. ' \
 		# 		'Timeout reached (%s seconds)' % (
 		# 		device, self._global_timeout)
@@ -329,19 +248,19 @@ class CinderVolume(base.Volume):
 		volume_id = self.id
 
 		self._check_cinder_connection()
-		volume = self._cinder.get(volume_id)
+		volume = self._cinder.volumes.get(volume_id)
 
 		LOG.debug('Detaching Cinder volume %s', volume_id)
 		if volume.status != 'available':
 			try:
-				self._cinder.detach(volume_id)
+				self._cinder.volumes.detach(volume_id)
 			except:
 				pass #TODO: handle possible exceptions
 
 			LOG.debug('Checking that Cinder volume %s is available', volume_id)
 
 			def exit_condition():
-				vol = self._cinder.get(volume_id)
+				vol = self._cinder.volumes.get(volume_id)
 				return vol.status in ('available', 'in-use')
 
 			msg = "Cinder volume %s is not in 'available' state. " \
@@ -362,13 +281,11 @@ class CinderVolume(base.Volume):
 	def _destroy(self, force, **kwds):
 		self._check_cinder_connection()
 
-		volume = self._cinder.get(self.id)
-		# raise BaseException(volume.status)
+		volume = self._cinder.volumes.get(self.id)
 		if len(volume.attachments) > 0:
 			self._detach_volume(volume.attachments[0]['server_id'])
-		# self._wait_status_transition()
 
-		self._cinder.delete(self.id)
+		self._cinder.volumes.delete(self.id)
 		self.id = None
 
 	def _clone(self, config):
@@ -383,10 +300,10 @@ class CinderVolume(base.Volume):
 		if not volume_id:
 			volume_id = self.id
 
-		status = self._cinder.get(volume_id).status
+		status = self._cinder.volumes.get(volume_id).status
 		vol = [None]
 		def exit_condition():
-			vol[0] = self._cinder.get(volume_id)
+			vol[0] = self._cinder.volumes.get(volume_id)
 			return vol[0].status not in ('attaching', 'detaching', 'creating')
 
 		if not exit_condition():
@@ -412,7 +329,7 @@ class CinderVolume(base.Volume):
 		snap = [None]
 
 		def exit_condition():
-			snap[0] = self._cinder.snapshot_get(snapshot_id)
+			snap[0] = self._cinder.volume_snapshots.get(snapshot_id)
 			return snap[0].status != 'creating'
 
 		util.wait_until(
@@ -444,16 +361,16 @@ class CinderSnapshot(base.Snapshot):
 	
 	def __init__(self, **kwds):
 		base.Snapshot.__init__(self, **kwds)
-		self._cinder = CinderFacade()		
+		self._cinder = CinderWrapper()		
 
 	def _status(self):
 		self._check_cinder_connection()
-		snapshot = self._cinder.snapshot_get(self.id)
+		snapshot = self._cinder.volume_snapshots.get(self.id)
 		return self._status_map[snapshot.status]
 
 	def _destroy(self):
 		self._check_cinder_connection()
-		self._cinder.snapshot_delete(self.id)
+		self._cinder.volume_snapshots.delete(self.id)
 
 
 storage2.volume_types['cinder'] = CinderVolume
