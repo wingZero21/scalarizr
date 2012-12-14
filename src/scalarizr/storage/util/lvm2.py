@@ -12,6 +12,7 @@ import time
 import random
 import logging
 import binascii
+from scalarizr import wait_until
 
 try:
 	from collections import namedtuple
@@ -273,7 +274,10 @@ class Lvm2:
 		else:
 			raise Lvm2Error('Cannot create logical volume: %s' % err)
 
-		return lvpath(os.path.basename(group), vol)
+		device_path = lvpath(os.path.basename(group), vol)
+		wait_until(lambda: os.path.exists(device_path), timeout=30)
+		return device_path
+
 
 
 	def create_lv_snapshot(self, lvolume, name=None, extents=None, size=None):
