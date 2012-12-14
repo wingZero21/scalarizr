@@ -250,7 +250,7 @@ class Lvm2:
 			args += ('--type=' + segment_type,)
 		if group and segment_type != 'snapshot':
 			args.append(group)
-		args += ('--noudevsync')
+		args += ('--noudevsync', )
 		if ph_volumes:
 			args += ph_volumes
 
