@@ -250,7 +250,7 @@ class Lvm2:
 			args += ('--type=' + segment_type,)
 		if group and segment_type != 'snapshot':
 			args.append(group)
-		args += ('--noudevsync', )
+
 		if ph_volumes:
 			args += ph_volumes
 
@@ -264,28 +264,25 @@ class Lvm2:
 		elif ret_code == 5:
 			logger.debug('Lvcreate exited with non-zero code. Trying to find '
 						'target device manually')
-			if segment_type == 'snapshot':
-				device_to_find = os.path.join(os.path.dirname(ph_volumes[0]), name)
-			else:
-				device_to_find = os.path.join('/dev', os.path.basename(group), name)
 
+			device_to_find = lvpath(os.path.basename(group), name)
 			if not os.path.exists(device_to_find):
 				raise Lvm2Error("Couldn't create logical volume %s: %s" % (device_to_find, err))
-
-			vol = name
+			return device_to_find
 
 		else:
 			raise Lvm2Error('Cannot create logical volume: %s' % err)
 
-
 		return lvpath(os.path.basename(group), vol)
-	
+
+
 	def create_lv_snapshot(self, lvolume, name=None, extents=None, size=None):
 		vg = extract_vg_lvol(lvolume)[0]
 		return self.create_lv(vg, name, extents, size, segment_type='snapshot', ph_volumes=(normalize_lvname(lvolume),))
-	
+
+
 	def change_lv(self, lvolume, available=None):
-		cmd = [LVCHANGE, '--noudevsync']
+		cmd = [LVCHANGE]
 		if available is not None:
 			cmd.append('-ay' if available else '-an')
 		cmd.append(normalize_lvname(lvolume))
@@ -308,7 +305,7 @@ class Lvm2:
 			if not system((LVREMOVE, '--test', '--force', vol), raise_exc=False)[2]:
 				break
 			time.sleep(1)
-		system((LVREMOVE, '--force', '--noudevsync', vol), error_text='Cannot remove logical volume')
+		system((LVREMOVE, '--force', vol), error_text='Cannot remove logical volume')
 
 	def extend_vg(self, group, *ph_volumes):
 		system([VGEXTEND, group] + list(ph_volumes), error_text='Cannot extend volume group')
