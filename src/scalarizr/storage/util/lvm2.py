@@ -252,11 +252,29 @@ class Lvm2:
 			args.append(group)
 		if ph_volumes:
 			args += ph_volumes
-		
-		out = system(args, error_text='Cannot create logical volume')[0].strip()
-		vol = re.match(r'Logical volume "([^\"]+)" created', out.split('\n')[-1].strip()).group(1)
-		if not vol:
-			raise Lvm2Error('Cannot create logical volume: %s' % out)
+
+		out, err, ret_code = system(args, raise_exc=False)
+		out = out.strip()
+		if not ret_code:
+			vol = re.match(r'Logical volume "([^\"]+)" created', out.split('\n')[-1].strip()).group(1)
+			if not vol:
+				raise Lvm2Error('Cannot create logical volume: %s' % err)
+
+		elif ret_code == 5:
+			logger.debug('Lvcreate exited with non-zero code. Trying to find '
+						'target device manually')
+			if segment_type == 'snapshot':
+				vol = os.path.join(os.path.dirname(ph_volumes), name)
+			else:
+				vol = os.path.join('/dev', os.path.basename(group), name)
+
+			if not os.path.exists(vol):
+				raise Lvm2Error("Couldn't create logical volume %s: %s" % (vol, err))
+
+		else:
+			raise Lvm2Error('Cannot create logical volume: %s' % err)
+
+
 		return lvpath(os.path.basename(group), vol)
 	
 	def create_lv_snapshot(self, lvolume, name=None, extents=None, size=None):
