@@ -264,12 +264,14 @@ class Lvm2:
 			logger.debug('Lvcreate exited with non-zero code. Trying to find '
 						'target device manually')
 			if segment_type == 'snapshot':
-				vol = os.path.join(os.path.dirname(ph_volumes), name)
+				device_to_find = os.path.join(os.path.dirname(ph_volumes[0]), name)
 			else:
-				vol = os.path.join('/dev', os.path.basename(group), name)
+				device_to_find = os.path.join('/dev', os.path.basename(group), name)
 
-			if not os.path.exists(vol):
-				raise Lvm2Error("Couldn't create logical volume %s: %s" % (vol, err))
+			if not os.path.exists(device_to_find):
+				raise Lvm2Error("Couldn't create logical volume %s: %s" % (device_to_find, err))
+
+			vol = name
 
 		else:
 			raise Lvm2Error('Cannot create logical volume: %s' % err)
