@@ -427,7 +427,7 @@ class LargeTransfer(bases.Task):
 			if callable(src):
 				src = (item for item in src())
 			else:
-				if not hasattr(src, '__iter__'):
+				if not hasattr(src, '__iter__') or hasattr(src, "read"):
 					src = [src]
 				src = iter(src)
 			if callable(dst):
@@ -955,11 +955,13 @@ class Manifest(object):
 		return self.data.__contains__(value)
 
 
-def cloudfs(fstype, imported={}, **driver_kwds):
-	if fstype not in imported:
-		imported[fstype] = __import__('scalarizr.storage2.cloudfs.%s' % fstype,
-			globals(), locals(), ["__cloudfs__"], -1).__cloudfs__
-	return imported[fstype](**driver_kwds)
+cloudfs_types = {}
+
+
+def cloudfs(fstype, **driver_kwds):
+	if fstype not in cloudfs_types:
+		__import__('scalarizr.storage2.cloudfs.%s' % fstype)
+	return cloudfs_types[fstype](**driver_kwds)
 
 
 class CloudFileSystem(object):

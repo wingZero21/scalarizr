@@ -306,6 +306,16 @@ def i_expect_failed_list_returned(step):
 	assert len(world.dl_result["failed"]) == 1
 
 
+@step("I have a (\d+) megabytes stream (\w+)")
+def i_have_a_stream(step, megabytes, name):
+	abs_path = os.path.join(world.basedir, name)
+	stream_md5 = make_file(abs_path, megabytes)
+	stream = open(abs_path, 'rb')
+
+	world.sources.append(stream)
+	world.items[os.path.basename(stream.name)] = stream_md5
+
+
 #@step("Driver test")
 def driver_test(step):
 	url = STORAGES["s3"]["url"]

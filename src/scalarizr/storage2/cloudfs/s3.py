@@ -9,6 +9,7 @@ from boto.s3.key import Key
 from boto.exception import S3ResponseError
 
 from scalarizr.bus import bus
+from scalarizr.storage2 import cloudfs
 
 
 class TransferError(Exception):  #? BaseException
@@ -144,4 +145,4 @@ def location_from_region(region):
 		return region
 
 
-__cloudfs__ = S3FileSystem
+cloudfs.cloudfs_types["s3"] = S3FileSystem

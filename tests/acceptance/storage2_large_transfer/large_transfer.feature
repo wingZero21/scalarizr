@@ -39,6 +39,18 @@ Scenario: Download files and dirs
     When I download with the manifest
     Then I expect original items downloaded
 
+Scenario: Upload single stream
+    Initialize upload variables
+    Given I have a 10 megabytes stream S1
+    When I upload it to s3 with gzipping
+    Then I expect manifest as a result
+    And all chunks are uploaded
+
+Scenario: Download single stream
+    Given I have info from the previous upload
+    When I download with the manifest
+    Then I expect original items downloaded
+
 Scenario: Upload list of streams
     Initialize upload variables
     Given I have a list with 10 megabytes stream S1, with 10 megabytes stream S2
