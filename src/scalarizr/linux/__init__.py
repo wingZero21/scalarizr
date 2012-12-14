@@ -27,7 +27,11 @@ def which(exe):
 def system(*args, **kwds):
 	kwds['exc_class'] = LinuxError
 	if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
-		args[0][0] = which(args[0][0])
+		executable = which(args[0][0])
+		if not executable:
+			msg = "Executable '%s' not found" % args[0][0]
+			raise LinuxError(msg)
+		args[0][0] = executable
 	return util.system2(*args, **kwds)
 
 
@@ -38,7 +42,6 @@ class Version(distutils.version.LooseVersion):
 			other0.version = list(other)
 			other = other0
 		return distutils.version.LooseVersion.__cmp__(self, other)
-
 
 
 class __os(dict):
@@ -156,8 +159,8 @@ class __os(dict):
 		if not 'name' in self:
 			self['name'] = name
 		self['release'] = Version(release)
-		self['codename'] = codename				
-				
+		self['codename'] = codename
+
 		if not 'name' in self:
 			self['name'] = 'Unknown %s' % self['kernel']
 			self['family'] = 'Unknown'
@@ -192,7 +195,7 @@ def build_cmd_args(executable=None, short=None, long=None, params=None):
 			ret.append(value)
 	if params:
 		ret += list(params)
-	return ret
+	return map(str, ret)
 
 
 

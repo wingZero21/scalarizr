@@ -32,6 +32,14 @@ from scalarizr.linux import coreutils
 LOG = logging.getLogger(__name__)
 
 
+class Error(Exception):
+	pass
+
+
+class DriverError(Error):
+	pass
+
+
 ### to move
 
 class EventInterrupt(Exception):
@@ -100,19 +108,21 @@ class BaseTransfer(bases.Task):
 		if callable(src):
 			src = (item for item in src())
 		else:
-			if not hasattr(src, '__iter__'):
+			try:
+				iter(src)
+			except:
 				src = [src]
-			src = iter(src)
 		if callable(dst):
 			dst = (item for item in dst())
-		elif not hasattr(dst, '__iter__'):
-			dst = itertools.repeat(dst)
 		else:
-			dst = iter(dst)	
-	
+			try:
+				iter(dst)
+			except:
+				dst = itertools.repeat(dst)
+
 		super(BaseTransfer, self).__init__(src=src, dst=dst, **kwds)
 		self.define_events('transfer_start', 'transfer_error', 'transfer_complete')
-		
+
 
 class FileTransfer(BaseTransfer):
 
@@ -495,6 +505,7 @@ class LargeTransfer(bases.Task):
 			self._transfer.on(transfer_complete=delete_uploaded_chunk)
 
 			for src in self.src:
+				LOG.debug('src: %s, type: %s', src, type(src))
 				fileinfo = {
 					"name": '',
 					"streamer": None,
@@ -508,7 +519,8 @@ class LargeTransfer(bases.Task):
 				if hasattr(src, 'read'):
 					stream = src
 					if hasattr(stream, 'name'):
-						name = os.path.basename(stream.name)  #? can stream name end with '/'
+						# os.pipe stream has name '<fdopen>'
+						name = os.path.basename(stream.name).strip('<>')  #? can stream name end with '/'
 					else:
 						name = 'stream-%s' % hash(stream)
 					fileinfo["name"] = name

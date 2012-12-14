@@ -441,6 +441,8 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 
 		kwds = {
 			'stream': 'xbstream',
+			#'compress': True,
+			#'compress_threads': os.sysconf('SC_NPROCESSORS_ONLN'),
 			'user': __mysql__['root_user'],
 			'password': __mysql__['root_password']
 		}
@@ -451,14 +453,14 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 				'incremental_lsn': self.from_lsn
 			})
 
-		xbak = innobackupex.args(**kwds).popen()
-		stream_in = cloudfs.namedstream(xbak.stdout, 'xtrabackup')
-		LOG.debug('Creating LargeTransfer, src=%s dst=%s', stream_in, self.cloudfs_dest)
+		xbak = innobackupex.args(__mysql__['tmp_dir'], **kwds).popen()
+		LOG.debug('Creating LargeTransfer, src=%s dst=%s', xbak.stdout, self.cloudfs_dest)
 		transfer = cloudfs.LargeTransfer(
-					stream_in,
+					[xbak.stdout],
 					self.cloudfs_dest,
-					gzip_it=True)
+					compressor=None)
 		cloudfs_dest = transfer.run()
+		LOG.debug('cloudfs_dest: %s', cloudfs_dest)
 		xbak.wait()
 		if xbak.returncode:
 			msg = xbak.stderr.read()
@@ -466,11 +468,11 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 
 		log_file = log_pos = to_lsn = None
 		for line in xbak.stderr.readlines():
-			m = self._re_lsn.search()
+			m = self._re_lsn.search(line)
 			if m:
 				to_lsn = int(m.group(1))
 				continue
-			m = self._re_binlog.search()
+			m = self._re_binlog.search(line)
 			if m:
 				log_file = m.group(1)
 				log_pos = int(m.group(2))
@@ -508,7 +510,12 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 		coreutils.clean_dir(__mysql__['data_dir'])
 
 		LOG.info('Downloading the base backup (LSN: 0..%d)', self.to_lsn)
-		xbak = cloudfs.LargeTransfer(self.cloudfs_src, __mysql__['data_dir'])
+		xbak = cloudfs.LargeTransfer(
+				self.cloudfs_src,
+				__mysql__['data_dir'],
+				streamer=xbstream.args(
+						extract=True,
+						directory=__mysql__['data_dir']))
 		xbak.run()
 
 		LOG.info('Preparing the base backup')
@@ -520,17 +527,20 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 
 		if self.incrementals:
 			inc_dir = os.path.join(__mysql__['tmp_dir'], 'xtrabackup-restore-inc')
-			os.makedirs(inc_dir)
-			try:
-				i = 0
-				for inc in self.incrementals:
+			i = 0
+			for inc in self.incrementals:
+				try:
+					os.makedirs(inc_dir)
 					inc = backup.restore(inc)
 					LOG.info('Downloading incremental backup #%d (LSN: %d..%d)', i,
 							inc.from_lsn, inc.to_lsn)
 					xbak = cloudfs.LargeTransfer(
 							inc.cloudfs_src,
 							inc_dir,
-							decompressor=xstream.args(short=['-x']))
+							streamer=xbstream.args(
+									extract=True,
+									directory=__mysql__['data_dir']))
+
 					xbak.run()  # todo: Largetransfer should support custom decompressor proc
 					LOG.info('Preparing incremental backup #%d', i)
 					innobackupex(__mysql__['data_dir'],
@@ -540,15 +550,15 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 							user=__mysql__['root_user'],
 							password=__mysql__['root_password'])
 					i += 1
-			finally:
-				coreutils.clean_dir(inc_dir)
-				os.remove(inc_dir)
+				finally:
+					coreutils.remove(inc_dir)
 
 		LOG.info('Preparing the full backup')
 		innobackupex(__mysql__['data_dir'],
 				apply_log=True,
 				user=__mysql__['root_user'],
 				password=__mysql__['root_password'])
+		coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
 
 
 #backup.backup_types['xtrabackup'] = XtrabackupBackup
@@ -642,7 +652,7 @@ class Exec(object):
 		assert isinstance(executable, basestring)
 		self.executable = executable
 		self.package = package
-		self.local = threading.local()
+		self.cmd = None
 		LOG.debug('Exec[%s] package=%s', self.executable, self.package)
 
 	def check(self):
@@ -656,11 +666,11 @@ class Exec(object):
 				raise linux.LinuxError(msg)
 
 	def args(self, *params, **long_kwds):
-		self.local.args = linux.build_cmd_args(
+		self.cmd = linux.build_cmd_args(
 			executable=self.executable,
 			long=long_kwds,
 			params=params)
-		LOG.debug('local.args: %s', self.local.args)
+		LOG.debug('cmd: %s', self.cmd)
 		return self
 
 	def popen(self, **kwds):
@@ -672,12 +682,12 @@ class Exec(object):
 			kwds['stdout'] = subprocess.PIPE
 		if not 'stderr' in kwds:
 			kwds['stderr'] = subprocess.PIPE
-		return subprocess.Popen(self.local.args, **kwds)
+		return subprocess.Popen(self.cmd, **kwds)
 
 	def __call__(self, *params, **long_kwds):
 		self.args(*params, **long_kwds)
 		self.check()
-		return linux.system(self.local.args)
+		return linux.system(self.cmd)
 
 '''
 def innobackupex(*params, **long_kwds):
@@ -692,7 +702,7 @@ def innobackupex(*params, **long_kwds):
 innobackupex = Exec('/usr/bin/innobackupex',
 				package='percona-xtrabackup')
 
-xstream = Exec('/usr/bin/xstream',
+xbstream = Exec('/usr/bin/xbstream',
 				package='percona-xtrabackup')
 
 
