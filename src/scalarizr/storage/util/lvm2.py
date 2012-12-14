@@ -250,6 +250,7 @@ class Lvm2:
 			args += ('--type=' + segment_type,)
 		if group and segment_type != 'snapshot':
 			args.append(group)
+		args += ('--noudevsync')
 		if ph_volumes:
 			args += ph_volumes
 
@@ -284,7 +285,7 @@ class Lvm2:
 		return self.create_lv(vg, name, extents, size, segment_type='snapshot', ph_volumes=(normalize_lvname(lvolume),))
 	
 	def change_lv(self, lvolume, available=None):
-		cmd = [LVCHANGE]
+		cmd = [LVCHANGE, '--noudevsync']
 		if available is not None:
 			cmd.append('-ay' if available else '-an')
 		cmd.append(normalize_lvname(lvolume))
@@ -307,7 +308,7 @@ class Lvm2:
 			if not system((LVREMOVE, '--test', '--force', vol), raise_exc=False)[2]:
 				break
 			time.sleep(1)
-		system((LVREMOVE, '--force', vol), error_text='Cannot remove logical volume')
+		system((LVREMOVE, '--force', '--noudevsync', vol), error_text='Cannot remove logical volume')
 
 	def extend_vg(self, group, *ph_volumes):
 		system([VGEXTEND, group] + list(ph_volumes), error_text='Cannot extend volume group')
