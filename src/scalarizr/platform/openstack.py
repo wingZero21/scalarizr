@@ -9,15 +9,15 @@ from scalarizr.platform import PlatformError
 
 
 #TODO: move next hardcode to some config
-class OpenstackCredentials:
-    USER = 'admin'
-    PASSWORD = 'password'
-    TENANT = 'demo'
-    SERVER_ADDRESS = 'http://192.168.1.100'
+# class OpenstackCredentials:
+#     USER = 'admin'
+#     PASSWORD = 'password'
+#     TENANT = 'demo'
+#     SERVER_ADDRESS = 'http://192.168.1.100'
 
-    AUTH_URL = '%s:5000/v2.0' % SERVER_ADDRESS
-    KEYSTONE_ENDPOINT = AUTH_URL
-    GLANCE_ENDPOINT = '%s:9292' % SERVER_ADDRESS
+#     AUTH_URL = '%s:5000/v2.0' % SERVER_ADDRESS
+#     KEYSTONE_ENDPOINT = AUTH_URL
+#     GLANCE_ENDPOINT = '%s:9292' % SERVER_ADDRESS
 
 
 class OpenstackServiceWrapper(object):
