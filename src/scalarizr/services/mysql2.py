@@ -539,7 +539,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 							inc_dir,
 							streamer=xbstream.args(
 									extract=True,
-									directory=__mysql__['data_dir']))
+									directory=inc_dir))
 
 					xbak.run()  # todo: Largetransfer should support custom decompressor proc
 					LOG.info('Preparing incremental backup #%d', i)
