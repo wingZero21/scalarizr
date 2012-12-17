@@ -1,12 +1,14 @@
 import urllib2
 import json
+import os
 
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
 
 from scalarizr.platform import Platform
 from scalarizr.platform import PlatformError
-
+from scalarizr.util.filetool import read_file
+from scalarizr.bus import bus
 
 #TODO: move next hardcode to some config
 # class OpenstackCredentials:
@@ -106,10 +108,21 @@ class OpenstackPlatform(Platform):
             return json.loads(response)
         except IOError, e:
             if isinstance(e, urllib2.HTTPError):
-                if e.code == 404:
-                    return {}
+                metadata = self._fetch_metadata_from_file()
+                return {'meta': metadata} #TODO: move some keys from metadata to parent dict, that should be there when fetching from url
             raise PlatformError("Cannot fetch %s metadata url '%s'. " \
                 "Error: %s" % (self.name, url, e))
+
+    def _fetch_metadata_from_file(self):
+        cnf = bus.cnf
+        if self._userdata is None:
+            path = cnf.private_path('.user-data')
+            if os.path.exists(path):
+                rawmeta = read_file(path)
+                if not rawmeta:
+                    raise PlatformError("Empty user-data")
+                return self._parse_user_data(rawmeta)
+        return self._userdata
 
     def new_cinder_connection(self):
         return CinderWrapper(self._access_data["user"], 
