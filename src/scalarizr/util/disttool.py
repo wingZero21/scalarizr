@@ -16,7 +16,7 @@ _is_debian_based = _is_redhat_based = False
 _is_debian = _is_ubuntu = False
 _is_rhel = _is_centos = _is_fedora = False
 
-_debian_based_dists = ['debian', 'ubuntu']
+_debian_based_dists = ['debian', 'ubuntu', 'gcel']
 _redhat_based_dists = map(string.lower, (
 	'centos', 
 	'centos linux', #centos60 only
@@ -49,7 +49,7 @@ if _is_linux:
 	_is_redhat_based = dist_name in _redhat_based_dists
 	_is_debian_based = dist_name in _debian_based_dists
 	_is_debian = dist_name == "debian"
-	_is_ubuntu = dist_name == "ubuntu"
+	_is_ubuntu = dist_name in ("ubuntu", "gcel")
 	_is_fedora = dist_name == "fedora" or (dist_name == 'redhat' and _linux_dist[2].lower() == 'werewolf')
 	_is_centos = dist_name == "centos" or dist_name == "centos linux"
 	_is_rhel = dist_name in ('red hat enterprise linux server', 'rhel',

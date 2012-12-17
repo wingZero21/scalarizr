@@ -302,7 +302,7 @@ class EphSnapshotProviderLite(object):
 			clear_queue(self._upload_queue)
 
 			if not os.path.exists(self._pigz_bin):
-				if linux.os['name'] == 'Ubuntu' and linux.os['release'] >= (10, 4):
+				if linux.os['family'] == 'Debian' and linux.os['release'] >= (10, 4):
 					pkgmgr.installed('pigz')
 				elif linux.os['family'] == 'RedHat' and linux.os['release'] >= (6, 0):
 					pkgmgr.epel_repository()

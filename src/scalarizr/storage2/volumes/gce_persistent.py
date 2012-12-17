@@ -37,7 +37,7 @@ class GcePersistentVolume(gce_ephemeral.GceEphemeralVolume):
 
 		now_raw = datetime.datetime.utcnow()
 		now_str = now_raw.strftime('%d-%b-%Y-%H-%M-%S-%f')
-		snap_name = '%s_snap_%s' % (self.id, now_str)
+		snap_name = '%s-snap-%s' % (self.id, now_str)
 
 		operation = connection.snapshots().insert(project=project_id,
 						body=dict(
