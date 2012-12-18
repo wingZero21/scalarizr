@@ -391,23 +391,27 @@ class LargeTransfer(bases.Task):
 	1. Download manifest 
 	2. <chunk downloader> | funzip | tar -x -C /mnt/dbbackup
 	'''
-	# TODO: benchmarks bzip against pigz
-	# http://tukaani.org/lzma/benchmarks.html
+
+	# TODO: graceful shutdown: interrupt chunk download
+
+	# TODO: s3 cleanup on fail
+
+	# TODO: bubble exceptions
 
 	# TODO: unlimited disk case: download all before unpacking
 
-	# TODO: graceful shutdown: interrupt chunk download
 	# TODO: kill -9 tmpfs problem
-	# TODO: s3 cleanup on fail
+
+	# TODO: benchmarks bzip against pigz
+	# http://tukaani.org/lzma/benchmarks.html
 
 	# TODO: subprocess hang problem
+	# python 2.7.3 @ ubuntu 12.04 works
 	# python 2.7.2 @ ubuntu 11.10 fail
+	# python 2.6.7 @ ubuntu 11.10 works
 	# python 2.6.5 @ ubuntu 10.04 works
-	# python 2.7.3 @ ubuntu 12.04 ?
 	# solutions: waiter thread that would kill everything on hang or
-	# separate thread for subprocess opening?
-
-	# TODO: bubble exceptions
+	# separate thread for subprocess opening? or just document it :)
 
 	# NOTE: use directory dst for uploading.
 	pigz_bin = '/usr/bin/pigz'
@@ -463,6 +467,7 @@ class LargeTransfer(bases.Task):
 		self.compressor = compressor
 		self.chunk_size = chunk_size
 		self.try_pigz = try_pigz
+		self._upload_res = None
 		self._restorer = None
 		self._killed = False
 		self._manifest_ready = InterruptibleEvent()
@@ -483,6 +488,18 @@ class LargeTransfer(bases.Task):
 		self.define_events(*events)
 		for ev in events:
 			self._transfer.on(ev, self._proxy_event(ev))
+
+
+	def _gzip_bin(self):
+		if self.try_pigz and os.path.exists(self.pigz_bin):
+			return self.pigz_bin
+		return self.gzip_bin
+
+
+	def _proxy_event(self, event):
+		def proxy(*args, **kwds):
+			self.fire(event, *args, **kwds)
+		return proxy
 		
 
 	def _src_generator(self):
@@ -551,7 +568,7 @@ class LargeTransfer(bases.Task):
 						prefix = os.path.join(prefix, name) + '.'
 
 						LOG.debug("LargeTransfer src_generator custom streamer POPEN")
-						#TODO: self.streamer.args += src
+						# TODO: self.streamer.args += src
 						tar = cmd = self.streamer.popen(stdin=None)
 						LOG.debug("LargeTransfer src_generator after custom streamer POPEN")
 					stream = tar.stdout
@@ -607,7 +624,10 @@ class LargeTransfer(bases.Task):
 				yield manifest_f
 
 		elif not self._up:
-			self._transfer.on(transfer_error=lambda *args: self.kill())
+			def on_transfer_error(*args):
+				LOG.debug("transfer_error event, shutting down")
+				self.kill()
+			self._transfer.on(transfer_error=on_transfer_error)
 
 			# The first yielded object will be the manifest, so
 			# catch_manifest is a listener that's supposed to trigger only
@@ -707,18 +727,6 @@ class LargeTransfer(bases.Task):
 				break
 
 
-	def _gzip_bin(self):
-		if self.try_pigz and os.path.exists(self.pigz_bin):
-			return self.pigz_bin
-		return self.gzip_bin
-
-
-	def _proxy_event(self, event):
-		def proxy(*args, **kwds):
-			self.fire(event, *args, **kwds)
-		return proxy
-
-
 	def _dl_restorer(self):
 		buf_size = 4096
 
@@ -782,6 +790,7 @@ class LargeTransfer(bases.Task):
 
 			try:
 				for chunk, info in file["chunks"].iteritems():
+
 					LOG.debug("*** RESTORER before wait %s" % chunk)
 					info["downloaded"].wait()
 
@@ -792,7 +801,16 @@ class LargeTransfer(bases.Task):
 							if not bytes:
 								LOG.debug("*** RESTORER break %s" % chunk)
 								break
-							stream.write(bytes)
+							try:
+								stream.write(bytes)
+
+							except Exception, e:
+								if isinstance(e, IOError) and e.errno == 32:
+									LOG.debug("*** RESTORER encountered broken"
+											  " pipe, err msg from the last"
+											  " supbrocess: %s" % cmd.stderr.read())
+								self.kill()
+								raise
 
 					info["processed"].set()  # this leads to chunk removal
 			finally:
@@ -801,10 +819,9 @@ class LargeTransfer(bases.Task):
 				#? wait for unzip first in case of tar&gzip
 
 				if cmd:
-					LOG.debug("*** RESTORER untar wait")
+					LOG.debug("*** RESTORER cmd wait")
 					cmd.wait()
-
-			LOG.debug("LargeTransfer download: finished restoring")
+					LOG.debug("LargeTransfer download: finished restoring")
 
 
 	def _run(self):
@@ -821,6 +838,9 @@ class LargeTransfer(bases.Task):
 					self._restorer.join()
 				return res
 			elif self._up:
+				if res["failed"] or self._transfer._stop_all.is_set():
+					#? upload failed inside FileTransfer or it was killed
+					self._s3_cleanup()
 				if self.multipart:
 					return res["multipart_result"]
 				else:
@@ -831,8 +851,13 @@ class LargeTransfer(bases.Task):
 			coreutils.remove(self._tranzit_vol.mpoint)
 
 
+	def _s3_cleanup(self):
+		# TODO
+		# LOG.debug("Performing S3 clean up")
+		pass
+
+
 	def kill(self):
-		LOG.debug("Killing LargeTransfer")
 		self._killed = True
 		self._transfer.kill_nowait()
 
