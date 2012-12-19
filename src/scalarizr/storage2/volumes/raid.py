@@ -52,6 +52,8 @@ class RaidVolume(base.Volume):
 		if vg is not None:
 			vg = os.path.basename(vg)
 		self._v1_compat = False
+		if disks:
+			disks = [storage2.volume(disk) for disk in disks]
 		super(RaidVolume, self).__init__(disks=disks or [],
 				raid_pv=raid_pv, level=level and int(level), 
 				lvm_group_cfg=lvm_group_cfg,
@@ -238,6 +240,7 @@ class RaidVolume(base.Volume):
 		self.raid_pv = None
 
 		for disk in self.disks:
+			disk = storage2.volume(disk)
 			disk.detach(force=force)
 
 
@@ -269,6 +272,7 @@ class RaidVolume(base.Volume):
 		remove_disks = kwds.get('remove_disks')
 		if remove_disks:
 			for disk in self.disks:
+				disk = storage2.volume(disk)
 				disk.destroy(force=force)
 			self.disks = []
 
