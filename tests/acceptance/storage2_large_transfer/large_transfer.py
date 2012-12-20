@@ -166,7 +166,7 @@ def i_have_a_file(step, megabytes, filename):
 def i_upload_it_with_gzipping(step, storage):
 	world.destination = STORAGES[storage]["url"]
 	world.driver = STORAGES[storage]["driver"]()
-	world.manifest_url = LargeTransfer(world.sources[0], world.destination).run()
+	world.manifest_url = LargeTransfer(world.sources[0], world.destination, chunk_size=15).run()
 
 
 
