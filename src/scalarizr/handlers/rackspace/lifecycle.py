@@ -2,7 +2,8 @@
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.config import ScalarizrState
-from scalarizr.linux import iptables, os as linux_os
+from scalarizr.linux import iptables
+from scalarizr.node import __node__
 import logging
 
 
@@ -41,30 +42,5 @@ class RackspaceLifeCycleHandler(Handler):
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8013"},
 				{"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
 			]
+			iptables.FIREWALL.ensure(rules)
 
-			if linux_os["family"] in ("RedHat", "Oracle"):
-				iptables.ensure({"RH-Firewall-1-INPUT": rules}) #? try except
-			else:
-				iptables.ensure({"INPUT": rules})
-
-		"""
-		firewall = iptables.IpTables()
-		if firewall.enabled():
-			rules = []
-			
-			# Scalarizr ports
-			rules.append(iptables.RuleSpec(dport=8008, jump='ACCEPT', protocol=iptables.P_TCP))
-			rules.append(iptables.RuleSpec(dport=8012, jump='ACCEPT', protocol=iptables.P_TCP))
-			rules.append(iptables.RuleSpec(dport=8013, jump='ACCEPT', protocol=iptables.P_TCP))
-			rules.append(iptables.RuleSpec(dport=8014, jump='ACCEPT', protocol=iptables.P_UDP))
-			
-			for rule in rules:
-				firewall.insert_rule(None, rule_spec = rule)
-				
-			if disttool.is_redhat_based():
-				for rule in rules:
-					try:
-						firewall.insert_rule(None, rule_spec = rule, chain='RH-Firewall-1-INPUT')
-					except:
-						pass
-		"""

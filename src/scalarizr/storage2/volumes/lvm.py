@@ -193,12 +193,16 @@ class LvmVolume(base.Volume):
 				pass
 			else:
 				if not (int(vg_info.snap_count) and not int(vg_info.lv_count)):
-					# TODO: Volume.destroy()
 					pv_disks = [device for device, pv_info in lvm2.pvs().items()
 								if pv_info.vg_name == self.vg]
 					lvm2.vgremove(self.vg)
 					for device in pv_disks:
 						lvm2.pvremove(device)
+
+					for pv in self.pvs:
+						pv.destroy(force=True)
+			
+
 						
 	def _clone(self, config):
 		config['pvs'] = [storage2.volume(pv).clone() for pv in config['pvs']]

@@ -58,7 +58,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 		self._logger = logging.getLogger(__name__)
 		self.rabbitmq = rabbitmq_svc.rabbitmq
 		self.service = initdv2.lookup(BuiltinBehaviours.RABBITMQ)
-		
+		self._service_name = BEHAVIOUR
 		self.on_reload()
 			
 		if 'ec2' == self.platform.name:
@@ -190,6 +190,9 @@ class RabbitMQHandler(ServiceCtlHandler):
 			ini = self.cnf.rawini
 			if message.node_type != ini.get(CNF_SECTION, 'node_type'):
 				self._logger.info('Changing node type to %s' % message.node_type)
+
+				disk_node = message.node_type == rabbitmq_svc.NodeTypes.DISK
+
 				hostname_ip_pairs = self._get_cluster_nodes()
 				nodes_to_cluster_with = []
 		
@@ -197,12 +200,14 @@ class RabbitMQHandler(ServiceCtlHandler):
 					nodes_to_cluster_with.append(hostname)
 					dns.ScalrHosts.set(ip, hostname)
 					
-				if nodes_to_cluster_with:
-					if message.node_type == rabbitmq_svc.NodeTypes.DISK:
-						hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
-						nodes_to_cluster_with.append(hostname)
-						
-					self.rabbitmq.cluster_with(nodes_to_cluster_with, do_reset=False)
+				if nodes_to_cluster_with or disk_node:
+					self_hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
+					self.rabbitmq.change_node_type(self_hostname,
+								nodes_to_cluster_with, disk_node)
+				else:
+					raise HandlerError('At least 1 disk node should'
+								'present in cluster')
+
 																
 				self._update_config(dict(node_type=message.node_type))
 			else:
@@ -228,8 +233,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 			
 	on_RabbitMq_IntHostInit = on_HostInit
 
-			
-			
+
 	def on_HostDown(self, message):
 		if not BuiltinBehaviours.RABBITMQ in message.behaviour:
 			return
@@ -286,7 +290,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 		for subdir in os.listdir(storage_path):
 			if subdir.startswith('rabbit'):
 				return False
-		return True				
+		return True
 
 
 	def on_before_host_up(self, message):
@@ -306,7 +310,9 @@ class RabbitMQHandler(ServiceCtlHandler):
 												RabbitMQMessages.INT_RABBITMQ_HOST_INIT,
 												msg_body, broadcast=True)
 						except:
-							self._logger.warning("Can't deliver internal message to server %s" % ip)
+							e = sys.exc_info()[1]
+							self._logger.warning("Can't deliver internal message"
+									" to server %s: %s" % (ip, e))
 			
 					volume_cnf = storage.Storage.restore_config(self._volume_config_path)
 					self.storage_vol = self._plug_storage(DEFAULT_STORAGE_PATH, volume_cnf)
@@ -316,15 +322,12 @@ class RabbitMQHandler(ServiceCtlHandler):
 					os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 					
 				with op.step(self._step_patch_conf):
+					# Check if it's first run here, before rabbit starts
 					init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
-					
 					do_cluster = True if nodes_to_cluster_with else False
 					is_disk_node = self.rabbitmq.node_type == rabbitmq_svc.NodeTypes.DISK
-					
-					if is_disk_node:
-						hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
-						nodes_to_cluster_with.append(hostname)
-				
+					self_hostname = self.cnf.rawini.get(CNF_SECTION, 'hostname')
+
 					self._logger.debug('Enabling management agent plugin')
 					self.rabbitmq.enable_plugin(RABBITMQ_MGMT_AGENT_PLUGIN_NAME)
 					
@@ -336,8 +339,10 @@ class RabbitMQHandler(ServiceCtlHandler):
 					self.service.start()
 		
 				with op.step(self._step_join_cluster):
+
 					if do_cluster and (not is_disk_node or init_run):
-						self.rabbitmq.cluster_with(nodes_to_cluster_with)
+						self.rabbitmq.cluster_with(self_hostname,
+									nodes_to_cluster_with, is_disk_node)
 			
 					self.rabbitmq.delete_user('guest')
 					password = self.cnf.rawini.get(CNF_SECTION, 'password')
@@ -349,7 +354,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 					
 				with op.step(self._step_collect_hostup_data):
 					# Update message
-					msg_data = {}
+					msg_data = dict()
 					msg_data['volume_config'] = self.storage_vol.config()
 					msg_data['node_type'] = self.rabbitmq.node_type
 					msg_data['password'] = password

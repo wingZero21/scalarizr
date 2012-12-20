@@ -140,6 +140,14 @@ def pvcreate(*physical_volumes, **long_kwds):
 			params=physical_volumes))
 
 
+def pvresize(*physical_volume_paths, **long_kwds):
+	return linux.system(linux.build_cmd_args(
+		executable='/sbin/pvresize',
+		long=long_kwds,
+		params=physical_volume_paths))
+
+
+
 def pvchange(*physical_volume_paths, **long_kwds):
 	try:
 		return linux.system(linux.build_cmd_args(
@@ -268,6 +276,12 @@ def lvextend(logical_volume_path, **long_kwds):
 		long=long_kwds,
 		params=[logical_volume_path]))
 
+
+def lvresize(logical_volume_path, **long_kwds):
+	return linux.system(linux.build_cmd_args(
+		executable='/sbin/lvresize',
+		long=long_kwds,
+		params=[logical_volume_path]))
 
 
 def backup_vg_config(vg_name):

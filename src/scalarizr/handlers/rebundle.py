@@ -397,7 +397,7 @@ class LinuxImage:
 		rsync = filetool.Rsync()
 		#rsync.archive().times().sparse().links().quietly()
 		#rsync.archive().sparse().xattributes()
-		rsync.archive().sparse()
+		rsync.archive().sparse().times()
 		if xattr:
 			rsync.xattributes()
 		rsync.exclude(self.excludes)

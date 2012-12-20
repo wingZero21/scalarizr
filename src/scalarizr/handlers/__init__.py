@@ -8,6 +8,7 @@ from scalarizr.util import initdv2, disttool, software
 from scalarizr.linux import iptables
 from scalarizr.util.filetool import write_file
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
+from scalarizr.node import __node__
 
 import logging
 import threading
@@ -15,6 +16,7 @@ import pprint
 import sys
 import traceback
 import uuid
+import distutils.version
 
 LOG = logging.getLogger(__name__)
 
@@ -144,12 +146,12 @@ class operation(object):
 
 
 class Handler(object):
-	_service_name = None
+	_service_name = behaviour = None
 	_logger = logging.getLogger(__name__)
 
 	def __init__(self):
 		if self._service_name and self._service_name not in self.get_ready_behaviours():
-			msg = 'Cannot load handler %s. Missing software.' % self.behaviour
+			msg = 'Cannot load handler %s. Missing software.' % self._service_name
 			raise HandlerError(msg)
 	
 	def get_initialization_phases(self, hir_message):
@@ -235,37 +237,39 @@ class Handler(object):
 
 	def get_ready_behaviours(self):
 		handlers = list()
-		info = software.system_info()
+		info = software.system_info(verbose=True)
 		if 'software' in info:
+			Version = distutils.version.LooseVersion
 			for entry in info['software']:
 				if not ('name' in entry and 'version' in entry):
 					continue
 				name = entry['name']
-				version = entry['version']
-				str_ver = entry['string_version']
+				
+				version = Version(entry['version'])
+
+				str_ver = entry['string_version'] if 'string_version' in entry else ''
 				if name == 'nginx':
 					handlers.append(config.BuiltinBehaviours.WWW)
 				elif name == 'chef':
 					handlers.append(config.BuiltinBehaviours.CHEF)
 				elif name == 'memcached':
 					handlers.append(config.BuiltinBehaviours.MEMCACHED)
-				if len(version) < 3:
-					continue
-				elif name == 'postgresql' and version[:3] in ('9.0', '9.1'):
+
+				elif name == 'postgresql' and Version('9.0') <= version < Version('9.2'):
 					handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-				elif name == 'redis' and version[:3] in ('2.2', '2.4'):
+				elif name == 'redis' and Version('2.2') <= version < Version('2.6'):
 					handlers.append(config.BuiltinBehaviours.REDIS)
-				elif name == 'rabbitmq' and version[:3] in ('2.6', '2.8'):
+				elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.0'):
 					handlers.append(config.BuiltinBehaviours.RABBITMQ)
-				elif name == 'mongodb' and version[:3] in ('2.0', '2.2'):
+				elif name == 'mongodb' and Version('2.0') <= version < Version('2.3'):
 					handlers.append(config.BuiltinBehaviours.MONGODB)
-				elif name == 'apache' and version[:3] in ('2.0', '2.1', '2.2'):
+				elif name == 'apache' and Version('2.0') <= version < Version('2.3'):
 					handlers.append(config.BuiltinBehaviours.APP)
-				elif name == 'mysql' and version.startswith('5.1'):
+				elif name == 'mysql' and Version('5.0') <= version < Version('5.5'):
 					handlers.append(config.BuiltinBehaviours.MYSQL)
-				elif name == 'mysql' and version.startswith('5.5') and str_ver and 'Percona' in str_ver:
+				elif name == 'mysql' and Version('5.5') <= version and str_ver and 'Percona' in str_ver:
 					handlers.append(config.BuiltinBehaviours.PERCONA)
-				elif name == 'mysql' and version.startswith('5.5'):
+				elif name == 'mysql' and Version('5.5') <= version:
 					handlers.append(config.BuiltinBehaviours.MYSQL2)
 		return handlers
 
@@ -315,13 +319,15 @@ class MessageListener:
 	
 	def __call__(self, message, queue):
 		self._logger.debug("Handle '%s'" % (message.name))
-		
+
+		cnf = bus.cnf
+		pl = bus.platform
+		platform_access_data_on_me = False
 		try:
 			# Each message can contains secret data to access platform services.
 			# Scalarizr assign access data to platform object and clears it when handlers processing finished 
-			pl = bus.platform
-			cnf = bus.cnf
 			if message.body.has_key("platform_access_data"):
+				platform_access_data_on_me = True				
 				pl.set_access_data(message.platform_access_data)
 			if 'scalr_version' in message.meta:
 				try:
@@ -356,7 +362,8 @@ class MessageListener:
 			if not accepted:
 				self._logger.warning("No one could handle '%s'", message.name)
 		finally:
-			pl.clear_access_data()
+			if platform_access_data_on_me:
+				pl.clear_access_data()
 
 def async(fn):
 	def decorated(*args, **kwargs):
@@ -373,10 +380,17 @@ class ServiceCtlHandler(Handler):
 	_preset_store = None
 	
 	def __init__(self, service_name, init_script=None, cnf_ctl=None):
-		self._logger = logging.getLogger(__name__)
+		'''
+		XXX: When migrating to the new preset system
+		do not forget that self._service_name is essential for
+		Handler.get_ready_behaviours() and should be overloaded
+		in every ServiceCtlHandler child.
+
+		'''
 		self._service_name = service_name
 		self._cnf_ctl = cnf_ctl
 		self._init_script = init_script
+		self._logger = logging.getLogger(__name__)
 		self._preset_store = CnfPresetStore(self._service_name)
 		Handler.__init__(self)
 
@@ -681,11 +695,7 @@ class FarmSecurityMixin(object):
 		for port in self._ports:
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
 
-		self._iptables.ensure({"INPUT": rules})
-		"""
-		for rule in rules:
-			self._iptables.insert_rule(1, rule)
-		"""
+		self._iptables.FIREWALL.ensure(rules)
 		
 
 	def on_HostDown(self, message):
@@ -698,7 +708,7 @@ class FarmSecurityMixin(object):
 			rules += self.__accept_host(message.local_ip, message.remote_ip, port)
 		for rule in rules:
 			try:
-				self._iptables.INPUT.remove(rule)
+				self._iptables.FIREWALL.remove(rule)
 				#self._iptables.delete_rule(rule)
 			except: #?
 				if 'does a matching rule exist in that chain' in str(sys.exc_info()[1]):
@@ -756,8 +766,8 @@ class FarmSecurityMixin(object):
 		for port in self._ports:
 			drop_rules.append(self.__create_drop_rule(port))
 
-		self._iptables.ensure({"INPUT": rules})
-		self._iptables.ensure({"INPUT": drop_rules}, append=True)
+		self._iptables.FIREWALL.ensure(rules)
+		self._iptables.FIREWALL.ensure(drop_rules, append=True)
 
 
 def prepare_tags(handler=None, **kwargs):

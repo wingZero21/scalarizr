@@ -9,7 +9,6 @@ import signal
 import logging
 import shutil
 
-from scalarizr.bus import bus
 from scalarizr.util import initdv2, system2, PopenError, wait_until
 from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError
 from scalarizr.util import disttool, cryptotool, firstmatched
@@ -49,9 +48,10 @@ AOF_FILENAME = 'appendonly.aof'
 AOF_TYPE = 'aof'
 SNAP_TYPE = 'snapshotting'
 
+MAX_CUSTOM_PROCESSES = 16
 MAX_START_TIMEOUT = 30
 DEFAULT_PORT	= 6379
-
+PORTS_RANGE = range(DEFAULT_PORT, DEFAULT_PORT+MAX_CUSTOM_PROCESSES)
 
 LOG = logging.getLogger(__name__)
 
@@ -205,15 +205,21 @@ class RedisInstances(object):
 	persistence_type = None
 
 
-	def __init__(self, master=False, persistence_type=SNAP_TYPE):
+	def __init__(self, master=False, persistence_type=SNAP_TYPE, use_passwords=True):
 		self.master = master
 		self.persistence_type = persistence_type
+		self.use_passwords = use_passwords
 		self.instances = []
 
 
 	@property
 	def ports(self):
 		return [instance.port for instance in self.instances]
+
+
+	@property
+	def passwords(self):
+		return [instance.password for instance in self.instances]
 
 
 	def __iter__(self):
@@ -239,15 +245,38 @@ class RedisInstances(object):
 		raise ServiceError('Redis instance with port %s not found' % port)
 
 
-	def init_processes(self, ports=[], passwords=[]):
-		if not passwords:
-			passwords = [cryptotool.pwgen(20) for port in ports]
-		creds = dict(zip(ports or [], passwords))
+	def init_processes(self, num, ports=[], passwords=[]):
+		if len(ports) < num:
+			diff = num-len(ports)
+			LOG.debug("Passed ports: %s. Need to find %s more." % (str(ports), diff))
+			additional_ports = [port for port in get_available_ports() if port not in ports]
+			if len(additional_ports) < diff:
+				raise ServiceError('Not enough free ports')
+
+			LOG.debug("Found available ports: %s" % str(additional_ports))
+			ports += additional_ports[:diff]
+
+		if len(passwords) < len(ports):
+			diff = len(ports) - len(passwords)
+			if self.use_passwords:
+				LOG.debug("Generating %s additional passwords for ports %s" % (diff, ports[-diff:]))
+				additional_passwords= [cryptotool.pwgen(20) for port in ports[-diff:]]
+				LOG.debug("Generated passwords: %s" % str(additional_passwords))
+				passwords += additional_passwords
+			else:
+				LOG.debug("Setting  %s additional empty passwords for ports %s" % (diff, ports[-diff:]))
+				passwords += [None for port in ports[-diff:]]
+
+		assert len(ports) == len(passwords)
+
+		creds = dict(zip(ports, passwords))
+		LOG.debug("Initializing redis processes: %s" % str(creds))
 		for port,password in creds.items():
 			if port not in self.ports:
 				create_redis_conf_copy(port)
 				redis_process = Redis(self.master, self.persistence_type, port, password)
 				self.instances.append(redis_process)
+		LOG.debug('Total of redis processes: %d' % len(self.instances))
 
 
 	def kill_processes(self, ports=[], remove_data=False):
@@ -308,11 +337,12 @@ class RedisInstances(object):
 		for redis in self.instances:
 			redis.wait_for_sync(link_timeout,sync_timeout)
 
+
 class Redis(BaseService):
+
 	_instance = None
 	port = None
 	password = None
-
 
 	def __init__(self, master=False, persistence_type=SNAP_TYPE, port=DEFAULT_PORT, password=None):
 		self._objects = {}
@@ -389,10 +419,6 @@ class Redis(BaseService):
 	def db_path(self):
 		fname = self.redis_conf.dbfilename if not self.redis_conf.appendonly else self.redis_conf.appendfilename
 		return os.path.join(self.redis_conf.dir, fname)
-
-
-	def generate_password(self, length=20):
-		return cryptotool.pwgen(length)
 
 
 	def _get_redis_conf(self):
@@ -892,6 +918,7 @@ def get_aof_db_filename(port=DEFAULT_PORT):
 def get_redis_conf_basename(port=DEFAULT_PORT):
 	return 'redis.%s.conf' % port
 
+
 def get_port(conf_path=DEFAULT_CONF_PATH):
 	'''
 	returns number from config filename
@@ -901,7 +928,6 @@ def get_port(conf_path=DEFAULT_CONF_PATH):
 		return DEFAULT_PORT
 	raw = conf_path.split('.')
 	return raw[-2:-1] if len(raw) > 2 else None
-
 
 
 def get_redis_conf_path(port=DEFAULT_PORT):
@@ -934,6 +960,7 @@ def create_redis_conf_copy(port=DEFAULT_PORT):
 	else:
 		LOG.debug('%s already exists.' % dst)
 
+
 def get_redis_processes():
 	config_files = list()
 	try:
@@ -946,4 +973,31 @@ def get_redis_processes():
 			if len(words) == 2 and words[0] == BIN_PATH:
 				config_files.append(words[1])
 	return config_files
-		
+
+
+def get_busy_ports():
+	busy_ports = []
+	args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
+	try:
+		out = system2(args, silent=True)[0].split('\n')
+		p = [x for x in out if x and BIN_PATH in x]
+	except PopenError,e:
+		p = []
+	LOG.debug('Running redis processes: %s' % p)
+	for redis_process in p:
+		for port in PORTS_RANGE:
+			conf_name = get_redis_conf_basename(port)
+			if conf_name in redis_process:
+				busy_ports.append(port)
+			elif DEFAULT_PORT == port and DEFAULT_CONF_PATH in redis_process:
+				busy_ports.append(port)
+	LOG.debug('busy_ports: %s' % busy_ports)
+	return busy_ports
+
+
+def get_available_ports():
+	busy_ports = get_busy_ports()
+	available = [port for port in PORTS_RANGE if port not in busy_ports]
+	LOG.debug("Available ports: %s" % available)
+	return available
+

@@ -8,10 +8,14 @@ import os
 import sys
 import time
 import shutil
+import logging
 
 from scalarizr import storage2
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
+
+
+LOG = logging.getLogger(__name__)
 
 
 class LoopVolume(base.Volume):
@@ -34,7 +38,7 @@ class LoopVolume(base.Volume):
 		'''
 		super(LoopVolume, self).__init__(file=file, size=size, 
 				zerofill=zerofill, **kwds)
-		self.features['restore'] = True
+		self.features.update(dict(restore=True, grow=True))
 		
 	
 	def _ensure(self):
@@ -50,16 +54,10 @@ class LoopVolume(base.Volume):
 			self.snap = None
 			self.file = filename
 
-
-		if self.device and os.path.exists(self.device):
-			if coreutils.losetup_all()[self.device] != self.file:
-				coreutils.losetup(self.device, detach=True)
-			else:
-				self.size = os.stat(self.file).st_size / 1073741824
-
-		if not self.device or not os.path.exists(self.device):
+		if not (self.device and self.file and \
+				self.device in coreutils.losetup_all()):
 			# Construct volume
-			if (not self.size and \
+			if (not self.size and
 				(not self.file or not os.path.exists(self.file))):
 				msg = 'You must specify size of a new loop device ' \
 						'or existing file'
@@ -95,13 +93,48 @@ class LoopVolume(base.Volume):
 			else:
 				coreutils.losetup(self.file, find=True)
 				self.device = coreutils.losetup_all(flip=True)[self.file]
-				
-		
+
 				
 	def _snapshot(self, description, tags, **kwds):
 		snapfile = '%s.snap.%s' % (self.file, self._uniq())
 		shutil.copy(self.file, snapfile)
 		return storage2.snapshot(type='loop', file=snapfile)
+
+
+	def _clone(self, config):
+		config.pop('file', None)
+
+
+	def check_growth(self, **growth):
+		size = growth.get('size')
+		if not size:
+			raise storage2.StorageError('Size argument is missing '
+							'from grow config')
+
+		if float(size) < float(self.size):
+			raise storage2.StorageError('New loop device size is less than '
+						'current.')
+
+
+	def _grow(self, new_vol, **growth):
+		snap = self.snapshot(description='Temporary snapshot for volume growth')
+		try:
+			size = growth.get('size')
+			size_in_mb = int(float(size) * 1024)
+			dd_kwds = {'if': '/dev/urandom', 'of': snap.file, 'bs': '1M',
+					   'seek': size_in_mb - 1, 'count' : 1}
+			coreutils.dd(**dd_kwds)
+			new_vol.snap = snap
+			new_vol.size = size
+			new_vol.ensure()
+
+		finally:
+			LOG.debug('Removing temporary snapshot.')
+			try:
+				snap.destroy()
+			except:
+				e = sys.exc_info()[1]
+				LOG.error('Failed to remove loop snapshot: %s' % e)
 
 
 	def _detach(self, force, **kwds):
@@ -124,7 +157,10 @@ class LoopVolume(base.Volume):
 
 
 class LoopSnapshot(base.Snapshot):
-	pass
+
+	def _destroy(self):
+		os.remove(self.file)
+
 
 
 storage2.volume_types['loop'] = LoopVolume

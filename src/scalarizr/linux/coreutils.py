@@ -9,7 +9,7 @@ import glob
 import shutil
 
 from scalarizr import linux
-from scalarizr.linux import pkgmgr
+from scalarizr.linux import pkgmgr, os as os_info
 
 
 def sync():
@@ -30,6 +30,9 @@ def sfdisk():
 
 
 def modprobe(module_name, **long_kwds):
+	if not os_info['mods_enabled']:
+		return (None, None, 0)
+
 	return linux.system(linux.build_cmd_args(
 				executable='/sbin/modprobe', 
 				long=long_kwds,
@@ -107,7 +110,11 @@ def clean_dir(path):
 
 
 def blkid(device_path, **kwargs):
+	if not os.path.exists(device_path):
+		raise Exception("Device %s doesn't exist")
+
 	ret = dict()
+
 	kwargs.update({'o': 'export'})
 	args = ['/sbin/blkid']
 	for k,v in kwargs.items():
@@ -118,7 +125,7 @@ def blkid(device_path, **kwargs):
 
 	args.append(device_path)
 
-	out = linux.system(args)[0].splitlines()
+	out = linux.system(args, raise_exc=False)[0].splitlines()
 	for line in out:
 		line = line.strip()
 		if line:
@@ -126,11 +133,4 @@ def blkid(device_path, **kwargs):
 			ret[k.lower()] = v
 
 	return ret
-
-
-
-
-
-
-
 

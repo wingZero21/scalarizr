@@ -64,7 +64,7 @@ class _Fstab(_Mounts):
 
 	def add(self, device, mpoint, fstype, options='auto', dump=0, fsck_order=0):
 		with open(self.filename, 'a+') as fp:
-			line = ' '.join(device, mpoint, fstype, options, dump, fsck_order)
+			line = ' '.join(map(str, (device, mpoint, fstype, options, dump, fsck_order)))
 			fp.write('\n')
 			fp.write(line)
 			

@@ -51,7 +51,7 @@ class Ec2Platform(Ec2LikePlatform):
 		
 	}
 	s3_endpoints = {
-		'us-east-1' 		: 's3.amazonaws.com',
+		'us-east-1' 		: 's3-external-1.amazonaws.com',
 		'us-west-1' 		: 's3-us-west-1.amazonaws.com',
 		'us-west-2' 		: 's3-us-west-2.amazonaws.com',
 		"sa-east-1"			: "s3-sa-east-1.amazonaws.com",
@@ -134,7 +134,7 @@ class Ec2Platform(Ec2LikePlatform):
 		
 	def _s3_endpoint(self, region):
 		if region == 'us-east-1':
-			return 's3.amazonaws.com'
+			return 's3-external-1.amazonaws.com'
 		else:
 			return 's3-%s.amazonaws.com' % region
 

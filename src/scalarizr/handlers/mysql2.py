@@ -208,7 +208,7 @@ class MysqlCnfController(CnfController):
 		LOG.debug('Variables from config: %s' % str(vars))
 		if self._init_script.running:
 			cli_vars = self.root_client.show_global_variables()
-			LOG.debug('Variables from cli: %s' % str(cli_vars))
+			#LOG.debug('Variables from cli: %s' % str(cli_vars))
 			vars.update(cli_vars)
 		return vars
 	
@@ -1303,9 +1303,9 @@ class MysqlHandler(DBMSRHandler):
 		
 	def _insert_iptables_rules(self):
 		if iptables.enabled():
-			iptables.ensure({"INPUT": [
+			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "3306"},
-			]})
+			])
 		
 		'''
 		ipt = iptables.IpTables()
@@ -1338,19 +1338,21 @@ class MysqlHandler(DBMSRHandler):
 		if not self.mysql.service.running:
 			self.mysql.service.start()
 			
-			try:
-				if not local_root.exists() or not local_root.check_password():
-					users.update({'local_root': local_root})
-					self.mysql.service.stop('creating users')
-					self.mysql.service.start_skip_grant_tables()
-				else:
-					LOG.debug('User %s exists and has correct password' % __mysql__['root_user'])
-			except ServiceError, e:
-				if 'Access denied for user' in str(e):
-					users.update({'local_root': local_root})
-					self.mysql.service.stop('creating users')
-					self.mysql.service.start_skip_grant_tables()
-				
+		try:
+			if not local_root.exists() or not local_root.check_password():
+				users.update({'local_root': local_root})
+				self.mysql.service.stop('creating users')
+				self.mysql.service.start_skip_grant_tables()
+			else:
+				LOG.debug('User %s exists and has correct password' % __mysql__['root_user'])
+		except ServiceError, e:
+			if 'Access denied for user' in str(e):
+				users.update({'local_root': local_root})
+				self.mysql.service.stop('creating users')
+				self.mysql.service.start_skip_grant_tables()
+			else:
+				raise
+
 		for login, password in creds.items():
 			user = mysql_svc.MySQLUser(root_cli, login, password, host='%', privileges=PRIVILEGES.get(login, None))
 			users[login] = user

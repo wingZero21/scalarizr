@@ -120,8 +120,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			shutdown=self.on_shutdown
 		)
 		self.on_reload()
-	
-	
+
+
+
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return message.name == Messages.INT_SERVER_REBOOT \
 			or message.name == Messages.INT_SERVER_HALT	\
@@ -153,7 +154,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 	def on_start(self):
-		iptables.save()
+		if iptables.enabled():
+			iptables.save()
 
 		optparser = bus.optparser
 		
@@ -248,13 +250,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 		if iptables.enabled():
 			# Scalarizr ports
-			iptables.ensure({"INPUT": [
+			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8008"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8010"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8012"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8013"},
 				{"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
-			]})
+			])
 
 
 	def on_shutdown(self):
@@ -281,7 +283,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 	def _start_int_messaging(self):
-		if 'mongodb' in __node__['behavior']:
+		if 'mongodb' in __node__['behavior'] or 'rabbitmq' in __node__['behavior']:
 			srv = IntMessagingService()
 			bus.int_messaging_service = srv
 			t = threading.Thread(name='IntMessageConsumer', target=srv.get_consumer().start)

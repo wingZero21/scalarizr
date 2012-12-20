@@ -6,24 +6,28 @@ Created on Nov 11, 2010
 '''
 from __future__ import with_statement
 
-from scalarizr.util import system2, disttool, firstmatched, PopenError
-from scalarizr.util.software import whereis
-from scalarizr.util.filetool import read_file
-from scalarizr.util import dynimp
-
 import re
+import os
 import time
+import random
+import logging
 import binascii
-from scalarizr.storage import StorageError
+
 try:
 	from collections import namedtuple
 except ImportError:
 	from scalarizr.externals.collections import namedtuple
-import logging
-import os
-from random import randint
+
+from scalarizr.util import system2, firstmatched, PopenError
+from scalarizr.util.software import whereis
+from scalarizr.util.filetool import read_file
+from scalarizr.util import dynimp
+from scalarizr.linux import coreutils
+from scalarizr.storage import StorageError
+
 
 logger = logging.getLogger(__name__)
+
 
 class Lvm2Error(PopenError):
 	pass
@@ -139,10 +143,9 @@ class Lvm2:
 	def usable():
 		if Lvm2._usable is None:
 			Lvm2._usable = False
-			err_text = 'Cannot load device mapper kernel module'
 			try:
-				system(['/sbin/modprobe', 'dm_snapshot'], error_text=err_text)
-				system(['/sbin/modprobe', 'dm_mod'], error_text=err_text)
+				coreutils.modprobe('dm_snapshot')
+				coreutils.modprobe('dm_mod')
 				Lvm2._usable = True
 			except:
 				try:
@@ -298,7 +301,7 @@ class Lvm2:
 		if hasattr(backup_file, 'read'):
 			# File-like object			
 			fpi = backup_file
-			backup_file = '/tmp/lvmvg-%s' % randint(100, 999)
+			backup_file = '/tmp/lvmvg-%s' % random.randint(100, 999)
 			fpo = open(backup_file, 'w+')
 			try:
 				fpo.write(fpi.read())

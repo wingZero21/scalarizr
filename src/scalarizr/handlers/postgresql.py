@@ -866,9 +866,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def _insert_iptables_rules(self):
 		if iptables.enabled():
-			iptables.ensure({"INPUT": [
+			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(POSTGRESQL_DEFAULT_PORT)},
-			]})
+			])
 
 		"""
 		iptables = IpTables()

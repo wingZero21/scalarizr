@@ -559,17 +559,6 @@ class MySQLDump(object):
 		with open(filename, 'w') as fp: 
 			system2(_opts + [dbname], stdout=fp)
 		# commented cause mysql_upgrade hanged forever on devel roles
-		'''
-		try:
-			with open(filename, 'w') as fp: 
-				system2(_opts + [dbname], stdout=fp)
-		except:
-			if 'Cannot load from mysql.proc. The table is probably corrupted' in str(sys.exc_info()[1]) and mysql_upgrade:
-				system2(('/usr/bin/mysql_upgrade', ), raise_exc=False)
-				self.create(dbname, filename, opts, mysql_upgrade=False)
-			else:
-				raise
-		'''
 
 
 class RepicationWatcher(threading.Thread):
@@ -678,7 +667,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			
 		pid_file = None
 		try:
-			out = system2("my_print_defaults mysqld", shell=True)
+			out = system2("my_print_defaults mysqld", shell=True, silent=True)
 			m = re.search("--pid[-_]file=(.*)", out[0], re.MULTILINE)
 			if m:
 				pid_file = m.group(1)
@@ -718,8 +707,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 				wait_sock(sock)
 					
 		return True
-	
-			
+
+	'''
+	XXX: Code commented because I am not sure why we still need self.socket_file
 	def status(self):
 		if self.socket_file:
 			if os.path.exists(self.socket_file):
@@ -727,11 +717,16 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			else:
 				return initdv2.Status.NOT_RUNNING
 		return initdv2.ParametrizedInitScript.status(self)
+	'''
+
+
+	def status(self):
+		return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
 
 	
 	def start(self):
 		mysql_cnf_err_re = re.compile('Unknown option|ERROR')
-		stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True)[1]
+		stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True, silent=True)[1]
 		if re.search(mysql_cnf_err_re, stderr):
 			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
 		

@@ -5,6 +5,7 @@ Created on Sep 10, 2010
 '''
 from scalarizr.util import disttool, system2
 from scalarizr import linux
+from scalarizr.linux import coreutils
 import os, re, zipfile, string, glob
 
 __all__ = ('all_installed', 'software_info', 'explore', 'whereis')
@@ -44,19 +45,24 @@ def whereis(name):
 	places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
 	return tuple([os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))])
 
-def system_info():
+def system_info(verbose=False):
 		
 	def check_module(module):
-		return not system2((modprobe, '-n', module), raise_exc=False)[-1]
-	
+		return not coreutils.modprobe(module, dry_run=True)[2]
+
 	ret = {}
 	ret['software'] = []			
 	installed_list = all_installed()
 	for software_info in installed_list:
-		ret['software'].append(dict(name 	 = software_info.name,
-							      version = '.'.join([str(x) for x in software_info.version]),
-							      string_version = software_info.string_version
-							      ))
+		v = dict(
+			name=software_info.name,
+			version='.'.join([str(x) for x in software_info.version])
+		)
+		if verbose:
+			v['string_version'] = software_info.string_version		
+		
+		ret['software'].append(v)
+
 	
 	ret['os'] = {}	
 	ret['os']['version'] 		= ' '.join(disttool.linux_dist())
@@ -68,12 +74,14 @@ def system_info():
 		'codename': linux.os['codename']
 	}
 	
-	modprobe = whereis('modprobe')[0]
 	ret['storage'] = {}
 	ret['storage']['fstypes'] = []
 	
-	for fstype in ['jfs', 'xfs', 'ext3', 'ext4']:
-		retcode = system2((modprobe, '-n', fstype), raise_exc=False)[-1]
+	for fstype in ['xfs', 'ext3', 'ext4']:
+		try:
+			retcode = coreutils.modprobe(fstype, dry_run=True)[1]
+		except:
+			retcode = 1
 		exe = whereis('mkfs.%s' % fstype)
 		if not retcode and exe:
 			ret['storage']['fstypes'].append(fstype)
@@ -108,7 +116,7 @@ class SoftwareInfo:
 		self.string_version = string_version
 		ver_nums		= map(int, version.split('.'))
 		if len(ver_nums) < 3: 
-			for i in range(len(ver_nums), 3):
+			for _ in range(len(ver_nums), 3):
 				ver_nums.append(0)
 		self.version = tuple(ver_nums)
 		
@@ -394,7 +402,7 @@ def redis_software_info():
 	if res:
 		version = res.group(0)
 	
-		return SoftwareInfo('redis-server', version, out)
+		return SoftwareInfo('redis', version, out)
 	raise SoftwareError
 explore('redis', redis_software_info)
 
@@ -419,8 +427,8 @@ explore('chef', chef_software_info)
 
 
 def postgresql_software_info():
-
 	versions_dirs = glob.glob('/usr/lib/p*sql/*')
+	versions_dirs.extend(glob.glob('/usr/p*sql*/'))
 	versions_dirs.sort()
 	versions_dirs.reverse()
 	for version in versions_dirs:

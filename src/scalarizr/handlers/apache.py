@@ -288,10 +288,10 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def _insert_iptables_rules(self):
 		if iptables.enabled():
-			iptables.ensure({"INPUT": [
+			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "80"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "443"},
-			]})
+			])
 
 			"""
 			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))		

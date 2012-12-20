@@ -1,6 +1,8 @@
 import re
 import os as osmod
 import platform
+import types
+import distutils.version
 
 from scalarizr import util
 
@@ -8,11 +10,39 @@ from scalarizr import util
 class LinuxError(util.PopenError):
 	pass
 
+def which(exe):
+	(path, _) = osmod.path.split(exe)
+	if osmod.access(exe, osmod.X_OK):
+		return exe
+
+	default_path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
+
+	for path in osmod.environ.get('PATH', default_path).split(osmod.pathsep):
+		full_path = osmod.path.join(path, exe)
+		if osmod.access(full_path, osmod.X_OK):
+			return full_path
+	return None
+
+
 def system(*args, **kwds):
 	kwds['exc_class'] = LinuxError
 	if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
-		args[0][0] = which(args[0][0])
+		executable = which(args[0][0])
+		if not executable:
+			msg = "Executable '%s' not found" % args[0][0]
+			raise LinuxError(msg)
+		args[0][0] = executable
 	return util.system2(*args, **kwds)
+
+
+class Version(distutils.version.LooseVersion):
+	def __cmp__(self, other):
+		if type(other) in (types.TupleType, types.ListType):
+			other0 = Version()
+			other0.version = list(other)
+			other = other0
+		return distutils.version.LooseVersion.__cmp__(self, other)
+
 
 class __os(dict):
 	def __init__(self, *args, **kwds):
@@ -128,9 +158,9 @@ class __os(dict):
 		name, release, codename = platform.dist()
 		if not 'name' in self:
 			self['name'] = name
-		self['release'] = release
-		self['codename'] = codename				
-				
+		self['release'] = Version(release)
+		self['codename'] = codename
+
 		if not 'name' in self:
 			self['name'] = 'Unknown %s' % self['kernel']
 			self['family'] = 'Unknown'
@@ -138,8 +168,9 @@ class __os(dict):
 			self['family'] = 'Unknown'
 
 	def _detect_kernel(self):
-		pass
-	
+		o, e, ret_code = system(['modprobe', '-l'], raise_exc=False)
+		self['mods_enabled'] = 0 if ret_code else 1
+
 	def _detect_cloud(self):
 		pass
 
@@ -164,20 +195,27 @@ def build_cmd_args(executable=None, short=None, long=None, params=None):
 			ret.append(value)
 	if params:
 		ret += list(params)
-	return ret
+	return map(str, ret)
 
 
-def which(exe):
-	(path, _) = osmod.path.split(exe)
-	if osmod.access(exe, osmod.X_OK):
-		return exe
 
-	default_path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
+'''
+class Exec(object):
+	def __init__(self):
+		pass
 
-	for path in osmod.environ.get('PATH', default_path).split(osmod.pathsep):
-		full_path = osmod.path.join(path, exe)
-		if osmod.access(full_path, os.X_OK):
-			return full_path
-	return None
+	def args(self, *args, **kwds):
+		pass
 
+	def popen(self, *args, **kwds):
+		pass
 
+	def __call__(self):
+		pass
+
+pigz = Exec(
+	command='/usr/bin/pigz', 
+	package='pigz'
+	supported_on='CentOS >= 6.0.0 RedHat >= 6.0.0 Ubuntu >= 10.04')
+
+'''
