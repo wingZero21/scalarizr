@@ -82,3 +82,10 @@ Scenario: Download file when one or several chunks are missing
     I delete one of the chunks
     When I download with the manifest
     Then I expect failed list returned
+
+Scenario: Instant upload kill with storage cleanup
+    Initialize upload variables
+    Given I have a 30 megabytes file F1
+    When I upload it to s3 with intentional interrupt
+    Then I expect cloud path cleaned
+

@@ -38,32 +38,6 @@ class S3(s3.S3FileSystem):
 		ls = self.ls(parent)
 		return remote_path in ls
 
-	def delete(self, remote_path):
-		import sys
-		from boto.exception import S3ResponseError
-		from scalarizr.storage2.cloudfs.s3 import TransferError
-
-		bucket_name, key_name = self.parse_url(remote_path)
-
-		try:
-			connection = self._get_connection()
-
-			try:
-				if not self._bucket_check_cache(bucket_name):
-					self._bucket = connection.get_bucket(bucket_name, validate=False)
-				key = self._bucket.get_key(key_name)
-				if key is None: raise TransferError("Key is None. No such key?")  ###
-			except S3ResponseError, e:
-				if e.code in ('NoSuchBucket', 'NoSuchKey'):
-					raise TransferError("S3 path '%s' not found" % remote_path)
-				raise
-
-			return key.delete()
-
-		except:
-			exc = sys.exc_info()
-			raise TransferError, exc[1], exc[2]
-
 
 #
 # Logging
@@ -195,6 +169,7 @@ def i_upload_it_with_gzipping(step, storage):
 	world.manifest_url = LargeTransfer(world.sources[0], world.destination).run()
 
 
+
 @step("I upload multiple sources to ([^\s]+) with gzipping")
 def i_upload_multiple_sources_with_gzipping(step, storage):
 	world.destination = STORAGES[storage]["url"]
@@ -281,7 +256,8 @@ def i_replace_the_manifest_with_old_repr(step):
 
 	world.driver.delete(world.manifest_url)
 
-	world.manifest_url = world.driver.put(manifest_ini_path, os.path.dirname(world.manifest_url))
+	world.manifest_url = world.driver.put(manifest_ini_path,
+		os.path.join(os.path.dirname(world.manifest_url), ''))
 	LOG.debug("NEW %s" % world.manifest_url)
 
 
@@ -316,21 +292,21 @@ def i_have_a_stream(step, megabytes, name):
 	world.items[os.path.basename(stream.name)] = stream_md5
 
 
-#@step("Driver test")
-def driver_test(step):
-	url = STORAGES["s3"]["url"]
-	driver = STORAGES["s3"]["driver"]()
+@step("I upload it to ([^\s]+) with intentional interrupt")
+def i_upload_it_with_intentional_interrupt(step, storage):
+	world.destination = STORAGES[storage]["url"]
+	world.driver = STORAGES[storage]["driver"]()
 
-	local = os.path.join(world.basedir, "starget")
-	target = os.path.join(url, "target")
+	lt = LargeTransfer(world.sources[0], world.destination, chunk_size=20, num_workers=2)
+	lt.on(transfer_complete=lambda *args: lt.kill())
+	lt.run()
 
-	make_file(local, 10)
-	#driver.put(local, target)
-	driver.delete(os.path.join(target, "starget"))
-
+	world.manifest_url = os.path.join(world.destination, lt.transfer_id)
 
 
-
+@step("I expect cloud path cleaned")
+def i_expect_path_clean(step):
+	assert not world.driver.ls(world.manifest_url)
 
 
 

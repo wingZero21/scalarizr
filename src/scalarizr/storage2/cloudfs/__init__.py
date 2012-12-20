@@ -125,6 +125,9 @@ class BaseTransfer(bases.Task):
 
 
 class FileTransfer(BaseTransfer):
+	# Drivers' get and put methods (multipart_put?) must
+	# support report_to arg, see progress_report_cb in _worker.
+
 
 	_url_re = re.compile(r'^[\w-]+://')
 
@@ -208,6 +211,7 @@ class FileTransfer(BaseTransfer):
 
 		super(FileTransfer, self).__init__(num_workers=num_workers, 
 						retries=retries, multipart=multipart, **kwds)
+		self.define_events('progress_report')
 
 		self._completed = []
 		self._failed = []
@@ -246,11 +250,15 @@ class FileTransfer(BaseTransfer):
 			
 	def _is_remote_path(self, path):
 		return isinstance(path, basestring) and self._url_re.match(path)
-				
+
 				
 	def _worker(self):
 		driver = None
 		for src, dst, retry, chunk_num in self._job_generator():
+
+			def progress_report_cb(uploaded, total):
+				self.fire("progress_report", src, dst, retry, chunk_num, uploaded, total)
+
 			self.fire('transfer_start', src, dst, retry, chunk_num)
 			try:
 				uploading = self._is_remote_path(dst) and os.path.isfile(src)
@@ -270,14 +278,14 @@ class FileTransfer(BaseTransfer):
 					if self.multipart:
 						driver.multipart_put(self._upload_id, chunk_num, src)
 					else:
-						driver.put(src, dst)
+						driver.put(src, dst, report_to=progress_report_cb)
 					self._completed.append({
 							'src': src,
 							'dst': dst,
 							'chunk_num': chunk_num,
 							'size': os.path.getsize(src)})
 				else:
-					driver.get(src, dst)
+					driver.get(src, dst, report_to=progress_report_cb)
 					self._completed.append({
 							'src': src,
 							'dst': dst,
@@ -393,8 +401,6 @@ class LargeTransfer(bases.Task):
 	'''
 
 	# TODO: graceful shutdown: interrupt chunk download
-
-	# TODO: s3 cleanup on fail
 
 	# TODO: bubble exceptions
 
@@ -694,7 +700,7 @@ class LargeTransfer(bases.Task):
 				# has sense only if not multipart
 				self._upload_res = os.path.join(dst, self.transfer_id, self.manifest)
 
-				yield os.path.join(dst, self.transfer_id)
+				yield os.path.join(dst, self.transfer_id, '')
 		else:
 			while True:
 				yield self._tranzit_vol.mpoint
@@ -837,10 +843,12 @@ class LargeTransfer(bases.Task):
 					LOG.debug("waiting restorer to finish...")
 					self._restorer.join()
 				return res
+
 			elif self._up:
 				if res["failed"] or self._transfer._stop_all.is_set():
 					#? upload failed inside FileTransfer or it was killed
 					self._s3_cleanup()
+					return
 				if self.multipart:
 					return res["multipart_result"]
 				else:
@@ -852,9 +860,27 @@ class LargeTransfer(bases.Task):
 
 
 	def _s3_cleanup(self):
-		# TODO
-		# LOG.debug("Performing S3 clean up")
-		pass
+		LOG.debug("Performing S3 clean up")
+		path = os.path.join(self.dst.next(), self.transfer_id)
+		driver = cloudfs(urlparse.urlparse(path).scheme)
+
+		pieces = Queue.Queue()
+		for piece in driver.ls(path):
+			pieces.put(piece)
+
+		def delete():
+			driver = cloudfs(urlparse.urlparse(path).scheme)
+			while True:
+				try:
+					driver.delete(pieces.get_nowait())
+				except Queue.Empty:
+					return
+
+		threads = [threading.Thread(target=delete) for i in range(min(4,
+			pieces.qsize()))]  #? 4
+		if threads:
+			map(lambda x: x.start(), threads)
+			map(lambda x: x.join(), threads)
 
 
 	def kill(self):
@@ -871,6 +897,9 @@ class LargeTransfer(bases.Task):
 						chunkinfo["downloaded"].interrupt()
 						chunkinfo["processed"].interrupt()
 
+		def interrupt(*args):
+			raise Exception("S3 transfer was interrupted by LargeTransfer.kill()")  #?
+		self._transfer.on(progress_report=interrupt)
 
 
 
@@ -933,7 +962,7 @@ class Manifest(object):
 		elif filename.endswith(".ini"):
 			self.data = self._read_ini(filename)
 		else:
-			raise TypeError(".json or .ini manifests only")
+			raise TypeError(".json or .ini manifests only, got %s" % filename)
 		return self
 
 	def write(self, filename):
