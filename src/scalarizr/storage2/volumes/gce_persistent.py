@@ -61,12 +61,13 @@ class GcePersistentSnapshot(base.Snapshot):
 
 
 	def destroy(self):
-		connection = __node__['gce']['compute_connection']
-		project_id = __node__['gce']['project_id']
-
-		op = connection.snapshots().delete(project=project_id,
-											snapshot=self.name).execute()
 		try:
+			connection = __node__['gce']['compute_connection']
+			project_id = __node__['gce']['project_id']
+
+			op = connection.snapshots().delete(project=project_id,
+											snapshot=self.name).execute()
+
 			wait_for_operation_to_complete(connection, project_id,
 										   op['name'])
 		except:

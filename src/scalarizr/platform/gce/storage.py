@@ -206,6 +206,24 @@ class GcePersistentVolumeProvider(GceEphemeralVolumeProvider):
 		raise storage.StorageError("Can't create from snapshot - attaching to "
 					"running instances is unsupported")
 
+
+	def destroy_snapshot(self, snap):
+		try:
+			connection = __node__['gce']['compute_connection']
+			project_id = __node__['gce']['project_id']
+
+			op = connection.snapshots().delete(project=project_id,
+											   snapshot=snap.name).execute()
+
+			wait_for_operation_to_complete(connection, project_id,
+											   op['name'])
+		except:
+			e = sys.exc_info()[1]
+			raise storage.StorageError('Failed to delete google disk snapshot.'
+										' Error: %s' % e)
+
+
+
 storage.Storage.explore_provider(GcePersistentVolumeProvider)
 
 
