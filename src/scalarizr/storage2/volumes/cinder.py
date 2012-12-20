@@ -10,7 +10,7 @@ from scalarizr import util
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
-from scalarizr.platform.openstack import CinderWrapper
+from scalarizr.platform.openstack import get_platform
 
 
 LOG = storage2.LOG
@@ -94,7 +94,7 @@ class CinderVolume(base.Volume):
         self.error_messages.update({
             'no_connection': 'Cinder connection should be available '
             'to perform this operation'})
-        self._cinder = CinderWrapper()
+        self._cinder = get_platform().new_cinder_connection()
 
     def _server_id(self):
         return __node__['openstack']['server_id']
@@ -363,7 +363,7 @@ class CinderSnapshot(base.Snapshot):
 
     def __init__(self, **kwds):
         base.Snapshot.__init__(self, **kwds)
-        self._cinder = CinderWrapper()
+        self._cinder = get_platform().new_cinder_connection()
 
     def _status(self):
         self._check_cinder_connection()
