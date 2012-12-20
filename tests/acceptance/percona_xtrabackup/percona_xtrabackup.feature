@@ -11,14 +11,13 @@ Feature: Percona xtrabackup
 		When i create incremental xtrabackup
 		Then i have a restore object R2
 
-#	Scenario: Restore full backup
-#		Given i have stopped Percona Server
-#		When i restore full backup R1
-#		Then i have operational Percona Server
-#
-#	Scenario: Restore incremental backup
-#		Given i have stopped Percona Server
-#		When i restore incremental backup R2
-#		Then i have operational Percona Server
-#		And some data from incremental backup
-#
+	Scenario: Restore full backup
+		Given i have stopped Percona Server
+		When i restore full backup R1
+		Then i have operational Percona Server
+
+	Scenario: Restore incremental backup
+		Given i have stopped Percona Server
+		When i restore incremental backup R2
+		Then i have operational Percona Server
+		And some data from incremental backup

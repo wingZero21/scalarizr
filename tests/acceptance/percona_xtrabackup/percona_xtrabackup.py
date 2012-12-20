@@ -99,7 +99,7 @@ def then_i_have_operational_percona_server(step):
 
 @step(u'When i restore incremental backup (.*)')
 def when_i_restore_incremental_backup(step, key):
-	rst = world.restore['R1']
+	rst = world.restore[key]
 	rst = backup.restore(rst)
 	rst.run()
 
