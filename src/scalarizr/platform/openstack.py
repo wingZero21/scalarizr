@@ -106,7 +106,9 @@ class OpenstackPlatform(Platform):
             response = r.read().strip()
             return json.loads(response)
         except IOError, e:
-            if isinstance(e, urllib2.HTTPError):
+            urllib_error = isinstance(e, urllib2.HTTPError) or \
+                isinstance(e, urllib2.URLError)
+            if urllib_error:
                 metadata = self._fetch_metadata_from_file()
                 # TODO: move some keys from metadata to parent dict,
                 # that should be there when fetching from url
