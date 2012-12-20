@@ -14,7 +14,7 @@ from lettuce import step, before, after, world
 
 
 FEATURE = 'Percona xtrabackup'
-CLOUDFS_DEST = 's3://scalr.test_bucket/percona-xtrabackup-streaming'
+CLOUDFS_TARGET = 's3://scalr.test_bucket/percona-xtrabackup-streaming'
 
 
 @before.each_feature
@@ -47,7 +47,7 @@ def when_i_create_full_xtrabackup(step):
 	__import__('scalarizr.services.mysql2')
 	bak = backup.backup(
 			type='xtrabackup',
-			cloudfs_dest=CLOUDFS_DEST)
+			cloudfs_target=CLOUDFS_TARGET)
 	restore = bak.run()
 	world.restore = {'R1': dict(restore)}
 
@@ -58,8 +58,8 @@ def when_i_create_incremental_xtrabackup(step):
 	bak = backup.backup(
 			type='xtrabackup',
 			backup_type='incremental',
-			from_lsn=world.restore['R1']['to_lsn'],
-			cloudfs_dest=CLOUDFS_DEST)
+			prev_cloudfs_source=world.restore['R1']['cloudfs_source'],
+			cloudfs_target=CLOUDFS_TARGET)
 	restore = bak.run()
 	world.restore['R2'] = dict(restore)
 
@@ -69,8 +69,8 @@ def then_i_have_a_restore_object(step, rst):
 	assert hasattr(world, 'restore')
 	restore = world.restore[rst]
 	assert restore['type'] == 'xtrabackup'
-	assert restore['cloudfs_src']
-	assert restore['cloudfs_src'].endswith('.json')
+	assert restore['cloudfs_source']
+	assert restore['cloudfs_source'].endswith('.json')
 	assert restore['to_lsn']
 
 
@@ -86,7 +86,7 @@ def given_i_have_stopped_percona_server(step):
 
 
 @step(u'When i restore full backup (.*)')
-def when_i_restore_full_backup(step, key):
+def when_i_restore_full_backup(step, key):	
 	rst = backup.restore(world.restore[key])
 	rst.run()
 
@@ -100,7 +100,6 @@ def then_i_have_operational_percona_server(step):
 @step(u'When i restore incremental backup (.*)')
 def when_i_restore_incremental_backup(step, key):
 	rst = world.restore['R1']
-	rst['incrementals'] = [world.restore[key]]
 	rst = backup.restore(rst)
 	rst.run()
 

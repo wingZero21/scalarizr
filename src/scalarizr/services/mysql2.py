@@ -423,12 +423,16 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 	def __init__(self,
 				backup_type='full',
 				from_lsn=None,
-				cloudfs_dest=None,
+				compressor=None,
+				prev_cloudfs_source=None,
+				cloudfs_target=None,
 				**kwds):
 		backup.Backup.__init__(self,
 				backup_type=backup_type,
 				from_lsn=int(from_lsn or 0),
-				cloudfs_dest=cloudfs_dest,
+				compressor=compressor,
+				prev_cloudfs_source=prev_cloudfs_source,
+				cloudfs_target=cloudfs_target,
 				**kwds)
 		XtrabackupMixin.__init__(self)
 		self._re_lsn = re.compile(r"xtrabackup: The latest check point " \
@@ -441,26 +445,35 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 
 		kwds = {
 			'stream': 'xbstream',
+			# Compression is broken
 			#'compress': True,
 			#'compress_threads': os.sysconf('SC_NPROCESSORS_ONLN'),
 			'user': __mysql__['root_user'],
 			'password': __mysql__['root_password']
 		}
+		if not int(__mysql__['replication_master']):
+			kwds['safe_slave_backup'] = True
 		if self.backup_type == 'incremental':
-			self._check_attr('from_lsn')
+			if self.prev_cloudfs_source:
+				# Download manifest and get it's to_lsn
+				mnf = cloudfs.Manifest(cloudfs_path=self.prev_cloudfs_source)
+				self.from_lsn = mnf.meta['to_lsn']
+			else:
+				self._check_attr('from_lsn')
 			kwds.update({
 				'incremental': True,
 				'incremental_lsn': self.from_lsn
 			})
+		LOG.debug('self._config: %s', self._config)
+		LOG.debug('kwds: %s', kwds)
 
 		xbak = innobackupex.args(__mysql__['tmp_dir'], **kwds).popen()
-		LOG.debug('Creating LargeTransfer, src=%s dst=%s', xbak.stdout, self.cloudfs_dest)
+		LOG.debug('Creating LargeTransfer, src=%s dst=%s', xbak.stdout, self.cloudfs_target)
 		transfer = cloudfs.LargeTransfer(
 					[xbak.stdout],
-					self.cloudfs_dest,
-					compressor=None)
-		cloudfs_dest = transfer.run()
-		LOG.debug('cloudfs_dest: %s', cloudfs_dest)
+					self.cloudfs_target,
+					compressor=self.compressor)
+		cloudfs_target = transfer.run()
 		xbak.wait()
 		if xbak.returncode:
 			msg = xbak.stderr.read()
@@ -480,43 +493,59 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			if log_file and log_pos and to_lsn:
 				break
 
-		return backup.restore(type='xtrabackup',
+		rst = backup.restore(type='xtrabackup',
 				backup_type=self.backup_type,
 				from_lsn=self.from_lsn,
 				to_lsn=to_lsn,
-				cloudfs_src=cloudfs_dest)
+				cloudfs_source=cloudfs_target,
+				prev_cloudfs_source=self.prev_cloudfs_source,
+				log_file=log_file,
+				log_pos=log_pos)
+
+		# Update manifest
+		LOG.debug('rst: %s', dict(rst))
+		mnf = cloudfs.Manifest(cloudfs_path=cloudfs_target)
+		mnf.meta = dict(rst) 
+		mnf.save()
+
+		return rst
 
 
 class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 	def __init__(self,
-				backup_type='full',
-				from_lsn=0,
-				to_lsn=0,
-				cloudfs_src=None,
-				incrementals=None,
+				cloudfs_source=None,
+				prev_cloudfs_source=None,
 				**kwds):
 		backup.Restore.__init__(self,
-				backup_type=backup_type,
-				from_lsn=int(from_lsn or 0),
-				to_lsn=int(to_lsn or 0),
-				cloudfs_src=cloudfs_src,
-				incrementals=incrementals or [],
+				cloudfs_source=cloudfs_source,
+				prev_cloudfs_source=prev_cloudfs_source,
 				**kwds)
 		XtrabackupMixin.__init__(self)
 
 	def _run(self):
-		assert self.backup_type == 'full', 'xtrabackup restore allows to restore only full backups'
-		# todo: allow restore only full backup
+		# Apply resource's meta
+		mnf = cloudfs.Manifest(cloudfs_path=self.cloudfs_source)
+		bak = backup.restore(**mnf.meta)
+
+		if bak.backup_type == 'incremental':
+			incrementals = [bak]
+			while bak.prev_cloudfs_source:
+				mnf = cloudfs.load_manifest(bak.prev_cloudfs_source)
+				bak = backup.restore(**mnf.meta)
+				if bak.backup_type == 'incremental':
+					incrementals.insert(0, bak)
+
+
 		coreutils.clean_dir(__mysql__['data_dir'])
 
-		LOG.info('Downloading the base backup (LSN: 0..%d)', self.to_lsn)
-		xbak = cloudfs.LargeTransfer(
-				self.cloudfs_src,
+		LOG.info('Downloading the base backup (LSN: 0..%d)', bak.to_lsn)
+		trn = cloudfs.LargeTransfer(
+				bak.cloudfs_source,
 				__mysql__['data_dir'],
 				streamer=xbstream.args(
 						extract=True,
 						directory=__mysql__['data_dir']))
-		xbak.run()
+		trn.run()
 
 		LOG.info('Preparing the base backup')
 		innobackupex(__mysql__['data_dir'],
@@ -534,14 +563,14 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 					inc = backup.restore(inc)
 					LOG.info('Downloading incremental backup #%d (LSN: %d..%d)', i,
 							inc.from_lsn, inc.to_lsn)
-					xbak = cloudfs.LargeTransfer(
-							inc.cloudfs_src,
+					trn = cloudfs.LargeTransfer(
+							inc.cloudfs_source,
 							inc_dir,
 							streamer=xbstream.args(
 									extract=True,
 									directory=inc_dir))
 
-					xbak.run()  # todo: Largetransfer should support custom decompressor proc
+					trn.run()  # todo: Largetransfer should support custom decompressor proc
 					LOG.info('Preparing incremental backup #%d', i)
 					innobackupex(__mysql__['data_dir'],
 							apply_log=True,

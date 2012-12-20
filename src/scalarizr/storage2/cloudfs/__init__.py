@@ -128,7 +128,7 @@ class FileTransfer(BaseTransfer):
 
 	_url_re = re.compile(r'^[\w-]+://')
 
-	def __init__(self, num_workers=4, retries=3, multipart=False, **kwds):
+	def __init__(self, num_workers=8, retries=3, multipart=False, **kwds):
 		'''
 		:type num_workers: int
 		:param num_workers: Number of worker threads
@@ -901,10 +901,23 @@ class Manifest(object):
 	Make sure to write to a file with '.json' extension.
 	"""
 
-	def __init__(self, filename=None):
+	filename = None
+	cloudfs_path = None
+
+	def __init__(self, filename=None, cloudfs_path=None):
 		self.reset()
 		if filename:
 			self.read(filename)
+			self.filename = filename
+		elif cloudfs_path:
+			cfs = cloudfs(urlparse.urlparse(cloudfs_path).scheme)
+			target_dir = tempfile.mkdtemp() 
+			cfs.get(cloudfs_path, target_dir)
+			try:
+				self.read(os.path.join(target_dir, os.path.basename(cloudfs_path)))
+				self.cloudfs_path = cloudfs_path
+			finally:
+				coreutils.remove(target_dir)
 
 	def reset(self):
 		self.data = {
@@ -998,6 +1011,33 @@ class Manifest(object):
 
 	def __contains__(self, value):
 		return self.data.__contains__(value)
+
+	def meta():
+		def fget(self):
+			ret = dict((key.split('.', 1)[1], self['tags'][key]) \
+				for key in self['tags'] \
+				if key.startswith('meta.'))
+			LOG.debug('meta: %s', ret)
+			return ret
+
+		def fset(self, meta):
+			for key, value in meta.items():
+				self['tags']['meta.%s' % key] = value
+
+		return locals()
+	meta = property(**meta())
+
+	def save(self):
+		if self.cloudfs_path:
+			cfs = cloudfs(urlparse.urlparse(self.cloudfs_path).scheme)
+			source = tempfile.mkstemp()[1] + '.json'
+			self.write(source)
+			try:
+				cfs.put(source, self.cloudfs_path)
+			finally:
+				coreutils.remove(source)
+		elif self.filename:
+			self.write(self.filename)
 
 
 cloudfs_types = {}

@@ -31,4 +31,5 @@ class TmpfsVolume(base.Volume):
 					'-o', 'size=%sM' % self.size)
 			self.device = self.mpoint
 
+
 storage2.volume_types['tmpfs'] = TmpfsVolume

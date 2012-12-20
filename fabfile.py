@@ -11,7 +11,6 @@ def _target(hostname=None, keyname=None):
 			if os.path.exists(keyfile):
 				env.key_filename = keyfile
 				break
-	print env
 
 
 def upload(hostname=None, keyname=None):
