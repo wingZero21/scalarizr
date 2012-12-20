@@ -23,7 +23,6 @@ from scalarizr.bus import bus
 
 
 class OpenstackServiceWrapper(object):
-
     def _make_connection(self, **kwargs):
         raise NotImplementedError()
 
@@ -37,7 +36,7 @@ class OpenstackServiceWrapper(object):
 
     def __getattr__(self, name):
         return getattr(self.connection, name)
-        
+
     def reconnect(self):
         self.connection = self._make_connection()
 
@@ -45,7 +44,7 @@ class OpenstackServiceWrapper(object):
     @property
     def has_connection(self):
         self.reconnect()
-        return self.connection != None
+        return self.connection is not None
 
 
 class CinderWrapper(OpenstackServiceWrapper):
@@ -74,7 +73,7 @@ class OpenstackPlatform(Platform):
     _userdata = None
 
     def _get_property(self, name):
-        if not self._metadata.has_key(name):
+        if not name in self._metadata:
             self._metadata = self._fetch_metadata()
         return self._metadata[name]
 
@@ -85,7 +84,7 @@ class OpenstackPlatform(Platform):
         self._get_property('availability_zone')
 
     def get_ssh_pub_key(self):
-        self._get_property('public_keys') #TODO: take one key
+        self._get_property('public_keys')  # TODO: take one key
 
     def get_user_data(self, key=None):
         if self._userdata is None:
@@ -97,8 +96,8 @@ class OpenstackPlatform(Platform):
             return self._userdata
 
     def _fetch_metadata(self):
-        """ 
-        Fetches whole metadata dict. Unlike Ec2LikePlatform, 
+        """
+        Fetches whole metadata dict. Unlike Ec2LikePlatform,
         which fetches data for concrete key.
         """
         url = self._meta_url
@@ -109,9 +108,11 @@ class OpenstackPlatform(Platform):
         except IOError, e:
             if isinstance(e, urllib2.HTTPError):
                 metadata = self._fetch_metadata_from_file()
-                return {'meta': metadata} #TODO: move some keys from metadata to parent dict, that should be there when fetching from url
-            raise PlatformError("Cannot fetch %s metadata url '%s'. " \
-                "Error: %s" % (self.name, url, e))
+                # TODO: move some keys from metadata to parent dict,
+                # that should be there when fetching from url
+                return {'meta': metadata}
+            raise PlatformError("Cannot fetch %s metadata url '%s'. "
+                                "Error: %s" % (self.name, url, e))
 
     def _fetch_metadata_from_file(self):
         cnf = bus.cnf
@@ -125,13 +126,13 @@ class OpenstackPlatform(Platform):
         return self._userdata
 
     def new_cinder_connection(self):
-        return CinderWrapper(self._access_data["user"], 
+        return CinderWrapper(self._access_data["user"],
                              self._access_data["password"],
                              self._access_data["tenant"],
                              self._access_data["auth_url"])
 
     def new_nova_connection(self):
-        return NovaWrapper(self._access_data["user"], 
+        return NovaWrapper(self._access_data["user"],
                            self._access_data["password"],
                            self._access_data["tenant"],
                            self._access_data["auth_url"])
