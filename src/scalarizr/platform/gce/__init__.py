@@ -21,6 +21,7 @@ from apiclient.discovery import build
 from scalarizr.platform import Platform
 from scalarizr.storage.transfer import Transfer
 from scalarizr.platform.gce.storage import GoogleCSTransferProvider
+from scalarizr import util
 
 
 Transfer.explore_provider(GoogleCSTransferProvider)
@@ -88,7 +89,7 @@ class GcePlatform(Platform):
 	def __init__(self):
 		Platform.__init__(self)
 		self.compute_svc_mgr = GoogleServiceManager(
-			self, 'compute', 'v1beta12', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
+			self, 'compute', 'v1beta13', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
 
 		self.storage_svs_mgr = GoogleServiceManager(
 			self, 'storage', 'v1beta1', STORAGE_FULL_SCOPE)
@@ -166,3 +167,27 @@ class GcePlatform(Platform):
 
 	def new_storage_client(self):
 		return self.storage_svs_mgr.get_service()
+
+
+def get_op_status(conn, proj_id, op_name, fields=None):
+	fields = ', '.join(fields) if fields else None
+	return conn.operations().get(project=proj_id,
+							operation=op_name, fields=fields).execute()
+
+
+def wait_for_operation_to_complete(connection, project_id, operation_name, timeout=3600):
+	def op_complete():
+		status = get_op_status(connection, project_id, operation_name,
+							   ('status', 'error'))
+		if 'DONE' == status['status']:
+			error = status.get('error')
+			if error:
+				err_msg = '\n'.join([err['message'] for err in error['errors']])
+				raise Exception(err_msg)
+			return True
+		return False
+
+	util.wait_until(op_complete, timeout=timeout)
+
+
+

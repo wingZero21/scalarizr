@@ -2,13 +2,17 @@ __author__ = 'Nick Demyanchuk'
 
 import os
 import sys
-import urlparse
 import logging
+import datetime
+import urlparse
 
 from apiclient.http import MediaFileUpload, MediaIoBaseDownload
 
 from scalarizr.bus import bus
+from scalarizr import storage
+from scalarizr.node import __node__
 from scalarizr.storage import transfer
+from scalarizr.platform.gce import wait_for_operation_to_complete, get_op_status
 
 
 LOG = logging.getLogger(__name__)
@@ -117,3 +121,100 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
 	def cloudstorage(self):
 		pl = bus.platform
 		return pl.new_storage_client()
+
+
+class GceEphemeralVolume(storage.Volume):
+	pass
+
+
+class GceEphemeralVolumeProvider(storage.VolumeProvider):
+	type = 'gce_ephemeral'
+	vol_class = GceEphemeralVolume
+
+	def create(self, **kwargs):
+		# Name - full device name (google created link name)
+		name = kwargs.get('name')
+		if not name:
+			raise storage.StorageError('Device_name attribute should be non-empty')
+
+		device = '/dev/disk/by-id/google-%s' % name
+		if not os.path.exists(device):
+			raise storage.StorageError("Device '%s' not found" % device)
+
+		kwargs['device'] = device
+		super(GceEphemeralVolumeProvider, self).create(**kwargs)
+
+
+	def create_snapshot(self, vol, snap, **kwargs):
+		raise storage.StorageError("Snapshotting is unsupported by GCE"
+									"ephemeral disks.")
+
+
+	def create_from_snapshot(self, **kwargs):
+		raise storage.StorageError("GCE ephemeral disks have no snapshots.")
+
+
+storage.Storage.explore_provider(GceEphemeralVolumeProvider)
+
+
+class GcePersistentVolume(storage.Volume):
+
+	@property
+	def link(self):
+		compute = __node__['gce']['compute_connection']
+		project_id = __node__['gce']['project_id']
+		return '%s%s/disks/%s' % (compute._baseUrl, project_id, self.name)
+
+
+class GcePersistentSnapshot(storage.Snapshot):
+	pass
+
+
+class GcePersistentVolumeProvider(GceEphemeralVolumeProvider):
+	type = 'gce_persistent'
+	vol_class = GcePersistentVolume
+	snap_class = GcePersistentSnapshot
+
+
+	def create_snapshot(self, vol, snap, **kwargs):
+		compute = __node__['gce']['compute_connection']
+		project_id = __node__['gce']['project_id']
+		now_raw = datetime.datetime.utcnow()
+		now_str = now_raw.strftime('%d-%b-%Y-%H-%M-%S-%f')
+		snap_name = '%s-snap-%s' % (vol.id, now_str)
+
+		op = compute.snapshots().insert(project=project_id,
+								body = dict(
+										name=snap_name,
+										sourceDisk=vol.link,
+										sourceDiskId=vol.id,
+										description=snap.description
+								))
+
+		wait_for_operation_to_complete(compute, project_id, op['name'])
+		gce_snap = compute.snapshots().get(project=project_id,
+									snapshot=snap_name,
+									fields='id').execute()
+
+		snap.id = gce_snap['id']
+		snap.name = snap_name
+
+		return snap
+
+
+	def create_from_snapshot(self, **kwargs):
+		raise storage.StorageError("Can't create from snapshot - attaching to "
+					"running instances is unsupported")
+
+storage.Storage.explore_provider(GcePersistentVolumeProvider)
+
+
+
+
+
+
+
+
+
+
+

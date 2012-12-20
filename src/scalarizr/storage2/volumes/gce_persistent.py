@@ -3,25 +3,12 @@ __author__ = 'Nick Demyanchuk'
 import sys
 import datetime
 
-from scalarizr import storage2, util
+from scalarizr import storage2
+
+from scalarizr.platform.gce import wait_for_operation_to_complete
 from scalarizr.storage2.volumes import base
 from scalarizr.storage2.volumes import gce_ephemeral
 from scalarizr.node import __node__
-
-
-def wait_for_operation_to_complete(connection, project_id, operation_name, timeout=3600):
-	def op_complete():
-		status = connection.operations().get(project=project_id,
-					operation=operation_name, fields='status, error').execute()
-		if 'DONE' == status['status']:
-			error = status.get('error')
-			if error:
-				err_msg = '\n'.join([err['message'] for err in error['errors']])
-				raise Exception(err_msg)
-			return True
-		return False
-
-	util.wait_until(op_complete, timeout=timeout)
 
 
 class GcePersistentVolume(gce_ephemeral.GceEphemeralVolume):
@@ -29,6 +16,12 @@ class GcePersistentVolume(gce_ephemeral.GceEphemeralVolume):
 	def _get_device_name(self):
 		return 'google-%s' % (self.alias or self.name)
 	'''
+
+	@property
+	def link(self):
+		compute = __node__['gce']['compute_connection']
+		project_id = __node__['gce']['project_id']
+		return '%s%s/disks/%s' % (compute._baseUrl, project_id, self.name)
 
 
 	def _snapshot(self, description, tags, **kwds):
@@ -43,7 +36,7 @@ class GcePersistentVolume(gce_ephemeral.GceEphemeralVolume):
 						body=dict(
 							name=snap_name,
 							description=description,
-							sourceDisk=self.name,
+							sourceDisk=self.link,
 							sourceDiskId=self.id
 						)).execute()
 
