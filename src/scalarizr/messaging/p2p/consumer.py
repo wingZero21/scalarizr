@@ -104,9 +104,16 @@ class P2pMessageConsumer(MessageConsumer):
 				try:
 					logger.debug("Decoding message: %s", rawmsg)
 					message = P2pMessage()
-					message.fromxml(rawmsg)
+
+					mime_type = self.headers.get('Content-Type', 'application/xml')
+					format = ('application/json' in mime_type) and 'json' or 'xml'
+					if 'json' == format:
+						message.fromjson(rawmsg)
+					else:
+						message.fromxml(rawmsg)
+
 				except (BaseException, Exception), e:
-					err = "Cannot decode message. error: %s; xml message: %s" % (str(e), rawmsg)
+					err = "Cannot decode message. error: %s; raw message: %s" % (str(e), rawmsg)
 					logger.error(err)
 					logger.exception(e)
 					self.send_response(400, err)

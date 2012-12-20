@@ -8,12 +8,12 @@ import logging
 import threading
 import time
 import uuid
-import urllib
 import urllib2
 
 from scalarizr import messaging, util
 from scalarizr.messaging import p2p
 from scalarizr.util import urltool
+from scalarizr.node import __node__
 import sys
 
 
@@ -96,15 +96,19 @@ class P2pMessageProducer(messaging.MessageProducer):
 	def _send0(self, queue, message, success_callback=None, fail_callback=None):
 		try:
 			# Serialize
-			xml = message.toxml()
+			# TODO: set Scalr version
+			use_json =  __node__['scalr']['version'] >= (0,0,0)
+			data = message.tojson() if use_json else message.toxml()
+
+			content_type = 'application/%s' % 'json' if use_json else 'xml'
+			headers = {'Content-Type': content_type}
+
 			if message.name not in ('Log', 'OperationDefinition', 
 								'OperationProgress', 'OperationResult'):
-				self._logger.debug("Delivering message '%s' %s", message.name, xml)
-			
-			headers = {}
-			data = xml
+				self._logger.debug("Delivering message '%s' %s", message.name, data)
+
 			for f in self.filters['protocol']:
-				data = f(self, queue, xml, headers)
+				data = f(self, queue, data, headers)
 			
 			url = self.endpoint + "/" + queue
 			req = urllib2.Request(url, data, headers)
