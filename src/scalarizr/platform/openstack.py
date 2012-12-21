@@ -55,7 +55,7 @@ class CinderWrapper(OpenstackServiceWrapper):
                                     self.password,
                                     self.tenant,
                                     auth_url=self.auth_url,
-                                    region_name=self.region_name
+                                    region_name=self.region_name,
                                     **kwargs)
 
 
@@ -66,7 +66,7 @@ class NovaWrapper(OpenstackServiceWrapper):
                                   self.password,
                                   self.tenant,
                                   auth_url=self.auth_url,
-                                  region_name=self.region_name
+                                  region_name=self.region_name,
                                   service_type=service_type,
                                   **kwargs)
 
