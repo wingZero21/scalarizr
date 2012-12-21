@@ -104,8 +104,8 @@ class LoopVolume(base.Volume):
 		config.pop('file', None)
 
 
-	def check_growth_cfg(self, **growth_cfg):
-		size = growth_cfg.get('size')
+	def check_growth(self, **growth):
+		size = growth.get('size')
 		if not size:
 			raise storage2.StorageError('Size argument is missing '
 							'from grow config')
@@ -115,10 +115,10 @@ class LoopVolume(base.Volume):
 						'current.')
 
 
-	def _grow(self, new_vol, **growth_cfg):
+	def _grow(self, new_vol, **growth):
 		snap = self.snapshot(description='Temporary snapshot for volume growth')
 		try:
-			size = growth_cfg.get('size')
+			size = growth.get('size')
 			size_in_mb = int(float(size) * 1024)
 			dd_kwds = {'if': '/dev/urandom', 'of': snap.file, 'bs': '1M',
 					   'seek': size_in_mb - 1, 'count' : 1}

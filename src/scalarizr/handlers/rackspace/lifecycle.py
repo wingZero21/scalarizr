@@ -42,6 +42,5 @@ class RackspaceLifeCycleHandler(Handler):
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8013"},
 				{"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
 			]
-
 			iptables.FIREWALL.ensure(rules)
 

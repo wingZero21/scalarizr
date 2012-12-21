@@ -13,6 +13,8 @@ from scalarizr.libs.metaconf import Configuration
 from scalarizr.util.software import whereis
 from scalarizr.util.fstool import mount, umount
 from scalarizr.util import firstmatched
+from scalarizr import linux
+from scalarizr.linux import pkgmgr
 
 from Queue import Queue, Empty
 from tempfile import mkdtemp
@@ -262,6 +264,7 @@ class EphSnapshotProviderLite(object):
 	_chunks_md5 = None
 	_read_finished = None
 	_inner_exc_info = None
+	_pigz_bin = None
 	
 	def __init__(self, chunk_size=100):
 		self.chunk_size			= chunk_size		
@@ -277,12 +280,23 @@ class EphSnapshotProviderLite(object):
 		self._transfer_cls  	= Transfer
 		self._inner_exc_info	= None
 		self._return_ev 		= threading.Event()
+		self._pigz_bin			= '/usr/bin/pigz'
+
 	
 	def create(self, volume, snapshot, tranzit_path, complete_cb=None):
 		try:
 			if snapshot.id in self._state_map:
 				raise StorageError('Snapshot %s is already %s. Cannot create it again' % (
 						snapshot.id, self._state_map[snapshot.id]))
+
+			if not os.path.exists(self._pigz_bin):
+				if linux.os['name'] == 'Ubuntu' and linux.os['release'] >= (10, 4):
+					pkgmgr.installed('pigz')
+				elif linux.os['family'] == 'RedHat' and linux.os['release'] >= (6, 0):
+					pkgmgr.epel_repository()
+					pkgmgr.installed('pigz')
+
+
 			self._chunks_md5 = {}
 			self._state_map[snapshot.id] = Snapshot.CREATING
 			#self.prepare_tranzit_vol(volume.tranzit_vol)

@@ -560,17 +560,6 @@ class MySQLDump(object):
 		with open(filename, 'w') as fp: 
 			system2(_opts + [dbname], stdout=fp)
 		# commented cause mysql_upgrade hanged forever on devel roles
-		'''
-		try:
-			with open(filename, 'w') as fp: 
-				system2(_opts + [dbname], stdout=fp)
-		except:
-			if 'Cannot load from mysql.proc. The table is probably corrupted' in str(sys.exc_info()[1]) and mysql_upgrade:
-				system2(('/usr/bin/mysql_upgrade', ), raise_exc=False)
-				self.create(dbname, filename, opts, mysql_upgrade=False)
-			else:
-				raise
-		'''
 
 
 class RepicationWatcher(threading.Thread):
@@ -679,7 +668,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			
 		pid_file = None
 		try:
-			out = system2("my_print_defaults mysqld", shell=True)
+			out = system2("my_print_defaults mysqld", shell=True, silent=True)
 			m = re.search("--pid[-_]file=(.*)", out[0], re.MULTILINE)
 			if m:
 				pid_file = m.group(1)
@@ -738,7 +727,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 	
 	def start(self):
 		mysql_cnf_err_re = re.compile('Unknown option|ERROR')
-		stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True)[1]
+		stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True, silent=True)[1]
 		if re.search(mysql_cnf_err_re, stderr):
 			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
 		

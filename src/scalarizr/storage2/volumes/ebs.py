@@ -117,8 +117,6 @@ class EbsMixin(object):
 			if sys.exc_type.__name__ not \
 				in ('AttributeError', 'NoAuthHandlerFound'):
 				raise
-		
-
 
 	def _avail_zone(self):
 		return __node__['ec2']['avail_zone']
@@ -160,19 +158,19 @@ class EbsVolume(base.Volume, EbsMixin):
 		config.pop('avail_zone', None)
 
 
-	def _grow(self, new_vol, **growth_cfg):
+	def _grow(self, new_vol, **growth):
 		"""
 		:param new_vol: New volume instance (almost empty)
 		:type new_vol: EbsVolume
-		:param growth_cfg: Growth rules for ebs with size, ebs type and
+		:param growth: Growth rules for ebs with size, ebs type and
 						(optionally) iops
-		:type growth_cfg: dict
+		:type growth: dict
 		:return: New, bigger, ready to volume instance
 		:rtype: EbsVolume
 		"""
-		size = growth_cfg.get('size')
-		ebs_type = growth_cfg.get('volume_type')
-		iops = growth_cfg.get('iops')
+		size = growth.get('size')
+		ebs_type = growth.get('volume_type')
+		iops = growth.get('iops')
 
 		snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1})
 		try:
@@ -189,14 +187,14 @@ class EbsVolume(base.Volume, EbsMixin):
 				LOG.error('Temporary snapshot desctruction failed: %s' % e)
 
 
-	def check_growth_cfg(self, **growth_cfg):
-		size = growth_cfg.get('size')
+	def check_growth(self, **growth):
+		size = growth.get('size')
 		target_size = int(size or self.size)
 
-		ebs_type = growth_cfg.get('volume_type')
+		ebs_type = growth.get('volume_type')
 		target_type = ebs_type or self.volume_type
 
-		iops = growth_cfg.get('iops')
+		iops = growth.get('iops')
 		target_iops = iops or self.iops
 
 		change_type = ebs_type and ebs_type != self.volume_type
@@ -281,7 +279,7 @@ class EbsVolume(base.Volume, EbsMixin):
 						tags=self.tags)
 				size = ebs.size
 		
-			if not (ebs.volume_state() == 'in-use' and  \
+			if not (ebs.volume_state() == 'in-use' and
 					ebs.attach_data.instance_id == self._instance_id()):
 				if ebs.attachment_state() in ('attaching', 'detaching'):
 					self._wait_attachment_state_change(ebs)

@@ -157,7 +157,7 @@ class Volume(Base):
 		return storage2.volume(config)
 
 
-	def grow(self, **growth_cfg):
+	def grow(self, **growth):
 		"""
 		Grow (and/or alternate, e.g.: change ebs type to io1) volume and fs.
 		Method creates clone of current volume, increases it's size and
@@ -165,8 +165,8 @@ class Volume(Base):
 
 		Old volume detached, but not destroyed.
 
-		:param growth_cfg: Volume type-dependent rules for volume growth
-		:type growth_cfg: dict
+		:param growth: Volume type-dependent rules for volume growth
+		:type growth: dict
 		:param resize_fs: Resize fs on device after it's growth or not
 		:type resize_fs: bool
 		:return: New, bigger (or altered) volume instance
@@ -183,16 +183,16 @@ class Volume(Base):
 									'volume has no id.')
 
 		# Resize_fs is true by default
-		resize_fs = growth_cfg.pop('resize_fs', True)
+		resize_fs = growth.pop('resize_fs', True)
 
-		self.check_growth_cfg(**growth_cfg)
+		self.check_growth(**growth)
 		was_mounted = self.mounted_to() if self.device else False
 
 		new_vol = None
 		try:
 			self.detach()
 			new_vol = self.clone()
-			self._grow(new_vol, **growth_cfg)
+			self._grow(new_vol, **growth)
 			if resize_fs:
 				fs_created = new_vol.detect_fstype()
 
@@ -235,14 +235,14 @@ class Volume(Base):
 		return new_vol
 
 
-	def _grow(self, bigger_vol, **kwargs):
+	def _grow(self, bigger_vol, **growth):
 		"""
 		Create, attach and do everything except mount.
 		All cleanup procedures and artifact removal should be
 		performed in this method
 
-		:param growth_cfg: Type-dependant config for volume growth
-		:type growth_cfg: dict
+		:param growth: Type-dependant config for volume growth
+		:type growth: dict
 		:rtype: Volume
 		"""
 		pass
@@ -272,7 +272,7 @@ class Volume(Base):
 			#raise NotImplementedError(msg)
 
 
-	def check_growth_cfg(self, **kwargs):
+	def check_growth(self, **growth):
 		pass
 
 

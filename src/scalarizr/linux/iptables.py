@@ -395,10 +395,8 @@ def redhat_input_chain():
 Initialization.
 '''
 if enabled():
-
 	# Without this first call 'service iptables save' fails with code:1
 	iptables(list=True, numeric=True)
-
 	rh_chain = redhat_input_chain()
 	if rh_chain:
 		FIREWALL = chains[rh_chain]

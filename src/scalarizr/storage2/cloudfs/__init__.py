@@ -7,7 +7,6 @@ import Queue
 import urlparse
 import itertools
 import tempfile
-import inspect
 import subprocess
 import threading
 import logging
@@ -33,8 +32,71 @@ from scalarizr.linux import coreutils
 LOG = logging.getLogger(__name__)
 
 
+class Error(Exception):
+	pass
+
+
+class DriverError(Error):
+	pass
+
+
+### to move
+
+class EventInterrupt(Exception):
+	pass
+
+
+class InterruptibleEvent(threading._Event):
+	"""
+	Inheritance from threading._Event because threading.Event simply returns
+	threading._Event instance.
+
+	Use-case: One-time set-wait/wait-set cycle for two threads: one waiter and
+	one setter. Allows setter to raise an exception in waiter by calling
+	interrupt() instead of set().
+
+	TODO: to make behavior more universal, all operations on self._exception
+	must be covered with self.__cond acquire-release calls. Self.__cond can
+	be accessed by defining self.__cond = self._Event__cond. Also properly
+	overriden clear method must be added.
+	"""
+
+	def __init__(self):
+		super(InterruptibleEvent, self).__init__()
+		self._exception = None
+
+	def interrupt(self, exc=None):
+		""" Raise exc or default EventInterrupt() in the waiting thread """
+		self._exception = exc if exc else EventInterrupt()
+		return super(InterruptibleEvent, self).set()
+
+	def wait(self, timeout=None):
+		wait_ret = super(InterruptibleEvent, self).wait(timeout)
+		if self._exception:
+			raise self._exception
+		else:
+			return wait_ret
+
+###
+
+
+class namedstream(object):
+	def __init__(self, stream, name):
+		self._stream = stream
+		self.name = name
+
+	def __getattr__(self, name):
+		if name in self.__dict__:
+			return self.__dict__[name]
+		return getattr(self.__dict__['_stream'], name)
+
+	def __hasattr__(self, name):
+		return hasattr(self.__dict__['_stream'], name) or \
+				name in self.__dict__
+
+
 class BaseTransfer(bases.Task):
-	
+
 	def __init__(self, src=None, dst=None, **kwds):
 		'''
 		:type src: string / generator / iterator
@@ -46,25 +108,30 @@ class BaseTransfer(bases.Task):
 		if callable(src):
 			src = (item for item in src())
 		else:
-			if not hasattr(src, '__iter__'):
+			try:
+				iter(src)
+			except:
 				src = [src]
-			src = iter(src)
 		if callable(dst):
 			dst = (item for item in dst())
-		elif not hasattr(dst, '__iter__'):
-			dst = itertools.repeat(dst)
 		else:
-			dst = iter(dst)	
-	
+			try:
+				iter(dst)
+			except:
+				dst = itertools.repeat(dst)
+
 		super(BaseTransfer, self).__init__(src=src, dst=dst, **kwds)
 		self.define_events('transfer_start', 'transfer_error', 'transfer_complete')
-		
+
 
 class FileTransfer(BaseTransfer):
+	# Drivers' get and put methods (multipart_put?) must
+	# support report_to arg, see progress_report_cb in _worker.
+
 
 	_url_re = re.compile(r'^[\w-]+://')
 
-	def __init__(self, num_workers=4, retries=3, multipart=False, **kwds):
+	def __init__(self, num_workers=8, retries=3, multipart=False, **kwds):
 		'''
 		:type num_workers: int
 		:param num_workers: Number of worker threads
@@ -144,6 +211,7 @@ class FileTransfer(BaseTransfer):
 
 		super(FileTransfer, self).__init__(num_workers=num_workers, 
 						retries=retries, multipart=multipart, **kwds)
+		self.define_events('progress_report')
 
 		self._completed = []
 		self._failed = []
@@ -182,11 +250,15 @@ class FileTransfer(BaseTransfer):
 			
 	def _is_remote_path(self, path):
 		return isinstance(path, basestring) and self._url_re.match(path)
-				
+
 				
 	def _worker(self):
 		driver = None
 		for src, dst, retry, chunk_num in self._job_generator():
+
+			def progress_report_cb(uploaded, total):
+				self.fire("progress_report", src, dst, retry, chunk_num, uploaded, total)
+
 			self.fire('transfer_start', src, dst, retry, chunk_num)
 			try:
 				uploading = self._is_remote_path(dst) and os.path.isfile(src)
@@ -202,18 +274,21 @@ class FileTransfer(BaseTransfer):
 						chunk_size = os.path.getsize(loc)
 						self._upload_id = driver.multipart_init(rem, chunk_size)
 
+				zero = int(time.time())
 				if uploading:
 					if self.multipart:
 						driver.multipart_put(self._upload_id, chunk_num, src)
 					else:
-						driver.put(src, dst)
+						driver.put(src, dst, report_to=progress_report_cb)
+						LOG.debug("*** BENCH %s %s uploaded" % (int(time.time() - zero), os.path.basename(src)))
 					self._completed.append({
 							'src': src,
 							'dst': dst,
 							'chunk_num': chunk_num,
 							'size': os.path.getsize(src)})
 				else:
-					driver.get(src, dst)
+					driver.get(src, dst, report_to=progress_report_cb)
+					LOG.debug("*** BENCH %s %s downloaded" % (int(time.time() - zero), os.path.basename(src)))
 					self._completed.append({
 							'src': src,
 							'dst': dst,
@@ -232,8 +307,8 @@ class FileTransfer(BaseTransfer):
 							'src': src,
 							'dst': dst,
 							'exc_info': sys.exc_info()})
-				self.fire('transfer_error', src, dst, retry, chunk_num, 
-							sys.exc_info())
+					self.fire('transfer_error', src, dst, retry, chunk_num,
+								sys.exc_info())
 			finally:
 				if self._stop_all.isSet():
 					with self._worker_lock:
@@ -265,6 +340,7 @@ class FileTransfer(BaseTransfer):
 				pool.append(worker)
 			# Join workers
 			for worker in pool:
+				LOG.debug("Worker '%s' join...", worker.getName())
 				worker.join()
 				LOG.debug("Worker '%s' finished", worker.getName())
 			return {
@@ -279,6 +355,11 @@ class FileTransfer(BaseTransfer):
 	def kill(self, timeout=None):
 		self._stop_all.set()
 		self._stopped.wait(timeout)
+
+
+	def kill_nowait(self):
+		return self.kill(0)
+
 
 
 
@@ -322,25 +403,35 @@ class LargeTransfer(bases.Task):
 	2. <chunk downloader> | funzip | tar -x -C /mnt/dbbackup
 	'''
 
-	# NOTE: use directory dst for uploading.
-	UPLOAD = 'upload'
-	DOWNLOAD = 'download'
+	# TODO: bubble exceptions
 
+	# TODO: unlimited disk case: download all before unpacking
+
+	# TODO: benchmarks bzip against pigz
+	# http://tukaani.org/lzma/benchmarks.html
+
+	# TODO: subprocess hang problem
+	# python 2.7.3 @ ubuntu 12.04 works
+	# python 2.7.2 @ ubuntu 11.10 fail
+	# python 2.6.7 @ ubuntu 11.10 works
+	# python 2.6.5 @ ubuntu 10.04 works
+	# solutions: waiter thread that would kill everything on hang or
+	# separate thread for subprocess opening? or just document it :)
+
+	# NOTE: use directory dst for uploading.
 	pigz_bin = '/usr/bin/pigz'
 	gzip_bin = '/bin/gzip'
 
-	def __init__(self, src, dst, direction,
+	def __init__(self, src, dst,
 				transfer_id=None,
-				tar_it=True,
-				gzip_it=True, 
+				streamer="tar",
+				compressor="gzip",
 				chunk_size=100, 
 				try_pigz=True,
 				manifest='manifest.json',
 				description='',
 				tags=None,
 				**kwds):
-		# TODO: subprocess hang, only in 2.7.2?
-		# TODO: "dir/" means dircontent, "dir" means dir
 		'''
 		@param src: transfer source path
 			- str file or directory path. 
@@ -354,13 +445,13 @@ class LargeTransfer(bases.Task):
 			self._up = True
 		else:
 			raise ValueError('Eather src or dst should be URL-like string')
-		if self._up and isinstance(src, basestring) and os.path.isdir(src) and not tar_it:
-			raise ValueError('Passed src is a directory. tar_it=True expected')
+		if self._up and isinstance(src, basestring) and os.path.isdir(src) and not streamer:
+			raise ValueError('Passed src is a directory. streamer expected')
 		if self._up:
 			if callable(src):
 				src = (item for item in src())
 			else:
-				if not hasattr(src, '__iter__'):
+				if not hasattr(src, '__iter__') or hasattr(src, "read"):
 					src = [src]
 				src = iter(src)
 			if callable(dst):
@@ -375,14 +466,18 @@ class LargeTransfer(bases.Task):
 		self.description = description
 		self.tags = tags
 		self.multipart = kwds.get("multipart")
-		self.direction = direction
 		self.src = src
 		self.dst = dst
-		self.tar_it = tar_it
-		self.gzip_it = gzip_it
+		self.streamer = streamer
+		self.compressor = compressor
 		self.chunk_size = chunk_size
 		self.try_pigz = try_pigz
+		self._upload_res = None
 		self._restorer = None
+		self._killed = False
+		self._manifest_ready = InterruptibleEvent()
+		self._chunks_events_access = threading.Lock()
+		self.files = None
 		if transfer_id is None:
 			self.transfer_id = uuid.uuid4().hex
 		else:
@@ -398,15 +493,25 @@ class LargeTransfer(bases.Task):
 		self.define_events(*events)
 		for ev in events:
 			self._transfer.on(ev, self._proxy_event(ev))
+
+
+	def _gzip_bin(self):
+		if self.try_pigz and os.path.exists(self.pigz_bin):
+			return self.pigz_bin
+		return self.gzip_bin
+
+
+	def _proxy_event(self, event):
+		def proxy(*args, **kwds):
+			self.fire(event, *args, **kwds)
+		return proxy
 		
 
 	def _src_generator(self):
 		'''
 		Compress, split, yield out
 		'''
-		# TODO: popen can deadlock sometimes, create a thread that would wait
-		# for a popen success flag with a timeout, and kill everything otherwise?
-		if self.direction == self.UPLOAD:
+		if self._up:
 			# Tranzit volume size is chunk for each worker
 			# and Ext filesystem overhead
 
@@ -422,10 +527,11 @@ class LargeTransfer(bases.Task):
 			self._transfer.on(transfer_complete=delete_uploaded_chunk)
 
 			for src in self.src:
+				LOG.debug('src: %s, type: %s', src, type(src))
 				fileinfo = {
 					"name": '',
-					"tar": False,
-					"gzip": False,
+					"streamer": None,
+					"compressor": None,
 					"chunks": [],
 				}
 				prefix = self._tranzit_vol.mpoint
@@ -435,35 +541,43 @@ class LargeTransfer(bases.Task):
 				if hasattr(src, 'read'):
 					stream = src
 					if hasattr(stream, 'name'):
-						name = os.path.basename(stream.name)  #? can stream name end with '/'
+						# os.pipe stream has name '<fdopen>'
+						name = os.path.basename(stream.name).strip('<>')  #? can stream name end with '/'
 					else:
 						name = 'stream-%s' % hash(stream)
 					fileinfo["name"] = name
 					prefix = os.path.join(prefix, name) + '.'
-				elif os.path.isdir(src):
-					if src.endswith('/'):
-						# tar the directory contents
-						tar_cmdargs = ['/bin/tar', 'cp', '-C', src, '.']
-					else:
-						# tar the directory itself
-						# -C parent to use relative paths inside tarball
-						parent, target = os.path.split(src)
-						tar_cmdargs = ['/bin/tar', 'cp',  '-C', parent, target]
-
+				elif self.streamer and isinstance(src, basestring) and os.path.isdir(src):
 					name = os.path.basename(src.rstrip('/'))
 					fileinfo["name"] = name
-					fileinfo["tar"] = True
-					prefix = os.path.join(prefix, name) + '.tar.'
 
-					LOG.debug("LargeTransfer src_generator TAR POPEN")
-					tar = cmd = subprocess.Popen(
-									tar_cmdargs,
-									stdout=subprocess.PIPE,
-									stderr=subprocess.PIPE,
-									close_fds=True)
-					LOG.debug("LargeTransfer src_generator AFTER TAR")
+					if self.streamer == "tar":
+						fileinfo["streamer"] = "tar"
+						prefix = os.path.join(prefix, name) + '.tar.'
+
+						if src.endswith('/'):  # tar dir content
+							tar_cmdargs = ['/bin/tar', 'cp', '-C', src, '.']
+						else:
+							parent, target = os.path.split(src)
+							tar_cmdargs = ['/bin/tar', 'cp',  '-C', parent, target]
+
+						LOG.debug("LargeTransfer src_generator TAR POPEN")
+						tar = cmd = subprocess.Popen(
+										tar_cmdargs,
+										stdout=subprocess.PIPE,
+										stderr=subprocess.PIPE,
+										close_fds=True)
+						LOG.debug("LargeTransfer src_generator AFTER TAR")
+					elif hasattr(self.streamer, "popen"):
+						fileinfo["streamer"] = str(self.streamer)
+						prefix = os.path.join(prefix, name) + '.'
+
+						LOG.debug("LargeTransfer src_generator custom streamer POPEN")
+						# TODO: self.streamer.args += src
+						tar = cmd = self.streamer.popen(stdin=None)
+						LOG.debug("LargeTransfer src_generator after custom streamer POPEN")
 					stream = tar.stdout
-				elif os.path.isfile(src):
+				elif isinstance(src, basestring) and os.path.isfile(src):
 					name = os.path.basename(src)
 					fileinfo["name"] = name
 					prefix = os.path.join(prefix, name) + '.'
@@ -472,8 +586,8 @@ class LargeTransfer(bases.Task):
 				else:
 					raise ValueError('Unsupported src: %s' % src)
 
-				if self.gzip_it:
-					fileinfo["gzip"] = True
+				if self.compressor == "gzip":
+					fileinfo["compressor"] = "gzip"
 					prefix += 'gz.'
 					LOG.debug("LargeTransfer src_generator GZIP POPEN")
 					gzip = cmd = subprocess.Popen(
@@ -487,6 +601,15 @@ class LargeTransfer(bases.Task):
 						# Allow tar to receive SIGPIPE if gzip exits.
 						tar.stdout.close()
 					stream = gzip.stdout
+				# custom compressor
+				elif hasattr(self.compressor, "popen"):
+					fileinfo["compressor"] = str(self.compressor)
+					LOG.debug("LargeTransfer src_generator custom compressor POPEN")
+					cmd = self.compressor.popen(stdin=stream)
+					LOG.debug("LargeTransfer src_generator after custom compressor POPEN")
+					if tar:
+						tar.stdout.close()
+					stream = cmd.stdout
 
 				for filename, md5sum in self._split(stream, prefix):
 					fileinfo["chunks"].append((os.path.basename(filename), md5sum))
@@ -505,45 +628,47 @@ class LargeTransfer(bases.Task):
 				LOG.debug("LargeTransfer yield %s" % manifest_f)
 				yield manifest_f
 
-		elif self.direction == self.DOWNLOAD:
-			def transfer_kill(*args, **kwargs):
-				self._transfer.kill()
-				# TODO: rethink killing
-				#? kill self._restorer?
-			self._transfer.on(transfer_error=transfer_kill)
+		elif not self._up:
+			def on_transfer_error(*args):
+				LOG.debug("transfer_error event, shutting down")
+				self.kill()
+			self._transfer.on(transfer_error=on_transfer_error)
 
 			# The first yielded object will be the manifest, so
 			# catch_manifest is a listener that's supposed to trigger only
 			# once and unsubscribe itself.
-			manifest_ready = threading.Event()
 			def wait_manifest(src, dst, retry, chunk_num):
 				self._transfer.un('transfer_complete', wait_manifest)
-				manifest_ready.set()
+				self._manifest_ready.set()
 			self._transfer.on(transfer_complete=wait_manifest)
 
 
 			manifest_path = self.src
 			yield manifest_path
 
-			manifest_ready.wait()
+			#? except EventInterrupt: save exc and return
+			self._manifest_ready.wait()
+
 			# we should have the manifest on the tmpfs by now
 			manifest_local = os.path.join(self._tranzit_vol.mpoint,
 				os.path.basename(manifest_path))
 			manifest = Manifest(manifest_local)
 			os.remove(manifest_local)
 			remote_path = os.path.dirname(manifest_path)
-			self.files = copy(manifest["files"])
 
 			# add ready and done events to each chunk without breaking the
 			# chunk order
-			for file in self.files:
-				file["chunks"] = OrderedDict([(
-					basename, {
-						"md5sum": md5sum,
-						"downloaded": threading.Event(),
-						"processed": threading.Event()
-					}
-				) for basename, md5sum in file["chunks"]])
+			with self._chunks_events_access:
+				if not self._killed:
+					self.files = copy(manifest["files"])
+					for file in self.files:
+						file["chunks"] = OrderedDict([(
+							basename, {
+								"md5sum": md5sum,
+								"downloaded": InterruptibleEvent(),
+								"processed": InterruptibleEvent()
+							}
+						) for basename, md5sum in file["chunks"]])
 
 			# launch restorer
 			if self._restorer is None:
@@ -557,7 +682,7 @@ class LargeTransfer(bases.Task):
 					if chunk_name in file["chunks"]:
 						chunk = file["chunks"][chunk_name]
 				chunk["downloaded"].set()
-				chunk["processed"].wait()  # TODO: avoid infinite waiting
+				chunk["processed"].wait()
 				os.remove(os.path.join(dst, chunk_name))
 			self._transfer.on(transfer_complete=wait_chunk)
 
@@ -567,14 +692,14 @@ class LargeTransfer(bases.Task):
 
 
 	def _dst_generator(self):
-		if self.direction == self.UPLOAD:
+		if self._up:
 			# last yield for manifest
 			# NOTE: this only works if dst is a dir
 			for dst in self.dst:
 				# has sense only if not multipart
 				self._upload_res = os.path.join(dst, self.transfer_id, self.manifest)
 
-				yield os.path.join(dst, self.transfer_id)
+				yield os.path.join(dst, self.transfer_id, '')
 		else:
 			while True:
 				yield self._tranzit_vol.mpoint
@@ -589,6 +714,7 @@ class LargeTransfer(bases.Task):
 			chunk_capacity = chunk_size
 			chunk_md5 = hashlib.md5()
 
+			zero = int(time.time())
 			with open(chunk_name, 'w') as chunk:
 				while chunk_capacity:
 					bytes = stream.read(min(buf_size, chunk_capacity))
@@ -599,6 +725,7 @@ class LargeTransfer(bases.Task):
 					chunk_md5.update(bytes)
 
 			if chunk_capacity != chunk_size:  # non-empty chunk
+				LOG.debug("*** BENCH %s %s created" % (int(time.time() - zero), os.path.basename(chunk_name)))
 				yield chunk_name, chunk_md5.hexdigest()
 			else:  # empty chunk
 				os.remove(chunk_name)
@@ -607,103 +734,103 @@ class LargeTransfer(bases.Task):
 				break
 
 
-	def _gzip_bin(self):
-		if self.try_pigz and os.path.exists(self.pigz_bin):
-			return self.pigz_bin
-		return self.gzip_bin
-
-
-	def _proxy_event(self, event):
-		def proxy(*args, **kwds):
-			self.fire(event, *args, **kwds)
-		return proxy
-
-
 	def _dl_restorer(self):
 		buf_size = 4096
 
 		for file in self.files:
 			dst = self.dst
 
-			LOG.debug("*** RESTORER start")
-			"""
-			# ugly-hack for dir untaring
-			if file["tar"]:
-				try:
-					os.mkdir(dst, 0755)
-				except OSError, e:
-					if e.strerror != 'File exists':
-						raise
-			"""
-			LOG.debug("*** RESTORER file %s to %s" % (file["name"], dst))
+			LOG.debug("RESTORER start")
+			LOG.debug("RESTORER file %s to %s" % (file["name"], dst))
+
+			# temporary fix for overriding download manifest settings with
+			# custom streamer
+			if hasattr(self.streamer, "popen"):
+				file["streamer"] = str(self.streamer)
 
 			# create 'cmd' and 'stream'
-			if not file["tar"] and not file["gzip"]:
-				stream = open(os.path.join(dst, file["name"]), 'w')
+			if not file["streamer"] and not file["compressor"]:
 				cmd = None
-			elif file["tar"] and file["gzip"]:
-				LOG.debug("*** RESTORER unzip popen")
-				unzip = subprocess.Popen([self._gzip_bin(), "-d"],
-					stdin=subprocess.PIPE,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE,
-					close_fds=True)
-				LOG.debug("*** RESTORER after unzip")
-				untar = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
-					stdin=unzip.stdout,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE,
-					close_fds=True)
-				LOG.debug("*** RESTORER after untar")
-				unzip.stdout.close()
-				LOG.debug("*** RESTORER unzip.stdout.close")
+				stream = open(os.path.join(dst, file["name"]), 'w')
+			else:
+				compressor_out = subprocess.PIPE
 
-				stream = unzip.stdin
-				cmd = untar
-			elif file["tar"]:
-				untar = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
-					stdin=subprocess.PIPE,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE,
-					close_fds=True)
+				if file["compressor"]:
+					if not file["streamer"]:
+						compressor_out = open(os.path.join(dst, file["name"]), 'w')
 
-				stream = untar.stdin
-				cmd = untar
-			elif file["gzip"]:
-				unzip = subprocess.Popen([self._gzip_bin(), "-d"],
-					stdin=subprocess.PIPE,
-					stdout=open(os.path.join(dst, file["name"]), 'w'),
-					stderr=subprocess.PIPE,
-					close_fds=True)
+					if file["compressor"] == "gzip":
+						LOG.debug("RESTORER unzip popen")
+						cmd = subprocess.Popen([self._gzip_bin(), "-d"],
+							stdin=subprocess.PIPE,
+							stdout=compressor_out,
+							stderr=subprocess.PIPE,
+							close_fds=True)
+						LOG.debug("RESTORER after unzip")
+					else:  # custom compressor
+						LOG.debug("RESTORER custom decompressor popen")
+						cmd = self.compressor.popen(stdout=compressor_out)
+						LOG.debug("RESTORER after custom decompressor popen")
+					stream = cmd.stdin
 
-				stream = unzip.stdin
-				cmd = unzip
+				if file["streamer"]:
+					if file["compressor"]:
+						compressor_out = cmd.stdout
 
-			for chunk, info in file["chunks"].iteritems():
-				LOG.debug("*** RESTORER before wait %s" % chunk)
-				info["downloaded"].wait()
+					if file["streamer"] == "tar":
+						LOG.debug("RESTORER untar popen")
+						cmd = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
+							stdin=compressor_out,
+							stdout=subprocess.PIPE,
+							stderr=subprocess.PIPE,
+							close_fds=True)
+						LOG.debug("RESTORER after untar")
+					else:  # custom streamer
+						LOG.debug("RESTORER custom decompressor popen")
+						cmd = self.streamer.popen(stdin=compressor_out)
+						LOG.debug("RESTORER after custom decompressor popen")
 
-				location = os.path.join(self._tranzit_vol.mpoint, chunk)
-				with open(location, 'rb') as fd:
-					while True:
-						bytes = fd.read(buf_size)
-						if not bytes:
-							LOG.debug("*** RESTORER break %s" % chunk)
-							break
-						stream.write(bytes)
+					if file["compressor"]:
+						compressor_out.close()
+					else:
+						stream = cmd.stdin
 
-				# TODO: set the event in finally
-				info["processed"].set()  # this leads to chunk removal
+			try:
+				for chunk, info in file["chunks"].iteritems():
 
-			stream.close()
+					LOG.debug("RESTORER before wait %s" % chunk)
+					info["downloaded"].wait()
+					zero = int(time.time())
 
-			#? wait for unzip first in case of tar&gzip
+					location = os.path.join(self._tranzit_vol.mpoint, chunk)
+					with open(location, 'rb') as fd:
+						while True:
+							bytes = fd.read(buf_size)
+							if not bytes:
+								LOG.debug("RESTORER break %s" % chunk)
+								LOG.debug("*** BENCH %s %s restored" % (int(time.time() - zero), chunk))
+								break
+							try:
+								stream.write(bytes)
 
-			if cmd:
-				LOG.debug("*** RESTORER untar wait")
-				cmd.wait()
+							except Exception, e:
+								if isinstance(e, IOError) and e.errno == 32:
+									LOG.debug("RESTORER encountered broken"
+											  " pipe, err msg from the last"
+											  " supbrocess: %s" % cmd.stderr.read())
+								self.kill()
+								raise
 
-			LOG.debug("LargeTransfer download: finished restoring")
+					info["processed"].set()  # this leads to chunk removal
+			finally:
+				stream.close()
+
+				#? wait for unzip first in case of tar&gzip
+
+				if cmd:
+					LOG.debug("RESTORER cmd wait")
+					cmd.wait()
+					LOG.debug("LargeTransfer download: finished restoring")
 
 
 	def _run(self):
@@ -712,10 +839,19 @@ class LargeTransfer(bases.Task):
 		self._tranzit_vol.ensure(mkfs=True)
 		try:
 			res = self._transfer.run()
+			LOG.debug("self._transfer finished")
 
-			if self.direction == self.DOWNLOAD:
-				self._restorer.join()
-			elif self.direction == self.UPLOAD:
+			if not self._up:
+				if self._restorer:
+					LOG.debug("waiting restorer to finish...")
+					self._restorer.join()
+				return res
+
+			elif self._up:
+				if res["failed"] or self._transfer._stop_all.is_set():
+					#? upload failed inside FileTransfer or it was killed
+					self._s3_cleanup()
+					return
 				if self.multipart:
 					return res["multipart_result"]
 				else:
@@ -724,6 +860,50 @@ class LargeTransfer(bases.Task):
 			LOG.debug("Destroying tmpfs")
 			self._tranzit_vol.destroy()
 			coreutils.remove(self._tranzit_vol.mpoint)
+
+
+	def _s3_cleanup(self):
+		LOG.debug("Performing S3 clean up")
+		path = os.path.join(self.dst.next(), self.transfer_id)
+		driver = cloudfs(urlparse.urlparse(path).scheme)
+
+		pieces = Queue.Queue()
+		for piece in driver.ls(path):
+			pieces.put(piece)
+
+		def delete():
+			driver = cloudfs(urlparse.urlparse(path).scheme)
+			while True:
+				try:
+					driver.delete(pieces.get_nowait())
+				except Queue.Empty:
+					return
+
+		threads = [threading.Thread(target=delete) for i in range(min(4,
+			pieces.qsize()))]  #? 4
+		if threads:
+			map(lambda x: x.start(), threads)
+			map(lambda x: x.join(), threads)
+
+
+	def kill(self):
+		self._killed = True
+		self._transfer.kill_nowait()
+
+		# interrupt all events
+		self._manifest_ready.interrupt()
+
+		with self._chunks_events_access:
+			if self.files:
+				for file in self.files:
+					for chunk, chunkinfo in file["chunks"].items():
+						chunkinfo["downloaded"].interrupt()
+						chunkinfo["processed"].interrupt()
+
+		def interrupt(*args):
+			raise Exception("S3 transfer was interrupted by LargeTransfer.kill()")  #?
+		self._transfer.on(progress_report=interrupt)
+
 
 
 class Manifest(object):
@@ -739,8 +919,8 @@ class Manifest(object):
 		files: [
 			{
 				name,
-				tar: true,
-				gzip: true,
+				streamer,  # "tar" | python function | None
+				compressor,  # "gzip" | python function | None
 				chunks: [(basename001, md5sum)]
 			}
 		]
@@ -753,10 +933,23 @@ class Manifest(object):
 	Make sure to write to a file with '.json' extension.
 	"""
 
-	def __init__(self, filename=None):
+	filename = None
+	cloudfs_path = None
+
+	def __init__(self, filename=None, cloudfs_path=None):
 		self.reset()
 		if filename:
 			self.read(filename)
+			self.filename = filename
+		elif cloudfs_path:
+			cfs = cloudfs(urlparse.urlparse(cloudfs_path).scheme)
+			target_dir = tempfile.mkdtemp() 
+			cfs.get(cloudfs_path, target_dir)
+			try:
+				self.read(os.path.join(target_dir, os.path.basename(cloudfs_path)))
+				self.cloudfs_path = cloudfs_path
+			finally:
+				coreutils.remove(target_dir)
 
 	def reset(self):
 		self.data = {
@@ -772,7 +965,7 @@ class Manifest(object):
 		elif filename.endswith(".ini"):
 			self.data = self._read_ini(filename)
 		else:
-			raise TypeError(".json or .ini manifests only")
+			raise TypeError(".json or .ini manifests only, got %s" % filename)
 		return self
 
 	def write(self, filename):
@@ -815,8 +1008,8 @@ class Manifest(object):
 			name = chunkname[:-7]
 		else:
 			name = chunkname  # just in case
-		tar = True
-		gzip = True
+		streamer = "tar"
+		compressor = "gzip"
 
 		chunks = parser.items("chunks")
 		chunks.sort()
@@ -829,8 +1022,8 @@ class Manifest(object):
 			"files": [
 				{
 					"name": name,
-					"tar": tar,
-					"gzip": gzip,
+					"streamer": streamer,
+					"compressor": compressor,
 					"chunks": chunks,
 				}
 			]
@@ -851,12 +1044,41 @@ class Manifest(object):
 	def __contains__(self, value):
 		return self.data.__contains__(value)
 
+	def meta():
+		def fget(self):
+			ret = dict((key.split('.', 1)[1], self['tags'][key]) \
+				for key in self['tags'] \
+				if key.startswith('meta.'))
+			LOG.debug('meta: %s', ret)
+			return ret
 
-def cloudfs(fstype, imported={}, **driver_kwds):
-	if fstype not in imported:
-		imported[fstype] = __import__('scalarizr.storage2.cloudfs.%s' % fstype,
-			globals(), locals(), ["__cloudfs__"], -1).__cloudfs__
-	return imported[fstype](**driver_kwds)
+		def fset(self, meta):
+			for key, value in meta.items():
+				self['tags']['meta.%s' % key] = value
+
+		return locals()
+	meta = property(**meta())
+
+	def save(self):
+		if self.cloudfs_path:
+			cfs = cloudfs(urlparse.urlparse(self.cloudfs_path).scheme)
+			source = tempfile.mkstemp()[1] + '.json'
+			self.write(source)
+			try:
+				cfs.put(source, self.cloudfs_path)
+			finally:
+				coreutils.remove(source)
+		elif self.filename:
+			self.write(self.filename)
+
+
+cloudfs_types = {}
+
+
+def cloudfs(fstype, **driver_kwds):
+	if fstype not in cloudfs_types:
+		__import__('scalarizr.storage2.cloudfs.%s' % fstype)
+	return cloudfs_types[fstype](**driver_kwds)
 
 
 class CloudFileSystem(object):

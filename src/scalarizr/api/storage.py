@@ -192,13 +192,13 @@ class StorageAPI(object):
 
 
 	@rpc.service_method
-	def grow(self, volume, growth_cfg, async=False):
+	def grow(self, volume, growth, async=False):
 		self._check_invalid(volume, 'volume', dict)
 		self._check_empty(volume.get('id'), 'volume.id')
 
 		def do_grow():
 			vol = storage2.volume(volume)
-			growed_vol = vol.grow(**growth_cfg)
+			growed_vol = vol.grow(**growth)
 			return dict(growed_vol)
 
 		if async:

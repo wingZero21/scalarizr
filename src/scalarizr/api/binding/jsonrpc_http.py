@@ -126,7 +126,8 @@ class WsgiApplication(Security):
 	
 	def __exit__(self, *args):
 		pl = bus.platform
-		pl.clear_access_data()
+		#pl.clear_access_data()
+		# Commented to allow async=True processing 
 
 
 class HttpServiceProxy(rpc.ServiceProxy, Security):
