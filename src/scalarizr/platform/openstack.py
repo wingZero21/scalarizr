@@ -53,7 +53,7 @@ class CinderWrapper(OpenstackServiceWrapper):
         return cinder_client.Client(self.user,
                                     self.password,
                                     self.tenant,
-                                    self.auth_url)
+                                    auth_url=self.auth_url)
 
 
 class NovaWrapper(OpenstackServiceWrapper):
@@ -62,7 +62,7 @@ class NovaWrapper(OpenstackServiceWrapper):
         return nova_client.Client(self.user,
                                   self.password,
                                   self.tenant,
-                                  self.auth_url,
+                                  auth_url=self.auth_url,
                                   service_type=service_type)
 
 
@@ -128,14 +128,18 @@ class OpenstackPlatform(Platform):
         return self._userdata
 
     def new_cinder_connection(self):
+        api_key = self._access_data["api_key"]
+        password = self._access_data["password"]
         return CinderWrapper(self._access_data["username"],
-                             self._access_data["password"],
+                             password or api_key,
                              self._access_data["tenant_name"],
                              self._access_data["keystone_url"])
 
     def new_nova_connection(self):
+        api_key = self._access_data["api_key"]
+        password = self._access_data["password"]
         return NovaWrapper(self._access_data["username"],
-                           self._access_data["password"],
+                           password or api_key,
                            self._access_data["tenant_name"],
                            self._access_data["keystone_url"])
 
