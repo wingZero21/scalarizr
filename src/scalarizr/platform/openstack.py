@@ -26,7 +26,7 @@ class OpenstackServiceWrapper(object):
     def _make_connection(self, **kwargs):
         raise NotImplementedError()
 
-    def __init__(self, user, password, tenant, auth_url):
+    def __init__(self, user, password, tenant, auth_url, region_name=None):
         self.user = user
         self.password = password
         self.tenant = tenant
@@ -53,7 +53,8 @@ class CinderWrapper(OpenstackServiceWrapper):
         return cinder_client.Client(self.user,
                                     self.password,
                                     self.tenant,
-                                    auth_url=self.auth_url)
+                                    auth_url=self.auth_url,
+                                    **kwargs)
 
 
 class NovaWrapper(OpenstackServiceWrapper):
@@ -63,7 +64,8 @@ class NovaWrapper(OpenstackServiceWrapper):
                                   self.password,
                                   self.tenant,
                                   auth_url=self.auth_url,
-                                  service_type=service_type)
+                                  service_type=service_type,
+                                  **kwargs)
 
 
 class OpenstackPlatform(Platform):
@@ -127,13 +129,21 @@ class OpenstackPlatform(Platform):
                 return self._parse_user_data(rawmeta)
         return self._userdata
 
+    def set_access_data(self, access_data):
+        # if it's Rackspace NG, we need to set env var CINDER_RAX_AUTH
+        # for proper nova and cinder authentication
+        if 'rackspacecloud' in self._access_data["keystone_url"]:
+            os.environ["CINDER_RAX_AUTH"] = "True"
+        self._access_data = access_data
+
     def new_cinder_connection(self):
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
         return CinderWrapper(self._access_data["username"],
                              password or api_key,
                              self._access_data["tenant_name"],
-                             self._access_data["keystone_url"])
+                             self._access_data["keystone_url"],
+                             self._access_data["cloud_location"])
 
     def new_nova_connection(self):
         api_key = self._access_data["api_key"]
@@ -141,7 +151,8 @@ class OpenstackPlatform(Platform):
         return NovaWrapper(self._access_data["username"],
                            password or api_key,
                            self._access_data["tenant_name"],
-                           self._access_data["keystone_url"])
+                           self._access_data["keystone_url"],
+                           self._access_data["cloud_location"])
 
 
 def get_platform():
