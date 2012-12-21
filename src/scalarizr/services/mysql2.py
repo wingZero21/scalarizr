@@ -541,8 +541,13 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 				bak = backup.restore(**mnf.meta)
 				if bak.backup_type == 'incremental':
 					incrementals.insert(0, bak)
-		self._config.update(dict(bak))
 		self.incrementals = incrementals
+		if self.incrementals:
+			self.log_file = self.incrementals[-1].log_file
+			self.log_pos = self.incrementals[-1].log_pos
+		else:
+			self.log_file = bak.log_file
+			self.log_pos = bak.log_pos
 
 		coreutils.clean_dir(__mysql__['data_dir'])
 
