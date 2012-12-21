@@ -130,11 +130,11 @@ class OpenstackPlatform(Platform):
         return self._userdata
 
     def set_access_data(self, access_data):
+        self._access_data = access_data
         # if it's Rackspace NG, we need to set env var CINDER_RAX_AUTH
         # for proper nova and cinder authentication
         if 'rackspacecloud' in self._access_data["keystone_url"]:
             os.environ["CINDER_RAX_AUTH"] = "True"
-        self._access_data = access_data
 
     def new_cinder_connection(self):
         api_key = self._access_data["api_key"]
