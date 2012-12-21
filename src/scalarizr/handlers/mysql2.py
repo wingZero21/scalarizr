@@ -1231,13 +1231,12 @@ class MysqlHandler(DBMSRHandler):
 				if 'restore' in __mysql__ \
 						and __mysql__['restore'].type != 'xtrabackup':
 					self._innodb_recovery()
-					self.mysql.service.start()
 			
 			with op.step(self._step_change_replication_master):
 				# Change replication master 
 				LOG.info("Requesting master server")
 				master_host = self.get_master_host()
-	
+				self.mysql.service.start()	
 				self._change_master( 
 						host=master_host, 
 						user=__mysql__['repl_user'], 
