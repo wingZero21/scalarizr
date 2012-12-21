@@ -19,11 +19,11 @@ def mdadm(mode, md_device=None, *devices, **long_kwds):
 				level=0, metadata='default', 
 				assume_clean=True, raid_devices=2)
 	"""
-
+	raise_exc = long_kwds.pop('raise_exc', True)
 	return linux.system(linux.build_cmd_args(
 					mdadm_binary,
 					['--%s' % mode] + ([md_device] if md_device else []),
-					long_kwds, devices))
+					long_kwds, devices), raise_exc=raise_exc)
 
 
 def mdfind(*devices):

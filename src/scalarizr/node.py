@@ -326,6 +326,5 @@ __node__['scalr'] = Compound({
 	'id': Ini(private_dir + '/config.ini', 'general', {'id': 'scalr_id'})
 })
 __node__ = Compound(__node__)
-#__node__ = dict() # XXX: added for unittests
 
 

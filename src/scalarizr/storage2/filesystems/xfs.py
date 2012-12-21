@@ -46,8 +46,9 @@ class XfsFileSystem(filesystems.FileSystem):
 			cmd = (XFS_GROWFS_EXEC, mpoint)
 			filesystems.system(cmd, 
 					error_text=self.error_messages['resize'] % device)
-		raise filesystems.FileSystemError(
-				self.error_messages['not_mounted'] % device)
+		else:
+			raise filesystems.FileSystemError(
+						self.error_messages['not_mounted'] % device)
 	
 
 	def freeze(self, device):
@@ -56,8 +57,9 @@ class XfsFileSystem(filesystems.FileSystem):
 			cmd = (XFS_FREEZE_EXEC, '-f', mpoint)
 			filesystems.system(cmd, 
 					error_text=self.error_messages['freeze'] % device)
-		raise filesystems.FileSystemError(
-				self.error_messages['not_mounted'] % device)
+		else:
+			raise filesystems.FileSystemError(
+					self.error_messages['not_mounted'] % device)
 		
 
 	def unfreeze(self, device):
@@ -66,8 +68,9 @@ class XfsFileSystem(filesystems.FileSystem):
 			cmd = (XFS_FREEZE_EXEC, '-u', mpoint)
 			filesystems.system(cmd, 
 					error_text=self.error_messages['unfreeze'] % device)
-		raise filesystems.FileSystemError(
-				self.error_messages['not_mounted'] % device)
+		else:
+			raise filesystems.FileSystemError(
+					self.error_messages['not_mounted'] % device)
 
 
 storage2.filesystem_types[XfsFileSystem.type] = XfsFileSystem

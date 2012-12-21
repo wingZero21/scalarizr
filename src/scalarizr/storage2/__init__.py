@@ -62,6 +62,10 @@ def snapshot(*args, **kwds):
 
 
 def filesystem(fstype=None):
+	"""
+	:return: Filesystem object
+	:rtype: scalarizr.storage2.filesystems.FileSystem
+	"""
 	fstype = fstype or 'ext3'
 	if not fstype in filesystem_types:
 		try:
@@ -134,6 +138,11 @@ def concurrent_snapshot(volumes, description, tags=None, **kwds):
 			
 class StorageError(linux.LinuxError):
 	pass
+
+
+class NoOpError(StorageError):
+	pass
+
 
 class OperationError(StorageError):
 	pass

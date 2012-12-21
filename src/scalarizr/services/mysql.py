@@ -719,8 +719,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 				wait_sock(sock)
 					
 		return True
-	
-			
+
+	'''
+	XXX: Code commented because I am not sure why we still need self.socket_file
 	def status(self):
 		if self.socket_file:
 			if os.path.exists(self.socket_file):
@@ -728,6 +729,11 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			else:
 				return initdv2.Status.NOT_RUNNING
 		return initdv2.ParametrizedInitScript.status(self)
+	'''
+
+
+	def status(self):
+		return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
 
 	
 	def start(self):

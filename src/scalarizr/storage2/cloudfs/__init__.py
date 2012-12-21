@@ -173,8 +173,9 @@ class FileTransfer(BaseTransfer):
 					retry = 0
 					if self.multipart:
 						self._chunk_num += 1
-					LOG.debug("FileTransfer yield %s %s %s %s" % (src, dst, retry, self._chunk_num))
-					yield src, dst, retry, self._chunk_num
+					chunk_num = self._chunk_num
+				LOG.debug("FileTransfer yield %s %s %s %s" % (src, dst, retry, chunk_num))
+				yield src, dst, retry, chunk_num
 			except StopIteration:
 				no_more = True
 			
@@ -338,6 +339,8 @@ class LargeTransfer(bases.Task):
 				description='',
 				tags=None,
 				**kwds):
+		# TODO: subprocess hang, only in 2.7.2?
+		# TODO: "dir/" means dircontent, "dir" means dir
 		'''
 		@param src: transfer source path
 			- str file or directory path. 
@@ -351,7 +354,7 @@ class LargeTransfer(bases.Task):
 			self._up = True
 		else:
 			raise ValueError('Eather src or dst should be URL-like string')
-		if self._up and os.path.isdir(src) and not tar_it:
+		if self._up and isinstance(src, basestring) and os.path.isdir(src) and not tar_it:
 			raise ValueError('Passed src is a directory. tar_it=True expected')
 		if self._up:
 			if callable(src):
@@ -379,6 +382,7 @@ class LargeTransfer(bases.Task):
 		self.gzip_it = gzip_it
 		self.chunk_size = chunk_size
 		self.try_pigz = try_pigz
+		self._restorer = None
 		if transfer_id is None:
 			self.transfer_id = uuid.uuid4().hex
 		else:
@@ -389,10 +393,6 @@ class LargeTransfer(bases.Task):
 		self._tranzit_vol = storage2.volume(
 								type='tmpfs',
 								mpoint=tempfile.mkdtemp())
-		self._chunk_num = -1
-		self._given_chunks = OrderedDict()
-		self._restoration_queue = Queue.Queue()
-		self._dl_lock = threading.Lock()
 
 		events = self._transfer.list_events()
 		self.define_events(*events)
@@ -400,17 +400,18 @@ class LargeTransfer(bases.Task):
 			self._transfer.on(ev, self._proxy_event(ev))
 		
 
-
 	def _src_generator(self):
 		'''
 		Compress, split, yield out
 		'''
+		# TODO: popen can deadlock sometimes, create a thread that would wait
+		# for a popen success flag with a timeout, and kill everything otherwise?
 		if self.direction == self.UPLOAD:
 			# Tranzit volume size is chunk for each worker
 			# and Ext filesystem overhead
 
 			# manifest is not used in multipart uploads and is left
-			# here to avoid writing ifs everywhere
+			# here to avoid writing 'if' everywhere
 			manifest = Manifest()
 			manifest["description"] = self.description
 			if self.tags:
@@ -432,25 +433,35 @@ class LargeTransfer(bases.Task):
 				cmd = tar = gzip = None
 
 				if hasattr(src, 'read'):
-					# leaving fileinfo["name"] == ''
 					stream = src
 					if hasattr(stream, 'name'):
-						name = stream.name
+						name = os.path.basename(stream.name)  #? can stream name end with '/'
 					else:
 						name = 'stream-%s' % hash(stream)
+					fileinfo["name"] = name
 					prefix = os.path.join(prefix, name) + '.'
 				elif os.path.isdir(src):
+					if src.endswith('/'):
+						# tar the directory contents
+						tar_cmdargs = ['/bin/tar', 'cp', '-C', src, '.']
+					else:
+						# tar the directory itself
+						# -C parent to use relative paths inside tarball
+						parent, target = os.path.split(src)
+						tar_cmdargs = ['/bin/tar', 'cp',  '-C', parent, target]
+
 					name = os.path.basename(src.rstrip('/'))
 					fileinfo["name"] = name
 					fileinfo["tar"] = True
 					prefix = os.path.join(prefix, name) + '.tar.'
 
+					LOG.debug("LargeTransfer src_generator TAR POPEN")
 					tar = cmd = subprocess.Popen(
-									['/bin/tar', 'cp', '-C', src, '.'],
-									#['/bin/tar', 'cp', src],
+									tar_cmdargs,
 									stdout=subprocess.PIPE,
 									stderr=subprocess.PIPE,
 									close_fds=True)
+					LOG.debug("LargeTransfer src_generator AFTER TAR")
 					stream = tar.stdout
 				elif os.path.isfile(src):
 					name = os.path.basename(src)
@@ -464,12 +475,14 @@ class LargeTransfer(bases.Task):
 				if self.gzip_it:
 					fileinfo["gzip"] = True
 					prefix += 'gz.'
+					LOG.debug("LargeTransfer src_generator GZIP POPEN")
 					gzip = cmd = subprocess.Popen(
 								[self._gzip_bin(), '-5'],
 								stdin=stream,
 								stdout=subprocess.PIPE,
 								stderr=subprocess.PIPE,
 								close_fds=True)
+					LOG.debug("LargeTransfer src_generator AFTER GZIP")
 					if tar:
 						# Allow tar to receive SIGPIPE if gzip exits.
 						tar.stdout.close()
@@ -477,7 +490,7 @@ class LargeTransfer(bases.Task):
 
 				for filename, md5sum in self._split(stream, prefix):
 					fileinfo["chunks"].append((os.path.basename(filename), md5sum))
-					LOG.debug("LargeTransfer yield %s" % filename)
+					LOG.debug("LargeTransfer src_generator yield %s" % filename)
 					yield filename
 				if cmd:
 					cmd.communicate()
@@ -497,7 +510,7 @@ class LargeTransfer(bases.Task):
 				self._transfer.kill()
 				# TODO: rethink killing
 				#? kill self._restorer?
-			self._transfer.on(transfer_error=transfer_kill())
+			self._transfer.on(transfer_error=transfer_kill)
 
 			# The first yielded object will be the manifest, so
 			# catch_manifest is a listener that's supposed to trigger only
@@ -508,7 +521,8 @@ class LargeTransfer(bases.Task):
 				manifest_ready.set()
 			self._transfer.on(transfer_complete=wait_manifest)
 
-			manifest_path = self.src.next()
+
+			manifest_path = self.src
 			yield manifest_path
 
 			manifest_ready.wait()
@@ -532,18 +546,19 @@ class LargeTransfer(bases.Task):
 				) for basename, md5sum in file["chunks"]])
 
 			# launch restorer
-			self._restorer = threading.Thread(target=self._dl_restorer)
-			self._restorer.start()
+			if self._restorer is None:
+				LOG.debug("STARTING RESTORER")
+				self._restorer = threading.Thread(target=self._dl_restorer)
+				self._restorer.start()
 
 			def wait_chunk(src, dst, retry, chunk_num):
-				basename = os.path.basename(dst)
+				chunk_name = os.path.basename(src)
 				for file in self.files:
-					if basename in file["chunks"]:
-						chunk = file["chunks"][basename]
-
+					if chunk_name in file["chunks"]:
+						chunk = file["chunks"][chunk_name]
 				chunk["downloaded"].set()
 				chunk["processed"].wait()  # TODO: avoid infinite waiting
-				os.remove(dst)
+				os.remove(os.path.join(dst, chunk_name))
 			self._transfer.on(transfer_complete=wait_chunk)
 
 			for file in self.files:
@@ -563,37 +578,6 @@ class LargeTransfer(bases.Task):
 		else:
 			while True:
 				yield self._tranzit_vol.mpoint
-
-
-	"""
-	def _split(self, stream, prefix):
-		buf_size = 4096
-		chunk_size = self.chunk_size * 1024 * 1024
-		read_bytes = 0
-		fp = None
-
-		def next_chunk(chunk_num=-1):
-			chunk_num += 1
-			return open(prefix + '%03d' % chunk_num, 'w'), hashlib.md5(), chunk_num
-		fp, md5sum, chunk_num = next_chunk()
-
-		while True:
-			LOG.debug("%s %s %s" % (fp, md5sum.hexdigest(), chunk_num))
-			size = min(buf_size, chunk_size - read_bytes)
-			bytes = stream.read(size)
-			if not bytes:
-				if fp:
-					fp.close()
-				LOG.debug("BREAK")
-				break
-			read_bytes += len(bytes)
-			fp.write(bytes)
-			md5sum.update(bytes)
-			if read_bytes == chunk_size:
-				fp.close()
-				yield fp.name, md5sum.hexdigest()
-				fp, md5sum, chunk_num = next_chunk(chunk_num)
-	"""
 
 
 	def _split(self, stream, prefix):
@@ -619,7 +603,7 @@ class LargeTransfer(bases.Task):
 			else:  # empty chunk
 				os.remove(chunk_name)
 			if chunk_capacity:  # empty or half-empty chunk, meaning stream
-								# is empty (if stream.closed?)
+								# is empty
 				break
 
 
@@ -639,53 +623,87 @@ class LargeTransfer(bases.Task):
 		buf_size = 4096
 
 		for file in self.files:
-			dst = self.dst.next()
+			dst = self.dst
+
+			LOG.debug("*** RESTORER start")
+			"""
+			# ugly-hack for dir untaring
+			if file["tar"]:
+				try:
+					os.mkdir(dst, 0755)
+				except OSError, e:
+					if e.strerror != 'File exists':
+						raise
+			"""
+			LOG.debug("*** RESTORER file %s to %s" % (file["name"], dst))
 
 			# create 'cmd' and 'stream'
 			if not file["tar"] and not file["gzip"]:
+				stream = open(os.path.join(dst, file["name"]), 'w')
 				cmd = None
-				stream = open(dst, 'w')  #? use file["name"]
 			elif file["tar"] and file["gzip"]:
-				# unzip from pipe
-				# from man unzip:
-				# Archives read from standard input are not yet supported,
-				# except with funzip (and then only the first member of the
-				# archive can be extracted).
-				unzip = subprocess.Popen(["/usr/bin/funzip"],
-					stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-				cmd = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
-					stdin=unzip.stdout)
+				LOG.debug("*** RESTORER unzip popen")
+				unzip = subprocess.Popen([self._gzip_bin(), "-d"],
+					stdin=subprocess.PIPE,
+					stdout=subprocess.PIPE,
+					stderr=subprocess.PIPE,
+					close_fds=True)
+				LOG.debug("*** RESTORER after unzip")
+				untar = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
+					stdin=unzip.stdout,
+					stdout=subprocess.PIPE,
+					stderr=subprocess.PIPE,
+					close_fds=True)
+				LOG.debug("*** RESTORER after untar")
 				unzip.stdout.close()
+				LOG.debug("*** RESTORER unzip.stdout.close")
+
 				stream = unzip.stdin
+				cmd = untar
 			elif file["tar"]:
-				cmd = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
-					stdin=subprocess.PIPE)
-				stream = cmd.stdin
+				untar = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
+					stdin=subprocess.PIPE,
+					stdout=subprocess.PIPE,
+					stderr=subprocess.PIPE,
+					close_fds=True)
+
+				stream = untar.stdin
+				cmd = untar
 			elif file["gzip"]:
-				unzip = subprocess.Popen(["/usr/bin/funzip"],
-					stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-				cmd = subprocess.Popen(["/usr/bin/tee", dst],
-					stdin=unzip.stdout)
-				unzip.stdout.close()
+				unzip = subprocess.Popen([self._gzip_bin(), "-d"],
+					stdin=subprocess.PIPE,
+					stdout=open(os.path.join(dst, file["name"]), 'w'),
+					stderr=subprocess.PIPE,
+					close_fds=True)
+
 				stream = unzip.stdin
+				cmd = unzip
 
 			for chunk, info in file["chunks"].iteritems():
+				LOG.debug("*** RESTORER before wait %s" % chunk)
 				info["downloaded"].wait()
 
 				location = os.path.join(self._tranzit_vol.mpoint, chunk)
-				with open(location) as fd:
+				with open(location, 'rb') as fd:
 					while True:
 						bytes = fd.read(buf_size)
 						if not bytes:
+							LOG.debug("*** RESTORER break %s" % chunk)
 							break
 						stream.write(bytes)
-						#? stream.flush()
 
+				# TODO: set the event in finally
 				info["processed"].set()  # this leads to chunk removal
 
 			stream.close()
+
+			#? wait for unzip first in case of tar&gzip
+
 			if cmd:
-				cmd.communicate()
+				LOG.debug("*** RESTORER untar wait")
+				cmd.wait()
+
+			LOG.debug("LargeTransfer download: finished restoring")
 
 
 	def _run(self):

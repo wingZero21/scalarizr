@@ -14,6 +14,7 @@ import boto.exception
 from scalarizr import linux
 from scalarizr import storage2
 from scalarizr import util
+from scalarizr.externals.logging import Logger
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
@@ -150,14 +151,82 @@ class EbsVolume(base.Volume, EbsMixin):
 		self.error_messages.update({
 			'no_id_or_conn': 'Volume has no ID and EC2 connection '
 							'required for volume construction is not available'
-		})	
+		})
+		self.features.update({'grow': True})
 
 		
 	def _clone(self, config):
 		config.pop('device', None)
 		config.pop('avail_zone', None)
 
-		
+
+	def _grow(self, new_vol, **growth_cfg):
+		"""
+		:param new_vol: New volume instance (almost empty)
+		:type new_vol: EbsVolume
+		:param growth_cfg: Growth rules for ebs with size, ebs type and
+						(optionally) iops
+		:type growth_cfg: dict
+		:return: New, bigger, ready to volume instance
+		:rtype: EbsVolume
+		"""
+		size = growth_cfg.get('size')
+		ebs_type = growth_cfg.get('volume_type')
+		iops = growth_cfg.get('iops')
+
+		snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1})
+		try:
+			new_vol.snap = snap
+			new_vol.size = size if size is not None else self.size
+			new_vol.volume_type = ebs_type if ebs_type is not None else self.volume_type
+			new_vol.iops = iops if iops is not None else self.iops
+			new_vol.ensure()
+		finally:
+			try:
+				snap.destroy(force=True)
+			except:
+				e = sys.exc_info()[1]
+				LOG.error('Temporary snapshot desctruction failed: %s' % e)
+
+
+	def check_growth_cfg(self, **growth_cfg):
+		size = growth_cfg.get('size')
+		target_size = int(size or self.size)
+
+		ebs_type = growth_cfg.get('volume_type')
+		target_type = ebs_type or self.volume_type
+
+		iops = growth_cfg.get('iops')
+		target_iops = iops or self.iops
+
+		change_type = ebs_type and ebs_type != self.volume_type
+		change_size = size and size != self.size
+		change_iops = iops and iops != self.iops
+
+		if not (change_size or change_type or change_iops):
+			raise storage2.NoOpError('New ebs volume configuration is equal'
+						' to present. Nothing to do.')
+
+		if target_iops and (target_type != 'io1'):
+			raise storage2.StorageError('EBS iops can only be used with '
+						'io1 volume type')
+
+		if 'io1' == target_type and not iops:
+			raise storage2.StorageError('Iops parameter must be specified '
+						'for io1 volumes')
+
+		if target_iops and target_size < 10:
+			raise storage2.StorageError('Volume size is too small to use '
+						'provisioned iops')
+
+		if target_iops and (int(target_iops) / target_size) < 10:
+			raise storage2.StorageError('Iops to volume size ratio is too high. '
+						'Maximum is 10')
+
+		if size and int(size) < self.size:
+			raise storage2.StorageError('New size is less than the old.')
+
+
 	def _ensure(self):
 		'''
 		Algo:
@@ -243,7 +312,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		@type nowait: bool
 		@param nowait: Wait for snapshot completion. Default: True
 		'''
-		
+
 		self._check_ec2()
 		snapshot = self._create_snapshot(self.id, description, tags, 
 										kwds.get('nowait', True))

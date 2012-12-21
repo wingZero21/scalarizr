@@ -78,7 +78,10 @@ class S3FileSystem(object):
 				key.name = key_name
 				file = open(local_path, "rb")
 				self._logger.debug("Actually uploading %s" % file)
-				key.set_contents_from_file(file, policy=self.acl)  # TODO: hangs sometimes
+				# TODO: sometimes takes a long time
+				#(finished within 22 minutes) - on 20 mb file
+				key.set_contents_from_file(file, policy=self.acl)
+				self._logger.debug("Finished uploading %s" % file)
 				return self._format_path(bucket_name, key_name)
 			finally:
 				if file:
@@ -107,7 +110,9 @@ class S3FileSystem(object):
 					raise TransferError("S3 path '%s' not found" % remote_path)
 				raise
 
+			self._logger.debug("Actually downloading %s" % file)
 			key.get_contents_to_filename(dest_path)
+			self._logger.debug("Finished downloading %s" % file)
 			return dest_path
 
 		except:

@@ -4,9 +4,14 @@ __author__ = 'Nick Demyanchuk'
 
 import os
 import re
+import sys
+import Queue
 import base64
 import logging
 import tempfile
+import threading
+import itertools
+
 
 from scalarizr import storage2, util
 from scalarizr.linux import mdadm, lvm2, coreutils
@@ -58,7 +63,7 @@ class RaidVolume(base.Volume):
 				raid_pv=raid_pv, level=level and int(level), 
 				lvm_group_cfg=lvm_group_cfg,
 				vg=vg, pv_uuid=pv_uuid, **kwds)
-
+		self.features.update({'restore': True, 'grow': True})
 
 	def _ensure(self):
 		self._v1_compat = self.snap and len(self.snap['disks']) and \
@@ -113,6 +118,7 @@ class RaidVolume(base.Volume):
 				raid_device = mdadm.mdfind(*disks_devices)
 			except storage2.StorageError:
 				raid_device = mdadm.findname()
+				"""
 				if self.level in (1, 10):
 					for disk in disks_devices:
 						mdadm.mdadm('misc', None, disk,
@@ -129,9 +135,9 @@ class RaidVolume(base.Volume):
 						else:
 							raise
 				else:
-					mdadm.mdadm('assemble', raid_device, *disks_devices)
-
-				mdadm.mdadm('misc', raid_device, wait=True)
+				"""
+				mdadm.mdadm('assemble', raid_device, *disks_devices)
+				mdadm.mdadm('misc', None, raid_device, wait=True, raise_exc=False)
 
 			# Restore vg config
 			vg_restore_file = tempfile.mktemp()
@@ -170,7 +176,7 @@ class RaidVolume(base.Volume):
 			kwargs = dict(force=True, level=self.level, assume_clean=True,
 						  raid_devices=len(disks_devices), metadata='default')
 			mdadm.mdadm('create', raid_device, *disks_devices, **kwargs)
-			mdadm.mdadm('misc', raid_device, wait=True)
+			mdadm.mdadm('misc', None, raid_device, wait=True, raise_exc=False)
 
 			lvm2.pvcreate(raid_device, force=True)
 			self.pv_uuid = lvm2.pvs(raid_device)[raid_device].pv_uuid
@@ -222,7 +228,6 @@ class RaidVolume(base.Volume):
 	def _detach(self, force, **kwds):
 		self.lvm_group_cfg = lvm2.backup_vg_config(self.vg)
 		lvm2.vgremove(self.vg, force=True)
-		self.device = None
 		lvm2.pvremove(self.raid_pv, force=True)
 
 		mdadm.mdadm('misc', None, self.raid_pv, stop=True, force=True)
@@ -242,6 +247,8 @@ class RaidVolume(base.Volume):
 		for disk in self.disks:
 			disk = storage2.volume(disk)
 			disk.detach(force=force)
+
+		self.device = None
 
 
 	def _snapshot(self, description, tags, **kwds):
@@ -275,6 +282,189 @@ class RaidVolume(base.Volume):
 				disk = storage2.volume(disk)
 				disk.destroy(force=force)
 			self.disks = []
+
+
+	def _clone(self, config):
+		disks = []
+		for disk_cfg_or_obj in self.disks:
+			disk = storage2.volume(disk_cfg_or_obj)
+			disk_clone = disk.clone()
+			disks.append(disk_clone)
+
+		config['disks'] = disks
+		for attr in ('pv_uuid', 'lvm_group_cfg', 'raid_pv', 'device'):
+			config.pop(attr, None)
+
+
+	def check_growth_cfg(self, **growth_cfg):
+		if int(self.level) in (0, 10):
+			raise storage2.StorageError("Raid%s doesn't support growth" % self.level)
+
+		foreach_cfg = growth_cfg.get('foreach')
+		change_disks = False
+
+		if foreach_cfg:
+			for disk_cfg_or_obj in self.disks:
+				disk = storage2.volume(disk_cfg_or_obj)
+				try:
+					disk.check_growth_cfg(**foreach_cfg)
+					change_disks = True
+				except storage2.NoOpError:
+					pass
+
+		new_len = growth_cfg.get('len')
+		current_len = len(self.disks)
+		change_size = new_len and int(new_len) != current_len
+
+		if not change_size and not change_disks:
+			raise storage2.NoOpError('Configurations are equal. Nothing to do')
+
+		if change_size and int(new_len) < current_len:
+			raise storage2.StorageError('Disk count can only be increased.')
+
+		if change_size and int(self.level) in (0, 10):
+			raise storage2.StorageError("Can't add disks to raid level %s"
+																% self.level)
+
+	def _grow(self, new_vol, **growth_cfg):
+		if int(self.level) in (0, 10):
+			raise storage2.StorageError("Raid%s doesn't support growth" % self.level)
+			
+		foreach_cfg = growth_cfg.get('foreach')
+
+		current_len = len(self.disks)
+		new_len = int(growth_cfg.get('len', 0))
+		increase_disk_count = new_len and new_len != current_len
+
+		new_vol.lvm_group_cfg = self.lvm_group_cfg
+		new_vol.pv_uuid = self.pv_uuid
+
+		growed_disks = []
+		added_disks = []
+		try:
+			if foreach_cfg:
+
+				def _grow(index, disk, cfg, queue):
+					try:
+						ret = disk.grow(resize_fs=False, **cfg)
+						queue.put(dict(index=index, result=ret))
+					except:
+						e = sys.exc_info()[1]
+						queue.put(dict(index=index, error=e))
+
+				# Concurrently grow each descendant disk
+				queue = Queue.Queue()
+				pool = []
+				for index, disk_cfg_or_obj in enumerate(self.disks):
+					# We use index to save disk order in raid disks
+					disk = storage2.volume(disk_cfg_or_obj)
+
+					t = threading.Thread(
+						name='Raid %s disk %s grower' %	(self.id, disk.id),
+						target=_grow, args=(index, disk, foreach_cfg, queue))
+					t.daemon = True
+					t.start()
+					pool.append(t)
+
+				for thread in pool:
+					thread.join()
+
+				# Get disks growth results
+				res = []
+				while True:
+					try:
+						res.append(queue.get_nowait())
+					except Queue.Empty:
+						break
+
+				res.sort(key=lambda p: p['index'])
+				growed_disks = [r['result'] for r in res if 'result' in r]
+
+				# Validate concurrent growth results
+				assert len(res) == len(self.disks), ("Not enough data in "
+						"concurrent raid disks grow result")
+
+				if not all(map(lambda x: 'result' in x, res)):
+					errors = '\n'.join([str(r['error']) for r in res if 'error' in r])
+					raise storage2.StorageError('Failed to grow raid disks.'
+							' Errors: \n%s' % errors)
+
+				assert len(growed_disks) == len(self.disks), ("Got malformed disks"
+							" growth result (not enough data).")
+
+				new_vol.disks = growed_disks
+				new_vol.pv_uuid = self.pv_uuid
+				new_vol.lvm_group_cfg = self.lvm_group_cfg
+
+				new_vol.ensure()
+
+			if increase_disk_count:
+				if not foreach_cfg:
+					""" It means we have original disks in self.disks
+						We need to snapshot it and make new disks.
+					"""
+					new_vol.disks = []
+					snaps = storage2.concurrent_snapshot(self.disks,
+							'Raid %s temp snapshot No.${index} (for growth)' % self.id,
+							tags=dict(temp='1'))
+					try:
+						for disk, snap in zip(self.disks, snaps):
+							new_disk = disk.clone()
+							new_disk.snap = snap
+							new_vol.disks.append(new_disk)
+							new_disk.ensure()
+					finally:
+						for s in snaps:
+							try:
+								s.destroy()
+							except:
+								e = sys.exc_info()[1]
+								LOG.debug('Failed to remove temporary snapshot: %s' % e)
+
+					new_vol.ensure()
+
+				existing_raid_disk = new_vol.disks[0]
+				add_disks_count = new_len - current_len
+				for _ in range(add_disks_count):
+					disk_to_add = existing_raid_disk.clone()
+					added_disks.append(disk_to_add)
+					disk_to_add.ensure()
+
+				added_disks_devices = [d.device for d in added_disks]
+				mdadm.mdadm('manage', new_vol.raid_pv, add=True,
+														*added_disks_devices)
+				new_vol.disks.extend(added_disks)
+
+				mdadm.mdadm('grow', new_vol.raid_pv, raid_devices=new_len)
+
+			mdadm.mdadm('misc', None, new_vol.raid_pv, wait=True, raise_exc=False)
+			mdadm.mdadm('grow', new_vol.raid_pv, size='max')
+			mdadm.mdadm('misc', None, new_vol.raid_pv, wait=True, raise_exc=False)
+
+			lvm2.pvresize(new_vol.raid_pv)
+			try:
+				lvm2.lvresize(new_vol.device, extents='100%VG')
+			except:
+				e = sys.exc_info()[1]
+				if (self.level == 1 and 'matches existing size' in str(e)
+														and not foreach_cfg):
+					LOG.debug('Raid1 actual size has not changed')
+				else:
+					raise
+		except:
+			err_type, err_val, trace = sys.exc_info()
+			if growed_disks or added_disks:
+				LOG.debug("Removing %s successfully growed disks and "
+							"%s additional disks",
+						  	len(growed_disks), len(added_disks))
+				for disk in itertools.chain(growed_disks, added_disks):
+					try:
+						disk.destroy(force=True)
+					except:
+						e = sys.exc_info()[1]
+						LOG.error('Failed to remove raid disk: %s' % e)
+
+			raise err_type, err_val, trace
 
 
 class RaidSnapshot(base.Snapshot):

@@ -223,7 +223,7 @@ class Script(object):
 	role_name = None
 	exec_timeout = 0
 	event_server_id = None
-
+	
 	id = None
 	pid = None
 	return_code = None
