@@ -464,8 +464,11 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 				'incremental': True,
 				'incremental_lsn': self.from_lsn
 			})
-		LOG.debug('self._config: %s', self._config)
-		LOG.debug('kwds: %s', kwds)
+
+		if self.backup_type == 'incremental':
+			LOG.info('Creating incremental xtrabackup (from LSN: %s)', self.from_lsn)
+		else:
+			LOG.info('Creating full xtrabackup')
 
 		xbak = innobackupex.args(__mysql__['tmp_dir'], **kwds).popen()
 		LOG.debug('Creating LargeTransfer, src=%s dst=%s', xbak.stdout, self.cloudfs_target)
@@ -507,6 +510,9 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		mnf = cloudfs.Manifest(cloudfs_path=cloudfs_target)
 		mnf.meta = dict(rst) 
 		mnf.save()
+
+		LOG.info('Created %s xtrabackup. (LSN: %s..%s, log_file: %s, log_pos: %s)',
+				rst.backup_type, rst.from_lsn, rst.to_lsn, rst.log_file, rst.log_pos)
 
 		return rst
 
