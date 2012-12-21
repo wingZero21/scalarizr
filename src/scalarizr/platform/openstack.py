@@ -128,16 +128,16 @@ class OpenstackPlatform(Platform):
         return self._userdata
 
     def new_cinder_connection(self):
-        return CinderWrapper(self._access_data["user"],
+        return CinderWrapper(self._access_data["username"],
                              self._access_data["password"],
-                             self._access_data["tenant"],
-                             self._access_data["auth_url"])
+                             self._access_data["tenant_name"],
+                             self._access_data["keystone_url"])
 
     def new_nova_connection(self):
-        return NovaWrapper(self._access_data["user"],
+        return NovaWrapper(self._access_data["username"],
                            self._access_data["password"],
-                           self._access_data["tenant"],
-                           self._access_data["auth_url"])
+                           self._access_data["tenant_name"],
+                           self._access_data["keystone_url"])
 
 
 def get_platform():
