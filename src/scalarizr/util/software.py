@@ -49,7 +49,10 @@ def whereis(name):
 def system_info(verbose=False):
 		
 	def check_module(module):
-		return not coreutils.modprobe(module, dry_run=True)[2]
+		try:
+			return not coreutils.modprobe(module, dry_run=True)[2]
+		except:
+			return False
 
 	ret = {}
 	ret['software'] = []			
