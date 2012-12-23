@@ -1,3 +1,4 @@
+from __future__ import with_statement
 from sys import version
 from time import time
 from pysnmp import majorVersionId

@@ -1,3 +1,4 @@
+from __future__ import with_statement
 # Operations with chains:
 # - append
 # - insert

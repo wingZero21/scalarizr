@@ -1,3 +1,4 @@
+from __future__ import with_statement
 
 from scalarizr.config import BuiltinPlatforms
 from scalarizr.platform import Platform, PlatformError
