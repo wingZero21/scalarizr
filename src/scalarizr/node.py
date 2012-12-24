@@ -130,26 +130,34 @@ class Json(Store):
 
 
 class Ini(Store):
-	def __init__(self, filename, section, mapping=None):
-		self.filename = filename
+	def __init__(self, filenames, section, mapping=None):
+		if not hasattr(filenames, '__iter__'):
+			filenames = [filenames]
+		self.filenames = filenames
 		self.section = section
-		self.ini = None
+		self.inis = None
 		self.mapping = mapping or {}
 
 
 	def _reload(self):
-		self.ini = ConfigParser.ConfigParser()
-		if os.path.exists(self.filename):
-			self.ini.read(self.filename)
+		self.inis = []
+		for filename in self.filenames:
+			if os.path.exists(self.filename):
+				ini = ConfigParser.ConfigParser()
+				ini.read(filename)
+				self.inis.append(ini)
 
 
 	def __getitem__(self, key):
-		try:
-			self._reload()
-			if key in self.mapping:
-				key = self.mapping[key]
-			return self.ini.get(self.section, key)
-		except ConfigParser.Error:
+		self._reload()
+		if key in self.mapping:
+			key = self.mapping[key]
+		for ini in self.inis:
+			try:
+				return self.inis[0].get(self.section, key)
+			except ConfigParser.Error:
+				continue
+		else:
 			raise KeyError(key)
 
 
@@ -161,22 +169,22 @@ class Ini(Store):
 			value = str(int(value))
 		else:
 			value = str(value)
-		if not self.ini.has_section(self.section):
-			self.ini.add_section(self.section)
+		if not self.inis[0].has_section(self.section):
+			self.inis[0].add_section(self.section)
 		if key in self.mapping:
 			key = self.mapping[key]
-		self.ini.set(self.section, key, value)
-		with open(self.filename, 'w+') as fp:
-			self.ini.write(fp)	
+		self.inis[0].set(self.section, key, value)
+		with open(self.filenames[0], 'w+') as fp:
+			self.inis[0].write(fp)
 
 
 class IniOption(Ini):
-	def __init__(self, filename, section, option, 
+	def __init__(self, filenames, section, option, 
 			getfilter=None, setfilter=None):
 		self.option = option
 		self.getfilter = getfilter
 		self.setfilter = setfilter
-		super(IniOption, self).__init__(filename, section)
+		super(IniOption, self).__init__(filenames, section)
 
 
 	def __getitem__(self, key):
@@ -288,7 +296,8 @@ __node__ = {
 				Ini(private_dir + '/config.ini', 'general'),
 	'platform': Ini(public_dir + '/config.ini', 'general'),
 	'behavior': IniOption(
-						private_dir + '/config.ini', 'general', 'behaviour',
+						[private_dir + '/config.ini', public_dir + '/config.ini'], 
+						'general', 'behaviour',
 						lambda val: val.strip().split(','),
 						lambda val: ','.join(val)),
 	'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),
