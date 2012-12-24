@@ -80,10 +80,14 @@ class OpenstackPlatform(Platform):
     def _get_property(self, name):
         if not name in self._metadata:
             self._metadata = self._fetch_metadata()
+            self._logger.debug('metadata: %s' % self._metadata)
         return self._metadata[name]
 
     def get_server_id(self):
-        return self._get_property('uuid') or self._get_property('serverid')
+        try:
+            return self._get_property('uuid')
+        except:
+            return self._get_property('serverid')
 
     def get_avail_zone(self):
         return self._get_property('availability_zone')
