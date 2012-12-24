@@ -197,13 +197,13 @@ class NginxHandler(ServiceCtlHandler):
 	def on_init(self):
 		bus.on(
 			start = self.on_start, 
-			before_host_up = self.on_before_host_up,
-			before_reboot_finish = self.on_before_reboot_finish
+			before_host_up = self.on_before_host_up
 		)
+
+		self._insert_iptables_rules()
 		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
 			self._stop_service('Configuring')
-			self._insert_iptables_rules()
 	
 	def on_reload(self):
 		self._queryenv = bus.queryenv_service		
@@ -252,9 +252,7 @@ class NginxHandler(ServiceCtlHandler):
 					self._reload_upstream()
 
 				bus.fire('service_configured', service_name=SERVICE_NAME)
-		
-	def on_before_reboot_finish(self, *args, **kwargs):
-		self._insert_iptables_rules()
+
 	
 	def on_HostUp(self, message):
 		self._reload_upstream()
@@ -468,13 +466,6 @@ class NginxHandler(ServiceCtlHandler):
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "80"},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "443"},
 			])
-
-		"""
-		iptables = IpTables()
-		if iptables.enabled():
-			iptables.insert_rule(None, RuleSpec(dport=80, jump='ACCEPT', protocol=P_TCP))
-			iptables.insert_rule(None, RuleSpec(dport=443, jump='ACCEPT', protocol=P_TCP))
-		"""
 
 
 	def _update_vhosts(self):

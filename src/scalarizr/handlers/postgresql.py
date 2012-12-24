@@ -163,10 +163,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
-		bus.on("before_reboot_finish", self.on_before_reboot_finish)
-		
+
+		self._insert_iptables_rules()		
+
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
-			self._insert_iptables_rules()
 			
 			if disttool.is_redhat_based():		
 					
@@ -420,10 +420,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 		Stop MySQL and unplug storage
 		"""
 		self.postgresql.service.stop('rebooting')
-
-
-	def on_before_reboot_finish(self, *args, **kwargs):
-		self._insert_iptables_rules()
 
 
 	def on_BeforeHostTerminate(self, message):
@@ -871,9 +867,3 @@ class PostgreSqlHander(ServiceCtlHandler):
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(POSTGRESQL_DEFAULT_PORT)},
 			])
 
-		"""
-		iptables = IpTables()
-		if iptables.enabled():
-			iptables.insert_rule(None, RuleSpec(dport=POSTGRESQL_DEFAULT_PORT, 
-											jump='ACCEPT', protocol=P_TCP))
-		"""

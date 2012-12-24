@@ -500,35 +500,17 @@ class CassandraScalingHandler(ServiceCtlHandler):
 			self.__create_rule(ip, '7000', 'ACCEPT'),
 			self.__create_rule(ip, '9160', 'ACCEPT'),
 		])
-		"""
-		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='ACCEPT', source = ip)
-		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='ACCEPT', source = ip)
-		self._iptables.insert_rule(None, storage_rule)
-		self._iptables.insert_rule(None, thrift_rule)
-		"""
 		
 			
 	def _del_iptables_rule(self, ip):
 		iptables.FIREWALL.remove(self.__create_rule(ip, '7000', 'ACCEPT'))
 		iptables.FIREWALL.remove(self.__create_rule(ip, '9160', 'ACCEPT'))
 
-		"""
-		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='ACCEPT', source = ip)
-		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='ACCEPT', source = ip)
-		self._iptables.delete_rule(storage_rule)
-		self._iptables.delete_rule(thrift_rule)
-		"""
 			
 	def _drop_iptable_rules(self):
 		iptables.FIREWALL.append(self.__create_rule(None, '7000', 'DROP'))
 		iptables.FIREWALL.append(self.__create_rule(None, '9160', 'DROP'))
 
-		"""
-		storage_rule = RuleSpec(protocol=iptables.P_TCP, dport='7000', jump='DROP')
-		thrift_rule  = RuleSpec(protocol=iptables.P_TCP, dport='9160', jump='DROP')
-		self._iptables.append_rule(storage_rule)
-		self._iptables.append_rule(thrift_rule)
-		"""
 			
 	def _is_decommissioned(self):
 		try:

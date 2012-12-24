@@ -359,10 +359,8 @@ class MysqlHandler(DBMSRHandler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
-		bus.on("before_reboot_finish", self.on_before_reboot_finish)
 				
-		if __node__['state'] == 'bootstrapping':
-			self._insert_iptables_rules()
+		self._insert_iptables_rules()
 		
 		elif __node__['state'] == 'running':
 			vol = storage2.volume(__mysql__['volume'])
@@ -1025,11 +1023,7 @@ class MysqlHandler(DBMSRHandler):
 		
 	def on_before_reboot_start(self, *args, **kwargs):
 		self.mysql.service.stop('Instance is going to reboot')
-
 	
-	def on_before_reboot_finish(self, *args, **kwargs):
-		self._insert_iptables_rules()
-
 
 	def generate_datadir(self):
 		try:
@@ -1322,13 +1316,6 @@ class MysqlHandler(DBMSRHandler):
 			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "3306"},
 			])
-		
-		'''
-		ipt = iptables.IpTables()
-		if ipt.usable():
-			ipt.insert_rule(None, iptables.RuleSpec(dport=mysql_svc.MYSQL_DEFAULT_PORT, 
-												jump='ACCEPT', protocol=iptables.P_TCP))	
-		'''
 
 	
 	def get_user_creds(self):

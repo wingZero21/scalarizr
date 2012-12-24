@@ -154,7 +154,7 @@ class Ini(Store):
 			key = self.mapping[key]
 		for ini in self.inis:
 			try:
-				return self.inis[0].get(self.section, key)
+				return ini.get(self.section, key)
 			except ConfigParser.Error:
 				continue
 		else:
