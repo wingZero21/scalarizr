@@ -142,7 +142,7 @@ class Ini(Store):
 	def _reload(self):
 		self.inis = []
 		for filename in self.filenames:
-			if os.path.exists(self.filename):
+			if os.path.exists(filename):
 				ini = ConfigParser.ConfigParser()
 				ini.read(filename)
 				self.inis.append(ini)
