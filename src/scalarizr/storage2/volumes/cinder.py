@@ -7,7 +7,6 @@ import threading
 
 from scalarizr import storage2
 from scalarizr import util
-from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
 from scalarizr.bus import bus
@@ -97,7 +96,7 @@ class CinderVolume(base.Volume):
         self._cinder = bus.platform.new_cinder_connection()
 
     def _server_id(self):
-        return __node__['openstack']['server_id']
+        return bus.platform.get_server_id()
 
     def _ensure(self):
         assert self._cinder.has_connection or self.id, \

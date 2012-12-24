@@ -83,13 +83,13 @@ class OpenstackPlatform(Platform):
         return self._metadata[name]
 
     def get_server_id(self):
-        self._get_property('uuid')
+        return self._get_property('uuid') or self._get_property('serverid')
 
     def get_avail_zone(self):
-        self._get_property('availability_zone')
+        return self._get_property('availability_zone')
 
     def get_ssh_pub_key(self):
-        self._get_property('public_keys')  # TODO: take one key
+        return self._get_property('public_keys')  # TODO: take one key
 
     def get_user_data(self, key=None):
         if self._userdata is None:
