@@ -79,7 +79,7 @@ class CinderVolume(base.Volume):
                  snapshot_id=None,
                  avail_zone=None,
                  tags=None,
-                 volume_type='standard',
+                 volume_type=None,
                  **kwds):
         base.Volume.__init__(self,
                              size=size and int(size) or None,
@@ -163,7 +163,7 @@ class CinderVolume(base.Volume):
                        avail_zone=None,
                        imageRef=None,
                        tags=None,
-                       volume_type='standard'):
+                       volume_type=None):
         LOG.debug('Creating Cinder volume (zone: %s size: %s snapshot: %s '
                   'volume_type: %s)', avail_zone, size,
                   snapshot_id, volume_type)
