@@ -5,7 +5,7 @@ import datetime
 
 from scalarizr import storage2
 
-from scalarizr.platform.gce import wait_for_operation_to_complete
+from scalarizr.platform.gce.storage import wait_for_operation_to_complete
 from scalarizr.storage2.volumes import base
 from scalarizr.storage2.volumes import gce_ephemeral
 from scalarizr.node import __node__

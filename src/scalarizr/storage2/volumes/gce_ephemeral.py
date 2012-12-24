@@ -10,7 +10,8 @@ class GceEphemeralVolume(base.Volume):
 			name=name, **kwds)
 
 	def _ensure(self):
-		device = '/dev/disk/by-id/google-%s' % self.name
+		self._check_attr('name')
+		device = '/dev/disk/by-id/%s' % self.name
 		if not os.path.exists(device):
 			msg = "Device '%s' not found" % device
 			raise storage2.StorageError(msg)

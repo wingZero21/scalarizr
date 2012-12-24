@@ -169,25 +169,4 @@ class GcePlatform(Platform):
 		return self.storage_svs_mgr.get_service()
 
 
-def get_op_status(conn, proj_id, op_name, fields=None):
-	fields = ', '.join(fields) if fields else None
-	return conn.operations().get(project=proj_id,
-							operation=op_name, fields=fields).execute()
-
-
-def wait_for_operation_to_complete(connection, project_id, operation_name, timeout=3600):
-	def op_complete():
-		status = get_op_status(connection, project_id, operation_name,
-							   ('status', 'error'))
-		if 'DONE' == status['status']:
-			error = status.get('error')
-			if error:
-				err_msg = '\n'.join([err['message'] for err in error['errors']])
-				raise Exception(err_msg)
-			return True
-		return False
-
-	util.wait_until(op_complete, timeout=timeout)
-
-
 
