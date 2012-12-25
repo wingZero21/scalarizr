@@ -142,7 +142,7 @@ class Ini(Store):
 	def _reload(self, only_last=False):
 		self.ini = ConfigParser.ConfigParser()
 		if only_last:
-				sel.ini.read(self.filenames[-1])
+				self.ini.read(self.filenames[-1])
 		else:
 			for filename in self.filenames:
 				if os.path.exists(filename):
