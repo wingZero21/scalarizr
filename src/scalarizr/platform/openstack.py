@@ -78,10 +78,10 @@ class OpenstackPlatform(Platform):
     _userdata = None
 
     def _get_property(self, name):
-        if not name in self._metadata:
-            self._metadata = self._fetch_metadata()
-            self._logger.debug('metadata: %s' % self._metadata)
-        return self._metadata[name]
+        if not name in self._userdata:
+            self.get_user_data()
+            # self._logger.debug('metadata: %s' % self._metadata)
+        return self._userdata[name]
 
     def get_server_id(self):
         try:
