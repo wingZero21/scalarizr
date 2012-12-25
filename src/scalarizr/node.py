@@ -142,10 +142,13 @@ class Ini(Store):
 	def _reload(self):
 		self.inis = []
 		for filename in self.filenames:
+			LOG.debug('Checking that %s exists', filename)
 			if os.path.exists(filename):
+				LOG.debug('Yar!')
 				ini = ConfigParser.ConfigParser()
 				ini.read(filename)
 				self.inis.append(ini)
+		LOG.debug('self.inis: %s', self.inis)
 
 
 	def __getitem__(self, key):
