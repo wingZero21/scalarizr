@@ -112,6 +112,7 @@ class OpenstackPlatform(Platform):
 
     def get_server_id(self):
         nova = self.new_nova_connection()
+        nova.connect()
         servers = nova.servers.list()
         for srv in servers:
             srv_private_addrs = map(lambda addr_info: addr_info['addr'],
