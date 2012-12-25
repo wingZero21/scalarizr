@@ -77,6 +77,9 @@ class OpenstackPlatform(Platform):
     _metadata = {}
     _userdata = None
 
+    _private_ip = None
+    _public_ip = None
+
     def get_private_ip(self):
         if not self._private_ip:
             self._private_ip = self._get_netiface_ip("eth1")
@@ -90,7 +93,6 @@ class OpenstackPlatform(Platform):
     def _get_property(self, name):
         if not name in self._userdata:
             self.get_user_data()
-            # self._logger.debug('metadata: %s' % self._metadata)
         return self._userdata[name]
 
     def get_server_id(self):
