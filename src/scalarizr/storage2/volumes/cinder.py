@@ -101,7 +101,7 @@ class CinderVolume(base.Volume):
     def _ensure(self):
         LOG.debug('before ensure:')
         for l in 'acd':
-            pattern = name2device('/dev/vd' + l) + '*'
+            pattern = name2device('/dev/xvd' + l) + '*'
             LOG.debug('letter: %s is: %s', l, glob.glob(pattern))
 
         assert self._cinder.has_connection or self.id, \
@@ -144,16 +144,16 @@ class CinderVolume(base.Volume):
 
                 LOG.debug('before attach:')
                 for l in 'acd':
-                    pattern = name2device('/dev/vd' + l) + '*'
+                    pattern = name2device('/dev/xvd' + l) + '*'
                     LOG.debug('letter: %s is: %s', l, glob.glob(pattern))
 
                 with self._free_device_letter_mgr:
-                    name = '/dev/vd%s' % self._free_device_letter_mgr.get()
+                    name = '/dev/xvd%s' % self._free_device_letter_mgr.get()
                     self._attach_volume(device_name=name)
 
                 LOG.debug('after attach:')
                 for l in 'acd':
-                    pattern = name2device('/dev/vd' + l) + '*'
+                    pattern = name2device('/dev/xvd' + l) + '*'
                     LOG.debug('letter: %s is: %s', l, glob.glob(pattern))
 
             else:
