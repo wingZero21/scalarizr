@@ -155,7 +155,7 @@ class Ini(Store):
 		if key in self.mapping:
 			key = self.mapping[key]
 		try:
-			return ini.get(self.section, key)
+			return self.ini.get(self.section, key)
 		except ConfigParser.Error:
 			raise KeyError(key)
 
