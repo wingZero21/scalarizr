@@ -362,7 +362,7 @@ class MysqlHandler(DBMSRHandler):
 				
 		self._insert_iptables_rules()
 		
-		elif __node__['state'] == 'running':
+		if __node__['state'] == 'running':
 			vol = storage2.volume(__mysql__['volume'])
 			if not vol.tags:
 				vol.tags = self.resource_tags()

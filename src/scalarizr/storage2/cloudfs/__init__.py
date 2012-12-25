@@ -227,26 +227,31 @@ class FileTransfer(BaseTransfer):
 
 		
 	def _job_generator(self):
-		no_more = False
-		while True:
-			try:
-				yield self._retries_queue.get_nowait()
-				continue
-			except Queue.Empty:
-				if no_more:
-					raise StopIteration
-			try:
-				with self._gen_lock:
-					src = self.src.next()
-					dst = self.dst.next()
-					retry = 0
-					if self.multipart:
-						self._chunk_num += 1
-					chunk_num = self._chunk_num
-				LOG.debug("FileTransfer yield %s %s %s %s" % (src, dst, retry, chunk_num))
-				yield src, dst, retry, chunk_num
-			except StopIteration:
-				no_more = True
+		try:
+			no_more = False
+			while True:
+				try:
+					yield self._retries_queue.get_nowait()
+					continue
+				except Queue.Empty:
+					if no_more:
+						raise StopIteration
+				try:
+					with self._gen_lock:
+						src = self.src.next()
+						dst = self.dst.next()
+						retry = 0
+						if self.multipart:
+							self._chunk_num += 1
+						chunk_num = self._chunk_num
+					LOG.debug("FileTransfer yield %s %s %s %s" % (src, dst, retry, chunk_num))
+					yield src, dst, retry, chunk_num
+				except StopIteration:
+					no_more = True
+		except:
+			LOG.debug('FileTransfer _job_generator failed: %s', 
+					sys.exc_info()[1], exc_info=sys.exc_info())
+			raise
 			
 			
 	def _is_remote_path(self, path):
@@ -300,6 +305,9 @@ class FileTransfer(BaseTransfer):
 				self.fire('transfer_error', src, dst, retry, chunk_num, 
 							sys.exc_info())
 			except:
+				LOG.debug('FileTransfer failed %s -> %s. Error: %s', 
+						src, dst, sys.exc_info()[1], 
+						exc_info=sys.exc_info())
 				retry += 1
 				if retry <= self.retries:
 					self._retries_queue.put((src, dst, retry, chunk_num))
