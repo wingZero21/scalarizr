@@ -99,6 +99,11 @@ class CinderVolume(base.Volume):
         return bus.platform.get_server_id()
 
     def _ensure(self):
+        LOG.debug('before ensure:')
+        for l in 'acd':
+            pattern = name2device('/dev/vd' + l) + '*'
+            LOG.debug('letter: %s is: %s', l, glob.glob(pattern))
+
         assert self._cinder.has_connection or self.id, \
             self.error_messages['no_id_or_conn']
 
@@ -120,7 +125,7 @@ class CinderVolume(base.Volume):
                 else:
                     self.size = volume.size
 
-            #TODO: take tags from snapshot, if it exists
+            #TODO: take tags from snapshot, if they exist
             if not self.id:
                 volume = self._create_volume(size=self.size,
                                              snapshot_id=self.snapshot_id,
@@ -137,9 +142,20 @@ class CinderVolume(base.Volume):
                 if len(volume.attachments) > 0:
                     self._detach_volume(volume.attachments[0]['server_id'])
 
+                LOG.debug('before attach:')
+                for l in 'acd':
+                    pattern = name2device('/dev/vd' + l) + '*'
+                    LOG.debug('letter: %s is: %s', l, glob.glob(pattern))
+
                 with self._free_device_letter_mgr:
                     name = '/dev/vd%s' % self._free_device_letter_mgr.get()
                     self._attach_volume(device_name=name)
+
+                LOG.debug('after attach:')
+                for l in 'acd':
+                    pattern = name2device('/dev/vd' + l) + '*'
+                    LOG.debug('letter: %s is: %s', l, glob.glob(pattern))
+
             else:
                 name = volume.attachments[0]['device']
 
@@ -229,16 +245,16 @@ class CinderVolume(base.Volume):
                   device_name, device)
         LOG.debug('Checking that device %s is available', device)
         #TODO: uncomment next lines for true testing
-        # msg = 'Device %s is not available in operation system. ' \
-        #       'Timeout reached (%s seconds)' % (
-        #       device, self._global_timeout)
-        # util.wait_until(
-        #   lambda: os.access(device, os.F_OK | os.R_OK),
-        #   sleep=1,
-        #   logger=LOG,
-        #   timeout=self._global_timeout,
-        #   error_text=msg
-        # )
+        msg = 'Device %s is not available in operation system. ' \
+              'Timeout reached (%s seconds)' % (
+              device, self._global_timeout)
+        util.wait_until(
+          lambda: os.access(device, os.F_OK | os.R_OK),
+          sleep=1,
+          logger=LOG,
+          timeout=self._global_timeout,
+          error_text=msg
+        )
         LOG.debug('Device %s is available', device)
 
     def _detach(self, force, **kwds):
