@@ -36,7 +36,7 @@ def device2name(device):
 class FreeDeviceLetterMgr(object):
 
     def __init__(self):
-        self._all = set(string.ascii_lowercase[2:16])
+        self._all = set(string.ascii_lowercase[1:16])
         self._acquired = set()
         self._lock = threading.Lock()
         self._local = threading.local()
@@ -99,11 +99,6 @@ class CinderVolume(base.Volume):
         return bus.platform.get_server_id()
 
     def _ensure(self):
-        LOG.debug('before ensure:')
-        for l in 'acd':
-            pattern = name2device('/dev/xvd' + l) + '*'
-            LOG.debug('letter: %s is: %s', l, glob.glob(pattern))
-
         assert self._cinder.has_connection or self.id, \
             self.error_messages['no_id_or_conn']
 
@@ -142,19 +137,9 @@ class CinderVolume(base.Volume):
                 if len(volume.attachments) > 0:
                     self._detach_volume(volume.attachments[0]['server_id'])
 
-                LOG.debug('before attach:')
-                for l in 'acd':
-                    pattern = name2device('/dev/xvd' + l) + '*'
-                    LOG.debug('letter: %s is: %s', l, glob.glob(pattern))
-
                 with self._free_device_letter_mgr:
                     name = '/dev/xvd%s' % self._free_device_letter_mgr.get()
                     self._attach_volume(device_name=name)
-
-                LOG.debug('after attach:')
-                for l in 'acd':
-                    pattern = name2device('/dev/xvd' + l) + '*'
-                    LOG.debug('letter: %s is: %s', l, glob.glob(pattern))
 
             else:
                 name = volume.attachments[0]['device']

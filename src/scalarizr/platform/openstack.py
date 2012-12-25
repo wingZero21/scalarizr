@@ -77,6 +77,16 @@ class OpenstackPlatform(Platform):
     _metadata = {}
     _userdata = None
 
+    def get_private_ip(self):
+        if not self._private_ip:
+            self._private_ip = self._get_netiface_ip("eth1")
+        return self._private_ip
+
+    def get_public_ip(self):
+        if not self._public_ip:
+            self._public_ip = self._get_netiface_ip("eth0")
+        return self._public_ip
+
     def _get_property(self, name):
         if not name in self._userdata:
             self.get_user_data()
@@ -84,10 +94,13 @@ class OpenstackPlatform(Platform):
         return self._userdata[name]
 
     def get_server_id(self):
-        try:
-            return self._get_property('uuid')
-        except:
-            return self._get_property('serverid')
+        nova = self.new_nova_connection()
+        servers = nova.servers.list()
+        for srv in servers:
+            srv_private_addrs = map(lambda addr_info: addr_info['addr'],
+                                    srv.addresses['private'])
+            if self.get_public_ip() in srv_private_addrs:
+                return srv.id
 
     def get_avail_zone(self):
         return self._get_property('availability_zone')
@@ -142,6 +155,7 @@ class OpenstackPlatform(Platform):
         # for proper nova and cinder authentication
         if 'rackspacecloud' in self._access_data["keystone_url"]:
             os.environ["CINDER_RAX_AUTH"] = "True"
+            os.environ["NOVA_RAX_AUTH"] = "True"
 
     def new_cinder_connection(self):
         api_key = self._access_data["api_key"]
