@@ -1,6 +1,7 @@
 import urllib2
 import json
 import os
+import re
 
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
@@ -9,6 +10,7 @@ from scalarizr.platform import Platform
 from scalarizr.platform import PlatformError
 from scalarizr.util.filetool import read_file
 from scalarizr.bus import bus
+from scalarizr.util import system2
 
 #TODO: move next hardcode to some config
 # class OpenstackCredentials:
@@ -89,6 +91,19 @@ class OpenstackPlatform(Platform):
         if not self._public_ip:
             self._public_ip = self._get_netiface_ip("eth0")
         return self._public_ip
+
+    def _get_netiface_ip(self, iface=None):
+        if not iface:
+            raise PlatformError('You must specify interface name '
+                                'to retrieve ip address')
+        if not hasattr(self, '_ip_re'):
+            self._ip_re = re.compile('inet\s*addr:(?P<ip>[\d\.]+)', re.M)
+
+        out = system2('/sbin/ifconfig ' + iface, shell=True)[0]
+        result = re.search(self._ip_re, out)
+        if not result:
+            return None
+        return result.group('ip')
 
     def _get_property(self, name):
         if not name in self._userdata:
