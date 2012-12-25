@@ -139,15 +139,14 @@ class Ini(Store):
 		self.mapping = mapping or {}
 
 
-	def _reload(self, only_first=False):
+	def _reload(self, only_last=False):
 		self.ini = ConfigParser.ConfigParser()
-		i = 0
-		for filename in self.filenames:
-			if os.path.exists(filename):
-				self.ini.read(filename)
-			i += 1
-			if i > 0 and only_first:
-				break
+		if only_last:
+				sel.ini.read(self.filenames[-1])
+		else:
+			for filename in self.filenames:
+				if os.path.exists(filename):
+					self.ini.read(filename)
 
 
 	def __getitem__(self, key):
@@ -167,7 +166,7 @@ class Ini(Store):
 			value = str(int(value))
 		else:
 			value = str(value)
-		self._reload(only_first=True)
+		self._reload(only_last=True)
 		if not self.ini.has_section(self.section):
 			self.ini.add_section(self.section)
 		if key in self.mapping:
@@ -295,7 +294,7 @@ __node__ = {
 				Ini(private_dir + '/config.ini', 'general'),
 	'platform': Ini(public_dir + '/config.ini', 'general'),
 	'behavior': IniOption(
-						[private_dir + '/config.ini', public_dir + '/config.ini'], 
+						[public_dir + '/config.ini', private_dir + '/config.ini'], 
 						'general', 'behaviour',
 						lambda val: val.strip().split(','),
 						lambda val: ','.join(val)),
