@@ -135,50 +135,46 @@ class Ini(Store):
 			filenames = [filenames]
 		self.filenames = filenames
 		self.section = section
-		self.inis = None
+		self.ini = None
 		self.mapping = mapping or {}
 
 
-	def _reload(self):
-		self.inis = []
+	def _reload(self, only_first=False):
+		self.ini = ConfigParser.ConfigParser()
+		i = 0
 		for filename in self.filenames:
-			LOG.debug('Checking that %s exists', filename)
 			if os.path.exists(filename):
-				LOG.debug('Yar!')
-				ini = ConfigParser.ConfigParser()
-				ini.read(filename)
-				self.inis.append(ini)
-		LOG.debug('self.inis: %s', self.inis)
+				self.ini.read(filename)
+			i += 1
+			if i > 0 and only_first:
+				break
 
 
 	def __getitem__(self, key):
 		self._reload()
 		if key in self.mapping:
 			key = self.mapping[key]
-		for ini in self.inis:
-			try:
-				return ini.get(self.section, key)
-			except ConfigParser.Error:
-				continue
-		else:
+		try:
+			return ini.get(self.section, key)
+		except ConfigParser.Error:
 			raise KeyError(key)
 
 
 	def __setitem__(self, key, value):
-		self._reload()
 		if value is None:
 			value = ''
 		elif isinstance(value, bool):
 			value = str(int(value))
 		else:
 			value = str(value)
-		if not self.inis[0].has_section(self.section):
-			self.inis[0].add_section(self.section)
+		self._reload(only_first=True)
+		if not self.ini.has_section(self.section):
+			self.ini.add_section(self.section)
 		if key in self.mapping:
 			key = self.mapping[key]
-		self.inis[0].set(self.section, key, value)
+		self.ini.set(self.section, key, value)
 		with open(self.filenames[0], 'w+') as fp:
-			self.inis[0].write(fp)
+			self.ini.write(fp)
 
 
 class IniOption(Ini):
