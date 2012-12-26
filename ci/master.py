@@ -18,7 +18,7 @@ c['schedulers'].append(AnyBranchScheduler(
 
 c["schedulers"].append(Triggerable(
 	name="{0} packaging".format(project),
-	builderNames=["deb_packaging"]
+	builderNames=["deb_packaging", "rpm_packaging"]
 ))
 
 
@@ -28,8 +28,8 @@ c['builders'].append(dict(
 	factory=BuildFactory(steps=
 		buildsteps.svn(__opts__) +
 		buildsteps.bump_version(__opts__, setter='cat > src/scalarizr/version') +
-		buildsteps.source_dist(__opts__)# +
-		#buildsteps.trigger_packaging(__opts__)
+		buildsteps.source_dist(__opts__) +
+		buildsteps.trigger_packaging(__opts__)
 	)
 ))
 
