@@ -2,6 +2,7 @@ import urllib2
 import json
 import os
 import re
+import logging
 
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
@@ -23,7 +24,7 @@ from scalarizr.util import system2
 #     KEYSTONE_ENDPOINT = AUTH_URL
 #     GLANCE_ENDPOINT = '%s:9292' % SERVER_ADDRESS
 
-
+LOG = logging.getLogger(__name__)
 class OpenstackServiceWrapper(object):
     def _make_connection(self, **kwargs):
         raise NotImplementedError()
@@ -64,7 +65,7 @@ class CinderWrapper(OpenstackServiceWrapper):
 class NovaWrapper(OpenstackServiceWrapper):
 
     def _make_connection(self, service_type='compute', **kwargs):
-        self._logger.debug('Nova auth url in _make_connection is: %s', self.auth_url)
+        LOG.debug('Nova auth url in _make_connection is: %s', self.auth_url)
         return nova_client.Client(self.user,
                                   self.password,
                                   self.tenant,
