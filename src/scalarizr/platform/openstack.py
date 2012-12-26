@@ -26,6 +26,8 @@ from scalarizr.util import system2
 #     GLANCE_ENDPOINT = '%s:9292' % SERVER_ADDRESS
 
 LOG = logging.getLogger(__name__)
+
+
 class OpenstackServiceWrapper(object):
     def _make_connection(self, **kwargs):
         raise NotImplementedError()
@@ -66,7 +68,6 @@ class CinderWrapper(OpenstackServiceWrapper):
 class NovaWrapper(OpenstackServiceWrapper):
 
     def _make_connection(self, service_type='compute', **kwargs):
-        LOG.debug('Nova auth url in _make_connection is: %s', self.auth_url)
         return nova_client.Client(self.user,
                                   self.password,
                                   self.tenant,
@@ -100,7 +101,7 @@ class OpenstackPlatform(Platform):
             raise PlatformError('You must specify interface name '
                                 'to retrieve ip address')
         if not hasattr(self, '_ip_re'):
-            self._ip_re = re.compile('inet\s*addr:(?P<ip>[\d\.]+)', re.M)
+            self._ip_re = re.compile('inet\s*addr:(?P<ip>[\d.\]+)', re.M)
 
         out = system2('/sbin/ifconfig ' + iface, shell=True)[0]
         result = re.search(self._ip_re, out)
@@ -116,12 +117,11 @@ class OpenstackPlatform(Platform):
     def get_server_id(self):
         nova = self.new_nova_connection()
         nova.connect()
-        LOG.debug("sys path:\n%s", sys.path)
         servers = nova.servers.list()
         for srv in servers:
             srv_private_addrs = map(lambda addr_info: addr_info['addr'],
                                     srv.addresses['private'])
-            if self.get_public_ip() in srv_private_addrs:
+            if self.get_private_ip() in srv_private_addrs:
                 return srv.id
 
     def get_avail_zone(self):
@@ -191,7 +191,6 @@ class OpenstackPlatform(Platform):
     def new_nova_connection(self):
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
-        self._logger.debug('Nova auth url is: %s', self._access_data['keystone_url'])
         return NovaWrapper(self._access_data["username"],
                            password or api_key,
                            self._access_data["tenant_name"],
