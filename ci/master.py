@@ -1,5 +1,6 @@
 
 from buildbot.schedulers.basic import AnyBranchScheduler
+from buildbot.schedulers.triggerable import Triggerable
 from buildbot.changes.filter import ChangeFilter
 from buildbot.process.factory import BuildFactory
 from buildscripts import steps as buildsteps
@@ -17,7 +18,7 @@ c['schedulers'].append(AnyBranchScheduler(
 
 c["schedulers"].append(Triggerable(
 	name="{0} packaging".format(project),
-	builderNames=["deb_packaging_1004"]
+	builderNames=["deb_packaging"]
 ))
 
 
