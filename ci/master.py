@@ -27,7 +27,7 @@ c['builders'].append(dict(
 	slavenames=['ubuntu1004'],
 	factory=BuildFactory(steps=
 		buildsteps.svn(__opts__) +
-		buildsteps.bump_version(__opts__) +
+		buildsteps.bump_version(__opts__, setter='cat > src/scalarizr/version') +
 		buildsteps.source_dist(__opts__)# +
 		#buildsteps.trigger_packaging(__opts__)
 	)
