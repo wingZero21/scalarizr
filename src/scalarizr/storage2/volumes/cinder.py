@@ -96,7 +96,9 @@ class CinderVolume(base.Volume):
         self._cinder = bus.platform.new_cinder_connection()
 
     def _server_id(self):
-        return bus.platform.get_server_id()
+        srv_id = bus.platform.get_server_id()
+        LOG.debug('srv id is: %s', srv_id)
+        return srv_id
 
     def _ensure(self):
         assert self._cinder.has_connection or self.id, \
@@ -233,13 +235,11 @@ class CinderVolume(base.Volume):
         msg = 'Device %s is not available in operation system. ' \
               'Timeout reached (%s seconds)' % (
               device, self._global_timeout)
-        util.wait_until(
-          lambda: os.access(device, os.F_OK | os.R_OK),
-          sleep=1,
-          logger=LOG,
-          timeout=self._global_timeout,
-          error_text=msg
-        )
+        util.wait_until(lambda: os.access(device, os.F_OK | os.R_OK),
+                        sleep=1,
+                        logger=LOG,
+                        timeout=self._global_timeout,
+                        error_text=msg)
         LOG.debug('Device %s is available', device)
 
     def _detach(self, force, **kwds):
