@@ -3,6 +3,7 @@ import json
 import os
 import re
 import logging
+import sys
 
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
@@ -115,6 +116,7 @@ class OpenstackPlatform(Platform):
     def get_server_id(self):
         nova = self.new_nova_connection()
         nova.connect()
+        LOG.debug("sys path:\n%s". sys.path)
         servers = nova.servers.list()
         for srv in servers:
             srv_private_addrs = map(lambda addr_info: addr_info['addr'],
