@@ -101,7 +101,7 @@ class OpenstackPlatform(Platform):
             raise PlatformError('You must specify interface name '
                                 'to retrieve ip address')
         if not hasattr(self, '_ip_re'):
-            self._ip_re = re.compile('inet\s*addr:(?P<ip>[\d.\]+)', re.M)
+            self._ip_re = re.compile('inet\s*addr:(?P<ip>[\d\.]+)', re.M)
 
         out = system2('/sbin/ifconfig ' + iface, shell=True)[0]
         result = re.search(self._ip_re, out)
