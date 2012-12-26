@@ -64,6 +64,7 @@ class CinderWrapper(OpenstackServiceWrapper):
 class NovaWrapper(OpenstackServiceWrapper):
 
     def _make_connection(self, service_type='compute', **kwargs):
+        self._logger.debug('Nova auth url in _make_connection is: %s', self.auth_url)
         return nova_client.Client(self.user,
                                   self.password,
                                   self.tenant,
@@ -187,6 +188,7 @@ class OpenstackPlatform(Platform):
     def new_nova_connection(self):
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
+        self._logger.debug('Nova auth url is: %s', self._access_data['keystone_url'])
         return NovaWrapper(self._access_data["username"],
                            password or api_key,
                            self._access_data["tenant_name"],
