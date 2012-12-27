@@ -747,7 +747,7 @@ class LargeTransfer(bases.Task):
 			try:
 				pkgmgr.installed("pigz")
 			except LinuxError, e:
-				if "Unable to locate package" in e.err:
+				if "No matching Packages to list" in e.err:
 					try:
 						pkgmgr.epel_repository()
 						pkgmgr.installed("pigz")
