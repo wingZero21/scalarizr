@@ -120,13 +120,13 @@ class _P2pMessageStore:
 		cur = conn.cursor()
 		try:
 			sql = """INSERT INTO p2p_message (id, message, message_id,
-						message_name, queue, is_ingoing, in_is_handled, in_consumer_id)
+						message_name, queue, is_ingoing, in_is_handled, in_consumer_id, format)
 					VALUES
 						(NULL, ?, ?, ?, ?, ?, ?, ?)"""
 
 
 			#self._logger.debug('Representation mes: %s', repr(str(message)))
-			cur.execute(sql, [message.toxml().decode('utf-8'), message.id, message.name, queue, 1, 0, consumer_id])
+			cur.execute(sql, [message.tojson().decode('utf-8'), message.id, message.name, queue, 1, 0, consumer_id, 'json'])
 			'''
 			cur.execute(sql, [str(message), message.id.decode('utf-8'),
 					message.name.decode('utf-8'), queue.encode('utf-8'), 1, 0,
@@ -149,7 +149,7 @@ class _P2pMessageStore:
 			ret = []
 			for queue, message in self._unhandled_messages:
 				msg_copy = P2pMessage()
-				msg_copy.fromxml(message.toxml())
+				msg_copy.fromjson(message.tojson())
 				ret.append((queue, msg_copy))
 
 			return ret
@@ -202,11 +202,12 @@ class _P2pMessageStore:
 		cur = conn.cursor()
 		try:
 			sql = """INSERT INTO p2p_message (id, message, message_id, message_name, queue, 
-						is_ingoing, out_is_delivered, out_delivery_attempts, out_sender) 
+						is_ingoing, out_is_delivered, out_delivery_attempts, out_sender, format)
 					VALUES 
 						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
 
-			cur.execute(sql, [message.toxml().decode('utf-8'), message.id, message.name, queue, 0, 0, 0, sender])
+			cur.execute(sql, [message.tojson().decode('utf-8'), message.id,
+							  message.name, queue, 0, 0, 0, sender, 'json'])
 			conn.commit()
 		finally:
 			cur.close()
@@ -260,7 +261,7 @@ class _P2pMessageStore:
 				self._unmarshall(message, row)
 				return message
 			else:
-				raise MessagingError("Cannot find message (message_id: %s)" % (message_id))
+				raise MessagingError("Cannot find message (message_id: %s)" % message_id)
 		finally:
 			cur.close()
 
@@ -316,13 +317,19 @@ class _P2pMessageStore:
 
 	def _unmarshall(self, message, row):
 		#message.fromxml(row["message"].encode('utf-8'))
-		message.fromxml(row["message"])
+		format = row["format"]
+		if 'json' == format:
+			message.fromjson(row["message"])
+		else:
+			message.fromxml(row["message"])
 
+	"""
 	def _marshall(self, message, row={}):
 		row["message_id"] = message.id
 		row["message_name"] = message.name
 		row["message"] = message.toxml()
 		return row
+	"""
 
 _message_store = None
 def P2pMessageStore():
