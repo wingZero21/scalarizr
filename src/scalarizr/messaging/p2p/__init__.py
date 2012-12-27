@@ -122,7 +122,7 @@ class _P2pMessageStore:
 			sql = """INSERT INTO p2p_message (id, message, message_id,
 						message_name, queue, is_ingoing, in_is_handled, in_consumer_id, format)
 					VALUES
-						(NULL, ?, ?, ?, ?, ?, ?, ?)"""
+						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
 
 
 			#self._logger.debug('Representation mes: %s', repr(str(message)))
@@ -204,7 +204,7 @@ class _P2pMessageStore:
 			sql = """INSERT INTO p2p_message (id, message, message_id, message_name, queue, 
 						is_ingoing, out_is_delivered, out_delivery_attempts, out_sender, format)
 					VALUES 
-						(NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
+						(NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
 
 			cur.execute(sql, [message.tojson().decode('utf-8'), message.id,
 							  message.name, queue, 0, 0, 0, sender, 'json'])
