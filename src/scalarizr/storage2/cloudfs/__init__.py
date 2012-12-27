@@ -504,8 +504,27 @@ class LargeTransfer(bases.Task):
 
 
 	def _gzip_bin(self):
-		if self.try_pigz and os.path.exists(self.pigz_bin):
-			return self.pigz_bin
+		if self.try_pigz:
+			try:
+				pkgmgr.installed("pigz")
+			except LinuxError, e:
+				if "No matching Packages to list" in e.err:
+					try:
+						pkgmgr.epel_repository()
+						pkgmgr.installed("pigz")
+					except:
+						LOG.debug("PIGZ install with epel failed, using gzip."\
+								  " Caught %s" % repr(sys.exc_info()[1]))
+					else:
+						return self.pigz_bin
+				else:
+					LOG.debug("PIGZ install failed, using gzip. Caught %s" %
+							  repr(sys.exc_info()[1]))
+			except:
+				LOG.debug("PIGZ install failed, using gzip. Caught %s" %
+						  repr(sys.exc_info()[1]))
+			else:
+				return self.pigz_bin
 		return self.gzip_bin
 
 
@@ -740,37 +759,6 @@ class LargeTransfer(bases.Task):
 			if chunk_capacity:  # empty or half-empty chunk, meaning stream
 								# is empty
 				break
-
-
-	def _gzip_bin(self):
-		if self.try_pigz:
-			try:
-				pkgmgr.installed("pigz")
-			except LinuxError, e:
-				if "No matching Packages to list" in e.err:
-					try:
-						pkgmgr.epel_repository()
-						pkgmgr.installed("pigz")
-					except:
-						LOG.debug("PIGZ install with epel failed, using gzip."\
-								  " Caught %s" % repr(sys.exc_info()[1]))
-					else:
-						return self.pigz_bin
-				else:
-					LOG.debug("PIGZ install failed, using gzip. Caught %s" %
-							  repr(sys.exc_info()[1]))
-			except:
-				LOG.debug("PIGZ install failed, using gzip. Caught %s" %
-						  repr(sys.exc_info()[1]))
-			else:
-				return self.pigz_bin
-		return self.gzip_bin
-
-
-	def _proxy_event(self, event):
-		def proxy(*args, **kwds):
-			self.fire(event, *args, **kwds)
-		return proxy
 
 
 	def _dl_restorer(self):
