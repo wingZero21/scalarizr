@@ -226,6 +226,7 @@ class CinderVolume(base.Volume):
                   device_name)
         # TODO: check that on openstack create_server_volume() works fine
         # self._cinder.volumes.attach(volume_id, server_id, device_name)
+        self._check_nova_connection()
         self._nova.volumes.create_server_volume(server_id,
                                                 volume_id,
                                                 device_name)
@@ -265,6 +266,7 @@ class CinderVolume(base.Volume):
             try:
                 # TODO: check that on openstack delete_server_volume() works ok
                 # self._cinder.volumes.detach(volume_id)
+                self._check_nova_connection()
                 self._nova.volumes.delete_server_volume(volume_id)
             except:
                 pass  # TODO: handle possible exceptions
