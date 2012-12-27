@@ -1,5 +1,4 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 import re
 import os
@@ -27,7 +26,7 @@ except ImportError:
 
 from scalarizr import storage2
 from scalarizr.libs import bases
-from scalarizr.linux import coreutils
+from scalarizr.linux import coreutils, pkgmgr, LinuxError
 
 
 LOG = logging.getLogger(__name__)
@@ -741,6 +740,37 @@ class LargeTransfer(bases.Task):
 			if chunk_capacity:  # empty or half-empty chunk, meaning stream
 								# is empty
 				break
+
+
+	def _gzip_bin(self):
+		if self.try_pigz:
+			try:
+				pkgmgr.installed("pigz")
+			except LinuxError, e:
+				if "Unable to locate package" in e.err:
+					try:
+						pkgmgr.epel_repository()
+						pkgmgr.installed("pigz")
+					except:
+						LOG.debug("PIGZ install with epel failed, using gzip."\
+								  " Caught %s" % repr(sys.exc_info()[1]))
+					else:
+						return self.pigz_bin
+				else:
+					LOG.debug("PIGZ install failed, using gzip. Caught %s" %
+							  repr(sys.exc_info()[1]))
+			except:
+				LOG.debug("PIGZ install failed, using gzip. Caught %s" %
+						  repr(sys.exc_info()[1]))
+			else:
+				return self.pigz_bin
+		return self.gzip_bin
+
+
+	def _proxy_event(self, event):
+		def proxy(*args, **kwds):
+			self.fire(event, *args, **kwds)
+		return proxy
 
 
 	def _dl_restorer(self):
