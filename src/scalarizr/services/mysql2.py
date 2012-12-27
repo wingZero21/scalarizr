@@ -478,14 +478,12 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 					self.cloudfs_target,
 					compressor=self.compressor)
 		cloudfs_target = transfer.run()
-		xbak.communicate()
-		#xbak.wait()
+		stderr = xbak.communicate()[1]
 		if xbak.returncode:
-			msg = xbak.stderr.read()
-			raise Error(msg)
+			raise Error(stderr)
 
 		log_file = log_pos = to_lsn = None
-		for line in xbak.stderr.readlines():
+		for line in stderr.splitlines():
 			m = self._re_lsn.search(line)
 			if m:
 				to_lsn = int(m.group(1))
