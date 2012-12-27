@@ -478,7 +478,8 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 					self.cloudfs_target,
 					compressor=self.compressor)
 		cloudfs_target = transfer.run()
-		xbak.wait()
+		xbak.communicate()
+		#xbak.wait()
 		if xbak.returncode:
 			msg = xbak.stderr.read()
 			raise Error(msg)
