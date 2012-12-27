@@ -247,6 +247,8 @@ class FileTransfer(BaseTransfer):
 					yield src, dst, retry, chunk_num
 				except StopIteration:
 					no_more = True
+		except StopIteration:
+			pass
 		except:
 			LOG.debug('FileTransfer _job_generator failed: %s', 
 					sys.exc_info()[1], exc_info=sys.exc_info())
