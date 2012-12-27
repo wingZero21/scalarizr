@@ -1092,7 +1092,7 @@ class MysqlHandler(DBMSRHandler):
 				self.mysql.my_cnf.skip_locking = False		
 				self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
 				if not os.listdir(__mysql__['data_dir']):
-					linux.system('mysql_install_db')
+					linux.system(['mysql_install_db'])
 					coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
 				self._change_selinux_ctx()
 
