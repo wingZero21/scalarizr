@@ -95,7 +95,6 @@ class P2pMessageProducer(messaging.MessageProducer):
 
 	def _send0(self, queue, message, success_callback=None, fail_callback=None):
 		try:
-			# Serialize
 			use_json =  __node__['scalr']['version'] >= (4,0,1)
 			data = message.tojson() if use_json else message.toxml()
 
