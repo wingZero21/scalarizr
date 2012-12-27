@@ -285,6 +285,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 				
+			self.mongodb.password = self.scalr_password
 			self.mongodb.start_shardsvr()
 			
 			if self.shard_index == 0 and self.rs_id == 0:
@@ -353,7 +354,8 @@ class MongoDBHandler(ServiceCtlHandler):
 					self._cnf.write_key(BEHAVIOUR, mongodb_key)
 					
 					mongodb_data['password'] = mongodb_data.get('password') or cryptotool.pwgen(10)
-						
+					self.mongodb.password = mongodb_data['password']
+
 					self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
 					self._update_config(mongodb_data)
 		
@@ -1075,10 +1077,17 @@ class MongoDBHandler(ServiceCtlHandler):
 		"""
 		
 		self._logger.info("Initializing %s primary" % BEHAVIOUR)
-
 		self.plug_storage()
-
 		self.mongodb.prepare(rs_name)
+
+		#Fix for mongo 2.2 auth
+		self._logger.info("Starting mongod instance without --auth to add the first superuser")
+		cli = mongo_svc.MongoCLI(mongo_svc.REPLICA_DEFAULT_PORT)
+		mongod = mongo_svc.Mongod(configpath=mongo_svc.CONFIG_PATH_DEFAULT, keyfile=None, cli=cli)
+		mongod.start()
+		cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+		mongod.stop("Terminating mongod instance to run it with --auth option")
+
 		self.mongodb.start_shardsvr()
 				
 		""" Check if replset already exists """
@@ -1732,7 +1741,7 @@ class ClusterTerminateWatcher(threading.Thread):
 				messages = [pair[1] for pair in msg_queue_pairs]
 
 				for msg in messages:
-					if not msg.name == MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT:
+					if msg.name != MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT:
 						continue
 
 					try:

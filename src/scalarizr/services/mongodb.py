@@ -371,7 +371,7 @@ class MongoDB(BaseService):
 
 
 	def _get_cli(self):
-		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT)
+		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT, SCALR_USER, self.password)
 	
 	def _set_cli(self, obj):
 		self._set('cli', obj)
