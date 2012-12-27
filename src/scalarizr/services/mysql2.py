@@ -527,10 +527,11 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 		mnf = cloudfs.Manifest(cloudfs_path=self.cloudfs_source)
 		bak = backup.restore(**mnf.meta)
 
+		incrementals = []
 		if bak.backup_type == 'incremental':
 			incrementals = [bak]
 			while bak.prev_cloudfs_source:
-				mnf = cloudfs.load_manifest(bak.prev_cloudfs_source)
+				mnf = cloudfs.Manifest(cloudfs_path=bak.prev_cloudfs_source)
 				bak = backup.restore(**mnf.meta)
 				if bak.backup_type == 'incremental':
 					incrementals.insert(0, bak)
@@ -554,10 +555,10 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 				user=__mysql__['root_user'],
 				password=__mysql__['root_password'])
 
-		if self.incrementals:
+		if incrementals:
 			inc_dir = os.path.join(__mysql__['tmp_dir'], 'xtrabackup-restore-inc')
 			i = 0
-			for inc in self.incrementals:
+			for inc in incrementals:
 				try:
 					os.makedirs(inc_dir)
 					inc = backup.restore(inc)

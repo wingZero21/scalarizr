@@ -2,7 +2,7 @@ Feature: Large transfer
 
 Scenario: Upload single file
     Initialize upload variables
-	Given I have a 10 megabytes file F1
+	Given I have a 50 megabytes file F1
 	When I upload it to s3 with gzipping
 	Then I expect manifest as a result
 	And all chunks are uploaded

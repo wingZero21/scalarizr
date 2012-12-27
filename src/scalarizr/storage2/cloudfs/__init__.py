@@ -274,11 +274,13 @@ class FileTransfer(BaseTransfer):
 						chunk_size = os.path.getsize(loc)
 						self._upload_id = driver.multipart_init(rem, chunk_size)
 
+				zero = int(time.time())
 				if uploading:
 					if self.multipart:
 						driver.multipart_put(self._upload_id, chunk_num, src)
 					else:
 						driver.put(src, dst, report_to=progress_report_cb)
+						LOG.debug("*** BENCH %s %s uploaded" % (int(time.time() - zero), os.path.basename(src)))
 					self._completed.append({
 							'src': src,
 							'dst': dst,
@@ -286,6 +288,7 @@ class FileTransfer(BaseTransfer):
 							'size': os.path.getsize(src)})
 				else:
 					driver.get(src, dst, report_to=progress_report_cb)
+					LOG.debug("*** BENCH %s %s downloaded" % (int(time.time() - zero), os.path.basename(src)))
 					self._completed.append({
 							'src': src,
 							'dst': dst,
@@ -400,13 +403,9 @@ class LargeTransfer(bases.Task):
 	2. <chunk downloader> | funzip | tar -x -C /mnt/dbbackup
 	'''
 
-	# TODO: graceful shutdown: interrupt chunk download
-
 	# TODO: bubble exceptions
 
 	# TODO: unlimited disk case: download all before unpacking
-
-	# TODO: kill -9 tmpfs problem
 
 	# TODO: benchmarks bzip against pigz
 	# http://tukaani.org/lzma/benchmarks.html
@@ -715,6 +714,7 @@ class LargeTransfer(bases.Task):
 			chunk_capacity = chunk_size
 			chunk_md5 = hashlib.md5()
 
+			zero = int(time.time())
 			with open(chunk_name, 'w') as chunk:
 				while chunk_capacity:
 					bytes = stream.read(min(buf_size, chunk_capacity))
@@ -725,6 +725,7 @@ class LargeTransfer(bases.Task):
 					chunk_md5.update(bytes)
 
 			if chunk_capacity != chunk_size:  # non-empty chunk
+				LOG.debug("*** BENCH %s %s created" % (int(time.time() - zero), os.path.basename(chunk_name)))
 				yield chunk_name, chunk_md5.hexdigest()
 			else:  # empty chunk
 				os.remove(chunk_name)
@@ -739,8 +740,8 @@ class LargeTransfer(bases.Task):
 		for file in self.files:
 			dst = self.dst
 
-			LOG.debug("*** RESTORER start")
-			LOG.debug("*** RESTORER file %s to %s" % (file["name"], dst))
+			LOG.debug("RESTORER start")
+			LOG.debug("RESTORER file %s to %s" % (file["name"], dst))
 
 			# temporary fix for overriding download manifest settings with
 			# custom streamer
@@ -759,17 +760,17 @@ class LargeTransfer(bases.Task):
 						compressor_out = open(os.path.join(dst, file["name"]), 'w')
 
 					if file["compressor"] == "gzip":
-						LOG.debug("*** RESTORER unzip popen")
+						LOG.debug("RESTORER unzip popen")
 						cmd = subprocess.Popen([self._gzip_bin(), "-d"],
 							stdin=subprocess.PIPE,
 							stdout=compressor_out,
 							stderr=subprocess.PIPE,
 							close_fds=True)
-						LOG.debug("*** RESTORER after unzip")
+						LOG.debug("RESTORER after unzip")
 					else:  # custom compressor
-						LOG.debug("*** RESTORER custom decompressor popen")
+						LOG.debug("RESTORER custom decompressor popen")
 						cmd = self.compressor.popen(stdout=compressor_out)
-						LOG.debug("*** RESTORER after custom decompressor popen")
+						LOG.debug("RESTORER after custom decompressor popen")
 					stream = cmd.stdin
 
 				if file["streamer"]:
@@ -777,17 +778,17 @@ class LargeTransfer(bases.Task):
 						compressor_out = cmd.stdout
 
 					if file["streamer"] == "tar":
-						LOG.debug("*** RESTORER untar popen")
+						LOG.debug("RESTORER untar popen")
 						cmd = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
 							stdin=compressor_out,
 							stdout=subprocess.PIPE,
 							stderr=subprocess.PIPE,
 							close_fds=True)
-						LOG.debug("*** RESTORER after untar")
+						LOG.debug("RESTORER after untar")
 					else:  # custom streamer
-						LOG.debug("*** RESTORER custom decompressor popen")
+						LOG.debug("RESTORER custom decompressor popen")
 						cmd = self.streamer.popen(stdin=compressor_out)
-						LOG.debug("*** RESTORER after custom decompressor popen")
+						LOG.debug("RESTORER after custom decompressor popen")
 
 					if file["compressor"]:
 						compressor_out.close()
@@ -797,22 +798,24 @@ class LargeTransfer(bases.Task):
 			try:
 				for chunk, info in file["chunks"].iteritems():
 
-					LOG.debug("*** RESTORER before wait %s" % chunk)
+					LOG.debug("RESTORER before wait %s" % chunk)
 					info["downloaded"].wait()
+					zero = int(time.time())
 
 					location = os.path.join(self._tranzit_vol.mpoint, chunk)
 					with open(location, 'rb') as fd:
 						while True:
 							bytes = fd.read(buf_size)
 							if not bytes:
-								LOG.debug("*** RESTORER break %s" % chunk)
+								LOG.debug("RESTORER break %s" % chunk)
+								LOG.debug("*** BENCH %s %s restored" % (int(time.time() - zero), chunk))
 								break
 							try:
 								stream.write(bytes)
 
 							except Exception, e:
 								if isinstance(e, IOError) and e.errno == 32:
-									LOG.debug("*** RESTORER encountered broken"
+									LOG.debug("RESTORER encountered broken"
 											  " pipe, err msg from the last"
 											  " supbrocess: %s" % cmd.stderr.read())
 								self.kill()
@@ -825,7 +828,7 @@ class LargeTransfer(bases.Task):
 				#? wait for unzip first in case of tar&gzip
 
 				if cmd:
-					LOG.debug("*** RESTORER cmd wait")
+					LOG.debug("RESTORER cmd wait")
 					cmd.wait()
 					LOG.debug("LargeTransfer download: finished restoring")
 
