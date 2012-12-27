@@ -73,6 +73,10 @@ class CinderVolume(base.Volume):
         assert self._cinder.has_connection, \
             self.error_messages['no_connection']
 
+    def _check_nova_connection(self):
+        assert self._nova.has_connection, \
+            self.error_messages['no_connection']
+
     def __init__(self,
                  size=None,
                  snapshot_id=None,
@@ -94,6 +98,7 @@ class CinderVolume(base.Volume):
             'no_connection': 'Cinder connection should be available '
             'to perform this operation'})
         self._cinder = bus.platform.new_cinder_connection()
+        self._nova = bus.platform.new_nova_connection()
 
     def _server_id(self):
         srv_id = bus.platform.get_server_id()
@@ -219,7 +224,11 @@ class CinderVolume(base.Volume):
         #volume attaching
         LOG.debug('Attaching Cinder volume %s (device: %s)', volume_id,
                   device_name)
-        self._cinder.volumes.attach(volume_id, server_id, device_name)
+        # TODO: check that on openstack create_server_volume() works fine
+        # self._cinder.volumes.attach(volume_id, server_id, device_name)
+        self._nova.volumes.create_server_volume(server_id,
+                                                volume_id,
+                                                device_name)
 
         #waiting for attaching transitional state
         LOG.debug('Checking that Cinder volume %s is attached', volume_id)
@@ -254,7 +263,9 @@ class CinderVolume(base.Volume):
         LOG.debug('Detaching Cinder volume %s', volume_id)
         if volume.status != 'available':
             try:
-                self._cinder.volumes.detach(volume_id)
+                # TODO: check that on openstack delete_server_volume() works ok
+                # self._cinder.volumes.detach(volume_id)
+                self._nova.volumes.delete_server_volume(volume_id)
             except:
                 pass  # TODO: handle possible exceptions
 
