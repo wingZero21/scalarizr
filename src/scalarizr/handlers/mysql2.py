@@ -1111,12 +1111,6 @@ class MysqlHandler(DBMSRHandler):
 			if 'restore' in __mysql__ and \
 					__mysql__['restore'].type == 'xtrabackup':
 				__mysql__['restore'].run()
-				if __mysql__['restore'].features['master_binlog_reset']:
-					self.mysql.service.start()
-					self.mysql.service.stop()
-					log_file, log_pos = mysql2_svc.mysqlbinlog_head()
-					__mysql__['restore'].log_file = log_file
-					__mysql__['restore'].log_pos = log_pos
 			
 		
 		# If It's 1st init of mysql master storage

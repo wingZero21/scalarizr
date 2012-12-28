@@ -531,6 +531,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 				prev_cloudfs_source=prev_cloudfs_source,
 				**kwds)
 		XtrabackupMixin.__init__(self)
+		self._mysql_init = mysql_svc.MysqlInitScript()
 
 	def _run(self):
 		# Apply resource's meta
@@ -609,8 +610,8 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 		if int(__mysql__['replication_master']):
 			LOG.info("Master will reset it's binary logs, "
 					"so updating binary log position in backup manifest")
-			self.mysql.service.start()
-			self.mysql.service.stop()
+			self._mysql_init.service.start()
+			self._mysql_init.service.stop()
 			log_file, log_pos = mysqlbinlog_head()
 			meta = mnf.meta
 			meta.update({'log_file': log_file, 'log_pos': log_pos})
