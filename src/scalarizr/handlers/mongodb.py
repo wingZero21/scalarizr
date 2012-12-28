@@ -568,6 +568,7 @@ class MongoDBHandler(ServiceCtlHandler):
 						self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
 					except BaseException, e:
 						self._logger.error(e)
+						raise
 						
 			with op.step(self._step_auth_on_cfg_server_and_router):
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
@@ -1080,7 +1081,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.plug_storage()
 		self.mongodb.prepare(rs_name)
 
-		#Fix for mongo 2.2 auth
+		#Fix for mongo 2.2 auth, see https://jira.mongodb.org/browse/SERVER-6591
 		self._logger.info("Starting mongod instance without --auth to add the first superuser")
 		self.mongodb.auth = False
 		self.mongodb.start_shardsvr()
