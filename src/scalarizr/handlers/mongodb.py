@@ -1082,14 +1082,9 @@ class MongoDBHandler(ServiceCtlHandler):
 
 		#Fix for mongo 2.2 auth
 		self._logger.info("Starting mongod instance without --auth to add the first superuser")
-		cli = mongo_svc.MongoCLI(mongo_svc.REPLICA_DEFAULT_PORT)
-		mongod = mongo_svc.Mongod(configpath=mongo_svc.CONFIG_PATH_DEFAULT, keyfile=None, cli=cli)
-		mongod.start()
-		cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
-		mongod.stop("Terminating mongod instance to run it with --auth option")
-
+		self.mongodb.auth = False
 		self.mongodb.start_shardsvr()
-				
+
 		""" Check if replset already exists """
 		if not list(self.mongodb.cli.connection.local.system.replset.find()):
 			self.mongodb.initiate_rs()
@@ -1106,6 +1101,11 @@ class MongoDBHandler(ServiceCtlHandler):
 			rs_cfg['version'] += 10
 			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
+
+		self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+		self.mongodb.mongod.stop("Terminating mongod instance to run it with --auth option")
+		self.mongodb.auth = True
+		self.mongodb.start_shardsvr()
 						
 		# Create snapshot
 		self.mongodb.cli.sync(lock=True)

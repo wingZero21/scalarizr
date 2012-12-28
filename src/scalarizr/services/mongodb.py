@@ -111,9 +111,12 @@ class MongoDB(BaseService):
 	_arbiter = None
 	_instance = None
 	_config_server = None
+	_mongod_noauth = None
+
 	keyfile = None
 	login = None
 	password = None
+	auth = True
 
 	
 	def __init__(self, keyfile=None):
@@ -200,9 +203,12 @@ class MongoDB(BaseService):
 	
 	def start_shardsvr(self):
 		self.working_dir.unlock()
-		self._logger.info('Starting main mongod process')
+		if self.auth:
+			self._logger.info('Starting main mongod process with auth enabled')
+		else:
+			self._logger.info('Starting main mongod process with auth disabled')
 		self.mongod.start()
-	
+
 	
 	def start_arbiter(self):
 		if self.arbiter.is_running:
@@ -364,6 +370,10 @@ class MongoDB(BaseService):
 		"""
 		@rtype: Mongod
 		"""
+		if not self.auth:
+			if not self._mongod_noauth:
+				self._mongod_noauth = Mongod(configpath=CONFIG_PATH_DEFAULT, keyfile=None)
+			return self._mongod_noauth
 		return self._get('mongod', Mongod.find, self.config, self.keyfile.path, self.cli)
 	
 	def _set_mongod(self, obj):
@@ -371,6 +381,8 @@ class MongoDB(BaseService):
 
 
 	def _get_cli(self):
+		if not self.auth:
+			return MongoCLI(REPLICA_DEFAULT_PORT)
 		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT, SCALR_USER, self.password)
 	
 	def _set_cli(self, obj):
