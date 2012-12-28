@@ -1106,6 +1106,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.mongod.stop("Terminating mongod instance to run it with --auth option")
 		self.mongodb.auth = True
 		self.mongodb.start_shardsvr()
+		self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 						
 		# Create snapshot
 		self.mongodb.cli.sync(lock=True)
