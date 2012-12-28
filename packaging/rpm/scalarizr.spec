@@ -580,8 +580,8 @@ rm -f $szr_version_file
 rm -f %{buildroot}/etc/scalr/private.d/*
 chmod 775 %{buildroot}/etc/scalr/private.d
 mkdir -p "%{buildroot}%{_initrddir}"
-cp "%{_sourcedir}/scalarizr.init.d" "%{buildroot}%{_initrddir}/scalarizr"
-cp "%{_sourcedir}/scalarizr_update.init.d" "%{buildroot}%{_initrddir}/scalarizr_update"
+cp "%{_sourcedir}/scalarizr.init" "%{buildroot}%{_initrddir}/scalarizr"
+cp "%{_sourcedir}/scalarizr_update.init" "%{buildroot}%{_initrddir}/scalarizr_update"
 
 
 %clean
