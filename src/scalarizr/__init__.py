@@ -305,7 +305,14 @@ def _init_services():
 
 	logger.debug("Initialize QueryEnv client")
 	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), '2008-12-16')
-	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), queryenv.get_latest_version())
+	queryenv_latest = queryenv.get_latest_version()
+	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), queryenv_latest)
+
+	if tuple(map(int, queryenv_latest.split('-'))) >= (2012, 7, 1):
+		scalr_version = queryenv.get_global_config()['params'].get('scalr.version')
+		if scalr_version:
+			bus.scalr_version = tuple(map(int, scalr_version.split('.')))
+
 	bus.queryenv_service = queryenv
 	bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 	
