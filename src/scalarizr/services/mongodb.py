@@ -372,7 +372,7 @@ class MongoDB(BaseService):
 		"""
 		if not self.auth:
 			if not self._mongod_noauth:
-				self._mongod_noauth = Mongod(configpath=CONFIG_PATH_DEFAULT, keyfile=None)
+				self._mongod_noauth = Mongod(configpath=CONFIG_PATH_DEFAULT, keyfile=None, cli=self.cli)
 			return self._mongod_noauth
 		return self._get('mongod', Mongod.find, self.config, self.keyfile.path, self.cli)
 	
