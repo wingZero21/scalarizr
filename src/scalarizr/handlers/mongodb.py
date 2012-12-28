@@ -37,6 +37,8 @@ import tempfile
 import datetime
 import threading
 
+import pymongo
+
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
@@ -566,9 +568,14 @@ class MongoDBHandler(ServiceCtlHandler):
 				with op.step(self._step_create_scalr_users):
 					try:
 						self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+					except pymongo.OperationFailure, err:
+						if 'unauthorized' in str(err):
+							self._logger.warning(err)
+						else:
+							raise
 					except BaseException, e:
 						self._logger.error(e)
-						raise
+
 						
 			with op.step(self._step_auth_on_cfg_server_and_router):
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
