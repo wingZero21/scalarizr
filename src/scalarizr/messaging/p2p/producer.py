@@ -11,6 +11,7 @@ import uuid
 import urllib2
 
 from scalarizr import messaging, util
+from scalarizr.bus import bus
 from scalarizr.messaging import p2p
 from scalarizr.util import urltool
 from scalarizr.node import __node__
@@ -96,7 +97,7 @@ class P2pMessageProducer(messaging.MessageProducer):
 	def _send0(self, queue, message, success_callback=None, fail_callback=None):
 		try:
 
-			use_json =  __node__['scalr']['version'] >= (4,0,1)
+			use_json = bus.scalr_version >= (4,0,1)
 			data = message.tojson() if use_json else message.toxml()
 
 			content_type = 'application/%s' % 'json' if use_json else 'xml'
