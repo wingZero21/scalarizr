@@ -423,6 +423,7 @@ class XtrabackupRestore(XtrabackupMixin, backup.Restore):
 class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 	def __init__(self,
 				backup_type='full',
+				no_lock=False,
 				from_lsn=None,
 				compressor=None,
 				prev_cloudfs_source=None,
@@ -430,6 +431,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 				**kwds):
 		backup.Backup.__init__(self,
 				backup_type=backup_type,
+				no_lock=no_lock,
 				from_lsn=int(from_lsn or 0),
 				compressor=compressor,
 				prev_cloudfs_source=prev_cloudfs_source,
@@ -452,6 +454,8 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			'user': __mysql__['root_user'],
 			'password': __mysql__['root_password']
 		}
+		if self.no_lock:
+			kwds['no_lock'] = True
 		if not int(__mysql__['replication_master']):
 			kwds['safe_slave_backup'] = True
 		if self.backup_type == 'incremental':
@@ -601,6 +605,17 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 				user=__mysql__['root_user'],
 				password=__mysql__['root_password'])
 		coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+
+		if int(__mysql__['replication_master']):
+			LOG.info("Master will reset it's binary logs, "
+					"so updating binary log position in backup manifest")
+			self.mysql.service.start()
+			self.mysql.service.stop()
+			log_file, log_pos = mysqlbinlog_head()
+			meta = mnf.meta
+			meta.update({'log_file': log_file, 'log_pos': log_pos})
+			mnf.meta = meta
+			mnf.save()
 
 
 #backup.backup_types['xtrabackup'] = XtrabackupBackup
