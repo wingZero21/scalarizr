@@ -22,7 +22,6 @@ class RackspaceLifeCycleHandler(Handler):
 		self.on_reload()
 	
 	def on_init(self, *args, **kwargs):
-		bus.on(before_reboot_finish=self.on_before_reboot_finish)	
 		self._insert_iptables_rules()
 	
 	def on_reload(self):
