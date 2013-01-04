@@ -223,7 +223,7 @@ class MongoDB(BaseService):
 		
 	
 	def start_config_server(self):
-		self._prepare_config_server()
+		self._prepare_config_server()ч
 		self._logger.info('Starting mongo config server')
 		self.config_server.start()
 		
@@ -651,7 +651,7 @@ class ConfigServerConf(MongoDBConfig):
 
 	
 class Mongod(object):	
-	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=0):
+	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=2):
 		self._logger = logging.getLogger(__name__)
 		self.configpath = configpath
 		self.dbpath = dbpath
