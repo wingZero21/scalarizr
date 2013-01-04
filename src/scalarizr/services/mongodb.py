@@ -223,7 +223,7 @@ class MongoDB(BaseService):
 		
 	
 	def start_config_server(self):
-		self._prepare_config_server()ч
+		self._prepare_config_server()
 		self._logger.info('Starting mongo config server')
 		self.config_server.start()
 		
