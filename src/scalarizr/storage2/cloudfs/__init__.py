@@ -247,7 +247,7 @@ class FileTransfer(BaseTransfer):
 					yield src, dst, retry, chunk_num
 				except StopIteration:
 					no_more = True
-		except StopIteration:
+		except (StopIteration, GeneratorExit):
 			raise
 		except:
 			LOG.debug('FileTransfer _job_generator failed: %s', 
@@ -864,7 +864,7 @@ class LargeTransfer(bases.Task):
 
 	def _run(self):
 		LOG.debug("Creating tmpfs")
-		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.1)
+		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.2)
 		self._tranzit_vol.ensure(mkfs=True)
 		try:
 			res = self._transfer.run()
