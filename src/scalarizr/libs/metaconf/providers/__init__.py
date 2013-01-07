@@ -1,3 +1,4 @@
+from __future__ import with_statement
 from .. import ParseError, MetaconfError
 from ..utils import quote, unquote, indent
 

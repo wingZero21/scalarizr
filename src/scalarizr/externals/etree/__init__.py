@@ -1,3 +1,4 @@
+from __future__ import with_statement
 # $Id: __init__.py 3375 2008-02-13 08:05:08Z fredrik $
 # elementtree package
 

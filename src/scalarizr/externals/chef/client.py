@@ -1,3 +1,4 @@
+from __future__ import with_statement
 from scalarizr.externals.chef.api import ChefAPI
 from scalarizr.externals.chef.base import ChefObject
 

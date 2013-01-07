@@ -1,3 +1,4 @@
+from __future__ import with_statement
 
 from scalarizr.bus import bus
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures

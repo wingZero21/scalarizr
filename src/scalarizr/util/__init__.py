@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from __future__ import with_statement
 import socket
 import os, re
 import logging
@@ -274,6 +275,7 @@ def system2(*popenargs, **kwargs):
 	return out, err, p.returncode
 
 
+
 def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, timeout=None, start_text=None, error_text=None):
 	args = args or ()
 	kwargs = kwargs or {}
@@ -330,8 +332,12 @@ def read_shebang(path=None, script=None):
 
 	shebang = re.search(re.compile('^#!(\S+.+)'), first_line)
 	if shebang:
-		return shebang.group(1)
+		return split_strip(shebang.group(1))[0]
 	return None
+
+def split_strip(value, separator=' '):
+	return map(string.strip, value.split(separator))
+
 
 def parse_size(size):
 	"""

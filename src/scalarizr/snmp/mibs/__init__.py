@@ -1,3 +1,4 @@
+from __future__ import with_statement
 from pyasn1.type.constraint import ValueRangeConstraint
 
 def validate(syntax, value, clone = True):

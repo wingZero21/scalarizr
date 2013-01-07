@@ -26,7 +26,7 @@ except ImportError:
 
 from scalarizr import storage2
 from scalarizr.libs import bases
-from scalarizr.linux import coreutils
+from scalarizr.linux import coreutils, pkgmgr, LinuxError
 
 
 LOG = logging.getLogger(__name__)
@@ -226,28 +226,35 @@ class FileTransfer(BaseTransfer):
 
 		
 	def _job_generator(self):
-		no_more = False
-		while True:
-			try:
-				yield self._retries_queue.get_nowait()
-				continue
-			except Queue.Empty:
-				if no_more:
-					raise StopIteration
-			try:
-				with self._gen_lock:
-					src = self.src.next()
-					dst = self.dst.next()
-					retry = 0
-					if self.multipart:
-						self._chunk_num += 1
-					chunk_num = self._chunk_num
-				LOG.debug("FileTransfer yield %s %s %s %s" % (src, dst, retry, chunk_num))
-				yield src, dst, retry, chunk_num
-			except StopIteration:
-				no_more = True
-			
-			
+		try:
+			no_more = False
+			while True:
+				try:
+					yield self._retries_queue.get_nowait()
+					continue
+				except Queue.Empty:
+					if no_more:
+						raise StopIteration
+				try:
+					with self._gen_lock:
+						src = self.src.next()
+						dst = self.dst.next()
+						retry = 0
+						if self.multipart:
+							self._chunk_num += 1
+						chunk_num = self._chunk_num
+					LOG.debug("FileTransfer yield %s %s %s %s" % (src, dst, retry, chunk_num))
+					yield src, dst, retry, chunk_num
+				except StopIteration:
+					no_more = True
+		except (StopIteration, GeneratorExit):
+			raise
+		except:
+			LOG.debug('FileTransfer _job_generator failed: %s', 
+					sys.exc_info()[1], exc_info=sys.exc_info())
+			raise
+		
+	
 	def _is_remote_path(self, path):
 		return isinstance(path, basestring) and self._url_re.match(path)
 
@@ -299,6 +306,9 @@ class FileTransfer(BaseTransfer):
 				self.fire('transfer_error', src, dst, retry, chunk_num, 
 							sys.exc_info())
 			except:
+				LOG.debug('FileTransfer failed %s -> %s. Error: %s', 
+						src, dst, sys.exc_info()[1], 
+						exc_info=sys.exc_info())
 				retry += 1
 				if retry <= self.retries:
 					self._retries_queue.put((src, dst, retry, chunk_num))
@@ -494,10 +504,28 @@ class LargeTransfer(bases.Task):
 		for ev in events:
 			self._transfer.on(ev, self._proxy_event(ev))
 
-
 	def _gzip_bin(self):
-		if self.try_pigz and os.path.exists(self.pigz_bin):
-			return self.pigz_bin
+		if self.try_pigz:
+			try:
+				pkgmgr.installed("pigz")
+			except LinuxError, e:
+				if "No matching Packages to list" in e.err:
+					try:
+						pkgmgr.epel_repository()
+						pkgmgr.installed("pigz")
+					except:
+						LOG.debug("PIGZ install with epel failed, using gzip."\
+								  " Caught %s" % repr(sys.exc_info()[1]))
+					else:
+						return self.pigz_bin
+				else:
+					LOG.debug("PIGZ install failed, using gzip. Caught %s" %
+							  repr(sys.exc_info()[1]))
+			except:
+				LOG.debug("PIGZ install failed, using gzip. Caught %s" %
+						  repr(sys.exc_info()[1]))
+			else:
+				return self.pigz_bin
 		return self.gzip_bin
 
 
@@ -505,7 +533,6 @@ class LargeTransfer(bases.Task):
 		def proxy(*args, **kwds):
 			self.fire(event, *args, **kwds)
 		return proxy
-		
 
 	def _src_generator(self):
 		'''
@@ -835,7 +862,7 @@ class LargeTransfer(bases.Task):
 
 	def _run(self):
 		LOG.debug("Creating tmpfs")
-		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.1)
+		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.2)
 		self._tranzit_vol.ensure(mkfs=True)
 		try:
 			res = self._transfer.run()

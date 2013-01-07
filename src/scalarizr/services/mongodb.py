@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Sep 30, 2011
 
@@ -758,8 +759,6 @@ class Mongos(object):
 			args = ['sudo', '-u', DEFAULT_USER, MONGOS, '--fork',
 					'--logpath', ROUTER_LOG_PATH, '--configdb',
 					'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
-			if cls.verbose and isinstance(cls.verbose, int) and 0<cls.verbose<6:
-				args.append('-'+'v'*cls.verbose)
 					
 			if os.path.exists(ROUTER_LOG_PATH):
 				rchown(DEFAULT_USER, ROUTER_LOG_PATH)

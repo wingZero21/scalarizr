@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Aug 28, 2012
 
@@ -225,7 +226,7 @@ class YumPackageMgr(PackageMgr):
 class RPMPackageMgr(PackageMgr):
 
 	def rpm_command(self, command, **kwds):
-		return linux.system((('/usr/bin/rpm', ) + tuple(filter(None, command.split()))), **kwds)
+		return linux.system(['/usr/bin/rpm', ] + filter(None, command.split()), **kwds)
 
 	def install(self, name, version=None, updatedb=False, **kwds):
 		''' Installs a package from file or url with `name' '''
