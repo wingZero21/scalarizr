@@ -633,6 +633,8 @@ class DbMsrMessages:
 	@ivar: current_xlog_location:  pg_current_xlog_location() on master after snap was created
 	'''
 	
+	DBMSR_NEW_MASTER_UP_RESULT = "DbMsr_NewMasterUpResult"
+
 	"""
 	Also Postgresql behaviour adds params to common messages:
 	

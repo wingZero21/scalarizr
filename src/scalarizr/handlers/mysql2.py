@@ -861,13 +861,16 @@ class MysqlHandler(DBMSRHandler):
 				self._update_config(updates)
 				'''
 
-				if mysql2.get('backup'):
-					bak = backup.backup(**mysql2.get('backup'))
-				else:
-					bak = backup.backup(
-							type='snap_mysql', 
-							volume=__mysql__['volume'])
-				restore = bak.run()
+				restore = None
+				no_data_bundle = mysql2.get('no_data_bundle', False)
+				if not no_data_bundle:
+					if mysql2.get('backup'):
+						bak = backup.backup(**mysql2.get('backup'))
+					else:
+						bak = backup.backup(
+								type='snap_mysql', 
+								volume=__mysql__['volume'])
+					restore = bak.run()
 				'''				
 				snap, log_file, log_pos = self._create_snapshot(ROOT_USER, mysql2['root_password'], tags=self.mysql_tags)
 				Storage.backup_config(snap.config(), self._snapshot_config_path)
@@ -879,17 +882,24 @@ class MysqlHandler(DBMSRHandler):
 					db_type = __mysql__['behavior']
 				)
 				if __mysql__['compat_prior_backup_restore']:
-					msg_data[__mysql__['behavior']] = {
-						'log_file': restore.log_file,
-						'log_pos': restore.log_pos,
-						'snapshot_config': dict(restore.snapshot),
-						'volume_config': dict(__mysql__['volume'])
+					result = {
+						'volume_config': dict(__mysql__['volume'])					
 					}
+					if restore:
+						result.update({
+							'snapshot_config': dict(restore.snapshot),
+							'log_file': restore.log_file,
+							'log_pos': restore.log_pos
+						})
 				else:
-					msg_data[__mysql__['behavior']] = {
-						'restore': dict(restore),
+					result = {
 						'volume': dict(__mysql__['volume'])
 					}
+					if restore:
+						result['restore'] = dict(restore)
+
+				msg_data[__mysql__['behavior']] = result
+
 				
 				self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 				LOG.info('Promotion completed')							
@@ -915,88 +925,103 @@ class MysqlHandler(DBMSRHandler):
 
 		
 	def on_DbMsr_NewMasterUp(self, message):
+		try:
+			assert message.body.has_key("db_type")
+			assert message.body.has_key("local_ip")
+			assert message.body.has_key("remote_ip")
+			assert message.body.has_key(__mysql__['behavior'])
+		
+			mysql2 = message.body[__mysql__['behavior']]
+			
+			if int(__mysql__['replication_master']):
+				LOG.debug('Skip NewMasterUp. My replication role is master')
+				return
+			
+			host = message.local_ip or message.remote_ip
+			LOG.info("Switching replication to a new MySQL master %s", host)
+			bus.fire('before_mysql_change_master', host=host)			
 
-		assert message.body.has_key("db_type")
-		assert message.body.has_key("local_ip")
-		assert message.body.has_key("remote_ip")
-		assert message.body.has_key(__mysql__['behavior'])
-	
-		mysql2 = message.body[__mysql__['behavior']]
-		
-		if int(__mysql__['replication_master']):
-			LOG.debug('Skip NewMasterUp. My replication role is master')
-			return
-		
-		host = message.local_ip or message.remote_ip
-		LOG.info("Switching replication to a new MySQL master %s", host)
-		bus.fire('before_mysql_change_master', host=host)			
+			LOG.debug("__mysql__['volume']: %s", __mysql__['volume'])
+			
+			if __mysql__['volume'].type in ('eph', 'lvm'):
+				if 'restore' in mysql2:
+					restore = backup.restore(**mysql2['restore'])
+				else:
+					# snap_mysql restore should update MySQL volume, and delete old one
+					restore = backup.restore(
+								type='snap_mysql',
+								log_file=mysql2['log_file'],
+								log_pos=mysql2['log_pos'],
+								volume=__mysql__['volume'],
+								snapshot=mysql2['snapshot_config'])
+				# XXX: ugly
+				if __mysql__['volume'].type == 'eph':
+					self.mysql.service.stop('Swapping storages to reinitialize slave')
+					'''
+					LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
+							restore.snapshot['id'], restore.log_file, restore.log_pos)
+					new_vol = restore.run()
+					self.mysql.service.stop('Swapping storages to reinitialize slave')
+				
+					LOG.debug('Destroing old storage')
+					vol = storage.volume(**__mysql__['volume'])
+					vol.destroy(remove_disks=True)
+					LOG.debug('Storage destoyed')
 
-		LOG.debug("__mysql__['volume']: %s", __mysql__['volume'])
-		
-		if __mysql__['volume'].type in ('eph', 'lvm'):
-			if 'restore' in mysql2:
-				restore = backup.restore(**mysql2['restore'])
+					'''
+				log_file = restore.log_file
+				log_pos = restore.log_pos
+				restore.run()
+				
+				'''
+				LOG.debug('Plugging new storage')
+				vol = Storage.create(snapshot=snap_config.copy(), tags=self.mysql_tags)
+				self._plug_storage(STORAGE_PATH, vol)
+				LOG.debug('Storage plugged')
+
+				Storage.backup_config(vol.config(), self._volume_config_path)
+				Storage.backup_config(snap_config, self._snapshot_config_path)
+				self.storage_vol = vol
+				'''
+				
+				self.mysql.service.start()
 			else:
-				# snap_mysql restore should update MySQL volume, and delete old one
-				restore = backup.restore(
-							type='snap_mysql',
-							log_file=mysql2['log_file'],
-							log_pos=mysql2['log_pos'],
-							volume=__mysql__['volume'],
-							snapshot=mysql2['snapshot_config'])
-			# XXX: ugly
-			if __mysql__['volume'].type == 'eph':
-				self.mysql.service.stop('Swapping storages to reinitialize slave')
-				'''
-				LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
-						restore.snapshot['id'], restore.log_file, restore.log_pos)
-				new_vol = restore.run()
-				self.mysql.service.stop('Swapping storages to reinitialize slave')
-			
-				LOG.debug('Destroing old storage')
-				vol = storage.volume(**__mysql__['volume'])
-				vol.destroy(remove_disks=True)
-				LOG.debug('Storage destoyed')
-
-				'''
-			log_file = restore.log_file
-			log_pos = restore.log_pos
-			restore.run()
-			
-			'''
-			LOG.debug('Plugging new storage')
-			vol = Storage.create(snapshot=snap_config.copy(), tags=self.mysql_tags)
-			self._plug_storage(STORAGE_PATH, vol)
-			LOG.debug('Storage plugged')
-
-			Storage.backup_config(vol.config(), self._volume_config_path)
-			Storage.backup_config(snap_config, self._snapshot_config_path)
-			self.storage_vol = vol
-			'''
-			
-			self.mysql.service.start()
-		else:
-			LOG.debug("Stopping slave i/o thread")
-			self.root_client.stop_slave_io_thread()
-			LOG.debug("Slave i/o thread stopped")
-			
-			LOG.debug("Retrieving current log_file and log_pos")
-			status = self.root_client.slave_status()
-			log_file = status['Master_Log_File']
-			log_pos = status['Read_Master_Log_Pos']
-			LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
+				LOG.debug("Stopping slave i/o thread")
+				self.root_client.stop_slave_io_thread()
+				LOG.debug("Slave i/o thread stopped")
+				
+				LOG.debug("Retrieving current log_file and log_pos")
+				status = self.root_client.slave_status()
+				log_file = status['Master_Log_File']
+				log_pos = status['Read_Master_Log_Pos']
+				LOG.debug("Retrieved log_file=%s, log_pos=%s", log_file, log_pos)
 
 
-		self._change_master(
-			host=host, 
-			user=__mysql__['repl_user'], 
-			password=mysql2['repl_password'],
-			log_file=log_file, 
-			log_pos=log_pos
-		)
-			
-		LOG.debug("Replication switched")
-		bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
+			self._change_master(
+				host=host, 
+				user=__mysql__['repl_user'], 
+				password=mysql2['repl_password'],
+				log_file=log_file, 
+				log_pos=log_pos
+			)
+				
+			LOG.debug("Replication switched")
+			bus.fire('mysql_change_master', host=host, log_file=log_file, log_pos=log_pos)
+
+			msg_data = dict(
+				db_type = __mysql__['behavior'],
+				status = 'ok'
+			)
+			self.send_message(DbMsrMessages.DBMSR_NEW_MASTER_UP_RESULT, msg_data)
+
+		except (Exception, BaseException), e:
+			LOG.exception(e)
+
+			msg_data = dict(
+				db_type = __mysql__['behavior'],
+				status="error",
+				last_error=str(e))
+			self.send_message(DbMsrMessages.DBMSR_NEW_MASTER_UP_RESULT, msg_data)
 
 
 	def on_ConvertVolume(self, message):
