@@ -128,10 +128,7 @@ class Ec2Platform(Ec2LikePlatform):
 
 
 	def _ec2_endpoint(self, region):
-		if region == 'us-east-1':
-			return 'ec2.amazonaws.com'
-		else:
-			return 'ec2.%s.amazonaws.com' % region
+		return '%s.ec2.amazonaws.com' % region
 		
 	def _s3_endpoint(self, region):
 		if region == 'us-east-1':
