@@ -741,7 +741,6 @@ class Mongos(object):
 		cls.password = password
 
 
-
 	@classmethod
 	def get_cli(cls):
 		if not hasattr(cls, '_cli'):
@@ -759,13 +758,17 @@ class Mongos(object):
 			args = ['sudo', '-u', DEFAULT_USER, MONGOS, '--fork',
 					'--logpath', ROUTER_LOG_PATH, '--configdb',
 					'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
-					
-			if os.path.exists(ROUTER_LOG_PATH):
-				rchown(DEFAULT_USER, ROUTER_LOG_PATH)
-
 			if cls.keyfile and os.path.exists(cls.keyfile):
 				rchown(DEFAULT_USER, cls.keyfile)
 				args.append('--keyFile=%s' % cls.keyfile)
+
+			if cls.verbose and isinstance(cls.verbose, int) and 0<cls.verbose<6:
+				args.append('-'+'v'*cls.verbose)
+
+
+			if os.path.exists(ROUTER_LOG_PATH):
+				rchown(DEFAULT_USER, ROUTER_LOG_PATH)
+
 			system2(args, close_fds=True, preexec_fn=os.setsid)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 			wait_until(lambda: cls.get_cli().has_connection, timeout=MAX_START_TIMEOUT)
