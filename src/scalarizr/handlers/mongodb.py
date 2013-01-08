@@ -275,8 +275,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			updates = dict(hostname_as_pubdns = '0')
 			self._cnf.update_ini('ec2', {'ec2': updates}, private=False)
 
-		if self._cnf.state == ScalarizrState.INITIALIZING:
-			self.mongodb.stop_default_init_script()
+		#if self._cnf.state == ScalarizrState.INITIALIZING:
+		self.mongodb.stop_default_init_script()
 		
 		if self._cnf.state == ScalarizrState.RUNNING:
 	
