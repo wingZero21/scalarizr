@@ -106,7 +106,7 @@ class CinderVolume(base.Volume):
         return srv_id
 
     def _ensure(self):
-        assert self._cinder.has_connection or self.id, \
+        assert (self._cinder and self._cinder.has_connection) or self.id, \
             self.error_messages['no_id_or_conn']
 
         if self._cinder:
@@ -142,7 +142,7 @@ class CinderVolume(base.Volume):
                     self._server_id() in server_ids):
                 self._wait_status_transition()
                 if len(volume.attachments) > 0:
-                    self._detach_volume(volume.attachments[0]['server_id'])
+                    self._detach_volume()
 
                 with self._free_device_letter_mgr:
                     name = '/dev/xvd%s' % self._free_device_letter_mgr.get()
@@ -157,8 +157,8 @@ class CinderVolume(base.Volume):
                 'name': name,
                 'size': volume.size})
 
-            if self.name:
-                self.device = name2device(self.name)
+        if self.name:
+            self.device = name2device(self.name)
 
     def _create_volume(self,
                        size=None,

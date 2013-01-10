@@ -14,16 +14,6 @@ from scalarizr.util.filetool import read_file
 from scalarizr.bus import bus
 from scalarizr.util import system2
 
-#TODO: move next hardcode to some config
-# class OpenstackCredentials:
-#     USER = 'admin'
-#     PASSWORD = 'password'
-#     TENANT = 'demo'
-#     SERVER_ADDRESS = 'http://192.168.1.100'
-
-#     AUTH_URL = '%s:5000/v2.0' % SERVER_ADDRESS
-#     KEYSTONE_ENDPOINT = AUTH_URL
-#     GLANCE_ENDPOINT = '%s:9292' % SERVER_ADDRESS
 
 LOG = logging.getLogger(__name__)
 
@@ -180,6 +170,8 @@ class OpenstackPlatform(Platform):
             os.environ["NOVA_RAX_AUTH"] = "True"
 
     def new_cinder_connection(self):
+        if not self._access_data:
+            return None
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
         return CinderWrapper(self._access_data["username"],
@@ -189,6 +181,8 @@ class OpenstackPlatform(Platform):
                              self._access_data["cloud_location"])
 
     def new_nova_connection(self):
+        if not self._access_data:
+            return None
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
         return NovaWrapper(self._access_data["username"],
