@@ -4,6 +4,9 @@ import os
 import glob
 import string
 import threading
+from time import sleep
+
+from novaclient.exceptions import ClientException
 
 from scalarizr import storage2
 from scalarizr import util
@@ -224,12 +227,16 @@ class CinderVolume(base.Volume):
         #volume attaching
         LOG.debug('Attaching Cinder volume %s (device: %s)', volume_id,
                   device_name)
-        # TODO: check that on openstack create_server_volume() works fine
-        # self._cinder.volumes.attach(volume_id, server_id, device_name)
         self._check_nova_connection()
-        self._nova.volumes.create_server_volume(server_id,
-                                                volume_id,
-                                                device_name)
+        for _ in xrange(5):
+            try:
+                self._nova.volumes.create_server_volume(server_id,
+                                                        volume_id,
+                                                        device_name)
+            except ClientException:
+                sleep(10)
+            else:
+                break
 
         #waiting for attaching transitional state
         LOG.debug('Checking that Cinder volume %s is attached', volume_id)
