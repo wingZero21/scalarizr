@@ -158,7 +158,8 @@ class CinderVolume(base.Volume):
                 'id': volume.id,
                 'avail_zone': volume.availability_zone,
                 'name': name,
-                'size': volume.size})
+                'size': volume.size,
+                'volume_type': volume.volume_type})
 
         if self.name:
             self.device = name2device(self.name)

@@ -3,14 +3,12 @@ import json
 import os
 import re
 import logging
-import sys
 
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
 
 from scalarizr.platform import Platform
 from scalarizr.platform import PlatformError
-from scalarizr.util.filetool import read_file
 from scalarizr.bus import bus
 from scalarizr.util import system2
 
@@ -155,7 +153,9 @@ class OpenstackPlatform(Platform):
         if self._userdata is None:
             path = cnf.private_path('.user-data')
             if os.path.exists(path):
-                rawmeta = read_file(path)
+                rawmeta = None
+                with open(path, 'r') as fp:
+                    rawmeta = fp.read()
                 if not rawmeta:
                     raise PlatformError("Empty user-data")
                 return self._parse_user_data(rawmeta)
