@@ -723,6 +723,23 @@ fp.close()
 		[ ! -f "$pub_cnf_dir/percona.ini" ] && ln -s "$pub_cnf_dir/mysql2.ini" "$pub_cnf_dir/percona.ini"
 	fi
 
+	if dpkg --compare-versions "$installed_version" lt '0.9.r4762-1'; then
+		dbfile="$priv_cnf_dir/db.sqlite"
+		if [ -e "$dbfile" ]; then
+			${__python} - <<-EOF
+				import sqlite3
+				import os
+				conn = sqlite3.Connection('${dbfile}')
+				cur = conn.cursor()
+				cur.execute('pragma table_info(p2p_message)')
+				if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
+					cur.execute("alter table p2p_message add column format TEXT default 'xml'")
+					conn.commit()
+				cur.close()
+			EOF
+		fi
+	fi
+
 	sync
 	umount -l "$priv_cnf_dir" 2>&1 || :	
 fi
