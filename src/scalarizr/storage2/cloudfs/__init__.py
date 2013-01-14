@@ -205,6 +205,7 @@ class FileTransfer(BaseTransfer):
 			==========  ==========  ==========  ====================================
 
 		'''
+
 		if not (not isinstance(kwds["src"], basestring) and
 				isinstance(kwds["dst"], basestring)) and multipart:
 			multipart = False
@@ -493,6 +494,7 @@ class LargeTransfer(bases.Task):
 		else:
 			self.transfer_id = transfer_id
 		self.manifest = manifest
+		# TODO: start less workers on smaller transfers
 		self._transfer = FileTransfer(src=self._src_generator,
 								dst=self._dst_generator, **kwds)
 		self._tranzit_vol = storage2.volume(
@@ -596,6 +598,7 @@ class LargeTransfer(bases.Task):
 										close_fds=True)
 						LOG.debug("LargeTransfer src_generator AFTER TAR")
 					elif hasattr(self.streamer, "popen"):
+						# TODO: not working yet
 						fileinfo["streamer"] = str(self.streamer)
 						prefix = os.path.join(prefix, name) + '.'
 
@@ -861,9 +864,10 @@ class LargeTransfer(bases.Task):
 
 
 	def _run(self):
-		LOG.debug("Creating tmpfs")
+		LOG.debug("Creating tmpfs...")
 		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.2)
 		self._tranzit_vol.ensure(mkfs=True)
+		LOG.debug("Creating tmpfs...")
 		try:
 			res = self._transfer.run()
 			LOG.debug("self._transfer finished")

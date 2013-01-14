@@ -24,6 +24,8 @@ class S3FileSystem(object):
 
 	_bucket = None
 
+
+	# TODO: change report frequency
 	def __init__(self, acl='aws-exec-read', report_frequency=11):
 		self.acl = acl
 		self.report_frequency = report_frequency
@@ -87,10 +89,10 @@ class S3FileSystem(object):
 				key = Key(self._bucket)
 				key.name = key_name
 				file = open(local_path, "rb")
-				LOG.debug("Actually uploading %s" % file)
+				LOG.debug("Actually uploading %s" % os.path.basename(local_path))
 				key.set_contents_from_file(file, policy=self.acl,
 					cb=report_to, num_cb=self.report_frequency)
-				LOG.debug("Finished uploading %s" % file)
+				LOG.debug("Finished uploading %s" % os.path.basename(local_path))
 				return self._format_path(bucket_name, key_name)
 			finally:
 				if file:
@@ -119,10 +121,10 @@ class S3FileSystem(object):
 					raise cloudfs.DriverError("S3 path '%s' not found" % remote_path)
 				raise
 
-			LOG.debug("Actually downloading %s" % file)
+			LOG.debug("Actually downloading %s" % os.path.basename(dest_path))
 			key.get_contents_to_filename(dest_path, cb=report_to,
 				num_cb=self.report_frequency)
-			LOG.debug("Finished downloading %s" % file)
+			LOG.debug("Finished downloading %s" % os.path.basename(dest_path))
 			return dest_path
 
 		except:
