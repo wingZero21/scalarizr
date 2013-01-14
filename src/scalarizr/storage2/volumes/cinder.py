@@ -129,9 +129,14 @@ class CinderVolume(base.Volume):
                     volume = None
                 else:
                     self.size = volume.size
+            elif self.snap:
+                self.snapshot_id = self.snap['id']
+                #TODO: take tags from snapshot, if they exist
+                # if not self.tags:
+                #     self.tags = self.snap.get('tags', {})
 
-            #TODO: take tags from snapshot, if they exist
             if not self.id:
+
                 volume = self._create_volume(size=self.size,
                                              snapshot_id=self.snapshot_id,
                                              avail_zone=self.avail_zone,
