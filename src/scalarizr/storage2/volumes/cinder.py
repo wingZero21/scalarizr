@@ -105,7 +105,6 @@ class CinderVolume(base.Volume):
 
     def _server_id(self):
         srv_id = bus.platform.get_server_id()
-        LOG.debug('srv id is: %s', srv_id)
         return srv_id
 
     def _ensure(self):
@@ -231,15 +230,20 @@ class CinderVolume(base.Volume):
         self._check_cinder_connection()
 
         #volume attaching
-        LOG.debug('Attaching Cinder volume %s (device: %s)', volume_id,
-                  device_name)
+        LOG.debug('Attaching Cinder volume %s (device: %s) to server %s',
+                  volume_id,
+                  device_name,
+                  server_id)
         self._check_nova_connection()
         for _ in xrange(5):
             try:
                 self._nova.volumes.create_server_volume(server_id,
                                                         volume_id,
                                                         device_name)
-            except ClientException:
+            except ClientException, e:
+                LOG.warn('Exception caught while trying \
+                         to attach volume %s: \n%s ', volume_id, e)
+                LOG.debug('Will try again after 10 seconds. ')
                 sleep(10)
             else:
                 break
