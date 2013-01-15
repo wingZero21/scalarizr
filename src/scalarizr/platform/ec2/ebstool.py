@@ -130,7 +130,6 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 			start_text='Attaching volume %s as device %s%s' % (vol.id, devname, not to_me and ' instance %s' % instance_id or ''), 
 			error_text="Failed to attach EBS volume %s. AttachVolume operation respond with 400 code without any details" % vol.id)
 
-	
 	logger.debug('Checking that volume %s is attached', vol.id)
 	wait_until(
 		lambda: vol.update() and vol.attachment_state() == 'attached', 
