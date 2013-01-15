@@ -7,7 +7,7 @@ import unittest
 from scalarizr.util import init_tests
 from scalarizr.bus import bus
 from scalarizr.handlers import cassandra
-from scalarizr.util import fstool
+from scalarizr.linux import mount
 from xml.dom.minidom import parse
 from scalarizr.platform import ec2
 
@@ -31,7 +31,7 @@ class Test(unittest.TestCase):
 				self._storage_conf = config.get('behaviour_cassandra','storage_conf')
 
 		def _tearDown(self):
-				fstool.umount("/dev/sdb1", clean_fstab = True)
+				mount.umount("/dev/sdb1", clean_fstab=True)
 
 		def testName(self):
 				class _Bunch(dict):
@@ -72,7 +72,7 @@ class Test(unittest.TestCase):
 				self.assertEqual(data_entry[0].firstChild.nodeValue, C.data_file_directory)
 
 		def _test_fstab(self):
-						fstab = fstool.Fstab("/etc/fstab")
+						fstab = mount.fstab("/etc/fstab")
 						entries = fstab.list_entries()
 						self.assertEqual(entries[1].device, "/dev/sda1")
 						self.assertEqual(entries[1].mpoint, "/")

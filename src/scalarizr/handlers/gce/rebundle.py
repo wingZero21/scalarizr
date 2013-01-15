@@ -53,7 +53,6 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			image_name	= 'disk.raw'
 			image_path	= os.path.join(rebundle_dir, image_name)
 
-			# root = filter(lambda x: x.mpoint == '/', filetool.df())[0]
 			root_size = coreutils.statvfs('/')['size']
 			LOG.debug('Creating image file %s' % image_path)
 			with open(image_path, 'w') as f:

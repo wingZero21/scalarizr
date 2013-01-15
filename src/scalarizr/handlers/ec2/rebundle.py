@@ -772,8 +772,8 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		for from_dev in from_devs:
 			num = os.path.basename(from_dev.device)[-1]
 
-			if self._mtab.contains(mpoint=os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num))) or\
-					self._mtab.contains(mpoint=os.path.join(self.mpoint, os.path.basename(from_dev.device))):
+			if self._mtab.contains(os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num))) or\
+					self._mtab.contains(os.path.join(self.mpoint, os.path.basename(from_dev.device))):
 				raise HandlerError("Partition already mounted")
 
 			""" dev like `sdg1` """
@@ -858,7 +858,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			mparts = [dev.mpoint for dev in coreutils.df() if dev.mpoint.startswith(mpt)]
 			LOG.debug('Partitions which will be unmounting: %s' % mparts)
 			for mpt in mparts:
-				if self._mtab.contains(mpoint=mpt, reload=True):
+				if self._mtab.contains(mpt, reload=True):
 					LOG.debug("Unmounting '%s'", mpt)
 					system2("umount -d " + mpt, shell=True, raise_exc=False)
 		else:

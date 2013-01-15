@@ -56,6 +56,10 @@ class _Mounts(object):
 		return any([entry.device == device_or_mpoint or 
 				entry.mpoint == device_or_mpoint 
 				for entry in self._entries])
+
+	def list_entries(self):
+		self.reload()
+		return self._entries
 		
 
 class _Fstab(_Mounts):
@@ -71,12 +75,12 @@ class _Fstab(_Mounts):
 		raise NotImplementedError()
 		
 
-def mounts():
-	return _Mounts()
+def mounts(filename=None):
+	return _Mounts(filename)
 
 
-def fstab():
-	return _Fstab()	
+def fstab(filename=None):
+	return _Fstab(filename)	
 
 
 def mount(device, mpoint, *short_args, **long_kwds):

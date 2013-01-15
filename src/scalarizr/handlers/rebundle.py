@@ -312,14 +312,14 @@ class LinuxImage:
 			os.rmdir(self.mpoint)
 	
 	def umount(self):
-		if self._mtab.contains(mpoint=self.mpoint, reload=True):
+		if self._mtab.contains(self.mpoint, reload=True):
 			LOG.debug("Unmounting '%s'", self.mpoint)
 			system2("umount -d " + self.mpoint, shell=True, raise_exc=False)
 	
 	def _format_image(self):
 		LOG.info("Formatting image")
 		
-		vol_entry = list(v for v in self._mtab.find(mpoint=self._volume) 
+		vol_entry = list(v for v in self._mtab[self._volume]
 						if v.devname.startswith('/dev'))[0]
 		fs = Storage.lookup_filesystem(vol_entry.fstype)
 					
@@ -346,7 +346,7 @@ class LinuxImage:
 
 	def _mount_image(self, options=None):
 		LOG.info("Mounting image")
-		if self._mtab.contains(mpoint=self.mpoint):
+		if self._mtab.contains(self.mpoint):
 			raise HandlerError("Image already mounted")
 		mount.mount(self.devname, self.mpoint, *options)
 	
