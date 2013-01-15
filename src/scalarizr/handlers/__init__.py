@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from __future__ import with_statement
 
 from scalarizr import config
 from scalarizr.bus import bus
@@ -632,6 +633,8 @@ class DbMsrMessages:
 	@ivar: current_xlog_location:  pg_current_xlog_location() on master after snap was created
 	'''
 	
+	DBMSR_NEW_MASTER_UP_RESULT = "DbMsr_NewMasterUpResult"
+
 	"""
 	Also Postgresql behaviour adds params to common messages:
 	
@@ -675,11 +678,10 @@ class FarmSecurityMixin(object):
 		
 	def __on_init(self):
 		bus.on(
-			before_host_up=self.__insert_iptables_rules,
-			before_reboot_finish=self.__insert_iptables_rules,
 			reload=self.__on_reload
 		)
-		self.__on_reload()		
+		self.__on_reload()
+		self.__insert_iptables_rules()		
 	
 	def __on_reload(self):
 		self._queryenv = bus.queryenv_service

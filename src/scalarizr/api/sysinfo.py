@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Nov 25, 2011
 
@@ -15,6 +16,7 @@ import glob
 
 from scalarizr import rpc
 from scalarizr.util import system2, dns, disttool
+from scalarizr.linux import mount
 
 LOG = logging.getLogger(__name__)
 
@@ -343,3 +345,27 @@ class SysInfoAPI(object):
 			}
 
 		return res
+
+
+	@rpc.service_method
+	def statvfs(self, mpoints=None):
+		if not isinstance(mpoints, list):
+			raise Exception('Argument "mpoints" should be a list of strings, '
+						'not %s' % type(mpoints))
+
+		res = dict()
+		mounts = mount.mounts()
+		for mpoint in mpoints:
+			try:
+				assert mpoint in mounts
+				mpoint_stat = os.statvfs(mpoint)
+				res[mpoint] = dict()
+				res[mpoint]['total'] = (mpoint_stat.f_bsize * mpoint_stat.f_blocks) / 1024
+				res[mpoint]['free'] = (mpoint_stat.f_bsize * mpoint_stat.f_bavail) / 1024
+			except:
+				res[mpoint] = None
+
+		return res
+
+
+

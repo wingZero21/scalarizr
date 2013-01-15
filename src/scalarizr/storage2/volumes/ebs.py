@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from __future__ import with_statement
 
 import sys
 import os
@@ -117,8 +118,6 @@ class EbsMixin(object):
 			if sys.exc_type.__name__ not \
 				in ('AttributeError', 'NoAuthHandlerFound'):
 				raise
-		
-
 
 	def _avail_zone(self):
 		return __node__['ec2']['avail_zone']
@@ -183,7 +182,7 @@ class EbsVolume(base.Volume, EbsMixin):
 			new_vol.ensure()
 		finally:
 			try:
-				snap.destroy(force=True)
+				snap.destroy()
 			except:
 				e = sys.exc_info()[1]
 				LOG.error('Temporary snapshot desctruction failed: %s' % e)

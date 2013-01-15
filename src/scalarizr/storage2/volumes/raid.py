@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from __future__ import with_statement
 
 __author__ = 'Nick Demyanchuk'
 
@@ -56,19 +57,27 @@ class RaidVolume(base.Volume):
 		# Backward compatibility with old storage
 		if vg is not None:
 			vg = os.path.basename(vg)
-
+		self._v1_compat = False
+		if disks:
+			disks = [storage2.volume(disk) for disk in disks]
 		super(RaidVolume, self).__init__(disks=disks or [],
 				raid_pv=raid_pv, level=level and int(level), 
 				lvm_group_cfg=lvm_group_cfg,
 				vg=vg, pv_uuid=pv_uuid, **kwds)
 		self.features.update({'restore': True, 'grow': True})
 
-
 	def _ensure(self):
+		self._v1_compat = self.snap and len(self.snap['disks']) and \
+						isinstance(self.snap['disks'][0], dict) and \
+						'snapshot' in self.snap['disks'][0]
 		if self.snap:
 			disks = []
 			try:
+				# @fixme: pv should be based on a disk config with snapshot taste
+				# @todo: create disks concurrently
 				for disk_snap in self.snap['disks']:
+					if self._v1_compat:
+						disk_snap = disk_snap['snapshot']
 					snap = storage2.snapshot(disk_snap)
 					disks.append(snap.restore())
 			except:
@@ -78,7 +87,11 @@ class RaidVolume(base.Volume):
 
 			self.disks = disks
 
-			self.vg = self.snap['vg']
+			if self._v1_compat:
+				# is some old snapshots /dev/vgname occured
+				self.vg = os.path.basename(self.snap['vg'])
+			else:
+				self.vg = self.snap['vg']
 			self.level = int(self.snap['level'])
 			self.pv_uuid = self.snap['pv_uuid']
 			self.lvm_group_cfg = self.snap['lvm_group_cfg']
@@ -100,7 +113,6 @@ class RaidVolume(base.Volume):
 		self.disks = disks
 
 		disks_devices = [disk.device for disk in self.disks]
-		vg_name = os.path.basename(self.vg)
 
 		if self.lvm_group_cfg:
 			try:
@@ -113,28 +125,36 @@ class RaidVolume(base.Volume):
 						mdadm.mdadm('misc', None, disk,
 									zero_superblock=True, force=True)
 
-					kwargs = dict(force=True, metadata='default',
-								  level=self.level, assume_clean=True,
-								  raid_devices=len(disks_devices))
-					mdadm.mdadm('create', raid_device, *disks_devices, **kwargs)
+					try:
+						kwargs = dict(force=True, metadata='default',
+									  level=self.level, assume_clean=True,
+									  raid_devices=len(disks_devices))
+						mdadm.mdadm('create', raid_device, *disks_devices, **kwargs)
+					except:
+						if self.level == 10 and self._v1_compat:
+							self._v1_repair_raid10(raid_device)
+						else:
+							raise
 				else:
 				"""
 				mdadm.mdadm('assemble', raid_device, *disks_devices)
 				mdadm.mdadm('misc', None, raid_device, wait=True, raise_exc=False)
 
+			# Restore vg config
+			vg_restore_file = tempfile.mktemp()
+			with open(vg_restore_file, 'w') as f:
+				f.write(base64.b64decode(self.lvm_group_cfg))
+
+			# Ensure RAID physical volume
 			try:
 				lvm2.pvs(raid_device)
 			except:
-				lvm2.pvcreate(raid_device, uuid=self.pv_uuid)
-
-			# Restore vg
-			tmpfile = tempfile.mktemp()
-			try:
-				with open(tmpfile, 'w') as f:
-					f.write(base64.b64decode(self.lvm_group_cfg))
-				lvm2.vgcfgrestore(vg_name, file=tmpfile)
+				lvm2.pvcreate(raid_device, uuid=self.pv_uuid, 
+							restorefile=vg_restore_file)
 			finally:
-				os.remove(tmpfile)
+				lvm2.vgcfgrestore(self.vg, file=vg_restore_file)
+				os.remove(vg_restore_file)
+				
 
 			# Check that logical volume exists
 			lv_infos = lvm2.lvs(self.vg)
@@ -145,7 +165,7 @@ class RaidVolume(base.Volume):
 			self.device = lvm2.lvpath(self.vg, lv_name)
 
 			# Activate volume group
-			lvm2.vgchange(vg_name, available='y')
+			lvm2.vgchange(self.vg, available='y')
 
 			# Wait for logical volume device file
 			util.wait_until(lambda: os.path.exists(self.device),
@@ -162,20 +182,48 @@ class RaidVolume(base.Volume):
 			lvm2.pvcreate(raid_device, force=True)
 			self.pv_uuid = lvm2.pvs(raid_device)[raid_device].pv_uuid
 
-			lvm2.vgcreate(vg_name, raid_device)
+			lvm2.vgcreate(self.vg, raid_device)
 
-			out, err = lvm2.lvcreate(vg_name, extents='100%FREE')[:2]
+			out, err = lvm2.lvcreate(self.vg, extents='100%FREE')[:2]
 			try:
 				clean_out = out.strip().split('\n')[-1].strip()
 				vol = re.match(self.lv_re, clean_out).group(1)
-				self.device = lvm2.lvpath(vg_name, vol)
+				self.device = lvm2.lvpath(self.vg, vol)
 			except:
 				e = 'Logical volume creation failed: %s\n%s' % (out, err)
 				raise Exception(e)
 
-			self.lvm_group_cfg = lvm2.backup_vg_config(vg_name)
+			self.lvm_group_cfg = lvm2.backup_vg_config(self.vg)
 
 		self.raid_pv = raid_device
+
+
+	def _v1_repair_raid10(self, raid_device):
+		'''
+		Situation is the following:
+		raid10 creation from the only half of snapshots failed.
+		'''
+		disks_devices = [disk.device for disk in self.disks]
+		missing_devices = disks_devices[::2]
+		md0_devices = [disks_devices[i] if i % 2 else 'missing' \
+						for i in range(0, len(disks_devices))]
+		
+
+		# Stop broken raid
+		if os.path.exists('/dev/md127'):
+			mdadm.mdadm('stop', '/dev/md127', force=True)
+
+		# Create raid with missing disks
+		kwargs = dict(force=True, metadata='default',
+					  level=self.level, assume_clean=True,
+					  raid_devices=len(disks_devices))
+		mdadm.mdadm('create', raid_device, *md0_devices, **kwargs)
+		mdadm.mdadm('misc', raid_device, wait=True)
+
+		# Add missing devices one by one
+		for device in missing_devices:
+			mdadm.mdadm('add', raid_device, device)
+		mdadm.mdadm('misc', raid_device, wait=True)
 
 
 	def _detach(self, force, **kwds):
@@ -198,6 +246,7 @@ class RaidVolume(base.Volume):
 		self.raid_pv = None
 
 		for disk in self.disks:
+			disk = storage2.volume(disk)
 			disk.detach(force=force)
 
 		self.device = None
@@ -207,10 +256,11 @@ class RaidVolume(base.Volume):
 		coreutils.sync()
 		lvm2.dmsetup('suspend', self.device)
 		try:
-			descr = 'Raid%s disk ${index}. %s' % (self.level, description or '')
+			description = 'Raid%s disk ${index}%s' % (self.level, \
+							'. %s' % description if description else '')
 			disks_snaps = storage2.concurrent_snapshot(
 				volumes=self.disks,
-				description=descr,
+				description=description,
 				tags=tags, **kwds
 			)
 
@@ -230,6 +280,7 @@ class RaidVolume(base.Volume):
 		remove_disks = kwds.get('remove_disks')
 		if remove_disks:
 			for disk in self.disks:
+				disk = storage2.volume(disk)
 				disk.destroy(force=force)
 			self.disks = []
 

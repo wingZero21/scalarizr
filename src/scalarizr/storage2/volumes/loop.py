@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Jan 6, 2011
 
@@ -39,7 +40,6 @@ class LoopVolume(base.Volume):
 		super(LoopVolume, self).__init__(file=file, size=size, 
 				zerofill=zerofill, **kwds)
 		self.features.update(dict(restore=True, grow=True))
-		
 	
 	def _ensure(self):
 		if self.snap:

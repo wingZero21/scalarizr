@@ -1,3 +1,4 @@
+from __future__ import with_statement
 
 import os
 
@@ -30,5 +31,6 @@ class TmpfsVolume(base.Volume):
 					'-t', 'tmpfs',
 					'-o', 'size=%sM' % self.size)
 			self.device = self.mpoint
+
 
 storage2.volume_types['tmpfs'] = TmpfsVolume

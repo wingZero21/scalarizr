@@ -1,3 +1,4 @@
+from __future__ import with_statement
 import collections
 
 from scalarizr.externals.chef.api import ChefAPI

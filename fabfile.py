@@ -3,11 +3,18 @@ from fabric.api import *
 
 env.user = 'root'
 
-def upload(hostname=None, keyname=None):
+def _target(hostname=None, keyname=None):
 	if hostname and keyname:
 		env.host_string = hostname
-		env.key_filename = os.path.expanduser('~/keys/%s' % keyname)
+		for place in ('~/keys', '~/Workspace/login'):
+			keyfile = os.path.expanduser(place + '/' + keyname)
+			if os.path.exists(keyfile):
+				env.key_filename = keyfile
+				break
 
+
+def upload(hostname=None, keyname=None):
+	_target(hostname, keyname)
 	local('rm -f /tmp/scalarizr-0.9.tar.gz')
 	local('tar -czf /tmp/scalarizr-0.9.tar.gz .')
 	run('rm -rf /root/scalarizr')
@@ -18,10 +25,7 @@ def upload(hostname=None, keyname=None):
 
 
 def setup_tests_deps(hostname=None, keyname=None):
-	if hostname and keyname:
-		env.host_string = hostname
-		env.key_filename = os.path.expanduser('~/keys/%s' % keyname)
-
+	_target(hostname, keyname)
 	with settings(warn_only=True):
 		if run('cat /etc/*-release | head -1 | grep -q Ubuntu').succeeded:
 			run('which easy_install || apt-get install python-setuptools')

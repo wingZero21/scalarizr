@@ -1,3 +1,4 @@
+from __future__ import with_statement
 # Copyright 2001-2007 by Vinay Sajip. All Rights Reserved.
 #
 # Permission to use, copy, modify, and distribute this software and its

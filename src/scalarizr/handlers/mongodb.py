@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Sep 30, 2011
 
@@ -36,6 +37,8 @@ import tarfile
 import tempfile
 import datetime
 import threading
+
+import pymongo
 
 from scalarizr import config
 from scalarizr.bus import bus
@@ -265,17 +268,15 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
-		bus.on("before_reboot_start", self.on_before_reboot_start)
-		bus.on("before_reboot_finish", self._insert_iptables_rules)	
-		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
-			self._insert_iptables_rules()
+		#if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
+		self._insert_iptables_rules()
 		
 		if 'ec2' == self._platform.name:
 			updates = dict(hostname_as_pubdns = '0')
 			self._cnf.update_ini('ec2', {'ec2': updates}, private=False)
 
-		if self._cnf.state == ScalarizrState.INITIALIZING:
-			self.mongodb.stop_default_init_script()
+		#if self._cnf.state == ScalarizrState.INITIALIZING:
+		self.mongodb.stop_default_init_script()
 		
 		if self._cnf.state == ScalarizrState.RUNNING:
 	
@@ -285,6 +286,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			if not self.storage_vol.mounted():
 				self.storage_vol.mount()
 				
+			self.mongodb.password = self.scalr_password
 			self.mongodb.start_shardsvr()
 			
 			if self.shard_index == 0 and self.rs_id == 0:
@@ -293,7 +295,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			if self.rs_id in (0,1):
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 				self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-				self.mongodb.start_router()
+				self.mongodb.start_router(5)
 
 
 	def on_reload(self):
@@ -311,10 +313,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.disable_requiretty()
 		key_path = self._cnf.key_path(BEHAVIOUR)
 		self.mongodb.keyfile = mongo_svc.KeyFile(key_path)
-
-
-	def on_before_reboot_finish(self, *args, **kwargs):
-		self._insert_iptables_rules()
 		
 
 	def on_host_init_response(self, message):
@@ -353,7 +351,8 @@ class MongoDBHandler(ServiceCtlHandler):
 					self._cnf.write_key(BEHAVIOUR, mongodb_key)
 					
 					mongodb_data['password'] = mongodb_data.get('password') or cryptotool.pwgen(10)
-						
+					self.mongodb.password = mongodb_data['password']
+
 					self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
 					self._update_config(mongodb_data)
 		
@@ -557,15 +556,21 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 			with op.step(self._step_start_router):
-				self.mongodb.start_router()
+				self.mongodb.start_router(5)
 				hostup_msg.mongodb['router'] = 1
 
 			if self.rs_id == 0 and self.shard_index == 0:
 				with op.step(self._step_create_scalr_users):
 					try:
 						self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+					except pymongo.errors.OperationFailure, err:
+						if 'unauthorized' in str(err):
+							self._logger.warning(err)
+						else:
+							raise
 					except BaseException, e:
 						self._logger.error(e)
+
 						
 			with op.step(self._step_auth_on_cfg_server_and_router):
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
@@ -1075,12 +1080,14 @@ class MongoDBHandler(ServiceCtlHandler):
 		"""
 		
 		self._logger.info("Initializing %s primary" % BEHAVIOUR)
-
 		self.plug_storage()
-
 		self.mongodb.prepare(rs_name)
+
+		#Fix for mongo 2.2 auth, see https://jira.mongodb.org/browse/SERVER-6591
+		self._logger.info("Starting mongod instance without --auth to add the first superuser")
+		self.mongodb.auth = False
 		self.mongodb.start_shardsvr()
-				
+
 		""" Check if replset already exists """
 		if not list(self.mongodb.cli.connection.local.system.replset.find()):
 			self.mongodb.initiate_rs()
@@ -1097,6 +1104,12 @@ class MongoDBHandler(ServiceCtlHandler):
 			rs_cfg['version'] += 10
 			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
+
+		self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+		self.mongodb.mongod.stop("Terminating mongod instance to run it with --auth option")
+		self.mongodb.auth = True
+		self.mongodb.start_shardsvr()
+		self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 						
 		# Create snapshot
 		self.mongodb.cli.sync(lock=True)
@@ -1480,21 +1493,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.REPLICA_DEFAULT_PORT)},
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.CONFIG_SERVER_DEFAULT_PORT)},
 			])
-
-		"""
-		ipt = iptables.IpTables()
-		if ipt.enabled():		
-			rules = []
-			
-			# Scalarizr ports
-			rules.append(iptables.RuleSpec(dport=mongo_svc.ROUTER_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
-			rules.append(iptables.RuleSpec(dport=mongo_svc.ARBITER_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
-			rules.append(iptables.RuleSpec(dport=mongo_svc.REPLICA_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
-			rules.append(iptables.RuleSpec(dport=mongo_svc.CONFIG_SERVER_DEFAULT_PORT, jump='ACCEPT', protocol=iptables.P_TCP))
-			
-			for rule in rules:
-				ipt.insert_rule(1, rule_spec = rule)
-		"""
 		
 			
 	@property
@@ -1732,7 +1730,7 @@ class ClusterTerminateWatcher(threading.Thread):
 				messages = [pair[1] for pair in msg_queue_pairs]
 
 				for msg in messages:
-					if not msg.name == MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT:
+					if msg.name != MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT:
 						continue
 
 					try:

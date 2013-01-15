@@ -8,6 +8,8 @@ import subprocess
 import json
 import logging
 import hashlib
+import base64
+import mock
 from copy import copy
 from ConfigParser import ConfigParser
 from random import choice
@@ -15,7 +17,9 @@ from random import choice
 from lettuce import step, world, before, after
 from boto import connect_s3
 
-from scalarizr.storage2.cloudfs import s3, LargeTransfer, LOG
+from scalarizr.storage2.cloudfs import LargeTransfer, LOG
+from scalarizr.storage2.cloudfs import s3, gcs
+from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 
 
 #
@@ -26,9 +30,28 @@ from scalarizr.storage2.cloudfs import s3, LargeTransfer, LOG
 # prevent ini parser from lowercasing params
 ConfigParser.optionxform = lambda self, x: x
 
-
-# patch get_conn because platfrom is None
+# make connections work
+# s3
 s3.S3FileSystem._get_connection = lambda self: connect_s3()
+# gcs
+def get_pk(f="gcs_pk.p12"):
+	with open(f, "rb") as fd:
+		pk = fd.read()
+	return base64.b64encode(pk)
+
+ACCESS_DATA = {
+	"service_account_name": '876103924605@developer.gserviceaccount.com',
+	"key": get_pk(),
+}
+
+gcs.bus = mock.MagicMock()
+gcs.bus.platform.get_access_data = lambda k: ACCESS_DATA[k]
+
+gsm = GoogleServiceManager(gcs.bus.platform,
+	"storage", "v1beta1", STORAGE_FULL_SCOPE)
+
+gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
+gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
 
 
 class S3(s3.S3FileSystem):
@@ -38,31 +61,13 @@ class S3(s3.S3FileSystem):
 		ls = self.ls(parent)
 		return remote_path in ls
 
-	def delete(self, remote_path):
-		import sys
-		from boto.exception import S3ResponseError
-		from scalarizr.storage2.cloudfs.s3 import TransferError
 
-		bucket_name, key_name = self.parse_url(remote_path)
+class GCS(gcs.GCSFileSystem):
 
-		try:
-			connection = self._get_connection()
-
-			try:
-				if not self._bucket_check_cache(bucket_name):
-					self._bucket = connection.get_bucket(bucket_name, validate=False)
-				key = self._bucket.get_key(key_name)
-				if key is None: raise TransferError("Key is None. No such key?")  ###
-			except S3ResponseError, e:
-				if e.code in ('NoSuchBucket', 'NoSuchKey'):
-					raise TransferError("S3 path '%s' not found" % remote_path)
-				raise
-
-			return key.delete()
-
-		except:
-			exc = sys.exc_info()
-			raise TransferError, exc[1], exc[2]
+	def exists(self, remote_path):
+		parent = os.path.dirname(remote_path.rstrip('/'))
+		ls = self.ls(parent)
+		return remote_path in ls
 
 
 #
@@ -73,11 +78,12 @@ LOG.setLevel(logging.DEBUG)
 LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
 
 
+"""
 @before.all
 def global_setup():
 	subprocess.Popen(["strace", "-T", "-t", "-f", "-q", "-o", "strace_latest",
 					  "-p", str(os.getpid())], close_fds=True)
-
+"""
 
 #
 #
@@ -88,7 +94,12 @@ STORAGES = {
 	"s3": {
 		"url": "s3://scalr.test_bucket/vova_test",
 		"driver": S3,
-	}
+	},
+	"gcs": {
+		"url": "gcs://vova-test",
+		"driver": GCS,
+
+	},
 }
 
 
@@ -195,6 +206,7 @@ def i_upload_it_with_gzipping(step, storage):
 	world.manifest_url = LargeTransfer(world.sources[0], world.destination).run()
 
 
+
 @step("I upload multiple sources to ([^\s]+) with gzipping")
 def i_upload_multiple_sources_with_gzipping(step, storage):
 	world.destination = STORAGES[storage]["url"]
@@ -281,7 +293,8 @@ def i_replace_the_manifest_with_old_repr(step):
 
 	world.driver.delete(world.manifest_url)
 
-	world.manifest_url = world.driver.put(manifest_ini_path, os.path.dirname(world.manifest_url))
+	world.manifest_url = world.driver.put(manifest_ini_path,
+		os.path.join(os.path.dirname(world.manifest_url), ''))
 	LOG.debug("NEW %s" % world.manifest_url)
 
 
@@ -306,21 +319,31 @@ def i_expect_failed_list_returned(step):
 	assert len(world.dl_result["failed"]) == 1
 
 
-#@step("Driver test")
-def driver_test(step):
-	url = STORAGES["s3"]["url"]
-	driver = STORAGES["s3"]["driver"]()
+@step("I have a (\d+) megabytes stream (\w+)")
+def i_have_a_stream(step, megabytes, name):
+	abs_path = os.path.join(world.basedir, name)
+	stream_md5 = make_file(abs_path, megabytes)
+	stream = open(abs_path, 'rb')
 
-	local = os.path.join(world.basedir, "starget")
-	target = os.path.join(url, "target")
-
-	make_file(local, 10)
-	#driver.put(local, target)
-	driver.delete(os.path.join(target, "starget"))
+	world.sources.append(stream)
+	world.items[os.path.basename(stream.name)] = stream_md5
 
 
+@step("I upload it to ([^\s]+) with intentional interrupt")
+def i_upload_it_with_intentional_interrupt(step, storage):
+	world.destination = STORAGES[storage]["url"]
+	world.driver = STORAGES[storage]["driver"]()
+
+	lt = LargeTransfer(world.sources[0], world.destination, chunk_size=20, num_workers=2)
+	lt.on(transfer_complete=lambda *args: lt.kill())
+	lt.run()
+
+	world.manifest_url = os.path.join(world.destination, lt.transfer_id)
 
 
+@step("I expect cloud path cleaned")
+def i_expect_path_clean(step):
+	assert not world.driver.ls(world.manifest_url)
 
 
 

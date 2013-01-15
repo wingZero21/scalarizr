@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from __future__ import with_statement
 
 import os
 import re
@@ -114,363 +115,103 @@ class XtrabackupMixin(object):
 
 	def _check_backup_type(self):
 		msg = self.error_messages['invalid_backup_type'] % self.backup_type
-		assert self.backup_type in ('full', 'incremental'), msg
+		assert self.backup_type in ('full', 'incremental', 'auto'), msg
 
-
-class XtrabackupBackup(XtrabackupMixin, backup.Backup):
-	def __init__(self,
-				backup_type='full',
-				from_lsn=None,
-				backup_dir='/mnt/dbbackup',
-				volume=None,
-				**kwds):
-		'''
-		:type backup_type: string
-		:param backup_type: Xtrabackup type. Valid values are
-			* full
-			* incremental
-
-		:type from_lsn: int
-		:param from_lsn: Log sequence number to start from
-
-		:type backup_dir: string
-		:param backup_dir: Directory to store backup files
-
-		:type volume: :class:`scalarizr.storage2.volumes.base.Volume` or dict
-		:param volume: A volume object or configuration to ensure and mount
-			to 'backup_dir'. After backup completion it will be snapshotted
-			and snapshot will be available in Restore configuration
-		'''
-		backup.Backup.__init__(self,
-				backup_type=backup_type, from_lsn=from_lsn,
-				backup_dir=backup_dir, volume=volume, **kwds)
-		XtrabackupMixin.__init__(self)
-
-	def _run(self):
-		self._check_backup_type()
-		if self.volume:
-			self.volume = storage2.volume(self.volume)
-			if self.tags:
-				self.volume.tags = self.tags
-			self.volume.mpoint = self.backup_dir
-			self.volume.ensure(mount=True, mkfs=True)
-		elif not os.path.exists(self.backup_dir):
-			os.makedirs(self.backup_dir)
-
-		kwds = {}
-		if self.backup_type == 'incremental':
-			from_lsn = self.from_lsn
-			if not from_lsn:
-				checkpoints = self._checkpoints()
-				from_lsn = checkpoints['to_lsn']
-			kwds.update({
-				'incremental': True,
-				'incremental_lsn': from_lsn
-			})
-		elif 'full' == self.backup_type and self.volume:
-			coreutils.clean_dir(self.backup_dir)
-
-		exc_info = None
-		try:
-			LOG.info('Creating %s xtrabackup', self.backup_type)
-			innobackupex(self.backup_dir,
-					user=__mysql__['root_user'],
-					password=__mysql__['root_password'],
-					**kwds)
-			log_file, log_pos = self._binlog_info()
-			chkpoints = self._checkpoints()
-			to_lsn = chkpoints['to_lsn']
-			from_lsn = chkpoints['from_lsn']
-			snapshot = None
-		except:
-			exc_info = sys.exc_info()
-		finally:
-			if self.volume:
-				try:
-					self.volume.detach()
-				except:
-					msg = 'Failed to detach backup volume: %s'
-					LOG.warn(msg, sys.exc_info()[1])
-		if exc_info:
-			raise exc_info[0], exc_info[1], exc_info[2]
-		if self.volume:
-			snapshot = self.volume.snapshot(
-						self.description or 'MySQL xtrabackup',
-						self.tags)
-
-		return backup.restore(
-				type='xtrabackup',
-				log_file=log_file,
-				log_pos=log_pos,
-				from_lsn=from_lsn,
-				to_lsn=to_lsn,
-				backup_type=self.backup_type,
-				backup_dir=self.backup_dir,
-				volume=self.volume.clone(),
-				snapshot=snapshot)
-
-	def _latest_backup_dir(self):
-		try:
-			dirs = filter(lambda x: not x.startswith('.'), os.listdir(self.backup_dir))
-			name = sorted(dirs)[0]
-		except IndexError:
-			msg = 'Failed to find any previous backup in %s'
-			raise Error(msg, self.backup_dir)
-		else:
-			return os.path.join(self.backup_dir, name)
-
-	def _checkpoints(self, filename=None):
-		if not filename:
-			filename = self._latest_backup_dir() + '/xtrabackup_checkpoints'
-		ret = {}
-		for line in open(filename):
-			key, value = line.split('=')
-			ret[key.strip()] = value.strip()
-		return ret
-
-	def _binlog_info(self, filename=None):
-		if not filename:
-			filename = self._latest_backup_dir() + '/xtrabackup_binlog_info'
-		return map(string.strip, open(filename).read().strip().split('\t'))
-
-
-class XtrabackupRestore(XtrabackupMixin, backup.Restore):
-	'''
-	Example:
-		rst = backup.restore(
-					type='xtrabackup',
-					snapshot=dict(type='ebs', id='snap-12345678'))
-	'''
-	def __init__(self,
-				log_file=None,
-				log_pos=None,
-				from_lsn=None,
-				to_lsn=None,
-				backup_type=None,
-				backup_dir='/mnt/dbbackup',
-				volume=None,
-				snapshot=None,
-				**kwds):
-		'''
-		:type log_file: string
-		:param log_file: MySQL binary log file (e.g. binlog.000003)
-
-		:type log_pos: int
-		:param log_pos: MySQL binary log file position (e.g. 126)
-
-		:type from_lsn: int
-		:param from_lsn: InnoDB start log sequence number
-
-		:type to_lsn: int
-		:param to_lsn: InnoDB end log sequence number
-
-		:type backup_type: string
-		:param backup_type: Xtrabackup type. Valid values are
-			* full
-			* incremental
-
-		:type backup_dir: string
-		:param backup_dir: Directory to store backup files
-
-		:type volume: :class:`scalarizr.storage2.volumes.base.Volume` or dict
-		:param volume: A volume object or configuration to ensure and mount
-			to 'backup_dir'.
-
-		:type snapshot: :class:`scalarizr.storage2.volumes.base.Snapshot`
-			or dict
-		:param snapshot: A snapshot object to restore backup Volume from
-		'''
-		backup.Restore.__init__(self,
-				log_file=log_file, log_pos=log_pos, from_lsn=from_lsn,
-				to_lsn=to_lsn, backup_type=backup_type, backup_dir=backup_dir,
-				volume=volume, snapshot=snapshot, **kwds)
-		XtrabackupMixin.__init__(self)
-		self.features['master_binlog_reset'] = True
-		self._mysql_init = mysql_svc.MysqlInitScript()
-		self._data_dir = None
-		self._binlog_dir = None
-		self._log_bin = None
-
-	def _run(self):
-		if self.backup_type:
-			self._check_backup_type()
-		rst_volume = None
-		exc_info = None
-		'''
-		# Create custom my.cnf
-		# XXX: it's not a good think to do, but we should create this hacks,
-		# cause when handler calls restore.run() my.cnf is not patched yet
-		shutil.copy(__mysql__['my.cnf'], '/tmp/my.cnf')
-		mycnf = metaconf.Configuration('mysql')
-		mycnf.read('/tmp/my.cnf')
-		try:
-			mycnf.options('mysqld')
-		except metaconf.NoPathError:
-			mycnf.add('mysqld')
-		mycnf.set('mysqld/datadir', __mysql__['data_dir'])
-		mycnf.set('mysqld/log-bin', __mysql__['binlog_dir'])
-		mycnf.write('/tmp/my.cnf')
-		'''
-
-		my_defaults = my_print_defaults('mysqld')
-		rst_volume = None
-		self._data_dir = os.path.normpath(my_defaults['datadir'])
-		LOG.info('_run: datadir is "%s"' % self._data_dir)
-		self._log_bin = os.path.normpath(my_defaults['log_bin'])
-		if self._log_bin.startswith('/'):
-			self._binlog_dir = os.path.dirname(self._log_bin)
-
-		try:
-			if self.snapshot:
-				LOG.info('Creating restore volume from snapshot')
-				if self.volume:
-					# Clone volume object
-					self.volume = storage2.volume(self.volume)
-					rst_volume = self.volume.clone()
-					rst_volume.snap = self.snapshot
-				else:
-					self.snapshot = storage2.snapshot(self.snapshot)
-					rst_volume = storage2.volume(type=self.snapshot.type,
-											snap=self.snapshot)
-				rst_volume.tags.update({'tmp': 1})
-				rst_volume.mpoint = self.backup_dir
-				rst_volume.ensure(mount=True)
-
-			if not os.listdir(self.backup_dir):
-				msg = 'Failed to find any backups in %s'
-				raise Error(msg, self.backup_dir)
-
-			backups = sorted(os.listdir(self.backup_dir))
-			LOG.info('Preparing the base backup')
-			base = backups.pop(0)
-			target_dir = os.path.join(self.backup_dir, base)
-			innobackupex(target_dir,
-						apply_log=True,
-						redo_only=True,
-						user=__mysql__['root_user'],
-						password=__mysql__['root_password'])
-			for inc in backups:
-				LOG.info('Preparing incremental backup %s', inc)
-				innobackupex(target_dir,
-							apply_log=True,
-							redo_only=True,
-							incremental_dir=os.path.join(self.backup_dir, inc),
-							user=__mysql__['root_user'],
-							password=__mysql__['root_password'])
-			LOG.info('Preparing the full backup')
-			innobackupex(target_dir,
-						apply_log=True,
-						user=__mysql__['root_user'],
-						password=__mysql__['root_password'])
-
-			LOG.info('Copying backup to datadir')
-			self._mysql_init.stop()
-			self._start_copyback()
-			try:
-				innobackupex(target_dir, copy_back=True)
-				coreutils.chown_r(self._data_dir,
-								'mysql', 'mysql')
-				self._mysql_init.start()
-				self._commit_copyback()
-			except:
-				self._rollback_copyback()
-				raise
-		except:
-			exc_info = sys.exc_info()
-		finally:
-			if rst_volume:
-				LOG.info('Destroying restore volume')
-				try:
-					rst_volume.destroy(force=True)
-				except:
-					msg = 'Failed to destroy volume %s: %s'
-					LOG.warn(msg, rst_volume.id, sys.exc_info()[1])
-		if exc_info:
-			raise exc_info[0], exc_info[1], exc_info[2]
-
-	def _start_copyback(self):
-		src = self._data_dir
-		dst = src + '.bak'
-		LOG.debug('Backup %s -> %s', src, dst)
-		os.rename(src, dst)
-		if self._binlog_dir:
-			for name in glob.glob(self._log_bin + '*'):
-				src = os.path.join(self._binlog_dir, name)
-				dst = src + '.bak'
-				LOG.debug('Backup %s -> %s', src, dst)
-				os.rename(src, dst)
-		os.makedirs(self._data_dir)
-
-	def _commit_copyback(self):
-		shutil.rmtree(self._data_dir + '.bak')
-		if self._binlog_dir:
-			for name in glob.glob(self._log_bin + '*.bak'):
-				LOG.debug('Remove %s' % os.path.join(self._binlog_dir, name))
-				os.remove(os.path.join(self._binlog_dir, name))
-
-	def _rollback_copyback(self):
-		if os.path.exists(self._data_dir):
-			shutil.rmtree(self._data_dir)
-		os.rename(self._data_dir + '.bak', self._data_dir)
-		if self._binlog_dir:
-			for name in glob.glob(self._log_bin + '*.bak'):
-				dstname = os.path.splitext(name)[0]
-				shutil.move(os.path.join(self._binlog_dir, name),
-							os.path.join(self._binlog_dir, dstname))
+	def _client(self):
+		return mysql_svc.MySQLClient(
+					__mysql__['root_user'],
+					__mysql__['root_password'])
 
 
 class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 	def __init__(self,
 				backup_type='full',
+				no_lock=False,
 				from_lsn=None,
-				cloudfs_dest=None,
+				compressor=None,
+				prev_cloudfs_source=None,
+				cloudfs_target=None,
 				**kwds):
 		backup.Backup.__init__(self,
 				backup_type=backup_type,
+				no_lock=no_lock,
 				from_lsn=int(from_lsn or 0),
-				cloudfs_dest=cloudfs_dest,
+				compressor=compressor,
+				prev_cloudfs_source=prev_cloudfs_source,
+				cloudfs_target=cloudfs_target,
 				**kwds)
 		XtrabackupMixin.__init__(self)
 		self._re_lsn = re.compile(r"xtrabackup: The latest check point " \
 								"\(for incremental\): '(\d+)'")
 		self._re_binlog = re.compile(r"innobackupex: MySQL binlog position: " \
 								"filename '([^']+)', position (\d+)")
+		self._re_lsn_innodb_stat = re.compile(r"Log sequence number \d+ (\d+)")
 
 	def _run(self):
 		self._check_backup_type()
 
 		kwds = {
 			'stream': 'xbstream',
+			# Compression is broken
+			#'compress': True,
+			#'compress_threads': os.sysconf('SC_NPROCESSORS_ONLN'),
 			'user': __mysql__['root_user'],
 			'password': __mysql__['root_password']
 		}
-		if self.backup_type == 'incremental':
-			self._check_attr('from_lsn')
-			kwds.update({
-				'incremental': True,
-				'incremental_lsn': self.from_lsn
-			})
+		if self.no_lock:
+			kwds['no_lock'] = True
+		if not int(__mysql__['replication_master']):
+			kwds['safe_slave_backup'] = True
 
-		xbak = innobackupex.args(**kwds).popen()
-		stream_in = cloudfs.namedstream(xbak.stdout, 'xtrabackup')
-		LOG.debug('Creating LargeTransfer, src=%s dst=%s', stream_in, self.cloudfs_dest)
+		current_lsn = None
+		if self.backup_type == 'auto':
+			client = self._client()
+			innodb_stat = client.fetchone('SHOW INNODB STATUS')[0]
+			for line in innodb_stat.splitlines():
+				m = self._re_lsn_innodb_stat.search(line):
+				if m:
+					current_lsn = int(m.group(1))
+					break
+
+		if self.backup_type in ('incremental', 'auto'):
+			if self.prev_cloudfs_source:
+				# Download manifest and get it's to_lsn
+				mnf = cloudfs.Manifest(cloudfs_path=self.prev_cloudfs_source)
+				self.from_lsn = mnf.meta['to_lsn']
+			else:
+				self._check_attr('from_lsn')
+			if self.backup_type == 'incremental' or \
+				(self.backup_type == 'auto' and current_lsn and current_lsn >= self.from_lsn):
+				kwds.update({
+					'incremental': True,
+					'incremental_lsn': self.from_lsn
+				})
+		LOG.debug('self._config: %s', self._config)
+		LOG.debug('kwds: %s', kwds)
+
+		if self.backup_type == 'incremental':
+			LOG.info('Creating incremental xtrabackup (from LSN: %s)', self.from_lsn)
+		else:
+			LOG.info('Creating full xtrabackup')
+
+		xbak = innobackupex.args(__mysql__['tmp_dir'], **kwds).popen()
+		LOG.debug('Creating LargeTransfer, src=%s dst=%s', xbak.stdout, self.cloudfs_target)
 		transfer = cloudfs.LargeTransfer(
-					stream_in,
-					self.cloudfs_dest,
-					gzip_it=True)
-		cloudfs_dest = transfer.run()
-		xbak.wait()
+					[xbak.stdout],
+					self.cloudfs_target,
+					compressor=self.compressor)
+		cloudfs_target = transfer.run()
+		stderr = xbak.communicate()[1]
 		if xbak.returncode:
-			msg = xbak.stderr.read()
-			raise Error(msg)
+			raise Error(stderr)
 
 		log_file = log_pos = to_lsn = None
-		for line in xbak.stderr.readlines():
-			m = self._re_lsn.search()
+		for line in stderr.splitlines():
+			m = self._re_lsn.search(line)
 			if m:
 				to_lsn = int(m.group(1))
 				continue
-			m = self._re_binlog.search()
+			m = self._re_binlog.search(line)
 			if m:
 				log_file = m.group(1)
 				log_pos = int(m.group(2))
@@ -478,38 +219,70 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			if log_file and log_pos and to_lsn:
 				break
 
-		return backup.restore(type='xtrabackup',
+		rst = backup.restore(type='xtrabackup',
 				backup_type=self.backup_type,
 				from_lsn=self.from_lsn,
 				to_lsn=to_lsn,
-				cloudfs_src=cloudfs_dest)
+				cloudfs_source=cloudfs_target,
+				prev_cloudfs_source=self.prev_cloudfs_source,
+				log_file=log_file,
+				log_pos=log_pos)
+
+		# Update manifest
+		LOG.debug('rst: %s', dict(rst))
+		mnf = cloudfs.Manifest(cloudfs_path=cloudfs_target)
+		mnf.meta = dict(rst) 
+		mnf.save()
+
+		LOG.info('Created %s xtrabackup. (LSN: %s..%s, log_file: %s, log_pos: %s)',
+				rst.backup_type, rst.from_lsn, rst.to_lsn, rst.log_file, rst.log_pos)
+
+		return rst
 
 
 class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 	def __init__(self,
-				backup_type='full',
-				from_lsn=0,
-				to_lsn=0,
-				cloudfs_src=None,
-				incrementals=None,
+				cloudfs_source=None,
+				prev_cloudfs_source=None,
 				**kwds):
 		backup.Restore.__init__(self,
-				backup_type=backup_type,
-				from_lsn=int(from_lsn or 0),
-				to_lsn=int(to_lsn or 0),
-				cloudfs_src=cloudfs_src,
-				incrementals=incrementals or [],
+				cloudfs_source=cloudfs_source,
+				prev_cloudfs_source=prev_cloudfs_source,
 				**kwds)
 		XtrabackupMixin.__init__(self)
+		self._mysql_init = mysql_svc.MysqlInitScript()
 
 	def _run(self):
-		assert self.backup_type == 'full', 'xtrabackup restore allows to restore only full backups'
-		# todo: allow restore only full backup
+		# Apply resource's meta
+		mnf = cloudfs.Manifest(cloudfs_path=self.cloudfs_source)
+		bak = backup.restore(**mnf.meta)
+
+		incrementals = []
+		if bak.backup_type == 'incremental':
+			incrementals = [bak]
+			while bak.prev_cloudfs_source:
+				mnf = cloudfs.Manifest(cloudfs_path=bak.prev_cloudfs_source)
+				bak = backup.restore(**mnf.meta)
+				if bak.backup_type == 'incremental':
+					incrementals.insert(0, bak)
+		self.incrementals = incrementals
+		if self.incrementals:
+			self.log_file = self.incrementals[-1].log_file
+			self.log_pos = self.incrementals[-1].log_pos
+		else:
+			self.log_file = bak.log_file
+			self.log_pos = bak.log_pos
+
 		coreutils.clean_dir(__mysql__['data_dir'])
 
-		LOG.info('Downloading the base backup (LSN: 0..%d)', self.to_lsn)
-		xbak = cloudfs.LargeTransfer(self.cloudfs_src, __mysql__['data_dir'])
-		xbak.run()
+		LOG.info('Downloading the base backup (LSN: 0..%d)', bak.to_lsn)
+		trn = cloudfs.LargeTransfer(
+				bak.cloudfs_source,
+				__mysql__['data_dir'],
+				streamer=xbstream.args(
+						extract=True,
+						directory=__mysql__['data_dir']))
+		trn.run()
 
 		LOG.info('Preparing the base backup')
 		innobackupex(__mysql__['data_dir'],
@@ -518,20 +291,23 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 				user=__mysql__['root_user'],
 				password=__mysql__['root_password'])
 
-		if self.incrementals:
+		if incrementals:
 			inc_dir = os.path.join(__mysql__['tmp_dir'], 'xtrabackup-restore-inc')
-			os.makedirs(inc_dir)
-			try:
-				i = 0
-				for inc in self.incrementals:
+			i = 0
+			for inc in incrementals:
+				try:
+					os.makedirs(inc_dir)
 					inc = backup.restore(inc)
 					LOG.info('Downloading incremental backup #%d (LSN: %d..%d)', i,
 							inc.from_lsn, inc.to_lsn)
-					xbak = cloudfs.LargeTransfer(
-							inc.cloudfs_src,
+					trn = cloudfs.LargeTransfer(
+							inc.cloudfs_source,
 							inc_dir,
-							decompressor=xstream.args(short=['-x']))
-					xbak.run()  # todo: Largetransfer should support custom decompressor proc
+							streamer=xbstream.args(
+									extract=True,
+									directory=inc_dir))
+
+					trn.run()  # todo: Largetransfer should support custom decompressor proc
 					LOG.info('Preparing incremental backup #%d', i)
 					innobackupex(__mysql__['data_dir'],
 							apply_log=True,
@@ -540,15 +316,26 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 							user=__mysql__['root_user'],
 							password=__mysql__['root_password'])
 					i += 1
-			finally:
-				coreutils.clean_dir(inc_dir)
-				os.remove(inc_dir)
+				finally:
+					coreutils.remove(inc_dir)
 
 		LOG.info('Preparing the full backup')
 		innobackupex(__mysql__['data_dir'],
 				apply_log=True,
 				user=__mysql__['root_user'],
 				password=__mysql__['root_password'])
+		coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+
+		if int(__mysql__['replication_master']):
+			LOG.info("Master will reset it's binary logs, "
+					"so updating binary log position in backup manifest")
+			self._mysql_init.start()
+			self._mysql_init.stop()
+			log_file, log_pos = mysqlbinlog_head()
+			meta = mnf.meta
+			meta.update({'log_file': log_file, 'log_pos': log_pos})
+			mnf.meta = meta
+			mnf.save()
 
 
 #backup.backup_types['xtrabackup'] = XtrabackupBackup
@@ -642,7 +429,7 @@ class Exec(object):
 		assert isinstance(executable, basestring)
 		self.executable = executable
 		self.package = package
-		self.local = threading.local()
+		self.cmd = None
 		LOG.debug('Exec[%s] package=%s', self.executable, self.package)
 
 	def check(self):
@@ -656,26 +443,28 @@ class Exec(object):
 				raise linux.LinuxError(msg)
 
 	def args(self, *params, **long_kwds):
-		self.local.args = linux.build_cmd_args(
+		self.cmd = linux.build_cmd_args(
 			executable=self.executable,
 			long=long_kwds,
 			params=params)
-		LOG.debug('local.args: %s', self.local.args)
+		LOG.debug('cmd: %s', self.cmd)
 		return self
 
 	def popen(self, **kwds):
 		self.check()
 		kwds['close_fds'] = True
+		if not 'stdin' in kwds:
+			kwds['stdin'] = subprocess.PIPE
 		if not 'stdout' in kwds:
 			kwds['stdout'] = subprocess.PIPE
 		if not 'stderr' in kwds:
 			kwds['stderr'] = subprocess.PIPE
-		return subprocess.Popen(self.local.args, **kwds)
+		return subprocess.Popen(self.cmd, **kwds)
 
 	def __call__(self, *params, **long_kwds):
 		self.args(*params, **long_kwds)
 		self.check()
-		return linux.system(self.local.args)
+		return linux.system(self.cmd)
 
 '''
 def innobackupex(*params, **long_kwds):
@@ -690,7 +479,7 @@ def innobackupex(*params, **long_kwds):
 innobackupex = Exec('/usr/bin/innobackupex',
 				package='percona-xtrabackup')
 
-xstream = Exec('/usr/bin/xstream',
+xbstream = Exec('/usr/bin/xbstream',
 				package='percona-xtrabackup')
 
 

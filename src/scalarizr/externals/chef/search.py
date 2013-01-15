@@ -1,3 +1,4 @@
+from __future__ import with_statement
 import collections
 import copy
 import urllib

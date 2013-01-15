@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Sep 30, 2011
 
@@ -111,9 +112,12 @@ class MongoDB(BaseService):
 	_arbiter = None
 	_instance = None
 	_config_server = None
+	_mongod_noauth = None
+
 	keyfile = None
 	login = None
 	password = None
+	auth = True
 
 	
 	def __init__(self, keyfile=None):
@@ -200,9 +204,12 @@ class MongoDB(BaseService):
 	
 	def start_shardsvr(self):
 		self.working_dir.unlock()
-		self._logger.info('Starting main mongod process')
+		if self.auth:
+			self._logger.info('Starting main mongod process with auth enabled')
+		else:
+			self._logger.info('Starting main mongod process with auth disabled')
 		self.mongod.start()
-	
+
 	
 	def start_arbiter(self):
 		if self.arbiter.is_running:
@@ -226,9 +233,10 @@ class MongoDB(BaseService):
 		self.config_server.stop('Stopping mongo config server')
 		
 		
-	def start_router(self):
+	def start_router(self, verbose = 0):
 		self.stop_default_init_script()
 		Mongos.set_keyfile(self.keyfile.path)
+		Mongos.verbose = verbose
 		Mongos.start()
 		
 	
@@ -364,6 +372,10 @@ class MongoDB(BaseService):
 		"""
 		@rtype: Mongod
 		"""
+		if not self.auth:
+			if not self._mongod_noauth:
+				self._mongod_noauth = Mongod(configpath=CONFIG_PATH_DEFAULT, keyfile=None, cli=self.cli)
+			return self._mongod_noauth
 		return self._get('mongod', Mongod.find, self.config, self.keyfile.path, self.cli)
 	
 	def _set_mongod(self, obj):
@@ -371,7 +383,9 @@ class MongoDB(BaseService):
 
 
 	def _get_cli(self):
-		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT)
+		if not self.auth:
+			return MongoCLI(REPLICA_DEFAULT_PORT)
+		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT, SCALR_USER, self.password)
 	
 	def _set_cli(self, obj):
 		self._set('cli', obj)
@@ -638,7 +652,7 @@ class ConfigServerConf(MongoDBConfig):
 
 	
 class Mongod(object):	
-	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None):
+	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=2):
 		self._logger = logging.getLogger(__name__)
 		self.configpath = configpath
 		self.dbpath = dbpath
@@ -646,6 +660,7 @@ class Mongod(object):
 		self.cli = cli or MongoCLI(port=port)
 		self.port = port
 		self.sock = initdv2.SockParam(self.port or REPLICA_DEFAULT_PORT)
+		self.verbose = verbose
 		
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None, cli=None):
@@ -664,6 +679,9 @@ class Mongod(object):
 		if self.keyfile and os.path.exists(self.keyfile):
 			rchown(DEFAULT_USER, self.keyfile)	
 			s.append('--keyFile=%s' % self.keyfile)
+		if self.verbose and isinstance(self.verbose, int) and 0<self.verbose<6:
+			s.append('-'+'v'*self.verbose)
+
 		return s
 	
 	def start(self):
@@ -710,6 +728,7 @@ class Mongos(object):
 	authenticated = False
 	login = None
 	password = None
+	verbose = 0
 
 	@classmethod
 	def set_keyfile(cls, keyfile = None):
@@ -720,7 +739,6 @@ class Mongos(object):
 	def auth(cls, login, password):
 		cls.login = login
 		cls.password = password
-
 
 
 	@classmethod
@@ -740,13 +758,17 @@ class Mongos(object):
 			args = ['sudo', '-u', DEFAULT_USER, MONGOS, '--fork',
 					'--logpath', ROUTER_LOG_PATH, '--configdb',
 					'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
-					
-			if os.path.exists(ROUTER_LOG_PATH):
-				rchown(DEFAULT_USER, ROUTER_LOG_PATH)
-
 			if cls.keyfile and os.path.exists(cls.keyfile):
 				rchown(DEFAULT_USER, cls.keyfile)
 				args.append('--keyFile=%s' % cls.keyfile)
+
+			if cls.verbose and isinstance(cls.verbose, int) and 0<cls.verbose<6:
+				args.append('-'+'v'*cls.verbose)
+
+
+			if os.path.exists(ROUTER_LOG_PATH):
+				rchown(DEFAULT_USER, ROUTER_LOG_PATH)
+
 			system2(args, close_fds=True, preexec_fn=os.setsid)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 			wait_until(lambda: cls.get_cli().has_connection, timeout=MAX_START_TIMEOUT)

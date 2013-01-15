@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 JSON-RPC over 0MQ API. 
 
