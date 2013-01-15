@@ -4,14 +4,17 @@ Created on Dec 24, 2009
 
 @author: marat
 '''
-from scalarizr.bus import bus
-from scalarizr.util.filetool import read_file
+
 import os
 import re
 import socket
 import urllib2
 import logging
+
 import ConfigParser
+
+from scalarizr.bus import bus
+
 
 class PlatformError(BaseException):
 	pass
@@ -70,7 +73,9 @@ class Platform():
 		if self._userdata is None:
 			path = cnf.private_path('.user-data')
 			if os.path.exists(path):
-				rawmeta = read_file(path)
+				rawmeta = None
+				with open(path, 'r') as fp:
+				    rawmeta = fp.read()
 				if not rawmeta:
 					raise PlatformError("Empty user-data")
 				self._userdata = self._parse_user_data(rawmeta)
@@ -86,7 +91,7 @@ class Platform():
 		if prop:
 			try:
 				return self._access_data[prop]
-			except TypeError, KeyError:
+			except (TypeError, KeyError):
 				raise PlatformError("Platform access data property '%s' doesn't exists" % (prop,))
 		else:
 			return self._access_data

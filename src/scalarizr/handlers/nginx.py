@@ -21,10 +21,9 @@ from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2, disttool
 from scalarizr.linux import iptables
-from scalarizr.util.filetool import read_file, write_file
 
 # Stdlibs
-import os, logging, shutil, re, time
+import os, logging, shutil, time
 from telnetlib import Telnet
 from datetime import datetime
 import ConfigParser
@@ -40,6 +39,7 @@ APP_PORT = 'app_port'
 HTTPS_INC_PATH = 'https_include_path'
 APP_INC_PATH = 'app_include_path'
 UPSTREAM_APP_ROLE = 'upstream_app_role'
+
 
 class NginxInitScript(initdv2.ParametrizedInitScript):
 	_nginx_binary = None
@@ -482,25 +482,28 @@ class NginxHandler(ServiceCtlHandler):
 			https_certificate = self._queryenv.get_https_certificate()
 
 			if https_certificate[0]:
-				msg = 'Writing ssl cert'
 				cert = https_certificate[0]
-				write_file(cert_path, cert, msg=msg, logger=self._logger)
+				self._logger.debug('Writing ssl cert')
+				with open(cert_path, 'w') as fp:
+				    fp.write(cert)
 			else:
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
 
 			if len(https_certificate)>1 and https_certificate[1]:
-				msg = 'Writing ssl key'
 				pk = https_certificate[1]
-				write_file(pk_path, pk, msg=msg, logger=self._logger)
+				self._logger.debug('Writing ssl key')
+				with open(pk_path, 'w') as fp:
+				    fp.write(pk)
 			else:
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
 
 			if https_certificate[2]:
-				msg = 'Appending CA cert to cert file'
 				cert = https_certificate[2]
-				write_file(cert_path, '\n' + https_certificate[2], mode='a', msg=msg, logger=self._logger)
+				self._logger.debug('Appending CA cert to cert file')
+				with open(cert_path, 'a') as fp:
+				    fp.write('\n' + https_certificate[2])
 		else:
 			self._logger.debug('No SSL vhosts obtained. Removing old SSL keys.')
 			for key_path in (cert_path, pk_path):
@@ -517,13 +520,16 @@ class NginxHandler(ServiceCtlHandler):
 					https_config += raw + '\n'
 
 			if https_config:
-				if os.path.exists(self._https_inc_path)\
-				and read_file(self._https_inc_path, logger=self._logger):
-					time_suffix = str(datetime.now()).replace(' ','.')
-					shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
+				if os.path.exists(self._https_inc_path):
+					file_content = None
+					with open(self._https_inc_path, 'r') as fp:
+					    file_content = fp.read()
+					if file_content:
+						time_suffix = str(datetime.now()).replace(' ','.')
+						shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
 
-				msg = 'Writing virtualhosts to https.include'
-				write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
+				with open(self._https_inc_path, 'w') as fp:
+				    fp.write(https_config)
 
 		else:
 			self._logger.debug('Scalr returned empty virtualhost list. Removing junk files.')

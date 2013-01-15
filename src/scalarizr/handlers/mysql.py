@@ -21,12 +21,14 @@ from scalarizr.platform import UserDataOptions
 # Libs
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 	ParseError
-from scalarizr.util import system2, disttool, filetool, \
+from scalarizr.util import system2, disttool, \
 	firstmatched, initdv2, software, wait_until, cryptotool,\
 	PopenError
 from scalarizr.handlers import operation	
 from scalarizr.util.software import which
 from scalarizr.linux import iptables
+from scalarizr.linux import coreutils
+from scalarizr.linux.rsync import rsync
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
 
 # Stdlibs
@@ -864,7 +866,7 @@ class MysqlHandler(ServiceCtlHandler):
 				with op.step(self._step_upload_to_cloud_storage):
 					# Creating list of full paths to archive chunks
 					if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-						parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+						parts = [os.path.join(tmpdir, file) for file in coreutils.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
 					else:
 						parts = [backup_path]
 					sizes = [os.path.getsize(file) for file in parts]
@@ -918,8 +920,8 @@ class MysqlHandler(ServiceCtlHandler):
 					# Creating snapshot
 					root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
 					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
-					used_size = firstmatched(lambda r: r.mpoint == self._storage_path, filetool.df()).used
-						
+					used_size = coreutils.statvfs(self._storage_path)['used']
+					
 					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 					
 					# Notify scalr
@@ -1062,8 +1064,8 @@ class MysqlHandler(ServiceCtlHandler):
 						mysql.expect("mysql>", timeout=timeout)
 						mysql.sendline("RESET MASTER;")
 						mysql.expect("mysql>", 20)
-						filetool.remove(os.path.join(self._data_dir, 'relay-log.info'))
-						filetool.remove(os.path.join(self._data_dir, 'master.info'))
+						coreutils.remove(os.path.join(self._data_dir, 'relay-log.info'))
+						coreutils.remove(os.path.join(self._data_dir, 'master.info'))
 					except pexpect.TIMEOUT:
 						raise HandlerError("Timeout (%d seconds) reached " + 
 									"while waiting for slave stop and master reset." % (timeout,))
@@ -1501,7 +1503,7 @@ class MysqlHandler(ServiceCtlHandler):
 			if not vol.mounted():
 				vol.mount(mpoint)
 		except StorageError, e:
-			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
+			''' XXX: Crapy. We need to introduce error codes from mount ''' 
 			if 'you must specify the filesystem type' in str(e):
 				vol.mkfs()
 				vol.mount(mpoint)
@@ -1817,9 +1819,7 @@ class MysqlHandler(ServiceCtlHandler):
 						LOG.debug('Make SELinux rule for rsync')
 						system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
 					LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
-					rsync = filetool.Rsync().archive()
-					rsync.source(src_dir).dest(directory).exclude(['ib_logfile*'])
-					system2(str(rsync), shell=True)
+					rsync(src_dir, directory, archive=True, exclude='ib_logfile*')
 					self._mysql_config.set(directive, dirname)
 				else:
 					LOG.info('Mysql directory \'%s\' doesn\'t exist. Creating new in \'%s\'', src_dir, directory)

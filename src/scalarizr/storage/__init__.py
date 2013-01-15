@@ -7,7 +7,8 @@ Created on Nov 11, 2010
 from __future__ import with_statement
 
 
-from scalarizr.util import system2, PopenError, disttool, fstool
+from scalarizr.util import system2, PopenError, disttool
+from scalarizr.util import mount
 
 import logging
 import threading
@@ -356,7 +357,7 @@ RHEL_DEVICE_ORDERING_BUG = False
 if disttool.is_redhat_based():
 	# Check that system is affected by devices ordering bug
 	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
-	mtab = fstool.Mtab()
+	mtab = mount.mounts()
 	entry = [v for v in mtab.find(mpoint='/') 
 			if v.devname.startswith('/dev')][0]
 	RHEL_DEVICE_ORDERING_BUG = entry.devname.startswith('/dev/xvde') 

@@ -9,7 +9,7 @@ import urlparse
 
 from scalarizr import storage2
 from scalarizr.libs import metaconf
-from scalarizr.util import filetool
+from scalarizr.linux import coreutils
 from scalarizr.storage2 import cloudfs
 from scalarizr.storage2.volumes import base
 
@@ -91,9 +91,8 @@ class EphVolume(base.Volume):
 			try:
 				self.mount()
 				if hasattr(self.snap, 'size'):
-					df_info = filetool.df()
-					df = filter(lambda x: x.mpoint == self.mpoint, df_info)[0]
-					if df.free < self.snap.size:
+					fs_free = coreutils.statvfs(self.mpoint)['free']
+					if fs_free < self.snap.size:
 						raise storage2.StorageError('Not enough free space'
 								' on device %s to restore snapshot.' %
 								self.device)
@@ -125,10 +124,7 @@ class EphVolume(base.Volume):
 							mpoint=tempfile.mkdtemp())
 			lvm_snap_vol.ensure(mount=True)
 
-			df_info = filetool.df()
-			df = filter(lambda x: x.mpoint == lvm_snap_vol.mpoint, df_info)
-
-			snap.size = df[0].used
+			snap.size = coreutils.statvfs(lvm_snap_vol.mpoint)['used']
 
 			try:
 				transfer = cloudfs.LargeTransfer(

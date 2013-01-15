@@ -23,12 +23,12 @@ import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
-from scalarizr.libs import metaconf
-from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, filetool
+from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool
 from scalarizr.storage import transfer
 
 from scalarizr import storage2, linux
 from scalarizr.linux import iptables
+from scalarizr.linux import coreutils
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
@@ -634,7 +634,7 @@ class MysqlHandler(DBMSRHandler):
 			with op.step(self._step_upload_to_cloud_storage):
 				# Creating list of full paths to archive chunks
 				if os.path.getsize(backup_path) > __mysql__['mysqldump_chunk_size']:
-					parts = [os.path.join(tmpdir, file) for file in filetool.split(backup_path, backup_filename, __mysql__['mysqldump_chunk_size'] , tmpdir)]
+					parts = [os.path.join(tmpdir, file) for file in coreutils.split(backup_path, backup_filename, __mysql__['mysqldump_chunk_size'] , tmpdir)]
 				else:
 					parts = [backup_path]
 				sizes = [os.path.getsize(file) for file in parts]
@@ -702,7 +702,7 @@ class MysqlHandler(DBMSRHandler):
 					'''
 					# Creating snapshot
 					snap, log_file, log_pos = self._create_snapshot(ROOT_USER, self.root_password, tags=self.mysql_tags)
-					used_size = firstmatched(lambda r: r.mpoint == STORAGE_PATH, filetool.df()).used
+					used_size = coreutils.statvfs(STORAGE_PATH)['used']
 					bus.fire('mysql_data_bundle', snapshot_id=snap.id)			
 					'''
 				

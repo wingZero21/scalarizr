@@ -5,17 +5,17 @@ Created on Aug 25, 2010
 @author: marat
 '''
 
-from scalarizr.bus import bus
-from scalarizr.util import wait_until, system2
-from scalarizr.platform import PlatformError, UserDataOptions
-
-import logging, os, time
+import sys
+import logging
+import os
 
 from boto.ec2.volume import Volume
 from boto.exception import BotoServerError
 from boto.ec2.snapshot import Snapshot
-import sys
-from scalarizr.util import disttool, fstool
+
+from scalarizr.bus import bus
+from scalarizr.util import wait_until, system2
+from scalarizr.platform import PlatformError, UserDataOptions
 from scalarizr import storage
 
 

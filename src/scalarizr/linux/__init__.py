@@ -179,20 +179,29 @@ class __os(dict):
 os = __os()
 
 
-def build_cmd_args(executable=None, short=None, long=None, params=None):
+def build_cmd_args(executable=None,
+				   short=None,
+				   long=None,
+				   params=None,
+				   duplicate_keys=False):
 	ret = []
 	if executable:
 		ret += [executable]
 	if short:
-		ret += short
+		ret += list(short)
 	if long:
 		for key, value in long.items():
-			ret.append('--%s' % key.replace('_', '-'))
+			cmd_key = '--%s' % key.replace('_', '-')
+			ret.append(cmd_key)
 			if type(value) == bool and value:
 				continue
-			# sometimes we should duplicate keys
 			elif type(value) in (list, tuple):
-				ret.extend(value)
+				if duplicate_keys:
+					ret.append(value[0])
+					for v in value[1:]:
+						ret.extend([cmd_key, v])
+				else:
+					ret.extend(value)
 				continue
 			ret.append(value)
 	if params:

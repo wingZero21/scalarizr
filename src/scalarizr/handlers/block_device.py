@@ -12,9 +12,11 @@ import logging
 
 from scalarizr.bus import bus
 from scalarizr import storage2
-from scalarizr import config, handlers
+from scalarizr import config
+from scalarizr import handlers
 from scalarizr.messaging import Messages
-from scalarizr.util import fstool, wait_until
+from scalarizr.util import wait_until
+from scalarizr.util import mount
 
 
 LOG = logging.getLogger(__name__)
@@ -129,40 +131,6 @@ class BlockDeviceHandler(handlers.Handler):
 				else:
 					block()
 				
-				'''
-				mtab = fstool.Mtab()
-				if not mtab.contains(vol.device, reload=True):
-					if bus.initialization_op:
-						bus.initialization_op.step('Mount device %s to %s' % (vol.device, vol.mpoint)).__enter__()
-					try:
-						self._logger.debug("Mounting device %s to %s", vol.device, vol.mpoint)
-						try:
-							fstool.mount(vol.device, vol.mpoint, auto_mount=True)
-						except fstool.FstoolError, e:
-							if e.code == fstool.FstoolError.NO_FS:
-								vol.mkfs()
-								fstool.mount(vol.device, vol.mpoint, auto_mount=True)
-							else:
-								raise
-						self._logger.info("Device %s is mounted to %s", vol.device, vol.mpoint)
-	
-						self.send_message(Messages.BLOCK_DEVICE_MOUNTED, dict(
-							volume_id = vol.id,
-							device_name = vol.ebs_device
-						), broadcast=True, wait_subhandler=True)
-						bus.fire("block_device_mounted", volume_id=qe_volume.volume_id, device=vol.device)
-					except:
-						if bus.initialization_op:
-							bus.initialization_op.__exit__(sys.exc_info())
-						raise
-					finally:
-						if bus.initialization_op:
-							bus.initialization_op.__exit__(None)
-
-				else:
-					entry = mtab.find(vol.device)[0]
-					self._logger.debug("Skip device %s already mounted to %s", vol.device, entry.mpoint)
-				'''
 		except:
 			LOG.exception("Can't attach volume")
 
@@ -195,7 +163,7 @@ class BlockDeviceHandler(handlers.Handler):
 			
 		elif message.action == "remove":
 			LOG.debug("udev notified me that block device %s was detached", message.devname)
-			fstab = fstool.Fstab()
+			fstab = mount.fstab()
 			fstab.remove(message.devname)
 			
 			self.send_message(

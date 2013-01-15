@@ -4,13 +4,19 @@ Created on Mar 2, 2010
 
 @author: marat
 '''
+
+import logging
+import os
+import re
+import sys
+
+import ConfigParser
+
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
-from scalarizr.util import system2, filetool, disttool
-import logging
-import os, re, sys
-import ConfigParser
-from scalarizr.util.fstool import Mtab, Fstab, mount
+from scalarizr.util import disttool
+from scalarizr.util import system2
+from scalarizr.util import mount
 
 
 def get_handlers ():
@@ -50,14 +56,19 @@ class Ec2LifeCycleHandler(Handler):
 			# Ubuntu cloud-init scripts may disable root ssh login
 			for path in ('/etc/ec2-init/ec2-config.cfg', '/etc/cloud/cloud.cfg'):
 				if os.path.exists(path):
-					c = filetool.read_file(path)
+					c = None
+					with open(path, 'r') as fp:
+						c = fp.read()
 					c = re.sub(re.compile(r'^disable_root[^:=]*([:=]).*', re.M), r'disable_root\1 0', c)
-					filetool.write_file(path, c)
+					with open(path, 'w') as fp:
+						fp.write(c)
 			
 		# Add server ssh public key to authorized_keys
 		authorized_keys_path = "/root/.ssh/authorized_keys"
 		if os.path.exists(authorized_keys_path):
-			c = filetool.read_file(authorized_keys_path)
+			c = None
+			with open(authorized_keys_path, 'r') as fp:
+				c = fp.read()
 			ssh_key = self._platform.get_ssh_pub_key()
 			idx = c.find(ssh_key)
 			if idx == -1:
@@ -65,22 +76,22 @@ class Ec2LifeCycleHandler(Handler):
 					c += '\n'
 				c += ssh_key + "\n"
 				self._logger.debug("Add server ssh public key to authorized_keys")
-				filetool.write_file(authorized_keys_path, c)
 			elif idx > 0 and c[idx-1] != '\n':
 				c = c[0:idx] + '\n' + c[idx:]
 				self._logger.warn('Adding new-line character before server SSH key in authorized_keys file')
-				filetool.write_file(authorized_keys_path, c)
+			with open(authorized_keys_path, 'w') as fp:
+				fp.write(c)
 				
 		# Mount ephemeral devices
 		# Seen on eucalyptus: 
 		# 	- fstab contains invalid fstype and `mount -a` fails  
-		mtab = Mtab()
-		fstab = Fstab()
+		mtab = mount.mounts()
+		fstab = mount.fstab()
 		for device in self._platform.instance_store_devices:
 			if os.path.exists(device) and fstab.contains(device) and not mtab.contains(device):
-				entry = fstab.find(device)[0]
+				entry = fstab[device]
 				try:
-					mount(device, entry.mpoint, ('-o', entry.options))
+					mount.mount(device, entry.mpoint, '-o', entry.options)
 				except:
 					self._logger.warn(sys.exc_info()[1])
 

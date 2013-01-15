@@ -21,7 +21,6 @@ except ImportError:
 
 from scalarizr.util import system2, firstmatched, PopenError
 from scalarizr.util.software import whereis
-from scalarizr.util.filetool import read_file
 from scalarizr.util import dynimp
 from scalarizr.linux import coreutils
 from scalarizr.storage import StorageError
@@ -130,7 +129,10 @@ def normalize_lvname(lvolume):
 def lvm_group_b64(vg):
 	vgfile = '/etc/lvm/backup/%s' % os.path.basename(vg)
 	if os.path.exists(vgfile):
-		return binascii.b2a_base64(read_file(vgfile))
+		file_content = None
+		with open(vgfile, 'r') as fp:
+		    file_content = fp.read()
+		return binascii.b2a_base64(file_content)
 
 
 class Lvm2:

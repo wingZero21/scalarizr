@@ -20,7 +20,6 @@ from .util.mdadm import Mdadm
 from .util.lvm2 import Lvm2, lvm_group_b64
 
 from scalarizr.util import wait_until
-from scalarizr.util.filetool import write_file
 
 
 logger = logging.getLogger(__name__)
@@ -181,7 +180,8 @@ class RaidVolumeProvider(VolumeProvider):
 		self._create_pv(raid_pv, pv_uuid )
 
 		lvm_raw_backup = binascii.a2b_base64(kwargs['lvm_group_cfg'])
-		write_file(self._lvm_backup_filename, lvm_raw_backup, logger=logger)
+		with open(self._lvm_backup_filename, 'w') as fp:
+		    fp.write(lvm_raw_backup)
 
 		try:
 			self._lvm.restore_vg(vg, self._lvm_backup_filename)

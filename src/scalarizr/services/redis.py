@@ -13,7 +13,7 @@ import shutil
 from scalarizr.util import initdv2, system2, PopenError, wait_until
 from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError
 from scalarizr.util import disttool, cryptotool, firstmatched
-from scalarizr.util.filetool import rchown
+from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
@@ -493,7 +493,7 @@ class WorkingDirectory(object):
 			shutil.copyfile(self.db_path, new_db_path)
 
 		LOG.debug("changing directory owner to %s" % self.user)
-		rchown(self.user, dst)
+		chown_r(dst, self.user)
 		self.db_path = new_db_path
 		return new_db_path
 
@@ -947,7 +947,7 @@ def get_pidfile(port=DEFAULT_PORT):
 	'''
 	if not os.path.exists(pid_file):
 		open(pid_file, 'w').close()
-	rchown('redis', pid_file)
+	chown_r(pid_file, 'redis')
 	return pid_file
 
 

@@ -8,10 +8,10 @@ Created on Aug 29, 2010
 import socket
 import os
 import time
-from scalarizr.util import system2, PopenError
-from scalarizr.util.filetool import read_file
 import re
 from threading import local
+
+from scalarizr.util import system2, PopenError
 
 
 _services  = dict()
@@ -80,7 +80,9 @@ class InitScript(object):
 		if self.pid_file:
 			if not os.path.exists(self.pid_file):
 				return Status.NOT_RUNNING
-			pid = read_file(self.pid_file).strip()
+			pid = None
+			with open(self.pid_file, 'r') as fp:
+			    pid = fp.read().strip()
 			if os.path.isfile('/proc/%s/status' % pid):
 				try:
 					fp = open('/proc/%s/status' % pid)

@@ -7,7 +7,7 @@ Created on Aug 11, 2010
 
 from scalarizr.bus import bus
 from scalarizr.libs.bases import Observable
-from scalarizr.util import validators, filetool
+from scalarizr.util import validators
 
 from ConfigParser import ConfigParser, RawConfigParser, NoOptionError, NoSectionError
 from getpass import getpass
@@ -923,10 +923,12 @@ class ScalarizrCnf(Observable):
 		filename = self.private_path('.state')
 		if not os.path.exists(filename):
 			return ScalarizrState.UNKNOWN
-		return str.strip(filetool.read_file(filename, logger=self._logger))
+		with open(filename, "r") as fp:
+			return str.strip(fp.read())
 
 	def _set_state(self, v):
-		filetool.write_file(self.private_path('.state'), v, logger=self._logger)
+		with open(self.private_path('.state'), 'w') as fp:
+		    fp.write(v)
 		self._logger.info('State: %s', v)
 
 	state = property(_get_state, _set_state)

@@ -25,11 +25,11 @@ from pymysql import cursors
 
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
-from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
+from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
 from scalarizr.util.initdv2 import wait_sock, InitdError
-from scalarizr.util.filetool import rchown
+from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
-import sys
+from scalarizr.linux.rsync import rsync
 
 
 from scalarizr import linux, storage2
@@ -142,12 +142,11 @@ class MySQL(BaseService):
 							pass
 							
 						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
-						rsync = filetool.Rsync().archive()
-						rsync.source(src_dir).dest(dest).exclude(['ib_logfile*'])
-						system2(str(rsync), shell=True)
+						rsync(src_dir, dest, archive=True, exclude='ib_logfile*')
+
 			self.my_cnf.set(directive, dirname)
 	
-			rchown("mysql", dest)
+			chown_r(dest, "mysql")
 			# Adding rules to apparmor config 
 			if disttool.is_debian_based():
 				_add_apparmor_rules(dest)

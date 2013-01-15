@@ -46,7 +46,7 @@ from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
 from scalarizr.util import wait_until, Hosts, cryptotool
 from scalarizr.linux import iptables
-from scalarizr.util.filetool import split, rchown
+from scalarizr.linux.coreutils import split, chown_r
 from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
@@ -993,7 +993,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				if not os.path.exists(self._tmp_dir):
 					os.makedirs(self._tmp_dir)
 				tmpdir = tempfile.mkdtemp(self._tmp_dir)		
-				rchown(mongo_svc.DEFAULT_USER, tmpdir) 
+				chown_r(tmpdir, mongo_svc.DEFAULT_USER)
 	
 				#dump config db on router
 				r_dbs = self.mongodb.router_cli.list_database_names()

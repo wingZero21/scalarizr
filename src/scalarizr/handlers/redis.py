@@ -19,7 +19,7 @@ from scalarizr.bus import bus
 from scalarizr import handlers
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
-from scalarizr.util.filetool import split
+from scalarizr.linux.coreutils import split
 from scalarizr.services import redis
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState

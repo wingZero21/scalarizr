@@ -12,7 +12,6 @@ from scalarizr import config as szrconfig
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip
-from scalarizr.util.filetool import write_file
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
 
@@ -289,7 +288,8 @@ class Script(object):
 		if not os.path.exists(exec_dir):
 			os.makedirs(exec_dir)
 
-		write_file(self.exec_path, self.body.encode('utf-8'), logger=LOG)
+		with open(self.exec_path, 'w') as fp:
+		    fp.write(self.body.encode('utf-8'))
 		os.chmod(self.exec_path, stat.S_IREAD | stat.S_IEXEC)
 
 		stdout = open(self.stdout_path, 'w+')

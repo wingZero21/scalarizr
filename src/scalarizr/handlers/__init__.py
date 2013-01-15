@@ -7,7 +7,6 @@ from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
 from scalarizr.linux import iptables
-from scalarizr.util.filetool import write_file
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 from scalarizr.node import __node__
 
@@ -342,8 +341,9 @@ class MessageListener:
 				except:
 					pass
 				else:
-					write_file(cnf.private_path('.scalr-version'), '.'.join(map(str, ver)))
-					bus.scalr_version = ver					
+					with open(cnf.private_path('.scalr-version'), 'w') as fp:
+					    fp.write('.'.join(map(str, ver)))
+					bus.scalr_version = ver
 			
 			accepted = False
 			for handler in self.get_handlers_chain():

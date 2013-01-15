@@ -22,8 +22,7 @@ from scalarizr.util import disttool, firstmatched, software, wait_until
 from scalarizr.util import initdv2, system2, dynimp
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.linux import iptables
-from scalarizr.util.filetool import read_file, write_file
-from scalarizr import filetool
+from scalarizr.linux.coreutils import chown_r
 
 # Stdlibs
 import logging, os, re
@@ -67,6 +66,7 @@ LOGROTATE_CONF_REDHAT_RAW = """/var/log/http-*.log {
      endscript
 }
 """
+
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
 	_apachectl = None
@@ -417,21 +417,21 @@ class ApacheHandler(ServiceCtlHandler):
 						self._logger.error("Scalr returned empty SSL key")
 					else:
 						self._logger.debug("Saving SSL certificates for %s",vhost.hostname)
-						key_error_message = 'Cannot write SSL key files to %s.' % cert_path
-						cert_error_message = 'Cannot write SSL certificate files to %s.' % cert_path
-						ca_cert_error_message = 'Cannot write CA certificate to %s.' % cert_path
 						
 						for key_file in ['https.key', vhost.hostname + '.key']:
-							write_file(os.path.join(cert_path,key_file), https_certificate[1], error_msg=key_error_message, logger=self._logger)
+							with open(os.path.join(cert_path, key_file), 'w') as fp:
+								fp.write(https_certificate[1])
 							os.chmod(cert_path + '/' + key_file, 0644)
 													
 						for cert_file in ['https.crt', vhost.hostname + '.crt']:
-							write_file(os.path.join(cert_path,cert_file), https_certificate[0], error_msg=cert_error_message, logger=self._logger)
+							with open(os.path.join(cert_path, cert_file), 'w') as fp:
+								fp.write(https_certificate[0])
 							os.chmod(cert_path + '/' + cert_file, 0644)
 							
 						if https_certificate[2]:
 							for filename in ('https-ca.crt', vhost.hostname + '-ca.crt'):
-								write_file(os.path.join(cert_path, filename), https_certificate[2], error_msg=ca_cert_error_message, logger=self._logger)
+								with open(os.path.join(cert_path, filename), 'w') as fp:
+									fp.write(https_certificate[2])
 								os.chmod(os.path.join(cert_path, filename), 0644)
 				
 				self._logger.debug('Enabling SSL virtual host %s', vhost.hostname)
@@ -439,7 +439,8 @@ class ApacheHandler(ServiceCtlHandler):
 				vhost_fullpath = self.get_vhost_filename(vhost.hostname, ssl=True)
 				raw = vhost.raw.replace('/etc/aws/keys/ssl', cert_path)
 				vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
-				write_file(vhost_fullpath, raw, error_msg=vhost_error_message, logger = self._logger)
+				with open(vhost_fullpath, 'w') as fp:
+					fp.write(raw)
 				
 				self._create_vhost_paths(vhost_fullpath) 	
 
@@ -453,7 +454,9 @@ class ApacheHandler(ServiceCtlHandler):
 				self._logger.debug('Enabling virtual host %s', vhost.hostname)
 				vhost_fullpath = self.get_vhost_filename(vhost.hostname)
 				vhost_error_message = 'Cannot write vhost file %s.' % vhost_fullpath
-				write_file(vhost_fullpath, vhost.raw, error_msg=vhost_error_message, logger=self._logger)
+				with open(vhost_fullpath, 'w') as fp:
+					fp.write(vhost.raw)
+
 				self._logger.debug("Done %s processing", vhost.hostname)
 				self._create_vhost_paths(vhost_fullpath)
 		self._logger.debug("New vhosts configuration files created")
@@ -483,9 +486,11 @@ class ApacheHandler(ServiceCtlHandler):
 	def _create_logrotate_conf(self, logrotate_conf_path):
 		if not os.path.exists(logrotate_conf_path):
 			if disttool.is_debian_based():
-				write_file(logrotate_conf_path, LOGROTATE_CONF_DEB_RAW, logger=self._logger)
+				with open(logrotate_conf_path, 'w') as fp:
+					fp.write(LOGROTATE_CONF_DEB_RAW)
 			else:
-				write_file(logrotate_conf_path, LOGROTATE_CONF_REDHAT_RAW, logger=self._logger)
+				with open(logrotate_conf_path, 'w') as fp:
+					fp.write(LOGROTATE_CONF_REDHAT_RAW)
 				
 
 	def _patch_ssl_conf(self, cert_path):
@@ -665,12 +670,13 @@ class ApacheHandler(ServiceCtlHandler):
 			#default_vhost.set('VirtualHost', '*:80', force=True)
 			default_vhost.write(default_vhost_path)
 						
-			error_message = 'Cannot read default vhost config file %s' % default_vhost_path
-			dv = read_file(default_vhost_path, error_msg=error_message, logger=self._logger)
+			dv = None
+			with open(default_vhost_path, 'r') as fp:
+				dv = fp.read()
 			vhost_regexp = re.compile('<VirtualHost\s+\*>')
 			dv = vhost_regexp.sub( '<VirtualHost *:80>', dv)
-			error_message = 'Cannot write to default vhost config file %s' % default_vhost_path
-			write_file(default_vhost_path, dv, error_msg=error_message, logger=self._logger)
+			with open(default_vhost_path, 'w') as fp:
+				fp.write(dv)
 			
 		else:
 			self._logger.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
@@ -723,7 +729,7 @@ class ApacheHandler(ServiceCtlHandler):
 										'apache/html'), doc_root)
 									self._logger.debug('Copied documentroot files: %s'
 										 % ', '.join(os.listdir(doc_root)))
-									filetool.rchown(uname, doc_root)
+									chown_r(doc_root, uname)
 									self._logger.debug('Changed owner to %s: %s'
 										 % (uname, ', '.join(os.listdir(doc_root))))
 				except:
