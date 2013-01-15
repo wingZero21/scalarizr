@@ -139,7 +139,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 				vol.id, vol.status, vol.attachment_state())
 	)
 	logger.debug('Volume %s attached',  vol.id)
-	
+
 	devname = real_devname(devname)
 	if to_me:
 		logger.debug('Checking that device %s is available', devname)
