@@ -95,7 +95,7 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, volume_type=None, io
 		logger=logger, timeout=timeout,
 		error_text="EBS volume %s wasn't available in a reasonable time" % vol.id
 	)
-	logger.debug('EBS volume %s available', vol.id)		
+	logger.debug('EBS volume %s available', vol.id)
 	
 	if not tags:
 		logger.debug('No tags to apply to volume %s' % vol.id)
