@@ -115,7 +115,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		vol.id = volume_id
 	else:
 		vol = volume_id
-		
+
 	def attach():
 		try:
 			vol.attach(instance_id, devname)
