@@ -72,7 +72,7 @@ def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 		logger.debug('Snapshot %s completed', snap.id)
 
 
-def create_volume(ec2_conn, size, avail_zone, snap_id=None, volume_type=None, iops=None, 
+def create_volume(ec2_conn, size, avail_zone, snap_id=None, volume_type=None, iops=None,
 				logger=None, timeout=DEFAULT_TIMEOUT, tags=None):
 	logger = logger or logging.getLogger(__name__)
 	
