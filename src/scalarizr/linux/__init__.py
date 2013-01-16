@@ -11,19 +11,6 @@ from scalarizr import util
 class LinuxError(util.PopenError):
 	pass
 
-def which(exe):
-	(path, _) = osmod.path.split(exe)
-	if osmod.access(exe, osmod.X_OK):
-		return exe
-
-	default_path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
-
-	for path in osmod.environ.get('PATH', default_path).split(osmod.pathsep):
-		full_path = osmod.path.join(path, exe)
-		if osmod.access(full_path, osmod.X_OK):
-			return full_path
-	return None
-
 
 def system(*args, **kwds):
 	kwds['exc_class'] = LinuxError
