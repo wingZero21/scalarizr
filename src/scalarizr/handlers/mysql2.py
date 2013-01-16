@@ -1077,9 +1077,8 @@ class MysqlHandler(DBMSRHandler):
 					os.path.dirname(__mysql__['storage_dir'])), raise_exc=False)
 	
 	def _fix_percona_debian_cnf(self):
-		if linux.os['name'] == 'Ubuntu' and \
-				__mysql__['behavior'] == 'percona' and \
-				os.path.exists(__mysql__['debian.cnf']):
+		if __mysql__['behavior'] == 'percona' and \
+							os.path.exists(__mysql__['debian.cnf']):
 			LOG.info('Fixing socket options in %s', __mysql__['debian.cnf'])
 			debian_cnf = metaconf.Configuration('mysql')
 			debian_cnf.read(__mysql__['debian.cnf'])
