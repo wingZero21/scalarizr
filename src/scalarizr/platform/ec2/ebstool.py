@@ -179,7 +179,7 @@ def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT
 		error_text="EBS volume %s wasn't available in a reasonable time" % vol.id
 	)
 	logger.debug('Volume %s is available', vol.id)
-	
+
 
 def delete_volume(ec2_conn, volume_id, logger=None):
 	logger = logger or logging.getLogger(__name__)
