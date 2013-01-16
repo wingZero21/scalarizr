@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from __future__ import with_statement
 
 import sys
 import os
@@ -181,7 +182,7 @@ class EbsVolume(base.Volume, EbsMixin):
 			new_vol.ensure()
 		finally:
 			try:
-				snap.destroy(force=True)
+				snap.destroy()
 			except:
 				e = sys.exc_info()[1]
 				LOG.error('Temporary snapshot desctruction failed: %s' % e)

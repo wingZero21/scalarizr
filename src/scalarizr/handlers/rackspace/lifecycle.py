@@ -1,3 +1,4 @@
+from __future__ import with_statement
 
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
@@ -21,16 +22,12 @@ class RackspaceLifeCycleHandler(Handler):
 		self.on_reload()
 	
 	def on_init(self, *args, **kwargs):
-		bus.on(before_reboot_finish=self.on_before_reboot_finish)	
-		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
-			self._insert_iptables_rules()
+		self._insert_iptables_rules()
 	
 	def on_reload(self):
 		self._cnf = bus.cnf
 		self._platform = bus.platform
 			
-	def on_before_reboot_finish(self, *args, **kwargs):
-		self._insert_iptables_rules()
 				
 	def _insert_iptables_rules(self):
 		self._logger.debug('Adding iptables rules for scalarizr ports')

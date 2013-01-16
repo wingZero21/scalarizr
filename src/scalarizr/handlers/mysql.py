@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on 14.06.2010
 
@@ -660,10 +661,9 @@ class MysqlHandler(ServiceCtlHandler):
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
 		bus.on("before_reboot_start", self.on_before_reboot_start)
-		bus.on("before_reboot_finish", self.on_before_reboot_finish)
-		
+
+		self._insert_iptables_rules()		
 		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
-			self._insert_iptables_rules()
 			self._stop_service('Configuring')
 			
 			# Add SELinux rule
@@ -1196,9 +1196,6 @@ class MysqlHandler(ServiceCtlHandler):
 		"""
 		self._stop_service('Instance is going to reboot')
 
-	def on_before_reboot_finish(self, *args, **kwargs):
-		self._insert_iptables_rules()
-
 	def on_host_init_response(self, message):
 		"""
 		Check mysql data in host init response
@@ -1524,11 +1521,6 @@ class MysqlHandler(ServiceCtlHandler):
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "3306"},
 			])
 
-		"""
-		iptables = IpTables()
-		if iptables.enabled():
-			iptables.insert_rule(None, RuleSpec(dport=3306, jump='ACCEPT', protocol=P_TCP))
-		"""
 	
 	def _get_ini_options(self, *args):
 		ret = []

@@ -1,3 +1,4 @@
+from __future__ import with_statement
 from scalarizr.libs.bases import Observable
 from scalarizr.util import xml_strip
 import xml.dom.minidom as dom

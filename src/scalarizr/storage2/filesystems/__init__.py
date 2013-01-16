@@ -1,3 +1,4 @@
+from __future__ import with_statement
 
 '''
 Created on Nov 11, 2010
@@ -62,7 +63,7 @@ class FileSystem(object):
 
 	def mkfs(self, device, *short_args):
 		short_args = list(short_args)
-		short_args.extend(('-t', self.type))
+		short_args = ['-t', self.type] + short_args
 		args = linux.build_cmd_args(
 					executable='/sbin/mkfs', 
 					short=short_args, 

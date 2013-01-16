@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Nov 25, 2011
 
@@ -7,7 +8,7 @@ Created on Nov 25, 2011
 from scalarizr import exceptions
 from scalarizr.libs import validate
 from scalarizr.services import haproxy
-from scalarizr.util import iptables
+from scalarizr.linux import iptables
 from scalarizr import rpc 
 
 import logging
@@ -95,7 +96,9 @@ class HAProxyAPI(object):
 				if not self.cfg.backend or not bnd in self.cfg.backend:
 					self.cfg['backend'][bnd] = backend
 				try:
-					iptables.insert_rule_once('ACCEPT', port, protocol if protocol != 'http' else 'tcp')
+					iptables.FIREWALL.ensure(
+						{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
+					)
 				except Exception, e:
 					raise exceptions.Duplicate(e)
 
@@ -233,7 +236,9 @@ class HAProxyAPI(object):
 				del self.cfg.backends[default_backend]
 
 		try:
-			iptables.remove_rule_once('ACCEPT', port, protocol if protocol != 'http' else 'tcp')
+			iptables.FIREWALL.remove({
+				"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port
+			})
 		except Exception, e:
 			raise exceptions.NotFound(e)
 

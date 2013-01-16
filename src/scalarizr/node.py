@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from __future__ import with_statement
 
 import os
 import re
@@ -124,53 +125,59 @@ class Json(Store):
 
 
 class Ini(Store):
-	def __init__(self, filename, section, mapping=None):
-		self.filename = filename
+	def __init__(self, filenames, section, mapping=None):
+		if not hasattr(filenames, '__iter__'):
+			filenames = [filenames]
+		self.filenames = filenames
 		self.section = section
 		self.ini = None
 		self.mapping = mapping or {}
 
 
-	def _reload(self):
+	def _reload(self, only_last=False):
 		self.ini = ConfigParser.ConfigParser()
-		if os.path.exists(self.filename):
-			self.ini.read(self.filename)
+		if only_last:
+				self.ini.read(self.filenames[-1])
+		else:
+			for filename in self.filenames:
+				if os.path.exists(filename):
+					self.ini.read(filename)
 
 
 	def __getitem__(self, key):
+		self._reload()
+		if key in self.mapping:
+			key = self.mapping[key]
 		try:
-			self._reload()
-			if key in self.mapping:
-				key = self.mapping[key]
 			return self.ini.get(self.section, key)
 		except ConfigParser.Error:
 			raise KeyError(key)
 
 
 	def __setitem__(self, key, value):
-		self._reload()
 		if value is None:
 			value = ''
 		elif isinstance(value, bool):
 			value = str(int(value))
 		else:
 			value = str(value)
+		self._reload(only_last=True)
 		if not self.ini.has_section(self.section):
 			self.ini.add_section(self.section)
 		if key in self.mapping:
 			key = self.mapping[key]
 		self.ini.set(self.section, key, value)
-		with open(self.filename, 'w+') as fp:
-			self.ini.write(fp)	
+		with open(self.filenames[0], 'w+') as fp:
+			self.ini.write(fp)
 
 
 class IniOption(Ini):
-	def __init__(self, filename, section, option, 
+	def __init__(self, filenames, section, option, 
 			getfilter=None, setfilter=None):
 		self.option = option
 		self.getfilter = getfilter
 		self.setfilter = setfilter
-		super(IniOption, self).__init__(filename, section)
+		super(IniOption, self).__init__(filenames, section)
 
 
 	def __getitem__(self, key):
@@ -286,7 +293,8 @@ __node__ = {
 				Ini(private_dir + '/config.ini', 'general'),
 	'platform': Ini(public_dir + '/config.ini', 'general'),
 	'behavior': IniOption(
-						private_dir + '/config.ini', 'general', 'behaviour',
+						[public_dir + '/config.ini', private_dir + '/config.ini'], 
+						'general', 'behaviour',
 						lambda val: val.strip().split(','),
 						lambda val: ','.join(val)),
 	'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),

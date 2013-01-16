@@ -1,3 +1,4 @@
+from __future__ import with_statement
 # Copyright (c) 2010 Noah Kantrowitz <noah@coderanger.net>
 from scalarizr.externals.chef.api import ChefAPI, autoconfigure
 from scalarizr.externals.chef.client import Client

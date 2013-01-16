@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Mar 3, 2010
 
@@ -116,7 +117,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			init=self.on_init, 
 			start=self.on_start, 
 			reload=self.on_reload, 
-			before_reboot_finish=self.on_before_reboot_finish,
 			shutdown=self.on_shutdown
 		)
 		self.on_reload()
@@ -133,7 +133,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 	def on_init(self):
 		bus.on("host_init_response", self.on_host_init_response)
 		self._producer.on("before_send", self.on_before_message_send)
-		bus.on(before_reboot_finish=self._insert_iptables_rules)	
 		
 		# Add internal messages to scripting skip list
 		try:
@@ -149,8 +148,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		system2(('mount', '-a'), raise_exc=False)
 
 		# Add firewall rules
-		if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
-			self._insert_iptables_rules()
+		#if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
+		self._insert_iptables_rules()
 
 
 	def on_start(self):
@@ -239,11 +238,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		
 		if self._cnf.state == ScalarizrState.RUNNING and self._cnf.key_exists(self._cnf.FARM_KEY):
 			self._start_int_messaging()
-
-
-	def on_before_reboot_finish(self, *args, **kwargs):
-		self._insert_iptables_rules()
-
 
 	def _insert_iptables_rules(self, *args, **kwargs):
 		self._logger.debug('Adding iptables rules for scalarizr ports')

@@ -16,7 +16,7 @@ License:        GPLv3
 URL:            http://scalr.net
 
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-BuildRequires:  python26-setuptools
+#BuildRequires:  python26-setuptools
 Requires:       python26 python26-m2crypto >= 0.20 python26-pexpect >= 2.3
 Requires:       python26-pysnmp >= 4.1 python26-pysnmp-mibs >= 0.0.8a 
 Requires:       python26-prettytable python26-PyYAML
@@ -518,6 +518,23 @@ if compare_versions "$installed_version" lt '0.9.r3746-1'; then
 	[ ! -f "$pub_cnf_dir/percona.ini" ] && ln -s "$pub_cnf_dir/mysql2.ini" "$pub_cnf_dir/percona.ini"
 fi
 
+if compare_versions "$installed_version" lt '0.9.r4762-1'; then
+	dbfile="$priv_cnf_dir/db.sqlite"
+	if [ -e "$dbfile" ]; then
+		${__python} - <<-EOF
+			import sqlite3
+			import os
+			conn = sqlite3.Connection('${dbfile}')
+			cur = conn.cursor()
+			cur.execute('pragma table_info(p2p_message)')
+			if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
+				cur.execute("alter table p2p_message add column format TEXT default 'xml'")
+				conn.commit()
+			cur.close()
+		EOF
+	fi
+fi
+
 sync
 umount -l "$priv_cnf_dir" 2>&1 || :	
 
@@ -580,8 +597,8 @@ rm -f $szr_version_file
 rm -f %{buildroot}/etc/scalr/private.d/*
 chmod 775 %{buildroot}/etc/scalr/private.d
 mkdir -p "%{buildroot}%{_initrddir}"
-cp "%{_sourcedir}/scalarizr.init.d" "%{buildroot}%{_initrddir}/scalarizr"
-cp "%{_sourcedir}/scalarizr_update.init.d" "%{buildroot}%{_initrddir}/scalarizr_update"
+cp "%{_sourcedir}/scalarizr.init" "%{buildroot}%{_initrddir}/scalarizr"
+cp "%{_sourcedir}/scalarizr_update.init" "%{buildroot}%{_initrddir}/scalarizr_update"
 
 
 %clean

@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Aug 1, 2012
 
@@ -14,8 +15,8 @@ import threading
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr import handlers, rpc
+from scalarizr.linux import iptables
 from scalarizr.util import system2, PopenError
-from scalarizr.util.iptables import IpTables, RuleSpec, P_TCP
 from scalarizr.services import redis as redis_service
 from scalarizr.handlers import redis as redis_handler
 
@@ -115,8 +116,6 @@ class RedisAPI(object):
 		new_ports = []
 		
 		
-		iptables = IpTables()
-		
 		
 		for port,password in zip(ports, passwords or [None for port in ports]):
 			if op:
@@ -126,7 +125,10 @@ class RedisAPI(object):
 					op.__enter__()
 					
 				if iptables.enabled():
-					iptables.insert_rule(None, RuleSpec(dport=port, jump='ACCEPT', protocol=P_TCP))
+					iptables.FIREWALL.ensure({
+						"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port
+					})
+					
 
 				redis_service.create_redis_conf_copy(port)
 				redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)

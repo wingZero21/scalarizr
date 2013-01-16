@@ -1,3 +1,4 @@
+from __future__ import with_statement
 '''
 Created on Nov 8, 2011
 
@@ -472,7 +473,7 @@ class MySQLConf(BaseConfig):
 	def _set_datadir(self, path):
 		if not path:
 			raise BaseException('Datadir value cannot be empty')
-		self.set('mysqld/datadir', path)	
+		self.set('mysqld/datadir', path)
 
 
 	def _get_log_bin(self):

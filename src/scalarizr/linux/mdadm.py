@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from __future__ import with_statement
 
 import re
 import os
@@ -6,10 +7,10 @@ from scalarizr import linux
 from scalarizr.storage2 import StorageError
 
 
-
+if not linux.which('mdadm'):
+	from scalarizr.linux import pkgmgr
+	pkgmgr.installed('mdadm')
 mdadm_binary = linux.which('mdadm')
-if not mdadm_binary:
-	raise Exception('Mdadm binary was not found')
 
 
 def mdadm(mode, md_device=None, *devices, **long_kwds):

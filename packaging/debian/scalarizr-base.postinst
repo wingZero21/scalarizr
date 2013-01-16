@@ -4,7 +4,11 @@ set -x
 
 # Automatically added by dh_pysupport
 if which update-python-modules >/dev/null 2>&1; then
-	update-python-modules scalarizr-base
+	if test -f /usr/share/python-support/scalarizr-base.public; then
+		update-python-modules /usr/share/python-support/scalarizr-base.public
+	else
+		update-python-modules scalarizr-base
+	fi
 fi
 # End automatically added section
 
@@ -721,6 +725,23 @@ fp.close()
 
 	if dpkg --compare-versions "$installed_version" lt '0.9.r3746-1'; then
 		[ ! -f "$pub_cnf_dir/percona.ini" ] && ln -s "$pub_cnf_dir/mysql2.ini" "$pub_cnf_dir/percona.ini"
+	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.9.r4762-1'; then
+		dbfile="$priv_cnf_dir/db.sqlite"
+		if [ -e "$dbfile" ]; then
+			${__python} - <<-EOF
+				import sqlite3
+				import os
+				conn = sqlite3.Connection('${dbfile}')
+				cur = conn.cursor()
+				cur.execute('pragma table_info(p2p_message)')
+				if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
+					cur.execute("alter table p2p_message add column format TEXT default 'xml'")
+					conn.commit()
+				cur.close()
+			EOF
+		fi
 	fi
 
 	sync

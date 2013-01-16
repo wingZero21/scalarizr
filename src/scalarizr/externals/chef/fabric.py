@@ -1,3 +1,4 @@
+from __future__ import with_statement
 from scalarizr.externals.chef import Search
 from scalarizr.externals.chef.api import ChefAPI, autoconfigure
 from scalarizr.externals.chef.exceptions import ChefError

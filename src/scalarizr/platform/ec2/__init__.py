@@ -1,3 +1,4 @@
+from __future__ import with_statement
 
 from scalarizr.bus import bus
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
@@ -5,8 +6,7 @@ from scalarizr.storage.transfer import Transfer
 from .storage import S3TransferProvider
 
 from boto import connect_s3
-from boto.ec2.connection import EC2Connection
-from boto.ec2.regioninfo import RegionInfo
+import boto.ec2
 import urllib2, re, os
 
 
@@ -39,27 +39,6 @@ class Ec2Platform(Ec2LikePlatform):
 
 	_userdata_key = "latest/user-data"
 
-	'''
-	ec2_endpoints = {
-		"us-east-1" 		: "ec2.amazonaws.com",
-		"us-west-1" 		: "ec2.us-west-1.amazonaws.com",
-		"us-west-2" 		: "ec2.us-west-2.amazonaws.com",
-		"sa-east-1"			: "ec2.sa-east-1.amazonaws.com",
-		"eu-west-1" 		: "ec2.eu-west-1.amazonaws.com",
-		"ap-southeast-1" 	: "ec2.ap-southeast-1.amazonaws.com",
-		"ap-northeast-1" 	: "ec2.ap-northeast-1.amazonaws.com"
-		
-	}
-	s3_endpoints = {
-		'us-east-1' 		: 's3-external-1.amazonaws.com',
-		'us-west-1' 		: 's3-us-west-1.amazonaws.com',
-		'us-west-2' 		: 's3-us-west-2.amazonaws.com',
-		"sa-east-1"			: "s3-sa-east-1.amazonaws.com",
-		'eu-west-1' 		: 's3-eu-west-1.amazonaws.com',
-		'ap-southeast-1' 	: 's3-ap-southeast-1.amazonaws.com',
-		'ap-northeast-1' 	: 's3-ap-northeast-1.amazonaws.com'
-	}
-	'''
 	
 	instance_store_devices = (
 		'/dev/sda2', '/dev/sdb', '/dev/xvdb', 
@@ -93,9 +72,9 @@ class Ec2Platform(Ec2LikePlatform):
 	def new_ec2_conn(self):
 		""" @rtype: boto.ec2.connection.EC2Connection """
 		region = self.get_region()
-		endpoint = self._ec2_endpoint(region)
-		self._logger.debug("Return ec2 connection (endpoint: %s)", endpoint)
-		return EC2Connection(region=RegionInfo(name=region, endpoint=endpoint))
+		self._logger.debug("Return ec2 connection (region: %s)", region)
+		return boto.ec2.connect_to_region(region)
+
 
 	def new_s3_conn(self):
 		region = self.get_region()
@@ -124,13 +103,6 @@ class Ec2Platform(Ec2LikePlatform):
 			bucket = self.get_user_data(UD_OPT_S3_BUCKET_NAME) or ''
 			ret = 's3://' + bucket
 		return ret
-
-
-	def _ec2_endpoint(self, region):
-		if region == 'us-east-1':
-			return 'ec2.amazonaws.com'
-		else:
-			return 'ec2.%s.amazonaws.com' % region
 		
 	def _s3_endpoint(self, region):
 		if region == 'us-east-1':
