@@ -8,6 +8,8 @@ import subprocess
 import json
 import logging
 import hashlib
+import base64
+import mock
 from copy import copy
 from ConfigParser import ConfigParser
 from random import choice
@@ -15,7 +17,9 @@ from random import choice
 from lettuce import step, world, before, after
 from boto import connect_s3
 
-from scalarizr.storage2.cloudfs import s3, LargeTransfer, LOG
+from scalarizr.storage2.cloudfs import LargeTransfer, LOG
+from scalarizr.storage2.cloudfs import s3, gcs
+from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 
 
 #
@@ -26,12 +30,39 @@ from scalarizr.storage2.cloudfs import s3, LargeTransfer, LOG
 # prevent ini parser from lowercasing params
 ConfigParser.optionxform = lambda self, x: x
 
-
-# patch get_conn because platfrom is None
+# make connections work
+# s3
 s3.S3FileSystem._get_connection = lambda self: connect_s3()
+# gcs
+def get_pk(f="gcs_pk.p12"):
+	with open(f, "rb") as fd:
+		pk = fd.read()
+	return base64.b64encode(pk)
+
+ACCESS_DATA = {
+	"service_account_name": '876103924605@developer.gserviceaccount.com',
+	"key": get_pk(),
+}
+
+gcs.bus = mock.MagicMock()
+gcs.bus.platform.get_access_data = lambda k: ACCESS_DATA[k]
+
+gsm = GoogleServiceManager(gcs.bus.platform,
+	"storage", "v1beta1", STORAGE_FULL_SCOPE)
+
+gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
+gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
 
 
 class S3(s3.S3FileSystem):
+
+	def exists(self, remote_path):
+		parent = os.path.dirname(remote_path.rstrip('/'))
+		ls = self.ls(parent)
+		return remote_path in ls
+
+
+class GCS(gcs.GCSFileSystem):
 
 	def exists(self, remote_path):
 		parent = os.path.dirname(remote_path.rstrip('/'))
@@ -47,11 +78,12 @@ LOG.setLevel(logging.DEBUG)
 LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
 
 
+"""
 @before.all
 def global_setup():
 	subprocess.Popen(["strace", "-T", "-t", "-f", "-q", "-o", "strace_latest",
 					  "-p", str(os.getpid())], close_fds=True)
-
+"""
 
 #
 #
@@ -62,7 +94,12 @@ STORAGES = {
 	"s3": {
 		"url": "s3://scalr.test_bucket/vova_test",
 		"driver": S3,
-	}
+	},
+	"gcs": {
+		"url": "gcs://vova-test",
+		"driver": GCS,
+
+	},
 }
 
 
@@ -166,7 +203,7 @@ def i_have_a_file(step, megabytes, filename):
 def i_upload_it_with_gzipping(step, storage):
 	world.destination = STORAGES[storage]["url"]
 	world.driver = STORAGES[storage]["driver"]()
-	world.manifest_url = LargeTransfer(world.sources[0], world.destination, chunk_size=15).run()
+	world.manifest_url = LargeTransfer(world.sources[0], world.destination).run()
 
 
 
