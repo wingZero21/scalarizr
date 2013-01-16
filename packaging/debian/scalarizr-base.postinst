@@ -4,7 +4,11 @@ set -x
 
 # Automatically added by dh_pysupport
 if which update-python-modules >/dev/null 2>&1; then
-	update-python-modules scalarizr-base
+	if test -f /usr/share/python-support/scalarizr-base.public; then
+		update-python-modules /usr/share/python-support/scalarizr-base.public
+	else
+		update-python-modules scalarizr-base
+	fi
 fi
 # End automatically added section
 
