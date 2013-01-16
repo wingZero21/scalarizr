@@ -168,7 +168,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			client = self._client()
 			innodb_stat = client.fetchone('SHOW INNODB STATUS')[0]
 			for line in innodb_stat.splitlines():
-				m = self._re_lsn_innodb_stat.search(line):
+				m = self._re_lsn_innodb_stat.search(line)
 				if m:
 					current_lsn = int(m.group(1))
 					break
