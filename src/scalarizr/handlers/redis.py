@@ -16,6 +16,7 @@ import logging
 
 from scalarizr import config, storage2, handlers
 from scalarizr.bus import bus
+from scalarizr.storage import transfer
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
 from scalarizr.util.filetool import split
@@ -533,19 +534,19 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 					cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
 					LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-					#trn = transfer.Transfer()
-					#cloud_files = trn.upload(parts, cloud_storage_path)
-					#LOG.info("%s backup uploaded to cloud storage under %s/%s" %
-					#        (BEHAVIOUR, cloud_storage_path, backup_filename))
+					trn = transfer.Transfer()
+					cloud_files = trn.upload(parts, cloud_storage_path)
+					LOG.info("%s backup uploaded to cloud storage under %s/%s" %
+					        (BEHAVIOUR, cloud_storage_path, backup_filename))
 
-			#result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))
-			#op.ok(data=result)
+			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))
+			op.ok(data=result)
 
 			# Notify Scalr
 			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
 				db_type = BEHAVIOUR,
 				status = 'ok',
-			#	backup_parts = result
+				backup_parts = result
 			))
 
 		except (Exception, BaseException), e:
