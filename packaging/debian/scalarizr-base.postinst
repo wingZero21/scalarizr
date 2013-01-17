@@ -730,7 +730,7 @@ fp.close()
 	if dpkg --compare-versions "$installed_version" lt '0.9.r4762-1'; then
 		dbfile="$priv_cnf_dir/db.sqlite"
 		if [ -e "$dbfile" ]; then
-			${__python} - <<-EOF
+			python - <<-EOF
 				import sqlite3
 				import os
 				conn = sqlite3.Connection('${dbfile}')
