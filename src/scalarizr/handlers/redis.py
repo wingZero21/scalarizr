@@ -78,9 +78,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 	def is_replication_master(self):
 		try:
 			value = __redis__[OPT_REPLICATION_MASTER]
-			LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
 		except KeyError:
+			value = None
+
+		if value is None:
 			value = 0
+			__redis__[OPT_REPLICATION_MASTER] = value
+		else:
+			LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
+
 		return True if int(value) else False
 
 
@@ -93,9 +99,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 	def persistence_type(self):
 		try:
 			value = __redis__[OPT_PERSISTENCE_TYPE]
-			LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
 		except KeyError:
+			value = None
+
+		if value is None:
 			value = 'snapshotting'
+			__redis__[OPT_PERSISTENCE_TYPE] = value
+		else:
+			LOG.debug('Got %s : %s' % (OPT_PERSISTENCE_TYPE, value))
+
 		return value
 
 
@@ -297,6 +309,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		else:
 			self._init_slave(message)
 
+		__redis__['volume'] = storage2.volume(__redis__['volume'])
+
 		self._init_script = self.redis_instances.get_default_process()
 		message.redis['ports'] = self.redis_instances.ports
 		message.redis['passwords'] = self.redis_instances.passwords
@@ -399,7 +413,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 				self.redis_instances.stop('Unplugging slave storage and then plugging master one')
 
-				old_vol = __redis__['volume'] # ??????
+				old_vol = storage2.volume(__redis__['volume']) # ??????
 				old_vol.detach(force=True)
 				new_storage_vol = storage2.volume(master_storage_conf)
 				new_storage_vol.ensure(mount=True)
@@ -426,8 +440,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 				new_storage_vol.detach(force=True)
 			# Get back slave storage
 			if old_vol:
+				old_vol.ensure(mount=True)
 				__redis__['volume'] = old_vol
-				__redis__['volume'].ensure(mount=True)
 
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, dict(
 				db_type=BEHAVIOUR,
@@ -598,6 +612,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		try:
 			val = __redis__[OPT_USE_PASSWORD]
 		except KeyError:
+			val = None
+
+		if val is None:
 			val = 1
 			__redis__[OPT_USE_PASSWORD] = val
 
@@ -608,11 +625,11 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		try:
 			password = __redis__[OPT_MASTER_PASSWORD]
 		except KeyError:
-			if self.use_passwords:
-				password = cryptotool.pwgen(20)
-				__redis__[OPT_MASTER_PASSWORD] = password
-			else:
-				password = None
+			password = None
+
+		if self.use_passwords and not password:
+			password = cryptotool.pwgen(20)
+			__redis__[OPT_MASTER_PASSWORD] = password
 
 		return password
 
