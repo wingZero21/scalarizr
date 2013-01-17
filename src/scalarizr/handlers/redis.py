@@ -264,7 +264,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					redis_data['volume'] = storage2.volume(
 							redis_data.pop('volume_config'))
 
-					if redis_data('snapshot_config'):
+					if redis_data.get('snapshot_config'):
 						redis_data['restore'] = backup.restore(
 							type='snap_redis',
 							snapshot=redis_data.pop('snapshot_config'),
