@@ -521,8 +521,8 @@ if compare_versions "$installed_version" lt '0.9.r4762-1'; then
 			cur = conn.cursor()
 			cur.execute('pragma table_info(p2p_message)')
 			if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
-				cur.execute("alter table p2p_message add column format TEXT default 'xml'")
-				conn.commit()
+			    cur.execute("alter table p2p_message add column format TEXT default 'xml'")
+			    conn.commit()
 			cur.close()
 		EOF
 	fi
