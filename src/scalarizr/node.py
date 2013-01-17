@@ -306,7 +306,7 @@ __node__ = {
 for behavior in ('mysql', 'mysql2', 'percona'):
 	section = 'mysql2' if behavior == 'percona' else behavior
 	__node__[behavior] = Compound({
-		'volume,volume_config': 
+		'volume,volume_config':
 				Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
 					'scalarizr.storage2.volume'),
 		'*_password,log_*,replication_master': 
@@ -314,6 +314,14 @@ for behavior in ('mysql', 'mysql2', 'percona'):
 		'mysqldump_options': 
 				Ini('%s/%s.ini' % (public_dir, behavior), behavior)
 	})
+
+__node__['redis'] = Compound({
+	'volume,volume_config':	Json('%s/storage/%s.json' % (private_dir, 'redis'),
+		 'scalarizr.storage2.volume'),
+	'replication_master,persistence_type,use_password,master_password': Ini(
+		'%s/%s.ini' % (private_dir, 'redis'), 'redis')
+})
+
 __node__['ec2'] = Compound({
 	't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
 	'hostname_as_pubdns': 

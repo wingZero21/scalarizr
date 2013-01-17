@@ -10,12 +10,18 @@ import signal
 import logging
 import shutil
 
-from scalarizr.util import initdv2, system2, PopenError, wait_until
-from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError
+from scalarizr import storage2, node
+from scalarizr.util import initdv2, system2, PopenError, wait_until, Singleton
+from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, backup
 from scalarizr.util import disttool, cryptotool, firstmatched
 from scalarizr.util.filetool import rchown
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
+
+__redis__ = node.__node__['redis']
+__redis__.update({
+	'storage_dir': '/mnt/redisstorage'
+})
 
 SERVICE_NAME = CNF_SECTION = DEFAULT_USER = 'redis'
 
@@ -201,10 +207,11 @@ class Redisd(object):
 
 class RedisInstances(object):
 
+	__metaclass__ = Singleton
+
 	instances = None
 	master = None
 	persistence_type = None
-
 
 	def __init__(self, master=False, persistence_type=SNAP_TYPE, use_passwords=True):
 		self.master = master
@@ -908,6 +915,33 @@ class RedisCLI(object):
 		if info['role']=='slave':
 			return True if info['master_sync_in_progress']=='1' else False
 		return False
+
+
+class RedisSnapBackup(backup.SnapBackup):
+	def __init__(self, **kwds):
+		super(RedisSnapBackup, self).__init__(**kwds)
+		self.on(freeze=self.freeze)
+		self._redis_instances = RedisInstances()
+
+
+	def freeze(self, volume, state):
+		system2('sync', shell=True)
+		self._redis_instances.save_all()
+		system2('sync', shell=True)
+
+class RedisSnapRestore(backup.SnapRestore):
+	def __init__(self, **kwds):
+		super(RedisSnapRestore, self).__init__(**kwds)
+		self.on(complete=self.complete)
+
+
+	def complete(self, volume):
+		vol = storage2.volume(volume)
+		vol.mpoint = __redis__['storage_dir']
+		vol.mount()
+
+backup.backup_types['snap_redis'] = RedisSnapBackup
+backup.restore_types['snap_redis'] = RedisSnapRestore
 
 
 def get_snap_db_filename(port=DEFAULT_PORT):
