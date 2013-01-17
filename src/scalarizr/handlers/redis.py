@@ -309,6 +309,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		else:
 			self._init_slave(message)
 
+		__redis__['volume'].tags = self.redis_tags()
 		__redis__['volume'] = storage2.volume(__redis__['volume'])
 
 		self._init_script = self.redis_instances.get_default_process()
@@ -697,7 +698,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 								   volume=__redis__['volume'],
 								   tags=self.redis_tags)
 		restore = backup_obj.run()
-		return restore.snap
+		return restore.snapshot
 
 
 	def _compat_storage_data(self, vol=None, snap=None):
