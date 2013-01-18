@@ -16,15 +16,14 @@ License:        GPLv3
 URL:            http://scalr.net
 
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-#BuildRequires:  python26-setuptools
+#BuildRequires: python26-distribute
 Requires:       python26 python26-m2crypto >= 0.20 python26-pexpect >= 2.3
 Requires:       python26-pysnmp >= 4.1 python26-pysnmp-mibs >= 0.0.8a 
 Requires:       python26-prettytable python26-PyYAML
 #Requires:		python26-pymongo
 Requires:		python26-pymysql
 Requires:		python26-pychef
-%endif
-%if 0%{?fedora} >= 8 || 0%{?rhel} >= 6
+%else
 BuildRequires:  python-setuptools
 Requires:       python >= 2.5 m2crypto >= 0.20 pexpect >= 2.3
 # snmp
@@ -57,10 +56,9 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr EC2 edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-boto >= 2.5.3
-%endif
-%if 0%{?fedora} >= 8 || 0%{?rhel} >= 6
-Requires:       python-boto >= 2.5.3
+Requires:       python26-boto >= 2.6.0
+%else
+Requires:       python-boto >= 2.6.0
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
@@ -92,8 +90,7 @@ Summary:        Scalarizr Rackspace edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:       python26-cloudfiles >= 1.5.1 python26-cloudservers >= 1.0
-%endif
-%if 0%{?fedora} >= 8 || 0%{?rhel} >= 6
+%else
 Requires:       python-cloudfiles >= 1.5.1 python-cloudservers >= 1.0 python-httplib2
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
@@ -117,8 +114,7 @@ Requires:       scalarizr-base = %{version}-%{release}
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:		python26-novaclient >= 2.10.0
 Requires:               python26-cinderclient >= 1.0.1
-%endif
-%if 0%{?fedora} >= 8 || 0%{?rhel} >= 6
+%else
 Requires:               python-novaclient >= 2.10.0
 Requires:               python-cinderclient >= 1.0.1
 %endif
@@ -140,8 +136,7 @@ Summary:        Scalarizr CloudStack (cloud.com) edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:       python26-cloudstack >= 0.1.r16
-%endif
-%if 0%{?fedora} >= 8 || 0%{?rhel} >= 6
+%else
 Requires:       python-cloudstack >= 0.1.r16
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
@@ -162,8 +157,7 @@ Summary:        Scalarizr uCloud (Korea Telecom) edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:       python26-cloudstack
-%endif
-%if 0%{?fedora} >= 8 || 0%{?rhel} >= 6
+%else
 Requires:       python-cloudstack
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
@@ -184,8 +178,7 @@ Summary:        Scalarizr IDCF edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:       python26-cloudstack
-%endif
-%if 0%{?fedora} >= 8 || 0%{?rhel} >= 6
+%else
 Requires:       python-cloudstack
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
@@ -528,8 +521,8 @@ if compare_versions "$installed_version" lt '0.9.r4762-1'; then
 			cur = conn.cursor()
 			cur.execute('pragma table_info(p2p_message)')
 			if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
-				cur.execute("alter table p2p_message add column format TEXT default 'xml'")
-				conn.commit()
+			    cur.execute("alter table p2p_message add column format TEXT default 'xml'")
+			    conn.commit()
 			cur.close()
 		EOF
 	fi
