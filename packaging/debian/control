@@ -73,7 +73,7 @@ Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
          python-novaclient (>= 2.6.1),
-         python-cinderclient,
+         python-cinderclient (>= 1.0.1),
          python-rackspace-novaclient
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
