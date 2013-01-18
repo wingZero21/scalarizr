@@ -41,7 +41,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-         python-boto (>= 2.5.3)
+         python-boto (>= 2.6.0)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Amazon EC2
@@ -72,7 +72,9 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-         python-novaclient (>= 2.6.1)
+         python-novaclient (>= 2.6.1),
+         python-cinderclient,
+         python-rackspace-novaclient
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Openstack cloud
