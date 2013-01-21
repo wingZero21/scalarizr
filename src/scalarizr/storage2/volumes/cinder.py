@@ -114,7 +114,6 @@ class CinderVolume(base.Volume):
 
         if self._cinder:
             volume = None
-            name = None
             if self.id:
                 volume = self._cinder.volumes.get(self.id)
 
@@ -156,18 +155,13 @@ class CinderVolume(base.Volume):
                     name = '/dev/xvd%s' % self._free_device_letter_mgr.get()
                     self._attach_volume(device_name=name)
 
-            else:
-                name = volume.attachments[0]['device']
-
             self._config.update({
                 'id': volume.id,
                 'avail_zone': volume.availability_zone,
-                'name': name,
                 'size': volume.size,
                 'volume_type': volume.volume_type})
 
-        if self.name:
-            self.device = name2device(self.name)
+        # TODO: check device availability
 
     def _create_volume(self,
                        size=None,
