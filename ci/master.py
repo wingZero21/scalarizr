@@ -29,7 +29,8 @@ c['builders'].append(dict(
 		buildsteps.svn(__opts__) +
 		buildsteps.bump_version(__opts__, setter='cat > src/scalarizr/version') +
 		buildsteps.source_dist(__opts__) +
-		buildsteps.trigger_packaging(__opts__)
+		buildsteps.trigger_packaging(__opts__) + 
+		buildsteps.to_repo(__opts__, types=["deb", "rpm"])
 	)
 ))
 
