@@ -28,21 +28,19 @@ class GCSFileSystem (object):
 	chunk_size = 2*1024*1024
 	report_interval = 10  # percent; every <value> percent at most
 
+
 	def ls(self, remote_path):
 		bucket, path = self._parse_path(remote_path)
 
 		path = path.rstrip('/') + '/' if path else ''
 
 		req = self.cloudstorage.objects().list(
-			bucket=bucket, prefix=path, delimiter='/'
-		)
+			bucket=bucket, prefix=path)
 		resp = req.execute()
 
-		dirs = [self._format_path(bucket, x)
-				for x in resp.setdefault("prefixes", [])]
-		items = [self._format_path(bucket, x["name"])
-				 for x in resp.setdefault("items", [])]
-		return tuple(dirs + items)
+		items = (self._format_path(bucket, x["name"])
+				 for x in resp.setdefault("items", []))
+		return tuple(items)
 
 
 	def _format_path(self, bucket, key):

@@ -26,7 +26,7 @@ from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 # Essential environment variables:
 # $AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY for s3
 # $RS_USERNAME, $RS_API_KEY for cf
-# default storage is s3; override with $STORAGE
+# default storage is s3; override with $LT_TEST_STORAGE
 
 
 #
@@ -229,7 +229,7 @@ def i_have_a_file(step, megabytes, filename):
 def i_upload_it_with_gzipping(step):
 	world.destination = STORAGES[STORAGE]["url"]
 	world.driver = STORAGES[STORAGE]["driver"]()
-	world.manifest_url = LargeTransfer(world.sources[0], world.destination).run()
+	world.manifest_url = LargeTransfer(world.sources[0], world.destination).run().cloudfs_path
 
 
 
@@ -242,7 +242,7 @@ def i_upload_multiple_sources_with_gzipping(step):
 		for src in sources:
 			yield src
 
-	world.manifest_url = LargeTransfer(src_gen(), world.destination).run()
+	world.manifest_url = LargeTransfer(src_gen(), world.destination).run().cloudfs_path
 
 
 @step("I expect manifest as a result")
