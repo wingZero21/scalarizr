@@ -338,9 +338,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 			LOG.info('Stopping %s service' % BEHAVIOUR)
 			self.redis_instances.stop('Server will be terminated')
 			if not self.is_replication_master:
-				LOG.info('Destroying volume %s' % self.storage_vol.id)
-				self.storage_vol.destroy(remove_disks=True)
-				LOG.info('Volume %s was destroyed.' % self.storage_vol.id)
+				LOG.info('Destroying volume %s' % __redis__['volume'].id)
+				__redis__['volume'].destroy(remove_disks=True)
+				LOG.info('Volume %s was destroyed.' % __redis__['volume'].id)
 
 
 	def on_DbMsr_CreateDataBundle(self, message):
@@ -678,7 +678,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 			with op.step(self._step_collect_host_up_data):
 				# Update HostUp message
-				message.redis = self._compat_storage_data(self.storage_vol)
+				message.redis = self._compat_storage_data(__redis__['volume'])
 				message.db_type = BEHAVIOUR
 
 
