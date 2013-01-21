@@ -82,7 +82,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		except KeyError:
 			value = None
 
-		if value is None:
+		if value in (None, ''):
 			value = 0
 			__redis__[OPT_REPLICATION_MASTER] = value
 		else:
@@ -103,7 +103,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		except KeyError:
 			value = None
 
-		if value is None:
+		if not value:
 			value = 'snapshotting'
 			__redis__[OPT_PERSISTENCE_TYPE] = value
 		else:
@@ -616,7 +616,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		except KeyError:
 			val = None
 
-		if val is None:
+		if val in (None, ''):
 			val = 1
 			__redis__[OPT_USE_PASSWORD] = val
 
