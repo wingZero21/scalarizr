@@ -18,7 +18,7 @@ from scalarizr.messaging import Messages, Queues
 from scalarizr.storage import Storage
 from scalarizr.storage.util import loop
 from scalarizr.util import system2, software
-from scalarizr.util import mount
+from scalarizr.linux import mount
 from scalarizr.linux import coreutils
 from scalarizr.linux.rsync import rsync
 

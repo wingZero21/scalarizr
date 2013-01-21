@@ -16,7 +16,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.util import disttool
 from scalarizr.util import system2
-from scalarizr.util import mount
+from scalarizr.linux import mount
 
 
 def get_handlers ():

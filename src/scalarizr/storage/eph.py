@@ -13,7 +13,7 @@ from .util import ramdisk
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util.software import whereis
 from scalarizr.util import firstmatched
-from scalarizr.util import mount 
+from scalarizr.linux import mount 
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
 

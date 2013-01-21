@@ -9,7 +9,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError, prepare_tags
 from scalarizr.util import system2, disttool, cryptotool,\
 	wait_until, firstmatched
-from scalarizr.util import mount
+from scalarizr.linux import mount
 from scalarizr.platform.ec2 import ebstool
 from scalarizr import storage
 from scalarizr.storage.transfer import Transfer

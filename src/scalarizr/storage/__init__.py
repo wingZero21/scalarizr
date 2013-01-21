@@ -8,7 +8,7 @@ from __future__ import with_statement
 
 
 from scalarizr.util import system2, PopenError, disttool
-from scalarizr.util import mount
+from scalarizr.linux import mount
 
 import logging
 import threading
@@ -358,9 +358,8 @@ if disttool.is_redhat_based():
 	# Check that system is affected by devices ordering bug
 	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
 	mtab = mount.mounts()
-	entry = [v for v in mtab['/'] 
-			if v.devname.startswith('/dev')][0]
-	RHEL_DEVICE_ORDERING_BUG = entry.devname.startswith('/dev/xvde') 
+	entry = mtab['/dev']
+	RHEL_DEVICE_ORDERING_BUG = entry.device.startswith('/dev/xvde') 
 
 
 def get_system_devname(devname):

@@ -16,7 +16,7 @@ from scalarizr.bus import bus
 from scalarizr.storage import transfer
 from scalarizr import storage2
 from scalarizr.util import system2, wait_until
-from scalarizr.util import mount
+from scalarizr.linux import mount
 from scalarizr.handlers import rebundle as rebundle_hndlr
 from scalarizr.linux.tar import Tar
 from scalarizr.linux.rsync import rsync

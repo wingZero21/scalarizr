@@ -493,9 +493,3 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 
 storage2.volume_types['ebs'] = EbsVolume
 storage2.snapshot_types['ebs'] = EbsSnapshot
-
-		
-
-
-
-

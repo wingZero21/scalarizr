@@ -12,7 +12,6 @@ import os
 import collections
 
 from scalarizr import linux
-from scalarizr import storage2
 from scalarizr.util import disttool
 
 
@@ -139,6 +138,7 @@ def mount_ex(device,
 	options = options or ('-t', 'auto')
 	
 	if make_fs:
+		from scalarizr import storage2
 		storage2.filesystem(fstype).mkfs(device)
 	
 	out = mount(device, mpoint, *options)[0]

@@ -16,7 +16,7 @@ from scalarizr import config
 from scalarizr import handlers
 from scalarizr.messaging import Messages
 from scalarizr.util import wait_until
-from scalarizr.util import mount
+from scalarizr.linux import mount
 
 
 LOG = logging.getLogger(__name__)

@@ -24,7 +24,7 @@ from scalarizr.util import system2, get_free_devname,\
 	firstmatched, wait_until
 from scalarizr.util import initdv2
 from scalarizr.util import software
-from scalarizr.util import mount
+from scalarizr.linux import mount
 from scalarizr.linux import iptables
 from scalarizr.linux.rsync import rsync
 

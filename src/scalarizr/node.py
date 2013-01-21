@@ -328,6 +328,12 @@ __node__['ec2'] = Compound({
 	'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
 	'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
 })
+__node__['cloudstack'] = Compound({
+	'new_conn': Call('scalarizr.bus', 'bus.platform.new_cloudstack_conn'),
+	'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
+	'zone_id': Call('scalarizr.bus', 'bus.platform.get_avail_zone_id'),
+	'zone_name': Call('scalarizr.bus', 'bus.platform.get_avail_zone')
+})
 __node__['scalr'] = Compound({
 	'version': File(private_dir + '/.scalr-version'),
 	'id': Ini(private_dir + '/config.ini', 'general', {'id': 'scalr_id'})

@@ -15,7 +15,7 @@ from scalarizr.linux.coreutils import statvfs
 from scalarizr.linux.coreutils import truncate
 from scalarizr.linux.rsync import rsync
 from scalarizr.linux.tar import Tar
-from scalarizr.util import mount
+from scalarizr.linux import mount
 from datetime import datetime
 from tempfile import mkdtemp
 import logging
