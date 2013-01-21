@@ -11,12 +11,14 @@ from apiclient.errors import HttpError
 
 from scalarizr.storage2 import cloudfs
 from scalarizr.bus import bus
-from scalarizr.node import __node__  #? node or bus
+from scalarizr.node import __node__
+
+
+# TODO: get connection from node
 
 
 LOG = logging.getLogger(__name__)
 
-# TODO: test large_transfer
 
 class GCSFileSystem (object):
 	# TODO: add amazon-style 0% and 100% callbacks ?
@@ -80,7 +82,8 @@ class GCSFileSystem (object):
 		LOG.debug('Uploading %s to cloud storage (remote path: %s)', local_path, remote_path)
 		filename = os.path.basename(local_path)
 		bucket, name = self._parse_path(remote_path)
-		name = os.path.join(name, filename)
+		if name.endswith("/"):
+			name = os.path.join(name, filename)
 
 		buckets = self._list_buckets()
 		if bucket not in buckets:

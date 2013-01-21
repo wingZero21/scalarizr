@@ -16,10 +16,17 @@ from random import choice
 
 from lettuce import step, world, before, after
 from boto import connect_s3
+import cloudfiles
 
 from scalarizr.storage2.cloudfs import LargeTransfer, LOG
-from scalarizr.storage2.cloudfs import s3, gcs
+from scalarizr.storage2.cloudfs import s3, gcs, cf
 from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
+
+
+# Essential environment variables:
+# $AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY for s3
+# $RS_USERNAME, $RS_API_KEY for cf
+# default storage is s3; override with $STORAGE
 
 
 #
@@ -34,7 +41,7 @@ ConfigParser.optionxform = lambda self, x: x
 # s3
 s3.S3FileSystem._get_connection = lambda self: connect_s3()
 # gcs
-def get_pk(f="gcs_pk.p12"):
+def get_pk(f="gcs_pk.p12"):  # TODO:
 	with open(f, "rb") as fd:
 		pk = fd.read()
 	return base64.b64encode(pk)
@@ -52,6 +59,9 @@ gsm = GoogleServiceManager(gcs.bus.platform,
 
 gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
 gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
+# cf
+cf.CFFileSystem._get_connection = lambda self: cloudfiles.Connection(
+		os.environ["RS_USERNAME"], os.environ["RS_API_KEY"])
 
 
 class S3(s3.S3FileSystem):
@@ -63,6 +73,14 @@ class S3(s3.S3FileSystem):
 
 
 class GCS(gcs.GCSFileSystem):
+
+	def exists(self, remote_path):
+		parent = os.path.dirname(remote_path.rstrip('/'))
+		ls = self.ls(parent)
+		return remote_path in ls
+
+
+class CF(cf.CFFileSystem):
 
 	def exists(self, remote_path):
 		parent = os.path.dirname(remote_path.rstrip('/'))
@@ -98,9 +116,17 @@ STORAGES = {
 	"gcs": {
 		"url": "gcs://vova-test",
 		"driver": GCS,
-
+	},
+	"cf": {
+		"url": "cf://vova-test",
+		"driver": CF,
 	},
 }
+
+STORAGE = "s3"
+if "LT_TEST_STORAGE" in os.environ:
+	STORAGE = os.environ["LT_TEST_STORAGE"]
+assert STORAGE in STORAGES, "%s not in %s" % (STORAGE, STORAGES.keys())
 
 
 def convert_manifest(json_manifest):
@@ -199,18 +225,18 @@ def i_have_a_file(step, megabytes, filename):
 	world.items[os.path.basename(filename)] = f_md5
 
 
-@step("I upload it to ([^\s]+) with gzipping")
-def i_upload_it_with_gzipping(step, storage):
-	world.destination = STORAGES[storage]["url"]
-	world.driver = STORAGES[storage]["driver"]()
+@step("I upload it to Storage with gzipping")
+def i_upload_it_with_gzipping(step):
+	world.destination = STORAGES[STORAGE]["url"]
+	world.driver = STORAGES[STORAGE]["driver"]()
 	world.manifest_url = LargeTransfer(world.sources[0], world.destination).run()
 
 
 
-@step("I upload multiple sources to ([^\s]+) with gzipping")
-def i_upload_multiple_sources_with_gzipping(step, storage):
-	world.destination = STORAGES[storage]["url"]
-	world.driver = STORAGES[storage]["driver"]()
+@step("I upload multiple sources to Storage with gzipping")
+def i_upload_multiple_sources_with_gzipping(step):
+	world.destination = STORAGES[STORAGE]["url"]
+	world.driver = STORAGES[STORAGE]["driver"]()
 
 	def src_gen(sources=copy(world.sources)):
 		for src in sources:
@@ -329,10 +355,10 @@ def i_have_a_stream(step, megabytes, name):
 	world.items[os.path.basename(stream.name)] = stream_md5
 
 
-@step("I upload it to ([^\s]+) with intentional interrupt")
-def i_upload_it_with_intentional_interrupt(step, storage):
-	world.destination = STORAGES[storage]["url"]
-	world.driver = STORAGES[storage]["driver"]()
+@step("I upload it to Storage with intentional interrupt")
+def i_upload_it_with_intentional_interrupt(step):
+	world.destination = STORAGES[STORAGE]["url"]
+	world.driver = STORAGES[STORAGE]["driver"]()
 
 	lt = LargeTransfer(world.sources[0], world.destination, chunk_size=20, num_workers=2)
 	lt.on(transfer_complete=lambda *args: lt.kill())

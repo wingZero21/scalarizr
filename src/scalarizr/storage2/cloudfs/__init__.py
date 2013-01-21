@@ -376,6 +376,10 @@ class FileTransfer(BaseTransfer):
 
 class LargeTransfer(bases.Task):
 	'''
+
+	# TODO: zalit/slit papku/file/stream primeri
+
+
 	SQL dump. File-per-database.
 	---------------------------
 
