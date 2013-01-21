@@ -336,6 +336,11 @@ __node__['ec2'] = Compound({
 	'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
 	'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
 })
+__node__['openstack'] = Compound({
+	'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
+	'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
+	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
+})
 __node__['scalr'] = Compound({
 	'version': File(private_dir + '/.scalr-version'),
 	'id': Ini(private_dir + '/config.ini', 'general', {'id': 'scalr_id'})

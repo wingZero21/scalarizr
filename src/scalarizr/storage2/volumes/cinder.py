@@ -8,13 +8,14 @@ from time import sleep
 
 from novaclient.exceptions import ClientException
 
+from scalarizr import node
 from scalarizr import storage2
 from scalarizr import util
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
-from scalarizr.bus import bus
 
 
+__openstack__ = node.__node__['openstack']
 LOG = storage2.LOG
 
 
@@ -100,11 +101,11 @@ class CinderVolume(base.Volume):
         self.error_messages.update({
             'no_connection': 'Cinder connection should be available '
             'to perform this operation'})
-        self._cinder = bus.platform.new_cinder_connection()
-        self._nova = bus.platform.new_nova_connection()
+        self._cinder = __openstack__['new_cinder_connection']
+        self._nova = __openstack__['new_nova_connection']
 
     def _server_id(self):
-        srv_id = bus.platform.get_server_id()
+        srv_id = __openstack__['server_id']
         return srv_id
 
     def _ensure(self):
@@ -314,7 +315,7 @@ class CinderVolume(base.Volume):
 
         volume = self._cinder.volumes.get(self.id)
         if len(volume.attachments) > 0:
-            self._detach_volume(volume.attachments[0]['server_id'])
+            self._detach_volume()
 
         self._cinder.volumes.delete(self.id)
         self.id = None
@@ -393,7 +394,7 @@ class CinderSnapshot(base.Snapshot):
 
     def __init__(self, **kwds):
         base.Snapshot.__init__(self, **kwds)
-        self._cinder = bus.platform.new_cinder_connection()
+        self._cinder = __openstack__['new_cinder_connection']
 
     def _status(self):
         self._check_cinder_connection()
