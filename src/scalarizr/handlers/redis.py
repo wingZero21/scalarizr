@@ -8,18 +8,14 @@ from __future__ import with_statement
 
 import os
 import time
-import shutil
-import tarfile
-import tempfile
 import logging
 
 
 from scalarizr import config, storage2, handlers
+from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.bus import bus
-from scalarizr.storage import transfer
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
-from scalarizr.util.filetool import split
+from scalarizr.util import system2, cryptotool, software, initdv2
 from scalarizr.services import redis, backup
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
@@ -485,7 +481,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
 	def on_DbMsr_CreateBackup(self, message):
-		tmpdir = backup_path = None
 		try:
 			op = operation(name=self._op_backup, phases=[{
 			                                             'name': self._phase_backup,
@@ -500,46 +495,14 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					# Flush redis data on disk before creating backup
 					LOG.info("Dumping Redis data on disk")
 					self.redis_instances.save_all()
-
-					# Dump all databases
-					LOG.info("Dumping all databases")
-					tmpdir = tempfile.mkdtemp()
-
-					# Defining archive name and path
-					backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-					backup_path = os.path.join('/tmp', backup_filename)
 					dbs = [r.db_path for r in self.redis_instances]
 
-					# Creating archive 
-					backup = tarfile.open(backup_path, 'w:gz')
+			with op.step(self._step_upload_to_cloud_storage):
+				cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
+				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
+				transfer = LargeTransfer(dbs, cloud_storage_path)
+				result = transfer.run()
 
-					for src_path in dbs:
-						fname = os.path.basename(src_path)
-						dump_path = os.path.join(tmpdir, fname)
-						if not os.path.exists(src_path):
-							LOG.info('%s DB file %s does not exist. Nothing to backup.' % (BEHAVIOUR, src_path))
-						else:
-							shutil.copyfile(src_path, dump_path)
-							backup.add(dump_path, fname)
-					backup.close()
-
-					# Creating list of full paths to archive chunks
-					if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-						parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-					else:
-						parts = [backup_path]
-					sizes = [os.path.getsize(file) for file in parts]
-
-				with op.step(self._step_upload_to_cloud_storage):
-
-					cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
-					LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-					trn = transfer.Transfer()
-					cloud_files = trn.upload(parts, cloud_storage_path)
-					LOG.info("%s backup uploaded to cloud storage under %s/%s" %
-					        (BEHAVIOUR, cloud_storage_path, backup_filename))
-
-			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))
 			op.ok(data=result)
 
 			# Notify Scalr
@@ -558,12 +521,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 				status = 'error',
 				last_error = str(e)
 			))
-
-		finally:
-			if tmpdir:
-				shutil.rmtree(tmpdir, ignore_errors=True)
-			if backup_path and os.path.exists(backup_path):
-				os.remove(backup_path)
 
 
 	def _init_master(self, message):
