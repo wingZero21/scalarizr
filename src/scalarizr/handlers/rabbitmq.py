@@ -22,7 +22,7 @@ from scalarizr.node import __node__
 import scalarizr.services.rabbitmq as rabbitmq_svc
 
 
-__rabbitmq__ = __node__['__rabbitmq__']
+__rabbitmq__ = __node__['rabbitmq']
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
