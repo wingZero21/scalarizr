@@ -316,7 +316,8 @@ class RedisInstances(object):
 
 
 	def init_as_masters(self, mpoint):
-		passwords = ports = []
+		passwords = []
+		ports = []
 		for redis in self.instances:
 			redis.init_master(mpoint)
 			passwords.append(redis.password)
@@ -325,7 +326,8 @@ class RedisInstances(object):
 
 
 	def init_as_slaves(self, mpoint, primary_ip):
-		passwords = ports = []
+		passwords = []
+		ports = []
 		for redis in self.instances:
 			passwords.append(redis.password)
 			ports.append(redis.port)

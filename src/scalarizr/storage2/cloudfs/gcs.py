@@ -11,12 +11,14 @@ from apiclient.errors import HttpError
 
 from scalarizr.storage2 import cloudfs
 from scalarizr.bus import bus
-from scalarizr.node import __node__  #? node or bus
+from scalarizr.node import __node__
+
+
+# TODO: get connection from node
 
 
 LOG = logging.getLogger(__name__)
 
-# TODO: test large_transfer
 
 class GCSFileSystem (object):
 	# TODO: add amazon-style 0% and 100% callbacks ?
@@ -26,21 +28,19 @@ class GCSFileSystem (object):
 	chunk_size = 2*1024*1024
 	report_interval = 10  # percent; every <value> percent at most
 
+
 	def ls(self, remote_path):
 		bucket, path = self._parse_path(remote_path)
 
 		path = path.rstrip('/') + '/' if path else ''
 
 		req = self.cloudstorage.objects().list(
-			bucket=bucket, prefix=path, delimiter='/'
-		)
+			bucket=bucket, prefix=path)
 		resp = req.execute()
 
-		dirs = [self._format_path(bucket, x)
-				for x in resp.setdefault("prefixes", [])]
-		items = [self._format_path(bucket, x["name"])
-				 for x in resp.setdefault("items", [])]
-		return tuple(dirs + items)
+		items = (self._format_path(bucket, x["name"])
+				 for x in resp.setdefault("items", []))
+		return tuple(items)
 
 
 	def _format_path(self, bucket, key):
@@ -80,7 +80,8 @@ class GCSFileSystem (object):
 		LOG.debug('Uploading %s to cloud storage (remote path: %s)', local_path, remote_path)
 		filename = os.path.basename(local_path)
 		bucket, name = self._parse_path(remote_path)
-		name = os.path.join(name, filename)
+		if name.endswith("/"):
+			name = os.path.join(name, filename)
 
 		buckets = self._list_buckets()
 		if bucket not in buckets:

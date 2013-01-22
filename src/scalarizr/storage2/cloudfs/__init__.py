@@ -376,6 +376,10 @@ class FileTransfer(BaseTransfer):
 
 class LargeTransfer(bases.Task):
 	'''
+
+	# TODO: zalit/slit papku/file/stream primeri
+
+
 	SQL dump. File-per-database.
 	---------------------------
 
@@ -455,7 +459,7 @@ class LargeTransfer(bases.Task):
 		elif isinstance(dst, basestring) and url_re.match(dst):
 			self._up = True
 		else:
-			raise ValueError('Eather src or dst should be URL-like string')
+			raise ValueError('Either src or dst should be URL-like string')
 		if self._up and isinstance(src, basestring) and os.path.isdir(src) and not streamer:
 			raise ValueError('Passed src is a directory. streamer expected')
 		if self._up:
@@ -655,6 +659,7 @@ class LargeTransfer(bases.Task):
 				LOG.debug("Manifest: %s" % manifest.data)
 				manifest_f = os.path.join(self._tranzit_vol.mpoint, self.manifest)
 				manifest.write(manifest_f)
+				self.manifest_obj = manifest  # upload has to return manifest obj now
 				LOG.debug("LargeTransfer yield %s" % manifest_f)
 				yield manifest_f
 
@@ -881,20 +886,21 @@ class LargeTransfer(bases.Task):
 			elif self._up:
 				if res["failed"] or self._transfer._stop_all.is_set():
 					#? upload failed inside FileTransfer or it was killed
-					self._s3_cleanup()
+					self._cloudfs_cleanup()
 					return
 				if self.multipart:
 					return res["multipart_result"]
 				else:
-					return self._upload_res
+					self.manifest_obj.cloudfs_path = self._upload_res
+					return self.manifest_obj
 		finally:
 			LOG.debug("Destroying tmpfs")
 			self._tranzit_vol.destroy()
 			coreutils.remove(self._tranzit_vol.mpoint)
 
 
-	def _s3_cleanup(self):
-		LOG.debug("Performing S3 clean up")
+	def _cloudfs_cleanup(self):
+		LOG.debug("Performing cloudfs clean up")
 		path = os.path.join(self.dst.next(), self.transfer_id)
 		driver = cloudfs(urlparse.urlparse(path).scheme)
 

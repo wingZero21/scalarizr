@@ -6,11 +6,11 @@ import logging
 import os
 import sys
 
-from scalarizr.node import __node__
-from scalarizr.storage2 import cloudfs
-
 from boto.s3.key import Key
 from boto.exception import S3ResponseError
+
+from scalarizr.node import __node__
+from scalarizr.storage2 import cloudfs
 
 
 LOG = logging.getLogger(__name__)

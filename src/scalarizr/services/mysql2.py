@@ -200,7 +200,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 					[xbak.stdout],
 					self.cloudfs_target,
 					compressor=self.compressor)
-		cloudfs_target = transfer.run()
+		manifesto = transfer.run()
 		stderr = xbak.communicate()[1]
 		if xbak.returncode:
 			raise Error(stderr)
@@ -223,16 +223,15 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 				backup_type=self.backup_type,
 				from_lsn=self.from_lsn,
 				to_lsn=to_lsn,
-				cloudfs_source=cloudfs_target,
+				cloudfs_source=manifesto.cloudfs_path,
 				prev_cloudfs_source=self.prev_cloudfs_source,
 				log_file=log_file,
 				log_pos=log_pos)
 
 		# Update manifest
 		LOG.debug('rst: %s', dict(rst))
-		mnf = cloudfs.Manifest(cloudfs_path=cloudfs_target)
-		mnf.meta = dict(rst) 
-		mnf.save()
+		manifesto.meta = dict(rst)
+		manifesto.save()
 
 		LOG.info('Created %s xtrabackup. (LSN: %s..%s, log_file: %s, log_pos: %s)',
 				rst.backup_type, rst.from_lsn, rst.to_lsn, rst.log_file, rst.log_pos)
