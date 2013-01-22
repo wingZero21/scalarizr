@@ -14,6 +14,7 @@ from scalarizr import storage
 from scalarizr.storage.transfer import Transfer
 from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr import storage
+from scalarizr.storage2.volumes import ebs as ebsvolume
 
 from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
@@ -231,6 +232,7 @@ class RebundleStratery:
 						and instance.root_device_name != vol.attach_data.device)
 
 		for devname in ebs_devs:
+			devname = ebsvolume.name2device(devname)
 			LOG.debug('Remove %s from fstab', devname)
 			fstab.remove(devname, autosave=False)
 		
