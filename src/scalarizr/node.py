@@ -303,6 +303,7 @@ __node__ = {
 	'rebooted': BoolFile(private_dir + '/.reboot'),
 	'halted': BoolFile(private_dir + '/.halt')
 }
+
 for behavior in ('mysql', 'mysql2', 'percona'):
 	section = 'mysql2' if behavior == 'percona' else behavior
 	__node__[behavior] = Compound({
@@ -321,6 +322,16 @@ __node__['redis'] = Compound({
 	'replication_master,persistence_type,use_password,master_password': Ini(
 		'%s/%s.ini' % (private_dir, 'redis'), 'redis')
 })
+
+
+__node__['rabbitmq'] = Compound({
+	'volume,volume_config':	Json('%s/storage/%s.json' % (private_dir, 'rabbitmq'),
+			'scalarizr.storage2.volume'),
+	'password,server_index,node_type,cookie,hostname': Ini(
+						'%s/%s.ini' % (private_dir, 'rabbitmq'), 'rabbitmq')
+
+})
+
 
 __node__['ec2'] = Compound({
 	't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
