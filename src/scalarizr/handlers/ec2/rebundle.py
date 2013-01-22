@@ -231,11 +231,13 @@ class RebundleStratery:
 						and instance.root_device_name != vol.attach_data.device)
 
 		for devname in ebs_devs:
+			LOG.debug('Remove %s from fstab', devname)
 			fstab.remove(devname, autosave=False)
 		
 		# Remove Non-local filesystems
 		for entry in fstab.list_entries():
 			if entry.fstype in NETWORK_FILESYSTEMS:
+				LOG.debug('Remove %s from fstab', entry.devname)
 				fstab.remove(entry.devname, autosave=False)
 		
 		# Ubuntu 10.04 mountall workaround
@@ -248,6 +250,7 @@ class RebundleStratery:
 						entry.options = re.sub(r'(nobootwait),(\S+)', r'\2,\1', entry.options)
 					else:
 						entry.options += ',nobootwait'
+					LOG.debug('Added nobootwait for %s', entry.devname)
 		
 		fstab.save()
 
