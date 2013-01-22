@@ -103,7 +103,6 @@ class RabbitMQHandler(ServiceCtlHandler):
 			__rabbitmq__['volume'] = rabbitmq_vol
 
 		
-		
 	def on_reload(self):
 		self.queryenv = bus.queryenv_service
 		self.platform = bus.platform

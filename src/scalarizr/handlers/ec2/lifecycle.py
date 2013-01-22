@@ -42,9 +42,12 @@ class Ec2LifeCycleHandler(Handler):
 		try:
 			hostname_as_pubdns = int(cnf.rawini.get('ec2', 'hostname_as_pubdns'))
 		except ConfigParser.Error:
+			self._logger.debug('Assuming hostname_as_pubdns is "1"')
 			hostname_as_pubdns = True
 		if hostname_as_pubdns:
-			system2("hostname " + self._platform.get_public_hostname(), shell=True)		
+			pub_hostname = self._platform.get_public_hostname()
+			self._logger.debug('Setting hostname to %s' % pub_hostname)
+			system2("hostname " + pub_hostname, shell=True)
 		
 		if disttool.is_ubuntu():
 			# Ubuntu cloud-init scripts may disable root ssh login
