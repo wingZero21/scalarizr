@@ -969,9 +969,10 @@ class MysqlHandler(DBMSRHandler):
 					LOG.debug('Storage destoyed')
 
 					'''
-				log_file = restore.log_file
-				log_pos = restore.log_pos
+
 				restore.run()
+				log_file = restore.log_file
+				log_pos = restore.log_pos				
 				
 				'''
 				LOG.debug('Plugging new storage')
