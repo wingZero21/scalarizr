@@ -74,6 +74,8 @@ class OpenstackPlatform(Platform):
     _private_ip = None
     _public_ip = None
 
+    features = ['volumes', 'snapshots']
+
     def get_private_ip(self):
         if not self._private_ip:
             self._private_ip = self._get_netiface_ip("eth1")
