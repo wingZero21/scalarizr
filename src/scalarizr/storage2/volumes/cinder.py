@@ -154,7 +154,7 @@ class CinderVolume(base.Volume):
                 with self._free_device_letter_mgr:
                     name = '/dev/xvd%s' % self._free_device_letter_mgr.get()
                     self._attach_volume(device_name=name)
-                    self.device = name2device(self.name)
+                    self.device = name2device(name)
             elif not self.device:
                 self.device = volume.attachments[0]['device']
 
