@@ -252,7 +252,7 @@ class RebundleStratery:
 		fstab.save()
 
 
-	def cleanup_image(self, image_mpoint, role_name=None):
+	def _cleanup_image(self, image_mpoint, role_name=None):
 		# Create message of the day
 		self._create_motd(image_mpoint, role_name)
 		self._fix_fstab(image_mpoint)
