@@ -266,12 +266,12 @@ class Handler(object):
 					handlers.append(config.BuiltinBehaviours.MONGODB)
 				elif name == 'apache' and Version('2.0') <= version < Version('2.3'):
 					handlers.append(config.BuiltinBehaviours.APP)
-				elif name == 'mysql' and Version('5.0') <= version < Version('5.5'):
-					handlers.append(config.BuiltinBehaviours.MYSQL)
-				elif name == 'mysql' and Version('5.5') <= version and str_ver and 'Percona' in str_ver:
-					handlers.append(config.BuiltinBehaviours.PERCONA)
-				elif name == 'mysql' and Version('5.5') <= version:
-					handlers.append(config.BuiltinBehaviours.MYSQL2)
+				elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
+					if 'Percona' in str_ver:
+						handlers.append(config.BuiltinBehaviours.PERCONA)
+					else:
+						handlers.append(config.BuiltinBehaviours.MYSQL2)
+
 		return handlers
 
 
