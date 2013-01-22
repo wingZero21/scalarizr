@@ -223,7 +223,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 				backup_type=self.backup_type,
 				from_lsn=self.from_lsn,
 				to_lsn=to_lsn,
-				cloudfs_source=manifesto.cloudfs_target,
+				cloudfs_source=manifesto.cloudfs_path,
 				prev_cloudfs_source=self.prev_cloudfs_source,
 				log_file=log_file,
 				log_pos=log_pos)
