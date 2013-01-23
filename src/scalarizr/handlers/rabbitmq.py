@@ -347,7 +347,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 				with op.step(self._step_collect_hostup_data):
 					# Update message
 					msg_data = dict()
-					msg_data['volume_config'] = self.storage_vol.config()
+					msg_data['volume_config'] = __rabbitmq__['volume'].config()
 					msg_data['node_type'] = self.rabbitmq.node_type
 					msg_data['password'] = password
 					self._logger.debug('Updating HostUp message with %s' % msg_data)
