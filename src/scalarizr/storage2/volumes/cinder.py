@@ -199,6 +199,7 @@ class CinderVolume(base.Volume):
 
     def _create_snapshot(self, volume_id=None, description=None, nowait=False):
         volume_id = self.id
+        self._check_cinder_connection()
 
         LOG.debug('Creating snapshot of Cinder volume', volume_id)
         coreutils.sync()
