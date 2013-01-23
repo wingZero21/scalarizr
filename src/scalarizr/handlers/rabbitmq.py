@@ -63,8 +63,9 @@ class RabbitMQHandler(ServiceCtlHandler):
 		self.service = initdv2.lookup(BuiltinBehaviours.RABBITMQ)
 		self._service_name = BEHAVIOUR
 		self.on_reload()
-			
+
 		if 'ec2' == self.platform.name:
+			self._logger.debug('Setting hostname_as_pubdns to 0')
 			__ec2__ = __node__['ec2']
 			__ec2__['hostname_as_pubdns'] = 0
 
@@ -257,17 +258,10 @@ class RabbitMQHandler(ServiceCtlHandler):
 					if not message.body.has_key("rabbitmq"):
 						raise HandlerError("HostInitResponse message for RabbitMQ behaviour must have 'rabbitmq' property")
 					
-					path = os.path.dirname(self._volume_config_path)
-					if not os.path.exists(path):
-						os.makedirs(path)
-			
 					rabbitmq_data = message.rabbitmq.copy()
 					
 					if not rabbitmq_data['password']:
 						rabbitmq_data['password'] = cryptotool.pwgen(10)
-			
-					if os.path.exists(self._volume_config_path):
-						os.remove(self._volume_config_path)
 			
 					hostname = RABBIT_HOSTNAME_TPL % int(message.server_index)
 					rabbitmq_data['server_index'] = message.server_index
@@ -278,9 +272,10 @@ class RabbitMQHandler(ServiceCtlHandler):
 						f.write(hostname)
 					system2(('hostname', '-F', '/etc/hostname'))
 
-					rabbitmq_data['volume'] = storage2.volume(
-						rabbitmq_data.pop('volume_config'))
-			
+					volume_config = rabbitmq_data.pop('volume_config')
+					volume_config['mpoint'] = STORAGE_PATH
+					rabbitmq_data['volume'] = storage2.volume(volume_config)
+
 					__rabbitmq__.update(rabbitmq_data)
 
 
