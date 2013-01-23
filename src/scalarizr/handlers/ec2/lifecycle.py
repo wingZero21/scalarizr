@@ -4,17 +4,23 @@ Created on Mar 2, 2010
 
 @author: marat
 '''
+import os
+import re
+import sys
+import logging
+
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 from scalarizr.handlers import Handler
 from scalarizr.util import system2, filetool, disttool
-import logging
-import os, re, sys
-import ConfigParser
 from scalarizr.util.fstool import Mtab, Fstab, mount
 
 
+__ec2__ = __node__['ec2']
+
 def get_handlers ():
 	return [Ec2LifeCycleHandler()]
+
 
 class Ec2LifeCycleHandler(Handler):
 	_logger = None
@@ -38,14 +44,12 @@ class Ec2LifeCycleHandler(Handler):
 		producer.on("before_send", self.on_before_message_send)
 		
 		# Set the hostname to this instance's public hostname
-		cnf = bus.cnf
 		try:
-			hostname_as_pubdns = int(cnf.rawini.get('ec2', 'hostname_as_pubdns'))
-		except ConfigParser.Error:
-			self._logger.debug('Assuming hostname_as_pubdns is "1"')
+			hostname_as_pubdns = int(__ec2__['hostname_as_pubdns'])
+		except:
 			hostname_as_pubdns = True
+
 		if hostname_as_pubdns:
-			self._logger.debug('%s' % hostname_as_pubdns)
 			pub_hostname = self._platform.get_public_hostname()
 			self._logger.debug('Setting hostname to %s' % pub_hostname)
 			system2("hostname " + pub_hostname, shell=True)
