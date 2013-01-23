@@ -157,7 +157,7 @@ class CSVolume(base.Volume):
         self._native_vol = None
         snapshot_id = None
         self._conn = self._new_conn()
-        devname = None
+        devname = self.device
 
         if self._conn:
             try:
@@ -206,6 +206,7 @@ class CSVolume(base.Volume):
             self._config.update({
                     'id': self._native_vol.id,
                     'size': self._native_vol.size / (1024*1024*1024),
+                    'device': devname,
                     'zone_id': self._native_vol.zoneid,
                     'disk_offering_id': getattr(self._native_vol, 'diskofferingid', None)})
             self._native_vol = None
