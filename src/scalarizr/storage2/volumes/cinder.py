@@ -199,6 +199,7 @@ class CinderVolume(base.Volume):
 
     def _create_snapshot(self, volume_id=None, description=None, nowait=False):
         volume_id = self.id
+        self._cinder = __openstack__['new_cinder_connection']
         self._check_cinder_connection()
 
         LOG.debug('Creating snapshot of Cinder volume', volume_id)
