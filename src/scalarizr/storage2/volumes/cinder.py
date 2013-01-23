@@ -74,10 +74,14 @@ class CinderVolume(base.Volume):
     _free_device_letter_mgr = FreeDeviceLetterMgr()
 
     def _check_cinder_connection(self):
+        if not self._cinder:
+            self._cinder = __openstack__['new_cinder_connection']
         assert self._cinder.has_connection, \
             self.error_messages['no_connection']
 
     def _check_nova_connection(self):
+        if not self._nova:
+            self._nova = __openstack__['new_nova_connection']
         assert self._nova.has_connection, \
             self.error_messages['no_connection']
 
@@ -199,7 +203,6 @@ class CinderVolume(base.Volume):
 
     def _create_snapshot(self, volume_id=None, description=None, nowait=False):
         volume_id = self.id
-        self._cinder = __openstack__['new_cinder_connection']
         self._check_cinder_connection()
 
         LOG.debug('Creating snapshot of Cinder volume', volume_id)
@@ -241,8 +244,8 @@ class CinderVolume(base.Volume):
                                                         volume_id,
                                                         device_name)
             except ClientException, e:
-                LOG.warn('Exception caught while trying \
-                         to attach volume %s: \n%s ', volume_id, e)
+                LOG.warn('Exception caught while trying'
+                         'to attach volume %s: \n%s ', volume_id, e)
                 LOG.debug('Will try again after 10 seconds. ')
                 sleep(10)
             else:
@@ -281,18 +284,18 @@ class CinderVolume(base.Volume):
         LOG.debug('Detaching Cinder volume %s', volume_id)
         if volume.status != 'available':
             try:
-                # TODO: check that on openstack delete_server_volume() works ok
                 # self._cinder.volumes.detach(volume_id)
                 self._check_nova_connection()
                 self._nova.volumes.delete_server_volume(volume_id)
-            except:
-                pass  # TODO: handle possible exceptions
+            except BaseException, e:
+                LOG.error('Exception caught when detaching volume: %s', e)
 
-            LOG.debug('Checking that Cinder volume %s is available', volume_id)
+            LOG.debug('Checking that Cinder volume %s is detached '
+                      'and available', volume_id)
 
             def exit_condition():
                 vol = self._cinder.volumes.get(volume_id)
-                return vol.status in ('available', 'in-use')
+                return vol.status == 'available'
 
             msg = "Cinder volume %s is not in 'available' state. " \
                 "Timeout reached (%s seconds)" % \
