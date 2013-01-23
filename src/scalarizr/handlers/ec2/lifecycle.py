@@ -45,6 +45,7 @@ class Ec2LifeCycleHandler(Handler):
 			self._logger.debug('Assuming hostname_as_pubdns is "1"')
 			hostname_as_pubdns = True
 		if hostname_as_pubdns:
+			self._logger.debug('%s' % hostname_as_pubdns)
 			pub_hostname = self._platform.get_public_hostname()
 			self._logger.debug('Setting hostname to %s' % pub_hostname)
 			system2("hostname " + pub_hostname, shell=True)
