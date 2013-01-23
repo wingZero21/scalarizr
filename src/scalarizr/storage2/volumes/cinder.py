@@ -286,7 +286,8 @@ class CinderVolume(base.Volume):
             try:
                 # self._cinder.volumes.detach(volume_id)
                 self._check_nova_connection()
-                self._nova.volumes.delete_server_volume(volume_id)
+                self._nova.volumes.delete_server_volume(self._server_id,
+                                                        volume_id)
             except BaseException, e:
                 LOG.error('Exception caught when detaching volume: %s', e)
 
