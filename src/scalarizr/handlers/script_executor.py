@@ -399,9 +399,24 @@ class Script(object):
 
 	def _proc_complete(self):
 		if self.proc:
+			self._proc_finalize()
 			return self.proc.returncode
 		else:
 			return 0
+
+	def _proc_finalize(self):
+		if self.proc.stdout:
+			try:
+				self.proc.stdout.flush()
+				os.fsync(self.proc.stdout.fileno())
+			except:
+				pass
+		if self.proc.stderr:
+			try:
+				self.proc.stderr.flush()
+				os.fsync(self.proc.stderr.fileno())
+			except:
+				pass			
 
 
 class LogRotateRunnable(object):
