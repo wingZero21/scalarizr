@@ -317,7 +317,13 @@ class RabbitMQHandler(ServiceCtlHandler):
 				with op.step(self._step_patch_conf):
 					# Check if it's first run here, before rabbit starts
 					init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
+					self._logger.debug("Storage is empty. Assuming it's "
+									"initial run.")
+
 					do_cluster = True if nodes_to_cluster_with else False
+					self._logger.debug('Nodes to cluster with: %s' %
+									nodes_to_cluster_with)
+
 					is_disk_node = self.rabbitmq.node_type == rabbitmq_svc.NodeTypes.DISK
 					self_hostname = __rabbitmq__['hostname']
 
