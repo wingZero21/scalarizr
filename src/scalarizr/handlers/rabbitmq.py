@@ -338,8 +338,8 @@ class RabbitMQHandler(ServiceCtlHandler):
 					self.service.start()
 		
 				with op.step(self._step_join_cluster):
-
 					if do_cluster and (not is_disk_node or init_run):
+						self._logger.info('Joining cluster with other nodes.')
 						self.rabbitmq.cluster_with(self_hostname,
 									nodes_to_cluster_with, is_disk_node)
 			
