@@ -9,7 +9,7 @@ Vagrant::Config.run do |config|
   # Every Vagrant virtual environment requires a box to build off of.
   config.vm.box = "ubuntu1204"
   config.vm.provision :shell, :inline => "apt-get install -y --fix-missing python-pip python-m2crypto mdadm lvm2"
-  config.vm.provision :shell, :inline => "pip install nose mock boto wsgi_intercept lettuce"
+  config.vm.provision :shell, :inline => "pip install nose mock boto wsgi_intercept lettuce google-api-python-client python-cloudfiles pymysql python-swiftclient python-novaclient python-cinderclient"
   # The url from where the 'config.vm.box' box will be fetched if it
   # doesn't already exist on the user's system.
   # config.vm.box_url = "http://domain.com/path/to/above.box"
