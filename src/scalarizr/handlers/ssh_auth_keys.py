@@ -127,7 +127,7 @@ class SSHKeys(Handler):
 		return content
 	
 	def _write_ssh_keys_file(self, content):
-		self._logger('Writing authorized keys')
+		self._logger.debug('Writing authorized keys')
 		try:
 			with open(self.authorized_keys_file, 'w') as fp:
 				fp.write(content)
