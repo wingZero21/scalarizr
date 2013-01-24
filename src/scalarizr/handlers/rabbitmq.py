@@ -29,7 +29,6 @@ BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
 OPT_VOLUME_CNF = 'volume_config'
 OPT_SNAPSHOT_CNF = 'snapshot_config'
 DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq/mnesia'
-STORAGE_PATH = '/mnt/rabbitstorage'
 STORAGE_VOLUME_CNF = 'rabbitmq.json'
 RABBITMQ_MGMT_PLUGIN_NAME= 'rabbitmq_management' 
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
@@ -273,7 +272,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 					system2(('hostname', '-F', '/etc/hostname'))
 
 					volume_config = rabbitmq_data.pop('volume_config')
-					volume_config['mpoint'] = STORAGE_PATH
+					volume_config['mpoint'] = DEFAULT_STORAGE_PATH
 					rabbitmq_data['volume'] = storage2.volume(volume_config)
 
 					__rabbitmq__.update(rabbitmq_data)
@@ -316,7 +315,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 					
 				with op.step(self._step_patch_conf):
 					# Check if it's first run here, before rabbit starts
-					init_run = self._is_storage_empty(STORAGE_PATH)
+					init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
 					if init_run:
 						self._logger.debug("Storage is empty. Assuming it's "
 									"initial run.")
