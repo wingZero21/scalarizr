@@ -1,5 +1,4 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 import os
 import re
@@ -483,13 +482,17 @@ class PerconaExec(Exec):
 			if linux.os['family'] in ('RedHat', 'Oracle'):
 				url = 'http://www.percona.com/downloads/percona-release/percona-release-0.0-1.%s.rpm' % linux.os['arch']
 				pkgmgr.RpmPackageMgr().install(url)
+				# Avoid "Can't locate Time/HiRes.pm in @INC"
+				# with InnoDB Backup Utility v1.5.1-xtrabackup
+				pkgmgr.installed('perl-Time-HiRes')
 			else:
 				pkgmgr.apt_source(
 						'percona.list', 
 						['deb http://repo.percona.com/apt %s main' % linux.os['codename']],
 						gpg_keyserver='hkp://keys.gnupg.net',
-						gpg_keyid='1C4CBDCDCD2EFD2A')
+						gpg_keyid='CD2EFD2A')
 			mgr.updatedb()
+
 
 		return super(PerconaExec, self).check()
 

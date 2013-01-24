@@ -17,8 +17,8 @@ def test_package_mgr():
 
 
 @mock.patch.dict('scalarizr.linux.os', {'family': 'RedHat', 'name': 'CentOS'})
-@mock.patch.object(pkgmgr.RPMPackageMgr, 'info')
-@mock.patch.object(pkgmgr.RPMPackageMgr, 'install')
+@mock.patch.object(pkgmgr.RpmPackageMgr, 'info')
+@mock.patch.object(pkgmgr.RpmPackageMgr, 'install')
 @mock.patch('scalarizr.linux.system')
 def test_epel_repository(system, install, info):
 	info.return_value = {'installed': None}
@@ -47,7 +47,7 @@ def test_apt_source(system, open):
 	write_mock = open.return_value.__enter__().write
 	write_mock.assert_called_once_with(file_contents)
 
-	linux.system.assert_called_once_with(('apt-key', 'adv', 
+	linux.system.assert_called_with(('apt-key', 'adv', 
 				  						  '--keyserver', 'key_server',
 										  '--recv', 'key_id'),
 										 raise_exc=False)
@@ -109,28 +109,28 @@ class TestAptPackageMgr(object):
 		assert repos, ['percona', 'scalr-stable']
 
 
-#RPMPackageMgr class tests
+#RpmPackageMgr class tests
 class TestRPMPackageMgr(object):
 		
 	@mock.patch('scalarizr.linux.system')
 	def test_rpm_command(self, system):
-		mgr = pkgmgr.RPMPackageMgr()
+		mgr = pkgmgr.RpmPackageMgr()
 		mgr.rpm_command('-Uvh test.rpm', raise_exc=True)
 
 		system.assert_called_once_with(['/usr/bin/rpm', '-Uvh', 'test.rpm'], raise_exc=True)
 
 
-	@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
+	@mock.patch.object(pkgmgr.RpmPackageMgr, 'rpm_command')
 	def test_install(self, rpm_command):
-		mgr = pkgmgr.RPMPackageMgr()
+		mgr = pkgmgr.RpmPackageMgr()
 		mgr.install('test.rpm', 1.1, True, test_kwd=True)
 
 		rpm_command.assert_called_once_with('-Uvh test.rpm', raise_exc=True, test_kwd=True)
 		
 
-	@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
+	@mock.patch.object(pkgmgr.RpmPackageMgr, 'rpm_command')
 	def test_remove(self, rpm_command):
-		mgr = pkgmgr.RPMPackageMgr()
+		mgr = pkgmgr.RpmPackageMgr()
 		mgr.remove('test.rpm', True)
 
 		rpm_command.assert_called_once_with('-e test.rpm', raise_exc=True)
@@ -138,17 +138,17 @@ class TestRPMPackageMgr(object):
 
 	@mock.patch('scalarizr.linux.system')
 	def test_updatedb(self, system):
-		mgr = pkgmgr.RPMPackageMgr()
+		mgr = pkgmgr.RpmPackageMgr()
 		mgr.updatedb()
 
 		assert not system.called
 	
-	@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
+	@mock.patch.object(pkgmgr.RpmPackageMgr, 'rpm_command')
 	def test_info(self, rpm_command):
 		test_pkg = 'http://www.site.com/rpms/vim-common-7.3.682-1.fc17.x86_64.rpm'
 		rpm_command.return_value = ('vim-common-7.3.682-1.fc17.x86_64', '', 0)
 
-		mgr = pkgmgr.RPMPackageMgr()
+		mgr = pkgmgr.RpmPackageMgr()
 		result = mgr.info(test_pkg)
 
 		rpm_command.assert_called_once_with('-q vim-common-7.3.682-1.fc17.x86_64', raise_exc=False)

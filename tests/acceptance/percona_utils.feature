@@ -1,11 +1,12 @@
 Feature: Percona utilities
 
-	Scenario: Innobackup utility
-		Given i have running <os> container
-		When i execute innobackup --help
+	Scenario: Install Percona repository on demand
+		Given i have no percona repository on machine
+		When i execute innobackup --version
 		Then it finishes with 0 code
+		And i have percona repostory on machine
 
-	Scenario: Execute innobackup one more time
-		Given ive already have percona repository 
-		When i execute innobackup --help
+	Scenario: Ensure repository install only once
+		Given i have percona repostory on machine
+		When i execute innobackup --version
 		Then it finishes with 0 code

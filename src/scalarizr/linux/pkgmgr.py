@@ -236,11 +236,11 @@ class YumPackageMgr(PackageMgr):
 			m = repo_re.search(line)
 			if m:
 				ret.append(m.group(1))
-		return ret
+		return map(string.lower, ret)
 
 
 
-class RPMPackageMgr(PackageMgr):
+class RpmPackageMgr(PackageMgr):
 
 	def rpm_command(self, command, **kwds):
 		return linux.system(['/usr/bin/rpm', ] + filter(None, command.split()), **kwds)
@@ -295,7 +295,7 @@ def epel_repository():
 	if linux.os['family'] not in ('RedHat', 'Oracle'):
 		return
 
-	mgr = RPMPackageMgr()
+	mgr = RpmPackageMgr()
 	installed = mgr.info(EPEL_RPM_URL)['installed']
 	if not installed:
 		mgr.install(EPEL_RPM_URL)
@@ -330,10 +330,11 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 		fp.write('\n'.join(prepared_sources))
 
 	if gpg_keyserver and gpg_keyid:
-		linux.system(('apt-key', 'adv', 
-					  '--keyserver', gpg_keyserver,
-					  '--recv', gpg_keyid),
-					 raise_exc=False)
+		if gpg_keyid not in linux.system(('apt-key', 'list'))[0]:
+			linux.system(('apt-key', 'adv', 
+						  '--keyserver', gpg_keyserver,
+						  '--recv', gpg_keyid),
+						 raise_exc=False)
 
 
 def installed(name, version=None, updatedb=False):
