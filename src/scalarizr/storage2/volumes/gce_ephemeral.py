@@ -17,7 +17,7 @@ class GceEphemeralVolume(base.Volume):
 		if not os.path.exists(device):
 			msg = "Device '%s' not found" % device
 			raise storage2.StorageError(msg)
-		self.device = os.path.realpath(device)
+		self.device = device
 
 
 storage2.volume_types['gce_ephemeral'] = GceEphemeralVolume
