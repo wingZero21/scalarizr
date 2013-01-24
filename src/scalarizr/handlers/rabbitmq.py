@@ -96,7 +96,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 			rabbitmq_vol = __rabbitmq__['volume']
 			rabbitmq_vol.tags = self.rabbitmq_tags
 
-			if not __rabbitmq__['volume'].mounted:
+			if not __rabbitmq__['volume'].mounted_to():
 				self.service.stop()
 				rabbitmq_vol.ensure()
 			self.service.start()
