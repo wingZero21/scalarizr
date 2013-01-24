@@ -316,7 +316,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 					
 				with op.step(self._step_patch_conf):
 					# Check if it's first run here, before rabbit starts
-					init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
+					init_run = self._is_storage_empty(STORAGE_PATH)
 					if init_run:
 						self._logger.debug("Storage is empty. Assuming it's "
 									"initial run.")
