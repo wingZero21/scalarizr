@@ -68,6 +68,11 @@ class TestMySQLSnapBackupAndRestore(object):
 		vol_factory.return_value.mount.assert_called_with()
 
 
+class TestPerconaExec(object):
+	def test_check():
+		pass
+
+
 @mock.patch.object(mysql2, 'my_print_defaults',
 				return_value={'datadir': '/mnt/dbstorage/mysql-data', 
 							'log_bin': '/mnt/dbstorage/mysql-misc/binlog'})

@@ -475,10 +475,28 @@ def innobackupex(*params, **long_kwds):
 			params=params))
 '''
 
-innobackupex = Exec('/usr/bin/innobackupex',
+class PerconaExec(Exec):
+
+	def check(self):
+		mgr = pkgmgr.package_mgr()
+		if not 'percona' in mgr.repos():
+			if linux.os['family'] in ('RedHat', 'Oracle'):
+				url = 'http://www.percona.com/downloads/percona-release/percona-release-0.0-1.%s.rpm' % linux.os['arch']
+				pkgmgr.RpmPackageMgr().install(url)
+			else:
+				pkgmgr.apt_source(
+						'percona.list', 
+						['deb http://repo.percona.com/apt %s main' % linux.os['codename']],
+						gpg_keyserver='hkp://keys.gnupg.net',
+						gpg_keyid='1C4CBDCDCD2EFD2A')
+			mgr.updatedb()
+
+		return super(Innobackupex, self).check()
+
+innobackupex = PerconaExec('/usr/bin/innobackupex',
 				package='percona-xtrabackup')
 
-xbstream = Exec('/usr/bin/xbstream',
+xbstream = PerconaExec('/usr/bin/xbstream',
 				package='percona-xtrabackup')
 
 

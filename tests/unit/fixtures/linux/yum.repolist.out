@@ -1,0 +1,36 @@
+Config time: 0.009
+Yum Version: 3.2.28
+Setting up Package Sacks
+pkgsack time: 0.046
+Repo-id      : aegisco
+Repo-name    : AegisCo rhel13 repo - x86_64
+Repo-updated : Tue May 10 04:04:48 2011
+Repo-pkgs    : 13
+Repo-size    : 17 M
+Repo-baseurl : http://rpm.aegisco.com/aegisco/fc13/x86_64
+Repo-expire  : 21,600 second(s) (last: Fri Jan 18 11:56:30 2013)
+
+Repo-id      : fedora
+Repo-name    : Fedora 13 - x86_64
+Repo-revision: 1274245576
+Repo-tags    : binary-x86_64
+Repo-distro-tags: [cpe:/o:fedoraproject:fedora:13]: rawhide
+Repo-updated : Wed May 19 01:44:06 2010
+Repo-pkgs    : 20,840
+Repo-size    : 20 G
+Repo-metalink: https://mirrors.fedoraproject.org/metalink?repo=fedora-13&arch=x86_64
+  Updated    : Wed May 19 01:44:06 2010
+Repo-expire  : 604,800 second(s) (last: Fri Jan 18 11:56:31 2013)
+
+Repo-id      : updates
+Repo-name    : Fedora 13 - x86_64 - Updates
+Repo-revision: 1308878513
+Repo-tags    : binary-x86_64
+Repo-updated : Thu Jun 23 22:54:16 2011
+Repo-pkgs    : 9,655
+Repo-size    : 12 G
+Repo-metalink: https://mirrors.fedoraproject.org/metalink?repo=updates-released-f13&arch=x86_64
+  Updated    : Thu Jun 23 22:54:16 2011
+Repo-expire  : 21,600 second(s) (last: Fri Jan 18 11:56:32 2013)
+
+repolist: 30,508

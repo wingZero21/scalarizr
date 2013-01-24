@@ -3,6 +3,7 @@ Created on Nov 2, 2012
 
 @author: uty
 '''
+import os
 
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
@@ -20,7 +21,7 @@ def test_package_mgr():
 @mock.patch.object(pkgmgr.RPMPackageMgr, 'install')
 @mock.patch('scalarizr.linux.system')
 def test_epel_repository(system, install, info):
-	info.return_value = {pkgmgr.RPMPackageMgr.INFO_INSTALLED_KEY: None}
+	info.return_value = {'installed': None}
 	pkgmgr.epel_repository()
 	install.assert_called_once_with(pkgmgr.EPEL_RPM_URL)
 
@@ -54,7 +55,7 @@ def test_apt_source(system, open):
 
 @mock.patch('scalarizr.linux.pkgmgr.package_mgr')
 def test_installed(mgr):
-	mgr().info.return_value = {pkgmgr.RPMPackageMgr.INFO_INSTALLED_KEY: None}
+	mgr().info.return_value = {'installed': None}
 
 	pkgmgr.installed('thing', '1.0', True)
 	
@@ -63,13 +64,13 @@ def test_installed(mgr):
 
 @mock.patch('scalarizr.linux.pkgmgr.package_mgr')
 def test_latest(mgr):
-	mgr().info.return_value = {pkgmgr.RPMPackageMgr.INFO_CANDIDATE_KEY: None,
-							   pkgmgr.RPMPackageMgr.INFO_INSTALLED_KEY: None}
+	mgr().info.return_value = {'candidate': None,
+							   'installed': None}
 	pkgmgr.latest('thing', True)
 	mgr().install.assert_called_once_with('thing', None)
 
-	mgr().info.return_value = {pkgmgr.RPMPackageMgr.INFO_CANDIDATE_KEY: '2.0',
-							   pkgmgr.RPMPackageMgr.INFO_INSTALLED_KEY: None}
+	mgr().info.return_value = {'candidate': '2.0',
+							   'installed': None}
 	pkgmgr.latest('thing', False)
 	mgr().install.assert_called_with('thing', '2.0')
 
@@ -83,6 +84,31 @@ def test_removed(mgr):
 	mgr().remove.assert_called_once_with('thing', True)
 
 
+class TestYumPackageMgr(object):
+	@mock.patch('scalarizr.linux.system')
+	def test_repos(self, s):
+		fixture = os.path.dirname(__file__) + '/../../fixtures/linux/yum.repolist.out'
+		s.return_value = [open(fixture).read(), '', 0]
+
+		mgr = pkgmgr.YumPackageMgr()
+		repos = sorted(mgr.repos())
+
+		assert repos, ['aegisco', 'fedora', 'updates']
+
+
+class TestAptPackageMgr(object):
+	@mock.patch('glob.glob')
+	def test_repos(self, g):
+		g.return_value = [
+				'/etc/apt/sources.list.d/percona.list', 
+				'/etc/apt/sources.list.d/scalr-stable.list']
+
+		mgr = pkgmgr.AptPackageMgr()
+		repos = mgr.repos()
+
+		assert repos, ['percona', 'scalr-stable']
+
+
 #RPMPackageMgr class tests
 class TestRPMPackageMgr(object):
 		
@@ -91,7 +117,7 @@ class TestRPMPackageMgr(object):
 		mgr = pkgmgr.RPMPackageMgr()
 		mgr.rpm_command('-Uvh test.rpm', raise_exc=True)
 
-		system.assert_called_once_with(('/usr/bin/rpm', '-Uvh', 'test.rpm'), raise_exc=True)
+		system.assert_called_once_with(['/usr/bin/rpm', '-Uvh', 'test.rpm'], raise_exc=True)
 
 
 	@mock.patch.object(pkgmgr.RPMPackageMgr, 'rpm_command')
@@ -126,5 +152,5 @@ class TestRPMPackageMgr(object):
 		result = mgr.info(test_pkg)
 
 		rpm_command.assert_called_once_with('-q vim-common-7.3.682-1.fc17.x86_64', raise_exc=False)
-		assert result == {pkgmgr.RPMPackageMgr.INFO_CANDIDATE_KEY: None,
-						  pkgmgr.RPMPackageMgr.INFO_INSTALLED_KEY: '7.3.682-1.fc17.x86_64'}
+		assert result == {'candidate': None,
+						  'installed': '7.3.682-1.fc17.x86_64'}
