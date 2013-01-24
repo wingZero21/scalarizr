@@ -146,7 +146,7 @@ class MySQL(BaseService):
 
 			self.my_cnf.set(directive, dirname)
 	
-			chown_r(dest, "mysql")
+			chown_r(dest, "mysql", "mysql")
 			# Adding rules to apparmor config 
 			if disttool.is_debian_based():
 				_add_apparmor_rules(dest)
