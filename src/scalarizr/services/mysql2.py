@@ -491,7 +491,7 @@ class PerconaExec(Exec):
 						gpg_keyid='1C4CBDCDCD2EFD2A')
 			mgr.updatedb()
 
-		return super(Innobackupex, self).check()
+		return super(PerconaExec, self).check()
 
 innobackupex = PerconaExec('/usr/bin/innobackupex',
 				package='percona-xtrabackup')
