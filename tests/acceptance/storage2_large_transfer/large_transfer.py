@@ -16,10 +16,10 @@ from random import choice
 
 from lettuce import step, world, before, after
 from boto import connect_s3
-import cloudfiles
+import swiftclient
 
 from scalarizr.storage2.cloudfs import LargeTransfer, LOG
-from scalarizr.storage2.cloudfs import s3, gcs, cf
+from scalarizr.storage2.cloudfs import s3, gcs, swift
 from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 
 
@@ -59,8 +59,9 @@ gsm = GoogleServiceManager(gcs.bus.platform,
 
 gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
 gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
-# cf
-cf.CFFileSystem._get_connection = lambda self: cloudfiles.Connection(
+# swift
+swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
+		"https://identity.api.rackspacecloud.com/v1.0",
 		os.environ["RS_USERNAME"], os.environ["RS_API_KEY"])
 
 
@@ -80,7 +81,7 @@ class GCS(gcs.GCSFileSystem):
 		return remote_path in ls
 
 
-class CF(cf.CFFileSystem):
+class Swift(swift.SwiftFileSystem):
 
 	def exists(self, remote_path):
 		parent = os.path.dirname(remote_path.rstrip('/'))
@@ -117,9 +118,9 @@ STORAGES = {
 		"url": "gcs://vova-test",
 		"driver": GCS,
 	},
-	"cf": {
-		"url": "cf://vova-test",
-		"driver": CF,
+	"swift": {
+		"url": "swift://vova-test",
+		"driver": Swift,
 	},
 }
 
