@@ -113,6 +113,10 @@ class TestIptables(object):
 
 		iptables.chains.add('new')
 
+		iptables.chains["new"]  # behavior was changed so add() itself would
+								# just make the system call, and the chain
+								# would appear in iptables.chains container
+								# only after the first __getitem__
 		assert 'new' in iptables.chains
 		iptables.iptables.assert_called_once_with(**{"new-chain": "new"})
 
@@ -147,9 +151,10 @@ class TestIptables(object):
 			"comment": "my local LAN",
 		}]
 
-	@mock.patch('scalarizr.linux.iptables.chains')
-	@mock.patch('scalarizr.linux.iptables.list')
-	def test_ensure(self, list_w, chains):
+	@mock.patch('scalarizr.linux.iptables.INPUT.list')
+	@mock.patch('scalarizr.linux.iptables.INPUT.insert')
+	@mock.patch('scalarizr.linux.iptables.INPUT.append')
+	def test_ensure(self, append_w, insert_w, list_w):
 		two_rules = [{
 			"source": "192.168.0.1/32",
 			"destination": "192.168.0.2/32",
@@ -165,20 +170,27 @@ class TestIptables(object):
 		}]
 
 		# 1
-		iptables.list.return_value = two_rules
+		iptables.chains["INPUT"].list.return_value = two_rules
 
 		iptables.ensure({"INPUT": [two_rules[0]]})
 
-		iptables.list.assert_called_once_with("INPUT")
-		assert not iptables.chains.called
+		iptables.chains["INPUT"].list.assert_called_once_with()
+		assert not iptables.chains["INPUT"].insert.called
+		assert not iptables.chains["INPUT"].append.called
+
+		#
+
+		iptables.chains["INPUT"].list.reset_mock()
+		iptables.chains["INPUT"].insert.reset_mock()
+		iptables.chains["INPUT"].append.reset_mock()
 
 		# 2
-		iptables.list.reset_mock()
-		iptables.list.return_value = [two_rules[1]]
+
+		iptables.chains["INPUT"].list.return_value = [two_rules[1]]
 
 		iptables.ensure({"INPUT": [two_rules[0]]})
 
-		iptables.list.assert_called_once_with("INPUT")
-		iptables.chains.__getitem__.return_value.insert.assert_called_once_with(
-			None, two_rules[0])
+		iptables.chains["INPUT"].list.assert_called_once_with()
+		iptables.chains["INPUT"].insert.assert_called_once_with(None, two_rules[0])
+		assert not iptables.chains["INPUT"].append.called
 

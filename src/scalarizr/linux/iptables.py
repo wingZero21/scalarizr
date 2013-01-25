@@ -344,6 +344,7 @@ class _Chains(object):
 		return value in self._container
 
 	def add(self, name):
+		# Only makes the system call; doesn't update the internal container
 		iptables(**{"new-chain": name})
 
 	def remove(self, name, force=False):
