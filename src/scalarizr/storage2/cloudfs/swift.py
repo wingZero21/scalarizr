@@ -6,6 +6,7 @@ import sys
 import logging
 
 from scalarizr.storage2 import cloudfs
+from scalarizr.node import __node__
 
 import swiftclient
 # TODO: make progress reports possible
