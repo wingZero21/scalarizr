@@ -21,7 +21,7 @@ class SwiftFileSystem(object):
 
 
 	def _get_connection(self):
-		raise NotImplementedError()
+		return __node__['openstack']['new_swift_conn']
 
 
 	def ls(self, remote_path):
@@ -46,7 +46,8 @@ class SwiftFileSystem(object):
 	def _parse_path(self, path):
 		o = urlparse.urlparse(path)
 		if o.scheme != self.schema:
-			raise cloudfs.DriverError('Wrong schema')
+			# TODO: in all drivers
+			raise cloudfs.DriverError('Wrong schema: %s' % o.scheme)
 		return o.netloc, o.path[1:]  # netloc instead of hostname, because
 									 # letter case matters on rackspace (and others?)
 
