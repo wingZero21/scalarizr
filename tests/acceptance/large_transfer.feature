@@ -2,10 +2,10 @@ Feature: Large transfer
 
 Scenario: Upload single file
     Initialize upload variables
-	Given I have a 10 megabytes file F1
-	When I upload it to Storage with gzipping
-	Then I expect manifest as a result
-	And all chunks are uploaded
+    Given I have a 10 megabytes file F1
+    When I upload it to Storage with gzipping
+    Then I expect manifest as a result
+    And all chunks are uploaded
 
 Scenario: Download single file
     Given I have info from the previous upload

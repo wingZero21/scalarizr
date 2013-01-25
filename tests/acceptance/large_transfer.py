@@ -1,3 +1,11 @@
+"""
+Essential environment variables:
+$AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY for s3
+$RS_USERNAME, $RS_API_KEY for swift (rackspace);
+$ENTER_IT_USERNAME, $ENTER_IT_API_KEY for swift enter.it
+
+default storage to test is s3; override with $LT_TEST_STORAGE
+"""
 __author__ = 'vladimir'
 
 
@@ -9,11 +17,11 @@ import json
 import logging
 import hashlib
 import base64
-import mock
 from copy import copy
 from ConfigParser import ConfigParser
 from random import choice
 
+import mock
 from lettuce import step, world, before, after
 from boto import connect_s3
 import swiftclient
@@ -23,46 +31,54 @@ from scalarizr.storage2.cloudfs import s3, gcs, swift
 from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 
 
-# Essential environment variables:
-# $AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY for s3
-# $RS_USERNAME, $RS_API_KEY for cf
-# default storage is s3; override with $LT_TEST_STORAGE
+FEATURE = "Large transfer"
+
+STORAGE = "s3"
+if "LT_TEST_STORAGE" in os.environ:
+	STORAGE = os.environ["LT_TEST_STORAGE"]
 
 
-#
-# Patches
-#
+@before.each_feature
+def setup(feat):
+	if feat.name == FEATURE:
 
+		# prevent ini parser from lowercasing params
+		ConfigParser.optionxform = lambda self, x: x
 
-# prevent ini parser from lowercasing params
-ConfigParser.optionxform = lambda self, x: x
+		# make connections work
 
-# make connections work
-# s3
-s3.S3FileSystem._get_connection = lambda self: connect_s3()
-# gcs
-def get_pk(f="gcs_pk.p12"):  # TODO:
-	with open(f, "rb") as fd:
-		pk = fd.read()
-	return base64.b64encode(pk)
+		if STORAGE == "s3":
+			s3.S3FileSystem._get_connection = lambda self: connect_s3()
 
-ACCESS_DATA = {
-	"service_account_name": '876103924605@developer.gserviceaccount.com',
-	"key": get_pk(),
-}
+		elif STORAGE == "gcs":
+			def get_pk(f="gcs_pk.p12"):  # TODO:
+				with open(f, "rb") as fd:
+					pk = fd.read()
+				return base64.b64encode(pk)
 
-gcs.bus = mock.MagicMock()
-gcs.bus.platform.get_access_data = lambda k: ACCESS_DATA[k]
+			ACCESS_DATA = {
+				"service_account_name": '876103924605@developer.gserviceaccount.com',
+				"key": get_pk(),
+			}
 
-gsm = GoogleServiceManager(gcs.bus.platform,
-	"storage", "v1beta1", STORAGE_FULL_SCOPE)
+			gcs.bus = mock.MagicMock()
+			gcs.bus.platform.get_access_data = lambda k: ACCESS_DATA[k]
 
-gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
-gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
-# swift
-swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
-		"https://identity.api.rackspacecloud.com/v1.0",
-		os.environ["RS_USERNAME"], os.environ["RS_API_KEY"])
+			gsm = GoogleServiceManager(gcs.bus.platform,
+				"storage", "v1beta1", STORAGE_FULL_SCOPE)
+
+			gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
+			gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
+
+		elif STORAGE == "swift":
+			swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
+					"https://identity.api.rackspacecloud.com/v1.0",
+					os.environ["RS_USERNAME"], os.environ["RS_API_KEY"])
+
+		elif STORAGE == "swift-enter-it":
+			swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
+				"http://folsom.enter.it:5000/v2.0",
+				os.environ["ENTER_IT_USERNAME"], os.environ["ENTER_IT_API_KEY"], auth_version="2")
 
 
 class S3(s3.S3FileSystem):
@@ -122,11 +138,12 @@ STORAGES = {
 		"url": "swift://vova-test",
 		"driver": Swift,
 	},
+	"swift-enter-it": {
+		"url": "swift://vova-test",
+		"driver": Swift,
+	},
 }
 
-STORAGE = "s3"
-if "LT_TEST_STORAGE" in os.environ:
-	STORAGE = os.environ["LT_TEST_STORAGE"]
 assert STORAGE in STORAGES, "%s not in %s" % (STORAGE, STORAGES.keys())
 
 
