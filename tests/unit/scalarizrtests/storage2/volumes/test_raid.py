@@ -38,11 +38,7 @@ class RaidVolumeTest(unittest.TestCase):
 			disk.ensure.assert_called_once_with()
 
 		mdadm.findname.assert_called_once_with()
-		# assert mdadm.mdadm.mock_calls == [
-		# 	mock.call('create', '/dev/md1',	*disks_devices, force=True, level=1,
-		# 			assume_clean=True, raid_devices=len(disks_devices),
-		# 			metadata='default'),
-		# 	mock.call('misc', '/dev/md1', wait=True)]
+
 		calls = [mock.call('create', '/dev/md1', *disks_devices, force=True, level=1,
 			                assume_clean=True, raid_devices=2, metadata='default'),
 				mock.call('misc', None, '/dev/md1', wait=True, raise_exc=False)]
@@ -131,14 +127,9 @@ class RaidVolumeTest(unittest.TestCase):
 				*disks_devices)
 
 			mdadm.findname.assert_called_once_with()
-			# calls = [mock.call('misc', None, d, zero_superblock=True,
-			# 				   force=True) for d in disks_devices]
 
 			raid_device = mdadm.findname.return_value
-			# calls.append(mock.call('create', raid_device, *disks_devices,
-			# 					   force=True, metadata='default',
-			# 					   level=lvl, assume_clean=True,
-			# 					   raid_devices=len(disks_devices)))
+
 			calls = [mock.call('assemble', raid_device, *disks_devices),
 						mock.call('misc', None, raid_device, wait=True, raise_exc=False)]
 			self.assertSequenceEqual(mdadm.mdadm.mock_calls, calls)
