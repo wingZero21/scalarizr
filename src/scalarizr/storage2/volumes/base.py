@@ -49,7 +49,7 @@ class Volume(Base):
 				mpoint=mpoint,
 				snap=snap,
 				**kwds)
-		self.features.update({'restore': True, 'grow': False})
+		self.features.update({'restore': True, 'grow': False, 'detach': True})
 		
 
 	def ensure(self, mount=False, mkfs=False, fstab=False, **updates):
@@ -93,6 +93,8 @@ class Volume(Base):
 			return
 		self.umount()
 		self._detach(force, **kwds)
+		if self.features['detach']:
+			self.device = None
 
 
 	def mount(self):
