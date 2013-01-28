@@ -1070,7 +1070,7 @@ class MysqlHandler(DBMSRHandler):
 
 	def _change_selinux_ctx(self):
 		chcon = software.whereis('chcon')
-		if disttool.is_rhel() and chcon:
+		if disttool.is_rhel_based() and chcon:
 			LOG.debug('Changing SELinux file security context for new mysql datadir')
 			system2((chcon[0], '-R', '-u', 'system_u', '-r',
 					'object_r', '-t', 'mysqld_db_t', 
