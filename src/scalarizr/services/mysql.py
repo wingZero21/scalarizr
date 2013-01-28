@@ -143,7 +143,7 @@ class MySQL(BaseService):
 							
 						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
 						rsync = filetool.Rsync().archive()
-						rsync.source(src_dir).dest(dest).exclude(['ib_logfile*']).exclude('*.sock')
+						rsync.source(src_dir).dest(dest).exclude(['ib_logfile*', '*.sock'])
 						system2(str(rsync), shell=True)
 			self.my_cnf.set(directive, dirname)
 	
