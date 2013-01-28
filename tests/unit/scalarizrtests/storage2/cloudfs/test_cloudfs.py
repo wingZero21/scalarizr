@@ -4,6 +4,7 @@ Created on Sep 19, 2012
 @author: Dmytro Korsakov
 '''
 import mock
+import os
 from Queue import Empty
 from os.path import basename
 from subprocess import call
@@ -387,49 +388,3 @@ class NTestFileTransfer(object):
 		for job in completed:
 			assert job in ret["completed"]
 		assert ret["failed"] == []
-
-
-class TestLargeTransfer(object):
-
-	mpoint = '/mpoint/'
-
-	path1 = '/mnt/backups/daily.tar.gz'
-	path2 = 's3://backups/mysql/2012-09-05/'  # dir
-
-	def setup(self):
-		cloudfs.cloudfs = mock.MagicMock()
-		cloudfs.FileTransfer = mock.MagicMock()
-		cloudfs.storage2.volume = mock.MagicMock()
-		cloudfs.coreutils.remove = mock.MagicMock()
-		cloudfs.tempfile = mock.MagicMock()
-
-		self.stream = mock.MagicMock()
-		self.stream.read = lambda size: 'c' * size
-		def myopen(path, mode=None):
-			if mode is None:
-				return self.stream
-			obj = mock.MagicMock()
-			obj.name = path
-			return obj
-		cloudfs.open = myopen
-
-	@mock.patch("scalarizr.storage2.cloudfs.os.path.isfile")
-	def test_src_gen_upload(self, isfile):
-		isfile.return_value = True
-		cloudfs.storage2.volume.return_value.mpoint = self.mpoint
-
-		obj = cloudfs.LargeTransfer(self.path1, self.path2,
-			cloudfs.LargeTransfer.UPLOAD, gzip_it=False)
-		assert cloudfs.FileTransfer.call_count == 1
-		src_gen = cloudfs.FileTransfer.call_args[0][0]()
-
-		res = []
-		for src in src_gen:
-			res.append(src)
-
-		assert res == [self.mpoint + basename(self.path1) + '.000'], res
-
-
-
-
-

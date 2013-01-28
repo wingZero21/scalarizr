@@ -210,7 +210,7 @@ class EphVolumeTest(unittest.TestCase):
 		self.assertEqual(final_snap.size, 400000)
 
 		cfs.LargeTransfer.assert_called_once_with(src='temporary_dir/',
-					dst=snap_path, tar_it=True, gzip_it=True)
+					dst=snap_path, tar_it=True, gzip_it=True, tags=None)
 
 		cfs.LargeTransfer.return_value.run.assert_called_once_with()
 

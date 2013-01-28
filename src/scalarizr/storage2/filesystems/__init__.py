@@ -13,6 +13,7 @@ import logging
 
 from scalarizr import linux
 from scalarizr.linux import mount, coreutils
+from scalarizr.linux import pkgmgr
 
 
 LOG = logging.getLogger(__name__)
@@ -56,7 +57,6 @@ class FileSystem(object):
 			if self.os_packages:
 				LOG.debug('Installing OS packages')
 				
-				from scalarizr.linux import pkgmgr
 				for package in self.os_packages:
 					pkgmgr.installed(package)
 		

@@ -21,9 +21,9 @@ class RaidVolumeTest(unittest.TestCase):
 	def test_ensure_new(self, mdadm, lvm2, storage2, exists, rm, tfile,
 						b64, op):
 		disks = [mock.MagicMock(type='loop', device='/dev/loop%s' % x)
-				 										for x in range(2)]
+				 										for x in range(2)]*2
 		storage2.volume.side_effect = disks
-		disks_devices = [d.device for d in disks]
+		disks_devices = [d.device for d in disks[:2]]
 		mdadm.findname.return_value = '/dev/md1'
 
 		lvm2.pvs.return_value.__getitem__.return_value.pv_uuid = 'pvuuid'
@@ -38,11 +38,15 @@ class RaidVolumeTest(unittest.TestCase):
 			disk.ensure.assert_called_once_with()
 
 		mdadm.findname.assert_called_once_with()
-		assert mdadm.mdadm.mock_calls == [
-			mock.call('create', '/dev/md1',	*disks_devices, force=True, level=1,
-					assume_clean=True, raid_devices=len(disks_devices),
-					metadata='default'),
-			mock.call('misc', '/dev/md1', wait=True)]
+		# assert mdadm.mdadm.mock_calls == [
+		# 	mock.call('create', '/dev/md1',	*disks_devices, force=True, level=1,
+		# 			assume_clean=True, raid_devices=len(disks_devices),
+		# 			metadata='default'),
+		# 	mock.call('misc', '/dev/md1', wait=True)]
+		calls = [mock.call('create', '/dev/md1', *disks_devices, force=True, level=1,
+			                assume_clean=True, raid_devices=2, metadata='default'),
+				mock.call('misc', None, '/dev/md1', wait=True, raise_exc=False)]
+		self.assertSequenceEqual(mdadm.mdadm.mock_calls, calls)
 
 		lvm2.pvcreate.assert_called_once_with('/dev/md1', force=True)
 		lvm2.pvs.assert_called_once_with('/dev/md1')
@@ -54,7 +58,7 @@ class RaidVolumeTest(unittest.TestCase):
 		self.assertEqual(raid_vol.lvm_group_cfg,
 						 lvm2.backup_vg_config.return_value)
 		self.assertEqual(raid_vol.pv_uuid, 'pvuuid')
-		self.assertEqual(raid_vol.disks, disks)
+		self.assertEqual(raid_vol.disks, disks[:2])
 		self.assertEqual(raid_vol.level, 1)
 
 
@@ -127,16 +131,16 @@ class RaidVolumeTest(unittest.TestCase):
 				*disks_devices)
 
 			mdadm.findname.assert_called_once_with()
-			calls = [mock.call('misc', None, d, zero_superblock=True,
-							   force=True) for d in disks_devices]
+			# calls = [mock.call('misc', None, d, zero_superblock=True,
+			# 				   force=True) for d in disks_devices]
 
 			raid_device = mdadm.findname.return_value
-			calls.append(mock.call('create', raid_device, *disks_devices,
-								   force=True, metadata='default',
-								   level=lvl, assume_clean=True,
-								   raid_devices=len(disks_devices)))
-
-			calls.append(mock.call('misc',  raid_device, wait=True))
+			# calls.append(mock.call('create', raid_device, *disks_devices,
+			# 					   force=True, metadata='default',
+			# 					   level=lvl, assume_clean=True,
+			# 					   raid_devices=len(disks_devices)))
+			calls = [mock.call('assemble', raid_device, *disks_devices),
+						mock.call('misc', None, raid_device, wait=True, raise_exc=False)]
 			self.assertSequenceEqual(mdadm.mdadm.mock_calls, calls)
 			mdadm.reset_mock()
 			storage2.reset_mock()
@@ -172,7 +176,7 @@ class RaidVolumeTest(unittest.TestCase):
 
 			raid_device = mdadm.findname.return_value
 			calls = [mock.call('assemble', raid_device, *disks_devices),
-						mock.call('misc',  raid_device, wait=True)]
+						mock.call('misc', None, raid_device, wait=True, raise_exc=False)]
 			self.assertSequenceEqual(mdadm.mdadm.mock_calls, calls)
 			mdadm.reset_mock()
 			storage2.reset_mock()
@@ -203,6 +207,8 @@ class RaidVolumeTest(unittest.TestCase):
 							storage2, exists, rm, tfile, b64, op):
 		disks_snaps = [dict(type='loop', size=0.01)]*2
 		lvm2.pvs.side_effect = Exception
+		tempfile_mock = mock.MagicMock()
+		tfile.mktemp.return_value = tempfile_mock
 		raid_vol = raid.RaidVolume(type='raid',
 								   snap=dict(
 									   vg='test', level=1,
@@ -213,18 +219,20 @@ class RaidVolumeTest(unittest.TestCase):
 		raid_vol.ensure()
 		raid_dev = mdadm.mdfind.return_value
 		lvm2.pvs.assert_called_once_with(raid_dev)
-		lvm2.pvcreate.assert_called_once_with(raid_dev, uuid='pvuuid')
+		lvm2.pvcreate.assert_called_once_with(raid_dev, uuid='pvuuid', 
+											  restorefile=tempfile_mock)
 
 
 	def test_ensure_existed(self, mdadm, lvm2,
 							storage2, exists, rm, tfile, b64, op):
-		disks =  [mock.MagicMock(), mock.MagicMock()]
+		disks = [mock.MagicMock() for _ in xrange(4)]
 		storage2.volume.side_effect = disks
 		raid_vol = raid.RaidVolume(type='raid',
 							vg='test', level=1,
 							disks=disks, pv_uuid='pvuuid',
 							lvm_group_cfg='base64_encoded_cfg'
 		)
+		storage2.volume.side_effect = disks
 		raid_vol.ensure()
 
 		mdadm.reset_mock()
@@ -257,7 +265,7 @@ class RaidVolumeTest(unittest.TestCase):
 		lvm2.lvcreate.return_value = ('Logical volume "lvol0" created', '', 0)
 		raid_vol = raid.RaidVolume(type='raid', vg='test', level=1,
 								   disks=[dict(type='loop', size=0.01)]*2)
-		disks =  [mock.MagicMock(), mock.MagicMock()]
+		disks =  [mock.MagicMock() for _ in xrange(2)]*2
 		storage2.volume.side_effect = disks
 		raid_vol.ensure()
 		lvm2.reset_mock()
@@ -285,7 +293,7 @@ class RaidVolumeTest(unittest.TestCase):
 		lvm2.lvcreate.return_value = ('Logical volume "lvol0" created', '', 0)
 		raid_vol = raid.RaidVolume(type='raid', vg='test', level=1,
 								   disks=[dict(type='loop', size=0.01)]*2)
-		disks =  [mock.MagicMock(), mock.MagicMock()]
+		disks =  [mock.MagicMock() for _ in xrange(2)]*2
 		storage2.volume.side_effect = disks
 
 		raid_vol.ensure()
@@ -298,7 +306,7 @@ class RaidVolumeTest(unittest.TestCase):
 			d.detach.assert_called_once_with(force=False)
 			assert d.destroy.call_count == 0
 
-		self.assertSequenceEqual(raid_vol.disks, disks)
+		self.assertSequenceEqual(raid_vol.disks, disks[:2])
 
 
 
@@ -308,13 +316,15 @@ class RaidVolumeTest(unittest.TestCase):
 		lvm2.lvcreate.return_value = ('Logical volume "lvol0" created', '', 0)
 		raid_vol = raid.RaidVolume(type='raid', vg='test', level=1,
 								   disks=[dict(type='loop', size=0.01)]*2)
-		disks =  [mock.MagicMock(), mock.MagicMock()]
+		disks = [mock.MagicMock() for _ in xrange(2)]*2
 		storage2.volume.side_effect = disks
 
 		raid_vol.ensure()
 
 		lvm2.reset_mock()
 		mdadm.reset_mock()
+		
+		storage2.volume.side_effect = disks
 
 		raid_vol.destroy(force=True, remove_disks=True)
 		for d in disks:

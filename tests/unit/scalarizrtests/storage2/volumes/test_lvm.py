@@ -9,6 +9,7 @@ import unittest
 
 from scalarizr.storage2.volumes import lvm
 from scalarizr.storage2.volumes import base
+from scalarizr import storage2
 
 @mock.patch('scalarizr.storage2.volumes.base.mod_mount')
 @mock.patch('scalarizr.storage2.volumes.lvm.lvm2')
@@ -28,8 +29,8 @@ class TestLvmVolume(unittest.TestCase):
 			return ret
 
 		lvm2.lvs.side_effect = lvs
-		lvm2.pvs.side_effect = [{}, {'/dev/sdb': mock.Mock(vg_name=None)},
-									{'/dev/sdc':  mock.Mock(vg_name=None)}]
+		lvm2.pvs.side_effect = [{}, {}] + [{'/dev/sdb': mock.Mock(vg_name=None)},
+										   {'/dev/sdc': mock.Mock(vg_name=None)}]*2
 		lvm2.vgs.side_effect = lvm2.NotFound
 
 		vol = lvm.LvmVolume(
@@ -75,19 +76,19 @@ class TestLvmVolume(unittest.TestCase):
 		assert isinstance(vol.pvs[1], base.Volume)
 		assert vol.device == '/dev/mapper/data-vol1'
 		assert lvm2.pvs.mock_calls == [mock.call(),
+									   mock.call(),
 									   mock.call('/dev/sdb'),
 									   mock.call('/dev/sdc')]
 		assert lvm2.pvcreate.call_count == 0
 		lvm2.vgs.assert_called_once_with('data')
-		lvm2.lvchange.assert_called_once_with(vol.device, available=True)
+		lvm2.lvchange.assert_called_once_with(vol.device, available='y')
 		
 	
 	def test_detach(self, lvm2, mod_mount):
 		vol = self._create_vol(lvm2)
+		device = vol.device
 		vol.detach()
-		lvm2.lvchange.assert_called_once_with(vol.device, available='n')
-
-
+		lvm2.lvchange.assert_called_once_with(device, available='n')
 
 	def test_destroy(self, lvm2, mod_mount):
 		vol = self._create_vol(lvm2)
@@ -116,6 +117,7 @@ class TestLvmVolume(unittest.TestCase):
 		"""
 		Creates mocked lvm volume with 2 pvs
 		"""
+		# storage2.volume('/dev/sdd')
 		lvm2.NotFound = Exception
 		lvs_returns = [
 			lvm2.NotFound,
@@ -128,8 +130,8 @@ class TestLvmVolume(unittest.TestCase):
 			return ret
 
 		lvm2.lvs.side_effect = lvs
-		lvm2.pvs.side_effect = [{}, {'/dev/sdb': mock.Mock(vg_name=None)},
-									{'/dev/sdc':  mock.Mock(vg_name=None)}]
+		lvm2.pvs.side_effect = lambda *args, **kwds: {'/dev/sdb': mock.Mock(vg_name=None),
+										'/dev/sdc':  mock.Mock(vg_name=None)}
 		lvm2.vgs.side_effect = lvm2.NotFound
 
 		vol = lvm.LvmVolume(
@@ -225,8 +227,8 @@ class TestLvmVolume(unittest.TestCase):
 
 		vol.pvs.append('/dev/sdc')
 
-		lvm2.pvs.side_effect = [{'/dev/sdb': mock.Mock(vg_name='data')}]*2 + \
-								[{'/dev/sdc': mock.Mock(vg_name=None)}]
+		lvm2.pvs.side_effect = [{'/dev/sdb': mock.Mock(vg_name='data')}]*3 + \
+								 [{'/dev/sdc': mock.Mock(vg_name=None)}]
 		lvs_returns.append(
 			{'data/vol1': mock.Mock(lv_path='/dev/mapper/data-vol1', lv_attr='-wi-ao')}
 		)

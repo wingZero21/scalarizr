@@ -70,7 +70,6 @@ class LoopVolume(base.Volume):
 						pc = int(self.size.split('%')[0])
 					except:
 						msg = 'Incorrect size format: %s' % self.size
-						raise storage2.StorageError(msg)
 					stat = os.statvfs('/')
 					total = stat.f_bsize * stat.f_blocks / 1048576
 					size = total * pc / 100
