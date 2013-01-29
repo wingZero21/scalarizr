@@ -4,14 +4,16 @@
 packages = [
   "python-nose",
   "python-mock",
+  "python-lettuce",
   "python-wsgi-intercept",
   "python-m2crypto",
+  "python-pymysql",
+  "python-boto",
   "python-swiftclient",
   "python-cinderclient",
-  "python-novaclient",
-  "python-novaclient-os-diskconfig-ext",
-  "python-novaclient-rax-backup-shedule-ext"
-#  "python-rackspace-novaclient"
+  "python-rackspace-novaclient",
+  "python-google-api-client",
+  "python-cloudstack"
 ].join(" ")
 
 Vagrant::Config.run do |config|

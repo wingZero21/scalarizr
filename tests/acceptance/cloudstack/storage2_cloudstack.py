@@ -4,8 +4,8 @@
 
 from lettuce import step
 from lettuce import world
-from scalarizr.storage2.volumes import cloudstack
 from cloudstack import Client
+from scalarizr.storage2.volumes import csvol as cloudstack
 
 
 cloudstack.__cloudstack__ = {}
