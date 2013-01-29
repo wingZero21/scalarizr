@@ -303,6 +303,7 @@ __node__ = {
 	'rebooted': BoolFile(private_dir + '/.reboot'),
 	'halted': BoolFile(private_dir + '/.halt')
 }
+
 for behavior in ('mysql', 'mysql2', 'percona'):
 	section = 'mysql2' if behavior == 'percona' else behavior
 	__node__[behavior] = Compound({
@@ -314,6 +315,24 @@ for behavior in ('mysql', 'mysql2', 'percona'):
 		'mysqldump_options': 
 				Ini('%s/%s.ini' % (public_dir, behavior), behavior)
 	})
+
+__node__['redis'] = Compound({
+	'volume,volume_config':	Json('%s/storage/%s.json' % (private_dir, 'redis'),
+		 'scalarizr.storage2.volume'),
+	'replication_master,persistence_type,use_password,master_password': Ini(
+		'%s/%s.ini' % (private_dir, 'redis'), 'redis')
+})
+
+
+__node__['rabbitmq'] = Compound({
+	'volume,volume_config':	Json('%s/storage/%s.json' % (private_dir, 'rabbitmq'),
+			'scalarizr.storage2.volume'),
+	'password,server_index,node_type,cookie,hostname': Ini(
+						'%s/%s.ini' % (private_dir, 'rabbitmq'), 'rabbitmq')
+
+})
+
+
 __node__['ec2'] = Compound({
 	't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
 	'hostname_as_pubdns': 
@@ -333,6 +352,11 @@ __node__['cloudstack'] = Compound({
 	'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
 	'zone_id': Call('scalarizr.bus', 'bus.platform.get_avail_zone_id'),
 	'zone_name': Call('scalarizr.bus', 'bus.platform.get_avail_zone')
+})
+__node__['openstack'] = Compound({
+	'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
+	'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
+	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
 __node__['scalr'] = Compound({
 	'version': File(private_dir + '/.scalr-version'),

@@ -23,12 +23,12 @@ import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
-from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool
+from scalarizr.libs import metaconf
+from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, filetool
 from scalarizr.storage import transfer
 
 from scalarizr import storage2, linux
-from scalarizr.linux import iptables
-from scalarizr.linux import coreutils
+from scalarizr.linux import iptables, coreutils	
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
@@ -1124,8 +1124,11 @@ class MysqlHandler(DBMSRHandler):
 				
 				# Patch configuration
 				self.mysql.my_cnf.expire_logs_days = 10
-				self.mysql.my_cnf.skip_locking = False				
+				self.mysql.my_cnf.skip_locking = False		
 				self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
+				if not os.listdir(__mysql__['data_dir']):
+					linux.system(['mysql_install_db'])
+					coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
 				self._change_selinux_ctx()
 
 		

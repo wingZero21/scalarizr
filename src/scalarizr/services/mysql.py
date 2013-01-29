@@ -142,7 +142,7 @@ class MySQL(BaseService):
 							pass
 							
 						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
-						rsync(src_dir, dest, archive=True, exclude='ib_logfile*')
+						rsync(src_dir, dest, archive=True, exclude=['ib_logfile*', '*.sock'])
 
 			self.my_cnf.set(directive, dirname)
 	
@@ -725,6 +725,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
 	
 	def start(self):
+		'''
+		Commented, cause Dima said this code is useless
+
 		# FIXME: This condition here because of the following fixme
 		if os.listdir('/mnt/dbstorage/mysql-data'):
 
@@ -734,7 +737,8 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True, silent=True)[1]
 			if re.search(mysql_cnf_err_re, stderr):
 				raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
-		
+		'''		
+
 		if not self.running:
 			try:
 				LOG.info("Starting mysql")

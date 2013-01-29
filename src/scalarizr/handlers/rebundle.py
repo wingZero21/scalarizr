@@ -401,6 +401,11 @@ class LinuxImage:
 						   sparse=True,
 						   times=True,
 						   exclude=self.excludes)
+		#rsync = filetool.Rsync()
+		#rsync.archive().times().sparse().links().quietly()
+		#rsync.archive().sparse().xattributes()
+		#rsync.archive().sparse().times()
+		
 		if xattr:
 			rsync_longs['xattributes'] = True
 		out, err, exitcode = rsync(source, dest, **rsync_longs)

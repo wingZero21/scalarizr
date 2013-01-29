@@ -270,7 +270,6 @@ class Handler(object):
 						handlers.append(config.BuiltinBehaviours.PERCONA)
 					else:
 						handlers.append(config.BuiltinBehaviours.MYSQL2)
-
 		return handlers
 
 

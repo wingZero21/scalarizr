@@ -4,7 +4,6 @@ Created on Dec 24, 2009
 
 @author: marat
 '''
-from __future__ import with_statement
 
 from scalarizr.bus import bus
 #from scalarizr.config import STATE

@@ -1,4 +1,8 @@
+<<<<<<< .working
 from __future__ import with_statement
+=======
+from __future__ import with_statement
+>>>>>>> .merge-right.r5062
 '''
 Created on Sep 8, 2011
 
@@ -16,10 +20,12 @@ import subprocess
 
 from . import lazy
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 from scalarizr.util import initdv2, system2, run_detached, software, wait_until
 from scalarizr.config import BuiltinBehaviours
 
 
+__rabbitmq__ = __node__['rabbitmq']
 
 
 SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
@@ -33,11 +39,14 @@ class NodeTypes:
 	RAM = 'ram'
 	DISK = 'disk'
 
+
 RABBITMQCTL = software.which('rabbitmqctl')
 RABBITMQ_SERVER = software.which('rabbitmq-server')
 
+
 # RabbitMQ from ubuntu repo puts rabbitmq-plugins
 # binary in non-obvious place
+
 try:
 	RABBITMQ_PLUGINS = software.which('rabbitmq-plugins')
 except LookupError:
@@ -114,7 +123,6 @@ class RabbitMQ(object):
 	
 
 	def __init__(self):
-		self._cnf = bus.cnf
 		self._logger = logging.getLogger(__name__)
 
 		for dirname in os.listdir('/usr/lib/rabbitmq/lib/'):
@@ -127,7 +135,6 @@ class RabbitMQ(object):
 		self.service = initdv2.lookup(SERVICE_NAME)
 
 	def set_cookie(self, cookie):
-		cookie = self._cnf.rawini.get(CNF_SECTION, 'cookie')
 		with open(COOKIE_PATH, 'w') as f:
 			f.write(cookie)
 		rabbitmq_user = pwd.getpwnam("rabbitmq")
@@ -196,7 +203,17 @@ class RabbitMQ(object):
 	
 	@property
 	def node_type(self):
-		return self._cnf.rawini.get(CNF_SECTION, 'node_type')
+		return __rabbitmq__['node_type']
+
+
+	def change_node_type(self, self_hostname, hostnames, disk_node):
+		if RABBITMQ_VERSION >= (3, 0, 0):
+			type = disk_node and 'disk' or 'ram'
+			cmd = [RABBITMQCTL, 'change_cluster_node_type', type]
+			system2(cmd, logger=self._logger)
+		else:
+			self.cluster_with(self_hostname, hostnames, disk_node, do_reset=False)
+
 
 
 	def change_node_type(self, self_hostname, hostnames, disk_node):

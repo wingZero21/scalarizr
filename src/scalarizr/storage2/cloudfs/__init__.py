@@ -942,7 +942,6 @@ class LargeTransfer(bases.Task):
 		self._transfer.on(progress_report=interrupt)
 
 
-
 class Manifest(object):
 	"""
 	manifest.json

@@ -55,7 +55,7 @@ class Platform():
 	_arch = None
 	_access_data = None
 	_userdata = None
-	
+	_logger = logging.getLogger(__name__)
 	features = []
 	scalrfs = None			
 	
