@@ -23,6 +23,7 @@ from scalarizr.util import initdv2, system2, dynimp
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.linux import iptables
 from scalarizr.linux.coreutils import chown_r
+from scalarizr.services import PresetProvider, BaseConfig
 
 # Stdlibs
 import logging, os, re
@@ -121,8 +122,11 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 			return initdv2.Status.NOT_RUNNING
 		return status
 
-	def configtest(self):
-		out = system2(self._apachectl +' configtest', shell=True)[1]
+	def configtest(self, path=None):
+		args = self._apachectl +' configtest'
+		if path:
+			args += '-f %s' % path
+		out = system2(args, shell=True)[1]
 		if 'error' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 
@@ -737,3 +741,28 @@ class ApacheHandler(ServiceCtlHandler):
 						' Error: %s',	doc_root, sys.exc_value)
 			else:
 				self._logger.warn("Vhost config file `%s` not found.", vhost_path)
+				
+
+class ApacheConf(BaseConfig):
+	
+		config_type = 'app'
+		config_name = 'apache2.conf' if disttool.is_debian_based() else 'httpd.conf'
+	
+				
+class ApachePresetProvider(PresetProvider):
+	
+	def __init__(self):
+		service = initdv2.lookup(SERVICE_NAME)
+		config_objects = (ApacheConf(APACHE_CONF_PATH),)
+		PresetProvider.__init__(service, config_objects)
+		
+
+	def rollback_hook(self):
+		try:
+			pwd.getpwnam('apache')
+			uname = 'apache'
+		except:
+			uname = 'www-data'
+		for obj in self.config_data:
+			filetool.rchown(uname, obj.path)
+			

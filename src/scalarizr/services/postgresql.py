@@ -21,7 +21,7 @@ from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, system2, PopenError
 from scalarizr.linux.coreutils import chown_r
-from scalarizr.services import BaseService, BaseConfig, ServiceError, lazy
+from scalarizr.services import BaseService, BaseConfig, ServiceError, lazy, PresetProvider
 
 
 SERVICE_NAME = BuiltinBehaviours.POSTGRESQL 
@@ -644,7 +644,7 @@ class ConfigDir(object):
 	
 	@classmethod
 	def find(cls, version=None):
-		cls.version = version
+		cls.version = version or '9.0'
 		path = cls.get_sysconfig_pgdata()
 		if not path:
 			path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
@@ -1048,3 +1048,17 @@ def make_symlinks(source_dir, dst_dir, username='postgres'):
 		
 		if os.path.exists(src):
 			chown_r(dst, username)
+				
+
+class PgSQLPresetProvider(PresetProvider):
+	
+	def __init__(self, version):
+		service = initdv2.lookup(SERVICE_NAME)
+		config_objects = (PostgresqlConf('/etc/postgresql/%s/main' % version),)
+		PresetProvider.__init__(service, config_objects)
+		
+		
+	def rollback_hook(self):
+		for obj in self.config_data:
+			rchown(DEFAULT_USER, obj.path)
+	

@@ -21,9 +21,10 @@ from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2, disttool
 from scalarizr.linux import iptables
+from scalarizr.services import BaseConfig, PresetProvider
 
 # Stdlibs
-import os, logging, shutil, time
+import os, logging, shutil, re, time, pwd
 from telnetlib import Telnet
 from datetime import datetime
 import ConfigParser
@@ -84,8 +85,12 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 			return initdv2.Status.UNKNOWN
 		return status
 
-	def configtest(self):
-		out = system2('%s -t' % self._nginx_binary, shell=True)[1]
+	def configtest(self, path=None):
+		args = '%s -t' % self._nginx_binary
+		if path:
+			args += '-c %s' % path
+			
+		out = system2(args, shell=True)[1]
 		if 'failed' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 		
@@ -537,3 +542,40 @@ class NginxHandler(ServiceCtlHandler):
 				os.remove(self._https_inc_path)
 				self._logger.debug('%s deleted' % self._https_inc_path)
 
+		if https_config:
+			if os.path.exists(self._https_inc_path) \
+					and read_file(self._https_inc_path, logger=self._logger):
+				time_suffix = str(datetime.now()).replace(' ','.')
+				shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
+
+			msg = 'Writing virtualhosts to https.include'
+			write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
+
+				
+
+class NginxConf(BaseConfig):
+	
+		config_type = 'www'
+		config_name = 'nginx.conf'
+	
+				
+class NginxPresetProvider(PresetProvider):
+	
+	def __init__(self):
+		cnf = bus.cnf
+		ini = cnf.rawini
+		nginx_conf_path = os.path.join(os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)), 'nginx.conf')
+		config_objects = (NginxConf(nginx_conf_path),)
+		service = initdv2.lookup(SERVICE_NAME)
+		PresetProvider.__init__(service, config_objects)
+
+
+	def rollback_hook(self):
+		try:
+			pwd.getpwnam('nginx')
+		except:
+			pass
+		else:
+			for obj in self.config_data:
+				rchown('nginx', obj.path)
+			

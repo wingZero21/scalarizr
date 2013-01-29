@@ -12,7 +12,8 @@ import shutil
 
 from scalarizr import storage2, node
 from scalarizr.util import initdv2, system2, PopenError, wait_until, Singleton
-from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, backup
+from scalarizr.bus import bus
+from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, PresetProvider
 from scalarizr.util import disttool, cryptotool, firstmatched
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs.metaconf import Configuration, NoPathError
@@ -917,6 +918,23 @@ class RedisCLI(object):
 		if info['role']=='slave':
 			return True if info['master_sync_in_progress']=='1' else False
 		return False
+	
+
+class RedisPresetProvider(PresetProvider):
+	
+	def __init__(self):
+		service = initdv2.lookup(SERVICE_NAME)
+		config_objects = (RedisConf(DEFAULT_CONF_PATH),)
+		PresetProvider.__init__(service, config_objects)
+		
+		
+	def rollback_hook(self):
+		for obj in self.config_data:
+			rchown(DEFAULT_USER, obj.path)
+			
+				
+def get_snap_db_filename(port=DEFAULT_PORT):	
+	return 'dump.%s.rdb' % port	
 
 
 class RedisSnapBackup(backup.SnapBackup):
