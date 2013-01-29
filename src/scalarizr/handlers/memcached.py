@@ -17,7 +17,6 @@ from scalarizr.messaging import Messages
 
 # Libs
 from scalarizr.util import disttool, initdv2
-from scalarizr.util.filetool import read_file, write_file
 
 
 # Stdlibs
@@ -36,16 +35,22 @@ else:
 	template = 'CACHESIZE="AMOUNT"' 	
 
 def set_cache_size(sub):
-		mcd_conf = read_file(mcd_conf_path)
-	
-		if mcd_conf:
-			if expression.findall(mcd_conf):
-				write_file(mcd_conf_path, re.sub(expression, sub, mcd_conf))
-			else:
-				write_file(mcd_conf_path, sub, mode='a')
+	mcd_conf = None
+	with open(mcd_conf_path, 'r') as fp:
+		mcd_conf = fp.read()
+
+	if mcd_conf:
+		if expression.findall(mcd_conf):
+			with open(mcd_conf_path, 'w') as fp:
+				fp.write(re.sub(expression, sub, mcd_conf))
+		else:
+			with open(mcd_conf_path, 'a') as fp:
+				fp.write(sub)
 	
 def get_cache_size():
-	mcd_conf = read_file(mcd_conf_path)
+	mcd_conf = None
+	with open(mcd_conf_path, 'r') as fp:
+		mcd_conf = fp.read()
 	if mcd_conf:
 		result = re.search(mem_re, mcd_conf)
 		if result:

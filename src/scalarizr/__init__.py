@@ -21,9 +21,8 @@ from scalarizr.api.binding import jsonrpc_http
 from scalarizr.storage.util.loop import listloop
 
 # Utils
-from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
+from scalarizr.util import initdv2, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size, dynimp
-from scalarizr.util.filetool import write_file, read_file
 from scalarizr.util import wait_until
 
 # Stdlibs
@@ -714,7 +713,9 @@ def main():
 		# Check for another running scalarzir 
 		if os.path.exists(PID_FILE):
 			try:
-				another_pid = int(read_file(PID_FILE).strip())
+				another_pid = None
+				with open(PID_FILE, 'r') as fp:
+					another_pid = int(fp.read().strip())
 			except ValueError:
 				pass
 			else:
@@ -723,7 +724,8 @@ def main():
 					sys.exit(1)
 					
 		# Write PID
-		write_file(PID_FILE, str(pid))
+		with open(PID_FILE, 'w') as fp:
+			fp.write(str(pid))
 			
 		cnf = bus.cnf
 		cnf.on('apply_user_data', _apply_user_data)
@@ -816,10 +818,14 @@ def main():
 		if not bus.scalr_version:
 			version_file = cnf.private_path('.scalr-version')
 			if os.path.exists(version_file):
-				bus.scalr_version = tuple(read_file(version_file).strip().split('.'))
+				bus.scalr_version = None
+				with open(version_file, 'r') as fp:
+					bus.scalr_version = tuple(fp.read().strip().split('.'))
 			else:
 				bus.scalr_version = _detect_scalr_version()
-				write_file(version_file, '.'.join(map(str, bus.scalr_version)))
+				with open(version_file, 'w') as fp:
+					fp.write('.'.join(map(str, bus.scalr_version)))
+				
 			
 		# Apply Command-line passed configuration options
 		cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))

@@ -19,8 +19,9 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages, Handler
-from scalarizr.util.filetool import split, rchown
-from scalarizr.util import system2, wait_until, disttool, software, filetool, cryptotool
+from scalarizr.linux.coreutils import chown_r
+from scalarizr.coreutils import split
+from scalarizr.util import system2, wait_until, disttool, software, cryptotool
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, PgUser, SU_EXEC
 from scalarizr.linux import iptables
@@ -158,7 +159,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		#temporary fix for starting-after-rebundle issue
 		if not os.path.exists(PG_SOCKET_DIR):
 			os.makedirs(PG_SOCKET_DIR)
-			rchown(user='postgres', path=PG_SOCKET_DIR)
+			chown_r(PG_SOCKET_DIR, 'postgres')
 			
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
@@ -176,8 +177,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 				if all((checkmodule_paths, semodule_package_paths, semodule_paths)):
 					
-					filetool.write_file('/tmp/sshkeygen.te',
-								SSH_KEYGEN_SELINUX_MODULE, logger=self._logger)
+					with open('/tmp/sshkeygen.te', 'w') as fp:
+					    fp.write(SSH_KEYGEN_SELINUX_MODULE)
 					
 					self._logger.debug('Compiling SELinux policy for ssh-keygen')
 					system2((checkmodule_paths[0], '-M', '-m', '-o',
@@ -633,7 +634,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				# Dump all databases
 				self._logger.info("Dumping all databases")
 				tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
-				rchown(self.postgresql.root_user.name, tmpdir)
+				chown_r(tmpdir, self.postgresql.root_user.name)
 
 				def _single_backup(db_name):
 					dump_path = tmpdir + os.sep + db_name + '.sql'
@@ -815,7 +816,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			if not vol.mounted():
 				vol.mount(mpoint)
 		except StorageError, e:
-			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
+			''' XXX: Crapy. We need to introduce error codes from mount ''' 
 			if 'you must specify the filesystem type' in str(e):
 				vol.mkfs()
 				vol.mount(mpoint)

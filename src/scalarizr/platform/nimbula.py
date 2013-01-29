@@ -5,7 +5,7 @@ Created on Feb 14, 2011
 @author: spike
 '''
 from scalarizr.libs import nimbula
-from scalarizr.util import wait_until, filetool
+from scalarizr.util import wait_until
 from . import Platform, Ec2LikePlatform, PlatformError
 import os
 
@@ -39,7 +39,10 @@ class NimbulaPlatform(Ec2LikePlatform):
 			wait_until(os.path.exists, (path, ), 
 					logger=self._logger, timeout=timeout, sleep=1, 
 					error_text="File %s not exists" % path)
-			rawmeta = filetool.read_file(path)
+			rawmeta = None
+			with open(path, 'r') as fp:
+				rawmeta = fp.read()
+			
 			if not rawmeta:
 				raise PlatformError("Empty user-data")
 			self._userdata = self._parse_user_data(rawmeta)

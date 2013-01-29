@@ -78,7 +78,7 @@ class CloudStackPlatform(Platform):
 	
 	
 	def get_instance_id(self):
-		return self.get_meta_data('instance-id').split('-')[2]
+		return self.get_meta_data('instance-id')
 	
 	
 	def get_avail_zone_id(self):

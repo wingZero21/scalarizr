@@ -5,14 +5,17 @@ Created on Feb 15, 2011
 @author: spike
 '''
 from scalarizr.bus import bus
-from scalarizr.handlers import Handler, HandlerError 
+from scalarizr.handlers import Handler, HandlerError
 from scalarizr.handlers.rebundle import RebundleLogHandler
 from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrState
 from scalarizr.util import system2, software, cryptotool, disttool, wait_until
 from scalarizr.util.software import whereis
-from scalarizr.util.filetool import df, Rsync, Tar, read_file, write_file, truncate
-from scalarizr.util.fstool import mount, umount
+from scalarizr.linux.coreutils import statvfs
+from scalarizr.linux.coreutils import truncate
+from scalarizr.linux.rsync import rsync
+from scalarizr.linux.tar import Tar
+from scalarizr.linux import mount
 from datetime import datetime
 from tempfile import mkdtemp
 import logging
@@ -169,11 +172,9 @@ class NimbulaRebundleHandler(Handler):
 			
 			""" Getting root device size """
 			self._logger.debug('Getting root device size')
-			fs_list = df() 
-			for fs in fs_list:
-				if fs.mpoint == '/':
-					root_size = fs.size
-					root_free = fs.free
+			fs_stats = statvfs('/') 
+			root_size = fs_stats['size']
+			root_free = fs_stats['size'] - fs_stats['used']
 			self._logger.debug('Root device size: %s', root_size)
 			
 			used_space = root_size - root_free
@@ -248,7 +249,7 @@ class NimbulaRebundleHandler(Handler):
 			self._logger.debug('Mounting root device to %s.' % self.root_mpoint)			
 			if not os.path.isdir(self.root_mpoint):
 				os.mkdir(self.root_mpoint)	
-			mount(root_dev_name, self.root_mpoint)
+			mount.mount(root_dev_name, self.root_mpoint)
 			try:
 				""" Snapshot copy from temp dir to image """
 				cnf = bus.cnf
@@ -289,7 +290,7 @@ class NimbulaRebundleHandler(Handler):
 					shell.close()
 			finally:				
 				self._logger.debug('Unmounting root device.')
-				umount(root_dev_name)
+				mount.umount(root_dev_name)
 			
 			""" Unmap image partitions """
 			system2('kpartx -d %s' % image_path, shell=True)
@@ -411,27 +412,25 @@ class NimbulaRebundleHandler(Handler):
 					role_name = role_name,
 					bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
 				)
-				write_file(motd_filename, motd, error_msg="Cannot patch motd file '%s' %s %s")
+				with open(motd_filename, 'w') as fp:
+				    fp.write(motd)
 	
 	def _rsync(self, src, dst, excludes=None, xattr=True):
-		rsync = Rsync()
-		rsync.archive().sparse()
-		rsync.source(src).dest(dst)
-				
+		rsync_longs = dict(archive=True, sparse=True)				
 		if xattr:
-			rsync.xattributes()
+			rsync_longs['xattributes'] = True
 		
 		if excludes:
-			rsync.exclude(excludes)
-					
-		out, err, ret_code = rsync.execute()
+			rsync_longs['exclude'] = excludes
+
+		out, err, ret_code = rsync(src, dst, **rsync_longs)
 		
-		if ret_code == 24 and Rsync.usable():
+		if ret_code == 24:
 			self._logger.warn(
 				"rsync exited with error code 24. This means a partial transfer due to vanished " + 
 				"source files. In most cases files are copied normally"
 			)
-		if ret_code == 23 and Rsync.usable():
+		if ret_code == 23:
 			self._logger.warn(
 				"rsync seemed successful but exited with error code 23. This probably means " +
            		"that your version of rsync was built against a kernel with HAVE_LUTIMES defined, " +
@@ -464,19 +463,26 @@ class RedHatAdapter:
 			grub_conf += 'kernel /boot/%s root=UUID=%s ro console=tty1 console=ttyS0\n' % (kernel, root_uuid)
 			grub_conf += 'initrd /boot/%s\n' % (kernel.replace('vmlinuz-', 'initrd-') + '.img')
 			grub_conf += 'boot\n'
-		write_file(grub_conf_path, grub_conf, logger=handler._logger)
-		
+		with open(grub_conf_path, 'w') as fp:
+			fp.write(grub_conf)
+
 		""" Enable login on serial console """
 		handler._logger.info('Enabling login to serial console')
 		inittab_path 	= os.path.join(handler.tmp_root_dir, 'etc', 'inittab')
-		inittab			= read_file(inittab_path, logger=handler._logger) or ''
+		inittab			= ''
+		with open(inittab_path, 'r') as fp:
+			inittab = fp.read()
 		inittab 		+= 'T0:12345:respawn:/sbin/agetty -L ttyS0 38400\n'
-		write_file(inittab_path, inittab, logger=handler._logger)
+		with open(inittab_path, 'w') as fp:
+		    fp.write(inittab)
 		
 		securetty_path	= os.path.join(handler.tmp_root_dir, 'etc', 'securetty')
-		secure_tty		= read_file(securetty_path, logger=handler._logger) or ''
+		secure_tty		= ''
+		with open(securetty_path, 'r') as fp:
+			secure_tty = fp.read()
 		secure_tty		+= 'ttyS0\n'
-		write_file(securetty_path, secure_tty, logger=handler._logger)
+		with open(securetty_path, 'w') as fp:
+		    fp.write(secure_tty)
 		
 	
 class DebianAdapter:
@@ -494,9 +500,9 @@ class DebianAdapter:
 
 		device_map_path = os.path.join(handler.tmp_root_dir, 'boot', 'grub', 'device.map')
 		device_map = '(hd0)  /dev/sda\n'
-		write_file(device_map_path, device_map, logger=handler._logger)
-				
-		mount('/dev', handler.tmp_root_dir + '/dev', options=('--bind',))
+		with open(device_map_path, 'w') as fp:
+		    fp.write(device_map)
+		mount.mount('/dev', handler.tmp_root_dir + '/dev', bind=True)
 		try:
 			shell = pexpect.spawn('/bin/sh')
 			try:
@@ -518,11 +524,14 @@ class DebianAdapter:
 			finally:
 				shell.close()
 		finally:
-			umount(mpoint=handler.tmp_root_dir + '/dev')
+			mount.umount(handler.tmp_root_dir + '/dev')
 			
 		""" Enable login on serial console """
 		handler._logger.info('Enabling login to serial console')
 		inittab_path 	= os.path.join(handler.tmp_root_dir, 'etc', 'inittab')
-		inittab			= read_file(inittab_path, logger=handler._logger) or ''
+		inittab			= ''
+		with open(inittab_path, 'r') as fp:
+		    inittab = fp.read()
 		inittab 		+= 'T0:23:respawn:/sbin/getty -L ttyS0 38400 vt100\n'
-		write_file(inittab_path, inittab, logger=handler._logger)
+		with open(inittab_path, 'w') as fp:
+		    fp.write(inittab)

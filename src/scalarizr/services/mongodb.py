@@ -19,7 +19,7 @@ from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, system2, \
 				PopenError, wait_until, initdv2, software, \
 				firstmatched
-from scalarizr.util.filetool import rchown, read_file, write_file
+from scalarizr.linux.coreutils import chown_r
 import pymongo
 
 
@@ -164,7 +164,7 @@ class MongoDB(BaseService):
 			shutil.rmtree(ARBITER_DATA_DIR)
 		self._logger.debug('Creating datadir for arbiter: %s' % ARBITER_DATA_DIR)
 		os.makedirs(ARBITER_DATA_DIR)
-		rchown(DEFAULT_USER, ARBITER_DATA_DIR)
+		chown_r(ARBITER_DATA_DIR, DEFAULT_USER)
 		self._logger.debug("Preparing arbiter's config file")
 		self.arbiter_conf.dbpath = ARBITER_DATA_DIR
 		self.arbiter_conf.replSet = rs_name
@@ -177,7 +177,7 @@ class MongoDB(BaseService):
 		self._logger.debug('Preparing config server')
 		if not os.path.exists(CONFIG_SERVER_DATA_DIR):
 			os.makedirs(CONFIG_SERVER_DATA_DIR)
-		rchown(DEFAULT_USER, CONFIG_SERVER_DATA_DIR)
+		chown_r(CONFIG_SERVER_DATA_DIR, DEFAULT_USER)
 		'''
 		configsvr changes the default port and turns on the diaglog, 
 		a log that keeps every action the config database performs 
@@ -362,10 +362,13 @@ class MongoDB(BaseService):
 		path = '/etc/sudoers'
 		self._logger.debug('Disabling requiretty in %s' % path)
 		if not disttool.is_ubuntu():
-			orig = read_file(path)
+			orig = None
+			with open(path, 'r') as fp:
+			    orig = fp.read()
 			new = re.sub('Defaults\s+requiretty', '\n', orig)
 			if new != orig:
-				write_file(path, new)
+				with open(path, 'w') as fp:
+				    fp.write(new)
 
 
 	def _get_mongod(self):
@@ -513,7 +516,7 @@ class WorkingDirectory(object):
 			os.makedirs(dst)
 			
 		self._logger.debug("changing directory owner to %s" % self.user)	
-		rchown(self.user, dst)			
+		chown_r(dst, self.user)
 		self.path = dst
 
 		return dst
@@ -677,7 +680,7 @@ class Mongod(object):
 		if self.port:
 			s.append('--port=%s' % self.port)
 		if self.keyfile and os.path.exists(self.keyfile):
-			rchown(DEFAULT_USER, self.keyfile)	
+			chown_r(self.keyfile, DEFAULT_USER)
 			s.append('--keyFile=%s' % self.keyfile)
 		if self.verbose and isinstance(self.verbose, int) and 0<self.verbose<6:
 			s.append('-'+'v'*self.verbose)
@@ -759,7 +762,7 @@ class Mongos(object):
 					'--logpath', ROUTER_LOG_PATH, '--configdb',
 					'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
 			if cls.keyfile and os.path.exists(cls.keyfile):
-				rchown(DEFAULT_USER, cls.keyfile)
+				chown_r(cls.keyfile, DEFAULT_USER)
 				args.append('--keyFile=%s' % cls.keyfile)
 
 			if cls.verbose and isinstance(cls.verbose, int) and 0<cls.verbose<6:
@@ -767,7 +770,7 @@ class Mongos(object):
 
 
 			if os.path.exists(ROUTER_LOG_PATH):
-				rchown(DEFAULT_USER, ROUTER_LOG_PATH)
+				chown_r(ROUTER_LOG_PATH, DEFAULT_USER)
 
 			system2(args, close_fds=True, preexec_fn=os.setsid)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)

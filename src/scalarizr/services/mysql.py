@@ -25,11 +25,11 @@ from pymysql import cursors
 
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
-from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
+from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
 from scalarizr.util.initdv2 import wait_sock, InitdError
-from scalarizr.util.filetool import rchown
+from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
-import sys
+from scalarizr.linux.rsync import rsync
 
 
 from scalarizr import linux, storage2
@@ -142,12 +142,11 @@ class MySQL(BaseService):
 							pass
 							
 						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
-						rsync = filetool.Rsync().archive()
-						rsync.source(src_dir).dest(dest).exclude(['ib_logfile*'])
-						system2(str(rsync), shell=True)
+						rsync(src_dir, dest, archive=True, exclude='ib_logfile*')
+
 			self.my_cnf.set(directive, dirname)
 	
-			rchown("mysql", dest)
+			chown_r(dest, "mysql", "mysql")
 			# Adding rules to apparmor config 
 			if disttool.is_debian_based():
 				_add_apparmor_rules(dest)
@@ -726,10 +725,15 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
 	
 	def start(self):
-		mysql_cnf_err_re = re.compile('Unknown option|ERROR')
-		stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True, silent=True)[1]
-		if re.search(mysql_cnf_err_re, stderr):
-			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
+		# FIXME: This condition here because of the following fixme
+		if os.listdir('/mnt/dbstorage/mysql-data'):
+
+			# FIXME: It's not a good place to test mysql configuration
+			# This code fails when datadir is empty, whereas init script detects this and start gracefully
+			mysql_cnf_err_re = re.compile('Unknown option|ERROR')
+			stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True, silent=True)[1]
+			if re.search(mysql_cnf_err_re, stderr):
+				raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
 		
 		if not self.running:
 			try:

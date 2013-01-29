@@ -76,7 +76,7 @@ class EphVolumeTest(unittest.TestCase):
 		lvm_vol.ensure.assert_called_once_with()
 		self.assertEqual(lvm_vol.device, vol.device)
 
-	@mock.patch('scalarizr.storage2.volumes.eph.filetool.df')
+	@mock.patch('scalarizr.linux.coreutils.df')
 	@mock.patch('scalarizr.storage2.volumes.eph.os.rmdir')
 	@mock.patch('scalarizr.storage2.volumes.eph.tempfile')
 	@mock.patch('scalarizr.storage2.volumes.eph.cloudfs')
@@ -168,7 +168,7 @@ class EphVolumeTest(unittest.TestCase):
 
 
 	@mock.patch('scalarizr.storage2.volumes.eph.os.rmdir')
-	@mock.patch('scalarizr.storage2.volumes.eph.filetool.df')
+	@mock.patch('scalarizr.linux.coreutils.df')
 	@mock.patch('scalarizr.storage2.volumes.eph.tempfile')
 	@mock.patch('scalarizr.storage2.volumes.eph.cloudfs')
 	def test_snapshot(self, cfs, tmpf, df, rmdir, storage2):

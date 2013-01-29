@@ -17,8 +17,10 @@ from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages, Queues
 from scalarizr.storage import Storage
 from scalarizr.storage.util import loop
-from scalarizr.util import fstool, filetool, system2, software
-
+from scalarizr.util import system2, software
+from scalarizr.linux import mount
+from scalarizr.linux import coreutils
+from scalarizr.linux.rsync import rsync
 
 LOG = logging.getLogger(__name__)
 
@@ -182,7 +184,7 @@ class RebundleHandler(Handler):
 				filename = os.path.join(logs_path, basename)
 				if os.path.isfile(filename):
 					try:
-						filetool.truncate(filename)
+						coreutils.truncate(filename)
 					except OSError, e:
 						self._logger.error("Cannot truncate file '%s'. %s", filename, e)
 			shutil.rmtree(os.path.join(logs_path, 'scalarizr/scripting'))
@@ -275,7 +277,7 @@ class LinuxImage:
 	_mtab = None
 	
 	def __init__(self, volume, path=None, excludes=None):
-		self._mtab = fstool.Mtab()
+		self._mtab = mount.mounts()
 		self._volume = volume
 		self.mpoint = '/mnt/img-mnt'
 		self.path = path
@@ -310,14 +312,14 @@ class LinuxImage:
 			os.rmdir(self.mpoint)
 	
 	def umount(self):
-		if self._mtab.contains(mpoint=self.mpoint, reload=True):
+		if self._mtab.contains(self.mpoint, reload=True):
 			LOG.debug("Unmounting '%s'", self.mpoint)
 			system2("umount -d " + self.mpoint, shell=True, raise_exc=False)
 	
 	def _format_image(self):
 		LOG.info("Formatting image")
 		
-		vol_entry = list(v for v in self._mtab.find(mpoint=self._volume) 
+		vol_entry = list(v for v in self._mtab[self._volume]
 						if v.devname.startswith('/dev'))[0]
 		fs = Storage.lookup_filesystem(vol_entry.fstype)
 					
@@ -344,9 +346,9 @@ class LinuxImage:
 
 	def _mount_image(self, options=None):
 		LOG.info("Mounting image")
-		if self._mtab.contains(mpoint=self.mpoint):
+		if self._mtab.contains(self.mpoint):
 			raise HandlerError("Image already mounted")
-		fstool.mount(self.devname, self.mpoint, options)
+		mount.mount(self.devname, self.mpoint, *options)
 	
 	
 	def _make_special_dirs(self):
@@ -395,24 +397,22 @@ class LinuxImage:
 	
 	def _copy_rec(self, source, dest, xattr=True):
 		LOG.info("Copying %s into the image %s", source, dest)
-		rsync = filetool.Rsync()
-		#rsync.archive().times().sparse().links().quietly()
-		#rsync.archive().sparse().xattributes()
-		rsync.archive().sparse().times()
+		rsync_longs = dict(archive=True,
+						   sparse=True,
+						   times=True,
+						   exclude=self.excludes)
 		if xattr:
-			rsync.xattributes()
-		rsync.exclude(self.excludes)
-		rsync.source(source).dest(dest)
-		out, err, exitcode = rsync.execute()
+			rsync_longs['xattributes'] = True
+		out, err, exitcode = rsync(source, dest, **rsync_longs)
 		LOG.debug('rsync stdout: %s', out)
 		LOG.debug('rsync stderr: %s', err)
 		
-		if exitcode == 24 and filetool.Rsync.usable():
+		if exitcode == 24:
 			LOG.warn(
 				"rsync exited with error code 24. This means a partial transfer due to vanished " + 
 				"source files. In most cases files are copied normally"
 			)
-		elif exitcode == 23 and filetool.Rsync.usable():
+		elif exitcode == 23:
 			LOG.warn(
 				"rsync seemed successful but exited with error code 23. This probably means " +
            		"that your version of rsync was built against a kernel with HAVE_LUTIMES defined, " +

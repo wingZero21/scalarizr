@@ -20,7 +20,7 @@ from scalarizr.util import disttool, firstmatched, wait_until
 from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, system2, PopenError
-from scalarizr.util.filetool import read_file, write_file, rchown
+from scalarizr.linux.coreutils import chown_r
 from scalarizr.services import BaseService, BaseConfig, ServiceError, lazy
 
 
@@ -365,15 +365,21 @@ class PgUser(object):
 		source_path = source_path or self.public_key_path 
 		if not os.path.exists(self.ssh_dir):
 			os.makedirs(self.ssh_dir)
-			rchown(self.name, self.ssh_dir)
+			chown_r(self.ssh_dir, self.name)
 		
-		pub_key = read_file(source_path,logger=self._logger)
+		pub_key = '' 
+		with open(source_path, 'r') as fp:
+		    pub_key = fp.read()
 		path = os.path.join(self.ssh_dir, 'authorized_keys')
-		keys = read_file(path,logger=self._logger) if os.path.exists(path) else ''
+		keys = ''
+		if os.path.exists(path):
+			with open(path, 'r') as fp:
+			    keys = fp.read()
 		
 		if not keys or not pub_key in keys:
-			write_file(path, data='\n%s %s\n' % (pub_key, self.name), mode='a', logger=self._logger)
-			rchown(self.name, path)
+			with open(path, 'a') as fp:
+			    fp.write('\n%s %s\n' % (pub_key, self.name))
+			chown_r(path, self.name)
 			
 	def apply_private_ssh_key(self,source_path=None):
 		source_path = source_path or self.private_key_path
@@ -382,12 +388,12 @@ class PgUser(object):
 		else:
 			if not os.path.exists(self.ssh_dir):
 				os.makedirs(self.ssh_dir)
-				rchown(self.name, self.ssh_dir)
+				chown_r(self.ssh_dir, self.name)
 				
 			dst = os.path.join(self.ssh_dir, 'id_rsa')
 			shutil.copyfile(source_path, dst)
 			os.chmod(dst, 0400)
-			rchown(self.name, dst)
+			chown_r(dst, self.name)
 			
 	
 	@property
@@ -395,15 +401,18 @@ class PgUser(object):
 		if not os.path.exists(self.private_key_path):
 			self.generate_private_ssh_key()
 			self.apply_private_ssh_key()
-		return read_file(self.private_key_path, logger=self._logger)
+		with open(self.private_key_path, 'r') as fp:
+		    return fp.read()
 	
 	@property
 	def public_key(self):
 		if not os.path.exists(self.public_key_path):
 			key = self.extract_public_ssh_key()
-			write_file(self.public_key_path, key, logger=self._logger)
+			with open(self.public_key_path, 'w') as fp:
+			    fp.write(key)
 			self.apply_public_ssh_key()
-		return read_file(self.public_key_path, logger=self._logger)
+		with open(self.public_key_path, 'r') as fp:
+		    return fp.read()
 		
 	@property
 	def homedir(self):
@@ -488,7 +497,11 @@ class PgUser(object):
 		self.password = password
 	
 	def _store_key(self, key_str, private=True):
-		write_file(self.private_key_path if private else self.public_key_path, data=key_str, logger=self._logger)
+		key_path = self.public_key_path
+		if private:
+			key_path = self.private_key_path
+		with open(key_path, 'w') as fp:
+		    fp.write(key_str)
 		
 		
 class PSQL(object):
@@ -588,7 +601,7 @@ class ClusterDir(object):
 				self._logger.debug("copying cluster files from %s into %s" % (source, new_cluster_dir))
 				shutil.copytree(source, new_cluster_dir)	
 		self._logger.debug("changing directory owner to %s" % self.user)	
-		rchown(self.user, dst)
+		chown_r(dst, self.user)
 		
 		self._logger.debug("Changing postgres user`s home directory")
 		if disttool.is_redhat_based():
@@ -653,7 +666,7 @@ class ConfigDir(object):
 				self._logger.debug('%s is already in place. Skipping.' % config)
 			else:
 				raise BaseException('Postgresql config file not found: %s' % old_config)
-			rchown(DEFAULT_USER, new_config)
+			chown_r(new_config, DEFAULT_USER)
 
 		#the following block needs revision
 		
@@ -724,8 +737,8 @@ class Trigger(object):
 	
 	def create(self):
 		if not self.exists():
-			null = ''
-			write_file(self.path, null, 'w', logger=self._logger)
+			with open(self.path, 'w') as fp:
+			    fp.write('')
 		
 	def destroy(self):
 		if self.exists():
@@ -943,7 +956,9 @@ class PgHbaConf(object):
 	@property
 	def records(self):
 		l = []
-		text = read_file(self.path) or ''
+		text = ''
+		with open(self.path, 'r') as fp:
+		    text = fp.read()
 		for line in text.splitlines():
 			if line.strip() and not line.strip().startswith('#'):
 				record = PgHbaRecord.from_string(line)
@@ -957,7 +972,8 @@ class PgHbaConf(object):
 					self.delete_record(old_record)
 		if record not in self.records:
 			self._logger.debug('Adding record "%s" to %s' % (str(record),self.path))
-			write_file(self.path, '\n'+str(record)+'\n', 'a')
+			with open(self.path, 'a') as fp:
+			    fp.write('\n'+str(record)+'\n')
 			
 	def delete_record(self, record, delete_similar=False):
 		deleted = []
@@ -972,7 +988,8 @@ class PgHbaConf(object):
 				lines.append(str(old_record))
 		if changed:
 			self._logger.debug('Removing records "%s" from %s' % (deleted,self.path))
-			write_file(self.path, '\n'.join(lines))
+			with open(self.path, 'w') as fp:
+			    fp.write('\n'.join(lines))
 	
 	def add_standby_host(self, ip, user='postgres'):
 		record = self._make_standby_record(ip, user)
@@ -1030,6 +1047,4 @@ def make_symlinks(source_dir, dst_dir, username='postgres'):
 		os.symlink(src, dst)
 		
 		if os.path.exists(src):
-			rchown(username, dst)	
-				
-								
+			chown_r(dst, username)

@@ -12,8 +12,8 @@ from .util import ramdisk
 
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util.software import whereis
-from scalarizr.util.fstool import mount, umount
 from scalarizr.util import firstmatched
+from scalarizr.linux import mount 
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
 
@@ -98,7 +98,9 @@ class EphVolumeProvider(VolumeProvider):
 
 		# Create tranzit volume (should be 5% bigger then data vol)
 		#lvi = self._lvm.lv_info(data_lv)
-		#size_in_KB = int(read_file('/sys/block/dm-%s/size' % lvi.lv_kernel_minor)) / 2
+		#size_in_KB = 0
+		#with open('/sys/block/dm-%s/size' % lvi.lv_kernel_minor, 'r') as fp:
+		#    size_in_KB = int(fp.read()) / 2
 		#tranzit_lv = self._lvm.create_lv(vg, 'tranzit', size='%dK' % (size_in_KB*1.05,))
 
 		return (vg, data_lv, size)
@@ -326,7 +328,7 @@ class EphSnapshotProviderLite(object):
 				opts = []
 				if volume.fstype == 'xfs':
 					opts += ['-o', 'nouuid,ro']
-				mount(snap_lv, snap_mpoint, opts)				
+				mount.mount(snap_lv, snap_mpoint, *opts)				
 				tar_cmd = ['tar', 'cp', '-C', snap_mpoint, '.']
 				
 				pigz_bins = whereis('pigz')
@@ -368,7 +370,7 @@ class EphSnapshotProviderLite(object):
 
 			finally:
 				self._return_ev.set()				
-				umount(snap_mpoint, options=('-f',))
+				mount.umount(snap_mpoint)
 				os.rmdir(snap_mpoint)
 				self._lvm.remove_lv(snap_lv)
 				self._inner_exc_info = None
@@ -608,7 +610,7 @@ class DataRestoreStrategy(RestoreStrategy):
 			if r_code:
 				raise Exception('Tar finished with return code %s' % r_code)
 		finally:
-			umount(mpoint=tmp_mpoint, options=('-f', ))
+			mount.umount(tmp_mpoint)
 
 class DeviceRestoreStrategy(RestoreStrategy):
 	def restore(self, queue, volume, download_finished):
