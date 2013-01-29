@@ -23,24 +23,6 @@ __cloudstack__ = node.__node__['cloudstack']
 LOG = logging.getLogger(__name__)
 
 
-def name2device(name):
-    if name.startswith('/dev/xvd'):
-        return name
-    if storage2.RHEL_DEVICE_ORDERING_BUG or os.path.exists('/dev/xvda1'):
-        name = name.replace('/sd', '/xvd')
-    if storage2.RHEL_DEVICE_ORDERING_BUG:
-        name = name[0:8] + chr(ord(name[8]) + 4) + name[9:]
-    return name
-
-
-def device2name(device):
-    if device.startswith('/dev/sd'):
-        return device
-    elif storage2.RHEL_DEVICE_ORDERING_BUG:
-        device = device[0:8] + chr(ord(device[8]) - 4) + device[9:]
-    return device.replace('/xvd', '/sd')
-
-
 def get_system_devname(letter):
     return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda') else 's', letter)
 
@@ -175,6 +157,13 @@ class CSVolume(base.Volume):
                 if not self.id:
                     LOG.debug('Creating new volume')
                     if not self.disk_offering_id:
+                        try:
+                            disk_offering_id = [dskoffer for dskoffer in conn.listDiskOfferings() 
+                                        if not dskoffer.disksize and dskoffer.iscustomized][0].id
+                        except IndexError:
+                            # XXX: For ucloud tests
+                            disk_offering_id = '1539f7a2-93bd-45fb-af6d-13d4d428286d'
+
                         # Any size you want
                         for dskoffer in self._conn.listDiskOfferings():
                             if not dskoffer.disksize and dskoffer.iscustomized:

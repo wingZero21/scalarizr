@@ -78,8 +78,14 @@ class CloudStackPlatform(Platform):
 	
 	
 	def get_instance_id(self):
-		return self.get_meta_data('instance-id')
-	
+		ret = self.get_meta_data('instance-id')
+		if len(ret) == 36:
+			# UUID (CloudStack 3)
+			return ret
+		else:
+			# CloudStack 2
+			return self.get_meta_data('instance-id').split('-')[2]
+		
 	
 	def get_avail_zone_id(self):
 		conn = self.new_cloudstack_conn()
