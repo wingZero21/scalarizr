@@ -422,13 +422,14 @@ class MessageDetailsCommand(Command):
 			cur = conn.cursor()
 
 			assert self.kwds['message_id'], 'message_id must be defined'
-			query="SELECT `message` FROM p2p_message WHERE `message_id`='%s'"\
+			query="SELECT `message`,`format` FROM p2p_message WHERE `message_id`='%s'"\
 				% self.kwds['message_id']
 			cur.execute(query)
 			res = cur.fetchone()
 			if res:
 				msg=Message()
-				msg.fromxml(res[0])
+				format = res[1]
+				msg.fromjson(res[0]) if 'json' == format else msg.fromxml(res[0])
 				try:
 					#LOG.debug('\nbefor encode: %s\n'% {u'id':msg.id, u'name':msg.name,
 					#	u'meta':msg.meta, u'body':msg.body})
