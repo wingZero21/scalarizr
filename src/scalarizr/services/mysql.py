@@ -725,10 +725,15 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
 	
 	def start(self):
-		mysql_cnf_err_re = re.compile('Unknown option|ERROR')
-		stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True, silent=True)[1]
-		if re.search(mysql_cnf_err_re, stderr):
-			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
+		# FIXME: This condition here because of the following fixme
+		if os.listdir('/mnt/dbstorage/mysql-data'):
+
+			# FIXME: It's not a good place to test mysql configuration
+			# This code fails when datadir is empty, whereas init script detects this and start gracefully
+			mysql_cnf_err_re = re.compile('Unknown option|ERROR')
+			stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True, silent=True)[1]
+			if re.search(mysql_cnf_err_re, stderr):
+				raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
 		
 		if not self.running:
 			try:
