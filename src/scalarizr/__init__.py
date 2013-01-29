@@ -609,7 +609,7 @@ def _cleanup_after_rebundle():
 	
 	if 'volumes' not in pl.features:
 		# Destory mysql storages
-		if os.path.exists(cnf.private_path('storage/mysql.json')):
+		if os.path.exists(cnf.private_path('storage/mysql.json')) and pl.name == 'rackspace':
 			logger.info('Cleanuping old MySQL storage')
 			vol = Storage.create(Storage.restore_config(cnf.private_path('storage/mysql.json')))
 			vol.destroy(force=True)				

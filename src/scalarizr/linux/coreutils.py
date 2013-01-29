@@ -141,6 +141,7 @@ def blkid(device_path, **kwargs):
 	return ret
 
 <<<<<<< .working
+<<<<<<< .working
 
 BUFFER_SIZE = 1024 * 1024	# Buffer size in bytes.
 PART_SUFFIX = '.part.'	

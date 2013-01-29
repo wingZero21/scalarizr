@@ -4,6 +4,7 @@ from __future__ import with_statement
 __author__ = 'Nick Demyanchuk'
 
 import os
+import sys
 import base64
 import logging
 import urllib2
@@ -21,6 +22,7 @@ from apiclient.discovery import build
 from scalarizr.platform import Platform
 from scalarizr.storage.transfer import Transfer
 from scalarizr.platform.gce.storage import GoogleCSTransferProvider
+from scalarizr import util
 
 
 Transfer.explore_provider(GoogleCSTransferProvider)
@@ -88,7 +90,7 @@ class GcePlatform(Platform):
 	def __init__(self):
 		Platform.__init__(self)
 		self.compute_svc_mgr = GoogleServiceManager(
-			self, 'compute', 'v1beta12', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
+			self, 'compute', 'v1beta13', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
 
 		self.storage_svs_mgr = GoogleServiceManager(
 			self, 'storage', 'v1beta1', STORAGE_FULL_SCOPE)
@@ -96,12 +98,14 @@ class GcePlatform(Platform):
 
 	def get_user_data(self, key=None):
 		if self._userdata is None:
-			self._userdata = dict()
-			resp = self._get_metadata('attributes/')
-			keys = resp.strip().split()
-			for k in keys:
-				value = self._get_metadata('attributes/%s' % k)
-				self._userdata[k] = value
+			try:
+				raw_userdata = self._get_metadata('attributes/scalr').strip()
+				self._userdata = self._parse_user_data(raw_userdata)
+			except urllib2.HTTPError, e:
+				if 404 == e.code:
+					self._userdata = dict()
+				else:
+					raise
 
 		return self._userdata.get(key) if key else self._userdata
 
@@ -164,3 +168,6 @@ class GcePlatform(Platform):
 
 	def new_storage_client(self):
 		return self.storage_svs_mgr.get_service()
+
+
+

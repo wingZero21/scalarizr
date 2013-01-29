@@ -1,5 +1,4 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 from scalarizr import config
 from scalarizr.bus import bus

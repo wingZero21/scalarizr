@@ -1,5 +1,4 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 import os
 import re
@@ -357,6 +356,11 @@ __node__['openstack'] = Compound({
 	'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
 	'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
 	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
+})
+__node__['gce'] = Compound({
+	'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
+	'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),
+	'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id')
 })
 __node__['scalr'] = Compound({
 	'version': File(private_dir + '/.scalr-version'),

@@ -28,6 +28,7 @@ def which(exe):
 
 
 def system(*args, **kwds):
+	args = list(args)
 	kwds['exc_class'] = LinuxError
 	kwds['close_fds'] = True
 	if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
@@ -35,6 +36,7 @@ def system(*args, **kwds):
 		if not executable:
 			msg = "Executable '%s' not found" % args[0][0]
 			raise LinuxError(msg)
+		args[0] = list(args[0])
 		args[0][0] = executable
 	return util.system2(*args, **kwds)
 
@@ -172,8 +174,13 @@ class __os(dict):
 			self['family'] = 'Unknown'
 
 	def _detect_kernel(self):
-		o, e, ret_code = system(['modprobe', '-l'], raise_exc=False)
+		o, e, ret_code = system(['modprobe', '-l'], raise_exc=False, silent=True)
 		self['mods_enabled'] = 0 if ret_code else 1
+
+		arch = osmod.uname()[-1]
+		if re.search(r'i\d86', arch):
+			arch = 'i386'
+		self['arch'] = arch
 
 	def _detect_cloud(self):
 		pass

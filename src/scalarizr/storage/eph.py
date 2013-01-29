@@ -197,10 +197,13 @@ class EphVolumeProvider(VolumeProvider):
 		vol = self.create(**_kwargs)
 
 		snap = self.snapshot_factory(**kwargs)
+		"""
+		# Free ram check disabled (wrong ram detection on GCE instances)
+
 		free_ram, free_swap = ramdisk.free()
 		if (free_ram + free_swap) < TRANZIT_VOL_SIZE:
 			raise Exception('Instance has no enough free ram to create tranzit ramdisk')
-		
+		"""
 		ramdisk.create(TRANZIT_VOL_SIZE, TRANZIT_VOL_MPOINT)
 		
 		try:
@@ -250,6 +253,13 @@ class EphVolumeProvider(VolumeProvider):
 Storage.explore_provider(EphVolumeProvider)
 
 
+def clear_queue(queue):
+	while True:
+		try:
+			queue.get_nowait()
+		except Empty:
+			return
+
 class EphSnapshotProviderLite(object):
 	
 	MANIFEST_NAME 		= 'manifest.ini'
@@ -291,8 +301,10 @@ class EphSnapshotProviderLite(object):
 				raise StorageError('Snapshot %s is already %s. Cannot create it again' % (
 						snapshot.id, self._state_map[snapshot.id]))
 
+			clear_queue(self._upload_queue)
+
 			if not os.path.exists(self._pigz_bin):
-				if linux.os['name'] == 'Ubuntu' and linux.os['release'] >= (10, 4):
+				if linux.os['family'] == 'Debian' and linux.os['release'] >= (10, 4):
 					pkgmgr.installed('pigz')
 				elif linux.os['family'] == 'RedHat' and linux.os['release'] >= (6, 0):
 					pkgmgr.epel_repository()
@@ -403,12 +415,12 @@ class EphSnapshotProviderLite(object):
 					if not chunk_fp.closed:
 						chunk_fp.close()
 					if chunk_size:
+						self._logger.debug('Putting chunk %s to upload queue' % chunk_path)
 						self._upload_queue.put(chunk_path)
 						self._chunks_md5[os.path.basename(chunk_path)] = binascii.hexlify(chunk_md5.digest())
 
 					manifest_path = self._write_manifest(snapshot, tranzit_path)
 					self._upload_queue.put(manifest_path)
-
 					break
 				
 				if piece_rest:
@@ -434,6 +446,7 @@ class EphSnapshotProviderLite(object):
 					
 				if chunk_size == chunk_max_size:
 					chunk_fp.close()
+					self._logger.debug('Putting chunk %s to upload queue' % chunk_path)
 					self._upload_queue.put(chunk_path)
 					self._chunks_md5[os.path.basename(chunk_path)] = binascii.hexlify(chunk_md5.digest())
 					chunk_md5 = hashlib.md5()
@@ -453,22 +466,38 @@ class EphSnapshotProviderLite(object):
 		"""
 		@rtype: tuple
 		"""
-		transfer = self._transfer_cls()
-		while True:
-			try:
-				chunk_path = self._upload_queue.get(False)
-			except Empty:
-				if self._read_finished.is_set():
-					break
-				continue
-			
-			with self._slot_available:
-				self._return_ev.set()
-				link = transfer.upload([chunk_path], dst)[0]
-				os.remove(chunk_path)
-			
-			if 'manifest.ini' in link:
-				snapshot.path = link
+		try:
+			transfer = self._transfer_cls()
+
+			def _upload():
+				with self._slot_available:
+					self._return_ev.set()
+					link = transfer.upload([chunk_path], dst)[0]
+					os.remove(chunk_path)
+
+				if 'manifest.ini' in link:
+					snapshot.path = link
+
+			while True:
+				try:
+					chunk_path = self._upload_queue.get(False)
+					self._logger.debug('Uploader got chunk %s' % chunk_path)
+				except Empty:
+					if self._read_finished.is_set():
+						while True:
+							try:
+								chunk_path = self._upload_queue.get(False)
+								_upload()
+							except Empty:
+								break
+						self._logger.debug('Upload is finished.')
+						break
+					continue
+
+				_upload()
+
+		except:
+			self._inner_exc_info = sys.exc_info()
 
 				
 	def _downloader(self, tranzit_path):
@@ -510,6 +539,8 @@ class EphSnapshotProviderLite(object):
 
 	def download_and_restore(self, volume, snapshot, tranzit_path):
 		# Load manifest
+		clear_queue(self._writer_queue)
+		clear_queue(self._download_queue)
 		self._download_finished.clear()
 		transfer = self._transfer_cls()
 		mnf_path = transfer.download(snapshot.path, tranzit_path)

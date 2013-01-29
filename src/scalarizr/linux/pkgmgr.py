@@ -4,11 +4,11 @@ Created on Aug 28, 2012
 
 @author: marat
 '''
-from __future__ import with_statement
-
 
 import logging
+import glob
 import re
+import os
 import string
 import time
 
@@ -18,9 +18,6 @@ from urlparse import urlparse
 LOG = logging.getLogger(__name__)
 
 class PackageMgr(object):
-
-	INFO_CANDIDATE_KEY = 'candidate'
-	INFO_INSTALLED_KEY = 'installed'
 
 	def install(self, name, version=None, updatedb=False, **kwds):
 		''' Installs a `version` of package `name` '''
@@ -43,6 +40,10 @@ class PackageMgr(object):
 
 	def updatedb(self):
 		''' Updates package manager internal database '''
+		raise NotImplementedError()
+
+	def repos(self):
+		''' List enabled repositories '''
 		raise NotImplementedError()
 
 
@@ -114,8 +115,14 @@ class AptPackageMgr(PackageMgr):
 
 	def info(self, name):
 		installed, candidate = self.apt_policy(name)
-		return {self.INFO_INSTALLED_KEY: installed,
-				self.INFO_CANDIDATE_KEY: candidate if installed != candidate else None}
+		return {'installed': installed,
+				'candidate': candidate if installed != candidate else None}
+
+	def repos(self):
+		files = glob.glob('/etc/apt/sources.list.d/*.list')
+		names = [os.path.basename(os.path.splitext(f)[0]) for f in files]
+		return names
+
 				
 
 class RpmVersion(object):
@@ -218,12 +225,22 @@ class YumPackageMgr(PackageMgr):
 
 	def info(self, name):
 		installed, candidates = self.yum_list(name)
-		return {self.INFO_INSTALLED_KEY: installed,
-				self.INFO_CANDIDATE_KEY: candidates[-1] if candidates else None}
+		return {'installed': installed,
+				'candidate': candidates[-1] if candidates else None}
+
+	def repos(self):
+		ret = []
+		repo_re = re.compile(r'Repo-id\s+:\s(.*)')		
+		out = linux.system(('/usr/bin/yum', 'repolist', '--verbose'))[0]
+		for line in out.splitlines():
+			m = repo_re.search(line)
+			if m:
+				ret.append(m.group(1))
+		return map(string.lower, ret)
 
 
 
-class RPMPackageMgr(PackageMgr):
+class RpmPackageMgr(PackageMgr):
 
 	def rpm_command(self, command, **kwds):
 		return linux.system(['/usr/bin/rpm', ] + filter(None, command.split()), **kwds)
@@ -256,8 +273,8 @@ class RPMPackageMgr(PackageMgr):
 		installed = not code
 		installed_version = self._version_from_name(out)
 
-		return {self.INFO_INSTALLED_KEY: installed_version if installed else None,
-				self.INFO_CANDIDATE_KEY: None}
+		return {'installed': installed_version if installed else None,
+				'candidate': None}
 
 	def updatedb(self):
 		pass
@@ -275,11 +292,11 @@ def epel_repository():
 	Ensure EPEL repository for RHEL based servers.
 	Figure out linux.os['arch'], linux.os['release']
 	'''
-	if linux.os['family'] != 'RedHat' or linux.os['name'] == 'Fedora':
+	if linux.os['family'] not in ('RedHat', 'Oracle'):
 		return
 
-	mgr = RPMPackageMgr()
-	installed = mgr.info(EPEL_RPM_URL)[PackageMgr.INFO_INSTALLED_KEY]
+	mgr = RpmPackageMgr()
+	installed = mgr.info(EPEL_RPM_URL)['installed']
 	if not installed:
 		mgr.install(EPEL_RPM_URL)
 
@@ -313,10 +330,11 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 		fp.write('\n'.join(prepared_sources))
 
 	if gpg_keyserver and gpg_keyid:
-		linux.system(('apt-key', 'adv', 
-					  '--keyserver', gpg_keyserver,
-					  '--recv', gpg_keyid),
-					 raise_exc=False)
+		if gpg_keyid not in linux.system(('apt-key', 'list'))[0]:
+			linux.system(('apt-key', 'adv', 
+						  '--keyserver', gpg_keyserver,
+						  '--recv', gpg_keyid),
+						 raise_exc=False)
 
 
 def installed(name, version=None, updatedb=False):
@@ -327,7 +345,7 @@ def installed(name, version=None, updatedb=False):
 	if updatedb:
 		mgr.updatedb()
 
-	installed = mgr.info(name)[PackageMgr.INFO_INSTALLED_KEY]
+	installed = mgr.info(name)['installed']
 	if not installed:
 		mgr.install(name, version)
 
@@ -341,8 +359,8 @@ def latest(name, updatedb=False):
 		mgr.updatedb()
 
 	info_dict = mgr.info(name)
-	candidate = info_dict[PackageMgr.INFO_CANDIDATE_KEY]
-	installed = info_dict[PackageMgr.INFO_INSTALLED_KEY]
+	candidate = info_dict['candidate']
+	installed = info_dict['installed']
 
 	if candidate or not installed:
 		mgr.install(name, candidate)
@@ -353,7 +371,7 @@ def removed(name, purge=False):
 	Ensure that package removed (purged)
 	'''
 	mgr = package_mgr()
-	installed = mgr.info(name)[PackageMgr.INFO_INSTALLED_KEY]
+	installed = mgr.info(name)['installed']
 	if purge or installed:
 		mgr.remove(name, purge)
 

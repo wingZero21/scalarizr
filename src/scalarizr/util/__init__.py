@@ -302,6 +302,7 @@ def xml_strip(el):
 			xml_strip(child)
 	return el	
 
+
 def url_replace_hostname(url, newhostname):
 	import urlparse	
 	r = url if isinstance(url, tuple) else urlparse.urlparse(url)
@@ -699,4 +700,3 @@ class Singleton(type):
 		return cls._instances[cls]
 
 
->>>>>>> .merge-right.r5062

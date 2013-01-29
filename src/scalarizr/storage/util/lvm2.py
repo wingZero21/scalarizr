@@ -14,6 +14,8 @@ import random
 import logging
 import binascii
 
+from scalarizr import wait_until
+
 try:
 	from collections import namedtuple
 except ImportError:
@@ -253,19 +255,40 @@ class Lvm2:
 			args += ('--type=' + segment_type,)
 		if group and segment_type != 'snapshot':
 			args.append(group)
+
 		if ph_volumes:
 			args += ph_volumes
-		
-		out = system(args, error_text='Cannot create logical volume')[0].strip()
-		vol = re.match(r'Logical volume "([^\"]+)" created', out.split('\n')[-1].strip()).group(1)
-		if not vol:
-			raise Lvm2Error('Cannot create logical volume: %s' % out)
-		return lvpath(os.path.basename(group), vol)
-	
+
+		out, err, ret_code = system(args, raise_exc=False)
+		out = out.strip()
+		if not ret_code:
+			vol = re.match(r'Logical volume "([^\"]+)" created', out.split('\n')[-1].strip()).group(1)
+			if not vol:
+				raise Lvm2Error('Cannot create logical volume: %s' % err)
+
+		elif ret_code == 5:
+			logger.debug('Lvcreate exited with non-zero code. Trying to find '
+						'target device manually')
+
+			device_to_find = lvpath(os.path.basename(group), name)
+			if not os.path.exists(device_to_find):
+				raise Lvm2Error("Couldn't create logical volume %s: %s" % (device_to_find, err))
+			return device_to_find
+
+		else:
+			raise Lvm2Error('Cannot create logical volume: %s' % err)
+
+		device_path = lvpath(os.path.basename(group), vol)
+		wait_until(lambda: os.path.exists(device_path), timeout=30)
+		return device_path
+
+
+
 	def create_lv_snapshot(self, lvolume, name=None, extents=None, size=None):
 		vg = extract_vg_lvol(lvolume)[0]
 		return self.create_lv(vg, name, extents, size, segment_type='snapshot', ph_volumes=(normalize_lvname(lvolume),))
-	
+
+
 	def change_lv(self, lvolume, available=None):
 		cmd = [LVCHANGE]
 		if available is not None:
