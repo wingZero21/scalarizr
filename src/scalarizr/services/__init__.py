@@ -196,7 +196,7 @@ class BaseConfig(object):
 			self.set(path, value)
 	
 	
-	def _init_configuration(self, file_path):
+	def _init_configuration(self):
 		if not self.data:
 			self.data = Configuration(self.config_type)
 			if os.path.exists(self.path):
