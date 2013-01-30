@@ -12,7 +12,7 @@ import shutil
 
 from scalarizr import storage2, node
 from scalarizr.util import initdv2, system2, PopenError, wait_until, Singleton
-from scalarizr.bus import bus
+from scalarizr.services import backup
 from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, PresetProvider
 from scalarizr.util import disttool, cryptotool, firstmatched
 from scalarizr.linux.coreutils import chown_r
@@ -930,7 +930,7 @@ class RedisPresetProvider(PresetProvider):
 		
 	def rollback_hook(self):
 		for obj in self.config_data:
-			rchown(DEFAULT_USER, obj.path)
+			chown_r(DEFAULT_USER, obj.path)
 			
 				
 def get_snap_db_filename(port=DEFAULT_PORT):	
