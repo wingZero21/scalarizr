@@ -2,20 +2,39 @@
 
 # from time import sleep
 
+from os import environ
+
 from lettuce import step
 from lettuce import world
+from lettuce import before
+from lettuce import after
+import mock
+
 from cloudstack import Client
 from scalarizr.storage2.volumes import csvol as cloudstack
 
+FEATURE_NAME = 'Cloudstack storage'
 
-cloudstack.__cloudstack__ = {}
-cloudstack.__cloudstack__['new_conn'] = Client('',
-    apiKey='',
-    secretKey='')
-cloudstack.__cloudstack__['zone_id'] = ''
-cloudstack.__cloudstack__['instance_id'] = ''
+@before.each_feature
+def setup(feat):
+    if feat.name == FEATURE_NAME:
+        world.cloudstack_patcher = mock.patch(cloudstack.__cloudstack__, {})
+        world.cloudstack_patcher.start()
+        world.cloudstack_patcher['new_conn'] = Client(environ['CLOUDSTACK_USERNAME'],
+                                                      apiKey=environ['CLOUDSTACK_API_KEY'],
+                                                      secretKey=environ['CLOUDSTACK_SECRET_KEY'])
+        world.cloudstack_patcher['zone_id'] = environ['CLOUDSTACK_ZONE_ID']
+        world.cloudstack_patcher['instance_id'] = ''
+
+
+@after.each_feature
+def teardown(feat):
+    if feat.name == FEATURE_NAME:
+        world.cloudstack_patcher.stop()
+
 
 world.ensured = False
+
 
 def init_vol(server_id, size=1):
     cloudstack.__cloudstack__['instance_id'] = server_id

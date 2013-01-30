@@ -24,11 +24,13 @@ LOG = logging.getLogger(__name__)
 
 
 def get_system_devname(letter):
-    return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda') else 's', letter)
+    return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda')
+                           else 's', letter)
 
 
 def deviceid_to_devname(deviceid):
-    return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda') else 's', string.ascii_letters[deviceid])
+    return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda')
+                           else 's', string.ascii_letters[deviceid])
 
 
 def devname_to_deviceid(devname):
@@ -72,23 +74,38 @@ class CSVolume(base.Volume):
     _global_timeout = 3600
 
     def __init__(self,
-                name=None,
-                snapshot_id=None,
-                zone_id=None,
-                disk_offering_id=None,
-                size=None,
-                **kwds):
+                 name=None,
+                 snapshot_id=None,
+                 zone_id=None,
+                 disk_offering_id=None,
+                 size=None,
+                 **kwds):
+        '''
+        :type name: string
+        :param name: Volume name
+
+        :type snapshot_id: string
+        :param snapshot_id: Snapshot id
+
+        :type zone_id: int
+        :param zone_id: Availability zone id
+
+        :param disk_offering_id: Disk offering ID
+
+        :type size: int or string
+        :param size: Volume size in GB
+        '''
         base.Volume.__init__(self,
                              name=name,
-                             snapshot_id=snapshot_id, 
-                             zone_id=zone_id, 
-                             size=size and int(size) or None, 
+                             snapshot_id=snapshot_id,
+                             zone_id=zone_id,
+                             size=size and int(size) or None,
                              disk_offering_id=disk_offering_id,
                              **kwds)
         self._native_vol = None
         self.error_messages.update({
             'no_id_or_conn': 'Volume has no ID and Cloudstack connection '
-                            'required for volume construction is not available'
+            'required for volume construction is not available'
         })
         self.error_messages.update({
             'no_connection': 'Cloudstack connection should be available '
@@ -114,26 +131,27 @@ class CSVolume(base.Volume):
 
             LOG.warning('Volume %s is not available. '
                         'It is attached to different instance %s. '
-                        'Now scalarizr will detach it', 
+                        'Now scalarizr will detach it',
                         self.id, self._native_vol.virtualmachineid)
             # We should wait for state chage
             if self._native_vol.vmstate == 'Stopping':
                 def vm_state_changed():
                     self._native_vol = self._conn.listVolumes(self._native_vol.id)[0]
                     return not hasattr(self._native_vol, 'virtualmachineid') or \
-                            self._native_vol.vmstate != 'Stopping'
+                        self._native_vol.vmstate != 'Stopping'
                 wait_until(vm_state_changed)
-            
-            # If stil attached, detaching 
+
+            # If stil attached, detaching
             if hasattr(self._native_vol, 'virtualmachineid'):
                 self._detach()
                 LOG.debug('Volume %s detached', self.id)
-        
+
         LOG.debug('Attaching volume %s to this instance', self.id)
         with self._free_device_letter_mgr:
             letter = self._free_device_letter_mgr.get()
             devname = get_system_devname(letter)
-            self._attach(__cloudstack__['instance_id'], devname_to_deviceid(devname))
+            self._attach(__cloudstack__['instance_id'],
+                         devname_to_deviceid(devname))
 
     def _ensure(self):
         self._native_vol = None
@@ -147,23 +165,17 @@ class CSVolume(base.Volume):
                     LOG.debug('Volume %s has been already created', self.id)
                     vol_list = self._conn.listVolumes(id=self.id)
                     if len(vol_list) == 0:
-                        raise storage2.StorageError("Volume %s doesn't exist" % self.id)
+                        raise storage2.StorageError("Volume %s doesn't exist" %
+                                                    self.id)
                     self._native_vol = vol_list[0]
                     self._check_attachement()
-                        
+
                 elif self.snap:
                     snapshot_id = self.snap['id']
 
                 if not self.id:
                     LOG.debug('Creating new volume')
                     if not self.disk_offering_id:
-                        try:
-                            disk_offering_id = [dskoffer for dskoffer in conn.listDiskOfferings() 
-                                        if not dskoffer.disksize and dskoffer.iscustomized][0].id
-                        except IndexError:
-                            # XXX: For ucloud tests
-                            disk_offering_id = '1539f7a2-93bd-45fb-af6d-13d4d428286d'
-
                         # Any size you want
                         for dskoffer in self._conn.listDiskOfferings():
                             if not dskoffer.disksize and dskoffer.iscustomized:
@@ -173,13 +185,15 @@ class CSVolume(base.Volume):
                         letter = self._free_device_letter_mgr.get()
                         devname = get_system_devname(letter)
                         self._native_vol = self._create_volume(
-                            name='%s-%02d' % (__cloudstack__['instance_id'], devname_to_deviceid(devname)),#
+                            name='%s-%02d' % (__cloudstack__['instance_id'],
+                                              devname_to_deviceid(devname)),
                             zone_id=__cloudstack__['zone_id'],
-                            size=self.size, 
+                            size=self.size,
                             disk_offering_id=self.disk_offering_id,
                             snap_id=snapshot_id)
                         self.id = self._native_vol.id
-                        self._attach(__cloudstack__['instance_id'], devname_to_deviceid(devname))
+                        self._attach(__cloudstack__['instance_id'],
+                                     devname_to_deviceid(devname))
                         self._native_vol = self._conn.listVolumes(id=self.id)[0]
             except:
                 exc_type, exc_value, exc_trace = sys.exc_info()
@@ -190,14 +204,18 @@ class CSVolume(base.Volume):
                     except:
                         pass
 
-                raise storage2.StorageError, 'Volume construction failed: %s' % exc_value, exc_trace
+                raise storage2.StorageError, \
+                    'Volume construction failed: %s' % exc_value, \
+                    exc_trace
 
             self._config.update({
-                    'id': self._native_vol.id,
-                    'size': self._native_vol.size / (1024*1024*1024),
-                    'device': devname,
-                    'zone_id': self._native_vol.zoneid,
-                    'disk_offering_id': getattr(self._native_vol, 'diskofferingid', None)})
+                'id': self._native_vol.id,
+                'size': self._native_vol.size / (1024 * 1024 * 1024),
+                'device': devname,
+                'zone_id': self._native_vol.zoneid,
+                'disk_offering_id': getattr(self._native_vol,
+                                            'diskofferingid',
+                                            None)})
             self._native_vol = None
 
     def _snapshot(self, description, tags, **kwds):
@@ -209,10 +227,10 @@ class CSVolume(base.Volume):
         self._check_connection()
         snapshot = self._create_snapshot(self.id, kwds.get('nowait', True))
         return storage2.snapshot(
-                type='csvol', 
-                id=snapshot.id, 
-                description=description,
-                tags=tags)
+            type='csvol',
+            id=snapshot.id,
+            description=description,
+            tags=tags)
 
     def _destroy(self, force=False, **kwargs):
         self._detach()
@@ -227,7 +245,7 @@ class CSVolume(base.Volume):
 
         if not nowait:
             self._wait_snapshot(snap)
-            
+
         return snap
 
     def _wait_snapshot(self, snap_id):
@@ -237,15 +255,18 @@ class CSVolume(base.Volume):
         self._check_connection()
         if hasattr(snap_id, 'id'):
             snap_id = snap_id.id
-        
+
         LOG.debug('Checking that snapshot %s is completed', snap_id)
-        wait_until(lambda: self._conn.listSnapshots(id=snap_id)[0].state == 'BackedUp', 
-            logger=LOG,
-            timeout=self._global_timeout,
-            error_text="Snapshot %s wasn't completed in a reasonable time" % snap_id)
+
+        def exit_condition():
+            return self._conn.listSnapshots(id=snap_id)[0].state == 'BackedUp'
+        wait_until(exit_condition,
+                   logger=LOG,
+                   timeout=self._global_timeout,
+                   error_text="Snapshot %s wasn't completed in a reasonable time" % snap_id)
         LOG.debug('Snapshot %s completed', snap_id)
 
-    def _create_volume(self, 
+    def _create_volume(self,
                        name,
                        zone_id,
                        size=None,
@@ -253,57 +274,56 @@ class CSVolume(base.Volume):
                        snap_id=None):
         self._check_connection()
         if snap_id:
-            disk_offering_id = None 
-        
+            disk_offering_id = None
+
         msg = "Creating volume '%s' in zone %s%s%s%s" % (
-            name, 
+            name,
             zone_id,
-            size and ' (size: %sG)' % size or '', 
+            size and ' (size: %sG)' % size or '',
             snap_id and ' from snapshot %s' % snap_id or '',
             disk_offering_id and ' with disk offering %s' % disk_offering_id or '')
         LOG.debug(msg)
 
         if snap_id:
             self._wait_snapshot(snap_id)
-        
+
         vol = self._conn.createVolume(name=name,
                                       size=size,
                                       diskOfferingId=disk_offering_id,
                                       snapshotId=snap_id,
                                       zoneId=zone_id)
         LOG.debug('Volume %s created%s', vol.id, snap_id and ' from snapshot %s' % snap_id or '')
-        
+
         if vol.state not in ('Allocated', 'Ready'):
             LOG.debug('Checking that volume %s is available', vol.id)
             wait_until(
-                lambda: self._conn.listVolumes(id=vol.id)[0].state in ('Allocated', 'Ready'), 
-                logger=LOG, 
+                lambda: self._conn.listVolumes(id=vol.id)[0].state in ('Allocated', 'Ready'),
+                logger=LOG,
                 timeout=self._global_timeout,
                 error_text="Volume %s wasn't available in a reasonable time" % vol.id
             )
-            LOG.debug('Volume %s available', vol.id)     
-        
-        return vol
+            LOG.debug('Volume %s available', vol.id)
 
+        return vol
 
     def _attach(self, instance_id, device_id=None):
         self._check_connection()
         volume_id = self.id or self._native_vol.id
 
-        msg = 'Attaching volume %s%s%s' % (volume_id, 
-                    device_id and ' as device %s' % deviceid_to_devname(device_id) or '', 
-                   ' instance %s' % instance_id or '')
+        msg = 'Attaching volume %s%s%s' % (volume_id,
+                                           device_id and ' as device %s' % deviceid_to_devname(device_id) or '',
+                                           ' instance %s' % instance_id or '')
         LOG.debug(msg)
         self._conn.attachVolume(volume_id, instance_id, device_id)
-        
+
         LOG.debug('Checking that volume %s is attached', volume_id)
-        wait_until(self._attached, 
+        wait_until(self._attached,
                    logger=LOG,
                    timeout=self._global_timeout,
                    error_text="Volume %s wasn't attached in a reasonable time"
                    " (vm_id: %s)." % (volume_id, instance_id))
-        LOG.debug('Volume %s attached',  volume_id)
-        
+        LOG.debug('Volume %s attached', volume_id)
+
         vol = self._conn.listVolumes(id=volume_id)[0]
         devname = deviceid_to_devname(vol.deviceid)
 
@@ -315,19 +335,19 @@ class CSVolume(base.Volume):
                     fp.write('- - -')
             return os.access(devname, os.F_OK | os.R_OK)
         LOG.debug('Checking that device %s is available', devname)
-        wait_until(scsi_attached, 
+        wait_until(scsi_attached,
                    sleep=5,
                    logger=LOG,
                    timeout=self._global_timeout,
                    error_text="Device %s wasn't available in a reasonable time" % devname)
         LOG.debug('Device %s is available', devname)
-            
+
         return vol, devname
 
     def _detach(self, force=False, **kwds):
         self._check_connection()
         volume_id = self.id or self._native_vol.id
-            
+
         LOG.debug('Detaching volume %s', volume_id)
         try:
             self._conn.detachVolume(volume_id)
@@ -341,7 +361,7 @@ class CSVolume(base.Volume):
                    timeout=self._global_timeout,
                    error_text="Volume %s wasn't available in a reasonable time" % volume_id)
         LOG.debug('Volume %s is available', volume_id)
-        
+
     def _delete(self):
         self._check_connection()
         volume_id = self.id or self._native_vol.id
@@ -362,7 +382,7 @@ class CSVolume(base.Volume):
 
 
 class CSSnapshot(base.Snapshot):
-    
+
     _status_map = {'Creating': base.Snapshot.IN_PROGRESS,
                    'BackingUp': base.Snapshot.IN_PROGRESS,
                    'BackedUp': base.Snapshot.COMPLETED,
@@ -379,14 +399,14 @@ class CSSnapshot(base.Snapshot):
         assert self._conn, self.error_messages['no_connection']
 
     def __init__(self, **kwds):
-        base.Snapshot.__init__(self, **kwds)      
+        base.Snapshot.__init__(self, **kwds)
 
     def _status(self):
         snapshots = self._new_conn().listSnapshots(id=self.id)
         if not snapshots:
             raise storage2.StorageError('listSnapshots returned empty list for snapshot %s' % self.id)
         return self._status_map[snapshots[0].state]
-    
+
     def _destroy(self):
         self._check_conn()
         self._conn.deleteSnapshot(id=self.id)
