@@ -544,12 +544,13 @@ class NginxHandler(ServiceCtlHandler):
 
 		if https_config:
 			if os.path.exists(self._https_inc_path) \
-					and read_file(self._https_inc_path, logger=self._logger):
+					and open(self._https_inc_path, 'r').read():
 				time_suffix = str(datetime.now()).replace(' ','.')
 				shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
 
-			msg = 'Writing virtualhosts to https.include'
-			write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
+			self._logger.debug('Writing virtualhosts to https.include')
+			with open(self._https_inc_path, 'w') as fp:
+				fp.write(https_config)
 
 				
 
