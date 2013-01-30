@@ -957,7 +957,7 @@ class MysqlHandler(DBMSRHandler):
 				# XXX: ugly
 				if __mysql__['volume'].type == 'eph':
 					self.mysql.service.stop('Swapping storages to reinitialize slave')
-					'''
+
 					LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
 							restore.snapshot['id'], restore.log_file, restore.log_pos)
 					new_vol = restore.run()
@@ -968,21 +968,9 @@ class MysqlHandler(DBMSRHandler):
 					vol.destroy(remove_disks=True)
 					LOG.debug('Storage destoyed')
 
-
 				restore.run()
 				log_file = restore.log_file
 				log_pos = restore.log_pos				
-				
-				'''
-				LOG.debug('Plugging new storage')
-				vol = Storage.create(snapshot=snap_config.copy(), tags=self.mysql_tags)
-				self._plug_storage(STORAGE_PATH, vol)
-				LOG.debug('Storage plugged')
-
-				Storage.backup_config(vol.config(), self._volume_config_path)
-				Storage.backup_config(snap_config, self._snapshot_config_path)
-				self.storage_vol = vol
-				'''
 				
 				self.mysql.service.start()
 			else:
@@ -1304,7 +1292,7 @@ class MysqlHandler(DBMSRHandler):
 					__mysql__['root_user'], 
 					__mysql__['root_password'])
 	
-	'''
+
 	def _compat_storage_data(self, vol=None, snap=None):
 		ret = dict()
 		if bus.scalr_version >= (2, 2):
@@ -1318,7 +1306,7 @@ class MysqlHandler(DBMSRHandler):
 			if snap:
 				ret['snapshot_id'] = snap.config()['id'] if not isinstance(snap, dict) else snap['id']
 		return ret
-	'''		
+		
 
 	def _innodb_recovery(self, storage_path=None):
 		storage_path = storage_path or __mysql__['storage_dir']
@@ -1402,46 +1390,7 @@ class MysqlHandler(DBMSRHandler):
 			
 		self.mysql.service.stop_skip_grant_tables()	
 		self.mysql.service.start()
-		return users
-		
-
-	'''
-	def _update_config(self, data): 
-		#XXX: I just don't like it
-		#ditching empty data
-		updates = dict((k, v or '') for k, v in data.items())
-		self._cnf.update_ini(CNF_SECTION, {CNF_SECTION : updates})
-		
-
-
-	def _plug_storage(self, mpoint, vol):
-		vol.tags = self.mysql_tags
-		vol.mpoint = mpoint
-		vol.ensure(mount=True, mkfs=True)
-		return vol
-	
-
-	def _create_snapshot(self, root_user, root_password, tags=None):
-		snap, log_file, log_pos = self.data_bundle.create(tags)
-		wait_until(lambda: snap.status() != snap.QUEUED)
-		if snap.state == snap.FAILED:
-			raise HandlerError('MySQL storage snapshot creation failed. See log for more details')
-		
-		LOG.info('MySQL data bundle created\n  snapshot: %s\n  log_file: %s\n  log_pos: %s', 
-						snap.id, log_file, log_pos)
-		return snap, log_file, log_pos
-	
-	
-	def _get_ini_options(self, *args):
-		ret = []
-		for opt in args:
-			try:
-				ret.append(self._cnf.rawini.get(CNF_SECTION, opt))
-			except ConfigParser.Error:
-				err = 'Required configuration option is missed in mysql.ini: %s' % opt
-				raise HandlerError(err)
-		return tuple(ret)
-	'''
+		return users		
 
 	def _data_bundle_description(self):
 		pl = bus.platform
