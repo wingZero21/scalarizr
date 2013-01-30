@@ -14,7 +14,7 @@ import ConfigParser
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.handlers import Handler
-from scalarizr.util import system2, filetool, disttool
+from scalarizr.util import system2, disttool
 from scalarizr.linux import mount
 
 

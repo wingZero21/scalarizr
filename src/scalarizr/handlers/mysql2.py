@@ -24,7 +24,7 @@ from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
 from scalarizr.libs import metaconf
-from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool, filetool
+from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool
 from scalarizr.storage import transfer
 
 from scalarizr import storage2, linux

@@ -21,8 +21,7 @@ from scalarizr.libs.metaconf import Configuration, ParseError, MetaconfError,\
 from scalarizr.util import disttool, firstmatched, software, wait_until
 from scalarizr.util import initdv2, system2, dynimp
 from scalarizr.util.initdv2 import InitdError
-from scalarizr.linux import iptables
-from scalarizr.linux.coreutils import chown_r
+from scalarizr.linux import iptables, coreutils
 from scalarizr.services import PresetProvider, BaseConfig
 
 # Stdlibs
@@ -733,7 +732,7 @@ class ApacheHandler(ServiceCtlHandler):
 										'apache/html'), doc_root)
 									self._logger.debug('Copied documentroot files: %s'
 										 % ', '.join(os.listdir(doc_root)))
-									chown_r(doc_root, uname)
+									coreutils.chown_r(doc_root, uname)
 									self._logger.debug('Changed owner to %s: %s'
 										 % (uname, ', '.join(os.listdir(doc_root))))
 				except:
@@ -764,5 +763,5 @@ class ApachePresetProvider(PresetProvider):
 		except:
 			uname = 'www-data'
 		for obj in self.config_data:
-			filetool.rchown(uname, obj.path)
+			coreutils.chown_r(obj.path, uname)
 			
