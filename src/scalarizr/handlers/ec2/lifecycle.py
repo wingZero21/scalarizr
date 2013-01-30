@@ -92,7 +92,7 @@ class Ec2LifeCycleHandler(Handler):
 		mtab = mount.mounts()
 		fstab = mount.fstab()
 		for device in self._platform.instance_store_devices:
-			if os.path.exists(device) and fstab.contains(device) and not mtab.contains(device):
+			if os.path.exists(device) and device in fstab and device not in mtab:
 				entry = fstab[device]
 				try:
 					mount.mount(device, entry.mpoint, '-o', entry.options)
