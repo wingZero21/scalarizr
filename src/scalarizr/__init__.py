@@ -313,7 +313,8 @@ def _init_services():
 		if scalr_version:
 			bus.scalr_version = tuple(map(int, scalr_version.split('.')))
 			version_file = cnf.private_path('.scalr-version')
-			write_file(version_file, scalr_version)
+			with open(version_file, 'w') as fp:
+				fp.write(scalr_version)
 
 	bus.queryenv_service = queryenv
 	bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
