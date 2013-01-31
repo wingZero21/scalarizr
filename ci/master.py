@@ -27,13 +27,12 @@ def push_to_github(__opts__):
 	cwd = 'sandboxes/{0}/svn2git'.format(project)
 	return [
 		MasterShellCommand(
-			command="svn2git --rebase --verbose",
-			workdir=cwd,
-			description='Fetching SVN changes'),
-		MasterShellCommand(
-			command="git push origin master"
-			workdir=cwd,
-			description='Pushing changes to GitHub')
+			command="""
+			cd sandboxes/{0}/svn2git 
+			svn2git --rebase --verbose
+			git push origin master""".format(project),
+			description='Pushing commit to GitHub',
+			descriptionDone='Push commit to GitHub (trunk)'),
 	]
 
 
