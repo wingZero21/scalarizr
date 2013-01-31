@@ -3,6 +3,7 @@ from buildbot.schedulers.basic import AnyBranchScheduler
 from buildbot.schedulers.triggerable import Triggerable
 from buildbot.changes.filter import ChangeFilter
 from buildbot.process.factory import BuildFactory
+from buildbot.steps.master import MasterShellCommand
 from buildscripts import steps as buildsteps
 
 
@@ -22,6 +23,20 @@ c["schedulers"].append(Triggerable(
 ))
 
 
+def push_to_github(__opts__):
+	cwd = 'sandboxes/{0}/svn2git'.format(project)
+	return [
+		MasterShellCommand(
+			command="svn2git --rebase --verbose",
+			workdir=cwd,
+			description='Fetching SVN changes'),
+		MasterShellCommand(
+			command="git push origin master"
+			workdir=cwd,
+			description='Pushing changes to GitHub')
+	]
+
+
 c['builders'].append(dict(
 	name='{0} source'.format(project),
 	slavenames=['ubuntu1004'],
@@ -30,8 +45,8 @@ c['builders'].append(dict(
 		buildsteps.bump_version(__opts__, setter='cat > src/scalarizr/version') +
 		buildsteps.source_dist(__opts__) +
 		buildsteps.trigger_packaging(__opts__) + 
-		buildsteps.to_repo(__opts__, types=["deb", "rpm"])
+		buildsteps.to_repo(__opts__, types=["deb", "rpm"]) +
+		push_to_github(__opts__)
 	)
 ))
-
 
