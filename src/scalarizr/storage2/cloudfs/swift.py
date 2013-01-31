@@ -55,20 +55,20 @@ class SwiftFileSystem(object):
 
 	def put(self, local_path, remote_path, report_to=None):
 		LOG.info("Uploading '%s' to Swift under '%s'", local_path, remote_path)
-		container, object = self._parse_path(remote_path)
-		if object.endswith("/"):
-			object = os.path.join(object, os.path.basename(local_path))
+		container, object_ = self._parse_path(remote_path)
+		if object_.endswith("/"):
+			object_ = os.path.join(object_, os.path.basename(local_path))
 
 		fd = open(local_path, 'rb')
 		try:
 			conn = self._get_connection()
 			try:
-				conn.put_object(container, object, fd)
+				conn.put_object(container, object_, fd)
 			except swiftclient.client.ClientException, e:
 				if e.http_reason == "Not Found":
 					# stand closer, shoot again
 					conn.put_container(container)
-					conn.put_object(container, object, fd)
+					conn.put_object(container, object_, fd)
 				else:
 					raise
 		except:  # TODO: catch specific exceptions
@@ -77,19 +77,19 @@ class SwiftFileSystem(object):
 		finally:
 			fd.close()
 
-		return self._format_path(container, object)
+		return self._format_path(container, object_)
 
 
 	def get(self, remote_path, local_path, report_to=None):
 		LOG.info('Downloading %s from Swift to %s' % (remote_path, local_path))
-		container, object = self._parse_path(remote_path)
+		container, object_ = self._parse_path(remote_path)
 		#? join only if local_path.endswith("/")
 		dest_path = os.path.join(local_path, os.path.basename(remote_path))
 
 		fd = open(dest_path, 'w')
 		try:
 			conn = self._get_connection()
-			res = conn.get_object(container, object)
+			res = conn.get_object(container, object_)
 			fd.write(res[1])
 		except:  #? see todo in put
 			exc = sys.exc_info()

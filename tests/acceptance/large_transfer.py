@@ -40,6 +40,7 @@ if "LT_TEST_STORAGE" in os.environ:
 
 @before.each_feature
 def setup(feat):
+	# TODO: restore
 	if feat.name == FEATURE:
 
 		# prevent ini parser from lowercasing params

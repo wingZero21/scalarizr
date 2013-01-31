@@ -95,6 +95,27 @@ def iptables_restore(filename, *short_args, **long_kwds):
 		short=short_args, long=long_kwds), stdin=filename)
 
 
+_used = False
+def _retry_save(func):
+	# 'service iptables save' fails with code:1 on centos 6 if called before
+	# any manipulations with iptables had been made
+	# /proc/net/ip_tables_names
+	def wrapper(*args, **kwargs):
+		try:
+			return func(*args, **kwargs)
+		except:
+			global _used
+			if not _used:
+				LOG.debug("iptables save didn't go through; trying list first")
+				iptables(list=True, numeric=True)
+				_used = True
+				return func(*args, **kwargs)
+			else:
+				raise
+	return wrapper
+
+
+@_retry_save
 def save():
 	'''
 	on RHEL call 'service iptables save'
@@ -403,8 +424,6 @@ def redhat_input_chain():
 Initialization.
 '''
 if enabled():
-	# Without this first call 'service iptables save' fails with code:1
-	iptables(list=True, numeric=True)
 	rh_chain = redhat_input_chain()
 	if rh_chain:
 		FIREWALL = chains[rh_chain]
