@@ -10,6 +10,8 @@ import os
 import time
 import logging
 
+from scalarizr import handlers
+from scalarizr.api import service as preset_service
 
 from scalarizr import config, storage2, handlers
 from scalarizr.storage2.cloudfs import LargeTransfer
@@ -138,6 +140,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
 	def __init__(self):
+		self.preset_provider = redis.RedisPresetProvider()
+		preset_service.services[BEHAVIOUR] = self.preset_provider
+
 		handlers.FarmSecurityMixin.__init__(self, ["%s:%s" %
 			 (redis.DEFAULT_PORT, redis.DEFAULT_PORT+redis.MAX_CUSTOM_PROCESSES)])
 		ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
@@ -250,6 +255,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					redis_data = message.redis.copy()
 					LOG.info('Got Redis part of HostInitResponse: %s' % redis_data)
 
+					if 'preset' in redis_data:
+						self.initial_preset = redis_data['preset']
+						del redis_data['preset']
+
 					'''
 					XXX: following line enables support for old scalr installations
 					use_password shoud be set by postinstall script for old servers
@@ -315,7 +324,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		message.redis['ports'] = self.redis_instances.ports
 		message.redis['passwords'] = self.redis_instances.passwords
 		message.redis['num_processes'] = len(self.redis_instances.instances)
-		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl, preset=self.initial_preset)
 
 
 	def on_before_reboot_start(self, *args, **kwargs):

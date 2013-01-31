@@ -117,6 +117,7 @@ class Redisd(object):
 	port = None
 	cli = None
 
+	name = 'redis-server'
 
 	def __init__(self, config_path=None, port=None):
 		self.config_path = config_path
@@ -157,6 +158,7 @@ class Redisd(object):
 
 		except PopenError, e:
 			LOG.error('Unable to start redis process: %s' % e)
+			raise initdv2.InitdError(e)
 
 
 	def stop(self, reason=None):
@@ -166,7 +168,9 @@ class Redisd(object):
 			wait_until(lambda: not self.running, timeout=MAX_START_TIMEOUT)
 
 
-	def restart(self, reason=None):
+	def restart(self, reason=None, force=True):
+		#force parameter is needed
+		#for compatibility with lazyInitScript
 		if self.running:
 			self.stop()
 		self.start()
@@ -918,23 +922,38 @@ class RedisCLI(object):
 		if info['role']=='slave':
 			return True if info['master_sync_in_progress']=='1' else False
 		return False
-	
+
 
 class RedisPresetProvider(PresetProvider):
-	
+
+
 	def __init__(self):
-		service = initdv2.lookup(SERVICE_NAME)
-		config_objects = (RedisConf(DEFAULT_CONF_PATH),)
-		PresetProvider.__init__(service, config_objects)
-		
-		
-	def rollback_hook(self):
-		for obj in self.config_data:
-			chown_r(DEFAULT_USER, obj.path)
-			
-				
-def get_snap_db_filename(port=DEFAULT_PORT):	
-	return 'dump.%s.rdb' % port	
+		pass
+
+
+	def get_preset(self, manifest):
+		'''
+		only redis instance bind to default redis port
+		is serving when get_preset is called
+		'''
+		for config_path in get_redis_processes():
+			port = get_port(config_path)
+			if port == DEFAULT_PORT:
+				service = Redisd(config_path, port)
+				config_mapping = {get_redis_conf_basename(port):service.redis_conf}
+				provider = PresetProvider(service, config_mapping)
+				return provider.get_preset(manifest)
+
+
+	@property
+	def config_mapping(self):
+		mapping = {}
+		for port in get_busy_ports():
+			if port == DEFAULT_PORT:
+				config_path = get_redis_conf_basename(port)
+				service = Redisd(config_path, port)
+				mapping.update({config_path:service.redis_conf})
+		return mapping
 
 
 class RedisSnapBackup(backup.SnapBackup):
@@ -982,7 +1001,7 @@ def get_port(conf_path=DEFAULT_CONF_PATH):
 	if conf_path == DEFAULT_CONF_PATH:
 		return DEFAULT_PORT
 	raw = conf_path.split('.')
-	return raw[-2:-1] if len(raw) > 2 else None
+	return int(raw[-2]) if len(raw) > 2 else None
 
 
 def get_redis_conf_path(port=DEFAULT_PORT):

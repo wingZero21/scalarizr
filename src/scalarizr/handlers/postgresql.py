@@ -20,14 +20,15 @@ from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages, Handler
 from scalarizr.linux.coreutils import chown_r
-from scalarizr.coreutils import split
+from scalarizr.linux.coreutils import split
 from scalarizr.util import system2, wait_until, disttool, software, cryptotool
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, PgUser, SU_EXEC
 from scalarizr.linux import iptables
 from scalarizr.handlers import operation, prepare_tags
 from scalarizr.services import make_backup_steps
-
+from scalarizr.api import service as preset_service
+from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP,\
+PgUser, SU_EXEC, PgSQLPresetProvider
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
 
@@ -88,7 +89,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	''' @type _cnf: scalarizr.config.ScalarizrCnf '''
 	
 	storage_vol = None	
-		
+	preset_provider = None
 		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
@@ -121,7 +122,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._service_name = SERVICE_NAME
-		Handler.__init__(self)
+		ServiceCtlHandler.__init__(self, SERVICE_NAME)
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_postgresql_data_bundle',
@@ -230,6 +231,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._platform = bus.platform
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
+		self.preset_provider = PgSQLPresetProvider(self.version)
+		preset_service.services[BEHAVIOUR] = self.preset_provider
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 		self._storage_path = STORAGE_PATH
 		self._tmp_path = os.path.join(self._storage_path, 'tmp')
@@ -375,7 +378,12 @@ class PostgreSqlHander(ServiceCtlHandler):
 						os.makedirs(dir)
 					
 					postgresql_data = message.postgresql.copy()
-			
+
+					if 'preset' in postgresql_data:
+						self.initial_preset = self._get_preset(postgresql_data['preset'], pg_svc.PRESET_FNAME)
+						self._logger.debug('Scalr sent current preset: %s' % self.initial_preset)
+						del postgresql_data['preset']
+
 					root = PgUser(ROOT_USER, self.pg_keys_dir)
 					root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
 					del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
@@ -413,7 +421,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self._init_master(message)									  
 		else:
 			self._init_slave(message)	
-		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl, preset=self.initial_preset)
 					
 				
 	def on_before_reboot_start(self, *args, **kwargs):

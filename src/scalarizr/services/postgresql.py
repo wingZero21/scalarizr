@@ -43,7 +43,7 @@ DEFAULT_USER			= "postgres"
 
 STORAGE_DATA_DIR 		= "data"
 TRIGGER_NAME 			= "trigger"
-
+PRESET_FNAME            = 'postgresql.conf'
 				
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
@@ -1048,17 +1048,11 @@ def make_symlinks(source_dir, dst_dir, username='postgres'):
 		
 		if os.path.exists(src):
 			chown_r(dst, username)
-				
+
 
 class PgSQLPresetProvider(PresetProvider):
-	
+
 	def __init__(self, version):
 		service = initdv2.lookup(SERVICE_NAME)
-		config_objects = (PostgresqlConf('/etc/postgresql/%s/main' % version),)
-		PresetProvider.__init__(service, config_objects)
-		
-		
-	def rollback_hook(self):
-		for obj in self.config_data:
-			rchown(DEFAULT_USER, obj.path)
-	
+		config_mapping = {'postgresql.conf':PostgresqlConf('/etc/postgresql/%s/main/postgresql.conf' % version)}
+		PresetProvider.__init__(self, service, config_mapping)

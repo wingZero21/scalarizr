@@ -33,6 +33,7 @@ from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
 from scalarizr.services import make_backup_steps
+from scalarizr.api import service as preset_service
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
@@ -161,7 +162,7 @@ class MysqlCnfController(CnfController):
 		out = None
 		
 		if not self._merged_manifest:
-			cmd = '%s --no-defaults --verbose --help' % mysql_svc.MYSQLD_PATH
+			cmd = '%s --no-defaults --verbose SU_EXEC' % mysql_svc.MYSQLD_PATH
 			out = system2('%s - mysql -s %s -c "%s"' % (SU_EXEC, BASH, cmd),shell=True, raise_exc=False,silent=True)[0]
 			
 		if out:
@@ -274,6 +275,8 @@ class MysqlHandler(DBMSRHandler):
 	
 	def __init__(self):
 		self.mysql = mysql_svc.MySQL()
+		self.preset_provider = mysql_svc.MySQLPresetProvider()
+		preset_service.services[__mysql__['behavior']] = self.preset_provider
 		ServiceCtlHandler.__init__(self, 
 				__mysql__['behavior'], 
 				self.mysql.service, 
@@ -408,7 +411,11 @@ class MysqlHandler(DBMSRHandler):
 					
 
 					# Apply MySQL data from HIR
-					md = getattr(message, __mysql__['behavior']).copy()					
+					md = getattr(message, __mysql__['behavior']).copy()
+
+					if 'preset' in md:
+						self.initial_preset = self._get_preset(md['preset'], mysql_svc.PRESET_FNAME)
+						LOG.debug('Scalr sent current preset: %s' % self.initial_preset)
 
 					md['compat_prior_backup_restore'] = False
 					if md.get('volume'):
@@ -481,7 +488,7 @@ class MysqlHandler(DBMSRHandler):
 			self._init_slave(message)
 		# Force to resave volume settings
 		__mysql__['volume'] = storage2.volume(__mysql__['volume'])
-		bus.fire('service_configured', service_name=__mysql__['behavior'], replication=repl)
+		bus.fire('service_configured', service_name=__mysql__['behavior'], replication=repl, preset=self.initial_preset)
 
 
 	def on_BeforeHostTerminate(self, message):
@@ -1107,11 +1114,11 @@ class MysqlHandler(DBMSRHandler):
 				if not storage_valid and datadir.find(__mysql__['data_dir']) == 0:
 					# When role was created from another mysql role it contains modified my.cnf settings 
 					self.mysql.my_cnf.datadir = '/var/lib/mysql'
-					self.mysql.my_cnf.log_bin = None
+					self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
 				
 				# Patch configuration
 				self.mysql.my_cnf.expire_logs_days = 10
-				self.mysql.my_cnf.skip_locking = False		
+				#self.mysql.my_cnf.skip_locking = False
 				self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
 				if not os.listdir(__mysql__['data_dir']):
 					linux.system(['mysql_install_db'])
@@ -1225,7 +1232,7 @@ class MysqlHandler(DBMSRHandler):
 				# Change configuration files
 				LOG.info("Changing configuration files")
 				self.mysql.my_cnf.datadir = __mysql__['data_dir']
-				self.mysql.my_cnf.skip_locking = False
+				#self.mysql.my_cnf.skip_locking = False
 				self.mysql.my_cnf.expire_logs_days = 10
 				self.mysql.my_cnf.read_only = True
 				self._fix_percona_debian_cnf()				

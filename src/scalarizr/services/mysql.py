@@ -32,13 +32,6 @@ from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
 
 
-from scalarizr import linux, storage2
-from scalarizr.linux import coreutils, pkgmgr
-from scalarizr.services import backup
-from scalarizr.node import __node__
-
-
-
 LOG = logging.getLogger(__name__)
 
 MYSQL_DEFAULT_PORT=3306
@@ -50,6 +43,9 @@ DEFAULT_DATADIR	= "/var/lib/mysql"
 DEFAULT_OWNER = "mysql"
 STORAGE_DATA_DIR = "mysql-data"
 STORAGE_BINLOG = "mysql-misc/binlog"
+SU_EXEC = '/bin/su'
+BASH = '/bin/bash'
+PRESET_FNAME = 'my.cnf'
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 
@@ -84,8 +80,7 @@ class MySQL(BaseService):
 		LOG.info('Initializing replication')
 		server_id = 1 if master else int(random.random() * 100000)+1
 		self.my_cnf.server_id = server_id
-		self.my_cnf.bind_address = None
-		self.my_cnf.skip_networking = None
+		self.my_cnf.delete_options(['mysqld/bind-address', 'mysqld/skip-networking'])
 
 	
 	def init_master(self):
@@ -445,8 +440,7 @@ class MySQLConf(BaseConfig):
 	
 	config_type = 'mysql'
 	config_name = 'my.cnf'
-	comment_empty = True
-	
+
 
 	@classmethod
 	def find(cls):
@@ -475,11 +469,11 @@ class MySQLConf(BaseConfig):
 
 
 	def _get_log_bin(self):
-		return self.get('mysqld/log-bin')
+		return self.get('mysqld/log_bin')
 	
 	
 	def _set_log_bin(self, path):
-		self.set('mysqld/log-bin', path)	
+		self.set('mysqld/log_bin', path)
 
 
 	def _get_server_id(self):
@@ -522,12 +516,19 @@ class MySQLConf(BaseConfig):
 		self.set('mysqld/skip-locking', val)
 
 
-	def _get_read_only(self, val):
+	def _get_read_only(self):
 		return self.get('mysqld/read_only')
 
 
 	def _set_read_only(self, val):
 		self.set('mysqld/read_only', val)
+
+	def _get_socket(self):
+		return self.get('mysqld/socket')
+
+
+	def _set_socket(self, path):
+		self.set('mysqld/socket', path)
 
 
 	log_bin = property(_get_log_bin, _set_log_bin)
@@ -539,6 +540,8 @@ class MySQLConf(BaseConfig):
 	datadir	 = property(_get_datadir, _set_datadir)
 	read_only = property(_get_read_only, _set_read_only)
 	datadir_default = DEFAULT_DATADIR
+	socket = property(_get_socket, _set_socket)
+	#socket_default = '/var/lib/mysql/mysql.sock' if disttool.is_redhat_based() else '/var/run/mysqld/mysqld.sock'
 
 	
 	
@@ -691,7 +694,10 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		except PopenError, e:
 			if 'Job is already running' not in str(e):
 				raise InitdError("Popen failed with error %s" % (e,))
-		
+
+		if action == 'restart' and err and 'stop: Job has already been stopped: mysql' in err:
+			return True
+
 		if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			try:
 				LOG.debug('waiting for mysql process')
@@ -836,16 +842,11 @@ def _add_apparmor_rules(directory):
 
 
 class MySQLPresetProvider(PresetProvider):
-	
+
 	def __init__(self):
 		service = initdv2.lookup(SERVICE_NAME)
-		config_objects = (MySQLConf(MYCNF_PATH),)
-		PresetProvider.__init__(service, config_objects)
-
-
-	def rollback_hook(self):
-			for obj in self.config_data:
-				rchown(DEFAULT_OWNER, obj.path)
+		config_mapping = {PRESET_FNAME:MySQLConf(MYCNF_PATH)}
+		PresetProvider.__init__(self, service, config_mapping)
 			
 
 initdv2.explore(SERVICE_NAME, MysqlInitScript)

@@ -12,6 +12,7 @@ from __future__ import with_statement
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
+from scalarizr.api import service as preset_service
 from scalarizr.handlers import HandlerError, ServiceCtlHandler, operation
 from scalarizr.messaging import Messages
 
@@ -205,11 +206,9 @@ class ApacheHandler(ServiceCtlHandler):
 	'''
 
 	def __init__(self):
-		
-		
-		self._logger = logging.getLogger(__name__)		
-		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())
-		
+		self._logger = logging.getLogger(__name__)
+		self.preset_provider = ApachePresetProvider()
+		preset_service.services[BEHAVIOUR] = self.preset_provider
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
 			'apache_rpaf_reload'
@@ -219,8 +218,9 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def on_init(self):
 		bus.on(
-			start = self.on_start, 
-			before_host_up = self.on_before_host_up
+			start = self.on_start,
+			before_host_up = self.on_before_host_up,
+			host_init_response = self.on_host_init_response
 		)
 
 		self._logger.debug('State: %s', self._cnf.state)
@@ -236,6 +236,13 @@ class ApacheHandler(ServiceCtlHandler):
 		self._httpd_conf_path = APACHE_CONF_PATH
 		self._config = Configuration('apache')
 		self._config.read(self._httpd_conf_path)
+
+
+	def on_host_init_response(self, message):
+		if hasattr(message, BEHAVIOUR):
+			data = getattr(message, BEHAVIOUR)
+			if data and 'preset' in data:
+				self.initial_preset = data['preset'].copy()
 
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -269,7 +276,7 @@ class ApacheHandler(ServiceCtlHandler):
 					self._update_vhosts()
 				with op.step(self._step_reload_rpaf):
 					self._rpaf_reload()
-				bus.fire('service_configured', service_name=SERVICE_NAME)
+				bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
 
 	def on_HostUp(self, message):
 		if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
@@ -746,14 +753,14 @@ class ApacheConf(BaseConfig):
 	
 		config_type = 'app'
 		config_name = 'apache2.conf' if disttool.is_debian_based() else 'httpd.conf'
-	
-				
+
+
 class ApachePresetProvider(PresetProvider):
-	
+
 	def __init__(self):
-		service = initdv2.lookup(SERVICE_NAME)
-		config_objects = (ApacheConf(APACHE_CONF_PATH),)
-		PresetProvider.__init__(service, config_objects)
+		service = initdv2.lookup('apache')
+		config_mapping = {'apache.conf':ApacheConf(APACHE_CONF_PATH)}
+		PresetProvider.__init__(self, service, config_mapping)
 		
 
 	def rollback_hook(self):

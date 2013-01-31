@@ -15,6 +15,7 @@ from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
 from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
+from scalarizr.api import service as preset_service
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
@@ -189,20 +190,23 @@ class NginxHandler(ServiceCtlHandler):
 	
 	backends_xpath = "upstream[@value='backend']/server"
 	localhost = '127.0.0.1:80'
-	
+
 	def __init__(self):
 		ServiceCtlHandler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
-				
+
 		self._logger = logging.getLogger(__name__)
-		
+		self.preset_provider = NginxPresetProvider()
+		preset_service.services[BEHAVIOUR] = self.preset_provider
+
 		bus.define_events("nginx_upstream_reload")
 		bus.on(init=self.on_init, reload=self.on_reload)
 		self.on_reload()			
-		
+
 	def on_init(self):
 		bus.on(
-			start = self.on_start, 
-			before_host_up = self.on_before_host_up
+			start = self.on_start,
+			before_host_up = self.on_before_host_up,
+			host_init_response = self.on_host_init_response
 		)
 
 		self._insert_iptables_rules()
@@ -223,6 +227,13 @@ class NginxHandler(ServiceCtlHandler):
 			self._upstream_app_role = ini.get(CNF_SECTION, UPSTREAM_APP_ROLE)
 		except ConfigParser.Error:
 			self._upstream_app_role = None
+
+	def on_host_init_response(self, message):
+		if hasattr(message, BEHAVIOUR):
+			data = getattr(message, BEHAVIOUR)
+			if data and 'preset' in data:
+				self.initial_preset = data['preset'].copy()
+
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -256,7 +267,7 @@ class NginxHandler(ServiceCtlHandler):
 				with op.step(self._step_reload_upstream):
 					self._reload_upstream()
 
-				bus.fire('service_configured', service_name=SERVICE_NAME)
+		bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
 
 	
 	def on_HostUp(self, message):
@@ -558,25 +569,24 @@ class NginxConf(BaseConfig):
 	
 		config_type = 'www'
 		config_name = 'nginx.conf'
-	
-				
+
+
+
+class NginxConf(BaseConfig):
+
+	config_type = 'www'
+	config_name = 'nginx.conf'
+
+
 class NginxPresetProvider(PresetProvider):
-	
+
 	def __init__(self):
 		cnf = bus.cnf
 		ini = cnf.rawini
 		nginx_conf_path = os.path.join(os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)), 'nginx.conf')
-		config_objects = (NginxConf(nginx_conf_path),)
-		service = initdv2.lookup(SERVICE_NAME)
-		PresetProvider.__init__(service, config_objects)
+		config_mapping = {'nginx.conf':NginxConf(nginx_conf_path)}
+		service = initdv2.lookup('nginx')
+		PresetProvider.__init__(self, service, config_mapping)
 
 
-	def rollback_hook(self):
-		try:
-			pwd.getpwnam('nginx')
-		except:
-			pass
-		else:
-			for obj in self.config_data:
-				rchown('nginx', obj.path)
 			
