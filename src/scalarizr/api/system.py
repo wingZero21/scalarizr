@@ -13,6 +13,7 @@ import os
 import logging
 import sys
 import glob
+import subprocess
 
 from scalarizr import rpc
 from scalarizr.util import system2, dns, disttool
@@ -47,6 +48,23 @@ class SysInfoAPI(object):
 					LOG.warn('Duplicate attribute %s. Overriding %s with %s', 
 							name, getattr(self, name), attr)
 				setattr(self, name, attr)
+
+
+	def call_auth_shutdown_hook(self):
+		script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
+		ret = 1
+		LOG.debug("Executing %s" % script_path)
+		if os.access(script_path, os.X_OK):
+			try:
+				ret = subprocess.call(script_path, stdout=subprocess.PIPE,
+					stderr=subprocess.PIPE, close_fds=True)
+			except Exception, e:
+				# TODO: log exception
+				LOG.debug("Exception while executing %s" % script_path)
+		else:
+			LOG.debug("Cannot access %s" % script_path)
+		return ret
+
 
 	@rpc.service_method
 	def fqdn(self, fqdn=None):
