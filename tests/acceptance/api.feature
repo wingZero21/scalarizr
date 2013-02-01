@@ -9,4 +9,4 @@ Examples:
     | code |
     | 0    |
     | 1    |
-
+    | 2    |
