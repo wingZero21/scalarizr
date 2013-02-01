@@ -587,7 +587,22 @@ class ServiceCtlHandler(Handler):
 				with op.step('Start %s' % service_name):
 					self._start_service()
 			
-		bus.fire(self._service_name + '_configure', **kwargs)		
+		bus.fire(self._service_name + '_configure', **kwargs)
+
+
+	def _get_preset(self, preset_data, config_fname):
+		p = {}
+		for preset in preset_data:
+			file = preset['file']
+			if 'name' in file and file['name'] == config_fname and 'settings' in file:
+				settings = file['settings']
+				if settings:
+					for setting in settings:
+						variable = setting['setting']['name']
+						value = setting['setting']['value']
+						p[variable] = value
+				break
+		return {config_fname : p}
 
 		
 class DbMsrMessages:
