@@ -377,6 +377,7 @@ class ServiceCtlHandler(Handler):
 	_cnf_ctl = None
 	_init_script = None
 	_preset_store = None
+	initial_preset = None
 	
 	def __init__(self, service_name, init_script=None, cnf_ctl=None):
 		'''
@@ -391,6 +392,7 @@ class ServiceCtlHandler(Handler):
 		self._init_script = init_script
 		self._logger = logging.getLogger(__name__)
 		self._preset_store = CnfPresetStore(self._service_name)
+
 		Handler.__init__(self)
 
 		self._queryenv = bus.queryenv_service

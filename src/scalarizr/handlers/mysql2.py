@@ -275,14 +275,14 @@ class MysqlHandler(DBMSRHandler):
 	
 	def __init__(self):
 		self.mysql = mysql_svc.MySQL()
-		self.preset_provider = mysql_svc.MySQLPresetProvider()
-		preset_service.services[__mysql__['behavior']] = self.preset_provider
+
 		ServiceCtlHandler.__init__(self, 
 				__mysql__['behavior'], 
 				self.mysql.service, 
 				MysqlCnfController())
 
-
+		self.preset_provider = mysql_svc.MySQLPresetProvider()
+		preset_service.services[__mysql__['behavior']] = self.preset_provider
 
 		bus.on(init=self.on_init, reload=self.on_reload)
 		bus.define_events(
