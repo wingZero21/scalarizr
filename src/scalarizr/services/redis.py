@@ -536,17 +536,12 @@ class WorkingDirectory(object):
 			LOG.error('Cannot empty %s: %s' % (os.path.dirname(self.db_path), e))
 
 
-
 class BaseRedisConfig(BaseConfig):
 
 	config_type = 'redis'
 
-
 	def set(self, option, value, append=False):
-		if not self.data:
-			self.data = Configuration(self.config_type)
-			if os.path.exists(self.path):
-				self.data.read(self.path)
+		self._init_configuration()
 		if value:
 			if append:
 				self.data.add(option, str(value))
@@ -554,9 +549,7 @@ class BaseRedisConfig(BaseConfig):
 				self.data.set(option,str(value), force=True)
 		else:
 			self.data.comment(option)
-		if self.autosave:
-			self.save_data()
-			self.data = None
+		self._cleanup(True)
 
 
 	def set_sequential_option(self, option, seq):
@@ -574,10 +567,7 @@ class BaseRedisConfig(BaseConfig):
 
 
 	def get_list(self, option):
-		if not self.data:
-			self.data =  Configuration(self.config_type)
-			if os.path.exists(self.path):
-				self.data.read(self.path)
+		self._init_configuration()
 		try:
 			value = self.data.get_list(option)
 		except NoPathError:
@@ -585,8 +575,7 @@ class BaseRedisConfig(BaseConfig):
 				value = getattr(self, option+'_default')
 			except AttributeError:
 				value = ()
-		if self.autosave:
-			self.data = None
+		self._cleanup(False)
 		return value
 
 
