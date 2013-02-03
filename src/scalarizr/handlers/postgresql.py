@@ -18,10 +18,10 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages, Handler
+from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.linux.coreutils import split
-from scalarizr.util import system2, wait_until, disttool, software, cryptotool
+from scalarizr.util import system2, wait_until, disttool, software, cryptotool, initdv2
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
 from scalarizr.linux import iptables
 from scalarizr.handlers import operation, prepare_tags
@@ -29,6 +29,7 @@ from scalarizr.services import make_backup_steps
 from scalarizr.api import service as preset_service
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP,\
 PgUser, SU_EXEC, PgSQLPresetProvider
+
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
 
@@ -122,7 +123,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._service_name = SERVICE_NAME
-		ServiceCtlHandler.__init__(self, SERVICE_NAME)
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup(SERVICE_NAME))
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_postgresql_data_bundle',
