@@ -74,7 +74,7 @@ def system_info(verbose=False):
 
 	ret['dist'] = {
 		'distributor': linux.os['name'].lower(),
-		'release': linux.os['release'],
+		'release': str(linux.os['release']),
 		'codename': linux.os['codename']
 	}
 	
