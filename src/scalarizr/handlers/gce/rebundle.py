@@ -93,7 +93,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 						
 						LOG.info('Copying root filesystem to image')
 						rsync('/', tmp_mount_dir, archive=True,
-												  hardlinks=True,
+												  hard_links=True,
 												  times=True,
 												  sparse=True,
 												  exclude=excludes)
