@@ -208,7 +208,7 @@ class Handler(object):
 		body['last_error'] += str(exc_info[1])
 		body['trace'] = ''.join(traceback.format_tb(exc_info[2]))
 
-		self._logger.error(body['last_error'], exc_info=exc_info)		
+		LOG.error(body['last_error'], exc_info=exc_info)
 		self.send_message(msg_name, body)
 
 
@@ -285,14 +285,14 @@ class MessageListener:
 		platform = bus.platform
 
 
-		self._logger.debug("Initializing message listener");
+		LOG.debug("Initializing message listener");
 		self._accept_kwargs = dict(
 			behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
 			platform = platform.name,
 			os = disttool.uname(),
 			dist = disttool.linux_dist()
 		)
-		self._logger.debug("Keywords for each Handler::accept\n%s", pprint.pformat(self._accept_kwargs))
+		LOG.debug("Keywords for each Handler::accept\n%s", pprint.pformat(self._accept_kwargs))
 		
 		self.get_handlers_chain()
 	
@@ -300,7 +300,7 @@ class MessageListener:
 	def get_handlers_chain (self):
 		if self._handlers_chain is None:
 			self._handlers_chain = []
-			self._logger.debug("Collecting message handlers...");
+			LOG.debug("Collecting message handlers...");
 			
 			cnf = bus.cnf 
 			for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
@@ -308,15 +308,15 @@ class MessageListener:
 				try:
 					self._handlers_chain.extend(sys.modules[module_str].get_handlers())
 				except:
-					self._logger.error("Can't get module handlers (module: %s)", module_str)
+					LOG.error("Can't get module handlers (module: %s)", module_str)
 					raise
 						
-			self._logger.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
+			LOG.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
 						
 		return self._handlers_chain
 	
 	def __call__(self, message, queue):
-		self._logger.debug("Handle '%s'" % (message.name))
+		LOG.debug("Handle '%s'" % (message.name))
 
 		cnf = bus.cnf
 		pl = bus.platform
@@ -335,7 +335,7 @@ class MessageListener:
 						queryenv = bus.queryenv_service
 						queryenv.api_version = queryenv.get_latest_version()
 						bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
-					self._logger.debug('Scalr version: %s', ver)
+					LOG.debug('Scalr version: %s', ver)
 				except:
 					pass
 				else:
@@ -349,17 +349,17 @@ class MessageListener:
 				try:
 					if handler.accept(message, queue, **self._accept_kwargs):
 						accepted = True
-						self._logger.debug("Call handler %s" % hnd_name)
+						LOG.debug("Call handler %s" % hnd_name)
 						try:
 							handler(message)
 						except (BaseException, Exception), e:
-							self._logger.exception(e)
+							LOG.exception(e)
 				except (BaseException, Exception), e:
-					self._logger.error("%s accept() method failed with exception", hnd_name)
-					self._logger.exception(e)
+					LOG.error("%s accept() method failed with exception", hnd_name)
+					LOG.exception(e)
 			
 			if not accepted:
-				self._logger.warning("No one could handle '%s'", message.name)
+				LOG.warning("No one could handle '%s'", message.name)
 		finally:
 			if platform_access_data_on_me:
 				pl.clear_access_data()
@@ -377,6 +377,7 @@ class ServiceCtlHandler(Handler):
 	_cnf_ctl = None
 	_init_script = None
 	_preset_store = None
+	_service_name = None
 	initial_preset = None
 	
 	def __init__(self, service_name, init_script=None, cnf_ctl=None):
@@ -420,7 +421,7 @@ class ServiceCtlHandler(Handler):
 		
 		# Apply current preset
 		try:
-			self._logger.info("Applying preset '%s' to %s %s service restart", 
+			LOG.info("Applying preset '%s' to %s %s service restart",
 							new_preset.name, self._service_name, 
 							'with' if message.restart_service == '1' else 'without')
 			self._cnf_ctl.apply_preset(new_preset)
@@ -437,41 +438,41 @@ class ServiceCtlHandler(Handler):
 			
 	def _start_service(self):
 		if not self._init_script.running:
-			self._logger.info("Starting %s" % self._service_name)
+			LOG.info("Starting %s" % self._service_name)
 			try:
 				self._init_script.start()
 			except BaseException, e:
 				if not self._init_script.running:
 					raise
-				self._logger.warning(str(e))
-			self._logger.debug("%s started" % self._service_name)
+				LOG.warning(str(e))
+			LOG.debug("%s started" % self._service_name)
 
 	def _stop_service(self, reason=None):
 		if self._init_script.running:
-			self._logger.info("Stopping %s%s", self._service_name, '. (%s)' % reason if reason else '')
+			LOG.info("Stopping %s%s", self._service_name, '. (%s)' % reason if reason else '')
 			try:
 				self._init_script.stop()
 			except:
 				if self._init_script.running:
 					raise
-			self._logger.debug("%s stopped", self._service_name)
+			LOG.debug("%s stopped", self._service_name)
 	
 	def _restart_service(self, reason=None):
-		self._logger.info("Restarting %s%s", self._service_name, '. (%s)' % reason if reason else '')
+		LOG.info("Restarting %s%s", self._service_name, '. (%s)' % reason if reason else '')
 		self._init_script.restart()
-		self._logger.debug("%s restarted", self._service_name)
+		LOG.debug("%s restarted", self._service_name)
 
 	def _reload_service(self, reason=None):
-		self._logger.info("Reloading %s%s", self._service_name, '. (%s)' % reason if reason else '')
+		LOG.info("Reloading %s%s", self._service_name, '. (%s)' % reason if reason else '')
 		try:
 			self._init_script.reload()
 			bus.fire(self._service_name + '_reload')
 		except initdv2.InitdError, e:
 			if e.code == initdv2.InitdError.NOT_RUNNING:
-				self._logger.debug('%s not running', self._service_name)
+				LOG.debug('%s not running', self._service_name)
 			else:
 				raise
-		self._logger.debug("%s reloaded", self._service_name)
+		LOG.debug("%s reloaded", self._service_name)
 		
 	def _obtain_current_preset(self):
 		service_conf = self._queryenv.get_service_configuration(self._service_name)
@@ -498,14 +499,14 @@ class ServiceCtlHandler(Handler):
 			else:
 				self._start_service()
 		except BaseException, e:
-			self._logger.error('Cannot start %s with current configuration preset. ' % self._service_name
+			LOG.error('Cannot start %s with current configuration preset. ' % self._service_name
 					+ '[Reason: %s] ' % str(e)
 					+ 'Rolling back to the last successful preset')
 			preset = self._preset_store.load(PresetType.LAST_SUCCESSFUL)
 			self._cnf_ctl.apply_preset(preset)
 			self._start_service()
 			
-		self._logger.debug("Set %s configuration preset '%s' as last successful", self._service_name, preset.name)
+		LOG.debug("Set %s configuration preset '%s' as last successful", self._service_name, preset.name)
 		self._preset_store.save(preset, PresetType.LAST_SUCCESSFUL)		
 
 	def sc_on_init(self):
@@ -526,16 +527,16 @@ class ServiceCtlHandler(Handler):
 				my_preset = self._cnf_ctl.current_preset()
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
 					if not STATE['global.start_after_update']:
-						self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
+						LOG.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
 						self._cnf_ctl.apply_preset(cur_preset)
 						# Start service with updated configuration
 						self._start_service_with_preset(cur_preset)
 					else:
-						self._logger.debug('Skiping apply configuration preset whereas Scalarizr was restarted after update')
+						LOG.debug('Skiping apply configuration preset whereas Scalarizr was restarted after update')
 						self._start_service()
 					
 				else:
-					self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+					LOG.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
 					self._start_service()
 
 			else:
@@ -544,49 +545,86 @@ class ServiceCtlHandler(Handler):
 
 	def sc_on_before_host_down(self, msg): 
 		self._stop_service('instance goes down')
-	
+
 	def sc_on_configured(self, service_name, **kwargs):
+		LOG.debug('%s == %s' % (self._service_name, service_name))
 		if self._service_name != service_name:
 			return
 
-		with bus.initialization_op as op:		
-			if self._cnf_ctl:	
-				with op.step('Apply configuration preset'):
-			
-					# Backup default configuration
-					my_preset = self._cnf_ctl.current_preset()
-					self._preset_store.save(my_preset, PresetType.DEFAULT)
-					
-					# Stop service if it's already running 
-					self._stop_service('Applying configuration preset')	
-					
-					# Fetch current configuration preset
-					service_conf = self._queryenv.get_service_configuration(self._service_name)
-					cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
-					self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
-					
-					if cur_preset.name == 'default':
-						# Scalr respond with default preset
-						self._logger.debug('%s configuration is default', self._service_name)
-						self._start_service()
-						return
-					
-					elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
-						self._logger.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
-						self._start_service()
-						return
-					
-					else:
-						self._logger.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
-						self._cnf_ctl.apply_preset(cur_preset)
-					
-				with op.step('Start %s with configuration preset' % service_name):
-					# Start service with updated configuration
-					self._start_service_with_preset(cur_preset)
+		if bus.scalr_version >= (4, 0, 1):
+			LOG.debug('New configuration presets engine is available.')
+			response = None
+			settings = {}
+			LOG.debug('Initial preset from HostInitResponse: %s' % self.initial_preset)
+
+			if self.initial_preset:
+				LOG.debug('initial_preset = %s' % self.initial_preset)
+				for preset in self.initial_preset:
+					for f, data in preset.items():
+						kv = {}
+						for setting in data['settings']:
+							k = setting['setting']['name']
+							v = setting['setting']['value']
+							kv[k] = v
+						settings.update({data['name']:kv})
+				LOG.debug('Got settings from initial preset: %s' % settings)
+
 			else:
-				with op.step('Start %s' % service_name):
-					self._start_service()
-			
+				cnf = bus.cnf
+				ini = cnf.rawini
+				farm_role_id = ini.get('general', 'farm_role_id')
+				response = self._queryenv.list_farm_role_params(farm_role_id)
+			LOG.debug('list_farm_role_params: %s' %  response)
+			if response and service_name in response and 'preset' in response[service_name]:
+				settings = response[service_name]['preset']
+				LOG.debug('list_farm_role_params returned settings: %s' % settings)
+			if settings:
+				manifest = self.preset_provider.get_manifest(service_name)
+				LOG.debug('Applying configuration preset')
+				self.preset_provider.set_preset(settings, manifest)
+				LOG.debug('Configuration preset has been successfully applied.')
+
+		else:
+
+			with bus.initialization_op as op:
+				if self._cnf_ctl:
+					with op.step('Apply configuration preset'):
+
+						# Backup default configuration
+						my_preset = self._cnf_ctl.current_preset()
+						self._preset_store.save(my_preset, PresetType.DEFAULT)
+
+						# Stop service if it's already running
+						self._stop_service('Applying configuration preset')
+
+						# Fetch current configuration preset
+						service_conf = self._queryenv.get_service_configuration(self._service_name)
+						cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
+						self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
+
+						if cur_preset.name == 'default':
+							# Scalr respond with default preset
+							LOG.debug('%s configuration is default', self._service_name)
+							#self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
+							self._start_service()
+							return
+
+						elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
+							LOG.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+							self._start_service()
+							return
+
+						else:
+							LOG.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
+							self._cnf_ctl.apply_preset(cur_preset)
+
+					with op.step('Start %s with configuration preset' % service_name):
+						# Start service with updated configuration
+						self._start_service_with_preset(cur_preset)
+				else:
+					with op.step('Start %s' % service_name):
+						self._start_service()
+
 		bus.fire(self._service_name + '_configure', **kwargs)
 
 
@@ -689,7 +727,7 @@ class FarmSecurityMixin(object):
 		if self._iptables.enabled():
 			bus.on('init', self.__on_init)			
 		else:
-			self._logger.warn("iptables is not enabled. ports %s won't be protected by firewall" %  (ports, ))
+			LOG.warn("iptables is not enabled. ports %s won't be protected by firewall" %  (ports, ))
 		
 	def __on_init(self):
 		bus.on(
