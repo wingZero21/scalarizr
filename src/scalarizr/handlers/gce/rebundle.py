@@ -57,13 +57,13 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			root_size = coreutils.statvfs('/')['size']
 			LOG.debug('Creating image file %s' % image_path)
 			with open(image_path, 'w') as f:
-				f.truncate(root_size*1024 + 1*1024)
+				f.truncate(root_size + 1*1024)
 
 			try:
 
 				LOG.debug('Creating partition table on image')
 				system2(('parted', image_path, 'mklabel', 'msdos'))
-				system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/1024)))
+				system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))))
 
 				# Map disk image
 				out = system2(('kpartx', '-av', image_path))[0]
