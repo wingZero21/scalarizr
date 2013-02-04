@@ -115,16 +115,11 @@ class SSHKeys(Handler):
 			self._write_ssh_keys_file(ak)
 	
 	def _read_ssh_keys_file(self):
-		content = None
 		self._logger.debug('Reading autorized keys from %s' % self.authorized_keys_file)
-		try:
-			with open(self.authorized_keys_file, 'r') as fp:
-				content = fp.read()
-		except IOError:
-			pass
-		if not content:
-			raise UpdateSshAuthorizedKeysError('Unable to read ssh keys from %s' % self.authorized_keys_file)
-		return content
+		if os.path.exists(self.authorized_keys_file):
+			os.chmod(self.authorized_keys_file, 0600)
+			with open(self.authorized_keys_file) as fp:
+				return fp.read()
 	
 	def _write_ssh_keys_file(self, content):
 		self._logger.debug('Writing authorized keys')
