@@ -245,7 +245,8 @@ class RabbitMQHandler(ServiceCtlHandler):
 		
 	
 	def on_BeforeHostTerminate(self, msg):
-		if msg.remote_ip == self.platform.get_public_ip():
+		if msg.remote_ip == self.platform.get_public_ip() and \
+		   			int(__rabbitmq__['server_index']) != 1:
 			self.service.stop()
 		
 
