@@ -9,6 +9,7 @@ from scalarizr.linux import iptables
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 from scalarizr.node import __node__
 
+import os
 import logging
 import threading
 import pprint
@@ -864,3 +865,12 @@ def prepare_tags(handler=None, **kwargs):
 				
 	LOG.debug('Prepared tags: %s. Excluded empty tags: %s' % (tags, excludes))
 	return tags
+
+
+def transfer_result_to_backup_result(mnf):
+	base = os.path.dirname(mnf.cloudfs_path)
+	files_sizes = list((os.path.join(base, chunk[0]), chunk[2]) 
+					for file_ in mnf.files 
+					for chunk in file_['chunks'])
+	return list(dict(path=path, size=size) for path, size in files_sizes)
+

@@ -513,6 +513,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 				transfer = LargeTransfer(dbs, cloud_storage_path)
 				result = transfer.run()
+				result = handlers.transfer_result_to_backup_result(result)
 
 			op.ok(data=result)
 

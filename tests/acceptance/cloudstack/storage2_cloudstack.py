@@ -20,7 +20,7 @@ def setup(feat):
     if feat.name == FEATURE_NAME:
         world.cloudstack_patcher = mock.patch(cloudstack.__cloudstack__, {})
         world.cloudstack_patcher.start()
-        world.cloudstack_patcher['new_conn'] = Client(environ['CLOUDSTACK_USERNAME'],
+        world.cloudstack_patcher['new_conn'] = Client(environ['CLOUDSTACK_API_URL'],
                                                       apiKey=environ['CLOUDSTACK_API_KEY'],
                                                       secretKey=environ['CLOUDSTACK_SECRET_KEY'])
         world.cloudstack_patcher['zone_id'] = environ['CLOUDSTACK_ZONE_ID']

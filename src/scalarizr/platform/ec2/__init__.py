@@ -69,6 +69,7 @@ class Ec2Platform(Ec2LikePlatform):
 			self._ec2_cert = self._cnf.read_key(os.path.join(bus.etc_path, self._cnf.rawini.get(self.name, OPT_EC2_CERT_PATH)), title="EC2 certificate")
 		return self._ec2_cert
 	
+
 	def new_ec2_conn(self):
 		""" @rtype: boto.ec2.connection.EC2Connection """
 		region = self.get_region()

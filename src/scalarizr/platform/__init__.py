@@ -19,6 +19,9 @@ from scalarizr.bus import bus
 class PlatformError(BaseException):
 	pass
 
+class NoAccessDataError(Exception):
+	pass
+
 class UserDataOptions:
 	FARM_ID = "farmid"
 	SERVER_ID = "serverid"	
@@ -125,6 +128,10 @@ class Platform():
 		for k, v in re.findall("([^=]+)=([^;]*);?", raw_userdata):
 			userdata[k] = v
 		return userdata
+
+	def _raise_no_access_data(self):
+		msg = 'There are no credentials from cloud services: %s' % self.name
+		raise NoAccessDataError(msg)
 	
 	
 	class _scalrfs(object):
