@@ -28,7 +28,7 @@ from scalarizr.handlers import operation, prepare_tags
 from scalarizr.services import make_backup_steps
 from scalarizr.api import service as preset_service
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP,\
-PgUser, SU_EXEC, PgSQLPresetProvider
+PgUser, SU_EXEC, PgSQLPresetProvider, PRESET_FNAME
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -381,7 +381,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					postgresql_data = message.postgresql.copy()
 
 					if 'preset' in postgresql_data:
-						self.initial_preset = self._get_preset(postgresql_data['preset'], pg_svc.PRESET_FNAME)
+						self.initial_preset = self._get_preset(postgresql_data['preset'], PRESET_FNAME)
 						self._logger.debug('Scalr sent current preset: %s' % self.initial_preset)
 						del postgresql_data['preset']
 
