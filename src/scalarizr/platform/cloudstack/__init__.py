@@ -96,7 +96,7 @@ class CloudStackPlatform(Platform):
 	
 		
 	def new_cloudstack_conn(self):
-		if 'api_url' in self._access_data:
+		if self._access_data and 'api_url' in self._access_data:
 			return cloudstack.Client(
 					self._access_data['api_url'], 
 					apiKey=self._access_data.get('api_key'), 
