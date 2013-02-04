@@ -8,13 +8,11 @@ Created on Sep 8, 2011
 import os
 import re
 import pwd
-import sys
 import time
 import logging
 import subprocess
 
 from . import lazy
-from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util import initdv2, system2, run_detached, software, wait_until
 from scalarizr.config import BuiltinBehaviours
@@ -199,26 +197,6 @@ class RabbitMQ(object):
 	@property
 	def node_type(self):
 		return __rabbitmq__['node_type']
-
-
-	def change_node_type(self, self_hostname, hostnames, disk_node):
-		if RABBITMQ_VERSION >= (3, 0, 0):
-			type = disk_node and 'disk' or 'ram'
-			cmd = [RABBITMQCTL, 'change_cluster_node_type', type]
-			system2(cmd, logger=self._logger)
-		else:
-			self.cluster_with(self_hostname, hostnames, disk_node, do_reset=False)
-
-
-
-	def change_node_type(self, self_hostname, hostnames, disk_node):
-		if RABBITMQ_VERSION >= (3, 0, 0):
-			type = disk_node and 'disk' or 'ram'
-			cmd = [RABBITMQCTL, 'change_cluster_node_type', type]
-			system2(cmd, logger=self._logger)
-		else:
-			self.cluster_with(self_hostname, hostnames, disk_node, do_reset=False)
-
 
 
 	def change_node_type(self, self_hostname, hostnames, disk_node):
