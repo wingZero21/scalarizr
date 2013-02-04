@@ -22,7 +22,7 @@ from scalarizr.linux import mount
 LOG = logging.getLogger(__name__)
 
 
-class SysInfoAPI(object):
+class SystemAPI(object):
 
 	_HOSTNAME = '/etc/hostname'
 	_DISKSTATS = '/proc/diskstats'
@@ -50,20 +50,15 @@ class SysInfoAPI(object):
 				setattr(self, name, attr)
 
 
+	@rpc.service_method
 	def call_auth_shutdown_hook(self):
 		script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
-		ret = 1
 		LOG.debug("Executing %s" % script_path)
 		if os.access(script_path, os.X_OK):
-			try:
-				ret = subprocess.call(script_path, stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE, close_fds=True)
-			except Exception, e:
-				# TODO: log exception
-				LOG.debug("Exception while executing %s" % script_path)
+			return subprocess.Popen(script_path, stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE, close_fds=True).communicate()[0].strip()
 		else:
-			LOG.debug("Cannot access %s" % script_path)
-		return ret
+			raise Exception('File not exists: %s' % script_path)
 
 
 	@rpc.service_method
