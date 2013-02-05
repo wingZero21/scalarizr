@@ -93,6 +93,8 @@ class __os(dict):
 			self['name'] = 'Debian'
 			self['family'] = 'Debian'
 			if 'lsb_distrib_id' in self:
+				if 'GCEL' in self['lsb_distrib_id']:
+					self['name'] = 'GCEL'
 				if 'Ubuntu' in self['lsb_distrib_id']:
 					self['name'] = 'Ubuntu'
 				elif osmod.path.isfile('/etc/issue.net') and \
@@ -187,6 +189,20 @@ class __os(dict):
 
 os = __os()
 
+
+ubuntu_release_to_codename = {
+	'8.04': 'hardy',
+	'8.10': 'intrepid',
+	'9.04': 'jaunty',
+	'9.10': 'karmic',
+	'10.04': 'lucid',
+	'10.10': 'maverick'
+	'11.04': 'natty',
+	'11.10': 'oneiric',
+	'12.04': 'precise',
+	'12.10': 'quantal',
+	'13.04': 'raring'
+}
 
 def build_cmd_args(executable=None,
 				   short=None,
