@@ -33,6 +33,17 @@ STORAGE_FULL_SCOPE = 'https://www.googleapis.com/auth/devstorage.full_control'
 
 LOG = logging.getLogger(__name__)
 
+
+class GoogleApiClientLoggerFilter:
+	def filter(self, record):
+		if 'takes exactly' or 'takes at most' in record.message:
+			return False
+		return True
+
+api_logger = logging.getLogger('oauth2client.util')
+api_logger.addFilter(GoogleApiClientLoggerFilter())
+
+
 def get_platform():
 	return GcePlatform()
 
@@ -90,7 +101,7 @@ class GcePlatform(Platform):
 	def __init__(self):
 		Platform.__init__(self)
 		self.compute_svc_mgr = GoogleServiceManager(
-			self, 'compute', 'v1beta13', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
+			self, 'compute', 'v1beta14', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
 
 		self.storage_svs_mgr = GoogleServiceManager(
 			self, 'storage', 'v1beta1', STORAGE_FULL_SCOPE)
