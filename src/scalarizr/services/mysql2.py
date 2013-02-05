@@ -477,7 +477,7 @@ class PerconaExec(Exec):
 				# with InnoDB Backup Utility v1.5.1-xtrabackup
 				pkgmgr.installed('perl-Time-HiRes')
 			else:
-				codename = linux.ubuntu_release_to_codename[os['lsb_release']]
+				codename = linux.ubuntu_release_to_codename[linux.os['lsb_release']]
 				pkgmgr.apt_source(
 						'percona.list', 
 						['deb http://repo.percona.com/apt %s main' % codename],
