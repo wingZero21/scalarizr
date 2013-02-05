@@ -757,7 +757,7 @@ def main():
 		
 			# XXX: nimbula's user-data is uploaded by ssh
 			server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-			if pl.name in ('nimbula', 'rackspace') and cnf.state != ScalarizrState.IMPORTING:
+			if pl.name in ('nimbula', 'rackspace', 'openstack') and cnf.state != ScalarizrState.IMPORTING:
 				if cnf.state == ScalarizrState.REBUNDLING:
 					# XXX: temporary workaround
 					# XXX: rackspace injects files and boots OS in a parallell. There were situations when
@@ -768,8 +768,14 @@ def main():
 				udfile = cnf.private_path('.user-data')
 				wait_until(lambda: os.path.exists(udfile), 
 						timeout=60, error_text="User-data file %s doesn't exist" % udfile)					
-			
-			ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
+			try:
+				ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
+			except:
+				if cnf.state == ScalarizrState.IMPORTING:
+					ud_server_id = None
+				else:
+					raise
+				
 			if server_id and ud_server_id and server_id != ud_server_id:
 				logger.info('Server was started after rebundle. Performing some cleanups')
 				_cleanup_after_rebundle()
