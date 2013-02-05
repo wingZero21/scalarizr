@@ -196,7 +196,7 @@ ubuntu_release_to_codename = {
 	'9.04': 'jaunty',
 	'9.10': 'karmic',
 	'10.04': 'lucid',
-	'10.10': 'maverick'
+	'10.10': 'maverick',
 	'11.04': 'natty',
 	'11.10': 'oneiric',
 	'12.04': 'precise',
