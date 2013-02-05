@@ -113,10 +113,14 @@ Group:          Applications/Internet
 Requires:       scalarizr-base = %{version}-%{release}
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:		python26-novaclient >= 2.10.0
-Requires:               python26-cinderclient >= 1.0.1
+Requires:       python26-rackspace-novaclient >= 1.0
+Requires:       python26-cinderclient >= 1.0.1
+Requires:       python26-swiftclient >= 1.2.0
 %else
-Requires:               python-novaclient >= 2.10.0
-Requires:               python-cinderclient >= 1.0.1
+Requires:		python-novaclient >= 2.10.0
+Requires:       python-rackspace-novaclient >= 1.0
+Requires:       python-cinderclient >= 1.0.1
+Requires:       python-swiftclient >= 1.2.0
 %endif
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
