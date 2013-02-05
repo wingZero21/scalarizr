@@ -43,35 +43,52 @@ class _Mounts(object):
 					self._entries.append(_MountEntry(*m))
 
 	def __getitem__(self, device_or_mpoint):
-		self._reload()
-		for entry in self._entries:
-			if entry.device == device_or_mpoint or \
-				entry.mpoint == device_or_mpoint:
-				return entry
+		matched = [entry for entry in self 
+					if self._entry_matches(entry, device_or_mpoint)]
+		if matched:
+			return matched[0]		
 		raise KeyError(device_or_mpoint)
 
 	def __contains__(self, device_or_mpoint):
+		return any([self._entry_matches(entry, device_or_mpoint)
+					for entry in self])
+
+	def __len__(self):
 		self._reload()
-		return any([entry.device == device_or_mpoint or 
-				entry.mpoint == device_or_mpoint 
-				for entry in self._entries])
+		return len(self._entries)
 
-	def list_entries(self):
-		self.reload()
-		return self._entries
-		
+	def __iter__(self):
+		self._reload()
+		return iter(self._entries)
 
-class _Fstab(_Mounts):
-	filename = '/etc/fstab'
+	list_entries = __iter__
+
+	def __delitem__(self, device_or_mpoint):
+		tmpname = self.filename + '.tmp'
+		with open(tmpname, 'w+') as fp:
+			for entry in self:
+				if not self._entry_matches(entry, device_or_mpoint):
+					self._write_entry(entry, fp)
+		os.rename(tmpname, self.filename)
+
+	remove = __delitem__
 
 	def add(self, device, mpoint, fstype, options='auto', dump=0, fsck_order=0):
 		with open(self.filename, 'a+') as fp:
-			line = ' '.join(map(str, (device, mpoint, fstype, options, dump, fsck_order)))
-			fp.write('\n')
-			fp.write(line)
-			
-	def remove(self, device_or_mpoint):
-		raise NotImplementedError()
+			self._write_entry(_MountEntry(device, mpoint, fstype, options, dump, fsck_order), fp)
+
+	def _entry_matches(self, entry, device_or_mpoint):
+		return entry.device == device_or_mpoint or \
+				entry.mpoint == device_or_mpoint
+
+	def _write_entry(self, entry, fp):
+		line = ' '.join(map(str, entry))
+		fp.write('\n')
+		fp.write(line)
+
+
+class _Fstab(_Mounts):
+	filename = '/etc/fstab'
 		
 
 def mounts(filename=None):
