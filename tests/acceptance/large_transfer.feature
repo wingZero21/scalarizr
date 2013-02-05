@@ -89,3 +89,11 @@ Scenario: Instant upload kill with storage cleanup
     When I upload it to Storage with intentional interrupt
     Then I expect cloud path cleaned
 
+Scenario: Chunk sizes
+    Initialize upload variables
+    Given I have a 10 megabytes file F1
+    When I upload it to Storage with gzipping
+    Then I expect manifest as a result
+    And all chunks are uploaded
+    And chunks sizes are correct
+

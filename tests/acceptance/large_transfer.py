@@ -160,7 +160,7 @@ def convert_manifest(json_manifest):
 	parser.set("snapshot", "created_at", json_manifest["created_at"])
 	parser.set("snapshot", "pack_method", json_manifest["files"][0]["compressor"])
 
-	for chunk, md5sum in reversed(json_manifest["files"][0]["chunks"]):
+	for chunk, md5sum, size in reversed(json_manifest["files"][0]["chunks"]):
 		parser.set("chunks", chunk, md5sum)
 
 	LOG.debug("CONVERT: %s" % parser.items("chunks"))
@@ -195,6 +195,7 @@ def setup(scenario):
 		'multipart_result': None,
 	}
 	world.deleted_chunk = None
+	world._for_size_test = None
 
 
 @after.each_scenario
@@ -237,6 +238,8 @@ def initialize_upload_variables(step):
 
 @step("I have a (\d+) megabytes file (\w+)")
 def i_have_a_file(step, megabytes, filename):
+	world._for_size_test = int(megabytes) * 1024 * 1024
+
 	filename = os.path.join(world.basedir, filename)
 	world.sources.append(filename)
 
@@ -277,9 +280,9 @@ def i_expect_manifest_as_a_result(step):
 
 @step("all chunks are uploaded")
 def all_chunks_are_uploaded(step):
-	for chunk, md5sum in world.result_chunks:
+	for chunk in world.result_chunks:
 		assert world.driver.exists(os.path.join(os.path.dirname(world.manifest_url),
-			chunk))
+			chunk[0]))
 
 
 @step("I have a dir (\w+/?) with (\d+) megabytes file (\w+), with (\d+) megabytes file (\w+)")
@@ -348,7 +351,7 @@ def i_delete_one_of_the_chunks(step):
 	manifest = release_local_data()
 	remote_dir, manifest_name = os.path.split(world.manifest_url)
 
-	chunk, md5sum = choice(choice(manifest["files"])["chunks"])
+	chunk, md5sum, size = choice(choice(manifest["files"])["chunks"])
 
 	chunk_url = os.path.join(remote_dir, chunk)
 	world.deleted_chunk = chunk_url
@@ -389,6 +392,15 @@ def i_upload_it_with_intentional_interrupt(step):
 @step("I expect cloud path cleaned")
 def i_expect_path_clean(step):
 	assert not world.driver.ls(world.manifest_url)
+
+
+@step("chunks sizes are correct")
+def chunks_sizes_are_correct(step):
+	# TODO: implement stat() in drivers and make more adequate size checks
+	chunk_sum = reduce(lambda sum, x: sum + x[2], world.result_chunks, 0)
+	assert abs(world._for_size_test - chunk_sum) < 10 * 1024, "%s != %s" % \
+											(world._for_size_test, chunk_sum)
+
 
 
 
