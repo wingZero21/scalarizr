@@ -1,9 +1,8 @@
-from __future__ import with_statement
-'''
+"""
 Created on Aug 29, 2012
 
 @author: marat
-'''
+"""
 
 from scalarizr import storage2
 from scalarizr.storage2 import filesystems 
@@ -35,8 +34,8 @@ class ExtFileSystem(filesystems.FileSystem):
 
 	def resize(self, device, size=None, *short_args, **long_kwds):
 		cmd = (E2FSCK_EXEC, '-fy', device)
-		o, e, rcode = filesystems.system(cmd, raise_exc=False,
-							error_text=self.error_messages['fsck'] % device)
+		rcode = filesystems.system(cmd, raise_exc=False,
+							error_text=self.error_messages['fsck'] % device)[2]
 		if rcode not in (0, 1):
 			raise storage2.StorageError('Fsck failed to correct file system errors')
 		cmd = (RESIZE2FS_EXEC, device)
