@@ -1099,6 +1099,11 @@ class MysqlHandler(DBMSRHandler):
 						__mysql__['restore'].type == 'snap_mysql':
 					__mysql__['restore'].run()
 				else:
+					if __node__['platform'] == 'idcf':
+						if __mysql__['volume'].id:
+							LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
+							__mysql__['volume'].snap = __mysql__['volume'].snapshot()
+
 					__mysql__['volume'].ensure(mount=True, mkfs=True)
 					LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
 					
