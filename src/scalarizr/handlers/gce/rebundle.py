@@ -171,11 +171,20 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			# TODO: check duplicate names
 			compute = pl.new_compute_client()
 
+			current_image_fq = pl.get_image().split('/')
+			current_img_project = current_image_fq[1]
+			current_img_name = current_image_fq[3]
+			current_img_obj = compute.images().get(project=current_img_project,
+						name=current_img_name).execute()
+			kernel = current_img_obj['preferredKernel']
+
 			image_url = 'http://storage.googleapis.com/%s/%s' % (
 											tmp_bucket_name, arch_name)
+
 			req_body = dict(
 				name=goog_image_name,
 				sourceType='RAW',
+				preferredKernel=kernel,
 				rawDisk=dict(
 					containerType='TAR',
 					source=image_url
