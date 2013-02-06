@@ -442,7 +442,7 @@ class MysqlHandler(DBMSRHandler):
 									type=md['snapshot_config']['type'])
 
 						if md['volume'].device and \
-									md['volume'].type in ('ebs', 'raid'):
+									md['volume'].type in ('ebs', 'csvol', 'raid'):
 							md.pop('snapshot_config', None)
 
 						if md.get('snapshot_config'):

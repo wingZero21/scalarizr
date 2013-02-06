@@ -286,6 +286,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					redis_data['volume'] = storage2.volume(
 							redis_data.pop('volume_config'))
 
+					if redis_data['volume'].device and \
+								redis_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+						redis_data.pop('snapshot_config', None)
+
 					if redis_data.get('snapshot_config'):
 						redis_data['restore'] = backup.restore(
 							type='snap_redis',
