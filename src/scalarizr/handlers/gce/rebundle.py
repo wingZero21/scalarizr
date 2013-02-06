@@ -196,7 +196,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 			LOG.info('Waiting for image to register')
 			def image_is_ready():
-				req = compute.operations().get(project=proj_id, operation=operation)
+				req = compute.globalOperations().get(project=proj_id, operation=operation)
 				res = req.execute()
 				if res['status'] == 'DONE':
 					if res.get('error'):

@@ -23,7 +23,7 @@ CHUNK_SIZE = 2*1024*1024
 
 def get_op_status(conn, proj_id, op_name, fields=None):
 	fields = ', '.join(fields) if fields else None
-	return conn.operations().get(project=proj_id,
+	return conn.globalOperations().get(project=proj_id,
 								 operation=op_name, fields=fields).execute()
 
 
