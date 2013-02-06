@@ -256,8 +256,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					LOG.info('Got Redis part of HostInitResponse: %s' % redis_data)
 
 					if 'preset' in redis_data:
-						self.initial_preset = redis_data['preset']
+						self.initial_preset = self._get_preset(redis_data['preset'], redis.PRESET_FNAME)
 						del redis_data['preset']
+						LOG.debug('Scalr sent current preset: %s' % self.initial_preset)
+
 
 					'''
 					XXX: following line enables support for old scalr installations

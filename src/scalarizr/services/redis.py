@@ -33,6 +33,7 @@ UBUNTU_BIN_PATH 	 = '/usr/bin/redis-server'
 CENTOS_BIN_PATH 	 = '/usr/sbin/redis-server'
 BIN_PATH = UBUNTU_BIN_PATH if disttool.is_ubuntu() else CENTOS_BIN_PATH
 
+PRESET_FNAME = 'redis.conf'
 UBUNTU_CONFIG_DIR = '/etc/redis'
 CENTOS_CONFIG_DIR = '/etc/'
 CONFIG_DIR = UBUNTU_CONFIG_DIR if disttool.is_ubuntu() else CENTOS_CONFIG_DIR
