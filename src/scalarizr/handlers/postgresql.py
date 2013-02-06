@@ -381,7 +381,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					postgresql_data = message.postgresql.copy()
 
 					if 'preset' in postgresql_data:
-						self.initial_preset = self._get_preset(postgresql_data['preset'], PRESET_FNAME)
+						self.initial_preset = postgresql_data['preset']
 						self._logger.debug('Scalr sent current preset: %s' % self.initial_preset)
 						del postgresql_data['preset']
 

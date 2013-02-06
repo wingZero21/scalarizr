@@ -414,7 +414,7 @@ class MysqlHandler(DBMSRHandler):
 					md = getattr(message, __mysql__['behavior']).copy()
 
 					if 'preset' in md:
-						self.initial_preset = self._get_preset(md['preset'], mysql_svc.PRESET_FNAME)
+						self.initial_preset = md['preset']
 						del md['preset']
 						LOG.debug('Scalr sent current preset: %s' % self.initial_preset)
 
