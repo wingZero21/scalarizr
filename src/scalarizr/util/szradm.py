@@ -694,9 +694,16 @@ def main():
 			if options.msgfile:
 				str = None
 				with open(options.msgfile, 'r') as fp:
-				    str = fp.read()
+					str = fp.read()
 				if str:
-					msg.fromxml(str)
+					try:
+						msg.fromxml(str)
+					except:
+						try:
+							msg.fromjson(str)
+						except:
+							print 'Unknown message format'
+							sys.exit(1)
 			else:
 				msg.body = kv
 
@@ -721,14 +728,17 @@ def main():
 				msg_service = bus.messaging_service
 				msg = msg_service.new_message()				
 								
-				cur.execute('SELECT message '
+				cur.execute('SELECT message, format '
 						'FROM p2p_message '
 						'WHERE message_name = ? '
 						'ORDER BY id DESC '
 						'LIMIT 1', ('HostInitResponse', )
 				)
-				xml = cur.fetchone()['message']
-				msg.fromxml(xml)
+				raw_msg, format = cur.fetchone()['message']
+				if 'xml' == format:
+					msg.fromxml(raw_msg)
+				elif 'json' == format:
+					msg.fromjson(raw_msg)
 				
 				producer = msg_service.get_producer()
 				producer.send(Queues.CONTROL, msg)
