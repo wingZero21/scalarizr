@@ -734,7 +734,8 @@ def main():
 						'ORDER BY id DESC '
 						'LIMIT 1', ('HostInitResponse', )
 				)
-				raw_msg, format = cur.fetchone()['message']
+				raw_msg, format = cur.fetchone()
+
 				if 'xml' == format:
 					msg.fromxml(raw_msg)
 				elif 'json' == format:
