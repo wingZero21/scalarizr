@@ -307,19 +307,20 @@ class QueryEnvService(object):
 				ret.append(vhost)
 		return ret
 
+
 	def _read_get_service_configuration_response(self, xml, behaviour):
 		data = xml2dict(ET.XML(xml))
 		preset = Preset()
-		for raw_preset in data:
-			if behaviour != raw_preset['behaviour']:
-				continue
-			preset.name = raw_preset['preset-name']
-			preset.restart_service = raw_preset['restart-service']
-			preset.settings = raw_preset['values']
-			if 'newPresetsUsed' in raw_preset and 'newPresetsUsed' == '1':
-				preset.new_engine = True
-			else:
-				preset.new_engine = True
+		if 'newPresetsUsed' in data and 'newPresetsUsed' == '1':
+			preset.new_engine = True
+		else:
+			for raw_preset in data:
+				if behaviour != raw_preset['behaviour']:
+					continue
+				preset.name = raw_preset['preset-name']
+				preset.restart_service = raw_preset['restart-service']
+				preset.settings = raw_preset['values']
+				preset.new_engine = False
 		return preset
 
 	
