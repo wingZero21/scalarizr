@@ -315,6 +315,17 @@ class Lvm2:
 			time.sleep(1)
 		system((LVREMOVE, '--force', vol), error_text='Cannot remove logical volume')
 
+		# On GCE lvremove finishes with the following stderr:
+		# 
+		#   The link /dev/<GroupName>/<VolumeName> should have been removed by udev but it is still present. 
+		#   Falling back to direct link removal.
+		#
+		# After that snapshot cow is still presented and prevents new snapshots creation
+		cow = '%s-%s-cow' % extract_vg_lvol(lvolume)
+		if os.path.exists('/dev/mapper/%s' % cow):
+			system((DMSETUP, 'remove', cow))
+
+
 	def extend_vg(self, group, *ph_volumes):
 		system([VGEXTEND, group] + list(ph_volumes), error_text='Cannot extend volume group')
 	
