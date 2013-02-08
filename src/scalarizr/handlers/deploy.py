@@ -258,12 +258,12 @@ class GitSource(Source):
 			if self.private_key:
 				pk_path = os.path.join(tmpdir, 'pk.pem')
 				with open(pk_path, 'w') as fp:
-				    fp.write(self.private_key)
+					fp.write(self.private_key)
 				os.chmod(pk_path, 0400)
 
 				git_ssh_path = os.path.join(tmpdir, 'git_ssh.sh')
 				with open(git_ssh_path, 'w') as fp:
-				    fp.write(self.ssh_tpl % pk_path)
+					fp.write(self.ssh_tpl % pk_path)
 				os.chmod(git_ssh_path, 0755)
 
 				env.update(dict(GIT_SSH=git_ssh_path))

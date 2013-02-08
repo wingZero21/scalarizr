@@ -288,7 +288,7 @@ class ScalrVersion(Store):
 
 
 __node__ = {
-	'server_id,role_id,farm_id,farm_role_id,env_id': 
+	'server_id,role_id,farm_id,farm_role_id,env_id,role_name':
 				Ini(private_dir + '/config.ini', 'general'),
 	'platform': Ini(public_dir + '/config.ini', 'general'),
 	'behavior': IniOption(
@@ -329,6 +329,15 @@ __node__['rabbitmq'] = Compound({
 	'password,server_index,node_type,cookie,hostname': Ini(
 						'%s/%s.ini' % (private_dir, 'rabbitmq'), 'rabbitmq')
 
+})
+
+__node__['mongodb'] = Compound({
+	'volume,volume_config':
+				Json('%s/storage/%s.json' % (private_dir, 'mongodb'),'scalarizr.storage2.volume'),
+	'snapshot,shanpshot_config':
+				Json('%s/storage/%s-snap.json' % (private_dir, 'mongodb'),'scalarizr.storage2.snapshot'),
+	'shards_total,password,replica_set_index,shard_index,keyfile':
+				Ini('%s/%s.ini' % (private_dir, 'mongodb'), 'mongodb')
 })
 
 

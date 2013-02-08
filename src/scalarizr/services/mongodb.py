@@ -302,7 +302,7 @@ class MongoDB(BaseService):
 		self._logger.debug('Getting rs status')
 		ret = self.cli.get_rs_status()
 		if 'errmsg' in ret:
-			self._logger.error('Could not get status of replica set' % (ret['errmsg']))
+			self._logger.error('Could not get status of replica set : %s' % ret['errmsg'])
 		else:
 			return int(ret['myState']) if 'myState' in ret else None
 				
@@ -346,7 +346,7 @@ class MongoDB(BaseService):
 	@property
 	def config_server(self):
 		if not self._config_server:
-			self._config_server = Mongod(CONFIG_SERVER_CONF_PATH, self.keyfile.path, CONFIG_SERVER_DATA_DIR, \
+			self._config_server = Mongod(CONFIG_SERVER_CONF_PATH, self.keyfile.path, CONFIG_SERVER_DATA_DIR,
 										 CONFIG_SERVER_DEFAULT_PORT)
 		return self._config_server
 
@@ -362,13 +362,12 @@ class MongoDB(BaseService):
 		path = '/etc/sudoers'
 		self._logger.debug('Disabling requiretty in %s' % path)
 		if not disttool.is_ubuntu():
-			orig = None
 			with open(path, 'r') as fp:
-			    orig = fp.read()
+				orig = fp.read()
 			new = re.sub('Defaults\s+requiretty', '\n', orig)
 			if new != orig:
 				with open(path, 'w') as fp:
-				    fp.write(new)
+					fp.write(new)
 
 
 	def _get_mongod(self):

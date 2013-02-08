@@ -928,7 +928,7 @@ class ScalarizrCnf(Observable):
 
 	def _set_state(self, v):
 		with open(self.private_path('.state'), 'w') as fp:
-		    fp.write(v)
+			fp.write(v)
 		self._logger.info('State: %s', v)
 
 	state = property(_get_state, _set_state)
