@@ -418,7 +418,8 @@ class ServiceCtlHandler(Handler):
 			new_preset = self._preset_store.load(PresetType.DEFAULT)
 		else:
 			new_preset = self._obtain_current_preset()
-		result.preset = new_preset.name
+		if new_preset:
+			result.preset = new_preset.name
 		
 		# Apply current preset
 		try:
@@ -478,7 +479,11 @@ class ServiceCtlHandler(Handler):
 	def _obtain_current_preset(self):
 		service_conf = self._queryenv.get_service_configuration(self._service_name)
 		
-		cur_preset = CnfPreset(service_conf.name, service_conf.settings)			
+		cur_preset = CnfPreset(service_conf.name, service_conf.settings)
+		if cur_preset.new_engine:
+			'''New sheriff in town. No need to calculate or apply old preset'''
+			return None
+
 		if cur_preset.name == 'default':
 			try:
 				cur_preset = self._preset_store.load(PresetType.DEFAULT)
@@ -523,7 +528,7 @@ class ServiceCtlHandler(Handler):
 			if self._cnf_ctl:
 				# Obtain current configuration preset
 				cur_preset = self._obtain_current_preset()
-				if cur_preset.new_engine:
+				if not cur_preset:
 					LOG.info('New configuration preset engine is used. Skipping old presets.')
 					return
 				# Apply current preset
