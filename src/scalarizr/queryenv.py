@@ -311,7 +311,7 @@ class QueryEnvService(object):
 	def _read_get_service_configuration_response(self, xml, behaviour):
 		data = xml2dict(ET.XML(xml))
 		preset = Preset()
-		if 'newPresetsUsed' in data and 'newPresetsUsed' == '1':
+		if 'newPresetsUsed' in data and data['newPresetsUsed']:
 			preset.new_engine = True
 		else:
 			for raw_preset in data:
