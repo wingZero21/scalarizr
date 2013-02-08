@@ -931,7 +931,7 @@ class RedisPresetProvider(PresetProvider):
 		for provider in self.providers:
 			for fname in settings:
 				if fname == PRESET_FNAME:
-					provider.set_preset(settings[PRESET_FNAME], manifest)
+					provider.set_preset(settings, manifest)
 
 
 	@property
@@ -939,7 +939,7 @@ class RedisPresetProvider(PresetProvider):
 		providers = []
 		LOG.debug('Getting list of redis preset providers')
 		for port in get_busy_ports():
-			service = Redisd(get_redis_conf_basename(port), int(port))
+			service = Redisd(get_redis_conf_path(port), int(port))
 			config_mapping = {PRESET_FNAME:service.redis_conf}
 			providers.append(PresetProvider(service, config_mapping))
 		return providers
