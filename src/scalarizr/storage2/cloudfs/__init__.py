@@ -377,9 +377,6 @@ class FileTransfer(BaseTransfer):
 class LargeTransfer(bases.Task):
 	'''
 
-	# TODO: zalit/slit papku/file/stream primeri
-
-
 	SQL dump. File-per-database.
 	---------------------------
 
@@ -886,8 +883,7 @@ class LargeTransfer(bases.Task):
 				return res
 
 			elif self._up:
-				if res["failed"] or self._transfer._stop_all.is_set():
-					#? upload failed inside FileTransfer or it was killed
+				if res["failed"] or self._killed:
 					if self.manifest:
 						self.manifest.delete()
 					return
@@ -901,7 +897,7 @@ class LargeTransfer(bases.Task):
 			coreutils.remove(self._tranzit_vol.mpoint)
 
 
-	def kill(self):
+	def _kill(self):
 		self._killed = True
 		self._transfer.kill_nowait()
 
@@ -916,7 +912,7 @@ class LargeTransfer(bases.Task):
 						chunkinfo["processed"].interrupt()
 
 		def interrupt(*args):
-			raise Exception("S3 transfer was interrupted by LargeTransfer.kill()")  #?
+			raise Exception("LargeTransfer is being killed")  #?
 		self._transfer.on(progress_report=interrupt)
 
 
@@ -1091,7 +1087,7 @@ class Manifest(object):
 		try:
 			path = os.path.dirname(self.cloudfs_path)
 		except AttributeError:
-			raise AttributeError("'cloudfs_path' for the manifest isn't defined")
+			LOG.debug("'cloudfs_path' for the manifest isn't defined")
 		driver = cloudfs(urlparse.urlparse(path).scheme)
 
 		pieces = Queue.Queue()

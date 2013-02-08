@@ -12,6 +12,7 @@ import logging
 import glob
 import tarfile
 import tempfile
+import threading
 
 # Core
 from scalarizr.bus import bus
@@ -310,8 +311,8 @@ class MysqlHandler(DBMSRHandler):
 		self._step_change_replication_master = 'Change replication Master'
 		self._step_innodb_recovery = 'InnoDB recovery'
 		self._step_collect_hostup_data = 'Collect HostUp data'
-		
-		
+
+		self._current_data_bundle = None
 		self.on_reload()	
 
 		
@@ -680,59 +681,96 @@ class MysqlHandler(DBMSRHandler):
 	def on_DbMsr_CreateDataBundle(self, message):
 		LOG.debug("on_DbMsr_CreateDataBundle")
 
-		try:
-			op = operation(name=self._op_data_bundle, phases=[{
-				'name': self._phase_data_bundle, 
-				'steps': [self._step_create_data_bundle]
-			}])
-			op.define()
+		def do_backup():
+			try:
+				op = operation(name=self._op_data_bundle, phases=[{
+					'name': self._phase_data_bundle,
+					'steps': [self._step_create_data_bundle]
+				}])
+				op.define()
 
-			with op.phase(self._phase_data_bundle):
-				with op.step(self._step_create_data_bundle):
-		
-					bus.fire('before_mysql_data_bundle')
+				with op.phase(self._phase_data_bundle):
+					with op.step(self._step_create_data_bundle):
 
-					backup_info = message.body.get(__mysql__['behavior'], {})
+						bus.fire('before_mysql_data_bundle')
 
-					compat_prior_backup_restore = 'backup' not in backup_info
-					if compat_prior_backup_restore:
-						bak = backup.backup(
-								type='snap_mysql',
-								volume=__mysql__['volume'])
-					else:
-						bak = backup.backup(backup_info['backup'])
-					restore = bak.run()
-									
-					# Notify scalr
-					msg_data = {
-						'db_type': __mysql__['behavior'],
-						'status': 'ok',
-						__mysql__['behavior']: {}
-					}
-					if compat_prior_backup_restore:
-						msg_data[__mysql__['behavior']].update({
-							'snapshot_config': dict(restore.snapshot),
-							'log_file': restore.log_file,
-							'log_pos': restore.log_pos,
-						})
-					else:
-						msg_data[__mysql__['behavior']].update({						
-							'restore': dict(restore)
-						})
-					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
-			op.ok()
-			
-		except (Exception, BaseException), e:
-			LOG.exception(e)
-			
-			# Notify Scalr about error
+						backup_info = message.body.get(__mysql__['behavior'], {})
+
+						compat_prior_backup_restore = 'backup' not in backup_info
+						if compat_prior_backup_restore:
+							bak = backup.backup(
+									type='snap_mysql',
+									volume=__mysql__['volume'])
+						else:
+							bak = backup.backup(backup_info['backup'])
+
+						self._current_data_bundle = bak
+						try:
+							restore = bak.run()
+						finally:
+							self._current_data_bundle = None
+
+						if restore is None:
+							#? op.error?
+							#? 'canceled' msg to scalr?
+							return
+
+						'''
+						# Creating snapshot
+						snap, log_file, log_pos = self._create_snapshot(ROOT_USER, self.root_password, tags=self.mysql_tags)
+						used_size = coreutils.statvfs(STORAGE_PATH)['used']
+						bus.fire('mysql_data_bundle', snapshot_id=snap.id)
+						'''
+
+						# Notify scalr
+						msg_data = {
+							'db_type': __mysql__['behavior'],
+							'status': 'ok',
+							__mysql__['behavior']: {}
+						}
+						if compat_prior_backup_restore:
+							msg_data[__mysql__['behavior']].update({
+								'snapshot_config': dict(restore.snapshot),
+								'log_file': restore.log_file,
+								'log_pos': restore.log_pos,
+							})
+						else:
+							msg_data[__mysql__['behavior']].update({
+								'restore': dict(restore)
+							})
+						self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
+				op.ok()
+
+			except (Exception, BaseException), e:
+				LOG.exception(e)
+
+				# Notify Scalr about error
+				self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
+					db_type = __mysql__['behavior'],
+					status		='error',
+					last_error	= str(e)
+				))
+
+		LOG.debug("Starting backup_thread")
+		threading.Thread(target=do_backup, name="backup_thread").start()
+
+
+	def on_DbMsr_CancelDataBundle(self, message):
+		LOG.debug("on_DbMsr_CancelDataBundle")
+		bak = self._current_data_bundle
+		if bak:
+			bak.kill()
+
+			#? move into CreateDataBundle?
 			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
 				db_type = __mysql__['behavior'],
 				status		='error',
-				last_error	= str(e)
+				last_error	= "Canceled"
 			))
-	
-	
+		else:
+			LOG.debug("No data bundle to cancel")
+
+
 	def on_DbMsr_PromoteToMaster(self, message):
 		"""
 		Promote slave to master

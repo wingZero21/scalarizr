@@ -146,6 +146,11 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 								"filename '([^']+)', position (\d+)")
 		self._re_lsn_innodb_stat = re.compile(r"Log sequence number \d+ (\d+)")
 
+		self._killed = False
+		self._xbak = None
+		self._transfer = None
+		self._xbak_init_lock = threading.Lock()
+
 	def _run(self):
 		self._check_backup_type()
 
@@ -193,16 +198,29 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		else:
 			LOG.info('Creating full xtrabackup')
 
-		xbak = innobackupex.args(__mysql__['tmp_dir'], **kwds).popen()
-		LOG.debug('Creating LargeTransfer, src=%s dst=%s', xbak.stdout, self.cloudfs_target)
-		transfer = cloudfs.LargeTransfer(
-					[xbak.stdout],
-					self.cloudfs_target,
-					compressor=self.compressor)
-		manifesto = transfer.run()
-		stderr = xbak.communicate()[1]
-		if xbak.returncode:
+		with self._xbak_init_lock:
+			if self._killed:
+				return
+			self._xbak = innobackupex.args(__mysql__['tmp_dir'], **kwds).popen()
+			LOG.debug('Creating LargeTransfer, src=%s dst=%s', self._xbak.stdout,
+				self.cloudfs_target)
+			self._transfer = cloudfs.LargeTransfer(
+						[self._xbak.stdout],
+						self.cloudfs_target,
+						compressor=self.compressor)
+		manifesto = self._transfer.run()
+		stderr = self._xbak.communicate()[1]
+		if self._xbak.returncode:
 			raise Error(stderr)
+
+		with self._xbak_init_lock:
+			self._xbak = None
+			self._transfer = None
+
+		if not isinstance(manifesto, cloudfs.Manifest):
+			LOG.debug("LargeTransfer didn't return manifest obj, probably was"
+					  "killed, aborting xtrabackup")
+			return
 
 		log_file = log_pos = to_lsn = None
 		for line in stderr.splitlines():
@@ -236,6 +254,16 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 				rst.backup_type, rst.from_lsn, rst.to_lsn, rst.log_file, rst.log_pos)
 
 		return rst
+
+	def _kill(self):
+		LOG.debug("Killing XtrabackupStreamBackup")
+		self._killed = True
+
+		with self._xbak_init_lock:
+			if self._transfer:
+				self._transfer.kill()
+			if self._xbak:
+				self._xbak.kill()
 
 
 class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
