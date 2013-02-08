@@ -468,14 +468,16 @@ class Exec(object):
 class PerconaExec(Exec):
 
 	def check(self):
+		if linux.os['family'] in ('RedHat', 'Oracle'):
+			# Avoid "Can't locate Time/HiRes.pm in @INC"
+			# with InnoDB Backup Utility v1.5.1-xtrabackup
+			pkgmgr.installed('perl-Time-HiRes')			
+
 		mgr = pkgmgr.package_mgr()
 		if not 'percona' in mgr.repos():
 			if linux.os['family'] in ('RedHat', 'Oracle'):
 				url = 'http://www.percona.com/downloads/percona-release/percona-release-0.0-1.%s.rpm' % linux.os['arch']
 				pkgmgr.RpmPackageMgr().install(url)
-				# Avoid "Can't locate Time/HiRes.pm in @INC"
-				# with InnoDB Backup Utility v1.5.1-xtrabackup
-				pkgmgr.installed('perl-Time-HiRes')
 			else:
 				codename = linux.ubuntu_release_to_codename[linux.os['lsb_release']]
 				pkgmgr.apt_source(

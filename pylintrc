@@ -30,10 +30,15 @@ load-plugins=
 # can either give multiple identifier separated by comma (,) or put this option
 # multiple time (only on the command line, not in the configuration file where
 # it should appear only once).
-disable=C0111,C0103,E1103
-# C0111 - Missing docstring [In our promises]
-# C0103 - Invalid name "%s" (should match %s) [Fires for 2 letter variables]
-# E1103 - %s %r has no %r member (but some types could not be inferred)  [Too many false positives]
+disable=C0111,C0103,E1103,W0142
+# C0111 - Missing docstring 
+#  - In our promises
+# C0103 - Invalid name "%s" (should match %s)
+#  - Fires for 2 letter variables
+# E1103 - %s %r has no %r member (but some types could not be inferred)
+#  - Too many false positives
+# W0142 - Used * or ** magic
+#  - We love such magic
 
 
 [REPORTS]
