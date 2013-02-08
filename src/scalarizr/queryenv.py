@@ -306,7 +306,7 @@ class QueryEnvService(object):
 				vhost = VirtualHost(hostname,v_type,raw_data,https)
 				ret.append(vhost)
 		return ret
-	
+
 	def _read_get_service_configuration_response(self, xml, behaviour):
 		data = xml2dict(ET.XML(xml))
 		preset = Preset()
@@ -316,6 +316,10 @@ class QueryEnvService(object):
 			preset.name = raw_preset['preset-name']
 			preset.restart_service = raw_preset['restart-service']
 			preset.settings = raw_preset['values']
+			if 'newPresetsUsed' in raw_preset and 'newPresetsUsed' == '1':
+				preset.new_engine = True
+			else:
+				preset.new_engine = True
 		return preset
 
 	
@@ -337,18 +341,20 @@ class Preset(object):
 	settings = None
 	name = None
 	restart_service = None
-	
+	new_engine = None
+
 	def __init__(self, name = None, settings = None, restart_service = None):
 		self.settings = {} if not settings else settings
 		self.name = None if not name else name
 		self.restart_service = None if not restart_service else restart_service
-	
+
 	def __repr__(self):
-		return 'name = ' + str(self.name) \
-	+ "; restart_service = " + str(self.restart_service) \
-	+ "; settings = " + str(self.settings)
-		
-	
+		return 'name = ' + str(self.name)\
+		       + "; restart_service = " + str(self.restart_service)\
+		       + "; settings = " + str(self.settings)\
+		       + "; new_engine = " + str(self.new_engine)
+
+
 class Mountpoint(object):
 	name = None
 	dir = None

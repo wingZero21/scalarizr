@@ -523,7 +523,9 @@ class ServiceCtlHandler(Handler):
 			if self._cnf_ctl:
 				# Obtain current configuration preset
 				cur_preset = self._obtain_current_preset()
-
+				if cur_preset.new_engine:
+					LOG.info('New configuration preset engine is used. Skipping old presets.')
+					return
 				# Apply current preset
 				my_preset = self._cnf_ctl.current_preset()
 				if not self._cnf_ctl.preset_equals(cur_preset, my_preset):
@@ -548,11 +550,13 @@ class ServiceCtlHandler(Handler):
 		self._stop_service('instance goes down')
 
 	def sc_on_configured(self, service_name, **kwargs):
-		LOG.debug('%s == %s' % (self._service_name, service_name))
 		if self._service_name != service_name:
 			return
 
-		if bus.scalr_version >= (4, 0, 1):
+		# Fetch current configuration preset
+		service_conf = self._queryenv.get_service_configuration(self._service_name)
+
+		if service_conf.new_engine:
 			LOG.debug('New configuration presets engine is available.')
 			response = None
 			settings = {}
@@ -598,8 +602,6 @@ class ServiceCtlHandler(Handler):
 						# Stop service if it's already running
 						self._stop_service('Applying configuration preset')
 
-						# Fetch current configuration preset
-						service_conf = self._queryenv.get_service_configuration(self._service_name)
 						cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
 						self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
 
