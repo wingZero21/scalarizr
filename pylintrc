@@ -30,7 +30,7 @@ load-plugins=
 # can either give multiple identifier separated by comma (,) or put this option
 # multiple time (only on the command line, not in the configuration file where
 # it should appear only once).
-disable=C0111,C0103,E1103,W0142
+disable=C0111,C0103,E1103,W0142,W0141,W0702
 # C0111 - Missing docstring 
 #  - In our promises
 # C0103 - Invalid name "%s" (should match %s)
@@ -39,7 +39,10 @@ disable=C0111,C0103,E1103,W0142
 #  - Too many false positives
 # W0142 - Used * or ** magic
 #  - We love such magic
-
+# W0141 - Builtin functions used (map, filter, input, apply)
+#  - But we need them
+# W0702 - Exception class not specified in except statement
+#  - Sometimes we need to catch any exception or object
 
 [REPORTS]
 
