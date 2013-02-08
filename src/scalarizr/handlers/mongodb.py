@@ -25,15 +25,16 @@ if disttool.is_redhat_based():
 			system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo',
 					 'python-bson'))
 		if not mgr.info('pymongo').get('installed'):
-			mgr.install('pymongo', mgr.info('pymongo')['candidate'][-1])
+			mgr.install('pymongo', mgr.info('pymongo')['candidate'])
 	elif disttool.version_info()[0] == 5:
 		if not mgr.info('python26-pymongo').get('installed'):
-			mgr.install('python26-pymongo',	mgr.info('python26-pymongo')['candidate'][-1])
+			mgr.install('python26-pymongo',	mgr.info('python26-pymongo')['candidate'])
 else:
 	if not mgr.info('python-pymongo').get('installed'):
 		# without python-bson explicit version won't work
-		ver = mgr.info('python-pymongo')['candidate'][-1]
-		mgr.install('python-pymongo', ver, 'python-bson', ver)
+		ver = mgr.info('python-pymongo')['candidate']
+		mgr.install('python-pymongo', ver)
+		mgr.install('python-bson', ver)
 
 import pymongo
 
