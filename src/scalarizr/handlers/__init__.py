@@ -478,12 +478,11 @@ class ServiceCtlHandler(Handler):
 		
 	def _obtain_current_preset(self):
 		service_conf = self._queryenv.get_service_configuration(self._service_name)
-		
-		cur_preset = CnfPreset(service_conf.name, service_conf.settings)
-		if cur_preset.new_engine:
+		if service_conf.new_engine:
 			'''New sheriff in town. No need to calculate or apply old preset'''
 			return None
 
+		cur_preset = CnfPreset(service_conf.name, service_conf.settings)
 		if cur_preset.name == 'default':
 			try:
 				cur_preset = self._preset_store.load(PresetType.DEFAULT)
