@@ -25,6 +25,7 @@ from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.handlers import operation, prepare_tags
+from scalarizr import storage2, node
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
@@ -558,7 +559,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 									__redis__['restore'].type == 'snap_redis':
 				__redis__['restore'].run()
 			else:
-				if __node__['platform'] == 'idcf':
+				if node.__node__['platform'] == 'idcf':
 					if __redis__['volume'].id:
 						LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
 						__redis__['volume'].snap = __redis__['volume'].snapshot()
