@@ -922,28 +922,27 @@ class RedisPresetProvider(PresetProvider):
 
 
 	def get_preset(self, manifest):
-		'''
-		only redis instance bind to default redis port
-		is serving when get_preset is called
-		'''
-		for config_path in get_redis_processes():
-			port = get_port(config_path)
-			if port == DEFAULT_PORT:
-				service = Redisd(config_path, port)
-				config_mapping = {get_redis_conf_basename(port):service.redis_conf}
-				provider = PresetProvider(service, config_mapping)
+		for provider in self.providers:
+			if provider.service.port == DEFAULT_PORT:
 				return provider.get_preset(manifest)
 
 
+	def set_preset(self, settings, manifest):
+		for provider in self.providers:
+			for fname in settings:
+				if fname == PRESET_FNAME:
+					provider.set_preset(settings[PRESET_FNAME], manifest)
+
+
 	@property
-	def config_mapping(self):
-		mapping = {}
+	def providers(self):
+		providers = []
+		LOG.debug('Getting list of redis preset providers')
 		for port in get_busy_ports():
-			if port == DEFAULT_PORT:
-				config_path = get_redis_conf_basename(port)
-				service = Redisd(config_path, port)
-				mapping.update({config_path:service.redis_conf})
-		return mapping
+			service = Redisd(get_redis_conf_basename(port), int(port))
+			config_mapping = {PRESET_FNAME:service.redis_conf}
+			providers.append(PresetProvider(service, config_mapping))
+		return providers
 
 
 class RedisSnapBackup(backup.SnapBackup):
