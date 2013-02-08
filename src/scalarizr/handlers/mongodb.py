@@ -6,8 +6,7 @@ Created on Sep 30, 2011
 '''
 from __future__ import with_statement
 
-
-from scalarizr.util.dynimp import package_mgr
+from scalarizr.linux import iptables, pkgmgr
 from scalarizr.util import disttool, system2
 
 import os
@@ -18,13 +17,31 @@ import logging
 import datetime
 import threading
 
+mgr = pkgmgr.package_mgr()
+
+if disttool.is_redhat_based():
+	if disttool.version_info()[0] >= 6:
+		if mgr.info('python-pymongo').get('installed'):
+			system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo',
+					 'python-bson'))
+		if not mgr.info('pymongo').get('installed'):
+			mgr.install('pymongo', mgr.info('pymongo')['candidate'][-1])
+	elif disttool.version_info()[0] == 5:
+		if not mgr.info('python26-pymongo').get('installed'):
+			mgr.install('python26-pymongo',	mgr.info('python26-pymongo')['candidate'][-1])
+else:
+	if not mgr.info('python-pymongo').get('installed'):
+		# without python-bson explicit version won't work
+		ver = mgr.info('python-pymongo')['candidate'][-1]
+		mgr.install('python-pymongo', ver, 'python-bson', ver)
+
 import pymongo
 
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
 from scalarizr.util import wait_until, Hosts, cryptotool
-from scalarizr.linux import iptables
+
 from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
 from scalarizr.storage2 import volume, StorageError
@@ -287,26 +304,6 @@ class MongoDBHandler(ServiceCtlHandler):
 		@param message: HostInitResponse
 		"""
 		with bus.initialization_op as op:
-
-			with op.phase('Installing missing libraries'):
-				mgr = package_mgr()
-
-				if disttool.is_redhat_based():
-					if disttool.version_info()[0] >= 6:
-						if mgr.installed('python-pymongo'):
-							system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo',
-									 										'python-bson'))
-						if not mgr.installed('pymongo'):
-							mgr.install('pymongo', mgr.candidates('pymongo')[-1])
-					elif disttool.version_info()[0] == 5:
-						if not mgr.installed('python26-pymongo'):
-							mgr.install('python26-pymongo',	mgr.candidates('python26-pymongo')[-1])
-				else:
-					if not mgr.installed('python-pymongo'):
-						# without python-bson explicit version won't work
-						ver = mgr.candidates('python-pymongo')[-1]
-						mgr.install('python-pymongo', ver, 'python-bson', ver)
-
 
 			with op.phase(self._phase_mongodb):
 				with op.step(self._step_accept_scalr_conf):
