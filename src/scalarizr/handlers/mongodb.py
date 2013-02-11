@@ -405,7 +405,7 @@ class MongoDBHandler(ServiceCtlHandler):
 														"(see https://jira.mongodb.org/browse/SERVER-4238)")
 	
 						wait_for_int_hostups = True
-						shards_total = __mongodb__['shards_total']
+						shards_total = int(__mongodb__['shards_total'])
 						""" Status table = {server_id : {is_ready, is_notified, ip_addr}, ...} """
 						status_table = {}
 	
@@ -1438,14 +1438,14 @@ class MongoDBHandler(ServiceCtlHandler):
 	@property
 	def shard_index(self):
 		if not hasattr(self, "_shard_index"):
-			self._shard_index = __mongodb__['shard_index']
+			self._shard_index = int(__mongodb__['shard_index'])
 		return self._shard_index
 
 
 	@property
 	def rs_id(self):
 		if not hasattr(self, "_rs_index"):
-			self._rs_index = __mongodb__['replica_set_index']
+			self._rs_index = int(__mongodb__['replica_set_index'])
 		return self._rs_index
 
 
