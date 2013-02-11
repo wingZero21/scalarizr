@@ -541,7 +541,7 @@ class MongoDBConfig(BaseConfig):
 			self.data.set(option,value, force=True)
 		else:
 			self.data.remove(option)
-		self._cleanup()
+		self._cleanup(save_data=True)
 
 	def set_bool_option(self, option, value):
 		try:
