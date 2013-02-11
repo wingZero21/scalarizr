@@ -362,8 +362,11 @@ class MessageListener:
 			if not accepted:
 				LOG.warning("No one could handle '%s'", message.name)
 		finally:
-			if platform_access_data_on_me:
-				pl.clear_access_data()
+			#if platform_access_data_on_me:
+			#	pl.clear_access_data()
+			# XXX(marat): I've commented this cause multithreaded and defered message handling failed 
+			# without credentials. We need a better secret data passing mechanism
+			pass
 
 def async(fn):
 	def decorated(*args, **kwargs):
