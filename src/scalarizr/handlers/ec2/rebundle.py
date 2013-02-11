@@ -77,6 +77,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		self._ebs_strategy_cls = ebs_strategy_cls or RebundleEbsStrategy
 		self._instance_store_strategy_cls = instance_store_strategy_cls or RebundleInstanceStoreStrategy
 		self._instance = None
+		self._strategy = None
 		bus.on(rebundle=self.on_rebundle)
 		
 
