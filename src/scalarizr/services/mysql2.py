@@ -2,10 +2,6 @@ from __future__ import with_statement
 
 import os
 import re
-import sys
-import glob
-import string
-import shutil
 import logging
 import subprocess
 import threading
