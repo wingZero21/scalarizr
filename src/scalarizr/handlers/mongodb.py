@@ -45,7 +45,7 @@ from scalarizr.util import wait_until, Hosts, cryptotool
 
 from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
-from scalarizr.storage2 import volume, StorageError
+from scalarizr import storage2
 
 from scalarizr.node import __node__
 import scalarizr.services.mongodb as mongo_svc
@@ -315,10 +315,10 @@ class MongoDBHandler(ServiceCtlHandler):
 					mongodb_data = message.mongodb.copy()
 
 					if 'volume_config' in mongodb_data:
-						__mongodb__['volume'] = mongodb_data.pop('volume_config')
+						__mongodb__['volume'] = storage2.volume(mongodb_data.pop('volume_config'))
 
 					if 'snapshot_config' in mongodb_data:
-						__mongodb__['snapshot'] = mongodb_data.pop('snapshot_config')
+						__mongodb__['snapshot'] = storage2.snapshot(mongodb_data.pop('snapshot_config'))
 
 					mongodb_key = mongodb_data.pop('keyfile', None)
 					mongodb_key = mongodb_key or cryptotool.pwgen(22)
@@ -1117,7 +1117,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			storage_volume = __mongodb__['volume']
 		except:
 			storage_snap = __mongodb__['snapshot']
-			storage_volume = volume(type=storage_snap.type, snap=storage_snap)
+			storage_volume = storage2.volume(type=storage_snap.type, snap=storage_snap)
 
 		storage_volume.mpoint = self._storage_path
 		storage_volume.ensure(mount=True, mkfs=True)
@@ -1246,7 +1246,7 @@ class MongoDBHandler(ServiceCtlHandler):
 								storage_vol.detach()
 								
 								snap_cnf = msg.mongodb.snapshot_config.copy()
-								new_volume = volume(type=snap_cnf['type'], mpoint=self._storage_path,
+								new_volume = storage2.volume(type=snap_cnf['type'], mpoint=self._storage_path,
 													snap=snap_cnf)
 								new_volume.ensure(mount=True)
 
@@ -1384,7 +1384,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.info("Creating mongodb's storage snapshot")
 		try:
 			return __mongodb__['volume'].snapshot(tags=self.mongo_tags)
-		except StorageError, e:
+		except storage2.StorageError, e:
 			self._logger.error("Cannot create %s data snapshot. %s", (BEHAVIOUR, e))
 			raise
 		

@@ -333,7 +333,7 @@ __node__['rabbitmq'] = Compound({
 
 __node__['mongodb'] = Compound({
 	'volume,volume_config':
-				Json('%s/storage/%s.json' % (private_dir, 'mongodb'),'scalarizr.storage2.volume'),
+				Json('%s/storage/%s.json' % (private_dir, 'mongodb'), 'scalarizr.storage2.volume'),
 	'snapshot,shanpshot_config':
 				Json('%s/storage/%s-snap.json' % (private_dir, 'mongodb'),'scalarizr.storage2.snapshot'),
 	'shards_total,password,replica_set_index,shard_index,keyfile':
