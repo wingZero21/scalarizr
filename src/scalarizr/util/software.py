@@ -44,10 +44,9 @@ def whereis(name):
 	Search executable in /bin /sbin /usr/bin /usr/sbin /usr/libexec /usr/local/bin /usr/local/sbin
 	@rtype: tuple
 	'''
-	places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin',
-			  '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
-	return tuple([os.path.join(place, name) for place in places
-				  			if os.path.exists(os.path.join(place, name))])
+	places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
+	places += ['/usr/local/nginx/sbin']  # XXX: hack for samsung	
+	return tuple([os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))])
 
 def system_info(verbose=False):
 		
