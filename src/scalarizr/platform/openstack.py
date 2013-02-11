@@ -1,18 +1,13 @@
 import urllib2
 import json
 import os
-import sys
 import logging
-import socket
-import struct
-import array
-import fcntl
+
 
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
 
-from scalarizr.platform import Platform
-from scalarizr.platform import PlatformError
+from scalarizr import platform
 from scalarizr.bus import bus
 
 
@@ -68,31 +63,9 @@ class NovaWrapper(OpenstackServiceWrapper):
                                   **kwargs)
 
 
-def net_interfaces():
-	# http://code.activestate.com/recipes/439093-get-names-of-all-up-network-interfaces-linux-only/#c7
-    is_64bits = sys.maxsize > 2**32
-    struct_size = 40 if is_64bits else 32
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    max_possible = 8 # initial value
-    while True:
-        num_bytes = max_possible * struct_size
-        names = array.array('B', '\0' * num_bytes)
-        outbytes = struct.unpack('iL', fcntl.ioctl(
-            s.fileno(),
-            0x8912,  # SIOCGIFCONF
-            struct.pack('iL', num_bytes, names.buffer_info()[0])
-        ))[0]
-        if outbytes == num_bytes:
-            max_possible *= 2
-        else:
-            break
-    namestr = names.tostring()
-    return [(namestr[i:i+16].split('\0', 1)[0],
-            socket.inet_ntoa(namestr[i+20:i+24]))
-            for i in range(0, outbytes, struct_size)]
 
 
-class OpenstackPlatform(Platform):
+class OpenstackPlatform(platform.Platform):
 
     _meta_url = "http://169.254.169.254/openstack/latest/meta_data.json"
     _metadata = {}
@@ -106,13 +79,13 @@ class OpenstackPlatform(Platform):
 
     def get_private_ip(self):
         if not self._private_ip:
-            ifaces = net_interfaces()
+            ifaces = platform.net_interfaces()
             self._private_ip = ifaces['eth1' if 'eth1' in ifaces else 'eth0']
         return self._private_ip
 
     def get_public_ip(self):
         if not self._public_ip:
-            ifaces = net_interfaces()
+            ifaces = platform.net_interfaces()
             self._public_ip =  ifaces['eth0']
         return self._public_ip
 
@@ -165,7 +138,7 @@ class OpenstackPlatform(Platform):
                 # TODO: move some keys from metadata to parent dict,
                 # that should be there when fetching from url
                 return {'meta': metadata}
-            raise PlatformError("Cannot fetch %s metadata url '%s'. "
+            raise platform.PlatformError("Cannot fetch %s metadata url '%s'. "
                                 "Error: %s" % (self.name, url, e))
 
     def _fetch_metadata_from_file(self):
@@ -177,7 +150,7 @@ class OpenstackPlatform(Platform):
                 with open(path, 'r') as fp:
                     rawmeta = fp.read()
                 if not rawmeta:
-                    raise PlatformError("Empty user-data")
+                    raise platform.PlatformError("Empty user-data")
                 return self._parse_user_data(rawmeta)
         return self._userdata
 
