@@ -321,6 +321,7 @@ class MysqlHandler(DBMSRHandler):
 					message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
 				or 	message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
+				or  message.name == DbMsrMessages.DBMSR_CANCEL_DATA_BUNDLE
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
 				or  message.name == Messages.BEFORE_HOST_TERMINATE

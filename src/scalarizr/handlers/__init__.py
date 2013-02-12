@@ -655,6 +655,7 @@ class ServiceCtlHandler(Handler):
 		
 class DbMsrMessages:
 	DBMSR_CREATE_DATA_BUNDLE = "DbMsr_CreateDataBundle"
+	DBMSR_CANCEL_DATA_BUNDLE = "DbMsr_CancelDataBundle"
 	
 	DBMSR_CREATE_DATA_BUNDLE_RESULT = "DbMsr_CreateDataBundleResult"
 	'''
