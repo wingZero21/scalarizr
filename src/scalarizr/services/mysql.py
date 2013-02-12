@@ -254,9 +254,7 @@ class MySQLClient(object):
 	
 	def user_exists(self, login, host):
 		ret = self.fetchone("select User,Host from mysql.user where User='%s' and Host='%s'" % (login, host))
-		
-		#return True if ret and ret['Host']==host and ret['User']==login else False
-		result = True if ret and len(ret)==2 and ret[0]==login and ret[1]==host else False 
+		result = True if ret and len(ret)==2 and ret[0]==login and ret[1]==host else False
 		LOG.debug('user_exists query returned value: %s for user %s on host %s. User exists: %s' % (str(ret), login, host, str(result)))
 		return result
 		
@@ -541,7 +539,6 @@ class MySQLConf(BaseConfig):
 	read_only = property(_get_read_only, _set_read_only)
 	datadir_default = DEFAULT_DATADIR
 	socket = property(_get_socket, _set_socket)
-	#socket_default = '/var/lib/mysql/mysql.sock' if disttool.is_redhat_based() else '/var/run/mysqld/mysqld.sock'
 
 	
 	
@@ -560,7 +557,6 @@ class MySQLDump(object):
 		_opts = [MYSQLDUMP_PATH, '-u', self.root_user, '--password='+self.root_password] + opts + ['--databases']
 		with open(filename, 'w') as fp: 
 			system2(_opts + [dbname], stdout=fp)
-		# commented cause mysql_upgrade hanged forever on devel roles
 
 
 class RepicationWatcher(threading.Thread):
@@ -712,17 +708,6 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 				wait_sock(sock)
 					
 		return True
-
-	'''
-	XXX: Code commented because I am not sure why we still need self.socket_file
-	def status(self):
-		if self.socket_file:
-			if os.path.exists(self.socket_file):
-				return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
-			else:
-				return initdv2.Status.NOT_RUNNING
-		return initdv2.ParametrizedInitScript.status(self)
-	'''
 
 
 	def status(self):
