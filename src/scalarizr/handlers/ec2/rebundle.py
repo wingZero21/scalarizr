@@ -95,7 +95,14 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		# Take rebundle strategy
 		pl = bus.platform 
 		ec2_conn = pl.new_ec2_conn()
-		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
+		instance_id = pl.get_instance_id()
+		try:
+			instance = ec2_conn.get_all_instances([instance_id])[0].instances[0]
+		except IndexError:
+			msg = 'Failed to find instance %s. ' \
+					'If you are importing this server, check that you are doing it from the ' \
+					'right Scalr environment'
+			raise HandlerError(msg)
 		self._instance = instance
 
 		
@@ -225,7 +232,7 @@ class RebundleStratery:
 	def _fix_fstab(self, image_mpoint):
 		LOG.debug('Fixing fstab')
 		pl = bus.platform
-		fstab = mount.fstab(os.path.join(image_mpoint, 'etc/fstab'), True)
+		fstab = mount.fstab(os.path.join(image_mpoint, 'etc/fstab'))
 
 		# Remove EBS volumes from fstab
 		ec2_conn = pl.new_ec2_conn()
@@ -236,30 +243,34 @@ class RebundleStratery:
 					if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id() 
 						and instance.root_device_name != vol.attach_data.device)
 
-		for devname in ebs_devs:
-			devname = ebsvolume.name2device(devname)
-			LOG.debug('Remove %s from fstab', devname)
-			fstab.remove(devname, autosave=False)
+		for device in ebs_devs:
+			device = ebsvolume.name2device(device)
+			LOG.debug('Remove %s from fstab', device)
+			try:
+				del fstab[device]
+			except KeyError:
+				pass
 		
 		# Remove Non-local filesystems
-		for entry in fstab.list_entries():
+		for entry in fstab:
 			if entry.fstype in NETWORK_FILESYSTEMS:
-				LOG.debug('Remove %s from fstab', entry.devname)
-				fstab.remove(entry.devname, autosave=False)
+				LOG.debug('Remove %s from fstab', entry.device)
+				del fstab[entry.device]
 		
 		# Ubuntu 10.04 mountall workaround
 		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
 		# @see http://alestic.com/2010/09/ec2-bug-mountall
 		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
-			for entry in fstab.list_entries():
-				if entry.devname in pl.instance_store_devices:
-					if entry.options.find('nobootwait') >= 0:			
-						entry.options = re.sub(r'(nobootwait),(\S+)', r'\2,\1', entry.options)
+			for entry in fstab:
+				if entry.device in pl.instance_store_devices:
+					options = entry.options
+					if options.find('nobootwait') >= 0:			
+						options = re.sub(r'(nobootwait),(\S+)', r'\2,\1', options)
 					else:
-						entry.options += ',nobootwait'
-					LOG.debug('Added nobootwait for %s', entry.devname)
-		
-		fstab.save()
+						options += ',nobootwait'
+					del fstab[entry.device]
+					fstab.add(entry.device, entry.mpoint, entry.fstype, options, entry.dump, entry.fsck_order)
+					LOG.debug('Added nobootwait for %s', entry.device)
 
 
 	def _cleanup_image(self, image_mpoint, role_name=None):
@@ -778,8 +789,8 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		for from_dev in from_devs:
 			num = os.path.basename(from_dev.device)[-1]
 
-			if self._mtab.contains(os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num))) or\
-					self._mtab.contains(os.path.join(self.mpoint, os.path.basename(from_dev.device))):
+			if os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num)) in self._mtab or \
+					os.path.join(self.mpoint, os.path.basename(from_dev.device)) in self._mtab:
 				raise HandlerError("Partition already mounted")
 
 			""" dev like `sdg1` """
@@ -864,7 +875,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			mparts = [dev.mpoint for dev in coreutils.df() if dev.mpoint.startswith(mpt)]
 			LOG.debug('Partitions which will be unmounting: %s' % mparts)
 			for mpt in mparts:
-				if self._mtab.contains(mpt, reload=True):
+				if mpt in self._mtab:
 					LOG.debug("Unmounting '%s'", mpt)
 					system2("umount -d " + mpt, shell=True, raise_exc=False)
 		else:
