@@ -868,6 +868,7 @@ class LargeTransfer(bases.Task):
 
 
 	def _run(self):
+		# ..
 		LOG.debug("Creating tmpfs...")
 		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.2)
 		self._tranzit_vol.ensure(mkfs=True)

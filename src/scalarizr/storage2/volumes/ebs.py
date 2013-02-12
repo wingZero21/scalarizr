@@ -25,6 +25,8 @@ LOG = logging.getLogger(__name__)
 
 
 def name2device(name):
+	if not name.startswith('/dev'):
+		name = os.path.join('/dev', name)
 	if name.startswith('/dev/xvd'):
 		return name
 	if storage2.RHEL_DEVICE_ORDERING_BUG or os.path.exists('/dev/xvda1'):

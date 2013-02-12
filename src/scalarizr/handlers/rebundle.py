@@ -1,11 +1,8 @@
-from __future__ import with_statement
-'''
+"""
 Created on Sep 7, 2011
 
-
 @author: marat
-'''
-from __future__ import with_statement
+"""
 
 import os
 import logging
@@ -18,9 +15,10 @@ from scalarizr.messaging import Messages, Queues
 from scalarizr.storage import Storage
 from scalarizr.storage.util import loop
 from scalarizr.util import system2, software
-from scalarizr.linux import mount
-from scalarizr.linux import coreutils
-from scalarizr.linux.rsync import rsync
+from scalarizr import linux
+from scalarizr.linux import mount, coreutils, rsync
+
+
 
 LOG = logging.getLogger(__name__)
 
@@ -74,7 +72,7 @@ def plug_rebundle_log(on_rebundle):
 	
 class PrepHandler(Handler):
 
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+	def accept(self, message, queue, **kwds):
 		return message.name == Messages.REBUNDLE
 	
 		
@@ -106,7 +104,7 @@ class RebundleHandler(Handler):
 		)
 
 	
-	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+	def accept(self, message, queue, **kwds):
 		return message.name == Messages.REBUNDLE
 
 	
@@ -151,7 +149,8 @@ class RebundleHandler(Handler):
 			# Notify Scalr
 			self.send_message(Messages.REBUNDLE_RESULT, result)
 			
-			LOG.info('Rebundle complete! If you imported this server to Scalr, you can terminate Scalarizr now.')
+			LOG.info('Rebundle complete! If you imported this server to Scalr, '
+					'you can terminate Scalarizr now.')
 			
 		except (Exception, BaseException), e:
 			LOG.exception(e)
@@ -213,9 +212,9 @@ class RebundleHandler(Handler):
 
 
 	def _cleanup_user_activity(self, homedir):
-		for file in (".bash_history", ".lesshst", ".viminfo", 
+		for name in (".bash_history", ".lesshst", ".viminfo", 
 					".mysql_history", ".history", ".sqlite_history"):
-			filename = os.path.join(homedir, file)
+			filename = os.path.join(homedir, name)
 			if os.path.exists(filename):
 				os.remove(filename)
 	
@@ -252,25 +251,25 @@ class LinuxImage:
 	_volume = None
 	
 	path = None
-	'''
+	"""
 	Image file
-	'''
+	"""
 	
 	devname = None
-	'''
+	"""
 	Image device name
 	Returned by _create_image def
-	'''
+	"""
 	
 	mpoint = None
-	'''
+	"""
 	Image mount point
-	'''
+	"""
 		
 	excludes = None
-	'''
+	"""
 	Directories excludes list
-	'''
+	"""
 	
 	_excluded_mpoints = None
 	
@@ -312,15 +311,15 @@ class LinuxImage:
 			os.rmdir(self.mpoint)
 	
 	def umount(self):
-		if self._mtab.contains(self.mpoint, reload=True):
+		if self.mpoint in self._mtab:
 			LOG.debug("Unmounting '%s'", self.mpoint)
 			system2("umount -d " + self.mpoint, shell=True, raise_exc=False)
 	
 	def _format_image(self):
 		LOG.info("Formatting image")
 		
-		vol_entry = list(v for v in self._mtab[self._volume]
-						if v.devname.startswith('/dev'))[0]
+		vol_entry = [v for v in self._mtab
+						if v.device.startswith('/dev')][0]
 		fs = Storage.lookup_filesystem(vol_entry.fstype)
 					
 		# create filesystem
@@ -334,7 +333,7 @@ class LinuxImage:
 			system2(('/sbin/tune2fs', '-i', '3m', self.devname))
 
 		# set label
-		label = fs.get_label(vol_entry.devname)
+		label = fs.get_label(vol_entry.device)
 		if label:
 			fs.set_label(self.devname, label)
 
@@ -346,8 +345,9 @@ class LinuxImage:
 
 	def _mount_image(self, options=None):
 		LOG.info("Mounting image")
-		if self._mtab.contains(self.mpoint):
+		if self.mpoint in  self._mtab:
 			raise HandlerError("Image already mounted")
+		options = options or []
 		mount.mount(self.devname, self.mpoint, *options)
 	
 	
@@ -355,20 +355,20 @@ class LinuxImage:
 		LOG.info('Making special directories')
 		
 		# Create empty special dirs
-		for dir in self.SPECIAL_DIRS:
-			spec_dir = self.mpoint + dir
-			if os.path.exists(dir) and not os.path.exists(spec_dir):
-				LOG.debug("Create spec dir %s", dir)
+		for dirname in self.SPECIAL_DIRS:
+			spec_dir = self.mpoint + dirname
+			if os.path.exists(dirname) and not os.path.exists(spec_dir):
+				LOG.debug("Create spec dir %s", dirname)
 				os.makedirs(spec_dir)
-				if dir == '/tmp':
+				if dirname == '/tmp':
 					os.chmod(spec_dir, 01777)
 					
 		# Create excluded mpoints dirs (not under special dirs)
-		for dir in self._excluded_mpoints:
-			if not list(dir for spec_dir in self.SPECIAL_DIRS if dir.startswith(spec_dir)):
-				if not os.path.exists(self.mpoint + dir):
-					LOG.debug('Create mpoint dir %s', dir)
-					os.makedirs(self.mpoint + dir)
+		for dirname in self._excluded_mpoints:
+			if not list(dirname for spec_dir in self.SPECIAL_DIRS if dirname.startswith(spec_dir)):
+				if not os.path.exists(self.mpoint + dirname):
+					LOG.debug('Create mpoint dir %s', dirname)
+					os.makedirs(self.mpoint + dirname)
 		
 		# MAKEDEV is incredibly variable across distros, so use mknod directly.
 		devdir = os.path.join(self.mpoint, 'dev')
@@ -400,38 +400,37 @@ class LinuxImage:
 		rsync_longs = dict(archive=True,
 						   sparse=True,
 						   times=True,
-						   exclude=self.excludes)
+						   exclude=list(self.excludes))
 		#rsync = filetool.Rsync()
 		#rsync.archive().times().sparse().links().quietly()
 		#rsync.archive().sparse().xattributes()
 		#rsync.archive().sparse().times()
 		
 		if xattr:
-			rsync_longs['xattributes'] = True
-		out, err, exitcode = rsync(source, dest, **rsync_longs)
-		LOG.debug('rsync stdout: %s', out)
-		LOG.debug('rsync stderr: %s', err)
-		
-		if exitcode == 24:
-			LOG.warn(
-				"rsync exited with error code 24. This means a partial transfer due to vanished " + 
-				"source files. In most cases files are copied normally"
-			)
-		elif exitcode == 23:
-			LOG.warn(
-				"rsync seemed successful but exited with error code 23. This probably means " +
-           		"that your version of rsync was built against a kernel with HAVE_LUTIMES defined, " +
-             	"although the current kernel was not built with this option enabled. The bundling " +
-			 	"process will thus ignore the error and continue bundling.  If bundling completes " +
-           		"successfully, your image should be perfectly usable. We, however, recommend that " +
-		   		"you install a version of rsync that handles this situation more elegantly.")
-		elif exitcode == 1 and xattr:
-			LOG.warn(
-				"rsync with preservation of extended file attributes failed. Retrying rsync " +
-           		"without attempting to preserve extended file attributes...")
-			self._copy_rec(source, dest, xattr=False)
-		elif exitcode > 0:
-			raise HandlerError('rsync failed with exit code %s' % (exitcode,))
+			rsync_longs['xattrs'] = True
+		try:
+			rsync.rsync(source, dest, **rsync_longs)
+		except linux.LinuxError, e:
+			if e.returncode == 24:
+				LOG.warn(
+					"rsync exited with error code 24. This means a partial transfer due to vanished " + 
+					"source files. In most cases files are copied normally"
+				)
+			elif e.returncode == 23:
+				LOG.warn(
+					"rsync seemed successful but exited with error code 23. This probably means " +
+	           		"that your version of rsync was built against a kernel with HAVE_LUTIMES defined, " +
+	             	"although the current kernel was not built with this option enabled. The bundling " +
+				 	"process will thus ignore the error and continue bundling.  If bundling completes " +
+	           		"successfully, your image should be perfectly usable. We, however, recommend that " +
+			   		"you install a version of rsync that handles this situation more elegantly.")
+			elif e.returncode == 1 and xattr:
+				LOG.warn(
+					"rsync with preservation of extended file attributes failed. Retrying rsync " +
+	           		"without attempting to preserve extended file attributes...")
+				self._copy_rec(source, dest, xattr=False)
+			else:
+				raise
 
 
 class LinuxLoopbackImage(LinuxImage):

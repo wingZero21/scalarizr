@@ -177,7 +177,7 @@ class ScriptExecutor(Handler):
 
 	def __call__(self, message):
 		event_name = message.event_name if message.name == Messages.EXEC_SCRIPT else message.name
-		role_name = message.role_name if hasattr(message, 'role_name') else 'unknown_role'
+		role_name = message.body.get('role_name', 'unknown_role')
 		LOG.debug("Scalr notified me that '%s' fired", event_name)
 
 		if self._cnf.state == ScalarizrState.IMPORTING:
@@ -325,6 +325,11 @@ class Script(object):
 									self.exec_timeout, self.interpreter, self.pid)
 				self.return_code = self._proc_kill()
 
+			if not os.path.exists(self.stdout_path):
+				open(self.stdout_path, 'w+').close()
+			if not os.path.exists(self.stderr_path):
+				open(self.stderr_path, 'w+').close()
+
 			elapsed_time = time.time() - self.start_time
 			self.logger.debug('Finished %s'
 					'\n  %s'
@@ -398,9 +403,24 @@ class Script(object):
 
 	def _proc_complete(self):
 		if self.proc:
+			self._proc_finalize()
 			return self.proc.returncode
 		else:
 			return 0
+
+	def _proc_finalize(self):
+		if self.proc.stdout:
+			try:
+				self.proc.stdout.flush()
+				os.fsync(self.proc.stdout.fileno())
+			except:
+				pass
+		if self.proc.stderr:
+			try:
+				self.proc.stderr.flush()
+				os.fsync(self.proc.stderr.fileno())
+			except:
+				pass			
 
 
 class LogRotateRunnable(object):

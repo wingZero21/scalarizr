@@ -903,6 +903,8 @@ class MysqlHandler(DBMSRHandler):
 					LOG.debug('Storage destoyed')
 
 				restore.run()
+
+				restore.run()
 				log_file = restore.log_file
 				log_pos = restore.log_pos				
 				

@@ -73,6 +73,9 @@ class _Mounts(object):
 
 	remove = __delitem__
 
+	def __setitem__(self, device, entry):
+		pass	
+
 	def add(self, device, mpoint, fstype, options='auto', dump=0, fsck_order=0):
 		with open(self.filename, 'a+') as fp:
 			self._write_entry(_MountEntry(device, mpoint, fstype, options, dump, fsck_order), fp)
@@ -106,6 +109,8 @@ def mount(device, mpoint, *short_args, **long_kwds):
 		long=long_kwds, 
 		params=(device, mpoint)
 	)
+	if not os.path.exists(mpoint):
+		os.makedirs(mpoint)
 	try:
 		msg = 'Cannot mount %s -> %s' % (device, mpoint)
 		return linux.system(args, error_text=msg)

@@ -1048,13 +1048,15 @@ class MysqlHandler(ServiceCtlHandler):
 						self._update_config(updates)
 						Storage.backup_config(new_storage_vol.config(), self._volume_config_path) 
 						
+						self._start_service()						
+
 						# Send message to Scalr
 						msg_data = dict(status='ok')
 						msg_data.update(self._compat_storage_data(vol=new_storage_vol))
 						self.send_message(MysqlMessages.PROMOTE_TO_MASTER_RESULT, msg_data)
 					else:
 						raise HandlerError("%s is not a valid MySQL storage" % self._storage_path)
-					self._start_service()
+
 				elif not master_storage_conf or master_storage_conf['type'] == 'eph':
 					self._start_service()
 					mysql = spawn_mysql_cli(ROOT_USER, message.root_password)
@@ -1097,6 +1099,8 @@ class MysqlHandler(ServiceCtlHandler):
 				
 			except (Exception, BaseException), e:
 				LOG.exception(e)
+				self._stop_service()
+
 				if new_storage_vol:
 					new_storage_vol.detach()
 				# Get back slave storage
