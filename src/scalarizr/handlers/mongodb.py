@@ -1259,6 +1259,7 @@ class MongoDBHandler(ServiceCtlHandler):
 									raise HandlerError('Got stale even when standing from snapshot.')
 								else:
 									__mongodb__['volume'] = new_volume
+									self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 							else:
 								raise HandlerError('Data bundle failed.')
 								
@@ -1277,9 +1278,12 @@ class MongoDBHandler(ServiceCtlHandler):
 				if stale:
 					# TODO: raise distinct exception
 					raise HandlerError("Replication status is stale")
+				self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 
 			else:
 				storage_vol.destroy(force=True, remove_disks=True)
+		else:
+			self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 
 		__mongodb__['volume'] = storage_vol
 		message.mongodb = self._compat_storage_data(storage_vol)
