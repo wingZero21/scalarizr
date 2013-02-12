@@ -207,6 +207,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup('apache'), ApacheCnfController())
 		self.preset_provider = ApachePresetProvider()
 		preset_service.services[BEHAVIOUR] = self.preset_provider
 		bus.on(init=self.on_init, reload=self.on_reload)
