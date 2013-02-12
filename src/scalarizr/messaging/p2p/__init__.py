@@ -185,7 +185,7 @@ class _P2pMessageStore:
 	def mark_as_handled(self, message_id):
 		with self._local_storage_lock:
 			filter_fn = lambda x: x[1].id != message_id
-			self._unhandled_messages = filter(filter_fn, self._unhandled_messages)
+			self._unhandled = filter(filter_fn, self._unhandled_messages)
 
 		conn = self._conn()
 		cur = conn.cursor()

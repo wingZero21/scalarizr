@@ -110,7 +110,7 @@ class Message(object):
 		result = dict(id=self.id, name=self.name,
 					  body=self.body, meta=self.meta)
 
-		return json.dumps(result, ensure_ascii=False)
+		return json.dumps(result, ensure_ascii=True)
 
 
 	def _walk_decode(self, el):
