@@ -274,6 +274,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 			self.mongodb.password = self.scalr_password
 			self.mongodb.start_shardsvr()
+			self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 			
 			if self.shard_index == 0 and self.rs_id == 0:
 				self.mongodb.start_config_server()
@@ -1210,6 +1211,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		
 		first_start = not self._storage_valid()
 		if not first_start:
+			self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 			self.mongodb.remove_replset_info()
 			self.mongodb.mongod.stop('Cleaning replica set configuration')
 			self.mongodb.start_shardsvr()
