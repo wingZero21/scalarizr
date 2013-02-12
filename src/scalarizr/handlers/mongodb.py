@@ -1270,7 +1270,6 @@ class MongoDBHandler(ServiceCtlHandler):
 				self._logger.info('%s. Trying to perform clean sync' % sys.exc_info()[1] )
 				if new_volume:
 					new_volume.destroy(force=True, remove_disks=True)
-
 				storage_vol.ensure(mount=True)
 
 				self._init_clean_sync()
