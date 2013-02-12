@@ -1282,6 +1282,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 			else:
 				storage_vol.destroy(force=True, remove_disks=True)
+
 		else:
 			self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 
