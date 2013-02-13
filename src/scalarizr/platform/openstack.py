@@ -10,6 +10,11 @@ from novaclient.v1_1 import client as nova_client
 from scalarizr import platform
 from scalarizr.bus import bus
 
+# TODO: Remote this when mysql2 backups will be uploaded with storage2.cloudfs
+from scalarizr.storage.transfer import Transfer
+from scalarizr.platform.rackspace.storage import CFTransferProvider
+Transfer.explore_provider(CFTransferProvider)
+
 
 LOG = logging.getLogger(__name__)
 
