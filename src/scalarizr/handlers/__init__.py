@@ -880,7 +880,7 @@ def prepare_tags(handler=None, **kwargs):
 def transfer_result_to_backup_result(mnf):
 	base = os.path.dirname(mnf.cloudfs_path)
 	files_sizes = list((os.path.join(base, chunk[0]), chunk[2]) 
-					for file_ in mnf.files 
+					for file_ in mnf['files'] 
 					for chunk in file_['chunks'])
 	return list(dict(path=path, size=size) for path, size in files_sizes)
 
