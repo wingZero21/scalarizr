@@ -73,9 +73,6 @@ class _Mounts(object):
 
 	remove = __delitem__
 
-	def __setitem__(self, device, entry):
-		pass	
-
 	def add(self, device, mpoint, fstype, options='auto', dump=0, fsck_order=0):
 		with open(self.filename, 'a+') as fp:
 			self._write_entry(_MountEntry(device, mpoint, fstype, options, dump, fsck_order), fp)
