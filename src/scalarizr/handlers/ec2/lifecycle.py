@@ -88,16 +88,20 @@ class Ec2LifeCycleHandler(Handler):
 				
 		# Mount ephemeral devices
 		# Seen on eucalyptus: 
-		# 	- fstab contains invalid fstype and `mount -a` fails  
-		mtab = mount.mounts()
-		fstab = mount.fstab()
-		for device in self._platform.instance_store_devices:
-			if os.path.exists(device) and device in fstab and device not in mtab:
-				entry = fstab[device]
-				try:
-					mount.mount(device, entry.mpoint, '-o', entry.options)
-				except:
-					self._logger.warn(sys.exc_info()[1])
+		# 	- fstab contains invalid fstype and `mount -a` fails 
+		if self._platform.name == 'eucalyptus': 
+			mtab = mount.mounts()
+			fstab = mount.fstab()
+			for device in self._platform.instance_store_devices:
+				if os.path.exists(device) and device in fstab and device not in mtab:
+					entry = fstab[device]
+					try:
+						mount.mount(device, entry.mpoint, '-o', entry.options)
+					except:
+						self._logger.warn(sys.exc_info()[1])
+		else:
+			system2('mount -a', shell=True, raise_exc=False)
+
 
 	def on_reload(self):
 		self._platform = bus.platform		

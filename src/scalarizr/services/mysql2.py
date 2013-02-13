@@ -2,10 +2,6 @@ from __future__ import with_statement
 
 import os
 import re
-import sys
-import glob
-import string
-import shutil
 import logging
 import subprocess
 import threading
@@ -141,9 +137,11 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 				**kwds)
 		XtrabackupMixin.__init__(self)
 		self._re_lsn = re.compile(r"xtrabackup: The latest check point " \
-								"\(for incremental\): '(\d+)'")
+							"\(for incremental\): '(\d+)'")
 		self._re_binlog = re.compile(r"innobackupex: MySQL binlog position: " \
-								"filename '([^']+)', position (\d+)")
+							"filename '([^']+)', position (\d+)")
+		self._re_slave_binlog = re.compile(r"innobackupex: MySQL slave binlog position: " \
+							"master host '[^']+', filename '([^']+)', position (\d+)")
 		self._re_lsn_innodb_stat = re.compile(r"Log sequence number \d+ (\d+)")
 
 		self._killed = False
@@ -166,6 +164,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			kwds['no_lock'] = True
 		if not int(__mysql__['replication_master']):
 			kwds['safe_slave_backup'] = True
+			kwds['slave_info'] = True
 
 		current_lsn = None
 		if self.backup_type == 'auto':
@@ -223,12 +222,15 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			return
 
 		log_file = log_pos = to_lsn = None
+		re_binlog = self._re_binlog \
+					if int(__mysql__['replication_master']) else \
+					self._re_slave_binlog
 		for line in stderr.splitlines():
 			m = self._re_lsn.search(line)
 			if m:
 				to_lsn = int(m.group(1))
 				continue
-			m = self._re_binlog.search(line)
+			m = re_binlog.search(line)
 			if m:
 				log_file = m.group(1)
 				log_pos = int(m.group(2))
