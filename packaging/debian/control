@@ -76,6 +76,7 @@ Depends: scalarizr-base (= ${binary:Version}),
          python-rackspace-novaclient (>= 1.0),
          python-cinderclient (>= 1.0.1),
          python-swiftclient (>= 1.2.0),
+         python-rackspace-cloudservers,
          python-rackspace-cloudfiles
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
