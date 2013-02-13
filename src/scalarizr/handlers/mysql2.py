@@ -761,13 +761,6 @@ class MysqlHandler(DBMSRHandler):
 		bak = self._current_data_bundle
 		if bak:
 			bak.kill()
-
-			#? move into CreateDataBundle?
-			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
-				db_type = __mysql__['behavior'],
-				status		='error',
-				last_error	= "Canceled"
-			))
 		else:
 			LOG.debug("No data bundle to cancel")
 

@@ -199,7 +199,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 
 		with self._xbak_init_lock:
 			if self._killed:
-				return
+				raise Error("Canceled")
 			self._xbak = innobackupex.args(__mysql__['tmp_dir'], **kwds).popen()
 			LOG.debug('Creating LargeTransfer, src=%s dst=%s', self._xbak.stdout,
 				self.cloudfs_target)
@@ -208,6 +208,8 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 						self.cloudfs_target,
 						compressor=self.compressor)
 		manifesto = self._transfer.run()
+		if not isinstance(manifesto, cloudfs.Manifest) and self._killed:
+			raise Error("Canceled")
 		stderr = self._xbak.communicate()[1]
 		if self._xbak.returncode:
 			raise Error(stderr)
@@ -215,11 +217,6 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		with self._xbak_init_lock:
 			self._xbak = None
 			self._transfer = None
-
-		if not isinstance(manifesto, cloudfs.Manifest):
-			LOG.debug("LargeTransfer didn't return manifest obj, probably was"
-					  "killed, aborting xtrabackup")
-			return
 
 		log_file = log_pos = to_lsn = None
 		re_binlog = self._re_binlog \
