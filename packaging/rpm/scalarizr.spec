@@ -116,11 +116,15 @@ Requires:		python26-novaclient >= 2.10.0
 Requires:       python26-rackspace-novaclient >= 1.0
 Requires:       python26-cinderclient >= 1.0.1
 Requires:       python26-swiftclient >= 1.2.0
+Requires:       python26-cloudfiles
+
 %else
 Requires:		python-novaclient >= 2.10.0
 Requires:       python-rackspace-novaclient >= 1.0
 Requires:       python-cinderclient >= 1.0.1
 Requires:       python-swiftclient >= 1.2.0
+# Unless mysql backups uploaded with storage2
+Requires:       python-cloudfiles
 %endif
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
