@@ -78,15 +78,15 @@ class OpenstackPlatform(platform.Platform):
 
 
     def get_private_ip(self):
-        if not self._private_ip:
+        if self._private_ip is None:
             ifaces = platform.net_interfaces()
             self._private_ip = ifaces['eth1' if 'eth1' in ifaces else 'eth0']
         return self._private_ip
 
     def get_public_ip(self):
-        if not self._public_ip:
+        if self._public_ip is None:
             ifaces = platform.net_interfaces()
-            self._public_ip =  ifaces['eth0']
+            self._public_ip = ifaces['eth0'] if 'eth1' in ifaces else '' 
         return self._public_ip
 
 
