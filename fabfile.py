@@ -6,7 +6,7 @@ env.user = 'root'
 def _target(hostname=None, keyname=None):
 	if hostname and keyname:
 		env.host_string = hostname
-		for place in ('~/keys', '~/Workspace/login'):
+		for place in ('~/keys', '~/Workspace/login', "~/Downloads"):
 			keyfile = os.path.expanduser(place + '/' + keyname)
 			if os.path.exists(keyfile):
 				env.key_filename = keyfile
@@ -14,6 +14,7 @@ def _target(hostname=None, keyname=None):
 
 
 def upload(hostname=None, keyname=None):
+	# fab upload:hostname=23.20.29.154,keyname=vova-percona-centos6-devel.pem
 	_target(hostname, keyname)
 	local('rm -f /tmp/scalarizr-0.9.tar.gz')
 	local('tar -czf /tmp/scalarizr-0.9.tar.gz .')

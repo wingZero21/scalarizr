@@ -886,6 +886,7 @@ class LargeTransfer(bases.Task):
 			elif self._up:
 				if res["failed"] or self._killed:
 					if self.manifest:
+						# TODO: get rid of the duplicate delete
 						self.manifest.delete()
 					return
 				if self.multipart:
@@ -915,6 +916,9 @@ class LargeTransfer(bases.Task):
 		def interrupt(*args):
 			raise Exception("LargeTransfer is being killed")  #?
 		self._transfer.on(progress_report=interrupt)
+
+		if self.manifest:
+			self.manifest.delete()
 
 
 class Manifest(object):

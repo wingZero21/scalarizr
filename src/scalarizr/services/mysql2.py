@@ -208,7 +208,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 						self.cloudfs_target,
 						compressor=self.compressor)
 		manifesto = self._transfer.run()
-		if not isinstance(manifesto, cloudfs.Manifest) and self._killed:
+		if self._killed:
 			raise Error("Canceled")
 		stderr = self._xbak.communicate()[1]
 		if self._xbak.returncode:

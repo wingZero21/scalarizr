@@ -1,12 +1,13 @@
 """
 Run on percona-lvm instance.
 
-Requires /root/create_msg.xml and /root/cancel_msg.xml.
+Uses $AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY, $AWS_ACCOUNT_ID
 """
 __author__ = 'vladimir'
 
 import subprocess
 import time
+import os
 
 from lettuce import before, after, world, step
 import yaml
@@ -15,10 +16,31 @@ import yaml
 FEATURE = "Cancel xtrabackup"
 
 
-def send_message(f):
-	n = "DbMsr_CreateDataBundle"
-	if "cancel" in n:
-		n = "DbMsr_CancelDataBundle"
+def send_message(action):
+	if action == "create":
+		name = "DbMsr_CreateDataBundle"
+	elif action == "cancel":
+		name = "DbMsr_CancelDataBundle"
+	else:
+		return
+
+	msg = '<?xml version="1.0"?>\n' \
+		  '<message id="d2d2251c-8f65-4175-a131-fc5b99b609e6" name="%s"><meta>' \
+		  '<scalr_version>4.1.0</scalr_version></meta><body><scripts/><percona>' \
+		  '<backup><type>xtrabackup</type><compressor>gzip</compressor>' \
+		  '<backup_type>full</backup_type><cloudfs_target>s3://scalr-ab6d8171' \
+		  '-3414-us-east-1/data-bundles/12416/percona/</cloudfs_target></backup>' \
+		  '</percona><storage_type>lvm</storage_type><platform_access_data>' \
+		  '<account_id>%s</account_id><key_id>%s</key_id><key>%s</key>' \
+		  '</platform_access_data></body></message>'
+	msg = msg % (name, os.environ["AWS_ACCOUNT_ID"],
+				 os.environ["AWS_ACCESS_KEY_ID"],
+				 os.environ["AWS_SECRET_ACCESS_KEY"])
+
+	path = "/tmp/msg.xml"
+	with open(path, 'w') as f:
+		f.write(msg)
+
 	subprocess.call([
 		"szradm",
 		"-m",
@@ -27,20 +49,25 @@ def send_message(f):
 		"-o",
 		"control",
 		"-n",
-		n,
+		name,
 		"-f",
-		f,
+		path,
 	], close_fds=True)
+
+	os.remove(path)
 
 
 def list_messages():
 	proc = subprocess.Popen([
-		"szradm"
+		"szradm",
 		"list-messages",
 		"-n",
-		"DbMsr_CreateDataBundleResult"
+		"DbMsr_CreateDataBundleResult",
 	], stdout=subprocess.PIPE, close_fds=True)
 	out = proc.communicate()[0]
+
+	if not out:
+		return set()
 
 	ids = map(lambda x: x.split()[1], out.splitlines()[3:-1])
 	return set(ids)
@@ -69,7 +96,7 @@ def i_have_used_the_storage_for(step, mb):
 
 @step("I have sent CreateDataBundle message")
 def i_have_sent_create_data_bundle_message(step):
-	send_message("/root/create_msg.xml")
+	send_message("create")
 
 
 @step("I wait for (\d+) seconds")
@@ -79,7 +106,7 @@ def i_wait_for_seconds(step, seconds):
 
 @step("I send CancelDataBundle message")
 def i_send_cancel_data_bundle_message(step):
-	send_message("/root/cancel_msg.xml")
+	send_message("cancel")
 
 
 @step("I expect it canceled")
