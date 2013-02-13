@@ -1210,6 +1210,8 @@ class MongoDBHandler(ServiceCtlHandler):
 
 		
 		first_start = not self._storage_valid()
+		self.mongodb.auth = True
+
 		if not first_start:
 			self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 			self.mongodb.remove_replset_info()
