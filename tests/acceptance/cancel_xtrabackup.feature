@@ -5,4 +5,5 @@ Scenario: Cancel
     And I have sent CreateDataBundle message
     When I wait for 3 seconds
     And I send CancelDataBundle message
+    And I wait for 10 seconds
     Then I expect it canceled

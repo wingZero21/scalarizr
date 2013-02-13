@@ -66,6 +66,7 @@ def list_messages():
 	], stdout=subprocess.PIPE, close_fds=True)
 	out = proc.communicate()[0]
 
+	# TODO: fix return for empty output
 	if not out:
 		return set()
 
@@ -114,7 +115,7 @@ def i_expect_it_canceled(step):
 	# we expect to have only one outgoing CreateDataBundleResult message
 	# that contains "Canceled"
 	new = list_messages() - world.existing
-	assert len(new) == 1, "Got multiple messages while running the test"
+	assert len(new) == 1, "Got %s messages while running the test" % len(new)
 	msg_id = new.pop()
 
 	proc = subprocess.Popen([
