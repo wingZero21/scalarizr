@@ -168,7 +168,7 @@ class MysqlCnfController(CnfController):
 						shell=True, raise_exc=False, silent=True)[0]
 			
 		if out:
-			raw = out.split('------------------------------------------------- ------------------------')
+			raw = out.split(49*'-'+' '+24*'-')
 			if raw:
 				a = raw[-1].split('\n')
 				if len(a) > 5:
