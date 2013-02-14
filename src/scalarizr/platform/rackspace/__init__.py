@@ -97,6 +97,9 @@ class RackspacePlatform(Platform):
 	def __init__(self):
 		Platform.__init__(self)
 		self._logger = logging.getLogger(__name__)
+		# Work over [Errno -3] Temporary failure in name resolution
+		# http://bugs.centos.org/view.php?id=4814 
+		os.chmod('/etc/resolv.conf', 0755)		
 
 	def get_private_ip(self):
 		if not self._private_ip:
