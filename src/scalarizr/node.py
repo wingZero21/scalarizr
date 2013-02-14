@@ -367,7 +367,7 @@ __node__['openstack'] = Compound({
 	'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
 	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
-__node__['openstack'] = Compound({
+__node__['rackspace'] = Compound({
 	'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
 	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
