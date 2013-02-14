@@ -78,6 +78,11 @@ class OpenstackPlatform(platform.Platform):
 
     features = ['volumes', 'snapshots']
 
+    def __init__(self):
+        platform.Platform.__init__(self)
+        # Work over [Errno -3] Temporary failure in name resolution
+        # http://bugs.centos.org/view.php?id=4814 
+        os.chmod('/etc/resolv.conf', 0755)
 
     def get_private_ip(self):
         if self._private_ip is None:
