@@ -124,9 +124,6 @@ Requires:		python-novaclient >= 2.10.0
 Requires:       python-rackspace-novaclient >= 1.0
 Requires:       python-cinderclient >= 1.0.1
 Requires:       python-swiftclient >= 1.2.0
-# Rackspace deps here unless mysql backups uploaded with storage2
-Requires:       python-cloudfiles
-Requires:       python-cloudservers
 %endif
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2

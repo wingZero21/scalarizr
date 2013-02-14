@@ -25,9 +25,10 @@ from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
 from scalarizr.libs import metaconf
 from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool
-from scalarizr.storage import transfer
+
 
 from scalarizr import storage2, linux
+from scalarizr.storage2 import cloudfs
 from scalarizr.linux import iptables, coreutils	
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
@@ -647,12 +648,13 @@ class MysqlHandler(DBMSRHandler):
 						
 				cloud_storage_path = self._platform.scalrfs.backups('mysql')
 				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-				trn = transfer.Transfer()
-				cloud_files = trn.upload(parts, cloud_storage_path)
-				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
-								cloud_storage_path, backup_filename)
+				trn = cloudfs.FileTransfer(parts, cloud_storage_path)
+				result = trn.run()
+				if result['failed']:
+					raise HandlerError('Fail to upload several files')
+				LOG.info('MySQL backup uploaded')
 
-			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))								
+			result = list(dict(path=path, size=size) for path, size in zip(result['completed'], sizes))								
 			op.ok(data=result)
 			
 			# Notify Scalr
