@@ -537,17 +537,12 @@ class MongoDBConfig(BaseConfig):
 		return cls(os.path.join(config_dir, cls.config_name) if config_dir else CONFIG_PATH_DEFAULT)
 	
 	def set(self, option, value):
-		if not self.data:
-			self.data = Configuration(self.config_type)
-			if os.path.exists(self.path):
-				self.data.read(self.path)
+		self._init_configuration()
 		if value :
 			self.data.set(option,value, force=True)
 		else:
 			self.data.remove(option)
-		if self.autosave:
-			self.save_data()
-			self.data = None
+		self._cleanup(save_data=True)
 
 	def set_bool_option(self, option, value):
 		try:

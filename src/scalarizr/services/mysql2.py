@@ -41,7 +41,6 @@ __mysql__.update({
 	'pma_user': 'pma',
 	'debian.cnf': '/etc/mysql/debian.cnf',
 	'my.cnf': '/etc/my.cnf' if linux.os['family'] in ('RedHat', 'Oracle') else '/etc/mysql/my.cnf',
-	#'mysqld_exec': util.try_exec('/usr/sbin/mysqld', '/usr/libexec/mysqld')
 	'mysqldump_chunk_size': 200 * 1024 * 1024,
 	'stop_slave_timeout': 180,
 	'change_master_timeout': 60,
@@ -363,8 +362,6 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 			mnf.save()
 
 
-#backup.backup_types['xtrabackup'] = XtrabackupBackup
-#backup.restore_types['xtrabackup'] = XtrabackupRestore
 backup.backup_types['xtrabackup'] = XtrabackupStreamBackup
 backup.restore_types['xtrabackup'] = XtrabackupStreamRestore
 
