@@ -22,7 +22,7 @@ class SwiftFileSystem(object):
 
 
 	def _get_connection(self):
-		return __node__['openstack']['new_swift_conn']
+		return __node__['openstack']['new_swift_connection']
 
 
 	def ls(self, remote_path):

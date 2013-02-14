@@ -15,6 +15,7 @@ import tempfile
 import threading
 
 # Core
+from scalarizr import handlers
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError, \
@@ -637,24 +638,13 @@ class MysqlHandler(DBMSRHandler):
 				backup.close()
 				
 			with op.step(self._step_upload_to_cloud_storage):
-				# Creating list of full paths to archive chunks
-				if os.path.getsize(backup_path) > __mysql__['mysqldump_chunk_size']:
-					parts = [os.path.join(tmpdir, file) 
-							for file in coreutils.split(backup_path, backup_filename, 
-								__mysql__['mysqldump_chunk_size'] , tmpdir)]
-				else:
-					parts = [backup_path]
-				sizes = [os.path.getsize(file) for file in parts]
-						
 				cloud_storage_path = self._platform.scalrfs.backups('mysql')
 				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-				trn = cloudfs.FileTransfer(parts, cloud_storage_path)
+				trn = cloudfs.LargeTransfer(src=backup_path, dst=cloud_storage_path, compressor=None)
 				result = trn.run()
-				if result['failed']:
-					raise HandlerError('Fail to upload several files')
+				result = handlers.transfer_result_to_backup_result(result)
 				LOG.info('MySQL backup uploaded')
-
-			result = list(dict(path=path, size=size) for path, size in zip(result['completed'], sizes))								
+							
 			op.ok(data=result)
 			
 			# Notify Scalr

@@ -364,6 +364,7 @@ __node__['cloudstack'] = Compound({
 __node__['openstack'] = Compound({
 	'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
 	'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
+	'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
 	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
 __node__['gce'] = Compound({

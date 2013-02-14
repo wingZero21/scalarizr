@@ -6,6 +6,7 @@ import logging
 
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
+import swiftclient
 
 from scalarizr import platform
 from scalarizr.bus import bus
@@ -183,6 +184,15 @@ class OpenstackPlatform(platform.Platform):
                            self._access_data["tenant_name"],
                            self._access_data["keystone_url"],
                            self._access_data["cloud_location"])
+
+    def new_swift_connection(self):
+        if not self._access_data:
+            return None
+        api_key = self._access_data["api_key"]
+        password = self._access_data["password"]
+        return swiftclient.Connection(self._access_data["username"],
+                           password or api_key,
+                           auth_version='2' if api_key else '1')
 
 
 def get_platform():
