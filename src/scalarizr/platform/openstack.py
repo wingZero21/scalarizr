@@ -190,9 +190,10 @@ class OpenstackPlatform(platform.Platform):
             return None
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
-        return swiftclient.Connection(self._access_data["username"],
-                           password or api_key,
-                           auth_version='2' if api_key else '1')
+        return swiftclient.Connection(self._access_data['keystone_url'], 
+                    self._access_data["username"],
+                    password or api_key,
+                    auth_version='2')
 
 
 def get_platform():
