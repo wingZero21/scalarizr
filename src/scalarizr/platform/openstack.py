@@ -2,6 +2,7 @@ import urllib2
 import json
 import os
 import logging
+import re
 
 
 from cinderclient.v1 import client as cinder_client
@@ -190,10 +191,12 @@ class OpenstackPlatform(platform.Platform):
             return None
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
-        return swiftclient.Connection(self._access_data['keystone_url'], 
+        keystone_url = re.sub(r'v2\.\d$', 'v1.0', self._access_data['keystone_url'])
+        auth_version = '2' if '/v2.' in keystone_url else '1'
+        return swiftclient.Connection(keystone_url, 
                     self._access_data["username"],
                     password or api_key,
-                    auth_version='2')
+                    auth_version=auth_version)
 
 
 def get_platform():
