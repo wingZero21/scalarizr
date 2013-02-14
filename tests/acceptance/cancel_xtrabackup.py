@@ -66,8 +66,7 @@ def list_messages():
 	], stdout=subprocess.PIPE, close_fds=True)
 	out = proc.communicate()[0]
 
-	# TODO: fix return for empty output
-	if not out:
+	if not out or out == " ":
 		return set()
 
 	ids = map(lambda x: x.split()[1], out.splitlines()[3:-1])

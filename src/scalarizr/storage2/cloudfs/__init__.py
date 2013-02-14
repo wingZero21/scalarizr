@@ -105,20 +105,19 @@ class BaseTransfer(bases.Task):
 		:type dst: string / generator / iterator
 		:param dst: Transfer destination
 		'''
+
 		if callable(src):
 			src = (item for item in src())
 		else:
-			try:
-				iter(src)
-			except:
+			if not hasattr(src, '__iter__') or hasattr(src, "read"):
 				src = [src]
+			src = iter(src)
 		if callable(dst):
 			dst = (item for item in dst())
+		elif not hasattr(dst, '__iter__'):
+			dst = itertools.repeat(dst)
 		else:
-			try:
-				iter(dst)
-			except:
-				dst = itertools.repeat(dst)
+			dst = iter(dst)
 
 		super(BaseTransfer, self).__init__(src=src, dst=dst, **kwds)
 		self.define_events('transfer_start', 'transfer_error', 'transfer_complete')
