@@ -829,7 +829,6 @@ class MongoCLIMeta(type):
 class MongoCLI(object):
 
 	__metaclass__ = MongoCLIMeta
-	authenticated = False
 	host = 'localhost'
 	_instances = dict()
 
@@ -864,10 +863,13 @@ class MongoCLI(object):
 		if not hasattr(self, '_con'):
 			self._logger.debug('creating pymongo connection to %s:%s' % (self.host,self.port))
 			self._con = pymongo.Connection(self.host, self.port)
-		if not self.authenticated and self.login and self.password and self.is_port_listening:
-			self._logger.debug('Authenticating connection on port %s as %s', self.port, self.login)
-			self._con.admin.authenticate(self.login, self.password)
-			self.authenticated = True
+
+		if self.login and self.password and self.is_port_listening:
+			try:
+				self._con.admin.system.users.find().next()
+			except:
+				self._logger.debug('Authenticating connection on port %s as %s', self.port, self.login)
+				self._con.admin.authenticate(self.login, self.password)
 		return self._con
 
 
