@@ -6,6 +6,7 @@ Created on Dec 23, 2009
 '''
 import binascii
 import logging
+import os
 import sys
 import urllib
 import urllib2
@@ -56,7 +57,11 @@ class QueryEnvService(object):
 		file.close()
 
 		signature, timestamp = cryptotool.sign_http_request(request_body, key)		
-		
+
+		# Work over [Errno -3] Temporary failure in name resolution
+		# http://bugs.centos.org/view.php?id=4814 
+		os.chmod('/etc/resolv.conf', 0755)					
+
 		post_data = urllib.urlencode(request_body)
 		headers = {
 			"Date": timestamp, 
