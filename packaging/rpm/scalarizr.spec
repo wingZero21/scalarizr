@@ -562,6 +562,7 @@ if [ -f cloudfoundry.ini ]; then
 		[ ! -f $name ] && ln -s cloudfoundry.ini $name
 	done
 fi
+rm -f percona.ini  # Measly config in several builds 
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini
