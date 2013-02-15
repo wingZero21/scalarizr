@@ -1,6 +1,7 @@
 
 import urlparse
 
+from scalarizr.node import __node__
 from scalarizr.storage2 import cloudfs
 from scalarizr.storage2.cloudfs import swift
 
