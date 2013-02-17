@@ -151,6 +151,6 @@ class RackspacePlatform(Platform):
 		return swiftclient.Connection(
 					'https://%s/v1.0' % self._access_data.get('auth_host', 'auth.api.rackspacecloud.com'),
 					self._access_data["username"],
-					self._access_data["password"] or self._access_data["api_key"],
+					self._access_data.get("password") or self._access_data.get("api_key"),
 					auth_version='1')	
 		
