@@ -5,7 +5,7 @@ Created on Nov 23, 2010
 '''
 import unittest
 from scalarizr.handlers.ssh_auth_keys import SSHKeys, UpdateSshAuthorizedKeysError
-from scalarizr.util.filetool import read_file, write_file, touch
+from scalarizr.linux.coreutils import touch
 from szr_unittest import main as unit_main
 import os
 
@@ -35,15 +35,21 @@ class Test(unittest.TestCase):
 			remove = []
 			
 		self.ssh_keys.on_UpdateSshAuthorizedKeys(_Message)
-		self.assertEquals('', read_file(self.ssh_keys.PATH))
+		keys = None
+		with open(self.ssh_keys.PATH, 'r') as fp:
+		    keys = fp.read()
+		self.assertEquals('', keys)
 		
 	def test_add_new_keys(self):
 		class _Message:
 			add = ['new_key1', 'new_key2']
 			remove = []
 		self.ssh_keys.on_UpdateSshAuthorizedKeys(_Message)
-		self.assertTrue(_Message.add[0] in read_file(self.ssh_keys.PATH))
-		self.assertTrue(_Message.add[1] in read_file(self.ssh_keys.PATH))
+		keys = None
+		with open(self.ssh_keys.PATH, 'r') as fp:
+		    keys = fp.read()
+		self.assertTrue(_Message.add[0] in keys)
+		self.assertTrue(_Message.add[1] in keys)
 		
 	def test_add_existed_keys(self):
 		pass
@@ -58,15 +64,18 @@ class Test(unittest.TestCase):
 		
 	def test_remove_existed_keys(self):
 		old_keys = ['old_key3', 'old_key4']
-		write_file(self.ssh_keys.PATH, '\n'.join(old_keys))
-		
+		with open(self.ssh_keys.PATH, 'w') as fp:
+		    fp.write('\n'.join(old_keys))
 		class _Message:
 			add = []
 			remove = old_keys
 			
 		self.ssh_keys.on_UpdateSshAuthorizedKeys(_Message)
-		self.assertFalse(_Message.remove[0] in read_file(self.ssh_keys.PATH))
-		self.assertFalse(_Message.remove[1] in read_file(self.ssh_keys.PATH))
+		keys = None
+		with open(self.ssh_keys.PATH, 'r') as fp:
+		    keys = fp.read()
+		self.assertFalse(_Message.remove[0] in keys)
+		self.assertFalse(_Message.remove[1] in keys)
 		
 	def test_unexisted_path(self):
 		class __SSHKeys(SSHKeys):

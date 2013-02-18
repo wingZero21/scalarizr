@@ -12,10 +12,9 @@ from .util import ramdisk
 
 from scalarizr.libs.metaconf import Configuration
 from scalarizr.util.software import whereis
-from scalarizr.util.fstool import mount, umount
 from scalarizr.util import firstmatched
 from scalarizr import linux
-from scalarizr.linux import pkgmgr
+from scalarizr.linux import mount, pkgmgr
 
 from Queue import Queue, Empty
 from tempfile import mkdtemp
@@ -98,7 +97,9 @@ class EphVolumeProvider(VolumeProvider):
 
 		# Create tranzit volume (should be 5% bigger then data vol)
 		#lvi = self._lvm.lv_info(data_lv)
-		#size_in_KB = int(read_file('/sys/block/dm-%s/size' % lvi.lv_kernel_minor)) / 2
+		#size_in_KB = 0
+		#with open('/sys/block/dm-%s/size' % lvi.lv_kernel_minor, 'r') as fp:
+		#    size_in_KB = int(fp.read()) / 2
 		#tranzit_lv = self._lvm.create_lv(vg, 'tranzit', size='%dK' % (size_in_KB*1.05,))
 
 		return (vg, data_lv, size)
@@ -196,10 +197,13 @@ class EphVolumeProvider(VolumeProvider):
 		vol = self.create(**_kwargs)
 
 		snap = self.snapshot_factory(**kwargs)
+		"""
+		# Free ram check disabled (wrong ram detection on GCE instances)
+
 		free_ram, free_swap = ramdisk.free()
 		if (free_ram + free_swap) < TRANZIT_VOL_SIZE:
 			raise Exception('Instance has no enough free ram to create tranzit ramdisk')
-		
+		"""
 		ramdisk.create(TRANZIT_VOL_SIZE, TRANZIT_VOL_MPOINT)
 		
 		try:
@@ -249,6 +253,13 @@ class EphVolumeProvider(VolumeProvider):
 Storage.explore_provider(EphVolumeProvider)
 
 
+def clear_queue(queue):
+	while True:
+		try:
+			queue.get_nowait()
+		except Empty:
+			return
+
 class EphSnapshotProviderLite(object):
 	
 	MANIFEST_NAME 		= 'manifest.ini'
@@ -290,8 +301,10 @@ class EphSnapshotProviderLite(object):
 				raise StorageError('Snapshot %s is already %s. Cannot create it again' % (
 						snapshot.id, self._state_map[snapshot.id]))
 
+			clear_queue(self._upload_queue)
+
 			if not os.path.exists(self._pigz_bin):
-				if linux.os['name'] == 'Ubuntu' and linux.os['release'] >= (10, 4):
+				if linux.os['family'] == 'Debian' and linux.os['release'] >= (10, 4):
 					pkgmgr.installed('pigz')
 				elif linux.os['family'] == 'RedHat' and linux.os['release'] >= (6, 0):
 					pkgmgr.epel_repository()
@@ -326,7 +339,7 @@ class EphSnapshotProviderLite(object):
 				opts = []
 				if volume.fstype == 'xfs':
 					opts += ['-o', 'nouuid,ro']
-				mount(snap_lv, snap_mpoint, opts)				
+				mount.mount(snap_lv, snap_mpoint, *opts)				
 				tar_cmd = ['tar', 'cp', '-C', snap_mpoint, '.']
 				
 				pigz_bins = whereis('pigz')
@@ -368,7 +381,7 @@ class EphSnapshotProviderLite(object):
 
 			finally:
 				self._return_ev.set()				
-				umount(snap_mpoint, options=('-f',))
+				mount.umount(snap_mpoint)
 				os.rmdir(snap_mpoint)
 				self._lvm.remove_lv(snap_lv)
 				self._inner_exc_info = None
@@ -402,12 +415,12 @@ class EphSnapshotProviderLite(object):
 					if not chunk_fp.closed:
 						chunk_fp.close()
 					if chunk_size:
+						self._logger.debug('Putting chunk %s to upload queue' % chunk_path)
 						self._upload_queue.put(chunk_path)
 						self._chunks_md5[os.path.basename(chunk_path)] = binascii.hexlify(chunk_md5.digest())
 
 					manifest_path = self._write_manifest(snapshot, tranzit_path)
 					self._upload_queue.put(manifest_path)
-
 					break
 				
 				if piece_rest:
@@ -433,6 +446,7 @@ class EphSnapshotProviderLite(object):
 					
 				if chunk_size == chunk_max_size:
 					chunk_fp.close()
+					self._logger.debug('Putting chunk %s to upload queue' % chunk_path)
 					self._upload_queue.put(chunk_path)
 					self._chunks_md5[os.path.basename(chunk_path)] = binascii.hexlify(chunk_md5.digest())
 					chunk_md5 = hashlib.md5()
@@ -452,22 +466,38 @@ class EphSnapshotProviderLite(object):
 		"""
 		@rtype: tuple
 		"""
-		transfer = self._transfer_cls()
-		while True:
-			try:
-				chunk_path = self._upload_queue.get(False)
-			except Empty:
-				if self._read_finished.is_set():
-					break
-				continue
-			
-			with self._slot_available:
-				self._return_ev.set()
-				link = transfer.upload([chunk_path], dst)[0]
-				os.remove(chunk_path)
-			
-			if 'manifest.ini' in link:
-				snapshot.path = link
+		try:
+			transfer = self._transfer_cls()
+
+			def _upload():
+				with self._slot_available:
+					self._return_ev.set()
+					link = transfer.upload([chunk_path], dst)[0]
+					os.remove(chunk_path)
+
+				if 'manifest.ini' in link:
+					snapshot.path = link
+
+			while True:
+				try:
+					chunk_path = self._upload_queue.get(False)
+					self._logger.debug('Uploader got chunk %s' % chunk_path)
+				except Empty:
+					if self._read_finished.is_set():
+						while True:
+							try:
+								chunk_path = self._upload_queue.get(False)
+								_upload()
+							except Empty:
+								break
+						self._logger.debug('Upload is finished.')
+						break
+					continue
+
+				_upload()
+
+		except:
+			self._inner_exc_info = sys.exc_info()
 
 				
 	def _downloader(self, tranzit_path):
@@ -509,6 +539,8 @@ class EphSnapshotProviderLite(object):
 
 	def download_and_restore(self, volume, snapshot, tranzit_path):
 		# Load manifest
+		clear_queue(self._writer_queue)
+		clear_queue(self._download_queue)
 		self._download_finished.clear()
 		transfer = self._transfer_cls()
 		mnf_path = transfer.download(snapshot.path, tranzit_path)
@@ -608,7 +640,7 @@ class DataRestoreStrategy(RestoreStrategy):
 			if r_code:
 				raise Exception('Tar finished with return code %s' % r_code)
 		finally:
-			umount(mpoint=tmp_mpoint, options=('-f', ))
+			mount.umount(tmp_mpoint)
 
 class DeviceRestoreStrategy(RestoreStrategy):
 	def restore(self, queue, volume, download_finished):

@@ -7,10 +7,12 @@ import logging
 import signal, csv, cStringIO, socket
 import string
 import re
+from threading import local
+import time
+import shutil
 
 from scalarizr import util
 from scalarizr.util import initdv2
-from scalarizr.util import filetool
 from scalarizr.libs import metaconf
 
 
@@ -23,7 +25,42 @@ class HAProxyError(Exception):
 	pass
 
 
-class HAProxyCfg(filetool.ConfigurationFile):
+class ConfigurationFile(object):
+
+	BACKUP_BASE_DIR = '/var/lib/scalarizr/backup'
+	
+	def __init__(self, path):
+		self.path = path
+		self.backup_dir = os.path.join(self.BACKUP_BASE_DIR, self.path[1:])
+		self.local = local()
+		
+	def __str__(self):
+		raise NotImplementedError()
+
+	def __enter__(self):
+		self.local.last_trans_id = str(time.time())
+		if not os.path.exists(self.backup_dir):
+			os.makedirs(self.backup_dir)
+		shutil.copy(self.path, os.path.join(self.backup_dir, self.local.last_trans_id))
+		with open(self.path, 'w+') as fp:
+			fp.write(str(self))
+		return self
+
+	def __exit__(self, *args):
+		if args[0] and hasattr(self.local, 'last_trans_id'):
+			backup_path = os.path.join(self.backup_dir, self.local.last_trans_id)
+			shutil.copy(backup_path, self.path)
+
+	def trans(self, enter=None, exit=None):
+		#raise NotImplementedError()
+		return self
+
+	def reload(self):
+		#raise NotImplementedError()
+		pass
+
+
+class HAProxyCfg(ConfigurationFile):
 	class slice_(dict):
 		def __init__(self, conf, xpath):
 			LOG.debug('slice_.__init__: xpath: `%s`', xpath)

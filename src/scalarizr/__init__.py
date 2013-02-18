@@ -21,9 +21,8 @@ from scalarizr.api.binding import jsonrpc_http
 from scalarizr.storage.util.loop import listloop
 
 # Utils
-from scalarizr.util import initdv2, fstool, filetool, log, PeriodicalExecutor
+from scalarizr.util import initdv2, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size, dynimp
-from scalarizr.util.filetool import write_file, read_file
 from scalarizr.util import wait_until
 
 # Stdlibs
@@ -133,12 +132,13 @@ _logging_configured = False
 
 
 _api_routes = {
-	'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
-	'system': 'scalarizr.api.system.SystemAPI',
-	'sysinfo': 'scalarizr.api.system.SystemAPI',
-	'storage': 'scalarizr.api.storage.StorageAPI',
-	'redis': 'scalarizr.api.redis.RedisAPI',
-	'mysql': 'scalarizr.api.mysql.MySQLAPI'
+'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
+'sysinfo': 'scalarizr.api.system.SystemAPI',
+'system': 'scalarizr.api.system.SystemAPI',
+'storage': 'scalarizr.api.storage.StorageAPI',
+'service': 'scalarizr.api.service.ServiceAPI',
+'redis': 'scalarizr.api.redis.RedisAPI',
+'mysql': 'scalarizr.api.mysql.MySQLAPI'
 }
 
 
@@ -307,7 +307,17 @@ def _init_services():
 
 	logger.debug("Initialize QueryEnv client")
 	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), '2008-12-16')
-	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), queryenv.get_latest_version())
+	queryenv_latest = queryenv.get_latest_version()
+	queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), queryenv_latest)
+
+	if tuple(map(int, queryenv_latest.split('-'))) >= (2012, 7, 1):
+		scalr_version = queryenv.get_global_config()['params'].get('scalr.version')
+		if scalr_version:
+			bus.scalr_version = tuple(map(int, scalr_version.split('.')))
+			version_file = cnf.private_path('.scalr-version')
+			with open(version_file, 'w') as fp:
+				fp.write(scalr_version)
+
 	bus.queryenv_service = queryenv
 	bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 	
@@ -611,7 +621,7 @@ def _cleanup_after_rebundle():
 	
 	if 'volumes' not in pl.features:
 		# Destory mysql storages
-		if os.path.exists(cnf.private_path('storage/mysql.json')):
+		if os.path.exists(cnf.private_path('storage/mysql.json')) and pl.name == 'rackspace':
 			logger.info('Cleanuping old MySQL storage')
 			vol = Storage.create(Storage.restore_config(cnf.private_path('storage/mysql.json')))
 			vol.destroy(force=True)				
@@ -715,7 +725,9 @@ def main():
 		# Check for another running scalarzir 
 		if os.path.exists(PID_FILE):
 			try:
-				another_pid = int(read_file(PID_FILE).strip())
+				another_pid = None
+				with open(PID_FILE, 'r') as fp:
+					another_pid = int(fp.read().strip())
 			except ValueError:
 				pass
 			else:
@@ -724,7 +736,8 @@ def main():
 					sys.exit(1)
 					
 		# Write PID
-		write_file(PID_FILE, str(pid))
+		with open(PID_FILE, 'w') as fp:
+			fp.write(str(pid))
 			
 		cnf = bus.cnf
 		cnf.on('apply_user_data', _apply_user_data)
@@ -823,10 +836,14 @@ def main():
 		if not bus.scalr_version:
 			version_file = cnf.private_path('.scalr-version')
 			if os.path.exists(version_file):
-				bus.scalr_version = tuple(read_file(version_file).strip().split('.'))
+				bus.scalr_version = None
+				with open(version_file, 'r') as fp:
+					bus.scalr_version = tuple(fp.read().strip().split('.'))
 			else:
 				bus.scalr_version = _detect_scalr_version()
-				write_file(version_file, '.'.join(map(str, bus.scalr_version)))
+				with open(version_file, 'w') as fp:
+					fp.write('.'.join(map(str, bus.scalr_version)))
+				
 			
 		# Apply Command-line passed configuration options
 		cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))

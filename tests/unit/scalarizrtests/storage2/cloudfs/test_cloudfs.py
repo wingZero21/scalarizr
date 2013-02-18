@@ -4,6 +4,7 @@ Created on Sep 19, 2012
 @author: Dmytro Korsakov
 '''
 import mock
+import os
 from Queue import Empty
 from os.path import basename
 from subprocess import call
@@ -13,7 +14,9 @@ from nose.tools import assert_raises
 from scalarizr.storage2 import cloudfs
 
 
-class NTestFileTransfer(object):
+class TestFileTransfer(object):
+
+	# TODO: test callback reports and replace mock.ANY
 
 	path0 = '/mnt/backups/daily0.tar.gz'
 	path1 = '/mnt/backups/daily.tar.gz'
@@ -117,7 +120,7 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.put.assert_called_once_with(self.path1, self.path2)
+		driver.put.assert_called_once_with(self.path1, self.path2, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.get.called
@@ -139,9 +142,9 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.put.assert_any_call(self.path0, self.path2)
-		driver.put.assert_any_call(self.path1, self.path2)
-		driver.put.assert_any_call(self.path0, self.path2)
+		driver.put.assert_any_call(self.path0, self.path2, report_to=mock.ANY)
+		driver.put.assert_any_call(self.path1, self.path2, report_to=mock.ANY)
+		driver.put.assert_any_call(self.path0, self.path2, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.get.called
@@ -173,9 +176,9 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.put.assert_any_call(self.path0, self.path2)
-		driver.put.assert_any_call(self.path1, dst2)
-		driver.put.assert_any_call(self.path0, dst3)
+		driver.put.assert_any_call(self.path0, self.path2, report_to=mock.ANY)
+		driver.put.assert_any_call(self.path1, dst2, report_to=mock.ANY)
+		driver.put.assert_any_call(self.path0, dst3, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.get.called
@@ -244,7 +247,7 @@ class NTestFileTransfer(object):
 		assert len(obj._retries_queue.put.call_args_list) == 2
 		obj._retries_queue.put.assert_any_call((self.path0, self.path2, 1, -1))
 		obj._retries_queue.put.assert_any_call((self.path1, self.path2, 1, -1))
-		assert obj._retries_queue.get_nowait.call_args_list == [mock.call()] * 10
+		assert obj._retries_queue.get_nowait.call_args_list == [mock.call()] * 18, obj._retries_queue.get_nowait.call_args_list
 
 		# iter str multipart
 		cloudfs.cloudfs.reset_mock()
@@ -346,7 +349,7 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.get.assert_called_once_with(self.path2, self.path1)
+		driver.get.assert_called_once_with(self.path2, self.path1, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.put.called
@@ -370,9 +373,9 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.get.assert_any_call(self.path2, self.path0)
-		driver.get.assert_any_call(dst2, self.path1)
-		driver.get.assert_any_call(dst3, self.path0)
+		driver.get.assert_any_call(self.path2, self.path0, report_to=mock.ANY)
+		driver.get.assert_any_call(dst2, self.path1, report_to=mock.ANY)
+		driver.get.assert_any_call(dst3, self.path0, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.put.called
@@ -387,49 +390,3 @@ class NTestFileTransfer(object):
 		for job in completed:
 			assert job in ret["completed"]
 		assert ret["failed"] == []
-
-
-class TestLargeTransfer(object):
-
-	mpoint = '/mpoint/'
-
-	path1 = '/mnt/backups/daily.tar.gz'
-	path2 = 's3://backups/mysql/2012-09-05/'  # dir
-
-	def setup(self):
-		cloudfs.cloudfs = mock.MagicMock()
-		cloudfs.FileTransfer = mock.MagicMock()
-		cloudfs.storage2.volume = mock.MagicMock()
-		cloudfs.coreutils.remove = mock.MagicMock()
-		cloudfs.tempfile = mock.MagicMock()
-
-		self.stream = mock.MagicMock()
-		self.stream.read = lambda size: 'c' * size
-		def myopen(path, mode=None):
-			if mode is None:
-				return self.stream
-			obj = mock.MagicMock()
-			obj.name = path
-			return obj
-		cloudfs.open = myopen
-
-	@mock.patch("scalarizr.storage2.cloudfs.os.path.isfile")
-	def test_src_gen_upload(self, isfile):
-		isfile.return_value = True
-		cloudfs.storage2.volume.return_value.mpoint = self.mpoint
-
-		obj = cloudfs.LargeTransfer(self.path1, self.path2,
-			cloudfs.LargeTransfer.UPLOAD, gzip_it=False)
-		assert cloudfs.FileTransfer.call_count == 1
-		src_gen = cloudfs.FileTransfer.call_args[0][0]()
-
-		res = []
-		for src in src_gen:
-			res.append(src)
-
-		assert res == [self.mpoint + basename(self.path1) + '.000'], res
-
-
-
-
-

@@ -20,10 +20,13 @@ from scalarizr.platform.ec2 import ebstool
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError,\
 	MetaconfError, ParseError
-from scalarizr.util import  fstool, system2, get_free_devname, filetool,\
+from scalarizr.util import system2, get_free_devname,\
 	firstmatched, wait_until
-from scalarizr.util import initdv2, software
+from scalarizr.util import initdv2
+from scalarizr.util import software
+from scalarizr.linux import mount
 from scalarizr.linux import iptables
+from scalarizr.linux.rsync import rsync
 
 # Stdlibs
 import logging, os, re
@@ -396,10 +399,7 @@ class CassandraScalingHandler(ServiceCtlHandler):
 			self._create_dbstorage_fslayout()
 			
 			self._logger.debug('Copying snapshot')
-			rsync = filetool.Rsync().archive()
-			rsync.source(TMP_EBS_MNTPOINT+os.sep).dest(cassandra.data_file_directory)
-			out = system2(str(rsync), shell=True)
-	
+			out = rsync(TMP_EBS_MNTPOINT+os.sep, cassandra.data_file_directory, archive=True)
 			if out[2]:
 				raise HandlerError('Error while copying snapshot content from temp ebs to permanent: %s', out[1])
 	
@@ -547,13 +547,13 @@ class CassandraScalingHandler(ServiceCtlHandler):
 									to_me=True, logger=self._logger)[1]
 		
 		# Mount
-		fstool.mount(devname, mpoint, make_fs=mkfs, auto_mount=auto_mount)		
+		mount.mount_ex(devname, mpoint, make_fs=mkfs, auto_mount=auto_mount)		
 		
 		del(ec2_conn)
 		return devname, vol
 	
 	def _umount_detach_delete_volume(self, devname, volume):
-		fstool.umount(devname)
+		mount.umount(devname)
 		ebstool.detach_volume(None, volume, logger=self._logger)
 		volume.delete()
 		
@@ -898,7 +898,7 @@ class _CassandraCdbRunnable(OnEachRunnable):
 		cassandra.stop_service()
 		system2('sync', shell=True)			
 					
-		fstool.umount(self.device_name)
+		mount.umount(self.device_name)
 		self.umounted = True
 		
 		volume_id = cassandra.ini.get(CNF_SECTION, OPT_STORAGE_VOLUME_ID)
@@ -910,7 +910,7 @@ class _CassandraCdbRunnable(OnEachRunnable):
 	
 	def post_handle_request(self):
 		if self.umounted:
-			fstool.mount(self.device_name, cassandra.storage_path)
+			mount.mount(self.device_name, cassandra.storage_path)
 		cassandra.start_service()
 				
 CassandraCdbHandler = OnEachExecutor(_CassandraCdbRunnable())	
@@ -1024,11 +1024,11 @@ class EphemeralStorage(Storage):
 
 		try:
 			self._logger.debug("Trying to mount device %s and add it to fstab", devname)
-			fstool.mount(device = devname, mpoint = mpoint, options = ["-t auto"], auto_mount = True)
-		except fstool.FstoolError, e:
+			mount.mount_ex(device = devname, mpoint = mpoint, options = ["-t auto"], auto_mount = True)
+		except fstool.FstoolError, e: #deprecated
 			if fstool.FstoolError.NO_FS == e.code:
 				self._logger.debug("Trying to create file system on device %s, mount it and add to fstab", devname)
-				fstool.mount(device = devname, mpoint = mpoint, options = ["-t auto"], make_fs = True, auto_mount = True)
+				mount.mount_ex(device = devname, mpoint = mpoint, options = ["-t auto"], make_fs = True, auto_mount = True)
 			else:
 				raise
 

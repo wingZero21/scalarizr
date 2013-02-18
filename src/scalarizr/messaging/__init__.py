@@ -1,10 +1,14 @@
 from __future__ import with_statement
+import copy
+import logging
+import xml.dom.minidom as dom
+try:
+	import json
+except ImportError:
+	import simplejson as json
+
 from scalarizr.libs.bases import Observable
 from scalarizr.util import xml_strip
-import xml.dom.minidom as dom
-import threading
-import logging
-
 
 LOG = logging.getLogger(__name__)
 
@@ -77,6 +81,15 @@ class Message(object):
 	def get_response(self):
 		pass
 
+	def fromjson(self, json_str):
+		if isinstance(json_str, str):
+			json_str = json_str.decode('utf-8')
+
+		json_obj = json.loads(json_str)
+		for attr in  ('id', 'name', 'meta', 'body'):
+			assert attr in json_obj, 'Attribute required: %s' % attr
+			setattr(self, attr, copy.copy(json_obj[attr]))
+
 	def fromxml (self, xml):
 		if isinstance(xml, str):
 			xml = xml.decode('utf-8')
@@ -91,6 +104,14 @@ class Message(object):
 			self.meta[ch.nodeName] = self._walk_decode(ch)
 		for ch in root.childNodes[1].childNodes:
 			self.body[ch.nodeName] = self._walk_decode(ch)
+
+
+	def tojson(self):
+		result = dict(id=self.id, name=self.name,
+					  body=self.body, meta=self.meta)
+
+		return json.dumps(result, ensure_ascii=True)
+
 
 	def _walk_decode(self, el):
 		if el.firstChild and el.firstChild.nodeType == 1:

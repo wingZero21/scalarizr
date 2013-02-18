@@ -13,7 +13,8 @@ CREATE TABLE p2p_message (
     "out_delivery_attempts" INTEGER,
     "out_last_attempt_time" TEXT,
     "in_is_handled" INTEGER,
-    "in_consumer_id" TEXT
+    "in_consumer_id" TEXT,
+    "format" TEXT DEFAULT "xml"
 );
 
 DROP TABLE IF EXISTS storage;

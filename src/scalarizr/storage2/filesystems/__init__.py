@@ -1,11 +1,9 @@
-from __future__ import with_statement
-
-'''
+"""
 Created on Nov 11, 2010
 
 @author: spike
 @author: marat
-'''
+"""
 
 import os
 import re
@@ -13,6 +11,7 @@ import logging
 
 from scalarizr import linux
 from scalarizr.linux import mount, coreutils
+from scalarizr.linux import pkgmgr
 
 
 LOG = logging.getLogger(__name__)
@@ -26,7 +25,7 @@ def system(*args, **kwargs):
 	kwargs['exc_class'] = FileSystemError
 	kwargs['warn_stderr'] = False
 	return linux.system(*args, **kwargs)
-	
+
 
 class FileSystem(object):
 	type = None
@@ -56,7 +55,6 @@ class FileSystem(object):
 			if self.os_packages:
 				LOG.debug('Installing OS packages')
 				
-				from scalarizr.linux import pkgmgr
 				for package in self.os_packages:
 					pkgmgr.installed(package)
 		
@@ -88,16 +86,13 @@ class FileSystem(object):
 
 	
 	def freeze(self, device):
-		raise NotImplementedError()
+		# pylint: disable=W0613
+		if self.features['freezable']:
+			raise NotImplementedError()
 
 	
 	def unfreeze(self, device):
-		raise NotImplementedError()
-
-	
-	def _device_mpoint(self, device):
-		try:
-			return mount.mounts()[device].mpoint
-		except KeyError:
-			return False
+		# pylint: disable=W0613
+		if self.features['freezable']:
+			raise NotImplementedError()
 		

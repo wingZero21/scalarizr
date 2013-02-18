@@ -6,53 +6,54 @@ Created on Sep 30, 2011
 '''
 from __future__ import with_statement
 
-
-from scalarizr.util.dynimp import package_mgr
+from scalarizr.linux import iptables, pkgmgr
 from scalarizr.util import disttool, system2
-mgr = package_mgr()
-
-if disttool.is_redhat_based():
-	if disttool.version_info()[0] >= 6:
-		if mgr.installed('python-pymongo'):
-			system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo', 'python-bson'))
-		if not mgr.installed('pymongo'):
-			mgr.install('pymongo', mgr.candidates('pymongo')[-1])
-	elif disttool.version_info()[0] == 5:
-		if not mgr.installed('python26-pymongo'):
-			mgr.install('python26-pymongo', mgr.candidates('python26-pymongo')[-1])
-else:
-	if not mgr.installed('python-pymongo'):
-		# without python-bson explicit version won't work
-		ver = mgr.candidates('python-pymongo')[-1]
-		mgr.install('python-pymongo', ver, 'python-bson', ver)   
-
-
 
 import os
 import sys
 import time
 import shutil
 import logging
-import tarfile
-import tempfile
 import datetime
 import threading
 
-from scalarizr import config
+mgr = pkgmgr.package_mgr()
+
+if disttool.is_redhat_based():
+	if disttool.version_info()[0] >= 6:
+		if mgr.info('python-pymongo').get('installed'):
+			system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo',
+					 'python-bson'))
+		if not mgr.info('pymongo').get('installed'):
+			mgr.install('pymongo', mgr.info('pymongo')['candidate'])
+	elif disttool.version_info()[0] == 5:
+		if not mgr.info('python26-pymongo').get('installed'):
+			mgr.install('python26-pymongo',	mgr.info('python26-pymongo')['candidate'])
+else:
+	if not mgr.info('python-pymongo').get('installed'):
+		# without python-bson explicit version won't work
+		ver = mgr.info('python-pymongo')['candidate']
+		mgr.install('python-pymongo', ver)
+		mgr.install('python-bson', ver)
+
+import pymongo
+
 from scalarizr.bus import bus
 from scalarizr.platform import PlatformFeatures
 from scalarizr.messaging import Messages
 from scalarizr.util import wait_until, Hosts, cryptotool
-from scalarizr.linux import iptables
-from scalarizr.util.filetool import split, rchown
+
 from scalarizr.config import BuiltinBehaviours, ScalarizrState, STATE
 from scalarizr.handlers import ServiceCtlHandler, HandlerError
-from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
+from scalarizr import storage2
+
+from scalarizr.node import __node__
 import scalarizr.services.mongodb as mongo_svc
 from scalarizr.messaging.p2p import P2pMessageStore
 from scalarizr.handlers import operation, prepare_tags
 
 
+__mongodb__ = __node__['mongodb']
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
@@ -60,14 +61,6 @@ BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
 STORAGE_VOLUME_CNF		= 'mongodb.json'
 STORAGE_SNAPSHOT_CNF	= 'mongodb-snap.json'
 STORAGE_TMP_DIR 		= "tmp"
-
-OPT_VOLUME_CNF			= 'volume_config'
-OPT_SNAPSHOT_CNF		= 'snapshot_config'
-OPT_KEYFILE				= "keyfile"
-OPT_SHARD_INDEX			= "shard_index"
-OPT_RS_ID				= "replica_set_index"
-OPT_PASSWORD			= "password"
-OPT_SHARDS_TOTAL		= "shards_total"
 
 BACKUP_CHUNK_SIZE		= 200*1024*1024
 
@@ -270,21 +263,18 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._insert_iptables_rules()
 		
 		if 'ec2' == self._platform.name:
-			updates = dict(hostname_as_pubdns = '0')
-			self._cnf.update_ini('ec2', {'ec2': updates}, private=False)
+			__node__['ec2']['hostname_as_pubdns'] = '0'
 
 		if self._cnf.state == ScalarizrState.INITIALIZING:
 			self.mongodb.stop_default_init_script()
 		
 		if self._cnf.state == ScalarizrState.RUNNING:
-	
-			storage_conf = Storage.restore_config(self._volume_config_path)
-			storage_conf['tags'] = self.mongo_tags
-			self.storage_vol = Storage.create(storage_conf)
-			if not self.storage_vol.mounted():
-				self.storage_vol.mount()
-				
+			storage_vol = __mongodb__['volume']
+			storage_vol.ensure(mount=True)
+
+			self.mongodb.password = self.scalr_password
 			self.mongodb.start_shardsvr()
+			self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 			
 			if self.shard_index == 0 and self.rs_id == 0:
 				self.mongodb.start_config_server()
@@ -292,20 +282,17 @@ class MongoDBHandler(ServiceCtlHandler):
 			if self.rs_id in (0,1):
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 				self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-				self.mongodb.start_router()
+				self.mongodb.start_router(5)
 
 
 	def on_reload(self):
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
 		self._cnf = bus.cnf
-		ini = self._cnf.rawini
-		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+		self._role_name = __node__['role_name']
 		self._storage_path = mongo_svc.STORAGE_PATH
 		self._tmp_dir = os.path.join(self._storage_path, STORAGE_TMP_DIR)
 		
-		self._volume_config_path  = self._cnf.private_path(os.path.join('storage', STORAGE_VOLUME_CNF))
-		self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 		self.mongodb = mongo_svc.MongoDB()
 		self.mongodb.disable_requiretty()
 		key_path = self._cnf.key_path(BEHAVIOUR)
@@ -319,38 +306,29 @@ class MongoDBHandler(ServiceCtlHandler):
 		@param message: HostInitResponse
 		"""
 		with bus.initialization_op as op:
+
 			with op.phase(self._phase_mongodb):
 				with op.step(self._step_accept_scalr_conf):
 					if not message.body.has_key(BEHAVIOUR):
 						raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property " 
 										% (BEHAVIOUR, BEHAVIOUR))
-					
-					path = os.path.dirname(self._volume_config_path)
-					if not os.path.exists(path):
-						os.makedirs(path)
-					
+
 					mongodb_data = message.mongodb.copy()
-			
-					for key, fpath in ((OPT_VOLUME_CNF, self._volume_config_path), 
-									(OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
-						if os.path.exists(fpath):
-							os.remove(fpath)
-						
-						if key in mongodb_data:
-							if mongodb_data[key]:
-								Storage.backup_config(mongodb_data[key], fpath)
-							del mongodb_data[key]
-							
-					mongodb_key = mongodb_data[OPT_KEYFILE]
-					del mongodb_data[OPT_KEYFILE]
-					
+
+					if 'volume_config' in mongodb_data:
+						__mongodb__['volume'] = storage2.volume(mongodb_data.pop('volume_config'))
+
+					if 'snapshot_config' in mongodb_data:
+						__mongodb__['snapshot'] = storage2.snapshot(mongodb_data.pop('snapshot_config'))
+
+					mongodb_key = mongodb_data.pop('keyfile', None)
 					mongodb_key = mongodb_key or cryptotool.pwgen(22)
 					self._cnf.write_key(BEHAVIOUR, mongodb_key)
 					
 					mongodb_data['password'] = mongodb_data.get('password') or cryptotool.pwgen(10)
-						
+
 					self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
-					self._update_config(mongodb_data)
+					__mongodb__.update(mongodb_data)
 		
 
 	def on_before_host_up(self, hostup_msg):
@@ -378,7 +356,6 @@ class MongoDBHandler(ServiceCtlHandler):
 							first_in_rs = False
 			
 						if host.shard_index == 0 and host.replica_set_index == 0:
-							# TODO: Move queryenv host statuses to separate class
 							if host.status == "Running":
 								cfg_server_running = True
 
@@ -429,7 +406,7 @@ class MongoDBHandler(ServiceCtlHandler):
 														"(see https://jira.mongodb.org/browse/SERVER-4238)")
 	
 						wait_for_int_hostups = True
-						shards_total = int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARDS_TOTAL))
+						shards_total = int(__mongodb__['shards_total'])
 						""" Status table = {server_id : {is_ready, is_notified, ip_addr}, ...} """
 						status_table = {}
 	
@@ -552,15 +529,21 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 			with op.step(self._step_start_router):
-				self.mongodb.start_router()
+				self.mongodb.start_router(5)
 				hostup_msg.mongodb['router'] = 1
 
 			if self.rs_id == 0 and self.shard_index == 0:
 				with op.step(self._step_create_scalr_users):
 					try:
 						self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+					except pymongo.errors.OperationFailure, err:
+						if 'unauthorized' in str(err):
+							self._logger.warning(err)
+						else:
+							raise
 					except BaseException, e:
 						self._logger.error(e)
+
 						
 			with op.step(self._step_auth_on_cfg_server_and_router):
 				self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
@@ -829,8 +812,8 @@ class MongoDBHandler(ServiceCtlHandler):
 			return
 
 		if message.local_ip == self._platform.get_private_ip():
-
 			STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
+			storage_vol = __mongodb__['volume']
 
 			if self.mongodb.is_replication_master:
 				self.mongodb.cli.step_down(180, force=True)
@@ -838,14 +821,14 @@ class MongoDBHandler(ServiceCtlHandler):
 			self.mongodb.stop_config_server()
 			self.mongodb.mongod.stop('Server will be terminated')	
 			self._logger.info('Detaching %s storage' % BEHAVIOUR)
-			self.storage_vol.detach()
+			storage_vol.detach()
 			if STATE[REMOVE_VOLUME_KEY]:
 				self._logger.info("Destroying storage")
-				self.storage_vol.destroy()
+				storage_vol.destroy()
 
 			if self._cnf.state == ScalarizrState.INITIALIZING:
-				if STATE[MONGO_VOLUME_CREATED] == self.storage_vol.id:
-					self.storage_vol.destroy(remove_disks=True)
+				if storage_vol.id and STATE[MONGO_VOLUME_CREATED] == storage_vol.id:
+					storage_vol.destroy(remove_disks=True)
 
 		else:
 			shard_idx = int(message.mongodb['shard_index'])
@@ -871,7 +854,6 @@ class MongoDBHandler(ServiceCtlHandler):
 							return True
 						else:
 							return False
-						break
 				else:
 					return True
 
@@ -953,8 +935,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		finally:
 			self.mongodb.router_cli.start_balancer()
 		
-			
-	
+	"""
 	def on_MongoDb_CreateBackup(self, message):
 		if not self.mongodb.is_replication_master:
 			self._logger.debug('Not a master. Skipping backup process')
@@ -983,7 +964,7 @@ class MongoDBHandler(ServiceCtlHandler):
 				if not os.path.exists(self._tmp_dir):
 					os.makedirs(self._tmp_dir)
 				tmpdir = tempfile.mkdtemp(self._tmp_dir)		
-				rchown(mongo_svc.DEFAULT_USER, tmpdir) 
+				chown_r(tmpdir, mongo_svc.DEFAULT_USER)
 	
 				#dump config db on router
 				r_dbs = self.mongodb.router_cli.list_database_names()
@@ -1061,7 +1042,9 @@ class MongoDBHandler(ServiceCtlHandler):
 				os.remove(backup_path)
 			self.mongodb.router_cli.start_balancer()
 				
-				
+	"""
+
+
 	def _init_master(self, message, rs_name):
 		"""
 		Initialize mongodb master
@@ -1070,12 +1053,14 @@ class MongoDBHandler(ServiceCtlHandler):
 		"""
 		
 		self._logger.info("Initializing %s primary" % BEHAVIOUR)
-
 		self.plug_storage()
-
 		self.mongodb.prepare(rs_name)
+
+		#Fix for mongo 2.2 auth, see https://jira.mongodb.org/browse/SERVER-6591
+		self._logger.info("Starting mongod instance without --auth to add the first superuser")
+		self.mongodb.auth = False
 		self.mongodb.start_shardsvr()
-				
+
 		""" Check if replset already exists """
 		if not list(self.mongodb.cli.connection.local.system.replset.find()):
 			self.mongodb.initiate_rs()
@@ -1092,6 +1077,12 @@ class MongoDBHandler(ServiceCtlHandler):
 			rs_cfg['version'] += 10
 			self.mongodb.cli.rs_reconfig(rs_cfg, force=True)
 			wait_until(lambda: self.mongodb.is_replication_master, timeout=180)
+
+		self.mongodb.cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
+		self.mongodb.mongod.stop("Terminating mongod instance to run it with --auth option")
+		self.mongodb.auth = True
+		self.mongodb.start_shardsvr()
+		self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 						
 		# Create snapshot
 		self.mongodb.cli.sync(lock=True)
@@ -1099,18 +1090,13 @@ class MongoDBHandler(ServiceCtlHandler):
 			snap = self._create_snapshot()
 		finally:
 			self.mongodb.cli.unlock()
-		Storage.backup_config(snap.config(), self._snapshot_config_path)
+
+		__mongodb__['snapshot'] = snap
 
 		# Update HostInitResponse message 
-		msg_data = self._compat_storage_data(self.storage_vol, snap)
-					
+		msg_data = self._compat_storage_data(__mongodb__['volume'], snap)
 		message.mongodb = msg_data.copy()
-		try:
-			del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
-		except KeyError:
-			pass
-		self._update_config(msg_data)
-	
+
 	
 	def _get_shard_hosts(self):
 		hosts = self._get_cluster_hosts()
@@ -1127,13 +1113,20 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 	def plug_storage(self):
-		# Plug storage
-		volume_cnf = self._get_volume_cnf()
-		volume_received = volume_cnf.get('id')
-		self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
-		if not volume_received:
-			STATE[MONGO_VOLUME_CREATED] = self.storage_vol.id
-		Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+		storage_snap = None
+		try:
+			storage_volume = __mongodb__['volume']
+		except:
+			storage_snap = __mongodb__['snapshot']
+			storage_volume = storage2.volume(type=storage_snap.type, snap=storage_snap)
+
+		storage_volume.mpoint = self._storage_path
+		storage_volume.ensure(mount=True, mkfs=True)
+
+		if storage_snap is not None:
+			STATE[MONGO_VOLUME_CREATED] = storage_volume.id
+
+		__mongodb__['volume'] = storage_volume
 
 
 	def _init_slave(self, message, rs_name):
@@ -1209,6 +1202,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		self._logger.info("Initializing %s secondary" % BEHAVIOUR)
 
 		self.plug_storage()
+		storage_vol = __mongodb__['volume']
 
 		self.mongodb.stop_default_init_script()
 		self.mongodb.prepare(rs_name)
@@ -1216,7 +1210,10 @@ class MongoDBHandler(ServiceCtlHandler):
 
 		
 		first_start = not self._storage_valid()
+		self.mongodb.auth = True
+
 		if not first_start:
+			self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 			self.mongodb.remove_replset_info()
 			self.mongodb.mongod.stop('Cleaning replica set configuration')
 			self.mongodb.start_shardsvr()
@@ -1250,19 +1247,21 @@ class MongoDBHandler(ServiceCtlHandler):
 								self._logger.info('Received data bundle from master node.')
 								self.mongodb.mongod.stop()
 								
-								self.storage_vol.detach()
+								storage_vol.detach()
 								
 								snap_cnf = msg.mongodb.snapshot_config.copy()
-								new_volume = self._plug_storage(self._storage_path,
-																	 {'snapshot': snap_cnf})
+								new_volume = storage2.volume(type=snap_cnf['type'], mpoint=self._storage_path,
+													snap=snap_cnf)
+								new_volume.ensure(mount=True)
+
 								self.mongodb.start_shardsvr()
 								stale = request_and_wait_replication_status()
 								
 								if stale:
 									raise HandlerError('Got stale even when standing from snapshot.')
 								else:
-									self.storage_vol.destroy()
-									self.storage_vol = new_volume
+									__mongodb__['volume'] = new_volume
+									self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 							else:
 								raise HandlerError('Data bundle failed.')
 								
@@ -1273,16 +1272,24 @@ class MongoDBHandler(ServiceCtlHandler):
 			except:
 				self._logger.info('%s. Trying to perform clean sync' % sys.exc_info()[1] )
 				if new_volume:
-					new_volume.destroy()
-					
-				# TODO: new storage
+					new_volume.destroy(force=True, remove_disks=True)
+				storage_vol.ensure(mount=True)
+
 				self._init_clean_sync()
 				stale = request_and_wait_replication_status()
 				if stale:
 					# TODO: raise distinct exception
 					raise HandlerError("Replication status is stale")
+				self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
 
-		message.mongodb = self._compat_storage_data(self.storage_vol)
+			else:
+				storage_vol.destroy(force=True, remove_disks=True)
+
+		else:
+			self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
+
+		__mongodb__['volume'] = storage_vol
+		message.mongodb = self._compat_storage_data(storage_vol)
 		
 
 	def on_MongoDb_ClusterTerminate(self, message):
@@ -1294,18 +1301,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		except:
 			self.send_result_error_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT, 'Cluster terminate failed')
 		
-		
-	def _get_volume_cnf(self):
-		volume_cnf = dict()
-		try:
-			snap_cnf = Storage.restore_config(self._snapshot_config_path)
-			volume_cnf['snapshot'] = snap_cnf
-		except IOError:
-			volume_cnf = Storage.restore_config(self._volume_config_path)
 
-		return volume_cnf
-
-		
 	def on_MongoDb_IntClusterTerminate(self, message):
 		try:
 			STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.TERMINATING
@@ -1373,51 +1369,21 @@ class MongoDBHandler(ServiceCtlHandler):
 				
 
 	def _get_keyfile(self):
-		password = None 
-		if self._cnf.rawini.has_option(CNF_SECTION, OPT_KEYFILE):
-			password = self._cnf.rawini.get(CNF_SECTION, OPT_KEYFILE)
-		return password
-
-
-	def _update_config(self, data): 
-		#ditching empty data
-		updates = dict()
-		for k,v in data.items():
-			if v: 
-				updates[k] = v
-		
-		self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: updates})
-
-
-	def _plug_storage(self, mpoint, vol):
-		if not isinstance(vol, Volume):
-			vol['tags'] = self.mongo_tags
-			vol = Storage.create(vol)
-
 		try:
-			if not os.path.exists(mpoint):
-				os.makedirs(mpoint)
-			if not vol.mounted():
-				vol.mount(mpoint)
-		except StorageError, e:
-			if 'you must specify the filesystem type' in str(e):
-				vol.mkfs()
-				vol.mount(mpoint)
-			else:
-				raise
-		return vol
+			return __mongodb__['keyfile']
+		except:
+			return None
 
 
 	def _create_snapshot(self):
-		
 		system2('sync', shell=True)
-		# Creating storage snapshot
+
 		snap = self._create_storage_snapshot()
 			
-		wait_until(lambda: snap.state in (Snapshot.CREATED, Snapshot.COMPLETED, Snapshot.FAILED))
-		if snap.state == Snapshot.FAILED:
+		wait_until(lambda: snap.status() in (snap.COMPLETED, snap.FAILED))
+		if snap.status() == snap.FAILED:
 			raise HandlerError('%s storage snapshot creation failed. See log for more details' % BEHAVIOUR)
-		
+
 		return snap
 
 
@@ -1425,8 +1391,8 @@ class MongoDBHandler(ServiceCtlHandler):
 		#TODO: check mongod journal option if service is running!
 		self._logger.info("Creating mongodb's storage snapshot")
 		try:
-			return self.storage_vol.snapshot(tags=self.mongo_tags)
-		except StorageError, e:
+			return __mongodb__['volume'].snapshot(tags=self.mongo_tags)
+		except storage2.StorageError, e:
 			self._logger.error("Cannot create %s data snapshot. %s", (BEHAVIOUR, e))
 			raise
 		
@@ -1480,14 +1446,14 @@ class MongoDBHandler(ServiceCtlHandler):
 	@property
 	def shard_index(self):
 		if not hasattr(self, "_shard_index"):
-			self._shard_index = int(self._cnf.rawini.get(CNF_SECTION, OPT_SHARD_INDEX))
+			self._shard_index = int(__mongodb__['shard_index'])
 		return self._shard_index
 
-	
+
 	@property
 	def rs_id(self):
 		if not hasattr(self, "_rs_index"):
-			self._rs_index = int(self._cnf.rawini.get(CNF_SECTION, OPT_RS_ID))
+			self._rs_index = int(__mongodb__['replica_set_index'])
 		return self._rs_index
 
 
@@ -1502,7 +1468,7 @@ class MongoDBHandler(ServiceCtlHandler):
 			
 	@property
 	def scalr_password(self):
-		return self._cnf.rawini.get(CNF_SECTION, OPT_PASSWORD)
+		return __mongodb__['password']
 	
 	@property
 	def hostname(self):
@@ -1712,7 +1678,7 @@ class ClusterTerminateWatcher(threading.Thread):
 				messages = [pair[1] for pair in msg_queue_pairs]
 
 				for msg in messages:
-					if not msg.name == MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT:
+					if msg.name != MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT:
 						continue
 
 					try:
@@ -1762,7 +1728,6 @@ class ClusterTerminateWatcher(threading.Thread):
 					self.handler.send_message(MongoDBMessages.CLUSTER_TERMINATE_STATUS, msg_body)
 
 					if terminated_nodes_count == self.total_nodes_count:
-						cluster_terminated = True
 						break
 					else:
 						self.next_heartbeat += datetime.timedelta(seconds=HEARTBEAT_INTERVAL)

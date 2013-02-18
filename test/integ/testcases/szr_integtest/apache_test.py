@@ -16,9 +16,6 @@ from szr_integtest_libs.scalrctl import	ScalrCtl
 from szr_integtest.nginx_test	 import VirtualTest, NginxStartupTest, NginxRestartTest, \
 										RebundleTest, TerminateTest, HttpsTest
 
-from scalarizr.util import system2
-from scalarizr.util.filetool import read_file, write_file 
-
 
 
 class StartupTest(NginxStartupTest):

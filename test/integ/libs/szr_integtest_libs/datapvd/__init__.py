@@ -11,7 +11,6 @@ from szr_integtest_libs.ssh_tool import MutableLogFile, execute
 from libcloud.types import Provider 
 from libcloud.providers import get_driver 
 from libcloud.base import NodeSize, NodeImage
-from scalarizr.util.filetool import read_file
 from scalarizr.util import wait_until
 from itertools import chain
 
@@ -48,7 +47,9 @@ def read_json_config(cnf_path):
 		else:
 			return data
 		
-	raw_config = read_file(cnf_path)
+	raw_config = None
+	with open(cnf_path, 'r') as fp:
+	    raw_config = fp.read()
 
 	try:
 		config = convert_dict_from_unicode(json.loads(raw_config))
@@ -188,7 +189,9 @@ class DataProvider(object):
 			# Set authorized_keys for rackspace
 			if self.ssh_config.get('ssh_pub_key') and self.ssh_config.get('ssh_private_key'):
 				pub_key_path = self.ssh_config.get('ssh_pub_key')
-				pub_key = read_file(pub_key_path)
+				pub_key = None
+				with open(pub_key_path, 'r') as fp:
+				    pub_key = fp.read()
 				kwargs['ex_files'] = {'/root/.ssh/authorized_keys' : pub_key, '/root/authorized_keys' : pub_key}
 			
 			node = self.conn.create_node(**kwargs)

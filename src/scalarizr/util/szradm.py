@@ -10,7 +10,6 @@ from scalarizr.messaging import Queues
 from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.bus import bus
-from scalarizr.util.filetool import read_file
 from scalarizr.util.software import system_info, whereis
 from scalarizr import init_script
 from scalarizr.util import system2
@@ -423,13 +422,14 @@ class MessageDetailsCommand(Command):
 			cur = conn.cursor()
 
 			assert self.kwds['message_id'], 'message_id must be defined'
-			query="SELECT `message` FROM p2p_message WHERE `message_id`='%s'"\
+			query="SELECT `message`,`format` FROM p2p_message WHERE `message_id`='%s'"\
 				% self.kwds['message_id']
 			cur.execute(query)
 			res = cur.fetchone()
 			if res:
 				msg=Message()
-				msg.fromxml(res[0])
+				format = res[1]
+				msg.fromjson(res[0]) if 'json' == format else msg.fromxml(res[0])
 				try:
 					#LOG.debug('\nbefor encode: %s\n'% {u'id':msg.id, u'name':msg.name,
 					#	u'meta':msg.meta, u'body':msg.body})
@@ -583,7 +583,8 @@ def new_queryenv():
 		if not bus.scalr_version:
 			version_file = cnf.private_path('.scalr-version')
 			if os.path.exists(version_file):
-				bus.scalr_version = tuple(read_file(version_file).strip().split('.'))
+				with open(version_file, 'r') as fp:
+				    bus.scalr_version = tuple(fp.read().strip().split('.'))
 		
 		if bus.scalr_version:
 			if bus.scalr_version >= (3, 5, 3):
@@ -691,10 +692,18 @@ def main():
 			msg = msg_service.new_message()
 
 			if options.msgfile:
-				str = read_file(options.msgfile, error_msg='Cannot open message file %s' %
-					options.msgfile)
+				str = None
+				with open(options.msgfile, 'r') as fp:
+					str = fp.read()
 				if str:
-					msg.fromxml(str)
+					try:
+						msg.fromxml(str)
+					except:
+						try:
+							msg.fromjson(str)
+						except:
+							print 'Unknown message format'
+							sys.exit(1)
 			else:
 				msg.body = kv
 
@@ -719,14 +728,18 @@ def main():
 				msg_service = bus.messaging_service
 				msg = msg_service.new_message()				
 								
-				cur.execute('SELECT message '
+				cur.execute('SELECT message, format '
 						'FROM p2p_message '
 						'WHERE message_name = ? '
 						'ORDER BY id DESC '
 						'LIMIT 1', ('HostInitResponse', )
 				)
-				xml = cur.fetchone()['message']
-				msg.fromxml(xml)
+				raw_msg, format = cur.fetchone()
+
+				if 'xml' == format:
+					msg.fromxml(raw_msg)
+				elif 'json' == format:
+					msg.fromjson(raw_msg)
 				
 				producer = msg_service.get_producer()
 				producer.send(Queues.CONTROL, msg)
@@ -747,7 +760,7 @@ def main():
 				log_params = ini.get('handler_file', 'args')
 				try:
 					log_file = log_params(0)
-				except IndexError, TypeError:
+				except (IndexError, TypeError):
 					raise
 			except Exception, BaseException:
 				log_file = '/var/log/scalarizr.log'

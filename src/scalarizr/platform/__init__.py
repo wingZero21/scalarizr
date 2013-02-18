@@ -4,16 +4,27 @@ Created on Dec 24, 2009
 
 @author: marat
 '''
-from scalarizr.bus import bus
-from scalarizr.util.filetool import read_file
+
 import os
 import re
 import socket
 import urllib2
 import logging
+import sys
+import socket
+import struct
+import array
+import fcntl
+
 import ConfigParser
 
+from scalarizr.bus import bus
+
+
 class PlatformError(BaseException):
+	pass
+
+class NoAccessDataError(Exception):
 	pass
 
 class UserDataOptions:
@@ -52,7 +63,7 @@ class Platform():
 	_arch = None
 	_access_data = None
 	_userdata = None
-	
+	_logger = logging.getLogger(__name__)
 	features = []
 	scalrfs = None			
 	
@@ -70,7 +81,9 @@ class Platform():
 		if self._userdata is None:
 			path = cnf.private_path('.user-data')
 			if os.path.exists(path):
-				rawmeta = read_file(path)
+				rawmeta = None
+				with open(path, 'r') as fp:
+				    rawmeta = fp.read()
 				if not rawmeta:
 					raise PlatformError("Empty user-data")
 				self._userdata = self._parse_user_data(rawmeta)
@@ -86,7 +99,7 @@ class Platform():
 		if prop:
 			try:
 				return self._access_data[prop]
-			except TypeError, KeyError:
+			except (TypeError, KeyError):
 				raise PlatformError("Platform access data property '%s' doesn't exists" % (prop,))
 		else:
 			return self._access_data
@@ -120,6 +133,10 @@ class Platform():
 		for k, v in re.findall("([^=]+)=([^;]*);?", raw_userdata):
 			userdata[k] = v
 		return userdata
+
+	def _raise_no_access_data(self):
+		msg = 'There are no credentials from cloud services: %s' % self.name
+		raise NoAccessDataError(msg)
 	
 	
 	class _scalrfs(object):
@@ -264,3 +281,27 @@ class Architectures:
 	I386 = "i386"
 	X86_64 = "x86_64"
 	UNKNOWN = "unknown"
+
+
+def net_interfaces():
+	# http://code.activestate.com/recipes/439093-get-names-of-all-up-network-interfaces-linux-only/#c7
+    is_64bits = sys.maxsize > 2**32
+    struct_size = 40 if is_64bits else 32
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    max_possible = 8 # initial value
+    while True:
+        num_bytes = max_possible * struct_size
+        names = array.array('B', '\0' * num_bytes)
+        outbytes = struct.unpack('iL', fcntl.ioctl(
+            s.fileno(),
+            0x8912,  # SIOCGIFCONF
+            struct.pack('iL', num_bytes, names.buffer_info()[0])
+        ))[0]
+        if outbytes == num_bytes:
+            max_possible *= 2
+        else:
+            break
+    namestr = names.tostring()
+    return dict([(namestr[i:i+16].split('\0', 1)[0],
+            socket.inet_ntoa(namestr[i+20:i+24]))
+            for i in range(0, outbytes, struct_size)])

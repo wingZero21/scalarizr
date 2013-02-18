@@ -15,8 +15,13 @@ import tempfile
 
 from scalarizr.bus import bus
 from scalarizr.storage import transfer
-from scalarizr.util import filetool, system2, fstool, wait_until
+from scalarizr import storage2
+from scalarizr.util import system2, wait_until
+from scalarizr.linux import mount
 from scalarizr.handlers import rebundle as rebundle_hndlr
+from scalarizr.linux.tar import Tar
+from scalarizr.linux.rsync import rsync
+from scalarizr.linux import coreutils
 
 
 def get_handlers():
@@ -49,17 +54,16 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			image_name	= 'disk.raw'
 			image_path	= os.path.join(rebundle_dir, image_name)
 
-			root = filter(lambda x: x.mpoint == '/', filetool.df())[0]
-
+			root_size = coreutils.statvfs('/')['size']
 			LOG.debug('Creating image file %s' % image_path)
 			with open(image_path, 'w') as f:
-				f.truncate(root.size*1024 + 1*1024)
+				f.truncate(root_size + 1*1024)
 
 			try:
 
 				LOG.debug('Creating partition table on image')
 				system2(('parted', image_path, 'mklabel', 'msdos'))
-				system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root.size/1024)))
+				system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))))
 
 				# Map disk image
 				out = system2(('kpartx', '-av', image_path))[0]
@@ -68,11 +72,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 					root_dev_name = '/dev/mapper/%sp1' % loop.split('/')[-1]
 
 					LOG.info('Creating filesystem')
-					fstool.mkfs(root_dev_name, 'ext4')
+					storage2.filesystem('ext4').mkfs(root_dev_name)
 					dev_uuid = uuid.uuid4()
 					system2(('tune2fs', '-U', str(dev_uuid), root_dev_name))
 
-					fstool.mount(root_dev_name, tmp_mount_dir)
+					mount.mount(root_dev_name, tmp_mount_dir)
 					try:
 						lines = system2(('/bin/mount', '-l'))[0].splitlines()
 						exclude_dirs = set()
@@ -83,14 +87,16 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 						exclude_dirs.update(self.exclude_dirs)
 
-						rsync = filetool.Rsync()
-						rsync.source('/').dest(tmp_mount_dir).sparse()
-						rsync.hardlinks().archive().times()
-						rsync.exclude([os.path.join(ex, '**') for ex in exclude_dirs])
-						rsync.exclude(self.exclude_files)
-						rsync.exclude(self._excludes)
+						excludes = [os.path.join(ex, '**') for ex in exclude_dirs]
+						excludes.extend(self.exclude_files)
+						excludes.extend(self._excludes)
+						
 						LOG.info('Copying root filesystem to image')
-						rsync.execute()
+						rsync('/', tmp_mount_dir, archive=True,
+												  hard_links=True,
+												  times=True,
+												  sparse=True,
+												  exclude=excludes)
 
 						LOG.info('Cleanup image')
 						self._create_spec_devices(tmp_mount_dir)
@@ -117,7 +123,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 								f.write(new_fstab)
 
 					finally:
-						fstool.umount(device=root_dev_name)
+						mount.umount(root_dev_name)
 				finally:
 					system2(('kpartx', '-d', image_path))
 
@@ -125,7 +131,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 				arch_name = '%s.tar.gz' % self._role_name.lower()
 				arch_path = os.path.join(rebundle_dir, arch_name)
 
-				tar = filetool.Tar()
+				tar = Tar()
 				tar.create().gzip().sparse()
 				tar.archive(arch_path)
 				tar.add(image_name, rebundle_dir)
@@ -165,11 +171,20 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			# TODO: check duplicate names
 			compute = pl.new_compute_client()
 
+			current_image_fq = pl.get_image().split('/')
+			current_img_project = current_image_fq[1]
+			current_img_name = current_image_fq[3]
+			current_img_obj = compute.images().get(project=current_img_project,
+									image=current_img_name).execute()
+			kernel = current_img_obj['preferredKernel']
+
 			image_url = 'http://storage.googleapis.com/%s/%s' % (
 											tmp_bucket_name, arch_name)
+
 			req_body = dict(
 				name=goog_image_name,
 				sourceType='RAW',
+				preferredKernel=kernel,
 				rawDisk=dict(
 					containerType='TAR',
 					source=image_url
@@ -181,7 +196,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
 			LOG.info('Waiting for image to register')
 			def image_is_ready():
-				req = compute.operations().get(project=proj_id, operation=operation)
+				req = compute.globalOperations().get(project=proj_id, operation=operation)
 				res = req.execute()
 				if res['status'] == 'DONE':
 					if res.get('error'):

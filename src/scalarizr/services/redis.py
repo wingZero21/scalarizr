@@ -10,12 +10,19 @@ import signal
 import logging
 import shutil
 
-from scalarizr.util import initdv2, system2, PopenError, wait_until
-from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError
+from scalarizr import storage2, node
+from scalarizr.util import initdv2, system2, PopenError, wait_until, Singleton
+from scalarizr.services import backup
+from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, PresetProvider
 from scalarizr.util import disttool, cryptotool, firstmatched
-from scalarizr.util.filetool import rchown
+from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
+
+__redis__ = node.__node__['redis']
+__redis__.update({
+	'storage_dir': '/mnt/redisstorage'
+})
 
 SERVICE_NAME = CNF_SECTION = DEFAULT_USER = 'redis'
 
@@ -26,6 +33,7 @@ UBUNTU_BIN_PATH 	 = '/usr/bin/redis-server'
 CENTOS_BIN_PATH 	 = '/usr/sbin/redis-server'
 BIN_PATH = UBUNTU_BIN_PATH if disttool.is_ubuntu() else CENTOS_BIN_PATH
 
+PRESET_FNAME = 'redis.conf'
 UBUNTU_CONFIG_DIR = '/etc/redis'
 CENTOS_CONFIG_DIR = '/etc/'
 CONFIG_DIR = UBUNTU_CONFIG_DIR if disttool.is_ubuntu() else CENTOS_CONFIG_DIR
@@ -101,8 +109,8 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 		password = redis_conf.requirepass
 		cli = RedisCLI(password)
 		wait_until(lambda: cli.test_connection(), timeout=10, sleep=1)
-	
-	
+
+
 class Redisd(object):
 
 	config_path = None
@@ -110,6 +118,7 @@ class Redisd(object):
 	port = None
 	cli = None
 
+	name = 'redis-server'
 
 	def __init__(self, config_path=None, port=None):
 		self.config_path = config_path
@@ -150,6 +159,7 @@ class Redisd(object):
 
 		except PopenError, e:
 			LOG.error('Unable to start redis process: %s' % e)
+			raise initdv2.InitdError(e)
 
 
 	def stop(self, reason=None):
@@ -159,7 +169,9 @@ class Redisd(object):
 			wait_until(lambda: not self.running, timeout=MAX_START_TIMEOUT)
 
 
-	def restart(self, reason=None):
+	def restart(self, reason=None, force=True):
+		#force parameter is needed
+		#for compatibility with lazyInitScript
 		if self.running:
 			self.stop()
 		self.start()
@@ -201,10 +213,11 @@ class Redisd(object):
 
 class RedisInstances(object):
 
+	__metaclass__ = Singleton
+
 	instances = None
 	master = None
 	persistence_type = None
-
 
 	def __init__(self, master=False, persistence_type=SNAP_TYPE, use_passwords=True):
 		self.master = master
@@ -316,7 +329,8 @@ class RedisInstances(object):
 
 
 	def init_as_masters(self, mpoint):
-		passwords = ports = []
+		passwords = []
+		ports = []
 		for redis in self.instances:
 			redis.init_master(mpoint)
 			passwords.append(redis.password)
@@ -325,7 +339,8 @@ class RedisInstances(object):
 
 
 	def init_as_slaves(self, mpoint, primary_ip):
-		passwords = ports = []
+		passwords = []
+		ports = []
 		for redis in self.instances:
 			passwords.append(redis.password)
 			ports.append(redis.port)
@@ -493,7 +508,7 @@ class WorkingDirectory(object):
 			shutil.copyfile(self.db_path, new_db_path)
 
 		LOG.debug("changing directory owner to %s" % self.user)
-		rchown(self.user, dst)
+		chown_r(dst, self.user)
 		self.db_path = new_db_path
 		return new_db_path
 
@@ -522,17 +537,12 @@ class WorkingDirectory(object):
 			LOG.error('Cannot empty %s: %s' % (os.path.dirname(self.db_path), e))
 
 
-
 class BaseRedisConfig(BaseConfig):
 
 	config_type = 'redis'
 
-
 	def set(self, option, value, append=False):
-		if not self.data:
-			self.data = Configuration(self.config_type)
-			if os.path.exists(self.path):
-				self.data.read(self.path)
+		self._init_configuration()
 		if value:
 			if append:
 				self.data.add(option, str(value))
@@ -540,9 +550,7 @@ class BaseRedisConfig(BaseConfig):
 				self.data.set(option,str(value), force=True)
 		else:
 			self.data.comment(option)
-		if self.autosave:
-			self.save_data()
-			self.data = None
+		self._cleanup(True)
 
 
 	def set_sequential_option(self, option, seq):
@@ -560,10 +568,7 @@ class BaseRedisConfig(BaseConfig):
 
 
 	def get_list(self, option):
-		if not self.data:
-			self.data =  Configuration(self.config_type)
-			if os.path.exists(self.path):
-				self.data.read(self.path)
+		self._init_configuration()
 		try:
 			value = self.data.get_list(option)
 		except NoPathError:
@@ -571,8 +576,7 @@ class BaseRedisConfig(BaseConfig):
 				value = getattr(self, option+'_default')
 			except AttributeError:
 				value = ()
-		if self.autosave:
-			self.data = None
+		self._cleanup(False)
 		return value
 
 
@@ -910,6 +914,64 @@ class RedisCLI(object):
 		return False
 
 
+class RedisPresetProvider(PresetProvider):
+
+
+	def __init__(self):
+		pass
+
+
+	def get_preset(self, manifest):
+		for provider in self.providers:
+			if provider.service.port == DEFAULT_PORT:
+				return provider.get_preset(manifest)
+
+
+	def set_preset(self, settings, manifest):
+		for provider in self.providers:
+			for fname in settings:
+				if fname == PRESET_FNAME:
+					provider.set_preset(settings, manifest)
+
+
+	@property
+	def providers(self):
+		providers = []
+		LOG.debug('Getting list of redis preset providers')
+		for port in get_busy_ports():
+			service = Redisd(get_redis_conf_path(port), int(port))
+			config_mapping = {PRESET_FNAME:service.redis_conf}
+			providers.append(PresetProvider(service, config_mapping))
+		return providers
+
+
+class RedisSnapBackup(backup.SnapBackup):
+	def __init__(self, **kwds):
+		super(RedisSnapBackup, self).__init__(**kwds)
+		self.on(freeze=self.freeze)
+		self._redis_instances = RedisInstances()
+
+
+	def freeze(self, volume, state):
+		system2('sync', shell=True)
+		self._redis_instances.save_all()
+		system2('sync', shell=True)
+
+class RedisSnapRestore(backup.SnapRestore):
+	def __init__(self, **kwds):
+		super(RedisSnapRestore, self).__init__(**kwds)
+		self.on(complete=self.complete)
+
+
+	def complete(self, volume):
+		vol = storage2.volume(volume)
+		vol.mpoint = __redis__['storage_dir']
+		vol.mount()
+
+backup.backup_types['snap_redis'] = RedisSnapBackup
+backup.restore_types['snap_redis'] = RedisSnapRestore
+
+
 def get_snap_db_filename(port=DEFAULT_PORT):
 	return 'dump.%s.rdb' % port
 
@@ -928,7 +990,7 @@ def get_port(conf_path=DEFAULT_CONF_PATH):
 	if conf_path == DEFAULT_CONF_PATH:
 		return DEFAULT_PORT
 	raw = conf_path.split('.')
-	return raw[-2:-1] if len(raw) > 2 else None
+	return int(raw[-2]) if len(raw) > 2 else None
 
 
 def get_redis_conf_path(port=DEFAULT_PORT):
@@ -947,7 +1009,7 @@ def get_pidfile(port=DEFAULT_PORT):
 	'''
 	if not os.path.exists(pid_file):
 		open(pid_file, 'w').close()
-	rchown('redis', pid_file)
+	chown_r(pid_file, 'redis')
 	return pid_file
 
 

@@ -1,4 +1,3 @@
-from __future__ import with_statement
 '''
 Created on Dec 04, 2011
 

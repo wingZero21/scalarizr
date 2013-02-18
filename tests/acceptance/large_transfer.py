@@ -1,3 +1,11 @@
+"""
+Essential environment variables:
+$AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY for s3
+$RS_USERNAME, $RS_API_KEY for swift (rackspace);
+$ENTER_IT_USERNAME, $ENTER_IT_API_KEY for swift enter.it
+
+default storage to test is s3; override with $LT_TEST_STORAGE
+"""
 __author__ = 'vladimir'
 
 
@@ -8,30 +16,89 @@ import subprocess
 import json
 import logging
 import hashlib
+import base64
 from copy import copy
 from ConfigParser import ConfigParser
 from random import choice
 
+import mock
 from lettuce import step, world, before, after
 from boto import connect_s3
+import swiftclient
 
-from scalarizr.storage2.cloudfs import s3, LargeTransfer, LOG
-
-
-#
-# Patches
-#
+from scalarizr.storage2.cloudfs import LargeTransfer, LOG
+from scalarizr.storage2.cloudfs import s3, gcs, swift
+from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 
 
-# prevent ini parser from lowercasing params
-ConfigParser.optionxform = lambda self, x: x
+FEATURE = "Large transfer"
+
+STORAGE = "s3"
+if "LT_TEST_STORAGE" in os.environ:
+	STORAGE = os.environ["LT_TEST_STORAGE"]
 
 
-# patch get_conn because platfrom is None
-s3.S3FileSystem._get_connection = lambda self: connect_s3()
+@before.each_feature
+def setup(feat):
+	# TODO: restore
+	if feat.name == FEATURE:
+
+		# prevent ini parser from lowercasing params
+		ConfigParser.optionxform = lambda self, x: x
+
+		# make connections work
+
+		if STORAGE == "s3":
+			s3.S3FileSystem._get_connection = lambda self: connect_s3()
+
+		elif STORAGE == "gcs":
+			def get_pk(f="gcs_pk.p12"):  # TODO:
+				with open(f, "rb") as fd:
+					pk = fd.read()
+				return base64.b64encode(pk)
+
+			ACCESS_DATA = {
+				"service_account_name": '876103924605@developer.gserviceaccount.com',
+				"key": get_pk(),
+			}
+
+			gcs.bus = mock.MagicMock()
+			gcs.bus.platform.get_access_data = lambda k: ACCESS_DATA[k]
+
+			gsm = GoogleServiceManager(gcs.bus.platform,
+				"storage", "v1beta1", STORAGE_FULL_SCOPE)
+
+			gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
+			gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
+
+		elif STORAGE == "swift":
+			swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
+					"https://identity.api.rackspacecloud.com/v1.0",
+					os.environ["RS_USERNAME"], os.environ["RS_API_KEY"])
+
+		elif STORAGE == "swift-enter-it":
+			swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
+				"http://folsom.enter.it:5000/v2.0",
+				os.environ["ENTER_IT_USERNAME"], os.environ["ENTER_IT_API_KEY"], auth_version="2")
 
 
 class S3(s3.S3FileSystem):
+
+	def exists(self, remote_path):
+		parent = os.path.dirname(remote_path.rstrip('/'))
+		ls = self.ls(parent)
+		return remote_path in ls
+
+
+class GCS(gcs.GCSFileSystem):
+
+	def exists(self, remote_path):
+		parent = os.path.dirname(remote_path.rstrip('/'))
+		ls = self.ls(parent)
+		return remote_path in ls
+
+
+class Swift(swift.SwiftFileSystem):
 
 	def exists(self, remote_path):
 		parent = os.path.dirname(remote_path.rstrip('/'))
@@ -47,11 +114,12 @@ LOG.setLevel(logging.DEBUG)
 LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
 
 
+"""
 @before.all
 def global_setup():
 	subprocess.Popen(["strace", "-T", "-t", "-f", "-q", "-o", "strace_latest",
 					  "-p", str(os.getpid())], close_fds=True)
-
+"""
 
 #
 #
@@ -62,8 +130,22 @@ STORAGES = {
 	"s3": {
 		"url": "s3://scalr.test_bucket/vova_test",
 		"driver": S3,
-	}
+	},
+	"gcs": {
+		"url": "gcs://vova-test",
+		"driver": GCS,
+	},
+	"swift": {
+		"url": "swift://vova-test",
+		"driver": Swift,
+	},
+	"swift-enter-it": {
+		"url": "swift://vova-test",
+		"driver": Swift,
+	},
 }
+
+assert STORAGE in STORAGES, "%s not in %s" % (STORAGE, STORAGES.keys())
 
 
 def convert_manifest(json_manifest):
@@ -78,7 +160,7 @@ def convert_manifest(json_manifest):
 	parser.set("snapshot", "created_at", json_manifest["created_at"])
 	parser.set("snapshot", "pack_method", json_manifest["files"][0]["compressor"])
 
-	for chunk, md5sum in reversed(json_manifest["files"][0]["chunks"]):
+	for chunk, md5sum, size in reversed(json_manifest["files"][0]["chunks"]):
 		parser.set("chunks", chunk, md5sum)
 
 	LOG.debug("CONVERT: %s" % parser.items("chunks"))
@@ -113,6 +195,7 @@ def setup(scenario):
 		'multipart_result': None,
 	}
 	world.deleted_chunk = None
+	world._for_size_test = None
 
 
 @after.each_scenario
@@ -155,6 +238,8 @@ def initialize_upload_variables(step):
 
 @step("I have a (\d+) megabytes file (\w+)")
 def i_have_a_file(step, megabytes, filename):
+	world._for_size_test = int(megabytes) * 1024 * 1024
+
 	filename = os.path.join(world.basedir, filename)
 	world.sources.append(filename)
 
@@ -162,24 +247,24 @@ def i_have_a_file(step, megabytes, filename):
 	world.items[os.path.basename(filename)] = f_md5
 
 
-@step("I upload it to ([^\s]+) with gzipping")
-def i_upload_it_with_gzipping(step, storage):
-	world.destination = STORAGES[storage]["url"]
-	world.driver = STORAGES[storage]["driver"]()
-	world.manifest_url = LargeTransfer(world.sources[0], world.destination, chunk_size=15).run()
+@step("I upload it to Storage with gzipping")
+def i_upload_it_with_gzipping(step):
+	world.destination = STORAGES[STORAGE]["url"]
+	world.driver = STORAGES[STORAGE]["driver"]()
+	world.manifest_url = LargeTransfer(world.sources[0], world.destination).run().cloudfs_path
 
 
 
-@step("I upload multiple sources to ([^\s]+) with gzipping")
-def i_upload_multiple_sources_with_gzipping(step, storage):
-	world.destination = STORAGES[storage]["url"]
-	world.driver = STORAGES[storage]["driver"]()
+@step("I upload multiple sources to Storage with gzipping")
+def i_upload_multiple_sources_with_gzipping(step):
+	world.destination = STORAGES[STORAGE]["url"]
+	world.driver = STORAGES[STORAGE]["driver"]()
 
 	def src_gen(sources=copy(world.sources)):
 		for src in sources:
 			yield src
 
-	world.manifest_url = LargeTransfer(src_gen(), world.destination).run()
+	world.manifest_url = LargeTransfer(src_gen(), world.destination).run().cloudfs_path
 
 
 @step("I expect manifest as a result")
@@ -195,9 +280,9 @@ def i_expect_manifest_as_a_result(step):
 
 @step("all chunks are uploaded")
 def all_chunks_are_uploaded(step):
-	for chunk, md5sum in world.result_chunks:
+	for chunk in world.result_chunks:
 		assert world.driver.exists(os.path.join(os.path.dirname(world.manifest_url),
-			chunk))
+			chunk[0]))
 
 
 @step("I have a dir (\w+/?) with (\d+) megabytes file (\w+), with (\d+) megabytes file (\w+)")
@@ -266,7 +351,7 @@ def i_delete_one_of_the_chunks(step):
 	manifest = release_local_data()
 	remote_dir, manifest_name = os.path.split(world.manifest_url)
 
-	chunk, md5sum = choice(choice(manifest["files"])["chunks"])
+	chunk, md5sum, size = choice(choice(manifest["files"])["chunks"])
 
 	chunk_url = os.path.join(remote_dir, chunk)
 	world.deleted_chunk = chunk_url
@@ -292,10 +377,10 @@ def i_have_a_stream(step, megabytes, name):
 	world.items[os.path.basename(stream.name)] = stream_md5
 
 
-@step("I upload it to ([^\s]+) with intentional interrupt")
-def i_upload_it_with_intentional_interrupt(step, storage):
-	world.destination = STORAGES[storage]["url"]
-	world.driver = STORAGES[storage]["driver"]()
+@step("I upload it to Storage with intentional interrupt")
+def i_upload_it_with_intentional_interrupt(step):
+	world.destination = STORAGES[STORAGE]["url"]
+	world.driver = STORAGES[STORAGE]["driver"]()
 
 	lt = LargeTransfer(world.sources[0], world.destination, chunk_size=20, num_workers=2)
 	lt.on(transfer_complete=lambda *args: lt.kill())
@@ -307,6 +392,15 @@ def i_upload_it_with_intentional_interrupt(step, storage):
 @step("I expect cloud path cleaned")
 def i_expect_path_clean(step):
 	assert not world.driver.ls(world.manifest_url)
+
+
+@step("chunks sizes are correct")
+def chunks_sizes_are_correct(step):
+	# TODO: implement stat() in drivers and make more adequate size checks
+	chunk_sum = reduce(lambda sum, x: sum + x[2], world.result_chunks, 0)
+	assert abs(world._for_size_test - chunk_sum) < 10 * 1024, "%s != %s" % \
+											(world._for_size_test, chunk_sum)
+
 
 
 

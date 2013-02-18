@@ -6,6 +6,7 @@ Created on Dec 23, 2009
 '''
 import binascii
 import logging
+import os
 import sys
 import urllib
 import urllib2
@@ -56,7 +57,11 @@ class QueryEnvService(object):
 		file.close()
 
 		signature, timestamp = cryptotool.sign_http_request(request_body, key)		
-		
+
+		# Work over [Errno -3] Temporary failure in name resolution
+		# http://bugs.centos.org/view.php?id=4814 
+		os.chmod('/etc/resolv.conf', 0755)					
+
 		post_data = urllib.urlencode(request_body)
 		headers = {
 			"Date": timestamp, 
@@ -306,16 +311,21 @@ class QueryEnvService(object):
 				vhost = VirtualHost(hostname,v_type,raw_data,https)
 				ret.append(vhost)
 		return ret
-	
+
+
 	def _read_get_service_configuration_response(self, xml, behaviour):
 		data = xml2dict(ET.XML(xml))
 		preset = Preset()
-		for raw_preset in data:
-			if behaviour != raw_preset['behaviour']:
-				continue
-			preset.name = raw_preset['preset-name']
-			preset.restart_service = raw_preset['restart-service']
-			preset.settings = raw_preset['values']
+		if 'newPresetsUsed' in data and data['newPresetsUsed']:
+			preset.new_engine = True
+		else:
+			for raw_preset in data:
+				if behaviour != raw_preset['behaviour']:
+					continue
+				preset.name = raw_preset['preset-name']
+				preset.restart_service = raw_preset['restart-service']
+				preset.settings = raw_preset['values']
+				preset.new_engine = False
 		return preset
 
 	
@@ -337,18 +347,20 @@ class Preset(object):
 	settings = None
 	name = None
 	restart_service = None
-	
+	new_engine = None
+
 	def __init__(self, name = None, settings = None, restart_service = None):
 		self.settings = {} if not settings else settings
 		self.name = None if not name else name
 		self.restart_service = None if not restart_service else restart_service
-	
+
 	def __repr__(self):
-		return 'name = ' + str(self.name) \
-	+ "; restart_service = " + str(self.restart_service) \
-	+ "; settings = " + str(self.settings)
-		
-	
+		return 'name = ' + str(self.name)\
+		       + "; restart_service = " + str(self.restart_service)\
+		       + "; settings = " + str(self.settings)\
+		       + "; new_engine = " + str(self.new_engine)
+
+
 class Mountpoint(object):
 	name = None
 	dir = None

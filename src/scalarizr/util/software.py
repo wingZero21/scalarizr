@@ -1,13 +1,14 @@
 from __future__ import with_statement
-'''
+"""
 Created on Sep 10, 2010
 
 @author: marat
-'''
+"""
+
 from scalarizr.util import disttool, system2
 from scalarizr import linux
-from scalarizr.linux import coreutils
-import os, re, zipfile, string, glob
+from scalarizr.linux import coreutils, pkgmgr
+import os, re, zipfile, glob
 
 __all__ = ('all_installed', 'software_info', 'explore', 'whereis')
 
@@ -58,13 +59,13 @@ def system_info(verbose=False):
 	ret = {}
 	ret['software'] = []			
 	installed_list = all_installed()
-	for software_info in installed_list:
+	for software_inf in installed_list:
 		v = dict(
-			name=software_info.name,
-			version='.'.join([str(x) for x in software_info.version])
+			name=software_inf.name,
+			version='.'.join([str(x) for x in software_inf.version])
 		)
 		if verbose:
-			v['string_version'] = software_info.string_version		
+			v['string_version'] = software_inf.string_version
 		
 		ret['software'].append(v)
 
@@ -75,7 +76,7 @@ def system_info(verbose=False):
 
 	ret['dist'] = {
 		'distributor': linux.os['name'].lower(),
-		'release': linux.os['release'],
+		'release': str(linux.os['release']),
 		'codename': linux.os['codename']
 	}
 	
@@ -108,7 +109,7 @@ def system_info(verbose=False):
 class SoftwareError(BaseException):
 	pass
 
-class SoftwareInfo:
+class SoftwareInfo(object):
 	name = None	
 	version = None	
 	'''
@@ -199,7 +200,7 @@ def php_software_info():
 	
 	if res:
 		version = res.group(1)
-		return SoftwareInfo('php',version, out)
+		return SoftwareInfo('php', version, out)
 	raise SoftwareError
 
 explore('php', php_software_info)
@@ -271,7 +272,8 @@ explore('apache', apache_software_info)
 
 def tomcat_software_info():
 	
-	tomcat_dir = [os.path.join('/usr/share', location) for location in os.listdir('/usr/share') if 'tomcat' in location]
+	tomcat_dir = [os.path.join('/usr/share', location) for location
+				  in os.listdir('/usr/share') if 'tomcat' in location]
 	if not tomcat_dir:
 		raise SoftwareError("Can't find tomcat server location")
 	
@@ -361,7 +363,7 @@ def cassandra_software_info():
 		if res:
 			version = res.group(1)
 			return SoftwareInfo('cassandra', version, '')
-		raise SoftwareError
+		raise SoftwareError()
 	finally:
 		cassandra.close()
 
@@ -370,23 +372,10 @@ explore('cassandra', cassandra_software_info)
 
 def rabbitmq_software_info():
 
-	binaries = whereis('rabbitmq-server')
-	if not binaries:
-		raise SoftwareError("Can't find executable for rabbitmq server")
-	
-	# Start rabbitmq server with broken parameters
-	# in order to receive version
-	env = dict(RABBITMQ_NODE_IP_ADDRESS='256.0.0.0', RABBITMQ_LOG_BASE='/tmp', RABBITMQ_NODENAME='version_test')
-	out = system2((binaries[0]), env=env, raise_exc=False, silent=True)[0]
-	if not out:
-		raise SoftwareError
-	
-	res = re.search('\|\s+v([\d\.]+)\s+\+---\+', out)
-	if res:
-		version = res.group(1)
-	
-		return SoftwareInfo('rabbitmq', version, version)
-	raise SoftwareError
+	pkg_mgr = pkgmgr.package_mgr()
+	version = pkg_mgr.info('rabbitmq-server')['installed']
+	version = re.search('[\d\.]+', version).group(0)
+	return SoftwareInfo('rabbitmq', version, version)
 
 explore('rabbitmq', rabbitmq_software_info)
 
@@ -400,7 +389,7 @@ def redis_software_info():
 		
 	out = system2((binaries[0], '-v'))[0]
 	if not out:
-		raise SoftwareError
+		raise SoftwareError()
 	
 	version_string = out.splitlines()[0]
 	res = re.search('[\d\.]+', version_string)

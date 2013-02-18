@@ -4,7 +4,6 @@ Created on Dec 24, 2009
 
 @author: marat
 '''
-from __future__ import with_statement
 
 from scalarizr.bus import bus
 #from scalarizr.config import STATE
@@ -12,7 +11,6 @@ from scalarizr import config as szrconfig
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip
-from scalarizr.util.filetool import write_file
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
 
@@ -198,7 +196,8 @@ class ScriptExecutor(Handler):
 							asynchronous=int(item['asynchronous']),
 							exec_timeout=item['timeout'], event_name=event_name,
 							role_name=role_name,
-							event_server_id=message.body.get('server_id'))
+							event_server_id=message.body.get('server_id'),
+							event_id=message.body.get('event_id'))
 						for item in message.body['scripts']]
 		else:
 			LOG.debug("Fetching scripts for event %s", event_name)
@@ -224,6 +223,7 @@ class Script(object):
 	role_name = None
 	exec_timeout = 0
 	event_server_id = None
+	event_id = None
 	
 	id = None
 	pid = None
@@ -289,7 +289,8 @@ class Script(object):
 		if not os.path.exists(exec_dir):
 			os.makedirs(exec_dir)
 
-		write_file(self.exec_path, self.body.encode('utf-8'), logger=LOG)
+		with open(self.exec_path, 'w') as fp:
+		    fp.write(self.body.encode('utf-8'))
 		os.chmod(self.exec_path, stat.S_IREAD | stat.S_IEXEC)
 
 		stdout = open(self.stdout_path, 'w+')
@@ -352,7 +353,8 @@ class Script(object):
 				script_path=self.exec_path,
 				event_name=self.event_name or '',
 				return_code=self.return_code,
-				event_server_id=self.event_server_id
+				event_server_id=self.event_server_id,
+				event_id=self.event_id
 			)
 			return ret
 

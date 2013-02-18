@@ -41,7 +41,6 @@ def restore(*args, **kwds):
 		else:
 			return args[0]
 	type_ = kwds.get('type', 'base')
-	print type_
 	try:
 		cls = restore_types[type_]
 	except KeyError:

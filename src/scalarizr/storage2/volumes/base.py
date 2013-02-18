@@ -49,7 +49,7 @@ class Volume(Base):
 				mpoint=mpoint,
 				snap=snap,
 				**kwds)
-		self.features.update({'restore': True, 'grow': False})
+		self.features.update({'restore': True, 'grow': False, 'detach': True})
 		
 
 	def ensure(self, mount=False, mkfs=False, fstab=False, **updates):
@@ -93,6 +93,8 @@ class Volume(Base):
 			return
 		self.umount()
 		self._detach(force, **kwds)
+		if self.features['detach']:
+			self.device = None
 
 
 	def mount(self):
@@ -191,6 +193,7 @@ class Volume(Base):
 
 		new_vol = None
 		try:
+			LOG.info('Detaching volume %s', self.id)
 			self.detach()
 			new_vol = self.clone()
 			self._grow(new_vol, **growth)
@@ -198,6 +201,7 @@ class Volume(Base):
 				fs_created = new_vol.detect_fstype()
 
 				if self.fstype:
+					LOG.info('Resizing filesystem')
 					fs = storage2.filesystem(fstype=self.fstype)
 					umount_on_resize = fs.features.get('umount_on_resize')
 
@@ -216,7 +220,7 @@ class Volume(Base):
 
 		except:
 			err_type, err_val, trace = sys.exc_info()
-			LOG.debug('Failed to grow volume: %s. Trying to attach old volume' % err_val)
+			LOG.warn('Failed to grow volume: %s. Trying to attach old volume', err_val)
 			try:
 				if new_vol:
 					try:
@@ -288,7 +292,7 @@ class Volume(Base):
 	
 	
 	def _snapshot(self, description, tags, **kwds):
-		pass
+		raise NotImplementedError()
 
 
 	def _detach(self, force, **kwds):

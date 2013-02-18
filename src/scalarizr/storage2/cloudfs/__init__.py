@@ -105,20 +105,19 @@ class BaseTransfer(bases.Task):
 		:type dst: string / generator / iterator
 		:param dst: Transfer destination
 		'''
+
 		if callable(src):
 			src = (item for item in src())
 		else:
-			try:
-				iter(src)
-			except:
+			if not hasattr(src, '__iter__') or hasattr(src, "read"):
 				src = [src]
+			src = iter(src)
 		if callable(dst):
 			dst = (item for item in dst())
+		elif not hasattr(dst, '__iter__'):
+			dst = itertools.repeat(dst)
 		else:
-			try:
-				iter(dst)
-			except:
-				dst = itertools.repeat(dst)
+			dst = iter(dst)
 
 		super(BaseTransfer, self).__init__(src=src, dst=dst, **kwds)
 		self.define_events('transfer_start', 'transfer_error', 'transfer_complete')
@@ -205,6 +204,7 @@ class FileTransfer(BaseTransfer):
 			==========  ==========  ==========  ====================================
 
 		'''
+
 		if not (not isinstance(kwds["src"], basestring) and
 				isinstance(kwds["dst"], basestring)) and multipart:
 			multipart = False
@@ -253,8 +253,8 @@ class FileTransfer(BaseTransfer):
 			LOG.debug('FileTransfer _job_generator failed: %s', 
 					sys.exc_info()[1], exc_info=sys.exc_info())
 			raise
-			
-			
+		
+	
 	def _is_remote_path(self, path):
 		return isinstance(path, basestring) and self._url_re.match(path)
 
@@ -375,6 +375,7 @@ class FileTransfer(BaseTransfer):
 
 class LargeTransfer(bases.Task):
 	'''
+
 	SQL dump. File-per-database.
 	---------------------------
 
@@ -492,7 +493,9 @@ class LargeTransfer(bases.Task):
 			self.transfer_id = uuid.uuid4().hex
 		else:
 			self.transfer_id = transfer_id
-		self.manifest = manifest
+		self.manifest_path = manifest
+		self.manifest = None
+		# TODO: start less workers on smaller transfers
 		self._transfer = FileTransfer(src=self._src_generator,
 								dst=self._dst_generator, **kwds)
 		self._tranzit_vol = storage2.volume(
@@ -503,7 +506,6 @@ class LargeTransfer(bases.Task):
 		self.define_events(*events)
 		for ev in events:
 			self._transfer.on(ev, self._proxy_event(ev))
-
 
 	def _gzip_bin(self):
 		if self.try_pigz:
@@ -534,7 +536,6 @@ class LargeTransfer(bases.Task):
 		def proxy(*args, **kwds):
 			self.fire(event, *args, **kwds)
 		return proxy
-		
 
 	def _src_generator(self):
 		'''
@@ -544,12 +545,15 @@ class LargeTransfer(bases.Task):
 			# Tranzit volume size is chunk for each worker
 			# and Ext filesystem overhead
 
-			# manifest is not used in multipart uploads and is left
-			# here to avoid writing 'if' everywhere
-			manifest = Manifest()
-			manifest["description"] = self.description
+			# if the upload is multiparted, the manifest won't be used
+			self.manifest = Manifest()
+			# supposedly, manifest's destination path; assumes that dst
+			# generator yields self.dst.next()+transfer_id
+			self.manifest.cloudfs_path = os.path.join(self.dst.next(),
+				self.transfer_id, self.manifest_path)
+			self.manifest["description"] = self.description
 			if self.tags:
-				manifest["tags"] = self.tags
+				self.manifest["tags"] = self.tags
 
 			def delete_uploaded_chunk(src, dst, retry, chunk_num):
 				os.remove(src)
@@ -598,6 +602,7 @@ class LargeTransfer(bases.Task):
 										close_fds=True)
 						LOG.debug("LargeTransfer src_generator AFTER TAR")
 					elif hasattr(self.streamer, "popen"):
+						# TODO: not working yet
 						fileinfo["streamer"] = str(self.streamer)
 						prefix = os.path.join(prefix, name) + '.'
 
@@ -640,20 +645,20 @@ class LargeTransfer(bases.Task):
 						tar.stdout.close()
 					stream = cmd.stdout
 
-				for filename, md5sum in self._split(stream, prefix):
-					fileinfo["chunks"].append((os.path.basename(filename), md5sum))
+				for filename, md5sum, size in self._split(stream, prefix):
+					fileinfo["chunks"].append((os.path.basename(filename), md5sum, size))
 					LOG.debug("LargeTransfer src_generator yield %s" % filename)
 					yield filename
 				if cmd:
 					cmd.communicate()
 
-				manifest["files"].append(fileinfo)
+				self.manifest["files"].append(fileinfo)
 
 			# send manifest to file transfer
 			if not self.multipart:
-				LOG.debug("Manifest: %s" % manifest.data)
-				manifest_f = os.path.join(self._tranzit_vol.mpoint, self.manifest)
-				manifest.write(manifest_f)
+				LOG.debug("Manifest: %s" % self.manifest.data)
+				manifest_f = os.path.join(self._tranzit_vol.mpoint, self.manifest_path)
+				self.manifest.write(manifest_f)
 				LOG.debug("LargeTransfer yield %s" % manifest_f)
 				yield manifest_f
 
@@ -692,12 +697,14 @@ class LargeTransfer(bases.Task):
 					self.files = copy(manifest["files"])
 					for file in self.files:
 						file["chunks"] = OrderedDict([(
-							basename, {
-								"md5sum": md5sum,
+							chunk[0], {
+								"md5sum": chunk[1],
+								"size": chunk[2] if len(chunk) > 2 else None,
 								"downloaded": InterruptibleEvent(),
 								"processed": InterruptibleEvent()
 							}
-						) for basename, md5sum in file["chunks"]])
+						) for chunk in file["chunks"]])
+						# chunk is [basename, md5sum, size]
 
 			# launch restorer
 			if self._restorer is None:
@@ -725,9 +732,6 @@ class LargeTransfer(bases.Task):
 			# last yield for manifest
 			# NOTE: this only works if dst is a dir
 			for dst in self.dst:
-				# has sense only if not multipart
-				self._upload_res = os.path.join(dst, self.transfer_id, self.manifest)
-
 				yield os.path.join(dst, self.transfer_id, '')
 		else:
 			while True:
@@ -755,7 +759,7 @@ class LargeTransfer(bases.Task):
 
 			if chunk_capacity != chunk_size:  # non-empty chunk
 				LOG.debug("*** BENCH %s %s created" % (int(time.time() - zero), os.path.basename(chunk_name)))
-				yield chunk_name, chunk_md5.hexdigest()
+				yield chunk_name, chunk_md5.hexdigest(), chunk_size - chunk_capacity
 			else:  # empty chunk
 				os.remove(chunk_name)
 			if chunk_capacity:  # empty or half-empty chunk, meaning stream
@@ -863,9 +867,11 @@ class LargeTransfer(bases.Task):
 
 
 	def _run(self):
-		LOG.debug("Creating tmpfs")
+		# ..
+		LOG.debug("Creating tmpfs...")
 		self._tranzit_vol.size = int(self.chunk_size * self._transfer.num_workers * 1.2)
 		self._tranzit_vol.ensure(mkfs=True)
+		LOG.debug("Creating tmpfs...")
 		try:
 			res = self._transfer.run()
 			LOG.debug("self._transfer finished")
@@ -877,45 +883,22 @@ class LargeTransfer(bases.Task):
 				return res
 
 			elif self._up:
-				if res["failed"] or self._transfer._stop_all.is_set():
-					#? upload failed inside FileTransfer or it was killed
-					self._s3_cleanup()
+				if res["failed"] or self._killed:
+					if self.manifest:
+						# TODO: get rid of the duplicate delete
+						self.manifest.delete()
 					return
 				if self.multipart:
 					return res["multipart_result"]
 				else:
-					return self._upload_res
+					return self.manifest
 		finally:
 			LOG.debug("Destroying tmpfs")
 			self._tranzit_vol.destroy()
 			coreutils.remove(self._tranzit_vol.mpoint)
 
 
-	def _s3_cleanup(self):
-		LOG.debug("Performing S3 clean up")
-		path = os.path.join(self.dst.next(), self.transfer_id)
-		driver = cloudfs(urlparse.urlparse(path).scheme)
-
-		pieces = Queue.Queue()
-		for piece in driver.ls(path):
-			pieces.put(piece)
-
-		def delete():
-			driver = cloudfs(urlparse.urlparse(path).scheme)
-			while True:
-				try:
-					driver.delete(pieces.get_nowait())
-				except Queue.Empty:
-					return
-
-		threads = [threading.Thread(target=delete) for i in range(min(4,
-			pieces.qsize()))]  #? 4
-		if threads:
-			map(lambda x: x.start(), threads)
-			map(lambda x: x.join(), threads)
-
-
-	def kill(self):
+	def _kill(self):
 		self._killed = True
 		self._transfer.kill_nowait()
 
@@ -930,9 +913,11 @@ class LargeTransfer(bases.Task):
 						chunkinfo["processed"].interrupt()
 
 		def interrupt(*args):
-			raise Exception("S3 transfer was interrupted by LargeTransfer.kill()")  #?
+			raise Exception("LargeTransfer is being killed")  #?
 		self._transfer.on(progress_report=interrupt)
 
+		if self.manifest:
+			self.manifest.delete()
 
 
 class Manifest(object):
@@ -950,7 +935,7 @@ class Manifest(object):
 				name,
 				streamer,  # "tar" | python function | None
 				compressor,  # "gzip" | python function | None
-				chunks: [(basename001, md5sum)]
+				chunks: [(basename001, md5sum, size_in_bytes)]
 			}
 		]
 	}
@@ -1099,6 +1084,33 @@ class Manifest(object):
 				coreutils.remove(source)
 		elif self.filename:
 			self.write(self.filename)
+
+	def delete(self, destroyers=4):
+		#? 4
+		LOG.debug("Performing cloudfs clean up")
+		try:
+			path = os.path.dirname(self.cloudfs_path)
+		except AttributeError:
+			LOG.debug("'cloudfs_path' for the manifest isn't defined")
+		driver = cloudfs(urlparse.urlparse(path).scheme)
+
+		pieces = Queue.Queue()
+		for piece in driver.ls(path):
+			pieces.put(piece)
+
+		def delete_obj():
+			driver = cloudfs(urlparse.urlparse(path).scheme)
+			while True:
+				try:
+					driver.delete(pieces.get_nowait())
+				except Queue.Empty:
+					return
+
+		threads = [threading.Thread(target=delete_obj) for i in range(
+			min(destroyers, pieces.qsize()))]
+		if threads:
+			map(lambda x: x.start(), threads)
+			map(lambda x: x.join(), threads)
 
 
 cloudfs_types = {}

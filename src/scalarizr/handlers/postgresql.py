@@ -18,14 +18,17 @@ from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
-from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages, Handler
-from scalarizr.util.filetool import split, rchown
-from scalarizr.util import system2, wait_until, disttool, software, filetool, cryptotool
+from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
+from scalarizr.linux.coreutils import chown_r
+from scalarizr.linux.coreutils import split
+from scalarizr.util import system2, wait_until, disttool, software, cryptotool, initdv2
 from scalarizr.storage import Storage, Snapshot, StorageError, Volume, transfer
-from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, PgUser, SU_EXEC
 from scalarizr.linux import iptables
 from scalarizr.handlers import operation, prepare_tags
 from scalarizr.services import make_backup_steps
+from scalarizr.api import service as preset_service
+from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP,\
+PgUser, SU_EXEC, PgSQLPresetProvider, PRESET_FNAME
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.POSTGRESQL
@@ -87,7 +90,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	''' @type _cnf: scalarizr.config.ScalarizrCnf '''
 	
 	storage_vol = None	
-		
+	preset_provider = None
 		
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
@@ -120,7 +123,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 	def __init__(self):
 		self._logger = logging.getLogger(__name__)
 		self._service_name = SERVICE_NAME
-		Handler.__init__(self)
+		ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup(SERVICE_NAME))
 		bus.on("init", self.on_init)
 		bus.define_events(
 			'before_postgresql_data_bundle',
@@ -158,7 +161,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		#temporary fix for starting-after-rebundle issue
 		if not os.path.exists(PG_SOCKET_DIR):
 			os.makedirs(PG_SOCKET_DIR)
-			rchown(user='postgres', path=PG_SOCKET_DIR)
+			chown_r(PG_SOCKET_DIR, 'postgres')
 			
 		bus.on("host_init_response", self.on_host_init_response)
 		bus.on("before_host_up", self.on_before_host_up)
@@ -176,8 +179,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 				if all((checkmodule_paths, semodule_package_paths, semodule_paths)):
 					
-					filetool.write_file('/tmp/sshkeygen.te',
-								SSH_KEYGEN_SELINUX_MODULE, logger=self._logger)
+					with open('/tmp/sshkeygen.te', 'w') as fp:
+					    fp.write(SSH_KEYGEN_SELINUX_MODULE)
 					
 					self._logger.debug('Compiling SELinux policy for ssh-keygen')
 					system2((checkmodule_paths[0], '-M', '-m', '-o',
@@ -229,6 +232,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self._platform = bus.platform
 		self._cnf = bus.cnf
 		ini = self._cnf.rawini
+		self.preset_provider = PgSQLPresetProvider(self.version)
+		preset_service.services[BEHAVIOUR] = self.preset_provider
 		self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 		self._storage_path = STORAGE_PATH
 		self._tmp_path = os.path.join(self._storage_path, 'tmp')
@@ -374,7 +379,12 @@ class PostgreSqlHander(ServiceCtlHandler):
 						os.makedirs(dir)
 					
 					postgresql_data = message.postgresql.copy()
-			
+
+					if 'preset' in postgresql_data:
+						self.initial_preset = postgresql_data['preset']
+						self._logger.debug('Scalr sent current preset: %s' % self.initial_preset)
+						del postgresql_data['preset']
+
 					root = PgUser(ROOT_USER, self.pg_keys_dir)
 					root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
 					del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
@@ -412,7 +422,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			self._init_master(message)									  
 		else:
 			self._init_slave(message)	
-		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
+		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl, preset=self.initial_preset)
 					
 				
 	def on_before_reboot_start(self, *args, **kwargs):
@@ -633,7 +643,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				# Dump all databases
 				self._logger.info("Dumping all databases")
 				tmpdir = tempfile.mkdtemp(dir=self._tmp_path)		
-				rchown(self.postgresql.root_user.name, tmpdir)
+				chown_r(tmpdir, self.postgresql.root_user.name)
 
 				def _single_backup(db_name):
 					dump_path = tmpdir + os.sep + db_name + '.sql'
@@ -815,7 +825,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			if not vol.mounted():
 				vol.mount(mpoint)
 		except StorageError, e:
-			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
+			''' XXX: Crapy. We need to introduce error codes from mount ''' 
 			if 'you must specify the filesystem type' in str(e):
 				vol.mkfs()
 				vol.mount(mpoint)

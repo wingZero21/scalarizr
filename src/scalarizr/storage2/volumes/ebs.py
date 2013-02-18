@@ -175,12 +175,14 @@ class EbsVolume(base.Volume, EbsMixin):
 		ebs_type = growth.get('volume_type')
 		iops = growth.get('iops')
 
+		LOG.info('Creating volume snapshot')
 		snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1})
 		try:
 			new_vol.snap = snap
 			new_vol.size = size if size is not None else self.size
 			new_vol.volume_type = ebs_type if ebs_type is not None else self.volume_type
 			new_vol.iops = iops if iops is not None else self.iops
+			LOG.info('Creating new volume from snapshot')
 			new_vol.ensure()
 		finally:
 			try:
@@ -495,9 +497,3 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 
 storage2.volume_types['ebs'] = EbsVolume
 storage2.snapshot_types['ebs'] = EbsSnapshot
-
-		
-
-
-
-

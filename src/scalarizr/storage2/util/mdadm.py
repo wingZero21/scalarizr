@@ -6,8 +6,7 @@ Created on Nov 11, 2010
 @author: marat
 '''
 
-from scalarizr.util import system2, wait_until, firstmatched, filetool, PopenError
-from scalarizr.util.filetool import read_file, write_file
+from scalarizr.util import system2, wait_until, firstmatched, PopenError
 from scalarizr.util import dynimp
 
 import logging
@@ -41,10 +40,13 @@ class Mdadm:
 			path = os.path.join(location, 'udev/rules.d/85-mdadm.rules')
 			if os.path.exists(path):
 
-				rule = read_file(path)
+				rule = None
+				with open(path, 'r') as fp:
+				    rule = fp.read()
 				if rule:
 					rule = re.sub(re.compile('^([^#])', re.M), '#\\1', rule)
-					write_file(path, rule)
+					with open(path, 'w') as fp:
+					    fp.write(rule)
 
 		self._raid_devices_re  	= re.compile('Raid\s+Devices\s+:\s+(?P<count>\d+)')
 		self._total_devices_re 	= re.compile('Total\s+Devices\s+:\s+(?P<count>\d+)')
@@ -208,7 +210,9 @@ class Mdadm:
 
 	def _get_array_by_device(self, device):
 		devname = os.path.basename(device)
-		out = filetool.read_file('/proc/mdstat')
+		out = None
+		with open('/proc/mdstat', 'r') as fp:
+		    out = fp.read()
 		if not out:
 			raise Exception("Can't get array info from /proc/mdstat.")
 

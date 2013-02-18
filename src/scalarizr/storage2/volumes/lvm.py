@@ -36,7 +36,7 @@ class LvmVolume(base.Volume):
 		'''
 		super(LvmVolume, self).__init__(pvs=pvs or [], vg=vg, name=name,
 				size=size, **kwds)
-
+		self.features['restore'] = True
 
 	def _lvinfo(self):
 		return lvm2.lvs(lvm2.lvpath(self.vg, self.name)).values()[0]
@@ -107,17 +107,17 @@ class LvmVolume(base.Volume):
 
 		pvs_to_extend_vg = []
 		for pv in self.pvs:
-			pv_info = lvm2.pvs(pv.device)[pv.device]
+			pv_info = lvm2.pvs(pv.device).popitem()[1]
 
 			if not pv_info.vg_name:
-				pvs_to_extend_vg.append(pv.device)
+				pvs_to_extend_vg.append(pv_info.pv_name)
 				continue
 
 			if os.path.basename(self.vg) != pv_info.vg_name:
 				raise storage2.StorageError(
 					'Can not add physical volume %s to volume group %s: already'
 					' in volume group %s' %
-					(pv.device, self.vg, pv_info.vg_name))
+					(pv_info.pv_name, self.vg, pv_info.vg_name))
 
 		if pvs_to_extend_vg:
 			lvm2.vgextend(self.vg, *pvs_to_extend_vg)

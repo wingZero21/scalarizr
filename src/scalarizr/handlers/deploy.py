@@ -19,7 +19,7 @@ from urlparse import urlparse
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages, Queues
 from scalarizr.handlers import Handler, script_executor, operation
-from scalarizr.util import system2, disttool, dicts, filetool
+from scalarizr.util import system2, disttool, dicts
 
 
 
@@ -257,11 +257,13 @@ class GitSource(Source):
 		try:
 			if self.private_key:
 				pk_path = os.path.join(tmpdir, 'pk.pem')
-				filetool.write_file(pk_path, self.private_key)
+				with open(pk_path, 'w') as fp:
+					fp.write(self.private_key)
 				os.chmod(pk_path, 0400)
 
 				git_ssh_path = os.path.join(tmpdir, 'git_ssh.sh')
-				filetool.write_file(git_ssh_path, self.ssh_tpl % pk_path)
+				with open(git_ssh_path, 'w') as fp:
+					fp.write(self.ssh_tpl % pk_path)
 				os.chmod(git_ssh_path, 0755)
 
 				env.update(dict(GIT_SSH=git_ssh_path))

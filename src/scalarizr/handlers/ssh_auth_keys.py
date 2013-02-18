@@ -6,7 +6,6 @@ from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
 from scalarizr.util import firstmatched
-from scalarizr.util.filetool import read_file, write_file
 
 import re
 import os
@@ -116,16 +115,18 @@ class SSHKeys(Handler):
 			self._write_ssh_keys_file(ak)
 	
 	def _read_ssh_keys_file(self):
-		content = read_file(self.authorized_keys_file, 
-						msg='Reading autorized keys from %s' % self.authorized_keys_file, 
-						logger=self._logger)
-		if content == None:
-			raise UpdateSshAuthorizedKeysError('Unable to read ssh keys from %s' % self.authorized_keys_file)
-		return content
+		self._logger.debug('Reading autorized keys from %s' % self.authorized_keys_file)
+		if os.path.exists(self.authorized_keys_file):
+			os.chmod(self.authorized_keys_file, 0600)
+			with open(self.authorized_keys_file) as fp:
+				return fp.read()
 	
 	def _write_ssh_keys_file(self, content):
-		ret = write_file(self.authorized_keys_file, content, msg='Writing authorized keys', logger=self._logger)
-		if not ret:
+		self._logger.debug('Writing authorized keys')
+		try:
+			with open(self.authorized_keys_file, 'w') as fp:
+				fp.write(content)
+		except IOError:
 			raise UpdateSshAuthorizedKeysError('Unable to write ssh keys to %s' % self.authorized_keys_file)
 		os.chmod(self.authorized_keys_file, 0600)
 	

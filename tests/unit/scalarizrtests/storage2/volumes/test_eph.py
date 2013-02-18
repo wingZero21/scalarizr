@@ -76,7 +76,7 @@ class EphVolumeTest(unittest.TestCase):
 		lvm_vol.ensure.assert_called_once_with()
 		self.assertEqual(lvm_vol.device, vol.device)
 
-	@mock.patch('scalarizr.storage2.volumes.eph.filetool.df')
+	@mock.patch('scalarizr.linux.coreutils.df')
 	@mock.patch('scalarizr.storage2.volumes.eph.os.rmdir')
 	@mock.patch('scalarizr.storage2.volumes.eph.tempfile')
 	@mock.patch('scalarizr.storage2.volumes.eph.cloudfs')
@@ -168,7 +168,7 @@ class EphVolumeTest(unittest.TestCase):
 
 
 	@mock.patch('scalarizr.storage2.volumes.eph.os.rmdir')
-	@mock.patch('scalarizr.storage2.volumes.eph.filetool.df')
+	@mock.patch('scalarizr.linux.coreutils.df')
 	@mock.patch('scalarizr.storage2.volumes.eph.tempfile')
 	@mock.patch('scalarizr.storage2.volumes.eph.cloudfs')
 	def test_snapshot(self, cfs, tmpf, df, rmdir, storage2):
@@ -210,7 +210,7 @@ class EphVolumeTest(unittest.TestCase):
 		self.assertEqual(final_snap.size, 400000)
 
 		cfs.LargeTransfer.assert_called_once_with(src='temporary_dir/',
-					dst=snap_path, tar_it=True, gzip_it=True)
+					dst=snap_path, tar_it=True, gzip_it=True, tags=None)
 
 		cfs.LargeTransfer.return_value.run.assert_called_once_with()
 

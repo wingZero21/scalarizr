@@ -24,20 +24,12 @@ import errno
 from pymysql import cursors
 
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy
-from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software, filetool
+from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy, PresetProvider
+from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
 from scalarizr.util.initdv2 import wait_sock, InitdError
-from scalarizr.util.filetool import rchown
+from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
-import sys
-
-
-
-from scalarizr import linux, storage2
-from scalarizr.linux import coreutils, pkgmgr
-from scalarizr.services import backup
-from scalarizr.node import __node__
-
+from scalarizr.linux.rsync import rsync
 
 
 LOG = logging.getLogger(__name__)
@@ -48,9 +40,12 @@ MYCNF_PATH 	= '/etc/mysql/my.cnf' if disttool.is_ubuntu() else '/etc/my.cnf'
 MYSQLD_PATH = firstmatched(lambda x: os.access(x, os.X_OK), ('/usr/sbin/mysqld', '/usr/libexec/mysqld'))
 MYSQLDUMP_PATH = '/usr/bin/mysqldump'
 DEFAULT_DATADIR	= "/var/lib/mysql"
-
+DEFAULT_OWNER = "mysql"
 STORAGE_DATA_DIR = "mysql-data"
 STORAGE_BINLOG = "mysql-misc/binlog"
+SU_EXEC = '/bin/su'
+BASH = '/bin/bash'
+PRESET_FNAME = 'my.cnf'
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MYSQL
 
@@ -85,8 +80,7 @@ class MySQL(BaseService):
 		LOG.info('Initializing replication')
 		server_id = 1 if master else int(random.random() * 100000)+1
 		self.my_cnf.server_id = server_id
-		self.my_cnf.bind_address = None
-		self.my_cnf.skip_networking = None
+		self.my_cnf.delete_options(['mysqld/bind-address', 'mysqld/skip-networking'])
 
 	
 	def init_master(self):
@@ -143,12 +137,10 @@ class MySQL(BaseService):
 							pass
 							
 						LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
-						rsync = filetool.Rsync().archive()
-						rsync.source(src_dir).dest(dest).exclude(['ib_logfile*'])
-						system2(str(rsync), shell=True)
+						rsync(src_dir, dest, archive=True, exclude=['ib_logfile*', '*.sock'])
+
 			self.my_cnf.set(directive, dirname)
-	
-			rchown("mysql", dest)
+			chown_r(dest, "mysql", "mysql")
 			# Adding rules to apparmor config 
 			if disttool.is_debian_based():
 				_add_apparmor_rules(dest)
@@ -262,9 +254,7 @@ class MySQLClient(object):
 	
 	def user_exists(self, login, host):
 		ret = self.fetchone("select User,Host from mysql.user where User='%s' and Host='%s'" % (login, host))
-		
-		#return True if ret and ret['Host']==host and ret['User']==login else False
-		result = True if ret and len(ret)==2 and ret[0]==login and ret[1]==host else False 
+		result = True if ret and len(ret)==2 and ret[0]==login and ret[1]==host else False
 		LOG.debug('user_exists query returned value: %s for user %s on host %s. User exists: %s' % (str(ret), login, host, str(result)))
 		return result
 		
@@ -448,8 +438,7 @@ class MySQLConf(BaseConfig):
 	
 	config_type = 'mysql'
 	config_name = 'my.cnf'
-	comment_empty = True
-	
+
 
 	@classmethod
 	def find(cls):
@@ -478,11 +467,11 @@ class MySQLConf(BaseConfig):
 
 
 	def _get_log_bin(self):
-		return self.get('mysqld/log-bin')
+		return self.get('mysqld/log_bin')
 	
 	
 	def _set_log_bin(self, path):
-		self.set('mysqld/log-bin', path)	
+		self.set('mysqld/log_bin', path)
 
 
 	def _get_server_id(self):
@@ -525,12 +514,19 @@ class MySQLConf(BaseConfig):
 		self.set('mysqld/skip-locking', val)
 
 
-	def _get_read_only(self, val):
+	def _get_read_only(self):
 		return self.get('mysqld/read_only')
 
 
 	def _set_read_only(self, val):
 		self.set('mysqld/read_only', val)
+
+	def _get_socket(self):
+		return self.get('mysqld/socket')
+
+
+	def _set_socket(self, path):
+		self.set('mysqld/socket', path)
 
 
 	log_bin = property(_get_log_bin, _set_log_bin)
@@ -542,6 +538,7 @@ class MySQLConf(BaseConfig):
 	datadir	 = property(_get_datadir, _set_datadir)
 	read_only = property(_get_read_only, _set_read_only)
 	datadir_default = DEFAULT_DATADIR
+	socket = property(_get_socket, _set_socket)
 
 	
 	
@@ -560,7 +557,6 @@ class MySQLDump(object):
 		_opts = [MYSQLDUMP_PATH, '-u', self.root_user, '--password='+self.root_password] + opts + ['--databases']
 		with open(filename, 'w') as fp: 
 			system2(_opts + [dbname], stdout=fp)
-		# commented cause mysql_upgrade hanged forever on devel roles
 
 
 class RepicationWatcher(threading.Thread):
@@ -694,11 +690,14 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		except PopenError, e:
 			if 'Job is already running' not in str(e):
 				raise InitdError("Popen failed with error %s" % (e,))
-		
+
+		if action == 'restart' and err and 'stop: Job has already been stopped: mysql' in err:
+			return True
+
 		if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			try:
 				LOG.debug('waiting for mysql process')
-				wait_until(lambda: MYSQLD_PATH in system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
+				wait_until(lambda: MYSQLD_PATH in system2(('ps', '-G', DEFAULT_OWNER, '-o', 'command', '--no-headers'))[0]
 							, timeout=10, sleep=1)
 			except:
 				self._start_stop_reload('restart')
@@ -710,28 +709,26 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 					
 		return True
 
-	'''
-	XXX: Code commented because I am not sure why we still need self.socket_file
-	def status(self):
-		if self.socket_file:
-			if os.path.exists(self.socket_file):
-				return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
-			else:
-				return initdv2.Status.NOT_RUNNING
-		return initdv2.ParametrizedInitScript.status(self)
-	'''
-
 
 	def status(self):
 		return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
 
 	
 	def start(self):
-		mysql_cnf_err_re = re.compile('Unknown option|ERROR')
-		stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True, silent=True)[1]
-		if re.search(mysql_cnf_err_re, stderr):
-			raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
-		
+		'''
+		Commented, cause Dima said this code is useless
+
+		# FIXME: This condition here because of the following fixme
+		if os.listdir('/mnt/dbstorage/mysql-data'):
+
+			# FIXME: It's not a good place to test mysql configuration
+			# This code fails when datadir is empty, whereas init script detects this and start gracefully
+			mysql_cnf_err_re = re.compile('Unknown option|ERROR')
+			stderr = system2('%s --user=mysql --help' % MYSQLD_PATH, shell=True, silent=True)[1]
+			if re.search(mysql_cnf_err_re, stderr):
+				raise Exception('Error in mysql configuration detected. Output:\n%s' % stderr)
+		'''		
+
 		if not self.running:
 			try:
 				LOG.info("Starting mysql")
@@ -742,6 +739,17 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 					LOG.warning('MySQL service is running with skip-grant-tables mode.')
 				elif not self.running:
 					raise
+
+		
+		try:
+			LOG.info("Starting mysql")
+			initdv2.ParametrizedInitScript.start(self)
+			LOG.debug("mysql started")
+		except:
+			if self._is_sgt_process_exists():
+				LOG.warning('MySQL service is running with skip-grant-tables mode.')
+			elif not self.running:
+				raise
 
 	
 	def stop(self, reason=None):
@@ -757,7 +765,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		
 	def _is_sgt_process_exists(self):
 		try:
-			out = system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
+			out = system2(('ps', '-G', DEFAULT_OWNER, '-o', 'command', '--no-headers'))[0]
 			return MYSQLD_PATH in out and 'skip-grant-tables' in out
 		except:
 			return False
@@ -767,7 +775,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		pid_dir = '/var/run/mysqld/'
 		if not os.path.isdir(pid_dir):
 			os.makedirs(pid_dir, mode=0755)
-			mysql_user	= pwd.getpwnam("mysql")
+			mysql_user	= pwd.getpwnam(DEFAULT_OWNER)
 			os.chown(pid_dir, mysql_user.pw_uid, -1)
 		if not self._is_sgt_process_exists():	
 			args = [MYSQLD_PATH, '--user=mysql', '--skip-grant-tables', '--pid-file=%s' % self.sgt_pid_path]
@@ -817,7 +825,15 @@ def _add_apparmor_rules(directory):
 			except InitdError, e:
 				LOG.error('Cannot restart apparmor. %s', e)	
 
-		
+
+class MySQLPresetProvider(PresetProvider):
+
+	def __init__(self):
+		service = initdv2.lookup(SERVICE_NAME)
+		config_mapping = {PRESET_FNAME:MySQLConf(MYCNF_PATH)}
+		PresetProvider.__init__(self, service, config_mapping)
+			
+
 initdv2.explore(SERVICE_NAME, MysqlInitScript)
 
 

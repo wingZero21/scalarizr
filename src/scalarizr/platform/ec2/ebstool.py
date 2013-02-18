@@ -5,17 +5,17 @@ Created on Aug 25, 2010
 @author: marat
 '''
 
-from scalarizr.bus import bus
-from scalarizr.util import wait_until, system2
-from scalarizr.platform import PlatformError, UserDataOptions
-
-import logging, os, time
+import sys
+import logging
+import os
 
 from boto.ec2.volume import Volume
 from boto.exception import BotoServerError
 from boto.ec2.snapshot import Snapshot
-import sys
-from scalarizr.util import disttool, fstool
+
+from scalarizr.bus import bus
+from scalarizr.util import wait_until, system2
+from scalarizr.platform import PlatformError, UserDataOptions
 from scalarizr import storage
 
 
@@ -72,7 +72,7 @@ def wait_snapshot(ec2_conn, snap_id, logger=None, timeout=SNAPSHOT_TIMEOUT):
 		logger.debug('Snapshot %s completed', snap.id)
 
 
-def create_volume(ec2_conn, size, avail_zone, snap_id=None, volume_type=None, iops=None, 
+def create_volume(ec2_conn, size, avail_zone, snap_id=None, volume_type=None, iops=None,
 				logger=None, timeout=DEFAULT_TIMEOUT, tags=None):
 	logger = logger or logging.getLogger(__name__)
 	
@@ -95,7 +95,7 @@ def create_volume(ec2_conn, size, avail_zone, snap_id=None, volume_type=None, io
 		logger=logger, timeout=timeout,
 		error_text="EBS volume %s wasn't available in a reasonable time" % vol.id
 	)
-	logger.debug('EBS volume %s available', vol.id)		
+	logger.debug('EBS volume %s available', vol.id)
 	
 	if not tags:
 		logger.debug('No tags to apply to volume %s' % vol.id)
@@ -115,7 +115,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 		vol.id = volume_id
 	else:
 		vol = volume_id
-		
+
 	def attach():
 		try:
 			vol.attach(instance_id, devname)
@@ -130,7 +130,6 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 			start_text='Attaching volume %s as device %s%s' % (vol.id, devname, not to_me and ' instance %s' % instance_id or ''), 
 			error_text="Failed to attach EBS volume %s. AttachVolume operation respond with 400 code without any details" % vol.id)
 
-	
 	logger.debug('Checking that volume %s is attached', vol.id)
 	wait_until(
 		lambda: vol.update() and vol.attachment_state() == 'attached', 
@@ -140,7 +139,7 @@ def attach_volume(ec2_conn, volume_id, instance_id, devname, to_me=False, logger
 				vol.id, vol.status, vol.attachment_state())
 	)
 	logger.debug('Volume %s attached',  vol.id)
-	
+
 	devname = real_devname(devname)
 	if to_me:
 		logger.debug('Checking that device %s is available', devname)
@@ -180,7 +179,7 @@ def detach_volume(ec2_conn, volume_id, force=False, logger=None, timeout=DEFAULT
 		error_text="EBS volume %s wasn't available in a reasonable time" % vol.id
 	)
 	logger.debug('Volume %s is available', vol.id)
-	
+
 
 def delete_volume(ec2_conn, volume_id, logger=None):
 	logger = logger or logging.getLogger(__name__)

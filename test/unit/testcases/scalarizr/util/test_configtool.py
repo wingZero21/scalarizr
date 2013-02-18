@@ -3,9 +3,10 @@ Created on Apr 6, 2010
 
 @author: marat
 '''
-from scalarizr.util import configtool, fstool, init_tests
+from scalarizr.util import configtool, init_tests
 from scalarizr.bus import bus
 from ConfigParser import ConfigParser
+from scalarizr.linux import mount
 import unittest
 import shutil
 import os
@@ -43,10 +44,10 @@ class Test(unittest.TestCase):
 			img_path = "/mnt/test-privated.img"
 			configtool.mount_private_d(privated_path, img_path, 10000)
 			self.assertTrue(os.path.exists(privated_path + "/keys/default"))
-			mtab = fstool.Mtab()
-			self.assertTrue(mtab.contains(mpoint=privated_path))
+			mtab = mount.mounts()
+			self.assertTrue(mtab.contains(privated_path))
 		finally:
-			fstool.umount(mpoint=privated_path)
+			mount.umount(privated_path)
 			os.remove(img_path)
 
 

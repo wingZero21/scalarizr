@@ -319,14 +319,14 @@ class TestEbsSnapshot(object):
 	def test_status(self, _ebs_snapshot, _connect_ec2, *args, **kwargs):
 		snap = EbsSnapshot(id='vol-123456ab')
 		snapshot = mock.Mock(id='vol-123456ab')
-		snapshot.update.return_value = 'pending'
+		snapshot.status = 'pending'
 		_ebs_snapshot.return_value = snapshot
 		assert snap.status() == base.Snapshot.IN_PROGRESS
 		_ebs_snapshot.assert_called_once_with('vol-123456ab')
 		snapshot.update.assert_called_with()
-		snapshot.update.return_value = 'available'
+		snapshot.status = 'completed'
 		assert snap.status() == base.Snapshot.COMPLETED
-		snapshot.update.return_value = 'error'
+		snapshot.status = 'error'
 		assert snap.status() == base.Snapshot.FAILED
 
 

@@ -1,5 +1,4 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 import os
 import re
@@ -9,9 +8,7 @@ try:
 	import json
 except ImportError:
 	import simplejson as json 
-import logging
 
-LOG = logging.getLogger(__name__)
 
 base_dir = '/etc/scalr'
 private_dir = base_dir + '/private.d'
@@ -111,7 +108,6 @@ class Json(Store):
 			else:
 				if isinstance(self.fn, basestring):
 					self.fn = _import(self.fn)
-				LOG.debug('getitem: %s', key)
 				self._obj = self.fn(**kwds)
 		return self._obj
 
@@ -119,14 +115,12 @@ class Json(Store):
 	def __setitem__(self, key, value):
 		self._obj = value
 		if hasattr(value, 'config'):
-			vv = dict(value)
-		else:
-			vv = value
+			value = value.config()
 		dirname = os.path.dirname(self.filename)
 		if not os.path.exists(dirname):
 			os.makedirs(dirname)
 		with open(self.filename, 'w+') as fp:
-			json.dump(vv, fp)
+			json.dump(value, fp)
 
 
 class Ini(Store):
@@ -289,8 +283,12 @@ def _import(objectstr):
 			raise ImportError('No module named %s' % attr)
 
 
+class ScalrVersion(Store):
+	pass
+
+
 __node__ = {
-	'server_id,role_id,farm_id,farm_role_id,env_id': 
+	'server_id,role_id,farm_id,farm_role_id,env_id,role_name':
 				Ini(private_dir + '/config.ini', 'general'),
 	'platform': Ini(public_dir + '/config.ini', 'general'),
 	'behavior': IniOption(
@@ -304,6 +302,7 @@ __node__ = {
 	'rebooted': BoolFile(private_dir + '/.reboot'),
 	'halted': BoolFile(private_dir + '/.halt')
 }
+
 for behavior in ('mysql', 'mysql2', 'percona'):
 	section = 'mysql2' if behavior == 'percona' else behavior
 	__node__[behavior] = Compound({
@@ -315,6 +314,33 @@ for behavior in ('mysql', 'mysql2', 'percona'):
 		'mysqldump_options': 
 				Ini('%s/%s.ini' % (public_dir, behavior), section)
 	})
+
+__node__['redis'] = Compound({
+	'volume,volume_config':	Json('%s/storage/%s.json' % (private_dir, 'redis'),
+		 'scalarizr.storage2.volume'),
+	'replication_master,persistence_type,use_password,master_password': Ini(
+		'%s/%s.ini' % (private_dir, 'redis'), 'redis')
+})
+
+
+__node__['rabbitmq'] = Compound({
+	'volume,volume_config':	Json('%s/storage/%s.json' % (private_dir, 'rabbitmq'),
+			'scalarizr.storage2.volume'),
+	'password,server_index,node_type,cookie,hostname': Ini(
+						'%s/%s.ini' % (private_dir, 'rabbitmq'), 'rabbitmq')
+
+})
+
+__node__['mongodb'] = Compound({
+	'volume,volume_config':
+				Json('%s/storage/%s.json' % (private_dir, 'mongodb'), 'scalarizr.storage2.volume'),
+	'snapshot,shanpshot_config':
+				Json('%s/storage/%s-snap.json' % (private_dir, 'mongodb'),'scalarizr.storage2.snapshot'),
+	'shards_total,password,replica_set_index,shard_index,keyfile':
+				Ini('%s/%s.ini' % (private_dir, 'mongodb'), 'mongodb')
+})
+
+
 __node__['ec2'] = Compound({
 	't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
 	'hostname_as_pubdns': 
@@ -328,6 +354,28 @@ __node__['ec2'] = Compound({
 	'region': Call('scalarizr.bus', 'bus.platform.get_region'),
 	'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
 	'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
+})
+__node__['cloudstack'] = Compound({
+	'new_conn': Call('scalarizr.bus', 'bus.platform.new_cloudstack_conn'),
+	'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
+	'zone_id': Call('scalarizr.bus', 'bus.platform.get_avail_zone_id'),
+	'zone_name': Call('scalarizr.bus', 'bus.platform.get_avail_zone')
+})
+__node__['openstack'] = Compound({
+	'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
+	'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
+	'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
+	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
+})
+__node__['rackspace'] = Compound({
+	'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
+	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
+})
+
+__node__['gce'] = Compound({
+	'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
+	'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),
+	'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id')
 })
 __node__['scalr'] = Compound({
 	'version': File(private_dir + '/.scalr-version'),

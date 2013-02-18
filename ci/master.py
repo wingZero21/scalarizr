@@ -1,4 +1,3 @@
-
 from buildbot.schedulers.basic import AnyBranchScheduler
 from buildbot.schedulers.triggerable import Triggerable
 from buildbot.changes.filter import ChangeFilter
@@ -48,4 +47,3 @@ c['builders'].append(dict(
 		push_to_github(__opts__)
 	)
 ))
-

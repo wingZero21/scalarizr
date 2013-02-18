@@ -17,7 +17,7 @@ from scalarizr.handlers import operation
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
-
+from scalarizr.storage2 import volume as storage2_volume
 
 # Libs
 from scalarizr.util import cryptotool, software
@@ -316,6 +316,17 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			self._define_initialization(message)
 			bus.fire("host_init_response", message)
 			hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)
+			###
+			if 'volumes' in message.body:
+				self._logger.debug('HIR volumes:\n%s' % message.volumes)
+				hostup_msg.body['volumes'] = []
+				for vol_info in message.volumes:
+					vol = storage2_volume(**vol_info)
+					vol.ensure()
+					vol_config = vol.config()
+					hostup_msg.body['volumes'].append(vol_config)
+				self._logger.debug('HU volumes:\n%s' % hostup_msg.body['volumes'])
+			###
 			bus.fire("before_host_up", hostup_msg)
 			if bus.scalr_version >= (2, 2, 3):
 				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_subhandler=True)

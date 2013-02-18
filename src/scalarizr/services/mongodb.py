@@ -19,7 +19,7 @@ from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, system2, \
 				PopenError, wait_until, initdv2, software, \
 				firstmatched
-from scalarizr.util.filetool import rchown, read_file, write_file
+from scalarizr.linux.coreutils import chown_r
 import pymongo
 
 
@@ -112,9 +112,12 @@ class MongoDB(BaseService):
 	_arbiter = None
 	_instance = None
 	_config_server = None
+	_mongod_noauth = None
+
 	keyfile = None
 	login = None
 	password = None
+	auth = True
 
 	
 	def __init__(self, keyfile=None):
@@ -161,7 +164,7 @@ class MongoDB(BaseService):
 			shutil.rmtree(ARBITER_DATA_DIR)
 		self._logger.debug('Creating datadir for arbiter: %s' % ARBITER_DATA_DIR)
 		os.makedirs(ARBITER_DATA_DIR)
-		rchown(DEFAULT_USER, ARBITER_DATA_DIR)
+		chown_r(ARBITER_DATA_DIR, DEFAULT_USER)
 		self._logger.debug("Preparing arbiter's config file")
 		self.arbiter_conf.dbpath = ARBITER_DATA_DIR
 		self.arbiter_conf.replSet = rs_name
@@ -174,7 +177,7 @@ class MongoDB(BaseService):
 		self._logger.debug('Preparing config server')
 		if not os.path.exists(CONFIG_SERVER_DATA_DIR):
 			os.makedirs(CONFIG_SERVER_DATA_DIR)
-		rchown(DEFAULT_USER, CONFIG_SERVER_DATA_DIR)
+		chown_r(CONFIG_SERVER_DATA_DIR, DEFAULT_USER)
 		'''
 		configsvr changes the default port and turns on the diaglog, 
 		a log that keeps every action the config database performs 
@@ -201,9 +204,12 @@ class MongoDB(BaseService):
 	
 	def start_shardsvr(self):
 		self.working_dir.unlock()
-		self._logger.info('Starting main mongod process')
+		if self.auth:
+			self._logger.info('Starting main mongod process with auth enabled')
+		else:
+			self._logger.info('Starting main mongod process with auth disabled')
 		self.mongod.start()
-	
+
 	
 	def start_arbiter(self):
 		if self.arbiter.is_running:
@@ -227,9 +233,10 @@ class MongoDB(BaseService):
 		self.config_server.stop('Stopping mongo config server')
 		
 		
-	def start_router(self):
+	def start_router(self, verbose = 0):
 		self.stop_default_init_script()
 		Mongos.set_keyfile(self.keyfile.path)
+		Mongos.verbose = verbose
 		Mongos.start()
 		
 	
@@ -355,16 +362,23 @@ class MongoDB(BaseService):
 		path = '/etc/sudoers'
 		self._logger.debug('Disabling requiretty in %s' % path)
 		if not disttool.is_ubuntu():
-			orig = read_file(path)
+			orig = None
+			with open(path, 'r') as fp:
+			    orig = fp.read()
 			new = re.sub('Defaults\s+requiretty', '\n', orig)
 			if new != orig:
-				write_file(path, new)
+				with open(path, 'w') as fp:
+				    fp.write(new)
 
 
 	def _get_mongod(self):
 		"""
 		@rtype: Mongod
 		"""
+		if not self.auth:
+			if not self._mongod_noauth:
+				self._mongod_noauth = Mongod(configpath=CONFIG_PATH_DEFAULT, keyfile=None, cli=self.cli)
+			return self._mongod_noauth
 		return self._get('mongod', Mongod.find, self.config, self.keyfile.path, self.cli)
 	
 	def _set_mongod(self, obj):
@@ -372,7 +386,9 @@ class MongoDB(BaseService):
 
 
 	def _get_cli(self):
-		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT)
+		if not self.auth:
+			return MongoCLI(REPLICA_DEFAULT_PORT)
+		return self._get('cli', MongoCLI.find, REPLICA_DEFAULT_PORT, SCALR_USER, self.password)
 	
 	def _set_cli(self, obj):
 		self._set('cli', obj)
@@ -500,7 +516,7 @@ class WorkingDirectory(object):
 			os.makedirs(dst)
 			
 		self._logger.debug("changing directory owner to %s" % self.user)	
-		rchown(self.user, dst)			
+		chown_r(dst, self.user)
 		self.path = dst
 
 		return dst
@@ -521,17 +537,12 @@ class MongoDBConfig(BaseConfig):
 		return cls(os.path.join(config_dir, cls.config_name) if config_dir else CONFIG_PATH_DEFAULT)
 	
 	def set(self, option, value):
-		if not self.data:
-			self.data = Configuration(self.config_type)
-			if os.path.exists(self.path):
-				self.data.read(self.path)
+		self._init_configuration()
 		if value :
 			self.data.set(option,value, force=True)
 		else:
 			self.data.remove(option)
-		if self.autosave:
-			self.save_data()
-			self.data = None
+		self._cleanup(save_data=True)
 
 	def set_bool_option(self, option, value):
 		try:
@@ -639,7 +650,7 @@ class ConfigServerConf(MongoDBConfig):
 
 	
 class Mongod(object):	
-	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None):
+	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=2):
 		self._logger = logging.getLogger(__name__)
 		self.configpath = configpath
 		self.dbpath = dbpath
@@ -647,6 +658,7 @@ class Mongod(object):
 		self.cli = cli or MongoCLI(port=port)
 		self.port = port
 		self.sock = initdv2.SockParam(self.port or REPLICA_DEFAULT_PORT)
+		self.verbose = verbose
 		
 	@classmethod
 	def find(cls, mongo_conf=None, keyfile=None, cli=None):
@@ -663,8 +675,11 @@ class Mongod(object):
 		if self.port:
 			s.append('--port=%s' % self.port)
 		if self.keyfile and os.path.exists(self.keyfile):
-			rchown(DEFAULT_USER, self.keyfile)	
+			chown_r(self.keyfile, DEFAULT_USER)
 			s.append('--keyFile=%s' % self.keyfile)
+		if self.verbose and isinstance(self.verbose, int) and 0<self.verbose<6:
+			s.append('-'+'v'*self.verbose)
+
 		return s
 	
 	def start(self):
@@ -711,6 +726,7 @@ class Mongos(object):
 	authenticated = False
 	login = None
 	password = None
+	verbose = 0
 
 	@classmethod
 	def set_keyfile(cls, keyfile = None):
@@ -721,7 +737,6 @@ class Mongos(object):
 	def auth(cls, login, password):
 		cls.login = login
 		cls.password = password
-
 
 
 	@classmethod
@@ -741,13 +756,17 @@ class Mongos(object):
 			args = ['sudo', '-u', DEFAULT_USER, MONGOS, '--fork',
 					'--logpath', ROUTER_LOG_PATH, '--configdb',
 					'mongo-0-0:%s' % CONFIG_SERVER_DEFAULT_PORT]
-					
-			if os.path.exists(ROUTER_LOG_PATH):
-				rchown(DEFAULT_USER, ROUTER_LOG_PATH)
-
 			if cls.keyfile and os.path.exists(cls.keyfile):
-				rchown(DEFAULT_USER, cls.keyfile)
+				chown_r(cls.keyfile, DEFAULT_USER)
 				args.append('--keyFile=%s' % cls.keyfile)
+
+			if cls.verbose and isinstance(cls.verbose, int) and 0<cls.verbose<6:
+				args.append('-'+'v'*cls.verbose)
+
+
+			if os.path.exists(ROUTER_LOG_PATH):
+				chown_r(ROUTER_LOG_PATH, DEFAULT_USER)
+
 			system2(args, close_fds=True, preexec_fn=os.setsid)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 			wait_until(lambda: cls.get_cli().has_connection, timeout=MAX_START_TIMEOUT)
@@ -811,7 +830,6 @@ class MongoCLIMeta(type):
 class MongoCLI(object):
 
 	__metaclass__ = MongoCLIMeta
-	authenticated = False
 	host = 'localhost'
 	_instances = dict()
 
@@ -846,10 +864,13 @@ class MongoCLI(object):
 		if not hasattr(self, '_con'):
 			self._logger.debug('creating pymongo connection to %s:%s' % (self.host,self.port))
 			self._con = pymongo.Connection(self.host, self.port)
-		if not self.authenticated and self.login and self.password and self.is_port_listening:
-			self._logger.debug('Authenticating connection on port %s as %s', self.port, self.login)
-			self._con.admin.authenticate(self.login, self.password)
-			self.authenticated = True
+
+		if self.login and self.password and self.is_port_listening:
+			try:
+				self._con.admin.system.users.find().next()
+			except:
+				self._logger.debug('Authenticating connection on port %s as %s', self.port, self.login)
+				self._con.admin.authenticate(self.login, self.password)
 		return self._con
 
 

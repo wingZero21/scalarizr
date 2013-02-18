@@ -12,7 +12,7 @@ from scalarizr import handlers
 from scalarizr import messaging
 from scalarizr import storage
 from scalarizr import util
-from scalarizr.util import filetool
+from scalarizr.linux.rsync import rsync
 from scalarizr.bus import bus
 from scalarizr.services import cloudfoundry
 
@@ -314,7 +314,7 @@ class CloudControllerHandler(handlers.Handler):
 			if not vol.mounted():
 				vol.mount(mpoint)
 		except storage.StorageError, e:
-			''' XXX: Crapy. We need to introduce error codes from fstool ''' 
+			''' XXX: Crapy. We need to introduce error codes from mount ''' 
 			if 'you must specify the filesystem type' in str(e):
 				vol.mkfs()
 				vol.mount(mpoint)
@@ -378,9 +378,7 @@ class CloudControllerHandler(handlers.Handler):
 						self.volume = self._plug_storage(mpoint=tmp_mpoint)
 						if not _cf.valid_datadir(tmp_mpoint):
 							LOG.info('Copying data from %s to storage', _datadir)
-							rsync = filetool.Rsync().archive().delete().\
-										source(_datadir + '/').dest(tmp_mpoint)
-							rsync.execute()
+							rsync(_datadir + '/', tmp_mpoint, archive=True, delete=True)
 							
 						LOG.debug('Mounting storage to %s', _datadir)
 						self.volume.umount()

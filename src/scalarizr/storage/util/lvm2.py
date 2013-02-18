@@ -14,6 +14,8 @@ import random
 import logging
 import binascii
 
+from scalarizr import wait_until
+
 try:
 	from collections import namedtuple
 except ImportError:
@@ -21,7 +23,6 @@ except ImportError:
 
 from scalarizr.util import system2, firstmatched, PopenError
 from scalarizr.util.software import whereis
-from scalarizr.util.filetool import read_file
 from scalarizr.util import dynimp
 from scalarizr.linux import coreutils
 from scalarizr.storage import StorageError
@@ -130,7 +131,10 @@ def normalize_lvname(lvolume):
 def lvm_group_b64(vg):
 	vgfile = '/etc/lvm/backup/%s' % os.path.basename(vg)
 	if os.path.exists(vgfile):
-		return binascii.b2a_base64(read_file(vgfile))
+		file_content = None
+		with open(vgfile, 'r') as fp:
+		    file_content = fp.read()
+		return binascii.b2a_base64(file_content)
 
 
 class Lvm2:
@@ -251,19 +255,40 @@ class Lvm2:
 			args += ('--type=' + segment_type,)
 		if group and segment_type != 'snapshot':
 			args.append(group)
+
 		if ph_volumes:
 			args += ph_volumes
-		
-		out = system(args, error_text='Cannot create logical volume')[0].strip()
-		vol = re.match(r'Logical volume "([^\"]+)" created', out.split('\n')[-1].strip()).group(1)
-		if not vol:
-			raise Lvm2Error('Cannot create logical volume: %s' % out)
-		return lvpath(os.path.basename(group), vol)
-	
+
+		out, err, ret_code = system(args, raise_exc=False)
+		out = out.strip()
+		if not ret_code:
+			vol = re.match(r'Logical volume "([^\"]+)" created', out.split('\n')[-1].strip()).group(1)
+			if not vol:
+				raise Lvm2Error('Cannot create logical volume: %s' % err)
+
+		elif ret_code == 5:
+			logger.debug('Lvcreate exited with non-zero code. Trying to find '
+						'target device manually')
+
+			device_to_find = lvpath(os.path.basename(group), name)
+			if not os.path.exists(device_to_find):
+				raise Lvm2Error("Couldn't create logical volume %s: %s" % (device_to_find, err))
+			return device_to_find
+
+		else:
+			raise Lvm2Error('Cannot create logical volume: %s' % err)
+
+		device_path = lvpath(os.path.basename(group), vol)
+		wait_until(lambda: os.path.exists(device_path), timeout=30)
+		return device_path
+
+
+
 	def create_lv_snapshot(self, lvolume, name=None, extents=None, size=None):
 		vg = extract_vg_lvol(lvolume)[0]
 		return self.create_lv(vg, name, extents, size, segment_type='snapshot', ph_volumes=(normalize_lvname(lvolume),))
-	
+
+
 	def change_lv(self, lvolume, available=None):
 		cmd = [LVCHANGE]
 		if available is not None:
@@ -289,6 +314,17 @@ class Lvm2:
 				break
 			time.sleep(1)
 		system((LVREMOVE, '--force', vol), error_text='Cannot remove logical volume')
+
+		# On GCE lvremove finishes with the following stderr:
+		# 
+		#   The link /dev/<GroupName>/<VolumeName> should have been removed by udev but it is still present. 
+		#   Falling back to direct link removal.
+		#
+		# After that snapshot cow is still presented and prevents new snapshots creation
+		cow = '%s-%s-cow' % extract_vg_lvol(lvolume)
+		if os.path.exists('/dev/mapper/%s' % cow):
+			system((DMSETUP, 'remove', cow))
+
 
 	def extend_vg(self, group, *ph_volumes):
 		system([VGEXTEND, group] + list(ph_volumes), error_text='Cannot extend volume group')

@@ -7,13 +7,16 @@ Created on Mar 11, 2010
 import scalarizr
 from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError, prepare_tags
-from scalarizr.util import system2, disttool, cryptotool, fstool, filetool,\
+from scalarizr.util import system2, disttool, cryptotool,\
 	wait_until, firstmatched
+from scalarizr.linux import mount
 from scalarizr.platform.ec2 import ebstool
 from scalarizr import storage
 from scalarizr.storage.transfer import Transfer
 from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr import storage
+from scalarizr.linux import coreutils
+from scalarizr.linux.tar import Tar
 from scalarizr.storage2.volumes import ebs as ebsvolume
 
 from M2Crypto import X509, EVP, Rand, RSA
@@ -74,6 +77,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		self._ebs_strategy_cls = ebs_strategy_cls or RebundleEbsStrategy
 		self._instance_store_strategy_cls = instance_store_strategy_cls or RebundleInstanceStoreStrategy
 		self._instance = None
+		self._strategy = None
 		bus.on(rebundle=self.on_rebundle)
 		
 
@@ -91,12 +95,19 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		# Take rebundle strategy
 		pl = bus.platform 
 		ec2_conn = pl.new_ec2_conn()
-		instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
+		instance_id = pl.get_instance_id()
+		try:
+			instance = ec2_conn.get_all_instances([instance_id])[0].instances[0]
+		except IndexError:
+			msg = 'Failed to find instance %s. ' \
+					'If you are importing this server, check that you are doing it from the ' \
+					'right Scalr environment'
+			raise HandlerError(msg)
 		self._instance = instance
 
 		
 		""" list of all mounted devices """
-		list_device = filetool.df()
+		list_device = coreutils.df()
 		
 		""" root device partition like `df(device='/dev/sda2', ..., mpoint='/')` """
 		root_disk = firstmatched(lambda x: x.mpoint == '/', list_device)
@@ -215,12 +226,13 @@ class RebundleStratery:
 					role_name = role_name,
 					bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
 				)
-				filetool.write_file(motd_filename, motd, error_msg="Cannot patch motd file '%s' %s %s")
+				with open(motd_filename, 'w') as fp:
+				    fp.write(motd)
 
 	def _fix_fstab(self, image_mpoint):
 		LOG.debug('Fixing fstab')
 		pl = bus.platform
-		fstab = fstool.Fstab(os.path.join(image_mpoint, 'etc/fstab'), True)
+		fstab = mount.fstab(os.path.join(image_mpoint, 'etc/fstab'))
 
 		# Remove EBS volumes from fstab
 		ec2_conn = pl.new_ec2_conn()
@@ -231,30 +243,34 @@ class RebundleStratery:
 					if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id() 
 						and instance.root_device_name != vol.attach_data.device)
 
-		for devname in ebs_devs:
-			devname = ebsvolume.name2device(devname)
-			LOG.debug('Remove %s from fstab', devname)
-			fstab.remove(devname, autosave=False)
+		for device in ebs_devs:
+			device = ebsvolume.name2device(device)
+			LOG.debug('Remove %s from fstab', device)
+			try:
+				del fstab[device]
+			except KeyError:
+				pass
 		
 		# Remove Non-local filesystems
-		for entry in fstab.list_entries():
+		for entry in fstab:
 			if entry.fstype in NETWORK_FILESYSTEMS:
-				LOG.debug('Remove %s from fstab', entry.devname)
-				fstab.remove(entry.devname, autosave=False)
+				LOG.debug('Remove %s from fstab', entry.device)
+				del fstab[entry.device]
 		
 		# Ubuntu 10.04 mountall workaround
 		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
 		# @see http://alestic.com/2010/09/ec2-bug-mountall
 		if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
-			for entry in fstab.list_entries():
-				if entry.devname in pl.instance_store_devices:
-					if entry.options.find('nobootwait') >= 0:			
-						entry.options = re.sub(r'(nobootwait),(\S+)', r'\2,\1', entry.options)
+			for entry in fstab:
+				if entry.device in pl.instance_store_devices:
+					options = entry.options
+					if options.find('nobootwait') >= 0:			
+						options = re.sub(r'(nobootwait),(\S+)', r'\2,\1', options)
 					else:
-						entry.options += ',nobootwait'
-					LOG.debug('Added nobootwait for %s', entry.devname)
-		
-		fstab.save()
+						options += ',nobootwait'
+					del fstab[entry.device]
+					fstab.add(entry.device, entry.mpoint, entry.fstype, options, entry.dump, entry.fsck_order)
+					LOG.debug('Added nobootwait for %s', entry.device)
 
 
 	def _cleanup_image(self, image_mpoint, role_name=None):
@@ -357,7 +373,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			# digest of the file to be calculated without having to re-read
 			# it from disk.
 			openssl = "/usr/sfw/bin/openssl" if disttool.is_sun() else "openssl"
-			tar = filetool.Tar()
+			tar = Tar()
 			tar.create().dereference().sparse()
 			tar.add(os.path.basename(image_file), os.path.dirname(image_file))
 			digest_file = os.path.join('/tmp', 'ec2-bundle-image-digest.sha1')
@@ -395,7 +411,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 			# tracked. The alternative is to create a dedicated output
 			# directory, but this leaves the user less choice.
 			LOG.info("Splitting image into chunks")
-			part_names = filetool.split(bundled_file_path, name, self._IMAGE_CHUNK_SIZE, destination)
+			part_names = coreutils.split(bundled_file_path, name, self._IMAGE_CHUNK_SIZE, destination)
 			LOG.debug("Image splitted into %s chunks", len(part_names))			
 
 			# Sum the parts file sizes to get the encrypted file size.
@@ -459,7 +475,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 				f = open(part_filename)
 				digest = EVP.MessageDigest(DIGEST_ALGO)
 				part_digests.append((part_name, hexlify(cryptotool.digest_file(digest, f)))) 
-			except Exception, BaseException:
+			except (Exception, BaseException):
 				LOG.error("Cannot generate digest for chunk '%s'", part_name)
 				raise
 			finally:
@@ -713,7 +729,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		system2("sync", shell=True)  
 		# Flush so newly formatted filesystem is ready to mount.
 
-		list_devices = filetool.df()
+		list_devices = coreutils.df()
 		
 		""" rdev_partition is like `/dev/sda1` """
 		rdev_partition = firstmatched(lambda x: x.mpoint == '/', list_devices).device
@@ -773,8 +789,8 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 		for from_dev in from_devs:
 			num = os.path.basename(from_dev.device)[-1]
 
-			if self._mtab.contains(mpoint=os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num))) or\
-					self._mtab.contains(mpoint=os.path.join(self.mpoint, os.path.basename(from_dev.device))):
+			if os.path.join(self.mpoint, '%s%s' % (os.path.basename(self.devname), num)) in self._mtab or \
+					os.path.join(self.mpoint, os.path.basename(from_dev.device)) in self._mtab:
 				raise HandlerError("Partition already mounted")
 
 			""" dev like `sdg1` """
@@ -784,7 +800,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 			LOG.debug('try mount dev(distination) `/dev/%s` like `%s`', dev, to_mpoint)
 			""" mount partition seems like /mnt/img-mnt/sdh1 """
-			fstool.mount('/dev/%s' % dev, to_mpoint)
+			mount.mount('/dev/%s' % dev, to_mpoint)
 
 			if os.path.basename(from_dev.device) != os.path.basename(rdev_partition):
 				""" copying not root partition """
@@ -792,7 +808,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 				LOG.debug('try mount dev(source) `%s` like `%s`', from_dev.device, from_mpoint)
 
 				""" mount source volume partition """
-				fstool.mount(from_dev.device, from_mpoint)
+				mount.mount(from_dev.device, from_mpoint)
 				""" copy all consitstant"""
 				excludes = self.excludes
 				self.excludes = tuple()
@@ -822,7 +838,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 		#TODO: need transmit flag `copy_partition_table` from Ec2RebundleHandler.before_rebundle
 		""" list of all mounted devices """
-		list_device = filetool.df()
+		list_device = coreutils.df()
 		""" root device partition like `df(device='/dev/sda2', ..., mpoint='/')` """
 		root_disk = firstmatched(lambda x: x.mpoint == '/', list_device)
 		if not root_disk:
@@ -856,10 +872,10 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 			""" self.mpoint like `/mnt/img-mnt/sda2' root partition copy 
 				finding all new mounted partitions in `/mnt/img-mnt`... """
 			mpt = '/'+ '/'.join(filter(None, self.mpoint.split('/'))[:-1])
-			mparts = [dev.mpoint for dev in filetool.df() if dev.mpoint.startswith(mpt)]
+			mparts = [dev.mpoint for dev in coreutils.df() if dev.mpoint.startswith(mpt)]
 			LOG.debug('Partitions which will be unmounting: %s' % mparts)
 			for mpt in mparts:
-				if self._mtab.contains(mpoint=mpt, reload=True):
+				if mpt in self._mtab:
 					LOG.debug("Unmounting '%s'", mpt)
 					system2("umount -d " + mpt, shell=True, raise_exc=False)
 		else:

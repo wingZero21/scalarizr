@@ -6,7 +6,6 @@ Created on Dec 16, 2009
 '''
 from scalarizr import init_script
 from scalarizr.bus import bus
-from scalarizr.util.filetool import read_file
 from optparse import OptionParser
 import sys
 
@@ -36,7 +35,9 @@ def main():
 	msg = msg_service.new_message()
 
 	if options.msgfile:
-		str = read_file(options.msgfile, error_msg='Cannot open message file %s' % options.msgfile)
+		str = None
+		with open(options.msgfile, 'r') as fp:
+			str = fp.read()
 		if str:
 			msg.fromxml(str)
 		
@@ -55,20 +56,20 @@ def main():
 """
 <?xml version="1.0" ?>
 <message id="037b1864-4539-4201-ac0b-5b1609686c80" name="Rebundle">
-    <meta>
-        <server_id>ab4d8acc-f001-4666-8f87-0748af52f700</server_id>
-    </meta>
-    <body>
-        <platform_access_data>
-            <account_id>*account_id*</account_id>
-            <key_id>*key_id*</key_id>
-            <key>*key*</key>
-            <cert>*cert*</cert>
-            <pk>*pk*</pk>
-        </platform_access_data>
-        <role_name>euca-base-1</role_name>
-        <bundle_task_id>567</bundle_task_id>
-        <excludes><excludes>
-    </body>
+	<meta>
+		<server_id>ab4d8acc-f001-4666-8f87-0748af52f700</server_id>
+	</meta>
+	<body>
+		<platform_access_data>
+			<account_id>*account_id*</account_id>
+			<key_id>*key_id*</key_id>
+			<key>*key*</key>
+			<cert>*cert*</cert>
+			<pk>*pk*</pk>
+		</platform_access_data>
+		<role_name>euca-base-1</role_name>
+		<bundle_task_id>567</bundle_task_id>
+		<excludes><excludes>
+	</body>
 </message>
 """

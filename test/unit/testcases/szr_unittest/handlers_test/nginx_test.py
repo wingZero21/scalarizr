@@ -9,7 +9,6 @@ import string
 
 from scalarizr.bus 				import bus
 from scalarizr.handlers 		import nginx
-from scalarizr.util.filetool 	import read_file, write_file
 from szr_unittest 				import RESOURCE_PATH
 from scalarizr.config 			import ScalarizrCnf
 from szr_unittest_libs.mock 	import QueryEnvService
@@ -43,13 +42,19 @@ class TestNginx(unittest.TestCase):
 		https_include_path = "/etc/nginx/https.include"
 		#_queryenv = bus.queryenv_service = _QueryEnv()
 		_queryenv = bus.queryenv_service = qe
-		https_include = read_file(https_include_path)
+		https_include = None
+		with open(https_include_path, 'r') as fp:
+		    https_include = fp.read()
 		
 		cert_path =  self._cnf.key_path("https.crt")
 		pk_path = self._cnf.key_path("https.key")
 		
-		cert = read_file(cert_path)
-		pk = read_file(pk_path)
+		cert = None
+		with open(cert_path, 'r') as fp:
+		    cert = fp.read()
+		pk = None
+		with open(pk_path, 'r') as fp:
+		    pk = fp.read()
 		
 		print 'Cleaning..'
 		for file in (https_include_path, cert_path, pk_path):
@@ -86,7 +91,7 @@ class TestNginx(unittest.TestCase):
 		self.assertTrue(os.path.exists(nginx_incl))
 	
 	def _test_changing_upstream_list(self):
-		_queryenv = bus.queryenv_service = qe
+		bus.queryenv_service = qe
 		config = bus.config
 		sect_name = nginx.CNF_SECTION
 		nginx_incl = "/etc/nginx/app-servers.include"
@@ -94,13 +99,16 @@ class TestNginx(unittest.TestCase):
 		
 		custom_include = 'upstream backend {\n\n	server	8.8.8.8:80\tweight=5;\n\n	server	7.7.7.7:80\tdebug;\n}'
 		print custom_include
-		write_file(nginx_incl, custom_include)
+		with open(nginx_incl, 'w') as fp:
+		    fp.write(custom_include)
 		
 		n = nginx.NginxHandler()
 		n._reload_upstream()
 		n._reload_upstream()
 		
-		new_incl = read_file(nginx_incl)
+		new_incl = None
+		with open(nginx_incl, 'r') as fp:
+		    new_incl = fp.read()
 		print new_incl
 		
 		#queryenv has only 8.8.8.8 in list_roles, so 7.7.7.7 supposed not to exist
@@ -115,7 +123,7 @@ class TestNginx(unittest.TestCase):
 		self.assertEquals(string.find(new_incl, include_str), string.rfind(new_incl, include_str))
 	
 	def test_main_config(self):
-		_queryenv = bus.queryenv_service = qe
+		bus.queryenv_service = qe
 		config = bus.config
 		sect_name = nginx.CNF_SECTION
 		nginx_incl = "/etc/nginx/app-servers.include"
@@ -130,7 +138,10 @@ class TestNginx(unittest.TestCase):
 		#n._reload_upstream()
 		n._update_main_config()
 		
-		main_cfg = read_file('/etc/nginx/nginx.conf')
+		main_cfg = None
+		with open('/etc/nginx/nginx.conf', 'r') as fp:
+		    main_cfg = fp.read()
+
 		include = 'include	/etc/nginx/app-servers.include;'
 		self.assertRaises(ValueError, string.index,*(main_cfg, include))
 		#moving back
@@ -143,12 +154,14 @@ class TestNginx(unittest.TestCase):
 		include_path = "/etc/nginx/app-servers.include"
 		config.set('www','app_include_path',include_path)
 		data = """\nupstream backend {\n\tip_hash;\n\n\t\tserver 8.8.8.8:80;\n\n}"""
-		write_file(include_path, data)	
-		
+		with open(include_path, 'w') as fp:
+		    fp.write(data)
 		n = nginx.NginxHandler()
 		n.on_BeforeHostTerminate(Message)
 		
-		new_data = read_file(include_path)
+		new_data = None
+		with open(include_path, 'r') as fp:
+		    new_data = fp.read()
 		self.assertEquals(new_data,"""\nupstream backend {\n\tip_hash;\n\n\tserver\t127.0.0.1:80;\n}\n""")
 
 
@@ -196,15 +209,19 @@ vhost = VirtualHost(
 cert_dir = os.path.join(RESOURCE_PATH, '../../integ/resources/apache-cert/')
 print os.path.exists(cert_dir)
 
-qe = QueryEnvService(
-	list_roles=[Role(["www"], "nginx", [role_host])],
-	
-	list_virtual_hosts = [vhost],
-		
-	get_https_certificate = (read_file(os.path.join(cert_dir, 'server.crt')),
-							read_file(os.path.join(cert_dir, 'server.key')),
-							read_file(os.path.join(cert_dir, 'ca.crt')),)	
-)
+server_crt = None
+server_key = None
+ca_crt = None
+with open(os.path.join(cert_dir, 'server.crt'), 'r') as fp:
+    server_crt = fp.read()
+with open(os.path.join(cert_dir, 'server.key'), 'r') as fp:
+    server_key = fp.read()
+with open(os.path.join(cert_dir, 'ca.crt'), 'r') as fp:
+    ca_crt = fp.read()
+
+qe = QueryEnvService(list_roles=[Role(["www"], "nginx", [role_host])],
+					 list_virtual_hosts=[vhost],
+					 get_https_certificate=(server_crt, server_key, ca_crt))
 
 bus.queryenv_service = qe
 print qe

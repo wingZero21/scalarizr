@@ -60,27 +60,22 @@ class TestLvmVolume(object):
 		
 	@mock.patch.multiple('scalarizr.linux.coreutils', 
 						losetup_all=mock.DEFAULT)
+	@mock.patch('scalarizr.linux.coreutils.losetup')
 	@mock.patch.object(os.path, 'exists')
 	@mock.patch.object(os, 'stat') 
-	def test_ensure_existed(self, stat, exists, losetup_all):
+	def test_ensure_existed(self, stat, exists, losetup, losetup_all):
 		stat.return_value = mock.Mock(st_size=1073741931)
 		exists.return_value=True
 		losetup_all.return_value.__getitem__.return_value = '/mnt/loopdev0'
 		
 		vol = storage2.volume(
-			type='loop', 
+			type='loop',
 			device='/dev/loop0', 
 			file='/mnt/loopdev0'
 		)
 		vol.ensure()
 		
 		losetup_all.assert_called_once_with()
-		assert vol.size == 1
-	
 	
 	def test_restore(self):
 		pass
-	
-	
-	
-

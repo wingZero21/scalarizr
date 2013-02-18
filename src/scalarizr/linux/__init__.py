@@ -11,21 +11,24 @@ from scalarizr import util
 class LinuxError(util.PopenError):
 	pass
 
+
 def which(exe):
-	(path, _) = osmod.path.split(exe)
-	if osmod.access(exe, osmod.X_OK):
-		return exe
-
-	default_path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
-
-	for path in osmod.environ.get('PATH', default_path).split(osmod.pathsep):
-		full_path = osmod.path.join(path, exe)
-		if osmod.access(full_path, osmod.X_OK):
-			return full_path
-	return None
+        if exe and exe.startswith('/') and \
+                        osmod.access(exe, osmod.X_OK):
+                return exe
+        exe = osmod.path.basename(exe)
+        path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
+        if osmod.environ.get('PATH'):
+                path += ':' + osmod.environ['PATH']
+        for p in set(path.split(osmod.pathsep)):
+                full_path = osmod.path.join(p, exe)
+                if osmod.access(full_path, osmod.X_OK):
+                        return full_path
+        return None
 
 
 def system(*args, **kwds):
+	args = list(args)
 	kwds['exc_class'] = LinuxError
 	kwds['close_fds'] = True
 	if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
@@ -33,6 +36,7 @@ def system(*args, **kwds):
 		if not executable:
 			msg = "Executable '%s' not found" % args[0][0]
 			raise LinuxError(msg)
+		args[0] = list(args[0])
 		args[0][0] = executable
 	return util.system2(*args, **kwds)
 
@@ -89,6 +93,8 @@ class __os(dict):
 			self['name'] = 'Debian'
 			self['family'] = 'Debian'
 			if 'lsb_distrib_id' in self:
+				if 'GCEL' in self['lsb_distrib_id']:
+					self['name'] = 'GCEL'
 				if 'Ubuntu' in self['lsb_distrib_id']:
 					self['name'] = 'Ubuntu'
 				elif osmod.path.isfile('/etc/issue.net') and \
@@ -170,8 +176,13 @@ class __os(dict):
 			self['family'] = 'Unknown'
 
 	def _detect_kernel(self):
-		o, e, ret_code = system(['modprobe', '-l'], raise_exc=False)
+		o, e, ret_code = system(['modprobe', '-l'], raise_exc=False, silent=True)
 		self['mods_enabled'] = 0 if ret_code else 1
+
+		arch = osmod.uname()[-1]
+		if re.search(r'i\d86', arch):
+			arch = 'i386'
+		self['arch'] = arch
 
 	def _detect_cloud(self):
 		pass
@@ -179,38 +190,46 @@ class __os(dict):
 os = __os()
 
 
-def build_cmd_args(executable=None, short=None, long=None, params=None):
+ubuntu_release_to_codename = {
+	'8.04': 'hardy',
+	'8.10': 'intrepid',
+	'9.04': 'jaunty',
+	'9.10': 'karmic',
+	'10.04': 'lucid',
+	'10.10': 'maverick',
+	'11.04': 'natty',
+	'11.10': 'oneiric',
+	'12.04': 'precise',
+	'12.10': 'quantal',
+	'13.04': 'raring'
+}
+
+def build_cmd_args(executable=None,
+				   short=None,
+				   long=None,
+				   params=None,
+				   duplicate_keys=False):
 	ret = []
 	if executable:
 		ret += [executable]
 	if short:
-		ret += short
+		ret += list(short)
 	if long:
 		for key, value in long.items():
-			ret.append('--%s' % key.replace('_', '-'))
+			cmd_key = '--%s' % key.replace('_', '-')
+			ret.append(cmd_key)
 			if type(value) == bool and value:
 				continue
-			# sometimes we should duplicate keys
 			elif type(value) in (list, tuple):
-				ret.extend(value)
+				if duplicate_keys:
+					ret.append(value[0])
+					for v in value[1:]:
+						ret.extend([cmd_key, v])
+				else:
+					ret.extend(value)
 				continue
 			ret.append(value)
 	if params:
 		ret += list(params)
 	return map(str, ret)
-
-
-def which(exe):
-	if exe and exe.startswith('/') and \
-			osmod.access(exe, osmod.X_OK):
-		return exe
-	exe = osmod.path.basename(exe)
-	path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
-	if osmod.environ.get('PATH'):
-		path += ':' + osmod.environ['PATH']
-	for p in set(path.split(osmod.pathsep)):
-		full_path = osmod.path.join(p, exe)
-		if osmod.access(full_path, osmod.X_OK):
-			return full_path
-	return None
 

@@ -15,16 +15,17 @@ from scalarizr.config import Configurator, BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
 from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
+from scalarizr.api import service as preset_service
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.util import system2, cached, firstmatched,\
 	validators, software, initdv2, disttool
 from scalarizr.linux import iptables
-from scalarizr.util.filetool import read_file, write_file
+from scalarizr.services import BaseConfig, PresetProvider
 
 # Stdlibs
-import os, logging, shutil, re, time
+import os, logging, shutil, re, time, pwd
 from telnetlib import Telnet
 from datetime import datetime
 import ConfigParser
@@ -40,6 +41,7 @@ APP_PORT = 'app_port'
 HTTPS_INC_PATH = 'https_include_path'
 APP_INC_PATH = 'app_include_path'
 UPSTREAM_APP_ROLE = 'upstream_app_role'
+
 
 class NginxInitScript(initdv2.ParametrizedInitScript):
 	_nginx_binary = None
@@ -84,8 +86,12 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 			return initdv2.Status.UNKNOWN
 		return status
 
-	def configtest(self):
-		out = system2('%s -t' % self._nginx_binary, shell=True)[1]
+	def configtest(self, path=None):
+		args = '%s -t' % self._nginx_binary
+		if path:
+			args += '-c %s' % path
+			
+		out = system2(args, shell=True)[1]
 		if 'failed' in out.lower():
 			raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 		
@@ -184,20 +190,23 @@ class NginxHandler(ServiceCtlHandler):
 	
 	backends_xpath = "upstream[@value='backend']/server"
 	localhost = '127.0.0.1:80'
-	
+
 	def __init__(self):
 		ServiceCtlHandler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
-				
+
 		self._logger = logging.getLogger(__name__)
-		
+		self.preset_provider = NginxPresetProvider()
+		preset_service.services[BEHAVIOUR] = self.preset_provider
+
 		bus.define_events("nginx_upstream_reload")
 		bus.on(init=self.on_init, reload=self.on_reload)
 		self.on_reload()			
-		
+
 	def on_init(self):
 		bus.on(
-			start = self.on_start, 
-			before_host_up = self.on_before_host_up
+			start = self.on_start,
+			before_host_up = self.on_before_host_up,
+			host_init_response = self.on_host_init_response
 		)
 
 		self._insert_iptables_rules()
@@ -218,6 +227,13 @@ class NginxHandler(ServiceCtlHandler):
 			self._upstream_app_role = ini.get(CNF_SECTION, UPSTREAM_APP_ROLE)
 		except ConfigParser.Error:
 			self._upstream_app_role = None
+
+	def on_host_init_response(self, message):
+		if hasattr(message, BEHAVIOUR):
+			data = getattr(message, BEHAVIOUR)
+			if data and 'preset' in data:
+				self.initial_preset = data['preset'].copy()
+
 	
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and \
@@ -251,7 +267,7 @@ class NginxHandler(ServiceCtlHandler):
 				with op.step(self._step_reload_upstream):
 					self._reload_upstream()
 
-				bus.fire('service_configured', service_name=SERVICE_NAME)
+		bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
 
 	
 	def on_HostUp(self, message):
@@ -482,25 +498,28 @@ class NginxHandler(ServiceCtlHandler):
 			https_certificate = self._queryenv.get_https_certificate()
 
 			if https_certificate[0]:
-				msg = 'Writing ssl cert'
 				cert = https_certificate[0]
-				write_file(cert_path, cert, msg=msg, logger=self._logger)
+				self._logger.debug('Writing ssl cert')
+				with open(cert_path, 'w') as fp:
+				    fp.write(cert)
 			else:
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
 
 			if len(https_certificate)>1 and https_certificate[1]:
-				msg = 'Writing ssl key'
 				pk = https_certificate[1]
-				write_file(pk_path, pk, msg=msg, logger=self._logger)
+				self._logger.debug('Writing ssl key')
+				with open(pk_path, 'w') as fp:
+				    fp.write(pk)
 			else:
 				self._logger.error('Scalr returned empty SSL Cert')
 				return
 
 			if https_certificate[2]:
-				msg = 'Appending CA cert to cert file'
 				cert = https_certificate[2]
-				write_file(cert_path, '\n' + https_certificate[2], mode='a', msg=msg, logger=self._logger)
+				self._logger.debug('Appending CA cert to cert file')
+				with open(cert_path, 'a') as fp:
+				    fp.write('\n' + https_certificate[2])
 		else:
 			self._logger.debug('No SSL vhosts obtained. Removing old SSL keys.')
 			for key_path in (cert_path, pk_path):
@@ -517,13 +536,16 @@ class NginxHandler(ServiceCtlHandler):
 					https_config += raw + '\n'
 
 			if https_config:
-				if os.path.exists(self._https_inc_path)\
-				and read_file(self._https_inc_path, logger=self._logger):
-					time_suffix = str(datetime.now()).replace(' ','.')
-					shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
+				if os.path.exists(self._https_inc_path):
+					file_content = None
+					with open(self._https_inc_path, 'r') as fp:
+					    file_content = fp.read()
+					if file_content:
+						time_suffix = str(datetime.now()).replace(' ','.')
+						shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
 
-				msg = 'Writing virtualhosts to https.include'
-				write_file(self._https_inc_path, https_config, msg=msg, logger=self._logger)
+				with open(self._https_inc_path, 'w') as fp:
+				    fp.write(https_config)
 
 		else:
 			self._logger.debug('Scalr returned empty virtualhost list. Removing junk files.')
@@ -531,3 +553,40 @@ class NginxHandler(ServiceCtlHandler):
 				os.remove(self._https_inc_path)
 				self._logger.debug('%s deleted' % self._https_inc_path)
 
+		if https_config:
+			if os.path.exists(self._https_inc_path) \
+					and open(self._https_inc_path, 'r').read():
+				time_suffix = str(datetime.now()).replace(' ','.')
+				shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
+
+			self._logger.debug('Writing virtualhosts to https.include')
+			with open(self._https_inc_path, 'w') as fp:
+				fp.write(https_config)
+
+				
+
+class NginxConf(BaseConfig):
+	
+		config_type = 'www'
+		config_name = 'nginx.conf'
+
+
+
+class NginxConf(BaseConfig):
+
+	config_type = 'www'
+	config_name = 'nginx.conf'
+
+
+class NginxPresetProvider(PresetProvider):
+
+	def __init__(self):
+		cnf = bus.cnf
+		ini = cnf.rawini
+		nginx_conf_path = os.path.join(os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)), 'nginx.conf')
+		config_mapping = {'nginx.conf':NginxConf(nginx_conf_path)}
+		service = initdv2.lookup('nginx')
+		PresetProvider.__init__(self, service, config_mapping)
+
+
+			
