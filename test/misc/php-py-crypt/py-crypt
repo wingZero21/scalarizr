@@ -1,0 +1,66 @@
+#!/usr/bin/python
+'''
+Created on Jun 14, 2010
+
+@author: marat
+'''
+
+import M2Crypto
+from M2Crypto.EVP import Cipher
+from M2Crypto.Rand import rand_bytes
+import binascii
+import hmac
+import hashlib
+import sys
+import os
+
+CRYPTO_ALGO = "des_ede3_cbc"
+version_info = tuple(map(int, M2Crypto.version.split(".")))
+
+def _init_cipher(key, op_enc=1):
+	kwargs = dict()
+#	if version_info >= (0, 20):
+#		kwargs["padding"] = 0
+
+	# Use first 24 bytes as secret key and last 8 bytes as iv
+	skey = key[0:24]
+	iv = key[-8:]
+	print "skey(hex): %s" % (binascii.hexlify(skey),)
+	print "iv(hex): %s" % (binascii.hexlify(iv),)
+	return Cipher(CRYPTO_ALGO, skey, iv, op_enc, **kwargs)
+		
+def encrypt (s, key):
+	c = _init_cipher(key, 1)
+	ret = c.update(s)
+	ret += c.final()
+	del c
+	print "enrypted(hex): %s" % (binascii.hexlify(ret),)
+	return binascii.b2a_base64(ret)
+	
+def decrypt (s, key):
+	c = _init_cipher(key, 0)
+	print "enrypted(hex): %s" % (binascii.hexlify(binascii.a2b_base64(s)),)
+	ret = c.update(binascii.a2b_base64(s))
+	ret += c.final()
+	del c
+	return ret
+
+key = open(os.path.dirname(os.path.abspath(__file__)) + "/crypto-key", "r").read()
+key = binascii.a2b_base64(key)
+print "key(hex): %s" % (binascii.hexlify(key),)
+try:
+	data = sys.argv[2]
+except IndexError:
+	data = sys.stdin.read()
+# Set data length to be multiple of block length
+print "data: %s" % (data,)
+
+if sys.argv[1] in ("-e", "--encrypt"):
+#	if len(data) % 8:
+#		data = data.ljust(len(data) + 8 - len(data) % 8, " ")
+	print "data: %s (len: %d)" % (data, len(data))
+	print encrypt(data, key)
+elif sys.argv[1] in ("-d", "--decrypt"):
+	print decrypt(data, key)
+else:
+	print "E: invalid opeartion %s" % (sys.argv[1],)

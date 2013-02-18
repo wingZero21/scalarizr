@@ -1,0 +1,5 @@
+#!/bin/sh
+echo "__SCRIPT 7__tried to execute unexisted program:"
+echo "/dev/php"
+touch test/resources/hooks/test_7_done
+/dev/php

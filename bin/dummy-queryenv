@@ -1,0 +1,10 @@
+#!/usr/bin/python
+
+import sys
+try:
+	from scalarizr.util.dummysrv import queryenv_main
+except ImportError, e:
+	print >> sys.stderr, "error: %s\n\nPlease make sure that scalarizr is properly installed" % (e)
+	sys.exit(1)
+	
+queryenv_main()

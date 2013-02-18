@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -x
+
+if [ "$1" = "purge" ]; then
+	rm -f /mnt/privated.img
+	rm -rf /etc/scalr/private.d
+	rm -rf /etc/scalr/public.d
+	rm -f /etc/scalr/logging*
+	rm -f /tmp/scalarizr.status
+
+	rmdir /etc/scalr
+fi
+
+exit 0
+

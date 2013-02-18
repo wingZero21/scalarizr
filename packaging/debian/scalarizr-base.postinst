@@ -1,0 +1,794 @@
+#!/bin/bash
+
+set -x
+
+# Automatically added by dh_pysupport
+if which update-python-modules >/dev/null 2>&1; then
+	if test -f /usr/share/python-support/scalarizr-base.public; then
+		update-python-modules -v /usr/share/python-support/scalarizr-base.public 1>&2
+		ls -la /usr/lib/pymodules/python2.6/scalarizr 1>&2
+		ls -la /usr/lib/pymodules/python2.6/scalarizr/libs 1>&2
+	else
+		update-python-modules scalarizr-base
+	fi
+fi
+
+/usr/local/bin/scalarizr -v
+
+# End automatically added section
+
+
+if [ "$1" == "configure" ]; then
+
+cp /usr/share/scalr/szradm.bash_completion /etc/bash_completion.d/szradm
+
+# Create configuration files
+pub_cnf_dir='/etc/scalr/public.d'
+priv_cnf_dir='/etc/scalr/private.d'	
+
+
+if [ ! -f "$pub_cnf_dir/config.ini" ]; then
+	echo 'Creating configuration files...'
+	cat <<EOF > "$pub_cnf_dir/config.ini"
+[general]
+
+; Server behaviour is a role your server acts as. 
+; Built-in behaviours:
+; 	www - Load balancer
+;	app - Application server
+; 	mysql - Database server
+behaviour = 
+
+; Path to the local sqlite database
+storage_path = private.d/db.sqlite3
+
+; Path to the Scalarizr crypto key
+crypto_key_path = private.d/keys/default
+
+; Cloud platform on which Scalarizr is deployed. 
+; Built-in platforms: 
+; 	ec2 - Amazon EC2
+platform = ec2
+
+; Scalarizr scripts path
+scripts_path = /usr/local/scalarizr/scripts
+
+; Email for system info reports
+report_email = szr-report@scalr.com
+
+[messaging]
+; Messaging implementation adapter. Built-in adapters: p2p
+adapter = p2p
+
+[messaging_p2p]
+; Retires progression
+producer_retries_progression = 1,2,5,10,20,30,60
+
+; Local messaging endpoint. Will be used by Scalr to send messages to.
+consumer_url = http://0.0.0.0:8013
+
+[snmp]
+
+; SNMP listen port
+port = 8014
+
+[handlers]
+
+; Life circle
+; @required
+; Server life cycle in a Scalr environment
+lifecycle = scalarizr.handlers.lifecycle
+
+; IP list builder
+; @optional
+; Builds farm servers IP addresses structure
+; @see http://article-about-etc-aws-hosts structure
+ip_list_builder = scalarizr.handlers.ip_list_builder
+
+; Scalr scripting
+; @optional
+; Executes user defined scripts on Scalr and Scalarizr events
+; @see http://article-about-scripting
+script_executor = scalarizr.handlers.script_executor
+
+; Hooks
+; @optional
+; @requires scalarizr.handlers.script_executor
+; Executes scripts on scalarizr events in a POSIX manner. Scripts are located in 'hooks' directory, 
+; must be named exactly as a Scalarizr event with a numeric prefix which defines the execution order,
+; and must have #! in a first line.
+; Example:
+; $ ls /usr/local/scalarizr/hooks
+; 01-host_init 01-host_up  02-host_up
+hooks = scalarizr.handlers.hooks
+
+; SSH authorized keys manager
+ssh_auth_keys = scalarizr.handlers.ssh_auth_keys
+
+; Deployments
+; @optional
+deploy = scalarizr.handlers.deploy
+
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/app.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/app.ini"
+[app]
+
+; Directory to create virtual hosts configuration in.
+; All Apache virtual hosts, created in the Scalr user interface are placed in a separate
+; directory and included to the main Apache configuration file.
+vhosts_path = 
+
+; Apache configuration file location.
+apache_conf_path = 
+
+; DO NOT MODIFY!
+; app behaviour implementation
+main_handler = apache
+
+[handlers]
+apache = scalarizr.handlers.apache
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/chef.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/chef.ini"
+; Opscode Chef integration
+
+[chef]
+
+
+[handlers]
+
+chef = scalarizr.handlers.chef	
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/cloudfoundry.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/cloudfoundry.ini"
+[cloudfoundry]
+
+vcap_home = /root/cloudfoundry/vcap
+
+[handlers]
+
+cloudfoundry = scalarizr.handlers.cloudfoundry
+EOF
+fi
+
+
+if [ ! -f "$pub_cnf_dir/cloudstack.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/cloudstack.ini"
+[cloudstack]
+
+[handlers]
+
+cloudstack_lifecycle = scalarizr.handlers.cloudstack.lifecycle
+
+cloudstack_rebundle = scalarizr.handlers.cloudstack.rebundle
+
+cloudstack_csvol = scalarizr.handlers.cloudstack.csvol
+EOF
+fi
+
+
+
+if [ ! -f "$pub_cnf_dir/ec2.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/ec2.ini"
+[ec2]
+
+; Amazon EC2 certificate path
+ec2_cert_path = public.d/keys/ec2_cert.pem
+
+; Your Amazon EC2 certificate path
+cert_path = private.d/keys/ec2_cert.pem
+
+; Your Amazon EC2 private key path
+pk_path = private.d/keys/ec2_pk.pem
+
+; Set hostname to the public DNS name of instance
+hostname_as_pubdns = 1
+
+[handlers]
+; Life cycle in the EC2 environment
+; @required
+; Additional life cycle features for the EC2 cloud platform
+ec2_lifecycle = scalarizr.handlers.ec2.lifecycle
+
+; Image bundle
+; @required
+; Create an instance image bundle and upload it to S3.
+rebundle = scalarizr.handlers.ec2.rebundle
+
+; EBS management
+; @required
+; EBS attach/detach operations handler.
+ebs = scalarizr.handlers.ec2.ebs	
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/eucalyptus.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/eucalyptus.ini"
+[eucalyptus]
+
+; Eucalyptus cloud certificate path
+cloud_cert_path = public.d/keys/euca_cloud_cert.pem
+
+[handlers]
+ec2_lifecycle = scalarizr.handlers.ec2.lifecycle
+rebundle = scalarizr.handlers.euca.rebundle
+ebs = scalarizr.handlers.ec2.ebs
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/gce.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/gce.ini"
+[gce]
+
+[handlers]
+
+rebundle = scalarizr.handlers.gce.rebundle
+EOF
+fi
+
+
+if [ ! -f "$pub_cnf_dir/hooks.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/hooks.ini"
+[hooks]
+
+hooks_path = /usr/local/scalarizr/hooks
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/ip_list_builder.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/ip_list_builder.ini"
+[ip_list_builder]
+base_path=$priv_cnf_dir/hosts
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/memcached.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/memcached.ini"
+[memcached]
+
+; Cache size in megabytes
+cache_size = 1536
+
+main_handler = memcached
+
+[handlers]
+
+memcached=scalarizr.handlers.memcached
+EOF
+fi
+
+
+if [ ! -f "$pub_cnf_dir/mongodb.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/mongodb.ini"
+[mongodb]
+main_handler = mongodb
+
+[handlers]
+mongodb = scalarizr.handlers.mongodb
+EOF
+fi
+
+
+if [ ! -f "$pub_cnf_dir/mysql.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/mysql.ini"
+[mysql]
+
+; MySQL daemon binary path
+mysqld_path = 
+
+; MySQL command line tool path.
+mysql_path =
+
+; Path to the mysqldump utility
+mysqldump_path =
+
+; MySQL configuration file path.
+mycnf_path = 
+
+; Timeout for change master host (on slave)
+change_master_timeout = 30
+
+mysqldump_options = --create-options --routines --add-drop-database --quick --quote-names --flush-privileges
+
+main_handler = mysql
+
+
+[handlers]
+
+mysql = scalarizr.handlers.mysql
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/mysql2.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/mysql2.ini"
+[mysql2]
+
+; Timeout for change master host (on slave)
+change_master_timeout = 30
+
+mysqldump_options = --create-options --routines --add-drop-database --quick --quote-names --flush-privileges 
+
+main_handler = mysql2
+
+
+[handlers]
+
+mysql2 = scalarizr.handlers.mysql2
+EOF
+fi
+
+
+
+if [ ! -f "$pub_cnf_dir/mysqlproxy.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/mysqlproxy.ini"
+[mysqlproxy]
+
+[handlers]
+
+mysqlproxy = scalarizr.handlers.mysqlproxy
+EOF
+fi
+
+
+if [ ! -f "$pub_cnf_dir/nimbula.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/nimbula.ini"
+[nimbula]
+
+; userdata appearance timeout, in seconds
+wait_user_data_timeout = 600
+
+
+[handlers]
+
+nimbula_rebundle = scalarizr.handlers.nimbula.rebundle
+EOF
+fi
+
+
+if [ ! -f "$pub_cnf_dir/postgresql.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/postgresql.ini"
+[postgresql]
+
+; Timeout for change master host (on slave)
+change_master_timeout = 30
+
+[handlers]
+
+postgresql = scalarizr.handlers.postgresql
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/rabbitmq.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/rabbitmq.ini"
+[rabbitmq]
+
+[handlers]
+
+rabbitmq = scalarizr.handlers.rabbitmq
+EOF
+fi
+
+
+if [ ! -f "$pub_cnf_dir/rackspace.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/rackspace.ini"
+[handlers]
+
+rackspace_lifecycle = scalarizr.handlers.rackspace.lifecycle
+
+rackspace_rebundle = scalarizr.handlers.rackspace.rebundle
+EOF
+fi
+
+
+if [ ! -f "$pub_cnf_dir/redis.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/redis.ini"
+[redis]
+
+; Timeout for change master host (on slave)
+change_master_timeout = 30
+
+[handlers]
+
+redis = scalarizr.handlers.redis
+EOF
+fi
+
+
+if [ ! -f "$pub_cnf_dir/script_executor.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/script_executor.ini"
+[script_executor]
+
+exec_dir_prefix=/usr/local/bin/scalr-scripting.
+
+logs_dir=/var/log/scalarizr/scripting
+
+logs_truncate_over=20K
+EOF
+fi
+
+if [ ! -f "$pub_cnf_dir/www.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/www.ini"
+[www]
+
+; Path to nginx binary
+binary_path = /usr/sbin/nginx
+
+; App upstreams configuration file path.
+app_include_path = /etc/nginx/app-servers.include
+
+; HTTPS configuration file path
+https_include_path = /etc/nginx/https.include
+
+; Application server http port
+app_port = 80
+
+; DO NOT MODIFY!
+main_handler = nginx
+
+; Proxy http trafic to single app role 
+upstream_app_role = 
+
+[handlers]
+
+nginx = scalarizr.handlers.nginx
+EOF
+fi
+
+
+pushd .
+cd $pub_cnf_dir
+if [ -f cloudfoundry.ini ]; then
+	for name in cf_router.ini cf_cloud_controller.ini \
+				cf_health_manager.ini cf_dea.ini cf_service.ini; do
+		[ ! -f $name ] && ln -s cloudfoundry.ini $name
+	done
+fi
+[ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
+[ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini 
+[ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini 
+popd
+
+
+
+
+#installed_version=$(echo $(dpkg-query -f '${Version}\n' --show {scalarizr,scalarizr-base}) | tail -1)
+
+installed_version="$2"
+if [ -z $installed_version ] && [ -f /tmp/szr-obsolete-version ]; then
+	installed_version=$(cat /tmp/szr-obsolete-version)
+	rm -f /tmp/szr-obsolete-version
+fi
+
+if [ -n "$installed_version" ]; then
+	# HotFix: remove crappy files in private.d/ from old packages
+	umount -l "$priv_cnf_dir" 2>&1 || :
+	if dpkg --compare-versions "$installed_version" lt '0.7.14-2'; then
+		if ! grep "$priv_cnf_dir" /proc/mounts; then
+			rm -f $priv_cnf_dir/*
+		fi
+	fi
+	[ -f /mnt/privated.img ] && mount /mnt/privated.img "$priv_cnf_dir" -o loop		
+
+	if dpkg --compare-versions "$installed_version" lt '0.5.7-1'; then
+		[ -f "$priv_cnf_dir/mysql.ini" ] && sed -i 's/behaviour_mysql/mysql/1' "$priv_cnf_dir/mysql.ini"
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.6.0-1'; then
+		[ -f "$pub_cnf_dir/nginx/app-servers.tpl" ] && sed -i 's/${upstream_hosts}//1' "$pub_cnf_dir/nginx/app-servers.tpl"
+	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.6.10-1'; then
+		sed -i 's/localhost:8013/0.0.0.0:8013/g' "$pub_cnf_dir/config.ini"
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.7.0'; then
+		# Convert mysql storage configuration
+		if [ -f "$priv_cnf_dir/mysql.ini" ]; then
+			[ ! -d "$priv_cnf_dir/storage" ] && mkdir "$priv_cnf_dir/storage"
+
+			grep snapshot_id "$priv_cnf_dir/mysql.ini" | sed 's/snapshot_id\s\+=\s\+\(.*\)/{ "type": "ebs", "id": "\1" }/' > "$priv_cnf_dir/storage/mysql-snap.json"
+			sed -i '/snapshot_id/d' "$priv_cnf_dir/mysql.ini"
+
+			device=$(cat /etc/fstab | grep dbstorage | awk '{ print $1 }') 
+			[ -z $device ] && device="/dev/sdo"
+			volume_id=$(grep volume_id "$priv_cnf_dir/mysql.ini" | sed 's/volume_id\s\+=\s\+\(.*\)/\1/')
+			echo '{ "type": "ebs", "id": "'$volume_id'", "device": "'$device'", "mpoint": "/mnt/dbstorage" }' > "$priv_cnf_dir/storage/mysql.json"
+			sed -i '/volume_id/d' "$priv_cnf_dir/mysql.ini"
+		fi
+	
+		# Add new colums
+		dbfile="$priv_cnf_dir/db.sqlite"
+		if [ -e "$dbfile" ]; then
+			python <<EOF
+import sqlite3
+import os
+conn = sqlite3.Connection('${dbfile}')
+cur = conn.cursor()
+cur.execute('pragma table_info(p2p_message)')
+if not any(filter(lambda row: row[1] == 'in_consumer_id', cur.fetchall())):
+	cur.execute('alter table p2p_message add column in_consumer_id TEXT')
+	cur.execute('update p2p_message set in_consumer_id = "http://0.0.0.0:8013" where is_ingoing = 1')
+	conn.commit()
+if not cur.execute('pragma table_info(storage)').fetchall():
+	cur.execute('CREATE TABLE storage ("volume_id" TEXT, "type" TEXT, "device" TEXT, "state" TEXT)')
+	conn.commit()
+if os.path.exists('${priv_cnf_dir}/storage/mysql.json'):
+	cur.execute('INSERT INTO storage VALUES (?, ?, ?, ?)', ('${volume_id}', 'ebs', '${device}', 'attached'))
+	conn.commit()
+cur.close()
+EOF
+		fi
+
+		# Add new options
+		if ! grep 'report_email' "$pub_cnf_dir/config.ini" > /dev/null; then
+			sed -i 's/\(\[messaging\]\)/report_email = szr-report@scalr.com\n\n\1/' "$pub_cnf_dir/config.ini"
+		fi
+		if ! grep 'ssh_auth_keys' "$pub_cnf_dir/config.ini" > /dev/null; then
+			sed -i 's/\(\[handlers\]\)/\1\nssh_auth_keys = scalarizr.handlers.ssh_auth_keys\n/' "$pub_cnf_dir/config.ini"
+		fi
+		if ! grep 'hostname_as_pubdns' "$pub_cnf_dir/ec2.ini" > /dev/null; then
+			sed -i 's/\(\[handlers\]\)/hostname_as_pubdns = 1\n\n\1/' "$pub_cnf_dir/ec2.ini"
+		fi
+		if ! grep 'upstream_app_role' "$pub_cnf_dir/www.ini" > /dev/null; then
+			sed -i 's/\(\[handlers\]\)/upstream_app_role =\n\n\1/' "$pub_cnf_dir/www.ini"
+		fi
+		if ! grep 'change_master_timeout' "$pub_cnf_dir/mysql.ini" > /dev/null; then
+			sed -i 's/\(\[handlers\]\)/change_master_timeout = 30\n\n\1/' "$pub_cnf_dir/mysql.ini"
+		fi
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.7.3-1'; then
+		if [ -f /etc/mysql/farm-replication.cnf ]; then
+			server_id=$(grep 'server-id' /etc/mysql/farm-replication.cnf)
+			sed -i "s/\(\[mysqld\]\)/\1\n$server_id/1" /etc/mysql/my.cnf
+			sed -i 's/.*farm-replication.cnf//' /etc/mysql/my.cnf
+			rm -f /etc/mysql/farm-replication.cnf			
+		fi
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.7.10-2'; then
+		if [ -f $priv_cnf_dir/mysql.ini ] && [ "1" = "`grep 'replication_master' $priv_cnf_dir/mysql.ini | awk '{print $3}'`" ]; then
+			if ! grep 'server-id' /etc/mysql/my.cnf > /dev/null; then
+				sed -i "s/\(\[mysqld\]\)/\1\nserver-id = 1/1" /etc/mysql/my.cnf
+			fi
+		fi  
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.7.14-2'; then
+		if [ -f /mnt/privated.img ]; then
+			umount $priv_cnf_dir 2>&1 || :
+			mpoint=$(mktemp -d)
+			mount /mnt/privated.img $mpoint -o loop
+			rsync -a $mpoint/ /etc/scalr/private.d/
+			sync 
+			umount $mpoint
+			rm -rf $mpoint
+			rm -f /mnt/privated.img
+		fi
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.7.23-1'; then
+		if grep 'logs_dir_prefix' "$pub_cnf_dir/script_executor.ini" > /dev/null; then
+			sed -i 's/logs_dir_prefix.*//g' "$pub_cnf_dir/script_executor.ini"
+		fi
+		if ! grep 'logs_dir' "$pub_cnf_dir/script_executor.ini" > /dev/null; then
+			cat <<EOF >> "$pub_cnf_dir/script_executor.ini"
+			
+logs_dir=/var/log/scalarizr/scripting
+EOF
+		fi
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.7.29-1'; then
+		if ! grep 'scalarizr.handlers.deploy' "$pub_cnf_dir/config.ini" > /dev/null; then
+			cat <<EOF >> "$pub_cnf_dir/config.ini"
+			
+; Deployments
+; @optional
+deploy = scalarizr.handlers.deploy
+EOF
+		fi
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.7.32-1'; then
+		sed -i 's/\(base_path=\).*/\1\/etc\/scalr\/private.d\/hosts/1' "$pub_cnf_dir/ip_list_builder.ini"
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.7.45-1'; then
+		dbfile="$priv_cnf_dir/db.sqlite"
+		if [ -e "$dbfile" ]; then
+			python <<EOF
+import sqlite3
+import os
+conn = sqlite3.Connection('${dbfile}')
+cur = conn.cursor()
+cur1 = conn.cursor()
+for row in cur.execute('select device from storage where state = ?', ('attached', )):
+	device = row[0]
+	if not os.path.exists(device):
+		cur1.execute('delete from storage where device = ? and state = ?', (device, 'attached'))
+conn.commit()
+EOF
+		fi
+	fi
+	
+	if dpkg --compare-versions "$installed_version" lt '0.7.78-1'; then
+		rm -rf "$priv_cnf_dir/hosts"
+	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.7.93-1'; then
+		val=$(curl http://169.254.169.254/latest/user-data/ 2>&1 | \
+			python -c "import sys, re; print re.search(r'cloud_storage_path=([^;]+)', sys.stdin.read()).group(1).strip().replace('/', '\\/');")
+		if ! grep 'cloud_storage_path' "$priv_cnf_dir/config.ini" > /dev/null; then
+			sed -i "s/\(\[general\]\)/\1\ncloud_storage_path=$val/1" "$priv_cnf_dir/config.ini"
+		fi
+	fi
+
+
+	if dpkg --compare-versions "$installed_version" lt '0.7.97-1'; then
+		if ! grep 'mysqldump_options' "$pub_cnf_dir/mysql.ini" > /dev/null; then
+			sed -i 's/\(\[handlers\]\)/mysqldump_options = --create-options --routines --add-drop-database --quick --quote-names --flush-privileges\n\n\1/' "$pub_cnf_dir/mysql.ini"
+		fi
+	fi
+
+
+	if dpkg --compare-versions "$installed_version" lt '0.7.143-1'; then
+		rm -f /etc/init.d/ec2-every-startup
+		python -c "
+from scalarizr.util import disttool
+if disttool.version_info() == (8, 4):
+	import os
+	import simplejson as json
+	cnf_path = '$priv_cnf_dir/storage/mysql.json'
+	if os.path.exists(cnf_path):
+		cnf = json.load(open(cnf_path))
+		if not 'mpoint' in cnf:
+			cnf['mpoint'] = '/mnt/dbstorage'
+		fp = open(cnf_path, 'w+')
+		json.dump(cnf, fp)
+		fp.close()
+"
+	fi
+	
+
+	if dpkg --compare-versions "$installed_version" lt '0.7.149-1'; then
+		# Add new colums
+		dbfile="$priv_cnf_dir/db.sqlite"
+		if [ -e "$dbfile" ]; then
+			python <<EOF
+import sqlite3
+import os
+conn = sqlite3.Connection('${dbfile}')
+cur = conn.cursor()
+if not cur.execute('pragma table_info(state)').fetchall():
+	cur.execute('CREATE TABLE state ("name" PRIMARY KEY ON CONFLICT REPLACE, "value" TEXT)')
+	conn.commit()
+cur.close()
+EOF
+		fi
+	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.7.192-1'; then
+		echo 'deb http://apt-delayed.scalr.net/debian scalr/' >> /etc/apt/sources.list.d/scalr.list
+	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.7.199-1'; then
+		if [ -e "$priv_cnf_dir/config.ini" ]; then
+			python -c "
+import ConfigParser
+
+name = '$priv_cnf_dir/config.ini'
+
+conf = ConfigParser.ConfigParser()
+conf.read(name)
+conf.set('general', 'env_id', '')
+conf.set('general', 'role_id', '')
+conf.set('general', 'farm_role_id', '')
+
+fp = open(name, 'w+')
+conf.write(fp)
+fp.close()
+"
+		fi
+	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.7.213-1'; then
+		if grep 'app' "$pub_cnf_dir/config.ini" > /dev/null; then
+			sed -i 's/Include\sprivate.d\/vhosts\/\*\.vhost.conf//1' '/etc/apache2/apache2.conf'
+			sed -i 's/Include\s\/etc\/scalr\/private.d\/private.d\/vhosts\/\*\.vhost.conf//1' '/etc/apache2/apache2.conf'
+		fi
+	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.7.228-1'; then
+		python - <<-EOF
+			import os
+			verfile = '/etc/scalr/private.d/.scalr-version'
+			if os.path.exists(verfile):
+			    ver = open(verfile).read().replace('\n', '').strip()
+			    open(verfile, 'w').write(ver)
+		EOF
+	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.9.r3746-1'; then
+		[ ! -f "$pub_cnf_dir/percona.ini" ] && ln -s "$pub_cnf_dir/mysql2.ini" "$pub_cnf_dir/percona.ini"
+	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.9.r4762-1'; then
+		dbfile="$priv_cnf_dir/db.sqlite"
+		if [ -e "$dbfile" ]; then
+			python - <<-EOF
+				import sqlite3
+				import os
+				conn = sqlite3.Connection('${dbfile}')
+				cur = conn.cursor()
+				cur.execute('pragma table_info(p2p_message)')
+				if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
+				    cur.execute("alter table p2p_message add column format TEXT default 'xml'")
+				    conn.commit()
+				cur.close()
+			EOF
+		fi
+	fi
+
+	sync
+	umount -l "$priv_cnf_dir" 2>&1 || :	
+fi
+
+chown -R root:root /etc/scalr
+chmod 775 /etc/scalr/private.d
+sync
+
+fi
+
+
+if dpkg-query --status scalr-ami-scripts >/dev/null 2>&1; then
+	cat <<EOF
+WARNING: 
+  scalr-ami-scripts package is installed on this server. 
+  scalarizr is incompatible with scalr-ami-scripts and you should migrate servers in a proper way. 
+  You can read more here: http://wiki.scalr.net/Tutorials/AMI_Scripts_to_Scalarizr_transition
+
+EOF
+fi
+
+
+NAME="scalarizr"
+INIT_SCRIPT="/etc/init.d/$NAME"
+
+if [ -x $INIT_SCRIPT ]; then
+	update-rc.d $NAME defaults 99 >/dev/null
+	update-rc.d scalarizr_update defaults 98 >/dev/null
+
+	snmp_pid=$(netstat -anp | grep ^udp | grep 0\.0\.0\.0:8014 | awk '{ print $6 }' | cut -d/ -f1)
+
+	if [ ! -z "$snmp_pid" ] && [ $snmp_pid -gt 1 ]; then
+		kill -9 $snmp_pid 2>/dev/null
+	fi
+
+	zomby_pids=$(ps aux | grep '/usr/local/bin/scalarizr' | awk '{ print $2 }')
+	if [ "$zomby_pids" ]; then
+		for zomby_pid in $zomby_pids; do
+			kill -9 $zomby_pid 2>/dev/null
+		done
+	fi
+
+	if [ -f "/tmp/$NAME.status" ]; then
+		status=$(cat /tmp/$NAME.status)
+		rm -f "/tmp/$NAME.status"
+		if [ "0" = "$status" ]; then
+			$INIT_SCRIPT start || exit $?
+		fi
+	else
+		if [ -f "/etc/scalr/private.d/.state" ]; then
+			$INIT_SCRIPT start || exit $?
+		fi
+	fi
+fi
+
