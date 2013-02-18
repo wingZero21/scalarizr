@@ -196,7 +196,8 @@ class ScriptExecutor(Handler):
 							asynchronous=int(item['asynchronous']),
 							exec_timeout=item['timeout'], event_name=event_name,
 							role_name=role_name,
-							event_server_id=message.body.get('server_id'))
+							event_server_id=message.body.get('server_id'),
+							event_id=message.body.get('event_id'))
 						for item in message.body['scripts']]
 		else:
 			LOG.debug("Fetching scripts for event %s", event_name)
@@ -222,6 +223,7 @@ class Script(object):
 	role_name = None
 	exec_timeout = 0
 	event_server_id = None
+	event_id = None
 	
 	id = None
 	pid = None
@@ -351,7 +353,8 @@ class Script(object):
 				script_path=self.exec_path,
 				event_name=self.event_name or '',
 				return_code=self.return_code,
-				event_server_id=self.event_server_id
+				event_server_id=self.event_server_id,
+				event_id=self.event_id
 			)
 			return ret
 

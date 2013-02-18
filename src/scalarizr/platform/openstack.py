@@ -2,10 +2,12 @@ import urllib2
 import json
 import os
 import logging
-
+import re
+from time import sleep
 
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
+import swiftclient
 
 from scalarizr import platform
 from scalarizr.bus import bus
@@ -15,29 +17,29 @@ LOG = logging.getLogger(__name__)
 
 
 class OpenstackServiceWrapper(object):
-	def _make_connection(self, **kwargs):
-		raise NotImplementedError()
+    def _make_connection(self, **kwargs):
+        raise NotImplementedError()
 
-	def __init__(self, user, password, tenant, auth_url, region_name=None):
-		self.user = user
-		self.password = password
-		self.tenant = tenant
-		self.auth_url = auth_url
-		self.region_name = region_name
-		self.connection = None
-		self.connect = self.reconnect
+    def __init__(self, user, password, tenant, auth_url, region_name=None):
+        self.user = user
+        self.password = password
+        self.tenant = tenant
+        self.auth_url = auth_url
+        self.region_name = region_name
+        self.connection = None
+        self.connect = self.reconnect
 
-	def __getattr__(self, name):
-		return getattr(self.connection, name)
+    def __getattr__(self, name):
+        return getattr(self.connection, name)
 
-	def reconnect(self):
-		self.connection = self._make_connection()
+    def reconnect(self):
+        self.connection = self._make_connection()
 
-	#TODO: make connection check more properly
-	@property
-	def has_connection(self):
-		self.reconnect()
-		return self.connection is not None
+    #TODO: make connection check more properly
+    @property
+    def has_connection(self):
+        self.reconnect()
+        return self.connection is not None
 
 
 class CinderWrapper(OpenstackServiceWrapper):
@@ -63,8 +65,6 @@ class NovaWrapper(OpenstackServiceWrapper):
                                   **kwargs)
 
 
-
-
 class OpenstackPlatform(platform.Platform):
 
     _meta_url = "http://169.254.169.254/openstack/latest/meta_data.json"
@@ -76,19 +76,23 @@ class OpenstackPlatform(platform.Platform):
 
     features = ['volumes', 'snapshots']
 
+    def __init__(self):
+        platform.Platform.__init__(self)
+        # Work over [Errno -3] Temporary failure in name resolution
+        # http://bugs.centos.org/view.php?id=4814
+        os.chmod('/etc/resolv.conf', 0755)
 
     def get_private_ip(self):
-        if not self._private_ip:
+        if self._private_ip is None:
             ifaces = platform.net_interfaces()
             self._private_ip = ifaces['eth1' if 'eth1' in ifaces else 'eth0']
         return self._private_ip
 
     def get_public_ip(self):
-        if not self._public_ip:
+        if self._public_ip is None:
             ifaces = platform.net_interfaces()
-            self._public_ip =  ifaces['eth0']
+            self._public_ip = ifaces['eth0'] if 'eth1' in ifaces else ''
         return self._public_ip
-
 
     def _get_property(self, name):
         if not name in self._userdata:
@@ -100,10 +104,24 @@ class OpenstackPlatform(platform.Platform):
         nova.connect()
         servers = nova.servers.list()
         for srv in servers:
-            srv_private_addrs = map(lambda addr_info: addr_info['addr'],
-                                    srv.addresses['private'])
+            srv_private_addrs = []
+            for _ in xrange(20):
+                # if for some reason nova returns server without private ip
+                # waiting for 1 sec than try again.
+                # If after 20 tries still no ip, give up and try another srv
+                try:
+                    srv_private_addrs = [addr_info['addr'] for addr_info in
+                                         srv.addresses['private']]
+                    break
+                except KeyError:
+                    sleep(1)
+                    srv.update()
+
             if self.get_private_ip() in srv_private_addrs:
                 return srv.id
+
+        raise BaseException("Can't get server_id because we can't get "
+                            "server private ip")
 
     def get_avail_zone(self):
         return self._get_property('availability_zone')
@@ -139,7 +157,7 @@ class OpenstackPlatform(platform.Platform):
                 # that should be there when fetching from url
                 return {'meta': metadata}
             raise platform.PlatformError("Cannot fetch %s metadata url '%s'. "
-                                "Error: %s" % (self.name, url, e))
+                                         "Error: %s" % (self.name, url, e))
 
     def _fetch_metadata_from_file(self):
         cnf = bus.cnf
@@ -157,7 +175,7 @@ class OpenstackPlatform(platform.Platform):
     def set_access_data(self, access_data):
         self._access_data = access_data
         # if it's Rackspace NG, we need to set env var CINDER_RAX_AUTH
-        # for proper nova and cinder authentication
+        # and NOVA_RAX_AUTH for proper nova and cinder authentication
         if 'rackspacecloud' in self._access_data["keystone_url"]:
             os.environ["CINDER_RAX_AUTH"] = "True"
             os.environ["NOVA_RAX_AUTH"] = "True"
@@ -183,6 +201,19 @@ class OpenstackPlatform(platform.Platform):
                            self._access_data["tenant_name"],
                            self._access_data["keystone_url"],
                            self._access_data["cloud_location"])
+
+    def new_swift_connection(self):
+        if not self._access_data:
+            return None
+        api_key = self._access_data["api_key"]
+        password = self._access_data["password"]
+        keystone_url = re.sub(r'v2\.\d$', 'v1.0',
+                              self._access_data['keystone_url'])
+        auth_version = '2' if '/v2.' in keystone_url else '1'
+        return swiftclient.Connection(keystone_url,
+                                      self._access_data["username"],
+                                      password or api_key,
+                                      auth_version=auth_version)
 
 
 def get_platform():

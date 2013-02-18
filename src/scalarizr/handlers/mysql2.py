@@ -15,6 +15,7 @@ import tempfile
 import threading
 
 # Core
+from scalarizr import handlers
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError, \
@@ -25,9 +26,10 @@ from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
 from scalarizr.libs import metaconf
 from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool
-from scalarizr.storage import transfer
+
 
 from scalarizr import storage2, linux
+from scalarizr.storage2 import cloudfs
 from scalarizr.linux import iptables, coreutils	
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
@@ -320,6 +322,7 @@ class MysqlHandler(DBMSRHandler):
 					message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
 				or 	message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
+				or  message.name == DbMsrMessages.DBMSR_CANCEL_DATA_BUNDLE
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
 				or  message.name == Messages.BEFORE_HOST_TERMINATE
@@ -572,23 +575,13 @@ class MysqlHandler(DBMSRHandler):
 				backup.close()
 				
 			with op.step(self._step_upload_to_cloud_storage):
-				# Creating list of full paths to archive chunks
-				if os.path.getsize(backup_path) > __mysql__['mysqldump_chunk_size']:
-					parts = [os.path.join(tmpdir, file) 
-							for file in coreutils.split(backup_path, backup_filename, 
-								__mysql__['mysqldump_chunk_size'] , tmpdir)]
-				else:
-					parts = [backup_path]
-				sizes = [os.path.getsize(file) for file in parts]
-						
 				cloud_storage_path = self._platform.scalrfs.backups('mysql')
 				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-				trn = transfer.Transfer()
-				cloud_files = trn.upload(parts, cloud_storage_path)
-				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
-								cloud_storage_path, backup_filename)
-
-			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))								
+				trn = cloudfs.LargeTransfer(src=backup_path, dst=cloud_storage_path, compressor=None)
+				result = trn.run()
+				result = handlers.transfer_result_to_backup_result(result)
+				LOG.info('MySQL backup uploaded')
+							
 			op.ok(data=result)
 			
 			# Notify Scalr
@@ -690,13 +683,6 @@ class MysqlHandler(DBMSRHandler):
 		bak = self._current_data_bundle
 		if bak:
 			bak.kill()
-
-			#? move into CreateDataBundle?
-			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
-				db_type = __mysql__['behavior'],
-				status		='error',
-				last_error	= "Canceled"
-			))
 		else:
 			LOG.debug("No data bundle to cancel")
 

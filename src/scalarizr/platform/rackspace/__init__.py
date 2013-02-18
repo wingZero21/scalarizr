@@ -17,6 +17,7 @@ from cloudservers import CloudServers
 from cloudservers.client import CloudServersClient
 from cloudservers.exceptions import CloudServersException 
 import cloudfiles
+import swiftclient
 
 
 LOG = logging.getLogger(__name__)
@@ -96,6 +97,9 @@ class RackspacePlatform(Platform):
 	def __init__(self):
 		Platform.__init__(self)
 		self._logger = logging.getLogger(__name__)
+		# Work over [Errno -3] Temporary failure in name resolution
+		# http://bugs.centos.org/view.php?id=4814 
+		os.chmod('/etc/resolv.conf', 0755)		
 
 	def get_private_ip(self):
 		if not self._private_ip:
@@ -142,4 +146,11 @@ class RackspacePlatform(Platform):
 	
 	def new_cloudfiles_conn(self):
 		return new_cloudfiles_conn()
+
+	def new_swift_connection(self):
+		return swiftclient.Connection(
+					'https://%s/v1.0' % self._access_data.get('auth_host', 'auth.api.rackspacecloud.com'),
+					self._access_data["username"],
+					self._access_data.get("password") or self._access_data.get("api_key"),
+					auth_version='1')	
 		

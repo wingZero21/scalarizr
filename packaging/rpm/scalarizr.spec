@@ -90,8 +90,10 @@ Summary:        Scalarizr Rackspace edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:       python26-cloudfiles >= 1.5.1 python26-cloudservers >= 1.0
+Requires:       python26-swiftclient >= 1.2.0
 %else
 Requires:       python-cloudfiles >= 1.5.1 python-cloudservers >= 1.0 python-httplib2
+Requires:       python-swiftclient >= 1.2.0
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
@@ -116,6 +118,9 @@ Requires:		python26-novaclient >= 2.10.0
 Requires:       python26-rackspace-novaclient >= 1.0
 Requires:       python26-cinderclient >= 1.0.1
 Requires:       python26-swiftclient >= 1.2.0
+Requires:       python26-cloudfiles
+Requires:       python26-cloudservers
+
 %else
 Requires:		python-novaclient >= 2.10.0
 Requires:       python-rackspace-novaclient >= 1.0
@@ -557,6 +562,7 @@ if [ -f cloudfoundry.ini ]; then
 		[ ! -f $name ] && ln -s cloudfoundry.ini $name
 	done
 fi
+rm -f percona.ini  # Measly config in several builds 
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini

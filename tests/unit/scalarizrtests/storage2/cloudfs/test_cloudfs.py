@@ -14,7 +14,9 @@ from nose.tools import assert_raises
 from scalarizr.storage2 import cloudfs
 
 
-class NTestFileTransfer(object):
+class TestFileTransfer(object):
+
+	# TODO: test callback reports and replace mock.ANY
 
 	path0 = '/mnt/backups/daily0.tar.gz'
 	path1 = '/mnt/backups/daily.tar.gz'
@@ -118,7 +120,7 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.put.assert_called_once_with(self.path1, self.path2)
+		driver.put.assert_called_once_with(self.path1, self.path2, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.get.called
@@ -140,9 +142,9 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.put.assert_any_call(self.path0, self.path2)
-		driver.put.assert_any_call(self.path1, self.path2)
-		driver.put.assert_any_call(self.path0, self.path2)
+		driver.put.assert_any_call(self.path0, self.path2, report_to=mock.ANY)
+		driver.put.assert_any_call(self.path1, self.path2, report_to=mock.ANY)
+		driver.put.assert_any_call(self.path0, self.path2, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.get.called
@@ -174,9 +176,9 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.put.assert_any_call(self.path0, self.path2)
-		driver.put.assert_any_call(self.path1, dst2)
-		driver.put.assert_any_call(self.path0, dst3)
+		driver.put.assert_any_call(self.path0, self.path2, report_to=mock.ANY)
+		driver.put.assert_any_call(self.path1, dst2, report_to=mock.ANY)
+		driver.put.assert_any_call(self.path0, dst3, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.get.called
@@ -245,7 +247,7 @@ class NTestFileTransfer(object):
 		assert len(obj._retries_queue.put.call_args_list) == 2
 		obj._retries_queue.put.assert_any_call((self.path0, self.path2, 1, -1))
 		obj._retries_queue.put.assert_any_call((self.path1, self.path2, 1, -1))
-		assert obj._retries_queue.get_nowait.call_args_list == [mock.call()] * 10
+		assert obj._retries_queue.get_nowait.call_args_list == [mock.call()] * 18, obj._retries_queue.get_nowait.call_args_list
 
 		# iter str multipart
 		cloudfs.cloudfs.reset_mock()
@@ -347,7 +349,7 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.get.assert_called_once_with(self.path2, self.path1)
+		driver.get.assert_called_once_with(self.path2, self.path1, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.put.called
@@ -371,9 +373,9 @@ class NTestFileTransfer(object):
 		driver = cloudfs.cloudfs.return_value
 
 		assert all([call == mock.call("s3") for call in cloudfs.cloudfs.call_args_list])
-		driver.get.assert_any_call(self.path2, self.path0)
-		driver.get.assert_any_call(dst2, self.path1)
-		driver.get.assert_any_call(dst3, self.path0)
+		driver.get.assert_any_call(self.path2, self.path0, report_to=mock.ANY)
+		driver.get.assert_any_call(dst2, self.path1, report_to=mock.ANY)
+		driver.get.assert_any_call(dst3, self.path0, report_to=mock.ANY)
 		assert not driver.multipart_init.called
 		assert not driver.multipart_put.called
 		assert not driver.put.called

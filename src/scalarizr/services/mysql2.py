@@ -136,9 +136,13 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 				**kwds)
 		XtrabackupMixin.__init__(self)
 		self._re_lsn = re.compile(r"xtrabackup: The latest check point " \
-								"\(for incremental\): '(\d+)'")
+							"\(for incremental\): '(\d+)'")
+		self._re_lsn_51 = re.compile(r"xtrabackup: The latest check point "
+							"\(for incremental\): '\d+:(\d+)'")
 		self._re_binlog = re.compile(r"innobackupex: MySQL binlog position: " \
-								"filename '([^']+)', position (\d+)")
+							"filename '([^']+)', position (\d+)")
+		self._re_slave_binlog = re.compile(r"innobackupex: MySQL slave binlog position: " \
+							"master host '[^']+', filename '([^']+)', position (\d+)")
 		self._re_lsn_innodb_stat = re.compile(r"Log sequence number \d+ (\d+)")
 
 		self._killed = False
@@ -161,6 +165,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			kwds['no_lock'] = True
 		if not int(__mysql__['replication_master']):
 			kwds['safe_slave_backup'] = True
+			kwds['slave_info'] = True
 
 		current_lsn = None
 		if self.backup_type == 'auto':
@@ -195,7 +200,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 
 		with self._xbak_init_lock:
 			if self._killed:
-				return
+				raise Error("Canceled")
 			self._xbak = innobackupex.args(__mysql__['tmp_dir'], **kwds).popen()
 			LOG.debug('Creating LargeTransfer, src=%s dst=%s', self._xbak.stdout,
 				self.cloudfs_target)
@@ -204,6 +209,8 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 						self.cloudfs_target,
 						compressor=self.compressor)
 		manifesto = self._transfer.run()
+		if self._killed:
+			raise Error("Canceled")
 		stderr = self._xbak.communicate()[1]
 		if self._xbak.returncode:
 			raise Error(stderr)
@@ -212,18 +219,16 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			self._xbak = None
 			self._transfer = None
 
-		if not isinstance(manifesto, cloudfs.Manifest):
-			LOG.debug("LargeTransfer didn't return manifest obj, probably was"
-					  "killed, aborting xtrabackup")
-			return
-
 		log_file = log_pos = to_lsn = None
+		re_binlog = self._re_binlog \
+					if int(__mysql__['replication_master']) else \
+					self._re_slave_binlog
 		for line in stderr.splitlines():
-			m = self._re_lsn.search(line)
+			m = self._re_lsn.search(line) or self._re_lsn_51.search(line)
 			if m:
 				to_lsn = int(m.group(1))
 				continue
-			m = self._re_binlog.search(line)
+			m = re_binlog.search(line)
 			if m:
 				log_file = m.group(1)
 				log_pos = int(m.group(2))

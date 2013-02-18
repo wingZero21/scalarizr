@@ -1,4 +1,6 @@
 from __future__ import with_statement
+from scalarizr.linux import LinuxError
+
 '''
 Created on Aug 28, 2012
 
@@ -49,16 +51,28 @@ class PackageMgr(object):
 
 class AptPackageMgr(PackageMgr):
 	def apt_get_command(self, command, **kwds):
-		kwds.update(env={
-			'DEBIAN_FRONTEND': 'noninteractive', 
-			'DEBIAN_PRIORITY': 'critical',
-			'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'
-		})
-		return linux.system(('/usr/bin/apt-get',
-						'-q', '-y', '--force-yes',
-						'-o Dpkg::Options::=--force-confold') + \
-						tuple(filter(None, command.split())), **kwds)
-		
+		kwds.update(env={'DEBIAN_FRONTEND': 'noninteractive',
+				'DEBIAN_PRIORITY': 'critical',
+				'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
+				raise_exc=False
+		)
+		for _ in range(3):
+			out, err, code = linux.system(('/usr/bin/apt-get',
+							'-q', '-y', '--force-yes',
+							'-o Dpkg::Options::=--force-confold') + \
+							tuple(filter(None, command.split())), **kwds)
+			if code:
+				if 'is another process using it?' in err:
+					LOG.debug('Could not get dpkg lock (perhaps, another process is using it.)')
+					time.sleep(10)
+					continue
+				else:
+					raise LinuxError('Apt-get command failed. Out: %s \nErrors: %s' % (out, err))
+
+			else:
+				return out, err, code
+
+		raise Exception('Apt-get command failed: dpkg is being used by another process')
 
 	def apt_cache_command(self, command, **kwds):
 		return linux.system(('/usr/bin/apt-cache',) + tuple(filter(None, command.split())), **kwds)
