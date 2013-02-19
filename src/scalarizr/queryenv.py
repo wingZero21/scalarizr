@@ -81,9 +81,9 @@ class QueryEnvService(object):
 			except IOError, e:
 				if isinstance(e, urllib2.HTTPError):
 					resp_body = e.read() if e.fp is not None else ""
-					self._logger.error('QueryEnv failed. HTTP %s. %s\n%s', e.code, resp_body, msg_wait)
+					self._logger.error('QueryEnv failed. HTTP %s. %s. %s', e.code, resp_body or e.msg, msg_wait)
 				else:
-					self._logger.error('QueryEnv failed. %s\n%s', sys.exc_info()[1], msg_wait)
+					self._logger.error('QueryEnv failed. %s. %s', sys.exc_info()[1], msg_wait)
 				time.sleep(wait_seconds)
 
 		resp_body = response.read()
