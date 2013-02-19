@@ -6,6 +6,7 @@ import sys
 import logging
 import tempfile
 import urlparse
+import threading
 
 from scalarizr import storage2
 from scalarizr.libs import metaconf
@@ -88,33 +89,13 @@ class EphVolume(base.Volume):
 
 
 	def _snapshot(self, description, tags, **kwds):
+		snap = storage2.snapshot(type='eph')
+		snap.path = os.path.join(os.path.join(
+									self.cloudfs_dir, snap.id + '.manifest.ini'))
 		lvm_snap = self._lvm_volume.lvm_snapshot(size='100%FREE')
-		try:
-			snap = storage2.snapshot(type='eph')
-			snap.path = os.path.join(os.path.join(
-							self.cloudfs_dir, snap.id + '.manifest.ini'))
 
-			lvm_snap_vol = storage2.volume(
-							device=lvm_snap.device,
-							mpoint=tempfile.mkdtemp())
-			lvm_snap_vol.ensure(mount=True)
-
-			snap.size = coreutils.statvfs(lvm_snap_vol.mpoint)['used']
-
-			try:
-				transfer = cloudfs.LargeTransfer(
-								src=lvm_snap_vol.mpoint + '/',
-								dst=snap.path,
-								tar_it=True,
-								gzip_it=True,
-								tags=tags)
-				transfer.run()
-			finally:
-				lvm_snap_vol.umount()
-				os.rmdir(lvm_snap_vol.mpoint)
-		finally:
-			lvm_snap.destroy()
-
+		t = threading.Thread(target=snap.upload_lvm_snapshot, args=(lvm_snap, tags))
+		t.start()
 		return snap
 
 
@@ -152,7 +133,44 @@ class EphSnapshot(base.Snapshot):
 
 
 	def _status(self):
-		return self.UNKNOWN
+		if hasattr(self, '_snap_status'):
+			return self._snap_status
+		else:
+			return self.UNKNOWN
+
+
+	def upload_lvm_snapshot(self, lvm_snap, tags):
+		try:
+			self._snap_status = self.QUEUED
+
+			lvm_snap_vol = storage2.volume(
+				device=lvm_snap.device,
+				mpoint=tempfile.mkdtemp())
+			lvm_snap_vol.ensure(mount=True)
+			self.size = coreutils.statvfs(lvm_snap_vol.mpoint)['used']
+
+			try:
+				transfer = cloudfs.LargeTransfer(
+					src=lvm_snap_vol.mpoint + '/',
+					dst=self.path,
+					tar_it=True,
+					gzip_it=True,
+					tags=tags)
+				self._snap_status = self.IN_PROGRESS
+				transfer.run()
+				self._snap_status = self.COMPLETED
+
+			finally:
+				lvm_snap_vol.umount()
+				os.rmdir(lvm_snap_vol.mpoint)
+
+		except:
+			self._snap_status = self.FAILED
+		finally:
+			lvm_snap.destroy()
+
+
+
 
 """
 class EphVolumeAdapter(EphVolume):
