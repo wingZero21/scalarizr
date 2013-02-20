@@ -91,11 +91,9 @@ class EphVolume(base.Volume):
 
 	def _snapshot(self, description, tags, **kwds):
 		snap = storage2.snapshot(type='eph')
-		snap.path = os.path.join(os.path.join(
-									self.cloudfs_dir, snap.id + '.manifest.ini'))
 		lvm_snap = self._lvm_volume.lvm_snapshot(size='100%FREE')
 
-		t = threading.Thread(target=snap.upload_lvm_snapshot, args=(lvm_snap, tags))
+		t = threading.Thread(target=snap.upload_lvm_snapshot, args=(lvm_snap, tags, self.cloudfs_dir))
 		t.start()
 		return snap
 
@@ -140,7 +138,8 @@ class EphSnapshot(base.Snapshot):
 			return self.UNKNOWN
 
 
-	def upload_lvm_snapshot(self, lvm_snap, tags):
+	def upload_lvm_snapshot(self, lvm_snap, tags, path):
+
 		try:
 			self._snap_status = self.QUEUED
 
@@ -153,12 +152,14 @@ class EphSnapshot(base.Snapshot):
 			try:
 				transfer = cloudfs.LargeTransfer(
 					src=lvm_snap_vol.mpoint + '/',
-					dst=self.path,
+					dst=path,
 					tar_it=True,
 					gzip_it=True,
-					tags=tags)
+					tags=tags,
+					transfer_id=self.id)
 				self._snap_status = self.IN_PROGRESS
-				transfer.run()
+				manifesto = transfer.run()
+				self.path = manifesto.cloudfs_path
 				self._snap_status = self.COMPLETED
 
 			finally:
