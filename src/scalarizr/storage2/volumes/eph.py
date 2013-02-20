@@ -169,9 +169,6 @@ class EphSnapshot(base.Snapshot):
 		finally:
 			lvm_snap.destroy()
 
-
-
-
 """
 class EphVolumeAdapter(EphVolume):
 	

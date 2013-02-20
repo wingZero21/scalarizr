@@ -38,14 +38,12 @@ class Volume(Base):
 	def __init__(self, 
 				device=None, 
 				fstype='ext3', 
-				fscreated=False, 
-				mpoint=None, 
+				mpoint=None,
 				snap=None,
 				**kwds):
 		super(Volume, self).__init__(
 				device=device,
 				fstype=fstype,
-				fscreated=fscreated,
 				mpoint=mpoint,
 				snap=snap,
 				**kwds)
@@ -124,12 +122,7 @@ class Volume(Base):
 
 	def is_fs_created(self):
 		self._check()
-		try:
-			device_attrs = coreutils.blkid(self.device)
-		except:
-			return False
-
-		fstype = device_attrs.get('type')
+		fstype = coreutils.blkid(self.device).get('type')
 
 		if fstype is None:
 			return False
@@ -140,15 +133,13 @@ class Volume(Base):
 
 	def mkfs(self):
 		self._check()
-		if self.fscreated:
+		if self.is_fs_created():
 			raise storage2.OperationError(
-					'fscreated flag is active. Filesystem creation denied '
-					'to preserve the original filesystem. If you wish to '
-					'proceed anyway set fscreated=False and retry')
+							'Filesystem on device %s is already created' % self.device)
+
 		fs = storage2.filesystem(self.fstype)
 		LOG.info('Creating filesystem on %s', self.device)
 		fs.mkfs(self.device)
-		self.fscreated = True
 
 
 	def clone(self):
