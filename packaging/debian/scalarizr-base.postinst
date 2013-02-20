@@ -5,9 +5,10 @@ set -x
 # Automatically added by dh_pysupport
 if which update-python-modules >/dev/null 2>&1; then
 	if test -f /usr/share/python-support/scalarizr-base.public; then
+		if dpkg --compare-versions "$2" lt '0.10.0'; then
+			rm -rf /usr/lib/pymodules/python2.*/scalarizr
+		fi
 		update-python-modules -v /usr/share/python-support/scalarizr-base.public 1>&2
-		ls -la /usr/lib/pymodules/python2.6/scalarizr 1>&2
-		ls -la /usr/lib/pymodules/python2.6/scalarizr/libs 1>&2
 	else
 		update-python-modules scalarizr-base
 	fi
