@@ -1041,10 +1041,6 @@ class BuiltinBehaviours:
 				for k in dir(BuiltinBehaviours) if not k.startswith('_') and k != 'values')
 
 
-	def check_support(behaviour):
-		pass
-
-
 class BuiltinPlatforms:
 	VPS 		= 'vps'	
 	EC2 		= 'ec2'
