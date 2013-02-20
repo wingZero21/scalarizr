@@ -16,7 +16,7 @@ except ImportError:
 
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.util import initdv2
+from scalarizr.util import initdv2, PopenError
 import shutil
 
 
