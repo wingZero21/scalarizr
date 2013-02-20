@@ -58,7 +58,8 @@ class EphVolume(base.Volume):
 
 		if self.snap:
 			self.snap = storage2.snapshot(self.snap)
-			self.mkfs()
+			if not self.is_fs_created():
+				self.mkfs()
 			tmp_mpoint = not self.mpoint
 			if tmp_mpoint:
 				tmp_mpoint = tempfile.mkdtemp()
@@ -68,7 +69,7 @@ class EphVolume(base.Volume):
 				self.mount()
 				if hasattr(self.snap, 'size'):
 					fs_free = coreutils.statvfs(self.mpoint)['avail']
-					if fs_free < self.snap.size:
+					if fs_free < int(self.snap.size):
 						raise storage2.StorageError('Not enough free space'
 								' on device %s to restore snapshot.' %
 								self.device)
