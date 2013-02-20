@@ -324,6 +324,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 				for vol_info in volumes:
 					vol = storage2_volume(**vol_info)
 					vol.ensure()
+					if not vol.fscreated:
+						vol.mkfs()
+					if vol.mpoint:
+						vol.mount()
 					vol_config = vol.config()
 					hostup_msg.body['volumes'].append(vol_config)
 				self._logger.debug('HU volumes:\n%s' % hostup_msg.body['volumes'])
