@@ -236,6 +236,18 @@ def _init_db(file=None):
 	if not os.path.exists(db_file) or not os.stat(db_file).st_size:
 		logger.debug("Database doesn't exist, creating new one from script")
 		_create_db(file)
+
+	# XXX(marat) Added here cause postinst script sometimes failed and we get
+	# OperationalError: table p2pmessage has no column named format
+	conn = _db_connect()
+	cur = conn.cursor()
+	cur.execute('pragma table_info(p2p_message)')
+	if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
+		cur.execute("alter table p2p_message add column format TEXT default 'xml'")
+		conn.commit()
+	cur.close()
+	conn.close()
+
 		
 	# Configure database connection pool
 	t = sqlite_server.SQLiteServerThread(_db_connect)
