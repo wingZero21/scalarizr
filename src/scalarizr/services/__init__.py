@@ -81,7 +81,8 @@ class LazyInitScript(object):
 			self.reload_queue.append(reason)
 
 	def configtest(self, path=None):
-		self._script.configtest(path)
+		if hasattr(self._script, 'configtest'):
+			self._script.configtest(path)
 
 
 	@property
