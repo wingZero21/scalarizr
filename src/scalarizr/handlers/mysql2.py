@@ -312,7 +312,7 @@ class MysqlHandler(DBMSRHandler):
 		self._step_change_replication_master = 'Change replication Master'
 		self._step_innodb_recovery = 'InnoDB recovery'
 		self._step_collect_hostup_data = 'Collect HostUp data'
-
+		self._step_copy_debian_cnf = 'Copy debian.cnf'
 		self._current_data_bundle = None
 		self.on_reload()	
 
@@ -1056,14 +1056,11 @@ class MysqlHandler(DBMSRHandler):
 		
 		# If It's 1st init of mysql master storage
 		if not storage_valid:
-			with op.step(self._step_create_users):			
-				if os.path.exists(__mysql__['debian.cnf']):
+			if os.path.exists(__mysql__['debian.cnf']):
+				with op.step(self._step_copy_debian_cnf):
 					LOG.debug("Copying debian.cnf file to mysql storage")
 					shutil.copy(__mysql__['debian.cnf'], __mysql__['storage_dir'])	
-						
-				# Add system users	
-				self.create_users(**user_creds)
-			
+
 		# If volume has mysql storage directory structure (N-th init)
 		else:
 			with op.step(self._step_innodb_recovery):
@@ -1081,7 +1078,11 @@ class MysqlHandler(DBMSRHandler):
 						self._innodb_recovery()	
 					self.mysql.service.start()
 
-					
+		with op.step(self._step_create_users):
+			# Check and create mysql system users
+			self.create_users(**user_creds)
+
+
 		with op.step(self._step_create_data_bundle):
 			if 'backup' in __mysql__:				
 				__mysql__['restore'] = __mysql__['backup'].run()
