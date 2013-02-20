@@ -319,7 +319,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			###
 			if 'volumes' in message.body:
 				self._logger.debug('HIR volumes:\n%s' % message.volumes)
-				volume = message.volumes or []
+				volumes = message.volumes or []
 				hostup_msg.body['volumes'] = []
 				for vol_info in volumes:
 					vol = storage2_volume(**vol_info)
