@@ -67,7 +67,7 @@ class EphVolume(base.Volume):
 				transfer = cloudfs.LargeTransfer(self.snap.path, self.mpoint + '/')
 				self.mount()
 				if hasattr(self.snap, 'size'):
-					fs_free = coreutils.statvfs(self.mpoint)['free']
+					fs_free = coreutils.statvfs(self.mpoint)['avail']
 					if fs_free < self.snap.size:
 						raise storage2.StorageError('Not enough free space'
 								' on device %s to restore snapshot.' %
