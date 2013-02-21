@@ -838,19 +838,16 @@ class LargeTransfer(bases.Task):
 					location = os.path.join(self._tranzit_vol.mpoint, chunk)
 					with open(location, 'rb') as fd:
 						while True:
-							bytes = fd.read(buf_size)
-							if not bytes:
-								LOG.debug("RESTORER break %s" % chunk)
-								LOG.debug("*** BENCH %s %s restored" % (int(time.time() - zero), chunk))
-								break
-							try:
-								stream.write(bytes)
+							try:							
+								bytes = fd.read(buf_size)
+								if not bytes:
+									LOG.debug("RESTORER break %s" % chunk)
+									LOG.debug("*** BENCH %s %s restored" % (int(time.time() - zero), chunk))
+									break
 
+								stream.write(bytes)
 							except Exception, e:
-								if isinstance(e, IOError) and e.errno == 32:
-									LOG.debug("RESTORER encountered broken"
-											  " pipe, err msg from the last"
-											  " supbrocess: %s" % cmd.stderr.read())
+								LOG.exception("Caught error in restore loop\ncmd.stderr: %s", cmd.stderr.read())
 								self.kill()
 								raise
 
@@ -899,10 +896,12 @@ class LargeTransfer(bases.Task):
 
 
 	def _kill(self):
+		LOG.debug("Killing large transfer...")
 		self._killed = True
 		self._transfer.kill_nowait()
 
 		# interrupt all events
+		LOG.debug("interrupting workers")
 		self._manifest_ready.interrupt()
 
 		with self._chunks_events_access:
@@ -916,8 +915,10 @@ class LargeTransfer(bases.Task):
 			raise Exception("LargeTransfer is being killed")  #?
 		self._transfer.on(progress_report=interrupt)
 
-		if self.manifest:
-			self.manifest.delete()
+		if self._up:
+			LOG.debug("Deleting manifest")
+			if self.manifest:
+				self.manifest.delete()
 
 
 class Manifest(object):
