@@ -118,14 +118,13 @@ Requires:		python26-novaclient >= 2.10.0
 Requires:       python26-rackspace-novaclient >= 1.0
 Requires:       python26-cinderclient >= 1.0.1
 Requires:       python26-swiftclient >= 1.2.0
-Requires:       python26-cloudfiles
-Requires:       python26-cloudservers
-
+Requires:       python26-keystoneclient >= 0.2.2
 %else
 Requires:		python-novaclient >= 2.10.0
 Requires:       python-rackspace-novaclient >= 1.0
 Requires:       python-cinderclient >= 1.0.1
 Requires:       python-swiftclient >= 1.2.0
+Requires:       python-keystoneclient >= 0.2.2
 %endif
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
