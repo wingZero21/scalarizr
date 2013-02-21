@@ -454,6 +454,8 @@ class MySQLConf(BaseConfig):
 			self.data.options('mysqld')
 		except metaconf.NoPathError:
 			self.data.add('mysqld')
+		finally:
+			self.data = None
 		
 	
 	def _get_datadir(self):
