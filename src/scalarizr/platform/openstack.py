@@ -207,16 +207,20 @@ class OpenstackPlatform(platform.Platform):
             return None
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
+        keystone_url = self._access_data["keystone_url"]
+        kwds = {}
         if 'rackspacecloud' in self._access_data["keystone_url"]:
             keystone_url = re.sub(r'v2\.\d$', 'v1.0',
-                                  self._access_data['keystone_url'])
+                            self._access_data['keystone_url'])
+            kwds['auth_version'] = '1'
         else:
-            keystone_url = self._access_data["keystone_url"]
-        auth_version = '2' if '/v2.' in keystone_url else '1'
-        return swiftclient.Connection(keystone_url,
-                                      self._access_data["username"],
-                                      password or api_key,
-                                      auth_version=auth_version)
+            kwds['auth_version'] = '2'
+            kwds['tenant_name'] = self._access_data["tenant_name"]
+
+        return swiftclient.Connection(keystone_url, 
+                    self._access_data["username"],
+                    password or api_key,
+                    **kwds)
 
 
 def get_platform():
