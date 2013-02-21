@@ -291,6 +291,7 @@ class PresetProvider(object):
 						data[k] = v
 
 				obj = self.config_mapping[config_name]
+				LOG.debug("Applying data: %s ; Deleting odds: %s" % (data, odds))
 				obj.apply_dict(data)
 				obj.delete_options(odds)
 
