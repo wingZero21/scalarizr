@@ -1025,11 +1025,12 @@ class MysqlHandler(DBMSRHandler):
 					# When restoring data bundle on ephemeral storage, data dir is empty and 
 					# move mysqldir moves unnecessary files from default datadir
 					self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
-				if not os.path.exists(__mysql__['data_dir']):
-					os.makedirs(__mysql__['data_dir'])
-				if not os.listdir(__mysql__['data_dir']):
-					linux.system(['mysql_install_db'])
-					coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+					if not os.listdir(__mysql__['data_dir']):
+						linux.system(['mysql_install_db'])
+						coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+				elif not os.path.exists(__mysql__['data_dir']):
+					os.makedirs(__mysql__['data_dir']):
+
 				self._change_selinux_ctx()
 
 		
