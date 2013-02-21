@@ -78,7 +78,6 @@ Depends: scalarizr-base (= ${binary:Version}),
          python-cinderclient (>= 1.0.1),
          python-swiftclient (>= 1.2.0),
          python-keystoneclient (>= 0.2.2)
-
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Openstack cloud
