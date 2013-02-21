@@ -1021,7 +1021,10 @@ class MysqlHandler(DBMSRHandler):
 				
 				# Patch configuration
 				self.mysql.my_cnf.expire_logs_days = 10
-				self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
+				if 'restore' not in __mysql__:
+					# When restoring data bundle on ephemeral storage, data dir is empty and 
+					# move mysqldir moves unnecessary files from default datadir
+					self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
 				if not os.listdir(__mysql__['data_dir']):
 					linux.system(['mysql_install_db'])
 					coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
