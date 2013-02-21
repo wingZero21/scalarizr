@@ -109,6 +109,11 @@ class EphVolume(base.Volume):
 
 class EphSnapshot(base.Snapshot):
 
+	def __init__(self, **kwargs):
+		super(EphSnapshot, self).__init__(**kwargs)
+		if hasattr(self, 'size') and '%' in str(self.size):
+			self.size = None
+
 	def _destroy(self):
 		self._check_attr('path')
 		scheme = urlparse.urlparse(self.path).scheme
