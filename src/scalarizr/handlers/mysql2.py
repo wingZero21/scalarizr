@@ -1029,7 +1029,7 @@ class MysqlHandler(DBMSRHandler):
 						linux.system(['mysql_install_db'])
 						coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
 				elif not os.path.exists(__mysql__['data_dir']):
-					os.makedirs(__mysql__['data_dir']):
+					os.makedirs(__mysql__['data_dir'])
 
 				self._change_selinux_ctx()
 
