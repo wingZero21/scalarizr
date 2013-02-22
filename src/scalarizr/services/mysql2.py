@@ -13,6 +13,7 @@ from scalarizr.node import __node__
 from scalarizr.services import mysql as mysql_svc
 from scalarizr.services import backup
 from scalarizr.libs import bases
+from scalarizr.handlers import transfer_result_to_backup_result
 
 
 LOG = logging.getLogger(__name__)
@@ -389,35 +390,43 @@ class MySQLDumpBackup(backup.Backup):
 		self.features.update({
 			'start_slave': False
 		})
+		self.transfer = None
+		self._killed = False
+		self._run_lock = threading.Lock()
 
 	def _run(self):
 		client = mysql_svc.MySQLClient(
 					__mysql__['root_user'],
 					__mysql__['root_password'])
 		self._databases = client.list_databases()
-		transfer = cloudfs.LargeTransfer(self._gen_src, self._gen_dst, 'upload',
-								tar_it=False, chunk_size=self.chunk_size)
-		transfer.run()
+
+		with self._run_lock:
+			if self._killed:
+				raise Error("Canceled")
+			self.transfer = cloudfs.LargeTransfer(self._gen_src, self._gen_dst,
+									streamer=None, chunk_size=self.chunk_size)
+		result = self.transfer.run()
+		if self._killed:
+			raise Error("Canceled")
+
+		result = self.transfer_result_to_backup_result(result)
+		return result #?
+		"""
 		return backup.restore(type='mysqldump',
-						files=transfer.result()['completed'])
+						files=self.transfer.result()['completed'])
+		"""
 
 	def _gen_src(self):
 		if self.file_per_database:
 			for db_name in self._databases:
 				self._current_db = db_name
-				cmd = linux.build_cmd_args(
-					executable='/usr/bin/mysqldump',
-					params=__mysql__['mysqldump_options'].split() + [db_name])
-				mysql_dump = subprocess.Popen(cmd, bufsize=-1,
-								stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-				yield mysql_dump.stdout
+				params = __mysql__['mysqldump_options'].split() + [db_name]
+				_mysqldump.args(*params)
+				yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
 		else:
-			cmd = linux.build_cmd_args(
-				executable='/usr/bin/mysqldump',
-				params=__mysql__['mysqldump_options'].split() + ['--all-databases'])
-			mysql_dump = subprocess.Popen(cmd, bufsize=-1,
-							stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			yield mysql_dump.stdout
+			params = __mysql__['mysqldump_options'].split() + ['--all-databases']
+			_mysqldump.args(*params)
+			yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
 
 	def _gen_dst(self):
 		while True:
@@ -425,6 +434,14 @@ class MySQLDumpBackup(backup.Backup):
 				yield os.path.join(self.cloudfs_dir, self._current_db)
 			else:
 				yield os.path.join(self.cloudfs_dir, 'mysql')
+
+	def _kill(self):
+		LOG.debug("Killing MySQLDumpBackup")
+		self._killed = True
+
+		with self._run_lock:
+			if self.transfer:
+				self.transfer.kill()
 
 
 backup.backup_types['mysqldump'] = MySQLDumpBackup
@@ -461,8 +478,8 @@ class Exec(object):
 			if self.package:
 				pkgmgr.installed(self.package)
 			else:
-				msg = 'Executable %s is not found, you should eather ' \
-					'specify a `package` attribute or install software ' \
+				msg = 'Executable %s is not found, you should either ' \
+					'specify `package` attribute or install the software ' \
 					'manually' % (self.executable)
 				raise linux.LinuxError(msg)
 
@@ -489,6 +506,9 @@ class Exec(object):
 		self.args(*params, **long_kwds)
 		self.check()
 		return linux.system(self.cmd)
+
+
+_mysqldump = Exec("/usr/bin/mysqldump")
 
 
 class PerconaExec(Exec):
