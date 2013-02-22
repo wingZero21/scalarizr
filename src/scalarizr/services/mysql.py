@@ -455,6 +455,7 @@ class MySQLConf(BaseConfig):
 		except metaconf.NoPathError:
 			self.data.add('mysqld')
 		finally:
+			# WHY? 
 			self.data = None
 		
 	
