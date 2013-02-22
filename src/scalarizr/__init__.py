@@ -66,7 +66,7 @@ keys=root,scalarizr
 keys=console,file,file_debug,scalr
 
 [formatters]
-keys=simple
+keys=simple,no_stacktrace_formatter
 
 [logger_root]
 level=DEBUG
@@ -81,13 +81,13 @@ propagate=0
 [handler_console]
 class=StreamHandler
 level=INFO
-formatter=simple
+formatter=no_stacktrace_formatter
 args=(sys.stdout,)
 
 [handler_file]
 class=scalarizr.util.log.RotatingFileHandler
 level=INFO
-formatter=simple
+formatter=no_stacktrace_formatter
 args=('/var/log/scalarizr.log', 'a+', 5242880, 5, 0600)
 
 [handler_file_debug]
@@ -104,6 +104,10 @@ args=(20, "30s")
 
 [formatter_simple]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
+
+[formatter_no_stacktrace_formatter]
+format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
+class=scalarizr.util.log.NoStacktraceFormatter
 '''
 
 _running = False
@@ -875,7 +879,8 @@ def main():
 		signal.signal(signal.SIGHUP, onSIGHUP)
 
 		_start_services()
-		
+		a = []  #delete this
+		b = a[4]  #delete this
 		# Fire start
 		globals()["_running"] = True
 		try:
