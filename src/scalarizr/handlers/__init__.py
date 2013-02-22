@@ -287,6 +287,7 @@ class MessageListener:
 
 
 		LOG.debug("Initializing message listener");
+		LOG.exception(BaseException('test'))  #delete this
 		self._accept_kwargs = dict(
 			behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
 			platform = platform.name,
