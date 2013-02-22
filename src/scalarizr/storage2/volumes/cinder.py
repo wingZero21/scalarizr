@@ -110,13 +110,14 @@ class CinderVolume(base.Volume):
 
     def mount(self):
         # Workaround : cindervolume remounts ro sometimes, fsck it first
-        self._check_attr('device')
-        self._check_attr('fstype')
-        fs = storage2.filesystem(self.fstype)
-        if fs.type.startswith('ext'):
-            rcode = linux.system(("/sbin/e2fsck", "-fy", self.device))[2]
-            if rcode not in (0, 1):
-                raise storage2.StorageError('Fsck failed to correct file system errors')
+        if self.is_fs_created():
+            self._check_attr('device')
+            self._check_attr('fstype')
+            fs = storage2.filesystem(self.fstype)
+            if fs.type.startswith('ext'):
+                rcode = linux.system(("/sbin/e2fsck", "-fy", self.device))[2]
+                if rcode not in (0, 1):
+                    raise storage2.StorageError('Fsck failed to correct file system errors')
         super(CinderVolume, self).mount()
 
     def _server_id(self):
