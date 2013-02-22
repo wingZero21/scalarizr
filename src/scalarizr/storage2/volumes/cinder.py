@@ -13,7 +13,7 @@ from scalarizr import storage2
 from scalarizr import util
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
-
+from scalarizr import linux
 
 __openstack__ = node.__node__['openstack']
 LOG = storage2.LOG
@@ -107,6 +107,17 @@ class CinderVolume(base.Volume):
             'to perform this operation'})
         self._cinder = __openstack__['new_cinder_connection']
         self._nova = __openstack__['new_nova_connection']
+
+    def mount(self):
+        # Workaround : cindervolume remounts ro sometimes, fsck it first
+        self._check_attr('device')
+        self._check_attr('fstype')
+        fs = storage2.filesystem(self.fstype)
+        if fs.type.startswith('ext'):
+            rcode = linux.system(("/sbin/e2fsck", "-fy", self.device))[2]
+            if rcode not in (0, 1):
+                raise storage2.StorageError('Fsck failed to correct file system errors')
+        super(CinderVolume, self).mount()
 
     def _server_id(self):
         srv_id = __openstack__['server_id']
