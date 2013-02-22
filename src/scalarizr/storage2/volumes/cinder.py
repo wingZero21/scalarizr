@@ -115,7 +115,7 @@ class CinderVolume(base.Volume):
             self._check_attr('fstype')
             fs = storage2.filesystem(self.fstype)
             if fs.type.startswith('ext'):
-                rcode = linux.system(("/sbin/e2fsck", "-fy", self.device))[2]
+                rcode = linux.system(("/sbin/e2fsck", "-fy", self.device), raise_exc=False)[2]
                 if rcode not in (0, 1):
                     raise storage2.StorageError('Fsck failed to correct file system errors')
         super(CinderVolume, self).mount()
