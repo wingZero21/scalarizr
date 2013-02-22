@@ -729,7 +729,7 @@ def main():
 
 		logger.debug("Initialize scalarizr...")
 		_init()
-
+		raise BaseException('test')  #delete this
 		# Starting scalarizr daemon initialization
 		globals()['_pid'] = pid = os.getpid()		
 		logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
@@ -879,8 +879,7 @@ def main():
 		signal.signal(signal.SIGHUP, onSIGHUP)
 
 		_start_services()
-		a = []  #delete this
-		b = a[4]  #delete this
+
 		# Fire start
 		globals()["_running"] = True
 		try:
