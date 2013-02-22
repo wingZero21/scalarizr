@@ -729,7 +729,7 @@ def main():
 
 		logger.debug("Initialize scalarizr...")
 		_init()
-		raise BaseException('test')  #delete this
+		logger.exception(BaseException('test'))  #delete this
 		# Starting scalarizr daemon initialization
 		globals()['_pid'] = pid = os.getpid()		
 		logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
