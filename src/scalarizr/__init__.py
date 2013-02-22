@@ -141,7 +141,6 @@ _api_routes = {
 'mysql': 'scalarizr.api.mysql.MySQLAPI'
 }
 
-api_port = 8010
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
 	def __init__(self):
@@ -345,9 +344,10 @@ def _init_services():
 	
 	if not bus.api_server:
 		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		api_port = 8010
 		try:
 			sock.connect(('0.0.0.0', api_port))
-			globals()['api_port'] = 8009
+			STATE['global.api_port'] = api_port = 8009
 			sock.close()
 		except socket.error:
 			pass
