@@ -1064,10 +1064,12 @@ class Manifest(object):
 			ret = dict((key.split('.', 1)[1], self['tags'][key]) \
 				for key in self['tags'] \
 				if key.startswith('meta.'))
-			LOG.debug('meta: %s', ret)
+			LOG.debug('get meta: %s', ret)
 			return ret
 
 		def fset(self, meta):
+
+			LOG.debug('set meta: %s', meta)
 			for key, value in meta.items():
 				self['tags']['meta.%s' % key] = value
 
