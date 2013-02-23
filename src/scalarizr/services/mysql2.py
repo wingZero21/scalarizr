@@ -287,8 +287,8 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 		if bak.backup_type == 'incremental':
 			incrementals = [bak]
 			while bak.prev_cloudfs_source:
-				mnf = cloudfs.Manifest(cloudfs_path=bak.prev_cloudfs_source)
-				bak = backup.restore(**mnf.meta)
+				tmpmnf = cloudfs.Manifest(cloudfs_path=bak.prev_cloudfs_source)
+				bak = backup.restore(**tmpmnf.meta)
 				if bak.backup_type == 'incremental':
 					incrementals.insert(0, bak)
 		self.incrementals = incrementals
