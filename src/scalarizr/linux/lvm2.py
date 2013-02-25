@@ -258,13 +258,22 @@ def lvchange(*logical_volume_path, **long_kwds):
 			raise NotFound()
 		raise
 
+
 def lvremove(*logical_volume_paths, **long_kwds):
 	try:
 		long_kwds.update({'force': True})
-		return linux.system(linux.build_cmd_args(
+		ret = linux.system(linux.build_cmd_args(
 				executable='/sbin/lvremove',
 				long=long_kwds,
 				params=logical_volume_paths))
+
+		for path in logical_volume_paths:
+			path = '/dev/mapper/%s' % os.path.basename(path)
+			possible_cow = '%s-cow' % path
+			if os.path.exists(possible_cow):
+				linux.system('/sbin/dmsetup', 'remove', possible_cow)
+		return ret
+
 	except linux.LinuxError, e:
 		if e.returncode == 5:
 			raise NotFound()
