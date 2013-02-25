@@ -399,8 +399,9 @@ class LinuxImage:
 		LOG.info("Copying %s into the image %s", source, dest)
 		rsync_longs = dict(archive=True,
 						   sparse=True,
-						   times=True,
-						   exclude=list(self.excludes))
+						   times=True)
+		if self.excludes:
+			rsync_longs['exclude'] = list(self.excludes)
 		#rsync = filetool.Rsync()
 		#rsync.archive().times().sparse().links().quietly()
 		#rsync.archive().sparse().xattributes()

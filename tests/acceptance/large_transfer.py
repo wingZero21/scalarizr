@@ -31,55 +31,72 @@ from scalarizr.storage2.cloudfs import s3, gcs, swift
 from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 
 
-FEATURE = "Large transfer"
+this_feature_only = world.ThisFeatureOnly("Large transfer")
+
 
 STORAGE = "s3"
 if "LT_TEST_STORAGE" in os.environ:
 	STORAGE = os.environ["LT_TEST_STORAGE"]
 
 
+_RESTORE = []
+
 @before.each_feature
+@this_feature_only
 def setup(feat):
-	# TODO: restore
-	if feat.name == FEATURE:
+	# prevent ini parser from lowercasing params
+	_RESTORE.append((ConfigParser, "optionxform",
+					 ConfigParser.optionxform))
+	ConfigParser.optionxform = lambda self, x: x
 
-		# prevent ini parser from lowercasing params
-		ConfigParser.optionxform = lambda self, x: x
+	# make connections work
 
-		# make connections work
+	if STORAGE == "s3":
+		_RESTORE.append((s3.S3FileSystem, "_get_connection",
+						 s3.S3FileSystem._get_connection))
+		s3.S3FileSystem._get_connection = lambda self: connect_s3()
 
-		if STORAGE == "s3":
-			s3.S3FileSystem._get_connection = lambda self: connect_s3()
+	elif STORAGE == "gcs":
+		def get_pk(f="gcs_pk.p12"):  # TODO:
+			with open(f, "rb") as fd:
+				pk = fd.read()
+			return base64.b64encode(pk)
 
-		elif STORAGE == "gcs":
-			def get_pk(f="gcs_pk.p12"):  # TODO:
-				with open(f, "rb") as fd:
-					pk = fd.read()
-				return base64.b64encode(pk)
+		ACCESS_DATA = {
+			"service_account_name": '876103924605@developer.gserviceaccount.com',
+			"key": get_pk(),
+		}
 
-			ACCESS_DATA = {
-				"service_account_name": '876103924605@developer.gserviceaccount.com',
-				"key": get_pk(),
-			}
+		_RESTORE.append((gcs, "bus", gcs.bus))
+		gcs.bus = mock.MagicMock()
+		gcs.bus.platform.get_access_data = lambda k: ACCESS_DATA[k]
 
-			gcs.bus = mock.MagicMock()
-			gcs.bus.platform.get_access_data = lambda k: ACCESS_DATA[k]
+		gsm = GoogleServiceManager(gcs.bus.platform,
+			"storage", "v1beta1", STORAGE_FULL_SCOPE)
 
-			gsm = GoogleServiceManager(gcs.bus.platform,
-				"storage", "v1beta1", STORAGE_FULL_SCOPE)
+		gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
+		gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
 
-			gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
-			gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
+	elif STORAGE == "swift":
+		_RESTORE.append((swift.SwiftFileSystem, "_get_connection",
+						 swift.SwiftFileSystem._get_connection))
+		swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
+				"https://identity.api.rackspacecloud.com/v1.0",
+				os.environ["RS_USERNAME"], os.environ["RS_API_KEY"])
 
-		elif STORAGE == "swift":
-			swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
-					"https://identity.api.rackspacecloud.com/v1.0",
-					os.environ["RS_USERNAME"], os.environ["RS_API_KEY"])
+	elif STORAGE == "swift-enter-it":
+		_RESTORE.append((swift.SwiftFileSystem, "_get_connection",
+						 swift.SwiftFileSystem._get_connection))
+		swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
+			"http://folsom.enter.it:5000/v2.0",
+			os.environ["ENTER_IT_USERNAME"], os.environ["ENTER_IT_API_KEY"], auth_version="2")
 
-		elif STORAGE == "swift-enter-it":
-			swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
-				"http://folsom.enter.it:5000/v2.0",
-				os.environ["ENTER_IT_USERNAME"], os.environ["ENTER_IT_API_KEY"], auth_version="2")
+
+@after.each_feature
+@this_feature_only
+def teardown(feat):
+	for args in _RESTORE:
+		setattr(*args)
 
 
 class S3(s3.S3FileSystem):

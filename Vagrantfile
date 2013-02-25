@@ -11,9 +11,9 @@ Vagrant::Config.run do |config|
     config.vm.define name do |machine|
       machine.vm.box = box
       machine.vm.provision :chef_client do |chef|
-        chef.chef_server_url = "https://api.opscode.com/organizations/webta"
+        chef.chef_server_url = "http://sl5.scalr.net:4000"
         chef.node_name = "#{ENV['USER']}.scalarizr-#{machine.vm.box}-vagrant"
-        chef.validation_client_name = "webta-validator"
+        chef.validation_client_name = "chef-validator"
         chef.run_list = ["recipe[vagrant_boxes]"]
         chef.validation_key_path = "validation.pem"
       end

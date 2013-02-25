@@ -13,6 +13,7 @@ from scalarizr.node import __node__
 from scalarizr.services import mysql as mysql_svc
 from scalarizr.services import backup
 from scalarizr.libs import bases
+from scalarizr.handlers import transfer_result_to_backup_result
 
 
 LOG = logging.getLogger(__name__)
@@ -136,9 +137,13 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 				**kwds)
 		XtrabackupMixin.__init__(self)
 		self._re_lsn = re.compile(r"xtrabackup: The latest check point " \
-								"\(for incremental\): '(\d+)'")
+							"\(for incremental\): '(\d+)'")
+		self._re_lsn_51 = re.compile(r"xtrabackup: The latest check point "
+							"\(for incremental\): '\d+:(\d+)'")
 		self._re_binlog = re.compile(r"innobackupex: MySQL binlog position: " \
-								"filename '([^']+)', position (\d+)")
+							"filename '([^']+)', position (\d+)")
+		self._re_slave_binlog = re.compile(r"innobackupex: MySQL slave binlog position: " \
+							"master host '[^']+', filename '([^']+)', position (\d+)")
 		self._re_lsn_innodb_stat = re.compile(r"Log sequence number \d+ (\d+)")
 
 		self._killed = False
@@ -161,6 +166,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			kwds['no_lock'] = True
 		if not int(__mysql__['replication_master']):
 			kwds['safe_slave_backup'] = True
+			kwds['slave_info'] = True
 
 		current_lsn = None
 		if self.backup_type == 'auto':
@@ -195,7 +201,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 
 		with self._xbak_init_lock:
 			if self._killed:
-				return
+				raise Error("Canceled")
 			self._xbak = innobackupex.args(__mysql__['tmp_dir'], **kwds).popen()
 			LOG.debug('Creating LargeTransfer, src=%s dst=%s', self._xbak.stdout,
 				self.cloudfs_target)
@@ -204,6 +210,8 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 						self.cloudfs_target,
 						compressor=self.compressor)
 		manifesto = self._transfer.run()
+		if self._killed:
+			raise Error("Canceled")
 		stderr = self._xbak.communicate()[1]
 		if self._xbak.returncode:
 			raise Error(stderr)
@@ -212,18 +220,16 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			self._xbak = None
 			self._transfer = None
 
-		if not isinstance(manifesto, cloudfs.Manifest):
-			LOG.debug("LargeTransfer didn't return manifest obj, probably was"
-					  "killed, aborting xtrabackup")
-			return
-
 		log_file = log_pos = to_lsn = None
+		re_binlog = self._re_binlog \
+					if int(__mysql__['replication_master']) else \
+					self._re_slave_binlog
 		for line in stderr.splitlines():
-			m = self._re_lsn.search(line)
+			m = self._re_lsn.search(line) or self._re_lsn_51.search(line)
 			if m:
 				to_lsn = int(m.group(1))
 				continue
-			m = self._re_binlog.search(line)
+			m = re_binlog.search(line)
 			if m:
 				log_file = m.group(1)
 				log_pos = int(m.group(2))
@@ -384,35 +390,43 @@ class MySQLDumpBackup(backup.Backup):
 		self.features.update({
 			'start_slave': False
 		})
+		self.transfer = None
+		self._killed = False
+		self._run_lock = threading.Lock()
 
 	def _run(self):
 		client = mysql_svc.MySQLClient(
 					__mysql__['root_user'],
 					__mysql__['root_password'])
 		self._databases = client.list_databases()
-		transfer = cloudfs.LargeTransfer(self._gen_src, self._gen_dst, 'upload',
-								tar_it=False, chunk_size=self.chunk_size)
-		transfer.run()
+
+		with self._run_lock:
+			if self._killed:
+				raise Error("Canceled")
+			self.transfer = cloudfs.LargeTransfer(self._gen_src, self._gen_dst,
+									streamer=None, chunk_size=self.chunk_size)
+		result = self.transfer.run()
+		if self._killed:
+			raise Error("Canceled")
+
+		result = self.transfer_result_to_backup_result(result)
+		return result #?
+		"""
 		return backup.restore(type='mysqldump',
-						files=transfer.result()['completed'])
+						files=self.transfer.result()['completed'])
+		"""
 
 	def _gen_src(self):
 		if self.file_per_database:
 			for db_name in self._databases:
 				self._current_db = db_name
-				cmd = linux.build_cmd_args(
-					executable='/usr/bin/mysqldump',
-					params=__mysql__['mysqldump_options'].split() + [db_name])
-				mysql_dump = subprocess.Popen(cmd, bufsize=-1,
-								stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-				yield mysql_dump.stdout
+				params = __mysql__['mysqldump_options'].split() + [db_name]
+				_mysqldump.args(*params)
+				yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
 		else:
-			cmd = linux.build_cmd_args(
-				executable='/usr/bin/mysqldump',
-				params=__mysql__['mysqldump_options'].split() + ['--all-databases'])
-			mysql_dump = subprocess.Popen(cmd, bufsize=-1,
-							stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			yield mysql_dump.stdout
+			params = __mysql__['mysqldump_options'].split() + ['--all-databases']
+			_mysqldump.args(*params)
+			yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
 
 	def _gen_dst(self):
 		while True:
@@ -420,6 +434,14 @@ class MySQLDumpBackup(backup.Backup):
 				yield os.path.join(self.cloudfs_dir, self._current_db)
 			else:
 				yield os.path.join(self.cloudfs_dir, 'mysql')
+
+	def _kill(self):
+		LOG.debug("Killing MySQLDumpBackup")
+		self._killed = True
+
+		with self._run_lock:
+			if self.transfer:
+				self.transfer.kill()
 
 
 backup.backup_types['mysqldump'] = MySQLDumpBackup
@@ -456,8 +478,8 @@ class Exec(object):
 			if self.package:
 				pkgmgr.installed(self.package)
 			else:
-				msg = 'Executable %s is not found, you should eather ' \
-					'specify a `package` attribute or install software ' \
+				msg = 'Executable %s is not found, you should either ' \
+					'specify `package` attribute or install the software ' \
 					'manually' % (self.executable)
 				raise linux.LinuxError(msg)
 
@@ -484,6 +506,9 @@ class Exec(object):
 		self.args(*params, **long_kwds)
 		self.check()
 		return linux.system(self.cmd)
+
+
+_mysqldump = Exec("/usr/bin/mysqldump")
 
 
 class PerconaExec(Exec):

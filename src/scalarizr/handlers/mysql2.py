@@ -15,6 +15,7 @@ import tempfile
 import threading
 
 # Core
+from scalarizr import handlers
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError, \
@@ -25,9 +26,10 @@ from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
 from scalarizr.libs import metaconf
 from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool
-from scalarizr.storage import transfer
+
 
 from scalarizr import storage2, linux
+from scalarizr.storage2 import cloudfs
 from scalarizr.linux import iptables, coreutils	
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
@@ -312,6 +314,7 @@ class MysqlHandler(DBMSRHandler):
 		self._step_collect_hostup_data = 'Collect HostUp data'
 
 		self._current_data_bundle = None
+		self._current_backup = None
 		self.on_reload()	
 
 		
@@ -320,6 +323,7 @@ class MysqlHandler(DBMSRHandler):
 					message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
 				or 	message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
+				or  message.name == DbMsrMessages.DBMSR_CANCEL_DATA_BUNDLE
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
 				or  message.name == Messages.BEFORE_HOST_TERMINATE
@@ -533,86 +537,57 @@ class MysqlHandler(DBMSRHandler):
 
 	def on_DbMsr_CreateBackup(self, message):
 		LOG.debug("on_DbMsr_CreateBackup")
-		tmp_basedir = __mysql__['tmp_dir']
-		if not os.path.exists(tmp_basedir):
-			os.makedirs(tmp_basedir)		
-		# Retrieve password for scalr mysql user
-		backup_path = None
-		tmpdir = None
-		try:
-			# Get databases list
-			databases = self.root_client.list_databases()
-			
-			op = operation(name=self._op_backup, phases=[{
-				'name': self._phase_backup
-			}])
-			op.define()			
 
-			with op.phase(self._phase_backup):
-				# Dump all databases
-				LOG.info("Dumping all databases")
-				tmpdir = tempfile.mkdtemp(dir=tmp_basedir)
+		def do_backup():
+			try:
+				op = operation(name=self._op_backup, phases=[{
+					'name': self._phase_backup,
+					"steps": [self._step_upload_to_cloud_storage],  #?
+				}])
+				op.define()
 
-				backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
-				backup_path = os.path.join(tmpdir, backup_filename)
-				
-				# Creating archive 
-				backup = tarfile.open(backup_path, 'w:gz')
-				mysqldump = mysql_svc.MySQLDump(root_user=__mysql__['root_user'],
-									root_password=__mysql__['root_password'])
-				dump_options = __mysql__['mysqldump_options'].split(' ')
+				with op.phase(self._phase_backup):
+					with op.step(self._step_upload_to_cloud_storage):
+						cloud_storage_path = self._platform.scalrfs.backups('mysql')
+						#? compressor?
+						bak = mysql2_svc.MySQLDumpBackup(cloudfs_dir=cloud_storage_path)
 
-				def _single_backup(db_name):
-					dump_path = os.path.join(tmpdir, db_name + '.sql') 
-					mysqldump.create(db_name, dump_path, dump_options)
-					backup.add(dump_path, os.path.basename(dump_path))
+						self._current_backup = bak
+						try:
+							result = bak.run()
+						finally:
+							self._current_backup = None
 
-				make_backup_steps(databases, op, _single_backup)
-						
-				backup.close()
-				
-			with op.step(self._step_upload_to_cloud_storage):
-				# Creating list of full paths to archive chunks
-				if os.path.getsize(backup_path) > __mysql__['mysqldump_chunk_size']:
-					parts = [os.path.join(tmpdir, file) 
-							for file in coreutils.split(backup_path, backup_filename, 
-								__mysql__['mysqldump_chunk_size'] , tmpdir)]
-				else:
-					parts = [backup_path]
-				sizes = [os.path.getsize(file) for file in parts]
-						
-				cloud_storage_path = self._platform.scalrfs.backups('mysql')
-				LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-				trn = transfer.Transfer()
-				cloud_files = trn.upload(parts, cloud_storage_path)
-				LOG.info("Mysql backup uploaded to cloud storage under %s/%s", 
-								cloud_storage_path, backup_filename)
+						# Notify Scalr
+						self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+							db_type = __mysql__['behavior'],
+							status = 'ok',
+							backup_parts = result
+						))
 
-			result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))								
-			op.ok(data=result)
-			
-			# Notify Scalr
-			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-				db_type = __mysql__['behavior'],
-				status = 'ok',
-				backup_parts = result
-			))
-						
-		except (Exception, BaseException), e:
-			LOG.exception(e)
-			
-			# Notify Scalr about error
-			self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-				db_type = __mysql__['behavior'],
-				status = 'error',
-				last_error = str(e)
-			))
-			
-		finally:
-			if tmpdir:
-				shutil.rmtree(tmpdir, ignore_errors=True)
-			if backup_path and os.path.exists(backup_path):
-				os.remove(backup_path)	
+				op.ok(data=result)
+
+			except (Exception, BaseException), e:
+				LOG.exception(e)
+
+				# Notify Scalr about error
+				self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+					db_type = __mysql__['behavior'],
+					status = 'error',
+					last_error = str(e)
+				))
+
+		LOG.debug("Starting backup_thread")
+		threading.Thread(target=do_backup, name="backup_thread").start()
+
+
+	def on_DbMsr_CancelBackup(self, message):
+		LOG.debug("on_DbMsr_CancelBackup")
+		bak = self._current_backup
+		if bak:
+			bak.kill()
+		else:
+			LOG.debug("No backup to cancel")
 
 
 	def on_DbMsr_CreateDataBundle(self, message):
@@ -690,13 +665,6 @@ class MysqlHandler(DBMSRHandler):
 		bak = self._current_data_bundle
 		if bak:
 			bak.kill()
-
-			#? move into CreateDataBundle?
-			self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
-				db_type = __mysql__['behavior'],
-				status		='error',
-				last_error	= "Canceled"
-			))
 		else:
 			LOG.debug("No data bundle to cancel")
 

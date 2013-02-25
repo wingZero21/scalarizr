@@ -192,7 +192,16 @@ class MessagingHandler(logging.Handler):
 			finally:
 				self._send_event.clear()
 
-	
+
+class NoStacktraceFormatter(logging.Formatter):
+
+	def __init__(self, fmt=None, datefmt=None):
+		super(NoStacktraceFormatter, self).__init__(fmt, datefmt)
+
+	def formatException(self, exc_info):
+		return 'ERROR: %s: %s' % exc_info[:2]
+
+
 def fix_py25_handler_resolving():
 	
 	def _resolve(name):

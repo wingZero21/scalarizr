@@ -333,6 +333,8 @@ class Messages:
 	Operation result message
 	'''
 
+	UPDATE_CONTROL_PORTS = "UpdateControlPorts"
+
 	REBUNDLE_LOG = "RebundleLog"
 
 	DEPLOY_LOG = "DeployLog"

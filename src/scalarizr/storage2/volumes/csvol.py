@@ -161,6 +161,11 @@ class CSVolume(base.Volume):
 
         if self._conn:
             try:
+                if self.snap:
+                    snapshot_id = self.snap['id']
+                    self.id = None
+                    self.size = None
+
                 if self.id:
                     LOG.debug('Volume %s has been already created', self.id)
                     vol_list = self._conn.listVolumes(id=self.id)
@@ -168,10 +173,7 @@ class CSVolume(base.Volume):
                         raise storage2.StorageError("Volume %s doesn't exist" %
                                                     self.id)
                     self._native_vol = vol_list[0]
-                    self._check_attachement()
-
-                elif self.snap:
-                    snapshot_id = self.snap['id']
+                    self._check_attachement()                    
 
                 if not self.id:
                     LOG.debug('Creating new volume')

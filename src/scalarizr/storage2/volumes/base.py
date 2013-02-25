@@ -184,6 +184,7 @@ class Volume(Base):
 
 		new_vol = None
 		try:
+			LOG.info('Detaching volume %s', self.id)
 			self.detach()
 			new_vol = self.clone()
 			self._grow(new_vol, **growth)
@@ -191,6 +192,7 @@ class Volume(Base):
 				fs_created = new_vol.detect_fstype()
 
 				if self.fstype:
+					LOG.info('Resizing filesystem')
 					fs = storage2.filesystem(fstype=self.fstype)
 					umount_on_resize = fs.features.get('umount_on_resize')
 
@@ -209,7 +211,7 @@ class Volume(Base):
 
 		except:
 			err_type, err_val, trace = sys.exc_info()
-			LOG.debug('Failed to grow volume: %s. Trying to attach old volume' % err_val)
+			LOG.warn('Failed to grow volume: %s. Trying to attach old volume', err_val)
 			try:
 				if new_vol:
 					try:

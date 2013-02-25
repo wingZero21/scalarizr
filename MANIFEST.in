@@ -3,6 +3,7 @@
 
 # additional files not known by setup.py
 include INSTALL.txt
+include src/scalarizr/version
 
 # configuration
 recursive-include etc *
@@ -10,6 +11,7 @@ recursive-include bdist *
 recursive-include bin *
 recursive-include scripts *
 recursive-include share *
+recursive-include packaging *
 
 # omit revision control, python bytecode
 global-exclude  *.pyc *.pyo */.svn/* 

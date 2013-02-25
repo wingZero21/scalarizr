@@ -66,7 +66,7 @@ keys=root,scalarizr
 keys=console,file,file_debug,scalr
 
 [formatters]
-keys=simple
+keys=simple,no_stacktrace_formatter
 
 [logger_root]
 level=DEBUG
@@ -81,13 +81,13 @@ propagate=0
 [handler_console]
 class=StreamHandler
 level=INFO
-formatter=simple
+formatter=no_stacktrace_formatter
 args=(sys.stdout,)
 
 [handler_file]
 class=scalarizr.util.log.RotatingFileHandler
 level=INFO
-formatter=simple
+formatter=no_stacktrace_formatter
 args=('/var/log/scalarizr.log', 'a+', 5242880, 5, 0600)
 
 [handler_file_debug]
@@ -104,6 +104,10 @@ args=(20, "30s")
 
 [formatter_simple]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
+
+[formatter_no_stacktrace_formatter]
+format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
+class=scalarizr.util.log.NoStacktraceFormatter
 '''
 
 _running = False
@@ -343,9 +347,17 @@ def _init_services():
 	Storage.maintain_volume_table = True
 	
 	if not bus.api_server:
+		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		api_port = 8010
+		try:
+			sock.connect(('0.0.0.0', api_port))
+			STATE['global.api_port'] = api_port = 8009
+			sock.close()
+		except socket.error:
+			pass
 		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
 											cnf.key_path(cnf.DEFAULT_KEY))
-		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', 8010, api_app)
+		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app)
 
 
 def _start_services():
@@ -867,7 +879,7 @@ def main():
 		signal.signal(signal.SIGHUP, onSIGHUP)
 
 		_start_services()
-		
+
 		# Fire start
 		globals()["_running"] = True
 		try:

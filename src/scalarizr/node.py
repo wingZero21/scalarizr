@@ -312,7 +312,7 @@ for behavior in ('mysql', 'mysql2', 'percona'):
 		'*_password,log_*,replication_master': 
 				Ini('%s/%s.ini' % (private_dir, behavior), section),
 		'mysqldump_options': 
-				Ini('%s/%s.ini' % (public_dir, behavior), behavior)
+				Ini('%s/%s.ini' % (public_dir, behavior), section)
 	})
 
 __node__['redis'] = Compound({
@@ -364,8 +364,14 @@ __node__['cloudstack'] = Compound({
 __node__['openstack'] = Compound({
 	'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
 	'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
+	'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
 	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
+__node__['rackspace'] = Compound({
+	'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
+	'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
+})
+
 __node__['gce'] = Compound({
 	'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
 	'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),

@@ -19,7 +19,7 @@ class GlacierFilesystem(CloudFileSystem):
 
 		#delete this two lines after test
 		from boto.glacier.layer1 import Layer1
-		return Layer1('AKIAJO6DOVEREBMYUERQ', 'LBEvgTXt+o7X3NsUr0c5paD4Uf9EWZsyrWMOixeD', 615271354814)
+		return Layer1()
 
 	def _clear(self):
 		self._conn = None

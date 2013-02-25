@@ -357,9 +357,8 @@ RHEL_DEVICE_ORDERING_BUG = False
 if disttool.is_redhat_based():
 	# Check that system is affected by devices ordering bug
 	# https://bugzilla.redhat.com/show_bug.cgi?id=729340
-	mtab = mount.mounts()
-	entry = mtab['/dev']
-	RHEL_DEVICE_ORDERING_BUG = entry.device.startswith('/dev/xvde') 
+	rootfs = [entry for entry in mount.mounts() if entry.mpoint == '/' and entry.device.startswith('/dev')][0]
+	RHEL_DEVICE_ORDERING_BUG = rootfs.device.startswith('/dev/xvde') 
 
 
 def get_system_devname(devname):
