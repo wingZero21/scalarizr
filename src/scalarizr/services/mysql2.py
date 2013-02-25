@@ -138,7 +138,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		self._re_lsn = re.compile(r"xtrabackup: The latest check point " \
 							"\(for incremental\): '(\d+)'")
 		self._re_lsn_51 = re.compile(r"xtrabackup: The latest check point "
-							"\(for incremental\): '\d+:(\d+)'")
+							"\(for incremental\): '(\d+:\d+)'")
 		self._re_binlog = re.compile(r"innobackupex: MySQL binlog position: " \
 							"filename '([^']+)', position (\d+)")
 		self._re_slave_binlog = re.compile(r"innobackupex: MySQL slave binlog position: " \

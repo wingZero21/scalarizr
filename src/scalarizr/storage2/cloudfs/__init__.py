@@ -1068,7 +1068,6 @@ class Manifest(object):
 			return ret
 
 		def fset(self, meta):
-
 			LOG.debug('set meta: %s', meta)
 			for key, value in meta.items():
 				self['tags']['meta.%s' % key] = value
