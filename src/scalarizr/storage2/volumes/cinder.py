@@ -110,7 +110,8 @@ class CinderVolume(base.Volume):
 
     def mount(self):
         # Workaround : cindervolume remounts ro sometimes, fsck it first
-        if self.is_fs_created():
+        mounted_to = self.mounted_to()
+        if self.is_fs_created() and not mounted_to:
             self._check_attr('device')
             self._check_attr('fstype')
             fs = storage2.filesystem(self.fstype)
