@@ -403,7 +403,7 @@ class MySQLDumpBackup(backup.Backup):
 		with self._run_lock:
 			if self._killed:
 				raise Error("Canceled")
-			self.transfer = cloudfs.LargeTransfer(self._gen_src, self._gen_dst,
+			self.transfer = cloudfs.LargeTransfer(self._gen_src, self._dst,
 									streamer=None, chunk_size=self.chunk_size)
 		result = self.transfer.run()
 		if self._killed:
@@ -428,12 +428,12 @@ class MySQLDumpBackup(backup.Backup):
 			_mysqldump.args(*params)
 			yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
 
-	def _gen_dst(self):
-		while True:
-			if self.file_per_database:
-				yield os.path.join(self.cloudfs_dir, self._current_db)
-			else:
-				yield os.path.join(self.cloudfs_dir, 'mysql')
+	@property
+	def _dst(self):
+		if self.file_per_database:
+			return os.path.join(self.cloudfs_dir, self._current_db)
+		else:
+			return os.path.join(self.cloudfs_dir, 'mysql')
 
 	def _kill(self):
 		LOG.debug("Killing MySQLDumpBackup")

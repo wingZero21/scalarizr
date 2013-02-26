@@ -325,6 +325,7 @@ class MysqlHandler(DBMSRHandler):
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
 				or  message.name == DbMsrMessages.DBMSR_CANCEL_DATA_BUNDLE
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
+				or 	message.name == DbMsrMessages.DBMSR_CANCEL_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
 				or  message.name == Messages.BEFORE_HOST_TERMINATE
 				or  message.name == MysqlMessages.CREATE_PMA_USER

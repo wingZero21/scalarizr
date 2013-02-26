@@ -80,7 +80,9 @@ def send_message(name):
 		os.remove(path)
 
 
-def parse_pretty_table(input):
+def _parse_pretty_table(input):
+	# TODO: use indexes of '+' for splitting, not '|'
+
 	if input in ('', ' '):
 		return []
 
@@ -111,7 +113,7 @@ def list_messages(name=None):
 	proc = subprocess.Popen(arglist, stdout=subprocess.PIPE, close_fds=True)
 	out = proc.communicate()[0]
 
-	msgs = parse_pretty_table(out)
+	msgs = _parse_pretty_table(out)
 	return msgs
 
 
