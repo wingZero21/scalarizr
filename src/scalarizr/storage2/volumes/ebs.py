@@ -214,7 +214,7 @@ class EbsVolume(base.Volume, EbsMixin):
 			raise storage2.StorageError('EBS iops can only be used with '
 						'io1 volume type')
 
-		if 'io1' == target_type and not iops:
+		if 'io1' == target_type and not target_iops:
 			raise storage2.StorageError('Iops parameter must be specified '
 						'for io1 volumes')
 
