@@ -260,9 +260,10 @@ class RedisAPI(object):
 		LOG.debug('primary IP: %s' % host)
 		return host
 
-	def reset_password(self, port=DEFAULT_PORT):
+	def reset_password(self, port=DEFAULT_PORT, new_password=None):
 		""" Reset auth for Redis process on port `port`. Return new password """
-		new_password = pwgen(20)
+		if not new_password:
+			new_password = pwgen(20)
 		redis_conf = redis_service.RedisConf.find(port=port)
 		redis_conf.requirepass = new_password
 		return new_password

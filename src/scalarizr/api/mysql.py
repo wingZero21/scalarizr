@@ -64,9 +64,10 @@ class MySQLAPI(object):
     def _check_empty(self, param, name):
         assert param, self.error_messages['empty'] % name
 
-    def reset_password(self):
+    def reset_password(self, new_password=None):
         """ Reset password for MySQL user 'scalr'. Return new password """
-        new_password = pwgen(20)
+        if not new_password:
+            new_password = pwgen(20)
         mysql_cli = mysql_svc.MySQLClient()
         mysql_cli.set_user_password('scalr', 'localhost', new_password)
         return new_password
