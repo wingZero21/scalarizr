@@ -46,8 +46,8 @@ REDIS_CLI_PATH = '/usr/bin/redis-cli'
 DEFAULT_DIR_PATH = '/var/lib/redis'
 
 DEFAULT_PID_DIR = '/var/run/redis' if os.path.isdir('/var/run/redis') else '/var/run'
-CENTOS_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR,'redis.pid')
-UBUNTU_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR,'redis-server.pid')
+CENTOS_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR, 'redis.pid')
+UBUNTU_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR, 'redis-server.pid')
 DEFAULT_PIDFILE = UBUNTU_DEFAULT_PIDFILE if disttool.is_ubuntu() else CENTOS_DEFAULT_PIDFILE
 
 REDIS_USER = 'redis'
@@ -940,7 +940,7 @@ class RedisPresetProvider(PresetProvider):
 		LOG.debug('Getting list of redis preset providers')
 		for port in get_busy_ports():
 			service = Redisd(get_redis_conf_path(port), int(port))
-			config_mapping = {PRESET_FNAME:service.redis_conf}
+			config_mapping = {PRESET_FNAME: service.redis_conf}
 			providers.append(PresetProvider(service, config_mapping))
 		return providers
 
