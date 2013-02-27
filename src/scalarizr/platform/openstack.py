@@ -4,6 +4,9 @@ import os
 import logging
 import re
 from time import sleep
+import urlparse
+import sys
+import socket
 
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
@@ -11,6 +14,8 @@ import swiftclient
 
 from scalarizr import platform
 from scalarizr.bus import bus
+from scalarizr.storage.transfer import Transfer, TransferProvider, TransferError
+from scalarizr.node import __node__
 
 
 LOG = logging.getLogger(__name__)
@@ -225,3 +230,105 @@ class OpenstackPlatform(platform.Platform):
 
 def get_platform():
     return OpenstackPlatform()
+
+
+class SwiftTransferProvider(TransferProvider):
+    schema = 'swift'
+    urlparse.uses_netloc.append(schema)
+    
+    _username = None
+    _api_key = None
+    
+    _logger = None
+    _container = None
+    
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)      
+
+    def put(self, local_path, remote_path):
+        self._logger.info('Uploading %s to Swift under %s' % (local_path, remote_path))
+        container, obj = self._parse_path(remote_path)
+        obj = os.path.join(obj, os.path.basename(local_path))
+        
+        try:
+            connection = self._get_connection()
+            
+            if not self._container_check_cache(container):
+                try:
+                    ct = connection.get_container(container)
+                except swiftclient.ClientException:
+                    self._logger.debug('Container %s not found. Trying to create.', container)
+                    ct = connection.create_container(container)
+                # Cache container object
+                self._container = ct
+                
+            o = self._container.create_object(obj)
+            o.load_from_filename(local_path)
+            return self._format_path(container, obj)            
+            
+        except (swiftclient.ClientException, OSError, Exception, socket.timeout):
+            exc = sys.exc_info()
+            raise TransferError, exc[1], exc[2]
+    
+    def get(self, remote_path, local_path):
+        self._logger.info('Downloading %s from Swift to %s' % (remote_path, local_path))
+        container, obj = self._parse_path(remote_path)
+        dest_path = os.path.join(local_path, os.path.basename(remote_path))
+        
+        try:
+            connection = self._get_connection()
+            
+            if not self._container_check_cache(container):
+                try:
+                    ct = connection.get_container(container)
+                except swiftclient.ClientException:
+                    raise TransferError("Container '%s' not found" % container)
+                # Cache container object
+                self._container = ct                
+            
+            try:
+                o = self._container.get_object(obj)
+            except swiftclient.ClientException:
+                raise TransferError("Object '%s' not found in container '%s'" 
+                        % (obj, container))
+            
+            o.save_to_filename(dest_path)
+            return dest_path            
+            
+        except (swiftclient.ClientException, OSError, Exception):
+            exc = sys.exc_info()
+            raise TransferError, exc[1], exc[2]
+
+    
+    def configure(self, remote_path, username=None, api_key=None):
+        if username:
+            self._username = username
+            self._api_key = api_key
+        
+    
+    def list(self, remote_path):
+        container, obj = self._parse_path(remote_path)
+        connection = self._get_connection()
+        ct = connection.get_container(container)
+        objects = container.get_objects(path=obj)
+        return tuple([self._format_path(ct, obj.name) for obj in objects]) if objects else ()   
+
+    def _get_connection(self):
+        return __node__['openstack']['new_swift_connection']
+
+    def _container_check_cache(self, container):
+        if self._container and self._container.name != container:
+            self._container = None
+        return self._container
+
+    def _format_path(self, container, obj):
+        return '%s://%s/%s' % (self.schema, container, obj)
+    
+    def _parse_path(self, path):
+        o = urlparse.urlparse(path)
+        if o.scheme != self.schema:
+            raise TransferError('Wrong schema')
+        return o.hostname, o.path[1:]
+
+
+Transfer.explore_provider(SwiftTransferProvider)
