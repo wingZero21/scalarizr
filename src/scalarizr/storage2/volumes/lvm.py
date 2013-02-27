@@ -7,7 +7,7 @@ Created on Aug 22, 2012
 import os
 import itertools
 
-from scalarizr import storage2
+from scalarizr import storage2, util
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import lvm2, coreutils
 
@@ -130,6 +130,11 @@ class LvmVolume(base.Volume):
 
 		if lv_info.lv_attr[4] == '-':
 			lvm2.lvchange(self.device, available='y')
+			util.wait_until(
+				lambda: os.path.exists(self.device), sleep=1, timeout=30,
+				start_text='Waiting for device %s' % self.device,
+				error_text='Device %s not available' % self.device
+			)
 
 
 	def lvm_snapshot(self, name=None, size=None):
