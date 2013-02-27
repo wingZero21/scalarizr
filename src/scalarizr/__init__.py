@@ -465,6 +465,11 @@ def init_script():
 	cnf = bus.cnf
 	cnf.bootstrap()
 	ini = cnf.rawini
+
+	szr_logger = logging.getLogger('scalarizr')
+	for hd in list(szr_logger.handlers):
+		if 'MessagingHandler' in hd.__class__.__name__:
+			szr_logger.handlers.remove(hd)
 	
 	logger = logging.getLogger(__name__)
 	logger.debug("Initialize script messaging")
