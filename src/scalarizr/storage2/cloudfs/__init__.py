@@ -80,19 +80,15 @@ class InterruptibleEvent(threading._Event):
 ###
 
 
-class namedstream(object):
+class NamedStream(object):
+	# do we need setattr/delattr here?
+
 	def __init__(self, stream, name):
 		self._stream = stream
 		self.name = name
 
-	def __getattr__(self, name):
-		if name in self.__dict__:
-			return self.__dict__[name]
-		return getattr(self.__dict__['_stream'], name)
-
-	def __hasattr__(self, name):
-		return hasattr(self.__dict__['_stream'], name) or \
-				name in self.__dict__
+	def __getattr__(self, attr):
+		return getattr(self._stream, attr)
 
 
 class BaseTransfer(bases.Task):

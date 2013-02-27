@@ -430,6 +430,7 @@ class MySQLDumpBackup(backup.Backup):
 
 	@property
 	def _dst(self):
+		# TODO: single destination; handle multiple src streams with the same names in largetransfer
 		if self.file_per_database:
 			return os.path.join(self.cloudfs_dir, self._current_db)
 		else:
