@@ -247,7 +247,7 @@ class SwiftTransferProvider(TransferProvider):
     
     def get(self, remote_path, local_path):
         self._logger.info('Downloading %s from Swift to %s' % (remote_path, local_path))
-        return self._driver.get(remote_path, os.path.join(local_path, os.path.basename(remote_path)))
+        return self._driver.get(remote_path, local_path)
         
     
     def list(self, remote_path):
