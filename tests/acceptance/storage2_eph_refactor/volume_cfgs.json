@@ -1,0 +1,64 @@
+{
+    "empty": {
+        "snap_backend": "s3://szr-tests/",
+        "vg": "redis",
+        "fstype": "ext3",
+        "mpoint": "/mnt/redisstorage",
+        "disk": {
+            "type": "loop",
+            "size": 0.5
+        },
+        "type": "eph",
+        "size": "80%"
+    },
+    "existing": {
+        "snap_backend": "s3://szr-tests/",
+        "vg": "redis",
+        "tags": {
+
+        },
+        "fstype": "ext3",
+        "device": "/dev/mapper/redis-data",
+        "version": "2.0",
+        "mpoint": "/mnt/redisstorage",
+        "snap": null,
+        "disk": {
+            "disk": {
+                "type": "loop",
+                "size": 0.5
+            }
+        },
+        "type": "eph",
+        "id": "vol-eph-8ec114d0",
+        "fscreated": true,
+        "size": "80%"
+    },
+    "snapshot": {
+        "type": "eph",
+        "snap": {
+            "vg": "redis",
+            "description": null,
+            "tags": {
+
+            },
+            "snap_backend": {
+                "path": "s3://szr-tests/"
+            },
+            "fs_created": null,
+            "fstype": "ext3",
+            "lvm_group_cfg": null,
+            "mpoint": "/mnt/redisstorage",
+            "snap_strategy": "data",
+            "version": "2.0",
+            "device": "/dev/mapper/redis-data",
+            "path": "s3://szr-tests/eph-snap-7c797494.manifest.ini",
+            "disk": {
+                "type": "loop",
+                "size": 0.5
+            },
+            "type": "eph",
+            "id": "eph-snap-ed360e1a",
+            "size": "80%"
+        }
+    }
+}
