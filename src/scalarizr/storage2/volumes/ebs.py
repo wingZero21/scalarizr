@@ -214,7 +214,7 @@ class EbsVolume(base.Volume, EbsMixin):
 			raise storage2.StorageError('EBS iops can only be used with '
 						'io1 volume type')
 
-		if 'io1' == target_type and not iops:
+		if 'io1' == target_type and not target_iops:
 			raise storage2.StorageError('Iops parameter must be specified '
 						'for io1 volumes')
 
@@ -222,12 +222,12 @@ class EbsVolume(base.Volume, EbsMixin):
 			raise storage2.StorageError('Volume size is too small to use '
 						'provisioned iops')
 
-		if target_iops and (int(target_iops) / target_size) < 10:
-			raise storage2.StorageError('Iops to volume size ratio is too high. '
-						'Maximum is 10')
+		if target_iops and (int(target_iops) / target_size) > 10:
+			raise storage2.StorageError('Maximum ratio of 10:1 is permitted'
+									' between IOPS and volume size')
 
 		if size and int(size) < self.size:
-			raise storage2.StorageError('New size is less than the old.')
+			raise storage2.StorageError('New size is smaller than old.')
 
 
 	def _ensure(self):

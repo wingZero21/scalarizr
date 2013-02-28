@@ -157,16 +157,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 		optparser = bus.optparser
 		
-		if self._flag_exists(self.FLAG_REBOOT):
+		if self._flag_exists(self.FLAG_REBOOT) or self._flag_exists(self.FLAG_HALT):
 			self._logger.info("Scalarizr resumed after reboot")
 			self._clear_flag(self.FLAG_REBOOT)
-			self._check_control_ports()			
+			self._clear_flag(self.FLAG_HALT)	
+			self._check_control_ports()	
 			self._start_after_reboot()
-			
-		elif self._flag_exists(self.FLAG_HALT):
-			self._logger.info("Scalarizr resumed after stop")
-			self._clear_flag(self.FLAG_HALT)
-			self._start_after_stop()
 			
 		elif optparser.values.import_server:
 			self._logger.info('Server will be imported into Scalr')				
