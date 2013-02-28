@@ -352,12 +352,11 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 				password=__mysql__['root_password'])
 		coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
 
+		self._mysql_init.start()
 		if int(__mysql__['replication_master']):
 			LOG.info("Master will reset it's binary logs, "
 					"so updating binary log position in backup manifest")
-			self._mysql_init.start()
-			self._mysql_init.stop()
-			log_file, log_pos = mysqlbinlog_head()
+			log_file, log_pos = self._client.master_status()
 			meta = mnf.meta
 			meta.update({'log_file': log_file, 'log_pos': log_pos})
 			mnf.meta = meta

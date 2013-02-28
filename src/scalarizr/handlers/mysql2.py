@@ -1070,15 +1070,8 @@ class MysqlHandler(DBMSRHandler):
 		else:
 			with op.step(self._step_innodb_recovery):
 				self._copy_debian_cnf_back()
-				if 'restore' in __mysql__:
-					if __mysql__['restore'].type == 'xtrabackup':
-						# xtrabackup doesn't contain binary logs. 
-						# after restoring backup binary logs will be reseted
-						log_file, log_pos = self.root_client.master_status()
-						__mysql__['restore'].log_file = log_file
-						__mysql__['restore'].log_pos = log_pos
-					else:					
-						self._innodb_recovery()	
+				if 'restore' in __mysql__ and  __mysql__['restore'].type != 'xtrabackup':			
+					self._innodb_recovery()	
 					self.mysql.service.start()
 
 		with op.step(self._step_create_users):
