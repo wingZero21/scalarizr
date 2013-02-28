@@ -1072,11 +1072,9 @@ class MysqlHandler(DBMSRHandler):
 				self._copy_debian_cnf_back()
 				if 'restore' in __mysql__:
 					if __mysql__['restore'].type == 'xtrabackup':
-						# xtrabackup doesn't contains binary logs
+						# xtrabackup doesn't contain binary logs. 
 						# after restoring backup binary logs will be reseted
-						self.mysql.service.stop()
-						self.mysql.service.start()
-						log_file, log_pos = mysql2_svc.mysqlbinlog_head()
+						log_file, log_pos = self.root_client.master_status()
 						__mysql__['restore'].log_file = log_file
 						__mysql__['restore'].log_pos = log_pos
 					else:					
