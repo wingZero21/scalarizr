@@ -887,10 +887,9 @@ class MysqlHandler(DBMSRHandler):
 					vol = storage2.volume(**__mysql__['volume'])
 					vol.destroy(remove_disks=True)
 					LOG.debug('Storage destoyed')
+				else:
+					restore.run()
 
-				restore.run()
-
-				restore.run()
 				log_file = restore.log_file
 				log_pos = restore.log_pos				
 				
