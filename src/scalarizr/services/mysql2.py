@@ -356,7 +356,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 		if int(__mysql__['replication_master']):
 			LOG.info("Master will reset it's binary logs, "
 					"so updating binary log position in backup manifest")
-			log_file, log_pos = self._client.master_status()
+			log_file, log_pos = self._client().master_status()
 			meta = mnf.meta
 			meta.update({'log_file': log_file, 'log_pos': log_pos})
 			mnf.meta = meta
