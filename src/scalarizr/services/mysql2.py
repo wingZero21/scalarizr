@@ -409,12 +409,8 @@ class MySQLDumpBackup(backup.Backup):
 		if self._killed:
 			raise Error("Canceled")
 
-		result = self.transfer_result_to_backup_result(result)
-		return result #?
-		"""
-		return backup.restore(type='mysqldump',
-						files=self.transfer.result()['completed'])
-		"""
+		result = transfer_result_to_backup_result(result)
+		return result
 
 	def _gen_src(self):
 		if self.file_per_database:
@@ -422,7 +418,8 @@ class MySQLDumpBackup(backup.Backup):
 				self._current_db = db_name
 				params = __mysql__['mysqldump_options'].split() + [db_name]
 				_mysqldump.args(*params)
-				yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
+				stream = _mysqldump.popen(stdin=None, bufsize=-1).stdout
+				yield cloudfs.NamedStream(stream, db_name)
 		else:
 			params = __mysql__['mysqldump_options'].split() + ['--all-databases']
 			_mysqldump.args(*params)
@@ -430,11 +427,7 @@ class MySQLDumpBackup(backup.Backup):
 
 	@property
 	def _dst(self):
-		# TODO: single destination; handle multiple src streams with the same names in largetransfer
-		if self.file_per_database:
-			return os.path.join(self.cloudfs_dir, self._current_db)
-		else:
-			return os.path.join(self.cloudfs_dir, 'mysql')
+		return os.path.join(self.cloudfs_dir, 'mysql')
 
 	def _kill(self):
 		LOG.debug("Killing MySQLDumpBackup")
