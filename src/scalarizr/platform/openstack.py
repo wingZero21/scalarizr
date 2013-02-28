@@ -20,6 +20,8 @@ from scalarizr.storage2.cloudfs import swift as swiftcloudfs
 LOG = logging.getLogger(__name__)
 
 
+
+
 class OpenstackServiceWrapper(object):
     def _make_connection(self, **kwargs):
         raise NotImplementedError()
@@ -228,6 +230,14 @@ class OpenstackPlatform(platform.Platform):
 
 
 def get_platform():
+    # Filter keystoneclient* and swiftclient* log messages
+    class FalseFilter:
+        def filter(self, record):
+            return False
+    for cat in ('keystoneclient', 'swiftclient'):
+        log = logging.getLogger(cat)
+        log.addFilter(FalseFilter())
+
     return OpenstackPlatform()
 
 
