@@ -413,6 +413,7 @@ class MySQLDumpBackup(backup.Backup):
 		return result
 
 	def _gen_src(self):
+		
 		if self.file_per_database:
 			for db_name in self._databases:
 				self._current_db = db_name
