@@ -17,7 +17,7 @@ import tempfile
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
-from scalarizr.config import ScalarizrState
+from scalarizr.config import ScalarizrState, BuiltinBehaviours
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.linux.coreutils import split
@@ -34,7 +34,7 @@ from scalarizr import storage2
 from scalarizr.services import backup
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = __postgresql__['behavior']
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.POSTGRESQL
 LOG = logging.getLogger(__name__)
 
 PG_SOCKET_DIR 				= '/var/run/postgresql/'
