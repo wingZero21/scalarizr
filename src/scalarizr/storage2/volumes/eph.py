@@ -43,8 +43,18 @@ class EphVolume(base.Volume):
 		# Example: resync slave data
 
 		if not self._lvm_volume:
-			if isinstance(self.disk, basestring) and self.disk.startswith('/dev/sd'):
-				self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
+
+			# Compatibility with old style configurations - convert base to ec2_ephemeral
+			if isinstance(self.disk, basestring):
+				if self.disk.startswith('/dev/sd'):
+					self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
+			else:
+				self.disk = storage2.volume(self.disk)
+				if self.disk.device:
+					if self.disk.type == 'base' and self.disk.device.startswith('/dev/sd'):
+						self.disk.type = 'ec2_ephemeral'
+						self.disk.name = 'ephemeral0'
+						self.disk.device = None
 
 			self._lvm_volume = storage2.volume(
 					type='lvm',

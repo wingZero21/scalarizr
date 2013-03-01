@@ -78,7 +78,8 @@ class LvmVolume(base.Volume):
 
 			pvs = lvm2.pvs()
 			if pv_volume.device not in pvs:
-				pv_volume.umount()
+				if pv_volume.mounted_to():
+					pv_volume.umount()
 				lvm2.pvcreate(pv_volume.device)
 			pv_volumes.append(pv_volume)
 		self.pvs = pv_volumes
