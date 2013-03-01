@@ -43,18 +43,18 @@ class EphVolume(base.Volume):
 		# Example: resync slave data
 
 		if not self._lvm_volume:
+			# First of all, merge self config and snapshot config
+			self.snap = storage2.snapshot(self.snap) if self.snap else None
 
-			# Compatibility with old style configurations - convert base to ec2_ephemeral
-			if isinstance(self.disk, basestring):
-				if self.disk.startswith('/dev/sd'):
-					self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
-			else:
-				self.disk = storage2.volume(self.disk)
-				if self.disk.device:
-					if self.disk.type == 'base' and self.disk.device.startswith('/dev/sd'):
-						self.disk.type = 'ec2_ephemeral'
-						self.disk.name = 'ephemeral0'
-						self.disk.device = None
+			for attr in ('disk', 'fstype', 'size', 'vg'):
+				if not getattr(self, attr, None):
+					if not self.snap or not getattr(self.snap, attr, None):
+						raise storage2.StorageError('Missing ephemeral volume'
+															' attribute "%s"' % attr)
+					setattr(self, attr, getattr(self.snap, attr))
+
+			if isinstance(self.disk, basestring) and self.disk.startswith('/dev/sd'):
+				self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
 
 			self._lvm_volume = storage2.volume(
 					type='lvm',
@@ -70,10 +70,12 @@ class EphVolume(base.Volume):
 			self.snap = storage2.snapshot(self.snap)
 			if not self.is_fs_created():
 				self.mkfs()
+
 			tmp_mpoint = not self.mpoint
 			if tmp_mpoint:
 				tmp_mpoint = tempfile.mkdtemp()
 				self.mpoint = tmp_mpoint
+
 			try:
 				transfer = cloudfs.LargeTransfer(self.snap.path, self.mpoint + '/')
 				self.mount()

@@ -41,6 +41,10 @@ class Volume(Base):
 				mpoint=None,
 				snap=None,
 				**kwds):
+
+		# Get rid of fscreated flag
+		kwds.pop('fscreated', None)
+
 		super(Volume, self).__init__(
 				device=device,
 				fstype=fstype,
@@ -279,6 +283,8 @@ class Volume(Base):
 
 	
 	def _ensure(self):
+		# Base volume doesn't guarantee that device 'self.device' exists
+		# TODO: Add explanatory comment
 		pass
 	
 	
