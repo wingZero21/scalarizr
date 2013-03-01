@@ -45,6 +45,7 @@ TRIGGER_NAME 			= "trigger"
 PRESET_FNAME            = 'postgresql.conf'
 OPT_PG_VERSION				= 'pg_version'
 
+LOG = logging.getLogger(__name__)
 __postgresql__ = __node__[SERVICE_NAME]
 
 
@@ -109,13 +110,15 @@ class PostgreSql(BaseService):
 	def __init__(self):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
-		self._logger = logging.getLogger(__name__)
 		self.pg_keys_dir = os.path.join(private_dir, 'keys')
 
 
 	@property
 	def version(self):
-		ver = __postgresql__[OPT_PG_VERSION]
+		try:
+			ver = __postgresql__[OPT_PG_VERSION]
+		except KeyError:
+			pass
 		if not ver:
 			try:
 				path_list = glob.glob('/var/lib/p*sql/9.*')
@@ -142,7 +145,7 @@ class PostgreSql(BaseService):
 		self.create_pg_role(ROOT_USER, password, super=True)
 					
 		if slaves:
-			self._logger.debug('Registering slave hosts: %s' % ' '.join(slaves))
+			LOG.debug('Registering slave hosts: %s' % ' '.join(slaves))
 			for host in slaves:
 				self.register_slave(host, force_restart=False)
 		self.service.start()
@@ -318,8 +321,6 @@ class PgUser(object):
 	private_key_path = None
 
 	def __init__(self, name, pg_keys_dir, group='postgres'):
-		self._logger = logging.getLogger(__name__)
-			
 		self.public_key_path = os.path.join(pg_keys_dir, '%s_public_key.pem' % name)
 		self.private_key_path = os.path.join(pg_keys_dir, '%s_private_key.pem' % name)
 		
@@ -331,17 +332,17 @@ class PgUser(object):
 		return self._is_system_user_exist and self._is_role_exist and self._is_pg_database_exist
 
 	def change_system_password(self, new_pass):
-		self._logger.debug('Changing password of system user %s to %s' % (self.name, new_pass)) 
+		LOG.debug('Changing password of system user %s to %s' % (self.name, new_pass))
 		out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
 		shadow_password = out.strip()
 		if retcode != 0:
-			self._logger.error('Error creating hash for ' + self.name)
+			LOG.error('Error creating hash for ' + self.name)
 		if err:
-			self._logger.error(err)
+			LOG.error(err)
 		
 		r = system2([USERMOD, '-p', '-1', shadow_password, self.name])[2]
 		if r != 0:
-			self._logger.error('Error changing password for ' + self.name)	
+			LOG.error('Error changing password for ' + self.name)
 		
 		#change password in privated/pgsql.ini
 		self.password = new_pass
@@ -375,7 +376,7 @@ class PgUser(object):
 		args.append(self.private_key_path)
 		out, err, retcode = system2(args)
 		if err:
-			self._logger.error('Failed to extract public key from %s : %s' % (self.private_key_path, err))
+			LOG.error('Failed to extract public key from %s : %s' % (self.private_key_path, err))
 		if retcode != 0:
 			raise Exception("Error handling would be nice, eh?")
 		return out.strip()		
@@ -403,7 +404,7 @@ class PgUser(object):
 	def apply_private_ssh_key(self,source_path=None):
 		source_path = source_path or self.private_key_path
 		if not os.path.exists(source_path):
-			self._logger.error('Cannot apply private ssh key: source %s not found' % source_path)
+			LOG.error('Cannot apply private ssh key: source %s not found' % source_path)
 		else:
 			if not os.path.exists(self.ssh_dir):
 				os.makedirs(self.ssh_dir)
@@ -459,14 +460,14 @@ class PgUser(object):
 
 	def _create_role(self, password=None, super=True):
 		if self._is_role_exist:
-			self._logger.debug('Cannot create role: role %s already exists' % self.name)
+			LOG.debug('Cannot create role: role %s already exists' % self.name)
 		else:
-			self._logger.debug('Creating role %s' % self.name)
+			LOG.debug('Creating role %s' % self.name)
 			try:
 				out = system2([SU_EXEC, '-', self.group, '-c', '%s -s %s' % (CREATEUSER, self.name)])[0]
-				self._logger.debug(out or 'Role %s has been successfully created.' % self.name)
+				LOG.debug(out or 'Role %s has been successfully created.' % self.name)
 			except PopenError, e:
-				self._logger.error('Unable to create role %s: %s' % (self.name, e))
+				LOG.error('Unable to create role %s: %s' % (self.name, e))
 				raise
 		self.change_role_password(password)
 	
@@ -480,38 +481,38 @@ class PgUser(object):
 			if 'password authentication failed for user' in str(e):
 				pass
 			else:
-				self._logger.error('Unable to check password for pg_role %s: %s' % (self.name, e))
+				LOG.error('Unable to check password for pg_role %s: %s' % (self.name, e))
 			return False
 		return True	
 
 			
 	def change_role_password(self, password):
-		self._logger.debug('Changing password for pg role %s' % self.name)
+		LOG.debug('Changing password for pg role %s' % self.name)
 		self.psql.execute("ALTER USER %s WITH PASSWORD '%s';" % (self.name, password), silent=True)
 		
 	def _create_pg_database(self):
 		if self._is_pg_database_exist:
-			self._logger.debug('Cannot create db: database %s already exists' % self.name)
+			LOG.debug('Cannot create db: database %s already exists' % self.name)
 		else:
-			self._logger.debug('Creating db %s' % self.name)
+			LOG.debug('Creating db %s' % self.name)
 			try:
 				out = system2([SU_EXEC, '-', self.group, '-c', '%s %s' % (CREATEDB,self.name)])[0]
-				self._logger.debug(out or 'DB %s has been successfully created.' % self.name)
+				LOG.debug(out or 'DB %s has been successfully created.' % self.name)
 			except PopenError, e:
-				self._logger.error('Unable to create db %s: %s' % (self.name, e))
+				LOG.error('Unable to create db %s: %s' % (self.name, e))
 				raise
 	
 	def _create_system_user(self, password):
 		if self._is_system_user_exist:
-			self._logger.debug('Cannot create system user: user %s already exists' % self.name)
+			LOG.debug('Cannot create system user: user %s already exists' % self.name)
 			#TODO: check password
 		else:
 			try:
 				out = system2([USERADD, '-m', '-g', self.group, '-p', password, self.name])[0]
-				if out: self._logger.debug(out)
-				self._logger.debug('Creating system user %s' % self.name)	
+				if out: LOG.debug(out)
+				LOG.debug('Creating system user %s' % self.name)
 			except PopenError, e:
-				self._logger.error('Unable to create system user %s: %s' % (self.name, e))
+				LOG.error('Unable to create system user %s: %s' % (self.name, e))
 				raise
 		self.password = password
 	
@@ -529,10 +530,9 @@ class PSQL(object):
 	
 	def __init__(self, user=DEFAULT_USER):	
 		self.user = user
-		self._logger = logging.getLogger(__name__)
-		
+
 	def test_connection(self):
-		self._logger.debug('Checking PostgreSQL service status')
+		LOG.debug('Checking PostgreSQL service status')
 		
 		def test_recursive(attempt):
 			try:
@@ -554,7 +554,7 @@ class PSQL(object):
 			return out	
 		except PopenError, e:
 			if not silent:
-				self._logger.error('Unable to execute query %s from user %s: %s' % (query, self.user, e))
+				LOG.error('Unable to execute query %s from user %s: %s' % (query, self.user, e))
 			raise		
 
 	def list_pg_roles(self):
@@ -569,25 +569,25 @@ class PSQL(object):
 	
 	def delete_pg_role(self, name):
 		out = self.execute('DROP ROLE IF EXISTS %s;' % name)
-		self._logger.debug(out)
+		LOG.debug(out)
 
 	def delete_pg_database(self, name):
 		out = self.execute('DROP DATABASE IF EXISTS %s;' % name)
-		self._logger.debug(out)
+		LOG.debug(out)
 		
 	def start_backup(self):
 		try:
 			out = self.execute("SELECT pg_start_backup('label', true);")
-			self._logger.debug(out)
+			LOG.debug(out)
 		except PopenError, e:
-			self._logger.warning('Cannot start backup: %s' % e)
+			LOG.warning('Cannot start backup: %s' % e)
 
 	def stop_backup(self):
 		try:
 			out = self.execute("SELECT pg_stop_backup();")
-			self._logger.debug(out)
+			LOG.debug(out)
 		except PopenError, e:
-			self._logger.warning('Cannot stop backup: %s' % e)
+			LOG.warning('Cannot stop backup: %s' % e)
 					
 	
 class ClusterDir(object):
@@ -598,8 +598,7 @@ class ClusterDir(object):
 	def __init__(self, path=None):
 		self.path = path
 		self.user = DEFAULT_USER
-		self._logger = logging.getLogger(__name__)
-		
+
 	@classmethod
 	def find(cls, postgresql_conf):
 		return cls(postgresql_conf.data_directory or cls.default_path)
@@ -608,21 +607,21 @@ class ClusterDir(object):
 		new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
 		
 		if not os.path.exists(dst):
-			self._logger.debug('Creating directory structure for postgresql cluster: %s' % dst)
+			LOG.debug('Creating directory structure for postgresql cluster: %s' % dst)
 			os.makedirs(dst)
 		
 		if move_files:
 			source = self.path 
 			if not os.path.exists(self.path):
 				source = self.default_path
-				self._logger.debug('data_directory in postgresql.conf points to non-existing location, using %s instead' % source)
+				LOG.debug('data_directory in postgresql.conf points to non-existing location, using %s instead' % source)
 			if source != new_cluster_dir:
-				self._logger.debug("copying cluster files from %s into %s" % (source, new_cluster_dir))
+				LOG.debug("copying cluster files from %s into %s" % (source, new_cluster_dir))
 				shutil.copytree(source, new_cluster_dir)	
-		self._logger.debug("changing directory owner to %s" % self.user)	
+		LOG.debug("changing directory owner to %s" % self.user)
 		chown_r(dst, self.user)
 		
-		self._logger.debug("Changing postgres user`s home directory")
+		LOG.debug("Changing postgres user`s home directory")
 		if disttool.is_redhat_based():
 			#looks like ubuntu doesn`t need this
 			system2([USERMOD, '-d', new_cluster_dir, self.user]) 
@@ -636,7 +635,7 @@ class ClusterDir(object):
 		for fname in fnames:
 			exclude = os.path.join(self.path, fname)
 			if os.path.exists(exclude):
-				self._logger.debug('Deliting file: %s' % exclude)
+				LOG.debug('Deliting file: %s' % exclude)
 				os.remove(exclude)
 	
 	def is_initialized(self, path):
@@ -656,7 +655,6 @@ class ConfigDir(object):
 	
 	
 	def __init__(self, path, version=None):
-		self._logger = logging.getLogger(__name__)
 		self.path = path
 		self.version = version
 	
@@ -672,17 +670,17 @@ class ConfigDir(object):
 	
 	def move_to(self, dst):
 		if not os.path.exists(dst):
-			self._logger.debug("creating %s" % dst)
+			LOG.debug("creating %s" % dst)
 			os.makedirs(dst)
 		
 		for config in ['postgresql.conf', 'pg_ident.conf', 'pg_hba.conf']:
 			old_config = os.path.join(self.path, config)
 			new_config = os.path.join(dst, config)
 			if os.path.exists(old_config):
-				self._logger.debug('Moving %s' % config)
+				LOG.debug('Moving %s' % config)
 				shutil.move(old_config, new_config)
 			elif os.path.exists(new_config):
-				self._logger.debug('%s is already in place. Skipping.' % config)
+				LOG.debug('%s is already in place. Skipping.' % config)
 			else:
 				raise BaseException('Postgresql config file not found: %s' % old_config)
 			chown_r(new_config, DEFAULT_USER)
@@ -694,20 +692,20 @@ class ConfigDir(object):
 		
 		self.path = dst
 		
-		self._logger.debug("configuring pid")
+		LOG.debug("configuring pid")
 		conf = PostgresqlConf.find(self)
 		conf.pid_file = os.path.join(dst, 'postmaster.pid')
 
 
 	def _patch_sysconfig(self, config_dir):
 		if config_dir == self.get_sysconfig_pgdata():
-			self._logger.debug('sysconfig file already rewrites PGDATA. Skipping.')
+			LOG.debug('sysconfig file already rewrites PGDATA. Skipping.')
 		else:
 			self.set_sysconfig_pgdata(config_dir)
 	
 	
 	def set_sysconfig_pgdata(self, pgdata):
-		self._logger.debug("rewriting PGDATA path in sysconfig")
+		LOG.debug("rewriting PGDATA path in sysconfig")
 		dir = os.path.dirname(self.get_sysconf_path())
 		if not os.path.exists(dir):
 			#ubuntu 11.10 has no sysconfig dir in etc
@@ -748,8 +746,7 @@ class Trigger(object):
 	
 	def __init__(self, path):
 		self.path = path
-		self._logger = logging.getLogger(__name__)
-		
+
 	@classmethod
 	def find(cls, recovery_conf):
 		return cls(recovery_conf.trigger_file)
@@ -780,7 +777,7 @@ class PostgresqlConf(BasePGConfig):
 	def _set_pid_file_path(self, path):
 		self.set('external_pid_file', path)
 		if not os.path.exists(path):
-			self._logger.debug('pid file does not exist')
+			LOG.debug('pid file does not exist')
 	
 	def _get_data_directory(self):
 		return self.get('data_directory')
@@ -964,9 +961,7 @@ class PgHbaConf(object):
 	
 	
 	def __init__(self, path):
-		
 		self.path = path
-		self._logger = logging.getLogger(__name__)
 
 	@classmethod
 	def find(cls, config_dir):
@@ -990,7 +985,7 @@ class PgHbaConf(object):
 				if old_record != record and old_record.is_similar_to(record):
 					self.delete_record(old_record)
 		if record not in self.records:
-			self._logger.debug('Adding record "%s" to %s' % (str(record),self.path))
+			LOG.debug('Adding record "%s" to %s' % (str(record),self.path))
 			with open(self.path, 'a') as fp:
 			    fp.write('\n'+str(record)+'\n')
 			
@@ -1006,7 +1001,7 @@ class PgHbaConf(object):
 			else:
 				lines.append(str(old_record))
 		if changed:
-			self._logger.debug('Removing records "%s" from %s' % (deleted,self.path))
+			LOG.debug('Removing records "%s" from %s' % (deleted,self.path))
 			with open(self.path, 'w') as fp:
 			    fp.write('\n'.join(lines))
 	
