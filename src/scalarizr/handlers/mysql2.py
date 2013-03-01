@@ -625,6 +625,7 @@ class MysqlHandler(DBMSRHandler):
 						if restore is None:
 							#? op.error?
 							#? 'canceled' msg to scalr?
+							#WTF: Shouldn't Scalr be notified anyway?(Dima)
 							return
 
 						# Notify scalr
@@ -752,7 +753,6 @@ class MysqlHandler(DBMSRHandler):
 					old_vol.mount()
 					raise
 			else:
-				# Set read_only option
 				self.mysql.my_cnf.read_only = False
 				self.mysql.service.start()
 
@@ -860,11 +860,11 @@ class MysqlHandler(DBMSRHandler):
 				if __mysql__['volume'].type == 'eph':
 					self.mysql.service.stop('Swapping storages to reinitialize slave')
 
-					LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
+					LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)',
 							restore.snapshot['id'], restore.log_file, restore.log_pos)
 					new_vol = restore.run()
 					self.mysql.service.stop('Swapping storages to reinitialize slave')
-				
+
 					LOG.debug('Destroing old storage')
 					vol = storage2.volume(**__mysql__['volume'])
 					vol.destroy(remove_disks=True)
@@ -1190,22 +1190,7 @@ class MysqlHandler(DBMSRHandler):
 		return mysql_svc.MySQLClient(
 					__mysql__['root_user'], 
 					__mysql__['root_password'])
-	
 
-	def _compat_storage_data(self, vol=None, snap=None):
-		ret = dict()
-		if bus.scalr_version >= (2, 2):
-			if vol:
-				ret['volume_config'] = vol.config() if not isinstance(vol, dict) else vol
-			if snap:
-				ret['snapshot_config'] = snap.config() if not isinstance(snap, dict) else snap
-		else:
-			if vol:
-				ret['volume_id'] = vol.config()['id'] if not isinstance(vol, dict) else vol['id']
-			if snap:
-				ret['snapshot_id'] = snap.config()['id'] if not isinstance(snap, dict) else snap['id']
-		return ret
-		
 
 	def _innodb_recovery(self, storage_path=None):
 		storage_path = storage_path or __mysql__['storage_dir']

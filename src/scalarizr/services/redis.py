@@ -957,6 +957,7 @@ class RedisSnapBackup(backup.SnapBackup):
 		self._redis_instances.save_all()
 		system2('sync', shell=True)
 
+
 class RedisSnapRestore(backup.SnapRestore):
 	def __init__(self, **kwds):
 		super(RedisSnapRestore, self).__init__(**kwds)

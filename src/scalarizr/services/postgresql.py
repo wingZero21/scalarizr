@@ -15,16 +15,15 @@ import subprocess
 
 from M2Crypto import RSA
 
-from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, firstmatched, wait_until
-from scalarizr import config
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, system2, PopenError
 from scalarizr.linux.coreutils import chown_r
-from scalarizr.services import BaseService, BaseConfig, ServiceError, lazy, PresetProvider
+from scalarizr.services import BaseService, BaseConfig, lazy, PresetProvider, backup
+from scalarizr.node import __node__, private_dir
+from scalarizr import storage2
 
-
-SERVICE_NAME = BuiltinBehaviours.POSTGRESQL 
+SERVICE_NAME = BuiltinBehaviours.POSTGRESQL
 
 SU_EXEC = '/bin/su'
 USERMOD = '/usr/sbin/usermod'
@@ -44,7 +43,11 @@ DEFAULT_USER			= "postgres"
 STORAGE_DATA_DIR 		= "data"
 TRIGGER_NAME 			= "trigger"
 PRESET_FNAME            = 'postgresql.conf'
-				
+OPT_PG_VERSION				= 'pg_version'
+
+__postgresql__ = __node__[SERVICE_NAME]
+
+
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
 	socket_file = None
 	
@@ -103,13 +106,29 @@ class PostgreSql(BaseService):
 		return cls._instance
 	
 	
-	def __init__(self, version, pg_keys_dir):
+	def __init__(self):
 		self._objects = {}
 		self.service = initdv2.lookup(SERVICE_NAME)
 		self._logger = logging.getLogger(__name__)
-		self.pg_keys_dir = pg_keys_dir
-		self.version = version
-	
+		self.pg_keys_dir = os.path.join(private_dir, 'keys')
+
+
+	@property
+	def version(self):
+		ver = __postgresql__[OPT_PG_VERSION]
+		if not ver:
+			try:
+				path_list = glob.glob('/var/lib/p*sql/9.*')
+				path_list.sort()
+				path = path_list[-1]
+				ver = os.path.basename(path)
+			except IndexError:
+				LOG.warning('Postgresql default directory not found. Assuming that PostgreSQL 9.0 is installed.')
+				ver = '9.0'
+			finally:
+				__postgresql__[OPT_PG_VERSION] = ver
+		return ver
+
 
 	@property	
 	def unified_etc_path(self):
@@ -1052,7 +1071,46 @@ def make_symlinks(source_dir, dst_dir, username='postgres'):
 
 class PgSQLPresetProvider(PresetProvider):
 
-	def __init__(self, version):
+	def __init__(self, config_object):
 		service = initdv2.lookup(SERVICE_NAME)
-		config_mapping = {'postgresql.conf':PostgresqlConf('/etc/postgresql/%s/main/postgresql.conf' % version)}
+		config_mapping = {'postgresql.conf':config_object}
 		PresetProvider.__init__(self, service, config_mapping)
+
+
+class PostgresqlSnapBackup(backup.SnapBackup):
+
+	def __init__(self, **kwds):
+		super(PostgresqlSnapBackup, self).__init__(**kwds)
+		self.service = initdv2.lookup(SERVICE_NAME)
+		self.psql = PSQL()
+		self.on(
+			freeze=self.freeze,
+			unfreeze=self.unfreeze
+		)
+
+
+	def freeze(self, *args):
+		if self.service.running:
+			self.psql.start_backup()
+		system2('sync', shell=True)
+
+
+	def unfreeze(self, *args):
+		if self.service.running:
+			self.psql.stop_backup()
+
+
+class PostgresqlSnapRestore(backup.SnapRestore):
+
+	def __init__(self, **kwds):
+		super(PostgresqlSnapRestore, self).__init__(**kwds)
+		self.on(complete=self.complete)
+
+
+	def complete(self, volume):
+		vol = storage2.volume(volume)
+		vol.mpoint = __postgresql__['storage_dir']
+		vol.mount()
+
+backup.backup_types['snap_postgresql'] = PostgresqlSnapBackup
+backup.restore_types['snap_postgresql'] = PostgresqlSnapRestore

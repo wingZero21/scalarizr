@@ -331,6 +331,13 @@ __node__['rabbitmq'] = Compound({
 
 })
 
+__node__['postgresql'] = Compound({
+'volume,volume_config':	Json('%s/storage/%s.json' % (private_dir, 'postgresql'),
+	'scalarizr.storage2.volume'),
+'replication_master,pg_version,scalr_password,root_password, root_user': Ini(
+	'%s/%s.ini' % (private_dir, 'postgresql'), 'redis')
+})
+
 __node__['mongodb'] = Compound({
 	'volume,volume_config':
 				Json('%s/storage/%s.json' % (private_dir, 'mongodb'), 'scalarizr.storage2.volume'),
@@ -339,7 +346,6 @@ __node__['mongodb'] = Compound({
 	'shards_total,password,replica_set_index,shard_index,keyfile':
 				Ini('%s/%s.ini' % (private_dir, 'mongodb'), 'mongodb')
 })
-
 
 __node__['ec2'] = Compound({
 	't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
