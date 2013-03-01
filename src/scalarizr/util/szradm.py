@@ -398,8 +398,11 @@ class MessageDetailsCommand(Command):
 	method = "message_details"
 	group = "Messages"
 	fields=['message']
-	parser = OptionParser(usage='message-details MESSAGE_ID',
+	parser = OptionParser(usage='message-details [-j|--json] MESSAGE_ID',
 		description='Display messages with message id', formatter=IndHelpFormatter())
+
+	parser.add_option('-j', '--json', dest='json', action="store_true",
+					  						help='Print result in json format')
 
 	def __init__(self,argv=None):
 		if argv:
@@ -436,8 +439,13 @@ class MessageDetailsCommand(Command):
 					mdict=encode({u'id':msg.id, u'name':msg.name,
 						u'meta':msg.meta, u'body':msg.body})
 					#LOG.debug('\nafter encode: %s\n'%mdict)
-					yaml=dump(mdict, Dumper=SzradmDumper, default_flow_style=False)
-					print yaml
+					if self.kwds and self.kwds['json']:
+						# print json
+						out = json.dumps(mdict, indent=4, sort_keys=True)
+					else:
+						# Print yaml
+						out = dump(mdict, Dumper=SzradmDumper, default_flow_style=False)
+					print out
 				except Exception, e:
 					raise LookupError('Error in recursive encode '
 						'(szradm->MessageDetailsCommand: l442) Details: %s'%e)

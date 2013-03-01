@@ -112,12 +112,20 @@ class Volume(Base):
 
 
 	def umount(self):
-		self._check()
+		try:
+			self._check(fstype=False, device=True)
+		except:
+			return
+
 		mod_mount.umount(self.device)
 
 
 	def mounted_to(self):
-		self._check()
+		try:
+			self._check(fstype=False, device=True)
+		except:
+			return False
+
 		try:
 			return mod_mount.mounts()[self.device].mpoint
 		except KeyError:
