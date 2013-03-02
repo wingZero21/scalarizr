@@ -58,57 +58,53 @@ SNMP_RESTART_DELAY = 5 # Seconds
 
 PID_FILE = '/var/run/scalarizr.pid' 
 
-LOGGING_CONFIG = '''
-[loggers]
-keys=root,scalarizr
-
-[handlers]
-keys=console,file,file_debug,scalr
-
-[formatters]
-keys=simple,no_stacktrace_formatter
-
-[logger_root]
-level=DEBUG
-handlers=file,file_debug,scalr
-
-[logger_scalarizr]
-level=DEBUG
-qualname=scalarizr
-handlers=file,file_debug,scalr
-propagate=0
-
-[handler_console]
-class=StreamHandler
-level=INFO
-formatter=no_stacktrace_formatter
-args=(sys.stdout,)
-
-[handler_file]
-class=scalarizr.util.log.RotatingFileHandler
-level=INFO
-formatter=no_stacktrace_formatter
-args=('/var/log/scalarizr.log', 'a+', 5242880, 5, 0600)
-
-[handler_file_debug]
-class=scalarizr.util.log.RotatingFileHandler
-level=DEBUG
-formatter=simple
-args=('/var/log/scalarizr_debug.log', 'a+', 5242880, 5, 0600)
-
-
-[handler_scalr]
-class=scalarizr.util.log.MessagingHandler
-level=INFO
-args=(20, "30s")
-
-[formatter_simple]
-format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
-
-[formatter_no_stacktrace_formatter]
-format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
-class=scalarizr.util.log.NoStacktraceFormatter
-'''
+LOGGING_CONFIG = {
+	'version': 1,
+	'loggers': {
+ 		'': {
+			'level': logging.DEBUG,
+			'handlers': ['console', 'scalr', 'user_log', 'debug_log']
+		}
+ 	},
+	'handlers': {
+		'console': {
+			'class': 'logging.StreamHandler',
+			'stream': sys.stderr,
+			'formatter': 'user',
+			'level': logging.FATAL
+		},
+		'user_log': {
+			'()': 'scalarizr.util.log.RotatingFileHandler',
+			'filename': '/var/log/scalarizr.log',
+			'mode': 'a+', 
+			'maxBytes': 5242880, 
+			'backupCount': 5, 
+			'formatter': 'user',
+			'level': logging.INFO
+		},
+		'debug_log': {
+			'()': 'scalarizr.util.log.RotatingFileHandler',
+			'filename': '/var/log/scalarizr_debug.log',
+			'mode': 'a+', 
+			'maxBytes': 5242880, 
+			'backupCount': 5, 
+			'formatter': 'debug'
+		},
+		'scalr': {
+			'()': 'scalarizr.util.log.MessagingHandler',
+			'level': logging.INFO
+		}
+	},
+	'formatters': {
+ 		'debug': {
+ 			'format': '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+		},
+		'user': {
+			'()': 'scalarizr.util.log.NoStacktraceFormatter',
+			'format': '%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+		}
+	}
+}
 
 _running = False
 '''
@@ -279,7 +275,7 @@ def _init_logging():
 		from scalarizr.util.log import fix_py25_handler_resolving		
 		fix_py25_handler_resolving()
 	
-	logging.config.fileConfig(cStringIO.StringIO(LOGGING_CONFIG))
+	logging.config.dictConfig(LOGGING_CONFIG)
 	globals()['_logging_configured'] = True
 	logger = logging.getLogger(__name__)
 	
@@ -288,10 +284,8 @@ def _init_logging():
 	if optparser and optparser.values.import_server:
 		if not any(isinstance(hdlr, logging.StreamHandler) \
 				and (hdlr.stream == sys.stdout or hdlr.stream == sys.stderr) 
-				for hdlr in logger.handlers):
-			hdlr = logging.StreamHandler(sys.stdout)
-			hdlr.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
-			logger.addHandler(hdlr)	
+				for hdlr in logging.getLogger('').handlers):
+			hdlr.setLevel(logging.INFO)
 
 
 def _init_platform():
