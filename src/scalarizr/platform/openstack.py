@@ -5,15 +5,21 @@ import logging
 import re
 from time import sleep
 
+
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
 import swiftclient
 
+
 from scalarizr import platform
 from scalarizr.bus import bus
+from scalarizr.storage.transfer import Transfer, TransferProvider
+from scalarizr.storage2.cloudfs import swift as swiftcloudfs
 
 
 LOG = logging.getLogger(__name__)
+
+
 
 
 class OpenstackServiceWrapper(object):
@@ -224,4 +230,38 @@ class OpenstackPlatform(platform.Platform):
 
 
 def get_platform():
+    # Filter keystoneclient* and swiftclient* log messages
+    class FalseFilter:
+        def filter(self, record):
+            return False
+    for cat in ('keystoneclient', 'swiftclient'):
+        log = logging.getLogger(cat)
+        log.addFilter(FalseFilter())
+
     return OpenstackPlatform()
+
+
+class SwiftTransferProvider(TransferProvider):
+    schema = 'swift'
+    
+    _logger = None
+    
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+        self._driver = swiftcloudfs.SwiftFileSystem()  
+        TransferProvider.__init__(self)   
+
+    def put(self, local_path, remote_path):
+        self._logger.info('Uploading %s to Swift under %s' % (local_path, remote_path))
+        return self._driver.put(local_path, os.path.join(remote_path, os.path.basename(local_path)))
+    
+    def get(self, remote_path, local_path):
+        self._logger.info('Downloading %s from Swift to %s' % (remote_path, local_path))
+        return self._driver.get(remote_path, local_path)
+        
+    
+    def list(self, remote_path):
+        return self._driver.ls(remote_path)
+
+
+Transfer.explore_provider(SwiftTransferProvider)
