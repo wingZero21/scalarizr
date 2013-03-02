@@ -78,6 +78,9 @@ class EphVolume(base.Volume):
 
 		self._lvm_volume.ensure()
 		self.device = self._lvm_volume.device
+		# To allow ensure(mkfs=True, mount=True) after volume passed 
+		# scalarizr 1st initialization
+		self.fscreated = self.is_fs_created()
 
 		if self.snap:
 			self.snap = storage2.snapshot(self.snap)
