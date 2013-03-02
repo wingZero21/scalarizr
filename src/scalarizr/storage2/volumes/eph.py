@@ -216,6 +216,9 @@ class EphVolumeAdapter(EphVolume):
 			self._eph_vol = self._eph_pvd.create(**config)
 		
 		self.device = self._eph_vol.device
+		# To allow ensure(mkfs=True, mount=True) after volume passed 
+		# scalarizr 1st initialization
+		self.fscreated = self.is_fs_created()		
 		
 		
 	def _snapshot(self, description, tags, **kwds):
