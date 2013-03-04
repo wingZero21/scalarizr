@@ -702,7 +702,8 @@ class MysqlHandler(DBMSRHandler):
 		bus.fire('before_slave_promote_to_master')
 
 		__mysql__['compat_prior_backup_restore'] = mysql2.get('volume_config') or \
-													mysql2.get('snapshot_config')
+													mysql2.get('snapshot_config') or \
+													message.body.get('volume_config')
 		new_vol	= None
 		if mysql2.get('volume_config'):
 			new_vol = storage2.volume(mysql2.get('volume_config'))
