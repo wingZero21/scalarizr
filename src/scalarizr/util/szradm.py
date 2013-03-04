@@ -185,7 +185,7 @@ class Command(object):
 
 	def __init__(self, argv=None):
 		if argv:
-			self.kwds =self.parser.parse_args(argv)[0].__dict__
+			self.kwds = self.parser.parse_args(argv)[0].__dict__
 		else:
 			self.kwds=None
 
@@ -410,7 +410,12 @@ class MessageDetailsCommand(Command):
 				if '-h'in argv or '--help'in argv:
 					self.kwds = self.parser.parse_args(argv)[0].__dict__
 				else:
-					self.kwds={'message_id':argv[0]}
+					self.kwds = dict()
+					if '--json' in argv:
+						argv.remove('--json')
+						self.kwds['json'] = True
+					self.kwds['message_id'] = argv[0]
+
 			else:
 				if argv != '-h' or argv != '--help':
 					self.kwds={'message_id':argv}
@@ -431,15 +436,12 @@ class MessageDetailsCommand(Command):
 			res = cur.fetchone()
 			if res:
 				msg=Message()
-				format = res[1]
-				msg.fromjson(res[0]) if 'json' == format else msg.fromxml(res[0])
+				msg_format = res[1]
+				msg.fromjson(res[0]) if 'json' == msg_format else msg.fromxml(res[0])
 				try:
-					#LOG.debug('\nbefor encode: %s\n'% {u'id':msg.id, u'name':msg.name,
-					#	u'meta':msg.meta, u'body':msg.body})
-					mdict=encode({u'id':msg.id, u'name':msg.name,
-						u'meta':msg.meta, u'body':msg.body})
-					#LOG.debug('\nafter encode: %s\n'%mdict)
-					if self.kwds and self.kwds['json']:
+					mdict={u'id':msg.id, u'name':msg.name,
+						u'meta':msg.meta, u'body':msg.body}
+					if self.kwds and self.kwds.get('json'):
 						# print json
 						out = json.dumps(mdict, indent=4, sort_keys=True)
 					else:

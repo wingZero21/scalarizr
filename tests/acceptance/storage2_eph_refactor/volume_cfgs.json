@@ -23,10 +23,8 @@
         "mpoint": "/mnt/redisstorage",
         "snap": null,
         "disk": {
-            "disk": {
-                "type": "loop",
-                "size": 0.5
-            }
+            "type": "loop",
+            "size": 0.5
         },
         "type": "eph",
         "id": "vol-eph-8ec114d0",
@@ -39,7 +37,6 @@
             "vg": "redis",
             "description": null,
             "tags": {
-
             },
             "snap_backend": {
                 "path": "s3://szr-tests/"

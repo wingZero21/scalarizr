@@ -46,7 +46,7 @@ class EphVolume(base.Volume):
 			# First of all, merge self config and snapshot config
 			self.snap = storage2.snapshot(self.snap) if self.snap else None
 
-			for attr in ('disk', 'fstype', 'size', 'vg'):
+			for attr in ('disk', 'fstype', 'size', 'vg', 'mpoint'):
 				if not getattr(self, attr, None):
 					if not self.snap or not getattr(self.snap, attr, None):
 						raise storage2.StorageError('Missing ephemeral volume'
@@ -80,14 +80,18 @@ class EphVolume(base.Volume):
 			try:
 				transfer = cloudfs.LargeTransfer(self.snap.path, self.mpoint + '/')
 				self.mount()
-				if hasattr(self.snap, 'size'):
+				if hasattr(self.snap, 'data_size'):
 					fs_free = coreutils.statvfs(self.mpoint)['avail']
-					if fs_free < int(self.snap.size):
+					if fs_free < int(self.snap.data_size):
 						raise storage2.StorageError('Not enough free space'
 								' on device %s to restore snapshot.' %
 								self.device)
 
-				transfer.run()
+				result = transfer.run()
+				if result.get('failed'):
+					err = result['failed'][0]['exc_info'][1]
+					raise storage2.StorageError('Failed to download snapshot'
+												'data. %s' % err)
 			except:
 				e = sys.exc_info()[1]
 				raise storage2.StorageError("Snapshot restore error: %s" % e)
@@ -122,10 +126,12 @@ class EphVolume(base.Volume):
 
 class EphSnapshot(base.Snapshot):
 
+	"""
 	def __init__(self, **kwargs):
 		super(EphSnapshot, self).__init__(**kwargs)
 		if hasattr(self, 'size') and '%' in str(self.size):
 			del self.size
+	"""
 
 	def _destroy(self):
 		self._check_attr('path')
@@ -165,7 +171,7 @@ class EphSnapshot(base.Snapshot):
 				device=lvm_snap.device,
 				mpoint=tempfile.mkdtemp())
 			lvm_snap_vol.ensure(mount=True)
-			self.size = coreutils.statvfs(lvm_snap_vol.mpoint)['used']
+			self.data_size = coreutils.statvfs(lvm_snap_vol.mpoint)['used']
 
 			try:
 				transfer = cloudfs.LargeTransfer(
