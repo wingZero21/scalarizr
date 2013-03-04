@@ -7,10 +7,12 @@ Created on Feb 25, 2011
 
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.services import mongodb as mongodb_svc
+from scalarizr import rpc
 
 
 class MongoDBAPI:
 
+    @rpc.service_method
     def reset_password(self):
         """ Reset password for Mongo user 'scalr'. Return new password  """
         new_password = pwgen(10)

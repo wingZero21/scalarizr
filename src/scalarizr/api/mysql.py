@@ -64,6 +64,7 @@ class MySQLAPI(object):
     def _check_empty(self, param, name):
         assert param, self.error_messages['empty'] % name
 
+    @rpc.service_method
     def reset_password(self, new_password=None):
         """ Reset password for MySQL user 'scalr'. Return new password """
         if not new_password:

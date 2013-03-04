@@ -260,6 +260,7 @@ class RedisAPI(object):
 		LOG.debug('primary IP: %s' % host)
 		return host
 
+	@rpc.service_method
 	def reset_password(self, port=DEFAULT_PORT, new_password=None):
 		""" Reset auth for Redis process on port `port`. Return new password """
 		if not new_password:
