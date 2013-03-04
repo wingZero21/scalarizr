@@ -18,5 +18,7 @@ class PostgreSQLAPI:
         if not new_password:
             new_pass = pwgen(10)
         pg = postgresql_svc.PostgreSql()
+        pg.root_user.change_role_password(new_pass)
         pg.root_user.change_system_password(new_pass)
+        pg.reload()
         return new_pass
