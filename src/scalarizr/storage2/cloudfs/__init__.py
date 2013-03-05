@@ -80,19 +80,15 @@ class InterruptibleEvent(threading._Event):
 ###
 
 
-class namedstream(object):
+class NamedStream(object):
+	# do we need setattr/delattr here?
+
 	def __init__(self, stream, name):
 		self._stream = stream
 		self.name = name
 
-	def __getattr__(self, name):
-		if name in self.__dict__:
-			return self.__dict__[name]
-		return getattr(self.__dict__['_stream'], name)
-
-	def __hasattr__(self, name):
-		return hasattr(self.__dict__['_stream'], name) or \
-				name in self.__dict__
+	def __getattr__(self, attr):
+		return getattr(self._stream, attr)
 
 
 class BaseTransfer(bases.Task):
@@ -838,19 +834,16 @@ class LargeTransfer(bases.Task):
 					location = os.path.join(self._tranzit_vol.mpoint, chunk)
 					with open(location, 'rb') as fd:
 						while True:
-							bytes = fd.read(buf_size)
-							if not bytes:
-								LOG.debug("RESTORER break %s" % chunk)
-								LOG.debug("*** BENCH %s %s restored" % (int(time.time() - zero), chunk))
-								break
-							try:
-								stream.write(bytes)
+							try:							
+								bytes = fd.read(buf_size)
+								if not bytes:
+									LOG.debug("RESTORER break %s" % chunk)
+									LOG.debug("*** BENCH %s %s restored" % (int(time.time() - zero), chunk))
+									break
 
+								stream.write(bytes)
 							except Exception, e:
-								if isinstance(e, IOError) and e.errno == 32:
-									LOG.debug("RESTORER encountered broken"
-											  " pipe, err msg from the last"
-											  " supbrocess: %s" % cmd.stderr.read())
+								LOG.exception("Caught error in restore loop\ncmd.stderr: %s", cmd.stderr.read())
 								self.kill()
 								raise
 
@@ -899,10 +892,12 @@ class LargeTransfer(bases.Task):
 
 
 	def _kill(self):
+		LOG.debug("Killing large transfer...")
 		self._killed = True
 		self._transfer.kill_nowait()
 
 		# interrupt all events
+		LOG.debug("interrupting workers")
 		self._manifest_ready.interrupt()
 
 		with self._chunks_events_access:
@@ -916,8 +911,10 @@ class LargeTransfer(bases.Task):
 			raise Exception("LargeTransfer is being killed")  #?
 		self._transfer.on(progress_report=interrupt)
 
-		if self.manifest:
-			self.manifest.delete()
+		if self._up:
+			LOG.debug("Deleting manifest")
+			if self.manifest:
+				self.manifest.delete()
 
 
 class Manifest(object):
@@ -1063,10 +1060,11 @@ class Manifest(object):
 			ret = dict((key.split('.', 1)[1], self['tags'][key]) \
 				for key in self['tags'] \
 				if key.startswith('meta.'))
-			LOG.debug('meta: %s', ret)
+			LOG.debug('get meta: %s', ret)
 			return ret
 
 		def fset(self, meta):
+			LOG.debug('set meta: %s', meta)
 			for key, value in meta.items():
 				self['tags']['meta.%s' % key] = value
 

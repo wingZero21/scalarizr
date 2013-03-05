@@ -200,6 +200,7 @@ class ScriptExecutor(Handler):
 							event_id=message.body.get('event_id'))
 						for item in message.body['scripts']]
 		else:
+			# TODO: remove obsolete code
 			LOG.debug("Fetching scripts for event %s", event_name)
 			event_id = message.meta['event_id'] if message.name == Messages.EXEC_SCRIPT else None
 			target_ip = message.body.get('local_ip')
