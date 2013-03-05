@@ -141,6 +141,7 @@ def teardown(scenario):
 
 @step("I have used the storage for (\d+) MB")
 def i_have_used_the_storage_for(step, mb):
+	# TODO: delay on s3 instead
 	subprocess.call([
 		"dd",
 		"if=/dev/urandom",
@@ -164,9 +165,13 @@ def i_wait_for_seconds(step, seconds):
 def i_expect_it_canceled(step):
 	# we expect to have only one outgoing result message
 	# that contains "Canceled"
-	new = list_messages()[len(world.existing):]
-	assert len(new) == 1, "Got %s messages while running the test" % len(new)
-	msg_id = new.pop()["id"]
+	new = list_messages()[world.existing:]
+
+	result = filter(lambda x: x["name"] in (
+		"DbMsr_CreateDataBundleResult", "DbMsr_CreateBackupResult"), new)
+
+	assert len(result) == 1, "Got %s messages while running the test" % len(result)
+	msg_id = result.pop()["id"]
 
 	msg = message_info(msg_id)
 

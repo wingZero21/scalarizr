@@ -394,6 +394,7 @@ class MySQLDumpBackup(backup.Backup):
 		self._run_lock = threading.Lock()
 
 	def _run(self):
+		LOG.debug("Running MySQLDumpBackup")
 		client = mysql_svc.MySQLClient(
 					__mysql__['root_user'],
 					__mysql__['root_password'])
