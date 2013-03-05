@@ -21,4 +21,5 @@ class PostgreSQLAPI:
         pg.root_user.change_role_password(new_pass)
         pg.root_user.change_system_password(new_pass)
         pg.reload()
+        
         return new_pass
