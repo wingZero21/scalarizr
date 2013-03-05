@@ -330,11 +330,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		
 					if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
 						raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
-					
-					dir = os.path.dirname(self._volume_config_path)
-					if not os.path.exists(dir):
-						os.makedirs(dir)
-					
+
 					postgresql_data = message.postgresql.copy()
 
 					if 'preset' in postgresql_data:
