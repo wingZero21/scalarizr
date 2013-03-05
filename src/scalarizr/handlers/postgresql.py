@@ -354,7 +354,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 						postgresql_data['restore'] = backup.restore(
 							type='snap_rostgresql',
 							snapshot=postgresql_data.pop('snapshot_config'),
-							volume=postgresql_data['volume'])
+							volume=postgresql_data['volume_config'])
 
 					LOG.debug("Update postgresql config with %s", postgresql_data)
 					__postgresql__.update(postgresql_data)
