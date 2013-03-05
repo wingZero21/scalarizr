@@ -199,7 +199,7 @@ class NoStacktraceFormatter(logging.Formatter):
 		super(NoStacktraceFormatter, self).__init__(fmt, datefmt)
 
 	def formatException(self, exc_info):
-		return 'ERROR: %s: %s' % exc_info[:2]
+		return ''
 
 
 def fix_py25_handler_resolving():
