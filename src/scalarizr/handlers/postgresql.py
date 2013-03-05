@@ -342,7 +342,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					postgresql_data['%s_password' % root_user] = postgresql_data.get(OPT_ROOT_PASSWORD) or cryptotool.pwgen(10)
 					del postgresql_data[OPT_ROOT_PASSWORD]
 
-					root = PgUser(root_user, self.pg_keys_dir)
+					root = PgUser(root_user, self.postgresql.pg_keys_dir)
 					root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
 					del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
 					del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]		
