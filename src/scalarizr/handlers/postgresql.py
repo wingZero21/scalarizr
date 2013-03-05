@@ -233,7 +233,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		self.postgresql = PostgreSql()
 		self.preset_provider = PgSQLPresetProvider(self.postgresql.postgresql_conf)
 		preset_service.services[BEHAVIOUR] = self.preset_provider
-		self._tmp_path = os.path.join(__postgresql__['storage_dir'], 'tmp')
+
 	
 	def on_HostInit(self, message):
 		if message.local_ip != self._platform.get_private_ip() and message.local_ip in self.pg_hosts:
@@ -287,7 +287,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if farm_hosts:
 			self.postgresql.service.reload('Granting access to all servers within farm.', force=True)
 				
-	
+
 	@property
 	def root_password(self):
 		return __postgresql__['%s_password' % ROOT_USER]
@@ -300,7 +300,13 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 	def store_password(self, name, password):
 		__postgresql__['%s_password' % name] = password
-			
+
+
+	@property
+	def _tmp_path(self):
+		return os.path.join(__postgresql__['storage_dir'], 'tmp')
+
+
 	@property
 	def is_replication_master(self):
 		return True if int(__postgresql__[OPT_REPLICATION_MASTER]) else False
