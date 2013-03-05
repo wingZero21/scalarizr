@@ -118,7 +118,7 @@ class PostgreSql(BaseService):
 		try:
 			ver = __postgresql__[OPT_PG_VERSION]
 		except KeyError:
-			pass
+			ver = None
 		if not ver:
 			try:
 				path_list = glob.glob('/var/lib/p*sql/9.*')
