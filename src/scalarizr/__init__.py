@@ -142,8 +142,7 @@ _api_routes = {
 'storage': 'scalarizr.api.storage.StorageAPI',
 'service': 'scalarizr.api.service.ServiceAPI',
 'redis': 'scalarizr.api.redis.RedisAPI',
-'mysql': 'scalarizr.api.mysql.MySQLAPI',
-'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI'
+'mysql': 'scalarizr.api.mysql.MySQLAPI'
 }
 
 

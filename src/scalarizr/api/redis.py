@@ -1,4 +1,3 @@
-from __future__ import with_statement
 '''
 Created on Aug 1, 2012
 
@@ -19,6 +18,7 @@ from scalarizr.linux import iptables
 from scalarizr.util import system2, PopenError
 from scalarizr.services import redis as redis_service
 from scalarizr.handlers import redis as redis_handler
+from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
 
 
@@ -267,4 +267,7 @@ class RedisAPI(object):
 			new_password = pwgen(20)
 		redis_conf = redis_service.RedisConf.find(port=port)
 		redis_conf.requirepass = new_password
+		redisd = redis_service.Redisd(os.path.join(redis_conf.dir, redis_conf.config_name), port)
+		redisd.reload()
+		__redis__['master_password'] = new_password
 		return new_password
