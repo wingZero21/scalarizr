@@ -84,7 +84,7 @@ def lvs(*volume_groups, **long_kwds):
 			ret['%s/%s' % (item.vg_name, item.lv_name)] = item
 		return ret
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 
@@ -106,7 +106,7 @@ def pvs(*physical_volumes, **long_kwds):
 			ret[item.pv_name] = item
 		return ret
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 
@@ -128,7 +128,7 @@ def vgs(*volume_groups, **long_kwds):
 			ret[item.vg_name] = item
 		return ret
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 	
@@ -156,7 +156,7 @@ def pvchange(*physical_volume_paths, **long_kwds):
 				long=long_kwds,
 				params=physical_volume_paths))
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 
@@ -178,7 +178,7 @@ def pvremove(*physical_volumes, **long_kwds):
 				long=long_kwds, 
 				params=physical_volumes))
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 
@@ -197,7 +197,7 @@ def vgchange(*volume_group_names, **long_kwds):
 				long=long_kwds,
 				params=volume_group_names))
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 
@@ -213,7 +213,7 @@ def vgextend(volume_group_name, *physical_volumes, **long_kwds):
 				long=long_kwds, 
 				params=[volume_group_name] + list(physical_volumes)))
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 		
@@ -226,7 +226,7 @@ def vgremove(*volume_group_names, **long_kwds):
 				long=long_kwds,
 				params=volume_group_names))
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 
@@ -254,7 +254,7 @@ def lvchange(*logical_volume_path, **long_kwds):
 				long=long_kwds, 
 				params=logical_volume_path))
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 
@@ -275,7 +275,7 @@ def lvremove(*logical_volume_paths, **long_kwds):
 		return ret
 
 	except linux.LinuxError, e:
-		if e.returncode == 5:
+		if 'not found' in str(e).lower():
 			raise NotFound()
 		raise
 
