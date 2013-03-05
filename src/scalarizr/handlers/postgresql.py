@@ -345,16 +345,49 @@ class PostgreSqlHander(ServiceCtlHandler):
 					root = PgUser(root_user, self.postgresql.pg_keys_dir)
 					root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
 					del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
-					del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]		
+					del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]
 
-					if 'volume_config' in postgresql_data:
-						__postgresql__['volume'] = storage2.volume(postgresql_data.pop('volume_config'))
 
-					if 'snapshot_config' in postgresql_data:
-						postgresql_data['restore'] = backup.restore(
-							type='snap_rostgresql',
-							snapshot=postgresql_data.pop('snapshot_config'),
-							volume=postgresql_data['volume_config'])
+					postgresql_data['compat_prior_backup_restore'] = False
+					if postgresql_data.get('volume'):
+						# New format
+						postgresql_data['volume'] = storage2.volume(postgresql_data['volume'])
+						if 'backup' in postgresql_data:
+							postgresql_data['backup'] = backup.backup(postgresql_data['backup'])
+						if 'restore' in postgresql_data:
+							postgresql_data['restore'] = backup.restore(postgresql_data['restore'])
+
+					else:
+
+						# Compatibility transformation
+						# - volume_config -> volume
+						# - master n'th start, type=ebs - del snapshot_config
+						# - snapshot_config + log_file + log_pos -> restore
+						# - create backup on master 1'st start
+
+						postgresql_data['compat_prior_backup_restore'] = True
+						if postgresql_data.get('volume_config'):
+							postgresql_data['volume'] = storage2.volume(
+								postgresql_data.pop('volume_config'))
+						else:
+							postgresql_data['volume'] = storage2.volume(
+								type=postgresql_data['snapshot_config']['type'])
+
+						if postgresql_data['volume'].device and \
+										postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+							postgresql_data.pop('snapshot_config', None)
+
+						if postgresql_data.get('snapshot_config'):
+							postgresql_data['restore'] = backup.restore(
+								type='snap_rostgresql',
+								snapshot=postgresql_data.pop('snapshot_config'),
+								volume=postgresql_data['volume'])
+
+						elif int(postgresql_data['replication_master']) and \
+								not postgresql_data['volume'].device:
+							postgresql_data['backup'] = backup.backup(
+								type='snap_rostgresql',
+								volume=postgresql_data['volume'])
 
 					LOG.debug("Update postgresql config with %s", postgresql_data)
 					__postgresql__.update(postgresql_data)
