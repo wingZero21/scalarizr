@@ -170,7 +170,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 		self._insert_iptables_rules()		
 
-		if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+		if __node__['state'] == ScalarizrState.BOOTSTRAPPING:
 			
 			if disttool.is_redhat_based():		
 					
