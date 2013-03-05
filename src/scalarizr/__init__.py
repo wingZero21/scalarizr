@@ -61,7 +61,7 @@ PID_FILE = '/var/run/scalarizr.pid'
 LOGGING_CONFIG = {
 	'version': 1,
 	'loggers': {
- 		'': {
+		'scalarizr': {
 			'level': logging.DEBUG,
 			'handlers': ['console', 'scalr', 'user_log', 'debug_log']
 		}
@@ -282,10 +282,9 @@ def _init_logging():
 	# During server import user must see all scalarizr activity in his terminal
 	# Add console handler if it doesn't configured in logging.ini	
 	if optparser and optparser.values.import_server:
-		if not any(isinstance(hdlr, logging.StreamHandler) \
-				and (hdlr.stream == sys.stdout or hdlr.stream == sys.stderr) 
-				for hdlr in logging.getLogger('').handlers):
-			hdlr.setLevel(logging.INFO)
+		for hdlr in logging.getLogger('scalarizr').handlers:
+			if isinstance(hdlr, logging.StreamHandler):
+				hdlr.setLevel(logging.INFO)
 
 
 def _init_platform():
