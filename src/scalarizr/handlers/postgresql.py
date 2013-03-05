@@ -379,14 +379,14 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 						if postgresql_data.get('snapshot_config'):
 							postgresql_data['restore'] = backup.restore(
-								type='snap_rostgresql',
+								type='snap_postgresql',
 								snapshot=postgresql_data.pop('snapshot_config'),
 								volume=postgresql_data['volume'])
 
 						elif int(postgresql_data['replication_master']) and \
 								not postgresql_data['volume'].device:
 							postgresql_data['backup'] = backup.backup(
-								type='snap_rostgresql',
+								type='snap_postgresql',
 								volume=postgresql_data['volume'])
 
 					LOG.debug("Update postgresql config with %s", postgresql_data)
