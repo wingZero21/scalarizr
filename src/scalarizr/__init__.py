@@ -80,18 +80,18 @@ propagate=0
 
 [handler_console]
 class=StreamHandler
-level=FATAL
+level=ERROR
 formatter=user
 args=(sys.stderr,)
 
 [handler_user_log]
-()=scalarizr.util.log.RotatingFileHandler
+class=scalarizr.util.log.RotatingFileHandler
 level=INFO
 formatter=user
 args=('/var/log/scalarizr.log', 'a+', 5242880, 5, 0600)
 
 [handler_debug_log]
-()=scalarizr.util.log.RotatingFileHandler
+class=scalarizr.util.log.RotatingFileHandler
 level=DEBUG
 formatter=debug
 args=('/var/log/scalarizr_debug.log', 'a+', 5242880, 5, 0600)
@@ -106,58 +106,9 @@ format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
 
 [formatter_user]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
-()=scalarizr.util.log.NoStacktraceFormatter
+class=scalarizr.util.log.NoStacktraceFormatter
 '''
 
-'''
-LOGGING_CONFIG = {
-	'version': 1,
-	'loggers': {
-		'scalarizr': {
-			'level': logging.DEBUG,
-			'handlers': ['console', 'scalr', 'user_log', 'debug_log']
-		}
- 	},
-	'handlers': {
-		'console': {
-			'class': 'logging.StreamHandler',
-			'stream': sys.stderr,
-			'formatter': 'user',
-			'level': logging.FATAL
-		},
-		'user_log': {
-			'()': 'scalarizr.util.log.RotatingFileHandler',
-			'filename': '/var/log/scalarizr.log',
-			'mode': 'a+', 
-			'maxBytes': 5242880, 
-			'backupCount': 5, 
-			'formatter': 'user',
-			'level': logging.INFO
-		},
-		'debug_log': {
-			'()': 'scalarizr.util.log.RotatingFileHandler',
-			'filename': '/var/log/scalarizr_debug.log',
-			'mode': 'a+', 
-			'maxBytes': 5242880, 
-			'backupCount': 5, 
-			'formatter': 'debug'
-		},
-		'scalr': {
-			'()': 'scalarizr.util.log.MessagingHandler',
-			'level': logging.INFO
-		}
-	},
-	'formatters': {
- 		'debug': {
- 			'format': '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
-		},
-		'user': {
-			'()': 'scalarizr.util.log.NoStacktraceFormatter',
-			'format': '%(asctime)s - %(levelname)s - %(name)s - %(message)s',
-		}
-	}
-}
-'''
 
 _running = False
 '''
