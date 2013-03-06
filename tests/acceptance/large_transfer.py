@@ -27,7 +27,7 @@ from boto import connect_s3
 import swiftclient
 
 from scalarizr.storage2.cloudfs import LargeTransfer, LOG
-from scalarizr.storage2.cloudfs import s3, gcs, swift
+from scalarizr.storage2.cloudfs import s3, gcs, swift, local
 from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 
 
@@ -99,28 +99,27 @@ def teardown(feat):
 		setattr(*args)
 
 
-class S3(s3.S3FileSystem):
-
-	def exists(self, remote_path):
-		parent = os.path.dirname(remote_path.rstrip('/'))
+class ExistsMixin(object):
+	def exists(self, url):
+		parent = os.path.dirname(url.rstrip('/'))
 		ls = self.ls(parent)
-		return remote_path in ls
+		return url in ls
 
 
-class GCS(gcs.GCSFileSystem):
-
-	def exists(self, remote_path):
-		parent = os.path.dirname(remote_path.rstrip('/'))
-		ls = self.ls(parent)
-		return remote_path in ls
+class S3(s3.S3FileSystem, ExistsMixin):
+	pass
 
 
-class Swift(swift.SwiftFileSystem):
+class GCS(gcs.GCSFileSystem, ExistsMixin):
+	pass
 
-	def exists(self, remote_path):
-		parent = os.path.dirname(remote_path.rstrip('/'))
-		ls = self.ls(parent)
-		return remote_path in ls
+
+class Swift(swift.SwiftFileSystem, ExistsMixin):
+	pass
+
+
+class Local(local.LocalFileSystem, ExistsMixin):
+	pass
 
 
 #
@@ -130,13 +129,6 @@ class Swift(swift.SwiftFileSystem):
 LOG.setLevel(logging.DEBUG)
 LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
 
-
-"""
-@before.all
-def global_setup():
-	subprocess.Popen(["strace", "-T", "-t", "-f", "-q", "-o", "strace_latest",
-					  "-p", str(os.getpid())], close_fds=True)
-"""
 
 #
 #
@@ -160,6 +152,10 @@ STORAGES = {
 		"url": "swift://vova-test",
 		"driver": Swift,
 	},
+	"local": {
+		"url": "local://abs/tmp/cloudfs",
+		"driver": Local,
+	}
 }
 
 assert STORAGE in STORAGES, "%s not in %s" % (STORAGE, STORAGES.keys())
@@ -180,7 +176,7 @@ def convert_manifest(json_manifest):
 	for chunk, md5sum, size in reversed(json_manifest["files"][0]["chunks"]):
 		parser.set("chunks", chunk, md5sum)
 
-	LOG.debug("CONVERT: %s" % parser.items("chunks"))
+	LOG.debug("CONVERT: %s", parser.items("chunks"))
 	return parser
 
 
@@ -200,7 +196,7 @@ def release_local_data():
 
 
 @before.each_scenario
-def setup(scenario):
+def setup_(scenario):
 	world.basedir = tempfile.mkdtemp()
 	world.sources = []
 	world.destination = None
@@ -216,7 +212,7 @@ def setup(scenario):
 
 
 @after.each_scenario
-def teardown(scenario):
+def teardown_(scenario):
 	shutil.rmtree(world.basedir)
 
 
@@ -253,7 +249,7 @@ def initialize_upload_variables(step):
 	world.items = {}
 
 
-@step("I have a (\d+) megabytes file (\w+)")
+@step(r"I have a (\d+) megabytes file (\w+)")
 def i_have_a_file(step, megabytes, filename):
 	world._for_size_test = int(megabytes) * 1024 * 1024
 
@@ -302,7 +298,7 @@ def all_chunks_are_uploaded(step):
 			chunk[0]))
 
 
-@step("I have a dir (\w+/?) with (\d+) megabytes file (\w+), with (\d+) megabytes file (\w+)")
+@step(r"I have a dir (\w+/?) with (\d+) megabytes file (\w+), with (\d+) megabytes file (\w+)")
 def i_have_dir_with_files(step, dirname, f1_size, f1_name, f2_size, f2_name):
 	dirname = os.path.join(world.basedir, dirname)
 	world.sources.append(dirname)
@@ -318,7 +314,7 @@ def i_have_dir_with_files(step, dirname, f1_size, f1_name, f2_size, f2_name):
 		world.items[os.path.basename(dirname)] = md5(dirname)
 
 
-@step("I have a list with (\d+) megabytes stream (\w+), with (\d+) megabytes stream (\w+)")
+@step(r"I have a list with (\d+) megabytes stream (\w+), with (\d+) megabytes stream (\w+)")
 def i_have_list_of_streams(step, s1_size, s1_name, s2_size, s2_name):
 	for name, size in [(s1_name, s1_size), (s2_name, s2_size)]:
 		abs_path = os.path.join(world.basedir, name)
@@ -384,7 +380,7 @@ def i_expect_failed_list_returned(step):
 	assert len(world.dl_result["failed"]) == 1
 
 
-@step("I have a (\d+) megabytes stream (\w+)")
+@step(r"I have a (\d+) megabytes stream (\w+)")
 def i_have_a_stream(step, megabytes, name):
 	abs_path = os.path.join(world.basedir, name)
 	stream_md5 = make_file(abs_path, megabytes)
