@@ -1,7 +1,7 @@
-Feature: MySql password reset
+Feature: Redis password reset
 
     Scenario: Password is changed
-        Given I am connected to MySql server
+        Given I am connected to Redis server
         When I call reset password
         Then password should be changed
 
