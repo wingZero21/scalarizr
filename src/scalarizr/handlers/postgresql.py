@@ -55,6 +55,12 @@ BACKUP_CHUNK_SIZE 		= 200*1024*1024
 
 POSTGRESQL_DEFAULT_PORT	= 5432
 
+__postgresql__.update({
+'port': 5432,
+'storage_dir': '/mnt/pgstorage',
+'root_user': 'scalr',
+'pgdump_chunk_size': 200 * 1024 * 1024,
+})
 		
 def get_handlers():
 	return (PostgreSqlHander(), )
@@ -338,11 +344,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 						LOG.debug('Scalr sent current preset: %s' % self.initial_preset)
 						del postgresql_data['preset']
 
-					root_user= postgresql_data[OPT_ROOT_USER] or ROOT_USER
-					postgresql_data['%s_password' % root_user] = postgresql_data.get(OPT_ROOT_PASSWORD) or cryptotool.pwgen(10)
+					postgresql_data['%s_password' % ROOT_USER] = postgresql_data.get(OPT_ROOT_PASSWORD) or cryptotool.pwgen(10)
 					del postgresql_data[OPT_ROOT_PASSWORD]
 
-					root = PgUser(root_user, self.postgresql.pg_keys_dir)
+					root = PgUser(ROOT_USER, self.postgresql.pg_keys_dir)
 					root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
 					del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
 					del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]
@@ -366,21 +371,21 @@ class PostgreSqlHander(ServiceCtlHandler):
 						# - create backup on master 1'st start
 
 						postgresql_data['compat_prior_backup_restore'] = True
-						if postgresql_data.get('volume_config'):
+						if postgresql_data.get(OPT_VOLUME_CNF):
 							postgresql_data['volume'] = storage2.volume(
-								postgresql_data.pop('volume_config'))
+								postgresql_data.pop(OPT_VOLUME_CNF))
 						else:
 							postgresql_data['volume'] = storage2.volume(
-								type=postgresql_data['snapshot_config']['type'])
+								type=postgresql_data[OPT_SNAPSHOT_CNF]['type'])
 
 						if postgresql_data['volume'].device and \
 										postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
-							postgresql_data.pop('snapshot_config', None)
+							postgresql_data.pop(OPT_SNAPSHOT_CNF, None)
 
-						if postgresql_data.get('snapshot_config'):
+						if postgresql_data.get(OPT_SNAPSHOT_CNF):
 							postgresql_data['restore'] = backup.restore(
 								type='snap_postgresql',
-								snapshot=postgresql_data.pop('snapshot_config'),
+								snapshot=postgresql_data.pop(OPT_SNAPSHOT_CNF),
 								volume=postgresql_data['volume'])
 
 						elif int(postgresql_data['replication_master']) and \
@@ -493,8 +498,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 		tx_complete = False
 
 		new_vol	= None
-		if postgresql.get('volume_config'):
-			new_vol = storage2.volume(postgresql.get('volume_config'))
+		if postgresql.get(OPT_SNAPSHOT_CNF):
+			new_vol = storage2.volume(postgresql.get(OPT_SNAPSHOT_CNF))
 
 		try:
 			self.postgresql.stop_replication()
@@ -580,7 +585,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					restore = backup.restore(
 						type='snap_postgresql',
 						volume=__postgresql__['volume'],
-						snapshot=postgresql_data['snapshot_config'])
+						snapshot=postgresql_data[OPT_SNAPSHOT_CNF])
 				# XXX: ugly
 				if __postgresql__['volume'].type == 'eph':
 					self.postgresql.service.stop('Swapping storages to reinitialize slave')
@@ -665,8 +670,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 				
 				with op.step(self._step_upload_to_cloud_storage):
 					# Creating list of full paths to archive chunks
-					if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-						parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+					if os.path.getsize(backup_path) > __postgresql__['pgdump_chunk_size']:
+						parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, __postgresql__['pgdump_chunk_size'], tmpdir)]
 					else:
 						parts = [backup_path]
 					sizes = [os.path.getsize(file) for file in parts]
