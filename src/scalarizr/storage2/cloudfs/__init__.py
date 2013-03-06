@@ -438,10 +438,8 @@ class LargeTransfer(bases.Task):
 		elif isinstance(dst, basestring) and url_re.match(dst):
 			self._up = True
 		else:
-			LOG.debug("src %s", src)
-			LOG.debug("dst %s", dst)
-
-			raise ValueError('Either src or dst should be URL-like string')
+			raise ValueError('Either src or dst should be URL-like string.' \
+				' Got src: %s and dst: %s' % (src, dst))
 		if self._up and isinstance(src, basestring) and os.path.isdir(src) and not streamer:
 			raise ValueError('Passed src is a directory. streamer expected')
 		if self._up:
