@@ -726,9 +726,9 @@ class RedisConf(BaseRedisConfig):
 	bind = property(_get_bind, _set_bind)
 	slaveof = property(_get_slaveof, _set_slaveof)
 	masterauth = property(_get_masterauth, _set_masterauth)
-	requirepass	 = property(_get_requirepass, _set_requirepass)
-	appendonly	 = property(_get_appendonly, _set_appendonly)
-	dbfilename	 = property(_get_dbfilename, _set_dbfilename)
+	requirepass = property(_get_requirepass, _set_requirepass)
+	appendonly = property(_get_appendonly, _set_appendonly)
+	dbfilename = property(_get_dbfilename, _set_dbfilename)
 	dbfilename_default = DB_FILENAME
 	appendfilename_default = AOF_FILENAME
 	port_default = DEFAULT_PORT

@@ -267,7 +267,9 @@ class RedisAPI(object):
 			new_password = pwgen(20)
 		redis_conf = redis_service.RedisConf.find(port=port)
 		redis_conf.requirepass = new_password
-		redisd = redis_service.Redisd(os.path.join(redis_conf.dir, redis_conf.config_name), port)
-		redisd.reload()
+		if redis_conf.slaveof:
+			redis_conf.masterauth = new_password
+		redis_wrapper = redis_service.Redis(port=port)
+		redis_wrapper.service.reload()
 		__redis__['master_password'] = new_password
 		return new_password
