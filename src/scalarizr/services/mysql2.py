@@ -139,7 +139,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		self._re_lsn = re.compile(r"xtrabackup: The latest check point " \
 							"\(for incremental\): '(\d+)'")
 		self._re_lsn_51 = re.compile(r"xtrabackup: The latest check point "
-							"\(for incremental\): '\d+:(\d+)'")
+							"\(for incremental\): '(\d+:\d+)'")
 		self._re_binlog = re.compile(r"innobackupex: MySQL binlog position: " \
 							"filename '([^']+)', position (\d+)")
 		self._re_slave_binlog = re.compile(r"innobackupex: MySQL slave binlog position: " \
@@ -288,8 +288,8 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 		if bak.backup_type == 'incremental':
 			incrementals = [bak]
 			while bak.prev_cloudfs_source:
-				mnf = cloudfs.Manifest(cloudfs_path=bak.prev_cloudfs_source)
-				bak = backup.restore(**mnf.meta)
+				tmpmnf = cloudfs.Manifest(cloudfs_path=bak.prev_cloudfs_source)
+				bak = backup.restore(**tmpmnf.meta)
 				if bak.backup_type == 'incremental':
 					incrementals.insert(0, bak)
 		self.incrementals = incrementals
@@ -353,12 +353,11 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 				password=__mysql__['root_password'])
 		coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
 
+		self._mysql_init.start()
 		if int(__mysql__['replication_master']):
 			LOG.info("Master will reset it's binary logs, "
 					"so updating binary log position in backup manifest")
-			self._mysql_init.start()
-			self._mysql_init.stop()
-			log_file, log_pos = mysqlbinlog_head()
+			log_file, log_pos = self._client().master_status()
 			meta = mnf.meta
 			meta.update({'log_file': log_file, 'log_pos': log_pos})
 			mnf.meta = meta
@@ -395,6 +394,7 @@ class MySQLDumpBackup(backup.Backup):
 		self._run_lock = threading.Lock()
 
 	def _run(self):
+		LOG.debug("Running MySQLDumpBackup")
 		client = mysql_svc.MySQLClient(
 					__mysql__['root_user'],
 					__mysql__['root_password'])
@@ -403,18 +403,14 @@ class MySQLDumpBackup(backup.Backup):
 		with self._run_lock:
 			if self._killed:
 				raise Error("Canceled")
-			self.transfer = cloudfs.LargeTransfer(self._gen_src, self._gen_dst,
+			self.transfer = cloudfs.LargeTransfer(self._gen_src, self._dst,
 									streamer=None, chunk_size=self.chunk_size)
 		result = self.transfer.run()
 		if self._killed:
 			raise Error("Canceled")
 
-		result = self.transfer_result_to_backup_result(result)
-		return result #?
-		"""
-		return backup.restore(type='mysqldump',
-						files=self.transfer.result()['completed'])
-		"""
+		result = transfer_result_to_backup_result(result)
+		return result
 
 	def _gen_src(self):
 		if self.file_per_database:
@@ -422,18 +418,16 @@ class MySQLDumpBackup(backup.Backup):
 				self._current_db = db_name
 				params = __mysql__['mysqldump_options'].split() + [db_name]
 				_mysqldump.args(*params)
-				yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
+				stream = _mysqldump.popen(stdin=None, bufsize=-1).stdout
+				yield cloudfs.NamedStream(stream, db_name)
 		else:
 			params = __mysql__['mysqldump_options'].split() + ['--all-databases']
 			_mysqldump.args(*params)
 			yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
 
-	def _gen_dst(self):
-		while True:
-			if self.file_per_database:
-				yield os.path.join(self.cloudfs_dir, self._current_db)
-			else:
-				yield os.path.join(self.cloudfs_dir, 'mysql')
+	@property
+	def _dst(self):
+		return os.path.join(self.cloudfs_dir, 'mysql')
 
 	def _kill(self):
 		LOG.debug("Killing MySQLDumpBackup")

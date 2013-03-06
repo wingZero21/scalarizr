@@ -312,7 +312,7 @@ class MysqlHandler(DBMSRHandler):
 		self._step_change_replication_master = 'Change replication Master'
 		self._step_innodb_recovery = 'InnoDB recovery'
 		self._step_collect_hostup_data = 'Collect HostUp data'
-
+		self._step_copy_debian_cnf = 'Copy debian.cnf'
 		self._current_data_bundle = None
 		self._current_backup = None
 		self.on_reload()	
@@ -325,6 +325,7 @@ class MysqlHandler(DBMSRHandler):
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
 				or  message.name == DbMsrMessages.DBMSR_CANCEL_DATA_BUNDLE
 				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
+				or 	message.name == DbMsrMessages.DBMSR_CANCEL_BACKUP
 				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
 				or  message.name == Messages.BEFORE_HOST_TERMINATE
 				or  message.name == MysqlMessages.CREATE_PMA_USER
@@ -869,10 +870,9 @@ class MysqlHandler(DBMSRHandler):
 					vol = storage2.volume(**__mysql__['volume'])
 					vol.destroy(remove_disks=True)
 					LOG.debug('Storage destoyed')
+				else:
+					restore.run()
 
-				restore.run()
-
-				restore.run()
 				log_file = restore.log_file
 				log_pos = restore.log_pos				
 				
@@ -1024,6 +1024,12 @@ class MysqlHandler(DBMSRHandler):
 				if not os.listdir(__mysql__['data_dir']):
 					linux.system(['mysql_install_db'])
 					coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+				if 'restore' in __mysql__ and \
+						__mysql__['restore'].type == 'xtrabackup':
+					# XXX: when restoring data bundle on ephemeral storage, data dir should by empty 
+					# but move_mysqldir_to call required to set several options in my.cnf
+					coreutils.clean_dir(__mysql__['data_dir'])
+
 				self._change_selinux_ctx()
 
 		
@@ -1038,32 +1044,24 @@ class MysqlHandler(DBMSRHandler):
 		
 		# If It's 1st init of mysql master storage
 		if not storage_valid:
-			with op.step(self._step_create_users):			
-				if os.path.exists(__mysql__['debian.cnf']):
+			if os.path.exists(__mysql__['debian.cnf']):
+				with op.step(self._step_copy_debian_cnf):
 					LOG.debug("Copying debian.cnf file to mysql storage")
 					shutil.copy(__mysql__['debian.cnf'], __mysql__['storage_dir'])	
-						
-				# Add system users	
-				self.create_users(**user_creds)
-			
+
 		# If volume has mysql storage directory structure (N-th init)
 		else:
 			with op.step(self._step_innodb_recovery):
 				self._copy_debian_cnf_back()
-				if 'restore' in __mysql__:
-					if __mysql__['restore'].type == 'xtrabackup':
-						# xtrabackup doesn't contains binary logs
-						# after restoring backup binary logs will be reseted
-						self.mysql.service.stop()
-						self.mysql.service.start()
-						log_file, log_pos = mysql2_svc.mysqlbinlog_head()
-						__mysql__['restore'].log_file = log_file
-						__mysql__['restore'].log_pos = log_pos
-					else:					
-						self._innodb_recovery()	
+				if 'restore' in __mysql__ and  __mysql__['restore'].type != 'xtrabackup':			
+					self._innodb_recovery()	
 					self.mysql.service.start()
 
-					
+		with op.step(self._step_create_users):
+			# Check and create mysql system users
+			self.create_users(**user_creds)
+
+
 		with op.step(self._step_create_data_bundle):
 			if 'backup' in __mysql__:				
 				__mysql__['restore'] = __mysql__['backup'].run()

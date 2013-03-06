@@ -69,30 +69,22 @@ class QueryEnvService(object):
 			"X-Server-Id": self.server_id
 		}
 		response = None
-		max_attempts = 5
-		for i in range(1, max_attempts + 1):
+		wait_seconds = 30
+		msg_wait = 'Waiting %d seconds before the next try' % wait_seconds
+		while True:
 			try:
-				try:
-					self._logger.debug("QueryEnv request: %s", post_data)
-					opener = urllib2.build_opener(urltool.HTTPRedirectHandler)
-					req = urllib2.Request(url, post_data, headers)
-					response = opener.open(req)
-					break
-				except urllib2.URLError, e:
-					if isinstance(e, urllib2.HTTPError):
-						resp_body = e.read() if e.fp is not None else ""
-						raise QueryEnvError, "Request failed. %s. URL: %s. Service message: %s" % (e, self.url, resp_body), sys.exc_traceback
-					else:
-						raise QueryEnvError, "Cannot connect to QueryEnv server on %s. %s" % (url, str(e)), sys.exc_traceback
-			except:
-				if 'not supported' in str(sys.exc_info()[1]):
-					raise
-				self._logger.debug('QueryEnv failed. %s', sys.exc_info()[1])
-				if i < max_attempts:
-					self._logger.debug('Waiting %d seconds before the next try', 10)
-					time.sleep(10)
+				self._logger.debug("QueryEnv request: %s", post_data)
+				opener = urllib2.build_opener(urltool.HTTPRedirectHandler)
+				req = urllib2.Request(url, post_data, headers)
+				response = opener.open(req)
+				break
+			except IOError, e:
+				if isinstance(e, urllib2.HTTPError):
+					resp_body = e.read() if e.fp is not None else ""
+					self._logger.error('QueryEnv failed. HTTP %s. %s. %s', e.code, resp_body or e.msg, msg_wait)
 				else:
-					raise
+					self._logger.error('QueryEnv failed. %s. %s', sys.exc_info()[1], msg_wait)
+				time.sleep(wait_seconds)
 
 		resp_body = response.read()
 		self._logger.debug("QueryEnv response: %s", resp_body)

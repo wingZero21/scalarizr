@@ -16,7 +16,7 @@ except ImportError:
 
 from scalarizr.bus import bus
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.util import initdv2
+from scalarizr.util import initdv2, PopenError
 import shutil
 
 
@@ -81,7 +81,8 @@ class LazyInitScript(object):
 			self.reload_queue.append(reason)
 
 	def configtest(self, path=None):
-		self._script.configtest(path)
+		if hasattr(self._script, 'configtest'):
+			self._script.configtest(path)
 
 
 	@property
@@ -290,6 +291,7 @@ class PresetProvider(object):
 						data[k] = v
 
 				obj = self.config_mapping[config_name]
+				LOG.debug("Applying data: %s ; Deleting odds: %s" % (data, odds))
 				obj.apply_dict(data)
 				obj.delete_options(odds)
 

@@ -266,6 +266,7 @@ class Handler(object):
 				elif name == 'apache' and Version('2.0') <= version < Version('2.3'):
 					handlers.append(config.BuiltinBehaviours.APP)
 				elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
+					handlers.append(config.BuiltinBehaviours.MYSQL)
 					if 'Percona' in str_ver:
 						handlers.append(config.BuiltinBehaviours.PERCONA)
 					else:
@@ -667,6 +668,7 @@ class DbMsrMessages:
 	'''
 	
 	DBMSR_CREATE_BACKUP = "DbMsr_CreateBackup"
+	DBMSR_CANCEL_BACKUP = "DbMsr_CancelBackup"
 	
 	DBMSR_CREATE_BACKUP_RESULT = "DbMsr_CreateBackupResult"
 	'''

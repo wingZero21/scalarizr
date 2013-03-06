@@ -454,6 +454,9 @@ class MySQLConf(BaseConfig):
 			self.data.options('mysqld')
 		except metaconf.NoPathError:
 			self.data.add('mysqld')
+		finally:
+			# WHY? 
+			self.data = None
 		
 	
 	def _get_datadir(self):
@@ -699,6 +702,11 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 				LOG.debug('waiting for mysql process')
 				wait_until(lambda: MYSQLD_PATH in system2(('ps', '-G', DEFAULT_OWNER, '-o', 'command', '--no-headers'))[0]
 							, timeout=10, sleep=1)
+				LOG.debug('waiting for debian-start finish')
+				out = system2('ps axo pid,command --noheaders | grep /etc/mysql/debian-start', shell=True)[0].strip()
+				if out:
+					pid = out.split('\n')[0].split(' ')[0]
+					wait_until(lambda: not os.path.exists('/proc/%s' % pid), sleep=1)
 			except:
 				self._start_stop_reload('restart')
 				return True

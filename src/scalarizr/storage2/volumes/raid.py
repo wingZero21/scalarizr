@@ -72,18 +72,31 @@ class RaidVolume(base.Volume):
 						'snapshot' in self.snap['disks'][0]
 		if self.snap:
 			disks = []
+			snaps = []
 			try:
-				# @fixme: pv should be based on a disk config with snapshot taste
 				# @todo: create disks concurrently
 				for disk_snap in self.snap['disks']:
 					if self._v1_compat:
 						disk_snap = disk_snap['snapshot']
 					snap = storage2.snapshot(disk_snap)
-					disks.append(snap.restore())
+					snaps.append(snap)
+
+				if self.disks:
+					if len(self.disks) != len(snaps):
+						raise storage2.StorageError('Volume disks count is not equal to '
+													'snapshot disks count')
+					self.disks = map(storage2.volume, self.disks)
+
+				# Mixing snapshots to self.volumes (if exist) or empty volumes
+				disks = self.disks or [storage2.volume(type=s['type']) for s in snaps]
+
+				for disk, snap in zip(disks, snaps):
+					disk.snap = snap
+
 			except:
-				for disk in disks:
-					disk.destroy()
-				raise
+				with util.capture_exception(logger=LOG):
+					for disk in disks:
+						disk.destroy()
 
 			self.disks = disks
 
