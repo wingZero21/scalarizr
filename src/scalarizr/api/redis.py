@@ -1,4 +1,3 @@
-from __future__ import with_statement
 '''
 Created on Aug 1, 2012
 
@@ -19,6 +18,8 @@ from scalarizr.linux import iptables
 from scalarizr.util import system2, PopenError
 from scalarizr.services import redis as redis_service
 from scalarizr.handlers import redis as redis_handler
+from scalarizr.services.redis import __redis__
+from scalarizr.util.cryptotool import pwgen
 
 
 BEHAVIOUR = CNF_SECTION = redis_handler.CNF_SECTION
@@ -209,7 +210,7 @@ class RedisAPI(object):
 				out = system2(args, silent=True)[0].split('\n')
 				try:
 					p = [x for x in out if x and BIN_PATH in x and redis_service.DEFAULT_CONF_PATH in x]
-				except PopenError,e:
+				except PopenError:
 					p = []
 				if p:
 					conf_path = redis_service.DEFAULT_CONF_PATH
@@ -259,3 +260,16 @@ class RedisAPI(object):
 		LOG.debug('primary IP: %s' % host)
 		return host
 
+	@rpc.service_method
+	def reset_password(self, port=DEFAULT_PORT, new_password=None):
+		""" Reset auth for Redis process on port `port`. Return new password """
+		if not new_password:
+			new_password = pwgen(20)
+		redis_conf = redis_service.RedisConf.find(port=port)
+		redis_conf.requirepass = new_password
+		if redis_conf.slaveof:
+			redis_conf.masterauth = new_password
+		redis_wrapper = redis_service.Redis(port=port)
+		redis_wrapper.service.reload()
+		__redis__['master_password'] = new_password
+		return new_password

@@ -573,8 +573,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 				self.redis_instances.init_as_masters(mpoint=self._storage_path)
 
 				msg_data = dict()
-				msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
-				                 OPT_MASTER_PASSWORD			:	password})
+				msg_data.update({OPT_REPLICATION_MASTER: '1',
+				                 OPT_MASTER_PASSWORD: password})
 			"""
 			with op.step(self._step_create_data_bundle):
 				# Create snapshot
