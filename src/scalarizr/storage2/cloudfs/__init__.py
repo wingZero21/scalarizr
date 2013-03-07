@@ -410,20 +410,7 @@ class LargeTransfer(bases.Task):
 	2. <chunk downloader> | funzip | tar -x -C /mnt/dbbackup
 	'''
 
-	# TODO: bubble exceptions
-
-	# TODO: unlimited disk case: download all before unpacking
-
-	# TODO: benchmarks bzip against pigz
-	# http://tukaani.org/lzma/benchmarks.html
-
-	# TODO: subprocess hang problem
-	# python 2.7.3 @ ubuntu 12.04 works
-	# python 2.7.2 @ ubuntu 11.10 fail
-	# python 2.6.7 @ ubuntu 11.10 works
-	# python 2.6.5 @ ubuntu 10.04 works
-	# solutions: waiter thread that would kill everything on hang or
-	# separate thread for subprocess opening? or just document it :)
+	# python 2.7.2 @ ubuntu 11.10 : subprocess hangs sometimes
 
 	# NOTE: use directory dst for uploading.
 	pigz_bin = '/usr/bin/pigz'
@@ -451,7 +438,8 @@ class LargeTransfer(bases.Task):
 		elif isinstance(dst, basestring) and url_re.match(dst):
 			self._up = True
 		else:
-			raise ValueError('Either src or dst should be URL-like string')
+			raise ValueError('Either src or dst should be URL-like string.' \
+				' Got src: %s and dst: %s' % (src, dst))
 		if self._up and isinstance(src, basestring) and os.path.isdir(src) and not streamer:
 			raise ValueError('Passed src is a directory. streamer expected')
 		if self._up:
