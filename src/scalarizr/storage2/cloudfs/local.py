@@ -19,7 +19,7 @@ def reraise_DriverError(f):
 			raise cloudfs.DriverError, exc[1], exc[2]
 	return wrapper
 
-
+#
 class LocalFileSystem(object):
 	"""
 	local://abs/one/two -> /one/two
