@@ -24,7 +24,7 @@ from scalarizr import rpc
 from scalarizr.bus import bus
 from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
-from scalarizr.util import system, kill_childs
+from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
 
 LOG = logging.getLogger(__name__)
@@ -192,8 +192,7 @@ class SystemAPI(object):
             for el in pythons:
                 res.append(el)
         #check full correct version
-        LOG.debug('variants of python bin paths: `%s`. They`ll be \
-                checking now.', list(set(res)))
+        LOG.debug('variants of python bin paths: `%s`. They`ll be checking now.', list(set(res)))
         result = []
         for pypath in list(set(res)):
             (out, err, rc) = system2((pypath, '-V'), raise_exc=False)
@@ -202,7 +201,7 @@ class SystemAPI(object):
             else:
                 LOG.debug('Can`t execute `%s -V`, details: %s',\
                         pypath, err or out)
-        return map(lambda x: x.lower().replace('python', '').strip(), list(set(result)))
+        return map(lambda x: x.lower().replace('python', '').strip(), sorted(list(set(result))))
 
 
     @rpc.service_method
@@ -393,7 +392,7 @@ class SystemAPI(object):
     @rpc.service_method
     def scaling_metrics(self):
         '''
-        Return Scaling metrics
+        @return list of scaling metrics
         @rtype: list
         
         Sample: [{
@@ -409,13 +408,11 @@ class SystemAPI(object):
         }]
         '''
 
-        ret = []
+        retval = []
 
         def get_execute(metric):
             if not os.access(metric.path, os.X_OK):
                 raise BaseException("File is not executable: '%s'" % metric.path)
-
-            logging.debug('Executing %s' % metric.path)
 
             EXEC_TIMEOUT = 3
 
@@ -455,7 +452,6 @@ class SystemAPI(object):
         def update_metric(metric):
             try:
                 # Retrieve metric value
-                LOG.debug('Updating metric %s', metric)
                 if metric.retrieve_method == ScalingMetric.RetriveMethod.EXECUTE:
                     value = get_execute(metric)
                 elif metric.retrieve_method == ScalingMetric.RetriveMethod.READ:
@@ -468,25 +464,29 @@ class SystemAPI(object):
                     value = float(value)
                 except ValueError, e:
                     raise ValueError("Cannot convert value '%s' to float" % value)
+                error = ''
                     
             except (BaseException, Exception), e:
                 value = 0.0
                 error = str(e)[0:255]
 
-            ret.append({'id':metric.id, 'name':metric.name, 'value':value, 'error':error})
+            retval.append({'id':metric.id, 'name':metric.name, 'value':value, 'error':error})
 
         # Obtain scaling metrics from Scalr.
         CACHE_TIME = 600
         now = time.time()
+
+        # use cach if possible
         if self._SCALING_METRICS is None or now - self._SCALING_METRICS_TIMESTAMP > CACHE_TIME:
-            LOG.debug('Obtain scaling metrics from QueryEnv')
             self._SCALING_METRICS = bus.queryenv_service.get_scaling_metrics()
             self._SCALING_METRICS_TIMESTAMP = now
-        else:
-            LOG.debug('Use cached scaling metrics. Expires: %s', 
-                    time.strftime('"%Y-%m-%d %H:%M:%S', time.localtime(self._SCALING_METRICS_TIMESTAMP + CACHE_TIME)))
      
-        workers = [Thread(target=update_metric, args=(metric)).start() for metric in self._SCALING_METRICS]
+        workers = [Thread(target=update_metric, args=(metric,)) for metric in self._SCALING_METRICS]
+
+        for worker in workers:
+            worker.start()
             
         for worker in workers:
             worker.join()
+
+        return retval
