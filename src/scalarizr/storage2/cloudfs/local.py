@@ -1,5 +1,4 @@
 import logging
-import urlparse
 import os
 import sys
 import shutil
@@ -10,20 +9,22 @@ from scalarizr.storage2 import cloudfs
 LOG = logging.getLogger(__name__)
 
 
-def reraise_DriverError(f):
-	def wrapper(*args, **kwargs):
-		try:
-			return f(*args, **kwargs)
-		except:
-			exc = sys.exc_info()
-			raise cloudfs.DriverError, exc[1], exc[2]
-	return wrapper
+def raises(exc_class):
+	def decorator(f):
+		def wrapper(*args, **kwargs):
+			try:
+				return f(*args, **kwargs)
+			except:
+				exc = sys.exc_info()
+				raise exc_class, exc[1], exc[2]
+		return wrapper
+	return decorator
 
-#
+
 class LocalFileSystem(object):
 	"""
-	local://abs/one/two -> /one/two
-	local://rel/one/two -> one/two
+	file:///one/two -> /one/two
+	file://one/two -> one/two
 
 	ls() and delete() don't validate input, so there's a potential danger
 	when using them: ls() tries to list all files recursively - that can take
@@ -31,27 +32,20 @@ class LocalFileSystem(object):
 	since tests mostly run as root.
 	"""
 
-	schema = "local"
-	buckets = ("abs", "rel")
+	schema = "file"
 
 	def _parse_url(self, url):
-		o = urlparse.urlparse(url)
-		if o.scheme != self.schema:
-			raise cloudfs.DriverError('Wrong schema: %s' % o.scheme)
-		if o.netloc == "abs":
-			path = o.path
-		elif o.netloc == "rel":
-			path = o.path[1:]
-		else:
-			raise cloudfs.DriverError('Invalid bucket: %s not in %s' % (
-				o.netloc, self.buckets))
+		try:
+			schema, path = url.split("://")
+		except ValueError:
+			raise ValueError("Bad url")
+		assert schema == self.schema, "Wrong schema %s" % schema
 		return path
 
 	def _format_path(self, path):
-		bucket, path = ("abs", path[1:]) if path.startswith("/") else ("rel", path)
-		return '%s://%s/%s' % (self.schema, bucket, path)
+		return "%s://%s" % (self.schema, path)
 
-	@reraise_DriverError
+	@raises(cloudfs.DriverError)
 	def ls(self, url):
 		path = self._parse_url(url)
 
@@ -62,7 +56,7 @@ class LocalFileSystem(object):
 			 		   filenames)
 		return res
 
-	@reraise_DriverError
+	@raises(cloudfs.DriverError)
 	def put(self, src, url, report_to=None):
 		path = self._parse_url(url)
 
@@ -80,7 +74,7 @@ class LocalFileSystem(object):
 			res = os.path.join(res, os.path.basename(src))
 		return self._format_path(res)
 
-	@reraise_DriverError
+	@raises(cloudfs.DriverError)
 	def get(self, url, dst, report_to=None):
 		path = self._parse_url(url)
 		dst = os.path.join(dst, os.path.basename(path))
@@ -89,7 +83,7 @@ class LocalFileSystem(object):
 		shutil.copy(path, dst)
 		return dst
 
-	@reraise_DriverError
+	@raises(cloudfs.DriverError)
 	def delete(self, url):
 		path = self._parse_url(url)
 
@@ -97,4 +91,4 @@ class LocalFileSystem(object):
 		return os.remove(path)
 
 
-cloudfs.cloudfs_types["local"] = LocalFileSystem
+cloudfs.cloudfs_types["file"] = LocalFileSystem

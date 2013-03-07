@@ -43,7 +43,7 @@ _RESTORE = []
 
 @before.each_feature
 @this_feature_only
-def setup(feat):
+def setup_feature(feat):
 	# prevent ini parser from lowercasing params
 	_RESTORE.append((ConfigParser, "optionxform",
 					 ConfigParser.optionxform))
@@ -94,7 +94,7 @@ def setup(feat):
 
 @after.each_feature
 @this_feature_only
-def teardown(feat):
+def teardown_feature(feat):
 	for args in _RESTORE:
 		setattr(*args)
 
@@ -153,7 +153,7 @@ STORAGES = {
 		"driver": Swift,
 	},
 	"local": {
-		"url": "local://abs/tmp/cloudfs",
+		"url": "file:///tmp/cloudfs",
 		"driver": Local,
 	}
 }
@@ -196,7 +196,7 @@ def release_local_data():
 
 
 @before.each_scenario
-def setup_(scenario):
+def setup_scenario(scenario):
 	world.basedir = tempfile.mkdtemp()
 	world.sources = []
 	world.destination = None
@@ -212,7 +212,7 @@ def setup_(scenario):
 
 
 @after.each_scenario
-def teardown_(scenario):
+def teardown_scenario(scenario):
 	shutil.rmtree(world.basedir)
 
 
