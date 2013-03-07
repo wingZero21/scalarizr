@@ -253,7 +253,6 @@ class TestSysInfoAPI(unittest.TestCase):
         # read ok
         with open('/tmp/test_custom_scaling_metric_read', 'w+') as fp:
             fp.writelines('555')
-        self.info._SCALING_METRICS_TIMESTAMP = 0
         m.path = '/tmp/test_custom_scaling_metric_read'
         m.retrieve_method = 'read'
         system.bus.queryenv_service.get_scaling_metrics.return_value = [m]
@@ -261,7 +260,6 @@ class TestSysInfoAPI(unittest.TestCase):
         os.remove('/tmp/test_custom_scaling_metric_read')
 
         # file dosn't exist 
-        self.info._SCALING_METRICS_TIMESTAMP = 0
         m.path = '/tmp/this_file_dosnt_exist'
         m.retrieve_method = 'read'
         system.bus.queryenv_service.get_scaling_metrics.return_value = [m]
@@ -271,7 +269,6 @@ class TestSysInfoAPI(unittest.TestCase):
         with open('/tmp/test_custom_scaling_metric_execute.sh', 'w+') as fp:
             fp.writelines('#!/bin/sh\necho "555"\n')
             os.chmod('/tmp/test_custom_scaling_metric_execute.sh', stat.S_IEXEC)
-        self.info._SCALING_METRICS_TIMESTAMP = 0
         m.path = '/tmp/test_custom_scaling_metric_execute.sh'
         m.retrieve_method = 'execute'
         system.bus.queryenv_service.get_scaling_metrics.return_value = [m]
@@ -282,7 +279,6 @@ class TestSysInfoAPI(unittest.TestCase):
         with open('/tmp/test_custom_scaling_metric_execute.sh', 'w+') as fp:
             fp.writelines('#!/bin/sh\nreturn 1\n')
             os.chmod('/tmp/test_custom_scaling_metric_execute.sh', stat.S_IEXEC)
-        self.info._SCALING_METRICS_TIMESTAMP = 0
         m.path = '/tmp/test_custom_scaling_metric_execute.sh'
         m.retrieve_method = 'execute'
         system.bus.queryenv_service.get_scaling_metrics.return_value = [m]
@@ -292,7 +288,6 @@ class TestSysInfoAPI(unittest.TestCase):
         # multi metrics ok
         with open('/tmp/test_custom_scaling_metric_read', 'w+') as fp:
             fp.writelines('555')
-        self.info._SCALING_METRICS_TIMESTAMP = 0
         m.path = '/tmp/test_custom_scaling_metric_read'
         m.retrieve_method = 'read'
         system.bus.queryenv_service.get_scaling_metrics.return_value = [m for _ in range(27)]

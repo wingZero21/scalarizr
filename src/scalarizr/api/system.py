@@ -38,7 +38,6 @@ class SystemAPI(object):
     _CPUINFO = '/proc/cpuinfo'
     _NETSTATS = '/proc/net/dev'
     _SCALING_METRICS = None
-    _SCALING_METRICS_TIMESTEMP = 0
 
     def _readlines(self, path):
         with open(path, "r") as fp:
@@ -473,13 +472,7 @@ class SystemAPI(object):
             retval.append({'id':metric.id, 'name':metric.name, 'value':value, 'error':error})
 
         # Obtain scaling metrics from Scalr.
-        CACHE_TIME = 600
-        now = time.time()
-
-        # use cach if possible
-        if self._SCALING_METRICS is None or now - self._SCALING_METRICS_TIMESTAMP > CACHE_TIME:
-            self._SCALING_METRICS = bus.queryenv_service.get_scaling_metrics()
-            self._SCALING_METRICS_TIMESTAMP = now
+        self._SCALING_METRICS = bus.queryenv_service.get_scaling_metrics()
      
         max_workers = 10
         for i in range(len(self._SCALING_METRICS) / max_workers + 1):
