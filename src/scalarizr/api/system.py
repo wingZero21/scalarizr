@@ -481,12 +481,15 @@ class SystemAPI(object):
             self._SCALING_METRICS = bus.queryenv_service.get_scaling_metrics()
             self._SCALING_METRICS_TIMESTAMP = now
      
-        workers = [Thread(target=update_metric, args=(metric,)) for metric in self._SCALING_METRICS]
-
-        for worker in workers:
-            worker.start()
-            
-        for worker in workers:
-            worker.join()
+        max_workers = 10
+        for i in range(len(self._SCALING_METRICS) / max_workers + 1):
+            workers = [Thread(target=update_metric, args=(metric,))
+                       for metric in self._SCALING_METRICS[i*max_workers:(i+1)*max_workers]]
+     
+            for worker in workers:
+                worker.start()
+                
+            for worker in workers:
+                worker.join()
 
         return retval
