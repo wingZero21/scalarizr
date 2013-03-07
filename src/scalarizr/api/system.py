@@ -449,22 +449,18 @@ class SystemAPI(object):
             return value
 
         def update_metric(metric):
+            error = ''
             try:
                 # Retrieve metric value
                 if metric.retrieve_method == ScalingMetric.RetriveMethod.EXECUTE:
-                    value = get_execute(metric)
+                    value = float(get_execute(metric))
                 elif metric.retrieve_method == ScalingMetric.RetriveMethod.READ:
-                    value = get_read(metric)
+                    value = float(get_read(metric))
                 else:
                     raise BaseException('Unknown retrieve method %s' % metric.retrieve_method)
-                
-                # Convert value to float
-                try:
-                    value = float(value)
-                except ValueError, e:
-                    raise ValueError("Cannot convert value '%s' to float" % value)
-                error = ''
-                    
+            except ValueError, e:
+                value = 0.0
+                error = "Cannot convert value '%s' to float" % value
             except (BaseException, Exception), e:
                 value = 0.0
                 error = str(e)[0:255]
