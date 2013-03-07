@@ -458,9 +458,6 @@ class SystemAPI(object):
                     value = float(get_read(metric))
                 else:
                     raise BaseException('Unknown retrieve method %s' % metric.retrieve_method)
-            except ValueError, e:
-                value = 0.0
-                error = "Cannot convert value '%s' to float" % value
             except (BaseException, Exception), e:
                 value = 0.0
                 error = str(e)[0:255]
