@@ -226,7 +226,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		for line in stderr.splitlines():
 			m = self._re_lsn.search(line) or self._re_lsn_51.search(line)
 			if m:
-				to_lsn = int(m.group(1))
+				to_lsn = m.group(1)
 				continue
 			m = re_binlog.search(line)
 			if m:
