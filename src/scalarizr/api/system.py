@@ -13,12 +13,11 @@ import os
 import logging
 import sys
 import glob
-import subprocess
 import time
 import signal
+import subprocess as subps
 
-from threading import Thread
-from subprocess import Popen, PIPE
+from multiprocessing import pool
 
 from scalarizr import rpc
 from scalarizr.bus import bus
@@ -30,6 +29,68 @@ from scalarizr.queryenv import ScalingMetric
 LOG = logging.getLogger(__name__)
 
 
+class _ScalingMetricStrategy(object):
+    """Strategy class for custom scaling metric"""
+
+    @staticmethod
+    def _get_execute(metric):
+        if not os.access(metric.path, os.X_OK):
+            raise BaseException("File is not executable: '%s'" % metric.path)
+  
+        exec_timeout = 3
+  
+        proc = subps.Popen(metric.path, stdout=subps.PIPE, stderr=subps.PIPE, close_fds=True)
+ 
+        timeout_time = time.time() + exec_timeout
+        while time.time() < timeout_time:
+            if proc.poll() is None:
+                time.sleep(0.2)
+            else:
+                break
+        else:
+            kill_childs(proc.pid)
+            if hasattr(proc, 'terminate'):
+                # python >= 2.6
+                proc.terminate()
+            else:
+                os.kill(proc.pid, signal.SIGTERM)
+            raise BaseException('Timeouted')
+                                
+        stdout, stderr = proc.communicate()
+        
+        if proc.returncode > 0:
+            raise BaseException(stderr if stderr else 'exitcode: %d' % proc.returncode)
+        
+        return stdout
+  
+  
+    @staticmethod
+    def _get_read(metric):
+        try:
+            with open(metric.path, 'r') as fp:
+                value = fp.readline()
+        except IOError:
+            raise BaseException("File is not readable: '%s'" % metric.path)
+  
+        return value
+
+    @staticmethod
+    def get(metric):
+        error = ''
+        try:
+            if metric.retrieve_method == ScalingMetric.RetriveMethod.EXECUTE:
+                value = float(_ScalingMetricStrategy._get_execute(metric))
+            elif metric.retrieve_method == ScalingMetric.RetriveMethod.READ:
+                value = float(_ScalingMetricStrategy._get_read(metric))
+            else:
+                raise BaseException('Unknown retrieve method %s' % metric.retrieve_method)
+        except (BaseException, Exception), e:
+            value = 0.0
+            error = str(e)[0:255]
+
+        return {'id':metric.id, 'name':metric.name, 'value':value, 'error':error}
+
+
 class SystemAPI(object):
 
     _HOSTNAME = '/etc/hostname'
@@ -37,7 +98,6 @@ class SystemAPI(object):
     _PATH = ['/usr/bin/', '/usr/local/bin/']
     _CPUINFO = '/proc/cpuinfo'
     _NETSTATS = '/proc/net/dev'
-    _SCALING_METRICS = None
 
     def _readlines(self, path):
         with open(path, "r") as fp:
@@ -64,8 +124,8 @@ class SystemAPI(object):
         script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
         LOG.debug("Executing %s" % script_path)
         if os.access(script_path, os.X_OK):
-            return subprocess.Popen(script_path, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, close_fds=True).communicate()[0].strip()
+            return subps.Popen(script_path, stdout=subps.PIPE,
+                stderr=subps.PIPE, close_fds=True).communicate()[0].strip()
         else:
             raise Exception('File not exists: %s' % script_path)
 
@@ -407,75 +467,15 @@ class SystemAPI(object):
         }]
         '''
 
-        retval = []
-
-        def get_execute(metric):
-            if not os.access(metric.path, os.X_OK):
-                raise BaseException("File is not executable: '%s'" % metric.path)
-
-            EXEC_TIMEOUT = 3
-
-            proc = Popen(metric.path, stdout=PIPE, stderr=PIPE, close_fds=True)
-
-            timeout_time = time.time() + EXEC_TIMEOUT
-            while time.time() < timeout_time:
-                if proc.poll() is None:
-                    time.sleep(0.2)
-                else:
-                    break
-            else:
-                kill_childs(proc.pid)
-                if hasattr(proc, 'terminate'):
-                    # python >= 2.6
-                    proc.terminate()
-                else:
-                    os.kill(proc.pid, signal.SIGTERM)
-                raise BaseException('Timeouted')
-                                    
-            stdout, stderr = proc.communicate()
-            
-            if proc.returncode > 0:
-                raise BaseException(stderr if stderr else 'exitcode: %d' % proc.returncode)
-            
-            return stdout
-
-        def get_read(metric):
-            try:
-                with open(metric.path, 'r') as fp:
-                    value = fp.readline()
-            except IOError:
-                raise BaseException("File is not readable: '%s'" % metric.path)
-
-            return value
-
-        def update_metric(metric):
-            error = ''
-            try:
-                # Retrieve metric value
-                if metric.retrieve_method == ScalingMetric.RetriveMethod.EXECUTE:
-                    value = float(get_execute(metric))
-                elif metric.retrieve_method == ScalingMetric.RetriveMethod.READ:
-                    value = float(get_read(metric))
-                else:
-                    raise BaseException('Unknown retrieve method %s' % metric.retrieve_method)
-            except (BaseException, Exception), e:
-                value = 0.0
-                error = str(e)[0:255]
-
-            retval.append({'id':metric.id, 'name':metric.name, 'value':value, 'error':error})
-
         # Obtain scaling metrics from Scalr.
-        self._SCALING_METRICS = bus.queryenv_service.get_scaling_metrics()
-     
-        max_workers = 10
-        for i in range(len(self._SCALING_METRICS) / max_workers + 1):
-            workers = [Thread(target=update_metric, args=(metric,))
-                       for metric in self._SCALING_METRICS[i*max_workers:(i+1)*max_workers]]
-     
-            for worker in workers:
-                worker.start()
-                
-            for worker in workers:
-                worker.join()
+        scaling_metrics = bus.queryenv_service.get_scaling_metrics()
+        
+        results = []
+        max_threads = 10
+        wrk_pool = pool.ThreadPool(processes=max_threads)
+        for metric in scaling_metrics:
+            results.append(wrk_pool.apply_async(_ScalingMetricStrategy.get, args=(metric,)))
+        wrk_pool.close()
+        wrk_pool.join()
 
-        return retval
+        return [result.get() for result in results]

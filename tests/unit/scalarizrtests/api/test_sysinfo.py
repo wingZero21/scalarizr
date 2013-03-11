@@ -8,8 +8,7 @@ import os, stat
 import unittest
 import mock
 import glob
-
-from subprocess import Popen, PIPE
+import subprocess as subps
 
 from scalarizr.api import system
 from scalarizr.util import system2
@@ -143,6 +142,7 @@ DISKSTATS = '/tmp/diskstats'
 CPUINFO = '/tmp/cpuinfo'
 NETSTATS = '/tmp/netstat'
 
+
 class TestSysInfoAPI(unittest.TestCase):
 
     def __init__(self, methodName='runTest'):
@@ -159,6 +159,7 @@ class TestSysInfoAPI(unittest.TestCase):
         self.info._CPUINFO = CPUINFO
         self.info._NETSTATS = NETSTATS
 
+
     def test_fqdn(self):
         (out, err, rc) = system2(('hostname'))
         self.assertEqual(out.strip(), self.info.fqdn())
@@ -169,36 +170,43 @@ class TestSysInfoAPI(unittest.TestCase):
         self.assertEqual(out.strip(), 'Scalr-Role-12345')
         self.info.fqdn(old_name)
 
+
     def test_block_devices(self):
         self.assertIsNotNone(self.info.block_devices())
 
+
     def test_uname(self):
         self.assertTrue(isinstance(self.info.uname(), dict) and self.info.uname())
+
 
     def test_dist(self):
         with mock.patch('scalarizr.util.disttool.linux_dist') as linux_dist_mock:
             linux_dist_mock.return_value = ('Ubuntu', '12.10', 'precise')
             self.assertEqual(self.info.dist(), {'codename': 'precise', 'description': 'Ubuntu 12.10 (precise)', 'id': 'Ubuntu', 'release': '12.10'})
 
+
     def test_pythons(self):
         maybe_python = [el for path_ in ['/usr/bin', '/usr/local/bin'] for el in glob.glob(os.path.join(path_, 'python[0-9].[0-9]'))]
         pythons = [py for py in maybe_python if os.path.exists(py)]
         right_result = []
         for py in pythons:
-            proc = Popen([py, '-V'], stdout=PIPE, stderr=PIPE)
+            proc = subps.Popen([py, '-V'], stdout=subps.PIPE, stderr=subps.PIPE)
             proc.wait()
             right_result.append(proc.stderr.readline())
 
         self.assertIsNotNone(self.info.pythons())
         self.assertEqual(self.info.pythons(), sorted(map(lambda x: x.lower().replace('python', '').strip(), list(set(right_result)))))
 
+
     def test_cpu_info(self):
         cpu = self.info.cpu_info()
         self.assertEqual(cpu, [{'vendor_id': 'GenuineIntel', 'cpu family': '6', 'cache_alignment': '64', 'cpu cores': '4', 'bogomips': '5785.58', 'core id': '0', 'apicid': '0', 'fpu_exception': 'yes', 'stepping': '7', 'wp': 'yes', 'clflush size': '64', 'microcode': '0x14', 'cache size': '6144 KB', 'power management': '', 'cpuid level': '13', 'physical id': '0', 'fpu': 'yes', 'flags': 'fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm pcid sse4_1 sse4_2 popcnt tsc_deadline_timer aes xsave avx lahf_lm ida arat epb xsaveopt pln pts dtherm tpr_shadow vnmi flexpriority ept vpid', 'cpu MHz': '1600.000', 'model name': 'Intel(R) Core(TM) i5-2310 CPU @ 2.90GHz', 'siblings': '4', 'model': '42', 'processor': '0', 'initial apicid': '0', 'address sizes': '36 bits physical, 48 bits virtual'}, {'vendor_id': 'GenuineIntel', 'cpu family': '6', 'cache_alignment': '64', 'cpu cores': '4', 'bogomips': '5785.20', 'core id': '1', 'apicid': '2', 'fpu_exception': 'yes', 'stepping': '7', 'wp': 'yes', 'clflush size': '64', 'microcode': '0x14', 'cache size': '6144 KB', 'power management': '', 'cpuid level': '13', 'physical id': '0', 'fpu': 'yes', 'flags': 'fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm pcid sse4_1 sse4_2 popcnt tsc_deadline_timer aes xsave avx lahf_lm ida arat epb xsaveopt pln pts dtherm tpr_shadow vnmi flexpriority ept vpid', 'cpu MHz': '1600.000', 'model name': 'Intel(R) Core(TM) i5-2310 CPU @ 2.90GHz', 'siblings': '4', 'model': '42', 'processor': '1', 'initial apicid': '2', 'address sizes': '36 bits physical, 48 bits virtual'}, {'vendor_id': 'GenuineIntel', 'cpu family': '6', 'cache_alignment': '64', 'cpu cores': '4', 'bogomips': '5785.20', 'core id': '2', 'apicid': '4', 'fpu_exception': 'yes', 'stepping': '7', 'wp': 'yes', 'clflush size': '64', 'microcode': '0x14', 'cache size': '6144 KB', 'power management': '', 'cpuid level': '13', 'physical id': '0', 'fpu': 'yes', 'flags': 'fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm pcid sse4_1 sse4_2 popcnt tsc_deadline_timer aes xsave avx lahf_lm ida arat epb xsaveopt pln pts dtherm tpr_shadow vnmi flexpriority ept vpid', 'cpu MHz': '1600.000', 'model name': 'Intel(R) Core(TM) i5-2310 CPU @ 2.90GHz', 'siblings': '4', 'model': '42', 'processor': '2', 'initial apicid': '4', 'address sizes': '36 bits physical, 48 bits virtual'}, {'vendor_id': 'GenuineIntel', 'cpu family': '6', 'cache_alignment': '64', 'cpu cores': '4', 'bogomips': '5785.19', 'core id': '3', 'apicid': '6', 'fpu_exception': 'yes', 'stepping': '7', 'wp': 'yes', 'clflush size': '64', 'microcode': '0x14', 'cache size': '6144 KB', 'power management': '', 'cpuid level': '13', 'physical id': '0', 'fpu': 'yes', 'flags': 'fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm pcid sse4_1 sse4_2 popcnt tsc_deadline_timer aes xsave avx lahf_lm ida arat epb xsaveopt pln pts dtherm tpr_shadow vnmi flexpriority ept vpid', 'cpu MHz': '1600.000', 'model name': 'Intel(R) Core(TM) i5-2310 CPU @ 2.90GHz', 'siblings': '4', 'model': '42', 'processor': '3', 'initial apicid': '6', 'address sizes': '36 bits physical, 48 bits virtual'}])
 
+
     def test_load_average(self):
         # TODO
         pass
+
 
     def test_disk_stats(self):
         self.assertEqual(self.info.disk_stats(), {
@@ -236,21 +244,22 @@ class TestSysInfoAPI(unittest.TestCase):
                 'write': {'num': 0, 'bytes': 0, 'sectors': 0},
                 'read': {'num': 2, 'bytes': 6144, 'sectors': 12}}})
 
+
     def test_net_stats(self):
         self.assertEqual(self.info.net_stats(), {
                 'lo': {'receive': {'packets': '81717', 'errors': '0', 'bytes': '19325974'}, 'transmit': {'packets': '81717', 'errors': '0', 'bytes': '19325974'}},
                 'lxcbr0': {'receive': {'packets': '0', 'errors': '0', 'bytes': '0'}, 'transmit': {'packets': '2548', 'errors': '0', 'bytes': '193001'}},
                 'eth0': {'receive': {'packets': '1160244', 'errors': '0', 'bytes': '1554522775'}, 'transmit': {'packets': '671950', 'errors': '0', 'bytes': '60669160'}}})
 
-    def test_scaling_metrics(self):
-        old_queryenv_service = system.bus.queryenv_service
 
+    def test_scaling_metrics_read(self):
+        # mock queryenv_service
+        old_queryenv_service = system.bus.queryenv_service
         system.bus.queryenv_service = mock.Mock()
+
         m = mock.Mock()
         m.id = '777'
         m.name = 'test_name'
-
-        # read ok
         with open('/tmp/test_custom_scaling_metric_read', 'w+') as fp:
             fp.writelines('555')
         m.path = '/tmp/test_custom_scaling_metric_read'
@@ -259,13 +268,35 @@ class TestSysInfoAPI(unittest.TestCase):
         assert self.info.scaling_metrics() == [{'error': '', 'id': '777', 'value': 555.0, 'name': 'test_name'}]
         os.remove('/tmp/test_custom_scaling_metric_read')
 
-        # file dosn't exist 
+        # unmock queryenv_service
+        system.bus.queryenv_service = old_queryenv_service
+
+
+    def test_scaling_metrics_read_error(self):
+        # mock queryenv_service
+        old_queryenv_service = system.bus.queryenv_service
+        system.bus.queryenv_service = mock.Mock()
+
+        m = mock.Mock()
+        m.id = '777'
+        m.name = 'test_name'
         m.path = '/tmp/this_file_dosnt_exist'
         m.retrieve_method = 'read'
         system.bus.queryenv_service.get_scaling_metrics.return_value = [m]
         assert self.info.scaling_metrics() == [{'error': "File is not readable: '/tmp/this_file_dosnt_exist'", 'id': '777', 'value': 0.0, 'name': 'test_name'}]
 
-        # execute ok
+        # unmock queryenv_service
+        system.bus.queryenv_service = old_queryenv_service
+
+
+    def test_scaling_metrics_execute(self):
+        # mock queryenv_service
+        old_queryenv_service = system.bus.queryenv_service
+        system.bus.queryenv_service = mock.Mock()
+
+        m = mock.Mock()
+        m.id = '777'
+        m.name = 'test_name'
         with open('/tmp/test_custom_scaling_metric_execute.sh', 'w+') as fp:
             fp.writelines('#!/bin/sh\necho "555"\n')
             os.chmod('/tmp/test_custom_scaling_metric_execute.sh', stat.S_IEXEC)
@@ -275,7 +306,19 @@ class TestSysInfoAPI(unittest.TestCase):
         assert self.info.scaling_metrics() == [{'error': '', 'id': '777', 'value': 555.0, 'name': 'test_name'}]
         os.remove('/tmp/test_custom_scaling_metric_execute.sh')
 
-        # execute fail
+        # unmock queryenv_service
+        system.bus.queryenv_service = old_queryenv_service
+
+
+
+    def test_scaling_metrics_execute_error(self):
+        # mock queryenv_service
+        old_queryenv_service = system.bus.queryenv_service
+        system.bus.queryenv_service = mock.Mock()
+
+        m = mock.Mock()
+        m.id = '777'
+        m.name = 'test_name'
         with open('/tmp/test_custom_scaling_metric_execute.sh', 'w+') as fp:
             fp.writelines('#!/bin/sh\nreturn 1\n')
             os.chmod('/tmp/test_custom_scaling_metric_execute.sh', stat.S_IEXEC)
@@ -285,7 +328,46 @@ class TestSysInfoAPI(unittest.TestCase):
         assert self.info.scaling_metrics() == [{'error': 'exitcode: 1', 'id': '777', 'value': 0.0, 'name': 'test_name'}]
         os.remove('/tmp/test_custom_scaling_metric_execute.sh')
 
-        # multi metrics ok
+        # unmock queryenv_service
+        system.bus.queryenv_service = old_queryenv_service
+
+
+    def test_scaling_metrics_execute_timeout(self):
+        # mock queryenv_service
+        old_queryenv_service = system.bus.queryenv_service
+        system.bus.queryenv_service = mock.Mock()
+
+        m = mock.Mock()
+        m.id = '777'
+        m.name = 'test_name'
+        with open('/tmp/test_custom_scaling_metric_execute.sh', 'w+') as fp:
+            fp.writelines('#!/bin/sh\nsleep 10s\nreturn 1\n')
+            os.chmod('/tmp/test_custom_scaling_metric_execute.sh', stat.S_IEXEC)
+        m.path = '/tmp/test_custom_scaling_metric_execute.sh'
+        m.retrieve_method = 'execute'
+        system.bus.queryenv_service.get_scaling_metrics.return_value = [m]
+        assert self.info.scaling_metrics() == [{'error': 'Timeouted', 'id': '777', 'value': 0.0, 'name': 'test_name'}]
+
+        ps = subps.Popen(['ps -ef'], shell=True, stdout=subps.PIPE)
+        output = ps.stdout.read()
+        ps.stdout.close()
+        ps.wait()
+        assert 'test_custom_scaling_metric_execute.sh' not in output
+
+        os.remove('/tmp/test_custom_scaling_metric_execute.sh')
+
+        # unmock queryenv_service
+        system.bus.queryenv_service = old_queryenv_service
+
+
+    def test_scaling_metrics_multi(self):
+        # mock queryenv_service
+        old_queryenv_service = system.bus.queryenv_service
+        system.bus.queryenv_service = mock.Mock()
+
+        m = mock.Mock()
+        m.id = '777'
+        m.name = 'test_name'
         with open('/tmp/test_custom_scaling_metric_read', 'w+') as fp:
             fp.writelines('555')
         m.path = '/tmp/test_custom_scaling_metric_read'
@@ -298,12 +380,10 @@ class TestSysInfoAPI(unittest.TestCase):
         system.bus.queryenv_service = old_queryenv_service
 
 
-
 def tearDownModule():
     os.remove(DISKSTATS)
     os.remove(CPUINFO)
     os.remove(NETSTATS)
-
 
 
 if __name__ == "__main__":
