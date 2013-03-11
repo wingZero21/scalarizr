@@ -51,10 +51,6 @@ OPT_ROOT_SSH_PRIVATE_KEY	= "root_ssh_private_key"
 OPT_CURRENT_XLOG_LOCATION	= 'current_xlog_location'
 OPT_REPLICATION_MASTER 		= "replication_master"
 
-BACKUP_CHUNK_SIZE 		= 200*1024*1024
-
-POSTGRESQL_DEFAULT_PORT	= 5432
-
 __postgresql__.update({
 'port': 5432,
 'storage_dir': '/mnt/pgstorage',
@@ -216,7 +212,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 			if not self.postgresql.root_user.exists():
 				self._logger.debug("Scalr's PostgreSQL root user does not exist. Recreating")
-				self.postgresql.root_user = self.postgresql.create_user(ROOT_USER, root_password)
+				self.postgresql.root_user = self.postgresql.create_linux_user(ROOT_USER, root_password)
 			else:
 				try:
 					self.postgresql.root_user.check_system_password(root_password)
@@ -412,7 +408,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 		if self.is_replication_master:
 			self._init_master(message)									  
 		else:
-			self._init_slave(message)	
+			self._init_slave(message)
+		# Force to resave volume settings
+		__postgresql__['volume'] = storage2.volume(__postgresql__['volume'])
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl, preset=self.initial_preset)
 					
 				
@@ -601,7 +599,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					LOG.debug('Storage destoyed')
 				self.postgresql.service.start()
 
-			self.postgresql.init_slave(STORAGE_PATH, host, POSTGRESQL_DEFAULT_PORT, self.root_password)
+			self.postgresql.init_slave(STORAGE_PATH, host, __postgresql__['port'], self.root_password)
 			LOG.debug("Replication switched")
 			bus.fire('postgresql_change_master', host=host)
 
@@ -808,31 +806,11 @@ class PostgreSqlHander(ServiceCtlHandler):
 						master_host.internal_ip, master_host.external_ip)
 				
 				host = master_host.internal_ip or master_host.external_ip
-				self.postgresql.init_slave(STORAGE_PATH, host, POSTGRESQL_DEFAULT_PORT, self.root_password)
+				self.postgresql.init_slave(STORAGE_PATH, host, __postgresql__['port'], self.root_password)
 			
 			with op.step(self._step_collect_host_up_data):
 				# Update HostUp message
 				message.db_type = BEHAVIOUR
-
-
-	def _plug_storage(self, mpoint, vol):
-		if not isinstance(vol, Volume):
-			vol['tags'] = self.postgres_tags
-			vol = Storage.create(vol)
-
-		try:
-			if not os.path.exists(mpoint):
-				os.makedirs(mpoint)
-			if not vol.mounted():
-				vol.mount(mpoint)
-		except StorageError, e:
-			''' XXX: Crapy. We need to introduce error codes from mount ''' 
-			if 'you must specify the filesystem type' in str(e):
-				vol.mkfs()
-				vol.mount(mpoint)
-			else:
-				raise
-		return vol
 
 
 	def _create_snapshot(self):
@@ -848,6 +826,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 	def _insert_iptables_rules(self):
 		if iptables.enabled():
 			iptables.FIREWALL.ensure([
-				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(POSTGRESQL_DEFAULT_PORT)},
+				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(__postgresql__['port'])},
 			])
 

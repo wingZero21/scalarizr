@@ -198,10 +198,10 @@ class PostgreSql(BaseService):
 		self.trigger_file.destroy()
 	
 	
-	def create_user(self, name, password, sys_user_only=True):
+	def create_linux_user(self, name, password, sys_user_only=True):
 		user = PgUser(name, self.pg_keys_dir)	
 		#password = password or user.generate_password(20)
-		user._create_system_user(password)
+		user._create_linux_user(password)
 		return user	
 	
 	
@@ -210,7 +210,7 @@ class PostgreSql(BaseService):
 		user = PgUser(name, self.pg_keys_dir)	
 		self.service.start()
 		user._create_pg_database()
-		user._create_role(password, super)
+		user._create_pg_role(password, super)
 		self.set_password_mode()
 		return user			
 
@@ -232,7 +232,7 @@ class PostgreSql(BaseService):
 	def _init_service(self, mpoint, password):
 		self.service.stop()
 		
-		self.root_user = self.create_user(ROOT_USER, password)
+		self.root_user = self.create_linux_user(ROOT_USER, password)
 		
 		move_files = not self.cluster_dir.is_initialized(mpoint)
 		self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
@@ -329,7 +329,7 @@ class PgUser(object):
 		self.psql = PSQL()
 		
 	def exists(self):
-		return self._is_system_user_exist and self._is_role_exist and self._is_pg_database_exist
+		return self._is_linux_user_exist and self._is_role_exist and self._is_pg_database_exist
 
 	def change_system_password(self, new_pass):
 		LOG.debug('Changing password of system user %s to %s' % (self.name, new_pass))
@@ -454,11 +454,11 @@ class PgUser(object):
 		return self.name in self.psql.list_pg_databases()
 	
 	@property
-	def _is_system_user_exist(self):
+	def _is_linux_user_exist(self):
 		file = open(PASSWD_FILE, 'r')
 		return -1 != file.read().find(self.name)
 
-	def _create_role(self, password=None, super=True):
+	def _create_pg_role(self, password=None, super=True):
 		if self._is_role_exist:
 			LOG.debug('Cannot create role: role %s already exists' % self.name)
 		else:
@@ -502,14 +502,15 @@ class PgUser(object):
 				LOG.error('Unable to create db %s: %s' % (self.name, e))
 				raise
 	
-	def _create_system_user(self, password):
-		if self._is_system_user_exist:
+	def _create_linux_user(self, password):
+		if self._is_linux_user_exist:
 			LOG.debug('Cannot create system user: user %s already exists' % self.name)
 			#TODO: check password
 		else:
 			try:
 				out = system2([USERADD, '-m', '-g', self.group, '-p', password, self.name])[0]
-				if out: LOG.debug(out)
+				if out:
+					LOG.debug(out)
 				LOG.debug('Creating system user %s' % self.name)
 			except PopenError, e:
 				LOG.error('Unable to create system user %s: %s' % (self.name, e))
