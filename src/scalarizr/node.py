@@ -335,7 +335,7 @@ __node__['postgresql'] = Compound({
 'volume,volume_config':	Json('%s/storage/%s.json' % (private_dir, 'postgresql'),
 	'scalarizr.storage2.volume'),
 'replication_master,pg_version,scalr_password,root_password, root_user': Ini(
-	'%s/%s.ini' % (private_dir, 'postgresql'), 'redis')
+	'%s/%s.ini' % (private_dir, 'postgresql'), 'postgresql')
 })
 
 __node__['mongodb'] = Compound({

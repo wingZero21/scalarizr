@@ -731,7 +731,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 							__postgresql__['volume'].snap = __postgresql__['volume'].snapshot()
 
 					__postgresql__['volume'].ensure(mount=True, mkfs=True)
-					LOG.debug('Redis volume config after ensure: %s', dict(__postgresql__['volume']))
+					LOG.debug('Postgres volume config after ensure: %s', dict(__postgresql__['volume']))
 				
 			with op.step(self._step_init_master):
 				self.postgresql.init_master(mpoint=STORAGE_PATH, password=self.root_password)
@@ -815,7 +815,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def _create_snapshot(self):
 		LOG.info("Creating PostgreSQL data bundle")
-		LOG.info("Creating Redis data bundle")
 		backup_obj = backup.backup(type='snap_postgresql',
 			volume=__postgresql__['volume'],
 			tags=self.postgres_tags)
