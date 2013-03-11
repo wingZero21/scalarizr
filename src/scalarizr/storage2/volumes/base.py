@@ -33,6 +33,9 @@ class Base(bases.ConfigDriven):
 
 
 class Volume(Base):
+	"""
+	Base class for all volume types
+	"""
 	MAX_SIZE = None
 	
 	def __init__(self, 
@@ -55,6 +58,13 @@ class Volume(Base):
 		
 
 	def ensure(self, mount=False, mkfs=False, fstab=False, **updates):
+		"""
+		Make sure that volume is attached and ready for use.
+
+		:param mount: if set, volume eventually will be mounted to it's mpoint
+		:param mkfs: if set, volume will have corresponding fs eventually
+		:return:
+		"""
 		if not self.features['restore']:
 			self._check_restore_unsupported()
 		if self.snap and isinstance(self.snap, Snapshot):
@@ -81,6 +91,7 @@ class Volume(Base):
 	
 	
 	def snapshot(self, description=None, tags=None, **kwds):
+
 		return self._snapshot(description, tags, **kwds)
 
 

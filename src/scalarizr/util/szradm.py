@@ -439,8 +439,8 @@ class MessageDetailsCommand(Command):
 				msg_format = res[1]
 				msg.fromjson(res[0]) if 'json' == msg_format else msg.fromxml(res[0])
 				try:
-					mdict={u'id':msg.id, u'name':msg.name,
-						u'meta':msg.meta, u'body':msg.body}
+					mdict=encode({u'id':msg.id, u'name':msg.name,
+						u'meta':msg.meta, u'body':msg.body})
 					if self.kwds and self.kwds.get('json'):
 						# print json
 						out = json.dumps(mdict, indent=4, sort_keys=True)

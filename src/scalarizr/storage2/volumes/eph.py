@@ -19,6 +19,14 @@ LOG = logging.getLogger(__name__)
 
 
 class EphVolume(base.Volume):
+	"""
+	Represents LVM layout over volumes of any type.
+	It differs from lvm volume in the way of making snapshot.
+	Ephemeral snapshot freezes lvm layout (creates pure LVM snapshot), then it uploads
+	all the data on this logical volume to cloud storage provider (whereas lvm volume
+	snapshots underlying disks)
+	"""
+
 	
 	def __init__(self, vg=None, disk=None, size=None, cloudfs_dir=None,	**kwds):
 		# Compatibility with 1.0
@@ -125,15 +133,17 @@ class EphVolume(base.Volume):
 
 
 class EphSnapshot(base.Snapshot):
-
 	"""
-	def __init__(self, **kwargs):
-		super(EphSnapshot, self).__init__(**kwargs)
-		if hasattr(self, 'size') and '%' in str(self.size):
-			del self.size
+	Respresents snapshot of data on ephemeral volume, uploaded to cloud storage provider.
+	Contains all necessary info to restore functionall ephemeral storage.
+
 	"""
 
 	def _destroy(self):
+		"""
+		Reads chunks paths from manifest, then deletes manifest and chunks
+		from cloud storage.
+		"""
 		self._check_attr('path')
 		scheme = urlparse.urlparse(self.path).scheme
 		storage_drv = cloudfs.cloudfs(scheme)
@@ -156,6 +166,10 @@ class EphSnapshot(base.Snapshot):
 
 
 	def _status(self):
+		"""
+		Represents current status of ephemeral snapshot.
+		Status updates exclusively in 'snapshot' method of ephemeral volume
+		"""
 		if hasattr(self, '_snap_status'):
 			return self._snap_status
 		else:
@@ -163,6 +177,12 @@ class EphSnapshot(base.Snapshot):
 
 
 	def upload_lvm_snapshot(self, lvm_snap, tags, path):
+		"""
+		Method which uploads data from lvm snapshot to cloud storage and
+		updates snapshot status.
+
+		EphVolume runs this method in separate thread
+		"""
 
 		try:
 			self._snap_status = self.QUEUED
