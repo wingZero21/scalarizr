@@ -273,3 +273,16 @@ class RedisAPI(object):
 		redis_wrapper.service.reload()
 		__redis__['master_password'] = new_password
 		return new_password
+
+	@rpc.service_method
+	def replication_status(self):
+		redis_wrapper = redis_service.Redis()
+		if redis_wrapper.role is 'master':
+			return {'master': {'status': 'up'}}
+		result = {'slave': {}}
+		info = redis_wrapper.info
+		for key in info.keys():
+			if 'master' in key:
+				result['slave'][key] = info[key]
+		result['slave']['status'] = result['slave']['master_link_status']
+		return result

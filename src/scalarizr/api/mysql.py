@@ -9,6 +9,7 @@ import threading
 
 from scalarizr import handlers, rpc, storage2
 from scalarizr.services import mysql as mysql_svc
+from scalarizr.services import ServiceError
 from scalarizr.services.mysql2 import __mysql__
 from scalarizr.util.cryptotool import pwgen
 
@@ -77,23 +78,17 @@ class MySQLAPI(object):
 
     @rpc.service_method
     def replication_status(self):
-        '''
-        For Master:
-        {'master': {
-            'status': 'up',
-            'log_file': 'binlog.000015', 
-            'log_pos': 165
-        }}
-
-        For Slave:
-        {'slave': {
-            'status': 'up',
-            'master_log_file': 'binlog.000015',
-            'read_master_log_file': 165,
-            'relay_log_file': 'relay-log.00023',
-            'relay_log_pos': 231,
-            'seconds_behind_master': 52,
-            ... # output of SHOW SLAVE STATUS
-        }}
-        '''
-        pass
+        mysql_cli = mysql_svc.MySQLClient()
+        master_status = mysql_cli.master_status()
+        if None in master_status:
+            try:
+                slave_status = mysql_cli.slave_status()
+                slave_status['status'] = 'up'
+                return {'slave': slave_status}
+            except ServiceError:
+                return {'slave': {'status': 'down'}}
+        else:
+            result = {'master': {'status': 'up',
+                                 'log_file': master_status[0],
+                                 'log_pos': master_status[1]}}
+            return result

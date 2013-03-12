@@ -277,12 +277,12 @@ class MySQLClient(object):
 		variables = dict(
 				Slave_IO_Running=None, 
 				Slave_SQL_Running=None,
-				Last_Error = None,
-				Last_Errno = None,
-				Exec_Master_Log_Pos = None,
-				Relay_Master_Log_File = None,
-				Master_Log_File = None,
-				Read_Master_Log_Pos = None
+				Last_Error=None,
+				Last_Errno=None,
+				Exec_Master_Log_Pos=None,
+				Relay_Master_Log_File=None,
+				Master_Log_File=None,
+				Read_Master_Log_Pos=None
 				)
 					
 		out = self.fetchdict("SHOW SLAVE STATUS")
