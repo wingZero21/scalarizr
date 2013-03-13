@@ -38,14 +38,13 @@ class Volume(Base):
 	def __init__(self, 
 				device=None, 
 				fstype='ext3', 
-				fscreated=False, 
-				mpoint=None, 
+				fscreated=False,
+				mpoint=None,
 				snap=None,
 				**kwds):
 		super(Volume, self).__init__(
 				device=device,
 				fstype=fstype,
-				fscreated=fscreated,
 				mpoint=mpoint,
 				snap=snap,
 				**kwds)

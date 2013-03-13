@@ -1,5 +1,6 @@
 __author__ = 'Nick Demyanchuk'
 
+import os
 import sys
 import uuid
 import datetime
@@ -17,15 +18,17 @@ class GcePersistentVolume(base.Volume):
 	'''
 
 
-	def __init__(self, **kwargs):
-		kwargs['name'] = (kwargs.get('name') or 'scalr-disk-%s' % uuid.uuid4())
-		super(GcePersistentVolume, self).__init__(**kwargs)
+	def __init__(self, name=None, link=None, size=None, zone=None, **kwargs):
+		name = name or 'scalr-disk-%s' % uuid.uuid4()
+		super(GcePersistentVolume, self).__init__(name=name, link=link,
+												  size=size, zone=zone,
+												  **kwargs)
 
 
 	def _ensure(self):
 
 		garbage_can = []
-		zone = __node__['gce']['zone']
+		zone = os.path.basename(__node__['gce']['zone'])
 		connection = __node__['gce']['compute_connection']
 		project_id = __node__['gce']['project_id']
 		instance_id = __node__['gce']['instance_id']
