@@ -375,8 +375,11 @@ __node__['rackspace'] = Compound({
 __node__['gce'] = Compound({
 	'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
 	'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),
-	'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id')
+	'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id'),
+	'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
+	'zone': Call('scalarizr.bus', 'bus.platform.get_zone')
 })
+
 __node__['scalr'] = Compound({
 	'version': File(private_dir + '/.scalr-version'),
 	'id': Ini(private_dir + '/config.ini', 'general', {'id': 'scalr_id'})

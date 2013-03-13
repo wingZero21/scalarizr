@@ -1,28 +1,129 @@
 __author__ = 'Nick Demyanchuk'
 
 import sys
+import uuid
 import datetime
 
 from scalarizr import storage2
-
-from scalarizr.platform.gce.storage import wait_for_operation_to_complete
-from scalarizr.storage2.volumes import base
-from scalarizr.storage2.volumes import gce_ephemeral
 from scalarizr.node import __node__
+from scalarizr.storage2.volumes import base
+from scalarizr.storage2.util import gce as gce_util
 
 
-class GcePersistentVolume(gce_ephemeral.GceEphemeralVolume):
+class GcePersistentVolume(base.Volume):
 	'''
 	def _get_device_name(self):
 		return 'google-%s' % (self.alias or self.name)
 	'''
 
-	@property
-	def link(self):
-		compute = __node__['gce']['compute_connection']
-		project_id = __node__['gce']['project_id']
-		return '%s%s/disks/%s' % (compute._baseUrl, project_id, self.name)
 
+	def __init__(self, **kwargs):
+		kwargs['name'] = (kwargs.get('name') or 'scalr-disk-%s' % uuid.uuid4())
+		super(GcePersistentVolume, self).__init__(**kwargs)
+
+
+	def _ensure(self):
+
+		garbage_can = []
+		zone = __node__['gce']['zone']
+		connection = __node__['gce']['compute_connection']
+		project_id = __node__['gce']['project_id']
+		instance_id = __node__['gce']['instance_id']
+
+		try:
+			create = False
+			if not self.link:
+				# Disk does not exist, create it first
+				create_request_body = dict(name=self.name, sizeGb=self.size)
+				if self.snap:
+					self.snap = storage2.snapshot(self.snap)
+					create_request_body['sourceSnapshot'] = self.snap.link
+				create = True
+			else:
+				self._check_attr('zone')
+				# TODO: update zone from disk resource of compute engine
+				if self.zone != zone:
+					# Volume is in different zone, snapshot it,
+					# create new volume from this snapshot, then attach
+					temp_snap = self.snapshot('volume')
+					garbage_can.append(temp_snap)
+					# TODO: generate new name
+					create_request_body = dict(name=self.name,
+											   sizeGb=self.size,
+											   sourceSnapshot=temp_snap.link)
+					create = True
+
+			if create:
+				op = connection.disks().insert(project=project_id,
+											   zone=zone,
+											   body=create_request_body).execute()
+				gce_util.wait_for_operation_to_complete(connection, project_id, op['name'], zone)
+				disk_name = create_request_body['name']
+				disk_dict = connection.disks().get(disk=disk_name,
+												   project=project_id,
+												   zone=zone).execute()
+				self.id = disk_dict['id']
+				self.link = disk_dict['selfLink']
+				self.zone = zone
+
+			attachment_inf = self._attachment_info(connection)
+			if attachment_inf:
+				disk_devicename = attachment_inf['deviceName']
+			else:
+				op = connection.instances().attachDisk(
+							instance=instance_id,
+							project=project_id,
+							zone=zone,
+							body=dict(
+									deviceName=self.name,
+									source=self.link,
+									mode="READ_WRITE",
+									type="PERSISTENT"
+							)).execute()
+				gce_util.wait_for_operation_to_complete(connection, project_id, op['name'], zone=zone)
+				disk_devicename = self.name
+
+			device = gce_util.devicename_to_device(disk_devicename)
+			if not device:
+				raise storage2.StorageError("Disk should be attached, but corresponding"
+											" device not found in system")
+			self.device = device
+
+		finally:
+			# Perform cleanup
+			for garbage in garbage_can:
+				try:
+					garbage.destroy(force=True)
+				except:
+					pass
+
+
+	def _attachment_info(self, con):
+		zone = __node__['gce']['zone']
+		project_id = __node__['gce']['project_id']
+		instance_id = __node__['gce']['instance_id']
+
+		this_instance = con.instances().get(zone=zone,
+										   project=project_id,
+										   instance=instance_id).execute()
+		attached = filter(lambda x: x['source'] == self.link, this_instance.disks)
+		if attached:
+			return attached[0]
+
+
+	def _detach(self, force, **kwds):
+		connection = __node__['gce']['compute_connection']
+		attachment_inf = self._attachment_info(connection)
+		if attachment_inf:
+			zone = __node__['gce']['zone']
+			project_id = __node__['gce']['project_id']
+			instance_id = __node__['gce']['instance_id']
+			op = connection.instances().detachDisk(instance=instance_id,
+										project=project_id,
+										zone=zone,
+										deviceName=attachment_inf['deviceName']).execute()
+
+			gce_util.wait_for_operation_to_complete(connection, project_id, op['name'], zone=zone)
 
 	def _snapshot(self, description, tags, **kwds):
 		connection = __node__['gce']['compute_connection']
@@ -30,7 +131,7 @@ class GcePersistentVolume(gce_ephemeral.GceEphemeralVolume):
 
 		now_raw = datetime.datetime.utcnow()
 		now_str = now_raw.strftime('%d-%b-%Y-%H-%M-%S-%f')
-		snap_name = '%s-snap-%s' % (self.id, now_str)
+		snap_name = '%s-snap-%s' % (self.name, now_str)
 
 		operation = connection.snapshots().insert(project=project_id,
 						body=dict(
@@ -41,7 +142,7 @@ class GcePersistentVolume(gce_ephemeral.GceEphemeralVolume):
 						)).execute()
 
 		try:
-			wait_for_operation_to_complete(connection, project_id, operation['name'])
+			gce_util.wait_for_operation_to_complete(connection, project_id, operation['name'])
 		except:
 			e = sys.exc_info()[1]
 			raise storage2.StorageError('Google disk snapshot creation '
@@ -60,7 +161,7 @@ class GcePersistentSnapshot(base.Snapshot):
 		super(GcePersistentSnapshot, self).__init__(name=name, **kwds)
 
 
-	def destroy(self):
+	def _destroy(self):
 		try:
 			connection = __node__['gce']['compute_connection']
 			project_id = __node__['gce']['project_id']
@@ -68,7 +169,7 @@ class GcePersistentSnapshot(base.Snapshot):
 			op = connection.snapshots().delete(project=project_id,
 											snapshot=self.name).execute()
 
-			wait_for_operation_to_complete(connection, project_id,
+			gce_util.wait_for_operation_to_complete(connection, project_id,
 										   op['name'])
 		except:
 			e = sys.exc_info()[1]
