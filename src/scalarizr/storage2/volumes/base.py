@@ -46,6 +46,7 @@ class Volume(Base):
 				device=device,
 				fstype=fstype,
 				mpoint=mpoint,
+				fscreated=fscreated,
 				snap=snap,
 				**kwds)
 		self.features.update({'restore': True, 'grow': False, 'detach': True})
