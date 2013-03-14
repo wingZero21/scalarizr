@@ -746,11 +746,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 			with op.step(self._step_init_master):
 				self.postgresql.init_master(mpoint=STORAGE_PATH, password=self.root_password)
 				
-				msg_data = dict()
-				msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.is_replication_master)),
-									OPT_ROOT_USER				:	self.postgresql.root_user.name,
-									OPT_ROOT_PASSWORD			:	self.root_password,
-									OPT_CURRENT_XLOG_LOCATION	: 	None})	
 
 			with op.step(self._step_create_data_bundle):
 				if 'backup' in __postgresql__:
@@ -758,20 +753,41 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 			with op.step(self._step_collect_host_up_data):
 				# Update HostUp message 
+				msg_data = dict()
+				msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.is_replication_master)),
+								OPT_ROOT_USER				:	self.postgresql.root_user.name,
+								OPT_ROOT_PASSWORD			:	self.root_password,
+								OPT_CURRENT_XLOG_LOCATION	: 	None})
+				msg_data.update(self._compat_storage_data(vol=__postgresql__['volume'], snap=__postgresql__['restore']))
 
-				if msg_data:
-					message.db_type = BEHAVIOUR
-					message.postgresql = msg_data.copy()
-					message.postgresql.update({
-									OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key, 
-									OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key
-									})
-					try:
-						del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
-					except KeyError:
-						pass 
-					__postgresql__.update(msg_data)
-	
+				message.db_type = BEHAVIOUR
+				message.postgresql = msg_data.copy()
+				message.postgresql.update({
+								OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key,
+								OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key
+								})
+				try:
+					del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
+				except KeyError:
+					pass
+				__postgresql__.update(msg_data)
+
+
+	def _compat_storage_data(self, vol=None, snap=None):
+		ret = dict()
+		if bus.scalr_version >= (2, 2):
+			if vol:
+				ret['volume_config'] = vol.config() if not isinstance(vol, dict) else vol
+			if snap:
+				ret['snapshot_config'] = snap.config() if not isinstance(snap, dict) else snap
+		else:
+			if vol:
+				ret['volume_id'] = vol.config()['id'] if not isinstance(vol, dict) else vol['id']
+			if snap:
+				ret['snapshot_id'] = snap.config()['id'] if not isinstance(snap, dict) else snap['id']
+		return ret
+
+
 	def _get_master_host(self):
 		master_host = None
 		LOG.info("Requesting master server")
