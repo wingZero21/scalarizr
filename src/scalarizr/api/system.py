@@ -74,6 +74,7 @@ class _ScalingMetricStrategy(object):
   
         return value
 
+
     @staticmethod
     def get(metric):
         error = ''
@@ -102,6 +103,7 @@ class SystemAPI(object):
     def _readlines(self, path):
         with open(path, "r") as fp:
             return fp.readlines()
+
 
     def add_extension(self, extension):
         '''
@@ -447,6 +449,7 @@ class SystemAPI(object):
                 res[mpoint] = None
 
         return res
+
 
     @rpc.service_method
     def scaling_metrics(self):

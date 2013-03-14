@@ -252,10 +252,9 @@ class TestSysInfoAPI(unittest.TestCase):
                 'eth0': {'receive': {'packets': '1160244', 'errors': '0', 'bytes': '1554522775'}, 'transmit': {'packets': '671950', 'errors': '0', 'bytes': '60669160'}}})
 
 
-    def test_scaling_metrics_read(self):
-        # mock queryenv_service
-        old_queryenv_service = system.bus.queryenv_service
-        system.bus.queryenv_service = mock.Mock()
+    @mock.patch('scalarizr.api.system.bus')
+    def test_scaling_metrics_read(self, bus_mock):
+        bus_mock.queryenv_service = mock.Mock()
 
         m = mock.Mock()
         m.id = '777'
@@ -268,14 +267,10 @@ class TestSysInfoAPI(unittest.TestCase):
         assert self.info.scaling_metrics() == [{'error': '', 'id': '777', 'value': 555.0, 'name': 'test_name'}]
         os.remove('/tmp/test_custom_scaling_metric_read')
 
-        # unmock queryenv_service
-        system.bus.queryenv_service = old_queryenv_service
 
-
-    def test_scaling_metrics_read_error(self):
-        # mock queryenv_service
-        old_queryenv_service = system.bus.queryenv_service
-        system.bus.queryenv_service = mock.Mock()
+    @mock.patch('scalarizr.api.system.bus')
+    def test_scaling_metrics_read_error(self, bus_mock):
+        bus_mock.queryenv_service = mock.Mock()
 
         m = mock.Mock()
         m.id = '777'
@@ -285,14 +280,10 @@ class TestSysInfoAPI(unittest.TestCase):
         system.bus.queryenv_service.get_scaling_metrics.return_value = [m]
         assert self.info.scaling_metrics() == [{'error': "File is not readable: '/tmp/this_file_dosnt_exist'", 'id': '777', 'value': 0.0, 'name': 'test_name'}]
 
-        # unmock queryenv_service
-        system.bus.queryenv_service = old_queryenv_service
 
-
-    def test_scaling_metrics_execute(self):
-        # mock queryenv_service
-        old_queryenv_service = system.bus.queryenv_service
-        system.bus.queryenv_service = mock.Mock()
+    @mock.patch('scalarizr.api.system.bus')
+    def test_scaling_metrics_execute(self, bus_mock):
+        bus_mock.queryenv_service = mock.Mock()
 
         m = mock.Mock()
         m.id = '777'
@@ -306,15 +297,10 @@ class TestSysInfoAPI(unittest.TestCase):
         assert self.info.scaling_metrics() == [{'error': '', 'id': '777', 'value': 555.0, 'name': 'test_name'}]
         os.remove('/tmp/test_custom_scaling_metric_execute.sh')
 
-        # unmock queryenv_service
-        system.bus.queryenv_service = old_queryenv_service
 
-
-
-    def test_scaling_metrics_execute_error(self):
-        # mock queryenv_service
-        old_queryenv_service = system.bus.queryenv_service
-        system.bus.queryenv_service = mock.Mock()
+    @mock.patch('scalarizr.api.system.bus')
+    def test_scaling_metrics_execute_error(self, bus_mock):
+        bus_mock.queryenv_service = mock.Mock()
 
         m = mock.Mock()
         m.id = '777'
@@ -328,14 +314,10 @@ class TestSysInfoAPI(unittest.TestCase):
         assert self.info.scaling_metrics() == [{'error': 'exitcode: 1', 'id': '777', 'value': 0.0, 'name': 'test_name'}]
         os.remove('/tmp/test_custom_scaling_metric_execute.sh')
 
-        # unmock queryenv_service
-        system.bus.queryenv_service = old_queryenv_service
 
-
-    def test_scaling_metrics_execute_timeout(self):
-        # mock queryenv_service
-        old_queryenv_service = system.bus.queryenv_service
-        system.bus.queryenv_service = mock.Mock()
+    @mock.patch('scalarizr.api.system.bus')
+    def test_scaling_metrics_execute_timeout(self, bus_mock):
+        bus_mock.queryenv_service = mock.Mock()
 
         m = mock.Mock()
         m.id = '777'
@@ -356,14 +338,10 @@ class TestSysInfoAPI(unittest.TestCase):
 
         os.remove('/tmp/test_custom_scaling_metric_execute.sh')
 
-        # unmock queryenv_service
-        system.bus.queryenv_service = old_queryenv_service
 
-
-    def test_scaling_metrics_multi(self):
-        # mock queryenv_service
-        old_queryenv_service = system.bus.queryenv_service
-        system.bus.queryenv_service = mock.Mock()
+    @mock.patch('scalarizr.api.system.bus')
+    def test_scaling_metrics_multi(self, bus_mock):
+        bus_mock.queryenv_service = mock.Mock()
 
         m = mock.Mock()
         m.id = '777'
@@ -375,9 +353,6 @@ class TestSysInfoAPI(unittest.TestCase):
         system.bus.queryenv_service.get_scaling_metrics.return_value = [m for _ in range(27)]
         assert self.info.scaling_metrics() == [{'error': '', 'id': '777', 'value': 555.0, 'name': 'test_name'} for _ in range(27)]
         os.remove('/tmp/test_custom_scaling_metric_read')
-
-        # unmock queryenv_service
-        system.bus.queryenv_service = old_queryenv_service
 
 
 def tearDownModule():
