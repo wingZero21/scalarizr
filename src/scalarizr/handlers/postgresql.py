@@ -753,23 +753,35 @@ class PostgreSqlHander(ServiceCtlHandler):
 			
 			with op.step(self._step_collect_host_up_data):
 				# Update HostUp message 
-				msg_data = dict()
-				msg_data.update({OPT_REPLICATION_MASTER 		: 	str(int(self.is_replication_master)),
+				msg_data = dict({OPT_REPLICATION_MASTER 		: 	str(int(self.is_replication_master)),
 								OPT_ROOT_USER				:	self.postgresql.root_user.name,
 								OPT_ROOT_PASSWORD			:	self.root_password,
+								OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key,
+								OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key,
 								OPT_CURRENT_XLOG_LOCATION	: 	None})
-				msg_data.update(self._compat_storage_data(vol=__postgresql__['volume'], snap=__postgresql__['restore']))
+
+				if __postgresql__['compat_prior_backup_restore']:
+					if 'restore' in __postgresql__:
+						msg_data.update(dict(
+							snapshot_config=dict(__postgresql__['restore'].snapshot)))
+					msg_data.update(dict(
+						volume_config=dict(__postgresql__['volume'])))
+				else:
+					msg_data.update(dict(
+						volume=dict(__postgresql__['volume'])
+					))
+					for key in ('backup', 'restore'):
+						if key in __postgresql__:
+							msg_data[key] = dict(__postgresql__[key])
 
 				message.db_type = BEHAVIOUR
 				message.postgresql = msg_data.copy()
-				message.postgresql.update({
-								OPT_ROOT_SSH_PRIVATE_KEY	: 	self.postgresql.root_user.private_key,
-								OPT_ROOT_SSH_PUBLIC_KEY 	: 	self.postgresql.root_user.public_key
-								})
+
 				try:
 					del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
 				except KeyError:
 					pass
+
 				__postgresql__.update(msg_data)
 
 
