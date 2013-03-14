@@ -149,7 +149,7 @@ class GcePersistentVolume(base.Volume):
 
 		operation = connection.snapshots().insert(project=project_id,
 						body=dict(
-							name=snap_name,
+							name=snap_name.lower(),
 							# Doesnt work without kind (3.14.2013)
 							kind="compute#snapshot",
 							description=description,
