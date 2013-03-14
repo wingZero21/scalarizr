@@ -31,7 +31,7 @@ class GcePersistentVolume(base.Volume):
 		zone = os.path.basename(__node__['gce']['zone'])
 		connection = __node__['gce']['compute_connection']
 		project_id = __node__['gce']['project_id']
-		instance_id = __node__['gce']['instance_id']
+		server_name = __node__['server_id']
 
 		try:
 			create = False
@@ -56,6 +56,7 @@ class GcePersistentVolume(base.Volume):
 											   sourceSnapshot=temp_snap.link)
 					create = True
 
+			attach = False
 			if create:
 				op = connection.disks().insert(project=project_id,
 											   zone=zone,
@@ -68,13 +69,18 @@ class GcePersistentVolume(base.Volume):
 				self.id = disk_dict['id']
 				self.link = disk_dict['selfLink']
 				self.zone = zone
+				attach = True
 
-			attachment_inf = self._attachment_info(connection)
-			if attachment_inf:
-				disk_devicename = attachment_inf['deviceName']
 			else:
+				attachment_inf = self._attachment_info(connection)
+				if attachment_inf:
+					disk_devicename = attachment_inf['deviceName']
+				else:
+					attach = True
+
+			if attach:
 				op = connection.instances().attachDisk(
-							instance=instance_id,
+							instance=server_name,
 							project=project_id,
 							zone=zone,
 							body=dict(
@@ -104,11 +110,11 @@ class GcePersistentVolume(base.Volume):
 	def _attachment_info(self, con):
 		zone = __node__['gce']['zone']
 		project_id = __node__['gce']['project_id']
-		instance_id = __node__['gce']['instance_id']
+		server_name = __node__['server_id']
 
 		this_instance = con.instances().get(zone=zone,
 										   project=project_id,
-										   instance=instance_id).execute()
+										   instance=server_name).execute()
 		attached = filter(lambda x: x['source'] == self.link, this_instance.disks)
 		if attached:
 			return attached[0]
@@ -120,8 +126,8 @@ class GcePersistentVolume(base.Volume):
 		if attachment_inf:
 			zone = __node__['gce']['zone']
 			project_id = __node__['gce']['project_id']
-			instance_id = __node__['gce']['instance_id']
-			op = connection.instances().detachDisk(instance=instance_id,
+			server_name = __node__['server_id']
+			op = connection.instances().detachDisk(instance=server_name,
 										project=project_id,
 										zone=zone,
 										deviceName=attachment_inf['deviceName']).execute()
