@@ -473,12 +473,7 @@ class SystemAPI(object):
         # Obtain scaling metrics from Scalr.
         scaling_metrics = bus.queryenv_service.get_scaling_metrics()
         
-        results = []
         max_threads = 10
         wrk_pool = pool.ThreadPool(processes=max_threads)
-        for metric in scaling_metrics:
-            results.append(wrk_pool.apply_async(_ScalingMetricStrategy.get, args=(metric,)))
-        wrk_pool.close()
-        wrk_pool.join()
 
-        return [result.get() for result in results]
+        return wrk_pool.map_async(_ScalingMetricStrategy.get, scaling_metrics).get()
