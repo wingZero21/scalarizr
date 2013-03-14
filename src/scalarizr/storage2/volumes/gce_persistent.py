@@ -134,6 +134,11 @@ class GcePersistentVolume(base.Volume):
 
 			gce_util.wait_for_operation_to_complete(connection, project_id, op['name'], zone=zone)
 
+
+	def _destroy(self, force, **kwds):
+		pass
+
+
 	def _snapshot(self, description, tags, **kwds):
 		connection = __node__['gce']['compute_connection']
 		project_id = __node__['gce']['project_id']
@@ -145,9 +150,10 @@ class GcePersistentVolume(base.Volume):
 		operation = connection.snapshots().insert(project=project_id,
 						body=dict(
 							name=snap_name,
+							# Doesnt work without kind (3.14.2013)
+							kind="compute#snapshot",
 							description=description,
 							sourceDisk=self.link,
-							sourceDiskId=self.id
 						)).execute()
 
 		try:
