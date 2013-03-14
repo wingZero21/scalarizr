@@ -19,7 +19,7 @@ class GcePersistentVolume(base.Volume):
 
 
 	def __init__(self, name=None, link=None, size=None, zone=None, **kwargs):
-		name = name or 'scalr-disk-%s' % uuid.uuid4()
+		name = name or 'scalr-disk-%s' % uuid.uuid4().hex[:8]
 		super(GcePersistentVolume, self).__init__(name=name, link=link,
 												  size=size, zone=zone,
 												  **kwargs)
