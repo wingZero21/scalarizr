@@ -636,7 +636,7 @@ class ClusterDir(object):
 		for fname in fnames:
 			exclude = os.path.join(self.path, fname)
 			if os.path.exists(exclude):
-				LOG.debug('Deliting file: %s' % exclude)
+				LOG.debug('Deleting file: %s' % exclude)
 				os.remove(exclude)
 	
 	def is_initialized(self, path):

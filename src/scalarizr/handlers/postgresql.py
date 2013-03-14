@@ -335,47 +335,57 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 					postgresql_data = message.postgresql.copy()
 
+					#Extracting service configuration preset from message
 					if 'preset' in postgresql_data:
 						self.initial_preset = postgresql_data['preset']
 						LOG.debug('Scalr sent current preset: %s' % self.initial_preset)
 						del postgresql_data['preset']
 
+					#Extracting or generating postgresql root password
 					postgresql_data['%s_password' % ROOT_USER] = postgresql_data.get(OPT_ROOT_PASSWORD) or cryptotool.pwgen(10)
 					del postgresql_data[OPT_ROOT_PASSWORD]
 
+					#Extracting replication ssh keys from message
 					root = PgUser(ROOT_USER, self.postgresql.pg_keys_dir)
 					root.store_keys(postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY], postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY])
 					del postgresql_data[OPT_ROOT_SSH_PUBLIC_KEY]
 					del postgresql_data[OPT_ROOT_SSH_PRIVATE_KEY]
 
 
-					postgresql_data['compat_prior_backup_restore'] = False
 					if postgresql_data.get('volume'):
 						# New format
+						postgresql_data['compat_prior_backup_restore'] = False
 						postgresql_data['volume'] = storage2.volume(postgresql_data['volume'])
+						LOG.debug("message.pg['volume']:", postgresql_data['volume'])
 						if 'backup' in postgresql_data:
 							postgresql_data['backup'] = backup.backup(postgresql_data['backup'])
+							LOG.debug("message.pg['backup']:", postgresql_data['backup'])
 						if 'restore' in postgresql_data:
 							postgresql_data['restore'] = backup.restore(postgresql_data['restore'])
-
+							LOG.debug("message.pg['restore']:", postgresql_data['restore'])
 					else:
 
 						# Compatibility transformation
 						# - volume_config -> volume
 						# - master n'th start, type=ebs - del snapshot_config
-						# - snapshot_config + log_file + log_pos -> restore
-						# - create backup on master 1'st start
+						# - snapshot_config -> restore
+						# - create backup object on master 1'st start
 
 						postgresql_data['compat_prior_backup_restore'] = True
 						if postgresql_data.get(OPT_VOLUME_CNF):
 							postgresql_data['volume'] = storage2.volume(
 								postgresql_data.pop(OPT_VOLUME_CNF))
-						else:
+
+						elif postgresql_data.get(OPT_SNAPSHOT_CNF):
 							postgresql_data['volume'] = storage2.volume(
 								type=postgresql_data[OPT_SNAPSHOT_CNF]['type'])
 
+						else:
+							raise HandlerError('No volume config or snapshot config provided')
+
 						if postgresql_data['volume'].device and \
 										postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+							LOG.debug("Master n'th start detected. Removing snapshot config from message")
 							postgresql_data.pop(OPT_SNAPSHOT_CNF, None)
 
 						if postgresql_data.get(OPT_SNAPSHOT_CNF):
@@ -720,7 +730,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		with bus.initialization_op as op:
 			with op.step(self._step_create_storage):
 
-			# Plug storage
+				# Plug storage
 				if 'restore' in __postgresql__ and\
 				   __postgresql__['restore'].type == 'snap_postgresql':
 					__postgresql__['restore'].run()
