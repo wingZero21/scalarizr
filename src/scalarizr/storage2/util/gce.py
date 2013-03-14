@@ -14,7 +14,7 @@ def devicename_to_device(device_name):
 
 
 def get_op_status(conn, proj_id, op_name, zone=None, fields=None):
-	fields = ', '.join(fields) if fields else None
+	fields = fields if isinstance(fields, str) else ', '.join(fields) if fields else None
 	kwargs = dict(project=proj_id, operation=op_name, fields=fields)
 	if zone:
 		kwargs['zone'] = zone
@@ -23,15 +23,15 @@ def get_op_status(conn, proj_id, op_name, zone=None, fields=None):
 		return conn.globalOperations().get(**kwargs).execute()
 
 
-def wait_for_operation_to_complete(connection, project_id, operation_name,
-								   zone=None, timeout=3600):
-	def op_complete():
+def wait_for_operation(connection, project_id, operation_name,
+								   zone=None, status_to_wait=("DONE",), timeout=3600):
+	def op_reached_status():
 		status = get_op_status(connection,
 							   project_id,
 							   operation_name,
 							   zone,
 							   ('status', 'error'))
-		if 'DONE' == status['status']:
+		if status['status'] in status_to_wait:
 			error = status.get('error')
 			if error:
 				err_msg = '\n'.join([err['message'] for err in error['errors']])
@@ -39,4 +39,4 @@ def wait_for_operation_to_complete(connection, project_id, operation_name,
 			return True
 		return False
 
-	util.wait_until(op_complete, timeout=timeout)
+	util.wait_until(op_reached_status, timeout=timeout)
