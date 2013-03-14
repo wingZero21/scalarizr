@@ -145,11 +145,11 @@ class GcePersistentVolume(base.Volume):
 
 		now_raw = datetime.datetime.utcnow()
 		now_str = now_raw.strftime('%d-%b-%Y-%H-%M-%S-%f')
-		snap_name = '%s-snap-%s' % (self.name, now_str)
+		snap_name = ('%s-snap-%s' % (self.name, now_str)).lower()
 
 		operation = connection.snapshots().insert(project=project_id,
 						body=dict(
-							name=snap_name.lower(),
+							name=snap_name,
 							# Doesnt work without kind (3.14.2013)
 							kind="compute#snapshot",
 							description=description,
