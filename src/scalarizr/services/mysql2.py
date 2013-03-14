@@ -70,6 +70,7 @@ class MySQLSnapBackup(backup.SnapBackup):
 		self._mysql_init.start()
 		client = self._client()
 		client.lock_tables()
+		coreutils.sync()
 		if int(__mysql__['replication_master']):
 			(log_file, log_pos) = client.master_status()
 		else:
