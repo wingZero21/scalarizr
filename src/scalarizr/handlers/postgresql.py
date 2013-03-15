@@ -489,7 +489,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		@param message: postgresql_PromoteToMaster
 		"""
 		LOG.debug("on_DbMsr_PromoteToMaster")
-		postgresql = message.body[__postgresql__['behavior']]
+		postgresql = message.body[BEHAVIOUR]
 
 		if int(__postgresql__['replication_master']):
 			LOG.warning('Cannot promote to master. Already master')
