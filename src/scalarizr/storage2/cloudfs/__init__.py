@@ -371,48 +371,31 @@ class FileTransfer(BaseTransfer):
 
 class LargeTransfer(bases.Task):
 	'''
+	LargeTransfer's main objective is to prepare incoming data (e.g. files,
+	process output) for storing on a cloud storage and to upload it (upload
+	scenario). The result of this is usually a url that points to a manifest
+	file (see Manifest).
+	LargeTransfer can download and rebuild stored data if provided with it's
+	manifest url.
 
-	SQL dump. File-per-database.
-	---------------------------
-
-	def src_gen():
-		yield stream = mysqldump ${database}
-	def dst_gen():
-		yield ${database}
-
-	s3://.../${transfer_id}/manifest.json
-							${database_1}.gz.00
-							${database_1}.gz.01
-							${database_2}.gz.00
-							${database_2}.gz.01
-							${database_2}.gz.02
-
-
-	Directory backup
-	----------------
-
-	src = '/mnt/dbbackup'
-	dst = 's3://backup/key1/key2/'
-
-	s3://backup/key1/key2/${transfer_id}/manifest.json
-	s3://backup/key1/key2/${transfer_id}/part.gz.00
-	s3://backup/key1/key2/${transfer_id}/part.gz.01
-	s3://backup/key1/key2/${transfer_id}/part.gz.02
-
-
-	Directory restore
-	-----------------
-
-	src = s3://backup/key1/key2/eph-snap-12345678/manifest.json
-	dst = /mnt/dbbackup/
-
-	1. Download manifest 
-	2. <chunk downloader> | funzip | tar -x -C /mnt/dbbackup
+	Details:
+	Download and upload action is performed by FileTransfer, so LargeTransfer
+	creates source and destination generators that contain most of the logic
+	and passes them to a FileTransfer instance. 
+	Destination generator simply repeats the destination path which is usually
+	a local dir or a cloudfs path prefix; it's implemented as generator
+	because at the time of writing, LargeTransfer was planned to be a more
+	generic tool.
+	Source generator is more comlpex, it handles compression and splitting of
+	incomning data before sending it to FileTransfer (upload scenario); or
+	reads chunk urls from the manifest and has FileTransfer download them to
+	a tmpfs dir (download scenario). Source generator also launches so called
+	restorer thread that uses the downloaded chunks to bring original data
+	back together.
 	'''
 
-	# python 2.7.2 @ ubuntu 11.10 : subprocess hangs sometimes
+	# python 2.7.2 @ ubuntu 11.10 subprocess hangs sometimes
 
-	# NOTE: use directory dst for uploading.
 	pigz_bin = '/usr/bin/pigz'
 	gzip_bin = '/bin/gzip'
 
@@ -427,11 +410,23 @@ class LargeTransfer(bases.Task):
 				tags=None,
 				**kwds):
 		'''
-		@param src: transfer source path
-			- str file or directory path. 
-			- file-like object (stream)
-			- generator function
+		:param src: DL: manifest url. UL: str file or directory path,
+					file-like object to read from, generator of those
+		:param dst: DL: str local dir path. UL: url cloudfs path
+		:param transfer_id: unique string appended to cloudfs path. If None,
+							generated automatically
+		:param streamer: "gzip" or services.mysql2.Exec instance. Else - no
+						  streaming. Ignored when uploading files or streams 
+		:param compressor: "gzip" or services.mysql2.Exec instance. Else - no
+						   compression.
+		:param chunk_size: chunk size in megabytes
+		:param try_pigz: if compressor is "gzip", try pigz first 
+		:param manifest: manifest file basename
+		:param description: description to save in manifest
+		:param tags: tags to save in manifest
+		:param **kwds: additional kwargs for FileTransfer
 		'''
+		
 		url_re = re.compile(r'^[\w-]+://')
 		if isinstance(src, basestring) and url_re.match(src):
 			self._up = False
@@ -1072,7 +1067,7 @@ class Manifest(object):
 			self.write(self.filename)
 
 	def delete(self, destroyers=4):
-		#? 4
+		# TODO: delete only those uploaded by this particular LT instance
 		LOG.debug("Performing cloudfs clean up")
 		try:
 			path = os.path.dirname(self.cloudfs_path)
