@@ -455,18 +455,17 @@ class PostgreSqlHander(ServiceCtlHandler):
 				with op.step(self._step_create_data_bundle):
 					
 					bus.fire('before_postgresql_data_bundle')
-					# Retrieve password for scalr postgresql root user
-					# Creating snapshot		
 					snap = self._create_snapshot()
 					used_size = int(system2(('df', '-P', '--block-size=M', STORAGE_PATH))[0].split('\n')[1].split()[2][:-1])
-					bus.fire('postgresql_data_bundle', snapshot_id=snap.id)			
-					
+					bus.fire('postgresql_data_bundle', snapshot_id=snap.id)
+
 					# Notify scalr
-					msg_data = dict(
-						db_type 	= BEHAVIOUR,
-						used_size	= '%.3f' % (float(used_size) / 1000,),
-						status		= 'ok'
-					)
+					msg_data = {
+					'db_type': BEHAVIOUR,
+					'status': 'ok',
+					used_size : '%.3f' % (float(used_size) / 1000,),
+					BEHAVIOUR: {OPT_SNAPSHOT_CNF: snap.config()}
+					}
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 			op.ok()
@@ -783,21 +782,6 @@ class PostgreSqlHander(ServiceCtlHandler):
 					pass
 
 				__postgresql__.update(msg_data)
-
-
-	def _compat_storage_data(self, vol=None, snap=None):
-		ret = dict()
-		if bus.scalr_version >= (2, 2):
-			if vol:
-				ret['volume_config'] = vol.config() if not isinstance(vol, dict) else vol
-			if snap:
-				ret['snapshot_config'] = snap.config() if not isinstance(snap, dict) else snap
-		else:
-			if vol:
-				ret['volume_id'] = vol.config()['id'] if not isinstance(vol, dict) else vol['id']
-			if snap:
-				ret['snapshot_id'] = snap.config()['id'] if not isinstance(snap, dict) else snap['id']
-		return ret
 
 
 	def _get_master_host(self):
