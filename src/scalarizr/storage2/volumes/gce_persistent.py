@@ -115,7 +115,7 @@ class GcePersistentVolume(base.Volume):
 		this_instance = con.instances().get(zone=zone,
 										   project=project_id,
 										   instance=server_name).execute()
-		attached = filter(lambda x: x['source'] == self.link, this_instance.disks)
+		attached = filter(lambda x: x.get('source') == self.link, this_instance['disks'])
 		if attached:
 			return attached[0]
 
