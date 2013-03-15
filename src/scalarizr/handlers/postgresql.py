@@ -312,13 +312,12 @@ class PostgreSqlHander(ServiceCtlHandler):
 	@property
 	def is_replication_master(self):
 		return True if int(__postgresql__[OPT_REPLICATION_MASTER]) else False
-				
-				
-	@property
-	def postgres_tags(self):
+
+
+	def resource_tags(self):
 		return prepare_tags(BEHAVIOUR, db_replication_role=self.is_replication_master)
-		
-				
+
+
 	def on_host_init_response(self, message):
 		"""
 		Check postgresql data in host init response
@@ -842,7 +841,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 		LOG.info("Creating PostgreSQL data bundle")
 		backup_obj = backup.backup(type='snap_postgresql',
 			volume=__postgresql__['volume'],
-			tags=self.postgres_tags)
+			tags=self.resource_tags())
 		restore = backup_obj.run()
 		return restore.snapshot
 
@@ -852,6 +851,3 @@ class PostgreSqlHander(ServiceCtlHandler):
 			iptables.FIREWALL.ensure([
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(__postgresql__['port'])},
 			])
-
-	def resource_tags(self):
-		return prepare_tags(BEHAVIOUR, db_replication_role=self.is_replication_master)
