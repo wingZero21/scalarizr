@@ -108,7 +108,7 @@ class GcePersistentVolume(base.Volume):
 
 
 	def _attachment_info(self, con):
-		zone = __node__['gce']['zone']
+		zone = os.path.basename(__node__['gce']['zone'])
 		project_id = __node__['gce']['project_id']
 		server_name = __node__['server_id']
 
@@ -124,7 +124,7 @@ class GcePersistentVolume(base.Volume):
 		connection = __node__['gce']['compute_connection']
 		attachment_inf = self._attachment_info(connection)
 		if attachment_inf:
-			zone = __node__['gce']['zone']
+			zone = os.path.basename(__node__['gce']['zone'])
 			project_id = __node__['gce']['project_id']
 			server_name = __node__['server_id']
 			op = connection.instances().detachDisk(instance=server_name,
@@ -136,7 +136,20 @@ class GcePersistentVolume(base.Volume):
 
 
 	def _destroy(self, force, **kwds):
-		pass
+		self._check_attr('link')
+		self._check_attr('name')
+
+		connection = __node__['gce']['compute_connection']
+		project_id = __node__['gce']['project_id']
+		zone = os.path.basename(__node__['gce']['zone'])
+		try:
+			op = connection.disks().delete(project=project_id,
+										   zone=zone,
+										   disk=self.name).execute()
+			gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
+		except:
+			e = sys.exc_info()[1]
+			raise storage2.StorageError("Disk destruction failed: %s" % e)
 
 
 	def _snapshot(self, description, tags, **kwds):
