@@ -60,7 +60,7 @@ __postgresql__.update({
 
 
 def get_handlers():
-	return tuple(PostgreSqlHander(),)
+	return PostgreSqlHander(),
 
 
 SSH_KEYGEN_SELINUX_MODULE = """
