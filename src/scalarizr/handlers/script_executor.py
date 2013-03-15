@@ -212,6 +212,9 @@ class ScriptExecutor(Handler):
 						exec_timeout=s.exec_timeout, event_name=event_name, role_name=role_name) \
 						for s in queryenv_scripts]
 
+		if 'global_variables' in message.body:
+			os.environ.update(message.global_variables or {})
+
 		LOG.debug('Fetched %d scripts', len(scripts))
 		self.execute_scripts(scripts)
 
