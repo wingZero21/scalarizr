@@ -1,4 +1,5 @@
 from __future__ import with_statement
+
 '''
 Created on April 18th, 2011
 
@@ -7,7 +8,6 @@ Created on April 18th, 2011
 from __future__ import with_statement
 
 import os
-import glob
 import time
 import shutil
 import tarfile
@@ -22,13 +22,13 @@ from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.linux.coreutils import split
 from scalarizr.util import system2, disttool, software, cryptotool, initdv2
-from scalarizr.storage import Storage, StorageError, Volume, transfer
+from scalarizr.storage import transfer
 from scalarizr.linux import iptables
 from scalarizr.handlers import operation, prepare_tags
 from scalarizr.services import make_backup_steps
 from scalarizr.api import service as preset_service
-from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP,\
-PgUser, SU_EXEC, PgSQLPresetProvider, __postgresql__
+from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, \
+	PgUser, SU_EXEC, PgSQLPresetProvider, __postgresql__
 from scalarizr.node import __node__
 from scalarizr import storage2
 from scalarizr.services import backup
@@ -37,29 +37,30 @@ from scalarizr.services import backup
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.POSTGRESQL
 LOG = logging.getLogger(__name__)
 
-PG_SOCKET_DIR 				= '/var/run/postgresql/'
-STORAGE_PATH 				= "/mnt/pgstorage"
-STORAGE_VOLUME_CNF 			= 'postgresql.json'
-STORAGE_SNAPSHOT_CNF 		= 'postgresql-snap.json'
+PG_SOCKET_DIR = '/var/run/postgresql/'
+STORAGE_PATH = "/mnt/pgstorage"
+STORAGE_VOLUME_CNF = 'postgresql.json'
+STORAGE_SNAPSHOT_CNF = 'postgresql-snap.json'
 
-OPT_VOLUME_CNF				= 'volume_config'
-OPT_SNAPSHOT_CNF			= 'snapshot_config'
-OPT_ROOT_USER				= 'root_user'
-OPT_ROOT_PASSWORD 			= "root_password"
-OPT_ROOT_SSH_PUBLIC_KEY 	= "root_ssh_public_key"
-OPT_ROOT_SSH_PRIVATE_KEY	= "root_ssh_private_key"
-OPT_CURRENT_XLOG_LOCATION	= 'current_xlog_location'
-OPT_REPLICATION_MASTER 		= "replication_master"
+OPT_VOLUME_CNF = 'volume_config'
+OPT_SNAPSHOT_CNF = 'snapshot_config'
+OPT_ROOT_USER = 'root_user'
+OPT_ROOT_PASSWORD = "root_password"
+OPT_ROOT_SSH_PUBLIC_KEY = "root_ssh_public_key"
+OPT_ROOT_SSH_PRIVATE_KEY = "root_ssh_private_key"
+OPT_CURRENT_XLOG_LOCATION = 'current_xlog_location'
+OPT_REPLICATION_MASTER = "replication_master"
 
 __postgresql__.update({
-'port': 5432,
-'storage_dir': '/mnt/pgstorage',
-'root_user': 'scalr',
-'pgdump_chunk_size': 200 * 1024 * 1024,
+	'port': 5432,
+	'storage_dir': '/mnt/pgstorage',
+	'root_user': 'scalr',
+	'pgdump_chunk_size': 200 * 1024 * 1024,
 })
-		
+
+
 def get_handlers():
-	return (PostgreSqlHander(), )
+	return tuple(PostgreSqlHander(),)
 
 
 SSH_KEYGEN_SELINUX_MODULE = """
@@ -81,32 +82,31 @@ allow ssh_keygen_t initrc_tmp_t:file { read write };
 """
 
 
-
-class PostgreSqlHander(ServiceCtlHandler):	
+class PostgreSqlHander(ServiceCtlHandler):
 	_logger = None
-		
+
 	_queryenv = None
 	""" @type _queryenv: scalarizr.queryenv.QueryEnvService	"""
-	
+
 	_platform = None
 	""" @type _platform: scalarizr.platform.Ec2Platform """
-	
+
 	_cnf = None
 	''' @type _cnf: scalarizr.config.ScalarizrCnf '''
-	
+
 	preset_provider = None
-		
+
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
 		return BEHAVIOUR in behaviour and (
-					message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
-				or 	message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
-				or 	message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
-				or 	message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
-				or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION
-				or  message.name == Messages.HOST_INIT
-				or  message.name == Messages.BEFORE_HOST_TERMINATE
-				or  message.name == Messages.HOST_UP
-				or  message.name == Messages.HOST_DOWN)	
+			message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
+			or message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
+			or message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
+			or message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
+			or message.name == Messages.UPDATE_SERVICE_CONFIGURATION
+			or message.name == Messages.HOST_INIT
+			or message.name == Messages.BEFORE_HOST_TERMINATE
+			or message.name == Messages.HOST_UP
+			or message.name == Messages.HOST_DOWN)
 
 	
 	def get_initialization_phases(self, hir_message):
@@ -183,7 +183,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				if all((checkmodule_paths, semodule_package_paths, semodule_paths)):
 					
 					with open('/tmp/sshkeygen.te', 'w') as fp:
-					    fp.write(SSH_KEYGEN_SELINUX_MODULE)
+						fp.write(SSH_KEYGEN_SELINUX_MODULE)
 					
 					self._logger.debug('Compiling SELinux policy for ssh-keygen')
 					system2((checkmodule_paths[0], '-M', '-m', '-o',
