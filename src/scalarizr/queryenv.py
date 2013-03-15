@@ -192,7 +192,6 @@ class QueryEnvService(object):
 		@return: list of ScalingMetric
 		'''
 		return self._request('get-scaling-metrics', {}, self._read_get_scaling_metrics_response)
-		pass
 	
 	def get_global_config(self):
 		"""

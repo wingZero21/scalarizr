@@ -1,9 +1,9 @@
 Feature: Cancel messages
 
 Scenario: Cancel
-    Given I have used the storage for 1000 MB
+    Given I have used the storage for 500 MB
     And I have sent <create> message
-    When I wait for 3 seconds
+    When I wait for 2 seconds
     And I send <cancel> message
     And I wait for 10 seconds
     Then I expect it canceled

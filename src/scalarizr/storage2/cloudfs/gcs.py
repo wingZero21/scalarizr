@@ -112,6 +112,7 @@ class GCSFileSystem (object):
 
 
 	def delete(self, remote_path):
+		LOG.info('Deleting %s from GCS' % remote_path)
 		bucket, obj = self._parse_path(remote_path)
 
 		req = self.cloudstorage.objects().delete(bucket=bucket, object=obj)
