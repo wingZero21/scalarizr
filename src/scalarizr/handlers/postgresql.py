@@ -403,6 +403,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 					LOG.debug("Update postgresql config with %s", postgresql_data)
 					__postgresql__.update(postgresql_data)
 					__postgresql__['volume'].mpoint = __postgresql__['storage_dir']
+					__postgresql__['volume'].tags = self.resource_tags()
+					if 'backup' in __postgresql__:
+						__postgresql__['backup'].tags = self.resource_tags()
 
 
 	def on_before_host_up(self, message):
@@ -850,3 +853,5 @@ class PostgreSqlHander(ServiceCtlHandler):
 				{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(__postgresql__['port'])},
 			])
 
+	def resource_tags(self):
+		return prepare_tags(BEHAVIOUR, db_replication_role=self.is_replication_master)
