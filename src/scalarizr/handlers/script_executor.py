@@ -213,7 +213,9 @@ class ScriptExecutor(Handler):
 						for s in queryenv_scripts]
 
 		if 'global_variables' in message.body:
-			os.environ.update(message.global_variables or {})
+			gv = message.body.get('global_variables', [])
+			for kv in gv:
+				os.environ[kv['name']] = kv['value']
 
 		LOG.debug('Fetched %d scripts', len(scripts))
 		self.execute_scripts(scripts)
