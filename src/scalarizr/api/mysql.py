@@ -79,15 +79,15 @@ class MySQLAPI(object):
     @rpc.service_method
     def replication_status(self):
         mysql_cli = mysql_svc.MySQLClient()
-        try:
-            slave_status = mysql_cli.slave_status()
-            slave_status['status'] = 'up'
-            return {'slave': slave_status}
-        except ServiceError:
-            master_status = mysql_cli.master_status()
+        if int(__mysql__['replication_status']):
+             master_status = mysql_cli.master_status()
             if None in master_status:
                 return {'slave': {'status': 'down'}}
             result = {'master': {'status': 'up',
                                  'log_file': master_status[0],
                                  'log_pos': master_status[1]}}
             return result
+        else:           
+            slave_status = mysql_cli.slave_status()
+            slave_status['status'] = 'up'
+            return {'slave': slave_status}
