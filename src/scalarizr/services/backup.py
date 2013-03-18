@@ -119,7 +119,8 @@ class SnapBackup(Backup):
 		finally:
 			self.fire('unfreeze', self.volume, state)
 		util.wait_until(lambda: snap.status() in (snap.COMPLETED, snap.FAILED),
-					start_text='Polling snapshot status (%s)' % snap.id)
+					start_text='Polling snapshot status (%s)' % snap.id,
+					logger=LOG)
 		if snap.status() == snap.FAILED:
 			msg = 'Backup failed because snapshot %s failed' % snap.id
 			raise Error(msg)

@@ -47,6 +47,19 @@ def i_see_volume_growth(step):
 	assert text == world.test_text
 
 
+@step('I create and then delete LVM snapshot')
+def create_delete_lvm_snap(step):
+	lvm_snap = world.lvm_vol.lvm_snapshot()
+	world.lvm_snap_path = lvm_snap.device
+	lvm_snap.destroy()
+
+
+@step('I do not see cow device file')
+def cow_is_gone(step):
+	assert not os.path.exists(world.lvm_snap_path)
+
+
+
 @after.all
 def cleanup(total):
 	if hasattr(world, 'lvm_vol'):

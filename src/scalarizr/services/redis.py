@@ -895,6 +895,7 @@ class RedisCLI(object):
 
 
 	def save(self):
+		LOG.info('Flushing redis data to disk (cli on port %s)', self.port)
 		self.bgrewriteaof() if self.aof_enabled else self.bgsave()
 
 

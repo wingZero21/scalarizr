@@ -118,7 +118,14 @@ class ConfigDriven(object):
 		if name in self.__dict__['_config']:
 			return self.__dict__['_config'][name]
 		raise AttributeError(name)
-	
+
+
+	def __delattr__(self, name):
+		if name in self.__dict__['_config']:
+			del self.__dict__['_config'][name]
+		else:
+			raise AttributeError(name)
+
 	
 	def __hasattr__(self, name):
 		return name in self.__dict__['_config']
