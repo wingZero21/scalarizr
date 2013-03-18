@@ -1,7 +1,7 @@
 import os
+import sys
 
 from scalarizr import util
-
 
 def devicename_to_device(device_name):
 	path = '/dev/disk/by-id/google-{0}'.format(device_name)
@@ -40,3 +40,44 @@ def wait_for_operation(connection, project_id, operation_name,
 		return False
 
 	util.wait_until(op_reached_status, timeout=timeout)
+
+
+def attachment_info(connection, project_id, zone, instance_name, disk_link):
+	instance = connection.instances().get(zone=zone,
+										project=project_id,
+										instance=instance_name).execute()
+	attached = filter(lambda x: x.get('source') == disk_link, instance['disks'])
+	if attached:
+		return attached[0]
+
+
+def ensure_disk_detached(connection, project_id, zone, instance_name, disk_link):
+	"""
+	Make sure that disk is detached from specified instance (since there is no way to detach disk
+	from any instance)
+
+	Handles: - Disk already detached
+			 - Instance doesn't exist
+
+	"""
+	try:
+		attached = attachment_info(connection, project_id, zone, instance_name, disk_link)
+		if not attached:
+			return
+		device_name = attached['deviceName']
+		op = connection.instances().detachDisk(project=project_id,
+											   zone=zone,
+											   instance=instance_name,
+											   deviceName=device_name).execute()
+		wait_for_operation(connection, project_id, op['name'], zone)
+	except:
+		e = str(sys.exc_info()[1])
+		if "Invalid value for field 'disk'" in e:
+			# Disk already detached
+			return
+		if "HttpError 404" in e:
+			# Instance is gone
+			return
+		raise
+
+

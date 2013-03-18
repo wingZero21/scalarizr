@@ -3,13 +3,15 @@ __author__ = 'Nick Demyanchuk'
 import os
 import sys
 import uuid
+import logging
 import datetime
 
-from scalarizr import storage2, util
+from scalarizr import storage2
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.storage2.util import gce as gce_util
 
+LOG = logging.getLogger(__name__)
 
 class GcePersistentVolume(base.Volume):
 	'''
@@ -18,10 +20,12 @@ class GcePersistentVolume(base.Volume):
 	'''
 
 
-	def __init__(self, name=None, link=None, size=None, zone=None, **kwargs):
+	def __init__(self, name=None, link=None, size=None, zone=None,
+				 		last_attached_to=None, **kwargs):
 		name = name or 'scalr-disk-%s' % uuid.uuid4().hex[:8]
 		super(GcePersistentVolume, self).__init__(name=name, link=link,
 												  size=size, zone=zone,
+												  last_attached_to=last_attached_to,
 												  **kwargs)
 
 
@@ -44,7 +48,6 @@ class GcePersistentVolume(base.Volume):
 				create = True
 			else:
 				self._check_attr('zone')
-				# TODO: update zone from disk resource of compute engine
 				if self.zone != zone:
 					# Volume is in different zone, snapshot it,
 					# create new volume from this snapshot, then attach
@@ -72,6 +75,9 @@ class GcePersistentVolume(base.Volume):
 				attach = True
 
 			else:
+				if self.last_attached_to and self.last_attached_to != server_name:
+					gce_util.ensure_disk_detached(connection, project_id, zone, self.last_attached_to, self.link)
+
 				attachment_inf = self._attachment_info(connection)
 				if attachment_inf:
 					disk_devicename = attachment_inf['deviceName']
@@ -97,6 +103,7 @@ class GcePersistentVolume(base.Volume):
 				raise storage2.StorageError("Disk should be attached, but corresponding"
 											" device not found in system")
 			self.device = device
+			self.last_attached_to = server_name
 
 		finally:
 			# Perform cleanup
@@ -112,12 +119,7 @@ class GcePersistentVolume(base.Volume):
 		project_id = __node__['gce']['project_id']
 		server_name = __node__['server_id']
 
-		this_instance = con.instances().get(zone=zone,
-										   project=project_id,
-										   instance=server_name).execute()
-		attached = filter(lambda x: x.get('source') == self.link, this_instance['disks'])
-		if attached:
-			return attached[0]
+		return gce_util.attachment_info(con, project_id, zone, server_name, self.link)
 
 
 	def _detach(self, force, **kwds):
