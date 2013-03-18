@@ -53,29 +53,32 @@ class GcePersistentVolume(base.Volume):
 					# create new volume from this snapshot, then attach
 					temp_snap = self.snapshot('volume')
 					garbage_can.append(temp_snap)
-					# TODO: generate new name
-					create_request_body = dict(name=self.name,
+					new_name = self.name + zone
+					create_request_body = dict(name=new_name,
 											   sizeGb=self.size,
 											   sourceSnapshot=temp_snap.link)
 					create = True
 
 			attach = False
 			if create:
+				disk_name = create_request_body['name']
+				LOG.debug('Creating new GCE disk %s' % disk_name)
 				op = connection.disks().insert(project=project_id,
 											   zone=zone,
 											   body=create_request_body).execute()
 				gce_util.wait_for_operation(connection, project_id, op['name'], zone)
-				disk_name = create_request_body['name']
 				disk_dict = connection.disks().get(disk=disk_name,
 												   project=project_id,
 												   zone=zone).execute()
 				self.id = disk_dict['id']
 				self.link = disk_dict['selfLink']
 				self.zone = zone
+				self.name = disk_name
 				attach = True
 
 			else:
 				if self.last_attached_to and self.last_attached_to != server_name:
+					LOG.debug("Making sure that disk %s detached from previous attachment place." % self.name)
 					gce_util.ensure_disk_detached(connection, project_id, zone, self.last_attached_to, self.link)
 
 				attachment_inf = self._attachment_info(connection)
@@ -85,6 +88,7 @@ class GcePersistentVolume(base.Volume):
 					attach = True
 
 			if attach:
+				LOG.debug('Attaching disk %s to current instance' % self.name)
 				op = connection.instances().attachDisk(
 							instance=server_name,
 							project=project_id,
@@ -104,6 +108,7 @@ class GcePersistentVolume(base.Volume):
 											" device not found in system")
 			self.device = device
 			self.last_attached_to = server_name
+			self.snap = None
 
 		finally:
 			# Perform cleanup
