@@ -546,6 +546,8 @@ class LargeTransfer(bases.Task):
 					"compressor": None,
 					"chunks": [],
 				}
+				self.manifest["files"].append(fileinfo)  # moved here from the
+														 # bottom
 				prefix = self._tranzit_vol.mpoint
 				stream = None
 				cmd = tar = gzip = None
@@ -630,8 +632,6 @@ class LargeTransfer(bases.Task):
 					yield filename
 				if cmd:
 					cmd.communicate()
-
-				self.manifest["files"].append(fileinfo)
 
 			# send manifest to file transfer
 			if not self.multipart:
@@ -1073,11 +1073,13 @@ class Manifest(object):
 			path = os.path.dirname(self.cloudfs_path)
 		except AttributeError:
 			LOG.debug("'cloudfs_path' for the manifest isn't defined")
+			raise
 		driver = cloudfs(urlparse.urlparse(path).scheme)
 
 		pieces = Queue.Queue()
-		for piece in driver.ls(path):
-			pieces.put(piece)
+		for file_ in self.data["files"]:
+			for name, checksum, size in file_["chunks"]:
+				pieces.put(os.path.join(path, name))
 
 		def delete_obj():
 			driver = cloudfs(urlparse.urlparse(path).scheme)
