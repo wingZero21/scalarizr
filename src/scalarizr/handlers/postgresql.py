@@ -297,7 +297,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	@property	
 	def farmrole_id(self):
-		return __postgresql__[config.OPT_FARMROLE_ID]
+		return __node__[config.OPT_FARMROLE_ID]
 	
 			
 	def store_password(self, name, password):
