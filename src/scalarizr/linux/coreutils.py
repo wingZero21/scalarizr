@@ -212,7 +212,7 @@ def truncate(filename):
 
 def statvfs(path='/'):
 	statvfs_result = os.statvfs(path)
-	result = {}
+	result = dict()
 	result['size'] = statvfs_result.f_bsize * statvfs_result.f_blocks
 	free = statvfs_result.f_bsize * statvfs_result.f_bfree
 	result['used'] = result['size'] - free

@@ -101,7 +101,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 		except IndexError:
 			msg = 'Failed to find instance %s. ' \
 					'If you are importing this server, check that you are doing it from the ' \
-					'right Scalr environment'
+					'right Scalr environment' % instance_id
 			raise HandlerError(msg)
 		self._instance = instance
 

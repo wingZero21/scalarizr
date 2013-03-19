@@ -265,7 +265,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		if 'ec2' == self._platform.name:
 			__node__['ec2']['hostname_as_pubdns'] = '0'
 
-		if self._cnf.state == ScalarizrState.INITIALIZING:
+		if self._cnf.state in (ScalarizrState.INITIALIZING, ScalarizrState.BOOTSTRAPPING):
 			self.mongodb.stop_default_init_script()
 		
 		if self._cnf.state == ScalarizrState.RUNNING:
