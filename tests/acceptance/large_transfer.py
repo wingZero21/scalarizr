@@ -196,6 +196,7 @@ def release_local_data():
 
 
 @before.each_scenario
+@this_feature_only
 def setup_scenario(scenario):
 	world.basedir = tempfile.mkdtemp()
 	world.sources = []
@@ -212,6 +213,7 @@ def setup_scenario(scenario):
 
 
 @after.each_scenario
+@this_feature_only
 def teardown_scenario(scenario):
 	shutil.rmtree(world.basedir)
 
